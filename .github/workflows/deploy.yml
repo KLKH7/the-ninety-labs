@@ -1,0 +1,34 @@
+name: deploy
+
+# Runs after CI passes on main. Signs in to Azure with OIDC: GitHub issues a short-lived token
+# that Azure trusts only for this repo's main branch, so no Azure secret is stored anywhere.
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-main
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Check access to the resource group
+        run: az group show -n "${{ vars.AZURE_RESOURCE_GROUP }}" --query "{name:name,location:location}" -o table
+      # The app deploy (Container Apps via Bicep) and the live smoke test are added with the
+      # first deployable service. See docs/PLAN.md.
