@@ -32,23 +32,24 @@ This document describes the system as designed. What already runs is tracked in
 The five stages named in the challenge brief, with the scoring loop that sets this project apart.
 
 ```mermaid
-flowchart TB
-    SIM["<b>Synthetic data</b><br/>match engine + broadcast renderer"]
-    TRUTH[("Ground-truth data<br/>sealed from the pipeline")]
-    INGEST["<b>1 Ingest</b><br/>detection, tracking, camera-to-pitch mapping,<br/>automatic event detection"]
-    INTERPRET["<b>2 Interpret</b><br/>pass quality, speeds, xG, control vs chaos"]
-    EXPLAIN["<b>3 Explain</b><br/>agent workflow with fact-checking"]
-    RENDERSTAGE["<b>4 Render</b><br/>timed on-screen graphics drawn on the video"]
-    PERSONALIZE["<b>5 Personalize</b><br/>analyst, casual, club, player cam,<br/>languages, audio description"]
-    SCORE["<b>Scoring</b><br/>precision and recall per event type"]
-    GEN["<b>Targeted synthetic data</b><br/>more footage where vision fails"]
-
-    SIM -- video --> INGEST --> INTERPRET --> EXPLAIN --> RENDERSTAGE --> PERSONALIZE
-    SIM --> TRUTH
-    INGEST -. detected events .-> SCORE
-    TRUTH -. ground truth .-> SCORE
-    SCORE --> GEN --> SIM
+flowchart LR
+    SIM["Synthetic match<br/>and video"] --> INGEST["1 Ingest"] --> INTERPRET["2 Interpret"] --> EXPLAIN["3 Explain"] --> RENDERSTAGE["4 Render"] --> PERSONALIZE["5 Personalize"]
+    SIM --> TRUTH[("Ground truth<br/>sealed")]
+    INGEST -.-> SCORE["Scoring"]
+    TRUTH -.-> SCORE
+    SCORE --> GEN["Targeted<br/>data"] --> SIM
 ```
+
+| Stage | What happens | Code |
+|---|---|---|
+| Synthetic data | a seeded match engine plays the match; a broadcast renderer turns it into video and records exact ground truth | `ninety/sim`, `web/render` |
+| 1 Ingest | detection, tracking and camera-to-pitch mapping turn the video into events (automatic event detection) | `ninety/vision` |
+| 2 Interpret | pass distance, accuracy and difficulty, ball and shot speed, sprint speed, xG, control vs chaos | `ninety/intel` |
+| 3 Explain | agents explain why a moment matters; the fact-checking agent gates every claim | `ninety/agents` |
+| 4 Render | timed on-screen graphics drawn on the video at detected positions | `web`, `schemas/overlay_cue.schema.json` |
+| 5 Personalize | analyst, casual, favourite club, player cam, languages, audio description | `ninety/agents`, `web` |
+| Scoring | detected events are scored against the sealed ground truth: precision and recall per event type | `ninety/eval` |
+| Targeted data | where detection fails, more footage of exactly that situation is generated, then scored again | `ninety/sim`, `web/render` |
 
 ## Agent design
 
