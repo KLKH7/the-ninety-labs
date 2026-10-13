@@ -16,8 +16,9 @@ including the ones who can't see it.
 1. [docs/BRIEF.md](docs/BRIEF.md): the challenge brief, the five required stages, the rubric and the submission checklist.
 2. [docs/CHALLENGE_MAP.md](docs/CHALLENGE_MAP.md): every requirement, where we answer it, and its status.
 3. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): design rules, components and the Microsoft stack.
-4. [docs/PLAN.md](docs/PLAN.md): what is due on which day.
-5. [SECURITY.md](SECURITY.md): the repo and the demo are public.
+4. [docs/PLAN.md](docs/PLAN.md): goals, milestones and what is due on which day.
+5. [docs/EVALUATION.md](docs/EVALUATION.md): how every published number is measured.
+6. [SECURITY.md](SECURITY.md): the repo and the demo are public.
 
 Task-specific guides in `docs/guides/`:
 
