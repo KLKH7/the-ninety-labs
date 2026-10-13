@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/KLKH7/spotter/schemas/frame.schema.json",
+  "title": "Frame",
+  "description": "Positions at one frame, in pitch metres. The truth log and the tracker output share this shape so eval can diff them.",
+  "type": "object",
+  "required": ["frame", "t", "ball", "players"],
+  "properties": {
+    "frame": { "type": "integer", "minimum": 0 },
+    "t": { "type": "number", "minimum": 0 },
+    "ball": {
+      "type": "object",
+      "required": ["x", "y", "z"],
+      "properties": { "x": { "type": "number" }, "y": { "type": "number" }, "z": { "type": "number" } }
+    },
+    "possessor": { "type": ["string", "null"] },
+    "players": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "team", "x", "y"],
+        "properties": {
+          "id": { "type": "string" },
+          "team": { "type": "string", "enum": ["home", "away"] },
+          "x": { "type": "number" },
+          "y": { "type": "number" }
+        }
+      }
+    }
+  }
+}

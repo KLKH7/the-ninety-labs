@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/KLKH7/spotter/schemas/match_event.schema.json",
+  "title": "MatchEvent",
+  "description": "One football event, either from the simulator's truth log or detected by the vision pipeline. Coordinates are pitch metres: x 0..105 toward the right goal, y 0..68 from the near touchline.",
+  "type": "object",
+  "required": ["id", "t", "type", "team", "x", "y", "source"],
+  "properties": {
+    "id": { "type": "string" },
+    "t": { "type": "number", "minimum": 0, "description": "Seconds since kick-off." },
+    "frame": { "type": "integer", "minimum": 0 },
+    "type": {
+      "type": "string",
+      "enum": ["kickoff", "pass", "shot", "goal", "tackle", "interception", "pressure", "possession_change", "out_of_play", "set_piece"]
+    },
+    "team": { "type": "string", "enum": ["home", "away"] },
+    "player": { "type": ["string", "null"] },
+    "receiver": { "type": ["string", "null"] },
+    "x": { "type": "number", "minimum": 0, "maximum": 105 },
+    "y": { "type": "number", "minimum": 0, "maximum": 68 },
+    "end_x": { "type": ["number", "null"] },
+    "end_y": { "type": ["number", "null"] },
+    "outcome": { "type": ["string", "null"], "enum": ["success", "fail", "on_target", "off_target", "goal", null] },
+    "ball_speed_kmh": { "type": ["number", "null"], "minimum": 0 },
+    "source": { "type": "string", "enum": ["truth", "vision"] },
+    "confidence": { "type": ["number", "null"], "minimum": 0, "maximum": 1 }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,18 @@
+[project]
+name = "spotter"
+version = "0.1.0"
+description = "Auto-eventing from synthetic broadcast video, explained by agents, personalized for every fan."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+dependencies = []
+
+[project.scripts]
+spotter-sim = "spotter.sim.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8", "jsonschema>=4"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

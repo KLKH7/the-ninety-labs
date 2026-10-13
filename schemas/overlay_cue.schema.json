@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/KLKH7/spotter/schemas/overlay_cue.schema.json",
+  "title": "OverlayCue",
+  "description": "One timed, machine-readable on-screen cue. A template cue airs on detection; a verified agent cue replaces it in the same slot.",
+  "type": "object",
+  "required": ["id", "t_in", "t_out", "kind", "slot", "persona", "lang", "text", "evidence"],
+  "properties": {
+    "id": { "type": "string" },
+    "t_in": { "type": "number", "minimum": 0 },
+    "t_out": { "type": "number", "minimum": 0 },
+    "kind": { "type": "string", "enum": ["player_tag", "speed_badge", "pass_arc", "shot_speed", "insight", "recap", "audio_description"] },
+    "slot": { "type": "string", "description": "Screen region or anchor, e.g. lower_third, top_right, player:<id>." },
+    "anchor": {
+      "type": ["object", "null"],
+      "description": "Pixel position on the video frame for cues drawn on the footage.",
+      "properties": { "px": { "type": "number" }, "py": { "type": "number" } }
+    },
+    "persona": { "type": "string", "enum": ["analyst", "casual", "club", "player_focus", "audio"] },
+    "lang": { "type": "string", "description": "BCP-47 tag, e.g. en, es, ar." },
+    "text": { "type": "string" },
+    "replaces": { "type": ["string", "null"] },
+    "verified": { "type": "boolean" },
+    "evidence": { "type": "array", "items": { "type": "string" }, "description": "Event ids behind the cue." }
+  }
+}

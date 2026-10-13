@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+runs/
+.env
+.env.*
+!.env.example
+.DS_Store
+node_modules/
+*.mp4
