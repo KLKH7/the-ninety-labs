@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/KLKH7/the-ninety-labs/schemas/frame.schema.json",
   "title": "Frame",
-  "description": "Positions at one frame, in pitch metres. The truth log and the tracker output share this shape so eval can diff them.",
+  "description": "Positions at one frame, in pitch metres. The ground-truth data and the tracker output share this shape so eval can diff them.",
   "type": "object",
   "required": ["frame", "t", "ball", "players"],
   "properties": {

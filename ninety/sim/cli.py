@@ -7,7 +7,7 @@ from ninety.sim.engine import FPS, simulate
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Simulate a synthetic match and write its truth log.")
+    ap = argparse.ArgumentParser(description="Simulate a synthetic match and write its ground-truth data.")
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--minutes", type=float, default=90)
     ap.add_argument("--out", type=Path, required=True)

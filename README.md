@@ -4,10 +4,10 @@
 
 The Ninety Labs is an entry for the Microsoft x Premier League *Inside the Game: Developer Hackathon*
 (challenge: *The Synthetic Match Insights Engine for Premier League Studio*). It starts one step
-earlier than an event feed: from **video**. A synthetic broadcast is auto-evented by a vision
-pipeline, graded against a hidden answer key, explained by a team of agents, drawn back onto the
-footage, and personalized for every viewer, including a live audio-description mode for blind and
-low-vision fans.
+earlier than an event feed: from **video**. A computer-vision pipeline watches a synthetic
+broadcast and detects every event automatically. Its output is scored against hidden ground-truth
+data, explained by a team of agents, drawn back onto the footage as on-screen graphics, and
+personalized for every viewer, including live audio description for blind and low-vision fans.
 
 All clubs, players and matches are synthetic. No real match data or footage is used.
 
@@ -18,22 +18,23 @@ per match with delivery inside 12 hours, and contract taggers are paid around $7
 up to 3,000 actions ([Rest of World, 2026](https://restofworld.org/2026/fifa-world-cup-ai-data-workers/)).
 Humans also disagree: providers' shot locations differed by more than five yards on 30% of shots
 at the 2018 World Cup ([ASA](https://americansocceranalysis.com/home/2019/9/30/shots-in-the-dark-how-data-providers-tell-us-different-versions-of-what-happened)).
-That cost is why data stops at the top flight. Downstream, every viewer gets the same overlays,
+That cost is why data stops at the top flight. Downstream, every viewer gets the same on-screen graphics,
 and blind and low-vision fans depend on human describers available in only some stadiums.
 
 ## The pipeline
 
 ```
- synthetic match engine ──► broadcast render (video) ──┐        hidden truth log
-                                                       ▼                │
- INGEST     vision: detect → track → pitch homography → possession → events
- INTERPRET  stats: pass distance/accuracy/difficulty, ball & shot speed, sprint speed, xG, control vs chaos
- EXPLAIN    agents: Analyst → Tactician ⇄ Verifier → Producer   (Microsoft Agent Framework + Foundry)
- RENDER     timed overlay cues drawn on the footage at detected positions
- PERSONALIZE analyst / casual / club / player-focus / language / audio description
-                                                       ▲                │
- EVAL       live precision/recall vs truth ◄───────────┴────────────────┘
- DATA LOOP  generate more footage where vision fails, re-measure
+ synthetic match engine ──► broadcast render (video)          hidden ground-truth data
+                                   │                                     │
+ INGEST       computer vision: detect → track → map to pitch → events    │
+ INTERPRET    stats: pass quality, ball & shot speed, sprint speed, xG,  │
+              control vs chaos                                           │
+ EXPLAIN      agents: Analyst → Tactician ⇄ Fact-checker → Producer      │
+ RENDER       on-screen graphics drawn on the footage                    │
+ PERSONALIZE  analyst / casual / club / player cam / language / audio    │
+                                                                         ▼
+ SCORE        live precision and recall per event vs ground truth
+ IMPROVE      generate more footage where vision fails, measure again
 ```
 
 How every requirement of the brief maps to code: [docs/CHALLENGE_MAP.md](docs/CHALLENGE_MAP.md).
@@ -44,14 +45,14 @@ Build plan: [docs/PLAN.md](docs/PLAN.md).
 
 | Path | What lives there |
 |---|---|
-| `ninety/sim` | Seeded match engine: events + per-frame positions (the truth log) |
+| `ninety/sim` | Seeded match engine: events + per-frame positions (the ground-truth data) |
 | `web/render` | Broadcast-style three.js renderer that turns a sim run into video |
-| `ninety/vision` | Detection, tracking, homography, possession, event rules |
+| `ninety/vision` | Detection, tracking, camera-to-pitch mapping, possession, event rules |
 | `ninety/intel` | Deterministic stats engine (code computes every number) |
-| `ninety/agents` | Agent Framework workflow: Analyst, Tactician, Verifier, Producer, Personalizer, Describer |
+| `ninety/agents` | Agent Framework workflow: Analyst, Tactician, Fact-checker, Producer, Personalizer, Describer |
 | `ninety/mcp` | MCP server exposing match tools to the agents |
-| `ninety/eval` | Grades auto-evented output against the truth log |
-| `schemas` | JSON Schemas: match event, frame, overlay cue |
+| `ninety/eval` | Grades automatically detected events against the ground-truth data |
+| `schemas` | JSON Schemas: match event, frame, on-screen graphic |
 | `web` | Viewer: video + overlays + persona controls |
 | `infra` | `azd` / Bicep for Azure Container Apps |
 

@@ -1,12 +1,12 @@
 """Seeded football match engine.
 
-Produces the truth log The Ninety Labs is graded against: every event, plus every player's and the ball's
+Produces the ground-truth data The Ninety Labs is graded against: every event, plus every player's and the ball's
 position at every frame, in pitch metres (x 0..105 toward the away goal, y 0..68). The home team
 attacks toward x=105 in both halves; the renderer can mirror if it wants a side switch.
 
 The model is deliberately simple (possession, dribble, pass, shot, tackle, interception, pressure)
 but tuned to football-realistic rates, because its job is to give the vision pipeline footage
-whose answer key is known exactly.
+whose ground truth is known exactly.
 """
 
 from __future__ import annotations

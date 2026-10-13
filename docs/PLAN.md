@@ -5,16 +5,16 @@ Submission needs: public repo, video under 2 minutes, a demo link live until Nov
 
 | Days | Milestone | Done when |
 |---|---|---|
-| 1 | Match engine + truth log | `ninety-sim` writes events + frames for a seeded match; tests pass |
+| 1 | Match engine + ground-truth data | `ninety-sim` writes events + frames for a seeded match; tests pass |
 | 2 | Broadcast render | three.js plays a run with a ball-following camera; exports video + per-frame camera matrix |
-| 3 | Vision ingest | detections + tracks on rendered frames; pitch homography |
-| 4 | Auto-eventing | possession state machine + pass/shot/tackle rules; events stream out |
+| 3 | Vision ingest | detections + tracks on rendered frames; camera-to-pitch mapping |
+| 4 | Automatic event detection | possession state machine + pass/shot/tackle rules; events stream out |
 | 5 | Eval | precision/recall per event type vs truth; seeded benchmark committed |
 | 6 | Stats engine | pass difficulty, speeds, xG, control vs chaos |
-| 7–8 | Agents | Agent Framework workflow, Verifier veto, MCP tools, Foundry models |
-| 9 | Overlays | cues drawn on the video at detected positions |
-| 10 | Personalize | personas, player-focus, languages, audio description (Azure Speech) |
-| 11 | Data loop | hard-case generator, retrain/re-measure, show the delta |
+| 7–8 | Agents | Agent Framework workflow, fact-checking agent, MCP tools, Foundry models |
+| 9 | Overlays | on-screen graphics drawn on the video at detected positions |
+| 10 | Personalize | personas, player cam, languages, audio description (Azure Speech) |
+| 11 | Targeted data generation | targeted synthetic data generation, retrain/re-measure, show the delta |
 | 12 | Azure | Container Apps deploy via `azd`, tracing, budget alert |
 | 13 | Video + README | 2-minute demo video, numbers in README |
 | 14 | Buffer | fix, trim claims to what ships, submit |
