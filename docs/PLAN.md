@@ -159,7 +159,7 @@ deployed demo, the failure table, the video.
 |---|---|
 | Detector trained on real footage does not transfer to renders, or renders are too easy | fine-tune on our renders (labels are exact); keep a hard, separate test set; render checks in CI |
 | No GPU quota | train on an Apple GPU or Colab; run inference on CPU over short clips |
-| Model not offered in our region | Foundry project in a region with the model; app stays in East US |
+| Region limits | the student subscription allows five regions; everything runs in North Central US, which offers our models |
 | Preview features change (A2A, Foundry agents) | every remote piece has an in-process fallback behind the same interface |
 | Budget | scale to zero, cached Replay mode, passcode on Live mode, $20 alert |
 | Scope | M1 on Oct 20 is the gate; apply the cut list the same day if it slips |
