@@ -32,8 +32,9 @@ This document describes the system as designed. What already runs is tracked in
 The five stages named in the challenge brief, with the scoring loop that sets this project apart.
 
 ```mermaid
-flowchart TB
+flowchart LR
     subgraph DATA["Synthetic data"]
+        direction TB
         SIM["Match engine<br/>ninety/sim"]
         RENDER["Broadcast renderer<br/>web/render"]
         TRUTH[("Ground-truth data<br/>sealed")]
@@ -43,6 +44,7 @@ flowchart TB
     end
 
     subgraph INGEST["1 Ingest"]
+        direction TB
         DET["Detection and tracking"]
         MAP["Camera-to-pitch mapping"]
         EVT["Automatic event detection"]
@@ -50,18 +52,22 @@ flowchart TB
     end
 
     subgraph INTERPRET["2 Interpret"]
+        direction TB
         STATS["Stats engine<br/>pass quality, speeds, xG,<br/>control vs chaos"]
     end
 
     subgraph EXPLAIN["3 Explain"]
+        direction TB
         AGENTS["Agent workflow<br/>with fact-checking"]
     end
 
     subgraph RENDERSTAGE["4 Render"]
+        direction TB
         CUES["Timed on-screen graphics<br/>drawn on the video"]
     end
 
     subgraph PERSONALIZE["5 Personalize"]
+        direction TB
         VIEW["Analyst, casual, club,<br/>player cam, languages,<br/>audio description"]
     end
 
@@ -69,6 +75,7 @@ flowchart TB
     EVT --> STATS --> AGENTS --> CUES --> VIEW
 
     subgraph SCORE["Scoring loop"]
+        direction TB
         EVAL["Precision and recall<br/>per event type"]
         GEN["Targeted synthetic<br/>data generation"]
     end
@@ -85,17 +92,19 @@ deterministic; model agents run on Microsoft Foundry deployments and are orchest
 Microsoft Agent Framework.
 
 ```mermaid
-flowchart LR
+flowchart TB
     LEDGER[("Ledger<br/>facts with source,<br/>confidence, evidence ids")]
     MCP{{"MCP server<br/>read-only match tools"}}
 
     subgraph PERCEPTION["Perception side"]
+        direction LR
         DETECTOR["Detector<br/>code"]
         AUDITOR["Vision Auditor<br/>groups detection failures"]
         DATAAGENT["Data agent<br/>requests targeted renders"]
     end
 
     subgraph NARRATIVE["Narrative side"]
+        direction LR
         ANALYST["Analyst<br/>finds what changed"]
         TACTICIAN["Tactician<br/>explains why"]
         CHALLENGER["Challenger<br/>argues an alternative"]
@@ -104,6 +113,7 @@ flowchart LR
     end
 
     subgraph AUDIENCE["Audience side"]
+        direction LR
         PERSONALIZER["Personalizer<br/>separate service over A2A"]
         DESCRIBER["Describer<br/>audio description"]
     end
