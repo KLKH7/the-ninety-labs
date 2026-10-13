@@ -71,9 +71,26 @@ uv sync
 uv run ninety-sim --seed 7 --minutes 5 --out runs/seed7
 uv run pytest
 
-# thin slice: Analyst -> fact-checker over MCP on Foundry, then speech (needs az login and access to the project)
+# thin slice: Analyst -> fact-checker over MCP on Foundry, then speech
+# (live runs need az login and a role on our Azure project)
 uv run ninety-slice --minute 2 --plant
 ```
+
+**Running the slice without our Azure project.** Nothing here uses an API key: Azure checks who
+is calling (your `az login` locally, the app's managed identity in the cloud), and key access is
+off on our resources. A live run from your own clone will therefore fail to authenticate. Replay
+a recorded run instead:
+
+```bash
+uv run ninety-slice --replay replays/slice-minute2-plant.json
+```
+
+Replay swaps only the two Foundry models for what they answered when recorded: the Analyst's
+replies and the Judge's verdicts. The Agent Framework workflow, the handoffs and the code checks
+all run for real, so you see the planted number rejected and the rewrite accepted. If a prompt has
+changed since the recording, the replay stops rather than pair an old answer with a new question. Speech needs Azure, so `--speak` does not
+replay. Team members refresh the recording with
+`uv run ninety-slice --minute 2 --plant --record replays/slice-minute2-plant.json`.
 
 ## Status
 
