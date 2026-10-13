@@ -47,6 +47,7 @@ Full design, agent roles and deployment: [docs/ARCHITECTURE.md](docs/ARCHITECTUR
 | [EVALUATION](docs/EVALUATION.md) | how every published number is measured |
 | [SECURITY](SECURITY.md) | rules for a public repo and a public demo |
 | [AGENTS](AGENTS.md) | rules for AI coding tools (Copilot, Cursor, Claude Code) |
+| [Broadcast render guide](docs/guides/broadcast-render.md) | rendering the synthetic video and generating images |
 
 ## Repo layout
 
