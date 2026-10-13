@@ -49,7 +49,11 @@ A change that moves none of them is probably out of scope for the deadline. Say 
 - MIT / Apache-2.0 / BSD dependencies only.
 - Update `docs/CHALLENGE_MAP.md` when a row ships. Never mark a row done that the demo doesn't run.
 
+## Related skill
+
+For any work on the synthetic video or image generation, also load `broadcast-render`.
+
 ## Step 4: finish
 
-Run `uv run pytest`. Stage files by name. Before pushing, confirm `git diff --cached` contains no
+Run `uv run ruff check .` and `uv run pytest`. Stage files by name. Before pushing, confirm `git diff --cached` contains no
 secret, key or `.env` file.

@@ -1,8 +1,9 @@
 """Seeded football match engine.
 
-Produces the ground-truth data The Ninety Labs is graded against: every event, plus every player's and the ball's
-position at every frame, in pitch metres (x 0..105 toward the away goal, y 0..68). The home team
-attacks toward x=105 in both halves; the renderer can mirror if it wants a side switch.
+Produces the ground-truth data The Ninety Labs is scored against: every event, plus every
+player's and the ball's position at every frame, in pitch metres (x 0..105 toward the away goal,
+y 0..68). The home team attacks toward x=105 in both halves; the renderer can mirror if it
+wants a side switch.
 
 The model is deliberately simple (possession, dribble, pass, shot, tackle, interception, pressure)
 but tuned to football-realistic rates, because its job is to give the vision pipeline footage
@@ -158,7 +159,10 @@ class Engine:
             speed = self.rng.uniform(70, 120)
             on_target = self.rng.random() < 0.34
             goal = on_target and self.rng.random() < clamp(0.45 - d_goal / 50, 0.06, 0.4)
-            ey = PITCH_Y / 2 + (self.rng.uniform(-3.4, 3.4) if on_target else self.rng.choice([-1, 1]) * self.rng.uniform(4.5, 12))
+            if on_target:
+                ey = PITCH_Y / 2 + self.rng.uniform(-3.4, 3.4)
+            else:
+                ey = PITCH_Y / 2 + self.rng.choice([-1, 1]) * self.rng.uniform(4.5, 12)
             outcome = "goal" if goal else ("on_target" if on_target else "off_target")
             eid = self.emit("shot", team, carrier.x, carrier.y, player=carrier.id, end_x=gx,
                             end_y=round(ey, 2), outcome=outcome, ball_speed_kmh=round(speed, 1))

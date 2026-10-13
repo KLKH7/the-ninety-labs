@@ -9,13 +9,50 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
       - run: uv sync --locked
+      - run: uv run ruff check .
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ matrix.python }}
+      - run: uv sync --locked
       - run: uv run pytest -q
+
+  smoke:
+    # Runs the CLI end to end; every event and every 100th frame must match the published schemas.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --locked
+      - run: uv run ninety-sim --seed 7 --minutes 3 --out runs/smoke
+      - run: |
+          uv run python - <<'PY'
+          import json
+          from jsonschema import validate
+          ev = json.load(open("schemas/match_event.schema.json"))
+          fr = json.load(open("schemas/frame.schema.json"))
+          n = 0
+          for line in open("runs/smoke/events.jsonl"):
+              validate(json.loads(line), ev); n += 1
+          for i, line in enumerate(open("runs/smoke/frames.jsonl")):
+              if i % 100 == 0:
+                  validate(json.loads(line), fr)
+          assert n > 0, "no events written"
+          print(f"{n} events valid")
+          PY
 
   secret-scan:
     runs-on: ubuntu-latest

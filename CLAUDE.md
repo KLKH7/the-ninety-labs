@@ -9,6 +9,10 @@ Before changing anything, load the project context with the `ninety-context` ski
 4. [docs/PLAN.md](docs/PLAN.md): the day-by-day plan to Oct 27.
 5. [SECURITY.md](SECURITY.md): the repo is public. Follow it for every change.
 
+## Other skills
+
+- `broadcast-render`: use for anything that renders the synthetic video or generates images: realism, exact per-frame ground truth, randomization, targeted hard cases, render checks.
+
 ## Hard rules
 
 - **The repo is public.** Never commit secrets, `.env` files, keys or connection strings. Use managed identity or Key Vault.
@@ -17,4 +21,4 @@ Before changing anything, load the project context with the `ninety-context` ski
 - **Licenses:** MIT, Apache-2.0 or BSD dependencies only. No AGPL (this rules out ultralytics).
 - **Terminology:** automatic event detection, ground-truth data, fact-checking agent, on-screen graphics, player cam. Keep the brief's stage names: Ingest, Interpret, Explain, Render, Personalize.
 - **Honest claims:** the README and project page describe only what runs. Mark unbuilt rows `planned`.
-- Run `uv run pytest` before every push.
+- Run `uv run ruff check .` and `uv run pytest` before every push. CI runs both, a schema smoke test, a secret scan and CodeQL.
