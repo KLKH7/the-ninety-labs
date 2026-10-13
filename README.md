@@ -21,27 +21,32 @@ at the 2018 World Cup ([ASA](https://americansocceranalysis.com/home/2019/9/30/s
 That cost is why data stops at the top flight. Downstream, every viewer gets the same on-screen graphics,
 and blind and low-vision fans depend on human describers available in only some stadiums.
 
-## The pipeline
+## How it works
 
-```
- synthetic match engine ──► broadcast render (video)          hidden ground-truth data
-                                   │                                     │
- INGEST       computer vision: detect → track → map to pitch → events    │
- INTERPRET    stats: pass quality, ball & shot speed, sprint speed, xG,  │
-              control vs chaos                                           │
- EXPLAIN      agents: Analyst → Tactician ⇄ Fact-checker → Producer      │
- RENDER       on-screen graphics drawn on the footage                    │
- PERSONALIZE  analyst / casual / club / player cam / language / audio    │
-                                                                         ▼
- SCORE        live precision and recall per event vs ground truth
- IMPROVE      generate more footage where vision fails, measure again
+```mermaid
+flowchart LR
+    SIM["Synthetic match<br/>and broadcast video"] --> INGEST["Ingest<br/>automatic event detection"]
+    INGEST --> INTERPRET["Interpret<br/>stats engine"]
+    INTERPRET --> EXPLAIN["Explain<br/>agents with fact-checking"]
+    EXPLAIN --> RENDER["Render<br/>graphics on the video"]
+    RENDER --> PERSONALIZE["Personalize<br/>personas, languages,<br/>audio description"]
+    INGEST -. scored against ground truth .-> SCORE["Precision and recall"]
+    SCORE -. targeted synthetic data .-> SIM
 ```
 
-The challenge brief and rubric: [docs/BRIEF.md](docs/BRIEF.md).
-How every requirement of the brief maps to code: [docs/CHALLENGE_MAP.md](docs/CHALLENGE_MAP.md).
-Architecture and Microsoft stack: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
-Build plan: [docs/PLAN.md](docs/PLAN.md).
-Security (this repo and the demo are public): [SECURITY.md](SECURITY.md).
+Full design, agent roles and deployment: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## Documentation
+
+| Document | Contents |
+|---|---|
+| [BRIEF](docs/BRIEF.md) | the challenge brief and judging rubric |
+| [ARCHITECTURE](docs/ARCHITECTURE.md) | design rules, system and agent diagrams, Azure deployment, technology decisions |
+| [PLAN](docs/PLAN.md) | goals, timeline, milestones, day-by-day schedule |
+| [CHALLENGE_MAP](docs/CHALLENGE_MAP.md) | every requirement of the brief, where it is built, and its status |
+| [EVALUATION](docs/EVALUATION.md) | how every published number is measured |
+| [SECURITY](SECURITY.md) | rules for a public repo and a public demo |
+| [AGENTS](AGENTS.md) | rules for AI coding tools (Copilot, Cursor, Claude Code) |
 
 ## Repo layout
 
@@ -68,8 +73,10 @@ uv run pytest
 
 ## Status
 
-Day 1 of the build. See [docs/PLAN.md](docs/PLAN.md). Claims in this README describe the design;
-the demo and the measured numbers are the source of truth once they exist.
+Working toward **M1, end to end on one clip (Oct 20)**. Running today: the seeded match engine,
+data contracts, CI and the deploy pipeline. See [docs/PLAN.md](docs/PLAN.md). This README
+describes the design; measured results are published in [docs/EVALUATION.md](docs/EVALUATION.md)
+as they land.
 
 ## License
 
