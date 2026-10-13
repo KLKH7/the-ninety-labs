@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/KLKH7/spotter/schemas/overlay_cue.schema.json",
+  "$id": "https://github.com/KLKH7/the-ninety-labs/schemas/overlay_cue.schema.json",
   "title": "OverlayCue",
   "description": "One timed, machine-readable on-screen cue. A template cue airs on detection; a verified agent cue replaces it in the same slot.",
   "type": "object",

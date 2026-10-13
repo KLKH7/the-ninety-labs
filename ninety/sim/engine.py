@@ -1,6 +1,6 @@
 """Seeded football match engine.
 
-Produces the truth log Spotter is graded against: every event, plus every player's and the ball's
+Produces the truth log The Ninety Labs is graded against: every event, plus every player's and the ball's
 position at every frame, in pitch metres (x 0..105 toward the away goal, y 0..68). The home team
 attacks toward x=105 in both halves; the renderer can mirror if it wants a side switch.
 

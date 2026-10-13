@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/KLKH7/spotter/schemas/match_event.schema.json",
+  "$id": "https://github.com/KLKH7/the-ninety-labs/schemas/match_event.schema.json",
   "title": "MatchEvent",
   "description": "One football event, either from the simulator's truth log or detected by the vision pipeline. Coordinates are pitch metres: x 0..105 toward the right goal, y 0..68 from the near touchline.",
   "type": "object",

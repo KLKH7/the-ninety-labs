@@ -1,8 +1,8 @@
-# Spotter
+# The Ninety Labs
 
 **AI that watches the match, logs every event, and describes it to every fan, including the ones who can't see it.**
 
-Spotter is an entry for the Microsoft x Premier League *Inside the Game: Developer Hackathon*
+The Ninety Labs is an entry for the Microsoft x Premier League *Inside the Game: Developer Hackathon*
 (challenge: *The Synthetic Match Insights Engine for Premier League Studio*). It starts one step
 earlier than an event feed: from **video**. A synthetic broadcast is auto-evented by a vision
 pipeline, graded against a hidden answer key, explained by a team of agents, drawn back onto the
@@ -44,13 +44,13 @@ Build plan: [docs/PLAN.md](docs/PLAN.md).
 
 | Path | What lives there |
 |---|---|
-| `spotter/sim` | Seeded match engine: events + per-frame positions (the truth log) |
+| `ninety/sim` | Seeded match engine: events + per-frame positions (the truth log) |
 | `web/render` | Broadcast-style three.js renderer that turns a sim run into video |
-| `spotter/vision` | Detection, tracking, homography, possession, event rules |
-| `spotter/intel` | Deterministic stats engine (code computes every number) |
-| `spotter/agents` | Agent Framework workflow: Analyst, Tactician, Verifier, Producer, Personalizer, Describer |
-| `spotter/mcp` | MCP server exposing match tools to the agents |
-| `spotter/eval` | Grades auto-evented output against the truth log |
+| `ninety/vision` | Detection, tracking, homography, possession, event rules |
+| `ninety/intel` | Deterministic stats engine (code computes every number) |
+| `ninety/agents` | Agent Framework workflow: Analyst, Tactician, Verifier, Producer, Personalizer, Describer |
+| `ninety/mcp` | MCP server exposing match tools to the agents |
+| `ninety/eval` | Grades auto-evented output against the truth log |
 | `schemas` | JSON Schemas: match event, frame, overlay cue |
 | `web` | Viewer: video + overlays + persona controls |
 | `infra` | `azd` / Bicep for Azure Container Apps |
@@ -59,7 +59,7 @@ Build plan: [docs/PLAN.md](docs/PLAN.md).
 
 ```bash
 uv sync
-uv run spotter-sim --seed 7 --minutes 5 --out runs/seed7
+uv run ninety-sim --seed 7 --minutes 5 --out runs/seed7
 uv run pytest
 ```
 

@@ -5,7 +5,7 @@ Submission needs: public repo, video under 2 minutes, a demo link live until Nov
 
 | Days | Milestone | Done when |
 |---|---|---|
-| 1 | Match engine + truth log | `spotter-sim` writes events + frames for a seeded match; tests pass |
+| 1 | Match engine + truth log | `ninety-sim` writes events + frames for a seeded match; tests pass |
 | 2 | Broadcast render | three.js plays a run with a ball-following camera; exports video + per-frame camera matrix |
 | 3 | Vision ingest | detections + tracks on rendered frames; pitch homography |
 | 4 | Auto-eventing | possession state machine + pass/shot/tackle rules; events stream out |

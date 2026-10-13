@@ -4,7 +4,7 @@ from pathlib import Path
 
 from jsonschema import validate
 
-from spotter.sim.engine import FPS, PITCH_X, PITCH_Y, simulate
+from ninety.sim.engine import FPS, PITCH_X, PITCH_Y, simulate
 
 ROOT = Path(__file__).resolve().parent.parent
 EVENT_SCHEMA = json.loads((ROOT / "schemas/match_event.schema.json").read_text())

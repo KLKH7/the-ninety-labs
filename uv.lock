@@ -249,7 +249,7 @@ wheels = [
 ]
 
 [[package]]
-name = "spotter"
+name = "ninety-labs"
 version = "0.1.0"
 source = { editable = "." }
 

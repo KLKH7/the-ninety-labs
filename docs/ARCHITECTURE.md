@@ -7,7 +7,7 @@
 2. **Facts before words.** Every insight is a timestamped fact before it becomes text, so one fact
    renders to any persona or language without recomputing.
 3. **Graded perception.** The simulator's truth log is never visible downstream; it is only used
-   by `spotter/eval` to score what the vision pipeline produced.
+   by `ninety/eval` to score what the vision pipeline produced.
 4. **Nothing waits on a model.** A template cue airs the moment an event is detected; the verified
    agent cue replaces it in the same slot.
 
@@ -15,7 +15,7 @@
 
 | Stage | Component | Tech |
 |---|---|---|
-| Data | `spotter/sim` match engine, `web/render` broadcast renderer | Python, three.js |
+| Data | `ninety/sim` match engine, `web/render` broadcast renderer | Python, three.js |
 | Ingest | detection, tracking, homography, possession, event rules | roboflow/sports + supervision (MIT), RF-DETR (Apache-2.0), ByteTrack |
 | Interpret | stats engine | Python, socceraction/kloppy for SPADL + xT |
 | Explain | Analyst, Tactician, Verifier, Producer | Microsoft Agent Framework (Python), Microsoft Foundry models |

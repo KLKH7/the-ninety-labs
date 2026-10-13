@@ -3,7 +3,7 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from spotter.sim.engine import FPS, simulate
+from ninety.sim.engine import FPS, simulate
 
 
 def main() -> None:
