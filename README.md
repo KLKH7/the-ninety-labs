@@ -37,9 +37,11 @@ and blind and low-vision fans depend on human describers available in only some 
  IMPROVE      generate more footage where vision fails, measure again
 ```
 
+The challenge brief and rubric: [docs/BRIEF.md](docs/BRIEF.md).
 How every requirement of the brief maps to code: [docs/CHALLENGE_MAP.md](docs/CHALLENGE_MAP.md).
 Architecture and Microsoft stack: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 Build plan: [docs/PLAN.md](docs/PLAN.md).
+Security (this repo and the demo are public): [SECURITY.md](SECURITY.md).
 
 ## Repo layout
 
