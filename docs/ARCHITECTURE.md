@@ -32,57 +32,22 @@ This document describes the system as designed. What already runs is tracked in
 The five stages named in the challenge brief, with the scoring loop that sets this project apart.
 
 ```mermaid
-flowchart LR
-    subgraph DATA["Synthetic data"]
-        direction TB
-        SIM["Match engine<br/>ninety/sim"]
-        RENDER["Broadcast renderer<br/>web/render"]
-        TRUTH[("Ground-truth data<br/>sealed")]
-        SIM --> RENDER
-        SIM --> TRUTH
-        RENDER --> TRUTH
-    end
+flowchart TB
+    SIM["<b>Synthetic data</b><br/>match engine + broadcast renderer"]
+    TRUTH[("Ground-truth data<br/>sealed from the pipeline")]
+    INGEST["<b>1 Ingest</b><br/>detection, tracking, camera-to-pitch mapping,<br/>automatic event detection"]
+    INTERPRET["<b>2 Interpret</b><br/>pass quality, speeds, xG, control vs chaos"]
+    EXPLAIN["<b>3 Explain</b><br/>agent workflow with fact-checking"]
+    RENDERSTAGE["<b>4 Render</b><br/>timed on-screen graphics drawn on the video"]
+    PERSONALIZE["<b>5 Personalize</b><br/>analyst, casual, club, player cam,<br/>languages, audio description"]
+    SCORE["<b>Scoring</b><br/>precision and recall per event type"]
+    GEN["<b>Targeted synthetic data</b><br/>more footage where vision fails"]
 
-    subgraph INGEST["1 Ingest"]
-        direction TB
-        DET["Detection and tracking"]
-        MAP["Camera-to-pitch mapping"]
-        EVT["Automatic event detection"]
-        DET --> MAP --> EVT
-    end
-
-    subgraph INTERPRET["2 Interpret"]
-        direction TB
-        STATS["Stats engine<br/>pass quality, speeds, xG,<br/>control vs chaos"]
-    end
-
-    subgraph EXPLAIN["3 Explain"]
-        direction TB
-        AGENTS["Agent workflow<br/>with fact-checking"]
-    end
-
-    subgraph RENDERSTAGE["4 Render"]
-        direction TB
-        CUES["Timed on-screen graphics<br/>drawn on the video"]
-    end
-
-    subgraph PERSONALIZE["5 Personalize"]
-        direction TB
-        VIEW["Analyst, casual, club,<br/>player cam, languages,<br/>audio description"]
-    end
-
-    RENDER -- video --> DET
-    EVT --> STATS --> AGENTS --> CUES --> VIEW
-
-    subgraph SCORE["Scoring loop"]
-        direction TB
-        EVAL["Precision and recall<br/>per event type"]
-        GEN["Targeted synthetic<br/>data generation"]
-    end
-
-    EVT -. detected events .-> EVAL
-    TRUTH -. ground truth .-> EVAL
-    EVAL --> GEN --> SIM
+    SIM -- video --> INGEST --> INTERPRET --> EXPLAIN --> RENDERSTAGE --> PERSONALIZE
+    SIM --> TRUTH
+    INGEST -. detected events .-> SCORE
+    TRUTH -. ground truth .-> SCORE
+    SCORE --> GEN --> SIM
 ```
 
 ## Agent design
@@ -92,46 +57,20 @@ deterministic; model agents run on Microsoft Foundry deployments and are orchest
 Microsoft Agent Framework.
 
 ```mermaid
-flowchart TB
-    LEDGER[("Ledger<br/>facts with source,<br/>confidence, evidence ids")]
-    MCP{{"MCP server<br/>read-only match tools"}}
-
-    subgraph PERCEPTION["Perception side"]
-        direction LR
-        DETECTOR["Detector<br/>code"]
-        AUDITOR["Vision Auditor<br/>groups detection failures"]
-        DATAAGENT["Data agent<br/>requests targeted renders"]
-    end
-
-    subgraph NARRATIVE["Narrative side"]
-        direction LR
-        ANALYST["Analyst<br/>finds what changed"]
-        TACTICIAN["Tactician<br/>explains why"]
-        CHALLENGER["Challenger<br/>argues an alternative"]
-        CHECKER["Fact-checker<br/>code + agent, veto"]
-        PRODUCER["Producer<br/>screen and voice budget"]
-    end
-
-    subgraph AUDIENCE["Audience side"]
-        direction LR
-        PERSONALIZER["Personalizer<br/>separate service over A2A"]
-        DESCRIBER["Describer<br/>audio description"]
-    end
-
-    DETECTOR --> LEDGER
-    LEDGER --> AUDITOR --> DATAAGENT
-    DATAAGENT -. new training scenes .-> DETECTOR
-
-    MCP --- LEDGER
-    ANALYST -- tools --> MCP
-    ANALYST --> TACTICIAN
-    TACTICIAN <--> CHALLENGER
-    TACTICIAN --> CHECKER
-    CHECKER -- rejected, max 2 retries --> TACTICIAN
-    CHECKER -- low-confidence evidence --> AUDITOR
-    CHECKER -- verified --> PRODUCER
-    PRODUCER -- A2A --> PERSONALIZER
-    PRODUCER --> DESCRIBER
+flowchart LR
+    DETECTOR["Detector<br/><i>code</i>"] --> LEDGER[("Ledger<br/>facts, source,<br/>confidence, evidence")]
+    LEDGER <--> MCP{{"MCP server<br/>read-only tools"}}
+    MCP --> ANALYST["Analyst<br/>what changed"]
+    ANALYST --> TACTICIAN["Tactician<br/>why it matters"]
+    TACTICIAN <--> CHALLENGER["Challenger<br/>alternative view"]
+    TACTICIAN --> CHECKER{"Fact-checker<br/><i>code + agent</i>"}
+    CHECKER -- rejected --> TACTICIAN
+    CHECKER -- verified --> PRODUCER["Producer<br/>screen and voice"]
+    PRODUCER -- A2A --> PERSONALIZER["Personalizer<br/><i>remote service</i>"]
+    PRODUCER --> DESCRIBER["Describer<br/>audio description"]
+    CHECKER -- low confidence --> AUDITOR["Vision Auditor<br/>failure clusters"]
+    AUDITOR --> DATAAGENT["Data agent<br/>targeted renders"]
+    DATAAGENT -. retrain .-> DETECTOR
 ```
 
 | Agent | Kind | Reads | Writes | On failure |
