@@ -32,7 +32,7 @@ This document describes the system as designed. What already runs is tracked in
 The five stages named in the challenge brief, with the scoring loop that sets this project apart.
 
 ```mermaid
-flowchart LR
+flowchart TB
     subgraph DATA["Synthetic data"]
         SIM["Match engine<br/>ninety/sim"]
         RENDER["Broadcast renderer<br/>web/render"]
@@ -85,7 +85,7 @@ deterministic; model agents run on Microsoft Foundry deployments and are orchest
 Microsoft Agent Framework.
 
 ```mermaid
-flowchart TB
+flowchart LR
     LEDGER[("Ledger<br/>facts with source,<br/>confidence, evidence ids")]
     MCP{{"MCP server<br/>read-only match tools"}}
 
