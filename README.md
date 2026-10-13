@@ -70,6 +70,9 @@ Full design, agent roles and deployment: [docs/ARCHITECTURE.md](docs/ARCHITECTUR
 uv sync
 uv run ninety-sim --seed 7 --minutes 5 --out runs/seed7
 uv run pytest
+
+# thin slice: Analyst -> fact-checker over MCP on Foundry, then speech (needs az login and access to the project)
+uv run ninety-slice --minute 2 --plant
 ```
 
 ## Status

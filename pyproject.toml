@@ -5,10 +5,17 @@ description = "Auto-eventing from synthetic broadcast video, explained by agents
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
-dependencies = []
+dependencies = [
+    "agent-framework-core>=1.21.0",
+    "agent-framework-foundry>=1.14.1",
+    "azure-identity>=1.26.0",
+    "httpx>=0.28.1",
+    "mcp>=1.24,<2",
+]
 
 [project.scripts]
 ninety-sim = "ninety.sim.cli:main"
+ninety-slice = "ninety.agents.slice:main"
 
 [dependency-groups]
 dev = [
