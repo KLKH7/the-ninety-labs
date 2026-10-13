@@ -38,7 +38,22 @@ deadline; say so.
 | UX and presentation | on-screen graphics drawn on the footage, a clear persona switch, the video |
 | Category fit | Best Multi-Agent System (primary), Best Use of Microsoft Foundry (fallback) |
 
-## 3. Hard rules
+## 3. Hold the product bar
+
+Ask two questions before building anything, and again before calling it done.
+
+1. **Does it set us apart?** Other entries already ship a stats engine, agents with a verifier,
+   overlay cards and multilingual voice. Work that only matches them comes after the work that
+   only we do: live automatic event detection on realistic video, targeted synthetic data that
+   improves the detector, a confidence-aware fact-checker proven by an ablation and a failure
+   table, and audio description.
+2. **Is it excellent on its own terms?** Being different is not enough. Would a broadcaster put
+   it on air, would a blind fan rely on it, would a senior engineer trust the code? A feature
+   that works but feels rough, slow or unexplained is not done.
+
+Every claim of quality ships with the measurement that proves it (`docs/EVALUATION.md`).
+
+## 4. Hard rules
 
 - **The repo is public.** Never commit secrets, `.env` files, keys or connection strings. Use managed identity or Key Vault.
 - **Synthetic data only.** No real match data, players, clubs, kits, crests or footage (rules 4.4 and 4.7).
@@ -48,7 +63,7 @@ deadline; say so.
 - **Terminology:** automatic event detection, ground-truth data, fact-checking agent, on-screen graphics, player cam. Keep the brief's stage names: Ingest, Interpret, Explain, Render, Personalize.
 - **Honest claims:** the README and project page describe only what runs. Mark unbuilt rows `planned` in the challenge map, and update a row when it ships.
 
-## 4. Working in the repo
+## 5. Working in the repo
 
 - Setup: `uv sync`. Simulator: `uv run ninety-sim --seed 7 --minutes 5 --out runs/seed7`.
 - Before every push: `uv run ruff check .` and `uv run pytest`.
