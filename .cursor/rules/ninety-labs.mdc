@@ -1,0 +1,13 @@
+---
+description: Project rules for The Ninety Labs (hackathon entry)
+alwaysApply: true
+---
+
+Follow `AGENTS.md` at the repo root. It is the single source of truth for this project's rules,
+and it links the challenge brief, architecture, plan, security policy and task guides in
+`docs/guides/`. Read it, and the docs it lists, before changing code.
+
+For anything that renders the synthetic video or generates images, also follow
+`docs/guides/broadcast-render.md`.
+
+The repo is public: never add secrets, keys, connection strings or `.env` files.
