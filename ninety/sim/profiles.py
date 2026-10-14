@@ -42,7 +42,9 @@ FACTOR_OF = {
 QUALITY_LOADING = 0.5  # design: how much a player's overall quality lifts each skill
 FACTOR_LOADING = 0.5  # design: how much one factor ties its skills together
 SPEED_LOADING = math.sqrt(0.6)  # A7: acceleration and top speed correlate about 0.6 in footballers
-TEAM_SD = 0.5  # design: spread of team strength in a league, in player-quality SDs
+# design: spread of team strength in a league, in player-quality SDs. sqrt(2/3) puts 40% of the
+# variation in player quality between teams (TEAM_SD² / (TEAM_SD² + 1)).
+TEAM_SD = math.sqrt(2 / 3)
 TRAIT_BASE, TRAIT_SLOPE = -2.0, 1.5  # design: a trait is likelier the stronger the skill behind it
 TRAIT_DRIVERS = {
     "shoots_from_distance": ("finishing",),

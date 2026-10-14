@@ -182,3 +182,17 @@ def test_left_sided_players_are_more_often_left_footed_and_inside_forwards_cut_i
 
 def test_the_same_seed_gives_the_same_squad():
     assert squad_sample(n=20, seed=3) == squad_sample(n=20, seed=3)
+
+
+def test_forty_percent_of_player_quality_varies_between_teams():
+    from statistics import pvariance
+
+    from ninety.sim.profiles import FORMATION_ROLES, team_strength
+    rng = random.Random(6)
+    teams = []
+    for _ in range(400):
+        s = team_strength(rng)
+        teams.append([Profile.generate(r, rng, s).quality for r in FORMATION_ROLES])
+    within = mean(pvariance(t) for t in teams) * 11 / 10
+    between = pvariance([mean(t) for t in teams]) - within / 11
+    assert abs(between / (between + within) - 0.4) < 0.05
