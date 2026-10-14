@@ -13,13 +13,14 @@ including the ones who can't see it.
 
 ## 1. Read before changing anything
 
-1. [docs/BRIEF.md](docs/BRIEF.md): the challenge brief, the five required stages, the rubric and the submission checklist.
-2. [docs/CHALLENGE_MAP.md](docs/CHALLENGE_MAP.md): every requirement, where we answer it, and its status.
-3. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): design rules, components and the Microsoft stack.
-4. [docs/PLAN.md](docs/PLAN.md): goals, milestones and what is due on which day.
-5. [docs/EVALUATION.md](docs/EVALUATION.md): how every published number is measured.
-6. [docs/DATA_CONTRACT.md](docs/DATA_CONTRACT.md): what ground-truth data must contain, and how it is checked.
-7. [SECURITY.md](SECURITY.md): the repo and the demo are public.
+1. [docs/LESSONS.md](docs/LESSONS.md): mistakes this project already made, the rule now, and how to check. Read it first, every task.
+2. [docs/BRIEF.md](docs/BRIEF.md): the challenge brief, the five required stages, the rubric and the submission checklist.
+3. [docs/CHALLENGE_MAP.md](docs/CHALLENGE_MAP.md): every requirement, where we answer it, and its status.
+4. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): design rules, components and the Microsoft stack.
+5. [docs/PLAN.md](docs/PLAN.md): goals, milestones and what is due on which day.
+6. [docs/EVALUATION.md](docs/EVALUATION.md): how every published number is measured.
+7. [docs/DATA_CONTRACT.md](docs/DATA_CONTRACT.md): what ground-truth data must contain, and how it is checked.
+8. [SECURITY.md](SECURITY.md): the repo and the demo are public.
 
 Task-specific guides in `docs/guides/`:
 
@@ -76,3 +77,4 @@ Every claim of quality ships with the measurement that proves it (`docs/EVALUATI
 - Before every push: `uv run ruff check .` and `uv run pytest`.
 - `main` is protected: CI (lint, tests on 3.11 and 3.12, schema smoke test, secret scan) must pass. Work on a branch and open a pull request.
 - Stage files by name. Before committing, check `git diff --cached` contains no secret, key or `.env` file.
+- **When you catch a mistake** (yours or anyone's), add a lesson to [docs/LESSONS.md](docs/LESSONS.md) in the same pull request as the fix: what happened, the rule now, how to check.

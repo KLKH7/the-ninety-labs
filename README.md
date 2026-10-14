@@ -47,6 +47,7 @@ Full design, agent roles and deployment: [docs/ARCHITECTURE.md](docs/ARCHITECTUR
 | [EVALUATION](docs/EVALUATION.md) | how every published number is measured |
 | [DATA_CONTRACT](docs/DATA_CONTRACT.md) | what ground-truth data must contain, and the validator that checks it |
 | [GROUNDING](docs/GROUNDING.md) | every football rule and physical limit, with its source in the Laws of the Game or sports science |
+| [LESSONS](docs/LESSONS.md) | mistakes this project already made, the rule now, and how to check; every tool reads it first |
 | [SECURITY](SECURITY.md) | rules for a public repo and a public demo |
 | [AGENTS](AGENTS.md) | rules for AI coding tools (Copilot, Cursor, Claude Code) |
 | [Broadcast render guide](docs/guides/broadcast-render.md) | rendering the synthetic video and generating images |
