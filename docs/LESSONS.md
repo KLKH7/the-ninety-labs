@@ -101,14 +101,20 @@ short and actionable. This file is public: no research sources, product names or
   fixed height; the next version was too small to read.
 - **Rule:** open the rendered page after pushing any diagram.
 
+### 15. A pipeline's exit code is its last command's
+- **What happened:** a secret scan written as `grep ... | head; echo $?` reported success, but
+  `$?` was `head`'s exit code, so it would have said the same whether or not anything matched.
+- **Rule:** test the command whose answer you need on its own (`grep -c`, then its exit code),
+  and add a positive control: something you know is there must be found.
+
 ## Data and grounding
 
-### 15. Read the primary source
+### 16. Read the primary source
 - **What happened:** "well-known" Laws in a draft were wrong or incomplete (throw-in distance,
   goal-kick position, corner distance, which Law covers switching ends).
 - **Rule:** check each rule against the current Laws of the Game; implement it in our own
   words; never commit the Laws' text.
 
-### 16. The ground truth is the answer key
+### 17. The ground truth is the answer key
 - **Rule:** ground truth is used only for training labels and scoring. Nothing on the live path
   reads it. Whatever makes the video must also write the truth, so no generative video.

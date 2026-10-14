@@ -1,0 +1,26 @@
+{
+  "format": 2,
+  "minute": 2,
+  "seed": 7,
+  "minutes": 5,
+  "plant": true,
+  "model": "gpt-4.1-mini",
+  "recorded_at": "2026-10-14T02:54:19+00:00",
+  "turns": [
+    {
+      "role": "analyst",
+      "prompt": "Write the claim for minute 2.",
+      "response": "{\"text\":\"At 2:28, a notable duel occurred as h8 successfully tackled a9, immediately followed by a9 counter-tackling back, showing intense midfield contest early in the game.\",\"evidence\":[\"e00049\",\"e00052\"]}"
+    },
+    {
+      "role": "analyst",
+      "prompt": "Write the claim for minute 2. Your previous claim was rejected: number 143 is not in the cited evidence. Fix it.",
+      "response": "{\"text\":\"At 2:28 there was a rare double tackle success where h8 tackled a9 and a9 tackled h8, showing intense midfield battle.\",\"evidence\":[\"e00049\",\"e00052\"]}"
+    },
+    {
+      "role": "judge",
+      "prompt": "{\"text\": \"At 2:28 there was a rare double tackle success where h8 tackled a9 and a9 tackled h8, showing intense midfield battle.\", \"evidence\": [\"e00049\", \"e00052\"]}",
+      "response": "{\"ok\": true, \"reasons\": []}"
+    }
+  ]
+}
