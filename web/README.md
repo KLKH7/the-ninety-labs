@@ -39,4 +39,5 @@ Knobs (`--set key=value`), all recorded in `clip.json`:
 | `camera_cut=true` | second angle | planned (fails loudly if set) |
 
 Without `--gpu`, Chromium uses software GL (SwiftShader), so a seed gives the same pixels and
-labels on the same Chromium build. That runs about 0.4 to 0.5 s per 720p frame on 4 CPU cores.
+labels on the same Chromium build. That runs at 0.47 to 0.61 s per 720p frame on 4 CPU cores
+(sun shadows are the slow part), so about 2 to 2.5 minutes per 10-second clip.

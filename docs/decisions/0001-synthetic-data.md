@@ -41,7 +41,7 @@ crowded boxes, low-contrast kits), because the targeted-data rounds are our diff
 | Exact ground truth | 5: camera matrix from code; visibility and boxes counted from an id pass of exactly what was drawn | 5 | 3: needs engine changes to export camera and boxes | 5 |
 | Realism for detector transfer | 3 today, room to grow (PBR materials, shadows, textures, GPU) | 2: flat shading, hard to improve | 3: fixed 2019 game look | n/a |
 | Control over hard cases | 5: every knob is our parameter | 5 | 3: scenario scripts, little control of camera and look | 2 |
-| Generation speed | 3: 0.4 to 0.5 s per 720p frame on 4 CPU cores in software GL; faster on a GPU (`--gpu`) | 3 | 4 | 5 |
+| Generation speed | 3: 0.47 s (overcast) to 0.61 s (sun shadows) per 720p frame on 4 CPU cores in software GL; faster on a GPU (`--gpu`) | 3 | 4 | 5 |
 | Cost | 5: free, runs locally or in CI | 5 | 5 | 5 |
 | Time to first clip (renderer v1 due Oct 15) | 5: running today | 4 | 2: C++ build, camera export, licence review | 5 |
 | **Total** | **31** | 28 | 23 | 24 |
@@ -69,8 +69,9 @@ already planned, with one change in how the work is split:
 - **Photorealism, for now.** Players are capsule figures with kit colours and a running gait,
   not motion-captured meshes. The off-the-shelf detector check (guide section 6.2) decides
   whether the realism pass on Oct 17 is enough.
-- **Speed on CPU.** About 2 minutes per 10-second clip on 4 cores. 20 training clips plus 5 test
-  clips take about an hour; longer clips or bigger rounds want a GPU machine.
+- **Speed on CPU.** 2 to 2.5 minutes per 10-second clip on 4 cores (the 5-clip test set took 11.5
+  minutes). 20 training clips plus the test set take about an hour; longer clips or bigger rounds
+  want a GPU machine.
 - **A browser in the toolchain.** Generation needs Node (for three.js) and Chromium. CI installs
   both in a dedicated `render` job.
 - **Bit-identical pixels across machines.** Only guaranteed on the same Chromium build; the build
@@ -91,6 +92,18 @@ From [EVALUATION.md](../EVALUATION.md#synthetic-data), reported by `ninety-rende
 | 4. Determinism | same seed renders identical labels and images | running in CI |
 | 5. Look at it | side-by-side with real broadcast framing; fix the biggest difference first | manual, at each realism pass |
 | Split integrity | test seeds (900001 to 900005) never train; overrides refused on the test set | running in unit tests |
+
+### First measurement (Oct 14, fixed test set, 5 clips, 1,250 frames)
+
+From `docs/eval/render-checks.json`: ball projection error mean 0.10 px, max 0.30 px; keypoints
+max 0.0014 px; every player's foot inside its box; no frame with a label problem; the re-render of
+seed 900001 matched labels and all 250 images byte for byte. Players are 38 to 102 px tall
+(5th to 95th percentile across clips), inside the guide's 30 to 120 px.
+
+**Not good enough yet:** the ball is under 0.5 visible in 1 of 1,250 frames (0.08%). The check
+passes (above zero), but the test set is too easy, because the simulator has no corners, free
+kicks or goalmouth scrambles, so players rarely crowd the ball. That is the first thing the
+realism pass and the simulator's set pieces must change.
 
 The final proof comes later: detector recall on the fixed test set before and after each
 targeted round.
