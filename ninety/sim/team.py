@@ -41,6 +41,7 @@ class TeamBrain:
     changed_at: float = -99.0
     line_x: float = 0.0
     pressers: list[str] = field(default_factory=list)
+    markers: dict[str, tuple[float, float]] = field(default_factory=dict)  # defender -> spot
 
     def update(self, now: float, has_ball: bool, ball_x: float, time_to_ball: dict[str, float]) -> None:
         """Read the game: who has the ball, where it is, and who of ours could reach it soonest.

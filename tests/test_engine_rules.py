@@ -60,7 +60,7 @@ def test_the_carrier_decides_on_where_he_believes_team_mates_are():
     keeper = e.keeper("away")
     e.beliefs[carrier.id].seen[keeper.id] = perception.Sighting(100.0, 34.0, 0.0, 0.0, e.t)
     scene = e.scene_for(carrier)
-    assert scene.keeper == (100.0, 34.0) and scene.opponents == []  # the keeper is counted once
+    assert scene.keeper == (100.0, 34.0) and scene.opponents == [(100.0, 34.0)]  # in lanes too
 
 
 def test_a_keeper_reacts_to_the_ball_like_anyone_and_reads_only_shots_at_his_goal():

@@ -173,10 +173,10 @@ def shot_estimate(x: float, y: float, goal_x: float, opponents: list[tuple[float
                   keeper: tuple[float, float] | None) -> float:
     """The player's own estimate of a shot from here, between 0 and 1: rising with the goal angle,
     halved for each defender he believes is in the shooting cone, reduced if the keeper stands on
-    the line of the shot. `opponents` must not include the keeper, who is counted once."""
+    the line of the shot. The keeper is counted once, as the keeper, even if he is in `opponents`."""
     q = 1 - math.exp(-SHOT_SHAPE * goal_angle(x, y, goal_x) ** 2)
     for ox, oy in opponents:
-        if in_cone(x, y, goal_x, ox, oy):
+        if (ox, oy) != keeper and in_cone(x, y, goal_x, ox, oy):  # the keeper is counted below
             q *= BLOCKER_FACTOR
     if keeper:
         cx, cy = goal_x, PITCH_Y / 2
@@ -292,7 +292,8 @@ def options(scene: Scene) -> list[Option]:
         bias = 1.3 if "shoots_from_distance" in scene.traits else 1.0
         # A shot that fails is either blocked, leaving the ball at his feet for them, or missed or
         # saved, which gives the ball back from deep (a goal kick or the keeper's hands).
-        blockers = sum(in_cone(scene.x, scene.y, scene.goal_x, ox, oy) for ox, oy in scene.opponents)
+        blockers = sum(in_cone(scene.x, scene.y, scene.goal_x, ox, oy) for ox, oy in scene.opponents
+                       if (ox, oy) != scene.keeper)
         blocked = 1 - BLOCKER_FACTOR ** blockers
         lost = blocked * loss_cost(scene.x, scene.y, scene.goal_x) + (1 - blocked) * LOSS_BASE
         out.append(Option("shoot", q * bias * (1 + 0.5 * scene.risk) - (1 - q) * lost,

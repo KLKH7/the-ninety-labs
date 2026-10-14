@@ -204,3 +204,12 @@ def test_a_shot_into_a_crowd_risks_losing_the_ball_where_he_stands():
     blocked = 1 - D.BLOCKER_FACTOR ** 2
     lost = blocked * D.loss_cost(75.0, 34.0, 105.0) + (1 - blocked) * D.LOSS_BASE
     assert math.isclose(shoot(crowded).value, q_crowd - (1 - q_crowd) * lost)
+
+
+def test_the_keeper_is_counted_once_in_a_shot_but_can_still_stop_a_dribble():
+    k = (103.0, 34.0)
+    assert D.shot_estimate(90, 34, 105, [k], k) == D.shot_estimate(90, 34, 105, [], k)
+    free = max(o.value for o in D.options(scene(x=97.0, keeper=k)) if o.kind == "dribble")
+    with_keeper = scene(x=97.0, keeper=k, opponents=[k])
+    keeper_there = max(o.value for o in D.options(with_keeper) if o.kind == "dribble")
+    assert keeper_there < free
