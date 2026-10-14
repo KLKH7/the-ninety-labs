@@ -229,6 +229,15 @@ def test_strong_braking_passes(tmp_path):
     assert "P2 player acceleration" not in run(tmp_path, clip)
 
 
+def test_a_touch_in_the_air_is_not_judged_as_free_flight(tmp_path):
+    clip = clean_clip()
+    lofted(clip)
+    clip["frames"][PASS_AT + 10]["ball"]["z"] += 0.4  # a defender's head meets it
+    assert "P5 ball flight" in run(tmp_path, clip)  # unexplained: a defect
+    clip["events"].append(event("e2", PASS_AT + 10, "deflection", "away", "a1", x=44.0))
+    assert "P5 ball flight" not in run(tmp_path, clip)  # recorded as a touch: allowed
+
+
 def test_ball_under_gravity_passes(tmp_path):
     clip = clean_clip()
     lofted(clip)

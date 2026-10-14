@@ -42,6 +42,7 @@ ON_BALL = {"pass", "shot", "tackle", "interception", "out_of_play", "goal", "set
 MAX_SUBSTITUTIONS = 5  # C3: Law 3, top-level competitions
 STOPPAGES = {"out_of_play", "goal", "substitution"}  # C3: events after which play has stopped
 RESTARTS = {"set_piece", "kickoff"}  # P3: events that put the ball back in play
+TOUCHES = {"pass", "shot", "deflection", "interception", "tackle", "possession_change"}  # P5
 EXAMPLES = 5
 
 Problems = dict[str, list[str]]
@@ -163,8 +164,10 @@ def check_physics(events: list[dict], frames: list[dict], fps: float, roster: li
     # three heights by up to POSITION_PRECISION_M moves the measured acceleration by up to
     # 4 * precision / dt², so that is the margin.
     margin = 4 * POSITION_PRECISION_M / dt**2
+    # Free flight only: frames where a player touched the ball are not judged against gravity.
+    touched = {e["frame"] + k for e in events if e["type"] in TOUCHES for k in (-1, 0, 1)}
     for f0, f1, f2 in zip(frames, frames[1:], frames[2:], strict=False):
-        if f1["frame"] in restarts or any(f.get("possessor") for f in (f0, f1, f2)):
+        if f1["frame"] in restarts or f1["frame"] in touched or any(f.get("possessor") for f in (f0, f1, f2)):
             continue
         z = (f0["ball"]["z"], f1["ball"]["z"], f2["ball"]["z"])
         if min(z) <= AIRBORNE_M:

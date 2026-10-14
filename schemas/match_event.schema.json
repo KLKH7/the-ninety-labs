@@ -11,7 +11,7 @@
     "frame": { "type": "integer", "minimum": 0 },
     "type": {
       "type": "string",
-      "enum": ["kickoff", "pass", "shot", "goal", "tackle", "interception", "pressure", "possession_change", "out_of_play", "set_piece", "substitution"]
+      "enum": ["kickoff", "pass", "shot", "goal", "tackle", "interception", "pressure", "possession_change", "out_of_play", "set_piece", "substitution", "deflection"]
     },
     "team": { "type": "string", "enum": ["home", "away"] },
     "player": { "type": ["string", "null"], "description": "The player who acts; for a substitution, the player leaving." },

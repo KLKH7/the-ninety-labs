@@ -40,11 +40,19 @@ def measure(seed: int, minutes: float = 90) -> dict:
     top = defaultdict(float)
     early_high = late_high = 0.0
     sprinting = defaultdict(bool)
+    team_of = {r["id"]: r["team"] for r in m.roster}
+    shape = defaultdict(list)  # (in or out of possession) -> [(length, width)]
     for prev, f in zip(m.frames, m.frames[1:], strict=False):
         if f["frame"] in resets or prev["frame"] in resets:
             continue
         before = {p["id"]: p for p in prev["players"]}
         minute = f["t"] / 60
+        holder = team_of.get(f.get("possessor"))
+        if holder and f["frame"] % 25 == 0:  # once a second is plenty for shape
+            for team in ("home", "away"):
+                xs = [p["x"] for p in f["players"] if team_of[p["id"]] == team and role[p["id"]] != "GK"]
+                ys = [p["y"] for p in f["players"] if team_of[p["id"]] == team and role[p["id"]] != "GK"]
+                shape["in" if team == holder else "out"].append((max(xs) - min(xs), max(ys) - min(ys)))
         for p in f["players"]:
             q = before[p["id"]]
             step = math.hypot(p["x"] - q["x"], p["y"] - q["y"])
@@ -73,7 +81,8 @@ def measure(seed: int, minutes: float = 90) -> dict:
                 "sprint_m": sprint_m[pid] * scale, "sprints": sprints[pid] * scale, "top": top[pid],
             })
     late_drop = 1 - late_high / early_high if early_high else None
-    return {"seed": seed, "groups": dict(per_group), "late_drop": late_drop}
+    team_shape = {k: (mean(v[0] for v in vals), mean(v[1] for v in vals)) for k, vals in shape.items()}
+    return {"seed": seed, "groups": dict(per_group), "late_drop": late_drop, "shape": team_shape}
 
 
 def report(results: list[dict]) -> str:
@@ -96,6 +105,12 @@ def report(results: list[dict]) -> str:
             f"| {mean(x['high_m'] for x in rows):.0f} | {mean(x['sprints'] for x in rows):.0f} "
             f"| {mean(x['top'] for x in rows):.1f} | {PUBLISHED_TOP[group]} |"
         )
+    lines += ["", "| Team shape (outfield) | Length, m | Width, m |", "|---|---|---|"]
+    for key, label in (("in", "in possession"), ("out", "out of possession")):
+        rows = [r["shape"][key] for r in results if key in r["shape"]]
+        if rows:
+            lines.append(f"| {label} | {mean(x[0] for x in rows):.0f} | {mean(x[1] for x in rows):.0f} |")
+    lines.append("| published (professional teams) | 31 to 46 | 35 to 48 |")
     drops = [r["late_drop"] for r in results if r["late_drop"] is not None]
 
     def change(d: float) -> str:
