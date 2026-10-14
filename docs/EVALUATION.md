@@ -5,7 +5,7 @@ generated it and the output file is committed. Rows marked *planned* have no res
 
 | Measure | Command | Output | Status |
 |---|---|---|---|
-| Simulator realism (passes, shots, tackles, pass completion per match) | `uv run pytest tests/test_sim.py` | test assertions | running |
+| Simulator realism: 16 per-match rates against published Premier League averages, ball in play, distance, top speed, no teleports | `uv run python -m ninety.sim.realism` (10 seeds); `uv run pytest tests/test_sim.py` checks the same bands on 3 seeds | `docs/eval/sim-realism.md` | running |
 | Event and frame schema validity | CI `smoke` job | CI log | running |
 | Render checks (projection error, determinism, ball occlusion share) | planned | `docs/eval/render-checks.json` | planned |
 | Detection recall (players, ball) on the fixed test set | planned | `docs/eval/vision-report-v{n}.json` | planned |
@@ -16,6 +16,13 @@ generated it and the output file is committed. Rows marked *planned* have no res
 | Recovery from injected failures | planned | `docs/eval/failure-table.md` | planned |
 | Ablation: one agent against the full workflow | planned | `docs/eval/ablation.md` | planned |
 | Latency to graphic and to speech (p50, p95); cost per match | planned | `docs/eval/latency-cost.md` | planned |
+
+## Real-world calibration
+
+The simulator's rates are tuned to published per-match averages, which are cited per row in
+`docs/eval/sim-realism.md`. Only those averages are used: no real match, event or tracking data is
+read or committed. A row whose average is not yet cited is marked `to cite`; its band is a working
+assumption, not a claim.
 
 ## Rules
 

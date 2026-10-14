@@ -9,9 +9,10 @@
     "id": { "type": "string" },
     "t": { "type": "number", "minimum": 0, "description": "Seconds since kick-off." },
     "frame": { "type": "integer", "minimum": 0 },
+    "period": { "type": "integer", "enum": [1, 2], "description": "Half of the match. Home attacks toward x=105 in period 1 and toward x=0 in period 2." },
     "type": {
       "type": "string",
-      "enum": ["kickoff", "pass", "shot", "goal", "tackle", "interception", "pressure", "possession_change", "out_of_play", "set_piece"]
+      "enum": ["kickoff", "pass", "shot", "goal", "tackle", "interception", "pressure", "possession_change", "out_of_play", "set_piece", "foul", "save", "clearance"]
     },
     "team": { "type": "string", "enum": ["home", "away"] },
     "player": { "type": ["string", "null"] },
@@ -20,7 +21,12 @@
     "y": { "type": "number", "minimum": 0, "maximum": 68 },
     "end_x": { "type": ["number", "null"] },
     "end_y": { "type": ["number", "null"] },
-    "outcome": { "type": ["string", "null"], "enum": ["success", "fail", "on_target", "off_target", "goal", null] },
+    "outcome": { "type": ["string", "null"], "enum": ["success", "fail", "on_target", "off_target", "blocked", "goal", null] },
+    "kind": {
+      "type": ["string", "null"],
+      "enum": ["throw_in", "corner", "free_kick", "goal_kick", "penalty", "cross", "header", "catch", "parry", null],
+      "description": "Sub-type. set_piece: the restart. pass: cross, or the restart it was taken from. shot: header, free_kick or penalty. save: catch or parry."
+    },
     "ball_speed_kmh": { "type": ["number", "null"], "minimum": 0 },
     "source": { "type": "string", "enum": ["truth", "vision"] },
     "confidence": { "type": ["number", "null"], "minimum": 0, "maximum": 1 }
