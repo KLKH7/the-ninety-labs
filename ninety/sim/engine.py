@@ -64,6 +64,10 @@ CHASE_EVERY = 4  # frames between re-planning who chases a free ball
 GOAL_HALF_WIDTH, CROSSBAR = 3.66, 2.44  # Law 1
 PENALTY_DEPTH, PENALTY_HALF_WIDTH = 16.5, 20.16  # Law 1
 GOAL_AREA_X = 5.5  # Law 1
+PASS_SPEED_EST_MPS = 15.0  # design: the passer's rough guess of a pass's average speed, to lead a runner
+LEAD_MAX_S = 2.0  # design: and he leads him by at most this long
+# Laws 15 to 17: opponents keep this far from a restart until the ball is in play.
+RESTART_DISTANCE_M = {"throw_in": 2.0, "corner": 9.15, "goal_kick": PENALTY_DEPTH - GOAL_AREA_X + 1.0}
 BOARDS_M = 4.0  # verify: advertising boards behind the lines stop a ball (and players) that go out
 RESTART_DELAY_S = {"throw_in": (3, 8), "goal_kick": (6, 10), "corner": (12, 20)}  # verify (R1)
 
@@ -88,6 +92,7 @@ class Player:
     vx: float = 0.0
     vy: float = 0.0
     physique: Body = field(default_factory=lambda: Body(F0_MEAN, V0_MEAN, CS_MEAN))
+    heading: float = 0.0  # radians: which way he faces (and so what he can see)
 
 
 @dataclass
@@ -143,6 +148,9 @@ def steer(p: Player, tx: float, ty: float, want_speed: float) -> None:
 class Engine:
     def __init__(self, seed: int):
         self.rng = random.Random(seed)
+        # Perception draws from its own stream, so a change to what players see does not
+        # reshuffle every other random draw in the match.
+        self.sight_rng = random.Random(f"{seed}-perception")
         self.match = Match(seed=seed)
         self.players: list[Player] = []
         for team in ("home", "away"):
@@ -150,7 +158,8 @@ class Engine:
                 ax = fx * PITCH_X if team == "home" else (1 - fx) * PITCH_X
                 ay = fy * PITCH_Y if team == "home" else (1 - fy) * PITCH_Y
                 self.players.append(Player(f"{team[0]}{n + 1}", team, role, ax, ay, ax, ay,
-                                           physique=Body.sample(self.rng)))
+                                           physique=Body.sample(self.rng),
+                                           heading=0.0 if team == "home" else math.pi))
         self.by_id = {p.id: p for p in self.players}
         self.match.roster = [{"id": p.id, "team": p.team, "role": p.role} for p in self.players]
         self.beliefs = {p.id: perception.Belief(next_scan=self.rng.uniform(0, 3)) for p in self.players}
@@ -161,6 +170,9 @@ class Engine:
         self.kicked: dict | None = None  # the pass or shot event in flight, resolved when it ends
         self.kicked_at = -99.0
         self.kicker_clear = True  # the struck ball has left the kicker's body
+        self.released_by: str | None = None
+        # (x, y, strike): a carrier turning the ball onto his kicking side before he strikes it
+        self.windup: tuple | None = None  # Law 12: a keeper who released it may not handle it again
         self.free_since = -99.0
         self.touched_since_kick = False
         self.chase: dict[str, tuple[str, float, float]] = {}  # team -> (player, x, y)
@@ -205,13 +217,16 @@ class Engine:
         return abs(x - own_line) <= PENALTY_DEPTH and abs(y - PITCH_Y / 2) <= PENALTY_HALF_WIDTH
 
     def hands(self, p: Player, x: float, y: float) -> bool:
-        """Law 12: a keeper may handle the ball only inside their own penalty area."""
-        return p.role == "GK" and self.in_own_box(p.team, x, y)
+        """Law 12: a keeper may handle the ball only inside his own penalty area, and not again
+        after releasing it until another player has touched it."""
+        return p.role == "GK" and self.in_own_box(p.team, x, y) and self.released_by != p.id
 
     def reaction(self, p: Player) -> float:
         """Seconds before a player responds to a struck ball: a choice reaction (he must also
-        pick a direction), shortened for a keeper who reads the kicker before the strike."""
-        if p.role == "GK":
+        pick a direction), shortened only for a keeper facing a shot at his own goal, whose
+        start he reads from the kicker before the strike."""
+        k = self.kicked
+        if p.role == "GK" and k and k["type"] == "shot" and k["team"] != p.team:
             return perception.CHOICE_REACTION_S - perception.KEEPER_ANTICIPATION_S
         return perception.CHOICE_REACTION_S
 
@@ -232,6 +247,9 @@ class Engine:
             self.poss_team = self.team_of(pid)
         self.possessor = pid
         self.last_touch = pid
+        if pid != self.released_by:
+            self.released_by = None
+        self.windup = None
         self.touched_since_kick = False
         self.chase = {}
         self.hold_until = self.t + self.rng.uniform(3.5, 7.5)
@@ -248,17 +266,24 @@ class Engine:
 
     # ---- decisions: players choose, the kick gives the ball a velocity -------
 
+    def can_strike(self, carrier: Player, tx: float, ty: float) -> bool:
+        """The ball is on the side of his body facing the target, so he can strike it there
+        without the ball passing through him."""
+        ox, oy = self.ball[0] - carrier.x, self.ball[1] - carrier.y
+        if math.hypot(ox, oy) < 0.1:
+            return True
+        return ox * (tx - self.ball[0]) + oy * (ty - self.ball[1]) >= 0
+
+    def turn_to(self, carrier: Player, tx: float, ty: float, strike) -> None:
+        """He turns, taking the ball round to his kicking side; the strike waits until it is there."""
+        carrier.heading = math.atan2(ty - carrier.y, tx - carrier.x)
+        self.windup = (tx, ty, strike)
+
     def kick(self, carrier: Player, vx: float, vy: float, vz: float) -> None:
-        # The ball is struck on the side of the body facing the kick (a player turns or uses the
-        # other foot): it never starts its flight through the kicker. Turning time and body angle
-        # come with execution error in step 3.
-        speed = math.hypot(vx, vy)
-        if speed > 1e-6:
-            side = BODY_RADIUS + ball.RADIUS
-            bx, by = carrier.x + vx / speed * side, carrier.y + vy / speed * side
-        else:
-            bx, by = self.ball[0], self.ball[1]
-        self.ball = (bx, by, 0.0, vx, vy, vz)
+        # Struck from where the ball is, at the carrier's feet on the side he faces. A ball moving
+        # away from a body never meets it (contact checks approach), so no placement is needed.
+        self.ball = (self.ball[0], self.ball[1], self.ball[2], vx, vy, vz)
+        self.released_by = carrier.id
         self.possessor = None
         self.last_touch = carrier.id
         self.kicked_at = self.t
@@ -273,6 +298,9 @@ class Engine:
     def shoot(self, carrier: Player) -> None:
         team = carrier.team
         gx = goal_x(team)
+        if not self.can_strike(carrier, gx, PITCH_Y / 2):
+            self.turn_to(carrier, gx, PITCH_Y / 2, lambda: self.shoot(carrier))
+            return
         bx, by = self.ball[0], self.ball[1]
         # Aim inside a post and under the bar, with an error that grows with distance.
         side = self.rng.choice([-1, 1])
@@ -288,9 +316,19 @@ class Engine:
         self.kick(carrier, vx, vy, vz)
 
     def pass_to(self, carrier: Player, target: Player, throw: bool = False) -> None:
+        """Aimed at where the carrier believes the team-mate is, led by the velocity he believes
+        the team-mate has: a stale or wrong picture sends the ball to the wrong place."""
         bx, by = self.ball[0], self.ball[1]
-        lead = self.rng.uniform(0, 3) * attack_dir(carrier.team)
-        tx, ty = clamp(target.x + lead, 1, PITCH_X - 1), target.y
+        belief = self.beliefs[carrier.id]
+        at = belief.where(target.id, self.t)
+        if at is None:
+            raise ValueError(f"{carrier.id} cannot pass to {target.id}, whom he has not seen")
+        lead = min(LEAD_MAX_S, math.hypot(at[0] - bx, at[1] - by) / PASS_SPEED_EST_MPS)
+        tvx, tvy = belief.velocity(target.id)
+        tx, ty = clamp(at[0] + tvx * lead, 1, PITCH_X - 1), clamp(at[1] + tvy * lead, 1, PITCH_Y - 1)
+        if not self.can_strike(carrier, tx, ty):
+            self.turn_to(carrier, tx, ty, lambda: self.pass_to(carrier, target, throw))
+            return
         dist = math.hypot(tx - bx, ty - by)
         if throw or dist > LOFT_OVER_M:
             ground, up = ball.lofted_pass(dist, 30 if throw else self.rng.uniform(25, 40), DT)
@@ -400,10 +438,13 @@ class Engine:
             cx, cy = x0 + s * dx, y0 + s * dy
             cz = before[2] + s * (z1 - before[2])
             d = math.hypot(cx - p.x, cy - p.y)
+            # The ball meets a body only if it is moving toward it, relative to the player.
+            closing = (self.ball[3] - p.vx) * (p.x - cx) + (self.ball[4] - p.vy) * (p.y - cy)
+            slow = math.hypot(self.ball[3] - p.vx, self.ball[4] - p.vy) < 1.0
             reach_m, reach_z = self.reach(p, cx, cy)
-            if since >= self.reaction(p) and d <= reach_m and cz <= reach_z:
+            if since >= self.reaction(p) and d <= reach_m and cz <= reach_z and (closing > 0 or slow):
                 hits.append((s, "touch", p, cx, cy, cz))
-            elif d <= BODY_RADIUS + ball.RADIUS and cz <= BODY_HEIGHT:
+            elif d <= BODY_RADIUS + ball.RADIUS and cz <= BODY_HEIGHT and closing > 0:
                 hits.append((s, "body", p, cx, cy, cz))
         if not hits:
             return
@@ -422,19 +463,23 @@ class Engine:
         self.deflect(p, cx, cy, cz, MISCONTROL_KEEP if kind == "touch" else BODY_RESTITUTION)
 
     def deflect(self, p: Player, cx: float, cy: float, cz: float, keep: float) -> None:
-        """The ball bounces off a player (a block, a parry, a heavy touch) and stays free."""
-        vx, vy, vz = self.ball[3], self.ball[4], self.ball[5]
+        """The ball bounces off a player (a block, a parry, a heavy touch) and stays free. In the
+        player's frame, the part of the ball's velocity into the body reverses and keeps `keep`
+        of its speed; the part along the body is unchanged."""
+        rx, ry, vz = self.ball[3] - p.vx, self.ball[4] - p.vy, self.ball[5]
         nx, ny = cx - p.x, cy - p.y
         n = math.hypot(nx, ny)
         if n > 1e-6:
             nx, ny = nx / n, ny / n
         else:  # dead centre: it comes straight back
-            speed = math.hypot(vx, vy) or 1.0
-            nx, ny = -vx / speed, -vy / speed
-        into = vx * nx + vy * ny
-        if into < 0:  # moving toward the body: reflect the part that hits it
-            vx, vy = vx - 2 * into * nx, vy - 2 * into * ny
-        self.ball = (cx + nx * 0.05, cy + ny * 0.05, cz, vx * keep, vy * keep, vz * keep)
+            speed = math.hypot(rx, ry) or 1.0
+            nx, ny = -rx / speed, -ry / speed
+        into = rx * nx + ry * ny
+        if into < 0:
+            rx, ry = rx - (1 + keep) * into * nx, ry - (1 + keep) * into * ny
+        # It leaves from outside the body, never from inside it (the swept contact can overlap).
+        out = max(math.hypot(cx - p.x, cy - p.y), BODY_RADIUS + ball.RADIUS) + 0.05
+        self.ball = (p.x + nx * out, p.y + ny * out, cz, rx + p.vx, ry + p.vy, vz)
         self.emit("deflection", p.team, cx, cy, player=p.id)  # a touch is ground truth too
         self.last_touch = p.id
         self.kicker_clear = False
@@ -445,6 +490,8 @@ class Engine:
         """Resolve the pass or shot in flight from who touched it, and how: observed, never
         intended. Called with the ball as it arrived, before the touch changes it."""
         self.touched_since_kick = True
+        if p.id != self.released_by:
+            self.released_by = None
         kicked = self.kicked
         if not kicked:
             return
@@ -453,11 +500,11 @@ class Engine:
             if same_team and controls:
                 kicked.update(receiver=p.id, end_x=round(x, 2), end_y=round(y, 2), outcome="success")
                 self.kicked = None
-            elif not same_team:
+            elif not same_team and controls:
                 kicked.update(receiver=p.id, end_x=round(x, 2), end_y=round(y, 2), outcome="fail")
                 self.emit("interception", p.team, x, y, player=p.id)
                 self.kicked = None
-            return  # a team-mate's deflection leaves the pass in flight
+            return  # a deflection by anyone leaves the pass in flight until someone controls it
         if same_team and not controls:
             return  # a team-mate's deflection leaves the shot in flight
         on_target = self.heading_on_target(kicked["team"])
@@ -608,11 +655,16 @@ class Engine:
             gx, gy = (own[0] - bx) / d, (own[1] - by) / d  # from the ball toward our goal
             def on_pitch(x: float, y: float) -> tuple[float, float]:
                 return clamp(x, 0.5, PITCH_X - 0.5), clamp(y, 0.5, PITCH_Y - 0.5)
-            if brain.pressers[:1] == [p.id] and math.hypot(bx - p.x, by - p.y) < ENGAGE_M:
+            gap = PRESS_GAP_M
+            if self.restart and self.restart.team != p.team:  # Laws 15 to 17: stand off the restart
+                gap = RESTART_DISTANCE_M[self.restart.kind]
+            presser = self.by_id[brain.pressers[0]] if brain.pressers else None
+            engaged = presser is not None and math.hypot(bx - presser.x, by - presser.y) < ENGAGE_M
+            if presser is p and engaged:
                 # Press goal-side: between the ball and the goal being defended, a step away.
-                return *on_pitch(bx + gx * PRESS_GAP_M, by + gy * PRESS_GAP_M), PRESS
-            if brain.pressers[1:2] == [p.id]:  # cover: behind the presser, goal-side
-                return *on_pitch(bx + gx * COVER_M, by + gy * COVER_M), RECOVER
+                return *on_pitch(bx + gx * gap, by + gy * gap), PRESS
+            if engaged and brain.pressers[1:2] == [p.id]:  # cover: behind the presser, goal-side
+                return *on_pitch(bx + gx * max(COVER_M, gap + 2), by + gy * max(COVER_M, gap + 2)), RECOVER
             slot = brain.slot(p.role, p.ay, clamp(by, 0, PITCH_Y))
             if slot:
                 tx, ty = slot
@@ -627,8 +679,8 @@ class Engine:
         for i, p in enumerate(self.players):
             if (self.frame + i) % PERCEIVE_EVERY == 0:
                 others = [st for st in states if st[0] != p.id]
-                perception.observe(self.beliefs[p.id], (p.x, p.y, p.vx, p.vy), others, (bx, by),
-                                   self.t, self.rng)
+                perception.observe(self.beliefs[p.id], (p.x, p.y, p.heading), others, self.t,
+                                   self.sight_rng)
         holder = self.restart.team if self.restart else self.poss_team
         for k, (team, brain) in enumerate(self.brains.items()):
             if (self.frame + k * BRAIN_EVERY // 2) % BRAIN_EVERY:
@@ -658,6 +710,7 @@ class Engine:
                 u = math.hypot(ux, uy) or 1.0
                 tx, ty = p.x + ux / u * dist, p.y + uy / u * dist
             steer(p, tx, ty, top)
+            p.heading = perception.facing(p.heading, p.vx, p.vy, p.x, p.y, self.ball[0], self.ball[1])
         self.separate()
 
     def avoid(self, p: Player) -> tuple[float, float]:
@@ -710,17 +763,29 @@ class Engine:
             return
         team, opp = carrier.team, other(carrier.team)
         gx = goal_x(team)
-        presser = self.nearest(carrier.x, carrier.y, opp)
+        presser = self.nearest(carrier.x, carrier.y, opp)  # who is physically there
         gap = math.hypot(presser.x - carrier.x, presser.y - carrier.y)
-        if gap > 6:  # carries the ball toward the penalty spot, not onto the goal line
+        # How pressed he feels comes from what he believes, not from the truth.
+        view = self.beliefs[carrier.id]
+        felt = min((math.hypot(w[0] - carrier.x, w[1] - carrier.y) for w in
+                    (view.where(q.id, self.t) for q in self.players if q.team == opp) if w), default=99.0)
+        if self.windup:
+            steer(carrier, carrier.x, carrier.y, DRIBBLE)
+        elif felt > 6:  # carries the ball toward the penalty spot, not onto the goal line
             steer(carrier, gx - attack_dir(team) * 11, carrier.y + (PITCH_Y / 2 - carrier.y) * 0.3, DRIBBLE)
         else:
             steer(carrier, carrier.x, carrier.y, DRIBBLE)
         # The ball settles at the carrier's feet (from a keeper's hands, down to the ground)
         # rather than jumping there.
-        # A controlled ball travels with the carrier, then closes the remaining gap relative to them.
+        # A controlled ball travels with the carrier, then closes the remaining gap relative to
+        # them, to his feet on the side he faces.
+        if not self.windup:  # turning to strike, he faces the target, not where he drifts
+            carrier.heading = perception.facing(carrier.heading, carrier.vx, carrier.vy, carrier.x,
+                                                carrier.y, carrier.x, carrier.y)
+        feet = BODY_RADIUS + ball.RADIUS
+        fx, fy = carrier.x + math.cos(carrier.heading) * feet, carrier.y + math.sin(carrier.heading) * feet
         bx, by, bz = self.ball[0] + carrier.vx * DT, self.ball[1] + carrier.vy * DT, self.ball[2]
-        dx, dy, dz = carrier.x - bx, carrier.y - by, -bz
+        dx, dy, dz = fx - bx, fy - by, -bz
         d = math.sqrt(dx * dx + dy * dy + dz * dz)
         step = min(d, BALL_TO_FEET * DT)
         if d > 1e-6:
@@ -733,12 +798,19 @@ class Engine:
         if gap < 2.0 and self.t - self.pressed.get(opp, -99) > 8:
             self.pressed[opp] = self.t
             self.emit("pressure", opp, presser.x, presser.y, player=presser.id, receiver=carrier.id)
-        if gap < 1.5 and self.rng.random() < 0.07 * DT:
+        # A tackle needs the ball within the tackler's reach (the chance itself is step 4's duel).
+        within_reach = math.hypot(presser.x - bx, presser.y - by) <= CONTROL_M
+        if within_reach and self.rng.random() < 0.07 * DT:
             self.emit("tackle", opp, bx, by, player=presser.id, receiver=carrier.id, outcome="success")
             self.emit("possession_change", opp, bx, by, player=presser.id)
             self.give(presser.id)
             return
-        if gap < 3:
+        if self.windup:
+            if self.can_strike(carrier, self.windup[0], self.windup[1]):
+                strike, self.windup = self.windup[2], None
+                strike()
+            return
+        if felt < 3:
             self.hold_until = min(self.hold_until, self.t + 2.4)
         if self.t >= self.hold_until:
             self.decide(carrier)

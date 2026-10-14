@@ -15,6 +15,8 @@ TRANSITION_S = 5.0  # T1: the window after the ball changes hands (counter-press
 # T2: defensive line, metres from own goal line, by block (low 12-22, mid 25-35, high 35-50).
 BLOCKS = {"low": (12.0, 22.0), "mid": (25.0, 35.0), "high": (35.0, 50.0)}
 LINE_FOLLOWS_BALL = 0.5  # design: how far the line moves for each metre the ball moves
+GOAL_SIDE_OF_BALL_M = 5.0  # design: with the ball inside the block, the line drops to stay this far goal-side
+LINE_FLOOR_M = 5.5  # Law 1: the line drops no deeper than the goal area
 LINE_GAPS_M = {"defence": 0.0, "midfield": 12.0, "attack": 24.0}  # design: compact out of possession
 SQUEEZE = 0.7  # design: out of possession the shape narrows toward the centre
 BALL_SIDE = 0.3  # design: and shifts toward the ball's side
@@ -40,13 +42,6 @@ class TeamBrain:
     line_x: float = 0.0
     pressers: list[str] = field(default_factory=list)
 
-    def phase(self, now: float) -> str:
-        """attack, defend, or the transition just after the ball changed hands."""
-        fresh = now - self.changed_at < TRANSITION_S
-        if self.in_possession:
-            return "attack_transition" if fresh else "attack"
-        return "defend_transition" if fresh else "defend"
-
     def update(self, now: float, has_ball: bool, ball_x: float, time_to_ball: dict[str, float]) -> None:
         """Read the game: who has the ball, where it is, and who of ours could reach it soonest.
         `time_to_ball` maps each outfield player of this team to his time to reach the ball."""
@@ -56,6 +51,9 @@ class TeamBrain:
         lo, hi = BLOCKS[self.block]
         ball_from_goal = abs(ball_x - own_goal_x(self.team))
         depth = min(hi, max(lo, ball_from_goal * LINE_FOLLOWS_BALL))
+        # The block holds while the ball is in front of it; a ball inside it pulls the line back
+        # toward the box, so the defence stays between the ball and the goal.
+        depth = min(depth, max(LINE_FLOOR_M, ball_from_goal - GOAL_SIDE_OF_BALL_M))
         self.line_x = own_goal_x(self.team) + forward(self.team) * depth
         ranked = sorted(time_to_ball, key=time_to_ball.get)
         self.pressers = [] if has_ball else ranked[:2]  # first presser, then cover

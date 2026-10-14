@@ -229,13 +229,34 @@ def test_strong_braking_passes(tmp_path):
     assert "P2 player acceleration" not in run(tmp_path, clip)
 
 
+def a1_in_the_path(clip):
+    for f in clip["frames"]:
+        f["players"][2].update(x=44.0, y=30.8)
+
+
 def test_a_touch_in_the_air_is_not_judged_as_free_flight(tmp_path):
     clip = clean_clip()
+    a1_in_the_path(clip)
     lofted(clip)
     clip["frames"][PASS_AT + 10]["ball"]["z"] += 0.4  # a defender's head meets it
     assert "P5 ball flight" in run(tmp_path, clip)  # unexplained: a defect
     clip["events"].append(event("e2", PASS_AT + 10, "deflection", "away", "a1", x=44.0))
-    assert "P5 ball flight" not in run(tmp_path, clip)  # recorded as a touch: allowed
+    problems = run(tmp_path, clip)
+    assert "P5 ball flight" not in problems and "P14 touch possible" not in problems
+
+
+def test_a_touch_by_a_distant_player_fails(tmp_path):
+    clip = clean_clip()  # a1 stands at (60, 40), about 19 m from the ball
+    clip["events"].append(event("e2", PASS_AT + 10, "deflection", "away", "a1", x=44.0))
+    assert "P14 touch possible" in run(tmp_path, clip)
+
+
+def test_a_touch_on_a_ball_moving_away_fails(tmp_path):
+    clip = clean_clip()
+    for f in clip["frames"]:  # a1 stands just behind where the ball started, as it leaves him
+        f["players"][2].update(x=39.8, y=30.0)
+    clip["events"].append(event("e2", PASS_AT + 3, "deflection", "away", "a1", x=41.2))  # 1.4 m: in reach
+    assert "P14 touch possible" in run(tmp_path, clip)
 
 
 def test_ball_under_gravity_passes(tmp_path):
@@ -269,3 +290,33 @@ def test_substitution_in_play_fails(tmp_path):
 
 def test_missing_file(tmp_path):
     assert "C1 files" in validate(tmp_path)
+
+
+def test_an_own_goal_needs_no_shot(tmp_path):
+    clip = clean_clip()
+    clip["events"].append(event("e2", 40, "goal", "away", None, x=50.0, y=30.0))
+    clip["meta"]["score"]["away"] = 1
+    assert "C8 event order" not in run(tmp_path, clip)
+
+
+def test_a_rebound_off_the_crossbar_is_not_judged_as_free_flight(tmp_path):
+    clip = clean_clip()
+    lofted(clip)
+    for n in range(PASS_AT, PASS_AT + 26):
+        clip["frames"][n]["ball"]["x"] += 64.6 - 40  # the same flight, ending at the far goal line
+    clip["frames"][PASS_AT + 10]["ball"]["z"] += 0.4
+    assert "P5 ball flight" in run(tmp_path, clip)  # in midfield: a defect
+    for n in range(PASS_AT, PASS_AT + 26):
+        clip["frames"][n]["ball"]["x"] = 104.8  # the same heights, at the goal mouth
+    problems = run(tmp_path, clip)
+    assert "P5 ball flight" not in problems
+
+
+def test_a_second_touch_straight_after_a_first_is_judged_on_reach_only(tmp_path):
+    clip = clean_clip()
+    for f in clip["frames"]:
+        f["players"][2].update(x=39.6, y=30.0)
+    clip["events"].append(event("e2", PASS_AT + 1, "deflection", "away", "a1", x=40.4))
+    clip["events"].append(event("e3", PASS_AT + 2, "deflection", "away", "a1", x=40.8))
+    problems = run(tmp_path, clip)
+    assert "P14 touch possible" not in problems

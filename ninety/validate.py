@@ -43,6 +43,15 @@ MAX_SUBSTITUTIONS = 5  # C3: Law 3, top-level competitions
 STOPPAGES = {"out_of_play", "goal", "substitution"}  # C3: events after which play has stopped
 RESTARTS = {"set_piece", "kickoff"}  # P3: events that put the ball back in play
 TOUCHES = {"pass", "shot", "deflection", "interception", "tackle", "possession_change"}  # P5
+# P14: a touch by someone other than the carrier must be physically possible: the player within
+# reach of the ball, which was not moving away from him. Reach is a foot (1 m) or a diving
+# keeper in his box (1.8 m), plus one frame of the ball's and the player's motion.
+CONTACTS = {"deflection", "interception"}
+FOOT_REACH_M, KEEPER_REACH_M, FRAME_SLACK_M = 1.0, 1.8, 0.6
+# P5: the goal frame (Law 1: posts 7.32 m apart, bar 2.44 m high) is a contact too; a ball
+# within this distance of it may rebound without an event.
+WOODWORK_NEAR_M = 0.6
+APPROACH_TOLERANCE_M = 0.04  # P14: per frame; a ball at 1 m/s relative to him can still be met
 EXAMPLES = 5
 
 Problems = dict[str, list[str]]
@@ -169,6 +178,8 @@ def check_physics(events: list[dict], frames: list[dict], fps: float, roster: li
     for f0, f1, f2 in zip(frames, frames[1:], frames[2:], strict=False):
         if f1["frame"] in restarts or f1["frame"] in touched or any(f.get("possessor") for f in (f0, f1, f2)):
             continue
+        if any(near_woodwork(f["ball"]) for f in (f0, f1, f2)):
+            continue
         z = (f0["ball"]["z"], f1["ball"]["z"], f2["ball"]["z"])
         if min(z) <= AIRBORNE_M:
             continue
@@ -183,6 +194,7 @@ def check_physics(events: list[dict], frames: list[dict], fps: float, roster: li
             )
 
     keepers = {p["id"] for p in roster if p.get("role") == "GK"}
+    check_contacts(events, frames, keepers, problems)
     for f in frames:
         pid = f.get("possessor")
         if not pid:
@@ -196,6 +208,47 @@ def check_physics(events: list[dict], frames: list[dict], fps: float, roster: li
                     and abs(holder["y"] - 34) <= PENALTY_HALF_WIDTH)
         if gap > (IN_HANDS_M if pid in keepers and in_a_box else AT_FEET_M):
             problems["P6 ball at feet"].append(f"frame {f['frame']}: ball {gap:.1f} m from {pid}, who has it")
+
+
+def near_woodwork(b: dict) -> bool:
+    """P5: within reach of a post or the crossbar, where the ball may rebound."""
+    on_line = min(abs(b["x"]), abs(105 - b["x"])) <= WOODWORK_NEAR_M
+    in_frame = abs(b["y"] - 34) <= 3.66 + WOODWORK_NEAR_M and b["z"] <= 2.44 + WOODWORK_NEAR_M
+    return on_line and in_frame
+
+
+def check_contacts(events: list[dict], frames: list[dict], keepers: set[str], problems: Problems) -> None:
+    """P14: a deflection or interception names a player who could have touched the ball."""
+    by_frame = {f["frame"]: f for f in frames}
+    touches = {e["frame"] for e in events if e["type"] in TOUCHES}
+    for e in events:
+        if e["type"] not in CONTACTS or not e.get("player"):
+            continue
+        f, before, earlier = (by_frame.get(e["frame"] - k) for k in (0, 1, 2))
+        if f is None:
+            continue
+
+        me = next((q for q in f["players"] if q["id"] == e["player"]), None)
+        if me is None:
+            continue
+        now = math.hypot(f["ball"]["x"] - me["x"], f["ball"]["y"] - me["y"])
+        in_box = min(me["x"], 105 - me["x"]) <= PENALTY_DEPTH and abs(me["y"] - 34) <= PENALTY_HALF_WIDTH
+        reach = (KEEPER_REACH_M if e["player"] in keepers and in_box else FOOT_REACH_M) + FRAME_SLACK_M
+        if now > reach:
+            problems["P14 touch possible"].append(
+                f"{e['id']}: {e['type']} by {e['player']}, {now:.1f} m from the ball")
+            continue
+        free = not touches & {e["frame"] - 1, e["frame"] - 2}  # a contact just before is not free motion
+        if before and earlier and free:
+            # Over the two frames before the touch, was the ball closing on him (or slow beside him)?
+            p1 = next((q for q in before["players"] if q["id"] == e["player"]), None)
+            p2 = next((q for q in earlier["players"] if q["id"] == e["player"]), None)
+            if p1 is not None and p2 is not None:
+                d1 = math.hypot(before["ball"]["x"] - p1["x"], before["ball"]["y"] - p1["y"])
+                d2 = math.hypot(earlier["ball"]["x"] - p2["x"], earlier["ball"]["y"] - p2["y"])
+                if d1 - d2 > APPROACH_TOLERANCE_M:
+                    problems["P14 touch possible"].append(
+                        f"{e['id']}: {e['type']} by {e['player']}, but the ball was moving away from him")
 
 
 def check_events(events: list[dict], frames: list[dict], fps: float, meta: dict, problems: Problems) -> None:
@@ -244,7 +297,7 @@ def check_events(events: list[dict], frames: list[dict], fps: float, meta: dict,
             before = [p for p in passes if p["frame"] <= e["frame"]]
             if not before or before[-1]["outcome"] != "fail" or before[-1]["receiver"] != e["player"]:
                 problems["C8 event order"].append(f"{e['id']}: {e['player']} intercepted no failed pass")
-        if e["type"] == "goal":
+        if e["type"] == "goal" and e.get("player"):  # an own goal (no scorer) needs no shot
             before = [s for s in shots if s["frame"] <= e["frame"]]
             if not before or before[-1]["outcome"] != "goal" or before[-1]["player"] != e["player"]:
                 problems["C8 event order"].append(f"{e['id']}: goal by {e['player']} without a scoring shot")
