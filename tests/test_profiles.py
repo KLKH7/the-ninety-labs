@@ -29,11 +29,22 @@ def test_roles_differ_in_the_expected_direction():
     assert mean(strikers) > mean(centre_backs) + 0.3
 
 
-def test_physical_attributes_keep_the_sourced_means():
+def test_physical_attributes_keep_the_sourced_distributions():
+    from ninety.sim import body
     rng = random.Random(2)
-    bodies = [Profile.generate("CM", rng).physique() for _ in range(2000)]
-    assert abs(mean(b.f0 for b in bodies) - 5.2) < 0.1
-    assert 0.35 < pstdev([b.f0 for b in bodies]) < 0.55
+    bodies = [Profile.generate("ST", rng).physique() for _ in range(4000)]  # no physical role shift
+    for name, mu, sd in (("f0", body.F0_MEAN, body.F0_SD), ("v0", body.V0_MEAN, body.V0_SD),
+                         ("cs", body.CS_MEAN, body.CS_SD)):
+        values = [getattr(b, name) for b in bodies]
+        assert abs(mean(values) - mu) < 0.1 * sd
+        assert abs(pstdev(values) - sd) < 0.1 * sd
+
+
+def test_a_physical_role_shift_moves_the_mean_by_that_many_spreads():
+    from ninety.sim import body
+    rng = random.Random(5)
+    wingers = [Profile.generate("RW", rng).physique().v0 for _ in range(4000)]
+    assert abs(mean(wingers) - (body.V0_MEAN + 0.7 * body.V0_SD)) < 0.05
 
 
 def error(p: Profile, **kw) -> float:
@@ -60,12 +71,16 @@ def test_pressure_fatigue_and_the_weaker_foot_widen_error():
     assert error(player(weak_foot=1.0), weak_foot=True) == error(player(weak_foot=1.0))  # two-footed
 
 
-def test_better_anticipation_reacts_sooner_and_keepers_read_the_kicker():
-    assert player(anticipation=0.9).reaction(False, 0.25) < player(anticipation=0.1).reaction(False, 0.25)
-    assert player().reaction(True, 0.25) < player().reaction(False, 0.25)
-    fastest = player(anticipation=1.0).reaction(False, 0.25)
-    slowest = player(anticipation=0.0).reaction(False, 0.25)
-    assert 0.31 < fastest < slowest < 0.41
+def test_reflexes_set_the_choice_reaction_within_the_measured_range():
+    assert player(reflexes=0.9).reaction() < player(reflexes=0.1).reaction()
+    assert math.isclose(player(reflexes=1.0).reaction(), 0.32)
+    assert math.isclose(player(reflexes=0.0).reaction(), 0.41)
+    assert player(anticipation=1.0).reaction() == player(anticipation=0.0).reaction()  # reading != reacting
+
+
+def test_anticipation_narrows_a_keepers_read_of_the_kicker():
+    assert player(anticipation=0.9).read_error_m() < player(anticipation=0.1).read_error_m()
+    assert player(anticipation=1.0).read_error_m() > 0  # a read can always be wrong
 
 
 def test_vision_widens_view_and_scans_more_often():

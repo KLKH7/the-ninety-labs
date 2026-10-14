@@ -2,9 +2,10 @@
 the passer believes, keepers only anticipate shots, pressers stand goal-side, and facing holds."""
 
 import math
+from statistics import mean, pstdev
 
 from ninety.sim import ball, perception
-from ninety.sim.engine import BODY_RADIUS, BODY_RESTITUTION, DT, PRESS_GAP_M, Engine
+from ninety.sim.engine import BODY_RADIUS, BODY_RESTITUTION, DT, MAX_STRIKE_MPS, PRESS_GAP_M, Engine
 
 
 def still(e: Engine) -> None:
@@ -57,15 +58,21 @@ def test_a_pass_goes_where_the_passer_believes_the_team_mate_is():
     assert e.ball[4] > 0.5 * abs(e.ball[3])  # aimed toward y=50, where he thinks the mate is
 
 
-def test_only_a_shot_at_his_own_goal_lets_a_keeper_react_early():
+def test_a_keeper_reacts_to_the_ball_like_anyone_and_reads_only_shots_at_his_goal():
     e = Engine(1)
     keeper, outfield = e.keeper("away"), e.by_id["a6"]
-    e.kicked = {"type": "pass", "team": "home"}
+    keeper.profile.attributes["reflexes"] = outfield.profile.attributes["reflexes"]
     assert e.reaction(keeper) == e.reaction(outfield)
-    e.kicked = {"type": "shot", "team": "home"}
-    assert e.reaction(keeper) < e.reaction(outfield)
-    e.kicked = {"type": "shot", "team": "away"}  # his own team's shot at the other end
-    assert e.reaction(keeper) == e.reaction(outfield)
+    carrier = e.by_id["h9"]
+    carrier.x, carrier.y, carrier.heading = 85.0, 34.0, 0.0
+    e.give(carrier.id)
+    e.ball = (85.37, 34.0, 0.0, 0.0, 0.0, 0.0)
+    e.shoot(carrier)
+    assert e.read and e.read[0] == keeper.id
+    tx, ty, _ = e.shape_target(keeper)
+    assert math.isclose(ty, min(34 + 3.66, max(34 - 3.66, e.read[1])))  # toward his read, within the posts
+    e.give(carrier.id)
+    assert e.read is None
 
 
 def test_the_presser_stands_goal_side_for_both_teams():
@@ -136,3 +143,70 @@ def test_a_carrier_turns_the_ball_onto_his_kicking_side_before_passing_behind_hi
             break
     assert e.possessor is None and e.ball[3] < 0  # struck, from behind him, toward the team-mate
     assert e.ball[0] < carrier.x
+
+
+def kicker(foot: str = "right") -> tuple[Engine, object]:
+    e = Engine(3)
+    still(e)
+    p = e.by_id["h9"]
+    p.x, p.y, p.heading = 50.0, 34.0, 0.0
+    p.profile.foot = foot
+    p.profile.attributes.update(finishing=0.5, composure=0.5, weak_foot=0.0)
+    for q in e.players:
+        if q.team == "away":
+            q.x, q.y = 5.0, 5.0  # nobody near: no pressure
+    return e, p
+
+
+def test_execution_scatters_direction_by_the_profiles_error_and_never_kicks_down():
+    e, p = kicker()
+    angles, speeds = [], []
+    for _ in range(3000):
+        vx, vy, vz = e.execute(p, 21.0, 0.0, 0.0, "finishing")
+        angles.append(math.degrees(math.atan2(vy, vx)))
+        speeds.append(math.sqrt(vx * vx + vy * vy + vz * vz))
+        assert vz == 0.0  # a ground pass is not lofted by error
+    expected = p.profile.kick_error("finishing", 21.0, 0.0, 1.0, False)[0]
+    assert abs(pstdev(angles) - expected) < 0.1 * expected
+    assert max(e.execute(p, 35.9, 0.0, 0.0, "finishing")[0] for _ in range(500)) <= MAX_STRIKE_MPS
+
+
+def mean_speed(e: Engine, p, deg: float) -> float:
+    a = math.radians(deg)
+    return mean(math.hypot(*e.execute(p, 20 * math.cos(a), 20 * math.sin(a), 0.0, "passing")[:2])
+                for _ in range(2000))
+
+
+def test_the_weaker_foot_is_used_on_its_side_and_strikes_slower():
+    for foot, weak_side in (("right", 60.0), ("left", -60.0)):
+        e, p = kicker(foot)
+        assert mean_speed(e, p, weak_side) < 0.92 * mean_speed(e, p, -weak_side)
+
+
+def test_the_engine_uses_each_profile_for_body_and_sight(monkeypatch):
+    e = Engine(4)
+    p = e.players[3]
+    assert p.physique.f0 == p.profile.physique().f0 and p.physique.v0 == p.profile.physique().v0
+    seen = {}
+    def spy(belief, me, others, now, rng, half_angle, scan_interval):
+        seen[me] = (half_angle, scan_interval)
+    monkeypatch.setattr(perception, "observe", spy)
+    for _ in range(6):
+        e.perceive_and_think()
+        e.frame += 1
+    assert seen[(p.x, p.y, p.heading)] == (p.profile.view_half_angle(), p.profile.scan_interval())
+
+
+def test_a_pass_is_struck_with_execution_error():
+    angles = set()
+    for seed in range(8):
+        e, p = kicker()
+        e.rng.seed(seed)
+        mate = e.by_id["h10"]
+        mate.x, mate.y = 70.0, 34.0
+        e.give(p.id)
+        e.ball = (50.37, 34.0, 0.0, 0.0, 0.0, 0.0)
+        e.beliefs[p.id].seen[mate.id] = perception.Sighting(70.0, 34.0, 0.0, 0.0, e.t)
+        e.pass_to(p, mate)
+        angles.add(round(math.atan2(e.ball[4], e.ball[3]), 6))
+    assert len(angles) > 1  # the same intended pass is not struck identically every time

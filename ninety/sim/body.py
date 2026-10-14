@@ -8,7 +8,6 @@ distance, the late drop in high-intensity running) is measured afterwards, never
 from __future__ import annotations
 
 import math
-import random
 from dataclasses import dataclass
 
 GRAVITY = 9.81
@@ -30,14 +29,6 @@ class Body:
     reserve: float = D0  # metres left above critical speed
     spent: float = 0.0  # total metres spent above critical speed this match
     grip_used: float = 0.0  # velocity change already used this frame, m/s (shared grip limit)
-
-    @classmethod
-    def sample(cls, rng: random.Random) -> Body:
-        return cls(
-            f0=max(4.0, rng.gauss(F0_MEAN, F0_SD)),
-            v0=max(9.0, rng.gauss(V0_MEAN, V0_SD)),
-            cs=max(3.3, rng.gauss(CS_MEAN, CS_SD)),
-        )
 
     @property
     def capacity(self) -> float:

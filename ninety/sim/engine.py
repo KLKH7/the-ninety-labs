@@ -20,7 +20,7 @@ import random
 from dataclasses import dataclass, field
 
 from ninety.sim import ball, perception
-from ninety.sim.body import BRAKE_MAX, CS_MEAN, F0_MEAN, V0_MEAN, Body
+from ninety.sim.body import BRAKE_MAX, CS_MEAN, D0, F0_MEAN, V0_MEAN, Body
 from ninety.sim.body import move as move_body
 from ninety.sim.profiles import Profile
 from ninety.sim.team import TeamBrain
@@ -55,6 +55,7 @@ SHOULDER_TO_SHOULDER_M = 0.52  # P11: centres of two players in contact, shoulde
 ANTICIPATE_S = 0.4  # verify: how far ahead players judge where others will be
 BODY_RESTITUTION = 0.3  # verify: share of the ball's speed into a body that it keeps
 PRESSURE_M = 3.0  # design: an opponent this close puts the kicker under full pressure
+MAX_STRIKE_MPS = 36.0  # design: the hardest a foot strikes a ball, below the 40 m/s check (P3)
 WEAK_SIDE_DEG = 30.0  # design: a kick this far to the weaker foot's side is struck with it
 MISCONTROL_KEEP = 0.4  # verify: share of speed a ball keeps off a failed touch or a parry
 POST_RADIUS = 0.06  # Law 1: posts and crossbar at most 12 cm wide
@@ -176,9 +177,10 @@ class Engine:
         self.kicked: dict | None = None  # the pass or shot event in flight, resolved when it ends
         self.kicked_at = -99.0
         self.kicker_clear = True  # the struck ball has left the kicker's body
-        self.released_by: str | None = None
+        self.released_by: str | None = None  # Law 12: a keeper who released it may not handle it again
         # (x, y, strike): a carrier turning the ball onto his kicking side before he strikes it
-        self.windup: tuple | None = None  # Law 12: a keeper who released it may not handle it again
+        self.windup: tuple | None = None
+        self.read: tuple[str, float] | None = None  # (keeper, y): where he reads a shot is going
         self.free_since = -99.0
         self.touched_since_kick = False
         self.chase: dict[str, tuple[str, float, float]] = {}  # team -> (player, x, y)
@@ -228,12 +230,10 @@ class Engine:
         return p.role == "GK" and self.in_own_box(p.team, x, y) and self.released_by != p.id
 
     def reaction(self, p: Player) -> float:
-        """Seconds before a player responds to a struck ball: a choice reaction (he must also
-        pick a direction), shortened only for a keeper facing a shot at his own goal, whose
-        start he reads from the kicker before the strike."""
-        k = self.kicked
-        reads_kicker = p.role == "GK" and bool(k) and k["type"] == "shot" and k["team"] != p.team
-        return max(0.0, p.profile.reaction(reads_kicker, perception.KEEPER_ANTICIPATION_S))
+        """Seconds before a player responds to the struck ball itself: a choice reaction (he must
+        also pick a direction). A keeper's head start is a read of the kicker (`read`), which can
+        be wrong; his reaction to the real ball still takes this long."""
+        return p.profile.reaction()
 
     def reach(self, p: Player, x: float, y: float, at: float | None = None) -> tuple[float, float]:
         """How far and how high this player can reach for a ball at (x, y), at time `at`."""
@@ -255,6 +255,7 @@ class Engine:
         if pid != self.released_by:
             self.released_by = None
         self.windup = None
+        self.read = None
         self.touched_since_kick = False
         self.chase = {}
         self.hold_until = self.t + self.rng.uniform(3.5, 7.5)
@@ -306,14 +307,17 @@ class Engine:
             return vx, vy, vz
         nearest = min(math.hypot(q.x - p.x, q.y - p.y) for q in self.players if q.team != p.team)
         pressure = clamp((PRESSURE_M - nearest) / PRESSURE_M, 0.0, 1.0)
-        heading = math.atan2(p.vy, p.vx) if math.hypot(p.vx, p.vy) > 1.0 else math.atan2(vy, vx)
-        turn = math.degrees((math.atan2(vy, vx) - heading + math.pi) % (2 * math.pi) - math.pi)
+        # Which foot: the kick's direction against the way he faces (a state; P13).
+        turn = math.degrees((math.atan2(vy, vx) - p.heading + math.pi) % (2 * math.pi) - math.pi)
         weak = (turn > WEAK_SIDE_DEG) if p.profile.foot == "right" else (turn < -WEAK_SIDE_DEG)
-        dir_sd, speed_sd, loft_sd = p.profile.kick_error(skill, speed, pressure, p.physique.capacity, weak)
+        fresh = p.physique.ceiling / D0  # the slow store: fatigue over the match, not one sprint
+        dir_sd, speed_sd, loft_sd = p.profile.kick_error(skill, speed, pressure, fresh, weak)
         angle = math.atan2(vy, vx) + math.radians(self.rng.gauss(0, dir_sd))
         loft = math.atan2(vz, ground) + (math.radians(self.rng.gauss(0, loft_sd)) if vz > 0 else 0.0)
+        # A mishit can carry almost nothing (floor: design); no strike exceeds a foot's limit.
         speed *= max(0.3, 1 + self.rng.gauss(0, speed_sd)) * (p.profile.weak_foot_speed() if weak else 1.0)
-        ground, up = speed * math.cos(loft), max(0.0, speed * math.sin(loft))
+        speed = min(speed, MAX_STRIKE_MPS)
+        ground, up = speed * math.cos(loft), speed * math.sin(loft)  # a low drive may go into the turf
         return ground * math.cos(angle), ground * math.sin(angle), up
 
     def aim(self, sx: float, sy: float, tx: float, ty: float, ground: float, up: float):
@@ -333,6 +337,10 @@ class Engine:
         tz = self.rng.uniform(0.1, 2.0)
         speed = self.rng.uniform(70, 120) / 3.6
         ground, up = ball.shot(math.hypot(gx - bx, ty - by), speed, tz, DT)
+        # The keeper reads the kicker's body and starts toward where he thinks it is going,
+        # before he can react to the ball itself; the read can be wrong (A2).
+        keeper = self.keeper(other(team))
+        self.read = (keeper.id, ty + self.rng.gauss(0, keeper.profile.read_error_m()))
         vx, vy, vz = self.execute(carrier, *self.aim(bx, by, gx, ty, ground, up), "finishing")
         speed = math.sqrt(vx * vx + vy * vy + vz * vz)
         # Outcome and end point are observed: set when the ball is touched, goes out or goes in.
@@ -665,6 +673,11 @@ class Engine:
         # Targets stay on the pitch so players brake for the line instead of stopping dead at it.
         if chase and chase[0] == p.id:
             return clamp(chase[1], 0.5, PITCH_X - 0.5), clamp(chase[2], 0.5, PITCH_Y - 0.5), SPRINT
+        if self.read and self.read[0] == p.id and self.possessor is None and self.kicked:
+            line = PITCH_X - goal_x(p.team)
+            x = line + attack_dir(p.team) * min(abs(p.x - line), 1.0)  # across his line, not off it
+            post = PITCH_Y / 2 - GOAL_HALF_WIDTH, PITCH_Y / 2 + GOAL_HALF_WIDTH
+            return x, clamp(self.read[1], *post), SPRINT
         if self.restart and p.id == self.restart.taker:
             r = self.restart
             return clamp(r.x, 0.5, PITCH_X - 0.5), clamp(r.y, 0.5, PITCH_Y - 0.5), RECOVER

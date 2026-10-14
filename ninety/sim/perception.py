@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 
 SIMPLE_REACTION_S = 0.255  # P12: footballers' simple visual reaction
 CHOICE_REACTION_S = 0.365  # P12: reaction when a direction must also be chosen
-KEEPER_ANTICIPATION_S = 0.25  # P12: keepers start 50 to 350 ms before the strike; design within it
+CHOICE_REACTION_RANGE_S = (0.41, 0.32)  # P12: slowest to fastest choice reaction across footballers
 VIEW_HALF_ANGLE = math.radians(60)  # design: the useful field of view either side of facing
 SENSE_RADIUS_M = 3.0  # design: anyone this close is noticed whichever way the player faces
 POSITION_ERROR_PER_M = 0.02  # design: 1 m of error at 50 m
