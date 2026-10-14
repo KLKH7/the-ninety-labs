@@ -59,23 +59,18 @@ Solid lines run every time; dotted lines are the answer key, which only training
 may read.
 
 ```mermaid
-flowchart TB
-    SRC["Grounding sources<br/>Laws of the Game,<br/>sports science"]
-    SCN["Scenario + seed"] --> ENG["Match engine<br/>football logic, physics"]
+flowchart LR
+    SRC["Laws of the Game,<br/>sports science"]
+    ENG["Match engine<br/>football, physics"] -- "events,<br/>frames" --> VAL{"Validator"}
+    VAL -- passes --> REN["Renderer<br/>three.js"]
+    REN -- video --> VIS["Vision<br/>pipeline"]
+    VIS -- "detected<br/>events" --> SC["Scoring"]
     SRC -.-> ENG
     SRC -.-> VAL
-    ENG --> GT[("Ground truth<br/>events, frames")]
-    GT --> VAL{"Validator<br/>laws, physics,<br/>consistency"}
-    VAL -- "fails: fix the engine" --> ENG
-    VAL -- passes --> REN["Renderer<br/>three.js"]
-    REN --> VID["Broadcast video"]
-    REN --> LBL[("Render labels<br/>camera, boxes")]
-    VID --> VIS["Vision pipeline"]
-    VIS --> DET["Detected events"]
-    DET --> EVAL["Scoring"]
-    GT -. answer key .-> EVAL
-    LBL -. training only .-> VIS
-    EVAL --> AUD["Vision Auditor"] --> DATA["Data agent"] --> SCN
+    VAL -- "fails: fix" --> ENG
+    ENG -. answer key .-> SC
+    REN -. "labels,<br/>training only" .-> VIS
+    SC --> LOOP["Vision Auditor,<br/>Data agent"] -- "new scenarios" --> ENG
 ```
 
 | Part | Job | Code | Status |
