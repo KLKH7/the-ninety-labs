@@ -20,7 +20,8 @@ including the ones who can't see it.
 5. [docs/PLAN.md](docs/PLAN.md): goals, milestones and what is due on which day.
 6. [docs/EVALUATION.md](docs/EVALUATION.md): how every published number is measured.
 7. [docs/DATA_CONTRACT.md](docs/DATA_CONTRACT.md): what ground-truth data must contain, and how it is checked.
-8. [SECURITY.md](SECURITY.md): the repo and the demo are public.
+8. [docs/ENGINE.md](docs/ENGINE.md): how the match engine makes football (players decide, physics happens, the referee observes) and the build order.
+9. [SECURITY.md](SECURITY.md): the repo and the demo are public.
 
 Task-specific guides in `docs/guides/`:
 
