@@ -66,7 +66,11 @@ short and actionable. This file is public: no research sources, product names or
   every legal case (a kick-off reset, a lofted pass, a substitution at a stoppage) has a test
   that requires it to pass, so no check is stricter than the Laws.
 - **What happened:** a planted "ball never arrives" defect showed the ball-path check could
-  never fail on short clips.
+  never fail on short clips. Later, a new braking test stayed green with the braking limit set
+  to infinity: an independent reviewer found it by breaking the limit on purpose.
+- **Check (mutation test):** for every new check or test, break the thing it guards (set the
+  limit to infinity, remove the line) and confirm exactly the intended test goes red; then
+  restore and confirm green.
 
 ### 9. Passing the validator is not being realistic
 - **What happened:** a run where every pass was intercepted met the data contract.
