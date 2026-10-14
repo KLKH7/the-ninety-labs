@@ -22,7 +22,7 @@ def main() -> None:
         for fr in match.frames:
             f.write(json.dumps(fr) + "\n")
     meta = {"seed": args.seed, "minutes": args.minutes, "fps": FPS, "score": match.score,
-            "counts": Counter(e["type"] for e in match.events)}
+            "roster": match.roster, "counts": Counter(e["type"] for e in match.events)}
     (args.out / "meta.json").write_text(json.dumps(meta, indent=2))
     print(json.dumps(meta))
 

@@ -58,7 +58,7 @@ Kind: **hard** fails the clip; **warn** is reported. Columns show what exists to
 | C4 | every player in an event is in the frames, on the right team | our schemas | hard | ✅ | ✅ |
 | C5 | each event's frame exists and its time matches | CDF | hard | ✅ | ✅ |
 | C6 | the ball is where a pass, shot or tackle says it happened | CDF | hard | ✅ | ✅ |
-| C7 | a pass or shot reaches its end point in the time its speed allows | physics | hard | ✅ | ✅ |
+| C7 | a pass or shot reaches its end point before anything else happens to the ball (no assumption about speed: a rolling ball slows) | CDF | hard | ✅ | ✅ |
 | C8 | event order makes sense: only the player with the ball passes or shoots; an interception follows a failed pass; a goal follows a shot | Laws 9, 10 | hard | ✅ | ✅ |
 | C9 | the score equals the goal events | Law 10 | hard | ✅ | ✅ |
 
@@ -70,8 +70,9 @@ Kind: **hard** fails the clip; **warn** is reported. Columns show what exists to
 | P2 | player acceleration at most about 8 m/s², measured over 0.2 s | elite players' maximal acceleration about 6.2 m/s² ([Applied Sciences, 2022](https://doaj.org/article/5a330c62187f431b8d51ae1e9eca156f)) plus margin | hard | ✅ | ✅ players accelerate at most 5 m/s² |
 | P3 | ball speed at most 40 m/s, except a new ball placed while out of play | sports science, fastest recorded shots (*verify*); Law 9 | hard | ✅ | ✅ |
 | P4 | ball never below the ground (circumference 68 to 70 cm, so radius about 0.11 m) | Law 2 | hard | ✅ | ✅ |
-| P5 | a ball in the air falls under gravity, then bounces and rolls | physics | hard | ✅ gravity; bounce and roll not yet | ✅ gravity; ❌ the ball stops dead where it lands |
-| P6 | the ball stays at the feet of the player who has it | physics | hard | ✅ | ✅ |
+| P5 | a ball in the air falls under gravity and air drag (drag coefficient up to 0.5, *verify*); the margin is the measurement precision of 1 mm positions | physics | hard | ✅ | ✅ |
+| P6 | the ball stays at the feet of the player who has it (1.5 m), or in a goalkeeper's hands in a penalty area (2 m, *verify*) | Law 12 | hard | ✅ | ✅ |
+| P8 | a free ball bounces (keeps about 60 percent of its vertical speed, *verify*) and rolls to a stop on grass (about 1.2 m/s², *verify*) | ball physics; Law 2 (size, mass) | hard | ❌ | ✅ |
 | P7 | two players never overlap (about 0.5 m apart) | physics | warn | ❌ | ❌ |
 
 ### Laws of the Game: it is legal football
@@ -82,11 +83,11 @@ Kind: **hard** fails the clip; **warn** is reported. Columns show what exists to
 | L2 | 11 players a team, exactly one goalkeeper | Law 3 | hard | ❌ | ✅ |
 | L3 | two equal halves of 45 minutes plus added time; teams switch ends for the second half | Laws 7, 8 | hard | ❌ | ❌ one long half |
 | L4 | kick-off: ball still on the centre mark, every player but the kicker in their own half, opponents 9.15 m away; after a goal the conceding team kicks off | Law 8 | hard | ❌ | partly |
-| L5 | the ball is out only when the whole ball has crossed a goal line or touchline, on the ground or in the air | Law 9 | hard | ❌ | ❌ no out of play except missed shots |
-| L6 | a goal only when the whole ball crosses the goal line between the posts and under the bar | Law 10 | hard | ❌ | partly |
-| L7 | over the touchline: a throw-in to the opponents of the last player to touch it, from where it crossed; opponents 2 m away | Law 15 | hard | ❌ | ❌ |
-| L8 | over the goal line, no goal, last touched by an attacker: a goal kick from inside the goal area; opponents outside the penalty area | Law 16 | hard | ❌ | ✅ goal kick from the goal area after a stoppage; ❌ opponents not kept out |
-| L9 | over the goal line, no goal, last touched by a defender: a corner from the corner area on that side; opponents 9.15 m from the corner arc | Law 17 | hard | ❌ | ❌ |
+| L5 | the ball is out only when the whole ball has crossed a goal line or touchline, on the ground or in the air | Law 9 | hard | ❌ | ✅ |
+| L6 | a goal only when the whole ball crosses the goal line between the posts and under the bar | Law 10 | hard | ❌ | ✅ |
+| L7 | over the touchline: a throw-in to the opponents of the last player to touch it, from where it crossed; opponents 2 m away | Law 15 | hard | ❌ | ✅ thrown, not dribbled; ❌ opponents not kept 2 m away |
+| L8 | over the goal line, no goal, last touched by an attacker: a goal kick from inside the goal area; opponents outside the penalty area | Law 16 | hard | ❌ | ✅ awarded; ❌ opponents not kept out |
+| L9 | over the goal line, no goal, last touched by a defender: a corner from the corner area on that side; opponents 9.15 m from the corner arc | Law 17 | hard | ❌ | ✅ awarded; ❌ opponents not kept away |
 | L10 | a player who receives a team-mate's pass while in an offside position (in the opponents' half, nearer the goal line than the ball and the second-last opponent; level is onside) is penalised; never from a goal kick, throw-in or corner | Law 11 | hard | ❌ | ❌ |
 | L11 | one referee and two assistants on the pitch | Laws 5, 6 | hard for video | ❌ | ❌ |
 | L12 | fouls, free kicks, penalties, cards | Laws 12 to 14 | later | ❌ | ❌ |
@@ -95,10 +96,10 @@ Kind: **hard** fails the clip; **warn** is reported. Columns show what exists to
 
 | ID | Check | Source | Validator | Engine |
 |---|---|---|---|---|
-| R1 | ball in play about 55 to 60 of 90 minutes | competition reports (*verify*) | ❌ | ❌ always in play |
+| R1 | ball in play about 55 to 60 of 90 minutes | competition reports (*verify*) | ❌ | ❌ only 4 to 8 restarts a match: passes are aimed at team-mates and there are no clearances or crosses, so the ball rarely goes out |
 | R2 | outfield players cover about 10 to 13 km per 90 minutes | sports science, Premier League samples (*verify*) | ❌ | ❓ |
-| R3 | pass completion about 75 to 88 percent | competition reports (*verify*) | ❌ | ✅ tuned |
-| R4 | shots and goals per match in the usual range | competition reports (*verify*) | ❌ | ✅ tuned |
+| R3 | pass completion about 75 to 88 percent | competition reports (*verify*) | ❌ | ✅ 74 to 77 percent, emerging from who reaches the ball first |
+| R4 | shots and goals per match in the usual range | competition reports (*verify*) | ❌ | 🟡 14 to 22 shots, 1 to 4 goals, emerging from physics; shots on the low side |
 | R5 | each position spends its time in realistic areas | sports science (*verify*) | ❌ | ❓ |
 
 ### Renderer truth: the labels match the pictures
@@ -112,8 +113,8 @@ Kind: **hard** fails the clip; **warn** is reported. Columns show what exists to
 ## Order of work
 
 1. ~~Fix C3 so a legal substitution passes.~~ Done.
-2. ~~Physics first.~~ Done: the engine passes P1 to P6 over full matches. Still open: the ball
-   bounces and rolls after landing (P5) instead of stopping dead.
+2. ~~Physics first.~~ Done: the engine passes P1 to P6 over full matches, with bounce and roll,
+   and outcomes emerge from the ball rather than being decided at the kick. P8 needs its check.
 3. **Out of play and restarts** (L5, L7 to L9) and **C8, C9**: visible on video, and they create
    the stoppages R1 needs.
 4. **Halves and kick-off** (L3, L4), then **offside** (L10) and **officials** (L11).
