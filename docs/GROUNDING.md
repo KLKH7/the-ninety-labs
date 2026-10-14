@@ -66,12 +66,12 @@ Kind: **hard** fails the clip; **warn** is reported. Columns show what exists to
 
 | ID | Check | Source | Kind | Validator | Engine |
 |---|---|---|---|---|---|
-| P1 | player speed at most about 10.5 m/s | sports science, peak match sprint speeds (*verify*) | hard | ✅ | ❌ receivers jump to the ball |
-| P2 | player acceleration at most about 8 m/s², measured over 0.2 s | elite players' maximal acceleration about 6.2 m/s² ([Applied Sciences, 2022](https://doaj.org/article/5a330c62187f431b8d51ae1e9eca156f)) plus margin | hard | ✅ | ❌ instant starts and turns |
-| P3 | ball speed at most 40 m/s | sports science, fastest recorded shots (*verify*) | hard | ✅ | ❌ goalkeeper takes the ball by jumping it |
+| P1 | player speed at most about 10.5 m/s | sports science, peak match sprint speeds (*verify*) | hard | ✅ | ✅ receivers run to the ball |
+| P2 | player acceleration at most about 8 m/s², measured over 0.2 s | elite players' maximal acceleration about 6.2 m/s² ([Applied Sciences, 2022](https://doaj.org/article/5a330c62187f431b8d51ae1e9eca156f)) plus margin | hard | ✅ | ✅ players accelerate at most 5 m/s² |
+| P3 | ball speed at most 40 m/s, except a new ball placed while out of play | sports science, fastest recorded shots (*verify*); Law 9 | hard | ✅ | ✅ |
 | P4 | ball never below the ground (circumference 68 to 70 cm, so radius about 0.11 m) | Law 2 | hard | ✅ | ✅ |
-| P5 | a ball in the air falls under gravity, then bounces and rolls | physics | hard | ✅ gravity; bounce and roll not yet | ❌ fixed arc for every pass |
-| P6 | the ball stays at the feet of the player who has it | physics | hard | ✅ | ❌ goalkeeper after a missed shot |
+| P5 | a ball in the air falls under gravity, then bounces and rolls | physics | hard | ✅ gravity; bounce and roll not yet | ✅ gravity; ❌ the ball stops dead where it lands |
+| P6 | the ball stays at the feet of the player who has it | physics | hard | ✅ | ✅ |
 | P7 | two players never overlap (about 0.5 m apart) | physics | warn | ❌ | ❌ |
 
 ### Laws of the Game: it is legal football
@@ -85,7 +85,7 @@ Kind: **hard** fails the clip; **warn** is reported. Columns show what exists to
 | L5 | the ball is out only when the whole ball has crossed a goal line or touchline, on the ground or in the air | Law 9 | hard | ❌ | ❌ no out of play except missed shots |
 | L6 | a goal only when the whole ball crosses the goal line between the posts and under the bar | Law 10 | hard | ❌ | partly |
 | L7 | over the touchline: a throw-in to the opponents of the last player to touch it, from where it crossed; opponents 2 m away | Law 15 | hard | ❌ | ❌ |
-| L8 | over the goal line, no goal, last touched by an attacker: a goal kick from inside the goal area; opponents outside the penalty area | Law 16 | hard | ❌ | partly |
+| L8 | over the goal line, no goal, last touched by an attacker: a goal kick from inside the goal area; opponents outside the penalty area | Law 16 | hard | ❌ | ✅ goal kick from the goal area after a stoppage; ❌ opponents not kept out |
 | L9 | over the goal line, no goal, last touched by a defender: a corner from the corner area on that side; opponents 9.15 m from the corner arc | Law 17 | hard | ❌ | ❌ |
 | L10 | a player who receives a team-mate's pass while in an offside position (in the opponents' half, nearer the goal line than the ball and the second-last opponent; level is onside) is penalised; never from a goal kick, throw-in or corner | Law 11 | hard | ❌ | ❌ |
 | L11 | one referee and two assistants on the pitch | Laws 5, 6 | hard for video | ❌ | ❌ |
@@ -112,8 +112,8 @@ Kind: **hard** fails the clip; **warn** is reported. Columns show what exists to
 ## Order of work
 
 1. ~~Fix C3 so a legal substitution passes.~~ Done.
-2. **Physics first.** Validator checks P2, P4 to P6 and C8, C9 are built; the engine must now
-   pass P1 to P6 before the training set is rendered.
+2. ~~Physics first.~~ Done: the engine passes P1 to P6 over full matches. Still open: the ball
+   bounces and rolls after landing (P5) instead of stopping dead.
 3. **Out of play and restarts** (L5, L7 to L9) and **C8, C9**: visible on video, and they create
    the stoppages R1 needs.
 4. **Halves and kick-off** (L3, L4), then **offside** (L10) and **officials** (L11).

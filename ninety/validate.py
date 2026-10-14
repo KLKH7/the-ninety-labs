@@ -31,6 +31,7 @@ NEAR_M = 2.5  # C6, C7: how close the ball must be to where an event says it hap
 ARRIVE_SLACK_S = 0.5  # C7: extra time a pass or shot may take beyond its stated speed
 MAX_SUBSTITUTIONS = 5  # C3: Law 3, top-level competitions
 STOPPAGES = {"out_of_play", "goal", "substitution"}  # C3: events after which play has stopped
+RESTARTS = {"set_piece", "kickoff"}  # P3: events that put the ball back in play
 EXAMPLES = 5
 
 Problems = dict[str, list[str]]
@@ -91,6 +92,15 @@ def check_physics(events: list[dict], frames: list[dict], fps: float, problems: 
     dt = 1 / fps
     # A kickoff restart may move everyone at once: the renderer cuts there.
     restarts = {e["frame"] for e in events if e["type"] == "kickoff"}
+    # While the ball is out of play (Law 9) a new ball may be placed for the restart.
+    dead: set[int] = set()
+    out_at = None
+    for e in events:
+        if e["type"] == "out_of_play" and out_at is None:
+            out_at = e["frame"]
+        elif e["type"] in RESTARTS and out_at is not None:
+            dead.update(range(out_at, e["frame"] + 1))
+            out_at = None
 
     for prev, f in zip(frames, frames[1:], strict=False):
         if f["frame"] in restarts or prev["frame"] in restarts:
@@ -105,7 +115,7 @@ def check_physics(events: list[dict], frames: list[dict], fps: float, problems: 
                 problems["P1 player speed"].append(f"frame {f['frame']}: {p['id']} moved at {speed:.1f} m/s")
         b, a = prev["ball"], f["ball"]
         speed = math.dist((a["x"], a["y"], a["z"]), (b["x"], b["y"], b["z"])) / dt
-        if speed > MAX_BALL_MPS:
+        if speed > MAX_BALL_MPS and f["frame"] not in dead:
             problems["P3 ball speed"].append(f"frame {f['frame']}: ball moved at {speed:.1f} m/s")
 
     # P2: acceleration from speeds averaged over a short window, skipping windows with a restart.

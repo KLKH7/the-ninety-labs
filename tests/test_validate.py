@@ -178,6 +178,17 @@ def lofted(clip):
         clip["frames"][n]["ball"]["z"] = round(max(v * t - 0.5 * 9.81 * t * t, 0.0), 4)
 
 
+def test_new_ball_placed_while_out_of_play_passes(tmp_path):
+    clip = clean_clip()
+    for n in range(100, 150):
+        clip["frames"][n]["possessor"] = None
+    for n in range(110, 150):
+        clip["frames"][n]["ball"]["x"] = 5.5  # placed for a goal kick at the other end
+    clip["events"].append(event("e2", 100, "out_of_play", "home", x=50.0))
+    clip["events"].append(event("e3", 110, "set_piece", "away", "a1", x=5.5))
+    assert "P3 ball speed" not in run(tmp_path, clip)
+
+
 def test_ball_under_gravity_passes(tmp_path):
     clip = clean_clip()
     lofted(clip)
