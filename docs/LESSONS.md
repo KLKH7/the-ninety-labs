@@ -107,6 +107,13 @@ short and actionable. This file is public: no research sources, product names or
 - **Rule:** test the command whose answer you need on its own (`grep -c`, then its exit code),
   and add a positive control: something you know is there must be found.
 
+### 18. Evidence has to fit in an agent's context
+- **What happened:** frame-based stats cited every frame they used, so one 90-minute match
+  produced 85 MB of facts (9.3 million source ids), too large for any agent or fact-checker.
+- **Rule:** cite frames as a range (`frames:<first>-<last>`); cite events by id; a value of zero
+  cites nothing.
+- **Check:** a test requires frame-based facts to cite one range, and caps the size of a clip's facts.
+
 ## Data and grounding
 
 ### 16. Read the primary source

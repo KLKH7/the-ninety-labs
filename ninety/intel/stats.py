@@ -62,6 +62,14 @@ def _distance(event: Mapping) -> float | None:
     return math.hypot(float(end_x) - float(event["x"]), float(end_y) - float(event["y"]))
 
 
+def _frame_span(frame_ids: Iterable[int]) -> tuple[str, ...]:
+    """Cite frames as one inclusive range, so a 90-minute fact does not carry 135,000 ids."""
+    ids = list(frame_ids)
+    if not ids:
+        return ()
+    return (f"frames:{min(ids)}-{max(ids)}",)
+
+
 def _fact(metric: str, value: float, unit: str, scope: str, source_ids: Iterable[str]) -> Fact:
     safe_scope = scope.replace(":", "_")
     return Fact(
@@ -79,9 +87,9 @@ def pass_facts(events: Iterable[Mapping]) -> list[Fact]:
     event_list = _events(events)
     passes = [event for event in event_list if event.get("type") == "pass"]
     groups: dict[str, list[Mapping]] = defaultdict(list)
-    groups.update({"home": [], "away": []})
+    groups.update({"team:home": [], "team:away": []})
     for event in passes:
-        groups[_team(event)].append(event)
+        groups[f"team:{_team(event)}"].append(event)
         if _player(event):
             groups[f"player:{_player(event)}"].append(event)
 
@@ -118,9 +126,9 @@ def shot_facts(events: Iterable[Mapping]) -> list[Fact]:
     event_list = _events(events)
     shots = [event for event in event_list if event.get("type") == "shot"]
     groups: dict[str, list[Mapping]] = defaultdict(list)
-    groups.update({"home": [], "away": []})
+    groups.update({"team:home": [], "team:away": []})
     for event in shots:
-        groups[_team(event)].append(event)
+        groups[f"team:{_team(event)}"].append(event)
         if _player(event):
             groups[f"player:{_player(event)}"].append(event)
 
@@ -164,10 +172,11 @@ def possession_facts(frames: Iterable[Mapping]) -> list[Fact]:
     total = counts["h"] + counts["a"]
     if not total:
         return []
-    source_ids = [str(frame["frame"]) for frame in frames_list if frame.get("possessor")]
+    source_ids = _frame_span(int(frame["frame"]) for frame in frames_list if frame.get("possessor"))
+    home_share = _round(counts["h"] / total)
     return [
-        _fact("possession_share", counts["h"] / total, "ratio", "team:home", source_ids),
-        _fact("possession_share", counts["a"] / total, "ratio", "team:away", source_ids),
+        _fact("possession_share", home_share, "ratio", "team:home", source_ids),
+        _fact("possession_share", 1 - home_share, "ratio", "team:away", source_ids),
         _fact("possession_frames", counts["h"], "frames", "team:home", source_ids),
         _fact("possession_frames", counts["a"], "frames", "team:away", source_ids),
     ]
@@ -177,15 +186,10 @@ def pressure_facts(events: Iterable[Mapping]) -> list[Fact]:
     """Count pressure events and recoveries by team."""
     event_list = _events(events)
     pressure = [event for event in event_list if event.get("type") == "pressure"]
-    groups: dict[str, list[Mapping]] = defaultdict(list)
-    for event in pressure:
-        groups[_team(event)].append(event)
     facts: list[Fact] = []
-    for team, group in sorted(groups.items()):
-        ids = [str(event["id"]) for event in group]
-        if not ids:
-            continue
-        facts.append(_fact("pressure_events", len(group), "events", f"team:{team}", ids))
+    for team in ("away", "home"):
+        ids = [str(event["id"]) for event in pressure if _team(event) == team]
+        facts.append(_fact("pressure_events", len(ids), "events", f"team:{team}", ids))
     return facts
 
 
@@ -198,7 +202,7 @@ def player_movement_facts(frames: Iterable[Mapping]) -> list[Fact]:
     for frame in frames_list:
         for player in frame.get("players", []):
             by_player[str(player["id"])].append(
-                (float(frame["t"]), float(player["x"]), float(player["y"]), str(frame["frame"]))
+                (float(frame["t"]), float(player["x"]), float(player["y"]), int(frame["frame"]))
             )
 
     facts: list[Fact] = []
@@ -206,7 +210,7 @@ def player_movement_facts(frames: Iterable[Mapping]) -> list[Fact]:
         distance = 0.0
         peak = 0.0
         sprint_frames = 0
-        source_ids: list[str] = []
+        cited: list[int] = []
         for previous, current in zip(samples, samples[1:], strict=False):
             dt = current[0] - previous[0]
             if dt <= 0:
@@ -216,7 +220,8 @@ def player_movement_facts(frames: Iterable[Mapping]) -> list[Fact]:
             peak = max(peak, speed_kmh)
             if speed_kmh >= SPRINT_THRESHOLD_KMH:
                 sprint_frames += 1
-            source_ids.append(current[3])
+            cited += [previous[3], current[3]]
+        source_ids = _frame_span(cited)
         scope = f"player:{player}"
         facts.extend(
             (
@@ -242,25 +247,28 @@ def control_vs_chaos(events: Iterable[Mapping], window_seconds: float = 60.0) ->
         start, end = index * window_seconds, (index + 1) * window_seconds
         window = [event for event in event_list if start <= float(event.get("t", 0)) < end]
         for team in ("home", "away"):
-            team_events = [event for event in window if _team(event) == team]
-            passes = [event for event in team_events if event.get("type") == "pass"]
+            passes = [e for e in window if _team(e) == team and e.get("type") == "pass"]
             completed = sum(event.get("outcome") == "success" for event in passes)
-            pressure = sum(event.get("type") == "pressure" for event in window
-                           if _team(event) != team)
-            turnovers = sum(
-                event.get("type") in {"interception", "tackle"} and _team(event) != team
-                for event in window
-            )
+            opponent = [e for e in window if _team(e) != team]
+            pressure = [e for e in opponent if e.get("type") == "pressure"]
+            recoveries = [e for e in opponent if _is_recovery(e)]
             denominator = max(len(passes), 1)
             control = completed / denominator
-            chaos = min(1.0, (pressure + turnovers) / denominator)
+            chaos = min(1.0, (len(pressure) + len(recoveries)) / denominator)
             index_value = control - chaos
-            ids = [str(event["id"]) for event in team_events]
+            ids = [str(event["id"]) for event in passes + pressure + recoveries]
             if not ids:
                 continue
             facts.append(_fact("control_vs_chaos", index_value, "index",
                                f"team:{team}:window:{index}", ids))
     return facts
+
+
+def _is_recovery(event: Mapping) -> bool:
+    """An interception, or a tackle that won the ball. A failed tackle recovers nothing."""
+    if event.get("type") == "interception":
+        return True
+    return event.get("type") == "tackle" and event.get("outcome") == "success"
 
 
 def _frames(frames: Iterable[Mapping]) -> list[Mapping]:

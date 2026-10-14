@@ -6,7 +6,7 @@ mark a row `planned` until it runs in the demo. Milestones are defined in [PLAN.
 | Brief | Requirement | The Ninety Labs | Where | Milestone | Status |
 |---|---|---|---|---|---|
 | (i)(a) | **Ingest** synthetic events as they happen | Events are generated live from the synthetic broadcast by the vision pipeline, streamed as they are detected | `ninety/vision`, `schemas/match_event.schema.json` | M1 | planned |
-| (i)(b) | **Interpret** into stats, patterns, context | Deterministic stats engine over the event + tracking stream | `ninety/intel` | M1 | planned |
+| (i)(b) | **Interpret** into stats, patterns, context | Deterministic stats engine over the event + tracking stream: pass, shot, possession, pressure and movement facts with cited event ids or frame ranges, and an experimental control-vs-chaos index (running, [INTELLIGENCE.md](INTELLIGENCE.md)); pass difficulty, xG, tempo and pressure windows (planned) | `ninety/intel` | M1 | in progress |
 | (i)(c) | **Explain** why a moment matters | Tactician proposes, fact-checking agent rejects unsupported claims, every number from code | `ninety/agents` | M1 | planned |
 | (i)(d) | **Render** on screen alongside the match | Timed, machine-readable on-screen graphics drawn on the footage at detected positions | `schemas/overlay_cue.schema.json`, `web` | M1 | planned |
 | (i)(e) | **Personalize**: analyst vs casual, favourite club, favourite player, player cam, language, single metric | Personalizer renders one fact set per viewer profile; player cam follows one player; audio description for blind and low-vision fans | `ninety/agents`, `web` | M2 | planned |
