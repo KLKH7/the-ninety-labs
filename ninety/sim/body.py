@@ -20,7 +20,6 @@ D0 = 225.0  # P10: metres that can be run above critical speed from full
 TAU_LIGHT, TAU_HEAVY = 120.0, 336.0  # P10: s to refill, recovering at a walk vs near CS
 ACCEL_COST = 2.5  # verify: extra metabolic cost of accelerating, per unit of a/g [design]
 SLOW_SCALE = 20.0  # design: reserves of work before recovery capacity falls to 1/e
-EXHAUSTED = 0.35  # design: share of the speed above CS still available on an empty reserve
 
 
 @dataclass
@@ -51,14 +50,25 @@ class Body:
         return D0 * math.exp(-self.spent / (SLOW_SCALE * D0))
 
     def top_speed(self) -> float:
-        """Above critical speed, what is left of the sprint fades as the reserve empties."""
-        share = EXHAUSTED + (1 - EXHAUSTED) * self.capacity
-        return self.cs + (self.v0 - self.cs) * share
+        """Critical-speed model: with an empty reserve no running above critical speed is
+        possible; the speed available above it shrinks as the reserve empties (the linear
+        shape is design)."""
+        return self.cs + (self.v0 - self.cs) * self.capacity
 
     def accel_limit(self, speed: float) -> float:
-        """Force-velocity: available acceleration falls linearly from f0 at rest to 0 at top speed."""
+        """Force-velocity: available acceleration falls linearly from f0 at rest to 0 at the top
+        speed available now, so fatigue lowers acceleration through that one top speed."""
+        return self.f0 * max(0.0, 1 - speed / self.top_speed())
+
+    def distance_in(self, seconds: float, speed_along: float = 0.0) -> float:
+        """How far this player can run in a straight line in the given time, from a current
+        speed along the line, under force-velocity acceleration: v(t) = V - (V - u)e^(-t/tau)."""
+        if seconds <= 0:
+            return 0.0
         top = self.top_speed()
-        return self.f0 * max(0.0, 1 - speed / top) * (EXHAUSTED + (1 - EXHAUSTED) * self.capacity)
+        u = clamp(speed_along, 0.0, top)
+        tau = top / self.f0
+        return top * seconds - (top - u) * tau * (1 - math.exp(-seconds / tau))
 
     def spend(self, speed: float, accel: float, dt: float) -> None:
         """Running above critical speed spends the reserve, accelerating costs extra; running
@@ -72,39 +82,34 @@ class Body:
             depth = min(1.0, effort / self.cs)
             tau = TAU_LIGHT + (TAU_HEAVY - TAU_LIGHT) * depth
             self.reserve += (self.ceiling - self.reserve) * (1 - math.exp(-dt / tau))
-        self.reserve = min(self.reserve, self.ceiling)
+        self.reserve = clamp(self.reserve, 0.0, self.ceiling)
+
+
+def clamp(v: float, lo: float, hi: float) -> float:
+    return max(lo, min(hi, v))
 
 
 def move(x: float, y: float, vx: float, vy: float, tx: float, ty: float, want_speed: float,
          body: Body, dt: float) -> tuple[float, float, float, float]:
-    """One step toward a target: speeding up is limited by force-velocity, braking and turning
-    by BRAKE_MAX, and the player slows in time to stop on the target."""
+    """One step toward a target. The velocity change is limited by grip (BRAKE_MAX, shared by
+    braking and turning), and any gain in speed by force-velocity, so speeding up can never
+    borrow the braking budget, whether turning or reversing. The player slows in time to stop
+    on the target."""
     dx, dy = tx - x, ty - y
     d = math.hypot(dx, dy)
     speed = math.hypot(vx, vy)
     want = min(want_speed, body.top_speed(), math.sqrt(2 * BRAKE_MAX * 0.8 * d))
     wx, wy = (dx / d * want, dy / d * want) if d > 1e-6 else (0.0, 0.0)
-    ax, ay = wx - vx, wy - vy
-    if speed > 1e-6:  # split into along the run (speed up or brake) and across it (turn)
-        ux, uy = vx / speed, vy / speed
-        along = ax * ux + ay * uy
-        acx, acy = ax - along * ux, ay - along * uy
-    else:
-        ux = uy = 0.0
-        along, acx, acy = 0.0, ax, ay
-    cap_along = body.accel_limit(speed) * dt if along > 0 else BRAKE_MAX * dt
-    along = math.copysign(min(abs(along), cap_along), along)
-    across = math.hypot(acx, acy)
-    cap_across = (body.accel_limit(speed) if speed <= 1e-6 else BRAKE_MAX) * dt
-    if across > cap_across:
-        acx, acy = acx / across * cap_across, acy / across * cap_across
-    # Braking and turning share one grip limit: the total change never exceeds BRAKE_MAX.
-    cx, cy = along * ux + acx, along * uy + acy
-    total = math.hypot(cx, cy)
-    if total > BRAKE_MAX * dt:
-        cx, cy = cx / total * BRAKE_MAX * dt, cy / total * BRAKE_MAX * dt
-    vx, vy = vx + cx, vy + cy
-    body.grip_used = math.hypot(cx, cy)
-    new_speed = math.hypot(vx, vy)
+    cx, cy = wx - vx, wy - vy
+    change = math.hypot(cx, cy)
+    if change > BRAKE_MAX * dt:
+        cx, cy = cx / change * BRAKE_MAX * dt, cy / change * BRAKE_MAX * dt
+    nvx, nvy = vx + cx, vy + cy
+    new_speed = math.hypot(nvx, nvy)
+    gain = body.accel_limit(speed) * dt
+    if new_speed > speed + gain:  # speeding up: force-velocity, not grip
+        scale = (speed + gain) / new_speed
+        nvx, nvy, new_speed = nvx * scale, nvy * scale, speed + gain
+    body.grip_used = math.hypot(nvx - vx, nvy - vy)
     body.spend(new_speed, (new_speed - speed) / dt, dt)
-    return x + vx * dt, y + vy * dt, vx, vy
+    return x + nvx * dt, y + nvy * dt, nvx, nvy

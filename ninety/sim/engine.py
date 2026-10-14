@@ -19,7 +19,9 @@ import math
 import random
 from dataclasses import dataclass, field
 
-from ninety.sim import ball, body
+from ninety.sim import ball
+from ninety.sim.body import BRAKE_MAX, CS_MEAN, F0_MEAN, V0_MEAN, Body
+from ninety.sim.body import move as move_body
 
 PITCH_X, PITCH_Y = 105.0, 68.0
 FPS = 25
@@ -81,7 +83,7 @@ class Player:
     y: float
     vx: float = 0.0
     vy: float = 0.0
-    body: body.Body = field(default_factory=lambda: body.Body(body.F0_MEAN, body.V0_MEAN, body.CS_MEAN))
+    physique: Body = field(default_factory=lambda: Body(F0_MEAN, V0_MEAN, CS_MEAN))
 
 
 @dataclass
@@ -123,11 +125,15 @@ def clamp(v: float, lo: float, hi: float) -> float:
 def steer(p: Player, tx: float, ty: float, want_speed: float) -> None:
     """Move toward a target within the player's own body: force-velocity acceleration, braking,
     a shared grip limit for braking and turning, and energy (ninety/sim/body.py)."""
-    x, y, p.vx, p.vy = body.move(p.x, p.y, p.vx, p.vy, tx, ty, want_speed, p.body, DT)
+    x, y, p.vx, p.vy = move_body(p.x, p.y, p.vx, p.vy, tx, ty, want_speed, p.physique, DT)
     # No wall at the lines: players may run past them, as in real matches. Targets stay on the
-    # pitch, so they slow down and come back; only the advertising boards stop them.
-    p.x = clamp(x, -BOARDS_M, PITCH_X + BOARDS_M)
-    p.y = clamp(y, -BOARDS_M, PITCH_Y + BOARDS_M)
+    # pitch, so they slow down and come back; only the advertising boards stop them, and then
+    # the boards also stop the part of the run that goes into them.
+    if not -BOARDS_M <= x <= PITCH_X + BOARDS_M:
+        x, p.vx = clamp(x, -BOARDS_M, PITCH_X + BOARDS_M), 0.0
+    if not -BOARDS_M <= y <= PITCH_Y + BOARDS_M:
+        y, p.vy = clamp(y, -BOARDS_M, PITCH_Y + BOARDS_M), 0.0
+    p.x, p.y = x, y
 
 
 class Engine:
@@ -140,7 +146,7 @@ class Engine:
                 ax = fx * PITCH_X if team == "home" else (1 - fx) * PITCH_X
                 ay = fy * PITCH_Y if team == "home" else (1 - fy) * PITCH_Y
                 self.players.append(Player(f"{team[0]}{n + 1}", team, role, ax, ay, ax, ay,
-                                           body=body.Body.sample(self.rng)))
+                                           physique=Body.sample(self.rng)))
         self.by_id = {p.id: p for p in self.players}
         self.match.roster = [{"id": p.id, "team": p.team, "role": p.role} for p in self.players]
         self.ball: ball.State = (PITCH_X / 2, PITCH_Y / 2, 0.0, 0.0, 0.0, 0.0)
@@ -149,6 +155,7 @@ class Engine:
         self.kicked: dict | None = None  # the pass or shot event in flight, resolved when it ends
         self.kicked_at = -99.0
         self.kicker_clear = True  # the struck ball has left the kicker's body
+        self.free_since = -99.0
         self.touched_since_kick = False
         self.chase: dict[str, tuple[str, float, float]] = {}  # team -> (player, x, y)
         self.restart: Restart | None = None
@@ -195,12 +202,14 @@ class Engine:
         """Law 12: a keeper may handle the ball only inside their own penalty area."""
         return p.role == "GK" and self.in_own_box(p.team, x, y)
 
-    def reach(self, p: Player, x: float, y: float) -> tuple[float, float]:
-        """How far and how high this player can reach for a ball at (x, y)."""
+    def reach(self, p: Player, x: float, y: float, at: float | None = None) -> tuple[float, float]:
+        """How far and how high this player can reach for a ball at (x, y), at time `at`."""
         if self.hands(p, x, y):
             # A dive stretches the keeper's reach over time: standing arm's length at first, the
-            # full stretch only once the dive has had time to unfold after he reacts.
-            diving = clamp((self.t - self.kicked_at - REACTION_S) / DIVE_TIME_S, 0.0, 1.0)
+            # full stretch only once the dive has had time to unfold after he reacts to the
+            # strike. A deflection does not un-stretch a dive already under way.
+            at = self.t if at is None else at
+            diving = clamp((at - self.free_since - REACTION_S) / DIVE_TIME_S, 0.0, 1.0)
             return KEEPER_STAND_REACH_M + KEEPER_DIVE_EXTRA_M * diving, HAND_REACH_Z
         return CONTROL_M, FOOT_REACH_Z
 
@@ -232,6 +241,7 @@ class Engine:
         self.possessor = None
         self.last_touch = carrier.id
         self.kicked_at = self.t
+        self.free_since = self.t  # the ball left a player's control: dives are timed from here
         self.kicker_clear = False
         self.chase = {}  # everyone reacts after REACTION_S, not on the frame of the kick
 
@@ -313,13 +323,15 @@ class Engine:
             for k in range(0, len(path), 2):
                 t = k * DT
                 bx, by, bz = path[k][0] + ex * t, path[k][1] + ey * t, path[k][2]
-                reach_m, reach_z = self.reach(p, bx, by)
+                reach_m, reach_z = self.reach(p, bx, by, at=self.t + t)
                 if bz > reach_z:
                     continue
-                gap = math.hypot(bx - p.x, by - p.y) - reach_m
-                pace = p.body.top_speed()  # an estimate: ignores the time spent accelerating
-                if gap <= pace * t or k + 2 >= len(path):
-                    arrive = t if gap <= pace * t else t + gap / pace
+                dx, dy = bx - p.x, by - p.y
+                gap = math.hypot(dx, dy) - reach_m
+                along = (p.vx * dx + p.vy * dy) / (math.hypot(dx, dy) or 1.0)
+                reachable = gap <= p.physique.distance_in(t, along)
+                if reachable or k + 2 >= len(path):
+                    arrive = t if reachable else t + gap / p.physique.top_speed()
                     if p.team not in best or arrive < best[p.team][0]:
                         best[p.team] = (arrive, p.id, bx, by)
                     break
@@ -604,7 +616,7 @@ class Engine:
     def separate(self) -> None:
         """Bodies in contact (shoulder to shoulder, SHOULDER_TO_SHOULDER_M between centres) brace:
         each stops closing on the other as fast as their own legs allow, never faster."""
-        grip = body.BRAKE_MAX * DT
+        grip = BRAKE_MAX * DT
         for i, a in enumerate(self.players):
             for b in self.players[i + 1:]:
                 dx, dy = b.x - a.x, b.y - a.y
@@ -616,12 +628,12 @@ class Engine:
                 if closing <= 0:
                     continue
                 # Bracing shares each player's grip with the steering already done this frame.
-                ea = min(closing / 2, max(0.0, grip - a.body.grip_used))
-                eb = min(closing / 2, max(0.0, grip - b.body.grip_used))
+                ea = min(closing / 2, max(0.0, grip - a.physique.grip_used))
+                eb = min(closing / 2, max(0.0, grip - b.physique.grip_used))
                 a.vx, a.vy = a.vx - nx * ea, a.vy - ny * ea
                 b.vx, b.vy = b.vx + nx * eb, b.vy + ny * eb
-                a.body.grip_used += ea
-                b.body.grip_used += eb
+                a.physique.grip_used += ea
+                b.physique.grip_used += eb
 
     def tick_carrier(self) -> None:
         carrier = self.by_id[self.possessor]

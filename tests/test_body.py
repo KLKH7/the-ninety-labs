@@ -56,12 +56,46 @@ def test_running_above_critical_speed_spends_and_below_refills():
     assert b.reserve > spent  # walking refills
 
 
-def test_a_tired_player_is_slower():
+def test_an_empty_reserve_means_no_running_above_critical_speed():
     b = fresh()
     top_fresh = b.top_speed()
     b.reserve = 0.0
     assert b.top_speed() < top_fresh
-    assert b.top_speed() > b.cs  # still faster than jogging pace
+    assert b.top_speed() == b.cs
+
+
+def test_the_reserve_never_goes_below_empty():
+    b = fresh()
+    for _ in range(int(600 / DT)):
+        b.spend(6.0, 0.0, DT)
+    assert b.reserve == 0.0
+
+
+def accel_from(vx: float, vy: float, tx: float, ty: float) -> tuple[float, float]:
+    """Gain in speed per second, and total change per second, over one step."""
+    b = fresh()
+    _, _, nvx, nvy = body.move(0.0, 0.0, vx, vy, tx, ty, 99.0, b, DT)
+    gain = (math.hypot(nvx, nvy) - math.hypot(vx, vy)) / DT
+    return gain, math.hypot(nvx - vx, nvy - vy) / DT
+
+
+def test_turning_from_almost_still_cannot_borrow_braking_grip():
+    gain, _ = accel_from(0.01, 0.0, 0.0, 50.0)  # nearly still, target to the side
+    assert gain <= 5.2 + 1e-6
+
+
+def test_reversing_cannot_borrow_braking_grip():
+    gain, total = accel_from(0.05, 0.0, -50.0, 0.0)  # barely moving, target behind
+    assert gain <= 5.2 + 1e-6
+    assert total <= body.BRAKE_MAX + 1e-6
+
+
+def test_distance_covered_follows_force_velocity():
+    b = fresh()
+    one_second = b.distance_in(1.0)
+    assert 2.0 < one_second < 2.7  # about f0 t² / 2 early on, a little less
+    assert b.distance_in(1.0, speed_along=7.0) > 7.0  # already running covers more
+    assert b.distance_in(0.0) == 0.0
 
 
 def test_slow_store_lowers_how_full_the_reserve_can_get():

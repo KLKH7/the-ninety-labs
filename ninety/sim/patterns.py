@@ -19,7 +19,6 @@ from ninety.sim.engine import FPS, simulate
 ROOT = Path(__file__).resolve().parents[2]
 HIGH_INTENSITY = 5.5  # m/s, 19.8 km/h: the usual high-intensity running threshold
 SPRINT = 7.0  # m/s, about 25 km/h
-JUMP_M = 1.0  # a move this large in one frame is a kick-off reset, not running
 GROUPS = {"RCB": "centre-back", "LCB": "centre-back", "RB": "full-back", "LB": "full-back",
           "RCM": "central midfield", "CM": "central midfield", "LCM": "central midfield",
           "RW": "winger", "LW": "winger", "ST": "centre-forward"}
@@ -33,6 +32,7 @@ PUBLISHED_TOP = {"centre-back": 7.9, "full-back": 8.1, "central midfield": 7.9, 
 def measure(seed: int, minutes: float = 90) -> dict:
     m = simulate(seed, minutes)
     role = {r["id"]: r["role"] for r in m.roster}
+    resets = {e["frame"] for e in m.events if e["type"] == "kickoff"}  # positions reset: not running
     dist = defaultdict(float)
     high = defaultdict(float)
     sprint_m = defaultdict(float)
@@ -41,12 +41,14 @@ def measure(seed: int, minutes: float = 90) -> dict:
     early_high = late_high = 0.0
     sprinting = defaultdict(bool)
     for prev, f in zip(m.frames, m.frames[1:], strict=False):
+        if f["frame"] in resets or prev["frame"] in resets:
+            continue
         before = {p["id"]: p for p in prev["players"]}
         minute = f["t"] / 60
         for p in f["players"]:
             q = before[p["id"]]
             step = math.hypot(p["x"] - q["x"], p["y"] - q["y"])
-            if step > JUMP_M or role[p["id"]] == "GK":
+            if role[p["id"]] == "GK":
                 continue
             speed = step * FPS
             dist[p["id"]] += step
@@ -95,10 +97,13 @@ def report(results: list[dict]) -> str:
             f"| {mean(x['top'] for x in rows):.1f} | {PUBLISHED_TOP[group]} |"
         )
     drops = [r["late_drop"] for r in results if r["late_drop"] is not None]
+
+    def change(d: float) -> str:
+        return f"{d * 100:.0f}% lower" if d >= 0 else f"{-d * 100:.0f}% higher"
     lines += [
         "",
         f"**High-intensity running, last 15 minutes against the first 15:** "
-        f"{mean(drops) * 100:.0f}% lower (per seed: {', '.join(f'{d * 100:.0f}%' for d in drops)}). "
+        f"{change(mean(drops)) if drops else 'n/a'} (per seed: {', '.join(change(d) for d in drops)}). "
         "Published: about 20 to 45% lower.",
         "",
     ]
