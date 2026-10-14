@@ -5,8 +5,10 @@ rule, limit and realism band cites a source, and this file is the register. The 
 to *make* football; the validator uses it, through independently written code, to *check* it
 ([architecture](ARCHITECTURE.md#synthetic-data-pipeline)).
 
-**Status: draft for review.** Values marked *verify* are from general knowledge and must be
-checked against the cited source before the check is built.
+**Status: draft for review.** Every Law row was checked on 2026-10-13 against the Laws as
+published on [theifab.com](https://www.theifab.com/laws/latest/the-field-of-play/) (the site
+lists the 2026/27 edition first). Values still marked *verify* come from general knowledge and
+must be checked against the cited source before their check is built.
 
 ## Sources, by reliability
 
@@ -52,7 +54,7 @@ Kind: **hard** fails the clip; **warn** is reported. Columns show what exists to
 |---|---|---|---|---|---|
 | C1 | files present, `fps` positive, every row matches its schema | our schemas | hard | ✅ | ✅ |
 | C2 | frames consecutive, `t = frame / fps` | CDF (event and tracking in sync) | hard | ✅ | ✅ |
-| C3 | same players throughout, **except a substitution at a stoppage** | Law 3 | hard | ⚠️ too strict: fails a legal substitution | ❌ no substitutions |
+| C3 | same players throughout, except a substitution: only during a stoppage, at most five a team | Law 3 | hard | ⚠️ too strict: fails a legal substitution | ❌ no substitutions |
 | C4 | every player in an event is in the frames, on the right team | our schemas | hard | ✅ | ✅ |
 | C5 | each event's frame exists and its time matches | CDF | hard | ✅ | ✅ |
 | C6 | the ball is where a pass, shot or tackle says it happened | CDF | hard | ✅ | ✅ |
@@ -67,7 +69,7 @@ Kind: **hard** fails the clip; **warn** is reported. Columns show what exists to
 | P1 | player speed at most about 10.5 m/s | sports science, peak match sprint speeds (*verify*) | hard | ✅ | ❌ receivers jump to the ball |
 | P2 | player acceleration at most about 8 m/s² | elite players' maximal acceleration about 6.2 m/s² ([Applied Sciences, 2022](https://doaj.org/article/5a330c62187f431b8d51ae1e9eca156f)) plus margin | hard | ❌ | ❌ no limit |
 | P3 | ball speed at most 40 m/s | sports science, fastest recorded shots (*verify*) | hard | ✅ | ❌ goalkeeper takes the ball by jumping it |
-| P4 | ball never below the ground | Law 2 (ball radius) | hard | ❌ | ✅ |
+| P4 | ball never below the ground (circumference 68 to 70 cm, so radius about 0.11 m) | Law 2 | hard | ❌ | ✅ |
 | P5 | a ball in the air falls under gravity, then bounces and rolls | physics | hard | ❌ | ❌ fixed arc for every pass |
 | P6 | the ball stays at the feet of the player who has it | physics | hard | ❌ | ✅ |
 | P7 | two players never overlap (about 0.5 m apart) | physics | warn | ❌ | ❌ |
@@ -76,16 +78,16 @@ Kind: **hard** fails the clip; **warn** is reported. Columns show what exists to
 
 | ID | Check | Source | Kind | Validator | Engine |
 |---|---|---|---|---|---|
-| L1 | pitch 105 x 68 m, within the Law's limits; goal 7.32 x 2.44 m | Law 1 | hard | ❌ | ✅ pitch, no goal frame |
+| L1 | pitch 105 x 68 m (international limits: 100 to 110 by 64 to 75); goal 7.32 x 2.44 m; centre circle 9.15 m | Law 1 | hard | ❌ | ✅ pitch, no goal frame |
 | L2 | 11 players a team, exactly one goalkeeper | Law 3 | hard | ❌ | ✅ |
-| L3 | two halves of 45 minutes; ends switch at half-time | Law 7, Law 8 | hard | ❌ | ❌ one long half |
-| L4 | kick-off: ball on the centre mark, everyone in their own half, opponents 9.15 m away | Law 8 | hard | ❌ | partly |
-| L5 | the ball is out only when the whole ball crosses a line | Law 9 | hard | ❌ | ❌ no out of play except missed shots |
+| L3 | two equal halves of 45 minutes plus added time; teams switch ends for the second half | Laws 7, 8 | hard | ❌ | ❌ one long half |
+| L4 | kick-off: ball still on the centre mark, every player but the kicker in their own half, opponents 9.15 m away; after a goal the conceding team kicks off | Law 8 | hard | ❌ | partly |
+| L5 | the ball is out only when the whole ball has crossed a goal line or touchline, on the ground or in the air | Law 9 | hard | ❌ | ❌ no out of play except missed shots |
 | L6 | a goal only when the whole ball crosses the goal line between the posts and under the bar | Law 10 | hard | ❌ | partly |
-| L7 | over the touchline: a throw-in to the other team, from where it crossed | Law 15 | hard | ❌ | ❌ |
-| L8 | over the goal line, last touched by an attacker: a goal kick from the goal area | Law 16 | hard | ❌ | partly |
-| L9 | over the goal line, last touched by a defender: a corner from the corner area | Law 17 | hard | ❌ | ❌ |
-| L10 | no completed pass to a player in an offside position | Law 11 | hard | ❌ | ❌ |
+| L7 | over the touchline: a throw-in to the opponents of the last player to touch it, from where it crossed; opponents 2 m away | Law 15 | hard | ❌ | ❌ |
+| L8 | over the goal line, no goal, last touched by an attacker: a goal kick from inside the goal area; opponents outside the penalty area | Law 16 | hard | ❌ | partly |
+| L9 | over the goal line, no goal, last touched by a defender: a corner from the corner area on that side; opponents 9.15 m from the corner arc | Law 17 | hard | ❌ | ❌ |
+| L10 | a player who receives a team-mate's pass while in an offside position (in the opponents' half, nearer the goal line than the ball and the second-last opponent; level is onside) is penalised; never from a goal kick, throw-in or corner | Law 11 | hard | ❌ | ❌ |
 | L11 | one referee and two assistants on the pitch | Laws 5, 6 | hard for video | ❌ | ❌ |
 | L12 | fouls, free kicks, penalties, cards | Laws 12 to 14 | later | ❌ | ❌ |
 
