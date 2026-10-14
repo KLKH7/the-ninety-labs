@@ -96,6 +96,19 @@ outcome. Players are synthetic (`ninety/sim/profiles.py`).
 | A5 | decisions, composure, work rate, aggression, dribbling, tackling, traits | decision temperature, pressing and sprint willingness, duel commitment, option biases | *design*; used from step 3b and step 4 | planned |
 | A6 | role tendencies | each role's attributes shift from the average (strikers finish better, centre-backs tackle better) | *design* | ✅ |
 
+### Decisions: the player's own estimates for choosing
+
+These are estimates a player uses to choose, from his own picture of the pitch; the outcome of
+the chosen action is decided by physics and execution error, so an estimate can be wrong.
+
+| ID | Rule | Source | Status |
+|---|---|---|---|
+| D1 | each option scores expected value: the chance it works times the value of what follows, minus the chance it fails times the cost of losing the ball there; a pass lane is open if no opponent can reach the ball's path first (each opponent assumed to react in about 0.37 s with an average body) | decision rule from performance-analysis research (expected-value and pass-lane models) | ✅ |
+| D2 | pressure is felt in a zone longer in front of the player than behind (about 9 m and 3 m) | pressure thresholds reported from tracking data | ✅ |
+| D3 | the player's estimate of a shot is 0.75 × (the angle of the goal)², about 0.3 from 11 m central and 0.03 from 35 m: the published shape of shot quality; halved for each defender in the cone, reduced by a well-placed keeper (*design*) | published shot-quality shape | ✅ |
+| D4 | choice by softmax: a good decision-maker almost always takes the best option, pressure loosens the choice unless composed; trailing late raises the appeal of shooting; a trait that likes long shots raises it from distance (*design*) | expected-value plus softmax approach from the research; values *design* | ✅ |
+| D5 | the carrier settles the ball (0.3 to 0.6 s, quicker with a good first touch) then decides about 4 times a second; a throw goes only to a team-mate | *design* | ✅ |
+
 ### Laws of the Game: it is legal football
 
 | ID | Check | Source | Kind | Validator | Engine |

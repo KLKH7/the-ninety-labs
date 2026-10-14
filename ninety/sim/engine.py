@@ -19,7 +19,7 @@ import math
 import random
 from dataclasses import dataclass, field
 
-from ninety.sim import ball, perception
+from ninety.sim import ball, decisions, perception
 from ninety.sim.body import BRAKE_MAX, CS_MEAN, F0_MEAN, V0_MEAN, Body
 from ninety.sim.body import move as move_body
 from ninety.sim.profiles import Profile
@@ -36,6 +36,7 @@ PRESS = 6.0  # closing down the ball carrier
 SHAPE = 3.0  # adjusting position, below critical speed so it can be sustained
 FAR_OUT_OF_POSITION_M = 10.0
 DRIBBLE = 2.5
+DECIDE_EVERY = 6  # frames between the ball carrier's decisions (about 4 a second)
 PERCEIVE_EVERY = 6  # frames between a player's looks at the pitch (about 4 a second, staggered)
 BRAIN_EVERY = 12  # frames between a team brain's reads of the game (about 2 a second)
 ENGAGE_M = 20.0  # design: the first presser goes to the ball when it is this close
@@ -172,6 +173,7 @@ class Engine:
         self.chase: dict[str, tuple[str, float, float]] = {}  # team -> (player, x, y)
         self.restart: Restart | None = None
         self.throw_by: str | None = None  # a throw-in taker holding the ball before the throw
+        self.dribble_to: tuple[float, float] | None = None  # the carrier's chosen carry, if any
         self.moved: str | None = None  # the carrier, already moved this frame by tick_carrier
         self.hold_until = 0.0
         self.pressed: dict[str, float] = {}
@@ -238,7 +240,9 @@ class Engine:
         self.last_touch = pid
         self.touched_since_kick = False
         self.chase = {}
-        self.hold_until = self.t + self.rng.uniform(3.5, 7.5)
+        # The first touch settles the ball before he can decide: quicker with a good first touch.
+        self.hold_until = self.t + 0.3 + 0.3 * (1 - self.by_id[pid].profile["first_touch"])
+        self.dribble_to = None
 
     def kickoff(self, team: str) -> None:
         # A restart after a goal: the broadcast cuts here, so positions reset (validator allows it).
@@ -310,13 +314,11 @@ class Engine:
         self.kicked = self.emit("shot", team, bx, by, player=carrier.id, ball_speed_kmh=round(speed * 3.6, 1))
         self.kick(carrier, vx, vy, vz)
 
-    def pass_to(self, carrier: Player, target: Player, throw: bool = False) -> None:
+    def pass_to(self, carrier: Player, tx: float, ty: float, lofted: bool, throw: bool = False) -> None:
+        """Kick toward a point the carrier chose (where he believes a team-mate will be, or space)."""
         bx, by = self.ball[0], self.ball[1]
-        lead = self.rng.uniform(0, 3) * attack_dir(carrier.team)
-        seen = self.beliefs[carrier.id].where(target.id, self.t) or (target.x, target.y)
-        tx, ty = clamp(seen[0] + lead, 1, PITCH_X - 1), seen[1]  # where he believes the receiver is
         dist = math.hypot(tx - bx, ty - by)
-        if throw or dist > LOFT_OVER_M:
+        if throw or lofted:
             ground, up = ball.lofted_pass(dist, 30 if throw else self.rng.uniform(25, 40), DT)
         else:
             ground, up = ball.ground_pass(dist, self.rng.uniform(3, 7), DT), 0.0
@@ -329,35 +331,39 @@ class Engine:
         self.kick(carrier, vx, vy, vz)
 
     def decide(self, carrier: Player, throw: bool = False) -> None:
-        team = carrier.team
-        opp = other(team)
-        gx = goal_x(team)
-        d_goal = math.hypot(gx - carrier.x, PITCH_Y / 2 - carrier.y)
-        if not throw and d_goal < 30 and self.rng.random() < 0.05 + (30 - d_goal) / 80:
-            self.shoot(carrier)
-            return
-        # Judged on what the carrier believes, not on the truth: a team-mate he has not seen
-        # cannot be picked, and space is measured to where he thinks the opponents are.
+        """The carrier chooses from what he believes (ninety/sim/decisions.py)."""
+        team, opp = carrier.team, other(carrier.team)
         belief = self.beliefs[carrier.id]
-        seen_opps = [w for w in (belief.where(q.id, self.t) for q in self.players if q.team == opp) if w]
-        mates = [p for p in self.players if p.team == team and p.id != carrier.id]
-        weights = []
-        for m in mates:
-            at = belief.where(m.id, self.t)
-            if at is None:
-                weights.append(0.0)
-                continue
-            fwd = (at[0] - carrier.x) * attack_dir(team)
-            dist = math.hypot(at[0] - carrier.x, at[1] - carrier.y)
-            if dist < 4 or dist > (25 if throw else 45):
-                weights.append(0.0)
-                continue
-            space = min((math.hypot(ox - at[0], oy - at[1]) for ox, oy in seen_opps), default=8.0)
-            weights.append(max(0.2, 1 + fwd / 18) * min(space, 8) / (1 + dist / 25))
-        if not any(weights):
-            self.hold_until = self.t + 0.5
+        mates = []
+        for q in self.players:
+            if q.team == team and q.id != carrier.id:
+                at = belief.where(q.id, self.t)
+                if at:  # a team-mate he has not seen cannot be picked
+                    mates.append((q.id, at[0], at[1], belief.age(q.id, self.t)))
+        opps = [w for w in (belief.where(q.id, self.t) for q in self.players if q.team == opp) if w]
+        keeper = belief.where(self.keeper(opp).id, self.t)
+        diff = self.match.score[team] - self.match.score[opp]
+        risk = clamp(-diff * self.t / 5400, -1.0, 1.0)  # chase the game when behind late, protect when ahead
+        prof = carrier.profile
+        scene = decisions.Scene(self.ball[0], self.ball[1], goal_x(team), mates, opps, keeper,
+                                prof["decisions"], prof["composure"], prof["dribbling"],
+                                tuple(prof.traits), risk)
+        if throw:  # Law 15: a throw goes to a team-mate, not at goal, and is never dribbled
+            scene.mates = [m for m in mates if math.hypot(m[1] - scene.x, m[2] - scene.y) <= 25]
+            choice = max((o for o in decisions.options(scene) if o.kind == "pass"),
+                         key=lambda o: o.value, default=None)
+            if choice:
+                self.pass_to(carrier, *choice.target, lofted=True, throw=True)
             return
-        self.pass_to(carrier, self.rng.choices(mates, weights=weights)[0], throw)
+        choice = decisions.choose(scene, self.rng)
+        if choice.kind == "pass" or choice.kind == "clear":
+            self.pass_to(carrier, *choice.target, lofted=choice.lofted)
+        elif choice.kind == "shoot":
+            self.shoot(carrier)
+        elif choice.kind == "dribble":
+            self.dribble_to = choice.target
+        else:
+            self.dribble_to = None  # hold: keep the ball, shield it
 
     # ---- the free ball: who can get there first ------------------------------
 
@@ -734,13 +740,15 @@ class Engine:
                 self.throw_by = None
                 self.decide(carrier, throw=True)
             return
-        team, opp = carrier.team, other(carrier.team)
-        gx = goal_x(team)
+        opp = other(carrier.team)
         presser = self.nearest(carrier.x, carrier.y, opp)
         gap = math.hypot(presser.x - carrier.x, presser.y - carrier.y)
-        if gap > 6:  # carries the ball toward the penalty spot, not onto the goal line
-            steer(carrier, gx - attack_dir(team) * 11, carrier.y + (PITCH_Y / 2 - carrier.y) * 0.3, DRIBBLE)
-        else:
+        if self.dribble_to:  # carrying the ball where he chose, as fast as his dribbling allows
+            tx, ty = self.dribble_to
+            steer(carrier, tx, ty, 2.5 + 2.0 * carrier.profile["dribbling"])
+            if math.hypot(tx - carrier.x, ty - carrier.y) < 1.0:
+                self.dribble_to = None
+        else:  # holding: keeps the ball, shielding it
             steer(carrier, carrier.x, carrier.y, DRIBBLE)
         # The ball settles at the carrier's feet (from a keeper's hands, down to the ground)
         # rather than jumping there.
@@ -764,9 +772,7 @@ class Engine:
             self.emit("possession_change", opp, bx, by, player=presser.id)
             self.give(presser.id)
             return
-        if gap < 3:
-            self.hold_until = min(self.hold_until, self.t + 2.4)
-        if self.t >= self.hold_until:
+        if self.t >= self.hold_until and (self.frame + int(carrier.id[1:])) % DECIDE_EVERY == 0:
             self.decide(carrier)
 
     def snapshot(self) -> None:
