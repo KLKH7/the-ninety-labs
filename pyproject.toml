@@ -10,17 +10,18 @@ dependencies = [
     "agent-framework-foundry>=1.14.1",
     "azure-identity>=1.26.0",
     "httpx>=0.28.1",
+    "jsonschema>=4",
     "mcp>=1.24,<2",
 ]
 
 [project.scripts]
 ninety-sim = "ninety.sim.cli:main"
 ninety-slice = "ninety.agents.slice:main"
+ninety-validate = "ninety.validate:main"
 
 [dependency-groups]
 dev = [
     "pytest>=8",
-    "jsonschema>=4",
     "ruff>=0.17.0",
 ]
 

@@ -45,6 +45,7 @@ Full design, agent roles and deployment: [docs/ARCHITECTURE.md](docs/ARCHITECTUR
 | [PLAN](docs/PLAN.md) | goals, timeline, milestones, day-by-day schedule |
 | [CHALLENGE_MAP](docs/CHALLENGE_MAP.md) | every requirement of the brief, where it is built, and its status |
 | [EVALUATION](docs/EVALUATION.md) | how every published number is measured |
+| [DATA_CONTRACT](docs/DATA_CONTRACT.md) | what ground-truth data must contain, and the validator that checks it |
 | [SECURITY](SECURITY.md) | rules for a public repo and a public demo |
 | [AGENTS](AGENTS.md) | rules for AI coding tools (Copilot, Cursor, Claude Code) |
 | [Broadcast render guide](docs/guides/broadcast-render.md) | rendering the synthetic video and generating images |
