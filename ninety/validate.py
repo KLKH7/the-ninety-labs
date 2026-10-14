@@ -220,7 +220,6 @@ def near_woodwork(b: dict) -> bool:
 def check_contacts(events: list[dict], frames: list[dict], keepers: set[str], problems: Problems) -> None:
     """P14: a deflection or interception names a player who could have touched the ball."""
     by_frame = {f["frame"]: f for f in frames}
-    touches = {e["frame"] for e in events if e["type"] in TOUCHES}
     for e in events:
         if e["type"] not in CONTACTS or not e.get("player"):
             continue
@@ -238,15 +237,15 @@ def check_contacts(events: list[dict], frames: list[dict], keepers: set[str], pr
             problems["P14 touch possible"].append(
                 f"{e['id']}: {e['type']} by {e['player']}, {now:.1f} m from the ball")
             continue
-        free = not touches & {e["frame"] - 1, e["frame"] - 2}  # a contact just before is not free motion
-        if before and earlier and free:
-            # Over the two frames before the touch, was the ball closing on him (or slow beside him)?
+        if before and earlier:
+            # A ball already within his reach can be touched whichever way it moves. One that was
+            # out of reach and moving away from him a frame before cannot be back within reach now.
             p1 = next((q for q in before["players"] if q["id"] == e["player"]), None)
             p2 = next((q for q in earlier["players"] if q["id"] == e["player"]), None)
             if p1 is not None and p2 is not None:
                 d1 = math.hypot(before["ball"]["x"] - p1["x"], before["ball"]["y"] - p1["y"])
                 d2 = math.hypot(earlier["ball"]["x"] - p2["x"], earlier["ball"]["y"] - p2["y"])
-                if d1 - d2 > APPROACH_TOLERANCE_M:
+                if d1 > reach and d1 - d2 > APPROACH_TOLERANCE_M:
                     problems["P14 touch possible"].append(
                         f"{e['id']}: {e['type']} by {e['player']}, but the ball was moving away from him")
 
@@ -291,6 +290,9 @@ def check_events(events: list[dict], frames: list[dict], fps: float, meta: dict,
                 problems["C8 event order"].append(f"{e['id']} {e['type']}: {e.get('player')} lacked the ball")
 
     passes = [e for e in events if e["type"] == "pass"]
+    for e in passes:
+        if e.get("receiver") and e["receiver"] == e["player"]:
+            problems["C8 event order"].append(f"{e['id']}: a pass received by its own passer")
     shots = [e for e in events if e["type"] == "shot"]
     for e in events:
         if e["type"] == "interception":

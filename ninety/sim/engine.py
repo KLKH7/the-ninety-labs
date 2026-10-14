@@ -185,6 +185,8 @@ class Engine:
         # (x, y, strike): a carrier turning the ball onto his kicking side before he strikes it
         self.windup: tuple | None = None
         self.read: tuple[str, float] | None = None  # (keeper, y): where he reads a shot is going
+        self.shot_touched_by: str | None = None  # "keeper" or "defender": who got to the shot
+        self.shot_was_on_target: bool | None = None  # was it going in when they first touched it?
         self.free_since = -99.0
         self.touched_since_kick = False
         self.chase: dict[str, tuple[str, float, float]] = {}  # team -> (player, x, y)
@@ -366,6 +368,7 @@ class Engine:
         vx, vy, vz = self.execute(carrier, *self.aim(bx, by, gx, ty, ground, up), "finishing")
         speed = math.sqrt(vx * vx + vy * vy + vz * vz)
         # Outcome and end point are observed: set when the ball is touched, goes out or goes in.
+        self.shot_touched_by = self.shot_was_on_target = None
         self.kicked = self.emit("shot", team, bx, by, player=carrier.id, ball_speed_kmh=round(speed * 3.6, 1))
         self.kick(carrier, vx, vy, vz)
 
@@ -505,11 +508,12 @@ class Engine:
             cx, cy = x0 + s * dx, y0 + s * dy
             cz = before[2] + s * (z1 - before[2])
             d = math.hypot(cx - p.x, cy - p.y)
-            # The ball meets a body only if it is moving toward it, relative to the player.
-            closing = (self.ball[3] - p.vx) * (p.x - cx) + (self.ball[4] - p.vy) * (p.y - cy)
-            slow = math.hypot(self.ball[3] - p.vx, self.ball[4] - p.vy) < 1.0
+            # A body meets the ball only if, at the start of this step, the ball was moving toward
+            # it (relative to the player). Measured from the step's start, not the closest point,
+            # where the relative direction is sideways by construction.
+            closing = (self.ball[3] - p.vx) * (p.x - x0) + (self.ball[4] - p.vy) * (p.y - y0)
             reach_m, reach_z = self.reach(p, cx, cy)
-            if since >= self.reaction(p) and d <= reach_m and cz <= reach_z and (closing > 0 or slow):
+            if since >= self.reaction(p) and d <= reach_m and cz <= reach_z:  # a deliberate touch
                 hits.append((s, "touch", p, cx, cy, cz))
             elif d <= BODY_RADIUS + ball.RADIUS and cz <= BODY_HEIGHT and closing > 0:
                 hits.append((s, "body", p, cx, cy, cz))
@@ -564,23 +568,41 @@ class Engine:
             return
         same_team = p.team == kicked["team"]
         if kicked["type"] == "pass":
-            if same_team and controls:
-                kicked.update(receiver=p.id, end_x=round(x, 2), end_y=round(y, 2), outcome="success")
+            if same_team and controls:  # completed, unless it only came back to the passer
+                done = p.id != kicked["player"]
+                kicked.update(receiver=p.id if done else None, end_x=round(x, 2), end_y=round(y, 2),
+                              outcome="success" if done else "fail")
                 self.kicked = None
-            elif not same_team and controls:
+            elif not same_team:  # an opponent got to it: the pass has failed
                 kicked.update(receiver=p.id, end_x=round(x, 2), end_y=round(y, 2), outcome="fail")
-                self.emit("interception", p.team, x, y, player=p.id)
+                if controls:
+                    self.emit("interception", p.team, x, y, player=p.id)
                 self.kicked = None
-            return  # a deflection by anyone leaves the pass in flight until someone controls it
-        if same_team and not controls:
-            return  # a team-mate's deflection leaves the shot in flight
-        on_target = self.heading_on_target(kicked["team"])
-        if not same_team and p.role != "GK":
+            return  # a team-mate's deflection leaves the pass in flight
+        if not same_team:
+            if self.shot_was_on_target is None:  # the first opponent touch: was it going in?
+                self.shot_was_on_target = self.heading_on_target(kicked["team"])
+            if p.role != "GK":
+                self.shot_touched_by = "defender"
+            elif self.shot_touched_by is None:
+                self.shot_touched_by = "keeper"
+        if controls:
+            self.close_shot(kicked, x, y)
+        # A deflection (block, parry, a team-mate's touch) leaves the shot in flight: it may still go in.
+
+    def close_shot(self, kicked: dict, x: float, y: float) -> None:
+        """A shot ends without a goal: blocked if a defender got to it, saved or tipped if only the
+        keeper did (on or off target as it was going), otherwise on or off target as it went."""
+        touched_by, was = self.shot_touched_by, self.shot_was_on_target
+        if touched_by == "defender":
             outcome = "blocked"
+        elif touched_by == "keeper":
+            outcome = "on_target" if was else "off_target"
         else:
-            outcome = "on_target" if on_target else "off_target"
+            outcome = "on_target" if self.heading_on_target(kicked["team"]) else "off_target"
         kicked.update(end_x=round(x, 2), end_y=round(y, 2), outcome=outcome)
-        self.kicked = None
+        if self.kicked is kicked:
+            self.kicked = None
 
     @staticmethod
     def in_goal(y: float, z: float) -> bool:
@@ -643,7 +665,10 @@ class Engine:
             if kicked["type"] == "pass":
                 kicked["outcome"] = "fail"
             elif not (over_goal_line and self.in_goal(by, bz)):
-                kicked["outcome"] = "off_target"
+                touched = self.shot_touched_by
+                self.close_shot(kicked, x, y)
+                if not touched:
+                    kicked["outcome"] = "off_target"  # it went out untouched: it missed
         self.chase = {}
         if over_goal_line:
             attackers = "home" if bx > PITCH_X / 2 else "away"
@@ -664,11 +689,19 @@ class Engine:
         return True
 
     def scored(self, team: str, kicked: dict | None, x: float, y: float) -> None:
+        """Credit as the game does: a shot that goes in is the shooter's goal, including after a
+        deflection or a parry, if it was on target before the opponents touched it; otherwise
+        the last touch decides, and a defender's last touch is an own goal."""
         self.match.score[team] += 1
-        shooter = kicked["player"] if kicked and kicked["type"] == "shot" else self.last_touch
-        if kicked and kicked["type"] == "shot":
-            kicked["outcome"] = "goal"
-        self.emit("goal", team, x, y, player=shooter if self.team_of(shooter) == team else None)
+        shot = kicked if kicked and kicked["type"] == "shot" and kicked["team"] == team else None
+        if shot and self.shot_was_on_target is not False:
+            shot["outcome"] = "goal"
+            scorer = shot["player"]
+        else:
+            if shot:
+                self.close_shot(shot, x, y)
+            scorer = self.last_touch if self.last_touch and self.team_of(self.last_touch) == team else None
+        self.emit("goal", team, x, y, player=scorer)
         self.kickoff(other(team))
 
     def stop(self, kind: str, team: str, spot: tuple[float, float], taker: str | None = None) -> None:

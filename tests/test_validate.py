@@ -150,6 +150,10 @@ def goal_without_shot(c):
     c["meta"]["score"]["home"] = 1
 
 
+def pass_to_himself(c):
+    c["events"][0]["receiver"] = "h1"
+
+
 def score_disagrees(c):
     c["meta"]["score"]["home"] = 1
 
@@ -174,6 +178,7 @@ def score_disagrees(c):
     (pass_without_ball, "C8 event order"),
     (interception_from_nowhere, "C8 event order"),
     (goal_without_shot, "C8 event order"),
+    (pass_to_himself, "C8 event order"),
     (score_disagrees, "C9 score"),
 ])
 def test_planted_defect_fails(tmp_path, defect, check):
@@ -251,11 +256,12 @@ def test_a_touch_by_a_distant_player_fails(tmp_path):
     assert "P14 touch possible" in run(tmp_path, clip)
 
 
-def test_a_touch_on_a_ball_moving_away_fails(tmp_path):
+def test_a_touch_on_a_ball_out_of_reach_and_moving_away_fails(tmp_path):
     clip = clean_clip()
-    for f in clip["frames"]:  # a1 stands just behind where the ball started, as it leaves him
-        f["players"][2].update(x=39.8, y=30.0)
-    clip["events"].append(event("e2", PASS_AT + 3, "deflection", "away", "a1", x=41.2))  # 1.4 m: in reach
+    for f in clip["frames"]:
+        f["players"][2].update(x=39.0, y=30.0)
+    clip["frames"][PASS_AT + 5]["players"][2].update(x=40.5)  # suddenly beside it, 1.5 m on
+    clip["events"].append(event("e2", PASS_AT + 5, "deflection", "away", "a1", x=42.0))
     assert "P14 touch possible" in run(tmp_path, clip)
 
 
@@ -312,7 +318,7 @@ def test_a_rebound_off_the_crossbar_is_not_judged_as_free_flight(tmp_path):
     assert "P5 ball flight" not in problems
 
 
-def test_a_second_touch_straight_after_a_first_is_judged_on_reach_only(tmp_path):
+def test_a_ball_within_reach_can_be_touched_whichever_way_it_moves(tmp_path):
     clip = clean_clip()
     for f in clip["frames"]:
         f["players"][2].update(x=39.6, y=30.0)

@@ -18,7 +18,7 @@ def test_a_ball_moving_away_from_a_body_is_not_touched_by_it():
     still(e)
     p = e.by_id["a6"]
     p.x, p.y = 50.0, 30.0
-    e.possessor, e.last_touch, e.kicker_clear = None, "h2", True
+    e.possessor, e.last_touch, e.kicker_clear, e.kicked_at = None, "h2", True, e.t  # body only
     before = (50.1, 30.0, 0.0, 12.0, 0.0, 0.0)  # starts at his body, rolling away from it
     e.ball = (50.1 + 12.0 * DT, 30.0, 0.0, 12.0, 0.0, 0.0)
     e.contact(before)
@@ -334,3 +334,66 @@ def test_a_stronger_team_is_made_of_better_players():
     e = Engine(2, strengths={"home": 1.5, "away": -1.5})
     quality = lambda team: mean(p.profile.quality for p in e.players if p.team == team)  # noqa: E731
     assert quality("home") - quality("away") > 2.0  # 3.0 expected; about 0 if strength were ignored
+
+
+def test_a_fast_ball_aimed_at_a_standing_body_always_hits_it():
+    for speed in (6.0, 20.0, 30.0):
+        for offset in (0.0, 0.1, 0.2, 0.3):
+            e = Engine(1)
+            still(e)
+            p = e.by_id["a6"]
+            p.x, p.y = 50.0, 30.0
+            e.possessor, e.last_touch, e.kicker_clear, e.kicked_at = None, "h2", True, e.t  # no reaction yet
+            before = (49.7, 30.0 + offset, 0.5, speed, 0.0, 0.0)  # it reaches him this step
+            e.ball = (49.7 + speed * DT, 30.0 + offset, 0.5, speed, 0.0, 0.0)
+            e.contact(before)
+            assert any(ev["type"] == "deflection" for ev in e.match.events), (speed, offset)
+
+
+def shot_in_flight(on_target: bool) -> tuple[Engine, dict]:
+    e = Engine(1)
+    shooter = e.by_id["h9"]
+    e.kicked = e.emit("shot", "home", 90.0, 34.0, player=shooter.id)
+    e.shot_touched_by = e.shot_was_on_target = None
+    e.heading_on_target = lambda team: on_target
+    return e, e.kicked
+
+
+def goal_event(e: Engine) -> dict:
+    return next(ev for ev in reversed(e.match.events) if ev["type"] == "goal")
+
+
+def test_a_shot_deflected_in_counts_for_the_shooter_only_if_it_was_on_target():
+    e, shot = shot_in_flight(True)
+    e.touched(e.by_id["a4"], 95.0, 34.0, controls=False)
+    e.last_touch = "a4"
+    e.scored("home", e.kicked, 105.0, 34.0)
+    assert shot["outcome"] == "goal" and goal_event(e)["player"] == "h9"
+    e, shot = shot_in_flight(False)
+    e.touched(e.by_id["a4"], 95.0, 34.0, controls=False)
+    e.last_touch = "a4"
+    e.scored("home", e.kicked, 105.0, 34.0)
+    assert shot["outcome"] == "blocked" and goal_event(e)["player"] is None  # an own goal
+
+
+def test_a_parry_is_a_save_and_a_block_is_a_block():
+    e, shot = shot_in_flight(True)
+    e.touched(e.keeper("away"), 103.0, 34.0, controls=False)
+    assert e.kicked is shot  # still live: the parry may yet go in
+    e.close_shot(shot, 103.0, 34.0)
+    assert shot["outcome"] == "on_target"
+    e, shot = shot_in_flight(True)
+    e.touched(e.by_id["a4"], 95.0, 34.0, controls=False)
+    e.touched(e.by_id["a5"], 96.0, 34.0, controls=True)
+    assert shot["outcome"] == "blocked" and e.kicked is None
+
+
+def test_a_blocked_pass_fails_and_a_pass_back_to_the_passer_is_not_completed():
+    e = Engine(1)
+    e.kicked = e.emit("pass", "home", 50.0, 34.0, player="h6")
+    e.touched(e.by_id["a8"], 52.0, 34.0, controls=False)
+    assert e.match.events[-1]["outcome"] == "fail" and e.kicked is None
+    assert not any(ev["type"] == "interception" for ev in e.match.events)
+    e.kicked = e.emit("pass", "home", 50.0, 34.0, player="h6")
+    e.touched(e.by_id["h6"], 50.5, 34.0, controls=True)
+    assert e.match.events[-1]["outcome"] == "fail" and e.match.events[-1]["receiver"] is None

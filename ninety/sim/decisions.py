@@ -34,6 +34,7 @@ STALE_S = 2.0  # design: a team-mate not seen for this long is a less certain op
 DRIBBLE_STEP_M = 6.0
 MAX_PASS_M = 45.0
 LOFT_OVER_M = 25.0
+RECEIVE_HEIGHT_M = 1.0  # a dropping ball is taken on the foot or thigh below about this height
 LOFT_DEG = 30.0  # design: the launch angle of a lofted pass or a throw, as estimated and as struck
 CONTROL_EST_MPS = 12.0  # A4: the passer's guess of what a first touch can kill: the average (8 + 8 × 0.5)
 CONTROL_MARGIN_MPS = 2.0  # design: how sharply that guess falls off
@@ -62,12 +63,31 @@ LAUNCH = [ball.ground_pass(max(d * 0.5, 0.5), ARRIVE_MPS, DT) for d in range(91)
 LOFT = [ball.lofted_pass(max(d * 0.5, 0.5), LOFT_DEG, DT) for d in range(91)]
 
 
+def _arrival_speed(launch: tuple[float, float]) -> float:
+    """Speed of a lofted ball when it has come back down to a receiver's foot or thigh (1 m),
+    from the same ball physics the engine flies it with (drag slows it on the way)."""
+    ground, up = launch
+    path = ball.predict((0.0, 0.0, 0.0, ground, 0.0, up), DT, 6.0)
+    for state in path[1:]:
+        if state[5] < 0 and state[2] <= RECEIVE_HEIGHT_M:
+            return math.sqrt(state[3] ** 2 + state[4] ** 2 + state[5] ** 2)
+    last = path[-1]
+    return math.sqrt(last[3] ** 2 + last[4] ** 2 + last[5] ** 2)
+
+
+ARRIVAL = [_arrival_speed(launch) for launch in LOFT]
+
+
 def launch_speed(distance: float) -> float:
     return LAUNCH[min(len(LAUNCH) - 1, max(0, round(distance / 0.5)))]
 
 
 def loft_launch(distance: float) -> tuple[float, float]:
     return LOFT[min(len(LOFT) - 1, max(0, round(distance / 0.5)))]
+
+
+def loft_arrival(distance: float) -> float:
+    return ARRIVAL[min(len(ARRIVAL) - 1, max(0, round(distance / 0.5)))]
 
 
 def loft_time(distance: float) -> float:
@@ -235,8 +255,8 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
         confidence *= sigmoid((generic_time(max(0.0, d - 1.0)) - t_ball) / LANE_MARGIN_S)
     receiver_t = generic_time(math.hypot(tx - mx, ty - my))
     confidence *= sigmoid((arrive + 0.5 - receiver_t) / RECEIVE_MARGIN_S)
-    # Can he control it when it gets there? A lofted ball drops at about the speed it was struck.
-    arrival = math.hypot(*loft_launch(dist)) if lofted else ARRIVE_MPS
+    # Can he control it when it gets there? A lofted ball arrives slower than it was struck (drag).
+    arrival = loft_arrival(dist) if lofted else ARRIVE_MPS
     confidence *= sigmoid((CONTROL_EST_MPS - arrival) / CONTROL_MARGIN_MPS)
     return confidence * (0.8 if age > STALE_S else 1.0)
 
@@ -270,7 +290,12 @@ def options(scene: Scene) -> list[Option]:
     q = shot_estimate(scene.x, scene.y, scene.goal_x, scene.opponents, scene.keeper)
     if abs(scene.goal_x - scene.x) < 40:
         bias = 1.3 if "shoots_from_distance" in scene.traits else 1.0
-        out.append(Option("shoot", q * bias * (1 + 0.5 * scene.risk) - (1 - q) * LOSS_BASE,
+        # A shot that fails is either blocked, leaving the ball at his feet for them, or missed or
+        # saved, which gives the ball back from deep (a goal kick or the keeper's hands).
+        blockers = sum(in_cone(scene.x, scene.y, scene.goal_x, ox, oy) for ox, oy in scene.opponents)
+        blocked = 1 - BLOCKER_FACTOR ** blockers
+        lost = blocked * loss_cost(scene.x, scene.y, scene.goal_x) + (1 - blocked) * LOSS_BASE
+        out.append(Option("shoot", q * bias * (1 + 0.5 * scene.risk) - (1 - q) * lost,
                           (scene.goal_x, PITCH_Y / 2)))
     for turn in (0.0, 0.8, -0.8):  # straight at goal, or angled away
         heading = math.atan2(PITCH_Y / 2 - scene.y, scene.goal_x - scene.x) + turn

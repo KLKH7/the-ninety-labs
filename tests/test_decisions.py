@@ -186,3 +186,21 @@ def test_a_failed_pass_is_costed_where_it_would_end_if_that_is_worse():
     at_target = D.loss_cost(*back.target, 105.0)
     assert at_target > D.loss_cost(30.0, 34.0, 105.0)  # the end is worse than the midpoint here
     assert math.isclose(back.value, conf * gain - (1 - conf) * at_target, rel_tol=1e-9)
+
+
+def test_the_control_estimate_uses_the_speed_a_lofted_ball_arrives_at():
+    for d in (20.0, 30.0, 40.0):
+        assert D.loft_arrival(d) < 0.8 * math.hypot(*D.loft_launch(d))  # drag slows it in the air
+    assert D.loft_arrival(30.0) > D.loft_arrival(20.0)  # but a longer ball still lands faster
+
+
+def test_a_shot_into_a_crowd_risks_losing_the_ball_where_he_stands():
+    shoot = lambda s: next(o for o in D.options(s) if o.kind == "shoot")  # noqa: E731
+    clear = scene(x=75.0)
+    crowded = scene(x=75.0, opponents=[(80.0, 34.0), (85.0, 33.0)])
+    q_clear = D.shot_estimate(75.0, 34.0, 105.0, [], None)
+    q_crowd = D.shot_estimate(75.0, 34.0, 105.0, crowded.opponents, None)
+    assert math.isclose(shoot(clear).value, q_clear - (1 - q_clear) * D.LOSS_BASE)
+    blocked = 1 - D.BLOCKER_FACTOR ** 2
+    lost = blocked * D.loss_cost(75.0, 34.0, 105.0) + (1 - blocked) * D.LOSS_BASE
+    assert math.isclose(shoot(crowded).value, q_crowd - (1 - q_crowd) * lost)
