@@ -12,7 +12,6 @@ from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
-PITCH_SPEED_CAP_KMH = 40.0
 SPRINT_THRESHOLD_KMH = 25.0
 
 
@@ -55,6 +54,14 @@ def _player(event: Mapping) -> str | None:
     return str(player) if player is not None else None
 
 
+def _distance(event: Mapping) -> float | None:
+    """Compute pass distance from the event contract rather than a model-written field."""
+    end_x, end_y = event.get("end_x"), event.get("end_y")
+    if end_x is None or end_y is None:
+        return None
+    return math.hypot(float(end_x) - float(event["x"]), float(end_y) - float(event["y"]))
+
+
 def _fact(metric: str, value: float, unit: str, scope: str, source_ids: Iterable[str]) -> Fact:
     safe_scope = scope.replace(":", "_")
     return Fact(
@@ -71,7 +78,6 @@ def pass_facts(events: Iterable[Mapping]) -> list[Fact]:
     """Return pass volume, completion, distance, and speed facts by team and player."""
     event_list = _events(events)
     passes = [event for event in event_list if event.get("type") == "pass"]
-    fallback_ids = [str(event["id"]) for event in event_list]
     groups: dict[str, list[Mapping]] = defaultdict(list)
     groups.update({"home": [], "away": []})
     for event in passes:
@@ -82,18 +88,18 @@ def pass_facts(events: Iterable[Mapping]) -> list[Fact]:
     facts: list[Fact] = []
     for scope, group in sorted(groups.items()):
         completed = [event for event in group if event.get("outcome") == "success"]
-        distances = [float(event["distance_m"]) for event in group if event.get("distance_m") is not None]
+        distances = [distance for event in group if (distance := _distance(event)) is not None]
         speeds = [
             float(event["ball_speed_kmh"])
             for event in group
             if event.get("ball_speed_kmh") is not None
         ]
-        ids = [str(event["id"]) for event in group] or fallback_ids
+        ids = [str(event["id"]) for event in group]
         facts.extend(
             (
                 _fact("passes_attempted", len(group), "passes", scope, ids),
                 _fact("passes_completed", len(completed), "passes", scope,
-                      [str(event["id"]) for event in completed] or ids),
+                      [str(event["id"]) for event in completed]),
                 _fact(
                     "pass_completion_rate", len(completed) / len(group) if group else 0,
                     "ratio", scope, ids
@@ -111,7 +117,6 @@ def shot_facts(events: Iterable[Mapping]) -> list[Fact]:
     """Return shot volume, accuracy, goals, and speed facts by team and player."""
     event_list = _events(events)
     shots = [event for event in event_list if event.get("type") == "shot"]
-    fallback_ids = [str(event["id"]) for event in event_list]
     groups: dict[str, list[Mapping]] = defaultdict(list)
     groups.update({"home": [], "away": []})
     for event in shots:
@@ -121,7 +126,7 @@ def shot_facts(events: Iterable[Mapping]) -> list[Fact]:
 
     facts: list[Fact] = []
     for scope, group in sorted(groups.items()):
-        ids = [str(event["id"]) for event in group] or fallback_ids
+        ids = [str(event["id"]) for event in group]
         on_target = [
             event for event in group if event.get("outcome") in {"on_target", "goal"}
         ]
@@ -135,11 +140,11 @@ def shot_facts(events: Iterable[Mapping]) -> list[Fact]:
             (
                 _fact("shots", len(group), "shots", scope, ids),
                 _fact("shots_on_target", len(on_target), "shots", scope,
-                      [str(event["id"]) for event in on_target] or ids),
+                      [str(event["id"]) for event in on_target]),
                 _fact("shot_accuracy", len(on_target) / len(group) if group else 0,
                       "ratio", scope, ids),
                 _fact("goals", len(goals), "goals", scope,
-                      [str(event["id"]) for event in goals] or ids),
+                      [str(event["id"]) for event in goals]),
             )
         )
         if speeds:
@@ -207,8 +212,6 @@ def player_movement_facts(frames: Iterable[Mapping]) -> list[Fact]:
             if dt <= 0:
                 continue
             speed_kmh = math.hypot(current[1] - previous[1], current[2] - previous[2]) / dt * 3.6
-            # A malformed tracker sample should not create a spectacular statistic.
-            speed_kmh = min(speed_kmh, PITCH_SPEED_CAP_KMH)
             distance += speed_kmh / 3.6 * dt
             peak = max(peak, speed_kmh)
             if speed_kmh >= SPRINT_THRESHOLD_KMH:
@@ -226,12 +229,7 @@ def player_movement_facts(frames: Iterable[Mapping]) -> list[Fact]:
 
 
 def control_vs_chaos(events: Iterable[Mapping], window_seconds: float = 60.0) -> list[Fact]:
-    """Compute a transparent control-vs-chaos index per team.
-
-    The index is the completed-pass share minus the normalized pressure and turnover
-    rate in each time window. It is a deterministic descriptive signal, not a rating
-    of a team or player.
-    """
+    """Compute the documented experimental control-vs-chaos index per team."""
     if window_seconds <= 0:
         raise ValueError("window_seconds must be positive")
     event_list = _events(events)
@@ -254,7 +252,9 @@ def control_vs_chaos(events: Iterable[Mapping], window_seconds: float = 60.0) ->
                 for event in window
             )
             denominator = max(len(passes), 1)
-            index_value = (completed / denominator) - ((pressure + turnovers) / denominator) * 0.1
+            control = completed / denominator
+            chaos = min(1.0, (pressure + turnovers) / denominator)
+            index_value = control - chaos
             ids = [str(event["id"]) for event in team_events]
             if not ids:
                 continue
