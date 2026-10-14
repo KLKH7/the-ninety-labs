@@ -38,6 +38,7 @@ jobs:
       - uses: astral-sh/setup-uv@v7
       - run: uv sync --locked
       - run: uv run ninety-sim --seed 7 --minutes 3 --out runs/smoke
+      - run: uv run ninety-validate runs/smoke  # data contract: consistency, physics, Laws (docs/GROUNDING.md)
       - run: |
           uv run python - <<'PY'
           import json

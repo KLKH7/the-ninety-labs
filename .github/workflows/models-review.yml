@@ -1,0 +1,39 @@
+name: models-review
+
+# Advisory AI review of each pull request on GitHub Models. No API key or stored secret: the
+# job's own GITHUB_TOKEN with `models: read` makes the call, free within GitHub Models' rate limits.
+# Never blocks a merge. Script and design: .github/scripts/models_review.py.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  models: read
+  pull-requests: write
+
+concurrency:
+  group: models-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    # Fork and Dependabot pull requests get a read-only token, so they cannot comment.
+    if: >-
+      !github.event.pull_request.draft
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - run: python3 .github/scripts/models_review.py
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          MODEL: ${{ vars.MODELS_REVIEW_MODEL }}
