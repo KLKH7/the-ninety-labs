@@ -11,11 +11,11 @@
     "frame": { "type": "integer", "minimum": 0 },
     "type": {
       "type": "string",
-      "enum": ["kickoff", "pass", "shot", "goal", "tackle", "interception", "pressure", "possession_change", "out_of_play", "set_piece"]
+      "enum": ["kickoff", "pass", "shot", "goal", "tackle", "interception", "pressure", "possession_change", "out_of_play", "set_piece", "substitution"]
     },
     "team": { "type": "string", "enum": ["home", "away"] },
-    "player": { "type": ["string", "null"] },
-    "receiver": { "type": ["string", "null"] },
+    "player": { "type": ["string", "null"], "description": "The player who acts; for a substitution, the player leaving." },
+    "receiver": { "type": ["string", "null"], "description": "Who the ball went to or who was challenged; for a substitution, the player coming on." },
     "x": { "type": "number", "minimum": 0, "maximum": 105 },
     "y": { "type": "number", "minimum": 0, "maximum": 68 },
     "end_x": { "type": ["number", "null"] },

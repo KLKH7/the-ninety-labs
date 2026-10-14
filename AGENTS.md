@@ -13,12 +13,14 @@ including the ones who can't see it.
 
 ## 1. Read before changing anything
 
-1. [docs/BRIEF.md](docs/BRIEF.md): the challenge brief, the five required stages, the rubric and the submission checklist.
-2. [docs/CHALLENGE_MAP.md](docs/CHALLENGE_MAP.md): every requirement, where we answer it, and its status.
-3. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): design rules, components and the Microsoft stack.
-4. [docs/PLAN.md](docs/PLAN.md): goals, milestones and what is due on which day.
-5. [docs/EVALUATION.md](docs/EVALUATION.md): how every published number is measured.
-6. [SECURITY.md](SECURITY.md): the repo and the demo are public.
+1. [docs/LESSONS.md](docs/LESSONS.md): mistakes this project already made, the rule now, and how to check. Read it first, every task.
+2. [docs/BRIEF.md](docs/BRIEF.md): the challenge brief, the five required stages, the rubric and the submission checklist.
+3. [docs/CHALLENGE_MAP.md](docs/CHALLENGE_MAP.md): every requirement, where we answer it, and its status.
+4. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): design rules, components and the Microsoft stack.
+5. [docs/PLAN.md](docs/PLAN.md): goals, milestones and what is due on which day.
+6. [docs/EVALUATION.md](docs/EVALUATION.md): how every published number is measured.
+7. [docs/DATA_CONTRACT.md](docs/DATA_CONTRACT.md): what ground-truth data must contain, and how it is checked.
+8. [SECURITY.md](SECURITY.md): the repo and the demo are public.
 
 Task-specific guides in `docs/guides/`:
 
@@ -59,13 +61,20 @@ Every claim of quality ships with the measurement that proves it (`docs/EVALUATI
 - **Synthetic data only.** No real match data, players, clubs, kits, crests or footage (rules 4.4 and 4.7).
 - **Code computes every number; models only explain.** Agents never invent a statistic, and the fact-checking agent gates what reaches the screen.
 - **Agents read typed facts.** Viewer input is data, never instructions.
-- **Licenses:** MIT, Apache-2.0 or BSD dependencies only. No AGPL (this rules out ultralytics).
+- **Ground truth is the answer key.** It is used for training labels and grading only. Nothing on the live path (vision, the stats it feeds, the agents in the demo) reads it. Until Milestone 1 the agents read simulator events as a stand-in; after it, a test enforces this.
+- **One football engine.** Football logic and physics live in `ninety/sim`; scenarios are modes of it. The renderer only draws. Whatever makes the video also writes the truth, so no generative video models.
+- **Ground-truth data meets the contract.** Every clip passes `uv run ninety-validate <clip>` ([docs/DATA_CONTRACT.md](docs/DATA_CONTRACT.md)).
+- **Fix the cause, never the symptom; never script the result.** In the engine, outcomes (a completed pass, an interception, a save, a goal, the ball going out) emerge from physics and decisions; never decide an outcome first and arrange the world to match it. In the validator, a threshold comes from a cited source or from measurement precision, set before looking at the engine's numbers; never loosen a check, add an exemption or special-case an id to turn it green. A legal case gets a test that must pass; a defect gets one that must fail.
+- **Football is grounded, not remembered.** Every rule in the engine and every check in the validator cites its source in [docs/GROUNDING.md](docs/GROUNDING.md) (a Law of the Game, a study, a published statistic). Implement rules in our own words; never commit the Laws' text.
+- **Licenses:** MIT, Apache-2.0 or BSD dependencies only. No AGPL (this rules out ultralytics). Record each in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+- **Vision models:** RF-DETR only in its Apache-2.0 sizes (Nano, Small, Medium, Large), pinned by name. Never the PML-1.0 sizes (Atto, Femto, Pico, XL, 2XL) or `rfdetr_plus`. Train and fine-tune on our own renders only: no Roboflow Universe or any dataset made from real footage. Do not send our video to a hosted third-party inference service; run models in our own Azure resources.
 - **Terminology:** automatic event detection, ground-truth data, fact-checking agent, on-screen graphics, player cam. Keep the brief's stage names: Ingest, Interpret, Explain, Render, Personalize.
 - **Honest claims:** the README and project page describe only what runs. Mark unbuilt rows `planned` in the challenge map, and update a row when it ships.
 
 ## 5. Working in the repo
 
-- Setup: `uv sync`. Simulator: `uv run ninety-sim --seed 7 --minutes 5 --out runs/seed7`.
+- Setup: `uv sync`. Simulator: `uv run ninety-sim --seed 7 --minutes 5 --out runs/seed7`. Contract check: `uv run ninety-validate runs/seed7`.
 - Before every push: `uv run ruff check .` and `uv run pytest`.
 - `main` is protected: CI (lint, tests on 3.11 and 3.12, schema smoke test, secret scan) must pass. Work on a branch and open a pull request.
 - Stage files by name. Before committing, check `git diff --cached` contains no secret, key or `.env` file.
+- **When you catch a mistake** (yours or anyone's), add a lesson to [docs/LESSONS.md](docs/LESSONS.md) in the same pull request as the fix: what happened, the rule now, how to check.

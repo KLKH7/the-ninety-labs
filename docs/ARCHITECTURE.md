@@ -8,11 +8,12 @@ This document describes the system as designed. What already runs is tracked in
 
 1. [Design rules](#design-rules)
 2. [System overview](#system-overview)
-3. [Agent design](#agent-design)
-4. [One moment, end to end](#one-moment-end-to-end)
-5. [Deployment on Azure](#deployment-on-azure)
-6. [Technology decisions](#technology-decisions)
-7. [Data contracts](#data-contracts)
+3. [Synthetic data pipeline](#synthetic-data-pipeline)
+4. [Agent design](#agent-design)
+5. [One moment, end to end](#one-moment-end-to-end)
+6. [Deployment on Azure](#deployment-on-azure)
+7. [Technology decisions](#technology-decisions)
+8. [Data contracts](#data-contracts)
 
 ## Design rules
 
@@ -50,6 +51,44 @@ flowchart LR
 | 5 Personalize | analyst, casual, favourite club, player cam, languages, audio description | `ninety/agents`, `web` |
 | Scoring | detected events are scored against the sealed ground truth: precision and recall per event type | `ninety/eval` |
 | Targeted data | where detection fails, more footage of exactly that situation is generated, then scored again | `ninety/sim`, `web/render` |
+
+## Synthetic data pipeline
+
+How a match becomes video with known truth, and how failures in vision turn into new data.
+Solid lines run every time; dotted lines are the answer key, which only training and scoring
+may read.
+
+```mermaid
+flowchart TB
+    ENG["Match engine<br/>football logic, physics"] -- "ground truth:<br/>events, frames" --> VAL["Validator<br/>laws, physics, consistency"]
+    VAL -- "fails: fix the engine" --> ENG
+    VAL -- passes --> REN["Renderer (three.js)"]
+    REN -- "broadcast video" --> VIS["Vision pipeline"]
+    REN -. "render labels,<br/>training only" .-> VIS
+    VIS -- "detected events" --> SC["Scoring"]
+    ENG -. "answer key" .-> SC
+    SC --> LOOP["Vision Auditor, Data agent"]
+    LOOP -- "new scenarios" --> ENG
+```
+
+Every check in the validator, and every rule the engine follows, cites its source: a Law of
+the Game, a sports-science measurement or a published match statistic ([GROUNDING.md](GROUNDING.md)).
+
+| Part | Job | Code | Status |
+|---|---|---|---|
+| Match engine | **makes** the match: applies football logic and physics every 1/25 s and writes each frame and event | `ninety/sim` | running, physics gaps |
+| Ground truth | the engine's output: the synthetic data itself | `events.jsonl`, `frames.jsonl` | running |
+| Validator | **inspects** the output, independently of the engine's code: a clip that breaks a law, physics or its own events never reaches the renderer | `ninety/validate.py` | running, engine fails it today |
+| Renderer | draws the frames as broadcast video; decides nothing about football | `web/render` | planned |
+| Render labels | each player's and the ball's box, projected through the camera, so labels are exact | `web/render` | planned |
+| Vision pipeline | sees pixels only: detection, tracking, camera-to-pitch mapping, event rules | `ninety/vision` | planned |
+| Scoring | compares detected events with the answer key: precision and recall per event type | `ninety/eval` | planned |
+| Vision Auditor, Data agent | find where vision fails and ask the engine for more of exactly those scenes | `ninety/agents` | planned |
+
+The engine and the validator are separate on purpose. The engine encodes *how to make* a
+moment happen; the validator encodes *what must be true* of the result. Written independently
+from the same source, a bug in one is caught by the other, and a law the engine does not model
+yet shows up as a failing check, which is the engine's to-do list.
 
 ## Agent design
 
@@ -189,3 +228,5 @@ pull request.
 | [`match_event.schema.json`](../schemas/match_event.schema.json) | one event, from ground truth or detected (`source`, `confidence`) | match engine, vision | stats engine, agents, scoring |
 | [`frame.schema.json`](../schemas/frame.schema.json) | positions at one frame | match engine, renderer, tracker | renderer, scoring |
 | [`overlay_cue.schema.json`](../schemas/overlay_cue.schema.json) | one timed on-screen graphic | Producer, Personalizer | viewer, WebVTT export |
+
+What a ground-truth clip must contain, and the validator that checks it: [DATA_CONTRACT.md](DATA_CONTRACT.md).

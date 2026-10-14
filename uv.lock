@@ -1338,12 +1338,12 @@ dependencies = [
     { name = "agent-framework-foundry" },
     { name = "azure-identity" },
     { name = "httpx" },
+    { name = "jsonschema" },
     { name = "mcp" },
 ]
 
 [package.dev-dependencies]
 dev = [
-    { name = "jsonschema" },
     { name = "pytest" },
     { name = "ruff" },
 ]
@@ -1354,12 +1354,12 @@ requires-dist = [
     { name = "agent-framework-foundry", specifier = ">=1.14.1" },
     { name = "azure-identity", specifier = ">=1.26.0" },
     { name = "httpx", specifier = ">=0.28.1" },
+    { name = "jsonschema", specifier = ">=4" },
     { name = "mcp", specifier = ">=1.24,<2" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "jsonschema", specifier = ">=4" },
     { name = "pytest", specifier = ">=8" },
     { name = "ruff", specifier = ">=0.17.0" },
 ]
