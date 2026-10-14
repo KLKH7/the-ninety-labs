@@ -5,8 +5,9 @@ a fact-checking step that can reject, and speech.
     uv run ninety-slice --minute 2 --plant        # tamper with the first draft to show a rejection
     uv run ninety-slice --minute 2 --speak a.mp3  # also speak the verified claim
 
-The Analyst reads the match only through the MCP server. The Fact-checker is code
-(ninety/agents/factcheck.py): it sends a rejected claim back with its reasons, at most twice.
+The Analyst reads the match only through the MCP server. The Fact-checker runs the code checks
+(ninety/agents/factcheck.py) and then the Judge (ninety/agents/judge.py), and sends a rejected
+claim back with its reasons, at most twice.
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ from azure.identity import DefaultAzureCredential
 
 from ninety import config
 from ninety.agents.factcheck import Claim, check
+from ninety.agents.judge import judge, judge_agent
 from ninety.match.facts import events_in
 
 MAX_REWRITES = 2
@@ -94,13 +96,21 @@ class AnalystExecutor(Executor):
 
 
 class FactCheckExecutor(Executor):
-    def __init__(self, known: dict[str, dict], trace: list[str]):
+    """Code checks first (free, exact about numbers, players and ids), then the Judge (meaning)."""
+
+    def __init__(self, known: dict[str, dict], judge: Agent, trace: list[str]):
         super().__init__(id="fact_checker")
-        self.known, self.trace = known, trace
+        self.known, self.judge, self.trace = known, judge, trace
 
     @handler
     async def review(self, draft: Draft, ctx: WorkflowContext[Task, Outcome]) -> None:
         verdict = check(draft.claim, self.known)
+        if verdict.ok:
+            evidence = [self.known[i] for i in draft.claim.evidence]
+            started = time.perf_counter()
+            verdict = await judge(self.judge, draft.claim, evidence)
+            seconds = time.perf_counter() - started
+            self.trace.append(f"judge: {'supported' if verdict.ok else 'not supported'} ({seconds:.1f}s)")
         if verdict.ok:
             self.trace.append("fact_checker: accepted")
             await ctx.yield_output(Outcome(True, draft.claim, draft.task.attempt + 1, self.trace))
@@ -127,7 +137,7 @@ async def run_slice(minute: int, plant: bool, seed: int, minutes: float) -> Outc
     async with tools:
         agent = Agent(client=client, name="analyst", instructions=INSTRUCTIONS, tools=tools)
         analyst = AnalystExecutor(agent, trace, plant)
-        checker = FactCheckExecutor(known, trace)
+        checker = FactCheckExecutor(known, judge_agent(client), trace)
         # A rejected claim goes back to the analyst with the reasons, at most MAX_REWRITES times.
         builder = WorkflowBuilder(start_executor=analyst)
         workflow = builder.add_edge(analyst, checker).add_edge(checker, analyst).build()
