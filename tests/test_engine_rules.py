@@ -252,3 +252,85 @@ def test_a_keeper_may_not_handle_a_team_mates_deliberate_pass():
     assert not e.hands(keeper, 6.0, 34.0)
     e.last_touch = "a9"  # an opponent got a touch on it
     assert e.hands(keeper, 6.0, 34.0)
+
+
+def scatter(e: Engine, p, n: int = 1500) -> tuple[float, float]:
+    """Spread of struck direction (degrees) and of struck speed (m/s) for one intended kick."""
+    shots = [e.execute(p, 21.0, 0.0, 0.0, "finishing") for _ in range(n)]
+    return (pstdev(math.degrees(math.atan2(vy, vx)) for vx, vy, _ in shots),
+            pstdev(math.hypot(vx, vy) for vx, vy, _ in shots))
+
+
+def test_pressure_widens_what_is_struck_unless_he_is_composed():
+    e, p = kicker()
+    calm = scatter(e, p)
+    e.by_id["a6"].x, e.by_id["a6"].y = 50.8, 34.0  # an opponent at his shoulder
+    pressed = scatter(e, p)
+    assert pressed[0] > 1.15 * calm[0] and pressed[1] > 1.3 * calm[1] > 0
+    p.profile.attributes["composure"] = 1.0
+    assert math.isclose(scatter(e, p)[0], calm[0], rel_tol=0.1)
+
+
+def test_a_tired_player_strikes_less_accurately():
+    e, p = kicker()
+    fresh = scatter(e, p)[0]
+    p.physique.spent = 20 * 225.0  # a match of hard running: the slow store is low
+    assert scatter(e, p)[0] > 1.1 * fresh
+
+
+def test_a_keepers_read_is_centred_on_the_aim_and_needs_to_see_the_kicker():
+    e = Engine(5)
+    keeper, shooter = e.keeper("away"), e.by_id["h9"]
+    keeper.x, keeper.y, keeper.heading = 104.0, 34.0, math.pi  # facing the play
+    shooter.x, shooter.y = 88.0, 34.0
+    reads = [e.keeper_read(keeper, shooter, 36.0) for _ in range(3000)]
+    assert abs(mean(reads) - 36.0) < 0.1
+    assert abs(pstdev(reads) - keeper.profile.read_error_m()) < 0.1
+    keeper.heading = 0.0  # facing his own net
+    assert e.keeper_read(keeper, shooter, 36.0) is None
+
+
+def test_reflexes_set_reaction_in_the_engine():
+    e = Engine(1)
+    p = e.by_id["a6"]
+    p.profile.attributes["reflexes"] = 1.0
+    quick = e.reaction(p)
+    p.profile.attributes["reflexes"] = 0.0
+    assert e.reaction(p) > quick
+
+
+def test_first_touch_decides_whether_a_ball_is_killed():
+    outcomes = {}
+    for touch in (1.0, 0.0):  # can kill 16 m/s, or 8 m/s
+        e = Engine(1)
+        still(e)
+        p = e.by_id["a6"]
+        p.x, p.y = 50.0, 30.0
+        p.profile.attributes["first_touch"] = touch
+        e.possessor, e.last_touch, e.kicker_clear, e.kicked_at = None, "h2", True, e.t - 2.0
+        before = (49.4, 30.0, 0.0, 12.0, 0.0, 0.0)
+        e.ball = (49.4 + 12.0 * DT, 30.0, 0.0, 12.0, 0.0, 0.0)
+        e.contact(before)
+        outcomes[touch] = e.possessor == p.id
+    assert outcomes == {1.0: True, 0.0: False}
+
+
+def test_a_long_ball_to_the_wing_is_struck_as_a_cross_and_a_shot_with_finishing(monkeypatch):
+    e, p = kicker()
+    used = []
+    original = e.execute
+    monkeypatch.setattr(e, "execute", lambda *a: used.append(a[-1]) or original(*a))
+    e.give(p.id)
+    e.ball = (50.37, 34.0, 0.0, 0.0, 0.0, 0.0)
+    e.pass_to(p, 85.0, 60.0, lofted=True)
+    p.x, p.y, p.heading = 88.0, 34.0, 0.0
+    e.give(p.id)
+    e.ball = (88.37, 34.0, 0.0, 0.0, 0.0, 0.0)
+    e.shoot(p)
+    assert used == ["crossing", "finishing"]
+
+
+def test_a_stronger_team_is_made_of_better_players():
+    e = Engine(2, strengths={"home": 1.5, "away": -1.5})
+    quality = lambda team: mean(p.profile.quality for p in e.players if p.team == team)  # noqa: E731
+    assert quality("home") - quality("away") > 2.0  # 3.0 expected; about 0 if strength were ignored

@@ -29,22 +29,51 @@ def test_roles_differ_in_the_expected_direction():
     assert mean(strikers) > mean(centre_backs) + 0.3
 
 
-def test_physical_attributes_keep_the_sourced_distributions():
+def test_a_whole_squad_keeps_the_sourced_physical_distributions():
     from ninety.sim import body
+    from ninety.sim.profiles import FORMATION_ROLES
     rng = random.Random(2)
-    bodies = [Profile.generate("ST", rng).physique() for _ in range(4000)]  # no physical role shift
+    bodies = [Profile.generate(role, rng).physique() for _ in range(500) for role in FORMATION_ROLES]
     for name, mu, sd in (("f0", body.F0_MEAN, body.F0_SD), ("v0", body.V0_MEAN, body.V0_SD),
                          ("cs", body.CS_MEAN, body.CS_SD)):
         values = [getattr(b, name) for b in bodies]
-        assert abs(mean(values) - mu) < 0.1 * sd
-        assert abs(pstdev(values) - sd) < 0.1 * sd
+        assert abs(mean(values) - mu) < 0.05 * sd
+        assert abs(pstdev(values) - sd) < 0.15 * sd  # positions add a little spread
 
 
 def test_a_physical_role_shift_moves_the_mean_by_that_many_spreads():
     from ninety.sim import body
+    from ninety.sim.profiles import PHYSICAL_CENTRE
     rng = random.Random(5)
-    wingers = [Profile.generate("RW", rng).physique().v0 for _ in range(4000)]
-    assert abs(mean(wingers) - (body.V0_MEAN + 0.7 * body.V0_SD)) < 0.05
+    wingers = [Profile.generate("RW", rng, archetype="touchline_winger").physique().v0 for _ in range(4000)]
+    assert abs(mean(wingers) - (body.V0_MEAN + (0.9 - PHYSICAL_CENTRE["pace"]) * body.V0_SD)) < 0.05
+
+
+def test_each_physical_attribute_drives_its_own_parameter():
+    fast, slow = player(pace=0.9).physique(), player(pace=0.1).physique()
+    assert fast.v0 > slow.v0 and fast.f0 == slow.f0 and fast.cs == slow.cs
+    quick, sluggish = player(acceleration=0.9).physique(), player(acceleration=0.1).physique()
+    assert quick.f0 > sluggish.f0 and quick.v0 == sluggish.v0
+    fit, unfit = player(stamina=0.9).physique(), player(stamina=0.1).physique()
+    assert fit.cs > unfit.cs and fit.v0 == unfit.v0
+
+
+def test_no_skill_piles_up_at_the_ends_of_the_scale():
+    rng = random.Random(8)
+    keepers = [Profile.generate("GK", rng) for _ in range(2000)]
+    assert sum(k["handling"] >= 0.999 for k in keepers) / len(keepers) < 0.01
+
+
+def test_an_average_weak_foot_carries_the_sourced_penalty():
+    p = player()
+    assert math.isclose(error(p, weak_foot=True) / error(p), 3.8 / 3.0)
+    assert math.isclose(p.weak_foot_speed(), 0.88)
+    assert error(p, turn_deg=90.0) > error(p)  # across the body is harder on either side
+
+
+def test_keepers_get_no_outfield_habits():
+    rng = random.Random(4)
+    assert all(not Profile.generate("GK", rng).traits for _ in range(500))
 
 
 def error(p: Profile, **kw) -> float:
@@ -93,3 +122,63 @@ def test_vision_widens_view_and_scans_more_often():
 def test_first_touch_and_handling_raise_what_can_be_controlled():
     assert player(first_touch=0.9).absorb_mps(False) > player(first_touch=0.1).absorb_mps(False)
     assert player(handling=0.9).absorb_mps(True) > player(handling=0.1).absorb_mps(True)
+
+
+def corr(xs, ys):
+    from statistics import correlation
+    return correlation(xs, ys)
+
+
+def squad_sample(n=3000, role="CM", strength=0.0, seed=11, **kw):
+    rng = random.Random(seed)
+    return [Profile.generate(role, rng, strength, **kw) for _ in range(n)]
+
+
+def test_acceleration_and_top_speed_go_together_as_measured():
+    ps = squad_sample(archetype="box_to_box")
+    assert abs(corr([p["pace"] for p in ps], [p["acceleration"] for p in ps]) - 0.6) < 0.06
+    assert abs(corr([p["pace"] for p in ps], [p["stamina"] for p in ps])) < 0.06  # separate capacities
+
+
+def test_skills_that_belong_together_correlate_more_than_skills_that_do_not():
+    ps = squad_sample(archetype="box_to_box")
+    same = corr([p["passing"] for p in ps], [p["first_touch"] for p in ps])
+    across = corr([p["passing"] for p in ps], [p["tackling"] for p in ps])
+    assert same > across + 0.15 and across > 0.1  # quality still lifts both
+
+
+def test_a_stronger_team_has_better_players_but_not_faster_ones():
+    strong, weak = squad_sample(strength=1.0), squad_sample(strength=-1.0)
+    assert mean(p["passing"] for p in strong) > mean(p["passing"] for p in weak) + 0.1
+    assert abs(mean(p["pace"] for p in strong) - mean(p["pace"] for p in weak)) < 0.03
+
+
+def test_archetypes_differ_where_they_should():
+    stoppers = squad_sample(role="RCB", archetype="stopper")
+    playmakers = squad_sample(role="RCB", archetype="ball_playing")
+    assert mean(p["tackling"] for p in stoppers) > mean(p["tackling"] for p in playmakers)
+    assert mean(p["passing"] for p in playmakers) > mean(p["passing"] for p in stoppers)
+    ps = squad_sample(role="ST", n=4000)
+    shares = {a: sum(p.archetype == a for p in ps) / len(ps) for a in ("poacher", "target_forward")}
+    assert abs(shares["poacher"] - 0.4) < 0.03 and abs(shares["target_forward"] - 0.3) < 0.03
+
+
+def test_a_trait_follows_the_skill_behind_it():
+    ps = squad_sample(role="ST", n=4000)
+    good = [p for p in ps if p["finishing"] > 0.75]
+    poor = [p for p in ps if p["finishing"] < 0.6]
+    rate = lambda group: sum("shoots_from_distance" in p.traits for p in group) / len(group)  # noqa: E731
+    assert rate(good) > 2 * rate(poor)
+
+
+def test_left_sided_players_are_more_often_left_footed_and_inside_forwards_cut_in():
+    left_backs = squad_sample(role="LB", n=2000)
+    right_backs = squad_sample(role="RB", n=2000)
+    lefty = lambda group: sum(p.foot == "left" for p in group) / len(group)  # noqa: E731
+    assert lefty(left_backs) > lefty(right_backs) + 0.4
+    assert lefty(squad_sample(role="RW", archetype="inside_forward")) > lefty(
+        squad_sample(role="LW", archetype="inside_forward"))
+
+
+def test_the_same_seed_gives_the_same_squad():
+    assert squad_sample(n=20, seed=3) == squad_sample(n=20, seed=3)

@@ -19,7 +19,7 @@ import math
 import random
 from dataclasses import dataclass, field
 
-from ninety.sim import ball, decisions, perception
+from ninety.sim import ball, decisions, perception, profiles
 from ninety.sim.body import BRAKE_MAX, CS_MEAN, D0, F0_MEAN, V0_MEAN, Body
 from ninety.sim.body import move as move_body
 from ninety.sim.profiles import Profile
@@ -151,24 +151,26 @@ def steer(p: Player, tx: float, ty: float, want_speed: float) -> None:
 
 
 class Engine:
-    def __init__(self, seed: int):
+    def __init__(self, seed: int, strengths: dict[str, float] | None = None):
         self.rng = random.Random(seed)
         # Perception draws from its own stream, so a change to what players see does not
         # reshuffle every other random draw in the match.
         self.sight_rng = random.Random(f"{seed}-perception")
         self.match = Match(seed=seed)
         self.players: list[Player] = []
+        self.strength = strengths or {team: profiles.team_strength(self.rng) for team in ("home", "away")}
         for team in ("home", "away"):
             for n, (role, fx, fy) in enumerate(FORMATION):
                 ax = fx * PITCH_X if team == "home" else (1 - fx) * PITCH_X
                 ay = fy * PITCH_Y if team == "home" else (1 - fy) * PITCH_Y
-                profile = Profile.generate(role, self.rng)
+                profile = Profile.generate(role, self.rng, self.strength[team])
                 self.players.append(Player(f"{team[0]}{n + 1}", team, role, ax, ay, ax, ay,
                                            physique=profile.physique(), profile=profile,
                                            heading=0.0 if team == "home" else math.pi))
         self.by_id = {p.id: p for p in self.players}
         self.match.roster = [{"id": p.id, "team": p.team, "role": p.role, "name": p.profile.name,
                               "foot": p.profile.foot, "traits": p.profile.traits,
+                              "archetype": p.profile.archetype,
                               "ratings": {a: p.profile.rating(a) for a in p.profile.attributes}}
                              for p in self.players]
         self.beliefs = {p.id: perception.Belief(next_scan=self.rng.uniform(0, 3)) for p in self.players}
@@ -322,7 +324,7 @@ class Engine:
         turn = math.degrees((math.atan2(vy, vx) - p.heading + math.pi) % (2 * math.pi) - math.pi)
         weak = (turn > WEAK_SIDE_DEG) if p.profile.foot == "right" else (turn < -WEAK_SIDE_DEG)
         fresh = p.physique.ceiling / D0  # the slow store: fatigue over the match, not one sprint
-        dir_sd, speed_sd, loft_sd = p.profile.kick_error(skill, speed, pressure, fresh, weak)
+        dir_sd, speed_sd, loft_sd = p.profile.kick_error(skill, speed, pressure, fresh, weak, turn)
         angle = math.atan2(vy, vx) + math.radians(self.rng.gauss(0, dir_sd))
         loft = math.atan2(vz, ground) + (math.radians(self.rng.gauss(0, loft_sd)) if vz > 0 else 0.0)
         # A mishit can carry almost nothing (floor: design); no strike exceeds a foot's limit.
@@ -334,6 +336,14 @@ class Engine:
     def aim(self, sx: float, sy: float, tx: float, ty: float, ground: float, up: float):
         d = math.hypot(tx - sx, ty - sy) or 1.0
         return (tx - sx) / d * ground, (ty - sy) / d * ground, up
+
+    def keeper_read(self, keeper: Player, kicker: Player, aim_y: float) -> float | None:
+        """Where a keeper thinks a shot is going, read from the kicker's body: only if he can
+        see the kicker, centred on the intended aim, with his anticipation's error (A2)."""
+        if not perception.visible(keeper.heading, keeper.x, keeper.y, kicker.x, kicker.y,
+                                  keeper.profile.view_half_angle()):
+            return None
+        return aim_y + self.rng.gauss(0, keeper.profile.read_error_m())
 
     def shoot(self, carrier: Player) -> None:
         team = carrier.team
@@ -351,7 +361,8 @@ class Engine:
         # The keeper reads the kicker's body and starts toward where he thinks it is going,
         # before he can react to the ball itself; the read can be wrong (A2).
         keeper = self.keeper(other(team))
-        self.read = (keeper.id, ty + self.rng.gauss(0, keeper.profile.read_error_m()))
+        read = self.keeper_read(keeper, carrier, ty)
+        self.read = None if read is None else (keeper.id, read)
         vx, vy, vz = self.execute(carrier, *self.aim(bx, by, gx, ty, ground, up), "finishing")
         speed = math.sqrt(vx * vx + vy * vy + vz * vz)
         # Outcome and end point are observed: set when the ball is touched, goes out or goes in.
