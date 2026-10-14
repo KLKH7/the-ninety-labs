@@ -12,16 +12,8 @@ stats it feeds, the agents in the demo) reads it. Whatever generates the video m
 the truth, which is why the video comes from a renderer driven by the engine and never from a
 generative video model: a prompt-to-video model writes no truth, so nothing could be graded.
 
-```mermaid
-flowchart LR
-  E[Match engine<br/>football logic + physics] --> T[(Ground-truth data<br/>events, frames, meta)]
-  T --> R[Renderer<br/>three.js]
-  R --> V[Broadcast video]
-  V --> D[Vision pipeline]
-  D --> X[Detected events]
-  T -. labels and grading only .-> G[Evaluation]
-  X --> G
-```
+The full pipeline, from engine to validator to renderer to scoring, is drawn in
+[ARCHITECTURE.md](ARCHITECTURE.md#synthetic-data-pipeline).
 
 Football logic and physics live in the engine (`ninety/sim`). The renderer only draws: it
 decides nothing about football and has no physics of its own. There is one engine: new
