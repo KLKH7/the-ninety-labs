@@ -57,25 +57,28 @@ def facing(vx: float, vy: float, x: float, y: float, bx: float, by: float) -> fl
     return math.atan2(by - y, bx - x)
 
 
-def visible(heading: float, x: float, y: float, ox: float, oy: float) -> bool:
+def visible(heading: float, x: float, y: float, ox: float, oy: float,
+            half_angle: float = VIEW_HALF_ANGLE) -> bool:
     dx, dy = ox - x, oy - y
     if math.hypot(dx, dy) <= SENSE_RADIUS_M:
         return True
     off = (math.atan2(dy, dx) - heading + math.pi) % (2 * math.pi) - math.pi
-    return abs(off) <= VIEW_HALF_ANGLE
+    return abs(off) <= half_angle
 
 
 def observe(belief: Belief, me: tuple[float, float, float, float], others: list[tuple],
-            ball: tuple[float, float], now: float, rng: random.Random) -> bool:
+            ball: tuple[float, float], now: float, rng: random.Random,
+            half_angle: float = VIEW_HALF_ANGLE,
+            scan_interval: tuple[float, float] = SCAN_INTERVAL_S) -> bool:
     """Refresh what this player can see now. `others` holds (id, x, y, vx, vy). Returns True if
     he scanned (looked all round) this time."""
     x, y, vx, vy = me
     scanning = now >= belief.next_scan
     if scanning:
-        belief.next_scan = now + rng.uniform(*SCAN_INTERVAL_S)
+        belief.next_scan = now + rng.uniform(*scan_interval)
     heading = facing(vx, vy, x, y, ball[0], ball[1])
     for pid, ox, oy, ovx, ovy in others:
-        if not (scanning or visible(heading, x, y, ox, oy)):
+        if not (scanning or visible(heading, x, y, ox, oy, half_angle)):
             continue
         sigma = POSITION_ERROR_PER_M * math.hypot(ox - x, oy - y)
         belief.seen[pid] = Sighting(ox + rng.gauss(0, sigma), oy + rng.gauss(0, sigma), ovx, ovy, now)

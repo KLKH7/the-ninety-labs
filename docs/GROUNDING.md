@@ -82,6 +82,20 @@ Kind: **hard** fails the clip; **warn** is reported. Columns show what exists to
 | T1 | the team brain marks a transition for about 5 s after the ball changes hands (counter-pressing is measured over about 5 to 6 s) | counter-pressing in the Bundesliga ([Vogelbein 2014](https://lida.sport-iat.de/dfb/Record/4032298?lng=en)) | engine | n/a | ✅ |
 | T2 | the defensive line stands within its block (low 12 to 22 m from own goal, mid 25 to 35, high 35 to 50), following the ball; out of possession the shape narrows and shifts to the ball side. Block ranges and line spacing are *design* | — | engine | n/a | ✅ mid block only so far |
 
+### Player profiles: attributes change causes, never outcomes
+
+Each attribute is 0 to 1 (shown 1 to 20) and maps to a parameter; none sets the chance of an
+outcome. Players are synthetic (`ninety/sim/profiles.py`).
+
+| ID | Attribute | What it changes | Source | Status |
+|---|---|---|---|---|
+| A1 | pace, acceleration, stamina | top-speed capability 9.3 to 10.5 m/s, acceleration from standing 4.4 to 6.0 m/s² (mean 5.2), critical speed 3.4 to 4.4 m/s (mean 3.9): the sourced means and spreads of P9 and P10 | as P9, P10. *Verify:* a 10 m sprint from standing takes 2.36 s at the mean, slower than elite times of about 1.8 s, so the acceleration source may be low | ✅ |
+| A2 | anticipation, reflexes, vision | choice reaction 0.32 to 0.41 s (the measured range); a keeper's head start reading the kicker scales with reflexes; field of view 50° to 70° either side and scan interval (*design*) | as P12, P13 | ✅ |
+| A3 | passing, crossing, finishing, composure, weak foot | kick error: about 3° of direction at average skill, preferred foot, penalty speed; wider with ball speed, pressure (unless composed), fatigue (about 25% when spent) and the weaker foot (about 27% wider, about 12% slower) | penalty precision by foot ([Frontiers 2024](https://www.frontiersin.org/journals/sports-and-active-living/articles/10.3389/fspor.2024.1434096/full)); the skill and pressure scaling and speed and launch errors are *design* | ✅ |
+| A4 | first touch, handling | the fastest ball a touch can kill (8 to 16 m/s) and a keeper can hold (16 to 28 m/s); no study measures either, so *design* | — | ✅ |
+| A5 | decisions, composure, work rate, aggression, dribbling, tackling, traits | decision temperature, pressing and sprint willingness, duel commitment, option biases | *design*; used from step 3b and step 4 | planned |
+| A6 | role tendencies | each role's attributes shift from the average (strikers finish better, centre-backs tackle better) | *design* | ✅ |
+
 ### Laws of the Game: it is legal football
 
 | ID | Check | Source | Kind | Validator | Engine |

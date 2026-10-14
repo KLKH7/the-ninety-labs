@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from ninety.sim import ball, perception
 from ninety.sim.body import BRAKE_MAX, CS_MEAN, F0_MEAN, V0_MEAN, Body
 from ninety.sim.body import move as move_body
+from ninety.sim.profiles import Profile
 from ninety.sim.team import TeamBrain
 
 PITCH_X, PITCH_Y = 105.0, 68.0
@@ -53,8 +54,8 @@ PERSONAL_SPACE_M = 1.2  # players steer to keep about this far from each other
 SHOULDER_TO_SHOULDER_M = 0.52  # P11: centres of two players in contact, shoulder to shoulder
 ANTICIPATE_S = 0.4  # verify: how far ahead players judge where others will be
 BODY_RESTITUTION = 0.3  # verify: share of the ball's speed into a body that it keeps
-FOOT_ABSORB_MPS = 12.0  # verify: fastest ball (relative to the player) a first touch can kill
-HANDS_ABSORB_MPS = 22.0  # verify: fastest shot a keeper can hold rather than parry
+PRESSURE_M = 3.0  # design: an opponent this close puts the kicker under full pressure
+WEAK_SIDE_DEG = 30.0  # design: a kick this far to the weaker foot's side is struck with it
 MISCONTROL_KEEP = 0.4  # verify: share of speed a ball keeps off a failed touch or a parry
 POST_RADIUS = 0.06  # Law 1: posts and crossbar at most 12 cm wide
 WOODWORK_RESTITUTION = 0.6  # verify
@@ -88,6 +89,7 @@ class Player:
     vx: float = 0.0
     vy: float = 0.0
     physique: Body = field(default_factory=lambda: Body(F0_MEAN, V0_MEAN, CS_MEAN))
+    profile: Profile | None = None
 
 
 @dataclass
@@ -149,10 +151,14 @@ class Engine:
             for n, (role, fx, fy) in enumerate(FORMATION):
                 ax = fx * PITCH_X if team == "home" else (1 - fx) * PITCH_X
                 ay = fy * PITCH_Y if team == "home" else (1 - fy) * PITCH_Y
+                profile = Profile.generate(role, self.rng)
                 self.players.append(Player(f"{team[0]}{n + 1}", team, role, ax, ay, ax, ay,
-                                           physique=Body.sample(self.rng)))
+                                           physique=profile.physique(), profile=profile))
         self.by_id = {p.id: p for p in self.players}
-        self.match.roster = [{"id": p.id, "team": p.team, "role": p.role} for p in self.players]
+        self.match.roster = [{"id": p.id, "team": p.team, "role": p.role, "name": p.profile.name,
+                              "foot": p.profile.foot, "traits": p.profile.traits,
+                              "ratings": {a: p.profile.rating(a) for a in p.profile.attributes}}
+                             for p in self.players]
         self.beliefs = {p.id: perception.Belief(next_scan=self.rng.uniform(0, 3)) for p in self.players}
         self.brains = {team: TeamBrain(team) for team in ("home", "away")}
         self.ball: ball.State = (PITCH_X / 2, PITCH_Y / 2, 0.0, 0.0, 0.0, 0.0)
@@ -211,9 +217,7 @@ class Engine:
     def reaction(self, p: Player) -> float:
         """Seconds before a player responds to a struck ball: a choice reaction (he must also
         pick a direction), shortened for a keeper who reads the kicker before the strike."""
-        if p.role == "GK":
-            return perception.CHOICE_REACTION_S - perception.KEEPER_ANTICIPATION_S
-        return perception.CHOICE_REACTION_S
+        return max(0.0, p.profile.reaction(p.role == "GK", perception.KEEPER_ANTICIPATION_S))
 
     def reach(self, p: Player, x: float, y: float, at: float | None = None) -> tuple[float, float]:
         """How far and how high this player can reach for a ball at (x, y), at time `at`."""
@@ -266,6 +270,26 @@ class Engine:
         self.kicker_clear = False
         self.chase = {}  # everyone reacts after their reaction time, not on the frame of the kick
 
+    def execute(self, p: Player, vx: float, vy: float, vz: float, skill: str) -> tuple[float, float, float]:
+        """The kick as struck, not as intended: direction, speed and launch angle scatter by the
+        player's own error, which grows with ball speed, pressure, fatigue and the weaker foot
+        and shrinks with skill (profiles.Profile.kick_error, docs/GROUNDING.md A3)."""
+        ground = math.hypot(vx, vy)
+        speed = math.sqrt(ground * ground + vz * vz)
+        if speed < 1e-6:
+            return vx, vy, vz
+        nearest = min(math.hypot(q.x - p.x, q.y - p.y) for q in self.players if q.team != p.team)
+        pressure = clamp((PRESSURE_M - nearest) / PRESSURE_M, 0.0, 1.0)
+        heading = math.atan2(p.vy, p.vx) if math.hypot(p.vx, p.vy) > 1.0 else math.atan2(vy, vx)
+        turn = math.degrees((math.atan2(vy, vx) - heading + math.pi) % (2 * math.pi) - math.pi)
+        weak = (turn > WEAK_SIDE_DEG) if p.profile.foot == "right" else (turn < -WEAK_SIDE_DEG)
+        dir_sd, speed_sd, loft_sd = p.profile.kick_error(skill, speed, pressure, p.physique.capacity, weak)
+        angle = math.atan2(vy, vx) + math.radians(self.rng.gauss(0, dir_sd))
+        loft = math.atan2(vz, ground) + (math.radians(self.rng.gauss(0, loft_sd)) if vz > 0 else 0.0)
+        speed *= max(0.3, 1 + self.rng.gauss(0, speed_sd)) * (p.profile.weak_foot_speed() if weak else 1.0)
+        ground, up = speed * math.cos(loft), max(0.0, speed * math.sin(loft))
+        return ground * math.cos(angle), ground * math.sin(angle), up
+
     def aim(self, sx: float, sy: float, tx: float, ty: float, ground: float, up: float):
         d = math.hypot(tx - sx, ty - sy) or 1.0
         return (tx - sx) / d * ground, (ty - sy) / d * ground, up
@@ -274,15 +298,14 @@ class Engine:
         team = carrier.team
         gx = goal_x(team)
         bx, by = self.ball[0], self.ball[1]
-        # Aim inside a post and under the bar, with an error that grows with distance.
+        # The aim (which corner, how high, how hard) is a choice; missing it is execution error.
         side = self.rng.choice([-1, 1])
-        d_goal = math.hypot(gx - bx, PITCH_Y / 2 - by)
-        spread = 1.2 + d_goal / 12
-        ty = PITCH_Y / 2 + side * self.rng.uniform(0.5, 3.2) + self.rng.gauss(0, spread)
-        tz = clamp(self.rng.uniform(0.1, 2.0) + self.rng.gauss(0, spread / 3), 0.0, 4.0)
+        ty = PITCH_Y / 2 + side * self.rng.uniform(0.5, 3.2)
+        tz = self.rng.uniform(0.1, 2.0)
         speed = self.rng.uniform(70, 120) / 3.6
         ground, up = ball.shot(math.hypot(gx - bx, ty - by), speed, tz, DT)
-        vx, vy, vz = self.aim(bx, by, gx, ty, ground, up)
+        vx, vy, vz = self.execute(carrier, *self.aim(bx, by, gx, ty, ground, up), "finishing")
+        speed = math.sqrt(vx * vx + vy * vy + vz * vz)
         # Outcome and end point are observed: set when the ball is touched, goes out or goes in.
         self.kicked = self.emit("shot", team, bx, by, player=carrier.id, ball_speed_kmh=round(speed * 3.6, 1))
         self.kick(carrier, vx, vy, vz)
@@ -290,13 +313,16 @@ class Engine:
     def pass_to(self, carrier: Player, target: Player, throw: bool = False) -> None:
         bx, by = self.ball[0], self.ball[1]
         lead = self.rng.uniform(0, 3) * attack_dir(carrier.team)
-        tx, ty = clamp(target.x + lead, 1, PITCH_X - 1), target.y
+        seen = self.beliefs[carrier.id].where(target.id, self.t) or (target.x, target.y)
+        tx, ty = clamp(seen[0] + lead, 1, PITCH_X - 1), seen[1]  # where he believes the receiver is
         dist = math.hypot(tx - bx, ty - by)
         if throw or dist > LOFT_OVER_M:
             ground, up = ball.lofted_pass(dist, 30 if throw else self.rng.uniform(25, 40), DT)
         else:
             ground, up = ball.ground_pass(dist, self.rng.uniform(3, 7), DT), 0.0
-        vx, vy, vz = self.aim(bx, by, tx, ty, ground, up)
+        wide = abs(ty - PITCH_Y / 2) > 20 and (tx - bx) * attack_dir(carrier.team) > 0
+        skill = "crossing" if (dist > LOFT_OVER_M and wide) else "passing"
+        vx, vy, vz = self.execute(carrier, *self.aim(bx, by, tx, ty, ground, up), skill)
         # Receiver, end point and outcome are filled in when someone takes the ball or it goes out.
         self.kicked = self.emit("pass", carrier.team, bx, by, player=carrier.id,
                                 ball_speed_kmh=round(math.sqrt(vx * vx + vy * vy + vz * vz) * 3.6, 1))
@@ -339,7 +365,7 @@ class Engine:
         """Each team sends the player who thinks they can reach the ball's path first. Each player
         judges the ball's velocity with an error that grows with their distance from it, and the
         judgement is renewed (and sharpens) every few frames as the ball comes closer."""
-        if self.t - self.kicked_at < perception.CHOICE_REACTION_S - perception.KEEPER_ANTICIPATION_S:
+        if self.t - self.kicked_at < min(self.reaction(p) for p in self.players):
             return
         path = ball.predict(self.ball, DT, 6.0)
         best: dict[str, tuple[float, str, float, float]] = {}
@@ -410,7 +436,7 @@ class Engine:
         s, kind, p, cx, cy, cz = min(hits, key=lambda h: h[0])
         vx, vy, vz = self.ball[3], self.ball[4], self.ball[5]
         rel = math.sqrt((vx - p.vx) ** 2 + (vy - p.vy) ** 2 + vz * vz)
-        absorb = HANDS_ABSORB_MPS if self.hands(p, cx, cy) else FOOT_ABSORB_MPS
+        absorb = p.profile.absorb_mps(self.hands(p, cx, cy))
         controls = kind == "touch" and rel <= absorb
         self.touched(p, cx, cy, controls)  # judged on the ball as it arrived
         if controls:
@@ -628,7 +654,7 @@ class Engine:
             if (self.frame + i) % PERCEIVE_EVERY == 0:
                 others = [st for st in states if st[0] != p.id]
                 perception.observe(self.beliefs[p.id], (p.x, p.y, p.vx, p.vy), others, (bx, by),
-                                   self.t, self.rng)
+                                   self.t, self.rng, p.profile.view_half_angle(), p.profile.scan_interval())
         holder = self.restart.team if self.restart else self.poss_team
         for k, (team, brain) in enumerate(self.brains.items()):
             if (self.frame + k * BRAIN_EVERY // 2) % BRAIN_EVERY:
