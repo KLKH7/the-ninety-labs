@@ -36,36 +36,27 @@ engine have `source: "truth"`; the vision pipeline writes the same schema with
 
 ## What the validator checks
 
-Today's checks are below. The full list, each with its source in the Laws of the Game or
-sports science, and which ones the engine meets, is the register in [GROUNDING.md](GROUNDING.md).
+Valid is not enough. The events and the frames must tell the same story, the frames must be
+physically possible, and the match must be legal football, because the video is drawn from
+the frames and graded against the events.
 
-Valid is not enough. The events and the frames must tell the same story, and the frames must
-be physically possible, because the video is drawn from the frames and graded against the
-events.
+Every check, its source in the Laws of the Game or sports science, and whether the validator
+and the engine meet it today, is in one place: the register, [GROUNDING.md](GROUNDING.md).
+Check IDs (C1, P2, L7) are the same there, in the validator's output and in its tests.
 
-| Check | Rule |
-|---|---|
-| files, meta | all three files present; `fps` positive |
-| event schema, frame schema | every row matches its schema; events are `source: "truth"` |
-| frame order | frames consecutive, `t = frame / fps` |
-| roster | the same players, on the same teams, in every frame |
-| player speed | no player moves faster than 10.5 m/s between frames, except at a kickoff restart |
-| ball speed | the ball never moves faster than 40 m/s (about 145 km/h) |
-| event players | every player and receiver is in the frames; the player of a pass or shot plays for the event's team |
-| event frame | the event's frame exists and its `t` matches that frame |
-| event location | at a pass, shot or tackle, the ball is within 2.5 m of the event's `x`, `y` |
-| ball path | a pass or shot reaches its `end_x`, `end_y` by the time its stated speed allows, plus 0.5 s |
-
-Every check has a test that plants one defect and requires it to fail
+Every check has a test that plants a defect and requires it to fail
 ([`tests/test_validate.py`](../tests/test_validate.py)), so none can pass by checking nothing.
+Legal cases (a kick-off reset, a substitution at a stoppage, a lofted pass under gravity) have
+tests that require them to pass, so no check is stricter than the Laws.
 
 ## Today's engine does not pass yet
 
-On seed 7, five minutes, the validator reports 52 player jumps (a pass receiver moves to the
-ball in one frame) and 2 ball jumps (the goalkeeper takes the ball after a missed shot). The
-data was never meant to be watched; the video will be. Also missing before rendering: ball
-flight is a straight line at constant speed with the same arc for every pass, and players have
-no acceleration limit. These are the first physics work for the engine.
+`uv run ninety-sim --seed 7 --minutes 90` then `ninety-validate`: every consistency check
+passes; the physics checks fail. Players start, stop and turn with no acceleration (P2) and pass
+receivers jump to the ball (P1); the ball falls at the wrong rate in the air (P5); after a missed
+shot the goalkeeper takes the ball by teleporting it (P3, P6). The data was never meant to be
+watched; the video will be, so these are the engine's first work, before the training set is
+rendered.
 
 ## The renderer's output (to agree)
 

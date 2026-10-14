@@ -54,24 +54,24 @@ Kind: **hard** fails the clip; **warn** is reported. Columns show what exists to
 |---|---|---|---|---|---|
 | C1 | files present, `fps` positive, every row matches its schema | our schemas | hard | ✅ | ✅ |
 | C2 | frames consecutive, `t = frame / fps` | CDF (event and tracking in sync) | hard | ✅ | ✅ |
-| C3 | same players throughout, except a substitution: only during a stoppage, at most five a team | Law 3 | hard | ⚠️ too strict: fails a legal substitution | ❌ no substitutions |
+| C3 | same players throughout, except a substitution: only during a stoppage, at most five a team | Law 3 | hard | ✅ | ❌ no substitutions |
 | C4 | every player in an event is in the frames, on the right team | our schemas | hard | ✅ | ✅ |
 | C5 | each event's frame exists and its time matches | CDF | hard | ✅ | ✅ |
 | C6 | the ball is where a pass, shot or tackle says it happened | CDF | hard | ✅ | ✅ |
 | C7 | a pass or shot reaches its end point in the time its speed allows | physics | hard | ✅ | ✅ |
-| C8 | event order makes sense: only the player with the ball passes or shoots; an interception follows a failed pass; a goal follows a shot | Laws 9, 10 | hard | ❌ | partly |
-| C9 | the score equals the goal events | Law 10 | hard | ❌ | ✅ |
+| C8 | event order makes sense: only the player with the ball passes or shoots; an interception follows a failed pass; a goal follows a shot | Laws 9, 10 | hard | ✅ | ✅ |
+| C9 | the score equals the goal events | Law 10 | hard | ✅ | ✅ |
 
 ### Physics: it could happen in the real world
 
 | ID | Check | Source | Kind | Validator | Engine |
 |---|---|---|---|---|---|
 | P1 | player speed at most about 10.5 m/s | sports science, peak match sprint speeds (*verify*) | hard | ✅ | ❌ receivers jump to the ball |
-| P2 | player acceleration at most about 8 m/s² | elite players' maximal acceleration about 6.2 m/s² ([Applied Sciences, 2022](https://doaj.org/article/5a330c62187f431b8d51ae1e9eca156f)) plus margin | hard | ❌ | ❌ no limit |
+| P2 | player acceleration at most about 8 m/s², measured over 0.2 s | elite players' maximal acceleration about 6.2 m/s² ([Applied Sciences, 2022](https://doaj.org/article/5a330c62187f431b8d51ae1e9eca156f)) plus margin | hard | ✅ | ❌ instant starts and turns |
 | P3 | ball speed at most 40 m/s | sports science, fastest recorded shots (*verify*) | hard | ✅ | ❌ goalkeeper takes the ball by jumping it |
-| P4 | ball never below the ground (circumference 68 to 70 cm, so radius about 0.11 m) | Law 2 | hard | ❌ | ✅ |
-| P5 | a ball in the air falls under gravity, then bounces and rolls | physics | hard | ❌ | ❌ fixed arc for every pass |
-| P6 | the ball stays at the feet of the player who has it | physics | hard | ❌ | ✅ |
+| P4 | ball never below the ground (circumference 68 to 70 cm, so radius about 0.11 m) | Law 2 | hard | ✅ | ✅ |
+| P5 | a ball in the air falls under gravity, then bounces and rolls | physics | hard | ✅ gravity; bounce and roll not yet | ❌ fixed arc for every pass |
+| P6 | the ball stays at the feet of the player who has it | physics | hard | ✅ | ❌ goalkeeper after a missed shot |
 | P7 | two players never overlap (about 0.5 m apart) | physics | warn | ❌ | ❌ |
 
 ### Laws of the Game: it is legal football
@@ -111,8 +111,9 @@ Kind: **hard** fails the clip; **warn** is reported. Columns show what exists to
 
 ## Order of work
 
-1. **Fix C3** so a legal substitution passes.
-2. **Physics first** (P2, P4 to P6): the vision model is trained on these frames.
+1. ~~Fix C3 so a legal substitution passes.~~ Done.
+2. **Physics first.** Validator checks P2, P4 to P6 and C8, C9 are built; the engine must now
+   pass P1 to P6 before the training set is rendered.
 3. **Out of play and restarts** (L5, L7 to L9) and **C8, C9**: visible on video, and they create
    the stoppages R1 needs.
 4. **Halves and kick-off** (L3, L4), then **offside** (L10) and **officials** (L11).
