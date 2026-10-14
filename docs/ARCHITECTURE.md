@@ -72,7 +72,7 @@ flowchart TB
 ```
 
 Every check in the validator, and every rule the engine follows, cites its source: a Law of
-the Game, a sports-science measurement or a published match statistic.
+the Game, a sports-science measurement or a published match statistic ([GROUNDING.md](GROUNDING.md)).
 
 | Part | Job | Code | Status |
 |---|---|---|---|

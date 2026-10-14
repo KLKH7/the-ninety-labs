@@ -46,6 +46,7 @@ Full design, agent roles and deployment: [docs/ARCHITECTURE.md](docs/ARCHITECTUR
 | [CHALLENGE_MAP](docs/CHALLENGE_MAP.md) | every requirement of the brief, where it is built, and its status |
 | [EVALUATION](docs/EVALUATION.md) | how every published number is measured |
 | [DATA_CONTRACT](docs/DATA_CONTRACT.md) | what ground-truth data must contain, and the validator that checks it |
+| [GROUNDING](docs/GROUNDING.md) | every football rule and physical limit, with its source in the Laws of the Game or sports science |
 | [SECURITY](SECURITY.md) | rules for a public repo and a public demo |
 | [AGENTS](AGENTS.md) | rules for AI coding tools (Copilot, Cursor, Claude Code) |
 | [Broadcast render guide](docs/guides/broadcast-render.md) | rendering the synthetic video and generating images |

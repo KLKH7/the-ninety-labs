@@ -36,6 +36,9 @@ engine have `source: "truth"`; the vision pipeline writes the same schema with
 
 ## What the validator checks
 
+Today's checks are below. The full list, each with its source in the Laws of the Game or
+sports science, and which ones the engine meets, is the register in [GROUNDING.md](GROUNDING.md).
+
 Valid is not enough. The events and the frames must tell the same story, and the frames must
 be physically possible, because the video is drawn from the frames and graded against the
 events.
