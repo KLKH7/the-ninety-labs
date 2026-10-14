@@ -59,23 +59,23 @@ Solid lines run every time; dotted lines are the answer key, which only training
 may read.
 
 ```mermaid
-flowchart LR
-    SRC["Laws of the Game,<br/>sports science"]
-    ENG["Match engine<br/>football, physics"] -- "events,<br/>frames" --> VAL{"Validator"}
-    VAL -- passes --> REN["Renderer<br/>three.js"]
-    REN -- video --> VIS["Vision<br/>pipeline"]
-    VIS -- "detected<br/>events" --> SC["Scoring"]
-    SRC -.-> ENG
-    SRC -.-> VAL
-    VAL -- "fails: fix" --> ENG
-    ENG -. answer key .-> SC
-    REN -. "labels,<br/>training only" .-> VIS
-    SC --> LOOP["Vision Auditor,<br/>Data agent"] -- "new scenarios" --> ENG
+flowchart TB
+    ENG["Match engine<br/>football logic, physics"] -- "ground truth:<br/>events, frames" --> VAL["Validator<br/>laws, physics, consistency"]
+    VAL -- "fails: fix the engine" --> ENG
+    VAL -- passes --> REN["Renderer (three.js)"]
+    REN -- "broadcast video" --> VIS["Vision pipeline"]
+    REN -. "render labels,<br/>training only" .-> VIS
+    VIS -- "detected events" --> SC["Scoring"]
+    ENG -. "answer key" .-> SC
+    SC --> LOOP["Vision Auditor, Data agent"]
+    LOOP -- "new scenarios" --> ENG
 ```
+
+Every check in the validator, and every rule the engine follows, cites its source: a Law of
+the Game, a sports-science measurement or a published match statistic.
 
 | Part | Job | Code | Status |
 |---|---|---|---|
-| Grounding sources | where every rule and limit comes from: a Law of the Game, a sports-science measurement or a published match statistic, cited per check | `docs/DATA_CONTRACT.md` | in progress |
 | Match engine | **makes** the match: applies football logic and physics every 1/25 s and writes each frame and event | `ninety/sim` | running, physics gaps |
 | Ground truth | the engine's output: the synthetic data itself | `events.jsonl`, `frames.jsonl` | running |
 | Validator | **inspects** the output, independently of the engine's code: a clip that breaks a law, physics or its own events never reaches the renderer | `ninety/validate.py` | running, engine fails it today |
