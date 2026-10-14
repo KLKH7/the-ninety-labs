@@ -103,3 +103,12 @@ def test_slow_store_lowers_how_full_the_reserve_can_get():
     ceiling = b.ceiling
     b.spent = 5 * body.D0
     assert b.ceiling < ceiling
+
+
+def test_running_away_costs_time_to_turn_round():
+    b = fresh()
+    towards = b.time_to_cover(10.0, speed_along=6.0)
+    standing = b.time_to_cover(10.0)
+    away = b.time_to_cover(10.0, speed_along=-6.0)
+    assert towards < standing < away
+    assert abs(b.distance_in(standing) - 10.0) < 0.01

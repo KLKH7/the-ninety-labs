@@ -329,9 +329,12 @@ class Engine:
                 dx, dy = bx - p.x, by - p.y
                 gap = math.hypot(dx, dy) - reach_m
                 along = (p.vx * dx + p.vy * dy) / (math.hypot(dx, dy) or 1.0)
-                reachable = gap <= p.physique.distance_in(t, along)
+                # Running away from the point, he must first brake to a stop (time and distance).
+                brake_t = max(0.0, -along) / BRAKE_MAX
+                extra = min(0.0, along) ** 2 / (2 * BRAKE_MAX)
+                reachable = gap + extra <= p.physique.distance_in(t - brake_t, max(0.0, along))
                 if reachable or k + 2 >= len(path):
-                    arrive = t if reachable else t + gap / p.physique.top_speed()
+                    arrive = t if reachable else p.physique.time_to_cover(gap, along)
                     if p.team not in best or arrive < best[p.team][0]:
                         best[p.team] = (arrive, p.id, bx, by)
                     break

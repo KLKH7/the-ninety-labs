@@ -70,6 +70,27 @@ class Body:
         tau = top / self.f0
         return top * seconds - (top - u) * tau * (1 - math.exp(-seconds / tau))
 
+    def time_to_cover(self, gap: float, speed_along: float = 0.0) -> float:
+        """Seconds to run `gap` metres along a line. A player moving away from it must first
+        brake to a stop, which takes time and adds distance."""
+        if gap <= 0:
+            return 0.0
+        brake_t = extra = 0.0
+        if speed_along < 0:
+            brake_t = -speed_along / BRAKE_MAX
+            extra = speed_along * speed_along / (2 * BRAKE_MAX)
+            speed_along = 0.0
+        lo, hi = 0.0, 1.0
+        while self.distance_in(hi, speed_along) < gap + extra:
+            hi *= 2
+        for _ in range(40):
+            mid = (lo + hi) / 2
+            if self.distance_in(mid, speed_along) < gap + extra:
+                lo = mid
+            else:
+                hi = mid
+        return brake_t + hi
+
     def spend(self, speed: float, accel: float, dt: float) -> None:
         """Running above critical speed spends the reserve, accelerating costs extra; running
         below it refills, faster the slower the recovery."""
