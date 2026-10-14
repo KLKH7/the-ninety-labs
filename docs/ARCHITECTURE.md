@@ -43,7 +43,7 @@ flowchart LR
 
 | Stage | What happens | Code |
 |---|---|---|
-| Synthetic data | a seeded match engine plays the match; a broadcast renderer turns it into video and records exact ground truth | `ninety/sim`, `web/render` |
+| Synthetic data | a seeded match engine plays the match; a broadcast renderer turns it into video and records exact ground truth | `ninety/sim`, `ninety/render`, `web/render` |
 | 1 Ingest | detection, tracking and camera-to-pitch mapping turn the video into events (automatic event detection) | `ninety/vision` |
 | 2 Interpret | pass distance, accuracy and difficulty, ball and shot speed, sprint speed, xG, control vs chaos | `ninety/intel` |
 | 3 Explain | agents explain why a moment matters; the fact-checking agent gates every claim | `ninety/agents` |
@@ -200,8 +200,8 @@ budget alert covers the subscription. See [SECURITY.md](../SECURITY.md).
 
 | Area | Decision | Reason |
 |---|---|---|
-| Renderer | three.js scene driven by `ninety-sim`, captured headless with Playwright at 1280x720, 25 fps | exact camera matrix per frame, so ground truth is perfect |
-| Frame data | Parquet (pyarrow), one file per clip | a 90-minute match was 180 MB as JSON lines |
+| Renderer | three.js scene driven by `ninety-sim`, captured headless with Playwright at 1280x720, 25 fps; Python computes the camera and body geometry, the page draws it and counts an object-id pass | exact camera matrix per frame and visibility counted from what was drawn ([decision 0001](decisions/0001-synthetic-data.md)) |
+| Frame data | compact JSON lines per clip today (about 4.4 KB a frame); Parquet (pyarrow) planned for long clips | a 90-minute match was 180 MB as JSON lines |
 | Clip length | 2 to 5 minutes | render and training time |
 | Detection | RF-DETR (Apache-2.0) fine-tuned on our renders; ByteTrack via supervision (MIT) | permissive licences only |
 | Camera-to-pitch mapping | keypoint heatmap model (PyTorch) trained on render keypoints; homography with RANSAC (OpenCV) | labels come free from the renderer |

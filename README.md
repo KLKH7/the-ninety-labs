@@ -57,6 +57,7 @@ Full design, agent roles and deployment: [docs/ARCHITECTURE.md](docs/ARCHITECTUR
 | Path | What lives there |
 |---|---|
 | `ninety/sim` | Seeded match engine: events + per-frame positions (the ground-truth data) |
+| `ninety/render` | Broadcast camera, player bodies, ground-truth labels, render checks, train/test split |
 | `web/render` | Broadcast-style three.js renderer that turns a sim run into video |
 | `ninety/vision` | Detection, tracking, camera-to-pitch mapping, possession, event rules |
 | `ninety/intel` | Deterministic stats engine (code computes every number) |
@@ -74,6 +75,10 @@ uv sync
 uv run ninety-sim --seed 7 --minutes 5 --out runs/seed7
 uv run pytest
 
+# broadcast clip with ground truth: one seed, one command (needs Node 22 for three.js)
+npm ci --prefix web && uv run playwright install chromium   # once
+uv run ninety-render --seed 7 --seconds 10 --out runs/clip7 --mp4   # --mp4 needs ffmpeg
+
 # thin slice: Analyst -> fact-checker over MCP on Foundry, then speech (needs az login and access to the project)
 uv run ninety-slice --minute 2 --plant
 ```
@@ -81,7 +86,8 @@ uv run ninety-slice --minute 2 --plant
 ## Status
 
 Working toward **M1, end to end on one clip (Oct 20)**. Running today: the seeded match engine,
-data contracts, CI and the deploy pipeline. See [docs/PLAN.md](docs/PLAN.md). This README
+the broadcast renderer with exact ground truth and render checks in CI
+([decision 0001](docs/decisions/0001-synthetic-data.md)), data contracts, CI and the deploy pipeline. See [docs/PLAN.md](docs/PLAN.md). This README
 describes the design; measured results are published in [docs/EVALUATION.md](docs/EVALUATION.md)
 as they land.
 
