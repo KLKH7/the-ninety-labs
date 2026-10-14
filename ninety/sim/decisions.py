@@ -17,6 +17,7 @@ from bisect import bisect_left
 from dataclasses import dataclass
 
 from ninety.sim import ball
+from ninety.sim import value as possession
 
 PITCH_X, PITCH_Y = 105.0, 68.0
 GOAL_HALF_WIDTH = 3.66
@@ -38,8 +39,14 @@ RECEIVE_HEIGHT_M = 1.0  # a dropping ball is taken on the foot or thigh below ab
 LOFT_DEG = 30.0  # design: the launch angle of a lofted pass or a throw, as estimated and as struck
 CONTROL_EST_MPS = 12.0  # A4: the passer's guess of what a first touch can kill: the average (8 + 8 × 0.5)
 CONTROL_MARGIN_MPS = 2.0  # design: how sharply that guess falls off
+GOAL_KICK_M = 5.5  # Law 16: a goal kick is taken from the goal area
 STICKY = 0.003  # design: a small bonus for carrying on with the current choice (no flip-flopping)
 CLEAR_FROM = 2 / 3  # a clear is an option in his own third: this share of the pitch from the goal he attacks
+
+
+# D7: what having the ball is worth by area, measured from the engine's own matches
+# (ninety/sim/value.py). Until a table has been measured, the hand-written estimate below is used.
+POSSESSION: possession.Tables | None = possession.load()
 
 
 def _ground_table() -> tuple[list[float], list[tuple[list[float], list[float]]]]:
@@ -210,15 +217,20 @@ def distance_to_segment(px: float, py: float, ax: float, ay: float, bx: float, b
 
 def value(x: float, y: float, goal_x: float, opponents: list[tuple[float, float]] = (),
           keeper: tuple[float, float] | None = None) -> float:
-    """What having the ball here is worth: the threat of a shot from it as he estimates it (the
-    one shot estimate, with the opponents he believes are in the way), plus progress."""
+    """What having the ball here is worth. With a measured table (D7): the chance of scoring
+    minus the chance of conceding soon after having it here. Without one: the threat of a shot
+    from it as he estimates it (with the opponents he believes are in the way), plus progress."""
+    if POSSESSION is not None:
+        return POSSESSION.threat.at(x, y, goal_x)
     progress = 1 - abs(goal_x - x) / PITCH_X
     return shot_estimate(x, y, goal_x, list(opponents), keeper) + PROGRESS_VALUE * progress
 
 
 def loss_cost(x: float, y: float, goal_x: float) -> float:
-    """What losing the ball here costs: the threat the opponents gain from it."""
+    """What losing the ball here costs: what having it here is worth to the opponents."""
     own_goal = PITCH_X - goal_x
+    if POSSESSION is not None:
+        return POSSESSION.threat.at(x, y, own_goal)
     return LOSS_BASE + value(x, y, own_goal)
 
 
@@ -281,13 +293,25 @@ def pass_option(scene: Scene, mate: tuple[str, float, float, float]) -> Option |
     return Option("pass", confidence * gain - (1 - confidence) * lost, (tx, ty), mid, lofted)
 
 
+def shot_chance(scene: Scene) -> float:
+    """His estimate that a shot from here goes in. With measured tables (D7): how often shots from
+    here went in, scaled by how this situation compares with an open one (blockers in the cone, the
+    keeper's position), so shooting and moving the ball are judged on the same scale."""
+    q = shot_estimate(scene.x, scene.y, scene.goal_x, scene.opponents, scene.keeper)
+    if POSSESSION is None:
+        return q
+    open_shot = shot_estimate(scene.x, scene.y, scene.goal_x, [], None)
+    measured = POSSESSION.finishing.at(scene.x, scene.y, scene.goal_x)
+    return min(1.0, measured * q / open_shot) if open_shot > 0 else 0.0
+
+
 def options(scene: Scene) -> list[Option]:
     out = [o for o in (pass_option(scene, mate) for mate in scene.mates) if o]
     if scene.throw:  # Law 15: a throw-in is thrown to someone; it is never a shot or a dribble
         return out
     here = value(scene.x, scene.y, scene.goal_x, scene.opponents, scene.keeper)
     p = pressure(scene)
-    q = shot_estimate(scene.x, scene.y, scene.goal_x, scene.opponents, scene.keeper)
+    q = shot_chance(scene)
     if abs(scene.goal_x - scene.x) < 40:
         bias = 1.3 if "shoots_from_distance" in scene.traits else 1.0
         # A shot that fails is either blocked, leaving the ball at his feet for them, or missed or
@@ -295,7 +319,9 @@ def options(scene: Scene) -> list[Option]:
         blockers = sum(in_cone(scene.x, scene.y, scene.goal_x, ox, oy) for ox, oy in scene.opponents
                        if (ox, oy) != scene.keeper)
         blocked = 1 - BLOCKER_FACTOR ** blockers
-        lost = blocked * loss_cost(scene.x, scene.y, scene.goal_x) + (1 - blocked) * LOSS_BASE
+        # A miss or a save gives them the ball deep in their own half (a goal kick or the keeper's).
+        missed = loss_cost(scene.goal_x - attack(scene.goal_x) * GOAL_KICK_M, PITCH_Y / 2, scene.goal_x)
+        lost = blocked * loss_cost(scene.x, scene.y, scene.goal_x) + (1 - blocked) * missed
         out.append(Option("shoot", q * bias * (1 + 0.5 * scene.risk) - (1 - q) * lost,
                           (scene.goal_x, PITCH_Y / 2)))
     for turn in (0.0, 0.8, -0.8):  # straight at goal, or angled away

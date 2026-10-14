@@ -4,7 +4,16 @@ import math
 import random
 from collections import Counter
 
+import pytest
+
 from ninety.sim import decisions as D
+from ninety.sim.value import CELLS_X, CELLS_Y, Table, Tables
+
+
+@pytest.fixture(autouse=True)
+def hand_written_values(monkeypatch):
+    """These tests pin the decision rules, not whatever table was last measured."""
+    monkeypatch.setattr(D, "POSSESSION", None)
 
 
 def scene(**kw) -> D.Scene:
@@ -200,9 +209,9 @@ def test_a_shot_into_a_crowd_risks_losing_the_ball_where_he_stands():
     crowded = scene(x=75.0, opponents=[(80.0, 34.0), (85.0, 33.0)])
     q_clear = D.shot_estimate(75.0, 34.0, 105.0, [], None)
     q_crowd = D.shot_estimate(75.0, 34.0, 105.0, crowded.opponents, None)
-    assert math.isclose(shoot(clear).value, q_clear - (1 - q_clear) * D.LOSS_BASE)
+    assert math.isclose(shoot(clear).value, q_clear - (1 - q_clear) * D.loss_cost(99.5, 34.0, 105.0))
     blocked = 1 - D.BLOCKER_FACTOR ** 2
-    lost = blocked * D.loss_cost(75.0, 34.0, 105.0) + (1 - blocked) * D.LOSS_BASE
+    lost = blocked * D.loss_cost(75.0, 34.0, 105.0) + (1 - blocked) * D.loss_cost(99.5, 34.0, 105.0)
     assert math.isclose(shoot(crowded).value, q_crowd - (1 - q_crowd) * lost)
 
 
@@ -213,3 +222,43 @@ def test_the_keeper_is_counted_once_in_a_shot_but_can_still_stop_a_dribble():
     with_keeper = scene(x=97.0, keeper=k, opponents=[k])
     keeper_there = max(o.value for o in D.options(with_keeper) if o.kind == "dribble")
     assert keeper_there < free
+
+
+def ramp(near_goal: float, far: float, finishing: float = 0.1) -> Tables:
+    """Made-up tables: possessions worth near_goal next to the goal attacked, falling to far at
+    the other end; shots going in at `finishing` from anywhere."""
+    threat = Table([[near_goal + (far - near_goal) * i / (CELLS_X - 1)] * CELLS_Y for i in range(CELLS_X)])
+    return Tables(threat, Table([[finishing] * CELLS_Y for _ in range(CELLS_X)]))
+
+
+def test_a_measured_table_values_possession_and_loss_for_both_directions(monkeypatch):
+    monkeypatch.setattr(D, "POSSESSION", ramp(0.3, 0.01))
+    assert D.value(100.0, 34.0, 105.0) > D.value(20.0, 34.0, 105.0)
+    assert math.isclose(D.value(100.0, 34.0, 105.0), D.value(5.0, 34.0, 0.0))  # mirrored
+    assert D.loss_cost(10.0, 34.0, 105.0) > D.loss_cost(90.0, 34.0, 105.0)  # losing it near our goal hurts
+    table = D.POSSESSION.threat
+    assert D.value(60.0, 20.0, 105.0) == table.at(60.0, 20.0, 105.0)  # the measured number, as is
+    assert D.loss_cost(60.0, 20.0, 105.0) == table.at(60.0, 20.0, 0.0)  # theirs, from their side
+
+
+def test_a_measured_table_makes_keeping_the_ball_beat_a_hopeless_shot(monkeypatch):
+    s = scene(x=70.0)  # 35 m out
+    # Possessions from 35 m score 3% of the time; shots from there go in 1% of the time.
+    monkeypatch.setattr(D, "POSSESSION", ramp(0.3, 0.0, finishing=0.01))
+    shoot = next(o for o in D.options(s) if o.kind == "shoot").value
+    hold = next(o for o in D.options(s) if o.kind == "hold").value
+    assert hold > shoot
+    assert max(D.options(s), key=lambda o: o.value).kind != "shoot"
+
+
+def test_a_missed_shot_is_never_a_reward(monkeypatch):
+    monkeypatch.setattr(D, "POSSESSION", ramp(0.3, 0.0, finishing=0.0))
+    s = scene(x=70.0)
+    assert next(o for o in D.options(s) if o.kind == "shoot").value <= 0.0
+
+
+def test_the_shot_chance_is_the_measured_rate_scaled_by_the_situation(monkeypatch):
+    monkeypatch.setattr(D, "POSSESSION", ramp(0.3, 0.0, finishing=0.2))
+    assert math.isclose(D.shot_chance(scene(x=90.0)), 0.2)  # open: the measured rate itself
+    blocked = scene(x=90.0, opponents=[(97.0, 34.0)])
+    assert math.isclose(D.shot_chance(blocked), 0.2 * D.BLOCKER_FACTOR)
