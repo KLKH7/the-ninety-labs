@@ -49,14 +49,13 @@ Every check has a test that plants a defect and requires it to fail
 Legal cases (a kick-off reset, a substitution at a stoppage, a lofted pass under gravity) have
 tests that require them to pass, so no check is stricter than the Laws.
 
-## Today's engine does not pass yet
+## Today's engine
 
-`uv run ninety-sim --seed 7 --minutes 90` then `ninety-validate`: every consistency check
-passes; the physics checks fail. Players start, stop and turn with no acceleration (P2) and pass
-receivers jump to the ball (P1); the ball falls at the wrong rate in the air (P5); after a missed
-shot the goalkeeper takes the ball by teleporting it (P3, P6). The data was never meant to be
-watched; the video will be, so these are the engine's first work, before the training set is
-rendered.
+`uv run ninety-sim --seed 7 --minutes 90` then `ninety-validate`: meets the contract. Players
+move with a velocity and at most 5 m/s² of acceleration, pass receivers run onto the ball, the
+ball flies under gravity, and a missed shot goes out for a goal kick after a stoppage. What the
+engine still does not model (out of play over the touchline, halves, offside, officials, the
+ball rolling after it lands) is listed, with sources, in [GROUNDING.md](GROUNDING.md).
 
 ## The renderer's output (to agree)
 
