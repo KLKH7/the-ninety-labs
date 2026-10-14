@@ -80,16 +80,20 @@ class Body:
             brake_t = -speed_along / BRAKE_MAX
             extra = speed_along * speed_along / (2 * BRAKE_MAX)
             speed_along = 0.0
-        lo, hi = 0.0, 1.0
-        while self.distance_in(hi, speed_along) < gap + extra:
-            hi *= 2
-        for _ in range(40):
-            mid = (lo + hi) / 2
-            if self.distance_in(mid, speed_along) < gap + extra:
-                lo = mid
-            else:
-                hi = mid
-        return brake_t + hi
+        # Newton's method: distance over time is smooth and its derivative is the speed.
+        top = self.top_speed()
+        u = clamp(speed_along, 0.0, top)
+        tau = top / self.f0
+        target = gap + extra
+        t = target / max(top, 1e-6) + tau  # a start past the answer: speed only rises
+        for _ in range(12):
+            f = self.distance_in(t, u) - target
+            speed = top - (top - u) * math.exp(-t / tau)
+            step = f / max(speed, 1e-6)
+            t -= step
+            if abs(step) < 1e-4:
+                break
+        return brake_t + max(t, 0.0)
 
     def spend(self, speed: float, accel: float, dt: float) -> None:
         """Running above critical speed spends the reserve, accelerating costs extra; running
