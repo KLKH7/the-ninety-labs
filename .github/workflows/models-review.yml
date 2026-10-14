@@ -2,7 +2,8 @@ name: models-review
 
 # Advisory AI review of each pull request on GitHub Models. No API key or stored secret: the
 # job's own GITHUB_TOKEN with `models: read` makes the call, free within GitHub Models' rate limits.
-# Never blocks a merge. Script and design: .github/scripts/models_review.py.
+# Never blocks a merge, but a skipped review is a visible warning, never a silent green.
+# Script and design: .github/scripts/models_review.py.
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -15,6 +16,9 @@ permissions:
 concurrency:
   group: models-review-${{ github.event.pull_request.number }}
   cancel-in-progress: true
+
+env:
+  MODEL: ${{ vars.MODELS_REVIEW_MODEL || 'openai/gpt-4.1' }}
 
 jobs:
   review:
@@ -29,11 +33,36 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - run: python3 .github/scripts/models_review.py
+
+      - id: prep
+        run: python3 .github/scripts/models_review.py prepare
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          REVIEW_DIR: ${{ runner.temp }}/review
+
+      # GitHub's own action for GitHub Models, pinned to v2.1.1 (v3 moved to the Copilot CLI,
+      # which spends Copilot premium requests).
+      - id: infer
+        if: steps.prep.outputs.reviewable == 'true'
+        continue-on-error: true
+        uses: actions/ai-inference@a7805884c80886efc241e94a5351df715968a0ad # v2.1.1
+        with:
+          model: ${{ env.MODEL }}
+          system-prompt-file: ${{ runner.temp }}/review/system.txt
+          prompt-file: ${{ runner.temp }}/review/prompt.txt
+          max-tokens: 1500
+          temperature: 0
+
+      - if: steps.infer.outcome == 'success'
+        run: python3 .github/scripts/models_review.py post
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          MODEL: ${{ vars.MODELS_REVIEW_MODEL }}
+          RESPONSE_FILE: ${{ steps.infer.outputs.response-file }}
+          OMITTED: ${{ steps.prep.outputs.omitted }}
+
+      - if: steps.infer.outcome == 'failure'
+        run: echo "::warning title=No AI review::GitHub Models call failed; see the infer step log."

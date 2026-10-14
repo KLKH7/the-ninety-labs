@@ -1,8 +1,12 @@
 """Advisory pull request review on GitHub Models, run by .github/workflows/models-review.yml.
 
+Two steps around actions/ai-inference, which makes the model call:
+  prepare  writes the system prompt and the prompt (repo rules plus the diff) for the action
+  post     posts the action's answer as the PR's one review comment, updated on every push
+
 No API key: the workflow's own GITHUB_TOKEN (with `models: read`) pays for the call, which is free
-within GitHub Models' rate limits. The review is one comment, updated on every push, and never
-blocks a merge: if the model call fails, the job warns and exits 0.
+within GitHub Models' rate limits. A failed call never blocks a merge, but the job raises a
+visible warning instead of passing silently.
 
 The diff is untrusted input. It reaches the model as delimited data, the model has no tools, and
 its answer is only ever posted as a comment.
@@ -17,10 +21,9 @@ import os
 import re
 import subprocess
 import sys
-import urllib.error
 import urllib.request
+from pathlib import Path
 
-ENDPOINT = "https://models.github.ai/inference/chat/completions"
 API = "https://api.github.com"
 MARKER = "<!-- models-review -->"
 # Generated or bulky files a reviewer cannot usefully read.
@@ -90,68 +93,56 @@ def request(url: str, token: str, body: dict | None = None, method: str = "GET")
             "X-GitHub-Api-Version": "2022-11-28",
         },
     )
-    with urllib.request.urlopen(req, timeout=120) as response:
-        raw = response.read()
-        try:
-            return json.loads(raw)
-        except ValueError as error:
-            # Say what actually came back, so a soft failure can be diagnosed from the job log.
-            kind = response.headers.get("Content-Type")
-            raise ValueError(
-                f"{response.status} from {response.url} ({kind}), not JSON: {raw[:300]!r}"
-            ) from error
+    with urllib.request.urlopen(req, timeout=60) as response:
+        return json.load(response)
 
 
 def git(*args: str) -> str:
     return subprocess.run(["git", *args], check=True, capture_output=True, text=True).stdout
 
 
-def main() -> int:
+def prepare() -> int:
+    """Write the prompt files for actions/ai-inference, and say which files did not fit."""
     env = os.environ
-    token, repo, number = env["GITHUB_TOKEN"], env["REPO"], env["PR_NUMBER"]
     base, head = env["BASE_SHA"], env["HEAD_SHA"]
-    model = env.get("MODEL") or "openai/gpt-4.1"
+    out = Path(env["REVIEW_DIR"])
     budget = int(env.get("MAX_DIFF_CHARS") or 24000)
 
     diff = git("diff", "--no-color", f"{base}...{head}", "--", ".", *EXCLUDE)
     kept, omitted = fit(split_files(diff), budget)
-    if not kept:
-        print("nothing reviewable in this diff")
-        return 0
     # Rules come from the base branch, so a pull request cannot rewrite what it is reviewed against.
     rules = hard_rules(git("show", f"{base}:AGENTS.md"))
-    prompt = f"REPO RULES:\n<rules>\n{rules}\n</rules>\n\nDIFF:\n<diff>\n{''.join(kept)}\n</diff>"
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "system.txt").write_text(INSTRUCTIONS)
+    (out / "prompt.txt").write_text(
+        f"REPO RULES:\n<rules>\n{rules}\n</rules>\n\nDIFF:\n<diff>\n{''.join(kept)}\n</diff>\n"
+    )
+    with open(env["GITHUB_OUTPUT"], "a") as f:
+        f.write(f"reviewable={'true' if kept else 'false'}\n")
+        f.write(f"omitted={', '.join(omitted)}\n")
+    print(f"{len(kept)} file(s) to review, {len(omitted)} omitted")
+    return 0
 
-    try:
-        answer = request(
-            ENDPOINT,
-            token,
-            {
-                "model": model,
-                "temperature": 0,
-                "messages": [
-                    {"role": "system", "content": INSTRUCTIONS},
-                    {"role": "user", "content": prompt},
-                ],
-            },
-            "POST",
-        )
-        review = answer["choices"][0]["message"]["content"]
-    except (urllib.error.URLError, KeyError, IndexError, TimeoutError, ValueError) as error:
-        detail = error.read().decode()[:300] if isinstance(error, urllib.error.HTTPError) else ""
-        print(f"::warning::GitHub Models review skipped: {error} {detail}")
+
+def post() -> int:
+    """Post the model's answer as the PR's one review comment, or update it."""
+    env = os.environ
+    token, repo, number = env["GITHUB_TOKEN"], env["REPO"], env["PR_NUMBER"]
+    review = Path(env["RESPONSE_FILE"]).read_text()
+    if not review.strip():
+        print("::warning::GitHub Models returned an empty review; nothing posted")
         return 0
-
-    body = comment_body(review, model, head, omitted)
+    omitted = [p for p in env.get("OMITTED", "").split(", ") if p]
+    body = comment_body(review, env["MODEL"], env["HEAD_SHA"], omitted)
     comments = request(f"{API}/repos/{repo}/issues/{number}/comments?per_page=100", token)
     mine = next((c for c in comments if MARKER in c.get("body", "")), None)
     if mine:
         request(f"{API}/repos/{repo}/issues/comments/{mine['id']}", token, {"body": body}, "PATCH")
     else:
         request(f"{API}/repos/{repo}/issues/{number}/comments", token, {"body": body}, "POST")
-    print(f"review posted ({len(kept)} file(s) reviewed, {len(omitted)} omitted)")
+    print("review posted")
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit({"prepare": prepare, "post": post}[sys.argv[1]]())
