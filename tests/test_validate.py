@@ -74,6 +74,26 @@ def teleport(c):
     c["frames"][60]["players"][2]["x"] = 70.0  # a1 jumps 10 m in one frame
 
 
+def runs_then(c, speed: float, change: float, start: float = 1.0) -> None:
+    """a1 runs at `speed` until `start` seconds, then changes speed at `change` m/s² until it
+    stops (braking) or reaches 9 m/s (speeding up), then holds that speed."""
+    x, v = 20.0, speed
+    for n in range(150):
+        t = n / FPS
+        c["frames"][n]["players"][2]["x"] = x
+        if t >= start:
+            v = max(0.0, min(9.0, v + change / FPS))
+        x += v / FPS
+
+
+def stops_too_hard(c):
+    runs_then(c, 8.0, -12.0)  # beyond any braking
+
+
+def speeds_up_too_hard(c):
+    runs_then(c, 3.0, 9.0)  # already running, then 9 m/s²: beyond any acceleration
+
+
 def sudden_sprint(c):
     for n in range(60, 150):  # a1 goes from standing to 9 m/s instantly: legal speed, impossible start
         c["frames"][n]["players"][2]["x"] = 60.0 + 9 * (n - 60) / FPS
@@ -140,6 +160,8 @@ def score_disagrees(c):
     (roster_changes, "C3 roster"),
     (teleport, "P1 player speed"),
     (sudden_sprint, "P2 player acceleration"),
+    (stops_too_hard, "P2 player acceleration"),
+    (speeds_up_too_hard, "P2 player acceleration"),
     (ball_jump, "P3 ball speed"),
     (ball_underground, "P4 ball below ground"),
     (ball_floats, "P5 ball flight"),
@@ -199,6 +221,12 @@ def test_keeper_may_hold_the_ball_at_arms_length_in_the_box(tmp_path):
     assert "P6 ball at feet" not in run(tmp_path, clip)
     clip["frames"][100]["ball"]["x"] = 6.0  # 3 m: beyond any reach
     assert "P6 ball at feet" in run(tmp_path, clip)
+
+
+def test_strong_braking_passes(tmp_path):
+    clip = clean_clip()
+    runs_then(clip, 9.0, -9.0)  # hard but legal braking, which a single 8 m/s² limit would fail
+    assert "P2 player acceleration" not in run(tmp_path, clip)
 
 
 def test_ball_under_gravity_passes(tmp_path):

@@ -20,7 +20,11 @@ from jsonschema import Draft202012Validator
 
 ROOT = Path(__file__).resolve().parents[1]
 MAX_PLAYER_MPS = 10.5  # P1: peak match sprint speeds
-MAX_PLAYER_ACCEL = 8.0  # P2: elite maximal acceleration about 6.2 m/s², plus margin
+# P2: speeding up. Professionals reach about 5.2 m/s² (SD 0.46) from standing; 8 allows the
+# fastest accelerators and is a design margin, not derived. Braking and turning: peak braking
+# about 8.5 m/s² (SD 1.1), so mean plus one SD is about 9.6, rounded to 10.
+MAX_PLAYER_ACCEL = 8.0
+MAX_PLAYER_BRAKE = 10.0
 ACCEL_WINDOW_S = 0.2  # P2: speeds averaged over this window, so frame jitter is not acceleration
 MAX_BALL_MPS = 40.0  # P3: above the hardest shots on record
 GRAVITY = 9.81  # P5
@@ -140,9 +144,15 @@ def check_physics(events: list[dict], frames: list[dict], fps: float, roster: li
             ax = (p["x"] - 2 * b["x"] + a["x"]) / span**2
             ay = (p["y"] - 2 * b["y"] + a["y"]) / span**2
             accel = math.hypot(ax, ay)
-            if accel > MAX_PLAYER_ACCEL:
+            # Speeding up is limited far more than braking or turning, so measure the actual change
+            # in speed between the two half-windows, then the total change against the grip limit.
+            v1 = math.hypot(b["x"] - a["x"], b["y"] - a["y"]) / span
+            v2 = math.hypot(p["x"] - b["x"], p["y"] - b["y"]) / span
+            forward = (v2 - v1) / span
+            if forward > MAX_PLAYER_ACCEL or accel > MAX_PLAYER_BRAKE:
                 problems["P2 player acceleration"].append(
-                    f"frame {f1['frame']}: {p['id']} accelerated at {accel:.1f} m/s²"
+                    f"frame {f1['frame']}: {p['id']} accelerated at {accel:.1f} m/s² "
+                    f"({forward:.1f} speeding up)"
                 )
 
     for f in frames:
