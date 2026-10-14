@@ -2,16 +2,25 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/KLKH7/the-ninety-labs/schemas/frame.schema.json",
   "title": "Frame",
-  "description": "Positions at one frame, in pitch metres. The ground-truth data and the tracker output share this shape so eval can diff them.",
+  "description": "Positions at one frame, in pitch metres. The ground-truth data and the tracker output share this shape so eval can diff them. Rendered frames add the optional image-space labels (camera, boxes, visibility, keypoints); pixel coordinates have their origin at the top-left image corner, and pixel (i, j) covers [i, i+1] x [j, j+1].",
   "type": "object",
   "required": ["frame", "t", "ball", "players"],
   "properties": {
-    "frame": { "type": "integer", "minimum": 0 },
+    "frame": { "type": "integer", "minimum": 0, "description": "Match frame index at 25 fps; event.frame refers to the same index." },
     "t": { "type": "number", "minimum": 0 },
+    "clip": { "type": "string", "description": "Rendered frames: id of the clip this frame belongs to." },
+    "image": { "type": "string", "description": "Rendered frames: image path relative to the clip directory." },
     "ball": {
       "type": "object",
       "required": ["x", "y", "z"],
-      "properties": { "x": { "type": "number" }, "y": { "type": "number" }, "z": { "type": "number" } }
+      "properties": {
+        "x": { "type": "number" }, "y": { "type": "number" }, "z": { "type": "number" },
+        "bbox": { "$ref": "#/$defs/bbox" },
+        "visibility": { "$ref": "#/$defs/visibility" },
+        "pixels": { "type": "integer", "minimum": 0, "description": "Pixels the ball covers in the image when drawn alone." },
+        "center_px": { "$ref": "#/$defs/point_or_null", "description": "Ball centre projected through the camera." },
+        "centroid_px": { "$ref": "#/$defs/point_or_null", "description": "Centroid of the ball's drawn pixels." }
+      }
     },
     "possessor": { "type": ["string", "null"] },
     "players": {
@@ -23,9 +32,64 @@
           "id": { "type": "string" },
           "team": { "type": "string", "enum": ["home", "away"] },
           "x": { "type": "number" },
-          "y": { "type": "number" }
+          "y": { "type": "number" },
+          "bbox": { "$ref": "#/$defs/bbox" },
+          "visibility": { "$ref": "#/$defs/visibility" },
+          "pixels": { "type": "integer", "minimum": 0 },
+          "foot_px": { "$ref": "#/$defs/point_or_null", "description": "(x, y, 0) projected through the camera." }
         }
       }
+    },
+    "camera": {
+      "type": "object",
+      "description": "Rendered frames: the exact pinhole camera. P = K [R | t] maps homogeneous pitch metres (x, y, z, 1) to pixels.",
+      "required": ["width", "height", "fov_v_deg", "position", "K", "R", "t", "P"],
+      "properties": {
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 },
+        "fov_v_deg": { "type": "number", "exclusiveMinimum": 0 },
+        "position": { "$ref": "#/$defs/vec3" },
+        "K": { "$ref": "#/$defs/mat3" },
+        "R": { "$ref": "#/$defs/mat3" },
+        "t": { "$ref": "#/$defs/vec3" },
+        "P": {
+          "type": "array", "minItems": 3, "maxItems": 3,
+          "items": { "type": "array", "minItems": 4, "maxItems": 4, "items": { "type": "number" } }
+        }
+      }
+    },
+    "blur_px": { "$ref": "#/$defs/point", "description": "Rendered frames: motion-blur streak from the camera pan, in pixels." },
+    "keypoints": {
+      "type": "array",
+      "description": "Rendered frames: named pitch points that fall inside the image. visible is false when a player, the goal frame or the scorebug covers the point.",
+      "items": {
+        "type": "object",
+        "required": ["name", "px", "py", "visible"],
+        "properties": {
+          "name": { "type": "string" },
+          "px": { "type": "number" },
+          "py": { "type": "number" },
+          "visible": { "type": "boolean" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "bbox": {
+      "type": ["array", "null"],
+      "description": "[x0, y0, x1, y1] in pixels around everything drawn of the object inside the image, occluded parts included; null when none of it is drawn.",
+      "minItems": 4, "maxItems": 4, "items": { "type": "number" }
+    },
+    "visibility": {
+      "type": "number", "minimum": 0, "maximum": 1,
+      "description": "Share of the object's in-image pixels not hidden by other players, the ball, the goal frame or the scorebug, counted by the renderer."
+    },
+    "point": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "type": "number" } },
+    "point_or_null": { "type": ["array", "null"], "minItems": 2, "maxItems": 2, "items": { "type": "number" } },
+    "vec3": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "type": "number" } },
+    "mat3": {
+      "type": "array", "minItems": 3, "maxItems": 3,
+      "items": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "type": "number" } }
     }
   }
 }

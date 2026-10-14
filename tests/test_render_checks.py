@@ -1,0 +1,66 @@
+"""The render checks themselves, on hand-built frames with known answers."""
+
+from ninety.render.camera import Camera
+from ninety.render.checks import label_completeness, occlusion, projection_errors
+
+
+def frame(ball_centroid_shift=0.0, ball_visibility=1.0):
+    cam = Camera((52.5, -35.0, 20.0), (52.5, 34.0, 0.0), 20.0, 1280, 720)
+    u, v = cam.project((52.5, 34.0, 0.11))
+    players = []
+    for i in range(22):
+        x = 40.0 + i
+        fu, fv = cam.project((x, 34.0, 0.0))
+        players.append(
+            {
+                "id": f"p{i}",
+                "team": "home",
+                "x": x,
+                "y": 34.0,
+                "bbox": [fu - 8, fv - 60, fu + 8, fv],
+                "visibility": 1.0,
+                "pixels": 500,
+                "foot_px": [fu, fv],
+            }
+        )
+    return {
+        "frame": 0,
+        "t": 0.0,
+        "image": "images/00000.jpg",
+        "camera": cam.to_dict(),
+        "keypoints": [],
+        "ball": {
+            "x": 52.5,
+            "y": 34.0,
+            "z": 0.0,
+            "bbox": [u - 4, v - 4, u + 4, v + 4],
+            "pixels": 40,
+            "visibility": ball_visibility,
+            "centroid_px": [u + ball_centroid_shift, v],
+        },
+        "players": players,
+    }
+
+
+def test_projection_check_catches_a_shifted_ball():
+    assert projection_errors([frame()])["ball_px"]["max"] < 1e-3
+    assert projection_errors([frame(2.0)])["ball_px"]["max"] > 1.9
+
+
+def test_projection_check_catches_a_box_away_from_the_feet():
+    f = frame()
+    f["players"][0]["bbox"] = [b + 80 for b in f["players"][0]["bbox"]]
+    assert projection_errors([f])["player_foot_outside_box"] == 1
+
+
+def test_completeness_flags_missing_boxes_and_rows():
+    f = frame()
+    assert label_completeness({"frames": 1}, [f])["ok"]
+    f["players"][3]["bbox"] = None
+    assert not label_completeness({"frames": 1}, [f])["ok"]
+    assert not label_completeness({"frames": 2}, [frame()])["ok"]
+
+
+def test_occlusion_share():
+    o = occlusion([frame(ball_visibility=0.2), frame(), frame(), frame()])
+    assert o["ball_visibility_lt_0_5_share"] == 0.25

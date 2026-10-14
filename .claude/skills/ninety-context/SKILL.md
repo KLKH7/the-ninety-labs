@@ -7,7 +7,8 @@ description: Load what The Ninety Labs is building before any work in this repo.
 
 1. Read `AGENTS.md` at the repo root in full. It is the shared rule file for every coding tool on
    the team (Claude Code, Cursor, GitHub Copilot).
-2. Read the docs it lists, in its order: `docs/BRIEF.md`, `docs/CHALLENGE_MAP.md`,
+2. Read the docs it lists, in its order, starting with `docs/LESSONS.md` (mistakes already made;
+   load the `ninety-lessons` skill), then `docs/BRIEF.md`, `docs/CHALLENGE_MAP.md`,
    `docs/ARCHITECTURE.md`, `docs/PLAN.md`, `SECURITY.md`.
 3. Before building, state which rubric criterion the task moves (the table in `AGENTS.md`).
 4. If a Google Docs connector is available, the team's working doc is

@@ -16,14 +16,14 @@ mark a row `planned` until it runs in the demo. Milestones are defined in [PLAN.
 | (ii) | **Automatic event detection** from an incoming video feed | The core of The Ninety Labs: detection → tracking → camera-to-pitch mapping → possession → event rules, graded vs truth | `ninety/vision`, `ninety/eval` | M1 | planned |
 | (iii) | Narratives, player context, milestones, recaps | Producer + narrator agents; half-time and full-time recaps from the verified fact log | `ninety/agents` | M1 | planned |
 | (iv) | Explainability: control vs chaos, pressure changes, rhythm | Control-vs-chaos index, pressing intensity windows, tempo; shift detection fed to the Tactician | `ninety/intel` | M1 | planned |
-| (v) | **Data innovation**: create/extend synthetic datasets | Seeded match engine with ground-truth data; broadcast renderer; targeted synthetic data generation where vision fails | `ninety/sim`, `web/render` | M1 | in progress |
+| (v) | **Data innovation**: create/extend synthetic datasets | Seeded match engine with ground-truth data (running); broadcast renderer with exact camera, boxes, visibility and keypoints, hard-case knobs (lighting, kit contrast, crowding, camera, blur) and a fixed test split (running, [decision 0001](decisions/0001-synthetic-data.md)); rain, camera cuts and referees (planned); targeted synthetic data rounds where vision fails (planned) | `ninety/sim`, `ninety/render`, `web/render` | M1 | in progress |
 | (vi) | Multi-language storytelling | Localizer agent + Azure Translator; Azure AI Speech voices per language | `ninety/agents` | M2 | planned |
 
 ## Judging criteria → evidence
 
 | Criterion (20% each) | What we show |
 |---|---|
-| Technological implementation | Synthetic video + ground-truth data, graded automatic event detection, tests, CI, IaC |
+| Technological implementation | Synthetic video + ground-truth data (render checks in CI), graded automatic event detection, tests, CI, IaC |
 | Agentic design & innovation | Multi-agent workflow with a confidence-aware fact-checking agent, Vision Auditor and Data agent loop, MCP tools, A2A Personalizer, ablation and failure table |
 | Real-world impact | Removes human event logging; accessible audio description |
 | UX & presentation | On-screen graphics drawn on the footage, persona switch, 2-minute video |

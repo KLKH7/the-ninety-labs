@@ -38,6 +38,7 @@ jobs:
       - uses: astral-sh/setup-uv@v7
       - run: uv sync --locked
       - run: uv run ninety-sim --seed 7 --minutes 3 --out runs/smoke
+      - run: uv run ninety-validate runs/smoke  # data contract: consistency, physics, Laws (docs/GROUNDING.md)
       - run: |
           uv run python - <<'PY'
           import json
@@ -53,6 +54,27 @@ jobs:
           assert n > 0, "no events written"
           print(f"{n} events valid")
           PY
+
+  render:
+    # Renders clips in headless Chromium (software GL) and runs the render guide's checks:
+    # schema validity, projection error under 1 px, complete labels, same seed same pixels.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --prefix web
+      - run: uv sync --locked
+      - run: uv run playwright install --with-deps chromium
+      - run: uv run pytest -q tests/test_render_clip.py
+        env:
+          NINETY_REQUIRE_RENDER: "1"
+      - run: uv run ninety-render --seed 7 --seconds 2 --out runs/ci-clip
+      - run: uv run ninety-render-check runs/ci-clip
 
   secret-scan:
     runs-on: ubuntu-latest

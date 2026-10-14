@@ -1,0 +1,10 @@
+{
+  "name": "ninety-web",
+  "private": true,
+  "version": "0.1.0",
+  "license": "MIT",
+  "description": "Broadcast renderer (three.js) and, later, the viewer.",
+  "dependencies": {
+    "three": "0.170.0"
+  }
+}
