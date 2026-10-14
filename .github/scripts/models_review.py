@@ -87,10 +87,19 @@ def request(url: str, token: str, body: dict | None = None, method: str = "GET")
             "Authorization": f"Bearer {token}",
             "Accept": "application/vnd.github+json",
             "Content-Type": "application/json",
+            "X-GitHub-Api-Version": "2022-11-28",
         },
     )
     with urllib.request.urlopen(req, timeout=120) as response:
-        return json.load(response)
+        raw = response.read()
+        try:
+            return json.loads(raw)
+        except ValueError as error:
+            # Say what actually came back, so a soft failure can be diagnosed from the job log.
+            kind = response.headers.get("Content-Type")
+            raise ValueError(
+                f"{response.status} from {response.url} ({kind}), not JSON: {raw[:300]!r}"
+            ) from error
 
 
 def git(*args: str) -> str:
