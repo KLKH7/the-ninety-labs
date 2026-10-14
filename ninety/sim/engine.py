@@ -50,7 +50,7 @@ KEEPER_DIVE_EXTRA_M = 0.8  # P11: added as the dive stretches out, hips to finge
 DIVE_TIME_S = 0.5  # P11: design; a full dive to the post takes about 1 s including body travel
 BODY_RADIUS = 0.26  # P11: half a footballer's shoulder width (about 0.53 m over the deltoids)
 BODY_HEIGHT = 1.8
-PRESS_GAP_M = 1.0  # verify: how close a presser stands, goal-side of the ball carrier
+PRESS_GAP_M = 2.0  # design, verify: how close a presser stands (jockeys), goal-side of the ball carrier
 PERSONAL_SPACE_M = 1.2  # players steer to keep about this far from each other
 SHOULDER_TO_SHOULDER_M = 0.52  # P11: centres of two players in contact, shoulder to shoulder
 ANTICIPATE_S = 0.4  # verify: how far ahead players judge where others will be
@@ -822,7 +822,8 @@ class Engine:
             if self.restart and self.restart.team != p.team:  # Laws 15 to 17: stand off the restart
                 gap = RESTART_DISTANCE_M[self.restart.kind]
             presser = self.by_id[brain.pressers[0]] if brain.pressers else None
-            engaged = presser is not None and math.hypot(bx - presser.x, by - presser.y) < ENGAGE_M
+            engaged = (presser is not None and math.hypot(bx - presser.x, by - presser.y) < ENGAGE_M
+                       and brain.presses(self.t, bx))
             if presser is p and engaged:
                 # Press goal-side: between the ball and the goal being defended, a step away.
                 return *on_pitch(bx + gx * gap, by + gy * gap), work

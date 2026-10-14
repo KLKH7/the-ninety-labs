@@ -14,6 +14,9 @@ PITCH_X, PITCH_Y = 105.0, 68.0
 TRANSITION_S = 5.0  # T1: the window after the ball changes hands (counter-press about 5 to 6 s)
 # T2: defensive line, metres from own goal line, by block (low 12-22, mid 25-35, high 35-50).
 BLOCKS = {"low": (12.0, 22.0), "mid": (25.0, 35.0), "high": (35.0, 50.0)}
+# T3: where a team starts pressing the ball, metres from its own goal, by block (the line of
+# engagement); outside it they hold their shape. *design*, *verify*.
+ENGAGE_FROM_GOAL_M = {"low": 40.0, "mid": 60.0, "high": 105.0}
 LINE_FOLLOWS_BALL = 0.5  # design: how far the line moves for each metre the ball moves
 GOAL_SIDE_OF_BALL_M = 5.0  # design: with the ball inside the block, the line drops to stay this far goal-side
 LINE_FLOOR_M = 5.5  # Law 1: the line drops no deeper than the goal area
@@ -58,6 +61,15 @@ class TeamBrain:
         self.line_x = own_goal_x(self.team) + forward(self.team) * depth
         ranked = sorted(time_to_ball, key=time_to_ball.get)
         self.pressers = [] if has_ball else ranked[:2]  # first presser, then cover
+
+    def presses(self, now: float, ball_x: float) -> bool:
+        """Out of possession, does the team go to the ball? Straight after losing it (the
+        counter-press window, T1), or once the ball is inside its line of engagement (T3)."""
+        if self.in_possession:
+            return False
+        if now - self.changed_at < TRANSITION_S:
+            return True
+        return abs(ball_x - own_goal_x(self.team)) <= ENGAGE_FROM_GOAL_M[self.block]
 
     def slot(self, role: str, anchor_y: float, ball_y: float) -> tuple[float, float] | None:
         """Where a player of this role belongs out of possession: his line's height from the

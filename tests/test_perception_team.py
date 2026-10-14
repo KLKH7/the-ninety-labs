@@ -82,3 +82,16 @@ def test_out_of_possession_the_shape_is_narrower_and_shifts_to_the_ball():
     assert wide[1] > 10.0  # squeezed toward the centre
     assert toward_ball[1] > wide[1]  # and shifted toward the ball
     assert brain.slot("GK", 34.0, 34.0) is None
+
+
+def test_a_team_presses_inside_its_line_of_engagement_or_straight_after_losing_the_ball():
+    for team, own in (("home", 0.0), ("away", 105.0)):
+        brain = TeamBrain(team, block="low")
+        brain.update(0.0, True, 50.0, {})
+        brain.update(10.0, False, abs(own - 80.0), {})  # just lost it, far from goal
+        assert brain.presses(12.0, abs(own - 80.0))  # counter-press window
+        assert not brain.presses(20.0, abs(own - 80.0))  # then they drop off
+        assert brain.presses(20.0, abs(own - 30.0))  # inside the low block's line of engagement
+    high = TeamBrain("home", block="high")
+    high.update(0.0, False, 95.0, {})
+    assert high.presses(10.0, 95.0)  # a high block presses everywhere
