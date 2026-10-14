@@ -30,10 +30,23 @@ JOG = 5.5  # holding team shape
 PRESS = 4.5  # closing down the ball carrier
 DRIBBLE = 2.5
 REACTION_S = 0.3  # verify: human reaction to a struck ball, before anyone can run for or touch it
-CONTROL_M = 1.0  # a player this close to a ball low enough to reach takes it
-FOOT_REACH_Z = 1.0  # outfield players control the ball below this height
-HAND_REACH_Z = 2.6  # a keeper inside their penalty area can reach this high
-KEEPER_REACH_M = 1.8  # a keeper's dive reaches further than a foot
+PERCEPTION_ERR = 0.03  # verify: m/s of misjudged ball velocity per metre between player and ball
+CONTROL_M = 1.0  # a foot reaches this far from the body's centre
+FOOT_REACH_Z = 1.0  # outfield players can play the ball below this height
+HAND_REACH_Z = 2.6  # a keeper can reach this high with the hands
+KEEPER_REACH_M = 1.8  # verify: hips to fingertips at full stretch, the keeper's hand reach
+BODY_RADIUS = 0.3  # verify: a player's body, as the ball meets it
+BODY_HEIGHT = 1.8
+PRESS_GAP_M = 1.0  # verify: how close a presser stands, goal-side of the ball carrier
+PERSONAL_SPACE_M = 1.2  # players steer to keep about this far from each other
+SHOULDER_TO_SHOULDER_M = 0.45  # verify: centres of two players in contact (shoulder width)
+ANTICIPATE_S = 0.4  # verify: how far ahead players judge where others will be
+BODY_RESTITUTION = 0.3  # verify: share of the ball's speed into a body that it keeps
+FOOT_ABSORB_MPS = 12.0  # verify: fastest ball (relative to the player) a first touch can kill
+HANDS_ABSORB_MPS = 22.0  # verify: fastest shot a keeper can hold rather than parry
+MISCONTROL_KEEP = 0.4  # verify: share of speed a ball keeps off a failed touch or a parry
+POST_RADIUS = 0.06  # Law 1: posts and crossbar at most 12 cm wide
+WOODWORK_RESTITUTION = 0.6  # verify
 BALL_TO_FEET = 12.0  # m/s: how fast the ball settles at a new carrier's feet
 LOFT_OVER_M = 25.0  # passes longer than this go through the air
 CHASE_EVERY = 4  # frames between re-planning who chases a free ball
@@ -136,6 +149,8 @@ class Engine:
         self.last_touch: str | None = None
         self.kicked: dict | None = None  # the pass or shot event in flight, resolved when it ends
         self.kicked_at = -99.0
+        self.kicker_clear = True  # the struck ball has left the kicker's body
+        self.touched_since_kick = False
         self.chase: dict[str, tuple[str, float, float]] = {}  # team -> (player, x, y)
         self.restart: Restart | None = None
         self.throw_by: str | None = None  # a throw-in taker holding the ball before the throw
@@ -173,13 +188,17 @@ class Engine:
         cands = [p for p in self.players if p.team == team and p.id != exclude]
         return min(cands, key=lambda p: math.hypot(p.x - x, p.y - y))
 
-    def in_own_box(self, p: Player) -> bool:
-        own_line = PITCH_X - goal_x(p.team)
-        return abs(p.x - own_line) <= PENALTY_DEPTH and abs(p.y - PITCH_Y / 2) <= PENALTY_HALF_WIDTH
+    def in_own_box(self, team: str, x: float, y: float) -> bool:
+        own_line = PITCH_X - goal_x(team)
+        return abs(x - own_line) <= PENALTY_DEPTH and abs(y - PITCH_Y / 2) <= PENALTY_HALF_WIDTH
 
-    def reach(self, p: Player) -> tuple[float, float]:
-        """How far and how high this player can reach for the ball."""
-        if p.role == "GK" and self.in_own_box(p):
+    def hands(self, p: Player, x: float, y: float) -> bool:
+        """Law 12: a keeper may handle the ball only inside their own penalty area."""
+        return p.role == "GK" and self.in_own_box(p.team, x, y)
+
+    def reach(self, p: Player, x: float, y: float) -> tuple[float, float]:
+        """How far and how high this player can reach for a ball at (x, y)."""
+        if self.hands(p, x, y):
             return KEEPER_REACH_M, HAND_REACH_Z
         return CONTROL_M, FOOT_REACH_Z
 
@@ -189,6 +208,7 @@ class Engine:
             self.poss_team = self.team_of(pid)
         self.possessor = pid
         self.last_touch = pid
+        self.touched_since_kick = False
         self.chase = {}
         self.hold_until = self.t + self.rng.uniform(3.5, 7.5)
 
@@ -210,7 +230,8 @@ class Engine:
         self.possessor = None
         self.last_touch = carrier.id
         self.kicked_at = self.t
-        self.plan_chase()
+        self.kicker_clear = False
+        self.chase = {}  # everyone reacts after REACTION_S, not on the frame of the kick
 
     def aim(self, sx: float, sy: float, tx: float, ty: float, ground: float, up: float):
         d = math.hypot(tx - sx, ty - sy) or 1.0
@@ -229,11 +250,8 @@ class Engine:
         speed = self.rng.uniform(70, 120) / 3.6
         ground, up = ball.shot(math.hypot(gx - bx, ty - by), speed, tz, DT)
         vx, vy, vz = self.aim(bx, by, gx, ty, ground, up)
-        on_target = abs(ty - PITCH_Y / 2) < GOAL_HALF_WIDTH - ball.RADIUS and tz < CROSSBAR - 2 * ball.RADIUS
-        # Where it ends (saved, blocked or out) is filled in when that happens.
-        self.kicked = self.emit("shot", team, bx, by, player=carrier.id,
-                                outcome="on_target" if on_target else "off_target",
-                                ball_speed_kmh=round(speed * 3.6, 1))
+        # Outcome and end point are observed: set when the ball is touched, goes out or goes in.
+        self.kicked = self.emit("shot", team, bx, by, player=carrier.id, ball_speed_kmh=round(speed * 3.6, 1))
         self.kick(carrier, vx, vy, vz)
 
     def pass_to(self, carrier: Player, target: Player, throw: bool = False) -> None:
@@ -278,65 +296,181 @@ class Engine:
     # ---- the free ball: who can get there first ------------------------------
 
     def plan_chase(self) -> None:
-        """Each team sends the player who can reach the ball's path first."""
+        """Each team sends the player who thinks they can reach the ball's path first. Each player
+        judges the ball's velocity with an error that grows with their distance from it, and the
+        judgement is renewed (and sharpens) every few frames as the ball comes closer."""
+        if self.t - self.kicked_at < REACTION_S:
+            return
         path = ball.predict(self.ball, DT, 6.0)
         best: dict[str, tuple[float, str, float, float]] = {}
         for p in self.players:
-            reach_m, reach_z = self.reach(p)
+            if self.kicked and p.id == self.kicked["player"] and not self.touched_since_kick:
+                continue  # the kicker moves on; he does not run after his own pass or shot
+            sigma = PERCEPTION_ERR * math.hypot(self.ball[0] - p.x, self.ball[1] - p.y)
+            ex, ey = self.rng.gauss(0, sigma), self.rng.gauss(0, sigma)
             for k in range(0, len(path), 2):
-                bx, by, bz = path[k][0], path[k][1], path[k][2]
+                t = k * DT
+                bx, by, bz = path[k][0] + ex * t, path[k][1] + ey * t, path[k][2]
+                reach_m, reach_z = self.reach(p, bx, by)
                 if bz > reach_z:
                     continue
-                t = k * DT
                 gap = math.hypot(bx - p.x, by - p.y) - reach_m
-                if gap <= SPRINT * max(0.0, t - REACTION_S) or k + 2 >= len(path):
-                    arrive = t if gap <= SPRINT * max(0.0, t - REACTION_S) else t + gap / SPRINT
+                if gap <= SPRINT * t or k + 2 >= len(path):
+                    arrive = t if gap <= SPRINT * t else t + gap / SPRINT
                     if p.team not in best or arrive < best[p.team][0]:
                         best[p.team] = (arrive, p.id, bx, by)
                     break
         self.chase = {team: (pid, x, y) for team, (_, pid, x, y) in best.items()}
 
     def tick_free(self) -> None:
-        self.ball = ball.step(self.ball, DT)
-        if self.went_out():
+        before = self.ball
+        self.ball = ball.step(before, DT)
+        self.woodwork(before)
+        if self.went_out(before):
             return
         if self.frame % CHASE_EVERY == 0:
             self.plan_chase()
-        if self.t - self.kicked_at < REACTION_S:
-            return
-        bx, by, bz = self.ball[0], self.ball[1], self.ball[2]
-        takers = []
+        self.contact(before)
+
+    def contact(self, before: ball.State) -> None:
+        """The ball meets whoever is on its path this frame: a body deflects it at any time; a
+        deliberate touch, after reaction time, controls it if it is slow enough to absorb."""
+        x0, y0 = before[0], before[1]
+        x1, y1, z1 = self.ball[0], self.ball[1], self.ball[2]
+        dx, dy = x1 - x0, y1 - y0
+        seg = dx * dx + dy * dy
+        kicker = self.by_id.get(self.last_touch) if self.last_touch else None
+        clear_of_body = kicker and math.hypot(x1 - kicker.x, y1 - kicker.y) > BODY_RADIUS + ball.RADIUS
+        if not self.kicker_clear and clear_of_body:
+            self.kicker_clear = True
+        reacted = self.t - self.kicked_at >= REACTION_S
+        hits = []
         for p in self.players:
-            reach_m, reach_z = self.reach(p)
-            d = math.hypot(bx - p.x, by - p.y)
-            if d <= reach_m and bz <= reach_z:
-                takers.append((d, p))
-        if takers:
-            self.taken_by(min(takers, key=lambda tp: tp[0])[1])
+            if p is kicker and not self.kicker_clear:
+                continue
+            s = 0.0 if seg == 0 else clamp(((p.x - x0) * dx + (p.y - y0) * dy) / seg, 0.0, 1.0)
+            cx, cy = x0 + s * dx, y0 + s * dy
+            cz = before[2] + s * (z1 - before[2])
+            d = math.hypot(cx - p.x, cy - p.y)
+            reach_m, reach_z = self.reach(p, cx, cy)
+            if reacted and d <= reach_m and cz <= reach_z:
+                hits.append((s, "touch", p, cx, cy, cz))
+            elif d <= BODY_RADIUS + ball.RADIUS and cz <= BODY_HEIGHT:
+                hits.append((s, "body", p, cx, cy, cz))
+        if not hits:
+            return
+        s, kind, p, cx, cy, cz = min(hits, key=lambda h: h[0])
+        vx, vy, vz = self.ball[3], self.ball[4], self.ball[5]
+        rel = math.sqrt((vx - p.vx) ** 2 + (vy - p.vy) ** 2 + vz * vz)
+        absorb = HANDS_ABSORB_MPS if self.hands(p, cx, cy) else FOOT_ABSORB_MPS
+        controls = kind == "touch" and rel <= absorb
+        self.touched(p, cx, cy, controls)  # judged on the ball as it arrived
+        if controls:
+            self.ball = (cx, cy, cz, p.vx, p.vy, 0.0)
+            if p.team != self.poss_team:
+                self.emit("possession_change", p.team, cx, cy, player=p.id)
+            self.give(p.id)
+            return
+        self.deflect(p, cx, cy, cz, MISCONTROL_KEEP if kind == "touch" else BODY_RESTITUTION)
 
-    def taken_by(self, p: Player) -> None:
-        bx, by = self.ball[0], self.ball[1]
+    def deflect(self, p: Player, cx: float, cy: float, cz: float, keep: float) -> None:
+        """The ball bounces off a player (a block, a parry, a heavy touch) and stays free."""
+        vx, vy, vz = self.ball[3], self.ball[4], self.ball[5]
+        nx, ny = cx - p.x, cy - p.y
+        n = math.hypot(nx, ny)
+        if n > 1e-6:
+            nx, ny = nx / n, ny / n
+        else:  # dead centre: it comes straight back
+            speed = math.hypot(vx, vy) or 1.0
+            nx, ny = -vx / speed, -vy / speed
+        into = vx * nx + vy * ny
+        if into < 0:  # moving toward the body: reflect the part that hits it
+            vx, vy = vx - 2 * into * nx, vy - 2 * into * ny
+        self.ball = (cx + nx * 0.05, cy + ny * 0.05, cz, vx * keep, vy * keep, vz * keep)
+        self.last_touch = p.id
+        self.kicker_clear = False
+        self.kicked_at = self.t  # a new strike of the ball: everyone reacts to it again
+        self.chase = {}
+
+    def touched(self, p: Player, x: float, y: float, controls: bool) -> None:
+        """Resolve the pass or shot in flight from who touched it, and how: observed, never
+        intended. Called with the ball as it arrived, before the touch changes it."""
+        self.touched_since_kick = True
         kicked = self.kicked
+        if not kicked:
+            return
+        same_team = p.team == kicked["team"]
+        if kicked["type"] == "pass":
+            if same_team and controls:
+                kicked.update(receiver=p.id, end_x=round(x, 2), end_y=round(y, 2), outcome="success")
+                self.kicked = None
+            elif not same_team:
+                kicked.update(receiver=p.id, end_x=round(x, 2), end_y=round(y, 2), outcome="fail")
+                self.emit("interception", p.team, x, y, player=p.id)
+                self.kicked = None
+            return  # a team-mate's deflection leaves the pass in flight
+        if same_team and not controls:
+            return  # a team-mate's deflection leaves the shot in flight
+        on_target = self.heading_on_target(kicked["team"])
+        if not same_team and p.role != "GK":
+            outcome = "blocked"
+        else:
+            outcome = "on_target" if on_target else "off_target"
+        kicked.update(end_x=round(x, 2), end_y=round(y, 2), outcome=outcome)
         self.kicked = None
-        if kicked and kicked["type"] == "shot":
-            kicked.update(end_x=round(bx, 2), end_y=round(by, 2))
-        if kicked and kicked["type"] == "pass":
-            same = p.team == kicked["team"]
-            kicked.update(receiver=p.id, end_x=round(bx, 2), end_y=round(by, 2),
-                          outcome="success" if same else "fail")
-            if not same:
-                self.emit("interception", p.team, bx, by, player=p.id)
-        if p.team != self.poss_team:
-            self.emit("possession_change", p.team, bx, by, player=p.id)
-        self.give(p.id)
 
-    def went_out(self) -> bool:
-        """Law 9: out once the whole ball has crossed a goal line or touchline."""
+    @staticmethod
+    def in_goal(y: float, z: float) -> bool:
+        """Law 10: the whole ball between the posts and under the bar (z is its lowest point)."""
+        return abs(y - PITCH_Y / 2) < GOAL_HALF_WIDTH - ball.RADIUS and z + 2 * ball.RADIUS < CROSSBAR
+
+    def heading_on_target(self, team: str) -> bool:
+        """Law 10: would the ball, untouched from here, have crossed between the posts and under
+        the bar of the goal this team attacks?"""
+        line = goal_x(team)
+        path = ball.predict(self.ball, DT, 4.0)
+        for a, b in zip(path, path[1:], strict=False):
+            if (a[0] - line) * (b[0] - line) <= 0 and a[0] != b[0]:
+                s = (line - a[0]) / (b[0] - a[0])
+                return self.in_goal(a[1] + s * (b[1] - a[1]), a[2] + s * (b[2] - a[2]))
+        return False
+
+    def woodwork(self, before: ball.State) -> None:
+        """Law 1: the ball rebounds off a post or the crossbar where it meets the goal line."""
+        for line in (0.0, PITCH_X):
+            x0, x1 = before[0], self.ball[0]
+            if (x0 - line) * (x1 - line) > 0 or x0 == x1:
+                continue
+            s = (line - x0) / (x1 - x0)
+            y = before[1] + s * (self.ball[1] - before[1])
+            zc = before[2] + s * (self.ball[2] - before[2]) + ball.RADIUS  # the ball's centre
+            off_centre = abs(y - PITCH_Y / 2)
+            touching = ball.RADIUS + POST_RADIUS
+            hits_post = abs(off_centre - GOAL_HALF_WIDTH) <= touching and zc <= CROSSBAR
+            hits_bar = off_centre <= GOAL_HALF_WIDTH and abs(zc - CROSSBAR) <= touching
+            if hits_post or hits_bar:
+                vx, vy, vz = self.ball[3], self.ball[4], self.ball[5]
+                vx = -vx * WOODWORK_RESTITUTION
+                if hits_bar:
+                    vz = -vz * WOODWORK_RESTITUTION if zc < CROSSBAR else abs(vz) * WOODWORK_RESTITUTION
+                bx = line + (0.15 if line == 0.0 else -0.15)
+                self.ball = (bx, y, max(zc - ball.RADIUS, 0.0), vx, vy, vz)
+                self.kicked_at = self.t
+                self.chase = {}
+                return
+
+    def went_out(self, before: ball.State) -> bool:
+        """Law 9: out once the whole ball has crossed a goal line or touchline. Where and how high
+        it crossed is taken at the line, not wherever the ball is a frame later."""
         bx, by, bz = self.ball[0], self.ball[1], self.ball[2]
         r = ball.RADIUS
         over_goal_line = bx < -r or bx > PITCH_X + r
         if not over_goal_line and -r <= by <= PITCH_Y + r:
             return False
+        if over_goal_line and before[0] != bx:
+            line = -r if bx < 0 else PITCH_X + r
+            s = clamp((line - before[0]) / (bx - before[0]), 0.0, 1.0)
+            by, bz = before[1] + s * (by - before[1]), before[2] + s * (bz - before[2])
         last_team = self.team_of(self.last_touch) if self.last_touch else "home"
         kicked = self.kicked
         self.kicked = None
@@ -345,10 +479,12 @@ class Engine:
             kicked.update(end_x=round(x, 2), end_y=round(y, 2))
             if kicked["type"] == "pass":
                 kicked["outcome"] = "fail"
+            elif not (over_goal_line and self.in_goal(by, bz)):
+                kicked["outcome"] = "off_target"
         self.chase = {}
         if over_goal_line:
             attackers = "home" if bx > PITCH_X / 2 else "away"
-            if abs(by - PITCH_Y / 2) < GOAL_HALF_WIDTH - r and bz < CROSSBAR - 2 * r:  # Law 10
+            if self.in_goal(by, bz):
                 self.scored(attackers, kicked, x, y)
                 return True
             self.emit("out_of_play", last_team, x, y)
@@ -420,7 +556,11 @@ class Engine:
             closest = self.nearest(carrier.x, carrier.y, p.team)
             in_zone = math.hypot(carrier.x - p.ax, carrier.y - p.ay) < 18
             if closest.id == p.id and in_zone:
-                return carrier.x, carrier.y, PRESS
+                # Press goal-side: between the ball and the goal being defended, a step away.
+                own = PITCH_X - goal_x(p.team), PITCH_Y / 2
+                d = math.hypot(own[0] - carrier.x, own[1] - carrier.y) or 1.0
+                return (carrier.x + (own[0] - carrier.x) / d * PRESS_GAP_M,
+                        carrier.y + (own[1] - carrier.y) / d * PRESS_GAP_M, PRESS)
         return tx, ty, JOG
 
     def move_players(self) -> None:
@@ -431,7 +571,48 @@ class Engine:
                 steer(p, p.x + p.vx * 0.5, p.y + p.vy * 0.5, DRIBBLE)
                 continue
             tx, ty, top = self.shape_target(p)
+            dist = math.hypot(tx - p.x, ty - p.y)
+            if dist > 1e-6:  # bend the running direction away from anyone about to be in the way
+                ax, ay = self.avoid(p)
+                ux, uy = (tx - p.x) / dist + ax, (ty - p.y) / dist + ay
+                u = math.hypot(ux, uy) or 1.0
+                tx, ty = p.x + ux / u * dist, p.y + uy / u * dist
             steer(p, tx, ty, top)
+        self.separate()
+
+    def avoid(self, p: Player) -> tuple[float, float]:
+        """Players see each other coming: where two will be close a moment from now, each bends
+        away, by more the closer they will be. Returned as a direction to add to the run."""
+        px, py = p.x + p.vx * ANTICIPATE_S, p.y + p.vy * ANTICIPATE_S
+        nx = ny = 0.0
+        for q in self.players:
+            if q is p:
+                continue
+            dx, dy = px - (q.x + q.vx * ANTICIPATE_S), py - (q.y + q.vy * ANTICIPATE_S)
+            d = math.hypot(dx, dy)
+            if 1e-6 < d < PERSONAL_SPACE_M:
+                closeness = (PERSONAL_SPACE_M - d) / PERSONAL_SPACE_M  # 0 at the edge, 1 at contact
+                w = 4 * closeness * closeness / d  # urgency grows sharply as contact nears
+                nx, ny = nx + dx * w, ny + dy * w
+        return nx, ny
+
+    def separate(self) -> None:
+        """Bodies in contact (shoulder to shoulder, SHOULDER_TO_SHOULDER_M between centres) brace:
+        each stops closing on the other as fast as their own legs allow, never faster."""
+        brake = MAX_ACCEL * DT
+        for i, a in enumerate(self.players):
+            for b in self.players[i + 1:]:
+                dx, dy = b.x - a.x, b.y - a.y
+                d = math.hypot(dx, dy)
+                if d >= SHOULDER_TO_SHOULDER_M or d < 1e-6:
+                    continue
+                nx, ny = dx / d, dy / d
+                closing = (a.vx - b.vx) * nx + (a.vy - b.vy) * ny
+                if closing <= 0:
+                    continue
+                each = min(closing / 2, brake)
+                a.vx, a.vy = a.vx - nx * each, a.vy - ny * each
+                b.vx, b.vy = b.vx + nx * each, b.vy + ny * each
 
     def tick_carrier(self) -> None:
         carrier = self.by_id[self.possessor]
@@ -447,19 +628,24 @@ class Engine:
         gx = goal_x(team)
         presser = self.nearest(carrier.x, carrier.y, opp)
         gap = math.hypot(presser.x - carrier.x, presser.y - carrier.y)
-        if gap > 6:
-            steer(carrier, gx, carrier.y + (PITCH_Y / 2 - carrier.y) * 0.3, DRIBBLE)
+        if gap > 6:  # carries the ball toward the penalty spot, not onto the goal line
+            steer(carrier, gx - attack_dir(team) * 11, carrier.y + (PITCH_Y / 2 - carrier.y) * 0.3, DRIBBLE)
         else:
             steer(carrier, carrier.x, carrier.y, DRIBBLE)
         # The ball settles at the carrier's feet (from a keeper's hands, down to the ground)
         # rather than jumping there.
-        bx, by, bz = self.ball[0], self.ball[1], self.ball[2]
+        # A controlled ball travels with the carrier, then closes the remaining gap relative to them.
+        bx, by, bz = self.ball[0] + carrier.vx * DT, self.ball[1] + carrier.vy * DT, self.ball[2]
         dx, dy, dz = carrier.x - bx, carrier.y - by, -bz
         d = math.sqrt(dx * dx + dy * dy + dz * dz)
         step = min(d, BALL_TO_FEET * DT)
         if d > 1e-6:
             bx, by, bz = bx + dx / d * step, by + dy / d * step, bz + dz / d * step
+        before = self.ball
         self.ball = (bx, by, max(bz, 0.0), carrier.vx, carrier.vy, 0.0)
+        if self.went_out(before):  # Law 9 applies to a ball at a player's feet too
+            self.possessor = None
+            return
         if gap < 2.0 and self.t - self.pressed.get(opp, -99) > 8:
             self.pressed[opp] = self.t
             self.emit("pressure", opp, presser.x, presser.y, player=presser.id, receiver=carrier.id)
