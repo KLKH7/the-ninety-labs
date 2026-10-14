@@ -19,7 +19,7 @@ import math
 import random
 from dataclasses import dataclass, field
 
-from ninety.sim import ball, decisions, perception
+from ninety.sim import ball, decisions, offball, perception
 from ninety.sim.body import BRAKE_MAX, CS_MEAN, F0_MEAN, V0_MEAN, Body
 from ninety.sim.body import move as move_body
 from ninety.sim.profiles import Profile
@@ -174,6 +174,8 @@ class Engine:
         self.restart: Restart | None = None
         self.throw_by: str | None = None  # a throw-in taker holding the ball before the throw
         self.dribble_to: tuple[float, float] | None = None  # the carrier's chosen carry, if any
+        self.intended: str | None = None  # the team-mate a pass was played to: he expects it
+        self.runs: dict[str, tuple[float, float, float]] = {}  # runner -> (x, y, started at)
         self.moved: str | None = None  # the carrier, already moved this frame by tick_carrier
         self.hold_until = 0.0
         self.pressed: dict[str, float] = {}
@@ -219,6 +221,8 @@ class Engine:
     def reaction(self, p: Player) -> float:
         """Seconds before a player responds to a struck ball: a choice reaction (he must also
         pick a direction), shortened for a keeper who reads the kicker before the strike."""
+        if p.id == self.intended:  # O5: he was expecting the pass, so a simple reaction
+            return perception.SIMPLE_REACTION_S
         return max(0.0, p.profile.reaction(p.role == "GK", perception.KEEPER_ANTICIPATION_S))
 
     def reach(self, p: Player, x: float, y: float, at: float | None = None) -> tuple[float, float]:
@@ -238,6 +242,8 @@ class Engine:
             self.poss_team = self.team_of(pid)
         self.possessor = pid
         self.last_touch = pid
+        self.intended = None
+        self.runs = {}
         self.touched_since_kick = False
         self.chase = {}
         # The first touch settles the ball before he can decide: quicker with a good first touch.
@@ -358,6 +364,7 @@ class Engine:
         choice = decisions.choose(scene, self.rng)
         if choice.kind == "pass" or choice.kind == "clear":
             self.pass_to(carrier, *choice.target, lofted=choice.lofted)
+            self.intended = choice.receiver
         elif choice.kind == "shoot":
             self.shoot(carrier)
         elif choice.kind == "dribble":
@@ -634,6 +641,32 @@ class Engine:
         tx = clamp(p.ax + shift + push, 2, PITCH_X - 2) if p.role != "GK" else p.ax
         ty = p.ay + (clamp(by, 0, PITCH_Y) - p.ay) * 0.25
         brain = self.brains[p.team]
+        own_goal = PITCH_X - goal_x(p.team)
+        work = 5.0 + 2.0 * p.profile["work_rate"]  # how hard he presses and recovers
+        if p.role == "GK" and not brain.in_possession:
+            carrier = self.by_id.get(self.possessor) if self.possessor else None
+            if carrier and carrier.team != p.team:
+                view = self.beliefs[p.id]
+                seen = view.where(carrier.id, self.t) or (bx, by)
+                mates = [w for w in (view.where(q.id, self.t) for q in self.players
+                                     if q.team == p.team and q.id != p.id) if w]
+                if offball.through_on_goal(seen, own_goal, mates):  # O1: come out and narrow it
+                    return *offball.close_down_spot(seen, own_goal), SPRINT
+            return *offball.keeper_spot(clamp(bx, 0, PITCH_X), clamp(by, 0, PITCH_Y), own_goal), RECOVER
+        if not brain.in_possession and p.id in brain.markers:
+            mx, my = brain.markers[p.id]
+            return clamp(mx, 0.5, PITCH_X - 0.5), clamp(my, 0.5, PITCH_Y - 0.5), work
+        carrier = self.by_id.get(self.possessor) if self.possessor else None
+        if brain.in_possession and carrier and carrier.team == p.team and p.role != "GK":
+            run = self.run_target(p, carrier, brain)
+            if run:
+                return *run, SPRINT
+            mates = sorted((q for q in self.players if q.team == p.team and q.id not in (carrier.id,)
+                            and q.role != "GK"), key=lambda q: math.hypot(q.x - carrier.x, q.y - carrier.y))
+            if p in mates[:2]:  # O3: the nearest two offer a diagonal option
+                presser = self.nearest(carrier.x, carrier.y, other(p.team))
+                return *offball.support_spot((p.x, p.y), (carrier.x, carrier.y), goal_x(p.team),
+                                             (presser.x, presser.y)), RECOVER
         if not brain.in_possession and p.role != "GK":
             own = PITCH_X - goal_x(p.team), PITCH_Y / 2
             d = math.hypot(own[0] - bx, own[1] - by) or 1.0
@@ -642,7 +675,7 @@ class Engine:
                 return clamp(x, 0.5, PITCH_X - 0.5), clamp(y, 0.5, PITCH_Y - 0.5)
             if brain.pressers[:1] == [p.id] and math.hypot(bx - p.x, by - p.y) < ENGAGE_M:
                 # Press goal-side: between the ball and the goal being defended, a step away.
-                return *on_pitch(bx + gx * PRESS_GAP_M, by + gy * PRESS_GAP_M), PRESS
+                return *on_pitch(bx + gx * PRESS_GAP_M, by + gy * PRESS_GAP_M), work
             if brain.pressers[1:2] == [p.id]:  # cover: behind the presser, goal-side
                 return *on_pitch(bx + gx * COVER_M, by + gy * COVER_M), RECOVER
             slot = brain.slot(p.role, p.ay, clamp(by, 0, PITCH_Y))
@@ -650,6 +683,21 @@ class Engine:
                 tx, ty = slot
         far = math.hypot(tx - p.x, ty - p.y) > FAR_OUT_OF_POSITION_M
         return tx, ty, RECOVER if far else SHAPE
+
+    def shared_view(self, team: str, of_team: str) -> dict[str, tuple[float, float]]:
+        """What a team's players know between them about another team's positions: for each
+        player, the freshest sighting any of them has (they talk). Never the truth."""
+        best: dict[str, tuple[float, tuple[float, float]]] = {}
+        for p in self.players:
+            if p.team != team:
+                continue
+            belief = self.beliefs[p.id]
+            for q in self.players:
+                if q.team == of_team and q.id in belief.seen:
+                    age = belief.age(q.id, self.t)
+                    if q.id not in best or age < best[q.id][0]:
+                        best[q.id] = (age, belief.where(q.id, self.t))
+        return {pid: at for pid, (_, at) in best.items()}
 
     def perceive_and_think(self) -> None:
         """Players look at the pitch about four times a second, staggered so they do not all look
@@ -674,6 +722,38 @@ class Engine:
                 along = (p.vx * dx + p.vy * dy) / (d or 1.0)
                 reach[p.id] = p.physique.time_to_cover(d, along)
             brain.update(self.t, holder == team, bx, reach)
+            if holder != team:  # O2: pick up the attackers who threaten our goal
+                free = {p.id: (p.x, p.y) for p in self.players
+                        if p.team == team and p.role != "GK" and p.id not in brain.pressers}
+                brain.markers = offball.marking(free, self.shared_view(team, other(team)),
+                                                PITCH_X - goal_x(team))
+            else:
+                brain.markers = {}
+
+    def run_target(self, p: Player, carrier: Player, brain: TeamBrain) -> tuple[float, float] | None:
+        """O4: forwards (and anyone who likes to) run in behind when the carrier has the ball
+        under control, facing forward and not pressed, while they are onside."""
+        if p.id in self.runs:
+            x, y, started = self.runs[p.id]
+            if self.t - started < 3.0:
+                return x, y
+            del self.runs[p.id]
+        likes = "runs_in_behind" in p.profile.traits
+        if p.role not in ("ST", "RW", "LW") and not likes:
+            return None
+        settled = self.t >= self.hold_until
+        nearest = min(math.hypot(q.x - carrier.x, q.y - carrier.y) for q in self.players if q.team != p.team)
+        can_play = settled and nearest > decisions.PRESSURE_FRONT_M / 2
+        view = self.beliefs[p.id]
+        defenders = sorted((w[0] for w in (view.where(q.id, self.t) for q in self.players
+                                           if q.team != p.team) if w), key=lambda x: -attack_dir(p.team) * x)
+        second_last = defenders[1] if len(defenders) > 1 else PITCH_X - goal_x(p.team)
+        onside = (second_last - p.x) * attack_dir(p.team) >= 0
+        their_line = self.brains[other(p.team)].line_x
+        spot = offball.run_in_behind((p.x, p.y), their_line, goal_x(p.team), can_play, onside)
+        if spot:
+            self.runs[p.id] = (*spot, self.t)
+        return spot
 
     def move_players(self) -> None:
         for p in self.players:

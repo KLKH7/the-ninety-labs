@@ -39,6 +39,7 @@ class TeamBrain:
     changed_at: float = -99.0
     line_x: float = 0.0
     pressers: list[str] = field(default_factory=list)
+    markers: dict[str, tuple[float, float]] = field(default_factory=dict)  # defender -> spot
 
     def phase(self, now: float) -> str:
         """attack, defend, or the transition just after the ball changed hands."""
