@@ -1,0 +1,2634 @@
+[
+ {
+  "kind": "true: completed pass",
+  "true": true,
+  "claim": "a8 plays a 29 m pass to a10.",
+  "evidence": [
+   {
+    "id": "e00007",
+    "minute": 1,
+    "second": 9,
+    "type": "pass",
+    "team": "away",
+    "player": "a8",
+    "receiver": "a10",
+    "outcome": "success",
+    "ball_speed_kmh": 78,
+    "distance_m": 29
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "true: completed pass",
+  "true": true,
+  "claim": "a10 plays a 19 m pass to a11.",
+  "evidence": [
+   {
+    "id": "e00008",
+    "minute": 1,
+    "second": 13,
+    "type": "pass",
+    "team": "away",
+    "player": "a10",
+    "receiver": "a11",
+    "outcome": "success",
+    "ball_speed_kmh": 70,
+    "distance_m": 19
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "true: completed pass",
+  "true": true,
+  "claim": "a11 plays a 29 m pass to a6.",
+  "evidence": [
+   {
+    "id": "e00009",
+    "minute": 1,
+    "second": 18,
+    "type": "pass",
+    "team": "away",
+    "player": "a11",
+    "receiver": "a6",
+    "outcome": "success",
+    "ball_speed_kmh": 60,
+    "distance_m": 29
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "true: completed pass",
+  "true": true,
+  "claim": "a6 plays a 17 m pass to a10.",
+  "evidence": [
+   {
+    "id": "e00011",
+    "minute": 1,
+    "second": 23,
+    "type": "pass",
+    "team": "away",
+    "player": "a6",
+    "receiver": "a10",
+    "outcome": "success",
+    "ball_speed_kmh": 63,
+    "distance_m": 17
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "true: tackle",
+  "true": true,
+  "claim": "a9 wins the ball from h5 with a tackle.",
+  "evidence": [
+   {
+    "id": "e00021",
+    "minute": 1,
+    "second": 51,
+    "type": "tackle",
+    "team": "away",
+    "player": "a9",
+    "receiver": "h5",
+    "outcome": "success"
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "true: tackle",
+  "true": true,
+  "claim": "h6 wins the ball from a11 with a tackle.",
+  "evidence": [
+   {
+    "id": "e00036",
+    "minute": 2,
+    "second": 54,
+    "type": "tackle",
+    "team": "home",
+    "player": "h6",
+    "receiver": "a11",
+    "outcome": "success"
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "true: tackle",
+  "true": true,
+  "claim": "a10 wins the ball from h4 with a tackle.",
+  "evidence": [
+   {
+    "id": "e00042",
+    "minute": 3,
+    "second": 3,
+    "type": "tackle",
+    "team": "away",
+    "player": "a10",
+    "receiver": "h4",
+    "outcome": "success"
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "true: tackle",
+  "true": true,
+  "claim": "h7 wins the ball from a10 with a tackle.",
+  "evidence": [
+   {
+    "id": "e00045",
+    "minute": 3,
+    "second": 4,
+    "type": "tackle",
+    "team": "home",
+    "player": "h7",
+    "receiver": "a10",
+    "outcome": "success"
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "true: shot",
+  "true": true,
+  "claim": "a10 shoots at 82 km/h.",
+  "evidence": [
+   {
+    "id": "e00086",
+    "minute": 4,
+    "second": 26,
+    "type": "shot",
+    "team": "away",
+    "player": "a10",
+    "outcome": "off_target",
+    "ball_speed_kmh": 82,
+    "distance_m": 17
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "true: shot",
+  "true": true,
+  "claim": "a10 shoots at 74 km/h.",
+  "evidence": [
+   {
+    "id": "e00113",
+    "minute": 5,
+    "second": 42,
+    "type": "shot",
+    "team": "away",
+    "player": "a10",
+    "outcome": "off_target",
+    "ball_speed_kmh": 74,
+    "distance_m": 18
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "true: shot",
+  "true": true,
+  "claim": "h10 shoots at 96 km/h.",
+  "evidence": [
+   {
+    "id": "e00135",
+    "minute": 7,
+    "second": 0,
+    "type": "shot",
+    "team": "home",
+    "player": "h10",
+    "outcome": "off_target",
+    "ball_speed_kmh": 96,
+    "distance_m": 11
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "true: shot",
+  "true": true,
+  "claim": "h10 shoots at 116 km/h.",
+  "evidence": [
+   {
+    "id": "e00207",
+    "minute": 9,
+    "second": 46,
+    "type": "shot",
+    "team": "home",
+    "player": "h10",
+    "outcome": "on_target",
+    "ball_speed_kmh": 116,
+    "distance_m": 16
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "true: interpreted tackle",
+  "true": true,
+  "claim": "a9 wins the ball back from h5, a crucial defensive intervention.",
+  "evidence": [
+   {
+    "id": "e00021",
+    "minute": 1,
+    "second": 51,
+    "type": "tackle",
+    "team": "away",
+    "player": "a9",
+    "receiver": "h5",
+    "outcome": "success"
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "true: interpreted tackle",
+  "true": true,
+  "claim": "h6 wins the ball back from a11, a crucial defensive intervention.",
+  "evidence": [
+   {
+    "id": "e00036",
+    "minute": 2,
+    "second": 54,
+    "type": "tackle",
+    "team": "home",
+    "player": "h6",
+    "receiver": "a11",
+    "outcome": "success"
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "true: interpreted tackle",
+  "true": true,
+  "claim": "a10 wins the ball back from h4, a crucial defensive intervention.",
+  "evidence": [
+   {
+    "id": "e00042",
+    "minute": 3,
+    "second": 3,
+    "type": "tackle",
+    "team": "away",
+    "player": "a10",
+    "receiver": "h4",
+    "outcome": "success"
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "true: interpreted tackle",
+  "true": true,
+  "claim": "h7 wins the ball back from a10, a crucial defensive intervention.",
+  "evidence": [
+   {
+    "id": "e00045",
+    "minute": 3,
+    "second": 4,
+    "type": "tackle",
+    "team": "home",
+    "player": "h7",
+    "receiver": "a10",
+    "outcome": "success"
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "true: interpreted pass",
+  "true": true,
+  "claim": "a8 picks out a10 with a 29 m pass, a confident ball forward.",
+  "evidence": [
+   {
+    "id": "e00007",
+    "minute": 1,
+    "second": 9,
+    "type": "pass",
+    "team": "away",
+    "player": "a8",
+    "receiver": "a10",
+    "outcome": "success",
+    "ball_speed_kmh": 78,
+    "distance_m": 29
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "true: interpreted pass",
+  "true": true,
+  "claim": "a10 picks out a11 with a 19 m pass, a confident ball forward.",
+  "evidence": [
+   {
+    "id": "e00008",
+    "minute": 1,
+    "second": 13,
+    "type": "pass",
+    "team": "away",
+    "player": "a10",
+    "receiver": "a11",
+    "outcome": "success",
+    "ball_speed_kmh": 70,
+    "distance_m": 19
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "true: interpreted pass",
+  "true": true,
+  "claim": "a11 picks out a6 with a 29 m pass, a confident ball forward.",
+  "evidence": [
+   {
+    "id": "e00009",
+    "minute": 1,
+    "second": 18,
+    "type": "pass",
+    "team": "away",
+    "player": "a11",
+    "receiver": "a6",
+    "outcome": "success",
+    "ball_speed_kmh": 60,
+    "distance_m": 29
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "true: interpreted pass",
+  "true": true,
+  "claim": "a6 picks out a10 with a 17 m pass, a confident ball forward.",
+  "evidence": [
+   {
+    "id": "e00011",
+    "minute": 1,
+    "second": 23,
+    "type": "pass",
+    "team": "away",
+    "player": "a6",
+    "receiver": "a10",
+    "outcome": "success",
+    "ball_speed_kmh": 63,
+    "distance_m": 17
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "true: interpreted shot",
+  "true": true,
+  "claim": "a10 tries their luck at 82 km/h, an ambitious effort.",
+  "evidence": [
+   {
+    "id": "e00086",
+    "minute": 4,
+    "second": 26,
+    "type": "shot",
+    "team": "away",
+    "player": "a10",
+    "outcome": "off_target",
+    "ball_speed_kmh": 82,
+    "distance_m": 17
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "true: interpreted shot",
+  "true": true,
+  "claim": "a10 tries their luck at 74 km/h, an ambitious effort.",
+  "evidence": [
+   {
+    "id": "e00113",
+    "minute": 5,
+    "second": 42,
+    "type": "shot",
+    "team": "away",
+    "player": "a10",
+    "outcome": "off_target",
+    "ball_speed_kmh": 74,
+    "distance_m": 18
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "true: interpreted shot",
+  "true": true,
+  "claim": "h10 tries their luck at 96 km/h, an ambitious effort.",
+  "evidence": [
+   {
+    "id": "e00135",
+    "minute": 7,
+    "second": 0,
+    "type": "shot",
+    "team": "home",
+    "player": "h10",
+    "outcome": "off_target",
+    "ball_speed_kmh": 96,
+    "distance_m": 11
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "true: interpreted shot",
+  "true": true,
+  "claim": "h10 tries their luck at 116 km/h, an ambitious effort.",
+  "evidence": [
+   {
+    "id": "e00207",
+    "minute": 9,
+    "second": 46,
+    "type": "shot",
+    "team": "home",
+    "player": "h10",
+    "outcome": "on_target",
+    "ball_speed_kmh": 116,
+    "distance_m": 16
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "false: wrong number",
+  "true": false,
+  "claim": "a8 plays a 38 m pass to a10.",
+  "evidence": [
+   {
+    "id": "e00007",
+    "minute": 1,
+    "second": 9,
+    "type": "pass",
+    "team": "away",
+    "player": "a8",
+    "receiver": "a10",
+    "outcome": "success",
+    "ball_speed_kmh": 78,
+    "distance_m": 29
+   }
+  ],
+  "seed": 7,
+  "code_ok": false,
+  "judge_ok": null,
+  "reasons": [
+   "number 38 is not in the cited evidence"
+  ]
+ },
+ {
+  "kind": "false: wrong number",
+  "true": false,
+  "claim": "a10 plays a 28 m pass to a11.",
+  "evidence": [
+   {
+    "id": "e00008",
+    "minute": 1,
+    "second": 13,
+    "type": "pass",
+    "team": "away",
+    "player": "a10",
+    "receiver": "a11",
+    "outcome": "success",
+    "ball_speed_kmh": 70,
+    "distance_m": 19
+   }
+  ],
+  "seed": 7,
+  "code_ok": false,
+  "judge_ok": null,
+  "reasons": [
+   "number 28 is not in the cited evidence"
+  ]
+ },
+ {
+  "kind": "false: wrong number",
+  "true": false,
+  "claim": "a11 plays a 38 m pass to a6.",
+  "evidence": [
+   {
+    "id": "e00009",
+    "minute": 1,
+    "second": 18,
+    "type": "pass",
+    "team": "away",
+    "player": "a11",
+    "receiver": "a6",
+    "outcome": "success",
+    "ball_speed_kmh": 60,
+    "distance_m": 29
+   }
+  ],
+  "seed": 7,
+  "code_ok": false,
+  "judge_ok": null,
+  "reasons": [
+   "number 38 is not in the cited evidence"
+  ]
+ },
+ {
+  "kind": "false: wrong number",
+  "true": false,
+  "claim": "a6 plays a 26 m pass to a10.",
+  "evidence": [
+   {
+    "id": "e00011",
+    "minute": 1,
+    "second": 23,
+    "type": "pass",
+    "team": "away",
+    "player": "a6",
+    "receiver": "a10",
+    "outcome": "success",
+    "ball_speed_kmh": 63,
+    "distance_m": 17
+   }
+  ],
+  "seed": 7,
+  "code_ok": false,
+  "judge_ok": null,
+  "reasons": [
+   "number 26 is not in the cited evidence"
+  ]
+ },
+ {
+  "kind": "false: wrong player",
+  "true": false,
+  "claim": "a8 plays a 29 m pass to a2.",
+  "evidence": [
+   {
+    "id": "e00007",
+    "minute": 1,
+    "second": 9,
+    "type": "pass",
+    "team": "away",
+    "player": "a8",
+    "receiver": "a10",
+    "outcome": "success",
+    "ball_speed_kmh": 78,
+    "distance_m": 29
+   }
+  ],
+  "seed": 7,
+  "code_ok": false,
+  "judge_ok": null,
+  "reasons": [
+   "player a2 does not appear in the cited evidence"
+  ]
+ },
+ {
+  "kind": "false: wrong player",
+  "true": false,
+  "claim": "a10 plays a 19 m pass to a2.",
+  "evidence": [
+   {
+    "id": "e00008",
+    "minute": 1,
+    "second": 13,
+    "type": "pass",
+    "team": "away",
+    "player": "a10",
+    "receiver": "a11",
+    "outcome": "success",
+    "ball_speed_kmh": 70,
+    "distance_m": 19
+   }
+  ],
+  "seed": 7,
+  "code_ok": false,
+  "judge_ok": null,
+  "reasons": [
+   "player a2 does not appear in the cited evidence"
+  ]
+ },
+ {
+  "kind": "false: wrong player",
+  "true": false,
+  "claim": "a11 plays a 29 m pass to a2.",
+  "evidence": [
+   {
+    "id": "e00009",
+    "minute": 1,
+    "second": 18,
+    "type": "pass",
+    "team": "away",
+    "player": "a11",
+    "receiver": "a6",
+    "outcome": "success",
+    "ball_speed_kmh": 60,
+    "distance_m": 29
+   }
+  ],
+  "seed": 7,
+  "code_ok": false,
+  "judge_ok": null,
+  "reasons": [
+   "player a2 does not appear in the cited evidence"
+  ]
+ },
+ {
+  "kind": "false: wrong player",
+  "true": false,
+  "claim": "a6 plays a 17 m pass to a2.",
+  "evidence": [
+   {
+    "id": "e00011",
+    "minute": 1,
+    "second": 23,
+    "type": "pass",
+    "team": "away",
+    "player": "a6",
+    "receiver": "a10",
+    "outcome": "success",
+    "ball_speed_kmh": 63,
+    "distance_m": 17
+   }
+  ],
+  "seed": 7,
+  "code_ok": false,
+  "judge_ok": null,
+  "reasons": [
+   "player a2 does not appear in the cited evidence"
+  ]
+ },
+ {
+  "kind": "meaning: intercepted pass called completed",
+  "true": false,
+  "claim": "h10 finds a8 with a 13 m pass.",
+  "evidence": [
+   {
+    "id": "e00003",
+    "minute": 1,
+    "second": 4,
+    "type": "pass",
+    "team": "home",
+    "player": "h10",
+    "receiver": "a8",
+    "outcome": "fail",
+    "ball_speed_kmh": 61,
+    "distance_m": 13
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "contradicted fact: 'h10 finds a8 with a 13 m pass.' (The pass from h10 to a8 was 13 m but the outcome was 'fail', so h10 did not find a8 with the pass.)"
+  ]
+ },
+ {
+  "kind": "meaning: intercepted pass called completed",
+  "true": false,
+  "claim": "a10 finds h8 with a 12 m pass.",
+  "evidence": [
+   {
+    "id": "e00014",
+    "minute": 1,
+    "second": 38,
+    "type": "pass",
+    "team": "away",
+    "player": "a10",
+    "receiver": "h8",
+    "outcome": "fail",
+    "ball_speed_kmh": 51,
+    "distance_m": 12
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "contradicted fact: 'a10 finds h8 with a 12 m pass' (The pass from a10 to h8 was unsuccessful (outcome 'fail'), so a10 did not find h8 with the pass.)"
+  ]
+ },
+ {
+  "kind": "meaning: intercepted pass called completed",
+  "true": false,
+  "claim": "a6 finds h6 with a 15 m pass.",
+  "evidence": [
+   {
+    "id": "e00052",
+    "minute": 3,
+    "second": 13,
+    "type": "pass",
+    "team": "away",
+    "player": "a6",
+    "receiver": "h6",
+    "outcome": "fail",
+    "ball_speed_kmh": 56,
+    "distance_m": 15
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "contradicted fact: 'a6 finds h6 with a 15 m pass' (The pass from a6 to h6 was unsuccessful (outcome 'fail'), so a6 did not find h6 with the pass, although the distance was 15 m.)"
+  ]
+ },
+ {
+  "kind": "meaning: intercepted pass called completed",
+  "true": false,
+  "claim": "h9 finds a7 with a 17 m pass.",
+  "evidence": [
+   {
+    "id": "e00057",
+    "minute": 3,
+    "second": 22,
+    "type": "pass",
+    "team": "home",
+    "player": "h9",
+    "receiver": "a7",
+    "outcome": "fail",
+    "ball_speed_kmh": 76,
+    "distance_m": 17
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "contradicted fact: 'h9 finds a7 with a 17 m pass.' (The pass from h9 to a7 was 17 m but the outcome was 'fail', so h9 did not successfully find a7.)"
+  ]
+ },
+ {
+  "kind": "meaning: completed pass called cut out",
+  "true": false,
+  "claim": "a8's 29 m pass to a10 is cut out.",
+  "evidence": [
+   {
+    "id": "e00007",
+    "minute": 1,
+    "second": 9,
+    "type": "pass",
+    "team": "away",
+    "player": "a8",
+    "receiver": "a10",
+    "outcome": "success",
+    "ball_speed_kmh": 78,
+    "distance_m": 29
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "contradicted fact: 'a8's 29 m pass to a10 is cut out' (The evidence shows that a8's 29 m pass to a10 was successful, not cut out.)"
+  ]
+ },
+ {
+  "kind": "meaning: completed pass called cut out",
+  "true": false,
+  "claim": "a10's 19 m pass to a11 is cut out.",
+  "evidence": [
+   {
+    "id": "e00008",
+    "minute": 1,
+    "second": 13,
+    "type": "pass",
+    "team": "away",
+    "player": "a10",
+    "receiver": "a11",
+    "outcome": "success",
+    "ball_speed_kmh": 70,
+    "distance_m": 19
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "contradicted fact: 'a10's 19 m pass to a11 is cut out' (The evidence shows a10's 19 m pass to a11 was successful, not cut out.)"
+  ]
+ },
+ {
+  "kind": "meaning: completed pass called cut out",
+  "true": false,
+  "claim": "a11's 29 m pass to a6 is cut out.",
+  "evidence": [
+   {
+    "id": "e00009",
+    "minute": 1,
+    "second": 18,
+    "type": "pass",
+    "team": "away",
+    "player": "a11",
+    "receiver": "a6",
+    "outcome": "success",
+    "ball_speed_kmh": 60,
+    "distance_m": 29
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "contradicted fact: 'a11's 29 m pass to a6 is cut out' (The evidence shows that a11's 29 m pass to a6 was successful, not cut out.)"
+  ]
+ },
+ {
+  "kind": "meaning: completed pass called cut out",
+  "true": false,
+  "claim": "a6's 17 m pass to a10 is cut out.",
+  "evidence": [
+   {
+    "id": "e00011",
+    "minute": 1,
+    "second": 23,
+    "type": "pass",
+    "team": "away",
+    "player": "a6",
+    "receiver": "a10",
+    "outcome": "success",
+    "ball_speed_kmh": 63,
+    "distance_m": 17
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "contradicted fact: 'a6's 17 m pass to a10 is cut out' (The evidence shows the pass from a6 to a10 was successful, not cut out.)"
+  ]
+ },
+ {
+  "kind": "meaning: wrong team",
+  "true": false,
+  "claim": "a8 of the home side plays a 29 m pass.",
+  "evidence": [
+   {
+    "id": "e00007",
+    "minute": 1,
+    "second": 9,
+    "type": "pass",
+    "team": "away",
+    "player": "a8",
+    "receiver": "a10",
+    "outcome": "success",
+    "ball_speed_kmh": 78,
+    "distance_m": 29
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "contradicted fact: 'a8 of the home side plays a 29 m pass' (The evidence shows that player a8 is on the away team, not the home side, and plays a 29 m pass.)"
+  ]
+ },
+ {
+  "kind": "meaning: wrong team",
+  "true": false,
+  "claim": "a10 of the home side plays a 19 m pass.",
+  "evidence": [
+   {
+    "id": "e00008",
+    "minute": 1,
+    "second": 13,
+    "type": "pass",
+    "team": "away",
+    "player": "a10",
+    "receiver": "a11",
+    "outcome": "success",
+    "ball_speed_kmh": 70,
+    "distance_m": 19
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "contradicted fact: 'a10 of the home side plays a 19 m pass.' (The evidence shows a10 of the away team, not the home side, plays a 19 m pass.)"
+  ]
+ },
+ {
+  "kind": "meaning: wrong team",
+  "true": false,
+  "claim": "a11 of the home side plays a 29 m pass.",
+  "evidence": [
+   {
+    "id": "e00009",
+    "minute": 1,
+    "second": 18,
+    "type": "pass",
+    "team": "away",
+    "player": "a11",
+    "receiver": "a6",
+    "outcome": "success",
+    "ball_speed_kmh": 60,
+    "distance_m": 29
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "contradicted fact: 'a11 of the home side plays a 29 m pass.' (The evidence shows that a11 belongs to the away team, not the home side, and played a 29 m pass.)"
+  ]
+ },
+ {
+  "kind": "meaning: wrong team",
+  "true": false,
+  "claim": "a6 of the home side plays a 17 m pass.",
+  "evidence": [
+   {
+    "id": "e00011",
+    "minute": 1,
+    "second": 23,
+    "type": "pass",
+    "team": "away",
+    "player": "a6",
+    "receiver": "a10",
+    "outcome": "success",
+    "ball_speed_kmh": 63,
+    "distance_m": 17
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "contradicted fact: 'a6 of the home side plays a 17 m pass' (The evidence shows that player a6 of the away team, not the home side, played a 17 m pass.)"
+  ]
+ },
+ {
+  "kind": "meaning: invented passing move",
+  "true": false,
+  "claim": "a8 ends a long passing move with a pass to a10.",
+  "evidence": [
+   {
+    "id": "e00007",
+    "minute": 1,
+    "second": 9,
+    "type": "pass",
+    "team": "away",
+    "player": "a8",
+    "receiver": "a10",
+    "outcome": "success",
+    "ball_speed_kmh": 78,
+    "distance_m": 29
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "unsupported fact: 'a8 ends a long passing move with a pass to a10' (The evidence shows a single pass from a8 to a10, but does not provide information about a preceding long passing move or sequence of passes leading to this pass.)"
+  ]
+ },
+ {
+  "kind": "meaning: invented passing move",
+  "true": false,
+  "claim": "a10 ends a long passing move with a pass to a11.",
+  "evidence": [
+   {
+    "id": "e00008",
+    "minute": 1,
+    "second": 13,
+    "type": "pass",
+    "team": "away",
+    "player": "a10",
+    "receiver": "a11",
+    "outcome": "success",
+    "ball_speed_kmh": 70,
+    "distance_m": 19
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "unsupported fact: 'a10 ends a long passing move with a pass to a11' (The evidence shows a single pass from a10 to a11, but does not establish that it was the end of a long passing move.)"
+  ]
+ },
+ {
+  "kind": "meaning: invented passing move",
+  "true": false,
+  "claim": "a11 ends a long passing move with a pass to a6.",
+  "evidence": [
+   {
+    "id": "e00009",
+    "minute": 1,
+    "second": 18,
+    "type": "pass",
+    "team": "away",
+    "player": "a11",
+    "receiver": "a6",
+    "outcome": "success",
+    "ball_speed_kmh": 60,
+    "distance_m": 29
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "unsupported fact: 'a11 ends a long passing move with a pass to a6' (The evidence shows a single pass from a11 to a6, but does not provide information about a preceding long passing move or multiple passes leading up to this one.)"
+  ]
+ },
+ {
+  "kind": "meaning: invented passing move",
+  "true": false,
+  "claim": "a6 ends a long passing move with a pass to a10.",
+  "evidence": [
+   {
+    "id": "e00011",
+    "minute": 1,
+    "second": 23,
+    "type": "pass",
+    "team": "away",
+    "player": "a6",
+    "receiver": "a10",
+    "outcome": "success",
+    "ball_speed_kmh": 63,
+    "distance_m": 17
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "unsupported fact: 'a6 ends a long passing move with a pass to a10.' (The evidence shows a single successful pass from a6 to a10, but does not establish that it ended a long passing move.)"
+  ]
+ },
+ {
+  "kind": "meaning: missed shot called a goal",
+  "true": false,
+  "claim": "a10 scores with a shot at 82 km/h.",
+  "evidence": [
+   {
+    "id": "e00086",
+    "minute": 4,
+    "second": 26,
+    "type": "shot",
+    "team": "away",
+    "player": "a10",
+    "outcome": "off_target",
+    "ball_speed_kmh": 82,
+    "distance_m": 17
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "contradicted fact: 'a10 scores with a shot at 82 km/h.' (The evidence shows a shot by a10 at 82 km/h but the outcome is 'off_target', meaning the shot did not score.)"
+  ]
+ },
+ {
+  "kind": "meaning: missed shot called a goal",
+  "true": false,
+  "claim": "a10 scores with a shot at 74 km/h.",
+  "evidence": [
+   {
+    "id": "e00113",
+    "minute": 5,
+    "second": 42,
+    "type": "shot",
+    "team": "away",
+    "player": "a10",
+    "outcome": "off_target",
+    "ball_speed_kmh": 74,
+    "distance_m": 18
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "contradicted fact: 'a10 scores with a shot at 74 km/h.' (The evidence shows a shot by a10 at 74 km/h but the outcome is 'off_target', so it did not score.)"
+  ]
+ },
+ {
+  "kind": "meaning: missed shot called a goal",
+  "true": false,
+  "claim": "h10 scores with a shot at 96 km/h.",
+  "evidence": [
+   {
+    "id": "e00135",
+    "minute": 7,
+    "second": 0,
+    "type": "shot",
+    "team": "home",
+    "player": "h10",
+    "outcome": "off_target",
+    "ball_speed_kmh": 96,
+    "distance_m": 11
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "contradicted fact: 'h10 scores with a shot at 96 km/h.' (The evidence shows h10 took a shot at 96 km/h but the outcome was 'off_target', so it was not a goal.)"
+  ]
+ },
+ {
+  "kind": "meaning: missed shot called a goal",
+  "true": false,
+  "claim": "h10 scores with a shot at 116 km/h.",
+  "evidence": [
+   {
+    "id": "e00207",
+    "minute": 9,
+    "second": 46,
+    "type": "shot",
+    "team": "home",
+    "player": "h10",
+    "outcome": "on_target",
+    "ball_speed_kmh": 116,
+    "distance_m": 16
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "unsupported fact: 'h10 scores with a shot at 116 km/h.' (The evidence shows h10 took a shot at 116 km/h that was on target, but does not indicate that it resulted in a goal (score).)"
+  ]
+ },
+ {
+  "kind": "meaning: invented consequence",
+  "true": false,
+  "claim": "a9's tackle on h5 leads straight to a goal.",
+  "evidence": [
+   {
+    "id": "e00021",
+    "minute": 1,
+    "second": 51,
+    "type": "tackle",
+    "team": "away",
+    "player": "a9",
+    "receiver": "h5",
+    "outcome": "success"
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "unsupported fact: 'a9's tackle on h5 leads straight to a goal.' (The evidence shows a successful tackle by a9 on h5, but there is no information about a goal occurring after this tackle.)"
+  ]
+ },
+ {
+  "kind": "meaning: invented consequence",
+  "true": false,
+  "claim": "h6's tackle on a11 leads straight to a goal.",
+  "evidence": [
+   {
+    "id": "e00036",
+    "minute": 2,
+    "second": 54,
+    "type": "tackle",
+    "team": "home",
+    "player": "h6",
+    "receiver": "a11",
+    "outcome": "success"
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "unsupported fact: 'h6's tackle on a11 leads straight to a goal.' (The evidence shows a successful tackle by h6 on a11 at 2:54, but there is no evidence of a goal occurring after this tackle.)"
+  ]
+ },
+ {
+  "kind": "meaning: invented consequence",
+  "true": false,
+  "claim": "a10's tackle on h4 leads straight to a goal.",
+  "evidence": [
+   {
+    "id": "e00042",
+    "minute": 3,
+    "second": 3,
+    "type": "tackle",
+    "team": "away",
+    "player": "a10",
+    "receiver": "h4",
+    "outcome": "success"
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "unsupported fact: 'a10's tackle on h4 leads straight to a goal.' (The evidence shows a successful tackle by a10 on h4, but there is no information about a goal or any event following the tackle that results in a goal.)"
+  ]
+ },
+ {
+  "kind": "meaning: invented consequence",
+  "true": false,
+  "claim": "h7's tackle on a10 leads straight to a goal.",
+  "evidence": [
+   {
+    "id": "e00045",
+    "minute": 3,
+    "second": 4,
+    "type": "tackle",
+    "team": "home",
+    "player": "h7",
+    "receiver": "a10",
+    "outcome": "success"
+   }
+  ],
+  "seed": 7,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "unsupported fact: 'leads straight to a goal' (The evidence does not mention any goal following the tackle or any goal event at all.)"
+  ]
+ },
+ {
+  "kind": "true: completed pass",
+  "true": true,
+  "claim": "h10 plays a 6 m pass to h7.",
+  "evidence": [
+   {
+    "id": "e00003",
+    "minute": 1,
+    "second": 4,
+    "type": "pass",
+    "team": "home",
+    "player": "h10",
+    "receiver": "h7",
+    "outcome": "success",
+    "ball_speed_kmh": 51,
+    "distance_m": 6
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "true: completed pass",
+  "true": true,
+  "claim": "h7 plays a 10 m pass to h6.",
+  "evidence": [
+   {
+    "id": "e00004",
+    "minute": 1,
+    "second": 8,
+    "type": "pass",
+    "team": "home",
+    "player": "h7",
+    "receiver": "h6",
+    "outcome": "success",
+    "ball_speed_kmh": 63,
+    "distance_m": 10
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "true: completed pass",
+  "true": true,
+  "claim": "h6 plays a 26 m pass to h10.",
+  "evidence": [
+   {
+    "id": "e00006",
+    "minute": 1,
+    "second": 13,
+    "type": "pass",
+    "team": "home",
+    "player": "h6",
+    "receiver": "h10",
+    "outcome": "success",
+    "ball_speed_kmh": 52,
+    "distance_m": 26
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "true: completed pass",
+  "true": true,
+  "claim": "h10 plays a 16 m pass to h9.",
+  "evidence": [
+   {
+    "id": "e00008",
+    "minute": 1,
+    "second": 21,
+    "type": "pass",
+    "team": "home",
+    "player": "h10",
+    "receiver": "h9",
+    "outcome": "success",
+    "ball_speed_kmh": 72,
+    "distance_m": 16
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "true: tackle",
+  "true": true,
+  "claim": "h8 wins the ball from a9 with a tackle.",
+  "evidence": [
+   {
+    "id": "e00021",
+    "minute": 1,
+    "second": 60,
+    "type": "tackle",
+    "team": "home",
+    "player": "h8",
+    "receiver": "a9",
+    "outcome": "success"
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "true: tackle",
+  "true": true,
+  "claim": "a8 wins the ball from h9 with a tackle.",
+  "evidence": [
+   {
+    "id": "e00144",
+    "minute": 7,
+    "second": 36,
+    "type": "tackle",
+    "team": "away",
+    "player": "a8",
+    "receiver": "h9",
+    "outcome": "success"
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "true: tackle",
+  "true": true,
+  "claim": "h9 wins the ball from a8 with a tackle.",
+  "evidence": [
+   {
+    "id": "e00147",
+    "minute": 7,
+    "second": 38,
+    "type": "tackle",
+    "team": "home",
+    "player": "h9",
+    "receiver": "a8",
+    "outcome": "success"
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "true: tackle",
+  "true": true,
+  "claim": "a10 wins the ball from h4 with a tackle.",
+  "evidence": [
+   {
+    "id": "e00160",
+    "minute": 8,
+    "second": 11,
+    "type": "tackle",
+    "team": "away",
+    "player": "a10",
+    "receiver": "h4",
+    "outcome": "success"
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "true: shot",
+  "true": true,
+  "claim": "h11 shoots at 88 km/h.",
+  "evidence": [
+   {
+    "id": "e00011",
+    "minute": 1,
+    "second": 32,
+    "type": "shot",
+    "team": "home",
+    "player": "h11",
+    "outcome": "off_target",
+    "ball_speed_kmh": 88,
+    "distance_m": 11
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "true: shot",
+  "true": true,
+  "claim": "a10 shoots at 105 km/h.",
+  "evidence": [
+   {
+    "id": "e00076",
+    "minute": 4,
+    "second": 25,
+    "type": "shot",
+    "team": "away",
+    "player": "a10",
+    "outcome": "on_target",
+    "ball_speed_kmh": 105,
+    "distance_m": 18
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "true: shot",
+  "true": true,
+  "claim": "h10 shoots at 119 km/h.",
+  "evidence": [
+   {
+    "id": "e00101",
+    "minute": 5,
+    "second": 35,
+    "type": "shot",
+    "team": "home",
+    "player": "h10",
+    "outcome": "off_target",
+    "ball_speed_kmh": 119,
+    "distance_m": 18
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "true: shot",
+  "true": true,
+  "claim": "a10 shoots at 76 km/h.",
+  "evidence": [
+   {
+    "id": "e00138",
+    "minute": 7,
+    "second": 24,
+    "type": "shot",
+    "team": "away",
+    "player": "a10",
+    "outcome": "off_target",
+    "ball_speed_kmh": 76,
+    "distance_m": 18
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "true: interpreted tackle",
+  "true": true,
+  "claim": "h8 wins the ball back from a9, a crucial defensive intervention.",
+  "evidence": [
+   {
+    "id": "e00021",
+    "minute": 1,
+    "second": 60,
+    "type": "tackle",
+    "team": "home",
+    "player": "h8",
+    "receiver": "a9",
+    "outcome": "success"
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "true: interpreted tackle",
+  "true": true,
+  "claim": "a8 wins the ball back from h9, a crucial defensive intervention.",
+  "evidence": [
+   {
+    "id": "e00144",
+    "minute": 7,
+    "second": 36,
+    "type": "tackle",
+    "team": "away",
+    "player": "a8",
+    "receiver": "h9",
+    "outcome": "success"
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "true: interpreted tackle",
+  "true": true,
+  "claim": "h9 wins the ball back from a8, a crucial defensive intervention.",
+  "evidence": [
+   {
+    "id": "e00147",
+    "minute": 7,
+    "second": 38,
+    "type": "tackle",
+    "team": "home",
+    "player": "h9",
+    "receiver": "a8",
+    "outcome": "success"
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "true: interpreted tackle",
+  "true": true,
+  "claim": "a10 wins the ball back from h4, a crucial defensive intervention.",
+  "evidence": [
+   {
+    "id": "e00160",
+    "minute": 8,
+    "second": 11,
+    "type": "tackle",
+    "team": "away",
+    "player": "a10",
+    "receiver": "h4",
+    "outcome": "success"
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "true: interpreted pass",
+  "true": true,
+  "claim": "h10 picks out h7 with a 6 m pass, a confident ball forward.",
+  "evidence": [
+   {
+    "id": "e00003",
+    "minute": 1,
+    "second": 4,
+    "type": "pass",
+    "team": "home",
+    "player": "h10",
+    "receiver": "h7",
+    "outcome": "success",
+    "ball_speed_kmh": 51,
+    "distance_m": 6
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "true: interpreted pass",
+  "true": true,
+  "claim": "h7 picks out h6 with a 10 m pass, a confident ball forward.",
+  "evidence": [
+   {
+    "id": "e00004",
+    "minute": 1,
+    "second": 8,
+    "type": "pass",
+    "team": "home",
+    "player": "h7",
+    "receiver": "h6",
+    "outcome": "success",
+    "ball_speed_kmh": 63,
+    "distance_m": 10
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "true: interpreted pass",
+  "true": true,
+  "claim": "h6 picks out h10 with a 26 m pass, a confident ball forward.",
+  "evidence": [
+   {
+    "id": "e00006",
+    "minute": 1,
+    "second": 13,
+    "type": "pass",
+    "team": "home",
+    "player": "h6",
+    "receiver": "h10",
+    "outcome": "success",
+    "ball_speed_kmh": 52,
+    "distance_m": 26
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "true: interpreted pass",
+  "true": true,
+  "claim": "h10 picks out h9 with a 16 m pass, a confident ball forward.",
+  "evidence": [
+   {
+    "id": "e00008",
+    "minute": 1,
+    "second": 21,
+    "type": "pass",
+    "team": "home",
+    "player": "h10",
+    "receiver": "h9",
+    "outcome": "success",
+    "ball_speed_kmh": 72,
+    "distance_m": 16
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "true: interpreted shot",
+  "true": true,
+  "claim": "h11 tries their luck at 88 km/h, an ambitious effort.",
+  "evidence": [
+   {
+    "id": "e00011",
+    "minute": 1,
+    "second": 32,
+    "type": "shot",
+    "team": "home",
+    "player": "h11",
+    "outcome": "off_target",
+    "ball_speed_kmh": 88,
+    "distance_m": 11
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "true: interpreted shot",
+  "true": true,
+  "claim": "a10 tries their luck at 105 km/h, an ambitious effort.",
+  "evidence": [
+   {
+    "id": "e00076",
+    "minute": 4,
+    "second": 25,
+    "type": "shot",
+    "team": "away",
+    "player": "a10",
+    "outcome": "on_target",
+    "ball_speed_kmh": 105,
+    "distance_m": 18
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "true: interpreted shot",
+  "true": true,
+  "claim": "h10 tries their luck at 119 km/h, an ambitious effort.",
+  "evidence": [
+   {
+    "id": "e00101",
+    "minute": 5,
+    "second": 35,
+    "type": "shot",
+    "team": "home",
+    "player": "h10",
+    "outcome": "off_target",
+    "ball_speed_kmh": 119,
+    "distance_m": 18
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "true: interpreted shot",
+  "true": true,
+  "claim": "a10 tries their luck at 76 km/h, an ambitious effort.",
+  "evidence": [
+   {
+    "id": "e00138",
+    "minute": 7,
+    "second": 24,
+    "type": "shot",
+    "team": "away",
+    "player": "a10",
+    "outcome": "off_target",
+    "ball_speed_kmh": 76,
+    "distance_m": 18
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": true,
+  "reasons": []
+ },
+ {
+  "kind": "false: wrong number",
+  "true": false,
+  "claim": "h10 plays a 15 m pass to h7.",
+  "evidence": [
+   {
+    "id": "e00003",
+    "minute": 1,
+    "second": 4,
+    "type": "pass",
+    "team": "home",
+    "player": "h10",
+    "receiver": "h7",
+    "outcome": "success",
+    "ball_speed_kmh": 51,
+    "distance_m": 6
+   }
+  ],
+  "seed": 21,
+  "code_ok": false,
+  "judge_ok": null,
+  "reasons": [
+   "number 15 is not in the cited evidence"
+  ]
+ },
+ {
+  "kind": "false: wrong number",
+  "true": false,
+  "claim": "h7 plays a 19 m pass to h6.",
+  "evidence": [
+   {
+    "id": "e00004",
+    "minute": 1,
+    "second": 8,
+    "type": "pass",
+    "team": "home",
+    "player": "h7",
+    "receiver": "h6",
+    "outcome": "success",
+    "ball_speed_kmh": 63,
+    "distance_m": 10
+   }
+  ],
+  "seed": 21,
+  "code_ok": false,
+  "judge_ok": null,
+  "reasons": [
+   "number 19 is not in the cited evidence"
+  ]
+ },
+ {
+  "kind": "false: wrong number",
+  "true": false,
+  "claim": "h6 plays a 35 m pass to h10.",
+  "evidence": [
+   {
+    "id": "e00006",
+    "minute": 1,
+    "second": 13,
+    "type": "pass",
+    "team": "home",
+    "player": "h6",
+    "receiver": "h10",
+    "outcome": "success",
+    "ball_speed_kmh": 52,
+    "distance_m": 26
+   }
+  ],
+  "seed": 21,
+  "code_ok": false,
+  "judge_ok": null,
+  "reasons": [
+   "number 35 is not in the cited evidence"
+  ]
+ },
+ {
+  "kind": "false: wrong number",
+  "true": false,
+  "claim": "h10 plays a 25 m pass to h9.",
+  "evidence": [
+   {
+    "id": "e00008",
+    "minute": 1,
+    "second": 21,
+    "type": "pass",
+    "team": "home",
+    "player": "h10",
+    "receiver": "h9",
+    "outcome": "success",
+    "ball_speed_kmh": 72,
+    "distance_m": 16
+   }
+  ],
+  "seed": 21,
+  "code_ok": false,
+  "judge_ok": null,
+  "reasons": [
+   "number 25 is not in the cited evidence"
+  ]
+ },
+ {
+  "kind": "false: wrong player",
+  "true": false,
+  "claim": "h10 plays a 6 m pass to h2.",
+  "evidence": [
+   {
+    "id": "e00003",
+    "minute": 1,
+    "second": 4,
+    "type": "pass",
+    "team": "home",
+    "player": "h10",
+    "receiver": "h7",
+    "outcome": "success",
+    "ball_speed_kmh": 51,
+    "distance_m": 6
+   }
+  ],
+  "seed": 21,
+  "code_ok": false,
+  "judge_ok": null,
+  "reasons": [
+   "player h2 does not appear in the cited evidence"
+  ]
+ },
+ {
+  "kind": "false: wrong player",
+  "true": false,
+  "claim": "h7 plays a 10 m pass to h2.",
+  "evidence": [
+   {
+    "id": "e00004",
+    "minute": 1,
+    "second": 8,
+    "type": "pass",
+    "team": "home",
+    "player": "h7",
+    "receiver": "h6",
+    "outcome": "success",
+    "ball_speed_kmh": 63,
+    "distance_m": 10
+   }
+  ],
+  "seed": 21,
+  "code_ok": false,
+  "judge_ok": null,
+  "reasons": [
+   "player h2 does not appear in the cited evidence"
+  ]
+ },
+ {
+  "kind": "false: wrong player",
+  "true": false,
+  "claim": "h6 plays a 26 m pass to h2.",
+  "evidence": [
+   {
+    "id": "e00006",
+    "minute": 1,
+    "second": 13,
+    "type": "pass",
+    "team": "home",
+    "player": "h6",
+    "receiver": "h10",
+    "outcome": "success",
+    "ball_speed_kmh": 52,
+    "distance_m": 26
+   }
+  ],
+  "seed": 21,
+  "code_ok": false,
+  "judge_ok": null,
+  "reasons": [
+   "player h2 does not appear in the cited evidence"
+  ]
+ },
+ {
+  "kind": "false: wrong player",
+  "true": false,
+  "claim": "h10 plays a 16 m pass to h2.",
+  "evidence": [
+   {
+    "id": "e00008",
+    "minute": 1,
+    "second": 21,
+    "type": "pass",
+    "team": "home",
+    "player": "h10",
+    "receiver": "h9",
+    "outcome": "success",
+    "ball_speed_kmh": 72,
+    "distance_m": 16
+   }
+  ],
+  "seed": 21,
+  "code_ok": false,
+  "judge_ok": null,
+  "reasons": [
+   "player h2 does not appear in the cited evidence"
+  ]
+ },
+ {
+  "kind": "meaning: intercepted pass called completed",
+  "true": false,
+  "claim": "h7 finds a10 with a 5 m pass.",
+  "evidence": [
+   {
+    "id": "e00027",
+    "minute": 2,
+    "second": 11,
+    "type": "pass",
+    "team": "home",
+    "player": "h7",
+    "receiver": "a10",
+    "outcome": "fail",
+    "ball_speed_kmh": 70,
+    "distance_m": 5
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "contradicted fact: 'h7 finds a10 with a 5 m pass.' (The pass from h7 to a10 was 5 meters but the outcome was 'fail', so h7 did not successfully find a10 with the pass.)"
+  ]
+ },
+ {
+  "kind": "meaning: intercepted pass called completed",
+  "true": false,
+  "claim": "a8 finds h7 with a 9 m pass.",
+  "evidence": [
+   {
+    "id": "e00035",
+    "minute": 2,
+    "second": 29,
+    "type": "pass",
+    "team": "away",
+    "player": "a8",
+    "receiver": "h7",
+    "outcome": "fail",
+    "ball_speed_kmh": 84,
+    "distance_m": 9
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "contradicted fact: 'a8 finds h7 with a 9 m pass' (The pass from a8 to h7 was unsuccessful (outcome 'fail'), so a8 did not find h7 with the pass.)"
+  ]
+ },
+ {
+  "kind": "meaning: intercepted pass called completed",
+  "true": false,
+  "claim": "h6 finds a7 with a 11 m pass.",
+  "evidence": [
+   {
+    "id": "e00043",
+    "minute": 2,
+    "second": 47,
+    "type": "pass",
+    "team": "home",
+    "player": "h6",
+    "receiver": "a7",
+    "outcome": "fail",
+    "ball_speed_kmh": 81,
+    "distance_m": 11
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "contradicted fact: 'h6 finds a7 with a 11 m pass.' (The pass from h6 to a7 was 11 meters but the outcome was 'fail', so h6 did not find a7 with the pass.)"
+  ]
+ },
+ {
+  "kind": "meaning: intercepted pass called completed",
+  "true": false,
+  "claim": "a11 finds h7 with a 17 m pass.",
+  "evidence": [
+   {
+    "id": "e00056",
+    "minute": 3,
+    "second": 19,
+    "type": "pass",
+    "team": "away",
+    "player": "a11",
+    "receiver": "h7",
+    "outcome": "fail",
+    "ball_speed_kmh": 52,
+    "distance_m": 17
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "contradicted fact: 'a11 finds h7 with a 17 m pass' (The pass from a11 to h7 was unsuccessful (outcome 'fail'), so a11 did not find h7 with the pass.)"
+  ]
+ },
+ {
+  "kind": "meaning: completed pass called cut out",
+  "true": false,
+  "claim": "h10's 6 m pass to h7 is cut out.",
+  "evidence": [
+   {
+    "id": "e00003",
+    "minute": 1,
+    "second": 4,
+    "type": "pass",
+    "team": "home",
+    "player": "h10",
+    "receiver": "h7",
+    "outcome": "success",
+    "ball_speed_kmh": 51,
+    "distance_m": 6
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "contradicted fact: 'h10's 6 m pass to h7 is cut out.' (The evidence shows h10's 6 m pass to h7 was successful, not cut out.)"
+  ]
+ },
+ {
+  "kind": "meaning: completed pass called cut out",
+  "true": false,
+  "claim": "h7's 10 m pass to h6 is cut out.",
+  "evidence": [
+   {
+    "id": "e00004",
+    "minute": 1,
+    "second": 8,
+    "type": "pass",
+    "team": "home",
+    "player": "h7",
+    "receiver": "h6",
+    "outcome": "success",
+    "ball_speed_kmh": 63,
+    "distance_m": 10
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "contradicted fact: 'h7's 10 m pass to h6 is cut out.' (The evidence shows h7's 10 m pass to h6 was successful, not cut out.)"
+  ]
+ },
+ {
+  "kind": "meaning: completed pass called cut out",
+  "true": false,
+  "claim": "h6's 26 m pass to h10 is cut out.",
+  "evidence": [
+   {
+    "id": "e00006",
+    "minute": 1,
+    "second": 13,
+    "type": "pass",
+    "team": "home",
+    "player": "h6",
+    "receiver": "h10",
+    "outcome": "success",
+    "ball_speed_kmh": 52,
+    "distance_m": 26
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "contradicted fact: 'h6's 26 m pass to h10 is cut out.' (The evidence shows that h6's 26 m pass to h10 was successful, not cut out.)"
+  ]
+ },
+ {
+  "kind": "meaning: completed pass called cut out",
+  "true": false,
+  "claim": "h10's 16 m pass to h9 is cut out.",
+  "evidence": [
+   {
+    "id": "e00008",
+    "minute": 1,
+    "second": 21,
+    "type": "pass",
+    "team": "home",
+    "player": "h10",
+    "receiver": "h9",
+    "outcome": "success",
+    "ball_speed_kmh": 72,
+    "distance_m": 16
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "contradicted fact: 'h10's 16 m pass to h9 is cut out.' (The evidence shows h10's 16 m pass to h9 was successful, not cut out.)"
+  ]
+ },
+ {
+  "kind": "meaning: wrong team",
+  "true": false,
+  "claim": "h10 of the away side plays a 6 m pass.",
+  "evidence": [
+   {
+    "id": "e00003",
+    "minute": 1,
+    "second": 4,
+    "type": "pass",
+    "team": "home",
+    "player": "h10",
+    "receiver": "h7",
+    "outcome": "success",
+    "ball_speed_kmh": 51,
+    "distance_m": 6
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "judge unavailable (ChatClientException); claim held back"
+  ]
+ },
+ {
+  "kind": "meaning: wrong team",
+  "true": false,
+  "claim": "h7 of the away side plays a 10 m pass.",
+  "evidence": [
+   {
+    "id": "e00004",
+    "minute": 1,
+    "second": 8,
+    "type": "pass",
+    "team": "home",
+    "player": "h7",
+    "receiver": "h6",
+    "outcome": "success",
+    "ball_speed_kmh": 63,
+    "distance_m": 10
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "judge unavailable (ChatClientException); claim held back"
+  ]
+ },
+ {
+  "kind": "meaning: wrong team",
+  "true": false,
+  "claim": "h6 of the away side plays a 26 m pass.",
+  "evidence": [
+   {
+    "id": "e00006",
+    "minute": 1,
+    "second": 13,
+    "type": "pass",
+    "team": "home",
+    "player": "h6",
+    "receiver": "h10",
+    "outcome": "success",
+    "ball_speed_kmh": 52,
+    "distance_m": 26
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "contradicted fact: 'h6 of the away side plays a 26 m pass.' (The evidence shows that player h6 of the home team, not the away team, played a 26 m pass.)"
+  ]
+ },
+ {
+  "kind": "meaning: wrong team",
+  "true": false,
+  "claim": "h10 of the away side plays a 16 m pass.",
+  "evidence": [
+   {
+    "id": "e00008",
+    "minute": 1,
+    "second": 21,
+    "type": "pass",
+    "team": "home",
+    "player": "h10",
+    "receiver": "h9",
+    "outcome": "success",
+    "ball_speed_kmh": 72,
+    "distance_m": 16
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "contradicted fact: 'h10 of the away side plays a 16 m pass.' (The evidence shows that h10 of the home side, not the away side, plays a 16 m pass.)"
+  ]
+ },
+ {
+  "kind": "meaning: invented passing move",
+  "true": false,
+  "claim": "h10 ends a long passing move with a pass to h7.",
+  "evidence": [
+   {
+    "id": "e00003",
+    "minute": 1,
+    "second": 4,
+    "type": "pass",
+    "team": "home",
+    "player": "h10",
+    "receiver": "h7",
+    "outcome": "success",
+    "ball_speed_kmh": 51,
+    "distance_m": 6
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "judge unavailable (ChatClientException); claim held back"
+  ]
+ },
+ {
+  "kind": "meaning: invented passing move",
+  "true": false,
+  "claim": "h7 ends a long passing move with a pass to h6.",
+  "evidence": [
+   {
+    "id": "e00004",
+    "minute": 1,
+    "second": 8,
+    "type": "pass",
+    "team": "home",
+    "player": "h7",
+    "receiver": "h6",
+    "outcome": "success",
+    "ball_speed_kmh": 63,
+    "distance_m": 10
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "judge unavailable (ChatClientException); claim held back"
+  ]
+ },
+ {
+  "kind": "meaning: invented passing move",
+  "true": false,
+  "claim": "h6 ends a long passing move with a pass to h10.",
+  "evidence": [
+   {
+    "id": "e00006",
+    "minute": 1,
+    "second": 13,
+    "type": "pass",
+    "team": "home",
+    "player": "h6",
+    "receiver": "h10",
+    "outcome": "success",
+    "ball_speed_kmh": 52,
+    "distance_m": 26
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "unsupported fact: 'h6 ends a long passing move with a pass to h10.' (The evidence shows a single pass from h6 to h10, but does not provide information about a preceding long passing move.)"
+  ]
+ },
+ {
+  "kind": "meaning: invented passing move",
+  "true": false,
+  "claim": "h10 ends a long passing move with a pass to h9.",
+  "evidence": [
+   {
+    "id": "e00008",
+    "minute": 1,
+    "second": 21,
+    "type": "pass",
+    "team": "home",
+    "player": "h10",
+    "receiver": "h9",
+    "outcome": "success",
+    "ball_speed_kmh": 72,
+    "distance_m": 16
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "unsupported fact: 'h10 ends a long passing move with a pass to h9' (The evidence shows a single successful pass from h10 to h9, but does not provide information about a preceding long passing move leading up to this pass.)"
+  ]
+ },
+ {
+  "kind": "meaning: missed shot called a goal",
+  "true": false,
+  "claim": "h11 scores with a shot at 88 km/h.",
+  "evidence": [
+   {
+    "id": "e00011",
+    "minute": 1,
+    "second": 32,
+    "type": "shot",
+    "team": "home",
+    "player": "h11",
+    "outcome": "off_target",
+    "ball_speed_kmh": 88,
+    "distance_m": 11
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "contradicted fact: 'h11 scores with a shot at 88 km/h.' (The evidence shows h11 took a shot at 88 km/h but the outcome was 'off_target', so it was not a goal.)"
+  ]
+ },
+ {
+  "kind": "meaning: missed shot called a goal",
+  "true": false,
+  "claim": "a10 scores with a shot at 105 km/h.",
+  "evidence": [
+   {
+    "id": "e00076",
+    "minute": 4,
+    "second": 25,
+    "type": "shot",
+    "team": "away",
+    "player": "a10",
+    "outcome": "on_target",
+    "ball_speed_kmh": 105,
+    "distance_m": 18
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "judge unavailable (ChatClientException); claim held back"
+  ]
+ },
+ {
+  "kind": "meaning: missed shot called a goal",
+  "true": false,
+  "claim": "h10 scores with a shot at 119 km/h.",
+  "evidence": [
+   {
+    "id": "e00101",
+    "minute": 5,
+    "second": 35,
+    "type": "shot",
+    "team": "home",
+    "player": "h10",
+    "outcome": "off_target",
+    "ball_speed_kmh": 119,
+    "distance_m": 18
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "judge unavailable (ChatClientException); claim held back"
+  ]
+ },
+ {
+  "kind": "meaning: missed shot called a goal",
+  "true": false,
+  "claim": "a10 scores with a shot at 76 km/h.",
+  "evidence": [
+   {
+    "id": "e00138",
+    "minute": 7,
+    "second": 24,
+    "type": "shot",
+    "team": "away",
+    "player": "a10",
+    "outcome": "off_target",
+    "ball_speed_kmh": 76,
+    "distance_m": 18
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "contradicted fact: 'a10 scores with a shot at 76 km/h.' (The evidence shows a shot by a10 at 76 km/h but the outcome is 'off_target', so it was not a goal.)"
+  ]
+ },
+ {
+  "kind": "meaning: invented consequence",
+  "true": false,
+  "claim": "h8's tackle on a9 leads straight to a goal.",
+  "evidence": [
+   {
+    "id": "e00021",
+    "minute": 1,
+    "second": 60,
+    "type": "tackle",
+    "team": "home",
+    "player": "h8",
+    "receiver": "a9",
+    "outcome": "success"
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "judge unavailable (ChatClientException); claim held back"
+  ]
+ },
+ {
+  "kind": "meaning: invented consequence",
+  "true": false,
+  "claim": "a8's tackle on h9 leads straight to a goal.",
+  "evidence": [
+   {
+    "id": "e00144",
+    "minute": 7,
+    "second": 36,
+    "type": "tackle",
+    "team": "away",
+    "player": "a8",
+    "receiver": "h9",
+    "outcome": "success"
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "unsupported fact: 'a8's tackle on h9 leads straight to a goal.' (The evidence shows a successful tackle by a8 on h9 at 7:36, but there is no information about a goal occurring after this tackle.)"
+  ]
+ },
+ {
+  "kind": "meaning: invented consequence",
+  "true": false,
+  "claim": "h9's tackle on a8 leads straight to a goal.",
+  "evidence": [
+   {
+    "id": "e00147",
+    "minute": 7,
+    "second": 38,
+    "type": "tackle",
+    "team": "home",
+    "player": "h9",
+    "receiver": "a8",
+    "outcome": "success"
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "unsupported fact: 'h9's tackle on a8 leads straight to a goal.' (The evidence shows a successful tackle by h9 on a8 at 7:38, but there is no evidence of a goal following this tackle.)"
+  ]
+ },
+ {
+  "kind": "meaning: invented consequence",
+  "true": false,
+  "claim": "a10's tackle on h4 leads straight to a goal.",
+  "evidence": [
+   {
+    "id": "e00160",
+    "minute": 8,
+    "second": 11,
+    "type": "tackle",
+    "team": "away",
+    "player": "a10",
+    "receiver": "h4",
+    "outcome": "success"
+   }
+  ],
+  "seed": 21,
+  "code_ok": true,
+  "judge_ok": false,
+  "reasons": [
+   "unsupported fact: 'a10's tackle on h4 leads straight to a goal.' (The evidence shows a successful tackle by a10 on h4 at 8:11, but there is no information about a goal occurring after this tackle.)"
+  ]
+ }
+]

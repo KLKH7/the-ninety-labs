@@ -1,0 +1,234 @@
+{
+  "generated": "2026-10-14T00:05:32Z",
+  "commit": "faf65a279106719a7716f1748ccb4cfa885f0596",
+  "command": "ninety-render-check runs/dataset/test/seed900001 runs/dataset/test/seed900002 runs/dataset/test/seed900003 runs/dataset/test/seed900004 runs/dataset/test/seed900005 --determinism --report docs/eval/render-checks.json",
+  "summary": {
+    "clips": 5,
+    "frames": 1250,
+    "ball_projection_max_px": 0.3046,
+    "ball_projection_mean_px": 0.101,
+    "keypoint_projection_max_px": 0.0014,
+    "player_feet_outside_box": 0,
+    "frames_with_label_problems": 0,
+    "ball_visibility_lt_0_5_share": 0.0008,
+    "all_passed": true,
+    "determinism": {
+      "clip": "seed900001",
+      "frames_jsonl_identical": true,
+      "events_identical": true,
+      "images_identical": true,
+      "images_compared": 250
+    }
+  },
+  "planned": {
+    "off_the_shelf_detector_recall": "needs the pretrained detector (Oct 18)",
+    "side_by_side_look": "manual; see docs/decisions/0001-synthetic-data.md"
+  },
+  "clips": [
+    {
+      "clip": "seed900001",
+      "seed": 900001,
+      "split": "test",
+      "projection": {
+        "ball_px": {
+          "n": 250,
+          "mean": 0.1125,
+          "max": 0.2498
+        },
+        "keypoint_px": {
+          "n": 2468,
+          "mean": 0.0005,
+          "max": 0.0014
+        },
+        "player_foot_outside_box": 0,
+        "player_foot_checked": 2769
+      },
+      "labels": {
+        "frames": 250,
+        "problems": [],
+        "ok": true
+      },
+      "occlusion": {
+        "ball_in_frame": 250,
+        "ball_visibility_lt_0_5_share": 0.004,
+        "player_boxes": 2861,
+        "player_visibility_lt_0_5_share": 0.0245,
+        "player_height_px": {
+          "p05": 38,
+          "median": 48,
+          "p95": 66
+        }
+      },
+      "passed": {
+        "projection_ball_lt_1px": true,
+        "projection_keypoints_lt_1px": true,
+        "player_feet_in_boxes": true,
+        "labels_complete": true
+      }
+    },
+    {
+      "clip": "seed900002",
+      "seed": 900002,
+      "split": "test",
+      "projection": {
+        "ball_px": {
+          "n": 250,
+          "mean": 0.0814,
+          "max": 0.2368
+        },
+        "keypoint_px": {
+          "n": 1456,
+          "mean": 0.0004,
+          "max": 0.0011
+        },
+        "player_foot_outside_box": 0,
+        "player_foot_checked": 2023
+      },
+      "labels": {
+        "frames": 250,
+        "problems": [],
+        "ok": true
+      },
+      "occlusion": {
+        "ball_in_frame": 250,
+        "ball_visibility_lt_0_5_share": 0.0,
+        "player_boxes": 2056,
+        "player_visibility_lt_0_5_share": 0.0,
+        "player_height_px": {
+          "p05": 58,
+          "median": 74,
+          "p95": 102
+        }
+      },
+      "passed": {
+        "projection_ball_lt_1px": true,
+        "projection_keypoints_lt_1px": true,
+        "player_feet_in_boxes": true,
+        "labels_complete": true
+      }
+    },
+    {
+      "clip": "seed900003",
+      "seed": 900003,
+      "split": "test",
+      "projection": {
+        "ball_px": {
+          "n": 250,
+          "mean": 0.1083,
+          "max": 0.3046
+        },
+        "keypoint_px": {
+          "n": 2083,
+          "mean": 0.0005,
+          "max": 0.0014
+        },
+        "player_foot_outside_box": 0,
+        "player_foot_checked": 2188
+      },
+      "labels": {
+        "frames": 250,
+        "problems": [],
+        "ok": true
+      },
+      "occlusion": {
+        "ball_in_frame": 250,
+        "ball_visibility_lt_0_5_share": 0.0,
+        "player_boxes": 2235,
+        "player_visibility_lt_0_5_share": 0.0013,
+        "player_height_px": {
+          "p05": 52,
+          "median": 63,
+          "p95": 91
+        }
+      },
+      "passed": {
+        "projection_ball_lt_1px": true,
+        "projection_keypoints_lt_1px": true,
+        "player_feet_in_boxes": true,
+        "labels_complete": true
+      }
+    },
+    {
+      "clip": "seed900004",
+      "seed": 900004,
+      "split": "test",
+      "projection": {
+        "ball_px": {
+          "n": 250,
+          "mean": 0.0936,
+          "max": 0.2243
+        },
+        "keypoint_px": {
+          "n": 2095,
+          "mean": 0.0004,
+          "max": 0.0013
+        },
+        "player_foot_outside_box": 0,
+        "player_foot_checked": 2618
+      },
+      "labels": {
+        "frames": 250,
+        "problems": [],
+        "ok": true
+      },
+      "occlusion": {
+        "ball_in_frame": 250,
+        "ball_visibility_lt_0_5_share": 0.0,
+        "player_boxes": 2655,
+        "player_visibility_lt_0_5_share": 0.0139,
+        "player_height_px": {
+          "p05": 43,
+          "median": 56,
+          "p95": 77
+        }
+      },
+      "passed": {
+        "projection_ball_lt_1px": true,
+        "projection_keypoints_lt_1px": true,
+        "player_feet_in_boxes": true,
+        "labels_complete": true
+      }
+    },
+    {
+      "clip": "seed900005",
+      "seed": 900005,
+      "split": "test",
+      "projection": {
+        "ball_px": {
+          "n": 250,
+          "mean": 0.1092,
+          "max": 0.2894
+        },
+        "keypoint_px": {
+          "n": 1755,
+          "mean": 0.0004,
+          "max": 0.0013
+        },
+        "player_foot_outside_box": 0,
+        "player_foot_checked": 2853
+      },
+      "labels": {
+        "frames": 250,
+        "problems": [],
+        "ok": true
+      },
+      "occlusion": {
+        "ball_in_frame": 250,
+        "ball_visibility_lt_0_5_share": 0.0,
+        "player_boxes": 2910,
+        "player_visibility_lt_0_5_share": 0.0261,
+        "player_height_px": {
+          "p05": 42,
+          "median": 50,
+          "p95": 69
+        }
+      },
+      "passed": {
+        "projection_ball_lt_1px": true,
+        "projection_keypoints_lt_1px": true,
+        "player_feet_in_boxes": true,
+        "labels_complete": true
+      }
+    }
+  ]
+}

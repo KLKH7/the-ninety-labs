@@ -4,7 +4,7 @@ from pathlib import Path
 
 from jsonschema import validate
 
-from ninety.sim.engine import FPS, PITCH_X, PITCH_Y, simulate
+from ninety.sim.engine import BOARDS_M, FPS, PITCH_X, PITCH_Y, simulate
 
 ROOT = Path(__file__).resolve().parent.parent
 EVENT_SCHEMA = json.loads((ROOT / "schemas/match_event.schema.json").read_text())
@@ -22,7 +22,12 @@ def test_frames_cover_the_clock_and_stay_on_the_pitch():
     assert len(m.frames) == 2 * 60 * FPS
     for fr in m.frames[::50]:
         assert len(fr["players"]) == 22
-        assert 0 <= fr["ball"]["x"] <= PITCH_X and 0 <= fr["ball"]["y"] <= PITCH_Y
+        # Players may run past a line and the ball may roll on out of play (Law 9), as far as
+        # the advertising boards.
+        for p in fr["players"]:
+            assert -BOARDS_M <= p["x"] <= PITCH_X + BOARDS_M and -BOARDS_M <= p["y"] <= PITCH_Y + BOARDS_M
+        assert -BOARDS_M <= fr["ball"]["x"] <= PITCH_X + BOARDS_M
+        assert -BOARDS_M <= fr["ball"]["y"] <= PITCH_Y + BOARDS_M
 
 
 def test_events_match_schema():
