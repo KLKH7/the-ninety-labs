@@ -46,16 +46,17 @@ def test_a_ball_into_a_body_rebounds_with_only_its_normal_part_reduced():
     assert math.isclose(vx * -ny + vy * nx, tangent_before, rel_tol=0.05)
 
 
-def test_a_pass_goes_where_the_passer_believes_the_team_mate_is():
+def test_the_carrier_decides_on_where_he_believes_team_mates_are():
     e = Engine(1)
     still(e)
     carrier, mate = e.by_id["h6"], e.by_id["h9"]
     carrier.x, carrier.y = 40.0, 34.0
     e.ball = (40.3, 34.0, 0.0, 0.0, 0.0, 0.0)
     mate.x, mate.y = 55.0, 34.0
-    e.beliefs[carrier.id].seen[mate.id] = perception.Sighting(55.0, 50.0, 0.0, 0.0, e.t)  # wrong
-    e.pass_to(carrier, mate)
-    assert e.ball[4] > 0.5 * abs(e.ball[3])  # aimed toward y=50, where he thinks the mate is
+    e.beliefs[carrier.id].seen = {mate.id: perception.Sighting(55.0, 50.0, 0.0, 0.0, e.t)}  # wrong
+    scene = e.scene_for(carrier)
+    assert [(m[1], m[2]) for m in scene.mates] == [(55.0, 50.0)]  # never the truth
+    assert scene.opponents == [] and scene.keeper is None  # nobody else seen
 
 
 def test_a_keeper_reacts_to_the_ball_like_anyone_and_reads_only_shots_at_his_goal():
@@ -134,8 +135,7 @@ def test_a_carrier_turns_the_ball_onto_his_kicking_side_before_passing_behind_hi
     mate.x, mate.y = 25.0, 34.0
     e.give(carrier.id)
     e.ball = (40.37, 34.0, 0.0, 0.0, 0.0, 0.0)  # at his feet, in front; the team-mate is behind
-    e.beliefs[carrier.id].seen[mate.id] = perception.Sighting(25.0, 34.0, 0.0, 0.0, e.t)
-    e.pass_to(carrier, mate)
+    e.pass_to(carrier, 25.0, 34.0, lofted=False)
     assert e.possessor == carrier.id and e.windup  # not struck through his own body
     for _ in range(10):
         e.tick_carrier()
@@ -206,7 +206,6 @@ def test_a_pass_is_struck_with_execution_error():
         mate.x, mate.y = 70.0, 34.0
         e.give(p.id)
         e.ball = (50.37, 34.0, 0.0, 0.0, 0.0, 0.0)
-        e.beliefs[p.id].seen[mate.id] = perception.Sighting(70.0, 34.0, 0.0, 0.0, e.t)
-        e.pass_to(p, mate)
+        e.pass_to(p, 70.0, 34.0, lofted=False)
         angles.add(round(math.atan2(e.ball[4], e.ball[3]), 6))
     assert len(angles) > 1  # the same intended pass is not struck identically every time
