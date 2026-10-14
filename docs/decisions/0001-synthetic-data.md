@@ -1,0 +1,109 @@
+# 0001: How we generate synthetic football data
+
+- **Status:** accepted, Oct 13, 2026
+- **Rubric:** technological implementation ("creative, optimized synthetic data creation") and
+  data innovation (brief item (v)); it also feeds agentic design, through the Vision Auditor and
+  Data agent loop.
+- **Measured by:** [EVALUATION.md, synthetic data](../EVALUATION.md#synthetic-data)
+
+## What we need
+
+Two linked kinds of data, from one seed:
+
+1. **Match events and tracking:** every pass, shot, tackle and possession change, plus every
+   player and ball position at 25 fps. The agent track runs on these today.
+2. **Broadcast-style video of that same match**, with exact per-frame ground truth: camera
+   matrix, player and ball boxes, visibility and pitch keypoints. Automatic event detection is
+   trained and graded on it.
+
+On top of that, the generator has to produce **hard cases on demand** (occlusion, motion blur,
+crowded boxes, low-contrast kits), because the targeted-data rounds are our differentiator.
+
+## Hard filters (from AGENTS.md), applied before scoring
+
+| Option | Synthetic only | MIT / Apache / BSD | Labels from the generator | Result |
+|---|---|---|---|---|
+| A. Our simulator + our three.js renderer | yes | yes (three.js MIT, Playwright Apache-2.0, Chromium BSD) | yes | **scored** |
+| B. Our simulator + a pure-Python software rasterizer | yes | yes | yes | **scored** |
+| C. Google Research Football as event and video source | yes | reported Apache-2.0 (built on the Gameplay Football engine) | only after C++ engine changes | **scored** |
+| D. RoboCup soccer server (rcssserver) | yes | **LGPL-3.0** | 2D only, no video | rejected |
+| E. Unity / Unreal (the SoccerSynth approach), or Blender | yes | **proprietary EULA / GPL-3.0** as a build dependency | yes | rejected |
+| F. Event logs only, no video (today's `ninety-sim`) | yes | yes | yes | **scored** (agent track) |
+| G. Generative video or image models | risky: trained on real broadcasts, can reproduce kits, crests and graphics | varies | **no**: a model guesses where players are, which breaks "code computes every number" | rejected for training data |
+| H. Real match data or footage | **no** | n/a | n/a | rejected; published per-match averages are only used to calibrate the simulator's rates, cited and never committed |
+| I. A published synthetic dataset (e.g. SoccerSynth-Detection) | yes | no licence stated | yes, but not linked to our events | rejected |
+
+## Scores (1 = poor, 5 = best)
+
+| | A. sim + three.js | B. sim + Python rasterizer | C. Google Research Football | F. events only |
+|---|---|---|---|---|
+| Rubric fit: how a judge sees it in the video | 5: our own broadcast with live boxes, and a "made more of what failed" round | 4: same story, plainer pictures | 3: recognisable game graphics, someone else's engine | 2: no video, so no automatic event detection |
+| Exact ground truth | 5: camera matrix from code; visibility and boxes counted from an id pass of exactly what was drawn | 5 | 3: needs engine changes to export camera and boxes | 5 |
+| Realism for detector transfer | 3 today, room to grow (PBR materials, shadows, textures, GPU) | 2: flat shading, hard to improve | 3: fixed 2019 game look | n/a |
+| Control over hard cases | 5: every knob is our parameter | 5 | 3: scenario scripts, little control of camera and look | 2 |
+| Generation speed | 3: 0.47 s (overcast) to 0.61 s (sun shadows) per 720p frame on 4 CPU cores in software GL; faster on a GPU (`--gpu`) | 3 | 4 | 5 |
+| Cost | 5: free, runs locally or in CI | 5 | 5 | 5 |
+| Time to first clip (renderer v1 due Oct 15) | 5: running today | 4 | 2: C++ build, camera export, licence review | 5 |
+| **Total** | **31** | 28 | 23 | 24 |
+
+## Decision
+
+**A: extend our seeded simulator and render it ourselves in three.js**, as the architecture
+already planned, with one change in how the work is split:
+
+- **Python owns the scene.** For every frame it computes the broadcast camera (pinhole, exact
+  `P = K [R | t]`), every player's body as capsules in world metres, and the ball, then sends
+  them to the page. The geometry that is drawn and the geometry that is labelled are the same
+  numbers.
+- **three.js draws, then counts.** Besides the picture, the page renders an object-id pass: each
+  player alone (their full in-image silhouette) and all together (what is still visible, with
+  the goal frame and scorebug as occluders). Boxes, visibility and keypoint visibility come
+  from those counts, never from an estimate.
+- **Software GL by default** (SwiftShader in headless Chromium), so the same seed gives the same
+  pixels and labels on the same Chromium build. `--gpu` trades reproducibility for speed.
+- **Option F stays** as the agent track's feed (`ninety-sim`), and the same seed's events ship
+  alongside every clip.
+
+## What we give up
+
+- **Photorealism, for now.** Players are capsule figures with kit colours and a running gait,
+  not motion-captured meshes. The off-the-shelf detector check (guide section 6.2) decides
+  whether the realism pass on Oct 17 is enough.
+- **Speed on CPU.** 2 to 2.5 minutes per 10-second clip on 4 cores (the 5-clip test set took 11.5
+  minutes). 20 training clips plus the test set take about an hour; longer clips or bigger rounds
+  want a GPU machine.
+- **A browser in the toolchain.** Generation needs Node (for three.js) and Chromium. CI installs
+  both in a dedicated `render` job.
+- **Bit-identical pixels across machines.** Only guaranteed on the same Chromium build; the build
+  is recorded in every `clip.json`.
+- **Parquet, for now.** Frame labels are compact JSON lines (about 4.4 KB a frame, so a 5-minute
+  clip is about 33 MB). The Parquet export in ARCHITECTURE.md is planned for when clips get long.
+
+## How we will know it worked
+
+From [EVALUATION.md](../EVALUATION.md#synthetic-data), reported by `ninety-render-check` into
+`docs/eval/render-checks.json`:
+
+| Check (render guide section 6) | Bar | Status |
+|---|---|---|
+| 1. Ground truth projects onto its pixels | ball centre within 1 px of its drawn pixels; keypoints within 1 px; every player's foot point inside its box | running in CI |
+| 2. Off-the-shelf detector recall on 200 frames | close to the same detector on real broadcast footage | planned (needs the detector, Oct 18) |
+| 3. Ball occlusion | share of in-frame ball frames with visibility under 0.5 is above zero | running |
+| 4. Determinism | same seed renders identical labels and images | running in CI |
+| 5. Look at it | side-by-side with real broadcast framing; fix the biggest difference first | manual, at each realism pass |
+| Split integrity | test seeds (900001 to 900005) never train; overrides refused on the test set | running in unit tests |
+
+### First measurement (Oct 14, fixed test set, 5 clips, 1,250 frames)
+
+From `docs/eval/render-checks.json`: ball projection error mean 0.10 px, max 0.30 px; keypoints
+max 0.0014 px; every player's foot inside its box; no frame with a label problem; the re-render of
+seed 900001 matched labels and all 250 images byte for byte. Players are 38 to 102 px tall
+(5th to 95th percentile across clips), inside the guide's 30 to 120 px.
+
+**Not good enough yet:** the ball is under 0.5 visible in 1 of 1,250 frames (0.08%). The check
+passes (above zero), but the test set is too easy, because the simulator has no corners, free
+kicks or goalmouth scrambles, so players rarely crowd the ball. That is the first thing the
+realism pass and the simulator's set pieces must change.
+
+The final proof comes later: detector recall on the fixed test set before and after each
+targeted round.

@@ -4,10 +4,18 @@ a fact-checking step that can reject, and speech.
     uv run ninety-slice --minute 2                # one verified claim about minute 2
     uv run ninety-slice --minute 2 --plant        # tamper with the first draft to show a rejection
     uv run ninety-slice --minute 2 --speak a.mp3  # also speak the verified claim
+    uv run ninety-slice --minute 2 --plant --record replays/slice.json   # save the model's replies
+    uv run ninety-slice --replay replays/slice.json                      # no Azure needed
 
 The Analyst reads the match only through the MCP server. The Fact-checker runs the code checks
 (ninety/agents/factcheck.py) and then the Judge (ninety/agents/judge.py), and sends a rejected
 claim back with its reasons, at most twice.
+
+--replay swaps only the two Foundry models for what they answered when recorded: the Analyst's
+replies and the Judge's verdicts. The workflow, the handoffs and the code checks all run for real,
+so anyone can run the slice without access to our Azure resources. If a prompt no longer matches
+the recording (the code checks changed, say), the replay stops instead of pairing an old answer
+with a new question.
 """
 
 from __future__ import annotations
@@ -18,18 +26,22 @@ import json
 import re
 import sys
 import time
-from dataclasses import dataclass, field
+from collections.abc import Awaitable, Callable
+from dataclasses import asdict, dataclass, field
+from datetime import UTC, datetime
+from pathlib import Path
 
 from agent_framework import Agent, Executor, MCPStdioTool, WorkflowBuilder, WorkflowContext, handler
 from agent_framework.foundry import FoundryChatClient
 from azure.identity import DefaultAzureCredential
 
 from ninety import config
-from ninety.agents.factcheck import Claim, check
+from ninety.agents.factcheck import Claim, Verdict, check
 from ninety.agents.judge import judge, judge_agent
 from ninety.match.facts import events_in
 
 MAX_REWRITES = 2
+REPLAY_FORMAT = 2
 
 INSTRUCTIONS = """You are the Analyst for a football broadcast. Use the match tools to read the
 events of the requested minute, then write ONE short sentence a commentator could say about the
@@ -47,6 +59,77 @@ class Task:
     minute: int
     feedback: list[str] = field(default_factory=list)
     attempt: int = 0
+
+
+@dataclass
+class Turn:
+    """One model answer: the Analyst's raw reply, or the Judge's verdict as JSON."""
+
+    role: str
+    prompt: str
+    response: str
+
+
+@dataclass
+class Recording:
+    """The models' answers from one live run, enough to replay it without Azure."""
+
+    minute: int
+    seed: int
+    minutes: float
+    plant: bool
+    model: str
+    recorded_at: str
+    turns: list[Turn]
+
+    def save(self, path: str | Path) -> None:
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"format": REPLAY_FORMAT, **asdict(self)}, indent=2) + "\n")
+
+    @classmethod
+    def load(cls, path: str | Path) -> Recording:
+        data = json.loads(Path(path).read_text())
+        if data.pop("format", None) != REPLAY_FORMAT:
+            raise ValueError(f"{path}: not a format {REPLAY_FORMAT} slice recording")
+        data["turns"] = [Turn(**t) for t in data["turns"]]
+        return cls(**data)
+
+
+class ReplayMismatch(RuntimeError):
+    pass
+
+
+Ask = Callable[[str], Awaitable[str]]
+Judge = Callable[[Claim, list[dict]], Awaitable[Verdict]]
+
+
+def judge_prompt(claim: Claim) -> str:
+    """What identifies a Judge call in a recording: the claim and the ids it cites."""
+    return json.dumps({"text": claim.text, "evidence": claim.evidence})
+
+
+def replayer(turns: list[Turn]) -> tuple[Ask, Judge]:
+    """Answers each call with the recorded answer, in order, and refuses a call it never saw."""
+    queue = list(turns)
+
+    def next_answer(role: str, prompt: str) -> str:
+        if not queue:
+            raise ReplayMismatch(f"the recording has no {role} answer for: {prompt!r}")
+        turn = queue.pop(0)
+        if (turn.role, turn.prompt) != (role, prompt):
+            raise ReplayMismatch(
+                f"call changed since recording: {turn.role} {turn.prompt!r} -> {role} {prompt!r}"
+            )
+        return turn.response
+
+    async def ask(prompt: str) -> str:
+        return next_answer("analyst", prompt)
+
+    async def judge_replay(claim: Claim, evidence: list[dict]) -> Verdict:
+        return Verdict(**json.loads(next_answer("judge", judge_prompt(claim))))
+
+    return ask, judge_replay
 
 
 @dataclass
@@ -75,9 +158,9 @@ def tamper(claim: Claim) -> Claim:
 
 
 class AnalystExecutor(Executor):
-    def __init__(self, agent: Agent, trace: list[str], plant: bool):
+    def __init__(self, ask: Ask, trace: list[str], plant: bool, live: bool):
         super().__init__(id="analyst")
-        self.agent, self.trace, self.plant = agent, trace, plant
+        self.ask, self.trace, self.plant, self.live = ask, trace, plant, live
 
     @handler
     async def write(self, task: Task, ctx: WorkflowContext[Draft]) -> None:
@@ -85,22 +168,21 @@ class AnalystExecutor(Executor):
         if task.feedback:
             prompt += " Your previous claim was rejected: " + "; ".join(task.feedback) + ". Fix it."
         started = time.perf_counter()
-        response = await self.agent.run(prompt)
-        claim = parse_claim(response.text)
+        claim = parse_claim(await self.ask(prompt))
         if self.plant and task.attempt == 0:
             claim = tamper(claim)
             self.trace.append("analyst: draft tampered on purpose (--plant)")
-        seconds = time.perf_counter() - started
-        self.trace.append(f"analyst: {claim.text!r} evidence={claim.evidence} ({seconds:.1f}s)")
+        took = f"{time.perf_counter() - started:.1f}s" if self.live else "replayed"
+        self.trace.append(f"analyst: {claim.text!r} evidence={claim.evidence} ({took})")
         await ctx.send_message(Draft(task=task, claim=claim))
 
 
 class FactCheckExecutor(Executor):
     """Code checks first (free, exact about numbers, players and ids), then the Judge (meaning)."""
 
-    def __init__(self, known: dict[str, dict], judge: Agent, trace: list[str]):
+    def __init__(self, known: dict[str, dict], judge: Judge, trace: list[str], live: bool):
         super().__init__(id="fact_checker")
-        self.known, self.judge, self.trace = known, judge, trace
+        self.known, self.judge, self.trace, self.live = known, judge, trace, live
 
     @handler
     async def review(self, draft: Draft, ctx: WorkflowContext[Task, Outcome]) -> None:
@@ -108,9 +190,9 @@ class FactCheckExecutor(Executor):
         if verdict.ok:
             evidence = [self.known[i] for i in draft.claim.evidence]
             started = time.perf_counter()
-            verdict = await judge(self.judge, draft.claim, evidence)
-            seconds = time.perf_counter() - started
-            self.trace.append(f"judge: {'supported' if verdict.ok else 'not supported'} ({seconds:.1f}s)")
+            verdict = await self.judge(draft.claim, evidence)
+            took = f"{time.perf_counter() - started:.1f}s" if self.live else "replayed"
+            self.trace.append(f"judge: {'supported' if verdict.ok else 'not supported'} ({took})")
         if verdict.ok:
             self.trace.append("fact_checker: accepted")
             await ctx.yield_output(Outcome(True, draft.claim, draft.task.attempt + 1, self.trace))
@@ -122,9 +204,22 @@ class FactCheckExecutor(Executor):
             await ctx.yield_output(Outcome(False, draft.claim, draft.task.attempt + 1, self.trace))
 
 
-async def run_slice(minute: int, plant: bool, seed: int, minutes: float) -> Outcome:
+async def run_workflow(
+    ask: Ask, judge_fn: Judge, minute: int, plant: bool, seed: int, minutes: float, live: bool
+) -> Outcome:
     known = {e["id"]: e for e in events_in(seed, minutes, 1, int(minutes) + 1)}
     trace: list[str] = []
+    analyst = AnalystExecutor(ask, trace, plant, live)
+    checker = FactCheckExecutor(known, judge_fn, trace, live)
+    # A rejected claim goes back to the analyst with the reasons, at most MAX_REWRITES times.
+    builder = WorkflowBuilder(start_executor=analyst)
+    workflow = builder.add_edge(analyst, checker).add_edge(checker, analyst).build()
+    result = await workflow.run(Task(minute=minute))
+    return result.get_outputs()[0]
+
+
+async def run_slice(minute: int, plant: bool, seed: int, minutes: float) -> tuple[Outcome, list[Turn]]:
+    """Live run on Foundry. Returns the outcome and every model answer, for --record."""
     tools = MCPStdioTool(
         name="match",
         command=sys.executable,
@@ -134,15 +229,31 @@ async def run_slice(minute: int, plant: bool, seed: int, minutes: float) -> Outc
     client = FoundryChatClient(
         project_endpoint=config.FOUNDRY_PROJECT, model=config.MODEL, credential=DefaultAzureCredential()
     )
+    turns: list[Turn] = []
     async with tools:
         agent = Agent(client=client, name="analyst", instructions=INSTRUCTIONS, tools=tools)
-        analyst = AnalystExecutor(agent, trace, plant)
-        checker = FactCheckExecutor(known, judge_agent(client), trace)
-        # A rejected claim goes back to the analyst with the reasons, at most MAX_REWRITES times.
-        builder = WorkflowBuilder(start_executor=analyst)
-        workflow = builder.add_edge(analyst, checker).add_edge(checker, analyst).build()
-        result = await workflow.run(Task(minute=minute))
-    return result.get_outputs()[0]
+
+        judge_ag = judge_agent(client)
+
+        async def ask(prompt: str) -> str:
+            response = (await agent.run(prompt)).text
+            turns.append(Turn("analyst", prompt, response))
+            return response
+
+        async def judge_live(claim: Claim, evidence: list[dict]) -> Verdict:
+            verdict = await judge(judge_ag, claim, evidence)
+            turns.append(Turn("judge", judge_prompt(claim), json.dumps(asdict(verdict))))
+            return verdict
+
+        outcome = await run_workflow(ask, judge_live, minute, plant, seed, minutes, live=True)
+    return outcome, turns
+
+
+async def replay_slice(recording: Recording) -> Outcome:
+    """Re-runs the workflow and the code checks with the recorded answers in place of the models."""
+    r = recording
+    ask, judge_replay = replayer(r.turns)
+    return await run_workflow(ask, judge_replay, r.minute, r.plant, r.seed, r.minutes, live=False)
 
 
 def main() -> None:
@@ -152,14 +263,38 @@ def main() -> None:
     ap.add_argument("--minutes", type=float, default=5)
     ap.add_argument("--plant", action="store_true", help="tamper with the first draft to show a rejection")
     ap.add_argument("--speak", metavar="MP3", help="speak the verified claim to this file")
+    ap.add_argument("--record", metavar="JSON", help="save the models' answers to this file")
+    ap.add_argument(
+        "--replay", metavar="JSON", help="replay a recording instead of calling Foundry (no Azure needed)"
+    )
     args = ap.parse_args()
+    if args.replay and (args.record or args.speak):
+        ap.error("--replay cannot be combined with --record or --speak (speech needs Azure)")
 
     started = time.perf_counter()
-    outcome = asyncio.run(run_slice(args.minute, args.plant, args.seed, args.minutes))
+    if args.replay:
+        recording = Recording.load(args.replay)
+        print(
+            f"replaying {args.replay}: minute {recording.minute}, seed {recording.seed}, "
+            f"{'planted, ' if recording.plant else ''}{recording.model} recorded {recording.recorded_at}"
+        )
+        try:
+            outcome = asyncio.run(replay_slice(recording))
+        except ReplayMismatch as e:
+            sys.exit(f"replay stopped: {e}. Record it again with --record.")
+    else:
+        outcome, turns = asyncio.run(run_slice(args.minute, args.plant, args.seed, args.minutes))
+        if args.record:
+            stamp = datetime.now(UTC).isoformat(timespec="seconds")
+            Recording(args.minute, args.seed, args.minutes, args.plant, config.MODEL, stamp, turns).save(
+                args.record
+            )
     for line in outcome.trace:
         print(line)
     verdict = "ACCEPTED" if outcome.accepted else "REJECTED"
     print(f"{verdict} after {outcome.attempts} draft(s), {time.perf_counter() - started:.1f}s")
+    if args.record and not args.replay:
+        print(f"recorded {len(turns)} model answer(s) to {args.record}")
     if outcome.accepted and args.speak:
         from ninety.speech.tts import synthesize
 

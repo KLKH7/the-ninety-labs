@@ -57,6 +57,7 @@ Full design, agent roles and deployment: [docs/ARCHITECTURE.md](docs/ARCHITECTUR
 | Path | What lives there |
 |---|---|
 | `ninety/sim` | Seeded match engine: events + per-frame positions (the ground-truth data) |
+| `ninety/render` | Broadcast camera, player bodies, ground-truth labels, render checks, train/test split |
 | `web/render` | Broadcast-style three.js renderer that turns a sim run into video |
 | `ninety/vision` | Detection, tracking, camera-to-pitch mapping, possession, event rules |
 | `ninety/intel` | Deterministic stats engine (code computes every number) |
@@ -74,14 +75,36 @@ uv sync
 uv run ninety-sim --seed 7 --minutes 5 --out runs/seed7
 uv run pytest
 
-# thin slice: Analyst -> fact-checker over MCP on Foundry, then speech (needs az login and access to the project)
+# broadcast clip with ground truth: one seed, one command (needs Node 22 for three.js)
+npm ci --prefix web && uv run playwright install chromium   # once
+uv run ninety-render --seed 7 --seconds 10 --out runs/clip7 --mp4   # --mp4 needs ffmpeg
+
+# thin slice: Analyst -> fact-checker over MCP on Foundry, then speech
+# (live runs need az login and a role on our Azure project)
 uv run ninety-slice --minute 2 --plant
 ```
+
+**Running the slice without our Azure project.** Nothing here uses an API key: Azure checks who
+is calling (your `az login` locally, the app's managed identity in the cloud), and key access is
+off on our resources. A live run from your own clone will therefore fail to authenticate. Replay
+a recorded run instead:
+
+```bash
+uv run ninety-slice --replay replays/slice-minute2-plant.json
+```
+
+Replay swaps only the two Foundry models for what they answered when recorded: the Analyst's
+replies and the Judge's verdicts. The Agent Framework workflow, the handoffs and the code checks
+all run for real, so you see the planted number rejected and the rewrite accepted. If a prompt has
+changed since the recording, the replay stops rather than pair an old answer with a new question. Speech needs Azure, so `--speak` does not
+replay. Team members refresh the recording with
+`uv run ninety-slice --minute 2 --plant --record replays/slice-minute2-plant.json`.
 
 ## Status
 
 Working toward **M1, end to end on one clip (Oct 20)**. Running today: the seeded match engine,
-data contracts, CI and the deploy pipeline. See [docs/PLAN.md](docs/PLAN.md). This README
+the broadcast renderer with exact ground truth and render checks in CI
+([decision 0001](docs/decisions/0001-synthetic-data.md)), data contracts, CI and the deploy pipeline. See [docs/PLAN.md](docs/PLAN.md). This README
 describes the design; measured results are published in [docs/EVALUATION.md](docs/EVALUATION.md)
 as they land.
 
