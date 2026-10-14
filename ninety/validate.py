@@ -20,7 +20,8 @@ from jsonschema import Draft202012Validator
 
 ROOT = Path(__file__).resolve().parents[1]
 MAX_PLAYER_MPS = 10.5  # P1: peak match sprint speeds
-MAX_PLAYER_ACCEL = 8.0  # P2: elite maximal acceleration about 6.2 m/s², plus margin
+MAX_PLAYER_ACCEL = 8.0  # P2: speeding up; professionals reach about 5.2 m/s² from standing, plus margin
+MAX_PLAYER_BRAKE = 10.0  # P2: braking and turning; peak braking about 8.5 m/s² (SD 1.1), plus margin
 ACCEL_WINDOW_S = 0.2  # P2: speeds averaged over this window, so frame jitter is not acceleration
 MAX_BALL_MPS = 40.0  # P3: above the hardest shots on record
 GRAVITY = 9.81  # P5
@@ -140,9 +141,14 @@ def check_physics(events: list[dict], frames: list[dict], fps: float, roster: li
             ax = (p["x"] - 2 * b["x"] + a["x"]) / span**2
             ay = (p["y"] - 2 * b["y"] + a["y"]) / span**2
             accel = math.hypot(ax, ay)
-            if accel > MAX_PLAYER_ACCEL:
+            # Split along the run: speeding up is limited far more than braking or turning.
+            vx, vy = (p["x"] - a["x"]) / (2 * span), (p["y"] - a["y"]) / (2 * span)
+            speed = math.hypot(vx, vy)
+            forward = (ax * vx + ay * vy) / speed if speed > 0.5 else accel
+            if forward > MAX_PLAYER_ACCEL or accel > MAX_PLAYER_BRAKE:
                 problems["P2 player acceleration"].append(
-                    f"frame {f1['frame']}: {p['id']} accelerated at {accel:.1f} m/s²"
+                    f"frame {f1['frame']}: {p['id']} accelerated at {accel:.1f} m/s² "
+                    f"({forward:.1f} speeding up)"
                 )
 
     for f in frames:

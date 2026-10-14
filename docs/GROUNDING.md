@@ -67,13 +67,16 @@ Kind: **hard** fails the clip; **warn** is reported. Columns show what exists to
 | ID | Check | Source | Kind | Validator | Engine |
 |---|---|---|---|---|---|
 | P1 | player speed at most about 10.5 m/s | sports science, peak match sprint speeds (*verify*) | hard | ✅ | ✅ receivers run to the ball |
-| P2 | player acceleration at most about 8 m/s², measured over 0.2 s | elite players' maximal acceleration about 6.2 m/s² ([Applied Sciences, 2022](https://doaj.org/article/5a330c62187f431b8d51ae1e9eca156f)) plus margin | hard | ✅ | ✅ players accelerate at most 5 m/s² |
+| P2 | speeding up at most 8 m/s²; braking and turning at most 10 m/s² (over 0.2 s) | about 5.2 m/s² from standing ([Hermosilla-Palma 2023](https://pmc.ncbi.nlm.nih.gov/articles/PMC9819841/)); braking peaks about 8.5 m/s² ([Harper 2020](https://knowledge.lancashire.ac.uk/id/eprint/33971/1/33971%20Manuscript%20-%20Measuring%20Max%20Decel%20%28AAM%29.pdf)); plus margin | hard | ✅ | ✅ force-velocity acceleration, braking up to 7 m/s², braking and turning share one grip limit |
 | P3 | ball speed at most 40 m/s, except a new ball placed while out of play | sports science, fastest recorded shots (*verify*); Law 9 | hard | ✅ | ✅ |
 | P4 | ball never below the ground (circumference 68 to 70 cm, so radius about 0.11 m) | Law 2 | hard | ✅ | ✅ |
 | P5 | a ball in the air falls under gravity and air drag (drag coefficient up to 0.5, *verify*); the margin is the measurement precision of 1 mm positions | physics | hard | ✅ | ✅ |
 | P6 | the ball stays at the feet of the player who has it (1.5 m), or in a goalkeeper's hands in a penalty area (2 m, *verify*) | Law 12 | hard | ✅ | ✅ |
 | P8 | a free ball bounces (keeps about 60 percent of its vertical speed, *verify*) and rolls to a stop on grass (about 1.2 m/s², *verify*) | ball physics; Law 2 (size, mass) | hard | ❌ | ✅ |
 | P7 | two players never overlap (about 0.5 m apart) | physics | warn | ❌ | ❌ |
+| P9 | each player has a top-speed capability (about 10 m/s, SD 0.3) and acceleration falls linearly from about 5.2 m/s² at rest to zero at that speed; match peaks are measured (R6), never set | force-velocity profile of professionals ([Hermosilla-Palma 2023](https://pmc.ncbi.nlm.nih.gov/articles/PMC9819841/)) | engine | n/a | ✅ |
+| P10 | energy: running above critical speed (about 3.9 m/s) spends a reserve of about 225 m; running below it refills it in 120 to 340 s, faster at a walk; a low reserve lowers top speed and acceleration. Accelerating costs extra (*design* factor); the slow store wearing down over a match is *design* | critical speed from match data ([Lord 2020](https://johk.pl/wp-content/uploads/2023/03/10078-73-2020-v73-2020-09.pdf)); refill time constants ([Vassallo 2020](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6969867/)) | engine | n/a | ✅ |
+| P11 | body: radius about 0.26 m, shoulder to shoulder about 0.52 m between centres; a keeper's reach is about 1 m standing and grows over a dive to about 1.8 m; jumping hand reach about 2.8 m | shoulder width of adult men scaled to footballers ([NC State anthropometry](https://ergocenter.ncsu.edu/wp-content/uploads/sites/358/2026/02/01-Anthropometry-Summary-Tables.pdf)); keeper dive time about 1 s ([Ibrahim 2019](https://www.frontiersin.org/journals/sports-and-active-living/articles/10.3389/fspor.2019.00015/full)) | engine | n/a | ✅ |
 
 ### Laws of the Game: it is legal football
 
@@ -97,10 +100,12 @@ Kind: **hard** fails the clip; **warn** is reported. Columns show what exists to
 | ID | Check | Source | Validator | Engine |
 |---|---|---|---|---|
 | R1 | ball in play about 55 to 60 of 90 minutes | competition reports (*verify*) | ❌ | ❌ only 4 to 8 restarts a match: passes are aimed at team-mates and there are no clearances or crosses, so the ball rarely goes out |
-| R2 | outfield players cover about 10 to 13 km per 90 minutes | sports science, Premier League samples (*verify*) | ❌ | ❓ |
+| R2 | outfield players cover about 9 to 11 km per 90 minutes, by position | World Cup tracking ([Ortega 2022](https://www.wbc.poznan.pl//Content/522956/2_Ortega_TSS_2022_292_51-56.pdf)) | ❌ (report: `ninety.sim.patterns`) | ❌ about 6 km: players are not yet asked to run (decision layer) |
 | R3 | pass completion about 75 to 88 percent | competition reports (*verify*) | ❌ | ✅ 74 to 77 percent, emerging from who reaches the ball first |
 | R4 | shots and goals per match in the usual range | competition reports (*verify*) | ❌ | 🟡 14 to 22 shots, 1 to 4 goals, emerging from physics; shots on the low side |
 | R5 | each position spends its time in realistic areas | sports science (*verify*) | ❌ | ❓ |
+| R6 | match top speed by position about 7.9 to 8.6 m/s (capability is higher; few sprints last long enough to reach it) | World Cup tracking ([Ortega 2022](https://www.wbc.poznan.pl//Content/522956/2_Ortega_TSS_2022_292_51-56.pdf)) | ❌ (report) | ❌ 4.7 to 6.0 m/s: no sprints chosen yet |
+| R7 | high-intensity running in the last 15 minutes about 20 to 45 percent below the first 15 | Premier League tracking ([Bradley 2009](https://sure.sunderland.ac.uk/id/eprint/3478/)) | ❌ (report) | ❌ too little high-intensity running to measure |
 
 ### Renderer truth: the labels match the pictures
 

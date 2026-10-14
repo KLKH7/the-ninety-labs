@@ -74,6 +74,11 @@ def teleport(c):
     c["frames"][60]["players"][2]["x"] = 70.0  # a1 jumps 10 m in one frame
 
 
+def hard_stop(c):
+    for n in range(60, 150):  # a1 jogs at 6 m/s, then stops dead within 0.1 s: beyond any braking
+        c["frames"][n]["players"][2]["x"] = 60.0 + 6 * min(n - 60, 25) / FPS + (0 if n < 85 else 0.1)
+
+
 def sudden_sprint(c):
     for n in range(60, 150):  # a1 goes from standing to 9 m/s instantly: legal speed, impossible start
         c["frames"][n]["players"][2]["x"] = 60.0 + 9 * (n - 60) / FPS
@@ -140,6 +145,7 @@ def score_disagrees(c):
     (roster_changes, "C3 roster"),
     (teleport, "P1 player speed"),
     (sudden_sprint, "P2 player acceleration"),
+    (hard_stop, "P2 player acceleration"),
     (ball_jump, "P3 ball speed"),
     (ball_underground, "P4 ball below ground"),
     (ball_floats, "P5 ball flight"),
@@ -199,6 +205,20 @@ def test_keeper_may_hold_the_ball_at_arms_length_in_the_box(tmp_path):
     assert "P6 ball at feet" not in run(tmp_path, clip)
     clip["frames"][100]["ball"]["x"] = 6.0  # 3 m: beyond any reach
     assert "P6 ball at feet" in run(tmp_path, clip)
+
+
+def test_strong_braking_passes(tmp_path):
+    clip = clean_clip()
+    for n in range(150):  # a1 runs at 7 m/s, then brakes at 7 m/s² to a stop: legal (P2)
+        t = n / FPS
+        if t <= 3.0:
+            x = 7 * t
+        elif t <= 4.0:
+            x = 21 + 7 * (t - 3) - 3.5 * (t - 3) ** 2
+        else:
+            x = 24.5
+        clip["frames"][n]["players"][2]["x"] = 20.0 + x
+    assert "P2 player acceleration" not in run(tmp_path, clip)
 
 
 def test_ball_under_gravity_passes(tmp_path):
