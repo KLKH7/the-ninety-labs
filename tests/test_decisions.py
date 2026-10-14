@@ -23,13 +23,12 @@ def scene(**kw) -> D.Scene:
     return D.Scene(**base)
 
 
-def test_shot_estimate_follows_the_published_shape():
+def test_shot_estimate_follows_the_sourced_rates_by_distance():
     central = lambda d: D.shot_estimate(105 - d, 34, 105, [], None)  # noqa: E731
-    assert 0.25 < central(11) < 0.35
-    assert 0.09 < central(18) < 0.15
-    assert central(35) < 0.04
+    assert math.isclose(central(3), 0.31) and math.isclose(central(11), 0.177)
+    assert math.isclose(central(20), 0.053) and math.isclose(central(30), 0.023)
+    assert central(2) <= 0.31  # never near-certain: close shots are contested in real matches
     assert central(11) > D.shot_estimate(105 - 11, 10, 105, [], None)  # a tight angle is worse
-
 
 def test_a_defender_in_the_cone_or_a_well_placed_keeper_lowers_the_estimate():
     open_shot = D.shot_estimate(90, 34, 105, [], None)

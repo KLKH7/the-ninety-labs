@@ -26,8 +26,13 @@ GENERIC_REACTION_S = 0.365  # D1: how quickly the passer assumes an opponent rea
 LANE_MARGIN_S = 0.25  # D1: design: how sharply the passer's confidence falls as a lane closes
 RECEIVE_MARGIN_S = 0.3  # design: the same for the receiver getting there in time
 PRESSURE_FRONT_M, PRESSURE_BEHIND_M = 9.0, 3.0  # D2: pressure zone, longer in front than behind
-SHOT_SHAPE = 0.75  # D3: design: the player's estimate of a shot rises with the goal angle²,
-                   # saturating below 1: about 0.27 at 11 m central, 0.11 at 18 m, 0.03 at 35 m
+# D3: how often a shot goes in by distance from the goal's centre, for a central shot: the
+# share of real shots that scored by zone (six-yard box 31%, the rest of the central box 17.7%,
+# central outside the box 5.3%, long range 2.3%; American Soccer Analysis, 8,291 MLS shots, 2013).
+# Distances are the zones' approximate middles (*verify*); beyond 40 m is *design*. A player's
+# sense of a good chance comes from what goes in, not from the open goal he sees.
+SHOT_ANCHORS = ((0.0, 0.31), (3.0, 0.31), (11.0, 0.177), (20.0, 0.053), (30.0, 0.023), (40.0, 0.01),
+                (105.0, 0.0))
 BLOCKER_FACTOR = 0.5  # design: each defender in the shooting cone halves the estimate
 PROGRESS_VALUE = 0.04  # design: value of possession per 100 m nearer goal, beyond shot threat
 LOSS_BASE = 0.02  # design: cost of losing the ball anywhere
@@ -176,12 +181,23 @@ def goal_angle(x: float, y: float, goal_x: float) -> float:
     return abs(a - b)
 
 
+def rate_at(distance: float) -> float:
+    """D3: the real scoring rate of a central shot from this distance, between the anchors."""
+    for (d0, r0), (d1, r1) in zip(SHOT_ANCHORS, SHOT_ANCHORS[1:], strict=False):
+        if distance <= d1:
+            return r0 + (r1 - r0) * (distance - d0) / (d1 - d0)
+    return 0.0
+
+
 def shot_estimate(x: float, y: float, goal_x: float, opponents: list[tuple[float, float]],
                   keeper: tuple[float, float] | None) -> float:
-    """The player's own estimate of a shot from here, between 0 and 1: rising with the goal angle,
-    halved for each defender he believes is in the shooting cone, reduced if the keeper stands on
-    the line of the shot. The keeper is counted once, as the keeper, even if he is in `opponents`."""
-    q = 1 - math.exp(-SHOT_SHAPE * goal_angle(x, y, goal_x) ** 2)
+    """The player's own estimate of a shot from here, between 0 and 1: how often shots from this
+    distance go in (D3), less from a tighter angle (by how much of the goal he can see compared with
+    a central shot), halved for each defender he believes is in the shooting cone, reduced if the
+    keeper stands on the line of the shot. The keeper is counted once, as the keeper."""
+    d = math.hypot(goal_x - x, PITCH_Y / 2 - y)
+    central = goal_angle(goal_x - math.copysign(d, goal_x - x), PITCH_Y / 2, goal_x)
+    q = rate_at(d) * min(1.0, goal_angle(x, y, goal_x) / central) if central > 0 else 0.0
     for ox, oy in opponents:
         if (ox, oy) != keeper and in_cone(x, y, goal_x, ox, oy):  # the keeper is counted below
             q *= BLOCKER_FACTOR
