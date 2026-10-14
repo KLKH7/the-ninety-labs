@@ -27,7 +27,7 @@ A clip is one directory:
 |---|---|---|
 | `events.jsonl` | one event per line | [`schemas/match_event.schema.json`](../schemas/match_event.schema.json) |
 | `frames.jsonl` | one frame per line, every frame | [`schemas/frame.schema.json`](../schemas/frame.schema.json) |
-| `meta.json` | at least `fps`; also `seed` or scenario name | `fps` must be positive |
+| `meta.json` | `fps`; `roster` (each player's `id`, `team` and `role`, so the validator knows the goalkeepers); `seed` or scenario name; `score` | `fps` positive; goalkeepers from `roster` |
 
 Coordinates are pitch metres: `x` 0 to 105 toward the right goal, `y` 0 to 68 from the near
 touchline, ball `z` is height. Player ids are `h1`..`h11` and `a1`..`a11`. Events from the
@@ -52,10 +52,12 @@ tests that require them to pass, so no check is stricter than the Laws.
 ## Today's engine
 
 `uv run ninety-sim --seed 7 --minutes 90` then `ninety-validate`: meets the contract. Players
-move with a velocity and at most 5 m/s² of acceleration, pass receivers run onto the ball, the
-ball flies under gravity, and a missed shot goes out for a goal kick after a stoppage. What the
-engine still does not model (out of play over the touchline, halves, offside, officials, the
-ball rolling after it lands) is listed, with sources, in [GROUNDING.md](GROUNDING.md).
+decide and physics decides what happens: a kick gives the ball a velocity, the ball flies under
+gravity and air drag, bounces and rolls (`ninety/sim/ball.py`), each team sends the player who
+can reach it first, and whoever gets there takes it. Completed and intercepted passes, saves,
+goals and balls going out are results, never decided at the kick. What the engine still does not
+model (opponents' distance at restarts, halves, offside, officials, enough stoppages) is listed,
+with sources, in [GROUNDING.md](GROUNDING.md).
 
 ## The renderer's output (to agree)
 

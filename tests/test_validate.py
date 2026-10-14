@@ -189,6 +189,18 @@ def test_new_ball_placed_while_out_of_play_passes(tmp_path):
     assert "P3 ball speed" not in run(tmp_path, clip)
 
 
+def test_keeper_may_hold_the_ball_at_arms_length_in_the_box(tmp_path):
+    clip = clean_clip()
+    for f in clip["frames"]:
+        f["players"].append({"id": "a11", "team": "away", "x": 3.0, "y": 34.0})
+    clip["meta"]["roster"] = [{"id": "a11", "team": "away", "role": "GK"}]
+    clip["frames"][100]["possessor"] = "a11"
+    clip["frames"][100]["ball"] = {"x": 4.8, "y": 34.0, "z": 1.0}  # 1.8 m: a dive, arms out
+    assert "P6 ball at feet" not in run(tmp_path, clip)
+    clip["frames"][100]["ball"]["x"] = 6.0  # 3 m: beyond any reach
+    assert "P6 ball at feet" in run(tmp_path, clip)
+
+
 def test_ball_under_gravity_passes(tmp_path):
     clip = clean_clip()
     lofted(clip)

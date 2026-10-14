@@ -24,11 +24,17 @@ MAX_PLAYER_ACCEL = 8.0  # P2: elite maximal acceleration about 6.2 m/s², plus m
 ACCEL_WINDOW_S = 0.2  # P2: speeds averaged over this window, so frame jitter is not acceleration
 MAX_BALL_MPS = 40.0  # P3: above the hardest shots on record
 GRAVITY = 9.81  # P5
-GRAVITY_TOLERANCE = 3.0  # P5: drag and spin bend the path, but not this much
+# P5: air drag adds up to K * speed * vertical speed to the vertical acceleration. K for a
+# football with a drag coefficient up to 0.5 (radius 0.11 m, 410 g, air 1.2 kg/m³); verify.
+DRAG_K_MAX = 0.5 * 1.2 * 0.5 * math.pi * 0.11**2 / 0.41
+POSITION_PRECISION_M = 0.0005  # positions are written to the nearest millimetre
+
 AIRBORNE_M = 0.3  # P5: the ball is in flight above this height
 AT_FEET_M = 1.5  # P6: how far the ball may be from the player who has it
+IN_HANDS_M = 2.0  # P6: a goalkeeper may hold it at arm's length in their penalty area (Law 12); verify
+PENALTY_DEPTH, PENALTY_HALF_WIDTH = 16.5, 20.16  # Law 1
 NEAR_M = 2.5  # C6, C7: how close the ball must be to where an event says it happened
-ARRIVE_SLACK_S = 0.5  # C7: extra time a pass or shot may take beyond its stated speed
+ON_BALL = {"pass", "shot", "tackle", "interception", "out_of_play", "goal", "set_piece", "kickoff"}
 MAX_SUBSTITUTIONS = 5  # C3: Law 3, top-level competitions
 STOPPAGES = {"out_of_play", "goal", "substitution"}  # C3: events after which play has stopped
 RESTARTS = {"set_piece", "kickoff"}  # P3: events that put the ball back in play
@@ -87,7 +93,8 @@ def check_frames(events: list[dict], frames: list[dict], fps: float, problems: P
             problems["C3 roster"].append(f"{sub['id']}: {sub['team']} over {MAX_SUBSTITUTIONS} substitutions")
 
 
-def check_physics(events: list[dict], frames: list[dict], fps: float, problems: Problems) -> None:
+def check_physics(events: list[dict], frames: list[dict], fps: float, roster: list[dict],
+                  problems: Problems) -> None:
     """P1 to P6: speeds, acceleration, ground, gravity, ball at the possessor's feet."""
     dt = 1 / fps
     # A kickoff restart may move everyone at once: the renderer cuts there.
@@ -142,7 +149,10 @@ def check_physics(events: list[dict], frames: list[dict], fps: float, problems: 
         if f["ball"]["z"] < 0:
             problems["P4 ball below ground"].append(f"frame {f['frame']}: z {f['ball']['z']}")
 
-    # P5: in flight with nobody touching it, the ball falls under gravity.
+    # P5: in flight with nobody touching it, the ball falls under gravity. Rounding each of the
+    # three heights by up to POSITION_PRECISION_M moves the measured acceleration by up to
+    # 4 * precision / dt², so that is the margin.
+    margin = 4 * POSITION_PRECISION_M / dt**2
     for f0, f1, f2 in zip(frames, frames[1:], frames[2:], strict=False):
         if f1["frame"] in restarts or any(f.get("possessor") for f in (f0, f1, f2)):
             continue
@@ -150,11 +160,16 @@ def check_physics(events: list[dict], frames: list[dict], fps: float, problems: 
         if min(z) <= AIRBORNE_M:
             continue
         az = (z[2] - 2 * z[1] + z[0]) / dt**2
-        if abs(az + GRAVITY) > GRAVITY_TOLERANCE:
+        b0, b2 = f0["ball"], f2["ball"]
+        v = [(b2[k] - b0[k]) / (2 * dt) for k in ("x", "y", "z")]
+        allowed = DRAG_K_MAX * math.hypot(*v) * abs(v[2]) + margin
+        if abs(az + GRAVITY) > allowed:
             problems["P5 ball flight"].append(
-                f"frame {f1['frame']}: ball in the air accelerates {az:.1f} m/s² vertically, not -{GRAVITY}"
+                f"frame {f1['frame']}: ball in the air accelerates {az:.1f} m/s² vertically; "
+                f"gravity and drag allow -{GRAVITY} ± {allowed:.1f}"
             )
 
+    keepers = {p["id"] for p in roster if p.get("role") == "GK"}
     for f in frames:
         pid = f.get("possessor")
         if not pid:
@@ -164,7 +179,9 @@ def check_physics(events: list[dict], frames: list[dict], fps: float, problems: 
             problems["P6 ball at feet"].append(f"frame {f['frame']}: possessor {pid} is not on the pitch")
             continue
         gap = math.hypot(f["ball"]["x"] - holder["x"], f["ball"]["y"] - holder["y"])
-        if gap > AT_FEET_M:
+        in_a_box = (min(holder["x"], 105 - holder["x"]) <= PENALTY_DEPTH
+                    and abs(holder["y"] - 34) <= PENALTY_HALF_WIDTH)
+        if gap > (IN_HANDS_M if pid in keepers and in_a_box else AT_FEET_M):
             problems["P6 ball at feet"].append(f"frame {f['frame']}: ball {gap:.1f} m from {pid}, who has it")
 
 
@@ -191,16 +208,15 @@ def check_events(events: list[dict], frames: list[dict], fps: float, meta: dict,
             gap = math.hypot(f["ball"]["x"] - e["x"], f["ball"]["y"] - e["y"])
             if gap > NEAR_M:
                 problems["C6 event location"].append(f"{e['id']} {e['type']}: ball {gap:.1f} m away")
-        if e["type"] in ("pass", "shot") and e.get("end_x") is not None and e.get("ball_speed_kmh"):
-            # When the ball should arrive at its stated speed, plus slack. A clip that ends
-            # before then cannot show the arrival, so only then is the check skipped.
-            length = math.hypot(e["end_x"] - e["x"], e["end_y"] - e["y"])
-            due = e["frame"] + math.ceil((length / (e["ball_speed_kmh"] / 3.6) + ARRIVE_SLACK_S) * fps)
-            if due <= last:
-                balls = [by_frame[n]["ball"] for n in range(e["frame"], due + 1) if n in by_frame]
-                if not any(math.hypot(b["x"] - e["end_x"], b["y"] - e["end_y"]) <= NEAR_M for b in balls):
-                    where = f"({e['end_x']}, {e['end_y']})"
-                    problems["C7 ball path"].append(f"{e['id']} {e['type']}: ball never reaches {where}")
+        if e["type"] in ("pass", "shot") and e.get("end_x") is not None:
+            # The ball reaches the end point before anything else happens to it. No assumption
+            # about speed: a rolling ball slows down.
+            later = [n["frame"] for n in events if n["frame"] > e["frame"] and n["type"] in ON_BALL]
+            until = min(later, default=last)
+            balls = [by_frame[n]["ball"] for n in range(e["frame"], until + 1) if n in by_frame]
+            if not any(math.hypot(b["x"] - e["end_x"], b["y"] - e["end_y"]) <= NEAR_M for b in balls):
+                where = f"({e['end_x']}, {e['end_y']})"
+                problems["C7 ball path"].append(f"{e['id']} {e['type']}: ball never reaches {where}")
         if e["type"] in ("pass", "shot") and e["frame"] > first:
             # The player had the ball just before playing it; possession may clear on the
             # frame the ball leaves.
@@ -255,7 +271,7 @@ def validate(clip: Path) -> Problems:
     check_frames(events, frames, fps, problems)
     if any(k.startswith("C2") for k in problems):
         return dict(problems)
-    check_physics(events, frames, fps, problems)
+    check_physics(events, frames, fps, meta.get("roster", []), problems)
     check_events(events, frames, fps, meta, problems)
     return dict(problems)
 
