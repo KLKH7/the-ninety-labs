@@ -25,8 +25,8 @@ GENERIC_REACTION_S = 0.365  # D1: how quickly the passer assumes an opponent rea
 LANE_MARGIN_S = 0.25  # D1: design: how sharply the passer's confidence falls as a lane closes
 RECEIVE_MARGIN_S = 0.3  # design: the same for the receiver getting there in time
 PRESSURE_FRONT_M, PRESSURE_BEHIND_M = 9.0, 3.0  # D2: pressure zone, longer in front than behind
-SHOT_SHAPE = 0.75  # D3: the player's own estimate of a shot: 0.75 × (goal angle)², about 0.3 at
-                   # 11 m central, 0.12 at 18 m, 0.03 at 35 m (the published shape of shot quality)
+SHOT_SHAPE = 0.75  # D3: design: the player's estimate of a shot rises with the goal angle²,
+                   # saturating below 1: about 0.27 at 11 m central, 0.11 at 18 m, 0.03 at 35 m
 BLOCKER_FACTOR = 0.5  # design: each defender in the shooting cone halves the estimate
 PROGRESS_VALUE = 0.04  # design: value of possession per 100 m nearer goal, beyond shot threat
 LOSS_BASE = 0.02  # design: cost of losing the ball anywhere
@@ -34,6 +34,11 @@ STALE_S = 2.0  # design: a team-mate not seen for this long is a less certain op
 DRIBBLE_STEP_M = 6.0
 MAX_PASS_M = 45.0
 LOFT_OVER_M = 25.0
+LOFT_DEG = 30.0  # design: the launch angle of a lofted pass or a throw, as estimated and as struck
+CONTROL_EST_MPS = 12.0  # A4: the passer's guess of what a first touch can kill: the average (8 + 8 × 0.5)
+CONTROL_MARGIN_MPS = 2.0  # design: how sharply that guess falls off
+STICKY = 0.003  # design: a small bonus for carrying on with the current choice (no flip-flopping)
+CLEAR_FROM = 2 / 3  # a clear is an option in his own third: this share of the pitch from the goal he attacks
 
 
 def _ground_table() -> tuple[list[float], list[tuple[list[float], list[float]]]]:
@@ -53,8 +58,26 @@ ARRIVE_MPS = 6.0  # design: the speed a ground pass is struck to arrive at
 LAUNCH = [ball.ground_pass(max(d * 0.5, 0.5), ARRIVE_MPS, DT) for d in range(91)]
 
 
+# The same for a lofted pass at LOFT_DEG: (ground speed, vertical speed) per 0.5 m.
+LOFT = [ball.lofted_pass(max(d * 0.5, 0.5), LOFT_DEG, DT) for d in range(91)]
+
+
 def launch_speed(distance: float) -> float:
     return LAUNCH[min(len(LAUNCH) - 1, max(0, round(distance / 0.5)))]
+
+
+def loft_launch(distance: float) -> tuple[float, float]:
+    return LOFT[min(len(LOFT) - 1, max(0, round(distance / 0.5)))]
+
+
+def loft_time(distance: float) -> float:
+    """Seconds a lofted pass is in the air: up and down under gravity (drag shortens it a little)."""
+    return 2 * loft_launch(distance)[1] / ball.GRAVITY
+
+
+def dribble_speed(dribbling: float) -> float:
+    """How fast a player can carry the ball, m/s (design): one definition for choosing and doing."""
+    return 2.5 + 2.0 * dribbling
 
 
 def ground_time(v0: float, distance: float) -> float:
@@ -103,6 +126,8 @@ class Scene:
     dribbling: float
     traits: tuple[str, ...]
     risk: float  # -1 protect a lead ... +1 chase the game
+    throw: bool = False  # Law 15: a throw-in, so every pass is thrown (lofted) and nothing else
+    current: str | None = None  # what he is doing now (dribble or hold), for STICKY
 
 
 @dataclass
@@ -126,9 +151,10 @@ def goal_angle(x: float, y: float, goal_x: float) -> float:
 
 def shot_estimate(x: float, y: float, goal_x: float, opponents: list[tuple[float, float]],
                   keeper: tuple[float, float] | None) -> float:
-    """The player's own estimate of a shot from here: the goal angle, halved for each defender
-    he believes is in the shooting cone, reduced if the keeper stands on the line of the shot."""
-    q = SHOT_SHAPE * goal_angle(x, y, goal_x) ** 2
+    """The player's own estimate of a shot from here, between 0 and 1: rising with the goal angle,
+    halved for each defender he believes is in the shooting cone, reduced if the keeper stands on
+    the line of the shot. `opponents` must not include the keeper, who is counted once."""
+    q = 1 - math.exp(-SHOT_SHAPE * goal_angle(x, y, goal_x) ** 2)
     for ox, oy in opponents:
         if in_cone(x, y, goal_x, ox, oy):
             q *= BLOCKER_FACTOR
@@ -149,17 +175,25 @@ def in_cone(x: float, y: float, goal_x: float, ox: float, oy: float) -> bool:
     return lo <= oy <= hi
 
 
-def distance_to_segment(px: float, py: float, ax: float, ay: float, bx: float, by: float) -> float:
+def closest_on_segment(px: float, py: float, ax: float, ay: float, bx: float, by: float
+                       ) -> tuple[float, float]:
+    """(distance from the point to the segment, share of the way along it at the closest point)."""
     dx, dy = bx - ax, by - ay
     seg = dx * dx + dy * dy
     s = 0.0 if seg == 0 else max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / seg))
-    return math.hypot(ax + s * dx - px, ay + s * dy - py)
+    return math.hypot(ax + s * dx - px, ay + s * dy - py), s
 
 
-def value(x: float, y: float, goal_x: float) -> float:
-    """What having the ball here is worth: the threat of a shot from it, plus progress."""
+def distance_to_segment(px: float, py: float, ax: float, ay: float, bx: float, by: float) -> float:
+    return closest_on_segment(px, py, ax, ay, bx, by)[0]
+
+
+def value(x: float, y: float, goal_x: float, opponents: list[tuple[float, float]] = (),
+          keeper: tuple[float, float] | None = None) -> float:
+    """What having the ball here is worth: the threat of a shot from it as he estimates it (the
+    one shot estimate, with the opponents he believes are in the way), plus progress."""
     progress = 1 - abs(goal_x - x) / PITCH_X
-    return SHOT_SHAPE * goal_angle(x, y, goal_x) ** 2 + PROGRESS_VALUE * progress
+    return shot_estimate(x, y, goal_x, list(opponents), keeper) + PROGRESS_VALUE * progress
 
 
 def loss_cost(x: float, y: float, goal_x: float) -> float:
@@ -179,49 +213,60 @@ def pressure(scene: Scene) -> float:
     return max(0.0, worst)
 
 
-def pass_option(scene: Scene, mate: tuple[str, float, float, float]) -> Option | None:
-    mid, mx, my, age = mate
-    lead = 1.5 * attack(scene.goal_x)
-    tx, ty = min(PITCH_X - 1, max(1.0, mx + lead)), my
+def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, age: float,
+                    lofted: bool) -> float | None:
+    """The passer's estimate that a pass to (tx, ty) reaches the team-mate at (mx, my) and is
+    controlled: no opponent gets to the ball's path first, the team-mate gets there in time, and
+    the ball arrives slowly enough to kill. None if a ground pass would stop short."""
     dist = math.hypot(tx - scene.x, ty - scene.y)
-    if dist < 4 or dist > MAX_PASS_M:
-        return None
-    lofted = dist > LOFT_OVER_M
     v0 = launch_speed(dist) if not lofted else 0.0
-    arrive = ground_time(v0, dist) if not lofted else dist / 16.0  # design: a lofted ball's flight
+    arrive = ground_time(v0, dist) if not lofted else loft_time(dist)
     if not math.isfinite(arrive):
         return None
     confidence = 1.0
     for ox, oy in scene.opponents:  # can any opponent reach the ball's path before the ball?
-        d = distance_to_segment(ox, oy, scene.x, scene.y, tx, ty)
-        along = math.hypot(ox - scene.x, oy - scene.y)
+        d, s = closest_on_segment(ox, oy, scene.x, scene.y, tx, ty)
+        along = s * dist  # how far along the pass his closest point is
         if lofted and along < 0.8 * dist:
             continue  # the ball is over his head until it comes down
-        reach_at = min(along, dist)
-        t_ball = ground_time(v0, reach_at) if not lofted else arrive
+        t_ball = ground_time(v0, along) if not lofted else arrive
         if not math.isfinite(t_ball):
             t_ball = arrive
         confidence *= sigmoid((generic_time(max(0.0, d - 1.0)) - t_ball) / LANE_MARGIN_S)
     receiver_t = generic_time(math.hypot(tx - mx, ty - my))
     confidence *= sigmoid((arrive + 0.5 - receiver_t) / RECEIVE_MARGIN_S)
-    if age > STALE_S:
-        confidence *= 0.8
-    gain = value(tx, ty, scene.goal_x)
+    # Can he control it when it gets there? A lofted ball drops at about the speed it was struck.
+    arrival = math.hypot(*loft_launch(dist)) if lofted else ARRIVE_MPS
+    confidence *= sigmoid((CONTROL_EST_MPS - arrival) / CONTROL_MARGIN_MPS)
+    return confidence * (0.8 if age > STALE_S else 1.0)
+
+
+def pass_option(scene: Scene, mate: tuple[str, float, float, float]) -> Option | None:
+    mid, mx, my, age = mate
+    lead = 1.5 * attack(scene.goal_x)
+    tx, ty = min(PITCH_X - 1, max(1.0, mx + lead)), min(PITCH_Y - 1, max(1.0, my))
+    dist = math.hypot(tx - scene.x, ty - scene.y)
+    if dist < 4 or dist > MAX_PASS_M:
+        return None
+    lofted = scene.throw or dist > LOFT_OVER_M
+    confidence = pass_confidence(scene, tx, ty, mx, my, age, lofted)
+    if confidence is None:
+        return None
+    gain = value(tx, ty, scene.goal_x, scene.opponents, scene.keeper)
     space = min((math.hypot(ox - tx, oy - ty) for ox, oy in scene.opponents), default=10.0)
     gain *= 0.7 + 0.3 * min(1.0, space / 5.0)  # a receiver with space can do more with it
+    # A pass that fails is lost along the lane or runs on to where it was aimed: the worse of the two.
     mx_, my_ = (scene.x + tx) / 2, (scene.y + ty) / 2
-    ev = confidence * gain - (1 - confidence) * loss_cost(mx_, my_, scene.goal_x)
-    return Option("pass", ev, (tx, ty), mid, lofted)
+    lost = max(loss_cost(mx_, my_, scene.goal_x), loss_cost(tx, ty, scene.goal_x))
+    return Option("pass", confidence * gain - (1 - confidence) * lost, (tx, ty), mid, lofted)
 
 
 def options(scene: Scene) -> list[Option]:
-    here = value(scene.x, scene.y, scene.goal_x)
+    out = [o for o in (pass_option(scene, mate) for mate in scene.mates) if o]
+    if scene.throw:  # Law 15: a throw-in is thrown to someone; it is never a shot or a dribble
+        return out
+    here = value(scene.x, scene.y, scene.goal_x, scene.opponents, scene.keeper)
     p = pressure(scene)
-    out: list[Option] = []
-    for mate in scene.mates:
-        o = pass_option(scene, mate)
-        if o:
-            out.append(o)
     q = shot_estimate(scene.x, scene.y, scene.goal_x, scene.opponents, scene.keeper)
     if abs(scene.goal_x - scene.x) < 40:
         bias = 1.3 if "shoots_from_distance" in scene.traits else 1.0
@@ -233,14 +278,18 @@ def options(scene: Scene) -> list[Option]:
         ty = scene.y + DRIBBLE_STEP_M * math.sin(heading)
         if not (1 <= tx <= PITCH_X - 1 and 1 <= ty <= PITCH_Y - 1):
             continue
-        my_t = DRIBBLE_STEP_M / (2.5 + 2.0 * scene.dribbling)
-        their_t = min((generic_time(math.hypot(ox - tx, oy - ty)) for ox, oy in scene.opponents),
-                      default=9.0)
-        win = sigmoid((their_t - my_t) / RECEIVE_MARGIN_S)
-        out.append(Option("dribble", win * value(tx, ty, scene.goal_x) - (1 - win) * loss_cost(
-            scene.x, scene.y, scene.goal_x), (tx, ty)))
-    out.append(Option("hold", here * (1 - p) - p * 0.5 * loss_cost(scene.x, scene.y, scene.goal_x)))
-    if abs(scene.goal_x - scene.x) > 0.6 * PITCH_X:  # in his own third: the ball can go long and away
+        # Can an opponent reach the carry anywhere along it before he has carried the ball past?
+        win = 1.0
+        for ox, oy in scene.opponents:
+            d, s = closest_on_segment(ox, oy, scene.x, scene.y, tx, ty)
+            my_t = s * DRIBBLE_STEP_M / dribble_speed(scene.dribbling)
+            win *= sigmoid((generic_time(d) - my_t) / RECEIVE_MARGIN_S)
+        gain = value(tx, ty, scene.goal_x, scene.opponents, scene.keeper)
+        ev = win * gain - (1 - win) * loss_cost(scene.x, scene.y, scene.goal_x)
+        out.append(Option("dribble", ev + (STICKY if scene.current == "dribble" else 0.0), (tx, ty)))
+    hold = here * (1 - p) - p * 0.5 * loss_cost(scene.x, scene.y, scene.goal_x)
+    out.append(Option("hold", hold + (STICKY if scene.current == "hold" else 0.0)))
+    if abs(scene.goal_x - scene.x) > CLEAR_FROM * PITCH_X:  # in his own third: long and away
         wide = 4.0 if scene.y < PITCH_Y / 2 else PITCH_Y - 4.0
         out.append(Option("clear", -LOSS_BASE, (scene.x + attack(scene.goal_x) * 45.0, wide), lofted=True))
     return out

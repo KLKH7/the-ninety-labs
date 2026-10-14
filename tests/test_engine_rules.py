@@ -57,6 +57,10 @@ def test_the_carrier_decides_on_where_he_believes_team_mates_are():
     scene = e.scene_for(carrier)
     assert [(m[1], m[2]) for m in scene.mates] == [(55.0, 50.0)]  # never the truth
     assert scene.opponents == [] and scene.keeper is None  # nobody else seen
+    keeper = e.keeper("away")
+    e.beliefs[carrier.id].seen[keeper.id] = perception.Sighting(100.0, 34.0, 0.0, 0.0, e.t)
+    scene = e.scene_for(carrier)
+    assert scene.keeper == (100.0, 34.0) and scene.opponents == []  # the keeper is counted once
 
 
 def test_a_keeper_reacts_to_the_ball_like_anyone_and_reads_only_shots_at_his_goal():
@@ -209,3 +213,42 @@ def test_a_pass_is_struck_with_execution_error():
         e.pass_to(p, 70.0, 34.0, lofted=False)
         angles.add(round(math.atan2(e.ball[4], e.ball[3]), 6))
     assert len(angles) > 1  # the same intended pass is not struck identically every time
+
+
+def test_a_throw_in_is_always_thrown_even_with_nobody_free():
+    e = Engine(1)
+    still(e)
+    e.possessor = None
+    e.stop("throw_in", "home", (50.0, 0.0))
+    taker = e.by_id[e.restart.taker]
+    taker.x, taker.y = 50.0, 0.0
+    e.restart.ready_at = e.t
+    e.tick_restart()
+    assert e.throw_by == taker.id
+    for b in e.beliefs.values():
+        b.seen.clear()  # he can see nobody to throw to
+    b = e.beliefs[taker.id]
+    b.next_scan = 1e9
+    thrown_at = None
+    for _ in range(int(10 / DT)):
+        e.beliefs[taker.id].seen.clear()
+        e.tick_carrier()
+        assert e.dribble_to is None and not any(ev["type"] == "shot" for ev in e.match.events)
+        if e.possessor is None:
+            thrown_at = e.t
+            break
+        e.t += DT
+        e.frame += 1
+    assert thrown_at is not None  # down the line once he has waited
+    assert e.match.events[-1]["type"] == "pass" and e.ball[5] > 0  # thrown, through the air
+
+
+def test_a_keeper_may_not_handle_a_team_mates_deliberate_pass():
+    e = Engine(1)
+    keeper, mate = e.keeper("home"), e.by_id["h3"]
+    keeper.x, keeper.y = 6.0, 34.0
+    e.kicked = {"type": "pass", "team": "home", "player": mate.id}
+    e.last_touch = mate.id
+    assert not e.hands(keeper, 6.0, 34.0)
+    e.last_touch = "a9"  # an opponent got a touch on it
+    assert e.hands(keeper, 6.0, 34.0)

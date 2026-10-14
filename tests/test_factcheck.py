@@ -3,7 +3,7 @@ from ninety.match.facts import events_in
 
 EVENTS = events_in(7, 5, 1, 5)
 KNOWN = {e["id"]: e for e in EVENTS}
-PASS = next(e for e in EVENTS if e["type"] == "pass" and "distance_m" in e)
+PASS = next(e for e in EVENTS if e["type"] == "pass" and "distance_m" in e and e.get("receiver"))
 
 
 def test_true_claim_passes():

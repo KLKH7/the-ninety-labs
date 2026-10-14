@@ -63,6 +63,7 @@ POST_RADIUS = 0.06  # Law 1: posts and crossbar at most 12 cm wide
 WOODWORK_RESTITUTION = 0.6  # verify
 BALL_TO_FEET = 12.0  # m/s: how fast the ball settles at a new carrier's feet
 LOFT_OVER_M = 25.0  # passes longer than this go through the air
+THROW_WAIT_S = 6.0  # design: with nobody free, a thrower waits this long, then throws down the line
 CHASE_EVERY = 4  # frames between re-planning who chases a free ball
 GOAL_HALF_WIDTH, CROSSBAR = 3.66, 2.44  # Law 1
 PENALTY_DEPTH, PENALTY_HALF_WIDTH = 16.5, 20.16  # Law 1
@@ -186,7 +187,8 @@ class Engine:
         self.touched_since_kick = False
         self.chase: dict[str, tuple[str, float, float]] = {}  # team -> (player, x, y)
         self.restart: Restart | None = None
-        self.throw_by: str | None = None  # a throw-in taker holding the ball before the throw
+        self.throw_by: str | None = None  # a throw-in taker holding the ball until he throws it
+        self.throw_ready = 0.0
         self.dribble_to: tuple[float, float] | None = None  # the carrier's chosen carry, if any
         self.moved: str | None = None  # the carrier, already moved this frame by tick_carrier
         self.hold_until = 0.0
@@ -227,9 +229,13 @@ class Engine:
         return abs(x - own_line) <= PENALTY_DEPTH and abs(y - PITCH_Y / 2) <= PENALTY_HALF_WIDTH
 
     def hands(self, p: Player, x: float, y: float) -> bool:
-        """Law 12: a keeper may handle the ball only inside his own penalty area, and not again
-        after releasing it until another player has touched it."""
-        return p.role == "GK" and self.in_own_box(p.team, x, y) and self.released_by != p.id
+        """Law 12: a keeper may handle the ball only inside his own penalty area; not again after
+        releasing it until another player has touched it; and not from a team-mate's deliberate
+        pass (a kick or a throw-in) that nobody else has touched."""
+        k = self.kicked
+        back_pass = bool(k) and k["type"] == "pass" and k["team"] == p.team and self.last_touch == k["player"]
+        return (p.role == "GK" and self.in_own_box(p.team, x, y) and self.released_by != p.id
+                and not back_pass)
 
     def reaction(self, p: Player) -> float:
         """Seconds before a player responds to the struck ball itself: a choice reaction (he must
@@ -294,6 +300,7 @@ class Engine:
         # away from a body never meets it (contact checks approach), so no placement is needed.
         self.ball = (self.ball[0], self.ball[1], self.ball[2], vx, vy, vz)
         self.released_by = carrier.id
+        self.throw_by = None  # a throw-in ends when the ball is thrown
         self.possessor = None
         self.last_touch = carrier.id
         self.kicked_at = self.t
@@ -358,10 +365,11 @@ class Engine:
             return
         bx, by = self.ball[0], self.ball[1]
         dist = math.hypot(tx - bx, ty - by)
+        # Struck as the decision estimated it (decisions.py); execution error is added on top.
         if throw or lofted:
-            ground, up = ball.lofted_pass(dist, 30 if throw else self.rng.uniform(25, 40), DT)
+            ground, up = decisions.loft_launch(dist)
         else:
-            ground, up = ball.ground_pass(dist, self.rng.uniform(3, 7), DT), 0.0
+            ground, up = decisions.launch_speed(dist), 0.0
         wide = abs(ty - PITCH_Y / 2) > 20 and (tx - bx) * attack_dir(carrier.team) > 0
         skill = "crossing" if (dist > LOFT_OVER_M and wide) else "passing"
         vx, vy, vz = self.execute(carrier, *self.aim(bx, by, tx, ty, ground, up), skill)
@@ -380,26 +388,34 @@ class Engine:
                 at = belief.where(q.id, self.t)
                 if at:  # a team-mate he has not seen cannot be picked
                     mates.append((q.id, at[0], at[1], belief.age(q.id, self.t)))
-        opps = [w for w in (belief.where(q.id, self.t) for q in self.players if q.team == opp) if w]
-        keeper = belief.where(self.keeper(opp).id, self.t)
+        their_keeper = self.keeper(opp).id
+        opps = [w for w in (belief.where(q.id, self.t) for q in self.players
+                            if q.team == opp and q.id != their_keeper) if w]  # the keeper counts once
+        keeper = belief.where(their_keeper, self.t)
         diff = self.match.score[team] - self.match.score[opp]
         risk = clamp(-diff * self.t / 5400, -1.0, 1.0)  # chase the game when behind late, protect when ahead
         prof = carrier.profile
         scene = decisions.Scene(self.ball[0], self.ball[1], goal_x(team), mates, opps, keeper,
                                 prof["decisions"], prof["composure"], prof["dribbling"],
-                                tuple(prof.traits), risk)
+                                tuple(prof.traits), risk,
+                                current="dribble" if self.dribble_to else "hold")
         return scene
 
     def decide(self, carrier: Player, throw: bool = False) -> None:
         """The carrier chooses from what he believes (ninety/sim/decisions.py)."""
         scene = self.scene_for(carrier)
-        mates = scene.mates
         if throw:  # Law 15: a throw goes to a team-mate, not at goal, and is never dribbled
-            scene.mates = [m for m in mates if math.hypot(m[1] - scene.x, m[2] - scene.y) <= 25]
-            choice = max((o for o in decisions.options(scene) if o.kind == "pass"),
-                         key=lambda o: o.value, default=None)
+            scene.throw = True
+            scene.mates = [m for m in scene.mates if math.hypot(m[1] - scene.x, m[2] - scene.y) <= 25]
+            choice = max(decisions.options(scene), key=lambda o: o.value, default=None)
             if choice:
                 self.pass_to(carrier, *choice.target, lofted=True, throw=True)
+            elif self.t - self.throw_ready > THROW_WAIT_S:  # nobody free: into space down the line
+                line = 3.0 if scene.y < PITCH_Y / 2 else PITCH_Y - 3.0
+                self.pass_to(carrier, clamp(scene.x + attack_dir(carrier.team) * 15, 1, PITCH_X - 1), line,
+                             lofted=True, throw=True)
+            else:
+                self.hold_until = self.t + 0.5  # he looks again
             return
         choice = decisions.choose(scene, self.rng)
         if choice.kind == "pass" or choice.kind == "clear":
@@ -670,6 +686,7 @@ class Engine:
         self.give(taker.id)
         self.hold_until = self.t + self.rng.uniform(0.5, 1.5)
         self.throw_by = taker.id if r.kind == "throw_in" else None
+        self.throw_ready = self.t
 
     # ---- tick ---------------------------------------------------------------
 
@@ -803,7 +820,6 @@ class Engine:
             steer(carrier, carrier.x, carrier.y, DRIBBLE)
             self.ball = (carrier.x, carrier.y, 0.0, 0.0, 0.0, 0.0)
             if self.t >= self.hold_until:
-                self.throw_by = None
                 self.decide(carrier, throw=True)
             return
         opp = other(carrier.team)
@@ -813,7 +829,7 @@ class Engine:
             steer(carrier, carrier.x, carrier.y, DRIBBLE)
         elif self.dribble_to:  # carrying the ball where he chose, as fast as his dribbling allows
             tx, ty = self.dribble_to
-            steer(carrier, tx, ty, 2.5 + 2.0 * carrier.profile["dribbling"])
+            steer(carrier, tx, ty, decisions.dribble_speed(carrier.profile["dribbling"]))
             if math.hypot(tx - carrier.x, ty - carrier.y) < 1.0:
                 self.dribble_to = None
         else:  # holding: keeps the ball, shielding it
