@@ -616,11 +616,14 @@ def test_l6_judges_the_goal_the_conceding_keeper_defends(tmp_path):
 
 
 def test_real_engine_goals_are_credited_and_relabelling_them_fails(tmp_path):
-    """Engine output, not a fixture, and no pinned seed (lesson 19): every goal in the first 64
-    scenario corners meets the contract, and giving it to the wrong player (or to nobody) fails
-    C8. Which kinds of goal appear moves with the engine; the rule must hold for each."""
+    """Engine output, not a fixture, and no pinned seed (lesson 19): the first three goals in the
+    scenario corners each meet the contract, and giving one to the wrong player (or to nobody)
+    fails C8. Which seeds score moves with the engine and even with the Python version (CI found
+    2 goals in the 32 seeds that gave 4 locally), so it scans until it has three."""
     goals = 0
-    for seed in range(64):
+    for seed in range(200):
+        if goals == 3:
+            break
         m = simulate(seed, 0.5, "corner")
         goal = next((e for e in m.events if e["type"] == "goal"), None)
         if goal is None:
@@ -635,7 +638,7 @@ def test_real_engine_goals_are_credited_and_relabelling_them_fails(tmp_path):
         goal["player"] = None if scorer is not None else keeper  # an own goal, or their own keeper
         (tmp_path / f"bad{seed}").mkdir()
         assert "C8 event order" in run(tmp_path / f"bad{seed}", base), seed
-    assert goals >= 3  # enough real goals to mean something (5 at the time of writing)
+    assert goals == 3  # about 1 corner in 15 scores, so 200 seeds always find three
 
 
 def test_off_an_attacker_it_is_a_goal_kick_not_a_corner(tmp_path):

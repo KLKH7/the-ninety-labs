@@ -196,3 +196,13 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** a test that pins a branch with a hand-built state must be paired with a
   measurement showing the branch happens in real clips.
 
+
+### 25. A seed's outcome is not the same on every Python
+- **What happened:** a test counted the goals in the first 32 scenario corners and asked for at
+  least 3. Locally (Python 3.13) there were 4; CI (3.12) found 2 and failed. Same seeds, same
+  code: tiny floating-point differences between versions grow over a chaotic simulation.
+- **Rule:** never assert how many times something happens over a fixed set of seeds. Scan until
+  enough cases are found (with a cap far above the expected need), and assert the rule on each.
+  Determinism holds within one Python version, not across them.
+- **Check:** before pushing a test that runs the engine over seeds, run it on every Python
+  version CI uses (`UV_PROJECT_ENVIRONMENT=<dir> uv run --python 3.11 pytest`).
