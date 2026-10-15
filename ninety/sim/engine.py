@@ -93,11 +93,12 @@ RESTART_DISTANCE_M = {"throw_in": 2.0, "corner": 9.15, "goal_kick": PENALTY_DEPT
                       "free_kick": 9.15, "kick_off": 9.15}  # Laws 8 and 13: 9.15 m (the centre circle)
 BOARDS_M = 4.0  # verify: advertising boards behind the lines stop a ball (and players) that go out
 # R1: seconds from the ball going out to the restart. Means from Opta timing of the Premier League
-# (The Analyst): throw-ins about 16 s (2022-23; 17.9 in 2025-26), goal kicks 29 to 30 s, corners and
-# free kicks about half a minute. The spread around each mean is design. Kickoff: design, long
+# (The Analyst): throw-ins about 16 s (2022-23; 17.9 in 2025-26), goal kicks 29 to 30 s, free kicks
+# 31.3 to 40.9 s by team (2022-23; mean taken as the middle), corners about half a minute (only a
+# combined figure is published). The spread around each mean is design. Kickoff: design, long
 # enough to see (a goal's celebration, about 72 s in the same data, is not modelled).
 RESTART_DELAY_S = {"throw_in": (12, 20), "goal_kick": (24, 34), "corner": (24, 36),
-                   "free_kick": (24, 36),
+                   "free_kick": (29, 41),
                    "kick_off": (1, 2)}
 NO_OFFSIDE_FROM = ("throw_in", "goal_kick", "corner")  # Law 11: no offside offence direct from these
 INTERCEPT_SHARE = 0.85  # design: taken before this share of the way to its target, a pass is intercepted
@@ -1457,6 +1458,12 @@ class Engine:
     def foul(self, p: Player, victim: Player) -> None:
         """Law 12: a careless challenge that hits the man: a direct free kick to his side where it
         happened (Law 13); in the offender's own penalty area, a penalty kick (Law 14)."""
+        kicked, (bx, by) = self.kicked, self.ball[:2]
+        if kicked and kicked["type"] == "pass":  # the whistle stops a pass that had not arrived
+            kicked.update(end_x=round(bx, 2), end_y=round(by, 2), outcome="fail")
+        elif kicked and kicked["type"] == "shot":
+            self.close_shot(kicked, bx, by)
+        self.kicked = None
         self.emit("foul", p.team, victim.x, victim.y, player=p.id, receiver=victim.id)
         self.off_balance[p.id] = self.t + OFF_BALANCE_S
         self.lunges.clear(), self.lunge_at.clear(), self.evade_at.clear()
