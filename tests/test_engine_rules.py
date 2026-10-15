@@ -423,3 +423,75 @@ def test_a_ball_that_goes_in_off_an_attacker_is_his_shot_and_goal():
     assert goal_event(e)["player"] == "h10"
     p = next(ev for ev in e.match.events if ev["type"] == "pass")
     assert p["receiver"] == "h10" and p["outcome"] == "success" and p["end_x"] == touch["x"]
+
+
+def test_an_old_deflection_is_never_relabelled_as_a_later_goal():
+    e = Engine(1)
+    e.deflect(e.by_id["h10"], 60.0, 32.0, 0.3, 0.3)  # long ago
+    e.give("h10")  # he then had the ball, so that touch is history
+    e.last_touch = "h10"
+    e.scored("home", None, 105.0, 34.0)
+    old = next(ev for ev in e.match.events if ev["player"] == "h10" and ev["type"] in ("shot", "deflection"))
+    assert old["type"] == "deflection"
+
+
+def test_his_own_pass_turned_in_off_himself_is_not_received_by_him():
+    e = Engine(1)
+    e.kicked = e.emit("pass", "home", 80.0, 30.0, player="h10")
+    e.frame += 10
+    e.deflect(e.by_id["h10"], 100.0, 32.0, 0.3, 0.3)
+    e.last_touch = "h10"
+    e.scored("home", e.kicked, 105.0, 34.0)
+    p = next(ev for ev in e.match.events if ev["type"] == "pass")
+    assert p["receiver"] is None and p["outcome"] == "fail"
+
+
+def test_team_mates_velocity_reaches_the_passers_picture():
+    e = Engine(1)
+    carrier, mate = e.by_id["h6"], e.by_id["h9"]
+    e.beliefs[carrier.id].seen[mate.id] = perception.Sighting(70.0, 34.0, 6.0, 1.0, e.t)
+    m = next(m for m in e.scene_for(carrier).mates if m[0] == mate.id)
+    assert m[4:6] == (6.0, 1.0)
+
+
+def test_the_passer_judges_opponents_where_they_will_be():
+    from ninety.sim.engine import ANTICIPATE_S
+    e = Engine(1)
+    carrier, opp = e.by_id["h6"], e.by_id["a6"]
+    e.beliefs[carrier.id].seen = {opp.id: perception.Sighting(60.0, 34.0, -5.0, 0.0, e.t)}
+    assert e.scene_for(carrier).opponents == [(60.0 - 5.0 * ANTICIPATE_S, 34.0)]
+
+
+def test_the_engine_uses_the_attacking_shape_with_the_ball():
+    from ninety.sim import offball
+    e = Engine(1)
+    p = e.by_id["h2"]  # RB
+    e.brains["home"].in_possession = True
+    e.possessor = None  # a pass in flight: the shape still holds
+    e.ball = (50.0, 34.0, 0.0, 0.0, 0.0, 0.0)
+    want = offball.attacking_slot("RB", 0.0, 50.0, 34.0, e.brains["away"].line_x)
+    assert e.shape_target(p)[:2] == want
+
+
+def test_his_own_pass_that_goes_straight_in_is_his_shot_not_an_old_deflection():
+    e = Engine(1)
+    e.deflect(e.by_id["h10"], 60.0, 32.0, 0.3, 0.3)  # an earlier touch
+    carrier = e.by_id["h10"]
+    e.ball = (90.0, 30.0, 0.0, 0.0, 0.0, 0.0)
+    e.kicked = e.emit("pass", "home", 90.0, 30.0, player="h10")
+    e.kick(carrier, 20.0, 4.0, 0.0)
+    e.last_touch = "h10"
+    e.scored("home", e.kicked, 105.0, 34.0)
+    kinds = {ev["type"] for ev in e.match.events if ev["player"] == "h10" and ev["type"] != "goal"}
+    assert "deflection" in kinds  # the old touch stays what it was
+    shot = next(ev for ev in e.match.events if ev["type"] == "shot")
+    assert shot["outcome"] == "goal" and shot["x"] == 90.0
+
+
+def test_an_opponent_cutting_a_pass_out_intercepts_but_collecting_it_where_it_was_going_recovers():
+    for at_x, label in ((60.0, True), (79.0, False)):
+        e = Engine(1)
+        e.pass_target = (80.0, 34.0)
+        e.kicked = e.emit("pass", "home", 50.0, 34.0, player="h6")
+        e.touched(e.by_id["a6"], at_x, 34.0, controls=True)
+        assert any(ev["type"] == "interception" for ev in e.match.events) is label

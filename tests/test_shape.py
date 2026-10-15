@@ -40,4 +40,5 @@ def test_a_pass_leads_a_running_team_mate_into_the_space_ahead_of_him():
 def test_box_runners_wait_onside_for_the_delivery():
     st = slot("ST", ball_x=88.0, ball_y=60.0, line=93.0)
     assert st[0] <= 92.0  # held a step onside of their line, not parked at the near post
-    assert slot("ST", ball_x=95.0, ball_y=60.0, line=93.0)[0] <= 95.0  # never beyond the ball when that is further
+    beyond_ball = slot("ST", ball_x=95.0, ball_y=60.0, line=93.0)
+    assert beyond_ball[0] <= 95.0  # level with the ball at most, when the ball is further on

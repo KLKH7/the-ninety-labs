@@ -115,12 +115,9 @@ def test_the_shot_estimate_stays_a_chance_even_on_the_line():
 
 
 def test_a_lofted_pass_goes_over_an_opponent_near_the_passer():
-    mate = ("h9", 95.0, 34.0, 0.0)  # 35 m: lofted
-    clear = D.pass_option(scene(), mate)
-    near_passer = D.pass_option(scene(opponents=[(66.0, 34.0)]), mate)
-    near_landing = D.pass_option(scene(opponents=[(92.0, 34.0)]), mate)
-    assert clear.lofted and near_passer.value == clear.value and near_landing.value < clear.value
-
+    conf = lambda opps: D.pass_confidence(scene(opponents=opps), 96.5, 34.0, 95.0, 34.0, 0.0, True)  # noqa: E731
+    assert conf([(66.0, 34.0)]) == conf([])  # over his head
+    assert conf([(92.0, 34.0)]) < conf([])  # but one where it comes down can get to it
 
 def test_a_pass_is_led_toward_the_goal_being_attacked():
     assert D.pass_option(scene(), ("h9", 75.0, 34.0, 0.0)).target[0] > 75.0
@@ -186,7 +183,7 @@ def test_a_lofted_ball_toward_his_own_goal_is_costed_where_it_would_end():
 def test_a_failed_pass_is_costed_where_it_would_end_if_that_is_worse():
     s = scene(x=40.0, y=34.0, opponents=[(28.0, 37.0)])
     back = D.pass_option(s, ("h4", 18.5, 34.0, 0.0))  # 20 m back along the ground, toward his own goal
-    conf = D.pass_confidence(s, *back.target, 18.5, 34.0, 0.0, False, back.pace)
+    conf = D.pass_confidence(s, *back.target, 18.5, 34.0, 0.0, back.lofted, back.pace)
     gain = D.value(*back.target, 105.0, s.opponents) * (0.7 + 0.3 * min(1.0, math.hypot(8.0, 3.0) / 5.0))
     at_target = D.loss_cost(*back.target, 105.0)
     assert at_target > D.loss_cost(30.0, 34.0, 105.0)  # the end is worse than the midpoint here
@@ -276,9 +273,30 @@ def test_choice_randomness_is_relative_to_how_different_the_options_are():
 
 
 def test_the_passer_picks_the_pace_the_lane_needs():
-    mate = ("h9", 82.5, 34.0, 0.0)
+    mate = ("h9", 72.5, 34.0, 0.0)  # a 14 m pass: too short to loft, so pace is the answer
     open_lane = D.pass_option(scene(x=60.0), mate)
-    tight = D.pass_option(scene(x=60.0, opponents=[(72.0, 37.0)]), mate)
-    assert tight.pace > open_lane.pace or tight.pace == max(D.PASS_PACES)
-    assert all(math.isfinite(D.launch_speed(20.0, p)) for p in D.PASS_PACES)
+    tight = D.pass_option(scene(x=60.0, opponents=[(68.0, 36.0)]), mate)  # 2 m off the lane
+    assert not tight.lofted and tight.pace > open_lane.pace
     assert D.launch_speed(20.0, 14.0) > D.launch_speed(20.0, 6.0)
+
+def test_options_closer_than_the_noise_floor_are_close_to_a_coin_flip():
+    rng = random.Random(9)
+    s = scene(x=60.0, decisions=1.0)
+    opts = [D.Option("a", 0.0200), D.Option("b", 0.0201)]
+    picks = Counter()
+    original = D.options
+    D.options = lambda _s: opts
+    try:
+        for _ in range(2000):
+            picks[D.choose(s, rng).kind] += 1
+    finally:
+        D.options = original
+    assert picks["a"] > 600  # a 0.0001 edge does not decide it
+
+
+def test_from_fifteen_metres_he_chooses_between_along_the_ground_and_over_the_top():
+    blocked = scene(x=60.0, opponents=[(67.0, 34.0), (70.0, 34.5)])  # the ground lane is shut
+    over = D.pass_option(blocked, ("h9", 85.0, 34.0, 0.0))
+    assert over.lofted
+    short = D.pass_option(scene(x=60.0), ("h9", 70.0, 34.0, 0.0))
+    assert not short.lofted  # under 15 m it stays on the ground

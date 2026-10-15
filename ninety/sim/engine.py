@@ -62,7 +62,6 @@ MISCONTROL_KEEP = 0.4  # verify: share of speed a ball keeps off a failed touch 
 POST_RADIUS = 0.06  # Law 1: posts and crossbar at most 12 cm wide
 WOODWORK_RESTITUTION = 0.6  # verify
 BALL_TO_FEET = 12.0  # m/s: how fast the ball settles at a new carrier's feet
-LOFT_OVER_M = 25.0  # passes longer than this go through the air
 # Dribbling is a run of touches (D6): the ball is pushed ahead and the dribbler runs onto it, so
 # between touches it is free and a defender who gets there first wins it. All *design*, *verify*.
 TOUCH_CLOSE_M = 0.8  # how far ahead a touch puts the ball with an opponent close
@@ -94,6 +93,7 @@ BOARDS_M = 4.0  # verify: advertising boards behind the lines stop a ball (and p
 RESTART_DELAY_S = {"throw_in": (3, 8), "goal_kick": (6, 10), "corner": (12, 20),
                    "free_kick": (4, 10)}  # verify (R1)
 NO_OFFSIDE_FROM = ("throw_in", "goal_kick", "corner")  # Law 11: no offside offence direct from these
+INTERCEPT_SHARE = 0.85  # design: taken before this share of the way to its target, a pass is intercepted
 
 # 4-3-3 anchors for a team attacking toward x=105, as (x, y) fractions of the pitch.
 FORMATION = [
@@ -210,6 +210,7 @@ class Engine:
         self.tackle: dict | None = None  # the tackle event whose outcome the next control decides
         self.dribbler: str | None = None  # a carrier who pushed the ball ahead and is running onto it
         self.last_deflection: dict | None = None  # the most recent deflection event
+        self.pass_target: tuple[float, float] | None = None  # where the pass in flight was aimed
         self.offside: set[str] = set()  # L10: team-mates in an offside position when the ball was played
         self.from_restart: str | None = None  # the restart the next kick is taken from
         self.read: tuple[str, float] | None = None  # (keeper, y): where he reads a shot is going
@@ -325,6 +326,16 @@ class Engine:
         self.give(taker.id)
 
     # ---- decisions: players choose, the kick gives the ball a velocity -------
+
+    def in_the_lane(self, kicked: dict, x: float, y: float) -> bool:
+        """Was the pass taken on its way, short of where it was aimed (by INTERCEPT_SHARE)?"""
+        tx, ty = self.pass_target or (x, y)
+        sx, sy = kicked["x"], kicked["y"]
+        length = math.hypot(tx - sx, ty - sy)
+        if length < 1e-6:
+            return True
+        along = ((x - sx) * (tx - sx) + (y - sy) * (ty - sy)) / length
+        return along < INTERCEPT_SHARE * length
 
     def offside_offence(self, p: Player, x: float, y: float) -> None:
         """L10: an indirect free kick to the defending side where the offside player played it."""
@@ -465,9 +476,10 @@ class Engine:
         else:
             ground, up = decisions.launch_speed(dist, pace), 0.0
         wide = abs(ty - PITCH_Y / 2) > 20 and (tx - bx) * attack_dir(carrier.team) > 0
-        skill = "crossing" if (dist > LOFT_OVER_M and wide) else "passing"
+        skill = "crossing" if ((lofted or throw) and wide) else "passing"
         vx, vy, vz = self.execute(carrier, *self.aim(bx, by, tx, ty, ground, up), skill)
         # Receiver, end point and outcome are filled in when someone takes the ball or it goes out.
+        self.pass_target = (tx, ty)
         self.kicked = self.emit("pass", carrier.team, bx, by, player=carrier.id,
                                 ball_speed_kmh=round(math.sqrt(vx * vx + vy * vy + vz * vz) * 3.6, 1))
         self.kick(carrier, vx, vy, vz)
@@ -689,7 +701,9 @@ class Engine:
                 self.kicked = None
             elif not same_team:  # an opponent got to it: the pass has failed
                 kicked.update(receiver=p.id, end_x=round(x, 2), end_y=round(y, 2), outcome="fail")
-                if controls:
+                if controls and self.in_the_lane(kicked, x, y):
+                    # Cut out on its way: an interception. Collected where it was going (a long
+                    # ball dropping to a defender) is a recovery: the possession change says it.
                     self.emit("interception", p.team, x, y, player=p.id)
                 self.kicked = None
             return  # a team-mate's deflection leaves the pass in flight
