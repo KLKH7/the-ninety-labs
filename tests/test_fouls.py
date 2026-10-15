@@ -137,3 +137,28 @@ def test_in_his_own_box_a_lunge_through_the_man_needs_a_surer_win():
     assert e.foul_line(dfd, att, 46.0, 34.0) == 0.0
     dfd.x, dfd.y, att.x, att.y = 96.0, 36.0, 95.6, 34.0  # in the box, from in front and wide
     assert e.foul_line(dfd, att, 96.0, 34.0) <= line
+
+
+def test_at_a_penalty_the_keeper_guesses_the_side_about_as_often_as_keepers_do():
+    import random
+
+    from ninety.sim.engine import PENALTY_CORRECT_SIDE, SHOT_AIM_OFF_M
+
+    e = box_foul()
+    keeper, taker = e.keeper("away"), e.by_id[e.restart.taker]
+    keeper.x, keeper.y, keeper.heading = 105.0, 34.0, 3.14159  # on his line, facing the kicker
+    taker.x, taker.y = 93.6, 34.0
+    e.rng = random.Random(5)
+
+    def right_side(restart_kind):
+        e.from_restart = restart_kind
+        n = right = 0
+        for _ in range(4000):
+            aim = 34.0 + random.choice([-1, 1]) * random.uniform(*SHOT_AIM_OFF_M)
+            read = e.keeper_read(keeper, taker, aim)
+            n += 1
+            right += (read - 34.0) * (aim - 34.0) > 0
+        return right / n
+
+    assert abs(right_side("penalty_kick") - PENALTY_CORRECT_SIDE) < 0.03
+    assert right_side(None) > 0.75  # open play keeps his own read

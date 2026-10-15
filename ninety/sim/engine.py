@@ -83,6 +83,28 @@ COMMIT_P = 0.6  # a defender commits only when he expects to win the race this o
 # What a defender expects a penalty to cost: the chance it is scored. Premier League seasons run from
 # 74.8% (2022-23) to 89.6% (2023-24) (Opta via The Analyst); 0.8 is design within that range.
 PENALTY_GOAL_P = 0.8
+SHOT_AIM_OFF_M = (0.5, 3.2)  # design: how far from the centre of the goal a shot is aimed
+# A2 at a penalty: the keeper must commit before the strike, against a kicker with time to disguise
+# it. On kicks to a side, keepers went the right way 113 times in 204 (Bar-Eli et al. 2007, Table 1,
+# 286 top-flight penalties): barely better than a guess. His read's spread is whatever gives that
+# rate over the shots the engine aims (derived below, not chosen).
+PENALTY_CORRECT_SIDE = 113 / 204
+
+
+def read_spread_for(correct: float, off: tuple[float, float] = SHOT_AIM_OFF_M) -> float:
+    """The spread (m) of a read centred on the aim that picks the aim's side with chance `correct`,
+    over aims uniform `off` metres either side of centre."""
+    def share(sd: float, n: int = 400) -> float:
+        return sum(0.5 * (1 + math.erf((off[0] + (off[1] - off[0]) * (i + 0.5) / n) / (sd * math.sqrt(2))))
+                   for i in range(n)) / n
+    lo, hi = 0.01, 1000.0
+    for _ in range(60):
+        mid = (lo + hi) / 2
+        lo, hi = (mid, hi) if share(mid) > correct else (lo, mid)
+    return lo
+
+
+PENALTY_READ_ERROR_M = read_spread_for(PENALTY_CORRECT_SIDE)
 SHIELD_M = 3.0  # holding with an opponent this close, the carrier puts his body between them
 EVADE_MPS = 3.0  # how fast a carrier pushes the ball away from a lunge, plus up to 2 m/s with dribbling
 JOCKEY_LOOKAHEAD_S = 0.5  # a jockeying defender matches where the carrier is going, not where he is
@@ -514,11 +536,14 @@ class Engine:
 
     def keeper_read(self, keeper: Player, kicker: Player, aim_y: float) -> float | None:
         """Where a keeper thinks a shot is going, read from the kicker's body: only if he can
-        see the kicker, centred on the intended aim, with his anticipation's error (A2)."""
+        see the kicker, centred on the intended aim, with his anticipation's error (A2); at a
+        penalty, with the measured spread of a keeper who must commit first."""
         if not perception.visible(keeper.heading, keeper.x, keeper.y, kicker.x, kicker.y,
                                   keeper.profile.view_half_angle()):
             return None
-        return aim_y + self.rng.gauss(0, keeper.profile.read_error_m())
+        penalty = self.from_restart == "penalty_kick"
+        spread = PENALTY_READ_ERROR_M if penalty else keeper.profile.read_error_m()
+        return aim_y + self.rng.gauss(0, spread)
 
     def shoot(self, carrier: Player) -> None:
         team = carrier.team
@@ -529,7 +554,7 @@ class Engine:
         bx, by = self.ball[0], self.ball[1]
         # The aim (which corner, how high, how hard) is a choice; missing it is execution error.
         side = self.rng.choice([-1, 1])
-        ty = PITCH_Y / 2 + side * self.rng.uniform(0.5, 3.2)
+        ty = PITCH_Y / 2 + side * self.rng.uniform(*SHOT_AIM_OFF_M)
         tz = self.rng.uniform(0.1, 2.0)
         speed = self.rng.uniform(*offball.SHOT_SPEEDS_KMH) / 3.6
         ground, up = ball.shot(math.hypot(gx - bx, ty - by), speed, tz, DT)
