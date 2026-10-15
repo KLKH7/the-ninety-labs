@@ -430,3 +430,25 @@ def test_the_shot_estimate_is_continuous_in_distance_with_the_keeper_off_his_spo
 def test_keeper_coverage_is_averaged_over_shot_speeds_so_it_never_hits_zero_too_early():
     usual = offball.keeper_spot(79, 34, 105)  # 26 m out, where a single speed left nothing open
     assert offball.open_goal_share(79, 34, 105, usual) > 0
+
+
+def test_a_one_on_one_with_the_keeper_rushing_out_is_never_hopeless_nor_certain():
+    kx, ky = offball.close_down_spot((91.0, 34.0), 105.0)
+    q = D.shot_estimate(91, 34, 105, [], (kx, ky))
+    assert 0 < q < D.shot_estimate(91, 34, 105, [], None)
+    assert D.shot_estimate(91, 34, 105, [], (60.0, 34.0)) < 1.0  # an empty net is likely, not certain
+
+
+def test_the_keeper_term_is_the_published_save_rate_with_odds_scaled_by_coverage():
+    assert D.KEEPER_SAVES == 826 / 1079  # Perez-Arroniz et al. 2025
+    usual = offball.keeper_spot(90, 34, 105)
+    assert math.isclose(D.shot_estimate(90, 34, 105, [], usual), D.shot_estimate(90, 34, 105, [], None))
+    near_post = (usual[0], usual[1] - 1.0)
+    far = (usual[0], usual[1] + 2.5)
+    assert D.shot_estimate(90, 34, 105, [], near_post) < D.shot_estimate(90, 34, 105, [], far)
+
+
+def test_the_arms_stretch_at_the_same_pace_as_the_dive():
+    for t in (0.0, 0.1, 0.25, 0.4, 0.5, 0.8):
+        want = offball.KEEPER_STAND_REACH_M + offball.KEEPER_DIVE_EXTRA_M * offball.dive_progress(t)
+        assert math.isclose(offball.arm_reach_m(t), want)

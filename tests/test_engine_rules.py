@@ -771,3 +771,33 @@ def test_the_keeper_dives_at_a_dipping_shot_that_comes_in_under_the_bar():
     assert z < 2.44  # it does come in under the bar, though a straight line says over
     e.t += e.reaction(k)
     assert e.keeper_dive(k)
+
+
+def test_ball_at_x_interpolates_the_crossing_between_frames():
+    e = Engine(1)
+    e.ball = (80.0, 34.0, 0.0, 10.0, 4.0, 0.0)  # along the ground, slowing a little with drag
+    when, y, _ = e.ball_at_x(90.0)
+    path = ball.predict(e.ball, 1 / 25, 3.0)
+    k = next(i for i, s in enumerate(path) if s[0] >= 90.0)
+    assert (k - 1) / 25 <= when <= k / 25  # between the frames, not the frame after
+    assert abs((y - 34.0) / (90.0 - 80.0) - 0.4) < 0.01  # on the ball's own line
+
+
+def test_a_late_dive_never_shrinks_the_keepers_reach():
+    e = Engine(1)
+    k = _shot_at_keeper(e, (80.0, 34.0, 0.3, 20.0, 1.0, 0.0))
+    e.t += e.reaction(k) + 0.4
+    before = e.reach(k, 104.0, 34.0)[0]
+    e.dive = (k.id, e.t, k.y, 0.5)  # he decides to dive only now
+    assert e.reach(k, 104.0, 34.0)[0] >= before
+
+
+def test_the_keepers_reach_grows_from_his_reaction_to_the_last_touch():
+    from ninety.sim import offball
+    e = Engine(1)
+    k = _shot_at_keeper(e, (90.0, 34.0, 0.5, 25.0, 0.0, 0.0))
+    e.t += e.reaction(k) + 0.05
+    early = e.reach(k, 104.0, 34.0)[0]
+    assert early < offball.KEEPER_STAND_REACH_M + offball.KEEPER_DIVE_EXTRA_M  # still stretching
+    e.kicked_at = e.t  # deflected: he reacts to it afresh, from the deflection, not the strike
+    assert e.reach(k, 104.0, 34.0)[0] == offball.arm_reach_m(0.0)

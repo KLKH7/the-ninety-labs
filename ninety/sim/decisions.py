@@ -43,9 +43,9 @@ BLOCKER_FACTOR = 0.5  # design, verify: each defender in the shooting cone block
 _UNSCREENED, _SCREENED, _UNSCREENED_SHARE = 0.1159, 0.0749, 0.2318
 _AVERAGE = _UNSCREENED_SHARE * _UNSCREENED + (1 - _UNSCREENED_SHARE) * _SCREENED
 CLEAR_SHOT, SCREENED_SHOT = _UNSCREENED / _AVERAGE, _SCREENED / _AVERAGE
-# D3: keepers save about 76.5% of on-target shots (Perez-Arroniz et al. 2025, 2,238 La Liga shots);
-# the typical shot behind the zone rates faces that keeper.
-KEEPER_SAVES = 0.765
+# D3: keepers save about 76.5% of on-target shots: 826 of 1,079 (Perez-Arroniz et al. 2025, 2,238
+# La Liga shots); the typical shot behind the zone rates faces that keeper.
+KEEPER_SAVES = 826 / 1079
 CHOICE_NOISE_FLOOR = 0.005  # design, verify: options closer than about this (in goals) are a near coin-flip
 HOLD_DECAY = 0.1  # design, verify: share of the ball's worth lost per decision spent holding
 STALE_S = 2.0  # design: a team-mate not seen for this long is a less certain option
@@ -237,12 +237,14 @@ def shot_estimate(x: float, y: float, goal_x: float, opponents: list[tuple[float
     q = typical_shot(x, y, goal_x) * (SCREENED_SHOT if screened else CLEAR_SHOT)
     if keeper:
         # The typical shot already faces a keeper in his usual spot, who saves KEEPER_SAVES of
-        # what reaches him. This keeper fails more often in proportion to how much less of the goal
-        # he covers than the usual one would, never beyond failing every time.
+        # what reaches him. This keeper's odds of a save scale with how much of the goal he covers
+        # against the usual one (*design*: one save rate for every distance, *verify* by zone), so
+        # a better-placed keeper saves more and a worse one less, but never every shot or none.
         usual = 1 - offball.open_goal_share(x, y, goal_x, offball.keeper_spot(x, y, goal_x))
         here = 1 - offball.open_goal_share(x, y, goal_x, keeper)
-        covers = min(here / usual, 1 / KEEPER_SAVES) if usual > 1e-9 else 1.0
-        q *= (1 - KEEPER_SAVES * covers) / (1 - KEEPER_SAVES)
+        ratio = here / usual if usual > 0 else 1.0  # (a usual keeper always covers something)
+        odds = KEEPER_SAVES / (1 - KEEPER_SAVES) * ratio
+        q *= (1 / (1 + odds)) / (1 - KEEPER_SAVES)
     return min(q, 1.0)  # a probability
 
 

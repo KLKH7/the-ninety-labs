@@ -301,9 +301,8 @@ class Engine:
             # full stretch only once the dive has had time to unfold after he reacts to the
             # strike. A deflection does not un-stretch a dive already under way.
             at = self.t if at is None else at
-            mine = self.dive and self.dive[0] == p.id
-            started = self.dive[1] if mine else self.kicked_at + self.reaction(p)
-            return offball.arm_reach_m(max(0.0, at - started)), HAND_REACH_Z
+            # His arms stretch from the moment he reacts, whether or not his body launches.
+            return offball.arm_reach_m(max(0.0, at - self.kicked_at - self.reaction(p))), HAND_REACH_Z
         return CONTROL_M, FOOT_REACH_Z
 
     def give(self, pid: str) -> None:
@@ -1126,14 +1125,18 @@ class Engine:
         return spot
 
     def ball_at_x(self, x: float, seconds: float = 3.0) -> tuple[float, float, float] | None:
+        # `seconds`: design, longer than any shot or pass takes to reach a keeper
         """(seconds from now, y, height) when the ball, in its own flight (drag and gravity),
         reaches x; None if it does not within `seconds`."""
         bx, vx = self.ball[0], self.ball[3]
         if abs(vx) < 1e-6 or (x - bx) * vx <= 0:
             return None
-        for k, s in enumerate(ball.predict(self.ball, DT, seconds)):
-            if (s[0] - x) * vx >= 0:
-                return k * DT, s[1], s[2]
+        path = ball.predict(self.ball, DT, seconds)
+        for k in range(1, len(path)):
+            a, b = path[k - 1], path[k]
+            if (b[0] - x) * vx >= 0:  # crossed between these two steps: interpolate
+                f = (x - a[0]) / (b[0] - a[0]) if b[0] != a[0] else 1.0
+                return (k - 1 + f) * DT, a[1] + f * (b[1] - a[1]), a[2] + f * (b[2] - a[2])
         return None
 
     def keeper_dive(self, p: Player) -> bool:
@@ -1148,8 +1151,10 @@ class Engine:
             arrival = self.ball_at_x(p.x)  # where the ball's own flight takes it past him
             if arrival and arrival[2] <= HAND_REACH_Z:  # not one going over him
                 when, cross = arrival[0], arrival[1]
-                # only as far as his body must go beyond what his arms will reach by then
-                need = abs(cross - p.y) - offball.arm_reach_m(when)
+                # only as far as his body must go beyond what his arms will reach by then; his arms
+                # began to stretch when he reacted, whenever the dive itself starts
+                stretched = self.t - (self.kicked_at + self.reaction(p)) + when
+                need = abs(cross - p.y) - offball.arm_reach_m(stretched)
                 if need > 0:
                     travel = math.copysign(min(need, KEEPER_DIVE_TRAVEL_M), cross - p.y)
                     self.dive = (p.id, self.t, p.y, travel)
