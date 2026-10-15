@@ -465,6 +465,9 @@ def test_scenario_corner_comes_from_play():
         b = first["ball"]
         gaps = [math.hypot(b["x"] - p["x"], b["y"] - p["y"]) for p in first["players"]]
         assert min(gaps) >= BODY_RADIUS + 0.1, seed  # the ball outside every body
+        others = [math.hypot(holder["x"] - p["x"], holder["y"] - p["y"]) for p in first["players"]
+                  if p["id"] != holder["id"]]
+        assert min(others) >= 2 * BODY_RADIUS, seed  # nor is he inside anyone
         b1 = m.frames[1]["ball"]
         assert math.hypot(b1["x"] - b["x"], b1["y"] - b["y"]) < 0.15, seed  # carried, not jumping
         players = first["players"]
@@ -660,9 +663,10 @@ L6_WRONG = {
     "over the bar": lambda n: (90.5 + 0.6 * max(n - 5, 0), 34.0, 0.16 * max(n - 5, 0)),
     "already deep in the net": lambda n: (92.0 + 0.6 * max(n - 5, 0), 34.0, 0.0),
     "3 m short of the line the frame before": lambda n: (87.5 + 0.6 * max(n - 5, 0), 34.0, 0.0),
-    # just wide: its centre crosses about 3.95 m from the middle, its path 0.22 m from the post's
-    # axis (touching distance 0.17 m), so it never touches the woodwork
-    "just wide of the post": lambda n: (90.5 + 0.6 * max(n - 5, 0), 34.0 + 0.1635 * max(n - 5, 0), 0.0),
+    # wide of the post and clear of it: its path passes 0.22 m from the post's axis (touching
+    # distance 0.17 m), so no rebound off the woodwork can have changed it
+    "wide of the post, clear of it": lambda n: (90.5 + 0.6 * max(n - 5, 0), 34.0 + 0.1635 * max(n - 5, 0),
+                                                0.0),
     "moving away from goal": lambda n: (105.0 - 0.6 * max(n - 5, 0) / 25 * 2, 34.0, 0.0) if n > 27 else
     (90.5 + 0.6 * max(n - 5, 0), 34.0, 0.0),
 }
@@ -711,27 +715,81 @@ def test_a_ball_that_rolls_through_the_post_fails_p15(tmp_path):
     assert "P15 woodwork" in run(tmp_path, clip)
 
 
+def test_a_ball_through_the_post_at_the_other_goal_fails_p15(tmp_path):
+    """Mutation caught: P15 checking only the goal at x = 105."""
+    path = creeping(32.5, z=1.1, dy=0.4)
+    clip = goal_clip(OWN_GOAL, None, path=lambda n: (105.0 - path(n)[0], *path(n)[1:]))
+    assert "P15 woodwork" in run(tmp_path, clip)
+
+
+def test_a_ball_rolling_over_the_line_into_the_post_fails_p15(tmp_path):
+    """A ball 2 cm outside the post's inner edge as it goes over overlaps the post: it would have
+    hit it. L6 cannot judge where it went after touching, so P15 is what rejects it."""
+    clip = goal_clip(OWN_GOAL, None, path=creeping(34.0 + 3.66 - 0.111 + 0.02))
+    assert "P15 woodwork" in run(tmp_path, clip)
+
+
+def test_p15_leaves_balls_that_pass_clear_of_the_frame(tmp_path):
+    """Mutations caught: the posts treated as rising above the bar; the bar as running past the
+    posts. A ball high over the post, and one at bar height outside the post, touch nothing."""
+    for path in (creeping(32.5, z=3.3, dy=0.4), creeping(34.0 + 3.72 + 1.3, z=2.39, x_before=105.0, dx=0.6)):
+        (tmp_path / str(path)).mkdir()
+        assert "P15 woodwork" not in run(tmp_path / str(path), goal_clip(OWN_GOAL, None, path=path))
+
+
 def test_a_ball_never_passes_through_the_crossbar(tmp_path):
     """P15: dropping through the bar from above, at the bar's height, is not a goal."""
     clip = goal_clip(OWN_GOAL, None, path=lambda n: (104.0 + 0.04 * max(n - 5, 0), 34.0, 2.33))
     assert "P15 woodwork" in run(tmp_path, clip)
 
 
-L6_SLOW = {  # audit 6: a slow ball let the old slack grow until these passed
+L6_SLOW = {  # audit 6: a slow ball let the old slack grow until these passed; and edge cases
     "creeping 0.3 m wide of the post": creeping(34.0 + 3.66 + 0.19),
-    "creeping, the whole ball over 2 cm outside the post's inner edge": creeping(34.0 + 3.66 - 0.111 + 0.02),
     "creeping with its lowest point 2.5 m up": creeping(34.0, z=2.5),
     "whole ball still a frame and more short of the line": creeping(34.0, x_before=105.0),
+    "whole ball over only a frame and a half later": creeping(34.0, x_before=105.0894),
     "partly outside the post as it goes over": creeping(37.5, x_before=105.092, dx=0.02, dy=0.1),
+    # audit 7: the woodwork exemption measured the post without height and the bar without extent
+    "along the line high over the post (0.8 m above the bar)": creeping(32.5, z=3.3, dy=0.4),
+    "at bar height 1.3 m outside the post": creeping(34.0 + 3.72 + 1.3, z=2.39, x_before=105.0, dx=0.6),
+    # just wide and just over at the fastest legal speed (40 m/s, P3), clear of the woodwork (its
+    # centre 0.20 m from the axes): what is tested is the margin for drag and gravity at that speed
+    "just wide of the post at 40 m/s": creeping(37.92, z=0.3, x_before=104.6, dx=1.6),
+    "just over the bar at 40 m/s": creeping(34.0, z=2.59, x_before=104.6, dx=1.6),
 }
+
+
+L6_SLOW_LEGAL = {  # audit 7: legal for the engine's ball (0.11 m), rejected with the largest ball
+    "rolling in at 0.5 m/s, the whole ball over late in the frame": creeping(34.0, x_before=105.0902,
+                                                                             dx=0.02),
+    "rolling in 2 mm inside the post's inner edge": creeping(34.0 + 3.66 - 0.11 - 0.002, x_before=105.1),
+}
+
+
+@pytest.mark.parametrize("name", L6_SLOW_LEGAL)
+def test_l6_accepts_slow_legal_goals(tmp_path, name):
+    """Mutations caught: the whole-ball conditions judged with the largest legal ball (Law 2 allows
+    68 to 70 cm; the lenient choice is the smallest); two roundings where the velocity has three."""
+    problems = run(tmp_path, goal_clip(OWN_GOAL, None, path=L6_SLOW_LEGAL[name]))
+    assert "L6 goal" not in problems and "P15 woodwork" not in problems
+
+
+def test_l6_accepts_a_goal_in_off_the_bar(tmp_path):
+    """Rising toward the line, the ball meets the underside of the bar in the last frame and drops
+    in; extrapolated from before the touch it would have gone over. Mutation caught: the bar left
+    out of the woodwork exemption."""
+    in_off = lambda n: (104.98 - 0.6 * (29 - max(n, 5)), 34.0, 2.22 - 0.1 * (29 - max(n, 5)))  # noqa: E731
+    problems = run(tmp_path, goal_clip([SHOT], "h1", path=in_off))
+    assert "L6 goal" not in problems and "P15 woodwork" not in problems
 
 
 @pytest.mark.parametrize("name", L6_SLOW)
 def test_l6_rejects_slow_balls_that_did_not_score(tmp_path, name):
-    """Mutations caught: the one-frame bound on the whole ball going over dropped; gravity in the
-    sideways slack; the whole-ball point on the wrong side of the line."""
+    """Mutations caught: the one-frame bound on the whole ball going over dropped, or its rounding
+    widened; gravity in the sideways slack; the whole-ball point on the wrong side of the line.
+    Balls whose body overlaps the woodwork are also reported by P15; L6 must reject them anyway."""
     problems = run(tmp_path, goal_clip(OWN_GOAL, None, path=L6_SLOW[name]))
-    assert "L6 goal" in problems and "P15 woodwork" not in problems
+    assert "L6 goal" in problems
 
 
 def test_l6_rejects_a_goal_touched_in_the_last_frame_from_well_wide(tmp_path):

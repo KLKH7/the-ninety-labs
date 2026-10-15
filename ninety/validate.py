@@ -61,6 +61,9 @@ APPROACH_TOLERANCE_M = 0.04  # P14: per frame; a ball at 1 m/s relative to him c
 # beyond them. The ball is stationary until it is kicked, and opponents stay 9.15 m from the arc
 # until then. The largest legal ball (Law 2: 70 cm round) has a radius of 0.1114 m.
 CORNER_ARC_M, CORNER_DISTANCE_M, BALL_RADIUS_M = 1.0, 9.15, 0.70 / (2 * math.pi)
+# Law 2: 68 to 70 cm round. Whether the whole ball is over or inside is judged with the smallest
+# legal ball (the lenient choice); whether it could be past a line, with the largest.
+BALL_RADIUS_MIN_M = 0.68 / (2 * math.pi)
 GOAL_HALF_WIDTH_M, CROSSBAR_M = 3.66, 2.44  # L6: Law 1, posts 7.32 m apart, bar 2.44 m high
 POST_WIDTH_M = 0.12  # P15: Law 1, posts and crossbar at most 12 cm wide
 # Rounding: a point rounded to 0.5 mm in x and y lies within √2 × 0.5 mm of where it was, so its
@@ -355,17 +358,56 @@ def defended_lines(frames: list[dict], keepers: set[str]) -> dict[str, float]:
     return {team: 0.0 if sum(v) / len(v) < 52.5 else 105.0 for team, v in xs.items()}
 
 
+def frame_axes(line: float) -> list[tuple[tuple[float, float, float], tuple[float, float, float]]]:
+    """Law 1: the goal frame on this goal line as three axes (x, y, height): both posts from the
+    ground to the bar, and the crossbar between them. Inner edges 7.32 m apart and 2.44 m high,
+    posts and bar POST_WIDTH_M wide, so each axis is half that further out."""
+    half = POST_WIDTH_M / 2
+    lo, hi, top = 34.0 - GOAL_HALF_WIDTH_M - half, 34.0 + GOAL_HALF_WIDTH_M + half, CROSSBAR_M + half
+    return [((line, lo, 0.0), (line, lo, top)), ((line, hi, 0.0), (line, hi, top)),
+            ((line, lo, top), (line, hi, top))]
+
+
+def segment_gap(p0: tuple, p1: tuple, q0: tuple, q1: tuple) -> float:
+    """Closest distance between segments p0-p1 and q0-q1 in 3D."""
+    d1 = [b - a for a, b in zip(p0, p1, strict=True)]
+    d2 = [b - a for a, b in zip(q0, q1, strict=True)]
+    r = [a - b for a, b in zip(p0, q0, strict=True)]
+    dot = lambda u, v: sum(x * y for x, y in zip(u, v, strict=True))  # noqa: E731
+    a, e, f = dot(d1, d1), dot(d2, d2), dot(d2, r)
+    if a <= 1e-12:
+        s = 0.0
+        t = min(1.0, max(0.0, f / e))
+    else:
+        c, b = dot(d1, r), dot(d1, d2)
+        denom = a * e - b * b
+        s = min(1.0, max(0.0, (b * f - c * e) / denom)) if denom > 1e-12 else 0.0
+        t = (b * s + f) / e
+        if t < 0.0:
+            t, s = 0.0, min(1.0, max(0.0, -c / a))
+        elif t > 1.0:
+            t, s = 1.0, min(1.0, max(0.0, (b - c) / a))
+    return math.dist([x + s * y for x, y in zip(p0, d1, strict=True)],
+                     [x + t * y for x, y in zip(q0, d2, strict=True)])
+
+
+def centre(b: dict) -> tuple[float, float, float]:
+    """The ball's centre from a frame (its z is the lowest point), with the smallest legal ball."""
+    return b["x"], b["y"], b["z"] + BALL_RADIUS_MIN_M
+
+
+def frame_distance(a: dict, b: dict, line: float) -> float:
+    """How close the ball's centre came to the goal frame on this line, moving from a to b."""
+    return min(segment_gap(centre(a), centre(b), q0, q1) for q0, q1 in frame_axes(line))
+
+
 def off_woodwork(a: dict, b: dict, line: float) -> bool:
-    """Did the ball, moving from a to b, come within touching distance (its radius plus the
-    woodwork's half-width, plus rounding) of a post or the bar on this goal line? Then a rebound
-    may have changed its path there, which no event records."""
-    touching = BALL_RADIUS_M + POST_WIDTH_M / 2 + POINT_PRECISION_M
-    for py in (34.0 - GOAL_HALF_WIDTH_M - POST_WIDTH_M / 2, 34.0 + GOAL_HALF_WIDTH_M + POST_WIDTH_M / 2):
-        if closest_on_segment(a["x"], a["y"], b["x"], b["y"], line, py)[0] <= touching:
-            return True
-    bar_z = CROSSBAR_M + POST_WIDTH_M / 2
-    d, _ = closest_on_segment(a["x"], a["z"] + BALL_RADIUS_M, b["x"], b["z"] + BALL_RADIUS_M, line, bar_z)
-    return d <= touching
+    """Did the ball, moving from a to b, come within touching distance of the goal frame (its
+    radius plus the woodwork's half-width, with the largest legal ball, plus rounding)? Then a
+    rebound may have changed its path there, which no event records. The engine stops a ball at
+    the point where it touches, so a touch shows within the step that reaches it."""
+    touching = BALL_RADIUS_M + POST_WIDTH_M / 2 + POINT_PRECISION_M + (BALL_RADIUS_M - BALL_RADIUS_MIN_M)
+    return frame_distance(a, b, line) <= touching
 
 
 def goal_crossing_problem(goal: dict, events: list[dict], by_frame: dict, fps: float,
@@ -390,8 +432,9 @@ def goal_crossing_problem(goal: dict, events: list[dict], by_frame: dict, fps: f
     if abs(b1["x"] - line) > reach:
         return f"ball {abs(b1['x'] - line):.1f} m from the goal line the frame before"
     # The nearest point where the whole ball is inside the mouth (z is the ball's lowest point).
-    my = min(max(b1["y"], 34.0 - GOAL_HALF_WIDTH_M + BALL_RADIUS_M), 34.0 + GOAL_HALF_WIDTH_M - BALL_RADIUS_M)
-    mz = min(max(b1["z"], 0.0), CROSSBAR_M - 2 * BALL_RADIUS_M)
+    inner = GOAL_HALF_WIDTH_M - BALL_RADIUS_MIN_M  # the whole ball inside the posts
+    my = min(max(b1["y"], 34.0 - inner), 34.0 + inner)
+    mz = min(max(b1["z"], 0.0), CROSSBAR_M - 2 * BALL_RADIUS_MIN_M)
     mouth = math.dist((b1["x"], b1["y"], b1["z"]), (line, my, mz))
     if mouth > reach + 2 * POSITION_PRECISION_M:
         return f"ball {mouth:.1f} m from the goal mouth the frame before"
@@ -400,7 +443,7 @@ def goal_crossing_problem(goal: dict, events: list[dict], by_frame: dict, fps: f
     # without passing through the woodwork (P15).
     if beyond and abs(b1["y"] - 34.0) > GOAL_HALF_WIDTH_M + POST_WIDTH_M / 2:
         return "ball beside or behind the post the frame before: it cannot enter the goal"
-    if beyond and b1["z"] + BALL_RADIUS_M > CROSSBAR_M + POST_WIDTH_M / 2:
+    if beyond and b1["z"] + BALL_RADIUS_MIN_M > CROSSBAR_M + POST_WIDTH_M / 2:
         return "ball on or behind the crossbar the frame before: it cannot enter the goal"
     late = any(e["type"] in GOAL_TOUCHES and n - 1 <= e["frame"] <= n for e in events if e is not goal)
     b0 = by_frame.get(n - 2, {}).get("ball")
@@ -413,22 +456,25 @@ def goal_crossing_problem(goal: dict, events: list[dict], by_frame: dict, fps: f
     # rolling along the line may have its centre past the line well before that). The goal frame
     # is the first after that moment, so it comes within one frame of the frame before, allowing
     # for the rounding of the two positions. (The ball cannot be wholly over already: checked above.)
-    over = line - inward * BALL_RADIUS_M
+    over = line - inward * BALL_RADIUS_MIN_M
     t = (over - b1["x"]) / vx  # frames until the whole ball is over
-    if t > 1 + 2 * POSITION_PRECISION_M / abs(vx):
+    # The rounding of b1 twice and b0 once (the velocity is their difference).
+    if t > 1 + 3 * POSITION_PRECISION_M / abs(vx):
         return f"whole ball still {abs(over - b1['x']):.2f} m short of over the line the frame before"
     speed = math.sqrt(vx * vx + vy * vy + vz * vz) / dt
     # Error of a straight-line extrapolation over t frames from a velocity measured half a frame
     # earlier: the largest acceleration over (t + 0.5) frames (drag across the goal; drag and
     # gravity in height), plus the rounding of the two positions.
     drag = DRAG_K_MAX * speed * speed
-    rounding = 2 * POSITION_PRECISION_M * (1 + t)
+    rounding = 3 * POSITION_PRECISION_M * (1 + t)
     y = b1["y"] + vy * t
     z = max(0.0, b1["z"] + vz * t - 0.5 * GRAVITY * (t * dt) ** 2)
-    if abs(y - 34.0) > GOAL_HALF_WIDTH_M - BALL_RADIUS_M + drag * ((t + 0.5) * dt) ** 2 + rounding:
-        return f"crossed {abs(y - 34.0) - GOAL_HALF_WIDTH_M:.2f} m outside the post"
-    if z + 2 * BALL_RADIUS_M > CROSSBAR_M + (drag + GRAVITY) * ((t + 0.5) * dt) ** 2 + rounding:
-        return f"crossed {z + 2 * BALL_RADIUS_M - CROSSBAR_M:.2f} m over the bar"
+    outside = abs(y - 34.0) - inner
+    if outside > drag * ((t + 0.5) * dt) ** 2 + rounding:
+        return f"the whole ball was not inside the posts: {outside:.2f} m of it outside the inner edge"
+    above = z + 2 * BALL_RADIUS_MIN_M - CROSSBAR_M
+    if above > (drag + GRAVITY) * ((t + 0.5) * dt) ** 2 + rounding:
+        return f"the whole ball was not under the bar: {above:.2f} m of it above"
     return None
 
 
@@ -492,45 +538,30 @@ def goal_credit_problem(goal: dict, events: list[dict], frames: list[dict], team
     return None
 
 
-def closest_on_segment(ax: float, ay: float, bx: float, by: float, px: float,
-                       py: float) -> tuple[float, float]:
-    """Distance from (px, py) to the segment a-b, and how far along it (0 to 1) the closest point is."""
-    dx, dy = bx - ax, by - ay
-    length2 = dx * dx + dy * dy
-    s = 0.0 if length2 == 0 else min(1.0, max(0.0, ((px - ax) * dx + (py - ay) * dy) / length2))
-    return math.hypot(ax + s * dx - px, ay + s * dy - py), s
-
-
 def check_woodwork(frames: list[dict], fps: float, problems: Problems) -> None:
-    """P15 (Law 1): the ball never passes through a goalpost or the crossbar. Posts stand on the
-    goal lines with their inner edges 7.32 m apart; posts and bar are at most 12 cm wide. Between
-    each two frames the ball moves in a straight line (any curve over 40 ms is far smaller than
-    the margin): it is reported if its centre comes within one ball radius of a post's or the
-    bar's axis, which is an overlap of more than the woodwork's whole half-width, beyond any
-    rounding. Frames where the ball jumps (a new ball, the kick-off reset) are skipped."""
-    reach = MAX_BALL_MPS / fps
-    half = POST_WIDTH_M / 2
-    post_y = (34.0 - GOAL_HALF_WIDTH_M - half, 34.0 + GOAL_HALF_WIDTH_M + half)
-    bar_z = CROSSBAR_M + half
-    limit = BALL_RADIUS_M - POINT_PRECISION_M
+    """P15 (Law 1): the ball never passes through the goal frame (posts, crossbar and the
+    corners between them; frame_axes). Between two frames the ball is taken to move in a straight
+    line; it is reported if its centre comes closer to the frame's axes than the smallest legal
+    ball's radius plus the woodwork's half-width, less every error: the rounding, how far a
+    ball's curve can stray from a straight line in one frame at the fastest legal speed (drag and
+    gravity), and the uncertainty in its centre height from the ball's size. Frames where the
+    ball jumps (a new ball, the kick-off reset) are skipped."""
+    dt = 1 / fps
+    reach = MAX_BALL_MPS * dt
+    curve = (GRAVITY + DRAG_K_MAX * MAX_BALL_MPS ** 2) * dt * dt / 8
+    limit = (BALL_RADIUS_MIN_M + POST_WIDTH_M / 2 - POINT_PRECISION_M - curve
+             - (BALL_RADIUS_M - BALL_RADIUS_MIN_M))
     for f0, f1 in zip(frames, frames[1:], strict=False):
         a, b = f0["ball"], f1["ball"]
         if math.dist((a["x"], a["y"], a["z"]), (b["x"], b["y"], b["z"])) > reach:
             continue
         for line in (0.0, 105.0):
-            if min(abs(a["x"] - line), abs(b["x"] - line)) > BALL_RADIUS_M + reach:
+            if min(abs(a["x"] - line), abs(b["x"] - line)) > BALL_RADIUS_M + POST_WIDTH_M + reach:
                 continue
-            for py in post_y:
-                d, s = closest_on_segment(a["x"], a["y"], b["x"], b["y"], line, py)
-                centre_z = a["z"] + s * (b["z"] - a["z"]) + BALL_RADIUS_M
-                if d < limit and centre_z <= bar_z:
-                    problems["P15 woodwork"].append(f"frame {f1['frame']}: ball through the post "
-                                                    f"at y = {py:.2f}")
-            az, bz = a["z"] + BALL_RADIUS_M, b["z"] + BALL_RADIUS_M  # centre heights
-            d, s = closest_on_segment(a["x"], az, b["x"], bz, line, bar_z)
-            y = a["y"] + s * (b["y"] - a["y"])
-            if d < limit and post_y[0] <= y <= post_y[1]:
-                problems["P15 woodwork"].append(f"frame {f1['frame']}: ball through the crossbar")
+            gap = frame_distance(a, b, line)
+            if gap < limit:
+                problems["P15 woodwork"].append(f"frame {f1['frame']}: ball through the goal frame at "
+                                                f"x = {line:.0f} (centre {gap:.3f} m from its axis)")
 
 
 def check_corners(events: list[dict], frames: list[dict], roster: list[dict], problems: Problems) -> None:

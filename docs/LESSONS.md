@@ -268,3 +268,17 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** for each geometric check, have fixtures for each way the ball can approach (straight,
   along the line, dropping, slow, fast), confirm each fails on the old code where it should, and
   build them with the speeds real output has.
+
+### 32. An exemption must use the same geometry as the rule it lifts; a contact must use the moment of contact
+- **What happened:** to allow a goal in off the post, the goal check skipped its path test when
+  the ball came near "the woodwork", but measured the post without its height and the bar without
+  its length: a ball a metre over the post, or level with the bar but well wide, counted as a
+  goal. In the engine, a ball that started a frame overlapping the bar was put back where it began
+  but kept the speed it had gained over the whole frame, so a ball resting on the bar gained
+  energy without limit.
+- **Rule:** model the object once (here, the goal frame as three bars, corners included) and use
+  that one model wherever it matters: the engine's rebound, the check that the ball never passes
+  through it, and any exemption. Resolve a contact with the state at the moment of contact.
+- **Check:** for every exemption, build an illegal case that sits just inside it and must still
+  fail; for every collision, a test that energy never rises and a resting ball comes to rest.
+

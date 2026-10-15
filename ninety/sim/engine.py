@@ -801,43 +801,42 @@ class Engine:
         return False
 
     def woodwork(self, before: ball.State) -> None:
-        """Law 1: the ball rebounds off a post or the crossbar wherever its path this frame first
-        comes within touching distance (ball radius plus post radius) of one, from any direction,
-        including a ball moving along the goal line. Posts stand on the goal lines with their
-        inner edges 7.32 m apart, so their axes are a post radius further out; the bar's axis is a
-        radius above 2.44 m. The rebound reflects the velocity about the line from the woodwork's
-        axis to the ball's centre, keeping WOODWORK_RESTITUTION of the speed into it, so a glancing
-        touch only nudges the ball; it rebounds from where it touched."""
+        """Law 1: the ball rebounds off the goal frame (both posts and the crossbar, corners
+        included) wherever its path this frame first comes within touching distance (ball radius
+        plus post radius) of it, from any direction, including a ball moving along the goal line.
+        Posts stand on the goal lines with their inner edges 7.32 m apart, so their axes are a post
+        radius further out; the bar's axis is a radius above 2.44 m. At the touch, the velocity the
+        ball had at that moment is reflected about the line from the frame's axis to the ball's
+        centre, keeping WOODWORK_RESTITUTION of the speed into it (a glancing touch only nudges the
+        ball), and the ball rebounds from where it touched. A ball that starts the frame already
+        overlapping (resting on the bar) is first moved out to touching distance."""
         r, touching = ball.RADIUS, ball.RADIUS + POST_RADIUS
-        x0, y0, z0 = before[0], before[1], before[2] + r  # ball centres
-        x1, y1, z1 = self.ball[0], self.ball[1], self.ball[2] + r
-        post_y = (PITCH_Y / 2 - GOAL_HALF_WIDTH - POST_RADIUS, PITCH_Y / 2 + GOAL_HALF_WIDTH + POST_RADIUS)
-        bar_z = CROSSBAR + POST_RADIUS
-        hit = None  # (s along the step, normal (nx, ny, nz))
+        p0 = (before[0], before[1], before[2] + r)  # ball centres
+        p1 = (self.ball[0], self.ball[1], self.ball[2] + r)
+        def at(s: float) -> tuple[float, float, float]:
+            return tuple(a + s * (b - a) for a, b in zip(p0, p1, strict=True))
+
         for line in (0.0, PITCH_X):
-            if min(abs(x0 - line), abs(x1 - line)) > touching + abs(x1 - x0):
+            if min(abs(p0[0] - line), abs(p1[0] - line)) > touching + abs(p1[0] - p0[0]):
                 continue
-            for py in post_y:  # a vertical axis: contact in the ground plane, below the bar
-                s = first_touch(x0, y0, x1, y1, line, py, touching)
-                if s is not None and z0 + s * (z1 - z0) <= bar_z and (hit is None or s < hit[0]):
-                    cx, cy = x0 + s * (x1 - x0), y0 + s * (y1 - y0)
-                    hit = (s, unit(cx - line, cy - py, 0.0))
-            s = first_touch(x0, z0, x1, z1, line, bar_z, touching)  # the bar: in the x-height plane
-            if s is not None and post_y[0] <= y0 + s * (y1 - y0) <= post_y[1] and (hit is None or s < hit[0]):
-                cx, cz = x0 + s * (x1 - x0), z0 + s * (z1 - z0)
-                hit = (s, unit(cx - line, 0.0, cz - bar_z))
-        if hit is None:
-            return
-        s, (nx, ny, nz) = hit
-        vx, vy, vz = self.ball[3], self.ball[4], self.ball[5]
-        into = vx * nx + vy * ny + vz * nz
-        if into < 0:
+            s = first_contact(lambda s, line=line: frame_gap(at(s), line), touching)
+            if s is None:
+                continue
+            centre = at(s)
+            gap, axis_point = frame_gap(centre, line)
+            n = unit(*(c - a for c, a in zip(centre, axis_point, strict=True)))
+            if gap < touching:  # overlapping from the start: out to touching distance
+                centre = tuple(a + touching * k for a, k in zip(axis_point, n, strict=True))
+            v = tuple(a + s * (b - a) for a, b in zip(before[3:6], self.ball[3:6], strict=True))
+            into = v[0] * n[0] + v[1] * n[1] + v[2] * n[2]
+            if into >= 0:
+                return  # touching but moving away: nothing to do
             k = (1 + WOODWORK_RESTITUTION) * into
-            vx, vy, vz = vx - k * nx, vy - k * ny, vz - k * nz
-        x, y, zc = x0 + s * (x1 - x0), y0 + s * (y1 - y0), z0 + s * (z1 - z0)
-        self.ball = (x, y, max(zc - r, 0.0), vx, vy, vz)
-        self.kicked_at = self.t
-        self.chase = {}
+            vx, vy, vz = (a - k * b for a, b in zip(v, n, strict=True))
+            self.ball = (centre[0], centre[1], max(centre[2] - r, 0.0), vx, vy, vz)
+            self.kicked_at = self.t
+            self.chase = {}
+            return
 
     def went_out(self, before: ball.State) -> bool:
         """Law 9: out once the whole ball has crossed a goal line or touchline. Where and how high
@@ -1447,10 +1446,11 @@ class Engine:
         self.plan_chase()
 
     def open_with_wide_attack(self) -> None:
-        """Scenario mode: the clip opens in play with a home winger on the ball by the touchline
-        in the final third, and everyone where the open-play shape rules put them for that ball
-        (S9). The wing, and how far from the goal line, are drawn from the seed. Nothing more is
-        set: whatever happens next is played."""
+        """Scenario mode: the clip opens in play with a home winger on the ball in the final third
+        near his touchline, and everyone where the open-play shape rules put them for that ball
+        (S9). The wing, how far from the goal line and the touchline, and which way he faces are
+        drawn from the seed; the ball is at his feet where the carry rule keeps it. Nothing more
+        is set: whatever happens next is played."""
         winger = self.rng.choice([p for p in self.players if p.team == "home" and p.role in ("RW", "LW")])
         near_side = winger.ay < PITCH_Y / 2
         wide = self.rng.uniform(*WIDE_FROM_TOUCHLINE_M)
@@ -1533,19 +1533,40 @@ def unit(x: float, y: float, z: float) -> tuple[float, float, float]:
     return x / n, y / n, z / n
 
 
-def first_touch(ax: float, ay: float, bx: float, by: float, cx: float, cy: float,
-                radius: float) -> float | None:
-    """Where (0 to 1) along a-b a point first comes within `radius` of c, moving toward it; None
-    if it never does."""
-    dx, dy, fx, fy = bx - ax, by - ay, ax - cx, ay - cy
-    a, b, c = dx * dx + dy * dy, 2 * (dx * fx + dy * fy), fx * fx + fy * fy - radius * radius
-    if c <= 0:  # already touching: a contact only if moving in
-        return 0.0 if b < 0 else None
-    disc = b * b - 4 * a * c
-    if a == 0 or disc < 0:
-        return None
-    s = (-b - math.sqrt(disc)) / (2 * a)
-    return s if 0.0 <= s <= 1.0 else None
+def frame_gap(p: tuple[float, float, float], line: float) -> tuple[float, tuple[float, float, float]]:
+    """Distance from a ball centre to the goal frame on this goal line (the axes of both posts,
+    ground to bar, and of the crossbar), and the nearest point on those axes."""
+    half = GOAL_HALF_WIDTH + POST_RADIUS
+    lo, hi, top = PITCH_Y / 2 - half, PITCH_Y / 2 + half, CROSSBAR + POST_RADIUS
+    best = None
+    for a, b in (((line, lo, 0.0), (line, lo, top)), ((line, hi, 0.0), (line, hi, top)),
+                 ((line, lo, top), (line, hi, top))):
+        d = tuple(q - o for q, o in zip(b, a, strict=True))
+        t = sum((pc - ac) * dc for pc, ac, dc in zip(p, a, d, strict=True)) / sum(dc * dc for dc in d)
+        t = min(1.0, max(0.0, t))
+        q = tuple(ac + t * dc for ac, dc in zip(a, d, strict=True))
+        g = math.dist(p, q)
+        if best is None or g < best[0]:
+            best = (g, q)
+    return best
+
+
+def first_contact(gap_at, touching: float, samples: int = 32) -> float | None:
+    """The first s (0 to 1) along a step where gap_at(s)[0] falls to `touching`, found by sampling
+    the step and then halving the interval; 0 if it starts there, None if it never does."""
+    if gap_at(0.0)[0] <= touching:
+        return 0.0
+    prev = 0.0
+    for k in range(1, samples + 1):
+        s = k / samples
+        if gap_at(s)[0] <= touching:
+            lo, hi = prev, s
+            for _ in range(30):
+                mid = (lo + hi) / 2
+                lo, hi = (lo, mid) if gap_at(mid)[0] <= touching else (mid, hi)
+            return hi
+        prev = s
+    return None
 
 
 def corner_seed(seed: int, attempt: int) -> int:
