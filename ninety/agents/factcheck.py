@@ -33,10 +33,8 @@ SECOND_NUMBER = re.compile(
     rf":(?P<second_c>\d{{1,2}})(?!\d))",
     re.I,
 )
-# A clock form, "12:34": the part before the colon must be a cited `minute` and the part after a
-# cited `second`, the convention agents read today (an event at 1:28 of play is minute 2, second
-# 28, and agents write "2:28"). Known issue: the scorebug shows the elapsed clock, 01:28.
-CLOCK_MINUTE = re.compile(r"(?<![\w.:])(?P<number>\d{1,3}):\d{2}(?!\d)")
+# A clock form, "12:34", is the elapsed scorebug clock in compact event facts.
+CLOCK = re.compile(r"(?<![\w.:])(?P<clock>\d{1,3}:\d{2})(?!\d)")
 # The synthetic squads' player ids (h1..h11, a1..a11). Names in this form are always checked,
 # even when the player is in no known event, so a claim cannot name an uninvolved player.
 PLAYER = re.compile(r"\b[ha](?:[1-9]|1[01])\b")
@@ -56,9 +54,12 @@ class Verdict:
     category: str | None = None
 
 
+def _normalize_clock(clock: str) -> str:
+    minute, second = clock.split(":")
+    return f"{minute.zfill(2)}:{second.zfill(2)}"
+
+
 def _number_field(text: str, start: int) -> str | None:
-    if any(m.start("number") == start for m in CLOCK_MINUTE.finditer(text)):
-        return "minute"
     for field_name, pattern in (
         ("distance_m", DISTANCE_NUMBER),
         ("ball_speed_kmh", SPEED_NUMBER),
@@ -113,7 +114,20 @@ def check(
     evidence = [known[i] for i in claim.evidence if i in known]
 
     allowed = allowed_numbers(evidence)
+    clock_spans = [range(match.start(), match.end()) for match in CLOCK.finditer(claim.text)]
+    for match in CLOCK.finditer(claim.text):
+        cited_clocks = {
+            _normalize_clock(event["clock"])
+            for event in evidence
+            if event.get("clock") is not None
+        }
+        clock = match.group("clock")
+        normalized = _normalize_clock(clock)
+        if normalized not in cited_clocks:
+            reasons.append(f"clock {clock} is not a cited clock")
     for match in NUMBER.finditer(claim.text):
+        if any(match.start() in span for span in clock_spans):
+            continue
         value = float(match.group())
         expected_field = _number_field(claim.text, match.start())
         if expected_field:
@@ -128,7 +142,6 @@ def check(
                 )
         elif value not in allowed:
             reasons.append(f"number {match.group()} is not in the cited evidence")
-
     cited_players = {
         value
         for event in evidence

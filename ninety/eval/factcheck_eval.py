@@ -47,6 +47,9 @@ def cases(seed: int, minutes: float) -> list[dict]:
         "true: completed pass": (
             True, done, "{player} plays a {distance_m} m pass to {receiver}."
         ),
+        "true: cited clock": (
+            True, done, "{player} plays a pass at {clock}."
+        ),
         "true: tackle": (
             True, tackles, "{player} wins the ball from {receiver} with a tackle."
         ),
@@ -91,6 +94,9 @@ def cases(seed: int, minutes: float) -> list[dict]:
         "false: wrong field": (
             False, done, "{player} plays a {distance_m} km/h pass to {receiver}."
         ),
+        "false: old ordinal clock": (
+            False, done, "{player} plays a pass at {minute}:{second}."
+        ),
         "false: invented quality": (
             False, done, "{player} is the best player on the pitch."
         ),
@@ -134,7 +140,7 @@ def cases(seed: int, minutes: float) -> list[dict]:
         for e in pool[:PER_KIND]:
             extra = {"mate": teammate(e), "rival": other[e["team"]], "wrong_m": e.get("distance_m", 0) + 9}
             fields = {**e, **extra}
-            text = write.format(**fields)
+            text = write.format(**{**fields, "second": str(fields["second"]).zfill(2)})
             out.append({"kind": kind, "true": truth, "claim": Claim(text, [e["id"]]), "evidence": [e]})
 
     ordered = sorted(extended, key=lambda event: (event["minute"], event["second"], event["id"]))
@@ -204,10 +210,11 @@ async def run(seeds: list[int], minutes: float, concurrency: int = 3) -> list[di
         row["code_ok"] = code.ok
         if not code.ok:
             row["judge_ok"], row["reasons"] = None, code.reasons
+            row["category"] = code.category
             return row
         async with gate:
             verdict = await judge(agent, row["claim"], row["evidence"])
-        row["judge_ok"], row["reasons"] = verdict.ok, verdict.reasons
+        row["judge_ok"], row["reasons"], row["category"] = verdict.ok, verdict.reasons, verdict.category
         return row
 
     return await asyncio.gather(*(one(r) for r in rows))
@@ -245,11 +252,24 @@ def report(rows: list[dict], seed: str) -> str:
     code_catch = sum(not r["code_ok"] for r in false)
     both_catch = sum(not passed(r) for r in false)
     both_wrong = sum(not passed(r) for r in true)
+    service_errors = [
+        r for r in rows if r.get("category") in {"service", "timeout"}
+    ]
+    semantic_true_wrong = sum(
+        not passed(r)
+        for r in true
+        if r.get("category") not in {"service", "timeout"}
+    )
+    true_service_errors = sum(r in true for r in service_errors)
+    semantic_denominator = len(true) - true_service_errors
     lines += [
         "",
         f"**False claims caught:** code alone {code_catch}/{len(false)}, "
         f"code + judge {both_catch}/{len(false)}.  ",
-        f"**True claims wrongly rejected:** code + judge {both_wrong}/{len(true)}.",
+        f"**True claims wrongly rejected:** code + judge {both_wrong}/{len(true)} "
+        f"(excluding service/timeout holds: {semantic_true_wrong}/{semantic_denominator}).",
+        f"**Judge service/timeout errors:** {len(service_errors)} total, "
+        f"{true_service_errors} on true claims.",
         "",
         "## Every miss and false rejection",
         "",

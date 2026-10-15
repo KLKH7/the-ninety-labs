@@ -49,7 +49,9 @@ most interesting moment in that minute, and why it matters.
 
 Rules:
 - Only state facts you read from the tools. Every number you write must be a field of an event
-  you cite (minute, second, ball_speed_kmh, distance_m) or a count of the events you cite.
+  you cite (minute, second, clock, ball_speed_kmh, distance_m) or a count of the events you cite.
+- For a time, use the event's clock exactly as given (01:28), or its minute as an ordinal (in
+  minute 2); never combine minute and second into a clock.
 - Name players by their ids exactly as given (for example h7 or a10).
 - Reply with JSON only: {"text": "<sentence>", "evidence": ["<event id>", ...]}"""
 
@@ -109,15 +111,6 @@ def judge_prompt(claim: Claim) -> str:
     return json.dumps({"text": claim.text, "evidence": claim.evidence})
 
 
-def _compatible_prompt(prompt: str) -> str:
-    """Keep old recordings replayable after making rejection reasons more actionable."""
-    return re.sub(
-        r"number ([\d.]+) is not (?:a cited \w+|in the cited evidence)",
-        r"number \1 is not in the cited evidence",
-        prompt,
-    )
-
-
 def replayer(turns: list[Turn]) -> tuple[Ask, Judge]:
     """Answers each call with the recorded answer, in order, and refuses a call it never saw."""
     queue = list(turns)
@@ -126,7 +119,7 @@ def replayer(turns: list[Turn]) -> tuple[Ask, Judge]:
         if not queue:
             raise ReplayMismatch(f"the recording has no {role} answer for: {prompt!r}")
         turn = queue.pop(0)
-        if (turn.role, _compatible_prompt(turn.prompt)) != (role, _compatible_prompt(prompt)):
+        if (turn.role, turn.prompt) != (role, prompt):
             raise ReplayMismatch(
                 f"call changed since recording: {turn.role} {turn.prompt!r} -> {role} {prompt!r}"
             )

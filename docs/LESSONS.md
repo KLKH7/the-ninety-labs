@@ -125,3 +125,12 @@ short and actionable. This file is public: no research sources, product names or
 - **Rule:** when diagnostics appear in persisted prompts, preserve a compatibility form or
   deliberately version the recording before changing them.
 - **Check:** run the committed replay fixture after changing fact-checker diagnostics.
+
+### 20. One clock for viewers and agents
+- **What happened:** agent-facing minute and second values were rounded and combined differently
+  from the scorebug's floored elapsed clock, producing off-by-one timestamps and occasional
+  second 60 values.
+- **Rule:** build the displayed clock in one shared function, and keep football's ordinal minute
+  as a separate field.
+- **Check:** compare every compact event's clock and seconds with the scorebug clock at its event
+  timestamp, including fractional seconds near a minute boundary.

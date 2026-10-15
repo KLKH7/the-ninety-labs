@@ -1,9 +1,10 @@
 from ninety.agents.factcheck import Claim, check
-from ninety.match.facts import events_in
+from ninety.match.facts import compact, events_in
 
 EVENTS = events_in(7, 5, 1, 5)
 KNOWN = {e["id"]: e for e in EVENTS}
 PASS = next(e for e in EVENTS if e["type"] == "pass" and "distance_m" in e)
+CLOCK_EVENT = next(e for e in EVENTS if e["clock"] == "01:27")
 
 
 def test_true_claim_passes():
@@ -93,24 +94,54 @@ def test_unknown_id_shaped_word_is_not_rejected():
     assert verdict.ok
 
 
-def test_clock_seconds_are_checked_against_second_field():
-    """Planted defect: the right minute with a wrong second must fail."""
-    wrong = (PASS["second"] + 7) % 60
-    verdict = check(Claim(f"A pass at {PASS['minute']}:{wrong:02d}.", [PASS["id"]]), KNOWN)
-    assert not verdict.ok and "second" in verdict.reasons[0]
-
-
-def test_wrong_minute_in_clock_form_is_rejected():
-    """Planted defect: the minute before the colon must be checked too."""
-    wrong = PASS["minute"] + 87
-    verdict = check(Claim(f"A pass at {wrong}:{PASS['second']:02d}.", [PASS["id"]]), KNOWN)
+def test_old_ordinal_clock_form_is_rejected():
+    verdict = check(
+        Claim(f"At {CLOCK_EVENT['minute']}:{CLOCK_EVENT['second']:02d}.", [CLOCK_EVENT["id"]]),
+        KNOWN,
+    )
     assert not verdict.ok
-    assert "minute" in verdict.reasons[0]
+    assert any("clock" in reason for reason in verdict.reasons)
+
+
+def test_clock_with_wrong_second_is_rejected():
+    wrong = f"01:{(int(CLOCK_EVENT['clock'][3:]) + 1) % 60:02d}"
+    verdict = check(Claim(f"A pass at {wrong}.", [CLOCK_EVENT["id"]]), KNOWN)
+    assert not verdict.ok
+    assert any("clock" in reason for reason in verdict.reasons)
 
 
 def test_clock_with_the_right_minute_and_second_passes():
-    text = f"A pass at {PASS['minute']}:{PASS['second']:02d}."
-    assert check(Claim(text, [PASS["id"]]), KNOWN).ok
+    text = f"An event at {CLOCK_EVENT['clock']}."
+    assert check(Claim(text, [CLOCK_EVENT["id"]]), KNOWN).ok
+
+
+def test_clock_accepts_unpadded_minute():
+    text = f"An event at {int(CLOCK_EVENT['clock'][:2])}:{CLOCK_EVENT['clock'][3:]}."
+    assert check(Claim(text, [CLOCK_EVENT["id"]]), KNOWN).ok
+
+
+def test_ordinal_minute_remains_valid():
+    text = f"A pass in the {CLOCK_EVENT['minute']} minute."
+    assert check(Claim(text, [CLOCK_EVENT["id"]]), KNOWN).ok
+
+
+def test_compact_event_floors_seconds_at_sixty():
+    event = {
+        "t": 59.6,
+        "id": "x",
+        "type": "pass",
+        "team": "home",
+        "player": "h1",
+        "receiver": None,
+        "outcome": None,
+        "ball_speed_kmh": None,
+        "end_x": None,
+        "x": 0,
+        "y": 0,
+    }
+    compact_event = compact(event)
+    assert compact_event["second"] == 59
+    assert compact_event["clock"] == "00:59"
 
 
 def test_player_in_no_known_event_is_still_rejected():
