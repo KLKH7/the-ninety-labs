@@ -19,7 +19,7 @@ from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from statistics import median, quantiles
 
-from ninety.sim.engine import CORNER_ATTEMPTS, FPS, simulate
+from ninety.sim.engine import FPS, corner_seed, simulate
 from ninety.validate import validate
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -63,9 +63,24 @@ def measure(seed: int) -> dict:
         "shot": any(e["type"] == "shot" and e["team"] == "home" for e in after),
         "lofted": lofted, "flight": (landed - kick["t"]) if (landed and lofted) else None,
         "ready_to_kick": kick["t"] - ready["t"], "out_to_kick": kick["t"] - out["t"],
-        "attack_to_out": out["t"], "attempts": m.seed % CORNER_ATTEMPTS + 1,
+        "attack_to_out": out["t"], "attempts": m.seed - corner_seed(seed, 0) + 1, "cause": cause(ev, out),
         "end": (kick.get("end_x"), kick.get("end_y")),
     }
+
+
+def cause(ev: list[dict], out: dict) -> str:
+    """What sent the ball out for the corner: the last kick before it (a home shot or pass, or an
+    away pass or clearance), and whether a defender deflected it on its way."""
+    before = [e for e in ev if e["frame"] <= out["frame"] and e is not out]
+    kick = next((e for e in reversed(before) if e["type"] in ("pass", "shot")), None)
+    if kick is None:
+        return "no kick (carried out)"
+    if kick["team"] == "away":
+        return "a defender's pass or clearance"
+    deflected = any(e["type"] == "deflection" and e["team"] == "away" and e["frame"] >= kick["frame"]
+                    for e in before)
+    how = "deflected by a defender" if deflected else "touched out by a defender"
+    return f"a home {kick['type']}, {how}"
 
 
 def spread(xs: list[float]) -> str:
@@ -107,6 +122,10 @@ def report(rows: list[dict]) -> str:
         f"| Distinct delivery end points (to 1 m) | "
         f"{len({(round(x), round(y)) for x, y in (r['end'] for r in rows) if x is not None})} / {n} | |",
     ]
+    causes = Counter(r["cause"] for r in rows)
+    lines += ["", "What sent the ball out for the corner (the opening and the selection shape this mix; "
+              "it is not how corners arise in matches):", "", "| Cause | Corners |", "|---|---|"]
+    lines += [f"| {k} | {v} |" for k, v in causes.most_common()]
     bad = [r["seed"] for r in rows if not r["valid"]]
     if bad:
         lines += ["", f"Seeds failing the contract: {bad}"]

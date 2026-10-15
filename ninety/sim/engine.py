@@ -97,10 +97,13 @@ RESTART_DELAY_S = {"throw_in": (3, 8), "goal_kick": (6, 10), "free_kick": (4, 10
 # turns into a home corner within CORNER_WITHIN_S; it gives up on an attack once the away side has
 # the ball ATTACK_OVER_M or more from that goal line.
 WIDE_FROM_GOAL_LINE_M = (13.0, 25.0)
-WIDE_FROM_TOUCHLINE_M = 8.0
+WIDE_FROM_TOUCHLINE_M = (3.0, 15.0)
+WINGER_TURN_DEG = 90.0  # he faces anywhere from straight at the goal line to straight infield
 CORNER_WITHIN_S = 20.0
 ATTACK_OVER_M = 40.0
-CORNER_ATTEMPTS = 1000
+CORNER_ATTEMPTS = 200  # far above the most any seed has needed (73)
+CORNER_SEED_BASE = 1_000_000_000  # scenario engine seeds: base + seed * 1000 + attempt, apart from
+# the seeds of full matches
 NO_OFFSIDE_FROM = ("throw_in", "goal_kick", "corner")  # Law 11: no offside offence direct from these
 INTERCEPT_SHARE = 0.85  # design: taken before this share of the way to its target, a pass is intercepted
 
@@ -798,28 +801,43 @@ class Engine:
         return False
 
     def woodwork(self, before: ball.State) -> None:
-        """Law 1: the ball rebounds off a post or the crossbar where it meets the goal line."""
+        """Law 1: the ball rebounds off a post or the crossbar wherever its path this frame first
+        comes within touching distance (ball radius plus post radius) of one, from any direction,
+        including a ball moving along the goal line. Posts stand on the goal lines with their
+        inner edges 7.32 m apart, so their axes are a post radius further out; the bar's axis is a
+        radius above 2.44 m. The rebound reflects the velocity about the line from the woodwork's
+        axis to the ball's centre, keeping WOODWORK_RESTITUTION of the speed into it, so a glancing
+        touch only nudges the ball; it rebounds from where it touched."""
+        r, touching = ball.RADIUS, ball.RADIUS + POST_RADIUS
+        x0, y0, z0 = before[0], before[1], before[2] + r  # ball centres
+        x1, y1, z1 = self.ball[0], self.ball[1], self.ball[2] + r
+        post_y = (PITCH_Y / 2 - GOAL_HALF_WIDTH - POST_RADIUS, PITCH_Y / 2 + GOAL_HALF_WIDTH + POST_RADIUS)
+        bar_z = CROSSBAR + POST_RADIUS
+        hit = None  # (s along the step, normal (nx, ny, nz))
         for line in (0.0, PITCH_X):
-            x0, x1 = before[0], self.ball[0]
-            if (x0 - line) * (x1 - line) > 0 or x0 == x1:
+            if min(abs(x0 - line), abs(x1 - line)) > touching + abs(x1 - x0):
                 continue
-            s = (line - x0) / (x1 - x0)
-            y = before[1] + s * (self.ball[1] - before[1])
-            zc = before[2] + s * (self.ball[2] - before[2]) + ball.RADIUS  # the ball's centre
-            off_centre = abs(y - PITCH_Y / 2)
-            touching = ball.RADIUS + POST_RADIUS
-            hits_post = abs(off_centre - GOAL_HALF_WIDTH) <= touching and zc <= CROSSBAR
-            hits_bar = off_centre <= GOAL_HALF_WIDTH and abs(zc - CROSSBAR) <= touching
-            if hits_post or hits_bar:
-                vx, vy, vz = self.ball[3], self.ball[4], self.ball[5]
-                vx = -vx * WOODWORK_RESTITUTION
-                if hits_bar:
-                    vz = -vz * WOODWORK_RESTITUTION if zc < CROSSBAR else abs(vz) * WOODWORK_RESTITUTION
-                bx = line + (0.15 if line == 0.0 else -0.15)
-                self.ball = (bx, y, max(zc - ball.RADIUS, 0.0), vx, vy, vz)
-                self.kicked_at = self.t
-                self.chase = {}
-                return
+            for py in post_y:  # a vertical axis: contact in the ground plane, below the bar
+                s = first_touch(x0, y0, x1, y1, line, py, touching)
+                if s is not None and z0 + s * (z1 - z0) <= bar_z and (hit is None or s < hit[0]):
+                    cx, cy = x0 + s * (x1 - x0), y0 + s * (y1 - y0)
+                    hit = (s, unit(cx - line, cy - py, 0.0))
+            s = first_touch(x0, z0, x1, z1, line, bar_z, touching)  # the bar: in the x-height plane
+            if s is not None and post_y[0] <= y0 + s * (y1 - y0) <= post_y[1] and (hit is None or s < hit[0]):
+                cx, cz = x0 + s * (x1 - x0), z0 + s * (z1 - z0)
+                hit = (s, unit(cx - line, 0.0, cz - bar_z))
+        if hit is None:
+            return
+        s, (nx, ny, nz) = hit
+        vx, vy, vz = self.ball[3], self.ball[4], self.ball[5]
+        into = vx * nx + vy * ny + vz * nz
+        if into < 0:
+            k = (1 + WOODWORK_RESTITUTION) * into
+            vx, vy, vz = vx - k * nx, vy - k * ny, vz - k * nz
+        x, y, zc = x0 + s * (x1 - x0), y0 + s * (y1 - y0), z0 + s * (z1 - z0)
+        self.ball = (x, y, max(zc - r, 0.0), vx, vy, vz)
+        self.kicked_at = self.t
+        self.chase = {}
 
     def went_out(self, before: ball.State) -> bool:
         """Law 9: out once the whole ball has crossed a goal line or touchline. Where and how high
@@ -1434,8 +1452,13 @@ class Engine:
         (S9). The wing, and how far from the goal line, are drawn from the seed. Nothing more is
         set: whatever happens next is played."""
         winger = self.rng.choice([p for p in self.players if p.team == "home" and p.role in ("RW", "LW")])
-        y = WIDE_FROM_TOUCHLINE_M if winger.ay < PITCH_Y / 2 else PITCH_Y - WIDE_FROM_TOUCHLINE_M
+        near_side = winger.ay < PITCH_Y / 2
+        wide = self.rng.uniform(*WIDE_FROM_TOUCHLINE_M)
+        y = wide if near_side else PITCH_Y - wide
         x = PITCH_X - self.rng.uniform(*WIDE_FROM_GOAL_LINE_M)
+        # He faces anywhere from straight at the goal line to straight infield.
+        infield = math.radians(self.rng.uniform(0.0, WINGER_TURN_DEG))
+        heading = infield if near_side else -infield
         self.ball = (x, y, 0.0, 0.0, 0.0, 0.0)
         self.poss_team = "home"
         for _ in range(2):  # shape, then re-read the game from where that shape put everyone
@@ -1445,8 +1468,14 @@ class Engine:
                 brain.update(self.t, team == "home", x, reach)
             for p in self.players:
                 p.x, p.y, _ = self.shape_target(p)
-        winger.x, winger.y = x - CONTROL_M / 2, y  # the ball at his feet, on the side he faces
-        winger.heading = 0.0
+        # The ball at his feet where the carry rule keeps it: on the side he faces, or shielded
+        # from an opponent within SHIELD_M (D8), never inside his body.
+        winger.heading = heading
+        near = min((q for q in self.players if q.team == "away"), key=lambda q: math.hypot(q.x - x, q.y - y))
+        shielded = math.hypot(near.x - x, near.y - y) < SHIELD_M
+        side = math.atan2(y - near.y, x - near.x) if shielded else heading
+        feet = BODY_RADIUS + ball.RADIUS
+        winger.x, winger.y = x - math.cos(side) * feet, y - math.sin(side) * feet
         self.give(winger.id)
 
     def play_until_corner(self) -> bool:
@@ -1499,18 +1528,42 @@ class Engine:
         return self.match
 
 
+def unit(x: float, y: float, z: float) -> tuple[float, float, float]:
+    n = math.sqrt(x * x + y * y + z * z) or 1.0
+    return x / n, y / n, z / n
+
+
+def first_touch(ax: float, ay: float, bx: float, by: float, cx: float, cy: float,
+                radius: float) -> float | None:
+    """Where (0 to 1) along a-b a point first comes within `radius` of c, moving toward it; None
+    if it never does."""
+    dx, dy, fx, fy = bx - ax, by - ay, ax - cx, ay - cy
+    a, b, c = dx * dx + dy * dy, 2 * (dx * fx + dy * fy), fx * fx + fy * fy - radius * radius
+    if c <= 0:  # already touching: a contact only if moving in
+        return 0.0 if b < 0 else None
+    disc = b * b - 4 * a * c
+    if a == 0 or disc < 0:
+        return None
+    s = (-b - math.sqrt(disc)) / (2 * a)
+    return s if 0.0 <= s <= 1.0 else None
+
+
+def corner_seed(seed: int, attempt: int) -> int:
+    return CORNER_SEED_BASE + seed * 1000 + attempt
+
+
 def simulate(seed: int, minutes: float, scenario: str | None = None) -> Match:
     """A match from the kick-off, or a scenario clip. `corner`: attacks from a wide opening are
-    played out, each with its own engine seed (seed * 1000 + attempt), and the first one that play
-    turns into a home corner is kept and run on for `minutes` after the corner is given (S9). The
-    match records the engine seed it used. Selection among played-out attacks, never an
-    arranged one: corners from this scenario say nothing about how often play produces them."""
+    played out, each with its own engine seed (corner_seed), and the first one that play turns
+    into a home corner is kept and run on for `minutes` after the corner is given (S9). The match
+    records the engine seed it used. Selection among played-out attacks, never an arranged one:
+    corners from this scenario say nothing about how often play produces them."""
     if scenario is None:
         return Engine(seed).run(minutes)
     if scenario != "corner":
         raise ValueError(f"unknown scenario {scenario!r}; known: corner")
     for attempt in range(CORNER_ATTEMPTS):
-        e = Engine(seed * CORNER_ATTEMPTS + attempt)
+        e = Engine(corner_seed(seed, attempt))
         e.open_with_wide_attack()
         if e.play_until_corner():
             for _ in range(int(minutes * 60 * FPS)):

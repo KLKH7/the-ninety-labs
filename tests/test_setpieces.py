@@ -10,7 +10,16 @@ import pytest
 from test_validate import FPS, event, run
 
 from ninety.sim import decisions, setpieces
-from ninety.sim.engine import CORNER_ATTEMPTS, PENALTY_DEPTH, PENALTY_HALF_WIDTH, SPRINT, Engine, simulate
+from ninety.sim.engine import (
+    BODY_RADIUS,
+    CORNER_ATTEMPTS,
+    PENALTY_DEPTH,
+    PENALTY_HALF_WIDTH,
+    SPRINT,
+    Engine,
+    corner_seed,
+    simulate,
+)
 from ninety.validate import last_touches, validate
 
 
@@ -452,15 +461,71 @@ def test_scenario_corner_comes_from_play():
         holder = next(p for p in first["players"] if p["id"] == first["possessor"])
         roles = {r["id"]: r["role"] for r in m.roster}
         assert holder["team"] == "home" and roles[holder["id"]] in ("RW", "LW"), seed
-        assert holder["x"] > 105.0 - 26.0 and min(holder["y"], 68.0 - holder["y"]) < 10.0, seed
+        assert holder["x"] > 105.0 - 26.0 and min(holder["y"], 68.0 - holder["y"]) < 16.0, seed
+        b = first["ball"]
+        gaps = [math.hypot(b["x"] - p["x"], b["y"] - p["y"]) for p in first["players"]]
+        assert min(gaps) >= BODY_RADIUS + 0.1, seed  # the ball outside every body
+        b1 = m.frames[1]["ball"]
+        assert math.hypot(b1["x"] - b["x"], b1["y"] - b["y"]) < 0.15, seed  # carried, not jumping
         players = first["players"]
         assert sum(p["x"] > 52.5 for p in players if p["team"] == "home" and roles[p["id"]] != "GK") >= 6
         assert sum(p["x"] > 70.0 for p in players if p["team"] == "away") >= 8
-        out = next(e for e in m.events if e["type"] == "out_of_play")
+        out = next(e for e in m.events if e["type"] == "out_of_play" and e["x"] in (0.0, 105.0))
         assert out["frame"] > 0 and out["x"] == 105.0 and out["team"] == "away", seed
         touches = last_touches(out, m.events, m.frames)
         assert touches and touches[-1][2].startswith("a"), seed  # the away player it came off
-        assert m.seed // CORNER_ATTEMPTS == seed  # the engine seed used is recorded
+        assert m.seed - corner_seed(seed, 0) in range(CORNER_ATTEMPTS)  # the engine seed is recorded
+
+
+def test_the_scenario_keeps_the_first_attack_that_play_turns_into_a_corner():
+    """Mutations caught: attempts that do not qualify kept; attempts skipped."""
+    for seed in range(2):
+        kept = simulate(seed, 0.02, "corner").seed - corner_seed(seed, 0)
+        for attempt in range(kept):
+            e = Engine(corner_seed(seed, attempt))
+            e.open_with_wide_attack()
+            assert not e.play_until_corner(), (seed, attempt)
+
+
+def opened(seed: int = 0) -> Engine:
+    e = Engine(corner_seed(seed, 0))
+    e.open_with_wide_attack()
+    return e
+
+
+def test_the_opening_varies_from_attack_to_attack():
+    """Audit 6: a fixed opening (8 m from the touchline, facing the goal line) made three corners
+    in four the same blocked shot. Mutations caught: the distance from the touchline or the way
+    the winger faces fixed."""
+    wide, facing = set(), set()
+    for attempt in range(12):
+        e = opened(attempt)
+        holder = e.by_id[e.possessor]
+        wide.add(round(min(e.ball[1], 68.0 - e.ball[1]), 1))
+        facing.add(round(math.degrees(abs(holder.heading))))
+    assert len(wide) > 8 and len(facing) > 8 and max(facing) > 45
+
+
+def test_an_attack_is_given_up_when_it_is_over():
+    """S9: a goal kick, a goal, a corner the other way, the away side on the ball 40 m out, or
+    20 s gone ends an attempt. Mutations caught: each condition dropped or widened tenfold."""
+    e = opened()
+    e.stop("goal_kick", "away", (5.0, 30.0))
+    assert not e.play_until_corner() and e.t < 0.1  # at once, not when the kick is taken
+    e = opened()
+    e.stop("kick_off", "away", (52.5, 34.0), "a10")
+    assert not e.play_until_corner() and e.t < 0.1
+    e = opened()
+    e.stop("corner", "away", (0.0, 0.0))
+    assert not e.play_until_corner() and e.t < 0.1
+    e = opened()
+    e.ball = (60.0, 34.0, 0.0, 0.0, 0.0, 0.0)  # 45 m from the goal being attacked
+    e.give("a5")
+    e.by_id["a5"].x, e.by_id["a5"].y = 59.6, 34.0
+    assert not e.play_until_corner() and e.t < 1.0
+    e = opened()
+    e.t = 19.9  # S9: 20 s
+    assert not e.play_until_corner() and 19.9 < e.t <= 20.0 + 1 / FPS + 1e-9  # within a frame of 20 s
 
 
 def test_a_keeper_out_of_place_at_the_exit_does_not_hide_the_corner(tmp_path):
@@ -500,7 +565,8 @@ def test_corners_cannot_be_checked_without_keepers(tmp_path):
 
 def goal_clip(touches, scorer, team="home", holder="h1", receiver_has_it=None, path=None) -> dict:
     """Shaped like engine output. h1 has the ball for 5 frames and strikes it at frame 5; it moves
-    0.6 m a frame toward the home side's attacking goal and crosses the line during frame 30. As
+    0.6 m a frame toward the home side's attacking goal, and the whole ball is over the line
+    during frame 30 (its centre 0.21 m short of that the frame before). As
     the engine writes it, the goal frame already shows the kick-off reset: the ball on the centre
     spot with the conceding team's striker (a9), and a kick-off event after the goal.
     `touches` are extra events (frame, type, player, team, outcome); `receiver_has_it` =
@@ -509,7 +575,7 @@ def goal_clip(touches, scorer, team="home", holder="h1", receiver_has_it=None, p
     frames = []
     for n in range(31):
         u = min(max((n - 5) / 25, 0.0), 1.0)
-        ball = path(n) if path else (90.0 + 15.0 * u, 34.0, 0.0)
+        ball = path(n) if path else (90.5 + 15.0 * u, 34.0, 0.0)
         poss = holder if n < 5 else None
         if receiver_has_it and n >= receiver_has_it[1]:
             poss = receiver_has_it[0]
@@ -526,7 +592,7 @@ def goal_clip(touches, scorer, team="home", holder="h1", receiver_has_it=None, p
                                    {"id": "ak", "team": "away", "x": 104.0, "y": 34.0}]})
     events = [event("e0", 0, "kickoff", "home", "h1", x=90.0, y=34.0)]
     for k, (f, kind, pid, tm, outcome) in enumerate(touches):
-        events.append(event(f"t{k}", f, kind, tm, pid, x=min(105.0, 90.0 + 0.6 * max(f - 5, 0)), y=34.0,
+        events.append(event(f"t{k}", f, kind, tm, pid, x=min(105.0, 90.5 + 0.6 * max(f - 5, 0)), y=34.0,
                             outcome=outcome))
     events.append(event("g1", 30, "goal", team, scorer, x=105.0, y=34.0))
     events.append(event("k1", 30, "kickoff", conceding, "a9", x=52.5, y=34.0))
@@ -590,14 +656,15 @@ def test_a_shot_cannot_score_twice(tmp_path):
 
 
 L6_WRONG = {
-    "wide of the post": lambda n: (90.0 + 0.6 * max(n - 5, 0), 34.0 + 0.215 * max(n - 5, 0), 0.0),
-    "over the bar": lambda n: (90.0 + 0.6 * max(n - 5, 0), 34.0, 0.16 * max(n - 5, 0)),
-    "already deep in the net": lambda n: (91.5 + 0.6 * max(n - 5, 0), 34.0, 0.0),
-    "3 m short of the line the frame before": lambda n: (87.0 + 0.6 * max(n - 5, 0), 34.0, 0.0),
-    # just wide: crosses 0.15 m beyond the derived slack outside the post
-    "just wide of the post": lambda n: (90.0 + 0.6 * max(n - 5, 0), 34.0 + 0.1505 * max(n - 5, 0), 0.0),
+    "wide of the post": lambda n: (90.5 + 0.6 * max(n - 5, 0), 34.0 + 0.215 * max(n - 5, 0), 0.0),
+    "over the bar": lambda n: (90.5 + 0.6 * max(n - 5, 0), 34.0, 0.16 * max(n - 5, 0)),
+    "already deep in the net": lambda n: (92.0 + 0.6 * max(n - 5, 0), 34.0, 0.0),
+    "3 m short of the line the frame before": lambda n: (87.5 + 0.6 * max(n - 5, 0), 34.0, 0.0),
+    # just wide: its centre crosses about 3.95 m from the middle, its path 0.22 m from the post's
+    # axis (touching distance 0.17 m), so it never touches the woodwork
+    "just wide of the post": lambda n: (90.5 + 0.6 * max(n - 5, 0), 34.0 + 0.1635 * max(n - 5, 0), 0.0),
     "moving away from goal": lambda n: (105.0 - 0.6 * max(n - 5, 0) / 25 * 2, 34.0, 0.0) if n > 27 else
-    (90.0 + 0.6 * max(n - 5, 0), 34.0, 0.0),
+    (90.5 + 0.6 * max(n - 5, 0), 34.0, 0.0),
 }
 
 
@@ -607,29 +674,77 @@ def test_l6_rejects_a_goal_that_did_not_cross_inside_the_mouth(tmp_path, name):
     assert "L6 goal" in run(tmp_path, goal_clip([SHOT], "h1", path=L6_WRONG[name]))
 
 
+def creeping(y, z=0.0, x_before=105.1, dx=0.0125, dy=0.0):
+    """A ball edging toward the line: at `x_before` the frame before the goal, `dx` m a frame
+    toward it and `dy` m a frame along it, at height `z`. At 0.0125 m a frame, 105.1 m means the
+    whole ball (centre 105.111 m) is over within the next frame."""
+    return lambda n: (x_before - dx * (29 - max(n, 5)), y - dy * (29 - max(n, 5)), z)
+
+
+OWN_GOAL = [(5, "pass", "h1", "home", "fail"), (20, "deflection", "a1", "away", None)]
+
+
 def test_l6_accepts_a_ball_rolling_along_the_line_into_the_goal(tmp_path):
-    """Regression (corner report, seed 31): a deflection sent the ball along the goal line from
-    outside the post, its centre just past the line but never the whole ball, and it went in
-    inside the post. L6 extrapolated to where the centre crossed (backwards, outside the post);
-    a goal is when the whole ball is over (Law 10)."""
-    # seed 31's speeds: 0.0125 m a frame into the goal, 0.4 m a frame along the line
-    along = lambda n: (104.8 + 0.0125 * max(n - 5, 0), 22.9 + 0.4 * max(n - 5, 0), 1.1)  # noqa: E731
-    clip = goal_clip([(5, "pass", "h1", "home", "fail"), (20, "deflection", "a1", "away", None)], None,
-                     path=along)
-    assert "L6 goal" not in run(tmp_path, clip)
+    """A deflection sends the ball along the goal line inside the posts, its centre past the line
+    for a while before the whole ball is over (Law 10). Extrapolating to the centre's crossing
+    projected it backwards; the goal is when the whole ball is over."""
+    clip = goal_clip(OWN_GOAL, None, path=creeping(33.4, dy=0.1))
+    problems = run(tmp_path, clip)
+    assert "L6 goal" not in problems and "P15 woodwork" not in problems
+
+
+def test_l6_accepts_a_goal_in_off_the_post(tmp_path):
+    """Regression (corner report, seed 113): the ball clipped the inside of the post in the last
+    frame and went in. No event records a woodwork contact, so L6 extrapolated the path from before
+    it and called it wide. Mutation caught: a woodwork contact not treated as a change of path."""
+    in_off = lambda n: (105.037 - 0.7 * (29 - max(n, 5)), 37.554 - 0.55 * (29 - max(n, 5)), 1.6)  # noqa: E731
+    problems = run(tmp_path, goal_clip([SHOT], "h1", path=in_off))
+    assert "L6 goal" not in problems and "P15 woodwork" not in problems
+
+
+def test_a_ball_that_rolls_through_the_post_fails_p15(tmp_path):
+    """Regression (audit 6): the engine let a ball moving along the goal line pass through the
+    post (its woodwork test only looks where the path crosses the line), then counted the goal.
+    A first fix of L6 accepted it. Seed 31's path, along the line at 0.4 m a frame from outside
+    the post, must fail: the ball passes through the post (Law 1)."""
+    clip = goal_clip(OWN_GOAL, None, path=creeping(32.5, z=1.1, dy=0.4))
+    assert "P15 woodwork" in run(tmp_path, clip)
+
+
+def test_a_ball_never_passes_through_the_crossbar(tmp_path):
+    """P15: dropping through the bar from above, at the bar's height, is not a goal."""
+    clip = goal_clip(OWN_GOAL, None, path=lambda n: (104.0 + 0.04 * max(n - 5, 0), 34.0, 2.33))
+    assert "P15 woodwork" in run(tmp_path, clip)
+
+
+L6_SLOW = {  # audit 6: a slow ball let the old slack grow until these passed
+    "creeping 0.3 m wide of the post": creeping(34.0 + 3.66 + 0.19),
+    "creeping, the whole ball over 2 cm outside the post's inner edge": creeping(34.0 + 3.66 - 0.111 + 0.02),
+    "creeping with its lowest point 2.5 m up": creeping(34.0, z=2.5),
+    "whole ball still a frame and more short of the line": creeping(34.0, x_before=105.0),
+    "partly outside the post as it goes over": creeping(37.5, x_before=105.092, dx=0.02, dy=0.1),
+}
+
+
+@pytest.mark.parametrize("name", L6_SLOW)
+def test_l6_rejects_slow_balls_that_did_not_score(tmp_path, name):
+    """Mutations caught: the one-frame bound on the whole ball going over dropped; gravity in the
+    sideways slack; the whole-ball point on the wrong side of the line."""
+    problems = run(tmp_path, goal_clip(OWN_GOAL, None, path=L6_SLOW[name]))
+    assert "L6 goal" in problems and "P15 woodwork" not in problems
 
 
 def test_l6_rejects_a_goal_touched_in_the_last_frame_from_well_wide(tmp_path):
     """Regression (audit 5): with a touch in the last frame only the distance to the goal line
     was checked, so a ball 2 m wide of the post that a defender touched still "scored". In one
     frame it can travel at most 1.6 m, so it must already be that close to the mouth."""
-    wide = lambda n: (90.0 + 0.6 * max(n - 5, 0), 34.0 + 0.25 * max(n - 5, 0), 0.0)  # noqa: E731
+    wide = lambda n: (90.5 + 0.6 * max(n - 5, 0), 34.0 + 0.25 * max(n - 5, 0), 0.0)  # noqa: E731
     clip = goal_clip([SHOT, (29, "deflection", "a1", "away", None)], "h1", path=wide)
     assert "L6 goal" in run(tmp_path, clip)
 
 
 def test_l6_accepts_a_goal_just_inside_the_post_and_under_the_bar(tmp_path):
-    inside = lambda n: (90.0 + 0.6 * max(n - 5, 0), 34.0 + 0.14 * max(n - 5, 0),  # noqa: E731
+    inside = lambda n: (90.5 + 0.6 * max(n - 5, 0), 34.0 + 0.14 * max(n - 5, 0),  # noqa: E731
                         min(1.7, 0.068 * max(n - 5, 0)))
     assert "L6 goal" not in run(tmp_path, goal_clip([SHOT], "h1", path=inside))
 

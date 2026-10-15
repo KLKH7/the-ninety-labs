@@ -251,14 +251,20 @@ short and actionable. This file is public: no research sources, product names or
   nothing at frame 0 except the opening state, and the cause (the exit and the touch it came
   off) present in the data.
 
-### 31. Check the Law's condition, not a convenient proxy for it
-- **What happened:** the goal-mouth check extrapolated the ball's path to where its centre met
-  the goal line. Law 10 counts a goal when the whole ball is over. A ball deflected along the
-  line from outside the post had its centre past the line for half a second before the whole
-  ball went over inside the post; the check projected backwards and rejected a legal goal. The
-  fixtures never had a ball moving along the line, and the first test written for the fix
-  passed on the old code too (its error allowance hid the mistake).
-- **Rule:** write the check on exactly what the Law states (here, the whole ball), and build a
-  fixture with the real case's speeds, then confirm it fails before the fix.
-- **Check:** for each geometric check, list the ways the real ball can approach (straight,
-  along the line, dropping, rising) and have a fixture for each.
+### 31. When a check rejects real output, find out what happened before changing the check
+- **What happened:** the goal-mouth check rejected an engine goal: a ball deflected along the
+  goal line from outside the post that went in inside it. The check was wrong in one way (it
+  aimed at where the ball's centre met the line; Law 10 needs the whole ball over), so it was
+  "fixed" and the goal called legal. An independent audit then found two things: the fix let
+  slow balls up to 1 m wide or over the bar count as goals (its error allowance grew with how far
+  it extrapolated), and the ball in that goal had passed through the post, because the engine
+  only tests the woodwork where the ball's path crosses the line. The original rejection was
+  right for a reason nobody looked for, and a test was written that enshrined the bad goal.
+- **Rule:** when a check fails real output, trace the whole event frame by frame (where was the
+  ball relative to the posts, the bar, the line?) before deciding which side is wrong. Write the
+  check on exactly what the Law states, bound how far it extrapolates by what the engine can do
+  (a goal is recorded in the frame the whole ball goes over), and add a check for the physical
+  impossibility you find (P15: the ball never passes through the woodwork).
+- **Check:** for each geometric check, have fixtures for each way the ball can approach (straight,
+  along the line, dropping, slow, fast), confirm each fails on the old code where it should, and
+  build them with the speeds real output has.
