@@ -155,7 +155,7 @@ def test_a_pass_the_receiver_cannot_get_to_in_time_is_less_certain():
     s = scene(x=60.0)
     conf = lambda tx, ty: D.pass_confidence(s, tx, ty, 70.0, 40.0, 0.0, False, 14.0, "h9")  # noqa: E731
     assert conf(70.0, 39.5) > 0.5  # played to his feet
-    assert conf(70.0, 30.0) < 0.25 * conf(70.0, 39.5)  # 10 m from him: it has mostly gone by first
+    assert conf(70.0, 30.0) < 0.2 * conf(70.0, 39.5)  # 10 m from him: four times in five it has gone by
 
 
 def test_an_opponent_on_the_dribble_path_makes_the_dribble_worse():
@@ -259,15 +259,19 @@ def test_the_strikes_he_weighs_reproduce_his_kick_error():
 
 
 def test_a_worse_passer_is_less_sure_of_a_pass_through_a_narrow_gap():
+    """Two opponents 4 m out, 1.6 m apart: the ball is past them before they react, so only a
+    strike off line hits one; a wider kick error sends more of his strikes into them."""
     from ninety.sim.profiles import Profile
     passer = Profile.generate("CM", random.Random(3))
-    gap = [(70.0, 36.2), (70.0, 31.8)]
+    gap = [(64.0, 34.8), (64.0, 33.2)]
 
     def conf(skill):
         passer.attributes["passing"] = skill
         s = scene(x=60.0, passer=passer, heading=0.0, opponents=gap)
-        return D.pass_confidence(s, 90.0, 34.0, 90.0, 34.0, 0.0, False, 14.0, "h9")
-    assert conf(0.1) < conf(0.5) < conf(0.9)
+        return D.pass_confidence(s, 85.0, 34.0, 85.0, 34.0, 0.0, False, 14.0, "h9")
+    poor, average, good = conf(0.1), conf(0.5), conf(0.9)
+    assert 0.3 < average < 0.7  # genuinely in doubt
+    assert poor < average < good and good - poor > 0.1
 
 
 def test_carrying_on_with_a_dribble_is_slightly_preferred_and_holding_gets_no_bonus():
@@ -666,3 +670,13 @@ def test_the_time_to_get_there_agrees_with_whether_he_gets_there():
         assert can_get_to(D.AVERAGE_BODY, dx, 0.0, D.CONTROL_M, along, 0.0, need + 1e-3)[0]
         if need > 0:
             assert not can_get_to(D.AVERAGE_BODY, dx, 0.0, D.CONTROL_M, along, 0.0, need - 1e-3)[0]
+
+
+def test_a_ball_is_out_only_once_the_whole_of_it_has_crossed_the_line():
+    """Law 9, one test for the engine (engine.went_out) and the passer's race."""
+    r = D.ball.RADIUS
+    # On each line, and which way is out: both goal lines, both touchlines.
+    for x, y, out_x, out_y in ((D.PITCH_X, 34.0, 1, 0), (0.0, 34.0, -1, 0), (50.0, D.PITCH_Y, 0, 1),
+                               (50.0, 0.0, 0, -1)):
+        assert not D.out_of_play(x + out_x * 0.9 * r, y + out_y * 0.9 * r)  # centre over, ball not
+        assert D.out_of_play(x + out_x * 1.1 * r, y + out_y * 1.1 * r)  # the whole ball over
