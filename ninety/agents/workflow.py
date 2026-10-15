@@ -12,7 +12,7 @@ import asyncio
 import json
 import re
 from collections.abc import Awaitable, Callable, Mapping, Sequence
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -22,20 +22,16 @@ from jsonschema import validate
 
 from ninety.agents.cues import DISPLAY_SECONDS, template_cues, write_fixture
 from ninety.agents.factcheck import Claim, Verdict, check
+from ninety.agents.judge import judge as live_judge
+from ninety.agents.judge import judge_agent
 from ninety.agents.ledger import InMemoryLedger, Ledger, Record, load_match
+from ninety.agents.slice import MAX_REWRITES
 from ninety.match.facts import match_events
 
-MAX_REWRITES = 2
-REPLAY_FORMAT = 2
+WORKFLOW_REPLAY_FORMAT = 2
+REPLAY_FORMAT = WORKFLOW_REPLAY_FORMAT
 ROOT = Path(__file__).resolve().parents[2]
 OVERLAY_SCHEMA = json.loads((ROOT / "schemas" / "overlay_cue.schema.json").read_text())
-INJECTION = re.compile(
-    r"(?:</?\s*(?:system|developer|assistant|claim)\b|"
-    r"\b(?:ignore|disregard|override)\s+(?:the\s+)?(?:evidence|instructions|rules)\b|"
-    r"\bmark\s+(?:this|the)\s+claim\s+supported\b)",
-    re.I,
-)
-
 Ask = Callable[[str], Awaitable[str | Mapping]]
 
 
@@ -59,6 +55,17 @@ DecisionAsk = Callable[[str], Awaitable[str | Mapping | Decision]]
 
 
 @dataclass
+class Models:
+    """Injected model adapters; absent adapters use deterministic scripted fakes."""
+
+    analyst: Ask | None = None
+    tactician: Ask | None = None
+    challenger: DecisionAsk | None = None
+    judge: DecisionAsk | None = None
+    judge_timeout_seconds: float = 15.0
+
+
+@dataclass
 class Request:
     events: tuple[dict, ...]
     known: dict[str, dict]
@@ -75,6 +82,7 @@ class Draft:
     attempt: int = 0
     history: list[dict] = field(default_factory=list)
     feedback: tuple[str, ...] = ()
+    author: str = "analyst"
 
 
 @dataclass
@@ -92,10 +100,16 @@ class WorkflowResult:
     attempts: int
     claim_history: tuple[dict, ...]
     trace: tuple[str, ...]
+    moments: tuple[str, ...] = ()
+    model_calls: int = 0
 
     @property
     def accepted(self) -> bool:
         return self.category == "verified"
+
+    @property
+    def call_count(self) -> int:
+        return self.model_calls
 
 
 @dataclass
@@ -124,15 +138,82 @@ class Recording:
     @classmethod
     def load(cls, path: str | Path) -> Recording:
         data = json.loads(Path(path).read_text())
-        if data.pop("format", None) != REPLAY_FORMAT:
-            raise ValueError(f"{path}: not a format {REPLAY_FORMAT} workflow recording")
-        data["format"] = REPLAY_FORMAT
+        if data.pop("format", None) != WORKFLOW_REPLAY_FORMAT:
+            raise ValueError(f"{path}: not a format {WORKFLOW_REPLAY_FORMAT} workflow recording")
+        data["format"] = WORKFLOW_REPLAY_FORMAT
         data["turns"] = [Turn(**turn) for turn in data["turns"]]
         return cls(**data)
 
 
 class ReplayMismatch(RuntimeError):
     pass
+
+
+async def _run_live_workflow(**kwargs: Any) -> WorkflowResult:
+    """Wire the production Foundry/MCP adapters without importing Azure on scripted runs."""
+    import sys
+
+    from agent_framework import Agent, MCPStdioTool
+    from agent_framework.foundry import FoundryChatClient
+    from azure.identity import DefaultAzureCredential
+
+    from ninety import config
+
+    tools = MCPStdioTool(
+        name="match",
+        command=sys.executable,
+        args=["-m", "ninety.mcp.match_server"],
+        env={"NINETY_SEED": str(kwargs["seed"]), "NINETY_MINUTES": str(kwargs["minutes"])},
+    )
+    client = FoundryChatClient(
+        project_endpoint=config.FOUNDRY_PROJECT,
+        model=config.MODEL,
+        credential=DefaultAzureCredential(),
+    )
+    async with tools:
+        analyst_agent = Agent(
+            client=client,
+            name="analyst",
+            instructions="Write JSON with text and evidence for the supplied football events.",
+            tools=tools,
+        )
+        tactician_agent = Agent(
+            client=client,
+            name="tactician",
+            instructions="Improve the supplied football commentary while preserving cited facts.",
+        )
+        challenger_agent = Agent(
+            client=client,
+            name="challenger",
+            instructions='Return JSON: {"category":"agree|raise|alternative","reasons":[]}.',
+        )
+        judge_model = judge_agent(client)
+
+        async def ask(agent: Agent, prompt: str) -> str:
+            return (await agent.run(prompt)).text
+
+        async def judge_call(prompt: str) -> Decision:
+            data = _json(prompt)["input"]
+            proposal = _proposal(data["claim"])
+            verdict = await live_judge(
+                judge_model,
+                proposal.claim(),
+                list(data["evidence"]),
+                timeout_seconds=kwargs["judge_timeout_seconds"],
+            )
+            return Decision(
+                "verified" if verdict.ok else "rejected",
+                tuple(verdict.reasons),
+            )
+
+        models = Models(
+            analyst=lambda prompt: ask(analyst_agent, prompt),
+            tactician=lambda prompt: ask(tactician_agent, prompt),
+            challenger=lambda prompt: ask(challenger_agent, prompt),
+            judge=judge_call,
+            judge_timeout_seconds=kwargs["judge_timeout_seconds"],
+        )
+        return await run_workflow(**kwargs, models=models, live_models=False)
 
 
 def _json(response: str | Mapping) -> dict:
@@ -147,9 +228,11 @@ def _proposal(response: str | Mapping) -> Proposal:
     return Proposal(str(data.get("text", "")), tuple(str(item) for item in data.get("evidence", [])))
 
 
-def _decision(response: str | Mapping | Decision) -> Decision:
+def _decision(response: str | Mapping | Decision | Verdict) -> Decision:
     if isinstance(response, Decision):
         return response
+    if isinstance(response, Verdict):
+        return Decision(response.category, tuple(response.reasons))
     data = _json(response)
     alternative = data.get("alternative")
     return Decision(
@@ -198,11 +281,13 @@ async def _scripted_ask(role: str, prompt: str) -> dict:
         if data.get("feedback"):
             proposal = _scripted(data["events"])
         return {"text": proposal.text, "evidence": list(proposal.evidence)}
+    if role == "tactician" and data.get("feedback"):
+        return {"text": _scripted(data["events"]).text, "evidence": list(_scripted(data["events"]).evidence)}
     return data["proposal"]
 
 
 def _replay(turns: list[Turn]) -> dict[str, Ask]:
-    queue = list(turns)
+    queue = turns
 
     def adapter(role: str) -> Ask:
         async def ask(prompt: str) -> str:
@@ -236,27 +321,23 @@ class AnalystExecutor(Executor):
             payload["previous"] = asdict(previous.proposal)
             payload["feedback"] = list(previous.feedback)
         claim_id = f"claim-workflow-{request.events[0]['id']}"
-        await self._append_claim(
-            request,
-            claim_id,
-            Proposal("", ()),
-            "draft",
-            (),
-            previous.attempt + 1 if previous else 1,
-        )
         try:
             response = await self.ask(_prompt("analyst", payload))
             proposal = _proposal(response)
-        except (ValueError, TypeError, json.JSONDecodeError) as exc:
+        except (ValueError, TypeError, json.JSONDecodeError):
             self.trace.append("analyst: invalid_response")
-            proposal = Proposal("", ())
-            previous = Draft(
-                request,
-                proposal,
-                previous.attempt if previous else 0,
-                [*(previous.history if previous else [])],
-                (f"analyst returned invalid response: {exc}",),
+            await ctx.yield_output(
+                WorkflowResult(
+                    "held",
+                    None,
+                    None,
+                    previous.attempt if previous else 0,
+                    tuple(previous.history if previous else ()),
+                    tuple(self.trace),
+                    model_calls=1,
+                )
             )
+            return
         if self.plant and previous is None:
             proposal = _tamper(proposal)
         if self.turns is not None:
@@ -277,6 +358,7 @@ class AnalystExecutor(Executor):
                 proposal,
                 previous.attempt if previous else 0,
                 [*(previous.history if previous else []), {"status": "draft", "text": proposal.text}],
+                author="analyst",
             )
         )
 
@@ -310,14 +392,20 @@ class TacticianExecutor(Executor):
 
     @handler
     async def explain(self, draft: Draft, ctx: WorkflowContext[Draft]) -> None:
-        payload = {"proposal": asdict(draft.proposal), "events": list(draft.request.events)}
+        payload = {
+            "proposal": asdict(draft.proposal),
+            "events": list(draft.request.events),
+            "feedback": list(draft.feedback),
+        }
         prompt = _prompt("tactician", payload)
         response = await self.ask(prompt)
         proposal = _proposal(response)
         if self.turns is not None:
             self.turns.append(Turn("tactician", prompt, json.dumps(asdict(proposal))))
         self.trace.append("tactician: draft")
-        await ctx.send_message(Draft(draft.request, proposal, draft.attempt, draft.history))
+        await ctx.send_message(
+            Draft(draft.request, proposal, draft.attempt, draft.history, author="tactician")
+        )
 
 
 class ChallengerExecutor(Executor):
@@ -332,7 +420,16 @@ class ChallengerExecutor(Executor):
             for item in draft.proposal.evidence
             if item in draft.request.known
         ]
-        if self.ask is not None:
+        deterministic: Decision | None = None
+        if not draft.proposal.text.strip():
+            deterministic = Decision("raise", ("empty claim text",))
+        elif not draft.proposal.evidence:
+            deterministic = Decision("raise", ("claim has no evidence",))
+        elif len(evidence) != len(draft.proposal.evidence):
+            deterministic = Decision("raise", ("unknown evidence id",))
+        if deterministic is not None:
+            decision = deterministic
+        elif self.ask is not None:
             prompt = _prompt(
                 "challenger",
                 {"proposal": asdict(draft.proposal), "evidence": evidence},
@@ -344,10 +441,6 @@ class ChallengerExecutor(Executor):
                 decision = Decision("raise", (f"challenger service error: {exc}",))
             if self.turns is not None:
                 self.turns.append(Turn("challenger", prompt, json.dumps(asdict(decision))))
-        elif not draft.proposal.evidence or len(evidence) != len(draft.proposal.evidence):
-            decision = Decision("raise", ("unknown evidence id",))
-        elif INJECTION.search(draft.proposal.text):
-            decision = Decision("held", ("claim contains instruction-like text",))
         else:
             decision = Decision("agree")
         self.trace.append(f"challenger: {decision.category}")
@@ -368,15 +461,8 @@ class JudgeExecutor(Executor):
     @handler
     async def judge(self, review: Review, ctx: WorkflowContext[Any]) -> None:
         if review.challenger.category == "raise":
-            await ctx.send_message(
-                Review(
-                    review.draft,
-                    review.challenger,
-                    Decision("rejected", review.challenger.reasons),
-                ),
-                target_id="producer",
-            )
-            return
+            self.trace.append("challenger: skipped; tactician continues")
+            review = Review(review.draft, Decision("agree"), review.judge)
         elif review.challenger.category == "alternative" and review.challenger.alternative:
             review = Review(
                 Draft(
@@ -393,9 +479,33 @@ class JudgeExecutor(Executor):
             await ctx.send_message(review, target_id="producer")
             return
         draft = review.draft
+        if not draft.proposal.text.strip():
+            code_verdict = Verdict(False, ["empty claim text"])
+        elif not draft.proposal.evidence:
+            code_verdict = Verdict(False, ["claim has no evidence"])
+        else:
+            code_verdict = check(draft.proposal.claim(), draft.request.known)
+        if not code_verdict.ok:
+            decision = Decision("rejected", tuple(code_verdict.reasons))
+            self.trace.append("judge: rejected")
+            self.trace.append("fact_checker: rejected: " + "; ".join(decision.reasons))
+            if draft.attempt < MAX_REWRITES:
+                await ctx.send_message(
+                    replace(
+                        draft,
+                        attempt=draft.attempt + 1,
+                        feedback=decision.reasons,
+                    ),
+                    target_id=draft.author,
+                )
+            else:
+                await ctx.send_message(
+                    Review(draft, review.challenger, decision),
+                    target_id="producer",
+                )
+            return
         if self.ask is None:
-            verdict: Verdict = check(draft.proposal.claim(), draft.request.known)
-            decision = Decision("verified" if verdict.ok else "rejected", tuple(verdict.reasons))
+            decision = Decision("verified")
         else:
             prompt = _prompt(
                 "judge",
@@ -419,7 +529,15 @@ class JudgeExecutor(Executor):
                 decision = Decision("held", ("judge service error; claim held back",))
             if self.turns is not None:
                 self.turns.append(Turn("judge", prompt, json.dumps(asdict(decision))))
-        category = decision.category
+        category = (
+            "rejected"
+            if decision.category in {"input", "unsupported_claim"}
+            else "held"
+            if decision.category in {"timeout", "service", "invalid_response"}
+            else decision.category
+        )
+        if category != decision.category:
+            decision = Decision(category, decision.reasons)
         self.trace.append(f"judge: {category}")
         self.trace.append(
             "fact_checker: accepted"
@@ -428,14 +546,12 @@ class JudgeExecutor(Executor):
         )
         if category == "rejected" and draft.attempt < MAX_REWRITES:
             await ctx.send_message(
-                Draft(
-                    draft.request,
-                    draft.proposal,
-                    draft.attempt + 1,
-                    draft.history,
-                    decision.reasons,
+                replace(
+                    draft,
+                    attempt=draft.attempt + 1,
+                    feedback=decision.reasons,
                 ),
-                target_id="analyst",
+                target_id=draft.author,
             )
         else:
             await ctx.send_message(
@@ -546,7 +662,20 @@ async def run_workflow(
     challenger: DecisionAsk | None = None,
     judge: DecisionAsk | None = None,
     judge_timeout_seconds: float = 1.0,
+    models: Models | None = None,
+    live_models: bool = False,
 ) -> WorkflowResult:
+    if live_models:
+        if models is not None:
+            raise ValueError("live_models cannot be combined with injected models")
+        return await _run_live_workflow(
+            seed=seed,
+            minutes=minutes,
+            window=window,
+            plant=plant,
+            ledger=ledger,
+            judge_timeout_seconds=judge_timeout_seconds,
+        )
     store = ledger or InMemoryLedger()
     events = list(match_events(seed, minutes))
     await load_match(store, events, ())
@@ -582,6 +711,14 @@ async def run_workflow(
         adapters["analyst"] = analyst
     if tactician is not None:
         adapters["tactician"] = tactician
+    if models is not None:
+        if models.analyst is not None:
+            adapters["analyst"] = models.analyst
+        if models.tactician is not None:
+            adapters["tactician"] = models.tactician
+        challenger = models.challenger or challenger
+        judge = models.judge or judge
+        judge_timeout_seconds = models.judge_timeout_seconds
     analyst_executor = AnalystExecutor(
         adapters.get("analyst", lambda p: _scripted_ask("analyst", p)),
         trace,
@@ -603,32 +740,38 @@ async def run_workflow(
         .add_edge(tactician_executor, challenger_executor)
         .add_edge(challenger_executor, judge_executor)
         .add_edge(judge_executor, analyst_executor)
+        .add_edge(judge_executor, tactician_executor)
         .add_edge(judge_executor, producer)
         .build()
     )
     result = await workflow.run(request)
     outcome = result.get_outputs()[0]
-    if asks is None:
-        outcome = WorkflowResult(
-            outcome.category,
-            outcome.cue,
-            outcome.proposal,
-            outcome.attempts,
-            outcome.claim_history,
-            tuple(trace),
-        )
+    outcome = WorkflowResult(
+        outcome.category,
+        outcome.cue,
+        outcome.proposal,
+        outcome.attempts,
+        outcome.claim_history,
+        tuple(trace),
+        tuple(str(event["id"]) for event in selected),
+        len(turns),
+    )
     return outcome
 
 
 async def replay(recording: Recording) -> WorkflowResult:
-    asks = _replay(recording.turns)
-    return await run_workflow(
+    queue = list(recording.turns)
+    asks = _replay(queue)
+    result = await run_workflow(
         seed=recording.seed,
         minutes=recording.minutes,
         window=_window(recording.window),
         plant=recording.plant,
         asks=asks,
     )
+    if queue:
+        raise ReplayMismatch(f"recording has {len(queue)} unused role turn(s)")
+    return result
 
 
 def main() -> None:
@@ -639,7 +782,8 @@ def main() -> None:
     parser.add_argument("--plant", action="store_true", help="plant a false first claim")
     parser.add_argument("--record", type=Path)
     parser.add_argument("--replay", type=Path)
-    parser.add_argument("--cues-out", type=Path, help="write template cues before running agents")
+    parser.add_argument("--cues-out", type=Path, help="write every aired cue for the selected window")
+    parser.add_argument("--live-models", action="store_true", help="use Foundry and MCP adapters")
     args = parser.parse_args()
     if args.record and args.replay:
         parser.error("--record and --replay cannot be combined")
@@ -649,6 +793,7 @@ def main() -> None:
     else:
         turns: list[Turn] = []
         asks = None
+        cli_ledger = InMemoryLedger()
         if args.record:
             adapters = _recording_adapters(turns)
             asks = adapters
@@ -659,14 +804,16 @@ def main() -> None:
                 window=selected_window,
                 plant=args.plant,
                 asks=asks,
+                ledger=cli_ledger,
+                live_models=args.live_models,
             )
         )
         if args.cues_out:
-            cues = asyncio.run(_template_only(args.seed, args.minutes, selected_window))
+            cues = asyncio.run(_aired_cues(cli_ledger, selected_window))
             write_fixture(cues, args.cues_out)
         if args.record:
             Recording(
-                REPLAY_FORMAT,
+                WORKFLOW_REPLAY_FORMAT,
                 args.seed,
                 args.minutes,
                 "scripted",
@@ -714,6 +861,14 @@ async def _template_only(
     ledger = InMemoryLedger()
     await load_match(ledger, list(match_events(seed, minutes)), ())
     cues = await template_cues(ledger)
+    if window is None:
+        return cues
+    return [cue for cue in cues if window[0] <= cue["t_in"] <= window[1]]
+
+
+async def _aired_cues(ledger: Ledger, window: tuple[float, float] | None) -> list[dict]:
+    records = await ledger.query(kind="cue")
+    cues = [record.payload for record in records]
     if window is None:
         return cues
     return [cue for cue in cues if window[0] <= cue["t_in"] <= window[1]]
