@@ -92,7 +92,7 @@ If M1 slips, the [cut list](#scope-control) is applied the same day.
 
 Work is split into two tracks that meet only at the [data contracts](ARCHITECTURE.md#data-contracts).
 The agents start on the simulator's ground-truth events and switch to detected events at M1, so
-neither track waits for the other. Owners are picked each morning from the next unblocked item.
+neither track waits for the other. Each item is owned by one of the five roles in [TEAM.md](TEAM.md), which also lists the handoff dates.
 "Learn first" is studied in the one to two hours before the work that needs it.
 
 | Date | Track A: perception | Track B: intelligence and product | Learn first | Done when |
@@ -169,6 +169,6 @@ deployed demo, the failure table, the video.
 - A short check-in each evening: what shipped, tomorrow's done-when, blockers.
 - Every change goes through a pull request; CI (lint, tests, schema smoke test, secret scan) must
   pass; Copilot reviews; merge the same day.
-- The schemas are the contract between tracks; changing one needs both people to agree.
+- The schemas are the contract between roles; changing one follows [TEAM.md](TEAM.md#contracts).
 - A [challenge map](CHALLENGE_MAP.md) row is marked done only when it runs in the demo.
 - Rules for every coding tool are in [AGENTS.md](../AGENTS.md).
