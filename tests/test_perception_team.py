@@ -86,12 +86,26 @@ def test_out_of_possession_the_shape_is_narrower_and_shifts_to_the_ball():
 
 def test_a_team_presses_inside_its_line_of_engagement_or_straight_after_losing_the_ball():
     for team, own in (("home", 0.0), ("away", 105.0)):
-        brain = TeamBrain(team, block="low")
+        brain = TeamBrain(team, engage_m=70.0)
         brain.update(0.0, True, 50.0, {})
-        brain.update(10.0, False, abs(own - 80.0), {})  # just lost it, far from goal
-        assert brain.presses(12.0, abs(own - 80.0))  # counter-press window
-        assert not brain.presses(20.0, abs(own - 80.0))  # then they drop off
-        assert brain.presses(20.0, abs(own - 30.0))  # inside the low block's line of engagement
-    high = TeamBrain("home", block="high")
-    high.update(0.0, False, 95.0, {})
-    assert high.presses(10.0, 95.0)  # a high block presses everywhere
+        brain.update(10.0, False, abs(own - 90.0), {})  # just lost it, far from goal
+        assert brain.presses(12.0, abs(own - 90.0))  # counter-press window
+        assert not brain.presses(20.0, abs(own - 90.0))  # then they drop off beyond 70 m
+        assert brain.presses(20.0, abs(own - 65.0))  # inside their line of engagement
+
+
+def test_each_side_presses_like_one_real_team_drawn_from_the_published_styles():
+    from ninety.sim.engine import Engine
+    lines = {Engine(seed).brains["home"].engage_m for seed in range(30)}
+    assert lines <= set(team_mod.ENGAGE_STYLES_M) and len(lines) > 5  # teams differ
+    assert min(team_mod.ENGAGE_STYLES_M) > 60.0  # every real team presses higher than the old mid block
+
+
+def test_the_forwards_wait_at_their_line_of_engagement_then_drop_at_the_blocks_pace():
+    for team, own in (("home", 0.0), ("away", 105.0)):
+        brain = TeamBrain(team, engage_m=80.0)
+        brain.update(0.0, False, abs(own - 95.0), {})  # their keeper's ball
+        assert abs(abs(brain.slot("ST", 34.0, 34.0)[0] - own) - 80.0) < 1e-9
+        brain.update(1.0, False, abs(own - 70.0), {})  # 10 m inside it: they drop back 5 m
+        assert abs(abs(brain.slot("ST", 34.0, 34.0)[0] - own) - 75.0) < 1e-9
+        assert abs(brain.slot("CM", 34.0, 34.0)[0] - brain.line_x) == team_mod.LINE_GAPS_M["midfield"]

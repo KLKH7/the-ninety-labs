@@ -604,3 +604,18 @@ def test_a_kickoff_is_set_up_and_seen_before_it_is_taken():
                 if p.team == "home":
                     assert math.hypot(p.x - 52.5, p.y - 34.0) >= 9.15 - 0.5  # outside the circle
     assert kicked_at is not None and kicked_at >= 3.0  # a visible pause, then the kick
+
+
+def test_once_a_pass_is_struck_shape_is_set_for_where_it_is_going():
+    e = Engine(1)
+    e.possessor = None
+    e.ball = (40.0, 34.0, 0.0, 14.0, 0.0, 0.0)
+    e.kicked, e.pass_target = {"type": "pass"}, (70.0, 20.0)
+    assert e.play_point() == (70.0, 20.0)
+    p = e.by_id["a6"]
+    e.brains["away"].in_possession = False
+    before = e.shape_target(p)[:2]
+    e.ball = (55.0, 27.0, 0.0, 14.0, 0.0, 0.0)  # the ball half way there: nobody's target moves
+    assert e.shape_target(p)[:2] == before
+    e.kicked = None  # a loose ball: play is where the ball is
+    assert e.play_point() == (55.0, 27.0)

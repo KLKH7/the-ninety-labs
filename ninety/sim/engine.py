@@ -20,6 +20,7 @@ import random
 from dataclasses import dataclass, field
 
 from ninety.sim import ball, decisions, offball, perception, profiles
+from ninety.sim import team as team_mod
 from ninety.sim.body import BRAKE_MAX, CS_MEAN, D0, F0_MEAN, V0_MEAN, Body
 from ninety.sim.body import move as move_body
 from ninety.sim.profiles import Profile
@@ -38,7 +39,6 @@ DRIBBLE = 2.5
 DECIDE_EVERY = 6  # frames between the ball carrier's decisions (about 4 a second)
 PERCEIVE_EVERY = 6  # frames between a player's looks at the pitch (about 4 a second, staggered)
 BRAIN_EVERY = 12  # frames between a team brain's reads of the game (about 2 a second)
-ENGAGE_M = 20.0  # design: the first presser goes to the ball when it is this close
 COVER_M = 8.0  # design: the covering player stays this far behind the presser, goal-side
 PERCEPTION_ERR = 0.03  # verify: m/s of misjudged ball velocity per metre between player and ball
 CONTROL_M = 1.0  # a foot reaches this far from the body's centre
@@ -203,7 +203,11 @@ class Engine:
                               "ratings": {a: p.profile.rating(a) for a in p.profile.attributes}}
                              for p in self.players]
         self.beliefs = {p.id: perception.Belief(next_scan=self.rng.uniform(0, 3)) for p in self.players}
-        self.brains = {team: TeamBrain(team) for team in ("home", "away")}
+        # T3: each side presses like one real team, drawn from its own stream so the rest of the
+        # match's random draws do not shift with it.
+        style = random.Random(f"{seed}-style")
+        self.brains = {team: TeamBrain(team, engage_m=style.choice(team_mod.ENGAGE_STYLES_M))
+                       for team in ("home", "away")}
         self.ball: ball.State = (PITCH_X / 2, PITCH_Y / 2, 0.0, 0.0, 0.0, 0.0)
         self.possessor: str | None = None
         self.last_touch: str | None = None
@@ -905,6 +909,13 @@ class Engine:
 
     # ---- tick ---------------------------------------------------------------
 
+    def play_point(self) -> tuple[float, float]:
+        """Where play is, for setting shape (O8): once a pass is struck, everyone sees where it is
+        going and sets up for that, rather than chasing the ball's every metre in flight."""
+        if self.kicked and self.kicked["type"] == "pass" and self.pass_target:
+            return self.pass_target
+        return self.ball[0], self.ball[1]
+
     def ball_eta(self, x: float, y: float) -> float:
         """How soon the ball could next be played to (x, y) (O8): first it has to be somewhere a
         player can play it from, then a pass covers the distance at about a pass's average speed.
@@ -953,7 +964,7 @@ class Engine:
         if self.restart and p.id == self.restart.taker:
             r = self.restart
             return clamp(r.x, 0.5, PITCH_X - 0.5), clamp(r.y, 0.5, PITCH_Y - 0.5), RECOVER
-        bx, by = self.ball[0], self.ball[1]
+        bx, by = self.play_point()  # O8: where the ball is going, once a pass is struck
         poss_team = self.team_of(self.possessor) if self.possessor else None
         shift = (clamp(bx, 0, PITCH_X) - PITCH_X / 2) * 0.45
         push = 6 * attack_dir(p.team) if poss_team == p.team else -4 * attack_dir(p.team)
@@ -1011,8 +1022,7 @@ class Engine:
             if self.restart and self.restart.team != p.team:  # Laws 15 to 17: stand off the restart
                 gap = RESTART_DISTANCE_M[self.restart.kind]
             presser = self.by_id[brain.pressers[0]] if brain.pressers else None
-            engaged = (presser is not None and math.hypot(bx - presser.x, by - presser.y) < ENGAGE_M
-                       and brain.presses(self.t, bx))
+            engaged = presser is not None and brain.presses(self.t, bx)
             if presser is p and engaged:
                 # Press goal-side, a step away, matching where the carrier is going (D8: a defender
                 # keeps his speed relative to the attacker small rather than holding a spot).
@@ -1047,7 +1057,7 @@ class Engine:
     def perceive_and_think(self) -> None:
         """Players look at the pitch about four times a second, staggered so they do not all look
         on the same frame; each team brain reads the game about twice a second."""
-        bx, by = self.ball[0], self.ball[1]
+        bx, by = self.play_point()
         states = [(p.id, p.x, p.y, p.vx, p.vy) for p in self.players]
         for i, p in enumerate(self.players):
             if (self.frame + i) % PERCEIVE_EVERY == 0:

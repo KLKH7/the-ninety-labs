@@ -19,5 +19,6 @@ licence must be one of those three (see `AGENTS.md`).
 | Data | Used for | Source and terms |
 |---|---|---|
 | `ninety/sim/data/expected_threat_12x8.json` | what having the ball in each area is worth (GROUNDING D9) | Expected Threat grid by Karun Singh, file open_xt_12x8_v1 (karun.in). Its licence is not stated: *verify* before release, or replace it with a grid measured from open event data |
+| `ninety/sim/data/press_styles.json` | how far up the pitch each side presses (GROUNDING T3) | computed by us from StatsBomb open data (github.com/statsbomb/open-data). Data: StatsBomb. Used under the StatsBomb Public Data User Agreement: analysis may be published with credit to StatsBomb (their logo to be added from their media pack); the data itself is not redistributed here; **no commercial use** of the data or of analysis derived from it |
 
 Planned, added when first used: RF-DETR (Apache-2.0 sizes only), supervision (MIT).
