@@ -45,7 +45,7 @@ MAX_PASS_M = 45.0
 LOFT_OVER_M = 25.0
 RECEIVE_HEIGHT_M = 1.0  # a dropping ball is taken on the foot or thigh below about this height
 LOFT_DEG = 30.0  # design: the launch angle of a lofted pass or a throw, as estimated and as struck
-CONTROL_EST_MPS = 12.0  # A4: the passer's guess of what a first touch can kill: the average (8 + 8 × 0.5)
+CONTROL_EST_MPS = 18.0  # A4: the passer's guess of what a first touch can kill: the average (12 + 12 × 0.5)
 CONTROL_MARGIN_MPS = 2.0  # design: how sharply that guess falls off
 GOAL_KICK_M = 5.5  # Law 16: a goal kick is taken from the goal area
 STICKY = 0.003  # design: a small bonus for carrying on with the current choice (no flip-flopping)
@@ -68,10 +68,13 @@ def _ground_table() -> tuple[list[float], list[tuple[list[float], list[float]]]]
 
 
 SPEEDS, TABLES = _ground_table()
-ARRIVE_MPS = 6.0  # design: the speed a ground pass is struck to arrive at
-# The launch speed for a ground pass to arrive at ARRIVE_MPS, per 0.5 m of distance (0 to 45 m),
+ARRIVE_MPS = 6.0  # the softest pace a ground pass is struck to arrive at
+# D1: the paces a ground pass can be struck to arrive at (design); passes leave the foot at about
+# 16 m/s in professional matches (tracking data, arXiv 2210.16474), so 10 to 14 m/s arrivals are normal.
+PASS_PACES = (6.0, 10.0, 14.0)
+# The launch speed for a ground pass to arrive at each pace, per 0.5 m of distance (0 to 45 m),
 # solved once by ball physics rather than on every decision.
-LAUNCH = [ball.ground_pass(max(d * 0.5, 0.5), ARRIVE_MPS, DT) for d in range(91)]
+LAUNCH = {pace: [ball.ground_pass(max(d * 0.5, 0.5), pace, DT) for d in range(91)] for pace in PASS_PACES}
 
 
 # The same for a lofted pass at LOFT_DEG: (ground speed, vertical speed) per 0.5 m.
@@ -93,8 +96,9 @@ def _arrival_speed(launch: tuple[float, float]) -> float:
 ARRIVAL = [_arrival_speed(launch) for launch in LOFT]
 
 
-def launch_speed(distance: float) -> float:
-    return LAUNCH[min(len(LAUNCH) - 1, max(0, round(distance / 0.5)))]
+def launch_speed(distance: float, pace: float = ARRIVE_MPS) -> float:
+    table = LAUNCH[pace]
+    return table[min(len(table) - 1, max(0, round(distance / 0.5)))]
 
 
 def loft_launch(distance: float) -> tuple[float, float]:
@@ -184,6 +188,7 @@ class Option:
     target: tuple[float, float] | None = None
     receiver: str | None = None
     lofted: bool = False
+    pace: float = ARRIVE_MPS  # a ground pass's arrival speed, as chosen
 
 
 def attack(goal_x: float) -> float:
@@ -274,12 +279,12 @@ def pressure(scene: Scene) -> float:
 
 
 def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, age: float,
-                    lofted: bool) -> float | None:
+                    lofted: bool, pace: float = ARRIVE_MPS) -> float | None:
     """The passer's estimate that a pass to (tx, ty) reaches the team-mate at (mx, my) and is
     controlled: no opponent gets to the ball's path first, the team-mate gets there in time, and
     the ball arrives slowly enough to kill. None if a ground pass would stop short."""
     dist = math.hypot(tx - scene.x, ty - scene.y)
-    v0 = launch_speed(dist) if not lofted else 0.0
+    v0 = launch_speed(dist, pace) if not lofted else 0.0
     arrive = ground_time(v0, dist) if not lofted else loft_time(dist)
     if not math.isfinite(arrive):
         return None
@@ -296,7 +301,7 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
     receiver_t = generic_time(math.hypot(tx - mx, ty - my))
     confidence *= sigmoid((arrive + 0.5 - receiver_t) / RECEIVE_MARGIN_S)
     # Can he control it when it gets there? A lofted ball arrives slower than it was struck (drag).
-    arrival = loft_arrival(dist) if lofted else ARRIVE_MPS
+    arrival = loft_arrival(dist) if lofted else pace
     confidence *= sigmoid((CONTROL_EST_MPS - arrival) / CONTROL_MARGIN_MPS)
     return confidence * (0.8 if age > STALE_S else 1.0)
 
@@ -309,16 +314,21 @@ def pass_option(scene: Scene, mate: tuple[str, float, float, float]) -> Option |
     if dist < 4 or dist > MAX_PASS_M:
         return None
     lofted = scene.throw or dist > LOFT_OVER_M
-    confidence = pass_confidence(scene, tx, ty, mx, my, age, lofted)
-    if confidence is None:
-        return None
     gain = value(tx, ty, scene.goal_x, scene.opponents, scene.keeper)
     space = min((math.hypot(ox - tx, oy - ty) for ox, oy in scene.opponents), default=10.0)
     gain *= 0.7 + 0.3 * min(1.0, space / 5.0)  # a receiver with space can do more with it
     # A pass that fails is lost along the lane or runs on to where it was aimed: the worse of the two.
     mx_, my_ = (scene.x + tx) / 2, (scene.y + ty) / 2
     lost = max(loss_cost(mx_, my_, scene.goal_x), loss_cost(tx, ty, scene.goal_x))
-    return Option("pass", confidence * gain - (1 - confidence) * lost, (tx, ty), mid, lofted)
+    best = None
+    for pace in ((ARRIVE_MPS,) if lofted else PASS_PACES):  # he picks the pace the lane needs
+        confidence = pass_confidence(scene, tx, ty, mx, my, age, lofted, pace)
+        if confidence is None:
+            continue
+        ev = confidence * gain - (1 - confidence) * lost
+        if best is None or ev > best.value:
+            best = Option("pass", ev, (tx, ty), mid, lofted, pace)
+    return best
 
 
 def shot_chance(scene: Scene) -> float:

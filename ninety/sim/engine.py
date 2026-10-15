@@ -407,10 +407,11 @@ class Engine:
         self.kicked = self.emit("shot", team, bx, by, player=carrier.id, ball_speed_kmh=round(speed * 3.6, 1))
         self.kick(carrier, vx, vy, vz)
 
-    def pass_to(self, carrier: Player, tx: float, ty: float, lofted: bool, throw: bool = False) -> None:
+    def pass_to(self, carrier: Player, tx: float, ty: float, lofted: bool, throw: bool = False,
+                pace: float = decisions.ARRIVE_MPS) -> None:
         """Kick toward a point the carrier chose (where he believes a team-mate will be, or space)."""
         if not self.can_strike(carrier, tx, ty):
-            self.turn_to(carrier, tx, ty, lambda: self.pass_to(carrier, tx, ty, lofted, throw))
+            self.turn_to(carrier, tx, ty, lambda: self.pass_to(carrier, tx, ty, lofted, throw, pace))
             return
         bx, by = self.ball[0], self.ball[1]
         dist = math.hypot(tx - bx, ty - by)
@@ -418,7 +419,7 @@ class Engine:
         if throw or lofted:
             ground, up = decisions.loft_launch(dist)
         else:
-            ground, up = decisions.launch_speed(dist), 0.0
+            ground, up = decisions.launch_speed(dist, pace), 0.0
         wide = abs(ty - PITCH_Y / 2) > 20 and (tx - bx) * attack_dir(carrier.team) > 0
         skill = "crossing" if (dist > LOFT_OVER_M and wide) else "passing"
         vx, vy, vz = self.execute(carrier, *self.aim(bx, by, tx, ty, ground, up), skill)
@@ -479,7 +480,7 @@ class Engine:
             return
         choice = decisions.choose(scene, self.rng)
         if choice.kind == "pass" or choice.kind == "clear":
-            self.pass_to(carrier, *choice.target, lofted=choice.lofted)
+            self.pass_to(carrier, *choice.target, lofted=choice.lofted, pace=choice.pace)
             self.intended = choice.receiver
         elif choice.kind == "shoot":
             self.shoot(carrier)
