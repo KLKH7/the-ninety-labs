@@ -118,6 +118,13 @@ short and actionable. This file is public: no research sources, product names or
   arguments.
 - **Check:** paste each documented command into a fresh shell before merging.
 
+### 21. Evidence has to fit in an agent's context
+- **What happened:** frame-based stats cited every frame they used, so one 90-minute match
+  produced 85 MB of facts (9.3 million source ids), too large for any agent or fact-checker.
+- **Rule:** cite frames as a range (`frames:<first>-<last>`); cite events by id; a value of zero
+  cites nothing.
+- **Check:** a test requires frame-based facts to cite one range, and caps the size of a clip's facts.
+
 ## Data and grounding
 
 ### 16. Read the primary source
