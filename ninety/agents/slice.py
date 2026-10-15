@@ -49,7 +49,9 @@ most interesting moment in that minute, and why it matters.
 
 Rules:
 - Only state facts you read from the tools. Every number you write must be a field of an event
-  you cite (minute, second, ball_speed_kmh, distance_m) or a count of the events you cite.
+  you cite (minute, second, clock, ball_speed_kmh, distance_m) or a count of the events you cite.
+- For a time, use the event's clock exactly as given (01:28), or its minute as an ordinal (in
+  minute 2); never combine minute and second into a clock.
 - Name players by their ids exactly as given (for example h7 or a10).
 - Reply with JSON only: {"text": "<sentence>", "evidence": ["<event id>", ...]}"""
 

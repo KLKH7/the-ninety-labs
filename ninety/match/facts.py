@@ -5,9 +5,10 @@ from __future__ import annotations
 import math
 from functools import lru_cache
 
+from ninety.match.clock import match_clock
 from ninety.sim.engine import simulate
 
-AGENT_TYPES = ("pass", "shot", "goal", "tackle", "interception")
+AGENT_TYPES = ("pass", "shot", "goal", "tackle", "interception", "pressure")
 
 
 @lru_cache(maxsize=8)
@@ -21,10 +22,14 @@ def minute_of(event: dict) -> int:
 
 def compact(event: dict) -> dict:
     """The fields an agent may cite, with derived values computed here so no model does arithmetic."""
+    minute = minute_of(event)
+    second = int(event["t"] % 60)
     out = {
         "id": event["id"],
-        "minute": minute_of(event),
-        "second": round(event["t"] % 60),
+        # `minute` is the football ordinal: minute 2 is 01:00 through 01:59, not the clock minute.
+        "minute": minute,
+        "second": second,
+        "clock": match_clock(event["t"]),
         "type": event["type"],
         "team": event["team"],
         "player": event["player"],
