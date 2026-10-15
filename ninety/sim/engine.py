@@ -1334,7 +1334,12 @@ class Engine:
         # A shorter dive is the same push, over sooner: the full dive's profile, sped up.
         speed_up = KEEPER_DIVE_TRAVEL_M / max(abs(travel), 1e-6)
         y = y0 + travel * offball.dive_progress(elapsed * speed_up)
-        p.vx, p.vy = 0.0, (y - p.y) / DT
+        # P2: the run he was making when he launched brakes as hard as his legs allow, it does not
+        # stop dead (the dive only moves him sideways).
+        brake = min(abs(p.vx), BRAKE_MAX * DT)
+        p.vx -= math.copysign(brake, p.vx)
+        p.x += p.vx * DT
+        p.vy = (y - p.y) / DT
         p.y = y
         if elapsed >= DIVE_TIME_S:
             self.landed = (p.id, self.dive[4])

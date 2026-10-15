@@ -840,3 +840,19 @@ def test_a_dribbler_whose_touch_is_declined_still_decides():
         e.tick_carrier()
         e.frame += 1
     assert calls == [c.id]  # the touch was not his, so he keeps the ball and chooses again
+
+
+def test_a_keeper_who_dives_while_running_brakes_his_run_and_does_not_stop_dead():
+    e = Engine(1)
+    k = e.by_id["a1"]
+    k.x, k.y, k.heading, k.vx, k.vy = 100.0, 34.0, math.pi, -4.0, 0.0  # coming off his line
+    e.dive = (k.id, e.t, k.y, 1.0, e.t)  # diving to his left
+    seen = [k.vx]
+    for _ in range(5):
+        x0 = k.x
+        e.keeper_dive(k)
+        assert math.isclose(k.x - x0, k.vx * DT)  # moved by the speed he has, not teleported
+        seen.append(k.vx)
+        e.t += DT
+    for a, b in zip(seen, seen[1:], strict=False):
+        assert math.isclose(b - a, engine.BRAKE_MAX * DT)  # GROUNDING P2: as hard as his legs brake
