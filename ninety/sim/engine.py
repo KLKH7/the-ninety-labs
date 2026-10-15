@@ -670,7 +670,11 @@ class Engine:
             # where the relative direction is sideways by construction.
             closing = (self.ball[3] - p.vx) * (p.x - x0) + (self.ball[4] - p.vy) * (p.y - y0)
             reach_m, reach_z = self.reach(p, cx, cy)
-            if since >= self.reaction(p) and d <= reach_m and cz <= reach_z:  # a deliberate touch
+            # D6: a dribbler is back on his own touch after TOUCH_GAP_S, the time the push was
+            # sized for (touch_speed); until then it is free. Timed from the touch itself, since a
+            # touch along his line does not restart kicked_at.
+            back_on = p.id != self.dribbler or self.t - self.free_since >= TOUCH_GAP_S
+            if since >= self.reaction(p) and d <= reach_m and cz <= reach_z and back_on:  # a deliberate touch
                 hits.append((s, "touch", p, cx, cy, cz))
             elif d <= BODY_RADIUS + ball.RADIUS and cz <= BODY_HEIGHT and closing > 0:
                 hits.append((s, "body", p, cx, cy, cz))
@@ -1002,9 +1006,11 @@ class Engine:
         if self.off_balance.get(p.id, -1.0) > self.t:  # beaten: getting up, out of the play
             return p.x, p.y, SHAPE
         if p.id == self.dribbler:  # running onto his own touch, a little faster than the ball
-            bx, by, _, bvx, bvy, _ = self.ball
-            onto = math.hypot(bvx, bvy) + 1.0  # design: he closes on it at about 1 m/s
-            return clamp(bx + bvx * 0.2, 0.5, PITCH_X - 0.5), clamp(by + bvy * 0.2, 0.5, PITCH_Y - 0.5), onto
+            # He runs along its path toward where it would stop, not at a point just ahead of it:
+            # steering stops on its target, so a target beside the ball keeps him behind it.
+            rest = ball.predict(self.ball, DT, 6.0)[-1]
+            onto = math.hypot(self.ball[3], self.ball[4]) + 1.0  # design: he closes on it at about 1 m/s
+            return clamp(rest[0], 0.5, PITCH_X - 0.5), clamp(rest[1], 0.5, PITCH_Y - 0.5), onto
         # Targets stay on the pitch so players brake for the line instead of stopping dead at it.
         if chase and chase[0] == p.id:
             return clamp(chase[1], 0.5, PITCH_X - 0.5), clamp(chase[2], 0.5, PITCH_Y - 0.5), SPRINT
@@ -1349,8 +1355,8 @@ class Engine:
             self.emit("pressure", opp, presser.x, presser.y, player=presser.id, receiver=carrier.id)
         close = self.closest_opponent(carrier) < CLOSE_CONTROL_M
         if self.dribble_to and not self.windup and not close and math.hypot(fx - bx, fy - by) < 0.15:
-            self.touch_ahead(carrier)
-            return
+            if self.touch_ahead(carrier):
+                return
         if self.windup:
             if self.can_strike(carrier, self.windup[0], self.windup[1]):
                 strike, self.windup = self.windup[2], None
@@ -1451,7 +1457,43 @@ class Engine:
         self.kicker_clear, self.touched_since_kick = False, True
         self.plan_chase()
 
-    def touch_ahead(self, carrier: Player) -> None:
+    def touch_speed(self, carrier: Player, ux: float, uy: float, lo: float, hi: float) -> float | None:
+        """D6: the hardest push up to `hi` that his own body can still run onto within TOUCH_GAP_S
+        (the engine's race, can_reach, on the ball's own path) and that no opponent, where he
+        believes them to be and going, gets to first (the passer's race: an average body, a foot's
+        reach; a touch along his line needs no reaction from them, P12). None if even the softest
+        is not his: he keeps it at his feet. A rolling ball keeps most of its speed, so a push sized
+        only by how far ahead it should go would run away from him."""
+        bx, by = self.ball[0], self.ball[1]
+        view = self.beliefs[carrier.id]
+        near = []
+        for q in self.players:
+            w = view.where(q.id, self.t) if q.team != carrier.team else None
+            if w and math.hypot(w[0] - bx, w[1] - by) < hi * TOUCH_GAP_S + 12.0:  # design: beyond, no race
+                near.append((w, view.velocity(q.id)))
+
+        def his(v: float) -> bool:
+            path = ball.predict((bx, by, 0.0, ux * v, uy * v, 0.0), DT, TOUCH_GAP_S)
+            x, y, z = path[-1][:3]
+            if not self.can_reach(carrier, x, y, z, TOUCH_GAP_S)[0]:
+                return False
+            for k in range(3, len(path), 3):
+                x, y = path[k][0], path[k][1]
+                for (wx, wy), (vx, vy) in near:
+                    if can_get_to(decisions.AVERAGE_BODY, x - wx, y - wy, CONTROL_M, vx, vy, k * DT)[0]:
+                        return False
+            return True
+
+        if not his(lo):
+            return None
+        if his(hi):
+            return hi
+        for _ in range(8):
+            mid = (lo + hi) / 2
+            lo, hi = (mid, hi) if his(mid) else (lo, mid)
+        return lo
+
+    def touch_ahead(self, carrier: Player) -> bool:
         """D6: a dribbling touch. The ball goes ahead of him toward where he is carrying it, further
         with space, struck with his own error; he runs onto it, and it is free until he gets there."""
         tx, ty = self.dribble_to
@@ -1459,7 +1501,7 @@ class Engine:
         d = math.hypot(tx - bx, ty - by)
         if d < 0.5:
             self.dribble_to = None
-            return
+            return False
         view = self.beliefs[carrier.id]
         felt = min((math.hypot(w[0] - carrier.x, w[1] - carrier.y) for w in
                     (view.where(q.id, self.t) for q in self.players if q.team != carrier.team) if w),
@@ -1467,7 +1509,9 @@ class Engine:
         space = clamp((felt - 2.0) / 8.0, 0.0, 1.0)
         ahead = TOUCH_CLOSE_M + TOUCH_SPACE_M * space
         run = max(decisions.dribble_speed(carrier.profile["dribbling"]), math.hypot(carrier.vx, carrier.vy))
-        speed = run + ahead / TOUCH_GAP_S
+        speed = self.touch_speed(carrier, (tx - bx) / d, (ty - by) / d, run, run + ahead / TOUCH_GAP_S)
+        if speed is None:  # no push is his: close control, the ball stays at his feet
+            return False
         vx, vy, vz = self.execute(carrier, (tx - bx) / d * speed, (ty - by) / d * speed, 0.0, "dribbling")
         self.ball = (bx, by, self.ball[2], vx, vy, vz)
         self.possessor = None
@@ -1486,6 +1530,7 @@ class Engine:
         # Who goes for the loose ball is judged at once: a defender who has been watching the carry
         # and can get there first commits to it, rather than keep shadowing.
         self.plan_chase()
+        return True
 
     def snapshot(self) -> None:
         bx, by, bz = self.ball[0], self.ball[1], self.ball[2]
