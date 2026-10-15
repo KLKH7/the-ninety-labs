@@ -1213,8 +1213,8 @@ class Engine:
     def keeper_dive(self, p: Player) -> bool:
         """P15: once the keeper has reacted to a shot, he dives toward where it will cross his line:
         his body travels sideways (up to KEEPER_DIVE_TRAVEL_M, only as far as he needs beyond his
-        standing reach) over DIVE_TIME_S, and he is down for a moment afterwards. True while the
-        dive moves him."""
+        standing reach) with the full dive's push, and he is down for a moment afterwards. True
+        while the dive moves him."""
         k = self.kicked
         shot_at_him = k and k["type"] == "shot" and k["team"] != p.team and self.possessor is None
         reacted = self.t - self.kicked_at >= self.reaction(p)  # to the last touch, a deflection too
@@ -1233,12 +1233,27 @@ class Engine:
             return False
         _, start, y0, travel, _ = self.dive
         elapsed = self.t + DT - start
-        # A shorter dive is the same push, over sooner: the full dive's profile, sped up.
-        speed_up = KEEPER_DIVE_TRAVEL_M / max(abs(travel), 1e-6)
-        y = y0 + travel * offball.dive_progress(elapsed * speed_up)
-        p.vx, p.vy = 0.0, (y - p.y) / DT
+        # A shorter dive is the same push, stopped once he has gone far enough: as hard as the full
+        # dive's, not harder, so he lands slower.
+        done = KEEPER_DIVE_TRAVEL_M * offball.dive_progress(elapsed)
+        landing = done >= abs(travel) or elapsed >= DIVE_TIME_S
+        y = y0 + math.copysign(min(done, abs(travel)), travel)
+        if landing:
+            # He lands carrying the speed the push gave him, for what is left of the frame, and
+            # slows on the ground from there (he is down: braking as any body does, P2), not in
+            # one frame.
+            reached = offball.dive_time_to(abs(travel))
+            carried = math.copysign(offball.dive_speed(reached), travel)
+            y += carried * min(max(elapsed - reached, 0.0), DT)
+        # P2: the run he was making when he launched brakes as hard as his legs allow, it does not
+        # stop dead (the dive only moves him sideways).
+        brake = min(abs(p.vx), BRAKE_MAX * DT)
+        p.vx -= math.copysign(brake, p.vx)
+        p.x += p.vx * DT
+        p.vy = (y - p.y) / DT
         p.y = y
-        if elapsed >= DIVE_TIME_S:
+        if landing:
+            p.vy = carried
             self.landed = (p.id, self.dive[4])
             self.dive = None
             self.off_balance[p.id] = self.t + offball.KEEPER_DOWN_S  # on the ground: getting up

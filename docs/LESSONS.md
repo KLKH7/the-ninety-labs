@@ -173,3 +173,14 @@ short and actionable. This file is public: no research sources, product names or
   the contact rule, the kick-error model), moved where both can import them, never a copy.
 - **Check:** `uv run python -m ninety.sim.calibration` on forced choices, not only chosen ones:
   chosen options hide a pessimistic estimate, because nobody picks what it underrates.
+
+### 28. A comment that names a physical rule is a claim to measure
+- **What happened:** the keeper's dive said "a shorter dive is the same push, over sooner", but
+  the code replayed the full dive's timing sped up, so a 0.5 m dive launched at about 46 m/s²
+  against 16 for a full one, and every dive ended by setting him down from full speed in one
+  frame. Tests checked where the dive ended, never how hard it pushed, so both passed for months.
+- **Rule:** when a comment or GROUNDING row states how a body moves (the same push, braking as
+  legs allow), a test measures that quantity frame by frame (speed gained or lost per frame),
+  not only where the movement ends.
+- **Check:** for any motion profile, a test sweeps its inputs (here, every dive length) and
+  bounds the per-frame change in speed; mutate the profile's scaling and the test must fail.
