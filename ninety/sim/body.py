@@ -14,6 +14,10 @@ from ninety.sim.shape import SHOULDER_BREADTH_M
 
 GRAVITY = 9.81
 BODY_RADIUS = SHOULDER_BREADTH_M / 2  # P11: how far his body reaches sideways (the outline: shape.py)
+BODY_HEIGHT = 1.8  # a ball below this height can strike the body
+CONTROL_M = 1.0  # a foot reaches this far from the body's centre
+FOOT_REACH_Z = 1.0  # outfield players can play the ball below this height
+HAND_REACH_Z = 2.8  # P11: a jumping keeper's hand reach (standing about 2.35 m plus the jump)
 F0_MEAN, F0_SD = 5.18, 0.46  # P2: acceleration from standing, m/s² (professional sprint tests)
 V0_MEAN, V0_SD = 10.0, 0.3  # P9: top-speed capability, m/s; a sprint-test fit gives about 10.3
 BRAKE_MAX = 7.0  # P2: braking, m/s²; peak about 8.5, about 4.5 averaged over a full stop
@@ -66,14 +70,15 @@ class Body:
 
     def time_to_cover(self, gap: float, speed_along: float = 0.0) -> float:
         """Seconds to run `gap` metres along a line. A player moving away from it must first
-        brake to a stop, which takes time and adds distance."""
-        if gap <= 0:
-            return 0.0
+        brake to a stop, which takes time and adds distance, even if he is already within the gap
+        (as can_get_to charges it: one rule for whether he gets there and when)."""
         brake_t = extra = 0.0
         if speed_along < 0:
             brake_t = -speed_along / BRAKE_MAX
             extra = speed_along * speed_along / (2 * BRAKE_MAX)
             speed_along = 0.0
+        if gap + extra <= 0:
+            return 0.0
         # Newton's method: distance over time is smooth and its derivative is the speed.
         top = self.top_speed()
         u = clamp(speed_along, 0.0, top)
@@ -81,8 +86,10 @@ class Body:
         target = gap + extra
         t = target / max(top, 1e-6) + tau  # a start past the answer: speed only rises
         for _ in range(12):
-            f = self.distance_in(t, u) - target
-            speed = top - (top - u) * math.exp(-t / tau)
+            fade = math.exp(-t / tau)
+            covered = top * t - (top - u) * tau * (1 - fade) if t > 0 else 0.0  # distance_in, inline
+            f = covered - target
+            speed = top - (top - u) * fade
             step = f / max(speed, 1e-6)
             t -= step
             if abs(step) < 1e-4:
@@ -102,6 +109,25 @@ class Body:
             tau = TAU_LIGHT + (TAU_HEAVY - TAU_LIGHT) * depth
             self.reserve += (self.ceiling - self.reserve) * (1 - math.exp(-dt / tau))
         self.reserve = clamp(self.reserve, 0.0, self.ceiling)
+
+
+def can_get_to(body: Body, dx: float, dy: float, reach_m: float, vx: float, vy: float,
+               seconds: float) -> tuple[bool, float, float]:
+    """Can a player running at (vx, vy) get within `reach_m` of a point (dx, dy) away from him in
+    `seconds` of running? (reachable, gap still to close, his speed along the way.) Running away
+    from the point, he must first brake to a stop, which takes time and adds distance. One test
+    for the engine's chase (engine.can_reach) and the passer's estimate of it."""
+    d = math.hypot(dx, dy)
+    gap = d - reach_m
+    along = (vx * dx + vy * dy) / (d or 1.0)
+    brake_t = max(0.0, -along) / BRAKE_MAX
+    extra = min(0.0, along) ** 2 / (2 * BRAKE_MAX)
+    return gap + extra <= body.distance_in(seconds - brake_t, max(0.0, along)), gap, along
+
+
+def relative_speed(bvx: float, bvy: float, bvz: float, pvx: float, pvy: float) -> float:
+    """The ball's speed relative to a player running at (pvx, pvy): what a touch has to absorb."""
+    return math.sqrt((bvx - pvx) ** 2 + (bvy - pvy) ** 2 + bvz * bvz)
 
 
 def clamp(v: float, lo: float, hi: float) -> float:

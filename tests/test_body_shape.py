@@ -6,7 +6,7 @@ import math
 import random
 
 from ninety.render.scene import Gait, Look, advance_gaits, body_parts, face
-from ninety.sim import ball, engine, shape
+from ninety.sim import ball, body, engine, shape
 from ninety.sim.engine import BODY_RESTITUTION, DT, Engine
 
 
@@ -450,7 +450,7 @@ def test_a_dropping_ball_is_played_once_it_comes_down_into_reach():
     e.contact(before)
     hit = [ev for ev in e.match.events if ev["type"] in ("deflection", "possession_change")]
     assert hit and hit[0]["player"] == p.id
-    assert math.isclose(hit[0]["x"], 49.0 + 0.4 * (1.5 - engine.FOOT_REACH_Z) / 0.8, abs_tol=0.03)
+    assert math.isclose(hit[0]["x"], 49.0 + 0.4 * (1.5 - body.FOOT_REACH_Z) / 0.8, abs_tol=0.03)
 
 
 def test_a_ball_he_controls_against_his_body_is_on_its_surface_not_inside_it():
@@ -690,9 +690,14 @@ def test_after_a_bump_a_new_strike_by_someone_else_is_new_to_everyone():
         else:
             c = e.by_id["h8"]
             c.x, c.y, c.heading = 70.0, 20.0, 0.0
+            c.vx, c.vy = 6.0 * math.cos(math.radians(40)), 6.0 * math.sin(math.radians(40))  # cutting across
+            for q in e.players:  # nobody near: a push is his, so he does touch it on
+                if q.team != c.team:
+                    q.x, q.y, q.vx, q.vy = 10.0, 60.0, 0.0, 0.0
+            e.beliefs[c.id].seen = {}
             e.possessor, e.dribble_to = c.id, (80.0, 20.0)
             e.ball = (70.21, 20.0, 0.0, 0.0, 0.0, 0.0)
-            e.touch_ahead(c)
+            assert e.touch_ahead(c) and e.kicked_at == e.t  # a new strike (D6: not one along his run)
         assert e.bumped is None, strike
 
 

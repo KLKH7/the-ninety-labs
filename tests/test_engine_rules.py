@@ -5,7 +5,8 @@ import math
 from statistics import mean, pstdev
 
 from ninety.sim import ball, perception, shape
-from ninety.sim.engine import BODY_RESTITUTION, DT, MAX_STRIKE_MPS, PRESS_GAP_M, Engine
+from ninety.sim.engine import BODY_RESTITUTION, DT, PRESS_GAP_M, Engine
+from ninety.sim.profiles import MAX_STRIKE_MPS
 
 
 def still(e: Engine) -> None:

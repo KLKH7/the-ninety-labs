@@ -163,7 +163,18 @@ short and actionable. This file is public: no research sources, product names or
 - **Rule:** before acting on a claim about what a source says, read the passage itself, and keep
   "the engine measures X" separate from "the source defines Y".
 
-### 23. What collides is what is drawn
+### 23. An estimate of what the engine does must run the engine's own rules
+- **What happened:** the passer's estimate of a pass raced each opponent against the ball reaching
+  his own nearest point, even after a team-mate would already have taken it, and left out how the
+  engine really loses passes (a body in the lane, a heavy first touch, the passer's own kick
+  error, the ball going out). Forced passes it rated 3% arrived about a quarter of the time, so risky passes
+  looked worse than they were.
+- **Rule:** an estimate of an engine outcome calls the engine's own definitions (the reach test,
+  the contact rule, the kick-error model), moved where both can import them, never a copy.
+- **Check:** `uv run python -m ninety.sim.calibration` on forced choices, not only chosen ones:
+  chosen options hide a pessimistic estimate, because nobody picks what it underrates.
+
+### 24. What collides is what is drawn
 - **What happened:** the engine's body was a round cylinder 0.52 m across; the renderer drew a
   round trunk 0.32 m across (deeper than a real chest), turned by its own smoothing of the motion
   rather than the engine's heading, and drew a carried ball 0.55 m ahead of where the engine had
@@ -179,7 +190,7 @@ short and actionable. This file is public: no research sources, product names or
   states), the clip's gaits take the engine's heading, and `drawn_ball` returns the engine's
   position.
 
-### 24. A new limit breaks every rule that assumed the old instant behaviour
+### 25. A new limit breaks every rule that assumed the old instant behaviour
 - **What happened:** turning was made to take time, but the strike still fired as soon as the
   ball was on the target's side of the body, which with a slow turn meant striking along the
   chest; passers knocked their own passes off themselves, and deflections doubled. The tests
@@ -190,7 +201,7 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** before and after, measure the outcomes the change could disturb (here: kick angle
   off the body, self-deflections, deflections, interceptions) on the same seeds.
 
-### 25. A limit on angle is not a limit on distance
+### 26. A limit on angle is not a limit on distance
 - **What happened:** a carried ball was sent round the carrier's body with its turn per frame
   limited, but its distance from him was set straight onto his outline, so a ball a metre away
   jumped up to 1.24 m in one frame, through him. It was under every validator limit, and the
@@ -200,7 +211,7 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** a test measures per-frame movement from awkward starting places (ahead, beside,
   behind) against the speed limit it claims.
 
-### 26. A contact must not swallow the rest of the frame
+### 27. A contact must not swallow the rest of the frame
 - **What happened:** a deflected ball was put back where it met the player and the rest of that
   frame's travel was dropped. A ball he kept failing to control hovered at knee height for
   seconds while its falling speed grew, touched again every frame; the gravity check let it
