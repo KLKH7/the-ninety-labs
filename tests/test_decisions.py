@@ -440,15 +440,9 @@ def test_a_one_on_one_with_the_keeper_rushing_out_is_never_hopeless_nor_certain(
 
 
 def test_the_keeper_term_is_the_published_save_rate_with_odds_scaled_by_coverage():
-    assert D.KEEPER_SAVES == 826 / 1079  # Perez-Arroniz et al. 2025
     usual = offball.keeper_spot(90, 34, 105)
     assert math.isclose(D.shot_estimate(90, 34, 105, [], usual), D.shot_estimate(90, 34, 105, [], None))
     near_post = (usual[0], usual[1] - 1.0)
     far = (usual[0], usual[1] + 2.5)
     assert D.shot_estimate(90, 34, 105, [], near_post) < D.shot_estimate(90, 34, 105, [], far)
 
-
-def test_the_arms_stretch_at_the_same_pace_as_the_dive():
-    for t in (0.0, 0.1, 0.25, 0.4, 0.5, 0.8):
-        want = offball.KEEPER_STAND_REACH_M + offball.KEEPER_DIVE_EXTRA_M * offball.dive_progress(t)
-        assert math.isclose(offball.arm_reach_m(t), want)

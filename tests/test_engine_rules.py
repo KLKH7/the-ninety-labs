@@ -779,7 +779,7 @@ def test_ball_at_x_interpolates_the_crossing_between_frames():
     when, y, _ = e.ball_at_x(90.0)
     path = ball.predict(e.ball, 1 / 25, 3.0)
     k = next(i for i, s in enumerate(path) if s[0] >= 90.0)
-    assert (k - 1) / 25 <= when <= k / 25  # between the frames, not the frame after
+    assert (k - 1) / 25 < when < k / 25  # between the frames, neither the frame before nor after
     assert abs((y - 34.0) / (90.0 - 80.0) - 0.4) < 0.01  # on the ball's own line
 
 
@@ -788,16 +788,40 @@ def test_a_late_dive_never_shrinks_the_keepers_reach():
     k = _shot_at_keeper(e, (80.0, 34.0, 0.3, 20.0, 1.0, 0.0))
     e.t += e.reaction(k) + 0.4
     before = e.reach(k, 104.0, 34.0)[0]
-    e.dive = (k.id, e.t, k.y, 0.5)  # he decides to dive only now
+    e.dive = (k.id, e.t, k.y, 0.5, e.kicked_at + e.reaction(k))  # he decides to dive only now
     assert e.reach(k, 104.0, 34.0)[0] >= before
 
 
-def test_the_keepers_reach_grows_from_his_reaction_to_the_last_touch():
+
+def test_before_he_reacts_the_keeper_has_only_his_standing_reach_then_it_grows():
     from ninety.sim import offball
     e = Engine(1)
     k = _shot_at_keeper(e, (90.0, 34.0, 0.5, 25.0, 0.0, 0.0))
-    e.t += e.reaction(k) + 0.05
-    early = e.reach(k, 104.0, 34.0)[0]
-    assert early < offball.KEEPER_STAND_REACH_M + offball.KEEPER_DIVE_EXTRA_M  # still stretching
-    e.kicked_at = e.t  # deflected: he reacts to it afresh, from the deflection, not the strike
-    assert e.reach(k, 104.0, 34.0)[0] == offball.arm_reach_m(0.0)
+    e.t += e.reaction(k) * 0.5
+    assert e.reach(k, 104.0, 34.0)[0] == offball.KEEPER_STAND_REACH_M
+    e.t += e.reaction(k) * 0.5 + 0.2
+    assert e.reach(k, 104.0, 34.0)[0] > offball.KEEPER_STAND_REACH_M
+
+
+def test_a_deflection_does_not_unstretch_a_dive_already_under_way():
+    e = Engine(1)
+    k = _shot_at_keeper(e, (90.0, 34.0, 0.5, 25.0, 6.0, 0.0))
+    e.t += e.reaction(k)
+    assert e.keeper_dive(k)
+    e.t += 0.3
+    stretched = e.reach(k, 104.0, 34.0)[0]
+    e.kicked_at = e.t  # deflected mid-dive
+    assert e.reach(k, 104.0, 34.0)[0] == stretched
+
+
+def test_a_late_dive_counts_the_stretch_his_arms_already_have():
+    from ninety.sim import offball
+    e = Engine(1)
+    k = _shot_at_keeper(e, (100.0, 34.0, 0.3, 20.0, 9.0, 0.0))  # close: his arms are still stretching
+    e.t += e.reaction(k) + 0.1  # he waits, then dives
+    when, cross, _ = e.ball_at_x(k.x)
+    assert when < 0.4
+    y0 = k.y
+    assert e.keeper_dive(k)
+    want = min(abs(cross - y0) - offball.arm_reach_m(0.1 + when), offball.KEEPER_DIVE_TRAVEL_M)
+    assert abs(abs(e.dive[3]) - want) < 1e-6

@@ -224,7 +224,8 @@ class Engine:
         self.offside: set[str] = set()  # L10: team-mates in an offside position when the ball was played
         self.from_restart: str | None = None  # the restart the next kick is taken from
         self.read: tuple[str, float] | None = None  # (keeper, y): where he reads a shot is going
-        self.dive: tuple[str, float, float, float] | None = None  # (keeper, start t, start y, signed travel)
+        # (keeper, start t, start y, signed travel, when his arms began to stretch)
+        self.dive: tuple[str, float, float, float, float] | None = None
         self.shot_touched_by: str | None = None  # "keeper" or "defender": who got to the shot
         self.shot_was_on_target: bool | None = None  # was it going in when they first touched it?
         self.free_since = -99.0
@@ -297,12 +298,10 @@ class Engine:
     def reach(self, p: Player, x: float, y: float, at: float | None = None) -> tuple[float, float]:
         """How far and how high this player can reach for a ball at (x, y), at time `at`."""
         if self.hands(p, x, y):
-            # A dive stretches the keeper's reach over time: standing arm's length at first, the
-            # full stretch only once the dive has had time to unfold after he reacts to the
-            # strike. A deflection does not un-stretch a dive already under way.
+            # His arms stretch from the moment he reacts to the last touch, whether or not his body
+            # launches; a deflection does not un-stretch a dive already under way.
             at = self.t if at is None else at
-            # His arms stretch from the moment he reacts, whether or not his body launches.
-            return offball.arm_reach_m(max(0.0, at - self.kicked_at - self.reaction(p))), HAND_REACH_Z
+            return offball.arm_reach_m(max(0.0, at - self.stretch_from(p))), HAND_REACH_Z
         return CONTROL_M, FOOT_REACH_Z
 
     def give(self, pid: str) -> None:
@@ -1124,8 +1123,15 @@ class Engine:
             self.runs[p.id] = (*spot, self.t)
         return spot
 
-    def ball_at_x(self, x: float, seconds: float = 3.0) -> tuple[float, float, float] | None:
-        # `seconds`: design, longer than any shot or pass takes to reach a keeper
+    def stretch_from(self, p: Player) -> float:
+        """When the keeper's arms began to stretch: when his dive began to be prepared (his reaction
+        to the touch that set it off), or his reaction to the last touch."""
+        if self.dive and self.dive[0] == p.id:
+            return self.dive[4]
+        return self.kicked_at + self.reaction(p)
+
+    def ball_at_x(self, x: float, seconds: float = 10.0) -> tuple[float, float, float] | None:
+        # `seconds`: only a bound; the ball's own path stops when it comes to rest
         """(seconds from now, y, height) when the ball, in its own flight (drag and gravity),
         reaches x; None if it does not within `seconds`."""
         bx, vx = self.ball[0], self.ball[3]
@@ -1153,14 +1159,14 @@ class Engine:
                 when, cross = arrival[0], arrival[1]
                 # only as far as his body must go beyond what his arms will reach by then; his arms
                 # began to stretch when he reacted, whenever the dive itself starts
-                stretched = self.t - (self.kicked_at + self.reaction(p)) + when
+                stretched = self.t - self.stretch_from(p) + when
                 need = abs(cross - p.y) - offball.arm_reach_m(stretched)
                 if need > 0:
                     travel = math.copysign(min(need, KEEPER_DIVE_TRAVEL_M), cross - p.y)
-                    self.dive = (p.id, self.t, p.y, travel)
+                    self.dive = (p.id, self.t, p.y, travel, self.kicked_at + self.reaction(p))
         if not self.dive or self.dive[0] != p.id:
             return False
-        _, start, y0, travel = self.dive
+        _, start, y0, travel, _ = self.dive
         elapsed = self.t + DT - start
         # A shorter dive is the same push, over sooner: the full dive's profile, sped up.
         speed_up = KEEPER_DIVE_TRAVEL_M / max(abs(travel), 1e-6)
