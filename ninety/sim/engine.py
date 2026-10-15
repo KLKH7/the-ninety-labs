@@ -28,13 +28,12 @@ from ninety.sim.team import TeamBrain
 PITCH_X, PITCH_Y = 105.0, 68.0
 FPS = 25
 DT = 1.0 / FPS
-# How fast a player chooses to go (design; step 3 turns these into decisions). What they can
-# reach is limited by their own body (ninety/sim/body.py): acceleration, top speed, energy.
+# How fast a player chooses to go. Off the ball he goes as fast as he needs to be in place before
+# the ball could get there (in_time, O8), no faster; a few jobs are flat out. What he can reach is
+# limited by his own body (ninety/sim/body.py): acceleration, top speed, energy.
 SPRINT = 99.0  # as fast as their body allows
-RECOVER = 6.0  # running back into position from far away
-PRESS = 6.0  # closing down the ball carrier
-SHAPE = 3.0  # adjusting position, below critical speed so it can be sustained
-FAR_OUT_OF_POSITION_M = 10.0
+RECOVER = 6.0  # a restart taker or the keeper getting into position (design)
+SHAPE = 3.0  # getting up after being beaten (design)
 DRIBBLE = 2.5
 DECIDE_EVERY = 6  # frames between the ball carrier's decisions (about 4 a second)
 PERCEIVE_EVERY = 6  # frames between a player's looks at the pitch (about 4 a second, staggered)
@@ -878,6 +877,21 @@ class Engine:
 
     # ---- tick ---------------------------------------------------------------
 
+    def ball_eta(self, x: float, y: float) -> float:
+        """How soon the ball could reach (x, y): the carrier must first be ready to play it, then a
+        pass covers the distance at about a pass's average speed; a ball already moving faster
+        gets there faster (O8)."""
+        bx, by, _, vx, vy, _ = self.ball
+        wait = max(0.0, self.hold_until - self.t) if self.possessor else 0.0
+        pace = decisions.PASS_SPEED_EST_MPS if self.possessor else max(math.hypot(vx, vy),
+                                                                       decisions.PASS_SPEED_EST_MPS)
+        return wait + math.hypot(x - bx, y - by) / pace
+
+    def in_time(self, p: Player, tx: float, ty: float) -> float:
+        """O8: the speed he chooses to get to (tx, ty): just enough to be there before the ball could
+        be, so far from the ball he walks and near it he bursts; his body caps it."""
+        return math.hypot(tx - p.x, ty - p.y) / max(self.ball_eta(tx, ty), DT)
+
     def shape_target(self, p: Player) -> tuple[float, float, float]:
         """Where a player off the ball wants to be, and how fast they go there."""
         chase = self.chase.get(p.team)
@@ -921,7 +935,8 @@ class Engine:
             return *offball.keeper_spot(clamp(bx, 0, PITCH_X), clamp(by, 0, PITCH_Y), own_goal), RECOVER
         if not brain.in_possession and p.id in brain.markers:
             mx, my = brain.markers[p.id]
-            return clamp(mx, 0.5, PITCH_X - 0.5), clamp(my, 0.5, PITCH_Y - 0.5), work
+            mx, my = clamp(mx, 0.5, PITCH_X - 0.5), clamp(my, 0.5, PITCH_Y - 0.5)
+            return mx, my, self.in_time(p, mx, my)
         carrier = self.by_id.get(self.possessor) if self.possessor else None
         if brain.in_possession and carrier and carrier.team == p.team and p.role != "GK":
             run = self.run_target(p, carrier, brain)
@@ -931,17 +946,17 @@ class Engine:
                             and q.role != "GK"), key=lambda q: math.hypot(q.x - carrier.x, q.y - carrier.y))
             if p in mates[:2]:  # O3: the nearest two offer a diagonal option
                 presser = self.nearest(carrier.x, carrier.y, other(p.team))
-                return *offball.support_spot((p.x, p.y), (carrier.x, carrier.y), goal_x(p.team),
-                                             (presser.x, presser.y)), RECOVER
+                sx, sy = offball.support_spot((p.x, p.y), (carrier.x, carrier.y), goal_x(p.team),
+                                              (presser.x, presser.y))
+                return sx, sy, self.in_time(p, sx, sy)
         if brain.in_possession and p.role != "GK":  # O6: the team's shape with the ball (also in flight)
             seen = [w for w in (self.beliefs[p.id].where(q.id, self.t) for q in self.players
                                 if q.team != p.team) if w]
             onside = self.onside_limit(p.team, seen, bx)  # L10: as far as he sees he may go
             spot = offball.attacking_slot(p.role, PITCH_X - goal_x(p.team), clamp(bx, 0, PITCH_X),
                                           clamp(by, 0, PITCH_Y), onside)
-            if spot:  # with the ball still in flight he drifts there; he runs once it is settled
-                far = math.hypot(spot[0] - p.x, spot[1] - p.y) > FAR_OUT_OF_POSITION_M
-                return *spot, RECOVER if far and self.possessor else SHAPE
+            if spot:
+                return *spot, self.in_time(p, *spot)
         if not brain.in_possession and p.role != "GK":
             own = PITCH_X - goal_x(p.team), PITCH_Y / 2
             d = math.hypot(own[0] - bx, own[1] - by) or 1.0
@@ -962,12 +977,13 @@ class Engine:
                 lead_y = carrier.vy * JOCKEY_LOOKAHEAD_S if carrier else 0.0
                 return *on_pitch(bx + lead_x + gx * gap, by + lead_y + gy * gap), work
             if engaged and brain.pressers[1:2] == [p.id]:  # cover: behind the presser, goal-side
-                return *on_pitch(bx + gx * max(COVER_M, gap + 2), by + gy * max(COVER_M, gap + 2)), RECOVER
+                cx, cy = on_pitch(bx + gx * max(COVER_M, gap + 2), by + gy * max(COVER_M, gap + 2))
+                return cx, cy, self.in_time(p, cx, cy)
             slot = brain.slot(p.role, p.ay, clamp(by, 0, PITCH_Y))
             if slot:
                 tx, ty = slot
-        far = math.hypot(tx - p.x, ty - p.y) > FAR_OUT_OF_POSITION_M
-        return tx, ty, RECOVER if far else SHAPE
+        tx, ty = clamp(tx, 0.5, PITCH_X - 0.5), clamp(ty, 0.5, PITCH_Y - 0.5)
+        return tx, ty, self.in_time(p, tx, ty)
 
     def shared_view(self, team: str, of_team: str) -> dict[str, tuple[float, float]]:
         """What a team's players know between them about another team's positions: for each

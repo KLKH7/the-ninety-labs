@@ -503,3 +503,17 @@ def test_only_a_carry_in_progress_is_a_choice_he_carries_on_with():
     assert e.scene_for(e.by_id["h6"]).current is None  # just received: nothing to carry on with
     e.dribble_to = (70.0, 34.0)
     assert e.scene_for(e.by_id["h6"]).current == "dribble"
+
+
+def test_off_the_ball_he_runs_only_as_fast_as_the_ball_could_get_there():
+    e = Engine(1)
+    p = e.by_id["h6"]
+    e.give("h10")
+    e.hold_until = e.t  # the carrier can play at once
+    e.ball = (p.x + 40.0, p.y, 0.0, 0.0, 0.0, 0.0)
+    far = e.in_time(p, p.x + 5.0, p.y)  # the ball is 35 m from where he is going: no hurry
+    e.ball = (p.x + 10.0, p.y, 0.0, 0.0, 0.0, 0.0)
+    near = e.in_time(p, p.x + 5.0, p.y)  # 5 m: the pass could be there in a third of a second
+    assert far < 3.0 < 6.0 < near
+    e.hold_until = e.t + 1.0  # the carrier is not ready yet: more time
+    assert e.in_time(p, p.x + 5.0, p.y) < near
