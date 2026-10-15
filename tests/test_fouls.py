@@ -81,3 +81,13 @@ def test_whether_the_leg_meets_him_depends_on_which_way_he_faces():
     assert e.leg_meets(dfd, att, 61.0, 34.0)
     att.heading = 1.5708  # facing across it: it passes in front of his chest
     assert not e.leg_meets(dfd, att, 61.0, 34.0)
+
+
+def test_his_leg_reaches_a_foot_from_his_body_and_no_further():
+    # The ball 3 m away along y = 34; h9 stands 1.5 m out on that line, beyond a foot's reach
+    # (CONTROL_M): the lunge's leg stops short of him.
+    e, dfd, att = lunge_scene(34.0)
+    att.x = 61.5
+    assert not e.leg_meets(dfd, att, 63.0, 34.0)
+    att.x = 60.6
+    assert e.leg_meets(dfd, att, 63.0, 34.0)

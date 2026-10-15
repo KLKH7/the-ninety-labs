@@ -50,7 +50,8 @@ def ref_reach(points, rests, t_end, sx, sy, ux, uy, px, py, vx, vy, react, limit
 def reference(scene, tx, ty, mx, my, age, lofted, pace, receiver):
     sx, sy = scene.x, scene.y
     direction = math.atan2(ty - sy, tx - sx)
-    _, wait = D.strike_turn(scene.heading, tx - sx, ty - sy)  # P16: everyone moves on while he turns
+    # P16: everyone moves on while he turns
+    _, wait = D.strike_turn(scene.heading, tx - sx, ty - sy, scene.throw)
     seen = {m[0]: m for m in scene.mates}
     meant = seen.get(receiver, (receiver, mx, my, age))
     mvx, mvy = meant[4:6] or (0.0, 0.0)

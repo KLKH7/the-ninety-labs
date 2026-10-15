@@ -719,3 +719,20 @@ def test_turning_first_gives_an_opponent_closing_on_the_lane_time_to_get_there()
     sure = D.pass_confidence(facing, 85.0, 34.0, 85.0, 34.0, 0.0, False)
     late = D.pass_confidence(away, 85.0, 34.0, 85.0, 34.0, 0.0, False)
     assert late < sure
+
+
+def test_a_throw_in_leaves_his_hands_at_once_whichever_way_he_faces(monkeypatch):
+    # Law 15 / P16: a ball in his hands is thrown, not struck off his foot: no turn, no 60° cap.
+    assert D.can_strike(0.0, 0.0, math.pi, 1.0, 0.0)
+    turn, wait = D.strike_turn(math.pi, 1.0, 0.0, thrown=True)
+    assert abs(turn) == pytest.approx(180.0) and wait == 0.0
+    asked = []
+    production = D.strike_turn
+
+    def spy(*args):
+        asked.append(args)
+        return production(*args)
+    monkeypatch.setattr(D, "strike_turn", spy)
+    D.pass_confidence(scene(throw=True, heading=math.pi, ball_offset=(0.0, 0.0)), 70.0, 34.0, 70.0, 34.0,
+                      0.0, True)
+    assert asked and all(len(a) == 4 and a[3] for a in asked)

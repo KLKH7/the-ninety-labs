@@ -856,3 +856,14 @@ def test_a_keeper_who_dives_while_running_brakes_his_run_and_does_not_stop_dead(
         e.t += DT
     for a, b in zip(seen, seen[1:], strict=False):
         assert math.isclose(b - a, engine.BRAKE_MAX * DT)  # GROUNDING P2: as hard as his legs brake
+
+
+def test_a_keeper_who_dives_while_barely_moving_stops_and_does_not_run_back():
+    e = Engine(1)
+    k = e.by_id["a1"]
+    k.x, k.y, k.heading, k.vx, k.vy = 100.0, 34.0, math.pi, -0.1, 0.0  # under one frame's braking
+    e.dive = (k.id, e.t, k.y, 1.0, e.t)
+    for _ in range(3):
+        e.keeper_dive(k)
+        assert k.vx == 0.0
+        e.t += DT

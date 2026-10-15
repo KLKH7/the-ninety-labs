@@ -305,14 +305,17 @@ def can_strike(ox: float, oy: float, heading: float, dx: float, dy: float) -> bo
     return (ox - sx) * dx + (oy - sy) * dy >= 0
 
 
-def strike_turn(heading: float, dx: float, dy: float) -> tuple[float, float]:
+def strike_turn(heading: float, dx: float, dy: float, thrown: bool = False) -> tuple[float, float]:
     """P16: how far (degrees) the kick toward (dx, dy) is from the way he faces when he strikes it,
     and how long he turns first (seconds). Facing within STRIKE_FACING he strikes now; else he
-    turns toward it at TURN_RATE until he is, and strikes at that angle. (A ball behind him also
-    comes round to his front within a few frames; that wait is not counted.)"""
+    turns toward it at TURN_RATE until he is, and strikes at that angle. A throw-in leaves his hands
+    at once, at whatever angle (can_strike). *Design*, not counted: a ball behind him also comes
+    round to his front within a few frames; the engine turns in whole frames, so it strikes up to
+    one frame later and up to 14° nearer his facing; and he does not move while he turns, though in
+    the engine he brakes and the ball goes with him."""
     off = turn_deg(math.atan2(dy, dx), heading)
     limit = math.degrees(STRIKE_FACING)
-    if abs(off) <= limit:
+    if thrown or abs(off) <= limit:
         return off, 0.0
     return math.copysign(limit, off), math.radians(abs(off) - limit) / TURN_RATE
 
@@ -428,7 +431,7 @@ def strike_nodes(scene: Scene, tx: float, ty: float, lofted: bool, pace: float
     ground, up = loft_launch(dist) if lofted else (launch_speed(dist, pace), 0.0)
     speed = math.hypot(ground, up)
     dx, dy = tx - scene.x, ty - scene.y
-    turn, _ = strike_turn(scene.heading, dx, dy)
+    turn, _ = strike_turn(scene.heading, dx, dy, scene.throw)
     cx, cy = scene.x - scene.ball_offset[0], scene.y - scene.ball_offset[1]
     nearest = min((math.hypot(o[0] - cx, o[1] - cy) for o in scene.moving), default=math.inf)
     skill = pass_skill(scene.x, tx, ty, lofted, scene.goal_x)
@@ -643,7 +646,7 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
     cx, cy = sx - scene.ball_offset[0], sy - scene.ball_offset[1]
     # P16: if he must turn before he can strike it, everyone else moves on meanwhile, each as the
     # passer believes him to be going (he holds the ball where it is while he turns).
-    _, wait = strike_turn(scene.heading, tx - sx, ty - sy)
+    _, wait = strike_turn(scene.heading, tx - sx, ty - sy, scene.throw)
     # Team-mates, the one it is meant for first, from where the passer sees him and expecting it:
     # (x, y, vx, vy, reaction, first touch).
     seen = {m[0]: m for m in scene.mates}
