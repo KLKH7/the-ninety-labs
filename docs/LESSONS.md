@@ -155,9 +155,17 @@ short and actionable. This file is public: no research sources, product names or
   neither, flags anything fitted to a check or scripted, and mutation-tests the new tests,
   before merging.
 
+### 22. When two reviewers disagree about a source, read the source
+- **What happened:** one review said our "screened shot" definition differed from the study it
+  came from and should change; the change was made. The next review said the opposite. The
+  study's own text settled it in a minute: the first review had measured our engine and read
+  the result as a statement about the study.
+- **Rule:** before acting on a claim about what a source says, read the passage itself, and keep
+  "the engine measures X" separate from "the source defines Y".
+
 ## Set pieces and tests
 
-### 22. A placed ball must start outside every body
+### 23. A placed ball must start outside every body
 - **What happened:** a corner's new ball was placed at the taker's centre, so the struck ball
   "touched" him on its way out: a fake deflection and a 0.4 m jump in the ground truth on 39
   of 60 corners. The validator exempts deflection frames, so nothing failed.
@@ -166,13 +174,13 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** after any kick, no deflection by the kicker within a few frames (a test runs many
   seeds).
 
-### 23. A test that changes the whole random stream cannot prove one cause
+### 24. A test that changes the whole random stream cannot prove one cause
 - **What happened:** "the delivery is struck with error" compared two runs with different seeds;
   the choice and timing differed anyway, so removing the error left it green.
 - **Rule:** hold everything else fixed (state, choice) and vary only the cause under test;
   then mutate the cause and require the test to fail.
 
-### 24. A rule must check what its name says
+### 25. A rule must check what its name says
 - **What happened:** a goal-credit rule described as "the last player to touch it" was built
   from a short list of event types. It missed a team-mate controlling a pass and a defender
   winning the ball, so it accepted wrong scorers and would have rejected right ones; the engine
@@ -181,7 +189,7 @@ short and actionable. This file is public: no research sources, product names or
   each frame, plus every touch event), and plant one case of each way it can be wrong.
 - **Check:** for each rule, list the ways the data can make it true, and test each one.
 
-### 25. A fixture must look like the real output
+### 26. A fixture must look like the real output
 - **What happened:** goal-credit tests built clips with nobody on the ball at the goal frame,
   but the engine writes the kick-off reset into that frame (the next taker on the centre spot).
   The rule counted that taker as the last toucher of every real goal: every own goal passed,
@@ -192,13 +200,13 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** for a new rule, find real clips where it applies (a scan over seeds) and assert on
   them in a test.
 
-### 26. "All mutations caught" is only as wide as the list
+### 27. "All mutations caught" is only as wide as the list
 - **What happened:** a report said 23 of 23 mutations were caught; an auditor found six more,
   near the same code, that survived (dropped conditions, a tolerance ten times too wide).
 - **Rule:** for every condition and every constant in a check, mutate it (drop it, widen it
   tenfold) and require a test to fail; report the list, not just the count.
 
-### 27. A plan must not stand the receiver where the ball is aimed
+### 28. A plan must not stand the receiver where the ball is aimed
 - **What happened:** the corner routine put each attacker on the exact spot the taker could aim
   at, standing still, so a delivery's target and its receiver were the same point decided in
   advance. Defenders marked a stationary man; the run, the timing and the space (what decides a
@@ -213,8 +221,8 @@ short and actionable. This file is public: no research sources, product names or
   meeting point or a cause, not an intention, is scripting. Measure before and after a change
   (here: first contact, goals, wait to the kick over 200 corners).
 
-### 28. A rule that never fires is not a model; a number without its script is not a result
-- **What happened:** after lesson 27, the taker was meant to time his cross on his runner. An
+### 29. A rule that never fires is not a model; a number without its script is not a result
+- **What happened:** after lesson 28, the taker was meant to time his cross on his runner. An
   audit measured it: in 293 of 300 corners he struck in the same frame he signalled, because
   the cross's long flight meant every runner "arrived in time"; the rule's unit test passed
   only with a runner placed 25 m away. The same pull request published first-contact numbers
@@ -229,7 +237,7 @@ short and actionable. This file is public: no research sources, product names or
   measurement showing the branch happens in real clips.
 
 
-### 29. A seed's outcome is not the same on every Python
+### 30. A seed's outcome is not the same on every Python
 - **What happened:** a test counted the goals in the first 32 scenario corners and asked for at
   least 3. Locally (Python 3.13) there were 4; CI (3.12) found 2 and failed. Same seeds, same
   code: tiny floating-point differences between versions grow over a chaotic simulation.
@@ -239,7 +247,7 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** before pushing a test that runs the engine over seeds, run it on every Python
   version CI uses (`UV_PROJECT_ENVIRONMENT=<dir> uv run --python 3.11 pytest`).
 
-### 30. For a rare event, select among played situations; never stage its cause
+### 31. For a rare event, select among played situations; never stage its cause
 - **What happened:** to get corner clips, the scenario placed a defender by the goal line and
   recorded him as the last touch, because open play rarely reached the line. The corner itself
   was played, but its cause was written into the data without happening.
@@ -251,7 +259,7 @@ short and actionable. This file is public: no research sources, product names or
   nothing at frame 0 except the opening state, and the cause (the exit and the touch it came
   off) present in the data.
 
-### 31. When a check rejects real output, find out what happened before changing the check
+### 32. When a check rejects real output, find out what happened before changing the check
 - **What happened:** the goal-mouth check rejected an engine goal: a ball deflected along the
   goal line from outside the post that went in inside it. The check was wrong in one way (it
   aimed at where the ball's centre met the line; Law 10 needs the whole ball over), so it was
@@ -264,12 +272,12 @@ short and actionable. This file is public: no research sources, product names or
   ball relative to the posts, the bar, the line?) before deciding which side is wrong. Write the
   check on exactly what the Law states, bound how far it extrapolates by what the engine can do
   (a goal is recorded in the frame the whole ball goes over), and add a check for the physical
-  impossibility you find (P15: the ball never passes through the woodwork).
+  impossibility you find (P16: the ball never passes through the woodwork).
 - **Check:** for each geometric check, have fixtures for each way the ball can approach (straight,
   along the line, dropping, slow, fast), confirm each fails on the old code where it should, and
   build them with the speeds real output has.
 
-### 32. An exemption must use the same geometry as the rule it lifts; a contact must use the moment of contact
+### 33. An exemption must use the same geometry as the rule it lifts; a contact must use the moment of contact
 - **What happened:** to allow a goal in off the post, the goal check skipped its path test when
   the ball came near "the woodwork", but measured the post without its height and the bar without
   its length: a ball a metre over the post, or level with the bar but well wide, counted as a

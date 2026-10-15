@@ -65,7 +65,7 @@ CORNER_ARC_M, CORNER_DISTANCE_M, BALL_RADIUS_M = 1.0, 9.15, 0.70 / (2 * math.pi)
 # legal ball (the lenient choice); whether it could be past a line, with the largest.
 BALL_RADIUS_MIN_M = 0.68 / (2 * math.pi)
 GOAL_HALF_WIDTH_M, CROSSBAR_M = 3.66, 2.44  # L6: Law 1, posts 7.32 m apart, bar 2.44 m high
-POST_WIDTH_M = 0.12  # P15: Law 1, posts and crossbar at most 12 cm wide
+POST_WIDTH_M = 0.12  # P16: Law 1, posts and crossbar at most 12 cm wide
 # Rounding: a point rounded to 0.5 mm in x and y lies within √2 × 0.5 mm of where it was, so its
 # distance to an exact point (the flag) is off by at most that. Two positions of the same still
 # ball, each rounded in x, y and z, differ by at most 2 × √3 × 0.5 mm.
@@ -440,7 +440,7 @@ def goal_crossing_problem(goal: dict, events: list[dict], by_frame: dict, fps: f
         return f"ball {mouth:.1f} m from the goal mouth the frame before"
     beyond = (b1["x"] - line) * inward < 0  # its centre already past the line
     # Past the line but outside a post's axis, or above the bar's: it cannot reach the goal
-    # without passing through the woodwork (P15).
+    # without passing through the woodwork (P16).
     if beyond and abs(b1["y"] - 34.0) > GOAL_HALF_WIDTH_M + POST_WIDTH_M / 2:
         return "ball beside or behind the post the frame before: it cannot enter the goal"
     if beyond and b1["z"] + BALL_RADIUS_MIN_M > CROSSBAR_M + POST_WIDTH_M / 2:
@@ -539,7 +539,7 @@ def goal_credit_problem(goal: dict, events: list[dict], frames: list[dict], team
 
 
 def check_woodwork(frames: list[dict], fps: float, problems: Problems) -> None:
-    """P15 (Law 1): the ball never passes through the goal frame (posts, crossbar and the
+    """P16 (Law 1): the ball never passes through the goal frame (posts, crossbar and the
     corners between them; frame_axes). Between two frames the ball is taken to move in a straight
     line; it is reported if its centre comes closer to the frame's axes than the smallest legal
     ball's radius plus the woodwork's half-width, less every error: the rounding, how far a
@@ -560,7 +560,7 @@ def check_woodwork(frames: list[dict], fps: float, problems: Problems) -> None:
                 continue
             gap = frame_distance(a, b, line)
             if gap < limit:
-                problems["P15 woodwork"].append(f"frame {f1['frame']}: ball through the goal frame at "
+                problems["P16 woodwork"].append(f"frame {f1['frame']}: ball through the goal frame at "
                                                 f"x = {line:.0f} (centre {gap:.3f} m from its axis)")
 
 

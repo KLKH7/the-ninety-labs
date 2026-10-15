@@ -16,7 +16,7 @@ import random
 from bisect import bisect_left
 from dataclasses import dataclass
 
-from ninety.sim import ball, threat
+from ninety.sim import ball, offball, threat
 from ninety.sim import value as possession
 from ninety.sim.profiles import FOOT_ABSORB_MPS
 
@@ -36,13 +36,16 @@ SHOT_ANCHORS = ((0.0, 0.31), (3.0, 0.31), (11.0, 0.177), (20.0, 0.053), (30.0, 0
                 (105.0, 0.0))
 BLOCKER_FACTOR = 0.5  # design, verify: each defender in the shooting cone blocks the shot half the time
 # D3: the zone rates are averages over real shots, which usually face a defender. Relative to that
-# average, a shot with no defender goal-side scores more and one with any scores a little less:
+# average, a shot with no outfield defender in the triangle between the ball and the posts (the
+# source's "goal-side", tested point-in-polygon) scores more and one with any a little less:
 # 11.59% against 7.49%, with 23.18% of shots unscreened (Lucey et al. 2015, 9,732 shots, tracking
 # data). The effect does not compound per defender (it flattens; Anzer and Bauer 2021).
 _UNSCREENED, _SCREENED, _UNSCREENED_SHARE = 0.1159, 0.0749, 0.2318
 _AVERAGE = _UNSCREENED_SHARE * _UNSCREENED + (1 - _UNSCREENED_SHARE) * _SCREENED
 CLEAR_SHOT, SCREENED_SHOT = _UNSCREENED / _AVERAGE, _SCREENED / _AVERAGE
-KEEPER_COVERS = 0.4  # design, verify: a keeper square on the shot's line, against one well off it
+# D3: keepers save about 76.5% of on-target shots: 826 of 1,079 (Perez-Arroniz et al. 2025, 2,238
+# La Liga shots); the typical shot behind the zone rates faces that keeper.
+KEEPER_SAVES = 826 / 1079
 CHOICE_NOISE_FLOOR = 0.005  # design, verify: options closer than about this (in goals) are a near coin-flip
 HOLD_DECAY = 0.1  # design, verify: share of the ball's worth lost per decision spent holding
 STALE_S = 2.0  # design: a team-mate not seen for this long is a less certain option
@@ -227,18 +230,31 @@ def shot_estimate(x: float, y: float, goal_x: float, opponents: list[tuple[float
     """The player's own estimate of a shot from here, between 0 and 1: how often shots from this
     distance go in (D3), less from a tighter angle (by how much of the goal he can see compared with
     a central shot), then compared with the typical shot those rates average over: better with no
-    defender he believes is in the shooting cone, a little worse with any; better if the keeper is
-    off the line of the shot (a keeper on it is the typical case). The keeper is counted once."""
+    outfield defender he believes is in the triangle to the posts, a little worse with any; and by
+    how much of the goal the keeper leaves open against a keeper in his usual spot. The keeper is
+    counted once."""
+    screened = any((ox, oy) != keeper and in_cone(x, y, goal_x, ox, oy) for ox, oy in opponents)
+    q = typical_shot(x, y, goal_x) * (SCREENED_SHOT if screened else CLEAR_SHOT)
+    if keeper:
+        # The typical shot already faces a keeper in his usual spot, who saves KEEPER_SAVES of
+        # what reaches him. This keeper's odds of a save scale with how much of the goal he covers
+        # against the usual one (*design*: one save rate for every distance, *verify* by zone), so
+        # a better-placed keeper saves more and a worse one less, but never every shot or none.
+        usual = 1 - offball.open_goal_share(x, y, goal_x, offball.keeper_spot(x, y, goal_x))
+        here = 1 - offball.open_goal_share(x, y, goal_x, keeper)
+        ratio = here / usual if usual > 0 else 1.0  # (a usual keeper always covers something)
+        odds = KEEPER_SAVES / (1 - KEEPER_SAVES) * ratio
+        q *= (1 / (1 + odds)) / (1 - KEEPER_SAVES)
+    return min(q, 1.0)  # a probability
+
+
+def typical_shot(x: float, y: float, goal_x: float) -> float:
+    """D3: how often real shots from here score, before anything about this one: the zone rate for
+    the distance, less from a tighter angle (by how much of the goal he can see compared with a
+    central shot)."""
     d = math.hypot(goal_x - x, PITCH_Y / 2 - y)
     central = goal_angle(goal_x - math.copysign(d, goal_x - x), PITCH_Y / 2, goal_x)
-    q = rate_at(d) * min(1.0, goal_angle(x, y, goal_x) / central) if central > 0 else 0.0
-    screened = any((ox, oy) != keeper and in_cone(x, y, goal_x, ox, oy) for ox, oy in opponents)
-    q *= SCREENED_SHOT if screened else CLEAR_SHOT
-    if keeper:
-        cx, cy = goal_x, PITCH_Y / 2
-        off = distance_to_segment(keeper[0], keeper[1], x, y, cx, cy)
-        q *= (KEEPER_COVERS + (1 - KEEPER_COVERS) * min(1.0, off / 3.0)) / KEEPER_COVERS
-    return min(q, 0.99)
+    return rate_at(d) * min(1.0, goal_angle(x, y, goal_x) / central) if central > 0 else 0.0
 
 
 def in_cone(x: float, y: float, goal_x: float, ox: float, oy: float) -> bool:
@@ -362,9 +378,9 @@ def shot_chance(scene: Scene) -> float:
     q = shot_estimate(scene.x, scene.y, scene.goal_x, scene.opponents, scene.keeper)
     if POSSESSION is None:
         return q
-    open_shot = shot_estimate(scene.x, scene.y, scene.goal_x, [], None)
+    typical = typical_shot(scene.x, scene.y, scene.goal_x)  # what the measured rate averages over
     measured = POSSESSION.finishing.at(scene.x, scene.y, scene.goal_x)
-    return min(1.0, measured * q / open_shot) if open_shot > 0 else 0.0
+    return min(1.0, measured * q / typical) if typical > 0 else 0.0
 
 
 def options(scene: Scene) -> list[Option]:
@@ -373,7 +389,7 @@ def options(scene: Scene) -> list[Option]:
         return out
     p = pressure(scene)
     q = shot_chance(scene)
-    if abs(scene.goal_x - scene.x) < 40:
+    if abs(scene.goal_x - scene.x) < offball.SHOT_RANGE_M:
         bias = 1.3 if "shoots_from_distance" in scene.traits else 1.0
         # A shot that fails is either blocked, leaving the ball at his feet for them, or missed or
         # saved, which gives the ball back from deep (a goal kick or the keeper's hands).

@@ -7,6 +7,7 @@ from collections import Counter
 import pytest
 
 from ninety.sim import decisions as D
+from ninety.sim import offball
 from ninety.sim.value import CELLS_X, CELLS_Y, Table, Tables
 
 
@@ -37,8 +38,9 @@ def test_the_typical_shot_keeps_the_published_rate_and_defenders_do_not_compound
     one = D.shot_estimate(90, 34, 105, [(97, 34)], None)
     three = D.shot_estimate(90, 34, 105, [(97, 34), (96, 33), (98, 35)], None)
     assert one == three == D.shot_estimate(90, 34, 105, [], None) * D.SCREENED_SHOT / D.CLEAR_SHOT
-    on_line = D.shot_estimate(90, 34, 105, [], (103, 34))
-    assert math.isclose(on_line, D.shot_estimate(90, 34, 105, [], None))  # a keeper on the line is typical
+    usual = offball.keeper_spot(90, 34, 105)
+    on_spot = D.shot_estimate(90, 34, 105, [], usual)
+    assert math.isclose(on_spot, D.shot_estimate(90, 34, 105, [], None))  # his usual spot is the typical case
 
 
 def test_a_defender_in_the_cone_or_a_well_placed_keeper_lowers_the_estimate():
@@ -265,9 +267,9 @@ def test_a_missed_shot_is_never_a_reward(monkeypatch):
 
 def test_the_shot_chance_is_the_measured_rate_scaled_by_the_situation(monkeypatch):
     monkeypatch.setattr(D, "POSSESSION", ramp(0.3, 0.0, finishing=0.2))
-    assert math.isclose(D.shot_chance(scene(x=90.0)), 0.2)  # open: the measured rate itself
+    assert math.isclose(D.shot_chance(scene(x=90.0)), 0.2 * D.CLEAR_SHOT)  # the measured average, unscreened
     blocked = scene(x=90.0, opponents=[(97.0, 34.0)])
-    assert math.isclose(D.shot_chance(blocked), 0.2 * D.SCREENED_SHOT / D.CLEAR_SHOT)
+    assert math.isclose(D.shot_chance(blocked), 0.2 * D.SCREENED_SHOT)
 
 
 def test_holding_is_worth_the_best_move_a_moment_later_never_more():
@@ -343,4 +345,104 @@ def test_from_fifteen_metres_he_chooses_between_along_the_ground_and_over_the_to
     assert over.lofted
     short = D.pass_option(scene(x=60.0), ("h9", 70.0, 34.0, 0.0))
     assert not short.lofted  # under 15 m it stays on the ground
+
+
+
+def test_the_keeper_term_is_how_much_goal_he_leaves_open():
+    usual = offball.keeper_spot(85, 34, 105)
+    off = (usual[0], usual[1] + 3.0)  # caught three metres off his line
+    assert offball.open_goal_share(85, 34, 105, off) > offball.open_goal_share(85, 34, 105, usual)
+    assert D.shot_estimate(85, 34, 105, [], off) > D.shot_estimate(85, 34, 105, [], usual)
+    assert 0.0 <= offball.open_goal_share(85, 34, 105, usual) < 1.0
+    assert D.shot_estimate(104, 34, 105, [], (95.0, 60.0)) <= 1.0  # a probability, even into an empty net
+
+
+def test_the_keeper_stays_home_against_far_shots_and_comes_out_against_near_ones():
+    depth = lambda d: 105 - offball.keeper_spot(105 - d, 34, 105)[0]  # noqa: E731
+    assert depth(20) < depth(6)  # his dive has time against a far shot; a near one he must smother
+    assert offball.KEEPER_DEPTH[0] <= depth(16) <= offball.KEEPER_DEPTH[1]
+    assert depth(50) == offball.KEEPER_DEPTH[1]  # out of shooting range: he sweeps
+
+
+def test_the_keeper_stands_on_the_bisector_of_the_posts_not_the_line_to_the_goal_centre():
+    import math as m
+    x, y = offball.keeper_spot(95, 10, 105)  # a tight angle
+    a1, a2 = m.atan2(30.34 - 10, 10), m.atan2(37.66 - 10, 10)
+    assert abs(m.atan2(y - 10, x - 95) - (a1 + a2) / 2) < 1e-6
+
+
+def test_before_he_reacts_only_his_body_stops_a_shot_in_the_shooters_judgement_too():
+    from ninety.sim import ball
+    from ninety.sim.body import BODY_RADIUS
+    assert offball.keeper_reach_m(0.1, 0.36) == BODY_RADIUS + ball.RADIUS
+    full = offball.KEEPER_STAND_REACH_M + offball.KEEPER_DIVE_EXTRA_M + offball.KEEPER_DIVE_TRAVEL_M
+    assert offball.keeper_reach_m(2.0, 0.36) == full
+
+
+def test_a_keeper_behind_the_shooter_covers_nothing():
+    assert offball.open_goal_share(95, 34, 105, (90, 34)) == 1.0
+
+
+def test_with_the_ball_almost_on_his_line_the_keeper_stays_on_it_between_the_posts():
+    x, y = offball.keeper_spot(104.5, 0.5, 105)
+    assert (x, y) == (105, 34 - 3.66)  # at the near post
+
+
+def test_out_of_shooting_range_the_keeper_sweeps_from_his_furthest_spot():
+    depth = lambda d: 105 - offball.keeper_spot(105 - d, 34, 105)[0]  # noqa: E731
+    assert depth(39) < offball.KEEPER_DEPTH[1] == depth(50)
+
+
+def test_keeper_coverage_has_no_cliff_with_distance():
+    # Averaged over the speeds shots are struck at, the open share falls smoothly with distance and a
+    # keeper caught off his spot still matters from range.
+    share = lambda d: offball.open_goal_share(105 - d, 34, 105, offball.keeper_spot(105 - d, 34, 105))  # noqa: E731
+    shares = [share(d) for d in (22, 24, 26, 28)]
+    assert all(a >= b for a, b in zip(shares, shares[1:], strict=False))
+    off = offball.open_goal_share(75, 34, 105, (100.0, 40.0))
+    assert off > offball.open_goal_share(75, 34, 105, offball.keeper_spot(75, 34, 105))
+
+
+def test_screened_is_a_defender_in_the_triangle_to_the_posts_as_in_the_source():
+    assert D.shot_estimate(90, 34, 105, [(100.0, 44.0)], None) == D.shot_estimate(90, 34, 105, [], None)
+    assert D.shot_estimate(90, 34, 105, [(97.0, 34.0)], None) < D.shot_estimate(90, 34, 105, [], None)
+
+
+def test_the_dive_never_beats_the_cited_peak_speed():
+    step = 0.001
+    travel = offball.KEEPER_DIVE_TRAVEL_M
+    speeds = [(offball.dive_progress(t + step) - offball.dive_progress(t)) / step * travel
+              for t in [i * step for i in range(int(offball.DIVE_TIME_S / step))]]
+    peak = max(speeds)
+    assert 3.6 <= peak <= 4.0 and offball.dive_progress(offball.DIVE_TIME_S) == 1.0
+
+
+def test_the_shot_estimate_is_continuous_in_distance_with_the_keeper_off_his_spot():
+    def q(d, off):
+        kx, ky = offball.keeper_spot(105 - d, 34, 105)
+        return D.shot_estimate(105 - d, 34, 105, [], (kx, ky + off))
+    for off in (0.0, 1.0, 3.0):
+        values = [q(d, off) for d in range(18, 40)]
+        assert all(b <= a + 1e-9 for a, b in zip(values, values[1:], strict=False))  # never up with distance
+    assert q(30, 1.0) < 0.1  # the old ratio gave 0.64 here
+
+
+def test_keeper_coverage_is_averaged_over_shot_speeds_so_it_never_hits_zero_too_early():
+    usual = offball.keeper_spot(79, 34, 105)  # 26 m out, where a single speed left nothing open
+    assert offball.open_goal_share(79, 34, 105, usual) > 0
+
+
+def test_a_one_on_one_with_the_keeper_rushing_out_is_never_hopeless_nor_certain():
+    kx, ky = offball.close_down_spot((91.0, 34.0), 105.0)
+    q = D.shot_estimate(91, 34, 105, [], (kx, ky))
+    assert 0 < q < D.shot_estimate(91, 34, 105, [], None)
+    assert D.shot_estimate(91, 34, 105, [], (60.0, 34.0)) < 1.0  # an empty net is likely, not certain
+
+
+def test_the_keeper_term_is_the_published_save_rate_with_odds_scaled_by_coverage():
+    usual = offball.keeper_spot(90, 34, 105)
+    assert math.isclose(D.shot_estimate(90, 34, 105, [], usual), D.shot_estimate(90, 34, 105, [], None))
+    near_post = (usual[0], usual[1] - 1.0)
+    far = (usual[0], usual[1] + 2.5)
+    assert D.shot_estimate(90, 34, 105, [], near_post) < D.shot_estimate(90, 34, 105, [], far)
 

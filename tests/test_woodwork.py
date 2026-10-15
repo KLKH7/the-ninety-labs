@@ -1,4 +1,4 @@
-"""The woodwork (Law 1; docs/GROUNDING.md P15): the ball rebounds off the goal frame (posts,
+"""The woodwork (Law 1; docs/GROUNDING.md P16): the ball rebounds off the goal frame (posts,
 crossbar and the corners between them) from any direction, including a ball moving along the goal
 line, never passes through it, and never gains energy from it. Every case runs at both goal lines.
 Distances are measured with the validator's own goal-frame geometry. Each test names the mutation
@@ -63,7 +63,7 @@ def test_a_ball_struck_at_the_post_rebounds_with_sixty_percent_of_its_speed(end)
     assert closest(path, end) >= TOUCHING - 0.002
     hit = next(k for k, b in enumerate(path) if b[3] * path[0][3] < 0)
     before = path[hit - 1][3]
-    assert abs(path[hit][3]) == pytest.approx(0.6 * abs(before), rel=0.05)  # GROUNDING P15: 60 percent
+    assert abs(path[hit][3]) == pytest.approx(0.6 * abs(before), rel=0.05)  # GROUNDING P16: 60 percent
 
 
 @ENDS

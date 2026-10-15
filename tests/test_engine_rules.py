@@ -612,7 +612,7 @@ def test_once_a_pass_is_struck_shape_is_set_for_where_it_is_going():
     e.possessor = None
     e.ball = (40.0, 34.0, 0.0, 14.0, 0.0, 0.0)
     e.kicked, e.pass_target = {"type": "pass", "x": 30.0, "y": 34.0}, (70.0, 20.0)
-    assert e.play_point() == (70.0, 20.0)
+    e.kicked_at, e.seen_going = e.t, (68.0, 34.0)
     p = e.by_id["a6"]
     e.brains["away"].in_possession = False
     before = e.shape_target(p)[:2]
@@ -620,6 +620,20 @@ def test_once_a_pass_is_struck_shape_is_set_for_where_it_is_going():
     assert e.shape_target(p)[:2] == before
     e.kicked = None  # a loose ball: play is where the ball is
     assert e.play_point() == (55.0, 27.0)
+
+
+def test_only_the_passer_and_his_receiver_know_where_a_pass_is_meant_defenders_react_to_what_they_see():
+    e = Engine(1)
+    e.possessor = None
+    e.ball = (40.0, 34.0, 0.0, 14.0, 0.0, 0.0)
+    e.kicked, e.pass_target = {"type": "pass", "x": 35.0, "y": 34.0}, (70.0, 20.0)
+    e.kicked_at, e.seen_going = e.t, (68.0, 34.0)
+    e.intended, e.released_by = "h9", "h6"
+    assert e.play_point(e.by_id["h9"]) == (70.0, 20.0)  # he expects it
+    d = e.by_id["a6"]
+    assert e.play_point(d) == (35.0, 34.0)  # not yet reacted: play is where it was struck
+    e.t += e.reaction(d)
+    assert e.play_point(d) == (68.0, 34.0)  # then where he sees it going, not where it was meant
 
 
 def test_a_marker_on_his_spot_moves_only_as_his_man_moves():
@@ -639,7 +653,8 @@ def test_a_marker_on_his_spot_moves_only_as_his_man_moves():
 def test_play_is_where_the_ball_is_once_a_pass_is_deflected_or_has_run_past_its_target():
     e = Engine(1)
     e.possessor = None
-    e.kicked, e.pass_target = {"type": "pass", "x": 40.0, "y": 34.0}, (70.0, 34.0)
+    e.kicked, e.pass_target = {"type": "pass", "team": "home", "x": 40.0, "y": 34.0}, (70.0, 34.0)
+    e.kicked_at, e.seen_going = e.t - 1.0, (70.0, 34.0)  # reacted to; seen going to the target
     e.ball = (55.0, 34.0, 0.0, 14.0, 0.0, 0.0)
     assert e.play_point() == (70.0, 34.0)
     e.ball = (74.0, 34.0, 0.0, 6.0, 0.0, 0.0)  # it ran past where it was aimed
@@ -667,3 +682,354 @@ def test_a_marker_chases_harder_when_his_man_runs_away_from_him_than_toward_him(
         e.beliefs[d.id].seen = {man.id: perception.Sighting(87.0, 34.0, vx, 0.0, e.t)}
         speeds.append(e.shape_target(d)[2])
     assert speeds[0] > speeds[1]
+
+
+def test_the_keeper_dives_toward_the_shot_after_reacting_then_is_down():
+    from ninety.sim.offball import DIVE_TIME_S, KEEPER_DIVE_TRAVEL_M
+    e = Engine(1)
+    k = e.keeper("away")
+    k.x, k.y, k.vx, k.vy = 104.0, 34.0, 0.0, 0.0
+    e.possessor = None
+    e.kicked = {"type": "shot", "team": "home"}
+    e.ball = (90.0, 34.0, 0.5, 25.0, 6.0, 0.0)  # heading for about 3.4 m to his left
+    e.kicked_at = e.free_since = e.t
+    assert not e.keeper_dive(k)  # he has not reacted yet
+    e.t += e.reaction(k)
+    y0 = k.y
+    assert e.keeper_dive(k)
+    for _ in range(int(DIVE_TIME_S * 25) + 2):
+        e.keeper_dive(k)
+        e.t += 1 / 25
+    assert 1.0 < k.y - y0 <= KEEPER_DIVE_TRAVEL_M + 1e-9  # launched toward it, no further than a dive goes
+    assert e.dive is None and e.off_balance[k.id] > e.t - 1 / 25  # and down on the ground after it
+
+
+def _shot_at_keeper(e, ball):
+    k = e.keeper("away")
+    k.x, k.y, k.vx, k.vy = 104.0, 34.0, 0.0, 0.0
+    e.possessor = None
+    e.kicked = {"type": "shot", "team": "home", "x": ball[0], "y": ball[1]}
+    e.ball = ball
+    e.kicked_at = e.free_since = e.t
+    return k
+
+
+def test_the_dive_runs_in_the_match_loop_and_waits_for_the_keepers_reaction():
+    e = Engine(1)
+    k = _shot_at_keeper(e, (90.0, 34.0, 0.5, 25.0, 6.0, 0.0))
+    y0 = k.y
+    e.move_players()
+    assert k.y == y0 or abs(k.y - y0) < 0.05  # nothing yet: he has not reacted
+    e.t += e.reaction(k)
+    for _ in range(5):
+        e.move_players()
+        e.t += 1 / 25
+    assert k.y - y0 > 0.2  # launched by the match loop itself
+
+
+def test_a_deflection_restarts_the_keepers_reaction_before_he_dives():
+    e = Engine(1)
+    k = _shot_at_keeper(e, (90.0, 34.0, 0.5, 25.0, 6.0, 0.0))
+    e.t += e.reaction(k)
+    e.kicked_at = e.t  # just deflected on its way
+    assert not e.keeper_dive(k)
+
+
+def test_no_dive_at_a_ball_going_over_the_bar():
+    e = Engine(1)
+    k = _shot_at_keeper(e, (90.0, 34.0, 2.0, 25.0, 6.0, 5.0))  # rising steeply
+    e.t += e.reaction(k)
+    assert not e.keeper_dive(k)
+
+
+def test_the_keeper_moves_sideways_at_his_depth_when_he_reads_a_shot():
+    e = Engine(1)
+    k = _shot_at_keeper(e, (90.0, 34.0, 0.5, 25.0, 0.0, 0.0))
+    k.x = 99.0  # he had come out
+    e.read = (k.id, 36.0)
+    tx, _, _ = e.shape_target(k)
+    assert tx == 99.0
+
+
+def test_the_keeper_sets_himself_from_the_ball_not_where_a_pass_is_going():
+    from ninety.sim import offball
+    e = Engine(1)
+    k = e.keeper("away")
+    e.brains["away"].in_possession = False
+    e.possessor = None
+    e.kicked, e.pass_target = {"type": "pass", "team": "home", "x": 60.0, "y": 34.0}, (95.0, 10.0)
+    e.ball = (70.0, 34.0, 0.0, 14.0, -12.0, 0.0)
+    tx, ty, _ = e.shape_target(k)
+    assert (tx, ty) == offball.keeper_spot(70.0, 34.0, 105.0)
+
+
+def test_a_short_dive_is_the_same_push_over_sooner_and_travel_counts_the_arms_reach_by_then():
+    from ninety.sim import offball
+    e = Engine(1)
+    k = _shot_at_keeper(e, (95.0, 34.0, 0.3, 25.0, 6.0, 0.0))  # crosses about 2 m wide
+    e.t += e.reaction(k)
+    y0 = k.y
+    assert e.keeper_dive(k)
+    travel = e.dive[3]
+    when, cross, _ = e.ball_at_x(k.x)
+    assert abs(travel - (abs(cross - y0) - offball.arm_reach_m(when))) < 1e-6  # his arms by then
+    for _ in range(int(offball.DIVE_TIME_S * 25)):
+        e.keeper_dive(k)
+        e.t += 1 / 25
+    assert abs(k.y - y0 - travel) < 1e-6  # done, and done early: a short dive is the same push
+
+
+def test_the_keeper_dives_at_a_dipping_shot_that_comes_in_under_the_bar():
+    e = Engine(1)
+    k = _shot_at_keeper(e, (80.0, 34.0, 0.3, 19.0, 3.0, 4.5))  # rises, then drops under the bar
+    when, _, z = e.ball_at_x(k.x)
+    assert z < 2.44  # it does come in under the bar, though a straight line says over
+    e.t += e.reaction(k)
+    assert e.keeper_dive(k)
+
+
+def test_ball_at_x_interpolates_the_crossing_between_frames():
+    e = Engine(1)
+    e.ball = (80.0, 34.0, 0.0, 10.0, 4.0, 0.0)  # along the ground, slowing a little with drag
+    when, y, _ = e.ball_at_x(90.0)
+    path = ball.predict(e.ball, 1 / 25, 3.0)
+    k = next(i for i, s in enumerate(path) if s[0] >= 90.0)
+    assert (k - 1) / 25 < when < k / 25  # between the frames, neither the frame before nor after
+    assert abs((y - 34.0) / (90.0 - 80.0) - 0.4) < 0.01  # on the ball's own line
+
+
+def test_a_late_dive_never_shrinks_the_keepers_reach():
+    e = Engine(1)
+    k = _shot_at_keeper(e, (80.0, 34.0, 0.3, 20.0, 1.0, 0.0))
+    e.t += e.reaction(k) + 0.4
+    before = e.reach(k, 104.0, 34.0)[0]
+    e.dive = (k.id, e.t, k.y, 0.5, e.kicked_at + e.reaction(k))  # he decides to dive only now
+    assert e.reach(k, 104.0, 34.0)[0] >= before
+
+
+
+def test_before_he_reacts_the_keeper_has_only_his_standing_reach_then_it_grows():
+    from ninety.sim import offball
+    e = Engine(1)
+    k = _shot_at_keeper(e, (90.0, 34.0, 0.5, 25.0, 0.0, 0.0))
+    e.t += e.reaction(k) * 0.5
+    assert e.reach(k, 104.0, 34.0)[0] == offball.KEEPER_STAND_REACH_M
+    e.t += e.reaction(k) * 0.5 + 0.2
+    assert e.reach(k, 104.0, 34.0)[0] > offball.KEEPER_STAND_REACH_M
+
+
+def test_a_deflection_does_not_unstretch_a_dive_already_under_way():
+    e = Engine(1)
+    k = _shot_at_keeper(e, (90.0, 34.0, 0.5, 25.0, 6.0, 0.0))
+    e.t += e.reaction(k)
+    assert e.keeper_dive(k)
+    e.t += 0.3
+    stretched = e.reach(k, 104.0, 34.0)[0]
+    e.kicked_at = e.t  # deflected mid-dive
+    assert e.reach(k, 104.0, 34.0)[0] == stretched
+
+
+def test_a_late_dive_counts_the_stretch_his_arms_already_have():
+    from ninety.sim import offball
+    e = Engine(1)
+    k = _shot_at_keeper(e, (100.0, 34.0, 0.3, 20.0, 9.0, 0.0))  # close: his arms are still stretching
+    e.t += e.reaction(k) + 0.1  # he waits, then dives
+    when, cross, _ = e.ball_at_x(k.x)
+    assert when < 0.4
+    y0 = k.y
+    assert e.keeper_dive(k)
+    assert e.dive[4] == e.kicked_at + e.reaction(k)  # his arms began when he reacted, not when he dived
+    want = min(abs(cross - y0) - offball.arm_reach_m(0.1 + when), offball.KEEPER_DIVE_TRAVEL_M)
+    assert abs(abs(e.dive[3]) - want) < 1e-6
+
+
+def test_the_keeper_follows_a_slow_shot_however_long_it_takes_to_arrive():
+    e = Engine(1)
+    e.ball = (65.0, 34.0, 0.0, 70 / 3.6, 0.0, 0.0)  # a slow ground shot from 40 m
+    arrival = e.ball_at_x(104.0)
+    assert arrival is not None and arrival[0] > 3.0
+
+
+def test_a_keeper_down_after_a_dive_keeps_his_stretch_until_he_is_up():
+    e = Engine(1)
+    k = _shot_at_keeper(e, (90.0, 34.0, 0.5, 25.0, 6.0, 0.0))
+    e.t += e.reaction(k)
+    assert e.keeper_dive(k)
+    for _ in range(int(0.5 * 25) + 2):
+        e.keeper_dive(k)
+        e.t += 1 / 25
+    assert e.dive is None and e.off_balance[k.id] > e.t  # landed, on the ground
+    e.kicked_at = e.t  # a deflection while he is down
+    assert e.reach(k, 104.0, 36.0)[0] > 1.5
+
+
+def _alone_with(e, mate_xy, others=(5.0, 5.0)):
+    for q in e.players:
+        q.vx = q.vy = 0.0
+        q.x, q.y = others
+    mate = e.by_id["h9"]
+    mate.x, mate.y = mate_xy
+    e.released_by = "h6"
+    e.by_id["h6"].x, e.by_id["h6"].y = 40.0, 34.0
+    return mate
+
+
+def test_a_struck_ball_is_seen_going_where_somebody_can_first_get_to_it():
+    e = Engine(1)
+    _alone_with(e, (55.0, 34.0))
+    e.ball = (40.0, 34.0, 0.0, 10.0, 0.0, 0.0)  # a slow ground pass straight at him, 15 m away
+    x, y = e.ball_destination()
+    assert 50.0 < x <= 56.0 and y == 34.0  # near him: not the kick spot, not where it would stop
+    e.ball = (100.0, 60.0, 0.0, 10.0, 20.0, 0.0)  # heading out of play, nobody near
+    assert e.ball_destination()[1] == 68.0
+
+
+def test_a_lofted_ball_is_not_reachable_while_it_is_over_his_head():
+    e = Engine(1)
+    _alone_with(e, (50.0, 34.0))
+    e.ball = (40.0, 34.0, 0.0, 12.0, 0.0, 9.0)  # lofted over him
+    x, _ = e.ball_destination()
+    assert x > 52.0  # where it comes down, beyond him
+
+
+def test_a_pass_that_waits_for_the_passer_to_turn_still_knows_its_receiver():
+    e = Engine(1)
+    p = e.by_id["h6"]
+    e.give(p.id)
+    e.ball = (p.x - 0.4, p.y, 0.0, 0.0, 0.0, 0.0)  # the ball on the far side of his body
+    e.pass_to(p, p.x + 15.0, p.y, lofted=False, receiver="h9")
+    assert e.windup is not None and e.intended is None  # he turns first; nothing struck yet
+    e.ball = (p.x + 0.4, p.y, 0.0, 0.0, 0.0, 0.0)  # taken round to his kicking side
+    strike, e.windup = e.windup[2], None
+    strike()
+    assert e.intended == "h9"
+
+def test_each_side_s_brain_reads_play_from_its_own_view_of_a_pass():
+    e = Engine(1)
+    e.possessor = None
+    e.ball = (40.0, 34.0, 0.0, 14.0, 0.0, 0.0)
+    e.kicked, e.pass_target = {"type": "pass", "team": "home", "x": 35.0, "y": 34.0}, (80.0, 34.0)
+    e.kicked_at, e.seen_going = e.t, (45.0, 34.0)
+    e.intended, e.released_by = "h9", "h6"
+    seen = {}
+    for team, brain in e.brains.items():
+        brain.update = lambda now, has, ball_x, reach, team=team: seen.__setitem__(team, ball_x)
+    for frame in range(12):  # each brain reads the game once in this many frames
+        e.frame = frame
+        e.perceive_and_think()
+    assert seen == {"home": 80.0, "away": 35.0}  # his side knows the target; theirs saw the strike
+
+def test_the_passing_side_knows_where_its_pass_was_meant_and_the_other_side_reacts():
+    e = Engine(1)
+    e.possessor = None
+    e.ball = (40.0, 34.0, 0.0, 14.0, 0.0, 0.0)
+    e.kicked, e.pass_target = {"type": "pass", "team": "home", "x": 35.0, "y": 34.0}, (70.0, 20.0)
+    e.kicked_at, e.seen_going = e.t, (68.0, 34.0)
+    e.intended, e.released_by = "h9", "h6"
+    assert e.play_point(e.by_id["h6"]) == (70.0, 20.0)  # the passer
+    assert e.play_point(team="home") == (70.0, 20.0)  # his side's brain
+    assert e.play_point(team="away") == (35.0, 34.0)  # theirs, before it reacts
+    e.t += 1.0
+    assert e.play_point(team="away") == (68.0, 34.0)
+
+
+def test_a_throw_in_is_meant_for_the_team_mate_it_is_thrown_to():
+    e = Engine(1)
+    p = e.by_id["h2"]
+    e.give(p.id)
+    e.ball = (p.x, p.y, 0.0, 0.0, 0.0, 0.0)
+    p.heading = 0.0
+    e.pass_to(p, p.x + 10.0, p.y, lofted=True, throw=True, receiver="h7")
+    assert e.intended == "h7" and e.seen_going is not None
+
+
+def test_a_new_strike_clears_a_keeper_landed_from_an_earlier_dive():
+    e = Engine(1)
+    p = e.by_id["h6"]
+    e.give(p.id)
+    e.landed = ("a1", e.t - 1.0)
+    e.kick(p, 15.0, 0.0, 0.0)
+    assert e.landed is None
+
+
+def test_where_play_goes_waits_for_the_reaction_and_counts_running_but_not_the_kicker():
+    e = Engine(1)
+    _alone_with(e, (44.0, 36.0))  # 2 m off the line, close to the kicker
+    e.ball = (40.0, 34.0, 0.0, 14.0, 0.0, 0.0)
+    x_near, _ = e.ball_destination()
+    assert x_near > 46.0  # he has to react first: the ball is past his spot before he can move
+    e2 = Engine(1)
+    _alone_with(e2, (60.0, 37.0))  # 3 m off the line further on: only running gets him there
+    e2.ball = (40.0, 34.0, 0.0, 10.0, 0.0, 0.0)
+    x_run, _ = e2.ball_destination()
+    assert 55.0 < x_run < 62.0
+    e3 = Engine(1)
+    _alone_with(e3, (5.0, 5.0))  # nobody else anywhere near
+    e3.ball = (40.0, 34.0, 0.0, 3.0, 0.0, 0.0)  # a slow ball rolling away from the kicker
+    x_away, _ = e3.ball_destination()
+    assert x_away > 41.0  # not the kicker's own feet
+
+
+def test_a_pass_records_where_play_is_seen_going_through_the_real_path():
+    e = Engine(1)
+    mate = _alone_with(e, (56.0, 34.0))
+    p = e.by_id["h6"]
+    e.give(p.id)
+    e.ball = (p.x + 0.4, p.y, 0.0, 0.0, 0.0, 0.0)
+    e.pass_to(p, 56.0, 34.0, lofted=False, pace=6.0, receiver=mate.id)
+    assert 48.0 < e.seen_going[0] <= 57.0  # where he meets it, stepping toward it: not the kick spot
+
+
+def test_can_reach_counts_a_keepers_stretching_hands_in_his_box_not_his_feet():
+    e = Engine(1)
+    k = e.keeper("away")
+    k.x, k.y, k.vx, k.vy = 103.0, 34.0, 0.0, 0.0
+    e.kicked_at = e.t - 0.1
+    t = e.reaction(k) + 0.6  # by then his arms are fully stretched
+    assert e.can_reach(k, 103.0, 35.7, 0.5, t, delay=t)[0]  # 1.7 m: his hands, without a step
+    outfield = e.by_id["a4"]
+    outfield.x, outfield.y, outfield.vx, outfield.vy = 60.0, 34.0, 0.0, 0.0
+    assert not e.can_reach(outfield, 60.0, 35.7, 0.5, t, delay=t)[0]  # a foot reaches 1 m
+
+
+def test_can_reach_counts_his_speed_toward_the_ball_and_braking_away_from_it():
+    e = Engine(1)
+    p = e.by_id["a4"]
+    p.x, p.y = 60.0, 34.0
+    p.vx, p.vy = 6.0, 0.0  # already running toward the point
+    toward = e.can_reach(p, 64.0, 34.0, 0.0, 0.5)[0]
+    p.vx = -6.0  # running away from it: he must brake first
+    away = e.can_reach(p, 64.0, 34.0, 0.0, 0.5)[0]
+    p.vx = 0.0
+    standing = e.can_reach(p, 64.0, 34.0, 0.0, 0.5)[0]
+    assert toward and not standing and not away
+    near = 61.5, 34.0  # 1.5 m away: a standing man gets there in half a second
+    assert e.can_reach(p, *near, 0.0, 0.5)[0]
+    p.vx = -6.0  # one running away at 6 m/s must first stop, which takes longer than that
+    assert not e.can_reach(p, *near, 0.0, 0.5)[0]
+
+
+def test_nobody_counts_as_reaching_a_struck_ball_before_reacting():
+    e = Engine(1)
+    _alone_with(e, (40.5, 34.0))  # right at the kicker's feet, as the ball leaves him
+    e.ball = (40.0, 34.0, 0.0, 20.0, 0.0, 0.0)  # struck hard away from both
+    assert e.ball_destination()[0] > 45.0
+
+
+def test_nobody_counts_as_reaching_it_anywhere_inside_the_reaction_window():
+    e = Engine(1)
+    _alone_with(e, (42.4, 34.0))  # the ball passes him 0.12 s after the strike: before he can react
+    e.ball = (40.0, 34.0, 0.0, 20.0, 0.0, 0.0)
+    assert e.ball_destination()[0] > 46.0
+
+
+def test_a_kick_clears_a_downed_keeper_before_judging_where_play_goes():
+    e = Engine(1)
+    p = e.by_id["h6"]
+    e.give(p.id)
+    e.landed = ("a1", e.t - 5.0)
+    seen = []
+    judge = e.ball_destination
+    e.ball_destination = lambda: (seen.append(e.landed), judge())[1]
+    e.kick(p, 15.0, 0.0, 0.0)
+    assert seen == [None]

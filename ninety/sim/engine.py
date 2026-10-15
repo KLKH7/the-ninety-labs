@@ -21,8 +21,9 @@ from dataclasses import dataclass, field
 
 from ninety.sim import ball, decisions, offball, perception, profiles, setpieces
 from ninety.sim import team as team_mod
-from ninety.sim.body import BRAKE_MAX, CS_MEAN, D0, F0_MEAN, V0_MEAN, Body
+from ninety.sim.body import BODY_RADIUS, BRAKE_MAX, CS_MEAN, D0, F0_MEAN, V0_MEAN, Body
 from ninety.sim.body import move as move_body
+from ninety.sim.offball import DIVE_TIME_S, KEEPER_DIVE_TRAVEL_M
 from ninety.sim.profiles import Profile
 from ninety.sim.team import TeamBrain
 
@@ -44,10 +45,6 @@ PERCEPTION_ERR = 0.03  # verify: m/s of misjudged ball velocity per metre betwee
 CONTROL_M = 1.0  # a foot reaches this far from the body's centre
 FOOT_REACH_Z = 1.0  # outfield players can play the ball below this height
 HAND_REACH_Z = 2.8  # P11: a jumping keeper's hand reach (standing about 2.35 m plus the jump)
-KEEPER_STAND_REACH_M = 1.0  # P11: a keeper's sideways arm reach from the body's centre
-KEEPER_DIVE_EXTRA_M = 0.8  # P11: added as the dive stretches out, hips to fingertips about 1.8 m
-DIVE_TIME_S = 0.5  # P11: design; a full dive to the post takes about 1 s including body travel
-BODY_RADIUS = 0.26  # P11: half a footballer's shoulder width (about 0.53 m over the deltoids)
 BODY_HEIGHT = 1.8
 PRESS_GAP_M = 2.0  # design, verify: how close a presser stands (jockeys), goal-side of the ball carrier
 PERSONAL_SPACE_M = 1.2  # players steer to keep about this far from each other
@@ -235,10 +232,14 @@ class Engine:
         self.tackle: dict | None = None  # the tackle event whose outcome the next control decides
         self.dribbler: str | None = None  # a carrier who pushed the ball ahead and is running onto it
         self.last_deflection: dict | None = None  # the most recent deflection event
+        self.seen_going: tuple[float, float] = (PITCH_X / 2, PITCH_Y / 2)  # where a struck ball is seen going
         self.pass_target: tuple[float, float] | None = None  # where the pass in flight was aimed
         self.offside: set[str] = set()  # L10: team-mates in an offside position when the ball was played
         self.from_restart: str | None = None  # the restart the next kick is taken from
         self.read: tuple[str, float] | None = None  # (keeper, y): where he reads a shot is going
+        # (keeper, start t, start y, signed travel, when his arms began to stretch)
+        self.dive: tuple[str, float, float, float, float] | None = None
+        self.landed: tuple[str, float] | None = None  # (keeper, his arms' stretch start) while he is down
         self.shot_touched_by: str | None = None  # "keeper" or "defender": who got to the shot
         self.shot_was_on_target: bool | None = None  # was it going in when they first touched it?
         self.free_since = -99.0
@@ -312,12 +313,10 @@ class Engine:
     def reach(self, p: Player, x: float, y: float, at: float | None = None) -> tuple[float, float]:
         """How far and how high this player can reach for a ball at (x, y), at time `at`."""
         if self.hands(p, x, y):
-            # A dive stretches the keeper's reach over time: standing arm's length at first, the
-            # full stretch only once the dive has had time to unfold after he reacts to the
-            # strike. A deflection does not un-stretch a dive already under way.
+            # His arms stretch from the moment he reacts to the last touch, whether or not his body
+            # launches; a deflection does not un-stretch a dive already under way.
             at = self.t if at is None else at
-            diving = clamp((at - self.free_since - self.reaction(p)) / DIVE_TIME_S, 0.0, 1.0)
-            return KEEPER_STAND_REACH_M + KEEPER_DIVE_EXTRA_M * diving, HAND_REACH_Z
+            return offball.arm_reach_m(max(0.0, at - self.stretch_from(p))), HAND_REACH_Z
         return CONTROL_M, FOOT_REACH_Z
 
     def give(self, pid: str) -> None:
@@ -343,6 +342,7 @@ class Engine:
         self.touched_since_kick = False
         self.chase = {}
         self.dribble_to = None
+        self.dive = None
 
     def kickoff_spot(self, p: Player, kicking: str) -> tuple[float, float]:
         """Law 8: his formation spot, but in his own half, and outside the centre circle if his
@@ -449,6 +449,8 @@ class Engine:
         self.last_touch = carrier.id
         self.kicked_at = self.t
         self.free_since = self.t  # the ball left a player's control: dives are timed from here
+        self.landed = None  # a new strike: a keeper still down reacts to it afresh
+        self.seen_going = self.ball_destination()
         self.kicker_clear = False
         self.chase = {}  # everyone reacts after their reaction time, not on the frame of the kick
 
@@ -498,7 +500,7 @@ class Engine:
         side = self.rng.choice([-1, 1])
         ty = PITCH_Y / 2 + side * self.rng.uniform(0.5, 3.2)
         tz = self.rng.uniform(0.1, 2.0)
-        speed = self.rng.uniform(70, 120) / 3.6
+        speed = self.rng.uniform(*offball.SHOT_SPEEDS_KMH) / 3.6
         ground, up = ball.shot(math.hypot(gx - bx, ty - by), speed, tz, DT)
         # The keeper reads the kicker's body and starts toward where he thinks it is going,
         # before he can react to the ball itself; the read can be wrong (A2).
@@ -513,10 +515,12 @@ class Engine:
         self.kick(carrier, vx, vy, vz)
 
     def pass_to(self, carrier: Player, tx: float, ty: float, lofted: bool, throw: bool = False,
-                pace: float = decisions.ARRIVE_MPS) -> None:
-        """Kick toward a point the carrier chose (where he believes a team-mate will be, or space)."""
+                pace: float = decisions.ARRIVE_MPS, receiver: str | None = None) -> None:
+        """Kick toward a point the carrier chose (where he believes a team-mate will be, or space),
+        meant for `receiver` if he chose one."""
         if not self.can_strike(carrier, tx, ty):
-            self.turn_to(carrier, tx, ty, lambda: self.pass_to(carrier, tx, ty, lofted, throw, pace))
+            self.turn_to(carrier, tx, ty,
+                         lambda: self.pass_to(carrier, tx, ty, lofted, throw, pace, receiver))
             return
         bx, by = self.ball[0], self.ball[1]
         dist = math.hypot(tx - bx, ty - by)
@@ -533,6 +537,7 @@ class Engine:
         self.kicked = self.emit("pass", carrier.team, bx, by, player=carrier.id,
                                 ball_speed_kmh=round(math.sqrt(vx * vx + vy * vy + vz * vz) * 3.6, 1))
         self.kick(carrier, vx, vy, vz)
+        self.intended = receiver  # he expects it
 
     def scene_for(self, carrier: Player) -> decisions.Scene:
         """The carrier's picture of the game, built only from what he believes."""
@@ -580,7 +585,7 @@ class Engine:
             scene.mates = [m for m in scene.mates if math.hypot(m[1] - scene.x, m[2] - scene.y) <= 25]
             choice = max(decisions.options(scene), key=lambda o: o.value, default=None)
             if choice:
-                self.pass_to(carrier, *choice.target, lofted=True, throw=True)
+                self.pass_to(carrier, *choice.target, lofted=True, throw=True, receiver=choice.receiver)
             elif self.t - self.throw_ready > THROW_WAIT_S:  # nobody free: into space down the line
                 line = 3.0 if scene.y < PITCH_Y / 2 else PITCH_Y - 3.0
                 self.pass_to(carrier, clamp(scene.x + attack_dir(carrier.team) * 15, 1, PITCH_X - 1), line,
@@ -590,8 +595,8 @@ class Engine:
             return
         choice = decisions.choose(scene, self.rng)
         if choice.kind == "pass" or choice.kind == "clear":
-            self.pass_to(carrier, *choice.target, lofted=choice.lofted, pace=choice.pace)
-            self.intended = choice.receiver
+            self.pass_to(carrier, *choice.target, lofted=choice.lofted, pace=choice.pace,
+                         receiver=choice.receiver)
         elif choice.kind == "shoot":
             self.shoot(carrier)
         elif choice.kind == "dribble":
@@ -600,6 +605,23 @@ class Engine:
             self.dribble_to = None  # hold: keep the ball, shield it
 
     # ---- the free ball: who can get there first ------------------------------
+
+    def can_reach(self, p: Player, bx: float, by: float, bz: float, t: float,
+                  delay: float = 0.0) -> tuple[bool, float | None, float]:
+        """Can he get to the ball at (bx, by, bz) `t` seconds from now, starting after `delay`?
+        (reachable, gap still to close, his speed along the way); gap None if it is over his reach.
+        His reach (a keeper's hands in his box), his speed along the way, and braking first if he
+        is running away from it: one test for chasing a ball and for judging where play goes."""
+        reach_m, reach_z = self.reach(p, bx, by, at=self.t + t)
+        if bz > reach_z:
+            return False, None, 0.0
+        dx, dy = bx - p.x, by - p.y
+        gap = math.hypot(dx, dy) - reach_m
+        along = (p.vx * dx + p.vy * dy) / (math.hypot(dx, dy) or 1.0)
+        # Running away from the point, he must first brake to a stop (time and distance).
+        brake_t = max(0.0, -along) / BRAKE_MAX
+        extra = min(0.0, along) ** 2 / (2 * BRAKE_MAX)
+        return gap + extra <= p.physique.distance_in(t - delay - brake_t, max(0.0, along)), gap, along
 
     def plan_chase(self) -> None:
         """Each team sends the player who thinks they can reach the ball's path first. Each player
@@ -619,16 +641,9 @@ class Engine:
             for k in range(0, len(path), 2):
                 t = k * DT
                 bx, by, bz = path[k][0] + ex * t, path[k][1] + ey * t, path[k][2]
-                reach_m, reach_z = self.reach(p, bx, by, at=self.t + t)
-                if bz > reach_z:
-                    continue
-                dx, dy = bx - p.x, by - p.y
-                gap = math.hypot(dx, dy) - reach_m
-                along = (p.vx * dx + p.vy * dy) / (math.hypot(dx, dy) or 1.0)
-                # Running away from the point, he must first brake to a stop (time and distance).
-                brake_t = max(0.0, -along) / BRAKE_MAX
-                extra = min(0.0, along) ** 2 / (2 * BRAKE_MAX)
-                reachable = gap + extra <= p.physique.distance_in(t - brake_t, max(0.0, along))
+                reachable, gap, along = self.can_reach(p, bx, by, bz, t)
+                if gap is None:
+                    continue  # over his reach
                 if reachable or k + 2 >= len(path):
                     arrive = t if reachable else p.physique.time_to_cover(gap, along)
                     if p.team not in best or arrive < best[p.team][0]:
@@ -968,16 +983,47 @@ class Engine:
 
     # ---- tick ---------------------------------------------------------------
 
-    def play_point(self) -> tuple[float, float]:
-        """Where play is, for setting shape (O8): once a pass is struck, everyone sees where it is
-        going and sets up for that, rather than chasing the ball's every metre in flight."""
+    def play_point(self, p: Player | None = None, team: str | None = None) -> tuple[float, float]:
+        """Where play is, for setting shape (O8): once a pass is struck, players set up for where
+        it is going rather than chasing the ball's every metre in flight. Only the passer and the
+        team-mate he played it to know where he meant it; everyone else must first react to the
+        struck ball (until then play is where it was struck), then goes by where they see it going
+        (its own path). A team brain (`team`) of the passing side knows where it was meant; the
+        other side's reacts like an average player."""
         bx, by = self.ball[0], self.ball[1]
         if self.kicked and self.kicked["type"] == "pass" and self.pass_target and not self.last_deflection:
             sx, sy = self.kicked["x"], self.kicked["y"]
             tx, ty = self.pass_target
             if (bx - sx) * (tx - sx) + (by - sy) * (ty - sy) < (tx - sx) ** 2 + (ty - sy) ** 2:
-                return self.pass_target  # still on its way there
+                if p is not None:
+                    knows = p.id in (self.intended, self.released_by)
+                else:
+                    knows = team == self.kicked["team"]
+                if knows:
+                    return self.pass_target  # he knows where it was meant to go
+                react = self.reaction(p) if p is not None else decisions.GENERIC_REACTION_S
+                if self.t - self.kicked_at < react:
+                    return sx, sy  # not yet reacted to the strike
+                return self.seen_going
         return bx, by
+
+    def ball_destination(self) -> tuple[float, float]:
+        """Where players who see a ball struck can tell play is going: the first point of its own
+        flight that somebody other than the kicker can get to in time after a choice reaction, by
+        the chase's own test (can_reach), else where it leaves the pitch or comes to rest. Judged
+        from where players really are (*design*: their misjudgement is not modelled here)."""
+        path = ball.predict(self.ball, DT, 10.0)  # 10 s: a bound; the path ends when the ball rests
+        others = [p for p in self.players if p.id != self.released_by]
+        for k in range(0, len(path), 2):  # every other frame, as the chase plans
+            s = path[k]
+            if not (0.0 <= s[0] <= PITCH_X and 0.0 <= s[1] <= PITCH_Y):
+                return clamp(s[0], 0.0, PITCH_X), clamp(s[1], 0.0, PITCH_Y)
+            if k * DT <= perception.CHOICE_REACTION_S:
+                continue  # nobody has reacted to the strike yet
+            for p in others:  # the same test the chase uses, after he reacts to the strike
+                if self.can_reach(p, s[0], s[1], s[2], k * DT, perception.CHOICE_REACTION_S)[0]:
+                    return s[0], s[1]
+        return path[-1][0], path[-1][1]
 
     def ball_eta(self, x: float, y: float) -> float:
         """How soon the ball could next be played to (x, y) (O8): first it has to be somewhere a
@@ -1018,10 +1064,10 @@ class Engine:
         if chase and chase[0] == p.id:
             return clamp(chase[1], 0.5, PITCH_X - 0.5), clamp(chase[2], 0.5, PITCH_Y - 0.5), SPRINT
         if self.read and self.read[0] == p.id and self.possessor is None and self.kicked:
-            line = PITCH_X - goal_x(p.team)
-            x = line + attack_dir(p.team) * min(abs(p.x - line), 1.0)  # across his line, not off it
+            # Sideways at the depth he has set, not back toward his line: a keeper who has come out
+            # to narrow the angle stays there.
             post = PITCH_Y / 2 - GOAL_HALF_WIDTH, PITCH_Y / 2 + GOAL_HALF_WIDTH
-            return x, clamp(self.read[1], *post), SPRINT
+            return p.x, clamp(self.read[1], *post), SPRINT
         if self.set_play and setpieces.over(self):  # S3: the routine has had its say
             self.set_play = None
         if self.set_play:  # a corner: his spot in the routine (setpieces.py)
@@ -1039,7 +1085,7 @@ class Engine:
         if self.restart and p.id == self.restart.taker:
             r = self.restart
             return clamp(r.x, 0.5, PITCH_X - 0.5), clamp(r.y, 0.5, PITCH_Y - 0.5), RECOVER
-        bx, by = self.play_point()  # O8: where the ball is going, once a pass is struck
+        bx, by = self.play_point(p)  # O8: where the ball is going, once a pass is struck
         poss_team = self.team_of(self.possessor) if self.possessor else None
         shift = (clamp(bx, 0, PITCH_X) - PITCH_X / 2) * 0.45
         push = 6 * attack_dir(p.team) if poss_team == p.team else -4 * attack_dir(p.team)
@@ -1057,7 +1103,10 @@ class Engine:
                                      if q.team == p.team and q.id != p.id) if w]
                 if offball.through_on_goal(seen, own_goal, mates):  # O1: come out and narrow it
                     return *offball.close_down_spot(seen, own_goal), SPRINT
-            return *offball.keeper_spot(clamp(bx, 0, PITCH_X), clamp(by, 0, PITCH_Y), own_goal), RECOVER
+            # He sets himself from where the ball is, not where a pass is going: a shot can come
+            # from wherever the ball is now.
+            kx, ky = clamp(self.ball[0], 0, PITCH_X), clamp(self.ball[1], 0, PITCH_Y)
+            return *offball.keeper_spot(kx, ky, own_goal), RECOVER
         if not brain.in_possession and p.id in brain.markers:
             mx, my = brain.markers[p.id]
             mx, my = clamp(mx, 0.5, PITCH_X - 0.5), clamp(my, 0.5, PITCH_Y - 0.5)
@@ -1134,7 +1183,6 @@ class Engine:
     def perceive_and_think(self) -> None:
         """Players look at the pitch about four times a second, staggered so they do not all look
         on the same frame; each team brain reads the game about twice a second."""
-        bx, by = self.play_point()
         states = [(p.id, p.x, p.y, p.vx, p.vy) for p in self.players]
         for i, p in enumerate(self.players):
             if (self.frame + i) % PERCEIVE_EVERY == 0:
@@ -1146,6 +1194,7 @@ class Engine:
             if (self.frame + k * BRAIN_EVERY // 2) % BRAIN_EVERY:
                 continue
             reach = {}
+            bx, by = self.play_point(team=team)
             for p in self.players:
                 if p.team != team or p.role == "GK":
                     continue
@@ -1187,9 +1236,69 @@ class Engine:
             self.runs[p.id] = (*spot, self.t)
         return spot
 
+    def stretch_from(self, p: Player) -> float:
+        """When the keeper's arms began to stretch: when his dive began to be prepared (his reaction
+        to the touch that set it off), or his reaction to the last touch."""
+        if self.dive and self.dive[0] == p.id:
+            return self.dive[4]
+        if self.landed and self.landed[0] == p.id and self.off_balance.get(p.id, -1.0) > self.t:
+            return self.landed[1]  # down after a dive: stretched out as he landed
+        return self.kicked_at + self.reaction(p)
+
+    def ball_at_x(self, x: float, seconds: float = 10.0) -> tuple[float, float, float] | None:
+        # `seconds`: only a bound; the ball's own path stops when it comes to rest
+        """(seconds from now, y, height) when the ball, in its own flight (drag and gravity),
+        reaches x; None if it does not within `seconds`."""
+        bx, vx = self.ball[0], self.ball[3]
+        if abs(vx) < 1e-6 or (x - bx) * vx <= 0:
+            return None
+        path = ball.predict(self.ball, DT, seconds)
+        for k in range(1, len(path)):
+            a, b = path[k - 1], path[k]
+            if (b[0] - x) * vx >= 0:  # crossed between these two steps: interpolate
+                f = (x - a[0]) / (b[0] - a[0]) if b[0] != a[0] else 1.0
+                return (k - 1 + f) * DT, a[1] + f * (b[1] - a[1]), a[2] + f * (b[2] - a[2])
+        return None
+
+    def keeper_dive(self, p: Player) -> bool:
+        """P15: once the keeper has reacted to a shot, he dives toward where it will cross his line:
+        his body travels sideways (up to KEEPER_DIVE_TRAVEL_M, only as far as he needs beyond his
+        standing reach) over DIVE_TIME_S, and he is down for a moment afterwards. True while the
+        dive moves him."""
+        k = self.kicked
+        shot_at_him = k and k["type"] == "shot" and k["team"] != p.team and self.possessor is None
+        reacted = self.t - self.kicked_at >= self.reaction(p)  # to the last touch, a deflection too
+        if self.dive is None and shot_at_him and reacted and self.off_balance.get(p.id, -1.0) <= self.t:
+            arrival = self.ball_at_x(p.x)  # where the ball's own flight takes it past him
+            if arrival and arrival[2] <= HAND_REACH_Z:  # not one going over him
+                when, cross = arrival[0], arrival[1]
+                # only as far as his body must go beyond what his arms will reach by then; his arms
+                # began to stretch when he reacted, whenever the dive itself starts
+                stretched = self.t - self.stretch_from(p) + when
+                need = abs(cross - p.y) - offball.arm_reach_m(stretched)
+                if need > 0:
+                    travel = math.copysign(min(need, KEEPER_DIVE_TRAVEL_M), cross - p.y)
+                    self.dive = (p.id, self.t, p.y, travel, self.kicked_at + self.reaction(p))
+        if not self.dive or self.dive[0] != p.id:
+            return False
+        _, start, y0, travel, _ = self.dive
+        elapsed = self.t + DT - start
+        # A shorter dive is the same push, over sooner: the full dive's profile, sped up.
+        speed_up = KEEPER_DIVE_TRAVEL_M / max(abs(travel), 1e-6)
+        y = y0 + travel * offball.dive_progress(elapsed * speed_up)
+        p.vx, p.vy = 0.0, (y - p.y) / DT
+        p.y = y
+        if elapsed >= DIVE_TIME_S:
+            self.landed = (p.id, self.dive[4])
+            self.dive = None
+            self.off_balance[p.id] = self.t + offball.KEEPER_DOWN_S  # on the ground: getting up
+        return True
+
     def move_players(self) -> None:
         for p in self.players:
             if p.id == self.moved:
+                continue
+            if p.role == "GK" and self.keeper_dive(p):
                 continue
             if p.id == self.possessor:  # won the ball this frame: keeps running, slowing to a dribble
                 steer(p, p.x + p.vx * 0.5, p.y + p.vy * 0.5, DRIBBLE)
