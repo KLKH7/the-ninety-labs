@@ -87,10 +87,11 @@ PENALTY_DEPTH, PENALTY_HALF_WIDTH = 16.5, 20.16  # Law 1
 GOAL_AREA_X = 5.5  # Law 1
 # Laws 15 to 17: opponents keep this far from a restart until the ball is in play.
 RESTART_DISTANCE_M = {"throw_in": 2.0, "corner": 9.15, "goal_kick": PENALTY_DEPTH - GOAL_AREA_X + 1.0,
-                      "free_kick": 9.15}  # Law 13: 9.15 m from a free kick
+                      "free_kick": 9.15, "kick_off": 9.15}  # Laws 8 and 13: 9.15 m (the centre circle)
 BOARDS_M = 4.0  # verify: advertising boards behind the lines stop a ball (and players) that go out
 RESTART_DELAY_S = {"throw_in": (3, 8), "goal_kick": (6, 10), "corner": (12, 20),
-                   "free_kick": (4, 10)}  # verify (R1)
+                   "free_kick": (4, 10),
+                   "kick_off": (3, 5)}  # verify (R1); a kickoff's: design, the set-up the broadcast shows
 NO_OFFSIDE_FROM = ("throw_in", "goal_kick", "corner")  # Law 11: no offside offence direct from these
 INTERCEPT_SHARE = 0.85  # design: taken before this share of the way to its target, a pass is intercepted
 
@@ -153,6 +154,15 @@ def other(team: str) -> str:
 
 def clamp(v: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, v))
+
+
+AVERAGE = 0.5  # an average player's attribute, for estimates about whoever ends up on the ball
+
+
+def settle_s(first_touch: float) -> float:
+    """The first touch settles the ball before he can decide: quicker with a good first touch
+    (design)."""
+    return 0.3 + 0.3 * (1 - first_touch)
 
 
 def steer(p: Player, tx: float, ty: float, want_speed: float) -> None:
@@ -310,19 +320,36 @@ class Engine:
         self.runs = {}
         self.touched_since_kick = False
         self.chase = {}
-        # The first touch settles the ball before he can decide: quicker with a good first touch.
-        self.hold_until = self.t + 0.3 + 0.3 * (1 - self.by_id[pid].profile["first_touch"])
+        self.hold_until = self.t + settle_s(self.by_id[pid].profile["first_touch"])
         self.dribble_to = None
 
+    def kickoff_spot(self, p: Player, kicking: str) -> tuple[float, float]:
+        """Law 8: his formation spot, but in his own half, and outside the centre circle if his
+        team is not taking the kick."""
+        half = PITCH_X / 2
+        x = min(p.ax, half - 1.0) if attack_dir(p.team) > 0 else max(p.ax, half + 1.0)
+        y = p.ay
+        d = math.hypot(x - half, y - PITCH_Y / 2)
+        circle = RESTART_DISTANCE_M["kick_off"] + 0.5
+        if p.team != kicking and d < circle:
+            scale = circle / (d or 1.0)
+            x, y = half + (x - half) * scale, PITCH_Y / 2 + (y - PITCH_Y / 2) * scale
+        return x, y
+
     def kickoff(self, team: str) -> None:
-        # A restart after a goal: the broadcast cuts here, so positions reset (validator allows it).
+        """Law 8. After a goal the broadcast cuts, so positions reset (the validator allows it).
+        Then the teams set up, each in its own half and the opponents outside the centre circle,
+        and the kick is taken after a short pause rather than at once."""
         for p in self.players:
-            p.x, p.y, p.vx, p.vy = p.ax, p.ay, 0.0, 0.0
+            p.x, p.y = self.kickoff_spot(p, team)
+            p.vx = p.vy = 0.0
         self.ball = (PITCH_X / 2, PITCH_Y / 2, 0.0, 0.0, 0.0, 0.0)
         taker = next(p for p in self.players if p.team == team and p.role == "ST")
         taker.x, taker.y = PITCH_X / 2, PITCH_Y / 2
         self.emit("kickoff", team, taker.x, taker.y, player=taker.id)
-        self.give(taker.id)
+        self.possessor = None
+        self.poss_team = team
+        self.stop("kick_off", team, (PITCH_X / 2, PITCH_Y / 2), taker.id)
 
     # ---- decisions: players choose, the kick gives the ball a velocity -------
 
@@ -866,7 +893,8 @@ class Engine:
         # While the ball is out of play a new one is placed: the only time the ball may jump.
         self.ball = (taker.x, taker.y, 0.0, 0.0, 0.0, 0.0)
         self.restart = None
-        self.emit("set_piece", r.team, taker.x, taker.y, player=taker.id, outcome=None)
+        if r.kind != "kick_off":  # a kickoff was recorded when the teams set up
+            self.emit("set_piece", r.team, taker.x, taker.y, player=taker.id, outcome=None)
         if r.team != self.poss_team:
             self.emit("possession_change", r.team, taker.x, taker.y, player=taker.id)
         self.give(taker.id)
@@ -878,14 +906,23 @@ class Engine:
     # ---- tick ---------------------------------------------------------------
 
     def ball_eta(self, x: float, y: float) -> float:
-        """How soon the ball could reach (x, y): the carrier must first be ready to play it, then a
-        pass covers the distance at about a pass's average speed; a ball already moving faster
-        gets there faster (O8)."""
+        """How soon the ball could next be played to (x, y) (O8): first it has to be somewhere a
+        player can play it from, then a pass covers the distance at about a pass's average speed.
+        A restart waits until it is taken; a pass in flight first reaches where it was aimed and is
+        settled there; a carrier must first be ready."""
         bx, by, _, vx, vy, _ = self.ball
-        wait = max(0.0, self.hold_until - self.t) if self.possessor else 0.0
-        pace = decisions.PASS_SPEED_EST_MPS if self.possessor else max(math.hypot(vx, vy),
-                                                                       decisions.PASS_SPEED_EST_MPS)
-        return wait + math.hypot(x - bx, y - by) / pace
+        if self.restart:
+            wait = max(0.0, self.restart.ready_at - self.t)
+            bx, by = self.restart.x, self.restart.y
+        elif self.possessor:
+            wait = max(0.0, self.hold_until - self.t)
+        elif self.kicked and self.pass_target:
+            ax, ay = self.pass_target
+            wait = math.hypot(ax - bx, ay - by) / max(math.hypot(vx, vy), 1.0) + settle_s(AVERAGE)
+            bx, by = ax, ay
+        else:  # loose: whoever gets to it first has to settle it before he can play it
+            wait = settle_s(AVERAGE)
+        return wait + math.hypot(x - bx, y - by) / decisions.PASS_SPEED_EST_MPS
 
     def in_time(self, p: Player, tx: float, ty: float) -> float:
         """O8: the speed he chooses to get to (tx, ty): just enough to be there before the ball could
@@ -911,6 +948,8 @@ class Engine:
             x = line + attack_dir(p.team) * min(abs(p.x - line), 1.0)  # across his line, not off it
             post = PITCH_Y / 2 - GOAL_HALF_WIDTH, PITCH_Y / 2 + GOAL_HALF_WIDTH
             return x, clamp(self.read[1], *post), SPRINT
+        if self.restart and self.restart.kind == "kick_off" and p.id != self.restart.taker:
+            return *self.kickoff_spot(p, self.restart.team), SHAPE  # Law 8: until the ball is kicked
         if self.restart and p.id == self.restart.taker:
             r = self.restart
             return clamp(r.x, 0.5, PITCH_X - 0.5), clamp(r.y, 0.5, PITCH_Y - 0.5), RECOVER
@@ -936,7 +975,12 @@ class Engine:
         if not brain.in_possession and p.id in brain.markers:
             mx, my = brain.markers[p.id]
             mx, my = clamp(mx, 0.5, PITCH_X - 0.5), clamp(my, 0.5, PITCH_Y - 0.5)
-            return mx, my, self.in_time(p, mx, my)
+            # His spot moves with his man, so he keeps up with him as well as getting there in time.
+            seen = self.beliefs[p.id].seen
+            man = min((q for q in self.players if q.team != p.team and q.id in seen),
+                      key=lambda q: math.hypot(seen[q.id].x - mx, seen[q.id].y - my), default=None)
+            keep_up = math.hypot(seen[man.id].vx, seen[man.id].vy) if man else 0.0
+            return mx, my, self.in_time(p, mx, my) + keep_up
         carrier = self.by_id.get(self.possessor) if self.possessor else None
         if brain.in_possession and carrier and carrier.team == p.team and p.role != "GK":
             run = self.run_target(p, carrier, brain)
@@ -1325,23 +1369,26 @@ class Engine:
                         for p in self.players],
         })
 
+    def step(self) -> None:
+        """One frame of the match."""
+        self.moved = None
+        self.perceive_and_think()
+        self.duels()
+        if self.possessor:
+            self.tick_carrier()
+        elif self.restart:
+            self.tick_restart()
+        else:
+            self.tick_free()
+        self.move_players()
+        self.snapshot()
+        self.t += DT
+        self.frame += 1
+
     def run(self, minutes: float) -> Match:
         self.kickoff("home")
-        total = int(minutes * 60 * FPS)
-        for _ in range(total):
-            self.moved = None
-            self.perceive_and_think()
-            self.duels()
-            if self.possessor:
-                self.tick_carrier()
-            elif self.restart:
-                self.tick_restart()
-            else:
-                self.tick_free()
-            self.move_players()
-            self.snapshot()
-            self.t += DT
-            self.frame += 1
+        for _ in range(int(minutes * 60 * FPS)):
+            self.step()
         return self.match
 
 

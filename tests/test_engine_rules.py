@@ -534,3 +534,73 @@ def test_a_receiver_takes_the_ball_in_his_stride_instead_of_stopping_dead():
         e.t += 1 / 25
     assert p.vx > 2.0  # still going his way, at a dribbling pace
     assert p.x > 50.0 + 1.5
+
+
+def test_every_off_ball_target_is_reached_just_in_time_through_the_real_path():
+    from ninety.sim.engine import Restart
+    states = []
+    e = Engine(5)
+    e.run(1)  # a minute of real play: real shapes, a real carrier or ball in flight
+    states.append(e)
+    e2 = Engine(6)
+    e2.run(1)
+    e2.possessor, e2.restart = None, Restart("goal_kick", "home", 5.5, 30.0, "h1", e2.t + 7.5)
+    states.append(e2)
+    checked = 0
+    for s in states:
+        for p in s.players:
+            if p.role == "GK" or p.id in s.lunges or p.id == s.possessor or p.id == s.dribbler:
+                continue
+            if s.restart and p.id == s.restart.taker:
+                continue
+            if s.brains[p.team].pressers[:1] == [p.id]:  # the presser keeps his work rate (T3)
+                continue
+            tx, ty, speed = s.shape_target(p)
+            if s.chase.get(p.team, [None])[0] == p.id or (s.brains[p.team].in_possession and s.run_target(
+                    p, s.by_id[s.possessor], s.brains[p.team]) if s.possessor else False):
+                continue
+            assert speed >= s.in_time(p, tx, ty) - 1e-9, (p.id, speed)
+            checked += 1
+    assert checked > 10
+
+
+def test_nobody_sprints_for_a_restart_that_is_seconds_away():
+    from ninety.sim.engine import Restart
+    e = Engine(1)
+    p = e.by_id["a9"]
+    p.x, p.y = 60.0, 34.0
+    e.possessor = None
+    e.restart = Restart("goal_kick", "home", 5.5, 34.0, "h1", e.t + 7.5)
+    assert e.in_time(p, 30.0, 34.0) < 4.0  # 30 m to go, about 10 s to do it
+    e.restart = Restart("goal_kick", "home", 5.5, 34.0, "h1", e.t)
+    assert e.in_time(p, 30.0, 34.0) > 4.0  # being taken now: hurry
+
+
+def test_a_pass_in_flight_is_timed_from_where_it_is_going():
+    e = Engine(1)
+    p = e.by_id["a6"]
+    p.x, p.y = 30.0, 34.0
+    e.possessor = None
+    e.ball = (31.0, 34.0, 0.0, 20.0, 0.0, 0.0)  # next to him, but on its way to x = 90
+    e.kicked, e.pass_target = {"type": "pass"}, (90.0, 34.0)
+    away = e.in_time(p, 33.0, 34.0)
+    e.kicked = None  # a loose ball at his feet instead
+    assert away < e.in_time(p, 33.0, 34.0)
+
+
+def test_a_kickoff_is_set_up_and_seen_before_it_is_taken():
+    e = Engine(2)
+    e.kickoff("away")
+    kicked_at = None
+    for _ in range(int(6 / DT)):
+        before = e.restart is not None
+        e.step()
+        if before and e.restart is None and kicked_at is None:
+            kicked_at = e.t
+        if e.restart:
+            for p in e.players:
+                own_half = p.x >= 52.5 - 0.5 if p.team == "away" else p.x <= 52.5 + 0.5
+                assert own_half or p.id == e.restart.taker, p.id  # Law 8
+                if p.team == "home":
+                    assert math.hypot(p.x - 52.5, p.y - 34.0) >= 9.15 - 0.5  # outside the circle
+    assert kicked_at is not None and kicked_at >= 3.0  # a visible pause, then the kick
