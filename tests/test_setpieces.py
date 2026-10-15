@@ -560,6 +560,16 @@ def test_a_new_ball_may_be_placed_when_the_clip_ends_before_the_restart(tmp_path
     assert "P3 ball speed" not in run(tmp_path, clip)
 
 
+def test_a_ball_out_exactly_in_the_middle_may_be_taken_from_either_corner(tmp_path):
+    """Regression (corner report, seed 257): over the bar dead centre, recorded at y = 34.0; the
+    engine took the corner from y = 0 and L9 insisted on y = 68. Law 17: the nearest corner area,
+    and both are. Mutation caught: the tie broken one way only."""
+    (tmp_path / "middle").mkdir()
+    assert "L9 corner" not in run(tmp_path / "middle", corner_clip(crossed_y=34.0))
+    (tmp_path / "off").mkdir()  # nearer the corner at y = 68: the one at y = 0 is wrong
+    assert "L9 corner" in run(tmp_path / "off", corner_clip(crossed_y=34.5))
+
+
 def test_corners_cannot_be_checked_without_keepers(tmp_path):
     clip = corner_clip(defender=(100.0, 5.0))
     clip["meta"]["roster"] = []

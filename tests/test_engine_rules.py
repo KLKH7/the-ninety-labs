@@ -685,7 +685,7 @@ def test_a_marker_chases_harder_when_his_man_runs_away_from_him_than_toward_him(
 
 
 def test_the_keeper_dives_toward_the_shot_after_reacting_then_is_down():
-    from ninety.sim.offball import DIVE_TIME_S, KEEPER_DIVE_TRAVEL_M
+    from ninety.sim.offball import DIVE_PEAK_MPS, DIVE_TIME_S, KEEPER_DIVE_TRAVEL_M
     e = Engine(1)
     k = e.keeper("away")
     k.x, k.y, k.vx, k.vy = 104.0, 34.0, 0.0, 0.0
@@ -700,7 +700,9 @@ def test_the_keeper_dives_toward_the_shot_after_reacting_then_is_down():
     for _ in range(int(DIVE_TIME_S * 25) + 2):
         e.keeper_dive(k)
         e.t += 1 / 25
-    assert 1.0 < k.y - y0 <= KEEPER_DIVE_TRAVEL_M + 1e-9  # launched toward it, no further than a dive goes
+    # Launched toward it, no further than a dive goes: the push ends once he has covered it, so he
+    # is at most one frame at the peak speed past it, still moving (he lands and brakes, P2).
+    assert 1.0 < k.y - y0 <= KEEPER_DIVE_TRAVEL_M + DIVE_PEAK_MPS / 25 + 1e-9
     assert e.dive is None and e.off_balance[k.id] > e.t - 1 / 25  # and down on the ground after it
 
 
@@ -724,7 +726,8 @@ def test_the_dive_runs_in_the_match_loop_and_waits_for_the_keepers_reaction():
     for _ in range(5):
         e.move_players()
         e.t += 1 / 25
-    assert k.y - y0 > 0.2  # launched by the match loop itself
+    from ninety.sim.offball import dive_distance
+    assert k.y - y0 > dive_distance(3 / 25)  # launched by the match loop itself: at least 3 frames of push
 
 
 def test_a_deflection_restarts_the_keepers_reaction_before_he_dives():
@@ -776,7 +779,9 @@ def test_a_short_dive_is_the_same_push_over_sooner_and_travel_counts_the_arms_re
     for _ in range(int(offball.DIVE_TIME_S * 25)):
         e.keeper_dive(k)
         e.t += 1 / 25
-    assert abs(k.y - y0 - travel) < 1e-6  # done, and done early: a short dive is the same push
+    # Done, and done early (a short dive is the same push ended sooner): at the distance he needed,
+    # at most one frame at the peak speed past it, since the push ends once he has covered it.
+    assert e.dive is None and travel - 1e-9 <= k.y - y0 <= travel + offball.DIVE_PEAK_MPS / 25
 
 
 def test_the_keeper_dives_at_a_dipping_shot_that_comes_in_under_the_bar():
@@ -855,7 +860,8 @@ def test_a_keeper_down_after_a_dive_keeps_his_stretch_until_he_is_up():
     k = _shot_at_keeper(e, (90.0, 34.0, 0.5, 25.0, 6.0, 0.0))
     e.t += e.reaction(k)
     assert e.keeper_dive(k)
-    for _ in range(int(0.5 * 25) + 2):
+    from ninety.sim.offball import DIVE_TIME_S
+    for _ in range(int(DIVE_TIME_S * 25) + 2):
         e.keeper_dive(k)
         e.t += 1 / 25
     assert e.dive is None and e.off_balance[k.id] > e.t  # landed, on the ground

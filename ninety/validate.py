@@ -24,6 +24,10 @@ MAX_PLAYER_MPS = 10.5  # P1: peak match sprint speeds
 # fastest accelerators and is a design margin, not derived. Braking and turning: peak braking
 # about 8.5 m/s² (SD 1.1), so mean plus one SD is about 9.6, rounded to 10.
 MAX_PLAYER_ACCEL = 8.0
+# P15 (verify): a keeper's dive is a push-off, not a sprint start: it gives the body 3.6 to 4.0
+# m/s sideways in about 0.40 to 0.48 s, so at most 4.0 / 0.40 = 10 m/s² of speeding up, allowed to
+# a keeper inside his own penalty area.
+MAX_KEEPER_DIVE_ACCEL = 4.0 / 0.40
 MAX_PLAYER_BRAKE = 10.0
 ACCEL_WINDOW_S = 0.2  # P2: speeds averaged over this window, so frame jitter is not acceleration
 MAX_BALL_MPS = 40.0  # P3: above the hardest shots on record
@@ -130,6 +134,9 @@ def check_physics(events: list[dict], frames: list[dict], fps: float, roster: li
                   problems: Problems) -> None:
     """P1 to P6: speeds, acceleration, ground, gravity, ball at the possessor's feet."""
     dt = 1 / fps
+    lines = defended_lines(frames, {r["id"] for r in roster if r.get("role") == "GK"})
+    keeper_lines = {r["id"]: lines[r["team"]] for r in roster
+                    if r.get("role") == "GK" and r.get("team") in lines}
     # A kickoff restart may move everyone at once: the renderer cuts there.
     restarts = {e["frame"] for e in events if e["type"] == "kickoff"}
     # While the ball is out of play (Law 9) a new ball may be placed for the restart.
@@ -180,7 +187,8 @@ def check_physics(events: list[dict], frames: list[dict], fps: float, roster: li
             v1 = math.hypot(b["x"] - a["x"], b["y"] - a["y"]) / span
             v2 = math.hypot(p["x"] - b["x"], p["y"] - b["y"]) / span
             forward = (v2 - v1) / span
-            if forward > MAX_PLAYER_ACCEL or accel > MAX_PLAYER_BRAKE:
+            limit = MAX_KEEPER_DIVE_ACCEL if in_own_box(p, keeper_lines) else MAX_PLAYER_ACCEL
+            if forward > limit or accel > MAX_PLAYER_BRAKE:
                 problems["P2 player acceleration"].append(
                     f"frame {f1['frame']}: {p['id']} accelerated at {accel:.1f} m/s² "
                     f"({forward:.1f} speeding up)"
@@ -344,6 +352,14 @@ def check_events(events: list[dict], frames: list[dict], fps: float, meta: dict,
                 problems["C9 score"].append(
                     f"meta says {team} scored {meta['score'].get(team, 0)}, goal events say {goals[team]}"
                 )
+
+
+def in_own_box(p: dict, keeper_lines: dict[str, float]) -> bool:
+    """Is this player a keeper inside the penalty area of the goal he defends (Law 1)?"""
+    line = keeper_lines.get(p["id"])
+    if line is None:
+        return False
+    return abs(p["x"] - line) <= PENALTY_DEPTH and abs(p["y"] - 34.0) <= PENALTY_HALF_WIDTH
 
 
 def defended_lines(frames: list[dict], keepers: set[str]) -> dict[str, float]:
@@ -590,11 +606,16 @@ def check_corners(events: list[dict], frames: list[dict], roster: list[dict], pr
         if restart["type"] != "set_piece" or restart["team"] == defending:
             problems["L9 corner"].append(f"{out['id']}: no corner for the attacking team")
             continue
-        flag = (out["x"], 0.0 if out["y"] < 34.0 else 68.0)
         g = by_frame.get(restart["frame"])
         if g is None:
             continue
         b = g["ball"]
+        # Law 17: the corner area nearest where it crossed; exactly between the two (within the
+        # precision of the positions), either is.
+        flags = [(out["x"], 0.0), (out["x"], 68.0)]
+        nearest = min(abs(out["y"] - fy) for _, fy in flags)
+        allowed = [fl for fl in flags if abs(out["y"] - fl[1]) <= nearest + POINT_PRECISION_M]
+        flag = min(allowed, key=lambda fl: math.hypot(b["x"] - fl[0], b["y"] - fl[1]))
         slack = BALL_RADIUS_M + POINT_PRECISION_M
         in_arc = math.hypot(b["x"] - flag[0], b["y"] - flag[1]) <= CORNER_ARC_M + slack
         in_field = -slack <= b["x"] <= 105.0 + slack and -slack <= b["y"] <= 68.0 + slack

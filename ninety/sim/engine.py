@@ -23,7 +23,7 @@ from ninety.sim import ball, decisions, offball, perception, profiles, setpieces
 from ninety.sim import team as team_mod
 from ninety.sim.body import BODY_RADIUS, BRAKE_MAX, CS_MEAN, D0, F0_MEAN, V0_MEAN, Body
 from ninety.sim.body import move as move_body
-from ninety.sim.offball import DIVE_TIME_S, KEEPER_DIVE_TRAVEL_M
+from ninety.sim.offball import KEEPER_DIVE_TRAVEL_M
 from ninety.sim.profiles import Profile
 from ninety.sim.team import TeamBrain
 
@@ -1263,8 +1263,8 @@ class Engine:
     def keeper_dive(self, p: Player) -> bool:
         """P15: once the keeper has reacted to a shot, he dives toward where it will cross his line:
         his body travels sideways (up to KEEPER_DIVE_TRAVEL_M, only as far as he needs beyond his
-        standing reach) over DIVE_TIME_S, and he is down for a moment afterwards. True while the
-        dive moves him."""
+        standing reach) with the one push of every dive (offball.dive_distance), and he is down for a
+        moment afterwards. True while the dive moves him."""
         k = self.kicked
         shot_at_him = k and k["type"] == "shot" and k["team"] != p.team and self.possessor is None
         reacted = self.t - self.kicked_at >= self.reaction(p)  # to the last touch, a deflection too
@@ -1283,12 +1283,20 @@ class Engine:
             return False
         _, start, y0, travel, _ = self.dive
         elapsed = self.t + DT - start
-        # A shorter dive is the same push, over sooner: the full dive's profile, sped up.
-        speed_up = KEEPER_DIVE_TRAVEL_M / max(abs(travel), 1e-6)
-        y = y0 + travel * offball.dive_progress(elapsed * speed_up)
-        p.vx, p.vy = 0.0, (y - p.y) / DT
-        p.y = y
-        if elapsed >= DIVE_TIME_S:
+        # The push (P15) is one force: it turns his velocity, however he was moving, toward the
+        # dive's (the peak speed straight along his line) at no more than DIVE_ACCEL, so a keeper
+        # moving the other way, or off his line, is first stopped by it. A shorter dive is the same
+        # push ended sooner, never the full dive played faster. It ends with the body still moving:
+        # he lands and brakes to a stop like any player (P2), rather than stopping dead in the air.
+        side = math.copysign(1.0, travel)
+        dvx, dvy = -p.vx, side * offball.DIVE_PEAK_MPS - p.vy
+        need = math.hypot(dvx, dvy)
+        step = min(need, offball.DIVE_ACCEL * DT)
+        vx = p.vx + (dvx / need * step if need > 1e-9 else 0.0)
+        vy = p.vy + (dvy / need * step if need > 1e-9 else 0.0)
+        p.x, p.y = p.x + (p.vx + vx) / 2 * DT, p.y + (p.vy + vy) / 2 * DT  # even push over the frame
+        p.vx, p.vy = vx, vy
+        if side * (p.y - y0) >= abs(travel) or elapsed >= offball.DIVE_GIVE_UP_S:
             self.landed = (p.id, self.dive[4])
             self.dive = None
             self.off_balance[p.id] = self.t + offball.KEEPER_DOWN_S  # on the ground: getting up

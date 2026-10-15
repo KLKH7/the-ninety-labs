@@ -290,3 +290,17 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** for every exemption, build an illegal case that sits just inside it and must still
   fail; for every collision, a test that energy never rises and a resting ball comes to rest.
 
+### 34. A new motion must be checked against every existing rule, in the scenes where it happens
+- **What happened:** a keeper's dive was added with a cited peak speed and duration, and the
+  push-off between them was derived to fit: 16 m/s², twice the acceleration check's limit. The
+  dive also started from rest whatever the keeper was doing, played short dives faster and
+  stopped him dead in the air. Every test and full-match clip passed, because few full-match
+  shots made a keeper dive; the first scenario that made keepers dive often failed two thirds of
+  its clips.
+- **Rule:** model a motion as the force that makes it, applied to the body's current state, with
+  each part of its profile from a source; never derive an unsourced part of a profile so that
+  two cited numbers fit. Then run the motion through the scenes that exercise it and the whole
+  contract, not only its own tests.
+- **Check:** for a new movement, a test that the body's velocity never changes faster than its
+  limit from any starting velocity, and a contract run over clips where it happens often.
+
