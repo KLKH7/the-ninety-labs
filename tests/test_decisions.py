@@ -161,9 +161,11 @@ def test_a_lane_is_judged_where_the_opponent_meets_the_line_not_by_his_distance_
     assert free.value > expected
 
 
-def test_carrying_on_is_slightly_preferred():
-    hold = next(o for o in D.options(scene(current="hold")) if o.kind == "hold").value
-    assert hold > next(o for o in D.options(scene(current="dribble")) if o.kind == "hold").value
+def test_carrying_on_with_a_dribble_is_slightly_preferred_and_holding_gets_no_bonus():
+    def first(kind, s):
+        return next(o for o in D.options(s) if o.kind == kind).value
+    assert math.isclose(first("dribble", scene(current="dribble")) - first("dribble", scene()), D.STICKY)
+    assert math.isclose(first("hold", scene(current="dribble")), first("hold", scene()))  # raw best
 
 
 def test_a_throw_in_is_only_ever_a_throw():
@@ -257,11 +259,41 @@ def test_the_shot_chance_is_the_measured_rate_scaled_by_the_situation(monkeypatc
     assert math.isclose(D.shot_chance(blocked), 0.2 * D.BLOCKER_FACTOR)
 
 
-def test_holding_keeps_only_part_of_what_the_ball_is_worth_here():
-    from ninety.sim import threat
-    s = scene(x=60.0)  # no pressure
-    hold = next(o for o in D.options(s) if o.kind == "hold").value
-    assert math.isclose(hold, threat.at(60.0, 34.0, 105.0) * (1 - D.HOLD_DECAY))
+def test_holding_is_worth_the_best_move_a_moment_later_never_more():
+    s = scene(x=60.0, mates=[("h9", 75.0, 34.0, 0.0)])  # no pressure
+    opts = D.options(s)
+    hold = next(o for o in opts if o.kind == "hold").value
+    best = max(o.value for o in opts if o.kind != "hold")
+    assert math.isclose(hold, best * (1 - D.HOLD_DECAY))
+    assert hold < best  # waiting never beats the move he is waiting to make
+
+
+def test_when_every_move_is_bad_waiting_is_a_little_worse_still(monkeypatch):
+    monkeypatch.setattr(D, "pressure", lambda _s: 0.0)  # unpressed: he could wait, but not for ever
+    hopeless = [(60.0 + dx, 34.0 + dy) for dx in (2.0, 4.0) for dy in (-3.0, 0.0, 3.0)]
+    s = scene(x=60.0, opponents=hopeless)
+    opts = D.options(s)
+    best = max(o.value for o in opts if o.kind != "hold")
+    assert best < 0  # the premise: nothing good to do
+    assert max(opts, key=lambda o: o.value).kind != "hold"
+
+
+def test_under_pressure_holding_is_never_better_than_both_of_its_outcomes(monkeypatch):
+    """With pressure he either loses the ball where he stands or still makes his move; holding is
+    a mix of the two, so it can never beat both (the old form valued the lost share at nothing)."""
+    hopeless = [(60.0 + dx, 34.0 + dy) for dx in (2.0, 4.0) for dy in (-3.0, 0.0, 3.0)]
+    lost_here = -D.loss_cost(60.0, 34.0, 105.0)
+    for p in (0.0, 0.3, 0.6, 0.9, 1.0):
+        monkeypatch.setattr(D, "pressure", lambda _s, p=p: p)
+        opts = D.options(scene(opponents=hopeless))
+        best = max(o.value for o in opts if o.kind != "hold")
+        hold = next(o for o in opts if o.kind == "hold").value
+        assert best < 0 and hold < max(best, lost_here)
+    calm = []
+    for p in (0.0, 0.5, 1.0):
+        monkeypatch.setattr(D, "pressure", lambda _s, p=p: p)
+        calm.append(next(o for o in D.options(scene(opponents=[(75.0, 50.0)])) if o.kind == "hold").value)
+    assert calm[0] > calm[1] > calm[2]
 
 
 def test_choice_randomness_is_relative_to_how_different_the_options_are():
@@ -300,3 +332,4 @@ def test_from_fifteen_metres_he_chooses_between_along_the_ground_and_over_the_to
     assert over.lofted
     short = D.pass_option(scene(x=60.0), ("h9", 70.0, 34.0, 0.0))
     assert not short.lofted  # under 15 m it stays on the ground
+

@@ -35,6 +35,7 @@ PLACE_S = 1.5  # S2 (verify): the taker places the ball before he steps back
 SETTLED_M = 1.5  # S2 (design): a player this close to his spot is in position
 SETTLED_MPS = 1.0  # S2 (design): or has stopped moving toward it (someone stands in the way)
 TAKER_AT_M = 0.5  # S2 (design): the taker is at his spot
+SET_UP_FAR_M = 10.0  # S2 (design): further than this from his spot a player runs to it, nearer he jogs
 SECOND_PHASE_S = 4.0  # S3 (design): the routine holds after the kick until the ball is won or out
 MARK_GOAL_SIDE_M = 1.0  # S4 (design): a man-marker stands this far goal-side of his attacker
 REST_MARK_M = 2.0  # S5 (design): a rest defender stands this far goal-side of a counter-attacker

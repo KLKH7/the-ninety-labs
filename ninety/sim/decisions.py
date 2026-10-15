@@ -363,7 +363,6 @@ def options(scene: Scene) -> list[Option]:
     out = [o for o in (pass_option(scene, mate) for mate in scene.mates) if o]
     if scene.throw:  # Law 15: a throw-in is thrown to someone; it is never a shot or a dribble
         return out
-    here = value(scene.x, scene.y, scene.goal_x, scene.opponents, scene.keeper)
     p = pressure(scene)
     q = shot_chance(scene)
     if abs(scene.goal_x - scene.x) < 40:
@@ -398,16 +397,22 @@ def options(scene: Scene) -> list[Option]:
         gain = value(tx, ty, scene.goal_x, scene.opponents, scene.keeper)
         ev = win * gain - (1 - win) * loss_cost(scene.x, scene.y, scene.goal_x)
         out.append(Option("dribble", ev + (STICKY if scene.current == "dribble" else 0.0), (tx, ty)))
-    # Holding gains nothing and the defence reorganises while he waits (D9), so it keeps only part
-    # of what the ball is worth here; under pressure it also risks losing it where he stands.
-    hold = here * (1 - HOLD_DECAY) * (1 - p) - p * 0.5 * loss_cost(scene.x, scene.y, scene.goal_x)
-    out.append(Option("hold", hold + (STICKY if scene.current == "hold" else 0.0)))
     if abs(scene.goal_x - scene.x) > CLEAR_FROM * PITCH_X:  # in his own third: long and away
         wide = 4.0 if scene.y < PITCH_Y / 2 else PITCH_Y - 4.0
         tx = scene.x + attack(scene.goal_x) * 45.0
         # A long ball away is a contest where it lands (an even one: design).
         contest = 0.5 * value(tx, wide, scene.goal_x) - 0.5 * loss_cost(tx, wide, scene.goal_x)
         out.append(Option("clear", contest, (tx, wide), lofted=True))
+    # Holding is waiting to make a move a moment later: worth the best move open to him now, less
+    # what the defence recovers while he waits (D9; *verify*: options only decay while he waits,
+    # nothing here models a run developing). He cannot wait for ever, so when every move is a bad
+    # one, waiting is a little worse still. Under pressure he loses the ball where he stands about
+    # half the time he is caught (p * 0.5); otherwise he still makes that move. Each decision
+    # weighs holding afresh, so it carries no bonus for carrying on.
+    best = max((o.value - (STICKY if o.kind == scene.current else 0.0) for o in out), default=0.0)
+    later = best * (1 - HOLD_DECAY) if best >= 0 else best * (1 + HOLD_DECAY)
+    lose = 0.5 * p
+    out.append(Option("hold", (1 - lose) * later - lose * loss_cost(scene.x, scene.y, scene.goal_x)))
     return out
 
 

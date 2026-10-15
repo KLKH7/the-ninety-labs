@@ -20,6 +20,7 @@ import random
 from dataclasses import dataclass, field
 
 from ninety.sim import ball, decisions, offball, perception, profiles, setpieces
+from ninety.sim import team as team_mod
 from ninety.sim.body import BRAKE_MAX, CS_MEAN, D0, F0_MEAN, V0_MEAN, Body
 from ninety.sim.body import move as move_body
 from ninety.sim.profiles import Profile
@@ -28,18 +29,16 @@ from ninety.sim.team import TeamBrain
 PITCH_X, PITCH_Y = 105.0, 68.0
 FPS = 25
 DT = 1.0 / FPS
-# How fast a player chooses to go (design; step 3 turns these into decisions). What they can
-# reach is limited by their own body (ninety/sim/body.py): acceleration, top speed, energy.
+# How fast a player chooses to go. Off the ball he goes as fast as he needs to be in place before
+# the ball could get there (in_time, O8), no faster; a few jobs are flat out. What he can reach is
+# limited by his own body (ninety/sim/body.py): acceleration, top speed, energy.
 SPRINT = 99.0  # as fast as their body allows
-RECOVER = 6.0  # running back into position from far away
-PRESS = 6.0  # closing down the ball carrier
-SHAPE = 3.0  # adjusting position, below critical speed so it can be sustained
-FAR_OUT_OF_POSITION_M = 10.0
+RECOVER = 6.0  # a restart taker or the keeper getting into position (design)
+SHAPE = 3.0  # getting up after being beaten (design)
 DRIBBLE = 2.5
 DECIDE_EVERY = 6  # frames between the ball carrier's decisions (about 4 a second)
 PERCEIVE_EVERY = 6  # frames between a player's looks at the pitch (about 4 a second, staggered)
 BRAIN_EVERY = 12  # frames between a team brain's reads of the game (about 2 a second)
-ENGAGE_M = 20.0  # design: the first presser goes to the ball when it is this close
 COVER_M = 8.0  # design: the covering player stays this far behind the presser, goal-side
 PERCEPTION_ERR = 0.03  # verify: m/s of misjudged ball velocity per metre between player and ball
 CONTROL_M = 1.0  # a foot reaches this far from the body's centre
@@ -88,10 +87,11 @@ PENALTY_DEPTH, PENALTY_HALF_WIDTH = 16.5, 20.16  # Law 1
 GOAL_AREA_X = 5.5  # Law 1
 # Laws 15 to 17: opponents keep this far from a restart until the ball is in play.
 RESTART_DISTANCE_M = {"throw_in": 2.0, "corner": 9.15, "goal_kick": PENALTY_DEPTH - GOAL_AREA_X + 1.0,
-                      "free_kick": 9.15}  # Law 13: 9.15 m from a free kick
+                      "free_kick": 9.15, "kick_off": 9.15}  # Laws 8 and 13: 9.15 m (the centre circle)
 BOARDS_M = 4.0  # verify: advertising boards behind the lines stop a ball (and players) that go out
-RESTART_DELAY_S = {"throw_in": (3, 8), "goal_kick": (6, 10),
-                   "free_kick": (4, 10)}  # verify (R1); corners: setpieces.ready, no timer
+RESTART_DELAY_S = {"throw_in": (3, 8), "goal_kick": (6, 10), "free_kick": (4, 10),
+                   "kick_off": (1, 2)}  # verify (R1); kickoff: design, long enough to see;
+# corners have no timer: taken when the teams are ready (setpieces.advance)
 NO_OFFSIDE_FROM = ("throw_in", "goal_kick", "corner")  # Law 11: no offside offence direct from these
 INTERCEPT_SHARE = 0.85  # design: taken before this share of the way to its target, a pass is intercepted
 
@@ -156,6 +156,15 @@ def clamp(v: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, v))
 
 
+AVERAGE = 0.5  # an average player's attribute, for estimates about whoever ends up on the ball
+
+
+def settle_s(first_touch: float) -> float:
+    """The first touch settles the ball before he can decide: quicker with a good first touch
+    (design)."""
+    return 0.3 + 0.3 * (1 - first_touch)
+
+
 def steer(p: Player, tx: float, ty: float, want_speed: float) -> None:
     """Move toward a target within the player's own body: force-velocity acceleration, braking,
     a shared grip limit for braking and turning, and energy (ninety/sim/body.py)."""
@@ -194,7 +203,11 @@ class Engine:
                               "ratings": {a: p.profile.rating(a) for a in p.profile.attributes}}
                              for p in self.players]
         self.beliefs = {p.id: perception.Belief(next_scan=self.rng.uniform(0, 3)) for p in self.players}
-        self.brains = {team: TeamBrain(team) for team in ("home", "away")}
+        # T2, T3: each side plays a block of its own (design: equally likely), drawn from its own
+        # stream so the rest of the match's random draws do not shift with it.
+        style = random.Random(f"{seed}-style")
+        self.brains = {team: TeamBrain(team, block=style.choice(sorted(team_mod.BLOCKS)))
+                       for team in ("home", "away")}
         self.ball: ball.State = (PITCH_X / 2, PITCH_Y / 2, 0.0, 0.0, 0.0, 0.0)
         self.possessor: str | None = None
         self.last_touch: str | None = None
@@ -303,6 +316,11 @@ class Engine:
         self.last_touch = pid
         if pid != self.released_by:
             self.released_by = None
+        self.new_phase()
+        self.hold_until = self.t + settle_s(self.by_id[pid].profile["first_touch"])
+
+    def new_phase(self) -> None:
+        """Forget the last phase of play: a new carrier, or a kickoff."""
         self.dribbler = None
         self.last_deflection = None
         self.offside = set()
@@ -312,20 +330,38 @@ class Engine:
         self.runs = {}
         self.touched_since_kick = False
         self.chase = {}
-        # The first touch settles the ball before he can decide: quicker with a good first touch.
-        self.hold_until = self.t + 0.3 + 0.3 * (1 - self.by_id[pid].profile["first_touch"])
         self.dribble_to = None
 
+    def kickoff_spot(self, p: Player, kicking: str) -> tuple[float, float]:
+        """Law 8: his formation spot, but in his own half, and outside the centre circle if his
+        team is not taking the kick."""
+        half = PITCH_X / 2
+        x = min(p.ax, half - 1.0) if attack_dir(p.team) > 0 else max(p.ax, half + 1.0)
+        y = p.ay
+        d = math.hypot(x - half, y - PITCH_Y / 2)
+        circle = RESTART_DISTANCE_M["kick_off"] + 0.5
+        if p.team != kicking and d < circle:
+            scale = circle / (d or 1.0)
+            x, y = half + (x - half) * scale, PITCH_Y / 2 + (y - PITCH_Y / 2) * scale
+        return x, y
+
     def kickoff(self, team: str) -> None:
-        # A restart after a goal: the broadcast cuts here, so positions reset (validator allows it).
+        """Law 8. After a goal the broadcast cuts, so positions reset (the validator allows it).
+        Then the teams set up, each in its own half and the opponents outside the centre circle,
+        and the kick is taken after a short pause rather than at once."""
         for p in self.players:
-            p.x, p.y, p.vx, p.vy = p.ax, p.ay, 0.0, 0.0
+            p.x, p.y = self.kickoff_spot(p, team)
+            p.vx = p.vy = 0.0
         self.ball = (PITCH_X / 2, PITCH_Y / 2, 0.0, 0.0, 0.0, 0.0)
         self.set_play = None
         taker = next(p for p in self.players if p.team == team and p.role == "ST")
         taker.x, taker.y = PITCH_X / 2, PITCH_Y / 2
         self.emit("kickoff", team, taker.x, taker.y, player=taker.id)
-        self.give(taker.id)
+        self.possessor = None
+        self.poss_team = team
+        self.kicked = None
+        self.new_phase()
+        self.stop("kick_off", team, (PITCH_X / 2, PITCH_Y / 2), taker.id)
 
     # ---- decisions: players choose, the kick gives the ball a velocity -------
 
@@ -521,7 +557,7 @@ class Engine:
         scene = decisions.Scene(self.ball[0], self.ball[1], goal_x(team), mates, opps, keeper,
                                 prof["decisions"], prof["composure"], prof["dribbling"],
                                 tuple(prof.traits), risk,
-                                current="dribble" if self.dribble_to else "hold")
+                                current="dribble" if self.dribble_to else None)
         return scene
 
     def decide(self, carrier: Player, throw: bool = False) -> None:
@@ -882,7 +918,8 @@ class Engine:
         # While the ball is out of play a new one is placed: the only time the ball may jump.
         self.ball = (taker.x, taker.y, 0.0, 0.0, 0.0, 0.0)
         self.restart = None
-        self.emit("set_piece", r.team, taker.x, taker.y, player=taker.id, outcome=None)
+        if r.kind != "kick_off":  # a kickoff was recorded when the teams set up
+            self.emit("set_piece", r.team, taker.x, taker.y, player=taker.id, outcome=None)
         if r.team != self.poss_team:
             self.emit("possession_change", r.team, taker.x, taker.y, player=taker.id)
         self.give(taker.id)
@@ -904,6 +941,41 @@ class Engine:
             self.poss_team = r.team
 
     # ---- tick ---------------------------------------------------------------
+
+    def play_point(self) -> tuple[float, float]:
+        """Where play is, for setting shape (O8): once a pass is struck, everyone sees where it is
+        going and sets up for that, rather than chasing the ball's every metre in flight."""
+        bx, by = self.ball[0], self.ball[1]
+        if self.kicked and self.kicked["type"] == "pass" and self.pass_target and not self.last_deflection:
+            sx, sy = self.kicked["x"], self.kicked["y"]
+            tx, ty = self.pass_target
+            if (bx - sx) * (tx - sx) + (by - sy) * (ty - sy) < (tx - sx) ** 2 + (ty - sy) ** 2:
+                return self.pass_target  # still on its way there
+        return bx, by
+
+    def ball_eta(self, x: float, y: float) -> float:
+        """How soon the ball could next be played to (x, y) (O8): first it has to be somewhere a
+        player can play it from, then a pass covers the distance at about a pass's average speed.
+        A restart waits until it is taken; a pass in flight first reaches where it was aimed and is
+        settled there; a carrier must first be ready."""
+        bx, by, _, vx, vy, _ = self.ball
+        if self.restart:
+            wait = max(0.0, self.restart.ready_at - self.t)
+            bx, by = self.restart.x, self.restart.y
+        elif self.possessor:
+            wait = max(0.0, self.hold_until - self.t)
+        elif self.kicked and self.pass_target:
+            ax, ay = self.pass_target
+            wait = math.hypot(ax - bx, ay - by) / max(math.hypot(vx, vy), 1.0) + settle_s(AVERAGE)
+            bx, by = ax, ay
+        else:  # loose: whoever gets to it first has to settle it before he can play it
+            wait = settle_s(AVERAGE)
+        return wait + math.hypot(x - bx, y - by) / decisions.PASS_SPEED_EST_MPS
+
+    def in_time(self, p: Player, tx: float, ty: float) -> float:
+        """O8: the speed he chooses to get to (tx, ty): just enough to be there before the ball could
+        be, so far from the ball he walks and near it he bursts; his body caps it."""
+        return math.hypot(tx - p.x, ty - p.y) / max(self.ball_eta(tx, ty), DT)
 
     def shape_target(self, p: Player) -> tuple[float, float, float]:
         """Where a player off the ball wants to be, and how fast they go there."""
@@ -934,12 +1006,14 @@ class Engine:
                 sx, sy = clamp(spot[0], 0.5, PITCH_X - 0.5), clamp(spot[1], 0.5, PITCH_Y - 0.5)
                 if setpieces.running(self, p):
                     return sx, sy, SPRINT
-                far = math.hypot(sx - p.x, sy - p.y) > FAR_OUT_OF_POSITION_M
+                far = math.hypot(sx - p.x, sy - p.y) > setpieces.SET_UP_FAR_M
                 return sx, sy, RECOVER if far else SHAPE
+        if self.restart and self.restart.kind == "kick_off" and p.id != self.restart.taker:
+            return *self.kickoff_spot(p, self.restart.team), SHAPE  # Law 8: until the ball is kicked
         if self.restart and p.id == self.restart.taker:
             r = self.restart
             return clamp(r.x, 0.5, PITCH_X - 0.5), clamp(r.y, 0.5, PITCH_Y - 0.5), RECOVER
-        bx, by = self.ball[0], self.ball[1]
+        bx, by = self.play_point()  # O8: where the ball is going, once a pass is struck
         poss_team = self.team_of(self.possessor) if self.possessor else None
         shift = (clamp(bx, 0, PITCH_X) - PITCH_X / 2) * 0.45
         push = 6 * attack_dir(p.team) if poss_team == p.team else -4 * attack_dir(p.team)
@@ -960,7 +1034,15 @@ class Engine:
             return *offball.keeper_spot(clamp(bx, 0, PITCH_X), clamp(by, 0, PITCH_Y), own_goal), RECOVER
         if not brain.in_possession and p.id in brain.markers:
             mx, my = brain.markers[p.id]
-            return clamp(mx, 0.5, PITCH_X - 0.5), clamp(my, 0.5, PITCH_Y - 0.5), work
+            mx, my = clamp(mx, 0.5, PITCH_X - 0.5), clamp(my, 0.5, PITCH_Y - 0.5)
+            seen = self.beliefs[p.id].seen
+            man = min((q for q in self.players if q.team != p.team and q.id in seen),
+                      key=lambda q: math.hypot(seen[q.id].x - mx, seen[q.id].y - my), default=None)
+            # His spot moves with his man: he matches the man's velocity and closes the gap on top.
+            mvx, mvy = (seen[man.id].vx, seen[man.id].vy) if man else (0.0, 0.0)
+            gap = math.hypot(mx - p.x, my - p.y)
+            close = self.in_time(p, mx, my) / gap if gap > 1e-6 else 0.0
+            return mx, my, math.hypot(mvx + (mx - p.x) * close, mvy + (my - p.y) * close)
         carrier = self.by_id.get(self.possessor) if self.possessor else None
         if brain.in_possession and carrier and carrier.team == p.team and p.role != "GK":
             run = self.run_target(p, carrier, brain)
@@ -970,17 +1052,17 @@ class Engine:
                             and q.role != "GK"), key=lambda q: math.hypot(q.x - carrier.x, q.y - carrier.y))
             if p in mates[:2]:  # O3: the nearest two offer a diagonal option
                 presser = self.nearest(carrier.x, carrier.y, other(p.team))
-                return *offball.support_spot((p.x, p.y), (carrier.x, carrier.y), goal_x(p.team),
-                                             (presser.x, presser.y)), RECOVER
+                sx, sy = offball.support_spot((p.x, p.y), (carrier.x, carrier.y), goal_x(p.team),
+                                              (presser.x, presser.y))
+                return sx, sy, self.in_time(p, sx, sy)
         if brain.in_possession and p.role != "GK":  # O6: the team's shape with the ball (also in flight)
             seen = [w for w in (self.beliefs[p.id].where(q.id, self.t) for q in self.players
                                 if q.team != p.team) if w]
             onside = self.onside_limit(p.team, seen, bx)  # L10: as far as he sees he may go
             spot = offball.attacking_slot(p.role, PITCH_X - goal_x(p.team), clamp(bx, 0, PITCH_X),
                                           clamp(by, 0, PITCH_Y), onside)
-            if spot:  # with the ball still in flight he drifts there; he runs once it is settled
-                far = math.hypot(spot[0] - p.x, spot[1] - p.y) > FAR_OUT_OF_POSITION_M
-                return *spot, RECOVER if far and self.possessor else SHAPE
+            if spot:
+                return *spot, self.in_time(p, *spot)
         if not brain.in_possession and p.role != "GK":
             own = PITCH_X - goal_x(p.team), PITCH_Y / 2
             d = math.hypot(own[0] - bx, own[1] - by) or 1.0
@@ -991,8 +1073,7 @@ class Engine:
             if self.restart and self.restart.team != p.team:  # Laws 15 to 17: stand off the restart
                 gap = RESTART_DISTANCE_M[self.restart.kind]
             presser = self.by_id[brain.pressers[0]] if brain.pressers else None
-            engaged = (presser is not None and math.hypot(bx - presser.x, by - presser.y) < ENGAGE_M
-                       and brain.presses(self.t, bx))
+            engaged = presser is not None and brain.presses(self.t, bx)
             if presser is p and engaged:
                 # Press goal-side, a step away, matching where the carrier is going (D8: a defender
                 # keeps his speed relative to the attacker small rather than holding a spot).
@@ -1001,12 +1082,13 @@ class Engine:
                 lead_y = carrier.vy * JOCKEY_LOOKAHEAD_S if carrier else 0.0
                 return *on_pitch(bx + lead_x + gx * gap, by + lead_y + gy * gap), work
             if engaged and brain.pressers[1:2] == [p.id]:  # cover: behind the presser, goal-side
-                return *on_pitch(bx + gx * max(COVER_M, gap + 2), by + gy * max(COVER_M, gap + 2)), RECOVER
+                cx, cy = on_pitch(bx + gx * max(COVER_M, gap + 2), by + gy * max(COVER_M, gap + 2))
+                return cx, cy, self.in_time(p, cx, cy)
             slot = brain.slot(p.role, p.ay, clamp(by, 0, PITCH_Y))
             if slot:
                 tx, ty = slot
-        far = math.hypot(tx - p.x, ty - p.y) > FAR_OUT_OF_POSITION_M
-        return tx, ty, RECOVER if far else SHAPE
+        tx, ty = clamp(tx, 0.5, PITCH_X - 0.5), clamp(ty, 0.5, PITCH_Y - 0.5)
+        return tx, ty, self.in_time(p, tx, ty)
 
     def shared_view(self, team: str, of_team: str) -> dict[str, tuple[float, float]]:
         """What a team's players know between them about another team's positions: for each
@@ -1026,7 +1108,7 @@ class Engine:
     def perceive_and_think(self) -> None:
         """Players look at the pitch about four times a second, staggered so they do not all look
         on the same frame; each team brain reads the game about twice a second."""
-        bx, by = self.ball[0], self.ball[1]
+        bx, by = self.play_point()
         states = [(p.id, p.x, p.y, p.vx, p.vy) for p in self.players]
         for i, p in enumerate(self.players):
             if (self.frame + i) % PERCEIVE_EVERY == 0:
@@ -1157,6 +1239,15 @@ class Engine:
             steer(carrier, tx, ty, pace)
             if math.hypot(tx - carrier.x, ty - carrier.y) < 1.0:
                 self.dribble_to = None
+        elif self.t < self.hold_until and carrier.role != "GK":
+            # A4: settling the ball he does not stop dead: he takes it in his stride and carries on
+            # the way he was going, no faster than he can dribble, slower in close control.
+            pace = min(math.hypot(carrier.vx, carrier.vy),
+                       decisions.dribble_speed(carrier.profile["dribbling"]))
+            if self.closest_opponent(carrier) < CLOSE_CONTROL_M:
+                pace *= CLOSE_CONTROL_PACE
+            steer(carrier, clamp(carrier.x + carrier.vx, 1.0, PITCH_X - 1.0),
+                  clamp(carrier.y + carrier.vy, 1.0, PITCH_Y - 1.0), pace)
         else:  # holding: keeps the ball, shielding it
             steer(carrier, carrier.x, carrier.y, DRIBBLE)
         # The ball settles at the carrier's feet (from a keeper's hands, down to the ground)
@@ -1366,6 +1457,22 @@ class Engine:
                         for p in self.players],
         })
 
+    def step(self) -> None:
+        """One frame of the match."""
+        self.moved = None
+        self.perceive_and_think()
+        self.duels()
+        if self.possessor:
+            self.tick_carrier()
+        elif self.restart:
+            self.tick_restart()
+        else:
+            self.tick_free()
+        self.move_players()
+        self.snapshot()
+        self.t += DT
+        self.frame += 1
+
     def run(self, minutes: float, scenario: str | None = None) -> Match:
         if scenario == "corner":
             self.open_with_corner()
@@ -1373,21 +1480,8 @@ class Engine:
             self.kickoff("home")
         else:
             raise ValueError(f"unknown scenario {scenario!r}; known: corner")
-        total = int(minutes * 60 * FPS)
-        for _ in range(total):
-            self.moved = None
-            self.perceive_and_think()
-            self.duels()
-            if self.possessor:
-                self.tick_carrier()
-            elif self.restart:
-                self.tick_restart()
-            else:
-                self.tick_free()
-            self.move_players()
-            self.snapshot()
-            self.t += DT
-            self.frame += 1
+        for _ in range(int(minutes * 60 * FPS)):
+            self.step()
         return self.match
 
 
