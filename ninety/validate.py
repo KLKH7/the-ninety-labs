@@ -388,7 +388,10 @@ def goal_crossing_problem(goal: dict, events: list[dict], by_frame: dict, fps: f
     vx, vy, vz = b1["x"] - b0["x"], b1["y"] - b0["y"], b1["z"] - b0["z"]  # metres per frame
     if vx * inward >= 0:
         return "ball not moving toward the goal line the frame before"
-    t = (line - b1["x"]) / vx  # frames until the centre reaches the line
+    # Law 10: a goal when the whole ball is over the line, its centre a radius beyond it. A ball
+    # rolling along the line may have its centre past the line well before that.
+    over = line - inward * BALL_RADIUS_M
+    t = max(0.0, (over - b1["x"]) / vx)  # frames until the whole ball is over
     speed = math.sqrt(vx * vx + vy * vy + vz * vz) / dt
     # Error of a straight-line extrapolation over t frames from a velocity measured half a frame
     # earlier: the largest acceleration (drag at this speed, gravity) over (t + 0.5) frames,

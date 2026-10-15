@@ -92,6 +92,15 @@ BOARDS_M = 4.0  # verify: advertising boards behind the lines stop a ball (and p
 RESTART_DELAY_S = {"throw_in": (3, 8), "goal_kick": (6, 10), "free_kick": (4, 10),
                    "kick_off": (1, 2)}  # verify (R1); kickoff: design, long enough to see;
 # corners have no timer: taken when the teams are ready (setpieces.advance)
+# S9 (design): the corner scenario opens with a home winger on the ball this far from the goal
+# line he attacks and from his touchline, plays the attack out, and keeps the first one that play
+# turns into a home corner within CORNER_WITHIN_S; it gives up on an attack once the away side has
+# the ball ATTACK_OVER_M or more from that goal line.
+WIDE_FROM_GOAL_LINE_M = (13.0, 25.0)
+WIDE_FROM_TOUCHLINE_M = 8.0
+CORNER_WITHIN_S = 20.0
+ATTACK_OVER_M = 40.0
+CORNER_ATTEMPTS = 1000
 NO_OFFSIDE_FROM = ("throw_in", "goal_kick", "corner")  # Law 11: no offside offence direct from these
 INTERCEPT_SHARE = 0.85  # design: taken before this share of the way to its target, a pass is intercepted
 
@@ -1419,32 +1428,42 @@ class Engine:
         # and can get there first commits to it, rather than keep shadowing.
         self.plan_chase()
 
-    def open_with_corner(self) -> None:
-        """Scenario mode: the clip opens with the ball just out of play for a home corner, with the
-        players where open play by that goal line put them, so the set-up itself is filmed. The
-        side and the crossing point are drawn from the seed (S9)."""
-        side = self.rng.choice([0.0, PITCH_Y])
-        crossed = abs(side - self.rng.uniform(4.0, 14.0))  # where it went over the goal line (design)
-        # Players stand where the game had them: the home side attacking at that end, the away
-        # side defending, from the same shape rules as open play with the ball by the line.
-        self.ball = (PITCH_X - 2.0, crossed, 0.0, 0.0, 0.0, 0.0)
+    def open_with_wide_attack(self) -> None:
+        """Scenario mode: the clip opens in play with a home winger on the ball by the touchline
+        in the final third, and everyone where the open-play shape rules put them for that ball
+        (S9). The wing, and how far from the goal line, are drawn from the seed. Nothing more is
+        set: whatever happens next is played."""
+        winger = self.rng.choice([p for p in self.players if p.team == "home" and p.role in ("RW", "LW")])
+        y = WIDE_FROM_TOUCHLINE_M if winger.ay < PITCH_Y / 2 else PITCH_Y - WIDE_FROM_TOUCHLINE_M
+        x = PITCH_X - self.rng.uniform(*WIDE_FROM_GOAL_LINE_M)
+        self.ball = (x, y, 0.0, 0.0, 0.0, 0.0)
         self.poss_team = "home"
         for _ in range(2):  # shape, then re-read the game from where that shape put everyone
             for team, brain in self.brains.items():
-                bx, by = self.ball[0], self.ball[1]
-                reach = {p.id: p.physique.time_to_cover(math.hypot(p.x - bx, p.y - by), 0.0)
+                reach = {p.id: p.physique.time_to_cover(math.hypot(p.x - x, p.y - y), 0.0)
                          for p in self.players if p.team == team and p.role != "GK"}
-                brain.update(self.t, team == "home", self.ball[0], reach)
+                brain.update(self.t, team == "home", x, reach)
             for p in self.players:
                 p.x, p.y, _ = self.shape_target(p)
-        # The away defender nearest the line put it out: he stands just inside it.
-        clearer = min((p for p in self.players if p.team == "away" and p.role != "GK"),
-                      key=lambda p: math.hypot(p.x - PITCH_X, p.y - crossed))
-        clearer.x, clearer.y = PITCH_X - 1.5, crossed
-        self.ball = (PITCH_X + 0.5, crossed, 0.0, 0.0, 0.0, 0.0)  # at rest, just out of play
-        self.last_touch = clearer.id
-        self.emit("out_of_play", "away", PITCH_X, crossed)
-        self.stop("corner", "home", (PITCH_X, side))
+        winger.x, winger.y = x - CONTROL_M / 2, y  # the ball at his feet, on the side he faces
+        winger.heading = 0.0
+        self.give(winger.id)
+
+    def play_until_corner(self) -> bool:
+        """Play on from the opening until the home side is given a corner (True), or the attack is
+        over (False): a goal, a goal kick, a corner the other way, the away side on the ball 40 m
+        or more from the goal being attacked, or CORNER_WITHIN_S gone (S9)."""
+        while self.t < CORNER_WITHIN_S:
+            self.step()
+            r = self.restart
+            if r and r.kind == "corner":
+                return r.team == "home"
+            if r and r.kind in ("goal_kick", "kick_off"):
+                return False
+            if self.possessor and self.team_of(self.possessor) == "away" and \
+                    PITCH_X - self.ball[0] >= ATTACK_OVER_M:
+                return False
+        return False
 
     def snapshot(self) -> None:
         bx, by, bz = self.ball[0], self.ball[1], self.ball[2]
@@ -1473,17 +1492,28 @@ class Engine:
         self.t += DT
         self.frame += 1
 
-    def run(self, minutes: float, scenario: str | None = None) -> Match:
-        if scenario == "corner":
-            self.open_with_corner()
-        elif scenario is None:
-            self.kickoff("home")
-        else:
-            raise ValueError(f"unknown scenario {scenario!r}; known: corner")
+    def run(self, minutes: float) -> Match:
+        self.kickoff("home")
         for _ in range(int(minutes * 60 * FPS)):
             self.step()
         return self.match
 
 
 def simulate(seed: int, minutes: float, scenario: str | None = None) -> Match:
-    return Engine(seed).run(minutes, scenario)
+    """A match from the kick-off, or a scenario clip. `corner`: attacks from a wide opening are
+    played out, each with its own engine seed (seed * 1000 + attempt), and the first one that play
+    turns into a home corner is kept and run on for `minutes` after the corner is given (S9). The
+    match records the engine seed it used. Selection among played-out attacks, never an
+    arranged one: corners from this scenario say nothing about how often play produces them."""
+    if scenario is None:
+        return Engine(seed).run(minutes)
+    if scenario != "corner":
+        raise ValueError(f"unknown scenario {scenario!r}; known: corner")
+    for attempt in range(CORNER_ATTEMPTS):
+        e = Engine(seed * CORNER_ATTEMPTS + attempt)
+        e.open_with_wide_attack()
+        if e.play_until_corner():
+            for _ in range(int(minutes * 60 * FPS)):
+                e.step()
+            return e.match
+    raise RuntimeError(f"no corner in {CORNER_ATTEMPTS} wide attacks from seed {seed}")

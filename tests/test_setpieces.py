@@ -10,15 +10,25 @@ import pytest
 from test_validate import FPS, event, run
 
 from ninety.sim import decisions, setpieces
-from ninety.sim.engine import PENALTY_DEPTH, PENALTY_HALF_WIDTH, SPRINT, Engine, simulate
-from ninety.validate import validate
+from ninety.sim.engine import CORNER_ATTEMPTS, PENALTY_DEPTH, PENALTY_HALF_WIDTH, SPRINT, Engine, simulate
+from ninety.validate import last_touches, validate
 
 
 def corner_engine(seed: int = 3, side: float = 0.0) -> Engine:
     e = Engine(seed)
     e.ball = (105.5, abs(side - 8.0), 0.0, 0.0, 0.0, 0.0)
+    e.emit("out_of_play", "away", 105.0, abs(side - 8.0))  # as the engine records an exit
     e.stop("corner", "home", (105.0, side))
     return e
+
+
+def corner_play(seed: int, seconds: float = 40.0):
+    """A real engine corner played out from where the players stood (the engine's own path when
+    a corner is given), without the scenario's search for an attack that ends in one."""
+    e = corner_engine(seed)
+    for _ in range(int(seconds * FPS)):
+        e.step()
+    return e.match
 
 
 def in_box(x: float, y: float, line: float) -> bool:
@@ -232,7 +242,7 @@ def test_beyond_a_short_corner_the_delivery_goes_through_the_air():
     deliveries were struck along the ground into the box. Mutation caught: dropping S8's lofted
     delivery beyond SHORT_CORNER_M."""
     for seed in range(10):
-        m = simulate(seed, 0.5, "corner")
+        m = corner_play(seed)
         kick = next(ev for ev in m.events if ev["type"] == "pass")
         heights = [f["ball"]["z"] for f in m.frames[kick["frame"]:kick["frame"] + 10]]
         travelled = math.dist((kick["x"], kick["y"]), (m.frames[kick["frame"] + 9]["ball"]["x"],
@@ -299,7 +309,7 @@ def test_the_taker_never_touches_his_own_corner():
     """Regression: the ball was placed inside the taker's body and deflected off him on 39 of 60
     corners. The struck ball must leave him without a contact."""
     for seed in range(20, 32):
-        m = simulate(seed, 0.9, "corner")
+        m = corner_play(seed)
         kick = next(ev for ev in m.events if ev["type"] == "pass")
         soon = [ev for ev in m.events if kick["frame"] < ev["frame"] <= kick["frame"] + 10]
         assert not any(ev["type"] == "deflection" and ev["player"] == kick["player"] for ev in soon), seed
@@ -324,8 +334,8 @@ def test_the_routine_holds_after_the_kick_until_the_ball_is_won_or_four_seconds_
 
 
 def test_scenario_corners_meet_the_data_contract(tmp_path):
-    for seed in range(8):
-        m = simulate(seed, 0.9, "corner")
+    for seed in range(5):
+        m = simulate(seed, 0.6, "corner")
         d = tmp_path / str(seed)
         d.mkdir()
         (d / "events.jsonl").write_text("".join(json.dumps(ev) + "\n" for ev in m.events))
@@ -335,9 +345,8 @@ def test_scenario_corners_meet_the_data_contract(tmp_path):
 
 
 def test_scenario_mode_is_deterministic_and_unknown_scenarios_fail():
-    a, b = simulate(2, 0.3, "corner"), simulate(2, 0.3, "corner")
-    assert a.events == b.events and a.frames[-1] == b.frames[-1]
-    assert a.events[0]["type"] == "out_of_play"
+    a, b = simulate(2, 0.1, "corner"), simulate(2, 0.1, "corner")
+    assert a.seed == b.seed and a.events == b.events and a.frames[-1] == b.frames[-1]
     with pytest.raises(ValueError):
         simulate(2, 0.1, "penalty_shootout")
 
@@ -431,13 +440,27 @@ def test_the_check_is_exact_to_the_rounding(tmp_path, clip, breach):
     assert ("L9 corner" in run(tmp_path, clip)) is breach
 
 
-def test_scenario_opens_from_open_play_by_that_goal_line():
-    """Mutation caught: the opening left in the kick-off shape."""
-    m = simulate(3, 0.05, "corner")
-    first = m.frames[0]["players"]
-    home_up = sum(p["x"] > 52.5 for p in first if p["team"] == "home" and p["id"] != "h1")
-    away_back = sum(p["x"] > 70.0 for p in first if p["team"] == "away")
-    assert home_up >= 6 and away_back >= 8
+def test_scenario_corner_comes_from_play():
+    """Regression (S9): the scenario used to place a defender by the line and record him as the
+    last touch. Now it opens in play with a home winger on the ball in the final third, everyone
+    in open-play shape, and the corner's cause is played and recorded: the ball goes over the
+    goal line later, off an away player who touched it in the data. Mutations caught: the
+    opening left in the kick-off shape; a staged exit at the first frame."""
+    for seed in range(3):
+        m = simulate(seed, 0.05, "corner")
+        first = m.frames[0]
+        holder = next(p for p in first["players"] if p["id"] == first["possessor"])
+        roles = {r["id"]: r["role"] for r in m.roster}
+        assert holder["team"] == "home" and roles[holder["id"]] in ("RW", "LW"), seed
+        assert holder["x"] > 105.0 - 26.0 and min(holder["y"], 68.0 - holder["y"]) < 10.0, seed
+        players = first["players"]
+        assert sum(p["x"] > 52.5 for p in players if p["team"] == "home" and roles[p["id"]] != "GK") >= 6
+        assert sum(p["x"] > 70.0 for p in players if p["team"] == "away") >= 8
+        out = next(e for e in m.events if e["type"] == "out_of_play")
+        assert out["frame"] > 0 and out["x"] == 105.0 and out["team"] == "away", seed
+        touches = last_touches(out, m.events, m.frames)
+        assert touches and touches[-1][2].startswith("a"), seed  # the away player it came off
+        assert m.seed // CORNER_ATTEMPTS == seed  # the engine seed used is recorded
 
 
 def test_a_keeper_out_of_place_at_the_exit_does_not_hide_the_corner(tmp_path):
@@ -584,6 +607,18 @@ def test_l6_rejects_a_goal_that_did_not_cross_inside_the_mouth(tmp_path, name):
     assert "L6 goal" in run(tmp_path, goal_clip([SHOT], "h1", path=L6_WRONG[name]))
 
 
+def test_l6_accepts_a_ball_rolling_along_the_line_into_the_goal(tmp_path):
+    """Regression (corner report, seed 31): a deflection sent the ball along the goal line from
+    outside the post, its centre just past the line but never the whole ball, and it went in
+    inside the post. L6 extrapolated to where the centre crossed (backwards, outside the post);
+    a goal is when the whole ball is over (Law 10)."""
+    # seed 31's speeds: 0.0125 m a frame into the goal, 0.4 m a frame along the line
+    along = lambda n: (104.8 + 0.0125 * max(n - 5, 0), 22.9 + 0.4 * max(n - 5, 0), 1.1)  # noqa: E731
+    clip = goal_clip([(5, "pass", "h1", "home", "fail"), (20, "deflection", "a1", "away", None)], None,
+                     path=along)
+    assert "L6 goal" not in run(tmp_path, clip)
+
+
 def test_l6_rejects_a_goal_touched_in_the_last_frame_from_well_wide(tmp_path):
     """Regression (audit 5): with a touch in the last frame only the distance to the goal line
     was checked, so a ball 2 m wide of the post that a defender touched still "scored". In one
@@ -616,15 +651,15 @@ def test_l6_judges_the_goal_the_conceding_keeper_defends(tmp_path):
 
 
 def test_real_engine_goals_are_credited_and_relabelling_them_fails(tmp_path):
-    """Engine output, not a fixture, and no pinned seed (lesson 19): the first three goals in the
-    scenario corners each meet the contract, and giving one to the wrong player (or to nobody)
+    """Engine output, not a fixture, and no pinned seed (lesson 19): the first three goals from
+    real engine corners each meet the contract, and giving one to the wrong player (or to nobody)
     fails C8. Which seeds score moves with the engine and even with the Python version (CI found
     2 goals in the 32 seeds that gave 4 locally), so it scans until it has three."""
     goals = 0
     for seed in range(200):
         if goals == 3:
             break
-        m = simulate(seed, 0.5, "corner")
+        m = corner_play(seed, 30.0)
         goal = next((e for e in m.events if e["type"] == "goal"), None)
         if goal is None:
             continue

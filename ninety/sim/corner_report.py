@@ -19,11 +19,11 @@ from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from statistics import median, quantiles
 
-from ninety.sim.engine import FPS, simulate
+from ninety.sim.engine import CORNER_ATTEMPTS, FPS, simulate
 from ninety.validate import validate
 
 ROOT = Path(__file__).resolve().parents[2]
-MINUTES = 0.75  # long enough for the set-up, the kick and 10 s after it
+MINUTES = 0.75  # after the corner is given: long enough for the set-up, the kick and 10 s after it
 AFTER_S = 10.0  # outcomes counted within this long of the kick
 TOUCHES = {"deflection", "interception", "tackle", "possession_change", "pass", "shot"}
 
@@ -32,7 +32,8 @@ def measure(seed: int) -> dict:
     m = simulate(seed, MINUTES, "corner")
     ev, frames = m.events, m.frames
     keepers = {r["id"]: r["team"] for r in m.roster if r.get("role") == "GK"}
-    ready = next(e for e in ev if e["type"] == "set_piece")
+    out = next(e for e in ev if e["type"] == "out_of_play" and e["x"] in (0.0, 105.0))
+    ready = next(e for e in ev if e["type"] == "set_piece" and e["frame"] > out["frame"])
     kick = next(e for e in ev if e["type"] == "pass" and e["frame"] >= ready["frame"])
     end = kick["frame"] + int(AFTER_S * FPS)
     first = None
@@ -61,7 +62,8 @@ def measure(seed: int) -> dict:
         "goal": any(e["type"] == "goal" and e["team"] == "home" for e in after),
         "shot": any(e["type"] == "shot" and e["team"] == "home" for e in after),
         "lofted": lofted, "flight": (landed - kick["t"]) if (landed and lofted) else None,
-        "ready_to_kick": kick["t"] - ready["t"], "out_to_kick": kick["t"] - ev[0]["t"],
+        "ready_to_kick": kick["t"] - ready["t"], "out_to_kick": kick["t"] - out["t"],
+        "attack_to_out": out["t"], "attempts": m.seed % CORNER_ATTEMPTS + 1,
         "end": (kick.get("end_x"), kick.get("end_y")),
     }
 
@@ -82,7 +84,8 @@ def report(rows: list[dict]) -> str:
         "# Corner scenario report",
         "",
         f"`uv run python -m ninety.sim.corner_report --seeds {n}`: seeds 0 to {n - 1}, "
-        f"{MINUTES} minutes each. A report, never a gate (docs/GROUNDING.md, R9).",
+        f"each a wide attack that play turned into a corner, run on {MINUTES} minutes after it "
+        "was given (S9). A report, never a gate (docs/GROUNDING.md, R9).",
         "",
         "| Measure | Result | Published |",
         "|---|---|---|",
@@ -97,6 +100,10 @@ def report(rows: list[dict]) -> str:
         f"| Lofted delivery, kick to first bounce or touch below 0.15 m | {spread(flights)} | |",
         f"| Ready (set-piece event) to kick | {spread([r['ready_to_kick'] for r in rows])} | |",
         f"| Out of play to kick | {spread([r['out_to_kick'] for r in rows])} | |",
+        f"| Wide attack to the ball going out for the corner | "
+        f"{spread([r['attack_to_out'] for r in rows])} | |",
+        f"| Wide attacks played per corner (selection, not a rate) | "
+        f"median {median(r['attempts'] for r in rows):.0f}, most {max(r['attempts'] for r in rows)} | |",
         f"| Distinct delivery end points (to 1 m) | "
         f"{len({(round(x), round(y)) for x, y in (r['end'] for r in rows) if x is not None})} / {n} | |",
     ]

@@ -206,3 +206,27 @@ short and actionable. This file is public: no research sources, product names or
   Determinism holds within one Python version, not across them.
 - **Check:** before pushing a test that runs the engine over seeds, run it on every Python
   version CI uses (`UV_PROJECT_ENVIRONMENT=<dir> uv run --python 3.11 pytest`).
+
+### 26. For a rare event, select among played situations; never stage its cause
+- **What happened:** to get corner clips, the scenario placed a defender by the goal line and
+  recorded him as the last touch, because open play rarely reached the line. The corner itself
+  was played, but its cause was written into the data without happening.
+- **Rule:** start from a situation that can plausibly lead to the event (here, a winger on the
+  ball in the final third), play it out, and keep the runs where play produces the event; give
+  each run its own seed and record it. Say in GROUNDING that this is selection, so nobody reads
+  the scenario's numbers as how often the event happens.
+- **Check:** in a scenario clip, every event before the one you wanted must have been played:
+  nothing at frame 0 except the opening state, and the cause (the exit and the touch it came
+  off) present in the data.
+
+### 27. Check the Law's condition, not a convenient proxy for it
+- **What happened:** the goal-mouth check extrapolated the ball's path to where its centre met
+  the goal line. Law 10 counts a goal when the whole ball is over. A ball deflected along the
+  line from outside the post had its centre past the line for half a second before the whole
+  ball went over inside the post; the check projected backwards and rejected a legal goal. The
+  fixtures never had a ball moving along the line, and the first test written for the fix
+  passed on the old code too (its error allowance hid the mistake).
+- **Rule:** write the check on exactly what the Law states (here, the whole ball), and build a
+  fixture with the real case's speeds, then confirm it fails before the fix.
+- **Check:** for each geometric check, list the ways the real ball can approach (straight,
+  along the line, dropping, rising) and have a fixture for each.
