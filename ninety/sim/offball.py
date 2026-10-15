@@ -307,3 +307,18 @@ def dive_progress(t: float) -> float:
     else:
         done = 0.5 * DIVE_PEAK_MPS * ramp + DIVE_PEAK_MPS * (t - ramp)
     return done / KEEPER_DIVE_TRAVEL_M
+
+
+def dive_speed(t: float) -> float:
+    """P15: the body's sideways speed `t` seconds into a dive (dive_progress's rate)."""
+    ramp = 2 * (DIVE_TIME_S - KEEPER_DIVE_TRAVEL_M / DIVE_PEAK_MPS)
+    return DIVE_PEAK_MPS * min(max(t, 0.0) / ramp, 1.0)
+
+
+def dive_time_to(metres: float) -> float:
+    """P15: how long into a dive the body has gone `metres` sideways (dive_progress inverted)."""
+    ramp = 2 * (DIVE_TIME_S - KEEPER_DIVE_TRAVEL_M / DIVE_PEAK_MPS)
+    pushed = 0.5 * DIVE_PEAK_MPS * ramp  # how far he goes while still speeding up
+    if metres <= pushed:
+        return math.sqrt(2 * metres * ramp / DIVE_PEAK_MPS)
+    return min(ramp + (metres - pushed) / DIVE_PEAK_MPS, DIVE_TIME_S)

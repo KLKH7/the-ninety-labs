@@ -688,7 +688,7 @@ def test_a_marker_chases_harder_when_his_man_runs_away_from_him_than_toward_him(
 
 
 def test_the_keeper_dives_toward_the_shot_after_reacting_then_is_down():
-    from ninety.sim.offball import DIVE_TIME_S, KEEPER_DIVE_TRAVEL_M
+    from ninety.sim.offball import DIVE_PEAK_MPS, DIVE_TIME_S, KEEPER_DIVE_TRAVEL_M
     e = Engine(1)
     k = e.keeper("away")
     k.x, k.y, k.vx, k.vy = 104.0, 34.0, 0.0, 0.0
@@ -701,9 +701,12 @@ def test_the_keeper_dives_toward_the_shot_after_reacting_then_is_down():
     y0 = k.y
     assert e.keeper_dive(k)
     for _ in range(int(DIVE_TIME_S * 25) + 2):
-        e.keeper_dive(k)
+        if not e.keeper_dive(k):
+            break
+        landed_at = k.y
         e.t += 1 / 25
-    assert 1.0 < k.y - y0 <= KEEPER_DIVE_TRAVEL_M + 1e-9  # launched toward it, no further than a dive goes
+    # launched toward it, no further than a dive goes (and what is left of the frame he lands in)
+    assert 1.0 < landed_at - y0 <= KEEPER_DIVE_TRAVEL_M + DIVE_PEAK_MPS / 25 + 1e-9
     assert e.dive is None and e.off_balance[k.id] > e.t - 1 / 25  # and down on the ground after it
 
 
@@ -777,10 +780,16 @@ def test_a_short_dive_is_the_same_push_over_sooner_and_travel_counts_the_arms_re
     travel = e.dive[3]
     when, cross, _ = e.ball_at_x(k.x)
     assert abs(travel - (abs(cross - y0) - offball.arm_reach_m(when))) < 1e-6  # his arms by then
-    for _ in range(int(offball.DIVE_TIME_S * 25)):
-        e.keeper_dive(k)
+    frames = 0
+    while e.keeper_dive(k):
+        frames += 1
         e.t += 1 / 25
-    assert abs(k.y - y0 - travel) < 1e-6  # done, and done early: a short dive is the same push
+    # done early, where the full dive's push takes him that far (and he carries on for the rest
+    # of that frame at the speed the push gave him)
+    reached = offball.dive_time_to(travel)
+    assert frames == math.ceil(reached * 25 - 1e-9) < offball.DIVE_TIME_S * 25
+    left = frames / 25 - reached
+    assert abs(k.y - y0 - travel - offball.dive_speed(reached) * left) < 1e-6
 
 
 def test_the_keeper_dives_at_a_dipping_shot_that_comes_in_under_the_bar():
@@ -1122,3 +1131,63 @@ def test_the_keeper_touches_a_ball_at_his_waist_that_he_cannot_yet_touch_under_t
         return e.ball[3] != -25.0 or e.possessor == k.id
     assert passes(1.0)
     assert not passes(2.6)
+
+
+def _dive_speeds(travel: float, vx: float = 0.0) -> tuple[list[float], list[float], int]:
+    """The keeper's sideways and forward speeds, frame by frame, over a dive of `travel` metres
+    and a second after it; and the frame he lands in."""
+    from ninety.sim.engine import DT
+    e = Engine(1)
+    k = e.by_id["a1"]
+    k.x, k.y, k.heading, k.vx, k.vy = 100.0, 34.0, math.pi, vx, 0.0
+    e.dive = (k.id, e.t, k.y, travel, e.t)
+    side, ahead, landed = [], [], None
+    for i in range(40):
+        x0, y0 = k.x, k.y
+        if not e.keeper_dive(k):
+            e.move_players()
+        elif e.dive is None:
+            landed = i
+        side.append((k.y - y0) / DT)
+        ahead.append((k.x - x0) / DT)
+        e.t += DT
+    return side, ahead, landed
+
+
+def test_every_dive_is_the_full_dives_push_so_a_short_one_is_no_harder_and_lands_slower():
+    # GROUNDING P15: one push for every dive; a shorter dive stops it sooner.
+    from ninety.sim import offball
+    from ninety.sim.engine import DT
+    ramp = 2 * (offball.DIVE_TIME_S - offball.KEEPER_DIVE_TRAVEL_M / offball.DIVE_PEAK_MPS)
+    push = offball.DIVE_PEAK_MPS / ramp * DT  # the full dive's gain in speed per frame
+    landings = []
+    for travel in (0.2, 0.5, 0.9, offball.KEEPER_DIVE_TRAVEL_M):
+        side, _, landed = _dive_speeds(travel)
+        assert landed is not None
+        gains = [b - a for a, b in zip(side, side[1:landed + 1], strict=False)]
+        assert max(gains) <= push + 1e-9 and max(side) <= offball.DIVE_PEAK_MPS + 1e-9
+        landings.append(side[landed])
+    assert landings == sorted(landings) and landings[0] < landings[-1]
+
+
+def test_a_keeper_who_lands_slows_on_the_ground_and_does_not_stop_dead():
+    # GROUNDING P2: on the ground he slows no faster than a body brakes, from the speed he landed at.
+    from ninety.sim import offball
+    from ninety.sim.engine import BRAKE_MAX, DT
+    for travel in (0.2, 0.5, offball.KEEPER_DIVE_TRAVEL_M):
+        side, _, landed = _dive_speeds(travel)
+        after = side[landed:]
+        assert after[0] > 1.0  # still moving when he lands
+        drops = [a - b for a, b in zip(after, after[1:], strict=False)]
+        assert max(drops) <= BRAKE_MAX * DT + 1e-9
+        assert min(abs(v) for v in after) < 0.05  # and comes to rest (then gets up and goes back)
+
+
+def test_a_keeper_who_dives_while_running_brakes_his_run_and_does_not_stop_dead():
+    # GROUNDING P2: the dive moves him sideways; the run he was making brakes as hard as legs allow.
+    from ninety.sim.engine import BRAKE_MAX, DT
+    _, ahead, landed = _dive_speeds(1.0, vx=-4.0)
+    run = ahead[:landed + 1]
+    assert run[0] < -3.0  # he does not stop dead
+    for a, b in zip(run, run[1:], strict=False):
+        assert b - a <= BRAKE_MAX * DT + 1e-9
