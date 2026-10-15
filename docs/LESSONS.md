@@ -136,3 +136,32 @@ short and actionable. This file is public: no research sources, product names or
 ### 17. The ground truth is the answer key
 - **Rule:** ground truth is used only for training labels and scoring. Nothing on the live path
   reads it. Whatever makes the video must also write the truth, so no generative video.
+
+### 19. Persisted replay prompts are an interface
+- **What happened:** making a rejection reason more specific changed the Analyst retry prompt,
+  so an existing recorded slice stopped replaying even though the workflow behavior was valid.
+- **Rule:** re-record the replay in the same pull request as any change to text that reaches a
+  recorded prompt (fact-checker reasons, agent instructions). Never make the replayer tolerate a
+  changed prompt: a shim that rewrites new wording back to old pairs an old answer with a new
+  question.
+- **Check:** run the committed replay fixture after changing fact-checker diagnostics.
+
+### 20. One clock for viewers and agents
+- **What happened:** agent-facing minute and second values were rounded and combined differently
+  from the scorebug's floored elapsed clock, producing off-by-one timestamps and occasional
+  second 60 values.
+- **Rule:** build the displayed clock in one shared function, and keep football's ordinal minute
+  as a separate field.
+- **Check:** compare every compact event's clock and seconds with the scorebug clock at its event
+  timestamp, including fractional seconds near a minute boundary.
+
+### 22. An evaluation's true labels must be true, and must not be quoted in the prompt
+- **What happened:** the fact-checker evaluation put "cautious" on every completed pass,
+  including one of 42 m at 96 km/h, and labelled the claim true; the Judge rejecting it was
+  counted as an error. The tone words being tested were also listed in the Judge's own
+  instructions, so a good score partly measured the quote.
+- **Rule:** attach a descriptive word only to events whose fields fit it, with the condition
+  written before reading any model output; test generalisation on words the prompt never uses.
+- **Check:** `tests/test_judge.py` fails if an evaluated tone word appears in the instructions,
+  or a tone claim is built on an event outside its condition.
+

@@ -24,6 +24,7 @@ from collections import Counter
 from contextlib import contextmanager
 from pathlib import Path
 
+from ninety.match.clock import match_clock
 from ninety.render import RENDERER_VERSION
 from ninety.render.camera import Camera, Director, blur_vector
 from ninety.render.params import RenderParams, sample_params
@@ -297,7 +298,7 @@ def render_clip(
             score = [
                 sum(1 for g in goals if g["team"] == team and g["t"] <= fr["t"]) for team in ("home", "away")
             ]
-            clock = f"{int(fr['t'] // 60):02d}:{int(fr['t'] % 60):02d}"
+            clock = match_clock(fr["t"])
             recent = [g for g in goals if 0 <= fr["t"] - g["t"] <= 2.5]
             last = recent[-1] if recent else None
             res = pg.evaluate(
