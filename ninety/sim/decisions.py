@@ -18,7 +18,6 @@ from dataclasses import dataclass
 
 from ninety.sim import ball, threat
 from ninety.sim import value as possession
-from ninety.sim.profiles import FOOT_ABSORB_MPS
 
 PITCH_X, PITCH_Y = 105.0, 68.0
 GOAL_HALF_WIDTH = 3.66
@@ -35,7 +34,6 @@ PRESSURE_FRONT_M, PRESSURE_BEHIND_M = 9.0, 3.0  # D2: pressure zone, longer in f
 SHOT_ANCHORS = ((0.0, 0.31), (3.0, 0.31), (11.0, 0.177), (20.0, 0.053), (30.0, 0.023), (40.0, 0.01),
                 (105.0, 0.0))
 BLOCKER_FACTOR = 0.5  # design: each defender in the shooting cone halves the estimate
-CHOICE_NOISE_FLOOR = 0.005  # design, verify: options closer than about this (in goals) are a near coin-flip
 HOLD_DECAY = 0.1  # design, verify: share of the ball's worth lost per decision spent holding
 STALE_S = 2.0  # design: a team-mate not seen for this long is a less certain option
 # D8: the tackle race, shared by the defender deciding to commit (engine.duels) and the carrier
@@ -49,8 +47,7 @@ LEAD_MAX_S = 2.0  # design: and he leads him by at most this long
 LOFT_OVER_M = 25.0
 RECEIVE_HEIGHT_M = 1.0  # a dropping ball is taken on the foot or thigh below about this height
 LOFT_DEG = 30.0  # design: the launch angle of a lofted pass or a throw, as estimated and as struck
-# A4: the passer's guess of what a first touch can kill: an average player's (one definition, profiles).
-CONTROL_EST_MPS = FOOT_ABSORB_MPS[0] + FOOT_ABSORB_MPS[1] * 0.5
+CONTROL_EST_MPS = 18.0  # A4: the passer's guess of what a first touch can kill: the average (12 + 12 × 0.5)
 CONTROL_MARGIN_MPS = 2.0  # design: how sharply that guess falls off
 GOAL_KICK_M = 5.5  # Law 16: a goal kick is taken from the goal area
 STICKY = 0.003  # design: a small bonus for carrying on with the current choice (no flip-flopping)
@@ -421,7 +418,7 @@ def choose(scene: Scene, rng: random.Random) -> Option:
     spread = math.sqrt(sum((v - mean) ** 2 for v in values) / len(values))
     # D4: the randomness is a share of how far apart the options are, so a choice between close
     # options is loose and one between clearly different options is not, wherever on the pitch.
-    t = temperature(scene) * max(spread, CHOICE_NOISE_FLOOR)
+    t = temperature(scene) * max(spread, 1e-4)
     top = max(o.value for o in opts)
     weights = [math.exp((o.value - top) / t) for o in opts]
     return rng.choices(opts, weights=weights)[0]

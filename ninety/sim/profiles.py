@@ -126,7 +126,6 @@ WEAK_FOOT_ERROR = 3.8 / 3.0  # A3: about 27% wider on the weaker foot ...
 WEAK_FOOT_SPEED = 0.88  # A3: ... and about 12% slower
 FATIGUE_ERROR = 0.25  # A3: design, *verify*: about 25% wider when the slow store (P10) is spent
 SPEED_ERROR = 0.06  # design: spread of struck speed, as a share
-FOOT_ABSORB_MPS = (12.0, 12.0)  # A4: a first touch kills 12 m/s plus 12 m/s more at full first-touch skill
 READ_ERROR_M = 1.5  # design: spread of a keeper's read of a shot's aim, at average anticipation
 LOFT_ERROR_DEG = 2.0  # design: spread of launch angle
 TURN_ERROR = 0.5  # design: error widens by up to half again for a ball struck across the body
@@ -230,7 +229,7 @@ class Profile:
         about 16 m/s; arXiv 2210.16474); *design*, *verify*."""
         if hands:
             return 16.0 + 12.0 * self["handling"]
-        return FOOT_ABSORB_MPS[0] + FOOT_ABSORB_MPS[1] * self["first_touch"]
+        return 12.0 + 12.0 * self["first_touch"]
 
     # ---- A3: execution -------------------------------------------------------
     def kick_error(self, skill: str, speed: float, pressure: float, capacity: float,

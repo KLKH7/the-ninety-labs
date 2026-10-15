@@ -925,9 +925,9 @@ class Engine:
             onside = self.onside_limit(p.team, seen, bx)  # L10: as far as he sees he may go
             spot = offball.attacking_slot(p.role, PITCH_X - goal_x(p.team), clamp(bx, 0, PITCH_X),
                                           clamp(by, 0, PITCH_Y), onside)
-            if spot:
+            if spot:  # with the ball still in flight he drifts there; he runs once it is settled
                 far = math.hypot(spot[0] - p.x, spot[1] - p.y) > FAR_OUT_OF_POSITION_M
-                return *spot, RECOVER if far else SHAPE
+                return *spot, RECOVER if far and self.possessor else SHAPE
         if not brain.in_possession and p.role != "GK":
             own = PITCH_X - goal_x(p.team), PITCH_Y / 2
             d = math.hypot(own[0] - bx, own[1] - by) or 1.0

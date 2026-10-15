@@ -140,14 +140,14 @@ the chosen action is decided by physics and execution error, so an estimate can 
 
 | ID | Check | Source | Validator | Engine |
 |---|---|---|---|---|
-| R1 | ball in play about 55 to 60 of 90 minutes | competition reports (*verify*) | ❌ | ❌ only 4 to 8 restarts a match: passes are aimed at team-mates and there are no clearances or crosses, so the ball rarely goes out |
-| R2 | outfield players cover about 9 to 11 km per 90 minutes, by position | World Cup tracking ([Ortega 2022](https://www.wbc.poznan.pl//Content/522956/2_Ortega_TSS_2022_292_51-56.pdf)) | ❌ (report: `ninety.sim.patterns`) | 🟡 11.6 to 12.5 km for defenders and midfielders, wingers 14.1, forwards 15.3: above the published 9.1 to 10.7 (players do not yet choose when to stand still) |
-| R3 | pass completion about 75 to 88 percent | competition reports (*verify*) | ❌ | ✅ 79 to 82 percent, emerging from lane, reach and control estimates and physics; but about 1,500 passes a match, roughly 1.5 times real |
-| R4 | shots and goals per match in the usual range | competition reports (*verify*) | ❌ | 🟡 about 8 shots (42% inside the box), 3.7 on target and 1.3 goals a match; 69% of shots on target saved (real about 70%) |
+| R1 | ball in play about 55 to 60 of 90 minutes | competition reports (*verify*) | ❌ | 🟡 about 70 restarts a match (real about 70 to 80); ball-in-play time not yet measured |
+| R2 | outfield players cover about 9 to 11 km per 90 minutes, by position | World Cup tracking ([Ortega 2022](https://www.wbc.poznan.pl//Content/522956/2_Ortega_TSS_2022_292_51-56.pdf)) | ❌ (report: `ninety.sim.patterns`) | 🟡 centre-backs 10.4 km, full-backs 11.4, midfielders 11.8, wingers 13.0, forwards 13.2: attackers above the published 9.6 |
+| R3 | pass completion about 75 to 88 percent | competition reports (*verify*) | ❌ | ✅ 84 percent on about 1,360 passes a match (passes above the real 900 to 1,000) |
+| R4 | shots and goals per match in the usual range | competition reports (*verify*) | ❌ | ❌ about 7 shots (35% inside the box), 3 on target and 1 goal a match; 68% of shots on target saved (real about 70%). Attacks reach the box too rarely; most interceptions come from lofted passes |
 | R5 | each position spends its time in realistic areas | sports science (*verify*) | ❌ | ❓ |
-| R6 | match top speed by position about 7.9 to 8.6 m/s (capability is higher; few sprints last long enough to reach it) | World Cup tracking ([Ortega 2022](https://www.wbc.poznan.pl//Content/522956/2_Ortega_TSS_2022_292_51-56.pdf)) | ❌ (report) | 🟡 6.5 to 7.4 m/s, below the published 7.9 to 8.6 |
-| R7 | high-intensity running in the last 15 minutes about 20 to 45 percent below the first 15 | Premier League tracking ([Bradley 2009](https://sure.sunderland.ac.uk/id/eprint/3478/)) | ❌ (report) | 🟡 54 percent lower, above the published 20 to 45 |
-| R8 | team length about 31 to 46 m and width about 35 to 48 m, more compact out of possession | systematic review of professional positional data ([Rico-González](https://www.termedia.pl/Reference-values-for-collective-tactical-behaviours-based-on-positional-data-in-professional-football-matches-a-systematic-review,78,43095,0,1.html)) | ❌ (report) | ✅ in possession 44 × 36; out of possession 38 × 34, more compact |
+| R6 | match top speed by position about 7.9 to 8.6 m/s (capability is higher; few sprints last long enough to reach it) | World Cup tracking ([Ortega 2022](https://www.wbc.poznan.pl//Content/522956/2_Ortega_TSS_2022_292_51-56.pdf)) | ❌ (report) | 🟡 6.8 to 7.4 m/s, below the published 7.9 to 8.6 |
+| R7 | high-intensity running in the last 15 minutes about 20 to 45 percent below the first 15 | Premier League tracking ([Bradley 2009](https://sure.sunderland.ac.uk/id/eprint/3478/)) | ❌ (report) | ✅ 38 percent lower (seeds vary 16 to 59) |
+| R8 | team length about 31 to 46 m and width about 35 to 48 m, more compact out of possession | systematic review of professional positional data ([Rico-González](https://www.termedia.pl/Reference-values-for-collective-tactical-behaviours-based-on-positional-data-in-professional-football-matches-a-systematic-review,78,43095,0,1.html)) | ❌ (report) | ✅ in possession 38 × 42; out of possession 31 × 35, more compact |
 
 ### Renderer truth: the labels match the pictures
 

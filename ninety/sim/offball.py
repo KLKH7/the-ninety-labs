@@ -109,15 +109,16 @@ def run_in_behind(player: tuple[float, float], line_x: float, goal_x: float,
 
 
 # O6: where each role stands while his team has the ball (design, *verify* against team shape in
-# possession: length about 31 to 46 m and width 35 to 48 m, Rico-Gonzalez review; formations in and
+# possession: length about 31 to 46 m and width 35 to 48 m, Rico-Gonzalez review, so the widest
+# players stand about 21 m either side of the centre; formations in and
 # out of possession differ, Shaw and Glickman 2019). Heights are metres from his own goal line,
 # relative to the ball; the attackers hold the opponents' last line, staying onside.
 # role: (metres behind the ball, or None for the opponents' last line; metres across from the centre)
 SHAPE_IN_POSSESSION = {
     "RCB": (24.0, -11.0), "LCB": (24.0, 11.0),
-    "RB": (8.0, -27.0), "LB": (8.0, 27.0),
+    "RB": (8.0, -18.0), "LB": (8.0, 18.0),
     "CM": (10.0, 0.0), "RCM": (3.0, -13.0), "LCM": (3.0, 13.0),
-    "RW": (None, -29.0), "LW": (None, 29.0), "ST": (None, 0.0),
+    "RW": (None, -21.0), "LW": (None, 21.0), "ST": (None, 0.0),
 }
 DEEPEST_M = 12.0  # nobody's in-possession spot is deeper than this from his own goal
 BALL_SIDE_IN_POSSESSION = 0.15  # the shape leans this share toward the ball's side

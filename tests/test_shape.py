@@ -10,7 +10,7 @@ def slot(role, ball_x=50.0, ball_y=34.0, line=80.0, own=0.0):
 
 def test_with_the_ball_the_team_spreads_wide_and_its_attackers_hold_the_last_line_onside():
     rb, lb = slot("RB"), slot("LB")
-    assert abs(rb[1] - lb[1]) > 45  # full-backs give width
+    assert 30 < abs(rb[1] - lb[1]) < 48  # full-backs give width, within published team widths
     st = slot("ST", ball_x=70.0, line=80.0)
     assert 78.0 <= st[0] < 80.0  # on their last line, a step onside
     assert slot("RCB")[0] < 50.0 < st[0]  # centre-backs behind the ball, striker ahead of it
