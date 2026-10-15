@@ -58,6 +58,9 @@ GOAL_TOUCHES = {"pass", "shot", "deflection", "interception", "tackle", "possess
 # keeper in his box (1.8 m), plus one frame of the ball's and the player's motion.
 CONTACTS = {"deflection", "interception"}
 FOOT_REACH_M, KEEPER_REACH_M, FRAME_SLACK_M = 1.0, 1.8, 0.6
+# P14 (P11): no player's head plays a ball higher than a jumping keeper's hands reach (the ball's
+# lowest point); only a keeper in his own box may play it higher, with his hands.
+TOUCH_HEIGHT_MAX_M = 2.8
 # P5: the goal frame (Law 1: posts 7.32 m apart, bar 2.44 m high) is a contact too; a ball
 # within this distance of it may rebound without an event.
 WOODWORK_NEAR_M = 0.6
@@ -254,8 +257,21 @@ def near_woodwork(b: dict) -> bool:
 
 
 def check_contacts(events: list[dict], frames: list[dict], keepers: set[str], problems: Problems) -> None:
-    """P14: a deflection or interception names a player who could have touched the ball."""
+    """P14: a deflection or interception names a player who could have touched the ball, and no touch
+    (those, a pass or a shot) is higher than a player can reach: a header at most, unless he is a
+    keeper in his own box."""
     by_frame = {f["frame"]: f for f in frames}
+    for e in events:
+        if e["type"] not in CONTACTS | {"pass", "shot"} or not e.get("player"):
+            continue
+        f = by_frame.get(e["frame"])
+        me = f and next((q for q in f["players"] if q["id"] == e["player"]), None)
+        if me is None:
+            continue
+        in_box = min(me["x"], 105 - me["x"]) <= PENALTY_DEPTH and abs(me["y"] - 34) <= PENALTY_HALF_WIDTH
+        if not (e["player"] in keepers and in_box) and f["ball"]["z"] > TOUCH_HEIGHT_MAX_M + FRAME_SLACK_M:
+            problems["P14 touch possible"].append(
+                f"{e['id']}: {e['type']} by {e['player']} with the ball {f['ball']['z']:.1f} m up")
     for e in events:
         if e["type"] not in CONTACTS or not e.get("player"):
             continue

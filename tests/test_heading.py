@@ -166,3 +166,29 @@ def test_a_ball_flying_past_him_that_he_cannot_bring_down_is_headed():
     play it. Mutation caught: an unchallenged ball never headed."""
     e, events = cross_at_head(None, CROSS)
     assert headers_in(e, events)
+
+
+def touches(z: float, who: str = "h1", x: float = 60.0) -> dict[str, list[str]]:
+    """check_contacts on one touch (a headed pass) by `who` standing at (x, 34) with the ball `z` up."""
+    from collections import defaultdict
+
+    from ninety.validate import check_contacts
+    frames = [{"frame": 0, "t": 0.0, "ball": {"x": x, "y": 34.0, "z": z}, "possessor": None,
+               "players": [{"id": who, "team": "home", "x": x, "y": 34.0}]}]
+    events = [{"id": "e1", "frame": 0, "type": "pass", "team": "home", "player": who}]
+    problems: dict[str, list[str]] = defaultdict(list)
+    check_contacts(events, frames, {"k1"}, problems)
+    return dict(problems)
+
+
+@pytest.mark.parametrize("z, who, x, flagged", [
+    (2.0, "h1", 60.0, False),  # a header
+    (3.39, "h1", 60.0, False),  # under a jumping keeper's hands, plus a frame of motion
+    (3.41, "h1", 60.0, True),  # over it
+    (3.6, "k1", 103.0, False),  # a keeper in his box, with his hands
+    (3.6, "k1", 60.0, True),  # a keeper outside it
+], ids=["header", "just under", "just over", "keeper in his box", "keeper outside his box"])
+def test_no_touch_is_higher_than_a_player_can_reach(z, who, x, flagged):
+    """P14 (P11). Mutations caught: the check dropped; its limit or slack widened; keepers exempt
+    everywhere; keepers not exempt in their box."""
+    assert ("P14 touch possible" in touches(z, who, x)) is flagged
