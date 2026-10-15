@@ -20,6 +20,7 @@ import random
 from dataclasses import dataclass, field
 
 from ninety.sim import ball, decisions, offball, perception, profiles
+from ninety.sim import team as team_mod
 from ninety.sim.body import BRAKE_MAX, CS_MEAN, D0, F0_MEAN, V0_MEAN, Body
 from ninety.sim.body import move as move_body
 from ninety.sim.profiles import Profile
@@ -38,7 +39,6 @@ DRIBBLE = 2.5
 DECIDE_EVERY = 6  # frames between the ball carrier's decisions (about 4 a second)
 PERCEIVE_EVERY = 6  # frames between a player's looks at the pitch (about 4 a second, staggered)
 BRAIN_EVERY = 12  # frames between a team brain's reads of the game (about 2 a second)
-ENGAGE_M = 20.0  # design: the first presser goes to the ball when it is this close
 COVER_M = 8.0  # design: the covering player stays this far behind the presser, goal-side
 PERCEPTION_ERR = 0.03  # verify: m/s of misjudged ball velocity per metre between player and ball
 CONTROL_M = 1.0  # a foot reaches this far from the body's centre
@@ -91,7 +91,7 @@ RESTART_DISTANCE_M = {"throw_in": 2.0, "corner": 9.15, "goal_kick": PENALTY_DEPT
 BOARDS_M = 4.0  # verify: advertising boards behind the lines stop a ball (and players) that go out
 RESTART_DELAY_S = {"throw_in": (3, 8), "goal_kick": (6, 10), "corner": (12, 20),
                    "free_kick": (4, 10),
-                   "kick_off": (3, 5)}  # verify (R1); a kickoff's: design, the set-up the broadcast shows
+                   "kick_off": (1, 2)}  # verify (R1); kickoff: design, long enough to see
 NO_OFFSIDE_FROM = ("throw_in", "goal_kick", "corner")  # Law 11: no offside offence direct from these
 INTERCEPT_SHARE = 0.85  # design: taken before this share of the way to its target, a pass is intercepted
 
@@ -203,7 +203,11 @@ class Engine:
                               "ratings": {a: p.profile.rating(a) for a in p.profile.attributes}}
                              for p in self.players]
         self.beliefs = {p.id: perception.Belief(next_scan=self.rng.uniform(0, 3)) for p in self.players}
-        self.brains = {team: TeamBrain(team) for team in ("home", "away")}
+        # T2, T3: each side plays a block of its own (design: equally likely), drawn from its own
+        # stream so the rest of the match's random draws do not shift with it.
+        style = random.Random(f"{seed}-style")
+        self.brains = {team: TeamBrain(team, block=style.choice(sorted(team_mod.BLOCKS)))
+                       for team in ("home", "away")}
         self.ball: ball.State = (PITCH_X / 2, PITCH_Y / 2, 0.0, 0.0, 0.0, 0.0)
         self.possessor: str | None = None
         self.last_touch: str | None = None
@@ -311,6 +315,11 @@ class Engine:
         self.last_touch = pid
         if pid != self.released_by:
             self.released_by = None
+        self.new_phase()
+        self.hold_until = self.t + settle_s(self.by_id[pid].profile["first_touch"])
+
+    def new_phase(self) -> None:
+        """Forget the last phase of play: a new carrier, or a kickoff."""
         self.dribbler = None
         self.last_deflection = None
         self.offside = set()
@@ -320,7 +329,6 @@ class Engine:
         self.runs = {}
         self.touched_since_kick = False
         self.chase = {}
-        self.hold_until = self.t + settle_s(self.by_id[pid].profile["first_touch"])
         self.dribble_to = None
 
     def kickoff_spot(self, p: Player, kicking: str) -> tuple[float, float]:
@@ -349,6 +357,8 @@ class Engine:
         self.emit("kickoff", team, taker.x, taker.y, player=taker.id)
         self.possessor = None
         self.poss_team = team
+        self.kicked = None
+        self.new_phase()
         self.stop("kick_off", team, (PITCH_X / 2, PITCH_Y / 2), taker.id)
 
     # ---- decisions: players choose, the kick gives the ball a velocity -------
@@ -905,6 +915,17 @@ class Engine:
 
     # ---- tick ---------------------------------------------------------------
 
+    def play_point(self) -> tuple[float, float]:
+        """Where play is, for setting shape (O8): once a pass is struck, everyone sees where it is
+        going and sets up for that, rather than chasing the ball's every metre in flight."""
+        bx, by = self.ball[0], self.ball[1]
+        if self.kicked and self.kicked["type"] == "pass" and self.pass_target and not self.last_deflection:
+            sx, sy = self.kicked["x"], self.kicked["y"]
+            tx, ty = self.pass_target
+            if (bx - sx) * (tx - sx) + (by - sy) * (ty - sy) < (tx - sx) ** 2 + (ty - sy) ** 2:
+                return self.pass_target  # still on its way there
+        return bx, by
+
     def ball_eta(self, x: float, y: float) -> float:
         """How soon the ball could next be played to (x, y) (O8): first it has to be somewhere a
         player can play it from, then a pass covers the distance at about a pass's average speed.
@@ -953,7 +974,7 @@ class Engine:
         if self.restart and p.id == self.restart.taker:
             r = self.restart
             return clamp(r.x, 0.5, PITCH_X - 0.5), clamp(r.y, 0.5, PITCH_Y - 0.5), RECOVER
-        bx, by = self.ball[0], self.ball[1]
+        bx, by = self.play_point()  # O8: where the ball is going, once a pass is struck
         poss_team = self.team_of(self.possessor) if self.possessor else None
         shift = (clamp(bx, 0, PITCH_X) - PITCH_X / 2) * 0.45
         push = 6 * attack_dir(p.team) if poss_team == p.team else -4 * attack_dir(p.team)
@@ -975,12 +996,14 @@ class Engine:
         if not brain.in_possession and p.id in brain.markers:
             mx, my = brain.markers[p.id]
             mx, my = clamp(mx, 0.5, PITCH_X - 0.5), clamp(my, 0.5, PITCH_Y - 0.5)
-            # His spot moves with his man, so he keeps up with him as well as getting there in time.
             seen = self.beliefs[p.id].seen
             man = min((q for q in self.players if q.team != p.team and q.id in seen),
                       key=lambda q: math.hypot(seen[q.id].x - mx, seen[q.id].y - my), default=None)
-            keep_up = math.hypot(seen[man.id].vx, seen[man.id].vy) if man else 0.0
-            return mx, my, self.in_time(p, mx, my) + keep_up
+            # His spot moves with his man: he matches the man's velocity and closes the gap on top.
+            mvx, mvy = (seen[man.id].vx, seen[man.id].vy) if man else (0.0, 0.0)
+            gap = math.hypot(mx - p.x, my - p.y)
+            close = self.in_time(p, mx, my) / gap if gap > 1e-6 else 0.0
+            return mx, my, math.hypot(mvx + (mx - p.x) * close, mvy + (my - p.y) * close)
         carrier = self.by_id.get(self.possessor) if self.possessor else None
         if brain.in_possession and carrier and carrier.team == p.team and p.role != "GK":
             run = self.run_target(p, carrier, brain)
@@ -1011,8 +1034,7 @@ class Engine:
             if self.restart and self.restart.team != p.team:  # Laws 15 to 17: stand off the restart
                 gap = RESTART_DISTANCE_M[self.restart.kind]
             presser = self.by_id[brain.pressers[0]] if brain.pressers else None
-            engaged = (presser is not None and math.hypot(bx - presser.x, by - presser.y) < ENGAGE_M
-                       and brain.presses(self.t, bx))
+            engaged = presser is not None and brain.presses(self.t, bx)
             if presser is p and engaged:
                 # Press goal-side, a step away, matching where the carrier is going (D8: a defender
                 # keeps his speed relative to the attacker small rather than holding a spot).
@@ -1047,7 +1069,7 @@ class Engine:
     def perceive_and_think(self) -> None:
         """Players look at the pitch about four times a second, staggered so they do not all look
         on the same frame; each team brain reads the game about twice a second."""
-        bx, by = self.ball[0], self.ball[1]
+        bx, by = self.play_point()
         states = [(p.id, p.x, p.y, p.vx, p.vy) for p in self.players]
         for i, p in enumerate(self.players):
             if (self.frame + i) % PERCEIVE_EVERY == 0:

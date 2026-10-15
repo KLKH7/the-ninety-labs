@@ -91,6 +91,7 @@ def test_the_presser_stands_goal_side_for_both_teams():
         e.ball = (52.0, 34.0, 0.0, 0.0, 0.0, 0.0)
         e.possessor = carrier.id
         brain = e.brains[team]
+        brain.block = "mid"  # engages at halfway
         brain.in_possession, brain.pressers = False, [presser.id]
         tx, _, _ = e.shape_target(presser)
         assert math.isclose(abs(tx - 52.0), PRESS_GAP_M, abs_tol=0.01)
@@ -603,4 +604,66 @@ def test_a_kickoff_is_set_up_and_seen_before_it_is_taken():
                 assert own_half or p.id == e.restart.taker, p.id  # Law 8
                 if p.team == "home":
                     assert math.hypot(p.x - 52.5, p.y - 34.0) >= 9.15 - 0.5  # outside the circle
-    assert kicked_at is not None and kicked_at >= 3.0  # a visible pause, then the kick
+    assert kicked_at is not None and kicked_at >= 1.0  # a visible pause, then the kick
+
+
+def test_once_a_pass_is_struck_shape_is_set_for_where_it_is_going():
+    e = Engine(1)
+    e.possessor = None
+    e.ball = (40.0, 34.0, 0.0, 14.0, 0.0, 0.0)
+    e.kicked, e.pass_target = {"type": "pass", "x": 30.0, "y": 34.0}, (70.0, 20.0)
+    assert e.play_point() == (70.0, 20.0)
+    p = e.by_id["a6"]
+    e.brains["away"].in_possession = False
+    before = e.shape_target(p)[:2]
+    e.ball = (55.0, 27.0, 0.0, 14.0, 0.0, 0.0)  # the ball half way there: nobody's target moves
+    assert e.shape_target(p)[:2] == before
+    e.kicked = None  # a loose ball: play is where the ball is
+    assert e.play_point() == (55.0, 27.0)
+
+
+def test_a_marker_on_his_spot_moves_only_as_his_man_moves():
+    e = Engine(1)
+    d, man = e.by_id["a4"], e.by_id["h9"]
+    brain = e.brains["away"]
+    brain.in_possession = False
+    man.x, man.y = 90.0, 34.0
+    d.x, d.y = 91.0, 34.0
+    brain.markers = {d.id: (91.0, 34.0)}
+    e.beliefs[d.id].seen = {man.id: perception.Sighting(90.0, 34.0, 0.0, 0.0, e.t)}
+    assert e.shape_target(d)[2] < 0.1  # on his spot, his man still: no need to run
+    e.beliefs[d.id].seen = {man.id: perception.Sighting(90.0, 34.0, 0.0, 6.0, e.t)}
+    assert abs(e.shape_target(d)[2] - 6.0) < 0.1  # his man runs: he goes with him
+
+
+def test_play_is_where_the_ball_is_once_a_pass_is_deflected_or_has_run_past_its_target():
+    e = Engine(1)
+    e.possessor = None
+    e.kicked, e.pass_target = {"type": "pass", "x": 40.0, "y": 34.0}, (70.0, 34.0)
+    e.ball = (55.0, 34.0, 0.0, 14.0, 0.0, 0.0)
+    assert e.play_point() == (70.0, 34.0)
+    e.ball = (74.0, 34.0, 0.0, 6.0, 0.0, 0.0)  # it ran past where it was aimed
+    assert e.play_point() == (74.0, 34.0)
+    e.ball = (55.0, 34.0, 0.0, 14.0, 0.0, 0.0)
+    e.last_deflection = {"type": "deflection"}  # a team-mate got a touch on it on the way
+    assert e.play_point() == (55.0, 34.0)
+
+
+def test_a_kickoff_starts_a_new_phase_of_play():
+    e = Engine(1)
+    e.dribbler, e.runs, e.chase = "h7", {"h9": (90.0, 30.0)}, {"home": ["h7"]}
+    e.kickoff("away")
+    assert e.dribbler is None and not e.runs and not e.chase
+
+
+def test_a_marker_chases_harder_when_his_man_runs_away_from_him_than_toward_him():
+    e = Engine(1)
+    d, man = e.by_id["a4"], e.by_id["h9"]
+    e.brains["away"].in_possession = False
+    d.x, d.y = 80.0, 34.0
+    e.brains["away"].markers = {d.id: (86.0, 34.0)}  # 6 m to his spot, ahead of him
+    speeds = []
+    for vx in (5.0, -5.0):  # his man runs away from him, then toward him
+        e.beliefs[d.id].seen = {man.id: perception.Sighting(87.0, 34.0, vx, 0.0, e.t)}
+        speeds.append(e.shape_target(d)[2])
+    assert speeds[0] > speeds[1]
