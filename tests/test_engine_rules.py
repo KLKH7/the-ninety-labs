@@ -1014,3 +1014,22 @@ def test_nobody_counts_as_reaching_a_struck_ball_before_reacting():
     _alone_with(e, (40.5, 34.0))  # right at the kicker's feet, as the ball leaves him
     e.ball = (40.0, 34.0, 0.0, 20.0, 0.0, 0.0)  # struck hard away from both
     assert e.ball_destination()[0] > 45.0
+
+
+def test_nobody_counts_as_reaching_it_anywhere_inside_the_reaction_window():
+    e = Engine(1)
+    _alone_with(e, (42.4, 34.0))  # the ball passes him 0.12 s after the strike: before he can react
+    e.ball = (40.0, 34.0, 0.0, 20.0, 0.0, 0.0)
+    assert e.ball_destination()[0] > 46.0
+
+
+def test_a_kick_clears_a_downed_keeper_before_judging_where_play_goes():
+    e = Engine(1)
+    p = e.by_id["h6"]
+    e.give(p.id)
+    e.landed = ("a1", e.t - 5.0)
+    seen = []
+    judge = e.ball_destination
+    e.ball_destination = lambda: (seen.append(e.landed), judge())[1]
+    e.kick(p, 15.0, 0.0, 0.0)
+    assert seen == [None]
