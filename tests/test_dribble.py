@@ -69,3 +69,26 @@ def test_no_push_when_a_seen_opponent_gets_to_it_first():
     assert push(53.0) is None  # he could not be back on it before a4
     far = push(70.0)
     assert far is not None and far <= push(None)
+
+
+def test_his_own_body_does_not_knock_on_a_touch_he_is_not_back_on_yet():
+    e, att, _ = carry_in_space()
+    assert not [ev for ev in e.match.events if ev["type"] == "deflection" and ev.get("player") == att.id]
+
+
+def test_the_push_allows_for_his_own_kick_error():
+    def push(exact: bool) -> float:
+        e = Engine(3)
+        att = e.by_id["h9"]
+        for p in e.players:
+            p.vx = p.vy = 0.0
+            if p is not att:
+                p.x, p.y = (2.0, 2.0) if p.team == "home" else (103.0, 66.0)
+        att.x, att.y, att.vx, att.heading = 50.0, 34.0, 4.0, 0.0
+        if exact:
+            att.profile.strike_error = lambda *a: (0.0, 0.0, 0.0, 1.0)
+        e.ball = (50.37, 34.0, 0.0, 0.0, 0.0, 0.0)
+        e.beliefs[att.id].seen.clear()
+        return e.touch_speed(att, 1.0, 0.0, 4.0, 12.0)
+
+    assert push(exact=False) < push(exact=True)

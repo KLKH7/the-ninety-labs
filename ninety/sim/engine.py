@@ -658,8 +658,11 @@ class Engine:
             self.kicker_clear = True
         since = self.t - self.kicked_at
         hits = []
+        back_on = self.t - self.free_since >= TOUCH_GAP_S
         for p in self.players:
             if p is kicker and not self.kicker_clear:
+                continue
+            if p.id == self.dribbler and not back_on:  # D6: mid-stride after his touch, not on it yet
                 continue
             s = 0.0 if seg == 0 else clamp(((p.x - x0) * dx + (p.y - y0) * dy) / seg, 0.0, 1.0)
             cx, cy = x0 + s * dx, y0 + s * dy
@@ -670,11 +673,7 @@ class Engine:
             # where the relative direction is sideways by construction.
             closing = (self.ball[3] - p.vx) * (p.x - x0) + (self.ball[4] - p.vy) * (p.y - y0)
             reach_m, reach_z = self.reach(p, cx, cy)
-            # D6: a dribbler is back on his own touch after TOUCH_GAP_S, the time the push was
-            # sized for (touch_speed); until then it is free. Timed from the touch itself, since a
-            # touch along his line does not restart kicked_at.
-            back_on = p.id != self.dribbler or self.t - self.free_since >= TOUCH_GAP_S
-            if since >= self.reaction(p) and d <= reach_m and cz <= reach_z and back_on:  # a deliberate touch
+            if since >= self.reaction(p) and d <= reach_m and cz <= reach_z:  # a deliberate touch
                 hits.append((s, "touch", p, cx, cy, cz))
             elif d <= BODY_RADIUS + ball.RADIUS and cz <= BODY_HEIGHT and closing > 0:
                 hits.append((s, "body", p, cx, cy, cz))
@@ -1458,22 +1457,30 @@ class Engine:
         self.plan_chase()
 
     def touch_speed(self, carrier: Player, ux: float, uy: float, lo: float, hi: float) -> float | None:
-        """D6: the hardest push up to `hi` that his own body can still run onto within TOUCH_GAP_S
-        (the engine's race, can_reach, on the ball's own path) and that no opponent, where he
-        believes them to be and going, gets to first (the passer's race: an average body, a foot's
-        reach; a touch along his line needs no reaction from them, P12). None if even the softest
-        is not his: he keeps it at his feet. A rolling ball keeps most of its speed, so a push sized
-        only by how far ahead it should go would run away from him."""
+        """D6: the hardest push up to `hi` that is his whatever his own kick error does to it (A3:
+        the strikes decisions.strike_nodes weighs, the centre and root-3 SDs of direction and
+        speed): his body runs onto it within TOUCH_GAP_S (the engine's race, can_reach, on the
+        ball's own path) and no opponent, where he believes them to be and going, gets to it first
+        (the passer's race: an average body, a foot's reach; a touch along his line needs no
+        reaction from them, P12). None if even the softest is not his: he keeps it at his feet. A
+        rolling ball keeps most of its speed, so a push sized only by how far ahead it should go
+        would run away from him."""
         bx, by = self.ball[0], self.ball[1]
         view = self.beliefs[carrier.id]
-        near = []
+        # Beyond what an opponent could cover flat out while the ball is free, there is no race.
+        bound = hi * TOUCH_GAP_S + carrier.physique.top_speed() * TOUCH_GAP_S + CONTROL_M
+        near, felt = [], math.inf
         for q in self.players:
             w = view.where(q.id, self.t) if q.team != carrier.team else None
-            if w and math.hypot(w[0] - bx, w[1] - by) < hi * TOUCH_GAP_S + 12.0:  # design: beyond, no race
-                near.append((w, view.velocity(q.id)))
+            if w:
+                felt = min(felt, math.hypot(w[0] - carrier.x, w[1] - carrier.y))
+                if math.hypot(w[0] - bx, w[1] - by) < bound:
+                    near.append((w, view.velocity(q.id)))
+        heading = math.atan2(uy, ux)
+        turn = decisions.turn_deg(heading, carrier.heading)
 
-        def his(v: float) -> bool:
-            path = ball.predict((bx, by, 0.0, ux * v, uy * v, 0.0), DT, TOUCH_GAP_S)
+        def lands(v: float, angle: float) -> bool:
+            path = ball.predict((bx, by, 0.0, math.cos(angle) * v, math.sin(angle) * v, 0.0), DT, TOUCH_GAP_S)
             x, y, z = path[-1][:3]
             if not self.can_reach(carrier, x, y, z, TOUCH_GAP_S)[0]:
                 return False
@@ -1483,6 +1490,15 @@ class Engine:
                     if can_get_to(decisions.AVERAGE_BODY, x - wx, y - wy, CONTROL_M, vx, vy, k * DT)[0]:
                         return False
             return True
+
+        def his(v: float) -> bool:
+            dir_sd, speed_sd, _, foot = carrier.profile.strike_error("dribbling", v, felt,
+                                                                     self.fresh(carrier), turn)
+            n = decisions.NODE_SD
+            strikes = [(decisions.struck_speed(v, 0.0, foot), heading)]
+            strikes += [(decisions.struck_speed(v, k * n * speed_sd, foot), heading) for k in (-1, 1)]
+            strikes += [(strikes[0][0], heading + math.radians(k * n * dir_sd)) for k in (-1, 1)]
+            return all(lands(sv, a) for sv, a in strikes)
 
         if not his(lo):
             return None
