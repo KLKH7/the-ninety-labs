@@ -871,25 +871,37 @@ class Engine:
         self.ball = (bx, by, bz, vx, vy, vz)
         r = self.restart
         taker = self.by_id[r.taker]
-        if r.kind == "corner":
-            if not setpieces.ready(self):
-                return
-        elif self.t < r.ready_at or math.hypot(taker.x - r.x, taker.y - r.y) > CONTROL_M:
+        if r.kind == "corner":  # placed, then struck on the taker's run-up (setpieces.py)
+            if setpieces.advance(self):
+                self.restart = None
+                self.from_restart = "corner"
+                setpieces.deliver(self, taker)
+            return
+        if self.t < r.ready_at or math.hypot(taker.x - r.x, taker.y - r.y) > CONTROL_M:
             return
         # While the ball is out of play a new one is placed: the only time the ball may jump.
-        # A corner's ball goes in the corner area, in front of the taker (setpieces.py).
-        px, py = self.set_play.ball_spot if r.kind == "corner" else (taker.x, taker.y)
-        self.ball = (px, py, 0.0, 0.0, 0.0, 0.0)
+        self.ball = (taker.x, taker.y, 0.0, 0.0, 0.0, 0.0)
         self.restart = None
-        self.emit("set_piece", r.team, px, py, player=taker.id, outcome=None)
+        self.emit("set_piece", r.team, taker.x, taker.y, player=taker.id, outcome=None)
         if r.team != self.poss_team:
-            self.emit("possession_change", r.team, px, py, player=taker.id)
+            self.emit("possession_change", r.team, taker.x, taker.y, player=taker.id)
         self.give(taker.id)
-        if r.kind != "corner":  # a corner taker settles the ball as any carrier does (D5)
-            self.hold_until = self.t + self.rng.uniform(0.5, 1.5)
+        self.hold_until = self.t + self.rng.uniform(0.5, 1.5)
         self.throw_by = taker.id if r.kind == "throw_in" else None
         self.throw_ready = self.t
         self.from_restart = r.kind
+
+    def corner_ready(self) -> None:
+        """The corner is ready: the ball placed (setpieces.advance), everyone set and the Law's
+        distance kept, and the taker starts his run-up. From here the ball stays still until he
+        strikes it, and opponents keep 9.15 m (L9 checks every frame from this event)."""
+        c, r = self.set_play, self.restart
+        px, py = c.ball_spot
+        self.emit("set_piece", r.team, px, py, player=c.taker, outcome=None)
+        if r.team != self.poss_team:
+            self.emit("possession_change", r.team, px, py, player=c.taker)
+            self.pressed.clear()
+            self.poss_team = r.team
 
     # ---- tick ---------------------------------------------------------------
 
@@ -912,6 +924,8 @@ class Engine:
             x = line + attack_dir(p.team) * min(abs(p.x - line), 1.0)  # across his line, not off it
             post = PITCH_Y / 2 - GOAL_HALF_WIDTH, PITCH_Y / 2 + GOAL_HALF_WIDTH
             return x, clamp(self.read[1], *post), SPRINT
+        if self.set_play and setpieces.over(self):  # S3: the routine has had its say
+            self.set_play = None
         if self.set_play:  # a corner: his spot in the routine (setpieces.py)
             spot = setpieces.target(self, p)
             if spot:
@@ -1129,18 +1143,6 @@ class Engine:
             self.ball = (carrier.x, carrier.y, 0.0, 0.0, 0.0, 0.0)
             if self.t >= self.hold_until:
                 self.decide(carrier, throw=True)
-            return
-        corner = self.set_play
-        # Law 17: a corner is kicked from where it was placed, never dribbled.
-        if corner and corner.delivered_at is None and carrier.id == corner.taker:
-            steer(carrier, carrier.x, carrier.y, DRIBBLE)
-            setpieces.face_ball(self, carrier)
-            self.ball = (self.ball[0], self.ball[1], 0.0, 0.0, 0.0, 0.0)  # it stays where it was placed
-            if self.t >= self.hold_until:
-                if corner.signalled_at is None:
-                    setpieces.signal(self, carrier)
-                if setpieces.time_to_strike(self):
-                    setpieces.deliver(self, carrier)
             return
         opp = other(carrier.team)
         presser = self.nearest(carrier.x, carrier.y, opp)  # who is physically there

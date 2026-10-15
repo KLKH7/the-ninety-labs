@@ -9,7 +9,7 @@ import math
 import pytest
 from test_validate import FPS, event, run
 
-from ninety.sim import setpieces
+from ninety.sim import decisions, setpieces
 from ninety.sim.engine import PENALTY_DEPTH, PENALTY_HALF_WIDTH, SPRINT, Engine, simulate
 from ninety.validate import validate
 
@@ -50,7 +50,7 @@ def run_until_kick(e: Engine, limit_s: float = 60.0) -> dict:
 
 
 def settle_everyone(e: Engine) -> None:
-    """Put every player on his spot, standing still, and the taker at his run-up."""
+    """Put every player on his spot, standing still, and the taker at the ball."""
     c = e.set_play
     for p in e.players:
         spot = c.run_up if p.id == c.taker else setpieces.target(e, p)
@@ -61,6 +61,16 @@ def settle_everyone(e: Engine) -> None:
             p.x, p.y = setpieces.target(e, p)
 
 
+def placed(e: Engine) -> None:
+    """Everyone set, the ball placed, the taker stepped back and the placing time over."""
+    settle_everyone(e)
+    assert not setpieces.advance(e)
+    c = e.set_play
+    taker = e.by_id[c.taker]
+    taker.x, taker.y = c.approach
+    e.t += setpieces.PLACE_S
+
+
 # --- the routine -------------------------------------------------------------------------------
 
 def test_every_player_has_a_place_and_the_best_crosser_takes_it():
@@ -69,21 +79,46 @@ def test_every_player_has_a_place_and_the_best_crosser_takes_it():
     eligible = [p for p in e.players if p.team == "home" and p.role in setpieces.TAKER_ROLES]
     assert c.taker == max(eligible, key=lambda p: p.profile["crossing"]).id
     for p in e.players:
-        placed = p.id in c.targets or p.id in c.marks or p.id in c.rest_marks
-        assert p.id == c.taker or placed, p.id
-    box = [pid for pid, z in c.zones.items() if z != "edge"]
+        placed_ = p.id in c.targets or p.id in c.marks or p.id in c.rest_marks
+        assert p.id == c.taker or placed_, p.id
+    box = [pid for pid, z in c.zones.items() if z in setpieces.ATTACK_ZONES and z != "edge"]
     assert len(box) >= 4 and set(c.marks.values()) == set(box)  # each attacker in the box is marked
 
 
-def test_rest_defence_stands_goal_side_of_the_counter_attackers():
-    """Mutation caught: rest defenders placed upfield of the players they guard."""
+def test_each_corner_draws_its_own_routine():
+    """Mutations caught: a fixed role-to-zone table; zones without jitter; a fixed run-up; a
+    fixed number of defenders left up; no short corner ever set up."""
+    plans = [corner_engine(seed=s).set_play for s in range(40)]
+    by_zone = {tuple(sorted((z, pid) for pid, z in c.zones.items())) for c in plans}
+    assert len(by_zone) > 20  # who goes where differs from corner to corner
+    assert len({c.targets[next(p for p, z in c.zones.items() if z == "far_post")] for c in plans}) == 40
+    assert len({c.approach for c in plans}) == 40
+    assert {len(c.left_up) for c in plans} == set(setpieces.LEFT_UP)
+    assert any("short" in c.zones.values() for c in plans)
+
+
+def test_rest_defence_marks_only_the_defenders_left_up():
+    """Regression (audit 5): a forward who defends in the box was marked as if he had stayed up.
+    Mutation caught: rest defenders placed upfield of the players they guard."""
+    for seed in range(20):
+        e = corner_engine(seed=seed)
+        c = e.set_play
+        assert set(c.rest_marks.values()) <= set(c.left_up), seed
     e = corner_engine()
     settle_everyone(e)
-    c = e.set_play
-    assert c.rest_marks
-    for rest_id, counter_id in c.rest_marks.items():
+    for rest_id, counter_id in e.set_play.rest_marks.items():
         rest, counter = e.by_id[rest_id], e.by_id[counter_id]
+        assert math.isclose(math.dist((rest.x, rest.y), (counter.x, counter.y)), 2.0)  # S5
         assert rest.x < counter.x  # home defends x = 0: nearer his own goal than the forward
+
+
+def test_a_defender_covers_the_edge_of_the_box():
+    """Regression (audit 5): the edge cover was never filled, so the man on the edge was free."""
+    for seed in range(20):
+        c = corner_engine(seed=seed).set_play
+        edge = c.zone_point(*setpieces.DEFEND_ZONES["edge_cover"])
+        assert any(c.targets.get(p.id) == edge for p in corner_engine(seed=seed).players
+                   if p.team == "away"), seed
 
 
 def test_defenders_are_held_at_the_laws_distance_even_when_marking_near_the_flag():
@@ -102,42 +137,60 @@ def test_defenders_are_held_at_the_laws_distance_even_when_marking_near_the_flag
             assert math.hypot(s[0] - 105.0, s[1] - 68.0) >= setpieces.STAND_OFF_M - 1e-9
 
 
-def test_not_ready_until_the_ball_is_placed_and_everyone_is_set():
-    """Mutations caught: PLACE_S = 0; ready() ignoring the other players; ready() ignoring the
-    Law's distance."""
+def test_placed_then_stepped_back_then_signalled_only_when_everyone_is_set():
+    """Mutations caught: PLACE_S = 0; no step back; the signal or the strike ignoring the other
+    players or the Law's distance; the set-piece event at placement."""
     e = corner_engine()
     settle_everyone(e)
-    assert not setpieces.ready(e)  # the taker has only just reached the ball
+    c = e.set_play
+    assert not setpieces.advance(e)
+    assert c.placed_at == e.t and e.ball[:2] == c.ball_spot
+    assert not any(ev["type"] == "set_piece" for ev in e.match.events)  # placed, not yet ready
+    taker = e.by_id[c.taker]
+    assert setpieces.target(e, taker) == c.run_up  # still placing it
     e.t += setpieces.PLACE_S - 0.1
-    assert not setpieces.ready(e)  # still placing it
+    assert setpieces.target(e, taker) == c.run_up
     e.t += 0.2
-    assert setpieces.ready(e)
-    runner = e.by_id[next(iter(e.set_play.zones))]
+    assert setpieces.target(e, taker) == c.approach  # steps back
+    assert not setpieces.advance(e) and c.signalled_at is None  # not back yet
+    taker.x, taker.y = c.approach
+    runner = e.by_id[next(iter(c.zones))]
     runner.x, runner.vx = runner.x - 10.0, 5.0  # far from his spot and still running to it
-    assert not setpieces.ready(e)
+    assert not setpieces.advance(e) and c.signalled_at is None
     runner.vx = 0.0  # stopped short (someone in the way): he does not hold the corner up
-    assert setpieces.ready(e)
-    intruder = e.by_id[e.set_play.short_block]
+    intruder = e.by_id[c.short_block]
     intruder.x, intruder.y = 100.0, 4.0  # about 6 m from the flag
-    assert not setpieces.ready(e)
+    assert not setpieces.advance(e) and c.signalled_at is None
+    intruder.x, intruder.y = setpieces.target(e, intruder)
+    assert not setpieces.advance(e) and c.signalled_at == e.t
+    assert e.match.events[-1]["type"] in ("set_piece", "possession_change")  # ready: L9 from here
+    assert setpieces.target(e, taker) == c.run_up  # the run-up
+    taker.x, taker.y = c.run_up
+    intruder.x, intruder.y = 100.0, 4.0  # steps in during the run-up: he does not strike
+    assert not setpieces.advance(e)
+    intruder.x, intruder.y = setpieces.target(e, intruder)
+    assert setpieces.advance(e)
 
 
-def test_no_drawn_delay_and_the_taker_settles_it_like_any_carrier():
+def test_the_corner_is_struck_when_the_taker_arrives_on_his_run_up():
+    """No drawn delay and no settle: the kick comes when his run-up reaches the ball."""
     e = corner_engine()
     assert e.restart.ready_at == math.inf
-    taker = e.set_play.taker
+    c = e.set_play
     kick = run_until_kick(e)
-    placed = next(ev for ev in e.match.events if ev["type"] == "set_piece")
-    assert kick["player"] == placed["player"] == taker
-    settle = kick["t"] - placed["t"]
-    assert 0.3 - 1e-9 <= settle <= 0.6 + 1 / FPS + 1e-9  # D5: the first touch, not a drawn wait
+    assert kick["player"] == c.taker
+    assert c.signalled_at is not None and kick["t"] > c.signalled_at
+    taker = next(p for p in e.match.frames[kick["frame"]]["players"] if p["id"] == c.taker)
+    assert math.dist((taker["x"], taker["y"]), c.run_up) <= setpieces.TAKER_AT_M + 0.3
+    run = math.dist(c.approach, c.run_up)
+    assert kick["t"] - c.signalled_at <= run / 2.0 + 1.0  # a run-up, not a wait
 
 
 def test_the_box_is_crowded_and_the_law_is_kept_at_every_frame_to_the_kick():
     e = corner_engine(seed=5)
     run_until_kick(e)
-    placed = next(ev for ev in e.match.events if ev["type"] == "set_piece")["frame"]
-    for f in e.match.frames[placed:-1]:
+    placed_at = next(ev for ev in e.match.events if ev["type"] == "set_piece")["frame"]
+    for f in e.match.frames[placed_at:-1]:
         for p in f["players"]:
             if p["team"] == "away":
                 assert math.hypot(p["x"] - 105.0, p["y"]) >= setpieces.LAW_DISTANCE_M
@@ -146,90 +199,99 @@ def test_the_box_is_crowded_and_the_law_is_kept_at_every_frame_to_the_kick():
     assert sum(in_box(p["x"], p["y"], 105.0) for p in f["players"] if p["team"] == "away") >= 7
 
 
-def test_runners_wait_off_their_zones_and_go_on_the_signal():
-    """Mutations caught: runners standing on their zones before the signal; runners (or their
-    markers) not sprinting after it. Where they wait is drawn for each corner (S10)."""
+def test_runners_wait_then_set_off_to_arrive_with_the_ball():
+    """Mutations caught: runners standing on their zones; runners leaving at the signal whatever
+    the distance; no reaction to the signal; runners (or their markers) not sprinting."""
     e = corner_engine(seed=3)
     c = e.set_play
-    assert {c.zones[pid] for pid in c.starts} == set(setpieces.RUNNING_ZONES)
+    assert c.starts and set(c.starts) <= set(c.zones)
     for pid, start in c.starts.items():
         assert setpieces.target(e, e.by_id[pid]) == start
-        assert math.dist(start, c.targets[pid]) > 1.0
+        assert math.dist(start, c.targets[pid]) > 0.5
         assert not setpieces.running(e, e.by_id[pid])
-    assert corner_engine(seed=4).set_play.starts != c.starts
+    placed(e)
+    taker = e.by_id[c.taker]
+    taker.x, taker.y = c.approach
+    near, far = list(c.starts)[:2]
+    e.by_id[near].x, e.by_id[near].y = c.targets[near][0] - 1.0, c.targets[near][1]
+    e.by_id[far].x, e.by_id[far].y = c.targets[far][0] - 30.0, c.targets[far][1]
     c.signalled_at = e.t
-    for pid in c.starts:
-        assert setpieces.target(e, e.by_id[pid]) == c.targets[pid]
-        assert setpieces.running(e, e.by_id[pid])
-    markers = [m for m, att in c.marks.items() if att in c.starts]
-    assert markers and all(setpieces.running(e, e.by_id[m]) for m in markers)
-    assert all(e.shape_target(e.by_id[pid])[2] == SPRINT for pid in [*c.starts, *markers])
+    setpieces.set_off(e, c)
+    assert not c.going  # nobody responds before a reaction time
+    e.t += 0.3
+    setpieces.set_off(e, c)
+    assert far in c.going and near not in c.going  # the far one must go now; the near one waits
+    assert setpieces.target(e, e.by_id[far]) == c.targets[far]
+    markers = [m for m, att in c.marks.items() if att == far]
+    for pid in [far, *markers]:
+        assert setpieces.running(e, e.by_id[pid]) and e.shape_target(e.by_id[pid])[2] == SPRINT
 
 
-def test_the_taker_times_the_cross_on_his_runner():
-    """Mutations caught: striking at the signal whatever the runner's distance; never striking
-    when the runner is held up. S10: he strikes when the runner will arrive in time, or once the
-    runner has reacted and is not making ground."""
-    e = corner_engine(seed=3)
+def test_beyond_a_short_corner_the_delivery_goes_through_the_air():
+    """Regression (corner report): with the shared pass estimates and no heading, 199 of 200
+    deliveries were struck along the ground into the box. Mutation caught: dropping S8's lofted
+    delivery beyond SHORT_CORNER_M."""
+    for seed in range(10):
+        m = simulate(seed, 0.5, "corner")
+        kick = next(ev for ev in m.events if ev["type"] == "pass")
+        heights = [f["ball"]["z"] for f in m.frames[kick["frame"]:kick["frame"] + 10]]
+        travelled = math.dist((kick["x"], kick["y"]), (m.frames[kick["frame"] + 9]["ball"]["x"],
+                                                       m.frames[kick["frame"] + 9]["ball"]["y"]))
+        if travelled > 5.0:  # not a short ball
+            assert max(heights) > 0.5, seed
+
+
+def test_the_taker_only_strikes_in_front_of_the_ball():
+    """Mutation caught: strikeable() accepting a target behind the ball."""
+    c = corner_engine().set_play
+    bx, by = c.ball_spot
+    ux, uy = c.facing
+    assert setpieces.strikeable(c, bx + ux * 5, by + uy * 5)
+    assert not setpieces.strikeable(c, bx - ux * 5, by - uy * 5)
+
+
+def struck(monkeypatch, seed: int, target: tuple[float, float], draw: int, spy=None):
+    option = decisions.Option("pass", 1.0, target, None, True)
+    monkeypatch.setattr(setpieces, "choose_delivery", lambda engine, taker: option)
+    e = corner_engine(seed=seed)
+    placed(e)
     c = e.set_play
-    runner = next(pid for pid, z in c.zones.items() if z == "far_post")
-    r = e.by_id[runner]
-    c.aim, c.runner, c.signalled_at = c.targets[runner], runner, e.t
-    r.x, r.y, r.vx, r.vy = c.aim[0] - 25.0, c.aim[1], 0.0, 0.0  # far off: the ball would beat him
-    assert not setpieces.time_to_strike(e)
-    r.vx = 6.0  # sprinting at it, but still too far
-    e.t += 1.0
-    assert not setpieces.time_to_strike(e)
-    r.vx = 0.0  # held up after reacting: no point waiting
-    assert setpieces.time_to_strike(e)
-    e.t = c.signalled_at + 0.1  # standing still, but he has not reacted yet
-    assert not setpieces.time_to_strike(e)
-    r.x = c.aim[0] - 3.0  # close enough to arrive with the ball
-    assert setpieces.time_to_strike(e)
+    taker = e.by_id[c.taker]
+    taker.x, taker.y = c.run_up
+    taker.heading = math.atan2(c.facing[1], c.facing[0])  # running up along his line
+    if spy:
+        spy(taker)
+    e.rng.seed(draw)
+    setpieces.deliver(e, taker)
+    return e, setpieces.intended(c, option)
 
 
 def test_the_delivery_is_struck_with_execution_error(monkeypatch):
     """Mutation caught: deliver() striking the intended velocity. Same state, same choice: only
     the execution draw differs, and the strike is never exactly the intention."""
-    target = (100.0, 38.5)
-    monkeypatch.setattr(setpieces, "choose_delivery", lambda engine, taker: (target, None))
-    struck = []
+    balls = []
     for draw in (1, 2):
-        e = corner_engine(seed=4)
-        settle_everyone(e)
-        e.t += setpieces.PLACE_S + 0.1
-        tick(e)  # placed and given to the taker
-        taker = e.by_id[e.set_play.taker]
-        setpieces.signal(e, taker)
-        e.rng.seed(draw)
-        setpieces.deliver(e, taker)
-        aim = setpieces.intended(e.set_play, *target)
-        struck.append(e.ball[3:6])
+        e, aim = struck(monkeypatch, 4, (100.0, 38.5), draw)
+        balls.append(e.ball[3:6])
         assert any(abs(a - b) > 1e-6 for a, b in zip(e.ball[3:6], aim, strict=True))
-    assert struck[0] != struck[1]
+    assert balls[0] != balls[1]
 
 
 def test_a_delivery_across_the_body_carries_the_turn(monkeypatch):
-    """Mutation caught: the taker turned to face the target before the strike. He stands behind
-    the ball facing the penalty spot, so a ball to the near post is struck across his body."""
-    target = (101.0, 30.0)  # near post, well off his line of sight from the flag at y = 0
-    monkeypatch.setattr(setpieces, "choose_delivery", lambda engine, taker: (target, None))
+    """Mutation caught: the taker turned to face the target before the strike. He runs up along
+    the line to the penalty spot, so a ball to the near post is struck across his body."""
     seen = {}
-    e = corner_engine(seed=4)
-    settle_everyone(e)
-    e.t += setpieces.PLACE_S + 0.1
-    tick(e)
-    taker = e.by_id[e.set_play.taker]
-    original = taker.profile.kick_error
 
-    def spy(skill, speed, pressure, fresh, weak, turn):
-        seen["turn"] = turn
-        return original(skill, speed, pressure, fresh, weak, turn)
+    def spy(taker):
+        original = taker.profile.kick_error
 
-    monkeypatch.setattr(taker.profile, "kick_error", spy)
-    setpieces.face_ball(e, taker)
-    setpieces.signal(e, taker)
-    setpieces.deliver(e, taker)
+        def wrapped(skill, speed, pressure, fresh, weak, turn):
+            seen["turn"] = turn
+            return original(skill, speed, pressure, fresh, weak, turn)
+
+        monkeypatch.setattr(taker.profile, "kick_error", wrapped)
+
+    struck(monkeypatch, 4, (101.0, 30.0), 1, spy)
     assert abs(seen["turn"]) > 10.0
 
 
@@ -243,12 +305,22 @@ def test_the_taker_never_touches_his_own_corner():
         assert not any(ev["type"] == "deflection" and ev["player"] == kick["player"] for ev in soon), seed
 
 
-def test_the_routine_ends_when_someone_wins_the_ball():
+def test_the_routine_holds_after_the_kick_until_the_ball_is_won_or_four_seconds_pass():
+    """Mutations caught: SECOND_PHASE_S widened or dropped; the routine kept after a player wins
+    the ball."""
     e = corner_engine(seed=6)
     run_until_kick(e)
-    assert e.set_play is not None
+    c = e.set_play
+    e.possessor, e.restart = None, None
+    e.t = c.delivered_at + 3.9  # S3: 4 s
+    assert not setpieces.over(e)
+    e.t += 0.2
+    assert setpieces.over(e)
+    e.t = c.delivered_at + 1.0
     e.give("a4")
-    assert setpieces.target(e, e.by_id["h4"]) is None and e.set_play is None
+    assert setpieces.over(e)
+    e.shape_target(e.by_id["h4"])
+    assert e.set_play is None
 
 
 def test_scenario_corners_meet_the_data_contract(tmp_path):
@@ -368,6 +440,35 @@ def test_scenario_opens_from_open_play_by_that_goal_line():
     assert home_up >= 6 and away_back >= 8
 
 
+def test_a_keeper_out_of_place_at_the_exit_does_not_hide_the_corner(tmp_path):
+    """Regression (audit 5): the defending team was the one whose keeper was nearest the line at
+    that moment, so an attacking keeper up for a late corner (and the defending keeper off his
+    line) turned a corner into a goal kick and skipped the Law 17 check. Over the clip, the away
+    keeper defends x = 105."""
+    clip = corner_clip(intrude_at=(12, 102.0, 5.0))  # a breach: inside 9.15 m before the kick
+    for p in clip["frames"][0]["players"]:
+        if p["id"] == "hk":
+            p["x"] = 103.0
+        if p["id"] == "ak":
+            p["x"] = 90.0
+    assert "L9 corner" in run(tmp_path, clip)
+
+
+def test_a_new_ball_may_be_placed_when_the_clip_ends_before_the_restart(tmp_path):
+    """Regression (corner report, seeds 51 and 132): the ball went out, the taker placed a new
+    one in the corner area, and the clip ended before the corner was ready. The ball is out of
+    play until the restart (Law 9), so the placement is not a 4 m jump in play. A jump after a
+    restart still fails (the existing P3 cases)."""
+    clip = corner_clip()
+    clip["events"] = clip["events"][:1]  # out of play, then the clip ends
+    for f in clip["frames"][30:]:
+        f["ball"].update(x=104.5, y=0.5)  # placed; before it the ball lay where corner_clip put it
+    for f in clip["frames"][:30]:
+        f["ball"].update(x=108.0, y=4.0)  # by the boards
+        f["possessor"] = None
+    assert "P3 ball speed" not in run(tmp_path, clip)
+
+
 def test_corners_cannot_be_checked_without_keepers(tmp_path):
     clip = corner_clip(defender=(100.0, 5.0))
     clip["meta"]["roster"] = []
@@ -483,6 +584,15 @@ def test_l6_rejects_a_goal_that_did_not_cross_inside_the_mouth(tmp_path, name):
     assert "L6 goal" in run(tmp_path, goal_clip([SHOT], "h1", path=L6_WRONG[name]))
 
 
+def test_l6_rejects_a_goal_touched_in_the_last_frame_from_well_wide(tmp_path):
+    """Regression (audit 5): with a touch in the last frame only the distance to the goal line
+    was checked, so a ball 2 m wide of the post that a defender touched still "scored". In one
+    frame it can travel at most 1.6 m, so it must already be that close to the mouth."""
+    wide = lambda n: (90.0 + 0.6 * max(n - 5, 0), 34.0 + 0.25 * max(n - 5, 0), 0.0)  # noqa: E731
+    clip = goal_clip([SHOT, (29, "deflection", "a1", "away", None)], "h1", path=wide)
+    assert "L6 goal" in run(tmp_path, clip)
+
+
 def test_l6_accepts_a_goal_just_inside_the_post_and_under_the_bar(tmp_path):
     inside = lambda n: (90.0 + 0.6 * max(n - 5, 0), 34.0 + 0.14 * max(n - 5, 0),  # noqa: E731
                         min(1.7, 0.068 * max(n - 5, 0)))
@@ -496,7 +606,7 @@ def test_l6_reports_a_goal_it_cannot_check():
     clip = goal_clip([SHOT], "h1")
     by_frame = {f["frame"]: f for f in clip["frames"] if f["frame"] != 29}
     goal = next(e for e in clip["events"] if e["type"] == "goal")
-    assert goal_crossing_problem(goal, clip["events"], by_frame, FPS, {"hk", "ak"}) is not None
+    assert goal_crossing_problem(goal, clip["events"], by_frame, FPS, {"away": 105.0}) is not None
 
 
 def test_l6_judges_the_goal_the_conceding_keeper_defends(tmp_path):
@@ -506,12 +616,12 @@ def test_l6_judges_the_goal_the_conceding_keeper_defends(tmp_path):
 
 
 def test_real_engine_goals_are_credited_and_relabelling_them_fails(tmp_path):
-    """Engine output, not a fixture, and no pinned seed (lesson 19): every goal in the first 32
+    """Engine output, not a fixture, and no pinned seed (lesson 19): every goal in the first 64
     scenario corners meets the contract, and giving it to the wrong player (or to nobody) fails
     C8. Which kinds of goal appear moves with the engine; the rule must hold for each."""
     goals = 0
-    for seed in range(32):
-        m = simulate(seed, 0.75, "corner")
+    for seed in range(64):
+        m = simulate(seed, 0.5, "corner")
         goal = next((e for e in m.events if e["type"] == "goal"), None)
         if goal is None:
             continue
@@ -525,7 +635,7 @@ def test_real_engine_goals_are_credited_and_relabelling_them_fails(tmp_path):
         goal["player"] = None if scorer is not None else keeper  # an own goal, or their own keeper
         (tmp_path / f"bad{seed}").mkdir()
         assert "C8 event order" in run(tmp_path / f"bad{seed}", base), seed
-    assert goals >= 3  # enough real goals to mean something (4 at the time of writing)
+    assert goals >= 3  # enough real goals to mean something (5 at the time of writing)
 
 
 def test_off_an_attacker_it_is_a_goal_kick_not_a_corner(tmp_path):

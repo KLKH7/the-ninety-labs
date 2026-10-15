@@ -137,6 +137,8 @@ def check_physics(events: list[dict], frames: list[dict], fps: float, roster: li
         elif e["type"] in RESTARTS and out_at is not None:
             dead.update(range(out_at, e["frame"] + 1))
             out_at = None
+    if out_at is not None and frames:  # the clip ends before the restart: the ball is still dead
+        dead.update(range(out_at, frames[-1]["frame"] + 1))
 
     for prev, f in zip(frames, frames[1:], strict=False):
         if f["frame"] in restarts or prev["frame"] in restarts:
@@ -268,6 +270,7 @@ def check_contacts(events: list[dict], frames: list[dict], keepers: set[str], pr
 def check_events(events: list[dict], frames: list[dict], fps: float, meta: dict, problems: Problems) -> None:
     """C4 to C9: events agree with frames, come in an order that makes sense, and add up."""
     keepers = {p["id"] for p in meta.get("roster", []) if p.get("role") == "GK"}
+    lines = defended_lines(frames, keepers)
     by_frame = {f["frame"]: f for f in frames}
     first, last = frames[0]["frame"], frames[-1]["frame"]
     team_of = {p["id"]: p["team"] for f in frames for p in f["players"]}
@@ -323,7 +326,7 @@ def check_events(events: list[dict], frames: list[dict], fps: float, meta: dict,
             why = goal_credit_problem(e, events, frames, team_of)
             if why:
                 problems["C8 event order"].append(f"{e['id']}: {why}")
-            crossing = goal_crossing_problem(e, events, by_frame, fps, keepers)
+            crossing = goal_crossing_problem(e, events, by_frame, fps, lines)
             if crossing:
                 problems["L6 goal"].append(f"{e['id']}: {crossing}")
 
@@ -339,22 +342,32 @@ def check_events(events: list[dict], frames: list[dict], fps: float, meta: dict,
                 )
 
 
+def defended_lines(frames: list[dict], keepers: set[str]) -> dict[str, float]:
+    """The goal line each team defends: the one nearer its keeper's mean position over the clip.
+    One frame can mislead (a keeper up for a late corner, or off his line after a cross); the
+    whole clip does not."""
+    xs: dict[str, list[float]] = defaultdict(list)
+    for f in frames:
+        for p in f["players"]:
+            if p["id"] in keepers:
+                xs[p["team"]].append(p["x"])
+    return {team: 0.0 if sum(v) / len(v) < 52.5 else 105.0 for team, v in xs.items()}
+
+
 def goal_crossing_problem(goal: dict, events: list[dict], by_frame: dict, fps: float,
-                          keepers: set[str]) -> str | None:
+                          lines: dict[str, float]) -> str | None:
     """L6 (Law 10): the whole ball crossed the goal line the conceding team defends, between the
     posts and under the bar. The goal frame shows the kick-off reset, so the crossing is
     extrapolated from the two frames before it to that goal line, and the crossing point must be
-    inside the mouth. If the ball was touched in the last frame (its path changed there), only
-    its distance from that line is checked."""
+    inside the mouth. Whatever happened in the last frame, the ball can have travelled at most
+    one frame at the fastest legal speed, so it must be that close to the mouth itself; if it was
+    touched in the last frame (its path changed there), that is all that can be checked."""
     n = goal["frame"]
     b1 = by_frame.get(n - 1, {}).get("ball")
     if b1 is None:
         return "no frame before the goal to check where the ball crossed"
-    conceding = [p for p in by_frame[n - 1]["players"] if p["id"] in keepers and p["team"] != goal["team"]]
-    if conceding:
-        line = 0.0 if conceding[0]["x"] < 52.5 else 105.0
-    else:
-        line = 0.0 if b1["x"] < 52.5 else 105.0
+    conceding = "away" if goal["team"] == "home" else "home"
+    line = lines.get(conceding, 0.0 if b1["x"] < 52.5 else 105.0)
     inward = 1.0 if line == 0.0 else -1.0  # from that goal line into the field
     dt = 1 / fps
     if (b1["x"] - line) * inward < -BALL_RADIUS_M:
@@ -362,6 +375,12 @@ def goal_crossing_problem(goal: dict, events: list[dict], by_frame: dict, fps: f
     reach = MAX_BALL_MPS * dt
     if abs(b1["x"] - line) > reach:
         return f"ball {abs(b1['x'] - line):.1f} m from the goal line the frame before"
+    # The nearest point where the whole ball is inside the mouth (z is the ball's lowest point).
+    my = min(max(b1["y"], 34.0 - GOAL_HALF_WIDTH_M + BALL_RADIUS_M), 34.0 + GOAL_HALF_WIDTH_M - BALL_RADIUS_M)
+    mz = min(max(b1["z"], 0.0), CROSSBAR_M - 2 * BALL_RADIUS_M)
+    mouth = math.dist((b1["x"], b1["y"], b1["z"]), (line, my, mz))
+    if mouth > reach + 2 * POSITION_PRECISION_M:
+        return f"ball {mouth:.1f} m from the goal mouth the frame before"
     late = any(e["type"] in GOAL_TOUCHES and n - 1 <= e["frame"] <= n for e in events if e is not goal)
     b0 = by_frame.get(n - 2, {}).get("ball")
     if late or b0 is None:
@@ -448,22 +467,21 @@ def goal_credit_problem(goal: dict, events: list[dict], frames: list[dict], team
 def check_corners(events: list[dict], frames: list[dict], roster: list[dict], problems: Problems) -> None:
     """L9: after the ball goes out over a goal line off a defender, the attacking team takes a
     corner from the corner area on that side, and every opponent stands at least 9.15 m from
-    the arc from the moment it is placed until the frame before it is kicked.
+    the arc from the set-piece event (the corner ready to be taken: placed, the taker starting
+    his run-up) until the frame before it is kicked.
 
-    Which team defends a goal line is read from where its keeper stands. An exit is over a goal
+    Which team defends a goal line is read from where its keeper stands over the clip. An exit is over a goal
     line when the out-of-play point is on that line and strictly between the touchlines; at the
     corner point itself the line cannot be told, so it is skipped."""
     by_frame = {f["frame"]: f for f in frames}
-    keepers = {p["id"] for p in roster if p.get("role") == "GK"}
+    lines = defended_lines(frames, {p["id"] for p in roster if p.get("role") == "GK"})
     for i, out in enumerate(events):
         if out["type"] != "out_of_play" or out["x"] not in (0.0, 105.0) or not 0.0 < out["y"] < 68.0:
             continue
-        f = by_frame.get(out["frame"])
-        gks = [p for p in f["players"] if p["id"] in keepers] if f else []
-        if not gks:
-            problems["L9 corner"].append(f"{out['id']}: no roster keeper in that frame to check the corner")
+        defending = next((team for team, line in lines.items() if line == out["x"]), None)
+        if defending is None:
+            problems["L9 corner"].append(f"{out['id']}: no roster keeper defends that line to check it")
             continue
-        defending = min(gks, key=lambda p: abs(p["x"] - out["x"]))["team"]
         if out["team"] != defending:
             continue  # off an attacker: a goal kick (L8)
         restart = next((e for e in events[i + 1:] if e["type"] in ("set_piece", "kickoff")), None)

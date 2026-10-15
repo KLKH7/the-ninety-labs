@@ -181,3 +181,18 @@ short and actionable. This file is public: no research sources, product names or
   meeting point or a cause, not an intention, is scripting. Measure before and after a change
   (here: first contact, goals, wait to the kick over 200 corners).
 
+### 24. A rule that never fires is not a model; a number without its script is not a result
+- **What happened:** after lesson 23, the taker was meant to time his cross on his runner. An
+  audit measured it: in 293 of 300 corners he struck in the same frame he signalled, because
+  the cross's long flight meant every runner "arrived in time"; the rule's unit test passed
+  only with a runner placed 25 m away. The same pull request published first-contact numbers
+  (156 to 36) counted from events alone, which miss clean receptions; the real split was 106 to
+  93. Then letting the taker choose freely with the shared pass estimates made 199 of 200
+  corners ground passes into the box, which no test noticed and only the report showed.
+- **Rule:** for every new decision rule, measure how often each branch fires on real engine
+  output and what the output looks like (here: kick timing, delivery height, end points),
+  before and after. Publish a number only from a committed script that anyone can rerun
+  (`ninety/sim/corner_report.py` writes `docs/eval/sim-corners.md`).
+- **Check:** a test that pins a branch with a hand-built state must be paired with a
+  measurement showing the branch happens in real clips.
+
