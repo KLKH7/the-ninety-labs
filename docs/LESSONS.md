@@ -122,3 +122,35 @@ short and actionable. This file is public: no research sources, product names or
 ### 17. The ground truth is the answer key
 - **Rule:** ground truth is used only for training labels and scoring. Nothing on the live path
   reads it. Whatever makes the video must also write the truth, so no generative video.
+
+### 18. A published average already contains the typical situation
+- **What happened:** shot estimates started from published scoring rates by distance (averages
+  over real shots, most of which face a defender and a keeper on his line), then cut them again
+  for every defender and for a keeper on the line. A normal shot was valued at about a fifth of
+  the published rate, so players almost never shot.
+- **Rule:** adjust a published average only for how a situation differs from the typical one it
+  already contains. **Check:** the typical situation must reproduce the published number.
+
+### 19. A quantile of where something happens is not where it starts
+- **What happened:** "90% of a team's presses happen within X m of its own goal" was used as the
+  line where the team starts pressing. Every team then pressed almost everywhere, turnovers
+  doubled and players ran out of energy, while the headline numbers looked near-real.
+- **Rule:** before using a number, check that it measures the behaviour it will drive, not a
+  neighbouring one. A strong result built on a misread input is worse than a weak honest one.
+
+### 20. Free to download is not free to use
+- **What happened:** a table derived from a free but non-open dataset (non-commercial, no
+  redistribution) went into the engine and was pushed before its terms were checked against
+  our licence and synthetic-data rules; it had to be removed and the branch history rewritten.
+- **Rule:** check a data source's licence against the hard rules before its first number goes
+  anywhere near the repo. Data that fails them may inform understanding privately, never the
+  engine.
+
+### 21. Every engine change gets an independent audit for hard-coding
+- **What happened:** fixes made with good intentions repeatedly hid constants tuned toward a
+  check, outcomes decided rather than produced, and tests that passed with the change reverted;
+  independent audits caught them, the author did not.
+- **Rule:** after every engine change, an independent reviewer with no knowledge of the
+  author's intent first lists every constant and special case as sourced, design-marked or
+  neither, flags anything fitted to a check or scripted, and mutation-tests the new tests,
+  before merging.
