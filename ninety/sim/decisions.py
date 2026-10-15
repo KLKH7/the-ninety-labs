@@ -52,6 +52,7 @@ LUNGE_REACH_M = 1.8  # a foot (1 m) plus a step
 LUNGE_S = 0.3  # time for an average tackler's foot to reach the ball from the edge of that reach
 DRIBBLE_STEP_M = 6.0
 MAX_PASS_M = 45.0
+SHOT_SPEED_EST_MPS = 95 / 3.6  # the middle of the speeds shots are struck at (engine.shoot, 70 to 120 km/h)
 PASS_SPEED_EST_MPS = 14.0  # design: a passer's rough guess of a pass's average speed, to lead a runner
 LEAD_MAX_S = 2.0  # design: and he leads him by at most this long
 LOFT_FROM_M = 15.0  # design: shorter than this, a pass is played along the ground
@@ -250,13 +251,15 @@ def typical_shot(x: float, y: float, goal_x: float) -> float:
 
 
 def open_goal_share(x: float, y: float, goal_x: float, keeper: tuple[float, float]) -> float:
-    """The share of the goal mouth, as seen from (x, y), that a keeper at `keeper` cannot reach
-    across with a full dive (P11)."""
+    """The share of the goal mouth, as seen from (x, y), that a keeper at `keeper` cannot get a hand
+    across before a typical shot gets there."""
     def bearing(px: float, py: float) -> float:
         return math.atan2(py - y, abs(px - x))
     lo, hi = sorted((bearing(goal_x, PITCH_Y / 2 - GOAL_HALF_WIDTH),
                      bearing(goal_x, PITCH_Y / 2 + GOAL_HALF_WIDTH)))
-    reach = offball.KEEPER_STAND_REACH_M + offball.KEEPER_DIVE_EXTRA_M
+    # How far he gets in the time a typical shot takes to reach him (P11, P15).
+    flight = math.hypot(keeper[0] - x, keeper[1] - y) / SHOT_SPEED_EST_MPS
+    reach = offball.keeper_reach_m(flight, GENERIC_REACTION_S)
     k = bearing(*keeper)
     half = math.atan2(reach, max(math.hypot(keeper[0] - x, keeper[1] - y), 1e-6))
     covered = max(0.0, min(hi, k + half) - max(lo, k - half))

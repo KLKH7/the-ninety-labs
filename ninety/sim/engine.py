@@ -23,7 +23,7 @@ from ninety.sim import ball, decisions, offball, perception, profiles
 from ninety.sim import team as team_mod
 from ninety.sim.body import BRAKE_MAX, CS_MEAN, D0, F0_MEAN, V0_MEAN, Body
 from ninety.sim.body import move as move_body
-from ninety.sim.offball import KEEPER_DIVE_EXTRA_M, KEEPER_STAND_REACH_M
+from ninety.sim.offball import DIVE_TIME_S, KEEPER_DIVE_EXTRA_M, KEEPER_DIVE_TRAVEL_M, KEEPER_STAND_REACH_M
 from ninety.sim.profiles import Profile
 from ninety.sim.team import TeamBrain
 
@@ -45,7 +45,6 @@ PERCEPTION_ERR = 0.03  # verify: m/s of misjudged ball velocity per metre betwee
 CONTROL_M = 1.0  # a foot reaches this far from the body's centre
 FOOT_REACH_Z = 1.0  # outfield players can play the ball below this height
 HAND_REACH_Z = 2.8  # P11: a jumping keeper's hand reach (standing about 2.35 m plus the jump)
-DIVE_TIME_S = 0.5  # P11: design; a full dive to the post takes about 1 s including body travel
 BODY_RADIUS = 0.26  # P11: half a footballer's shoulder width (about 0.53 m over the deltoids)
 BODY_HEIGHT = 1.8
 PRESS_GAP_M = 2.0  # design, verify: how close a presser stands (jockeys), goal-side of the ball carrier
@@ -226,6 +225,7 @@ class Engine:
         self.offside: set[str] = set()  # L10: team-mates in an offside position when the ball was played
         self.from_restart: str | None = None  # the restart the next kick is taken from
         self.read: tuple[str, float] | None = None  # (keeper, y): where he reads a shot is going
+        self.dive: tuple[str, float, float, float] | None = None  # (keeper, start t, start y, signed travel)
         self.shot_touched_by: str | None = None  # "keeper" or "defender": who got to the shot
         self.shot_was_on_target: bool | None = None  # was it going in when they first touched it?
         self.free_since = -99.0
@@ -329,6 +329,7 @@ class Engine:
         self.touched_since_kick = False
         self.chase = {}
         self.dribble_to = None
+        self.dive = None
 
     def kickoff_spot(self, p: Player, kicking: str) -> tuple[float, float]:
         """Law 8: his formation spot, but in his own half, and outside the centre circle if his
@@ -1124,9 +1125,39 @@ class Engine:
             self.runs[p.id] = (*spot, self.t)
         return spot
 
+    def keeper_dive(self, p: Player) -> bool:
+        """P15: once the keeper has reacted to a shot, he dives toward where it will cross his line:
+        his body travels sideways (up to KEEPER_DIVE_TRAVEL_M, only as far as he needs beyond his
+        standing reach) over DIVE_TIME_S, and he is down for a moment afterwards. True while the
+        dive moves him."""
+        k = self.kicked
+        shot_at_him = k and k["type"] == "shot" and k["team"] != p.team and self.possessor is None
+        reacted = self.t - self.free_since >= self.reaction(p)
+        if self.dive is None and shot_at_him and reacted and self.off_balance.get(p.id, -1.0) <= self.t:
+            bx, by, vx, vy = self.ball[0], self.ball[1], self.ball[3], self.ball[4]
+            if abs(vx) > 1e-6 and (p.x - bx) * vx > 0:  # the ball is coming toward his line
+                cross = by + vy * (p.x - bx) / vx
+                need = abs(cross - p.y) - KEEPER_STAND_REACH_M
+                if need > 0:
+                    travel = math.copysign(min(need, KEEPER_DIVE_TRAVEL_M), cross - p.y)
+                    self.dive = (p.id, self.t, p.y, travel)
+        if not self.dive or self.dive[0] != p.id:
+            return False
+        _, start, y0, travel = self.dive
+        s = min(1.0, (self.t + DT - start) / DIVE_TIME_S)
+        y = y0 + travel * s * s * (3 - 2 * s)  # the launch builds and then eases as he lands
+        p.vx, p.vy = 0.0, (y - p.y) / DT
+        p.y = y
+        if s >= 1.0:
+            self.dive = None
+            self.off_balance[p.id] = self.t + OFF_BALANCE_S  # on the ground: getting up
+        return True
+
     def move_players(self) -> None:
         for p in self.players:
             if p.id == self.moved:
+                continue
+            if p.role == "GK" and self.keeper_dive(p):
                 continue
             if p.id == self.possessor:  # won the ball this frame: keeps running, slowing to a dribble
                 steer(p, p.x + p.vx * 0.5, p.y + p.vy * 0.5, DRIBBLE)

@@ -667,3 +667,23 @@ def test_a_marker_chases_harder_when_his_man_runs_away_from_him_than_toward_him(
         e.beliefs[d.id].seen = {man.id: perception.Sighting(87.0, 34.0, vx, 0.0, e.t)}
         speeds.append(e.shape_target(d)[2])
     assert speeds[0] > speeds[1]
+
+
+def test_the_keeper_dives_toward_the_shot_after_reacting_then_is_down():
+    from ninety.sim.offball import DIVE_TIME_S, KEEPER_DIVE_TRAVEL_M
+    e = Engine(1)
+    k = e.keeper("away")
+    k.x, k.y, k.vx, k.vy = 104.0, 34.0, 0.0, 0.0
+    e.possessor = None
+    e.kicked = {"type": "shot", "team": "home"}
+    e.ball = (90.0, 34.0, 0.5, 25.0, 6.0, 0.0)  # heading for about 3.4 m to his left
+    e.free_since = e.t
+    assert not e.keeper_dive(k)  # he has not reacted yet
+    e.t += e.reaction(k)
+    y0 = k.y
+    assert e.keeper_dive(k)
+    for _ in range(int(DIVE_TIME_S * 25) + 2):
+        e.keeper_dive(k)
+        e.t += 1 / 25
+    assert 1.0 < k.y - y0 <= KEEPER_DIVE_TRAVEL_M + 1e-9  # launched toward it, no further than a dive goes
+    assert e.dive is None and e.off_balance[k.id] > e.t - 1 / 25  # and down on the ground after it

@@ -15,6 +15,10 @@ PITCH_X, PITCH_Y = 105.0, 68.0
 GOAL_HALF_WIDTH = 3.66
 KEEPER_STAND_REACH_M = 1.0  # P11: a keeper's sideways arm reach from the body's centre
 KEEPER_DIVE_EXTRA_M = 0.8  # P11: added as the dive stretches out, hips to fingertips about 1.8 m
+# P15: a dive launches the body sideways about 1.4 to 1.5 m (centre of mass, peak 3.6 to 4.0 m/s)
+# over about half a second (Monteiro et al. 2022, Sci. Rep.; Ibrahim et al. 2019, J. Sports Sci.).
+KEEPER_DIVE_TRAVEL_M = 1.45
+DIVE_TIME_S = 0.5
 KEEPER_DEPTH = (1.0, 6.0)  # O1: design: metres off the line, further the further away the ball is
 KEEPER_DEPTH_PER_M = 0.12  # O1: design
 RUSH_RANGE_M = 18.0  # O1: design: an attacker this close and through on goal draws the keeper out
@@ -158,3 +162,10 @@ def attacking_slot(role: str, own_goal_x: float, ball_x: float, ball_y: float,
     u = min(PITCH_X - 3.0, max(DEEPEST_M, u))
     y = PITCH_Y / 2 + across * width + (ball_y - PITCH_Y / 2) * BALL_SIDE_IN_POSSESSION
     return own_goal_x + fwd * u, min(PITCH_Y - 2.0, max(2.0, y))
+
+
+def keeper_reach_m(seconds: float, reaction_s: float) -> float:
+    """P11, P15: how far sideways a keeper can get a hand to, `seconds` after the ball is struck:
+    standing reach until he reacts, then the dive's stretch and the body's launch over DIVE_TIME_S."""
+    unfolded = min(1.0, max(0.0, (seconds - reaction_s) / DIVE_TIME_S))
+    return KEEPER_STAND_REACH_M + (KEEPER_DIVE_EXTRA_M + KEEPER_DIVE_TRAVEL_M) * unfolded
