@@ -12,7 +12,7 @@ from __future__ import annotations
 import math
 
 from ninety.sim import ball
-from ninety.sim.body import BODY_RADIUS, CONTROL_M, FOOT_REACH_Z, HAND_REACH_Z
+from ninety.sim.body import BODY_RADIUS, BRAKE_MAX, CONTROL_M, FOOT_REACH_Z, HAND_REACH_Z
 from ninety.sim.perception import CHOICE_REACTION_S
 
 PITCH_X, PITCH_Y = 105.0, 68.0
@@ -262,16 +262,42 @@ def dive_progress(t: float) -> float:
     return done / KEEPER_DIVE_TRAVEL_M
 
 
-def dive_speed(t: float) -> float:
-    """P15: the body's sideways speed `t` seconds into a dive (dive_progress's rate)."""
-    ramp = 2 * (DIVE_TIME_S - KEEPER_DIVE_TRAVEL_M / DIVE_PEAK_MPS)
-    return DIVE_PEAK_MPS * min(max(t, 0.0) / ramp, 1.0)
+def dive_motion(t: float, v0: float = 0.0) -> tuple[float, float]:
+    """P15: how far (m) and how fast (m/s) the body has gone toward the dive `t` seconds into it,
+    from a sideways speed `v0` toward it when it began. The dive is one push (dive_progress's,
+    speeding him up to DIVE_PEAK_MPS); a run toward the dive is where the push starts from, never
+    lost; a run away from it is first braked as any body brakes (P2), then he pushes."""
+    push = DIVE_PEAK_MPS / _dive_ramp()
+    t = max(t, 0.0)
+    gone = 0.0
+    if v0 < 0:
+        braking = -v0 / BRAKE_MAX
+        if t <= braking:
+            return v0 * t + 0.5 * BRAKE_MAX * t * t, v0 + BRAKE_MAX * t
+        gone, t, v0 = -v0 * v0 / (2 * BRAKE_MAX), t - braking, 0.0
+    top = max(DIVE_PEAK_MPS, v0)
+    pushing = (top - v0) / push
+    if t <= pushing:
+        return gone + v0 * t + 0.5 * push * t * t, v0 + push * t
+    return gone + v0 * pushing + 0.5 * push * pushing * pushing + top * (t - pushing), top
 
 
-def dive_time_to(metres: float) -> float:
-    """P15: how long into a dive the body has gone `metres` sideways (dive_progress inverted)."""
-    ramp = 2 * (DIVE_TIME_S - KEEPER_DIVE_TRAVEL_M / DIVE_PEAK_MPS)
-    pushed = 0.5 * DIVE_PEAK_MPS * ramp  # how far he goes while still speeding up
+def dive_time_to(metres: float, v0: float = 0.0) -> float:
+    """P15: how long into a dive the body has gone `metres` toward it (dive_motion inverted)."""
+    push = DIVE_PEAK_MPS / _dive_ramp()
+    before = 0.0
+    if v0 < 0:
+        before = -v0 / BRAKE_MAX
+        metres += v0 * v0 / (2 * BRAKE_MAX)  # what the braking took him away first
+        v0 = 0.0
+    top = max(DIVE_PEAK_MPS, v0)
+    pushing = (top - v0) / push
+    pushed = v0 * pushing + 0.5 * push * pushing * pushing
     if metres <= pushed:
-        return math.sqrt(2 * metres * ramp / DIVE_PEAK_MPS)
-    return min(ramp + (metres - pushed) / DIVE_PEAK_MPS, DIVE_TIME_S)
+        return before + (math.sqrt(v0 * v0 + 2 * push * metres) - v0) / push
+    return before + pushing + (metres - pushed) / top
+
+
+def _dive_ramp() -> float:
+    """P15: how long the full dive speeds up for (peak 3.8 m/s and 1.45 m in 0.5 s: about 0.24 s)."""
+    return 2 * (DIVE_TIME_S - KEEPER_DIVE_TRAVEL_M / DIVE_PEAK_MPS)
