@@ -59,7 +59,7 @@ Kind: **hard** fails the clip; **warn** is reported. Columns show what exists to
 | C5 | each event's frame exists and its time matches | CDF | hard | ✅ | ✅ |
 | C6 | the ball is where a pass, shot or tackle says it happened | CDF | hard | ✅ | ✅ |
 | C7 | a pass or shot reaches its end point before anything else happens to the ball (no assumption about speed: a rolling ball slows) | CDF | hard | ✅ | ✅ |
-| C8 | event order makes sense: only the player with the ball passes or shoots; an interception follows a failed pass; a goal follows a shot | Laws 9, 10 | hard | ✅ | ✅ |
+| C8 | event order makes sense: only the player with the ball, or one within reach of it playing it first time (P14), passes or shoots; a pass is never received by its own passer; an interception follows a failed pass; a goal follows a shot | Laws 9, 10 | hard | ✅ | ✅ |
 | C9 | the score equals the goal events | Law 10 | hard | ✅ | ✅ |
 
 ### Physics: it could happen in the real world
