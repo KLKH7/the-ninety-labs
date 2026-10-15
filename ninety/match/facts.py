@@ -7,7 +7,7 @@ from functools import lru_cache
 
 from ninety.sim.engine import simulate
 
-AGENT_TYPES = ("pass", "shot", "goal", "tackle", "interception")
+AGENT_TYPES = ("pass", "shot", "goal", "tackle", "interception", "pressure")
 
 
 @lru_cache(maxsize=8)
