@@ -23,11 +23,13 @@ KEEPER_DIVE_EXTRA_M = 0.8  # P11: added as the dive stretches out, hips to finge
 # over about half a second (Monteiro et al. 2022, Sci. Rep.; Ibrahim et al. 2019, J. Sports Sci.).
 KEEPER_DIVE_TRAVEL_M = 1.45
 DIVE_TIME_S = 0.5
+DIVE_PEAK_MPS = 3.8  # P15: the body's peak sideways speed (3.6 to 4.0)
+KEEPER_DOWN_S = 0.8  # design, verify: how long a keeper is on the ground after a dive
 SHOT_SPEEDS_KMH = (70.0, 120.0)  # design, verify: the speeds shots are struck at (engine.shoot)
-SHOT_SPEED_EST_MPS = sum(SHOT_SPEEDS_KMH) / 2 / 3.6  # a typical shot, for judging in advance
+SHOT_SPEED_SAMPLES = 8  # how finely that range is averaged over
 KEEPER_DEPTH = (1.0, 6.0)  # O1: design, verify: how far off his line he stands
 SHOT_RANGE_M = 40.0  # design: a shot is an option inside this distance of the goal
-KEEPER_DEPTH_STEP_M = 0.5  # O1: the depths he weighs, this far apart
+KEEPER_DEPTH_STEP_M = 0.5  # O1: design: the depths he weighs, this far apart
 RUSH_RANGE_M = 18.0  # O1: design: an attacker this close and through on goal draws the keeper out
 CLOSE_DOWN_M = 2.0  # O1: design: how close the keeper gets to narrow the angle
 DANGER_RANGE_M = 25.0  # O2: design: attackers this near our goal are marked man to man
@@ -56,11 +58,15 @@ def keeper_spot(ball_x: float, ball_y: float, own_goal_x: float) -> tuple[float,
     lo, hi = KEEPER_DEPTH
     for k in range(int((hi - lo) / KEEPER_DEPTH_STEP_M) + 1):
         depth = lo + k * KEEPER_DEPTH_STEP_M
-        along = max(0.0, to_line - depth / abs(ux))
+        along = to_line - depth / abs(ux)
+        if along < CLOSE_DOWN_M:  # no nearer the ball than when he rushes out to close it down
+            continue
         spot = ball_x + ux * along, ball_y + uy * along
         open_share = open_goal_share(ball_x, ball_y, own_goal_x, spot)
         if best is None or open_share < best[0] - 1e-12:
             best = (open_share, spot)
+    if best is None:  # the ball is almost on his line: he stays on it, between the posts
+        return own_goal_x, min(gy + GOAL_HALF_WIDTH, max(gy - GOAL_HALF_WIDTH, ball_y))
     return best[1]
 
 
@@ -72,12 +78,20 @@ def open_goal_share(x: float, y: float, goal_x: float, keeper: tuple[float, floa
         return math.atan2(py - y, abs(px - x))
     lo, hi = sorted((bearing(goal_x, PITCH_Y / 2 - GOAL_HALF_WIDTH),
                      bearing(goal_x, PITCH_Y / 2 + GOAL_HALF_WIDTH)))
+    if hi <= lo:
+        return 0.0
+    if (keeper[0] - x) * (goal_x - x) <= 0:  # behind the shooter: he covers nothing
+        return 1.0
     gap = math.hypot(keeper[0] - x, keeper[1] - y)
-    reach = keeper_reach_m(gap / SHOT_SPEED_EST_MPS, CHOICE_REACTION_S)
     k = bearing(*keeper)
-    half = math.atan2(reach, max(gap, 1e-6))
-    covered = max(0.0, min(hi, k + half) - max(lo, k - half))
-    return (hi - lo - covered) / (hi - lo) if hi > lo else 0.0
+    lo_kmh, hi_kmh = SHOT_SPEEDS_KMH
+    open_share = 0.0
+    for i in range(SHOT_SPEED_SAMPLES):  # over the speeds shots are struck at, not one typical speed
+        speed = (lo_kmh + (hi_kmh - lo_kmh) * (i + 0.5) / SHOT_SPEED_SAMPLES) / 3.6
+        half = math.atan2(keeper_reach_m(gap / speed, CHOICE_REACTION_S), max(gap, 1e-6))
+        covered = max(0.0, min(hi, k + half) - max(lo, k - half))
+        open_share += (hi - lo - covered) / (hi - lo) / SHOT_SPEED_SAMPLES
+    return open_share
 
 
 def through_on_goal(carrier: tuple[float, float], own_goal_x: float,
@@ -212,3 +226,16 @@ def keeper_reach_m(seconds: float, reaction_s: float) -> float:
         return BODY_RADIUS + ball.RADIUS
     unfolded = min(1.0, (seconds - reaction_s) / DIVE_TIME_S)
     return KEEPER_STAND_REACH_M + (KEEPER_DIVE_EXTRA_M + KEEPER_DIVE_TRAVEL_M) * unfolded
+
+
+def dive_progress(t: float) -> float:
+    """P15: the share of a full dive's sideways travel done `t` seconds after it starts: he
+    accelerates to the cited peak speed, then carries it, so that the whole travel takes DIVE_TIME_S
+    (peak 3.8 m/s and 1.45 m in 0.5 s give about 0.24 s of acceleration)."""
+    ramp = 2 * (DIVE_TIME_S - KEEPER_DIVE_TRAVEL_M / DIVE_PEAK_MPS)
+    t = min(max(t, 0.0), DIVE_TIME_S)
+    if t <= ramp:
+        done = 0.5 * DIVE_PEAK_MPS / ramp * t * t
+    else:
+        done = 0.5 * DIVE_PEAK_MPS * ramp + DIVE_PEAK_MPS * (t - ramp)
+    return done / KEEPER_DIVE_TRAVEL_M

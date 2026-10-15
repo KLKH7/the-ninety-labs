@@ -348,13 +348,6 @@ def test_from_fifteen_metres_he_chooses_between_along_the_ground_and_over_the_to
 
 
 
-def test_screened_means_any_outfield_defender_nearer_the_goal_as_in_the_source():
-    wide = [(100.0, 44.0)]  # 11 m from goal (he is 15 m), outside the posts' cone
-    assert D.shot_estimate(90, 34, 105, wide, None) < D.shot_estimate(90, 34, 105, [], None)
-    behind = [(85.0, 34.0)]
-    assert D.shot_estimate(90, 34, 105, behind, None) == D.shot_estimate(90, 34, 105, [], None)
-
-
 def test_the_keeper_term_is_how_much_goal_he_leaves_open():
     usual = offball.keeper_spot(85, 34, 105)
     off = (usual[0], usual[1] + 3.0)  # caught three metres off his line
@@ -384,3 +377,41 @@ def test_before_he_reacts_only_his_body_stops_a_shot_in_the_shooters_judgement_t
     assert offball.keeper_reach_m(0.1, 0.36) == BODY_RADIUS + ball.RADIUS
     full = offball.KEEPER_STAND_REACH_M + offball.KEEPER_DIVE_EXTRA_M + offball.KEEPER_DIVE_TRAVEL_M
     assert offball.keeper_reach_m(2.0, 0.36) == full
+
+
+def test_a_keeper_behind_the_shooter_covers_nothing():
+    assert offball.open_goal_share(95, 34, 105, (90, 34)) == 1.0
+
+
+def test_with_the_ball_almost_on_his_line_the_keeper_stays_on_it_between_the_posts():
+    x, y = offball.keeper_spot(104.5, 0.5, 105)
+    assert x == 105 and abs(y - 34) <= 3.66
+
+
+def test_out_of_shooting_range_the_keeper_sweeps_from_his_furthest_spot():
+    depth = lambda d: 105 - offball.keeper_spot(105 - d, 34, 105)[0]  # noqa: E731
+    assert depth(39) < offball.KEEPER_DEPTH[1] == depth(50)
+
+
+def test_keeper_coverage_has_no_cliff_with_distance():
+    # Averaged over the speeds shots are struck at, the open share falls smoothly with distance and a
+    # keeper caught off his spot still matters from range.
+    share = lambda d: offball.open_goal_share(105 - d, 34, 105, offball.keeper_spot(105 - d, 34, 105))  # noqa: E731
+    shares = [share(d) for d in (22, 24, 26, 28)]
+    assert all(a >= b for a, b in zip(shares, shares[1:], strict=False))
+    off = offball.open_goal_share(75, 34, 105, (100.0, 40.0))
+    assert off > offball.open_goal_share(75, 34, 105, offball.keeper_spot(75, 34, 105))
+
+
+def test_screened_is_a_defender_in_the_triangle_to_the_posts_as_in_the_source():
+    assert D.shot_estimate(90, 34, 105, [(100.0, 44.0)], None) == D.shot_estimate(90, 34, 105, [], None)
+    assert D.shot_estimate(90, 34, 105, [(97.0, 34.0)], None) < D.shot_estimate(90, 34, 105, [], None)
+
+
+def test_the_dive_never_beats_the_cited_peak_speed():
+    step = 0.001
+    travel = offball.KEEPER_DIVE_TRAVEL_M
+    speeds = [(offball.dive_progress(t + step) - offball.dive_progress(t)) / step * travel
+              for t in [i * step for i in range(int(offball.DIVE_TIME_S / step))]]
+    peak = max(speeds)
+    assert 3.6 <= peak <= 4.0 and offball.dive_progress(offball.DIVE_TIME_S) == 1.0

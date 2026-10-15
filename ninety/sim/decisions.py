@@ -36,8 +36,8 @@ SHOT_ANCHORS = ((0.0, 0.31), (3.0, 0.31), (11.0, 0.177), (20.0, 0.053), (30.0, 0
                 (105.0, 0.0))
 BLOCKER_FACTOR = 0.5  # design, verify: each defender in the shooting cone blocks the shot half the time
 # D3: the zone rates are averages over real shots, which usually face a defender. Relative to that
-# average, a shot with no outfield defender goal-side (nearer the goal than the shooter) scores more
-# and one with any scores a little less:
+# average, a shot with no outfield defender in the triangle between the ball and the posts (the
+# source's "goal-side", tested point-in-polygon) scores more and one with any a little less:
 # 11.59% against 7.49%, with 23.18% of shots unscreened (Lucey et al. 2015, 9,732 shots, tracking
 # data). The effect does not compound per defender (it flattens; Anzer and Bauer 2021).
 _UNSCREENED, _SCREENED, _UNSCREENED_SHARE = 0.1159, 0.0749, 0.2318
@@ -227,12 +227,10 @@ def shot_estimate(x: float, y: float, goal_x: float, opponents: list[tuple[float
     """The player's own estimate of a shot from here, between 0 and 1: how often shots from this
     distance go in (D3), less from a tighter angle (by how much of the goal he can see compared with
     a central shot), then compared with the typical shot those rates average over: better with no
-    outfield defender he believes is nearer the goal than he is, a little worse with any; and by how
-    much of the goal the keeper leaves open against a keeper in his usual spot. The keeper is
+    outfield defender he believes is in the triangle to the posts, a little worse with any; and by
+    how much of the goal the keeper leaves open against a keeper in his usual spot. The keeper is
     counted once."""
-    d = math.hypot(goal_x - x, PITCH_Y / 2 - y)
-    screened = any((ox, oy) != keeper and math.hypot(goal_x - ox, PITCH_Y / 2 - oy) < d
-                   for ox, oy in opponents)
+    screened = any((ox, oy) != keeper and in_cone(x, y, goal_x, ox, oy) for ox, oy in opponents)
     q = typical_shot(x, y, goal_x) * (SCREENED_SHOT if screened else CLEAR_SHOT)
     if keeper:  # how much of the goal he leaves open, against a keeper in his usual spot
         usual = offball.open_goal_share(x, y, goal_x, offball.keeper_spot(x, y, goal_x))

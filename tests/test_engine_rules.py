@@ -677,7 +677,7 @@ def test_the_keeper_dives_toward_the_shot_after_reacting_then_is_down():
     e.possessor = None
     e.kicked = {"type": "shot", "team": "home"}
     e.ball = (90.0, 34.0, 0.5, 25.0, 6.0, 0.0)  # heading for about 3.4 m to his left
-    e.free_since = e.t
+    e.kicked_at = e.free_since = e.t
     assert not e.keeper_dive(k)  # he has not reacted yet
     e.t += e.reaction(k)
     y0 = k.y
@@ -687,3 +687,62 @@ def test_the_keeper_dives_toward_the_shot_after_reacting_then_is_down():
         e.t += 1 / 25
     assert 1.0 < k.y - y0 <= KEEPER_DIVE_TRAVEL_M + 1e-9  # launched toward it, no further than a dive goes
     assert e.dive is None and e.off_balance[k.id] > e.t - 1 / 25  # and down on the ground after it
+
+
+def _shot_at_keeper(e, ball):
+    k = e.keeper("away")
+    k.x, k.y, k.vx, k.vy = 104.0, 34.0, 0.0, 0.0
+    e.possessor = None
+    e.kicked = {"type": "shot", "team": "home", "x": ball[0], "y": ball[1]}
+    e.ball = ball
+    e.kicked_at = e.free_since = e.t
+    return k
+
+
+def test_the_dive_runs_in_the_match_loop_and_waits_for_the_keepers_reaction():
+    e = Engine(1)
+    k = _shot_at_keeper(e, (90.0, 34.0, 0.5, 25.0, 6.0, 0.0))
+    y0 = k.y
+    e.move_players()
+    assert k.y == y0 or abs(k.y - y0) < 0.05  # nothing yet: he has not reacted
+    e.t += e.reaction(k)
+    for _ in range(5):
+        e.move_players()
+        e.t += 1 / 25
+    assert k.y - y0 > 0.2  # launched by the match loop itself
+
+
+def test_a_deflection_restarts_the_keepers_reaction_before_he_dives():
+    e = Engine(1)
+    k = _shot_at_keeper(e, (90.0, 34.0, 0.5, 25.0, 6.0, 0.0))
+    e.t += e.reaction(k)
+    e.kicked_at = e.t  # just deflected on its way
+    assert not e.keeper_dive(k)
+
+
+def test_no_dive_at_a_ball_going_over_the_bar():
+    e = Engine(1)
+    k = _shot_at_keeper(e, (90.0, 34.0, 2.0, 25.0, 6.0, 5.0))  # rising steeply
+    e.t += e.reaction(k)
+    assert not e.keeper_dive(k)
+
+
+def test_the_keeper_moves_sideways_at_his_depth_when_he_reads_a_shot():
+    e = Engine(1)
+    k = _shot_at_keeper(e, (90.0, 34.0, 0.5, 25.0, 0.0, 0.0))
+    k.x = 99.0  # he had come out
+    e.read = (k.id, 36.0)
+    tx, _, _ = e.shape_target(k)
+    assert tx == 99.0
+
+
+def test_the_keeper_sets_himself_from_the_ball_not_where_a_pass_is_going():
+    from ninety.sim import offball
+    e = Engine(1)
+    k = e.keeper("away")
+    e.brains["away"].in_possession = False
+    e.possessor = None
+    e.kicked, e.pass_target = {"type": "pass", "team": "home", "x": 60.0, "y": 34.0}, (95.0, 10.0)
+    e.ball = (70.0, 34.0, 0.0, 14.0, -12.0, 0.0)
+    tx, ty, _ = e.shape_target(k)
+    assert (tx, ty) == offball.keeper_spot(70.0, 34.0, 105.0)

@@ -154,3 +154,11 @@ short and actionable. This file is public: no research sources, product names or
   author's intent first lists every constant and special case as sourced, design-marked or
   neither, flags anything fitted to a check or scripted, and mutation-tests the new tests,
   before merging.
+
+### 22. When two reviewers disagree about a source, read the source
+- **What happened:** one review said our "screened shot" definition differed from the study it
+  came from and should change; the change was made. The next review said the opposite. The
+  study's own text settled it in a minute: the first review had measured our engine and read
+  the result as a statement about the study.
+- **Rule:** before acting on a claim about what a source says, read the passage itself, and keep
+  "the engine measures X" separate from "the source defines Y".

@@ -1131,25 +1131,30 @@ class Engine:
         dive moves him."""
         k = self.kicked
         shot_at_him = k and k["type"] == "shot" and k["team"] != p.team and self.possessor is None
-        reacted = self.t - self.free_since >= self.reaction(p)
+        reacted = self.t - self.kicked_at >= self.reaction(p)  # to the last touch, a deflection too
         if self.dive is None and shot_at_him and reacted and self.off_balance.get(p.id, -1.0) <= self.t:
-            bx, by, vx, vy = self.ball[0], self.ball[1], self.ball[3], self.ball[4]
-            if abs(vx) > 1e-6 and (p.x - bx) * vx > 0:  # the ball is coming toward his line
+            bx, by, bz, vx, vy, vz = self.ball
+            coming = abs(vx) > 1e-6 and (p.x - bx) * vx > 0  # the ball is coming toward his line
+            over = coming and bz + vz * (p.x - bx) / vx > HAND_REACH_Z  # going over him: no dive
+            if coming and not over:
                 cross = by + vy * (p.x - bx) / vx
-                need = abs(cross - p.y) - KEEPER_STAND_REACH_M
+                # only as far as his body must go beyond the full stretch of his arms
+                need = abs(cross - p.y) - (KEEPER_STAND_REACH_M + KEEPER_DIVE_EXTRA_M)
                 if need > 0:
                     travel = math.copysign(min(need, KEEPER_DIVE_TRAVEL_M), cross - p.y)
                     self.dive = (p.id, self.t, p.y, travel)
         if not self.dive or self.dive[0] != p.id:
             return False
         _, start, y0, travel = self.dive
-        s = min(1.0, (self.t + DT - start) / DIVE_TIME_S)
-        y = y0 + travel * s * s * (3 - 2 * s)  # the launch builds and then eases as he lands
+        elapsed = self.t + DT - start
+        # A shorter dive is the same push, over sooner: the full dive's profile, sped up.
+        speed_up = KEEPER_DIVE_TRAVEL_M / max(abs(travel), 1e-6)
+        y = y0 + travel * offball.dive_progress(elapsed * speed_up)
         p.vx, p.vy = 0.0, (y - p.y) / DT
         p.y = y
-        if s >= 1.0:
+        if elapsed >= DIVE_TIME_S:
             self.dive = None
-            self.off_balance[p.id] = self.t + OFF_BALANCE_S  # on the ground: getting up
+            self.off_balance[p.id] = self.t + offball.KEEPER_DOWN_S  # on the ground: getting up
         return True
 
     def move_players(self) -> None:
