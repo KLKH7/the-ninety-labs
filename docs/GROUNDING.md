@@ -111,6 +111,23 @@ the chosen action is decided by physics and execution error, so an estimate can 
 | D4 | choice by softmax: a good decision-maker almost always takes the best option, pressure loosens the choice unless composed; a small bonus for carrying on with the current dribble or hold; trailing late raises the appeal of shooting; a trait that likes long shots raises it from distance (*design*) | expected-value plus softmax approach from the research; values *design* | ✅ |
 | D5 | the carrier settles the ball (0.3 to 0.6 s, quicker with a good first touch) then decides about 4 times a second; a throw-in is always thrown, only to a team-mate within 25 m, or after 6 s with nobody free, into space down the line (*design*) | Law 15; timings *design* | ✅ |
 
+### Set pieces: positions are a plan, outcomes are physics
+
+The routine says where players stand and what the taker may choose; who wins the ball, and
+whether a corner ends in a shot, a clearance or a goal, is decided by the ball's flight and
+contact (`ninety/sim/setpieces.py`).
+
+| ID | Rule | Source | Status |
+|---|---|---|---|
+| S1 | defenders' spots are kept 10.65 m from the corner flag before the kick: the 9.15 m of Law 17 from the 1 m arc, plus 0.5 m so that a player still settling does not step inside it (*design*) | Law 17 | ✅ |
+| S2 | a corner is taken when the taker has reached the flag, placed the ball (1.5 s, *verify*) and every player has reached his spot (within 1.5 m) or stopped moving toward it (below 1 m/s), never after a drawn delay (*design*). Then the taker settles the ball as for any carrier (D5) and strikes it | ENGINE.md layer 10; timings *design* | ✅ |
+| S3 | the routine holds after the kick until a player controls the ball, it goes out, or 4 s pass (*design*); players chasing the ball (who can reach it first) always go for it | *design* | ✅ |
+| S4 | a man-marker stands 1 m goal-side of his attacker, between him and the centre of the goal (*design*) | coaching practice (*verify*) | ✅ |
+| S5 | the attacking team sends five players into named zones (near post, in front of the keeper, centre and far side of the six-yard box, the penalty spot), one to the edge of the box for a clearance, and keeps the full-backs and keeper back. Who goes where is by position: centre-backs and the striker attack the ball in the air (*design*) | aerial deliveries with several attackers making runs are the usual pattern ([Casal et al. 2015](https://lida.sport-iat.de/dfb/Record/4036711), 1,139 corners at elite level); the zones and numbers are *design* | ✅ |
+| S6 | the taker is the best crosser among the wingers, central midfielders and full-backs (*design*) | *design* | ✅ |
+| S7 | the defending team marks each attacker in the box man to man with its best tacklers, puts the rest in zones (near post, front post, both sides of the six-yard box), sets its keeper on the line, and leaves two forwards up for a counter-attack (*design*) | mixed zonal and man marking is the norm, man to man the most common in the Premier League ([Pulling et al. 2013](https://www.ingentaconnect.com/content/uwic/ujpa/2013/00000013/00000001/art00012), 90 percent of 436 corners); zones are *design* | ✅ |
+| S8 | the taker chooses a short ball to a team-mate within 15 m or a cross to an attacker's zone, scored like any pass (D1) on what he believes, by softmax (D4); the cross is struck at 30° with his crossing error (A3) | D1, D4, A3; the 15 m short-corner limit is *design* | ✅ |
+
 ### Laws of the Game: it is legal football
 
 | ID | Check | Source | Kind | Validator | Engine |
@@ -123,7 +140,7 @@ the chosen action is decided by physics and execution error, so an estimate can 
 | L6 | a goal only when the whole ball crosses the goal line between the posts and under the bar | Law 10 | hard | ❌ | ✅ |
 | L7 | over the touchline: a throw-in to the opponents of the last player to touch it, from where it crossed; opponents 2 m away | Law 15 | hard | ❌ | ✅ thrown, not dribbled; ✅ the presser stands off 2 m |
 | L8 | over the goal line, no goal, last touched by an attacker: a goal kick from inside the goal area; opponents outside the penalty area | Law 16 | hard | ❌ | ✅ awarded; 🟡 the presser stands outside the penalty area; other players are not yet kept out |
-| L9 | over the goal line, no goal, last touched by a defender: a corner from the corner area on that side; opponents 9.15 m from the corner arc | Law 17 | hard | ❌ | ✅ awarded; 🟡 the presser stands off 9.15 m; other players are not yet kept away |
+| L9 | over the goal line, no goal, last touched by a defender: a corner from the corner area on that side (the ball placed within the 1 m arc); opponents 9.15 m from the corner arc until it is kicked | Law 17 | hard | ✅ placed in the arc on the side it went out; every opponent 9.15 m from the arc from placing to the kick | ✅ awarded; ✅ every defender's spot is kept 10.65 m from the flag (S1) |
 | L10 | a player who receives a team-mate's pass while in an offside position (in the opponents' half, nearer the goal line than the ball and the second-last opponent; level is onside) is penalised; never from a goal kick, throw-in or corner | Law 11 | hard | ❌ | ❌ |
 | L11 | one referee and two assistants on the pitch | Laws 5, 6 | hard for video | ❌ | ❌ |
 | L12 | fouls, free kicks, penalties, cards | Laws 12 to 14 | later | ❌ | ❌ |
@@ -141,6 +158,7 @@ the chosen action is decided by physics and execution error, so an estimate can 
 | R6 | match top speed by position about 7.9 to 8.6 m/s (capability is higher; few sprints last long enough to reach it) | World Cup tracking ([Ortega 2022](https://www.wbc.poznan.pl//Content/522956/2_Ortega_TSS_2022_292_51-56.pdf)) | ❌ (report) | 🟡 6.5 to 7.4 m/s, below the published 7.9 to 8.6 |
 | R7 | high-intensity running in the last 15 minutes about 20 to 45 percent below the first 15 | Premier League tracking ([Bradley 2009](https://sure.sunderland.ac.uk/id/eprint/3478/)) | ❌ (report) | 🟡 54 percent lower, above the published 20 to 45 |
 | R8 | team length about 31 to 46 m and width about 35 to 48 m, more compact out of possession | systematic review of professional positional data ([Rico-González](https://www.termedia.pl/Reference-values-for-collective-tactical-behaviours-based-on-positional-data-in-professional-football-matches-a-systematic-review,78,43095,0,1.html)) | ❌ (report) | ✅ in possession 44 × 36; out of possession 38 × 34, more compact |
+| R9 | about 2 percent of corners lead directly to a goal | elite competitions ([Casal et al. 2015](https://lida.sport-iat.de/dfb/Record/4036711)); *verify* against a second source | ❌ (report) | ❓ not yet measured: corners are rare in full matches until crosses and clearances exist; the `corner` scenario is the way to measure it |
 
 ### Renderer truth: the labels match the pictures
 

@@ -52,6 +52,11 @@ FOOT_REACH_M, KEEPER_REACH_M, FRAME_SLACK_M = 1.0, 1.8, 0.6
 # within this distance of it may rebound without an event.
 WOODWORK_NEAR_M = 0.6
 APPROACH_TOLERANCE_M = 0.04  # P14: per frame; a ball at 1 m/s relative to him can still be met
+# L9 (Law 17): the ball is placed in the corner area (an arc of 1 m about the corner) and
+# opponents stay 9.15 m from the arc until it is kicked. A restart within CORNER_NEAR_M of a
+# corner, after the ball went out over that goal line, is a corner; a goal kick is taken from
+# the goal area, more than 20 m from either corner, so the two cannot be confused.
+CORNER_ARC_M, CORNER_DISTANCE_M, CORNER_NEAR_M = 1.0, 9.15, 3.0
 EXAMPLES = 5
 
 Problems = dict[str, list[str]]
@@ -316,6 +321,48 @@ def check_events(events: list[dict], frames: list[dict], fps: float, meta: dict,
                 )
 
 
+def check_corners(events: list[dict], frames: list[dict], problems: Problems) -> None:
+    """L9: a corner is placed in the corner area, and every opponent stands at least 9.15 m from
+    the corner arc from the moment it is placed until it is kicked."""
+    by_frame = {f["frame"]: f for f in frames}
+    out = None
+    for i, e in enumerate(events):
+        if e["type"] == "out_of_play":
+            out = e
+            continue
+        if e["type"] != "set_piece" or out is None:
+            continue
+        line, crossed = out["x"], out
+        out = None
+        if line not in (0.0, 105.0):  # over a touchline: a throw-in
+            continue
+        corner = min(((line, 0.0), (line, 68.0)), key=lambda c: math.hypot(e["x"] - c[0], e["y"] - c[1]))
+        if math.hypot(e["x"] - corner[0], e["y"] - corner[1]) > CORNER_NEAR_M:
+            continue  # a goal kick (or a goal) from that line
+        if (corner[1] == 0.0) != (crossed["y"] < 34.0):
+            problems["L9 corner"].append(f"{e['id']}: taken from the far corner, not where it went out")
+        f = by_frame.get(e["frame"])
+        if f is None:
+            continue
+        b = f["ball"]
+        if math.hypot(b["x"] - corner[0], b["y"] - corner[1]) > CORNER_ARC_M + POSITION_PRECISION_M:
+            problems["L9 corner"].append(f"{e['id']}: ball placed outside the corner arc")
+        strike = next((n for n in events[i + 1:] if n["type"] in ("pass", "shot")), None)
+        last = strike["frame"] if strike else e["frame"]
+        for n in range(e["frame"], last + 1):
+            g = by_frame.get(n)
+            if g is None:
+                continue
+            for p in g["players"]:
+                if p["team"] == e["team"]:
+                    continue
+                gap = math.hypot(p["x"] - corner[0], p["y"] - corner[1]) - CORNER_ARC_M
+                if gap < CORNER_DISTANCE_M - POSITION_PRECISION_M:
+                    where = f"{gap:.2f} m from the arc at frame {n}"
+                    problems["L9 corner"].append(f"{e['id']}: {p['id']} {where}")
+                    break
+
+
 def validate(clip: Path) -> Problems:
     """Returns failures by check; an empty dict means the clip meets the contract."""
     problems: Problems = defaultdict(list)
@@ -341,6 +388,7 @@ def validate(clip: Path) -> Problems:
         return dict(problems)
     check_physics(events, frames, fps, meta.get("roster", []), problems)
     check_events(events, frames, fps, meta, problems)
+    check_corners(events, frames, problems)
     return dict(problems)
 
 

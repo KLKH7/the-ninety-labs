@@ -19,7 +19,7 @@ import math
 import random
 from dataclasses import dataclass, field
 
-from ninety.sim import ball, decisions, perception, profiles
+from ninety.sim import ball, decisions, perception, profiles, setpieces
 from ninety.sim.body import BRAKE_MAX, CS_MEAN, D0, F0_MEAN, V0_MEAN, Body
 from ninety.sim.body import move as move_body
 from ninety.sim.profiles import Profile
@@ -191,6 +191,7 @@ class Engine:
         self.touched_since_kick = False
         self.chase: dict[str, tuple[str, float, float]] = {}  # team -> (player, x, y)
         self.restart: Restart | None = None
+        self.set_play: setpieces.Corner | None = None  # a corner routine being set up or played
         self.throw_by: str | None = None  # a throw-in taker holding the ball until he throws it
         self.throw_ready = 0.0
         self.dribble_to: tuple[float, float] | None = None  # the carrier's chosen carry, if any
@@ -279,6 +280,7 @@ class Engine:
         for p in self.players:
             p.x, p.y, p.vx, p.vy = p.ax, p.ay, 0.0, 0.0
         self.ball = (PITCH_X / 2, PITCH_Y / 2, 0.0, 0.0, 0.0, 0.0)
+        self.set_play = None
         taker = next(p for p in self.players if p.team == team and p.role == "ST")
         taker.x, taker.y = PITCH_X / 2, PITCH_Y / 2
         self.emit("kickoff", team, taker.x, taker.y, player=taker.id)
@@ -705,6 +707,11 @@ class Engine:
         self.kickoff(other(team))
 
     def stop(self, kind: str, team: str, spot: tuple[float, float], taker: str | None = None) -> None:
+        if kind == "corner":  # both teams set up; it is taken when they are ready (setpieces.py)
+            self.set_play = setpieces.plan(self, team, spot)
+            self.restart = Restart(kind, team, spot[0], spot[1], self.set_play.taker, math.inf)
+            return
+        self.set_play = None
         if taker is None:
             taker = self.nearest(spot[0], spot[1], team).id
         lo, hi = RESTART_DELAY_S[kind]
@@ -719,7 +726,10 @@ class Engine:
         self.ball = (bx, by, bz, vx, vy, vz)
         r = self.restart
         taker = self.by_id[r.taker]
-        if self.t < r.ready_at or math.hypot(taker.x - r.x, taker.y - r.y) > CONTROL_M:
+        if r.kind == "corner":
+            if not setpieces.ready(self):
+                return
+        elif self.t < r.ready_at or math.hypot(taker.x - r.x, taker.y - r.y) > CONTROL_M:
             return
         # While the ball is out of play a new one is placed: the only time the ball may jump.
         self.ball = (taker.x, taker.y, 0.0, 0.0, 0.0, 0.0)
@@ -748,6 +758,12 @@ class Engine:
         if self.restart and p.id == self.restart.taker:
             r = self.restart
             return clamp(r.x, 0.5, PITCH_X - 0.5), clamp(r.y, 0.5, PITCH_Y - 0.5), RECOVER
+        if self.set_play:  # a corner: his spot in the routine (setpieces.py)
+            spot = setpieces.target(self, p)
+            if spot:
+                sx, sy = clamp(spot[0], 0.5, PITCH_X - 0.5), clamp(spot[1], 0.5, PITCH_Y - 0.5)
+                far = math.hypot(sx - p.x, sy - p.y) > FAR_OUT_OF_POSITION_M
+                return sx, sy, RECOVER if far else SHAPE
         bx, by = self.ball[0], self.ball[1]
         poss_team = self.team_of(self.possessor) if self.possessor else None
         shift = (clamp(bx, 0, PITCH_X) - PITCH_X / 2) * 0.45
@@ -866,6 +882,14 @@ class Engine:
             if self.t >= self.hold_until:
                 self.decide(carrier, throw=True)
             return
+        corner = self.set_play
+        # Law 17: a corner is kicked from where it was placed, never dribbled.
+        if corner and corner.delivered_at is None and carrier.id == corner.taker:
+            steer(carrier, carrier.x, carrier.y, DRIBBLE)
+            self.ball = (self.ball[0], self.ball[1], 0.0, 0.0, 0.0, 0.0)
+            if self.t >= self.hold_until:
+                setpieces.deliver(self, carrier)
+            return
         opp = other(carrier.team)
         presser = self.nearest(carrier.x, carrier.y, opp)  # who is physically there
         gap = math.hypot(presser.x - carrier.x, presser.y - carrier.y)
@@ -916,6 +940,15 @@ class Engine:
         if self.t >= self.hold_until and (self.frame + int(carrier.id[1:])) % DECIDE_EVERY == 0:
             self.decide(carrier)
 
+    def open_with_corner(self) -> None:
+        """Scenario mode: the clip opens with the ball out of play for a home corner, from the
+        players' starting shape, so the set-up itself is filmed. The side is drawn from the seed."""
+        side = self.rng.choice([0.0, PITCH_Y])
+        spot = (PITCH_X, side)
+        self.ball = (*spot, 0.0, 0.0, 0.0, 0.0)
+        self.emit("out_of_play", "away", *spot)
+        self.stop("corner", "home", spot)
+
     def snapshot(self) -> None:
         bx, by, bz = self.ball[0], self.ball[1], self.ball[2]
         self.match.frames.append({
@@ -927,8 +960,13 @@ class Engine:
                         for p in self.players],
         })
 
-    def run(self, minutes: float) -> Match:
-        self.kickoff("home")
+    def run(self, minutes: float, scenario: str | None = None) -> Match:
+        if scenario == "corner":
+            self.open_with_corner()
+        elif scenario is None:
+            self.kickoff("home")
+        else:
+            raise ValueError(f"unknown scenario {scenario!r}; known: corner")
         total = int(minutes * 60 * FPS)
         for _ in range(total):
             self.moved = None
@@ -946,5 +984,5 @@ class Engine:
         return self.match
 
 
-def simulate(seed: int, minutes: float) -> Match:
-    return Engine(seed).run(minutes)
+def simulate(seed: int, minutes: float, scenario: str | None = None) -> Match:
+    return Engine(seed).run(minutes, scenario)

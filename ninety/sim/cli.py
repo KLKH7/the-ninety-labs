@@ -11,9 +11,11 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--minutes", type=float, default=90)
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--scenario", choices=("corner",), default=None,
+                    help="open the clip at a set piece instead of the kick-off (targeted data)")
     args = ap.parse_args()
 
-    match = simulate(args.seed, args.minutes)
+    match = simulate(args.seed, args.minutes, args.scenario)
     args.out.mkdir(parents=True, exist_ok=True)
     with open(args.out / "events.jsonl", "w") as f:
         for ev in match.events:
@@ -21,7 +23,8 @@ def main() -> None:
     with open(args.out / "frames.jsonl", "w") as f:
         for fr in match.frames:
             f.write(json.dumps(fr) + "\n")
-    meta = {"seed": args.seed, "minutes": args.minutes, "fps": FPS, "score": match.score,
+    meta = {"seed": args.seed, "minutes": args.minutes, "scenario": args.scenario, "fps": FPS,
+            "score": match.score,
             "roster": match.roster, "counts": Counter(e["type"] for e in match.events)}
     (args.out / "meta.json").write_text(json.dumps(meta, indent=2))
     print(json.dumps(meta))
