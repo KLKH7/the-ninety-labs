@@ -149,3 +149,20 @@ short and actionable. This file is public: no research sources, product names or
   each frame, plus every touch event), and plant one case of each way it can be wrong.
 - **Check:** for each rule, list the ways the data can make it true, and test each one.
 
+### 21. A fixture must look like the real output
+- **What happened:** goal-credit tests built clips with nobody on the ball at the goal frame,
+  but the engine writes the kick-off reset into that frame (the next taker on the centre spot).
+  The rule counted that taker as the last toucher of every real goal: every own goal passed,
+  and a correct team-mate's goal failed, while every test was green.
+- **Rule:** build fixtures from real output (or copy its shape exactly: what the goal frame,
+  the restart frame and the first frame contain), and run each rule on real engine clips that
+  contain the case, not only on fixtures.
+- **Check:** for a new rule, find real clips where it applies (a scan over seeds) and assert on
+  them in a test.
+
+### 22. "All mutations caught" is only as wide as the list
+- **What happened:** a report said 23 of 23 mutations were caught; an auditor found six more,
+  near the same code, that survived (dropped conditions, a tolerance ten times too wide).
+- **Rule:** for every condition and every constant in a check, mutate it (drop it, widen it
+  tenfold) and require a test to fail; report the list, not just the count.
+
