@@ -11,7 +11,7 @@ import json
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Literal, Protocol, cast
+from typing import Literal, Protocol
 
 from jsonschema import validate
 from jsonschema.exceptions import ValidationError
@@ -20,7 +20,10 @@ from ninety.intel.stats import calculate_facts
 from ninety.match.facts import compact
 
 Kind = Literal["event", "fact", "claim", "cue"]
-OVERLAY_SCHEMA = Path(__file__).resolve().parents[2] / "schemas" / "overlay_cue.schema.json"
+OVERLAY_SCHEMA = json.loads(
+    (Path(__file__).resolve().parents[2] / "schemas" / "overlay_cue.schema.json").read_text()
+)
+FRAME_RANGE = "frames:"
 
 
 @dataclass(frozen=True)
@@ -140,7 +143,7 @@ class InMemoryLedger:
             raise ValueError(f"record {record.id}: {record.source} records require confidence=None")
         if record.kind == "cue":
             try:
-                validate(record.payload, json.loads(OVERLAY_SCHEMA.read_text()))
+                validate(record.payload, OVERLAY_SCHEMA)
             except ValidationError as exc:
                 raise ValueError(f"record {record.id}: cue payload fails overlay schema: {exc}") from exc
         if record.kind == "event" and record.source == "vision" and record.confidence is None:
@@ -155,6 +158,8 @@ async def load_match(ledger: Ledger, events: Iterable[Mapping], frames: Iterable
     """Load events and computed facts while preserving their original evidence references."""
     event_list = [dict(event) for event in events]
     event_by_id = {str(event["id"]): event for event in event_list}
+    frame_list = list(frames)
+    frame_t = {int(frame["frame"]): float(frame["t"]) for frame in frame_list}
     for event in event_list:
         await ledger.append(
             Record(
@@ -168,17 +173,26 @@ async def load_match(ledger: Ledger, events: Iterable[Mapping], frames: Iterable
                 payload=compact(event),
             )
         )
-    for fact in calculate_facts(event_list, frames):
-        event_ids = tuple(source_id for source_id in fact.source_ids if source_id in event_by_id)
-        event_times = [float(event_by_id[event_id]["t"]) for event_id in event_ids]
-        # Frame ranges remain in the fact payload; frames are not Ledger records.
+    for fact in calculate_facts(event_list, frame_list):
+        # Frame ranges stay in the fact payload, not in evidence: frames are not Ledger records.
+        # Any other source id must be a loaded event, so a fact citing a missing event fails here
+        # instead of being stored with its evidence silently dropped.
+        event_ids = tuple(s for s in fact.source_ids if not s.startswith(FRAME_RANGE))
+        unknown = [s for s in event_ids if s not in event_by_id]
+        if unknown:
+            raise ValueError(f"fact {fact.id}: cites unknown event ids {unknown}")
+        times = [float(event_by_id[event_id]["t"]) for event_id in event_ids]
+        for source_id in fact.source_ids:
+            if source_id.startswith(FRAME_RANGE):
+                last = int(source_id[len(FRAME_RANGE):].split("-")[1])
+                times.append(frame_t[last])
         payload = fact.as_dict()
         await ledger.append(
             Record(
                 id=fact.id,
                 version=1,
                 kind="fact",
-                t=max(event_times, default=0.0),
+                t=max(times, default=0.0),  # a whole-match fact with no citation sits at kick-off
                 source="stats",
                 confidence=None,
                 evidence=event_ids,
@@ -186,15 +200,3 @@ async def load_match(ledger: Ledger, events: Iterable[Mapping], frames: Iterable
             )
         )
 
-
-def record_from_dict(data: Mapping) -> Record:
-    return Record(
-        id=str(data["id"]),
-        version=int(data.get("version", 1)),
-        kind=cast(Kind, data["kind"]),
-        t=float(data["t"]),
-        source=str(data["source"]),
-        confidence=data.get("confidence"),
-        evidence=tuple(data.get("evidence", ())),
-        payload=dict(data["payload"]),
-    )

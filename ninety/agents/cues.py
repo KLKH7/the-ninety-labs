@@ -18,43 +18,65 @@ ROOT = Path(__file__).resolve().parents[2]
 SCHEMA = json.loads((ROOT / "schemas" / "overlay_cue.schema.json").read_text())
 
 
-def _text(event: dict, persona: str) -> str:
-    player = event["player"]
-    receiver = event.get("receiver")
+# Words that state a result follow the event's outcome field: "finds" only for a completed
+# pass, "scores" only for a goal. The number gate in factcheck.check cannot catch a wrong verb.
+SHOT_OUTCOME = {"on_target": "on target", "off_target": "off target", "blocked": "blocked", "goal": "goal"}
+
+
+def _pass_text(event: dict, persona: str) -> str:
+    player, receiver, outcome = event["player"], event.get("receiver"), event.get("outcome")
     if persona == "casual":
-        if event["type"] == "pass":
-            return f"{player} finds {receiver}" if receiver else f"{player} plays a pass"
-        return f"{player} scores" if event["type"] == "goal" else f"{player} takes a shot"
-    if event["type"] == "pass":
-        parts = [f"{player} → {receiver}" if receiver else f"{player} pass"]
-        if event.get("distance_m") is not None:
-            parts.append(f"{event['distance_m']} m")
-        if event.get("ball_speed_kmh") is not None:
-            parts.append(f"{event['ball_speed_kmh']} km/h")
-        return ", ".join(parts)
-    parts = [f"{player} scores" if event["type"] == "goal" else f"{player} shot"]
+        if not receiver:
+            return f"{player} plays a pass"
+        if outcome == "success":
+            return f"{player} finds {receiver}"
+        if outcome == "fail":
+            return f"{player} looks for {receiver}, but it doesn't arrive"
+        return f"{player} looks for {receiver}"
+    parts = [f"{player} → {receiver}" if receiver else f"{player} pass"]
+    if outcome == "fail":
+        parts[0] += " (incomplete)"
+    if event.get("distance_m") is not None:
+        parts.append(f"{event['distance_m']} m")
     if event.get("ball_speed_kmh") is not None:
         parts.append(f"{event['ball_speed_kmh']} km/h")
     return ", ".join(parts)
 
 
+def _shot_text(event: dict, persona: str) -> str:
+    player = event["player"]
+    if event["type"] == "goal":
+        return f"{player} scores"
+    if persona == "casual":
+        return f"{player} takes a shot"
+    parts = [f"{player} shot"]
+    if event.get("outcome") in SHOT_OUTCOME:
+        parts.append(SHOT_OUTCOME[event["outcome"]])
+    if event.get("ball_speed_kmh") is not None:
+        parts.append(f"{event['ball_speed_kmh']} km/h")
+    return ", ".join(parts)
+
+
+def _text(event: dict, persona: str) -> str:
+    return _pass_text(event, persona) if event["type"] == "pass" else _shot_text(event, persona)
+
+
 async def template_cues(ledger: Ledger) -> list[dict]:
     events = await ledger.query(kind="event")
-    await ledger.query(kind="fact")  # Keep facts part of the template-cue read path.
     cues = []
     for record in events:
         if record.payload.get("type") not in {"pass", "shot", "goal"}:
             continue
         for persona in ("analyst", "casual"):
             text = _text(record.payload, persona)
-            if persona == "analyst":
-                verdict = check(Claim(text, [record.id]), {record.id: record.payload})
-                if not verdict.ok:
-                    raise ValueError(f"cue {record.id}-{persona}: {verdict.reasons}")
+            # Both personas pass the fact-checker's code half: numbers and player ids alike.
+            verdict = check(Claim(text, [record.id]), {record.id: record.payload})
+            if not verdict.ok:
+                raise ValueError(f"cue {record.id}-{persona}: {verdict.reasons}")
             cue = {
                 "id": f"cue-{record.id}-{persona}",
                 "t_in": record.t,
-                "t_out": record.t + DISPLAY_SECONDS,
+                "t_out": round(record.t + DISPLAY_SECONDS, 2),  # event times are to 0.01 s
                 "kind": "pass_arc" if record.payload["type"] == "pass" else "shot_speed",
                 "slot": "lower_third",
                 "anchor": None,

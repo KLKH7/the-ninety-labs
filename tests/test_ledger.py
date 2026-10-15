@@ -61,3 +61,30 @@ def test_load_match_resolves_event_evidence():
     event_ids = {record.id for record in records if record.kind == "event"}
     for fact in (record for record in records if record.kind == "fact"):
         assert set(fact.evidence) <= event_ids
+
+
+def test_load_match_refuses_a_fact_citing_a_missing_event(monkeypatch):
+    # planted defect: before the fix, the unknown id was silently dropped from evidence
+    from ninety.agents import ledger as ledger_module
+    from ninety.intel.stats import Fact
+
+    monkeypatch.setattr(
+        ledger_module, "calculate_facts",
+        lambda events, frames: [Fact("f1", "passes", 1, "count", "home", ("e99999",))],
+    )
+    with pytest.raises(ValueError, match="e99999"):
+        run(load_match(InMemoryLedger(), list(match_events(7, 0.5)), ()))
+
+
+def test_load_match_keeps_frame_ranges_out_of_evidence_and_times_them():
+    from ninety.sim.engine import simulate
+
+    match = simulate(7, 1)
+    ledger = InMemoryLedger()
+    run(load_match(ledger, match.events, match.frames))
+    framed = [r for r in run(ledger.query(kind="fact"))
+              if any(s.startswith("frames:") for s in r.payload["source_ids"])]
+    assert framed, "seed 7 with frames should give possession or movement facts"
+    for fact in framed:
+        assert not any(s.startswith("frames:") for s in fact.evidence)
+        assert 0 < fact.t <= match.frames[-1]["t"]
