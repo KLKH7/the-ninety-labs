@@ -34,7 +34,15 @@ PRESSURE_FRONT_M, PRESSURE_BEHIND_M = 9.0, 3.0  # D2: pressure zone, longer in f
 # sense of a good chance comes from what goes in, not from the open goal he sees.
 SHOT_ANCHORS = ((0.0, 0.31), (3.0, 0.31), (11.0, 0.177), (20.0, 0.053), (30.0, 0.023), (40.0, 0.01),
                 (105.0, 0.0))
-BLOCKER_FACTOR = 0.5  # design: each defender in the shooting cone halves the estimate
+BLOCKER_FACTOR = 0.5  # design, verify: each defender in the shooting cone blocks the shot half the time
+# D3: the zone rates are averages over real shots, which usually face a defender. Relative to that
+# average, a shot with no defender goal-side scores more and one with any scores a little less:
+# 11.59% against 7.49%, with 23.18% of shots unscreened (Lucey et al. 2015, 9,732 shots, tracking
+# data). The effect does not compound per defender (it flattens; Anzer and Bauer 2021).
+_UNSCREENED, _SCREENED, _UNSCREENED_SHARE = 0.1159, 0.0749, 0.2318
+_AVERAGE = _UNSCREENED_SHARE * _UNSCREENED + (1 - _UNSCREENED_SHARE) * _SCREENED
+CLEAR_SHOT, SCREENED_SHOT = _UNSCREENED / _AVERAGE, _SCREENED / _AVERAGE
+KEEPER_COVERS = 0.4  # design, verify: a keeper square on the shot's line, against one well off it
 CHOICE_NOISE_FLOOR = 0.005  # design, verify: options closer than about this (in goals) are a near coin-flip
 HOLD_DECAY = 0.1  # design, verify: share of the ball's worth lost per decision spent holding
 STALE_S = 2.0  # design: a team-mate not seen for this long is a less certain option
@@ -218,19 +226,19 @@ def shot_estimate(x: float, y: float, goal_x: float, opponents: list[tuple[float
                   keeper: tuple[float, float] | None) -> float:
     """The player's own estimate of a shot from here, between 0 and 1: how often shots from this
     distance go in (D3), less from a tighter angle (by how much of the goal he can see compared with
-    a central shot), halved for each defender he believes is in the shooting cone, reduced if the
-    keeper stands on the line of the shot. The keeper is counted once, as the keeper."""
+    a central shot), then compared with the typical shot those rates average over: better with no
+    defender he believes is in the shooting cone, a little worse with any; better if the keeper is
+    off the line of the shot (a keeper on it is the typical case). The keeper is counted once."""
     d = math.hypot(goal_x - x, PITCH_Y / 2 - y)
     central = goal_angle(goal_x - math.copysign(d, goal_x - x), PITCH_Y / 2, goal_x)
     q = rate_at(d) * min(1.0, goal_angle(x, y, goal_x) / central) if central > 0 else 0.0
-    for ox, oy in opponents:
-        if (ox, oy) != keeper and in_cone(x, y, goal_x, ox, oy):  # the keeper is counted below
-            q *= BLOCKER_FACTOR
+    screened = any((ox, oy) != keeper and in_cone(x, y, goal_x, ox, oy) for ox, oy in opponents)
+    q *= SCREENED_SHOT if screened else CLEAR_SHOT
     if keeper:
         cx, cy = goal_x, PITCH_Y / 2
         off = distance_to_segment(keeper[0], keeper[1], x, y, cx, cy)
-        q *= 0.4 + 0.6 * min(1.0, off / 3.0)  # design: a well-placed keeper covers the shot
-    return q
+        q *= (KEEPER_COVERS + (1 - KEEPER_COVERS) * min(1.0, off / 3.0)) / KEEPER_COVERS
+    return min(q, 0.99)
 
 
 def in_cone(x: float, y: float, goal_x: float, ox: float, oy: float) -> bool:

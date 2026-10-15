@@ -25,10 +25,21 @@ def scene(**kw) -> D.Scene:
 
 def test_shot_estimate_follows_the_sourced_rates_by_distance():
     central = lambda d: D.shot_estimate(105 - d, 34, 105, [], None)  # noqa: E731
-    assert math.isclose(central(3), 0.31) and math.isclose(central(11), 0.177)
-    assert math.isclose(central(20), 0.053) and math.isclose(central(30), 0.023)
-    assert central(2) <= 0.31  # never near-certain: close shots are contested in real matches
+    # Nobody in the cone: better than the average shot the published rates describe.
+    assert math.isclose(central(3), 0.31 * D.CLEAR_SHOT) and math.isclose(central(11), 0.177 * D.CLEAR_SHOT)
+    assert math.isclose(central(20), 0.053 * D.CLEAR_SHOT) and math.isclose(central(30), 0.023 * D.CLEAR_SHOT)
+    assert central(2) <= 0.31 * D.CLEAR_SHOT  # never near-certain: close shots are contested in real matches
     assert central(11) > D.shot_estimate(105 - 11, 10, 105, [], None)  # a tight angle is worse
+
+def test_the_typical_shot_keeps_the_published_rate_and_defenders_do_not_compound():
+    # Lucey et al. 2015: 11.59% unscreened, 7.49% screened, 23.18% unscreened.
+    assert math.isclose(0.2318 * D.CLEAR_SHOT + (1 - 0.2318) * D.SCREENED_SHOT, 1.0)
+    one = D.shot_estimate(90, 34, 105, [(97, 34)], None)
+    three = D.shot_estimate(90, 34, 105, [(97, 34), (96, 33), (98, 35)], None)
+    assert one == three == D.shot_estimate(90, 34, 105, [], None) * D.SCREENED_SHOT / D.CLEAR_SHOT
+    on_line = D.shot_estimate(90, 34, 105, [], (103, 34))
+    assert math.isclose(on_line, D.shot_estimate(90, 34, 105, [], None))  # a keeper on the line is typical
+
 
 def test_a_defender_in_the_cone_or_a_well_placed_keeper_lowers_the_estimate():
     open_shot = D.shot_estimate(90, 34, 105, [], None)
@@ -256,7 +267,7 @@ def test_the_shot_chance_is_the_measured_rate_scaled_by_the_situation(monkeypatc
     monkeypatch.setattr(D, "POSSESSION", ramp(0.3, 0.0, finishing=0.2))
     assert math.isclose(D.shot_chance(scene(x=90.0)), 0.2)  # open: the measured rate itself
     blocked = scene(x=90.0, opponents=[(97.0, 34.0)])
-    assert math.isclose(D.shot_chance(blocked), 0.2 * D.BLOCKER_FACTOR)
+    assert math.isclose(D.shot_chance(blocked), 0.2 * D.SCREENED_SHOT / D.CLEAR_SHOT)
 
 
 def test_holding_is_worth_the_best_move_a_moment_later_never_more():
