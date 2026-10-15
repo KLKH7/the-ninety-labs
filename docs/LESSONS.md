@@ -166,3 +166,18 @@ short and actionable. This file is public: no research sources, product names or
 - **Rule:** for every condition and every constant in a check, mutate it (drop it, widen it
   tenfold) and require a test to fail; report the list, not just the count.
 
+### 23. A plan must not stand the receiver where the ball is aimed
+- **What happened:** the corner routine put each attacker on the exact spot the taker could aim
+  at, standing still, so a delivery's target and its receiver were the same point decided in
+  advance. Defenders marked a stationary man; the run, the timing and the space (what decides a
+  real corner) were missing. The scenario also placed a defender by the line and recorded him as
+  the last touch, so the corner's cause was staged. Every test was green: they checked the plan
+  was carried out, not whether the plan itself decided the play.
+- **Rule:** a plan gives players intentions (where to wait, where to run, when), never the point
+  where the ball meets them; the taker aims at space and times it on his runner, and contact
+  emerges from the run and the flight. When a cause cannot yet be played, say so in GROUNDING as
+  an open issue rather than calling it modelled.
+- **Check:** for each set piece, ask what is decided before the ball moves; anything that is a
+  meeting point or a cause, not an intention, is scripting. Measure before and after a change
+  (here: first contact, goals, wait to the kick over 200 corners).
+

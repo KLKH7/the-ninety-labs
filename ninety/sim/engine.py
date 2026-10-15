@@ -833,6 +833,8 @@ class Engine:
                 if p.id == self.set_play.taker:  # behind the ball: off the pitch, by the flag
                     return spot[0], spot[1], RECOVER
                 sx, sy = clamp(spot[0], 0.5, PITCH_X - 0.5), clamp(spot[1], 0.5, PITCH_Y - 0.5)
+                if setpieces.running(self, p):
+                    return sx, sy, SPRINT
                 far = math.hypot(sx - p.x, sy - p.y) > FAR_OUT_OF_POSITION_M
                 return sx, sy, RECOVER if far else SHAPE
         if self.restart and p.id == self.restart.taker:
@@ -1041,7 +1043,10 @@ class Engine:
             setpieces.face_ball(self, carrier)
             self.ball = (self.ball[0], self.ball[1], 0.0, 0.0, 0.0, 0.0)  # it stays where it was placed
             if self.t >= self.hold_until:
-                setpieces.deliver(self, carrier)
+                if corner.signalled_at is None:
+                    setpieces.signal(self, carrier)
+                if setpieces.time_to_strike(self):
+                    setpieces.deliver(self, carrier)
             return
         opp = other(carrier.team)
         presser = self.nearest(carrier.x, carrier.y, opp)  # who is physically there

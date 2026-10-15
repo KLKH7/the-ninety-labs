@@ -10,7 +10,7 @@ import pytest
 from test_validate import FPS, event, run
 
 from ninety.sim import setpieces
-from ninety.sim.engine import PENALTY_DEPTH, PENALTY_HALF_WIDTH, Engine, simulate
+from ninety.sim.engine import PENALTY_DEPTH, PENALTY_HALF_WIDTH, SPRINT, Engine, simulate
 from ninety.validate import validate
 
 
@@ -146,11 +146,53 @@ def test_the_box_is_crowded_and_the_law_is_kept_at_every_frame_to_the_kick():
     assert sum(in_box(p["x"], p["y"], 105.0) for p in f["players"] if p["team"] == "away") >= 7
 
 
+def test_runners_wait_off_their_zones_and_go_on_the_signal():
+    """Mutations caught: runners standing on their zones before the signal; runners (or their
+    markers) not sprinting after it. Where they wait is drawn for each corner (S10)."""
+    e = corner_engine(seed=3)
+    c = e.set_play
+    assert {c.zones[pid] for pid in c.starts} == set(setpieces.RUNNING_ZONES)
+    for pid, start in c.starts.items():
+        assert setpieces.target(e, e.by_id[pid]) == start
+        assert math.dist(start, c.targets[pid]) > 1.0
+        assert not setpieces.running(e, e.by_id[pid])
+    assert corner_engine(seed=4).set_play.starts != c.starts
+    c.signalled_at = e.t
+    for pid in c.starts:
+        assert setpieces.target(e, e.by_id[pid]) == c.targets[pid]
+        assert setpieces.running(e, e.by_id[pid])
+    markers = [m for m, att in c.marks.items() if att in c.starts]
+    assert markers and all(setpieces.running(e, e.by_id[m]) for m in markers)
+    assert all(e.shape_target(e.by_id[pid])[2] == SPRINT for pid in [*c.starts, *markers])
+
+
+def test_the_taker_times_the_cross_on_his_runner():
+    """Mutations caught: striking at the signal whatever the runner's distance; never striking
+    when the runner is held up. S10: he strikes when the runner will arrive in time, or once the
+    runner has reacted and is not making ground."""
+    e = corner_engine(seed=3)
+    c = e.set_play
+    runner = next(pid for pid, z in c.zones.items() if z == "far_post")
+    r = e.by_id[runner]
+    c.aim, c.runner, c.signalled_at = c.targets[runner], runner, e.t
+    r.x, r.y, r.vx, r.vy = c.aim[0] - 25.0, c.aim[1], 0.0, 0.0  # far off: the ball would beat him
+    assert not setpieces.time_to_strike(e)
+    r.vx = 6.0  # sprinting at it, but still too far
+    e.t += 1.0
+    assert not setpieces.time_to_strike(e)
+    r.vx = 0.0  # held up after reacting: no point waiting
+    assert setpieces.time_to_strike(e)
+    e.t = c.signalled_at + 0.1  # standing still, but he has not reacted yet
+    assert not setpieces.time_to_strike(e)
+    r.x = c.aim[0] - 3.0  # close enough to arrive with the ball
+    assert setpieces.time_to_strike(e)
+
+
 def test_the_delivery_is_struck_with_execution_error(monkeypatch):
     """Mutation caught: deliver() striking the intended velocity. Same state, same choice: only
     the execution draw differs, and the strike is never exactly the intention."""
     target = (100.0, 38.5)
-    monkeypatch.setattr(setpieces, "choose_delivery", lambda engine, taker: target)
+    monkeypatch.setattr(setpieces, "choose_delivery", lambda engine, taker: (target, None))
     struck = []
     for draw in (1, 2):
         e = corner_engine(seed=4)
@@ -158,6 +200,7 @@ def test_the_delivery_is_struck_with_execution_error(monkeypatch):
         e.t += setpieces.PLACE_S + 0.1
         tick(e)  # placed and given to the taker
         taker = e.by_id[e.set_play.taker]
+        setpieces.signal(e, taker)
         e.rng.seed(draw)
         setpieces.deliver(e, taker)
         aim = setpieces.intended(e.set_play, *target)
@@ -170,7 +213,7 @@ def test_a_delivery_across_the_body_carries_the_turn(monkeypatch):
     """Mutation caught: the taker turned to face the target before the strike. He stands behind
     the ball facing the penalty spot, so a ball to the near post is struck across his body."""
     target = (101.0, 30.0)  # near post, well off his line of sight from the flag at y = 0
-    monkeypatch.setattr(setpieces, "choose_delivery", lambda engine, taker: target)
+    monkeypatch.setattr(setpieces, "choose_delivery", lambda engine, taker: (target, None))
     seen = {}
     e = corner_engine(seed=4)
     settle_everyone(e)
@@ -185,6 +228,7 @@ def test_a_delivery_across_the_body_carries_the_turn(monkeypatch):
 
     monkeypatch.setattr(taker.profile, "kick_error", spy)
     setpieces.face_ball(e, taker)
+    setpieces.signal(e, taker)
     setpieces.deliver(e, taker)
     assert abs(seen["turn"]) > 10.0
 
@@ -397,6 +441,8 @@ C8_WRONG = {
         [(5, "pass", "h1", "home", "fail"), (20, "deflection", "a1", "away", None)], "a1", team="home"),
     "shooter credited after the keeper held it": goal_clip(
         [SHOT], "h1", receiver_has_it=("ak", 20)),
+    "own goal recorded, but the shot it came off is recorded as the goal": goal_clip(
+        [SHOT, (20, "deflection", "a1", "away", None)], None),
     "same frame: a defender deflects, then the scorer's team-mate controls": goal_clip(
         [SHOT, (29, "deflection", "a1", "away", None)], "h1", receiver_has_it=("h2", 29)),
 }
@@ -459,11 +505,12 @@ def test_l6_judges_the_goal_the_conceding_keeper_defends(tmp_path):
     assert "L6 goal" in run(tmp_path, goal_clip([SHOT], "h1", path=own_end))
 
 
-@pytest.mark.parametrize("seed, scorer", [(326, "h11"), (73, None), (22, "h9")])
+@pytest.mark.parametrize("seed, scorer", [(158, "h10"), (222, None), (58, "h9"), (40, "h11")])
 def test_real_engine_goals_are_credited_and_relabelling_them_fails(tmp_path, seed, scorer):
-    """Engine output, not a fixture: corner seeds with a team-mate's deflection goal (326), an own
-    goal (73) and a shot straight in (22). Each meets the contract; giving it to the wrong
-    player (or to nobody) fails C8."""
+    """Engine output, not a fixture: corner seeds where a team-mate's touch puts a shot in (158),
+    an own goal (222), a shot straight in (58) and a shot in off a defender (40). Each meets the
+    contract; giving it to the wrong player (or to nobody) fails C8. The seeds were found by
+    classifying every goal in 400 scenario corners; a change to the routine moves them."""
     m = simulate(seed, 1.0, "corner")
     goal = next(e for e in m.events if e["type"] == "goal")
     assert goal["player"] == scorer

@@ -15,7 +15,7 @@ import math
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from ninety.sim import ball, decisions
+from ninety.sim import ball, decisions, perception
 
 if TYPE_CHECKING:  # pragma: no cover
     from ninety.sim.engine import Engine, Player
@@ -62,6 +62,12 @@ DEFEND_ZONES = {"near_post_zone": (1.0, -4.5), "short_block": None, "six_yard_ne
 COUNTER_ROLES = ("ST", "RW", "LW")  # S7 (design): defenders who stay up for a counter-attack
 COUNTER_DEPTH_M = 50.0  # S7 (design): they wait this far from the goal being attacked, near halfway
 SPARE_REST = (COUNTER_DEPTH_M + 8.0, 8.0)  # S5 (design): a rest defender with nobody to mark
+# S10 (design): attackers who attack a zone wait away from it and run in on the taker's signal,
+# from a spot drawn for each corner: this deep (from the goal line) and this far either side
+# of their zone's line across the goal.
+RUNNING_ZONES = ("near_post", "centre", "far_post", "spot")
+RUN_FROM_M = (11.0, 15.0)
+RUN_SPREAD_M = 3.0
 
 
 def goal_line(attacking: str) -> float:
@@ -85,7 +91,11 @@ class Corner:
     marks: dict[str, str] = field(default_factory=dict)  # defender -> attacker he marks
     rest_marks: dict[str, str] = field(default_factory=dict)  # rest defender -> counter-attacker
     short_block: str | None = None
+    starts: dict[str, tuple[float, float]] = field(default_factory=dict)  # runner -> where he waits
     placed_at: float | None = None
+    signalled_at: float | None = None  # the taker has signalled: the runners go
+    aim: tuple[float, float] | None = None  # where the taker means to put it
+    runner: str | None = None  # the team-mate he is aiming for
     delivered_at: float | None = None
 
     @property
@@ -131,6 +141,10 @@ def plan(engine: Engine, team: str, spot: tuple[float, float]) -> Corner:
             continue
         c.zones[p.id] = zone
         c.targets[p.id] = c.zone_point(*ATTACK_ZONES[zone])
+        if zone in RUNNING_ZONES:
+            depth = engine.rng.uniform(*RUN_FROM_M)
+            across = ATTACK_ZONES[zone][1] + engine.rng.uniform(-RUN_SPREAD_M, RUN_SPREAD_M)
+            c.starts[p.id] = c.zone_point(max(depth, ATTACK_ZONES[zone][0]), across)
         used.add(p.id)
     defend(engine, c)
     # Rest defence: the keeper at the edge of his own box; everyone else left marks a
@@ -214,6 +228,8 @@ def target(engine: Engine, p: Player) -> tuple[float, float] | None:
     elif p.id in c.rest_marks:  # goal-side of the counter-attacker, toward his own goal
         opp = engine.by_id[c.rest_marks[p.id]]
         x, y = goal_side(opp.x, opp.y, PITCH_X - goal_line(c.team), CENTRE_Y, REST_MARK_M)
+    elif p.id in c.starts and c.signalled_at is None:  # waiting for the signal
+        x, y = c.starts[p.id]
     elif p.id in c.targets:
         x, y = c.targets[p.id]
     else:
@@ -263,7 +279,15 @@ def strikeable(c: Corner, tx: float, ty: float) -> bool:
     return (tx - bx) * ux + (ty - by) * uy > 0
 
 
-def choose_delivery(engine: Engine, taker: Player) -> tuple[float, float]:
+def running(engine: Engine, p: Player) -> bool:
+    """A runner after the signal, or a defender marking one: both go flat out."""
+    c: Corner | None = engine.set_play
+    if c is None or c.signalled_at is None:
+        return False
+    return p.id in c.starts or c.marks.get(p.id) in c.starts
+
+
+def choose_delivery(engine: Engine, taker: Player) -> tuple[tuple[float, float], str | None]:
     """The taker picks where to put the corner from what he believes: each attacker's zone (or a
     short ball to a team-mate nearby) is worth its threat times his estimate that it gets there
     before a defender, minus the cost of losing it. A softmax picks, as for any decision."""
@@ -285,11 +309,12 @@ def choose_delivery(engine: Engine, taker: Player) -> tuple[float, float]:
         lost = decisions.loss_cost(tx, ty, scene.goal_x)
         opts.append(decisions.Option("pass", conf * gain - (1 - conf) * lost, (tx, ty), mid, not short))
     if not opts:  # nobody seen: into the far side of the six-yard box
-        return c.zone_point(*ATTACK_ZONES["far_post"])
+        return c.zone_point(*ATTACK_ZONES["far_post"]), None
     t = decisions.temperature(scene)
     top = max(o.value for o in opts)
     weights = [math.exp((o.value - top) / t) for o in opts]
-    return engine.rng.choices(opts, weights=weights)[0].target
+    pick = engine.rng.choices(opts, weights=weights)[0]
+    return pick.target, pick.receiver
 
 
 def intended(c: Corner, tx: float, ty: float) -> tuple[float, float, float]:
@@ -302,11 +327,37 @@ def intended(c: Corner, tx: float, ty: float) -> tuple[float, float, float]:
     return (tx - bx) / dist * ground, (ty - by) / dist * ground, up
 
 
-def deliver(engine: Engine, taker: Player) -> None:
-    """Strike the corner with the taker's own execution error. He faces the ball from behind it,
-    so a delivery away from that line is struck across his body (and may be his weaker foot)."""
+def signal(engine: Engine, taker: Player) -> None:
+    """The taker picks his delivery and signals: from now the runners attack their zones."""
     c: Corner = engine.set_play
-    tx, ty = choose_delivery(engine, taker)
+    c.aim, c.runner = choose_delivery(engine, taker)
+    c.signalled_at = engine.t
+
+
+def time_to_strike(engine: Engine) -> bool:
+    """S10: the taker strikes when his runner will reach the aim no later than the ball would,
+    or once the runner, having reacted to the signal, is no longer making ground toward it (he
+    is blocked or has stopped). A short corner, or one aimed at nobody, goes at once."""
+    c: Corner = engine.set_play
+    bx, by = c.ball_spot
+    dist = math.hypot(c.aim[0] - bx, c.aim[1] - by)
+    if c.runner is None or c.runner not in c.starts or dist <= SHORT_CORNER_M:
+        return True
+    r = engine.by_id[c.runner]
+    gap = math.hypot(c.aim[0] - r.x, c.aim[1] - r.y)
+    along = (r.vx * (c.aim[0] - r.x) + r.vy * (c.aim[1] - r.y)) / gap if gap > 1e-9 else 0.0
+    if r.physique.time_to_cover(gap, along) <= decisions.loft_time(dist):
+        return True
+    reacted = engine.t - c.signalled_at > perception.SIMPLE_REACTION_S
+    return reacted and along < SETTLED_MPS
+
+
+def deliver(engine: Engine, taker: Player) -> None:
+    """Strike the corner at the chosen aim with the taker's own execution error. He faces the
+    ball from behind it, so a delivery away from that line is struck across his body (and may
+    be his weaker foot)."""
+    c: Corner = engine.set_play
+    tx, ty = c.aim
     bx, by = engine.ball[0], engine.ball[1]
     short = math.hypot(tx - bx, ty - by) <= SHORT_CORNER_M
     vx, vy, vz = engine.execute(taker, *intended(c, tx, ty), "passing" if short else "crossing")

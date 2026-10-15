@@ -405,7 +405,8 @@ def goal_credit_problem(goal: dict, events: list[dict], frames: list[dict], team
     last attacker to touch the ball). A named scorer either touched the ball last (and if that
     touch was a shot, it is recorded as the goal), or struck a shot recorded as the goal that only
     opponents deflected after it (a block or a parry on its way in: no one controlled it). A goal
-    with no scorer is an own goal: an opponent of the scoring team touched it last. Only touches
+    with no scorer is an own goal: an opponent of the scoring team touched it last, and no shot
+    is recorded as the goal (the shot's record and the goal's must agree). Only touches
     since the last kick-off count, so a shot cannot score twice."""
     touches = last_touches(goal, events, frames)
     if not touches:
@@ -415,6 +416,10 @@ def goal_credit_problem(goal: dict, events: list[dict], frames: list[dict], team
     if scorer is None:
         if team_of.get(last) == team:
             return f"own goal, but {last} of the scoring team touched it last"
+        scored = next((ev for _, _, _, ev in touches if ev and ev["type"] == "shot"
+                       and ev["outcome"] == "goal"), None)
+        if scored:
+            return f"own goal, but {scored['player']}'s shot is recorded as the goal"
         return None
     if team_of.get(scorer) != team:
         return f"goal credited to {scorer}, who does not play for {team}"
