@@ -165,3 +165,15 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_judge.py` fails if an evaluated tone word appears in the instructions,
   or a tone claim is built on an event outside its condition.
 
+
+### 23. A graphic's words must follow the outcome, not just its numbers
+- **What happened:** the first template graphics wrote "h10 finds h6" for every pass with a
+  receiver, including the 10 failed passes in seed 7's first five minutes. The fact-checker's
+  code half passed them, because it checks numbers and player ids, not verbs. The Ledger also
+  dropped any fact source id it could not find, so a fact citing a missing event would have been
+  stored with less evidence instead of failing.
+- **Rule:** a word that states a result ("finds", "scores", "blocked") comes from the event's
+  `outcome` field. A citation that does not resolve is an error, never filtered out.
+- **Check:** `tests/test_cues.py::test_failed_pass_never_says_it_found_the_receiver` and
+  `tests/test_ledger.py::test_load_match_refuses_a_fact_citing_a_missing_event` fail on the
+  original code.
