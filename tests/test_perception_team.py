@@ -108,8 +108,8 @@ def test_the_forwards_wait_at_their_line_of_engagement_never_past_the_ball():
         brain = TeamBrain(team, block="mid")  # engages 60 m from its goal
         brain.update(0.0, False, abs(own - 95.0), {})  # their keeper's ball
         assert abs(abs(brain.slot("ST", 34.0, 34.0)[0] - own) - 60.0) < 1e-9
-        brain.update(1.0, False, abs(own - 56.0), {})  # 4 m inside it: they drop back 2 m
-        assert abs(abs(brain.slot("ST", 34.0, 34.0)[0] - own) - 56.0) < 1e-9  # ...but not past the ball
+        brain.update(1.0, False, abs(own - 56.0), {})  # 4 m inside it: up to the ball, not past it
+        assert abs(abs(brain.slot("ST", 34.0, 34.0)[0] - own) - 56.0) < 1e-9
         brain.update(1.0, False, abs(own - 40.0), {})  # deep in our half: the block's own front
         front = abs(brain.line_x - own) + team_mod.LINE_GAPS_M["attack"]
         assert abs(abs(brain.slot("ST", 34.0, 34.0)[0] - own) - front) < 1e-9

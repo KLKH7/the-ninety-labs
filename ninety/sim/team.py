@@ -61,11 +61,9 @@ class TeamBrain:
         depth = min(depth, max(LINE_FLOOR_M, ball_from_goal - GOAL_SIDE_OF_BALL_M))
         self.line_x = own_goal_x(self.team) + forward(self.team) * depth
         # T3: the forwards wait at the team's line of engagement, so that when the ball comes
-        # inside it the first presser is already close; never past the ball. Once it is inside, the
-        # presser goes and the rest of the front line drops back at the block's pace (T2).
-        inside = max(0.0, self.engage_m - ball_from_goal)
-        waiting = min(ball_from_goal, self.engage_m - inside * LINE_FOLLOWS_BALL)
-        front = max(depth + LINE_GAPS_M["attack"], waiting)
+        # inside it the first presser is already close; never past the ball, and never closer
+        # to their own goal than the front of the block.
+        front = max(depth + LINE_GAPS_M["attack"], min(ball_from_goal, self.engage_m))
         self.front_x = own_goal_x(self.team) + forward(self.team) * front
         ranked = sorted(time_to_ball, key=time_to_ball.get)
         self.pressers = [] if has_ball else ranked[:2]  # first presser, then cover

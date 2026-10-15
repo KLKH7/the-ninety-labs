@@ -13,6 +13,8 @@ import math
 
 PITCH_X, PITCH_Y = 105.0, 68.0
 GOAL_HALF_WIDTH = 3.66
+KEEPER_STAND_REACH_M = 1.0  # P11: a keeper's sideways arm reach from the body's centre
+KEEPER_DIVE_EXTRA_M = 0.8  # P11: added as the dive stretches out, hips to fingertips about 1.8 m
 KEEPER_DEPTH = (1.0, 6.0)  # O1: design: metres off the line, further the further away the ball is
 KEEPER_DEPTH_PER_M = 0.12  # O1: design
 RUSH_RANGE_M = 18.0  # O1: design: an attacker this close and through on goal draws the keeper out

@@ -23,6 +23,7 @@ from ninety.sim import ball, decisions, offball, perception, profiles
 from ninety.sim import team as team_mod
 from ninety.sim.body import BRAKE_MAX, CS_MEAN, D0, F0_MEAN, V0_MEAN, Body
 from ninety.sim.body import move as move_body
+from ninety.sim.offball import KEEPER_DIVE_EXTRA_M, KEEPER_STAND_REACH_M
 from ninety.sim.profiles import Profile
 from ninety.sim.team import TeamBrain
 
@@ -44,8 +45,6 @@ PERCEPTION_ERR = 0.03  # verify: m/s of misjudged ball velocity per metre betwee
 CONTROL_M = 1.0  # a foot reaches this far from the body's centre
 FOOT_REACH_Z = 1.0  # outfield players can play the ball below this height
 HAND_REACH_Z = 2.8  # P11: a jumping keeper's hand reach (standing about 2.35 m plus the jump)
-KEEPER_STAND_REACH_M = 1.0  # P11: a keeper's sideways arm reach from the body's centre
-KEEPER_DIVE_EXTRA_M = 0.8  # P11: added as the dive stretches out, hips to fingertips about 1.8 m
 DIVE_TIME_S = 0.5  # P11: design; a full dive to the post takes about 1 s including body travel
 BODY_RADIUS = 0.26  # P11: half a footballer's shoulder width (about 0.53 m over the deltoids)
 BODY_HEIGHT = 1.8
@@ -992,7 +991,10 @@ class Engine:
                                      if q.team == p.team and q.id != p.id) if w]
                 if offball.through_on_goal(seen, own_goal, mates):  # O1: come out and narrow it
                     return *offball.close_down_spot(seen, own_goal), SPRINT
-            return *offball.keeper_spot(clamp(bx, 0, PITCH_X), clamp(by, 0, PITCH_Y), own_goal), RECOVER
+            # He sets himself from where the ball is, not where a pass is going: a shot can come
+            # from wherever the ball is now.
+            kx, ky = clamp(self.ball[0], 0, PITCH_X), clamp(self.ball[1], 0, PITCH_Y)
+            return *offball.keeper_spot(kx, ky, own_goal), RECOVER
         if not brain.in_possession and p.id in brain.markers:
             mx, my = brain.markers[p.id]
             mx, my = clamp(mx, 0.5, PITCH_X - 0.5), clamp(my, 0.5, PITCH_Y - 0.5)

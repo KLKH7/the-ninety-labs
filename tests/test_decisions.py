@@ -7,6 +7,7 @@ from collections import Counter
 import pytest
 
 from ninety.sim import decisions as D
+from ninety.sim import offball
 from ninety.sim.value import CELLS_X, CELLS_Y, Table, Tables
 
 
@@ -37,8 +38,9 @@ def test_the_typical_shot_keeps_the_published_rate_and_defenders_do_not_compound
     one = D.shot_estimate(90, 34, 105, [(97, 34)], None)
     three = D.shot_estimate(90, 34, 105, [(97, 34), (96, 33), (98, 35)], None)
     assert one == three == D.shot_estimate(90, 34, 105, [], None) * D.SCREENED_SHOT / D.CLEAR_SHOT
-    on_line = D.shot_estimate(90, 34, 105, [], (103, 34))
-    assert math.isclose(on_line, D.shot_estimate(90, 34, 105, [], None))  # a keeper on the line is typical
+    usual = offball.keeper_spot(90, 34, 105)
+    on_spot = D.shot_estimate(90, 34, 105, [], usual)
+    assert math.isclose(on_spot, D.shot_estimate(90, 34, 105, [], None))  # his usual spot is the typical case
 
 
 def test_a_defender_in_the_cone_or_a_well_placed_keeper_lowers_the_estimate():
@@ -265,9 +267,9 @@ def test_a_missed_shot_is_never_a_reward(monkeypatch):
 
 def test_the_shot_chance_is_the_measured_rate_scaled_by_the_situation(monkeypatch):
     monkeypatch.setattr(D, "POSSESSION", ramp(0.3, 0.0, finishing=0.2))
-    assert math.isclose(D.shot_chance(scene(x=90.0)), 0.2)  # open: the measured rate itself
+    assert math.isclose(D.shot_chance(scene(x=90.0)), 0.2 * D.CLEAR_SHOT)  # the measured average, unscreened
     blocked = scene(x=90.0, opponents=[(97.0, 34.0)])
-    assert math.isclose(D.shot_chance(blocked), 0.2 * D.SCREENED_SHOT / D.CLEAR_SHOT)
+    assert math.isclose(D.shot_chance(blocked), 0.2 * D.SCREENED_SHOT)
 
 
 def test_holding_is_worth_the_best_move_a_moment_later_never_more():
@@ -344,3 +346,20 @@ def test_from_fifteen_metres_he_chooses_between_along_the_ground_and_over_the_to
     short = D.pass_option(scene(x=60.0), ("h9", 70.0, 34.0, 0.0))
     assert not short.lofted  # under 15 m it stays on the ground
 
+
+
+def test_screened_means_any_outfield_defender_nearer_the_goal_as_in_the_source():
+    wide = [(100.0, 44.0)]  # 11 m from goal (he is 15 m), outside the posts' cone
+    assert D.shot_estimate(90, 34, 105, wide, None) < D.shot_estimate(90, 34, 105, [], None)
+    behind = [(85.0, 34.0)]
+    assert D.shot_estimate(90, 34, 105, behind, None) == D.shot_estimate(90, 34, 105, [], None)
+
+
+def test_the_keeper_term_is_how_much_goal_he_leaves_open():
+    usual = offball.keeper_spot(85, 34, 105)
+    assert math.isclose(D.open_goal_share(85, 34, 105, usual), D.open_goal_share(85, 34, 105, usual))
+    off = (usual[0], usual[1] + 3.0)  # caught three metres off his line
+    assert D.open_goal_share(85, 34, 105, off) > D.open_goal_share(85, 34, 105, usual)
+    assert D.shot_estimate(85, 34, 105, [], off) > D.shot_estimate(85, 34, 105, [], usual)
+    assert 0.0 <= D.open_goal_share(85, 34, 105, usual) < 1.0
+    assert D.shot_estimate(104, 34, 105, [], (95.0, 60.0)) <= 1.0  # a probability, even into an empty net
