@@ -1134,6 +1134,15 @@ class Engine:
             steer(carrier, tx, ty, pace)
             if math.hypot(tx - carrier.x, ty - carrier.y) < 1.0:
                 self.dribble_to = None
+        elif self.t < self.hold_until and carrier.role != "GK":
+            # A4: settling the ball he does not stop dead: he takes it in his stride and carries on
+            # the way he was going, no faster than he can dribble, slower in close control.
+            pace = min(math.hypot(carrier.vx, carrier.vy),
+                       decisions.dribble_speed(carrier.profile["dribbling"]))
+            if self.closest_opponent(carrier) < CLOSE_CONTROL_M:
+                pace *= CLOSE_CONTROL_PACE
+            steer(carrier, clamp(carrier.x + carrier.vx, 1.0, PITCH_X - 1.0),
+                  clamp(carrier.y + carrier.vy, 1.0, PITCH_Y - 1.0), pace)
         else:  # holding: keeps the ball, shielding it
             steer(carrier, carrier.x, carrier.y, DRIBBLE)
         # The ball settles at the carrier's feet (from a keeper's hands, down to the ground)

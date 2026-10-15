@@ -517,3 +517,20 @@ def test_off_the_ball_he_runs_only_as_fast_as_the_ball_could_get_there():
     assert far < 3.0 < 6.0 < near
     e.hold_until = e.t + 1.0  # the carrier is not ready yet: more time
     assert e.in_time(p, p.x + 5.0, p.y) < near
+
+
+def test_a_receiver_takes_the_ball_in_his_stride_instead_of_stopping_dead():
+    e = Engine(1)
+    p = e.by_id["h8"]
+    for q in e.players:
+        if q.team == "away":
+            q.x, q.y = 100.0, 60.0  # nobody near him
+    p.x, p.y, p.vx, p.vy = 50.0, 34.0, 5.0, 0.0
+    e.give(p.id)
+    e.ball = (p.x + 0.37, p.y, 0.0, 5.0, 0.0, 0.0)
+    e.hold_until = e.t + 0.5  # settling the ball
+    for _ in range(10):
+        e.tick_carrier()
+        e.t += 1 / 25
+    assert p.vx > 2.0  # still going his way, at a dribbling pace
+    assert p.x > 50.0 + 1.5
