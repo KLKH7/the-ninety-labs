@@ -651,7 +651,7 @@ def test_l6_judges_the_goal_the_conceding_keeper_defends(tmp_path):
 
 
 def test_real_engine_goals_are_credited_and_relabelling_them_fails(tmp_path):
-    """Engine output, not a fixture, and no pinned seed (lesson 19): the first three goals from
+    """Engine output, not a fixture, and no pinned seed (lesson 23): the first three goals from
     real engine corners each meet the contract, and giving one to the wrong player (or to nobody)
     fails C8. Which seeds score moves with the engine and even with the Python version (CI found
     2 goals in the 32 seeds that gave 4 locally), so it scans until it has three."""

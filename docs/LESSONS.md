@@ -123,9 +123,41 @@ short and actionable. This file is public: no research sources, product names or
 - **Rule:** ground truth is used only for training labels and scoring. Nothing on the live path
   reads it. Whatever makes the video must also write the truth, so no generative video.
 
+### 18. A published average already contains the typical situation
+- **What happened:** shot estimates started from published scoring rates by distance (averages
+  over real shots, most of which face a defender and a keeper on his line), then cut them again
+  for every defender and for a keeper on the line. A normal shot was valued at about a fifth of
+  the published rate, so players almost never shot.
+- **Rule:** adjust a published average only for how a situation differs from the typical one it
+  already contains. **Check:** the typical situation must reproduce the published number.
+
+### 19. A quantile of where something happens is not where it starts
+- **What happened:** "90% of a team's presses happen within X m of its own goal" was used as the
+  line where the team starts pressing. Every team then pressed almost everywhere, turnovers
+  doubled and players ran out of energy, while the headline numbers looked near-real.
+- **Rule:** before using a number, check that it measures the behaviour it will drive, not a
+  neighbouring one. A strong result built on a misread input is worse than a weak honest one.
+
+### 20. Free to download is not free to use
+- **What happened:** a table derived from a free but non-open dataset (non-commercial, no
+  redistribution) went into the engine and was pushed before its terms were checked against
+  our licence and synthetic-data rules; it had to be removed and the branch history rewritten.
+- **Rule:** check a data source's licence against the hard rules before its first number goes
+  anywhere near the repo. Data that fails them may inform understanding privately, never the
+  engine.
+
+### 21. Every engine change gets an independent audit for hard-coding
+- **What happened:** fixes made with good intentions repeatedly hid constants tuned toward a
+  check, outcomes decided rather than produced, and tests that passed with the change reverted;
+  independent audits caught them, the author did not.
+- **Rule:** after every engine change, an independent reviewer with no knowledge of the
+  author's intent first lists every constant and special case as sourced, design-marked or
+  neither, flags anything fitted to a check or scripted, and mutation-tests the new tests,
+  before merging.
+
 ## Set pieces and tests
 
-### 18. A placed ball must start outside every body
+### 22. A placed ball must start outside every body
 - **What happened:** a corner's new ball was placed at the taker's centre, so the struck ball
   "touched" him on its way out: a fake deflection and a 0.4 m jump in the ground truth on 39
   of 60 corners. The validator exempts deflection frames, so nothing failed.
@@ -134,13 +166,13 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** after any kick, no deflection by the kicker within a few frames (a test runs many
   seeds).
 
-### 19. A test that changes the whole random stream cannot prove one cause
+### 23. A test that changes the whole random stream cannot prove one cause
 - **What happened:** "the delivery is struck with error" compared two runs with different seeds;
   the choice and timing differed anyway, so removing the error left it green.
 - **Rule:** hold everything else fixed (state, choice) and vary only the cause under test;
   then mutate the cause and require the test to fail.
 
-### 20. A rule must check what its name says
+### 24. A rule must check what its name says
 - **What happened:** a goal-credit rule described as "the last player to touch it" was built
   from a short list of event types. It missed a team-mate controlling a pass and a defender
   winning the ball, so it accepted wrong scorers and would have rejected right ones; the engine
@@ -149,7 +181,7 @@ short and actionable. This file is public: no research sources, product names or
   each frame, plus every touch event), and plant one case of each way it can be wrong.
 - **Check:** for each rule, list the ways the data can make it true, and test each one.
 
-### 21. A fixture must look like the real output
+### 25. A fixture must look like the real output
 - **What happened:** goal-credit tests built clips with nobody on the ball at the goal frame,
   but the engine writes the kick-off reset into that frame (the next taker on the centre spot).
   The rule counted that taker as the last toucher of every real goal: every own goal passed,
@@ -160,13 +192,13 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** for a new rule, find real clips where it applies (a scan over seeds) and assert on
   them in a test.
 
-### 22. "All mutations caught" is only as wide as the list
+### 26. "All mutations caught" is only as wide as the list
 - **What happened:** a report said 23 of 23 mutations were caught; an auditor found six more,
   near the same code, that survived (dropped conditions, a tolerance ten times too wide).
 - **Rule:** for every condition and every constant in a check, mutate it (drop it, widen it
   tenfold) and require a test to fail; report the list, not just the count.
 
-### 23. A plan must not stand the receiver where the ball is aimed
+### 27. A plan must not stand the receiver where the ball is aimed
 - **What happened:** the corner routine put each attacker on the exact spot the taker could aim
   at, standing still, so a delivery's target and its receiver were the same point decided in
   advance. Defenders marked a stationary man; the run, the timing and the space (what decides a
@@ -181,8 +213,8 @@ short and actionable. This file is public: no research sources, product names or
   meeting point or a cause, not an intention, is scripting. Measure before and after a change
   (here: first contact, goals, wait to the kick over 200 corners).
 
-### 24. A rule that never fires is not a model; a number without its script is not a result
-- **What happened:** after lesson 23, the taker was meant to time his cross on his runner. An
+### 28. A rule that never fires is not a model; a number without its script is not a result
+- **What happened:** after lesson 27, the taker was meant to time his cross on his runner. An
   audit measured it: in 293 of 300 corners he struck in the same frame he signalled, because
   the cross's long flight meant every runner "arrived in time"; the rule's unit test passed
   only with a runner placed 25 m away. The same pull request published first-contact numbers
@@ -197,7 +229,7 @@ short and actionable. This file is public: no research sources, product names or
   measurement showing the branch happens in real clips.
 
 
-### 25. A seed's outcome is not the same on every Python
+### 29. A seed's outcome is not the same on every Python
 - **What happened:** a test counted the goals in the first 32 scenario corners and asked for at
   least 3. Locally (Python 3.13) there were 4; CI (3.12) found 2 and failed. Same seeds, same
   code: tiny floating-point differences between versions grow over a chaotic simulation.
@@ -207,7 +239,7 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** before pushing a test that runs the engine over seeds, run it on every Python
   version CI uses (`UV_PROJECT_ENVIRONMENT=<dir> uv run --python 3.11 pytest`).
 
-### 26. For a rare event, select among played situations; never stage its cause
+### 30. For a rare event, select among played situations; never stage its cause
 - **What happened:** to get corner clips, the scenario placed a defender by the goal line and
   recorded him as the last touch, because open play rarely reached the line. The corner itself
   was played, but its cause was written into the data without happening.
@@ -219,7 +251,7 @@ short and actionable. This file is public: no research sources, product names or
   nothing at frame 0 except the opening state, and the cause (the exit and the touch it came
   off) present in the data.
 
-### 27. Check the Law's condition, not a convenient proxy for it
+### 31. Check the Law's condition, not a convenient proxy for it
 - **What happened:** the goal-mouth check extrapolated the ball's path to where its centre met
   the goal line. Law 10 counts a goal when the whole ball is over. A ball deflected along the
   line from outside the post had its centre past the line for half a second before the whole
