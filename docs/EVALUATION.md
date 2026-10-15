@@ -10,7 +10,7 @@ generated it and the output file is committed. Rows marked *planned* have no res
 | Ground-truth data meets the data contract (consistency and physics) | `uv run ninety-validate <clip>` | command output | running: the engine meets the contract on full matches (seeds 7, 11, 21); CI runs it on the smoke clip |
 | Render checks (projection error, label completeness, determinism, ball occlusion share) | `uv run ninety-render-check <clips> --determinism --report docs/eval/render-checks.json`; CI `render` job on every push | `docs/eval/render-checks.json`, CI log | running |
 | Off-the-shelf detector recall on renders (guide check 2) | planned | `docs/eval/render-checks.json` | planned |
-| Detection recall (players, ball) on the fixed test set | planned | `docs/eval/vision-report-v{n}.json` | planned |
+| Detection precision and recall (players, ball) on the fixed test set, by difficulty, strict and lenient matching | planned | `docs/eval/vision-report-v{n}.json` | planned |
 | Event precision, recall and F1 per type; possession accuracy; speed error | planned | `docs/eval/vision-report-v{n}.json` | planned |
 | Targeted data rounds, before and after | planned | `docs/eval/vision-report-v{n}.json` | planned |
 | Fact-checker rules (numbers, players, evidence ids) | `uv run pytest tests/test_factcheck.py` | test assertions | running |
@@ -36,6 +36,41 @@ uv run ninety-render-check runs/dataset/test/seed9000* --determinism --report do
 | Ball occlusion | share of frames with the ball in shot where its visibility is under 0.5 | above zero |
 | Determinism | re-render the first clip; compare `frames.jsonl`, `events.jsonl` and image hashes | identical |
 | Split integrity | `ninety/render/splits.py`: test seeds are reserved; overrides are refused on the test set | unit tests |
+
+## Vision scoring
+
+Fixed before the first detector runs, so no rule is tuned to a result. Every vision report
+gives precision and recall (both kinds of error), on the fixed test set only.
+
+**Matching.** A detection is mapped onto the pitch through the camera and matched one to one,
+nearest first, to the true positions in the same frame.
+
+| Rule | Ball | Player | Why |
+|---|---|---|---|
+| Strict (the headline) | within 1.0 m | within 1.0 m | possession assigns the ball to the nearest player; two players are often about 2 m apart, so an error above half that can give the ball to the wrong one |
+| Lenient (for comparison) | within 2.0 m | within 1.5 m | the looser radii commonly used for this task, so our numbers can be compared with others |
+
+**Difficulty groups.** Every true ball and player is put in groups using the renderer's
+labels, and recall is reported for each group as well as overall:
+
+| Group | Rule (from `frames.jsonl`) |
+|---|---|
+| visible | visibility ≥ 0.9 |
+| partly hidden | 0.5 ≤ visibility < 0.9 |
+| mostly hidden | 0 < visibility < 0.5 |
+| in the air (ball) | height above 0.5 m, about knee height |
+| blurred | camera blur streak longer than 3 px, about half the width of a ball at broadcast distance |
+
+The ball target (recall ≥ 0.90) applies to balls at least half visible; the other groups are
+reported, never left out.
+
+**Events.** A detected event matches a true event of the same type and team within 1.0 s
+(25 frames), one to one. Precision, recall and F1 are reported per type; pass F1 is the
+headline.
+
+**The test set must be hard enough.** Each report states the share of test frames with the ball
+in shot and less than half visible. The target before freezing the test set is at least 5%
+(see [PLAN.md](PLAN.md#goals)).
 
 ## Rules
 
