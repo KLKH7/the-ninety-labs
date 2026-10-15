@@ -36,7 +36,7 @@ from ninety.sim.body import (
 )
 from ninety.sim.body import move as move_body
 from ninety.sim.decisions import PENALTY_DEPTH
-from ninety.sim.offball import DIVE_TIME_S, KEEPER_DIVE_TRAVEL_M
+from ninety.sim.offball import KEEPER_DIVE_TRAVEL_M
 from ninety.sim.profiles import Profile
 from ninety.sim.team import TeamBrain
 
@@ -277,8 +277,9 @@ class Engine:
         self.from_restart: str | None = None  # the restart the next kick is taken from
         self.read: tuple[str, float] | None = None  # (keeper, y): where he reads a shot is going
         # (keeper, start t, start y, signed travel, when his arms began to stretch)
-        self.dive: tuple[str, float, float, float, float] | None = None
+        self.dive: tuple[float | str, ...] | None = None
         self.landed: tuple[str, float] | None = None  # (keeper, his arms' stretch start) while he is down
+        self.dived_at: float | None = None  # P15: the touch (kicked_at) the last dive was at: one dive each
         self.shot_touched_by: str | None = None  # "keeper" or "defender": who got to the shot
         self.shot_was_on_target: bool | None = None  # was it going in when they first touched it?
         self.free_since = -99.0
@@ -1293,7 +1294,9 @@ class Engine:
         k = self.kicked
         shot_at_him = k and k["type"] == "shot" and k["team"] != p.team and self.possessor is None
         reacted = self.t - self.kicked_at >= self.reaction(p)  # to the last touch, a deflection too
-        if self.dive is None and shot_at_him and reacted and self.off_balance.get(p.id, -1.0) <= self.t:
+        fresh = self.dived_at != self.kicked_at  # P15: one dive per touch; a deflection is a new touch
+        up = self.off_balance.get(p.id, -1.0) <= self.t
+        if self.dive is None and shot_at_him and reacted and fresh and up:
             arrival = self.ball_at_x(p.x)  # where the ball's own flight takes it past him
             if arrival:
                 when, cross, height = arrival
@@ -1306,22 +1309,25 @@ class Engine:
                 need = abs(cross - p.y) - arms
                 if height <= top and need > 0:
                     travel = math.copysign(min(need, KEEPER_DIVE_TRAVEL_M), cross - p.y)
-                    self.dive = (p.id, self.t, p.y, travel, self.kicked_at + self.reaction(p))
+                    self.dive = (p.id, self.t, p.y, travel, self.kicked_at + self.reaction(p),
+                                 math.copysign(1.0, travel) * p.vy)  # his sideways run toward it
+                    self.dived_at = self.kicked_at
         if not self.dive or self.dive[0] != p.id:
             return False
-        _, start, y0, travel, _ = self.dive
+        _, start, y0, travel = self.dive[:4]
+        v0 = self.dive[5] if len(self.dive) > 5 else 0.0
         elapsed = self.t + DT - start
         # A shorter dive is the same push, stopped once he has gone far enough: as hard as the full
-        # dive's, not harder, so he lands slower.
-        done = KEEPER_DIVE_TRAVEL_M * offball.dive_progress(elapsed)
-        landing = done >= abs(travel) or elapsed >= DIVE_TIME_S
-        y = y0 + math.copysign(min(done, abs(travel)), travel)
+        # dive's, not harder. It starts from the sideways run he was already making (P2).
+        done, _ = offball.dive_motion(elapsed, v0)
+        landing = done >= abs(travel)
+        y = y0 + math.copysign(1.0, travel) * min(done, abs(travel))  # done < 0 while braking a run away
         if landing:
             # He lands carrying the speed the push gave him, for what is left of the frame, and
             # slows on the ground from there (he is down: braking as any body does, P2), not in
             # one frame.
-            reached = offball.dive_time_to(abs(travel))
-            carried = math.copysign(offball.dive_speed(reached), travel)
+            reached = offball.dive_time_to(abs(travel), v0)
+            carried = math.copysign(offball.dive_motion(reached, v0)[1], travel)
             y += carried * min(max(elapsed - reached, 0.0), DT)
         # P2: the run he was making when he launched brakes as hard as his legs allow, it does not
         # stop dead (the dive only moves him sideways).

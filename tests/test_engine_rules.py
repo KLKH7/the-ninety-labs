@@ -789,7 +789,7 @@ def test_a_short_dive_is_the_same_push_over_sooner_and_travel_counts_the_arms_re
     reached = offball.dive_time_to(travel)
     assert frames == math.ceil(reached * 25 - 1e-9) < offball.DIVE_TIME_S * 25
     left = frames / 25 - reached
-    assert abs(k.y - y0 - travel - offball.dive_speed(reached) * left) < 1e-6
+    assert abs(k.y - y0 - travel - offball.dive_motion(reached)[1] * left) < 1e-6
 
 
 def test_the_keeper_dives_at_a_dipping_shot_that_comes_in_under_the_bar():
@@ -1133,14 +1133,15 @@ def test_the_keeper_touches_a_ball_at_his_waist_that_he_cannot_yet_touch_under_t
     assert not passes(2.6)
 
 
-def _dive_speeds(travel: float, vx: float = 0.0) -> tuple[list[float], list[float], int]:
+def _dive_speeds(travel: float, vx: float = 0.0, vy: float = 0.0
+                 ) -> tuple[list[float], list[float], int]:
     """The keeper's sideways and forward speeds, frame by frame, over a dive of `travel` metres
-    and a second after it; and the frame he lands in."""
+    and a second after it (he was running at (vx, vy) when it began); and the frame he lands in."""
     from ninety.sim.engine import DT
     e = Engine(1)
     k = e.by_id["a1"]
-    k.x, k.y, k.heading, k.vx, k.vy = 100.0, 34.0, math.pi, vx, 0.0
-    e.dive = (k.id, e.t, k.y, travel, e.t)
+    k.x, k.y, k.heading, k.vx, k.vy = 100.0, 34.0, math.pi, vx, vy
+    e.dive = (k.id, e.t, k.y, travel, e.t, math.copysign(1.0, travel) * vy)
     side, ahead, landed = [], [], None
     for i in range(40):
         x0, y0 = k.x, k.y
@@ -1187,7 +1188,45 @@ def test_a_keeper_who_dives_while_running_brakes_his_run_and_does_not_stop_dead(
     # GROUNDING P2: the dive moves him sideways; the run he was making brakes as hard as legs allow.
     from ninety.sim.engine import BRAKE_MAX, DT
     _, ahead, landed = _dive_speeds(1.0, vx=-4.0)
-    run = ahead[:landed + 1]
-    assert run[0] < -3.0  # he does not stop dead
+    run = [-4.0] + ahead[:landed + 1]
+    assert run[1] < -3.0  # he does not stop dead
     for a, b in zip(run, run[1:], strict=False):
-        assert b - a <= BRAKE_MAX * DT + 1e-9
+        if a < -BRAKE_MAX * DT:  # still running: braking as hard as his legs allow, no harder
+            assert b - a == pytest.approx(BRAKE_MAX * DT)
+
+
+def test_a_keeper_already_running_sideways_dives_on_from_that_run_and_does_not_lose_it():
+    # GROUNDING P15 and P2: toward the dive, the push starts from his run; away from it, he first
+    # brakes as legs allow, then pushes; his sideways speed never jumps.
+    from ninety.sim.engine import BRAKE_MAX, DT
+    ramp = 2 * (offball.DIVE_TIME_S - offball.KEEPER_DIVE_TRAVEL_M / offball.DIVE_PEAK_MPS)
+    push = offball.DIVE_PEAK_MPS / ramp * DT
+    for vy in (2.0, -2.0, 4.5):  # 4.5: faster than the dive's own peak, which it keeps
+        side, _, landed = _dive_speeds(1.0, vy=vy)
+        speeds = [vy] + side[:landed + 1]
+        gains = [b - a for a, b in zip(speeds, speeds[1:], strict=False)]
+        assert min(gains) >= -1e-9  # toward the dive throughout: never thrown back
+        braking = [b - a for a, b in zip(speeds, speeds[1:], strict=False) if b < 0]  # still running away
+        assert bool(braking) == (vy < 0)
+        assert all(g <= BRAKE_MAX * DT + 1e-9 for g in braking)
+        assert max(gains) <= max(push, BRAKE_MAX * DT) + 1e-9
+    toward, _, landed_toward = _dive_speeds(1.0, vy=2.0)
+    still, _, landed_still = _dive_speeds(1.0)
+    assert toward[0] > still[0] and landed_toward <= landed_still  # a run toward it helps him
+
+
+def test_a_keeper_dives_once_at_a_touch_and_again_only_after_a_new_one():
+    # GROUNDING P15: one dive per touch of the ball. Down after diving at a slow shot, he gets up
+    # and does not dive at the same ball again; a deflection is a new touch he may dive at.
+    e = Engine(1)
+    k = _shot_at_keeper(e, (80.0, 34.0, 0.3, 20.0, 4.5, 0.0))  # slow, wide of him: time to dive, land, rise
+    e.t += e.reaction(k)
+    assert e.keeper_dive(k)
+    while e.dive is not None:
+        e.keeper_dive(k)
+        e.t += 1 / 25
+    e.t = e.off_balance[k.id] + 0.01  # up again, the same ball still coming
+    k.y = 34.0
+    assert not e.keeper_dive(k)
+    e.kicked_at = e.t - 1.0  # it came off someone: a new touch, which he has reacted to
+    assert e.keeper_dive(k)
