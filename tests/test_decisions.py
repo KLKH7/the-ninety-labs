@@ -1,5 +1,6 @@
 """On-ball decisions score options from what the player believes; the scoring behaves like football."""
 
+import copy
 import math
 import random
 from collections import Counter
@@ -8,6 +9,7 @@ import pytest
 
 from ninety.sim import decisions as D
 from ninety.sim import offball
+from ninety.sim.profiles import Profile
 from ninety.sim.value import CELLS_X, CELLS_Y, Table, Tables
 
 
@@ -17,10 +19,18 @@ def hand_written_values(monkeypatch):
     monkeypatch.setattr(D, "POSSESSION", None)
 
 
+PASSER = Profile.generate("CM", random.Random(7))  # a real passer: every estimate carries his kick error
+
+
 def scene(**kw) -> D.Scene:
+    """A scene as the engine builds one (engine.scene_for): a real passer facing the goal he
+    attacks, and the opponents as he sees them now, standing unless `moving` says otherwise."""
     base = dict(x=60.0, y=34.0, goal_x=105.0, mates=[], opponents=[], keeper=None, decisions=0.5,
-                composure=0.5, dribbling=0.5, traits=(), risk=0.0)
+                composure=0.5, dribbling=0.5, traits=(), risk=0.0, absorb={}, passer=PASSER)
     base.update(kw)
+    base.setdefault("heading", 0.0 if base["goal_x"] > 52.5 else math.pi)
+    base.setdefault("moving", [(ox, oy, 0.0, 0.0, (ox, oy) == base["keeper"])
+                               for ox, oy in base["opponents"]])
     return D.Scene(**base)
 
 
@@ -97,6 +107,10 @@ def mirror(**kw) -> D.Scene:
     s.mates = [(m[0], 105 - m[1], m[2], m[3]) for m in s.mates]
     s.opponents = [(105 - ox, oy) for ox, oy in s.opponents]
     s.keeper = None if s.keeper is None else (105 - s.keeper[0], s.keeper[1])
+    s.moving = [(105 - ox, oy, -vx, vy, k) for ox, oy, vx, vy, k in s.moving]
+    s.heading = math.pi
+    s.passer = copy.copy(PASSER)  # a mirror image kicks with the other foot
+    s.passer.foot = "left" if PASSER.foot == "right" else "right"
     return s
 
 
@@ -137,11 +151,11 @@ def test_a_pass_is_led_toward_the_goal_being_attacked():
     assert D.pass_option(mirror(), ("a9", 30.0, 34.0, 0.0)).target[0] < 30.0
 
 
-def test_a_pass_too_short_for_the_receiver_to_reach_the_lead_is_less_certain():
+def test_a_pass_the_receiver_cannot_get_to_in_time_is_less_certain():
     s = scene(x=60.0)
-    short = D.pass_option(s, ("h9", 64.5, 34.0, 0.0))  # the ball is there before he can step to it
-    gain = D.value(*short.target, 105.0)
-    assert short.value < 0.8 * gain
+    conf = lambda tx, ty: D.pass_confidence(s, tx, ty, 70.0, 40.0, 0.0, False, 14.0, "h9")  # noqa: E731
+    assert conf(70.0, 39.5) > 0.5  # played to his feet
+    assert conf(70.0, 30.0) < 0.2 * conf(70.0, 39.5)  # 10 m from him: four times in five it has gone by
 
 
 def test_an_opponent_on_the_dribble_path_makes_the_dribble_worse():
@@ -157,21 +171,107 @@ def test_a_dribble_is_valued_by_the_published_threat_where_it_ends():
     straight = next(o for o in D.options(s) if o.kind == "dribble")
     assert math.isclose(straight.value, threat.at(*straight.target, 105.0), rel_tol=1e-6)
 
-def test_a_lane_is_judged_where_the_opponent_meets_the_line_not_by_his_distance_from_the_passer():
-    s = scene(x=60.0)
+def test_a_pass_is_valued_by_its_estimate_of_reaching_him_and_where_it_would_be_lost():
+    s = scene(x=60.0, opponents=[(72.0, 40.0)])  # 6 m off the line at its midpoint
     mate = ("h9", 82.5, 34.0, 0.0)  # a 24 m ground pass to (84, 34)
-    free = D.pass_option(s, mate)
-    s.opponents = [(72.0, 40.0)]  # 6 m off the line at its midpoint
     chosen = D.pass_option(s, mate)
-    v0 = D.launch_speed(24.0, chosen.pace)
-    conf = D.sigmoid((D.generic_time(5.0) - D.ground_time(v0, 12.0)) / D.LANE_MARGIN_S)
-    receive = D.sigmoid((D.ground_time(v0, 24.0) + 0.5 - D.generic_time(1.5)) / D.RECEIVE_MARGIN_S)
-    receive *= D.sigmoid((D.CONTROL_EST_MPS - chosen.pace) / D.CONTROL_MARGIN_MPS)
-    space = 0.7 + 0.3 * min(1.0, math.hypot(84.0 - 72.0, 6.0) / 5.0)
-    gain = D.value(84.0, 34.0, 105.0) * space
-    expected = conf * receive * gain - (1 - conf * receive) * D.loss_cost(72.0, 34.0, 105.0)
+    conf = D.pass_confidence(s, 84.0, 34.0, 82.5, 34.0, 0.0, chosen.lofted, chosen.pace, "h9")
+    gain = D.value(84.0, 34.0, 105.0) * (0.7 + 0.3 * min(1.0, math.hypot(84.0 - 72.0, 6.0) / 5.0))
+    expected = conf * gain - (1 - conf) * D.loss_cost(72.0, 34.0, 105.0)
     assert math.isclose(chosen.value, expected, rel_tol=1e-9)
-    assert free.value > expected
+    assert D.pass_option(scene(x=60.0), mate).value > chosen.value
+
+
+def test_an_opponent_on_the_lane_is_a_risk_and_one_well_off_it_is_not():
+    def conf(opponents):
+        return D.pass_confidence(scene(x=60.0, opponents=opponents), 84.0, 34.0, 82.5, 34.0, 0.0, False, 10.0,
+                                 "h9")
+    free = conf([])
+    by_offset = [conf([(72.0, 34.0 + off)]) for off in (0.0, 1.0, 2.0, 4.0, 8.0, 15.0)]
+    assert by_offset[0] < 0.1 < 0.9 * free < by_offset[-1]
+    assert all(a <= b + 1e-9 for a, b in zip(by_offset, by_offset[1:], strict=False))
+
+
+def test_an_opponent_beyond_where_the_team_mate_takes_it_cannot_cut_it_out():
+    """He is raced against the team-mate's take, not against the ball reaching his own nearest point."""
+    def conf(opponents):
+        return D.pass_confidence(scene(x=60.0, opponents=opponents), 75.0, 34.0, 75.0, 34.0, 0.0, False, 10.0,
+                                 "h9")
+    assert conf([(84.0, 34.0)]) > 0.9 * conf([])  # on the line, 9 m past him
+    assert conf([(70.0, 35.0)]) < 0.5 * conf([])  # in foot reach of the line, before him
+
+
+def test_a_body_in_the_lane_stops_a_ball_before_he_can_react_but_a_foot_needs_a_reaction():
+    def conf(opponents):
+        return D.pass_confidence(scene(x=60.0, opponents=opponents), 75.0, 34.0, 75.0, 34.0, 0.0, False, 14.0,
+                                 "h9")
+    assert conf([(63.0, 34.0)]) < 0.05  # standing on the line 3 m away: the ball hits him
+    assert conf([(63.0, 35.0)]) > 0.9 * conf([])  # 1 m off it: in foot reach, but it is past before he reacts
+
+
+def test_the_receivers_first_touch_decides_a_hard_pass():
+    def conf(absorb):
+        s = scene(x=60.0, absorb={"h9": absorb})
+        return D.pass_confidence(s, 90.0, 34.0, 90.0, 34.0, 0.0, False, 14.0, "h9")
+    assert conf(24.0) > 0.9 > 0.1 > conf(8.0)  # it arrives at about 14 m/s
+
+
+def test_a_pass_that_leaves_the_pitch_first_is_lost():
+    s = scene(x=60.0, y=60.0)
+    assert D.pass_confidence(s, 72.0, 67.5, 72.0, 67.5, 0.0, False, 14.0, "h9") > 0.5  # he meets it first
+    assert D.pass_confidence(s, 72.0, 67.5, 66.0, 58.0, 0.0, False, 14.0, "h9") < 0.05  # it runs out
+
+
+def test_a_keeper_takes_a_ball_in_his_box_with_his_hands():
+    def conf(keeper):
+        s = scene(x=75.0, moving=[(97.0, 34.0, 0.0, 0.0, keeper)])
+        return D.pass_confidence(s, 98.0, 34.0, 99.0, 30.0, 0.0, True, D.ARRIVE_MPS, "h9")
+    assert conf(True) < conf(False)
+
+
+def test_the_strikes_he_weighs_reproduce_his_kick_error():
+    from ninety.sim.profiles import Profile
+    passer = Profile.generate("CM", random.Random(3))
+    s = scene(x=60.0, passer=passer, heading=0.0, opponents=[(61.5, 35.0)])
+    for lofted in (False, True):
+        nodes = D.strike_nodes(s, 85.0, 34.0, lofted, 10.0)
+        g0, up0 = D.loft_launch(25.0) if lofted else (D.launch_speed(25.0, 10.0), 0.0)
+        speed, nearest = math.hypot(g0, up0), math.hypot(1.5, 1.0)
+        dir_sd, speed_sd, loft_sd, foot = passer.strike_error("passing", speed, nearest, 1.0, 0.0)
+        assert math.isclose(sum(w for w, *_ in nodes), 1.0)
+        assert math.isclose(sum(w * d for w, d, *_ in nodes), 0.0, abs_tol=1e-12)
+        assert math.isclose(sum(w * d * d for w, d, *_ in nodes), math.radians(dir_sd) ** 2)
+        speeds = [math.hypot(g, u) / math.hypot(g0, up0) for _, _, g, u in nodes]
+        mean = sum(w * v for (w, *_), v in zip(nodes, speeds, strict=True))
+        assert math.isclose(mean, foot)
+        assert math.isclose(sum(w * (v - mean) ** 2 for (w, *_), v in zip(nodes, speeds, strict=True)),
+                            (speed_sd * foot) ** 2)
+        lofts = [math.atan2(u, g) - math.atan2(up0, g0) for _, _, g, u in nodes]
+        spread = sum(w * a * a for (w, *_), a in zip(nodes, lofts, strict=True))
+        assert math.isclose(spread, math.radians(loft_sd) ** 2 if lofted else 0.0, abs_tol=1e-12)
+    passer.foot = "right"  # the pass goes 60 degrees to his left: struck with his left, weaker foot
+    turned = scene(x=60.0, passer=passer, heading=math.radians(-60))
+    across = D.strike_nodes(turned, 85.0, 34.0, False, 10.0)
+    shares = [g / D.launch_speed(25.0, 10.0) for _, _, g, _ in across]
+    mean = sum(w * v for (w, *_), v in zip(across, shares, strict=True))
+    assert math.isclose(mean, passer.weak_foot_speed())
+    assert passer.weak_foot_speed() < 1
+
+
+def test_a_worse_passer_is_less_sure_of_a_pass_through_a_narrow_gap():
+    """Two opponents 4 m out, 1.6 m apart: the ball is past them before they react, so only a
+    strike off line hits one; a wider kick error sends more of his strikes into them."""
+    from ninety.sim.profiles import Profile
+    passer = Profile.generate("CM", random.Random(3))
+    gap = [(64.0, 34.8), (64.0, 33.2)]
+
+    def conf(skill):
+        passer.attributes["passing"] = skill
+        s = scene(x=60.0, passer=passer, heading=0.0, opponents=gap)
+        return D.pass_confidence(s, 85.0, 34.0, 85.0, 34.0, 0.0, False, 14.0, "h9")
+    poor, average, good = conf(0.1), conf(0.5), conf(0.9)
+    assert 0.3 < average < 0.7  # genuinely in doubt
+    assert poor < average < good and good - poor > 0.1
 
 
 def test_carrying_on_with_a_dribble_is_slightly_preferred_and_holding_gets_no_bonus():
@@ -205,11 +305,16 @@ def test_a_failed_pass_is_costed_where_it_would_end_if_that_is_worse():
     assert math.isclose(back.value, conf * gain - (1 - conf) * at_target, rel_tol=1e-9)
 
 
-def test_the_control_estimate_uses_the_speed_a_lofted_ball_arrives_at():
-    for d in (20.0, 30.0, 40.0):
-        assert D.loft_arrival(d) < 0.8 * math.hypot(*D.loft_launch(d))  # drag slows it in the air
-    assert D.loft_arrival(30.0) > D.loft_arrival(20.0)  # but a longer ball still lands faster
+def test_the_first_touch_is_judged_on_the_speed_a_lofted_ball_comes_down_at():
+    points, _ = D.flight(*D.loft_launch(30.0))
+    down = next(p for p in points[1:] if p[4] < 0 and p[2] <= D.FOOT_REACH_Z)
+    landing, launch = math.hypot(down[3], down[4]), math.hypot(*D.loft_launch(30.0))
+    assert landing < 0.8 * launch  # drag slows it in the air
 
+    def conf(absorb):
+        s = scene(x=60.0, absorb={"h9": absorb})
+        return D.pass_confidence(s, 90.0, 34.0, 90.0, 34.0, 0.0, True, D.ARRIVE_MPS, "h9")
+    assert conf(landing + 4.0) > 0.8 > 0.2 > conf(landing - 4.0)  # the landing speed, not the launch
 
 def test_a_shot_into_a_crowd_risks_losing_the_ball_where_he_stands():
     shoot = lambda s: next(o for o in D.options(s) if o.kind == "shoot")  # noqa: E731
@@ -446,3 +551,132 @@ def test_the_keeper_term_is_the_published_save_rate_with_odds_scaled_by_coverage
     far = (usual[0], usual[1] + 2.5)
     assert D.shot_estimate(90, 34, 105, [], near_post) < D.shot_estimate(90, 34, 105, [], far)
 
+
+
+def test_an_opponent_just_short_of_the_lane_is_nearly_as_much_a_risk_as_one_who_just_reaches_it():
+    """No cliff: one who cannot quite make it is raced by how late he would be."""
+    def conf(off):
+        s = scene(x=60.0, opponents=[(68.0, 34.0 + off)])
+        return D.pass_confidence(s, 74.0, 34.0, 72.5, 34.0, 0.0, False, 6.0, "h9")
+    confs = [conf(1.5 + k * 0.01) for k in range(61)]
+    assert all(b - a < 0.02 for a, b in zip(confs, confs[1:], strict=False))
+    assert all(a <= b + 1e-9 for a, b in zip(confs, confs[1:], strict=False))
+    assert confs[0] < 0.5 and conf(8.0) > 0.9
+
+
+def test_any_team_mate_who_gets_there_first_takes_it():
+    s = scene(x=60.0, mates=[("h9", 90.0, 50.0, 0.0)])
+    alone = D.pass_confidence(s, 90.0, 34.0, 90.0, 50.0, 0.0, False, 14.0, "h9")  # 16 m from him
+    s.mates.append(("h8", 80.0, 34.0, 0.0))  # standing on its path
+    assert alone < 0.1 < 0.5 < D.pass_confidence(s, 90.0, 34.0, 90.0, 50.0, 0.0, False, 14.0, "h9")
+
+
+def _crossing(points, height_lo, height_hi):
+    """Metres along and seconds of the first path point coming down through this band of heights."""
+    return next((a, t) for t, a, z, _, vz in points if vz < 0 and height_lo <= z <= height_hi)
+
+
+def test_after_he_reacts_a_ball_at_his_feet_is_his_to_play_and_one_at_his_chest_hits_him():
+    react = D.perception.CHOICE_REACTION_S
+    ground, _ = D.flight(D.launch_speed(20.0, 10.0), 0.0)
+    hit = lambda points, along: D.body_hit(points, 9.0, 0.0, 0.0, 1.0, 0.0, along, 0.0, 0.0, 0.0,  # noqa: E731
+                                          react, 0.05, 0.0)
+    assert hit(ground, 3.0) > 0.99  # 3 m out: there before he reacts
+    assert hit(ground, 15.0) == 0.0  # after he reacts, at his feet: a touch, his race (reach_time)
+    lofted, _ = D.flight(*D.loft_launch(30.0))
+    along, t = _crossing(lofted, 1.2, 1.6)
+    assert t > react and hit(lofted, along) > 0.99  # after he reacts, at body height: it hits him
+
+
+def test_the_body_contact_chance_follows_how_sure_he_is_of_where_the_opponent_stands():
+    points, _ = D.flight(D.launch_speed(20.0, 14.0), 0.0)
+    react = D.perception.CHOICE_REACTION_S
+    hit = lambda side, sigma: D.body_hit(points, 9.0, 0.0, 0.0, 1.0, 0.0, 3.0, side, 0.0, 0.0,  # noqa: E731
+                                         react, sigma, 0.0)
+    assert hit(0.6, 0.01) < 1e-6 < 0.2 < hit(0.6, 0.4)  # just outside contact: only if he is misjudged
+    assert hit(0.0, 0.01) > 0.99 > 0.8 > hit(0.0, 0.4)  # dead on: misjudged, he may not be there
+
+
+def test_nobody_plays_a_struck_ball_before_he_reacts():
+    points, rests = D.flight(D.launch_speed(20.0, 14.0), 0.0)
+    on_its_path = lambda react: D.reach_time(points, math.inf, rests, 0.0, 0.0, 1.0, 0.0,  # noqa: E731
+                                            3.0, 0.0, 0.0, 0.0, react, 9.0)[0]
+    assert on_its_path(0.365) > 0.365 > 0.2 > on_its_path(0.0)
+    # Standing just where the ball is the frame before he reacts: still not his until he has.
+    just_before = next(p for p in points if p[0] <= 0.365 < p[0] + D.RACE_STEP * D.DT)
+    for late in (False, True):
+        t, _ = D.reach_time(points, math.inf, rests, 0.0, 0.0, 1.0, 0.0, just_before[1], 0.0, 0.0, 0.0,
+                            0.365, 9.0, late=late)
+        assert t > 0.365
+
+
+def test_running_away_from_the_ball_he_must_brake_first():
+    from ninety.sim.body import can_get_to
+    reach = lambda vx: can_get_to(D.AVERAGE_BODY, -3.0, 0.0, 1.0, vx, 0.0, 1.0)[0]  # noqa: E731
+    assert reach(0.0)  # 2 m from standing in a second
+    assert not reach(8.0)  # going the other way at 8 m/s: a second is spent braking
+
+
+def test_a_first_touch_absorbs_the_balls_speed_relative_to_him():
+    from ninety.sim.body import relative_speed
+    assert relative_speed(10.0, 0.0, 0.0, 8.0, 0.0) == 2.0  # running with it
+    assert relative_speed(10.0, 0.0, 0.0, -8.0, 0.0) == 18.0  # running into it
+    assert math.isclose(relative_speed(10.0, 0.0, 3.0, 0.0, 0.0), math.sqrt(109.0))
+
+
+def test_a_mishit_keeps_some_speed_and_no_strike_beats_a_foot():
+    assert math.isclose(D.struck_speed(10.0, -0.9, 1.0), 3.0)  # the 0.3 floor
+    assert D.struck_speed(30.0, 0.5, 1.0) == D.MAX_STRIKE_MPS
+    assert math.isclose(D.struck_speed(10.0, 0.1, 0.88), 9.68)
+
+
+def test_a_keeper_reaches_a_ball_at_rest_in_his_box_with_his_hands_too():
+    points, rests = [(0.0, 0.0, 0.0, 1.0, 0.0), (3.4, 10.0, 0.0, 0.0, 0.0)], True  # at rest 10 m on
+    # A keeper 18 m to the side of where it stops, inside his box (his goal line at x = 95).
+    at = lambda box: D.reach_time(points, math.inf, rests, 80.0, 34.0, 1.0, 0.0,  # noqa: E731
+                                  90.0, 52.0, 0.0, 0.0, 0.365, 99.0, box)[0]
+    arms = D.offball.arm_reach_m(3.4 - 0.365)
+    assert math.isclose(at(95.0), 0.365 + D.AVERAGE_BODY.time_to_cover(18.0 - arms))
+    assert math.isclose(at(None), 0.365 + D.AVERAGE_BODY.time_to_cover(18.0 - D.CONTROL_M))
+    assert at(95.0) < at(None)
+
+
+def test_a_body_beyond_the_contact_cutoff_is_not_in_the_way_and_the_shortcut_agrees():
+    points, _ = D.flight(D.launch_speed(20.0, 14.0), 0.0)
+    r, sigma = D.BODY_RADIUS + D.ball.RADIUS, 0.1
+    hit = lambda side: D.body_hit(points, 9.0, 0.0, 0.0, 1.0, 0.0, 3.0, side, 0.0, 0.0,  # noqa: E731
+                                  0.365, sigma, 0.0)
+    assert hit(r + 5.1 * sigma) == 0.0 < hit(r + 4.8 * sigma)
+    assert not D.body_near(r + 5.1 * sigma, 0.0, sigma) and D.body_near(r + 4.9 * sigma, 0.0, sigma)
+
+
+def test_an_opponent_running_away_from_the_lane_is_no_cliff_either():
+    """Within reach but running away, he must brake first: the time he needs, and so the estimate,
+    moves smoothly as he nears the edge of his reach (body.time_to_cover agrees with can_get_to)."""
+    def conf(off):
+        s = scene(x=60.0, opponents=[(70.0, 34.0 + off)], moving=[(70.0, 34.0 + off, 0.0, 5.0, False)])
+        return D.pass_confidence(s, 74.0, 34.0, 72.5, 34.0, 0.0, False, 10.0, "h9")
+    confs = [conf(0.9 + k * 0.001) for k in range(151)]  # charging no braking inside reach jumped 0.16 here
+    assert all(abs(b - a) < 0.01 for a, b in zip(confs, confs[1:], strict=False))
+
+
+def test_the_time_to_get_there_agrees_with_whether_he_gets_there():
+    """body.time_to_cover is the inverse of body.can_get_to, braking included, inside reach or not."""
+    from ninety.sim.body import can_get_to
+    rng = random.Random(2)
+    for _ in range(300):
+        dx, along = rng.uniform(0.01, 12.0), rng.uniform(-8.0, 8.0)  # a point dx ahead, his speed toward it
+        need = D.AVERAGE_BODY.time_to_cover(dx - D.CONTROL_M, along)
+        assert can_get_to(D.AVERAGE_BODY, dx, 0.0, D.CONTROL_M, along, 0.0, need + 1e-3)[0]
+        if need > 0:
+            assert not can_get_to(D.AVERAGE_BODY, dx, 0.0, D.CONTROL_M, along, 0.0, need - 1e-3)[0]
+
+
+def test_a_ball_is_out_only_once_the_whole_of_it_has_crossed_the_line():
+    """Law 9, one test for the engine (engine.went_out) and the passer's race."""
+    r = D.ball.RADIUS
+    # On each line, and which way is out: both goal lines, both touchlines.
+    for x, y, out_x, out_y in ((D.PITCH_X, 34.0, 1, 0), (0.0, 34.0, -1, 0), (50.0, D.PITCH_Y, 0, 1),
+                               (50.0, 0.0, 0, -1)):
+        assert not D.out_of_play(x + out_x * 0.9 * r, y + out_y * 0.9 * r)  # centre over, ball not
+        assert D.out_of_play(x + out_x * 1.1 * r, y + out_y * 1.1 * r)  # the whole ball over

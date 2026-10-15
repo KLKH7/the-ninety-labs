@@ -12,7 +12,7 @@ from __future__ import annotations
 import math
 
 from ninety.sim import ball
-from ninety.sim.body import BODY_RADIUS
+from ninety.sim.body import BODY_RADIUS, CONTROL_M, FOOT_REACH_Z, HAND_REACH_Z
 from ninety.sim.perception import CHOICE_REACTION_S
 
 PITCH_X, PITCH_Y = 105.0, 68.0
@@ -228,6 +228,22 @@ def keeper_reach_m(seconds: float, reaction_s: float) -> float:
     if seconds < reaction_s:
         return BODY_RADIUS + ball.RADIUS
     return arm_reach_m(seconds - reaction_s) + KEEPER_DIVE_TRAVEL_M * dive_progress(seconds - reaction_s)
+
+
+def may_handle(keeper: bool, in_own_box: bool, released_it: bool, back_pass: bool) -> bool:
+    """Law 12: a keeper may handle the ball only inside his own penalty area; not again after
+    releasing it until another player has touched it; and not from a team-mate's deliberate pass (a
+    kick or a throw-in) that nobody else has touched."""
+    return keeper and in_own_box and not released_it and not back_pass
+
+
+def reach_for(hands: bool, stretched_s: float) -> tuple[float, float]:
+    """How far and how high a player can reach for the ball: a foot (CONTROL_M, below FOOT_REACH_Z),
+    or a keeper's hands, his arms stretched for `stretched_s` (since he reacted), up to HAND_REACH_Z.
+    One rule for the engine (engine.reach) and the passer's race (decisions.pass_confidence)."""
+    if hands:
+        return arm_reach_m(max(0.0, stretched_s)), HAND_REACH_Z
+    return CONTROL_M, FOOT_REACH_Z
 
 
 def arm_reach_m(diving_s: float) -> float:

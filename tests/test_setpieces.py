@@ -9,12 +9,12 @@ import math
 import pytest
 from test_validate import FPS, event, run
 
-from ninety.sim import decisions, setpieces
+from ninety.sim import ball, decisions, setpieces
+from ninety.sim.decisions import PENALTY_DEPTH, PENALTY_HALF_WIDTH
 from ninety.sim.engine import (
     BODY_RADIUS,
     CORNER_ATTEMPTS,
-    PENALTY_DEPTH,
-    PENALTY_HALF_WIDTH,
+    DT,
     SPRINT,
     Engine,
     corner_seed,
@@ -216,6 +216,19 @@ def test_the_box_is_crowded_and_the_law_is_kept_at_every_frame_to_the_kick():
     f = e.match.frames[-1]
     assert sum(in_box(p["x"], p["y"], 105.0) for p in f["players"] if p["team"] == "home") >= 4
     assert sum(in_box(p["x"], p["y"], 105.0) for p in f["players"] if p["team"] == "away") >= 7
+
+
+def test_runners_time_the_cross_by_the_engines_own_flight():
+    """S10, lesson 23: the cross's time in the air is the launch flown by the engine's ball
+    physics, never a separate formula. Mutation caught: the drag-free estimate (2 up / g), which
+    is 0.15 s long at 25 m and 0.3 s at 38 m."""
+    for d in (25.0, 38.0):
+        g, u = decisions.loft_launch(d)
+        path = ball.predict((0.0, 0.0, 0.0, g, 0.0, u), DT, ball.FLIGHT_BOUND_S)
+        k = next(k for k, s in enumerate(path) if s[0] >= d)
+        crossed = (k - 1 + (d - path[k - 1][0]) / (path[k][0] - path[k - 1][0])) * DT
+        # within a frame: the passer judges a launch to 0.05 m/s and checks every second frame
+        assert setpieces.cross_time(d) == pytest.approx(crossed, abs=DT)
 
 
 def test_runners_wait_then_set_off_to_arrive_with_the_ball():
@@ -837,7 +850,7 @@ def test_l6_judges_the_goal_the_conceding_keeper_defends(tmp_path):
 
 
 def test_real_engine_goals_are_credited_and_relabelling_them_fails(tmp_path):
-    """Engine output, not a fixture, and no pinned seed (lesson 23): the first three goals from
+    """Engine output, not a fixture, and no pinned seed (lesson 25): the first three goals from
     real engine corners each meet the contract, and giving one to the wrong player (or to nobody)
     fails C8. Which seeds score moves with the engine and even with the Python version (CI found
     2 goals in the 32 seeds that gave 4 locally), so it scans until it has three."""

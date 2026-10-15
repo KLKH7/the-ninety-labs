@@ -1,7 +1,10 @@
 """Attacking shape (O6) and passes into space (O7)."""
 
+import random
+
 from ninety.sim import decisions as D
 from ninety.sim import offball as O
+from ninety.sim.profiles import Profile
 
 
 def slot(role, ball_x=50.0, ball_y=34.0, line=80.0, own=0.0):
@@ -31,7 +34,8 @@ def test_with_the_ball_wide_in_the_final_third_the_box_is_attacked():
 
 
 def test_a_pass_leads_a_running_team_mate_into_the_space_ahead_of_him():
-    s = D.Scene(50.0, 34.0, 105.0, [], [], None, 0.5, 0.5, 0.5, (), 0.0)
+    s = D.Scene(50.0, 34.0, 105.0, [], [], None, 0.5, 0.5, 0.5, (), 0.0, [], {},
+                Profile.generate("CM", random.Random(7)))
     standing = D.pass_option(s, ("h9", 70.0, 34.0, 0.0, 0.0, 0.0))
     running = D.pass_option(s, ("h9", 70.0, 34.0, 0.0, 7.0, 0.0))
     assert running.target[0] > standing.target[0] + 5.0

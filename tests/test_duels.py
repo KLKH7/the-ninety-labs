@@ -5,6 +5,13 @@ import random
 
 from ninety.sim import decisions as D
 from ninety.sim.engine import DT, OFF_BALANCE_S, SHIELD_M, Engine
+from ninety.sim.profiles import Profile
+
+
+def carrier_scene(opponent: tuple[float, float]) -> D.Scene:
+    """A carrier at (60, 34) attacking x = 105, one opponent standing where he sees him."""
+    return D.Scene(60.0, 34.0, 105.0, [], [opponent], None, 0.5, 0.5, 0.5, (), 0.0,
+                   [(*opponent, 0.0, 0.0, False)], {}, Profile.generate("CM", random.Random(7)))
 
 
 def one_on_one(gap: float = 1.2, keeper_holds: bool = False) -> tuple[Engine, object, object]:
@@ -102,8 +109,8 @@ def test_nobody_challenges_a_keeper_holding_the_ball_in_his_box():
 
 
 def test_the_carrier_judges_a_dribble_by_the_same_tackle_race():
-    near = D.Scene(60.0, 34.0, 105.0, [], [(62.0, 34.0)], None, 0.5, 0.5, 0.5, (), 0.0)
-    far = D.Scene(60.0, 34.0, 105.0, [], [(62.0, 45.0)], None, 0.5, 0.5, 0.5, (), 0.0)
+    near = carrier_scene((62.0, 34.0))
+    far = carrier_scene((62.0, 45.0))
     straight = lambda s: next(o for o in D.options(s) if o.kind == "dribble").value  # noqa: E731
     assert straight(near) < straight(far)
     assert math.isclose(D.tackle_chance(0.0), D.sigmoid(D.GENERIC_REACTION_S / D.LANE_MARGIN_S))
@@ -111,7 +118,7 @@ def test_the_carrier_judges_a_dribble_by_the_same_tackle_race():
 
 def test_a_defender_inside_lunge_reach_of_the_carry_counts_by_his_tackle_chance(monkeypatch):
     monkeypatch.setattr(D, "POSSESSION", None)
-    s = D.Scene(60.0, 34.0, 105.0, [], [(62.0, 34.5)], None, 0.5, 0.5, 0.5, (), 0.0)
+    s = carrier_scene((62.0, 34.5))
     straight = next(o for o in D.options(s) if o.kind == "dribble")
     win = 1 - D.tackle_chance(0.5)
     gain = D.value(*straight.target, 105.0, s.opponents, None)

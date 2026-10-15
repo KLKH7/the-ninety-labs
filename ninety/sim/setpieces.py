@@ -330,6 +330,18 @@ def time_to_ball(engine: Engine, c: Corner) -> float:
     return taker.physique.time_to_cover(gap, along)
 
 
+def cross_time(distance: float) -> float:
+    """Seconds a lofted cross takes to reach `distance`: the launch the taker would strike, flown by
+    the engine's own ball physics (the passer's estimate does the same, lesson 23)."""
+    points, _ = decisions.flight(*decisions.loft_launch(distance))
+    t0, a0 = 0.0, 0.0
+    for t, along, *_ in points:
+        if along >= distance:
+            return t0 + (t - t0) * (distance - a0) / (along - a0) if along > a0 else t
+        t0, a0 = t, along
+    return t0
+
+
 def set_off(engine: Engine, c: Corner) -> None:
     """S10: each runner sets off when he judges that leaving now gets him to his zone as the
     ball arrives: the taker's time to the ball plus the cross's time in the air, against his own
@@ -343,7 +355,7 @@ def set_off(engine: Engine, c: Corner) -> None:
             continue
         r = engine.by_id[pid]
         zx, zy = c.targets[pid]
-        flight = decisions.loft_time(math.hypot(zx - bx, zy - by))
+        flight = cross_time(math.hypot(zx - bx, zy - by))
         if r.physique.time_to_cover(math.hypot(zx - r.x, zy - r.y), 0.0) >= still + flight:
             c.going.add(pid)
 
