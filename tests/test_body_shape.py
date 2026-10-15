@@ -818,3 +818,25 @@ def test_a_ball_held_high_on_his_centre_comes_out_no_faster_than_it_settles():
     was = e.ball
     e.tick_carrier()
     assert math.dist(was[:3], e.ball[:3]) <= 0.48 + 1e-6  # GROUNDING P6: out and down within 0.48 m a frame
+
+
+def test_a_dribbler_whose_touch_is_declined_still_decides():
+    e = Engine(1)
+    still(e)
+    c = e.by_id["h6"]
+    c.x, c.y, c.heading = 40.0, 34.0, 0.0  # standing: no push is his (he could not run onto it)
+    for q in e.players:
+        if q is not c:
+            q.x, q.y = 90.0 if q.team == "away" else 10.0, 5.0 + 2 * int(q.id[1:])
+    r = shape.surface(0.0, 0.0, pad=ball.RADIUS)
+    e.ball = (c.x + r, c.y, 0.0, 0.0, 0.0, 0.0)
+    e.possessor = e.last_touch = c.id
+    e.dribble_to, e.hold_until = (60.0, 34.0), e.t - 1.0
+    calls = []
+    e.decide = lambda p, **kw: calls.append(p.id)
+    for _ in range(engine.DECIDE_EVERY):
+        if e.possessor != c.id:
+            break
+        e.tick_carrier()
+        e.frame += 1
+    assert calls == [c.id]  # the touch was not his, so he keeps the ball and chooses again
