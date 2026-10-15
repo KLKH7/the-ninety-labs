@@ -75,7 +75,7 @@ TOUCH_EXPECTED_DEG = 30.0  # a touch within this of his running line needs no ne
 OFF_BALANCE_S = 0.8  # a missed lunge leaves him out of the play this long
 CLOSE_CONTROL_M = 3.0  # with an opponent this close, a carrier keeps the ball at his feet
 CLOSE_CONTROL_PACE = 0.6  # and carries it at this share of his dribbling speed
-COVER_M = 10.0  # a team-mate goal-side within this distance is cover to commit with
+COMMIT_COVER_M = 10.0  # a team-mate goal-side within this distance is cover to commit with
 LAST_DITCH_M = 18.0  # this near his own goal a defender commits without cover
 COMMIT_P = 0.6  # a defender commits only when he expects to win the race this often (aggression shifts it)
 SHIELD_M = 3.0  # holding with an opponent this close, the carrier puts his body between them
@@ -297,6 +297,7 @@ class Engine:
         if pid != self.released_by:
             self.released_by = None
         self.dribbler = None
+        self.last_deflection = None
         self.windup = None
         self.read = None
         self.intended = None
@@ -337,6 +338,7 @@ class Engine:
         # away from a body never meets it (contact checks approach), so no placement is needed.
         self.ball = (self.ball[0], self.ball[1], self.ball[2], vx, vy, vz)
         self.released_by = carrier.id
+        self.last_deflection = None
         self.throw_by = None  # a throw-in ends when the ball is thrown
         self.dribbler = None
         self.possessor = None
@@ -759,15 +761,21 @@ class Engine:
             if shot:
                 self.close_shot(shot, x, y)
             scorer = self.last_touch if self.last_touch and self.team_of(self.last_touch) == team else None
-            touch = self.last_deflection
+            touch = self.last_deflection  # only a touch since the last kick or control (reset there)
+            struck = kicked if kicked and kicked["type"] == "pass" and kicked["player"] == scorer else None
+            if scorer and not shot and not touch and struck:
+                # His own pass went straight in: that strike was his attempt.
+                struck.update(type="shot", outcome="goal", receiver=None,
+                              end_x=round(x, 2), end_y=round(y, 2))
             if scorer and not shot and touch and touch["player"] == scorer:
                 # It went in off him: the touch that sent it in is his attempt, as event data records it,
                 # and a team-mate's pass he turned in reached him there.
                 touch.update(type="shot", outcome="goal", end_x=round(x, 2), end_y=round(y, 2))
                 turned_in = kicked and kicked["type"] == "pass" and kicked["team"] == team
                 if turned_in and kicked["frame"] < touch["frame"]:
-                    kicked.update(receiver=scorer, end_x=touch["x"], end_y=touch["y"],
-                                  outcome="success" if kicked["player"] != scorer else "fail")
+                    own = kicked["player"] == scorer  # his own pass back off himself: not received
+                    kicked.update(receiver=None if own else scorer, end_x=touch["x"], end_y=touch["y"],
+                                  outcome="fail" if own else "success")
         self.emit("goal", team, x, y, player=scorer)
         self.kickoff(other(team))
 
@@ -1094,7 +1102,7 @@ class Engine:
         if math.hypot(bx - holder.x, by - holder.y) > CONTROL_M:  # a heavy touch: the ball is there
             return True
         return any(q.team == p.team and q is not p and abs(q.x - own) < abs(p.x - own)
-                   and math.hypot(q.x - p.x, q.y - p.y) < COVER_M for q in self.players)
+                   and math.hypot(q.x - p.x, q.y - p.y) < COMMIT_COVER_M for q in self.players)
 
     def duels(self) -> None:
         """D8: defenders near the ball decide whether to tackle, and lunges that have arrived are

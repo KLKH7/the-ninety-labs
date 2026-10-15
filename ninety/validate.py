@@ -287,8 +287,10 @@ def check_events(events: list[dict], frames: list[dict], fps: float, meta: dict,
             # ball leaves), or played it first time: the ball within his reach (P14) as he struck it.
             had = {by_frame[n].get("possessor") for n in (e["frame"] - 1, e["frame"]) if n in by_frame}
             me = next((q for q in f["players"] if q["id"] == e.get("player")), None)
-            first_time = me is not None and math.hypot(f["ball"]["x"] - me["x"], f["ball"]["y"] - me["y"]) \
-                <= FOOT_REACH_M + FRAME_SLACK_M
+            before = by_frame.get(e["frame"] - 1)
+            loose = before is not None and before.get("possessor") is None  # nobody had it a frame before
+            first_time = loose and me is not None and \
+                math.hypot(f["ball"]["x"] - me["x"], f["ball"]["y"] - me["y"]) <= FOOT_REACH_M + FRAME_SLACK_M
             if e.get("player") not in had and not first_time:
                 problems["C8 event order"].append(f"{e['id']} {e['type']}: {e.get('player')} lacked the ball")
 
