@@ -162,3 +162,51 @@ short and actionable. This file is public: no research sources, product names or
   the result as a statement about the study.
 - **Rule:** before acting on a claim about what a source says, read the passage itself, and keep
   "the engine measures X" separate from "the source defines Y".
+
+### 23. What collides is what is drawn
+- **What happened:** the engine's body was a round cylinder 0.52 m across; the renderer drew a
+  round trunk 0.32 m across (deeper than a real chest), turned by its own smoothing of the motion
+  rather than the engine's heading, and drew a carried ball 0.55 m ahead of where the engine had
+  it. Balls bounced off players in empty air, and the
+  labels showed contacts that the pixels did not.
+- **Rule:** one body shape (`ninety/sim/shape.py`), oriented by the engine's heading (which turns
+  at a sourced rate, never in a jump), is used by the contact physics and the renderer; the
+  renderer draws the ball where the engine has it. Where drawn and simulated bodies still differ
+  (the legs, running arms and lean), say so in GROUNDING rather than claim they match. Measure a
+  change's "before" from a clean worktree of the base commit, never from the tree being edited.
+- **Check:** `tests/test_body_shape.py` checks cross-sections of the drawn body against the shape
+  over its whole area at chest height (nothing outside it, the share it fills as GROUNDING
+  states), the clip's gaits take the engine's heading, and `drawn_ball` returns the engine's
+  position.
+
+### 24. A new limit breaks every rule that assumed the old instant behaviour
+- **What happened:** turning was made to take time, but the strike still fired as soon as the
+  ball was on the target's side of the body, which with a slow turn meant striking along the
+  chest; passers knocked their own passes off themselves, and deflections doubled. The tests
+  read the new constant back, so they could not see it.
+- **Rule:** when a change makes something take time (a turn, a reaction), find every rule that
+  waited for it and make it wait for the real state, with a sourced threshold. Pin a sourced
+  constant with a test that states the source's number (180° in about 0.52 s), not the constant.
+- **Check:** before and after, measure the outcomes the change could disturb (here: kick angle
+  off the body, self-deflections, deflections, interceptions) on the same seeds.
+
+### 25. A limit on angle is not a limit on distance
+- **What happened:** a carried ball was sent round the carrier's body with its turn per frame
+  limited, but its distance from him was set straight onto his outline, so a ball a metre away
+  jumped up to 1.24 m in one frame, through him. It was under every validator limit, and the
+  test started with the ball already on the outline.
+- **Rule:** bound what actually moves (the distance per frame), and test from a state that is
+  not already the answer.
+- **Check:** a test measures per-frame movement from awkward starting places (ahead, beside,
+  behind) against the speed limit it claims.
+
+### 26. A contact must not swallow the rest of the frame
+- **What happened:** a deflected ball was put back where it met the player and the rest of that
+  frame's travel was dropped. A ball he kept failing to control hovered at knee height for
+  seconds while its falling speed grew, touched again every frame; the gravity check let it
+  through, because a touch excuses the frames around it. Short runs never showed it; a full
+  match did (one player "deflected" it 96 times in a row).
+- **Rule:** after a contact, spend the rest of the frame: the ball flies on, and whoever it meets
+  next in that time is resolved too. Measure on full-length matches, not only short clips.
+- **Check:** the longest run of consecutive deflection events by one player over 90 minutes
+  (seeds 7, 11, 21, other events between them ignored) is a few, not dozens (1 to 3 measured).
