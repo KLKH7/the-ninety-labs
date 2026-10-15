@@ -653,7 +653,7 @@ def test_a_marker_on_his_spot_moves_only_as_his_man_moves():
 def test_play_is_where_the_ball_is_once_a_pass_is_deflected_or_has_run_past_its_target():
     e = Engine(1)
     e.possessor = None
-    e.kicked, e.pass_target = {"type": "pass", "x": 40.0, "y": 34.0}, (70.0, 34.0)
+    e.kicked, e.pass_target = {"type": "pass", "team": "home", "x": 40.0, "y": 34.0}, (70.0, 34.0)
     e.kicked_at, e.seen_going = e.t - 1.0, (70.0, 34.0)  # reacted to; seen going to the target
     e.ball = (55.0, 34.0, 0.0, 14.0, 0.0, 0.0)
     assert e.play_point() == (70.0, 34.0)
@@ -861,3 +861,50 @@ def test_a_keeper_down_after_a_dive_keeps_his_stretch_until_he_is_up():
     assert e.dive is None and e.off_balance[k.id] > e.t  # landed, on the ground
     e.kicked_at = e.t  # a deflection while he is down
     assert e.reach(k, 104.0, 36.0)[0] > 1.5
+
+
+def test_a_struck_ball_is_seen_going_where_it_first_becomes_playable():
+    from ninety.sim import decisions as D
+    e = Engine(1)
+    e.ball = (40.0, 34.0, 0.0, 20.0, 0.0, 0.0)  # a firm ground pass
+    x, y = e.ball_destination()
+    path = ball.predict(e.ball, 1 / 25, 10.0)
+    rest = path[-1][0]
+    assert 40.0 < x < rest  # short of where it would finally stop
+    first = next(s for s in path if math.sqrt(s[3] ** 2 + s[4] ** 2 + s[5] ** 2) <= D.CONTROL_EST_MPS)
+    assert x == first[0]
+    e.ball = (100.0, 60.0, 0.0, 10.0, 20.0, 0.0)  # heading out of play
+    assert e.ball_destination()[1] == 68.0
+
+
+def test_the_passing_side_knows_where_its_pass_was_meant_and_the_other_side_reacts():
+    e = Engine(1)
+    e.possessor = None
+    e.ball = (40.0, 34.0, 0.0, 14.0, 0.0, 0.0)
+    e.kicked, e.pass_target = {"type": "pass", "team": "home", "x": 35.0, "y": 34.0}, (70.0, 20.0)
+    e.kicked_at, e.seen_going = e.t, (68.0, 34.0)
+    e.intended, e.released_by = "h9", "h6"
+    assert e.play_point(e.by_id["h6"]) == (70.0, 20.0)  # the passer
+    assert e.play_point(team="home") == (70.0, 20.0)  # his side's brain
+    assert e.play_point(team="away") == (35.0, 34.0)  # theirs, before it reacts
+    e.t += 1.0
+    assert e.play_point(team="away") == (68.0, 34.0)
+
+
+def test_a_throw_in_is_meant_for_the_team_mate_it_is_thrown_to():
+    e = Engine(1)
+    p = e.by_id["h2"]
+    e.give(p.id)
+    e.ball = (p.x, p.y, 0.0, 0.0, 0.0, 0.0)
+    p.heading = 0.0
+    e.pass_to(p, p.x + 10.0, p.y, lofted=True, throw=True, receiver="h7")
+    assert e.intended == "h7" and e.seen_going is not None
+
+
+def test_a_new_strike_clears_a_keeper_landed_from_an_earlier_dive():
+    e = Engine(1)
+    p = e.by_id["h6"]
+    e.give(p.id)
+    e.landed = ("a1", e.t - 1.0)
+    e.kick(p, 15.0, 0.0, 0.0)
+    assert e.landed is None

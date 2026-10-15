@@ -436,6 +436,7 @@ class Engine:
         self.kicked_at = self.t
         self.free_since = self.t  # the ball left a player's control: dives are timed from here
         self.seen_going = self.ball_destination()
+        self.landed = None  # a new strike: a keeper still down reacts to it afresh
         self.kicker_clear = False
         self.chase = {}  # everyone reacts after their reaction time, not on the frame of the kick
 
@@ -500,10 +501,12 @@ class Engine:
         self.kick(carrier, vx, vy, vz)
 
     def pass_to(self, carrier: Player, tx: float, ty: float, lofted: bool, throw: bool = False,
-                pace: float = decisions.ARRIVE_MPS) -> None:
-        """Kick toward a point the carrier chose (where he believes a team-mate will be, or space)."""
+                pace: float = decisions.ARRIVE_MPS, receiver: str | None = None) -> None:
+        """Kick toward a point the carrier chose (where he believes a team-mate will be, or space),
+        meant for `receiver` if he chose one."""
         if not self.can_strike(carrier, tx, ty):
-            self.turn_to(carrier, tx, ty, lambda: self.pass_to(carrier, tx, ty, lofted, throw, pace))
+            self.turn_to(carrier, tx, ty,
+                         lambda: self.pass_to(carrier, tx, ty, lofted, throw, pace, receiver))
             return
         bx, by = self.ball[0], self.ball[1]
         dist = math.hypot(tx - bx, ty - by)
@@ -520,6 +523,7 @@ class Engine:
         self.kicked = self.emit("pass", carrier.team, bx, by, player=carrier.id,
                                 ball_speed_kmh=round(math.sqrt(vx * vx + vy * vy + vz * vz) * 3.6, 1))
         self.kick(carrier, vx, vy, vz)
+        self.intended = receiver  # he expects it
 
     def scene_for(self, carrier: Player) -> decisions.Scene:
         """The carrier's picture of the game, built only from what he believes."""
@@ -567,7 +571,7 @@ class Engine:
             scene.mates = [m for m in scene.mates if math.hypot(m[1] - scene.x, m[2] - scene.y) <= 25]
             choice = max(decisions.options(scene), key=lambda o: o.value, default=None)
             if choice:
-                self.pass_to(carrier, *choice.target, lofted=True, throw=True)
+                self.pass_to(carrier, *choice.target, lofted=True, throw=True, receiver=choice.receiver)
             elif self.t - self.throw_ready > THROW_WAIT_S:  # nobody free: into space down the line
                 line = 3.0 if scene.y < PITCH_Y / 2 else PITCH_Y - 3.0
                 self.pass_to(carrier, clamp(scene.x + attack_dir(carrier.team) * 15, 1, PITCH_X - 1), line,
@@ -577,8 +581,8 @@ class Engine:
             return
         choice = decisions.choose(scene, self.rng)
         if choice.kind == "pass" or choice.kind == "clear":
-            self.pass_to(carrier, *choice.target, lofted=choice.lofted, pace=choice.pace)
-            self.intended = choice.receiver
+            self.pass_to(carrier, *choice.target, lofted=choice.lofted, pace=choice.pace,
+                         receiver=choice.receiver)
         elif choice.kind == "shoot":
             self.shoot(carrier)
         elif choice.kind == "dribble":
@@ -916,18 +920,23 @@ class Engine:
 
     # ---- tick ---------------------------------------------------------------
 
-    def play_point(self, p: Player | None = None) -> tuple[float, float]:
+    def play_point(self, p: Player | None = None, team: str | None = None) -> tuple[float, float]:
         """Where play is, for setting shape (O8): once a pass is struck, players set up for where
         it is going rather than chasing the ball's every metre in flight. Only the passer and the
         team-mate he played it to know where he meant it; everyone else must first react to the
         struck ball (until then play is where it was struck), then goes by where they see it going
-        (its own path). A team brain reacts like an average player."""
+        (its own path). A team brain (`team`) of the passing side knows where it was meant; the
+        other side's reacts like an average player."""
         bx, by = self.ball[0], self.ball[1]
         if self.kicked and self.kicked["type"] == "pass" and self.pass_target and not self.last_deflection:
             sx, sy = self.kicked["x"], self.kicked["y"]
             tx, ty = self.pass_target
             if (bx - sx) * (tx - sx) + (by - sy) * (ty - sy) < (tx - sx) ** 2 + (ty - sy) ** 2:
-                if p is not None and p.id in (self.intended, self.released_by):
+                if p is not None:
+                    knows = p.id in (self.intended, self.released_by)
+                else:
+                    knows = team == self.kicked["team"]
+                if knows:
                     return self.pass_target  # he knows where it was meant to go
                 react = self.reaction(p) if p is not None else decisions.GENERIC_REACTION_S
                 if self.t - self.kicked_at < react:
@@ -936,12 +945,17 @@ class Engine:
         return bx, by
 
     def ball_destination(self) -> tuple[float, float]:
-        """Where the ball, in its own flight, comes to rest or leaves the pitch: where players who
-        see it struck can tell it is going."""
-        path = ball.predict(self.ball, DT, 10.0)
+        """Where players who see a ball struck can tell it is going: the first point of its own
+        flight where it is low and slow enough for an average first touch to play (A4), or where it
+        leaves the pitch, whichever comes first. (Their misjudgement of its velocity is not modelled
+        here.)"""
+        path = ball.predict(self.ball, DT, 10.0)  # 10 s: a bound; the path ends when the ball rests
         for s in path:
             if not (0.0 <= s[0] <= PITCH_X and 0.0 <= s[1] <= PITCH_Y):
                 return clamp(s[0], 0.0, PITCH_X), clamp(s[1], 0.0, PITCH_Y)
+            speed = math.sqrt(s[3] ** 2 + s[4] ** 2 + s[5] ** 2)
+            if s[2] <= FOOT_REACH_Z and speed <= decisions.CONTROL_EST_MPS:
+                return s[0], s[1]
         return path[-1][0], path[-1][1]
 
     def ball_eta(self, x: float, y: float) -> float:
@@ -1102,6 +1116,7 @@ class Engine:
             if (self.frame + k * BRAIN_EVERY // 2) % BRAIN_EVERY:
                 continue
             reach = {}
+            bx, by = self.play_point(team=team)
             for p in self.players:
                 if p.team != team or p.role == "GK":
                     continue
