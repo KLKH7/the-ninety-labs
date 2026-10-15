@@ -563,6 +563,8 @@ class Engine:
         keeper = self.keeper(other(team))
         read = self.keeper_read(keeper, carrier, ty)
         self.read = None if read is None else (keeper.id, read)
+        if read is not None and self.from_restart == "penalty_kick":
+            self.commit_dive(keeper, read, math.hypot(gx - bx, ty - by) / max(ground, 1.0))
         vx, vy, vz = self.execute(carrier, *self.aim(bx, by, gx, ty, ground, up), "finishing")
         speed = math.sqrt(vx * vx + vy * vy + vz * vz)
         # Outcome and end point are observed: set when the ball is touched, goes out or goes in.
@@ -1279,6 +1281,17 @@ class Engine:
                 f = (x - a[0]) / (b[0] - a[0]) if b[0] != a[0] else 1.0
                 return (k - 1 + f) * DT, a[1] + f * (b[1] - a[1]), a[2] + f * (b[2] - a[2])
         return None
+
+    def commit_dive(self, keeper: Player, read: float, flight_s: float) -> None:
+        """P15 at a penalty: keepers start sideways before the ball is struck (50 to 350 ms before
+        contact, Dicks et al. 2010; the vertical part of the save about 245 ms after it), so his
+        dive starts at the strike, toward his guess, with the same push and the same rule for how
+        far as any dive: only beyond what his arms will reach by the time the ball arrives. A
+        guess within his reach is no dive: he stays and reacts to the ball like any shot."""
+        need = abs(read - keeper.y) - offball.arm_reach_m(flight_s)
+        if need > 0 and self.dive is None:
+            travel = math.copysign(min(need, KEEPER_DIVE_TRAVEL_M), read - keeper.y)
+            self.dive = (keeper.id, self.t, keeper.y, travel, self.t)
 
     def keeper_dive(self, p: Player) -> bool:
         """P15: once the keeper has reacted to a shot, he dives toward where it will cross his line:
