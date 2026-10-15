@@ -119,7 +119,7 @@ short and actionable. This file is public: no research sources, product names or
 - **Rule:** ground truth is used only for training labels and scoring. Nothing on the live path
   reads it. Whatever makes the video must also write the truth, so no generative video.
 
-### 18. Persisted replay prompts are an interface
+### 19. Persisted replay prompts are an interface
 - **What happened:** making a rejection reason more specific changed the Analyst retry prompt,
   so an existing recorded slice stopped replaying even though the workflow behavior was valid.
 - **Rule:** when diagnostics appear in persisted prompts, preserve a compatibility form or

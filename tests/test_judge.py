@@ -98,6 +98,15 @@ def test_service_error_retries_once_then_fails_closed():
     assert agent.calls == 2
 
 
+def test_sign_in_error_fails_closed():
+    """An Azure sign-in failure must hold the claim back, not crash the demo."""
+    from azure.core.exceptions import ClientAuthenticationError
+
+    agent = FakeAgent(error=ClientAuthenticationError("no credential"))
+    verdict = asyncio.run(judge(agent, Claim("A pass.", ["e1"]), []))
+    assert not verdict.ok and verdict.category == "service"
+
+
 def test_invalid_response_fails_closed():
     agent = FakeAgent(Response(text="{not json"))
     verdict = asyncio.run(judge(agent, Claim("A pass.", ["e1"]), []))

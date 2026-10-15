@@ -14,7 +14,8 @@ import re
 from typing import Literal
 
 from agent_framework import Agent
-from agent_framework.exceptions import ChatClientException
+from agent_framework.exceptions import AgentFrameworkException
+from azure.core.exceptions import AzureError
 from pydantic import BaseModel, ValidationError
 
 from ninety.agents.factcheck import Claim, Verdict
@@ -128,7 +129,7 @@ async def judge(
                 reasons=["judge timeout; claim held back"],
                 category="timeout",
             )
-        except ChatClientException:
+        except (AgentFrameworkException, AzureError):  # the model service, sign-in or network
             if attempts < RETRY_LIMIT:
                 attempts += 1
                 continue

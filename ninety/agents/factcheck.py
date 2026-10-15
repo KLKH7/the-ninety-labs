@@ -33,6 +33,13 @@ SECOND_NUMBER = re.compile(
     rf":(?P<second_c>\d{{1,2}})(?!\d))",
     re.I,
 )
+# A clock form, "12:34": the part before the colon must be a cited `minute` and the part after a
+# cited `second`, the convention agents read today (an event at 1:28 of play is minute 2, second
+# 28, and agents write "2:28"). Known issue: the scorebug shows the elapsed clock, 01:28.
+CLOCK_MINUTE = re.compile(r"(?<![\w.:])(?P<number>\d{1,3}):\d{2}(?!\d)")
+# The synthetic squads' player ids (h1..h11, a1..a11). Names in this form are always checked,
+# even when the player is in no known event, so a claim cannot name an uninvolved player.
+PLAYER = re.compile(r"\b[ha](?:[1-9]|1[01])\b")
 NUMBER_FIELDS = ("minute", "second", "ball_speed_kmh", "distance_m")
 
 
@@ -50,6 +57,8 @@ class Verdict:
 
 
 def _number_field(text: str, start: int) -> str | None:
+    if any(m.start("number") == start for m in CLOCK_MINUTE.finditer(text)):
+        return "minute"
     for field_name, pattern in (
         ("distance_m", DISTANCE_NUMBER),
         ("ball_speed_kmh", SPEED_NUMBER),
@@ -105,8 +114,6 @@ def check(
 
     allowed = allowed_numbers(evidence)
     for match in NUMBER.finditer(claim.text):
-        if match.end() < len(claim.text) and claim.text[match.end()] == ":":
-            continue
         value = float(match.group())
         expected_field = _number_field(claim.text, match.start())
         if expected_field:
@@ -132,7 +139,7 @@ def check(
         player_id
         for player_id in _roster_ids(known, roster)
         if re.search(rf"(?<!\w){re.escape(player_id)}(?!\w)", claim.text)
-    }
+    } | set(PLAYER.findall(claim.text))
     for name in sorted(named_players - cited_players):
         reasons.append(f"player {name} does not appear in the cited evidence")
 

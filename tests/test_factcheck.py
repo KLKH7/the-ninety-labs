@@ -94,5 +94,29 @@ def test_unknown_id_shaped_word_is_not_rejected():
 
 
 def test_clock_seconds_are_checked_against_second_field():
-    verdict = check(Claim(f"A pass at 0:{PASS['second']:02d}.", [PASS["id"]]), KNOWN)
-    assert verdict.ok
+    """Planted defect: the right minute with a wrong second must fail."""
+    wrong = (PASS["second"] + 7) % 60
+    verdict = check(Claim(f"A pass at {PASS['minute']}:{wrong:02d}.", [PASS["id"]]), KNOWN)
+    assert not verdict.ok and "second" in verdict.reasons[0]
+
+
+def test_wrong_minute_in_clock_form_is_rejected():
+    """Planted defect: the minute before the colon must be checked too."""
+    wrong = PASS["minute"] + 87
+    verdict = check(Claim(f"A pass at {wrong}:{PASS['second']:02d}.", [PASS["id"]]), KNOWN)
+    assert not verdict.ok
+    assert "minute" in verdict.reasons[0]
+
+
+def test_clock_with_the_right_minute_and_second_passes():
+    text = f"A pass at {PASS['minute']}:{PASS['second']:02d}."
+    assert check(Claim(text, [PASS["id"]]), KNOWN).ok
+
+
+def test_player_in_no_known_event_is_still_rejected():
+    """Planted defect: a squad player absent from every event must not slip through."""
+    involved = {v for e in EVENTS for v in (e["player"], e.get("receiver")) if v}
+    absent = next(f"{t}{n}" for t in "ha" for n in range(1, 12) if f"{t}{n}" not in involved)
+    verdict = check(Claim(f"{absent} starts the move.", [PASS["id"]]), KNOWN)
+    assert not verdict.ok
+    assert absent in verdict.reasons[0]
