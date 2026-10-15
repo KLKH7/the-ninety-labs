@@ -122,8 +122,10 @@ short and actionable. This file is public: no research sources, product names or
 ### 19. Persisted replay prompts are an interface
 - **What happened:** making a rejection reason more specific changed the Analyst retry prompt,
   so an existing recorded slice stopped replaying even though the workflow behavior was valid.
-- **Rule:** when diagnostics appear in persisted prompts, preserve a compatibility form or
-  deliberately version the recording before changing them.
+- **Rule:** re-record the replay in the same pull request as any change to text that reaches a
+  recorded prompt (fact-checker reasons, agent instructions). Never make the replayer tolerate a
+  changed prompt: a shim that rewrites new wording back to old pairs an old answer with a new
+  question.
 - **Check:** run the committed replay fixture after changing fact-checker diagnostics.
 
 ### 20. One clock for viewers and agents
