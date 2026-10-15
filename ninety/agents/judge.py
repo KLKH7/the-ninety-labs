@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from typing import Literal
 
 from agent_framework import Agent
@@ -78,6 +79,12 @@ def judge_agent(client) -> Agent:
 
 CLAIM_MAX_CHARS = 500
 RETRY_LIMIT = 1
+INJECTION = re.compile(
+    r"(?:</?\s*(?:system|developer|assistant|claim)\b|"
+    r"\b(?:ignore|disregard|override)\s+(?:the\s+)?(?:evidence|instructions|rules)\b|"
+    r"\bmark\s+(?:this|the)\s+claim\s+supported\b)",
+    re.I,
+)
 
 
 def _input_error(text: str) -> str | None:
@@ -85,6 +92,8 @@ def _input_error(text: str) -> str | None:
         return f"claim exceeds {CLAIM_MAX_CHARS} character limit"
     if any(ord(char) < 32 and char not in "\t\n\r" for char in text):
         return "claim contains control characters"
+    if INJECTION.search(text):
+        return "claim contains instruction-like or fake role-tag text"
     return None
 
 
