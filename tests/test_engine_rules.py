@@ -612,7 +612,7 @@ def test_once_a_pass_is_struck_shape_is_set_for_where_it_is_going():
     e.possessor = None
     e.ball = (40.0, 34.0, 0.0, 14.0, 0.0, 0.0)
     e.kicked, e.pass_target = {"type": "pass", "x": 30.0, "y": 34.0}, (70.0, 20.0)
-    assert e.play_point() == (70.0, 20.0)
+    e.kicked_at, e.seen_going = e.t, (68.0, 34.0)
     p = e.by_id["a6"]
     e.brains["away"].in_possession = False
     before = e.shape_target(p)[:2]
@@ -620,6 +620,20 @@ def test_once_a_pass_is_struck_shape_is_set_for_where_it_is_going():
     assert e.shape_target(p)[:2] == before
     e.kicked = None  # a loose ball: play is where the ball is
     assert e.play_point() == (55.0, 27.0)
+
+
+def test_only_the_passer_and_his_receiver_know_where_a_pass_is_meant_defenders_react_to_what_they_see():
+    e = Engine(1)
+    e.possessor = None
+    e.ball = (40.0, 34.0, 0.0, 14.0, 0.0, 0.0)
+    e.kicked, e.pass_target = {"type": "pass", "x": 35.0, "y": 34.0}, (70.0, 20.0)
+    e.kicked_at, e.seen_going = e.t, (68.0, 34.0)
+    e.intended, e.released_by = "h9", "h6"
+    assert e.play_point(e.by_id["h9"]) == (70.0, 20.0)  # he expects it
+    d = e.by_id["a6"]
+    assert e.play_point(d) == (35.0, 34.0)  # not yet reacted: play is where it was struck
+    e.t += e.reaction(d)
+    assert e.play_point(d) == (68.0, 34.0)  # then where he sees it going, not where it was meant
 
 
 def test_a_marker_on_his_spot_moves_only_as_his_man_moves():
@@ -640,6 +654,7 @@ def test_play_is_where_the_ball_is_once_a_pass_is_deflected_or_has_run_past_its_
     e = Engine(1)
     e.possessor = None
     e.kicked, e.pass_target = {"type": "pass", "x": 40.0, "y": 34.0}, (70.0, 34.0)
+    e.kicked_at, e.seen_going = e.t - 1.0, (70.0, 34.0)  # reacted to; seen going to the target
     e.ball = (55.0, 34.0, 0.0, 14.0, 0.0, 0.0)
     assert e.play_point() == (70.0, 34.0)
     e.ball = (74.0, 34.0, 0.0, 6.0, 0.0, 0.0)  # it ran past where it was aimed

@@ -220,6 +220,7 @@ class Engine:
         self.tackle: dict | None = None  # the tackle event whose outcome the next control decides
         self.dribbler: str | None = None  # a carrier who pushed the ball ahead and is running onto it
         self.last_deflection: dict | None = None  # the most recent deflection event
+        self.seen_going: tuple[float, float] = (PITCH_X / 2, PITCH_Y / 2)  # where a struck ball is seen going
         self.pass_target: tuple[float, float] | None = None  # where the pass in flight was aimed
         self.offside: set[str] = set()  # L10: team-mates in an offside position when the ball was played
         self.from_restart: str | None = None  # the restart the next kick is taken from
@@ -434,6 +435,7 @@ class Engine:
         self.last_touch = carrier.id
         self.kicked_at = self.t
         self.free_since = self.t  # the ball left a player's control: dives are timed from here
+        self.seen_going = self.ball_destination()
         self.kicker_clear = False
         self.chase = {}  # everyone reacts after their reaction time, not on the frame of the kick
 
@@ -914,16 +916,33 @@ class Engine:
 
     # ---- tick ---------------------------------------------------------------
 
-    def play_point(self) -> tuple[float, float]:
-        """Where play is, for setting shape (O8): once a pass is struck, everyone sees where it is
-        going and sets up for that, rather than chasing the ball's every metre in flight."""
+    def play_point(self, p: Player | None = None) -> tuple[float, float]:
+        """Where play is, for setting shape (O8): once a pass is struck, players set up for where
+        it is going rather than chasing the ball's every metre in flight. Only the passer and the
+        team-mate he played it to know where he meant it; everyone else must first react to the
+        struck ball (until then play is where it was struck), then goes by where they see it going
+        (its own path). A team brain reacts like an average player."""
         bx, by = self.ball[0], self.ball[1]
         if self.kicked and self.kicked["type"] == "pass" and self.pass_target and not self.last_deflection:
             sx, sy = self.kicked["x"], self.kicked["y"]
             tx, ty = self.pass_target
             if (bx - sx) * (tx - sx) + (by - sy) * (ty - sy) < (tx - sx) ** 2 + (ty - sy) ** 2:
-                return self.pass_target  # still on its way there
+                if p is not None and p.id in (self.intended, self.released_by):
+                    return self.pass_target  # he knows where it was meant to go
+                react = self.reaction(p) if p is not None else decisions.GENERIC_REACTION_S
+                if self.t - self.kicked_at < react:
+                    return sx, sy  # not yet reacted to the strike
+                return self.seen_going
         return bx, by
+
+    def ball_destination(self) -> tuple[float, float]:
+        """Where the ball, in its own flight, comes to rest or leaves the pitch: where players who
+        see it struck can tell it is going."""
+        path = ball.predict(self.ball, DT, 10.0)
+        for s in path:
+            if not (0.0 <= s[0] <= PITCH_X and 0.0 <= s[1] <= PITCH_Y):
+                return clamp(s[0], 0.0, PITCH_X), clamp(s[1], 0.0, PITCH_Y)
+        return path[-1][0], path[-1][1]
 
     def ball_eta(self, x: float, y: float) -> float:
         """How soon the ball could next be played to (x, y) (O8): first it has to be somewhere a
@@ -973,7 +992,7 @@ class Engine:
         if self.restart and p.id == self.restart.taker:
             r = self.restart
             return clamp(r.x, 0.5, PITCH_X - 0.5), clamp(r.y, 0.5, PITCH_Y - 0.5), RECOVER
-        bx, by = self.play_point()  # O8: where the ball is going, once a pass is struck
+        bx, by = self.play_point(p)  # O8: where the ball is going, once a pass is struck
         poss_team = self.team_of(self.possessor) if self.possessor else None
         shift = (clamp(bx, 0, PITCH_X) - PITCH_X / 2) * 0.45
         push = 6 * attack_dir(p.team) if poss_team == p.team else -4 * attack_dir(p.team)
