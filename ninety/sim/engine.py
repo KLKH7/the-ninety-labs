@@ -647,9 +647,11 @@ class Engine:
                 self.shot_touched_by = "defender"
             elif self.shot_touched_by is None:
                 self.shot_touched_by = "keeper"
-        if controls:
+        if controls or (same_team and p.id != kicked["player"]):
+            # Controlled, or touched by a team-mate: the shot is over, and if the ball now goes
+            # in, it is the goal of whoever touched it last (C8).
             self.close_shot(kicked, x, y)
-        # A deflection (block, parry, a team-mate's touch) leaves the shot in flight: it may still go in.
+        # A defender's block or a keeper's parry leaves the shot in flight: it may still go in.
 
     def close_shot(self, kicked: dict, x: float, y: float) -> None:
         """A shot ends without a goal: blocked if a defender got to it, saved or tipped if only the
@@ -1226,20 +1228,23 @@ class Engine:
         self.plan_chase()
 
     def open_with_corner(self) -> None:
-        """Scenario mode: the clip opens with the ball out of play for a home corner, from the
-        players' starting shape, so the set-up itself is filmed. The side is drawn from the seed."""
+        """Scenario mode: the clip opens with the ball just out of play for a home corner, with the
+        players where open play by that goal line put them, so the set-up itself is filmed. The
+        side and the crossing point are drawn from the seed (S9)."""
         side = self.rng.choice([0.0, PITCH_Y])
         crossed = abs(side - self.rng.uniform(4.0, 14.0))  # where it went over the goal line (design)
         # Players stand where the game had them: the home side attacking at that end, the away
         # side defending, from the same shape rules as open play with the ball by the line.
         self.ball = (PITCH_X - 2.0, crossed, 0.0, 0.0, 0.0, 0.0)
         self.poss_team = "home"
-        for team, brain in self.brains.items():
-            reach = {p.id: math.hypot(p.x - self.ball[0], p.y - self.ball[1]) / 7.0
-                     for p in self.players if p.team == team and p.role != "GK"}
-            brain.update(self.t, team == "home", self.ball[0], reach)
-        for p in self.players:
-            p.x, p.y, _ = self.shape_target(p)
+        for _ in range(2):  # shape, then re-read the game from where that shape put everyone
+            for team, brain in self.brains.items():
+                bx, by = self.ball[0], self.ball[1]
+                reach = {p.id: p.physique.time_to_cover(math.hypot(p.x - bx, p.y - by), 0.0)
+                         for p in self.players if p.team == team and p.role != "GK"}
+                brain.update(self.t, team == "home", self.ball[0], reach)
+            for p in self.players:
+                p.x, p.y, _ = self.shape_target(p)
         # The away defender nearest the line put it out: he stands just inside it.
         clearer = min((p for p in self.players if p.team == "away" and p.role != "GK"),
                       key=lambda p: math.hypot(p.x - PITCH_X, p.y - crossed))

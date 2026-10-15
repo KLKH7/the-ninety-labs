@@ -139,3 +139,13 @@ short and actionable. This file is public: no research sources, product names or
   the choice and timing differed anyway, so removing the error left it green.
 - **Rule:** hold everything else fixed (state, choice) and vary only the cause under test;
   then mutate the cause and require the test to fail.
+
+### 20. A rule must check what its name says
+- **What happened:** a goal-credit rule described as "the last player to touch it" was built
+  from a short list of event types. It missed a team-mate controlling a pass and a defender
+  winning the ball, so it accepted wrong scorers and would have rejected right ones; the engine
+  produced one of them (a shot deflected in by a team-mate, credited to the shooter).
+- **Rule:** build the quantity the rule names from every source of it (here: who had the ball at
+  each frame, plus every touch event), and plant one case of each way it can be wrong.
+- **Check:** for each rule, list the ways the data can make it true, and test each one.
+

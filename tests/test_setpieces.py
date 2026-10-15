@@ -299,29 +299,103 @@ def test_the_ball_must_stay_where_it_was_placed_until_the_kick(tmp_path):
     assert "L9 corner" in run(tmp_path, clip)
 
 
+@pytest.mark.parametrize("clip, breach", [
+    (None, True),  # the ball nudged 1 cm off its spot before the kick (built below)
+    (corner_clip(ball_at=(104.15, 0.85)), True),  # centre 1.20 m from the flag: off the arc line
+    (corner_clip(ball_at=(104.215, 0.785)), False),  # centre 1.11 m: still on the arc line
+    (corner_clip(defender=(105.0, 10.149)), True),  # 1 mm inside the distance
+], ids=["ball nudged 1 cm", "1.20 m from the flag", "1.11 m from the flag", "1 mm inside"])
+def test_the_check_is_exact_to_the_rounding(tmp_path, clip, breach):
+    """Mutations caught: the stationary tolerance, the ball radius and the rounding slack loosened.
+    Each case sits just past (or just inside) the limit."""
+    if clip is None:
+        clip = corner_clip()
+        for f in clip["frames"][11:15]:
+            f["ball"]["x"] -= 0.01
+    assert ("L9 corner" in run(tmp_path, clip)) is breach
+
+
+def test_scenario_opens_from_open_play_by_that_goal_line():
+    """Mutation caught: the opening left in the kick-off shape."""
+    m = simulate(3, 0.05, "corner")
+    first = m.frames[0]["players"]
+    home_up = sum(p["x"] > 52.5 for p in first if p["team"] == "home" and p["id"] != "h1")
+    away_back = sum(p["x"] > 70.0 for p in first if p["team"] == "away")
+    assert home_up >= 6 and away_back >= 8
+
+
 def test_corners_cannot_be_checked_without_keepers(tmp_path):
     clip = corner_clip(defender=(100.0, 5.0))
     clip["meta"]["roster"] = []
     assert "L9 corner" in run(tmp_path, clip)  # reported, never silently skipped
 
 
-def goal_after(clip, scorer, team="home"):
-    """Append a goal at frame 40 credited to `scorer` (the clip has no shot)."""
-    clip["events"].append(event("e9", 40, "goal", team, scorer, x=105.0, y=34.0))
-    clip["meta"]["score"] = {"home": 1, "away": 0} if team == "home" else {"home": 0, "away": 1}
-    return clip
+def goal_clip(touches, scorer, team="home", holder="h1", receiver_has_it=None) -> dict:
+    """h1 has the ball for 5 frames and strikes it at frame 5 toward goal; it crosses the line at
+    frame 30. `touches` are extra events (frame, type, player, team, outcome) on the way in.
+    `receiver_has_it` = (player, from_frame): a player controls the ball from that frame."""
+    frames = []
+    for n in range(31):
+        u = min(max((n - 5) / 25, 0.0), 1.0)
+        poss = holder if n < 5 else None
+        if receiver_has_it and n >= receiver_has_it[1]:
+            poss = receiver_has_it[0]
+        frames.append({"frame": n, "t": n / FPS, "possessor": poss,
+                       "ball": {"x": 90.0 + 15.0 * u, "y": 34.0, "z": 0.0},
+                       "players": [{"id": "h1", "team": "home", "x": 90.0, "y": 34.0},
+                                   {"id": "h2", "team": "home", "x": 100.0, "y": 36.0},
+                                   {"id": "hk", "team": "home", "x": 5.0, "y": 34.0},
+                                   {"id": "a1", "team": "away", "x": 98.0, "y": 32.0},
+                                   {"id": "ak", "team": "away", "x": 104.0, "y": 34.0}]})
+    events = [event("e0", 0, "kickoff", "home", "h1", x=90.0, y=34.0)]
+    for k, (f, kind, pid, tm, outcome) in enumerate(touches):
+        events.append(event(f"t{k}", f, kind, tm, pid, x=90.0 + 15.0 * (f - 5) / 25, y=34.0, outcome=outcome))
+    events.append(event("g1", 30, "goal", team, scorer, x=105.0, y=34.0))
+    score = {"home": int(team == "home"), "away": int(team == "away")}
+    return {"events": events, "frames": frames, "meta": {"fps": FPS, "score": score, "roster": ROSTER}}
 
 
-def test_a_goal_off_the_last_attacker_to_touch_it_passes(tmp_path):
-    """A corner deflected in off an attacker (or straight in from the kick) is his goal (C8)."""
-    clip = goal_after(corner_clip(), "h2")
-    clip["events"].insert(3, event("e8", 39, "deflection", "home", "h2", x=99.0, y=8.0))
-    assert "C8 event order" not in run(tmp_path, clip)
+SHOT = (5, "shot", "h1", "home", "goal")
+C8_LEGAL = {
+    "shot straight in": goal_clip([SHOT], "h1"),
+    "shot deflected in by a defender": goal_clip([SHOT, (20, "deflection", "a1", "away", None)], "h1"),
+    "cross deflected in by an attacker": goal_clip([(5, "pass", "h1", "home", "fail"),
+                                                   (20, "deflection", "h2", "home", None)], "h2"),
+    "corner straight in": goal_clip([(5, "pass", "h1", "home", "fail")], "h1"),
+    "own goal off a defender": goal_clip([(5, "pass", "h1", "home", "fail"),
+                                          (20, "deflection", "a1", "away", None)], None),
+    "the shot's team-mate deflects it in": goal_clip([SHOT, (20, "deflection", "h2", "home", None)], "h2"),
+}
+C8_WRONG = {
+    "shooter credited after a team-mate's touch": goal_clip(
+        [SHOT, (20, "deflection", "h2", "home", None)], "h1"),
+    "shooter credited after a defender then a team-mate": goal_clip(
+        [SHOT, (15, "deflection", "a1", "away", None), (20, "deflection", "h2", "home", None)], "h1"),
+    "passer credited after the receiver controls it": goal_clip(
+        [(5, "pass", "h1", "home", "success")], "h1", receiver_has_it=("h2", 25)),
+    "passer credited after a defender wins it": goal_clip(
+        [(5, "pass", "h1", "home", "fail"), (20, "possession_change", "a1", "away", None)], "h1"),
+    "own goal but an attacker touched it last": goal_clip(
+        [(5, "pass", "h1", "home", "fail"), (20, "deflection", "h2", "home", None)], None),
+    "last touch a shot recorded as saved": goal_clip([(5, "shot", "h1", "home", "on_target")], "h1"),
+    "goal for a player of the other team": goal_clip([SHOT], "a1"),
+}
 
 
-def test_a_goal_credited_to_someone_who_did_not_touch_it_last_fails(tmp_path):
-    clip = goal_after(corner_clip(), "h2")
-    clip["events"].insert(3, event("e8", 39, "deflection", "away", "a1", x=99.0, y=8.0))
+@pytest.mark.parametrize("name", C8_LEGAL)
+def test_c8_credits_the_right_scorer(tmp_path, name):
+    assert "C8 event order" not in run(tmp_path, C8_LEGAL[name])
+
+
+@pytest.mark.parametrize("name", C8_WRONG)
+def test_c8_rejects_a_wrong_scorer(tmp_path, name):
+    assert "C8 event order" in run(tmp_path, C8_WRONG[name])
+
+
+def test_a_shot_cannot_score_twice(tmp_path):
+    """The same shot reused for a second goal after the kick-off fails."""
+    clip = goal_clip([SHOT], "h1")
+    clip["events"].insert(-1, event("k2", 29, "kickoff", "away", "a1", x=52.5, y=34.0))
     assert "C8 event order" in run(tmp_path, clip)
 
 
@@ -335,3 +409,20 @@ def test_a_throw_in_near_a_corner_is_not_judged_as_a_corner(tmp_path):
     clip = corner_clip(defender=(100.0, 5.0))
     clip["events"][0].update(x=103.0, y=0.0)
     assert "L9 corner" not in run(tmp_path, clip)
+
+
+def test_a_team_mates_touch_ends_the_shot_in_the_engine():
+    """Mutation caught: a team-mate's deflection leaving the shot in flight, so the shooter would
+    be credited with a goal the team-mate put in (C8)."""
+    e = Engine(1)
+    shooter, mate, defender = e.by_id["h10"], e.by_id["h9"], e.by_id["a4"]
+    shooter.x, shooter.y, shooter.heading = 88.0, 34.0, 0.0
+    e.give(shooter.id)
+    e.ball = (88.37, 34.0, 0.0, 0.0, 0.0, 0.0)
+    e.shoot(shooter)
+    shot = e.kicked
+    assert shot and shot["type"] == "shot"
+    e.touched(defender, 95.0, 34.0, controls=False)  # a block leaves the shot in flight
+    assert e.kicked is shot
+    e.touched(mate, 98.0, 34.0, controls=False)  # a team-mate's touch ends it
+    assert e.kicked is None and shot["outcome"] in ("blocked", "on_target", "off_target")

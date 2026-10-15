@@ -43,7 +43,8 @@ MAX_SUBSTITUTIONS = 5  # C3: Law 3, top-level competitions
 STOPPAGES = {"out_of_play", "goal", "substitution"}  # C3: events after which play has stopped
 RESTARTS = {"set_piece", "kickoff"}  # P3: events that put the ball back in play
 TOUCHES = {"pass", "shot", "deflection", "interception", "tackle", "possession_change"}  # P5
-GOAL_TOUCHES = {"pass", "shot", "deflection", "interception", "tackle"}  # C8: touches that can score
+# C8: events that are a touch of the ball by their player (who then touched it last)
+GOAL_TOUCHES = {"pass", "shot", "deflection", "interception", "tackle", "possession_change"}
 # P14: a touch by someone other than the carrier must be physically possible: the player within
 # reach of the ball, which was not moving away from him. Reach is a foot (1 m) or a diving
 # keeper in his box (1.8 m), plus one frame of the ball's and the player's motion.
@@ -57,10 +58,13 @@ APPROACH_TOLERANCE_M = 0.04  # P14: per frame; a ball at 1 m/s relative to him c
 # with the ball in the corner area: within the 1 m arc, where a ball resting on the arc or a line
 # is in (Law 1: lines belong to the areas they mark), so its centre may be up to a ball radius
 # beyond them. The ball is stationary until it is kicked, and opponents stay 9.15 m from the arc
-# until then. The largest legal ball (Law 2: 70 cm round) has a radius of 0.1114 m. A distance
-# between two points each rounded to 0.5 mm in x and y can be off by up to √2 × 0.5 mm per point.
+# until then. The largest legal ball (Law 2: 70 cm round) has a radius of 0.1114 m.
 CORNER_ARC_M, CORNER_DISTANCE_M, BALL_RADIUS_M = 1.0, 9.15, 0.70 / (2 * math.pi)
-DISTANCE_PRECISION_M = 2 * math.sqrt(2) * POSITION_PRECISION_M
+# Rounding: a point rounded to 0.5 mm in x and y lies within √2 × 0.5 mm of where it was, so its
+# distance to an exact point (the flag) is off by at most that. Two positions of the same still
+# ball, each rounded in x, y and z, differ by at most 2 × √3 × 0.5 mm.
+POINT_PRECISION_M = math.sqrt(2) * POSITION_PRECISION_M
+STILL_PRECISION_M = 2 * math.sqrt(3) * POSITION_PRECISION_M
 EXAMPLES = 5
 
 Problems = dict[str, list[str]]
@@ -302,26 +306,20 @@ def check_events(events: list[dict], frames: list[dict], fps: float, meta: dict,
     for e in passes:
         if e.get("receiver") and e["receiver"] == e["player"]:
             problems["C8 event order"].append(f"{e['id']}: a pass received by its own passer")
-    shots = [e for e in events if e["type"] == "shot"]
     for e in events:
         if e["type"] == "interception":
             before = [p for p in passes if p["frame"] <= e["frame"]]
             if not before or before[-1]["outcome"] != "fail" or before[-1]["receiver"] != e["player"]:
                 problems["C8 event order"].append(f"{e['id']}: {e['player']} intercepted no failed pass")
-        if e["type"] == "goal" and e.get("player"):  # an own goal (no scorer) needs no shot
-            # The scorer either struck a shot that went in (it may be deflected on its way), or
-            # was the last player to touch the ball before it crossed the line: a cross or a
-            # corner that goes straight in, or a deflection off an attacker (Law 10 counts the
-            # goal; the last attacker to touch it is credited).
-            before = [s for s in shots if s["frame"] <= e["frame"]]
-            shot = before[-1] if before else None
-            scoring_shot = shot is not None and shot["outcome"] == "goal" and shot["player"] == e["player"]
-            touches = [t for t in events if t["type"] in GOAL_TOUCHES and t["frame"] <= e["frame"]]
-            last = touches[-1] if touches else None
-            last_touch = last is not None and last["player"] == e["player"] and last["type"] != "shot"
-            if not (scoring_shot or last_touch):
-                problems["C8 event order"].append(
-                    f"{e['id']}: goal by {e['player']}, who neither scored with a shot nor touched it last")
+        if e["type"] == "goal":
+            why = goal_credit_problem(e, events, frames, team_of)
+            if why:
+                problems["C8 event order"].append(f"{e['id']}: {why}")
+            before = by_frame.get(e["frame"] - 1)  # the goal frame itself shows the kick-off reset
+            if before and not at_goal_mouth(before["ball"], fps):
+                b = before["ball"]
+                where = f"({b['x']:.1f}, {b['y']:.1f})"
+                problems["L6 goal"].append(f"{e['id']}: ball at {where} the frame before")
 
     if isinstance(meta.get("score"), dict):
         goals: dict[str, int] = defaultdict(int)
@@ -333,6 +331,64 @@ def check_events(events: list[dict], frames: list[dict], fps: float, meta: dict,
                 problems["C9 score"].append(
                     f"meta says {team} scored {meta['score'].get(team, 0)}, goal events say {goals[team]}"
                 )
+
+
+def at_goal_mouth(b: dict, fps: float) -> bool:
+    """L6 (Law 10): the frame before a goal, the ball is within one frame of travel at the
+    fastest legal ball speed (P3) of crossing a goal line between the posts and under the bar."""
+    reach = MAX_BALL_MPS / fps
+    to_line = min(abs(b["x"]), abs(b["x"] - 105.0))
+    return to_line <= reach and abs(b["y"] - 34.0) <= 3.66 + reach and b["z"] <= 2.44 + reach
+
+
+Touch = tuple[int, int, str, dict | None]  # frame, order within the frame, player, the touch event
+
+
+def last_touches(goal: dict, events: list[dict], frames: list[dict]) -> list[Touch]:
+    """Every touch of the ball since the last kick-off, up to the goal, in order: a frame where a
+    player has the ball (who controls it), and every touch event. (frame, order, player, event)."""
+    start = max((e["frame"] for e in events if e["type"] == "kickoff" and e["frame"] < goal["frame"]),
+                default=-1)
+    touches = [(f["frame"], 0, f["possessor"], None) for f in frames
+               if start <= f["frame"] <= goal["frame"] and f.get("possessor")]
+    for k, e in enumerate(events):
+        if e is goal:
+            break
+        if e["type"] in GOAL_TOUCHES and e.get("player") and start <= e["frame"] <= goal["frame"]:
+            touches.append((e["frame"], 1 + k, e["player"], e))
+    return sorted(touches, key=lambda t: (t[0], t[1]))
+
+
+def goal_credit_problem(goal: dict, events: list[dict], frames: list[dict], team_of: dict) -> str | None:
+    """C8: who a goal is credited to (Law 10 counts the goal; the scoring convention credits the
+    last attacker to touch the ball). A named scorer either touched the ball last (and if that
+    touch was a shot, it is recorded as the goal), or struck a shot recorded as the goal that only
+    opponents touched after it (a deflection or a parry on its way in). A goal with no scorer is
+    an own goal: an opponent of the scoring team touched it last. Only touches since the last
+    kick-off count, so a shot cannot score twice."""
+    touches = last_touches(goal, events, frames)
+    if not touches:
+        return "goal with no touch of the ball since the kick-off"
+    _, _, last, last_event = touches[-1]
+    scorer, team = goal.get("player"), goal["team"]
+    if scorer is None:
+        if team_of.get(last) == team:
+            return f"own goal, but {last} of the scoring team touched it last"
+        return None
+    if team_of.get(scorer) != team:
+        return f"goal credited to {scorer}, who does not play for {team}"
+    if last == scorer:
+        if last_event and last_event["type"] == "shot" and last_event["outcome"] != "goal":
+            return f"goal by {scorer}, whose shot is recorded as {last_event['outcome']}"
+        return None
+    shot = next((t[3] for t in reversed(touches) if t[3] and t[3]["type"] == "shot" and t[2] == scorer), None)
+    if shot and shot["outcome"] == "goal":
+        after = [t for t in touches if (t[0], t[1]) > (shot["frame"], events.index(shot) + 1)]
+        mates = [t[2] for t in after if team_of.get(t[2]) == team]
+        if not mates:
+            return None
+        return f"goal by {scorer}, but team-mate {mates[-1]} touched it after his shot"
+    return f"goal by {scorer}, who neither touched it last nor scored with a shot"
 
 
 def check_corners(events: list[dict], frames: list[dict], roster: list[dict], problems: Problems) -> None:
@@ -351,7 +407,7 @@ def check_corners(events: list[dict], frames: list[dict], roster: list[dict], pr
         f = by_frame.get(out["frame"])
         gks = [p for p in f["players"] if p["id"] in keepers] if f else []
         if not gks:
-            problems["L9 corner"].append(f"{out['id']}: no keeper in the roster to check the corner")
+            problems["L9 corner"].append(f"{out['id']}: no roster keeper in that frame to check the corner")
             continue
         defending = min(gks, key=lambda p: abs(p["x"] - out["x"]))["team"]
         if out["team"] != defending:
@@ -367,7 +423,7 @@ def check_corners(events: list[dict], frames: list[dict], roster: list[dict], pr
         if g is None:
             continue
         b = g["ball"]
-        slack = BALL_RADIUS_M + DISTANCE_PRECISION_M
+        slack = BALL_RADIUS_M + POINT_PRECISION_M
         in_arc = math.hypot(b["x"] - flag[0], b["y"] - flag[1]) <= CORNER_ARC_M + slack
         in_field = -slack <= b["x"] <= 105.0 + slack and -slack <= b["y"] <= 68.0 + slack
         if not (in_arc and in_field):
@@ -382,12 +438,12 @@ def check_corners(events: list[dict], frames: list[dict], roster: list[dict], pr
                 continue
             hb = h["ball"]
             shift = math.dist((hb["x"], hb["y"], hb["z"]), (b["x"], b["y"], b["z"]))
-            if not moved and shift > DISTANCE_PRECISION_M:
+            if not moved and shift > STILL_PRECISION_M:
                 problems["L9 corner"].append(f"{restart['id']}: ball moved before the kick (frame {n})")
                 moved = True
             near = [p for p in h["players"] if p["team"] == defending and
                     math.hypot(p["x"] - flag[0], p["y"] - flag[1]) - CORNER_ARC_M
-                    < CORNER_DISTANCE_M - DISTANCE_PRECISION_M]
+                    < CORNER_DISTANCE_M - POINT_PRECISION_M]
             if near:
                 problems["L9 corner"].append(f"{restart['id']}: {near[0]['id']} inside 9.15 m at frame {n}")
                 break
