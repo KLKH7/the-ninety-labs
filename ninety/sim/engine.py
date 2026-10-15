@@ -69,6 +69,15 @@ TOUCH_CLOSE_M = 0.8  # how far ahead a touch puts the ball with an opponent clos
 TOUCH_SPACE_M = 3.0  # how much further when he has space (nearest opponent 10 m or more)
 TOUCH_GAP_S = 0.6  # how long the ball runs ahead before he is back on it
 TOUCH_EXPECTED_DEG = 30.0  # a touch within this of his running line needs no new reaction
+# Tackles (D8): a defender near the ball decides whether to commit; the lunge takes time, and it
+# wins the ball only if his foot gets there before the carrier moves it (decisions.tackle_chance
+# is the shared race). All *design*, *verify*.
+OFF_BALANCE_S = 0.8  # a missed lunge leaves him out of the play this long
+COMMIT_P = 0.6  # a defender commits only when he expects to win the race this often (aggression shifts it)
+SHIELD_M = 3.0  # holding with an opponent this close, the carrier puts his body between them
+EVADE_MPS = 3.0  # how fast a carrier pushes the ball away from a lunge, plus up to 2 m/s with dribbling
+JOCKEY_LOOKAHEAD_S = 0.5  # a jockeying defender matches where the carrier is going, not where he is
+POKE_MPS = 5.0  # how fast a tackled ball comes away
 THROW_WAIT_S = 6.0  # design: with nobody free, a thrower waits this long, then throws down the line
 CHASE_EVERY = 4  # frames between re-planning who chases a free ball
 GOAL_HALF_WIDTH, CROSSBAR = 3.66, 2.44  # Law 1
@@ -190,6 +199,10 @@ class Engine:
         self.released_by: str | None = None  # Law 12: a keeper who released it may not handle it again
         # (x, y, strike): a carrier turning the ball onto his kicking side before he strikes it
         self.windup: tuple | None = None
+        self.lunges: dict[str, float] = {}  # defender -> when his lunge reaches the ball
+        self.evade_at: dict[str, float] = {}  # defender -> when the carrier reacts to his lunge
+        self.off_balance: dict[str, float] = {}  # defender -> when he has recovered from a miss
+        self.tackle: dict | None = None  # the tackle event whose outcome the next control decides
         self.dribbler: str | None = None  # a carrier who pushed the ball ahead and is running onto it
         self.read: tuple[str, float] | None = None  # (keeper, y): where he reads a shot is going
         self.shot_touched_by: str | None = None  # "keeper" or "defender": who got to the shot
@@ -546,6 +559,9 @@ class Engine:
         self.touched(p, cx, cy, controls)  # judged on the ball as it arrived
         if controls:
             self.ball = (cx, cy, cz, p.vx, p.vy, 0.0)
+            if self.tackle:  # who came away with the ball decides the tackle
+                self.tackle["outcome"] = "success" if p.team == self.tackle["team"] else "fail"
+                self.tackle = None
             if p.id == self.dribbler:  # back on his own touch: the dribble goes on
                 self.possessor, self.last_touch, self.dribbler = p.id, p.id, None
                 self.touched_since_kick = False
@@ -764,6 +780,10 @@ class Engine:
     def shape_target(self, p: Player) -> tuple[float, float, float]:
         """Where a player off the ball wants to be, and how fast they go there."""
         chase = self.chase.get(p.team)
+        if p.id in self.lunges:  # committed: straight at the ball
+            return self.ball[0], self.ball[1], SPRINT
+        if self.off_balance.get(p.id, -1.0) > self.t:  # beaten: getting up, out of the play
+            return p.x, p.y, SHAPE
         if p.id == self.dribbler:  # running onto his own touch, a little faster than the ball
             bx, by, _, bvx, bvy, _ = self.ball
             onto = math.hypot(bvx, bvy) + 1.0  # design: he closes on it at about 1 m/s
@@ -825,8 +845,12 @@ class Engine:
             engaged = (presser is not None and math.hypot(bx - presser.x, by - presser.y) < ENGAGE_M
                        and brain.presses(self.t, bx))
             if presser is p and engaged:
-                # Press goal-side: between the ball and the goal being defended, a step away.
-                return *on_pitch(bx + gx * gap, by + gy * gap), work
+                # Press goal-side, a step away, matching where the carrier is going (D8: a defender
+                # keeps his speed relative to the attacker small rather than holding a spot).
+                carrier = self.by_id.get(self.possessor) if self.possessor else None
+                lead_x = carrier.vx * JOCKEY_LOOKAHEAD_S if carrier else 0.0
+                lead_y = carrier.vy * JOCKEY_LOOKAHEAD_S if carrier else 0.0
+                return *on_pitch(bx + lead_x + gx * gap, by + lead_y + gy * gap), work
             if engaged and brain.pressers[1:2] == [p.id]:  # cover: behind the presser, goal-side
                 return *on_pitch(bx + gx * max(COVER_M, gap + 2), by + gy * max(COVER_M, gap + 2)), RECOVER
             slot = brain.slot(p.role, p.ay, clamp(by, 0, PITCH_Y))
@@ -991,7 +1015,13 @@ class Engine:
             carrier.heading = perception.facing(carrier.heading, carrier.vx, carrier.vy, carrier.x,
                                                 carrier.y, carrier.x, carrier.y)
         feet = BODY_RADIUS + ball.RADIUS
-        fx, fy = carrier.x + math.cos(carrier.heading) * feet, carrier.y + math.sin(carrier.heading) * feet
+        side = carrier.heading
+        if not self.dribble_to and not self.windup:  # D8: holding, he keeps his body between ball and man
+            near = min((q for q in self.players if q.team != carrier.team),
+                       key=lambda q: math.hypot(q.x - carrier.x, q.y - carrier.y))
+            if math.hypot(near.x - carrier.x, near.y - carrier.y) < SHIELD_M:
+                side = math.atan2(carrier.y - near.y, carrier.x - near.x)
+        fx, fy = carrier.x + math.cos(side) * feet, carrier.y + math.sin(side) * feet
         bx, by, bz = self.ball[0] + carrier.vx * DT, self.ball[1] + carrier.vy * DT, self.ball[2]
         dx, dy, dz = fx - bx, fy - by, -bz
         d = math.sqrt(dx * dx + dy * dy + dz * dz)
@@ -1009,15 +1039,6 @@ class Engine:
         if self.dribble_to and not self.windup and math.hypot(fx - bx, fy - by) < 0.15:
             self.touch_ahead(carrier)
             return
-        # Holding (shielding) still uses a placeholder chance of being tackled; step 4's duel
-        # replaces it. A dribble is contested through the touches above, by physics.
-        within_reach = math.hypot(presser.x - bx, presser.y - by) <= CONTROL_M
-        in_hands = self.hands(carrier, carrier.x, carrier.y)  # Law 12: nobody may challenge it
-        if not self.dribble_to and not in_hands and within_reach and self.rng.random() < 0.07 * DT:
-            self.emit("tackle", opp, bx, by, player=presser.id, receiver=carrier.id, outcome="success")
-            self.emit("possession_change", opp, bx, by, player=presser.id)
-            self.give(presser.id)
-            return
         if self.windup:
             if self.can_strike(carrier, self.windup[0], self.windup[1]):
                 strike, self.windup = self.windup[2], None
@@ -1025,6 +1046,83 @@ class Engine:
             return
         if self.t >= self.hold_until and (self.frame + int(carrier.id[1:])) % DECIDE_EVERY == 0:
             self.decide(carrier)
+
+    def duels(self) -> None:
+        """D8: defenders near the ball decide whether to tackle, and lunges that have arrived are
+        resolved. The decision weighs the threat removed if he wins it against the threat added
+        if the carrier gets past him; whether he wins it is the race between his foot and the
+        carrier moving the ball."""
+        holder = self.by_id.get(self.possessor) if self.possessor else self.by_id.get(self.dribbler or "")
+        bx, by = self.ball[0], self.ball[1]
+        for pid, reach_at in list(self.lunges.items()):
+            if self.t < reach_at:
+                carrier = self.by_id.get(self.possessor) if self.possessor else None
+                if carrier and self.t >= self.evade_at.get(pid, math.inf):
+                    self.evade(carrier, self.by_id[pid])  # he saw it coming in time
+                    self.evade_at.pop(pid, None)
+                continue
+            self.evade_at.pop(pid, None)
+            del self.lunges[pid]
+            p = self.by_id[pid]
+            holder = self.by_id.get(self.possessor) if self.possessor else self.by_id.get(self.dribbler or "")
+            bx, by = self.ball[0], self.ball[1]
+            if holder and holder.team != p.team and math.hypot(p.x - bx, p.y - by) <= CONTROL_M:
+                self.poke(p, holder)
+                holder = None
+            else:
+                self.off_balance[pid] = self.t + OFF_BALANCE_S
+        if not holder or self.restart or self.hands(holder, holder.x, holder.y):  # Law 12: not his hands
+            return
+        for i, p in enumerate(self.players):
+            if p.team == holder.team or p.role == "GK" or p.id in self.lunges:
+                continue
+            if self.off_balance.get(p.id, -1.0) > self.t or (self.frame + i) % DECIDE_EVERY:
+                continue
+            d = math.hypot(p.x - bx, p.y - by)
+            if d > decisions.LUNGE_REACH_M:
+                continue
+            lunge = decisions.lunge_time(d, p.profile["tackling"])
+            # His estimate of winning the race: an average carrier needs a choice reaction to react.
+            p_win = decisions.tackle_chance(d, p.profile["tackling"])
+            # He stays on his feet unless he expects to win it (aggressive players gamble sooner);
+            # a better decision-maker judges that line more sharply.
+            line = COMMIT_P - 0.2 * (p.profile["aggression"] - 0.5)
+            sharp = 0.02 + 0.08 * (1 - p.profile["decisions"])
+            if self.rng.random() < decisions.sigmoid((p_win - line) / sharp):
+                self.lunges[p.id] = self.t + lunge
+                self.evade_at[p.id] = self.t + holder.profile.reaction()
+
+    def evade(self, carrier: Player, defender: Player) -> None:
+        """The carrier, having reacted to a lunge, pushes the ball away from the defender's foot,
+        to the side that keeps him going forward; a better dribbler moves it quicker."""
+        bx, by = self.ball[0], self.ball[1]
+        away = math.atan2(by - defender.y, bx - defender.x)
+        fwd = math.atan2(0.0, attack_dir(carrier.team))
+        sides = (away + math.pi / 2, away - math.pi / 2)
+        angle = min(sides, key=lambda a: abs((a - fwd + math.pi) % (2 * math.pi) - math.pi))
+        speed = EVADE_MPS + 2.0 * carrier.profile["dribbling"]
+        vx, vy, vz = self.execute(carrier, math.cos(angle) * speed, math.sin(angle) * speed, 0.0, "dribbling")
+        self.ball = (bx, by, self.ball[2], vx, vy, vz)
+        self.possessor, self.dribbler, self.dribble_to = None, carrier.id, None
+        self.last_touch = carrier.id
+        self.free_since = self.t
+        self.kicker_clear, self.touched_since_kick = False, True
+
+    def poke(self, p: Player, holder: Player) -> None:
+        """A tackle that reaches the ball knocks it loose; whoever then controls it decides the
+        tackle (won or lost)."""
+        heading = math.atan2(p.vy, p.vx) if math.hypot(p.vx, p.vy) > 0.5 else \
+            math.atan2(self.ball[1] - p.y, self.ball[0] - p.x)
+        angle = heading + math.radians(self.rng.gauss(0.0, 40.0))
+        self.ball = (self.ball[0], self.ball[1], 0.0, holder.vx * 0.3 + POKE_MPS * math.cos(angle),
+                     holder.vy * 0.3 + POKE_MPS * math.sin(angle), 0.0)
+        self.tackle = self.emit("tackle", p.team, self.ball[0], self.ball[1], player=p.id, receiver=holder.id,
+                                outcome=None)
+        self.possessor, self.dribbler, self.dribble_to, self.windup = None, None, None, None
+        self.last_touch = p.id
+        self.kicked_at = self.free_since = self.t
+        self.kicker_clear, self.touched_since_kick = False, True
+        self.plan_chase()
 
     def touch_ahead(self, carrier: Player) -> None:
         """D6: a dribbling touch. The ball goes ahead of him toward where he is carrying it, further
@@ -1079,6 +1177,7 @@ class Engine:
         for _ in range(total):
             self.moved = None
             self.perceive_and_think()
+            self.duels()
             if self.possessor:
                 self.tick_carrier()
             elif self.restart:

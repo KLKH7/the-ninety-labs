@@ -37,6 +37,10 @@ BLOCKER_FACTOR = 0.5  # design: each defender in the shooting cone halves the es
 PROGRESS_VALUE = 0.04  # design: value of possession per 100 m nearer goal, beyond shot threat
 LOSS_BASE = 0.02  # design: cost of losing the ball anywhere
 STALE_S = 2.0  # design: a team-mate not seen for this long is a less certain option
+# D8: the tackle race, shared by the defender deciding to commit (engine.duels) and the carrier
+# judging a dribble. All *design*, *verify*.
+LUNGE_REACH_M = 1.8  # a foot (1 m) plus a step
+LUNGE_S = 0.3  # time for an average tackler's foot to reach the ball from the edge of that reach
 DRIBBLE_STEP_M = 6.0
 MAX_PASS_M = 45.0
 LOFT_OVER_M = 25.0
@@ -142,6 +146,18 @@ def generic_time(distance: float) -> float:
 
 def sigmoid(x: float) -> float:
     return 1 / (1 + math.exp(-max(-30.0, min(30.0, x))))
+
+
+def lunge_time(distance: float, tackling: float = 0.5) -> float:
+    return LUNGE_S * (distance / LUNGE_REACH_M) * (1.4 - 0.8 * tackling)
+
+
+def tackle_chance(distance: float, tackling: float = 0.5) -> float:
+    """D8: the chance a defender this far from the ball wins the race to it: his lunge against an
+    average carrier's choice reaction. 0 beyond his reach."""
+    if distance > LUNGE_REACH_M:
+        return 0.0
+    return sigmoid((GENERIC_REACTION_S - lunge_time(distance, tackling)) / LANE_MARGIN_S)
 
 
 @dataclass
@@ -347,9 +363,14 @@ def options(scene: Scene) -> list[Option]:
         if not (1 <= tx <= PITCH_X - 1 and 1 <= ty <= PITCH_Y - 1):
             continue
         # Can an opponent reach the carry anywhere along it before he has carried the ball past?
+        # A defender within lunge reach of the carry can tackle (the same race the defender judges);
+        # one further off must first get to it.
         win = 1.0
         for ox, oy in scene.opponents:
             d, s = closest_on_segment(ox, oy, scene.x, scene.y, tx, ty)
+            if d <= LUNGE_REACH_M:
+                win *= 1 - tackle_chance(d)
+                continue
             my_t = s * DRIBBLE_STEP_M / dribble_speed(scene.dribbling)
             win *= sigmoid((generic_time(d) - my_t) / RECEIVE_MARGIN_S)
         gain = value(tx, ty, scene.goal_x, scene.opponents, scene.keeper)
