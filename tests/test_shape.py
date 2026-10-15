@@ -23,8 +23,8 @@ def test_the_shape_mirrors_for_the_team_attacking_the_other_way():
 
 
 def test_with_the_ball_wide_in_the_final_third_the_box_is_attacked():
-    near = slot("ST", ball_x=90.0, ball_y=60.0)
-    far = slot("RW", ball_x=90.0, ball_y=60.0)  # the right winger is on the far side from the left flank
+    near = slot("ST", ball_x=90.0, ball_y=60.0, line=101.0)  # their defenders deep in the box
+    far = slot("RW", ball_x=90.0, ball_y=60.0, line=101.0)  # the right winger is on the far side
     assert near[0] > 95 and abs(near[1] - 34) < 8
     assert far[0] > 95 and far[1] < 34
     assert slot("RB", ball_x=90.0, ball_y=60.0)[0] < 95  # a full-back is not one of the box runners
@@ -35,3 +35,9 @@ def test_a_pass_leads_a_running_team_mate_into_the_space_ahead_of_him():
     standing = D.pass_option(s, ("h9", 70.0, 34.0, 0.0, 0.0, 0.0))
     running = D.pass_option(s, ("h9", 70.0, 34.0, 0.0, 7.0, 0.0))
     assert running.target[0] > standing.target[0] + 5.0
+
+
+def test_box_runners_wait_onside_for_the_delivery():
+    st = slot("ST", ball_x=88.0, ball_y=60.0, line=93.0)
+    assert st[0] <= 92.0  # held a step onside of their line, not parked at the near post
+    assert slot("ST", ball_x=95.0, ball_y=60.0, line=93.0)[0] <= 95.0  # never beyond the ball when that is further

@@ -127,6 +127,7 @@ BOX_RUNS = {"ST": (99.0, 4.0), "far_winger": (98.0, -7.0), "RCM": (88.0, 0.0)}  
 
 def attacking_slot(role: str, own_goal_x: float, ball_x: float, ball_y: float,
                    last_line_x: float) -> tuple[float, float] | None:
+    # `last_line_x`: the furthest a player of this side may stand and be onside, as he sees it.
     """O6: where this role stands while his team has the ball. Heights follow the ball; attackers
     stand on the opponents' last line (onside); with the ball wide in the final third, the striker,
     the far-side winger and a midfielder attack the near post, the far post and the box edge."""
@@ -144,6 +145,7 @@ def attacking_slot(role: str, own_goal_x: float, ball_x: float, ball_y: float,
         key = "far_winger" if far_winger else role
         if key in BOX_RUNS:
             u, side = BOX_RUNS[key]
+            u = min(u, max(last_u, ball_u))  # L10: he waits onside for the delivery
             return own_goal_x + fwd * u, PITCH_Y / 2 + ball_side * side
     behind, width = shape
     if behind is None:

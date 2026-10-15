@@ -88,9 +88,12 @@ GOAL_HALF_WIDTH, CROSSBAR = 3.66, 2.44  # Law 1
 PENALTY_DEPTH, PENALTY_HALF_WIDTH = 16.5, 20.16  # Law 1
 GOAL_AREA_X = 5.5  # Law 1
 # Laws 15 to 17: opponents keep this far from a restart until the ball is in play.
-RESTART_DISTANCE_M = {"throw_in": 2.0, "corner": 9.15, "goal_kick": PENALTY_DEPTH - GOAL_AREA_X + 1.0}
+RESTART_DISTANCE_M = {"throw_in": 2.0, "corner": 9.15, "goal_kick": PENALTY_DEPTH - GOAL_AREA_X + 1.0,
+                      "free_kick": 9.15}  # Law 13: 9.15 m from a free kick
 BOARDS_M = 4.0  # verify: advertising boards behind the lines stop a ball (and players) that go out
-RESTART_DELAY_S = {"throw_in": (3, 8), "goal_kick": (6, 10), "corner": (12, 20)}  # verify (R1)
+RESTART_DELAY_S = {"throw_in": (3, 8), "goal_kick": (6, 10), "corner": (12, 20),
+                   "free_kick": (4, 10)}  # verify (R1)
+NO_OFFSIDE_FROM = ("throw_in", "goal_kick", "corner")  # Law 11: no offside offence direct from these
 
 # 4-3-3 anchors for a team attacking toward x=105, as (x, y) fractions of the pitch.
 FORMATION = [
@@ -207,6 +210,8 @@ class Engine:
         self.tackle: dict | None = None  # the tackle event whose outcome the next control decides
         self.dribbler: str | None = None  # a carrier who pushed the ball ahead and is running onto it
         self.last_deflection: dict | None = None  # the most recent deflection event
+        self.offside: set[str] = set()  # L10: team-mates in an offside position when the ball was played
+        self.from_restart: str | None = None  # the restart the next kick is taken from
         self.read: tuple[str, float] | None = None  # (keeper, y): where he reads a shot is going
         self.shot_touched_by: str | None = None  # "keeper" or "defender": who got to the shot
         self.shot_was_on_target: bool | None = None  # was it going in when they first touched it?
@@ -298,6 +303,7 @@ class Engine:
             self.released_by = None
         self.dribbler = None
         self.last_deflection = None
+        self.offside = set()
         self.windup = None
         self.read = None
         self.intended = None
@@ -320,6 +326,40 @@ class Engine:
 
     # ---- decisions: players choose, the kick gives the ball a velocity -------
 
+    def offside_offence(self, p: Player, x: float, y: float) -> None:
+        """L10: an indirect free kick to the defending side where the offside player played it."""
+        kicked = self.kicked
+        if kicked and kicked["type"] == "pass":
+            kicked.update(receiver=p.id, end_x=round(x, 2), end_y=round(y, 2), outcome="fail")
+        elif kicked and kicked["type"] == "shot":
+            self.close_shot(kicked, x, y)
+        self.kicked = None
+        self.offside = set()
+        self.emit("offside", p.team, x, y, player=p.id)
+        self.possessor = None  # the ball is dead and rolls on until the free kick is taken
+        self.chase = {}
+        self.stop("free_kick", other(p.team), (clamp(x, 0.5, PITCH_X - 0.5), clamp(y, 0.5, PITCH_Y - 0.5)))
+
+    def onside_limit(self, team: str, positions: list[tuple[float, float]], ball_x: float) -> float:
+        """Law 11: how far toward the opponents' goal a player of `team` may stand and be onside:
+        level with the second-last opponent or the ball, whichever is further, and anywhere in
+        his own half. `positions` are the opponents' x positions as seen (or the truth, for the
+        referee)."""
+        fwd = attack_dir(team)
+        ahead = sorted((x for x, _ in positions), key=lambda x: -fwd * x)
+        second_last = ahead[1] if len(ahead) > 1 else goal_x(team)
+        limit = max(fwd * second_last, fwd * ball_x, fwd * PITCH_X / 2)
+        return fwd * limit
+
+    def offside_positions(self, passer: Player) -> set[str]:
+        """L10: the passer's team-mates in an offside position as the ball is played (the truth:
+        this is the referee's judgement)."""
+        opp = [(q.x, q.y) for q in self.players if q.team != passer.team]
+        limit = self.onside_limit(passer.team, opp, self.ball[0])
+        fwd = attack_dir(passer.team)
+        return {q.id for q in self.players
+                if q.team == passer.team and q is not passer and fwd * (q.x - limit) > 0}
+
     def can_strike(self, carrier: Player, tx: float, ty: float) -> bool:
         """The ball is on the side of his body facing the target, so he can strike it there
         without the ball passing through him."""
@@ -339,6 +379,9 @@ class Engine:
         self.ball = (self.ball[0], self.ball[1], self.ball[2], vx, vy, vz)
         self.released_by = carrier.id
         self.last_deflection = None
+        exempt = self.from_restart in NO_OFFSIDE_FROM
+        self.from_restart = None
+        self.offside = set() if exempt else self.offside_positions(carrier)
         self.throw_by = None  # a throw-in ends when the ball is thrown
         self.dribbler = None
         self.possessor = None
@@ -439,6 +482,10 @@ class Engine:
                 at = belief.where(q.id, self.t)
                 if at:  # a team-mate he has not seen cannot be picked
                     mates.append((q.id, at[0], at[1], belief.age(q.id, self.t), *belief.velocity(q.id)))
+        seen_opps = [w for w in (belief.where(q.id, self.t) for q in self.players if q.team == opp) if w]
+        if self.from_restart not in NO_OFFSIDE_FROM:  # L10: he does not pick a man he sees offside
+            limit = self.onside_limit(team, seen_opps, self.ball[0])
+            mates = [m for m in mates if attack_dir(team) * (m[1] - limit) <= 0]
         # The keeper is an opponent like any other for lanes, carries and pressure; the shot
         # estimate counts him once, as the keeper, not also as a blocker.
         # Opponents as they will be a moment from now (their seen velocity): a carrier reads a
@@ -573,7 +620,8 @@ class Engine:
         rel = math.sqrt((vx - p.vx) ** 2 + (vy - p.vy) ** 2 + vz * vz)
         absorb = p.profile.absorb_mps(self.hands(p, cx, cy))
         controls = kind == "touch" and rel <= absorb
-        self.touched(p, cx, cy, controls)  # judged on the ball as it arrived
+        if self.touched(p, cx, cy, controls):  # judged on the ball as it arrived
+            return
         if controls:
             self.ball = (cx, cy, cz, p.vx, p.vy, 0.0)
             if self.tackle:  # who came away with the ball decides the tackle
@@ -615,9 +663,15 @@ class Engine:
         self.kicked_at = self.t  # a new strike of the ball: everyone reacts to it again
         self.chase = {}
 
-    def touched(self, p: Player, x: float, y: float, controls: bool) -> None:
+    def touched(self, p: Player, x: float, y: float, controls: bool) -> bool:
         """Resolve the pass or shot in flight from who touched it, and how: observed, never
-        intended. Called with the ball as it arrived, before the touch changes it."""
+        intended. Called with the ball as it arrived, before the touch changes it. Returns True
+        if the touch stopped play (an offside offence)."""
+        if p.id in self.offside:  # L10: he was offside when it was played, and now plays it
+            self.offside_offence(p, x, y)
+            return True
+        if p.team != (self.team_of(self.last_touch) if self.last_touch else p.team) and controls:
+            self.offside = set()  # an opponent's deliberate play: a new phase
         self.touched_since_kick = True
         if p.id != self.dribbler and self.dribbler and p.team == self.team_of(self.dribbler):
             self.dribbler = None  # a team-mate took it: the dribble is over
@@ -806,6 +860,7 @@ class Engine:
         self.hold_until = self.t + self.rng.uniform(0.5, 1.5)
         self.throw_by = taker.id if r.kind == "throw_in" else None
         self.throw_ready = self.t
+        self.from_restart = r.kind
 
     # ---- tick ---------------------------------------------------------------
 
@@ -865,8 +920,11 @@ class Engine:
                 return *offball.support_spot((p.x, p.y), (carrier.x, carrier.y), goal_x(p.team),
                                              (presser.x, presser.y)), RECOVER
         if brain.in_possession and p.role != "GK":  # O6: the team's shape with the ball (also in flight)
+            seen = [w for w in (self.beliefs[p.id].where(q.id, self.t) for q in self.players
+                                if q.team != p.team) if w]
+            onside = self.onside_limit(p.team, seen, bx)  # L10: as far as he sees he may go
             spot = offball.attacking_slot(p.role, PITCH_X - goal_x(p.team), clamp(bx, 0, PITCH_X),
-                                          clamp(by, 0, PITCH_Y), self.brains[other(p.team)].line_x)
+                                          clamp(by, 0, PITCH_Y), onside)
             if spot:
                 far = math.hypot(spot[0] - p.x, spot[1] - p.y) > FAR_OUT_OF_POSITION_M
                 return *spot, RECOVER if far else SHAPE
