@@ -592,6 +592,23 @@ class Engine:
 
     # ---- the free ball: who can get there first ------------------------------
 
+    def can_reach(self, p: Player, bx: float, by: float, bz: float, t: float,
+                  delay: float = 0.0) -> tuple[bool, float | None, float]:
+        """Can he get to the ball at (bx, by, bz) `t` seconds from now, starting after `delay`?
+        (reachable, gap still to close, his speed along the way); gap None if it is over his reach.
+        His reach (a keeper's hands in his box), his speed along the way, and braking first if he
+        is running away from it: one test for chasing a ball and for judging where play goes."""
+        reach_m, reach_z = self.reach(p, bx, by, at=self.t + t)
+        if bz > reach_z:
+            return False, None, 0.0
+        dx, dy = bx - p.x, by - p.y
+        gap = math.hypot(dx, dy) - reach_m
+        along = (p.vx * dx + p.vy * dy) / (math.hypot(dx, dy) or 1.0)
+        # Running away from the point, he must first brake to a stop (time and distance).
+        brake_t = max(0.0, -along) / BRAKE_MAX
+        extra = min(0.0, along) ** 2 / (2 * BRAKE_MAX)
+        return gap + extra <= p.physique.distance_in(t - delay - brake_t, max(0.0, along)), gap, along
+
     def plan_chase(self) -> None:
         """Each team sends the player who thinks they can reach the ball's path first. Each player
         judges the ball's velocity with an error that grows with their distance from it, and the
@@ -610,16 +627,9 @@ class Engine:
             for k in range(0, len(path), 2):
                 t = k * DT
                 bx, by, bz = path[k][0] + ex * t, path[k][1] + ey * t, path[k][2]
-                reach_m, reach_z = self.reach(p, bx, by, at=self.t + t)
-                if bz > reach_z:
-                    continue
-                dx, dy = bx - p.x, by - p.y
-                gap = math.hypot(dx, dy) - reach_m
-                along = (p.vx * dx + p.vy * dy) / (math.hypot(dx, dy) or 1.0)
-                # Running away from the point, he must first brake to a stop (time and distance).
-                brake_t = max(0.0, -along) / BRAKE_MAX
-                extra = min(0.0, along) ** 2 / (2 * BRAKE_MAX)
-                reachable = gap + extra <= p.physique.distance_in(t - brake_t, max(0.0, along))
+                reachable, gap, along = self.can_reach(p, bx, by, bz, t)
+                if gap is None:
+                    continue  # over his reach
                 if reachable or k + 2 >= len(path):
                     arrive = t if reachable else p.physique.time_to_cover(gap, along)
                     if p.team not in best or arrive < best[p.team][0]:
@@ -946,23 +956,17 @@ class Engine:
 
     def ball_destination(self) -> tuple[float, float]:
         """Where players who see a ball struck can tell play is going: the first point of its own
-        flight that somebody other than the kicker can get a foot to in time (after a choice
-        reaction, at his own body's pace, low enough to play), else where it leaves the pitch or
-        comes to rest. Judged from where players are; their misjudgement is not modelled here."""
+        flight that somebody other than the kicker can get to in time after a choice reaction, by
+        the chase's own test (can_reach), else where it leaves the pitch or comes to rest. Judged
+        from where players really are (*design*: their misjudgement is not modelled here)."""
         path = ball.predict(self.ball, DT, 10.0)  # 10 s: a bound; the path ends when the ball rests
         others = [p for p in self.players if p.id != self.released_by]
-        for k in range(0, len(path), 2):  # every other frame is fine enough to place the shape
+        for k in range(0, len(path), 2):  # every other frame, as the chase plans
             s = path[k]
             if not (0.0 <= s[0] <= PITCH_X and 0.0 <= s[1] <= PITCH_Y):
                 return clamp(s[0], 0.0, PITCH_X), clamp(s[1], 0.0, PITCH_Y)
-            if s[2] > FOOT_REACH_Z:
-                continue
-            t = k * DT - perception.CHOICE_REACTION_S
-            if t <= 0:
-                continue
-            for p in others:
-                d = math.hypot(s[0] - p.x, s[1] - p.y) - CONTROL_M
-                if d <= 0 or p.physique.distance_in(t, 0.0) >= d:
+            for p in others:  # the same test the chase uses, after he reacts to the strike
+                if self.can_reach(p, s[0], s[1], s[2], k * DT, perception.CHOICE_REACTION_S)[0]:
                     return s[0], s[1]
         return path[-1][0], path[-1][1]
 

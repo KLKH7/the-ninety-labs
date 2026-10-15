@@ -950,3 +950,31 @@ def test_a_new_strike_clears_a_keeper_landed_from_an_earlier_dive():
     e.landed = ("a1", e.t - 1.0)
     e.kick(p, 15.0, 0.0, 0.0)
     assert e.landed is None
+
+
+def test_where_play_goes_waits_for_the_reaction_and_counts_running_but_not_the_kicker():
+    e = Engine(1)
+    _alone_with(e, (44.0, 36.0))  # 2 m off the line, close to the kicker
+    e.ball = (40.0, 34.0, 0.0, 14.0, 0.0, 0.0)
+    x_near, _ = e.ball_destination()
+    assert x_near > 46.0  # he has to react first: the ball is past his spot before he can move
+    e2 = Engine(1)
+    _alone_with(e2, (60.0, 37.0))  # 3 m off the line further on: only running gets him there
+    e2.ball = (40.0, 34.0, 0.0, 10.0, 0.0, 0.0)
+    x_run, _ = e2.ball_destination()
+    assert 55.0 < x_run < 62.0
+    e3 = Engine(1)
+    _alone_with(e3, (5.0, 5.0))  # nobody else anywhere near
+    e3.ball = (40.0, 34.0, 0.0, 3.0, 0.0, 0.0)  # a slow ball rolling away from the kicker
+    x_away, _ = e3.ball_destination()
+    assert x_away > 41.0  # not the kicker's own feet
+
+
+def test_a_pass_records_where_play_is_seen_going_through_the_real_path():
+    e = Engine(1)
+    mate = _alone_with(e, (56.0, 34.0))
+    p = e.by_id["h6"]
+    e.give(p.id)
+    e.ball = (p.x + 0.4, p.y, 0.0, 0.0, 0.0, 0.0)
+    e.pass_to(p, 56.0, 34.0, lofted=False, pace=6.0, receiver=mate.id)
+    assert 48.0 < e.seen_going[0] <= 57.0  # where he meets it, stepping toward it: not the kick spot
