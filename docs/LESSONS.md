@@ -304,3 +304,15 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** for a new movement, a test that the body's velocity never changes faster than its
   limit from any starting velocity, and a contract run over clips where it happens often.
 
+### 35. When sources disagree, the reading that passes your check is not evidence
+- **What happened:** a keeper's dive broke the acceleration check. Two cited sources pointed
+  opposite ways: one implied a push of about 0.2 s (the fast dive the engine had), the other, read
+  only from search results, a push of about 0.44 s. The slower one was chosen; it also happened to
+  fit under the check, and it cut keepers' saves at 16 m from 74 to 55 percent. An audit pointed
+  out that the choice had been made on the number that passed, not on the source.
+- **Rule:** when sources disagree, read both and record why one is right before building on
+  either; until then mark the conflict as unresolved where the number is used, with what it
+  changes, and never let "it passes the check" decide.
+- **Check:** for each new constant, can you quote the passage it comes from? If not, it is
+  *verify*, and GROUNDING says what it would change if the other reading is right.
+

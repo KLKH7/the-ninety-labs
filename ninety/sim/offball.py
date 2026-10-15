@@ -258,9 +258,28 @@ def dive_time(travel: float) -> float:
 
 
 DIVE_TIME_S = dive_time(KEEPER_DIVE_TRAVEL_M)  # a full dive from standing: about 0.60 s
-# The longest a dive can push before he lands, whatever he was doing (design): a full dive, plus
-# as long again for the push to turn him from running the other way.
-DIVE_GIVE_UP_S = 2 * DIVE_TIME_S
+
+
+def dive_time_from(travel: float, v_along: float, v_across: float) -> float:
+    """P15: the longest the push can take to carry him `travel` metres along his line, starting at
+    `v_along` m/s that way (negative: the other way) and `v_across` m/s off it. An upper bound:
+    first the push cancels his motion across with its whole force (meanwhile he drifts along at
+    `v_along`), then his motion the wrong way, then it is a dive from standing over what is left;
+    the real push does all of it at once, so is never slower."""
+    t = v_across / DIVE_ACCEL
+    left = abs(travel) - v_along * t
+    if left <= 0:
+        return t
+    if v_along < 0:
+        lost = v_along * v_along / (2 * DIVE_ACCEL)
+        return t + -v_along / DIVE_ACCEL + dive_time(left + lost)
+    if v_along >= DIVE_PEAK_MPS:
+        return t + left / v_along
+    push = (DIVE_PEAK_MPS - v_along) / DIVE_ACCEL
+    pushed = v_along * push + 0.5 * DIVE_ACCEL * push * push
+    if left <= pushed:
+        return t + (-v_along + math.sqrt(v_along * v_along + 2 * DIVE_ACCEL * left)) / DIVE_ACCEL
+    return t + push + (left - pushed) / DIVE_PEAK_MPS
 
 
 def dive_progress(t: float) -> float:

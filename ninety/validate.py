@@ -24,10 +24,13 @@ MAX_PLAYER_MPS = 10.5  # P1: peak match sprint speeds
 # fastest accelerators and is a design margin, not derived. Braking and turning: peak braking
 # about 8.5 m/s² (SD 1.1), so mean plus one SD is about 9.6, rounded to 10.
 MAX_PLAYER_ACCEL = 8.0
-# P15 (verify): a keeper's dive is a push-off, not a sprint start: it gives the body 3.6 to 4.0
-# m/s sideways in about 0.40 to 0.48 s, so at most 4.0 / 0.40 = 10 m/s² of speeding up, allowed to
-# a keeper inside his own penalty area.
-MAX_KEEPER_DIVE_ACCEL = 4.0 / 0.40
+# P15 (verify; the push-off time is from search results, not yet read in the paper): a keeper's
+# dive is a push-off, not a sprint start: it gives the body at most 4.0 m/s along his goal line in
+# about 0.40 to 0.48 s, so at most 4.0 / 0.40 = 10 m/s² of speeding up. Allowed only for what a dive
+# can be: a keeper inside his own penalty area, speeding up mostly along his goal line, and no
+# faster than the dive's peak at the end.
+DIVE_PEAK_MAX_MPS = 4.0
+MAX_KEEPER_DIVE_ACCEL = DIVE_PEAK_MAX_MPS / 0.40
 MAX_PLAYER_BRAKE = 10.0
 ACCEL_WINDOW_S = 0.2  # P2: speeds averaged over this window, so frame jitter is not acceleration
 MAX_BALL_MPS = 40.0  # P3: above the hardest shots on record
@@ -187,7 +190,11 @@ def check_physics(events: list[dict], frames: list[dict], fps: float, roster: li
             v1 = math.hypot(b["x"] - a["x"], b["y"] - a["y"]) / span
             v2 = math.hypot(p["x"] - b["x"], p["y"] - b["y"]) / span
             forward = (v2 - v1) / span
-            limit = MAX_KEEPER_DIVE_ACCEL if in_own_box(p, keeper_lines) else MAX_PLAYER_ACCEL
+            # A keeper's dive (P15): in his own area, gaining speed mostly along his goal line
+            # (y), and no faster than the dive's peak at the end of the window.
+            dive_like = (in_own_box(p, keeper_lines) and abs(ay) >= abs(ax)
+                         and v2 <= DIVE_PEAK_MAX_MPS + 2 * POSITION_PRECISION_M / span)
+            limit = MAX_KEEPER_DIVE_ACCEL if dive_like else MAX_PLAYER_ACCEL
             if forward > limit or accel > MAX_PLAYER_BRAKE:
                 problems["P2 player acceleration"].append(
                     f"frame {f1['frame']}: {p['id']} accelerated at {accel:.1f} m/s² "

@@ -6,8 +6,8 @@
 |---|---|---|
 | Clips meeting the data contract | 298 / 300 | all |
 | Goals within 10 s of the kick | 42 / 300 (14.0%) | about 2% (R9) |
-| Attacking shots within 10 s | 106 / 300 | |
-| First contact: attackers / defenders (keeper) / nobody | 167 / 132 (42) / 1 | |
+| Attacking shots within 10 s | 107 / 300 | |
+| First contact: attackers / defenders (keeper) / nobody | 168 / 131 (42) / 1 | |
 | Lofted deliveries | 292 / 300 | |
 | Lofted delivery, kick to first bounce or touch below 0.15 m | 2.2 s (10th to 90th percentile 1.9 to 2.5) | |
 | Ready (set-piece event) to kick | 1.1 s (10th to 90th percentile 0.8 to 1.4) | |

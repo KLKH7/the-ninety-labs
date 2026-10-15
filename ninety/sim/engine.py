@@ -238,7 +238,8 @@ class Engine:
         self.from_restart: str | None = None  # the restart the next kick is taken from
         self.read: tuple[str, float] | None = None  # (keeper, y): where he reads a shot is going
         # (keeper, start t, start y, signed travel, when his arms began to stretch)
-        self.dive: tuple[str, float, float, float, float] | None = None
+        # keeper, start, y at the start, travel, when he reacted, the longest the push can need
+        self.dive: tuple[str, float, float, float, float, float] | None = None
         self.landed: tuple[str, float] | None = None  # (keeper, his arms' stretch start) while he is down
         self.shot_touched_by: str | None = None  # "keeper" or "defender": who got to the shot
         self.shot_was_on_target: bool | None = None  # was it going in when they first touched it?
@@ -1278,25 +1279,29 @@ class Engine:
                 need = abs(cross - p.y) - offball.arm_reach_m(stretched)
                 if need > 0:
                     travel = math.copysign(min(need, KEEPER_DIVE_TRAVEL_M), cross - p.y)
-                    self.dive = (p.id, self.t, p.y, travel, self.kicked_at + self.reaction(p))
+                    bound = offball.dive_time_from(travel, p.vy * math.copysign(1.0, travel), abs(p.vx))
+                    self.dive = (p.id, self.t, p.y, travel, self.kicked_at + self.reaction(p), bound)
         if not self.dive or self.dive[0] != p.id:
             return False
-        _, start, y0, travel, _ = self.dive
+        _, start, y0, travel, _, bound = self.dive
         elapsed = self.t + DT - start
         # The push (P15) is one force: it turns his velocity, however he was moving, toward the
-        # dive's (the peak speed straight along his line) at no more than DIVE_ACCEL, so a keeper
-        # moving the other way, or off his line, is first stopped by it. A shorter dive is the same
-        # push ended sooner, never the full dive played faster. It ends with the body still moving:
-        # he lands and brakes to a stop like any player (P2), rather than stopping dead in the air.
+        # dive's (straight along his line at the peak speed, or faster if he already was) at no
+        # more than DIVE_ACCEL, so a keeper moving the other way, or off his line, is first stopped
+        # by it. A shorter dive is the same push ended sooner, never the full dive played faster.
+        # It ends once he has covered the travel, with the body still moving: he lands and brakes
+        # like any player (P2), rather than stopping dead in the air. `bound` is the longest that
+        # can take (it guards only against something stopping him).
         side = math.copysign(1.0, travel)
-        dvx, dvy = -p.vx, side * offball.DIVE_PEAK_MPS - p.vy
+        dvx, dvy = -p.vx, side * max(offball.DIVE_PEAK_MPS, side * p.vy) - p.vy
         need = math.hypot(dvx, dvy)
         step = min(need, offball.DIVE_ACCEL * DT)
         vx = p.vx + (dvx / need * step if need > 1e-9 else 0.0)
         vy = p.vy + (dvy / need * step if need > 1e-9 else 0.0)
         p.x, p.y = p.x + (p.vx + vx) / 2 * DT, p.y + (p.vy + vy) / 2 * DT  # even push over the frame
         p.vx, p.vy = vx, vy
-        if side * (p.y - y0) >= abs(travel) or elapsed >= offball.DIVE_GIVE_UP_S:
+        p.physique.grip_used = step  # the push is his grip this frame: nothing else adds to it
+        if side * (p.y - y0) >= abs(travel) or elapsed >= bound:
             self.landed = (p.id, self.dive[4])
             self.dive = None
             self.off_balance[p.id] = self.t + offball.KEEPER_DOWN_S  # on the ground: getting up
