@@ -283,10 +283,13 @@ def check_events(events: list[dict], frames: list[dict], fps: float, meta: dict,
                 where = f"({e['end_x']}, {e['end_y']})"
                 problems["C7 ball path"].append(f"{e['id']} {e['type']}: ball never reaches {where}")
         if e["type"] in ("pass", "shot") and e["frame"] > first:
-            # The player had the ball just before playing it; possession may clear on the
-            # frame the ball leaves.
+            # The player had the ball just before playing it (possession may clear on the frame the
+            # ball leaves), or played it first time: the ball within his reach (P14) as he struck it.
             had = {by_frame[n].get("possessor") for n in (e["frame"] - 1, e["frame"]) if n in by_frame}
-            if e.get("player") not in had:
+            me = next((q for q in f["players"] if q["id"] == e.get("player")), None)
+            first_time = me is not None and math.hypot(f["ball"]["x"] - me["x"], f["ball"]["y"] - me["y"]) \
+                <= FOOT_REACH_M + FRAME_SLACK_M
+            if e.get("player") not in had and not first_time:
                 problems["C8 event order"].append(f"{e['id']} {e['type']}: {e.get('player')} lacked the ball")
 
     passes = [e for e in events if e["type"] == "pass"]

@@ -106,3 +106,50 @@ def run_in_behind(player: tuple[float, float], line_x: float, goal_x: float,
     if (goal_x - x) * forward < 3:  # never run into the goal itself
         x = goal_x - forward * 3
     return x, min(PITCH_Y - 1, max(1.0, player[1]))
+
+
+# O6: where each role stands while his team has the ball (design, *verify* against team shape in
+# possession: length about 31 to 46 m and width 35 to 48 m, Rico-Gonzalez review; formations in and
+# out of possession differ, Shaw and Glickman 2019). Heights are metres from his own goal line,
+# relative to the ball; the attackers hold the opponents' last line, staying onside.
+# role: (metres behind the ball, or None for the opponents' last line; metres across from the centre)
+SHAPE_IN_POSSESSION = {
+    "RCB": (24.0, -11.0), "LCB": (24.0, 11.0),
+    "RB": (8.0, -27.0), "LB": (8.0, 27.0),
+    "CM": (10.0, 0.0), "RCM": (3.0, -13.0), "LCM": (3.0, 13.0),
+    "RW": (None, -29.0), "LW": (None, 29.0), "ST": (None, 0.0),
+}
+DEEPEST_M = 12.0  # nobody's in-possession spot is deeper than this from his own goal
+BALL_SIDE_IN_POSSESSION = 0.15  # the shape leans this share toward the ball's side
+FINAL_THIRD_M = 70.0  # ball this far from his own goal: the box is attacked
+BOX_RUNS = {"ST": (99.0, 4.0), "far_winger": (98.0, -7.0), "RCM": (88.0, 0.0)}  # near post, far post, edge
+
+
+def attacking_slot(role: str, own_goal_x: float, ball_x: float, ball_y: float,
+                   last_line_x: float) -> tuple[float, float] | None:
+    """O6: where this role stands while his team has the ball. Heights follow the ball; attackers
+    stand on the opponents' last line (onside); with the ball wide in the final third, the striker,
+    the far-side winger and a midfielder attack the near post, the far post and the box edge."""
+    shape = SHAPE_IN_POSSESSION.get(role)
+    if shape is None:
+        return None
+    fwd = 1.0 if own_goal_x < PITCH_X / 2 else -1.0
+    ball_u = abs(ball_x - own_goal_x)
+    last_u = abs(last_line_x - own_goal_x) - 1.0  # a step onside of their last defender
+    across = 1.0 if fwd > 0 else -1.0  # width is mirrored for the side attacking toward x = 0
+    wide_ball = abs(ball_y - PITCH_Y / 2) > 12.0
+    if ball_u > FINAL_THIRD_M and wide_ball:
+        ball_side = 1.0 if ball_y > PITCH_Y / 2 else -1.0
+        far_winger = (role == "RW" and ball_side * across > 0) or (role == "LW" and ball_side * across < 0)
+        key = "far_winger" if far_winger else role
+        if key in BOX_RUNS:
+            u, side = BOX_RUNS[key]
+            return own_goal_x + fwd * u, PITCH_Y / 2 + ball_side * side
+    behind, width = shape
+    if behind is None:
+        u = max(min(last_u, ball_u + 25.0), ball_u - 5.0)
+    else:
+        u = ball_u - behind
+    u = min(PITCH_X - 3.0, max(DEEPEST_M, u))
+    y = PITCH_Y / 2 + across * width + (ball_y - PITCH_Y / 2) * BALL_SIDE_IN_POSSESSION
+    return own_goal_x + fwd * u, min(PITCH_Y - 2.0, max(2.0, y))

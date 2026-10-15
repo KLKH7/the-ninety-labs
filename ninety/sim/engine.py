@@ -87,8 +87,6 @@ CHASE_EVERY = 4  # frames between re-planning who chases a free ball
 GOAL_HALF_WIDTH, CROSSBAR = 3.66, 2.44  # Law 1
 PENALTY_DEPTH, PENALTY_HALF_WIDTH = 16.5, 20.16  # Law 1
 GOAL_AREA_X = 5.5  # Law 1
-PASS_SPEED_EST_MPS = 15.0  # design: the passer's rough guess of a pass's average speed, to lead a runner
-LEAD_MAX_S = 2.0  # design: and he leads him by at most this long
 # Laws 15 to 17: opponents keep this far from a restart until the ball is in play.
 RESTART_DISTANCE_M = {"throw_in": 2.0, "corner": 9.15, "goal_kick": PENALTY_DEPTH - GOAL_AREA_X + 1.0}
 BOARDS_M = 4.0  # verify: advertising boards behind the lines stop a ball (and players) that go out
@@ -208,6 +206,7 @@ class Engine:
         self.off_balance: dict[str, float] = {}  # defender -> when he has recovered from a miss
         self.tackle: dict | None = None  # the tackle event whose outcome the next control decides
         self.dribbler: str | None = None  # a carrier who pushed the ball ahead and is running onto it
+        self.last_deflection: dict | None = None  # the most recent deflection event
         self.read: tuple[str, float] | None = None  # (keeper, y): where he reads a shot is going
         self.shot_touched_by: str | None = None  # "keeper" or "defender": who got to the shot
         self.shot_was_on_target: bool | None = None  # was it going in when they first touched it?
@@ -437,7 +436,7 @@ class Engine:
             if q.team == team and q.id != carrier.id:
                 at = belief.where(q.id, self.t)
                 if at:  # a team-mate he has not seen cannot be picked
-                    mates.append((q.id, at[0], at[1], belief.age(q.id, self.t)))
+                    mates.append((q.id, at[0], at[1], belief.age(q.id, self.t), *belief.velocity(q.id)))
         # The keeper is an opponent like any other for lanes, carries and pressure; the shot
         # estimate counts him once, as the keeper, not also as a blocker.
         # Opponents as they will be a moment from now (their seen velocity): a carrier reads a
@@ -608,7 +607,7 @@ class Engine:
         # It leaves from outside the body, never from inside it (the swept contact can overlap).
         out = max(math.hypot(cx - p.x, cy - p.y), BODY_RADIUS + ball.RADIUS) + 0.05
         self.ball = (p.x + nx * out, p.y + ny * out, cz, rx + p.vx, ry + p.vy, vz)
-        self.emit("deflection", p.team, cx, cy, player=p.id)  # a touch is ground truth too
+        self.last_deflection = self.emit("deflection", p.team, cx, cy, player=p.id)  # a touch is truth too
         self.last_touch = p.id
         self.kicker_clear = False
         self.kicked_at = self.t  # a new strike of the ball: everyone reacts to it again
@@ -760,6 +759,15 @@ class Engine:
             if shot:
                 self.close_shot(shot, x, y)
             scorer = self.last_touch if self.last_touch and self.team_of(self.last_touch) == team else None
+            touch = self.last_deflection
+            if scorer and not shot and touch and touch["player"] == scorer:
+                # It went in off him: the touch that sent it in is his attempt, as event data records it,
+                # and a team-mate's pass he turned in reached him there.
+                touch.update(type="shot", outcome="goal", end_x=round(x, 2), end_y=round(y, 2))
+                turned_in = kicked and kicked["type"] == "pass" and kicked["team"] == team
+                if turned_in and kicked["frame"] < touch["frame"]:
+                    kicked.update(receiver=scorer, end_x=touch["x"], end_y=touch["y"],
+                                  outcome="success" if kicked["player"] != scorer else "fail")
         self.emit("goal", team, x, y, player=scorer)
         self.kickoff(other(team))
 
@@ -848,6 +856,12 @@ class Engine:
                 presser = self.nearest(carrier.x, carrier.y, other(p.team))
                 return *offball.support_spot((p.x, p.y), (carrier.x, carrier.y), goal_x(p.team),
                                              (presser.x, presser.y)), RECOVER
+        if brain.in_possession and p.role != "GK":  # O6: the team's shape with the ball (also in flight)
+            spot = offball.attacking_slot(p.role, PITCH_X - goal_x(p.team), clamp(bx, 0, PITCH_X),
+                                          clamp(by, 0, PITCH_Y), self.brains[other(p.team)].line_x)
+            if spot:
+                far = math.hypot(spot[0] - p.x, spot[1] - p.y) > FAR_OUT_OF_POSITION_M
+                return *spot, RECOVER if far else SHAPE
         if not brain.in_possession and p.role != "GK":
             own = PITCH_X - goal_x(p.team), PITCH_Y / 2
             d = math.hypot(own[0] - bx, own[1] - by) or 1.0

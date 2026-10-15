@@ -408,3 +408,18 @@ def test_a_pass_is_struck_at_the_pace_chosen():
         e.pass_to(p, 70.0, 34.0, lofted=False, pace=pace)
         speeds[pace] = math.hypot(e.ball[3], e.ball[4])
     assert speeds[14.0] > speeds[6.0] * 1.3
+
+
+def test_a_ball_that_goes_in_off_an_attacker_is_his_shot_and_goal():
+    e = Engine(1)
+    e.kicked = e.emit("pass", "home", 80.0, 30.0, player="h2")
+    e.frame += 10
+    e.deflect(e.by_id["h10"], 100.0, 32.0, 0.3, 0.3)  # then it goes in off the striker
+    e.last_touch = "h10"
+    e.scored("home", e.kicked, 105.0, 34.0)
+    touch = next(ev for ev in e.match.events
+                 if ev["player"] == "h10" and ev["type"] in ("shot", "deflection"))
+    assert touch["type"] == "shot" and touch["outcome"] == "goal"
+    assert goal_event(e)["player"] == "h10"
+    p = next(ev for ev in e.match.events if ev["type"] == "pass")
+    assert p["receiver"] == "h10" and p["outcome"] == "success" and p["end_x"] == touch["x"]

@@ -326,3 +326,10 @@ def test_a_ball_within_reach_can_be_touched_whichever_way_it_moves(tmp_path):
     clip["events"].append(event("e3", PASS_AT + 2, "deflection", "away", "a1", x=40.8))
     problems = run(tmp_path, clip)
     assert "P14 touch possible" not in problems
+
+
+def test_a_first_time_shot_by_a_player_within_reach_of_the_ball_passes(tmp_path):
+    clip = clean_clip()  # the pass reaches h2 at frame PASS_AT + 25; a frame earlier it is 0.4 m short
+    clip["events"].append(event("e2", PASS_AT + 24, "shot", "home", "h2", x=49.6, y=30.0,
+                                outcome="off_target", ball_speed_kmh=80.0))
+    assert "C8 event order" not in run(tmp_path, clip)

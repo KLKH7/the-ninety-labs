@@ -42,6 +42,8 @@ LUNGE_REACH_M = 1.8  # a foot (1 m) plus a step
 LUNGE_S = 0.3  # time for an average tackler's foot to reach the ball from the edge of that reach
 DRIBBLE_STEP_M = 6.0
 MAX_PASS_M = 45.0
+PASS_SPEED_EST_MPS = 14.0  # design: a passer's rough guess of a pass's average speed, to lead a runner
+LEAD_MAX_S = 2.0  # design: and he leads him by at most this long
 LOFT_OVER_M = 25.0
 RECEIVE_HEIGHT_M = 1.0  # a dropping ball is taken on the foot or thigh below about this height
 LOFT_DEG = 30.0  # design: the launch angle of a lofted pass or a throw, as estimated and as struck
@@ -169,7 +171,7 @@ class Scene:
     x: float
     y: float
     goal_x: float  # the goal he attacks
-    mates: list[tuple[str, float, float, float]]  # (id, x, y, seconds since seen)
+    mates: list[tuple]  # (id, x, y, seconds since seen) or with (vx, vy) as seen appended
     opponents: list[tuple[float, float]]  # believed positions
     keeper: tuple[float, float] | None  # believed opposition keeper
     decisions: float
@@ -307,9 +309,16 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
 
 
 def pass_option(scene: Scene, mate: tuple[str, float, float, float]) -> Option | None:
-    mid, mx, my, age = mate
-    lead = 1.5 * attack(scene.goal_x)
-    tx, ty = min(PITCH_X - 1, max(1.0, mx + lead)), min(PITCH_Y - 1, max(1.0, my))
+    mid, mx, my, age, *moving = mate
+    # O7: into the space he is running into, by the velocity the passer has seen; a team-mate
+    # standing still gets it a step ahead, toward goal.
+    dist0 = math.hypot(mx - scene.x, my - scene.y)
+    if moving and math.hypot(*moving) > 1.0:
+        t_est = min(LEAD_MAX_S, dist0 / PASS_SPEED_EST_MPS)
+        lx, ly = moving[0] * t_est, moving[1] * t_est
+    else:
+        lx, ly = 1.5 * attack(scene.goal_x), 0.0
+    tx, ty = min(PITCH_X - 1, max(1.0, mx + lx)), min(PITCH_Y - 1, max(1.0, my + ly))
     dist = math.hypot(tx - scene.x, ty - scene.y)
     if dist < 4 or dist > MAX_PASS_M:
         return None
