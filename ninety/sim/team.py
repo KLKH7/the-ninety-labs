@@ -8,20 +8,15 @@ cite docs/GROUNDING.md (T1, T2).
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
-from pathlib import Path
-from statistics import median
 
 PITCH_X, PITCH_Y = 105.0, 68.0
 TRANSITION_S = 5.0  # T1: the window after the ball changes hands (counter-press about 5 to 6 s)
 # T2: defensive line, metres from own goal line, by block (low 12-22, mid 25-35, high 35-50).
 BLOCKS = {"low": (12.0, 22.0), "mid": (25.0, 35.0), "high": (35.0, 50.0)}
-# T3: how far up the pitch each team goes to press (the line of engagement, metres from its own
-# goal): one real team's style per side, from StatsBomb open data (ninety/sim/data/press_styles.json;
-# 69 to 93 m, median 85). Outside it the team holds its shape.
-PRESS_STYLES = json.loads((Path(__file__).resolve().parent / "data" / "press_styles.json").read_text())
-ENGAGE_STYLES_M = PRESS_STYLES["engage_from_goal_m"]
+# T3: where a team starts pressing the ball, metres from its own goal, by block (the line of
+# engagement); outside it they hold their shape. *design*, *verify*: published sources wanted.
+ENGAGE_FROM_GOAL_M = {"low": 40.0, "mid": 60.0, "high": 105.0}
 LINE_FOLLOWS_BALL = 0.5  # design: how far the line moves for each metre the ball moves
 GOAL_SIDE_OF_BALL_M = 5.0  # design: with the ball inside the block, the line drops to stay this far goal-side
 LINE_FLOOR_M = 5.5  # Law 1: the line drops no deeper than the goal area
@@ -45,7 +40,6 @@ def forward(team: str) -> float:
 class TeamBrain:
     team: str
     block: str = "mid"
-    engage_m: float = median(ENGAGE_STYLES_M)  # this team's line of engagement (T3)
     in_possession: bool = False
     changed_at: float = -99.0
     line_x: float = 0.0
@@ -67,13 +61,19 @@ class TeamBrain:
         depth = min(depth, max(LINE_FLOOR_M, ball_from_goal - GOAL_SIDE_OF_BALL_M))
         self.line_x = own_goal_x(self.team) + forward(self.team) * depth
         # T3: the forwards wait at the team's line of engagement, so that when the ball comes
-        # inside it the first presser is already close. Once it is inside, the presser goes and
-        # the rest of the front line drops back at the block's pace (T2), not the ball's.
+        # inside it the first presser is already close; never past the ball. Once it is inside, the
+        # presser goes and the rest of the front line drops back at the block's pace (T2).
         inside = max(0.0, self.engage_m - ball_from_goal)
-        front = max(depth + LINE_GAPS_M["attack"], self.engage_m - inside * LINE_FOLLOWS_BALL)
+        waiting = min(ball_from_goal, self.engage_m - inside * LINE_FOLLOWS_BALL)
+        front = max(depth + LINE_GAPS_M["attack"], waiting)
         self.front_x = own_goal_x(self.team) + forward(self.team) * front
         ranked = sorted(time_to_ball, key=time_to_ball.get)
         self.pressers = [] if has_ball else ranked[:2]  # first presser, then cover
+
+    @property
+    def engage_m(self) -> float:
+        """This team's line of engagement (T3)."""
+        return ENGAGE_FROM_GOAL_M[self.block]
 
     def presses(self, now: float, ball_x: float) -> bool:
         """Out of possession, does the team go to the ball? Straight after losing it (the

@@ -91,6 +91,7 @@ def test_the_presser_stands_goal_side_for_both_teams():
         e.ball = (52.0, 34.0, 0.0, 0.0, 0.0, 0.0)
         e.possessor = carrier.id
         brain = e.brains[team]
+        brain.block = "mid"  # engages at halfway
         brain.in_possession, brain.pressers = False, [presser.id]
         tx, _, _ = e.shape_target(presser)
         assert math.isclose(abs(tx - 52.0), PRESS_GAP_M, abs_tol=0.01)
@@ -603,7 +604,7 @@ def test_a_kickoff_is_set_up_and_seen_before_it_is_taken():
                 assert own_half or p.id == e.restart.taker, p.id  # Law 8
                 if p.team == "home":
                     assert math.hypot(p.x - 52.5, p.y - 34.0) >= 9.15 - 0.5  # outside the circle
-    assert kicked_at is not None and kicked_at >= 3.0  # a visible pause, then the kick
+    assert kicked_at is not None and kicked_at >= 1.0  # a visible pause, then the kick
 
 
 def test_once_a_pass_is_struck_shape_is_set_for_where_it_is_going():

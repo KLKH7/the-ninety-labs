@@ -91,7 +91,7 @@ RESTART_DISTANCE_M = {"throw_in": 2.0, "corner": 9.15, "goal_kick": PENALTY_DEPT
 BOARDS_M = 4.0  # verify: advertising boards behind the lines stop a ball (and players) that go out
 RESTART_DELAY_S = {"throw_in": (3, 8), "goal_kick": (6, 10), "corner": (12, 20),
                    "free_kick": (4, 10),
-                   "kick_off": (3, 5)}  # verify (R1); a kickoff's: design, the set-up the broadcast shows
+                   "kick_off": (1, 2)}  # verify (R1); kickoff: design, long enough to see
 NO_OFFSIDE_FROM = ("throw_in", "goal_kick", "corner")  # Law 11: no offside offence direct from these
 INTERCEPT_SHARE = 0.85  # design: taken before this share of the way to its target, a pass is intercepted
 
@@ -203,10 +203,10 @@ class Engine:
                               "ratings": {a: p.profile.rating(a) for a in p.profile.attributes}}
                              for p in self.players]
         self.beliefs = {p.id: perception.Belief(next_scan=self.rng.uniform(0, 3)) for p in self.players}
-        # T3: each side presses like one real team, drawn from its own stream so the rest of the
-        # match's random draws do not shift with it.
+        # T2, T3: each side plays a block of its own (design: equally likely), drawn from its own
+        # stream so the rest of the match's random draws do not shift with it.
         style = random.Random(f"{seed}-style")
-        self.brains = {team: TeamBrain(team, engage_m=style.choice(team_mod.ENGAGE_STYLES_M))
+        self.brains = {team: TeamBrain(team, block=style.choice(sorted(team_mod.BLOCKS)))
                        for team in ("home", "away")}
         self.ball: ball.State = (PITCH_X / 2, PITCH_Y / 2, 0.0, 0.0, 0.0, 0.0)
         self.possessor: str | None = None
