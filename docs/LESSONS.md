@@ -118,3 +118,10 @@ short and actionable. This file is public: no research sources, product names or
 ### 17. The ground truth is the answer key
 - **Rule:** ground truth is used only for training labels and scoring. Nothing on the live path
   reads it. Whatever makes the video must also write the truth, so no generative video.
+
+### 18. Persisted replay prompts are an interface
+- **What happened:** making a rejection reason more specific changed the Analyst retry prompt,
+  so an existing recorded slice stopped replaying even though the workflow behavior was valid.
+- **Rule:** when diagnostics appear in persisted prompts, preserve a compatibility form or
+  deliberately version the recording before changing them.
+- **Check:** run the committed replay fixture after changing fact-checker diagnostics.
