@@ -16,7 +16,7 @@ import random
 from bisect import bisect_left
 from dataclasses import dataclass
 
-from ninety.sim import ball
+from ninety.sim import ball, threat
 from ninety.sim import value as possession
 
 PITCH_X, PITCH_Y = 105.0, 68.0
@@ -34,8 +34,7 @@ PRESSURE_FRONT_M, PRESSURE_BEHIND_M = 9.0, 3.0  # D2: pressure zone, longer in f
 SHOT_ANCHORS = ((0.0, 0.31), (3.0, 0.31), (11.0, 0.177), (20.0, 0.053), (30.0, 0.023), (40.0, 0.01),
                 (105.0, 0.0))
 BLOCKER_FACTOR = 0.5  # design: each defender in the shooting cone halves the estimate
-PROGRESS_VALUE = 0.04  # design: value of possession per 100 m nearer goal, beyond shot threat
-LOSS_BASE = 0.02  # design: cost of losing the ball anywhere
+HOLD_DECAY = 0.1  # design, verify: share of the ball's worth lost per decision spent holding
 STALE_S = 2.0  # design: a team-mate not seen for this long is a less certain option
 # D8: the tackle race, shared by the defender deciding to commit (engine.duels) and the carrier
 # judging a dribble. All *design*, *verify*.
@@ -249,21 +248,18 @@ def distance_to_segment(px: float, py: float, ax: float, ay: float, bx: float, b
 
 def value(x: float, y: float, goal_x: float, opponents: list[tuple[float, float]] = (),
           keeper: tuple[float, float] | None = None) -> float:
-    """What having the ball here is worth. With a measured table (D7): the chance of scoring
-    minus the chance of conceding soon after having it here. Without one: the threat of a shot
-    from it as he estimates it (with the opponents he believes are in the way), plus progress."""
+    """What having the ball here is worth: the chance a possession here leads to a goal. From the
+    engine's own measured table if one is in use (D7), otherwise the published expected threat
+    from real matches (D9). Who is in the way is judged by each option's chance of working."""
     if POSSESSION is not None:
         return POSSESSION.threat.at(x, y, goal_x)
-    progress = 1 - abs(goal_x - x) / PITCH_X
-    return shot_estimate(x, y, goal_x, list(opponents), keeper) + PROGRESS_VALUE * progress
+    return threat.at(x, y, goal_x)
 
 
 def loss_cost(x: float, y: float, goal_x: float) -> float:
     """What losing the ball here costs: what having it here is worth to the opponents."""
     own_goal = PITCH_X - goal_x
-    if POSSESSION is not None:
-        return POSSESSION.threat.at(x, y, own_goal)
-    return LOSS_BASE + value(x, y, own_goal)
+    return value(x, y, own_goal)
 
 
 def pressure(scene: Scene) -> float:
@@ -376,23 +372,34 @@ def options(scene: Scene) -> list[Option]:
         gain = value(tx, ty, scene.goal_x, scene.opponents, scene.keeper)
         ev = win * gain - (1 - win) * loss_cost(scene.x, scene.y, scene.goal_x)
         out.append(Option("dribble", ev + (STICKY if scene.current == "dribble" else 0.0), (tx, ty)))
-    hold = here * (1 - p) - p * 0.5 * loss_cost(scene.x, scene.y, scene.goal_x)
+    # Holding gains nothing and the defence reorganises while he waits (D9), so it keeps only part
+    # of what the ball is worth here; under pressure it also risks losing it where he stands.
+    hold = here * (1 - HOLD_DECAY) * (1 - p) - p * 0.5 * loss_cost(scene.x, scene.y, scene.goal_x)
     out.append(Option("hold", hold + (STICKY if scene.current == "hold" else 0.0)))
     if abs(scene.goal_x - scene.x) > CLEAR_FROM * PITCH_X:  # in his own third: long and away
         wide = 4.0 if scene.y < PITCH_Y / 2 else PITCH_Y - 4.0
-        out.append(Option("clear", -LOSS_BASE, (scene.x + attack(scene.goal_x) * 45.0, wide), lofted=True))
+        tx = scene.x + attack(scene.goal_x) * 45.0
+        # A long ball away is a contest where it lands (an even one: design).
+        contest = 0.5 * value(tx, wide, scene.goal_x) - 0.5 * loss_cost(tx, wide, scene.goal_x)
+        out.append(Option("clear", contest, (tx, wide), lofted=True))
     return out
 
 
 def temperature(scene: Scene) -> float:
-    """Design: how loosely the player chooses. A good decision-maker almost always takes the best
-    option; pressure loosens his choice unless he is composed."""
-    return (0.004 + 0.02 * (1 - scene.decisions)) * (1 + pressure(scene) * (1 - scene.composure))
+    """Design: how loosely the player chooses, relative to how different his options are. A good
+    decision-maker almost always takes the best option; pressure loosens his choice unless he is
+    composed."""
+    return (0.15 + 0.6 * (1 - scene.decisions)) * (1 + pressure(scene) * (1 - scene.composure))
 
 
 def choose(scene: Scene, rng: random.Random) -> Option:
     opts = options(scene)
-    t = temperature(scene)
+    values = [o.value for o in opts]
+    mean = sum(values) / len(values)
+    spread = math.sqrt(sum((v - mean) ** 2 for v in values) / len(values))
+    # D4: the randomness is a share of how far apart the options are, so a choice between close
+    # options is loose and one between clearly different options is not, wherever on the pitch.
+    t = temperature(scene) * max(spread, 1e-4)
     top = max(o.value for o in opts)
     weights = [math.exp((o.value - top) / t) for o in opts]
     return rng.choices(opts, weights=weights)[0]

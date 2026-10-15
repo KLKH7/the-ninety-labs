@@ -141,14 +141,11 @@ def test_an_opponent_on_the_dribble_path_makes_the_dribble_worse():
     assert blocked < free
 
 
-def test_a_dribble_toward_goal_is_valued_by_the_same_shot_estimate_as_shooting():
-    # Two opponents equally far from the carry's end (so equally able to stop it); only one
-    # stands in the shooting cone from there.
-    in_cone = next(o for o in D.options(scene(x=88.0, opponents=[(104.0, 34.0)])) if o.kind == "dribble")
-    outside = next(o for o in D.options(scene(x=88.0, opponents=[(100.0, 42.0)])) if o.kind == "dribble")
-    assert in_cone.target == outside.target == (94.0, 34.0)
-    assert in_cone.value < outside.value
-
+def test_a_dribble_is_valued_by_the_published_threat_where_it_ends():
+    from ninety.sim import threat
+    s = scene(x=88.0)  # nobody near: the carry certainly works
+    straight = next(o for o in D.options(s) if o.kind == "dribble")
+    assert math.isclose(straight.value, threat.at(*straight.target, 105.0), rel_tol=1e-6)
 
 def test_a_lane_is_judged_where_the_opponent_meets_the_line_not_by_his_distance_from_the_passer():
     s = scene(x=60.0)
@@ -261,3 +258,18 @@ def test_the_shot_chance_is_the_measured_rate_scaled_by_the_situation(monkeypatc
     assert math.isclose(D.shot_chance(scene(x=90.0)), 0.2)  # open: the measured rate itself
     blocked = scene(x=90.0, opponents=[(97.0, 34.0)])
     assert math.isclose(D.shot_chance(blocked), 0.2 * D.BLOCKER_FACTOR)
+
+
+def test_holding_keeps_only_part_of_what_the_ball_is_worth_here():
+    from ninety.sim import threat
+    s = scene(x=60.0)  # no pressure
+    hold = next(o for o in D.options(s) if o.kind == "hold").value
+    assert math.isclose(hold, threat.at(60.0, 34.0, 105.0) * (1 - D.HOLD_DECAY))
+
+
+def test_choice_randomness_is_relative_to_how_different_the_options_are():
+    rng = random.Random(4)
+    s = scene(x=60.0, decisions=1.0, mates=[("h9", 75.0, 34.0, 0.0)])
+    best = max(D.options(s), key=lambda o: o.value).kind
+    picks = Counter(D.choose(s, rng).kind for _ in range(500))
+    assert picks[best] / 500 > 0.7  # a good decision-maker usually takes the best, even in midfield
