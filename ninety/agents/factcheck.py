@@ -46,6 +46,7 @@ class Claim:
 class Verdict:
     ok: bool
     reasons: list[str] = field(default_factory=list)
+    category: str | None = None
 
 
 def _number_field(text: str, start: int) -> str | None:
