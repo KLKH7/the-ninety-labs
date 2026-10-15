@@ -863,19 +863,61 @@ def test_a_keeper_down_after_a_dive_keeps_his_stretch_until_he_is_up():
     assert e.reach(k, 104.0, 36.0)[0] > 1.5
 
 
-def test_a_struck_ball_is_seen_going_where_it_first_becomes_playable():
-    from ninety.sim import decisions as D
+def _alone_with(e, mate_xy, others=(5.0, 5.0)):
+    for q in e.players:
+        q.vx = q.vy = 0.0
+        q.x, q.y = others
+    mate = e.by_id["h9"]
+    mate.x, mate.y = mate_xy
+    e.released_by = "h6"
+    e.by_id["h6"].x, e.by_id["h6"].y = 40.0, 34.0
+    return mate
+
+
+def test_a_struck_ball_is_seen_going_where_somebody_can_first_get_to_it():
     e = Engine(1)
-    e.ball = (40.0, 34.0, 0.0, 20.0, 0.0, 0.0)  # a firm ground pass
+    _alone_with(e, (55.0, 34.0))
+    e.ball = (40.0, 34.0, 0.0, 10.0, 0.0, 0.0)  # a slow ground pass straight at him, 15 m away
     x, y = e.ball_destination()
-    path = ball.predict(e.ball, 1 / 25, 10.0)
-    rest = path[-1][0]
-    assert 40.0 < x < rest  # short of where it would finally stop
-    first = next(s for s in path if math.sqrt(s[3] ** 2 + s[4] ** 2 + s[5] ** 2) <= D.CONTROL_EST_MPS)
-    assert x == first[0]
-    e.ball = (100.0, 60.0, 0.0, 10.0, 20.0, 0.0)  # heading out of play
+    assert 50.0 < x <= 56.0 and y == 34.0  # near him: not the kick spot, not where it would stop
+    e.ball = (100.0, 60.0, 0.0, 10.0, 20.0, 0.0)  # heading out of play, nobody near
     assert e.ball_destination()[1] == 68.0
 
+
+def test_a_lofted_ball_is_not_reachable_while_it_is_over_his_head():
+    e = Engine(1)
+    _alone_with(e, (50.0, 34.0))
+    e.ball = (40.0, 34.0, 0.0, 12.0, 0.0, 9.0)  # lofted over him
+    x, _ = e.ball_destination()
+    assert x > 52.0  # where it comes down, beyond him
+
+
+def test_a_pass_that_waits_for_the_passer_to_turn_still_knows_its_receiver():
+    e = Engine(1)
+    p = e.by_id["h6"]
+    e.give(p.id)
+    e.ball = (p.x - 0.4, p.y, 0.0, 0.0, 0.0, 0.0)  # the ball on the far side of his body
+    e.pass_to(p, p.x + 15.0, p.y, lofted=False, receiver="h9")
+    assert e.windup is not None and e.intended is None  # he turns first; nothing struck yet
+    e.ball = (p.x + 0.4, p.y, 0.0, 0.0, 0.0, 0.0)  # taken round to his kicking side
+    strike, e.windup = e.windup[2], None
+    strike()
+    assert e.intended == "h9"
+
+def test_each_side_s_brain_reads_play_from_its_own_view_of_a_pass():
+    e = Engine(1)
+    e.possessor = None
+    e.ball = (40.0, 34.0, 0.0, 14.0, 0.0, 0.0)
+    e.kicked, e.pass_target = {"type": "pass", "team": "home", "x": 35.0, "y": 34.0}, (80.0, 34.0)
+    e.kicked_at, e.seen_going = e.t, (45.0, 34.0)
+    e.intended, e.released_by = "h9", "h6"
+    seen = {}
+    for team, brain in e.brains.items():
+        brain.update = lambda now, has, ball_x, reach, team=team: seen.__setitem__(team, ball_x)
+    for frame in range(12):  # each brain reads the game once in this many frames
+        e.frame = frame
+        e.perceive_and_think()
+    assert seen == {"home": 80.0, "away": 35.0}  # his side knows the target; theirs saw the strike
 
 def test_the_passing_side_knows_where_its_pass_was_meant_and_the_other_side_reacts():
     e = Engine(1)

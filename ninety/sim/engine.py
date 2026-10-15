@@ -945,17 +945,25 @@ class Engine:
         return bx, by
 
     def ball_destination(self) -> tuple[float, float]:
-        """Where players who see a ball struck can tell it is going: the first point of its own
-        flight where it is low and slow enough for an average first touch to play (A4), or where it
-        leaves the pitch, whichever comes first. (Their misjudgement of its velocity is not modelled
-        here.)"""
+        """Where players who see a ball struck can tell play is going: the first point of its own
+        flight that somebody other than the kicker can get a foot to in time (after a choice
+        reaction, at his own body's pace, low enough to play), else where it leaves the pitch or
+        comes to rest. Judged from where players are; their misjudgement is not modelled here."""
         path = ball.predict(self.ball, DT, 10.0)  # 10 s: a bound; the path ends when the ball rests
-        for s in path:
+        others = [p for p in self.players if p.id != self.released_by]
+        for k in range(0, len(path), 2):  # every other frame is fine enough to place the shape
+            s = path[k]
             if not (0.0 <= s[0] <= PITCH_X and 0.0 <= s[1] <= PITCH_Y):
                 return clamp(s[0], 0.0, PITCH_X), clamp(s[1], 0.0, PITCH_Y)
-            speed = math.sqrt(s[3] ** 2 + s[4] ** 2 + s[5] ** 2)
-            if s[2] <= FOOT_REACH_Z and speed <= decisions.CONTROL_EST_MPS:
-                return s[0], s[1]
+            if s[2] > FOOT_REACH_Z:
+                continue
+            t = k * DT - perception.CHOICE_REACTION_S
+            if t <= 0:
+                continue
+            for p in others:
+                d = math.hypot(s[0] - p.x, s[1] - p.y) - CONTROL_M
+                if d <= 0 or p.physique.distance_in(t, 0.0) >= d:
+                    return s[0], s[1]
         return path[-1][0], path[-1][1]
 
     def ball_eta(self, x: float, y: float) -> float:
@@ -1104,7 +1112,6 @@ class Engine:
     def perceive_and_think(self) -> None:
         """Players look at the pitch about four times a second, staggered so they do not all look
         on the same frame; each team brain reads the game about twice a second."""
-        bx, by = self.play_point()
         states = [(p.id, p.x, p.y, p.vx, p.vy) for p in self.players]
         for i, p in enumerate(self.players):
             if (self.frame + i) % PERCEIVE_EVERY == 0:
