@@ -385,7 +385,7 @@ def test_a_keeper_behind_the_shooter_covers_nothing():
 
 def test_with_the_ball_almost_on_his_line_the_keeper_stays_on_it_between_the_posts():
     x, y = offball.keeper_spot(104.5, 0.5, 105)
-    assert x == 105 and abs(y - 34) <= 3.66
+    assert (x, y) == (105, 34 - 3.66)  # at the near post
 
 
 def test_out_of_shooting_range_the_keeper_sweeps_from_his_furthest_spot():
@@ -415,3 +415,18 @@ def test_the_dive_never_beats_the_cited_peak_speed():
               for t in [i * step for i in range(int(offball.DIVE_TIME_S / step))]]
     peak = max(speeds)
     assert 3.6 <= peak <= 4.0 and offball.dive_progress(offball.DIVE_TIME_S) == 1.0
+
+
+def test_the_shot_estimate_is_continuous_in_distance_with_the_keeper_off_his_spot():
+    def q(d, off):
+        kx, ky = offball.keeper_spot(105 - d, 34, 105)
+        return D.shot_estimate(105 - d, 34, 105, [], (kx, ky + off))
+    for off in (0.0, 1.0, 3.0):
+        values = [q(d, off) for d in range(18, 40)]
+        assert all(b <= a + 1e-9 for a, b in zip(values, values[1:], strict=False))  # never up with distance
+    assert q(30, 1.0) < 0.1  # the old ratio gave 0.64 here
+
+
+def test_keeper_coverage_is_averaged_over_shot_speeds_so_it_never_hits_zero_too_early():
+    usual = offball.keeper_spot(79, 34, 105)  # 26 m out, where a single speed left nothing open
+    assert offball.open_goal_share(79, 34, 105, usual) > 0

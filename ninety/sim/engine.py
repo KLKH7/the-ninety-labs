@@ -23,7 +23,7 @@ from ninety.sim import ball, decisions, offball, perception, profiles
 from ninety.sim import team as team_mod
 from ninety.sim.body import BODY_RADIUS, BRAKE_MAX, CS_MEAN, D0, F0_MEAN, V0_MEAN, Body
 from ninety.sim.body import move as move_body
-from ninety.sim.offball import DIVE_TIME_S, KEEPER_DIVE_EXTRA_M, KEEPER_DIVE_TRAVEL_M, KEEPER_STAND_REACH_M
+from ninety.sim.offball import DIVE_TIME_S, KEEPER_DIVE_TRAVEL_M
 from ninety.sim.profiles import Profile
 from ninety.sim.team import TeamBrain
 
@@ -301,8 +301,9 @@ class Engine:
             # full stretch only once the dive has had time to unfold after he reacts to the
             # strike. A deflection does not un-stretch a dive already under way.
             at = self.t if at is None else at
-            diving = clamp((at - self.free_since - self.reaction(p)) / DIVE_TIME_S, 0.0, 1.0)
-            return KEEPER_STAND_REACH_M + KEEPER_DIVE_EXTRA_M * diving, HAND_REACH_Z
+            mine = self.dive and self.dive[0] == p.id
+            started = self.dive[1] if mine else self.kicked_at + self.reaction(p)
+            return offball.arm_reach_m(max(0.0, at - started)), HAND_REACH_Z
         return CONTROL_M, FOOT_REACH_Z
 
     def give(self, pid: str) -> None:
@@ -1124,6 +1125,17 @@ class Engine:
             self.runs[p.id] = (*spot, self.t)
         return spot
 
+    def ball_at_x(self, x: float, seconds: float = 3.0) -> tuple[float, float, float] | None:
+        """(seconds from now, y, height) when the ball, in its own flight (drag and gravity),
+        reaches x; None if it does not within `seconds`."""
+        bx, vx = self.ball[0], self.ball[3]
+        if abs(vx) < 1e-6 or (x - bx) * vx <= 0:
+            return None
+        for k, s in enumerate(ball.predict(self.ball, DT, seconds)):
+            if (s[0] - x) * vx >= 0:
+                return k * DT, s[1], s[2]
+        return None
+
     def keeper_dive(self, p: Player) -> bool:
         """P15: once the keeper has reacted to a shot, he dives toward where it will cross his line:
         his body travels sideways (up to KEEPER_DIVE_TRAVEL_M, only as far as he needs beyond his
@@ -1133,13 +1145,11 @@ class Engine:
         shot_at_him = k and k["type"] == "shot" and k["team"] != p.team and self.possessor is None
         reacted = self.t - self.kicked_at >= self.reaction(p)  # to the last touch, a deflection too
         if self.dive is None and shot_at_him and reacted and self.off_balance.get(p.id, -1.0) <= self.t:
-            bx, by, bz, vx, vy, vz = self.ball
-            coming = abs(vx) > 1e-6 and (p.x - bx) * vx > 0  # the ball is coming toward his line
-            over = coming and bz + vz * (p.x - bx) / vx > HAND_REACH_Z  # going over him: no dive
-            if coming and not over:
-                cross = by + vy * (p.x - bx) / vx
-                # only as far as his body must go beyond the full stretch of his arms
-                need = abs(cross - p.y) - (KEEPER_STAND_REACH_M + KEEPER_DIVE_EXTRA_M)
+            arrival = self.ball_at_x(p.x)  # where the ball's own flight takes it past him
+            if arrival and arrival[2] <= HAND_REACH_Z:  # not one going over him
+                when, cross = arrival[0], arrival[1]
+                # only as far as his body must go beyond what his arms will reach by then
+                need = abs(cross - p.y) - offball.arm_reach_m(when)
                 if need > 0:
                     travel = math.copysign(min(need, KEEPER_DIVE_TRAVEL_M), cross - p.y)
                     self.dive = (p.id, self.t, p.y, travel)

@@ -224,8 +224,13 @@ def keeper_reach_m(seconds: float, reaction_s: float) -> float:
     then his standing reach, the dive's stretch and the body's launch over DIVE_TIME_S."""
     if seconds < reaction_s:
         return BODY_RADIUS + ball.RADIUS
-    unfolded = min(1.0, (seconds - reaction_s) / DIVE_TIME_S)
-    return KEEPER_STAND_REACH_M + (KEEPER_DIVE_EXTRA_M + KEEPER_DIVE_TRAVEL_M) * unfolded
+    return arm_reach_m(seconds - reaction_s) + KEEPER_DIVE_TRAVEL_M * dive_progress(seconds - reaction_s)
+
+
+def arm_reach_m(diving_s: float) -> float:
+    """P11, P15: his reach from his body's centre, `diving_s` into a dive: standing reach, stretched
+    out over the dive at the same pace as the body's launch."""
+    return KEEPER_STAND_REACH_M + KEEPER_DIVE_EXTRA_M * dive_progress(diving_s)
 
 
 def dive_progress(t: float) -> float:

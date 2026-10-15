@@ -746,3 +746,28 @@ def test_the_keeper_sets_himself_from_the_ball_not_where_a_pass_is_going():
     e.ball = (70.0, 34.0, 0.0, 14.0, -12.0, 0.0)
     tx, ty, _ = e.shape_target(k)
     assert (tx, ty) == offball.keeper_spot(70.0, 34.0, 105.0)
+
+
+def test_a_short_dive_is_the_same_push_over_sooner_and_travel_counts_the_arms_reach_by_then():
+    from ninety.sim import offball
+    e = Engine(1)
+    k = _shot_at_keeper(e, (95.0, 34.0, 0.3, 25.0, 6.0, 0.0))  # crosses about 2 m wide
+    e.t += e.reaction(k)
+    y0 = k.y
+    assert e.keeper_dive(k)
+    travel = e.dive[3]
+    when, cross, _ = e.ball_at_x(k.x)
+    assert abs(travel - (abs(cross - y0) - offball.arm_reach_m(when))) < 1e-6  # his arms by then
+    for _ in range(int(offball.DIVE_TIME_S * 25)):
+        e.keeper_dive(k)
+        e.t += 1 / 25
+    assert abs(k.y - y0 - travel) < 1e-6  # done, and done early: a short dive is the same push
+
+
+def test_the_keeper_dives_at_a_dipping_shot_that_comes_in_under_the_bar():
+    e = Engine(1)
+    k = _shot_at_keeper(e, (80.0, 34.0, 0.3, 19.0, 3.0, 4.5))  # rises, then drops under the bar
+    when, _, z = e.ball_at_x(k.x)
+    assert z < 2.44  # it does come in under the bar, though a straight line says over
+    e.t += e.reaction(k)
+    assert e.keeper_dive(k)
