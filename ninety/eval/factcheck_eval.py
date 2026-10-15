@@ -70,7 +70,7 @@ def cases(seed: int, minutes: float) -> list[dict]:
             True, tackles, "{player} makes a risky tackle on {receiver}."
         ),
         "true: distant interpretation": (
-            True, shots, "{player} makes a hopeful effort from distance."
+            True, shots, "{player} makes a hopeful effort from {distance_m} metres."
         ),
         "true: interception": (
             True, interceptions, "{player} wins the ball with an interception."
