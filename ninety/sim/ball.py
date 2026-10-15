@@ -18,6 +18,7 @@ ROLL_DECEL = 1.2  # verify: m/s² of grass rolling resistance
 RESTITUTION = 0.6  # verify: share of vertical speed kept in a bounce on grass
 BOUNCE_GRIP = 0.85  # verify: share of horizontal speed kept in a bounce
 SETTLE_MPS = 0.6  # below this vertical speed a bounce becomes a roll
+FLIGHT_BOUND_S = 10.0  # a bound on how far ahead a struck ball's flight is followed; it ends at rest
 
 State = tuple[float, float, float, float, float, float]
 

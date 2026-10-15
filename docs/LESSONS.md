@@ -162,3 +162,14 @@ short and actionable. This file is public: no research sources, product names or
   the result as a statement about the study.
 - **Rule:** before acting on a claim about what a source says, read the passage itself, and keep
   "the engine measures X" separate from "the source defines Y".
+
+### 23. An estimate of what the engine does must run the engine's own rules
+- **What happened:** the passer's estimate of a pass raced each opponent against the ball reaching
+  his own nearest point, even after a team-mate would already have taken it, and left out how the
+  engine really loses passes (a body in the lane, a heavy first touch, the passer's own kick
+  error, the ball going out). Forced passes it rated 3% arrived about a quarter of the time, so risky passes
+  looked worse than they were.
+- **Rule:** an estimate of an engine outcome calls the engine's own definitions (the reach test,
+  the contact rule, the kick-error model), moved where both can import them, never a copy.
+- **Check:** `uv run python -m ninety.sim.calibration` on forced choices, not only chosen ones:
+  chosen options hide a pessimistic estimate, because nobody picks what it underrates.

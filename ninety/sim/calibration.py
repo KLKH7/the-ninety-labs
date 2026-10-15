@@ -37,8 +37,8 @@ def measure(seed: int, minutes: float = 90) -> list[tuple[float, bool, bool, boo
         o = rng.choice(forward) if forced else original(scene, r)
         if o.kind == "pass":
             mate = next(m for m in scene.mates if m[0] == o.receiver)
-            c = D.pass_confidence(scene, *o.target, mate[1], mate[2], mate[3], o.lofted, o.pace)
-            pending["next"] = (c or 0.0, forced, o.lofted)
+            c = D.pass_confidence(scene, *o.target, mate[1], mate[2], mate[3], o.lofted, o.pace, o.receiver)
+            pending["next"] = (c, forced, o.lofted)
         else:
             pending.pop("next", None)
         return o
