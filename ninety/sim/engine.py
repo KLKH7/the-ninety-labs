@@ -29,6 +29,7 @@ from ninety.sim.body import (
     D0,
     F0_MEAN,
     HAND_REACH_Z,
+    TURN_RATE,
     V0_MEAN,
     Body,
     can_get_to,
@@ -55,8 +56,6 @@ PERCEIVE_EVERY = 6  # frames between a player's looks at the pitch (about 4 a se
 BRAIN_EVERY = 12  # frames between a team brain's reads of the game (about 2 a second)
 COVER_M = 8.0  # design: the covering player stays this far behind the presser, goal-side
 PERCEPTION_ERR = 0.03  # verify: m/s of misjudged ball velocity per metre between player and ball
-TURN_RATE = math.radians(350)  # P16: the fastest a body turns, 180° over a 0.52 s plant (rad/s)
-STRIKE_FACING = math.radians(60)  # P16 (design): the widest run-up angle tested with no loss
 PRESS_GAP_M = 2.0  # design, verify: how close a presser stands (jockeys), goal-side of the ball carrier
 PERSONAL_SPACE_M = 1.2  # players steer to keep about this far from each other
 ANTICIPATE_S = 0.4  # verify: how far ahead players judge where others will be
@@ -457,18 +456,10 @@ class Engine:
                 if q.team == passer.team and q is not passer and fwd * (q.x - limit) > 0}
 
     def can_strike(self, carrier: Player, tx: float, ty: float) -> bool:
-        """He strikes once he faces within STRIKE_FACING of the target (P16, design: the widest
-        run-up angle tested, with no loss of speed or accuracy), with the ball on the side of his
-        body toward it, so its way out leaves his surface (shape.py) rather than passing through
-        him."""
+        """P16: can he strike it toward (tx, ty) now? The rule the passer's estimate uses too
+        (decisions.can_strike)."""
         bx, by = self.ball[0], self.ball[1]
-        if math.hypot(bx - carrier.x, by - carrier.y) < 0.1:  # in his hands (a throw-in)
-            return True
-        want = math.atan2(ty - carrier.y, tx - carrier.x)
-        if abs((want - carrier.heading + math.pi) % (2 * math.pi) - math.pi) > STRIKE_FACING:
-            return False
-        sx, sy = shape.nearest_on_spine(bx, by, carrier.x, carrier.y, carrier.heading)
-        return (bx - sx) * (tx - bx) + (by - sy) * (ty - by) >= 0
+        return decisions.can_strike(bx - carrier.x, by - carrier.y, carrier.heading, tx - bx, ty - by)
 
     def turn_to(self, carrier: Player, tx: float, ty: float, strike) -> None:
         """He turns toward the target, no faster than a body turns (P16, tick_carrier), taking the
