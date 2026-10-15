@@ -223,7 +223,6 @@ class Engine:
         self.throw_by: str | None = None  # a throw-in taker holding the ball until he throws it
         self.throw_ready = 0.0
         self.dribble_to: tuple[float, float] | None = None  # the carrier's chosen carry, if any
-        self.holding = False  # the carrier chose to hold at his last decision (not just received)
         self.intended: str | None = None  # the team-mate a pass was played to: he expects it
         self.runs: dict[str, tuple[float, float, float]] = {}  # runner -> (x, y, started at)
         self.moved: str | None = None  # the carrier, already moved this frame by tick_carrier
@@ -315,7 +314,6 @@ class Engine:
         # The first touch settles the ball before he can decide: quicker with a good first touch.
         self.hold_until = self.t + 0.3 + 0.3 * (1 - self.by_id[pid].profile["first_touch"])
         self.dribble_to = None
-        self.holding = False
 
     def kickoff(self, team: str) -> None:
         # A restart after a goal: the broadcast cuts here, so positions reset (validator allows it).
@@ -521,7 +519,7 @@ class Engine:
         scene = decisions.Scene(self.ball[0], self.ball[1], goal_x(team), mates, opps, keeper,
                                 prof["decisions"], prof["composure"], prof["dribbling"],
                                 tuple(prof.traits), risk,
-                                current="dribble" if self.dribble_to else ("hold" if self.holding else None))
+                                current="dribble" if self.dribble_to else None)
         return scene
 
     def decide(self, carrier: Player, throw: bool = False) -> None:
@@ -541,7 +539,6 @@ class Engine:
                 self.hold_until = self.t + 0.5  # he looks again
             return
         choice = decisions.choose(scene, self.rng)
-        self.holding = choice.kind == "hold"
         if choice.kind == "pass" or choice.kind == "clear":
             self.pass_to(carrier, *choice.target, lofted=choice.lofted, pace=choice.pace)
             self.intended = choice.receiver

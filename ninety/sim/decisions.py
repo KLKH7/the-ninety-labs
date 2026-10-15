@@ -404,13 +404,15 @@ def options(scene: Scene) -> list[Option]:
         contest = 0.5 * value(tx, wide, scene.goal_x) - 0.5 * loss_cost(tx, wide, scene.goal_x)
         out.append(Option("clear", contest, (tx, wide), lofted=True))
     # Holding is waiting to make a move a moment later: worth the best move open to him now, less
-    # what the defence recovers while he waits (D9). He cannot wait for ever, so when every move is
-    # a bad one, waiting is a little worse still. Under pressure it also risks losing the ball where
-    # he stands.
-    best = max(o.value for o in out) if out else 0.0
+    # what the defence recovers while he waits (D9; *verify*: options only decay while he waits,
+    # nothing here models a run developing). He cannot wait for ever, so when every move is a bad
+    # one, waiting is a little worse still. Under pressure he loses the ball where he stands about
+    # half the time he is caught (p * 0.5); otherwise he still makes that move. Each decision
+    # weighs holding afresh, so it carries no bonus for carrying on.
+    best = max((o.value - (STICKY if o.kind == scene.current else 0.0) for o in out), default=0.0)
     later = best * (1 - HOLD_DECAY) if best >= 0 else best * (1 + HOLD_DECAY)
-    hold = later * (1 - p) - p * 0.5 * loss_cost(scene.x, scene.y, scene.goal_x)
-    out.append(Option("hold", hold + (STICKY if scene.current == "hold" else 0.0)))
+    lose = 0.5 * p
+    out.append(Option("hold", (1 - lose) * later - lose * loss_cost(scene.x, scene.y, scene.goal_x)))
     return out
 
 

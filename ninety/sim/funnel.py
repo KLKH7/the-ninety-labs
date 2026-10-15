@@ -2,7 +2,7 @@
 beside published figures. A report, never a gate: nothing in the engine is tuned to these
 numbers (docs/GROUNDING.md, R rows).
 
-    uv run python -m ninety.sim.funnel --seeds 7,11,21,31,41,51    # writes docs/eval/funnel.md
+    uv run python -m ninety.sim.funnel    # 12 matches; writes docs/eval/funnel.md
 """
 
 from __future__ import annotations
@@ -18,10 +18,9 @@ ROOT = Path(__file__).resolve().parents[2]
 PITCH_X, PITCH_Y = 105.0, 68.0
 FINAL_THIRD_M = PITCH_X / 3  # from the goal attacked
 BOX_DEPTH_M, BOX_HALF_WIDTH_M = 16.5, 20.16  # Law 1
-# Per team per match, for reading the report only. Unverified figures are marked as such.
-PUBLISHED = {"passes": "450 to 550", "completion": "about 80%", "possessions": "90 to 125 (by definition)",
-             "final_third": "unverified", "box": "unverified", "shots": "12 to 13", "goals": "about 1.4",
-             "tackles": "16 to 18"}
+# Per team per match, for reading the report only, from docs/GROUNDING.md R3 (itself *verify*).
+# A measure with no sourced figure is left blank rather than given a number nobody can trace.
+PUBLISHED = {"passes": "450 to 500 (R3, *verify*)", "completion": "75 to 88% (R3, *verify*)"}
 
 
 def zone(x: float, y: float, goal_x: float) -> str | None:
@@ -32,22 +31,27 @@ def zone(x: float, y: float, goal_x: float) -> str | None:
 
 
 def measure(seed: int, minutes: float = 90) -> dict[str, float]:
-    """Per team, averaged over the two teams. An entry is the ball crossing into the zone while the
-    team has the possession (a loose ball after its touch included), counted once per crossing."""
-    m = simulate(seed, minutes)
+    return tally(simulate(seed, minutes))
+
+
+def tally(m) -> dict[str, float]:
+    """Per team, averaged over the two teams. A possession runs from one team's controlled touch
+    until the other team's (a loose ball, or one in flight, still belongs to it). An entry is the
+    ball crossing into the zone during a possession, once per crossing; a possession that starts
+    inside a zone has not entered it."""
     team_of = {r["id"]: r["team"] for r in m.roster}
     goal_x = {"home": PITCH_X, "away": 0.0}
     out = {k: 0.0 for k in ("possessions", "final_third", "box")}
     team, inside = None, set()
     for f in m.frames:
         holder = team_of.get(f.get("possessor"))
-        if holder and holder != team:
-            team, inside = holder, set()
-            out["possessions"] += 1
-        if team is None:
+        if team is None and not holder:
             continue
-        z = zone(f["ball"]["x"], f["ball"]["y"], goal_x[team])
+        z = zone(f["ball"]["x"], f["ball"]["y"], goal_x[holder or team])
         now = {"final_third", "box"} if z == "box" else ({z} if z else set())
+        if holder and holder != team:
+            team, inside = holder, now
+            out["possessions"] += 1
         for k in now - inside:
             out[k] += 1
         inside = now
@@ -62,7 +66,7 @@ def measure(seed: int, minutes: float = 90) -> dict[str, float]:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--seeds", default="7,11,21,31,41,51")
+    ap.add_argument("--seeds", default="7,11,21,31,41,51,61,71,81,91,101,111")
     ap.add_argument("--minutes", type=float, default=90)
     ap.add_argument("--out", default=str(ROOT / "docs/eval/funnel.md"))
     args = ap.parse_args()

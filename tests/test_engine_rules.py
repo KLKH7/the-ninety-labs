@@ -497,9 +497,9 @@ def test_an_opponent_cutting_a_pass_out_intercepts_but_collecting_it_where_it_wa
         assert any(ev["type"] == "interception" for ev in e.match.events) is label
 
 
-def test_a_player_who_has_just_received_is_not_yet_holding():
+def test_only_a_carry_in_progress_is_a_choice_he_carries_on_with():
     e = Engine(1)
     e.give("h6")
-    assert e.scene_for(e.by_id["h6"]).current is None  # no carry-on bonus for a choice he never made
-    e.holding = True
-    assert e.scene_for(e.by_id["h6"]).current == "hold"
+    assert e.scene_for(e.by_id["h6"]).current is None  # just received: nothing to carry on with
+    e.dribble_to = (70.0, 34.0)
+    assert e.scene_for(e.by_id["h6"]).current == "dribble"
