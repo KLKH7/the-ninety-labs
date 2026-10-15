@@ -357,9 +357,30 @@ def test_screened_means_any_outfield_defender_nearer_the_goal_as_in_the_source()
 
 def test_the_keeper_term_is_how_much_goal_he_leaves_open():
     usual = offball.keeper_spot(85, 34, 105)
-    assert math.isclose(D.open_goal_share(85, 34, 105, usual), D.open_goal_share(85, 34, 105, usual))
     off = (usual[0], usual[1] + 3.0)  # caught three metres off his line
-    assert D.open_goal_share(85, 34, 105, off) > D.open_goal_share(85, 34, 105, usual)
+    assert offball.open_goal_share(85, 34, 105, off) > offball.open_goal_share(85, 34, 105, usual)
     assert D.shot_estimate(85, 34, 105, [], off) > D.shot_estimate(85, 34, 105, [], usual)
-    assert 0.0 <= D.open_goal_share(85, 34, 105, usual) < 1.0
+    assert 0.0 <= offball.open_goal_share(85, 34, 105, usual) < 1.0
     assert D.shot_estimate(104, 34, 105, [], (95.0, 60.0)) <= 1.0  # a probability, even into an empty net
+
+
+def test_the_keeper_stays_home_against_far_shots_and_comes_out_against_near_ones():
+    depth = lambda d: 105 - offball.keeper_spot(105 - d, 34, 105)[0]  # noqa: E731
+    assert depth(20) < depth(6)  # his dive has time against a far shot; a near one he must smother
+    assert offball.KEEPER_DEPTH[0] <= depth(16) <= offball.KEEPER_DEPTH[1]
+    assert depth(50) == offball.KEEPER_DEPTH[1]  # out of shooting range: he sweeps
+
+
+def test_the_keeper_stands_on_the_bisector_of_the_posts_not_the_line_to_the_goal_centre():
+    import math as m
+    x, y = offball.keeper_spot(95, 10, 105)  # a tight angle
+    a1, a2 = m.atan2(30.34 - 10, 10), m.atan2(37.66 - 10, 10)
+    assert abs(m.atan2(y - 10, x - 95) - (a1 + a2) / 2) < 1e-6
+
+
+def test_before_he_reacts_only_his_body_stops_a_shot_in_the_shooters_judgement_too():
+    from ninety.sim import ball
+    from ninety.sim.body import BODY_RADIUS
+    assert offball.keeper_reach_m(0.1, 0.36) == BODY_RADIUS + ball.RADIUS
+    full = offball.KEEPER_STAND_REACH_M + offball.KEEPER_DIVE_EXTRA_M + offball.KEEPER_DIVE_TRAVEL_M
+    assert offball.keeper_reach_m(2.0, 0.36) == full

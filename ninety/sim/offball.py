@@ -11,6 +11,10 @@ from __future__ import annotations
 
 import math
 
+from ninety.sim import ball
+from ninety.sim.body import BODY_RADIUS
+from ninety.sim.perception import CHOICE_REACTION_S
+
 PITCH_X, PITCH_Y = 105.0, 68.0
 GOAL_HALF_WIDTH = 3.66
 KEEPER_STAND_REACH_M = 1.0  # P11: a keeper's sideways arm reach from the body's centre
@@ -19,8 +23,11 @@ KEEPER_DIVE_EXTRA_M = 0.8  # P11: added as the dive stretches out, hips to finge
 # over about half a second (Monteiro et al. 2022, Sci. Rep.; Ibrahim et al. 2019, J. Sports Sci.).
 KEEPER_DIVE_TRAVEL_M = 1.45
 DIVE_TIME_S = 0.5
-KEEPER_DEPTH = (1.0, 6.0)  # O1: design: metres off the line, further the further away the ball is
-KEEPER_DEPTH_PER_M = 0.12  # O1: design
+SHOT_SPEEDS_KMH = (70.0, 120.0)  # design, verify: the speeds shots are struck at (engine.shoot)
+SHOT_SPEED_EST_MPS = sum(SHOT_SPEEDS_KMH) / 2 / 3.6  # a typical shot, for judging in advance
+KEEPER_DEPTH = (1.0, 6.0)  # O1: design, verify: how far off his line he stands
+SHOT_RANGE_M = 40.0  # design: a shot is an option inside this distance of the goal
+KEEPER_DEPTH_STEP_M = 0.5  # O1: the depths he weighs, this far apart
 RUSH_RANGE_M = 18.0  # O1: design: an attacker this close and through on goal draws the keeper out
 CLOSE_DOWN_M = 2.0  # O1: design: how close the keeper gets to narrow the angle
 DANGER_RANGE_M = 25.0  # O2: design: attackers this near our goal are marked man to man
@@ -30,14 +37,47 @@ RUN_BEYOND_M = 10.0  # O4: design: a run in behind aims this far beyond the defe
 
 
 def keeper_spot(ball_x: float, ball_y: float, own_goal_x: float) -> tuple[float, float]:
-    """O1: on the line from the ball to the centre of the goal, further off the line the further
-    away the ball is, so the angle stays covered."""
-    gx, gy = own_goal_x, PITCH_Y / 2
-    dx, dy = ball_x - gx, ball_y - gy
-    d = math.hypot(dx, dy) or 1.0
-    depth = min(KEEPER_DEPTH[1], max(KEEPER_DEPTH[0], KEEPER_DEPTH_PER_M * d))
-    x, y = gx + dx / d * depth, gy + dy / d * depth
-    return x, min(gy + GOAL_HALF_WIDTH + 1, max(gy - GOAL_HALF_WIDTH - 1, y))
+    """O1: on the line that bisects the angle between the posts as seen from the ball, at the depth
+    (within KEEPER_DEPTH) that leaves the least of the goal open to a shot from there, given how far
+    he can get in the time the shot takes: against a far shot he stays deep, where his dive has time
+    to unfold; against a near one he comes out and narrows the angle."""
+    gy = PITCH_Y / 2
+    a1 = math.atan2(gy - GOAL_HALF_WIDTH - ball_y, own_goal_x - ball_x)
+    a2 = math.atan2(gy + GOAL_HALF_WIDTH - ball_y, own_goal_x - ball_x)
+    mid = math.atan2(math.sin(a1) + math.sin(a2), math.cos(a1) + math.cos(a2))
+    ux, uy = math.cos(mid), math.sin(mid)  # from the ball toward the goal, between the posts
+    if abs(ux) < 1e-6:
+        return own_goal_x, gy
+    to_line = (own_goal_x - ball_x) / ux  # along the bisector to the goal line
+    if math.hypot(own_goal_x - ball_x, gy - ball_y) > SHOT_RANGE_M:  # out of range: he sweeps
+        along = max(0.0, to_line - KEEPER_DEPTH[1] / abs(ux))
+        return ball_x + ux * along, ball_y + uy * along
+    best = None
+    lo, hi = KEEPER_DEPTH
+    for k in range(int((hi - lo) / KEEPER_DEPTH_STEP_M) + 1):
+        depth = lo + k * KEEPER_DEPTH_STEP_M
+        along = max(0.0, to_line - depth / abs(ux))
+        spot = ball_x + ux * along, ball_y + uy * along
+        open_share = open_goal_share(ball_x, ball_y, own_goal_x, spot)
+        if best is None or open_share < best[0] - 1e-12:
+            best = (open_share, spot)
+    return best[1]
+
+
+def open_goal_share(x: float, y: float, goal_x: float, keeper: tuple[float, float]) -> float:
+    """The share of the goal mouth, as seen from (x, y), that a keeper at `keeper` cannot get a hand
+    across before a typical shot gets there (P11, P15). Used by the keeper to choose where to
+    stand and by the shooter to judge him: one definition."""
+    def bearing(px: float, py: float) -> float:
+        return math.atan2(py - y, abs(px - x))
+    lo, hi = sorted((bearing(goal_x, PITCH_Y / 2 - GOAL_HALF_WIDTH),
+                     bearing(goal_x, PITCH_Y / 2 + GOAL_HALF_WIDTH)))
+    gap = math.hypot(keeper[0] - x, keeper[1] - y)
+    reach = keeper_reach_m(gap / SHOT_SPEED_EST_MPS, CHOICE_REACTION_S)
+    k = bearing(*keeper)
+    half = math.atan2(reach, max(gap, 1e-6))
+    covered = max(0.0, min(hi, k + half) - max(lo, k - half))
+    return (hi - lo - covered) / (hi - lo) if hi > lo else 0.0
 
 
 def through_on_goal(carrier: tuple[float, float], own_goal_x: float,
@@ -165,7 +205,10 @@ def attacking_slot(role: str, own_goal_x: float, ball_x: float, ball_y: float,
 
 
 def keeper_reach_m(seconds: float, reaction_s: float) -> float:
-    """P11, P15: how far sideways a keeper can get a hand to, `seconds` after the ball is struck:
-    standing reach until he reacts, then the dive's stretch and the body's launch over DIVE_TIME_S."""
-    unfolded = min(1.0, max(0.0, (seconds - reaction_s) / DIVE_TIME_S))
+    """P11, P15: how far sideways a keeper can stop the ball, `seconds` after it is struck: until he
+    reacts only his body is in the way (as in the engine's contact rule: hands need a reaction);
+    then his standing reach, the dive's stretch and the body's launch over DIVE_TIME_S."""
+    if seconds < reaction_s:
+        return BODY_RADIUS + ball.RADIUS
+    unfolded = min(1.0, (seconds - reaction_s) / DIVE_TIME_S)
     return KEEPER_STAND_REACH_M + (KEEPER_DIVE_EXTRA_M + KEEPER_DIVE_TRAVEL_M) * unfolded

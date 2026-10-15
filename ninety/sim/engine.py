@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 
 from ninety.sim import ball, decisions, offball, perception, profiles
 from ninety.sim import team as team_mod
-from ninety.sim.body import BRAKE_MAX, CS_MEAN, D0, F0_MEAN, V0_MEAN, Body
+from ninety.sim.body import BODY_RADIUS, BRAKE_MAX, CS_MEAN, D0, F0_MEAN, V0_MEAN, Body
 from ninety.sim.body import move as move_body
 from ninety.sim.offball import DIVE_TIME_S, KEEPER_DIVE_EXTRA_M, KEEPER_DIVE_TRAVEL_M, KEEPER_STAND_REACH_M
 from ninety.sim.profiles import Profile
@@ -45,7 +45,6 @@ PERCEPTION_ERR = 0.03  # verify: m/s of misjudged ball velocity per metre betwee
 CONTROL_M = 1.0  # a foot reaches this far from the body's centre
 FOOT_REACH_Z = 1.0  # outfield players can play the ball below this height
 HAND_REACH_Z = 2.8  # P11: a jumping keeper's hand reach (standing about 2.35 m plus the jump)
-BODY_RADIUS = 0.26  # P11: half a footballer's shoulder width (about 0.53 m over the deltoids)
 BODY_HEIGHT = 1.8
 PRESS_GAP_M = 2.0  # design, verify: how close a presser stands (jockeys), goal-side of the ball carrier
 PERSONAL_SPACE_M = 1.2  # players steer to keep about this far from each other
@@ -484,7 +483,7 @@ class Engine:
         side = self.rng.choice([-1, 1])
         ty = PITCH_Y / 2 + side * self.rng.uniform(0.5, 3.2)
         tz = self.rng.uniform(0.1, 2.0)
-        speed = self.rng.uniform(70, 120) / 3.6
+        speed = self.rng.uniform(*offball.SHOT_SPEEDS_KMH) / 3.6
         ground, up = ball.shot(math.hypot(gx - bx, ty - by), speed, tz, DT)
         # The keeper reads the kicker's body and starts toward where he thinks it is going,
         # before he can react to the ball itself; the read can be wrong (A2).
@@ -965,10 +964,10 @@ class Engine:
         if chase and chase[0] == p.id:
             return clamp(chase[1], 0.5, PITCH_X - 0.5), clamp(chase[2], 0.5, PITCH_Y - 0.5), SPRINT
         if self.read and self.read[0] == p.id and self.possessor is None and self.kicked:
-            line = PITCH_X - goal_x(p.team)
-            x = line + attack_dir(p.team) * min(abs(p.x - line), 1.0)  # across his line, not off it
+            # Sideways at the depth he has set, not back toward his line: a keeper who has come out
+            # to narrow the angle stays there.
             post = PITCH_Y / 2 - GOAL_HALF_WIDTH, PITCH_Y / 2 + GOAL_HALF_WIDTH
-            return x, clamp(self.read[1], *post), SPRINT
+            return p.x, clamp(self.read[1], *post), SPRINT
         if self.restart and self.restart.kind == "kick_off" and p.id != self.restart.taker:
             return *self.kickoff_spot(p, self.restart.team), SHAPE  # Law 8: until the ball is kicked
         if self.restart and p.id == self.restart.taker:

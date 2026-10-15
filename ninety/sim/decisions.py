@@ -52,7 +52,6 @@ LUNGE_REACH_M = 1.8  # a foot (1 m) plus a step
 LUNGE_S = 0.3  # time for an average tackler's foot to reach the ball from the edge of that reach
 DRIBBLE_STEP_M = 6.0
 MAX_PASS_M = 45.0
-SHOT_SPEED_EST_MPS = 95 / 3.6  # the middle of the speeds shots are struck at (engine.shoot, 70 to 120 km/h)
 PASS_SPEED_EST_MPS = 14.0  # design: a passer's rough guess of a pass's average speed, to lead a runner
 LEAD_MAX_S = 2.0  # design: and he leads him by at most this long
 LOFT_FROM_M = 15.0  # design: shorter than this, a pass is played along the ground
@@ -236,8 +235,8 @@ def shot_estimate(x: float, y: float, goal_x: float, opponents: list[tuple[float
                    for ox, oy in opponents)
     q = typical_shot(x, y, goal_x) * (SCREENED_SHOT if screened else CLEAR_SHOT)
     if keeper:  # how much of the goal he leaves open, against a keeper in his usual spot
-        usual = open_goal_share(x, y, goal_x, offball.keeper_spot(x, y, goal_x))
-        q *= open_goal_share(x, y, goal_x, keeper) / usual if usual > 0 else 1.0
+        usual = offball.open_goal_share(x, y, goal_x, offball.keeper_spot(x, y, goal_x))
+        q *= offball.open_goal_share(x, y, goal_x, keeper) / usual if usual > 0 else 1.0
     return min(q, 1.0)  # a probability
 
 
@@ -248,22 +247,6 @@ def typical_shot(x: float, y: float, goal_x: float) -> float:
     d = math.hypot(goal_x - x, PITCH_Y / 2 - y)
     central = goal_angle(goal_x - math.copysign(d, goal_x - x), PITCH_Y / 2, goal_x)
     return rate_at(d) * min(1.0, goal_angle(x, y, goal_x) / central) if central > 0 else 0.0
-
-
-def open_goal_share(x: float, y: float, goal_x: float, keeper: tuple[float, float]) -> float:
-    """The share of the goal mouth, as seen from (x, y), that a keeper at `keeper` cannot get a hand
-    across before a typical shot gets there."""
-    def bearing(px: float, py: float) -> float:
-        return math.atan2(py - y, abs(px - x))
-    lo, hi = sorted((bearing(goal_x, PITCH_Y / 2 - GOAL_HALF_WIDTH),
-                     bearing(goal_x, PITCH_Y / 2 + GOAL_HALF_WIDTH)))
-    # How far he gets in the time a typical shot takes to reach him (P11, P15).
-    flight = math.hypot(keeper[0] - x, keeper[1] - y) / SHOT_SPEED_EST_MPS
-    reach = offball.keeper_reach_m(flight, GENERIC_REACTION_S)
-    k = bearing(*keeper)
-    half = math.atan2(reach, max(math.hypot(keeper[0] - x, keeper[1] - y), 1e-6))
-    covered = max(0.0, min(hi, k + half) - max(lo, k - half))
-    return (hi - lo - covered) / (hi - lo) if hi > lo else 0.0
 
 
 def in_cone(x: float, y: float, goal_x: float, ox: float, oy: float) -> bool:
@@ -398,7 +381,7 @@ def options(scene: Scene) -> list[Option]:
         return out
     p = pressure(scene)
     q = shot_chance(scene)
-    if abs(scene.goal_x - scene.x) < 40:
+    if abs(scene.goal_x - scene.x) < offball.SHOT_RANGE_M:
         bias = 1.3 if "shoots_from_distance" in scene.traits else 1.0
         # A shot that fails is either blocked, leaving the ball at his feet for them, or missed or
         # saved, which gives the ball back from deep (a goal kick or the keeper's hands).
