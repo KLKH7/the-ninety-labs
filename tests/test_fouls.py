@@ -18,9 +18,9 @@ def lunge_scene(victim_y: float):
 
 def test_his_leg_meets_a_man_in_its_sweep_and_misses_one_off_it():
     e, dfd, att = lunge_scene(34.0)
-    assert e.leg_meets(dfd, att, 61.0, 34.0)
+    assert e.leg_meets(dfd.x, dfd.y, att.x, att.y, 61.0, 34.0)
     e, dfd, att = lunge_scene(35.5)
-    assert not e.leg_meets(dfd, att, 61.0, 34.0)
+    assert not e.leg_meets(dfd.x, dfd.y, att.x, att.y, 61.0, 34.0)
 
 
 def test_a_late_lunge_through_the_man_is_a_foul_and_a_free_kick_to_his_side():
@@ -71,3 +71,69 @@ def test_a_foul_closes_the_pass_in_flight_and_counts_one_in_his_own_box():
     passes = [ev for ev in e.match.events if ev["type"] == "pass"]
     assert passes[0]["outcome"] == "fail" and e.kicked is None
     assert e.penalties == 1
+
+
+def box_foul():
+    """a4 fouls h9 inside the away side's own box (it defends the goal at x = 105)."""
+    e, dfd, att = lunge_scene(34.0)
+    dfd.x, att.x = 95.0, 95.6
+    e.possessor = None
+    e.ball = (98.0, 34.0, 0.0, 0.0, 0.0, 0.0)
+    e.lunges[dfd.id] = e.t
+    e.lunge_at[dfd.id] = att.id
+    e.duels()
+    return e
+
+
+def test_a_foul_in_his_own_box_is_a_penalty_from_the_mark_by_the_best_finisher():
+    e = box_foul()
+    r = e.restart
+    assert r.kind == "penalty_kick" and r.team == "home" and (r.x, r.y) == (105.0 - 11.0, 34.0)
+    outfield = [q for q in e.players if q.team == "home" and q.role != "GK"]
+    best = max(outfield, key=lambda q: q.profile["finishing"])
+    assert r.taker == best.id
+
+
+def test_while_a_penalty_waits_everyone_stands_where_law_14_puts_them():
+    from ninety.sim import decisions
+    from ninety.sim.engine import PITCH_Y
+
+    e = box_foul()
+    r = e.restart
+    for p in e.players:
+        if p.id == r.taker:
+            continue
+        x, y = e.penalty_wait_spot(p)
+        if p.role == "GK" and p.team == "away":
+            assert (x, y) == (105.0, PITCH_Y / 2)
+            continue
+        assert not decisions.in_box(x, y, 105.0)
+        assert ((x - r.x) ** 2 + (y - r.y) ** 2) ** 0.5 >= 9.15
+        assert x <= r.x  # behind the mark
+
+
+def test_when_the_penalty_is_taken_he_shoots_from_the_mark():
+    e = box_foul()
+    r = e.restart
+    taker = e.by_id[r.taker]
+    taker.x, taker.y, taker.heading = r.x - 0.4, r.y, 0.0
+    e.t = r.ready_at
+    for _ in range(25):
+        e.step()
+        if any(ev["type"] == "shot" for ev in e.match.events):
+            break
+    shots = [ev for ev in e.match.events if ev["type"] == "shot"]
+    assert shots and shots[0]["player"] == taker.id and abs(shots[0]["x"] - r.x) < 0.5
+
+
+def test_in_his_own_box_a_lunge_through_the_man_needs_a_surer_win():
+    from ninety.sim.engine import COMMIT_P
+
+    e, dfd, att = lunge_scene(34.0)
+    dfd.x, att.x = 95.0, 95.6  # behind him, the ball beyond: the man is in his line
+    line = e.foul_line(dfd, att, 96.0, 34.0)
+    assert line > COMMIT_P
+    dfd.x, att.x = 45.0, 45.6  # the same challenge in midfield: a miss is a free kick there
+    assert e.foul_line(dfd, att, 46.0, 34.0) == 0.0
+    dfd.x, dfd.y, att.x, att.y = 96.0, 36.0, 95.6, 34.0  # in the box, from in front and wide
+    assert e.foul_line(dfd, att, 96.0, 34.0) <= line

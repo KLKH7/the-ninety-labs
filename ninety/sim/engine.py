@@ -80,6 +80,9 @@ CLOSE_CONTROL_PACE = 0.6  # and carries it at this share of his dribbling speed
 COMMIT_COVER_M = 10.0  # a team-mate goal-side within this distance is cover to commit with
 LAST_DITCH_M = 18.0  # this near his own goal a defender commits without cover
 COMMIT_P = 0.6  # a defender commits only when he expects to win the race this often (aggression shifts it)
+# What a defender expects a penalty to cost: the chance it is scored. Premier League seasons run from
+# 74.8% (2022-23) to 89.6% (2023-24) (Opta via The Analyst); 0.8 is design within that range.
+PENALTY_GOAL_P = 0.8
 SHIELD_M = 3.0  # holding with an opponent this close, the carrier puts his body between them
 EVADE_MPS = 3.0  # how fast a carrier pushes the ball away from a lunge, plus up to 2 m/s with dribbling
 JOCKEY_LOOKAHEAD_S = 0.5  # a jockeying defender matches where the carrier is going, not where he is
@@ -90,7 +93,9 @@ GOAL_HALF_WIDTH, CROSSBAR = 3.66, 2.44  # Law 1
 GOAL_AREA_X = 5.5  # Law 1
 # Laws 15 to 17: opponents keep this far from a restart until the ball is in play.
 RESTART_DISTANCE_M = {"throw_in": 2.0, "corner": 9.15, "goal_kick": PENALTY_DEPTH - GOAL_AREA_X + 1.0,
-                      "free_kick": 9.15, "kick_off": 9.15}  # Laws 8 and 13: 9.15 m (the centre circle)
+                      "free_kick": 9.15, "kick_off": 9.15,
+                      "penalty_kick": 9.15}  # Laws 8, 13 and 14: 9.15 m (the centre circle, the arc)
+PENALTY_MARK_M = 11.0  # Law 1: the penalty mark, 11 m from the goal line
 BOARDS_M = 4.0  # verify: advertising boards behind the lines stop a ball (and players) that go out
 # R1: seconds from the ball going out to the restart. Means from Opta timing of the Premier League
 # (The Analyst): throw-ins about 16 s (2022-23; 17.9 in 2025-26), goal kicks 29 to 30 s, free kicks
@@ -99,6 +104,8 @@ BOARDS_M = 4.0  # verify: advertising boards behind the lines stop a ball (and p
 # enough to see (a goal's celebration, about 72 s in the same data, is not modelled).
 RESTART_DELAY_S = {"throw_in": (12, 20), "goal_kick": (24, 34), "corner": (24, 36),
                    "free_kick": (29, 41),
+                   # about two minutes from the foul to the spot kick (same source, 2022-23)
+                   "penalty_kick": (100, 140),
                    "kick_off": (1, 2)}
 NO_OFFSIDE_FROM = ("throw_in", "goal_kick", "corner")  # Law 11: no offside offence direct from these
 INTERCEPT_SHARE = 0.85  # design: taken before this share of the way to its target, a pass is intercepted
@@ -149,6 +156,16 @@ class Match:
 
 def attack_dir(team: str) -> float:
     return 1.0 if team == "home" else -1.0
+
+
+def evade_angle(team: str, bx: float, by: float, dx: float, dy: float) -> float:
+    """D8: the way a carrier pushes the ball from a lunge by a defender at (dx, dy): across the
+    challenge, to the side that keeps him going forward. One rule for the evasion and for the
+    defender's picture of it."""
+    away = math.atan2(by - dy, bx - dx)
+    fwd = math.atan2(0.0, attack_dir(team))
+    sides = (away + math.pi / 2, away - math.pi / 2)
+    return min(sides, key=lambda a: abs((a - fwd + math.pi) % (2 * math.pi) - math.pi))
 
 
 def goal_x(team: str) -> float:
@@ -227,7 +244,7 @@ class Engine:
         self.windup: tuple | None = None
         self.lunges: dict[str, float] = {}  # defender -> when his lunge reaches the ball
         self.lunge_at: dict[str, str] = {}  # defender -> the man he lunged at
-        self.penalties = 0  # fouls in the offender's own box (Law 14 not yet modelled: a free kick)
+        self.penalties = 0  # penalty kicks awarded (Law 14)
         self.evade_at: dict[str, float] = {}  # defender -> when the carrier reacts to his lunge
         self.off_balance: dict[str, float] = {}  # defender -> when he has recovered from a miss
         self.tackle: dict | None = None  # the tackle event whose outcome the next control decides
@@ -339,6 +356,27 @@ class Engine:
         self.chase = {}
         self.dribble_to = None
         self.dive = None
+
+    def penalty_wait_spot(self, p: Player) -> tuple[float, float]:
+        """Law 14: the defending keeper on his goal line between the posts; everyone else on the
+        pitch, outside the penalty area, behind the mark and 9.15 m from it: his own target pushed
+        out of the area and off the arc."""
+        r = self.restart
+        gx = goal_x(r.team)  # the goal the kick is at
+        out = -attack_dir(r.team)  # from that goal back up the pitch
+        if p.role == "GK" and p.team != r.team:
+            return gx, PITCH_Y / 2
+        x = clamp(p.ax if p.role == "GK" else p.x, 1.0, PITCH_X - 1.0)
+        y = clamp(p.y, 1.0, PITCH_Y - 1.0)
+        edge = gx + out * (PENALTY_DEPTH + 1.0)  # a metre clear of the area
+        if (x - edge) * out < 0:
+            x = edge
+        clear = RESTART_DISTANCE_M["penalty_kick"] + 0.5
+        d = math.hypot(x - r.x, y - r.y)
+        if d < clear:  # off the arc, radially from the mark
+            ux, uy = ((x - r.x) / d, (y - r.y) / d) if d > 1e-6 else (out, 0.0)
+            x, y = r.x + ux * clear, r.y + uy * clear
+        return x, y
 
     def kickoff_spot(self, p: Player, kicking: str) -> tuple[float, float]:
         """Law 8: his formation spot, but in his own half, and outside the centre circle if his
@@ -926,7 +964,9 @@ class Engine:
         if self.t < r.ready_at or math.hypot(taker.x - r.x, taker.y - r.y) > CONTROL_M:
             return
         # While the ball is out of play a new one is placed: the only time the ball may jump.
-        self.ball = (taker.x, taker.y, 0.0, 0.0, 0.0, 0.0)
+        # A penalty is placed on the mark (Law 14).
+        spot = (r.x, r.y) if r.kind == "penalty_kick" else (taker.x, taker.y)
+        self.ball = (*spot, 0.0, 0.0, 0.0, 0.0)
         self.restart = None
         if r.kind != "kick_off":  # a kickoff was recorded when the teams set up
             self.emit("set_piece", r.team, taker.x, taker.y, player=taker.id, outcome=None)
@@ -937,6 +977,9 @@ class Engine:
         self.throw_by = taker.id if r.kind == "throw_in" else None
         self.throw_ready = self.t
         self.from_restart = r.kind
+        if r.kind == "penalty_kick":  # Law 14: kicked forward, at goal (a shot like any other)
+            self.hold_until = self.t
+            self.shoot(taker)
 
     # ---- tick ---------------------------------------------------------------
 
@@ -1027,6 +1070,8 @@ class Engine:
             # to narrow the angle stays there.
             post = PITCH_Y / 2 - GOAL_HALF_WIDTH, PITCH_Y / 2 + GOAL_HALF_WIDTH
             return p.x, clamp(self.read[1], *post), SPRINT
+        if self.restart and self.restart.kind == "penalty_kick" and p.id != self.restart.taker:
+            return *self.penalty_wait_spot(p), SHAPE  # Law 14: until the ball is kicked
         if self.restart and self.restart.kind == "kick_off" and p.id != self.restart.taker:
             return *self.kickoff_spot(p, self.restart.team), SHAPE  # Law 8: until the ball is kicked
         if self.restart and p.id == self.restart.taker:
@@ -1414,7 +1459,7 @@ class Engine:
             if holder and holder.team != p.team and math.hypot(p.x - bx, p.y - by) <= CONTROL_M:
                 self.poke(p, holder)
                 holder = None
-            elif victim and not self.restart and self.leg_meets(p, victim, bx, by):
+            elif victim and not self.restart and self.leg_meets(p.x, p.y, victim.x, victim.y, bx, by):
                 self.foul(p, victim)
                 return
             else:
@@ -1435,29 +1480,57 @@ class Engine:
             # He stays on his feet unless he expects to win it (aggressive players gamble sooner);
             # a better decision-maker judges that line more sharply.
             line = COMMIT_P - 0.2 * (p.profile["aggression"] - 0.5)
+            line = max(line, self.foul_line(p, holder, bx, by))
             sharp = 0.02 + 0.08 * (1 - p.profile["decisions"])
             if self.rng.random() < decisions.sigmoid((p_win - line) / sharp):
                 self.lunges[p.id] = self.t + lunge
                 self.lunge_at[p.id] = holder.id
                 self.evade_at[p.id] = self.t + holder.profile.reaction()
 
+    def foul_line(self, p: Player, holder: Player, bx: float, by: float) -> float:
+        """Law 14 in his head: in his own box, with the man across the line of his lunge, a miss is
+        a penalty. Against standing off (their threat here, the engine's own value of the ball),
+        committing pays only if p_win * threat >= (1 - p_win) * (PENALTY_GOAL_P - threat), so he
+        needs p_win of at least 1 - threat / PENALTY_GOAL_P. Elsewhere a miss through the man is a
+        free kick where they already had the ball: no extra line."""
+        own = PITCH_X - goal_x(p.team)
+        if not decisions.in_box(holder.x, holder.y, own):
+            return 0.0
+        # Where the ball and the man will be if the carrier sees it coming and pushes it across
+        # (evade, an average dribbler) by the time his foot gets there, and where he will be:
+        # does his leg then sweep through the man?
+        d = math.hypot(bx - p.x, by - p.y)
+        lunge = decisions.lunge_time(d, p.profile["tackling"])
+        react = decisions.GENERIC_REACTION_S
+        push = max(0.0, lunge - react) * (EVADE_MPS + 2.0 * 0.5)
+        a = evade_angle(holder.team, bx, by, p.x, p.y)
+        ex, ey = bx + math.cos(a) * push, by + math.sin(a) * push
+        reach = max(0.0, d - CONTROL_M) / (d or 1.0)  # he lunges until his foot is at the ball
+        ax, ay = p.x + (bx - p.x) * reach, p.y + (by - p.y) * reach
+        mx, my = holder.x + holder.vx * lunge, holder.y + holder.vy * lunge
+        now = self.leg_meets(p.x, p.y, holder.x, holder.y, bx, by)
+        if not (now or self.leg_meets(ax, ay, mx, my, ex, ey)):
+            return 0.0
+        threat = decisions.value(bx, by, own)  # their chance of scoring from having it here
+        return clamp(1.0 - threat / PENALTY_GOAL_P, 0.0, 1.0)
+
     @staticmethod
-    def leg_meets(p: Player, victim: Player, bx: float, by: float) -> bool:
+    def leg_meets(px: float, py: float, vx: float, vy: float, bx: float, by: float) -> bool:
         """Law 12: a lunge that arrives with the ball gone still sweeps his leg toward it, a foot's
         reach (CONTROL_M) from his body. If that leg passes through the man he went for, he has
         made contact with the opponent, not the ball."""
-        dx, dy = bx - p.x, by - p.y
+        dx, dy = bx - px, by - py
         d = math.hypot(dx, dy)
         if d < 1e-6:
             return False
-        fx, fy = p.x + dx / d * min(d, CONTROL_M), p.y + dy / d * min(d, CONTROL_M)
-        sx, sy = fx - p.x, fy - p.y
-        k = clamp(((victim.x - p.x) * sx + (victim.y - p.y) * sy) / (sx * sx + sy * sy), 0.0, 1.0)
-        return math.hypot(p.x + k * sx - victim.x, p.y + k * sy - victim.y) <= BODY_RADIUS
+        sx, sy = dx / d * min(d, CONTROL_M), dy / d * min(d, CONTROL_M)
+        k = clamp(((vx - px) * sx + (vy - py) * sy) / (sx * sx + sy * sy), 0.0, 1.0)
+        return math.hypot(px + k * sx - vx, py + k * sy - vy) <= BODY_RADIUS
 
     def foul(self, p: Player, victim: Player) -> None:
         """Law 12: a careless challenge that hits the man: a direct free kick to his side where it
-        happened (Law 13); in the offender's own penalty area, a penalty kick (Law 14)."""
+        happened (Law 13); in the offender's own penalty area, a penalty kick (Law 14), taken by
+        his side's best finisher."""
         kicked, (bx, by) = self.kicked, self.ball[:2]
         if kicked and kicked["type"] == "pass":  # the whistle stops a pass that had not arrived
             kicked.update(end_x=round(bx, 2), end_y=round(by, 2), outcome="fail")
@@ -1469,9 +1542,14 @@ class Engine:
         self.lunges.clear(), self.lunge_at.clear(), self.evade_at.clear()
         self.possessor = self.dribbler = self.dribble_to = self.windup = None
         self.chase = {}
-        own_goal_x = PITCH_X if attack_dir(p.team) < 0 else 0.0
-        if decisions.in_box(victim.x, victim.y, own_goal_x):
+        gx = goal_x(victim.team)  # the offender's own goal
+        if decisions.in_box(victim.x, victim.y, gx):
             self.penalties += 1
+            taker = max((q for q in self.players if q.team == victim.team and q.role != "GK"),
+                        key=lambda q: q.profile["finishing"])  # the side's designated taker (design)
+            self.stop("penalty_kick", victim.team, (gx - attack_dir(victim.team) * PENALTY_MARK_M,
+                                                    PITCH_Y / 2), taker.id)
+            return
         self.stop("free_kick", victim.team, (clamp(victim.x, 0.5, PITCH_X - 0.5),
                                              clamp(victim.y, 0.5, PITCH_Y - 0.5)))
 
@@ -1479,10 +1557,7 @@ class Engine:
         """The carrier, having reacted to a lunge, pushes the ball away from the defender's foot,
         to the side that keeps him going forward; a better dribbler moves it quicker."""
         bx, by = self.ball[0], self.ball[1]
-        away = math.atan2(by - defender.y, bx - defender.x)
-        fwd = math.atan2(0.0, attack_dir(carrier.team))
-        sides = (away + math.pi / 2, away - math.pi / 2)
-        angle = min(sides, key=lambda a: abs((a - fwd + math.pi) % (2 * math.pi) - math.pi))
+        angle = evade_angle(carrier.team, bx, by, defender.x, defender.y)
         speed = EVADE_MPS + 2.0 * carrier.profile["dribbling"]
         vx, vy, vz = self.execute(carrier, math.cos(angle) * speed, math.sin(angle) * speed, 0.0, "dribbling")
         self.ball = (bx, by, self.ball[2], vx, vy, vz)
