@@ -797,3 +797,19 @@ def test_a_ball_he_knocks_over_the_touchline_is_out_in_the_same_frame():
     e.tick_free()
     assert [ev["type"] for ev in e.match.events] == ["deflection", "out_of_play"]
     assert e.restart is not None and e.restart.kind == "throw_in" and e.restart.team == "home"
+
+
+def test_a_ball_held_high_on_his_centre_comes_out_no_faster_than_it_settles():
+    e = Engine(1)
+    still(e)
+    c = e.by_id["a6"]
+    c.x, c.y, c.heading = 40.0, 34.0, math.pi
+    for q in e.players:
+        if q is not c:
+            q.x, q.y = 90.0 if q.team == "home" else 10.0, 5.0 + 2 * int(q.id[1:])
+    e.possessor = e.last_touch = c.id
+    e.hold_until = e.t + 60.0
+    e.ball = (40.0, 34.0, 1.0, 0.0, 0.0, 0.0)  # in a keeper's hands, on his centre, a metre up
+    was = e.ball
+    e.tick_carrier()
+    assert math.dist(was[:3], e.ball[:3]) <= 0.48 + 1e-6  # GROUNDING P6: out and down within 0.48 m a frame

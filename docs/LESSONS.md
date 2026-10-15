@@ -209,4 +209,4 @@ short and actionable. This file is public: no research sources, product names or
 - **Rule:** after a contact, spend the rest of the frame: the ball flies on, and whoever it meets
   next in that time is resolved too. Measure on full-length matches, not only short clips.
 - **Check:** the longest run of consecutive deflection events by one player over 90 minutes
-  (seeds 7, 11, 21, other events between them ignored) is a few, not dozens (1 to 3 measured).
+  (seeds 7, 11, 21, other events between them ignored) is a few, not dozens (1 to 4 measured; base 9 or 10).
