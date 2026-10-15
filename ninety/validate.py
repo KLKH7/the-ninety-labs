@@ -47,8 +47,8 @@ PENALTY_DEPTH, PENALTY_HALF_WIDTH = 16.5, 20.16  # Law 1
 NEAR_M = 2.5  # C6, C7: how close the ball must be to where an event says it happened
 ON_BALL = {"pass", "shot", "tackle", "interception", "out_of_play", "goal", "set_piece", "kickoff"}
 MAX_SUBSTITUTIONS = 5  # C3: Law 3, top-level competitions
-STOPPAGES = {"out_of_play", "goal", "substitution", "offside"}  # C3: events after which play has stopped
-DEAD_FROM = {"out_of_play", "offside"}  # the ball is dead from these until the restart (Laws 9, 11)
+STOPPAGES = {"out_of_play", "goal", "substitution", "offside", "foul"}  # C3: play has stopped after these
+DEAD_FROM = {"out_of_play", "offside", "foul"}  # dead from these until the restart (Laws 9, 11, 12)
 RESTARTS = {"set_piece", "kickoff"}  # P3: events that put the ball back in play
 TOUCHES = {"pass", "shot", "deflection", "interception", "tackle", "possession_change"}  # P5
 # C8: events that are a touch of the ball by their player (who then touched it last)
