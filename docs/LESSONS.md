@@ -122,3 +122,20 @@ short and actionable. This file is public: no research sources, product names or
 ### 17. The ground truth is the answer key
 - **Rule:** ground truth is used only for training labels and scoring. Nothing on the live path
   reads it. Whatever makes the video must also write the truth, so no generative video.
+
+## Set pieces and tests
+
+### 18. A placed ball must start outside every body
+- **What happened:** a corner's new ball was placed at the taker's centre, so the struck ball
+  "touched" him on its way out: a fake deflection and a 0.4 m jump in the ground truth on 39
+  of 60 corners. The validator exempts deflection frames, so nothing failed.
+- **Rule:** place a restart ball where it will be struck, with the taker behind it; a struck
+  ball must leave its kicker without a contact.
+- **Check:** after any kick, no deflection by the kicker within a few frames (a test runs many
+  seeds).
+
+### 19. A test that changes the whole random stream cannot prove one cause
+- **What happened:** "the delivery is struck with error" compared two runs with different seeds;
+  the choice and timing differed anyway, so removing the error left it green.
+- **Rule:** hold everything else fixed (state, choice) and vary only the cause under test;
+  then mutate the cause and require the test to fail.

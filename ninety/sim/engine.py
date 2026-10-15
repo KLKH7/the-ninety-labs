@@ -73,7 +73,7 @@ LEAD_MAX_S = 2.0  # design: and he leads him by at most this long
 # Laws 15 to 17: opponents keep this far from a restart until the ball is in play.
 RESTART_DISTANCE_M = {"throw_in": 2.0, "corner": 9.15, "goal_kick": PENALTY_DEPTH - GOAL_AREA_X + 1.0}
 BOARDS_M = 4.0  # verify: advertising boards behind the lines stop a ball (and players) that go out
-RESTART_DELAY_S = {"throw_in": (3, 8), "goal_kick": (6, 10), "corner": (12, 20)}  # verify (R1)
+RESTART_DELAY_S = {"throw_in": (3, 8), "goal_kick": (6, 10)}  # verify (R1); corners: setpieces.ready
 
 # 4-3-3 anchors for a team attacking toward x=105, as (x, y) fractions of the pitch.
 FORMATION = [
@@ -732,13 +732,16 @@ class Engine:
         elif self.t < r.ready_at or math.hypot(taker.x - r.x, taker.y - r.y) > CONTROL_M:
             return
         # While the ball is out of play a new one is placed: the only time the ball may jump.
-        self.ball = (taker.x, taker.y, 0.0, 0.0, 0.0, 0.0)
+        # A corner's ball goes in the corner area, in front of the taker (setpieces.py).
+        px, py = self.set_play.ball_spot if r.kind == "corner" else (taker.x, taker.y)
+        self.ball = (px, py, 0.0, 0.0, 0.0, 0.0)
         self.restart = None
-        self.emit("set_piece", r.team, taker.x, taker.y, player=taker.id, outcome=None)
+        self.emit("set_piece", r.team, px, py, player=taker.id, outcome=None)
         if r.team != self.poss_team:
-            self.emit("possession_change", r.team, taker.x, taker.y, player=taker.id)
+            self.emit("possession_change", r.team, px, py, player=taker.id)
         self.give(taker.id)
-        self.hold_until = self.t + self.rng.uniform(0.5, 1.5)
+        if r.kind != "corner":  # a corner taker settles the ball as any carrier does (D5)
+            self.hold_until = self.t + self.rng.uniform(0.5, 1.5)
         self.throw_by = taker.id if r.kind == "throw_in" else None
         self.throw_ready = self.t
 
@@ -755,15 +758,17 @@ class Engine:
             x = line + attack_dir(p.team) * min(abs(p.x - line), 1.0)  # across his line, not off it
             post = PITCH_Y / 2 - GOAL_HALF_WIDTH, PITCH_Y / 2 + GOAL_HALF_WIDTH
             return x, clamp(self.read[1], *post), SPRINT
-        if self.restart and p.id == self.restart.taker:
-            r = self.restart
-            return clamp(r.x, 0.5, PITCH_X - 0.5), clamp(r.y, 0.5, PITCH_Y - 0.5), RECOVER
         if self.set_play:  # a corner: his spot in the routine (setpieces.py)
             spot = setpieces.target(self, p)
             if spot:
+                if p.id == self.set_play.taker:  # behind the ball: off the pitch, by the flag
+                    return spot[0], spot[1], RECOVER
                 sx, sy = clamp(spot[0], 0.5, PITCH_X - 0.5), clamp(spot[1], 0.5, PITCH_Y - 0.5)
                 far = math.hypot(sx - p.x, sy - p.y) > FAR_OUT_OF_POSITION_M
                 return sx, sy, RECOVER if far else SHAPE
+        if self.restart and p.id == self.restart.taker:
+            r = self.restart
+            return clamp(r.x, 0.5, PITCH_X - 0.5), clamp(r.y, 0.5, PITCH_Y - 0.5), RECOVER
         bx, by = self.ball[0], self.ball[1]
         poss_team = self.team_of(self.possessor) if self.possessor else None
         shift = (clamp(bx, 0, PITCH_X) - PITCH_X / 2) * 0.45
@@ -886,7 +891,8 @@ class Engine:
         # Law 17: a corner is kicked from where it was placed, never dribbled.
         if corner and corner.delivered_at is None and carrier.id == corner.taker:
             steer(carrier, carrier.x, carrier.y, DRIBBLE)
-            self.ball = (self.ball[0], self.ball[1], 0.0, 0.0, 0.0, 0.0)
+            setpieces.face_ball(self, carrier)
+            self.ball = (self.ball[0], self.ball[1], 0.0, 0.0, 0.0, 0.0)  # it stays where it was placed
             if self.t >= self.hold_until:
                 setpieces.deliver(self, carrier)
             return
@@ -944,10 +950,11 @@ class Engine:
         """Scenario mode: the clip opens with the ball out of play for a home corner, from the
         players' starting shape, so the set-up itself is filmed. The side is drawn from the seed."""
         side = self.rng.choice([0.0, PITCH_Y])
-        spot = (PITCH_X, side)
-        self.ball = (*spot, 0.0, 0.0, 0.0, 0.0)
-        self.emit("out_of_play", "away", *spot)
-        self.stop("corner", "home", spot)
+        crossed = abs(side - 8.0)  # off a defender, over the goal line 8 m from the flag (design)
+        self.ball = (PITCH_X + 0.5, crossed, 0.0, 0.0, 0.0, 0.0)  # at rest, just out of play
+        self.last_touch = self.keeper("away").id
+        self.emit("out_of_play", "away", PITCH_X, crossed)
+        self.stop("corner", "home", (PITCH_X, side))
 
     def snapshot(self) -> None:
         bx, by, bz = self.ball[0], self.ball[1], self.ball[2]

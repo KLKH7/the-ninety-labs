@@ -52,11 +52,11 @@ FOOT_REACH_M, KEEPER_REACH_M, FRAME_SLACK_M = 1.0, 1.8, 0.6
 # within this distance of it may rebound without an event.
 WOODWORK_NEAR_M = 0.6
 APPROACH_TOLERANCE_M = 0.04  # P14: per frame; a ball at 1 m/s relative to him can still be met
-# L9 (Law 17): the ball is placed in the corner area (an arc of 1 m about the corner) and
-# opponents stay 9.15 m from the arc until it is kicked. A restart within CORNER_NEAR_M of a
-# corner, after the ball went out over that goal line, is a corner; a goal kick is taken from
-# the goal area, more than 20 m from either corner, so the two cannot be confused.
-CORNER_ARC_M, CORNER_DISTANCE_M, CORNER_NEAR_M = 1.0, 9.15, 3.0
+# L9 (Law 17): over the goal line, last touched by a defender, the attacking team takes a corner
+# with the ball in the corner area: within the 1 m arc, where a ball resting on the arc or a line
+# is in (Law 1: lines belong to the areas they mark), so its centre may be up to a ball radius
+# beyond them. Opponents stay 9.15 m from the arc until the ball is kicked.
+CORNER_ARC_M, CORNER_DISTANCE_M, BALL_RADIUS_M = 1.0, 9.15, 0.11
 EXAMPLES = 5
 
 Problems = dict[str, list[str]]
@@ -321,46 +321,55 @@ def check_events(events: list[dict], frames: list[dict], fps: float, meta: dict,
                 )
 
 
-def check_corners(events: list[dict], frames: list[dict], problems: Problems) -> None:
-    """L9: a corner is placed in the corner area, and every opponent stands at least 9.15 m from
-    the corner arc from the moment it is placed until it is kicked."""
+def check_corners(events: list[dict], frames: list[dict], roster: list[dict], problems: Problems) -> None:
+    """L9: after the ball goes out over a goal line off a defender, the attacking team takes a
+    corner from the corner area on that side, and every opponent stands at least 9.15 m from
+    the arc from the moment it is placed until the frame before it is kicked.
+
+    Which team defends a goal line is read from where its keeper stands. An exit is over a goal
+    line when the out-of-play point is on that line and strictly between the touchlines; at the
+    corner point itself the line cannot be told, so it is skipped."""
     by_frame = {f["frame"]: f for f in frames}
-    out = None
-    for i, e in enumerate(events):
-        if e["type"] == "out_of_play":
-            out = e
+    keepers = {p["id"] for p in roster if p.get("role") == "GK"}
+    for i, out in enumerate(events):
+        if out["type"] != "out_of_play" or out["x"] not in (0.0, 105.0) or not 0.0 < out["y"] < 68.0:
             continue
-        if e["type"] != "set_piece" or out is None:
+        f = by_frame.get(out["frame"])
+        gks = [p for p in f["players"] if p["id"] in keepers] if f else []
+        if not gks:
+            continue  # without a keeper on record the defending team cannot be told
+        defending = min(gks, key=lambda p: abs(p["x"] - out["x"]))["team"]
+        if out["team"] != defending:
+            continue  # off an attacker: a goal kick (L8)
+        restart = next((e for e in events[i + 1:] if e["type"] in ("set_piece", "kickoff")), None)
+        if restart is None:
+            continue  # the clip ends before the corner is taken
+        if restart["type"] != "set_piece" or restart["team"] == defending:
+            problems["L9 corner"].append(f"{out['id']}: no corner for the attacking team")
             continue
-        line, crossed = out["x"], out
-        out = None
-        if line not in (0.0, 105.0):  # over a touchline: a throw-in
+        flag = (out["x"], 0.0 if out["y"] < 34.0 else 68.0)
+        g = by_frame.get(restart["frame"])
+        if g is None:
             continue
-        corner = min(((line, 0.0), (line, 68.0)), key=lambda c: math.hypot(e["x"] - c[0], e["y"] - c[1]))
-        if math.hypot(e["x"] - corner[0], e["y"] - corner[1]) > CORNER_NEAR_M:
-            continue  # a goal kick (or a goal) from that line
-        if (corner[1] == 0.0) != (crossed["y"] < 34.0):
-            problems["L9 corner"].append(f"{e['id']}: taken from the far corner, not where it went out")
-        f = by_frame.get(e["frame"])
-        if f is None:
-            continue
-        b = f["ball"]
-        if math.hypot(b["x"] - corner[0], b["y"] - corner[1]) > CORNER_ARC_M + POSITION_PRECISION_M:
-            problems["L9 corner"].append(f"{e['id']}: ball placed outside the corner arc")
-        strike = next((n for n in events[i + 1:] if n["type"] in ("pass", "shot")), None)
-        last = strike["frame"] if strike else e["frame"]
-        for n in range(e["frame"], last + 1):
-            g = by_frame.get(n)
-            if g is None:
+        b = g["ball"]
+        slack = BALL_RADIUS_M + POSITION_PRECISION_M
+        in_arc = math.hypot(b["x"] - flag[0], b["y"] - flag[1]) <= CORNER_ARC_M + slack
+        in_field = -slack <= b["x"] <= 105.0 + slack and -slack <= b["y"] <= 68.0 + slack
+        if not (in_arc and in_field):
+            problems["L9 corner"].append(f"{restart['id']}: ball not placed in the corner area")
+        later = events[events.index(restart) + 1:]
+        strike = next((n for n in later if n["type"] in ("pass", "shot")), None)
+        until = strike["frame"] if strike else restart["frame"] + 1  # positions before the kick
+        for n in range(restart["frame"], until):
+            h = by_frame.get(n)
+            if h is None:
                 continue
-            for p in g["players"]:
-                if p["team"] == e["team"]:
-                    continue
-                gap = math.hypot(p["x"] - corner[0], p["y"] - corner[1]) - CORNER_ARC_M
-                if gap < CORNER_DISTANCE_M - POSITION_PRECISION_M:
-                    where = f"{gap:.2f} m from the arc at frame {n}"
-                    problems["L9 corner"].append(f"{e['id']}: {p['id']} {where}")
-                    break
+            near = [p for p in h["players"] if p["team"] == defending and
+                    math.hypot(p["x"] - flag[0], p["y"] - flag[1]) - CORNER_ARC_M
+                    < CORNER_DISTANCE_M - POSITION_PRECISION_M]
+            if near:
+                problems["L9 corner"].append(f"{restart['id']}: {near[0]['id']} inside 9.15 m at frame {n}")
+                break
 
 
 def validate(clip: Path) -> Problems:
@@ -388,7 +397,7 @@ def validate(clip: Path) -> Problems:
         return dict(problems)
     check_physics(events, frames, fps, meta.get("roster", []), problems)
     check_events(events, frames, fps, meta, problems)
-    check_corners(events, frames, problems)
+    check_corners(events, frames, meta.get("roster", []), problems)
     return dict(problems)
 
 
