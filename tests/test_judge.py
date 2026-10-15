@@ -126,3 +126,46 @@ def test_programming_error_is_not_hidden():
 
     with pytest.raises(TypeError):
         asyncio.run(judge(BrokenAgent(), Claim("A pass.", ["e1"]), []))
+
+
+def judgement(*statements):
+    return Response(value=Judgement(statements=[
+        Statement(text=text, kind=kind, verdict=verdict, reason="r") for text, kind, verdict in statements
+    ]))
+
+
+def test_supported_fact_and_supported_tone_pass():
+    agent = FakeAgent(judgement(("h4 passes to h9", "fact", "supported"),
+                                ("the pass was composed", "interpretation", "supported")))
+    assert asyncio.run(judge(agent, Claim("h4 plays a composed pass to h9.", ["e1"]), [])).ok
+
+
+def test_contradicted_tone_fails_even_with_a_supported_fact():
+    agent = FakeAgent(judgement(("h4 passes to h9", "fact", "supported"),
+                                ("the pass was a soft touch", "interpretation", "contradicted")))
+    verdict = asyncio.run(judge(agent, Claim("h4 plays a soft touch to h9.", ["e1"]), []))
+    assert not verdict.ok and verdict.category == "unsupported_claim"
+
+
+def test_instructions_do_not_quote_the_evaluations_tone_words():
+    """A score on a tone word the prompt quotes measures the quote, not the rule."""
+    from ninety.agents.judge import INSTRUCTIONS
+    from ninety.eval.factcheck_eval import HELD_OUT_TONE_WORDS, TONE_WORDS
+
+    text = INSTRUCTIONS.lower()
+    leaked = [w for w in TONE_WORDS + HELD_OUT_TONE_WORDS if w in text]
+    assert leaked == []
+
+
+def test_tone_labels_fit_their_events():
+    """Planted defect guard: a true tone claim is only built on an event the word fits."""
+    from ninety.eval.factcheck_eval import FAST_PASS_KMH, LONG_RANGE_M, SHORT_SLOW, cases
+
+    for row in cases(7, 30):
+        e = row["evidence"][0]
+        if row["kind"] in ("true: neutral interpretation", "true: held-out tone, patient pass"):
+            assert e["distance_m"] <= SHORT_SLOW[0] and e["ball_speed_kmh"] <= SHORT_SLOW[1], row
+        if row["kind"] in ("true: distant interpretation", "true: held-out tone, speculative shot"):
+            assert e["distance_m"] >= LONG_RANGE_M, row
+        if row["kind"] == "false: contradicted tone, gentle pass":
+            assert e["ball_speed_kmh"] >= FAST_PASS_KMH, row

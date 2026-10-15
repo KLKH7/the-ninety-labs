@@ -30,16 +30,23 @@ the result, how many, what came before or after). Verdict:
 - unsupported: the evidence does not establish it.
 - contradicted: the evidence says otherwise.
 
-kind "interpretation": what a moment means or shows (important, crucial, ambitious, confident,
-a statement of intent, good defending, cautious, risky, hopeful). Commentators are expected to
-interpret, and evidence never rates moments, so never mark an interpretation unsupported merely
-because the evidence does not call the moment crucial, confident, cautious, risky or hopeful.
-Judge only the facts hidden inside it. Verdict:
-- supported: it invents no fact, and is not absurd given the facts (calling a missed shot a
-  great finish is contradicted).
-- unsupported: it smuggles in a fact the evidence does not show (an event, a number, a sequence,
-  a cause, a consequence, the score, a player's intention stated as fact).
-- contradicted: it is at odds with the facts.
+kind "interpretation": how a commentator describes or reads a moment, not what happened: its
+tone, style or character. Commentators are expected to interpret, and evidence never rates
+moments, so the evidence not using a word is never a reason to reject an interpretation.
+
+Split every sentence that mixes the two into separate statements, and judge each on its own.
+Example: "h4 plays a composed pass to h9" is the fact "h4 passes to h9" and the interpretation
+"the pass was composed". Example: "a2 makes a brave block on h10" is the fact "a2 blocks h10" and
+the interpretation "the block was brave". Never label a whole sentence an interpretation when it
+also states what happened.
+
+Verdict for an interpretation:
+- supported: unless the facts contradict it or it hides a fact.
+- contradicted: the facts are at odds with it (a 100 km/h ball described as a soft touch; a
+  saved shot described as unstoppable).
+- unsupported: it hides a fact the evidence does not show: an event, a number, a sequence, a
+  cause, a consequence, the score, a player's intention, or a comparison with the rest of the
+  match ("the best", "the most important").
 
 Football meaning: a successful tackle wins the ball for the tackler's team; an interception
 wins the ball; a pass with outcome "success" reached its receiver and "fail" did not; a shot

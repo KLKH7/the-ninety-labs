@@ -136,3 +136,14 @@ short and actionable. This file is public: no research sources, product names or
   as a separate field.
 - **Check:** compare every compact event's clock and seconds with the scorebug clock at its event
   timestamp, including fractional seconds near a minute boundary.
+
+### 22. An evaluation's true labels must be true, and must not be quoted in the prompt
+- **What happened:** the fact-checker evaluation put "cautious" on every completed pass,
+  including one of 42 m at 96 km/h, and labelled the claim true; the Judge rejecting it was
+  counted as an error. The tone words being tested were also listed in the Judge's own
+  instructions, so a good score partly measured the quote.
+- **Rule:** attach a descriptive word only to events whose fields fit it, with the condition
+  written before reading any model output; test generalisation on words the prompt never uses.
+- **Check:** `tests/test_judge.py` fails if an evaluated tone word appears in the instructions,
+  or a tone claim is built on an event outside its condition.
+
