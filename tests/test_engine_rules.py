@@ -978,3 +978,39 @@ def test_a_pass_records_where_play_is_seen_going_through_the_real_path():
     e.ball = (p.x + 0.4, p.y, 0.0, 0.0, 0.0, 0.0)
     e.pass_to(p, 56.0, 34.0, lofted=False, pace=6.0, receiver=mate.id)
     assert 48.0 < e.seen_going[0] <= 57.0  # where he meets it, stepping toward it: not the kick spot
+
+
+def test_can_reach_counts_a_keepers_stretching_hands_in_his_box_not_his_feet():
+    e = Engine(1)
+    k = e.keeper("away")
+    k.x, k.y, k.vx, k.vy = 103.0, 34.0, 0.0, 0.0
+    e.kicked_at = e.t - 0.1
+    t = e.reaction(k) + 0.6  # by then his arms are fully stretched
+    assert e.can_reach(k, 103.0, 35.7, 0.5, t, delay=t)[0]  # 1.7 m: his hands, without a step
+    outfield = e.by_id["a4"]
+    outfield.x, outfield.y, outfield.vx, outfield.vy = 60.0, 34.0, 0.0, 0.0
+    assert not e.can_reach(outfield, 60.0, 35.7, 0.5, t, delay=t)[0]  # a foot reaches 1 m
+
+
+def test_can_reach_counts_his_speed_toward_the_ball_and_braking_away_from_it():
+    e = Engine(1)
+    p = e.by_id["a4"]
+    p.x, p.y = 60.0, 34.0
+    p.vx, p.vy = 6.0, 0.0  # already running toward the point
+    toward = e.can_reach(p, 64.0, 34.0, 0.0, 0.5)[0]
+    p.vx = -6.0  # running away from it: he must brake first
+    away = e.can_reach(p, 64.0, 34.0, 0.0, 0.5)[0]
+    p.vx = 0.0
+    standing = e.can_reach(p, 64.0, 34.0, 0.0, 0.5)[0]
+    assert toward and not standing and not away
+    near = 61.5, 34.0  # 1.5 m away: a standing man gets there in half a second
+    assert e.can_reach(p, *near, 0.0, 0.5)[0]
+    p.vx = -6.0  # one running away at 6 m/s must first stop, which takes longer than that
+    assert not e.can_reach(p, *near, 0.0, 0.5)[0]
+
+
+def test_nobody_counts_as_reaching_a_struck_ball_before_reacting():
+    e = Engine(1)
+    _alone_with(e, (40.5, 34.0))  # right at the kicker's feet, as the ball leaves him
+    e.ball = (40.0, 34.0, 0.0, 20.0, 0.0, 0.0)  # struck hard away from both
+    assert e.ball_destination()[0] > 45.0

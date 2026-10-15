@@ -435,8 +435,8 @@ class Engine:
         self.last_touch = carrier.id
         self.kicked_at = self.t
         self.free_since = self.t  # the ball left a player's control: dives are timed from here
-        self.seen_going = self.ball_destination()
         self.landed = None  # a new strike: a keeper still down reacts to it afresh
+        self.seen_going = self.ball_destination()
         self.kicker_clear = False
         self.chase = {}  # everyone reacts after their reaction time, not on the frame of the kick
 
@@ -965,6 +965,8 @@ class Engine:
             s = path[k]
             if not (0.0 <= s[0] <= PITCH_X and 0.0 <= s[1] <= PITCH_Y):
                 return clamp(s[0], 0.0, PITCH_X), clamp(s[1], 0.0, PITCH_Y)
+            if k * DT <= perception.CHOICE_REACTION_S:
+                continue  # nobody has reacted to the strike yet
             for p in others:  # the same test the chase uses, after he reacts to the strike
                 if self.can_reach(p, s[0], s[1], s[2], k * DT, perception.CHOICE_REACTION_S)[0]:
                     return s[0], s[1]
