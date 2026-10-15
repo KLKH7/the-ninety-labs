@@ -15,6 +15,7 @@ generated it and the output file is committed. Rows marked *planned* have no res
 | Targeted data rounds, before and after | planned | `docs/eval/vision-report-v{n}.json` | planned |
 | Stats engine facts: hand-computed cases, planted defects, citations, size | `uv run pytest tests/test_stats.py` | test assertions | running |
 | Fact-checker rules (numbers, players, evidence ids) | `uv run pytest tests/test_factcheck.py` | test assertions | running |
+| Ledger versioning, evidence validation, and deterministic cue fixture | `uv run pytest tests/test_ledger.py tests/test_cues.py` | `tests/fixtures/cues-seed7.jsonl` and test assertions | running: 10 tests; 152 cues for seed 7, five minutes |
 | Fact-checker catch rate on planted false claims, and true claims wrongly rejected | `uv run python -m ninety.eval.factcheck_eval` | `docs/eval/fact-checker.md` | running (v0, templated claims on simulator events): 64/64 caught, 0/48 wrongly rejected |
 | Recovery from injected failures | planned | `docs/eval/failure-table.md` | planned |
 | Ablation: one agent against the full workflow | planned | `docs/eval/ablation.md` | planned |
