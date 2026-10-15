@@ -294,7 +294,7 @@ def choose_delivery(engine: Engine, taker: Player) -> tuple[tuple[float, float],
     c: Corner = engine.set_play
     scene = engine.scene_for(taker)
     opts: list[decisions.Option] = []
-    for mid, mx, my, age in scene.mates:
+    for mid, mx, my, age, *_ in scene.mates:  # with (vx, vy) appended when seen moving
         zone = c.zones.get(mid)
         short = math.hypot(mx - scene.x, my - scene.y) <= SHORT_CORNER_M
         if zone is None and not short:

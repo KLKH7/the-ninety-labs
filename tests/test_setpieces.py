@@ -505,22 +505,27 @@ def test_l6_judges_the_goal_the_conceding_keeper_defends(tmp_path):
     assert "L6 goal" in run(tmp_path, goal_clip([SHOT], "h1", path=own_end))
 
 
-@pytest.mark.parametrize("seed, scorer", [(158, "h10"), (222, None), (58, "h9"), (40, "h11")])
-def test_real_engine_goals_are_credited_and_relabelling_them_fails(tmp_path, seed, scorer):
-    """Engine output, not a fixture: corner seeds where a team-mate's touch puts a shot in (158),
-    an own goal (222), a shot straight in (58) and a shot in off a defender (40). Each meets the
-    contract; giving it to the wrong player (or to nobody) fails C8. The seeds were found by
-    classifying every goal in 400 scenario corners; a change to the routine moves them."""
-    m = simulate(seed, 1.0, "corner")
-    goal = next(e for e in m.events if e["type"] == "goal")
-    assert goal["player"] == scorer
-    meta = {"fps": FPS, "score": m.score, "roster": m.roster}
-    base = {"events": m.events, "frames": m.frames, "meta": meta}
-    (tmp_path / "ok").mkdir()
-    assert run(tmp_path / "ok", base) == {}
-    wrong = "h1" if scorer is not None else "h10"  # their keeper, or a home forward for an own goal
-    goal["player"] = None if scorer is not None else wrong
-    assert "C8 event order" in run(tmp_path, base)
+def test_real_engine_goals_are_credited_and_relabelling_them_fails(tmp_path):
+    """Engine output, not a fixture, and no pinned seed (lesson 19): every goal in the first 32
+    scenario corners meets the contract, and giving it to the wrong player (or to nobody) fails
+    C8. Which kinds of goal appear moves with the engine; the rule must hold for each."""
+    goals = 0
+    for seed in range(32):
+        m = simulate(seed, 0.75, "corner")
+        goal = next((e for e in m.events if e["type"] == "goal"), None)
+        if goal is None:
+            continue
+        goals += 1
+        meta = {"fps": FPS, "score": m.score, "roster": m.roster}
+        base = {"events": m.events, "frames": m.frames, "meta": meta}
+        (tmp_path / f"ok{seed}").mkdir()
+        assert run(tmp_path / f"ok{seed}", base) == {}, seed
+        scorer = goal["player"]
+        keeper = next(r["id"] for r in m.roster if r["team"] == goal["team"] and r.get("role") == "GK")
+        goal["player"] = None if scorer is not None else keeper  # an own goal, or their own keeper
+        (tmp_path / f"bad{seed}").mkdir()
+        assert "C8 event order" in run(tmp_path / f"bad{seed}", base), seed
+    assert goals >= 3  # enough real goals to mean something (4 at the time of writing)
 
 
 def test_off_an_attacker_it_is_a_goal_kick_not_a_corner(tmp_path):

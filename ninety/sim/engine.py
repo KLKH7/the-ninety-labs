@@ -62,7 +62,6 @@ MISCONTROL_KEEP = 0.4  # verify: share of speed a ball keeps off a failed touch 
 POST_RADIUS = 0.06  # Law 1: posts and crossbar at most 12 cm wide
 WOODWORK_RESTITUTION = 0.6  # verify
 BALL_TO_FEET = 12.0  # m/s: how fast the ball settles at a new carrier's feet
-LOFT_OVER_M = 25.0  # passes longer than this go through the air
 # Dribbling is a run of touches (D6): the ball is pushed ahead and the dribbler runs onto it, so
 # between touches it is free and a defender who gets there first wins it. All *design*, *verify*.
 TOUCH_CLOSE_M = 0.8  # how far ahead a touch puts the ball with an opponent close
@@ -75,7 +74,7 @@ TOUCH_EXPECTED_DEG = 30.0  # a touch within this of his running line needs no ne
 OFF_BALANCE_S = 0.8  # a missed lunge leaves him out of the play this long
 CLOSE_CONTROL_M = 3.0  # with an opponent this close, a carrier keeps the ball at his feet
 CLOSE_CONTROL_PACE = 0.6  # and carries it at this share of his dribbling speed
-COVER_M = 10.0  # a team-mate goal-side within this distance is cover to commit with
+COMMIT_COVER_M = 10.0  # a team-mate goal-side within this distance is cover to commit with
 LAST_DITCH_M = 18.0  # this near his own goal a defender commits without cover
 COMMIT_P = 0.6  # a defender commits only when he expects to win the race this often (aggression shifts it)
 SHIELD_M = 3.0  # holding with an opponent this close, the carrier puts his body between them
@@ -87,12 +86,14 @@ CHASE_EVERY = 4  # frames between re-planning who chases a free ball
 GOAL_HALF_WIDTH, CROSSBAR = 3.66, 2.44  # Law 1
 PENALTY_DEPTH, PENALTY_HALF_WIDTH = 16.5, 20.16  # Law 1
 GOAL_AREA_X = 5.5  # Law 1
-PASS_SPEED_EST_MPS = 15.0  # design: the passer's rough guess of a pass's average speed, to lead a runner
-LEAD_MAX_S = 2.0  # design: and he leads him by at most this long
 # Laws 15 to 17: opponents keep this far from a restart until the ball is in play.
-RESTART_DISTANCE_M = {"throw_in": 2.0, "corner": 9.15, "goal_kick": PENALTY_DEPTH - GOAL_AREA_X + 1.0}
+RESTART_DISTANCE_M = {"throw_in": 2.0, "corner": 9.15, "goal_kick": PENALTY_DEPTH - GOAL_AREA_X + 1.0,
+                      "free_kick": 9.15}  # Law 13: 9.15 m from a free kick
 BOARDS_M = 4.0  # verify: advertising boards behind the lines stop a ball (and players) that go out
-RESTART_DELAY_S = {"throw_in": (3, 8), "goal_kick": (6, 10)}  # verify (R1); corners: setpieces.ready
+RESTART_DELAY_S = {"throw_in": (3, 8), "goal_kick": (6, 10),
+                   "free_kick": (4, 10)}  # verify (R1); corners: setpieces.ready, no timer
+NO_OFFSIDE_FROM = ("throw_in", "goal_kick", "corner")  # Law 11: no offside offence direct from these
+INTERCEPT_SHARE = 0.85  # design: taken before this share of the way to its target, a pass is intercepted
 
 # 4-3-3 anchors for a team attacking toward x=105, as (x, y) fractions of the pitch.
 FORMATION = [
@@ -208,6 +209,10 @@ class Engine:
         self.off_balance: dict[str, float] = {}  # defender -> when he has recovered from a miss
         self.tackle: dict | None = None  # the tackle event whose outcome the next control decides
         self.dribbler: str | None = None  # a carrier who pushed the ball ahead and is running onto it
+        self.last_deflection: dict | None = None  # the most recent deflection event
+        self.pass_target: tuple[float, float] | None = None  # where the pass in flight was aimed
+        self.offside: set[str] = set()  # L10: team-mates in an offside position when the ball was played
+        self.from_restart: str | None = None  # the restart the next kick is taken from
         self.read: tuple[str, float] | None = None  # (keeper, y): where he reads a shot is going
         self.shot_touched_by: str | None = None  # "keeper" or "defender": who got to the shot
         self.shot_was_on_target: bool | None = None  # was it going in when they first touched it?
@@ -299,6 +304,8 @@ class Engine:
         if pid != self.released_by:
             self.released_by = None
         self.dribbler = None
+        self.last_deflection = None
+        self.offside = set()
         self.windup = None
         self.read = None
         self.intended = None
@@ -322,6 +329,50 @@ class Engine:
 
     # ---- decisions: players choose, the kick gives the ball a velocity -------
 
+    def in_the_lane(self, kicked: dict, x: float, y: float) -> bool:
+        """Was the pass taken on its way, short of where it was aimed (by INTERCEPT_SHARE)?"""
+        tx, ty = self.pass_target or (x, y)
+        sx, sy = kicked["x"], kicked["y"]
+        length = math.hypot(tx - sx, ty - sy)
+        if length < 1e-6:
+            return True
+        along = ((x - sx) * (tx - sx) + (y - sy) * (ty - sy)) / length
+        return along < INTERCEPT_SHARE * length
+
+    def offside_offence(self, p: Player, x: float, y: float) -> None:
+        """L10: an indirect free kick to the defending side where the offside player played it."""
+        kicked = self.kicked
+        if kicked and kicked["type"] == "pass":
+            kicked.update(receiver=p.id, end_x=round(x, 2), end_y=round(y, 2), outcome="fail")
+        elif kicked and kicked["type"] == "shot":
+            self.close_shot(kicked, x, y)
+        self.kicked = None
+        self.offside = set()
+        self.emit("offside", p.team, x, y, player=p.id)
+        self.possessor = None  # the ball is dead and rolls on until the free kick is taken
+        self.chase = {}
+        self.stop("free_kick", other(p.team), (clamp(x, 0.5, PITCH_X - 0.5), clamp(y, 0.5, PITCH_Y - 0.5)))
+
+    def onside_limit(self, team: str, positions: list[tuple[float, float]], ball_x: float) -> float:
+        """Law 11: how far toward the opponents' goal a player of `team` may stand and be onside:
+        level with the second-last opponent or the ball, whichever is further, and anywhere in
+        his own half. `positions` are the opponents' x positions as seen (or the truth, for the
+        referee)."""
+        fwd = attack_dir(team)
+        ahead = sorted((x for x, _ in positions), key=lambda x: -fwd * x)
+        second_last = ahead[1] if len(ahead) > 1 else goal_x(team)
+        limit = max(fwd * second_last, fwd * ball_x, fwd * PITCH_X / 2)
+        return fwd * limit
+
+    def offside_positions(self, passer: Player) -> set[str]:
+        """L10: the passer's team-mates in an offside position as the ball is played (the truth:
+        this is the referee's judgement)."""
+        opp = [(q.x, q.y) for q in self.players if q.team != passer.team]
+        limit = self.onside_limit(passer.team, opp, self.ball[0])
+        fwd = attack_dir(passer.team)
+        return {q.id for q in self.players
+                if q.team == passer.team and q is not passer and fwd * (q.x - limit) > 0}
+
     def can_strike(self, carrier: Player, tx: float, ty: float) -> bool:
         """The ball is on the side of his body facing the target, so he can strike it there
         without the ball passing through him."""
@@ -340,6 +391,10 @@ class Engine:
         # away from a body never meets it (contact checks approach), so no placement is needed.
         self.ball = (self.ball[0], self.ball[1], self.ball[2], vx, vy, vz)
         self.released_by = carrier.id
+        self.last_deflection = None
+        exempt = self.from_restart in NO_OFFSIDE_FROM
+        self.from_restart = None
+        self.offside = set() if exempt else self.offside_positions(carrier)
         self.throw_by = None  # a throw-in ends when the ball is thrown
         self.dribbler = None
         self.possessor = None
@@ -423,9 +478,10 @@ class Engine:
         else:
             ground, up = decisions.launch_speed(dist, pace), 0.0
         wide = abs(ty - PITCH_Y / 2) > 20 and (tx - bx) * attack_dir(carrier.team) > 0
-        skill = "crossing" if (dist > LOFT_OVER_M and wide) else "passing"
+        skill = "crossing" if ((lofted or throw) and wide) else "passing"
         vx, vy, vz = self.execute(carrier, *self.aim(bx, by, tx, ty, ground, up), skill)
         # Receiver, end point and outcome are filled in when someone takes the ball or it goes out.
+        self.pass_target = (tx, ty)
         self.kicked = self.emit("pass", carrier.team, bx, by, player=carrier.id,
                                 ball_speed_kmh=round(math.sqrt(vx * vx + vy * vy + vz * vz) * 3.6, 1))
         self.kick(carrier, vx, vy, vz)
@@ -439,7 +495,11 @@ class Engine:
             if q.team == team and q.id != carrier.id:
                 at = belief.where(q.id, self.t)
                 if at:  # a team-mate he has not seen cannot be picked
-                    mates.append((q.id, at[0], at[1], belief.age(q.id, self.t)))
+                    mates.append((q.id, at[0], at[1], belief.age(q.id, self.t), *belief.velocity(q.id)))
+        seen_opps = [w for w in (belief.where(q.id, self.t) for q in self.players if q.team == opp) if w]
+        if self.from_restart not in NO_OFFSIDE_FROM:  # L10: he does not pick a man he sees offside
+            limit = self.onside_limit(team, seen_opps, self.ball[0])
+            mates = [m for m in mates if attack_dir(team) * (m[1] - limit) <= 0]
         # The keeper is an opponent like any other for lanes, carries and pressure; the shot
         # estimate counts him once, as the keeper, not also as a blocker.
         # Opponents as they will be a moment from now (their seen velocity): a carrier reads a
@@ -574,7 +634,8 @@ class Engine:
         rel = math.sqrt((vx - p.vx) ** 2 + (vy - p.vy) ** 2 + vz * vz)
         absorb = p.profile.absorb_mps(self.hands(p, cx, cy))
         controls = kind == "touch" and rel <= absorb
-        self.touched(p, cx, cy, controls)  # judged on the ball as it arrived
+        if self.touched(p, cx, cy, controls):  # judged on the ball as it arrived
+            return
         if controls:
             self.ball = (cx, cy, cz, p.vx, p.vy, 0.0)
             if self.tackle:  # who came away with the ball decides the tackle
@@ -610,15 +671,21 @@ class Engine:
         # It leaves from outside the body, never from inside it (the swept contact can overlap).
         out = max(math.hypot(cx - p.x, cy - p.y), BODY_RADIUS + ball.RADIUS) + 0.05
         self.ball = (p.x + nx * out, p.y + ny * out, cz, rx + p.vx, ry + p.vy, vz)
-        self.emit("deflection", p.team, cx, cy, player=p.id)  # a touch is ground truth too
+        self.last_deflection = self.emit("deflection", p.team, cx, cy, player=p.id)  # a touch is truth too
         self.last_touch = p.id
         self.kicker_clear = False
         self.kicked_at = self.t  # a new strike of the ball: everyone reacts to it again
         self.chase = {}
 
-    def touched(self, p: Player, x: float, y: float, controls: bool) -> None:
+    def touched(self, p: Player, x: float, y: float, controls: bool) -> bool:
         """Resolve the pass or shot in flight from who touched it, and how: observed, never
-        intended. Called with the ball as it arrived, before the touch changes it."""
+        intended. Called with the ball as it arrived, before the touch changes it. Returns True
+        if the touch stopped play (an offside offence)."""
+        if p.id in self.offside:  # L10: he was offside when it was played, and now plays it
+            self.offside_offence(p, x, y)
+            return True
+        if p.team != (self.team_of(self.last_touch) if self.last_touch else p.team) and controls:
+            self.offside = set()  # an opponent's deliberate play: a new phase
         self.touched_since_kick = True
         if p.id != self.dribbler and self.dribbler and p.team == self.team_of(self.dribbler):
             self.dribbler = None  # a team-mate took it: the dribble is over
@@ -636,7 +703,9 @@ class Engine:
                 self.kicked = None
             elif not same_team:  # an opponent got to it: the pass has failed
                 kicked.update(receiver=p.id, end_x=round(x, 2), end_y=round(y, 2), outcome="fail")
-                if controls:
+                if controls and self.in_the_lane(kicked, x, y):
+                    # Cut out on its way: an interception. Collected where it was going (a long
+                    # ball dropping to a defender) is a recovery: the possession change says it.
                     self.emit("interception", p.team, x, y, player=p.id)
                 self.kicked = None
             return  # a team-mate's deflection leaves the pass in flight
@@ -764,6 +833,21 @@ class Engine:
             if shot:
                 self.close_shot(shot, x, y)
             scorer = self.last_touch if self.last_touch and self.team_of(self.last_touch) == team else None
+            touch = self.last_deflection  # only a touch since the last kick or control (reset there)
+            struck = kicked if kicked and kicked["type"] == "pass" and kicked["player"] == scorer else None
+            if scorer and not shot and not touch and struck:
+                # His own pass went straight in: that strike was his attempt.
+                struck.update(type="shot", outcome="goal", receiver=None,
+                              end_x=round(x, 2), end_y=round(y, 2))
+            if scorer and not shot and touch and touch["player"] == scorer:
+                # It went in off him: the touch that sent it in is his attempt, as event data records it,
+                # and a team-mate's pass he turned in reached him there.
+                touch.update(type="shot", outcome="goal", end_x=round(x, 2), end_y=round(y, 2))
+                turned_in = kicked and kicked["type"] == "pass" and kicked["team"] == team
+                if turned_in and kicked["frame"] < touch["frame"]:
+                    own = kicked["player"] == scorer  # his own pass back off himself: not received
+                    kicked.update(receiver=None if own else scorer, end_x=touch["x"], end_y=touch["y"],
+                                  outcome="fail" if own else "success")
         self.emit("goal", team, x, y, player=scorer)
         self.kickoff(other(team))
 
@@ -805,6 +889,7 @@ class Engine:
             self.hold_until = self.t + self.rng.uniform(0.5, 1.5)
         self.throw_by = taker.id if r.kind == "throw_in" else None
         self.throw_ready = self.t
+        self.from_restart = r.kind
 
     # ---- tick ---------------------------------------------------------------
 
@@ -873,6 +958,15 @@ class Engine:
                 presser = self.nearest(carrier.x, carrier.y, other(p.team))
                 return *offball.support_spot((p.x, p.y), (carrier.x, carrier.y), goal_x(p.team),
                                              (presser.x, presser.y)), RECOVER
+        if brain.in_possession and p.role != "GK":  # O6: the team's shape with the ball (also in flight)
+            seen = [w for w in (self.beliefs[p.id].where(q.id, self.t) for q in self.players
+                                if q.team != p.team) if w]
+            onside = self.onside_limit(p.team, seen, bx)  # L10: as far as he sees he may go
+            spot = offball.attacking_slot(p.role, PITCH_X - goal_x(p.team), clamp(bx, 0, PITCH_X),
+                                          clamp(by, 0, PITCH_Y), onside)
+            if spot:  # with the ball still in flight he drifts there; he runs once it is settled
+                far = math.hypot(spot[0] - p.x, spot[1] - p.y) > FAR_OUT_OF_POSITION_M
+                return *spot, RECOVER if far and self.possessor else SHAPE
         if not brain.in_possession and p.role != "GK":
             own = PITCH_X - goal_x(p.team), PITCH_Y / 2
             d = math.hypot(own[0] - bx, own[1] - by) or 1.0
@@ -1117,7 +1211,7 @@ class Engine:
         if math.hypot(bx - holder.x, by - holder.y) > CONTROL_M:  # a heavy touch: the ball is there
             return True
         return any(q.team == p.team and q is not p and abs(q.x - own) < abs(p.x - own)
-                   and math.hypot(q.x - p.x, q.y - p.y) < COVER_M for q in self.players)
+                   and math.hypot(q.x - p.x, q.y - p.y) < COMMIT_COVER_M for q in self.players)
 
     def duels(self) -> None:
         """D8: defenders near the ball decide whether to tackle, and lunges that have arrived are
