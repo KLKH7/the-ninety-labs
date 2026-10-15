@@ -109,6 +109,15 @@ def judge_prompt(claim: Claim) -> str:
     return json.dumps({"text": claim.text, "evidence": claim.evidence})
 
 
+def _compatible_prompt(prompt: str) -> str:
+    """Keep old recordings replayable after making rejection reasons more actionable."""
+    return re.sub(
+        r"number ([\d.]+) is not (?:a cited \w+|in the cited evidence)",
+        r"number \1 is not in the cited evidence",
+        prompt,
+    )
+
+
 def replayer(turns: list[Turn]) -> tuple[Ask, Judge]:
     """Answers each call with the recorded answer, in order, and refuses a call it never saw."""
     queue = list(turns)
@@ -117,7 +126,7 @@ def replayer(turns: list[Turn]) -> tuple[Ask, Judge]:
         if not queue:
             raise ReplayMismatch(f"the recording has no {role} answer for: {prompt!r}")
         turn = queue.pop(0)
-        if (turn.role, turn.prompt) != (role, prompt):
+        if (turn.role, _compatible_prompt(turn.prompt)) != (role, _compatible_prompt(prompt)):
             raise ReplayMismatch(
                 f"call changed since recording: {turn.role} {turn.prompt!r} -> {role} {prompt!r}"
             )

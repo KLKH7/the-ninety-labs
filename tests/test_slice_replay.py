@@ -52,6 +52,14 @@ def test_replay_runs_the_planted_rejection_and_rewrite():
     assert any(line.startswith("fact_checker: rejected") for line in outcome.trace)
 
 
+def test_legacy_planted_reason_replays_after_unit_hardening():
+    legacy_reason = "number 143 is not in the cited evidence"
+    retry = FIRST + " Your previous claim was rejected: " + legacy_reason + ". Fix it."
+    turns = [WRITE, Turn("analyst", retry, REPLY), SUPPORTED]
+    outcome = asyncio.run(replay_slice(recording(turns, plant=True)))
+    assert outcome.accepted and outcome.attempts == 2
+
+
 def test_replay_stops_when_the_prompt_no_longer_matches():
     with pytest.raises(ReplayMismatch):
         asyncio.run(
