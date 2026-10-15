@@ -116,14 +116,15 @@ def test_when_the_penalty_is_taken_he_shoots_from_the_mark():
     e = box_foul()
     r = e.restart
     taker = e.by_id[r.taker]
-    taker.x, taker.y, taker.heading = r.x - 0.4, r.y, 0.0
+    taker.x, taker.y, taker.heading = r.x - 0.9, r.y, 0.0  # in reach of the mark, not on it
     e.t = r.ready_at
+    e.decide = lambda *a, **k: None  # only Law 14 may make him shoot
     for _ in range(25):
         e.step()
         if any(ev["type"] == "shot" for ev in e.match.events):
             break
     shots = [ev for ev in e.match.events if ev["type"] == "shot"]
-    assert shots and shots[0]["player"] == taker.id and abs(shots[0]["x"] - r.x) < 0.5
+    assert shots and shots[0]["player"] == taker.id and abs(shots[0]["x"] - r.x) < 0.05
 
 
 def test_in_his_own_box_a_lunge_through_the_man_needs_a_surer_win():
@@ -135,8 +136,20 @@ def test_in_his_own_box_a_lunge_through_the_man_needs_a_surer_win():
     assert line > COMMIT_P
     dfd.x, att.x = 45.0, 45.6  # the same challenge in midfield: a miss is a free kick there
     assert e.foul_line(dfd, att, 46.0, 34.0) == 0.0
-    dfd.x, dfd.y, att.x, att.y = 96.0, 36.0, 95.6, 34.0  # in the box, from in front and wide
-    assert e.foul_line(dfd, att, 96.0, 34.0) <= line
+    dfd.x, dfd.y, att.x, att.y = 96.0, 36.0, 95.6, 34.0  # in the box, from in front and wide,
+    e.dribble_to = (100.0, 34.0)  # the man carrying it on, not holding it
+    assert e.foul_line(dfd, att, 96.0, 34.0) == 0.0
+
+
+def test_he_foresees_the_man_running_on_into_his_lunge():
+    e, dfd, att = lunge_scene(34.0)
+    dfd.x, dfd.y = 95.5, 34.6  # beside him: his leg to the ball misses the man as they stand
+    att.x, att.y, att.vx = 95.5, 34.0, 0.0
+    e.dribble_to = (100.0, 34.0)  # carrying it, so not shielding it from him
+    assert not e.leg_meets(dfd.x, dfd.y, att.x, att.y, 95.87, 34.0)
+    assert e.foul_line(dfd, att, 95.87, 34.0) == 0.0  # standing still: no risk
+    att.vx = 5.0  # running on toward goal with it: by the time his foot arrives, the man is there
+    assert e.foul_line(dfd, att, 95.87, 34.0) > 0.0
 
 
 def test_at_a_penalty_the_keeper_guesses_the_side_about_as_often_as_keepers_do():
@@ -162,3 +175,13 @@ def test_at_a_penalty_the_keeper_guesses_the_side_about_as_often_as_keepers_do()
 
     assert abs(right_side("penalty_kick") - PENALTY_CORRECT_SIDE) < 0.03
     assert right_side(None) > 0.75  # open play keeps his own read
+
+
+def test_he_foresees_a_holding_man_shielding_it_from_him():
+    e, dfd, att = lunge_scene(34.0)
+    dfd.x, dfd.y = 95.5, 34.6
+    att.x, att.y, att.vx = 95.5, 34.0, 0.0
+    e.dribble_to = (100.0, 34.0)
+    carrying = e.foul_line(dfd, att, 95.87, 34.0)
+    e.dribble_to = None  # holding: the ball goes to his far side from the defender
+    assert carrying == 0.0 and e.foul_line(dfd, att, 95.87, 34.0) > 0.0

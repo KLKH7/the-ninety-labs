@@ -994,7 +994,7 @@ class Engine:
         self.ball = (*spot, 0.0, 0.0, 0.0, 0.0)
         self.restart = None
         if r.kind != "kick_off":  # a kickoff was recorded when the teams set up
-            self.emit("set_piece", r.team, taker.x, taker.y, player=taker.id, outcome=None)
+            self.emit("set_piece", r.team, *spot, player=taker.id, outcome=None)
         if r.team != self.poss_team:
             self.emit("possession_change", r.team, taker.x, taker.y, player=taker.id)
         self.give(taker.id)
@@ -1521,20 +1521,30 @@ class Engine:
         own = PITCH_X - goal_x(p.team)
         if not decisions.in_box(holder.x, holder.y, own):
             return 0.0
-        # Where the ball and the man will be if the carrier sees it coming and pushes it across
-        # (evade, an average dribbler) by the time his foot gets there, and where he will be:
-        # does his leg then sweep through the man?
+        # Where the man and the ball at his feet will be when his foot gets there: carried on at
+        # the man's speed, and pushed across him (evade, an average dribbler) if the man reacts in
+        # time. He lunges along the same distance toward where it will be: does his leg then
+        # sweep through the man?
         d = math.hypot(bx - p.x, by - p.y)
         lunge = decisions.lunge_time(d, p.profile["tackling"])
-        react = decisions.GENERIC_REACTION_S
-        push = max(0.0, lunge - react) * (EVADE_MPS + 2.0 * 0.5)
+        push = max(0.0, lunge - decisions.GENERIC_REACTION_S) * (EVADE_MPS + 2.0 * 0.5)
         a = evade_angle(holder.team, bx, by, p.x, p.y)
-        ex, ey = bx + math.cos(a) * push, by + math.sin(a) * push
-        reach = max(0.0, d - CONTROL_M) / (d or 1.0)  # he lunges until his foot is at the ball
-        ax, ay = p.x + (bx - p.x) * reach, p.y + (by - p.y) * reach
         mx, my = holder.x + holder.vx * lunge, holder.y + holder.vy * lunge
+        ex = bx + holder.vx * lunge + math.cos(a) * push
+        ey = by + holder.vy * lunge + math.sin(a) * push
+        far = math.hypot(ex - p.x, ey - p.y) or 1.0
+        step = max(0.0, d - CONTROL_M) / far  # he covers what he would have to the ball now
+        ax, ay = p.x + (ex - p.x) * step, p.y + (ey - p.y) * step
         now = self.leg_meets(p.x, p.y, holder.x, holder.y, bx, by)
-        if not (now or self.leg_meets(ax, ay, mx, my, ex, ey)):
+        ahead = self.leg_meets(ax, ay, mx, my, ex, ey)
+        # A carrier holding the ball with him this close shields it (tick_carrier, D8): the ball
+        # goes to the far side of the man, so a lunge for it goes through him.
+        shielded = False
+        if not self.dribble_to and math.hypot(mx - ax, my - ay) < SHIELD_M:
+            g = math.hypot(mx - ax, my - ay) or 1.0
+            feet = BODY_RADIUS + ball.RADIUS
+            shielded = self.leg_meets(ax, ay, mx, my, mx + (mx - ax) / g * feet, my + (my - ay) / g * feet)
+        if not (now or ahead or shielded):
             return 0.0
         threat = decisions.value(bx, by, own)  # their chance of scoring from having it here
         return clamp(1.0 - threat / PENALTY_GOAL_P, 0.0, 1.0)
