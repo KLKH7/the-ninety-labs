@@ -321,7 +321,7 @@ def test_a_long_ball_to_the_wing_is_struck_as_a_cross_and_a_shot_with_finishing(
     e, p = kicker()
     used = []
     original = e.execute
-    monkeypatch.setattr(e, "execute", lambda *a: used.append(a[-1]) or original(*a))
+    monkeypatch.setattr(e, "execute", lambda *a, **k: used.append(a[-1]) or original(*a, **k))
     e.give(p.id)
     e.ball = (50.37, 34.0, 0.0, 0.0, 0.0, 0.0)
     e.pass_to(p, 85.0, 60.0, lofted=True)
@@ -808,9 +808,9 @@ def test_a_late_dive_never_shrinks_the_keepers_reach():
     e = Engine(1)
     k = _shot_at_keeper(e, (80.0, 34.0, 0.3, 20.0, 1.0, 0.0))
     e.t += e.reaction(k) + 0.4
-    before = e.reach(k, 104.0, 34.0)[0]
+    before = e.reach(k, 104.0, 34.0, 0.5)
     e.dive = (k.id, e.t, k.y, 0.5, e.kicked_at + e.reaction(k))  # he decides to dive only now
-    assert e.reach(k, 104.0, 34.0)[0] >= before
+    assert e.reach(k, 104.0, 34.0, 0.5) >= before
 
 
 
@@ -819,9 +819,9 @@ def test_before_he_reacts_the_keeper_has_only_his_standing_reach_then_it_grows()
     e = Engine(1)
     k = _shot_at_keeper(e, (90.0, 34.0, 0.5, 25.0, 0.0, 0.0))
     e.t += e.reaction(k) * 0.5
-    assert e.reach(k, 104.0, 34.0)[0] == offball.KEEPER_STAND_REACH_M
+    assert e.reach(k, 104.0, 34.0, 0.5) == offball.KEEPER_STAND_REACH_M
     e.t += e.reaction(k) * 0.5 + 0.2
-    assert e.reach(k, 104.0, 34.0)[0] > offball.KEEPER_STAND_REACH_M
+    assert e.reach(k, 104.0, 34.0, 0.5) > offball.KEEPER_STAND_REACH_M
 
 
 def test_a_deflection_does_not_unstretch_a_dive_already_under_way():
@@ -830,9 +830,9 @@ def test_a_deflection_does_not_unstretch_a_dive_already_under_way():
     e.t += e.reaction(k)
     assert e.keeper_dive(k)
     e.t += 0.3
-    stretched = e.reach(k, 104.0, 34.0)[0]
+    stretched = e.reach(k, 104.0, 34.0, 0.5)
     e.kicked_at = e.t  # deflected mid-dive
-    assert e.reach(k, 104.0, 34.0)[0] == stretched
+    assert e.reach(k, 104.0, 34.0, 0.5) == stretched
 
 
 def test_a_late_dive_counts_the_stretch_his_arms_already_have():
@@ -867,7 +867,7 @@ def test_a_keeper_down_after_a_dive_keeps_his_stretch_until_he_is_up():
         e.t += 1 / 25
     assert e.dive is None and e.off_balance[k.id] > e.t  # landed, on the ground
     e.kicked_at = e.t  # a deflection while he is down
-    assert e.reach(k, 104.0, 36.0)[0] > 1.5
+    assert e.reach(k, 104.0, 36.0, 0.5) > 1.5
 
 
 def _alone_with(e, mate_xy, others=(5.0, 5.0)):

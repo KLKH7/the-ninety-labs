@@ -21,10 +21,11 @@ from ninety.sim import value as possession
 from ninety.sim.body import (
     BODY_HEIGHT,
     BODY_RADIUS,
+    BODY_RESTITUTION,
     CONTROL_M,
     CS_MEAN,
     F0_MEAN,
-    FOOT_REACH_Z,
+    HEAD_SPEED_MPS,
     V0_MEAN,
     Body,
     can_get_to,
@@ -172,6 +173,11 @@ class Scene:
     heading: float = 0.0  # the way he faces, radians
     fresh: float = 1.0  # his slow store's share left (P10)
     ball_offset: tuple[float, float] = (0.0, 0.0)  # the ball relative to his body
+    # P17: he meets the ball in the air with his head, at this height (its lowest point), the ball
+    # arriving at this velocity: every option is a header from there.
+    header: bool = False
+    z: float = 0.0
+    incoming: tuple[float, float, float] = (0.0, 0.0, 0.0)
 
 
 @dataclass
@@ -366,17 +372,20 @@ NODE_SD = math.sqrt(3.0)
 # Design: the passer judges a strike's speed to 0.05 m/s (each component of the launch), finer than
 # his kick error at any pass speed; it also lets flights be reused (`flight`).
 LAUNCH_STEP_MPS = 0.05
-_FLIGHTS: dict[tuple[int, int], tuple[list[tuple[float, float, float, float, float]], bool]] = {}
+HEIGHT_STEP_M = 0.05  # design: and a header's height to 5 cm, for the same reuse
+_FLIGHTS: dict[tuple[int, ...], tuple[list[tuple[float, float, float, float, float]], bool]] = {}
 _FLIGHTS_MAX = 4096  # memory bound on cached flights
 
 Flight = tuple[list[tuple[float, float, float, float, float]], bool]
 
 
-def fly(key: tuple[int, int]) -> Flight:
-    """A ball struck at key * LAUNCH_STEP_MPS (ground, up) m/s along a straight line, flown by the
-    engine's ball physics: (seconds, metres along, height, ground speed, vertical speed) every
-    RACE_STEP frames, and whether it comes to rest within ball.FLIGHT_BOUND_S."""
-    path = ball.predict((0.0, 0.0, 0.0, key[0] * LAUNCH_STEP_MPS, 0.0, key[1] * LAUNCH_STEP_MPS), DT,
+def fly(key: tuple[int, ...]) -> Flight:
+    """A ball struck at key * LAUNCH_STEP_MPS (ground, up) m/s along a straight line, from the
+    ground or (a third key) from key[2] * HEIGHT_STEP_M up, flown by the engine's ball physics:
+    (seconds, metres along, height, ground speed, vertical speed) every RACE_STEP frames, and whether
+    it comes to rest within ball.FLIGHT_BOUND_S."""
+    z0 = key[2] * HEIGHT_STEP_M if len(key) > 2 else 0.0
+    path = ball.predict((0.0, 0.0, z0, key[0] * LAUNCH_STEP_MPS, 0.0, key[1] * LAUNCH_STEP_MPS), DT,
                         ball.FLIGHT_BOUND_S)
     last = path[-1]
     rests = last[2] == 0 and last[3] == 0 and last[5] == 0
@@ -385,15 +394,58 @@ def fly(key: tuple[int, int]) -> Flight:
     return points, rests
 
 
-def flight(ground: float, up: float) -> Flight:
-    """`fly` for a launch as the passer judges it (to LAUNCH_STEP_MPS), remembered for reuse."""
-    key = (round(ground / LAUNCH_STEP_MPS), round(up / LAUNCH_STEP_MPS))
+def flight(ground: float, up: float, z0: float = 0.0) -> Flight:
+    """`fly` for a launch as the passer judges it (to LAUNCH_STEP_MPS; a header's height to
+    HEIGHT_STEP_M), remembered for reuse."""
+    key: tuple[int, ...] = (round(ground / LAUNCH_STEP_MPS), round(up / LAUNCH_STEP_MPS))
+    if z0 > 0:
+        key += (round(z0 / HEIGHT_STEP_M),)
     hit = _FLIGHTS.get(key)
     if hit is None:
         if len(_FLIGHTS) >= _FLIGHTS_MAX:
             _FLIGHTS.clear()
         hit = _FLIGHTS[key] = fly(key)
     return hit
+
+
+HEADED_PASS_Z = 0.1  # design: a headed pass is aimed to arrive just above the ground, at his feet
+HEADER_AWAY_DEG = 35.0  # design: a header away (a clearance, a flick on) is struck up at this angle
+
+
+def header_cap(scene: Scene, tx: float, ty: float) -> float:
+    """P17: the hardest he can head the ball toward (tx, ty): his head's drive (HEAD_SPEED_MPS) and
+    the share of the ball's own speed into his head along that line that it keeps (BODY_RESTITUTION).
+    One rule for the header as estimated and as struck (engine.header)."""
+    d = math.hypot(tx - scene.x, ty - scene.y) or 1.0
+    vx, vy, _ = scene.incoming
+    into = max(0.0, -(vx * (tx - scene.x) + vy * (ty - scene.y)) / d)
+    return (1 + BODY_RESTITUTION) * HEAD_SPEED_MPS + BODY_RESTITUTION * into
+
+
+def header_launch(scene: Scene, tx: float, ty: float, aim_z: float, speed: float | None = None
+                  ) -> tuple[float, float] | None:
+    """(ground, up) for a header from where he meets the ball to (tx, ty), at height `aim_z` there:
+    at `speed` (no harder than header_cap) or as hard as he can; None if a header cannot get there."""
+    cap = header_cap(scene, tx, ty)
+    v = cap if speed is None else min(speed, cap)
+    return ball.aim_from(math.hypot(tx - scene.x, ty - scene.y), v, scene.z, aim_z, DT)
+
+
+def headed_pass(scene: Scene, tx: float, ty: float) -> tuple[float, float] | None:
+    """A headed pass: as hard as a lofted pass there would be struck (no harder than he can head it),
+    to arrive at his team-mate's feet (HEADED_PASS_Z); None if a header cannot get there."""
+    return header_launch(scene, tx, ty, HEADED_PASS_Z,
+                         math.hypot(*loft_launch(math.hypot(tx - scene.x, ty - scene.y))))
+
+
+def header_away(scene: Scene) -> tuple[float, float]:
+    """Where a header away lands: struck as hard as he can at HEADER_AWAY_DEG toward the goal he
+    attacks (wide of the middle, as a clearance goes: `options`), flown by the ball physics."""
+    v = (1 + BODY_RESTITUTION) * HEAD_SPEED_MPS
+    c, s_ = math.cos(math.radians(HEADER_AWAY_DEG)), math.sin(math.radians(HEADER_AWAY_DEG))
+    path = ball.predict((0.0, 0.0, scene.z, v * c, 0.0, v * s_), DT, ball.FLIGHT_BOUND_S)
+    landed = next((st[0] for st in path[1:] if st[2] <= 0.0), path[-1][0])
+    return landed, v
 
 
 def strike_nodes(scene: Scene, tx: float, ty: float, lofted: bool, pace: float
@@ -404,15 +456,23 @@ def strike_nodes(scene: Scene, tx: float, ty: float, lofted: bool, pace: float
     situation he strikes it in: the skill, the speed, the nearest opponent he sees, his fatigue, and
     the foot (if the ball is on the wrong side he turns first, and strikes it the way he faces)."""
     dist = math.hypot(tx - scene.x, ty - scene.y)
-    ground, up = loft_launch(dist) if lofted else (launch_speed(dist, pace), 0.0)
+    if scene.header:  # P17: a headed pass, from where he meets it
+        launch = headed_pass(scene, tx, ty)
+        if launch is None:
+            return []
+        ground, up = launch
+    else:
+        ground, up = loft_launch(dist) if lofted else (launch_speed(dist, pace), 0.0)
     speed = math.hypot(ground, up)
     dx, dy = tx - scene.x, ty - scene.y
-    turn = turn_deg(math.atan2(dy, dx), scene.heading) if can_strike(*scene.ball_offset, dx, dy) else 0.0
+    strikeable = scene.header or can_strike(*scene.ball_offset, dx, dy)
+    turn = turn_deg(math.atan2(dy, dx), scene.heading) if strikeable and not scene.header else 0.0
     cx, cy = scene.x - scene.ball_offset[0], scene.y - scene.ball_offset[1]
     nearest = min((math.hypot(o[0] - cx, o[1] - cy) for o in scene.moving), default=math.inf)
     skill = pass_skill(scene.x, tx, ty, lofted, scene.goal_x)
-    dir_sd, speed_sd, loft_sd, foot = scene.passer.strike_error(skill, speed, nearest, scene.fresh, turn)
-    sds = (dir_sd, speed_sd, loft_sd) if up > 0 else (dir_sd, speed_sd)
+    dir_sd, speed_sd, loft_sd, foot = scene.passer.strike_error(skill, speed, nearest, scene.fresh, turn,
+                                                                header=scene.header)
+    sds = (dir_sd, speed_sd, loft_sd) if up > 0 or scene.header else (dir_sd, speed_sd)
     centre = 1 - len(sds) / 3
     errors = [(centre, (0.0, 0.0, 0.0))] if centre > 0 else []
     for i, sd in enumerate(sds):
@@ -442,19 +502,20 @@ def in_box(x: float, y: float, goal_x: float) -> bool:
 
 def reach_time(points, t_end: float, rests: bool, sx: float, sy: float, ux: float, uy: float,
                px: float, py: float, pvx: float, pvy: float, react: float, limit: float,
-               box_x: float | None = None, late: bool = False) -> tuple[float, int]:
+               box_x: float | None = None, late: bool = False, heads: bool = True) -> tuple[float, int]:
     """(seconds, index of the path point) of the first point of the ball's path this player can
     play, by the engine's chase test (body.can_get_to, as engine.can_reach) with an average body:
-    below foot height, within a foot's reach, after his reaction, braking first if he is running away
-    from it. A keeper whose box is at `box_x` reaches with his hands there (engine.reach): the arms'
-    stretch since he reacted, up to HAND_REACH_Z. A ball that comes to rest on the pitch is reached
-    whenever he gets there. (inf, -1) if not before `limit` or before the ball is out of play at
-    `t_end`.
+    within a foot's or his head's reach at the ball's height (offball.reach_at), after his reaction,
+    braking first if he is running away from it. A keeper whose box is at `box_x` reaches with his
+    hands there (engine.reach): the arms' stretch since he reacted, up to HAND_REACH_Z. A ball that
+    comes to rest on the pitch is reached whenever he gets there. (inf, -1) if not before `limit` or
+    before the ball is out of play at `t_end`.
 
     With `late`, a player who cannot get to any of it is given the soonest he could be at a point of
     the path if the ball waited for him there (as engine.plan_chase times a chaser who cannot make it:
     time_to_cover), over the points before `limit`: so how far he is from making it moves the estimate
-    smoothly, never all at once."""
+    smoothly, never all at once. With `heads` False only his feet count (he lets it drop).
+    """
     speed = math.hypot(pvx, pvy)
     last = len(points) - 1
     if late:
@@ -471,8 +532,8 @@ def reach_time(points, t_end: float, rests: bool, sx: float, sy: float, ux: floa
         if t <= react and not resting:
             continue
         bx, by = sx + ux * a, sy + uy * a
-        reach_m, reach_z = _FOOT if box_x is None else _reach(bx, by, t, react, box_x)
-        if z > reach_z:
+        reach_m = _reach(bx, by, t, react, box_x, z, heads)
+        if reach_m is None:
             continue
         dx, dy = bx - px, by - py
         if resting:  # it waits for him there: he takes it whenever he arrives
@@ -486,16 +547,14 @@ def reach_time(points, t_end: float, rests: bool, sx: float, sy: float, ux: floa
     return math.inf, -1
 
 
-_FOOT = offball.reach_for(False, 0.0)  # an outfield player's reach, the same at every moment
-
-
-def _reach(bx: float, by: float, t: float, react: float, box_x: float | None) -> tuple[float, float]:
-    """How far and how high he reaches for a ball at (bx, by), `t` seconds after the strike, by the
-    engine's own rules (offball.may_handle, offball.reach_for): a foot, or, for the opposing keeper
-    (his box at `box_x`), his hands in his box, stretched since he reacted. The pass is not his
-    release, nor a pass from his own side, so only his box decides."""
+def _reach(bx: float, by: float, t: float, react: float, box_x: float | None, z: float,
+           heads: bool = True) -> float | None:
+    """How far he reaches for a ball at (bx, by), its lowest point at `z`, `t` seconds after the
+    strike, by the engine's own rules (offball.may_handle, offball.reach_at): a foot or his head, or,
+    for the opposing keeper (his box at `box_x`), his hands in his box, stretched since he reacted.
+    The pass is not his release, nor a pass from his own side, so only his box decides."""
     hands = box_x is not None and offball.may_handle(True, in_box(bx, by, box_x), False, False)
-    return offball.reach_for(hands, t - react)
+    return offball.reach_at(hands, t - react, z, heads)
 
 
 def _late_arrival(points, t_end: float, rests: bool, sx: float, sy: float, ux: float, uy: float,
@@ -514,8 +573,8 @@ def _late_arrival(points, t_end: float, rests: bool, sx: float, sy: float, ux: f
         if t > limit or t >= t_end or (t <= react and not (rests and i == last)):
             return None
         bx, by = sx + ux * a, sy + uy * a
-        reach_m, reach_z = _FOOT if box_x is None else _reach(bx, by, t, react, box_x)
-        return None if z > reach_z else (t, bx - px, by - py, reach_m)
+        reach_m = _reach(bx, by, t, react, box_x, z)
+        return None if reach_m is None else (t, bx - px, by - py, reach_m)
 
     def arrival(t: float, dx: float, dy: float, reach_m: float, best: float) -> float:
         # Exact: can_get_to and time_to_cover are one rule, so one who cannot get there even a
@@ -549,8 +608,8 @@ def _late_arrival(points, t_end: float, rests: bool, sx: float, sy: float, ux: f
         if t <= react and not (rests and i == last):
             continue
         bx, by = sx + ux * a, sy + uy * a
-        reach_m, reach_z = _FOOT if box_x is None else _reach(bx, by, t, react, box_x)
-        if z > reach_z:
+        reach_m = _reach(bx, by, t, react, box_x, z)
+        if reach_m is None:
             continue
         dx, dy = bx - px, by - py
         soonest = react + _soonest(math.hypot(dx, dy) - reach_m, speed)
@@ -577,10 +636,11 @@ def body_hit(points, take: float, sx: float, sy: float, ux: float, uy: float,
              ) -> float:
     """The chance the ball strikes this opponent's body on its way, before the team-mate takes it
     at `take` (engine.contact: a body needs no reaction, and any opponent touch ends a pass). Until
-    he reacts he carries on as he was going; after it, a ball low enough to play is his race
-    (reach_time), so only one at body height counts. Where the ball passes him is judged from where
-    the passer believes he is, which may be off by his perception error (sigma0 + sigma_v * seconds:
-    perception.POSITION_ERROR_PER_M and VELOCITY_ERROR_PER_M at his distance), out to BODY_SDS."""
+    he reacts he carries on as he was going; after it, a ball he can play (a foot or his head) is his
+    race (reach_time), so only one at body height above that counts. Where the ball passes him is
+    judged from where the passer believes he is, which may be off by his perception error
+    (sigma0 + sigma_v * seconds: perception.POSITION_ERROR_PER_M and VELOCITY_ERROR_PER_M at his
+    distance), out to BODY_SDS."""
     prev = None
     for t, a, z, _, _ in points:
         if t > take:
@@ -594,7 +654,8 @@ def body_hit(points, take: float, sx: float, sy: float, ux: float, uy: float,
             if prev is not None and a > prev[1]:  # where it passed him, between two path points
                 f = (along - prev[1]) / (a - prev[1])
                 t, z = prev[0] + f * (t - prev[0]), prev[2] + f * (z - prev[2])
-            if t > take or z > BODY_HEIGHT or (t >= react and z <= FOOT_REACH_Z):
+            playable = t >= react and offball.reach_at(False, t - react, z) is not None
+            if t > take or z > BODY_HEIGHT or playable:
                 return 0.0
             side = abs(rx * uy - ry * ux)
             sigma = max(sigma0 + sigma_v * min(t, react), 1e-3)
@@ -634,7 +695,9 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
     # How far each player is from the ball's whole path at the widest spread of the strikes: a
     # lower bound on when he could get there (at top speed, straight), so the race can skip those
     # who could not be in it.
-    longest = max(flight(g, u)[0][-1][1] for _, _, g, u in nodes)
+    if not nodes:
+        return 0.0
+    longest = max(flight(g, u, scene.z)[0][-1][1] for _, _, g, u in nodes)
     spread = max(abs(d) for _, d, _, _ in nodes)
     ux0, uy0 = math.cos(direction), math.sin(direction)
     ex, ey = sx + ux0 * longest, sy + uy0 * longest
@@ -655,7 +718,7 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
         rivals.append((ox, oy, ovx, ovy, keeper, lb, body, sigma0, sigma_v))
     total = 0.0
     for w, d_angle, ground, up in nodes:
-        points, rests = flight(ground, up)
+        points, rests = flight(ground, up, scene.z)
         ux, uy = math.cos(direction + d_angle), math.sin(direction + d_angle)
         t_end = math.inf  # out of play (Law 9): the whole ball over a line
         for t, a, _, _, _ in points:
@@ -672,10 +735,23 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
                 take, at, taker = t, i, mate
         if taker is None:
             continue  # nobody of his gets to it before it goes out or comes to rest out of reach
-        _, a, _, g, vz = points[at]
+        if offball.headed(False, points[at][2]):
+            # P17 (engine.goes_up): he lets it drop to his feet if he can take it there before any
+            # opponent could get to it at all; otherwise he heads it.
+            t_f, i_f = reach_time(points, t_end, rests, sx, sy, ux, uy, *taker[:5], math.inf, heads=False)
+            if t_f < math.inf and all(
+                    reach_time(points, t_end, rests, sx, sy, ux, uy, ox, oy, ovx, ovy, react, t_f,
+                               scene.goal_x if keeper else None)[0] > t_f
+                    for ox, oy, ovx, ovy, keeper, *_ in rivals):
+                take, at = t_f, i_f
+        _, a, z, g, vz = points[at]
         if at == len(points) - 1 and rests:
             g = vz = 0.0
-        p = sigmoid((taker[5] - relative_speed(g * ux, g * uy, vz, taker[2], taker[3])) / CONTROL_MARGIN_MPS)
+        if offball.headed(False, z):  # P17: he meets it with his head: won in the air, and what he
+            p = 1.0  # does with it is his next choice
+        else:
+            rel = relative_speed(g * ux, g * uy, vz, taker[2], taker[3])
+            p = sigmoid((taker[5] - rel) / CONTROL_MARGIN_MPS)
         horizon = take + OPPONENT_LATE_S
         # Where the ball has got to by then, along this strike: nobody further from that stretch of
         # its path than he can run by then matters (a shortcut, like `lb`).
@@ -724,6 +800,10 @@ def pass_option(scene: Scene, mate: tuple[str, float, float, float]) -> Option |
     ways = [(True, ARRIVE_MPS)] if scene.throw else [(False, pace) for pace in PASS_PACES]
     if not scene.throw and dist >= LOFT_FROM_M:
         ways.append((True, ARRIVE_MPS))
+    if scene.header:  # P17: headed, only as far as a header can get it there
+        if headed_pass(scene, tx, ty) is None:
+            return None
+        ways = [(True, ARRIVE_MPS)]
     best = None
     for lofted, pace in ways:
         confidence = pass_confidence(scene, tx, ty, mx, my, age, lofted, pace, mid)
@@ -751,7 +831,10 @@ def options(scene: Scene) -> list[Option]:
         return out
     p = pressure(scene)
     q = shot_chance(scene)
-    if abs(scene.goal_x - scene.x) < offball.SHOT_RANGE_M:
+    in_range = abs(scene.goal_x - scene.x) < offball.SHOT_RANGE_M
+    if scene.header:  # P17: a header at goal only from where a header can reach it
+        in_range = in_range and header_launch(scene, scene.goal_x, PITCH_Y / 2, 1.0) is not None
+    if in_range:
         bias = 1.3 if "shoots_from_distance" in scene.traits else 1.0
         # A shot that fails is either blocked, leaving the ball at his feet for them, or missed or
         # saved, which gives the ball back from deep (a goal kick or the keeper's hands).
@@ -763,6 +846,19 @@ def options(scene: Scene) -> list[Option]:
         lost = blocked * loss_cost(scene.x, scene.y, scene.goal_x) + (1 - blocked) * missed
         out.append(Option("shoot", q * bias * (1 + 0.5 * scene.risk) - (1 - q) * lost,
                           (scene.goal_x, PITCH_Y / 2)))
+    if scene.header:
+        # P17: in the air he can only head it: no dribble, nothing to hold. Or he heads it away, as
+        # far as he can, toward the side a clearance goes: in his own third that is a clearance,
+        # elsewhere a flick on; either way a contest where it lands (as `clear`).
+        reach, _ = header_away(scene)
+        wide = 4.0 if scene.y < PITCH_Y / 2 else PITCH_Y - 4.0
+        fx, fy = scene.x + attack(scene.goal_x) * 45.0 - scene.x, wide - scene.y
+        f = math.hypot(fx, fy)
+        tx = min(PITCH_X - 1, max(1.0, scene.x + fx / f * reach))
+        ty = min(PITCH_Y - 1, max(1.0, scene.y + fy / f * reach))
+        contest = 0.5 * value(tx, ty, scene.goal_x) - 0.5 * loss_cost(tx, ty, scene.goal_x)
+        out.append(Option("clear", contest, (tx, ty), lofted=True))
+        return out
     for turn in (0.0, 0.8, -0.8):  # straight at goal, or angled away
         heading = math.atan2(PITCH_Y / 2 - scene.y, scene.goal_x - scene.x) + turn
         tx = scene.x + DRIBBLE_STEP_M * math.cos(heading)

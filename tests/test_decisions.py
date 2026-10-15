@@ -9,6 +9,7 @@ import pytest
 
 from ninety.sim import decisions as D
 from ninety.sim import offball
+from ninety.sim.body import FOOT_REACH_Z
 from ninety.sim.profiles import Profile
 from ninety.sim.value import CELLS_X, CELLS_Y, Table, Tables
 
@@ -307,7 +308,7 @@ def test_a_failed_pass_is_costed_where_it_would_end_if_that_is_worse():
 
 def test_the_first_touch_is_judged_on_the_speed_a_lofted_ball_comes_down_at():
     points, _ = D.flight(*D.loft_launch(30.0))
-    down = next(p for p in points[1:] if p[4] < 0 and p[2] <= D.FOOT_REACH_Z)
+    down = next(p for p in points[1:] if p[4] < 0 and p[2] <= FOOT_REACH_Z)
     landing, launch = math.hypot(down[3], down[4]), math.hypot(*D.loft_launch(30.0))
     assert landing < 0.8 * launch  # drag slows it in the air
 
@@ -585,7 +586,13 @@ def test_after_he_reacts_a_ball_at_his_feet_is_his_to_play_and_one_at_his_chest_
     assert hit(ground, 15.0) == 0.0  # after he reacts, at his feet: a touch, his race (reach_time)
     lofted, _ = D.flight(*D.loft_launch(30.0))
     along, t = _crossing(lofted, 1.2, 1.6)
-    assert t > react and hit(lofted, along) > 0.99  # after he reacts, at body height: it hits him
+    assert t > react and hit(lofted, along) == 0.0  # after he reacts, at head height: his header (P17)
+    # A ball at 1.7 m, above a standing header: it hits him until he has had the time to jump, then
+    # it is his to head. Mutations caught: no jump time; heads reaching it standing.
+    level = [(k * 0.04, k * 0.4, 1.7, 10.0, 0.0) for k in range(60)]  # 10 m/s, 1.7 m up
+    jump = D.offball.JUMP_RISE_S
+    assert hit(level, 10.0 * (react + 0.5 * jump)) > 0.99
+    assert hit(level, 10.0 * (react + jump + 0.1)) == 0.0
 
 
 def test_the_body_contact_chance_follows_how_sure_he_is_of_where_the_opponent_stands():
