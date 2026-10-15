@@ -495,3 +495,11 @@ def test_an_opponent_cutting_a_pass_out_intercepts_but_collecting_it_where_it_wa
         e.kicked = e.emit("pass", "home", 50.0, 34.0, player="h6")
         e.touched(e.by_id["a6"], at_x, 34.0, controls=True)
         assert any(ev["type"] == "interception" for ev in e.match.events) is label
+
+
+def test_a_player_who_has_just_received_is_not_yet_holding():
+    e = Engine(1)
+    e.give("h6")
+    assert e.scene_for(e.by_id["h6"]).current is None  # no carry-on bonus for a choice he never made
+    e.holding = True
+    assert e.scene_for(e.by_id["h6"]).current == "hold"
