@@ -226,6 +226,7 @@ class Engine:
         self.read: tuple[str, float] | None = None  # (keeper, y): where he reads a shot is going
         # (keeper, start t, start y, signed travel, when his arms began to stretch)
         self.dive: tuple[str, float, float, float, float] | None = None
+        self.landed: tuple[str, float] | None = None  # (keeper, his arms' stretch start) while he is down
         self.shot_touched_by: str | None = None  # "keeper" or "defender": who got to the shot
         self.shot_was_on_target: bool | None = None  # was it going in when they first touched it?
         self.free_since = -99.0
@@ -1128,6 +1129,8 @@ class Engine:
         to the touch that set it off), or his reaction to the last touch."""
         if self.dive and self.dive[0] == p.id:
             return self.dive[4]
+        if self.landed and self.landed[0] == p.id and self.off_balance.get(p.id, -1.0) > self.t:
+            return self.landed[1]  # down after a dive: stretched out as he landed
         return self.kicked_at + self.reaction(p)
 
     def ball_at_x(self, x: float, seconds: float = 10.0) -> tuple[float, float, float] | None:
@@ -1174,6 +1177,7 @@ class Engine:
         p.vx, p.vy = 0.0, (y - p.y) / DT
         p.y = y
         if elapsed >= DIVE_TIME_S:
+            self.landed = (p.id, self.dive[4])
             self.dive = None
             self.off_balance[p.id] = self.t + offball.KEEPER_DOWN_S  # on the ground: getting up
         return True

@@ -823,5 +823,26 @@ def test_a_late_dive_counts_the_stretch_his_arms_already_have():
     assert when < 0.4
     y0 = k.y
     assert e.keeper_dive(k)
+    assert e.dive[4] == e.kicked_at + e.reaction(k)  # his arms began when he reacted, not when he dived
     want = min(abs(cross - y0) - offball.arm_reach_m(0.1 + when), offball.KEEPER_DIVE_TRAVEL_M)
     assert abs(abs(e.dive[3]) - want) < 1e-6
+
+
+def test_the_keeper_follows_a_slow_shot_however_long_it_takes_to_arrive():
+    e = Engine(1)
+    e.ball = (65.0, 34.0, 0.0, 70 / 3.6, 0.0, 0.0)  # a slow ground shot from 40 m
+    arrival = e.ball_at_x(104.0)
+    assert arrival is not None and arrival[0] > 3.0
+
+
+def test_a_keeper_down_after_a_dive_keeps_his_stretch_until_he_is_up():
+    e = Engine(1)
+    k = _shot_at_keeper(e, (90.0, 34.0, 0.5, 25.0, 6.0, 0.0))
+    e.t += e.reaction(k)
+    assert e.keeper_dive(k)
+    for _ in range(int(0.5 * 25) + 2):
+        e.keeper_dive(k)
+        e.t += 1 / 25
+    assert e.dive is None and e.off_balance[k.id] > e.t  # landed, on the ground
+    e.kicked_at = e.t  # a deflection while he is down
+    assert e.reach(k, 104.0, 36.0)[0] > 1.5
