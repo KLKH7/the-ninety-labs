@@ -40,7 +40,8 @@ PENALTY_DEPTH, PENALTY_HALF_WIDTH = 16.5, 20.16  # Law 1
 NEAR_M = 2.5  # C6, C7: how close the ball must be to where an event says it happened
 ON_BALL = {"pass", "shot", "tackle", "interception", "out_of_play", "goal", "set_piece", "kickoff"}
 MAX_SUBSTITUTIONS = 5  # C3: Law 3, top-level competitions
-STOPPAGES = {"out_of_play", "goal", "substitution"}  # C3: events after which play has stopped
+STOPPAGES = {"out_of_play", "goal", "substitution", "offside"}  # C3: events after which play has stopped
+DEAD_FROM = {"out_of_play", "offside"}  # the ball is dead from these until the restart (Laws 9, 11)
 RESTARTS = {"set_piece", "kickoff"}  # P3: events that put the ball back in play
 TOUCHES = {"pass", "shot", "deflection", "interception", "tackle", "possession_change"}  # P5
 # P14: a touch by someone other than the carrier must be physically possible: the player within
@@ -117,7 +118,7 @@ def check_physics(events: list[dict], frames: list[dict], fps: float, roster: li
     dead: set[int] = set()
     out_at = None
     for e in events:
-        if e["type"] == "out_of_play" and out_at is None:
+        if e["type"] in DEAD_FROM and out_at is None:
             out_at = e["frame"]
         elif e["type"] in RESTARTS and out_at is not None:
             dead.update(range(out_at, e["frame"] + 1))
@@ -287,8 +288,10 @@ def check_events(events: list[dict], frames: list[dict], fps: float, meta: dict,
             # ball leaves), or played it first time: the ball within his reach (P14) as he struck it.
             had = {by_frame[n].get("possessor") for n in (e["frame"] - 1, e["frame"]) if n in by_frame}
             me = next((q for q in f["players"] if q["id"] == e.get("player")), None)
-            first_time = me is not None and math.hypot(f["ball"]["x"] - me["x"], f["ball"]["y"] - me["y"]) \
-                <= FOOT_REACH_M + FRAME_SLACK_M
+            before = by_frame.get(e["frame"] - 1)
+            loose = before is not None and before.get("possessor") is None  # nobody had it a frame before
+            first_time = loose and me is not None and \
+                math.hypot(f["ball"]["x"] - me["x"], f["ball"]["y"] - me["y"]) <= FOOT_REACH_M + FRAME_SLACK_M
             if e.get("player") not in had and not first_time:
                 problems["C8 event order"].append(f"{e['id']} {e['type']}: {e.get('player')} lacked the ball")
 
