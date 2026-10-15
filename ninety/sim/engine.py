@@ -92,9 +92,13 @@ GOAL_AREA_X = 5.5  # Law 1
 RESTART_DISTANCE_M = {"throw_in": 2.0, "corner": 9.15, "goal_kick": PENALTY_DEPTH - GOAL_AREA_X + 1.0,
                       "free_kick": 9.15, "kick_off": 9.15}  # Laws 8 and 13: 9.15 m (the centre circle)
 BOARDS_M = 4.0  # verify: advertising boards behind the lines stop a ball (and players) that go out
-RESTART_DELAY_S = {"throw_in": (3, 8), "goal_kick": (6, 10), "corner": (12, 20),
-                   "free_kick": (4, 10),
-                   "kick_off": (1, 2)}  # verify (R1); kickoff: design, long enough to see
+# R1: seconds from the ball going out to the restart. Means from Opta timing of the Premier League
+# (The Analyst): throw-ins about 16 s (2022-23; 17.9 in 2025-26), goal kicks 29 to 30 s, corners and
+# free kicks about half a minute. The spread around each mean is design. Kickoff: design, long
+# enough to see (a goal's celebration, about 72 s in the same data, is not modelled).
+RESTART_DELAY_S = {"throw_in": (12, 20), "goal_kick": (24, 34), "corner": (24, 36),
+                   "free_kick": (24, 36),
+                   "kick_off": (1, 2)}
 NO_OFFSIDE_FROM = ("throw_in", "goal_kick", "corner")  # Law 11: no offside offence direct from these
 INTERCEPT_SHARE = 0.85  # design: taken before this share of the way to its target, a pass is intercepted
 
@@ -221,6 +225,8 @@ class Engine:
         # (x, y, strike): a carrier turning the ball onto his kicking side before he strikes it
         self.windup: tuple | None = None
         self.lunges: dict[str, float] = {}  # defender -> when his lunge reaches the ball
+        self.lunge_at: dict[str, str] = {}  # defender -> the man he lunged at
+        self.penalties = 0  # fouls in the offender's own box (Law 14 not yet modelled: a free kick)
         self.evade_at: dict[str, float] = {}  # defender -> when the carrier reacts to his lunge
         self.off_balance: dict[str, float] = {}  # defender -> when he has recovered from a miss
         self.tackle: dict | None = None  # the tackle event whose outcome the next control decides
@@ -1053,11 +1059,14 @@ class Engine:
             seen = self.beliefs[p.id].seen
             man = min((q for q in self.players if q.team != p.team and q.id in seen),
                       key=lambda q: math.hypot(seen[q.id].x - mx, seen[q.id].y - my), default=None)
-            # His spot moves with his man: he matches the man's velocity and closes the gap on top.
+            # His spot moves with his man: he matches the man's velocity and closes the gap on top,
+            # and never goes slower than in time for the spot itself (he steers at the spot, so a
+            # man running toward him does not make a late arrival on time).
             mvx, mvy = (seen[man.id].vx, seen[man.id].vy) if man else (0.0, 0.0)
             gap = math.hypot(mx - p.x, my - p.y)
-            close = self.in_time(p, mx, my) / gap if gap > 1e-6 else 0.0
-            return mx, my, math.hypot(mvx + (mx - p.x) * close, mvy + (my - p.y) * close)
+            need = self.in_time(p, mx, my)
+            close = need / gap if gap > 1e-6 else 0.0
+            return mx, my, max(need, math.hypot(mvx + (mx - p.x) * close, mvy + (my - p.y) * close))
         carrier = self.by_id.get(self.possessor) if self.possessor else None
         if brain.in_possession and carrier and carrier.team == p.team and p.role != "GK":
             run = self.run_target(p, carrier, brain)
@@ -1400,9 +1409,13 @@ class Engine:
             p = self.by_id[pid]
             holder = self.by_id.get(self.possessor) if self.possessor else self.by_id.get(self.dribbler or "")
             bx, by = self.ball[0], self.ball[1]
+            victim = self.by_id.get(self.lunge_at.pop(pid, ""))
             if holder and holder.team != p.team and math.hypot(p.x - bx, p.y - by) <= CONTROL_M:
                 self.poke(p, holder)
                 holder = None
+            elif victim and not self.restart and self.leg_meets(p, victim, bx, by):
+                self.foul(p, victim)
+                return
             else:
                 self.off_balance[pid] = self.t + OFF_BALANCE_S
         if not holder or self.restart or self.hands(holder, holder.x, holder.y):  # Law 12: not his hands
@@ -1424,7 +1437,36 @@ class Engine:
             sharp = 0.02 + 0.08 * (1 - p.profile["decisions"])
             if self.rng.random() < decisions.sigmoid((p_win - line) / sharp):
                 self.lunges[p.id] = self.t + lunge
+                self.lunge_at[p.id] = holder.id
                 self.evade_at[p.id] = self.t + holder.profile.reaction()
+
+    @staticmethod
+    def leg_meets(p: Player, victim: Player, bx: float, by: float) -> bool:
+        """Law 12: a lunge that arrives with the ball gone still sweeps his leg toward it, a foot's
+        reach (CONTROL_M) from his body. If that leg passes through the man he went for, he has
+        made contact with the opponent, not the ball."""
+        dx, dy = bx - p.x, by - p.y
+        d = math.hypot(dx, dy)
+        if d < 1e-6:
+            return False
+        fx, fy = p.x + dx / d * min(d, CONTROL_M), p.y + dy / d * min(d, CONTROL_M)
+        sx, sy = fx - p.x, fy - p.y
+        k = clamp(((victim.x - p.x) * sx + (victim.y - p.y) * sy) / (sx * sx + sy * sy), 0.0, 1.0)
+        return math.hypot(p.x + k * sx - victim.x, p.y + k * sy - victim.y) <= BODY_RADIUS
+
+    def foul(self, p: Player, victim: Player) -> None:
+        """Law 12: a careless challenge that hits the man: a direct free kick to his side where it
+        happened (Law 13); in the offender's own penalty area, a penalty kick (Law 14)."""
+        self.emit("foul", p.team, victim.x, victim.y, player=p.id, receiver=victim.id)
+        self.off_balance[p.id] = self.t + OFF_BALANCE_S
+        self.lunges.clear(), self.lunge_at.clear(), self.evade_at.clear()
+        self.possessor = self.dribbler = self.dribble_to = self.windup = None
+        self.chase = {}
+        own_goal_x = PITCH_X if attack_dir(p.team) < 0 else 0.0
+        if decisions.in_box(victim.x, victim.y, own_goal_x):
+            self.penalties += 1
+        self.stop("free_kick", victim.team, (clamp(victim.x, 0.5, PITCH_X - 0.5),
+                                             clamp(victim.y, 0.5, PITCH_Y - 0.5)))
 
     def evade(self, carrier: Player, defender: Player) -> None:
         """The carrier, having reacted to a lunge, pushes the ball away from the defender's foot,
