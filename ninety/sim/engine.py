@@ -315,6 +315,11 @@ class Engine:
         self.last_touch = pid
         if pid != self.released_by:
             self.released_by = None
+        self.new_phase()
+        self.hold_until = self.t + settle_s(self.by_id[pid].profile["first_touch"])
+
+    def new_phase(self) -> None:
+        """Forget the last phase of play: a new carrier, or a kickoff."""
         self.dribbler = None
         self.last_deflection = None
         self.offside = set()
@@ -324,7 +329,6 @@ class Engine:
         self.runs = {}
         self.touched_since_kick = False
         self.chase = {}
-        self.hold_until = self.t + settle_s(self.by_id[pid].profile["first_touch"])
         self.dribble_to = None
 
     def kickoff_spot(self, p: Player, kicking: str) -> tuple[float, float]:
@@ -353,6 +357,8 @@ class Engine:
         self.emit("kickoff", team, taker.x, taker.y, player=taker.id)
         self.possessor = None
         self.poss_team = team
+        self.kicked = None
+        self.new_phase()
         self.stop("kick_off", team, (PITCH_X / 2, PITCH_Y / 2), taker.id)
 
     # ---- decisions: players choose, the kick gives the ball a velocity -------
@@ -912,9 +918,13 @@ class Engine:
     def play_point(self) -> tuple[float, float]:
         """Where play is, for setting shape (O8): once a pass is struck, everyone sees where it is
         going and sets up for that, rather than chasing the ball's every metre in flight."""
-        if self.kicked and self.kicked["type"] == "pass" and self.pass_target:
-            return self.pass_target
-        return self.ball[0], self.ball[1]
+        bx, by = self.ball[0], self.ball[1]
+        if self.kicked and self.kicked["type"] == "pass" and self.pass_target and not self.last_deflection:
+            sx, sy = self.kicked["x"], self.kicked["y"]
+            tx, ty = self.pass_target
+            if (bx - sx) * (tx - sx) + (by - sy) * (ty - sy) < (tx - sx) ** 2 + (ty - sy) ** 2:
+                return self.pass_target  # still on its way there
+        return bx, by
 
     def ball_eta(self, x: float, y: float) -> float:
         """How soon the ball could next be played to (x, y) (O8): first it has to be somewhere a
@@ -986,12 +996,14 @@ class Engine:
         if not brain.in_possession and p.id in brain.markers:
             mx, my = brain.markers[p.id]
             mx, my = clamp(mx, 0.5, PITCH_X - 0.5), clamp(my, 0.5, PITCH_Y - 0.5)
-            # His spot moves with his man, so he keeps up with him as well as getting there in time.
             seen = self.beliefs[p.id].seen
             man = min((q for q in self.players if q.team != p.team and q.id in seen),
                       key=lambda q: math.hypot(seen[q.id].x - mx, seen[q.id].y - my), default=None)
-            keep_up = math.hypot(seen[man.id].vx, seen[man.id].vy) if man else 0.0
-            return mx, my, self.in_time(p, mx, my) + keep_up
+            # His spot moves with his man: he matches the man's velocity and closes the gap on top.
+            mvx, mvy = (seen[man.id].vx, seen[man.id].vy) if man else (0.0, 0.0)
+            gap = math.hypot(mx - p.x, my - p.y)
+            close = self.in_time(p, mx, my) / gap if gap > 1e-6 else 0.0
+            return mx, my, math.hypot(mvx + (mx - p.x) * close, mvy + (my - p.y) * close)
         carrier = self.by_id.get(self.possessor) if self.possessor else None
         if brain.in_possession and carrier and carrier.team == p.team and p.role != "GK":
             run = self.run_target(p, carrier, brain)
