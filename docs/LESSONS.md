@@ -66,7 +66,11 @@ short and actionable. This file is public: no research sources, product names or
   every legal case (a kick-off reset, a lofted pass, a substitution at a stoppage) has a test
   that requires it to pass, so no check is stricter than the Laws.
 - **What happened:** a planted "ball never arrives" defect showed the ball-path check could
-  never fail on short clips.
+  never fail on short clips. Later, a new braking test stayed green with the braking limit set
+  to infinity: an independent reviewer found it by breaking the limit on purpose.
+- **Check (mutation test):** for every new check or test, break the thing it guards (set the
+  limit to infinity, remove the line) and confirm exactly the intended test goes red; then
+  restore and confirm green.
 
 ### 9. Passing the validator is not being realistic
 - **What happened:** a run where every pass was intercepted met the data contract.
@@ -106,6 +110,20 @@ short and actionable. This file is public: no research sources, product names or
   `$?` was `head`'s exit code, so it would have said the same whether or not anything matched.
 - **Rule:** test the command whose answer you need on its own (`grep -c`, then its exit code),
   and add a positive control: something you know is there must be found.
+
+### 18. Run the commands you document
+- **What happened:** the data contract told readers to run `ninety-sim` without `--out`, which
+  the CLI requires, so the first command a newcomer copied failed.
+- **Rule:** every command in a doc is copied from a run that worked, with all required
+  arguments.
+- **Check:** paste each documented command into a fresh shell before merging.
+
+### 21. Evidence has to fit in an agent's context
+- **What happened:** frame-based stats cited every frame they used, so one 90-minute match
+  produced 85 MB of facts (9.3 million source ids), too large for any agent or fact-checker.
+- **Rule:** cite frames as a range (`frames:<first>-<last>`); cite events by id; a value of zero
+  cites nothing.
+- **Check:** a test requires frame-based facts to cite one range, and caps the size of a clip's facts.
 
 ## Data and grounding
 

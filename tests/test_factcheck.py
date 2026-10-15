@@ -3,8 +3,9 @@ from ninety.match.facts import compact, events_in
 
 EVENTS = events_in(7, 5, 1, 5)
 KNOWN = {e["id"]: e for e in EVENTS}
-PASS = next(e for e in EVENTS if e["type"] == "pass" and "distance_m" in e)
-CLOCK_EVENT = next(e for e in EVENTS if e["clock"] == "01:27")
+PASS = next(e for e in EVENTS if e["type"] == "pass" and "distance_m" in e and e.get("receiver"))
+# any event in the second minute of play (01:00 to 01:59), whatever the engine produces there
+CLOCK_EVENT = next(e for e in EVENTS if e["clock"].startswith("01:"))
 
 
 def test_true_claim_passes():

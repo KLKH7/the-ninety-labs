@@ -151,12 +151,14 @@ Each step is one pull request, checked by the validator, reported against the re
 patterns, and audited independently before it merges.
 
 1. **Body and energy**: acceleration curve, per-player top speed, body size, two-reserve
-   energy. Done when every physics check passes and the late drop in high-intensity running
-   emerges.
+   energy. Done when every physics check passes and the body model's own tests do. Running
+   patterns (distance, sprints, top speeds, the late drop in high-intensity running) are
+   reported from this step on, but cannot appear until players choose to run (step 3).
 2. **Perception and team brain**: reaction and anticipation, beliefs, phase, line, press and
    cover assignments, anchor tables.
-3. **Decisions and execution**: options, utility scoring, softmax, look-ahead, execution error.
-   Done when shots, goals and restarts arise from choices and errors with no outcome draws.
+3. **Decisions and execution**: options, utility scoring, softmax, look-ahead, execution error,
+   off-the-ball runs. Done when shots, goals and restarts arise from choices and errors with no
+   outcome draws, and running patterns (distance, sprints, the late drop) appear in the report.
 4. **Duels and the referee**: dribble touches, challenges, fouls, offside, set pieces without
    timers.
 5. **Styles and matchups**: dials, archetypes, fingerprints measured per clip.

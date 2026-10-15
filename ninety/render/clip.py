@@ -15,6 +15,7 @@ import base64
 import functools
 import http.server
 import json
+import math
 import random
 import shutil
 import subprocess
@@ -36,6 +37,7 @@ from ninety.render.scene import (
     parts_box,
     project_keypoints,
     sample_looks,
+    turn_toward,
     update_gait,
 )
 from ninety.render.splits import split_of
@@ -106,6 +108,9 @@ def browser_page(gpu: bool = False):
             browser.close()
 
 
+BOOT = "#1a1a1a"
+
+
 def kit_colors(p: RenderParams, team: str, role: str) -> dict:
     kit = {
         ("home", False): p.home_kit,
@@ -113,7 +118,18 @@ def kit_colors(p: RenderParams, team: str, role: str) -> dict:
         ("home", True): p.home_gk,
         ("away", True): p.away_gk,
     }[(team, role == "GK")]
-    return {"shirt": kit.shirt, "shorts": kit.shorts, "socks": kit.socks}
+    return {"shirt": kit.shirt, "shorts": kit.shorts, "socks": kit.socks, "boots": BOOT}
+
+
+def _appearance(lk, p: RenderParams) -> dict:
+    """What the page needs to draw one player. Keepers stay solid, so they never match a team pattern."""
+    pattern = "solid" if lk.role == "GK" else (p.home_pattern if lk.team == "home" else p.away_pattern)
+    return {
+        "id": lk.id,
+        "colors": {**kit_colors(p, lk.team, lk.role), "skin": lk.skin, "hair": lk.hair},
+        "pattern": pattern,
+        "number": int(lk.id[1:]),
+    }
 
 
 def choose_start(
@@ -159,10 +175,7 @@ def render_clip(
     }
     players0 = [{**pl, "role": roles[pl["id"]]} for pl in frames[0]["players"]]
     looks = sample_looks(players0, seed)
-    objects = [
-        {"id": lk.id, "colors": {**kit_colors(p, lk.team, lk.role), "skin": lk.skin, "hair": lk.hair}}
-        for lk in looks
-    ]
+    objects = [_appearance(lk, p) for lk in looks]
     objects.append({"id": "ball", "colors": {"ball": "#f2f2f2"}})
     by_id = {lk.id: lk for lk in looks}
 
@@ -172,6 +185,7 @@ def render_clip(
     (out / "images").mkdir(parents=True)
 
     goals = [e for e in match.events if e["type"] == "goal"]
+    goal_at = {e["frame"]: e for e in goals}
     t0, t1 = frames[start]["t"], frames[start + n - 1]["t"]
     clip = {
         "clip_id": f"seed{seed}",
@@ -200,40 +214,93 @@ def render_clip(
             "cfg => window.ninety.init(cfg)", {"seed": seed, "params": p.to_dict(), "objects": objects}
         )
         clip["scorebug_px"] = info["bugRect"]
-        director = Director(p.camera, p.width, p.height, p.fps, seed)
+        director = Director(p.camera, p.width, p.height, p.fps, seed, cuts=p.camera_cut)
         gaits = {lk.id: Gait() for lk in looks}
         prev_xy: dict[str, tuple[float, float]] = {}
         prev_cam: Camera | None = None
+        spin_angle = 0.0
+        spin_axis = None
         rows = []
         for fi in range(max(0, start - WARMUP), start + n):
             fr = frames[fi]
             bx, by = fr["ball"]["x"], fr["ball"]["y"]
             for pl in fr["players"]:
                 px, py = prev_xy.get(pl["id"], (pl["x"], pl["y"]))
-                update_gait(
-                    gaits[pl["id"]], pl["x"] - px, pl["y"] - py, 1 / FPS, (bx - pl["x"], by - pl["y"])
-                )
+                g = gaits[pl["id"]]
+                held = g.heading
+                update_gait(g, pl["x"] - px, pl["y"] - py, 1 / FPS, (bx - pl["x"], by - pl["y"]))
                 prev_xy[pl["id"]] = (pl["x"], pl["y"])
-            carrier = fr.get("possessor")
-            ball = drawn_ball(fr, gaits[carrier].heading if carrier else None)
-            cam = director.step(ball[0], ball[1])
+                if "heading" in pl:
+                    # The engine says where he wants to face. The body turns toward it.
+                    g.heading = turn_toward(held, pl["heading"], 1 / FPS)
+                    pl["heading"] = round(g.heading, 4)
+                    g.speed = math.hypot(pl.get("vx", 0.0), pl.get("vy", 0.0))
+                    g.action = pl.get("action", "stand")
+                    g.dive = pl.get("dive", 0.0)
+            ball = drawn_ball(fr)
+            actors = [(pl["x"], pl["y"], pl.get("action", "")) for pl in fr["players"]]
+            # The snapshot of a goal already has the ball on the centre spot. The event
+            # carries the mouth it crossed, and the frame before it carries the pace.
+            ev = goal_at.get(fr["frame"])
+            goal_arg = None
+            if ev is not None and fi > 0:
+                prevb = frames[fi - 1]["ball"]
+                side = "L" if ev["x"] < 52.5 else "R"
+                z = min(max(prevb["z"] + 0.11, 0.25), 2.15)
+                speed = math.hypot(prevb["vx"], prevb["vy"], prevb.get("vz", 0.0))
+                goal_arg = (side, ev["y"], z, speed)
+            cam = director.step(ball[0], ball[1], actors, goal_arg)
             blur = blur_vector(prev_cam, cam, p.motion_blur)
             prev_cam = cam
+            bvx, bvy = fr["ball"].get("vx", 0.0), fr["ball"].get("vy", 0.0)
+            spd = math.hypot(bvx, bvy)
+            # v/r is the true roll, and at 25 fps it aliases into a flicker. Cap it, and
+            # do not let a touch that reverses the velocity flip the panels.
+            if spd > 0.4:
+                ax, ay = -bvy / spd, bvx / spd
+                if spin_axis is not None and ax * spin_axis[0] + ay * spin_axis[1] < 0:
+                    ax, ay = -ax, -ay
+                if spin_axis is None:
+                    spin_axis = (ax, ay)
+                else:
+                    sx = spin_axis[0] * 0.75 + ax * 0.25
+                    sy = spin_axis[1] * 0.75 + ay * 0.25
+                    nrm = math.hypot(sx, sy) or 1.0
+                    spin_axis = (sx / nrm, sy / nrm)
+                spin_angle += min(spd / 0.11, 9.0) / FPS
+            spin = (
+                (round(spin_axis[0], 4), round(spin_axis[1], 4), round(spin_angle, 4))
+                if spin_axis is not None
+                else None
+            )
             if fi < start:
                 continue
             index = fi - start
             spec_objects, row_players = [], []
             for pl in fr["players"]:
-                parts = body_parts(pl["x"], pl["y"], by_id[pl["id"]], gaits[pl["id"]])
-                spec_objects.append({"id": pl["id"], "parts": parts, "box": parts_box(cam, parts)})
+                g = gaits[pl["id"]]
+                meet = g.action in ("strike", "foot", "thigh", "chest", "head", "hands")
+                parts = body_parts(
+                    pl["x"], pl["y"], by_id[pl["id"]], g, ball if meet else None
+                )
+                spec_objects.append(
+                    {
+                        "id": pl["id"],
+                        "parts": parts,
+                        "box": parts_box(cam, parts),
+                        "heading": gaits[pl["id"]].heading,
+                    }
+                )
                 row_players.append(pl)
-            bparts = ball_parts(*ball)
+            bparts = ball_parts(*ball, spin)
             spec_objects.append({"id": "ball", "parts": bparts, "box": parts_box(cam, bparts)})
             kps = project_keypoints(cam)
             score = [
                 sum(1 for g in goals if g["team"] == team and g["t"] <= fr["t"]) for team in ("home", "away")
             ]
             clock = match_clock(fr["t"])
+            recent = [g for g in goals if 0 <= fr["t"] - g["t"] <= 2.5]
+            last = recent[-1] if recent else None
             res = pg.evaluate(
                 "s => window.ninety.frame(s)",
                 {
@@ -244,13 +311,18 @@ def render_clip(
                     "blur": list(blur),
                     "score": score,
                     "clock": clock,
+                    "goal_age": round(fr["t"] - last["t"], 3) if last else None,
+                    "goal_side": 0 if last and last["team"] == "home" else (1 if last else None),
+                    "net": director.net_view(),
                     "want_image": write_images,
                 },
             )
             image = f"images/{index:05d}.jpg"
             if write_images:
                 (out / image).write_bytes(base64.b64decode(res["image"].split(",", 1)[1]))
-            rows.append(_frame_row(fr, cam, ball, row_players, res, kps, blur, image, clip["clip_id"]))
+            rows.append(
+                _frame_row(fr, cam, ball, row_players, res, kps, blur, image, clip["clip_id"], director.angle)
+            )
 
     with open(out / "frames.jsonl", "w") as f:
         for r in rows:
@@ -295,6 +367,7 @@ def _frame_row(
     blur: tuple[float, float],
     image: str,
     clip_id: str,
+    angle: str,
 ) -> dict:
     objs = res["objects"]
 
@@ -330,7 +403,7 @@ def _frame_row(
         "ball": ball_row,
         "possessor": fr.get("possessor"),
         "players": row_players,
-        "camera": cam.to_dict(),
+        "camera": {**cam.to_dict(), "angle": angle},
         "blur_px": list(blur),
         "keypoints": [{**k, "visible": bool(v)} for k, v in zip(kps, res["keypoints"], strict=True)],
     }

@@ -34,6 +34,14 @@ touchline, ball `z` is height. Player ids are `h1`..`h11` and `a1`..`a11`. Event
 engine have `source: "truth"`; the vision pipeline writes the same schema with
 `source: "vision"` and a `confidence`, which is what lets the two be compared row for row.
 
+## Events
+
+`kickoff`, `pass`, `shot`, `goal`, `tackle`, `interception` (an opponent takes control of a
+pass), `deflection` (the ball comes off a player, a block, parry or heavy touch, and stays
+free), `pressure`, `possession_change`, `out_of_play`, `set_piece` and `substitution`. A goal
+with no `player` is an own goal. Touches (`deflection`, `interception`) must be physically
+possible (P14).
+
 ## What the validator checks
 
 Valid is not enough. The events and the frames must tell the same story, the frames must be
@@ -51,7 +59,8 @@ tests that require them to pass, so no check is stricter than the Laws.
 
 ## Today's engine
 
-`uv run ninety-sim --seed 7 --minutes 90` then `ninety-validate`: meets the contract. Players
+`uv run ninety-sim --seed 7 --minutes 90 --out runs/seed7` then
+`uv run ninety-validate runs/seed7`: meets the contract. Players
 decide and physics decides what happens: a kick gives the ball a velocity, the ball flies under
 gravity and air drag, bounces and rolls (`ninety/sim/ball.py`), each team sends the player who
 can reach it first, and whoever gets there takes it. Completed and intercepted passes, saves,

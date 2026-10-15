@@ -1,6 +1,7 @@
 import pytest
 
 from ninety.render.params import (
+    PATTERNS,
     TEAM_CODES,
     apply_overrides,
     color_distance,
@@ -82,11 +83,34 @@ def test_overrides_apply_and_are_validated():
         apply_overrides(p, {"no_such_knob": 1})
 
 
-def test_planned_knobs_fail_loudly():
-    with pytest.raises(NotImplementedError):
-        sample_params(1, weather="rain")
-    with pytest.raises(NotImplementedError):
-        sample_params(1, camera_cut=True)
+def test_rain_cuts_and_patterns_are_built():
+    p = sample_params(1, weather="rain", camera_cut=True, home_pattern="hoops", away_pattern="stripes")
+    assert p.weather == "rain" and p.camera_cut is True
+    assert p.home_pattern == "hoops" and p.away_pattern == "stripes"
+    with pytest.raises(ValueError):
+        sample_params(1, weather="hail")
+    with pytest.raises(ValueError):
+        sample_params(1, home_pattern="tartan")
+    with pytest.raises(ValueError):
+        sample_params(1, camera_cut="sometimes")
+
+
+def test_sampling_adds_rain_cuts_and_patterns_without_moving_the_camera():
+    # Seed 5's camera and kits were fixed before rain, cuts and patterns were appended.
+    p = sample_params(5)
+    assert p.lighting == "dusk" and p.sun_azimuth_deg == 164.5 and p.sun_elevation_deg == 10.3
+    assert p.camera.height_m == 21.76 and p.camera.back_m == 38.33 and p.camera.half_width_m == 17.57
+    assert p.home_kit.shirt == "#1a1a1a" and p.away_kit.shirt == "#694eb0"
+    assert p.home_code == "DUN" and p.away_code == "GRV"
+    assert p.grass_hue == 0.279 and p.motion_blur == 0.31 and p.noise == 0.019
+    assert p.home_pattern in PATTERNS and p.away_pattern in PATTERNS
+    assert "rain" in {sample_params(s).weather for s in range(60)}
+    assert any(sample_params(s).camera_cut for s in range(40))
+    assert any(not sample_params(s).camera_cut for s in range(40))
+    for s in range(40):
+        q = sample_params(s)
+        if q.lighting == "overcast":
+            assert q.weather == "overcast"
 
 
 def test_parse_override_types():

@@ -3,6 +3,9 @@
 Every value lands in `clip.json`, so any frame can be regenerated exactly. Knobs listed in
 `PLANNED` are part of the contract but not drawn yet; setting them to a non-default value fails
 loudly instead of silently rendering something the labels do not describe.
+
+New random draws are appended after the original sequence, so a seed keeps the camera, kits and
+lighting it already had. Weather and the camera cut are the exception: they are chosen at the end.
 """
 
 from __future__ import annotations
@@ -15,9 +18,11 @@ LIGHTING = ("day", "dusk", "night", "overcast")
 WEATHER = ("clear", "overcast", "rain")
 OCCLUSION = ("natural", "crowded")
 KIT_CONTRAST = ("normal", "low")
+# Shirt graphics. Colours stay fictional; a pattern is not a real club's kit.
+PATTERNS = ("solid", "stripes", "hoops", "sash", "halves")
 
-# Knob -> default value. Any other value raises until the knob is built.
-PLANNED = {"weather": ("clear", "overcast"), "camera_cut": (False,)}
+# Knob -> values that are accepted but not drawn. Empty: rain and camera cuts are built.
+PLANNED: dict[str, tuple] = {}
 
 # Fictional three-letter codes; none is a Premier League club code.
 TEAM_CODES = ("ASH", "CRW", "DUN", "ELM", "FEN", "GRV", "HLT", "IVY", "KST", "MRL", "OAK", "QRY")
@@ -60,6 +65,8 @@ class RenderParams:
     away_kit: Kit = Kit("#1d4ed8", "#1d4ed8", "#ffffff")
     home_gk: Kit = Kit("#16a34a", "#111111", "#16a34a")
     away_gk: Kit = Kit("#eab308", "#111111", "#eab308")
+    home_pattern: str = "solid"
+    away_pattern: str = "solid"
     grass_hue: float = 0.28  # HSV hue of the turf
     stripe_width_m: float = 5.25
     wear: float = 0.5  # 0 pristine, 1 heavily worn goalmouths and centre
@@ -176,6 +183,17 @@ def sample_params(seed: int, **overrides) -> RenderParams:
         home_code=codes[0],
         away_code=codes[1],
     )
+    # Appended draws. Everything above is the original sequence and must stay in this order.
+    weather = base.weather
+    if weather == "clear" and rng.random() < 0.34:
+        weather = "rain"
+    base = replace(
+        base,
+        home_pattern=rng.choice(PATTERNS),
+        away_pattern=rng.choice(PATTERNS),
+        camera_cut=rng.random() < 0.30,
+        weather=weather,
+    )
     return apply_overrides(base, overrides)
 
 
@@ -207,6 +225,11 @@ def validate(p: RenderParams) -> None:
     ):
         if getattr(p, name) not in allowed:
             raise ValueError(f"{name} must be one of {allowed}, got {getattr(p, name)!r}")
+    for name in ("home_pattern", "away_pattern"):
+        if getattr(p, name) not in PATTERNS:
+            raise ValueError(f"{name} must be one of {PATTERNS}, got {getattr(p, name)!r}")
+    if not isinstance(p.camera_cut, bool):
+        raise ValueError("camera_cut must be true or false")
     for name, ok in PLANNED.items():
         if getattr(p, name) not in ok:
             raise NotImplementedError(f"render parameter {name}={getattr(p, name)!r} is planned, not built")

@@ -74,6 +74,26 @@ def teleport(c):
     c["frames"][60]["players"][2]["x"] = 70.0  # a1 jumps 10 m in one frame
 
 
+def runs_then(c, speed: float, change: float, start: float = 1.0) -> None:
+    """a1 runs at `speed` until `start` seconds, then changes speed at `change` m/s² until it
+    stops (braking) or reaches 9 m/s (speeding up), then holds that speed."""
+    x, v = 20.0, speed
+    for n in range(150):
+        t = n / FPS
+        c["frames"][n]["players"][2]["x"] = x
+        if t >= start:
+            v = max(0.0, min(9.0, v + change / FPS))
+        x += v / FPS
+
+
+def stops_too_hard(c):
+    runs_then(c, 8.0, -12.0)  # beyond any braking
+
+
+def speeds_up_too_hard(c):
+    runs_then(c, 3.0, 9.0)  # already running, then 9 m/s²: beyond any acceleration
+
+
 def sudden_sprint(c):
     for n in range(60, 150):  # a1 goes from standing to 9 m/s instantly: legal speed, impossible start
         c["frames"][n]["players"][2]["x"] = 60.0 + 9 * (n - 60) / FPS
@@ -130,6 +150,10 @@ def goal_without_shot(c):
     c["meta"]["score"]["home"] = 1
 
 
+def pass_to_himself(c):
+    c["events"][0]["receiver"] = "h1"
+
+
 def score_disagrees(c):
     c["meta"]["score"]["home"] = 1
 
@@ -140,6 +164,8 @@ def score_disagrees(c):
     (roster_changes, "C3 roster"),
     (teleport, "P1 player speed"),
     (sudden_sprint, "P2 player acceleration"),
+    (stops_too_hard, "P2 player acceleration"),
+    (speeds_up_too_hard, "P2 player acceleration"),
     (ball_jump, "P3 ball speed"),
     (ball_underground, "P4 ball below ground"),
     (ball_floats, "P5 ball flight"),
@@ -152,6 +178,7 @@ def score_disagrees(c):
     (pass_without_ball, "C8 event order"),
     (interception_from_nowhere, "C8 event order"),
     (goal_without_shot, "C8 event order"),
+    (pass_to_himself, "C8 event order"),
     (score_disagrees, "C9 score"),
 ])
 def test_planted_defect_fails(tmp_path, defect, check):
@@ -201,6 +228,43 @@ def test_keeper_may_hold_the_ball_at_arms_length_in_the_box(tmp_path):
     assert "P6 ball at feet" in run(tmp_path, clip)
 
 
+def test_strong_braking_passes(tmp_path):
+    clip = clean_clip()
+    runs_then(clip, 9.0, -9.0)  # hard but legal braking, which a single 8 m/s² limit would fail
+    assert "P2 player acceleration" not in run(tmp_path, clip)
+
+
+def a1_in_the_path(clip):
+    for f in clip["frames"]:
+        f["players"][2].update(x=44.0, y=30.8)
+
+
+def test_a_touch_in_the_air_is_not_judged_as_free_flight(tmp_path):
+    clip = clean_clip()
+    a1_in_the_path(clip)
+    lofted(clip)
+    clip["frames"][PASS_AT + 10]["ball"]["z"] += 0.4  # a defender's head meets it
+    assert "P5 ball flight" in run(tmp_path, clip)  # unexplained: a defect
+    clip["events"].append(event("e2", PASS_AT + 10, "deflection", "away", "a1", x=44.0))
+    problems = run(tmp_path, clip)
+    assert "P5 ball flight" not in problems and "P14 touch possible" not in problems
+
+
+def test_a_touch_by_a_distant_player_fails(tmp_path):
+    clip = clean_clip()  # a1 stands at (60, 40), about 19 m from the ball
+    clip["events"].append(event("e2", PASS_AT + 10, "deflection", "away", "a1", x=44.0))
+    assert "P14 touch possible" in run(tmp_path, clip)
+
+
+def test_a_touch_on_a_ball_out_of_reach_and_moving_away_fails(tmp_path):
+    clip = clean_clip()
+    for f in clip["frames"]:
+        f["players"][2].update(x=39.0, y=30.0)
+    clip["frames"][PASS_AT + 5]["players"][2].update(x=40.5)  # suddenly beside it, 1.5 m on
+    clip["events"].append(event("e2", PASS_AT + 5, "deflection", "away", "a1", x=42.0))
+    assert "P14 touch possible" in run(tmp_path, clip)
+
+
 def test_ball_under_gravity_passes(tmp_path):
     clip = clean_clip()
     lofted(clip)
@@ -232,3 +296,33 @@ def test_substitution_in_play_fails(tmp_path):
 
 def test_missing_file(tmp_path):
     assert "C1 files" in validate(tmp_path)
+
+
+def test_an_own_goal_needs_no_shot(tmp_path):
+    clip = clean_clip()
+    clip["events"].append(event("e2", 40, "goal", "away", None, x=50.0, y=30.0))
+    clip["meta"]["score"]["away"] = 1
+    assert "C8 event order" not in run(tmp_path, clip)
+
+
+def test_a_rebound_off_the_crossbar_is_not_judged_as_free_flight(tmp_path):
+    clip = clean_clip()
+    lofted(clip)
+    for n in range(PASS_AT, PASS_AT + 26):
+        clip["frames"][n]["ball"]["x"] += 64.6 - 40  # the same flight, ending at the far goal line
+    clip["frames"][PASS_AT + 10]["ball"]["z"] += 0.4
+    assert "P5 ball flight" in run(tmp_path, clip)  # in midfield: a defect
+    for n in range(PASS_AT, PASS_AT + 26):
+        clip["frames"][n]["ball"]["x"] = 104.8  # the same heights, at the goal mouth
+    problems = run(tmp_path, clip)
+    assert "P5 ball flight" not in problems
+
+
+def test_a_ball_within_reach_can_be_touched_whichever_way_it_moves(tmp_path):
+    clip = clean_clip()
+    for f in clip["frames"]:
+        f["players"][2].update(x=39.6, y=30.0)
+    clip["events"].append(event("e2", PASS_AT + 1, "deflection", "away", "a1", x=40.4))
+    clip["events"].append(event("e3", PASS_AT + 2, "deflection", "away", "a1", x=40.8))
+    problems = run(tmp_path, clip)
+    assert "P14 touch possible" not in problems

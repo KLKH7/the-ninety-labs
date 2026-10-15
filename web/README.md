@@ -35,8 +35,9 @@ Knobs (`--set key=value`), all recorded in `clip.json`:
 | `motion_blur` | shutter fraction; streak follows the pan | built |
 | `noise`, `jpeg_quality` | sensor noise and compression | built |
 | `grass_hue`, `stripe_width_m`, `wear`, `stand_color`, `crowd_density` | look | built |
-| `weather=rain` | streaks, wet sheen | planned (fails loudly if set) |
-| `camera_cut=true` | second angle | planned (fails loudly if set) |
+| `weather=rain` | darker wet grass, specular sheen, streaks over the frame | built |
+| `camera_cut=true` | cut to the far stand, or high behind the goal when the ball is in that penalty area | built |
+| `home_pattern`, `away_pattern` | `solid`, `stripes`, `hoops`, `sash`, `halves` (goalkeepers stay solid) | built |
 
 Without `--gpu`, Chromium uses software GL (SwiftShader), so a seed gives the same pixels and
 labels on the same Chromium build. That runs at 0.47 to 0.61 s per 720p frame on 4 CPU cores

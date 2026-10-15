@@ -13,6 +13,7 @@ generated it and the output file is committed. Rows marked *planned* have no res
 | Detection recall (players, ball) on the fixed test set | planned | `docs/eval/vision-report-v{n}.json` | planned |
 | Event precision, recall and F1 per type; possession accuracy; speed error | planned | `docs/eval/vision-report-v{n}.json` | planned |
 | Targeted data rounds, before and after | planned | `docs/eval/vision-report-v{n}.json` | planned |
+| Stats engine facts: hand-computed cases, planted defects, citations, size | `uv run pytest tests/test_stats.py` | test assertions | running |
 | Fact-checker rules (numbers, players, evidence ids) | `uv run pytest tests/test_factcheck.py` | test assertions | running |
 | Fact-checker catch rate on planted false claims, and true claims wrongly rejected | `uv run python -m ninety.eval.factcheck_eval` | `docs/eval/fact-checker.md` | re-run pending: the Judge's instructions and the tone kinds changed after the last run (fact split from tone, tone labels fitted to events, held-out and contradicted tone). Last published run, before that change, on held-out seeds 21,33: 129/129 false caught, 12/99 true rejected excluding service holds, all twelve on tone. |
 | Recovery from injected failures | planned | `docs/eval/failure-table.md` | planned |

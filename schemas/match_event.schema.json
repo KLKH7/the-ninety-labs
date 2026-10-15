@@ -11,7 +11,7 @@
     "frame": { "type": "integer", "minimum": 0 },
     "type": {
       "type": "string",
-      "enum": ["kickoff", "pass", "shot", "goal", "tackle", "interception", "pressure", "possession_change", "out_of_play", "set_piece", "substitution"]
+      "enum": ["kickoff", "pass", "shot", "goal", "tackle", "interception", "pressure", "possession_change", "out_of_play", "set_piece", "substitution", "deflection"]
     },
     "team": { "type": "string", "enum": ["home", "away"] },
     "player": { "type": ["string", "null"], "description": "The player who acts; for a substitution, the player leaving." },
@@ -20,7 +20,7 @@
     "y": { "type": "number", "minimum": 0, "maximum": 68 },
     "end_x": { "type": ["number", "null"] },
     "end_y": { "type": ["number", "null"] },
-    "outcome": { "type": ["string", "null"], "enum": ["success", "fail", "on_target", "off_target", "goal", null] },
+    "outcome": { "type": ["string", "null"], "enum": ["success", "fail", "on_target", "off_target", "blocked", "goal", null] },
     "ball_speed_kmh": { "type": ["number", "null"], "minimum": 0 },
     "source": { "type": "string", "enum": ["truth", "vision"] },
     "confidence": { "type": ["number", "null"], "minimum": 0, "maximum": 1 }
