@@ -92,3 +92,24 @@ def test_the_push_allows_for_his_own_kick_error():
         return e.touch_speed(att, 1.0, 0.0, 4.0, 12.0)
 
     assert push(exact=False) < push(exact=True)
+
+
+def test_he_runs_through_his_touch_along_its_path_not_to_a_point_beside_it():
+    e = Engine(3)
+    att = e.by_id["h9"]
+    att.x, att.y, att.vx, att.vy = 50.0, 34.0, 4.0, 0.0
+    e.possessor, e.dribbler = None, att.id
+    e.ball = (51.0, 34.0, 0.0, 6.0, 0.0, 0.0)
+    tx, ty, speed = e.shape_target(att)
+    assert tx > 51.0 + 6.0 and abs(ty - 34.0) < 0.1  # where it would stop, far beyond it
+    assert speed > 6.0
+
+
+def test_a_ball_deflected_off_someone_else_is_no_longer_his_touch():
+    e = Engine(3)
+    att, dfd = e.by_id["h9"], e.by_id["a4"]
+    att.x, att.y, dfd.x, dfd.y = 50.0, 34.0, 52.0, 34.0
+    e.possessor, e.dribbler = None, att.id
+    e.ball = (51.6, 34.0, 0.0, 5.0, 0.0, 0.0)
+    e.deflect(dfd, 51.7, 34.0, 0.0, 0.3)
+    assert e.dribbler is None

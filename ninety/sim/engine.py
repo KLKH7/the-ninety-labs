@@ -723,6 +723,8 @@ class Engine:
         self.ball = (p.x + nx * out, p.y + ny * out, cz, rx + p.vx, ry + p.vy, vz)
         self.last_deflection = self.emit("deflection", p.team, cx, cy, player=p.id)  # a touch is truth too
         self.last_touch = p.id
+        if p.id != self.dribbler:  # it came off someone else: no longer his touch to run onto
+            self.dribbler = None
         self.kicker_clear = False
         self.kicked_at = self.t  # a new strike of the ball: everyone reacts to it again
         self.chase = {}
@@ -1467,15 +1469,17 @@ class Engine:
         would run away from him."""
         bx, by = self.ball[0], self.ball[1]
         view = self.beliefs[carrier.id]
-        # Beyond what an opponent could cover flat out while the ball is free, there is no race.
-        bound = hi * TOUCH_GAP_S + carrier.physique.top_speed() * TOUCH_GAP_S + CONTROL_M
         near, felt = [], math.inf
         for q in self.players:
             w = view.where(q.id, self.t) if q.team != carrier.team else None
             if w:
                 felt = min(felt, math.hypot(w[0] - carrier.x, w[1] - carrier.y))
-                if math.hypot(w[0] - bx, w[1] - by) < bound:
-                    near.append((w, view.velocity(q.id)))
+                v = view.velocity(q.id)
+                # Beyond what he could cover while the ball is free (the race's own body, or faster
+                # if he is seen going faster), there is no race: pruning only.
+                reach = max(decisions.AVERAGE_BODY.top_speed(), math.hypot(*v)) * TOUCH_GAP_S
+                if math.hypot(w[0] - bx, w[1] - by) < hi * TOUCH_GAP_S + reach + CONTROL_M:
+                    near.append((w, v))
         heading = math.atan2(uy, ux)
         turn = decisions.turn_deg(heading, carrier.heading)
 
