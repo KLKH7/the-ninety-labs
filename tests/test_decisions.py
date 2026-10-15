@@ -4,7 +4,16 @@ import math
 import random
 from collections import Counter
 
+import pytest
+
 from ninety.sim import decisions as D
+from ninety.sim.value import CELLS_X, CELLS_Y, Table, Tables
+
+
+@pytest.fixture(autouse=True)
+def hand_written_values(monkeypatch):
+    """These tests pin the decision rules, not whatever table was last measured."""
+    monkeypatch.setattr(D, "POSSESSION", None)
 
 
 def scene(**kw) -> D.Scene:
@@ -14,13 +23,12 @@ def scene(**kw) -> D.Scene:
     return D.Scene(**base)
 
 
-def test_shot_estimate_follows_the_published_shape():
+def test_shot_estimate_follows_the_sourced_rates_by_distance():
     central = lambda d: D.shot_estimate(105 - d, 34, 105, [], None)  # noqa: E731
-    assert 0.25 < central(11) < 0.35
-    assert 0.09 < central(18) < 0.15
-    assert central(35) < 0.04
+    assert math.isclose(central(3), 0.31) and math.isclose(central(11), 0.177)
+    assert math.isclose(central(20), 0.053) and math.isclose(central(30), 0.023)
+    assert central(2) <= 0.31  # never near-certain: close shots are contested in real matches
     assert central(11) > D.shot_estimate(105 - 11, 10, 105, [], None)  # a tight angle is worse
-
 
 def test_a_defender_in_the_cone_or_a_well_placed_keeper_lowers_the_estimate():
     open_shot = D.shot_estimate(90, 34, 105, [], None)
@@ -133,28 +141,26 @@ def test_an_opponent_on_the_dribble_path_makes_the_dribble_worse():
     assert blocked < free
 
 
-def test_a_dribble_toward_goal_is_valued_by_the_same_shot_estimate_as_shooting():
-    # Two opponents equally far from the carry's end (so equally able to stop it); only one
-    # stands in the shooting cone from there.
-    in_cone = next(o for o in D.options(scene(x=88.0, opponents=[(104.0, 34.0)])) if o.kind == "dribble")
-    outside = next(o for o in D.options(scene(x=88.0, opponents=[(100.0, 42.0)])) if o.kind == "dribble")
-    assert in_cone.target == outside.target == (94.0, 34.0)
-    assert in_cone.value < outside.value
-
+def test_a_dribble_is_valued_by_the_published_threat_where_it_ends():
+    from ninety.sim import threat
+    s = scene(x=88.0)  # nobody near: the carry certainly works
+    straight = next(o for o in D.options(s) if o.kind == "dribble")
+    assert math.isclose(straight.value, threat.at(*straight.target, 105.0), rel_tol=1e-6)
 
 def test_a_lane_is_judged_where_the_opponent_meets_the_line_not_by_his_distance_from_the_passer():
     s = scene(x=60.0)
     mate = ("h9", 82.5, 34.0, 0.0)  # a 24 m ground pass to (84, 34)
     free = D.pass_option(s, mate)
     s.opponents = [(72.0, 40.0)]  # 6 m off the line at its midpoint
-    v0 = D.launch_speed(24.0)
+    chosen = D.pass_option(s, mate)
+    v0 = D.launch_speed(24.0, chosen.pace)
     conf = D.sigmoid((D.generic_time(5.0) - D.ground_time(v0, 12.0)) / D.LANE_MARGIN_S)
     receive = D.sigmoid((D.ground_time(v0, 24.0) + 0.5 - D.generic_time(1.5)) / D.RECEIVE_MARGIN_S)
-    receive *= D.sigmoid((D.CONTROL_EST_MPS - D.ARRIVE_MPS) / D.CONTROL_MARGIN_MPS)
+    receive *= D.sigmoid((D.CONTROL_EST_MPS - chosen.pace) / D.CONTROL_MARGIN_MPS)
     space = 0.7 + 0.3 * min(1.0, math.hypot(84.0 - 72.0, 6.0) / 5.0)
     gain = D.value(84.0, 34.0, 105.0) * space
     expected = conf * receive * gain - (1 - conf * receive) * D.loss_cost(72.0, 34.0, 105.0)
-    assert math.isclose(D.pass_option(s, mate).value, expected, rel_tol=1e-9)
+    assert math.isclose(chosen.value, expected, rel_tol=1e-9)
     assert free.value > expected
 
 
@@ -175,13 +181,12 @@ def test_a_lofted_ball_toward_his_own_goal_is_costed_where_it_would_end():
     back = D.pass_option(s, ("h1", 6.0, 34.0, 0.0))  # 34 m back to the keeper, through the air
     forward = D.pass_option(s, ("h9", 72.0, 34.0, 0.0))
     assert back.lofted and back.value < forward.value
-    assert back.value < -0.1  # a lob that misses ends near his own goal
 
 
 def test_a_failed_pass_is_costed_where_it_would_end_if_that_is_worse():
     s = scene(x=40.0, y=34.0, opponents=[(28.0, 37.0)])
     back = D.pass_option(s, ("h4", 18.5, 34.0, 0.0))  # 20 m back along the ground, toward his own goal
-    conf = D.pass_confidence(s, *back.target, 18.5, 34.0, 0.0, False)
+    conf = D.pass_confidence(s, *back.target, 18.5, 34.0, 0.0, False, back.pace)
     gain = D.value(*back.target, 105.0, s.opponents) * (0.7 + 0.3 * min(1.0, math.hypot(8.0, 3.0) / 5.0))
     at_target = D.loss_cost(*back.target, 105.0)
     assert at_target > D.loss_cost(30.0, 34.0, 105.0)  # the end is worse than the midpoint here
@@ -200,7 +205,80 @@ def test_a_shot_into_a_crowd_risks_losing_the_ball_where_he_stands():
     crowded = scene(x=75.0, opponents=[(80.0, 34.0), (85.0, 33.0)])
     q_clear = D.shot_estimate(75.0, 34.0, 105.0, [], None)
     q_crowd = D.shot_estimate(75.0, 34.0, 105.0, crowded.opponents, None)
-    assert math.isclose(shoot(clear).value, q_clear - (1 - q_clear) * D.LOSS_BASE)
+    assert math.isclose(shoot(clear).value, q_clear - (1 - q_clear) * D.loss_cost(99.5, 34.0, 105.0))
     blocked = 1 - D.BLOCKER_FACTOR ** 2
-    lost = blocked * D.loss_cost(75.0, 34.0, 105.0) + (1 - blocked) * D.LOSS_BASE
+    lost = blocked * D.loss_cost(75.0, 34.0, 105.0) + (1 - blocked) * D.loss_cost(99.5, 34.0, 105.0)
     assert math.isclose(shoot(crowded).value, q_crowd - (1 - q_crowd) * lost)
+
+
+def test_the_keeper_is_counted_once_in_a_shot_but_can_still_stop_a_dribble():
+    k = (103.0, 34.0)
+    assert D.shot_estimate(90, 34, 105, [k], k) == D.shot_estimate(90, 34, 105, [], k)
+    free = max(o.value for o in D.options(scene(x=97.0, keeper=k)) if o.kind == "dribble")
+    with_keeper = scene(x=97.0, keeper=k, opponents=[k])
+    keeper_there = max(o.value for o in D.options(with_keeper) if o.kind == "dribble")
+    assert keeper_there < free
+
+
+def ramp(near_goal: float, far: float, finishing: float = 0.1) -> Tables:
+    """Made-up tables: possessions worth near_goal next to the goal attacked, falling to far at
+    the other end; shots going in at `finishing` from anywhere."""
+    threat = Table([[near_goal + (far - near_goal) * i / (CELLS_X - 1)] * CELLS_Y for i in range(CELLS_X)])
+    return Tables(threat, Table([[finishing] * CELLS_Y for _ in range(CELLS_X)]))
+
+
+def test_a_measured_table_values_possession_and_loss_for_both_directions(monkeypatch):
+    monkeypatch.setattr(D, "POSSESSION", ramp(0.3, 0.01))
+    assert D.value(100.0, 34.0, 105.0) > D.value(20.0, 34.0, 105.0)
+    assert math.isclose(D.value(100.0, 34.0, 105.0), D.value(5.0, 34.0, 0.0))  # mirrored
+    assert D.loss_cost(10.0, 34.0, 105.0) > D.loss_cost(90.0, 34.0, 105.0)  # losing it near our goal hurts
+    table = D.POSSESSION.threat
+    assert D.value(60.0, 20.0, 105.0) == table.at(60.0, 20.0, 105.0)  # the measured number, as is
+    assert D.loss_cost(60.0, 20.0, 105.0) == table.at(60.0, 20.0, 0.0)  # theirs, from their side
+
+
+def test_a_measured_table_makes_keeping_the_ball_beat_a_hopeless_shot(monkeypatch):
+    s = scene(x=70.0)  # 35 m out
+    # Possessions from 35 m score 3% of the time; shots from there go in 1% of the time.
+    monkeypatch.setattr(D, "POSSESSION", ramp(0.3, 0.0, finishing=0.01))
+    shoot = next(o for o in D.options(s) if o.kind == "shoot").value
+    hold = next(o for o in D.options(s) if o.kind == "hold").value
+    assert hold > shoot
+    assert max(D.options(s), key=lambda o: o.value).kind != "shoot"
+
+
+def test_a_missed_shot_is_never_a_reward(monkeypatch):
+    monkeypatch.setattr(D, "POSSESSION", ramp(0.3, 0.0, finishing=0.0))
+    s = scene(x=70.0)
+    assert next(o for o in D.options(s) if o.kind == "shoot").value <= 0.0
+
+
+def test_the_shot_chance_is_the_measured_rate_scaled_by_the_situation(monkeypatch):
+    monkeypatch.setattr(D, "POSSESSION", ramp(0.3, 0.0, finishing=0.2))
+    assert math.isclose(D.shot_chance(scene(x=90.0)), 0.2)  # open: the measured rate itself
+    blocked = scene(x=90.0, opponents=[(97.0, 34.0)])
+    assert math.isclose(D.shot_chance(blocked), 0.2 * D.BLOCKER_FACTOR)
+
+
+def test_holding_keeps_only_part_of_what_the_ball_is_worth_here():
+    from ninety.sim import threat
+    s = scene(x=60.0)  # no pressure
+    hold = next(o for o in D.options(s) if o.kind == "hold").value
+    assert math.isclose(hold, threat.at(60.0, 34.0, 105.0) * (1 - D.HOLD_DECAY))
+
+
+def test_choice_randomness_is_relative_to_how_different_the_options_are():
+    rng = random.Random(4)
+    s = scene(x=60.0, decisions=1.0, mates=[("h9", 75.0, 34.0, 0.0)])
+    best = max(D.options(s), key=lambda o: o.value).kind
+    picks = Counter(D.choose(s, rng).kind for _ in range(500))
+    assert picks[best] / 500 > 0.7  # a good decision-maker usually takes the best, even in midfield
+
+
+def test_the_passer_picks_the_pace_the_lane_needs():
+    mate = ("h9", 82.5, 34.0, 0.0)
+    open_lane = D.pass_option(scene(x=60.0), mate)
+    tight = D.pass_option(scene(x=60.0, opponents=[(72.0, 37.0)]), mate)
+    assert tight.pace > open_lane.pace or tight.pace == max(D.PASS_PACES)
+    assert all(math.isfinite(D.launch_speed(20.0, p)) for p in D.PASS_PACES)
+    assert D.launch_speed(20.0, 14.0) > D.launch_speed(20.0, 6.0)

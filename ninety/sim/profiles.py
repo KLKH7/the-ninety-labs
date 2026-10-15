@@ -42,7 +42,9 @@ FACTOR_OF = {
 QUALITY_LOADING = 0.5  # design: how much a player's overall quality lifts each skill
 FACTOR_LOADING = 0.5  # design: how much one factor ties its skills together
 SPEED_LOADING = math.sqrt(0.6)  # A7: acceleration and top speed correlate about 0.6 in footballers
-TEAM_SD = 0.5  # design: spread of team strength in a league, in player-quality SDs
+# design: spread of team strength in a league, in player-quality SDs. sqrt(2/3) puts 40% of the
+# variation in player quality between teams (TEAM_SD² / (TEAM_SD² + 1)).
+TEAM_SD = math.sqrt(2 / 3)
 TRAIT_BASE, TRAIT_SLOPE = -2.0, 1.5  # design: a trait is likelier the stronger the skill behind it
 TRAIT_DRIVERS = {
     "shoots_from_distance": ("finishing",),
@@ -222,10 +224,12 @@ class Profile:
     # ---- A4: control -------------------------------------------------------------
     def absorb_mps(self, hands: bool) -> float:
         """Fastest ball (relative to the player) a touch can kill; with the hands, a keeper's
-        hold. No study measures either; design, scaled by skill."""
+        hold. No study measures either directly. The foot's range is set so an average player
+        kills the 12 to 15 m/s a typical professional pass arrives at (passes leave the foot at
+        about 16 m/s; arXiv 2210.16474); *design*, *verify*."""
         if hands:
             return 16.0 + 12.0 * self["handling"]
-        return 8.0 + 8.0 * self["first_touch"]
+        return 12.0 + 12.0 * self["first_touch"]
 
     # ---- A3: execution -------------------------------------------------------
     def kick_error(self, skill: str, speed: float, pressure: float, capacity: float,

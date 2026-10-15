@@ -42,7 +42,7 @@ def test_events_match_schema():
 # Known failure on the engine/agents integration branch: removing scripted outcomes left the
 # football unrealistic until the decision layer exists (docs/ENGINE.md, build step 3). strict=True
 # turns it back into a hard failure the moment it passes, so this marker must then be removed.
-@pytest.mark.xfail(strict=True, reason="decision layer pending (docs/ENGINE.md step 3)")
+@pytest.mark.xfail(strict=True, reason="not yet realistic: goals and shots too high (docs/GROUNDING.md R4)")
 def test_football_realistic_rates_over_a_full_match():
     m = simulate(11, 90)
     c = Counter(e["type"] for e in m.events)
@@ -54,3 +54,4 @@ def test_football_realistic_rates_over_a_full_match():
     assert c["tackle"] > 0 and c["interception"] > 0 and c["pressure"] > 0
     completed = sum(1 for e in m.events if e["type"] == "pass" and e["outcome"] == "success")
     assert 0.7 <= completed / c["pass"] <= 0.9
+    assert 1 <= c["goal"] <= 6, c  # a Premier League match averages about 2.8

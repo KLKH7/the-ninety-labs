@@ -60,7 +60,7 @@ def test_the_carrier_decides_on_where_he_believes_team_mates_are():
     keeper = e.keeper("away")
     e.beliefs[carrier.id].seen[keeper.id] = perception.Sighting(100.0, 34.0, 0.0, 0.0, e.t)
     scene = e.scene_for(carrier)
-    assert scene.keeper == (100.0, 34.0) and scene.opponents == []  # the keeper is counted once
+    assert scene.keeper == (100.0, 34.0) and scene.opponents == [(100.0, 34.0)]  # in lanes too
 
 
 def test_a_keeper_reacts_to_the_ball_like_anyone_and_reads_only_shots_at_his_goal():
@@ -301,15 +301,15 @@ def test_reflexes_set_reaction_in_the_engine():
 
 def test_first_touch_decides_whether_a_ball_is_killed():
     outcomes = {}
-    for touch in (1.0, 0.0):  # can kill 16 m/s, or 8 m/s
+    for touch in (1.0, 0.0):  # can kill 24 m/s, or 12 m/s
         e = Engine(1)
         still(e)
         p = e.by_id["a6"]
         p.x, p.y = 50.0, 30.0
         p.profile.attributes["first_touch"] = touch
         e.possessor, e.last_touch, e.kicker_clear, e.kicked_at = None, "h2", True, e.t - 2.0
-        before = (49.4, 30.0, 0.0, 12.0, 0.0, 0.0)
-        e.ball = (49.4 + 12.0 * DT, 30.0, 0.0, 12.0, 0.0, 0.0)
+        before = (49.4, 30.0, 0.0, 18.0, 0.0, 0.0)
+        e.ball = (49.4 + 18.0 * DT, 30.0, 0.0, 18.0, 0.0, 0.0)
         e.contact(before)
         outcomes[touch] = e.possessor == p.id
     assert outcomes == {1.0: True, 0.0: False}
@@ -397,3 +397,14 @@ def test_a_blocked_pass_fails_and_a_pass_back_to_the_passer_is_not_completed():
     e.kicked = e.emit("pass", "home", 50.0, 34.0, player="h6")
     e.touched(e.by_id["h6"], 50.5, 34.0, controls=True)
     assert e.match.events[-1]["outcome"] == "fail" and e.match.events[-1]["receiver"] is None
+
+
+def test_a_pass_is_struck_at_the_pace_chosen():
+    speeds = {}
+    for pace in (6.0, 14.0):
+        e, p = kicker()
+        e.give(p.id)
+        e.ball = (50.37, 34.0, 0.0, 0.0, 0.0, 0.0)
+        e.pass_to(p, 70.0, 34.0, lofted=False, pace=pace)
+        speeds[pace] = math.hypot(e.ball[3], e.ball[4])
+    assert speeds[14.0] > speeds[6.0] * 1.3
