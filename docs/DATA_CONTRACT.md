@@ -51,7 +51,8 @@ tests that require them to pass, so no check is stricter than the Laws.
 
 ## Today's engine
 
-`uv run ninety-sim --seed 7 --minutes 90` then `ninety-validate`: meets the contract. Players
+`uv run ninety-sim --seed 7 --minutes 90 --out runs/seed7` then
+`uv run ninety-validate runs/seed7`: meets the contract. Players
 decide and physics decides what happens: a kick gives the ball a velocity, the ball flies under
 gravity and air drag, bounces and rolls (`ninety/sim/ball.py`), each team sends the player who
 can reach it first, and whoever gets there takes it. Completed and intercepted passes, saves,

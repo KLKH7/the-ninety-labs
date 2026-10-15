@@ -107,6 +107,13 @@ short and actionable. This file is public: no research sources, product names or
 - **Rule:** test the command whose answer you need on its own (`grep -c`, then its exit code),
   and add a positive control: something you know is there must be found.
 
+### 18. Run the commands you document
+- **What happened:** the data contract told readers to run `ninety-sim` without `--out`, which
+  the CLI requires, so the first command a newcomer copied failed.
+- **Rule:** every command in a doc is copied from a run that worked, with all required
+  arguments.
+- **Check:** paste each documented command into a fresh shell before merging.
+
 ## Data and grounding
 
 ### 16. Read the primary source
