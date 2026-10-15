@@ -86,12 +86,17 @@ def test_rest_defence_stands_goal_side_of_the_counter_attackers():
         assert rest.x < counter.x  # home defends x = 0: nearer his own goal than the forward
 
 
-def test_the_short_block_is_held_at_the_laws_distance():
-    """Mutation caught: keep_off removed from target()."""
+def test_defenders_are_held_at_the_laws_distance_even_when_marking_near_the_flag():
+    """Mutation caught: keep_off removed from target(). An attacker drifts toward the flag (to
+    offer a short corner); his marker follows him only as far as the Law allows."""
     e = corner_engine(side=68.0)
     c = e.set_play
     spot = setpieces.target(e, e.by_id[c.short_block])
     assert math.isclose(math.hypot(spot[0] - 105.0, spot[1] - 68.0), setpieces.STAND_OFF_M)
+    marker, attacker = next(iter(c.marks.items()))
+    e.by_id[attacker].x, e.by_id[attacker].y = 101.0, 64.0  # about 5.7 m from the flag
+    mx, my = setpieces.target(e, e.by_id[marker])
+    assert math.isclose(math.hypot(mx - 105.0, my - 68.0), setpieces.STAND_OFF_M)
     for p in e.players:
         if p.team == "away" and (s := setpieces.target(e, p)):
             assert math.hypot(s[0] - 105.0, s[1] - 68.0) >= setpieces.STAND_OFF_M - 1e-9
@@ -161,6 +166,29 @@ def test_the_delivery_is_struck_with_execution_error(monkeypatch):
     assert struck[0] != struck[1]
 
 
+def test_a_delivery_across_the_body_carries_the_turn(monkeypatch):
+    """Mutation caught: the taker turned to face the target before the strike. He stands behind
+    the ball facing the penalty spot, so a ball to the near post is struck across his body."""
+    target = (101.0, 30.0)  # near post, well off his line of sight from the flag at y = 0
+    monkeypatch.setattr(setpieces, "choose_delivery", lambda engine, taker: target)
+    seen = {}
+    e = corner_engine(seed=4)
+    settle_everyone(e)
+    e.t += setpieces.PLACE_S + 0.1
+    tick(e)
+    taker = e.by_id[e.set_play.taker]
+    original = taker.profile.kick_error
+
+    def spy(skill, speed, pressure, fresh, weak, turn):
+        seen["turn"] = turn
+        return original(skill, speed, pressure, fresh, weak, turn)
+
+    monkeypatch.setattr(taker.profile, "kick_error", spy)
+    setpieces.face_ball(e, taker)
+    setpieces.deliver(e, taker)
+    assert abs(seen["turn"]) > 10.0
+
+
 def test_the_taker_never_touches_his_own_corner():
     """Regression: the ball was placed inside the taker's body and deflected off him on 39 of 60
     corners. The struck ball must leave him without a contact."""
@@ -180,8 +208,8 @@ def test_the_routine_ends_when_someone_wins_the_ball():
 
 
 def test_scenario_corners_meet_the_data_contract(tmp_path):
-    for seed in (1, 2):
-        m = simulate(seed, 0.6, "corner")
+    for seed in range(8):
+        m = simulate(seed, 0.9, "corner")
         d = tmp_path / str(seed)
         d.mkdir()
         (d / "events.jsonl").write_text("".join(json.dumps(ev) + "\n" for ev in m.events))
@@ -262,6 +290,39 @@ def test_a_legal_corner_passes(tmp_path, clip):
         "behind the line", "wrong corner", "wrong team"])
 def test_a_breach_of_law_17_fails(tmp_path, clip):
     assert "L9 corner" in run(tmp_path, clip)
+
+
+def test_the_ball_must_stay_where_it_was_placed_until_the_kick(tmp_path):
+    clip = corner_clip()
+    for f in clip["frames"][11:15]:  # carried 4 m out of the arc after placing, then crossed
+        f["ball"]["x"] -= 3.0 * (f["frame"] - 10) / 4
+    assert "L9 corner" in run(tmp_path, clip)
+
+
+def test_corners_cannot_be_checked_without_keepers(tmp_path):
+    clip = corner_clip(defender=(100.0, 5.0))
+    clip["meta"]["roster"] = []
+    assert "L9 corner" in run(tmp_path, clip)  # reported, never silently skipped
+
+
+def goal_after(clip, scorer, team="home"):
+    """Append a goal at frame 40 credited to `scorer` (the clip has no shot)."""
+    clip["events"].append(event("e9", 40, "goal", team, scorer, x=105.0, y=34.0))
+    clip["meta"]["score"] = {"home": 1, "away": 0} if team == "home" else {"home": 0, "away": 1}
+    return clip
+
+
+def test_a_goal_off_the_last_attacker_to_touch_it_passes(tmp_path):
+    """A corner deflected in off an attacker (or straight in from the kick) is his goal (C8)."""
+    clip = goal_after(corner_clip(), "h2")
+    clip["events"].insert(3, event("e8", 39, "deflection", "home", "h2", x=99.0, y=8.0))
+    assert "C8 event order" not in run(tmp_path, clip)
+
+
+def test_a_goal_credited_to_someone_who_did_not_touch_it_last_fails(tmp_path):
+    clip = goal_after(corner_clip(), "h2")
+    clip["events"].insert(3, event("e8", 39, "deflection", "away", "a1", x=99.0, y=8.0))
+    assert "C8 event order" in run(tmp_path, clip)
 
 
 def test_off_an_attacker_it_is_a_goal_kick_not_a_corner(tmp_path):

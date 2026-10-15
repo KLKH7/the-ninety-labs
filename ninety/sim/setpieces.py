@@ -36,7 +36,9 @@ SECOND_PHASE_S = 4.0  # S3 (design): the routine holds after the kick until the 
 MARK_GOAL_SIDE_M = 1.0  # S4 (design): a man-marker stands this far goal-side of his attacker
 REST_MARK_M = 2.0  # S5 (design): a rest defender stands this far goal-side of a counter-attacker
 SHORT_CORNER_M = 15.0  # S8 (design): a team-mate this close is a short option
-SHORT_BLOCK_M = 5.0  # S7 (design): the defender against a short corner aims this far out (then kept off)
+KEEPER_SPOT = (0.6, 0.5)  # S7 (design): the defending keeper, just off his line, toward the far post
+EDGE_COVER = (17.0, 4.0)  # S7 (design): spare defenders, on the edge of the box either side of centre
+OWN_BOX_EDGE_M = 16.0  # S5 (design): the attacking keeper waits this far from his own goal line
 
 # S5 (design): attacking zones for a corner, as (depth from the goal line, offset across the goal
 # toward the far post). Negative offsets are on the corner's side.
@@ -59,6 +61,7 @@ DEFEND_ZONES = {"near_post_zone": (1.0, -4.5), "short_block": None, "six_yard_ne
                 "six_yard_far": (5.0, 2.5)}
 COUNTER_ROLES = ("ST", "RW", "LW")  # S7 (design): defenders who stay up for a counter-attack
 COUNTER_DEPTH_M = 50.0  # S7 (design): they wait this far from the goal being attacked, near halfway
+SPARE_REST = (COUNTER_DEPTH_M + 8.0, 8.0)  # S5 (design): a rest defender with nobody to mark
 
 
 def goal_line(attacking: str) -> float:
@@ -137,12 +140,12 @@ def plan(engine: Engine, team: str, spot: tuple[float, float]) -> Corner:
     rest = [p for p in engine.players if p.team == team and p.id not in used]
     for p in rest:
         if p.role == "GK":
-            c.targets[p.id] = (goal_line(team) + into_pitch(team) * (PITCH_X - 16.0), CENTRE_Y)
+            c.targets[p.id] = (goal_line(team) + into_pitch(team) * (PITCH_X - OWN_BOX_EDGE_M), CENTRE_Y)
         elif counter:
             c.rest_marks[p.id] = counter.pop(0)
         else:
             spare = len(c.targets) % 2
-            c.targets[p.id] = c.zone_point(COUNTER_DEPTH_M + 8.0, -8.0 if spare else 8.0)
+            c.targets[p.id] = c.zone_point(SPARE_REST[0], -SPARE_REST[1] if spare else SPARE_REST[1])
     return c
 
 
@@ -153,7 +156,7 @@ def defend(engine: Engine, c: Corner) -> None:
     team = "away" if c.team == "home" else "home"
     defenders = [p for p in engine.players if p.team == team]
     keeper = next(p for p in defenders if p.role == "GK")
-    c.targets[keeper.id] = c.zone_point(0.6, 0.5)
+    c.targets[keeper.id] = c.zone_point(*KEEPER_SPOT)
     outfield = [p for p in defenders if p is not keeper]
     counter = [p for p in outfield if p.role in COUNTER_ROLES][:2]
     for i, p in enumerate(counter):
@@ -167,14 +170,14 @@ def defend(engine: Engine, c: Corner) -> None:
         c.marks[mk.id] = att
     zonal = [p for p in rest if p.id not in c.marks]
     for p, (name, where) in zip(zonal, DEFEND_ZONES.items(), strict=False):
-        if name == "short_block":
+        if name == "short_block":  # in line with the ball, at the Law's distance plus the margin (S1)
             ux, uy = c.facing
             c.short_block = p.id
-            c.targets[p.id] = (c.spot[0] + ux * SHORT_BLOCK_M, c.spot[1] + uy * SHORT_BLOCK_M)
+            c.targets[p.id] = (c.spot[0] + ux * STAND_OFF_M, c.spot[1] + uy * STAND_OFF_M)
         else:
             c.targets[p.id] = c.zone_point(*where)
     for i, p in enumerate(zonal[len(DEFEND_ZONES):]):  # anyone left covers the edge of the box
-        c.targets[p.id] = c.zone_point(17.0, -4.0 if i % 2 == 0 else 4.0)
+        c.targets[p.id] = c.zone_point(EDGE_COVER[0], -EDGE_COVER[1] if i % 2 == 0 else EDGE_COVER[1])
 
 
 def keep_off(c: Corner, x: float, y: float) -> tuple[float, float]:

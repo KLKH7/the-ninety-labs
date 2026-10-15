@@ -43,6 +43,7 @@ MAX_SUBSTITUTIONS = 5  # C3: Law 3, top-level competitions
 STOPPAGES = {"out_of_play", "goal", "substitution"}  # C3: events after which play has stopped
 RESTARTS = {"set_piece", "kickoff"}  # P3: events that put the ball back in play
 TOUCHES = {"pass", "shot", "deflection", "interception", "tackle", "possession_change"}  # P5
+GOAL_TOUCHES = {"pass", "shot", "deflection", "interception", "tackle"}  # C8: touches that can score
 # P14: a touch by someone other than the carrier must be physically possible: the player within
 # reach of the ball, which was not moving away from him. Reach is a foot (1 m) or a diving
 # keeper in his box (1.8 m), plus one frame of the ball's and the player's motion.
@@ -55,8 +56,11 @@ APPROACH_TOLERANCE_M = 0.04  # P14: per frame; a ball at 1 m/s relative to him c
 # L9 (Law 17): over the goal line, last touched by a defender, the attacking team takes a corner
 # with the ball in the corner area: within the 1 m arc, where a ball resting on the arc or a line
 # is in (Law 1: lines belong to the areas they mark), so its centre may be up to a ball radius
-# beyond them. Opponents stay 9.15 m from the arc until the ball is kicked.
-CORNER_ARC_M, CORNER_DISTANCE_M, BALL_RADIUS_M = 1.0, 9.15, 0.11
+# beyond them. The ball is stationary until it is kicked, and opponents stay 9.15 m from the arc
+# until then. The largest legal ball (Law 2: 70 cm round) has a radius of 0.1114 m. A distance
+# between two points each rounded to 0.5 mm in x and y can be off by up to √2 × 0.5 mm per point.
+CORNER_ARC_M, CORNER_DISTANCE_M, BALL_RADIUS_M = 1.0, 9.15, 0.70 / (2 * math.pi)
+DISTANCE_PRECISION_M = 2 * math.sqrt(2) * POSITION_PRECISION_M
 EXAMPLES = 5
 
 Problems = dict[str, list[str]]
@@ -305,9 +309,19 @@ def check_events(events: list[dict], frames: list[dict], fps: float, meta: dict,
             if not before or before[-1]["outcome"] != "fail" or before[-1]["receiver"] != e["player"]:
                 problems["C8 event order"].append(f"{e['id']}: {e['player']} intercepted no failed pass")
         if e["type"] == "goal" and e.get("player"):  # an own goal (no scorer) needs no shot
+            # The scorer either struck a shot that went in (it may be deflected on its way), or
+            # was the last player to touch the ball before it crossed the line: a cross or a
+            # corner that goes straight in, or a deflection off an attacker (Law 10 counts the
+            # goal; the last attacker to touch it is credited).
             before = [s for s in shots if s["frame"] <= e["frame"]]
-            if not before or before[-1]["outcome"] != "goal" or before[-1]["player"] != e["player"]:
-                problems["C8 event order"].append(f"{e['id']}: goal by {e['player']} without a scoring shot")
+            shot = before[-1] if before else None
+            scoring_shot = shot is not None and shot["outcome"] == "goal" and shot["player"] == e["player"]
+            touches = [t for t in events if t["type"] in GOAL_TOUCHES and t["frame"] <= e["frame"]]
+            last = touches[-1] if touches else None
+            last_touch = last is not None and last["player"] == e["player"] and last["type"] != "shot"
+            if not (scoring_shot or last_touch):
+                problems["C8 event order"].append(
+                    f"{e['id']}: goal by {e['player']}, who neither scored with a shot nor touched it last")
 
     if isinstance(meta.get("score"), dict):
         goals: dict[str, int] = defaultdict(int)
@@ -337,7 +351,8 @@ def check_corners(events: list[dict], frames: list[dict], roster: list[dict], pr
         f = by_frame.get(out["frame"])
         gks = [p for p in f["players"] if p["id"] in keepers] if f else []
         if not gks:
-            continue  # without a keeper on record the defending team cannot be told
+            problems["L9 corner"].append(f"{out['id']}: no keeper in the roster to check the corner")
+            continue
         defending = min(gks, key=lambda p: abs(p["x"] - out["x"]))["team"]
         if out["team"] != defending:
             continue  # off an attacker: a goal kick (L8)
@@ -352,7 +367,7 @@ def check_corners(events: list[dict], frames: list[dict], roster: list[dict], pr
         if g is None:
             continue
         b = g["ball"]
-        slack = BALL_RADIUS_M + POSITION_PRECISION_M
+        slack = BALL_RADIUS_M + DISTANCE_PRECISION_M
         in_arc = math.hypot(b["x"] - flag[0], b["y"] - flag[1]) <= CORNER_ARC_M + slack
         in_field = -slack <= b["x"] <= 105.0 + slack and -slack <= b["y"] <= 68.0 + slack
         if not (in_arc and in_field):
@@ -360,13 +375,19 @@ def check_corners(events: list[dict], frames: list[dict], roster: list[dict], pr
         later = events[events.index(restart) + 1:]
         strike = next((n for n in later if n["type"] in ("pass", "shot")), None)
         until = strike["frame"] if strike else restart["frame"] + 1  # positions before the kick
+        moved = False
         for n in range(restart["frame"], until):
             h = by_frame.get(n)
             if h is None:
                 continue
+            hb = h["ball"]
+            shift = math.dist((hb["x"], hb["y"], hb["z"]), (b["x"], b["y"], b["z"]))
+            if not moved and shift > DISTANCE_PRECISION_M:
+                problems["L9 corner"].append(f"{restart['id']}: ball moved before the kick (frame {n})")
+                moved = True
             near = [p for p in h["players"] if p["team"] == defending and
                     math.hypot(p["x"] - flag[0], p["y"] - flag[1]) - CORNER_ARC_M
-                    < CORNER_DISTANCE_M - POSITION_PRECISION_M]
+                    < CORNER_DISTANCE_M - DISTANCE_PRECISION_M]
             if near:
                 problems["L9 corner"].append(f"{restart['id']}: {near[0]['id']} inside 9.15 m at frame {n}")
                 break

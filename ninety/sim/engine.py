@@ -950,9 +950,23 @@ class Engine:
         """Scenario mode: the clip opens with the ball out of play for a home corner, from the
         players' starting shape, so the set-up itself is filmed. The side is drawn from the seed."""
         side = self.rng.choice([0.0, PITCH_Y])
-        crossed = abs(side - 8.0)  # off a defender, over the goal line 8 m from the flag (design)
+        crossed = abs(side - self.rng.uniform(4.0, 14.0))  # where it went over the goal line (design)
+        # Players stand where the game had them: the home side attacking at that end, the away
+        # side defending, from the same shape rules as open play with the ball by the line.
+        self.ball = (PITCH_X - 2.0, crossed, 0.0, 0.0, 0.0, 0.0)
+        self.poss_team = "home"
+        for team, brain in self.brains.items():
+            reach = {p.id: math.hypot(p.x - self.ball[0], p.y - self.ball[1]) / 7.0
+                     for p in self.players if p.team == team and p.role != "GK"}
+            brain.update(self.t, team == "home", self.ball[0], reach)
+        for p in self.players:
+            p.x, p.y, _ = self.shape_target(p)
+        # The away defender nearest the line put it out: he stands just inside it.
+        clearer = min((p for p in self.players if p.team == "away" and p.role != "GK"),
+                      key=lambda p: math.hypot(p.x - PITCH_X, p.y - crossed))
+        clearer.x, clearer.y = PITCH_X - 1.5, crossed
         self.ball = (PITCH_X + 0.5, crossed, 0.0, 0.0, 0.0, 0.0)  # at rest, just out of play
-        self.last_touch = self.keeper("away").id
+        self.last_touch = clearer.id
         self.emit("out_of_play", "away", PITCH_X, crossed)
         self.stop("corner", "home", (PITCH_X, side))
 
