@@ -35,6 +35,8 @@ def test_a_defender_commits_more_often_up_close_and_when_aggressive():
         n = 0
         for seed in range(150):
             e, att, dfd = one_on_one(gap)
+            cover = e.by_id["a5"]
+            cover.x, cover.y = dfd.x + 6.0, 34.0  # a team-mate goal-side: he may commit
             e.rng = random.Random(seed)
             dfd.profile.attributes.update(aggression=aggression, decisions=0.5)
             for k in range(6):  # one decision tick for him within these frames
@@ -114,3 +116,23 @@ def test_a_defender_inside_lunge_reach_of_the_carry_counts_by_his_tackle_chance(
     win = 1 - D.tackle_chance(0.5)
     gain = D.value(*straight.target, 105.0, s.opponents, None)
     assert math.isclose(straight.value, win * gain - (1 - win) * D.loss_cost(60.0, 34.0, 105.0))
+
+
+def test_without_cover_a_defender_jockeys_unless_the_ball_runs_loose_or_it_is_last_ditch():
+    e, att, dfd = one_on_one(1.2)
+    assert not e.may_commit(dfd, att, *e.ball[:2])  # alone, ball at the carrier's feet: wait
+    assert e.may_commit(dfd, att, att.x + 1.3, 34.0)  # a heavy touch: the ball is there to win
+    cover = e.by_id["a5"]
+    cover.x, cover.y = dfd.x + 6.0, 34.0
+    assert e.may_commit(dfd, att, *e.ball[:2])  # covered
+    e2, att2, dfd2 = one_on_one(1.2)
+    att2.x, dfd2.x = 90.0, 91.2
+    assert e2.may_commit(dfd2, att2, 90.37, 34.0)  # 15 m from his goal: last ditch
+
+
+def test_close_to_an_opponent_the_carrier_keeps_the_ball_at_his_feet():
+    e, att, dfd = one_on_one(2.0)
+    e.dribble_to = (80.0, 30.0)
+    for _ in range(25):
+        e.tick_carrier()
+        assert e.possessor == att.id  # never pushed loose with a man this close

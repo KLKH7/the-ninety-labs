@@ -73,6 +73,10 @@ TOUCH_EXPECTED_DEG = 30.0  # a touch within this of his running line needs no ne
 # wins the ball only if his foot gets there before the carrier moves it (decisions.tackle_chance
 # is the shared race). All *design*, *verify*.
 OFF_BALANCE_S = 0.8  # a missed lunge leaves him out of the play this long
+CLOSE_CONTROL_M = 3.0  # with an opponent this close, a carrier keeps the ball at his feet
+CLOSE_CONTROL_PACE = 0.6  # and carries it at this share of his dribbling speed
+COVER_M = 10.0  # a team-mate goal-side within this distance is cover to commit with
+LAST_DITCH_M = 18.0  # this near his own goal a defender commits without cover
 COMMIT_P = 0.6  # a defender commits only when he expects to win the race this often (aggression shifts it)
 SHIELD_M = 3.0  # holding with an opponent this close, the carrier puts his body between them
 EVADE_MPS = 3.0  # how fast a carrier pushes the ball away from a lunge, plus up to 2 m/s with dribbling
@@ -435,8 +439,19 @@ class Engine:
                     mates.append((q.id, at[0], at[1], belief.age(q.id, self.t)))
         # The keeper is an opponent like any other for lanes, carries and pressure; the shot
         # estimate counts him once, as the keeper, not also as a blocker.
-        opps = [w for w in (belief.where(q.id, self.t) for q in self.players if q.team == opp) if w]
-        keeper = belief.where(self.keeper(opp).id, self.t)
+        # Opponents as they will be a moment from now (their seen velocity): a carrier reads a
+        # defender closing in, not only where he stands.
+        opps = []
+        for q in self.players:
+            at = belief.where(q.id, self.t)
+            if at and q.team == opp:
+                qvx, qvy = belief.velocity(q.id)
+                opps.append((at[0] + qvx * ANTICIPATE_S, at[1] + qvy * ANTICIPATE_S))
+        their_keeper = self.keeper(opp).id
+        keeper = belief.where(their_keeper, self.t)
+        if keeper:  # the same anticipated spot as in `opps`, so the shot estimate counts him once
+            kvx, kvy = belief.velocity(their_keeper)
+            keeper = (keeper[0] + kvx * ANTICIPATE_S, keeper[1] + kvy * ANTICIPATE_S)
         diff = self.match.score[team] - self.match.score[opp]
         risk = clamp(-diff * self.t / 5400, -1.0, 1.0)  # chase the game when behind late, protect when ahead
         prof = carrier.profile
@@ -1002,7 +1017,10 @@ class Engine:
             steer(carrier, carrier.x, carrier.y, DRIBBLE)
         elif self.dribble_to:  # carrying the ball where he chose, as fast as his dribbling allows
             tx, ty = self.dribble_to
-            steer(carrier, tx, ty, decisions.dribble_speed(carrier.profile["dribbling"]))
+            pace = decisions.dribble_speed(carrier.profile["dribbling"])
+            if self.closest_opponent(carrier) < CLOSE_CONTROL_M:
+                pace *= CLOSE_CONTROL_PACE  # close control: slower, the ball never leaves his feet
+            steer(carrier, tx, ty, pace)
             if math.hypot(tx - carrier.x, ty - carrier.y) < 1.0:
                 self.dribble_to = None
         else:  # holding: keeps the ball, shielding it
@@ -1036,7 +1054,8 @@ class Engine:
         if gap < 2.0 and self.t - self.pressed.get(opp, -99) > 8:
             self.pressed[opp] = self.t
             self.emit("pressure", opp, presser.x, presser.y, player=presser.id, receiver=carrier.id)
-        if self.dribble_to and not self.windup and math.hypot(fx - bx, fy - by) < 0.15:
+        close = self.closest_opponent(carrier) < CLOSE_CONTROL_M
+        if self.dribble_to and not self.windup and not close and math.hypot(fx - bx, fy - by) < 0.15:
             self.touch_ahead(carrier)
             return
         if self.windup:
@@ -1046,6 +1065,21 @@ class Engine:
             return
         if self.t >= self.hold_until and (self.frame + int(carrier.id[1:])) % DECIDE_EVERY == 0:
             self.decide(carrier)
+
+    def closest_opponent(self, p: Player) -> float:
+        return min(math.hypot(q.x - p.x, q.y - p.y) for q in self.players if q.team != p.team)
+
+    def may_commit(self, p: Player, holder: Player, bx: float, by: float) -> bool:
+        """D8: delay, deny, then commit. A defender goes in only with a team-mate covering behind
+        him, when the ball has run loose from the carrier, or as a last resort near his own goal;
+        otherwise he jockeys and waits."""
+        own = PITCH_X - goal_x(p.team)
+        if abs(bx - own) < LAST_DITCH_M:
+            return True
+        if math.hypot(bx - holder.x, by - holder.y) > CONTROL_M:  # a heavy touch: the ball is there
+            return True
+        return any(q.team == p.team and q is not p and abs(q.x - own) < abs(p.x - own)
+                   and math.hypot(q.x - p.x, q.y - p.y) < COVER_M for q in self.players)
 
     def duels(self) -> None:
         """D8: defenders near the ball decide whether to tackle, and lunges that have arrived are
@@ -1079,7 +1113,7 @@ class Engine:
             if self.off_balance.get(p.id, -1.0) > self.t or (self.frame + i) % DECIDE_EVERY:
                 continue
             d = math.hypot(p.x - bx, p.y - by)
-            if d > decisions.LUNGE_REACH_M:
+            if d > decisions.LUNGE_REACH_M or not self.may_commit(p, holder, bx, by):
                 continue
             lunge = decisions.lunge_time(d, p.profile["tackling"])
             # His estimate of winning the race: an average carrier needs a choice reaction to react.
