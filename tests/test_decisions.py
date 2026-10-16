@@ -696,3 +696,59 @@ def test_the_shooter_judges_the_keeper_over_the_heights_shots_are_aimed_at(monke
     open_share = offball.open_goal_share(*shooter, 105, keeper)
     monkeypatch.setattr(offball, "SHOT_AIM_Z_M", (offball.KEEPER_COM_Z, offball.KEEPER_COM_Z))
     assert open_share > offball.open_goal_share(*shooter, 105, keeper)
+
+
+def test_he_strikes_at_most_the_published_approach_angle_off_his_facing_after_turning():
+    # P16: facing within 60° he strikes now; otherwise he turns at 350°/s until he is, then strikes at 60°.
+    assert D.strike_turn(0.0, 1.0, math.tan(math.radians(40))) == pytest.approx((40.0, 0.0))
+    turn, wait = D.strike_turn(0.0, math.cos(math.radians(150)), math.sin(math.radians(150)))
+    assert turn == pytest.approx(60.0) and wait == pytest.approx(math.radians(90) / math.radians(350))
+
+
+def test_the_estimate_and_the_engine_share_one_strike_rule():
+    from ninety.sim.engine import Engine
+    e = Engine(1)
+    c = e.by_id["h6"]
+    c.x, c.y = 40.0, 34.0
+    for heading, side in ((0.0, 0.21), (math.radians(70), 0.21), (0.0, -0.21)):
+        c.heading = heading
+        e.ball = (c.x + side, c.y, 0.0, 0.0, 0.0, 0.0)
+        assert e.can_strike(c, 60.0, 34.0) == D.can_strike(side, 0.0, heading, 60.0 - c.x - side, 0.0)
+
+
+def test_how_far_he_must_turn_first_does_not_change_the_kick_he_then_strikes():
+    from ninety.sim.profiles import Profile
+    passer = Profile.generate("CM", random.Random(3))
+    # Pass along +x; facing 60° or 150° off it, he strikes it 60° off either way (P16).
+    near = D.strike_nodes(scene(passer=passer, heading=math.radians(60)), 85.0, 34.0, False, 10.0)
+    far = D.strike_nodes(scene(passer=passer, heading=math.radians(150)), 85.0, 34.0, False, 10.0)
+    assert len(near) == len(far)
+    for a, b in zip(near, far, strict=True):
+        assert a == pytest.approx(b)
+
+
+def test_turning_first_gives_an_opponent_closing_on_the_lane_time_to_get_there():
+    # An opponent 3 m off the lane, running at it: the turn's delay (P16) is time he uses.
+    moving = [(70.0, 37.0, 0.0, -4.0, False)]
+    facing = scene(moving=moving, heading=0.0)
+    away = scene(moving=moving, heading=math.pi)
+    sure = D.pass_confidence(facing, 85.0, 34.0, 85.0, 34.0, 0.0, False)
+    late = D.pass_confidence(away, 85.0, 34.0, 85.0, 34.0, 0.0, False)
+    assert late < sure
+
+
+def test_a_throw_in_leaves_his_hands_at_once_whichever_way_he_faces(monkeypatch):
+    # Law 15 / P16: a ball in his hands is thrown, not struck off his foot: no turn, no 60° cap.
+    assert D.can_strike(0.0, 0.0, math.pi, 1.0, 0.0)
+    turn, wait = D.strike_turn(math.pi, 1.0, 0.0, thrown=True)
+    assert abs(turn) == pytest.approx(180.0) and wait == 0.0
+    asked = []
+    production = D.strike_turn
+
+    def spy(*args):
+        asked.append(args)
+        return production(*args)
+    monkeypatch.setattr(D, "strike_turn", spy)
+    D.pass_confidence(scene(throw=True, heading=math.pi, ball_offset=(0.0, 0.0)), 70.0, 34.0, 70.0, 34.0,
+                      0.0, True)
+    assert asked and all(len(a) == 4 and a[3] for a in asked)

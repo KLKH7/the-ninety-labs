@@ -2,7 +2,11 @@
 
 Players are built from capsules (thighs, shins, torso, arms) and spheres (head, hair). Python
 computes every capsule in world coordinates for every frame and sends them to the page, so the
-geometry that is drawn and the geometry that is labelled are the same numbers.
+geometry that is drawn and the geometry that is labelled are the same numbers. Standing, trunk and
+arms are drawn to fill the body shape the engine's contact physics uses (ninety/sim/shape.py)
+between hip and shoulder height, turned the way the engine says he faces. The legs are narrower
+than that shape, and running, the arms swing and the trunk leans outside it (docs/GROUNDING.md,
+P11).
 """
 
 from __future__ import annotations
@@ -12,9 +16,9 @@ import random
 from dataclasses import dataclass
 
 from ninety.render.camera import Camera
+from ninety.sim import shape
 
 BALL_RADIUS = 0.11
-DRIBBLE_LEAD = 0.55  # the ball is drawn this far ahead of the carrier's feet
 STRIDE_M = 1.7  # ground covered per full running cycle
 
 SKIN_TONES = ("#f5d0b5", "#e8b897", "#d19a74", "#b07850", "#8d5a3b", "#6b4329", "#4a2e1d")
@@ -74,6 +78,25 @@ def update_gait(g: Gait, dx: float, dy: float, dt: float, face: tuple[float, flo
     g.phase = (g.phase + 2 * math.pi * d / STRIDE_M) % (2 * math.pi)
 
 
+def advance_gaits(gaits: dict[str, Gait], prev_xy: dict[str, tuple[float, float]], frame: dict,
+                  dt: float) -> None:
+    """One frame of every player's gait: stride from how far he moved, and the way he faces from
+    the engine (face), so the body is drawn turned as it collides."""
+    bx, by = frame["ball"]["x"], frame["ball"]["y"]
+    for pl in frame["players"]:
+        px, py = prev_xy.get(pl["id"], (pl["x"], pl["y"]))
+        update_gait(gaits[pl["id"]], pl["x"] - px, pl["y"] - py, dt, (bx - pl["x"], by - pl["y"]))
+        prev_xy[pl["id"]] = (pl["x"], pl["y"])
+        face(gaits[pl["id"]], pl)
+
+
+def face(g: Gait, player: dict) -> None:
+    """Turn the drawn body the way the engine says he faces, when the frame says (the engine
+    already limits how fast a body turns, GROUNDING P16), so it is drawn as it collides."""
+    if "heading" in player:
+        g.heading = player["heading"]
+
+
 def body_parts(x: float, y: float, look: Look, g: Gait) -> list[dict]:
     """Capsules (a, b, r) and spheres (a only) in world metres, tagged with a colour slot."""
     k = look.height_m / 1.84
@@ -86,6 +109,9 @@ def body_parts(x: float, y: float, look: Look, g: Gait) -> list[dict]:
     def at(f: float, side: float, z: float) -> list[float]:
         return [round(x + hx * f + lx * side, 4), round(y + hy * f + ly * side, 4), round(z, 4)]
 
+    sleeve_r = 0.06 * k
+    # The outer edge of the sleeves is the shoulder breadth over the deltoids (shape.py, P11).
+    shoulder_y = shape.SHOULDER_BREADTH_M / 2 - sleeve_r
     parts = []
     for side, sign in (("l", 1.0), ("r", -1.0)):
         swing = amp * s * sign
@@ -96,28 +122,36 @@ def body_parts(x: float, y: float, look: Look, g: Gait) -> list[dict]:
         parts.append({"n": f"thigh_{side}", "a": hip, "b": knee, "r": round(0.085 * k * w, 4), "c": "shorts"})
         parts.append({"n": f"shin_{side}", "a": knee, "b": ankle, "r": round(0.062 * k * w, 4), "c": "socks"})
         arm_swing = -swing * 0.7
-        shoulder = at(0.0, 0.21 * k * w * sign, 1.40 * k)
-        hand = at(arm_swing, 0.25 * k * w * sign, 0.93 * k)
-        parts.append({"n": f"arm_{side}", "a": shoulder, "b": hand, "r": round(0.048 * k, 4), "c": "skin"})
+        shoulder = at(0.0, shoulder_y * sign, 1.40 * k)
+        arm_r = 0.048 * k
+        hand = at(arm_swing, (shoulder_y + sleeve_r - arm_r) * sign, 0.93 * k)  # hangs inside the deltoid
+        parts.append({"n": f"arm_{side}", "a": shoulder, "b": hand, "r": round(arm_r, 4), "c": "skin"})
         parts.append(
             {
                 "n": f"sleeve_{side}",
                 "a": shoulder,
                 "b": [round((shoulder[i] * 0.6 + hand[i] * 0.4), 4) for i in range(3)],
-                "r": round(0.06 * k, 4),
+                "r": round(sleeve_r, 4),
                 "c": "shirt",
             }
         )
     lean = min(g.speed / 7.0, 1.0) * 0.08 * k
-    parts.append(
-        {
-            "n": "torso",
-            "a": at(0.0, 0.0, 0.98 * k),
-            "b": at(lean, 0.0, 1.36 * k),
-            "r": round(0.16 * k * w, 4),
-            "c": "shirt",
-        }
-    )
+    # The trunk: three capsules side by side, each as thick as the chest is deep, filling the width
+    # up to the inside of the hanging arms, so at chest height, trunk and arms span the engine's
+    # body (shape.py) across and front to back.
+    half = shape.CHEST_DEPTH_M / 2
+    arm_inner = shoulder_y + sleeve_r - 2 * 0.048 * k
+    trunk_y = max(0.0, arm_inner - half)
+    for side, sign in (("l", 1.0), ("", 0.0), ("r", -1.0)):
+        parts.append(
+            {
+                "n": f"torso_{side}" if side else "torso",
+                "a": at(0.0, trunk_y * sign, 0.98 * k),
+                "b": at(lean, trunk_y * sign, 1.36 * k),
+                "r": round(half, 4),
+                "c": "shirt",
+            }
+        )
     parts.append(
         {
             "n": "neck",
@@ -163,15 +197,10 @@ def ball_parts(x: float, y: float, z: float) -> list[dict]:
     ]
 
 
-def drawn_ball(frame: dict, carrier_heading: float | None) -> tuple[float, float, float]:
-    """Where the ball is drawn: at the sim position, or just ahead of the carrier's feet."""
+def drawn_ball(frame: dict) -> tuple[float, float, float]:
+    """Where the ball is drawn: where the engine has it. A carrier's ball is already against his
+    body on the side he faces (engine.py, tick_carrier), so it is drawn there, not moved."""
     b = frame["ball"]
-    if frame.get("possessor") and carrier_heading is not None:
-        return (
-            b["x"] + DRIBBLE_LEAD * math.cos(carrier_heading),
-            b["y"] + DRIBBLE_LEAD * math.sin(carrier_heading),
-            b["z"],
-        )
     return (b["x"], b["y"], b["z"])
 
 

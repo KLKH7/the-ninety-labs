@@ -28,6 +28,7 @@ from ninety.render.camera import Camera, Director, blur_vector
 from ninety.render.params import RenderParams, sample_params
 from ninety.render.scene import (
     Gait,
+    advance_gaits,
     ball_parts,
     body_parts,
     crowded_start,
@@ -35,7 +36,6 @@ from ninety.render.scene import (
     parts_box,
     project_keypoints,
     sample_looks,
-    update_gait,
 )
 from ninety.render.splits import split_of
 from ninety.sim.engine import FORMATION, FPS, PITCH_X, PITCH_Y, simulate
@@ -220,15 +220,8 @@ def render_clip(
         rows = []
         for fi in range(max(0, start - WARMUP), start + n):
             fr = frames[fi]
-            bx, by = fr["ball"]["x"], fr["ball"]["y"]
-            for pl in fr["players"]:
-                px, py = prev_xy.get(pl["id"], (pl["x"], pl["y"]))
-                update_gait(
-                    gaits[pl["id"]], pl["x"] - px, pl["y"] - py, 1 / FPS, (bx - pl["x"], by - pl["y"])
-                )
-                prev_xy[pl["id"]] = (pl["x"], pl["y"])
-            carrier = fr.get("possessor")
-            ball = drawn_ball(fr, gaits[carrier].heading if carrier else None)
+            advance_gaits(gaits, prev_xy, fr, 1 / FPS)
+            ball = drawn_ball(fr)
             cam = director.step(ball[0], ball[1])
             blur = blur_vector(prev_cam, cam, p.motion_blur)
             prev_cam = cam
