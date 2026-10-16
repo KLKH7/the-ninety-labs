@@ -742,11 +742,15 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
         # its path than he can run by then matters (a shortcut, like `lb`).
         reached = points[min(len(points) - 1, int(horizon / (RACE_STEP * DT)) + 1)][1]
         hx, hy = sx + ux * reached, sy + uy * reached
+        # A body in its way can stop it whoever chases; but they send one man after a free ball
+        # (engine.plan_chase: the one who gets to its path first), so only the soonest of them
+        # races the team-mate for it.
+        first = math.inf
         for ox, oy, ovx, ovy, keeper, lb, body, sigma0, sigma_v in rivals:
             if body:
                 p *= 1 - body_hit(points, take, sx, sy, ux, uy, ox, oy, ovx, ovy, react, sigma0, sigma_v)
-            if lb > horizon:
-                continue  # he could not be there soon enough to matter
+            if lb > horizon or lb > first:
+                continue  # he could not be there soon enough to matter, or another gets there sooner
             near = distance_to_segment(ox, oy, sx, sy, hx, hy) - (arm_max if keeper else CONTROL_M)
             if react + _soonest(near, math.hypot(ovx, ovy)) > horizon:
                 continue
@@ -754,8 +758,9 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
             # just short of the lane is nearly as much a risk as one who just reaches it.
             t, _ = reach_time(points, t_end, rests, sx, sy, ux, uy, ox, oy, ovx, ovy, react,
                               horizon, scene.goal_x if keeper else None, late=True)
-            if t <= horizon:
-                p *= sigmoid((t - take) / LANE_MARGIN_S)
+            first = min(first, t)
+        if first <= horizon:
+            p *= sigmoid((first - take) / LANE_MARGIN_S)
         total += w * p
     return total * (0.8 if age > STALE_S else 1.0)
 

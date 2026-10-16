@@ -93,6 +93,7 @@ def reference(scene, tx, ty, mx, my, age, lofted, pace, receiver):
         absorb = taker[5] * CUSHION[part] / quality(0.0, felt, 0.5, 1.0, rel, taker[5])
         p = D.sigmoid((absorb + KEEP_MPS - rel) / D.CONTROL_MARGIN_MPS)
         horizon = take + D.OPPONENT_LATE_S
+        first = math.inf  # they send one man after it (engine.plan_chase): the soonest races
         for ox0, oy0, ovx, ovy, keeper in scene.moving:
             ox, oy = ox0 + ovx * wait, oy0 + ovy * wait
             d = math.hypot(ox - cx, oy - cy)
@@ -100,8 +101,9 @@ def reference(scene, tx, ty, mx, my, age, lofted, pace, receiver):
                                 perception.POSITION_ERROR_PER_M * d, perception.VELOCITY_ERROR_PER_M * d)
             t, _ = ref_reach(points, rests, t_end, sx, sy, ux, uy, ox, oy, ovx, ovy, react, horizon,
                              scene.goal_x if keeper else None, True)
-            if t <= horizon:
-                p *= D.sigmoid((t - take) / D.LANE_MARGIN_S)
+            first = min(first, t)
+        if first <= horizon:
+            p *= D.sigmoid((first - take) / D.LANE_MARGIN_S)
         total += w * p
     return total * (0.8 if age > D.STALE_S else 1.0)
 
