@@ -1184,6 +1184,10 @@ class Engine:
                 lead_x = carrier.vx * JOCKEY_LOOKAHEAD_S if carrier else 0.0
                 lead_y = carrier.vy * JOCKEY_LOOKAHEAD_S if carrier else 0.0
                 return *on_pitch(bx + lead_x + gx * gap, by + lead_y + gy * gap), work
+            if not engaged and not self.restart and self.presses_high(p, brain, bx, by):
+                # O9: a pressing role goes to the carrier beyond the block's engagement line,
+                # goal-side and a step away, as the first presser does; the rest hold the block.
+                return *on_pitch(bx + gx * gap, by + gy * gap), work
             if engaged and brain.pressers[1:2] == [p.id]:  # cover: behind the presser, goal-side
                 cx, cy = on_pitch(bx + gx * max(COVER_M, gap + 2), by + gy * max(COVER_M, gap + 2))
                 return cx, cy, self.in_time(p, cx, cy)
@@ -1289,6 +1293,15 @@ class Engine:
         if spot:
             self.runs[p.id] = (*spot, self.t)
         return spot
+
+    def presses_high(self, p: Player, brain: TeamBrain, bx: float, by: float) -> bool:
+        """O9: is he the one of his side's pressing roles (roles.py) nearest the ball, while they
+        are out of possession? One goes; the block's own pressers take over inside its line."""
+        if brain.in_possession or not roles.role_of(p.profile.archetype).high_press:
+            return False
+        mine = [q for q in self.players if q.team == p.team and roles.role_of(q.profile.archetype).high_press
+                and self.off_balance.get(q.id, -1.0) <= self.t]
+        return min(mine, key=lambda q: math.hypot(q.x - bx, q.y - by)) is p
 
     def drop_target(self, p: Player, carrier: Player) -> tuple[float, float] | None:
         """O9: a deep-lying playmaker or a target forward comes short to receive while his team

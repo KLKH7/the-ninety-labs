@@ -22,6 +22,7 @@ class Role:
     forward_m: float  # his in-possession spot, this many metres higher (negative: deeper)
     inside_m: float  # and this many metres nearer the centre (negative: wider)
     runs: frozenset[str] = frozenset()  # the runs he makes when the carrier can play one
+    high_press: bool = False  # out of possession he goes to the ball beyond his team's engagement line
 
 
 # In behind: beyond the last line. Diagonal: in behind, from wide toward the near half-space.
@@ -35,13 +36,13 @@ ROLES = {
     "defensive": Role(DEFEND, -6.0, 2.0),
     "overlapping": Role(ATTACK, 6.0, 0.0, frozenset({"overlap"})),
     "deep_playmaker": Role(BALANCED, -6.0, 0.0, frozenset({"drop"})),
-    "box_to_box": Role(ATTACK, 4.0, 0.0, frozenset({"late"})),
+    "box_to_box": Role(ATTACK, 4.0, 0.0, frozenset({"late"}), high_press=True),
     "ball_winner": Role(DEFEND, -3.0, 0.0),
     "touchline_winger": Role(BALANCED, 0.0, -2.0),
     "inside_forward": Role(ATTACK, 0.0, 5.0, frozenset({"diagonal"})),
     "poacher": Role(ATTACK, 0.0, 0.0, frozenset({"in_behind"})),
     "target_forward": Role(BALANCED, -4.0, 0.0, frozenset({"drop"})),
-    "pressing_forward": Role(ATTACK, 0.0, 0.0, frozenset({"in_behind"})),
+    "pressing_forward": Role(ATTACK, 0.0, 0.0, frozenset({"in_behind"}), high_press=True),
 }
 DEFAULT = Role(BALANCED, 0.0, 0.0)
 
