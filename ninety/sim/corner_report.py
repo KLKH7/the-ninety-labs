@@ -19,6 +19,7 @@ from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from statistics import median, quantiles
 
+from ninety.sim.body import FOOT_REACH_Z
 from ninety.sim.engine import FPS, corner_seed, simulate
 from ninety.validate import validate
 
@@ -47,6 +48,8 @@ def measure(seed: int) -> dict:
             first = f["possessor"]
             break
     after = [e for e in ev if kick["frame"] < e["frame"] <= end]
+    headed = [e for e in after if e["type"] in ("pass", "shot")
+              and frames[e["frame"]]["ball"]["z"] > FOOT_REACH_Z]
     lofted = any(f["ball"]["z"] > 0.5 for f in frames[kick["frame"]:kick["frame"] + 10])
     landed = next((f["t"] for f in frames[kick["frame"] + 2:end] if f["ball"]["z"] < 0.15), None)
     with tempfile.TemporaryDirectory() as d:
@@ -60,6 +63,8 @@ def measure(seed: int) -> dict:
         "seed": seed, "valid": not problems,
         "first": "defending keeper" if first in keepers and keepers[first] == "away" else team,
         "goal": any(e["type"] == "goal" and e["team"] == "home" for e in after),
+        "heads": (sum(e["team"] == "home" for e in headed), sum(e["team"] == "away" for e in headed),
+                  sum(e["type"] == "shot" and e["team"] == "home" for e in headed)),
         "shot": any(e["type"] == "shot" and e["team"] == "home" for e in after),
         "lofted": lofted, "flight": (landed - kick["t"]) if (landed and lofted) else None,
         "ready_to_kick": kick["t"] - ready["t"], "out_to_kick": kick["t"] - out["t"],
@@ -112,6 +117,9 @@ def report(rows: list[dict]) -> str:
         f"{first['defenders'] + first['defending keeper']} ({first['defending keeper']}) / "
         f"{first['nobody']} | |",
         f"| Lofted deliveries | {sum(r['lofted'] for r in rows)} / {n} | |",
+        f"| Headers within {AFTER_S:.0f} s (P17): attackers / defenders; attackers' headers at goal | "
+        f"{sum(r['heads'][0] for r in rows)} / {sum(r['heads'][1] for r in rows)}; "
+        f"{sum(r['heads'][2] for r in rows)} | |",
         f"| Lofted delivery, kick to first bounce or touch below 0.15 m | {spread(flights)} | |",
         f"| Ready (set-piece event) to kick | {spread([r['ready_to_kick'] for r in rows])} | |",
         f"| Out of play to kick | {spread([r['out_to_kick'] for r in rows])} | |",
