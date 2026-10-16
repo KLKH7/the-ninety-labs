@@ -1338,9 +1338,13 @@ class Engine:
             reached = offball.dive_time_to(abs(travel), v0)
             carried = math.copysign(offball.dive_motion(reached, v0)[1], travel)
             y += carried * min(max(elapsed - reached, 0.0), DT)
-        # P2: the run he was making when he launched brakes as hard as his legs allow, it does not
-        # stop dead (the dive only moves him sideways).
-        brake = min(abs(p.vx), BRAKE_MAX * DT)
+        # P2: the run he was making when he launched brakes with the grip the dive's push leaves
+        # (braking and pushing share one grip, BRAKE_MAX: while the push takes it all he carries his
+        # run), never stopping dead.
+        vy = carried if landing else (y - p.y) / DT
+        pushing = abs(vy - p.vy) / DT
+        grip = math.sqrt(max(BRAKE_MAX * BRAKE_MAX - pushing * pushing, 0.0))
+        brake = min(abs(p.vx), grip * DT)
         p.vx -= math.copysign(brake, p.vx)
         p.x += p.vx * DT
         p.vy = (y - p.y) / DT

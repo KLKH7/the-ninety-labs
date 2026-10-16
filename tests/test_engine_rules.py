@@ -727,7 +727,7 @@ def test_the_dive_runs_in_the_match_loop_and_waits_for_the_keepers_reaction():
     e.move_players()
     assert k.y == y0 or abs(k.y - y0) < 0.05  # nothing yet: he has not reacted
     e.t += e.reaction(k)
-    for _ in range(5):
+    for _ in range(8):
         e.move_players()
         e.t += 1 / 25
     assert k.y - y0 > 0.2  # launched by the match loop itself
@@ -868,7 +868,7 @@ def test_a_keeper_down_after_a_dive_keeps_his_stretch_until_he_is_up():
     k = _shot_at_keeper(e, (90.0, 34.0, 0.5, 25.0, 6.0, 0.0))
     e.t += e.reaction(k)
     assert e.keeper_dive(k)
-    for _ in range(int(0.5 * 25) + 2):
+    for _ in range(int(offball.DIVE_TIME_S * 25) + 2):
         e.keeper_dive(k)
         e.t += 1 / 25
     assert e.dive is None and e.off_balance[k.id] > e.t  # landed, on the ground
@@ -1071,8 +1071,10 @@ def test_high_balls_are_reached_less_far_across_and_low_ones_once_he_falls():
     assert mid == pytest.approx(offball.KEEPER_ARM_M) and high < mid
     standing = offball.KEEPER_COM_Z  # his centre of mass, before he has fallen at all
     on_the_ground = (offball.KEEPER_ARM_M ** 2 - standing ** 2) ** 0.5
-    assert offball.reach_for(True, 0.5, 0.0, 0.0)[0] == pytest.approx(offball.KEEPER_ARM_M)  # fallen to it
-    assert offball.reach_for(True, 0.5, 0.0, 0.0)[0] > on_the_ground
+    stretched = offball.DIVE_TIME_S  # his arms fully stretched by the dive's end
+    fallen = offball.reach_for(True, stretched, 0.0, 0.0)[0]  # fallen to the ground by then
+    assert fallen == pytest.approx(offball.KEEPER_ARM_M)
+    assert fallen > on_the_ground
 
 
 def test_the_upward_part_of_a_save_starts_no_sooner_than_245_ms_after_the_kick():
@@ -1159,7 +1161,7 @@ def test_every_dive_is_the_full_dives_push_so_a_short_one_is_no_harder_and_lands
     # GROUNDING P15: one push for every dive; a shorter dive stops it sooner.
     from ninety.sim import offball
     from ninety.sim.engine import DT
-    ramp = 2 * (offball.DIVE_TIME_S - offball.KEEPER_DIVE_TRAVEL_M / offball.DIVE_PEAK_MPS)
+    ramp = offball.DIVE_PUSH_OFF_S
     push = offball.DIVE_PEAK_MPS / ramp * DT  # the full dive's gain in speed per frame
     landings = []
     for travel in (0.2, 0.5, 0.9, offball.KEEPER_DIVE_TRAVEL_M):
@@ -1185,21 +1187,28 @@ def test_a_keeper_who_lands_slows_on_the_ground_and_does_not_stop_dead():
 
 
 def test_a_keeper_who_dives_while_running_brakes_his_run_and_does_not_stop_dead():
-    # GROUNDING P2: the dive moves him sideways; the run he was making brakes as hard as legs allow.
+    # GROUNDING P2: the dive moves him sideways; the run he was making brakes with the grip left.
     from ninety.sim.engine import BRAKE_MAX, DT
     _, ahead, landed = _dive_speeds(1.0, vx=-4.0)
     run = [-4.0] + ahead[:landed + 1]
+    side, _, _ = _dive_speeds(1.0, vx=-4.0)
+    side = [0.0] + side[:landed + 1]
     assert run[1] < -3.0  # he does not stop dead
-    for a, b in zip(run, run[1:], strict=False):
-        if a < -BRAKE_MAX * DT:  # still running: braking as hard as his legs allow, no harder
-            assert b - a == pytest.approx(BRAKE_MAX * DT)
+    for i in range(1, len(run)):
+        if run[i - 1] < -BRAKE_MAX * DT:  # still running: braking as hard as the grip his push leaves
+            pushing = abs(side[i] - side[i - 1]) / DT
+            grip = max(BRAKE_MAX ** 2 - pushing ** 2, 0.0) ** 0.5
+            assert run[i] - run[i - 1] == pytest.approx(grip * DT, abs=1e-9)
+            change = ((run[i] - run[i - 1]) ** 2 + (side[i] - side[i - 1]) ** 2) ** 0.5
+            assert change <= max(BRAKE_MAX * DT, pushing * DT) + 1e-9  # never more than one grip
+    assert any(b - a > 0.5 * BRAKE_MAX * DT for a, b in zip(run, run[1:], strict=False))  # it does brake
 
 
 def test_a_keeper_already_running_sideways_dives_on_from_that_run_and_does_not_lose_it():
     # GROUNDING P15 and P2: toward the dive, the push starts from his run; away from it, he first
     # brakes as legs allow, then pushes; his sideways speed never jumps.
     from ninety.sim.engine import BRAKE_MAX, DT
-    ramp = 2 * (offball.DIVE_TIME_S - offball.KEEPER_DIVE_TRAVEL_M / offball.DIVE_PEAK_MPS)
+    ramp = offball.DIVE_PUSH_OFF_S
     push = offball.DIVE_PEAK_MPS / ramp * DT
     for vy in (2.0, -2.0, 4.5):  # 4.5: faster than the dive's own peak, which it keeps
         side, _, landed = _dive_speeds(1.0, vy=vy)
@@ -1266,3 +1275,14 @@ def test_can_reach_judges_a_keepers_hands_by_the_balls_height():
     t = e.reaction(k) + 0.6
     assert e.can_reach(k, 103.0, 35.4, 1.0, t, delay=t)[0]  # at his waist
     assert not e.can_reach(k, 103.0, 35.4, 2.9, t, delay=t)[0]  # near the top of his jump: not so far across
+
+
+def test_the_dives_push_stays_within_what_legs_give():
+    # GROUNDING P2, P15: pushed off over the cited push-off time, the body speeds up no faster than
+    # a player can (the validator's own P2 limit), whatever the dive's length.
+    from ninety.sim.engine import DT
+    from ninety.validate import MAX_PLAYER_ACCEL
+    for travel in (0.5, 1.0, offball.KEEPER_DIVE_TRAVEL_M):
+        side, _, landed = _dive_speeds(travel)
+        speeds = [0.0] + side[:landed + 1]
+        assert max(b - a for a, b in zip(speeds, speeds[1:], strict=False)) <= MAX_PLAYER_ACCEL * DT + 1e-9
