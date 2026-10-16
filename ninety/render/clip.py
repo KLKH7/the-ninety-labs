@@ -38,7 +38,7 @@ from ninety.render.scene import (
     update_gait,
 )
 from ninety.render.splits import split_of
-from ninety.sim.engine import FORMATION, FPS, simulate
+from ninety.sim.engine import FORMATION, FPS, PITCH_X, PITCH_Y, simulate
 
 ROOT = Path(__file__).resolve().parents[2]
 WEB = ROOT / "web"
@@ -50,6 +50,7 @@ CHROMIUM_ARGS = [
     "--disable-gpu-driver-bug-workarounds",
 ]
 WARMUP = 2 * FPS  # frames simulated before the window so the camera and gaits settle
+WINDOW_DRAWS = 50  # seeded windows tried for one with the ball on the pitch (choose_start)
 
 
 class RenderUnavailable(RuntimeError):
@@ -118,10 +119,23 @@ def kit_colors(p: RenderParams, team: str, role: str) -> dict:
 def choose_start(
     frames: list[dict], p: RenderParams, n: int, seed: int, earliest_s: float, latest_s: float
 ) -> int:
+    """A seeded random window, redrawn (from the same seeded sequence, so still reproducible) while
+    the ball is off the pitch for all of it: a dead ball lying behind a goal line or touchline
+    waiting for a restart is off camera, so such a clip has no ball to label or check."""
     earliest, latest = int(earliest_s * FPS), int(latest_s * FPS)
     if p.occlusion == "crowded":
         return crowded_start(frames, n, max(earliest, WARMUP), latest)
-    return random.Random(f"window-{seed}").randint(max(earliest, WARMUP), latest)
+    rng = random.Random(f"window-{seed}")
+    for _ in range(WINDOW_DRAWS):
+        start = rng.randint(max(earliest, WARMUP), latest)
+        if any(_on_pitch(f["ball"]) for f in frames[start : start + n]):
+            break
+    return start
+
+
+def _on_pitch(b: dict) -> bool:
+    """The ball within the pitch's lines (Law 1)."""
+    return 0.0 <= b["x"] <= PITCH_X and 0.0 <= b["y"] <= PITCH_Y
 
 
 def render_clip(
