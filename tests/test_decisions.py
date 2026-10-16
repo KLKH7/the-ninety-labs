@@ -680,3 +680,13 @@ def test_a_ball_is_out_only_once_the_whole_of_it_has_crossed_the_line():
                                (50.0, 0.0, 0, -1)):
         assert not D.out_of_play(x + out_x * 0.9 * r, y + out_y * 0.9 * r)  # centre over, ball not
         assert D.out_of_play(x + out_x * 1.1 * r, y + out_y * 1.1 * r)  # the whole ball over
+
+
+def test_they_send_one_man_after_the_ball_so_a_second_who_is_later_adds_no_risk():
+    # engine.plan_chase sends one opponent after a free ball: the passer's race is against him.
+    def conf(opponents):
+        return D.pass_confidence(scene(x=60.0, opponents=opponents), 80.0, 34.0, 80.0, 34.0, 0.0, False)
+
+    near = conf([(70.0, 38.0)])
+    assert near < conf([])  # he is a real risk
+    assert math.isclose(conf([(70.0, 38.0), (72.0, 39.0)]), near, abs_tol=0.02)  # the later one never goes
