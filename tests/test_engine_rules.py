@@ -6,8 +6,8 @@ from statistics import mean, pstdev
 
 import pytest
 
-from ninety.sim import ball, offball, perception
-from ninety.sim.engine import BODY_RADIUS, BODY_RESTITUTION, DT, PRESS_GAP_M, Engine
+from ninety.sim import ball, offball, perception, shape
+from ninety.sim.engine import BODY_RESTITUTION, DT, PRESS_GAP_M, Engine
 from ninety.sim.profiles import MAX_STRIKE_MPS
 
 
@@ -39,9 +39,10 @@ def test_a_ball_into_a_body_rebounds_with_only_its_normal_part_reduced():
     e.contact(before)
     vx, vy = e.ball[3], e.ball[4]
     assert any(ev["type"] == "deflection" for ev in e.match.events)
-    nx, ny = e.ball[0] - p.x, e.ball[1] - p.y
+    assert shape.clearance(e.ball[0], e.ball[1], p.x, p.y, p.heading) >= ball.RADIUS  # outside the body
+    sx, sy = shape.nearest_on_spine(e.ball[0], e.ball[1], p.x, p.y, p.heading)
+    nx, ny = e.ball[0] - sx, e.ball[1] - sy  # the body's surface normal where it was met
     n = math.hypot(nx, ny)
-    assert n >= BODY_RADIUS + ball.RADIUS  # it leaves from outside the body, not from inside it
     nx, ny = nx / n, ny / n
     out, into_before = vx * nx + vy * ny, -(10.0 * nx + 2.0 * ny)
     assert math.isclose(out, BODY_RESTITUTION * into_before, rel_tol=0.05)
