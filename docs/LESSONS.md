@@ -221,3 +221,14 @@ short and actionable. This file is public: no research sources, product names or
   next in that time is resolved too. Measure on full-length matches, not only short clips.
 - **Check:** the longest run of consecutive deflection events by one player over 90 minutes
   (seeds 7, 11, 21, other events between them ignored) is a few, not dozens (1 to 4 measured; base 9 or 10).
+
+### 28. A comment that names a physical rule is a claim to measure
+- **What happened:** the keeper's dive said "a shorter dive is the same push, over sooner", but
+  the code replayed the full dive's timing sped up, so a 0.5 m dive launched at about 46 m/s²
+  against 16 for a full one, and every dive ended by setting him down from full speed in one
+  frame. Tests checked where the dive ended, never how hard it pushed, so both passed for months.
+- **Rule:** when a comment or GROUNDING row states how a body moves (the same push, braking as
+  legs allow), a test measures that quantity frame by frame (speed gained or lost per frame),
+  not only where the movement ends.
+- **Check:** for any motion profile, a test sweeps its inputs (here, every dive length) and
+  bounds the per-frame change in speed; mutate the profile's scaling and the test must fail.

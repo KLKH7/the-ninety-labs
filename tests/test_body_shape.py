@@ -848,14 +848,16 @@ def test_a_keeper_who_dives_while_running_brakes_his_run_and_does_not_stop_dead(
     k.x, k.y, k.heading, k.vx, k.vy = 100.0, 34.0, math.pi, -4.0, 0.0  # coming off his line
     e.dive = (k.id, e.t, k.y, 1.0, e.t)  # diving to his left
     seen = [k.vx]
-    for _ in range(5):
+    while e.dive is not None:
         x0 = k.x
         e.keeper_dive(k)
         assert math.isclose(k.x - x0, k.vx * DT)  # moved by the speed he has, not teleported
         seen.append(k.vx)
         e.t += DT
-    for a, b in zip(seen, seen[1:], strict=False):
-        assert math.isclose(b - a, engine.BRAKE_MAX * DT)  # GROUNDING P2: as hard as his legs brake
+    # GROUNDING P2: never faster than his legs brake; while the dive's push takes all his grip he
+    # carries the run, then brakes it
+    assert all(-1e-9 <= b - a <= engine.BRAKE_MAX * DT + 1e-9 for a, b in zip(seen, seen[1:], strict=False))
+    assert seen[1] < -3.0 and seen[-1] > seen[0]  # not stopped dead, but braked by the end
 
 
 def test_a_keeper_who_dives_while_barely_moving_stops_and_does_not_run_back():

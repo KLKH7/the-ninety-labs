@@ -481,7 +481,7 @@ def test_before_he_reacts_only_his_body_stops_a_shot_in_the_shooters_judgement_t
     from ninety.sim.body import BODY_RADIUS
     assert offball.keeper_reach_m(0.1, 0.36) == BODY_RADIUS + ball.RADIUS
     full = offball.KEEPER_STAND_REACH_M + offball.KEEPER_DIVE_EXTRA_M + offball.KEEPER_DIVE_TRAVEL_M
-    assert offball.keeper_reach_m(2.0, 0.36) == full
+    assert offball.keeper_reach_m(2.0, 0.36) == pytest.approx(full)
 
 
 def test_a_keeper_behind_the_shooter_covers_nothing():
@@ -519,7 +519,7 @@ def test_the_dive_never_beats_the_cited_peak_speed():
     speeds = [(offball.dive_progress(t + step) - offball.dive_progress(t)) / step * travel
               for t in [i * step for i in range(int(offball.DIVE_TIME_S / step))]]
     peak = max(speeds)
-    assert 3.6 <= peak <= 4.0 and offball.dive_progress(offball.DIVE_TIME_S) == 1.0
+    assert 3.6 <= peak <= 4.0 and offball.dive_progress(offball.DIVE_TIME_S) == pytest.approx(1.0)
 
 
 def test_the_shot_estimate_is_continuous_in_distance_with_the_keeper_off_his_spot():
