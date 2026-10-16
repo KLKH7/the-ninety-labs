@@ -736,6 +736,25 @@ def test_a_deflection_restarts_the_keepers_reaction_before_he_dives():
     assert not e.keeper_dive(k)
 
 
+def test_the_keeper_dives_once_per_touch_and_a_deflection_lets_him_dive_again():
+    # P15: a slow shot still on its way after he has dived, landed and got up does not set off a
+    # second dive at the same touch; a deflection is a new touch and restarts it.
+    from ninety.sim.offball import DIVE_TIME_S, KEEPER_DOWN_S
+    e = Engine(1)
+    k = _shot_at_keeper(e, (80.0, 34.0, 0.2, 14.0, 1.5, 0.0))  # far out and slow, wide to his left
+    e.t += e.reaction(k)
+    assert e.keeper_dive(k)
+    for _ in range(int((DIVE_TIME_S + KEEPER_DOWN_S) * 25) + 3):  # the dive, then down, then up
+        e.keeper_dive(k)
+        e.t += 1 / 25
+    assert e.dive is None and e.off_balance[k.id] <= e.t  # back on his feet
+    k.y = 34.0  # back where he started: the same shot is as far from him as when he first dived
+    assert not e.keeper_dive(k) and e.dive is None  # no second dive at the same touch
+    e.kicked_at = e.t  # deflected on its way
+    e.t += e.reaction(k)
+    assert e.keeper_dive(k)  # a new touch: he may dive at it
+
+
 def test_no_dive_at_a_ball_going_over_the_bar():
     e = Engine(1)
     k = _shot_at_keeper(e, (90.0, 34.0, 2.0, 25.0, 6.0, 5.0))  # rising steeply

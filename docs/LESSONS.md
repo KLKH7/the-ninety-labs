@@ -173,3 +173,14 @@ short and actionable. This file is public: no research sources, product names or
   the contact rule, the kick-error model), moved where both can import them, never a copy.
 - **Check:** `uv run python -m ninety.sim.calibration` on forced choices, not only chosen ones:
   chosen options hide a pessimistic estimate, because nobody picks what it underrates.
+
+### 24. A trigger guarded only by "not busy now" fires again when the busy state ends
+- **What happened:** a keeper's dive was allowed whenever he was not diving and not on the
+  ground. A slow shot was still on its way after he had dived, landed and got up, so he dived a
+  second time at the same ball. Every condition checked the present; none remembered that the
+  touch had already set off a dive.
+- **Rule:** an action that happens once per cause records the cause it answered (here the touch,
+  `kicked_at`) and checks it, rather than relying on a temporary state to block a repeat.
+- **Check:** for each once-per-cause action, write a test where the cause outlives the action's
+  own busy state (dive, land, get up, ball still coming) and require no repeat; and one where a
+  new cause (a deflection) is allowed to trigger it again.

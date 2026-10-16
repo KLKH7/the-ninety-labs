@@ -280,6 +280,7 @@ class Engine:
         # (keeper, start t, start y, signed travel, when his arms began to stretch)
         self.dive: tuple[str, float, float, float, float] | None = None
         self.landed: tuple[str, float] | None = None  # (keeper, his arms' stretch start) while he is down
+        self.dived_at: dict[str, float] = {}  # keeper -> the touch (kicked_at) he dived at (P15)
         self.shot_touched_by: str | None = None  # "keeper" or "defender": who got to the shot
         self.shot_was_on_target: bool | None = None  # was it going in when they first touched it?
         self.free_since = -99.0
@@ -1283,12 +1284,15 @@ class Engine:
     def keeper_dive(self, p: Player) -> bool:
         """P15: once the keeper has reacted to a shot, he dives toward where it will cross his line:
         his body travels sideways (up to KEEPER_DIVE_TRAVEL_M, only as far as he needs beyond his
-        standing reach) over DIVE_TIME_S, and he is down for a moment afterwards. True while the
-        dive moves him."""
+        standing reach) over DIVE_TIME_S, and he is down for a moment afterwards. One dive per touch
+        of the ball: once he is up again he does not dive a second time at the same shot; only a new
+        touch (a deflection restarts it) can set off another. True while the dive moves him."""
         k = self.kicked
         shot_at_him = k and k["type"] == "shot" and k["team"] != p.team and self.possessor is None
         reacted = self.t - self.kicked_at >= self.reaction(p)  # to the last touch, a deflection too
-        if self.dive is None and shot_at_him and reacted and self.off_balance.get(p.id, -1.0) <= self.t:
+        fresh = self.dived_at.get(p.id) != self.kicked_at  # not already dived at this touch
+        if (self.dive is None and shot_at_him and reacted and fresh
+                and self.off_balance.get(p.id, -1.0) <= self.t):
             arrival = self.ball_at_x(p.x)  # where the ball's own flight takes it past him
             if arrival and arrival[2] <= HAND_REACH_Z:  # not one going over him
                 when, cross = arrival[0], arrival[1]
@@ -1299,6 +1303,7 @@ class Engine:
                 if need > 0:
                     travel = math.copysign(min(need, KEEPER_DIVE_TRAVEL_M), cross - p.y)
                     self.dive = (p.id, self.t, p.y, travel, self.kicked_at + self.reaction(p))
+                    self.dived_at[p.id] = self.kicked_at
         if not self.dive or self.dive[0] != p.id:
             return False
         _, start, y0, travel, _ = self.dive
