@@ -681,3 +681,18 @@ def test_a_ball_is_out_only_once_the_whole_of_it_has_crossed_the_line():
                                (50.0, 0.0, 0, -1)):
         assert not D.out_of_play(x + out_x * 0.9 * r, y + out_y * 0.9 * r)  # centre over, ball not
         assert D.out_of_play(x + out_x * 1.1 * r, y + out_y * 1.1 * r)  # the whole ball over
+
+
+def test_nothing_of_the_keeper_reaches_a_ball_over_his_envelope_in_the_shooters_judgement():
+    top = offball.reach_for(True, 2.0, 0.0, 2.0)[1]
+    assert offball.keeper_reach_m(2.0, 0.36, top + 0.1) == 0.0
+    assert offball.keeper_reach_m(2.0, 0.36, top - 0.1) > 0.0
+
+
+def test_the_shooter_judges_the_keeper_over_the_heights_shots_are_aimed_at(monkeypatch):
+    # His reach is widest at his waist: a shooter who weighed only waist-high shots would see less
+    # of the goal open than one who weighs the heights shots are aimed at (P15).
+    shooter, keeper = (85.0, 34.0), (103.0, 34.0)
+    open_share = offball.open_goal_share(*shooter, 105, keeper)
+    monkeypatch.setattr(offball, "SHOT_AIM_Z_M", (offball.KEEPER_COM_Z, offball.KEEPER_COM_Z))
+    assert open_share > offball.open_goal_share(*shooter, 105, keeper)

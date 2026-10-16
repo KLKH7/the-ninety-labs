@@ -187,8 +187,9 @@ short and actionable. This file is public: no research sources, product names or
 
 ### 29. A reach is a shape in time and height, not a number
 - **What happened:** a keeper's reach was 1.45 m of travel plus 1.8 m of arms, at any height up
-  to 2.8 m, at every moment of the dive. Once his dive started at a penalty's strike, as keepers'
-  do, he stopped 72% of the kicks he guessed right against about 27% in real penalties. The arms'
+  to 2.8 m, at every moment of the dive. In an experiment where his dive started at a penalty's
+  strike, as keepers' do, he stopped 72% of the kicks he guessed right against about 27% in real
+  penalties. The arms'
   1.8 m and the 2.8 m height were also not one body: arms that long would put his standing reach
   above his jumping one.
 - **Rule:** a reach is an envelope built from one body (stature, centre of mass, standing reach,

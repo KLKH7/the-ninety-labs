@@ -1230,3 +1230,39 @@ def test_a_keeper_dives_once_at_a_touch_and_again_only_after_a_new_one():
     assert not e.keeper_dive(k)
     e.kicked_at = e.t - 1.0  # it came off someone: a new touch, which he has reacted to
     assert e.keeper_dive(k)
+
+
+def test_a_deflection_does_not_pull_a_diving_keeper_out_of_his_jump():
+    # GROUNDING P15: his rise counts from the touch he dived at, not from a deflection mid-dive.
+    e = Engine(1)
+    k = _shot_at_keeper(e, (90.0, 34.0, 0.5, 25.0, 6.0, 0.0))
+    e.t += e.reaction(k)
+    assert e.keeper_dive(k)
+    e.t += 0.3
+    before = e.reach(k, 104.0, 34.0, 2.8)
+    e.kicked_at = e.t  # deflected mid-dive
+    assert e.reach(k, 104.0, 34.0, 2.8) == before
+
+
+def test_a_ball_crossing_high_needs_a_longer_dive_than_one_at_his_waist():
+    # GROUNDING P11, P15: he dives only as far as his hands will not reach the ball at the height it
+    # crosses his line; higher up they reach less far across, so his body must go further.
+    def travel(vz):
+        e = Engine(1)
+        k = _shot_at_keeper(e, (92.0, 34.0, 0.3, 25.0, 4.0, vz))
+        e.t += e.reaction(k)
+        assert e.keeper_dive(k)
+        return abs(e.dive[3]), e.ball_at_x(k.x)[2]
+    (low, z_low), (high, z_high) = travel(5.0), travel(7.0)
+    assert z_low < 1.5 < 2.0 < z_high
+    assert high > low
+
+
+def test_can_reach_judges_a_keepers_hands_by_the_balls_height():
+    e = Engine(1)
+    k = e.keeper("away")
+    k.x, k.y, k.vx, k.vy = 103.0, 34.0, 0.0, 0.0
+    e.kicked_at = e.t - 0.1
+    t = e.reaction(k) + 0.6
+    assert e.can_reach(k, 103.0, 35.4, 1.0, t, delay=t)[0]  # at his waist
+    assert not e.can_reach(k, 103.0, 35.4, 2.9, t, delay=t)[0]  # near the top of his jump: not so far across

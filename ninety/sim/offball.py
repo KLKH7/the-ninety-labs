@@ -275,6 +275,8 @@ def reach_for(hands: bool, stretched_s: float, z: float = 0.0, rising_s: float =
         return CONTROL_M, FOOT_REACH_Z
     stretched = max(0.0, stretched_s)
     top = KEEPER_COM_Z + jump_rise_m(rising_s)
+    # design: down to the ground (lying on his side it is nearer 0.15 to 0.2 m up; the difference to
+    # his reach across is under 2 cm)
     low = max(0.0, KEEPER_COM_Z - 0.5 * GRAVITY * stretched * stretched)
     off = max(z - top, low - z, 0.0)  # how far above or below where his centre of mass can be
     across = math.sqrt(max(KEEPER_ARM_M * KEEPER_ARM_M - off * off, 0.0))

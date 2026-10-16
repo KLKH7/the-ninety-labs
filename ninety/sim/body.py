@@ -22,7 +22,6 @@ KEEPER_STATURE_M = 1.91
 COM_SHARE = 0.559
 STANDING_REACH_SHARE = 1.335
 KEEPER_JUMP_M = 0.45
-HAND_REACH_Z = KEEPER_STATURE_M * STANDING_REACH_SHARE + KEEPER_JUMP_M  # P11: his hands at a jump's top
 F0_MEAN, F0_SD = 5.18, 0.46  # P2: acceleration from standing, m/s² (professional sprint tests)
 V0_MEAN, V0_SD = 10.0, 0.3  # P9: top-speed capability, m/s; a sprint-test fit gives about 10.3
 BRAKE_MAX = 7.0  # P2: braking, m/s²; peak about 8.5, about 4.5 averaged over a full stop

@@ -446,10 +446,10 @@ def reach_time(points, t_end: float, rests: bool, sx: float, sy: float, ux: floa
     """(seconds, index of the path point) of the first point of the ball's path this player can
     play, by the engine's chase test (body.can_get_to, as engine.can_reach) with an average body:
     below foot height, within a foot's reach, after his reaction, braking first if he is running away
-    from it. A keeper whose box is at `box_x` reaches with his hands there (engine.reach): the arms'
-    stretch since he reacted, up to HAND_REACH_Z. A ball that comes to rest on the pitch is reached
-    whenever he gets there. (inf, -1) if not before `limit` or before the ball is out of play at
-    `t_end`.
+    from it. A keeper whose box is at `box_x` reaches with his hands there (engine.reach): his
+    reach envelope since he reacted (offball.reach_for, by the ball's height). A ball that comes
+    to rest on the pitch is reached whenever he gets there. (inf, -1) if not before `limit` or
+    before the ball is out of play at `t_end`.
 
     With `late`, a player who cannot get to any of it is given the soonest he could be at a point of
     the path if the ball waited for him there (as engine.plan_chase times a chaser who cannot make it:

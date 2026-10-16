@@ -350,15 +350,13 @@ class Engine:
         """How far (across the ground) this player can reach a ball at (x, y), height z, at time
         `at`, and how high he can reach at all (offball.reach_for). His arms stretch from the moment
         he reacts to the last touch, whether or not his body launches; a deflection does not
-        un-stretch a dive already under way. He can rise from UP_AFTER_CONTACT_S after the kick, or
-        when his save began, whichever is later."""
+        un-stretch a dive already under way, nor pull him back out of his jump (rise_from)."""
         hands = self.hands(p, x, y)
         if not hands:
             return offball.reach_for(False, 0.0)
         at = self.t if at is None else at
         start = self.stretch_from(p)
-        return offball.reach_for(True, at - start, z,
-                                 at - max(start, self.kicked_at + offball.UP_AFTER_CONTACT_S))
+        return offball.reach_for(True, at - start, z, at - self.rise_from(p))
 
     def give(self, pid: str) -> None:
         if self.team_of(pid) != self.poss_team:
@@ -1271,6 +1269,18 @@ class Engine:
             return self.landed[1]  # down after a dive: stretched out as he landed
         return self.kicked_at + self.reaction(p)
 
+    def rise_from(self, p: Player) -> float:
+        """P15: when the keeper's centre of mass can begin to rise: when his save began, but no
+        sooner than UP_AFTER_CONTACT_S after the kick it answers (only a save begun before he could
+        react to the ball, as at a penalty, waits for that). During a dive, or down after one, that
+        is the touch he dived at: a deflection does not pull him back out of his jump."""
+        kick = self.kicked_at
+        diving = self.dive and self.dive[0] == p.id
+        down = self.landed and self.landed[0] == p.id and self.off_balance.get(p.id, -1.0) > self.t
+        if (diving or down) and self.dived_at is not None:
+            kick = self.dived_at
+        return max(self.stretch_from(p), kick + offball.UP_AFTER_CONTACT_S)
+
     def ball_at_x(self, x: float, seconds: float = 10.0) -> tuple[float, float, float] | None:
         # `seconds`: only a bound; the ball's own path stops when it comes to rest
         """(seconds from now, y, height) when the ball, in its own flight (drag and gravity),
@@ -1304,8 +1314,7 @@ class Engine:
                 # by then (P11 envelope: his arms began to stretch when he reacted, whenever the dive
                 # itself starts); no dive at one going over the top of it
                 at, start = self.t + when, self.stretch_from(p)
-                rise_from = max(start, self.kicked_at + offball.UP_AFTER_CONTACT_S)
-                arms, top = offball.reach_for(True, at - start, height, at - rise_from)
+                arms, top = offball.reach_for(True, at - start, height, at - self.rise_from(p))
                 need = abs(cross - p.y) - arms
                 if height <= top and need > 0:
                     travel = math.copysign(min(need, KEEPER_DIVE_TRAVEL_M), cross - p.y)
