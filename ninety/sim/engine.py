@@ -29,7 +29,6 @@ from ninety.sim.body import (
     CS_MEAN,
     D0,
     F0_MEAN,
-    HAND_REACH_Z,
     V0_MEAN,
     Body,
     can_get_to,
@@ -346,13 +345,19 @@ class Engine:
             return perception.SIMPLE_REACTION_S
         return p.profile.reaction()
 
-    def reach(self, p: Player, x: float, y: float, at: float | None = None) -> tuple[float, float]:
-        """How far and how high this player can reach for a ball at (x, y), at time `at`
-        (offball.reach_for). His arms stretch from the moment he reacts to the last touch, whether
-        or not his body launches; a deflection does not un-stretch a dive already under way."""
+    def reach(self, p: Player, x: float, y: float, z: float, at: float | None = None) -> tuple[float, float]:
+        """How far (across the ground) this player can reach a ball at (x, y), height z, at time
+        `at`, and how high he can reach at all (offball.reach_for). His arms stretch from the moment
+        he reacts to the last touch, whether or not his body launches; a deflection does not
+        un-stretch a dive already under way. He can rise from UP_AFTER_CONTACT_S after the kick, or
+        when his save began, whichever is later."""
         hands = self.hands(p, x, y)
+        if not hands:
+            return offball.reach_for(False, 0.0)
         at = self.t if at is None else at
-        return offball.reach_for(hands, at - self.stretch_from(p) if hands else 0.0)
+        start = self.stretch_from(p)
+        return offball.reach_for(True, at - start, z,
+                                 at - max(start, self.kicked_at + offball.UP_AFTER_CONTACT_S))
 
     def give(self, pid: str) -> None:
         if self.team_of(pid) != self.poss_team:
@@ -555,7 +560,7 @@ class Engine:
         # The aim (which corner, how high, how hard) is a choice; missing it is execution error.
         side = self.rng.choice([-1, 1])
         ty = PITCH_Y / 2 + side * self.rng.uniform(*SHOT_AIM_OFF_M)
-        tz = self.rng.uniform(0.1, 2.0)
+        tz = self.rng.uniform(*offball.SHOT_AIM_Z_M)
         speed = self.rng.uniform(*offball.SHOT_SPEEDS_KMH) / 3.6
         ground, up = ball.shot(math.hypot(gx - bx, ty - by), speed, tz, DT)
         # The keeper reads the kicker's body and starts toward where he thinks it is going,
@@ -672,7 +677,7 @@ class Engine:
         (reachable, gap still to close, his speed along the way); gap None if it is over his reach.
         His reach (a keeper's hands in his box), his speed along the way, and braking first if he
         is running away from it: one test for chasing a ball and for judging where play goes."""
-        reach_m, reach_z = self.reach(p, bx, by, at=self.t + t)
+        reach_m, reach_z = self.reach(p, bx, by, bz, at=self.t + t)
         if bz > reach_z:
             return False, None, 0.0
         return can_get_to(p.physique, bx - p.x, by - p.y, reach_m, p.vx, p.vy, t - delay)
@@ -742,7 +747,7 @@ class Engine:
             # it (relative to the player). Measured from the step's start, not the closest point,
             # where the relative direction is sideways by construction.
             closing = (self.ball[3] - p.vx) * (p.x - x0) + (self.ball[4] - p.vy) * (p.y - y0)
-            reach_m, reach_z = self.reach(p, cx, cy)
+            reach_m, reach_z = self.reach(p, cx, cy, cz)
             if since >= self.reaction(p) and d <= reach_m and cz <= reach_z:  # a deliberate touch
                 hits.append((s, "touch", p, cx, cy, cz))
             elif d <= BODY_RADIUS + ball.RADIUS and cz <= BODY_HEIGHT and closing > 0:
@@ -1290,13 +1295,16 @@ class Engine:
         reacted = self.t - self.kicked_at >= self.reaction(p)  # to the last touch, a deflection too
         if self.dive is None and shot_at_him and reacted and self.off_balance.get(p.id, -1.0) <= self.t:
             arrival = self.ball_at_x(p.x)  # where the ball's own flight takes it past him
-            if arrival and arrival[2] <= HAND_REACH_Z:  # not one going over him
-                when, cross = arrival[0], arrival[1]
-                # only as far as his body must go beyond what his arms will reach by then; his arms
-                # began to stretch when he reacted, whenever the dive itself starts
-                stretched = self.t - self.stretch_from(p) + when
-                need = abs(cross - p.y) - offball.arm_reach_m(stretched)
-                if need > 0:
+            if arrival:
+                when, cross, height = arrival
+                # only as far as his body must go beyond what his hands will reach, at that height,
+                # by then (P11 envelope: his arms began to stretch when he reacted, whenever the dive
+                # itself starts); no dive at one going over the top of it
+                at, start = self.t + when, self.stretch_from(p)
+                rise_from = max(start, self.kicked_at + offball.UP_AFTER_CONTACT_S)
+                arms, top = offball.reach_for(True, at - start, height, at - rise_from)
+                need = abs(cross - p.y) - arms
+                if height <= top and need > 0:
                     travel = math.copysign(min(need, KEEPER_DIVE_TRAVEL_M), cross - p.y)
                     self.dive = (p.id, self.t, p.y, travel, self.kicked_at + self.reaction(p))
         if not self.dive or self.dive[0] != p.id:

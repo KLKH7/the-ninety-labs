@@ -479,9 +479,10 @@ def test_the_keeper_stands_on_the_bisector_of_the_posts_not_the_line_to_the_goal
 def test_before_he_reacts_only_his_body_stops_a_shot_in_the_shooters_judgement_too():
     from ninety.sim import ball
     from ninety.sim.body import BODY_RADIUS
-    assert offball.keeper_reach_m(0.1, 0.36) == BODY_RADIUS + ball.RADIUS
+    z = offball.KEEPER_COM_Z  # where his reach across is widest
+    assert offball.keeper_reach_m(0.1, 0.36, z) == BODY_RADIUS + ball.RADIUS
     full = offball.KEEPER_STAND_REACH_M + offball.KEEPER_DIVE_EXTRA_M + offball.KEEPER_DIVE_TRAVEL_M
-    assert offball.keeper_reach_m(2.0, 0.36) == full
+    assert offball.keeper_reach_m(2.0, 0.36, z) == pytest.approx(full)
 
 
 def test_a_keeper_behind_the_shooter_covers_nothing():
@@ -495,7 +496,7 @@ def test_with_the_ball_almost_on_his_line_the_keeper_stays_on_it_between_the_pos
 
 def test_out_of_shooting_range_the_keeper_sweeps_from_his_furthest_spot():
     depth = lambda d: 105 - offball.keeper_spot(105 - d, 34, 105)[0]  # noqa: E731
-    assert depth(39) < offball.KEEPER_DEPTH[1] == depth(50)
+    assert depth(25) < offball.KEEPER_DEPTH[1] == depth(50)
 
 
 def test_keeper_coverage_has_no_cliff_with_distance():

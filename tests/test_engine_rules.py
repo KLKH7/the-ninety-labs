@@ -4,7 +4,9 @@ the passer believes, keepers only anticipate shots, pressers stand goal-side, an
 import math
 from statistics import mean, pstdev
 
-from ninety.sim import ball, perception
+import pytest
+
+from ninety.sim import ball, offball, perception
 from ninety.sim.engine import BODY_RADIUS, BODY_RESTITUTION, DT, PRESS_GAP_M, Engine
 from ninety.sim.profiles import MAX_STRIKE_MPS
 
@@ -738,8 +740,9 @@ def test_a_deflection_restarts_the_keepers_reaction_before_he_dives():
 
 def test_no_dive_at_a_ball_going_over_the_bar():
     e = Engine(1)
-    k = _shot_at_keeper(e, (90.0, 34.0, 2.0, 25.0, 6.0, 5.0))  # rising steeply
+    k = _shot_at_keeper(e, (90.0, 34.0, 2.0, 25.0, 6.0, 5.5))  # rising steeply
     e.t += e.reaction(k)
+    assert e.ball_at_x(k.x)[2] > offball.reach_for(True, 9.0, 0.0, 9.0)[1]  # over his highest reach
     assert not e.keeper_dive(k)
 
 
@@ -803,9 +806,9 @@ def test_a_late_dive_never_shrinks_the_keepers_reach():
     e = Engine(1)
     k = _shot_at_keeper(e, (80.0, 34.0, 0.3, 20.0, 1.0, 0.0))
     e.t += e.reaction(k) + 0.4
-    before = e.reach(k, 104.0, 34.0)[0]
+    before = e.reach(k, 104.0, 34.0, offball.KEEPER_COM_Z)[0]
     e.dive = (k.id, e.t, k.y, 0.5, e.kicked_at + e.reaction(k))  # he decides to dive only now
-    assert e.reach(k, 104.0, 34.0)[0] >= before
+    assert e.reach(k, 104.0, 34.0, offball.KEEPER_COM_Z)[0] >= before
 
 
 
@@ -814,9 +817,9 @@ def test_before_he_reacts_the_keeper_has_only_his_standing_reach_then_it_grows()
     e = Engine(1)
     k = _shot_at_keeper(e, (90.0, 34.0, 0.5, 25.0, 0.0, 0.0))
     e.t += e.reaction(k) * 0.5
-    assert e.reach(k, 104.0, 34.0)[0] == offball.KEEPER_STAND_REACH_M
+    assert e.reach(k, 104.0, 34.0, offball.KEEPER_COM_Z)[0] == offball.KEEPER_STAND_REACH_M
     e.t += e.reaction(k) * 0.5 + 0.2
-    assert e.reach(k, 104.0, 34.0)[0] > offball.KEEPER_STAND_REACH_M
+    assert e.reach(k, 104.0, 34.0, offball.KEEPER_COM_Z)[0] > offball.KEEPER_STAND_REACH_M
 
 
 def test_a_deflection_does_not_unstretch_a_dive_already_under_way():
@@ -825,9 +828,9 @@ def test_a_deflection_does_not_unstretch_a_dive_already_under_way():
     e.t += e.reaction(k)
     assert e.keeper_dive(k)
     e.t += 0.3
-    stretched = e.reach(k, 104.0, 34.0)[0]
+    stretched = e.reach(k, 104.0, 34.0, offball.KEEPER_COM_Z)[0]
     e.kicked_at = e.t  # deflected mid-dive
-    assert e.reach(k, 104.0, 34.0)[0] == stretched
+    assert e.reach(k, 104.0, 34.0, offball.KEEPER_COM_Z)[0] == stretched
 
 
 def test_a_late_dive_counts_the_stretch_his_arms_already_have():
@@ -861,7 +864,7 @@ def test_a_keeper_down_after_a_dive_keeps_his_stretch_until_he_is_up():
         e.t += 1 / 25
     assert e.dive is None and e.off_balance[k.id] > e.t  # landed, on the ground
     e.kicked_at = e.t  # a deflection while he is down
-    assert e.reach(k, 104.0, 36.0)[0] > 1.5
+    assert e.reach(k, 104.0, 36.0, offball.KEEPER_COM_Z)[0] == pytest.approx(offball.KEEPER_ARM_M)
 
 
 def _alone_with(e, mate_xy, others=(5.0, 5.0)):
@@ -987,7 +990,7 @@ def test_can_reach_counts_a_keepers_stretching_hands_in_his_box_not_his_feet():
     k.x, k.y, k.vx, k.vy = 103.0, 34.0, 0.0, 0.0
     e.kicked_at = e.t - 0.1
     t = e.reaction(k) + 0.6  # by then his arms are fully stretched
-    assert e.can_reach(k, 103.0, 35.7, 0.5, t, delay=t)[0]  # 1.7 m: his hands, without a step
+    assert e.can_reach(k, 103.0, 35.4, 0.5, t, delay=t)[0]  # 1.4 m: his hands, without a step
     outfield = e.by_id["a4"]
     outfield.x, outfield.y, outfield.vx, outfield.vy = 60.0, 34.0, 0.0, 0.0
     assert not e.can_reach(outfield, 60.0, 35.7, 0.5, t, delay=t)[0]  # a foot reaches 1 m
@@ -1034,3 +1037,88 @@ def test_a_kick_clears_a_downed_keeper_before_judging_where_play_goes():
     e.ball_destination = lambda: (seen.append(e.landed), judge())[1]
     e.kick(p, 15.0, 0.0, 0.0)
     assert seen == [None]
+
+
+def test_the_keepers_envelope_comes_from_his_body_and_his_jump():
+    # GROUNDING P11: hands within KEEPER_ARM_M of the centre of mass (standing reach less its
+    # height), the centre of mass at most a jump above where it stands, so his highest reach is his
+    # standing reach plus that jump.
+    from ninety.sim import body
+    stand = body.KEEPER_STATURE_M * body.STANDING_REACH_SHARE
+    assert offball.KEEPER_COM_Z + offball.KEEPER_ARM_M == pytest.approx(stand)
+    assert offball.reach_for(True, 9.0, 0.0, 9.0)[1] == pytest.approx(stand + body.KEEPER_JUMP_M)
+    assert offball.reach_for(True, 9.0, 0.0, 0.0)[1] == pytest.approx(stand)  # no jump yet: no higher
+    assert offball.jump_rise_m(0.1) < offball.jump_rise_m(0.2) < body.KEEPER_JUMP_M  # rising under gravity
+    apex = (2 * body.GRAVITY * body.KEEPER_JUMP_M) ** 0.5 / body.GRAVITY
+    assert offball.jump_rise_m(apex) == pytest.approx(body.KEEPER_JUMP_M) == offball.jump_rise_m(2 * apex)
+
+
+def test_high_balls_are_reached_less_far_across_and_low_ones_once_he_falls():
+    # GROUNDING P11: the higher the ball above where his centre of mass can be, the less far across he
+    # reaches it; a low ball needs him to have fallen toward it (gravity, from when his save began).
+    full = 9.0
+    mid = offball.reach_for(True, full, offball.KEEPER_COM_Z, full)[0]
+    high = offball.reach_for(True, full, 2.4, full)[0]
+    assert mid == pytest.approx(offball.KEEPER_ARM_M) and high < mid
+    standing = offball.KEEPER_COM_Z  # his centre of mass, before he has fallen at all
+    on_the_ground = (offball.KEEPER_ARM_M ** 2 - standing ** 2) ** 0.5
+    assert offball.reach_for(True, 0.5, 0.0, 0.0)[0] == pytest.approx(offball.KEEPER_ARM_M)  # fallen to it
+    assert offball.reach_for(True, 0.5, 0.0, 0.0)[0] > on_the_ground
+
+
+def test_the_upward_part_of_a_save_starts_no_sooner_than_245_ms_after_the_kick():
+    # GROUNDING P15 (Higueras-Herbada et al. 2020): a keeper who dived at the strike reaches a ball
+    # under the bar later than one at his waist, because he cannot start rising until then.
+    e = Engine(1)
+    k = e.keeper("away")
+    k.x, k.y, k.vx, k.vy = 104.0, 34.0, 0.0, 0.0
+    e.kicked = {"type": "shot", "team": "home"}
+    e.kicked_at = e.t
+    e.dive = (k.id, e.t, k.y, 1.0, e.t)  # his save began at the strike
+    top = lambda at: e.reach(k, 104.0, 34.0, 0.0, at=e.kicked_at + at)[1]  # noqa: E731
+    assert top(offball.UP_AFTER_CONTACT_S) == pytest.approx(offball.KEEPER_COM_Z + offball.KEEPER_ARM_M)
+    assert top(offball.UP_AFTER_CONTACT_S + 0.1) > top(offball.UP_AFTER_CONTACT_S)
+
+
+def test_the_engine_the_dive_and_the_shooter_share_one_envelope():
+    # One definition (offball.reach_for): engine.reach, the shooter's judgement (keeper_reach_m) and
+    # the passer's race (decisions._reach) give the same reach for the same moment and height.
+    from ninety.sim import decisions
+    e = Engine(1)
+    k = e.keeper("away")
+    k.x, k.y, k.vx, k.vy = 104.0, 34.0, 0.0, 0.0
+    react = 0.36
+    e.kicked = {"type": "shot", "team": "home"}
+    e.kicked_at = e.t
+    e.reaction = lambda p: react
+    for at, z in ((0.5, 0.2), (0.6, 1.0), (0.7, 2.3), (1.2, 2.6)):
+        engine = e.reach(k, 104.0, 34.0, z, at=e.t + at)
+        passer = decisions._reach(104.0, 34.0, z, at, react, 105.0)
+        assert engine == pytest.approx(passer)
+        shooter = offball.keeper_reach_m(at, react, z)
+        across = engine[0] if z <= engine[1] else 0.0
+        launched = offball.KEEPER_DIVE_TRAVEL_M * offball.dive_progress(at - react)
+        assert shooter == pytest.approx(across + launched)
+
+
+def test_the_keeper_touches_a_ball_at_his_waist_that_he_cannot_yet_touch_under_the_bar():
+    # GROUNDING P11, P15: engine.contact judges the hands by the ball's height. 0.9 m across, half a
+    # second after the kick: at his waist it is in his hands; at 2.6 m his jump has not lifted him
+    # high enough yet.
+    def passes(z):
+        e = Engine(1)
+        k = e.keeper("away")
+        for q in e.players:
+            if q is not k:
+                q.x, q.y = (2.0, 2.0) if q.team == "home" else (60.0, 60.0)
+        k.x, k.y, k.vx, k.vy = 104.0, 34.0, 0.0, 0.0
+        e.reaction = lambda p: 0.36
+        e.possessor = None
+        e.kicked = {"type": "shot", "team": "home", "player": "h9"}
+        e.kicked_at, e.last_touch, e.kicker_clear = e.t - 0.5, "h9", True
+        before = (104.6, 34.9, z, -25.0, 0.0, 0.0)
+        e.ball = (103.6, 34.9, z, -25.0, 0.0, 0.0)
+        e.contact(before)
+        return e.ball[3] != -25.0 or e.possessor == k.id
+    assert passes(1.0)
+    assert not passes(2.6)

@@ -471,7 +471,7 @@ def reach_time(points, t_end: float, rests: bool, sx: float, sy: float, ux: floa
         if t <= react and not resting:
             continue
         bx, by = sx + ux * a, sy + uy * a
-        reach_m, reach_z = _FOOT if box_x is None else _reach(bx, by, t, react, box_x)
+        reach_m, reach_z = _FOOT if box_x is None else _reach(bx, by, z, t, react, box_x)
         if z > reach_z:
             continue
         dx, dy = bx - px, by - py
@@ -489,13 +489,15 @@ def reach_time(points, t_end: float, rests: bool, sx: float, sy: float, ux: floa
 _FOOT = offball.reach_for(False, 0.0)  # an outfield player's reach, the same at every moment
 
 
-def _reach(bx: float, by: float, t: float, react: float, box_x: float | None) -> tuple[float, float]:
-    """How far and how high he reaches for a ball at (bx, by), `t` seconds after the strike, by the
-    engine's own rules (offball.may_handle, offball.reach_for): a foot, or, for the opposing keeper
-    (his box at `box_x`), his hands in his box, stretched since he reacted. The pass is not his
+def _reach(bx: float, by: float, bz: float, t: float, react: float, box_x: float | None
+           ) -> tuple[float, float]:
+    """How far he reaches for a ball at (bx, by), height bz, `t` seconds after the strike, and how
+    high he reaches at all, by the engine's own rules (offball.may_handle, offball.reach_for): a
+    foot, or, for the opposing keeper (his box at `box_x`), his hands in his box, his save begun
+    when he reacted (rising from then, or UP_AFTER_CONTACT_S if later). The pass is not his
     release, nor a pass from his own side, so only his box decides."""
     hands = box_x is not None and offball.may_handle(True, in_box(bx, by, box_x), False, False)
-    return offball.reach_for(hands, t - react)
+    return offball.reach_for(hands, t - react, bz, t - max(react, offball.UP_AFTER_CONTACT_S))
 
 
 def _late_arrival(points, t_end: float, rests: bool, sx: float, sy: float, ux: float, uy: float,
@@ -514,7 +516,7 @@ def _late_arrival(points, t_end: float, rests: bool, sx: float, sy: float, ux: f
         if t > limit or t >= t_end or (t <= react and not (rests and i == last)):
             return None
         bx, by = sx + ux * a, sy + uy * a
-        reach_m, reach_z = _FOOT if box_x is None else _reach(bx, by, t, react, box_x)
+        reach_m, reach_z = _FOOT if box_x is None else _reach(bx, by, z, t, react, box_x)
         return None if z > reach_z else (t, bx - px, by - py, reach_m)
 
     def arrival(t: float, dx: float, dy: float, reach_m: float, best: float) -> float:
@@ -549,7 +551,7 @@ def _late_arrival(points, t_end: float, rests: bool, sx: float, sy: float, ux: f
         if t <= react and not (rests and i == last):
             continue
         bx, by = sx + ux * a, sy + uy * a
-        reach_m, reach_z = _FOOT if box_x is None else _reach(bx, by, t, react, box_x)
+        reach_m, reach_z = _FOOT if box_x is None else _reach(bx, by, z, t, react, box_x)
         if z > reach_z:
             continue
         dx, dy = bx - px, by - py
