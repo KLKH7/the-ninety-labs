@@ -122,7 +122,7 @@ def aim_from(distance: float, speed: float, z0: float, aim_height: float, dt: fl
     `z0` (a header: struck in the air), so that it is at `aim_height` when it has travelled
     `distance` (gravity and drag, the flight above), in flight: it has not come down before then. The
     launch angle is searched between `lowest_deg` (struck down) and `highest_deg`; None if even the
-    highest does not get it there."""
+    highest does not get it there, or even the lowest is still above the aim."""
     def height_at(angle: float) -> float:
         c, s = math.cos(angle), math.sin(angle)
         state = (0.0, 0.0, z0, speed * c, 0.0, speed * s)
@@ -139,7 +139,7 @@ def aim_from(distance: float, speed: float, z0: float, aim_height: float, dt: fl
         return -2.0
 
     lo, hi = math.radians(lowest_deg), math.radians(highest_deg)
-    if height_at(hi) < aim_height:
-        return None
+    if height_at(hi) < aim_height or height_at(lo) > aim_height:
+        return None  # out of reach, or so near that even struck down it is still above the aim
     angle = _bisect(height_at, lo, hi, aim_height)
     return speed * math.cos(angle), speed * math.sin(angle)

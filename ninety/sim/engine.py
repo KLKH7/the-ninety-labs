@@ -92,7 +92,6 @@ GOAL_AREA_X = 5.5  # Law 1
 # Laws 15 to 17: opponents keep this far from a restart until the ball is in play.
 RESTART_DISTANCE_M = {"throw_in": 2.0, "corner": 9.15, "goal_kick": PENALTY_DEPTH - GOAL_AREA_X + 1.0,
                       "free_kick": 9.15, "kick_off": 9.15}  # Laws 8 and 13: 9.15 m (the centre circle)
-GOES_UP_HORIZON_S = 3.0  # design: how far ahead he judges whether he can let it drop
 BOARDS_M = 4.0  # verify: advertising boards behind the lines stop a ball (and players) that go out
 # R1: seconds from the ball going out to the restart. Means from Opta timing of the Premier League
 # (The Analyst): throw-ins about 16 s (2022-23; 17.9 in 2025-26), goal kicks 29 to 30 s, free kicks
@@ -238,6 +237,7 @@ class Engine:
         self.kicked: dict | None = None  # the pass or shot event in flight, resolved when it ends
         self.kicked_at = -99.0
         self.kicker_clear = True  # the struck ball has left the kicker's body
+        self.kicker_far = True  # ... and is beyond his reach, moving away (his body is in play again)
         self.released_by: str | None = None  # Law 12: a keeper who released it may not handle it again
         # (x, y, strike): a carrier turning the ball onto his kicking side before he strikes it
         self.windup: tuple | None = None
@@ -465,7 +465,7 @@ class Engine:
         self.free_since = self.t  # the ball left a player's control: dives are timed from here
         self.landed = None  # a new strike: a keeper still down reacts to it afresh
         self.seen_going = self.ball_destination()
-        self.kicker_clear = False
+        self.kicker_clear = self.kicker_far = False
         self.chase = {}  # everyone reacts after their reaction time, not on the frame of the kick
 
     def execute(self, p: Player, vx: float, vy: float, vz: float, skill: str,
@@ -546,9 +546,10 @@ class Engine:
 
     def pass_to(self, carrier: Player, tx: float, ty: float, lofted: bool, throw: bool = False,
                 pace: float = decisions.ARRIVE_MPS, receiver: str | None = None,
-                header: decisions.Scene | None = None) -> None:
+                header: decisions.Scene | None = None, launch: tuple[float, float] | None = None) -> None:
         """Kick toward a point the carrier chose (where he believes a team-mate will be, or space),
-        meant for `receiver` if he chose one; or a `header` there (P17), from where he met the ball."""
+        meant for `receiver` if he chose one; or a `header` there (P17), from where he met the ball,
+        with the `launch` the option was estimated with (a header away)."""
         if header is None and not self.can_strike(carrier, tx, ty):
             self.turn_to(carrier, tx, ty,
                          lambda: self.pass_to(carrier, tx, ty, lofted, throw, pace, receiver))
@@ -556,12 +557,10 @@ class Engine:
         bx, by = self.ball[0], self.ball[1]
         dist = math.hypot(tx - bx, ty - by)
         # Struck as the decision estimated it (decisions.py); execution error is added on top.
-        if header is not None:  # a headed pass, or headed away as far as he can (the options' own)
-            launch = (decisions.headed_pass(header, tx, ty)
-                      or decisions.header_launch(header, tx, ty, decisions.HEADED_PASS_Z))
-            if launch is None:  # out of a header's reach: as hard as he can, up and toward it
-                v, up_angle = decisions.header_cap(header, tx, ty), math.radians(decisions.HEADER_AWAY_DEG)
-                launch = v * math.cos(up_angle), v * math.sin(up_angle)
+        if header is not None:  # headed away as estimated, or a headed pass (the options' own)
+            launch = launch or decisions.headed_pass(header, tx, ty)
+            if launch is None:  # an option is only a headed pass where one can get there
+                raise ValueError(f"no header from ({bx:.1f}, {by:.1f}) to ({tx:.1f}, {ty:.1f})")
             ground, up = launch
         elif throw or lofted:
             ground, up = decisions.loft_launch(dist)
@@ -709,6 +708,14 @@ class Engine:
         clear_of_body = kicker and math.hypot(x1 - kicker.x, y1 - kicker.y) > BODY_RADIUS + ball.RADIUS
         if not self.kicker_clear and clear_of_body:
             self.kicker_clear = True
+        # Nor is his body in the way of his own strike until the ball is beyond where he can strike
+        # it from (a foot's reach; a header is met nearer) and moving away from him: a header across
+        # his line passes his shoulder, one flicked on passes over his head. (He may play it again,
+        # a dribbler's next touch, once it has left his body.)
+        if kicker and not self.kicker_far:
+            rx, ry = x1 - kicker.x, y1 - kicker.y
+            away = rx * (self.ball[3] - kicker.vx) + ry * (self.ball[4] - kicker.vy) > 0
+            self.kicker_far = away and math.hypot(rx, ry) > CONTROL_M
         since = self.t - self.kicked_at
         hits = []
         back_on = self.t - self.free_since >= TOUCH_GAP_S
@@ -726,16 +733,25 @@ class Engine:
             # where the relative direction is sideways by construction.
             closing = (self.ball[3] - p.vx) * (p.x - x0) + (self.ball[4] - p.vy) * (p.y - y0)
             reach_m = self.reach(p, cx, cy, cz)
-            if since >= self.reaction(p) and reach_m is not None and d <= reach_m:  # a deliberate touch
+            touch = since >= self.reaction(p) and reach_m is not None and d <= reach_m  # deliberate
+            if touch and offball.headed(self.hands(p, cx, cy), cz):
+                if self.goes_up(p):  # P17: met where its path first comes within his head's reach
+                    s_in = entry(x0 - p.x, y0 - p.y, dx, dy, reach_m)
+                    hits.append((s_in, "head", p, x0 + s_in * dx, y0 + s_in * dy,
+                                 before[2] + s_in * (z1 - before[2])))
+                    continue
+                # He lets it drop to his feet; if it meets his body on the way he cushions it there
+                # (chest or thigh), judged by his first touch as any control (A4), not a bounce.
+                touch = d <= BODY_RADIUS + ball.RADIUS and cz <= BODY_HEIGHT
+            if touch:
                 hits.append((s, "touch", p, cx, cy, cz))
-            elif d <= BODY_RADIUS + ball.RADIUS and cz <= BODY_HEIGHT and closing > 0:
+            elif d <= BODY_RADIUS + ball.RADIUS and cz <= BODY_HEIGHT and closing > 0 and \
+                    (p is not kicker or self.kicker_far):
                 hits.append((s, "body", p, cx, cy, cz))
         if not hits:
             return
         s, kind, p, cx, cy, cz = min(hits, key=lambda h: h[0])
-        if kind == "touch" and offball.headed(self.hands(p, cx, cy), cz):
-            if not self.goes_up(p):
-                return  # he lets it drop to his feet (P17)
+        if kind == "head":
             if not self.touched(p, cx, cy, True):  # a header is deliberate play (Law 11, the pass's end)
                 self.header(p, cx, cy, cz)
             return
@@ -768,7 +784,7 @@ class Engine:
         before any opponent could get to it at all: an unchallenged ball is brought down, a
         contested one is headed. By the same reach and chase test as everything else
         (can_reach); the passer's race decides the same way (decisions.pass_confidence)."""
-        path = ball.predict(self.ball, DT, GOES_UP_HORIZON_S)
+        path = ball.predict(self.ball, DT, decisions.DROP_HORIZON_S)
         rivals = [q for q in self.players if q.team != p.team]
         for k, (bx, by, bz, *_) in enumerate(path[1:], start=1):
             t = k * DT
@@ -793,7 +809,8 @@ class Engine:
         if choice.kind == "shoot":
             self.shoot(p, header=scene)
         else:
-            self.pass_to(p, *choice.target, lofted=True, receiver=choice.receiver, header=scene)
+            self.pass_to(p, *choice.target, lofted=True, receiver=choice.receiver, header=scene,
+                         launch=choice.launch)
 
     def deflect(self, p: Player, cx: float, cy: float, cz: float, keep: float) -> None:
         """The ball bounces off a player (a block, a parry, a heavy touch) and stays free. In the
@@ -817,7 +834,7 @@ class Engine:
         self.last_touch = p.id
         if p.id != self.dribbler:  # it came off someone else: no longer his touch to run onto
             self.dribbler = None
-        self.kicker_clear = False
+        self.kicker_clear = self.kicker_far = False
         self.kicked_at = self.t  # a new strike of the ball: everyone reacts to it again
         self.chase = {}
 
@@ -828,14 +845,18 @@ class Engine:
         if p.id in self.offside:  # L10: he was offside when it was played, and now plays it
             self.offside_offence(p, x, y)
             return True
-        if p.team != (self.team_of(self.last_touch) if self.last_touch else p.team) and controls:
+        kicked = self.kicked
+        # Law 11: a deliberate save (stopping a ball going into goal) is not a new phase.
+        saving = bool(kicked) and kicked["type"] == "shot" and kicked["team"] != p.team and \
+            self.heading_on_target(kicked["team"])
+        opponent = p.team != (self.team_of(self.last_touch) if self.last_touch else p.team)
+        if opponent and controls and not saving:
             self.offside = set()  # an opponent's deliberate play: a new phase
         self.touched_since_kick = True
         if p.id != self.dribbler and self.dribbler and p.team == self.team_of(self.dribbler):
             self.dribbler = None  # a team-mate took it: the dribble is over
         if p.id != self.released_by:
             self.released_by = None
-        kicked = self.kicked
         if not kicked:
             return
         same_team = p.team == kicked["team"]
@@ -1637,7 +1658,7 @@ class Engine:
         self.possessor, self.dribbler, self.dribble_to = None, carrier.id, None
         self.last_touch = carrier.id
         self.free_since = self.t
-        self.kicker_clear, self.touched_since_kick = False, True
+        self.kicker_clear, self.kicker_far, self.touched_since_kick = False, False, True
 
     def poke(self, p: Player, holder: Player) -> None:
         """A tackle that reaches the ball knocks it loose; whoever then controls it decides the
@@ -1652,7 +1673,7 @@ class Engine:
         self.possessor, self.dribbler, self.dribble_to, self.windup = None, None, None, None
         self.last_touch = p.id
         self.kicked_at = self.free_since = self.t
-        self.kicker_clear, self.touched_since_kick = False, True
+        self.kicker_clear, self.kicker_far, self.touched_since_kick = False, False, True
         self.plan_chase()
 
     def touch_speed(self, carrier: Player, ux: float, uy: float, lo: float, hi: float) -> float | None:
@@ -1742,7 +1763,7 @@ class Engine:
         if not moving or turn > math.radians(TOUCH_EXPECTED_DEG):
             self.kicked_at = self.t
         self.free_since = self.t
-        self.kicker_clear = False
+        self.kicker_clear = self.kicker_far = False
         self.touched_since_kick = True
         # Who goes for the loose ball is judged at once: a defender who has been watching the carry
         # and can get there first commits to it, rather than keep shadowing.
@@ -1830,6 +1851,19 @@ class Engine:
         for _ in range(int(minutes * 60 * FPS)):
             self.step()
         return self.match
+
+
+def entry(ax: float, ay: float, dx: float, dy: float, r: float) -> float:
+    """The first s (0 to 1) along a step from (ax, ay) by (dx, dy), relative to a player, where the
+    ball comes within `r` of him (0 if it starts within it); the step's closest point if it never
+    does."""
+    a2, ad, d2 = ax * ax + ay * ay, ax * dx + ay * dy, dx * dx + dy * dy
+    if a2 <= r * r or d2 == 0:
+        return 0.0
+    disc = ad * ad - d2 * (a2 - r * r)
+    if disc < 0:
+        return clamp(-ad / d2, 0.0, 1.0)
+    return clamp((-ad - math.sqrt(disc)) / d2, 0.0, 1.0)
 
 
 def unit(x: float, y: float, z: float) -> tuple[float, float, float]:

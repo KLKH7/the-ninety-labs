@@ -188,6 +188,7 @@ class Option:
     receiver: str | None = None
     lofted: bool = False
     pace: float = ARRIVE_MPS  # a ground pass's arrival speed, as chosen
+    launch: tuple[float, float] | None = None  # a header away: (ground, up) as estimated, struck so
 
 
 def attack(goal_x: float) -> float:
@@ -209,13 +210,15 @@ def rate_at(distance: float) -> float:
 
 
 def shot_estimate(x: float, y: float, goal_x: float, opponents: list[tuple[float, float]],
-                  keeper: tuple[float, float] | None) -> float:
+                  keeper: tuple[float, float] | None,
+                  speeds_kmh: tuple[float, float] = offball.SHOT_SPEEDS_KMH) -> float:
     """The player's own estimate of a shot from here, between 0 and 1: how often shots from this
     distance go in (D3), less from a tighter angle (by how much of the goal he can see compared with
     a central shot), then compared with the typical shot those rates average over: better with no
     outfield defender he believes is in the triangle to the posts, a little worse with any; and by
     how much of the goal the keeper leaves open against a keeper in his usual spot. The keeper is
-    counted once."""
+    counted once. Struck at `speeds_kmh` (a header: P17, slower than a kick) against a keeper in his
+    usual spot facing the usual shot: a slower strike gives this keeper more time."""
     screened = any((ox, oy) != keeper and in_cone(x, y, goal_x, ox, oy) for ox, oy in opponents)
     q = typical_shot(x, y, goal_x) * (SCREENED_SHOT if screened else CLEAR_SHOT)
     if keeper:
@@ -224,7 +227,7 @@ def shot_estimate(x: float, y: float, goal_x: float, opponents: list[tuple[float
         # against the usual one (*design*: one save rate for every distance, *verify* by zone), so
         # a better-placed keeper saves more and a worse one less, but never every shot or none.
         usual = 1 - offball.open_goal_share(x, y, goal_x, offball.keeper_spot(x, y, goal_x))
-        here = 1 - offball.open_goal_share(x, y, goal_x, keeper)
+        here = 1 - offball.open_goal_share(x, y, goal_x, keeper, speeds_kmh)
         ratio = here / usual if usual > 0 else 1.0  # (a usual keeper always covers something)
         odds = KEEPER_SAVES / (1 - KEEPER_SAVES) * ratio
         q *= (1 / (1 + odds)) / (1 - KEEPER_SAVES)
@@ -410,16 +413,21 @@ def flight(ground: float, up: float, z0: float = 0.0) -> Flight:
 
 HEADED_PASS_Z = 0.1  # design: a headed pass is aimed to arrive just above the ground, at his feet
 HEADER_AWAY_DEG = 35.0  # design: a header away (a clearance, a flick on) is struck up at this angle
+# P17 (design): how far ahead a player judges whether he can let a ball at head height drop to his
+# feet before an opponent could get to it (engine.goes_up and the passer's race: one rule)
+DROP_HORIZON_S = 3.0
 
 
 def header_cap(scene: Scene, tx: float, ty: float) -> float:
-    """P17: the hardest he can head the ball toward (tx, ty): his head's drive (HEAD_SPEED_MPS) and
-    the share of the ball's own speed into his head along that line that it keeps (BODY_RESTITUTION).
-    One rule for the header as estimated and as struck (engine.header)."""
+    """P17: the hardest he can head the ball toward (tx, ty), along that line: his head drives
+    through it at HEAD_SPEED_MPS and the ball rebounds off it keeping BODY_RESTITUTION of their
+    closing speed, so it leaves at (1 + e) V - e u, u being the ball's own speed along that line
+    (negative when it comes at him). The ball's speed across the line is lost (a glancing flick on
+    that keeps its pace is not modelled). One rule for the header as estimated and as struck."""
     d = math.hypot(tx - scene.x, ty - scene.y) or 1.0
     vx, vy, _ = scene.incoming
-    into = max(0.0, -(vx * (tx - scene.x) + vy * (ty - scene.y)) / d)
-    return (1 + BODY_RESTITUTION) * HEAD_SPEED_MPS + BODY_RESTITUTION * into
+    along = (vx * (tx - scene.x) + vy * (ty - scene.y)) / d
+    return max(0.0, (1 + BODY_RESTITUTION) * HEAD_SPEED_MPS - BODY_RESTITUTION * along)
 
 
 def header_launch(scene: Scene, tx: float, ty: float, aim_z: float, speed: float | None = None
@@ -438,14 +446,15 @@ def headed_pass(scene: Scene, tx: float, ty: float) -> tuple[float, float] | Non
                          math.hypot(*loft_launch(math.hypot(tx - scene.x, ty - scene.y))))
 
 
-def header_away(scene: Scene) -> tuple[float, float]:
-    """Where a header away lands: struck as hard as he can at HEADER_AWAY_DEG toward the goal he
-    attacks (wide of the middle, as a clearance goes: `options`), flown by the ball physics."""
-    v = (1 + BODY_RESTITUTION) * HEAD_SPEED_MPS
-    c, s_ = math.cos(math.radians(HEADER_AWAY_DEG)), math.sin(math.radians(HEADER_AWAY_DEG))
-    path = ball.predict((0.0, 0.0, scene.z, v * c, 0.0, v * s_), DT, ball.FLIGHT_BOUND_S)
+def header_away(scene: Scene, fx: float, fy: float) -> tuple[float, tuple[float, float]]:
+    """A header away along the direction (fx, fy) (a unit vector): struck as hard as he can that way
+    (header_cap) at HEADER_AWAY_DEG; (how far along it lands, the launch), flown by the ball
+    physics. The launch is struck as estimated (engine.header)."""
+    v = header_cap(scene, scene.x + fx, scene.y + fy)
+    launch = v * math.cos(math.radians(HEADER_AWAY_DEG)), v * math.sin(math.radians(HEADER_AWAY_DEG))
+    path = ball.predict((0.0, 0.0, scene.z, launch[0], 0.0, launch[1]), DT, ball.FLIGHT_BOUND_S)
     landed = next((st[0] for st in path[1:] if st[2] <= 0.0), path[-1][0])
-    return landed, v
+    return landed, launch
 
 
 def strike_nodes(scene: Scene, tx: float, ty: float, lofted: bool, pace: float
@@ -738,7 +747,8 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
         if offball.headed(False, points[at][2]):
             # P17 (engine.goes_up): he lets it drop to his feet if he can take it there before any
             # opponent could get to it at all; otherwise he heads it.
-            t_f, i_f = reach_time(points, t_end, rests, sx, sy, ux, uy, *taker[:5], math.inf, heads=False)
+            t_f, i_f = reach_time(points, t_end, rests, sx, sy, ux, uy, *taker[:5], take + DROP_HORIZON_S,
+                                  heads=False)
             if t_f < math.inf and all(
                     reach_time(points, t_end, rests, sx, sy, ux, uy, ox, oy, ovx, ovy, react, t_f,
                                scene.goal_x if keeper else None)[0] > t_f
@@ -817,7 +827,11 @@ def shot_chance(scene: Scene) -> float:
     """His estimate that a shot from here goes in. With measured tables (D7): how often shots from
     here went in, scaled by how this situation compares with an open one (blockers in the cone, the
     keeper's position), so shooting and moving the ball are judged on the same scale."""
-    q = shot_estimate(scene.x, scene.y, scene.goal_x, scene.opponents, scene.keeper)
+    speeds = offball.SHOT_SPEEDS_KMH
+    if scene.header:  # P17: the speed his header at goal leaves at (engine.shoot)
+        v = 3.6 * min(header_cap(scene, scene.goal_x, PITCH_Y / 2), offball.SHOT_SPEEDS_KMH[1] / 3.6)
+        speeds = (v, v)
+    q = shot_estimate(scene.x, scene.y, scene.goal_x, scene.opponents, scene.keeper, speeds)
     if POSSESSION is None:
         return q
     typical = typical_shot(scene.x, scene.y, scene.goal_x)  # what the measured rate averages over
@@ -850,14 +864,14 @@ def options(scene: Scene) -> list[Option]:
         # P17: in the air he can only head it: no dribble, nothing to hold. Or he heads it away, as
         # far as he can, toward the side a clearance goes: in his own third that is a clearance,
         # elsewhere a flick on; either way a contest where it lands (as `clear`).
-        reach, _ = header_away(scene)
         wide = 4.0 if scene.y < PITCH_Y / 2 else PITCH_Y - 4.0
-        fx, fy = scene.x + attack(scene.goal_x) * 45.0 - scene.x, wide - scene.y
+        fx, fy = attack(scene.goal_x) * 45.0, wide - scene.y
         f = math.hypot(fx, fy)
+        reach, launch = header_away(scene, fx / f, fy / f)
         tx = min(PITCH_X - 1, max(1.0, scene.x + fx / f * reach))
         ty = min(PITCH_Y - 1, max(1.0, scene.y + fy / f * reach))
         contest = 0.5 * value(tx, ty, scene.goal_x) - 0.5 * loss_cost(tx, ty, scene.goal_x)
-        out.append(Option("clear", contest, (tx, ty), lofted=True))
+        out.append(Option("clear", contest, (tx, ty), lofted=True, launch=launch))
         return out
     for turn in (0.0, 0.8, -0.8):  # straight at goal, or angled away
         heading = math.atan2(PITCH_Y / 2 - scene.y, scene.goal_x - scene.x) + turn

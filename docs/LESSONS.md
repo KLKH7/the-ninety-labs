@@ -326,3 +326,18 @@ short and actionable. This file is public: no research sources, product names or
   changes, and never let "it passes the check" decide.
 - **Check:** for each new constant, can you quote the passage it comes from? If not, it is
   *verify*, and GROUNDING says what it would change if the other reading is right.
+
+### 37. A new way to touch the ball must be checked from every body near it, and decided once
+- **What happened:** heading was added and passed its own tests, but an audit found a header met
+  the ball at its closest point to the player, so it left from inside his body and could deflect
+  off him; a ball he chose to let drop passed through his chest, because declining the header
+  skipped the body test; and the passer's estimate disagreed with the engine in three places (how
+  far ahead a player judges letting the ball drop, the launch of a header away, a header at goal
+  valued as a kick). Half the new tests compared a constant with itself, so changing it changed
+  the expectation too.
+- **Rule:** for a new contact, check the toucher's own body after his touch, a player who declines
+  the touch, and everyone else the ball passes; put any rule the estimate shares with the engine
+  in one helper or one constant both use; pin sourced numbers in tests as numbers.
+- **Check:** a test that the ball never passes through or rebounds off the player who just played
+  it, over many random cases; a test that runs the estimate and the engine on one scene; mutation
+  results reported per mutation, with which test caught it, and incidental catches named as such.

@@ -82,10 +82,12 @@ def keeper_spot(ball_x: float, ball_y: float, own_goal_x: float) -> tuple[float,
     return best[1]
 
 
-def open_goal_share(x: float, y: float, goal_x: float, keeper: tuple[float, float]) -> float:
+def open_goal_share(x: float, y: float, goal_x: float, keeper: tuple[float, float],
+                    speeds_kmh: tuple[float, float] = SHOT_SPEEDS_KMH) -> float:
     """The share of the goal mouth, as seen from (x, y), that a keeper at `keeper` cannot get a hand
-    across before a typical shot gets there (P11, P15). Used by the keeper to choose where to
-    stand and by the shooter to judge him: one definition."""
+    across before a typical shot gets there (P11, P15), struck at `speeds_kmh` (a header: the speed
+    a header leaves at, P17). Used by the keeper to choose where to stand and by the shooter to
+    judge him: one definition."""
     def bearing(px: float, py: float) -> float:
         return math.atan2(py - y, abs(px - x))
     lo, hi = sorted((bearing(goal_x, PITCH_Y / 2 - GOAL_HALF_WIDTH),
@@ -96,7 +98,7 @@ def open_goal_share(x: float, y: float, goal_x: float, keeper: tuple[float, floa
         return 1.0
     gap = math.hypot(keeper[0] - x, keeper[1] - y)
     k = bearing(*keeper)
-    lo_kmh, hi_kmh = SHOT_SPEEDS_KMH
+    lo_kmh, hi_kmh = speeds_kmh
     open_share = 0.0
     for i in range(SHOT_SPEED_SAMPLES):  # over the speeds shots are struck at, not one typical speed
         speed = (lo_kmh + (hi_kmh - lo_kmh) * (i + 0.5) / SHOT_SPEED_SAMPLES) / 3.6

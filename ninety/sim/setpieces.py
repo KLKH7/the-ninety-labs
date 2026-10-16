@@ -394,10 +394,10 @@ def choose_delivery(engine: Engine, taker: Player) -> decisions.Option | None:
     """At the ball, the taker picks a pass like any other (D1): to where he believes each
     team-mate will be, led by the velocity he has seen, scored on what he believes; a softmax
     picks (D4). Only targets in front of him can be struck. Beyond a short corner the ball goes
-    through the air (S8): the engine has no heading yet (P11), so its pass estimates rate every
-    ball into a crowded box as hopeless and a ground ball would win on a tie; until heading
-    exists, the delivery's height is fixed and only its target is chosen. The lofted-only
-    scoring is the one a throw-in uses."""
+    through the air (S8): before heading existed (P17) the pass estimates rated every ball into a
+    crowded box as hopeless and a ground ball won on a tie, so the delivery's height is fixed and
+    only its target is chosen (whether that rule can now go is open, S8). The lofted-only scoring
+    is the one a throw-in uses."""
     c: Corner = engine.set_play
     scene = engine.scene_for(taker)
     aerial = dataclasses.replace(scene, throw=True)  # pass_option scores lofted balls only
