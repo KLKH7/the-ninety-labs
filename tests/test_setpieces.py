@@ -12,11 +12,13 @@ from test_validate import FPS, event, run
 from ninety.sim import ball, decisions, setpieces
 from ninety.sim.decisions import PENALTY_DEPTH, PENALTY_HALF_WIDTH
 from ninety.sim.engine import (
-    BODY_RADIUS,
+    BASE_MATCH_S,
+    BASE_SEEDS_FROM,
     CORNER_ATTEMPTS,
     DT,
     SPRINT,
     Engine,
+    corner_attempts,
     corner_seed,
     simulate,
 )
@@ -464,84 +466,97 @@ def test_the_check_is_exact_to_the_rounding(tmp_path, clip, breach):
 
 def test_scenario_corner_comes_from_play():
     """Regression (S9): the scenario used to place a defender by the line and record him as the
-    last touch. Now it opens in play with a home winger on the ball in the final third, everyone
-    in open-play shape, and the corner's cause is played and recorded: the ball goes over the
-    goal line later, off an away player who touched it in the data. Mutations caught: the
-    opening left in the kick-off shape; a staged exit at the first frame."""
-    for seed in range(3):
+    last touch, then to open with a drawn winger on the ball (which made four corners in five a
+    blocked shot). Now it opens at a moment open play reached: the home side on the ball in its
+    final third, from a match played from the kick-off; the corner's cause is played and recorded.
+    Mutations caught: an opening not in the final third or not the home side's; a staged exit at
+    the first frame; the record not rebased; the clip's score taken from the whole match."""
+    for seed in range(2):
         m = simulate(seed, 0.05, "corner")
         first = m.frames[0]
+        assert first["frame"] == 0 and first["t"] == 0.0, seed
         holder = next(p for p in first["players"] if p["id"] == first["possessor"])
-        roles = {r["id"]: r["role"] for r in m.roster}
-        assert holder["team"] == "home" and roles[holder["id"]] in ("RW", "LW"), seed
-        assert holder["x"] > 105.0 - 26.0 and min(holder["y"], 68.0 - holder["y"]) < 16.0, seed
-        b = first["ball"]
-        gaps = [math.hypot(b["x"] - p["x"], b["y"] - p["y"]) for p in first["players"]]
-        assert min(gaps) >= BODY_RADIUS + 0.1, seed  # the ball outside every body
-        others = [math.hypot(holder["x"] - p["x"], holder["y"] - p["y"]) for p in first["players"]
-                  if p["id"] != holder["id"]]
-        assert min(others) >= 2 * BODY_RADIUS, seed  # nor is he inside anyone
-        b1 = m.frames[1]["ball"]
-        assert math.hypot(b1["x"] - b["x"], b1["y"] - b["y"]) < 0.15, seed  # carried, not jumping
-        players = first["players"]
-        assert sum(p["x"] > 52.5 for p in players if p["team"] == "home" and roles[p["id"]] != "GK") >= 6
-        assert sum(p["x"] > 70.0 for p in players if p["team"] == "away") >= 8
+        # its frame 0 is one step after the moment: the ball has moved at most one frame (40 m/s)
+        assert holder["team"] == "home" and first["ball"]["x"] >= 70.0 - 40.0 / FPS, seed
+        assert not any(e["type"] == "kickoff" for e in m.events), seed
         out = next(e for e in m.events if e["type"] == "out_of_play" and e["x"] in (0.0, 105.0))
         assert out["frame"] > 0 and out["x"] == 105.0 and out["team"] == "away", seed
         touches = last_touches(out, m.events, m.frames)
         assert touches and touches[-1][2].startswith("a"), seed  # the away player it came off
-        assert m.seed - corner_seed(seed, 0) in range(CORNER_ATTEMPTS)  # the engine seed is recorded
+        assert m.seed - corner_seed(seed, 0) in range(1, CORNER_ATTEMPTS + 1)  # the attempt is recorded
+        goals = [e["team"] for e in m.events if e["type"] == "goal"]
+        assert m.score == {"home": goals.count("home"), "away": goals.count("away")}, seed
 
 
 def test_the_scenario_keeps_the_first_attack_that_play_turns_into_a_corner():
-    """Mutations caught: attempts that do not qualify kept; attempts skipped."""
+    """Mutations caught: attempts that do not qualify kept; attempts skipped (the attempts' seeds
+    are checked against their order, not against the generator itself)."""
     for seed in range(2):
         kept = simulate(seed, 0.02, "corner").seed - corner_seed(seed, 0)
-        for attempt in range(kept):
-            e = Engine(corner_seed(seed, attempt))
-            e.open_with_wide_attack()
-            assert not e.play_until_corner(), (seed, attempt)
+        for n, e in enumerate(corner_attempts(seed), start=1):
+            assert e.match.seed == corner_seed(seed, n), (seed, n)
+            if n == kept:
+                assert e.play_until_corner(), seed
+                break
+            assert not e.play_until_corner(), seed
 
 
 def opened(seed: int = 0) -> Engine:
-    e = Engine(corner_seed(seed, 0))
-    e.open_with_wide_attack()
-    return e
+    return next(corner_attempts(seed))
 
 
-def test_the_opening_varies_from_attack_to_attack():
-    """Audit 6: a fixed opening (8 m from the touchline, facing the goal line) made three corners
-    in four the same blocked shot. Mutations caught: the distance from the touchline or the way
-    the winger faces fixed."""
-    wide, facing = set(), set()
-    for attempt in range(12):
-        e = opened(attempt)
-        holder = e.by_id[e.possessor]
-        wide.add(round(min(e.ball[1], 68.0 - e.ball[1]), 1))
-        facing.add(round(math.degrees(abs(holder.heading))))
-    assert len(wide) > 8 and len(facing) > 8 and max(facing) > 45
+def test_attempts_branch_from_one_played_moment_and_play_differently():
+    """S9. Mutations caught: an attempt not reseeded (every attempt the same play); attempts from
+    different moments; a moment while the home side's play has not left the final third; a moment
+    at a restart (a throw-in or free kick being taken) or with a struck ball in flight."""
+    attempts = corner_attempts(0)
+    a, b = next(attempts), next(attempts)
+    where = lambda e: [(p.x, p.y) for p in e.players]  # noqa: E731
+    assert a.t == b.t and a.ball == b.ball and where(a) == where(b)
+    for e in (a, b):
+        assert e.restart is None and e.from_restart is None and e.throw_by is None and e.kicked is None
+        assert e.ball[0] >= 70.0 and e.team_of(e.possessor) == "home"  # the final third: 70 m, pinned
+    for _ in range(75):
+        a.step()
+        b.step()
+    assert where(a) != where(b)
+    base = Engine(corner_seed(0, BASE_SEEDS_FROM))
+    base.kickoff("home")
+    assert base.next_attacking_moment(BASE_MATCH_S) and base.attacking()
+    states = []
+    step = base.step
+
+    def recording():
+        step()
+        states.append(base.attacking())
+
+    base.step = recording
+    assert base.next_attacking_moment(BASE_MATCH_S) and states[-1]
+    assert not all(states)  # the home side's play left the final third (or was lost) in between
+    assert base.restart is None and base.from_restart is None and base.throw_by is None
 
 
 def test_an_attack_is_given_up_when_it_is_over():
     """S9: a goal kick, a goal, a corner the other way, the away side on the ball 40 m out, or
-    20 s gone ends an attempt. Mutations caught: each condition dropped or widened tenfold."""
+    20 s from the opening ends an attempt. Mutations caught: each condition dropped or widened
+    tenfold; the 20 s counted from the kick-off rather than the opening."""
+    for kind, team, spot, taker in (("goal_kick", "away", (5.0, 30.0), None),
+                                    ("kick_off", "away", (52.5, 34.0), "a10"),
+                                    ("corner", "away", (0.0, 0.0), None)):
+        e = opened()
+        t0 = e.t
+        e.stop(kind, team, spot, taker)
+        assert not e.play_until_corner() and e.t - t0 < 0.1, kind  # at once, not when it is taken
     e = opened()
-    e.stop("goal_kick", "away", (5.0, 30.0))
-    assert not e.play_until_corner() and e.t < 0.1  # at once, not when the kick is taken
-    e = opened()
-    e.stop("kick_off", "away", (52.5, 34.0), "a10")
-    assert not e.play_until_corner() and e.t < 0.1
-    e = opened()
-    e.stop("corner", "away", (0.0, 0.0))
-    assert not e.play_until_corner() and e.t < 0.1
-    e = opened()
+    t0 = e.t
     e.ball = (60.0, 34.0, 0.0, 0.0, 0.0, 0.0)  # 45 m from the goal being attacked
     e.give("a5")
     e.by_id["a5"].x, e.by_id["a5"].y = 59.6, 34.0
-    assert not e.play_until_corner() and e.t < 1.0
+    assert not e.play_until_corner() and e.t - t0 < 1.0
     e = opened()
-    e.t = 19.9  # S9: 20 s
-    assert not e.play_until_corner() and 19.9 < e.t <= 20.0 + 1 / FPS + 1e-9  # within a frame of 20 s
+    t0 = e.t
+    e.step = lambda: setattr(e, "t", e.t + 1 / FPS)  # nothing happens: only the clock runs
+    assert not e.play_until_corner() and 20.0 <= e.t - t0 <= 20.0 + 1 / FPS + 1e-9
 
 
 def test_a_keeper_out_of_place_at_the_exit_does_not_hide_the_corner(tmp_path):

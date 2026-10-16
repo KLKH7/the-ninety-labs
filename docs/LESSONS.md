@@ -341,3 +341,15 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** a test that the ball never passes through or rebounds off the player who just played
   it, over many random cases; a test that runs the estimate and the engine on one scene; mutation
   results reported per mutation, with which test caught it, and incidental catches named as such.
+
+### 38. A drawn opening is a hidden cause
+- **What happened:** after lesson 32 the corner scenario played its attacks out instead of staging
+  the corner, but it opened every attack with a winger on the ball at a drawn spot, facing a drawn
+  way, and kept only corners within 20 s. Four corners in five were then a blocked shot: the
+  opening chose the kind of play, the window kept only the quick outcomes, and the report blamed
+  the engine's shooting.
+- **Rule:** a scenario that selects a rare event opens from a moment the full engine reaches by
+  itself (here: play from the kick-off until the home side has the ball in its final third), and
+  branches its attempts from there; nothing about the opening is drawn.
+- **Check:** compare the scenario's mix of causes with the same causes in full matches, and list
+  every parameter of the opening: each one that is drawn rather than played is a suspect.

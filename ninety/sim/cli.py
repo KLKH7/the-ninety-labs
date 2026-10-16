@@ -12,8 +12,8 @@ def main() -> None:
     ap.add_argument("--minutes", type=float, default=90)
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--scenario", choices=("corner",), default=None,
-                    help="corner: a wide attack that play turns into a corner, run on for --minutes "
-                         "after the corner is given (targeted data)")
+                    help="corner: an attack from a moment open play reaches that play turns into a "
+                         "corner, run on for --minutes after the corner is given (targeted data)")
     args = ap.parse_args()
 
     match = simulate(args.seed, args.minutes, args.scenario)
@@ -24,7 +24,8 @@ def main() -> None:
     with open(args.out / "frames.jsonl", "w") as f:
         for fr in match.frames:
             f.write(json.dumps(fr) + "\n")
-    meta = {"seed": args.seed, "engine_seed": match.seed, "minutes": args.minutes, "scenario": args.scenario,
+    meta = {"seed": args.seed, "engine_seed": match.seed, "base_seed": match.base_seed,
+            "opening_t": match.opening_t, "minutes": args.minutes, "scenario": args.scenario,
             "fps": FPS,
             "score": match.score,
             "roster": match.roster, "counts": Counter(e["type"] for e in match.events)}

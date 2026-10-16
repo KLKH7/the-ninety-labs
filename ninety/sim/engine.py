@@ -15,6 +15,7 @@ that the world is then arranged to match. Every limit cites its source in docs/G
 
 from __future__ import annotations
 
+import copy
 import math
 import random
 from dataclasses import dataclass, field
@@ -103,16 +104,21 @@ RESTART_DELAY_S = {"throw_in": (12, 20), "goal_kick": (24, 34), "corner": (24, 3
                    "kick_off": (1, 2)}
 # A corner is not taken on a timer here: it is taken when both teams are set (setpieces.advance), so
 # its range above is unused; the corner report compares the time that emerges with it.
-# S9 (design): the corner scenario opens with a home winger on the ball this far from the goal
-# line he attacks and from his touchline, plays the attack out, and keeps the first one that play
-# turns into a home corner within CORNER_WITHIN_S; it gives up on an attack once the away side has
-# the ball ATTACK_OVER_M or more from that goal line.
-WIDE_FROM_GOAL_LINE_M = (13.0, 25.0)
-WIDE_FROM_TOUCHLINE_M = (3.0, 15.0)
-WINGER_TURN_DEG = 90.0  # he faces anywhere from straight at the goal line to straight infield
+# S9 (design): the corner scenario opens at a moment open play reaches: from the kick-off, play
+# runs until the home side brings the ball into its final third (or wins it there) in open play.
+# Attempts branch from that moment (MOMENT_ATTEMPTS of them, each with its own random streams);
+# the first one that play turns into a home corner within CORNER_WITHIN_S is kept; an attempt is
+# given up once the away side has the ball ATTACK_OVER_M or more from that goal line. If none
+# does, play runs on to the next such moment; a base match is played for at most BASE_MATCH_S,
+# then a new one begins; up to CORNER_ATTEMPTS attempts in all.
+FINAL_THIRD_X = PITCH_X * 2 / 3
+MOMENT_ATTEMPTS = 20
+BASE_MATCH_S = 90 * 60.0  # a base match is played no longer than a match
 CORNER_WITHIN_S = 20.0
 ATTACK_OVER_M = 40.0
-CORNER_ATTEMPTS = 200  # far above the most any seed has needed (73)
+CORNER_ATTEMPTS = 400  # a bound on attempts per seed
+BASE_SEEDS_FROM = 500  # base match k of a seed: corner_seed(seed, BASE_SEEDS_FROM + k), apart from attempts
+assert CORNER_ATTEMPTS < BASE_SEEDS_FROM < 1000  # a seed's scenario seeds stay in its block of 1000
 CORNER_SEED_BASE = 1_000_000_000  # scenario engine seeds: base + seed * 1000 + attempt, apart from
 # the seeds of full matches
 NO_OFFSIDE_FROM = ("throw_in", "goal_kick", "corner")  # Law 11: no offside offence direct from these
@@ -156,6 +162,9 @@ class Restart:
 @dataclass
 class Match:
     seed: int
+    # a scenario clip (S9): the match it branched from, and that match's clock at the opening
+    base_seed: int | None = None
+    opening_t: float | None = None
     events: list[dict] = field(default_factory=list)
     frames: list[dict] = field(default_factory=list)
     score: dict = field(default_factory=lambda: {"home": 0, "away": 0})
@@ -1770,44 +1779,39 @@ class Engine:
         self.plan_chase()
         return True
 
-    def open_with_wide_attack(self) -> None:
-        """Scenario mode: the clip opens in play with a home winger on the ball in the final third
-        near his touchline, and everyone where the open-play shape rules put them for that ball
-        (S9). The wing, how far from the goal line and the touchline, and which way he faces are
-        drawn from the seed; the ball is at his feet where the carry rule keeps it. Nothing more
-        is set: whatever happens next is played."""
-        winger = self.rng.choice([p for p in self.players if p.team == "home" and p.role in ("RW", "LW")])
-        near_side = winger.ay < PITCH_Y / 2
-        wide = self.rng.uniform(*WIDE_FROM_TOUCHLINE_M)
-        y = wide if near_side else PITCH_Y - wide
-        x = PITCH_X - self.rng.uniform(*WIDE_FROM_GOAL_LINE_M)
-        # He faces anywhere from straight at the goal line to straight infield.
-        infield = math.radians(self.rng.uniform(0.0, WINGER_TURN_DEG))
-        heading = infield if near_side else -infield
-        self.ball = (x, y, 0.0, 0.0, 0.0, 0.0)
-        self.poss_team = "home"
-        for _ in range(2):  # shape, then re-read the game from where that shape put everyone
-            for team, brain in self.brains.items():
-                reach = {p.id: p.physique.time_to_cover(math.hypot(p.x - x, p.y - y), 0.0)
-                         for p in self.players if p.team == team and p.role != "GK"}
-                brain.update(self.t, team == "home", x, reach)
-            for p in self.players:
-                p.x, p.y, _ = self.shape_target(p)
-        # The ball at his feet where the carry rule keeps it: on the side he faces, or shielded
-        # from an opponent within SHIELD_M (D8), never inside his body.
-        winger.heading = heading
-        near = min((q for q in self.players if q.team == "away"), key=lambda q: math.hypot(q.x - x, q.y - y))
-        shielded = math.hypot(near.x - x, near.y - y) < SHIELD_M
-        side = math.atan2(y - near.y, x - near.x) if shielded else heading
-        feet = BODY_RADIUS + ball.RADIUS
-        winger.x, winger.y = x - math.cos(side) * feet, y - math.sin(side) * feet
-        self.give(winger.id)
+    def reseed(self, seed: int) -> None:
+        """New random streams from here on (a scenario attempt branched from a played moment)."""
+        self.rng = random.Random(seed)
+        self.sight_rng = random.Random(f"{seed}-perception")
+
+    def attacking(self) -> bool:
+        """S9: the home side's play (its possession, through its passes) in the final third it
+        attacks, in open play: no restart pending or being taken (a throw-in or free kick held, or
+        the ball just restarted and not yet played on)."""
+        return self.poss_team == "home" and self.ball[0] >= FINAL_THIRD_X and self.restart is None \
+            and self.from_restart is None and self.throw_by is None
+
+    def next_attacking_moment(self, until: float) -> bool:
+        """S9: play on to the next moment the home side brings the ball into its final third, or
+        wins it there, in open play, with one of its players on it and nothing struck or contested
+        in flight (after this moment, if this is one); False if none comes before the clock reaches
+        `until`."""
+        armed = not self.attacking()
+        while self.t < until:
+            self.step()
+            if not self.attacking():
+                armed = True
+            elif armed and self.possessor and self.team_of(self.possessor) == "home" and \
+                    self.kicked is None and self.tackle is None and self.last_deflection is None:
+                return True  # nothing struck or contested is in flight: the clip starts clean
+        return False
 
     def play_until_corner(self) -> bool:
         """Play on from the opening until the home side is given a corner (True), or the attack is
         over (False): a goal, a goal kick, a corner the other way, the away side on the ball 40 m
         or more from the goal being attacked, or CORNER_WITHIN_S gone (S9)."""
-        while self.t < CORNER_WITHIN_S:
+        opened = self.t
+        while self.t - opened < CORNER_WITHIN_S:
             self.step()
             r = self.restart
             if r and r.kind == "corner":
@@ -1911,21 +1915,57 @@ def corner_seed(seed: int, attempt: int) -> int:
     return CORNER_SEED_BASE + seed * 1000 + attempt
 
 
+def corner_attempts(seed: int):
+    """S9: the attempts the corner scenario plays, in order, each an engine at a played moment of
+    the home side bringing the ball into its final third, with its own random streams
+    (corner_seed). A base match is played no longer than BASE_MATCH_S; then a new one begins."""
+    attempt = 0
+    for k in range(CORNER_ATTEMPTS):
+        base_seed = corner_seed(seed, BASE_SEEDS_FROM + k)
+        base = Engine(base_seed)
+        base.kickoff("home")
+        while attempt < CORNER_ATTEMPTS and base.next_attacking_moment(BASE_MATCH_S):
+            base.match.frames, base.match.events = [], []  # the clip's record starts at the moment
+            for _ in range(min(MOMENT_ATTEMPTS, CORNER_ATTEMPTS - attempt)):
+                attempt += 1
+                e = copy.deepcopy(base)
+                e.reseed(corner_seed(seed, attempt))
+                e.match.seed = corner_seed(seed, attempt)
+                e.match.base_seed, e.match.opening_t = base_seed, round(base.t, 3)
+                yield e
+        if attempt >= CORNER_ATTEMPTS:
+            return
+
+
+def rebased(m: Match) -> Match:
+    """The clip's record from its first frame: frames and events from 0 (as a clip from the kick-off
+    is), the score its own goals. The engine's clock and score ran on from the kick-off."""
+    f0, t0 = m.frames[0]["frame"], m.frames[0]["t"]
+    for f in m.frames:
+        f["frame"] -= f0
+        f["t"] = round(f["t"] - t0, 3)
+    for e in m.events:
+        e["frame"] -= f0
+        e["t"] = round(e["t"] - t0, 2)
+    goals = [e["team"] for e in m.events if e["type"] == "goal"]
+    m.score = {"home": goals.count("home"), "away": goals.count("away")}
+    return m
+
+
 def simulate(seed: int, minutes: float, scenario: str | None = None) -> Match:
-    """A match from the kick-off, or a scenario clip. `corner`: attacks from a wide opening are
-    played out, each with its own engine seed (corner_seed), and the first one that play turns
-    into a home corner is kept and run on for `minutes` after the corner is given (S9). The match
-    records the engine seed it used. Selection among played-out attacks, never an arranged one:
-    corners from this scenario say nothing about how often play produces them."""
+    """A match from the kick-off, or a scenario clip. `corner`: attacks from a moment open play
+    reaches (the home side on the ball in its final third) are played out, each with its own random
+    streams (corner_attempts), and the first one that play turns into a home corner is kept and run
+    on for `minutes` after the corner is given (S9). The match records the attempt's seed. Selection
+    among played-out attacks, never an arranged one: corners from this scenario say nothing about
+    how often play produces them."""
     if scenario is None:
         return Engine(seed).run(minutes)
     if scenario != "corner":
         raise ValueError(f"unknown scenario {scenario!r}; known: corner")
-    for attempt in range(CORNER_ATTEMPTS):
-        e = Engine(corner_seed(seed, attempt))
-        e.open_with_wide_attack()
+    for e in corner_attempts(seed):
         if e.play_until_corner():
             for _ in range(int(minutes * 60 * FPS)):
                 e.step()
-            return e.match
-    raise RuntimeError(f"no corner in {CORNER_ATTEMPTS} wide attacks from seed {seed}")
+            return rebased(e.match)
+    raise RuntimeError(f"no corner in {CORNER_ATTEMPTS} attacks from seed {seed}")

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import tempfile
 from collections import Counter
 from concurrent.futures import ProcessPoolExecutor
@@ -68,20 +69,31 @@ def measure(seed: int) -> dict:
         "shot": any(e["type"] == "shot" and e["team"] == "home" for e in after),
         "lofted": lofted, "flight": (landed - kick["t"]) if (landed and lofted) else None,
         "ready_to_kick": kick["t"] - ready["t"], "out_to_kick": kick["t"] - out["t"],
-        "attack_to_out": out["t"], "attempts": m.seed - corner_seed(seed, 0) + 1, "cause": cause(ev, out),
+        "attack_to_out": out["t"], "attempts": m.seed - corner_seed(seed, 0), "base_t": m.opening_t,
+        "cause": cause(ev, out, frames),
         "end": (kick.get("end_x"), kick.get("end_y")),
     }
 
 
-def cause(ev: list[dict], out: dict) -> str:
+PRESSED_M = 3.0  # design: an attacker this close to the defender as he kicks it counts as pressing him
+
+
+def cause(ev: list[dict], out: dict, frames: list[dict]) -> str:
     """What sent the ball out for the corner: the last kick before it (a home shot or pass, or an
-    away pass or clearance), and whether a defender deflected it on its way."""
+    away pass or clearance, and whether an attacker was pressing him), and whether a defender
+    deflected it on its way."""
     before = [e for e in ev if e["frame"] <= out["frame"] and e is not out]
     kick = next((e for e in reversed(before) if e["type"] in ("pass", "shot")), None)
     if kick is None:
         return "no kick (carried out)"
     if kick["team"] == "away":
-        return "a defender's pass or clearance"
+        f = frames[kick["frame"]]
+        me = next(p for p in f["players"] if p["id"] == kick["player"])
+        near = min(math.hypot(p["x"] - me["x"], p["y"] - me["y"])
+                   for p in f["players"] if p["team"] == "home")
+        how = "headed" if f["ball"]["z"] > FOOT_REACH_Z else "kicked"
+        pressed = "pressed" if near <= PRESSED_M else "unpressed"
+        return f"a defender's pass or clearance, {how}, {pressed}"
     deflected = any(e["type"] == "deflection" and e["team"] == "away" and e["frame"] >= kick["frame"]
                     for e in before)
     how = "deflected by a defender" if deflected else "touched out by a defender"
@@ -104,7 +116,8 @@ def report(rows: list[dict]) -> str:
         "# Corner scenario report",
         "",
         f"`uv run python -m ninety.sim.corner_report --seeds {n}`: seeds 0 to {n - 1}, "
-        f"each a wide attack that play turned into a corner, run on {MINUTES} minutes after it "
+        f"each an attack from a moment open play reached (the home side on the ball in its final "
+        f"third) that play turned into a corner, run on {MINUTES} minutes after it "
         "was given (S9). A report, never a gate (docs/GROUNDING.md, R9).",
         "",
         "| Measure | Result | Published |",
@@ -123,9 +136,9 @@ def report(rows: list[dict]) -> str:
         f"| Lofted delivery, kick to first bounce or touch below 0.15 m | {spread(flights)} | |",
         f"| Ready (set-piece event) to kick | {spread([r['ready_to_kick'] for r in rows])} | |",
         f"| Out of play to kick | {spread([r['out_to_kick'] for r in rows])} | |",
-        f"| Wide attack to the ball going out for the corner | "
+        f"| Opening to the ball going out for the corner | "
         f"{spread([r['attack_to_out'] for r in rows])} | |",
-        f"| Wide attacks played per corner (selection, not a rate) | "
+        f"| Attacks played per corner (selection, not a rate) | "
         f"median {median(r['attempts'] for r in rows):.0f}, most {max(r['attempts'] for r in rows)} | |",
         f"| Distinct delivery end points (to 1 m) | "
         f"{len({(round(x), round(y)) for x, y in (r['end'] for r in rows) if x is not None})} / {n} | |",
