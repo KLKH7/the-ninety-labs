@@ -12,21 +12,44 @@ from __future__ import annotations
 import math
 
 from ninety.sim import ball
-from ninety.sim.body import BODY_RADIUS, CONTROL_M, FOOT_REACH_Z, HAND_REACH_Z
+from ninety.sim.body import (
+    BODY_RADIUS,
+    BRAKE_MAX,
+    COM_SHARE,
+    CONTROL_M,
+    FOOT_REACH_Z,
+    GRAVITY,
+    KEEPER_JUMP_M,
+    KEEPER_STATURE_M,
+    STANDING_REACH_SHARE,
+)
 from ninety.sim.perception import CHOICE_REACTION_S
 
 PITCH_X, PITCH_Y = 105.0, 68.0
 GOAL_HALF_WIDTH = 3.66
 KEEPER_STAND_REACH_M = 1.0  # P11: a keeper's sideways arm reach from the body's centre
-KEEPER_DIVE_EXTRA_M = 0.8  # P11: added as the dive stretches out, hips to fingertips about 1.8 m
-# P15: a dive launches the body sideways about 1.4 to 1.5 m (centre of mass, peak 3.6 to 4.0 m/s)
-# over about half a second (Monteiro et al. 2022, Sci. Rep.; Ibrahim et al. 2019, J. Sports Sci.).
+# P11: his reach envelope. His hands reach anywhere within KEEPER_ARM_M of his centre of mass (the
+# body straight, the arms stretched beyond the head: standing reach less the centre of mass's
+# height), sideways no further yet than his arms have stretched over the dive.
+KEEPER_COM_Z = KEEPER_STATURE_M * COM_SHARE
+KEEPER_ARM_M = KEEPER_STATURE_M * (STANDING_REACH_SHARE - COM_SHARE)
+KEEPER_DIVE_EXTRA_M = KEEPER_ARM_M - KEEPER_STAND_REACH_M  # added as the dive stretches him out
+# P15: keepers start the sideways part of a save before the kick but the upward part only about
+# 245 ms after it, once they see where the ball is going (Higueras-Herbada et al. 2020).
+UP_AFTER_CONTACT_S = 0.245
+SHOT_AIM_Z_M = (0.1, 2.0)  # design: the heights shots are aimed at (engine.shoot)
+# P15: a dive launches the body sideways about 1.4 to 1.5 m (centre of mass, peak 3.6 to 4.0 m/s;
+# Monteiro et al. 2022, Sci. Rep.), pushed off over about 0.48 s of ground contact (Ibrahim et al.
+# 2019, J. Sports Sci.): so it speeds up at about 7.9 m/s², within what legs give (P2), then carries
+# that speed.
 KEEPER_DIVE_TRAVEL_M = 1.45
-DIVE_TIME_S = 0.5
 DIVE_PEAK_MPS = 3.8  # P15: the body's peak sideways speed (3.6 to 4.0)
+DIVE_PUSH_OFF_S = 0.48  # P15: how long the push-off lasts, speeding him up to DIVE_PEAK_MPS
+DIVE_TIME_S = DIVE_PUSH_OFF_S / 2 + KEEPER_DIVE_TRAVEL_M / DIVE_PEAK_MPS  # a full dive: about 0.62 s
 KEEPER_DOWN_S = 0.8  # design, verify: how long a keeper is on the ground after a dive
 SHOT_SPEEDS_KMH = (70.0, 120.0)  # design, verify: the speeds shots are struck at (engine.shoot)
 SHOT_SPEED_SAMPLES = 8  # how finely that range is averaged over
+SHOT_HEIGHT_SAMPLES = 4  # and the heights shots are aimed at
 KEEPER_DEPTH = (1.0, 6.0)  # O1: design, verify: how far off his line he stands
 SHOT_RANGE_M = 40.0  # design: a shot is an option inside this distance of the goal
 KEEPER_DEPTH_STEP_M = 0.5  # O1: design: the depths he weighs, this far apart
@@ -88,9 +111,11 @@ def open_goal_share(x: float, y: float, goal_x: float, keeper: tuple[float, floa
     open_share = 0.0
     for i in range(SHOT_SPEED_SAMPLES):  # over the speeds shots are struck at, not one typical speed
         speed = (lo_kmh + (hi_kmh - lo_kmh) * (i + 0.5) / SHOT_SPEED_SAMPLES) / 3.6
-        half = math.atan2(keeper_reach_m(gap / speed, CHOICE_REACTION_S), max(gap, 1e-6))
-        covered = max(0.0, min(hi, k + half) - max(lo, k - half))
-        open_share += (hi - lo - covered) / (hi - lo) / SHOT_SPEED_SAMPLES
+        for j in range(SHOT_HEIGHT_SAMPLES):  # and the heights they are aimed at: his reach differs
+            z = SHOT_AIM_Z_M[0] + (SHOT_AIM_Z_M[1] - SHOT_AIM_Z_M[0]) * (j + 0.5) / SHOT_HEIGHT_SAMPLES
+            half = math.atan2(keeper_reach_m(gap / speed, CHOICE_REACTION_S, z), max(gap, 1e-6))
+            covered = max(0.0, min(hi, k + half) - max(lo, k - half))
+            open_share += (hi - lo - covered) / (hi - lo) / SHOT_SPEED_SAMPLES / SHOT_HEIGHT_SAMPLES
     return open_share
 
 
@@ -218,13 +243,18 @@ def attacking_slot(role: str, own_goal_x: float, ball_x: float, ball_y: float,
     return own_goal_x + fwd * u, min(PITCH_Y - 2.0, max(2.0, y))
 
 
-def keeper_reach_m(seconds: float, reaction_s: float) -> float:
-    """P11, P15: how far sideways a keeper can stop the ball, `seconds` after it is struck: until he
-    reacts only his body is in the way (as in the engine's contact rule: hands need a reaction);
-    then his standing reach, the dive's stretch and the body's launch over DIVE_TIME_S."""
+def keeper_reach_m(seconds: float, reaction_s: float, z: float) -> float:
+    """P11, P15: how far sideways a keeper can stop a ball at height `z`, `seconds` after it is
+    struck: until he reacts only his body is in the way (as in the engine's contact rule: hands
+    need a reaction); then his hands' reach at that height (reach_for, the engine's own envelope)
+    and the body's launch over DIVE_TIME_S. Nothing, over the top of his envelope."""
     if seconds < reaction_s:
         return BODY_RADIUS + ball.RADIUS
-    return arm_reach_m(seconds - reaction_s) + KEEPER_DIVE_TRAVEL_M * dive_progress(seconds - reaction_s)
+    diving = seconds - reaction_s
+    reach_m, reach_z = reach_for(True, diving, z, seconds - max(reaction_s, UP_AFTER_CONTACT_S))
+    if z > reach_z:
+        return 0.0
+    return reach_m + KEEPER_DIVE_TRAVEL_M * dive_progress(diving)
 
 
 def may_handle(keeper: bool, in_own_box: bool, released_it: bool, back_pass: bool) -> bool:
@@ -234,13 +264,36 @@ def may_handle(keeper: bool, in_own_box: bool, released_it: bool, back_pass: boo
     return keeper and in_own_box and not released_it and not back_pass
 
 
-def reach_for(hands: bool, stretched_s: float) -> tuple[float, float]:
-    """How far and how high a player can reach for the ball: a foot (CONTROL_M, below FOOT_REACH_Z),
-    or a keeper's hands, his arms stretched for `stretched_s` (since he reacted), up to HAND_REACH_Z.
-    One rule for the engine (engine.reach) and the passer's race (decisions.pass_confidence)."""
-    if hands:
-        return arm_reach_m(max(0.0, stretched_s)), HAND_REACH_Z
-    return CONTROL_M, FOOT_REACH_Z
+def reach_for(hands: bool, stretched_s: float, z: float = 0.0, rising_s: float = 0.0
+              ) -> tuple[float, float]:
+    """How far (from the body's centre, across the ground) a player can reach a ball at height `z`,
+    and the highest he can reach at all: a foot (CONTROL_M, below FOOT_REACH_Z), or a keeper's
+    hands (P11, P15). His hands reach within KEEPER_ARM_M of his centre of mass, sideways no further
+    than his arms have stretched since his save began (`stretched_s`). His centre of mass can be
+    as high as his jump has lifted it `rising_s` after it began (UP_AFTER_CONTACT_S after the
+    kick at the soonest), or as low as falling since his save began has dropped it. One rule for
+    the engine (engine.reach, engine.contact), the keeper's dive, the passer's race
+    (decisions.pass_confidence) and the shooter's judgement (keeper_reach_m)."""
+    if not hands:
+        return CONTROL_M, FOOT_REACH_Z
+    stretched = max(0.0, stretched_s)
+    top = KEEPER_COM_Z + jump_rise_m(rising_s)
+    # design: down to the ground (lying on his side it is nearer 0.15 to 0.2 m up; the difference to
+    # his reach across is under 2 cm)
+    low = max(0.0, KEEPER_COM_Z - 0.5 * GRAVITY * stretched * stretched)
+    off = max(z - top, low - z, 0.0)  # how far above or below where his centre of mass can be
+    across = math.sqrt(max(KEEPER_ARM_M * KEEPER_ARM_M - off * off, 0.0))
+    return min(arm_reach_m(stretched), across), top + KEEPER_ARM_M
+
+
+def jump_rise_m(rising_s: float) -> float:
+    """P11: the most his centre of mass can have risen `rising_s` after his jump began: thrown up
+    fast enough to rise KEEPER_JUMP_M, then flying under gravity (at the top he can be no higher)."""
+    if rising_s <= 0:
+        return 0.0
+    up = math.sqrt(2 * GRAVITY * KEEPER_JUMP_M)
+    t = min(rising_s, up / GRAVITY)
+    return up * t - 0.5 * GRAVITY * t * t
 
 
 def arm_reach_m(diving_s: float) -> float:
@@ -251,12 +304,53 @@ def arm_reach_m(diving_s: float) -> float:
 
 def dive_progress(t: float) -> float:
     """P15: the share of a full dive's sideways travel done `t` seconds after it starts: he
-    accelerates to the cited peak speed, then carries it, so that the whole travel takes DIVE_TIME_S
-    (peak 3.8 m/s and 1.45 m in 0.5 s give about 0.24 s of acceleration)."""
-    ramp = 2 * (DIVE_TIME_S - KEEPER_DIVE_TRAVEL_M / DIVE_PEAK_MPS)
+    speeds up to the cited peak speed over the push-off, then carries it (the whole travel takes
+    DIVE_TIME_S)."""
+    ramp = DIVE_PUSH_OFF_S
     t = min(max(t, 0.0), DIVE_TIME_S)
     if t <= ramp:
         done = 0.5 * DIVE_PEAK_MPS / ramp * t * t
     else:
         done = 0.5 * DIVE_PEAK_MPS * ramp + DIVE_PEAK_MPS * (t - ramp)
     return done / KEEPER_DIVE_TRAVEL_M
+
+
+def dive_motion(t: float, v0: float = 0.0) -> tuple[float, float]:
+    """P15: how far (m) and how fast (m/s) the body has gone toward the dive `t` seconds into it,
+    from a sideways speed `v0` toward it when it began. The dive is one push (dive_progress's,
+    speeding him up to DIVE_PEAK_MPS); a run toward the dive is where the push starts from, never
+    lost; a run away from it is first braked as any body brakes (P2), then he pushes."""
+    push = DIVE_PEAK_MPS / _dive_ramp()
+    t = max(t, 0.0)
+    gone = 0.0
+    if v0 < 0:
+        braking = -v0 / BRAKE_MAX
+        if t <= braking:
+            return v0 * t + 0.5 * BRAKE_MAX * t * t, v0 + BRAKE_MAX * t
+        gone, t, v0 = -v0 * v0 / (2 * BRAKE_MAX), t - braking, 0.0
+    top = max(DIVE_PEAK_MPS, v0)
+    pushing = (top - v0) / push
+    if t <= pushing:
+        return gone + v0 * t + 0.5 * push * t * t, v0 + push * t
+    return gone + v0 * pushing + 0.5 * push * pushing * pushing + top * (t - pushing), top
+
+
+def dive_time_to(metres: float, v0: float = 0.0) -> float:
+    """P15: how long into a dive the body has gone `metres` toward it (dive_motion inverted)."""
+    push = DIVE_PEAK_MPS / _dive_ramp()
+    before = 0.0
+    if v0 < 0:
+        before = -v0 / BRAKE_MAX
+        metres += v0 * v0 / (2 * BRAKE_MAX)  # what the braking took him away first
+        v0 = 0.0
+    top = max(DIVE_PEAK_MPS, v0)
+    pushing = (top - v0) / push
+    pushed = v0 * pushing + 0.5 * push * pushing * pushing
+    if metres <= pushed:
+        return before + (math.sqrt(v0 * v0 + 2 * push * metres) - v0) / push
+    return before + pushing + (metres - pushed) / top
+
+
+def _dive_ramp() -> float:
+    """P15: how long the full dive speeds up for: the push-off."""
+    return DIVE_PUSH_OFF_S

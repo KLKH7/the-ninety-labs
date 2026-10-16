@@ -479,9 +479,10 @@ def test_the_keeper_stands_on_the_bisector_of_the_posts_not_the_line_to_the_goal
 def test_before_he_reacts_only_his_body_stops_a_shot_in_the_shooters_judgement_too():
     from ninety.sim import ball
     from ninety.sim.body import BODY_RADIUS
-    assert offball.keeper_reach_m(0.1, 0.36) == BODY_RADIUS + ball.RADIUS
+    z = offball.KEEPER_COM_Z  # where his reach across is widest
+    assert offball.keeper_reach_m(0.1, 0.36, z) == BODY_RADIUS + ball.RADIUS
     full = offball.KEEPER_STAND_REACH_M + offball.KEEPER_DIVE_EXTRA_M + offball.KEEPER_DIVE_TRAVEL_M
-    assert offball.keeper_reach_m(2.0, 0.36) == full
+    assert offball.keeper_reach_m(2.0, 0.36, z) == pytest.approx(full)
 
 
 def test_a_keeper_behind_the_shooter_covers_nothing():
@@ -495,7 +496,7 @@ def test_with_the_ball_almost_on_his_line_the_keeper_stays_on_it_between_the_pos
 
 def test_out_of_shooting_range_the_keeper_sweeps_from_his_furthest_spot():
     depth = lambda d: 105 - offball.keeper_spot(105 - d, 34, 105)[0]  # noqa: E731
-    assert depth(39) < offball.KEEPER_DEPTH[1] == depth(50)
+    assert depth(25) < offball.KEEPER_DEPTH[1] == depth(50)
 
 
 def test_keeper_coverage_has_no_cliff_with_distance():
@@ -519,7 +520,7 @@ def test_the_dive_never_beats_the_cited_peak_speed():
     speeds = [(offball.dive_progress(t + step) - offball.dive_progress(t)) / step * travel
               for t in [i * step for i in range(int(offball.DIVE_TIME_S / step))]]
     peak = max(speeds)
-    assert 3.6 <= peak <= 4.0 and offball.dive_progress(offball.DIVE_TIME_S) == 1.0
+    assert 3.6 <= peak <= 4.0 and offball.dive_progress(offball.DIVE_TIME_S) == pytest.approx(1.0)
 
 
 def test_the_shot_estimate_is_continuous_in_distance_with_the_keeper_off_his_spot():
@@ -680,3 +681,18 @@ def test_a_ball_is_out_only_once_the_whole_of_it_has_crossed_the_line():
                                (50.0, 0.0, 0, -1)):
         assert not D.out_of_play(x + out_x * 0.9 * r, y + out_y * 0.9 * r)  # centre over, ball not
         assert D.out_of_play(x + out_x * 1.1 * r, y + out_y * 1.1 * r)  # the whole ball over
+
+
+def test_nothing_of_the_keeper_reaches_a_ball_over_his_envelope_in_the_shooters_judgement():
+    top = offball.reach_for(True, 2.0, 0.0, 2.0)[1]
+    assert offball.keeper_reach_m(2.0, 0.36, top + 0.1) == 0.0
+    assert offball.keeper_reach_m(2.0, 0.36, top - 0.1) > 0.0
+
+
+def test_the_shooter_judges_the_keeper_over_the_heights_shots_are_aimed_at(monkeypatch):
+    # His reach is widest at his waist: a shooter who weighed only waist-high shots would see less
+    # of the goal open than one who weighs the heights shots are aimed at (P15).
+    shooter, keeper = (75.0, 34.0), (103.0, 34.0)  # far enough out for his arms to have stretched
+    open_share = offball.open_goal_share(*shooter, 105, keeper)
+    monkeypatch.setattr(offball, "SHOT_AIM_Z_M", (offball.KEEPER_COM_Z, offball.KEEPER_COM_Z))
+    assert open_share > offball.open_goal_share(*shooter, 105, keeper)

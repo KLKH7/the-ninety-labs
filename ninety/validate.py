@@ -46,9 +46,10 @@ RESTARTS = {"set_piece", "kickoff"}  # P3: events that put the ball back in play
 TOUCHES = {"pass", "shot", "deflection", "interception", "tackle", "possession_change"}  # P5
 # P14: a touch by someone other than the carrier must be physically possible: the player within
 # reach of the ball, which was not moving away from him. Reach is a foot (1 m) or a diving
-# keeper in his box (1.8 m), plus one frame of the ball's and the player's motion.
+# keeper in his box (1.48 m: P11, his centre of mass to his stretched fingertips), plus one frame of
+# the ball's and the player's motion.
 CONTACTS = {"deflection", "interception"}
-FOOT_REACH_M, KEEPER_REACH_M, FRAME_SLACK_M = 1.0, 1.8, 0.6
+FOOT_REACH_M, KEEPER_REACH_M, FRAME_SLACK_M = 1.0, 1.48, 0.6
 # P5: the goal frame (Law 1: posts 7.32 m apart, bar 2.44 m high) is a contact too; a ball
 # within this distance of it may rebound without an event.
 WOODWORK_NEAR_M = 0.6
