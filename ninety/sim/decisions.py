@@ -704,6 +704,37 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
     return total * (0.8 if age > STALE_S else 1.0)
 
 
+def lane_chance(sx: float, sy: float, tx: float, ty: float, opponents) -> float:
+    """D1, the same race at its simplest, for a pass a team-mate could play next: the ball at a
+    pass's average speed against the soonest opponent (an average body from standing, after
+    reacting) to any point of the lane, softened by LANE_MARGIN_S. No kick error, no first touch:
+    a cheap look one pass ahead, not the full estimate."""
+    length = math.hypot(tx - sx, ty - sy)
+    margin = math.inf
+    for ox, oy in opponents:
+        d, s = closest_on_segment(ox, oy, sx, sy, tx, ty)
+        margin = min(margin, generic_time(max(0.0, d - CONTROL_M)) - s * length / PASS_SPEED_EST_MPS)
+    return 1.0 if margin == math.inf else sigmoid(margin / LANE_MARGIN_S)
+
+
+def next_pass_value(scene: Scene, rx: float, ry: float, receiver: str | None) -> float:
+    """D1, one pass ahead: what a team-mate receiving at (rx, ry) could do next, his best pass to
+    another team-mate (not back to the passer), valued as any pass is: the chance it arrives times
+    what the ball is worth there, less what losing it would cost. Opponents where the passer sees
+    them now."""
+    best = -math.inf
+    for mid, mx, my, *_ in scene.mates:
+        if mid == receiver:
+            continue
+        d = math.hypot(mx - rx, my - ry)
+        if d < 4 or d > MAX_PASS_M:
+            continue
+        p = lane_chance(rx, ry, mx, my, scene.opponents)
+        lost = max(loss_cost((rx + mx) / 2, (ry + my) / 2, scene.goal_x), loss_cost(mx, my, scene.goal_x))
+        best = max(best, p * value(mx, my, scene.goal_x, scene.opponents, scene.keeper) - (1 - p) * lost)
+    return best
+
+
 def pass_option(scene: Scene, mate: tuple[str, float, float, float]) -> Option | None:
     mid, mx, my, age, *moving = mate
     # O7: into the space he is running into, by the velocity the passer has seen; a team-mate
@@ -721,6 +752,8 @@ def pass_option(scene: Scene, mate: tuple[str, float, float, float]) -> Option |
     gain = value(tx, ty, scene.goal_x, scene.opponents, scene.keeper)
     space = min((math.hypot(ox - tx, oy - ty) for ox, oy in scene.opponents), default=10.0)
     gain *= 0.7 + 0.3 * min(1.0, space / 5.0)  # a receiver with space can do more with it
+    # D1, one pass ahead: the ball there is worth at least what he can do with it next.
+    gain = max(gain, next_pass_value(scene, tx, ty, mid))
     # A pass that fails is lost along the lane or runs on to where it was aimed: the worse of the two.
     mx_, my_ = (scene.x + tx) / 2, (scene.y + ty) / 2
     lost = max(loss_cost(mx_, my_, scene.goal_x), loss_cost(tx, ty, scene.goal_x))
