@@ -471,7 +471,10 @@ def test_the_engine_uses_the_attacking_shape_with_the_ball():
     e.brains["home"].in_possession = True
     e.possessor = None  # a pass in flight: the shape still holds
     e.ball = (50.0, 34.0, 0.0, 0.0, 0.0, 0.0)
-    want = offball.attacking_slot("RB", 0.0, 50.0, 34.0, e.brains["away"].line_x)
+    from ninety.sim import roles
+    role, style = roles.role_of(p.profile.archetype), roles.STYLES[e.brains["home"].build_up]
+    want = offball.attacking_slot("RB", 0.0, 50.0, 34.0, e.brains["away"].line_x,
+                                  role.forward_m + style.forward_m, role.inside_m - style.width_m)
     assert e.shape_target(p)[:2] == want
 
 

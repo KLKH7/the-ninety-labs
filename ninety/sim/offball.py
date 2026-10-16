@@ -187,7 +187,8 @@ BOX_RUNS = {"ST": (99.0, 4.0), "far_winger": (98.0, -7.0), "RCM": (88.0, 0.0)}  
 
 
 def attacking_slot(role: str, own_goal_x: float, ball_x: float, ball_y: float,
-                   last_line_x: float) -> tuple[float, float] | None:
+                   last_line_x: float, forward_m: float = 0.0, inside_m: float = 0.0
+                   ) -> tuple[float, float] | None:
     # `last_line_x`: the furthest a player of this side may stand and be onside, as he sees it.
     """O6: where this role stands while his team has the ball. Heights follow the ball; attackers
     stand on the opponents' last line (onside); with the ball wide in the final third, the striker,
@@ -209,11 +210,14 @@ def attacking_slot(role: str, own_goal_x: float, ball_x: float, ball_y: float,
             u = min(u, max(last_u, ball_u))  # L10: he waits onside for the delivery
             return own_goal_x + fwd * u, PITCH_Y / 2 + ball_side * side
     behind, width = shape
+    # His role and his team's build-up style (roles.py): higher or deeper, nearer the centre or wider.
     if behind is None:
-        u = max(min(last_u, ball_u + 25.0), ball_u - 5.0)
+        u = min(max(min(last_u, ball_u + 25.0), ball_u - 5.0) + min(forward_m, 0.0), last_u)
     else:
-        u = ball_u - behind
+        u = min(ball_u - behind + forward_m, max(last_u, ball_u))  # L10: never beyond the last line
     u = min(PITCH_X - 3.0, max(DEEPEST_M, u))
+    side = 1.0 if width > 0 else -1.0 if width < 0 else 0.0
+    width = width - side * inside_m if side else width
     y = PITCH_Y / 2 + across * width + (ball_y - PITCH_Y / 2) * BALL_SIDE_IN_POSSESSION
     return own_goal_x + fwd * u, min(PITCH_Y - 2.0, max(2.0, y))
 

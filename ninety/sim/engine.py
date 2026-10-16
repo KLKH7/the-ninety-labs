@@ -19,7 +19,7 @@ import math
 import random
 from dataclasses import dataclass, field
 
-from ninety.sim import ball, decisions, offball, perception, profiles
+from ninety.sim import ball, decisions, offball, perception, profiles, roles
 from ninety.sim import team as team_mod
 from ninety.sim.body import (
     BODY_HEIGHT,
@@ -255,6 +255,9 @@ class Engine:
         style = random.Random(f"{seed}-style")
         self.brains = {team: TeamBrain(team, block=style.choice(sorted(team_mod.BLOCKS)))
                        for team in ("home", "away")}
+        build_up = random.Random(f"{seed}-build-up")  # T4: its own stream too (design: equally likely)
+        for brain in self.brains.values():
+            brain.build_up = build_up.choice(sorted(roles.STYLES))
         self.ball: ball.State = (PITCH_X / 2, PITCH_Y / 2, 0.0, 0.0, 0.0, 0.0)
         self.possessor: str | None = None
         self.last_touch: str | None = None
@@ -1143,6 +1146,9 @@ class Engine:
             run = self.run_target(p, carrier, brain)
             if run:
                 return *run, SPRINT
+            drop = self.drop_target(p, carrier)
+            if drop:
+                return *drop, self.in_time(p, *drop)
             mates = sorted((q for q in self.players if q.team == p.team and q.id not in (carrier.id,)
                             and q.role != "GK"), key=lambda q: math.hypot(q.x - carrier.x, q.y - carrier.y))
             if p in mates[:2]:  # O3: the nearest two offer a diagonal option
@@ -1154,8 +1160,10 @@ class Engine:
             seen = [w for w in (self.beliefs[p.id].where(q.id, self.t) for q in self.players
                                 if q.team != p.team) if w]
             onside = self.onside_limit(p.team, seen, bx)  # L10: as far as he sees he may go
+            role, style = roles.role_of(p.profile.archetype), roles.STYLES[brain.build_up]
             spot = offball.attacking_slot(p.role, PITCH_X - goal_x(p.team), clamp(bx, 0, PITCH_X),
-                                          clamp(by, 0, PITCH_Y), onside)
+                                          clamp(by, 0, PITCH_Y), onside, role.forward_m + style.forward_m,
+                                          role.inside_m - style.width_m)
             if spot:
                 return *spot, self.in_time(p, *spot)
         if not brain.in_possession and p.role != "GK":
@@ -1232,15 +1240,23 @@ class Engine:
                 brain.markers = {}
 
     def run_target(self, p: Player, carrier: Player, brain: TeamBrain) -> tuple[float, float] | None:
-        """O4: forwards (and anyone who likes to) run in behind when the carrier has the ball
-        under control, facing forward and not pressed, while they are onside."""
+        """O4, O9: the run his role makes (roles.py) when the carrier can play one: in behind the
+        last line, a diagonal from wide into the half-space, an overlap beyond the ball on his
+        flank, or a late run into the box once the ball is in the final third. Only while he is
+        onside, only with the ball under control, facing forward and not pressed, and only for
+        the duties his team's build-up style sends forward."""
         if p.id in self.runs:
             x, y, started = self.runs[p.id]
             if self.t - started < 3.0:
                 return x, y
             del self.runs[p.id]
-        likes = "runs_in_behind" in p.profile.traits
-        if p.role not in ("ST", "RW", "LW") and not likes:
+        role, style = roles.role_of(p.profile.archetype), roles.STYLES[brain.build_up]
+        kinds = set(role.runs) - {"drop"}
+        if "runs_in_behind" in p.profile.traits:
+            kinds.add("in_behind")
+        elif not kinds and p.role in ("ST", "RW", "LW"):
+            kinds.add("in_behind")  # a forward's default run
+        if not kinds or (role.duty not in style.run_duties and "runs_in_behind" not in p.profile.traits):
             return None
         settled = self.t >= self.hold_until
         nearest = min(math.hypot(q.x - carrier.x, q.y - carrier.y) for q in self.players if q.team != p.team)
@@ -1250,11 +1266,40 @@ class Engine:
                                            if q.team != p.team) if w), key=lambda x: -attack_dir(p.team) * x)
         second_last = defenders[1] if len(defenders) > 1 else PITCH_X - goal_x(p.team)
         onside = (second_last - p.x) * attack_dir(p.team) >= 0
+        if not (can_play and onside):
+            return None
+        fwd, gx = attack_dir(p.team), goal_x(p.team)
+        ball_u = (carrier.x - (PITCH_X - gx)) * fwd  # metres from his own goal line
         their_line = self.brains[other(p.team)].line_x
-        spot = offball.run_in_behind((p.x, p.y), their_line, goal_x(p.team), can_play, onside)
+        spot = None
+        if "overlap" in kinds and abs(carrier.y - p.ay) < roles.OVERLAP_FLANK_M \
+                and (carrier.x - p.x) * fwd > 0 and ball_u > PITCH_X / 3:
+            side = 1.0 if p.ay > PITCH_Y / 2 else -1.0
+            spot = (clamp(carrier.x + fwd * roles.OVERLAP_AHEAD_M, 1.0, PITCH_X - 1.0),
+                    PITCH_Y / 2 + side * (PITCH_Y / 2 - roles.OVERLAP_TOUCHLINE_M))
+        elif "late" in kinds and ball_u > offball.FINAL_THIRD_M:
+            spot = gx - fwd * roles.LATE_RUN_DEPTH_M, clamp(carrier.y, PITCH_Y / 2 - 4, PITCH_Y / 2 + 4)
+        elif "diagonal" in kinds:
+            behind = offball.run_in_behind((p.x, p.y), their_line, gx, can_play, onside)
+            if behind:
+                side = 1.0 if p.y > PITCH_Y / 2 else -1.0
+                spot = behind[0], PITCH_Y / 2 + side * roles.DIAGONAL_HALF_SPACE_M
+        elif "in_behind" in kinds:
+            spot = offball.run_in_behind((p.x, p.y), their_line, gx, can_play, onside)
         if spot:
             self.runs[p.id] = (*spot, self.t)
         return spot
+
+    def drop_target(self, p: Player, carrier: Player) -> tuple[float, float] | None:
+        """O9: a deep-lying playmaker or a target forward comes short to receive while his team
+        builds from its own half: in front of the ball, toward the centre (roles.py)."""
+        if "drop" not in roles.role_of(p.profile.archetype).runs:
+            return None
+        fwd = attack_dir(p.team)
+        if (carrier.x - (PITCH_X - goal_x(p.team))) * fwd > PITCH_X / 2:
+            return None
+        return (clamp(carrier.x + fwd * roles.DROP_AHEAD_M, 1.0, PITCH_X - 1.0),
+                (carrier.y + PITCH_Y / 2) / 2)
 
     def stretch_from(self, p: Player) -> float:
         """When the keeper's arms began to stretch: when his dive began to be prepared (his reaction
