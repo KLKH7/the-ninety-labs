@@ -1059,6 +1059,16 @@ def test_the_throw_in_ends_when_the_ball_leaves_his_hands_any_way_at_all():
     e.restart.ready_at = e.t
     e.tick_restart()
     assert e.throw_by == taker.id
+    opp = e.by_id["a6"]
+    opp.x, opp.y = 50.6, 1.0  # beside him while he holds it
+    e.may_commit = lambda *a: True  # he would go in if he could
+    rng = e.rng.random
+    e.rng.random = lambda: 0.0
+    for _ in range(10):
+        e.duels()
+        e.frame += 1
+    assert opp.id not in e.lunges  # Law 15: no challenge for a ball still in his hands
+    e.rng.random = rng
     e.possessor = None  # poked out of his hands before he threw it
     e.step()
     assert e.throw_by is None
@@ -1124,6 +1134,7 @@ def test_a_free_kick_he_chooses_to_dribble_is_touched_on_from_its_spot():
         assert (e.ball[0], e.ball[1]) == spot  # on its spot until he touches it
     assert e.possessor != taker.id and e.dribbler == taker.id  # touched on: a kick, so in play
     assert e.dead_ball is None and e.ball[3] > 0  # going upfield
+    assert e.from_restart is None  # Law 11: only the restart's own kick is exempt; this touch was it
     assert abs(D.turn_deg(0.0, taker.heading)) <= math.degrees(D.STRIKE_FACING)  # facing it (P16)
 
 
@@ -1173,6 +1184,31 @@ def test_a_throw_in_through_the_match_loop_stays_in_his_hands_until_he_throws_it
         assert e.throw_by == taker.id
         assert abs(e.ball[0] - taker.x) < 0.1 and abs(e.ball[1] - taker.y) < 0.1  # in his hands
     assert e.match.events[-1]["type"] == "pass" and e.match.events[-1]["player"] == taker.id
+
+
+def test_at_a_kick_off_everyone_stays_in_his_half_until_the_ball_is_kicked():
+    """Law 8: placed on the centre mark, the kick-off holds while the taker turns to play it."""
+    import math
+
+    e = Engine(1)
+    still(e)
+    e.possessor = None
+    e.stop("kick_off", "home", (52.5, 34.0))
+    taker = e.by_id[e.restart.taker]
+    taker.x, taker.y, taker.heading = 52.5, 34.0, math.pi / 2  # facing a touchline
+    e.restart.ready_at = e.t
+    e.tick_restart()
+    e.turn_to(taker, 40.0, 34.0, lambda: e.pass_to(taker, 40.0, 34.0, lofted=False))  # back to a team-mate
+    held = 0
+    for _ in range(2 * 25):
+        if not e.placed:
+            break
+        held += 1
+        for q in e.players:
+            if q is not taker:
+                assert e.shape_target(q)[:2] == e.kickoff_spot(q, "home")
+        e.step()
+    assert held > 1 and not e.placed  # it held while he turned, then he kicked it
 
 
 def test_a_throw_in_is_meant_for_the_team_mate_it_is_thrown_to():
