@@ -20,7 +20,35 @@ licence must be one of those three (see `AGENTS.md`).
 |---|---|---|
 | `ninety/sim/data/expected_threat_12x8.json` | what having the ball in each area is worth (GROUNDING D9) | Expected Threat grid by Karun Singh, file open_xt_12x8_v1 (karun.in). Its licence is not stated: *verify* before release, or replace it with a grid measured from open event data |
 
-Planned, added when first used: RF-DETR (Apache-2.0 sizes only), supervision (MIT).
+## Vision group (`uv sync --group vision`)
+
+The detector's dependencies are in the optional `vision` group, so `uv sync` and CI do not
+download PyTorch. rfdetr is pinned to one exact version; we use only RF-DETR Small, whose weights
+are Apache-2.0. The PML-1.0 sizes (Atto, Femto, Pico, XL, 2XL) live in `rfdetr_plus`, which we
+never install (it comes only with the `rfdetr[plus]` extra).
+
+| Package | Used for | Licence |
+|---|---|---|
+| rfdetr 1.11.2, RF-DETR Small weights | object detection | Apache-2.0 |
+| torch, torchvision | neural network runtime | BSD-3-Clause |
+| transformers, huggingface-hub, tokenizers, safetensors, hf-xet | model backbone and weight loading | Apache-2.0 |
+| supervision | detection utilities | MIT |
+| pydeprecate, requests, cuda-bindings, cuda-pathfinder | rfdetr and torch internals | Apache-2.0 |
+| python-dateutil | matplotlib | Apache-2.0 or BSD-3-Clause |
+| numpy, scipy, sympy, mpmath, networkx, fsspec, jinja2, markupsafe, contourpy, cycler, kiwisolver, pygments | numerics and torch internals | BSD |
+| triton, typer, rich, markdown-it-py, mdurl, annotated-doc, filelock, pyparsing, fonttools, six, setuptools | torch (Linux) and CLI internals | MIT |
+
+These come in with the vision group under other permissive licences, outside the three named
+above. None is copyleft for our code; they are listed so nothing is hidden.
+
+| Package | Pulled in by | Licence |
+|---|---|---|
+| tqdm | rfdetr, transformers | MPL-2.0 AND MIT |
+| matplotlib, defusedxml | supervision | PSF |
+| pillow | supervision, torchvision | MIT-CMU |
+| shellingham | typer | ISC |
+| av | supervision | BSD-3-Clause; its wheels bundle FFmpeg (LGPL-2.1), used unmodified |
+| nvidia-* CUDA libraries, cuda-toolkit (Linux only) | torch | NVIDIA proprietary, free to redistribute |
 
 ## Algorithms adapted, not dependencies
 
