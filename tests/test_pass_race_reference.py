@@ -78,8 +78,9 @@ def reference(scene, tx, ty, mx, my, age, lofted, pace, receiver):
         if taker is None:
             continue
         if offball.headed(False, points[at][2]):  # he lets it drop if he gets it at his feet first
-            t_f, i_f = ref_reach(points, rests, t_end, sx, sy, ux, uy, *taker[:5], math.inf, None, False,
-                                 heads=False)
+            # within the engine's own horizon for letting it drop (engine.goes_up)
+            t_f, i_f = ref_reach(points, rests, t_end, sx, sy, ux, uy, *taker[:5], take + D.DROP_HORIZON_S,
+                                 None, False, heads=False)
             if t_f < math.inf and all(
                     ref_reach(points, rests, t_end, sx, sy, ux, uy, ox + ovx * wait, oy + ovy * wait,
                               ovx, ovy, react, t_f, scene.goal_x if keeper else None, False)[0] > t_f

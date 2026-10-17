@@ -70,7 +70,7 @@ STALE_S = 2.0  # design: a team-mate not seen for this long is a less certain op
 LUNGE_REACH_M = 1.8  # a foot (1 m) plus a step
 LUNGE_S = 0.3  # time for an average tackler's foot to reach the ball from the edge of that reach
 DRIBBLE_STEP_M = 6.0
-MAX_PASS_M = 45.0
+MIN_PASS_M, MAX_PASS_M = 4.0, 45.0  # a pass is a choice only between these lengths
 PASS_SPEED_EST_MPS = 14.0  # design: a passer's rough guess of a pass's average speed, to lead a runner
 LEAD_MAX_S = 2.0  # design: and he leads him by at most this long
 LOFT_FROM_M = 15.0  # design: shorter than this, a pass is played along the ground
@@ -815,19 +815,25 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
     return total * (0.8 if age > STALE_S else 1.0)
 
 
-def pass_option(scene: Scene, mate: tuple[str, float, float, float]) -> Option | None:
-    mid, mx, my, age, *moving = mate
-    # O7: into the space he is running into, by the velocity the passer has seen; a team-mate
-    # standing still gets it a step ahead, toward goal.
-    dist0 = math.hypot(mx - scene.x, my - scene.y)
+def lead_target(x: float, y: float, goal_x: float, mate: tuple) -> tuple[float, float]:
+    """O7: where a pass from (x, y) to this team-mate (as the passer sees him) is aimed: into the
+    space he is running into, by the velocity the passer believes he has; a team-mate standing
+    still gets it a step ahead, toward goal. The same rule when he decides and when he strikes."""
+    _, mx, my, _, *moving = mate
+    dist0 = math.hypot(mx - x, my - y)
     if moving and math.hypot(*moving) > 1.0:
         t_est = min(LEAD_MAX_S, dist0 / PASS_SPEED_EST_MPS)
         lx, ly = moving[0] * t_est, moving[1] * t_est
     else:
-        lx, ly = 1.5 * attack(scene.goal_x), 0.0
-    tx, ty = min(PITCH_X - 1, max(1.0, mx + lx)), min(PITCH_Y - 1, max(1.0, my + ly))
+        lx, ly = 1.5 * attack(goal_x), 0.0
+    return min(PITCH_X - 1, max(1.0, mx + lx)), min(PITCH_Y - 1, max(1.0, my + ly))
+
+
+def pass_option(scene: Scene, mate: tuple[str, float, float, float]) -> Option | None:
+    mid, mx, my, age, *_ = mate
+    tx, ty = lead_target(scene.x, scene.y, scene.goal_x, mate)
     dist = math.hypot(tx - scene.x, ty - scene.y)
-    if dist < 4 or dist > MAX_PASS_M:
+    if not MIN_PASS_M <= dist <= MAX_PASS_M:
         return None
     gain = value(tx, ty, scene.goal_x, scene.opponents, scene.keeper)
     space = min((math.hypot(ox - tx, oy - ty) for ox, oy in scene.opponents), default=10.0)
