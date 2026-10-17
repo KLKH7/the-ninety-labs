@@ -132,7 +132,7 @@ def team_strength(rng: random.Random) -> float:
 # (a slower ball drops more), so the launch angle's spread is what is left once the engine's own
 # speed spread (SPEED_ERROR) has taken its share, both through the ball's own flight to the target:
 # about 2.3 degrees on the preferred foot. The weaker foot follows its own ellipse the same way
-# (about 1.34 across, 1.4 up and down), derived at the preferred foot's reference speed although the
+# (about 1.34 across, 1.45 up and down), derived at the preferred foot's reference speed although the
 # weaker foot strikes slower (design). Both grow the same way with the strike (design: one ellipse,
 # scaled).
 KICK_ELLIPSE_95_M = {"preferred": (4.08, 1.91), "weaker": (5.60, 2.28)}
