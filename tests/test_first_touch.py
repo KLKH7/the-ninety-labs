@@ -158,3 +158,26 @@ def test_the_passer_judges_the_touch_by_the_engines_rule(z):
     assert firsttouch.at_feet(firsttouch.residual(edge - 0.01, absorb))
     assert not firsttouch.at_feet(firsttouch.residual(edge + 0.01, absorb))
     assert firsttouch.kept_estimate(edge, absorb, D.CONTROL_MARGIN_MPS) == pytest.approx(0.5)
+
+
+def test_a_pass_a_team_mate_plays_ends_with_him_even_when_his_heavy_touch_is_lost():
+    # The pass reached him: it is completed where he touched it. a4 winning the loose ball after is
+    # a new event, never the pass's end (C7: a pass ends before anything else happens to the ball).
+    e = scene(("h8", "a4"))
+    p, rival = e.by_id["h8"], e.by_id["a4"]
+    p.x, p.y, p.heading = 50.0, 34.0, math.pi
+    p.profile.attributes["first_touch"] = 0.0
+    sent = e.emit("pass", "home", 30.0, 34.0, player="h2")
+    e.kicked, e.intended = sent, "h8"
+    arrive(e, "h8", 20.0, 0.0)
+    assert e.dribbler == "h8"
+    assert sent["outcome"] == "success" and sent["receiver"] == "h8"
+    assert math.hypot(sent["end_x"] - p.x, sent["end_y"] - p.y) < 1.5
+    bx, by, _, vx, vy, _ = e.ball
+    n = math.hypot(vx, vy)
+    rival.x, rival.y = bx + 6.0 * vx / n, by + 6.0 * vy / n
+    for _ in range(int(3.0 / DT)):
+        e.step()
+        if e.possessor:
+            break
+    assert e.possessor == "a4" and sent["receiver"] == "h8"

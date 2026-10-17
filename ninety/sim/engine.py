@@ -1031,6 +1031,14 @@ class Engine:
         is back on it after TOUCH_GAP_S, as a dribbling touch does (D6). Who has it then is the race.
         Everyone else reacts to it as a new touch. It is a deflection in the data (DATA_CONTRACT: a
         heavy touch that leaves the ball free)."""
+        k = self.kicked
+        if k and k["type"] == "pass" and k["team"] == p.team:
+            # A team-mate played it on purpose: the pass reached him there, completed (back to the
+            # passer, it was not). Losing a heavy touch afterwards is a new event, not the pass's.
+            done = p.id != k["player"]
+            k.update(receiver=p.id if done else None, end_x=round(cx, 2), end_y=round(cy, 2),
+                     outcome="success" if done else "fail")
+            self.kicked = None
         self.last_deflection = self.emit("deflection", p.team, cx, cy, player=p.id)
         start = (cx, cy, cz, sent[0], sent[1], 0.0)
         self.ball = ball.step(start, left) if left > 1e-9 else start
