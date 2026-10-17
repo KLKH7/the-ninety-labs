@@ -42,7 +42,10 @@ def cases(seed: int, minutes: float) -> list[dict]:
     events = events_in(seed, minutes, 1, int(minutes) + 1)
     extended = events_in(seed, max(minutes, 90), 1, int(max(minutes, 90)) + 1)
     done = [e for e in events if e["type"] == "pass" and e.get("outcome") == "success" and "distance_m" in e]
-    failed = [e for e in events if e["type"] == "pass" and e.get("outcome") == "fail" and "distance_m" in e]
+    # A failed pass an opponent reached: its `receiver` is that opponent, so a claim built on it can
+    # name him. One that went out or back to nobody has no receiver to format.
+    failed = [e for e in events if e["type"] == "pass" and e.get("outcome") == "fail" and "distance_m" in e
+              and "receiver" in e]
     tackles = [e for e in events if e["type"] == "tackle"]
     shots = [e for e in events if e["type"] == "shot" and e.get("outcome") != "goal"]
     # Long-range and fast shots are rare in 30 minutes, so the shot tone kinds read the full match,

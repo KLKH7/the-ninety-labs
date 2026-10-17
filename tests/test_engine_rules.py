@@ -3,22 +3,30 @@ the passer believes, keepers only anticipate shots, pressers stand goal-side, an
 
 import math
 import random
+from collections import defaultdict
 from statistics import mean, pstdev
 
 import pytest
 
 from ninety.sim import ball, offball, perception, shape
-from ninety.sim.body import TURN_RATE
+from ninety.sim.body import BRAKE_MAX, STRIKE_FACING, TURN_RATE
+from ninety.sim.body import move as move_body
 from ninety.sim.engine import (
     AERIAL_ABSORB,
     BODY_RESTITUTION,
+    COVER_BEHIND_M,
     DT,
+    FPS,
     MISCONTROL_KEEP,
-    PRESS_GAP_M,
+    RESTART_DELAY_S,
     Engine,
+    simulate,
+    throw_hands,
     throw_stand,
 )
 from ninety.sim.profiles import FOOT_ABSORB_MPS, MAX_STRIKE_MPS
+from ninety.sim.style import Style
+from ninety.validate import check_physics
 
 
 def still(e: Engine) -> None:
@@ -94,9 +102,28 @@ def test_a_keeper_reacts_to_the_ball_like_anyone_and_reads_only_shots_at_his_goa
     assert e.read is None
 
 
+def test_the_cover_stands_goal_side_of_the_ball_at_the_cover_distance():
+    """T3: the second player covers 8 m behind the presser, goal-side of the ball (the constant
+    was once shadowed by the 10 m commit-with-cover radius of D8)."""
+    for team in ("home", "away"):
+        e = Engine(1, styles={team: Style()})  # a mid style: engages at 60 m from its goal (T3)
+        still(e)
+        carrier = next(p for p in e.players if p.team != team and p.role == "CM")
+        presser = next(p for p in e.players if p.team == team and p.role == "CM")
+        cover = next(p for p in e.players if p.team == team and p.role == "RCM")
+        carrier.x, carrier.y = 52.0, 34.0
+        presser.x, presser.y = 55.0 if team == "away" else 49.0, 34.0
+        e.ball = (52.0, 34.0, 0.0, 0.0, 0.0, 0.0)
+        e.possessor = carrier.id
+        brain = e.brains[team]
+        brain.in_possession, brain.pressers, brain.markers = False, [presser.id, cover.id], {}
+        tx, ty, _ = e.shape_target(cover)
+        assert math.isclose(math.hypot(tx - 52.0, ty - 34.0), COVER_BEHIND_M, abs_tol=0.01)
+
+
 def test_the_presser_stands_goal_side_for_both_teams():
     for team, defends_x in (("home", 0.0), ("away", 105.0)):
-        e = Engine(1)
+        e = Engine(1, styles={team: Style()})  # a mid style: engages at 60 m from its goal (T3)
         still(e)
         carrier = next(p for p in e.players if p.team != team and p.role == "CM")
         presser = next(p for p in e.players if p.team == team and p.role == "CM")
@@ -105,10 +132,9 @@ def test_the_presser_stands_goal_side_for_both_teams():
         e.ball = (52.0, 34.0, 0.0, 0.0, 0.0, 0.0)
         e.possessor = carrier.id
         brain = e.brains[team]
-        brain.block = "mid"  # engages at halfway
         brain.in_possession, brain.pressers = False, [presser.id]
         tx, _, _ = e.shape_target(presser)
-        assert math.isclose(abs(tx - 52.0), PRESS_GAP_M, abs_tol=0.01)
+        assert math.isclose(abs(tx - 52.0), brain.press_gap_m, abs_tol=0.01)
         assert abs(tx - defends_x) < abs(52.0 - defends_x)  # between the ball and his own goal
 
 
@@ -236,7 +262,7 @@ def test_a_throw_in_is_always_thrown_even_with_nobody_free():
     e.possessor = None
     e.stop("throw_in", "home", (50.0, 0.0))
     taker = e.by_id[e.restart.taker]
-    taker.x, taker.y = 50.0, 0.0
+    taker.x, taker.y = throw_stand(50.0, 0.0)  # he has run to his spot behind the line
     e.restart.ready_at = e.t
     e.tick_restart()
     assert e.throw_by == taker.id
@@ -1441,7 +1467,8 @@ def test_a_thrower_turns_to_face_the_field_no_faster_than_a_body_turns_then_thro
             break
         e.t += DT
         e.frame += 1
-    assert thrown is not None and math.sin(thrown) > 0  # Law 15: thrown facing the field
+    assert thrown is not None  # Law 15: thrown facing the field, within the P16 strike angle of it
+    assert math.cos(thrown - math.pi / 2) >= math.cos(STRIKE_FACING) - 1e-9
     assert hands == [True]  # with both hands
 
 
@@ -1480,3 +1507,165 @@ def test_a_throw_has_no_kicking_side_so_where_he_faces_does_not_change_it():
         kicked.append(e.execute(p, 0.0, 10.0, 4.0, "passing"))
     assert thrown[0] == thrown[1]
     assert kicked[0] != kicked[1]  # a kick does depend on it (P13)
+
+
+def test_a_throw_taken_from_a_restart_and_never_entering_is_retaken_where_it_was_awarded():
+    e = Engine(1)
+    still(e)
+    e.possessor = None
+    e.stop("throw_in", "home", (40.0, 0.0))
+    taker = e.by_id[e.restart.taker]
+    taker.x, taker.y = throw_stand(40.0, 0.0)
+    e.restart.ready_at = e.t
+    e.tick_restart()  # placed: the throw is awarded at x = 40
+    # Released backwards and drifting along the line, away from where it was awarded.
+    e.possessor, e.last_touch, e.into_play = None, taker.id, True
+    e.ball = (41.3, -0.45, 1.9, 1.0, -4.0, 0.5)
+    assert e.went_out((41.26, -0.29, 1.88, 1.0, -4.0, 0.6))
+    r = e.restart
+    assert (r.kind, r.team, r.taker, r.x, r.y) == ("throw_in", "home", taker.id, 40.0, 0.0)
+    assert not e.into_play
+
+
+def test_a_throw_in_taker_runs_to_his_spot_and_stops_there():
+    """Lesson 5: the taker was once moved the last metre to his spot in one frame (22 m/s) and
+    stopped dead with the ball. The match must contain a throw-in, so the case is exercised; a
+    short clip with no restart would pass whatever the engine did."""
+    m = simulate(7, 6)
+    assert any(p["action"] == "throw" for fr in m.frames for p in fr["players"])
+    problems = defaultdict(list)
+    check_physics(m.events, m.frames, FPS, m.roster, problems)
+    assert not problems.get("P1 player speed") and not problems.get("P2 player acceleration"), dict(problems)
+
+
+def throw_in_scene() -> tuple[Engine, object, object]:
+    """Home's h9 holds the ball for a throw-in on the near touchline; away's a5 is within lunge
+    reach with a team-mate covering goal-side, so in open play he could commit (D8)."""
+    e = Engine(1)
+    still(e)
+    thrower, defender, cover = e.by_id["h9"], e.by_id["a5"], e.by_id["a3"]
+    thrower.x, thrower.y = 56.1, -0.45
+    defender.x, defender.y = 56.6, 0.4
+    cover.x, cover.y = 60.0, 4.0
+    e.restart, e.possessor, e.dribbler, e.throw_by = None, thrower.id, None, thrower.id
+    e.ball = (*throw_hands(thrower.x, thrower.y), 0.0, 0.0, 0.0)
+    e.hold_until = e.t + 99.0
+    return e, thrower, defender
+
+
+def test_nobody_challenges_a_ball_held_for_a_throw_in():
+    """Law 15: the ball is not in play until it is thrown."""
+    e, _, defender = throw_in_scene()
+    defender.profile.attributes["aggression"] = 1.0
+    for frame in range(60):
+        e.frame = frame
+        e.duels()
+    assert defender.id not in e.lunges
+
+
+def test_a_lunge_that_arrives_during_a_throw_in_finds_nothing():
+    e, thrower, defender = throw_in_scene()
+    held = e.ball
+    # Defence in depth: a lunge lasts under 0.5 s and a restart takes at least 1 s, so play should
+    # never produce this; if it did, the held ball must still be safe.
+    e.lunges[defender.id] = e.t
+    e.duels()
+    assert e.possessor == thrower.id and e.ball == held
+    assert not any(ev["type"] == "tackle" for ev in e.match.events)
+
+
+def test_a_dribbler_whose_touch_went_out_still_takes_the_throw_in():
+    """His touch ran over the line, so the ball is dead and his dribble is over; he runs to his
+    spot behind the line like any thrower. (He once kept chasing his touch, which a target held
+    on the pitch never let him leave, so the restart never came.)"""
+    e = Engine(1)
+    still(e)
+    taker = e.by_id["h9"]
+    taker.x, taker.y = 50.0, 2.0
+    e.possessor, e.dribbler = None, taker.id
+    e.ball = (50.0, -1.0, 0.0, 0.0, 0.0, 0.0)
+    e.stop("throw_in", "home", (50.0, 0.0), taker=taker.id)
+    for _ in range(int((RESTART_DELAY_S["throw_in"][1] + 10) / DT)):  # the sourced delay, then his run
+        e.step()
+        if e.restart is None:
+            break
+    assert e.restart is None and e.throw_by == taker.id
+
+
+def test_taking_the_ball_for_a_throw_in_never_brakes_or_speeds_him_up_beyond_his_body():
+    """He arrives still moving a little (just under one frame of braking). Over the frame he takes
+    the ball and the frames he holds it, his speed only falls, by no more than his braking grip."""
+    e = Engine(1)
+    still(e)
+    e.possessor = None
+    e.stop("throw_in", "home", (50.0, 0.0))
+    taker = e.by_id[e.restart.taker]
+    taker.x, taker.y = throw_stand(50.0, 0.0)
+    taker.vx, taker.vy = 0.25, 0.0
+    e.restart.ready_at = e.t
+    speeds = [0.25]
+    for _ in range(5):
+        e.step()
+        speeds.append(math.hypot(taker.vx, taker.vy))
+    assert e.throw_by == taker.id
+    for before, after in zip(speeds, speeds[1:], strict=False):
+        assert after <= before + 1e-9 and before - after <= BRAKE_MAX * DT + 1e-9, speeds
+
+
+def thrower_ready_at(x: float, y: float, vx: float = 0.0, vy: float = 0.0) -> tuple[Engine, object]:
+    """Home's h9 is the taker of a throw-in where the ball crossed the near touchline at x = 50,
+    standing at (x, y) and moving at (vx, vy); the restart is ready now."""
+    e = Engine(1)
+    still(e)
+    taker = e.by_id["h9"]
+    taker.x, taker.y, taker.vx, taker.vy = x, y, vx, vy
+    e.possessor = None
+    e.ball = (50.0, -1.0, 0.0, 0.0, 0.0, 0.0)
+    e.stop("throw_in", "home", (50.0, 0.0), taker=taker.id)
+    e.restart.ready_at = e.t
+    return e, taker
+
+
+def test_a_throw_in_is_thrown_from_behind_the_touchline_with_the_ball_over_or_behind_it():
+    """Law 15 (D5): at the moment of the throw the thrower stands on or behind the touchline and
+    the ball, in his hands, is over or behind it. He starts standing 0.9 m inside the pitch, so
+    a spot tolerance wide enough to reach him there would let him throw from the field."""
+    e, taker = thrower_ready_at(50.0, 0.35)
+    thrown = False
+    for _ in range(int(10 / DT)):
+        x, y = taker.x, taker.y  # the throw uses where he stands as the frame starts
+        e.step()
+        thrown = any(ev["type"] == "pass" and ev["player"] == taker.id for ev in e.match.events)
+        if thrown:
+            break
+    assert thrown  # positive control: he did throw
+    assert y < 0.0, y  # his body is behind the line, not on the pitch
+    # The ball leaves from his hands, a reach in front of him (events clamp to the pitch, so read
+    # the ball itself: it was struck this frame and has not moved yet).
+    assert e.ball[:3] == throw_hands(x, y)
+    assert e.ball[1] <= 0.0, e.ball  # over or behind the line
+
+
+def test_taking_the_ball_for_a_throw_in_never_places_the_taker():
+    """Lesson 5: he is never moved to his spot. He is inside the spot tolerance and slow enough
+    to take the ball, but not on the spot; over the frame he takes it, tick_restart leaves his
+    position and velocity exactly where his own movement model puts them."""
+    sx, sy = throw_stand(50.0, 0.0)
+    e, taker = thrower_ready_at(sx + 0.15, sy + 0.1, vx=0.2, vy=-0.05)
+    expect = move_body(taker.x, taker.y, taker.vx, taker.vy, taker.x, taker.y, 0.0, taker.physique, DT)
+    e.tick_restart()
+    assert e.restart is None and e.throw_by == taker.id  # positive control: he took the ball
+    assert (taker.x, taker.y, taker.vx, taker.vy) == expect
+
+
+def test_a_thrower_arriving_faster_than_one_frame_of_braking_does_not_take_the_ball():
+    """D5, P2: he takes the ball only when one frame of his braking limit stops him. Just above
+    that, on his spot, he waits; just below, he takes it."""
+    sx, sy = throw_stand(50.0, 0.0)
+    limit = BRAKE_MAX * DT
+    e, taker = thrower_ready_at(sx, sy, vx=limit * 1.05)
+    e.tick_restart()
+    assert e.restart is not None and e.throw_by is None
+    e, taker = thrower_ready_at(sx, sy, vx=limit * 0.95)
+    e.tick_restart()
+    assert e.restart is None and e.throw_by == taker.id

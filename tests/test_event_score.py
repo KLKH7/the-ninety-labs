@@ -311,3 +311,11 @@ def test_fake_detections_refuse_damage_they_cannot_plant_cleanly():
     crowded = [ev("t1", 1.0), ev("t2", 1.5), ev("t3", 2.0)]
     with pytest.raises(ValueError, match="isolated"):
         fake_detections(crowded, frames(), seed=1, per_damage=1)
+
+
+def test_a_foul_is_placed_at_the_fouled_player_not_the_one_who_fouled():
+    # engine.foul: the event's team is the offender's, its spot is where the fouled player was.
+    frame = {"frame": 0, "t": 0.0, "ball": {"x": 30.0, "y": 30.0, "z": 0.0},
+             "players": [{"id": "h4", "team": "home", "x": 10.0, "y": 10.0},
+                         {"id": "a6", "team": "away", "x": 10.5, "y": 11.4}]}
+    assert reference_point("foul", "home", 0.0, [frame], (10.5, 11.4))[:2] == (10.5, 11.4)
