@@ -10,7 +10,7 @@ generated it and the output file is committed. Rows marked *planned* have no res
 | Same seed, same match on every machine: the simulator's math pinned bit for bit, and no C math library call where ground truth or a published number is computed | `uv run pytest tests/test_fmath.py tests/test_cues.py`; CI `portable` job on macOS, `test` on Linux | test assertions | running: seeds 1, 2, 3, 11, 42 (3 minutes) and seed 7 (5 minutes, every frame at full precision) are identical on macOS arm64 and Linux arm64 and x86_64, Python 3.11 and 3.12 |
 | Ground-truth data meets the data contract (consistency and physics) | `uv run ninety-validate <clip>` | command output | running: the engine meets the contract on full matches (seeds 7, 11, 21); CI runs it on the smoke clip |
 | Render checks (projection error, label completeness, determinism, ball occlusion share) | `uv run ninety-render-check <clips> --determinism --report docs/eval/render-checks.json`; CI `render` job on every push | `docs/eval/render-checks.json`, CI log | running |
-| Training data against its floors (clips, frames, player and ball boxes, balls by visibility, ball size at the training input, clips per render knob) | `uv run python -m ninety.vision.data_stats <clips> --stride 5 --input 512x512 --floors --report docs/eval/dataset-stats.json` | `docs/eval/dataset-stats.json` | running: render run v1, 195 training clips. Misses the hidden-ball floors (272 balls less than half visible, 2.8%, against 400 and 5%): even `occlusion=crowded` clips reach only 4.0%, so more of them cannot close it; that is targeted round 1. The floors are starting points set before any data was counted; the learning curve decides whether they are enough |
+| Training data against its floors (clips, frames, player and ball boxes, balls by visibility, ball size at the training input, clips per render knob) | `uv run ninety-data-stats <train clips> --stride 5 --input 640x640 --out docs/eval/dataset-stats.json --floors` | `docs/eval/dataset-stats.json` | running: render run v1, 195 training clips (the 25 validation seeds counted apart). Meets every train floor except the hidden balls: 270 mostly hidden (2.8%) against 400 and 5%. Even `occlusion=crowded` clips reach only 4.0%, so more of them cannot close it; that is targeted round 1. The floors were set before any data was counted; the learning curve decides whether they are enough |
 | Off-the-shelf detector recall on renders (guide check 2) | planned | `docs/eval/render-checks.json` | planned |
 | Detection precision and recall (players, ball) on the fixed test set, by difficulty, strict and lenient matching | planned | `docs/eval/vision-report-v{n}.json` | planned |
 | Event precision, recall and F1 per type; possession accuracy; speed error | events: `uv run python -m ninety.eval.event_score --truth <clip>/events.jsonl --frames <clip>/frames.jsonl --detected <detected.jsonl> --report <report.json>` ([format](#event-report-format)); possession and speed planned | `docs/eval/vision-report-v{n}.json` | planned: the harness runs and is tested on damaged simulator events; no detector yet |
@@ -40,6 +40,27 @@ uv run ninety-render-check runs/dataset/test/seed9000* --determinism --report do
 | Ball occlusion | share of frames with the ball in shot where its visibility is under 0.5 | above zero |
 | Determinism | re-render the first clip; compare `frames.jsonl`, `events.jsonl` and image hashes | identical |
 | Split integrity | `ninety/render/splits.py`: test seeds are reserved; overrides are refused on the test set | unit tests |
+
+### What the data holds
+
+`ninety-data-stats` counts, per split and from the saved labels only, what a dataset can teach the
+detector: distinct seeds, frames after the stride, player and ball boxes, balls by visibility
+group, ball size in pixels at the training input size, and clips per render knob. With
+`--floors` it exits 1 when a split misses a floor. The floors were set before any training clip
+was counted, and each one's reason is beside it in `ninety/vision/data_stats.py`. Meeting them
+does not prove the data is enough; the learning curve decides that.
+
+```bash
+uv run ninety-data-stats runs/dataset --stride 5 --input 512x512 --out docs/eval/dataset-stats.json --floors
+```
+
+The floors are `TRAIN_FLOORS` and `TEST_FLOORS` in `ninety/vision/data_stats.py`, each with its
+reason; that file is the only table. `ball_visibility_lt_0_5_share` is the quantity PLAN.md
+freezes on and `ninety-render-check` reports (every frame with the ball in shot, not only the
+strided ones, fully hidden balls included); the ball-box counts are training labels and
+exclude visibility 0, so the train split's hidden-ball floor is `ball_boxes_mostly_hidden_share`,
+a share of those labels. Lighting and weather floors cover only the values the renderer can draw
+(`PLANNED` in `ninety/render/params.py`).
 
 ## Vision scoring
 

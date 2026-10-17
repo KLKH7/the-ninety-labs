@@ -1,15 +1,75 @@
 {
-  "generated": "2026-10-17T17:03:17Z",
-  "commit": "1cc45c2f9b3555cb8f3ddbadfc07691ff28f39ae",
-  "stride": 5,
-  "input": [
+  "floor_failures": [
+    "train ball_boxes_mostly_hidden_excluding_fully_hidden: 270 < 400",
+    "train ball_boxes_mostly_hidden_share: 0.0279706 < 0.05",
+    "test: no clips"
+  ],
+  "floors": {
+    "test": {
+      "ball_visibility_lt_0_5_share": 0.05
+    },
+    "train": {
+      "ball_boxes": 6000,
+      "ball_boxes_mostly_hidden_excluding_fully_hidden": 400,
+      "ball_boxes_mostly_hidden_share": 0.05,
+      "clips_per_lighting": 15,
+      "clips_per_weather": 15,
+      "distinct_seeds": 150,
+      "frames": 7500,
+      "kit_contrast_low_share": 0.2,
+      "occlusion_crowded_share": 0.2,
+      "player_boxes": 75000
+    }
+  },
+  "frame_stride": 5,
+  "input_px": [
     640,
     640
   ],
   "splits": {
     "train": {
+      "ball_boxes": 9653,
+      "ball_boxes_mostly_hidden_excluding_fully_hidden": 270,
+      "ball_boxes_mostly_hidden_share": 0.027970579094581994,
+      "ball_by_visibility": {
+        "mostly hidden": 270,
+        "partly hidden": 1001,
+        "visible": 8382
+      },
+      "ball_in_frame": 48373,
+      "ball_size_px": {
+        "median": 8.88888888888889,
+        "p05": 8.0,
+        "p95": 9.777777777777777
+      },
+      "ball_visibility_lt_0_5_share": 0.031009033965228538,
       "clips": 195,
+      "clips_by_knob": {
+        "kit_contrast": {
+          "low": 40,
+          "normal": 155
+        },
+        "lighting": {
+          "day": 50,
+          "dusk": 35,
+          "night": 66,
+          "overcast": 44
+        },
+        "occlusion": {
+          "crowded": 40,
+          "natural": 155
+        },
+        "weather": {
+          "clear": 111,
+          "overcast": 44,
+          "rain": 40
+        }
+      },
       "distinct_seeds": 195,
+      "frames": 9750,
+      "kit_contrast_low_share": 0.20512820512820512,
+      "occlusion_crowded_share": 0.20512820512820512,
+      "player_boxes": 77304,
       "seeds": [
         3,
         4,
@@ -206,71 +266,7 @@
         3038,
         3039,
         3040
-      ],
-      "frames": 9750,
-      "player_boxes": 77228,
-      "ball_boxes": 9644,
-      "ball_by_visibility": {
-        "visible": 8462,
-        "partly hidden": 910,
-        "mostly hidden": 272
-      },
-      "ball_mostly_hidden_share": 0.0282,
-      "ball_size_px": {
-        "n": 9644,
-        "p05": 8.0,
-        "median": 8.89,
-        "p95": 9.78
-      },
-      "player_height_px": {
-        "n": 77228,
-        "p05": 32.89,
-        "median": 61.33,
-        "p95": 79.11
-      },
-      "clips_by": {
-        "lighting": {
-          "day": 50,
-          "dusk": 35,
-          "night": 66,
-          "overcast": 44
-        },
-        "weather": {
-          "clear": 111,
-          "overcast": 44,
-          "rain": 40
-        },
-        "kit_contrast": {
-          "low": 40,
-          "normal": 155
-        },
-        "occlusion": {
-          "crowded": 40,
-          "natural": 155
-        },
-        "camera_cut": {
-          "False": 140,
-          "True": 55
-        }
-      },
-      "kit_contrast_low_share": 0.2051,
-      "occlusion_crowded_share": 0.2051
+      ]
     }
-  },
-  "floors": {
-    "clips": 150,
-    "frames": 7500,
-    "player_boxes": 75000,
-    "ball_boxes": 6000,
-    "ball_mostly_hidden": 400,
-    "ball_mostly_hidden_share": 0.05,
-    "clips_per_lighting": 15,
-    "clips_per_weather": 15,
-    "kit_contrast_low_share": 0.2,
-    "occlusion_crowded_share": 0.2
-  },
-  "train_floor_failures": [
-    "ball_mostly_hidden: 272 < 400",
-    "ball_mostly_hidden_share: 272/9644 < 0.05"
-  ]
+  }
 }
