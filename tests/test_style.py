@@ -179,10 +179,13 @@ def test_out_of_possession_a_high_press_defends_higher_up_the_pitch_than_a_low_b
     """Intent shows in where players stand, after they have run there. Both ways round, so the
     side does not decide it. Blocks: low 12 to 22 m, high 35 to 50 m (T2), so at least 13 m
     apart once players are in place; the 5 m margin, set before running, is under half that,
-    because a line that has just lost the ball is still running up to its block."""
+    because a line that has just lost the ball is still running up to its block. Ten minutes, not
+    three: three gave as few as 26 low-block readings, and the gap moved from 7.8 m to 5.0 m with
+    a change (the measured kick error) that does not touch where anyone stands; over ten it was
+    15.7 m and 12.7 m on the same two engines."""
     depths = {"high_press": [], "low_block": []}
     for home, away in (("high_press", "low_block"), ("low_block", "high_press")):
-        m = simulate(2, 3, strengths={"home": 0.0, "away": 0.0},
+        m = simulate(2, 10, strengths={"home": 0.0, "away": 0.0},
                      styles={"home": PRESETS[home], "away": PRESETS[away]})
         for name, team in ((home, "home"), (away, "away")):
             depths[name] += line_depths(m, team)
