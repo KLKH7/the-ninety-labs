@@ -172,3 +172,12 @@ def test_inference_uses_the_resolution_the_checkpoint_was_trained_at(tmp_path):
     assert detect.trained_resolution(None) is None
     with pytest.raises(FileNotFoundError):
         detect.trained_resolution(str(tmp_path / "elsewhere" / "x.pth"))
+
+
+def test_resume_continues_from_the_runs_last_checkpoint(tmp_path):
+    with pytest.raises(FileNotFoundError, match="nothing to resume"):
+        train.resume_from(tmp_path)
+    (tmp_path / train.LAST).write_bytes(b"ckpt")
+    last = train.resume_from(tmp_path)
+    assert train.train_kwargs(CONFIG, Path("data"), tmp_path, last)["resume"] == str(tmp_path / "last.ckpt")
+    assert "resume" not in train.train_kwargs(CONFIG, Path("data"), tmp_path)

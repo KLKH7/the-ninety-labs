@@ -28,6 +28,7 @@ from ninety.vision.coco_export import ANNOTATIONS
 from ninety.vision.model import load
 
 BEST = "checkpoint_best_total.pth"
+LAST = "last.ckpt"  # PyTorch Lightning's full checkpoint: weights, optimizer, scheduler, epoch
 
 
 def sha256(path: Path) -> str:
@@ -48,8 +49,17 @@ def check_dataset(data: Path) -> dict:
     return json.loads((data / "export.json").read_text())
 
 
-def train_kwargs(cfg: dict, data: Path, out: Path) -> dict:
+def resume_from(out: Path) -> Path:
+    """The run's own last checkpoint, to continue a killed run instead of starting over."""
+    last = out / LAST
+    if not last.exists():
+        raise FileNotFoundError(f"{last} is missing: nothing to resume; start the run without --resume")
+    return last
+
+
+def train_kwargs(cfg: dict, data: Path, out: Path, resume: Path | None = None) -> dict:
     return {
+        **({"resume": str(resume)} if resume else {}),
         "dataset_dir": str(data),
         "output_dir": str(out),
         "resolution": cfg["resolution"],
@@ -77,15 +87,21 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--config", type=Path, default=Path(__file__).with_name("finetune.json"))
     ap.add_argument("--name", required=True, help="checkpoint name for detections.jsonl, e.g. ours-v1")
     ap.add_argument("--epochs", type=int, default=None, help="override for a smoke run only")
+    ap.add_argument(
+        "--resume",
+        action="store_true",
+        help="continue a killed run from <out>/last.ckpt, same config and data",
+    )
     a = ap.parse_args(argv)
     cfg = json.loads(a.config.read_text())
     if a.epochs is not None:
         cfg["train"]["epochs"] = a.epochs
     dataset = check_dataset(a.data)
     a.out.mkdir(parents=True, exist_ok=True)
+    resume = resume_from(a.out) if a.resume else None
     started = dt.datetime.now(dt.UTC)
     model = load()
-    model.train(**train_kwargs(cfg, a.data, a.out))
+    model.train(**train_kwargs(cfg, a.data, a.out, resume))
     best = a.out / BEST
     manifest = {
         "name": a.name,
@@ -95,6 +111,7 @@ def main(argv: list[str] | None = None) -> None:
         "rfdetr": importlib.metadata.version("rfdetr"),
         "config": cfg,
         "epochs_override": a.epochs,
+        "resumed_from": str(resume) if resume else None,
         "dataset": {
             k: {kk: vv for kk, vv in v.items() if kk != "seeds"} if isinstance(v, dict) else v
             for k, v in dataset.items()
