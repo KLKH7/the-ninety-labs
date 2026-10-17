@@ -157,6 +157,21 @@ resource foundryProject 'Microsoft.CognitiveServices/accounts/projects@2025-06-0
   name: foundryProjectName
 }
 
+// The nightly evaluation workflow (.github/workflows/evals.yml) runs as the GitHub identity: it
+// calls the published agents and records evaluation runs, so it needs Foundry User on this
+// resource only (looked up with `az role definition list --name "Foundry User"`).
+var foundryUser = '53ca6127-db72-4b80-b1b0-d745d6d5456d'
+
+resource ciFoundryUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(ciPrincipalId)) {
+  scope: foundry
+  name: guid(foundry.id, ciPrincipalId, foundryUser)
+  properties: {
+    principalId: ciPrincipalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', foundryUser)
+  }
+}
+
 // Agent runs send OpenTelemetry traces here; connected to the project, they show in Foundry's
 // tracing view. Shares the capped Log Analytics workspace above.
 resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
