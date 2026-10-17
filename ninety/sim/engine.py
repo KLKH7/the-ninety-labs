@@ -1212,6 +1212,13 @@ class Engine:
                 shooting = math.hypot(own[0] - bx, own[1] - by) < offball.SHOT_RANGE_M
                 return cx, cy, work if shooting else self.in_time(p, cx, cy)
             slot = brain.slot(p.role, p.ay, clamp(by, 0, PITCH_Y))
+            if slot and self.blocks_lane(p, brain, bx, by):
+                # Within shooting range the one of them whose spot is nearest the shooting lane
+                # steps across into it, at his own line's depth (the line from the ball to the
+                # middle of the goal); the rest hold the block.
+                own_x, own_y = own
+                k = (slot[0] - bx) / (own_x - bx) if abs(own_x - bx) > 1e-6 else 0.0
+                return slot[0], by + (own_y - by) * clamp(k, 0.0, 1.0), work
             if slot:
                 tx, ty = slot
         tx, ty = clamp(tx, 0.5, PITCH_X - 0.5), clamp(ty, 0.5, PITCH_Y - 0.5)
@@ -1322,6 +1329,27 @@ class Engine:
         mine = [q for q in self.players if q.team == p.team and roles.role_of(q.profile.archetype).high_press
                 and self.off_balance.get(q.id, -1.0) <= self.t]
         return min(mine, key=lambda q: math.hypot(q.x - bx, q.y - by)) is p
+
+    def blocks_lane(self, p: Player, brain: TeamBrain, bx: float, by: float) -> bool:
+        """O10: with the ball within shooting range of his goal, is he the one out of possession
+        (not the presser, his cover or a marker) whose block spot, goal-side of the ball, is nearest
+        the line from the ball to the middle of his goal?"""
+        own_x = PITCH_X - goal_x(p.team)
+        if brain.in_possession or math.hypot(own_x - bx, PITCH_Y / 2 - by) >= offball.SHOT_RANGE_M:
+            return False
+        busy = set(brain.pressers[:2]) | set(brain.markers)
+        best, who = math.inf, None
+        for q in self.players:
+            if q.team != p.team or q.role == "GK" or q.id in busy:
+                continue
+            spot = brain.slot(q.role, q.ay, clamp(by, 0, PITCH_Y))
+            if not spot or (spot[0] - bx) * (own_x - bx) <= 0:
+                continue  # not goal-side of the ball
+            k = (spot[0] - bx) / (own_x - bx)
+            off = abs(spot[1] - (by + (PITCH_Y / 2 - by) * clamp(k, 0.0, 1.0)))
+            if off < best:
+                best, who = off, q.id
+        return who == p.id
 
     def drop_target(self, p: Player, carrier: Player) -> tuple[float, float] | None:
         """O9: a deep-lying playmaker or a target forward comes short to receive while his team
