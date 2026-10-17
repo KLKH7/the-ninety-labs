@@ -52,9 +52,9 @@ def test_a_fast_ball_is_a_heavy_touch_he_runs_onto_when_nobody_is_nearer():
     e = scene(("h8",))
     p = e.by_id["h8"]
     p.x, p.y, p.heading = 50.0, 34.0, math.pi
-    p.profile.attributes["first_touch"] = 0.0  # kills 12 m/s
-    arrive(e, "h8", 20.0, 0.0)
-    assert e.possessor is None and e.dribbler == "h8"  # 8 m/s left over: more than he keeps at his feet
+    p.profile.attributes["first_touch"] = 0.0  # kills 12 m/s at best
+    arrive(e, "h8", 16.0, 0.0)
+    assert e.possessor is None and e.dribbler == "h8"  # more left over than he keeps at his feet
     # In the data a heavy touch is a deflection (DATA_CONTRACT); unlike a rebound it is still his
     # to run onto (dribbler).
     assert [ev["player"] for ev in e.match.events if ev["type"] == "deflection"] == ["h8"]
@@ -108,7 +108,7 @@ def test_planted_defect_a_touch_that_ignores_his_chosen_direction_goes_out(monke
     # has to be able to fail.
     e = scene(("h8",))
 
-    def the_way_it_came(p, cx, cy, speed, z=0.0):
+    def the_way_it_came(p, cx, cy, speed, z=0.0, worse=1.0):
         bvx, bvy = e.ball[3], e.ball[4]
         n = math.hypot(bvx, bvy)
         return p.vx + speed * bvx / n, p.vy + speed * bvy / n

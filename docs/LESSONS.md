@@ -175,6 +175,15 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** the deploy workflow's smoke test passes only when `/api/health` reports the commit
   it deployed.
 
+### 50. A merge from main is a code change: test it before pushing
+- **What happened:** #80 pinned lighting and weather to day and clear; #70 merged into main
+  with tests that pushed `lighting=night` and `weather=rain` under their floors. Merging main
+  into #80 had no conflict, and it was pushed after only ruff and one manual run, so two tests
+  failed on the pushed head: correct code, tests written for the old knobs.
+- **Rule:** after merging main into a branch, run the full `uv run pytest` before pushing. A
+  clean merge only means no lines overlapped, not that the two changes agree.
+- **Check:** the merge commit's CI is green, and it was green locally before the push.
+
 ### 13. Keep diffs to what you meant to change
 - **What happened:** a one-word schema change rewrote 131 lines because a tool reformatted the
   whole file.

@@ -595,6 +595,7 @@ def test_any_team_mate_who_gets_there_first_takes_it():
     s = scene(x=60.0, mates=[("h9", 90.0, 50.0, 0.0)])
     alone = D.pass_confidence(s, 90.0, 34.0, 90.0, 50.0, 0.0, False, 14.0, "h9")  # 16 m from him
     s.mates.append(("h8", 80.0, 34.0, 0.0))  # standing on its path
+    s.absorb["h8"] = FOOT_ABSORB_MPS[0] + FOOT_ABSORB_MPS[1]  # the race is tested here, not his touch
     assert alone < 0.1 < 0.5 < D.pass_confidence(s, 90.0, 34.0, 90.0, 50.0, 0.0, False, 14.0, "h9")
 
 

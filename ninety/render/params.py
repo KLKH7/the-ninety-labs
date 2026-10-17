@@ -21,8 +21,10 @@ KIT_CONTRAST = ("normal", "low")
 # Shirt graphics. Colours stay fictional; a pattern is not a real club's kit.
 PATTERNS = ("solid", "stripes", "hoops", "sash", "halves")
 
-# Knob -> values that are accepted but not drawn. Empty: rain and camera cuts are built.
-PLANNED: dict[str, tuple] = {}
+# Knob -> the only values rendered for now. Dusk, night, overcast and rain are drawn by
+# web/render but do not look like broadcast footage yet, so every clip is a clear day until they
+# do; asking for one fails instead of putting a bad render into a dataset.
+PLANNED: dict[str, tuple] = {"lighting": ("day",), "weather": ("clear",)}
 
 # Fictional three-letter codes; none is a Premier League club code.
 TEAM_CODES = ("ASH", "CRW", "DUN", "ELM", "FEN", "GRV", "HLT", "IVY", "KST", "MRL", "OAK", "QRY")
@@ -155,7 +157,10 @@ def sample_params(seed: int, **overrides) -> RenderParams:
         lead_s=round(rng.uniform(0.2, 0.5), 2),
         shake_m=round(rng.uniform(0.0, 0.15), 3),
     )
-    lighting = rng.choice(LIGHTING)
+    # Lighting is still drawn, then set to day (see PLANNED), so every later draw of a seed and
+    # hence its camera, kits and stadium stay where they were.
+    drawn_lighting = rng.choice(LIGHTING)
+    lighting = "day"
     elevation = {"day": rng.uniform(30, 60), "dusk": rng.uniform(8, 18), "night": 45.0, "overcast": 50.0}[
         lighting
     ]
@@ -167,7 +172,7 @@ def sample_params(seed: int, **overrides) -> RenderParams:
         lighting=lighting,
         sun_azimuth_deg=round(rng.uniform(0, 360), 1),
         sun_elevation_deg=round(elevation, 1),
-        weather="overcast" if lighting == "overcast" else "clear",
+        weather="clear",
         kit_contrast=contrast,
         home_kit=home,
         away_kit=away,
@@ -184,15 +189,13 @@ def sample_params(seed: int, **overrides) -> RenderParams:
         away_code=codes[1],
     )
     # Appended draws. Everything above is the original sequence and must stay in this order.
-    weather = base.weather
-    if weather == "clear" and rng.random() < 0.34:
-        weather = "rain"
+    if drawn_lighting != "overcast":
+        rng.random()  # the rain draw, kept so the camera cut and patterns stay where they were
     base = replace(
         base,
         home_pattern=rng.choice(PATTERNS),
         away_pattern=rng.choice(PATTERNS),
         camera_cut=rng.random() < 0.30,
-        weather=weather,
     )
     return apply_overrides(base, overrides)
 
