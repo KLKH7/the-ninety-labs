@@ -42,18 +42,38 @@ uv run ninety-render-check runs/dataset/test/seed9000* --determinism --report do
 ## Vision scoring
 
 Fixed before the first detector runs, so no rule is tuned to a result. Every vision report
-gives precision and recall (both kinds of error), on the fixed test set only.
+gives precision and recall (both kinds of error), on the fixed test set only. The pixel scorer
+accepts `frames.jsonl` labels and detection records (`frame`, `cls`, `bbox`, `score`) and applies
+a default score threshold of 0.5. This is an object-detection AP50-style rule (IoU 0.50 for
+players), following the COCO evaluation conventions ([Lin et al., 2014](https://arxiv.org/abs/1405.0312)).
 
-**Matching.** A detection is mapped onto the pitch through the camera and matched one to one,
-nearest first, to the true positions in the same frame.
+### Pixel boxes
 
-| Rule | Ball | Player | Why |
+Within each frame and class, eligible detections are paired one-to-one, best-first. Player boxes
+match at IoU ≥ 0.50. Ball boxes match when their centre distance is ≤ 5 pixels. A label with no
+match is a false negative; a detection with no match is a false positive. The report contains
+TP, FP, FN, precision and recall overall, by class, and for the visibility groups below. Boxes
+with visibility zero are not labels because they were not drawn. Run:
+
+```bash
+uv run python -m ninety.eval.vision_score --frames runs/seed7/frames.jsonl \
+  --detected detections.jsonl --report vision-report.json
+```
+
+### Later follow-up: pitch-level matching
+
+Pitch-level matching is a separate future evaluation. It will map detections onto the pitch
+through the camera and match them one to one, nearest first, to true positions in the same
+frame. It is not part of the pixel-box score above and must not be used to interpret that score.
+
+| Planned comparison rule | Ball | Player | Why |
 |---|---|---|---|
-| Strict (the headline) | within 1.0 m | within 1.0 m | possession assigns the ball to the nearest player; two players are often about 2 m apart, so an error above half that can give the ball to the wrong one |
-| Lenient (for comparison) | within 2.0 m | within 1.5 m | the looser radii commonly used for this task, so our numbers can be compared with others |
+| Strict | within 1.0 m | within 1.0 m | possession assigns the ball to the nearest player; two players are often about 2 m apart |
+| Lenient | within 2.0 m | within 1.5 m | a looser comparison radius |
 
 **Difficulty groups.** Every true ball and player is put in groups using the renderer's
-labels, and recall is reported for each group as well as overall:
+labels, and TP, FP, FN, precision, recall and F1 are reported for each visibility group
+nested under its class (`visibility.player.visible`, for example), as well as overall:
 
 | Group | Rule (from `frames.jsonl`) |
 |---|---|
