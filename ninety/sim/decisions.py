@@ -296,9 +296,7 @@ def can_strike(ox: float, oy: float, heading: float, dx: float, dy: float) -> bo
     `heading`, can he strike it toward (dx, dy) now? Only once he faces within STRIKE_FACING of it
     (the widest run-up angle tested with no loss of speed or accuracy) with the ball on the side
     of his body toward it, so its way out leaves his surface (shape.py) rather than passing
-    through him. A ball in his hands (a throw-in) needs neither."""
-    if math.hypot(ox, oy) < 0.1:
-        return True
+    through him. A throw-in is the engine's own case (engine.can_strike: in his hands)."""
     if abs(turn_deg(math.atan2(dy, dx), heading)) > math.degrees(STRIKE_FACING):
         return False
     sx, sy = shape.nearest_on_spine(ox, oy, 0.0, 0.0, heading)

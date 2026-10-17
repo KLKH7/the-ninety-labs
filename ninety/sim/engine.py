@@ -1313,6 +1313,9 @@ class Engine:
             r = self.restart
             if r.kind == "throw_in":
                 return *throw_stand(r.x, r.y), RECOVER
+            if r.kind == "penalty_kick":  # behind the ball on the mark, against his body as he faces goal
+                behind = shape.surface(0.0, 0.0, pad=ball.RADIUS)
+                return r.x - attack_dir(p.team) * behind, r.y, RECOVER
             return clamp(r.x, 0.5, PITCH_X - 0.5), clamp(r.y, 0.5, PITCH_Y - 0.5), RECOVER
         bx, by = self.play_point(p)  # O8: where the ball is going, once a pass is struck
         poss_team = self.team_of(self.possessor) if self.possessor else None
