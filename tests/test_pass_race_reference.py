@@ -10,7 +10,8 @@ import random
 from ninety.sim import decisions as D
 from ninety.sim import offball, perception
 from ninety.sim.body import can_get_to, relative_speed
-from ninety.sim.engine import Engine
+from ninety.sim.engine import AERIAL_ABSORB, BODY_TOUCH_Z, Engine
+from ninety.sim.firsttouch import KEEP_MPS
 from ninety.sim.profiles import Profile
 
 
@@ -76,11 +77,14 @@ def reference(scene, tx, ty, mx, my, age, lofted, pace, receiver):
                 take, at, taker = t, i, mate
         if taker is None:
             continue
-        _, _, _, g, vz = points[at]
+        _, _, z, g, vz = points[at]
         if at == len(points) - 1 and rests:
             g = vz = 0.0
         rel = relative_speed(g * ux, g * uy, vz, taker[2], taker[3])
-        p = D.sigmoid((taker[5] - rel) / D.CONTROL_MARGIN_MPS)
+        # The engine's touch: a thigh, chest or head above BODY_TOUCH_Z kills AERIAL_ABSORB of a
+        # foot's pace, and he keeps it if what is left is no more than KEEP_MPS.
+        absorb = taker[5] * (AERIAL_ABSORB if z > BODY_TOUCH_Z else 1.0)
+        p = D.sigmoid((absorb + KEEP_MPS - rel) / D.CONTROL_MARGIN_MPS)
         horizon = take + D.OPPONENT_LATE_S
         for ox0, oy0, ovx, ovy, keeper in scene.moving:
             ox, oy = ox0 + ovx * wait, oy0 + ovy * wait

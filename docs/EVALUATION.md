@@ -19,11 +19,39 @@ generated it and the output file is committed. Rows marked *planned* have no res
 | Stats engine facts: hand-computed cases, planted defects, citations, size | `uv run pytest tests/test_stats.py` | test assertions | running |
 | Late drop in high-intensity running (R7), by the protocol below; distance and top speed by position on the same matches | `uv run python -m ninety.sim.late_drop` | `docs/eval/late-drop.md` | running |
 | Fact-checker rules (numbers, players, evidence ids) | `uv run pytest tests/test_factcheck.py` | test assertions | running |
-| Ledger versioning, evidence validation, and deterministic cue fixture | `uv run pytest tests/test_ledger.py tests/test_cues.py` | `tests/fixtures/cues-seed7.jsonl` and test assertions | running: 20 tests; 114 cues for seed 7, five minutes (56 passes, 14 of them failed, and one blocked shot; no goal in that window, so goals are covered by hand-built cases) |
+| Ledger versioning, evidence validation, and deterministic cue fixture | `uv run pytest tests/test_ledger.py tests/test_cues.py` | `tests/fixtures/cues-seed7.jsonl` and test assertions | running: 20 tests; 160 cues for seed 7, five minutes (158 for its 79 passes, 12 of them failed, and 2 for its one shot, blocked; no goal in that window, so goals are covered by hand-built cases) |
 | Fact-checker catch rate on planted false claims, and true claims wrongly rejected | `uv run python -m ninety.eval.factcheck_eval` | `docs/eval/fact-checker.md` | re-run pending: the Judge's instructions and the tone kinds changed after the last run (fact split from tone, tone labels fitted to events, held-out and contradicted tone). Since then a pass also carries `intended`, `interceptor` and `deflected_by` (lesson 42), so the Judge sees those fields; the code half now rejects a pass said to "find" or "pick out" anyone but its receiver (other wordings, such as "connects with", are still the Judge's), which catches "intercepted pass called completed" without the Judge; and two kinds test that rule (a failed pass, or one another team-mate got, said to find the player it was for). None of this is in the published numbers. Last published run, before that change, on held-out seeds 21,33: 129/129 false caught, 12/99 true rejected excluding service holds, all twelve on tone. |
+| Match engine touches: control by surface, whose ball and speed; throw-ins; pass completion | `uv run python -m ninety.sim.touches` (seeds 40 to 47) | `docs/eval/touches.md`, `docs/eval/funnel-touches.md` | running: a report, never a gate; comparisons fixed below. Seeds 40 to 47, before and after the cushioned touch (base d38ce9b): thigh, chest or head touches 3,693 then 706 (passers now judge them by the engine's own rule), kept 59% then 61%; all touches except the dribbler's own kept 87% then 97%; throw-ins 89.5% then 86.1% first contact by a team-mate (Stone 2021: 83%), 67.3% then 58.3% held 5 s later (54%); completion 82.1% then 88.2% (R3: 75 to 88%) |
 | Recovery from injected failures | planned | `docs/eval/failure-table.md` | planned |
 | Ablation: one agent against the full workflow | planned | `docs/eval/ablation.md` | planned |
 | Latency to graphic and to speech (p50, p95); cost per match | planned | `docs/eval/latency-cost.md` | planned |
+
+## Match engine: touches
+
+How a player meets the ball is about to change (a cushioned first touch, a surface for each height,
+and what makes a touch worse; [ENGINE.md](ENGINE.md), layer 7). These comparisons were fixed
+**before** the first of those changes, on the engine at `claude/engine-to-main` e8982ef, so no
+cushion or error is set after looking at where it lands (lessons 2 and 3).
+
+```bash
+uv run python -m ninety.sim.touches                      # seeds 40 to 47; writes docs/eval/touches.md
+uv run python -m ninety.sim.funnel --seeds 40,41,42,43,44,45,46,47 --out docs/eval/funnel-touches.md
+```
+
+Both run on the same eight seeds after every engine change to touches, and the results are
+recorded in `docs/eval/` and [GROUNDING.md](GROUNDING.md) whatever they show.
+
+| Engine number | Compared with | Source |
+|---|---|---|
+| throw-ins: first contact by a team-mate | 83% | Stone, Smith and Barry 2021, *Int J Sports Sci Coach* 16: 830-839; 16,154 Premier League throw-ins, 2018-19 |
+| throw-ins: possession held 5 s after the throw (the team of the last player to have had the ball) | 54% retained | the same study; its own definition of "retained" is not yet checked against our 5 s window (*verify*) |
+| pass completion (`touches.md` and the funnel) | 75 to 88% | GROUNDING R3 (*verify*) |
+
+Not compared, only reported: control and keep rates by surface, by whose ball it was and by
+arriving speed; where a kept ball ends up; body hits. No published figure for them has been
+found. One is added to this table, with its source, before any engine number is read against it.
+**Never a target:** a cushion, an error or a skill range is set from a cited measurement or as
+design, never moved to bring these numbers onto a published figure.
 
 ## Synthetic data
 

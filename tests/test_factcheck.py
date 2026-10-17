@@ -146,10 +146,12 @@ def test_compact_event_floors_seconds_at_sixty():
 
 
 def test_player_in_no_known_event_is_still_rejected():
-    """Planted defect: a squad player absent from every event must not slip through."""
-    involved = {v for e in EVENTS for v in (e["player"], e.get("receiver")) if v}
-    absent = next(f"{t}{n}" for t in "ha" for n in range(1, 12) if f"{t}{n}" not in involved)
-    verdict = check(Claim(f"{absent} starts the move.", [PASS["id"]]), KNOWN)
+    """Planted defect: a squad player absent from every event must not slip through. The known
+    events are the clip's less any that name him, so the test does not rely on someone happening
+    to stay out of the clip (with every player in it, it had nobody to plant)."""
+    absent = next(f"h{n}" for n in range(1, 12) if f"h{n}" not in (PASS["player"], PASS.get("receiver")))
+    known = {i: e for i, e in KNOWN.items() if absent not in (e["player"], e.get("receiver"))}
+    verdict = check(Claim(f"{absent} starts the move.", [PASS["id"]]), known)
     assert not verdict.ok
     assert absent in verdict.reasons[0]
 
