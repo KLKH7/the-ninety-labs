@@ -106,4 +106,4 @@ jobs:
         run: |
           az bicep build --file infra/main.bicep --stdout > /dev/null 2> diagnostics.txt
           cat diagnostics.txt
-          ! grep -E "(Warning|Error) [A-Z]+[0-9]+" diagnostics.txt
+          ! grep -E "(Warning|Error) " diagnostics.txt
