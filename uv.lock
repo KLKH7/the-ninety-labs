@@ -2374,6 +2374,9 @@ dev = [
     { name = "pytest" },
     { name = "ruff" },
 ]
+render-job = [
+    { name = "azure-storage-blob" },
+]
 vision = [
     { name = "rfdetr" },
 ]
@@ -2398,6 +2401,7 @@ dev = [
     { name = "pytest", specifier = ">=8" },
     { name = "ruff", specifier = ">=0.17.0" },
 ]
+render-job = [{ name = "azure-storage-blob", specifier = ">=12" }]
 vision = [{ name = "rfdetr", specifier = "==1.11.2" }]
 
 [[package]]
