@@ -647,8 +647,9 @@ class Engine:
                                 absorb={m[0]: self.by_id[m[0]].profile.absorb_mps(False) for m in mates},
                                 passer=prof, heading=carrier.heading, fresh=self.fresh(carrier),
                                 ball_offset=(self.ball[0] - carrier.x, self.ball[1] - carrier.y),
-                                progress=style.progress_per_m, hold_decay=style.hold_decay,
-                                held=self.holds)
+                                progress=style.progress_per_m * (0.5 + prof["teamwork"]),  # A8
+                                hold_decay=style.hold_decay, held=self.holds,
+                                vision=prof["vision"], flair=prof["flair"])
         return scene
 
     def decide(self, carrier: Player, throw: bool = False) -> None:
@@ -1299,7 +1300,9 @@ class Engine:
         prior = roles.role_of(p.profile.archetype).prior(kind)
         for trait in p.profile.traits:  # a habit strengthens a move of his role; it never adds one
             prior *= roles.TRAIT_MOVES.get(trait, {}).get(kind, 1.0)
-        return prior * roles.STYLE_MOVES[brain.build_up].get(kind, 1.0)
+        # A8: his team's instruction weighs as much as his teamwork makes it (as at average, squared at
+        # the most, not at all at the least).
+        return prior * roles.STYLE_MOVES[brain.build_up].get(kind, 1.0) ** (2 * p.profile["teamwork"])
 
     def move_worth(self, p: Player, carrier: Player, spot: tuple[float, float]) -> float:
         """O10: what being at `spot` is worth to his team, as he sees the pitch: the chance the

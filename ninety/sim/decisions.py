@@ -175,6 +175,8 @@ class Scene:
     progress: float = 0.0  # T4: his team's intent, value per metre gained toward goal (roles.STYLES)
     hold_decay: float = HOLD_DECAY  # D9: his team's tempo (roles.STYLES)
     held: int = 0  # D9: decisions in a row he has already spent holding
+    vision: float = 1.0  # A8: how readily he notices a pass that takes opponents out of the game
+    flair: float = 0.5  # A8: how strongly he is drawn to the low-percentage option
 
 
 @dataclass
@@ -185,6 +187,8 @@ class Option:
     receiver: str | None = None
     lofted: bool = False
     pace: float = ARRIVE_MPS  # a ground pass's arrival speed, as chosen
+    chance: float = 1.0  # A8: his own estimate that it works (a pass arriving, a carry kept, a goal)
+    bypassed: int = 0  # A8: the opponents a pass takes out of the game, as he sees them
 
 
 def attack(goal_x: float) -> float:
@@ -771,8 +775,16 @@ def pass_option(scene: Scene, mate: tuple[str, float, float, float]) -> Option |
         ahead = max(0.0, (tx - scene.x) * attack(scene.goal_x))
         ev = confidence * (gain + scene.progress * ahead) - (1 - confidence) * lost
         if best is None or ev > best.value:
-            best = Option("pass", ev, (tx, ty), mid, lofted, pace)
+            best = Option("pass", ev, (tx, ty), mid, lofted, pace, confidence, taken_out(scene, tx))
     return best
+
+
+def taken_out(scene: Scene, tx: float) -> int:
+    """A8: how many opponents (keeper aside) a pass to `tx` takes out of the game: goal-side of the
+    ball now, and no longer goal-side of it once it arrives."""
+    a = attack(scene.goal_x)
+    return sum(1 for ox, oy in scene.opponents
+               if (ox, oy) != scene.keeper and (ox - scene.x) * a > 0 and (ox - tx) * a < 0)
 
 
 def shot_chance(scene: Scene) -> float:
@@ -804,7 +816,7 @@ def options(scene: Scene) -> list[Option]:
         missed = loss_cost(scene.goal_x - attack(scene.goal_x) * GOAL_KICK_M, PITCH_Y / 2, scene.goal_x)
         lost = blocked * loss_cost(scene.x, scene.y, scene.goal_x) + (1 - blocked) * missed
         out.append(Option("shoot", q * bias * (1 + 0.5 * scene.risk) - (1 - q) * lost,
-                          (scene.goal_x, PITCH_Y / 2)))
+                          (scene.goal_x, PITCH_Y / 2), chance=q))
     for turn in (0.0, 0.8, -0.8):  # straight at goal, or angled away
         heading = math.atan2(PITCH_Y / 2 - scene.y, scene.goal_x - scene.x) + turn
         tx = scene.x + DRIBBLE_STEP_M * math.cos(heading)
@@ -825,7 +837,8 @@ def options(scene: Scene) -> list[Option]:
         gain = value(tx, ty, scene.goal_x, scene.opponents, scene.keeper)
         gain += scene.progress * max(0.0, (tx - scene.x) * attack(scene.goal_x))  # T4: his team's intent
         ev = win * gain - (1 - win) * loss_cost(scene.x, scene.y, scene.goal_x)
-        out.append(Option("dribble", ev + (STICKY if scene.current == "dribble" else 0.0), (tx, ty)))
+        sticky = STICKY if scene.current == "dribble" else 0.0
+        out.append(Option("dribble", ev + sticky, (tx, ty), chance=win))
     if abs(scene.goal_x - scene.x) > CLEAR_FROM * PITCH_X and p > 0:  # pressed in his own third
         # Long and away, toward where his most advanced team-mate is, not at a touchline: a long
         # ball is a contest where it lands (an even one: design).
@@ -881,24 +894,59 @@ def taste_key(scene: Scene, o: Option) -> tuple:
     return (o.kind,)
 
 
+# A8: how choosing on the ball is split from executing (all *design*). Seeing: a pass that takes
+# opponents out of the game must first be noticed, for each one it bypasses with this chance short of
+# certain, at the worst vision (none at the best), kept until his next scan. Choosing: flair
+# widens his misjudgement of an option by this factor per unit of its risk (1 - chance) at the most
+# flair, narrowing it at the least, so the creative player tries the low-percentage option more and
+# fails with it more; an average player chooses as before. A habit pulls toward its one option by
+# this many units of misjudgement. Executing is the kick, the race and the touch, as before.
+MISS_PER_OPPONENT = 0.5
+FLAIR_SPREAD = 2.0
+HABIT_PULL = 0.5
+
+
+def noticed(scene: Scene, o: Option, draw: float) -> bool:
+    """A8: does he see this option at all? Every option but a pass that takes opponents out of the
+    game is in plain sight; that one he notices with a chance that falls with each opponent it
+    bypasses, less steeply the better his vision."""
+    return draw < (1 - MISS_PER_OPPONENT * (1 - scene.vision)) ** o.bypassed
+
+
+def habit(scene: Scene, o: Option) -> float:
+    """A8: a habit is a pull toward one option, never a second rating."""
+    pull = 0.0
+    if o.kind == "dribble" and "takes_players_on" in scene.traits:
+        pull += HABIT_PULL
+    if o.kind == "pass" and o.target and "plays_short" in scene.traits \
+            and math.hypot(o.target[0] - scene.x, o.target[1] - scene.y) < LOFT_FROM_M:
+        pull += HABIT_PULL
+    return pull
+
+
 def choose(scene: Scene, rng: random.Random, tastes: dict | None = None) -> Option:
     """D4: the option with the best value plus his own misjudgement of it. The misjudgement is a
     random-utility draw (Gumbel), so a single choice is a softmax of the values; it is drawn once
     per option and kept in `tastes` until he next scans the pitch (the engine resets it), so looking
     again at the same options does not re-roll the dice (a choice he keeps rejecting does not become
-    certain by being asked four times a second)."""
-    opts = options(scene)
+    certain by being asked four times a second). What he has noticed (A8) is kept the same way."""
+    tastes = {} if tastes is None else tastes
+
+    def draw(key: tuple) -> float:
+        if key not in tastes:
+            tastes[key] = rng.random()
+        return tastes[key]
+
+    # A8: he chooses among what he sees; holding is always in sight.
+    opts = [o for o in options(scene) if noticed(scene, o, draw(("seen",) + taste_key(scene, o)))]
     # D4: the randomness is a share of how far apart the options are, so a choice between close
     # options is loose and one between clearly different options is not, wherever on the pitch.
     t = temperature(scene) * choice_spread([o.value for o in opts])
     if t <= 0:  # a perfect decision-maker takes the best option
         return max(opts, key=lambda o: o.value)
-    tastes = {} if tastes is None else tastes
 
     def taste(o: Option) -> float:
-        k = taste_key(scene, o)
-        if k not in tastes:
-            tastes[k] = -math.log(-math.log(max(rng.random(), 1e-12)))
-        return tastes[k]
+        gumbel = -math.log(-math.log(max(draw(taste_key(scene, o)), 1e-12)))
+        return gumbel * math.exp(FLAIR_SPREAD * (scene.flair - 0.5) * (1 - o.chance)) + habit(scene, o)
 
     return max(opts, key=lambda o: o.value / t + taste(o))
