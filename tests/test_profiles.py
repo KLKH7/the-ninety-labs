@@ -66,7 +66,10 @@ def test_no_skill_piles_up_at_the_ends_of_the_scale():
 
 def test_an_average_weak_foot_carries_the_sourced_penalty():
     p = player()
-    assert math.isclose(error(p, weak_foot=True) / error(p), 3.8 / 3.0)
+    _, _, up = p.kick_error("finishing", 21.0, 0.0, 1.0, False)
+    _, _, weak_up = p.kick_error("finishing", 21.0, 0.0, 1.0, True)
+    # A3: the weaker foot's own measured ellipse, about a third wider each way
+    assert abs(error(p, weak_foot=True) / error(p) - 1.34) < 0.01 and abs(weak_up / up - 1.35) < 0.01
     assert math.isclose(p.weak_foot_speed(), 0.88)
     assert error(p, turn_deg=90.0) > error(p)  # across the body is harder on either side
 
@@ -82,8 +85,50 @@ def error(p: Profile, **kw) -> float:
     return p.kick_error(**args)[0]
 
 
-def test_average_skill_at_penalty_speed_is_about_three_degrees():
-    assert abs(error(player()) - 3.0) < 0.01
+def measured_sds_deg(axes_m: tuple[float, float], tilt_deg: float) -> tuple[float, float]:
+    """A3's ellipse seen from the kick, worked out from the geometry itself: the SDs in metres on
+    the goal's plane, turned into angles by how far the bearing and elevation to the target
+    (3.5 m across, 1.6 m up, from 11 m) move when the ball lands a little off it."""
+    long_sd, short_sd = (a / 2 / 2.448 for a in axes_m)
+    t = math.radians(tilt_deg)
+    across_m = math.sqrt((long_sd * math.cos(t)) ** 2 + (short_sd * math.sin(t)) ** 2)
+    up_m = math.sqrt((long_sd * math.sin(t)) ** 2 + (short_sd * math.cos(t)) ** 2)
+    eps, ground = 1e-4, math.hypot(11.0, 3.5)
+    across = (math.atan((3.5 + eps) / 11.0) - math.atan((3.5 - eps) / 11.0)) / (2 * eps)
+    up = (math.atan((1.6 + eps) / ground) - math.atan((1.6 - eps) / ground)) / (2 * eps)
+    return math.degrees(across_m * across), math.degrees(up_m * up)
+
+
+def test_average_skill_at_penalty_speed_gives_the_measured_ellipse():
+    # A3: preferred-foot straight kicks, 95% axes 4.08 m and 1.91 m, tilted 26.9 degrees (Figure 5)
+    across, _, up = player().kick_error("finishing", 21.0, 0.0, 1.0, False)
+    assert abs(across - 3.61) < 0.01 and abs(up - 2.50) < 0.01
+    want = measured_sds_deg((4.08, 1.91), 26.9)
+    assert math.isclose(across, want[0], rel_tol=1e-6) and math.isclose(up, want[1], rel_tol=1e-6)
+
+
+def test_the_weaker_foot_follows_its_own_measured_ellipse():
+    # A3: weaker-foot straight kicks, 95% axes 5.60 m and 2.28 m, tilted 29.4 degrees (Figure 5)
+    p = player(weak_foot=0.5)
+    across, _, up = p.kick_error("finishing", 21.0, 0.0, 1.0, True)
+    want = measured_sds_deg((5.60, 2.28), 29.4)
+    assert math.isclose(across, want[0], rel_tol=1e-6) and math.isclose(up, want[1], rel_tol=1e-6)
+
+
+def test_launch_angle_error_grows_with_everything_direction_error_grows_with():
+    def both(p: Profile, **kw) -> tuple[float, float]:
+        args = {"skill": "finishing", "speed": 21.0, "pressure": 0.0, "capacity": 1.0, "weak_foot": False}
+        args.update(kw)
+        across, _, up = p.kick_error(**args)
+        return across, up
+    p = player()
+    ratio = both(p)[1] / both(p)[0]
+    for q, kw in ((player(finishing=0.1), {}), (p, {"speed": 30.0}), (p, {"pressure": 1.0}),
+                  (p, {"capacity": 0.0}), (p, {"turn_deg": 90.0})):
+        across, up = both(q, **kw)
+        assert up > both(p)[1]  # a harder, more hurried, tired or awkward strike also flies higher or lower
+        assert math.isclose(up / across, ratio)  # one ellipse, scaled
+    assert both(p, weak_foot=True)[1] > both(p)[1]  # the weaker foot has its own, wider ellipse
 
 
 def test_skill_narrows_error_and_speed_widens_it():
