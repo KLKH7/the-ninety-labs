@@ -13,7 +13,6 @@ from ninety.sim.engine import (
     DT,
     MAX_STRIKE_MPS,
     MISCONTROL_KEEP,
-    PRESS_GAP_M,
     Engine,
 )
 
@@ -122,7 +121,7 @@ def test_the_presser_stands_goal_side_for_both_teams():
         brain = e.brains[team]
         brain.in_possession, brain.pressers = False, [presser.id]
         tx, _, _ = e.shape_target(presser)
-        assert math.isclose(abs(tx - 52.0), PRESS_GAP_M, abs_tol=0.01)
+        assert math.isclose(abs(tx - 52.0), brain.press_gap_m, abs_tol=0.01)
         assert abs(tx - defends_x) < abs(52.0 - defends_x)  # between the ball and his own goal
 
 
