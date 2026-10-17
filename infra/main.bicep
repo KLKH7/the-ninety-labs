@@ -28,6 +28,14 @@ param renderReaderPrincipalId string = ''
 @description('Commit the event-driven render job renders with: a pushed sha or an engine tag. Empty: no queue job.')
 param renderCommit string = ''
 
+@secure()
+@description('Only to create or rotate the MCP key: written to Key Vault when set; left alone when empty.')
+param mcpKey string = ''
+
+@description('The Foundry resource and project, created by hand before this file; referenced, not managed.')
+param foundryAccountName string = 'ninety-labs-ai'
+param foundryProjectName string = 'the-ninety-labs'
+
 var token = uniqueString(subscription().id, resourceGroup().id, environmentName)
 var tags = { 'azd-env-name': environmentName }
 
@@ -84,6 +92,38 @@ resource ciPush 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empt
 // Set the mode explicitly: left out, Azure now creates an Express environment, which cannot run
 // Container Apps jobs or OpenTelemetry and failed to pull our image with the managed identity.
 // Only the 2026-03-02-preview API exposes environmentMode.
+// Key Vault holds the key Foundry's agents use to call the match MCP server at /mcp. The API reads
+// it through its managed identity; the Foundry connection gets it at deployment. Never in the repo.
+resource vault 'Microsoft.KeyVault/vaults@2023-07-01' = {
+  name: 'kv-ninety-${take(token, 13)}'
+  location: location
+  tags: tags
+  properties: {
+    tenantId: subscription().tenantId
+    sku: { family: 'A', name: 'standard' }
+    enableRbacAuthorization: true
+    enabledForTemplateDeployment: true
+  }
+}
+
+resource mcpKeySecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empty(mcpKey)) {
+  parent: vault
+  name: 'mcp-key'
+  properties: { value: mcpKey }
+}
+
+var vaultReaderRole = '4633458b-17de-408a-b874-0445c86b69e6' // built-in role "Key Vault Secrets User" (az role definition list)
+
+resource apiReadsSecrets 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: vault
+  name: guid(vault.id, apiIdentity.id, vaultReaderRole)
+  properties: {
+    principalId: apiIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', vaultReaderRole)
+  }
+}
+
 resource environment 'Microsoft.App/managedEnvironments@2026-03-02-preview' = {
   name: 'cae-ninety-${token}'
   location: location
@@ -114,7 +154,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
     type: 'UserAssigned'
     userAssignedIdentities: { '${apiIdentity.id}': {} }
   }
-  dependsOn: [apiPull]
+  dependsOn: [apiPull, apiReadsSecrets, mcpKeySecret]
   properties: {
     managedEnvironmentId: environment.id
     workloadProfileName: 'Consumption'
@@ -126,6 +166,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
         transport: 'auto'
       }
       registries: [{ server: registry.properties.loginServer, identity: apiIdentity.id }]
+      secrets: [{ name: 'mcp-key', keyVaultUrl: '${vault.properties.vaultUri}secrets/mcp-key', identity: apiIdentity.id }]
     }
     template: {
       containers: [
@@ -134,6 +175,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
           // A public placeholder until the first `azd deploy api`; after that, the deployed image.
           image: apiExists ? apiImage.outputs.image : 'mcr.microsoft.com/k8se/quickstart:latest'
           resources: { cpu: json('0.25'), memory: '0.5Gi' }
+          env: [{ name: 'NINETY_MCP_KEY', secretRef: 'mcp-key' }]
           probes: apiExists
             ? [
                 { type: 'Readiness', httpGet: { path: '/api/health', port: 8000 }, periodSeconds: 10 }
@@ -145,6 +187,102 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
       // Scale to zero between viewers; one replica is plenty for a demo and caps spend.
       scale: { minReplicas: 0, maxReplicas: 1 }
     }
+  }
+}
+
+// Foundry: tracing and the guardrail ------------------------------------------------------
+
+resource foundry 'Microsoft.CognitiveServices/accounts@2025-06-01' existing = {
+  name: foundryAccountName
+}
+
+resource foundryProject 'Microsoft.CognitiveServices/accounts/projects@2025-06-01' existing = {
+  parent: foundry
+  name: foundryProjectName
+}
+
+// The nightly evaluation workflow (.github/workflows/evals.yml) runs as the GitHub identity: it
+// calls the published agents and records evaluation runs, so it needs Foundry User on this
+// resource only (looked up with `az role definition list --name "Foundry User"`).
+var foundryUser = '53ca6127-db72-4b80-b1b0-d745d6d5456d'
+
+resource ciFoundryUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(ciPrincipalId)) {
+  scope: foundry
+  name: guid(foundry.id, ciPrincipalId, foundryUser)
+  properties: {
+    principalId: ciPrincipalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', foundryUser)
+  }
+}
+
+// Agent runs send OpenTelemetry traces here; connected to the project, they show in Foundry's
+// tracing view. Shares the capped Log Analytics workspace above.
+resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
+  name: 'appi-ninety-${token}'
+  location: location
+  tags: tags
+  kind: 'web'
+  properties: {
+    Application_Type: 'web'
+    WorkspaceResourceId: logs.id
+  }
+}
+
+resource tracingConnection 'Microsoft.CognitiveServices/accounts/projects/connections@2025-06-01' = {
+  parent: foundryProject
+  name: 'appinsights-tracing'
+  properties: {
+    category: 'AppInsights'
+    target: appInsights.id
+    authType: 'ApiKey'
+    isSharedToAll: false
+    credentials: { key: appInsights.properties.ConnectionString }
+    metadata: { ApiType: 'Azure', ResourceId: appInsights.id }
+  }
+}
+
+// The guardrail every agent is published with (ninety/agents/foundry.py). Microsoft's default
+// filters at their default thresholds, plus Prompt Shields for indirect attacks: our agents read
+// tool output and, later, viewer input, and both are data that may carry instructions. Thresholds
+// are not tuned to football words: false blocks on commentary are to be measured with the agent
+// evaluations (planned), and a threshold changes only on that evidence.
+resource guardrail 'Microsoft.CognitiveServices/accounts/raiPolicies@2025-06-01' = {
+  parent: foundry
+  name: 'ninety-guardrail'
+  properties: {
+    basePolicyName: 'Microsoft.DefaultV2'
+    mode: 'Blocking'
+    contentFilters: [
+      { name: 'Hate', blocking: true, enabled: true, severityThreshold: 'Medium', source: 'Prompt' }
+      { name: 'Hate', blocking: true, enabled: true, severityThreshold: 'Medium', source: 'Completion' }
+      { name: 'Sexual', blocking: true, enabled: true, severityThreshold: 'Medium', source: 'Prompt' }
+      { name: 'Sexual', blocking: true, enabled: true, severityThreshold: 'Medium', source: 'Completion' }
+      { name: 'Violence', blocking: true, enabled: true, severityThreshold: 'Medium', source: 'Prompt' }
+      { name: 'Violence', blocking: true, enabled: true, severityThreshold: 'Medium', source: 'Completion' }
+      { name: 'Selfharm', blocking: true, enabled: true, severityThreshold: 'Medium', source: 'Prompt' }
+      { name: 'Selfharm', blocking: true, enabled: true, severityThreshold: 'Medium', source: 'Completion' }
+      { name: 'Jailbreak', blocking: true, enabled: true, source: 'Prompt' }
+      { name: 'Indirect Attack', blocking: true, enabled: true, source: 'Prompt' }
+      { name: 'Protected Material Text', blocking: true, enabled: true, source: 'Completion' }
+    ]
+  }
+}
+
+// The match MCP server as a Foundry tool connection: the published Analyst names it, and Foundry
+// sends the key with every call (ninety/agents/foundry.py, MCP_CONNECTION).
+resource vaultForDeployment 'Microsoft.KeyVault/vaults@2023-07-01' existing = {
+  name: vault.name
+}
+
+module mcpConnection 'modules/mcp-connection.bicep' = {
+  name: 'mcp-connection'
+  dependsOn: [mcpKeySecret]
+  params: {
+    foundryAccountName: foundryAccountName
+    foundryProjectName: foundryProjectName
+    target: 'https://${api.properties.configuration.ingress.fqdn}/mcp'
+    key: vaultForDeployment.getSecret('mcp-key')
   }
 }
 
@@ -372,6 +510,7 @@ resource renderQueueJob 'Microsoft.App/jobs@2025-01-01' = if (!empty(renderCommi
 output AZURE_CONTAINER_REGISTRY_ENDPOINT string = registry.properties.loginServer
 output AZURE_CONTAINER_APPS_ENVIRONMENT_ID string = environment.id
 output API_URL string = 'https://${api.properties.configuration.ingress.fqdn}'
+output FOUNDRY_GUARDRAIL string = guardrail.name
 output RENDER_JOB_NAME string = renderJob.name
 output RENDER_STORAGE_ACCOUNT string = storage.name
 output RENDER_QUEUE_URL string = storage.properties.primaryEndpoints.queue

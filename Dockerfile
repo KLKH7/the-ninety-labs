@@ -18,6 +18,11 @@ RUN uv sync --locked --no-install-project
 COPY ninety ./ninety
 RUN uv sync --locked
 
+# The matches the MCP server serves, simulated now so a tool call is a lookup, never a simulation
+# (Foundry gives an MCP call 100 s; one simulation takes longer than that on a quarter CPU).
+ENV NINETY_MATCH_DIR=/app/matches
+RUN uv run --no-sync python -m ninety.mcp.match_server --precompute /app/matches
+
 ARG NINETY_COMMIT=unknown
 ENV NINETY_COMMIT=${NINETY_COMMIT} PATH="/app/.venv/bin:${PATH}"
 

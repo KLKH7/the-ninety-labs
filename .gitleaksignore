@@ -1,0 +1,7 @@
+# Findings that are not secrets, each by exact fingerprint (commit:file:rule:line) with its reason.
+# Never add a pattern or a path here, only a single reviewed finding.
+
+# Microsoft's public ID for the built-in role "Key Vault Secrets User", flagged because the variable
+# holding it was named secretsUser (renamed to vaultReaderRole in the next commit). Kept in history
+# because docs/eval/analyst.md is stamped with this commit.
+d911c0bf3ecbcb4e3759c4b3221f9c5042ac464f:infra/main.bicep:generic-api-key:109
