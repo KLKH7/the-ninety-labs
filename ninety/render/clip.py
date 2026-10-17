@@ -132,12 +132,29 @@ def _appearance(lk, p: RenderParams) -> dict:
     }
 
 
+def camera_positions(frames: list[dict], p: RenderParams, seed: int) -> list[tuple[float, float, float]]:
+    """Where the broadcast lens stands at each frame, from the director the render uses.
+
+    Run from the first frame rather than from the window's warm-up, so a cut's timing can
+    differ from the render's by a few frames. Good enough to rank windows; the labels are
+    measured on the render itself.
+    """
+    director = Director(p.camera, p.width, p.height, p.fps, seed, cuts=p.camera_cut)
+    out = []
+    for fr in frames:
+        ball = drawn_ball(fr)
+        actors = [(pl["x"], pl["y"], pl.get("action", "")) for pl in fr["players"]]
+        out.append(tuple(director.step(ball[0], ball[1], actors).position))
+    return out
+
+
 def choose_start(
     frames: list[dict], p: RenderParams, n: int, seed: int, earliest_s: float, latest_s: float
 ) -> int:
     earliest, latest = int(earliest_s * FPS), int(latest_s * FPS)
     if p.occlusion == "crowded":
-        return crowded_start(frames, n, max(earliest, WARMUP), latest)
+        cams = camera_positions(frames[: latest + n], p, seed)
+        return crowded_start(frames, n, max(earliest, WARMUP), latest, cams)
     return random.Random(f"window-{seed}").randint(max(earliest, WARMUP), latest)
 
 
