@@ -54,7 +54,17 @@ Within each frame and class, eligible detections are paired one-to-one, best-fir
 match at IoU ≥ 0.50. Ball boxes match when their centre distance is ≤ 5 pixels. A label with no
 match is a false negative; a detection with no match is a false positive. The report contains
 TP, FP, FN, precision and recall overall, by class, and for the difficulty groups below. Boxes
-with visibility zero are not labels because they were not drawn. Run:
+with visibility zero are not labels because they were not drawn.
+
+Only frames the detector ran on are scored. A frame is run when it has a line in the
+detections file ([the detections contract](../ninety/vision/detections.py)); a line with an
+empty `detections` list is a run frame that found nothing, so its labels are false negatives.
+Labels on frames with no line are skipped, not counted as misses, so detecting every 25th frame
+scores those frames only. The run set is read before the per-frame lines are flattened, and a
+run frame missing from `frames.jsonl` is refused. The report's `frames` block gives `scored`
+(run frames) and `label_frames_skipped` (labelled frames with no line). In the flat format (one
+detection per line) a frame that found nothing cannot be written, so use the per-frame format.
+Run:
 
 ```bash
 uv run python -m ninety.eval.vision_score --frames runs/seed7/frames.jsonl \
