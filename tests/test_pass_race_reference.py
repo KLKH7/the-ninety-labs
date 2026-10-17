@@ -10,8 +10,8 @@ import random
 from ninety.sim import decisions as D
 from ninety.sim import offball, perception
 from ninety.sim.body import can_get_to, relative_speed
-from ninety.sim.engine import AERIAL_ABSORB, BODY_TOUCH_Z, Engine
-from ninety.sim.firsttouch import KEEP_MPS
+from ninety.sim.engine import Engine
+from ninety.sim.firsttouch import CUSHION, KEEP_MPS, SURFACES
 from ninety.sim.profiles import Profile
 
 
@@ -81,9 +81,11 @@ def reference(scene, tx, ty, mx, my, age, lofted, pace, receiver):
         if at == len(points) - 1 and rests:
             g = vz = 0.0
         rel = relative_speed(g * ux, g * uy, vz, taker[2], taker[3])
-        # The engine's touch: a thigh, chest or head above BODY_TOUCH_Z kills AERIAL_ABSORB of a
-        # foot's pace, and he keeps it if what is left is no more than KEEP_MPS.
-        absorb = taker[5] * (AERIAL_ABSORB if z > BODY_TOUCH_Z else 1.0)
+        # The engine's touch: the part the ball meets at its height (SURFACES) kills its CUSHION share
+        # of a foot's pace, and he keeps it if what is left is no more than KEEP_MPS. Written out here,
+        # not a call to firsttouch.surface, on purpose: this is an independent reference.
+        part = next(name for name, top in SURFACES if z <= top)
+        absorb = taker[5] * CUSHION[part]
         p = D.sigmoid((absorb + KEEP_MPS - rel) / D.CONTROL_MARGIN_MPS)
         horizon = take + D.OPPONENT_LATE_S
         for ox0, oy0, ovx, ovy, keeper in scene.moving:
