@@ -46,3 +46,15 @@ def test_box_runners_wait_onside_for_the_delivery():
     assert st[0] <= 92.0  # held a step onside of their line, not parked at the near post
     beyond_ball = slot("ST", ball_x=95.0, ball_y=60.0, line=93.0)
     assert beyond_ball[0] <= 95.0  # level with the ball at most, when the ball is further on
+
+
+def test_with_the_ball_central_in_the_final_third_the_box_is_attacked_too():
+    def at(role, ball_x=80.0, line=101.0):  # their defenders deep in the box
+        x, y = slot(role, ball_x=ball_x, ball_y=34.0, line=line)
+        return x, round(y, 6)
+    assert at("ST") == (99.0, 34.0)  # between the centre-backs
+    assert at("RW") == (98.0, 27.0) and at("LW") == (98.0, 41.0)  # inside, at the posts
+    assert at("RW", line=90.0)[0] < 90.0  # still onside until the pass
+    assert abs(at("RW", ball_x=60.0)[1] - 34.0) > 15.0  # before the final third: wide
+    away = O.attacking_slot("RW", 105.0, 25.0, 34.0, 4.0)
+    assert (away[0], round(away[1], 6)) == (7.0, 41.0)  # mirrored for the side attacking toward x = 0

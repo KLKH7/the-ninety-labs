@@ -217,6 +217,10 @@ POSSESSION_LENGTH_M = 46.0
 BALL_SIDE_IN_POSSESSION = 0.15  # the shape leans this share toward the ball's side
 FINAL_THIRD_M = 70.0  # ball this far from his own goal: the box is attacked
 BOX_RUNS = {"ST": (99.0, 4.0), "far_winger": (98.0, -7.0), "RCM": (88.0, 0.0)}  # near post, far post, edge
+# O6: with the ball central in the final third the box is attacked too: the striker between the
+# centre-backs, each winger inside to the post on his own side, a midfielder at the edge (*design*:
+# the same spots as the wide case, mirrored; he still waits onside for the pass).
+CENTRAL_BOX_RUNS = {"ST": (99.0, 0.0), "RW": (98.0, -7.0), "LW": (98.0, 7.0), "RCM": (88.0, 0.0)}
 
 
 def attacking_slot(role: str, own_goal_x: float, ball_x: float, ball_y: float,
@@ -224,8 +228,10 @@ def attacking_slot(role: str, own_goal_x: float, ball_x: float, ball_y: float,
                    ) -> tuple[float, float] | None:
     # `last_line_x`: the furthest a player of this side may stand and be onside, as he sees it.
     """O6: where this role stands while his team has the ball. Heights follow the ball; attackers
-    stand on the opponents' last line (onside); with the ball wide in the final third, the striker,
-    the far-side winger and a midfielder attack the near post, the far post and the box edge."""
+    stand on the opponents' last line (onside); with the ball in the final third the box is attacked:
+    wide, the striker, the far-side winger and a midfielder attack the near post, the far post and
+    the box edge; central, the striker the goal's centre, both wingers their posts and a midfielder
+    the edge."""
     shape = SHAPE_IN_POSSESSION.get(role)
     if shape is None:
         return None
@@ -242,6 +248,10 @@ def attacking_slot(role: str, own_goal_x: float, ball_x: float, ball_y: float,
             u, side = BOX_RUNS[key]
             u = min(u, max(last_u, ball_u))  # L10: he waits onside for the delivery
             return own_goal_x + fwd * u, PITCH_Y / 2 + ball_side * side
+    elif ball_u > FINAL_THIRD_M and role in CENTRAL_BOX_RUNS:
+        u, side = CENTRAL_BOX_RUNS[role]
+        u = min(u, max(last_u, ball_u))  # L10: he waits onside for the delivery
+        return own_goal_x + fwd * u, PITCH_Y / 2 + across * side
     behind, width = shape
     # His role and his team's build-up style (roles.py): higher or deeper, nearer the centre or wider.
     if behind is None:
