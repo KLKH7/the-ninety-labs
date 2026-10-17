@@ -523,14 +523,18 @@ class Engine:
         """P16: can he strike it toward (tx, ty) now? The rule the passer's estimate uses too
         (decisions.can_strike)."""
         bx, by = self.ball[0], self.ball[1]
+        facing = decisions.STRIKE_FACING
         if self.dead_ball == carrier.id:  # a placed ball does not come to him: he steps up to it
+            # Nobody may challenge him until he kicks it (Laws 13 to 17), so he squares up to it, to
+            # the engine's resolution of one frame's turn (P16, A3).
+            facing = TURN_RATE * DT
             h = carrier.heading
             feet = shape.surface(h, h, pad=ball.RADIUS)
             fx, fy = carrier.x + math.cos(h) * feet, carrier.y + math.sin(h) * feet
             if math.hypot(fx - bx, fy - by) >= AT_FOOT_M:
                 return False
         return decisions.can_strike(bx - carrier.x, by - carrier.y, carrier.heading, tx - bx, ty - by,
-                                    thrown=carrier.id == self.throw_by)
+                                    thrown=carrier.id == self.throw_by, facing=facing)
 
     def turn_to(self, carrier: Player, tx: float, ty: float, strike) -> None:
         """He turns toward the target, no faster than a body turns (P16, tick_carrier), taking the
@@ -686,7 +690,8 @@ class Engine:
                                 current="dribble" if self.dribble_to else None, moving=moving,
                                 absorb={m[0]: self.by_id[m[0]].profile.absorb_mps(False) for m in mates},
                                 passer=prof, heading=carrier.heading, fresh=self.fresh(carrier),
-                                ball_offset=(self.ball[0] - carrier.x, self.ball[1] - carrier.y))
+                                ball_offset=(self.ball[0] - carrier.x, self.ball[1] - carrier.y),
+                                dead=carrier.id == self.dead_ball)
         return scene
 
     def decide(self, carrier: Player, throw: bool = False) -> None:

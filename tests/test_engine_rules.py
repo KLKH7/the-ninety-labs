@@ -1105,9 +1105,11 @@ def test_a_free_kick_stays_on_its_spot_while_the_taker_turns_and_is_struck_from_
         assert (e.ball[0], e.ball[1]) == spot  # never carried off the spot
         assert math.hypot(taker.x - spot[0], taker.y - spot[1]) < 0.5  # he stays at the ball
     assert struck is not None and (struck["x"], struck["y"]) == (round(spot[0], 2), round(spot[1], 2))
-    assert abs(D.turn_deg(0.0, taker.heading)) <= math.degrees(D.STRIKE_FACING)
-    # P16: 180° round to within 60° of the line takes at least 120° / 350° a second
-    assert frames * DT >= 120.0 / 350.0 - DT
+    from ninety.sim.engine import TURN_RATE
+
+    # nobody may challenge him first (Law 13), so he squares up to it: all 180° at 350° a second (P16)
+    assert abs(D.turn_deg(0.0, taker.heading)) <= math.degrees(TURN_RATE * DT) + 1e-9
+    assert frames * DT >= 180.0 / 350.0 - DT
     # struck at his foot: the ball against his front, not out of reach in front of him
     assert shape.clearance(*spot, taker.x, taker.y, taker.heading) < 2 * ball.RADIUS
 
@@ -1150,6 +1152,7 @@ def test_a_restart_holds_until_the_ball_is_kicked_opponents_off_it_and_no_challe
     e.restart.ready_at = e.t
     e.tick_restart()
     assert e.restart is None and e.placed is not None  # placed, not yet kicked
+    assert e.scene_for(taker).dead  # he weighs his options knowing nobody may challenge him yet
     opp = e.by_id["a6"]
     opp.x, opp.y = 40.8, 34.0
     brain = e.brains["away"]
