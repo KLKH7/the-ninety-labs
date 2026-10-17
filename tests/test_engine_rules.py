@@ -7,6 +7,7 @@ from statistics import mean, pstdev
 
 from ninety.sim import ball, perception
 from ninety.sim.body import BRAKE_MAX
+from ninety.sim.body import move as move_body
 from ninety.sim.engine import (
     BODY_RADIUS,
     BODY_RESTITUTION,
@@ -609,23 +610,6 @@ def test_a_lunge_that_arrives_during_a_throw_in_finds_nothing():
     assert not any(ev["type"] == "tackle" for ev in e.match.events)
 
 
-def step(e: Engine) -> None:
-    """One frame of Engine.run without its kick-off."""
-    e.moved = None
-    e.perceive_and_think()
-    e.duels()
-    if e.possessor:
-        e.tick_carrier()
-    elif e.restart:
-        e.tick_restart()
-    else:
-        e.tick_free()
-    e.move_players()
-    e.snapshot()
-    e.t += DT
-    e.frame += 1
-
-
 def test_a_dribbler_whose_touch_went_out_still_takes_the_throw_in():
     """His touch ran over the line, so the ball is dead and his dribble is over; he runs to his
     spot behind the line like any thrower. (He once kept chasing his touch, which a target held
@@ -638,7 +622,7 @@ def test_a_dribbler_whose_touch_went_out_still_takes_the_throw_in():
     e.ball = (50.0, -1.0, 0.0, 0.0, 0.0, 0.0)
     e.stop("throw_in", "home", (50.0, 0.0), taker=taker.id)
     for _ in range(int(10 / DT)):
-        step(e)
+        e.step()
         if e.restart is None:
             break
     assert e.restart is None and e.throw_by == taker.id
@@ -657,8 +641,67 @@ def test_taking_the_ball_for_a_throw_in_never_brakes_or_speeds_him_up_beyond_his
     e.restart.ready_at = e.t
     speeds = [0.25]
     for _ in range(5):
-        step(e)
+        e.step()
         speeds.append(math.hypot(taker.vx, taker.vy))
     assert e.throw_by == taker.id
     for before, after in zip(speeds, speeds[1:], strict=False):
         assert after <= before + 1e-9 and before - after <= BRAKE_MAX * DT + 1e-9, speeds
+
+
+def thrower_ready_at(x: float, y: float, vx: float = 0.0, vy: float = 0.0) -> tuple[Engine, object]:
+    """Home's h9 is the taker of a throw-in where the ball crossed the near touchline at x = 50,
+    standing at (x, y) and moving at (vx, vy); the restart is ready now."""
+    e = Engine(1)
+    still(e)
+    taker = e.by_id["h9"]
+    taker.x, taker.y, taker.vx, taker.vy = x, y, vx, vy
+    e.possessor = None
+    e.ball = (50.0, -1.0, 0.0, 0.0, 0.0, 0.0)
+    e.stop("throw_in", "home", (50.0, 0.0), taker=taker.id)
+    e.restart.ready_at = e.t
+    return e, taker
+
+
+def test_a_throw_in_is_thrown_from_behind_the_touchline_with_the_ball_over_or_behind_it():
+    """Law 15 (D5): at the moment of the throw the thrower stands on or behind the touchline and
+    the ball, in his hands, is over or behind it. He starts standing 0.9 m inside the pitch, so
+    a spot tolerance wide enough to reach him there would let him throw from the field."""
+    e, taker = thrower_ready_at(50.0, 0.35)
+    thrown = False
+    for _ in range(int(10 / DT)):
+        x, y = taker.x, taker.y  # the throw uses where he stands as the frame starts
+        e.step()
+        thrown = any(ev["type"] == "pass" and ev["player"] == taker.id for ev in e.match.events)
+        if thrown:
+            break
+    assert thrown  # positive control: he did throw
+    assert y < 0.0, y  # his body is behind the line, not on the pitch
+    # The ball leaves from his hands, a reach in front of him (events clamp to the pitch, so read
+    # the ball itself: it was struck this frame and has not moved yet).
+    assert e.ball[:3] == throw_hands(x, y)
+    assert e.ball[1] <= 0.0, e.ball  # over or behind the line
+
+
+def test_taking_the_ball_for_a_throw_in_never_places_the_taker():
+    """Lesson 5: he is never moved to his spot. He is inside the spot tolerance and slow enough
+    to take the ball, but not on the spot; over the frame he takes it, tick_restart leaves his
+    position and velocity exactly where his own movement model puts them."""
+    sx, sy = throw_stand(50.0, 0.0)
+    e, taker = thrower_ready_at(sx + 0.15, sy + 0.1, vx=0.2, vy=-0.05)
+    expect = move_body(taker.x, taker.y, taker.vx, taker.vy, taker.x, taker.y, 0.0, taker.physique, DT)
+    e.tick_restart()
+    assert e.restart is None and e.throw_by == taker.id  # positive control: he took the ball
+    assert (taker.x, taker.y, taker.vx, taker.vy) == expect
+
+
+def test_a_thrower_arriving_faster_than_one_frame_of_braking_does_not_take_the_ball():
+    """D5, P2: he takes the ball only when one frame of his braking limit stops him. Just above
+    that, on his spot, he waits; just below, he takes it."""
+    sx, sy = throw_stand(50.0, 0.0)
+    limit = BRAKE_MAX * DT
+    e, taker = thrower_ready_at(sx, sy, vx=limit * 1.05)
+    e.tick_restart()
+    assert e.restart is not None and e.throw_by is None
+    e, taker = thrower_ready_at(sx, sy, vx=limit * 0.95)
+    e.tick_restart()
+    assert e.restart is None and e.throw_by == taker.id

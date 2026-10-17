@@ -1518,23 +1518,26 @@ class Engine:
             }
         )
 
+    def step(self) -> None:
+        """One frame: everyone perceives and decides, the ball is played, everyone moves."""
+        self.moved = None
+        self.perceive_and_think()
+        self.duels()
+        if self.possessor:
+            self.tick_carrier()
+        elif self.restart:
+            self.tick_restart()
+        else:
+            self.tick_free()
+        self.move_players()
+        self.snapshot()
+        self.t += DT
+        self.frame += 1
+
     def run(self, minutes: float) -> Match:
         self.kickoff("home")
-        total = int(minutes * 60 * FPS)
-        for _ in range(total):
-            self.moved = None
-            self.perceive_and_think()
-            self.duels()
-            if self.possessor:
-                self.tick_carrier()
-            elif self.restart:
-                self.tick_restart()
-            else:
-                self.tick_free()
-            self.move_players()
-            self.snapshot()
-            self.t += DT
-            self.frame += 1
+        for _ in range(int(minutes * 60 * FPS)):
+            self.step()
         return self.match
 
 
