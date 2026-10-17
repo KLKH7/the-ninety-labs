@@ -816,9 +816,10 @@ class Engine:
             return False, None, 0.0
         return can_get_to(p.physique, bx - p.x, by - p.y, reach_m, p.vx, p.vy, t - delay, cap)
 
-    def run_speed(self, p: Player, goals: float) -> float:
-        """P17: the speed he asks for on a run worth `goals`, from what it costs him now."""
-        return pacing.run_speed(p.physique, p.profile["stamina"], p.profile["work_rate"], self.t, goals)
+    def run_speed(self, p: Player, goals: float, x: float, y: float) -> float:
+        """P17: the speed he asks for on a run to (x, y) worth `goals`, from what it costs him now."""
+        return pacing.run_speed(p.physique, p.profile["stamina"], p.profile["work_rate"], self.t, goals,
+                                math.hypot(x - p.x, y - p.y))
 
     def contest_goals(self, team: str, x: float, y: float) -> float:
         """P17: what winning (or denying them) the ball at (x, y) is worth: its threat for us there
@@ -829,8 +830,9 @@ class Engine:
         """T3: how hard he presses and recovers (design)."""
         return 5.0 + 2.0 * p.profile["work_rate"]
 
-    def press_goals(self, p: Player) -> float:
-        """P17: what pressing now is worth, from where play is going and when the ball is under
+    def press_run(self, p: Player) -> tuple[float, float]:
+        """P17: what pressing now is worth (goals) and the metres above critical speed it takes (the
+        run to pressing distance at his pressing pace), from where play is going and when the ball is under
         control there (O8). Closing the carrier down to pressing distance while he still has it
         (his time on the ball) takes away the danger: the threat of their ball there (D9). Winning
         it needs more: reaching him before he can react to the presser and play it (D1's choice
@@ -852,12 +854,17 @@ class Engine:
                                             / decisions.LANE_MARGIN_S)
         wins = before_he_plays * decisions.tackle_chance(reach, p.profile["tackling"])
         theirs = decisions.value(tx, ty, goal_x(other(p.team)))
-        return closed * theirs + wins * decisions.value(tx, ty, goal_x(p.team))
+        metres = pacing.metres_above(max(0.0, d - gap), pace, p.physique.cs)
+        return closed * theirs + wins * decisions.value(tx, ty, goal_x(p.team)), metres
+
+    def press_goals(self, p: Player) -> float:
+        """P17: what pressing now is worth, in goals (press_run)."""
+        return self.press_run(p)[0]
 
     def accepts_press(self, p: Player) -> bool:
         """P17: does he think pressing now is worth what it costs him?"""
-        return pacing.accepts(p.physique, p.profile["stamina"], p.profile["work_rate"], self.t,
-                              self.press_goals(p))
+        goals, metres = self.press_run(p)
+        return pacing.accepts(p.physique, p.profile["stamina"], p.profile["work_rate"], self.t, goals, metres)
 
     def plan_chase(self) -> None:
         """Each team sends the player who thinks they can reach the ball's path first. Each player
@@ -878,7 +885,8 @@ class Engine:
                 t = k * DT
                 bx, by, bz = path[k][0] + ex * t, path[k][1] + ey * t, path[k][2]
                 # Judged at the speed he would chase it to there at (P17); a keeper is not priced.
-                cap = None if p.role == "GK" else self.run_speed(p, self.contest_goals(p.team, bx, by))
+                goals = self.contest_goals(p.team, bx, by)
+                cap = None if p.role == "GK" else self.run_speed(p, goals, bx, by)
                 reachable, gap, along = self.can_reach(p, bx, by, bz, t, cap=cap)
                 if gap is None:
                     continue  # over his reach
@@ -1364,7 +1372,8 @@ class Engine:
         """Where a player off the ball wants to be, and how fast they go there."""
         chase = self.chase.get(p.team)
         if p.id in self.lunges:  # committed: straight at the ball, at what winning it is worth to him (P17)
-            return self.ball[0], self.ball[1], self.run_speed(p, self.contest_goals(p.team, *self.ball[:2]))
+            bx, by = self.ball[0], self.ball[1]
+            return bx, by, self.run_speed(p, self.contest_goals(p.team, bx, by), bx, by)
         if self.off_balance.get(p.id, -1.0) > self.t:  # beaten: getting up, out of the play
             return p.x, p.y, SHAPE
         if p.id == self.dribbler:  # running onto his own touch, a little faster than the ball
@@ -1376,7 +1385,7 @@ class Engine:
         # Targets stay on the pitch so players brake for the line instead of stopping dead at it.
         if chase and chase[0] == p.id:  # the loose ball his team sends him to (P17; a keeper all-out)
             goals = self.contest_goals(p.team, chase[1], chase[2])
-            speed = SPRINT if p.role == "GK" else self.run_speed(p, goals)
+            speed = SPRINT if p.role == "GK" else self.run_speed(p, goals, chase[1], chase[2])
             return clamp(chase[1], 0.5, PITCH_X - 0.5), clamp(chase[2], 0.5, PITCH_Y - 0.5), speed
         if self.read and self.read[0] == p.id and self.possessor is None and self.kicked:
             # Sideways at the depth he has set, not back toward his line: a keeper who has come out
@@ -1441,7 +1450,7 @@ class Engine:
             run = self.run_target(p, carrier, brain)
             if run:  # a run in behind: worth the threat it adds if the ball reaches him there (P17)
                 gain = decisions.value(*run, goal_x(p.team)) - decisions.value(*self.ball[:2], goal_x(p.team))
-                return *run, self.run_speed(p, gain)
+                return *run, self.run_speed(p, gain, *run)
             mates = sorted(
                 (
                     q
