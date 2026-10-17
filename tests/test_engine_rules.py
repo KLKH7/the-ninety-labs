@@ -2,19 +2,26 @@
 the passer believes, keepers only anticipate shots, pressers stand goal-side, and facing holds."""
 
 import math
+from collections import defaultdict
 from statistics import mean, pstdev
 
 from ninety.sim import ball, perception
+from ninety.sim.body import BRAKE_MAX
 from ninety.sim.engine import (
     BODY_RADIUS,
     BODY_RESTITUTION,
     COVER_BEHIND_M,
     DIVE_TIME_S,
     DT,
+    FPS,
     MAX_STRIKE_MPS,
     MISCONTROL_KEEP,
     Engine,
+    simulate,
+    throw_hands,
+    throw_stand,
 )
+from ninety.validate import check_physics
 
 
 def still(e: Engine) -> None:
@@ -249,7 +256,7 @@ def test_a_throw_in_is_always_thrown_even_with_nobody_free():
     e.possessor = None
     e.stop("throw_in", "home", (50.0, 0.0))
     taker = e.by_id[e.restart.taker]
-    taker.x, taker.y = 50.0, 0.0
+    taker.x, taker.y = throw_stand(50.0, 0.0)  # he has run to his spot behind the line
     e.restart.ready_at = e.t
     e.tick_restart()
     assert e.throw_by == taker.id
@@ -553,3 +560,105 @@ def test_a_blocked_pass_fails_and_a_pass_back_to_the_passer_is_not_completed():
     e.kicked = e.emit("pass", "home", 50.0, 34.0, player="h6")
     e.touched(e.by_id["h6"], 50.5, 34.0, controls=True)
     assert e.match.events[-1]["outcome"] == "fail" and e.match.events[-1]["receiver"] is None
+
+
+def test_a_throw_in_taker_runs_to_his_spot_and_stops_there():
+    """Lesson 5: the taker was once moved the last metre to his spot in one frame (22 m/s) and
+    stopped dead with the ball. The match must contain a throw-in, so the case is exercised; a
+    short clip with no restart would pass whatever the engine did."""
+    m = simulate(7, 6)
+    assert any(p["action"] == "throw" for fr in m.frames for p in fr["players"])
+    problems = defaultdict(list)
+    check_physics(m.events, m.frames, FPS, m.roster, problems)
+    assert not problems.get("P1 player speed") and not problems.get("P2 player acceleration"), dict(problems)
+
+
+def throw_in_scene() -> tuple[Engine, object, object]:
+    """Home's h9 holds the ball for a throw-in on the near touchline; away's a5 is within lunge
+    reach with a team-mate covering goal-side, so in open play he could commit (D8)."""
+    e = Engine(1)
+    still(e)
+    thrower, defender, cover = e.by_id["h9"], e.by_id["a5"], e.by_id["a3"]
+    thrower.x, thrower.y = 56.1, -0.45
+    defender.x, defender.y = 56.6, 0.4
+    cover.x, cover.y = 60.0, 4.0
+    e.restart, e.possessor, e.dribbler, e.throw_by = None, thrower.id, None, thrower.id
+    e.ball = (*throw_hands(thrower.x, thrower.y), 0.0, 0.0, 0.0)
+    e.hold_until = e.t + 99.0
+    return e, thrower, defender
+
+
+def test_nobody_challenges_a_ball_held_for_a_throw_in():
+    """Law 15: the ball is not in play until it is thrown."""
+    e, _, defender = throw_in_scene()
+    defender.profile.attributes["aggression"] = 1.0
+    for frame in range(60):
+        e.frame = frame
+        e.duels()
+    assert defender.id not in e.lunges
+
+
+def test_a_lunge_that_arrives_during_a_throw_in_finds_nothing():
+    e, thrower, defender = throw_in_scene()
+    held = e.ball
+    # Defence in depth: a lunge lasts under 0.5 s and a restart takes at least 1 s, so play should
+    # never produce this; if it did, the held ball must still be safe.
+    e.lunges[defender.id] = e.t
+    e.duels()
+    assert e.possessor == thrower.id and e.ball == held
+    assert not any(ev["type"] == "tackle" for ev in e.match.events)
+
+
+def step(e: Engine) -> None:
+    """One frame of Engine.run without its kick-off."""
+    e.moved = None
+    e.perceive_and_think()
+    e.duels()
+    if e.possessor:
+        e.tick_carrier()
+    elif e.restart:
+        e.tick_restart()
+    else:
+        e.tick_free()
+    e.move_players()
+    e.snapshot()
+    e.t += DT
+    e.frame += 1
+
+
+def test_a_dribbler_whose_touch_went_out_still_takes_the_throw_in():
+    """His touch ran over the line, so the ball is dead and his dribble is over; he runs to his
+    spot behind the line like any thrower. (He once kept chasing his touch, which a target held
+    on the pitch never let him leave, so the restart never came.)"""
+    e = Engine(1)
+    still(e)
+    taker = e.by_id["h9"]
+    taker.x, taker.y = 50.0, 2.0
+    e.possessor, e.dribbler = None, taker.id
+    e.ball = (50.0, -1.0, 0.0, 0.0, 0.0, 0.0)
+    e.stop("throw_in", "home", (50.0, 0.0), taker=taker.id)
+    for _ in range(int(10 / DT)):
+        step(e)
+        if e.restart is None:
+            break
+    assert e.restart is None and e.throw_by == taker.id
+
+
+def test_taking_the_ball_for_a_throw_in_never_brakes_or_speeds_him_up_beyond_his_body():
+    """He arrives still moving a little (just under one frame of braking). Over the frame he takes
+    the ball and the frames he holds it, his speed only falls, by no more than his braking grip."""
+    e = Engine(1)
+    still(e)
+    e.possessor = None
+    e.stop("throw_in", "home", (50.0, 0.0))
+    taker = e.by_id[e.restart.taker]
+    taker.x, taker.y = throw_stand(50.0, 0.0)
+    taker.vx, taker.vy = 0.25, 0.0
+    e.restart.ready_at = e.t
+    speeds = [0.25]
+    for _ in range(5):
+        step(e)
+        speeds.append(math.hypot(taker.vx, taker.vy))
+    assert e.throw_by == taker.id
+    for before, after in zip(speeds, speeds[1:], strict=False):
+        assert after <= before + 1e-9 and before - after <= BRAKE_MAX * DT + 1e-9, speeds

@@ -98,6 +98,15 @@ short and actionable. This file is public: no research sources, product names or
 - **Rule:** an evaluation reports misses and false rejections, tunes on one seed and is
   confirmed on a held-out one.
 
+### 25. A check that never meets the case cannot fail
+- **What happened:** the throw-in taker was moved the last metre to his spot in one frame (about
+  22 m/s) and stopped dead with the ball. The validator's speed check catches it, but CI validates
+  only a 3-minute clip, and the first throw-in of that seed comes after 5 minutes. The realism
+  report showed full-backs and wingers at 20 to 24 m/s, and nothing failed.
+- **Rule:** a check runs on data that contains the case it guards, and the test says so.
+- **Check:** `tests/test_engine_rules.py::test_a_throw_in_taker_runs_to_his_spot_and_stops_there`
+  asserts a throw-in happened before checking speeds; it fails on the old engine.
+
 ## Working in the repo
 
 ### 12. "No checks yet" is not "checks passed"

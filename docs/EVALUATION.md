@@ -11,11 +11,11 @@ generated it and the output file is committed. Rows marked *planned* have no res
 | Render checks (projection error, label completeness, determinism, ball occlusion share) | `uv run ninety-render-check <clips> --determinism --report docs/eval/render-checks.json`; CI `render` job on every push | `docs/eval/render-checks.json`, CI log | running |
 | Off-the-shelf detector recall on renders (guide check 2) | planned | `docs/eval/render-checks.json` | planned |
 | Detection precision and recall (players, ball) on the fixed test set, by difficulty, strict and lenient matching | planned | `docs/eval/vision-report-v{n}.json` | planned |
-| Event precision, recall and F1 per type; possession accuracy; speed error | planned | `docs/eval/vision-report-v{n}.json` | planned |
+| Event precision, recall and F1 per type; possession accuracy; speed error | events: `uv run python -m ninety.eval.event_score --truth <clip>/events.jsonl --frames <clip>/frames.jsonl --detected <detected.jsonl> --report <report.json>` ([format](#event-report-format)); possession and speed planned | `docs/eval/vision-report-v{n}.json` | planned: the harness runs and is tested on damaged simulator events; no detector yet |
 | Targeted data rounds, before and after | planned | `docs/eval/vision-report-v{n}.json` | planned |
 | Stats engine facts: hand-computed cases, planted defects, citations, size | `uv run pytest tests/test_stats.py` | test assertions | running |
 | Fact-checker rules (numbers, players, evidence ids) | `uv run pytest tests/test_factcheck.py` | test assertions | running |
-| Ledger versioning, evidence validation, and deterministic cue fixture | `uv run pytest tests/test_ledger.py tests/test_cues.py` | `tests/fixtures/cues-seed7.jsonl` and test assertions | running: 17 tests; 150 cues for seed 7, five minutes (75 passes, 15 of them failed; the engine made no shots in that window, so shots and goals are covered by hand-built cases) |
+| Ledger versioning, evidence validation, and deterministic cue fixture | `uv run pytest tests/test_ledger.py tests/test_cues.py` | `tests/fixtures/cues-seed7.jsonl` and test assertions | running: 17 tests; 156 cues for seed 7, five minutes (77 passes, 12 of them failed, and one shot; goals are covered by hand-built cases) |
 | Fact-checker catch rate on planted false claims, and true claims wrongly rejected | `uv run python -m ninety.eval.factcheck_eval` | `docs/eval/fact-checker.md` | re-run pending: the Judge's instructions and the tone kinds changed after the last run (fact split from tone, tone labels fitted to events, held-out and contradicted tone). Last published run, before that change, on held-out seeds 21,33: 129/129 false caught, 12/99 true rejected excluding service holds, all twelve on tone. |
 | Recovery from injected failures | planned | `docs/eval/failure-table.md` | planned |
 | Ablation: one agent against the full workflow | planned | `docs/eval/ablation.md` | planned |
@@ -67,8 +67,85 @@ The ball target (recall ≥ 0.90) applies to balls at least half visible; the ot
 reported, never left out.
 
 **Events.** A detected event matches a true event of the same type and team within 1.0 s
-(25 frames), one to one. Precision, recall and F1 are reported per type; pass F1 is the
-headline.
+(25 frames; exactly 1.0 s counts), one to one, the pairs closest in time taken first.
+Precision, recall and F1 are reported per type; pass F1 under the strict rule is the headline.
+Built in [`ninety/eval/event_score.py`](../ninety/eval/event_score.py).
+
+The detected spot must also be right, and it is judged at the **detected** time: its distance
+to where the reference object was at that moment.
+
+| Event type | Reference object |
+|---|---|
+| pressure, kickoff | the player of the event's team nearest to the detected spot |
+| substitution | none: graded on time only |
+| every other type | the ball |
+
+| Rule | Spot within | Use |
+|---|---|---|
+| Strict | 1.0 m | the headline, for the same reason as the ball and player radius above |
+| Lenient | 2.0 m | for comparison |
+| Time only | not checked | for comparison: how many errors are place errors |
+
+Why the detected time and not the true one: after a pass the ball moves about 10 m/s, so a
+pass detected 0.4 s late is several metres from the true event's spot even when vision placed
+the ball perfectly. Judging at the true time would turn every timing error into a place error
+and quietly tighten the 1.0 s window. The measurements are in
+[eval/event-motion.md](eval/event-motion.md).
+
+### Event report format
+
+The handoff to the agents (R4): what the harness reads and what it writes.
+
+```bash
+uv run ninety-sim --seed 7 --minutes 5 --out runs/seed7
+# fake detections until a detector exists: true events copied as vision output, then damaged
+uv run python -c "import json; from pathlib import Path; from ninety.eval.fake_detections import fake_detections; rd = lambda p: [json.loads(l) for l in Path(p).read_text().splitlines() if l.strip()]; det, log = fake_detections(rd('runs/seed7/events.jsonl'), rd('runs/seed7/frames.jsonl'), seed=1, per_damage=1); Path('runs/seed7/detected.jsonl').write_text(''.join(json.dumps(e) + '\n' for e in det))"
+uv run python -m ninety.eval.event_score --truth runs/seed7/events.jsonl --frames runs/seed7/frames.jsonl --detected runs/seed7/detected.jsonl --report runs/seed7/event-report.json
+```
+
+**Input: detected events.** One JSON object per line, each a valid
+[`match_event`](../schemas/match_event.schema.json) with `"source": "vision"` and a
+`confidence` from 0 to 1. The harness refuses the file if any line has another source, and
+refuses a truth file that is not all `"source": "truth"`. It reads `type`, `team`, `t`, `x`
+and `y`; `id` is copied into the pairs.
+
+**Output: one JSON file**, also summarised on the terminal:
+
+| Key | Contents |
+|---|---|
+| `rules` | `time_window_s` 1.0, `strict_m` 1.0, `lenient_m` 2.0, and `match`, the rule in words |
+| `inputs` | `truth`, `frames`, `detected` (the paths as given), `git_commit`, `date` (YYYY-MM-DD) |
+| `strict`, `lenient`, `time_only` | one block per rule, each with `per_type` and `pairs` |
+| `headline` | `{"rule": "strict", "pass_f1": ...}` |
+
+`per_type` has one entry per event type seen in the truth or the detections:
+
+| Field | Meaning |
+|---|---|
+| `true`, `detected` | how many of this type are in the truth and in the detections |
+| `tp`, `fp`, `fn` | matched; detected but unmatched; true but unmatched |
+| `precision`, `recall`, `f1` | `tp / detected`, `tp / true`, and their harmonic mean |
+| `time_error_s` | `{"mean", "max"}` of the absolute time error over matched pairs |
+| `distance_m` | `{"mean", "max"}` of the distance from the detected spot to the true event's spot, over matched pairs; reported, never used to match |
+
+`null` means undefined because a denominator is zero, never a made-up 0 or 1: precision with
+nothing detected, recall with nothing true, F1 when either is `null`, and both error blocks
+when nothing matched. When precision and recall are both defined and nothing matched, F1 is 0.
+
+Each of `pairs` is one match:
+
+| Field | Meaning |
+|---|---|
+| `truth_id`, `detected_id` | the two events' `id` |
+| `type`, `team` | shared by both |
+| `dt_s` | detected time minus true time, seconds; positive means late |
+| `place_error_m` | the spot's distance to the reference object at the detected time; `null` for a substitution; written as `Infinity` (not valid strict JSON) when the detected time is past the last frame, which can happen only in `time_only` |
+| `distance_m` | the spot's distance to the true event's spot |
+
+Example from the commands above on Windows, on fake detections, so the numbers grade the
+harness, not a detector (the same seed simulates a different match on Linux, so the digits may
+differ there): under `strict`, `pass` had `true` 69, `detected` 69, `tp` 64 and `f1` 0.928, and an
+invented `shot` (none true) had `precision` 0.0 and `recall` and `f1` `null`.
 
 **The test set must be hard enough.** Each report states the share of test frames with the ball
 in shot and less than half visible. The target before freezing the test set is at least 5%
