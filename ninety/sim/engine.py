@@ -269,6 +269,8 @@ class Engine:
         self.windup: tuple | None = None
         self.lunges: dict[str, float] = {}  # defender -> when his lunge reaches the ball
         self.lunge_at: dict[str, str] = {}  # defender -> the man he lunged at
+        self.tastes: dict = {}  # D4: the carrier's misjudgement of each option, kept while he has it
+        self.holds = 0  # D9: decisions in a row the carrier has spent holding
         self.penalties = 0  # penalty kicks awarded (Law 14)
         self.evade_at: dict[str, float] = {}  # defender -> when the carrier reacts to his lunge
         self.off_balance: dict[str, float] = {}  # defender -> when he has recovered from a miss
@@ -363,6 +365,8 @@ class Engine:
             self.poss_team = self.team_of(pid)
         self.possessor = pid
         self.last_touch = pid
+        self.tastes = {}  # D4: a new man on the ball judges his options afresh
+        self.holds = 0
         if pid != self.released_by:
             self.released_by = None
         self.new_phase()
@@ -600,6 +604,7 @@ class Engine:
     def scene_for(self, carrier: Player) -> decisions.Scene:
         """The carrier's picture of the game, built only from what he believes."""
         team, opp = carrier.team, other(carrier.team)
+        style = roles.STYLES[self.brains[team].build_up]  # T4: his team's intent and tempo
         belief = self.beliefs[carrier.id]
         mates = []
         for q in self.players:
@@ -637,7 +642,9 @@ class Engine:
                                 current="dribble" if self.dribble_to else None, moving=moving,
                                 absorb={m[0]: self.by_id[m[0]].profile.absorb_mps(False) for m in mates},
                                 passer=prof, heading=carrier.heading, fresh=self.fresh(carrier),
-                                ball_offset=(self.ball[0] - carrier.x, self.ball[1] - carrier.y))
+                                ball_offset=(self.ball[0] - carrier.x, self.ball[1] - carrier.y),
+                                progress=style.progress_per_m, hold_decay=style.hold_decay,
+                                held=self.holds)
         return scene
 
     def decide(self, carrier: Player, throw: bool = False) -> None:
@@ -656,7 +663,8 @@ class Engine:
             else:
                 self.hold_until = self.t + 0.5  # he looks again
             return
-        choice = decisions.choose(scene, self.rng)
+        choice = decisions.choose(scene, self.rng, self.tastes)
+        self.holds = self.holds + 1 if choice.kind == "hold" else 0
         if choice.kind == "pass" or choice.kind == "clear":
             self.pass_to(carrier, *choice.target, lofted=choice.lofted, pace=choice.pace,
                          receiver=choice.receiver)

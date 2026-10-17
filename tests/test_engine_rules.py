@@ -473,7 +473,8 @@ def test_the_engine_uses_the_attacking_shape_with_the_ball():
     e.ball = (50.0, 34.0, 0.0, 0.0, 0.0, 0.0)
     from ninety.sim import roles
     role, style = roles.role_of(p.profile.archetype), roles.STYLES[e.brains["home"].build_up]
-    want = offball.attacking_slot("RB", 0.0, 50.0, 34.0, e.brains["away"].line_x,
+    seen = [w for w in (e.beliefs[p.id].where(q.id, e.t) for q in e.players if q.team != p.team) if w]
+    want = offball.attacking_slot("RB", 0.0, 50.0, 34.0, e.onside_limit("home", seen, 50.0),
                                   role.forward_m + style.forward_m, role.inside_m - style.width_m)
     assert e.shape_target(p)[:2] == want
 

@@ -172,6 +172,9 @@ class Scene:
     heading: float = 0.0  # the way he faces, radians
     fresh: float = 1.0  # his slow store's share left (P10)
     ball_offset: tuple[float, float] = (0.0, 0.0)  # the ball relative to his body
+    progress: float = 0.0  # T4: his team's intent, value per metre gained toward goal (roles.STYLES)
+    hold_decay: float = HOLD_DECAY  # D9: his team's tempo (roles.STYLES)
+    held: int = 0  # D9: decisions in a row he has already spent holding
 
 
 @dataclass
@@ -765,7 +768,8 @@ def pass_option(scene: Scene, mate: tuple[str, float, float, float]) -> Option |
     best = None
     for lofted, pace in ways:
         confidence = pass_confidence(scene, tx, ty, mx, my, age, lofted, pace, mid)
-        ev = confidence * gain - (1 - confidence) * lost
+        ahead = max(0.0, (tx - scene.x) * attack(scene.goal_x))
+        ev = confidence * (gain + scene.progress * ahead) - (1 - confidence) * lost
         if best is None or ev > best.value:
             best = Option("pass", ev, (tx, ty), mid, lofted, pace)
     return best
@@ -819,14 +823,17 @@ def options(scene: Scene) -> list[Option]:
             my_t = s * DRIBBLE_STEP_M / dribble_speed(scene.dribbling)
             win *= sigmoid((generic_time(d) - my_t) / RECEIVE_MARGIN_S)
         gain = value(tx, ty, scene.goal_x, scene.opponents, scene.keeper)
+        gain += scene.progress * max(0.0, (tx - scene.x) * attack(scene.goal_x))  # T4: his team's intent
         ev = win * gain - (1 - win) * loss_cost(scene.x, scene.y, scene.goal_x)
         out.append(Option("dribble", ev + (STICKY if scene.current == "dribble" else 0.0), (tx, ty)))
-    if abs(scene.goal_x - scene.x) > CLEAR_FROM * PITCH_X:  # in his own third: long and away
-        wide = 4.0 if scene.y < PITCH_Y / 2 else PITCH_Y - 4.0
+    if abs(scene.goal_x - scene.x) > CLEAR_FROM * PITCH_X and p > 0:  # pressed in his own third
+        # Long and away, toward where his most advanced team-mate is, not at a touchline: a long
+        # ball is a contest where it lands (an even one: design).
         tx = scene.x + attack(scene.goal_x) * 45.0
-        # A long ball away is a contest where it lands (an even one: design).
-        contest = 0.5 * value(tx, wide, scene.goal_x) - 0.5 * loss_cost(tx, wide, scene.goal_x)
-        out.append(Option("clear", contest, (tx, wide), lofted=True))
+        front = max(scene.mates, key=lambda m: m[1] * attack(scene.goal_x), default=None)
+        ty = min(PITCH_Y - 6.0, max(6.0, front[2])) if front else PITCH_Y / 2
+        contest = 0.5 * value(tx, ty, scene.goal_x) - 0.5 * loss_cost(tx, ty, scene.goal_x)
+        out.append(Option("clear", contest, (tx, ty), lofted=True))
     # Holding is waiting to make a move a moment later: worth the best move open to him now, less
     # what the defence recovers while he waits (D9; *verify*: options only decay while he waits,
     # nothing here models a run developing). He cannot wait for ever, so when every move is a bad
@@ -834,7 +841,9 @@ def options(scene: Scene) -> list[Option]:
     # half the time he is caught (p * 0.5); otherwise he still makes that move. Each decision
     # weighs holding afresh, so it carries no bonus for carrying on.
     best = max((o.value - (STICKY if o.kind == scene.current else 0.0) for o in out), default=0.0)
-    later = best * (1 - HOLD_DECAY) if best >= 0 else best * (1 + HOLD_DECAY)
+    # D9: per decision spent holding, so the longer he waits the less waiting is worth.
+    decay = 1 - (1 - scene.hold_decay) ** (scene.held + 1)
+    later = best * (1 - decay) if best >= 0 else best * (1 + decay)
     lose = 0.5 * p
     out.append(Option("hold", (1 - lose) * later - lose * loss_cost(scene.x, scene.y, scene.goal_x)))
     return out
@@ -847,7 +856,23 @@ def temperature(scene: Scene) -> float:
     return (0.15 + 0.6 * (1 - scene.decisions)) * (1 + pressure(scene) * (1 - scene.composure))
 
 
-def choose(scene: Scene, rng: random.Random) -> Option:
+def taste_key(scene: Scene, o: Option) -> tuple:
+    """Which option this is, the same from one look to the next while he has the ball: a pass by
+    who it is for and how, a carry by its direction relative to the goal, the rest by kind."""
+    if o.kind == "pass":
+        return o.kind, o.receiver, o.lofted
+    if o.kind == "dribble" and o.target:
+        goal = math.atan2(PITCH_Y / 2 - scene.y, scene.goal_x - scene.x)
+        turn = math.atan2(o.target[1] - scene.y, o.target[0] - scene.x) - goal
+        return o.kind, round(((turn + math.pi) % (2 * math.pi) - math.pi) / 0.8)
+    return (o.kind,)
+
+
+def choose(scene: Scene, rng: random.Random, tastes: dict | None = None) -> Option:
+    """D4: the option with the best value plus his own misjudgement of it. The misjudgement is a
+    random-utility draw (Gumbel), so a single choice is a softmax of the values; it is drawn once
+    per option and kept in `tastes` while he has the ball, so looking again at the same options does
+    not re-roll the dice (a choice he keeps rejecting does not become certain by being asked often)."""
     opts = options(scene)
     values = [o.value for o in opts]
     mean = sum(values) / len(values)
@@ -855,6 +880,12 @@ def choose(scene: Scene, rng: random.Random) -> Option:
     # D4: the randomness is a share of how far apart the options are, so a choice between close
     # options is loose and one between clearly different options is not, wherever on the pitch.
     t = temperature(scene) * max(spread, CHOICE_NOISE_FLOOR)
-    top = max(o.value for o in opts)
-    weights = [math.exp((o.value - top) / t) for o in opts]
-    return rng.choices(opts, weights=weights)[0]
+    tastes = {} if tastes is None else tastes
+
+    def taste(o: Option) -> float:
+        k = taste_key(scene, o)
+        if k not in tastes:
+            tastes[k] = -math.log(-math.log(max(rng.random(), 1e-12)))
+        return tastes[k]
+
+    return max(opts, key=lambda o: o.value / t + taste(o))

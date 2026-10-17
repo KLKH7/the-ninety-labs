@@ -40,7 +40,7 @@ def forward(team: str) -> float:
 class TeamBrain:
     team: str
     block: str = "mid"
-    build_up: str = "balanced"  # T4: roles.STYLES
+    build_up: str = "quick"  # T4: roles.STYLES
     in_possession: bool = False
     changed_at: float = -99.0
     line_x: float = 0.0

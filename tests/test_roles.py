@@ -4,7 +4,7 @@ from ninety.sim import offball, perception, roles
 from ninety.sim.engine import PITCH_Y, Engine
 
 
-def attacking(archetype: str, pid: str, ball: tuple[float, float], build_up: str = "balanced"):
+def attacking(archetype: str, pid: str, ball: tuple[float, float], build_up: str = "quick"):
     """Home has the ball at `ball`, settled and unpressed; everyone else stands still and away."""
     e = Engine(3)
     p = e.by_id[pid]
@@ -66,13 +66,13 @@ def test_an_inside_forward_runs_from_wide_into_the_half_space():
     assert run and abs(run[1] - (PITCH_Y / 2 - roles.DIAGONAL_HALF_SPACE_M)) < 1e-9 and run[0] > 80.0
 
 
-def test_a_counter_side_sends_only_its_attacking_roles():
-    e, p, carrier, brain = attacking("touchline_winger", "h9", (60.0, 30.0), "counter")
+def test_a_direct_side_sends_only_its_attacking_roles():
+    e, p, carrier, brain = attacking("touchline_winger", "h9", (60.0, 30.0), "direct")
     p.x, p.y = 70.0, 8.0
     e.brains["away"].line_x = 80.0
     sees_them(e)
     assert e.run_target(p, carrier, brain) is None  # balanced duty: he holds on a counter side
-    e, p, carrier, brain = attacking("touchline_winger", "h9", (60.0, 30.0), "balanced")
+    e, p, carrier, brain = attacking("touchline_winger", "h9", (60.0, 30.0), "quick")
     p.x, p.y = 70.0, 8.0
     e.brains["away"].line_x = 80.0
     sees_them(e)

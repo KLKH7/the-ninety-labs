@@ -52,14 +52,20 @@ class Style:
     forward_m: float  # the whole team's in-possession shape, this many metres higher
     width_m: float  # and this much wider either side
     run_duties: tuple[int, ...]  # the duties whose runs the team makes
+    progress_per_m: float  # T4: what the team's instructions add for each metre gained toward goal
+    hold_decay: float  # D9: share of the ball's worth lost per decision spent holding (tempo)
 
 
-# T4: build-up style. Short: patient, wide, everyone available. Balanced. Counter: forwards stay
-# high and the team goes direct, only the attacking roles run. Drawn per team like the block.
+# T4: how a team attacks. Every style means to progress (Kian, 2026-10-16); they differ in how.
+# Patient: short passes, wide, everyone available, but still forward. Quick: few touches, forward
+# early. Direct: long balls to runners, forwards high, only the attacking roles run. The intent is
+# in the units of what the ball is worth (goal chance), so 20 m gained is worth 0.005 to 0.012 on
+# top of the ball's worth there, comparable to the spread between options in the first two thirds
+# (0.011 at 15 m to 0.020 at 65 m, D9). All *design*: a coach's instructions, never fitted to a rate.
 STYLES = {
-    "short": Style(-3.0, 3.0, (BALANCED, ATTACK)),
-    "balanced": Style(0.0, 0.0, (BALANCED, ATTACK)),
-    "counter": Style(4.0, -2.0, (ATTACK,)),
+    "patient": Style(-3.0, 3.0, (BALANCED, ATTACK), 0.00025, 0.1),
+    "quick": Style(0.0, 0.0, (BALANCED, ATTACK), 0.0004, 0.2),
+    "direct": Style(4.0, -2.0, (ATTACK,), 0.0006, 0.1),
 }
 
 OVERLAP_AHEAD_M = 10.0  # an overlap runs this far beyond the ball, on his flank
