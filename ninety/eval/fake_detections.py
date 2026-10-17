@@ -27,6 +27,7 @@ from ninety.eval.event_score import (
     WINDOW_S,
     reference_point,
 )
+from ninety.sim import fmath
 from ninety.sim.engine import FPS
 
 # Misplace distances, one inside each band: within strict, between strict and lenient, beyond both.
@@ -85,7 +86,7 @@ def misplaced(d: dict, distance: float, rng: random.Random) -> dict:
     """Move a detection's spot exactly `distance` from where it is, staying on the pitch."""
     for _ in range(100):
         a = rng.uniform(0, 2 * math.pi)
-        x, y = d["x"] + distance * math.cos(a), d["y"] + distance * math.sin(a)
+        x, y = d["x"] + distance * fmath.cos(a), d["y"] + distance * fmath.sin(a)
         if 0 <= x <= PITCH_X and 0 <= y <= PITCH_Y:
             return {**d, "x": x, "y": y}
     raise ValueError(f"cannot move {d['id']} {distance} m and stay on the pitch")
@@ -94,7 +95,7 @@ def misplaced(d: dict, distance: float, rng: random.Random) -> dict:
 def fake_detections(truth: list[dict], frames: list[dict], seed: int,
                     per_damage: int = 2) -> tuple[list[dict], list[dict]]:
     """Return (detected events, damage log). per_damage of each kind in DAMAGES."""
-    rng = random.Random(seed)
+    rng = fmath.Random(seed)  # the same draws as random.Random; refuses anything platform-dependent
     end = frames[-1]["t"]
     other_team = {"home": "away", "away": "home"}
     victims = [e for e in truth if isolated(truth, e)]

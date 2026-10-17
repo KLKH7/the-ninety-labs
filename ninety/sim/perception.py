@@ -13,6 +13,8 @@ import math
 import random
 from dataclasses import dataclass, field
 
+from ninety.sim import fmath
+
 SIMPLE_REACTION_S = 0.255  # P12: footballers' simple visual reaction
 CHOICE_REACTION_S = 0.365  # P12: reaction when a direction must also be chosen
 CHOICE_REACTION_RANGE_S = (0.41, 0.32)  # P12: slowest to fastest choice reaction across footballers
@@ -67,9 +69,9 @@ def facing(heading: float, vx: float, vy: float, x: float, y: float, bx: float, 
     """A moving player looks where he runs; a still one turns to the ball; when the ball is at
     his own feet (a direction that does not exist), he keeps the way he was facing."""
     if math.hypot(vx, vy) > 0.5:
-        return math.atan2(vy, vx)
+        return fmath.atan2(vy, vx)
     if math.hypot(bx - x, by - y) > TURN_TO_BALL_M:
-        return math.atan2(by - y, bx - x)
+        return fmath.atan2(by - y, bx - x)
     return heading
 
 
@@ -78,7 +80,7 @@ def visible(heading: float, x: float, y: float, ox: float, oy: float,
     dx, dy = ox - x, oy - y
     if math.hypot(dx, dy) <= SENSE_RADIUS_M:
         return True
-    off = (math.atan2(dy, dx) - heading + math.pi) % (2 * math.pi) - math.pi
+    off = (fmath.atan2(dy, dx) - heading + math.pi) % (2 * math.pi) - math.pi
     return abs(off) <= half_angle
 
 

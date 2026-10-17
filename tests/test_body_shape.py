@@ -523,6 +523,8 @@ def test_a_dribbler_touches_the_ball_on_only_once_he_faces_where_it_goes():
 def test_his_body_meets_a_ball_before_his_foot_can_if_it_gets_there_first():
     e = Engine(1)
     p = lone(e, "a6", 50.0, 30.0, math.pi)
+    # Set directly, not left to the seed's draw of him: a touch too poor for his chest to keep it.
+    p.profile.attributes["first_touch"] = 0.0
     e.possessor, e.last_touch, e.kicker_clear, e.kicked_at = None, "h2", True, e.t - 5.0
     before = (49.75, 30.0, 1.3, 8.0, 0.0, -8.0)  # chest high, coming down onto him
     e.ball = (49.75 + 8.0 * DT, 30.0, 1.3 - 8.0 * DT, 8.0, 0.0, -8.0)
@@ -827,7 +829,9 @@ def test_a_dribbler_whose_touch_is_declined_still_decides():
     e = Engine(1)
     still(e)
     c = e.by_id["h6"]
-    c.x, c.y, c.heading = 40.0, 34.0, 0.0  # standing: no push is his (he could not run onto it)
+    c.x, c.y, c.heading = 40.0, 34.0, 0.0
+    # No push is his. Set directly: whether he could run onto one depends on the seed's draw of him.
+    e.touch_speed = lambda *args: None
     for q in e.players:
         if q is not c:
             q.x, q.y = 90.0 if q.team == "away" else 10.0, 5.0 + 2 * int(q.id[1:])

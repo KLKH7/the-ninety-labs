@@ -53,7 +53,10 @@ def test_director_follows_the_ball_smoothly_and_keeps_it_in_shot():
         # what the camera follows; the ball in play is. Measured at the merge of main: the camera
         # aims no nearer a touchline than 12 m (camera.py), so a ball resting beyond the near
         # line is in shot in 229 of 576 such frames on seed 4, and was never tested before
-        # because restarts took 1 to 2 s. In play: 903 of 924 (lesson 37).
+        # because restarts took 1 to 2 s. In play: 903 of 924 (lesson 37). After main's portable
+        # math redrew every match, seed 4's first minute holds a foul at 14.8 s and its free kick
+        # at 46.5 s (R1's free-kick wait), the dead ball lying beyond the touchline in between:
+        # on the pitch 639 of 1,500 frames, all 639 in shot.
         if 0 <= fr["ball"]["x"] <= 105 and 0 <= fr["ball"]["y"] <= 68:
             uv = c.project((fr["ball"]["x"], fr["ball"]["y"], 0.0))
             in_shot += uv is not None and 0 <= uv[0] < 1280 and 0 <= uv[1] < 720
@@ -62,7 +65,8 @@ def test_director_follows_the_ball_smoothly_and_keeps_it_in_shot():
             max_step = max(max_step, math.dist(prev.target[:2], c.target[:2]))
         prev = c
         assert d.angle == "main"
-    assert on_pitch > len(m.frames) / 2 and in_shot / on_pitch > 0.97
+    # Never vacuous, whatever the seed draws: 20 s of the ball on the pitch, so 3% is 15 frames.
+    assert on_pitch >= 25 * 20 and in_shot / on_pitch > 0.97
     assert max_step <= 22.0 / 25 + 0.05  # metres per frame (plus shake): a pan, never a jump
 
 

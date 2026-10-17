@@ -643,7 +643,8 @@ def test_his_own_pass_that_goes_straight_in_is_his_shot_not_an_old_deflection():
     e.deflect(e.by_id["h10"], 60.0, 32.0, 0.3, 0.3)  # an earlier touch
     carrier = e.by_id["h10"]
     e.ball = (90.0, 30.0, 0.0, 0.0, 0.0, 0.0)
-    e.kicked = e.emit("pass", "home", 90.0, 30.0, player="h10")
+    e.kicked = e.emit("pass", "home", 90.0, 30.0, player="h10", intended="h9", interceptor=None,
+                      deflected_by=None)
     e.kick(carrier, 20.0, 4.0, 0.0)
     e.last_touch = "h10"
     e.scored("home", e.kicked, 105.0, 34.0)
@@ -651,6 +652,7 @@ def test_his_own_pass_that_goes_straight_in_is_his_shot_not_an_old_deflection():
     assert "deflection" in kinds  # the old touch stays what it was
     shot = next(ev for ev in e.match.events if ev["type"] == "shot")
     assert shot["outcome"] == "goal" and shot["x"] == 90.0
+    assert not {"intended", "interceptor", "deflected_by"} & set(shot)  # pass-only fields
 
 
 def test_an_opponent_cutting_a_pass_out_intercepts_but_collecting_it_where_it_was_going_recovers():
@@ -694,11 +696,15 @@ def test_a_receiver_takes_the_ball_in_his_stride_instead_of_stopping_dead():
     e.give(p.id)
     e.ball = (p.x + 0.37, p.y, 0.0, 5.0, 0.0, 0.0)
     e.hold_until = e.t + 0.5  # settling the ball
-    for _ in range(10):
+    frames, v = 10, 5.0
+    for _ in range(frames):
         e.tick_carrier()
         e.t += 1 / 25
     assert p.vx > 2.0  # still going his way, at a dribbling pace
-    assert p.x > 50.0 + 1.5
+    # further than a man who stops dead, braking as hard as he can (P2), goes in the same time
+    t = frames / 25
+    stopping = min(v * v / (2 * BRAKE_MAX), v * t - BRAKE_MAX * t * t / 2)
+    assert p.x - 50.0 > stopping
 
 
 def test_every_off_ball_target_is_reached_just_in_time_through_the_real_path():

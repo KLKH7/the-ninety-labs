@@ -10,7 +10,7 @@ from ninety.sim import ball, firsttouch
 from ninety.sim import decisions as D
 from ninety.sim.engine import DT, PITCH_Y, Engine
 from ninety.sim.perception import Sighting
-from ninety.sim.profiles import FOOT_ABSORB_MPS
+from ninety.sim.profiles import FOOT_ABSORB_MPS, SPEED_ERROR
 
 
 def scene(keep: tuple[str, ...], seed: int = 1) -> Engine:
@@ -181,3 +181,84 @@ def test_a_pass_a_team_mate_plays_ends_with_him_even_when_his_heavy_touch_is_los
         if e.possessor:
             break
     assert e.possessor == "a4" and sent["receiver"] == "h8"
+
+
+def touch_spread(first_touch: float, n: int = 400) -> tuple[float, float]:
+    """(direction SD in degrees, speed SD in m/s) of 6 m/s cushioned touches from h8's front."""
+    from statistics import pstdev
+    e = scene(("h8",))
+    p = e.by_id["h8"]
+    p.x, p.y, p.heading = 50.0, 34.0, 0.0
+    p.profile.attributes["first_touch"] = first_touch
+    sent = [e.cushion(p, 50.6, 34.0, 6.0) for _ in range(n)]
+    angles = [math.degrees(math.atan2(vy, vx)) for vx, vy in sent]
+    return pstdev(angles), pstdev(math.hypot(vx, vy) for vx, vy in sent)
+
+
+def test_the_touch_is_sent_with_his_own_error_in_direction_and_speed():
+    good, poor = touch_spread(1.0), touch_spread(0.0)
+    assert poor[0] > 1.5 * good[0] > 0  # direction: wider with a poorer first touch (A3's rule)
+    # speed: A3's share of the speed it is sent at (unpressed, whatever his skill)
+    assert good[1] == pytest.approx(SPEED_ERROR * 6.0, rel=0.2) and poor[1] == pytest.approx(good[1], rel=0.2)
+
+
+def test_however_wide_his_error_a_touch_never_leaves_into_his_own_body():
+    e = scene(("h8",))
+    p = e.by_id["h8"]
+    p.x, p.y, p.heading = 50.0, 34.0, 0.0
+    p.profile.attributes["first_touch"] = 0.0
+    for bx, by in ((50.6, 34.0), (49.4, 34.0), (50.0, 34.6), (50.4, 33.6)):  # in front, behind, beside
+        for _ in range(200):
+            vx, vy = e.cushion(p, bx, by, 8.0)
+            assert vx * (bx - p.x) + vy * (by - p.y) >= -1e-9  # P11: away from him, or across him
+
+
+def test_back_on_a_heavy_touch_won_from_the_other_side_is_a_possession_change_not_a_tackle():
+    e = scene(("a4",))
+    p = e.by_id["a4"]
+    p.x, p.y, p.heading = 50.0, 34.0, 0.0
+    p.profile.attributes["first_touch"] = 0.0
+    e.poss_team = "home"  # h2's side had it
+    arrive(e, "a4", 16.0, math.pi)  # a home pass coming at him from +x
+    assert e.dribbler == "a4"
+    for _ in range(int(6.0 / DT)):
+        e.step()
+        if e.possessor:
+            break
+    assert e.possessor == "a4"
+    kinds = [(ev["type"], ev.get("player")) for ev in e.match.events]
+    assert ("possession_change", "a4") in kinds
+    assert not any(k == "tackle" for k, _ in kinds)  # nobody had it to be tackled
+
+
+def test_a_heavy_touch_judges_offside_afresh():
+    # Law 11: a team-mate offside when the pass was played, but not when h8 plays it on, is not
+    # offside for what h8's touch sets free.
+    e = scene(("h8", "h9", "a2"))
+    p, mate = e.by_id["h8"], e.by_id["h9"]
+    p.x, p.y, p.heading = 60.0, 34.0, math.pi
+    e.by_id["a2"].x, e.by_id["a2"].y = 70.0, 30.0  # the second-last defender (with a1 in goal)
+    mate.x, mate.y = 65.0, 40.0  # behind a2's line: onside now
+    e.offside = {"h9"}  # as judged at the earlier pass
+    p.profile.attributes["first_touch"] = 0.0
+    arrive(e, "h8", 16.0, 0.0)
+    assert e.dribbler == "h8" and "h9" not in e.offside
+
+
+def test_winning_a_loose_heavy_touch_off_the_other_side_is_no_tackle():
+    e = scene(("a4", "h8"))
+    p, rival = e.by_id["a4"], e.by_id["h8"]
+    p.x, p.y, p.heading = 50.0, 34.0, 0.0
+    p.profile.attributes["first_touch"] = 0.0
+    e.poss_team = "home"
+    arrive(e, "a4", 16.0, math.pi)
+    assert e.dribbler == "a4"
+    bx, by, _, vx, vy, _ = e.ball
+    n = math.hypot(vx, vy)
+    rival.x, rival.y = bx + 6.0 * vx / n, by + 6.0 * vy / n  # h8 nearer where it runs
+    for _ in range(int(3.0 / DT)):
+        e.step()
+        if e.possessor:
+            break
+    assert e.possessor == "h8"
+    assert not any(ev["type"] == "tackle" for ev in e.match.events)  # a4 never had it

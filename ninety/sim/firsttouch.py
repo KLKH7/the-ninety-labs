@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import math
 
+from ninety.sim import fmath
 from ninety.sim.body import CONTROL_M
 
 BODY_TOUCH_Z = 0.45  # design (P14): above this, a ball he is under is a thigh, chest or head, not a foot
@@ -28,7 +29,7 @@ SURFACES = (("foot", BODY_TOUCH_Z), ("thigh", 1.0), ("chest", 1.55), ("head", ma
 CUSHION = {"foot": 1.0, "thigh": 0.5, "chest": 0.75, "head": 0.25}
 # design: how much wider his direction error is with each, against the foot's.
 AIM_ERROR = {"foot": 1.0, "thigh": 1.5, "chest": 2.0, "head": 1.25}
-TOUCH_GAP_S = 0.6  # D6: how long a touched ball runs before he is back on it
+TOUCH_GAP_S = 0.6  # D6 (design, verify): how long a touched ball runs before he is back on it
 # What he can let the ball run and still keep it at his feet: no more than his reach (CONTROL_M) opens
 # up between him and the ball before he is back on it (TOUCH_GAP_S). About 1.7 m/s.
 KEEP_MPS = CONTROL_M / TOUCH_GAP_S
@@ -68,4 +69,4 @@ def kept_estimate(rel: float, absorb: float, margin: float) -> float:
     softened by `margin` (m/s). A heavy touch is counted as lost, though the race for it may still
     go his way (*verify*: pessimistic, as a failed touch was before)."""
     x = (absorb + KEEP_MPS - rel) / margin
-    return 1.0 / (1.0 + math.exp(-max(-30.0, min(30.0, x))))
+    return 1.0 / (1.0 + fmath.exp(-max(-30.0, min(30.0, x))))
