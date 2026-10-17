@@ -297,7 +297,7 @@ def test_he_foresees_the_man_running_on_into_his_lunge():
 def test_at_a_penalty_the_keeper_guesses_the_side_about_as_often_as_keepers_do():
     import random
 
-    from ninety.sim.engine import PENALTY_CORRECT_SIDE, SHOT_AIM_OFF_M
+    from ninety.sim.engine import PENALTY_CORRECT_SIDE, PENALTY_SIDE_AIM_M, PENALTY_STAYS, SHOT_AIM_OFF_M
 
     e = box_foul()
     keeper, taker = e.keeper("away"), e.by_id[e.restart.taker]
@@ -305,18 +305,24 @@ def test_at_a_penalty_the_keeper_guesses_the_side_about_as_often_as_keepers_do()
     taker.x, taker.y = 93.6, 34.0
     e.rng = random.Random(5)
 
-    def right_side(restart_kind):
+    def right_side(restart_kind, aims):
         e.from_restart = restart_kind
-        n = right = 0
+        n = right = stays = 0
         for _ in range(4000):
-            aim = 34.0 + random.choice([-1, 1]) * random.uniform(*SHOT_AIM_OFF_M)
+            aim = 34.0 + random.choice([-1, 1]) * random.uniform(*aims)
             read = e.keeper_read(keeper, taker, aim)
+            if read == keeper.y:  # stays where he stands
+                stays += 1
+                continue
             n += 1
             right += (read - 34.0) * (aim - 34.0) > 0
-        return right / n
+        return right / n, stays / 4000
 
-    assert abs(right_side("penalty_kick") - PENALTY_CORRECT_SIDE) < 0.03
-    assert right_side(None) > 0.75  # open play keeps his own read
+    right, stays = right_side("penalty_kick", PENALTY_SIDE_AIM_M)
+    assert abs(right - PENALTY_CORRECT_SIDE) < 0.03  # of the dives on kicks to a side (Bar-Eli, 113 of 196)
+    assert abs(stays - PENALTY_STAYS) < 0.015  # stayed in the middle (18 of 286)
+    right, stays = right_side(None, SHOT_AIM_OFF_M)
+    assert right > 0.75 and stays == 0  # open play keeps his own read, and he never just stays
 
 
 def test_he_foresees_a_holding_man_shielding_it_from_him():

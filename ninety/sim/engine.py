@@ -84,11 +84,20 @@ COMMIT_P = 0.6  # a defender commits only when he expects to win the race this o
 # 74.8% (2022-23) to 89.6% (2023-24) (Opta via The Analyst); 0.8 is design within that range.
 PENALTY_GOAL_P = 0.8
 SHOT_AIM_OFF_M = (0.5, 3.2)  # design: how far from the centre of the goal a shot is aimed
+# A penalty's aim and the keeper's choice, from Bar-Eli et al. 2007, Table 1 (286 top-flight penalties
+# on target, by the third of the goal's width each ended in and where the keeper went). 82 ended in
+# the middle third, the rest in a side third; where within a third he aims is design (evenly, a side
+# aim no nearer the post than any shot's, SHOT_AIM_OFF_M).
+GOAL_THIRD_M = 2 * offball.GOAL_HALF_WIDTH / 3
+PENALTY_MIDDLE = 82 / 286
+PENALTY_MIDDLE_AIM_M = (0.0, GOAL_THIRD_M / 2)
+PENALTY_SIDE_AIM_M = (GOAL_THIRD_M / 2, SHOT_AIM_OFF_M[1])
 # A2 at a penalty: the keeper must commit before the strike, against a kicker with time to disguise
-# it. On kicks to a side, keepers went the right way 113 times in 204 (Bar-Eli et al. 2007, Table 1,
-# 286 top-flight penalties): barely better than a guess. His read's spread is whatever gives that
-# rate over the shots the engine aims (derived below, not chosen).
-PENALTY_CORRECT_SIDE = 113 / 204
+# it. He stayed in the middle 18 times in 286 (design: whatever the kick); on kicks to a side he dived
+# the right way 113 times and the wrong way 83 (and stayed 8): barely better than a guess. His read's
+# spread is whatever gives that rate over the side aims (derived below, not chosen).
+PENALTY_STAYS = 18 / 286
+PENALTY_CORRECT_SIDE = 113 / (113 + 83)
 
 
 def read_spread_for(correct: float, off: tuple[float, float] = SHOT_AIM_OFF_M) -> float:
@@ -104,7 +113,7 @@ def read_spread_for(correct: float, off: tuple[float, float] = SHOT_AIM_OFF_M) -
     return lo
 
 
-PENALTY_READ_ERROR_M = read_spread_for(PENALTY_CORRECT_SIDE)
+PENALTY_READ_ERROR_M = read_spread_for(PENALTY_CORRECT_SIDE, PENALTY_SIDE_AIM_M)
 SHIELD_M = 3.0  # holding with an opponent this close, the carrier puts his body between them
 EVADE_MPS = 3.0  # how fast a carrier pushes the ball away from a lunge, plus up to 2 m/s with dribbling
 JOCKEY_LOOKAHEAD_S = 0.5  # a jockeying defender matches where the carrier is going, not where he is
@@ -600,6 +609,8 @@ class Engine:
                                   keeper.profile.view_half_angle()):
             return None
         penalty = self.from_restart == "penalty_kick"
+        if penalty and self.rng.random() < PENALTY_STAYS:
+            return keeper.y  # he will stay where he stands
         spread = PENALTY_READ_ERROR_M if penalty else keeper.profile.read_error_m()
         return aim_y + self.rng.gauss(0, spread)
 
@@ -612,7 +623,11 @@ class Engine:
         bx, by = self.ball[0], self.ball[1]
         # The aim (which corner, how high, how hard) is a choice; missing it is execution error.
         side = self.rng.choice([-1, 1])
-        ty = PITCH_Y / 2 + side * self.rng.uniform(*SHOT_AIM_OFF_M)
+        if self.from_restart == "penalty_kick":  # down the middle or to a side, as penalties went
+            aims = PENALTY_MIDDLE_AIM_M if self.rng.random() < PENALTY_MIDDLE else PENALTY_SIDE_AIM_M
+            ty = PITCH_Y / 2 + side * self.rng.uniform(*aims)
+        else:
+            ty = PITCH_Y / 2 + side * self.rng.uniform(*SHOT_AIM_OFF_M)
         tz = self.rng.uniform(0.1, 2.0)
         speed = self.rng.uniform(*offball.SHOT_SPEEDS_KMH) / 3.6
         ground, up = ball.shot(math.hypot(gx - bx, ty - by), speed, tz, DT)
