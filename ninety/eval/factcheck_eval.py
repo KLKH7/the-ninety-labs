@@ -43,6 +43,9 @@ def cases(seed: int, minutes: float) -> list[dict]:
     extended = events_in(seed, max(minutes, 90), 1, int(max(minutes, 90)) + 1)
     done = [e for e in events if e["type"] == "pass" and e.get("outcome") == "success" and "distance_m" in e]
     failed = [e for e in events if e["type"] == "pass" and e.get("outcome") == "fail" and "distance_m" in e]
+    # Failed passes an opponent cut out. Their claim names that opponent as found, as the claims
+    # did when a failed pass's `receiver` was the interceptor, so the published cases are unchanged.
+    cut_out = [e for e in failed if "interceptor" in e]
     tackles = [e for e in events if e["type"] == "tackle"]
     shots = [e for e in events if e["type"] == "shot" and e.get("outcome") != "goal"]
     # Long-range and fast shots are rare in 30 minutes, so the shot tone kinds read the full match,
@@ -148,7 +151,7 @@ def cases(seed: int, minutes: float) -> list[dict]:
         ),
         # false meaning: only the judge can catch these
         "meaning: intercepted pass called completed": (
-            False, failed, "{player} finds {receiver} with a {distance_m} m pass."
+            False, cut_out, "{player} finds {interceptor} with a {distance_m} m pass."
         ),
         "meaning: completed pass called cut out": (
             False, done, "{player}'s {distance_m} m pass to {receiver} is cut out."

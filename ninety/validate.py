@@ -257,10 +257,20 @@ def check_events(events: list[dict], frames: list[dict], fps: float, meta: dict,
     team_of = {p["id"]: p["team"] for f in frames for p in f["players"]}
 
     for e in events:
-        for role in ("player", "receiver"):
+        for role in ("player", "receiver", "intended", "interceptor"):
             pid = e.get(role)
             if pid is not None and pid not in team_of:
                 problems["C4 event players"].append(f"{e['id']}: {role} {pid} is not in the frames")
+        if e["type"] == "pass":  # who a pass reached, who it was for and who cut it out are three people
+            for role, same in (("receiver", True), ("intended", True), ("interceptor", False)):
+                pid = e.get(role)
+                if pid in team_of and (team_of[pid] == e["team"]) != same:
+                    side = "the passer's team" if same else "the other team"
+                    problems["C4 event players"].append(f"{e['id']}: pass {role} {pid} is not on {side}")
+            if e.get("receiver") and e.get("outcome") != "success":
+                problems["C4 event players"].append(f"{e['id']}: a pass with a receiver did not succeed")
+            if e.get("interceptor") and e.get("outcome") != "fail":
+                problems["C4 event players"].append(f"{e['id']}: an intercepted pass did not fail")
         if e["type"] in ("pass", "shot", "goal") and team_of.get(e.get("player"), e["team"]) != e["team"]:
             problems["C4 event players"].append(f"{e['id']}: {e['player']} does not play for {e['team']}")
         f = by_frame.get(e.get("frame"))
@@ -297,7 +307,7 @@ def check_events(events: list[dict], frames: list[dict], fps: float, meta: dict,
     for e in events:
         if e["type"] == "interception":
             before = [p for p in passes if p["frame"] <= e["frame"]]
-            if not before or before[-1]["outcome"] != "fail" or before[-1]["receiver"] != e["player"]:
+            if not before or before[-1]["outcome"] != "fail" or before[-1].get("interceptor") != e["player"]:
                 problems["C8 event order"].append(f"{e['id']}: {e['player']} intercepted no failed pass")
         if e["type"] == "goal" and e.get("player"):  # an own goal (no scorer) needs no shot
             before = [s for s in shots if s["frame"] <= e["frame"]]

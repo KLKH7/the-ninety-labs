@@ -487,8 +487,10 @@ class Engine:
         self.kicked = self.emit("shot", team, bx, by, player=carrier.id, ball_speed_kmh=round(speed * 3.6, 1))
         self.kick(carrier, vx, vy, vz)
 
-    def pass_to(self, carrier: Player, tx: float, ty: float, lofted: bool, throw: bool = False) -> None:
-        """Kick toward a point the carrier chose (where he believes a team-mate will be, or space)."""
+    def pass_to(self, carrier: Player, tx: float, ty: float, lofted: bool, throw: bool = False,
+                intended: str | None = None) -> None:
+        """Kick toward a point the carrier chose (where he believes a team-mate will be, or space).
+        `intended` is the team-mate he chose to play it to, if any: his intention, recorded as such."""
         if throw:
             # Law 15: both hands, from behind and over the head. The feet never touch it.
             bx, by, bz = throw_hands(carrier.x, carrier.y)
@@ -505,12 +507,14 @@ class Engine:
                 bx,
                 by,
                 player=carrier.id,
+                intended=intended,
+                interceptor=None,
                 ball_speed_kmh=round(math.sqrt(vx * vx + vy * vy + vz * vz) * 3.6, 1),
             )
             self.kick(carrier, vx, vy, vz)
             return
         if not self.can_strike(carrier, tx, ty):
-            self.turn_to(carrier, tx, ty, lambda: self.pass_to(carrier, tx, ty, lofted, throw))
+            self.turn_to(carrier, tx, ty, lambda: self.pass_to(carrier, tx, ty, lofted, throw, intended))
             return
         bx, by = self.ball[0], self.ball[1]
         dist = math.hypot(tx - bx, ty - by)
@@ -522,13 +526,16 @@ class Engine:
         wide = abs(ty - PITCH_Y / 2) > 20 and (tx - bx) * attack_dir(carrier.team) > 0
         skill = "crossing" if (dist > LOFT_OVER_M and wide) else "passing"
         vx, vy, vz = self.execute(carrier, *self.aim(bx, by, tx, ty, ground, up), skill)
-        # Receiver, end point and outcome are filled in when someone takes the ball or it goes out.
+        # Receiver, interceptor, end point and outcome are filled in when someone takes the ball or
+        # it goes out; only the intended team-mate is known at the kick.
         self.kicked = self.emit(
             "pass",
             carrier.team,
             bx,
             by,
             player=carrier.id,
+            intended=intended,
+            interceptor=None,
             ball_speed_kmh=round(math.sqrt(vx * vx + vy * vy + vz * vz) * 3.6, 1),
         )
         self.kick(carrier, vx, vy, vz)
@@ -588,7 +595,7 @@ class Engine:
             scene.mates = [m for m in scene.mates if math.hypot(m[1] - scene.x, m[2] - scene.y) <= 25]
             choice = max(decisions.options(scene), key=lambda o: o.value, default=None)
             if choice:
-                self.pass_to(carrier, *choice.target, lofted=True, throw=True)
+                self.pass_to(carrier, *choice.target, lofted=True, throw=True, intended=choice.receiver)
             elif self.t - self.throw_ready > THROW_WAIT_S:  # nobody free: into space down the line
                 line = 3.0 if scene.y < PITCH_Y / 2 else PITCH_Y - 3.0
                 self.pass_to(
@@ -603,7 +610,7 @@ class Engine:
             return
         choice = decisions.choose(scene, self.rng)
         if choice.kind == "pass" or choice.kind == "clear":
-            self.pass_to(carrier, *choice.target, lofted=choice.lofted)
+            self.pass_to(carrier, *choice.target, lofted=choice.lofted, intended=choice.receiver)
             self.intended = choice.receiver
         elif choice.kind == "shoot":
             self.shoot(carrier)
@@ -774,8 +781,8 @@ class Engine:
                     outcome="success" if done else "fail",
                 )
                 self.kicked = None
-            elif not same_team:  # an opponent got to it: the pass has failed
-                kicked.update(receiver=p.id, end_x=round(x, 2), end_y=round(y, 2), outcome="fail")
+            elif not same_team:  # an opponent got to it: the pass has failed, and he cut it out
+                kicked.update(interceptor=p.id, end_x=round(x, 2), end_y=round(y, 2), outcome="fail")
                 if controls:
                     self.emit("interception", p.team, x, y, player=p.id)
                 self.kicked = None

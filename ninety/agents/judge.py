@@ -49,7 +49,9 @@ Verdict for an interpretation:
   match ("the best", "the most important").
 
 Football meaning: a successful tackle wins the ball for the tackler's team; an interception
-wins the ball; a pass with outcome "success" reached its receiver and "fail" did not; a shot
+wins the ball; a pass with outcome "success" reached its receiver and "fail" did not. A pass's
+"intended" is the team-mate it was played for, which says nothing about whether it arrived, and
+its "interceptor" is the opponent who cut it out; a shot
 "off_target" missed and "on_target" did not score unless there is a goal event.
 A statement about several actions (a move, a sequence, a run of passes, a spell of pressure,
 a streak) needs those actions in the evidence: one cited event cannot establish a move.

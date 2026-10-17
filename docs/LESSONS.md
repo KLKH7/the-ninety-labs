@@ -177,3 +177,17 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_cues.py::test_failed_pass_never_says_it_found_the_receiver` and
   `tests/test_ledger.py::test_load_match_refuses_a_fact_citing_a_missing_event` fail on the
   original code.
+
+### 26. One field, one meaning: who a pass was for is not who got it
+- **What happened:** a pass event's `receiver` meant the team-mate who got a completed pass and,
+  on a failed one, the opponent who cut it out. The cue template read it as the target, so 12 of
+  the 15 failed-pass cues in the seed-7 fixture said things like "a2 looks for h8", h8 being the
+  home player who intercepted it. Lesson 23's checks passed: the verb followed the outcome, the
+  name did not.
+- **Rule:** a pass records three people in three fields: `intended` (whom the passer chose),
+  `receiver` (the team-mate who got it, completed passes only) and `interceptor` (the opponent who
+  reached a failed one). Never reuse a field for a different role depending on the outcome.
+- **Check:** the validator's C4 fails a pass whose receiver or intended is an opponent, whose
+  interceptor is a team-mate, or whose receiver is set on a failed pass;
+  `tests/test_cues.py::test_no_cue_in_the_fixture_names_an_opponent_as_a_pass_target` fails on
+  the old fixture.
