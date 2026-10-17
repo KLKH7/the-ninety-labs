@@ -132,6 +132,8 @@ Each style has a **fingerprint** measured from the events it produced: pressing 
 crosses, field tilt. A high-press team must come out with intense pressing; if it does not,
 a cause is wrong. Fingerprints are measured, never forced.
 
+Dials, presets, strength, predictions and the matchup grid: [decision 0002](decisions/0002-styles-and-matchups.md).
+
 ## Using the research
 
 | Kind of data | Permitted use | Example |
