@@ -8,7 +8,9 @@ license = "MIT"
 dependencies = [
     "agent-framework-core>=1.21.0",
     "agent-framework-foundry>=1.14.1",
+    "azure-ai-projects>=2.7.0",
     "azure-identity>=1.26.0",
+    "azure-monitor-opentelemetry>=1.8.10,<2",
     "httpx>=0.28.1",
     "jsonschema>=4",
     "mcp>=1.24,<2",
@@ -20,6 +22,7 @@ dependencies = [
 [project.scripts]
 ninety-sim = "ninety.sim.cli:main"
 ninety-slice = "ninety.agents.slice:main"
+ninety-agents = "ninety.agents.foundry:main"
 ninety-validate = "ninety.validate:main"
 ninety-render = "ninety.render.cli:render_main"
 ninety-dataset = "ninety.render.cli:dataset_main"

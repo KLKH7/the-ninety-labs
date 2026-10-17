@@ -8,6 +8,8 @@ licence must be one of those three (see `AGENTS.md`).
 |---|---|---|
 | agent-framework-core, agent-framework-foundry | agents and workflow | MIT |
 | azure-identity | keyless Entra authentication | MIT |
+| azure-ai-projects | publishing agents to Microsoft Foundry | MIT |
+| azure-monitor-opentelemetry | agent traces to Application Insights and Foundry; brings OpenTelemetry (Apache-2.0), psutil (BSD-3-Clause), wrapt (BSD-2-Clause) and, through msrest, requests-oauthlib (ISC) | MIT |
 | httpx | Azure AI Speech REST calls | BSD-3-Clause |
 | jsonschema | data contract validation | MIT |
 | azure-storage-blob (`render-job` group) | render job uploads clips to Blob Storage | MIT |

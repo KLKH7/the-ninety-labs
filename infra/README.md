@@ -12,14 +12,20 @@ subscription allows five regions; that one has our models).
 | Log Analytics workspace | container logs; 30-day retention, 0.2 GB/day cap |
 | Container Apps job `render` + its identity | renders training clips in parallel executions (2 vCPU, 4 GiB each), on the public Playwright image |
 | Storage account + `renders` container | the rendered clips; shared keys and public access off, Entra roles only |
+| Application Insights + a Foundry project connection (`appinsights-tracing`) | agent traces, shown in Foundry's tracing view; stored in the capped workspace above |
+| Foundry content-safety policy `ninety-guardrail` | attached to every published agent: Microsoft's default filters plus Prompt Shields for jailbreaks and indirect attacks |
 
-Not managed here yet: the Foundry (`ninety-labs-ai`) and Speech (`ninety-labs-speech`)
-resources, created by hand earlier, and the $20 monthly budget alert. Cosmos DB, the Personalizer
-app and Application Insights are added with the code that uses them
+The Foundry resource (`ninety-labs-ai`) and its project were created by hand earlier: the Bicep
+references them to add the connection and the policy, but does not manage them. Also not managed
+here yet: Speech (`ninety-labs-speech`) and the $20 monthly budget alert. Cosmos DB and the
+Personalizer app are added with the code that uses them
 ([ARCHITECTURE.md](../docs/ARCHITECTURE.md#deployment-on-azure)).
 
-Rough cost: the registry is the only fixed charge (Basic, about $5 a month). The app and logs sit
-inside the monthly free grants at demo traffic.
+The agents themselves are published from code, not Bicep: `uv run ninety-agents publish`
+(ninety/agents/foundry.py) creates a new Foundry version of any agent whose definition changed.
+
+Rough cost: the registry is the only fixed charge (Basic, about $5 a month). The app, logs and
+traces sit inside the monthly free grants at demo traffic.
 
 ## Who runs what
 
@@ -80,5 +86,7 @@ infra/render-job.sh download v1 runs/dataset
 uv run ninety-render-check runs/dataset/v1/train/seed*   # check again after download
 ```
 
-Estimated cost, from local timing (confirm on the first run): about 600 vCPU-seconds and 1,200 GiB-seconds per ten-second clip, so 200 clips sit inside
-the Consumption plan's monthly free grant; blobs are about 30 MB a clip.
+Measured on render run v1 (220 ten-second clips): 365 to 660 s a clip, about 8 minutes, so about
+960 vCPU-seconds and 1,900 GiB-seconds a clip. 200 clips is about 190,000 vCPU-seconds, slightly over
+the Consumption plan's monthly free grant of 180,000, so about a dollar beyond it; blobs are about
+30 MB a clip.

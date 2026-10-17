@@ -25,6 +25,10 @@ param ciPrincipalId string = ''
 @description('Object id of a maintainer allowed to read rendered clips (Storage Blob Data Reader). Empty to skip.')
 param renderReaderPrincipalId string = ''
 
+@description('The Foundry resource and project, created by hand before this file; referenced, not managed.')
+param foundryAccountName string = 'ninety-labs-ai'
+param foundryProjectName string = 'the-ninety-labs'
+
 var token = uniqueString(subscription().id, resourceGroup().id, environmentName)
 var tags = { 'azd-env-name': environmentName }
 
@@ -145,6 +149,70 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
   }
 }
 
+// Foundry: tracing and the guardrail ------------------------------------------------------
+
+resource foundry 'Microsoft.CognitiveServices/accounts@2025-06-01' existing = {
+  name: foundryAccountName
+}
+
+resource foundryProject 'Microsoft.CognitiveServices/accounts/projects@2025-06-01' existing = {
+  parent: foundry
+  name: foundryProjectName
+}
+
+// Agent runs send OpenTelemetry traces here; connected to the project, they show in Foundry's
+// tracing view. Shares the capped Log Analytics workspace above.
+resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
+  name: 'appi-ninety-${token}'
+  location: location
+  tags: tags
+  kind: 'web'
+  properties: {
+    Application_Type: 'web'
+    WorkspaceResourceId: logs.id
+  }
+}
+
+resource tracingConnection 'Microsoft.CognitiveServices/accounts/projects/connections@2025-06-01' = {
+  parent: foundryProject
+  name: 'appinsights-tracing'
+  properties: {
+    category: 'AppInsights'
+    target: appInsights.id
+    authType: 'ApiKey'
+    isSharedToAll: false
+    credentials: { key: appInsights.properties.ConnectionString }
+    metadata: { ApiType: 'Azure', ResourceId: appInsights.id }
+  }
+}
+
+// The guardrail every agent is published with (ninety/agents/foundry.py). Microsoft's default
+// filters at their default thresholds, plus Prompt Shields for indirect attacks: our agents read
+// tool output and, later, viewer input, and both are data that may carry instructions. Thresholds
+// are not tuned to football words: false blocks on commentary are to be measured with the agent
+// evaluations (planned), and a threshold changes only on that evidence.
+resource guardrail 'Microsoft.CognitiveServices/accounts/raiPolicies@2025-06-01' = {
+  parent: foundry
+  name: 'ninety-guardrail'
+  properties: {
+    basePolicyName: 'Microsoft.DefaultV2'
+    mode: 'Blocking'
+    contentFilters: [
+      { name: 'Hate', blocking: true, enabled: true, severityThreshold: 'Medium', source: 'Prompt' }
+      { name: 'Hate', blocking: true, enabled: true, severityThreshold: 'Medium', source: 'Completion' }
+      { name: 'Sexual', blocking: true, enabled: true, severityThreshold: 'Medium', source: 'Prompt' }
+      { name: 'Sexual', blocking: true, enabled: true, severityThreshold: 'Medium', source: 'Completion' }
+      { name: 'Violence', blocking: true, enabled: true, severityThreshold: 'Medium', source: 'Prompt' }
+      { name: 'Violence', blocking: true, enabled: true, severityThreshold: 'Medium', source: 'Completion' }
+      { name: 'Selfharm', blocking: true, enabled: true, severityThreshold: 'Medium', source: 'Prompt' }
+      { name: 'Selfharm', blocking: true, enabled: true, severityThreshold: 'Medium', source: 'Completion' }
+      { name: 'Jailbreak', blocking: true, enabled: true, source: 'Prompt' }
+      { name: 'Indirect Attack', blocking: true, enabled: true, source: 'Prompt' }
+      { name: 'Protected Material Text', blocking: true, enabled: true, source: 'Completion' }
+    ]
+  }
+}
+
 // Render job: renders training clips in parallel executions and writes them to Blob Storage
 // (infra/render-job.sh). Shared keys are off, so the job and maintainers reach the blobs with
 // Entra identities only.
@@ -248,5 +316,6 @@ resource renderJob 'Microsoft.App/jobs@2024-03-01' = {
 output AZURE_CONTAINER_REGISTRY_ENDPOINT string = registry.properties.loginServer
 output AZURE_CONTAINER_APPS_ENVIRONMENT_ID string = environment.id
 output API_URL string = 'https://${api.properties.configuration.ingress.fqdn}'
+output FOUNDRY_GUARDRAIL string = guardrail.name
 output RENDER_JOB_NAME string = renderJob.name
 output RENDER_STORAGE_ACCOUNT string = storage.name
