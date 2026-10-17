@@ -4,6 +4,10 @@ Ground-truth rows are read from ``frames.jsonl``. Detection JSONL may contain on
 flat mapping with ``frame``, ``cls``, ``bbox`` and ``score`` per line, or one row
 per frame with a ``detections`` list whose entries contain ``cls``, ``bbox`` and
 ``score``.
+
+Only frames the detector ran on are scored. In the per-frame format a frame with an empty
+``detections`` list was run and found nothing, so its labels are misses; a frame with no line
+was not run, so its labels are not counted at all.
 """
 
 from __future__ import annotations
@@ -25,9 +29,19 @@ BOUNDARY_GROUPS = ("edge-touching", "interior")
 def load_jsonl(path: str | Path, *, flatten_detections: bool = False) -> list[dict]:
     """Read JSONL rows, optionally flattening per-frame detection records."""
     rows = [json.loads(line) for line in Path(path).read_text().splitlines() if line.strip()]
-    if not flatten_detections:
-        return rows
+    return flatten(rows) if flatten_detections else rows
 
+
+def frames_run(rows: Iterable[Mapping]) -> set[int]:
+    """Frames the detector ran on: every row's frame, including rows with an empty list.
+
+    Read this from the rows before flattening, which drops a frame that found nothing.
+    """
+    return {int(row["frame"]) for row in rows}
+
+
+def flatten(rows: Iterable[Mapping]) -> list[dict]:
+    """Flatten per-frame detection records into one mapping per detection."""
     detections = []
     for row in rows:
         if "detections" in row:
@@ -180,10 +194,21 @@ def score(
     frames: Iterable[Mapping],
     detections: Iterable[Mapping],
     threshold: float = DEFAULT_THRESHOLD,
+    run: Iterable[int] | None = None,
 ) -> dict:
-    """Return overall, visibility and image-boundary pixel metrics."""
+    """Return overall, visibility and image-boundary pixel metrics.
+
+    ``run`` is the set of frames the detector ran on (``frames_run``). Labels on other frames
+    are skipped, not counted as misses. ``None`` scores every frame in ``frames``.
+    """
     frames = list(frames)
-    labels = ground_truth(frames)
+    all_labels = ground_truth(frames)
+    known = {int(row["frame"]) for row in frames}
+    run = known if run is None else {int(f) for f in run}
+    if unknown := sorted(run - known):
+        raise ValueError(f"detections name frames not in frames.jsonl: {unknown[:5]}")
+    labels = [label for label in all_labels if label["frame"] in run]
+    skipped = {label["frame"] for label in all_labels} - run
     cameras = {int(row["frame"]): row.get("camera", {}) for row in frames}
     boundary = [boundary_group(label["bbox"], cameras[label["frame"]]) for label in labels]
     detections = [dict(d) for d in detections]
@@ -237,7 +262,9 @@ def score(
             "player_iou": PLAYER_IOU,
             "ball_center_distance_px": BALL_DISTANCE_PX,
             "match": "same frame/class, one-to-one, best-first",
+            "frames": "only frames with a line in the detections file; an empty list is scored",
         },
+        "frames": {"scored": len(run), "label_frames_skipped": len(skipped)},
         "overall": overall, "by_class": by_class, **difficulty,
         "pairs": pairs,
     }
@@ -250,11 +277,8 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD)
     parser.add_argument("--report", type=Path)
     args = parser.parse_args(argv)
-    report = score(
-        load_jsonl(args.frames),
-        load_jsonl(args.detected, flatten_detections=True),
-        args.threshold,
-    )
+    rows = load_jsonl(args.detected)
+    report = score(load_jsonl(args.frames), flatten(rows), args.threshold, run=frames_run(rows))
     text = json.dumps(report, indent=2) + "\n"
     if args.report:
         args.report.write_text(text)
