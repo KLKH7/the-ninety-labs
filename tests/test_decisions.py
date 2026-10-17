@@ -777,14 +777,16 @@ def test_a_thrown_pass_is_estimated_with_no_kicking_side():
     assert c != pytest.approx(a)  # a kick at that angle is not
 
 
-def test_the_passer_expects_a_dropping_ball_beside_his_man_to_be_a_foot_touch_not_a_thigh():
-    # firsttouch.surface_absorb: a ball dropping into the receiver's reach comes down through the
-    # thigh's height; only one coming into his body meets the thigh (A4). Beside its line, within his
-    # foot's reach (P14), he meets it with the foot, which kills more, so it is likelier kept. A mid
-    # first touch, from the profile's own range.
+
+def test_the_passer_expects_a_dropping_ball_into_his_man_to_meet_the_thigh():
+    # A4 (design): a receiver runs onto the ball's path, so the estimate takes a ball dropping into
+    # his reach above BODY_TOUCH_Z on the thigh or chest, whether he stands on its line now or just
+    # beside it: a cautious bound where the engine finds him beside it, with a foot.
     mid = FOOT_ABSORB_MPS[0] + FOOT_ABSORB_MPS[1] / 2
     on = scene(x=60.0, absorb={"h9": mid}, mates=[("h9", 84.0, 34.0, 0.0)])
     beside = scene(x=60.0, absorb={"h9": mid}, mates=[("h9", 84.0, 34.6, 0.0)])
     into = D.pass_confidence(on, 84.0, 34.0, 84.0, 34.0, 0.0, True, 18.0, "h9")
-    foot = D.pass_confidence(beside, 84.0, 34.0, 84.0, 34.6, 0.0, True, 18.0, "h9")
-    assert foot > 1.5 * into
+    near = D.pass_confidence(beside, 84.0, 34.0, 84.0, 34.6, 0.0, True, 18.0, "h9")
+    assert near == pytest.approx(into, abs=0.02)
+    # and as a thigh: well below what the same ball on the foot would be judged
+    assert into < 0.5

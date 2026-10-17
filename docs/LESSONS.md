@@ -467,11 +467,16 @@ short and actionable. This file is public: no research sources, product names or
   miscontrolled and popped up beside him to be miscontrolled again: before the cushioned touch, 158
   deflections in 30 minutes of seed 7, 52 by the same player straight after his own, against 35
   before the port, and about 80 fewer passes a team per match over 24 matches. The cushioned touch
-  then copied the same height-only test into the shared first-touch rule and the passer's estimate;
-  there it made such a ball a heavy touch, 344 passes in those 30 minutes against 416 with the fix.
+  then copied the same height-only test into the shared first-touch rule; there it made such a ball
+  a heavy touch. The first fix also let the passer's estimate judge "into his body" from where the
+  receiver stood, but receivers run onto the ball's path: passers then over-rated dropping balls
+  and receivers kept fewer of them (89.5% against 94.2% on the base, seeds 40 to 47). The estimate
+  keeps the thigh for a dropping ball, as a cautious bound.
 - **Rule:** when porting a rule between engines, carry over every condition it was guarded by (here,
   "into his body"), and check it against the receiving engine's own definitions (here, foot reach).
 - **Check:** after a port, compare event counts by kind (deflections, passes) with the parent on the
-  same seed. `tests/test_engine_rules.py::test_a_ball_he_reaches_beside_him_below_his_foot_reach_is_a_foot_touch`
-  and `tests/test_decisions.py::test_the_passer_expects_a_dropping_ball_beside_his_man_to_be_a_foot_touch_not_a_thigh`
-  fail with the height-only test restored.
+  same seed, and rerun the touch report: an estimate made more optimistic shows there before it shows
+  in goals. `tests/test_engine_rules.py::test_a_ball_he_reaches_beside_him_below_his_foot_reach_is_a_foot_touch`
+  fails with the height-only test restored;
+  `tests/test_decisions.py::test_the_passer_expects_a_dropping_ball_into_his_man_to_meet_the_thigh`
+  fails if the estimate takes it on the foot.

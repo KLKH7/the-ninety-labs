@@ -730,12 +730,12 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
         if at == len(points) - 1 and rests:
             g = vz = 0.0
         # The engine's own touch (firsttouch.py): the surface by the ball's height where he takes it,
-        # a thigh or chest only if it comes into his body (he is on its line as he goes, his body a
-        # circle as everywhere in this estimate, P11), and a touch that keeps it at his feet.
-        on_line = abs((taker[0] + taker[2] * take - sx) * uy - (taker[1] + taker[3] * take - sy) * ux)
-        into = on_line <= BODY_RADIUS + ball.RADIUS
+        # and a touch that keeps it at his feet. A receiver runs onto the ball's path, so it comes
+        # into his body: above BODY_TOUCH_Z, a thigh or chest (design, A4: a cautious bound where the
+        # engine finds him beside it, with a foot; judging that from where he stands now made
+        # passers over-rate dropping balls, touch report seeds 40 to 47: kept 89.5% against 94.4%).
         p = firsttouch.kept_estimate(relative_speed(g * ux, g * uy, vz, taker[2], taker[3]),
-                                     firsttouch.surface_absorb(taker[5], z, into), CONTROL_MARGIN_MPS)
+                                     firsttouch.surface_absorb(taker[5], z, True), CONTROL_MARGIN_MPS)
         horizon = take + OPPONENT_LATE_S
         # Where the ball has got to by then, along this strike: nobody further from that stretch of
         # its path than he can run by then matters (a shortcut, like `lb`).
