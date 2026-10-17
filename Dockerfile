@@ -1,8 +1,12 @@
 # The API image (ninety/api), deployed to Azure Container Apps by `azd deploy api`.
 # Dependencies come from uv.lock, so the image runs exactly what CI tested.
-FROM python:3.12-slim
+# Container Apps runs linux/amd64 only. The platform is pinned here, not left to the builder:
+# Docker's legacy builder on an Apple-silicon Mac reused a cached arm64 base under an amd64 label,
+# and the app failed in Azure with "exec format error".
+FROM --platform=linux/amd64 ghcr.io/astral-sh/uv:0.12.23 AS uv
+FROM --platform=linux/amd64 python:3.12-slim
 
-COPY --from=ghcr.io/astral-sh/uv:0.12.23 /uv /usr/local/bin/uv
+COPY --from=uv /uv /usr/local/bin/uv
 
 WORKDIR /app
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_NO_DEV=1

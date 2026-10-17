@@ -53,7 +53,7 @@ resource apiIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-3
 }
 
 var acrPull = '7f951dda-4ed3-4680-a7ca-43fe172d538d'
-var acrPush = '8311e382-0749-4cb8-b61a-753f48f6e0af'
+var acrPush = '8311e382-0749-4cb8-b61a-304f252e45ec'
 
 resource apiPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   scope: registry
@@ -75,11 +75,16 @@ resource ciPush 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empt
   }
 }
 
-resource environment 'Microsoft.App/managedEnvironments@2024-03-01' = {
+// Set the mode explicitly: left out, Azure now creates an Express environment, which cannot run
+// Container Apps jobs or OpenTelemetry and failed to pull our image with the managed identity.
+// Only the 2026-03-02-preview API exposes environmentMode.
+resource environment 'Microsoft.App/managedEnvironments@2026-03-02-preview' = {
   name: 'cae-ninety-${token}'
   location: location
   tags: tags
   properties: {
+    environmentMode: 'WorkloadProfiles'
+    workloadProfiles: [{ name: 'Consumption', workloadProfileType: 'Consumption' }]
     appLogsConfiguration: {
       destination: 'log-analytics'
       logAnalyticsConfiguration: {
@@ -106,6 +111,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
   dependsOn: [apiPull]
   properties: {
     managedEnvironmentId: environment.id
+    workloadProfileName: 'Consumption'
     configuration: {
       ingress: {
         external: true
