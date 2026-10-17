@@ -36,7 +36,7 @@ Please do not open a public issue. Use GitHub's
 - **Viewer input is data.** Free text a viewer types (a favourite player, a question) is
   length-capped, validated against the roster or an allow-list where possible, and never treated
   as an instruction.
-- **Tools are read-only and scoped.** The MCP server exposes match-query tools only: no file
+- **Tools are read-only and scoped.** The MCP server exposes match-query tools only, over a fixed list of precomputed matches, and its public endpoint answers only with the key held in Key Vault and the Foundry connection: no file
   system, shell, network fetch or write access.
 - **The fact-checking agent gates output.** Any sentence whose numbers or entities are not in the
   evidence is rejected before it reaches the screen.

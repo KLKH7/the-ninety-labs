@@ -41,7 +41,7 @@ DT = 1 / 25
 GENERIC_REACTION_S = 0.365  # D1: how quickly the passer assumes an opponent reacts (P12)
 LANE_MARGIN_S = 0.25  # D1: design: how sharply the passer's confidence falls as a lane closes
 RECEIVE_MARGIN_S = 0.3  # design: how sharply a carrier's confidence falls as a defender closes on his carry
-PRESSURE_FRONT_M, PRESSURE_BEHIND_M = 9.0, 3.0  # D2: pressure zone, longer in front than behind
+PRESSURE_FRONT_M, PRESSURE_BEHIND_M = perception.PRESSURE_FRONT_M, perception.PRESSURE_BEHIND_M  # D2
 # D3: how often a shot goes in by distance from the goal's centre, for a central shot: the
 # share of real shots that scored by zone (six-yard box 31%, the rest of the central box 17.7%,
 # central outside the box 5.3%, long range 2.3%; American Soccer Analysis, 8,291 MLS shots, 2013).
@@ -77,6 +77,7 @@ LOFT_DEG = 30.0  # design: the launch angle of a lofted pass or a throw, as esti
 # A4: the passer's guess of what a first touch can kill: an average player's (one definition, profiles).
 CONTROL_EST_MPS = FOOT_ABSORB_MPS[0] + FOOT_ABSORB_MPS[1] * 0.5
 CONTROL_MARGIN_MPS = 2.0  # design: how sharply that guess falls off
+AVERAGE = 0.5  # an average player's attribute, for estimates about someone the passer cannot judge
 GOAL_KICK_M = 5.5  # Law 16: a goal kick is taken from the goal area
 STICKY = 0.003  # design: a small bonus for carrying on with the current choice (no flip-flopping)
 CLEAR_FROM = 2 / 3  # a clear is an option in his own third: this share of the pitch from the goal he attacks
@@ -299,12 +300,9 @@ def loss_cost(x: float, y: float, goal_x: float) -> float:
 def pressure(scene: Scene) -> float:
     """0 to 1: how closely the nearest opponent presses, judged in a zone longer in front of the
     player (toward the goal he attacks) than behind him."""
-    worst = 0.0
-    for ox, oy in scene.opponents:
-        ahead = (ox - scene.x) * attack(scene.goal_x) > 0
-        reach = PRESSURE_FRONT_M if ahead else PRESSURE_BEHIND_M
-        worst = max(worst, 1 - math.hypot(ox - scene.x, oy - scene.y) / reach)
-    return max(0.0, worst)
+    sign = attack(scene.goal_x)
+    return max((perception.pressure_from(scene.x, scene.y, ox, oy, sign) for ox, oy in scene.opponents),
+               default=0.0)
 
 
 def turn_deg(direction: float, heading: float) -> float:
@@ -730,9 +728,15 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
         if at == len(points) - 1 and rests:
             g = vz = 0.0
         # The engine's own touch (firsttouch.py): the surface by the ball's height where he takes it,
-        # and a touch that keeps it at his feet.
-        p = firsttouch.kept_estimate(relative_speed(g * ux, g * uy, vz, taker[2], taker[3]),
-                                     firsttouch.surface_absorb(taker[5], z), CONTROL_MARGIN_MPS)
+        # made worse as the engine makes it (firsttouch.quality) by what the passer can know: its
+        # speed and the opponents he sees near where it is taken (D2's zone); the team-mate is
+        # taken to face it, as one expecting it does, fresh and of average composure.
+        rel = relative_speed(g * ux, g * uy, vz, taker[2], taker[3])
+        tx_, ty_ = sx + ux * a, sy + uy * a
+        felt = max((perception.pressure_from(tx_, ty_, ox, oy, attack(scene.goal_x))
+                    for ox, oy in scene.opponents), default=0.0)
+        worse = firsttouch.quality(0.0, felt, AVERAGE, 1.0, rel, taker[5])
+        p = firsttouch.kept_estimate(rel, firsttouch.surface_absorb(taker[5], z) / worse, CONTROL_MARGIN_MPS)
         horizon = take + OPPONENT_LATE_S
         # Where the ball has got to by then, along this strike: nobody further from that stretch of
         # its path than he can run by then matters (a shortcut, like `lb`).

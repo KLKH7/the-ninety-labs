@@ -128,6 +128,7 @@ FOOT_ABSORB_MPS = (12.0, 12.0)  # A4: a first touch kills 12 m/s plus 12 m/s mor
 READ_ERROR_M = 1.5  # design: spread of a keeper's read of a shot's aim, at average anticipation
 LOFT_ERROR_DEG = 2.0  # design: spread of launch angle
 TURN_ERROR = 0.5  # design: error widens by up to half again for a ball struck across the body
+PRESSURE_ERROR = 0.5  # A3, design: full pressure widens a strike's error by half again, less if composed
 PRESSURE_M = 3.0  # design: an opponent this close puts the kicker under full pressure
 WEAK_SIDE_DEG = 30.0  # design: a kick this far to the weaker foot's side is struck with it
 MAX_STRIKE_MPS = 36.0  # design: the hardest a foot strikes a ball, below the 40 m/s check (P3)
@@ -241,7 +242,7 @@ class Profile:
         gives about 3 degrees; error grows with speed, pressure (less for the composed), fatigue,
         the angle across his body, and the weaker foot (the sourced 27% at an average weak foot)."""
         sigma = KICK_ERROR_DEG * (1.6 - 1.2 * self[skill]) * (speed / KICK_REF_SPEED)
-        sigma *= 1 + 0.5 * pressure * (1 - self["composure"])
+        sigma *= 1 + PRESSURE_ERROR * pressure * (1 - self["composure"])
         sigma *= 1 + FATIGUE_ERROR * (1 - capacity)
         sigma *= 1 + TURN_ERROR * min(abs(turn_deg), 180.0) / 180.0
         if weak_foot:
