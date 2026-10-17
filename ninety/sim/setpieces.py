@@ -444,7 +444,8 @@ def deliver(engine: Engine, taker: Player) -> None:
     vx, vy, vz = engine.execute(taker, *intended(c, option), skill)
     engine.pass_target = option.target
     engine.intended = option.receiver
-    engine.kicked = engine.emit("pass", taker.team, bx, by, player=taker.id,
+    engine.kicked = engine.emit("pass", taker.team, bx, by, player=taker.id, intended=option.receiver,
+                                interceptor=None,
                                 ball_speed_kmh=round(math.sqrt(vx * vx + vy * vy + vz * vz) * 3.6, 1))
     engine.kick(taker, vx, vy, vz)
     c.delivered_at = engine.t

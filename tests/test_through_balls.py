@@ -9,6 +9,7 @@ from ninety.sim import decisions as D
 from tests.test_decisions import scene
 
 DEFENCE = [(80.0, 20.0), (80.0, 48.0), (95.0, 34.0)]  # last line at 80 m, a keeper-like deepest man
+RUNNER = ("h9", 75.0, 34.0, 0.0, 7.0, 0.0)  # seen running toward goal at 7 m/s
 
 
 def aims_for(s, mate, monkeypatch):
@@ -27,8 +28,17 @@ def aims_for(s, mate, monkeypatch):
 
 def test_a_pass_into_space_is_weighed_ahead_of_an_onside_team_mate(monkeypatch):
     s = scene(x=60.0, opponents=DEFENCE)
-    seen = aims_for(s, ("h9", 75.0, 34.0, 0.0), monkeypatch)
+    seen = aims_for(s, RUNNER, monkeypatch)
     assert (75.0 + 6.0, 34.0) in seen and (75.0 + 12.0, 34.0) in seen
+
+
+def test_never_into_space_for_a_team_mate_who_is_not_running_toward_goal(monkeypatch):
+    # render/latest: half of all passes went into space ahead of standing team-mates; the run is
+    # what makes the space his. Standing, or running back toward his own goal: only to him.
+    s = scene(x=60.0, opponents=DEFENCE)
+    for mate in (("h9", 75.0, 34.0, 0.0), ("h9", 75.0, 34.0, 0.0, -7.0, 0.0),
+                 ("h9", 75.0, 34.0, 0.0, 0.0, 7.0)):
+        assert len(aims_for(s, mate, monkeypatch)) == 1, mate
 
 
 def test_never_into_space_for_a_team_mate_believed_offside(monkeypatch):
@@ -58,7 +68,7 @@ def test_offside_reads_the_other_way_for_the_away_side():
 
 def test_never_aimed_at_the_goal_line(monkeypatch):
     s = scene(x=80.0, opponents=[(97.0, 30.0), (98.0, 38.0)])
-    seen = aims_for(s, ("h9", 94.0, 34.0, 0.0), monkeypatch)
+    seen = aims_for(s, ("h9", 94.0, 34.0, 0.0, 7.0, 0.0), monkeypatch)
     assert all(105.0 - tx >= D.GOAL_LINE_SPACE_M for tx, _ in seen[1:])
     assert (100.0, 34.0) in seen and (106.0, 34.0) not in seen  # 5 m from the line is fine; past it is not
 
@@ -106,8 +116,10 @@ def test_a_run_already_under_way_makes_the_pass_into_space_more_likely_to_arrive
 
 def test_the_aim_chosen_for_a_team_mate_is_the_best_of_all_his_aims():
     s = scene(x=60.0, opponents=DEFENCE)
-    mate = ("h9", 75.0, 34.0, 0.0)
-    aims = [(76.5, 34.0), (81.0, 34.0), (87.0, 34.0)]  # O7's step ahead, then the two leads
+    mate = RUNNER
+    o7 = 75.0 + 7.0 * min(D.LEAD_MAX_S, 15.0 / D.PASS_SPEED_EST_MPS)  # O7: led by his run
+    aims = [(o7, 34.0), (81.0, 34.0), (87.0, 34.0)]  # O7's lead, then the two leads into space
+    s = scene(x=60.0, opponents=DEFENCE, mates=[mate])
     scored = [o for o in (D.aimed_pass(s, "h9", 75.0, 34.0, 0.0, tx, ty) for tx, ty in aims) if o]
     assert len(scored) == 3 and len({round(o.value, 9) for o in scored}) == 3  # they differ
     chosen = D.pass_option(s, mate)

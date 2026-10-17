@@ -895,7 +895,10 @@ def pass_option(scene: Scene, mate: tuple[str, float, float, float]) -> Option |
     else:
         lx, ly = 1.5 * attack(scene.goal_x), 0.0
     aims = [(min(PITCH_X - 1, max(1.0, mx + lx)), min(PITCH_Y - 1, max(1.0, my + ly)))]
-    if not scene.throw and believed_onside(scene, mx):  # Law 15: a throw-in goes to him
+    # D11: into space only for a team-mate he sees running toward goal (as fast as O7 counts as
+    # moving): the run is what makes space ahead his. Law 15: a throw-in goes to him.
+    running = bool(moving) and moving[0] * attack(scene.goal_x) > 1.0
+    if not scene.throw and running and believed_onside(scene, mx):
         a = attack(scene.goal_x)
         for lead in THROUGH_LEADS_M:
             tx = mx + a * lead
