@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import math
 
+from ninety.sim import fmath
+
 SHOULDER_BREADTH_M = 0.50  # P11: bideltoid breadth of adult men, 50.2 cm (SD 3.3)
 CHEST_DEPTH_M = 0.20  # P11: anteroposterior chest depth of professional footballers, about 20 cm
 RADIUS_M = CHEST_DEPTH_M / 2  # how far the body's surface is from its spine
@@ -22,7 +24,7 @@ HALF_SPINE_M = (SHOULDER_BREADTH_M - CHEST_DEPTH_M) / 2  # the spine runs this f
 
 def spine(x: float, y: float, heading: float) -> tuple[float, float, float, float]:
     """The ends of the spine of a player at (x, y) facing `heading` (radians)."""
-    lx, ly = -math.sin(heading) * HALF_SPINE_M, math.cos(heading) * HALF_SPINE_M  # to his left
+    lx, ly = -fmath.sin(heading) * HALF_SPINE_M, fmath.cos(heading) * HALF_SPINE_M  # to his left
     return x + lx, y + ly, x - lx, y - ly
 
 
@@ -46,11 +48,11 @@ def surface(angle: float, heading: float, pad: float = 0.0) -> float:
     to the side. With pad = a ball's radius, it is where a ball's centre rests against him."""
     r = RADIUS_M + pad
     phi = angle - heading
-    fwd, side = abs(math.cos(phi)), abs(math.sin(phi))
+    fwd, side = abs(fmath.cos(phi)), abs(fmath.sin(phi))
     if fwd > 1e-12 and r * side / fwd <= HALF_SPINE_M:  # through the flat front or back
         return r / fwd
     # through a round end: |t (fwd, side) - (0, HALF_SPINE_M)| = r, the far root
-    return HALF_SPINE_M * side + math.sqrt(max(0.0, r**2 - (HALF_SPINE_M * fwd) ** 2))
+    return HALF_SPINE_M * side + math.sqrt(max(0.0, r * r - fmath.ipow(HALF_SPINE_M * fwd, 2)))
 
 
 def first_contact(x0: float, y0: float, x1: float, y1: float, x: float, y: float, heading: float,
