@@ -548,13 +548,14 @@ class Engine:
         # estimate counts him once, as the keeper, not also as a blocker.
         # Opponents as they will be a moment from now (their seen velocity): a carrier reads a
         # defender closing in, not only where he stands.
-        opps, opp_velocity = [], []
+        opps, opp_velocity, opps_now = [], [], []
         for q in self.players:
             at = belief.where(q.id, self.t)
             if at and q.team == opp:
                 qvx, qvy = belief.velocity(q.id)
                 opps.append((at[0] + qvx * ANTICIPATE_S, at[1] + qvy * ANTICIPATE_S))
                 opp_velocity.append((qvx, qvy))
+                opps_now.append(at)
         their_keeper = self.keeper(opp).id
         keeper = belief.where(their_keeper, self.t)
         if keeper:  # the same anticipated spot as in `opps`, so the shot estimate counts him once
@@ -581,6 +582,7 @@ class Engine:
             loss_weight=style.loss_weight(),
             mate_velocity=mate_velocity,
             opponent_velocity=opp_velocity,
+            opponents_now=opps_now,
         )
         return scene
 

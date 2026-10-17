@@ -200,6 +200,9 @@ class Scene:
     loss_weight: float = 1.0
     mate_velocity: dict[str, tuple[float, float]] = field(default_factory=dict)  # as he last saw them
     opponent_velocity: list[tuple[float, float]] = field(default_factory=list)  # in the order of `opponents`
+    # Where he believes the opponents are now; `opponents` is where they will be a moment from now.
+    # Offside is judged now, against the receiver where he is now. Empty: use `opponents`.
+    opponents_now: list[tuple[float, float]] = field(default_factory=list)
     current: str | None = None  # what he is doing now (dribble or hold), for STICKY
 
 
@@ -385,7 +388,7 @@ def believed_onside(scene: Scene, mx: float) -> bool:
     opponents' half nearer their goal line than both the ball and the second-last opponent is
     offside if he plays it. The passer avoids him; there is no referee in the engine yet (L10)."""
     a = attack(scene.goal_x)
-    depths = sorted((a * ox for ox, _ in scene.opponents), reverse=True)
+    depths = sorted((a * ox for ox, _ in scene.opponents_now or scene.opponents), reverse=True)
     second_last = depths[1] if len(depths) > 1 else a * (PITCH_X - scene.goal_x)
     in_their_half = a * (mx - PITCH_X / 2) > 0
     return not (in_their_half and a * mx > a * scene.x and a * mx > second_last)
@@ -403,8 +406,8 @@ def through_options(scene: Scene, mate: tuple[str, float, float, float]) -> list
     out = []
     for lead in THROUGH_LEADS_M:
         tx, ty = mx + a * lead, my
-        if a * (scene.goal_x - tx) < GOAL_LINE_SPACE_M:
-            continue
+        if a * (scene.goal_x - tx) < GOAL_LINE_SPACE_M or not 1.0 <= ty <= PITCH_Y - 1.0:
+            continue  # never at the goal line, nor beyond a touchline he is believed to be past
         dist = math.hypot(tx - scene.x, ty - scene.y)
         if dist < 4 or dist > MAX_PASS_M:
             continue

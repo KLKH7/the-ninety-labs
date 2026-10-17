@@ -142,3 +142,36 @@ def test_running_time_matches_the_body_model_integrated_step_by_step():
             x += v * dt
             t += dt
         assert math.isclose(D.running_time(distance, v0), D.GENERIC_REACTION_S + t, abs_tol=0.01)
+
+
+
+def test_never_into_space_beyond_a_touchline():
+    """He may be believed just past the line (positions are carried forward unbounded)."""
+    s = scene(mates=[("h11", 72.0, -0.5, 0.0)], opponents=BACK_LINE, keeper=BACK_LINE[-1])
+    assert D.through_options(s, s.mates[0]) == []
+
+
+def line_moving(vx: float):
+    """Home's h10 at x = 76, the ball at 50; away's back two seen at x = 75 moving at vx."""
+    from ninety.sim import perception
+
+    e = Engine(1)
+    carrier, runner = e.by_id["h7"], e.by_id["h10"]
+    carrier.x, carrier.y = 50.0, 34.0
+    e.ball = (50.0, 34.0, 0.0, 0.0, 0.0, 0.0)
+    e.possessor = carrier.id
+    seen = e.beliefs[carrier.id].seen
+    seen.clear()
+    seen[runner.id] = perception.Sighting(76.0, 34.0, 0.0, 0.0, t=e.t)
+    for pid, y in (("a3", 28.0), ("a4", 40.0)):
+        seen[pid] = perception.Sighting(75.0, y, vx, 0.0, t=e.t)
+    seen["a1"] = perception.Sighting(103.0, 34.0, 0.0, 0.0, t=e.t)
+    return e.scene_for(carrier)
+
+
+def test_offside_is_judged_where_the_line_is_now_not_where_it_will_be():
+    """Beyond a line stepping up (it will be at 77 in 0.4 s) he is still offside now; behind a
+    line dropping off (73 in 0.4 s) he is onside now only if he is behind it now."""
+    assert not D.believed_onside(line_moving(+5.0), 76.0)
+    assert D.believed_onside(line_moving(-5.0), 74.5)
+    assert not D.believed_onside(line_moving(-5.0), 76.0)
