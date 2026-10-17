@@ -43,3 +43,13 @@ def test_a_penalty_never_comes_off_the_man_who_took_it():
         assert shot_at is not None
         after = e.match.events[shot_at:]
         assert not any(ev["type"] == "deflection" and ev.get("player") == taker.id for ev in after), seed
+
+
+def test_the_save_report_reads_saves_from_what_happened():
+    from ninety.sim import saves
+
+    near = [saves.shoot_from(8.0, seed) for seed in range(1, 9)]
+    far = [saves.shoot_from(25.0, seed) for seed in range(1, 9)]
+    assert all(r is not None for r in near + far)
+    assert any(r["on_target"] and not r["saved"] for r in near)  # from 8 m one beats him
+    assert any(r["saved"] for r in far)  # from 25 m he gets to one

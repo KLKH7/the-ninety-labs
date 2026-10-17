@@ -6,6 +6,8 @@ generated it and the output file is committed. Rows marked *planned* have no res
 | Measure | Command | Output | Status |
 |---|---|---|---|
 | Simulator realism (passes, shots, tackles, pass completion per match) | `uv run pytest tests/test_sim.py` | test assertions | running |
+| Keeper saves (isolated central shots at 8 to 25 m against the O1 position, and on-target shots in 12 matches) | `uv run python -m ninety.sim.saves` | `docs/eval/saves.md` | running: a report beside GROUNDING O1, never a target |
+| Penalties (scored, keeper's side, stops, on target) | `uv run python -m ninety.sim.penalties` | `docs/eval/penalties.md` | running: a report beside published figures, never a target |
 | Event and frame schema validity | CI `smoke` job | CI log | running |
 | Ground-truth data meets the data contract (consistency and physics) | `uv run ninety-validate <clip>` | command output | running: the engine meets the contract on full matches (seeds 7, 11, 21); CI runs it on the smoke clip |
 | Render checks (projection error, label completeness, determinism, ball occlusion share) | `uv run ninety-render-check <clips> --determinism --report docs/eval/render-checks.json`; CI `render` job on every push | `docs/eval/render-checks.json`, CI log | running |
