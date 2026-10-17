@@ -12,6 +12,6 @@ replays
 tests
 docs
 infra
-web
+web/node_modules
 .env
 .env.*

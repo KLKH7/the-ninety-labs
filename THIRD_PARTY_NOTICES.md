@@ -12,6 +12,7 @@ licence must be one of those three (see `AGENTS.md`).
 | azure-monitor-opentelemetry | agent traces to Application Insights and Foundry; brings OpenTelemetry (Apache-2.0), psutil (BSD-3-Clause), wrapt (BSD-2-Clause) and, through msrest, requests-oauthlib (ISC) | MIT |
 | httpx | Azure AI Speech REST calls | BSD-3-Clause |
 | jsonschema | data contract validation | MIT |
+| azure-storage-blob (`render-job` group) | render job uploads clips to Blob Storage | MIT |
 | mcp | MCP server and client | MIT |
 | starlette, uvicorn | the public API (`ninety/api`) | BSD-3-Clause |
 | pydantic (via agent-framework) | typed agent output | MIT |
