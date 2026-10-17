@@ -825,22 +825,34 @@ class Engine:
         plus its threat for them (D9)."""
         return decisions.value(x, y, goal_x(team)) + decisions.value(x, y, goal_x(other(team)))
 
+    def press_pace(self, p: Player) -> float:
+        """T3: how hard he presses and recovers (design)."""
+        return 5.0 + 2.0 * p.profile["work_rate"]
+
     def press_goals(self, p: Player) -> float:
-        """P17: what a press is worth now: the chance he reaches the ball before its carrier can play
-        it (a carrier still settling it has longer; once settled he needs a choice reaction to the
-        presser, D1) times what winning it there is worth. A carrier with time and space at the
-        back is a press worth almost nothing; one who has just received near our goal, a lot."""
-        bx, by = self.ball[0], self.ball[1]
-        carrier = self.by_id.get(self.possessor) if self.possessor else None
-        settling = max(0.0, self.hold_until - self.t) if carrier and carrier.team != p.team else 0.0
-        release = settling + decisions.GENERIC_REACTION_S
-        dx, dy = bx - p.x, by - p.y
+        """P17: what pressing now is worth, from where play is going and when the ball is under
+        control there (O8). Closing the carrier down to pressing distance while he still has it
+        (his time on the ball) takes away the danger: the threat of their ball there (D9). Winning
+        it needs more: reaching him before he can react to the presser and play it (D1's choice
+        reaction, as a settled carrier sees him coming), then D8's race from the edge of his
+        reach; that is worth the threat of ours there. So a press on a carrier near our goal is
+        worth much, in midfield some, and on defenders with time and space at the back little,
+        while one who has just received near his own goal with a presser on him is worth a lot."""
+        tx, ty = self.play_point(p)
+        controlled_at = self.ball_eta(tx, ty)  # a carrier still settling it, or a pass yet to arrive
+        gap = self.brains[p.team].press_gap_m
+        reach = min(gap, decisions.LUNGE_REACH_M)  # he jockeys at gap, and commits from within reach
+        dx, dy = tx - p.x, ty - p.y
         d = math.hypot(dx, dy)
         along = (p.vx * dx + p.vy * dy) / (d or 1.0)
-        work = 5.0 + 2.0 * p.profile["work_rate"]  # the pace he presses at (T3)
-        arrive = p.physique.time_to_cover(max(0.0, d - CONTROL_M), along, work)
-        reaches = decisions.sigmoid((release - arrive) / decisions.LANE_MARGIN_S)
-        return reaches * self.contest_goals(p.team, bx, by)
+        pace = self.press_pace(p)
+        closed = pacing.closes_down(p.physique.time_to_cover(max(0.0, d - gap), along, pace), controlled_at)
+        in_reach = p.physique.time_to_cover(max(0.0, d - reach), along, pace)
+        before_he_plays = decisions.sigmoid((controlled_at + decisions.GENERIC_REACTION_S - in_reach)
+                                            / decisions.LANE_MARGIN_S)
+        wins = before_he_plays * decisions.tackle_chance(reach, p.profile["tackling"])
+        theirs = decisions.value(tx, ty, goal_x(other(p.team)))
+        return closed * theirs + wins * decisions.value(tx, ty, goal_x(p.team))
 
     def accepts_press(self, p: Player) -> bool:
         """P17: does he think pressing now is worth what it costs him?"""
@@ -862,12 +874,11 @@ class Engine:
                 continue  # has not yet reacted to this strike
             sigma = PERCEPTION_ERR * math.hypot(self.ball[0] - p.x, self.ball[1] - p.y)
             ex, ey = self.rng.gauss(0, sigma), self.rng.gauss(0, sigma)
-            # Judged at the speed he would chase it at (P17); a keeper's dash is not priced.
-            goals = self.contest_goals(p.team, self.ball[0], self.ball[1])
-            cap = None if p.role == "GK" else self.run_speed(p, goals)
             for k in range(0, len(path), 2):
                 t = k * DT
                 bx, by, bz = path[k][0] + ex * t, path[k][1] + ey * t, path[k][2]
+                # Judged at the speed he would chase it to there at (P17); a keeper is not priced.
+                cap = None if p.role == "GK" else self.run_speed(p, self.contest_goals(p.team, bx, by))
                 reachable, gap, along = self.can_reach(p, bx, by, bz, t, cap=cap)
                 if gap is None:
                     continue  # over his reach
@@ -1392,7 +1403,7 @@ class Engine:
         ty = p.ay + (clamp(by, 0, PITCH_Y) - p.ay) * 0.25
         brain = self.brains[p.team]
         own_goal = PITCH_X - goal_x(p.team)
-        work = 5.0 + 2.0 * p.profile["work_rate"]  # how hard he presses and recovers
+        work = self.press_pace(p)  # how hard he presses and recovers
         if p.role == "GK" and not brain.in_possession:
             carrier = self.by_id.get(self.possessor) if self.possessor else None
             if carrier and carrier.team != p.team:

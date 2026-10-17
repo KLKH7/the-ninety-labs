@@ -1,17 +1,24 @@
-"""P17: a player prices running above critical speed by the hazard score (strain times the match
-left) and weighs it against what the run is worth in the situation, in goals. The choice reads the
-body; it never changes it."""
+"""P17: a player prices running above critical speed by the hazard score (how far his slow store
+has fallen times the match left) and weighs it against what the run is worth in the situation, in
+goals. The choice reads the body; it never changes it."""
 
 import math
 from dataclasses import astuple
 
 from ninety.sim import decisions, pacing
-from ninety.sim.body import BRAKE_MAX, D0, Body, can_get_to
+from ninety.sim.body import BRAKE_MAX, D0, SLOW_SCALE, Body, can_get_to
 from ninety.sim.body import move as move_body
 from ninety.sim.engine import DT, SPRINT, Engine
 from ninety.sim.style import Style
 
 MIN = 60.0
+
+
+def worn(body: Body, share_gone: float) -> Body:
+    """His slow store `share_gone` down (P10), his reserve full to what it allows."""
+    body.spent = -math.log(1.0 - share_gone) * SLOW_SCALE * D0
+    body.reserve = body.ceiling
+    return body
 
 
 def average(p) -> None:
@@ -30,7 +37,7 @@ def press_scene(carrier_at=(30.0, 34.0), presser_at=(26.0, 34.0)):
     carrier.x, carrier.y = carrier_at
     first.x, first.y = presser_at
     e.ball = (*carrier_at, 0.0, 0.0, 0.0, 0.0)
-    e.possessor, e.restart = carrier.id, None
+    e.possessor, e.restart, e.kicked = carrier.id, None, None
     for pid in ("h7", "h6", "h8"):
         average(e.by_id[pid])
     brain = e.brains["home"]
@@ -47,12 +54,12 @@ def at(e, minute: float, settling: float) -> None:
 
 def outcomes():
     """Who presses a carrier settling the ball 30 m from home's goal, h7 4 m away: a fresh h7 in
-    minute 15; h7 at 40% of his reserve in minute 60; the same h7 in minute 88."""
+    minute 15; h7 with his slow store 40% down in minute 60; the same h7 in minute 88."""
     e, first, brain = press_scene()
     at(e, 15, 0.4)
     goals = e.press_goals(first)
     fresh = e.who_presses(brain)
-    first.physique.reserve = 0.4 * D0
+    worn(first.physique, 0.4)
     at(e, 60, 0.4)
     tired = e.who_presses(brain)
     at(e, 88, 0.4)
@@ -64,11 +71,11 @@ def test_a_fresh_player_accepts_a_press_that_a_tired_one_declines_until_the_end(
     goals, fresh, tired, late = outcomes()
     # The scene's worth sits between the tired player's price in minute 60 and in minute 88
     # (lesson 36: if the design values move, this says why the scene no longer tests the rule).
-    body = Body(5.18, 10.0, 3.9, reserve=0.4 * D0)
+    body = worn(Body(5.18, 10.0, 3.9), 0.4)
     assert pacing.price(body, 0.5, 88 * MIN) < pacing.worth(goals, 0.5) < pacing.price(body, 0.5, 60 * MIN)
     assert fresh == ["h7", "h6"]  # he presses, the next soonest covers
     assert tired == ["h6", "h8"]  # he declines: the next soonest is asked, and the one after covers
-    assert late == ["h7", "h6"]  # minutes from the end the same reserve is worth spending
+    assert late == ["h7", "h6"]  # minutes from the end what is left is worth spending
 
 
 def test_the_scene_fails_when_the_price_ignores_the_clock(monkeypatch):
@@ -80,20 +87,20 @@ def test_the_scene_fails_when_the_price_ignores_the_clock(monkeypatch):
 
 
 def test_a_tired_player_presses_a_promising_ball_near_his_goal_but_not_defenders_with_time():
-    """The same tired h7 (40% reserve, minute 60): a carrier who has just received 18 m from
-    home's goal with h7 2 m away is worth pressing; away's centre-back on the ball 10 m from his
-    own goal, settled, with h7 15 m off, is worth almost nothing."""
-    e, first, brain = press_scene(carrier_at=(18.0, 34.0), presser_at=(16.0, 34.0))
-    first.physique.reserve = 0.4 * D0
-    at(e, 60, 0.5)
+    """The same tired h7 (slow store 40% down, minute 60): a carrier who has just received 18 m from
+    home's goal with h7 4 m away is worth pressing; away's centre-back on the ball 10 m from his
+    own goal, settled, with h7 15 m off, is not."""
+    e, first, brain = press_scene(carrier_at=(18.0, 34.0), presser_at=(14.0, 34.0))
+    worn(first.physique, 0.4)
+    at(e, 60, 0.4)
     promising = e.press_goals(first)
     assert e.who_presses(brain)[0] == "h7"
     e, first, brain = press_scene(carrier_at=(95.0, 34.0), presser_at=(80.0, 34.0))
-    first.physique.reserve = 0.4 * D0
+    worn(first.physique, 0.4)
     at(e, 60, 0.0)
     hopeless = e.press_goals(first)
     assert e.who_presses(brain)[0] != "h7"
-    assert promising > 100 * hopeless
+    assert promising > 10 * hopeless
 
 
 def test_a_press_is_worth_more_the_sooner_he_gets_there_and_the_more_the_ball_is_worth_there():
@@ -104,15 +111,43 @@ def test_a_press_is_worth_more_the_sooner_he_gets_there_and_the_more_the_ball_is
 
     assert goals(presser_at=(27.0, 34.0)) > goals(presser_at=(23.0, 34.0))  # nearer
     assert goals(settling=0.6) > goals(settling=0.0)  # the carrier still has the ball to settle
-    assert goals((20.0, 34.0), (16.0, 34.0)) > goals((70.0, 34.0), (66.0, 34.0))  # nearer our goal
+    # Against a settled carrier 8 m off: worth most near our goal, less in midfield, least at their
+    # back, where a defender with time plays it before a presser can win it.
+    down = [goals((x, 34.0), (x - 8.0, 34.0), 0.0) for x in (12.0, 30.0, 52.0, 75.0, 95.0)]
+    assert all(a >= b for a, b in zip(down, down[1:], strict=False)), down
+    assert down[-1] < down[0] / 5
+    # But a defender still settling the ball at his own goal with the presser on him can lose it.
+    assert goals((95.0, 34.0), (92.5, 34.0), 0.5) > 5 * down[-1]
+
+
+def test_a_press_is_timed_to_where_a_pass_in_flight_is_going():
+    """O8: once he has reacted to a pass travelling to a receiver near home's goal, the presser
+    near the receiver is judged against the ball arriving there (the moment to press), not
+    against the ball in the air."""
+    e, first, brain = press_scene(carrier_at=(40.0, 34.0), presser_at=(19.0, 34.0))
+    e.by_id["a9"].x, e.by_id["a9"].y = 22.0, 34.0
+    e.t = 30 * MIN
+    passer = e.by_id["a10"]
+    passer.heading = math.pi
+    e.give(passer.id)
+    e.ball = (39.63, 34.0, 0.0, 0.0, 0.0, 0.0)
+    e.pass_to(passer, 22.0, 34.0, lofted=False, receiver="a9")
+    assert e.possessor is None and e.pass_target == (22.0, 34.0)
+    at_strike = e.press_goals(first)
+    e.t += 2 * e.reaction(first)
+    reacted = e.press_goals(first)
+    assert math.hypot(e.play_point(first)[0] - 22.0, e.play_point(first)[1] - 34.0) < 5.0
+    assert reacted > at_strike and reacted > 0.01
 
 
 def test_nobody_presses_when_none_of_them_thinks_it_worth_it():
     e, first, brain = press_scene(carrier_at=(95.0, 34.0), presser_at=(80.0, 34.0))
     at(e, 30, 0.0)
     for pid in brain.ranked:
-        e.by_id[pid].physique.reserve = 0.0
+        worn(e.by_id[pid].physique, 0.9)
     assert e.who_presses(brain) == []
+    e.by_id["h8"].physique = Body(5.18, 10.0, 3.9)  # the third is fresh: asked in turn, he goes
+    assert e.who_presses(brain) == ["h8"]
 
 
 def test_the_press_is_asked_in_the_match_loop(monkeypatch):
@@ -132,18 +167,20 @@ def test_the_press_is_asked_in_the_match_loop(monkeypatch):
 def test_the_price_rises_as_the_reserve_falls_and_with_the_match_left():
     body = Body(5.18, 10.0, 3.9)
     assert pacing.price(body, 0.5, 0.0) == 0.0  # fresh: running hard costs him nothing
-    body.reserve = 0.4 * D0
+    worn(body, 0.4)
     early, mid, end = (pacing.price(body, 0.5, m * MIN) for m in (10, 60, 90))
     assert early > mid > end == 0.0
-    body.reserve = 0.2 * D0
+    worn(body, 0.6)
     assert pacing.price(body, 0.5, 60 * MIN) > mid
-    body = Body(5.18, 10.0, 3.9, spent=40 * D0)  # the slow store has fallen, and he is at its ceiling
-    body.reserve = body.ceiling
-    assert pacing.strain(body) == 1 - body.ceiling / D0 > 0  # a match-long decline is felt
+    # A dip in the reserve after a sprint refills in minutes: it is his body's limit, not a reason to
+    # save himself for the rest of the match.
+    body = Body(5.18, 10.0, 3.9)
+    body.reserve = 0.3 * D0
+    assert pacing.price(body, 0.5, 10 * MIN) == 0.0
 
 
 def test_stamina_lowers_the_price_and_work_rate_raises_what_a_run_is_worth():
-    body = Body(5.18, 10.0, 3.9, reserve=0.4 * D0)
+    body = worn(Body(5.18, 10.0, 3.9), 0.4)
     assert pacing.price(body, 0.9, 60 * MIN) < pacing.price(body, 0.1, 60 * MIN)
     assert pacing.worth(0.01, 0.9) > pacing.worth(0.01, 0.1)
     assert pacing.worth(-0.01, 0.5) == 0.0  # a run that loses ground is worth nothing, never less
@@ -152,7 +189,8 @@ def test_stamina_lowers_the_price_and_work_rate_raises_what_a_run_is_worth():
 def test_a_run_is_asked_for_at_full_capability_while_free_and_slower_as_it_costs_more():
     body = Body(5.18, 10.0, 3.9)
     assert pacing.run_speed(body, 0.5, 0.5, 30 * MIN, 0.05) == body.v0
-    body.reserve = 0.3 * D0
+    assert pacing.run_speed(body, 0.5, 0.5, 30 * MIN, 0.0) == body.v0  # costs nothing: as before pacing
+    worn(body, 0.5)
     valuable = pacing.run_speed(body, 0.5, 0.5, 30 * MIN, 0.05)
     slight = pacing.run_speed(body, 0.5, 0.5, 30 * MIN, 0.005)
     assert body.cs < slight < valuable < body.v0
@@ -163,7 +201,7 @@ def test_a_choice_never_changes_the_body():
     """Pricing, choosing and asking for a speed read the body and leave it as it was; the speed he
     gets is still capped by his body."""
     e, first, brain = press_scene()
-    first.physique.reserve = 0.4 * D0
+    worn(first.physique, 0.4)
     at(e, 60, 0.4)
     before = astuple(first.physique), first.physique.top_speed(), first.physique.accel_limit(3.0)
     e.who_presses(brain)
@@ -174,7 +212,7 @@ def test_a_choice_never_changes_the_body():
     assert before == after
     assert first.physique.cs < asked <= first.physique.v0
     body = Body(5.18, 10.0, 3.9, reserve=0.05 * D0)  # nearly empty: his body allows little above cs
-    want = pacing.run_speed(body, 0.5, 0.5, 89 * MIN, 0.05)
+    want = pacing.run_speed(body, 0.5, 0.5, 89 * MIN, 0.05)  # the slow store is full: nothing to save
     assert want > body.top_speed()  # he wants more than he has
     x = y = vx = vy = 0.0
     for _ in range(200):
@@ -213,7 +251,7 @@ def test_each_full_speed_run_asks_for_what_the_situation_makes_it_worth():
     e = Engine(1, styles={"home": Style(), "away": Style()})
     runner = e.by_id["h9"]
     average(runner)
-    runner.physique.reserve = 0.6 * D0
+    worn(runner.physique, 0.4)
     e.t = 30 * MIN
     e.possessor = "h7"
     e.brains["home"].in_possession = True
@@ -240,21 +278,54 @@ def test_the_chase_plan_judges_outfield_players_at_their_chosen_speed(monkeypatc
     e.possessor, e.restart = None, None
     e.ball = (52.0, 34.0, 3.0, 0.0, 0.0, 0.0)
     for p in e.players:
-        p.physique.reserve = 0.5 * D0
+        worn(p.physique, 0.3)
     e.t = 30 * MIN
     caps = {}
     real = e.can_reach
 
-    def spy(p, *a, cap=None, **k):
-        caps.setdefault(p.id, cap)
-        return real(p, *a, cap=cap, **k)
+    def spy(p, bx, by, bz, t, *a, cap=None, **k):
+        caps.setdefault(p.id, []).append((bx, by, cap))
+        return real(p, bx, by, bz, t, *a, cap=cap, **k)
 
     monkeypatch.setattr(e, "can_reach", spy)
     monkeypatch.setattr(e, "reacting_since", lambda p: -99.0)
     e.plan_chase()
     outfield = [pid for pid in caps if e.by_id[pid].role != "GK"]
     assert outfield
-    for pid in outfield:
+    later = 0
+    for pid in outfield:  # judged at the speed he would chase the ball to each point at
         p = e.by_id[pid]
-        assert caps[pid] == e.run_speed(p, e.contest_goals(p.team, 52.0, 34.0))
-    assert all(cap is None for pid, cap in caps.items() if e.by_id[pid].role == "GK")
+        for bx, by, cap in caps[pid]:
+            assert cap == e.run_speed(p, e.contest_goals(p.team, bx, by)) < p.physique.v0
+            later += math.hypot(bx - 52.0, by - 34.0) > 1.0
+    assert later  # some points along the ball's path, not only where it is now
+    assert all(cap is None for pid, calls in caps.items() if e.by_id[pid].role == "GK" for _, _, cap in calls)
+    # The engine's reach test honours the cap: 10 m to close in 2.5 s is in reach flat out, not at 5 m/s.
+    p = e.by_id[outfield[0]]
+    p.physique, p.x, p.y, p.vx, p.vy = Body(5.18, 10.0, 3.9), 40.0, 34.0, 0.0, 0.0
+    monkeypatch.setattr(e, "reach", lambda p, bx, by, bz, at: (1.0, 2.0))
+    assert real(p, 51.0, 34.0, 0.0, 2.5)[0] and not real(p, 51.0, 34.0, 0.0, 2.5, cap=5.0)[0]
+
+
+def test_a_press_is_worth_the_danger_removed_and_the_regain_from_the_engines_own_rules():
+    """Lesson 23: the press's worth is built from the engine's definitions: closing down to pressing
+    distance at his pressing pace (T3, T4) while the carrier still has it (from when the ball is
+    under control where play is going, O8) takes away their threat there; reaching him before he
+    can react and play it (D1), then D8's race from the edge of his reach, wins ours (D9)."""
+    for carrier_at, presser_at in (((30.0, 34.0), (27.0, 34.0)), ((92.0, 20.0), (89.0, 21.0))):
+        e, first, _ = press_scene(carrier_at, presser_at)
+        at(e, 30, 0.3)
+        gap = e.brains["home"].press_gap_m
+        d = math.hypot(carrier_at[0] - presser_at[0], carrier_at[1] - presser_at[1])
+        pace = 5.0 + 2.0 * first.profile["work_rate"]
+        assert pace < first.physique.top_speed()  # so the pace is a real limit here
+        controlled = e.ball_eta(*carrier_at)
+        closed = pacing.closes_down(first.physique.time_to_cover(d - gap, 0.0, pace), controlled)
+        reach = min(gap, decisions.LUNGE_REACH_M)  # he commits once the carrier is within his reach
+        in_reach = first.physique.time_to_cover(d - reach, 0.0, pace)
+        late = controlled + decisions.GENERIC_REACTION_S - in_reach
+        before = decisions.sigmoid(late / decisions.LANE_MARGIN_S)
+        wins = before * decisions.tackle_chance(reach, first.profile["tackling"])
+        theirs, ours = decisions.value(*carrier_at, 0.0), decisions.value(*carrier_at, 105.0)
+        assert math.isclose(e.press_goals(first), closed * theirs + wins * ours, rel_tol=1e-12)
+        assert closed > 0 and wins > 0
