@@ -1,0 +1,18 @@
+# Azure Developer CLI project. `azd provision` creates infra/main.bicep in the existing resource
+# group; `azd deploy api` builds the Dockerfile, pushes it to our registry and rolls a new revision.
+# Setup and the provision/deploy split: infra/README.md.
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+name: the-ninety-labs
+infra:
+  provider: bicep
+  path: infra
+services:
+  api:
+    project: .
+    language: py
+    host: containerapp
+    docker:
+      path: ./Dockerfile
+      context: .
+      buildArgs:
+        - NINETY_COMMIT=${NINETY_COMMIT}
