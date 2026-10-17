@@ -47,6 +47,15 @@ def test_ball_size_scales_to_the_training_input(tmp_path):
     assert dataset_stats([d], stride=1, input_size=(512, 512))["train"]["ball_size_px"]["median"] == 4.27
 
 
+def test_median_of_an_even_sample_is_the_mean_of_the_middle_two():
+    from ninety.vision.data_stats import _quantiles
+
+    assert _quantiles([12, 4])["median"] == 8
+    q = _quantiles([1, 2, 3, 4, 5])
+    assert (q["p05"], q["median"], q["p95"]) == (1.2, 3, 4.8)
+    assert _quantiles([7])["median"] == 7 and _quantiles([])["median"] is None
+
+
 def test_splits_are_counted_apart_with_their_seeds(tmp_path):
     dirs = [write_clip(tmp_path, 3, "train", [1.0]), write_clip(tmp_path, 1, "train", [1.0]),
             write_clip(tmp_path, 900001, "test", [0.2, 0.2])]

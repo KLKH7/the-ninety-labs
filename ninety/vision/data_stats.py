@@ -62,7 +62,12 @@ def _quantiles(xs: list[float]) -> dict:
     xs = sorted(xs)
 
     def q(p: float) -> float:
-        return round(xs[min(len(xs) - 1, int(p * len(xs)))], 2)
+        # linear interpolation between closest ranks, so the median of an even sample is the mean
+        # of the two middle values, not the upper one
+        k = p * (len(xs) - 1)
+        lo = int(k)
+        hi = min(lo + 1, len(xs) - 1)
+        return round(xs[lo] + (xs[hi] - xs[lo]) * (k - lo), 2)
 
     return {"n": len(xs), "p05": q(0.05), "median": q(0.5), "p95": q(0.95)}
 
