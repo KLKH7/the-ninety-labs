@@ -319,10 +319,12 @@ def strike_turn(heading: float, dx: float, dy: float, thrown: bool = False,
     turns toward it at TURN_RATE until he is, and strikes at that angle. A throw-in leaves his hands
     at once, at whatever angle (can_strike). At a dead ball (`dead`) nobody may challenge him until
     he kicks it, so he turns all the way and strikes it square, as the kicks A3 is measured from were
-    struck. *Design*, not counted: walking round behind a dead ball takes no extra time here; a
-    ball behind him also comes round to his front within a few frames; the engine turns in whole
-    frames, so it strikes up to one frame later and up to 14° nearer his facing; and he does not
-    move while he turns, though in the engine he brakes and the ball goes with him."""
+    struck (*design*, GROUNDING P16). *Design*, not counted: a ball behind him also comes round to
+    his front within a few frames; the engine turns in whole frames, so in play it strikes up to one
+    frame later and up to 14° nearer his facing, and at a dead ball up to one frame sooner and up to
+    14° off square (its resolution), and walking round behind a dead ball takes time not counted
+    here; and he does not move while he turns, though in the engine he brakes and the ball goes
+    with him."""
     off = turn_deg(math.atan2(dy, dx), heading)
     if dead and not thrown:
         return 0.0, math.radians(abs(off)) / TURN_RATE

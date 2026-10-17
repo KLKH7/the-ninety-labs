@@ -1214,6 +1214,33 @@ def test_at_a_kick_off_everyone_stays_in_his_half_until_the_ball_is_kicked():
     assert held > 1 and not e.placed  # it held while he turned, then he kicked it
 
 
+@pytest.mark.parametrize("kind,spot,aim", [
+    ("corner", (105.0, 0.0), (94.0, 34.0)),  # at the flag, into the box
+    ("corner", (105.0, 0.0), (105.0, 20.0)),  # along the goal line
+    ("free_kick", (50.0, 0.0), (50.0, 15.0)),  # on the touchline, infield
+    ("free_kick", (50.0, 68.0), (70.0, 68.0)),  # along the line
+])
+def test_a_dead_ball_is_always_struck_soon_whichever_way_he_faces(kind, spot, aim):
+    """P16: squaring up to a dead ball takes at most a half turn and a step round it, never forever."""
+    import math
+
+    for k in range(12):
+        e = Engine(1)
+        still(e)
+        e.possessor = None
+        e.stop(kind, "home", spot)
+        taker = e.by_id[e.restart.taker]
+        taker.x, taker.y, taker.heading = *spot, math.radians(30 * k)
+        e.restart.ready_at = e.t
+        e.tick_restart()
+        e.turn_to(taker, *aim, lambda e=e, t=taker: e.pass_to(t, *aim, lofted=False))
+        for _ in range(25):  # a second: 180° at 350° a second is 0.51 s
+            e.step()
+            if e.possessor != taker.id:
+                break
+        assert e.possessor != taker.id, (kind, spot, aim, 30 * k)
+
+
 def test_a_throw_in_is_meant_for_the_team_mate_it_is_thrown_to():
     e = Engine(1)
     p = e.by_id["h2"]
