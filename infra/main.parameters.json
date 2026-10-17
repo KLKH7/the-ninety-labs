@@ -7,6 +7,7 @@
     "apiExists": { "value": "${SERVICE_API_RESOURCE_EXISTS=false}" },
     "ciPrincipalId": { "value": "${CI_PRINCIPAL_ID=}" },
     "mcpKey": { "value": "${MCP_KEY=}" },
-    "renderReaderPrincipalId": { "value": "${RENDER_READER_PRINCIPAL_ID=}" }
+    "renderReaderPrincipalId": { "value": "${RENDER_READER_PRINCIPAL_ID=}" },
+    "renderCommit": { "value": "${RENDER_COMMIT=}" }
   }
 }

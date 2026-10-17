@@ -104,6 +104,8 @@ jobs:
       - run: az bicep install
       - name: Build, failing on any warning
         run: |
-          az bicep build --file infra/main.bicep --stdout > /dev/null 2> diagnostics.txt
+          az bicep build --file infra/main.bicep --stdout > arm.json 2> diagnostics.txt
           cat diagnostics.txt
           ! grep -E "(Warning|Error) " diagnostics.txt
+      - name: Ground truth is sealed from the live path
+        run: python3 infra/check_truth_sealed.py arm.json
