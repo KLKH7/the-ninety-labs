@@ -537,12 +537,13 @@ class Engine:
         """The carrier's picture of the game, built only from what he believes."""
         team, opp = carrier.team, other(carrier.team)
         belief = self.beliefs[carrier.id]
-        mates = []
+        mates, mate_velocity = [], {}
         for q in self.players:
             if q.team == team and q.id != carrier.id:
                 at = belief.where(q.id, self.t)
                 if at:  # a team-mate he has not seen cannot be picked
                     mates.append((q.id, at[0], at[1], belief.age(q.id, self.t)))
+                    mate_velocity[q.id] = belief.velocity(q.id)
         # The keeper is an opponent like any other for lanes, carries and pressure; the shot
         # estimate counts him once, as the keeper, not also as a blocker.
         # Opponents as they will be a moment from now (their seen velocity): a carrier reads a
@@ -577,6 +578,7 @@ class Engine:
             current="dribble" if self.dribble_to else "hold",
             progress_weight=style.progress_weight(brain.attacking_transition(self.t)),
             loss_weight=style.loss_weight(),
+            mate_velocity=mate_velocity,
         )
         return scene
 
