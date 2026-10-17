@@ -170,6 +170,7 @@ class Scene:
     absorb: dict[str, float]  # team-mates' first touch (A4), by id
     passer: Profile  # who he is, for his own kick error (A3)
     throw: bool = False  # Law 15: a throw-in, so every pass is thrown (lofted) and nothing else
+    dead: bool = False  # a placed ball not yet kicked: nobody may challenge, so he squares up (P16)
     current: str | None = None  # what he is doing now (dribble or hold), for STICKY
     heading: float = 0.0  # the way he faces, radians
     fresh: float = 1.0  # his slow store's share left (P10)
@@ -291,17 +292,19 @@ def turn_deg(direction: float, heading: float) -> float:
     return math.degrees((direction - heading + math.pi) % (2 * math.pi) - math.pi)
 
 
-def can_strike(ox: float, oy: float, heading: float, dx: float, dy: float, thrown: bool = False) -> bool:
+def can_strike(ox: float, oy: float, heading: float, dx: float, dy: float, thrown: bool = False,
+               facing: float = STRIKE_FACING) -> bool:
     """P16, the engine's own rule: with the ball at (ox, oy) from his body's centre and facing
     `heading`, can he strike it toward (dx, dy) now? Only once he faces within STRIKE_FACING of it
     (the widest run-up angle tested with no loss of speed or accuracy) with the ball on the side
     of his body toward it, so its way out leaves his surface (shape.py) rather than passing
     through him; a ball within his outline (a dead ball placed where he stands) has no such side,
     so he steps behind it first. A ball in his hands at a throw-in (`thrown`, Law 15) needs
-    neither; a ball at his feet does, a dead ball at a free kick, corner or penalty included."""
+    neither; a ball at his feet does, a dead ball at a free kick, corner or penalty included. At a
+    dead ball the caller narrows `facing`: nothing hurries him, so he squares up to it."""
     if thrown:
         return True
-    if abs(turn_deg(math.atan2(dy, dx), heading)) > math.degrees(STRIKE_FACING):
+    if abs(turn_deg(math.atan2(dy, dx), heading)) > math.degrees(facing):
         return False
     if shape.clearance(ox, oy, 0.0, 0.0, heading) <= 0:  # within his outline: no side to strike it from
         return False
@@ -309,15 +312,22 @@ def can_strike(ox: float, oy: float, heading: float, dx: float, dy: float, throw
     return (ox - sx) * dx + (oy - sy) * dy >= 0
 
 
-def strike_turn(heading: float, dx: float, dy: float, thrown: bool = False) -> tuple[float, float]:
+def strike_turn(heading: float, dx: float, dy: float, thrown: bool = False,
+                dead: bool = False) -> tuple[float, float]:
     """P16: how far (degrees) the kick toward (dx, dy) is from the way he faces when he strikes it,
     and how long he turns first (seconds). Facing within STRIKE_FACING he strikes now; else he
     turns toward it at TURN_RATE until he is, and strikes at that angle. A throw-in leaves his hands
-    at once, at whatever angle (can_strike). *Design*, not counted: a ball behind him also comes
-    round to his front within a few frames; the engine turns in whole frames, so it strikes up to
-    one frame later and up to 14° nearer his facing; and he does not move while he turns, though in
-    the engine he brakes and the ball goes with him."""
+    at once, at whatever angle (can_strike). At a dead ball (`dead`) nobody may challenge him until
+    he kicks it, so he turns all the way and strikes it square, as the kicks A3 is measured from were
+    struck (*design*, GROUNDING P16). *Design*, not counted: a ball behind him also comes round to
+    his front within a few frames; the engine turns in whole frames, so in play it strikes up to one
+    frame later and up to 14° nearer his facing, and at a dead ball up to one frame sooner and up to
+    14° off square (its resolution), and walking round behind a dead ball takes time not counted
+    here; and he does not move while he turns, though in the engine he brakes and the ball goes
+    with him."""
     off = turn_deg(math.atan2(dy, dx), heading)
+    if dead and not thrown:
+        return 0.0, math.radians(abs(off)) / TURN_RATE
     limit = math.degrees(STRIKE_FACING)
     if thrown or abs(off) <= limit:
         return off, 0.0
@@ -435,7 +445,7 @@ def strike_nodes(scene: Scene, tx: float, ty: float, lofted: bool, pace: float
     ground, up = loft_launch(dist) if lofted else (launch_speed(dist, pace), 0.0)
     speed = math.hypot(ground, up)
     dx, dy = tx - scene.x, ty - scene.y
-    turn, _ = strike_turn(scene.heading, dx, dy, scene.throw)
+    turn, _ = strike_turn(scene.heading, dx, dy, scene.throw, scene.dead)
     cx, cy = scene.x - scene.ball_offset[0], scene.y - scene.ball_offset[1]
     nearest = min((math.hypot(o[0] - cx, o[1] - cy) for o in scene.moving), default=math.inf)
     skill = pass_skill(scene.x, tx, ty, lofted, scene.goal_x)
@@ -650,7 +660,7 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
     cx, cy = sx - scene.ball_offset[0], sy - scene.ball_offset[1]
     # P16: if he must turn before he can strike it, everyone else moves on meanwhile, each as the
     # passer believes him to be going (he holds the ball where it is while he turns).
-    _, wait = strike_turn(scene.heading, tx - sx, ty - sy, scene.throw)
+    _, wait = strike_turn(scene.heading, tx - sx, ty - sy, scene.throw, scene.dead)
     # Team-mates, the one it is meant for first, from where the passer sees him and expecting it:
     # (x, y, vx, vy, reaction, first touch).
     seen = {m[0]: m for m in scene.mates}

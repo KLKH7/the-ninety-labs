@@ -149,10 +149,11 @@ def test_when_the_penalty_is_taken_he_shoots_from_the_mark():
 
 
 def test_a_taker_facing_away_turns_to_the_goal_before_he_strikes_the_penalty():
-    """P16: the ball on the mark is at his feet, not in his hands, so he faces the goal to strike it."""
+    """P16: the ball on the mark is at his feet, not in his hands, so he faces the goal to strike it;
+    nobody may challenge him first (Law 14), so he squares up to it rather than strike it at 60°."""
     import math
 
-    from ninety.sim.decisions import STRIKE_FACING
+    from ninety.sim.engine import DT, TURN_RATE
 
     e = box_foul()
     r = e.restart
@@ -173,9 +174,9 @@ def test_a_taker_facing_away_turns_to_the_goal_before_he_strikes_the_penalty():
     assert heading_at_shot is not None
     shot = next(ev for ev in e.match.events if ev["type"] == "shot")
     assert (shot["x"], shot["y"]) == (r.x, r.y)  # Law 14: from the mark, the ball unmoved by his turn
-    to_goal = math.atan2(34.0 - taker.y, 105.0 - taker.x)
+    to_goal = math.atan2(34.0 - r.y, 105.0 - r.x)  # from the mark to the middle of the goal
     off = abs((heading_at_shot - to_goal + math.pi) % (2 * math.pi) - math.pi)
-    assert off <= STRIKE_FACING + 1e-9
+    assert off <= TURN_RATE * DT + 1e-9  # square to it, to one frame's turn
 
 
 def test_in_his_own_box_a_lunge_through_the_man_needs_a_surer_win():
