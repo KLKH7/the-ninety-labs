@@ -12,6 +12,8 @@ from urllib.parse import quote
 
 from ninety.eval.vision_score import (
     DEFAULT_THRESHOLD,
+    flatten,
+    frames_run,
     ground_truth,
     load_jsonl,
     match,
@@ -54,23 +56,32 @@ def _legend(top: int) -> str:
 
 
 def draw(clip: Path, detected: Path, output: Path, threshold: float = DEFAULT_THRESHOLD) -> dict:
-    """Write one SVG overlay per rendered frame and return match/error counts."""
+    """Write one SVG overlay per frame the detector ran on and return match/error counts.
+
+    Like the scorer, a frame is run when ``detected`` has a line for it (an empty list still
+    counts). Frames without a line are not drawn, and their labels are not misses.
+    """
     frames = load_jsonl(clip / "frames.jsonl")
+    rows = load_jsonl(detected)
+    run = frames_run(rows)
+    frame_by_number = {int(frame["frame"]): frame for frame in frames}
+    if unknown := sorted(run - frame_by_number.keys()):
+        raise ValueError(f"detections name frames not in frames.jsonl: {unknown[:5]}")
     detections = [
         detection
-        for detection in load_jsonl(detected, flatten_detections=True)
+        for detection in flatten(rows)
         if float(detection.get("score", 0.0)) >= threshold
     ]
-    labels = ground_truth(frames)
+    labels = [label for label in ground_truth(frames) if label["frame"] in run]
     pairs = match(labels, detections, threshold=threshold)
     matched_truth = {pair["truth"] for pair in pairs}
     matched_detection = {pair["detection"] for pair in pairs}
-    frame_by_number = {int(frame["frame"]): frame for frame in frames}
     output_dir = output.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     counts = {"frames": 0, "matched": len(pairs), "missed": 0, "false": 0}
 
-    for frame_number, frame in sorted(frame_by_number.items()):
+    for frame_number in sorted(run):
+        frame = frame_by_number[frame_number]
         camera = frame.get("camera", {})
         width, height = int(camera.get("width", 1280)), int(camera.get("height", 720))
         image = frame.get("image")
