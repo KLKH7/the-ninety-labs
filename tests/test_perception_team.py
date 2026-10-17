@@ -116,4 +116,9 @@ def test_the_forwards_wait_at_their_line_of_engagement_never_past_the_ball():
         high = TeamBrain(team, block="high")  # engages everywhere, but never stands past the ball
         high.update(0.0, False, abs(own - 80.0), {})
         assert abs(high.slot("ST", 34.0, 34.0)[0] - own) <= 80.0 + 1e-9
+        # With the ball 40 m out the midfield screens goal-side of it, still in front of the defence.
+        cm = abs(brain.slot("CM", 34.0, 34.0)[0] - own)
+        assert cm == 40.0 - team_mod.GOAL_SIDE_OF_BALL_M
+        assert cm - abs(brain.line_x - own) >= team_mod.MID_SCREEN_M
+        brain.update(2.0, False, abs(own - 95.0), {})  # the ball far away: the usual gap
         assert abs(brain.slot("CM", 34.0, 34.0)[0] - brain.line_x) == team_mod.LINE_GAPS_M["midfield"]

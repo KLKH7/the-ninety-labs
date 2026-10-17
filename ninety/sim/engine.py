@@ -1196,14 +1196,21 @@ class Engine:
                 carrier = self.by_id.get(self.possessor) if self.possessor else None
                 lead_x = carrier.vx * JOCKEY_LOOKAHEAD_S if carrier else 0.0
                 lead_y = carrier.vy * JOCKEY_LOOKAHEAD_S if carrier else 0.0
-                return *on_pitch(bx + lead_x + gx * gap, by + lead_y + gy * gap), work
+                # Goal-side of where the carrier is going, on the line from there to the goal: the
+                # lane a shot from there would take (not the lane from where the ball is now).
+                fx, fy = bx + lead_x, by + lead_y
+                fd = math.hypot(own[0] - fx, own[1] - fy) or 1.0
+                return *on_pitch(fx + (own[0] - fx) / fd * gap, fy + (own[1] - fy) / fd * gap), work
             if not engaged and not self.restart and self.presses_high(p, brain, bx, by):
                 # O9: a pressing role goes to the carrier beyond the block's engagement line,
                 # goal-side and a step away, as the first presser does; the rest hold the block.
                 return *on_pitch(bx + gx * gap, by + gy * gap), work
             if engaged and brain.pressers[1:2] == [p.id]:  # cover: behind the presser, goal-side
                 cx, cy = on_pitch(bx + gx * max(COVER_M, gap + 2), by + gy * max(COVER_M, gap + 2))
-                return cx, cy, self.in_time(p, cx, cy)
+                # A shot can come from wherever the ball is now (as the keeper sets himself): within
+                # shooting range the cover gets into the lane at his work rate, not in time for a pass.
+                shooting = math.hypot(own[0] - bx, own[1] - by) < offball.SHOT_RANGE_M
+                return cx, cy, work if shooting else self.in_time(p, cx, cy)
             slot = brain.slot(p.role, p.ay, clamp(by, 0, PITCH_Y))
             if slot:
                 tx, ty = slot

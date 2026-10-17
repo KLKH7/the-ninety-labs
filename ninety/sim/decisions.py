@@ -850,10 +850,12 @@ def options(scene: Scene) -> list[Option]:
 
 
 def temperature(scene: Scene) -> float:
-    """Design: how loosely the player chooses, relative to how different his options are. A good
-    decision-maker almost always takes the best option; pressure loosens his choice unless he is
-    composed."""
-    return (0.15 + 0.6 * (1 - scene.decisions)) * (1 + pressure(scene) * (1 - scene.composure))
+    """Design: how loosely the player chooses, relative to how different his options are. All of
+    the looseness is his decisions attribute (Kian, 2026-10-16): a perfect decision-maker always
+    takes the best option, a poor one often does not; pressure loosens his choice unless he is
+    composed. (There was a 0.15 floor every player shared: it made even the best decision-maker
+    take a clearly worse option, such as a 27 m shot, about one time in five.)"""
+    return 0.6 * (1 - scene.decisions) * (1 + pressure(scene) * (1 - scene.composure))
 
 
 def taste_key(scene: Scene, o: Option) -> tuple:
@@ -881,6 +883,8 @@ def choose(scene: Scene, rng: random.Random, tastes: dict | None = None) -> Opti
     # D4: the randomness is a share of how far apart the options are, so a choice between close
     # options is loose and one between clearly different options is not, wherever on the pitch.
     t = temperature(scene) * max(spread, CHOICE_NOISE_FLOOR)
+    if t <= 0:  # a perfect decision-maker takes the best option
+        return max(opts, key=lambda o: o.value)
     tastes = {} if tastes is None else tastes
 
     def taste(o: Option) -> float:

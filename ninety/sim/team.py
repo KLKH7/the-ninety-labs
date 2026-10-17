@@ -21,6 +21,7 @@ LINE_FOLLOWS_BALL = 0.5  # design: how far the line moves for each metre the bal
 GOAL_SIDE_OF_BALL_M = 5.0  # design: with the ball inside the block, the line drops to stay this far goal-side
 LINE_FLOOR_M = 5.5  # Law 1: the line drops no deeper than the goal area
 LINE_GAPS_M = {"defence": 0.0, "midfield": 12.0, "attack": 24.0}  # design: compact out of possession
+MID_SCREEN_M = 2.0  # design: screening, the midfield line still stands this far in front of the defence
 SQUEEZE = 0.7  # design: out of possession the shape narrows toward the centre
 BALL_SIDE = 0.3  # design: and shifts toward the ball's side
 ROLE_LINE = {"RB": "defence", "RCB": "defence", "LCB": "defence", "LB": "defence",
@@ -45,6 +46,7 @@ class TeamBrain:
     changed_at: float = -99.0
     line_x: float = 0.0
     front_x: float = 0.0  # where the forwards wait out of possession (T3)
+    mid_x: float = 0.0  # where the midfield line stands out of possession
     pressers: list[str] = field(default_factory=list)
     markers: dict[str, tuple[float, float]] = field(default_factory=dict)  # defender -> spot
 
@@ -64,6 +66,12 @@ class TeamBrain:
         # T3: the forwards wait at the team's line of engagement, so that when the ball comes
         # inside it the first presser is already close; never past the ball, and never closer
         # to their own goal than the front of the block.
+        # The midfield line keeps its gap in front of the defence, but like the defence it stays
+        # goal-side of the ball: with the ball between the lines it drops to screen the defence
+        # instead of standing behind the man on the ball.
+        screen = max(depth + MID_SCREEN_M, ball_from_goal - GOAL_SIDE_OF_BALL_M)
+        mid = min(depth + LINE_GAPS_M["midfield"], screen)
+        self.mid_x = own_goal_x(self.team) + forward(self.team) * mid
         front = max(depth + LINE_GAPS_M["attack"], min(ball_from_goal, self.engage_m))
         self.front_x = own_goal_x(self.team) + forward(self.team) * front
         ranked = sorted(time_to_ball, key=time_to_ball.get)
@@ -89,6 +97,6 @@ class TeamBrain:
         line = ROLE_LINE.get(role)
         if line is None or self.in_possession:
             return None
-        x = self.front_x if line == "attack" else self.line_x + forward(self.team) * LINE_GAPS_M[line]
+        x = {"attack": self.front_x, "midfield": self.mid_x}.get(line, self.line_x)
         y = PITCH_Y / 2 + (anchor_y - PITCH_Y / 2) * SQUEEZE + (ball_y - PITCH_Y / 2) * BALL_SIDE
         return min(PITCH_X - 1, max(1.0, x)), min(PITCH_Y - 1, max(1.0, y))

@@ -444,9 +444,21 @@ def test_the_passer_picks_the_pace_the_lane_needs():
     assert not tight.lofted and tight.pace > open_lane.pace
     assert D.launch_speed(20.0, 14.0) > D.launch_speed(20.0, 6.0)
 
-def test_options_closer_than_the_noise_floor_are_close_to_a_coin_flip():
+def test_a_perfect_decision_maker_always_takes_the_best_option():
     rng = random.Random(9)
     s = scene(x=60.0, decisions=1.0)
+    opts = [D.Option("a", 0.0200), D.Option("b", 0.0201)]
+    original = D.options
+    D.options = lambda _s: opts
+    try:
+        assert all(D.choose(s, rng).kind == "b" for _ in range(200))
+    finally:
+        D.options = original
+
+
+def test_options_closer_than_the_noise_floor_are_close_to_a_coin_flip():
+    rng = random.Random(9)
+    s = scene(x=60.0, decisions=0.5)  # an average decision-maker
     opts = [D.Option("a", 0.0200), D.Option("b", 0.0201)]
     picks = Counter()
     original = D.options
