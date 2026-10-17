@@ -1254,6 +1254,35 @@ class Engine:
             self.chase = {}
             return
 
+    def clear_of_frame(self, old: tuple[float, float, float],
+                       new: tuple[float, float, float]) -> tuple[float, float, float]:
+        """P17: a ball in a player's hands or at his feet does not pass through the goal frame
+        either. Its move this frame stands if no point of it comes within touching distance of the
+        frame (ball radius plus post radius) while getting closer to it; otherwise it first comes
+        across at the height it is (a keeper pulls a ball caught over the bar back over it, or
+        round the post), and only then drops; if neither move is clear it stays where it was."""
+        r, touching = ball.RADIUS, ball.RADIUS + POST_RADIUS
+        lines = [line for line in (0.0, PITCH_X)
+                 if min(abs(old[0] - line), abs(new[0] - line)) <= touching + abs(new[0] - old[0])]
+        if not lines:
+            return new
+
+        def gap(q: tuple[float, float, float]) -> float:
+            return min(frame_gap((q[0], q[1], q[2] + r), line)[0] for line in lines)
+
+        start = gap(old)
+
+        def clear(q: tuple[float, float, float]) -> bool:
+            def gap_at(t: float) -> tuple[float]:
+                g = gap(tuple(a + t * (b - a) for a, b in zip(old, q, strict=True)))
+                return (g if g < start else touching,)  # only coming nearer counts
+            return first_contact(gap_at, touching - 1e-9) is None
+
+        for q in (new, (new[0], new[1], old[2])):
+            if clear(q):
+                return q
+        return old
+
     def went_out(self, before: ball.State) -> bool:
         """Law 9: out once the whole ball has crossed a goal line or touchline. Where and how high
         it crossed is taken at the line, not wherever the ball is a frame later."""
@@ -1957,7 +1986,8 @@ class Engine:
             bx, by, bz = self.settle(carrier, bx, by, bz, fx, fy, side, step * math.hypot(dx, dy) / d)
             bz = bz + dz / d * step
         before = self.ball
-        self.ball = (bx, by, max(bz, 0.0), carrier.vx, carrier.vy, 0.0)
+        bx, by, bz = self.clear_of_frame(before[:3], (bx, by, max(bz, 0.0)))
+        self.ball = (bx, by, bz, carrier.vx, carrier.vy, 0.0)
         if self.went_out(before):  # Law 9 applies to a ball at a player's feet too
             self.possessor = None
             return
