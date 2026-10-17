@@ -296,3 +296,14 @@ short and actionable. This file is public: no research sources, product names or
   When removing an exemption, follow every case it covered through the code it now reaches
   (here a dead ball reaching the in-play turn) and test it through the match loop, not just the
   rule's function.
+
+### 34. Never measure from a tree someone is mutating
+- **What happened:** a 24-match comparison ran in the background while the author and an
+  independent auditor mutation-tested the same checkout by editing `engine.py` in place and
+  restoring it. Whichever version was on disk when the run imported the engine is what it
+  measured: seed 11 scored 4 goals in that run and 7 on the committed code. The same overlap may
+  have touched the previous pull request's 24-match numbers.
+- **Rule:** run measurements from a separate worktree checked out at the exact commit being
+  measured, and do mutation testing in a different checkout, or never at the same time.
+- **Check:** before trusting a run, re-run one of its seeds on a clean checkout of the commit and
+  compare; record the commit and worktree with the numbers.
