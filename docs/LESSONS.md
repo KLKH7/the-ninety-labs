@@ -475,3 +475,17 @@ short and actionable. This file is public: no research sources, product names or
   hand.
 - **Check:** `grep` the rule's constants: they appear in one module and its tests, nowhere else;
   a test feeds the same case to the engine's function and to the estimate.
+
+### 70. A law the engine obeys, the players obey too
+- **What happened:** the duels refused to challenge a keeper who may handle the ball (Law 12), but
+  his own decisions still felt the forward at his face as pressure (0.87 of 1 with a man 1.5 m
+  away). He hurried his distribution into the press for no reason the laws allow, and close
+  turnovers after keeper possessions became one of the commonest ways to score. Passes into space
+  (#46) made keepers collect the ball more often, which turned the gap into matches of 9 and 10
+  goals. Each half was right on its own; the diagnosis found it by splitting goals by how they came.
+- **Rule:** when the engine enforces a law (who may be challenged, who may handle, who is offside),
+  every decision that weighs that situation reads the same function (`engine.hands`,
+  `offball.may_handle`), so a player never fears what the referee would not allow. A sibling of
+  lesson 69.
+- **Check:** `tests/test_engine_rules.py::test_a_keeper_who_may_handle_it_feels_no_challenge_coming`
+  fails on the old code (pressure 0.87) and checks the same forward still presses him off his hands.

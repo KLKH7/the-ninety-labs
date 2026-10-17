@@ -8,7 +8,7 @@ from statistics import mean, pstdev
 
 import pytest
 
-from ninety.sim import ball, offball, perception, shape
+from ninety.sim import ball, decisions, offball, perception, shape
 from ninety.sim.body import BRAKE_MAX, STRIKE_FACING, TURN_RATE
 from ninety.sim.body import move as move_body
 from ninety.sim.engine import (
@@ -302,6 +302,36 @@ def test_a_keeper_may_not_handle_a_team_mates_deliberate_pass():
     assert not e.hands(keeper, 6.0, 34.0)
     e.last_touch = "a9"  # an opponent got a touch on it
     assert e.hands(keeper, 6.0, 34.0)
+
+
+def keeper_with_a_forward_at_him(e: Engine):
+    """The home keeper on the ball in his own box, an opponent 1.5 m in front, everyone seen."""
+    keeper, forward = e.keeper("home"), e.by_id["a10"]
+    keeper.x, keeper.y, keeper.vx, keeper.vy = 6.0, 34.0, 0.0, 0.0
+    forward.x, forward.y, forward.vx, forward.vy = 7.5, 34.0, 0.0, 0.0
+    e.ball = (6.3, 34.0, 0.0, 0.0, 0.0, 0.0)
+    e.restart = None
+    e.give(keeper.id)
+    for p in e.players:
+        for q in e.players:
+            if q is not p:
+                e.beliefs[p.id].seen[q.id] = perception.Sighting(q.x, q.y, 0.0, 0.0, e.t)
+    return keeper
+
+
+def test_a_keeper_who_may_handle_it_feels_no_challenge_coming():
+    """Law 12: nobody may challenge a keeper who may handle the ball, as the duels obey, so his
+    choice is not hurried by a forward at his face (D2). Off his hands (a team-mate's back pass)
+    the same forward presses him as he would anyone."""
+    e = Engine(7)
+    keeper = keeper_with_a_forward_at_him(e)
+    assert e.hands(keeper, keeper.x, keeper.y)
+    scene = e.scene_for(keeper)
+    assert decisions.pressure(scene) == 0.0
+    e.kicked = {"type": "pass", "team": "home", "player": "h3"}  # a team-mate's back pass
+    e.last_touch = "h3"
+    assert not e.hands(keeper, keeper.x, keeper.y)
+    assert decisions.pressure(e.scene_for(keeper)) > 0.8
 
 
 def scatter(e: Engine, p, n: int = 1500) -> tuple[float, float]:
