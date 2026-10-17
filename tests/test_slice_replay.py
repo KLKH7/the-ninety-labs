@@ -91,6 +91,6 @@ def test_there_are_committed_replays():
 
 @pytest.mark.parametrize("path", REPLAYS, ids=lambda p: p.name)
 def test_every_committed_replay_still_replays(path):
-    # A recording no test replays rots silently when a prompt changes (lessons 19 and 27).
+    # A recording no test replays rots silently when a prompt changes (lessons 32 and 43).
     outcome = asyncio.run(replay_slice(Recording.load(path)))
     assert outcome.attempts >= 1

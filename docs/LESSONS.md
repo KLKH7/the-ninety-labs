@@ -325,10 +325,10 @@ short and actionable. This file is public: no research sources, product names or
 ### 43. A committed recording must be replayed by a test, or it rots silently
 - **What happened:** the fact-checker started also reporting "clock 01:00 is not a cited clock",
   which changed the Analyst's retry prompt, and `replays/slice-minute2-plant.json` stopped
-  replaying on main. Lesson 19's check was a manual step nobody ran, and
+  replaying on main. Lesson 32's check was a manual step nobody ran, and
   `tests/test_slice_replay.py` passed because it only built synthetic recordings.
 - **Rule:** every file in `replays/` is replayed by a test in CI. When that test fails, re-record
-  (lesson 19); never edit the JSON by hand.
+  (lesson 32); never edit the JSON by hand.
 - **Check:** `tests/test_slice_replay.py::test_every_committed_replay_still_replays` fails on the
   stale recording and passes on the re-recorded one.
 
@@ -419,3 +419,14 @@ short and actionable. This file is public: no research sources, product names or
   Files are written with `allow_nan=False`, so a stray infinity or NaN fails at the source.
 - **Check:** `tests/test_event_score.py::test_a_time_outside_the_clip_still_gives_strict_json`
   fails on the original code.
+
+### 46. A test's premise holds by construction, not by a seed's draw
+- **What happened:** porting the portable math onto the engine branch changed `gauss`, so every
+  drawn player changed. `test_a_dribbler_whose_touch_is_declined_still_decides` assumed h6 in
+  `Engine(1)` "could not run onto" a push from standing. That was true only of the old draw of him
+  (acceleration 0.41, dribbling 0.30); the new one (0.51, 0.24) can, so the touch was taken and the
+  test failed on behaviour it was never about.
+- **Rule:** the situation a test is about is set directly (a stubbed method, a set attribute), never
+  left to what a seed happens to draw. A test that means to cover a draw says so and checks it.
+- **Check:** the test sets `e.touch_speed` to decline; it still fails when a declined touch skips
+  the decision (mutation run on the merge of `main`'s portable math).

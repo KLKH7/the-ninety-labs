@@ -1259,8 +1259,8 @@ class Engine:
         if self.kicked and self.kicked["type"] == "pass" and self.pass_target and not self.last_deflection:
             sx, sy = self.kicked["x"], self.kicked["y"]
             tx, ty = self.pass_target
-            short_of_target = fmath.ipow(tx - sx, 2) + fmath.ipow(ty - sy, 2)
-            if (bx - sx) * (tx - sx) + (by - sy) * (ty - sy) < short_of_target:
+            target_sq = fmath.ipow(tx - sx, 2) + fmath.ipow(ty - sy, 2)
+            if (bx - sx) * (tx - sx) + (by - sy) * (ty - sy) < target_sq:
                 if p is not None:
                     knows = p.id in (self.intended, self.released_by)
                 else:
