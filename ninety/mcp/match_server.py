@@ -50,7 +50,9 @@ def list_events(match: str, minute_from: int, minute_to: int, event_type: str | 
     """Events of one match between two match minutes (inclusive), oldest first. `match` is the
     match id you were given (for example seed7). Optionally one event_type: pass, shot, goal,
     tackle, interception or pressure; null for all. Each event has id, clock, minute, second,
-    type, team, player, and where relevant receiver, outcome, ball_speed_kmh and distance_m."""
+    type, team, player, and where relevant receiver (completed passes), intended (who a pass was
+    for), interceptor (who won it), deflected_by (who only touched it), outcome, ball_speed_kmh
+    and distance_m."""
     types = (event_type,) if event_type in AGENT_TYPES else AGENT_TYPES
     rows = [e for e in events_of(match) if minute_from <= e["minute"] <= minute_to and e["type"] in types]
     return rows[:MAX_EVENTS]

@@ -124,9 +124,14 @@ WEAK_FOOT_ERROR = 3.8 / 3.0  # A3: about 27% wider on the weaker foot ...
 WEAK_FOOT_SPEED = 0.88  # A3: ... and about 12% slower
 FATIGUE_ERROR = 0.25  # A3: design, *verify*: about 25% wider when the slow store (P10) is spent
 SPEED_ERROR = 0.06  # design: spread of struck speed, as a share
+FOOT_ABSORB_MPS = (12.0, 12.0)  # A4: a first touch kills 12 m/s plus 12 m/s more at full first-touch skill
 READ_ERROR_M = 1.5  # design: spread of a keeper's read of a shot's aim, at average anticipation
 LOFT_ERROR_DEG = 2.0  # design: spread of launch angle
 TURN_ERROR = 0.5  # design: error widens by up to half again for a ball struck across the body
+PRESSURE_ERROR = 0.5  # A3, design: full pressure widens a strike's error by half again, less if composed
+PRESSURE_M = 3.0  # design: an opponent this close puts the kicker under full pressure
+WEAK_SIDE_DEG = 30.0  # design: a kick this far to the weaker foot's side is struck with it
+MAX_STRIKE_MPS = 36.0  # design: the hardest a foot strikes a ball, below the 40 m/s check (P3)
 
 SYLLABLES = ("ka", "lo", "mi", "ren", "to", "va", "sun", "de", "ri", "an", "bo", "el", "ju", "ny", "or",
              "sa", "te", "vi", "zo", "ma", "ke", "lu", "ni", "pe", "ro")
@@ -222,10 +227,12 @@ class Profile:
     # ---- A4: control -------------------------------------------------------------
     def absorb_mps(self, hands: bool) -> float:
         """Fastest ball (relative to the player) a touch can kill; with the hands, a keeper's
-        hold. No study measures either; design, scaled by skill."""
+        hold. No study measures either directly. The foot's range is set so an average player
+        kills the 12 to 15 m/s a typical professional pass arrives at (passes leave the foot at
+        about 16 m/s; arXiv 2210.16474); *design*, *verify*."""
         if hands:
             return 16.0 + 12.0 * self["handling"]
-        return 8.0 + 8.0 * self["first_touch"]
+        return FOOT_ABSORB_MPS[0] + FOOT_ABSORB_MPS[1] * self["first_touch"]
 
     # ---- A3: execution -------------------------------------------------------
     def kick_error(self, skill: str, speed: float, pressure: float, capacity: float,
@@ -235,12 +242,24 @@ class Profile:
         gives about 3 degrees; error grows with speed, pressure (less for the composed), fatigue,
         the angle across his body, and the weaker foot (the sourced 27% at an average weak foot)."""
         sigma = KICK_ERROR_DEG * (1.6 - 1.2 * self[skill]) * (speed / KICK_REF_SPEED)
-        sigma *= 1 + 0.5 * pressure * (1 - self["composure"])
+        sigma *= 1 + PRESSURE_ERROR * pressure * (1 - self["composure"])
         sigma *= 1 + FATIGUE_ERROR * (1 - capacity)
         sigma *= 1 + TURN_ERROR * min(abs(turn_deg), 180.0) / 180.0
         if weak_foot:
             sigma *= 1 + (WEAK_FOOT_ERROR - 1) * 2 * (1 - self["weak_foot"])
         return sigma, SPEED_ERROR * (1 + pressure * (1 - self["composure"])), LOFT_ERROR_DEG
+
+    def strike_error(self, skill: str, speed: float, nearest_opponent_m: float, capacity: float,
+                     turn_deg: float) -> tuple[float, float, float, float]:
+        """The kick error of a strike in the situation it is struck in, one definition for the kick
+        (engine.execute) and the striker's own estimate of it (decisions.pass_confidence):
+        (direction SD in degrees, speed SD as a share, launch-angle SD in degrees, the share of the
+        intended speed he gets off that foot). Pressure from the nearest opponent; the foot from
+        the kick's direction against the way he faces (`turn_deg`)."""
+        pressure = min(1.0, max(0.0, (PRESSURE_M - nearest_opponent_m) / PRESSURE_M))
+        weak = (turn_deg > WEAK_SIDE_DEG) if self.foot == "right" else (turn_deg < -WEAK_SIDE_DEG)
+        dir_sd, speed_sd, loft_sd = self.kick_error(skill, speed, pressure, capacity, weak, turn_deg)
+        return dir_sd, speed_sd, loft_sd, self.weak_foot_speed() if weak else 1.0
 
     def weak_foot_speed(self) -> float:
         """Share of his usual speed off the weaker foot: the sourced 88% at an average weak foot."""

@@ -2,7 +2,6 @@ import json
 from collections import Counter
 from pathlib import Path
 
-import pytest
 from jsonschema import validate
 
 from ninety.sim.engine import BOARDS_M, FPS, PITCH_X, PITCH_Y, simulate
@@ -44,10 +43,6 @@ def test_events_match_schema():
         validate(fr, FRAME_SCHEMA)
 
 
-# Known failure on the engine/agents integration branch: removing scripted outcomes left the
-# football unrealistic until the decision layer exists (docs/ENGINE.md, build step 3). strict=True
-# turns it back into a hard failure the moment it passes, so this marker must then be removed.
-@pytest.mark.xfail(strict=True, reason="not yet realistic: goals and shots too high (docs/GROUNDING.md R4)")
 def test_football_realistic_rates_over_a_full_match():
     m = simulate(11, 90)
     c = Counter(e["type"] for e in m.events)
@@ -60,3 +55,20 @@ def test_football_realistic_rates_over_a_full_match():
     completed = sum(1 for e in m.events if e["type"] == "pass" and e["outcome"] == "success")
     assert 0.7 <= completed / c["pass"] <= 0.9
     assert 1 <= c["goal"] <= 6, c  # a Premier League match averages about 2.8
+
+
+def test_a_pass_names_who_it_was_for_who_got_it_and_who_cut_it_out():
+    """`receiver` is the team-mate who got a completed pass, `intended` the team-mate it was played
+    for, `interceptor` the opponent who won a failed one, `deflected_by` one who only touched it:
+    never one read as another."""
+    m = simulate(7, 6)
+    team = {r["id"]: r["team"] for r in m.roster}
+    passes = [e for e in m.events if e["type"] == "pass"]
+    assert any(e["interceptor"] for e in passes) and any(e["intended"] for e in passes)
+    assert any(e["deflected_by"] for e in passes)  # a touch without control is not a win
+    for e in passes:
+        assert e["receiver"] is None or (e["outcome"] == "success" and team[e["receiver"]] == e["team"])
+        assert e["intended"] is None or team[e["intended"]] == e["team"]
+        assert e["interceptor"] is None or (e["outcome"] == "fail" and team[e["interceptor"]] != e["team"])
+        assert e["deflected_by"] is None or (e["outcome"] == "fail" and team[e["deflected_by"]] != e["team"])
+        assert not (e["interceptor"] and e["deflected_by"])  # won it, or only touched it

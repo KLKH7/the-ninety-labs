@@ -51,10 +51,14 @@ def cases(seed: int, minutes: float) -> list[dict]:
     events = events_in(seed, minutes, 1, int(minutes) + 1)
     extended = events_in(seed, max(minutes, 90), 1, int(max(minutes, 90)) + 1)
     done = [e for e in events if e["type"] == "pass" and e.get("outcome") == "success" and "distance_m" in e]
-    # A failed pass an opponent reached: its `receiver` is that opponent, so a claim built on it can
-    # name him. One that went out or back to nobody has no receiver to format.
+    # A failed pass an opponent won (lesson 42: `interceptor`, not `receiver`). One that went out,
+    # back to nobody or only off an opponent has no interceptor to format.
     failed = [e for e in events if e["type"] == "pass" and e.get("outcome") == "fail" and "distance_m" in e
-              and "receiver" in e]
+              and "interceptor" in e]
+    # Passes the passer meant for a team-mate who did not get them: failed, or found someone else.
+    meant_failed = [e for e in events if e["type"] == "pass" and e.get("outcome") == "fail"
+                    and "distance_m" in e and "intended" in e]
+    meant_other = [e for e in done if e.get("intended") and e["intended"] != e.get("receiver")]
     tackles = [e for e in events if e["type"] == "tackle"]
     shots = [e for e in events if e["type"] == "shot" and e.get("outcome") != "goal"]
     # Long-range and fast shots are rare in 30 minutes, so the shot tone kinds read the full match,
@@ -73,7 +77,8 @@ def cases(seed: int, minutes: float) -> list[dict]:
 
     def teammate(e):
         squad = [f"{e['team'][0]}{n}" for n in range(2, 12)]
-        return next(p for p in squad if p not in (e["player"], e.get("receiver")))
+        # not the passer, his receiver or the team-mate he meant it for (a claim naming him is not false)
+        return next(p for p in squad if p not in (e["player"], e.get("receiver"), e.get("intended")))
 
     # (truth, events, template). Templates read the compact event's fields, plus {mate} (a teammate
     # not in the event) and {rival} (the other team).
@@ -158,9 +163,18 @@ def cases(seed: int, minutes: float) -> list[dict]:
         "false: invented importance": (
             False, interceptions, "{player} makes the most important intervention of the match."
         ),
-        # false meaning: only the judge can catch these
+        # The code half's role check (lesson 42) catches these: the player a pass "finds" must be its
+        # receiver, and the one it was meant for is a cited player but did not get it.
+        "false: failed pass called found by its intended": (
+            False, meant_failed, "{player} finds {intended} with a {distance_m} m pass."
+        ),
+        "false: pass called found by a team-mate it was not for": (
+            False, meant_other, "{player} finds {intended} with a {distance_m} m pass."
+        ),
+        # false meaning: only the judge could catch these when the report was published; the first
+        # is now also caught by the code half's role check.
         "meaning: intercepted pass called completed": (
-            False, failed, "{player} finds {receiver} with a {distance_m} m pass."
+            False, failed, "{player} finds {interceptor} with a {distance_m} m pass."
         ),
         "meaning: completed pass called cut out": (
             False, done, "{player}'s {distance_m} m pass to {receiver} is cut out."
