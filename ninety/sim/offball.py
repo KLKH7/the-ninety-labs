@@ -181,6 +181,10 @@ SHAPE_IN_POSSESSION = {
     "RW": (None, -21.0), "LW": (None, 21.0), "ST": (None, 0.0),
 }
 DEEPEST_M = 12.0  # nobody's in-possession spot is deeper than this from his own goal
+# O6: team length in possession is about 31 to 46 m (Rico-Gonzalez review, above); building from
+# deep a team is at its longest, so the forwards hold at least the top of that range beyond the back
+# line (onside), stretching the block instead of dropping with the ball.
+POSSESSION_LENGTH_M = 46.0
 BALL_SIDE_IN_POSSESSION = 0.15  # the shape leans this share toward the ball's side
 FINAL_THIRD_M = 70.0  # ball this far from his own goal: the box is attacked
 BOX_RUNS = {"ST": (99.0, 4.0), "far_winger": (98.0, -7.0), "RCM": (88.0, 0.0)}  # near post, far post, edge
@@ -212,7 +216,9 @@ def attacking_slot(role: str, own_goal_x: float, ball_x: float, ball_y: float,
     behind, width = shape
     # His role and his team's build-up style (roles.py): higher or deeper, nearer the centre or wider.
     if behind is None:
-        u = min(max(min(last_u, ball_u + 25.0), ball_u - 5.0) + min(forward_m, 0.0), last_u)
+        back_u = max(DEEPEST_M, ball_u - SHAPE_IN_POSSESSION["RCB"][0])  # where his back line stands
+        reach = max(ball_u + 25.0, back_u + POSSESSION_LENGTH_M)
+        u = min(max(min(last_u, reach), ball_u - 5.0) + min(forward_m, 0.0), last_u)
     else:
         u = min(ball_u - behind + forward_m, max(last_u, ball_u))  # L10: never beyond the last line
     u = min(PITCH_X - 3.0, max(DEEPEST_M, u))

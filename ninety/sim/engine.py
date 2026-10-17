@@ -271,6 +271,7 @@ class Engine:
         self.lunge_at: dict[str, str] = {}  # defender -> the man he lunged at
         self.tastes: dict = {}  # D4: the carrier's misjudgement of each option, kept while he has it
         self.holds = 0  # D9: decisions in a row the carrier has spent holding
+        self.taste_scan = -1.0  # the carrier's scan the tastes were drawn after
         self.penalties = 0  # penalty kicks awarded (Law 14)
         self.evade_at: dict[str, float] = {}  # defender -> when the carrier reacts to his lunge
         self.off_balance: dict[str, float] = {}  # defender -> when he has recovered from a miss
@@ -663,6 +664,10 @@ class Engine:
             else:
                 self.hold_until = self.t + 0.5  # he looks again
             return
+        # D4: his misjudgements last until he next looks around (P13 scans), not the whole spell.
+        scan = self.beliefs[carrier.id].next_scan
+        if scan != self.taste_scan:
+            self.tastes, self.taste_scan = {}, scan
         choice = decisions.choose(scene, self.rng, self.tastes)
         self.holds = self.holds + 1 if choice.kind == "hold" else 0
         if choice.kind == "pass" or choice.kind == "clear":

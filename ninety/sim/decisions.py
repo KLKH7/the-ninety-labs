@@ -871,8 +871,9 @@ def taste_key(scene: Scene, o: Option) -> tuple:
 def choose(scene: Scene, rng: random.Random, tastes: dict | None = None) -> Option:
     """D4: the option with the best value plus his own misjudgement of it. The misjudgement is a
     random-utility draw (Gumbel), so a single choice is a softmax of the values; it is drawn once
-    per option and kept in `tastes` while he has the ball, so looking again at the same options does
-    not re-roll the dice (a choice he keeps rejecting does not become certain by being asked often)."""
+    per option and kept in `tastes` until he next scans the pitch (the engine resets it), so looking
+    again at the same options does not re-roll the dice (a choice he keeps rejecting does not become
+    certain by being asked four times a second)."""
     opts = options(scene)
     values = [o.value for o in opts]
     mean = sum(values) / len(values)
