@@ -40,6 +40,24 @@ uv run ninety-render-check runs/dataset/test/seed9000* --determinism --report do
 | Determinism | re-render the first clip; compare `frames.jsonl`, `events.jsonl` and image hashes | identical |
 | Split integrity | `ninety/render/splits.py`: test seeds are reserved; overrides are refused on the test set | unit tests |
 
+### What the data holds
+
+`ninety-data-stats` counts, per split and from the saved labels only, what a dataset can teach the
+detector: distinct seeds, frames after the stride, player and ball boxes, balls by visibility
+group, ball size in pixels at the training input size, and clips per render knob. With
+`--floors` it exits 1 when a split misses a floor. The floors were set before any training clip
+was counted, and each one's reason is beside it in `ninety/vision/data_stats.py`. Meeting them
+does not prove the data is enough; the learning curve decides that.
+
+```bash
+uv run ninety-data-stats runs/dataset --stride 5 --input 512x512 --out docs/eval/dataset-stats.json --floors
+```
+
+| Split | Floor |
+|---|---|
+| train | ≥ 150 distinct seeds, 7,500 frames, 75,000 player boxes, 6,000 ball boxes; ≥ 400 and ≥ 5% of balls mostly hidden; ≥ 15 clips per lighting and per weather value; ≥ 20% of clips with low kit contrast, and with crowded occlusion |
+| test | ≥ 5% of balls in shot mostly hidden (visibility under 0.5), the freeze rule in [PLAN.md](PLAN.md) |
+
 ## Vision scoring
 
 Fixed before the first detector runs, so no rule is tuned to a result. Every vision report

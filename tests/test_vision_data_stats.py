@@ -1,8 +1,18 @@
+import argparse
 import json
 
 import pytest
 
-from ninety.vision.data_stats import dataset_stats, find_clips, percentile
+from ninety.render.params import LIGHTING, WEATHER
+from ninety.vision.data_stats import (
+    TEST_FLOORS,
+    TRAIN_FLOORS,
+    dataset_stats,
+    find_clips,
+    floor_failures,
+    parse_input,
+    percentile,
+)
 from ninety.vision.data_stats import main as stats_main
 
 
@@ -36,7 +46,7 @@ def test_percentile_interpolates():
 def test_exact_counts_with_stride_and_skipped_invisible_boxes(tmp_path):
     write_clip(tmp_path, 1, "train", n_frames=10, lighting="night")
     write_clip(tmp_path, 2, "train", n_frames=10, ball_visibility=0.3, weather="rain")
-    report = dataset_stats(find_clips([tmp_path]), stride=5, train_width=1280)
+    report = dataset_stats(find_clips([tmp_path]), stride=5)
     train = report["splits"]["train"]
     assert train["clips"] == 2
     assert train["frames"] == 4  # frames 0 and 5 of each clip
@@ -49,12 +59,16 @@ def test_exact_counts_with_stride_and_skipped_invisible_boxes(tmp_path):
     assert train["seeds"] == [1, 2]
 
 
-def test_ball_size_scales_to_training_width(tmp_path):
-    write_clip(tmp_path, 1, "train")
-    full = dataset_stats(find_clips([tmp_path]), train_width=1280)["splits"]["train"]
-    half = dataset_stats(find_clips([tmp_path]), train_width=640)["splits"]["train"]
-    assert full["ball_size_px"]["median"] == 12.0
+def test_ball_size_scales_to_the_training_input(tmp_path):
+    write_clip(tmp_path, 1, "train")  # ball box 12 x 8 in a 1280 x 720 frame
+    clips = find_clips([tmp_path])
+    native = dataset_stats(clips)["splits"]["train"]
+    half = dataset_stats(clips, input_size=(640, 360))["splits"]["train"]
+    square = dataset_stats(clips, input_size=(512, 512))["splits"]["train"]
+    assert native["ball_size_px"]["median"] == 12.0
     assert half["ball_size_px"]["median"] == 6.0
+    # squeezed to a square: width x0.4 gives 4.8, height x0.711 gives 5.69; the larger side wins
+    assert square["ball_size_px"]["median"] == pytest.approx(8 * 512 / 720)
 
 
 def test_splits_are_reported_apart(tmp_path):
@@ -70,8 +84,83 @@ def test_bad_stride_is_refused(tmp_path):
         dataset_stats([], stride=0)
 
 
+def test_repeated_seed_is_one_independent_clip(tmp_path):
+    write_clip(tmp_path / "a", 1, "train")
+    write_clip(tmp_path / "b", 1, "train")
+    train = dataset_stats(find_clips([tmp_path]))["splits"]["train"]
+    assert (train["clips"], train["distinct_seeds"]) == (2, 1)
+
+
 def test_cli_writes_strict_json(tmp_path):
     write_clip(tmp_path / "clips", 1, "train")
     out = tmp_path / "stats.json"
-    stats_main([str(tmp_path / "clips"), "--out", str(out)])
-    assert json.loads(out.read_text())["splits"]["train"]["clips"] == 1
+    stats_main([str(tmp_path / "clips"), "--out", str(out)])  # without --floors it only reports
+    report = json.loads(out.read_text())
+    assert report["splits"]["train"]["clips"] == 1
+    assert report["floor_failures"]
+
+
+def test_cli_exits_nonzero_under_the_floors(tmp_path):
+    write_clip(tmp_path / "clips", 1, "train")
+    with pytest.raises(SystemExit) as exit_:
+        stats_main([str(tmp_path / "clips"), "--floors", "--out", str(tmp_path / "stats.json")])
+    assert exit_.value.code == 1
+
+
+def test_input_size_parsing():
+    assert parse_input("512x384") == (512, 384)
+    for bad in ("512", "0x512", "ax5", "512x"):
+        with pytest.raises(argparse.ArgumentTypeError):
+            parse_input(bad)
+
+
+def at_every_floor():
+    """Split summaries exactly at every floor, so each test below moves one value under it."""
+    balls = TRAIN_FLOORS["ball_boxes"]
+    hidden = max(TRAIN_FLOORS["ball_mostly_hidden"], round(balls * TRAIN_FLOORS["ball_mostly_hidden_share"]))
+    train = {
+        "distinct_seeds": TRAIN_FLOORS["distinct_seeds"],
+        "frames": TRAIN_FLOORS["frames"],
+        "player_boxes": TRAIN_FLOORS["player_boxes"],
+        "ball_boxes": balls,
+        "ball_by_visibility": {"visible": balls - hidden, "partly hidden": 0, "mostly hidden": hidden},
+        "ball_mostly_hidden_share": hidden / balls,
+        "clips_by_knob": {
+            "lighting": {v: TRAIN_FLOORS["clips_per_lighting"] for v in LIGHTING},
+            "weather": {v: TRAIN_FLOORS["clips_per_weather"] for v in WEATHER},
+        },
+        "kit_contrast_low_share": TRAIN_FLOORS["kit_contrast_low_share"],
+        "occlusion_crowded_share": TRAIN_FLOORS["occlusion_crowded_share"],
+    }
+    test = {"ball_mostly_hidden_share": TEST_FLOORS["ball_mostly_hidden_share"]}
+    return {"train": train, "test": test}
+
+
+def test_splits_at_every_floor_pass():
+    assert floor_failures(at_every_floor()) == []
+
+
+@pytest.mark.parametrize(
+    "miss, expect",
+    [
+        (lambda s: s["train"].update(distinct_seeds=149), "train distinct_seeds"),
+        (lambda s: s["train"].update(frames=TRAIN_FLOORS["frames"] - 1), "train frames"),
+        (lambda s: s["train"].update(player_boxes=TRAIN_FLOORS["player_boxes"] - 1), "train player_boxes"),
+        (lambda s: s["train"].update(ball_boxes=TRAIN_FLOORS["ball_boxes"] - 1), "train ball_boxes"),
+        (lambda s: s["train"]["ball_by_visibility"].update({"mostly hidden": 10}),
+         "train ball_mostly_hidden:"),
+        (lambda s: s["train"].update(ball_mostly_hidden_share=0.01), "train ball_mostly_hidden_share"),
+        (lambda s: s["train"]["clips_by_knob"]["lighting"].pop("night"), "train lighting=night"),
+        (lambda s: s["train"]["clips_by_knob"]["weather"].update(rain=3), "train weather=rain"),
+        (lambda s: s["train"].update(kit_contrast_low_share=None), "train kit_contrast_low_share"),
+        (lambda s: s["train"].update(occlusion_crowded_share=0.1), "train occlusion_crowded_share"),
+        (lambda s: s["test"].update(ball_mostly_hidden_share=0.049), "test ball_mostly_hidden_share"),
+        (lambda s: s.pop("train"), "train: no clips"),
+        (lambda s: s.pop("test"), "test: no clips"),
+    ],
+)
+def test_each_missed_floor_is_reported(miss, expect):
+    splits = at_every_floor()
+    miss(splits)
+    fails = floor_failures(splits)
+    assert len(fails) == 1 and fails[0].startswith(expect), fails
