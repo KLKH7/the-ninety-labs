@@ -17,9 +17,37 @@ generated it and the output file is committed. Rows marked *planned* have no res
 | Fact-checker rules (numbers, players, evidence ids) | `uv run pytest tests/test_factcheck.py` | test assertions | running |
 | Ledger versioning, evidence validation, and deterministic cue fixture | `uv run pytest tests/test_ledger.py tests/test_cues.py` | `tests/fixtures/cues-seed7.jsonl` and test assertions | running: 17 tests; 122 cues for seed 7, five minutes (61 passes, 9 of them failed; the engine made no shots in that window, so shots and goals are covered by hand-built cases) |
 | Fact-checker catch rate on planted false claims, and true claims wrongly rejected | `uv run python -m ninety.eval.factcheck_eval` | `docs/eval/fact-checker.md` | re-run pending: the Judge's instructions and the tone kinds changed after the last run (fact split from tone, tone labels fitted to events, held-out and contradicted tone). Last published run, before that change, on held-out seeds 21,33: 129/129 false caught, 12/99 true rejected excluding service holds, all twelve on tone. |
+| Match engine touches: control by surface, whose ball and speed; throw-ins; pass completion | `uv run python -m ninety.sim.touches` (seeds 40 to 47) | `docs/eval/touches.md` | running: a report, never a gate; comparisons fixed below |
 | Recovery from injected failures | planned | `docs/eval/failure-table.md` | planned |
 | Ablation: one agent against the full workflow | planned | `docs/eval/ablation.md` | planned |
 | Latency to graphic and to speech (p50, p95); cost per match | planned | `docs/eval/latency-cost.md` | planned |
+
+## Match engine: touches
+
+How a player meets the ball is about to change (a cushioned first touch, a surface for each height,
+and what makes a touch worse; [ENGINE.md](ENGINE.md), layer 7). These comparisons were fixed
+**before** the first of those changes, on the engine at `claude/engine-to-main` 5aba718, so no
+cushion or error is set after looking at where it lands (lessons 2 and 3).
+
+```bash
+uv run python -m ninety.sim.touches                      # seeds 40 to 47; writes docs/eval/touches.md
+uv run python -m ninety.sim.funnel --seeds 40,41,42,43,44,45,46,47 --out docs/eval/funnel-touches.md
+```
+
+Both run on the same eight seeds after every engine change to touches, and the results are
+recorded in `docs/eval/` and [GROUNDING.md](GROUNDING.md) whatever they show.
+
+| Engine number | Compared with | Source |
+|---|---|---|
+| throw-ins: first contact by a team-mate | 83% | Stone, Smith and Barry 2021, *Int J Sports Sci Coach* 16: 830-839; 16,154 Premier League throw-ins, 2018-19 |
+| throw-ins: possession held 5 s after the throw (the team of the last player to have had the ball) | 54% retained | the same study; its own definition of "retained" is not yet checked against our 5 s window (*verify*) |
+| pass completion (`touches.md` and the funnel) | 75 to 88% | GROUNDING R3 (*verify*) |
+
+Not compared, only reported: control and keep rates by surface, by whose ball it was and by
+arriving speed; where a kept ball ends up; body hits. No published figure for them has been
+found. One is added to this table, with its source, before any engine number is read against it.
+**Never a target:** a cushion, an error or a skill range is set from a cited measurement or as
+design, never moved to bring these numbers onto a published figure.
 
 ## Synthetic data
 
