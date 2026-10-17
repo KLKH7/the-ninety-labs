@@ -1188,7 +1188,8 @@ class Engine:
                 # lane a shot from there would take (not the lane from where the ball is now).
                 fx, fy = bx + lead_x, by + lead_y
                 fd = math.hypot(own[0] - fx, own[1] - fy) or 1.0
-                return *on_pitch(fx + (own[0] - fx) / fd * gap, fy + (own[1] - fy) / fd * gap), work
+                ux, uy = (own[0] - fx) / fd, (own[1] - fy) / fd
+                return *on_pitch(*self.press_path(p, fx, fy, ux, uy, gap)), work
             if not engaged and not self.restart and self.presses_high(p, brain, bx, by):
                 # O9: a pressing role goes to the carrier beyond the block's engagement line,
                 # goal-side and a step away, as the first presser does; the rest hold the block.
@@ -1395,6 +1396,20 @@ class Engine:
         body = p.physique
         gap = round(math.hypot(spot[0] - p.x, spot[1] - p.y))
         return spot if sprint_cost_m(body.f0, body.v0, body.cs, gap, DT) <= body.reserve else None
+
+    @staticmethod
+    def press_path(p: Player, fx: float, fy: float, ux: float, uy: float, gap: float) -> tuple[float, float]:
+        """D8: the way a presser closes the carrier down. His spot is `gap` goal-side of where the
+        carrier is going, (fx, fy), on the line from there to the goal (direction (ux, uy)). Already
+        goal-side of that spot but off the line, he first gets into the lane at his own depth, so a
+        shot meets him on the way; once a foot's reach from the line (CONTROL_M), he steps up along
+        it. Level with the ball or behind it, he runs for the spot itself."""
+        along = (p.x - fx) * ux + (p.y - fy) * uy  # how far goal-side of the carrier he is
+        if along > gap:
+            lx, ly = fx + ux * along, fy + uy * along  # the lane, at his depth
+            if math.hypot(p.x - lx, p.y - ly) > CONTROL_M:
+                return lx, ly
+        return fx + ux * gap, fy + uy * gap
 
     def presses_high(self, p: Player, brain: TeamBrain, bx: float, by: float) -> bool:
         """O9: is he the one of his side's pressing roles (roles.py) nearest the ball, while they

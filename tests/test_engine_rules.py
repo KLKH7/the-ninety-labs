@@ -1041,3 +1041,15 @@ def test_a_kick_clears_a_downed_keeper_before_judging_where_play_goes():
     e.ball_destination = lambda: (seen.append(e.landed), judge())[1]
     e.kick(p, 15.0, 0.0, 0.0)
     assert seen == [None]
+
+
+def test_a_presser_off_the_lane_gets_into_it_first_then_closes_down_along_it():
+    from ninety.sim.body import CONTROL_M
+    p = Engine(1).by_id["a4"]
+    # The carrier is going to (30, 34); the lane runs toward the goal at x = 0; his spot is 2 m goal-side.
+    p.x, p.y = 22.0, 39.0  # 8 m goal-side, 5 m off the lane
+    assert Engine.press_path(p, 30.0, 34.0, -1.0, 0.0, 2.0) == (22.0, 34.0)  # into the lane at his depth
+    p.y = 34.0 + CONTROL_M * 0.9  # within a foot's reach of the line
+    assert Engine.press_path(p, 30.0, 34.0, -1.0, 0.0, 2.0) == (28.0, 34.0)  # now he steps up along it
+    p.x, p.y = 33.0, 39.0  # behind the ball: he runs for the spot itself
+    assert Engine.press_path(p, 30.0, 34.0, -1.0, 0.0, 2.0) == (28.0, 34.0)
