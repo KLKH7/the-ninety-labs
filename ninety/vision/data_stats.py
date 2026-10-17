@@ -19,6 +19,7 @@ import json
 import subprocess
 import sys
 from collections import Counter
+from fractions import Fraction
 from pathlib import Path
 
 from ninety.eval.vision_score import VISIBILITY_GROUPS, visibility_group
@@ -115,6 +116,7 @@ def _finish(acc: dict) -> dict:
     return {
         "clips": clips,
         "distinct_seeds": len(acc["seeds"]),
+        "seeds": sorted(acc["seeds"]),
         "frames": acc["frames"],
         "player_boxes": acc["player_boxes"],
         "ball_boxes": balls,
@@ -149,10 +151,16 @@ def floor_failures(train: dict | None, lighting: tuple[str, ...], weather: tuple
     hidden = train["ball_by_visibility"]["mostly hidden"]
     if hidden < FLOORS["ball_mostly_hidden"]:
         fails.append(f"ball_mostly_hidden: {hidden} < {FLOORS['ball_mostly_hidden']}")
-    for key in ("ball_mostly_hidden_share", "kit_contrast_low_share", "occlusion_crowded_share"):
-        value = train[key] if train[key] is not None else 0.0
-        if value < FLOORS[key]:
-            fails.append(f"{key}: {value} < {FLOORS[key]}")
+    # shares are checked on the counts, never on the rounded shares in the report: 400 of 8,001 rounds
+    # to 0.05 but is below it. Fraction, because 0.2 * 150 in floating point is just above 30.
+    shares = {
+        "ball_mostly_hidden_share": (hidden, train["ball_boxes"]),
+        "kit_contrast_low_share": (train["clips_by"]["kit_contrast"].get("low", 0), train["clips"]),
+        "occlusion_crowded_share": (train["clips_by"]["occlusion"].get("crowded", 0), train["clips"]),
+    }
+    for key, (num, den) in shares.items():
+        if den == 0 or Fraction(num, den) < Fraction(str(FLOORS[key])):
+            fails.append(f"{key}: {num}/{den} < {FLOORS[key]}")
     for knob, values, floor in (
         ("lighting", lighting, FLOORS["clips_per_lighting"]),
         ("weather", weather, FLOORS["clips_per_weather"]),

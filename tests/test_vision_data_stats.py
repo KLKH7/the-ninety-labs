@@ -47,31 +47,39 @@ def test_ball_size_scales_to_the_training_input(tmp_path):
     assert dataset_stats([d], stride=1, input_size=(512, 512))["train"]["ball_size_px"]["median"] == 4.27
 
 
-def test_splits_are_counted_apart(tmp_path):
-    dirs = [write_clip(tmp_path, 1, "train", [1.0]), write_clip(tmp_path, 900001, "test", [0.2, 0.2])]
+def test_splits_are_counted_apart_with_their_seeds(tmp_path):
+    dirs = [write_clip(tmp_path, 3, "train", [1.0]), write_clip(tmp_path, 1, "train", [1.0]),
+            write_clip(tmp_path, 900001, "test", [0.2, 0.2])]
     s = dataset_stats(dirs, stride=1)
-    assert s["train"]["ball_boxes"] == 1 and s["test"]["ball_boxes"] == 2
+    assert s["train"]["ball_boxes"] == 2 and s["test"]["ball_boxes"] == 2
+    assert s["train"]["seeds"] == [1, 3] and s["test"]["seeds"] == [900001]
 
 
 def big_train():
     """A train split exactly at every floor."""
     n = FLOORS["clips"]
     balls = FLOORS["ball_boxes"]
-    hidden = max(FLOORS["ball_mostly_hidden"], int(balls * FLOORS["ball_mostly_hidden_share"]) + 1)
+    hidden = max(FLOORS["ball_mostly_hidden"], int(balls * FLOORS["ball_mostly_hidden_share"]))
+    low = int(n * FLOORS["kit_contrast_low_share"])
+    crowded = int(n * FLOORS["occlusion_crowded_share"])
     return {
         "clips": n,
         "frames": FLOORS["frames"],
         "player_boxes": FLOORS["player_boxes"],
         "ball_boxes": balls,
         "ball_by_visibility": {"visible": balls - hidden, "partly hidden": 0, "mostly hidden": hidden},
-        "ball_mostly_hidden_share": hidden / balls,
         "clips_by": {
             "lighting": {v: FLOORS["clips_per_lighting"] for v in LIGHTING},
             "weather": {v: FLOORS["clips_per_weather"] for v in WEATHER},
+            "kit_contrast": {"low": low, "normal": n - low},
+            "occlusion": {"crowded": crowded, "natural": n - crowded},
         },
-        "kit_contrast_low_share": FLOORS["kit_contrast_low_share"],
-        "occlusion_crowded_share": FLOORS["occlusion_crowded_share"],
     }
+
+
+def hidden_balls(t, hidden, balls):
+    t["ball_boxes"] = balls
+    t["ball_by_visibility"].update({"visible": balls - hidden, "mostly hidden": hidden})
 
 
 def test_a_split_at_every_floor_passes():
@@ -82,20 +90,23 @@ def test_a_split_at_every_floor_passes():
     "change, expect",
     [
         (lambda t: t.update(clips=FLOORS["clips"] - 1), "clips"),
+        (lambda t: t.update(frames=FLOORS["frames"] - 1), "frames"),
+        (lambda t: t.update(player_boxes=FLOORS["player_boxes"] - 1), "player_boxes"),
         (lambda t: t.update(ball_boxes=FLOORS["ball_boxes"] - 1), "ball_boxes"),
-        (lambda t: t.update(ball_mostly_hidden_share=0.0008), "ball_mostly_hidden_share"),
-        (lambda t: t["ball_by_visibility"].update({"mostly hidden": 10}), "ball_mostly_hidden"),
+        (lambda t: t["ball_by_visibility"].update({"mostly hidden": 399}), "ball_mostly_hidden:"),
+        # 400 of 8,001 rounds to 0.05 but is below it; the other floors still hold
+        (lambda t: hidden_balls(t, 400, 8_001), "ball_mostly_hidden_share"),
+        (lambda t: t["clips_by"]["kit_contrast"].update(low=29), "kit_contrast_low_share"),
+        (lambda t: t["clips_by"]["occlusion"].update(crowded=29), "occlusion_crowded_share"),
         (lambda t: t["clips_by"]["lighting"].pop("night"), "lighting=night"),
-        (lambda t: t["clips_by"]["weather"].update(rain=3), "weather=rain"),
-        (lambda t: t.update(occlusion_crowded_share=0.1), "occlusion_crowded_share"),
-        (lambda t: t.update(kit_contrast_low_share=None), "kit_contrast_low_share"),
+        (lambda t: t["clips_by"]["weather"].update(rain=14), "weather=rain"),
     ],
 )
 def test_each_missed_floor_is_reported(change, expect):
     t = big_train()
     change(t)
     fails = floor_failures(t, LIGHTING, WEATHER)
-    assert any(f.startswith(expect) for f in fails), fails
+    assert len(fails) == 1 and fails[0].startswith(expect), fails
 
 
 def test_no_train_split_fails():
