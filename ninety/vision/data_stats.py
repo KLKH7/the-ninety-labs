@@ -19,6 +19,7 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from ninety.eval.vision_score import VISIBILITY_GROUPS, ground_truth, visibility_group
+from ninety.render import params as render_params
 from ninety.render.params import LIGHTING, WEATHER
 
 KNOB_NAMES = ("lighting", "weather", "kit_contrast", "occlusion")
@@ -36,8 +37,8 @@ TRAIN_FLOORS = {
     # at most one ball a frame, tiny: the scarce and hardest class
     "ball_boxes": 6_000,
     # the hard case, in number and in share (the share is PLAN.md's test-set floor)
-    "ball_mostly_hidden": 400,
-    "ball_mostly_hidden_share": 0.05,
+    "ball_boxes_mostly_hidden_excluding_fully_hidden": 400,
+    "ball_visibility_lt_0_5_share": 0.05,
     # every lighting and weather value drawn in enough distinct clips
     "clips_per_lighting": 15,
     "clips_per_weather": 15,
@@ -47,8 +48,9 @@ TRAIN_FLOORS = {
 }
 
 # PLAN.md Goals: before the test set is frozen, at least 5% of its balls in shot are less than
-# half visible. A ball in shot has a box (visibility > 0), the same count as the render checks.
-TEST_FLOORS = {"ball_mostly_hidden_share": 0.05}
+# half visible. Same quantity and denominator as `ninety-render-check`: frames with the ball in
+# shot (a bbox), fully hidden balls included.
+TEST_FLOORS = {"ball_visibility_lt_0_5_share": 0.05}
 
 
 def parse_input(text: str) -> tuple[int, int]:
@@ -93,8 +95,11 @@ def clip_stats(clip_dir: Path, *, stride: int, input_size: tuple[int, int] | Non
     ball_visibility = Counter(
         visibility_group(lab["visibility"]) for lab in labels if lab["cls"] == "ball"
     )
+    in_frame = [row["ball"] for row in used if (row.get("ball") or {}).get("bbox") is not None]
     return {
         "seed": meta["seed"],
+        "ball_in_frame": len(in_frame),
+        "ball_visibility_lt_0_5": sum(float(b.get("visibility", 1.0)) < 0.5 for b in in_frame),
         "split": meta["split"],
         "knobs": {name: params[name] for name in KNOB_NAMES},
         "frames": len(used),
@@ -116,19 +121,28 @@ def summarise(clips: list[dict]) -> dict:
     by_visibility = {
         g: sum(c["ball_by_visibility"][g] for c in clips) for g in VISIBILITY_GROUPS
     }
-    below_half = by_visibility["mostly hidden"]  # 0 < visibility < 0.5; boxes at 0 are not drawn
+    seeds = [c["seed"] for c in clips]
+    if len(set(seeds)) != len(seeds):
+        dupes = sorted(sd for sd, n in Counter(seeds).items() if n > 1)
+        raise ValueError(f"seed counted more than once (a .rerender copy?): {dupes}")
+    in_frame = sum(c["ball_in_frame"] for c in clips)
+    lt_half = sum(c["ball_visibility_lt_0_5"] for c in clips)
     knobs: dict[str, dict[str, int]] = {}
     for name in KNOB_NAMES:
         knobs[name] = dict(sorted(Counter(str(c["knobs"][name]) for c in clips).items()))
     return {
         "clips": len(clips),
-        "distinct_seeds": len({c["seed"] for c in clips}),
-        "seeds": sorted(c["seed"] for c in clips),
+        "distinct_seeds": len(set(seeds)),
+        "seeds": sorted(seeds),
         "frames": sum(c["frames"] for c in clips),
         "player_boxes": sum(c["player_boxes"] for c in clips),
         "ball_boxes": ball_boxes,
         "ball_by_visibility": by_visibility,
-        "ball_mostly_hidden_share": _share(below_half, ball_boxes),
+        "ball_in_frame": in_frame,
+        # PLANNED quantity: the render check's name and denominator (ball in shot, v = 0 included)
+        "ball_visibility_lt_0_5_share": round(lt_half / in_frame, 4) if in_frame else None,
+        # training labels only: 0 < visibility < 0.5, a fully hidden ball has no box
+        "ball_boxes_mostly_hidden_excluding_fully_hidden": by_visibility["mostly hidden"],
         "ball_size_px": {
             "p05": percentile(sizes, 0.05),
             "median": percentile(sizes, 0.5),
@@ -170,19 +184,20 @@ def floor_failures(splits: dict) -> list[str]:
     else:
         for key in ("distinct_seeds", "frames", "player_boxes", "ball_boxes"):
             fails += _below(f"train {key}", train[key], TRAIN_FLOORS[key])
-        fails += _below("train ball_mostly_hidden", train["ball_by_visibility"]["mostly hidden"],
-                        TRAIN_FLOORS["ball_mostly_hidden"])
-        for key in ("ball_mostly_hidden_share", "kit_contrast_low_share", "occlusion_crowded_share"):
+        key = "ball_boxes_mostly_hidden_excluding_fully_hidden"
+        fails += _below(f"train {key}", train[key], TRAIN_FLOORS[key])
+        for key in ("ball_visibility_lt_0_5_share", "kit_contrast_low_share", "occlusion_crowded_share"):
             fails += _below(f"train {key}", train[key], TRAIN_FLOORS[key])
         for knob, values in (("lighting", LIGHTING), ("weather", WEATHER)):
-            for v in values:
+            # only values the renderer can draw: a planned knob has no clips to count
+            for v in render_params.PLANNED.get(knob, values):
                 fails += _below(f"train {knob}={v} clips", train["clips_by_knob"][knob].get(v, 0),
                                 TRAIN_FLOORS[f"clips_per_{knob}"])
     if test is None:
         fails.append("test: no clips")
     else:
-        fails += _below("test ball_mostly_hidden_share", test["ball_mostly_hidden_share"],
-                        TEST_FLOORS["ball_mostly_hidden_share"])
+        fails += _below("test ball_visibility_lt_0_5_share", test["ball_visibility_lt_0_5_share"],
+                        TEST_FLOORS["ball_visibility_lt_0_5_share"])
     return fails
 
 

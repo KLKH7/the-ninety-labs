@@ -53,10 +53,11 @@ does not prove the data is enough; the learning curve decides that.
 uv run ninety-data-stats runs/dataset --stride 5 --input 512x512 --out docs/eval/dataset-stats.json --floors
 ```
 
-| Split | Floor |
-|---|---|
-| train | ≥ 150 distinct seeds, 7,500 frames, 75,000 player boxes, 6,000 ball boxes; ≥ 400 and ≥ 5% of balls mostly hidden; ≥ 15 clips per lighting and per weather value; ≥ 20% of clips with low kit contrast, and with crowded occlusion |
-| test | ≥ 5% of balls in shot mostly hidden (visibility under 0.5), the freeze rule in [PLAN.md](PLAN.md) |
+The floors are `TRAIN_FLOORS` and `TEST_FLOORS` in `ninety/vision/data_stats.py`, each with its
+reason; that file is the only table. `ball_visibility_lt_0_5_share` is the quantity PLAN.md
+freezes on and `ninety-render-check` reports (frames with the ball in shot, fully hidden balls
+included); the ball-box counts are training labels and exclude visibility 0. Lighting and weather
+floors cover only the values the renderer can draw (`PLANNED` in `ninety/render/params.py`).
 
 ## Vision scoring
 

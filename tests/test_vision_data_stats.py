@@ -53,7 +53,7 @@ def test_exact_counts_with_stride_and_skipped_invisible_boxes(tmp_path):
     assert train["player_boxes"] == 4  # the visibility-0 player is never a label
     assert train["ball_boxes"] == 4
     assert train["ball_by_visibility"] == {"visible": 2, "partly hidden": 0, "mostly hidden": 2}
-    assert train["ball_mostly_hidden_share"] == 0.5
+    assert train["ball_visibility_lt_0_5_share"] == 0.5
     assert train["clips_by_knob"]["lighting"] == {"day": 1, "night": 1}
     assert train["clips_by_knob"]["weather"] == {"clear": 1, "rain": 1}
     assert train["seeds"] == [1, 2]
@@ -84,11 +84,49 @@ def test_bad_stride_is_refused(tmp_path):
         dataset_stats([], stride=0)
 
 
-def test_repeated_seed_is_one_independent_clip(tmp_path):
-    write_clip(tmp_path / "a", 1, "train")
-    write_clip(tmp_path / "b", 1, "train")
-    train = dataset_stats(find_clips([tmp_path]))["splits"]["train"]
-    assert (train["clips"], train["distinct_seeds"]) == (2, 1)
+def test_repeated_seed_is_refused_not_deduped(tmp_path):
+    write_clip(tmp_path, 7, "train")
+    copy = tmp_path / "seed7.rerender"  # what ninety-render-check --determinism leaves behind
+    copy.mkdir()
+    for name in ("clip.json", "frames.jsonl"):
+        (copy / name).write_text((tmp_path / "seed7" / name).read_text())
+    assert len(find_clips([tmp_path])) == 2
+    with pytest.raises(ValueError, match=r"seed counted more than once.*\[7\]"):
+        dataset_stats(find_clips([tmp_path]))
+
+
+def test_distinct_seeds_reported(tmp_path):
+    write_clip(tmp_path, 1, "train")
+    write_clip(tmp_path, 2, "train")
+    assert dataset_stats(find_clips([tmp_path]))["splits"]["train"]["distinct_seeds"] == 2
+
+
+def test_lt_half_share_matches_render_check_with_a_fully_hidden_ball(tmp_path):
+    from ninety.render.checks import occlusion
+
+    clip = write_clip(tmp_path, 1, "train", n_frames=4)
+    rows = [json.loads(line) for line in (clip / "frames.jsonl").read_text().splitlines()]
+    for row, vis in zip(rows, (0.0, 0.3, 0.7, 1.0), strict=True):
+        row["ball"]["visibility"] = vis
+    (clip / "frames.jsonl").write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+    train = dataset_stats(find_clips([tmp_path]), stride=1)["splits"]["train"]
+    assert train["ball_visibility_lt_0_5_share"] == occlusion(rows)["ball_visibility_lt_0_5_share"] == 0.5
+    assert train["ball_in_frame"] == 4
+    assert train["ball_boxes"] == 3  # a fully hidden ball is not a training label
+    assert train["ball_boxes_mostly_hidden_excluding_fully_hidden"] == 1
+
+
+def test_floors_loop_over_the_values_the_renderer_allows(monkeypatch):
+    from ninety.render import params
+
+    monkeypatch.setitem(params.PLANNED, "lighting", ("day",))
+    monkeypatch.setitem(params.PLANNED, "weather", ("clear",))
+    splits = at_every_floor()
+    splits["train"]["clips_by_knob"]["lighting"] = {"day": 15}
+    splits["train"]["clips_by_knob"]["weather"] = {"clear": 15}
+    assert floor_failures(splits) == []
+    splits["train"]["clips_by_knob"]["weather"] = {"clear": 14}
+    assert [f.split(" clips")[0] for f in floor_failures(splits)] == ["train weather=clear"]
 
 
 def test_cli_writes_strict_json(tmp_path):
@@ -117,14 +155,15 @@ def test_input_size_parsing():
 def at_every_floor():
     """Split summaries exactly at every floor, so each test below moves one value under it."""
     balls = TRAIN_FLOORS["ball_boxes"]
-    hidden = max(TRAIN_FLOORS["ball_mostly_hidden"], round(balls * TRAIN_FLOORS["ball_mostly_hidden_share"]))
+    hidden_key = "ball_boxes_mostly_hidden_excluding_fully_hidden"
+    hidden = max(TRAIN_FLOORS[hidden_key], round(balls * TRAIN_FLOORS["ball_visibility_lt_0_5_share"]))
     train = {
         "distinct_seeds": TRAIN_FLOORS["distinct_seeds"],
         "frames": TRAIN_FLOORS["frames"],
         "player_boxes": TRAIN_FLOORS["player_boxes"],
         "ball_boxes": balls,
-        "ball_by_visibility": {"visible": balls - hidden, "partly hidden": 0, "mostly hidden": hidden},
-        "ball_mostly_hidden_share": hidden / balls,
+        hidden_key: hidden,
+        "ball_visibility_lt_0_5_share": hidden / balls,
         "clips_by_knob": {
             "lighting": {v: TRAIN_FLOORS["clips_per_lighting"] for v in LIGHTING},
             "weather": {v: TRAIN_FLOORS["clips_per_weather"] for v in WEATHER},
@@ -132,7 +171,7 @@ def at_every_floor():
         "kit_contrast_low_share": TRAIN_FLOORS["kit_contrast_low_share"],
         "occlusion_crowded_share": TRAIN_FLOORS["occlusion_crowded_share"],
     }
-    test = {"ball_mostly_hidden_share": TEST_FLOORS["ball_mostly_hidden_share"]}
+    test = {"ball_visibility_lt_0_5_share": TEST_FLOORS["ball_visibility_lt_0_5_share"]}
     return {"train": train, "test": test}
 
 
@@ -147,14 +186,15 @@ def test_splits_at_every_floor_pass():
         (lambda s: s["train"].update(frames=TRAIN_FLOORS["frames"] - 1), "train frames"),
         (lambda s: s["train"].update(player_boxes=TRAIN_FLOORS["player_boxes"] - 1), "train player_boxes"),
         (lambda s: s["train"].update(ball_boxes=TRAIN_FLOORS["ball_boxes"] - 1), "train ball_boxes"),
-        (lambda s: s["train"]["ball_by_visibility"].update({"mostly hidden": 10}),
-         "train ball_mostly_hidden:"),
-        (lambda s: s["train"].update(ball_mostly_hidden_share=0.01), "train ball_mostly_hidden_share"),
+        (lambda s: s["train"].update(ball_boxes_mostly_hidden_excluding_fully_hidden=10),
+         "train ball_boxes_mostly_hidden_excluding_fully_hidden:"),
+        (lambda s: s["train"].update(ball_visibility_lt_0_5_share=0.01),
+         "train ball_visibility_lt_0_5_share"),
         (lambda s: s["train"]["clips_by_knob"]["lighting"].pop("night"), "train lighting=night"),
         (lambda s: s["train"]["clips_by_knob"]["weather"].update(rain=3), "train weather=rain"),
         (lambda s: s["train"].update(kit_contrast_low_share=None), "train kit_contrast_low_share"),
         (lambda s: s["train"].update(occlusion_crowded_share=0.1), "train occlusion_crowded_share"),
-        (lambda s: s["test"].update(ball_mostly_hidden_share=0.049), "test ball_mostly_hidden_share"),
+        (lambda s: s["test"].update(ball_visibility_lt_0_5_share=0.049), "test ball_visibility_lt_0_5_share"),
         (lambda s: s.pop("train"), "train: no clips"),
         (lambda s: s.pop("test"), "test: no clips"),
     ],
