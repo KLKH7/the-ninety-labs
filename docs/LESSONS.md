@@ -139,7 +139,10 @@ short and actionable. This file is public: no research sources, product names or
   frames before any step that can drop empty records, and report how many were scored and
   skipped, so a denominator is visible rather than assumed.
 - **Check:** `tests/test_vision_score.py::test_only_frames_the_detector_ran_on_are_scored`
-  fails on the original code (FN 6 instead of 3).
+  fails on the original code (FN 6 instead of 3). The overlay tool (`ninety/eval/draw.py`) had
+  the same flaw and drew unrun frames as misses;
+  `tests/test_draw.py::test_only_frames_the_detector_ran_on_are_drawn_and_counted` fails on it
+  (4 misses over 3 frames instead of 2 over 2).
 
 ## Working in the repo
 
