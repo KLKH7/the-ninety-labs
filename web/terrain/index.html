@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The Ninety Labs: match terrain</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;700&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap">
+  <style>
+/* Layout: one stage (the 3D terrain) over a momentum strip that doubles as the scrubber, then the five turning points as stops. */
+:root {
+  --bg: #eef1ee;
+  --surface: #ffffff;
+  --ink: #17201b;
+  --muted: #5d6a62;
+  --line: #d3dad5;
+  --home: #d9822b;
+  --away: #3f72c2;
+  --stage: #e3e8e4;
+  --display: "Barlow Condensed", "Arial Narrow", sans-serif;
+  --body: "IBM Plex Sans", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0e1411; --surface: #151d18; --ink: #e6ece8; --muted: #8d9a92; --line: #26312b;
+  --home: #f0a04b; --away: #6f9de6; --stage: #0a0f0c; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0e1411; --surface: #151d18; --ink: #e6ece8; --muted: #8d9a92; --line: #26312b;
+  --home: #f0a04b; --away: #6f9de6; --stage: #0a0f0c; color-scheme: dark }
+
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 var(--body); }
+.wrap { max-width: 1180px; margin: 0 auto; padding-block: 20px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 18px; }
+header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 24px; }
+.eyebrow { font: 500 12px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+h1 { font: 700 clamp(30px, 5vw, 46px)/1 var(--display); letter-spacing: .01em; margin: 6px 0 0; text-wrap: balance; }
+.score { font: 700 clamp(26px, 4vw, 36px)/1 var(--display); display: flex; gap: 10px; align-items: baseline; font-variant-numeric: tabular-nums; }
+.score .h { color: var(--home); } .score .a { color: var(--away); }
+.score small { font: 400 13px var(--mono); color: var(--muted); }
+
+.controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; background: var(--surface); }
+.seg button { font: 500 13px var(--body); padding: 7px 14px; border: 0; background: transparent; color: var(--muted); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+select, .play { font: 500 13px var(--body); padding: 7px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+.play { cursor: pointer; }
+button:focus-visible, select:focus-visible { outline: 2px solid var(--home); outline-offset: 2px; }
+label.inline { display: inline-flex; gap: 8px; align-items: center; color: var(--muted); font-size: 13px; }
+
+.stage { position: relative; background: var(--stage); border-radius: 18px; overflow: hidden; height: clamp(320px, 58vh, 620px); max-width: 100%; }
+.stage canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.legend { position: absolute; left: 14px; top: 12px; display: grid; gap: 4px; font: 12px var(--mono); color: var(--muted); pointer-events: none; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+.axis { position: absolute; font: 11px var(--mono); color: var(--muted); pointer-events: none; }
+.tip { position: absolute; right: 12px; top: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+  padding: 8px 10px; font: 12px/1.4 var(--mono); max-width: 240px; pointer-events: none; }
+.fallback { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); padding: 24px; text-align: center; }
+
+.strip { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px 6px; }
+.strip-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+.strip svg { width: 100%; height: 110px; display: block; cursor: pointer; }
+
+.stops { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.stop { text-align: left; font: inherit; color: inherit; background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+  padding: 14px; display: grid; gap: 6px; cursor: pointer; min-width: 0; }
+.stop[aria-current="true"] { border-color: var(--ink); }
+.stop .min { font: 700 28px/1 var(--display); font-variant-numeric: tabular-nums; }
+.stop .who { font: 500 12px var(--mono); letter-spacing: .06em; text-transform: uppercase; }
+.stop p { margin: 0; font-size: 14px; }
+.stop .cite { font: 11px var(--mono); color: var(--muted); }
+.home-c { color: var(--home); } .away-c { color: var(--away); }
+
+.notes { color: var(--muted); font-size: 13px; max-width: 75ch; display: grid; gap: 6px; }
+.notes p { margin: 0; }
+code { font: 12px var(--mono); }
+@media (max-width: 560px) { .tip { display: none; } }
+</style>
+  <script type="importmap">{ "imports": { "three": "../node_modules/three/build/three.module.js", "three/addons/": "../node_modules/three/examples/jsm/" } }</script>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <div class="eyebrow">The Ninety Labs · terrain prototype · <span id="seed">seed 7</span></div>
+      <h1>Every match has a shape</h1>
+    </div>
+    <div class="score"><span class="h">Home</span><span id="score">0–0</span><span class="a">Away</span><small id="minutes">90'</small></div>
+  </header>
+
+  <div class="controls">
+    <div class="seg" role="group" aria-label="Viewer">
+      <button id="mode-casual" aria-pressed="true">Casual fan</button>
+      <button id="mode-analyst" aria-pressed="false">Analyst</button>
+      <button id="mode-audio" aria-pressed="false">Audio description</button>
+    </div>
+    <label class="inline" for="player">Follow a player <select id="player"></select></label>
+    <button class="play" id="play">▶ Play the story</button>
+  </div>
+
+  <div class="stage" id="stage">
+    <div class="legend">
+      <span><i style="background:var(--home)"></i>Home threat rises</span>
+      <span><i style="background:var(--away)"></i>Away threat sinks</span>
+    </div>
+    <div class="tip" id="tip" hidden></div>
+    <div class="fallback" id="fallback" hidden>The 3D view needs WebGL. The momentum strip and turning points below still work.</div>
+  </div>
+
+  <section class="strip" aria-label="Momentum">
+    <div class="strip-head">
+      <span><b style="color:var(--ink)">Momentum</b> · threat balance, home minus away, 5-minute average</span>
+      <span id="cursor-label">Tap the strip to fly there</span>
+    </div>
+    <svg id="strip" viewBox="0 0 900 110" preserveAspectRatio="none" role="img" aria-label="Momentum over 90 minutes"></svg>
+  </section>
+
+  <section class="stops" id="stops" aria-label="Turning points"></section>
+
+  <section class="notes">
+    <p><b style="color:var(--ink)">How it's built.</b> Height is threat: every fifth frame, the ball's spot is valued with the engine's possession-value table for the team that has it, then summed per minute and per 5 m strip of pitch. Home attacks toward the far end. A turning point is a minute where the side on top changes and the new side stays on top for at least 5 minutes; a swing inside one side's spell, or a shorter flicker, is not one. Each card is a cue written by code (<code>ninety/agents/cues.py</code>) from the events of the 3 minutes before it, and passes the fact-checking agent's number check: every count and minute it states is read off the events it cites.</p>
+    <p><b style="color:var(--ink)">Limits.</b> The default file, seed 7, is a simulated 0–0 with four shots, so the shape is about territory and pressure, not goals. The threat table comes from <code>docs/eval/possession-value.md</code> and has not settled yet. The repo has no halves yet, so nobody switches ends.</p>
+  </section>
+</div>
+<script type="module" src="./terrain.js"></script>
+</body>
+</html>

@@ -279,3 +279,15 @@ short and actionable. This file is public: no research sources, product names or
   Files are written with `allow_nan=False`, so a stray infinity or NaN fails at the source.
 - **Check:** `tests/test_event_score.py::test_a_time_outside_the_clip_still_gives_strict_json`
   fails on the original code.
+
+
+### 31. A minute is the football minute
+- **What happened:** the first match terrain labelled its turning points with the clock minute
+  (33 for 33:00 to 33:59), while the agents and the fact-checking agent use the football minute
+  (`ninety.match.facts.minute_of`: 34 for the same span). Every card read one minute early, and
+  nothing failed, because the terrain never went through the checker.
+- **Rule:** any minute shown to a viewer is `minute_of`. Arrays may be indexed from 0, but say so
+  where they are built, and convert at the edge. Route generated wording through the checker so a
+  wrong minute cannot air.
+- **Check:** `tests/test_terrain.py::test_turning_point_minutes_are_football_minutes` fails on the
+  original code.

@@ -16,6 +16,7 @@ licence must be one of those three (see `AGENTS.md`).
 | starlette, uvicorn | the public API (`ninety/api`) | BSD-3-Clause |
 | pydantic (via agent-framework) | typed agent output | MIT |
 | pytest, ruff (development) | tests and lint | MIT |
+| three (npm, `web/`) | broadcast renderer and terrain viewer | MIT |
 | uv (container build only) | installs `uv.lock` into the API image | MIT or Apache-2.0 |
 
 ## Vision group (`uv sync --group vision`)
