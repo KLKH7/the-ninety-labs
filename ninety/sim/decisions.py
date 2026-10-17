@@ -14,7 +14,7 @@ from __future__ import annotations
 import math
 import random
 from bisect import bisect_left
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from ninety.sim import ball
 from ninety.sim import value as possession
@@ -50,6 +50,9 @@ CONTROL_EST_MPS = 12.0  # A4: the passer's guess of what a first touch can kill:
 CONTROL_MARGIN_MPS = 2.0  # design: how sharply that guess falls off
 GOAL_KICK_M = 5.5  # Law 16: a goal kick is taken from the goal area
 STICKY = 0.003  # design: a small bonus for carrying on with the current choice (no flip-flopping)
+# D9: a pass into space, aimed ahead of a team-mate toward goal for him to run onto. Both *design*.
+THROUGH_LEADS_M = (6.0, 12.0)  # how far ahead of him it is aimed
+GOAL_LINE_SPACE_M = 3.0  # never aimed nearer the goal line than this
 CLEAR_FROM = 2 / 3  # a clear is an option in his own third: this share of the pitch from the goal he attacks
 
 
@@ -138,6 +141,22 @@ def _generic_time(distance: float) -> float:
 GENERIC = [_generic_time(d * 0.25) for d in range(481)]  # 0 to 120 m, every 0.25 m
 
 
+def running_time(distance: float, v0: float) -> float:
+    """D9: how long the passer assumes a team-mate already running toward a point at v0 takes to
+    reach it: the same reaction and the same average body as `generic_time`, but he keeps his speed
+    while he reacts and accelerates from it rather than from standing."""
+    if v0 <= 0:
+        return generic_time(distance)
+    vmax, tau = 9.9, 9.9 / 5.2
+    v0 = min(v0, vmax)
+    d = max(0.0, distance - v0 * GENERIC_REACTION_S)
+    t = d / vmax
+    for _ in range(8):
+        f = vmax * t - (vmax - v0) * tau * (1 - math.exp(-t / tau)) - d
+        t -= f / max(vmax - (vmax - v0) * math.exp(-t / tau), 1e-6)
+    return GENERIC_REACTION_S + max(t, 0.0)
+
+
 def generic_time(distance: float) -> float:
     """How long the passer assumes any player takes to cover a distance from standing, after
     reacting: an average body (acceleration about 5.2 m/s², top speed about 9.9 m/s)."""
@@ -179,6 +198,11 @@ class Scene:
     # ball costs, against the defaults. Both 1 for a mid style.
     progress_weight: float = 1.0
     loss_weight: float = 1.0
+    mate_velocity: dict[str, tuple[float, float]] = field(default_factory=dict)  # as he last saw them
+    opponent_velocity: list[tuple[float, float]] = field(default_factory=list)  # in the order of `opponents`
+    # Where he believes the opponents are now; `opponents` is where they will be a moment from now.
+    # Offside is judged now, against the receiver where he is now. Empty: use `opponents`.
+    opponents_now: list[tuple[float, float]] = field(default_factory=list)
     current: str | None = None  # what he is doing now (dribble or hold), for STICKY
 
 
@@ -298,7 +322,7 @@ def pressure(scene: Scene) -> float:
 
 
 def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, age: float,
-                    lofted: bool) -> float | None:
+                    lofted: bool, receiver_t: float | None = None, runs: bool = False) -> float | None:
     """The passer's estimate that a pass to (tx, ty) reaches the team-mate at (mx, my) and is
     controlled: no opponent gets to the ball's path first, the team-mate gets there in time, and
     the ball arrives slowly enough to kill. None if a ground pass would stop short."""
@@ -308,7 +332,7 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
     if not math.isfinite(arrive):
         return None
     confidence = 1.0
-    for ox, oy in scene.opponents:  # can any opponent reach the ball's path before the ball?
+    for k, (ox, oy) in enumerate(scene.opponents):  # can any opponent reach the ball's path before the ball?
         d, s = closest_on_segment(ox, oy, scene.x, scene.y, tx, ty)
         along = s * dist  # how far along the pass his closest point is
         if lofted and along < 0.8 * dist:
@@ -316,8 +340,17 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
         t_ball = ground_time(v0, along) if not lofted else arrive
         if not math.isfinite(t_ball):
             t_ball = arrive
-        confidence *= sigmoid((generic_time(max(0.0, d - 1.0)) - t_ball) / LANE_MARGIN_S)
-    receiver_t = generic_time(math.hypot(tx - mx, ty - my))
+        reach = max(0.0, d - 1.0)
+        if runs and k < len(scene.opponent_velocity) and d > 0:
+            # D9: for a pass into space the receiver's run is counted, so the defenders' are too.
+            px, py = scene.x + s * (tx - scene.x), scene.y + s * (ty - scene.y)
+            ovx, ovy = scene.opponent_velocity[k]
+            opp_t = running_time(reach, (ovx * (px - ox) + ovy * (py - oy)) / d)
+        else:
+            opp_t = generic_time(reach)
+        confidence *= sigmoid((opp_t - t_ball) / LANE_MARGIN_S)
+    if receiver_t is None:
+        receiver_t = generic_time(math.hypot(tx - mx, ty - my))
     confidence *= sigmoid((arrive + 0.5 - receiver_t) / RECEIVE_MARGIN_S)
     # Can he control it when it gets there? A lofted ball arrives slower than it was struck (drag).
     arrival = loft_arrival(dist) if lofted else ARRIVE_MPS
@@ -333,7 +366,12 @@ def pass_option(scene: Scene, mate: tuple[str, float, float, float]) -> Option |
     if dist < 4 or dist > MAX_PASS_M:
         return None
     lofted = scene.throw or dist > LOFT_OVER_M
-    confidence = pass_confidence(scene, tx, ty, mx, my, age, lofted)
+    return scored_pass(scene, mid, tx, ty, lofted, pass_confidence(scene, tx, ty, mx, my, age, lofted))
+
+
+def scored_pass(scene: Scene, mid: str, tx: float, ty: float, lofted: bool,
+                confidence: float | None) -> Option | None:
+    """D1: a pass's expected value from the passer's confidence that it arrives."""
     if confidence is None:
         return None
     gain = our_value(scene, tx, ty)
@@ -343,6 +381,44 @@ def pass_option(scene: Scene, mate: tuple[str, float, float, float]) -> Option |
     mx_, my_ = (scene.x + tx) / 2, (scene.y + ty) / 2
     lost = max(our_loss(scene, mx_, my_), our_loss(scene, tx, ty))
     return Option("pass", confidence * gain - (1 - confidence) * lost, (tx, ty), mid, lofted)
+
+
+def believed_onside(scene: Scene, mx: float) -> bool:
+    """Law 11, as the passer judges it from where he believes everyone is: a team-mate in the
+    opponents' half nearer their goal line than both the ball and the second-last opponent is
+    offside if he plays it. The passer avoids him; there is no referee in the engine yet (L10)."""
+    a = attack(scene.goal_x)
+    depths = sorted((a * ox for ox, _ in scene.opponents_now or scene.opponents), reverse=True)
+    second_last = depths[1] if len(depths) > 1 else a * (PITCH_X - scene.goal_x)
+    in_their_half = a * (mx - PITCH_X / 2) > 0
+    return not (in_their_half and a * mx > a * scene.x and a * mx > second_last)
+
+
+def through_options(scene: Scene, mate: tuple[str, float, float, float]) -> list[Option]:
+    """D9: passes into space ahead of a team-mate, toward goal, for him to run onto. Judged like
+    any pass (D1): no opponent gets to its path first and he gets there in time, counting the run
+    he is already making. Only to a team-mate the passer believes is onside."""
+    mid, mx, my, age = mate
+    if not believed_onside(scene, mx):
+        return []
+    a = attack(scene.goal_x)
+    vx, vy = scene.mate_velocity.get(mid, (0.0, 0.0))
+    out = []
+    for lead in THROUGH_LEADS_M:
+        tx, ty = mx + a * lead, my
+        if a * (scene.goal_x - tx) < GOAL_LINE_SPACE_M or not 1.0 <= ty <= PITCH_Y - 1.0:
+            continue  # never at the goal line, nor beyond a touchline he is believed to be past
+        dist = math.hypot(tx - scene.x, ty - scene.y)
+        if dist < 4 or dist > MAX_PASS_M:
+            continue
+        along = (vx * (tx - mx) + vy * (ty - my)) / lead  # his speed toward the spot
+        receiver_t = running_time(math.hypot(tx - mx, ty - my), along)
+        lofted = dist > LOFT_OVER_M
+        confidence = pass_confidence(scene, tx, ty, mx, my, age, lofted, receiver_t, runs=True)
+        option = scored_pass(scene, mid, tx, ty, lofted, confidence)
+        if option:
+            out.append(option)
+    return out
 
 
 def shot_chance(scene: Scene) -> float:
@@ -358,9 +434,15 @@ def shot_chance(scene: Scene) -> float:
 
 
 def options(scene: Scene) -> list[Option]:
-    out = [o for o in (pass_option(scene, mate) for mate in scene.mates) if o]
     if scene.throw:  # Law 15: a throw-in is thrown to someone; it is never a shot or a dribble
-        return out
+        return [o for o in (pass_option(scene, mate) for mate in scene.mates) if o]
+    # One pass per team-mate, aimed where he thinks it is worth most (to feet or into space ahead of
+    # him, D9): where to put the ball is part of choosing him, so he is not counted three times over.
+    out = []
+    for mate in scene.mates:
+        aims = [o for o in [pass_option(scene, mate), *through_options(scene, mate)] if o]
+        if aims:
+            out.append(max(aims, key=lambda o: o.value))
     here = our_value(scene, scene.x, scene.y)
     p = pressure(scene)
     q = shot_chance(scene)
