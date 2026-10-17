@@ -47,6 +47,7 @@ class TeamBrain:
     changed_at: float = -99.0
     line_x: float = 0.0
     front_x: float = 0.0  # where the forwards wait out of possession (T3)
+    ranked: list[str] = field(default_factory=list)  # out of possession: soonest to the ball first
     pressers: list[str] = field(default_factory=list)
     markers: dict[str, tuple[float, float]] = field(default_factory=dict)  # defender -> spot
 
@@ -75,8 +76,9 @@ class TeamBrain:
         # to their own goal than the front of the block.
         front = max(depth + LINE_GAPS_M["attack"], min(ball_from_goal, self.engage_from_goal_m))
         self.front_x = own_goal_x(self.team) + forward(self.team) * front
-        ranked = sorted(time_to_ball, key=time_to_ball.get)
-        self.pressers = [] if has_ball else ranked[:2]  # first presser, then cover
+        self.ranked = [] if has_ball else sorted(time_to_ball, key=time_to_ball.get)
+        # The suggestion: first presser, then cover. Each named player still decides (P17).
+        self.pressers = self.ranked[:2]
 
     def counter_pressing(self, now: float) -> bool:
         """In the window after losing the ball (T1), and the style counter-presses."""
