@@ -2,7 +2,7 @@
 # Render training clips on Azure: one Container Apps job execution per range of seeds, in parallel.
 # Needs `azd provision` first (infra/README.md). Usage:
 #
-#   infra/render-job.sh build                                  build and push the image, point the job at it
+#   infra/render-job.sh build                                  build the image in the registry, point the job at it
 #   infra/render-job.sh start <run> <first> <total> <per> [set]  start ceil(total/per) executions
 #   infra/render-job.sh status                                  recent executions and their state
 #   infra/render-job.sh download <run> <dest>                   copy <run>/ from Blob Storage to <dest>
@@ -21,9 +21,10 @@ case "${1:-}" in
     registry=$(env_value AZURE_CONTAINER_REGISTRY_ENDPOINT)
     commit=$(git rev-parse --short HEAD)
     image="$registry/ninety-render:$commit"
-    # amd64 pinned in Dockerfile.render; Container Apps runs nothing else
-    docker buildx build --platform linux/amd64 -f Dockerfile.render \
-      --build-arg NINETY_COMMIT="$commit" -t "$image" --push .
+    # Built in the registry, not locally: an emulated amd64 build of Chromium on an Apple-silicon
+    # laptop ran it out of memory. amd64 is pinned in Dockerfile.render too.
+    az acr build -r "${registry%%.*}" -f Dockerfile.render --platform linux/amd64 \
+      --build-arg NINETY_COMMIT="$commit" -t "ninety-render:$commit" .
     azd env set RENDER_IMAGE "$image"  # so a later `azd provision` keeps this image
     az containerapp job update -g "$RG" -n "$JOB" --image "$image" -o none
     echo "job $JOB now runs $image"

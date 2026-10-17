@@ -1,6 +1,7 @@
 # The render job image (ninety/render/job.py): renders training clips in headless Chromium with
 # software GL and uploads them to Blob Storage. Run as an Azure Container Apps job by
-# infra/render-job.sh. Same base, platform pin and uv.lock as the API image (see Dockerfile).
+# infra/render-job.sh, which builds it in the registry with `az acr build`. Same base, platform
+# pin and uv.lock as the API image (see Dockerfile).
 FROM --platform=linux/amd64 node:22-slim AS web
 WORKDIR /web
 COPY web/package.json web/package-lock.json ./
