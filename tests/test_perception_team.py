@@ -122,3 +122,28 @@ def test_the_forwards_wait_at_their_line_of_engagement_never_past_the_ball():
         assert cm - abs(brain.line_x - own) >= team_mod.MID_SCREEN_M
         brain.update(2.0, False, abs(own - 95.0), {})  # the ball far away: the usual gap
         assert abs(brain.slot("CM", 34.0, 34.0)[0] - brain.line_x) == team_mod.LINE_GAPS_M["midfield"]
+
+
+def test_the_back_four_keeps_its_defenders_six_to_eight_metres_apart_and_shuffles_across_together():
+    from ninety.sim.team import BACK_FOUR_GAP_M
+    assert 6.0 <= BACK_FOUR_GAP_M <= 8.0  # T2: the cited coaching range
+    for team, anchors in (("home", {"RB": 10.2, "RCB": 25.8, "LCB": 42.2, "LB": 57.8}),
+                          ("away", {"RB": 57.8, "RCB": 42.2, "LCB": 25.8, "LB": 10.2})):
+        brain = TeamBrain(team)
+        brain.update(0.0, False, 40.0 if team == "home" else 65.0, {})
+        for ball_y in (34.0, 45.0):  # the ball inside the line's width
+            ys = sorted(brain.slot(role, anchor_y=ay, ball_y=ball_y)[1] for role, ay in anchors.items())
+            gaps = [b - a for a, b in zip(ys, ys[1:], strict=False)]
+            assert all(abs(g - BACK_FOUR_GAP_M) < 1e-9 for g in gaps), gaps
+            centre = sum(ys) / 4
+            assert abs(centre - (34.0 + (ball_y - 34.0) * 0.3)) < 1e-9  # the whole line shifts with the ball
+        at = {role: brain.slot(role, anchor_y=ay, ball_y=34.0)[1] for role, ay in anchors.items()}
+        assert (at["RB"] < 34.0) == (anchors["RB"] < 34.0)  # each on his own side, mirrored for the away team
+        assert abs(at["RB"] - 34.0) > abs(at["RCB"] - 34.0)  # full-backs outside their centre-backs
+        assert abs(at["LB"] - 34.0) > abs(at["LCB"] - 34.0)
+        # The ball gone wide on the right back's side: he goes with it; the other three keep their gaps.
+        wide_y = 2.0 if anchors["RB"] < 34.0 else 66.0
+        wide = {role: brain.slot(role, anchor_y=ay, ball_y=wide_y)[1] for role, ay in anchors.items()}
+        assert wide["RB"] == wide_y
+        rest = sorted(wide[r] for r in ("RCB", "LCB", "LB"))
+        assert all(abs(b - a - BACK_FOUR_GAP_M) < 1e-9 for a, b in zip(rest, rest[1:], strict=False))

@@ -23,6 +23,11 @@ LINE_FLOOR_M = 5.5  # Law 1: the line drops no deeper than the goal area
 LINE_GAPS_M = {"defence": 0.0, "midfield": 12.0, "attack": 24.0}  # design: compact out of possession
 MID_SCREEN_M = 2.0  # design: screening, the midfield line still stands this far in front of the defence
 SQUEEZE = 0.7  # design: out of possession the shape narrows toward the centre
+# T2: the back four keeps its defenders 6 to 8 m apart, shuffling across together, and takes up
+# the wide area only when the ball goes wide (FIFA Training Centre, "Defending with a back four",
+# Lehmann 2022: coaching guidance for drills, not a measurement); the middle of that range. *verify*
+BACK_FOUR_GAP_M = 7.0
+BACK_FOUR_PLACE = {"RB": 1.5, "RCB": 0.5, "LCB": 0.5, "LB": 1.5}  # gaps from the line's centre
 BALL_SIDE = 0.3  # design: and shifts toward the ball's side
 ROLE_LINE = {"RB": "defence", "RCB": "defence", "LCB": "defence", "LB": "defence",
              "RCM": "midfield", "CM": "midfield", "LCM": "midfield",
@@ -93,10 +98,20 @@ class TeamBrain:
 
     def slot(self, role: str, anchor_y: float, ball_y: float) -> tuple[float, float] | None:
         """Where a player of this role belongs out of possession: his line's height from the
-        defensive line, squeezed toward the centre and shifted toward the ball's side."""
+        defensive line, shifted toward the ball's side; the back four BACK_FOUR_GAP_M apart (on
+        his own side of the line's centre, as his anchor is), except that the full-back on the
+        ball's side goes wide with a ball that is wider than him; the others squeezed toward the
+        centre."""
         line = ROLE_LINE.get(role)
         if line is None or self.in_possession:
             return None
         x = {"attack": self.front_x, "midfield": self.mid_x}.get(line, self.line_x)
-        y = PITCH_Y / 2 + (anchor_y - PITCH_Y / 2) * SQUEEZE + (ball_y - PITCH_Y / 2) * BALL_SIDE
+        centre = PITCH_Y / 2 + (ball_y - PITCH_Y / 2) * BALL_SIDE
+        if role in BACK_FOUR_PLACE:
+            side = 1.0 if anchor_y > PITCH_Y / 2 else -1.0
+            y = centre + side * BACK_FOUR_PLACE[role] * BACK_FOUR_GAP_M
+            if BACK_FOUR_PLACE[role] == max(BACK_FOUR_PLACE.values()) and (ball_y - y) * side > 0:
+                y = ball_y  # the ball has gone wide on his side: he takes up the wide area, level with it
+        else:
+            y = centre + (anchor_y - PITCH_Y / 2) * SQUEEZE
         return min(PITCH_X - 1, max(1.0, x)), min(PITCH_Y - 1, max(1.0, y))
