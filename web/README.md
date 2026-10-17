@@ -16,7 +16,7 @@ Every number comes from `ninety/intel/terrain.py`, and every card sentence from
 `turning_point_cues` in `ninety/agents/cues.py`: overlay cues (`schemas/overlay_cue.schema.json`)
 written by code templates and passed through the fact-checking agent's number check, with no model
 call. The page only lays them out. `seed7.json` and `seed7.cues.jsonl` are seed 7 at 90 minutes
-(a 0–0 with two shots).
+(a 0–0 with four shots).
 
 ```bash
 npm ci --prefix web
