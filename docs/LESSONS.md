@@ -313,3 +313,25 @@ short and actionable. This file is public: no research sources, product names or
   number on `main` at merge time.
 - **Check:** `tests/test_engine_rules.py` high-ball tests build their speeds from the profile
   constants; `grep '^### ' docs/LESSONS.md` shows no number twice.
+
+### 37. A check narrowed in a merge needs its cause measured
+- **What happened:** merging `main` turned the camera test red: 75% of frames had the ball in
+  shot against a 97% bar. The failing frames were a dead ball lying 4 m beyond the touchline for
+  the sourced restart time. `main` never hit this because its restarts took 1 to 2 s. The test was
+  narrowed to the ball on the pitch. The independent audit then swapped the halves and found the
+  cause: `main`'s camera, which never aims nearer a touchline than 12 m, not the engine.
+- **Rule:** before narrowing a check, find which side of the merge causes the failure (swap the
+  halves) and write the measurement next to the narrowed check. Keep the threshold.
+- **Check:** `tests/test_render_camera.py` states the measured in-shot counts, both on the pitch and
+  off it.
+
+### 38. A scorer has to know every event the engine can emit
+- **What happened:** after the merge, `main`'s event scorer judged a goal against the ball on the
+  centre spot, because the goal's own frame already shows the kickoff. It also judged a foul against
+  the ball, where the engine places it at the fouled player. Neither case had come up on `main`: no
+  goal in its five-minute test windows, and no fouls at all.
+- **Rule:** when the engine gains an event kind, or changes where it places one, the scorer's
+  reference for it is set in the same pull request. A goal is read from the frame before its own,
+  as the renderer reads it.
+- **Check:** `tests/test_event_score.py::test_each_event_spot_is_at_its_reference_object` runs over
+  windows that contain a goal and a foul (seed 11).

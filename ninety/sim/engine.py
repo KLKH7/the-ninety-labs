@@ -132,9 +132,9 @@ RESTART_DELAY_S = {"throw_in": (12, 20), "goal_kick": (24, 34), "corner": (24, 3
                    "kick_off": (1, 2)}
 NO_OFFSIDE_FROM = ("throw_in", "goal_kick", "corner")  # Law 11: no offside offence direct from these
 INTERCEPT_SHARE = 0.85  # design: taken before this share of the way to its target, a pass is intercepted
-THROW_BEHIND_M = 0.55  # Law 15: his body stands outside the touchline, feet on or behind it
-THROW_REACH_M = 0.28  # both hands reach toward the pitch and still stay short of the line
-THROW_HAND_Z = 1.85  # bottom of the ball just over the head (the centre sits one radius higher)
+THROW_BEHIND_M = 0.55  # Law 15: his body stands outside the touchline, feet on or behind it (design)
+THROW_REACH_M = 0.28  # design: both hands reach toward the pitch and still stay short of the line
+THROW_HAND_Z = 1.85  # design: bottom of the ball just over an average head (no stature per player)
 
 # 4-3-3 anchors for a team attacking toward x=105, as (x, y) fractions of the pitch.
 FORMATION = [
@@ -364,6 +364,7 @@ class Engine:
         self.throw_by: str | None = None  # a throw-in taker holding the ball until he throws it
         self.throw_ready = 0.0
         self.into_play = False  # released from behind the line; not a new out until it enters or falls away
+        self.throw_from: tuple[float, float] | None = None  # where the last throw-in was taken
         self.touch_show: dict[str, tuple[str, float]] = {}  # player -> (part, until)
         self.dive_show: dict[str, tuple[float, float]] = {}  # keeper -> (until, side)
         self.dribble_to: tuple[float, float] | None = None  # the carrier's chosen carry, if any
@@ -1086,6 +1087,15 @@ class Engine:
             r = ball.RADIUS
             inside = -r <= bx <= PITCH_X + r and -r <= by <= PITCH_Y + r
             inward = (by >= 0 or vy > 0) and (by <= PITCH_Y or vy < 0)
+            if not inside and not inward and self.throw_from:
+                # Law 15: it never entered the field, so the same side throws it again from there.
+                self.into_play = False
+                if self.kicked:
+                    self.kicked.update(outcome="fail")
+                    self.kicked = None
+                self.chase = {}
+                self.stop("throw_in", self.team_of(self.last_touch), self.throw_from, self.last_touch)
+                return True
             if inside or not inward:
                 self.into_play = False
             if self.into_play or inside:
@@ -1183,9 +1193,9 @@ class Engine:
         # While the ball is out of play a new one is placed: the only time the ball may jump.
         if r.kind == "throw_in":  # Law 15: from behind the line, in both hands over his head
             taker.x, taker.y = spot
-            taker.vx = taker.vy = 0.0
-            taker.heading = math.pi / 2 if spot[1] < PITCH_Y / 2 else -math.pi / 2
+            taker.vx = taker.vy = 0.0  # he turns to face the pitch as any body turns (P16, tick_carrier)
             self.ball = (*throw_hands(taker.x, taker.y), 0.0, 0.0, 0.0)
+            self.throw_from = (r.x, r.y)
         else:  # a penalty is placed on the mark (Law 14)
             spot = (r.x, r.y) if r.kind == "penalty_kick" else (taker.x, taker.y)
             self.ball = (*spot, 0.0, 0.0, 0.0, 0.0)
@@ -1195,7 +1205,7 @@ class Engine:
         if r.team != self.poss_team:
             self.emit("possession_change", r.team, taker.x, taker.y, player=taker.id)
         self.give(taker.id)
-        # With the ball in his hands he sets and throws. A longer hold reads as a freeze.
+        # With the ball in his hands he sets and throws (design: a longer hold reads as a freeze).
         pause = (0.2, 0.45) if r.kind == "throw_in" else (0.5, 1.5)
         self.hold_until = self.t + self.rng.uniform(*pause)
         self.throw_by = taker.id if r.kind == "throw_in" else None
@@ -1653,9 +1663,11 @@ class Engine:
         self.moved = carrier.id
         if self.throw_by == carrier.id:  # Law 15: held behind the line and thrown, not dribbled
             carrier.vx = carrier.vy = 0.0
-            carrier.heading = math.pi / 2 if carrier.y < PITCH_Y / 2 else -math.pi / 2
+            inward = 1.0 if carrier.y < PITCH_Y / 2 else -1.0
+            carrier.heading = turn_toward(carrier.heading, inward * math.pi / 2)  # P16: no jump
             self.ball = (*throw_hands(carrier.x, carrier.y), 0.0, 0.0, 0.0)
-            if self.t >= self.hold_until:
+            # Law 15: he throws facing the field, once his body has turned to it.
+            if self.t >= self.hold_until and math.sin(carrier.heading) * inward > 0:
                 self.decide(carrier, throw=True)
             return
         opp = other(carrier.team)

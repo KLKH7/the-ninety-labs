@@ -19,6 +19,7 @@ from collections import Counter
 
 from ninety.eval.event_score import (
     EPS,
+    FOULED_PLACED,
     LENIENT_M,
     NOT_PLACED,
     PLAYER_PLACED,
@@ -113,7 +114,7 @@ def fake_detections(truth: list[dict], frames: list[dict], seed: int,
 
     def ball_placed(e):
         # A moved spot near a player-placed event could land by another player and pass by luck.
-        return e["type"] not in PLAYER_PLACED | NOT_PLACED
+        return e["type"] not in PLAYER_PLACED | FOULED_PLACED | NOT_PLACED
 
     detected: list[dict] = []
     for damage in DAMAGES:

@@ -752,3 +752,12 @@ def test_a_throw_in_leaves_his_hands_at_once_whichever_way_he_faces(monkeypatch)
     D.pass_confidence(scene(throw=True, heading=math.pi, ball_offset=(0.0, 0.0)), 70.0, 34.0, 70.0, 34.0,
                       0.0, True)
     assert asked and all(len(a) == 4 and a[3] for a in asked)
+
+
+def test_a_thrown_pass_is_estimated_with_no_kicking_side():
+    passer = Profile.generate("CM", random.Random(3))
+    a = D.strike_nodes(scene(passer=passer, heading=math.radians(10), throw=True), 85.0, 34.0, True, 10.0)
+    b = D.strike_nodes(scene(passer=passer, heading=math.radians(55), throw=True), 85.0, 34.0, True, 10.0)
+    assert a == pytest.approx(b)  # as engine.execute throws it (hands=True)
+    c = D.strike_nodes(scene(passer=passer, heading=math.radians(55)), 85.0, 34.0, True, 10.0)
+    assert c != pytest.approx(a)  # a kick at that angle is not

@@ -2,12 +2,22 @@
 the passer believes, keepers only anticipate shots, pressers stand goal-side, and facing holds."""
 
 import math
+import random
 from statistics import mean, pstdev
 
 import pytest
 
 from ninety.sim import ball, offball, perception, shape
-from ninety.sim.engine import AERIAL_ABSORB, BODY_RESTITUTION, DT, MISCONTROL_KEEP, PRESS_GAP_M, Engine
+from ninety.sim.body import TURN_RATE
+from ninety.sim.engine import (
+    AERIAL_ABSORB,
+    BODY_RESTITUTION,
+    DT,
+    MISCONTROL_KEEP,
+    PRESS_GAP_M,
+    Engine,
+    throw_stand,
+)
 from ninety.sim.profiles import FOOT_ABSORB_MPS, MAX_STRIKE_MPS
 
 
@@ -429,8 +439,10 @@ def test_a_keeper_in_his_box_still_holds_a_high_ball_with_his_hands():
     p.profile.attributes["first_touch"] = 0.0  # a chest could not kill this
     p.profile.attributes["handling"] = 1.0
     e.possessor, e.last_touch, e.kicker_clear, e.kicked_at = None, "a6", True, e.t - 2.0
-    e.ball = (4.6 + 12.0 * DT, 34.0, 1.4, 12.0, 0.0, 0.0)
-    e.contact((4.6, 34.0, 1.4, 12.0, 0.0, 0.0))
+    hold = p.profile.absorb_mps(True)
+    fast = (hold * AERIAL_ABSORB + hold) / 2  # inside his hold, past what a chest of his would kill
+    e.ball = (4.6 + fast * DT, 34.0, 1.4, fast, 0.0, 0.0)
+    e.contact((4.6, 34.0, 1.4, fast, 0.0, 0.0))
     assert e.possessor == p.id
     assert e.pose(p)[0] == "hands"
 
@@ -1402,3 +1414,69 @@ def test_the_dives_push_stays_within_what_legs_give():
         side, _, landed = _dive_speeds(travel)
         speeds = [0.0] + side[:landed + 1]
         assert max(b - a for a, b in zip(speeds, speeds[1:], strict=False)) <= MAX_PLAYER_ACCEL * DT + 1e-9
+
+
+def test_a_thrower_turns_to_face_the_field_no_faster_than_a_body_turns_then_throws(monkeypatch):
+    e = Engine(1)
+    still(e)
+    e.possessor = None
+    e.stop("throw_in", "home", (40.0, 0.0))
+    taker = e.by_id[e.restart.taker]
+    taker.x, taker.y = throw_stand(40.0, 0.0)
+    taker.heading = -math.pi / 2  # facing away from the field
+    e.restart.ready_at = e.t
+    e.tick_restart()
+    assert taker.heading == -math.pi / 2  # placed at the line, not spun round (P16)
+    e.hold_until, e.throw_ready = e.t, e.t - 10.0  # set, and done looking: only facing holds it back
+    hands = []
+    original = e.execute
+    monkeypatch.setattr(e, "execute", lambda *a, **kw: hands.append(kw.get("hands")) or original(*a, **kw))
+    last, thrown = taker.heading, None
+    for _ in range(int(10 / DT)):
+        e.tick_carrier()
+        assert abs((taker.heading - last + math.pi) % (2 * math.pi) - math.pi) <= TURN_RATE * DT + 1e-9
+        last = taker.heading
+        if e.possessor is None:
+            thrown = taker.heading
+            break
+        e.t += DT
+        e.frame += 1
+    assert thrown is not None and math.sin(thrown) > 0  # Law 15: thrown facing the field
+    assert hands == [True]  # with both hands
+
+
+def test_a_throw_that_never_enters_the_field_is_taken_again_by_the_same_side():
+    e = Engine(1)
+    still(e)
+    taker = e.by_id["h4"]
+    e.possessor, e.last_touch, e.into_play, e.throw_from = None, taker.id, True, (40.0, 0.0)
+    e.kicked = {"type": "pass", "team": "home"}
+    e.ball = (40.0, -0.43, 1.88, 0.0, -4.0, 0.6)  # going back over his head, away from the field
+    assert e.went_out((40.0, -0.27, 1.85, 0.0, -4.0, 1.0))
+    r = e.restart
+    assert (r.kind, r.team, r.taker, r.x, r.y) == ("throw_in", "home", taker.id, 40.0, 0.0)  # Law 15
+    assert e.kicked is None
+    # One that came onto the field and went back out is the other side's throw (Law 15).
+    e = Engine(1)
+    still(e)
+    e.possessor, e.last_touch, e.into_play, e.throw_from = None, taker.id, True, (40.0, 0.0)
+    e.ball = (40.0, 0.4, 1.5, 0.0, 4.0, 0.0)
+    assert not e.went_out((40.0, -0.27, 1.85, 0.0, 4.0, 0.0)) and not e.into_play
+    e.ball = (41.0, -0.3, 0.2, 0.0, -4.0, 0.0)
+    assert e.went_out((41.0, 0.0, 0.3, 0.0, -4.0, 0.0))
+    assert (e.restart.kind, e.restart.team) == ("throw_in", "away")
+
+
+def test_a_throw_has_no_kicking_side_so_where_he_faces_does_not_change_it():
+    e = Engine(1)
+    p = e.by_id["h4"]
+    thrown, kicked = [], []
+    for heading in (math.pi / 2, -math.pi / 2):  # facing the way it goes, and facing away
+        p.heading = heading
+        e.rng = random.Random(5)
+        thrown.append(e.execute(p, 0.0, 10.0, 4.0, "passing", hands=True))
+        p.heading = heading
+        e.rng = random.Random(5)
+        kicked.append(e.execute(p, 0.0, 10.0, 4.0, "passing"))
+    assert thrown[0] == thrown[1]
+    assert kicked[0] != kicked[1]  # a kick does depend on it (P13)

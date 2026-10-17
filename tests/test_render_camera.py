@@ -49,8 +49,11 @@ def test_director_follows_the_ball_smoothly_and_keeps_it_in_shot():
     prev, in_shot, on_pitch, max_step = None, 0, 0, 0.0
     for fr in m.frames:
         c = d.step(fr["ball"]["x"], fr["ball"]["y"])
-        # A dead ball lying off the pitch until the restart (12 s or more, GROUNDING) is not
-        # what the camera follows; the ball in play is.
+        # A dead ball lying off the pitch until the restart (12 s or more, GROUNDING R1) is not
+        # what the camera follows; the ball in play is. Measured at the merge of main: the camera
+        # aims no nearer a touchline than 12 m (camera.py), so a ball resting beyond the near
+        # line is in shot in 229 of 576 such frames on seed 4, and was never tested before
+        # because restarts took 1 to 2 s. In play: 903 of 924 (lesson 37).
         if 0 <= fr["ball"]["x"] <= 105 and 0 <= fr["ball"]["y"] <= 68:
             uv = c.project((fr["ball"]["x"], fr["ball"]["y"], 0.0))
             in_shot += uv is not None and 0 <= uv[0] < 1280 and 0 <= uv[1] < 720
