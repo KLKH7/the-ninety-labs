@@ -82,9 +82,11 @@ class Body:
 
     def _capped_distance(self, seconds: float, speed_along: float, cap: float) -> float:
         top = self.top_speed()
-        u = clamp(speed_along, 0.0, cap)
-        if u >= cap:
-            return cap * seconds
+        u = clamp(speed_along, 0.0, top)
+        if u >= cap:  # already faster than he chooses: he brakes down to it as any body brakes (P2)
+            slow = (u - cap) / BRAKE_MAX
+            t = min(seconds, slow)
+            return u * t - BRAKE_MAX * t * t / 2 + cap * max(0.0, seconds - slow)
         tau = top / self.f0
         reach_cap = tau * math.log((top - u) / (top - cap))  # when v(t) reaches his chosen speed
         t = min(seconds, reach_cap)
