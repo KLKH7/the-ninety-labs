@@ -833,9 +833,13 @@ class Engine:
             reach_m, reach_z = self.reach(p, x0 + sc * dx, y0 + sc * dy)  # judged where it comes closest
             floor, top = 0.0, reach_z
             diving = self.dive is not None and self.dive[0] == p.id
+            down = bool(self.landed and self.landed[0] == p.id and self.off_balance.get(p.id, -1.0) > self.t)
             if diving:  # P15: in the air he covers the heights his dive has reached so far
                 floor, top = offball.dive_band(self.t + t0 - self.kicked_at)
                 top = min(top, reach_z)
+            elif down:  # down after his dive, on the ground: the low third of the goal's height (design)
+                top = offball.MIDDLE_THIRD_Z[0]
+            diving = diving or down
             if self.t - self.reacting_since(p) >= self.reaction(p) or diving:  # a deliberate touch
                 st = first_low_within(x0, y0, hz, rdx, rdy, z1 - hz, qx, qy, reach_m, top, floor)
                 if st is not None:
