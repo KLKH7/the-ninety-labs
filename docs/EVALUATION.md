@@ -182,7 +182,8 @@ Each of `pairs` is one match:
 | `truth_id`, `detected_id` | the two events' `id` |
 | `type`, `team` | shared by both |
 | `dt_s` | detected time minus true time, seconds; positive means late |
-| `place_error_m` | the spot's distance to the reference object at the detected time; `null` for a substitution; written as `Infinity` (not valid strict JSON) when the detected time is past the last frame, which can happen only in `time_only` |
+| `place_error_m` | the spot's distance to the reference object at the detected time; `null` when it cannot be measured: for a substitution, or when `outside_frames` is `true` |
+| `outside_frames` | `true` when the detected time is outside the truth frames (usually past the last one), so there is nothing to be right about; such a pair can appear only in `time_only`, since `strict` and `lenient` reject it |
 | `distance_m` | the spot's distance to the true event's spot |
 
 Example from the commands above on Windows, on fake detections, so the numbers grade the
