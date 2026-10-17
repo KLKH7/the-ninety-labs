@@ -1,0 +1,51 @@
+name: evals
+
+# Nightly evaluation of the published agents, recorded in Foundry so its Evaluations page holds a
+# history: the fact-checker on planted false and true claims (ninety/eval/factcheck_eval.py) and
+# the Analyst's first drafts with Foundry's agent evaluators (ninety/agents/analyst_eval.py).
+# Signs in with the same OIDC identity as deploy.yml (trusted for main only, no stored secret),
+# which holds Foundry User on the Foundry resource (infra/main.bicep). Costs cents a night in
+# model calls. Reports are kept as a workflow artifact; the committed docs/eval files come from
+# a maintainer's run at a known commit, as docs/EVALUATION.md requires.
+on:
+  schedule:
+    - cron: "0 8 * * *" # 01:00 PT
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: evals
+  cancel-in-progress: false
+
+jobs:
+  evals:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - run: uv sync --locked
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Fact-checker on held-out seeds
+        run: uv run python -m ninety.eval.factcheck_eval --seeds 21,33 --foundry --out runs/eval/fact-checker.md
+      - name: Analyst first drafts and Foundry agent evaluators
+        run: uv run python -m ninety.agents.analyst_eval --seeds 21,33 --foundry --out runs/eval/analyst.md
+      - name: Summary
+        if: always()
+        run: |
+          for f in runs/eval/fact-checker.md runs/eval/analyst.md; do
+            [ -f "$f" ] && sed -n '1,/^## /p' "$f" >> "$GITHUB_STEP_SUMMARY"
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-reports
+          path: runs/eval/
