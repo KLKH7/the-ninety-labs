@@ -24,7 +24,7 @@ from ninety.sim.body import BRAKE_MAX, CS_MEAN, D0, F0_MEAN, V0_MEAN, Body
 from ninety.sim.body import move as move_body
 from ninety.sim.profiles import Profile
 from ninety.sim.style import Style, preset_name
-from ninety.sim.team import TeamBrain
+from ninety.sim.team import ROLE_LINE, TeamBrain
 
 PITCH_X, PITCH_Y = 105.0, 68.0
 FPS = 25
@@ -561,6 +561,7 @@ class Engine:
         diff = self.match.score[team] - self.match.score[opp]
         risk = clamp(-diff * self.t / 5400, -1.0, 1.0)  # chase the game when behind late, protect when ahead
         prof = carrier.profile
+        style, brain = self.styles[team], self.brains[team]
         scene = decisions.Scene(
             self.ball[0],
             self.ball[1],
@@ -574,6 +575,8 @@ class Engine:
             tuple(prof.traits),
             risk,
             current="dribble" if self.dribble_to else "hold",
+            progress_weight=style.progress_weight(brain.attacking_transition(self.t)),
+            loss_weight=style.loss_weight(),
         )
         return scene
 
@@ -1118,7 +1121,11 @@ class Engine:
                 return x, y
             del self.runs[p.id]
         likes = "runs_in_behind" in p.profile.traits
-        if p.role not in ("ST", "RW", "LW") and not likes:
+        # A high counter-attacking style (T4) also sends the central midfielders forward while
+        # the counter is on.
+        countering = brain.style.level("counter_attacking") == "high" and brain.attacking_transition(self.t)
+        midfielder = ROLE_LINE.get(p.role) == "midfield"
+        if p.role not in ("ST", "RW", "LW") and not likes and not (countering and midfielder):
             return None
         settled = self.t >= self.hold_until
         nearest = min(math.hypot(q.x - carrier.x, q.y - carrier.y) for q in self.players if q.team != p.team)

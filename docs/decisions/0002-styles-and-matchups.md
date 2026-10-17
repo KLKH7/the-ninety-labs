@@ -54,9 +54,9 @@ styles and two team strengths.
 | Pressing height | the line of engagement (`ENGAGE_FROM_GOAL_M`, T3), set separately from the line | **built** (T4) |
 | Pressing intensity | how far the first presser goes to the ball and how close he stands (one presser and one cover, as before) | **built** (T4) |
 | Counter-pressing | whether the team presses in the transition window after losing the ball (`TRANSITION_S`, T1), and from how far | **built** (T4) |
-| Counter-attacking | in the window after winning the ball, more weight on forward passes, forward runs and carries | no |
-| Directness | weight on ground gained against keeping the ball, in option values (D1, D4) | no |
-| Risk | the cost of losing the ball in option values (D1); the game state moves it too (ENGINE.md §6) | no |
+| Counter-attacking | in the window after winning the ball, more weight on ground gained, and (high) central midfielders run in behind | **built** (T4) |
+| Directness | weight on ground gained from where the ball is, in option values (D1, D4) | **built** (T4) |
+| Risk | the cost of losing the ball in option values (D1); the game state still moves the shot bias separately (ENGINE.md §6) | **built** (T4) |
 | Tempo | how soon the carrier releases the ball once settled (D5), and the bonus for holding it | no |
 | Width | how far the shape spreads across the pitch in possession (R8) | no |
 | Crossing | weight on crosses from wide areas | no: the engine has no crosses yet (R1) |
@@ -128,8 +128,8 @@ must be read before the result is published.
 
 ## Precondition: the baseline must be realistic first
 
-The engine today produces 47 to 56 shots and 13 to 19 goals a match (GROUNDING.md R4). Against
-that baseline, differences in goals between styles mean nothing. So:
+The engine's shots and goals per match are not yet in the published range (GROUNDING.md R4).
+Against that baseline, differences in goals between styles mean nothing. So:
 
 - **Fingerprints (H2 to H4) can be reported as soon as the dials are wired:** they test intent,
   not totals.

@@ -1,10 +1,12 @@
 """A team's style: dials that change what its players intend, never what happens.
 
-Each dial runs from 0 to 1 and is read in three bands (low, mid, high). A dial moves where the
-team stands and when it goes to the ball; whether a press wins the ball is still decided by
-perception, physics and execution error. Only dials the engine acts on are listed here; the
-rest of docs/decisions/0002-styles-and-matchups.md arrives as each one is wired. Constants cite
-docs/GROUNDING.md (T4). All band values *design*.
+Each dial runs from 0 to 1. The shape dials are read in three bands (low, mid, high) and move
+where the team stands and when it goes to the ball. The on-ball dials tilt how the player on the
+ball weighs his options (D1, D4) around the mid value, which leaves them as they were. Whether a
+press wins the ball or a pass arrives is still decided by perception, physics and execution
+error. Only dials the engine acts on are listed here; the rest of
+docs/decisions/0002-styles-and-matchups.md arrives as each one is wired. Constants cite
+docs/GROUNDING.md (T4). All values *design*.
 """
 
 from __future__ import annotations
@@ -12,6 +14,12 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 
 LOW, MID, HIGH = 0.2, 0.5, 0.8  # preset values for each band
+
+
+def tilt(value: float) -> float:
+    """A dial as a tilt from -1 to 1 around its mid value (0 at 0.5)."""
+    band(value)
+    return (value - MID) * 2
 
 
 def band(value: float) -> str:
@@ -28,6 +36,16 @@ PRESS_GAP_M = {"low": 2.5, "mid": 2.0, "high": 1.5}
 # Counter-pressing: in the window after losing the ball (T1), whether the team goes to the ball
 # wherever it is, and from how far. Low drops straight back into shape.
 COUNTER_PRESS_ENGAGE_M = {"low": None, "mid": 20.0, "high": 30.0}
+# On the ball. Directness scales the value of ground gained toward goal from where the ball is
+# (D1's progress term) by 1 + DIRECTNESS_SPAN x tilt: 0.1 to 1.9 times at the preset values.
+# Counter-attacking scales it again, by the same rule, in the window after winning the ball (T1);
+# a high counter-attacking team also sends its central midfielders running in behind then (O4).
+# Below a dial value of 1/6 a factor would turn negative (valuing ground lost), so each is held at
+# 0 or more. Risk scales the cost of losing the ball by 1 - RISK_SPAN x tilt: 1.3 to 0.7 times at
+# the preset values, 1.5 to 0.5 over the whole dial.
+DIRECTNESS_SPAN = 1.5
+COUNTER_ATTACK_SPAN = 1.5
+RISK_SPAN = 0.5
 
 
 @dataclass(frozen=True)
@@ -36,6 +54,9 @@ class Style:
     pressing_height: float = MID  # where the team starts going to the ball (T3)
     pressing_intensity: float = MID  # how far the presser goes, and how tight he stands
     counter_pressing: float = MID  # pressing straight after losing the ball (T1)
+    counter_attacking: float = MID  # going forward straight after winning the ball (T1)
+    directness: float = MID  # ground gained against keeping the ball (D1)
+    risk: float = MID  # how much losing the ball is feared (D1)
 
     def __post_init__(self) -> None:
         for value in asdict(self).values():
@@ -44,15 +65,26 @@ class Style:
     def level(self, dial: str) -> str:
         return band(getattr(self, dial))
 
+    def progress_weight(self, attacking_transition: bool) -> float:
+        """How much the player on the ball values ground gained, against the engine's default."""
+        w = max(0.0, 1 + DIRECTNESS_SPAN * tilt(self.directness))
+        if attacking_transition:
+            w *= max(0.0, 1 + COUNTER_ATTACK_SPAN * tilt(self.counter_attacking))
+        return w
 
-# Named presets (docs/decisions/0002). "Direct" waits for the directness and risk dials: on the
-# dials wired so far it would be the default.
-PRESETS = {  # line height, pressing height, pressing intensity, counter-pressing
+    def loss_weight(self) -> float:
+        """How much the player on the ball fears losing it, against the engine's default."""
+        return 1 - RISK_SPAN * tilt(self.risk)
+
+
+# Named presets (docs/decisions/0002).
+PRESETS = {  # line, pressing height, intensity, counter-press, counter-attack, directness, risk
     "balanced": Style(),
-    "high_press": Style(HIGH, HIGH, HIGH, HIGH),
-    "possession": Style(HIGH, MID, MID, HIGH),
-    "counter_attack": Style(MID, LOW, MID, LOW),
-    "low_block": Style(LOW, LOW, LOW, LOW),
+    "high_press": Style(HIGH, HIGH, HIGH, HIGH, HIGH, MID, MID),
+    "possession": Style(HIGH, MID, MID, HIGH, LOW, LOW, LOW),
+    "counter_attack": Style(MID, LOW, MID, LOW, HIGH, HIGH, MID),
+    "low_block": Style(LOW, LOW, LOW, LOW, MID, MID, LOW),
+    "direct": Style(MID, MID, MID, MID, MID, HIGH, HIGH),
 }
 
 

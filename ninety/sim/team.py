@@ -76,6 +76,10 @@ class TeamBrain:
         """In the window after losing the ball (T1), and the style counter-presses."""
         return self._counter_engage_m is not None and now - self.changed_at < TRANSITION_S
 
+    def attacking_transition(self, now: float) -> bool:
+        """In the window after winning the ball (T1), when a counter-attack is on."""
+        return self.in_possession and now - self.changed_at < TRANSITION_S
+
     def presses(self, now: float, ball_x: float) -> bool:
         """Out of possession, does the team go to the ball? Straight after losing it (the
         counter-press window, T1), or once the ball is inside its line of engagement (T3)."""
