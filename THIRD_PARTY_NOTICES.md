@@ -1,8 +1,8 @@
 # Third-party notices
 
 The Ninety Labs is MIT licensed. It depends on the open-source packages below, each under a
-permissive licence (MIT, Apache-2.0 or BSD). Add a row when you add a dependency; the
-licence must be one of those three (see `AGENTS.md`).
+permissive licence. Add a row when you add a dependency; the licence must be one `AGENTS.md`
+allows (permissive or MPL-2.0 unmodified, plus its two narrow exceptions; never GPL or AGPL).
 
 | Package | Used for | Licence |
 |---|---|---|
