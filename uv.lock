@@ -478,6 +478,21 @@ wheels = [
 ]
 
 [[package]]
+name = "azure-storage-queue"
+version = "12.18.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "azure-core" },
+    { name = "cryptography" },
+    { name = "isodate" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/29/78/37012b4026dfa6b9795c68736dfe70d271d70cf7f4802a2874f924643b11/azure_storage_queue-12.18.0.tar.gz", hash = "sha256:672dac5a7df2e93134f1b8ac6dc0df29823b9daa490b61bda1f88601403b5aa9", size = 233348, upload-time = "2026-09-30T21:20:05.399Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8c/d9/a528dcd2c16b7ad530b41fc54d936a178eb5ca46b961ff65a0d0922f27e1/azure_storage_queue-12.18.0-py3-none-any.whl", hash = "sha256:a91e5dce29279aa8528ee6a43a5aed10e22de94dae9a4c5dccbd4d1aee2cc5c1", size = 206472, upload-time = "2026-09-30T21:20:07.279Z" },
+]
+
+[[package]]
 name = "certifi"
 version = "2026.7.22"
 source = { registry = "https://pypi.org/simple" }
@@ -2376,6 +2391,7 @@ dev = [
 ]
 render-job = [
     { name = "azure-storage-blob" },
+    { name = "azure-storage-queue" },
 ]
 vision = [
     { name = "rfdetr" },
@@ -2401,7 +2417,10 @@ dev = [
     { name = "pytest", specifier = ">=8" },
     { name = "ruff", specifier = ">=0.17.0" },
 ]
-render-job = [{ name = "azure-storage-blob", specifier = ">=12" }]
+render-job = [
+    { name = "azure-storage-blob", specifier = ">=12" },
+    { name = "azure-storage-queue", specifier = ">=12.18.0" },
+]
 vision = [{ name = "rfdetr", specifier = "==1.11.2" }]
 
 [[package]]
