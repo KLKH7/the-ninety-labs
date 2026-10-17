@@ -497,3 +497,14 @@ short and actionable. This file is public: no research sources, product names or
   hand.
 - **Check:** `grep` the rule's constants: they appear in one module and its tests, nowhere else;
   a test feeds the same case to the engine's function and to the estimate.
+
+### 51. A band is only as good as the sources that make it
+- **What happened:** R7's published band, 20 to 45%, was cited to one Premier League study, which
+  reports about 20%; the 35 to 45% came from a second study that was not cited. The same row still
+  showed a 62% late drop measured on an engine two rebuilds old, and the late drop that did exist
+  came from a design constant, not from players pacing themselves.
+- **Rule:** each end of a band names the source it comes from. A realism number is judged by a
+  protocol written before it is measured (matches, seeds, statistic, spread, band), and the row
+  records the engine commit the number came from.
+- **Check:** `uv run python -m ninety.sim.late_drop` prints the commit in `docs/eval/late-drop.md`;
+  `tests/test_late_drop.py` fails if the seeds or band drift from `docs/EVALUATION.md`.
