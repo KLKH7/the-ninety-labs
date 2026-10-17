@@ -40,7 +40,7 @@ DRIBBLE = 2.5
 DECIDE_EVERY = 6  # frames between the ball carrier's decisions (about 4 a second)
 PERCEIVE_EVERY = 6  # frames between a player's looks at the pitch (about 4 a second, staggered)
 BRAIN_EVERY = 12  # frames between a team brain's reads of the game (about 2 a second)
-COVER_M = 8.0  # design: the covering player stays this far behind the presser, goal-side
+COVER_BEHIND_M = 8.0  # design: the covering player stands this far goal-side of the ball, behind the presser
 PERCEPTION_ERR = 0.03  # verify: m/s of misjudged ball velocity per metre between player and ball
 CONTROL_M = 1.0  # a foot reaches this far from the body's centre
 FOOT_REACH_Z = 1.0  # outfield players can play the ball below this height
@@ -77,7 +77,7 @@ TOUCH_EXPECTED_DEG = 30.0  # a touch within this of his running line needs no ne
 OFF_BALANCE_S = 0.8  # a missed lunge leaves him out of the play this long
 CLOSE_CONTROL_M = 3.0  # with an opponent this close, a carrier keeps the ball at his feet
 CLOSE_CONTROL_PACE = 0.6  # and carries it at this share of his dribbling speed
-COVER_M = 10.0  # a team-mate goal-side within this distance is cover to commit with
+COVER_TO_COMMIT_M = 10.0  # a team-mate goal-side within this distance is cover to commit with
 LAST_DITCH_M = 18.0  # this near his own goal a defender commits without cover
 COMMIT_P = 0.6  # a defender commits only when he expects to win the race this often (aggression shifts it)
 SHIELD_M = 3.0  # holding with an opponent this close, the carrier puts his body between them
@@ -1063,7 +1063,8 @@ class Engine:
                 lead_y = carrier.vy * JOCKEY_LOOKAHEAD_S if carrier else 0.0
                 return *on_pitch(bx + lead_x + gx * gap, by + lead_y + gy * gap), work
             if engaged and brain.pressers[1:2] == [p.id]:  # cover: behind the presser, goal-side
-                return *on_pitch(bx + gx * max(COVER_M, gap + 2), by + gy * max(COVER_M, gap + 2)), RECOVER
+                behind = max(COVER_BEHIND_M, gap + 2)
+                return *on_pitch(bx + gx * behind, by + gy * behind), RECOVER
             slot = brain.slot(p.role, p.ay, clamp(by, 0, PITCH_Y))
             if slot:
                 tx, ty = slot
@@ -1299,7 +1300,7 @@ class Engine:
             q.team == p.team
             and q is not p
             and abs(q.x - own) < abs(p.x - own)
-            and math.hypot(q.x - p.x, q.y - p.y) < COVER_M
+            and math.hypot(q.x - p.x, q.y - p.y) < COVER_TO_COMMIT_M
             for q in self.players
         )
 

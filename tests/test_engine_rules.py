@@ -10,6 +10,7 @@ from ninety.sim.body import BRAKE_MAX
 from ninety.sim.engine import (
     BODY_RADIUS,
     BODY_RESTITUTION,
+    COVER_BEHIND_M,
     DIVE_TIME_S,
     DT,
     FPS,
@@ -93,6 +94,25 @@ def test_a_keeper_reacts_to_the_ball_like_anyone_and_reads_only_shots_at_his_goa
     assert math.isclose(ty, min(34 + 3.66, max(34 - 3.66, e.read[1])))  # toward his read, within the posts
     e.give(carrier.id)
     assert e.read is None
+
+
+def test_the_cover_stands_goal_side_of_the_ball_at_the_cover_distance():
+    """T3: the second player covers 8 m behind the presser, goal-side of the ball (the constant
+    was once shadowed by the 10 m commit-with-cover radius of D8)."""
+    for team in ("home", "away"):
+        e = Engine(1)
+        still(e)
+        carrier = next(p for p in e.players if p.team != team and p.role == "CM")
+        presser = next(p for p in e.players if p.team == team and p.role == "CM")
+        cover = next(p for p in e.players if p.team == team and p.role == "RCM")
+        carrier.x, carrier.y = 52.0, 34.0
+        presser.x, presser.y = 55.0 if team == "away" else 49.0, 34.0
+        e.ball = (52.0, 34.0, 0.0, 0.0, 0.0, 0.0)
+        e.possessor = carrier.id
+        brain = e.brains[team]
+        brain.in_possession, brain.pressers, brain.markers = False, [presser.id, cover.id], {}
+        tx, ty, _ = e.shape_target(cover)
+        assert math.isclose(math.hypot(tx - 52.0, ty - 34.0), COVER_BEHIND_M, abs_tol=0.01)
 
 
 def test_the_presser_stands_goal_side_for_both_teams():
