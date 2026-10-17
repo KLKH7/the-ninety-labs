@@ -146,6 +146,19 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** branch protection on `main` requires branches to be up to date (on since
   2026-10-17), so GitHub will not merge until CI has passed on the branch with main merged in.
 
+### 29. A deploy is done when the live URL answers with the new commit
+- **What happened:** the first `azd provision` and deploy of the API failed three times, and each
+  earlier step said it had passed. A role id written from memory did not exist (`what-if` does not
+  check role ids). Leaving the Container Apps environment's mode unset gave an Express
+  environment, which cannot run jobs or OpenTelemetry. And an image built by Docker's legacy
+  builder on a Mac looked amd64 when inspected locally, but in Azure even `/bin/sh` failed with
+  `exec format error`. `azd` reported success every time.
+- **Rule:** look up every Azure id (`az role definition list --name ...`); set every mode the
+  platform would otherwise default; build images with BuildKit, never the legacy builder. A
+  deploy counts as done only when the public URL answers with the commit just deployed.
+- **Check:** the deploy workflow's smoke test passes only when `/api/health` reports the commit
+  it deployed.
+
 ### 13. Keep diffs to what you meant to change
 - **What happened:** a one-word schema change rewrote 131 lines because a tool reformatted the
   whole file.
