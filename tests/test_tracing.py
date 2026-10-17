@@ -30,14 +30,22 @@ def test_a_planted_claim_traces_its_rejection_and_its_rewrite(spans):
     claims = [s for s in finished if s.name == "ninety.claim"]
     checks = [s for s in finished if s.name == "ninety.fact_check"]
 
-    assert len(claims) == 1 and len(checks) == outcome.attempts == 2
+    # How many drafts the model needed is the recording's, not the test's (lesson 47): the planted
+    # draft is rejected, so at least one rewrite, and every draft has its verdict traced.
+    assert len(claims) == 1 and len(checks) == outcome.attempts >= 2
     claim = claims[0]
-    assert claim.attributes["ninety.accepted"] is True and claim.attributes["ninety.drafts"] == 2
+    assert claim.attributes["ninety.accepted"] is True
+    assert claim.attributes["ninety.drafts"] == outcome.attempts
     assert claim.attributes["ninety.planted"] is True and claim.attributes["ninety.live"] is False
 
-    rejected, accepted = sorted(checks, key=lambda s: s.attributes["ninety.attempt"])
-    assert rejected.attributes["ninety.verdict"] == "rejected"
-    assert any("143" in r for r in rejected.attributes["ninety.reasons"])
+    planted, *rewrites, accepted = sorted(checks, key=lambda s: s.attributes["ninety.attempt"])
+    assert [s.attributes["ninety.attempt"] for s in (planted, *rewrites, accepted)] == list(
+        range(1, outcome.attempts + 1)
+    )
+    assert planted.attributes["ninety.verdict"] == "rejected"
+    assert any("143" in r for r in planted.attributes["ninety.reasons"])
+    for rewrite in rewrites:  # a rewrite the checker turned down says why
+        assert rewrite.attributes["ninety.verdict"] == "rejected" and rewrite.attributes["ninety.reasons"]
     assert accepted.attributes["ninety.verdict"] == "accepted" and accepted.attributes["ninety.reasons"] == ()
     # One trace per claim, so Foundry's tracing view shows the whole story together.
     assert {s.context.trace_id for s in checks} == {claim.context.trace_id}
