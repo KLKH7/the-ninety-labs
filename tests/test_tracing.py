@@ -24,21 +24,30 @@ def spans(monkeypatch):
     return exporter
 
 
-def test_a_planted_claim_traces_its_rejection_and_its_rewrite(spans):
+def test_a_planted_claim_traces_every_verdict(spans):
+    # Expectations come from the recording's own outcome, since a re-recorded run may end either way.
     outcome = asyncio.run(replay_slice(Recording.load(PLANTED)))
     finished = spans.get_finished_spans()
     claims = [s for s in finished if s.name == "ninety.claim"]
-    checks = [s for s in finished if s.name == "ninety.fact_check"]
+    checks = sorted(
+        (s for s in finished if s.name == "ninety.fact_check"), key=lambda s: s.attributes["ninety.attempt"]
+    )
 
-    assert len(claims) == 1 and len(checks) == outcome.attempts == 2
+    assert len(claims) == 1 and len(checks) == outcome.attempts >= 2
     claim = claims[0]
-    assert claim.attributes["ninety.accepted"] is True and claim.attributes["ninety.drafts"] == 2
+    assert claim.attributes["ninety.accepted"] is outcome.accepted
+    assert claim.attributes["ninety.drafts"] == outcome.attempts
     assert claim.attributes["ninety.planted"] is True and claim.attributes["ninety.live"] is False
 
-    rejected, accepted = sorted(checks, key=lambda s: s.attributes["ninety.attempt"])
-    assert rejected.attributes["ninety.verdict"] == "rejected"
-    assert any("143" in r for r in rejected.attributes["ninety.reasons"])
-    assert accepted.attributes["ninety.verdict"] == "accepted" and accepted.attributes["ninety.reasons"] == ()
+    # The planted number is the first rejection; the last verdict is the claim's fate.
+    assert checks[0].attributes["ninety.verdict"] == "rejected"
+    assert any("143" in r for r in checks[0].attributes["ninety.reasons"])
+    assert [c.attributes["ninety.verdict"] for c in checks[1:-1]] == ["rejected"] * (len(checks) - 2)
+    last = checks[-1].attributes
+    if outcome.accepted:
+        assert last["ninety.verdict"] == "accepted" and last["ninety.reasons"] == ()
+    else:
+        assert last["ninety.verdict"] == "held_back" and last["ninety.reasons"]
     # One trace per claim, so Foundry's tracing view shows the whole story together.
     assert {s.context.trace_id for s in checks} == {claim.context.trace_id}
     assert all(s.parent.span_id == claim.context.span_id for s in checks)
