@@ -459,3 +459,19 @@ short and actionable. This file is public: no research sources, product names or
   hand.
 - **Check:** `grep` the rule's constants: they appear in one module and its tests, nowhere else;
   a test feeds the same case to the engine's function and to the estimate.
+
+### 70. A ported rule keeps its condition, not just its threshold
+- **What happened:** porting `main`'s aerial touches, the engine flagged every touch in foot reach
+  above 0.45 m as a thigh or chest, at half a foot's first touch. `main` applied that only to a ball
+  coming into the body; the engine's foot reaches to 1 m. A knee-high pass met beside a player was
+  miscontrolled and popped up beside him to be miscontrolled again: before the cushioned touch, 158
+  deflections in 30 minutes of seed 7, 52 by the same player straight after his own, against 35
+  before the port, and about 80 fewer passes a team per match over 24 matches. The cushioned touch
+  then copied the same height-only test into the shared first-touch rule and the passer's estimate;
+  there it made such a ball a heavy touch, 344 passes in those 30 minutes against 416 with the fix.
+- **Rule:** when porting a rule between engines, carry over every condition it was guarded by (here,
+  "into his body"), and check it against the receiving engine's own definitions (here, foot reach).
+- **Check:** after a port, compare event counts by kind (deflections, passes) with the parent on the
+  same seed. `tests/test_engine_rules.py::test_a_ball_he_reaches_beside_him_below_his_foot_reach_is_a_foot_touch`
+  and `tests/test_decisions.py::test_the_passer_expects_a_dropping_ball_beside_his_man_to_be_a_foot_touch_not_a_thigh`
+  fail with the height-only test restored.

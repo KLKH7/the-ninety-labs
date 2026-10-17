@@ -8,6 +8,7 @@ import pytest
 
 from ninety.sim import ball, firsttouch
 from ninety.sim import decisions as D
+from ninety.sim.body import FOOT_REACH_Z
 from ninety.sim.engine import DT, PITCH_Y, Engine
 from ninety.sim.perception import Sighting
 from ninety.sim.profiles import FOOT_ABSORB_MPS, SPEED_ERROR
@@ -149,15 +150,24 @@ def test_a_ball_he_has_not_reacted_to_or_far_too_fast_still_rebounds():
     assert not firsttouch.beaten(firsttouch.BEATEN_FACTOR * absorb - 0.1, absorb)
 
 
-@pytest.mark.parametrize("z", [0.1, 1.0])
-def test_the_passer_judges_the_touch_by_the_engines_rule(z):
+@pytest.mark.parametrize("z,into", [(0.1, True), (1.0, True), (1.0, False)])
+def test_the_passer_judges_the_touch_by_the_engines_rule(z, into):
     # One rule (firsttouch.py) for both: the estimate is even odds exactly where the engine's touch
-    # stops keeping the ball at his feet, on the surface the ball's height gives.
-    absorb = firsttouch.surface_absorb(18.0, z)
+    # stops keeping the ball at his feet, on the surface the ball's height and line give.
+    absorb = firsttouch.surface_absorb(18.0, z, into)
     edge = absorb + firsttouch.KEEP_MPS
     assert firsttouch.at_feet(firsttouch.residual(edge - 0.01, absorb))
     assert not firsttouch.at_feet(firsttouch.residual(edge + 0.01, absorb))
     assert firsttouch.kept_estimate(edge, absorb, D.CONTROL_MARGIN_MPS) == pytest.approx(0.5)
+
+
+def test_a_thigh_or_chest_only_for_a_ball_into_his_body_and_beside_him_a_foot():
+    # A4 and P14: above BODY_TOUCH_Z a ball coming into his body meets a thigh, chest or head, which
+    # kills AERIAL_ABSORB of what a foot does; beside him, within his foot's reach, it is the foot.
+    knee = (firsttouch.BODY_TOUCH_Z + FOOT_REACH_Z) / 2
+    assert firsttouch.surface_absorb(18.0, knee, True) == pytest.approx(18.0 * firsttouch.AERIAL_ABSORB)
+    assert firsttouch.surface_absorb(18.0, knee, False) == 18.0
+    assert firsttouch.surface_absorb(18.0, firsttouch.BODY_TOUCH_Z, True) == 18.0
 
 
 def test_a_pass_a_team_mate_plays_ends_with_him_even_when_his_heavy_touch_is_lost():

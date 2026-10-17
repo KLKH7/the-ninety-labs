@@ -26,10 +26,11 @@ KEEP_MPS = CONTROL_M / TOUCH_GAP_S
 BEATEN_FACTOR = 2.0
 
 
-def surface_absorb(foot_absorb: float, z: float) -> float:
-    """What the surface he meets it with can kill (m/s, relative to him): the foot's, or a thigh,
-    chest or head's above BODY_TOUCH_Z."""
-    return foot_absorb * (AERIAL_ABSORB if z > BODY_TOUCH_Z else 1.0)
+def surface_absorb(foot_absorb: float, z: float, into_body: bool) -> float:
+    """What the surface he meets it with can kill (m/s, relative to him): a thigh, chest or head's
+    for a ball coming into his body above BODY_TOUCH_Z; otherwise the foot's, which reaches beside
+    him up to FOOT_REACH_Z (P14)."""
+    return foot_absorb * (AERIAL_ABSORB if into_body and z > BODY_TOUCH_Z else 1.0)
 
 
 def beaten(rel: float, absorb: float) -> bool:
