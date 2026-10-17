@@ -730,7 +730,11 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
         if at == len(points) - 1 and rests:
             g = vz = 0.0
         # The engine's own touch (firsttouch.py): the surface by the ball's height where he takes it,
-        # and a touch that keeps it at his feet.
+        # and a touch that keeps it at his feet. A receiver runs onto the ball's path, so it comes
+        # into his body: above BODY_TOUCH_Z, the part its height gives (design, verify, A4, D1: pessimistic
+        # where the engine finds him beside it, with a foot. Judging that from where he stands now
+        # made passers over-rate dropping balls: touch report, seeds 40 to 47, intended receivers
+        # kept 89.5% of passes that way, 94.4% with this bound, 94.2% before the engine's fix).
         p = firsttouch.kept_estimate(relative_speed(g * ux, g * uy, vz, taker[2], taker[3]),
                                      firsttouch.surface_absorb(taker[5], z), CONTROL_MARGIN_MPS)
         horizon = take + OPPONENT_LATE_S

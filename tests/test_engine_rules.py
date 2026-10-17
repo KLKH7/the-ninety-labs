@@ -9,7 +9,7 @@ from statistics import mean, pstdev
 import pytest
 
 from ninety.sim import ball, offball, perception, shape
-from ninety.sim.body import BRAKE_MAX, STRIKE_FACING, TURN_RATE
+from ninety.sim.body import BRAKE_MAX, FOOT_REACH_Z, STRIKE_FACING, TURN_RATE
 from ninety.sim.body import move as move_body
 from ninety.sim.engine import (
     BODY_RESTITUTION,
@@ -23,7 +23,7 @@ from ninety.sim.engine import (
     throw_hands,
     throw_stand,
 )
-from ninety.sim.firsttouch import CUSHION, KEEP_MPS
+from ninety.sim.firsttouch import BODY_TOUCH_Z, CUSHION, KEEP_MPS
 from ninety.sim.profiles import FOOT_ABSORB_MPS, MAX_STRIKE_MPS
 from ninety.sim.style import Style
 from ninety.validate import check_physics
@@ -425,6 +425,21 @@ def test_a_high_ball_can_be_taken_on_the_body_and_a_poor_touch_is_worse():
     assert over.possessor is None and over.ball[3] == CHEST
     wide = _high_ball(1.0, CHEST, 1.35, True, y=30.7)
     assert wide.possessor is None and wide.ball[3] == CHEST
+
+
+def test_a_ball_he_reaches_beside_him_below_his_foot_reach_is_a_foot_touch():
+    # P14: a foot reaches up to FOOT_REACH_Z. Beside him, not coming into his body, a knee- or
+    # waist-high ball is met with the foot at the foot's full first touch (A4), not killed only as
+    # a thigh would. PAST_THIGH is beyond the best thigh and inside the best foot, so only a foot
+    # touch keeps it. Before this rule a foot-reach touch above BODY_TOUCH_Z was judged as a thigh,
+    # and in matches the miscontrolled ball popped up beside him again and again.
+    for z in (BODY_TOUCH_Z + 0.05, (BODY_TOUCH_Z + FOOT_REACH_Z) / 2, FOOT_REACH_Z - 0.1):
+        foot = _high_ball(1.0, PAST_THIGH, z, True, y=30.55)
+        assert foot.possessor == "a6", z
+        assert not any(ev["type"] == "deflection" for ev in foot.match.events), z
+    # The same ball coming into his body is still a thigh, and still too fast for one.
+    thigh = _high_ball(1.0, PAST_THIGH, (BODY_TOUCH_Z + FOOT_REACH_Z) / 2, True)
+    assert thigh.possessor is None and any(ev["type"] == "deflection" for ev in thigh.match.events)
 
 
 def test_a_touch_names_the_part_and_a_carry_does_not():
