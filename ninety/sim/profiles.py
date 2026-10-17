@@ -120,15 +120,34 @@ def team_strength(rng: random.Random) -> float:
 
 
 # A1 to A6: what each attribute changes.
-KICK_ERROR_DEG = 3.0  # A3: preferred-foot direction error at a precise penalty (~21 m/s, 11 m)
+# A3: where preferred-foot instep kicks from the penalty mark (11 m, about 21 m/s) cross the goal
+# line: a tilted ellipse (Frontiers 2024, 16 players). Its 95% axes 4.08 m and 1.91 m (straight
+# kicks) are 2.448 SDs each way (chi-square, 2 dof: assumed, the paper does not say how its ellipse
+# was built), and its long axis lies about 30 degrees from horizontal (a blend of Figure 5's medians,
+# 27 degrees for straight kicks and 36 for cross kicks). The horizontal and vertical SDs are the
+# ellipse's own projections: 3.9 degrees across and 2.8 degrees up and down (the latter taken as the
+# launch angle's spread). Both grow the same way (design: one ellipse, scaled).
+KICK_ELLIPSE_95_M = (4.08, 1.91)
+KICK_ELLIPSE_TILT_DEG = 30.0
+KICK_REF_DIST_M = 11.0
 KICK_REF_SPEED = 21.0
+
+
+def _ellipse_sds_deg() -> tuple[float, float]:
+    """(horizontal, vertical) SD in degrees of the measured ellipse, seen from the kicking point."""
+    long_sd, short_sd = (math.degrees(math.atan(a / 2 / 2.448 / KICK_REF_DIST_M)) for a in KICK_ELLIPSE_95_M)
+    c, s = math.cos(math.radians(KICK_ELLIPSE_TILT_DEG)), math.sin(math.radians(KICK_ELLIPSE_TILT_DEG))
+    return (math.sqrt((long_sd * c) ** 2 + (short_sd * s) ** 2),
+            math.sqrt((long_sd * s) ** 2 + (short_sd * c) ** 2))
+
+
+KICK_ERROR_DEG, LOFT_ERROR_DEG = _ellipse_sds_deg()  # about 3.9 and 2.8
 WEAK_FOOT_ERROR = 3.8 / 3.0  # A3: about 27% wider on the weaker foot ...
 WEAK_FOOT_SPEED = 0.88  # A3: ... and about 12% slower
 FATIGUE_ERROR = 0.25  # A3: design, *verify*: about 25% wider when the slow store (P10) is spent
 SPEED_ERROR = 0.06  # design: spread of struck speed, as a share
 FOOT_ABSORB_MPS = (12.0, 12.0)  # A4: a first touch kills 12 m/s plus 12 m/s more at full first-touch skill
 READ_ERROR_M = 1.5  # design: spread of a keeper's read of a shot's aim, at average anticipation
-LOFT_ERROR_DEG = 2.0  # design: spread of launch angle
 TURN_ERROR = 0.5  # design: error widens by up to half again for a ball struck across the body
 PRESSURE_M = 3.0  # design: an opponent this close puts the kicker under full pressure
 WEAK_SIDE_DEG = 30.0  # design: a kick this far to the weaker foot's side is struck with it
@@ -240,15 +259,17 @@ class Profile:
                    weak_foot: bool, turn_deg: float = 0.0) -> tuple[float, float, float]:
         """Standard deviations of a kick's direction (degrees), speed (share) and launch angle
         (degrees). Average skill on the preferred foot at penalty speed, struck the way he faces,
-        gives about 3 degrees; error grows with speed, pressure (less for the composed), fatigue,
-        the angle across his body, and the weaker foot (the sourced 27% at an average weak foot)."""
-        sigma = KICK_ERROR_DEG * (1.6 - 1.2 * self[skill]) * (speed / KICK_REF_SPEED)
-        sigma *= 1 + 0.5 * pressure * (1 - self["composure"])
-        sigma *= 1 + FATIGUE_ERROR * (1 - capacity)
-        sigma *= 1 + TURN_ERROR * min(abs(turn_deg), 180.0) / 180.0
+        gives the measured spread, about 3.9 degrees across and 2.8 up and down; both grow alike
+        with speed, pressure (less for the composed), fatigue, the angle across his body, and the
+        weaker foot (the sourced 27% at an average weak foot)."""
+        scale = (1.6 - 1.2 * self[skill]) * (speed / KICK_REF_SPEED)
+        scale *= 1 + 0.5 * pressure * (1 - self["composure"])
+        scale *= 1 + FATIGUE_ERROR * (1 - capacity)
+        scale *= 1 + TURN_ERROR * min(abs(turn_deg), 180.0) / 180.0
         if weak_foot:
-            sigma *= 1 + (WEAK_FOOT_ERROR - 1) * 2 * (1 - self["weak_foot"])
-        return sigma, SPEED_ERROR * (1 + pressure * (1 - self["composure"])), LOFT_ERROR_DEG
+            scale *= 1 + (WEAK_FOOT_ERROR - 1) * 2 * (1 - self["weak_foot"])
+        return (KICK_ERROR_DEG * scale, SPEED_ERROR * (1 + pressure * (1 - self["composure"])),
+                LOFT_ERROR_DEG * scale)
 
     def strike_error(self, skill: str, speed: float, nearest_opponent_m: float, capacity: float,
                      turn_deg: float) -> tuple[float, float, float, float]:
