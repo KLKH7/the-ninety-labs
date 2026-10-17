@@ -28,6 +28,7 @@ from ninety.sim.body import (
     CS_MEAN,
     D0,
     F0_MEAN,
+    STRIKE_FACING,
     TURN_RATE,
     V0_MEAN,
     Body,
@@ -59,9 +60,9 @@ PRESS_GAP_M = 2.0  # design, verify: how close a presser stands (jockeys), goal-
 PERSONAL_SPACE_M = 1.2  # players steer to keep about this far from each other
 ANTICIPATE_S = 0.4  # verify: how far ahead players judge where others will be
 BODY_RESTITUTION = 0.3  # verify: share of the ball's speed into a body that it keeps
-BODY_TOUCH_Z = 0.45  # above this, a ball he is under is a thigh, chest or head, not a foot
+BODY_TOUCH_Z = 0.45  # design (P14): above this, a ball he is under is a thigh, chest or head, not a foot
 AERIAL_ABSORB = 0.5  # design: those kill about half the pace a foot does (A4), same first touch
-TOUCH_POSE_S = 0.30  # how long the body shows the part that met the ball
+TOUCH_POSE_S = 0.30  # design (P14): how long the body shows the part that met the ball
 MISCONTROL_KEEP = 0.4  # verify: share of speed a ball keeps off a failed touch or a parry
 POST_RADIUS = 0.06  # Law 1: posts and crossbar at most 12 cm wide
 WOODWORK_RESTITUTION = 0.6  # verify
@@ -1666,8 +1667,10 @@ class Engine:
             inward = 1.0 if carrier.y < PITCH_Y / 2 else -1.0
             carrier.heading = turn_toward(carrier.heading, inward * math.pi / 2)  # P16: no jump
             self.ball = (*throw_hands(carrier.x, carrier.y), 0.0, 0.0, 0.0)
-            # Law 15: he throws facing the field, once his body has turned to it.
-            if self.t >= self.hold_until and math.sin(carrier.heading) * inward > 0:
+            # Law 15: he throws facing the field, once his body has turned to within STRIKE_FACING of
+            # it (P16: the widest angle he strikes at, here from the line straight onto the field).
+            facing = math.cos(carrier.heading - inward * math.pi / 2) >= math.cos(STRIKE_FACING)
+            if self.t >= self.hold_until and facing:
                 self.decide(carrier, throw=True)
             return
         opp = other(carrier.team)
@@ -2084,7 +2087,7 @@ class Engine:
         if self.hands(p, cx, cy):
             part = "hands"
         elif aerial:
-            if cz < 0.95:
+            if cz < 0.95:  # design (P14): the part by height
                 part = "thigh"
             elif cz < 1.50:
                 part = "chest"
