@@ -56,7 +56,7 @@ DECIDE_EVERY = 6  # frames between the ball carrier's decisions (about 4 a secon
 PERCEIVE_EVERY = 6  # frames between a player's looks at the pitch (about 4 a second, staggered)
 BRAIN_EVERY = 12  # frames between a team brain's reads of the game (about 2 a second)
 BLOCK_DIAL = {"low": LOW, "mid": MID, "high": HIGH}  # a drawn block as a style dial (T4)
-COVER_M = 8.0  # design: the covering player stays this far behind the presser, goal-side
+COVER_BEHIND_M = 8.0  # design: the covering player stands this far goal-side of the ball, behind the presser
 PERCEPTION_ERR = 0.03  # verify: m/s of misjudged ball velocity per metre between player and ball
 PERSONAL_SPACE_M = 1.2  # players steer to keep about this far from each other
 ANTICIPATE_S = 0.4  # verify: how far ahead players judge where others will be
@@ -80,7 +80,7 @@ TOUCH_EXPECTED_DEG = 30.0  # a touch within this of his running line needs no ne
 OFF_BALANCE_S = 0.8  # a missed lunge leaves him out of the play this long
 CLOSE_CONTROL_M = 3.0  # with an opponent this close, a carrier keeps the ball at his feet
 CLOSE_CONTROL_PACE = 0.6  # and carries it at this share of his dribbling speed
-COMMIT_COVER_M = 10.0  # a team-mate goal-side within this distance is cover to commit with
+COVER_TO_COMMIT_M = 10.0  # a team-mate goal-side within this distance is cover to commit with
 LAST_DITCH_M = 18.0  # this near his own goal a defender commits without cover
 COMMIT_P = 0.6  # a defender commits only when he expects to win the race this often (aggression shifts it)
 # What a defender expects a penalty to cost: the chance it is scored. Premier League seasons run from
@@ -135,6 +135,8 @@ RESTART_DELAY_S = {"throw_in": (12, 20), "goal_kick": (24, 34), "corner": (24, 3
 NO_OFFSIDE_FROM = ("throw_in", "goal_kick", "corner")  # Law 11: no offside offence direct from these
 INTERCEPT_SHARE = 0.85  # design: taken before this share of the way to its target, a pass is intercepted
 THROW_BEHIND_M = 0.55  # Law 15: his body stands outside the touchline, feet on or behind it (design)
+THROW_SPOT_M = 0.25  # design: within this of his spot he throws from where he stands, still behind the line
+THROW_SETTLED_MPS = BRAKE_MAX * DT  # he throws once one frame of braking would stop him (P2)
 THROW_REACH_M = 0.28  # design: both hands reach toward the pitch and still stay short of the line
 THROW_HAND_Z = 1.85  # design: bottom of the ball just over an average head (no stature per player)
 
@@ -251,7 +253,7 @@ def throw_stand(x: float, line_y: float) -> tuple[float, float]:
 
 
 def throw_hands(x: float, y: float) -> tuple[float, float, float]:
-    """The ball in both hands, over the head, still off the pitch."""
+    """The ball in both hands, over the head, over or behind the touchline."""
     inward = 1.0 if y < PITCH_Y / 2 else -1.0
     return x, y + inward * THROW_REACH_M, THROW_HAND_Z
 
@@ -1198,6 +1200,7 @@ class Engine:
         if taker is None:
             taker = self.nearest(spot[0], spot[1], team).id
         lo, hi = RESTART_DELAY_S[kind]
+        self.dribbler = self.dribble_to = None  # the ball is dead: nobody is running onto a touch
         self.restart = Restart(kind, team, spot[0], spot[1], taker, self.t + self.rng.uniform(lo, hi))
 
     def tick_restart(self) -> None:
@@ -1210,12 +1213,19 @@ class Engine:
         r = self.restart
         taker = self.by_id[r.taker]
         spot = throw_stand(r.x, r.y) if r.kind == "throw_in" else (r.x, r.y)
-        if self.t < r.ready_at or math.hypot(taker.x - spot[0], taker.y - spot[1]) > CONTROL_M:
+        # A thrower must be at his spot, behind the line; anyone else is close enough when the ball
+        # is at his feet. Nobody is moved there: he runs (lesson 5).
+        near = THROW_SPOT_M if r.kind == "throw_in" else CONTROL_M
+        if self.t < r.ready_at or math.hypot(taker.x - spot[0], taker.y - spot[1]) > near:
+            return
+        if r.kind == "throw_in" and math.hypot(taker.vx, taker.vy) > THROW_SETTLED_MPS:
             return
         # While the ball is out of play a new one is placed: the only time the ball may jump.
         if r.kind == "throw_in":  # Law 15: from behind the line, in both hands over his head
-            taker.x, taker.y = spot
-            taker.vx = taker.vy = 0.0  # he turns to face the pitch as any body turns (P16, tick_carrier)
+            # He takes the ball and stops within his own braking (lesson 5); he has moved this frame.
+            # He turns to face the pitch as any body turns (P16, tick_carrier).
+            steer(taker, taker.x, taker.y, 0.0)
+            self.moved = taker.id
             self.ball = (*throw_hands(taker.x, taker.y), 0.0, 0.0, 0.0)
             self.throw_from = (r.x, r.y)
         else:  # a penalty is placed on the mark (Law 14)
@@ -1430,7 +1440,8 @@ class Engine:
                 lead_y = carrier.vy * JOCKEY_LOOKAHEAD_S if carrier else 0.0
                 return *on_pitch(bx + lead_x + gx * gap, by + lead_y + gy * gap), work
             if engaged and brain.pressers[1:2] == [p.id]:  # cover: behind the presser, goal-side
-                cx, cy = on_pitch(bx + gx * max(COVER_M, gap + 2), by + gy * max(COVER_M, gap + 2))
+                behind = max(COVER_BEHIND_M, gap + 2)
+                cx, cy = on_pitch(bx + gx * behind, by + gy * behind)
                 return cx, cy, self.in_time(p, cx, cy)
             slot = brain.slot(p.role, p.ay, clamp(by, 0, PITCH_Y))
             if slot:
@@ -1695,7 +1706,7 @@ class Engine:
         carrier = self.by_id[self.possessor]
         self.moved = carrier.id
         if self.throw_by == carrier.id:  # Law 15: held behind the line and thrown, not dribbled
-            carrier.vx = carrier.vy = 0.0
+            steer(carrier, carrier.x, carrier.y, 0.0)  # standing still, braking within his body
             inward = 1.0 if carrier.y < PITCH_Y / 2 else -1.0
             carrier.heading = turn_toward(carrier.heading, inward * math.pi / 2)  # P16: no jump
             self.ball = (*throw_hands(carrier.x, carrier.y), 0.0, 0.0, 0.0)
@@ -1790,7 +1801,7 @@ class Engine:
         if math.hypot(bx - holder.x, by - holder.y) > CONTROL_M:  # a heavy touch: the ball is there
             return True
         return any(q.team == p.team and q is not p and abs(q.x - own) < abs(p.x - own)
-                   and math.hypot(q.x - p.x, q.y - p.y) < COMMIT_COVER_M for q in self.players)
+                   and math.hypot(q.x - p.x, q.y - p.y) < COVER_TO_COMMIT_M for q in self.players)
 
     def duels(self) -> None:
         """D8: defenders near the ball decide whether to tackle, and lunges that have arrived are
@@ -1812,16 +1823,20 @@ class Engine:
             holder = self.by_id.get(self.possessor) if self.possessor else self.by_id.get(self.dribbler or "")
             bx, by = self.ball[0], self.ball[1]
             victim = self.by_id.get(self.lunge_at.pop(pid, ""))
-            if holder and holder.team != p.team and math.hypot(p.x - bx, p.y - by) <= CONTROL_M:
+            # Law 15: a ball held for a throw-in is not in play, so a lunge that arrives then finds nothing.
+            held = holder is not None and self.throw_by == holder.id
+            if holder and holder.team != p.team and not held and math.hypot(p.x - bx, p.y - by) <= CONTROL_M:
                 self.poke(p, holder)
                 holder = None
-            elif victim and not self.restart and self.leg_meets(p.x, p.y, victim.x, victim.y, bx, by,
-                                                                victim.heading):
+            elif victim and not self.restart and not held and self.leg_meets(
+                    p.x, p.y, victim.x, victim.y, bx, by, victim.heading):
                 self.foul(p, victim)
                 return
             else:
                 self.off_balance[pid] = self.t + OFF_BALANCE_S
         if not holder or self.restart or self.hands(holder, holder.x, holder.y):  # Law 12: not his hands
+            return
+        if self.throw_by == holder.id:  # Law 15: not in play until it is thrown, so nobody challenges
             return
         for i, p in enumerate(self.players):
             if p.team == holder.team or p.role == "GK" or p.id in self.lunges:
@@ -2177,7 +2192,7 @@ class Engine:
         })
 
     def step(self) -> None:
-        """One frame of the match."""
+        """One frame: everyone perceives and decides, the ball is played, everyone moves."""
         self.moved = None
         self.perceive_and_think()
         self.duels()

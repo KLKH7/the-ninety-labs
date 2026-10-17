@@ -14,8 +14,9 @@ from ninety.match.facts import events_in
 
 SEED, MINUTES, MINUTE = 7, 5, 2
 KNOWN = {e["id"]: e for e in events_in(SEED, MINUTES, 1, int(MINUTES) + 1)}
-PASS = next(e for e in KNOWN.values()
-            if e["minute"] == MINUTE and e["type"] == "pass" and "distance_m" in e and e.get("receiver"))
+# A completed pass, so "finds" is true of it (lesson 23); the first pass of the minute may have failed.
+PASS = next(e for e in KNOWN.values() if e["minute"] == MINUTE and e["type"] == "pass"
+            and e.get("outcome") == "success" and "receiver" in e and "distance_m" in e)
 CLAIM = Claim(f"{PASS['player']} finds {PASS['receiver']} with a {PASS['distance_m']} m pass.", [PASS["id"]])
 REPLY = json.dumps({"text": CLAIM.text, "evidence": CLAIM.evidence})
 FIRST = f"Write the claim for minute {MINUTE}."
