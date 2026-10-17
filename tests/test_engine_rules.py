@@ -911,6 +911,8 @@ def test_a_pass_that_waits_for_the_passer_to_turn_still_knows_its_receiver():
     p = e.by_id["h6"]
     e.give(p.id)
     e.ball = (p.x - 0.4, p.y, 0.0, 0.0, 0.0, 0.0)  # the ball on the far side of his body
+    # a team-mate he has seen, onside as he sees it (a pass he could choose: O7, L10)
+    e.beliefs[p.id].seen["h9"] = perception.Sighting(p.x + 13.5, p.y, 0.0, 0.0, e.t)
     e.pass_to(p, p.x + 15.0, p.y, lofted=False, receiver="h9")
     assert e.windup is not None and e.intended is None  # he turns first; nothing struck yet
     e.ball = (p.x + 0.4, p.y, 0.0, 0.0, 0.0, 0.0)  # taken round to his kicking side

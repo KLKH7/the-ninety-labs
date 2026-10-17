@@ -664,7 +664,7 @@ class Engine:
         with the `launch` the option was estimated with (a header away)."""
         if header is None and not self.can_strike(carrier, tx, ty):
             self.turn_to(carrier, tx, ty,
-                         lambda: self.pass_to(carrier, tx, ty, lofted, throw, pace, receiver))
+                         lambda: self.strike_pass(carrier, tx, ty, lofted, throw, pace, receiver))
             return
         bx, by = self.ball[0], self.ball[1]
         dist = math.hypot(tx - bx, ty - by)
@@ -688,6 +688,22 @@ class Engine:
         self.kick(carrier, vx, vy, vz)
         self.intended = receiver  # he expects it
 
+    def strike_pass(self, carrier: Player, tx: float, ty: float, lofted: bool, throw: bool, pace: float,
+                    receiver: str | None) -> None:
+        """O7: a pass is aimed when it is struck. Having turned to play it, he aims at the team-mate
+        he chose as he sees him now (decisions.lead_target), not as he saw him when he chose; a
+        pass into space keeps its spot. If that is no longer a pass he could choose (he now sees
+        him offside, L10, or the spot is out of a pass's range) he chooses again."""
+        if receiver is not None:
+            mate = next((m for m in self.scene_for(carrier).mates if m[0] == receiver), None)
+            if mate is not None:
+                tx, ty = decisions.lead_target(self.ball[0], self.ball[1], goal_x(carrier.team), mate)
+            dist = math.hypot(tx - self.ball[0], ty - self.ball[1])
+            if mate is None or not decisions.MIN_PASS_M <= dist <= decisions.MAX_PASS_M:
+                self.decide(carrier)
+                return
+        self.pass_to(carrier, tx, ty, lofted, throw, pace, receiver)
+
     def scene_for(self, carrier: Player) -> decisions.Scene:
         """The carrier's picture of the game, built only from what he believes."""
         team, opp = carrier.team, other(carrier.team)
@@ -697,7 +713,7 @@ class Engine:
             if q.team == team and q.id != carrier.id:
                 at = belief.where(q.id, self.t)
                 if at:  # a team-mate he has not seen cannot be picked
-                    mates.append((q.id, at[0], at[1], belief.age(q.id, self.t), *belief.velocity(q.id)))
+                    mates.append((q.id, *at, belief.age(q.id, self.t), *belief.velocity(q.id, self.t)))
         seen_opps = [w for w in (belief.where(q.id, self.t) for q in self.players if q.team == opp) if w]
         if self.from_restart not in NO_OFFSIDE_FROM:  # L10: he does not pick a man he sees offside
             limit = self.onside_limit(team, seen_opps, self.ball[0])
@@ -706,18 +722,19 @@ class Engine:
         # estimate counts him once, as the keeper, not also as a blocker.
         # Opponents as they will be a moment from now (their seen velocity): a carrier reads a
         # defender closing in, not only where he stands.
-        # The pass race runs from where he sees them now, at the velocity he saw (decisions.pass_confidence).
+        # The pass race runs from where he sees them now, at the velocity he believes they have now
+        # (decisions.pass_confidence).
         their_keeper = self.keeper(opp).id
         opps, moving = [], []
         for q in self.players:
             at = belief.where(q.id, self.t)
             if at and q.team == opp:
-                qvx, qvy = belief.velocity(q.id)
+                qvx, qvy = belief.velocity(q.id, self.t)
                 opps.append((at[0] + qvx * ANTICIPATE_S, at[1] + qvy * ANTICIPATE_S))
                 moving.append((at[0], at[1], qvx, qvy, q.id == their_keeper))
         keeper = belief.where(their_keeper, self.t)
         if keeper:  # the same anticipated spot as in `opps`, so the shot estimate counts him once
-            kvx, kvy = belief.velocity(their_keeper)
+            kvx, kvy = belief.velocity(their_keeper, self.t)
             keeper = (keeper[0] + kvx * ANTICIPATE_S, keeper[1] + kvy * ANTICIPATE_S)
         diff = self.match.score[team] - self.match.score[opp]
         risk = clamp(-diff * self.t / 5400, -1.0, 1.0)  # chase the game when behind late, protect when ahead
@@ -1987,7 +2004,7 @@ class Engine:
             w = view.where(q.id, self.t) if q.team != carrier.team else None
             if w:
                 felt = min(felt, math.hypot(w[0] - carrier.x, w[1] - carrier.y))
-                v = view.velocity(q.id)
+                v = view.velocity(q.id, self.t)
                 # Beyond what he could cover while the ball is free (the race's own body, or faster
                 # if he is seen going faster), there is no race: pruning only.
                 reach = max(decisions.AVERAGE_BODY.top_speed(), math.hypot(*v)) * TOUCH_GAP_S

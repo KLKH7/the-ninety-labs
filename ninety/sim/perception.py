@@ -50,9 +50,13 @@ class Belief:
         age = min(now - s.t, EXTRAPOLATE_S)
         return s.x + s.vx * age, s.y + s.vy * age
 
-    def velocity(self, pid: str) -> tuple[float, float]:
+    def velocity(self, pid: str, now: float) -> tuple[float, float]:
+        """Believed velocity now: the one seen, while the sighting is carried forward (`where`);
+        once it is held, he is believed to be there, not still running."""
         s = self.seen.get(pid)
-        return (0.0, 0.0) if s is None else (s.vx, s.vy)
+        if s is None or now - s.t >= EXTRAPOLATE_S:
+            return 0.0, 0.0
+        return s.vx, s.vy
 
     def uncertainty(self, pid: str, now: float) -> float:
         """Metres the believed position may be off by, growing with the sighting's age."""

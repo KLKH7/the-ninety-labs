@@ -422,3 +422,19 @@ short and actionable. This file is public: no research sources, product names or
   heads it, lets it drop to his feet, cushions it on his body) and show each one in the new code.
 - **Check:** run both branches' tests on the merge before resolving any test conflict, and read
   each failure as a possible regression before treating it as an outdated expectation.
+
+### 45. A belief is one state: everything read from it must agree
+- **What happened:** a team's own passes rolled out for corners, about 3.75 a match, 70 percent of
+  all corners. A player unseen for over a second was believed to stand where he was last carried
+  to, but his believed velocity was still the old one, so a pass led him into the space he had run
+  from, often toward his own goal line; the passer's race rated it 0.7 to 0.99. The pass was also
+  aimed at the spot chosen before the passer turned, though turning had just shown him where the
+  receiver was. An audit then found the new tests checked the belief, not the four places that
+  read it, and that mutation runs in a copy were importing the original through the editable
+  install, so every mutant "survived".
+- **Rule:** every quantity read from a belief (position, velocity, age) is derived from the same
+  model of it; a choice that waits on a turn acts on what is believed when it is carried out.
+  For mutation runs in a copy, set `PYTHONPATH` to the copy and check `ninety.__file__`.
+- **Check:** a test that the believed velocity is the rate of change of the believed position, and
+  tests on each caller; for a rate like own-pass corners, look at what the passer believed against
+  what was true at the kick.
