@@ -201,4 +201,4 @@ in shot and less than half visible. The target before freezing the test set is a
   and targeted data rounds never add clips to the test set.
 - **Every report records its inputs:** git commit, seeds, model versions and the date.
 - **Results are reproducible:** each command runs from a clean clone after `uv sync`, and gives the
-  same numbers on any operating system (lesson 26).
+  same numbers on any operating system (lesson 29).

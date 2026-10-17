@@ -69,7 +69,7 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_constants.py` fails if any module in `ninety/` assigns a top-level name
   twice.
 
-### 26. Same seed, same match, on every machine
+### 29. Same seed, same match, on every machine
 - **What happened:** seed 7 simulated a different match on macOS from the one on Linux, so the cue
   fixture test failed on a Mac and "156 cues" could not be reproduced there. The engine was
   deterministic; the C math library was not. Apple's `exp`, `erf`, `sin` and the rest disagree

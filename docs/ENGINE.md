@@ -23,7 +23,7 @@ totals were tuned. This is the design for the next builds; what already runs is 
 6. **A seed is the same match on every machine.** The engine draws from `fmath.Random` and
    computes `exp`, `sin`, `atan2` and the normal distribution with `ninety/sim/fmath.py`,
    never the C math library, whose last bit differs between operating systems
-   ([LESSONS.md](LESSONS.md), lesson 26).
+   ([LESSONS.md](LESSONS.md), lesson 29).
 
 ## The loop
 
