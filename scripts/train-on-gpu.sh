@@ -39,11 +39,13 @@ echo "== environment"
 
 if [[ $data == azure:* ]]; then
   runs=${data#azure:}
-  account=$(azd env get-value RENDER_STORAGE_ACCOUNT 2>/dev/null || echo stninetyicrxiozwmmxmg)
+  # the storage account, from RENDER_STORAGE_ACCOUNT or azd; anything but a valid name falls back
+  account=${RENDER_STORAGE_ACCOUNT:-$(azd env get-value RENDER_STORAGE_ACCOUNT 2>/dev/null || true)}
+  [[ $account =~ ^[a-z0-9]{3,24}$ ]] || account=stninetyicrxiozwmmxmg
   expiry=$(date -u -v+6H +%Y-%m-%dT%H:%MZ 2>/dev/null || date -u -d '+6 hours' +%Y-%m-%dT%H:%MZ)
   echo "== read-only link to $account/renders, valid until $expiry UTC"
   sas=$(az storage container generate-sas --account-name "$account" --name renders --permissions rl \
-    --expiry "$expiry" --auth-mode login --as-user -o tsv 2>/dev/null)
+    --expiry "$expiry" --auth-mode login --as-user -o tsv 2>/dev/null || true)
   [ -n "$sas" ] || { echo "could not make the link: are you signed in to Azure with blob read access?"; exit 1; }
   fetches=""
   for r in ${runs//,/ }; do fetches+="uv run --no-sync python -m ninety.vision.fetch_clips $r --out clips; "; done
