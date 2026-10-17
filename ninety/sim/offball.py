@@ -28,6 +28,12 @@ DIVE_PEAK_MPS = 3.8  # P15: the body's peak sideways speed (3.6 to 4.0)
 DIVE_PUSH_OFF_S = 0.48  # P15: how long the push-off lasts, speeding him up to DIVE_PEAK_MPS
 DIVE_TIME_S = DIVE_PUSH_OFF_S / 2 + KEEPER_DIVE_TRAVEL_M / DIVE_PEAK_MPS  # a full dive: about 0.62 s
 KEEPER_DOWN_S = 0.8  # design, verify: how long a keeper is on the ground after a dive
+# P15: a diving keeper's hands go up or down only once the ball's flight shows its height: at penalties
+# they diverge for low and high kicks about 245 ms after the strike, starting from the middle third of
+# the goal's height (Higueras-Herbada et al. 2020, Frontiers in Psychology 11:311). CROSSBAR_Z: Law 1.
+CROSSBAR_Z = 2.44
+MIDDLE_THIRD_Z = (CROSSBAR_Z / 3, 2 * CROSSBAR_Z / 3)
+HEIGHT_FROM_FLIGHT_S = 0.245
 SHOT_SPEEDS_KMH = (70.0, 120.0)  # design, verify: the speeds shots are struck at (engine.shoot)
 SHOT_SPEED_SAMPLES = 8  # how finely that range is averaged over
 KEEPER_DEPTH = (1.0, 6.0)  # O1: design, verify: how far off his line he stands
@@ -250,6 +256,16 @@ def arm_reach_m(diving_s: float) -> float:
     """P11, P15: his reach from his body's centre, `diving_s` into a dive: standing reach, stretched
     out over the dive at the same pace as the body's launch."""
     return KEEPER_STAND_REACH_M + KEEPER_DIVE_EXTRA_M * dive_progress(diving_s)
+
+
+def dive_band(since_touch_s: float) -> tuple[float, float]:
+    """P15: the heights (floor, top) a diving keeper's hands and body cover `since_touch_s` after the
+    touch he dives at: the middle third of the goal's height until its flight shows the ball's height
+    (HEIGHT_FROM_FLIGHT_S), then out toward the ground and his full reach at the pace his body launches
+    into a dive (dive_progress; design)."""
+    grown = dive_progress(since_touch_s - HEIGHT_FROM_FLIGHT_S)
+    low, high = MIDDLE_THIRD_Z
+    return low * (1.0 - grown), high + (HAND_REACH_Z - high) * grown
 
 
 def dive_progress(t: float) -> float:

@@ -97,6 +97,10 @@ PENALTY_SIDE_AIM_M = (GOAL_THIRD_M / 2, SHOT_AIM_OFF_M[1])
 # the right way 113 times and the wrong way 83 (and stayed 8): barely better than a guess. His read's
 # spread is whatever gives that rate over the side aims (derived below, not chosen).
 PENALTY_STAYS = 18 / 286
+# He sets off toward his side before the strike: at penalties keepers' hands already differ for left
+# and right kicks 115 ms before contact, the earliest frame measured (Higueras-Herbada et al. 2020;
+# the bound is taken).
+PENALTY_DIVE_LEAD_S = 0.115
 PENALTY_CORRECT_SIDE = 113 / (113 + 83)
 
 
@@ -209,9 +213,10 @@ def other(team: str) -> str:
 
 
 def first_low_within(x0: float, y0: float, z0: float, dx: float, dy: float, dz: float, px: float,
-                     py: float, r: float, top: float) -> float | None:
+                     py: float, r: float, top: float, floor: float = 0.0) -> float | None:
     """The first share of the way along the step (x0, y0, z0) + s (dx, dy, dz), 0 to 1, at which
-    the ball is within r of (px, py) across the ground and no higher than `top`; None if never."""
+    the ball is within r of (px, py) across the ground, no higher than `top` and no lower than
+    `floor`; None if never."""
     fx, fy = x0 - px, y0 - py
     a, b, c = dx * dx + dy * dy, fx * dx + fy * dy, fx * fx + fy * fy - r * r
     if a < 1e-12:
@@ -224,12 +229,11 @@ def first_low_within(x0: float, y0: float, z0: float, dx: float, dy: float, dz: 
         lo, hi = max(0.0, (-b - root) / a), min(1.0, (-b + root) / a)
     if lo > hi:
         return None
-    if z0 + lo * dz <= top:  # low enough as soon as it is in reach
-        return lo
-    if dz < 0:  # coming down: from when it drops below `top`, if still in reach
-        s = (top - z0) / dz
-        return s if s <= hi else None
-    return None
+    if dz:  # the part of the step within [floor, top] in height
+        a_, b_ = (floor - z0) / dz, (top - z0) / dz
+        lo, hi = max(lo, min(a_, b_)), min(hi, max(a_, b_))
+        return lo if lo <= hi else None
+    return lo if floor <= z0 <= top else None
 
 
 def turn_toward(heading: float, target: float) -> float:
@@ -827,8 +831,13 @@ class Engine:
             rseg = rdx * rdx + rdy * rdy
             sc = 0.0 if rseg == 0 else clamp(((qx - x0) * rdx + (qy - y0) * rdy) / rseg, 0.0, 1.0)
             reach_m, reach_z = self.reach(p, x0 + sc * dx, y0 + sc * dy)  # judged where it comes closest
-            if self.t - self.reacting_since(p) >= self.reaction(p):  # a deliberate touch, first chance
-                st = first_low_within(x0, y0, hz, rdx, rdy, z1 - hz, qx, qy, reach_m, reach_z)
+            floor, top = 0.0, reach_z
+            diving = self.dive is not None and self.dive[0] == p.id
+            if diving:  # P15: in the air he covers the heights his dive has reached so far
+                floor, top = offball.dive_band(self.t + t0 - self.kicked_at)
+                top = min(top, reach_z)
+            if self.t - self.reacting_since(p) >= self.reaction(p) or diving:  # a deliberate touch
+                st = first_low_within(x0, y0, hz, rdx, rdy, z1 - hz, qx, qy, reach_m, top, floor)
                 if st is not None:
                     hits.append((st, "touch", p, x0 + st * dx, y0 + st * dy, hz + st * (z1 - hz),
                                  qx + st * mx, qy + st * my))  # his body may still meet it first
@@ -842,7 +851,8 @@ class Engine:
             # toward the nearest point of his spine, which is along the surface normal.
             sx, sy = shape.nearest_on_spine(ux, uy, qx, qy, p.heading)
             closing = (self.ball[3] - p.vx) * (sx - ux) + (self.ball[4] - p.vy) * (sy - uy)
-            if bz <= BODY_HEIGHT and closing > 0:
+            low, high = (floor, min(BODY_HEIGHT, top)) if diving else (0.0, BODY_HEIGHT)
+            if low <= bz <= high and closing > 0:
                 hits.append((sb, "body", p, ux + sb * mx, uy + sb * my, bz, qx + sb * mx, qy + sb * my))
         if not hits:
             return
@@ -1431,7 +1441,8 @@ class Engine:
             to = clamp(self.read[1], *post) - p.y
             if to:
                 travel = math.copysign(min(abs(to), KEEPER_DIVE_TRAVEL_M), to)
-                self.dive = (p.id, self.t, p.y, travel, self.t, math.copysign(1.0, travel) * p.vy)
+                begun = self.kicked_at - PENALTY_DIVE_LEAD_S  # he set off before the strike
+                self.dive = (p.id, begun, p.y, travel, begun, math.copysign(1.0, travel) * p.vy)
             self.dived_at[p.id] = self.kicked_at
         if (self.dive is None and shot_at_him and reacted and fresh
                 and self.off_balance.get(p.id, -1.0) <= self.t):
