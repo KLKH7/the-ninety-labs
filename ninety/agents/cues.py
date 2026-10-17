@@ -24,18 +24,33 @@ SHOT_OUTCOME = {"on_target": "on target", "off_target": "off target", "blocked":
 
 
 def _pass_text(event: dict, persona: str) -> str:
-    player, receiver, outcome = event["player"], event.get("receiver"), event.get("outcome")
+    """A pass names who it was for (`intended`), who got it (`receiver`, completed only), who cut it
+    out (`interceptor`) and who only touched it (`deflected_by`): different people, never one field
+    read as another. A touch is only a touch: "cut out" needs the opponent to have won it."""
+    player, outcome = event["player"], event.get("outcome")
+    receiver, intended, interceptor = event.get("receiver"), event.get("intended"), event.get("interceptor")
+    deflector = event.get("deflected_by")
+    target = receiver or intended
+    stopped = (f"cut out by {interceptor}" if interceptor
+               else f"deflected by {deflector}" if deflector else None)
     if persona == "casual":
-        if not receiver:
-            return f"{player} plays a pass"
-        if outcome == "success":
+        if outcome == "success" and receiver:
             return f"{player} finds {receiver}"
         if outcome == "fail":
-            return f"{player} looks for {receiver}, but it doesn't arrive"
-        return f"{player} looks for {receiver}"
-    parts = [f"{player} → {receiver}" if receiver else f"{player} pass"]
+            if intended and stopped:
+                return f"{player}'s pass for {intended} is {stopped}"
+            if stopped:
+                return f"{player}'s pass is {stopped}"
+            if intended:
+                return f"{player} looks for {intended}, but it doesn't arrive"
+        if intended:
+            return f"{player} looks for {intended}"
+        return f"{player} plays a pass"
+    parts = [f"{player} → {target}" if target else f"{player} pass"]
     if outcome == "fail":
-        parts[0] += " (incomplete)"
+        parts[0] += f" ({stopped})" if stopped else " (incomplete)"
+    elif outcome is None and target:
+        parts[0] += " (in flight)"
     if event.get("distance_m") is not None:
         parts.append(f"{event['distance_m']} m")
     if event.get("ball_speed_kmh") is not None:

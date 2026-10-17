@@ -1,4 +1,5 @@
 import asyncio
+import json
 from pathlib import Path
 
 import pytest
@@ -59,9 +60,49 @@ def test_completed_pass_finds_its_receiver():
 
 def test_failed_pass_never_says_it_found_the_receiver():
     # planted defect: before the fix, a failed pass aired as "h7 finds h9"
-    texts = _cue_texts({**PASS, "outcome": "fail"})
+    texts = _cue_texts({**PASS, "receiver": None, "intended": "h9", "outcome": "fail"})
     assert "finds" not in texts["casual"] and "doesn't arrive" in texts["casual"]
     assert "(incomplete)" in texts["analyst"]
+
+
+def test_an_intercepted_pass_names_who_it_was_for_and_who_cut_it_out():
+    """Lesson 42: a failed pass's interceptor is an opponent; he was once named as the target."""
+    texts = _cue_texts({**PASS, "receiver": None, "intended": "h9", "interceptor": "a4", "outcome": "fail"})
+    assert texts == {"analyst": "h7 → h9 (cut out by a4), 24.0 m, 61.0 km/h",
+                     "casual": "h7's pass for h9 is cut out by a4"}
+    no_target = _cue_texts({**PASS, "receiver": None, "interceptor": "a4", "outcome": "fail"})
+    assert no_target["casual"] == "h7's pass is cut out by a4"
+
+
+def test_a_pass_still_in_flight_does_not_read_as_completed():
+    in_flight = {k: v for k, v in PASS.items() if k != "distance_m"}  # no end point yet
+    texts = _cue_texts({**in_flight, "receiver": None, "intended": "h9", "outcome": None})
+    assert texts == {"analyst": "h7 → h9 (in flight), 61.0 km/h", "casual": "h7 looks for h9"}
+
+
+def test_a_touched_pass_is_deflected_not_cut_out():
+    """An opponent who only touched a pass did not win it, and the ball may still have reached its
+    target: the cue says so much and no more."""
+    texts = _cue_texts({**PASS, "receiver": None, "intended": "h9", "deflected_by": "a4", "outcome": "fail"})
+    assert texts == {"analyst": "h7 → h9 (deflected by a4), 24.0 m, 61.0 km/h",
+                     "casual": "h7's pass for h9 is deflected by a4"}
+
+
+def test_no_cue_in_the_fixture_names_an_opponent_as_a_pass_target():
+    """Player ids carry their side (h for home, a for away): the player a pass is for or found by
+    is always on the passer's side; only the one who cut it out is not."""
+    for line in FIXTURE.read_text().splitlines():
+        cue = json.loads(line)
+        if cue["kind"] != "pass_arc":
+            continue
+        text = cue["text"]
+        for cut in (" (cut out by ", " is cut out by ", " (deflected by ", " is deflected by "):
+            text = text.split(cut)[0]
+        passer = text.split()[0].removesuffix("'s")
+        for phrase in (" finds ", " looks for ", " for ", " → "):
+            if phrase in text:
+                target = text.split(phrase)[1].split()[0].strip(",")
+                assert target[0] == passer[0], cue["text"]
 
 
 def test_shot_and_goal_cues():

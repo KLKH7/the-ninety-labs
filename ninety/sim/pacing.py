@@ -21,8 +21,7 @@ changes the body.
 
 from __future__ import annotations
 
-import math
-
+from ninety.sim import fmath
 from ninety.sim.body import D0, Body
 
 MATCH_S = 90 * 60.0  # Law 7: two halves of 45 minutes (the engine plays them without a break)
@@ -81,7 +80,7 @@ def closes_down(arrive: float, controlled_at: float) -> float:
     """The chance a presser who reaches the carrier `arrive` seconds from now still finds the ball
     at his feet, when the carrier has (or will have) it under control `controlled_at` seconds from
     now: certain if he is there first, then falling as the carrier's time on the ball runs out."""
-    return math.exp(-max(0.0, arrive - controlled_at) / ON_BALL_S)
+    return fmath.exp(-max(0.0, arrive - controlled_at) / ON_BALL_S)
 
 
 def accepts(body: Body, stamina: float, work_rate: float, t: float, goals: float, metres: float) -> bool:
