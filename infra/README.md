@@ -11,6 +11,8 @@ subscription allows five regions; that one has our models).
 | User-assigned managed identity | the app pulls its image with it (AcrPull); no registry password |
 | Log Analytics workspace | container logs; 30-day retention, 0.2 GB/day cap |
 | Application Insights + a Foundry project connection (`appinsights-tracing`) | agent traces, shown in Foundry's tracing view; stored in the capped workspace above |
+| Key Vault (RBAC) + the `mcp-key` secret | the key Foundry uses to call the match MCP server at `/mcp`; the API reads it through its managed identity (Key Vault Secrets User) |
+| Foundry project connection `ninety-match-mcp` | the MCP server as a Foundry tool connection, holding the key; the published Analyst names it |
 | Foundry content-safety policy `ninety-guardrail` | attached to every published agent: Microsoft's default filters plus Prompt Shields for jailbreaks and indirect attacks |
 
 The Foundry resource (`ninety-labs-ai`) and its project were created by hand earlier: the Bicep
@@ -60,3 +62,15 @@ az deployment group what-if -g ninety-labs -f infra/main.bicep -p environmentNam
 ```
 
 CI compiles the Bicep on every pull request and fails on any warning.
+
+## The MCP key
+
+The key is created once and kept in Key Vault. To create or rotate it, pass a new one for a single
+provision, then clear it from the local azd environment so it lives only in Azure:
+
+```bash
+azd env set MCP_KEY "$(openssl rand -hex 32)" && azd provision && azd env set MCP_KEY ""
+```
+
+Provisions without `MCP_KEY` leave the secret alone. After rotating, restart the API's revision
+so it reads the new value.

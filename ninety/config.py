@@ -16,3 +16,9 @@ SPEECH_RESOURCE_ID = os.environ.get("NINETY_SPEECH_RESOURCE_ID", "")
 # Full resource id of the Foundry resource, needed to attach the guardrail when publishing agents:
 #   az cognitiveservices account show -n ninety-labs-ai -g ninety-labs --query id -o tsv
 FOUNDRY_RESOURCE_ID = os.environ.get("NINETY_FOUNDRY_RESOURCE_ID", "")
+
+# The match MCP server Foundry's agents call (ninety/api/app.py at /mcp). Not a secret: calls need
+# the key that only Key Vault and the Foundry connection hold.
+MATCH_MCP_URL = os.environ.get(
+    "NINETY_MATCH_MCP_URL", "https://ca-api-icrxiozwmmxmg.blackmoss-2f143091.northcentralus.azurecontainerapps.io/mcp"
+)

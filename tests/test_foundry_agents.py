@@ -1,8 +1,7 @@
 """The published Foundry agents and the code that defines them must not drift apart.
 
-No Azure needed: definitions are built from the code (with the real MCP server's tool schemas) and
-compared with the versions pinned in ninety/agents/foundry_agents.json; publishing runs against a
-fake project client.
+No Azure needed: definitions are built from the code and compared with the versions pinned in
+ninety/agents/foundry_agents.json; publishing runs against a fake project client.
 """
 
 import asyncio
@@ -11,20 +10,12 @@ from types import SimpleNamespace
 import pytest
 from azure.identity import DefaultAzureCredential
 
+from ninety import config
 from ninety.agents import foundry
+from ninety.mcp import match_server
 
-
-def _definitions():
-    async def build():
-        async with foundry.match_mcp() as tools:
-            agents = foundry.build_agents(foundry.chat_client(DefaultAzureCredential()), tools.functions)
-            shas = {foundry.foundry_name(a): foundry.fingerprint(foundry.definition(a)) for a in agents}
-            return agents, shas
-
-    return asyncio.run(build())
-
-
-AGENTS, SHAS = _definitions()
+AGENTS = foundry.build_agents(foundry.chat_client(DefaultAzureCredential()))
+SHAS = {foundry.foundry_name(a): foundry.fingerprint(foundry.definition(a)) for a in AGENTS}
 
 
 def test_every_agent_matches_its_pinned_version():
@@ -38,8 +29,9 @@ def test_every_agent_matches_its_pinned_version():
 
 def test_a_changed_prompt_refuses_to_run_under_the_old_version():
     analyst = AGENTS[0]
-    tools = analyst.default_options["tools"]
-    changed = foundry.Agent(client=analyst.client, name=analyst.name, instructions="Anything.", tools=tools)
+    changed = foundry.Agent(
+        client=analyst.client, name=analyst.name, instructions="Anything.", tools=[foundry.match_tool()]
+    )
     with pytest.raises(foundry.RegistryDrift, match="changed since version"):
         foundry.pinned(changed)
 
@@ -54,27 +46,21 @@ def test_every_agent_is_published_with_the_guardrail():
         assert foundry.definition(agent)["rai_config"]["rai_policy_name"] == foundry.GUARDRAIL
 
 
-def test_tool_schemas_are_strict():
-    tools = foundry.definition(AGENTS[0])["tools"]
-    assert {t["name"] for t in tools} == {"list_events", "match_info"}
-    for tool in tools:
-        params = tool["parameters"]
-        assert tool["strict"] is True
-        assert params["additionalProperties"] is False
-        assert set(params["required"]) == set(params["properties"])
-        assert "default" not in str(params)
+def test_the_analyst_reads_the_match_only_through_our_mcp_server():
+    (tool,) = foundry.definition(AGENTS[0]).as_dict()["tools"]
+    assert tool["type"] == "mcp" and tool["server_url"] == config.MATCH_MCP_URL
+    # Foundry sends the key from this connection; no call waits for a human approval.
+    assert tool["project_connection_id"] == foundry.MCP_CONNECTION and tool["require_approval"] == "never"
+    assert tool["allowed_tools"] == list(match_server.TOOLS)
 
 
-def test_strict_schema_reaches_nested_objects():
-    schema = {
-        "type": "object",
-        "properties": {
-            "a": {"anyOf": [{"type": "object", "properties": {"b": {"type": "integer", "default": 1}}}]}
-        },
-    }
-    nested = foundry.strict_schema(schema)["properties"]["a"]["anyOf"][0]
-    assert nested["required"] == ["b"] and nested["additionalProperties"] is False
-    assert "default" not in nested["properties"]["b"]
+def test_the_allowed_tools_are_the_servers_tools():
+    served = asyncio.run(match_server.server.list_tools())
+    assert sorted(t.name for t in served) == sorted(match_server.TOOLS)
+
+
+def test_the_judge_has_no_tools():
+    assert "tools" not in foundry.definition(AGENTS[1]).as_dict()
 
 
 class FakeAgents:
