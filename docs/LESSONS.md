@@ -135,6 +135,17 @@ short and actionable. This file is public: no research sources, product names or
   because the wait loop treated an empty check list as finished.
 - **Rule:** wait until every required check has reported, then merge.
 
+### 28. Green CI on an old base is not green on main
+- **What happened:** #55 changed the seed-7 match and merged at 05:55 UTC. #61 merged three
+  minutes later on CI that had run against the main before #55, because branch protection does
+  not require a branch to be up to date. Main went red: the recorded slice cited an event id
+  (`e00051`) that the new match no longer has.
+- **Rule:** if main has moved since a pull request's checks ran, merge main into the branch and
+  wait for CI again before merging, even when the files don't overlap. A recording or fixture
+  depends on the whole engine, not on the files its pull request touched.
+- **Check:** branch protection on `main` requires branches to be up to date (on since
+  2026-10-17), so GitHub will not merge until CI has passed on the branch with main merged in.
+
 ### 13. Keep diffs to what you meant to change
 - **What happened:** a one-word schema change rewrote 131 lines because a tool reformatted the
   whole file.
@@ -184,9 +195,9 @@ short and actionable. This file is public: no research sources, product names or
   recorded prompt (fact-checker reasons, agent instructions). Never make the replayer tolerate a
   changed prompt: a shim that rewrites new wording back to old pairs an old answer with a new
   question.
-- **Check:** `test_every_committed_replay_still_replays` runs every committed replay (lesson 24).
+- **Check:** `test_every_committed_replay_still_replays` runs every committed replay (lesson 27).
 
-### 24. A committed recording must be replayed by a test, or it rots silently
+### 27. A committed recording must be replayed by a test, or it rots silently
 - **What happened:** the fact-checker started also reporting "clock 01:00 is not a cited clock",
   which changed the Analyst's retry prompt, and `replays/slice-minute2-plant.json` stopped
   replaying on main. Lesson 19's check was a manual step nobody ran, and
