@@ -22,9 +22,6 @@ param apiExists bool = false
 @description('Object id of the GitHub Actions service principal, granted image push. Empty to skip.')
 param ciPrincipalId string = ''
 
-@description('Render job image; set by infra/render-job.sh so a re-provision keeps it. Empty: a placeholder.')
-param renderImage string = ''
-
 @description('Object id of a maintainer allowed to read rendered clips (Storage Blob Data Reader). Empty to skip.')
 param renderReaderPrincipalId string = ''
 
@@ -182,18 +179,14 @@ resource renderIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-0
   tags: tags
 }
 
+// Microsoft's public Playwright image at our pinned playwright version, by digest. The container
+// fetches this repo at NINETY_COMMIT and runs infra/render-job-start.sh: nothing is built, because
+// this subscription does not allow ACR Tasks.
+var renderImage = 'mcr.microsoft.com/playwright/python:v1.56.0-noble-amd64@sha256:508b37a524219d210a67a7190beb079efda72553e0dcb9ef21d4dae8f8a7686b'
+var renderBoot = 'python3 -c "import io,os,tarfile,urllib.request as u; d=u.urlopen(\'https://codeload.github.com/KLKH7/the-ninety-labs/tar.gz/\' + os.environ[\'NINETY_COMMIT\'], timeout=120).read(); tarfile.open(fileobj=io.BytesIO(d)).extractall(\'/tmp/src\', filter=\'data\'); os.rename(\'/tmp/src/\' + os.listdir(\'/tmp/src\')[0], \'/tmp/repo\')" && exec bash /tmp/repo/infra/render-job-start.sh'
+
 var blobContributor = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
 var blobReader = '2a2b9908-6ea1-4ae2-8e65-a410df84e7d1'
-
-resource renderPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  scope: registry
-  name: guid(registry.id, renderIdentity.id, acrPull)
-  properties: {
-    principalId: renderIdentity.properties.principalId
-    principalType: 'ServicePrincipal'
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', acrPull)
-  }
-}
 
 resource renderWrite 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   scope: storage
@@ -223,7 +216,7 @@ resource renderJob 'Microsoft.App/jobs@2024-03-01' = {
     type: 'UserAssigned'
     userAssignedIdentities: { '${renderIdentity.id}': {} }
   }
-  dependsOn: [renderPull, renderWrite]
+  dependsOn: [renderWrite]
   properties: {
     environmentId: environment.id
     workloadProfileName: 'Consumption'
@@ -233,13 +226,13 @@ resource renderJob 'Microsoft.App/jobs@2024-03-01' = {
       replicaTimeout: 4 * 3600
       replicaRetryLimit: 1
       manualTriggerConfig: { parallelism: 1, replicaCompletionCount: 1 }
-      registries: [{ server: registry.properties.loginServer, identity: renderIdentity.id }]
     }
     template: {
       containers: [
         {
           name: 'render'
-          image: empty(renderImage) ? 'mcr.microsoft.com/k8se/quickstart-jobs:latest' : renderImage
+          image: renderImage
+          command: ['/bin/bash', '-c', renderBoot]
           resources: { cpu: json('2'), memory: '4Gi' }
           env: [
             { name: 'AZURE_CLIENT_ID', value: renderIdentity.properties.clientId }

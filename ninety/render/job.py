@@ -121,7 +121,10 @@ def main() -> None:
         cfg = job_config(dict(os.environ))
     except ValueError as e:
         sys.exit(str(e))
-    start = {k: v for k, v in cfg.items() if k != "blob_url"} | {"seeds": [cfg["seeds"][0], cfg["seeds"][-1]]}
+    start = {k: v for k, v in cfg.items() if k != "blob_url"} | {
+        "seeds": [cfg["seeds"][0], cfg["seeds"][-1]],
+        "commit": os.environ.get("NINETY_COMMIT"),
+    }
     print(json.dumps(start), flush=True)
     with tempfile.TemporaryDirectory() as work:
         done = run_job(cfg, _container(cfg), render_clip, browser_page, Path(work))

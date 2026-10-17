@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Render training clips on Azure: one Container Apps job execution per range of seeds, in parallel.
-# Needs `azd provision` first (infra/README.md). Usage:
+# Needs `azd provision` first (infra/README.md). Each execution runs this repo at the current
+# commit, which must be pushed: the container fetches it from GitHub. Usage:
 #
-#   infra/render-job.sh build                                  build the image in the registry, point the job at it
 #   infra/render-job.sh start <run> <first> <total> <per> [set]  start ceil(total/per) executions
 #   infra/render-job.sh status                                  recent executions and their state
 #   infra/render-job.sh download <run> <dest>                   copy <run>/ from Blob Storage to <dest>
@@ -17,30 +17,24 @@ RG=$(env_value AZURE_RESOURCE_GROUP)
 JOB=$(env_value RENDER_JOB_NAME)
 
 case "${1:-}" in
-  build)
-    registry=$(env_value AZURE_CONTAINER_REGISTRY_ENDPOINT)
-    commit=$(git rev-parse --short HEAD)
-    image="$registry/ninety-render:$commit"
-    # Built in the registry, not locally: an emulated amd64 build of Chromium on an Apple-silicon
-    # laptop ran it out of memory. amd64 is pinned in Dockerfile.render too.
-    az acr build -r "${registry%%.*}" -f Dockerfile.render --platform linux/amd64 \
-      --build-arg NINETY_COMMIT="$commit" -t "ninety-render:$commit" .
-    azd env set RENDER_IMAGE "$image"  # so a later `azd provision` keeps this image
-    az containerapp job update -g "$RG" -n "$JOB" --image "$image" -o none
-    echo "job $JOB now runs $image"
-    ;;
   start)
     run=$2 first=$3 total=$4 per=$5 set=${6:-}
-    # A start with overrides replaces the container definition, so carry the job's own settings
-    # (identity, storage URL, size) into every execution explicitly.
-    read -r -a base_env <<< "$(az containerapp job show -g "$RG" -n "$JOB" \
-      --query "properties.template.containers[0].env[].join('=', [name, value])" -o tsv | tr '\n' ' ')"
+    commit=$(git rev-parse HEAD)
+    git branch -r --contains "$commit" | grep -q . || { echo "push $commit first: the job fetches it from GitHub"; exit 1; }
+    job_id=$(az containerapp job show -g "$RG" -n "$JOB" --query id -o tsv)
+    job_json=$(az containerapp job show -g "$RG" -n "$JOB" -o json)
     seed=$first end=$((first + total))
     while [ "$seed" -lt "$end" ]; do
       count=$(( end - seed < per ? end - seed : per ))
-      az containerapp job start -g "$RG" -n "$JOB" --container-name render \
-        --image "$(env_value RENDER_IMAGE)" --cpu 2 --memory 4Gi \
-        --env-vars "${base_env[@]}" NINETY_RUN="$run" NINETY_FIRST_SEED="$seed" NINETY_COUNT="$count" ${set:+NINETY_SET="$set"} \
+      # A start with a template replaces the container definition, so copy the job's own container
+      # (image, boot command, size, identity and storage settings) and add this range's variables.
+      body=$(JOB_JSON="$job_json" python3 -c '
+import json, os, sys
+c = json.loads(os.environ["JOB_JSON"])["properties"]["template"]["containers"][0]
+extra = dict(zip(["NINETY_COMMIT", "NINETY_RUN", "NINETY_FIRST_SEED", "NINETY_COUNT", "NINETY_SET"], sys.argv[1:]))
+c["env"] = [e for e in c.get("env", []) if e["name"] not in extra] + [{"name": k, "value": v} for k, v in extra.items() if v]
+print(json.dumps({"containers": [c]}))' "$commit" "$run" "$seed" "$count" "$set")
+      az rest --method post --uri "$job_id/start?api-version=2024-03-01" --body "$body" \
         --query name -o tsv | sed "s/^/seeds $seed-$((seed + count - 1)): /"
       seed=$((seed + count))
     done
