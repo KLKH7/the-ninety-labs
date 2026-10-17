@@ -22,6 +22,12 @@ param apiExists bool = false
 @description('Object id of the GitHub Actions service principal, granted image push. Empty to skip.')
 param ciPrincipalId string = ''
 
+@description('Render job image; set by infra/render-job.sh so a re-provision keeps it. Empty: a placeholder.')
+param renderImage string = ''
+
+@description('Object id of a maintainer allowed to read rendered clips (Storage Blob Data Reader). Empty to skip.')
+param renderReaderPrincipalId string = ''
+
 var token = uniqueString(subscription().id, resourceGroup().id, environmentName)
 var tags = { 'azd-env-name': environmentName }
 
@@ -142,6 +148,112 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
   }
 }
 
+// Render job: renders training clips in parallel executions and writes them to Blob Storage
+// (infra/render-job.sh). Shared keys are off, so the job and maintainers reach the blobs with
+// Entra identities only.
+resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
+  name: 'stninety${token}'
+  location: location
+  tags: tags
+  sku: { name: 'Standard_LRS' }
+  kind: 'StorageV2'
+  properties: {
+    allowSharedKeyAccess: false
+    allowBlobPublicAccess: false
+    minimumTlsVersion: 'TLS1_2'
+    supportsHttpsTrafficOnly: true
+  }
+}
+
+resource blobs 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01' = {
+  parent: storage
+  name: 'default'
+}
+
+resource renders 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  parent: blobs
+  name: 'renders'
+  properties: { publicAccess: 'None' }
+}
+
+resource renderIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: 'id-render-${token}'
+  location: location
+  tags: tags
+}
+
+var blobContributor = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
+var blobReader = '2a2b9908-6ea1-4ae2-8e65-a410df84e7d1'
+
+resource renderPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: registry
+  name: guid(registry.id, renderIdentity.id, acrPull)
+  properties: {
+    principalId: renderIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', acrPull)
+  }
+}
+
+resource renderWrite 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: storage
+  name: guid(storage.id, renderIdentity.id, blobContributor)
+  properties: {
+    principalId: renderIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', blobContributor)
+  }
+}
+
+resource renderRead 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(renderReaderPrincipalId)) {
+  scope: storage
+  name: guid(storage.id, renderReaderPrincipalId, blobReader)
+  properties: {
+    principalId: renderReaderPrincipalId
+    principalType: 'User'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', blobReader)
+  }
+}
+
+resource renderJob 'Microsoft.App/jobs@2024-03-01' = {
+  name: 'job-render-${token}'
+  location: location
+  tags: tags
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: { '${renderIdentity.id}': {} }
+  }
+  dependsOn: [renderPull, renderWrite]
+  properties: {
+    environmentId: environment.id
+    workloadProfileName: 'Consumption'
+    configuration: {
+      triggerType: 'Manual'
+      // 25 ten-second clips at about 5 minutes each, with headroom; a retry resumes, not redoes
+      replicaTimeout: 4 * 3600
+      replicaRetryLimit: 1
+      manualTriggerConfig: { parallelism: 1, replicaCompletionCount: 1 }
+      registries: [{ server: registry.properties.loginServer, identity: renderIdentity.id }]
+    }
+    template: {
+      containers: [
+        {
+          name: 'render'
+          image: empty(renderImage) ? 'mcr.microsoft.com/k8se/quickstart-jobs:latest' : renderImage
+          resources: { cpu: json('2'), memory: '4Gi' }
+          env: [
+            { name: 'AZURE_CLIENT_ID', value: renderIdentity.properties.clientId }
+            { name: 'AZURE_STORAGE_BLOB_URL', value: storage.properties.primaryEndpoints.blob }
+            { name: 'AZURE_STORAGE_CONTAINER', value: renders.name }
+          ]
+        }
+      ]
+    }
+  }
+}
+
 output AZURE_CONTAINER_REGISTRY_ENDPOINT string = registry.properties.loginServer
 output AZURE_CONTAINER_APPS_ENVIRONMENT_ID string = environment.id
 output API_URL string = 'https://${api.properties.configuration.ingress.fqdn}'
+output RENDER_JOB_NAME string = renderJob.name
+output RENDER_STORAGE_ACCOUNT string = storage.name

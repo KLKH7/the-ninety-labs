@@ -5,6 +5,8 @@
     "environmentName": { "value": "${AZURE_ENV_NAME}" },
     "location": { "value": "${AZURE_LOCATION=northcentralus}" },
     "apiExists": { "value": "${SERVICE_API_RESOURCE_EXISTS=false}" },
-    "ciPrincipalId": { "value": "${CI_PRINCIPAL_ID=}" }
+    "ciPrincipalId": { "value": "${CI_PRINCIPAL_ID=}" },
+    "renderImage": { "value": "${RENDER_IMAGE=}" },
+    "renderReaderPrincipalId": { "value": "${RENDER_READER_PRINCIPAL_ID=}" }
   }
 }

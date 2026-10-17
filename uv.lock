@@ -1427,6 +1427,9 @@ dev = [
     { name = "pytest" },
     { name = "ruff" },
 ]
+render-job = [
+    { name = "azure-storage-blob" },
+]
 
 [package.metadata]
 requires-dist = [
@@ -1446,6 +1449,7 @@ dev = [
     { name = "pytest", specifier = ">=8" },
     { name = "ruff", specifier = ">=0.17.0" },
 ]
+render-job = [{ name = "azure-storage-blob", specifier = ">=12" }]
 
 [[package]]
 name = "openai"

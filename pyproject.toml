@@ -31,6 +31,9 @@ dev = [
     "pytest>=8",
     "ruff>=0.17.0",
 ]
+render-job = [
+    "azure-storage-blob>=12",
+]
 
 [build-system]
 requires = ["hatchling"]

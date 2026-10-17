@@ -1,0 +1,18 @@
+# Build context for Dockerfile.render: like .dockerignore, but the renderer needs web/render.
+.git
+.github
+.venv
+.claude
+.cursor
+.pytest_cache
+.ruff_cache
+.azure
+**/__pycache__
+runs
+replays
+tests
+docs
+infra
+web/node_modules
+.env
+.env.*

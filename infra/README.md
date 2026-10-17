@@ -10,6 +10,8 @@ subscription allows five regions; that one has our models).
 | Container Registry (Basic) | holds the API image; admin user off |
 | User-assigned managed identity | the app pulls its image with it (AcrPull); no registry password |
 | Log Analytics workspace | container logs; 30-day retention, 0.2 GB/day cap |
+| Container Apps job `render` + its identity | renders training clips in parallel executions (2 vCPU, 4 GiB each); pulls with AcrPull |
+| Storage account + `renders` container | the rendered clips; shared keys and public access off, Entra roles only |
 
 Not managed here yet: the Foundry (`ninety-labs-ai`) and Speech (`ninety-labs-speech`)
 resources, created by hand earlier, and the $20 monthly budget alert. Cosmos DB, the Personalizer
@@ -54,3 +56,25 @@ az deployment group what-if -g ninety-labs -f infra/main.bicep -p environmentNam
 ```
 
 CI compiles the Bicep on every pull request and fails on any warning.
+
+## Rendering training clips on Azure
+
+`infra/render-job.sh` runs [ninety/render/job.py](../ninety/render/job.py) as a Container Apps
+job: one execution per range of training seeds, in parallel. Each execution renders its clips
+with software GL, runs the render checks, uploads passing clips to `renders/<run>/train/seed<N>/`
+(`clip.json` last, so a retried execution skips finished seeds) and reports failing ones in
+`renders/<run>/failed/`. Test-set seeds are refused: the fixed test set is rendered once,
+locally, so its pixels never depend on the machine that drew them.
+
+```bash
+azd env set RENDER_READER_PRINCIPAL_ID "$(az ad signed-in-user show --query id -o tsv)"
+azd provision                          # storage, identity, job (Owner on the resource group)
+infra/render-job.sh build              # build Dockerfile.render, push, point the job at it
+infra/render-job.sh start v1 1 150 25  # seeds 1-150, 25 per execution, 6 in parallel
+infra/render-job.sh status
+infra/render-job.sh download v1 runs/dataset
+uv run ninety-render-check runs/dataset/v1/train/seed*   # check again after download
+```
+
+Estimated cost, from local timing (confirm on the first run): about 600 vCPU-seconds and 1,200 GiB-seconds per ten-second clip, so 200 clips sit inside
+the Consumption plan's monthly free grant; blobs are about 30 MB a clip.
