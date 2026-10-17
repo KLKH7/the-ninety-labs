@@ -12,6 +12,7 @@ import math
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
+from ninety.sim import ball, shape
 from ninety.sim.engine import FPS, PITCH_X, PITCH_Y, Engine, goal_x, other
 from ninety.sim.offball import KEEPER_DEPTH, RUSH_RANGE_M
 
@@ -38,7 +39,8 @@ def shoot_once(seed: int, dist: float, keeper_spot: str, depths: list[float] | N
             q.x, q.y = gx + away * (PITCH_X - FAR_X_M), 5.0 + 3.0 * (i % 20)
     shooter.x, shooter.y = gx + away * dist, PITCH_Y / 2
     shooter.heading = math.atan2(0.0, gx - shooter.x)
-    e.ball = (shooter.x, shooter.y, 0.0, 0.0, 0.0, 0.0)
+    foot = shape.surface(shooter.heading, shooter.heading, pad=ball.RADIUS)  # at his feet, before him
+    e.ball = (shooter.x + math.cos(shooter.heading) * foot, shooter.y, 0.0, 0.0, 0.0, 0.0)
     e.possessor = e.last_touch = shooter.id
     e.poss_team = team
     if keeper_spot == "line":

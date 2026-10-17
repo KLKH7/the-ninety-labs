@@ -7,6 +7,7 @@ from statistics import mean, pstdev
 import pytest
 
 from ninety.sim import ball, offball, perception, shape
+from ninety.sim import decisions as D
 from ninety.sim.engine import BODY_RESTITUTION, DT, PRESS_GAP_M, Engine
 from ninety.sim.profiles import MAX_STRIKE_MPS
 
@@ -1027,11 +1028,195 @@ def test_the_passing_side_knows_where_its_pass_was_meant_and_the_other_side_reac
     assert e.play_point(team="away") == (68.0, 34.0)
 
 
+def test_the_thrower_may_throw_whichever_way_he_faces_but_a_free_kick_taker_must_turn():
+    """P16: only the ball in his hands at a throw-in is exempt from facing; a dead ball at his feet is not."""
+    import math
+
+    e = Engine(1)
+    still(e)
+    e.possessor = None
+    e.stop("throw_in", "home", (50.0, 0.0))
+    taker = e.by_id[e.restart.taker]
+    taker.x, taker.y = 50.0, 0.0
+    e.restart.ready_at = e.t
+    e.tick_restart()
+    taker.heading = -math.pi / 2  # facing off the pitch, the throw is into it
+    assert e.can_strike(taker, 50.0, 20.0)
+    e.throw_by = None  # the same ball at his feet, as at a free kick
+    assert not e.can_strike(taker, 50.0, 20.0)
+
+
+def test_the_throw_in_ends_when_the_ball_leaves_his_hands_any_way_at_all():
+    """Knocked from his hands and won back, it is a ball at his feet: no second throw, and P16 holds."""
+    import math
+
+    e = Engine(1)
+    still(e)
+    e.possessor = None
+    e.stop("throw_in", "home", (50.0, 0.0))
+    taker = e.by_id[e.restart.taker]
+    taker.x, taker.y = 50.0, 0.0
+    e.restart.ready_at = e.t
+    e.tick_restart()
+    assert e.throw_by == taker.id
+    opp = e.by_id["a6"]
+    opp.x, opp.y = 50.6, 1.0  # beside him while he holds it
+    e.may_commit = lambda *a: True  # he would go in if he could
+    rng = e.rng.random
+    e.rng.random = lambda: 0.0
+    for _ in range(10):
+        e.duels()
+        e.frame += 1
+    assert opp.id not in e.lunges  # Law 15: no challenge for a ball still in his hands
+    e.rng.random = rng
+    e.possessor = None  # poked out of his hands before he threw it
+    e.step()
+    assert e.throw_by is None
+    e.throw_by = taker.id
+    e.give("a6")  # or taken from his hands and held
+    e.step()
+    assert e.throw_by is None
+    e.give(taker.id)  # he wins it back
+    taker.heading = -math.pi / 2
+    assert not e.can_strike(taker, 50.0, 20.0)
+
+
+def test_a_free_kick_stays_on_its_spot_while_the_taker_turns_and_is_struck_from_it():
+    """Law 13: the ball is stationary when the kick is taken. Facing away, he walks round behind it."""
+    import math
+
+    e = Engine(1)
+    still(e)
+    e.possessor = None
+    e.stop("free_kick", "home", (40.0, 34.0))
+    taker = e.by_id[e.restart.taker]
+    taker.x, taker.y, taker.heading = 40.0, 34.0, math.pi  # on the spot, facing his own goal
+    e.restart.ready_at = e.t
+    e.tick_restart()
+    spot = (e.ball[0], e.ball[1])
+    e.turn_to(taker, 60.0, 34.0, lambda: e.pass_to(taker, 60.0, 34.0, lofted=False))  # he plays it upfield
+    struck, frames = None, 0
+    for _ in range(4 * 25):
+        e.step()
+        frames += 1
+        if e.possessor != taker.id:
+            struck = next(ev for ev in reversed(e.match.events) if ev["type"] == "pass")
+            break
+        assert (e.ball[0], e.ball[1]) == spot  # never carried off the spot
+        assert math.hypot(taker.x - spot[0], taker.y - spot[1]) < 0.5  # he stays at the ball
+    assert struck is not None and (struck["x"], struck["y"]) == (round(spot[0], 2), round(spot[1], 2))
+    assert abs(D.turn_deg(0.0, taker.heading)) <= math.degrees(D.STRIKE_FACING)
+    # P16: 180° round to within 60° of the line takes at least 120° / 350° a second
+    assert frames * DT >= 120.0 / 350.0 - DT
+    # struck at his foot: the ball against his front, not out of reach in front of him
+    assert shape.clearance(*spot, taker.x, taker.y, taker.heading) < 2 * ball.RADIUS
+
+
+def test_a_free_kick_he_chooses_to_dribble_is_touched_on_from_its_spot():
+    import math
+
+    e = Engine(1)
+    still(e)
+    e.possessor = None
+    e.stop("free_kick", "home", (40.0, 34.0))
+    taker = e.by_id[e.restart.taker]
+    taker.x, taker.y, taker.heading = 40.0, 34.0, math.pi
+    e.restart.ready_at = e.t
+    e.tick_restart()
+    spot = (e.ball[0], e.ball[1])
+    e.touch_speed = lambda *a, **k: 6.0  # a push that is his (D6 decides that elsewhere)
+    e.decide = lambda *a, **k: None  # he has chosen: only the dribble may play it
+    e.dribble_to = (55.0, 34.0)  # he carries it upfield himself
+    for _ in range(4 * 25):
+        e.step()
+        if e.possessor != taker.id:
+            break
+        assert (e.ball[0], e.ball[1]) == spot  # on its spot until he touches it
+    assert e.possessor != taker.id and e.dribbler == taker.id  # touched on: a kick, so in play
+    assert e.dead_ball is None and e.ball[3] > 0  # going upfield
+    assert e.from_restart is None  # Law 11: only the restart's own kick is exempt; this touch was it
+    assert abs(D.turn_deg(0.0, taker.heading)) <= math.degrees(D.STRIKE_FACING)  # facing it (P16)
+
+
+def test_a_restart_holds_until_the_ball_is_kicked_opponents_off_it_and_no_challenge():
+    from ninety.sim.engine import RESTART_DISTANCE_M
+
+    e = Engine(1)
+    still(e)
+    e.possessor = None
+    e.stop("free_kick", "home", (40.0, 34.0))
+    taker = e.by_id[e.restart.taker]
+    taker.x, taker.y = 40.0, 34.0
+    e.restart.ready_at = e.t
+    e.tick_restart()
+    assert e.restart is None and e.placed is not None  # placed, not yet kicked
+    opp = e.by_id["a6"]
+    opp.x, opp.y = 40.8, 34.0
+    brain = e.brains["away"]
+    brain.pressers, brain.in_possession, brain.changed_at = ["a6", "a9"], False, e.t  # he goes to the ball
+    x, y, _ = e.shape_target(opp)
+    assert ((x - 40.0) ** 2 + (y - 34.0) ** 2) ** 0.5 >= RESTART_DISTANCE_M["free_kick"] - 0.01  # Law 13
+    e.may_commit = lambda *a: True  # he would go in if he could
+    e.rng.random = lambda: 0.0
+    for _ in range(10):
+        e.duels()
+        e.frame += 1
+    assert opp.id not in e.lunges  # nobody may challenge for a ball not yet in play
+    e.give("a6")  # taken off him before he kicked it: the restart is over
+    e.step()
+    assert e.dead_ball is None and e.placed is None
+
+
+def test_a_throw_in_through_the_match_loop_stays_in_his_hands_until_he_throws_it():
+    e = Engine(1)
+    still(e)
+    e.possessor = None
+    e.stop("throw_in", "home", (50.0, 0.0))
+    taker = e.by_id[e.restart.taker]
+    taker.x, taker.y = 50.0, 0.0
+    e.restart.ready_at = e.t
+    e.tick_restart()
+    taker.vx = 2.0  # still moving as he picks it up
+    for _ in range(10 * 25):
+        e.step()
+        if e.possessor != taker.id:
+            break
+        assert e.throw_by == taker.id
+        assert abs(e.ball[0] - taker.x) < 0.1 and abs(e.ball[1] - taker.y) < 0.1  # in his hands
+    assert e.match.events[-1]["type"] == "pass" and e.match.events[-1]["player"] == taker.id
+
+
+def test_at_a_kick_off_everyone_stays_in_his_half_until_the_ball_is_kicked():
+    """Law 8: placed on the centre mark, the kick-off holds while the taker turns to play it."""
+    import math
+
+    e = Engine(1)
+    still(e)
+    e.possessor = None
+    e.stop("kick_off", "home", (52.5, 34.0))
+    taker = e.by_id[e.restart.taker]
+    taker.x, taker.y, taker.heading = 52.5, 34.0, math.pi / 2  # facing a touchline
+    e.restart.ready_at = e.t
+    e.tick_restart()
+    e.turn_to(taker, 40.0, 34.0, lambda: e.pass_to(taker, 40.0, 34.0, lofted=False))  # back to a team-mate
+    held = 0
+    for _ in range(2 * 25):
+        if not e.placed:
+            break
+        held += 1
+        for q in e.players:
+            if q is not taker:
+                assert e.shape_target(q)[:2] == e.kickoff_spot(q, "home")
+        e.step()
+    assert held > 1 and not e.placed  # it held while he turned, then he kicked it
+
+
 def test_a_throw_in_is_meant_for_the_team_mate_it_is_thrown_to():
     e = Engine(1)
     p = e.by_id["h2"]
     e.give(p.id)
     e.ball = (p.x, p.y, 0.0, 0.0, 0.0, 0.0)
+    e.throw_by = p.id  # in his hands, as tick_restart leaves a throw-in
     p.heading = 0.0
     e.pass_to(p, p.x + 10.0, p.y, lofted=True, throw=True, receiver="h7")
     assert e.intended == "h7" and e.seen_going is not None

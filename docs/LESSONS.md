@@ -276,3 +276,23 @@ short and actionable. This file is public: no research sources, product names or
   any known bias of the derivation (a linear split left the vertical about 1% wide) rather than
   spend the tolerance on it.
 
+
+### 33. Say what an exemption is about; never infer it from a coincidence
+- **What happened:** the rule that a kick needs the kicker facing its line (P16) exempted a
+  throw-in by testing "the ball is within 0.1 m of his centre", meaning "in his hands". Every dead
+  ball the restart code places at the taker's centre (kick-offs, free kicks, corners, goal kicks)
+  passed the same test, and so did a penalty whenever the taker had walked onto the mark, so takers
+  struck at once with their back to the target. In matches penalties scored 6 of 17 against the
+  published 75 to 90%. The first fix had two more faults, both caught by the audit. The flag that
+  replaced the test outlived the throw when the ball was knocked from his hands. And a taker who
+  now had to turn carried the dead ball off its spot as he turned, because the turn code was
+  written for a ball in play. A third audit found that, once the turn took time, the restart's
+  rules had already lapsed: opponents could close on a ball not yet kicked.
+  The pass estimate already exempted only throw-ins, so the two disagreed (lesson 23).
+- **Rule:** an exemption names the case it is for (here, an explicit "thrown" flag from the
+  throw-in in progress), never a geometric stand-in that other cases can also satisfy.
+- **Check:** for each exemption, list every state in which its condition holds and confirm each
+  belongs to it; test one case that should be exempt and one that looks alike and should not.
+  When removing an exemption, follow every case it covered through the code it now reaches
+  (here a dead ball reaching the in-play turn) and test it through the match loop, not just the
+  rule's function.
