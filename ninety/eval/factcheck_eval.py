@@ -42,10 +42,14 @@ def cases(seed: int, minutes: float) -> list[dict]:
     events = events_in(seed, minutes, 1, int(minutes) + 1)
     extended = events_in(seed, max(minutes, 90), 1, int(max(minutes, 90)) + 1)
     done = [e for e in events if e["type"] == "pass" and e.get("outcome") == "success" and "distance_m" in e]
-    failed = [e for e in events if e["type"] == "pass" and e.get("outcome") == "fail" and "distance_m" in e]
-    # Failed passes an opponent cut out. Their claim names that opponent as found, as the claims
-    # did when a failed pass's `receiver` was the interceptor, so the published cases are unchanged.
-    cut_out = [e for e in failed if "interceptor" in e]
+    # A failed pass an opponent won (lesson 42: `interceptor`, not `receiver`). One that went out,
+    # back to nobody or only off an opponent has no interceptor to format.
+    failed = [e for e in events if e["type"] == "pass" and e.get("outcome") == "fail" and "distance_m" in e
+              and "interceptor" in e]
+    # Passes the passer meant for a team-mate who did not get them: failed, or found someone else.
+    meant_failed = [e for e in events if e["type"] == "pass" and e.get("outcome") == "fail"
+                    and "distance_m" in e and "intended" in e]
+    meant_other = [e for e in done if e.get("intended") and e["intended"] != e.get("receiver")]
     tackles = [e for e in events if e["type"] == "tackle"]
     shots = [e for e in events if e["type"] == "shot" and e.get("outcome") != "goal"]
     # Long-range and fast shots are rare in 30 minutes, so the shot tone kinds read the full match,
@@ -149,9 +153,18 @@ def cases(seed: int, minutes: float) -> list[dict]:
         "false: invented importance": (
             False, interceptions, "{player} makes the most important intervention of the match."
         ),
-        # false meaning: only the judge can catch these
+        # The code half's role check (lesson 42) catches these: the player a pass "finds" must be its
+        # receiver, and the one it was meant for is a cited player but did not get it.
+        "false: failed pass called found by its intended": (
+            False, meant_failed, "{player} finds {intended} with a {distance_m} m pass."
+        ),
+        "false: pass called found by a team-mate it was not for": (
+            False, meant_other, "{player} finds {intended} with a {distance_m} m pass."
+        ),
+        # false meaning: only the judge could catch these when the report was published; the first
+        # is now also caught by the code half's role check.
         "meaning: intercepted pass called completed": (
-            False, cut_out, "{player} finds {interceptor} with a {distance_m} m pass."
+            False, failed, "{player} finds {interceptor} with a {distance_m} m pass."
         ),
         "meaning: completed pass called cut out": (
             False, done, "{player}'s {distance_m} m pass to {receiver} is cut out."

@@ -3,6 +3,7 @@ the ball weighs his options), never what happens; the default style is the engin
 styles."""
 
 import math
+import random
 from statistics import mean
 
 import pytest
@@ -11,6 +12,7 @@ from ninety.sim import decisions as D
 from ninety.sim import perception
 from ninety.sim import style as style_mod
 from ninety.sim.engine import Engine, simulate
+from ninety.sim.profiles import Profile
 from ninety.sim.style import HIGH, LOW, MID, PRESETS, Style, band, preset_name, tilt
 from ninety.sim.team import TRANSITION_S, TeamBrain
 
@@ -28,16 +30,17 @@ def test_a_dial_is_read_in_thirds_and_must_be_between_0_and_1():
 
 
 def test_the_default_style_is_the_engine_before_styles():
-    """The values the engine used before it had styles: mid block, engagement 60 m from goal, the
-    presser goes from 20 m and stands 2 m off, counter-press in the T1 window from 20 m."""
+    """The values the engine used before it had styles, for a mid block: engagement 60 m from goal,
+    the presser goes from wherever he is (no distance gate) and stands 2 m off, counter-press in
+    the T1 window."""
     brain = TeamBrain("home")
     assert brain.block == "mid"
     assert brain.engage_from_goal_m == 60.0
     assert brain.press_gap_m == 2.0
     brain.update(0.0, True, 52.5, {})
     brain.update(0.5, False, 52.5, {})
-    assert brain.counter_pressing(1.0) and brain.engage_m(1.0) == 20.0
-    assert not brain.counter_pressing(TRANSITION_S + 1) and brain.engage_m(TRANSITION_S + 1) == 20.0
+    assert brain.counter_pressing(1.0) and brain.engage_m(1.0) == math.inf
+    assert not brain.counter_pressing(TRANSITION_S + 1) and brain.engage_m(TRANSITION_S + 1) == math.inf
 
 
 def test_line_height_picks_the_block():
@@ -62,12 +65,17 @@ def test_a_team_that_does_not_counter_press_drops_back_after_losing_the_ball():
         assert brain.presses(12.0, 80.0) is goes
 
 
-def test_a_high_counter_press_goes_from_further_only_in_the_window():
-    brain = TeamBrain("home", Style(counter_pressing=HIGH))
+def test_a_counter_press_goes_from_further_only_in_the_window():
+    """A low-intensity team's presser only goes from 20 m, except while it counter-presses."""
+    brain = TeamBrain("home", Style(pressing_intensity=LOW, counter_pressing=HIGH))
     brain.update(10.0, True, 80.0, {})
     brain.update(11.0, False, 80.0, {})
-    assert brain.engage_m(12.0) > style_mod.ENGAGE_M["mid"]
-    assert brain.engage_m(11.0 + TRANSITION_S + 1) == style_mod.ENGAGE_M["mid"]
+    assert brain.engage_m(12.0) > style_mod.ENGAGE_M["low"]
+    assert brain.engage_m(11.0 + TRANSITION_S + 1) == style_mod.ENGAGE_M["low"]
+    mid = TeamBrain("home", Style(pressing_intensity=LOW, counter_pressing=MID))
+    mid.update(10.0, True, 80.0, {})
+    mid.update(11.0, False, 80.0, {})
+    assert mid.engage_m(12.0) == brain.engage_m(12.0) == math.inf  # whatever the pressing intensity
 
 
 def test_pressing_intensity_sets_how_far_the_presser_goes_and_how_tight_he_stands():
@@ -103,9 +111,10 @@ def test_the_presser_stands_as_tight_as_his_teams_style_says():
 
 
 def test_a_high_intensity_presser_goes_to_the_ball_from_further():
-    """22 m from the ball: inside the high-intensity reach (25 m), outside the low one (15 m)."""
+    """2 m beyond a low-intensity presser's reach: a high-intensity one goes, a low one does not."""
     for level, goes in ((HIGH, True), (LOW, False)):
-        e, presser, brain = pressing_scene(Style(pressing_height=HIGH, pressing_intensity=level), 38.0)
+        start = 60.0 - (style_mod.ENGAGE_M["low"] + 2.0)
+        e, presser, brain = pressing_scene(Style(pressing_height=HIGH, pressing_intensity=level), start)
         x, y, _ = e.shape_target(presser)
         assert (math.hypot(x - 60.0, y - 34.0) < 3.0) is goes
 
@@ -116,12 +125,19 @@ def test_presets_are_distinct_and_named():
     assert preset_name(Style(line_height=LOW)) is None
 
 
-def test_explicit_default_styles_are_the_same_as_none_given():
-    """Identity with the engine before styles is shown in the pull request that wires each dial
-    (byte-identical events and frames for fixed seeds); the defaults' values are pinned above."""
+def test_a_side_given_no_style_draws_a_block_and_giving_that_style_is_the_same_match():
+    """With no style a side draws its block (T2, T3), its line and engagement at that height and
+    every other dial mid; giving the drawn styles explicitly plays the same match."""
+    drawn = Engine(3).styles
+    for style in drawn.values():
+        assert style.line_height == style.pressing_height
+        assert style == Style(line_height=style.line_height, pressing_height=style.pressing_height)
     a = simulate(3, 1)
-    b = simulate(3, 1, styles={"home": Style(), "away": Style()})
+    b = simulate(3, 1, styles=dict(drawn))
     assert a.events == b.events and a.frames[-1] == b.frames[-1]
+    assert Engine(3, styles={"home": PRESETS["high_press"]}).styles["away"] == drawn["away"]
+    # Its own stream: giving the strengths (which otherwise consume the match's draws) changes nothing.
+    assert Engine(3, strengths={"home": 0.0, "away": 0.0}).styles == drawn
 
 
 def test_strengths_given_are_used_and_one_left_out_is_drawn():
@@ -142,7 +158,7 @@ def test_a_misspelt_team_is_refused():
 def test_the_scenario_records_each_teams_style_and_strength():
     e = Engine(1, styles={"home": PRESETS["high_press"]})
     assert e.match.teams["home"]["preset"] == "high_press"
-    assert e.match.teams["away"]["preset"] == "balanced"
+    assert e.match.teams["away"]["preset"] == preset_name(e.styles["away"])  # drawn: a block, else mid
     assert e.match.teams["home"]["style"]["line_height"] == HIGH
 
 
@@ -183,11 +199,18 @@ def hand_written_values(monkeypatch):
     monkeypatch.setattr(D, "POSSESSION", None)
 
 
+PASSER = Profile.generate("CM", random.Random(7))  # a real passer, as tests/test_decisions.py builds
+
+
 def on_ball(style: Style, transition: bool = False, **kw) -> D.Scene:
+    """A scene as the engine builds one (engine.scene_for), opponents standing where he sees them."""
     base = dict(x=40.0, y=34.0, goal_x=105.0, mates=[], opponents=[], keeper=None, decisions=0.5,
-                composure=0.5, dribbling=0.5, traits=(), risk=0.0,
+                composure=0.5, dribbling=0.5, traits=(), risk=0.0, absorb={}, passer=PASSER,
                 progress_weight=style.progress_weight(transition), loss_weight=style.loss_weight())
     base.update(kw)
+    base.setdefault("heading", 0.0 if base["goal_x"] > 52.5 else math.pi)
+    base.setdefault("moving", [(ox, oy, 0.0, 0.0, (ox, oy) == base["keeper"])
+                               for ox, oy in base["opponents"]])
     return D.Scene(**base)
 
 
@@ -296,6 +319,19 @@ def test_risk_reaches_every_option_that_can_lose_the_ball(hand_written_values):
     low, high = values(LOW), values(HIGH)
     for kind in ("pass", "shoot", "dribble", "hold"):
         assert high[kind] > low[kind], kind
+
+
+def test_a_patient_team_never_values_going_back_and_mid_changes_nothing(hand_written_values):
+    """The weight scales the change in the ball's worth: at 0.1 a tenth of the gain forward and of
+    the loss going back, so going back is never a gain; at mid the value is untouched."""
+    for x in (25.0, 40.0, 55.0, 85.0):
+        here = D.value(x, 34.0, 105.0)
+        for gained in (10.0, -10.0):
+            change = D.value(x + gained, 34.0, 105.0) - here
+            for style in (Style(directness=LOW), Style(), Style(directness=HIGH)):
+                scene = on_ball(style, x=x)
+                assert math.isclose(D.our_value(scene, x + gained, 34.0) - here,
+                                    style.progress_weight(False) * change, abs_tol=1e-12)
 
 
 def test_dribbling_forward_is_worth_more_to_a_direct_team(hand_written_values):

@@ -49,7 +49,8 @@ about 0.6. Spin and swerve come later.
 - **Acceleration falls as speed rises**: about 5 m/s² from standing, approaching zero at top
   speed; braking up to about 8 m/s².
 - **Top speed per player**, about 8 to 9.5 m/s in matches, from the player's pace.
-- **Body size** for contact: a radius of about 0.26 m; shoulder-to-shoulder centres about 0.5 m.
+- **Body shape** for contact: shoulders wide (0.50 m) and chest deep (0.20 m), turned the way he
+  faces, the same outline the renderer draws (`ninety/sim/shape.py`, GROUNDING P11).
 - **Goalkeeper reach grows during a dive**: about 1 m standing, more as the dive goes on, so a
   save depends on when the keeper started moving and where the ball is.
 

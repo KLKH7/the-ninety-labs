@@ -34,7 +34,7 @@ def compact(event: dict) -> dict:
         "team": event["team"],
         "player": event["player"],
     }
-    for role in ("receiver", "intended", "interceptor"):
+    for role in ("receiver", "intended", "interceptor", "deflected_by"):
         if event.get(role):
             out[role] = event[role]
     if event["outcome"]:

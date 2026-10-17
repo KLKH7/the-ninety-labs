@@ -46,16 +46,23 @@ def test_point_behind_camera_is_none():
 def test_director_follows_the_ball_smoothly_and_keeps_it_in_shot():
     m = simulate(4, 1)
     d = Director(CameraParams(), 1280, 720, 25, seed=4)
-    prev, in_shot, max_step = None, 0, 0.0
+    prev, in_shot, on_pitch, max_step = None, 0, 0, 0.0
     for fr in m.frames:
         c = d.step(fr["ball"]["x"], fr["ball"]["y"])
-        uv = c.project((fr["ball"]["x"], fr["ball"]["y"], 0.0))
-        in_shot += uv is not None and 0 <= uv[0] < 1280 and 0 <= uv[1] < 720
+        # A dead ball lying off the pitch until the restart (12 s or more, GROUNDING R1) is not
+        # what the camera follows; the ball in play is. Measured at the merge of main: the camera
+        # aims no nearer a touchline than 12 m (camera.py), so a ball resting beyond the near
+        # line is in shot in 229 of 576 such frames on seed 4, and was never tested before
+        # because restarts took 1 to 2 s. In play: 903 of 924 (lesson 37).
+        if 0 <= fr["ball"]["x"] <= 105 and 0 <= fr["ball"]["y"] <= 68:
+            uv = c.project((fr["ball"]["x"], fr["ball"]["y"], 0.0))
+            in_shot += uv is not None and 0 <= uv[0] < 1280 and 0 <= uv[1] < 720
+            on_pitch += 1
         if prev:
             max_step = max(max_step, math.dist(prev.target[:2], c.target[:2]))
         prev = c
         assert d.angle == "main"
-    assert in_shot / len(m.frames) > 0.97
+    assert on_pitch > len(m.frames) / 2 and in_shot / on_pitch > 0.97
     assert max_step <= 22.0 / 25 + 0.05  # metres per frame (plus shake): a pan, never a jump
 
 

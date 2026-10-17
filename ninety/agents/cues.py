@@ -24,19 +24,23 @@ SHOT_OUTCOME = {"on_target": "on target", "off_target": "off target", "blocked":
 
 
 def _pass_text(event: dict, persona: str) -> str:
-    """A pass names who it was for (`intended`), who got it (`receiver`, completed only) and who cut
-    it out (`interceptor`): three different people, never one field read as another."""
+    """A pass names who it was for (`intended`), who got it (`receiver`, completed only), who cut it
+    out (`interceptor`) and who only touched it (`deflected_by`): different people, never one field
+    read as another. A touch is only a touch: "cut out" needs the opponent to have won it."""
     player, outcome = event["player"], event.get("outcome")
     receiver, intended, interceptor = event.get("receiver"), event.get("intended"), event.get("interceptor")
+    deflector = event.get("deflected_by")
     target = receiver or intended
+    stopped = (f"cut out by {interceptor}" if interceptor
+               else f"deflected by {deflector}" if deflector else None)
     if persona == "casual":
         if outcome == "success" and receiver:
             return f"{player} finds {receiver}"
         if outcome == "fail":
-            if intended and interceptor:
-                return f"{player}'s pass for {intended} is cut out by {interceptor}"
-            if interceptor:
-                return f"{player}'s pass is cut out by {interceptor}"
+            if intended and stopped:
+                return f"{player}'s pass for {intended} is {stopped}"
+            if stopped:
+                return f"{player}'s pass is {stopped}"
             if intended:
                 return f"{player} looks for {intended}, but it doesn't arrive"
         if intended:
@@ -44,7 +48,7 @@ def _pass_text(event: dict, persona: str) -> str:
         return f"{player} plays a pass"
     parts = [f"{player} → {target}" if target else f"{player} pass"]
     if outcome == "fail":
-        parts[0] += f" (cut out by {interceptor})" if interceptor else " (incomplete)"
+        parts[0] += f" ({stopped})" if stopped else " (incomplete)"
     if event.get("distance_m") is not None:
         parts.append(f"{event['distance_m']} m")
     if event.get("ball_speed_kmh") is not None:

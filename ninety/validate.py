@@ -40,14 +40,16 @@ PENALTY_DEPTH, PENALTY_HALF_WIDTH = 16.5, 20.16  # Law 1
 NEAR_M = 2.5  # C6, C7: how close the ball must be to where an event says it happened
 ON_BALL = {"pass", "shot", "tackle", "interception", "out_of_play", "goal", "set_piece", "kickoff"}
 MAX_SUBSTITUTIONS = 5  # C3: Law 3, top-level competitions
-STOPPAGES = {"out_of_play", "goal", "substitution"}  # C3: events after which play has stopped
+STOPPAGES = {"out_of_play", "goal", "substitution", "offside", "foul"}  # C3: play has stopped after these
+DEAD_FROM = {"out_of_play", "offside", "foul"}  # dead from these until the restart (Laws 9, 11, 12)
 RESTARTS = {"set_piece", "kickoff"}  # P3: events that put the ball back in play
 TOUCHES = {"pass", "shot", "deflection", "interception", "tackle", "possession_change"}  # P5
 # P14: a touch by someone other than the carrier must be physically possible: the player within
 # reach of the ball, which was not moving away from him. Reach is a foot (1 m) or a diving
-# keeper in his box (1.8 m), plus one frame of the ball's and the player's motion.
+# keeper in his box (1.48 m: P11, his centre of mass to his stretched fingertips), plus one frame of
+# the ball's and the player's motion.
 CONTACTS = {"deflection", "interception"}
-FOOT_REACH_M, KEEPER_REACH_M, FRAME_SLACK_M = 1.0, 1.8, 0.6
+FOOT_REACH_M, KEEPER_REACH_M, FRAME_SLACK_M = 1.0, 1.48, 0.6
 # P5: the goal frame (Law 1: posts 7.32 m apart, bar 2.44 m high) is a contact too; a ball
 # within this distance of it may rebound without an event.
 WOODWORK_NEAR_M = 0.6
@@ -117,7 +119,7 @@ def check_physics(events: list[dict], frames: list[dict], fps: float, roster: li
     dead: set[int] = set()
     out_at = None
     for e in events:
-        if e["type"] == "out_of_play" and out_at is None:
+        if e["type"] in DEAD_FROM and out_at is None:
             out_at = e["frame"]
         elif e["type"] in RESTARTS and out_at is not None:
             dead.update(range(out_at, e["frame"] + 1))
@@ -257,12 +259,13 @@ def check_events(events: list[dict], frames: list[dict], fps: float, meta: dict,
     team_of = {p["id"]: p["team"] for f in frames for p in f["players"]}
 
     for e in events:
-        for role in ("player", "receiver", "intended", "interceptor"):
+        for role in ("player", "receiver", "intended", "interceptor", "deflected_by"):
             pid = e.get(role)
             if pid is not None and pid not in team_of:
                 problems["C4 event players"].append(f"{e['id']}: {role} {pid} is not in the frames")
-        if e["type"] == "pass":  # who a pass reached, who it was for and who cut it out are three people
-            for role, same in (("receiver", True), ("intended", True), ("interceptor", False)):
+        if e["type"] == "pass":  # who got a pass, who it was for, who won it, who touched it: own fields
+            for role, same in (("receiver", True), ("intended", True), ("interceptor", False),
+                               ("deflected_by", False)):
                 pid = e.get(role)
                 if pid in team_of and (team_of[pid] == e["team"]) != same:
                     side = "the passer's team" if same else "the other team"
@@ -271,6 +274,10 @@ def check_events(events: list[dict], frames: list[dict], fps: float, meta: dict,
                 problems["C4 event players"].append(f"{e['id']}: a pass with a receiver did not succeed")
             if e.get("interceptor") and e.get("outcome") != "fail":
                 problems["C4 event players"].append(f"{e['id']}: an intercepted pass did not fail")
+            if e.get("deflected_by") and e.get("outcome") != "fail":
+                problems["C4 event players"].append(f"{e['id']}: a deflected pass did not fail")
+            if e.get("interceptor") and e.get("deflected_by"):
+                problems["C4 event players"].append(f"{e['id']}: a pass both won and only touched")
         if e["type"] in ("pass", "shot", "goal") and team_of.get(e.get("player"), e["team"]) != e["team"]:
             problems["C4 event players"].append(f"{e['id']}: {e['player']} does not play for {e['team']}")
         f = by_frame.get(e.get("frame"))
@@ -293,10 +300,15 @@ def check_events(events: list[dict], frames: list[dict], fps: float, meta: dict,
                 where = f"({e['end_x']}, {e['end_y']})"
                 problems["C7 ball path"].append(f"{e['id']} {e['type']}: ball never reaches {where}")
         if e["type"] in ("pass", "shot") and e["frame"] > first:
-            # The player had the ball just before playing it; possession may clear on the
-            # frame the ball leaves.
+            # The player had the ball just before playing it (possession may clear on the frame the
+            # ball leaves), or played it first time: the ball within his reach (P14) as he struck it.
             had = {by_frame[n].get("possessor") for n in (e["frame"] - 1, e["frame"]) if n in by_frame}
-            if e.get("player") not in had:
+            me = next((q for q in f["players"] if q["id"] == e.get("player")), None)
+            before = by_frame.get(e["frame"] - 1)
+            loose = before is not None and before.get("possessor") is None  # nobody had it a frame before
+            first_time = loose and me is not None and \
+                math.hypot(f["ball"]["x"] - me["x"], f["ball"]["y"] - me["y"]) <= FOOT_REACH_M + FRAME_SLACK_M
+            if e.get("player") not in had and not first_time:
                 problems["C8 event order"].append(f"{e['id']} {e['type']}: {e.get('player')} lacked the ball")
 
     passes = [e for e in events if e["type"] == "pass"]

@@ -152,3 +152,19 @@ def test_player_in_no_known_event_is_still_rejected():
     verdict = check(Claim(f"{absent} starts the move.", [PASS["id"]]), KNOWN)
     assert not verdict.ok
     assert absent in verdict.reasons[0]
+
+
+def test_a_pass_finds_only_its_receiver():
+    """Lesson 42: who a pass was for and who won it are cited players, but neither received it, so a
+    verb that says it arrived must name the receiver."""
+    failed = {"id": "e1", "clock": "00:10", "minute": 1, "second": 10, "type": "pass", "team": "home",
+              "player": "h7", "intended": "h9", "interceptor": "a4", "outcome": "fail", "distance_m": 20}
+    other = {**failed, "id": "e2", "receiver": "h10", "outcome": "success"}
+    other.pop("interceptor")
+    known = {e["id"]: e for e in (failed, other)}
+    for e, name in ((failed, "h9"), (failed, "a4"), (other, "h9")):
+        verdict = check(Claim(f"h7 finds {name} with a 20 m pass.", [e["id"]]), known)
+        assert not verdict.ok and f"player {name} received no cited pass" in verdict.reasons
+    assert not check(Claim("h7 picks out h9.", ["e2"]), known).ok
+    assert check(Claim("h7 finds h10 with a 20 m pass.", ["e2"]), known).ok
+    assert check(Claim("h7's pass for h9 is cut out by a4.", ["e1"]), known).ok
