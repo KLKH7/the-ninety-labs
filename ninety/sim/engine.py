@@ -768,7 +768,8 @@ class Engine:
                                 passer=prof, heading=carrier.heading, fresh=self.fresh(carrier),
                                 ball_offset=(self.ball[0] - carrier.x, self.ball[1] - carrier.y),
                                 progress_weight=style.progress_weight(brain.attacking_transition(self.t)),
-                                loss_weight=style.loss_weight())
+                                loss_weight=style.loss_weight(),
+                                hands=self.hands(carrier, carrier.x, carrier.y))  # as engine.duels judges it
         return scene
 
     def decide(self, carrier: Player, throw: bool = False) -> None:

@@ -178,6 +178,8 @@ class Scene:
     heading: float = 0.0  # the way he faces, radians
     fresh: float = 1.0  # his slow store's share left (P10)
     ball_offset: tuple[float, float] = (0.0, 0.0)  # the ball relative to his body
+    # Law 12: a keeper who may handle it where he is (offball.may_handle); nobody may challenge him
+    hands: bool = False
 
 
 @dataclass
@@ -298,7 +300,10 @@ def loss_cost(x: float, y: float, goal_x: float) -> float:
 
 def pressure(scene: Scene) -> float:
     """0 to 1: how closely the nearest opponent presses, judged in a zone longer in front of the
-    player (toward the goal he attacks) than behind him."""
+    player (toward the goal he attacks) than behind him. None for a keeper who may handle it: Law 12
+    lets nobody challenge him, as the engine's duels already obey (engine.duels)."""
+    if scene.hands:
+        return 0.0
     worst = 0.0
     for ox, oy in scene.opponents:
         ahead = (ox - scene.x) * attack(scene.goal_x) > 0
