@@ -1,7 +1,9 @@
 """Deterministic pixel-level scoring for player and ball detections.
 
-Ground-truth rows are read from ``frames.jsonl``.  A detection is a mapping with
-``frame``, ``cls`` (``player`` or ``ball``), ``bbox`` and ``score``.
+Ground-truth rows are read from ``frames.jsonl``. Detection JSONL may contain one
+flat mapping with ``frame``, ``cls``, ``bbox`` and ``score`` per line, or one row
+per frame with a ``detections`` list whose entries contain ``cls``, ``bbox`` and
+``score``.
 """
 
 from __future__ import annotations
@@ -19,8 +21,36 @@ DEFAULT_THRESHOLD = 0.5
 VISIBILITY_GROUPS = ("visible", "partly hidden", "mostly hidden")
 
 
-def load_jsonl(path: str | Path) -> list[dict]:
-    return [json.loads(line) for line in Path(path).read_text().splitlines() if line.strip()]
+def load_jsonl(path: str | Path, *, flatten_detections: bool = False) -> list[dict]:
+    """Read JSONL rows, optionally flattening per-frame detection records."""
+    rows = [json.loads(line) for line in Path(path).read_text().splitlines() if line.strip()]
+    if not flatten_detections:
+        return rows
+
+    detections = []
+    for row in rows:
+        if "detections" in row:
+            entries = row["detections"]
+        elif "boxes" in row:
+            entries = row["boxes"]
+        else:
+            detection = dict(row)
+            if "frame" in detection:
+                detection["frame"] = int(detection["frame"])
+            detections.append(detection)
+            continue
+        if not isinstance(entries, list):
+            raise ValueError("detection rows must contain a list in 'detections' or 'boxes'")
+        for entry in entries:
+            if not isinstance(entry, Mapping):
+                raise ValueError("each detection must be a JSON object")
+            detection = dict(entry)
+            if "frame" not in detection and "frame" in row:
+                detection["frame"] = row["frame"]
+            if "frame" in detection:
+                detection["frame"] = int(detection["frame"])
+            detections.append(detection)
+    return detections
 
 
 def _box(box: Iterable[float]) -> tuple[float, float, float, float]:
@@ -204,7 +234,11 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD)
     parser.add_argument("--report", type=Path)
     args = parser.parse_args(argv)
-    report = score(load_jsonl(args.frames), load_jsonl(args.detected), args.threshold)
+    report = score(
+        load_jsonl(args.frames),
+        load_jsonl(args.detected, flatten_detections=True),
+        args.threshold,
+    )
     text = json.dumps(report, indent=2) + "\n"
     if args.report:
         args.report.write_text(text)
