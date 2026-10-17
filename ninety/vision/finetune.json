@@ -3,8 +3,8 @@
     "val_seeds": "Chosen before any training: the last 15 bulk seeds and the last 5 of each hard-case set of render run v1, so validation has the same mix as training. Never test seeds.",
     "stride": "Every 5th frame (5 fps): nearer frames are near copies of each other.",
     "resolution": "640, divisible by patch 16 x windows 2. At the default 512 the median ball is 7.1 px (docs/eval/dataset-stats.json); 640 gives about 8.9 px for a 1.6x cost. Larger is a measured ablation, not a default.",
-    "batch": "2 images, gradients accumulated 8 times: an effective batch of 16, rfdetr's default target. Set before the v1 run: at 4 x 4 the training process took about 18 GB of a 24 GB Mac's unified memory on MPS and pushed the machine into swap; 2 x 8 is the same optimisation with roughly half the memory.",
-    "epochs": "Up to 12 with early stopping on validation mAP (patience 5). Set for compute, before the full run: on an Apple GPU (MPS) an epoch of v1 (9,750 images at 640) takes about 54 min (measured: 0.32 s per training image), so 30 epochs would take about 27 h; Azure has no GPU quota. 12 epochs is about 11 h.",
+    "batch": "4 images, gradients accumulated 4 times: an effective batch of 16, rfdetr's default target. It was 2 x 8 (the same optimisation, half the memory) while training on a 24 GB Mac, where 4 x 4 took about 18 GB of unified memory; a 24 GB GPU holds 4 x 4.",
+    "epochs": "Up to 30 with early stopping on validation mAP (patience 5), the original setting. It was cut to 12 for compute while training on an Apple GPU (about 54 min an epoch); restored before the first full run, which trains on a rented RTX 4090 (AGENTS.md, #84).",
     "seed": "Fixed so a rerun on the same data gives the same model, up to GPU nondeterminism."
   },
   "val_seeds": [
@@ -37,9 +37,9 @@
   "stride": 5,
   "resolution": 640,
   "train": {
-    "epochs": 12,
-    "batch_size": 2,
-    "grad_accum_steps": 8,
+    "epochs": 30,
+    "batch_size": 4,
+    "grad_accum_steps": 4,
     "lr": 0.0001,
     "lr_encoder": 0.00015,
     "early_stopping": true,
