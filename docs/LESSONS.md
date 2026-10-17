@@ -59,6 +59,16 @@ short and actionable. This file is public: no research sources, product names or
   already changed the ball's velocity.
 - **Rule:** read the state for any judgement before mutating it.
 
+### 24. A constant defined twice keeps only the last value
+- **What happened:** the engine defined the same constant name twice for two different ideas: how
+  far the covering player stands behind the presser (8 m), and the radius within which a
+  team-mate counts as cover for a tackle (10 m). The second silently replaced the first, so the
+  cover stood 10 m back. Lint did not flag it.
+- **Rule:** one name, one meaning. Name a constant after what it measures, not the word it shares
+  with another rule.
+- **Check:** `tests/test_constants.py` fails if any module in `ninety/` assigns a top-level name
+  twice.
+
 ## Checks that prove something
 
 ### 8. A check must be able to fail
