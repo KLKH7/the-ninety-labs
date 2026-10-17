@@ -62,6 +62,18 @@ def test_each_function_agrees_with_the_platform_to_two_ulps(name, low, high):
     assert worst <= TWO_ULPS
 
 
+def test_sin_and_cos_hold_to_their_range_and_refuse_beyond_it():
+    """The reduction is exact while |x| <= 1e6; beyond, it would return values outside [-1, 1]."""
+    r = random.Random(5)
+    for x in [r.uniform(-1e6, 1e6) for _ in range(20000)] + [1e6, -1e6]:
+        assert ulps(fmath.sin(x), math.sin(x)) <= TWO_ULPS and ulps(fmath.cos(x), math.cos(x)) <= TWO_ULPS
+    for x in (1.0000001e6, -2e6, 1e20):
+        with pytest.raises(ValueError):
+            fmath.sin(x)
+        with pytest.raises(ValueError):
+            fmath.cos(x)
+
+
 def test_log_and_atan2_agree_with_the_platform_to_two_ulps():
     r = random.Random(2)
     xs = [math.exp(r.uniform(-700, 700)) for _ in range(20000)] + [r.uniform(0.5, 2) for _ in range(20000)]
@@ -91,6 +103,18 @@ def test_the_normal_distribution_matches_the_standard_library():
         assert abs(x - nd.inv_cdf(p)) <= 1e-12 and abs(fmath.normal_cdf(x) - p) <= 8 * 1.1e-16
 
 
+def test_the_inverse_cdf_is_right_in_both_tails_and_refuses_below_its_range():
+    """Newton from 0 once stopped at -14.06 for p = 1e-100 (the root is -21.27). The relative
+    bound is what the cdf's rounding allows (residual 1e-13 p over the density)."""
+    nd = NormalDist()
+    for p in (1e-300, 1e-200, 1e-100, 1e-50, 1e-20, 1e-8, 1e-4, 0.00099, 0.9991, 1 - 1e-8, 1 - 1e-15):
+        x = fmath.normal_inv_cdf(p)
+        assert abs(x - nd.inv_cdf(p)) <= 1e-12 * max(1.0, abs(x)), (p, x, nd.inv_cdf(p))
+    for p in (0.0, 1e-301, 5e-324, 1.0, -0.1):
+        with pytest.raises(ValueError):
+            fmath.normal_inv_cdf(p)
+
+
 def test_gauss_draws_a_standard_normal_and_refuses_what_it_cannot_do_portably():
     r = fmath.Random(4)
     draws = [r.gauss(1.0, 2.0) for _ in range(200000)]
@@ -98,9 +122,15 @@ def test_gauss_draws_a_standard_normal_and_refuses_what_it_cannot_do_portably():
     sd = math.sqrt(sum((d - mean) * (d - mean) for d in draws) / len(draws))
     # Standard errors of a 200,000-draw mean and sd: 2/sqrt(n) = 0.0045 and 2/sqrt(2n) = 0.0032.
     assert abs(mean - 1.0) < 4 * 0.0045 and abs(sd - 2.0) < 4 * 0.0032
-    for name in ("normalvariate", "expovariate", "lognormvariate", "vonmisesvariate"):
+    # Every draw random.Random builds from the C library, with valid arguments, so removing any
+    # one refusal fails here; the set is read from random.Random so a new Python's draws count too.
+    valid = {"normalvariate": (0.0, 1.0), "lognormvariate": (0.0, 1.0), "expovariate": (1.0,),
+             "vonmisesvariate": (0.0, 1.0), "gammavariate": (2.0, 1.0), "betavariate": (2.0, 2.0),
+             "paretovariate": (2.0,), "weibullvariate": (1.0, 2.0), "binomialvariate": (5, 0.5)}
+    assert {n for n in dir(random.Random) if n.endswith("variate")} <= set(valid)
+    for name, args in valid.items():
         with pytest.raises(NotImplementedError):
-            getattr(r, name)(1.0, 1.0)
+            getattr(r, name)(*args)
 
 
 def test_uniform_and_integer_draws_are_those_of_random_random():
@@ -111,7 +141,8 @@ def test_uniform_and_integer_draws_are_those_of_random_random():
 
 
 def platform_calls(source: str) -> list[str]:
-    """Every call into the C math library, `**` (C's pow), and every plain random.Random built."""
+    """Every call into the C math library, `**` (C's pow), and every plain random.Random built.
+    `math` and `random` must keep their own names, so a call cannot hide behind an alias."""
     found = []
     for node in ast.walk(ast.parse(source)):
         if (isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "math"
@@ -122,6 +153,11 @@ def platform_calls(source: str) -> list[str]:
         elif (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
               and isinstance(node.func.value, ast.Name) and node.func.value.id == "random"):
             found.append(f"line {node.lineno}: random.{node.func.attr}()")
+        elif isinstance(node, ast.ImportFrom) and node.module == "random":
+            found += [f"line {node.lineno}: from random import {a.name}" for a in node.names]
+        elif isinstance(node, ast.Import):
+            found += [f"line {node.lineno}: import {a.name} as {a.asname}" for a in node.names
+                      if a.name in ("math", "random") and a.asname]
         elif isinstance(node, ast.ImportFrom) and node.module == "math":
             names = [a.name for a in node.names if a.name in C_LIBRARY]
             found += [f"line {node.lineno}: from math import {name}" for name in names]
@@ -134,8 +170,10 @@ def test_the_check_finds_each_way_of_reaching_the_c_library():
     """Positive control: a planted call of each kind is found; sqrt, hypot and annotations are not."""
     planted = ("import math, random\nfrom math import exp\nfrom statistics import NormalDist\n"
                "a = math.exp(1.0)\nb = 2.0 ** 0.5\nr = random.Random(7)\nn = NormalDist()\n"
-               "c = math.sqrt(2.0) + math.hypot(3.0, 4.0)\ns: random.Random\n")
+               "c = math.sqrt(2.0) + math.hypot(3.0, 4.0)\ns: random.Random\n"
+               "from random import Random\nimport random as rnd\nimport math as m\n")
     assert sorted(platform_calls(planted)) == [
+        "line 10: from random import Random", "line 11: import random as rnd", "line 12: import math as m",
         "line 2: from math import exp", "line 4: math.exp", "line 5: **", "line 6: random.Random()",
         "line 7: NormalDist",
     ]

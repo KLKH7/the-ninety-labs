@@ -101,7 +101,14 @@ def _kcos(x: float) -> float:
     return w + (((1.0 - w) - hz) + z * r)
 
 
+_TRIG_MAX = 1.0e6  # radians: |n| stays below 2^20, where the reduction above is exact
+
+
 def _reduce(x: float) -> tuple[int, float]:
+    if not -_TRIG_MAX <= x <= _TRIG_MAX:
+        # A larger angle needs Payne-Hanek reduction, which nothing here needs: a heading is
+        # always within a few turns of zero. Refuse rather than return a wrong value.
+        raise ValueError(f"sin and cos take |x| <= {_TRIG_MAX:g} radians, not {x!r}")
     n = _floor(x * _INV_PIO2 + 0.5)
     return n, ((x - n * _PIO2_1) - n * _PIO2_2) - n * _PIO2_3
 
@@ -198,6 +205,7 @@ _TWO_OVER_SQRT_PI = 1.12837916709551257390e00
 _INV_SQRT_PI = 5.64189583547756286948e-01
 _INV_SQRT2 = 7.07106781186547524401e-01
 _INV_SQRT_2PI = 3.98942280401432677940e-01
+_CDF_ROUNDING = 8 * 1.1e-16  # absolute error of normal_cdf: a few ulps of 1 (tests/test_fmath.py)
 _CF_DEPTH = 60  # continued-fraction terms: erfc is converged to the last bit from 2.5 up
 
 
@@ -231,16 +239,27 @@ def normal_cdf(x: float) -> float:
 
 
 def normal_inv_cdf(p: float) -> float:
-    """The x with normal_cdf(x) = p. Newton's method from 0: the cdf is concave above the median
-    and convex below it, so every step lands on the near side of the root and it converges."""
-    if not 0.0 < p < 1.0:
-        raise ValueError("p must be in the range 0.0 < p < 1.0")
-    x = 0.0
+    """The x with normal_cdf(x) = p, by Newton's method. The cdf is concave above the median and
+    convex below it, so from a start on either side every step after the first lands on the near
+    side of the root and the steps shrink to it. From 0.001 to 0.999 it starts at 0; in the tails
+    it starts at -sqrt(-2 log p) (the upper tail by symmetry: 1 - p is exact there).
+
+    Near the root the cdf's own rounding (a few times 1e-16) makes the steps jitter, about 1e-13
+    in x, so some p never meet the step tolerance and stop after 100 steps. Either way the answer
+    is returned only if its cdf is p to within that rounding."""
+    if not 1e-300 <= p < 1.0:
+        # Below 1e-300 (x under about -37) the density underflows and Newton cannot step.
+        raise ValueError("p must be in the range 1e-300 <= p < 1.0")
+    if p > 0.999:
+        return -normal_inv_cdf(1.0 - p)
+    x = 0.0 if p >= 0.001 else -_sqrt(-2.0 * log(p))
     for _ in range(100):
         step = (normal_cdf(x) - p) / (_INV_SQRT_2PI * exp(-0.5 * x * x))
         x -= step
         if abs(step) <= 4e-16 * max(1.0, abs(x)):
             break
+    if abs(normal_cdf(x) - p) > _CDF_ROUNDING + 1e-13 * p:
+        raise ArithmeticError(f"normal_inv_cdf({p!r}) did not converge")
     return x
 
 
