@@ -1,0 +1,10 @@
+{
+  "ninety-analyst": {
+    "definition_sha": "c94c92bba7d0d03d",
+    "version": "3"
+  },
+  "ninety-judge": {
+    "definition_sha": "2b04c8ad1ac3c950",
+    "version": "2"
+  }
+}
