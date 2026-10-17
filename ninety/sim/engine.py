@@ -1004,14 +1004,14 @@ class Engine:
     def touch_worse(self, p: Player, rel: float, foot: float) -> float:
         """firsttouch.quality for the ball as it arrives at him: where it comes from against the way
         he faces, the pressure of the nearest opponent (D2's zone, where they really are: this is the
-        touch, not his picture of it), his composure, his energy (what is left of a fresh player's
-        reserve, P10) and its speed relative to him."""
+        touch, not his picture of it), his composure, his energy (the slow store's share left, P10, as
+        a kick's) and its speed relative to him."""
         rvx, rvy = self.ball[3] - p.vx, self.ball[4] - p.vy
         come = fmath.atan2(-rvy, -rvx)  # where it comes from, seen from him
         approach = decisions.turn_deg(come, p.heading)
         pressure = max((perception.pressure_from(p.x, p.y, q.x, q.y, attack_dir(p.team))
                         for q in self.players if q.team != p.team), default=0.0)
-        energy = p.physique.reserve / D0
+        energy = self.fresh(p)
         return firsttouch.quality(approach, pressure, p.profile["composure"], energy, rel, foot)
 
     def cushion(self, p: Player, cx: float, cy: float, speed: float, z: float = 0.0,
