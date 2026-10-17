@@ -397,3 +397,17 @@ short and actionable. This file is public: no research sources, product names or
 - **Rule:** regenerate a report from the exact tree being committed, after the last code change,
   and state how big a difference the sample can resolve.
 - **Check:** re-run the report on a clean checkout of the commit and compare before merging.
+
+### 46. A test's sample must survive a change that does not touch what it tests
+- **What happened:** merging the measured kick error, which changes only where a struck ball
+  goes, broke two tests that check something else. A styles test read the defensive line over
+  three minutes of one seed: the gap between a high press and a low block fell from 7.8 m to
+  5.0 m, against a 5 m margin, while over ten minutes it was 15.7 m and 12.7 m. A fact-checker
+  test needed some player to be absent from every event in a five-minute clip; after the change
+  all 22 took part, so it had nobody to plant.
+- **Rule:** a test that reads a match measures enough of it that an unrelated change cannot move
+  the result across its margin, and a test that needs a case builds that case itself rather than
+  waiting for the match to produce it. Lengthen the sample or build the case; never move the
+  margin.
+- **Check:** before trusting a match-reading test, run its measurement on a longer window and a
+  second engine version, and write both numbers next to it.
