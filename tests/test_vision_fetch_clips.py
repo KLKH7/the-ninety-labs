@@ -24,3 +24,8 @@ def test_frames_match_what_coco_export_keeps():
 def test_a_test_seed_is_refused():
     with pytest.raises(ValueError, match="not a training seed"):
         plan(["v2/train/seed900001/clip.json"], "v2", 5)
+
+
+def test_a_seed_from_an_earlier_run_is_not_fetched_again():
+    names = ["v2/train/seed2001/clip.json", "v2/train/seed3/clip.json"]
+    assert [s for _, s, _ in plan(names, "v2", 5, frozenset({2001}))] == [3]

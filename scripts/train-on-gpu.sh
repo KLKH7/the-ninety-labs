@@ -4,7 +4,7 @@
 #
 #   scripts/train-on-gpu.sh <user@host> <data> <name>
 #     <data> = a local exported COCO dataset (copied up), or azure:<run>[,<run>...] (fetched there)
-#   SSH_PORT=12345 scripts/train-on-gpu.sh root@1.2.3.4 azure:v2 ours-v2      # RunPod-style port
+#   SSH_PORT=12345 scripts/train-on-gpu.sh root@1.2.3.4 azure:v2los,v2 ours-v2  # RunPod; v2los first wins
 #   scripts/train-on-gpu.sh ubuntu@1.2.3.4 runs/coco/v2 ours-v2
 #
 # azure:<runs>: a read-only SAS link to the `renders` container, valid 6 hours, is made here with

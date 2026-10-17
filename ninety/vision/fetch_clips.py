@@ -6,6 +6,9 @@ Downloads, per clip, `clip.json`, `frames.jsonl` and the images of every `--stri
 exactly the frames coco_export keeps (same stride, from frame 0). The render checks already ran on
 every clip before it was uploaded (ninety/render/job.py), so they are not repeated here.
 
+Several runs go into one folder in order: a seed already fetched from an earlier run is skipped in
+a later one, so `v2los` then `v2` takes the re-rendered crowded clips from v2los and the rest from v2.
+
 The SAS URL comes only from the environment, is read-only, and is never printed or written to
 disk. Only training seeds are fetched; a test or reserved seed in the run is refused.
 """
@@ -41,13 +44,17 @@ def wanted(blob_name: str, run: str, stride: int) -> tuple[int, str] | None:
     return None
 
 
-def plan(names: list[str], run: str, stride: int) -> list[tuple[str, int, str]]:
+def plan(
+    names: list[str], run: str, stride: int, skip_seeds: frozenset[int] = frozenset()
+) -> list[tuple[str, int, str]]:
     out = []
     for name in names:
         w = wanted(name, run, stride)
         if w is None:
             continue
         seed, rel = w
+        if seed in skip_seeds:
+            continue
         if split_of(seed) != "train":
             raise ValueError(f"seed {seed} in {run} is not a training seed; refusing to fetch it")
         out.append((name, seed, rel))
@@ -69,7 +76,9 @@ def main(argv: list[str] | None = None) -> None:
     container = ContainerClient.from_container_url(url)
     t = time.time()
     names = [b.name for b in container.list_blobs(name_starts_with=f"{a.run}/train/")]
-    todo = plan(names, a.run, a.stride)
+    # seeds an earlier run already supplied (their clip.json arrived) are not taken again
+    have = frozenset(int(d.name[4:]) for d in a.out.glob("seed*") if (d / "clip.json").exists())
+    todo = plan(names, a.run, a.stride, have)
 
     def fetch(item: tuple[str, int, str]) -> int:
         name, seed, rel = item
@@ -82,7 +91,9 @@ def main(argv: list[str] | None = None) -> None:
     with ThreadPoolExecutor(a.workers) as pool:
         total = sum(pool.map(fetch, todo))
     seeds = {s for _, s, _ in todo}
-    print(f"fetched {len(todo)} files, {total / 1e9:.2f} GB, {len(seeds)} clips in {time.time() - t:.0f}s")
+    took = time.time() - t
+    print(f"{a.run}: fetched {len(todo)} files, {total / 1e9:.2f} GB, {len(seeds)} clips in {took:.0f}s")
+    print(f"{a.run}: {len(have)} seeds were already present from an earlier run and were skipped")
 
 
 if __name__ == "__main__":
