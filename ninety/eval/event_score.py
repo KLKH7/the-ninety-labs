@@ -42,6 +42,7 @@ LENIENT_M = 2.0
 # the ball, except a pressure event and a kick-off, which are placed at a player of the event's
 # team; a substitution has no meaningful place and is graded on time only.
 PLAYER_PLACED = {"pressure", "kickoff"}
+FOULED_PLACED = {"foul"}  # placed where the fouled player was (engine.foul): the other side
 NOT_PLACED = {"substitution"}
 
 
@@ -54,13 +55,16 @@ def reference_point(kind: str, team: str, t: float, frames: list[dict],
     if kind in NOT_PLACED:
         return None
     k = round(t * FPS)
+    if kind == "goal":  # the goal's own frame already shows the kickoff (engine.kickoff): the ball
+        k -= 1          # as it crossed is the frame before, as the renderer reads it (clip.py)
     if not 0 <= k < len(frames):
         return None
     frame = frames[k]
     if frame["frame"] != k:
         raise ValueError(f"frames must be every frame from 0; position {k} holds frame {frame['frame']}")
-    if kind in PLAYER_PLACED:
-        players = [p for p in frame["players"] if p["team"] == team]
+    if kind in PLAYER_PLACED | FOULED_PLACED:
+        side = team if kind in PLAYER_PLACED else ("away" if team == "home" else "home")
+        players = [p for p in frame["players"] if p["team"] == side]
         if not players:
             return None
         p = min(players, key=lambda p: math.hypot(p["x"] - near[0], p["y"] - near[1]))

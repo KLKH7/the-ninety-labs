@@ -6,6 +6,8 @@ generated it and the output file is committed. Rows marked *planned* have no res
 | Measure | Command | Output | Status |
 |---|---|---|---|
 | Simulator realism (passes, shots, tackles, pass completion per match) | `uv run pytest tests/test_sim.py` | test assertions | running |
+| Keeper saves (isolated central shots at 8 to 25 m against the O1 position, and on-target shots in 12 matches) | `uv run python -m ninety.sim.saves` | `docs/eval/saves.md` | running: a report beside GROUNDING O1, never a target |
+| Penalties (scored, keeper's side, stops, on target) | `uv run python -m ninety.sim.penalties` | `docs/eval/penalties.md` | running: a report beside published figures, never a target |
 | Event and frame schema validity | CI `smoke` job | CI log | running |
 | Same seed, same match on every machine: the simulator's math pinned bit for bit, and no C math library call where ground truth or a published number is computed | `uv run pytest tests/test_fmath.py tests/test_cues.py`; CI `portable` job on macOS, `test` on Linux | test assertions | running: seeds 1, 2, 3, 11, 42 (3 minutes) and seed 7 (5 minutes, every frame at full precision) are identical on macOS arm64 and Linux arm64 and x86_64, Python 3.11 and 3.12 |
 | Ground-truth data meets the data contract (consistency and physics) | `uv run ninety-validate <clip>` | command output | running: the engine meets the contract on full matches (seeds 7, 11, 21); CI runs it on the smoke clip |
@@ -16,13 +18,42 @@ generated it and the output file is committed. Rows marked *planned* have no res
 | Event precision, recall and F1 per type; possession accuracy; speed error | events: `uv run python -m ninety.eval.event_score --truth <clip>/events.jsonl --frames <clip>/frames.jsonl --detected <detected.jsonl> --report <report.json>` ([format](#event-report-format)); possession and speed planned | `docs/eval/vision-report-v{n}.json` | planned: the harness runs and is tested on damaged simulator events; no detector yet |
 | Targeted data rounds, before and after | planned | `docs/eval/vision-report-v{n}.json` | planned |
 | Stats engine facts: hand-computed cases, planted defects, citations, size | `uv run pytest tests/test_stats.py` | test assertions | running |
+| Late drop in high-intensity running (R7), by the protocol below; distance and top speed by position on the same matches | `uv run python -m ninety.sim.late_drop` | `docs/eval/late-drop.md` | running |
 | Fact-checker rules (numbers, players, evidence ids) | `uv run pytest tests/test_factcheck.py` | test assertions | running |
-| Ledger versioning, evidence validation, and deterministic cue fixture | `uv run pytest tests/test_ledger.py tests/test_cues.py` | `tests/fixtures/cues-seed7.jsonl` and test assertions | running: 17 tests; 166 cues for seed 7, five minutes (83 passes, 19 of them failed; no shot in these five minutes, so shots and goals are covered by hand-built cases) |
+| Ledger versioning, evidence validation, and deterministic cue fixture | `uv run pytest tests/test_ledger.py tests/test_cues.py` | `tests/fixtures/cues-seed7.jsonl` and test assertions | running: 20 tests; 192 cues for seed 7, five minutes (186 for its 93 passes, 7 of them failed, and 6 for its 3 shots; no goal in that window, so goals are covered by hand-built cases) |
 | Fact-checker catch rate on planted false claims, and true claims wrongly rejected, on the published Judge | `uv run python -m ninety.eval.factcheck_eval --seeds 21,33 --foundry`; nightly in `.github/workflows/evals.yml`, recorded in Foundry | `docs/eval/fact-checker.md` | running: held-out seeds 21,33, `ninety-judge:1` at commit `9be98bd`: 136/136 false claims caught (code alone 32/136); 7/105 true claims wrongly rejected excluding service holds (17/115 including them); 19 of 251 Judge calls failed and were held back (fail closed), more than earlier runs, not yet investigated |
 | Analyst first drafts that would air (code checks then the Judge), and Foundry's agent evaluators (task adherence, intent resolution, tool call accuracy; model-graded) on the same responses, published agents, held-out seeds | `uv run python -m ninety.agents.analyst_eval --foundry`; nightly in `.github/workflows/evals.yml`, recorded in Foundry | `docs/eval/analyst.md` | running: seeds 21,33, `ninety-analyst:3` (match tools called by Foundry over MCP) at commit `d911c0b`: 5/10 first drafts would air; Foundry evaluators intent resolution 10/10, tool call accuracy 10/10, task adherence 4/10. Ten drafts is a small sample: an identical run minutes earlier gave 6/10 and task adherence 1/10; the nightly history in Foundry is the better guide |
+| Match engine touches: control by surface, whose ball and speed; throw-ins; pass completion | `uv run python -m ninety.sim.touches` (seeds 40 to 47) | `docs/eval/touches.md`, `docs/eval/funnel-touches.md` | running: a report, never a gate; comparisons fixed below. Seeds 40 to 47, before and after the cushioned touch (base d38ce9b): thigh, chest or head touches 3,693 then 706 (passers now judge them by the engine's own rule), kept 59% then 61%; all touches except the dribbler's own kept 87% then 97%; throw-ins 89.5% then 86.1% first contact by a team-mate (Stone 2021: 83%), 67.3% then 58.3% held 5 s later (54%); completion 82.1% then 88.2% (R3: 75 to 88%). With a surface for each height (same seeds and base): thigh, chest or head touches 690, kept 62.5%; throw-ins 87.3% first contact by a team-mate, 67.6% held 5 s later; completion 87.4%. With what makes a touch worse: thigh, chest or head kept 46.4%; throw-ins 87.5% first contact by a team-mate, 54.1% held 5 s later (Stone 2021: 54%); completion 87.2%; goals 1.0 a team (a held-out miss) |
 | Recovery from injected failures | planned | `docs/eval/failure-table.md` | planned |
 | Ablation: one agent against the full workflow | planned | `docs/eval/ablation.md` | planned |
 | Latency to graphic and to speech (p50, p95); cost per match | planned | `docs/eval/latency-cost.md` | planned |
+
+## Match engine: touches
+
+How a player meets the ball is about to change (a cushioned first touch, a surface for each height,
+and what makes a touch worse; [ENGINE.md](ENGINE.md), layer 7). These comparisons were fixed
+**before** the first of those changes, on the engine at `claude/engine-to-main` e8982ef, so no
+cushion or error is set after looking at where it lands (lessons 2 and 3).
+
+```bash
+uv run python -m ninety.sim.touches                      # seeds 40 to 47; writes docs/eval/touches.md
+uv run python -m ninety.sim.funnel --seeds 40,41,42,43,44,45,46,47 --out docs/eval/funnel-touches.md
+```
+
+Both run on the same eight seeds after every engine change to touches, and the results are
+recorded in `docs/eval/` and [GROUNDING.md](GROUNDING.md) whatever they show.
+
+| Engine number | Compared with | Source |
+|---|---|---|
+| throw-ins: first contact by a team-mate | 83% | Stone, Smith and Barry 2021, *Int J Sports Sci Coach* 16: 830-839; 16,154 Premier League throw-ins, 2018-19 |
+| throw-ins: possession held 5 s after the throw (the team of the last player to have had the ball) | 54% retained | the same study; its own definition of "retained" is not yet checked against our 5 s window (*verify*) |
+| pass completion (`touches.md` and the funnel) | 75 to 88% | GROUNDING R3 (*verify*) |
+
+Not compared, only reported: control and keep rates by surface, by whose ball it was and by
+arriving speed; where a kept ball ends up; body hits. No published figure for them has been
+found. One is added to this table, with its source, before any engine number is read against it.
+**Never a target:** a cushion, an error or a skill range is set from a cited measurement or as
+design, never moved to bring these numbers onto a published figure.
 
 ## Synthetic data
 
@@ -231,10 +262,40 @@ invented `shot` (none true) had `precision` 0.0 and `recall` and `f1` `null`.
 in shot and less than half visible. The target before freezing the test set is at least 5%
 (see [PLAN.md](PLAN.md#goals)).
 
+## Late drop in high-intensity running (R7)
+
+Fixed on 2026-10-17, before any engine change was measured with it and before the command had
+produced a number, so neither the seeds nor the rule can be chosen by their result. Changing any
+item below starts a new protocol, recorded here with its date; it never re-runs the old one on
+other seeds.
+
+| Item | Fixed value |
+|---|---|
+| Matches | 30 full matches, seeds 101 to 130, 90 minutes each (`SEEDS` in `ninety/sim/late_drop.py`). None of these seeds was used to judge R7 before |
+| Who | outfield players only; frames at a kick-off reset are left out (positions jump) |
+| High intensity | running above 5.5 m/s (19.8 km/h), the threshold of the published study |
+| Windows | the first 15 minutes of match time (0 to 15) against the last 15 (75 to 90) |
+| Per match | drop = 1 − (high-intensity metres in the last 15 minutes ÷ those in the first 15), summed over all 20 outfield players |
+| Statistic | the mean of the 30 per-match drops; its spread reported as the standard deviation across matches, a 95% interval for the mean (Student's t, 29 degrees of freedom) and the range of single matches |
+| Published band | 20 to 45% (GROUNDING R7): about 20% in Premier League tracking ([Bradley 2009](https://sure.sunderland.ac.uk/id/eprint/3478/), 28 matches) and 35 to 45% in top-class and moderate professionals (Mohr, Krustrup & Bangsbo 2003, *J Sports Sci* 21:519–528). *Verify*: both read from abstracts, not the full papers |
+| Verdict | inside the band if the mean lies within 20 to 45%, otherwise outside. If the mean is inside but its 95% interval crosses an edge, the report says so |
+
+**Rules.**
+
+- The protocol is run once per engine change it judges, and the result is recorded in
+  GROUNDING.md (R7) whatever it shows. It is a held-out pattern: no constant is set, and no
+  change kept or dropped, by looking at it ([LESSONS.md](LESSONS.md), lessons 2 and 3).
+- The report records the engine commit and the date, every match's drop, and, from the same
+  matches, distance and top speed by position (R2, R6, O8) and how much of the slow store (P10)
+  is left at the final whistle, so a better late drop cannot hide a worse neighbour.
+- **Known difference from the sources:** the engine plays 90 minutes with no half-time break
+  (the real interval lets players recover), no stoppage time and no substitutes. Read the verdict
+  with that in mind; the protocol does not adjust for it.
+
 ## Rules
 
 - **The test set is fixed and separate.** Clips used to score detection are never used to train it,
   and targeted data rounds never add clips to the test set.
 - **Every report records its inputs:** git commit, seeds, model versions and the date.
 - **Results are reproducible:** each command runs from a clean clone after `uv sync`, and gives the
-  same numbers on any operating system (lesson 29).
+  same numbers on any operating system (lesson 46).
