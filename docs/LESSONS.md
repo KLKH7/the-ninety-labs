@@ -197,8 +197,8 @@ short and actionable. This file is public: no research sources, product names or
   dimensions?" and test the derived values against the source's own figures.
 
 ### 26. A committed report must come from the committed code
-- **What happened:** two consecutive commits regenerated `docs/eval/funnel.md` (1.8 goals a team)
-  but the code as committed produced 2.5; the realism test went red with nobody noticing. Twelve
+- **What happened:** two commits regenerated `docs/eval/funnel.md` (1.8 goals a team), yet the
+  code of the later one, re-run on a clean checkout of that commit, produced 2.5; the realism test went red with nobody noticing. Twelve
   matches also hide a change of 0.3 goals a team in noise (standard error about 0.27).
 - **Rule:** regenerate a report from the exact tree being committed, after the last code change,
   and state how big a difference the sample can resolve.

@@ -122,8 +122,9 @@ def team_strength(rng: random.Random) -> float:
 # A1 to A6: what each attribute changes.
 # A3: where preferred-foot instep kicks from the penalty mark (11 m, about 21 m/s) cross the goal
 # line: a tilted ellipse (Frontiers 2024, 16 players). Its 95% axes 4.08 m and 1.91 m (straight
-# kicks) are 2.448 SDs each way (chi-square, 2 dof), and its long axis lies about 30 degrees from
-# horizontal (Figure 5 medians, 27 and 36 degrees). The horizontal and vertical SDs are the
+# kicks) are 2.448 SDs each way (chi-square, 2 dof: assumed, the paper does not say how its ellipse
+# was built), and its long axis lies about 30 degrees from horizontal (a blend of Figure 5's medians,
+# 27 degrees for straight kicks and 36 for cross kicks). The horizontal and vertical SDs are the
 # ellipse's own projections: 3.9 degrees across and 2.8 degrees up and down (the latter taken as the
 # launch angle's spread). Both grow the same way (design: one ellipse, scaled).
 KICK_ELLIPSE_95_M = (4.08, 1.91)
