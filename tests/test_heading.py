@@ -365,7 +365,7 @@ def test_the_height_check_covers_every_touch(kind):
 
 
 def test_a_header_interception_meets_the_event_order_and_a_missing_pass_fails(tmp_path):
-    """Lesson 37: on engine output. A defender who heads a cross away intercepts it and plays it on
+    """Lesson 38: on engine output. A defender who heads a cross away intercepts it and plays it on
     in the same frame; the contract reads events in the order recorded (C8). Mutations caught: C8
     reading the interceptor's own header as the pass he intercepted; the check dropped."""
     import json
@@ -397,7 +397,7 @@ def test_a_header_interception_meets_the_event_order_and_a_missing_pass_fails(tm
 
 
 def test_rules_each_checked_directly():
-    """Each caught by its own assertion, not by a scene that happens to change (lesson 38).
+    """Each caught by its own assertion, not by a scene that happens to change (lesson 39).
     Mutations caught: aim_from accepting a target it cannot get down to; flights from the ground; a
     header at goal estimated as a kick (M3)."""
     assert ball.aim_from(0.6, 12.0, 2.0, 0.1, DT) is None  # struck down as far as allowed, still above

@@ -296,9 +296,20 @@ short and actionable. This file is public: no research sources, product names or
   When removing an exemption, follow every case it covered through the code it now reaches
   (here a dead ball reaching the in-play turn) and test it through the match loop, not just the
   rule's function.
+
+### 34. Never measure from a tree someone is mutating
+- **What happened:** a 24-match comparison ran in the background while the author and an
+  independent auditor mutation-tested the same checkout by editing `engine.py` in place and
+  restoring it. Whichever version was on disk when the run imported the engine is what it
+  measured: seed 11 scored 4 goals in that run and 7 on the committed code. The same overlap may
+  have touched the previous pull request's 24-match numbers.
+- **Rule:** run measurements from a separate worktree checked out at the exact commit being
+  measured, and do mutation testing in a different checkout, or never at the same time.
+- **Check:** before trusting a run, re-run one of its seeds on a clean checkout of the commit and
+  compare; record the commit and worktree with the numbers.
 ## Set pieces and tests
 
-### 34. A placed ball must start outside every body
+### 35. A placed ball must start outside every body
 - **What happened:** a corner's new ball was placed at the taker's centre, so the struck ball
   "touched" him on its way out: a fake deflection and a 0.4 m jump in the ground truth on 39
   of 60 corners. The validator exempts deflection frames, so nothing failed.
@@ -307,13 +318,13 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** after any kick, no deflection by the kicker within a few frames (a test runs many
   seeds).
 
-### 35. A test that changes the whole random stream cannot prove one cause
+### 36. A test that changes the whole random stream cannot prove one cause
 - **What happened:** "the delivery is struck with error" compared two runs with different seeds;
   the choice and timing differed anyway, so removing the error left it green.
 - **Rule:** hold everything else fixed (state, choice) and vary only the cause under test;
   then mutate the cause and require the test to fail.
 
-### 36. A rule must check what its name says
+### 37. A rule must check what its name says
 - **What happened:** a goal-credit rule described as "the last player to touch it" was built
   from a short list of event types. It missed a team-mate controlling a pass and a defender
   winning the ball, so it accepted wrong scorers and would have rejected right ones; the engine
@@ -322,7 +333,7 @@ short and actionable. This file is public: no research sources, product names or
   each frame, plus every touch event), and plant one case of each way it can be wrong.
 - **Check:** for each rule, list the ways the data can make it true, and test each one.
 
-### 37. A fixture must look like the real output
+### 38. A fixture must look like the real output
 - **What happened:** goal-credit tests built clips with nobody on the ball at the goal frame,
   but the engine writes the kick-off reset into that frame (the next taker on the centre spot).
   The rule counted that taker as the last toucher of every real goal: every own goal passed,
@@ -333,13 +344,13 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** for a new rule, find real clips where it applies (a scan over seeds) and assert on
   them in a test.
 
-### 38. "All mutations caught" is only as wide as the list
+### 39. "All mutations caught" is only as wide as the list
 - **What happened:** a report said 23 of 23 mutations were caught; an auditor found six more,
   near the same code, that survived (dropped conditions, a tolerance ten times too wide).
 - **Rule:** for every condition and every constant in a check, mutate it (drop it, widen it
   tenfold) and require a test to fail; report the list, not just the count.
 
-### 39. A plan must not stand the receiver where the ball is aimed
+### 40. A plan must not stand the receiver where the ball is aimed
 - **What happened:** the corner routine put each attacker on the exact spot the taker could aim
   at, standing still, so a delivery's target and its receiver were the same point decided in
   advance. Defenders marked a stationary man; the run, the timing and the space (what decides a
@@ -354,8 +365,8 @@ short and actionable. This file is public: no research sources, product names or
   meeting point or a cause, not an intention, is scripting. Measure before and after a change
   (here: first contact, goals, wait to the kick over 200 corners).
 
-### 40. A rule that never fires is not a model; a number without its script is not a result
-- **What happened:** after lesson 39, the taker was meant to time his cross on his runner. An
+### 41. A rule that never fires is not a model; a number without its script is not a result
+- **What happened:** after lesson 40, the taker was meant to time his cross on his runner. An
   audit measured it: in 293 of 300 corners he struck in the same frame he signalled, because
   the cross's long flight meant every runner "arrived in time"; the rule's unit test passed
   only with a runner placed 25 m away. The same pull request published first-contact numbers
@@ -370,7 +381,7 @@ short and actionable. This file is public: no research sources, product names or
   measurement showing the branch happens in real clips.
 
 
-### 41. A seed's outcome is not the same on every Python
+### 42. A seed's outcome is not the same on every Python
 - **What happened:** a test counted the goals in the first 32 scenario corners and asked for at
   least 3. Locally (Python 3.13) there were 4; CI (3.12) found 2 and failed. Same seeds, same
   code: tiny floating-point differences between versions grow over a chaotic simulation.
@@ -380,7 +391,7 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** before pushing a test that runs the engine over seeds, run it on every Python
   version CI uses (`UV_PROJECT_ENVIRONMENT=<dir> uv run --python 3.11 pytest`).
 
-### 42. For a rare event, select among played situations; never stage its cause
+### 43. For a rare event, select among played situations; never stage its cause
 - **What happened:** to get corner clips, the scenario placed a defender by the goal line and
   recorded him as the last touch, because open play rarely reached the line. The corner itself
   was played, but its cause was written into the data without happening.
@@ -392,7 +403,7 @@ short and actionable. This file is public: no research sources, product names or
   nothing at frame 0 except the opening state, and the cause (the exit and the touch it came
   off) present in the data.
 
-### 43. When a check rejects real output, find out what happened before changing the check
+### 44. When a check rejects real output, find out what happened before changing the check
 - **What happened:** the goal-mouth check rejected an engine goal: a ball deflected along the
   goal line from outside the post that went in inside it. The check was wrong in one way (it
   aimed at where the ball's centre met the line; Law 10 needs the whole ball over), so it was
@@ -410,7 +421,7 @@ short and actionable. This file is public: no research sources, product names or
   along the line, dropping, slow, fast), confirm each fails on the old code where it should, and
   build them with the speeds real output has.
 
-### 44. An exemption must use the same geometry as the rule it lifts; a contact must use the moment of contact
+### 45. An exemption must use the same geometry as the rule it lifts; a contact must use the moment of contact
 - **What happened:** to allow a goal in off the post, the goal check skipped its path test when
   the ball came near "the woodwork", but measured the post without its height and the bar without
   its length: a ball a metre over the post, or level with the bar but well wide, counted as a
@@ -423,7 +434,7 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** for every exemption, build an illegal case that sits just inside it and must still
   fail; for every collision, a test that energy never rises and a resting ball comes to rest.
 
-### 45. A new motion must be checked against every existing rule, in the scenes where it happens
+### 46. A new motion must be checked against every existing rule, in the scenes where it happens
 - **What happened:** a keeper's dive was added with a cited peak speed and duration, and the
   push-off between them was derived to fit: 16 m/s², twice the acceleration check's limit. The
   dive also started from rest whatever the keeper was doing, played short dives faster and
@@ -437,7 +448,7 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** for a new movement, a test that the body's velocity never changes faster than its
   limit from any starting velocity, and a contract run over clips where it happens often.
 
-### 46. When sources disagree, the reading that passes your check is not evidence
+### 47. When sources disagree, the reading that passes your check is not evidence
 - **What happened:** a keeper's dive broke the acceleration check. Two cited sources pointed
   opposite ways: one implied a push of about 0.2 s (the fast dive the engine had), the other, read
   only from search results, a push of about 0.44 s. The slower one was chosen; it also happened to
@@ -449,7 +460,7 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** for each new constant, can you quote the passage it comes from? If not, it is
   *verify*, and GROUNDING says what it would change if the other reading is right.
 
-### 47. A new way to touch the ball must be checked from every body near it, and decided once
+### 48. A new way to touch the ball must be checked from every body near it, and decided once
 - **What happened:** heading was added and passed its own tests, but an audit found a header met
   the ball at its closest point to the player, so it left from inside his body and could deflect
   off him; a ball he chose to let drop passed through his chest, because declining the header
@@ -464,8 +475,8 @@ short and actionable. This file is public: no research sources, product names or
   it, over many random cases; a test that runs the estimate and the engine on one scene; mutation
   results reported per mutation, with which test caught it, and incidental catches named as such.
 
-### 48. A drawn opening is a hidden cause
-- **What happened:** after lesson 42 the corner scenario played its attacks out instead of staging
+### 49. A drawn opening is a hidden cause
+- **What happened:** after lesson 43 the corner scenario played its attacks out instead of staging
   the corner, but it opened every attack with a winger on the ball at a drawn spot, facing a drawn
   way, and kept only corners within 20 s. Four corners in five were then a blocked shot: the
   opening chose the kind of play, the window kept only the quick outcomes, and the report blamed
@@ -476,7 +487,7 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** compare the scenario's mix of causes with the same causes in full matches, and list
   every parameter of the opening: each one that is drawn rather than played is a suspect.
 
-### 49. A merge that ports a rule into new code must keep every branch of it
+### 50. A merge that ports a rule into new code must keep every branch of it
 - **What happened:** merging the body outline (lesson 24) into heading, the contact loop was
   rewritten to take each player's earliest reach. A ball he chose to let drop past his head then
   ended his turn in that step, so the foot touch later in the same step was lost, and a ball
@@ -487,7 +498,7 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** run both branches' tests on the merge before resolving any test conflict, and read
   each failure as a possible regression before treating it as an outdated expectation.
 
-### 50. A belief is one state: everything read from it must agree
+### 51. A belief is one state: everything read from it must agree
 - **What happened:** a team's own passes rolled out for corners, about 3.75 a match, 70 percent of
   all corners. A player unseen for over a second was believed to stand where he was last carried
   to, but his believed velocity was still the old one, so a pass led him into the space he had run
@@ -503,7 +514,7 @@ short and actionable. This file is public: no research sources, product names or
   tests on each caller; for a rate like own-pass corners, look at what the passer believed against
   what was true at the kick.
 
-### 51. A structural change chosen from a report, justified by half the engine, is tailoring
+### 52. A structural change chosen from a report, justified by half the engine, is tailoring
 - **What happened:** a full-match pass count was over a test's limit. Calibration showed forward
   passes rated too low, and the passer's estimate raced every opponent while the engine sends
   one chaser, so the estimate was changed to race only the first. It made calibration look

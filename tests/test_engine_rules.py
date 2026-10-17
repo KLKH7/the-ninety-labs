@@ -1108,9 +1108,11 @@ def test_a_free_kick_stays_on_its_spot_while_the_taker_turns_and_is_struck_from_
         assert (e.ball[0], e.ball[1]) == spot  # never carried off the spot
         assert math.hypot(taker.x - spot[0], taker.y - spot[1]) < 0.5  # he stays at the ball
     assert struck is not None and (struck["x"], struck["y"]) == (round(spot[0], 2), round(spot[1], 2))
-    assert abs(D.turn_deg(0.0, taker.heading)) <= math.degrees(D.STRIKE_FACING)
-    # P16: 180° round to within 60° of the line takes at least 120° / 350° a second
-    assert frames * DT >= 120.0 / 350.0 - DT
+    from ninety.sim.engine import TURN_RATE
+
+    # nobody may challenge him first (Law 13), so he squares up to it: all 180° at 350° a second (P16)
+    assert abs(D.turn_deg(0.0, taker.heading)) <= math.degrees(TURN_RATE * DT) + 1e-9
+    assert frames * DT >= 180.0 / 350.0 - DT
     # struck at his foot: the ball against his front, not out of reach in front of him
     assert shape.clearance(*spot, taker.x, taker.y, taker.heading) < 2 * ball.RADIUS
 
@@ -1153,6 +1155,7 @@ def test_a_restart_holds_until_the_ball_is_kicked_opponents_off_it_and_no_challe
     e.restart.ready_at = e.t
     e.tick_restart()
     assert e.restart is None and e.placed is not None  # placed, not yet kicked
+    assert e.scene_for(taker).dead  # he weighs his options knowing nobody may challenge him yet
     opp = e.by_id["a6"]
     opp.x, opp.y = 40.8, 34.0
     brain = e.brains["away"]
@@ -1212,6 +1215,33 @@ def test_at_a_kick_off_everyone_stays_in_his_half_until_the_ball_is_kicked():
                 assert e.shape_target(q)[:2] == e.kickoff_spot(q, "home")
         e.step()
     assert held > 1 and not e.placed  # it held while he turned, then he kicked it
+
+
+@pytest.mark.parametrize("kind,spot,aim", [
+    ("corner", (105.0, 0.0), (94.0, 34.0)),  # at the flag, into the box
+    ("corner", (105.0, 0.0), (105.0, 20.0)),  # along the goal line
+    ("free_kick", (50.0, 0.0), (50.0, 15.0)),  # on the touchline, infield
+    ("free_kick", (50.0, 68.0), (70.0, 68.0)),  # along the line
+])
+def test_a_dead_ball_is_always_struck_soon_whichever_way_he_faces(kind, spot, aim):
+    """P16: squaring up to a dead ball takes at most a half turn and a step round it, never forever."""
+    import math
+
+    for k in range(12):
+        e = Engine(1)
+        still(e)
+        e.possessor = None
+        e.stop(kind, "home", spot)
+        taker = e.by_id[e.restart.taker]
+        taker.x, taker.y, taker.heading = *spot, math.radians(30 * k)
+        e.restart.ready_at = e.t
+        e.tick_restart()
+        e.turn_to(taker, *aim, lambda e=e, t=taker: e.pass_to(t, *aim, lofted=False))
+        for _ in range(25):  # a second: 180° at 350° a second is 0.51 s
+            e.step()
+            if e.possessor != taker.id:
+                break
+        assert e.possessor != taker.id, (kind, spot, aim, 30 * k)
 
 
 def test_a_throw_in_is_meant_for_the_team_mate_it_is_thrown_to():

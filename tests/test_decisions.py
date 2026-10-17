@@ -728,6 +728,25 @@ def test_turning_first_gives_an_opponent_closing_on_the_lane_time_to_get_there()
     assert late < sure
 
 
+def test_at_a_dead_ball_he_squares_up_before_he_strikes_and_the_estimate_expects_it():
+    # P16: in play he strikes once within STRIKE_FACING; at a dead ball nobody may challenge him, so
+    # he turns all the way and strikes it square (the kicks A3 is measured from), and waits longer.
+    in_play, wait = D.strike_turn(0.0, math.cos(math.radians(100)), math.sin(math.radians(100)))
+    assert in_play == pytest.approx(60.0) and wait == pytest.approx(math.radians(40) / D.TURN_RATE)
+    square, dead_wait = D.strike_turn(0.0, math.cos(math.radians(100)), math.sin(math.radians(100)),
+                                      dead=True)
+    assert square == 0.0 and dead_wait == pytest.approx(math.radians(100) / D.TURN_RATE)
+    assert D.strike_turn(0.0, 0.0, 1.0, thrown=True, dead=True) == (pytest.approx(90.0), 0.0)
+    ball = (shape.RADIUS_M + 0.11, 0.0)  # against his front
+    off30 = (math.cos(math.radians(30)), math.sin(math.radians(30)))
+    assert D.can_strike(*ball, 0.0, *off30)  # in play, 30° off is near enough
+    assert not D.can_strike(*ball, 0.0, *off30, facing=math.radians(14))  # squared up, it is not
+    # His kick error is reckoned at the angle he strikes it: square at a dead ball, wherever he faced.
+    back = D.strike_nodes(scene(heading=math.pi, dead=True), 80.0, 34.0, False, D.ARRIVE_MPS)
+    square = D.strike_nodes(scene(heading=0.0), 80.0, 34.0, False, D.ARRIVE_MPS)
+    assert back == square != D.strike_nodes(scene(heading=math.pi), 80.0, 34.0, False, D.ARRIVE_MPS)
+
+
 def test_a_throw_in_leaves_his_hands_at_once_whichever_way_he_faces(monkeypatch):
     # Law 15 / P16: a ball in his hands is thrown, not struck off his foot: no turn, no 60° cap.
     assert D.can_strike(0.0, 0.0, math.pi, 1.0, 0.0, thrown=True)
@@ -748,4 +767,4 @@ def test_a_throw_in_leaves_his_hands_at_once_whichever_way_he_faces(monkeypatch)
     monkeypatch.setattr(D, "strike_turn", spy)
     D.pass_confidence(scene(throw=True, heading=math.pi, ball_offset=(0.0, 0.0)), 70.0, 34.0, 70.0, 34.0,
                       0.0, True)
-    assert asked and all(len(a) == 4 and a[3] for a in asked)
+    assert asked and all(len(a) == 5 and a[3] for a in asked)
