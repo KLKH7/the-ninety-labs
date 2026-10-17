@@ -36,7 +36,7 @@ from ninety.sim.body import (
 )
 from ninety.sim.body import move as move_body
 from ninety.sim.decisions import PENALTY_DEPTH
-from ninety.sim.firsttouch import AERIAL_ABSORB, BODY_TOUCH_Z, TOUCH_GAP_S  # A4, P14, D6
+from ninety.sim.firsttouch import BODY_TOUCH_Z, TOUCH_GAP_S  # A4, P14, D6
 from ninety.sim.offball import KEEPER_DIVE_TRAVEL_M
 from ninety.sim.profiles import Profile
 from ninety.sim.style import HIGH, LOW, MID, Style, preset_name
@@ -923,14 +923,14 @@ class Engine:
         vx, vy, vz = self.ball[3], self.ball[4], self.ball[5]
         rel = relative_speed(vx, vy, vz, p.vx, p.vy)
         hands = self.hands(p, cx, cy)
-        absorb = p.profile.absorb_mps(hands)
-        if aerial:  # a thigh, chest or head kills less pace than a foot
-            absorb *= AERIAL_ABSORB
+        absorb = foot = p.profile.absorb_mps(hands)
+        if aerial:  # a thigh, chest or head kills its own share of what a foot does (A4)
+            absorb = firsttouch.surface_absorb(foot, cz)
         sent = None  # a cushioned touch: the ball's velocity as it leaves him (firsttouch.py, A4)
         if kind == "touch" and hands:  # a keeper holds what his hands can, or it beats them
             controls = rel <= absorb
-        elif kind == "touch" and not firsttouch.beaten(rel, absorb):
-            sent = self.cushion(p, cx, cy, firsttouch.residual(rel, absorb))
+        elif kind == "touch" and not firsttouch.beaten(rel, absorb, foot):
+            sent = self.cushion(p, cx, cy, firsttouch.residual(rel, absorb), cz if aerial else 0.0)
             controls = firsttouch.at_feet(math.hypot(sent[0] - p.vx, sent[1] - p.vy))
         else:  # a ball he has not reacted to, or one far too fast for the surface: it rebounds
             controls = False
@@ -998,10 +998,11 @@ class Engine:
                 worst, away = 1 - d / reach, ((p.x - w[0]) / d, (p.y - w[1]) / d)
         return fmath.atan2(dy + 2 * worst * away[1], dx + 2 * worst * away[0])
 
-    def cushion(self, p: Player, cx: float, cy: float, speed: float) -> tuple[float, float]:
+    def cushion(self, p: Player, cx: float, cy: float, speed: float, z: float = 0.0) -> tuple[float, float]:
         """A4: a cushioned touch sends the ball on at `speed` (relative to him, what the surface did
         not kill) toward where he chose (touch_aim), struck with his first touch's own error (A3's
-        rule with first touch as the skill: wider with speed, pressure, fatigue). Never over a line
+        rule with first touch as the skill: wider with speed, pressure, fatigue, and with the surface
+        he meets it with at height z, firsttouch.AIM_ERROR). Never over a line
         he can see: if it would come to rest out of play he turns it back in, the least he must.
         Returns the ball's velocity on the pitch as it leaves him."""
         # He cannot play it through himself (P11): from where he meets it, it goes no further into
@@ -1017,6 +1018,7 @@ class Engine:
         if speed > 1e-6:
             nearest = min(math.hypot(q.x - p.x, q.y - p.y) for q in self.players if q.team != p.team)
             dir_sd, speed_sd, _, _ = p.profile.strike_error("first_touch", speed, nearest, self.fresh(p), 0.0)
+            dir_sd *= firsttouch.AIM_ERROR[firsttouch.surface(z)]
             for k in range(13):  # 0, +15, -15, +30, ... up to 90 degrees from his aim (design)
                 turn = math.radians(15.0 * ((k + 1) // 2) * (1 if k % 2 else -1))
                 a = across(aim + turn)
@@ -2246,16 +2248,12 @@ class Engine:
         return True
 
     def _show_touch(self, p: Player, cx: float, cy: float, cz: float, aerial: bool) -> None:
-        """The part that met the ball. A carry's own touch is the gait. Anything else is drawn."""
+        """The part that met the ball (firsttouch.surface, the engine's own). A carry's own touch is
+        the gait. Anything else is drawn."""
         if self.hands(p, cx, cy):
             part = "hands"
         elif aerial:
-            if cz < 0.95:  # design (P14): the part by height
-                part = "thigh"
-            elif cz < 1.50:
-                part = "chest"
-            else:
-                part = "head"
+            part = firsttouch.surface(cz)
         elif self.dribbler == p.id and cz <= BODY_TOUCH_Z:
             return
         else:
