@@ -72,6 +72,9 @@ DRIBBLE_STEP_M = 6.0
 MAX_PASS_M = 45.0
 PASS_SPEED_EST_MPS = 14.0  # design: a passer's rough guess of a pass's average speed, to lead a runner
 LEAD_MAX_S = 2.0  # design: and he leads him by at most this long
+# D11: a pass into space, aimed ahead of a team-mate toward goal for him to run onto. Both *design*.
+THROUGH_LEADS_M = (6.0, 12.0)  # how far ahead of him it is aimed
+GOAL_LINE_SPACE_M = 3.0  # never aimed nearer the goal line than this
 LOFT_FROM_M = 15.0  # design: shorter than this, a pass is played along the ground
 LOFT_DEG = 30.0  # design: the launch angle of a lofted pass or a throw, as estimated and as struck
 # A4: the passer's guess of what a first touch can kill: an average player's (one definition, profiles).
@@ -753,6 +756,9 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
 
 
 def pass_option(scene: Scene, mate: tuple[str, float, float, float]) -> Option | None:
+    """One pass per team-mate, aimed where the passer thinks it is worth most: to where he is going
+    (O7), or into space ahead of him toward goal (D11). Where to put the ball is part of choosing
+    him, so he is not counted once per aim."""
     mid, mx, my, age, *moving = mate
     # O7: into the space he is running into, by the velocity the passer has seen; a team-mate
     # standing still gets it a step ahead, toward goal.
@@ -762,7 +768,34 @@ def pass_option(scene: Scene, mate: tuple[str, float, float, float]) -> Option |
         lx, ly = moving[0] * t_est, moving[1] * t_est
     else:
         lx, ly = 1.5 * attack(scene.goal_x), 0.0
-    tx, ty = min(PITCH_X - 1, max(1.0, mx + lx)), min(PITCH_Y - 1, max(1.0, my + ly))
+    aims = [(min(PITCH_X - 1, max(1.0, mx + lx)), min(PITCH_Y - 1, max(1.0, my + ly)))]
+    if not scene.throw and believed_onside(scene, mx):  # Law 15: a throw-in goes to him
+        a = attack(scene.goal_x)
+        for lead in THROUGH_LEADS_M:
+            tx = mx + a * lead
+            if a * (scene.goal_x - tx) >= GOAL_LINE_SPACE_M and 1.0 <= my <= PITCH_Y - 1.0:
+                aims.append((tx, my))  # never at the goal line, nor beyond a touchline
+    options = [o for o in (aimed_pass(scene, mid, mx, my, age, tx, ty) for tx, ty in aims) if o]
+    return max(options, key=lambda o: o.value) if options else None
+
+
+def believed_onside(scene: Scene, mx: float) -> bool:
+    """Law 11, as the passer judges it from where he believes everyone is now: a team-mate in the
+    opponents' half nearer their goal line than both the ball and the second-last opponent is
+    offside if he plays it. The passer avoids him (the referee's call is L10's)."""
+    a = attack(scene.goal_x)
+    now = [m[:2] for m in scene.moving] or scene.opponents
+    depths = sorted((a * ox for ox, _ in now), reverse=True)
+    second_last = depths[1] if len(depths) > 1 else a * (PITCH_X - scene.goal_x)
+    in_their_half = a * (mx - PITCH_X / 2) > 0
+    return not (in_their_half and a * mx > a * scene.x and a * mx > second_last)
+
+
+def aimed_pass(scene: Scene, mid: str, mx: float, my: float, age: float, tx: float,
+               ty: float) -> Option | None:
+    """D1: the best way to play a pass to (tx, ty) for the team-mate at (mx, my), and its value.
+    The race (pass_confidence) counts the run he is making and the opponents' runs, so a ball into
+    space ahead of him is judged by the same rule as one to his feet."""
     dist = math.hypot(tx - scene.x, ty - scene.y)
     if dist < 4 or dist > MAX_PASS_M:
         return None

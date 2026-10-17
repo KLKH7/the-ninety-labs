@@ -1615,8 +1615,12 @@ def test_a_throw_in_taker_runs_to_his_spot_and_stops_there():
     """Lesson 5: the taker was once moved the last metre to his spot in one frame (22 m/s) and
     stopped dead with the ball. The match must contain a throw-in, so the case is exercised; a
     short clip with no restart would pass whatever the engine did."""
-    m = simulate(7, 6)
-    assert any(p["action"] == "throw" for fr in m.frames for p in fr["players"])
+    for seed in (7, 11, 21, 3):  # the first of these whose 6 minutes contain a throw-in
+        m = simulate(seed, 6)
+        if any(p["action"] == "throw" for fr in m.frames for p in fr["players"]):
+            break
+    else:
+        raise AssertionError("no throw-in in any of the matches: the case is not exercised")
     problems = defaultdict(list)
     check_physics(m.events, m.frames, FPS, m.roster, problems)
     assert not problems.get("P1 player speed") and not problems.get("P2 player acceleration"), dict(problems)
