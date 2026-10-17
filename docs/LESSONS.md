@@ -198,3 +198,15 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_cues.py::test_failed_pass_never_says_it_found_the_receiver` and
   `tests/test_ledger.py::test_load_match_refuses_a_fact_citing_a_missing_event` fail on the
   original code.
+
+### 26. A report another program reads must be strict JSON
+- **What happened:** the event scoring harness used infinity for "the detected time is past the
+  last frame, so the place cannot be right". That is correct inside the matching, but it was also
+  written into the report, and Python's `json.dumps` writes it as `Infinity`, which JavaScript's
+  `JSON.parse` and most other parsers reject. The report format even documented it, so the
+  agents (R4) could have failed on one late detection.
+- **Rule:** a value that only steers a computation stays inside it; what is written out is plain
+  JSON, with `null` plus a named flag (here `outside_frames`) for a case that has no number.
+  Files are written with `allow_nan=False`, so a stray infinity or NaN fails at the source.
+- **Check:** `tests/test_event_score.py::test_a_time_outside_the_clip_still_gives_strict_json`
+  fails on the original code.
