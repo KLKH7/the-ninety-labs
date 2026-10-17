@@ -82,7 +82,8 @@ def reference(scene, tx, ty, mx, my, age, lofted, pace, receiver):
             g = vz = 0.0
         rel = relative_speed(g * ux, g * uy, vz, taker[2], taker[3])
         # The engine's touch: the part the ball meets at its height (SURFACES) kills its CUSHION share
-        # of a foot's pace, and he keeps it if what is left is no more than KEEP_MPS.
+        # of a foot's pace, and he keeps it if what is left is no more than KEEP_MPS. Written out here,
+        # not a call to firsttouch.surface, on purpose: this is an independent reference.
         part = next(name for name, top in SURFACES if z <= top)
         absorb = taker[5] * CUSHION[part]
         p = D.sigmoid((absorb + KEEP_MPS - rel) / D.CONTROL_MARGIN_MPS)

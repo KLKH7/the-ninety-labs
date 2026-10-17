@@ -6,7 +6,7 @@ import math
 import random
 
 from ninety.render.scene import Gait, Look, advance_gaits, body_parts, face
-from ninety.sim import ball, body, engine, shape
+from ninety.sim import ball, body, engine, firsttouch, profiles, shape
 from ninety.sim.engine import BODY_RESTITUTION, DT, Engine
 
 
@@ -531,6 +531,8 @@ def test_his_body_meets_a_ball_before_his_foot_can_if_it_gets_there_first():
     e.contact(before)
     # It meets his chest first (the part drawn is the part the engine used, firsttouch.surface),
     # before his foot could reach down to it; the chest cushions it (A4).
+    hit = [ev for ev in e.match.events if ev["type"] == "deflection"]
+    assert hit and hit[0]["player"] == p.id and e.possessor is None  # too fast for him to keep it
     assert e.pose(p)[0] == "chest"
 
 
@@ -648,8 +650,10 @@ def test_a_ball_he_fails_to_control_keeps_flying_and_falling_for_the_rest_of_the
     p.profile.attributes["first_touch"] = 0.0  # it will not stick
     e.possessor, e.last_touch, e.kicker_clear, e.kicked_at = None, "h2", True, e.t - 5.0
     # dropping hard at his feet and driven at him, within his reach, too fast for him to steer
-    # (firsttouch.beaten: more than his thigh kills plus his foot's 12 m/s)
-    before = (49.5, 30.0, 0.6, 22.0, 0.0, -12.0)
+    # (firsttouch.beaten: more than his thigh kills plus his foot's, with no first touch)
+    foot = profiles.FOOT_ABSORB_MPS[0]
+    fast = foot * firsttouch.CUSHION["thigh"] + foot + 4.0  # its pace into him is past that
+    before = (49.5, 30.0, 0.6, fast, 0.0, -12.0)
     e.ball = ball.step(before, DT)
     e.contact(before)
     assert any(ev["type"] == "deflection" for ev in e.match.events) and e.possessor is None

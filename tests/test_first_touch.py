@@ -147,6 +147,10 @@ def test_a_ball_he_has_not_reacted_to_or_far_too_fast_still_rebounds():
     foot = p.profile.absorb_mps(False)
     assert firsttouch.beaten(2 * foot + 0.1, foot, foot)  # on the foot: twice what it kills
     assert not firsttouch.beaten(2 * foot - 0.1, foot, foot)
+    for part in ("thigh", "chest", "head"):  # elsewhere: what that part kills plus what the foot does
+        edge = foot * firsttouch.CUSHION[part] + foot
+        absorb = foot * firsttouch.CUSHION[part]
+        assert firsttouch.beaten(edge + 0.1, absorb, foot) and not firsttouch.beaten(edge - 0.1, absorb, foot)
 
 
 @pytest.mark.parametrize("z", [0.1, 1.0])

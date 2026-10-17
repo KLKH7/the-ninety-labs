@@ -62,10 +62,31 @@ def spread(z: float, n: int = 300) -> float:
 
 def test_each_part_aims_as_well_as_it_is_made_to():
     foot, thigh, chest, head = (spread(z) for z in (0.2, 0.7, 1.3, 1.7))
-    # Ordered as AIM_ERROR orders them, and in proportion to it (300 draws: within 15%).
+    # Ordered as AIM_ERROR orders them, and in proportion to it. Each spread draws from a fresh
+    # Engine(1), so every part gets the same draws and the ratio is exact.
     assert foot < head < thigh < chest
     for part, sd in (("thigh", thigh), ("chest", chest), ("head", head)):
-        assert sd / foot == pytest.approx(firsttouch.AIM_ERROR[part], rel=0.15)
+        assert sd / foot == pytest.approx(firsttouch.AIM_ERROR[part], rel=1e-6)
+
+
+@pytest.mark.parametrize("z", [0.2, 0.7, 1.3, 1.7])
+def test_in_play_the_touch_is_aimed_with_the_part_the_ball_meets(z, monkeypatch):
+    # contact() hands cushion() the height it met the ball at, so AIM_ERROR applies in a match.
+    seen = []
+    real = Engine.cushion
+
+    def spy(self, p, cx, cy, speed, at_z=0.0, *rest):
+        seen.append(at_z)
+        return real(self, p, cx, cy, speed, at_z, *rest)
+    monkeypatch.setattr(Engine, "cushion", spy)
+    ball_at(z, 4.0)
+    assert seen and firsttouch.surface(seen[0]) == firsttouch.surface(z)
+
+
+def test_the_chest_kills_most_of_the_three_and_the_head_least():
+    # What A4 says of them: the chest drops the ball at his feet, the head redirects it.
+    c = firsttouch.CUSHION
+    assert c["chest"] > c["thigh"] > c["head"]
 
 
 @pytest.mark.parametrize("z, part", [(0.7, "thigh"), (0.97, "thigh"), (1.3, "chest"), (1.52, "chest"),

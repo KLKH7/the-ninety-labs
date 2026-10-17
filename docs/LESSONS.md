@@ -370,7 +370,7 @@ short and actionable. This file is public: no research sources, product names or
   branches had moved those limits to 12 + 12 × skill, so the same numbers now tested nothing: a
   "poor" chest killed the ball. Both branches had also numbered new lessons 18 to 23.
 - **Rule:** a test that checks a threshold derives its inputs from the constant (`FOOT_ABSORB_MPS`,
-  `AERIAL_ABSORB`), so a change to the constant moves the test with it. A new lesson takes the next
+  `firsttouch.CUSHION`), so a change to the constant moves the test with it. A new lesson takes the next
   number on `main` at merge time.
 - **Check:** `tests/test_engine_rules.py` high-ball tests build their speeds from the profile
   constants; `grep '^### ' docs/LESSONS.md` shows no number twice.
