@@ -17,8 +17,8 @@ generated it and the output file is committed. Rows marked *planned* have no res
 | Targeted data rounds, before and after | planned | `docs/eval/vision-report-v{n}.json` | planned |
 | Stats engine facts: hand-computed cases, planted defects, citations, size | `uv run pytest tests/test_stats.py` | test assertions | running |
 | Fact-checker rules (numbers, players, evidence ids) | `uv run pytest tests/test_factcheck.py` | test assertions | running |
-| Ledger versioning, evidence validation, and deterministic cue fixture | `uv run pytest tests/test_ledger.py tests/test_cues.py` | `tests/fixtures/cues-seed7.jsonl` and test assertions | running: 17 tests; 146 cues for seed 7, five minutes (140 for its 70 passes, 10 of them failed, and 6 for its 3 shots; no goal in that window, so goals are covered by hand-built cases) |
-| Fact-checker catch rate on planted false claims, and true claims wrongly rejected | `uv run python -m ninety.eval.factcheck_eval` | `docs/eval/fact-checker.md` | re-run pending: the Judge's instructions and the tone kinds changed after the last run (fact split from tone, tone labels fitted to events, held-out and contradicted tone). Last published run, before that change, on held-out seeds 21,33: 129/129 false caught, 12/99 true rejected excluding service holds, all twelve on tone. |
+| Ledger versioning, evidence validation, and deterministic cue fixture | `uv run pytest tests/test_ledger.py tests/test_cues.py` | `tests/fixtures/cues-seed7.jsonl` and test assertions | running: 20 tests; 146 cues for seed 7, five minutes (140 for its 70 passes, 10 of them failed, and 6 for its 3 shots; no goal in that window, so goals are covered by hand-built cases) |
+| Fact-checker catch rate on planted false claims, and true claims wrongly rejected | `uv run python -m ninety.eval.factcheck_eval` | `docs/eval/fact-checker.md` | re-run pending: the Judge's instructions and the tone kinds changed after the last run (fact split from tone, tone labels fitted to events, held-out and contradicted tone). Since then a pass also carries `intended`, `interceptor` and `deflected_by` (lesson 42), so the Judge sees those fields; the code half now rejects a pass said to "find" or "pick out" anyone but its receiver (other wordings, such as "connects with", are still the Judge's), which catches "intercepted pass called completed" without the Judge; and two kinds test that rule (a failed pass, or one another team-mate got, said to find the player it was for). None of this is in the published numbers. Last published run, before that change, on held-out seeds 21,33: 129/129 false caught, 12/99 true rejected excluding service holds, all twelve on tone. |
 | Match engine touches: control by surface, whose ball and speed; throw-ins; pass completion | `uv run python -m ninety.sim.touches` (seeds 40 to 47) | `docs/eval/touches.md`, `docs/eval/funnel-touches.md` | running: a report, never a gate; comparisons fixed below. Seeds 40 to 47, before and after the cushioned touch (base 8c6e06e): thigh, chest or head touches 3,756 then 759 (passers now judge them by the engine's own rule), kept 58% then 61%; all touches except the dribbler's own kept 87% then 97%; throw-ins 87.1% then 84.0% first contact by a team-mate (Stone 2021: 83%), 66.0% then 59.1% held 5 s later (54%); completion 80.4% then 87.5% (R3: 75 to 88%) |
 | Recovery from injected failures | planned | `docs/eval/failure-table.md` | planned |
 | Ablation: one agent against the full workflow | planned | `docs/eval/ablation.md` | planned |
@@ -72,26 +72,68 @@ uv run ninety-render-check runs/dataset/test/seed9000* --determinism --report do
 ## Vision scoring
 
 Fixed before the first detector runs, so no rule is tuned to a result. Every vision report
-gives precision and recall (both kinds of error), on the fixed test set only.
+gives precision and recall (both kinds of error), on the fixed test set only. The pixel scorer
+accepts `frames.jsonl` labels and detection records (`frame`, `cls`, `bbox`, `score`) and applies
+a default score threshold of 0.5. This is an object-detection AP50-style rule (IoU 0.50 for
+players), following the COCO evaluation conventions ([Lin et al., 2014](https://arxiv.org/abs/1405.0312)).
 
-**Matching.** A detection is mapped onto the pitch through the camera and matched one to one,
-nearest first, to the true positions in the same frame.
+### Pixel boxes
 
-| Rule | Ball | Player | Why |
+Within each frame and class, eligible detections are paired one-to-one, best-first. Player boxes
+match at IoU ≥ 0.50. Ball boxes match when their centre distance is ≤ 5 pixels. A label with no
+match is a false negative; a detection with no match is a false positive. The report contains
+TP, FP, FN, precision and recall overall, by class, and for the difficulty groups below. Boxes
+with visibility zero are not labels because they were not drawn. Run:
+
+```bash
+uv run python -m ninety.eval.vision_score --frames runs/seed7/frames.jsonl \
+  --detected detections.jsonl --report vision-report.json
+```
+
+### Later follow-up: pitch-level matching
+
+Pitch-level matching is a separate future evaluation. It will map detections onto the pitch
+through the camera and match them one to one, nearest first, to true positions in the same
+frame. It is not part of the pixel-box score above and must not be used to interpret that score.
+
+| Planned comparison rule | Ball | Player | Why |
 |---|---|---|---|
-| Strict (the headline) | within 1.0 m | within 1.0 m | possession assigns the ball to the nearest player; two players are often about 2 m apart, so an error above half that can give the ball to the wrong one |
-| Lenient (for comparison) | within 2.0 m | within 1.5 m | the looser radii commonly used for this task, so our numbers can be compared with others |
+| Strict | within 1.0 m | within 1.0 m | possession assigns the ball to the nearest player; two players are often about 2 m apart |
+| Lenient | within 2.0 m | within 1.5 m | a looser comparison radius |
 
 **Difficulty groups.** Every true ball and player is put in groups using the renderer's
-labels, and recall is reported for each group as well as overall:
+labels. TP, FP, FN, precision, recall and F1 are reported for each visibility group
+nested under its class (`visibility.player.visible`, for example), and independently for
+each image-boundary group (`image_boundary.player.edge-touching` and
+`image_boundary.player.interior`; likewise for `ball`), as well as overall:
 
 | Group | Rule (from `frames.jsonl`) |
 |---|---|
 | visible | visibility ≥ 0.9 |
 | partly hidden | 0.5 ≤ visibility < 0.9 |
 | mostly hidden | 0 < visibility < 0.5 |
-| in the air (ball) | height above 0.5 m, about knee height |
-| blurred | camera blur streak longer than 3 px, about half the width of a ball at broadcast distance |
+| edge-touching | saved bbox reaches any image boundary: x0 ≤ 0, y0 ≤ 0, x1 ≥ camera.width or y1 ≥ camera.height |
+| interior | saved bbox reaches none of those boundaries |
+| in the air (ball; planned) | height above 0.5 m, about knee height |
+| blurred (planned) | camera blur streak longer than 3 px, about half the width of a ball at broadcast distance |
+
+The boundary rule uses each frame's saved camera width and height, with no margin; labelled
+frames missing those dimensions fail rather than guessing a resolution. It does not measure
+a truncation percentage: saved boxes do not say how much of an object lies outside the image.
+A player with bbox `[1041, 705, 1053, 720]` in a 1280×720 image and visibility 1.0 is both
+visible and edge-touching. Occlusion visibility and boundary contact are separate axes.
+
+Matching runs once, not once per difficulty group. A matched prediction inherits its true
+label's group on each axis. An unmatched prediction is a false positive assigned to the
+nearest true label's group in the same frame and class (bbox centre distance; ties use the
+first label in saved order), even if that label was already matched. This is an attribution
+convention for group precision, not evidence of a false prediction's occlusion or boundary
+status. A false positive with no same-frame/class label remains in overall and by-class
+counts, but cannot be assigned to a difficulty group; group FP totals can therefore be lower
+than by-class FP totals. No prediction is matched twice or discarded from overall metrics.
+Unmatched labels count as FN in their groups. Precision is `null` without predictions
+(`TP + FP = 0`); recall is `null` without labels (`TP + FN = 0`); F1 follows the existing
+convention of `null` when either metric is undefined or both are zero.
 
 The ball target (recall ≥ 0.90) applies to balls at least half visible; the other groups are
 reported, never left out.

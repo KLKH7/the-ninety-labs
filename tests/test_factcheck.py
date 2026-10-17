@@ -154,3 +154,45 @@ def test_player_in_no_known_event_is_still_rejected():
     verdict = check(Claim(f"{absent} starts the move.", [PASS["id"]]), known)
     assert not verdict.ok
     assert absent in verdict.reasons[0]
+
+
+def test_a_pass_finds_only_its_receiver():
+    """Lesson 42: who a pass was for and who won it are cited players, but neither received it, so a
+    verb that says it arrived must name the receiver."""
+    failed = {"id": "e1", "clock": "00:10", "minute": 1, "second": 10, "type": "pass", "team": "home",
+              "player": "h7", "intended": "h9", "interceptor": "a4", "outcome": "fail", "distance_m": 20}
+    other = {**failed, "id": "e2", "receiver": "h10", "outcome": "success"}
+    other.pop("interceptor")
+    known = {e["id"]: e for e in (failed, other)}
+    for e, name in ((failed, "h9"), (failed, "a4"), (other, "h9")):
+        verdict = check(Claim(f"h7 finds {name} with a 20 m pass.", [e["id"]]), known)
+        assert not verdict.ok and f"player {name} received no cited pass from h7" in verdict.reasons
+    assert not check(Claim("h7 picks out h9.", ["e2"]), known).ok
+    assert check(Claim("h7 finds h10 with a 20 m pass.", ["e2"]), known).ok
+    assert check(Claim("h7's pass for h9 is cut out by a4.", ["e1"]), known).ok
+
+
+def test_a_passer_finds_only_the_player_his_own_pass_reached():
+    """Two cited passes: each passer's verb must name his own pass's receiver, not the other's."""
+    one = {"id": "e1", "clock": "00:10", "minute": 1, "second": 10, "type": "pass", "team": "home",
+           "player": "h7", "receiver": "h10", "outcome": "success", "distance_m": 20}
+    two = {**one, "id": "e2", "player": "h3", "receiver": "h9"}
+    known = {e["id"]: e for e in (one, two)}
+    assert check(Claim("h7 finds h10, then h3 finds h9.", ["e1", "e2"]), known).ok
+    for text in ("h7 finds h9.", "h3 finds h10.", "h7 Finds H9.", "H7 Finds H9."):
+        assert not check(Claim(text, ["e1", "e2"]), known).ok, text
+    assert check(Claim("H7 Finds H10.", ["e1"]), known).ok  # ids compared whatever their case
+
+
+def test_found_about_a_tackle_or_pressure_is_not_read_as_a_pass():
+    """A tackle's or a press's `receiver` is the player challenged: the pass rule does not apply."""
+    tackle = {"id": "e1", "clock": "00:10", "minute": 1, "second": 10, "type": "tackle", "team": "away",
+              "player": "a4", "receiver": "h9", "outcome": "success"}
+    press = {**tackle, "id": "e2", "type": "pressure", "outcome": None}
+    known = {e["id"]: e for e in (tackle, press)}
+    assert check(Claim("a4 found h9 in possession and won it.", ["e1"]), known).ok
+    assert check(Claim("a4 picks out h9 to press.", ["e2"]), known).ok
+    # his failed pass and his tackle on h9 cited together: the tackle did not make h9 a receiver
+    failed = {**tackle, "id": "e3", "type": "pass", "receiver": None, "intended": "a9", "outcome": "fail"}
+    known["e3"] = failed
+    assert not check(Claim("a4 finds h9.", ["e1", "e3"]), known).ok

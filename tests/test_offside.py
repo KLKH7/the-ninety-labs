@@ -34,12 +34,14 @@ def test_level_or_in_his_own_half_or_behind_the_ball_is_onside():
 def test_playing_the_ball_from_an_offside_position_gives_a_free_kick_to_the_defenders():
     e, passer, runner = setup()
     runner.x, runner.y = 80.0, 34.0
-    e.kicked = e.emit("pass", "home", 55.0, 34.0, player=passer.id)
+    e.kicked = e.emit("pass", "home", 55.0, 34.0, player=passer.id, intended=runner.id)
     e.kick(passer, 15.0, 0.0, 0.0)
     assert e.touched(runner, 80.0, 34.0, controls=True)
     assert e.match.events[-1]["type"] == "offside" and e.restart.kind == "free_kick"
     assert e.restart.team == "away"
-    assert next(ev for ev in e.match.events if ev["type"] == "pass")["outcome"] == "fail"
+    pass_ = next(ev for ev in e.match.events if ev["type"] == "pass")
+    # meant for him, never received: the offside event names him (lesson 42)
+    assert pass_["outcome"] == "fail" and pass_["receiver"] is None and pass_["intended"] == runner.id
 
 
 def test_no_offside_straight_from_a_throw_in():

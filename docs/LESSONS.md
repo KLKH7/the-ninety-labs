@@ -368,6 +368,24 @@ short and actionable. This file is public: no research sources, product names or
   the report shows breaking gets a test.
 - **Check:** `tests/test_penalties.py::test_a_penalty_never_comes_off_the_man_who_took_it`.
 
+### 42. One field, one meaning: who a pass was for is not who got it
+- **What happened:** a pass event's `receiver` meant the team-mate who got a completed pass and,
+  on a failed one, the opponent who cut it out. The cue template read it as the target, so 12 of
+  the 15 failed-pass cues in the seed-7 fixture said things like "a2 looks for h8", h8 being the
+  home player who intercepted it. Lesson 23's checks passed: the verb followed the outcome, the
+  name did not.
+- **Rule:** a pass records each person in their own field: `intended` (whom the passer chose),
+  `receiver` (the team-mate who got it, completed passes only), `interceptor` (the opponent who won
+  a failed one) and `deflected_by` (an opponent who only touched it, which says nothing about where
+  it went next). Never reuse a field for a different role depending on the outcome. A word that
+  states a role ("finds", "cut out by") reads the field for that role, in the cue and in the
+  fact-checker.
+- **Check:** the validator's C4 fails a pass whose receiver or intended is an opponent, whose
+  interceptor or deflector is a team-mate, or whose receiver is set on a failed pass;
+  `tests/test_cues.py::test_no_cue_in_the_fixture_names_an_opponent_as_a_pass_target` fails on
+  the old fixture; `tests/test_factcheck.py::test_a_pass_finds_only_its_receiver` fails without
+  the fact-checker's role check.
+
 ### 47. A rule two places use lives in one place
 - **What happened:** when the engine began taking a high ball on the thigh, chest or head, at half
   a foot's pace (A4), the passer's estimate kept judging every reception by the foot. Passers
