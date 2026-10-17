@@ -25,6 +25,7 @@ ninety-render = "ninety.render.cli:render_main"
 ninety-dataset = "ninety.render.cli:dataset_main"
 ninety-render-check = "ninety.render.cli:check_main"
 ninety-grid = "ninety.sim.grid:main"
+ninety-data-stats = "ninety.vision.data_stats:main"
 
 [dependency-groups]
 dev = [
@@ -33,6 +34,9 @@ dev = [
 ]
 render-job = [
     "azure-storage-blob>=12",
+]
+vision = [
+    "rfdetr==1.11.2",
 ]
 
 [build-system]
