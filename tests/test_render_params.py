@@ -75,17 +75,17 @@ def test_kits_contrast_by_default_and_on_request():
 
 
 def test_overrides_apply_and_are_validated():
-    p = sample_params(1, lighting="night", **{"camera.half_width_m": 12.0})
-    assert p.lighting == "night" and p.camera.half_width_m == 12.0
+    p = sample_params(1, occlusion="crowded", **{"camera.half_width_m": 12.0})
+    assert p.occlusion == "crowded" and p.camera.half_width_m == 12.0
     with pytest.raises(ValueError):
         apply_overrides(p, {"lighting": "noon"})
     with pytest.raises(ValueError):
         apply_overrides(p, {"no_such_knob": 1})
 
 
-def test_rain_cuts_and_patterns_are_built():
-    p = sample_params(1, weather="rain", camera_cut=True, home_pattern="hoops", away_pattern="stripes")
-    assert p.weather == "rain" and p.camera_cut is True
+def test_cuts_and_patterns_are_built():
+    p = sample_params(1, camera_cut=True, home_pattern="hoops", away_pattern="stripes")
+    assert p.camera_cut is True
     assert p.home_pattern == "hoops" and p.away_pattern == "stripes"
     with pytest.raises(ValueError):
         sample_params(1, weather="hail")
@@ -95,22 +95,31 @@ def test_rain_cuts_and_patterns_are_built():
         sample_params(1, camera_cut="sometimes")
 
 
-def test_sampling_adds_rain_cuts_and_patterns_without_moving_the_camera():
-    # Seed 5's camera and kits were fixed before rain, cuts and patterns were appended.
+@pytest.mark.parametrize("override", [{"lighting": v} for v in ("dusk", "night", "overcast")]
+                         + [{"weather": v} for v in ("overcast", "rain")])
+def test_lighting_and_weather_that_render_badly_are_refused(override):
+    with pytest.raises(NotImplementedError):
+        sample_params(1, **override)
+
+
+def test_every_clip_is_a_clear_day():
+    for s in [*range(100), 900001, 900002, 900003, 900004, 900005]:
+        p = sample_params(s)
+        assert p.lighting == "day" and p.weather == "clear" and 30 <= p.sun_elevation_deg <= 60
+
+
+def test_sampling_adds_cuts_and_patterns_without_moving_the_camera():
+    # Seed 5's camera and kits were fixed before cuts and patterns were appended, and stay put
+    # now that lighting and weather are pinned (seed 5 was drawn as dusk; the sun is now a day sun).
     p = sample_params(5)
-    assert p.lighting == "dusk" and p.sun_azimuth_deg == 164.5 and p.sun_elevation_deg == 10.3
+    assert p.lighting == "day" and p.sun_azimuth_deg == 164.5 and p.sun_elevation_deg == 43.7
     assert p.camera.height_m == 21.76 and p.camera.back_m == 38.33 and p.camera.half_width_m == 17.57
     assert p.home_kit.shirt == "#1a1a1a" and p.away_kit.shirt == "#694eb0"
     assert p.home_code == "DUN" and p.away_code == "GRV"
     assert p.grass_hue == 0.279 and p.motion_blur == 0.31 and p.noise == 0.019
     assert p.home_pattern in PATTERNS and p.away_pattern in PATTERNS
-    assert "rain" in {sample_params(s).weather for s in range(60)}
     assert any(sample_params(s).camera_cut for s in range(40))
     assert any(not sample_params(s).camera_cut for s in range(40))
-    for s in range(40):
-        q = sample_params(s)
-        if q.lighting == "overcast":
-            assert q.weather == "overcast"
 
 
 def test_parse_override_types():

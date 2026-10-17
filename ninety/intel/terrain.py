@@ -13,9 +13,9 @@ Per-minute arrays are indexed from 0; index m covers the clock from m:00 to m:59
 minute m + 1 (`ninety.match.facts.minute_of`). Every `minute` field on a turning point is a football
 minute, so it reads the same as the minutes the agents and the fact-checking agent use.
 
-Threat comes from the engine's possession-value table (`ninety/sim/value.py`). That table is not
-committed while it is still being measured, so without it this reads the latest published round
-from docs/eval/possession-value.md and says so.
+Threat is what the engine itself says having the ball there is worth (`ninety.sim.decisions.value`:
+its measured table when one is in use, otherwise the published expected threat in
+`ninety/sim/threat.py`), so the terrain and the players' decisions value the ball by one rule.
 
     uv run python -m ninety.intel.terrain runs/seed7 web/terrain/seed7.json
 """
@@ -24,18 +24,16 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import statistics
-import sys
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 
 from ninety.intel.stats import control_vs_chaos
-from ninety.sim import value
-from ninety.sim.value import PITCH_X, Table
+from ninety.sim.decisions import value as ball_value
+from ninety.sim.threat import PITCH_X
 
-ZONES = 21  # 5 m strips, the threat table's own resolution along the pitch
+ZONES = 21  # 5 m strips along the pitch
 SAMPLE_EVERY = 5  # frames: 5 samples a second at 25 fps
 SMOOTH_MINUTES = 5
 # Turning points (design values, tuned by eye on seed 7, not measured): a side is on top in a
@@ -46,21 +44,7 @@ DEAD_BAND = 0.25
 HOLD_MINUTES = 5
 BUILD_UP_MINUTES = 3
 INVOLVEMENT = ("pass", "shot", "tackle", "interception", "pressure")
-PUBLISHED_TABLE = value.ROOT / "docs" / "eval" / "possession-value.md"
 
-
-def threat_table(path: Path = value.TABLE, published: Path = PUBLISHED_TABLE) -> Table:
-    tables = value.load(path)
-    if tables:
-        return tables.threat
-    text = published.read_text()
-    block = text.split("Threat, metres")[1].split("Finishing, metres")[0]
-    rows = [r for r in block.splitlines() if re.match(r"^\| \d+-\d+ \|", r)]
-    values = [[float(c) / 100 for c in r.strip("|").split("|")[1:]] for r in rows]
-    if len(values) != value.CELLS_X or any(len(r) != value.CELLS_Y for r in values):
-        raise ValueError(f"{published}: threat table is not {value.CELLS_X} x {value.CELLS_Y}")
-    print(f"terrain: {path} not found, using the threat table published in {published}", file=sys.stderr)
-    return Table(values)
 
 
 def _minute(t: float, minutes: int) -> int:
@@ -77,13 +61,13 @@ def _is_recovery(event: Mapping) -> bool:
     return event["type"] == "tackle" and event.get("outcome") == "success"
 
 
-def build_terrain(events: list[Mapping], frames: Iterable[Mapping], roster: list[Mapping], minutes: int,
-                  threat: Table) -> dict:
+def build_terrain(events: list[Mapping], frames: Iterable[Mapping], roster: list[Mapping],
+                  minutes: int) -> dict:
     grid = [[0.0] * ZONES for _ in range(minutes)]
     samples = [0] * minutes
     home, away = [0.0] * minutes, [0.0] * minutes
     position = defaultdict(lambda: [[0.0, 0] for _ in range(minutes)])
-    team = None  # a loose ball still belongs to the team that last had it, as in value.possessions
+    team = None  # a loose ball still belongs to the team that last had it
     for frame in frames:
         if frame["frame"] % SAMPLE_EVERY:
             continue
@@ -93,7 +77,7 @@ def build_terrain(events: list[Mapping], frames: Iterable[Mapping], roster: list
             team = _team_of(frame["possessor"])
         if team:
             x, y = frame["ball"]["x"], frame["ball"]["y"]
-            v = threat.at(x, y, PITCH_X if team == "home" else 0.0)
+            v = ball_value(x, y, PITCH_X if team == "home" else 0.0)
             zone = min(ZONES - 1, max(0, int(x / PITCH_X * ZONES)))
             grid[m][zone] += v if team == "home" else -v
             (home if team == "home" else away)[m] += v
@@ -216,7 +200,7 @@ def main() -> None:
     events = [json.loads(line) for line in open(args.clip / "events.jsonl")]
     minutes = max(1, int(-(-meta["minutes"] // 1)))
     frames = _frames(args.clip / "frames.jsonl")
-    terrain = build_terrain(events, frames, meta["roster"], minutes, threat_table())
+    terrain = build_terrain(events, frames, meta["roster"], minutes)
     terrain.update(seed=meta.get("seed"), score=meta["score"])
     args.out.write_text(json.dumps(terrain, separators=(",", ":")))
     print(f"terrain: {minutes} minutes, {len(terrain['turning_points'])} turning points -> {args.out}")

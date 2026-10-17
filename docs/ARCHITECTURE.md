@@ -83,7 +83,7 @@ the Game, a sports-science measurement or a published match statistic ([GROUNDIN
 | Render labels | each player's and the ball's box, projected through the camera, so labels are exact | `web/render` | running |
 | Vision pipeline | sees pixels only: detection, tracking, camera-to-pitch mapping, event rules | `ninety/vision` | planned |
 | Scoring | compares detected events with the answer key: precision and recall per event type | `ninety/eval` | planned |
-| Vision Auditor, Data agent | find where vision fails and ask the engine for more of exactly those scenes | `ninety/agents` | planned |
+| Vision Auditor, Data agent | find where vision fails and ask the engine for more of exactly those scenes | `ninety/agents` | Data agent and the queue-driven render job running; Vision Auditor planned |
 
 The engine and the validator are separate on purpose. The engine encodes *how to make* a
 moment happen; the validator encodes *what must be true* of the result. Written independently
@@ -210,7 +210,7 @@ budget alert covers the subscription. See [SECURITY.md](../SECURITY.md).
 | Training compute | Apple GPU (MPS) or free Colab | no GPU quota assumed |
 | Agents | Microsoft Agent Framework (Python); each agent published to Foundry as a versioned prompt agent with a content-safety guardrail, and called by its pinned version | multi-agent orchestration with handoffs and recovery; what ran is visible and versioned in Foundry |
 | Shared state | Ledger in Cosmos DB (free tier) | one versioned record every agent reads |
-| Agent tools | MCP server, read-only | standard tool interface, safe by construction |
+| Agent tools | MCP server, read-only, hosted at `/mcp` on the API and called by Foundry with a Key Vault key | standard tool interface, safe by construction; tool calls run server-side in Foundry |
 | Personalizer | separate Container App over A2A, in-process fallback | a real process boundary |
 | Speech | Azure AI Speech neural voices with SSML; stereo position from ball x in the browser | audio description |
 | Viewer | Vite + TypeScript; video with a canvas overlay synced to the graphics timeline | graphics drawn on the footage |

@@ -1,7 +1,9 @@
 import pytest
 
-from ninety.intel.terrain import HOLD_MINUTES, ZONES, build_terrain, threat_table, turning_points
+from ninety.intel import terrain as terrain_module
+from ninety.intel.terrain import HOLD_MINUTES, ZONES, build_terrain, turning_points
 from ninety.match.facts import minute_of
+from ninety.sim import decisions
 from ninety.sim.engine import simulate
 
 MINUTES = 12
@@ -10,14 +12,13 @@ MINUTES = 12
 @pytest.fixture(scope="module")
 def played():
     match = simulate(7, MINUTES)
-    return match, build_terrain(match.events, match.frames, match.roster, MINUTES, threat_table())
+    return match, build_terrain(match.events, match.frames, match.roster, MINUTES)
 
 
-def test_threat_table_matches_the_value_grid():
-    table = threat_table()
-    assert len(table.values) == 21 and all(len(row) == 10 for row in table.values)
-    near, far = table.at(100, 34, 105.0), table.at(5, 34, 105.0)
-    assert near > far, "the ball near the goal attacked is worth more than near your own"
+def test_terrain_values_the_ball_by_the_engines_rule():
+    # one rule for what the ball is worth: the terrain calls the function the players decide with
+    assert terrain_module.ball_value is decisions.value
+    assert decisions.value(100, 34, 105.0) > decisions.value(5, 34, 105.0)
 
 
 def test_grid_signs_follow_the_team_in_possession(played):

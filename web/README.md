@@ -16,19 +16,21 @@ Every number comes from `ninety/intel/terrain.py`, and every card sentence from
 `turning_point_cues` in `ninety/agents/cues.py`: overlay cues (`schemas/overlay_cue.schema.json`)
 written by code templates and passed through the fact-checking agent's number check, with no model
 call. The page only lays them out. `seed7.json` and `seed7.cues.jsonl` are seed 7 at 90 minutes
-(a 0–0 with four shots).
+(a 3–0 home win with 28 shots).
 
 ```bash
 npm ci --prefix web
-uv run ninety-sim --seed 7 --minutes 90 --out runs/seed7      # about 3 minutes
+uv run ninety-sim --seed 7 --minutes 90 --out runs/seed7      # about 5 minutes
 uv run python -m ninety.intel.terrain runs/seed7 web/terrain/seed7.json
 uv run python -m ninety.agents.cues --terrain web/terrain/seed7.json --clip runs/seed7 --out web/terrain/seed7.cues.jsonl
 python -m http.server -d web 8000   # open http://localhost:8000/terrain/  (?data=other.json loads other.json and other.cues.jsonl)
 ```
 
-Limits: the threat table is not committed while it is measured, so the terrain reads the latest
-round published in `docs/eval/possession-value.md` and says so on stderr. It reads simulator
-events and frames directly, as `ninety/intel` does until vision lands (M1).
+Threat is the engine's own value of the ball (`ninety.sim.decisions.value`: the published expected
+threat in `ninety/sim/threat.py` unless a measured table is in use), so the terrain and the players
+agree on what a spot is worth. Limits: it reads simulator events and frames directly, as
+`ninety/intel` does until vision lands (M1); home attacks the same goal in both halves, as the
+engine does.
 
 ## `web/render`: broadcast renderer
 
@@ -43,7 +45,7 @@ rules: [render guide](../docs/guides/broadcast-render.md).
 npm ci --prefix web                      # three.js, pinned in package-lock.json
 uv run playwright install chromium       # once
 uv run ninety-render --seed 7 --seconds 10 --out runs/clip7
-uv run ninety-render --seed 7 --out runs/clip7-night --set lighting=night --set kit_contrast=low --set occlusion=crowded
+uv run ninety-render --seed 7 --out runs/clip7-hard --set kit_contrast=low --set occlusion=crowded
 uv run ninety-dataset --split train --count 20   # training clips, seeds 1..20
 uv run ninety-dataset --split test               # fixed test set, seeds 900001..900005, no overrides
 uv run ninety-render-check runs/clip7            # render guide section 6 checks
@@ -53,7 +55,7 @@ Knobs (`--set key=value`), all recorded in `clip.json`:
 
 | Knob | Values | Status |
 |---|---|---|
-| `lighting` | `day`, `dusk`, `night` (four floodlight shadows), `overcast` | built |
+| `lighting` | `day` | built; `dusk`, `night` (four floodlight shadows) and `overcast` are drawn but not yet broadcast quality, so they are planned and refused |
 | `sun_azimuth_deg`, `sun_elevation_deg` | degrees | built |
 | `kit_contrast` | `normal`, `low` (similar luminance: the team-confusion case) | built |
 | `occlusion` | `natural`, `crowded` (picks the window with most players near the ball) | built |
@@ -63,7 +65,7 @@ Knobs (`--set key=value`), all recorded in `clip.json`:
 | `motion_blur` | shutter fraction; streak follows the pan | built |
 | `noise`, `jpeg_quality` | sensor noise and compression | built |
 | `grass_hue`, `stripe_width_m`, `wear`, `stand_color`, `crowd_density` | look | built |
-| `weather=rain` | darker wet grass, specular sheen, streaks over the frame | built |
+| `weather` | `clear` | built; `overcast` and `rain` (wet grass, sheen, streaks) are planned and refused, for the same reason |
 | `camera_cut=true` | cut to the far stand, or high behind the goal when the ball is in that penalty area | built |
 | `home_pattern`, `away_pattern` | `solid`, `stripes`, `hoops`, `sash`, `halves` (goalkeepers stay solid) | built |
 

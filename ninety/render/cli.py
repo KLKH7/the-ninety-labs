@@ -12,6 +12,7 @@ import datetime as dt
 import json
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -47,7 +48,7 @@ def render_main(argv: list[str] | None = None) -> None:
         action="append",
         default=[],
         metavar="KEY=VALUE",
-        help="override a render parameter, e.g. lighting=night, kit_contrast=low, occlusion=crowded, "
+        help="override a render parameter, e.g. kit_contrast=low, occlusion=crowded, "
         "camera.half_width_m=12 (repeatable)",
     )
     _add_render_args(ap)
@@ -176,15 +177,18 @@ def check_main(argv: list[str] | None = None) -> None:
     if a.determinism:
         first = a.clips[0]
         clip = json.loads((first / "clip.json").read_text())
-        again = first.parent / f"{first.name}.rerender"
-        render_clip(
-            clip["seed"],
-            again,
-            seconds=clip["frames"] / clip["fps"],
-            start_s=clip["t_start"],
-            overrides=clip["overrides"],
-        )
-        da, db = digest(first), digest(again)
+        # Re-render into a temporary folder: a copy left beside the clip is the same seed twice
+        # to anything that walks the dataset.
+        with tempfile.TemporaryDirectory(prefix=f"{first.name}-rerender-") as tmp:
+            again = Path(tmp) / first.name
+            render_clip(
+                clip["seed"],
+                again,
+                seconds=clip["frames"] / clip["fps"],
+                start_s=clip["t_start"],
+                overrides=clip["overrides"],
+            )
+            da, db = digest(first), digest(again)
         summary["determinism"] = {
             "clip": clip["clip_id"],
             "frames_jsonl_identical": da["frames_jsonl"] == db["frames_jsonl"],

@@ -4,7 +4,7 @@ from jsonschema import validate
 from ninety.agents import cues
 from ninety.agents.cues import SCHEMA, turning_point_cues
 from ninety.agents.factcheck import Claim, check
-from ninety.intel.terrain import build_terrain, threat_table
+from ninety.intel.terrain import build_terrain
 from ninety.match.facts import compact
 from ninety.sim.engine import simulate
 
@@ -14,7 +14,7 @@ MINUTES = 12
 @pytest.fixture(scope="module")
 def played():
     match = simulate(7, MINUTES)
-    terrain = build_terrain(match.events, match.frames, match.roster, MINUTES, threat_table())
+    terrain = build_terrain(match.events, match.frames, match.roster, MINUTES)
     return match, terrain
 
 
@@ -60,7 +60,7 @@ def test_templates_follow_the_facts():
         "Going in, they intercept 2 times.")
     assert texts["cue-tp41-audio"].startswith(
         "Home take control in minute 41 and keep it until minute 90, the end of the match")
-    assert texts["cue-tp6-analyst"] == "Away on top 6'–40'. Previous three minutes: 3 pressures."
+    assert texts["cue-tp6-analyst"] == "Away on top 6'–40'. The three minutes up to it: 3 pressures."
 
 
 def test_a_short_spell_after_a_short_spell_reads_as_brief():
@@ -90,3 +90,29 @@ def test_a_template_with_an_uncited_count_is_refused(monkeypatch):
     events = [_event(1, 6, "pressure", "away")]
     with pytest.raises(ValueError, match="4"):
         _texts([_point(6, "away", 30, 24, ["e1"])], events)
+
+
+def test_goals_in_the_spell_are_named_with_their_minutes():
+    events = [_event(1, 20, "pressure", "home"), _event(2, 20, "pressure", "home"),
+              _event(3, 20, "pressure", "home"), _event(4, 34, "goal", "home"),
+              _event(5, 60, "goal", "home"), _event(6, 90, "pass", "away"),
+              _event(7, 70, "goal", "away")]
+    texts = _texts([_point(20, "home", 90, 71, ["e1", "e2", "e3"])], events)
+    assert texts["cue-tp20-casual"].endswith(
+        "They score 2 times, at 34' and 60'. Going in, they press 3 times.")
+    assert "They score 2 times, in minute 34 and minute 60." in texts["cue-tp20-audio"]
+    assert "Goals in the spell: 34', 60'." in texts["cue-tp20-analyst"]
+
+
+def test_an_own_goal_is_not_credited_to_the_spell():
+    # a goal event with no scorer is an own goal; which side it counts for is not on the event
+    own_goal = {**_event(2, 30, "goal", "home"), "player": None}
+    texts = _texts([_point(20, "home", 40, 21, ["e1"])], [_event(1, 20, "pass", "home"), own_goal])
+    assert "score" not in texts["cue-tp20-casual"] and "Goals" not in texts["cue-tp20-analyst"]
+
+
+def test_a_turning_point_at_kick_off_says_first_minute():
+    events = [_event(i, 1, "pass", "home") for i in range(1, 5)] + [_event(9, 8, "pass", "away")]
+    texts = _texts([_point(1, "home", 8, 8, ["e1", "e2", "e3", "e4"])], events)
+    assert texts["cue-tp1-casual"].endswith("They play 4 passes in the first minute.")
+    assert texts["cue-tp1-analyst"].endswith("The first minute: 4 passes.")

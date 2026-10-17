@@ -29,18 +29,33 @@ SHOT_OUTCOME = {"on_target": "on target", "off_target": "off target", "blocked":
 
 
 def _pass_text(event: dict, persona: str) -> str:
-    player, receiver, outcome = event["player"], event.get("receiver"), event.get("outcome")
+    """A pass names who it was for (`intended`), who got it (`receiver`, completed only), who cut it
+    out (`interceptor`) and who only touched it (`deflected_by`): different people, never one field
+    read as another. A touch is only a touch: "cut out" needs the opponent to have won it."""
+    player, outcome = event["player"], event.get("outcome")
+    receiver, intended, interceptor = event.get("receiver"), event.get("intended"), event.get("interceptor")
+    deflector = event.get("deflected_by")
+    target = receiver or intended
+    stopped = (f"cut out by {interceptor}" if interceptor
+               else f"deflected by {deflector}" if deflector else None)
     if persona == "casual":
-        if not receiver:
-            return f"{player} plays a pass"
-        if outcome == "success":
+        if outcome == "success" and receiver:
             return f"{player} finds {receiver}"
         if outcome == "fail":
-            return f"{player} looks for {receiver}, but it doesn't arrive"
-        return f"{player} looks for {receiver}"
-    parts = [f"{player} → {receiver}" if receiver else f"{player} pass"]
+            if intended and stopped:
+                return f"{player}'s pass for {intended} is {stopped}"
+            if stopped:
+                return f"{player}'s pass is {stopped}"
+            if intended:
+                return f"{player} looks for {intended}, but it doesn't arrive"
+        if intended:
+            return f"{player} looks for {intended}"
+        return f"{player} plays a pass"
+    parts = [f"{player} → {target}" if target else f"{player} pass"]
     if outcome == "fail":
-        parts[0] += " (incomplete)"
+        parts[0] += f" ({stopped})" if stopped else " (incomplete)"
+    elif outcome is None and target:
+        parts[0] += " (in flight)"
     if event.get("distance_m") is not None:
         parts.append(f"{event['distance_m']} m")
     if event.get("ball_speed_kmh") is not None:
@@ -123,7 +138,7 @@ def _other(team: str) -> str:
 
 def _counted(team: str) -> set[tuple[str, str]]:
     """The (team, type) pairs a turning-point text may state a count of."""
-    return {(team, "pass"), (team, "pressure"), (team, "interception"), (team, "shot"),
+    return {(team, "pass"), (team, "pressure"), (team, "interception"), (team, "shot"), (team, "goal"),
             (_other(team), "interception")}
 
 
@@ -151,27 +166,48 @@ def _counts(cited: list[dict], team: str) -> dict[str, int]:
         return sum(e["team"] == event_team and e["type"] == kind for e in cited)
     return {"passes": n(team, "pass"), "pressures": n(team, "pressure"),
             "interceptions": n(team, "interception"), "shots": n(team, "shot"),
-            "lost": n(_other(team), "interception")}
+            "goals": n(team, "goal"), "lost": n(_other(team), "interception")}
 
 
 def _count(n: int, one: str, many: str) -> str:
     return f"{n} {one if n == 1 else many}"
 
 
+def _listed(items: list[str]) -> str:
+    return items[0] if len(items) == 1 else f"{', '.join(items[:-1])} and {items[-1]}"
+
+
+def _goals_text(c: dict[str, int], goal_minutes: list[int], persona: str) -> str:
+    """The spell's goals: their minutes, and how many when more than one."""
+    if not goal_minutes:
+        return ""
+    marked = [f"{g}'" for g in goal_minutes]
+    if persona == "analyst":
+        return f" Goals in the spell: {', '.join(marked)}."
+    at = _listed([f"minute {g}" for g in goal_minutes]) if persona == "audio" else _listed(marked)
+    word = "in" if persona == "audio" else "at"
+    if len(goal_minutes) == 1:
+        return f" They score {word} {at}."
+    return f" They score {c['goals']} times, {word} {at}."
+
+
 def _turning_text(point: dict, previous: dict | None, minutes: int, c: dict[str, int],
-                  until: int | None, peak: int | None, persona: str) -> str:
+                  until: int | None, peak: int | None, persona: str, goal_minutes: list[int] = ()) -> str:
     side, other = SIDE[point["team"]], SIDE[_other(point["team"])]
     m = point["minute"]
     to_end = until is not None and point["until"] == minutes
+    # The build-up is the three minutes up to the turning point, or fewer at kick-off.
+    build_up = {1: "the first minute", 2: "the first two minutes"}.get(m, "the three minutes up to it")
+    goals = _goals_text(c, list(goal_minutes), persona)
     if persona == "analyst":
         span = f"{m}'–{until}'" if until is not None else f"from {m}'"
         head = f"{side} on top {span}" + (f", peak {peak}'" if peak is not None else "")
         parts = [_count(c[k], one, many) for k, one, many in
                  (("passes", "pass", "passes"), ("pressures", "pressure", "pressures"),
                   ("interceptions", "interception", "interceptions"), ("shots", "shot", "shots")) if c[k]]
-        tail = f"Previous three minutes: {', '.join(parts)}" if parts else "Quiet build-up"
+        tail = f"{build_up[0].upper()}{build_up[1:]}: {', '.join(parts)}" if parts else "Quiet build-up"
         lost = f"; {other} intercepted {c['lost']}" if c["lost"] else ""
-        return f"{head}. {tail}{lost}."
+        return f"{head}.{goals} {tail}{lost}."
 
     if persona == "audio":
         opener = f"{side} take control in minute {m}"
@@ -202,10 +238,10 @@ def _turning_text(point: dict, previous: dict | None, minutes: int, c: dict[str,
     elif c["pressures"] >= 3:
         why = f"Going in, they press {c['pressures']} times."
     elif c["passes"] >= 3:
-        why = f"They play {c['passes']} passes in the three minutes before."
+        why = f"They play {c['passes']} passes in {build_up}."
     else:
         why = ""
-    return f"{opener}. {why}".strip()
+    return f"{opener}.{goals} {why}".strip()
 
 
 def turning_point_cues(terrain: dict, events: list[dict]) -> list[dict]:
@@ -230,10 +266,19 @@ def turning_point_cues(terrain: dict, events: list[dict]) -> list[dict]:
         peak = point["peak_minute"]
         if peak in (point["minute"], point["until"]) or not cited_minute(peak):
             peak = None
+        # Goals scored by the side on top during its spell; an own goal (no scorer) is left out,
+        # since which side it counts for is not on the event.
+        goals = [e for e in by_minute if e["type"] == "goal" and e["team"] == team and e.get("player")
+                 and point["minute"] <= e["minute"] <= point["until"]]
+        for goal in goals:
+            if goal["id"] not in evidence:
+                evidence.append(goal["id"])
+                cited.append(goal)
         counts = _counts(cited, team)
         previous = points[n - 1] if n else None
         for persona in ("analyst", "casual", "audio"):
-            text = _turning_text(point, previous, terrain["minutes"], counts, until, peak, persona)
+            text = _turning_text(point, previous, terrain["minutes"], counts, until, peak, persona,
+                                 [g["minute"] for g in goals])
             verdict = check(Claim(text, evidence), known)
             if not verdict.ok:
                 raise ValueError(f"turning point {point['minute']}-{persona}: {verdict.reasons}")

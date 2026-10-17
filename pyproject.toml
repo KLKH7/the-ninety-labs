@@ -35,6 +35,10 @@ dev = [
     "pytest>=8",
     "ruff>=0.17.0",
 ]
+render-job = [
+    "azure-storage-blob>=12",
+    "azure-storage-queue>=12.18.0",
+]
 vision = [
     "rfdetr==1.11.2",
 ]
