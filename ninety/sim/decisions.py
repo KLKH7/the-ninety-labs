@@ -19,9 +19,12 @@ from dataclasses import dataclass
 from ninety.sim import ball, fmath, offball, perception, shape, threat
 from ninety.sim import value as possession
 from ninety.sim.body import (
+    AERIAL_ABSORB,
     BODY_HEIGHT,
     BODY_RADIUS,
     BODY_RESTITUTION,
+    BODY_TOUCH_Z,
+    CHEST_TOP_Z,
     CONTROL_M,
     CS_MEAN,
     F0_MEAN,
@@ -804,7 +807,7 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
                 take, at, taker = t, i, mate
         if taker is None:
             continue  # nobody of his gets to it before it goes out or comes to rest out of reach
-        if offball.headed(False, points[at][2]):
+        if points[at][2] >= CHEST_TOP_Z:
             # P18 (engine.goes_up): he lets it drop to his feet if he can take it there before any
             # opponent could get to it at all; otherwise he heads it.
             t_f, i_f = reach_time(points, t_end, rests, sx, sy, ux, uy, *taker[:5], take + DROP_HORIZON_S,
@@ -817,11 +820,15 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
         _, a, z, g, vz = points[at]
         if at == len(points) - 1 and rests:
             g = vz = 0.0
-        if offball.headed(False, z):  # P18: he meets it with his head: won in the air, and what he
+        # A4, P18, as engine.contact decides the part: a ball he takes below the top of his chest
+        # meets his body there (a thigh or chest above a foot's height, killing AERIAL_ABSORB of
+        # what his foot would); above it, his head.
+        if z >= CHEST_TOP_Z:  # P18: he meets it with his head: won in the air, and what he
             p = 1.0  # does with it is his next choice
         else:
             rel = relative_speed(g * ux, g * uy, vz, taker[2], taker[3])
-            p = sigmoid((taker[5] - rel) / CONTROL_MARGIN_MPS)
+            absorb = taker[5] * (AERIAL_ABSORB if z > BODY_TOUCH_Z else 1.0)
+            p = sigmoid((absorb - rel) / CONTROL_MARGIN_MPS)
         horizon = take + OPPONENT_LATE_S
         # Where the ball has got to by then, along this strike: nobody further from that stretch of
         # its path than he can run by then matters (a shortcut, like `lb`).

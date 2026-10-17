@@ -691,3 +691,16 @@ short and actionable. This file is public: no research sources, product names or
   holds everything else equal, so only the lean can tell the outcomes apart.
 - **Check:** mutation-test each prior (set it to 1, drop it from the worth); the test named after
   it must go red.
+
+### 70. An estimate must judge a touch by the part of the body the engine uses
+- **What happened:** the engine takes a ball above a foot's height on the thigh or chest, which
+  kills half the pace a foot does, and heads only a ball above the chest. The passer's estimate
+  judged every touch below a foot's reach by the foot, and counted any ball above it as won in the
+  air. So lofted passes it rated about 76% sure arrived 60% of the time, and in nearly every
+  failed first touch by the man a pass was for (126 of 134), the ball met his thigh or chest at
+  a pace his foot would have killed. Completion over 90 minutes fell to 67%.
+- **Rule:** the heights that pick the body part, and what each part absorbs, live in `body.py`,
+  where the engine's contact and the estimate both read them (lesson 23). Neither keeps a copy.
+- **Check:** split the calibration by how the pass was struck (ground or lofted), not only by
+  the estimate's own bins. A gap in one kind of pass points to a rule the estimate does not
+  share with the engine.

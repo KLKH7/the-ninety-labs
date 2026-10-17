@@ -659,6 +659,19 @@ def test_a_first_touch_absorbs_the_balls_speed_relative_to_him():
     assert math.isclose(relative_speed(10.0, 0.0, 3.0, 0.0, 0.0), math.sqrt(109.0))
 
 
+def test_the_estimate_judges_the_first_touch_by_the_part_of_him_the_ball_meets(monkeypatch):
+    """A4 as engine.contact applies it: a ball taken above a foot's height, on the thigh or chest,
+    kills only AERIAL_ABSORB of what his foot would. The passer's estimate judged every touch below
+    head height by the foot, so the lofted passes it rated surest were the ones most often lost."""
+    def conf(lofted):
+        s = scene(x=60.0, mates=[("h9", 80.0, 34.0, 0.0)])
+        return D.pass_confidence(s, 80.0, 34.0, 80.0, 34.0, 0.0, lofted, D.PASS_PACES[1], "h9")
+    lofted, ground = conf(True), conf(False)
+    monkeypatch.setattr(D, "AERIAL_ABSORB", 1.0)  # every part kills what a foot does
+    assert conf(True) > lofted  # a lofted pass dropping onto him is taken on the thigh
+    assert conf(False) == ground  # a ground pass meets his foot either way
+
+
 def test_a_mishit_keeps_some_speed_and_no_strike_beats_a_foot():
     assert math.isclose(D.struck_speed(10.0, -0.9, 1.0), 3.0)  # the 0.3 floor
     assert D.struck_speed(30.0, 0.5, 1.0) == D.MAX_STRIKE_MPS

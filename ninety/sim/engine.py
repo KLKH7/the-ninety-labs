@@ -22,15 +22,19 @@ from dataclasses import asdict, dataclass, field
 from ninety.sim import ball, decisions, fmath, offball, perception, profiles, roles, setpieces, shape
 from ninety.sim import team as team_mod
 from ninety.sim.body import (
+    AERIAL_ABSORB,
     BODY_HEIGHT,
     BODY_RESTITUTION,
+    BODY_TOUCH_Z,
     BRAKE_MAX,
+    CHEST_TOP_Z,
     CONTROL_M,
     CS_MEAN,
     D0,
     F0_MEAN,
     FOOT_REACH_Z,
     STRIKE_FACING,
+    THIGH_TOP_Z,
     TURN_RATE,
     V0_MEAN,
     Body,
@@ -64,10 +68,7 @@ COVER_BEHIND_M = 8.0  # design: the covering player stands this far goal-side of
 PERCEPTION_ERR = 0.03  # verify: m/s of misjudged ball velocity per metre between player and ball
 PERSONAL_SPACE_M = 1.2  # players steer to keep about this far from each other
 ANTICIPATE_S = 0.4  # verify: how far ahead players judge where others will be
-BODY_TOUCH_Z = 0.45  # design (P14): above this, a ball he is under is a thigh, chest or head, not a foot
-AERIAL_ABSORB = 0.5  # design: those kill about half the pace a foot does (A4), same first touch
 TOUCH_POSE_S = 0.30  # design (P14): how long the body shows the part that met the ball
-THIGH_TOP_Z, CHEST_TOP_Z = 0.95, 1.50  # design (P14): the part by height; above the chest, the head
 MISCONTROL_KEEP = 0.4  # verify: share of speed a ball keeps off a failed touch or a parry
 POST_RADIUS = 0.06  # Law 1: posts and crossbar at most 12 cm wide
 WOODWORK_RESTITUTION = 0.6  # verify
