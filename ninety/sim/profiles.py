@@ -206,6 +206,8 @@ WEAK_FOOT_SPEED = 0.88  # A3: ... and about 12% slower
 FATIGUE_ERROR = 0.25  # A3: design, *verify*: about 25% wider when the slow store (P10) is spent
 FOOT_ABSORB_MPS = (12.0, 12.0)  # A4: a first touch kills 12 m/s plus 12 m/s more at full first-touch skill
 READ_ERROR_M = 1.5  # design: spread of a keeper's read of a shot's aim, at average anticipation
+# P18: design, verify: a header's direction and height are this much less precise than a kick's
+HEADER_ERROR = 2.0
 TURN_ERROR = 0.5  # design: error widens by up to half again for a ball struck across the body
 PRESSURE_M = 3.0  # design: an opponent this close puts the kicker under full pressure
 WEAK_SIDE_DEG = 30.0  # design: a kick this far to the weaker foot's side is struck with it
@@ -331,13 +333,18 @@ class Profile:
         return across, SPEED_ERROR * (1 + pressure * (1 - self["composure"])), up
 
     def strike_error(self, skill: str, speed: float, nearest_opponent_m: float, capacity: float,
-                     turn_deg: float) -> tuple[float, float, float, float]:
+                     turn_deg: float, header: bool = False) -> tuple[float, float, float, float]:
         """The kick error of a strike in the situation it is struck in, one definition for the kick
         (engine.execute) and the striker's own estimate of it (decisions.pass_confidence):
         (direction SD in degrees, speed SD as a share, launch-angle SD in degrees, the share of the
         intended speed he gets off that foot). Pressure from the nearest opponent; the foot from
-        the kick's direction against the way he faces (`turn_deg`)."""
+        the kick's direction against the way he faces (`turn_deg`). A `header` (P18) is met with the
+        head, which turns to the ball, so no foot and no angle across the body; its direction and
+        height are HEADER_ERROR times less precise."""
         pressure = min(1.0, max(0.0, (PRESSURE_M - nearest_opponent_m) / PRESSURE_M))
+        if header:
+            dir_sd, speed_sd, loft_sd = self.kick_error(skill, speed, pressure, capacity, False)
+            return dir_sd * HEADER_ERROR, speed_sd, loft_sd * HEADER_ERROR, 1.0
         weak = (turn_deg > WEAK_SIDE_DEG) if self.foot == "right" else (turn_deg < -WEAK_SIDE_DEG)
         dir_sd, speed_sd, loft_sd = self.kick_error(skill, speed, pressure, capacity, weak, turn_deg)
         return dir_sd, speed_sd, loft_sd, self.weak_foot_speed() if weak else 1.0

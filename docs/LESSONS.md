@@ -490,3 +490,194 @@ short and actionable. This file is public: no research sources, product names or
   interceptor is a team-mate, or whose receiver is set on a failed pass;
   `tests/test_cues.py::test_no_cue_in_the_fixture_names_an_opponent_as_a_pass_target` fails on
   the old fixture.
+
+## Set pieces and tests
+
+### 53. A placed ball must start outside every body
+- **What happened:** a corner's new ball was placed at the taker's centre, so the struck ball
+  "touched" him on its way out: a fake deflection and a 0.4 m jump in the ground truth on 39
+  of 60 corners. The validator exempts deflection frames, so nothing failed.
+- **Rule:** place a restart ball where it will be struck, with the taker behind it; a struck
+  ball must leave its kicker without a contact.
+- **Check:** after any kick, no deflection by the kicker within a few frames (a test runs many
+  seeds).
+
+### 54. A test that changes the whole random stream cannot prove one cause
+- **What happened:** "the delivery is struck with error" compared two runs with different seeds;
+  the choice and timing differed anyway, so removing the error left it green.
+- **Rule:** hold everything else fixed (state, choice) and vary only the cause under test;
+  then mutate the cause and require the test to fail.
+
+### 55. A rule must check what its name says
+- **What happened:** a goal-credit rule described as "the last player to touch it" was built
+  from a short list of event types. It missed a team-mate controlling a pass and a defender
+  winning the ball, so it accepted wrong scorers and would have rejected right ones; the engine
+  produced one of them (a shot deflected in by a team-mate, credited to the shooter).
+- **Rule:** build the quantity the rule names from every source of it (here: who had the ball at
+  each frame, plus every touch event), and plant one case of each way it can be wrong.
+- **Check:** for each rule, list the ways the data can make it true, and test each one.
+
+### 56. A fixture must look like the real output
+- **What happened:** goal-credit tests built clips with nobody on the ball at the goal frame,
+  but the engine writes the kick-off reset into that frame (the next taker on the centre spot).
+  The rule counted that taker as the last toucher of every real goal: every own goal passed,
+  and a correct team-mate's goal failed, while every test was green.
+- **Rule:** build fixtures from real output (or copy its shape exactly: what the goal frame,
+  the restart frame and the first frame contain), and run each rule on real engine clips that
+  contain the case, not only on fixtures.
+- **Check:** for a new rule, find real clips where it applies (a scan over seeds) and assert on
+  them in a test.
+
+### 57. "All mutations caught" is only as wide as the list
+- **What happened:** a report said 23 of 23 mutations were caught; an auditor found six more,
+  near the same code, that survived (dropped conditions, a tolerance ten times too wide).
+- **Rule:** for every condition and every constant in a check, mutate it (drop it, widen it
+  tenfold) and require a test to fail; report the list, not just the count.
+
+### 58. A plan must not stand the receiver where the ball is aimed
+- **What happened:** the corner routine put each attacker on the exact spot the taker could aim
+  at, standing still, so a delivery's target and its receiver were the same point decided in
+  advance. Defenders marked a stationary man; the run, the timing and the space (what decides a
+  real corner) were missing. The scenario also placed a defender by the line and recorded him as
+  the last touch, so the corner's cause was staged. Every test was green: they checked the plan
+  was carried out, not whether the plan itself decided the play.
+- **Rule:** a plan gives players intentions (where to wait, where to run, when), never the point
+  where the ball meets them; the taker aims at space and times it on his runner, and contact
+  emerges from the run and the flight. When a cause cannot yet be played, say so in GROUNDING as
+  an open issue rather than calling it modelled.
+- **Check:** for each set piece, ask what is decided before the ball moves; anything that is a
+  meeting point or a cause, not an intention, is scripting. Measure before and after a change
+  (here: first contact, goals, wait to the kick over 200 corners).
+
+### 59. A rule that never fires is not a model; a number without its script is not a result
+- **What happened:** after lesson 34, the taker was meant to time his cross on his runner. An
+  audit measured it: in 293 of 300 corners he struck in the same frame he signalled, because
+  the cross's long flight meant every runner "arrived in time"; the rule's unit test passed
+  only with a runner placed 25 m away. The same pull request published first-contact numbers
+  (156 to 36) counted from events alone, which miss clean receptions; the real split was 106 to
+  93. Then letting the taker choose freely with the shared pass estimates made 199 of 200
+  corners ground passes into the box, which no test noticed and only the report showed.
+- **Rule:** for every new decision rule, measure how often each branch fires on real engine
+  output and what the output looks like (here: kick timing, delivery height, end points),
+  before and after. Publish a number only from a committed script that anyone can rerun
+  (`ninety/sim/corner_report.py` writes `docs/eval/sim-corners.md`).
+- **Check:** a test that pins a branch with a hand-built state must be paired with a
+  measurement showing the branch happens in real clips.
+
+
+### 60. A seed's outcome is not the same on every Python
+- **What happened:** a test counted the goals in the first 32 scenario corners and asked for at
+  least 3. Locally (Python 3.13) there were 4; CI (3.12) found 2 and failed. Same seeds, same
+  code: tiny floating-point differences between versions grow over a chaotic simulation.
+- **Rule:** never assert how many times something happens over a fixed set of seeds. Scan until
+  enough cases are found (with a cap far above the expected need), and assert the rule on each.
+  Determinism holds within one Python version, not across them.
+- **Check:** before pushing a test that runs the engine over seeds, run it on every Python
+  version CI uses (`UV_PROJECT_ENVIRONMENT=<dir> uv run --python 3.11 pytest`).
+
+### 61. For a rare event, select among played situations; never stage its cause
+- **What happened:** to get corner clips, the scenario placed a defender by the goal line and
+  recorded him as the last touch, because open play rarely reached the line. The corner itself
+  was played, but its cause was written into the data without happening.
+- **Rule:** start from a situation that can plausibly lead to the event (here, a winger on the
+  ball in the final third), play it out, and keep the runs where play produces the event; give
+  each run its own seed and record it. Say in GROUNDING that this is selection, so nobody reads
+  the scenario's numbers as how often the event happens.
+- **Check:** in a scenario clip, every event before the one you wanted must have been played:
+  nothing at frame 0 except the opening state, and the cause (the exit and the touch it came
+  off) present in the data.
+
+### 62. When a check rejects real output, find out what happened before changing the check
+- **What happened:** the goal-mouth check rejected an engine goal: a ball deflected along the
+  goal line from outside the post that went in inside it. The check was wrong in one way (it
+  aimed at where the ball's centre met the line; Law 10 needs the whole ball over), so it was
+  "fixed" and the goal called legal. An independent audit then found two things: the fix let
+  slow balls up to 1 m wide or over the bar count as goals (its error allowance grew with how far
+  it extrapolated), and the ball in that goal had passed through the post, because the engine
+  only tests the woodwork where the ball's path crosses the line. The original rejection was
+  right for a reason nobody looked for, and a test was written that enshrined the bad goal.
+- **Rule:** when a check fails real output, trace the whole event frame by frame (where was the
+  ball relative to the posts, the bar, the line?) before deciding which side is wrong. Write the
+  check on exactly what the Law states, bound how far it extrapolates by what the engine can do
+  (a goal is recorded in the frame the whole ball goes over), and add a check for the physical
+  impossibility you find (P17: the ball never passes through the woodwork).
+- **Check:** for each geometric check, have fixtures for each way the ball can approach (straight,
+  along the line, dropping, slow, fast), confirm each fails on the old code where it should, and
+  build them with the speeds real output has.
+
+### 63. An exemption must use the same geometry as the rule it lifts; a contact must use the moment of contact
+- **What happened:** to allow a goal in off the post, the goal check skipped its path test when
+  the ball came near "the woodwork", but measured the post without its height and the bar without
+  its length: a ball a metre over the post, or level with the bar but well wide, counted as a
+  goal. In the engine, a ball that started a frame overlapping the bar was put back where it began
+  but kept the speed it had gained over the whole frame, so a ball resting on the bar gained
+  energy without limit.
+- **Rule:** model the object once (here, the goal frame as three bars, corners included) and use
+  that one model wherever it matters: the engine's rebound, the check that the ball never passes
+  through it, and any exemption. Resolve a contact with the state at the moment of contact.
+- **Check:** for every exemption, build an illegal case that sits just inside it and must still
+  fail; for every collision, a test that energy never rises and a resting ball comes to rest.
+
+### 64. A new motion must be checked against every existing rule, in the scenes where it happens
+- **What happened:** a keeper's dive was added with a cited peak speed and duration, and the
+  push-off between them was derived to fit: 16 m/s², twice the acceleration check's limit. The
+  dive also started from rest whatever the keeper was doing, played short dives faster and
+  stopped him dead in the air. Every test and full-match clip passed, because few full-match
+  shots made a keeper dive; the first scenario that made keepers dive often failed two thirds of
+  its clips.
+- **Rule:** model a motion as the force that makes it, applied to the body's current state, with
+  each part of its profile from a source; never derive an unsourced part of a profile so that
+  two cited numbers fit. Then run the motion through the scenes that exercise it and the whole
+  contract, not only its own tests.
+- **Check:** for a new movement, a test that the body's velocity never changes faster than its
+  limit from any starting velocity, and a contract run over clips where it happens often.
+
+### 65. When sources disagree, the reading that passes your check is not evidence
+- **What happened:** a keeper's dive broke the acceleration check. Two cited sources pointed
+  opposite ways: one implied a push of about 0.2 s (the fast dive the engine had), the other, read
+  only from search results, a push of about 0.44 s. The slower one was chosen; it also happened to
+  fit under the check, and it cut keepers' saves at 16 m from 74 to 55 percent. An audit pointed
+  out that the choice had been made on the number that passed, not on the source.
+- **Rule:** when sources disagree, read both and record why one is right before building on
+  either; until then mark the conflict as unresolved where the number is used, with what it
+  changes, and never let "it passes the check" decide.
+- **Check:** for each new constant, can you quote the passage it comes from? If not, it is
+  *verify*, and GROUNDING says what it would change if the other reading is right.
+
+### 66. A new way to touch the ball must be checked from every body near it, and decided once
+- **What happened:** heading was added and passed its own tests, but an audit found a header met
+  the ball at its closest point to the player, so it left from inside his body and could deflect
+  off him; a ball he chose to let drop passed through his chest, because declining the header
+  skipped the body test; and the passer's estimate disagreed with the engine in three places (how
+  far ahead a player judges letting the ball drop, the launch of a header away, a header at goal
+  valued as a kick). Half the new tests compared a constant with itself, so changing it changed
+  the expectation too.
+- **Rule:** for a new contact, check the toucher's own body after his touch, a player who declines
+  the touch, and everyone else the ball passes; put any rule the estimate shares with the engine
+  in one helper or one constant both use; pin sourced numbers in tests as numbers.
+- **Check:** a test that the ball never passes through or rebounds off the player who just played
+  it, over many random cases; a test that runs the estimate and the engine on one scene; mutation
+  results reported per mutation, with which test caught it, and incidental catches named as such.
+
+### 67. A drawn opening is a hidden cause
+- **What happened:** after lesson 37 the corner scenario played its attacks out instead of staging
+  the corner, but it opened every attack with a winger on the ball at a drawn spot, facing a drawn
+  way, and kept only corners within 20 s. Four corners in five were then a blocked shot: the
+  opening chose the kind of play, the window kept only the quick outcomes, and the report blamed
+  the engine's shooting.
+- **Rule:** a scenario that selects a rare event opens from a moment the full engine reaches by
+  itself (here: play from the kick-off until the home side has the ball in its final third), and
+  branches its attempts from there; nothing about the opening is drawn.
+- **Check:** compare the scenario's mix of causes with the same causes in full matches, and list
+  every parameter of the opening: each one that is drawn rather than played is a suspect.
+
+### 68. A merge that ports a rule into new code must keep every branch of it
+- **What happened:** merging the body outline (lesson 24) into heading, the contact loop was
+  rewritten to take each player's earliest reach. A ball he chose to let drop past his head then
+  ended his turn in that step, so the foot touch later in the same step was lost, and a ball
+  dropping straight down inside his outline passed through him. The old loop had a separate
+  branch for that case; the port kept only the first chance. Both sides' tests caught it.
+- **Rule:** when a merge moves a rule into rewritten code, list the old rule's branches (here:
+  heads it, lets it drop to his feet, cushions it on his body) and show each one in the new code.
+- **Check:** run both branches' tests on the merge before resolving any test conflict, and read
+  each failure as a possible regression before treating it as an outdated expectation.

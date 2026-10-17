@@ -949,7 +949,8 @@ def test_the_dive_runs_in_the_match_loop_and_waits_for_the_keepers_reaction():
     for _ in range(8):
         e.move_players()
         e.t += 1 / 25
-    assert k.y - y0 > 0.2  # launched by the match loop itself
+    from ninety.sim.offball import dive_motion
+    assert k.y - y0 > dive_motion(3 / 25)[0]  # launched by the match loop itself: at least 3 frames of push
 
 
 def test_a_deflection_restarts_the_keepers_reaction_before_he_dives():

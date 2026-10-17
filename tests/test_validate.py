@@ -145,7 +145,9 @@ def interception_from_nowhere(c):
     c["events"].append(event("e2", 40, "interception", "away", "a1", x=50.0))
 
 
-def goal_without_shot(c):
+def goal_away_from_the_ball(c):
+    """h2 has the ball 55 m from goal when a goal is given. Credit alone cannot catch this (he
+    touched it last); Law 10 needs the ball at the goal mouth."""
     c["events"].append(event("e2", 40, "goal", "home", "h2", x=105.0, y=34.0))
     c["meta"]["score"]["home"] = 1
 
@@ -198,7 +200,7 @@ def score_disagrees(c):
     (ball_never_arrives, "C7 ball path"),
     (pass_without_ball, "C8 event order"),
     (interception_from_nowhere, "C8 event order"),
-    (goal_without_shot, "C8 event order"),
+    (goal_away_from_the_ball, "L6 goal"),
     (pass_to_himself, "C8 event order"),
     (receiver_of_a_failed_pass, "C4 event players"),
     (interceptor_on_his_own_team, "C4 event players"),

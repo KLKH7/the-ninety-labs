@@ -19,6 +19,10 @@ from ninety.sim.body import (
     CONTROL_M,
     FOOT_REACH_Z,
     GRAVITY,
+    HEAD_JUMP_Z,
+    HEAD_REACH_M,
+    HEAD_STAND_Z,
+    JUMP_RISE_S,
     KEEPER_JUMP_M,
     KEEPER_STATURE_M,
     STANDING_REACH_SHARE,
@@ -93,10 +97,12 @@ def keeper_spot(ball_x: float, ball_y: float, own_goal_x: float) -> tuple[float,
     return best[1]
 
 
-def open_goal_share(x: float, y: float, goal_x: float, keeper: tuple[float, float]) -> float:
+def open_goal_share(x: float, y: float, goal_x: float, keeper: tuple[float, float],
+                    speeds_kmh: tuple[float, float] = SHOT_SPEEDS_KMH) -> float:
     """The share of the goal mouth, as seen from (x, y), that a keeper at `keeper` cannot get a hand
-    across before a typical shot gets there (P11, P15). Used by the keeper to choose where to
-    stand and by the shooter to judge him: one definition."""
+    across before a typical shot gets there (P11, P15), struck at `speeds_kmh` (a header: the speed
+    a header leaves at, P18). Used by the keeper to choose where to stand and by the shooter to
+    judge him: one definition."""
     def bearing(px: float, py: float) -> float:
         return fmath.atan2(py - y, abs(px - x))
     lo, hi = sorted((bearing(goal_x, PITCH_Y / 2 - GOAL_HALF_WIDTH),
@@ -107,7 +113,7 @@ def open_goal_share(x: float, y: float, goal_x: float, keeper: tuple[float, floa
         return 1.0
     gap = math.hypot(keeper[0] - x, keeper[1] - y)
     k = bearing(*keeper)
-    lo_kmh, hi_kmh = SHOT_SPEEDS_KMH
+    lo_kmh, hi_kmh = speeds_kmh
     open_share = 0.0
     for i in range(SHOT_SPEED_SAMPLES):  # over the speeds shots are struck at, not one typical speed
         speed = (lo_kmh + (hi_kmh - lo_kmh) * (i + 0.5) / SHOT_SPEED_SAMPLES) / 3.6
@@ -264,8 +270,8 @@ def may_handle(keeper: bool, in_own_box: bool, released_it: bool, back_pass: boo
     return keeper and in_own_box and not released_it and not back_pass
 
 
-def reach_for(hands: bool, stretched_s: float, z: float = 0.0, rising_s: float = 0.0
-              ) -> tuple[float, float]:
+def reach_for(hands: bool, stretched_s: float, z: float = 0.0, rising_s: float = 0.0,
+              heads: bool = False) -> tuple[float, float]:
     """How far (from the body's centre, across the ground) a player can reach a ball at height `z`,
     and the highest he can reach at all: a foot (CONTROL_M, below FOOT_REACH_Z), or a keeper's
     hands (P11, P15). His hands reach within KEEPER_ARM_M of his centre of mass, sideways no further
@@ -273,8 +279,13 @@ def reach_for(hands: bool, stretched_s: float, z: float = 0.0, rising_s: float =
     as high as his jump has lifted it `rising_s` after it began (UP_AFTER_CONTACT_S after the
     kick at the soonest), or as low as falling since his save began has dropped it. One rule for
     the engine (engine.reach, engine.contact), the keeper's dive, the passer's race
-    (decisions.pass_confidence) and the shooter's judgement (keeper_reach_m)."""
+    (decisions.pass_confidence) and the shooter's judgement (keeper_reach_m). An outfield player
+    (`hands` False) plays a ball below FOOT_REACH_Z with a foot; with `heads`, a ball above it with
+    his head (P18), within HEAD_REACH_M, standing up to HEAD_STAND_Z or, once he has had
+    JUMP_RISE_S since he reacted (`stretched_s`), jumping up to HEAD_JUMP_Z."""
     if not hands:
+        if heads and z > FOOT_REACH_Z:
+            return HEAD_REACH_M, HEAD_JUMP_Z if stretched_s >= JUMP_RISE_S else HEAD_STAND_Z
         return CONTROL_M, FOOT_REACH_Z
     stretched = max(0.0, stretched_s)
     top = KEEPER_COM_Z + jump_rise_m(rising_s)
@@ -294,6 +305,10 @@ def jump_rise_m(rising_s: float) -> float:
     up = math.sqrt(2 * GRAVITY * KEEPER_JUMP_M)
     t = min(rising_s, up / GRAVITY)
     return up * t - 0.5 * GRAVITY * t * t
+
+def headed(hands: bool, z: float) -> bool:
+    """A touch at this height is a header: above a foot's reach and not in a keeper's hands."""
+    return not hands and z > FOOT_REACH_Z
 
 
 def arm_reach_m(diving_s: float) -> float:
