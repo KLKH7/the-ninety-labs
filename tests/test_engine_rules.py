@@ -6,6 +6,7 @@ from collections import defaultdict
 from statistics import mean, pstdev
 
 from ninety.sim import ball, perception
+from ninety.sim.body import BRAKE_MAX
 from ninety.sim.engine import (
     BODY_RADIUS,
     BODY_RESTITUTION,
@@ -622,3 +623,23 @@ def test_a_dribbler_whose_touch_went_out_still_takes_the_throw_in():
         if e.restart is None:
             break
     assert e.restart is None and e.throw_by == taker.id
+
+
+def test_taking_the_ball_for_a_throw_in_never_brakes_or_speeds_him_up_beyond_his_body():
+    """He arrives still moving a little (just under one frame of braking). Over the frame he takes
+    the ball and the frames he holds it, his speed only falls, by no more than his braking grip."""
+    e = Engine(1)
+    still(e)
+    e.possessor = None
+    e.stop("throw_in", "home", (50.0, 0.0))
+    taker = e.by_id[e.restart.taker]
+    taker.x, taker.y = throw_stand(50.0, 0.0)
+    taker.vx, taker.vy = 0.25, 0.0
+    e.restart.ready_at = e.t
+    speeds = [0.25]
+    for _ in range(5):
+        step(e)
+        speeds.append(math.hypot(taker.vx, taker.vy))
+    assert e.throw_by == taker.id
+    for before, after in zip(speeds, speeds[1:], strict=False):
+        assert after <= before + 1e-9 and before - after <= BRAKE_MAX * DT + 1e-9, speeds

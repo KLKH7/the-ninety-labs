@@ -927,6 +927,9 @@ class Engine:
             return
         # While the ball is out of play a new one is placed: the only time the ball may jump.
         if r.kind == "throw_in":
+            # He takes the ball and stops within his own braking (lesson 5); he has moved this frame.
+            steer(taker, taker.x, taker.y, 0.0)
+            self.moved = taker.id
             taker.heading = math.pi / 2 if spot[1] < PITCH_Y / 2 else -math.pi / 2
             self.ball = (*throw_hands(taker.x, taker.y), 0.0, 0.0, 0.0)
         else:
@@ -1189,7 +1192,7 @@ class Engine:
         carrier = self.by_id[self.possessor]
         self.moved = carrier.id
         if self.throw_by == carrier.id:  # Law 15: held behind the line and thrown, not dribbled
-            carrier.vx = carrier.vy = 0.0
+            steer(carrier, carrier.x, carrier.y, 0.0)  # standing still, braking within his body
             carrier.heading = math.pi / 2 if carrier.y < PITCH_Y / 2 else -math.pi / 2
             self.ball = (*throw_hands(carrier.x, carrier.y), 0.0, 0.0, 0.0)
             if self.t >= self.hold_until:
