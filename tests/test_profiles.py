@@ -69,7 +69,7 @@ def test_an_average_weak_foot_carries_the_sourced_penalty():
     _, _, up = p.kick_error("finishing", 21.0, 0.0, 1.0, False)
     _, _, weak_up = p.kick_error("finishing", 21.0, 0.0, 1.0, True)
     # A3: the weaker foot's own measured ellipse, about a third wider each way
-    assert abs(error(p, weak_foot=True) / error(p) - 1.34) < 0.01 and abs(weak_up / up - 1.42) < 0.01
+    assert abs(error(p, weak_foot=True) / error(p) - 1.34) < 0.01 and abs(weak_up / up - 1.45) < 0.01
     assert math.isclose(p.weak_foot_speed(), 0.88)
     assert error(p, turn_deg=90.0) > error(p)  # across the body is harder on either side
 
@@ -102,7 +102,7 @@ def test_average_skill_at_penalty_speed_gives_the_measured_ellipse():
     # Up and down, the launch angle carries what the speed spread leaves of the measured spread (the
     # whole ellipse is checked through the engine's own flight in test_engine_rules).
     across, _, up = player().kick_error("finishing", 21.0, 0.0, 1.0, False)
-    assert abs(across - 3.61) < 0.01 and abs(up - 2.31) < 0.01
+    assert abs(across - 3.61) < 0.01 and abs(up - 2.29) < 0.01
     assert math.isclose(across, measured_across_deg((4.08, 1.91), 26.9), rel_tol=1e-6)
 
 
@@ -111,7 +111,7 @@ def test_the_weaker_foot_follows_its_own_measured_ellipse():
     p = player(weak_foot=0.5)
     across, _, up = p.kick_error("finishing", 21.0, 0.0, 1.0, True)
     assert math.isclose(across, measured_across_deg((5.60, 2.28), 29.4), rel_tol=1e-6)
-    assert abs(up - 2.31 * 1.42) < 0.02
+    assert abs(up - 2.29 * 1.45) < 0.02
 
 
 def test_launch_angle_error_grows_with_everything_direction_error_grows_with():

@@ -132,8 +132,9 @@ def team_strength(rng: random.Random) -> float:
 # (a slower ball drops more), so the launch angle's spread is what is left once the engine's own
 # speed spread (SPEED_ERROR) has taken its share, both through the ball's own flight to the target:
 # about 2.3 degrees on the preferred foot. The weaker foot follows its own ellipse the same way
-# (about 1.34 across, 1.42 up and down). Both grow the same way with the strike (design: one
-# ellipse, scaled).
+# (about 1.34 across, 1.4 up and down), derived at the preferred foot's reference speed although the
+# weaker foot strikes slower (design). Both grow the same way with the strike (design: one ellipse,
+# scaled).
 KICK_ELLIPSE_95_M = {"preferred": (4.08, 1.91), "weaker": (5.60, 2.28)}
 KICK_ELLIPSE_TILT_DEG = {"preferred": 26.9, "weaker": 29.4}
 KICK_REF_DIST_M = 11.0
@@ -161,25 +162,42 @@ def _height_at_target(launch: float, speed: float, ground_m: float) -> float:
     raise ValueError("the ball does not reach the target")
 
 
+# Five-point Gauss-Hermite rule for a standard normal (exact for polynomials up to degree 9): nodes 0,
+# +-sqrt(5 - sqrt(10)), +-sqrt(5 + sqrt(10)); weights 8/15 and (7 +- 2 sqrt(10)) / 60.
+_GH_NODES = (0.0, math.sqrt(5 - math.sqrt(10)), -math.sqrt(5 - math.sqrt(10)),
+             math.sqrt(5 + math.sqrt(10)), -math.sqrt(5 + math.sqrt(10)))
+_GH_WEIGHTS = (8 / 15, (7 + 2 * math.sqrt(10)) / 60, (7 + 2 * math.sqrt(10)) / 60,
+               (7 - 2 * math.sqrt(10)) / 60, (7 - 2 * math.sqrt(10)) / 60)
+
+
+def _height_sd(launch: float, speed: float, ground_m: float, launch_sd: float) -> float:
+    """SD of the ball's height at the target when its launch angle scatters by `launch_sd` (radians)
+    and its struck speed by SPEED_ERROR, each independently, through the ball's own flight."""
+    first = second = 0.0
+    for a, wa in zip(_GH_NODES, _GH_WEIGHTS, strict=True):
+        for v, wv in zip(_GH_NODES, _GH_WEIGHTS, strict=True):
+            h = _height_at_target(launch + launch_sd * a, speed * (1 + SPEED_ERROR * v), ground_m)
+            first += wa * wv * h
+            second += wa * wv * h * h
+    return math.sqrt(max(second - first * first, 0.0))
+
+
 def _ellipse_sds_deg(foot: str) -> tuple[float, float]:
     """(across, launch angle) SD in degrees that reproduce a foot's measured ellipse at the target.
     Across: a metre there is cos^2 of its bearing over 11 m of angle. Up and down: the ball's height
-    at the target moves with its launch angle and with its speed, so the measured spread is split,
-    in quadrature, between the engine's speed spread and the launch angle (linearised around the
-    kick that reaches the target)."""
+    at the target moves with its launch angle and with its speed, so the launch angle's spread is the
+    one that, with the engine's speed spread, gives the measured spread through the ball's own flight
+    (exactly, by quadrature over both, not linearised: height is not linear in speed)."""
     across_m, up_m = _ellipse_sds_m(foot)
     y, z = KICK_TARGET_M
     ground = math.hypot(KICK_REF_DIST_M, y)
     across = math.degrees(across_m * (KICK_REF_DIST_M / ground) ** 2 / KICK_REF_DIST_M)
     forward, rise = ball.shot(ground, KICK_REF_SPEED, z, FRAME_S)
     launch, speed = math.atan2(rise, forward), math.hypot(forward, rise)
-    da, dv = 1e-3, 1e-2
-    def height(d_launch: float, d_speed: float) -> float:
-        return _height_at_target(launch + d_launch, speed + d_speed, ground)
-    per_rad = (height(da, 0.0) - height(-da, 0.0)) / (2 * da)
-    per_mps = (height(0.0, dv) - height(0.0, -dv)) / (2 * dv)
-    from_speed = per_mps * SPEED_ERROR * speed
-    return across, math.degrees(math.sqrt(up_m * up_m - from_speed * from_speed) / per_rad)
+    if _height_sd(launch, speed, ground, 0.0) >= up_m:
+        raise ValueError("SPEED_ERROR alone spreads the ball wider than the measured vertical (A3)")
+    launch_sd = ball._bisect(lambda sd: _height_sd(launch, speed, ground, sd), 0.0, 0.2, up_m, rounds=40)
+    return across, math.degrees(launch_sd)
 
 
 KICK_ERROR_DEG, LOFT_ERROR_DEG = _ellipse_sds_deg("preferred")  # about 3.6 and 2.3
@@ -301,7 +319,7 @@ class Profile:
                    weak_foot: bool, turn_deg: float = 0.0) -> tuple[float, float, float]:
         """Standard deviations of a kick's direction (degrees), speed (share) and launch angle
         (degrees). Average skill on the preferred foot at penalty speed, struck the way he faces,
-        gives the measured spread, about 3.6 degrees across and 2.5 up and down; both grow alike
+        gives the measured spread, about 3.6 degrees across and 2.3 of launch angle; both grow alike
         with speed, pressure (less for the composed), fatigue and the angle across his body, and on
         the weaker foot follow its own measured ellipse (at an average weak-foot rating)."""
         scale = (1.6 - 1.2 * self[skill]) * (speed / KICK_REF_SPEED)

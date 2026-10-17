@@ -236,6 +236,7 @@ def test_kicks_from_the_penalty_mark_land_in_the_measured_ellipse():
     t = math.radians(26.9)
     across = math.hypot(long_sd * math.cos(t), short_sd * math.sin(t))
     height = math.hypot(long_sd * math.sin(t), short_sd * math.cos(t))
+    assert len(zs) == 20000
     within = 4 / math.sqrt(2 * len(zs))  # 4 standard errors of an SD
     assert abs(pstdev(ys) / across - 1) < within
     assert abs(pstdev(zs) / height - 1) < within

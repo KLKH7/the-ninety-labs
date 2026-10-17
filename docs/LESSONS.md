@@ -272,5 +272,7 @@ short and actionable. This file is public: no research sources, product names or
   quantity, derive each one's share through the engine's own physics so that together they
   reproduce the measurement, never set one of them to the whole of it.
 - **Check:** reproduce the source's measurement end to end through the engine (here, kicks fired at
-  the paper's setup land in the paper's ellipse), with a tolerance from the sample size.
+  the paper's setup land in the paper's ellipse), with a tolerance from the sample size, and remove
+  any known bias of the derivation (a linear split left the vertical about 1% wide) rather than
+  spend the tolerance on it.
 
