@@ -126,6 +126,24 @@ def test_a_share_just_under_the_floor_is_not_rounded_up(tmp_path):
     assert any(f.startswith("test ball_visibility_lt_0_5_share") for f in floor_failures({"test": test}))
 
 
+def test_train_hidden_floor_counts_training_labels_not_every_frame(tmp_path):
+    # hidden balls only on frames the stride skips, plus fully hidden ones: 40% of frames in shot
+    # are under half visible, yet not one training label is mostly hidden
+    clip = write_clip(tmp_path, 1, "train", n_frames=10)
+    rows = [json.loads(line) for line in (clip / "frames.jsonl").read_text().splitlines()]
+    for row in rows:
+        if row["frame"] in (1, 2, 3):
+            row["ball"]["visibility"] = 0.2
+        if row["frame"] == 4:
+            row["ball"]["visibility"] = 0.0
+    (clip / "frames.jsonl").write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+    train = dataset_stats([clip], stride=5)["splits"]["train"]
+    assert train["ball_visibility_lt_0_5_share"] == 0.4
+    assert train["ball_boxes_mostly_hidden_share"] == 0.0
+    fails = floor_failures({"train": train})
+    assert any(f.startswith("train ball_boxes_mostly_hidden_share") for f in fails), fails
+
+
 def test_distinct_seeds_reported(tmp_path):
     write_clip(tmp_path, 1, "train")
     write_clip(tmp_path, 2, "train")
@@ -206,14 +224,14 @@ def at_every_floor():
     """Split summaries exactly at every floor, so each test below moves one value under it."""
     balls = TRAIN_FLOORS["ball_boxes"]
     hidden_key = "ball_boxes_mostly_hidden_excluding_fully_hidden"
-    hidden = max(TRAIN_FLOORS[hidden_key], round(balls * TRAIN_FLOORS["ball_visibility_lt_0_5_share"]))
+    hidden = max(TRAIN_FLOORS[hidden_key], round(balls * TRAIN_FLOORS["ball_boxes_mostly_hidden_share"]))
     train = {
         "distinct_seeds": TRAIN_FLOORS["distinct_seeds"],
         "frames": TRAIN_FLOORS["frames"],
         "player_boxes": TRAIN_FLOORS["player_boxes"],
         "ball_boxes": balls,
         hidden_key: hidden,
-        "ball_visibility_lt_0_5_share": hidden / balls,
+        "ball_boxes_mostly_hidden_share": hidden / balls,
         "clips_by_knob": {
             "lighting": {v: TRAIN_FLOORS["clips_per_lighting"] for v in LIGHTING},
             "weather": {v: TRAIN_FLOORS["clips_per_weather"] for v in WEATHER},
@@ -238,8 +256,8 @@ def test_splits_at_every_floor_pass():
         (lambda s: s["train"].update(ball_boxes=TRAIN_FLOORS["ball_boxes"] - 1), "train ball_boxes"),
         (lambda s: s["train"].update(ball_boxes_mostly_hidden_excluding_fully_hidden=10),
          "train ball_boxes_mostly_hidden_excluding_fully_hidden:"),
-        (lambda s: s["train"].update(ball_visibility_lt_0_5_share=0.01),
-         "train ball_visibility_lt_0_5_share"),
+        (lambda s: s["train"].update(ball_boxes_mostly_hidden_share=0.01),
+         "train ball_boxes_mostly_hidden_share"),
         (lambda s: s["train"]["clips_by_knob"]["lighting"].pop("night"), "train lighting=night"),
         (lambda s: s["train"]["clips_by_knob"]["weather"].update(rain=3), "train weather=rain"),
         (lambda s: s["train"].update(kit_contrast_low_share=None), "train kit_contrast_low_share"),

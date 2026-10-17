@@ -38,7 +38,9 @@ TRAIN_FLOORS = {
     "ball_boxes": 6_000,
     # the hard case, in number and in share (the share is PLAN.md's test-set floor)
     "ball_boxes_mostly_hidden_excluding_fully_hidden": 400,
-    "ball_visibility_lt_0_5_share": 0.05,
+    # a share of the training labels themselves (strided, visibility > 0), not of every frame:
+    # skipped frames and fully hidden balls teach the detector nothing
+    "ball_boxes_mostly_hidden_share": 0.05,
     # every lighting and weather value drawn in enough distinct clips
     "clips_per_lighting": 15,
     "clips_per_weather": 15,
@@ -146,6 +148,7 @@ def summarise(clips: list[dict]) -> dict:
         "ball_visibility_lt_0_5_share": _share(lt_half, in_frame),
         # training labels only: 0 < visibility < 0.5, a fully hidden ball has no box
         "ball_boxes_mostly_hidden_excluding_fully_hidden": by_visibility["mostly hidden"],
+        "ball_boxes_mostly_hidden_share": _share(by_visibility["mostly hidden"], ball_boxes),
         "ball_size_px": {
             "p05": percentile(sizes, 0.05),
             "median": percentile(sizes, 0.5),
@@ -189,7 +192,7 @@ def floor_failures(splits: dict) -> list[str]:
             fails += _below(f"train {key}", train[key], TRAIN_FLOORS[key])
         key = "ball_boxes_mostly_hidden_excluding_fully_hidden"
         fails += _below(f"train {key}", train[key], TRAIN_FLOORS[key])
-        for key in ("ball_visibility_lt_0_5_share", "kit_contrast_low_share", "occlusion_crowded_share"):
+        for key in ("ball_boxes_mostly_hidden_share", "kit_contrast_low_share", "occlusion_crowded_share"):
             fails += _below(f"train {key}", train[key], TRAIN_FLOORS[key])
         for knob, values in (("lighting", LIGHTING), ("weather", WEATHER)):
             # only values the renderer can draw: a planned knob has no clips to count
