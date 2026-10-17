@@ -18,6 +18,7 @@ from ninety.sim.engine import (
     throw_stand,
 )
 from ninety.sim.profiles import FOOT_ABSORB_MPS, MAX_STRIKE_MPS
+from ninety.sim.style import Style
 
 
 def still(e: Engine) -> None:
@@ -95,7 +96,7 @@ def test_a_keeper_reacts_to_the_ball_like_anyone_and_reads_only_shots_at_his_goa
 
 def test_the_presser_stands_goal_side_for_both_teams():
     for team, defends_x in (("home", 0.0), ("away", 105.0)):
-        e = Engine(1)
+        e = Engine(1, styles={team: Style()})  # a mid style: engages at 60 m from its goal (T3)
         still(e)
         carrier = next(p for p in e.players if p.team != team and p.role == "CM")
         presser = next(p for p in e.players if p.team == team and p.role == "CM")
@@ -104,7 +105,6 @@ def test_the_presser_stands_goal_side_for_both_teams():
         e.ball = (52.0, 34.0, 0.0, 0.0, 0.0, 0.0)
         e.possessor = carrier.id
         brain = e.brains[team]
-        brain.block = "mid"  # engages at halfway
         brain.in_possession, brain.pressers = False, [presser.id]
         tx, _, _ = e.shape_target(presser)
         assert math.isclose(abs(tx - 52.0), brain.press_gap_m, abs_tol=0.01)

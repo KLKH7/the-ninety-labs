@@ -3,6 +3,7 @@ the ball weighs his options), never what happens; the default style is the engin
 styles."""
 
 import math
+import random
 from statistics import mean
 
 import pytest
@@ -11,6 +12,7 @@ from ninety.sim import decisions as D
 from ninety.sim import perception
 from ninety.sim import style as style_mod
 from ninety.sim.engine import Engine, simulate
+from ninety.sim.profiles import Profile
 from ninety.sim.style import HIGH, LOW, MID, PRESETS, Style, band, preset_name, tilt
 from ninety.sim.team import TRANSITION_S, TeamBrain
 
@@ -70,6 +72,10 @@ def test_a_counter_press_goes_from_further_only_in_the_window():
     brain.update(11.0, False, 80.0, {})
     assert brain.engage_m(12.0) > style_mod.ENGAGE_M["low"]
     assert brain.engage_m(11.0 + TRANSITION_S + 1) == style_mod.ENGAGE_M["low"]
+    mid = TeamBrain("home", Style(pressing_intensity=LOW, counter_pressing=MID))
+    mid.update(10.0, True, 80.0, {})
+    mid.update(11.0, False, 80.0, {})
+    assert mid.engage_m(12.0) == brain.engage_m(12.0) == math.inf  # whatever the pressing intensity
 
 
 def test_pressing_intensity_sets_how_far_the_presser_goes_and_how_tight_he_stands():
@@ -105,9 +111,10 @@ def test_the_presser_stands_as_tight_as_his_teams_style_says():
 
 
 def test_a_high_intensity_presser_goes_to_the_ball_from_further():
-    """22 m from the ball: a high-intensity presser goes from anywhere, a low one only from 20 m."""
+    """2 m beyond a low-intensity presser's reach: a high-intensity one goes, a low one does not."""
     for level, goes in ((HIGH, True), (LOW, False)):
-        e, presser, brain = pressing_scene(Style(pressing_height=HIGH, pressing_intensity=level), 38.0)
+        start = 60.0 - (style_mod.ENGAGE_M["low"] + 2.0)
+        e, presser, brain = pressing_scene(Style(pressing_height=HIGH, pressing_intensity=level), start)
         x, y, _ = e.shape_target(presser)
         assert (math.hypot(x - 60.0, y - 34.0) < 3.0) is goes
 
@@ -129,6 +136,8 @@ def test_a_side_given_no_style_draws_a_block_and_giving_that_style_is_the_same_m
     b = simulate(3, 1, styles=dict(drawn))
     assert a.events == b.events and a.frames[-1] == b.frames[-1]
     assert Engine(3, styles={"home": PRESETS["high_press"]}).styles["away"] == drawn["away"]
+    # Its own stream: giving the strengths (which otherwise consume the match's draws) changes nothing.
+    assert Engine(3, strengths={"home": 0.0, "away": 0.0}).styles == drawn
 
 
 def test_strengths_given_are_used_and_one_left_out_is_drawn():
@@ -190,11 +199,18 @@ def hand_written_values(monkeypatch):
     monkeypatch.setattr(D, "POSSESSION", None)
 
 
+PASSER = Profile.generate("CM", random.Random(7))  # a real passer, as tests/test_decisions.py builds
+
+
 def on_ball(style: Style, transition: bool = False, **kw) -> D.Scene:
+    """A scene as the engine builds one (engine.scene_for), opponents standing where he sees them."""
     base = dict(x=40.0, y=34.0, goal_x=105.0, mates=[], opponents=[], keeper=None, decisions=0.5,
-                composure=0.5, dribbling=0.5, traits=(), risk=0.0,
+                composure=0.5, dribbling=0.5, traits=(), risk=0.0, absorb={}, passer=PASSER,
                 progress_weight=style.progress_weight(transition), loss_weight=style.loss_weight())
     base.update(kw)
+    base.setdefault("heading", 0.0 if base["goal_x"] > 52.5 else math.pi)
+    base.setdefault("moving", [(ox, oy, 0.0, 0.0, (ox, oy) == base["keeper"])
+                               for ox, oy in base["opponents"]])
     return D.Scene(**base)
 
 
@@ -303,6 +319,19 @@ def test_risk_reaches_every_option_that_can_lose_the_ball(hand_written_values):
     low, high = values(LOW), values(HIGH)
     for kind in ("pass", "shoot", "dribble", "hold"):
         assert high[kind] > low[kind], kind
+
+
+def test_a_patient_team_never_values_going_back_and_mid_changes_nothing(hand_written_values):
+    """The weight scales the change in the ball's worth: at 0.1 a tenth of the gain forward and of
+    the loss going back, so going back is never a gain; at mid the value is untouched."""
+    for x in (25.0, 40.0, 55.0, 85.0):
+        here = D.value(x, 34.0, 105.0)
+        for gained in (10.0, -10.0):
+            change = D.value(x + gained, 34.0, 105.0) - here
+            for style in (Style(directness=LOW), Style(), Style(directness=HIGH)):
+                scene = on_ball(style, x=x)
+                assert math.isclose(D.our_value(scene, x + gained, 34.0) - here,
+                                    style.progress_weight(False) * change, abs_tol=1e-12)
 
 
 def test_dribbling_forward_is_worth_more_to_a_direct_team(hand_written_values):

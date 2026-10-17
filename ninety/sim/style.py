@@ -39,11 +39,11 @@ PRESS_GAP_M = {"low": 2.5, "mid": 2.0, "high": 1.5}
 # Counter-pressing: in the window after losing the ball (T1), whether the team goes to the ball
 # wherever it is, and from how far (a low-intensity team too). Low drops straight back into shape.
 COUNTER_PRESS_ENGAGE_M = {"low": None, "mid": math.inf, "high": math.inf}
-# On the ball. Directness scales the value of ground gained toward goal from where the ball is
-# (D1's progress term) by 1 + DIRECTNESS_SPAN x tilt: 0.1 to 1.9 times at the preset values.
+# On the ball. Directness scales what an option gains in the ball's worth from where it is now
+# (D9's threat table) by 1 + DIRECTNESS_SPAN x tilt: 0.1 to 1.9 times at the preset values.
 # Counter-attacking scales it again, by the same rule, in the window after winning the ball (T1);
 # a high counter-attacking team also sends its central midfielders running in behind then (O4).
-# Below a dial value of 1/6 a factor would turn negative (valuing ground lost), so each is held at
+# Below a dial value of 1/6 a factor would turn negative (valuing worth lost), so each is held at
 # 0 or more. Risk scales the cost of losing the ball by 1 - RISK_SPAN x tilt: 1.3 to 0.7 times at
 # the preset values, 1.5 to 0.5 over the whole dial.
 DIRECTNESS_SPAN = 1.5

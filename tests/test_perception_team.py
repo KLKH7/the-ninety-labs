@@ -114,7 +114,8 @@ def test_the_forwards_wait_at_their_line_of_engagement_never_past_the_ball():
         brain.update(1.0, False, abs(own - 40.0), {})  # deep in our half: the block's own front
         front = abs(brain.line_x - own) + team_mod.LINE_GAPS_M["attack"]
         assert abs(abs(brain.slot("ST", 34.0, 34.0)[0] - own) - front) < 1e-9
-        high = TeamBrain(team, Style(line_height=HIGH, pressing_height=HIGH))  # engages everywhere, but never stands past the ball
+        # A high block engages everywhere, but never stands past the ball.
+        high = TeamBrain(team, Style(line_height=HIGH, pressing_height=HIGH))
         high.update(0.0, False, abs(own - 80.0), {})
         assert abs(high.slot("ST", 34.0, 34.0)[0] - own) <= 80.0 + 1e-9
         assert abs(brain.slot("CM", 34.0, 34.0)[0] - brain.line_x) == team_mod.LINE_GAPS_M["midfield"]

@@ -70,10 +70,6 @@ LUNGE_REACH_M = 1.8  # a foot (1 m) plus a step
 LUNGE_S = 0.3  # time for an average tackler's foot to reach the ball from the edge of that reach
 DRIBBLE_STEP_M = 6.0
 MAX_PASS_M = 45.0
-# T4 (design): what a style's directness tilts by, per pitch length gained. The value of the ball
-# itself (D9's threat table) already rises toward goal; this is the earlier model's progress term,
-# kept only as the unit of a style's lean, so a mid style leaves values exactly as they are.
-PROGRESS_VALUE = 0.04
 PASS_SPEED_EST_MPS = 14.0  # design: a passer's rough guess of a pass's average speed, to lead a runner
 LEAD_MAX_S = 2.0  # design: and he leads him by at most this long
 LOFT_FROM_M = 15.0  # design: shorter than this, a pass is played along the ground
@@ -279,12 +275,13 @@ def value(x: float, y: float, goal_x: float, opponents: list[tuple[float, float]
 
 def our_value(scene: Scene, x: float, y: float) -> float:
     """What the player on the ball thinks having it at (x, y) is worth to his team. His team's
-    style (T4: directness, counter-attacking) adds to or takes from the ground gained from where
-    the ball is now, at PROGRESS_VALUE per pitch length, times the style's weight less one: a
-    direct team likes going forward more and back less, a patient one the reverse."""
-    gained = attack(scene.goal_x) * (x - scene.x) / PITCH_X
-    tilt = PROGRESS_VALUE * (scene.progress_weight - 1) * gained
-    return value(x, y, scene.goal_x, scene.opponents, scene.keeper) + tilt
+    style (T4: directness, counter-attacking) scales what the ball gains (or loses) in worth by
+    moving from where it is now to (x, y), by the style's weight: a direct team likes the gain
+    forward more and minds the loss going back more, a patient one less of both. A weight of 1
+    (mid) leaves the value as it is; a weight of 0 or more never turns a loss into a gain."""
+    here = value(scene.x, scene.y, scene.goal_x, scene.opponents, scene.keeper)
+    there = value(x, y, scene.goal_x, scene.opponents, scene.keeper)
+    return there + (scene.progress_weight - 1) * (there - here)
 
 
 def our_loss(scene: Scene, x: float, y: float) -> float:
