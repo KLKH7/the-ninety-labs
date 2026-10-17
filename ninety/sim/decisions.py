@@ -70,6 +70,10 @@ LUNGE_REACH_M = 1.8  # a foot (1 m) plus a step
 LUNGE_S = 0.3  # time for an average tackler's foot to reach the ball from the edge of that reach
 DRIBBLE_STEP_M = 6.0
 MAX_PASS_M = 45.0
+# T4 (design): what a style's directness tilts by, per pitch length gained. The value of the ball
+# itself (D9's threat table) already rises toward goal; this is the earlier model's progress term,
+# kept only as the unit of a style's lean, so a mid style leaves values exactly as they are.
+PROGRESS_VALUE = 0.04
 PASS_SPEED_EST_MPS = 14.0  # design: a passer's rough guess of a pass's average speed, to lead a runner
 LEAD_MAX_S = 2.0  # design: and he leads him by at most this long
 LOFT_FROM_M = 15.0  # design: shorter than this, a pass is played along the ground
@@ -170,6 +174,10 @@ class Scene:
     absorb: dict[str, float]  # team-mates' first touch (A4), by id
     passer: Profile  # who he is, for his own kick error (A3)
     throw: bool = False  # Law 15: a throw-in, so every pass is thrown (lofted) and nothing else
+    # The team's style (T4): how much ground gained from here is worth, and how much losing the
+    # ball costs, against the defaults. Both 1 for a mid style.
+    progress_weight: float = 1.0
+    loss_weight: float = 1.0
     current: str | None = None  # what he is doing now (dribble or hold), for STICKY
     heading: float = 0.0  # the way he faces, radians
     fresh: float = 1.0  # his slow store's share left (P10)
@@ -267,6 +275,22 @@ def value(x: float, y: float, goal_x: float, opponents: list[tuple[float, float]
     if POSSESSION is not None:
         return POSSESSION.threat.at(x, y, goal_x)
     return threat.at(x, y, goal_x)
+
+
+def our_value(scene: Scene, x: float, y: float) -> float:
+    """What the player on the ball thinks having it at (x, y) is worth to his team. His team's
+    style (T4: directness, counter-attacking) adds to or takes from the ground gained from where
+    the ball is now, at PROGRESS_VALUE per pitch length, times the style's weight less one: a
+    direct team likes going forward more and back less, a patient one the reverse."""
+    gained = attack(scene.goal_x) * (x - scene.x) / PITCH_X
+    tilt = PROGRESS_VALUE * (scene.progress_weight - 1) * gained
+    return value(x, y, scene.goal_x, scene.opponents, scene.keeper) + tilt
+
+
+def our_loss(scene: Scene, x: float, y: float) -> float:
+    """What the player on the ball thinks losing it at (x, y) costs, as his team's style fears it
+    (T4: risk). What it is worth to the opponents is theirs, so it is not style-weighted."""
+    return loss_cost(x, y, scene.goal_x) * scene.loss_weight
 
 
 def loss_cost(x: float, y: float, goal_x: float) -> float:
@@ -746,12 +770,12 @@ def pass_option(scene: Scene, mate: tuple[str, float, float, float]) -> Option |
     dist = math.hypot(tx - scene.x, ty - scene.y)
     if dist < 4 or dist > MAX_PASS_M:
         return None
-    gain = value(tx, ty, scene.goal_x, scene.opponents, scene.keeper)
+    gain = our_value(scene, tx, ty)
     space = min((math.hypot(ox - tx, oy - ty) for ox, oy in scene.opponents), default=10.0)
     gain *= 0.7 + 0.3 * min(1.0, space / 5.0)  # a receiver with space can do more with it
     # A pass that fails is lost along the lane or runs on to where it was aimed: the worse of the two.
     mx_, my_ = (scene.x + tx) / 2, (scene.y + ty) / 2
-    lost = max(loss_cost(mx_, my_, scene.goal_x), loss_cost(tx, ty, scene.goal_x))
+    lost = max(our_loss(scene, mx_, my_), our_loss(scene, tx, ty))
     # D1: how to play it is his choice: along the ground at a pace the lane needs, or, from
     # LOFT_FROM_M, over the top. A throw-in always goes through the air.
     ways = [(True, ARRIVE_MPS)] if scene.throw else [(False, pace) for pace in PASS_PACES]
@@ -792,8 +816,8 @@ def options(scene: Scene) -> list[Option]:
                        if (ox, oy) != scene.keeper)
         blocked = 1 - BLOCKER_FACTOR ** blockers
         # A miss or a save gives them the ball deep in their own half (a goal kick or the keeper's).
-        missed = loss_cost(scene.goal_x - attack(scene.goal_x) * GOAL_KICK_M, PITCH_Y / 2, scene.goal_x)
-        lost = blocked * loss_cost(scene.x, scene.y, scene.goal_x) + (1 - blocked) * missed
+        missed = our_loss(scene, scene.goal_x - attack(scene.goal_x) * GOAL_KICK_M, PITCH_Y / 2)
+        lost = blocked * our_loss(scene, scene.x, scene.y) + (1 - blocked) * missed
         out.append(Option("shoot", q * bias * (1 + 0.5 * scene.risk) - (1 - q) * lost,
                           (scene.goal_x, PITCH_Y / 2)))
     for turn in (0.0, 0.8, -0.8):  # straight at goal, or angled away
@@ -813,8 +837,8 @@ def options(scene: Scene) -> list[Option]:
                 continue
             my_t = s * DRIBBLE_STEP_M / dribble_speed(scene.dribbling)
             win *= sigmoid((generic_time(d) - my_t) / RECEIVE_MARGIN_S)
-        gain = value(tx, ty, scene.goal_x, scene.opponents, scene.keeper)
-        ev = win * gain - (1 - win) * loss_cost(scene.x, scene.y, scene.goal_x)
+        gain = our_value(scene, tx, ty)
+        ev = win * gain - (1 - win) * our_loss(scene, scene.x, scene.y)
         out.append(Option("dribble", ev + (STICKY if scene.current == "dribble" else 0.0), (tx, ty)))
     if abs(scene.goal_x - scene.x) > CLEAR_FROM * PITCH_X:  # in his own third: long and away
         wide = 4.0 if scene.y < PITCH_Y / 2 else PITCH_Y - 4.0
@@ -831,7 +855,7 @@ def options(scene: Scene) -> list[Option]:
     best = max((o.value - (STICKY if o.kind == scene.current else 0.0) for o in out), default=0.0)
     later = best * (1 - HOLD_DECAY) if best >= 0 else best * (1 + HOLD_DECAY)
     lose = 0.5 * p
-    out.append(Option("hold", (1 - lose) * later - lose * loss_cost(scene.x, scene.y, scene.goal_x)))
+    out.append(Option("hold", (1 - lose) * later - lose * our_loss(scene, scene.x, scene.y)))
     return out
 
 

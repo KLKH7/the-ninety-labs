@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import math
 import random
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 
 from ninety.sim import ball, decisions, offball, perception, profiles, shape
 from ninety.sim import team as team_mod
@@ -38,7 +38,8 @@ from ninety.sim.body import move as move_body
 from ninety.sim.decisions import PENALTY_DEPTH
 from ninety.sim.offball import KEEPER_DIVE_TRAVEL_M
 from ninety.sim.profiles import Profile
-from ninety.sim.team import TeamBrain
+from ninety.sim.style import HIGH, LOW, MID, Style, preset_name
+from ninety.sim.team import ROLE_LINE, TeamBrain
 
 PITCH_X, PITCH_Y = 105.0, 68.0
 FPS = 25
@@ -53,9 +54,9 @@ DRIBBLE = 2.5
 DECIDE_EVERY = 6  # frames between the ball carrier's decisions (about 4 a second)
 PERCEIVE_EVERY = 6  # frames between a player's looks at the pitch (about 4 a second, staggered)
 BRAIN_EVERY = 12  # frames between a team brain's reads of the game (about 2 a second)
+BLOCK_DIAL = {"low": LOW, "mid": MID, "high": HIGH}  # a drawn block as a style dial (T4)
 COVER_M = 8.0  # design: the covering player stays this far behind the presser, goal-side
 PERCEPTION_ERR = 0.03  # verify: m/s of misjudged ball velocity per metre between player and ball
-PRESS_GAP_M = 2.0  # design, verify: how close a presser stands (jockeys), goal-side of the ball carrier
 PERSONAL_SPACE_M = 1.2  # players steer to keep about this far from each other
 ANTICIPATE_S = 0.4  # verify: how far ahead players judge where others will be
 BODY_RESTITUTION = 0.3  # verify: share of the ball's speed into a body that it keeps
@@ -185,6 +186,7 @@ class Match:
     frames: list[dict] = field(default_factory=list)
     score: dict = field(default_factory=lambda: {"home": 0, "away": 0})
     roster: list[dict] = field(default_factory=list)
+    teams: dict = field(default_factory=dict)  # each team's strength and style: the scenario's settings
 
 
 def attack_dir(team: str) -> float:
@@ -281,14 +283,34 @@ def steer(p: Player, tx: float, ty: float, want_speed: float) -> None:
 
 
 class Engine:
-    def __init__(self, seed: int, strengths: dict[str, float] | None = None):
+    def __init__(self, seed: int, strengths: dict[str, float] | None = None,
+                 styles: dict[str, Style] | None = None):
         self.rng = random.Random(seed)
         # Perception draws from its own stream, so a change to what players see does not
         # reshuffle every other random draw in the match.
         self.sight_rng = random.Random(f"{seed}-perception")
         self.match = Match(seed=seed)
         self.players: list[Player] = []
-        self.strength = strengths or {team: profiles.team_strength(self.rng) for team in ("home", "away")}
+        # A strength not given is drawn, home first: with none given the match is the same as before.
+        given = strengths or {}
+        unknown = (set(given) | set(styles or {})) - {"home", "away"}
+        if unknown:
+            raise ValueError(f"teams are 'home' and 'away', got {sorted(unknown)}")
+        self.strength = {team: given[team] if team in given else profiles.team_strength(self.rng)
+                         for team in ("home", "away")}
+        # T2, T3: a side given no style plays a block of its own (design: equally likely), its
+        # line and its line of engagement at the same height, the other dials mid. Drawn from its
+        # own stream for both sides, so the rest of the match's random draws do not shift with it.
+        draw = random.Random(f"{seed}-style")
+        drawn = {team: Style(line_height=BLOCK_DIAL[block], pressing_height=BLOCK_DIAL[block])
+                 for team, block in (("home", draw.choice(sorted(team_mod.BLOCKS))),
+                                     ("away", draw.choice(sorted(team_mod.BLOCKS))))}
+        self.styles = {team: (styles or {}).get(team, drawn[team]) for team in ("home", "away")}
+        self.match.teams = {
+            team: {"strength": self.strength[team], "preset": preset_name(self.styles[team]),
+                   "style": asdict(self.styles[team])}
+            for team in ("home", "away")
+        }
         for team in ("home", "away"):
             for n, (role, fx, fy) in enumerate(FORMATION):
                 ax = fx * PITCH_X if team == "home" else (1 - fx) * PITCH_X
@@ -323,11 +345,7 @@ class Engine:
             for p in self.players
         ]
         self.beliefs = {p.id: perception.Belief(next_scan=self.rng.uniform(0, 3)) for p in self.players}
-        # T2, T3: each side plays a block of its own (design: equally likely), drawn from its own
-        # stream so the rest of the match's random draws do not shift with it.
-        style = random.Random(f"{seed}-style")
-        self.brains = {team: TeamBrain(team, block=style.choice(sorted(team_mod.BLOCKS)))
-                       for team in ("home", "away")}
+        self.brains = {team: TeamBrain(team, self.styles[team]) for team in ("home", "away")}
         self.ball: ball.State = (PITCH_X / 2, PITCH_Y / 2, 0.0, 0.0, 0.0, 0.0)
         self.possessor: str | None = None
         self.last_touch: str | None = None
@@ -738,13 +756,16 @@ class Engine:
         diff = self.match.score[team] - self.match.score[opp]
         risk = clamp(-diff * self.t / 5400, -1.0, 1.0)  # chase the game when behind late, protect when ahead
         prof = carrier.profile
+        style, brain = self.styles[team], self.brains[team]
         scene = decisions.Scene(self.ball[0], self.ball[1], goal_x(team), mates, opps, keeper,
                                 prof["decisions"], prof["composure"], prof["dribbling"],
                                 tuple(prof.traits), risk,
                                 current="dribble" if self.dribble_to else None, moving=moving,
                                 absorb={m[0]: self.by_id[m[0]].profile.absorb_mps(False) for m in mates},
                                 passer=prof, heading=carrier.heading, fresh=self.fresh(carrier),
-                                ball_offset=(self.ball[0] - carrier.x, self.ball[1] - carrier.y))
+                                ball_offset=(self.ball[0] - carrier.x, self.ball[1] - carrier.y),
+                                progress_weight=style.progress_weight(brain.attacking_transition(self.t)),
+                                loss_weight=style.loss_weight())
         return scene
 
     def decide(self, carrier: Player, throw: bool = False) -> None:
@@ -1388,11 +1409,15 @@ class Engine:
             def on_pitch(x: float, y: float) -> tuple[float, float]:
                 return clamp(x, 0.5, PITCH_X - 0.5), clamp(y, 0.5, PITCH_Y - 0.5)
 
-            gap = PRESS_GAP_M
+            gap = brain.press_gap_m  # how tight the style presses (pressing intensity)
             if self.restart and self.restart.team != p.team:  # Laws 15 to 17: stand off the restart
                 gap = RESTART_DISTANCE_M[self.restart.kind]
             presser = self.by_id[brain.pressers[0]] if brain.pressers else None
-            engaged = presser is not None and brain.presses(self.t, bx)
+            engaged = (
+                presser is not None
+                and math.hypot(bx - presser.x, by - presser.y) < brain.engage_m(self.t)
+                and brain.presses(self.t, bx)
+            )
             if presser is p and engaged:
                 # Press goal-side, a step away, matching where the carrier is going (D8: a defender
                 # keeps his speed relative to the attacker small rather than holding a spot).
@@ -1475,7 +1500,11 @@ class Engine:
                 return x, y
             del self.runs[p.id]
         likes = "runs_in_behind" in p.profile.traits
-        if p.role not in ("ST", "RW", "LW") and not likes:
+        # A high counter-attacking style (T4) also sends the central midfielders forward while
+        # the counter is on.
+        countering = brain.style.level("counter_attacking") == "high" and brain.attacking_transition(self.t)
+        midfielder = ROLE_LINE.get(p.role) == "midfield"
+        if p.role not in ("ST", "RW", "LW") and not likes and not (countering and midfielder):
             return None
         settled = self.t >= self.hold_until
         nearest = min(math.hypot(q.x - carrier.x, q.y - carrier.y) for q in self.players if q.team != p.team)
@@ -2164,5 +2193,6 @@ class Engine:
         return self.match
 
 
-def simulate(seed: int, minutes: float) -> Match:
-    return Engine(seed).run(minutes)
+def simulate(seed: int, minutes: float, strengths: dict[str, float] | None = None,
+             styles: dict[str, Style] | None = None) -> Match:
+    return Engine(seed, strengths, styles).run(minutes)
