@@ -69,6 +69,25 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_constants.py` fails if any module in `ninety/` assigns a top-level name
   twice.
 
+### 26. Same seed, same match, on every machine
+- **What happened:** seed 7 simulated a different match on macOS from the one on Linux, so the cue
+  fixture test failed on a Mac and "156 cues" could not be reproduced there. The engine was
+  deterministic; the C math library was not. Apple's `exp`, `erf`, `sin` and the rest disagree
+  with glibc's in the last bit for some inputs, a player's profile differed by one bit, and a
+  chaotic match grew that into different events within two minutes. A report already noted "the
+  same seed can simulate a slightly different match on another operating system" without
+  anyone tracing it. Review of the fix then found its helpers silently wrong outside the range
+  the engine uses (`sin(1e20)` gave 2.7e27; the inverse cdf gave -14.06 for p = 1e-100), and
+  the check blind to `from random import Random`.
+- **Rule:** code that writes ground truth or a published number computes with operations IEEE
+  754 rounds exactly (+, -, *, /, `sqrt`) and `ninety/sim/fmath.py`, never `math.exp`,
+  `math.sin`, `**`, `random.gauss` or `NormalDist`. A difference between machines is a defect
+  to trace, not a caveat to print. A numerical helper computes its whole stated domain or
+  refuses what it cannot.
+- **Check:** `tests/test_fmath.py` fails if `ninety/sim`, `ninety/match` or `ninety/eval` calls
+  the C math library, and pins `fmath`'s results bit for bit; CI runs it and the cue fixture on
+  Linux and macOS.
+
 ## Checks that prove something
 
 ### 8. A check must be able to fail

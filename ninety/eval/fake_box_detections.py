@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-import random
+import math
 from collections.abc import Mapping
 
 from ninety.eval.vision_score import BALL_DISTANCE_PX, PLAYER_IOU, ground_truth, iou, score
+from ninety.sim import fmath
 
 
 def _shift(box, dx, dy):
@@ -37,8 +38,8 @@ def _away_from_truth(box, cls, frame, labels):
     x0, y0, x1, y1 = box
     cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
     return all(
-        ((cx - (label["bbox"][0] + label["bbox"][2]) / 2) ** 2
-         + (cy - (label["bbox"][1] + label["bbox"][3]) / 2) ** 2) ** 0.5
+        math.hypot(cx - (label["bbox"][0] + label["bbox"][2]) / 2,
+                   cy - (label["bbox"][1] + label["bbox"][3]) / 2)
         > BALL_DISTANCE_PX
         for label in same_class
     )
@@ -86,7 +87,7 @@ def fake_detections(
         add = damages.get("add", add)
     labels = ground_truth(frames)
     frames_by_number = {int(frame["frame"]): frame for frame in frames}
-    rng = random.Random(seed)
+    rng = fmath.Random(seed)  # the same draws as random.Random; refuses anything platform-dependent
     if drop + shift > len(labels):
         raise ValueError("damage exceeds the number of drawn boxes")
     chosen = list(range(len(labels)))

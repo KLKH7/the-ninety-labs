@@ -11,9 +11,8 @@ from __future__ import annotations
 import math
 import random
 from dataclasses import dataclass, field
-from statistics import NormalDist
 
-from ninety.sim import perception
+from ninety.sim import fmath, perception
 from ninety.sim.body import CS_MEAN, CS_SD, F0_MEAN, F0_SD, V0_MEAN, V0_SD, Body
 
 ATTRIBUTES = ("pace", "acceleration", "stamina", "passing", "crossing", "finishing", "first_touch",
@@ -87,8 +86,7 @@ LEFT_FOOTED = {"LB": 0.7, "LW": 0.7, "LCB": 0.35, "LCM": 0.25, "GK": 0.2, "CM": 
 ROLE_GROUP = {"GK": "GK", "RCB": "CB", "LCB": "CB", "RB": "FB", "LB": "FB", "RCM": "CM", "CM": "CM",
               "LCM": "CM", "RW": "W", "LW": "W", "ST": "ST"}
 ATTRIBUTE_SD = 0.17  # design: spread of a skill attribute around an average 0.5
-NORMAL = NormalDist()
-# Skill attributes are NORMAL.cdf(SKILL_SCALE * z): the same 0.17 spread near the average, but
+# Skill attributes are normal_cdf(SKILL_SCALE * z): the same 0.17 spread near the average, but
 # saturating smoothly toward 0 and 1 instead of piling up at a clamp.
 SKILL_SCALE = ATTRIBUTE_SD / 0.3989
 FORMATION_ROLES = ("GK", "RB", "RCB", "LCB", "LB", "RCM", "CM", "LCM", "RW", "ST", "LW")
@@ -111,7 +109,7 @@ PHYSICAL_CENTRE = _physical_centre()
 
 
 def sigmoid(x: float) -> float:
-    return 1 / (1 + math.exp(-x))
+    return 1 / (1 + fmath.exp(-x))
 
 
 def team_strength(rng: random.Random) -> float:
@@ -171,10 +169,10 @@ class Profile:
                 shift = shifts.get(a, 0.0) - PHYSICAL_CENTRE[a]
                 z[a] = shift + common + math.sqrt(1 - load * load) * rng.gauss(0.0, 1.0)
             else:
-                own = math.sqrt(1 - QUALITY_LOADING ** 2 - FACTOR_LOADING ** 2)
+                own = math.sqrt(1 - QUALITY_LOADING * QUALITY_LOADING - FACTOR_LOADING * FACTOR_LOADING)
                 z[a] = (shifts.get(a, 0.0) + QUALITY_LOADING * quality + FACTOR_LOADING * factors[factor]
                         + own * rng.gauss(0.0, 1.0))
-        attributes = {a: NORMAL.cdf(z[a] if a in PHYSICAL else SKILL_SCALE * z[a]) for a in ATTRIBUTES}
+        attributes = {a: fmath.normal_cdf(z[a] if a in PHYSICAL else SKILL_SCALE * z[a]) for a in ATTRIBUTES}
         traits = []
         for trait, drivers in TRAIT_DRIVERS.items() if group != "GK" else ():  # outfield habits
             drive = sum(z[d] for d in drivers) / len(drivers)
@@ -198,7 +196,7 @@ class Profile:
         """Each physical attribute is a percentile of its sourced distribution: acceleration
         from standing (P2), top-speed capability (P9), critical speed (P10)."""
         def z(attribute: str) -> float:
-            return NORMAL.inv_cdf(min(0.999, max(0.001, self[attribute])))
+            return fmath.normal_inv_cdf(min(0.999, max(0.001, self[attribute])))
         return Body(f0=F0_MEAN + F0_SD * z("acceleration"), v0=V0_MEAN + V0_SD * z("pace"),
                     cs=CS_MEAN + CS_SD * z("stamina"))
 

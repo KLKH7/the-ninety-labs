@@ -16,7 +16,7 @@ import random
 from bisect import bisect_left
 from dataclasses import dataclass
 
-from ninety.sim import ball
+from ninety.sim import ball, fmath
 from ninety.sim import value as possession
 
 PITCH_X, PITCH_Y = 105.0, 68.0
@@ -86,9 +86,9 @@ def _arrival_speed(launch: tuple[float, float]) -> float:
     path = ball.predict((0.0, 0.0, 0.0, ground, 0.0, up), DT, 6.0)
     for state in path[1:]:
         if state[5] < 0 and state[2] <= RECEIVE_HEIGHT_M:
-            return math.sqrt(state[3] ** 2 + state[4] ** 2 + state[5] ** 2)
+            return math.sqrt(state[3] * state[3] + state[4] * state[4] + state[5] * state[5])
     last = path[-1]
-    return math.sqrt(last[3] ** 2 + last[4] ** 2 + last[5] ** 2)
+    return math.sqrt(last[3] * last[3] + last[4] * last[4] + last[5] * last[5])
 
 
 ARRIVAL = [_arrival_speed(launch) for launch in LOFT]
@@ -130,8 +130,8 @@ def _generic_time(distance: float) -> float:
         return GENERIC_REACTION_S
     t = distance / 9.9 + tau
     for _ in range(8):
-        f = 9.9 * t - 9.9 * tau * (1 - math.exp(-t / tau)) - distance
-        t -= f / max(9.9 * (1 - math.exp(-t / tau)), 1e-6)
+        f = 9.9 * t - 9.9 * tau * (1 - fmath.exp(-t / tau)) - distance
+        t -= f / max(9.9 * (1 - fmath.exp(-t / tau)), 1e-6)
     return GENERIC_REACTION_S + max(t, 0.0)
 
 
@@ -145,7 +145,7 @@ def generic_time(distance: float) -> float:
 
 
 def sigmoid(x: float) -> float:
-    return 1 / (1 + math.exp(-max(-30.0, min(30.0, x))))
+    return 1 / (1 + fmath.exp(-max(-30.0, min(30.0, x))))
 
 
 def lunge_time(distance: float, tackling: float = 0.5) -> float:
@@ -196,8 +196,8 @@ def attack(goal_x: float) -> float:
 
 
 def goal_angle(x: float, y: float, goal_x: float) -> float:
-    a = math.atan2(PITCH_Y / 2 + GOAL_HALF_WIDTH - y, abs(goal_x - x))
-    b = math.atan2(PITCH_Y / 2 - GOAL_HALF_WIDTH - y, abs(goal_x - x))
+    a = fmath.atan2(PITCH_Y / 2 + GOAL_HALF_WIDTH - y, abs(goal_x - x))
+    b = fmath.atan2(PITCH_Y / 2 - GOAL_HALF_WIDTH - y, abs(goal_x - x))
     return abs(a - b)
 
 
@@ -370,16 +370,16 @@ def options(scene: Scene) -> list[Option]:
         # saved, which gives the ball back from deep (a goal kick or the keeper's hands).
         blockers = sum(in_cone(scene.x, scene.y, scene.goal_x, ox, oy) for ox, oy in scene.opponents
                        if (ox, oy) != scene.keeper)
-        blocked = 1 - BLOCKER_FACTOR ** blockers
+        blocked = 1 - fmath.ipow(BLOCKER_FACTOR, blockers)
         # A miss or a save gives them the ball deep in their own half (a goal kick or the keeper's).
         missed = our_loss(scene, scene.goal_x - attack(scene.goal_x) * GOAL_KICK_M, PITCH_Y / 2)
         lost = blocked * our_loss(scene, scene.x, scene.y) + (1 - blocked) * missed
         out.append(Option("shoot", q * bias * (1 + 0.5 * scene.risk) - (1 - q) * lost,
                           (scene.goal_x, PITCH_Y / 2)))
     for turn in (0.0, 0.8, -0.8):  # straight at goal, or angled away
-        heading = math.atan2(PITCH_Y / 2 - scene.y, scene.goal_x - scene.x) + turn
-        tx = scene.x + DRIBBLE_STEP_M * math.cos(heading)
-        ty = scene.y + DRIBBLE_STEP_M * math.sin(heading)
+        heading = fmath.atan2(PITCH_Y / 2 - scene.y, scene.goal_x - scene.x) + turn
+        tx = scene.x + DRIBBLE_STEP_M * fmath.cos(heading)
+        ty = scene.y + DRIBBLE_STEP_M * fmath.sin(heading)
         if not (1 <= tx <= PITCH_X - 1 and 1 <= ty <= PITCH_Y - 1):
             continue
         # Can an opponent reach the carry anywhere along it before he has carried the ball past?
@@ -414,5 +414,5 @@ def choose(scene: Scene, rng: random.Random) -> Option:
     opts = options(scene)
     t = temperature(scene)
     top = max(o.value for o in opts)
-    weights = [math.exp((o.value - top) / t) for o in opts]
+    weights = [fmath.exp((o.value - top) / t) for o in opts]
     return rng.choices(opts, weights=weights)[0]

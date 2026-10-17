@@ -8,12 +8,14 @@ from __future__ import annotations
 
 import math
 
+from ninety.sim import fmath
+
 GRAVITY = 9.81
 RADIUS = 0.11  # Law 2: circumference 68 to 70 cm
 MASS = 0.43  # Law 2: 410 to 450 g
 AIR_DENSITY = 1.2
 DRAG_COEFFICIENT = 0.25  # verify: a football at match speeds
-DRAG_K = 0.5 * AIR_DENSITY * DRAG_COEFFICIENT * math.pi * RADIUS**2 / MASS  # deceleration = K * speed²
+DRAG_K = 0.5 * AIR_DENSITY * DRAG_COEFFICIENT * math.pi * RADIUS * RADIUS / MASS  # deceleration = K * speed²
 ROLL_DECEL = 1.2  # verify: m/s² of grass rolling resistance
 RESTITUTION = 0.6  # verify: share of vertical speed kept in a bounce on grass
 BOUNCE_GRIP = 0.85  # verify: share of horizontal speed kept in a bounce
@@ -89,7 +91,7 @@ def ground_pass(distance: float, arrive_mps: float, dt: float) -> float:
 
 def lofted_pass(distance: float, angle_deg: float, dt: float) -> tuple[float, float]:
     """Horizontal and vertical launch speeds for a ball that first lands at distance."""
-    c, s = math.cos(math.radians(angle_deg)), math.sin(math.radians(angle_deg))
+    c, s = fmath.cos(math.radians(angle_deg)), fmath.sin(math.radians(angle_deg))
 
     def first_bounce(v0: float) -> float:
         prev = 0.0
