@@ -10,6 +10,7 @@
 # Example: 150 clips, 25 per execution (6 in parallel), then 40 crowded clips on later seeds:
 #   infra/render-job.sh start v1 1 150 25
 #   infra/render-job.sh start v1 1001 40 20 "occlusion=crowded"
+# Clip length defaults to 10 s; set NINETY_SECONDS=4 in the environment for shorter clips.
 set -euo pipefail
 
 env_value() { azd env get-value "$1"; }
@@ -31,9 +32,10 @@ case "${1:-}" in
       body=$(JOB_JSON="$job_json" python3 -c '
 import json, os, sys
 c = json.loads(os.environ["JOB_JSON"])["properties"]["template"]["containers"][0]
-extra = dict(zip(["NINETY_COMMIT", "NINETY_RUN", "NINETY_FIRST_SEED", "NINETY_COUNT", "NINETY_SET"], sys.argv[1:]))
+names = ["NINETY_COMMIT", "NINETY_RUN", "NINETY_FIRST_SEED", "NINETY_COUNT", "NINETY_SET", "NINETY_SECONDS"]
+extra = dict(zip(names, sys.argv[1:]))
 c["env"] = [e for e in c.get("env", []) if e["name"] not in extra] + [{"name": k, "value": v} for k, v in extra.items() if v]
-print(json.dumps({"containers": [c]}))' "$commit" "$run" "$seed" "$count" "$set")
+print(json.dumps({"containers": [c]}))' "$commit" "$run" "$seed" "$count" "$set" "${NINETY_SECONDS:-}")
       az rest --method post --uri "$job_id/start?api-version=2024-03-01" --body "$body" \
         --query name -o tsv | sed "s/^/seeds $seed-$((seed + count - 1)): /"
       seed=$((seed + count))
