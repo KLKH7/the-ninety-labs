@@ -739,7 +739,12 @@ def test_turning_first_gives_an_opponent_closing_on_the_lane_time_to_get_there()
 
 def test_a_throw_in_leaves_his_hands_at_once_whichever_way_he_faces(monkeypatch):
     # Law 15 / P16: a ball in his hands is thrown, not struck off his foot: no turn, no 60° cap.
-    assert D.can_strike(0.0, 0.0, math.pi, 1.0, 0.0)
+    from ninety.sim.engine import Engine
+
+    e = Engine(1)  # in his hands: the engine's own case (engine.can_strike), whichever way he faces
+    taker = e.by_id["h4"]
+    taker.heading, e.throw_by = math.pi, taker.id
+    assert e.can_strike(taker, taker.x + 10.0, taker.y)
     turn, wait = D.strike_turn(math.pi, 1.0, 0.0, thrown=True)
     assert abs(turn) == pytest.approx(180.0) and wait == 0.0
     asked = []

@@ -335,3 +335,14 @@ short and actionable. This file is public: no research sources, product names or
   as the renderer reads it.
 - **Check:** `tests/test_event_score.py::test_each_event_spot_is_at_its_reference_object` runs over
   windows that contain a goal and a foul (seed 11).
+
+### 39. Run the reports after a reconcile, not only the tests
+- **What happened:** reconciling the engine branches combined #31's body outline with the
+  penalty code from `engine/passes`. The penalty taker walked onto the mark itself. The strike rule
+  exempted a ball at his centre ("in his hands") and the kick was taken at once, so a quarter of
+  penalties came straight off his own body. On-target fell from 90% to 65%. No test covered it.
+  The penalty report showed it only when the save rates were re-measured, after two audits.
+- **Rule:** after merging engine branches, rerun the reports (`ninety.sim.penalties`,
+  `ninety.sim.funnel`) and compare them with the parents before calling the merge done. A behaviour
+  the report shows breaking gets a test.
+- **Check:** `tests/test_penalties.py::test_a_penalty_never_comes_off_the_man_who_took_it`.
