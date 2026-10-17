@@ -6,6 +6,7 @@
 #     <data> = a local exported COCO dataset (copied up), or azure:<run>[,<run>...] (fetched there)
 #   SSH_PORT=12345 scripts/train-on-gpu.sh root@1.2.3.4 azure:v2los,v2 ours-v2  # RunPod; v2los first wins
 #   scripts/train-on-gpu.sh ubuntu@1.2.3.4 runs/coco/v2 ours-v2
+#   EPOCHS=1 ...                                   a smoke run; the manifest records the override
 #
 # azure:<runs>: a read-only SAS link to the `renders` container, valid 6 hours, is made here with
 # your Azure sign-in and sent to the machine over SSH's stdin, never as an argument or a file. The
@@ -18,6 +19,7 @@ set -euo pipefail
 host=$1 data=$2 name=$3
 key=~/.ssh/ninety_lambda
 port=${SSH_PORT:-22}
+epochs_arg=${EPOCHS:+--epochs $EPOCHS}  # a smoke run only; real runs use finetune.json's epochs
 ssh_=(ssh -i "$key" -p "$port" -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=60 "$host")
 commit=$(git rev-parse HEAD)
 git branch -r --contains "$commit" | grep -q . || { echo "push $commit first"; exit 1; }
@@ -53,7 +55,7 @@ if [[ $data == azure:* ]]; then
     $fetches
     unset RENDERS_SAS_URL
     rm -rf data && uv run --no-sync python -m ninety.vision.coco_export clips/seed* --out data --config ninety/vision/finetune.json
-    NINETY_COMMIT=$commit nohup uv run --no-sync python -m ninety.vision.train --data data --out out/$name --name $name > train-$name.log 2>&1 &
+    NINETY_COMMIT=$commit nohup uv run --no-sync python -m ninety.vision.train --data data --out out/$name --name $name $epochs_arg > train-$name.log 2>&1 &
     echo started: tail -f ninety/train-$name.log
   '"
 else
@@ -63,7 +65,7 @@ else
   echo "== train $name"
   "${ssh_[@]}" "bash -lc '
     cd ninety && export PATH=\$HOME/.local/bin:\$PATH
-    NINETY_COMMIT=$commit nohup uv run --no-sync python -m ninety.vision.train --data data --out out/$name --name $name > train-$name.log 2>&1 &
+    NINETY_COMMIT=$commit nohup uv run --no-sync python -m ninety.vision.train --data data --out out/$name --name $name $epochs_arg > train-$name.log 2>&1 &
     echo started: tail -f ninety/train-$name.log
   '"
 fi
