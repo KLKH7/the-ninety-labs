@@ -406,6 +406,10 @@ class Engine:
         or not his body launches; a deflection does not un-stretch a dive already under way."""
         hands = self.hands(p, x, y)
         at = self.t if at is None else at
+        if hands and self.dive and self.dive[0] == p.id and (y - p.y) * self.dive[3] < 0:
+            # P11, P15: his stretch goes the way he dives; behind it he reaches no further than
+            # standing (his trailing leg, design)
+            return offball.reach_for(hands, 0.0)
         return offball.reach_for(hands, at - self.stretch_from(p) if hands else 0.0)
 
     def give(self, pid: str) -> None:
