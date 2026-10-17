@@ -367,3 +367,14 @@ short and actionable. This file is public: no research sources, product names or
   `ninety.sim.funnel`) and compare them with the parents before calling the merge done. A behaviour
   the report shows breaking gets a test.
 - **Check:** `tests/test_penalties.py::test_a_penalty_never_comes_off_the_man_who_took_it`.
+
+### 42. A band is only as good as the sources that make it
+- **What happened:** R7's published band, 20 to 45%, was cited to one Premier League study, which
+  reports about 20%; the 35 to 45% came from a second study that was not cited. The same row still
+  showed a 62% late drop measured on an engine two rebuilds old, and the late drop that did exist
+  came from a design constant, not from players pacing themselves.
+- **Rule:** each end of a band names the source it comes from. A realism number is judged by a
+  protocol written before it is measured (matches, seeds, statistic, spread, band), and the row
+  records the engine commit the number came from.
+- **Check:** `uv run python -m ninety.sim.late_drop` prints the commit in `docs/eval/late-drop.md`;
+  `tests/test_late_drop.py` fails if the seeds or band drift from `docs/EVALUATION.md`.

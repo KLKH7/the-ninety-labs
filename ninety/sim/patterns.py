@@ -14,7 +14,8 @@ from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from statistics import mean
 
-from ninety.sim.engine import FPS, simulate
+from ninety.sim.body import D0
+from ninety.sim.engine import FPS, Engine
 
 ROOT = Path(__file__).resolve().parents[2]
 HIGH_INTENSITY = 5.5  # m/s, 19.8 km/h: the usual high-intensity running threshold
@@ -30,7 +31,8 @@ PUBLISHED_TOP = {"centre-back": 7.9, "full-back": 8.1, "central midfield": 7.9, 
 
 
 def measure(seed: int, minutes: float = 90) -> dict:
-    m = simulate(seed, minutes)
+    engine = Engine(seed)
+    m = engine.run(minutes)
     role = {r["id"]: r["role"] for r in m.roster}
     resets = {e["frame"] for e in m.events if e["type"] == "kickoff"}  # positions reset: not running
     dist = defaultdict(float)
@@ -82,7 +84,10 @@ def measure(seed: int, minutes: float = 90) -> dict:
             })
     late_drop = 1 - late_high / early_high if early_high else None
     team_shape = {k: (mean(v[0] for v in vals), mean(v[1] for v in vals)) for k, vals in shape.items()}
-    return {"seed": seed, "groups": dict(per_group), "late_drop": late_drop, "shape": team_shape}
+    # The slow store's share left at the final whistle (P10), averaged over outfield players.
+    store = mean(p.physique.ceiling / D0 for p in engine.players if p.role != "GK")
+    return {"seed": seed, "groups": dict(per_group), "late_drop": late_drop, "shape": team_shape,
+            "early_high": early_high, "late_high": late_high, "store_left": store}
 
 
 def report(results: list[dict]) -> str:
