@@ -123,6 +123,23 @@ of seed 900001 matched labels and all 250 images byte for byte.
 - Player height p05 is 16 px in seed 900001, under the guide's 30 px; the other four clips are
   31 to 54 px at p05, and every clip's p95 is 86 to 106 px. Not yet traced.
 
+### Third measurement (Oct 17, hard cases drawn from the seed)
+
+`kit_contrast` and `occlusion` used to change only with `--set`, which the test set refuses, so
+the test set could never hold a crowded window or low-contrast kits. They are now drawn from the
+seed at `HARD_CASE_RATE` = 0.3, set from the train floors before rendering, not from this number.
+Re-rendered at commit `6269283`: seeds 900001, 900002 and 900004 are crowded, 900004 has
+low-contrast kits.
+
+All checks pass (ball projection max 0.30 px, keypoints max 0.0015 px, determinism identical).
+
+- The ball is under 0.5 visible in 55 of 1,250 frames (**4.40%**; crowded clips 6.4%, 8.8%,
+  2.4%; natural clips 0% and 4.4%). Still **short of the 5% minimum**, so the test set is still
+  not ready to freeze. The rate is not raised to reach 5%; whether to move the freeze or change
+  the test set's design is R2's decision.
+- Player height p05 is 9 px in seed 900004 (the 16 px case moved from 900001 to 900004 with the
+  new window), under the guide's 30 px. Not yet traced; a camera cut is the first suspect.
+
 The final proof comes later: detector recall on the fixed test set before and after each
 targeted round.
 

@@ -1,6 +1,7 @@
 import pytest
 
 from ninety.render.params import (
+    HARD_CASE_RATE,
     PATTERNS,
     TEAM_CODES,
     apply_overrides,
@@ -10,6 +11,7 @@ from ninety.render.params import (
     parse_override,
     sample_params,
 )
+from ninety.render.splits import TEST_SEEDS
 
 PREMIER_LEAGUE_CODES = {
     "ARS",
@@ -64,9 +66,9 @@ def test_camera_stays_in_broadcast_ranges():
         assert 15 <= c.height_m <= 25 and 30 <= c.back_m <= 40
 
 
-def test_kits_contrast_by_default_and_on_request():
+def test_kits_contrast_when_normal_and_on_request():
     for seed in range(30):
-        p = sample_params(seed)
+        p = sample_params(seed, kit_contrast="normal")
         assert kits_differ(p.home_kit.shirt, p.away_kit.shirt, "normal")
         for gk in (p.home_gk.shirt, p.away_gk.shirt):
             assert color_distance(gk, p.home_kit.shirt) >= 0.5 and color_distance(gk, p.away_kit.shirt) >= 0.5
@@ -132,3 +134,20 @@ def test_parse_override_types():
 
 def test_team_codes_are_fictional():
     assert not set(TEAM_CODES) & PREMIER_LEAGUE_CODES
+
+
+def test_hard_cases_are_drawn_from_the_seed():
+    # Each at HARD_CASE_RATE (0.3); 1,000 seeds give a binomial sd of about 0.015, so +-0.05 is
+    # over 3 sd and the test does not flake.
+    ps = [sample_params(s) for s in range(1, 1001)]
+    assert abs(sum(p.kit_contrast == "low" for p in ps) / 1000 - HARD_CASE_RATE) < 0.05
+    assert abs(sum(p.occlusion == "crowded" for p in ps) / 1000 - HARD_CASE_RATE) < 0.05
+    # an override still wins over the draw
+    assert sample_params(900004, kit_contrast="normal", occlusion="natural").occlusion == "natural"
+
+
+def test_the_fixed_test_set_holds_each_hard_case():
+    # The test set refuses overrides, so its hard cases must come from its seeds.
+    test = [sample_params(s) for s in TEST_SEEDS]
+    assert any(p.occlusion == "crowded" for p in test)
+    assert any(p.kit_contrast == "low" for p in test)
