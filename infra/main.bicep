@@ -106,15 +106,15 @@ resource mcpKeySecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empt
   properties: { value: mcpKey }
 }
 
-var secretsUser = '4633458b-17de-408a-b874-0445c86b69e6' // Key Vault Secrets User (az role definition list)
+var vaultReaderRole = '4633458b-17de-408a-b874-0445c86b69e6' // built-in role "Key Vault Secrets User" (az role definition list)
 
 resource apiReadsSecrets 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   scope: vault
-  name: guid(vault.id, apiIdentity.id, secretsUser)
+  name: guid(vault.id, apiIdentity.id, vaultReaderRole)
   properties: {
     principalId: apiIdentity.properties.principalId
     principalType: 'ServicePrincipal'
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', secretsUser)
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', vaultReaderRole)
   }
 }
 
