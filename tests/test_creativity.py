@@ -1,8 +1,7 @@
-"""A8: choosing on the ball is split from executing it. Vision decides what he sees, flair what he is
-drawn to, habits pull toward one option, teamwork weighs the team's instructions; none of them makes
-an option more likely to work."""
+"""A8: choosing on the ball is split from executing it. Flair decides what he is drawn to, habits
+pull toward one option, teamwork weighs the team's instructions; none of them makes an option more
+likely to work."""
 
-import math
 import random
 
 import pytest
@@ -24,7 +23,7 @@ def scene(**kw) -> D.Scene:
     return D.Scene(**base)
 
 SAFE = D.Option("pass", 0.010, (70.0, 34.0), "h5", chance=0.95)
-BOLD = D.Option("pass", 0.010, (95.0, 34.0), "h9", chance=0.30, bypassed=0)
+BOLD = D.Option("pass", 0.010, (95.0, 34.0), "h9", chance=0.30)
 HOLD = D.Option("hold", 0.005)
 
 
@@ -56,43 +55,29 @@ def test_flair_draws_him_to_the_low_percentage_option_without_changing_what_it_i
     assert worth == [(o.kind, o.value, o.chance) for o in D.options(scene(flair=1.0, **s))]
 
 
-def test_an_average_flair_chooses_as_before(monkeypatch):
+def test_an_average_flair_chooses_as_before_and_flair_is_measured_from_the_average(monkeypatch):
     monkeypatch.setattr(D, "options", lambda s: [SAFE, BOLD, HOLD])
     sc = scene(flair=0.5)
-    tastes: dict = {}
-    choice = D.choose(sc, random.Random(5), tastes)
     t = D.temperature(sc) * D.choice_spread([o.value for o in (SAFE, BOLD, HOLD)])
-    gumbel = {k: -math.log(-math.log(v)) for k, v in tastes.items() if k[0] != "seen"}
-    best = max((SAFE, BOLD, HOLD), key=lambda o: o.value / t + gumbel[D.taste_key(sc, o)])
-    assert choice is best
-
-
-def test_vision_decides_whether_he_sees_a_pass_that_takes_opponents_out(monkeypatch):
-    killer = D.Option("pass", 0.030, (95.0, 34.0), "h9", chance=0.6, bypassed=3)
-    blind = picks(monkeypatch, [SAFE, killer, HOLD], vision=0.0)
-    sharp = picks(monkeypatch, [SAFE, killer, HOLD], vision=1.0)
-    assert sharp["h9"] > blind.get("h9", 0) * 2
-    level = D.Option("pass", 0.030, (95.0, 34.0), "h9", chance=0.6, bypassed=0)
-    assert picks(monkeypatch, [SAFE, level, HOLD], vision=0.0)["h9"] == picks(
-        monkeypatch, [SAFE, level, HOLD], vision=1.0)["h9"]  # nothing to notice: vision does not matter
-
-
-def test_what_he_has_not_noticed_stays_unnoticed_while_he_has_the_ball(monkeypatch):
-    killer = D.Option("pass", 0.5, (95.0, 34.0), "h9", chance=0.9, bypassed=4)
-    monkeypatch.setattr(D, "options", lambda s: [SAFE, killer, HOLD])
-    rng = random.Random(11)
-    for _ in range(50):  # the same look, again and again: the first notice decides
+    for seed in range(300):  # at 0.5 every choice is the plain misjudgement's, with no flair term
         tastes: dict = {}
-        first = D.choose(scene(vision=0.0), rng, tastes).receiver
-        assert all(D.choose(scene(vision=0.0), rng, tastes).receiver == first for _ in range(10))
+        choice = D.choose(sc, random.Random(seed), tastes)
+        assert choice is max((SAFE, BOLD, HOLD), key=lambda o: o.value / t + tastes[D.taste_key(sc, o)])
+    monkeypatch.undo()
+    below = picks(monkeypatch, [SAFE, BOLD, HOLD], n=3000, flair=0.4)
+    above = picks(monkeypatch, [SAFE, BOLD, HOLD], n=3000, flair=0.6)
+    plain = picks(monkeypatch, [SAFE, BOLD, HOLD], n=3000, flair=0.5)
+    assert below["h9"] < plain["h9"] < above["h9"]  # 0.5 is the middle, not merely somewhere
 
 
-def test_a_pass_takes_out_the_opponents_between_the_ball_and_where_it_arrives():
-    s = scene(x=50.0, opponents=[(55.0, 30.0), (65.0, 40.0), (85.0, 34.0), (45.0, 34.0)], keeper=None)
-    assert D.taken_out(s, 70.0) == 2  # the two between, not the one beyond or the one behind
-    passes = [o for o in D.options(scene(x=50.0, mates=[("h9", 75.0, 34.0, 0.0)],
-                                         opponents=[(60.0, 20.0), (65.0, 50.0)])) if o.kind == "pass"]
-    assert passes and passes[0].bypassed == 2 and 0.0 < passes[0].chance <= 1.0
+def test_each_option_carries_his_own_estimate_that_it_works():
+    opts = D.options(scene(x=50.0, mates=[("h9", 75.0, 34.0, 0.0)], opponents=[(60.0, 20.0), (65.0, 50.0)]))
+    passes = [o for o in opts if o.kind == "pass"]
+    carries = [o for o in opts if o.kind == "dribble"]
+    assert passes and all(0.0 < o.chance < 1.0 for o in passes + carries)
+    assert 0.0 < next(o for o in opts if o.kind == "hold").chance <= 1.0
+    shots = [o for o in D.options(scene(x=90.0, opponents=[(95.0, 30.0)])) if o.kind == "shoot"]
+    assert shots and 0.0 < shots[0].chance < 1.0
 
 
 def test_a_habit_pulls_toward_its_one_option(monkeypatch):
@@ -104,6 +89,28 @@ def test_a_habit_pulls_toward_its_one_option(monkeypatch):
     pulled = picks(monkeypatch, [short, BOLD, HOLD], traits=("plays_short",))
     usual = picks(monkeypatch, [short, BOLD, HOLD], traits=())
     assert pulled["h4"] > usual["h4"] and pulled["h9"] < usual["h9"]  # the 35 m pass gets no pull
+
+
+def test_the_engine_hands_him_his_own_flair():
+    e = Engine(3)
+    carrier = e.by_id["h7"]
+    e.give(carrier.id)
+    carrier.profile.attributes["flair"] = 0.91
+    assert e.scene_for(carrier).flair == 0.91
+
+
+def test_teamwork_goes_with_game_intelligence_and_flair_with_neither_it_nor_quality():
+    rng = random.Random(4)
+    squad = [Profile.generate("CM", rng, archetype="box_to_box") for _ in range(600)]
+
+    def corr(a, b):
+        ma, mb = sum(a) / len(a), sum(b) / len(b)
+        cov = sum((x - ma) * (y - mb) for x, y in zip(a, b, strict=True))
+        return cov / (sum((x - ma) ** 2 for x in a) * sum((y - mb) ** 2 for y in b)) ** 0.5
+    decisions = [p["decisions"] for p in squad]
+    assert corr([p["teamwork"] for p in squad], decisions) > 0.3
+    assert abs(corr([p["flair"] for p in squad], decisions)) < 0.1
+    assert abs(corr([p["flair"] for p in squad], [p.quality for p in squad])) < 0.1
 
 
 def test_teamwork_weighs_the_teams_instruction_on_and_off_the_ball():

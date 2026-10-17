@@ -649,7 +649,7 @@ class Engine:
                                 ball_offset=(self.ball[0] - carrier.x, self.ball[1] - carrier.y),
                                 progress=style.progress_per_m * (0.5 + prof["teamwork"]),  # A8
                                 hold_decay=style.hold_decay, held=self.holds,
-                                vision=prof["vision"], flair=prof["flair"])
+                                flair=prof["flair"])
         return scene
 
     def decide(self, carrier: Player, throw: bool = False) -> None:

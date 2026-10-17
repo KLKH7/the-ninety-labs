@@ -175,7 +175,6 @@ class Scene:
     progress: float = 0.0  # T4: his team's intent, value per metre gained toward goal (roles.STYLES)
     hold_decay: float = HOLD_DECAY  # D9: his team's tempo (roles.STYLES)
     held: int = 0  # D9: decisions in a row he has already spent holding
-    vision: float = 1.0  # A8: how readily he notices a pass that takes opponents out of the game
     flair: float = 0.5  # A8: how strongly he is drawn to the low-percentage option
 
 
@@ -188,7 +187,6 @@ class Option:
     lofted: bool = False
     pace: float = ARRIVE_MPS  # a ground pass's arrival speed, as chosen
     chance: float = 1.0  # A8: his own estimate that it works (a pass arriving, a carry kept, a goal)
-    bypassed: int = 0  # A8: the opponents a pass takes out of the game, as he sees them
 
 
 def attack(goal_x: float) -> float:
@@ -775,16 +773,8 @@ def pass_option(scene: Scene, mate: tuple[str, float, float, float]) -> Option |
         ahead = max(0.0, (tx - scene.x) * attack(scene.goal_x))
         ev = confidence * (gain + scene.progress * ahead) - (1 - confidence) * lost
         if best is None or ev > best.value:
-            best = Option("pass", ev, (tx, ty), mid, lofted, pace, confidence, taken_out(scene, tx))
+            best = Option("pass", ev, (tx, ty), mid, lofted, pace, confidence)
     return best
-
-
-def taken_out(scene: Scene, tx: float) -> int:
-    """A8: how many opponents (keeper aside) a pass to `tx` takes out of the game: goal-side of the
-    ball now, and no longer goal-side of it once it arrives."""
-    a = attack(scene.goal_x)
-    return sum(1 for ox, oy in scene.opponents
-               if (ox, oy) != scene.keeper and (ox - scene.x) * a > 0 and (ox - tx) * a < 0)
 
 
 def shot_chance(scene: Scene) -> float:
@@ -846,7 +836,7 @@ def options(scene: Scene) -> list[Option]:
         front = max(scene.mates, key=lambda m: m[1] * attack(scene.goal_x), default=None)
         ty = min(PITCH_Y - 6.0, max(6.0, front[2])) if front else PITCH_Y / 2
         contest = 0.5 * value(tx, ty, scene.goal_x) - 0.5 * loss_cost(tx, ty, scene.goal_x)
-        out.append(Option("clear", contest, (tx, ty), lofted=True))
+        out.append(Option("clear", contest, (tx, ty), lofted=True, chance=0.5))  # the even contest
     # Holding is waiting to make a move a moment later: worth the best move open to him now, less
     # what the defence recovers while he waits (D9; *verify*: options only decay while he waits,
     # nothing here models a run developing). He cannot wait for ever, so when every move is a bad
@@ -858,7 +848,8 @@ def options(scene: Scene) -> list[Option]:
     decay = 1 - (1 - scene.hold_decay) ** (scene.held + 1)
     later = best * (1 - decay) if best >= 0 else best * (1 + decay)
     lose = 0.5 * p
-    out.append(Option("hold", (1 - lose) * later - lose * loss_cost(scene.x, scene.y, scene.goal_x)))
+    out.append(Option("hold", (1 - lose) * later - lose * loss_cost(scene.x, scene.y, scene.goal_x),
+                      chance=1 - lose))
     return out
 
 
@@ -894,32 +885,24 @@ def taste_key(scene: Scene, o: Option) -> tuple:
     return (o.kind,)
 
 
-# A8: how choosing on the ball is split from executing (all *design*). Seeing: a pass that takes
-# opponents out of the game must first be noticed, for each one it bypasses with this chance short of
-# certain, at the worst vision (none at the best), kept until his next scan. Choosing: flair
-# widens his misjudgement of an option by this factor per unit of its risk (1 - chance) at the most
-# flair, narrowing it at the least, so the creative player tries the low-percentage option more and
-# fails with it more; an average player chooses as before. A habit pulls toward its one option by
-# this many units of misjudgement. Executing is the kick, the race and the touch, as before.
-MISS_PER_OPPONENT = 0.5
+# A8: how choosing on the ball is split from executing (all *design*). Flair widens his
+# misjudgement of an option by this factor per unit of its risk (1 - chance) at the most flair,
+# narrowing it at the least, so the creative player tries the low-percentage option more and fails
+# with it more; an average player chooses as before. A habit pulls toward its one option by this
+# many units of misjudgement. Executing is the kick, the race and the touch, as before.
 FLAIR_SPREAD = 2.0
 HABIT_PULL = 0.5
-
-
-def noticed(scene: Scene, o: Option, draw: float) -> bool:
-    """A8: does he see this option at all? Every option but a pass that takes opponents out of the
-    game is in plain sight; that one he notices with a chance that falls with each opponent it
-    bypasses, less steeply the better his vision."""
-    return draw < (1 - MISS_PER_OPPONENT * (1 - scene.vision)) ** o.bypassed
+SHORT_PASS_M = 15.0  # A8: a pass this short is what a player who `plays_short` is drawn to
 
 
 def habit(scene: Scene, o: Option) -> float:
-    """A8: a habit is a pull toward one option, never a second rating."""
+    """A8: a habit is a pull toward one kind of option, never a second rating (each of the carry
+    directions he weighs gets the pull, so carrying as a whole gains a little more than one pull)."""
     pull = 0.0
     if o.kind == "dribble" and "takes_players_on" in scene.traits:
         pull += HABIT_PULL
     if o.kind == "pass" and o.target and "plays_short" in scene.traits \
-            and math.hypot(o.target[0] - scene.x, o.target[1] - scene.y) < LOFT_FROM_M:
+            and math.hypot(o.target[0] - scene.x, o.target[1] - scene.y) < SHORT_PASS_M:
         pull += HABIT_PULL
     return pull
 
@@ -929,16 +912,9 @@ def choose(scene: Scene, rng: random.Random, tastes: dict | None = None) -> Opti
     random-utility draw (Gumbel), so a single choice is a softmax of the values; it is drawn once
     per option and kept in `tastes` until he next scans the pitch (the engine resets it), so looking
     again at the same options does not re-roll the dice (a choice he keeps rejecting does not become
-    certain by being asked four times a second). What he has noticed (A8) is kept the same way."""
+    certain by being asked four times a second). Flair and habits shape that misjudgement (A8)."""
+    opts = options(scene)
     tastes = {} if tastes is None else tastes
-
-    def draw(key: tuple) -> float:
-        if key not in tastes:
-            tastes[key] = rng.random()
-        return tastes[key]
-
-    # A8: he chooses among what he sees; holding is always in sight.
-    opts = [o for o in options(scene) if noticed(scene, o, draw(("seen",) + taste_key(scene, o)))]
     # D4: the randomness is a share of how far apart the options are, so a choice between close
     # options is loose and one between clearly different options is not, wherever on the pitch.
     t = temperature(scene) * choice_spread([o.value for o in opts])
@@ -946,7 +922,10 @@ def choose(scene: Scene, rng: random.Random, tastes: dict | None = None) -> Opti
         return max(opts, key=lambda o: o.value)
 
     def taste(o: Option) -> float:
-        gumbel = -math.log(-math.log(max(draw(taste_key(scene, o)), 1e-12)))
+        k = taste_key(scene, o)
+        if k not in tastes:
+            tastes[k] = -math.log(-math.log(max(rng.random(), 1e-12)))
+        gumbel = tastes[k]
         return gumbel * math.exp(FLAIR_SPREAD * (scene.flair - 0.5) * (1 - o.chance)) + habit(scene, o)
 
     return max(opts, key=lambda o: o.value / t + taste(o))
