@@ -13,5 +13,6 @@ licence must be one of those three (see `AGENTS.md`).
 | mcp | MCP server and client | MIT |
 | pydantic (via agent-framework) | typed agent output | MIT |
 | pytest, ruff (development) | tests and lint | MIT |
+| three (npm, `web/`) | broadcast renderer and terrain viewer | MIT |
 
 Planned, added when first used: RF-DETR (Apache-2.0 sizes only), supervision (MIT).
