@@ -100,8 +100,8 @@ BOARDS_M = 4.0  # verify: advertising boards behind the lines stop a ball (and p
 RESTART_DELAY_S = {"throw_in": (1.0, 2.0), "goal_kick": (1.0, 2.0), "corner": (1.0, 2.0)}
 THROW_BEHIND_M = 0.55  # Law 15: his body stands outside the touchline, feet on or behind it
 THROW_SPOT_M = 0.25  # design: within this of his spot he throws from where he stands, still behind the line
-THROW_SETTLED_MPS = 0.3  # design: he throws once he has (nearly) stopped, so nobody stops dead
-THROW_REACH_M = 0.28  # both hands reach toward the pitch and still stay short of the line
+THROW_SETTLED_MPS = BRAKE_MAX * DT  # he throws once one frame of braking would stop him (P2)
+THROW_REACH_M = 0.28  # both hands reach toward the pitch; the ball is over or behind the line
 THROW_HAND_Z = 1.85  # bottom of the ball just over the head (the centre sits one radius higher)
 
 # 4-3-3 anchors for a team attacking toward x=105, as (x, y) fractions of the pitch.
@@ -175,7 +175,7 @@ def throw_stand(x: float, line_y: float) -> tuple[float, float]:
 
 
 def throw_hands(x: float, y: float) -> tuple[float, float, float]:
-    """The ball in both hands, over the head, still off the pitch."""
+    """The ball in both hands, over the head, over or behind the touchline."""
     inward = 1.0 if y < PITCH_Y / 2 else -1.0
     return x, y + inward * THROW_REACH_M, THROW_HAND_Z
 
@@ -905,6 +905,7 @@ class Engine:
         if taker is None:
             taker = self.nearest(spot[0], spot[1], team).id
         lo, hi = RESTART_DELAY_S[kind]
+        self.dribbler = self.dribble_to = None  # the ball is dead: nobody is running onto a touch
         self.restart = Restart(kind, team, spot[0], spot[1], taker, self.t + self.rng.uniform(lo, hi))
 
     def tick_restart(self) -> None:

@@ -581,7 +581,44 @@ def test_nobody_challenges_a_ball_held_for_a_throw_in():
 def test_a_lunge_that_arrives_during_a_throw_in_finds_nothing():
     e, thrower, defender = throw_in_scene()
     held = e.ball
-    e.lunges[defender.id] = e.t  # started before the ball went out, arriving now
+    # Defence in depth: a lunge lasts under 0.5 s and a restart takes at least 1 s, so play should
+    # never produce this; if it did, the held ball must still be safe.
+    e.lunges[defender.id] = e.t
     e.duels()
     assert e.possessor == thrower.id and e.ball == held
     assert not any(ev["type"] == "tackle" for ev in e.match.events)
+
+
+def step(e: Engine) -> None:
+    """One frame of Engine.run without its kick-off."""
+    e.moved = None
+    e.perceive_and_think()
+    e.duels()
+    if e.possessor:
+        e.tick_carrier()
+    elif e.restart:
+        e.tick_restart()
+    else:
+        e.tick_free()
+    e.move_players()
+    e.snapshot()
+    e.t += DT
+    e.frame += 1
+
+
+def test_a_dribbler_whose_touch_went_out_still_takes_the_throw_in():
+    """His touch ran over the line, so the ball is dead and his dribble is over; he runs to his
+    spot behind the line like any thrower. (He once kept chasing his touch, which a target held
+    on the pitch never let him leave, so the restart never came.)"""
+    e = Engine(1)
+    still(e)
+    taker = e.by_id["h9"]
+    taker.x, taker.y = 50.0, 2.0
+    e.possessor, e.dribbler = None, taker.id
+    e.ball = (50.0, -1.0, 0.0, 0.0, 0.0, 0.0)
+    e.stop("throw_in", "home", (50.0, 0.0), taker=taker.id)
+    for _ in range(int(10 / DT)):
+        step(e)
+        if e.restart is None:
+            break
+    assert e.restart is None and e.throw_by == taker.id
