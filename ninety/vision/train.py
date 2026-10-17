@@ -20,6 +20,7 @@ import datetime as dt
 import hashlib
 import importlib.metadata
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -58,6 +59,9 @@ def train_kwargs(cfg: dict, data: Path, out: Path) -> dict:
 
 
 def _git_commit() -> str | None:
+    """The commit being trained: from git, or NINETY_COMMIT when the code was copied without .git."""
+    if os.environ.get("NINETY_COMMIT"):
+        return os.environ["NINETY_COMMIT"]
     try:
         return subprocess.run(
             ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True
