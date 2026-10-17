@@ -438,3 +438,19 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** a test that the believed velocity is the rate of change of the believed position, and
   tests on each caller; for a rate like own-pass corners, look at what the passer believed against
   what was true at the kick.
+
+### 46. A structural change chosen from a report, justified by half the engine, is tailoring
+- **What happened:** a full-match pass count was over a test's limit. Calibration showed forward
+  passes rated too low, and the passer's estimate raced every opponent while the engine sends
+  one chaser, so the estimate was changed to race only the first. It made calibration look
+  better and turned the failing seed green. An audit found the engine lets any opponent take the
+  ball by contact and re-plans its chaser every 4 frames, so the change was not the engine's rule
+  but a different way to combine uncertainty, optimistic wherever two opponents contest; where
+  play happens did not change at all. It was reverted. A shape change tried before it (attackers
+  on the defenders' line) cut passes only through 12 offsides a match, and was reverted too.
+- **Rule:** before changing how an estimate combines its parts, read every path in the engine
+  that decides the same outcome (here `plan_chase` and `contact`), not only the one that fits.
+  A rate that moves for the wrong reason (passes down because offsides went up), or a check that
+  turns green while the behaviour behind it does not move, is not a fix.
+- **Check:** for any change that moves a held-out check, list what else moved (stoppages, where
+  play happens) and say what did not.
