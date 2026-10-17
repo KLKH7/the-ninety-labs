@@ -179,9 +179,10 @@ to R4 and R3 and is not part of this build.
 
 ## Rules
 
-- A dial changes intention only. A test checks that every dial at its default reproduces
-  today's engine exactly (same events for the same seed), so wiring the dials changes nothing
-  until a style is chosen.
+- A dial changes intention only. Every pull request that wires a dial records events and
+  frames for fixed seeds before the change and shows them byte-identical after it with the
+  default style; a permanent test pins each dial's default to the engine's earlier values. (A
+  permanent hash of a whole match would break on every later engine change.)
 - No dial, preset value or engine constant is changed to make a prediction come true or a grid
   cell look better. A missed prediction is reported and its cause investigated.
 - Every dial that ships gets a GROUNDING.md row (a T row) saying what it changes and where its
@@ -193,7 +194,7 @@ to R4 and R3 and is not part of this build.
 | Date | Work | Done when |
 |---|---|---|
 | Oct 17 | `engine-v1` is tagged **without** styles; dataset v1 is not disturbed | tag exists |
-| Oct 18 to 19 | `Style` dataclass and presets; wire line height, pressing height, pressing intensity and counter-pressing; CLI `--home-style --away-style --home-strength --away-strength`; defaults reproduce today | default-identity test passes; a high-press run shows a high line in the tracking |
+| Oct 18 to 19 | `Style` dataclass and presets; wire line height, pressing height, pressing intensity and counter-pressing; CLI `--home-style --away-style --home-strength --away-strength`; defaults reproduce today | default style byte-identical to the engine before (seeds 7, 11, 21); a high-press run shows a high line in the tracking |
 | Oct 20 to 21 | counter-attacking, directness, risk and tempo in option values; fingerprint measures; grid runner | H2 to H4 reported on 5 seeds per preset |
 | Oct 22 | `engine-v2` with styles (R1 → R2 handoff); grid runs as a job | `docs/eval/sim-styles.md` committed |
 | Oct 23 to 24 | corner card and grid page (R5, from a JSON fixture R1 provides on Oct 21) | the viewer shows a matchup card on a library clip |

@@ -1,5 +1,6 @@
 import argparse
 import json
+import math
 from collections import Counter
 from pathlib import Path
 
@@ -18,6 +19,10 @@ def main() -> None:
         ap.add_argument(f"--{team}-strength", type=float, default=None,
                         help=f"the {team} team's strength in player-quality SDs (0 is average); else drawn")
     args = ap.parse_args()
+    for team in ("home", "away"):
+        s = getattr(args, f"{team}_strength")
+        if s is not None and not math.isfinite(s):
+            ap.error(f"--{team}-strength must be a finite number")
 
     strengths = {team: s for team in ("home", "away") if (s := getattr(args, f"{team}_strength")) is not None}
     styles = {team: PRESETS[getattr(args, f"{team}_style")] for team in ("home", "away")}

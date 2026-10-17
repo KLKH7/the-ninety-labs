@@ -205,8 +205,11 @@ class Engine:
         self.sight_rng = random.Random(f"{seed}-perception")
         self.match = Match(seed=seed)
         self.players: list[Player] = []
-        # A strength not given is drawn, home first, so an unset match is the same as before.
+        # A strength not given is drawn, home first: with none given the match is the same as before.
         given = strengths or {}
+        unknown = (set(given) | set(styles or {})) - {"home", "away"}
+        if unknown:
+            raise ValueError(f"teams are 'home' and 'away', got {sorted(unknown)}")
         self.strength = {team: given[team] if team in given else profiles.team_strength(self.rng)
                          for team in ("home", "away")}
         self.styles = {team: (styles or {}).get(team, Style()) for team in ("home", "away")}

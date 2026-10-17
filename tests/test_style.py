@@ -113,7 +113,9 @@ def test_presets_are_distinct_and_named():
     assert preset_name(Style(line_height=LOW)) is None
 
 
-def test_explicit_default_styles_change_nothing():
+def test_explicit_default_styles_are_the_same_as_none_given():
+    """Identity with the engine before styles is shown in the pull request that wires each dial
+    (byte-identical events and frames for fixed seeds); the defaults' values are pinned above."""
     a = simulate(3, 1)
     b = simulate(3, 1, styles={"home": Style(), "away": Style()})
     assert a.events == b.events and a.frames[-1] == b.frames[-1]
@@ -125,6 +127,13 @@ def test_strengths_given_are_used_and_one_left_out_is_drawn():
     assert e.match.teams["home"]["strength"] == 1.5
     drawn = Engine(1).strength
     assert Engine(1, strengths={"away": -1.0}).strength["home"] == drawn["home"]  # same draw, home first
+
+
+def test_a_misspelt_team_is_refused():
+    with pytest.raises(ValueError):
+        Engine(1, styles={"Home": PRESETS["high_press"]})
+    with pytest.raises(ValueError):
+        Engine(1, strengths={"hme": 1.0})
 
 
 def test_the_scenario_records_each_teams_style_and_strength():
@@ -149,8 +158,9 @@ def line_depths(match, team: str) -> list[float]:
 
 def test_out_of_possession_a_high_press_defends_higher_up_the_pitch_than_a_low_block():
     """Intent shows in where players stand, after they have run there. Both ways round, so the
-    side does not decide it. Blocks: low 12 to 22 m, high 35 to 50 m (T2); the 5 m margin allows
-    for players still on their way."""
+    side does not decide it. Blocks: low 12 to 22 m, high 35 to 50 m (T2), so at least 13 m
+    apart once players are in place; the 5 m margin, set before running, is under half that,
+    because a line that has just lost the ball is still running up to its block."""
     depths = {"high_press": [], "low_block": []}
     for home, away in (("high_press", "low_block"), ("low_block", "high_press")):
         m = simulate(2, 3, strengths={"home": 0.0, "away": 0.0},
