@@ -2,8 +2,9 @@
 a reserve spent above critical speed and refilled below it, and a slow store that wears down."""
 
 import math
+import random
 
-from ninety.sim import body
+from ninety.sim import body, fmath
 
 DT = 1 / 25
 
@@ -112,3 +113,53 @@ def test_running_away_costs_time_to_turn_round():
     away = b.time_to_cover(10.0, speed_along=-6.0)
     assert towards < standing < away
     assert abs(b.distance_in(standing) - 10.0) < 0.01
+
+
+def test_the_ceiling_follows_spent_however_it_changes():
+    """The ceiling is kept between calls; it must still be the slow-store formula for whatever
+    `spent` is now, whether running spent it or it was set directly."""
+    b = fresh()
+
+    def formula() -> float:
+        return body.D0 * fmath.exp(-b.spent / (body.SLOW_SCALE * body.D0))
+
+    assert b.ceiling == formula() == body.D0
+    for _ in range(200):
+        b.spend(9.0, 2.0, DT)  # hard running spends
+        assert b.ceiling == formula()
+    b.spent = body.SLOW_SCALE * body.D0  # set directly: the ceiling falls to 1/e of full
+    assert b.ceiling == formula() < body.D0 / 2
+
+
+def reference_time_to_cover(b: body.Body, gap: float, speed_along: float) -> float:
+    """time_to_cover as first written: Newton on distance_in, the speed from its own exp."""
+    if gap <= 0:
+        return 0.0
+    brake_t = extra = 0.0
+    if speed_along < 0:
+        brake_t = -speed_along / body.BRAKE_MAX
+        extra = speed_along * speed_along / (2 * body.BRAKE_MAX)
+        speed_along = 0.0
+    top = b.top_speed()
+    u = body.clamp(speed_along, 0.0, top)
+    tau = top / b.f0
+    target = gap + extra
+    t = target / max(top, 1e-6) + tau
+    for _ in range(12):
+        f = b.distance_in(t, u) - target
+        speed = top - (top - u) * fmath.exp(-t / tau)
+        step = f / max(speed, 1e-6)
+        t -= step
+        if abs(step) < 1e-4:
+            break
+    return brake_t + max(t, 0.0)
+
+
+def test_time_to_cover_shares_one_exp_and_gives_the_same_bits():
+    rng = random.Random(3)
+    for _ in range(5000):
+        b = body.Body(f0=rng.uniform(4.0, 6.5), v0=rng.uniform(9.0, 11.0), cs=rng.uniform(3.4, 4.4))
+        b.spent = rng.uniform(0.0, 10 * body.D0)
+        b.reserve = rng.uniform(0.0, b.ceiling)
+        gap, along = rng.uniform(-1.0, 60.0), rng.uniform(-8.0, 10.0)
+        assert b.time_to_cover(gap, along) == reference_time_to_cover(b, gap, along)

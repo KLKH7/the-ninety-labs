@@ -8,7 +8,7 @@ distance, the late drop in high-intensity running) is measured afterwards, never
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from ninety.sim import fmath
 
@@ -31,6 +31,10 @@ class Body:
     reserve: float = D0  # metres left above critical speed
     spent: float = 0.0  # total metres spent above critical speed this match
     grip_used: float = 0.0  # velocity change already used this frame, m/s (shared grip limit)
+    # The ceiling for the `spent` it was computed at: it changes only when `spent` does, and is
+    # read every time anyone asks how fast or far this player can run.
+    _ceiling_at: float = field(default=-1.0, init=False, repr=False, compare=False)
+    _ceiling: float = field(default=D0, init=False, repr=False, compare=False)
 
     @property
     def capacity(self) -> float:
@@ -40,7 +44,10 @@ class Body:
     @property
     def ceiling(self) -> float:
         """The slow store: how full the reserve can refill, falling with work done all match."""
-        return D0 * fmath.exp(-self.spent / (SLOW_SCALE * D0))
+        if self._ceiling_at != self.spent:
+            self._ceiling_at = self.spent
+            self._ceiling = D0 * fmath.exp(-self.spent / (SLOW_SCALE * D0))
+        return self._ceiling
 
     def top_speed(self) -> float:
         """Critical-speed model: with an empty reserve no running above critical speed is
@@ -80,8 +87,10 @@ class Body:
         target = gap + extra
         t = target / max(top, 1e-6) + tau  # a start past the answer: speed only rises
         for _ in range(12):
-            f = self.distance_in(t, u) - target
-            speed = top - (top - u) * fmath.exp(-t / tau)
+            # distance_in(t, u) and the speed at t share one e^(-t/tau).
+            e = fmath.exp(-t / tau)
+            f = (top * t - (top - u) * tau * (1 - e) if t > 0 else 0.0) - target
+            speed = top - (top - u) * e
             step = f / max(speed, 1e-6)
             t -= step
             if abs(step) < 1e-4:
