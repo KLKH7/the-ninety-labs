@@ -1,4 +1,4 @@
-"""Heading (docs/GROUNDING.md P11, P17): the head plays a ball above a foot's reach, higher with a
+"""Heading (docs/GROUNDING.md P11, P18): the head plays a ball above a foot's reach, higher with a
 jump once there is time to rise; a header is struck from where the ball is met, no harder than the
 head can send it, with a header's error; a player heads a ball only when it is contested and lets
 an unchallenged one drop to his feet; the passer's race decides the same way. Each test names the
@@ -80,7 +80,7 @@ def scene_at(x: float, y: float, z: float, incoming: tuple[float, float, float])
 
 
 def test_the_hardest_header_is_the_heads_drive_and_what_the_ball_keeps_of_its_own_speed():
-    """P17. Mutations caught: the ball's own speed ignored; added when it is moving away; the wrong
+    """P18. Mutations caught: the ball's own speed ignored; added when it is moving away; the wrong
     restitution."""
     still = scene_at(95.0, 34.0, 1.6, (0.0, 0.0, 0.0))
     hardest = (1 + BODY_RESTITUTION) * HEAD_SPEED_MPS
@@ -91,7 +91,7 @@ def test_the_hardest_header_is_the_heads_drive_and_what_the_ball_keeps_of_its_ow
     assert decisions.header_cap(along, 105.0, 34.0) == pytest.approx(hardest - BODY_RESTITUTION * 15.0)
     across = scene_at(95.0, 34.0, 1.6, (0.0, 15.0, 0.0))  # its speed across the line is lost
     assert decisions.header_cap(across, 105.0, 34.0) == pytest.approx(hardest)
-    assert hardest == pytest.approx(1.3 * 11.0)  # P17: 11 m/s and 0.3, pinned
+    assert hardest == pytest.approx(1.3 * 11.0)  # P18: 11 m/s and 0.3, pinned
 
 
 def test_a_header_is_less_precise_than_a_kick():
@@ -156,7 +156,7 @@ def headers_in(e: Engine, events: list[dict]) -> list[dict]:
 
 
 def test_an_unchallenged_ball_dropping_onto_him_is_brought_down_and_a_contested_one_headed():
-    """P17 (engine.goes_up): the same ball, alone and with a defender at his shoulder. Mutations
+    """P18 (engine.goes_up): the same ball, alone and with a defender at his shoulder. Mutations
     caught: heading whatever reaches the head first; never heading."""
     e, events = cross_at_head(None, DROPPING)
     assert not headers_in(e, events)
@@ -201,7 +201,7 @@ def test_no_touch_is_higher_than_a_player_can_reach(z, who, x, flagged):
 # --- audit 9: the numbers, the estimate against the engine, Law 11, the physics -------------------
 
 def test_the_sourced_and_design_numbers_are_the_documented_ones():
-    """P11, P17. Pinned, so a changed value cannot pass by changing the test's expectation with it.
+    """P11, P18. Pinned, so a changed value cannot pass by changing the test's expectation with it.
     Mutations caught: each constant moved."""
     from ninety.sim import body
     assert body.JUMP_M == 0.45 and body.HEAD_REACH_M == 0.5 and body.HEAD_SPEED_MPS == 11.0
@@ -214,7 +214,7 @@ def test_the_sourced_and_design_numbers_are_the_documented_ones():
 
 
 def test_a_header_completes_the_pass_to_him_and_an_opponents_header_ends_it():
-    """Law 11 and the pass's end (P17): a header is deliberate play. Mutations caught: the header
+    """Law 11 and the pass's end (P18): a header is deliberate play. Mutations caught: the header
     skipping the touch (no offside check, the pass left open); the header not counted as deliberate."""
     for gap in (0.6, -0.6):  # the defender behind him, or in front, so either may win it
         e, events = cross_at_head(gap)
@@ -365,7 +365,7 @@ def test_the_height_check_covers_every_touch(kind):
 
 
 def test_a_header_interception_meets_the_event_order_and_a_missing_pass_fails(tmp_path):
-    """Lesson 27: on engine output. A defender who heads a cross away intercepts it and plays it on
+    """Lesson 32: on engine output. A defender who heads a cross away intercepts it and plays it on
     in the same frame; the contract reads events in the order recorded (C8). Mutations caught: C8
     reading the interceptor's own header as the pass he intercepted; the check dropped."""
     import json
@@ -397,7 +397,7 @@ def test_a_header_interception_meets_the_event_order_and_a_missing_pass_fails(tm
 
 
 def test_rules_each_checked_directly():
-    """Each caught by its own assertion, not by a scene that happens to change (lesson 28).
+    """Each caught by its own assertion, not by a scene that happens to change (lesson 33).
     Mutations caught: aim_from accepting a target it cannot get down to; flights from the ground; a
     header at goal estimated as a kick (M3)."""
     assert ball.aim_from(0.6, 12.0, 2.0, 0.1, DT) is None  # struck down as far as allowed, still above

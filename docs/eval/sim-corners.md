@@ -9,7 +9,7 @@
 | Attacking shots within 10 s | 130 / 300 | |
 | First contact: attackers / defenders (keeper) / nobody | 161 / 133 (30) / 6 | |
 | Lofted deliveries | 293 / 300 | |
-| Headers within 10 s (P17): attackers / defenders; attackers' headers at goal | 135 / 136; 87 | |
+| Headers within 10 s (P18): attackers / defenders; attackers' headers at goal | 135 / 136; 87 | |
 | Lofted delivery, kick to first bounce or touch below 0.15 m | 3.0 s (10th to 90th percentile 1.9 to 4.0) | |
 | Ready (set-piece event) to kick | 1.2 s (10th to 90th percentile 0.8 to 1.5) | |
 | Out of play to kick | 13.9 s (10th to 90th percentile 11.4 to 16.9) | |

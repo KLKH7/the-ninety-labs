@@ -482,7 +482,7 @@ def test_before_he_reacts_only_his_body_stops_a_shot_in_the_shooters_judgement_t
     from ninety.sim.body import BODY_RADIUS
     assert offball.keeper_reach_m(0.1, 0.36) == BODY_RADIUS + ball.RADIUS
     full = offball.KEEPER_STAND_REACH_M + offball.KEEPER_DIVE_EXTRA_M + offball.KEEPER_DIVE_TRAVEL_M
-    assert offball.keeper_reach_m(2.0, 0.36) == full
+    assert offball.keeper_reach_m(2.0, 0.36) == pytest.approx(full)
 
 
 def test_a_keeper_behind_the_shooter_covers_nothing():
@@ -520,7 +520,7 @@ def test_the_dive_never_beats_the_cited_peak_speed():
     speeds = [(offball.dive_progress(t + step) - offball.dive_progress(t)) / step * travel
               for t in [i * step for i in range(int(offball.DIVE_TIME_S / step))]]
     peak = max(speeds)
-    assert 3.6 <= peak <= 4.0 and offball.dive_progress(offball.DIVE_TIME_S) == 1.0
+    assert 3.6 <= peak <= 4.0 and offball.dive_progress(offball.DIVE_TIME_S) == pytest.approx(1.0)
 
 
 def test_the_shot_estimate_is_continuous_in_distance_with_the_keeper_off_his_spot():
@@ -586,7 +586,7 @@ def test_after_he_reacts_a_ball_at_his_feet_is_his_to_play_and_one_at_his_chest_
     assert hit(ground, 15.0) == 0.0  # after he reacts, at his feet: a touch, his race (reach_time)
     lofted, _ = D.flight(*D.loft_launch(30.0))
     along, t = _crossing(lofted, 1.2, 1.6)
-    assert t > react and hit(lofted, along) == 0.0  # after he reacts, at head height: his header (P17)
+    assert t > react and hit(lofted, along) == 0.0  # after he reacts, at head height: his header (P18)
     # A ball at 1.7 m, above a standing header: it hits him until he has had the time to jump, then
     # it is his to head. Mutations caught: no jump time; heads reaching it standing.
     level = [(k * 0.04, k * 0.4, 1.7, 10.0, 0.0) for k in range(60)]  # 10 m/s, 1.7 m up
@@ -687,3 +687,59 @@ def test_a_ball_is_out_only_once_the_whole_of_it_has_crossed_the_line():
                                (50.0, 0.0, 0, -1)):
         assert not D.out_of_play(x + out_x * 0.9 * r, y + out_y * 0.9 * r)  # centre over, ball not
         assert D.out_of_play(x + out_x * 1.1 * r, y + out_y * 1.1 * r)  # the whole ball over
+
+
+def test_he_strikes_at_most_the_published_approach_angle_off_his_facing_after_turning():
+    # P16: facing within 60° he strikes now; otherwise he turns at 350°/s until he is, then strikes at 60°.
+    assert D.strike_turn(0.0, 1.0, math.tan(math.radians(40))) == pytest.approx((40.0, 0.0))
+    turn, wait = D.strike_turn(0.0, math.cos(math.radians(150)), math.sin(math.radians(150)))
+    assert turn == pytest.approx(60.0) and wait == pytest.approx(math.radians(90) / math.radians(350))
+
+
+def test_the_estimate_and_the_engine_share_one_strike_rule():
+    from ninety.sim.engine import Engine
+    e = Engine(1)
+    c = e.by_id["h6"]
+    c.x, c.y = 40.0, 34.0
+    for heading, side in ((0.0, 0.21), (math.radians(70), 0.21), (0.0, -0.21)):
+        c.heading = heading
+        e.ball = (c.x + side, c.y, 0.0, 0.0, 0.0, 0.0)
+        assert e.can_strike(c, 60.0, 34.0) == D.can_strike(side, 0.0, heading, 60.0 - c.x - side, 0.0)
+
+
+def test_how_far_he_must_turn_first_does_not_change_the_kick_he_then_strikes():
+    from ninety.sim.profiles import Profile
+    passer = Profile.generate("CM", random.Random(3))
+    # Pass along +x; facing 60° or 150° off it, he strikes it 60° off either way (P16).
+    near = D.strike_nodes(scene(passer=passer, heading=math.radians(60)), 85.0, 34.0, False, 10.0)
+    far = D.strike_nodes(scene(passer=passer, heading=math.radians(150)), 85.0, 34.0, False, 10.0)
+    assert len(near) == len(far)
+    for a, b in zip(near, far, strict=True):
+        assert a == pytest.approx(b)
+
+
+def test_turning_first_gives_an_opponent_closing_on_the_lane_time_to_get_there():
+    # An opponent 3 m off the lane, running at it: the turn's delay (P16) is time he uses.
+    moving = [(70.0, 37.0, 0.0, -4.0, False)]
+    facing = scene(moving=moving, heading=0.0)
+    away = scene(moving=moving, heading=math.pi)
+    sure = D.pass_confidence(facing, 85.0, 34.0, 85.0, 34.0, 0.0, False)
+    late = D.pass_confidence(away, 85.0, 34.0, 85.0, 34.0, 0.0, False)
+    assert late < sure
+
+
+def test_a_throw_in_leaves_his_hands_at_once_whichever_way_he_faces(monkeypatch):
+    # Law 15 / P16: a ball in his hands is thrown, not struck off his foot: no turn, no 60° cap.
+    assert D.can_strike(0.0, 0.0, math.pi, 1.0, 0.0)
+    turn, wait = D.strike_turn(math.pi, 1.0, 0.0, thrown=True)
+    assert abs(turn) == pytest.approx(180.0) and wait == 0.0
+    asked = []
+    production = D.strike_turn
+
+    def spy(*args):
+        asked.append(args)
+        return production(*args)
+    monkeypatch.setattr(D, "strike_turn", spy)
+    D.pass_confidence(scene(throw=True, heading=math.pi, ball_offset=(0.0, 0.0)), 70.0, 34.0, 70.0, 34.0,
+                      0.0, True)
+    assert asked and all(len(a) == 4 and a[3] for a in asked)

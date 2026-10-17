@@ -51,13 +51,17 @@ def ref_reach(points, rests, t_end, sx, sy, ux, uy, px, py, vx, vy, react, limit
 def reference(scene, tx, ty, mx, my, age, lofted, pace, receiver):
     sx, sy = scene.x, scene.y
     direction = math.atan2(ty - sy, tx - sx)
+    # P16: everyone moves on while he turns
+    _, wait = (0.0, 0.0) if scene.header else D.strike_turn(scene.heading, tx - sx, ty - sy, scene.throw)
     seen = {m[0]: m for m in scene.mates}
     meant = seen.get(receiver, (receiver, mx, my, age))
-    mates = [(mx, my, *(meant[4:6] or (0.0, 0.0)), perception.SIMPLE_REACTION_S,
+    mvx, mvy = meant[4:6] or (0.0, 0.0)
+    mates = [(mx + mvx * wait, my + mvy * wait, mvx, mvy, perception.SIMPLE_REACTION_S,
               scene.absorb.get(receiver, D.CONTROL_EST_MPS))]
     for mid, qx, qy, _, *vel in scene.mates:
         if mid != receiver:
-            mates.append((qx, qy, *(vel or (0.0, 0.0)), perception.CHOICE_REACTION_S,
+            qvx, qvy = vel or (0.0, 0.0)
+            mates.append((qx + qvx * wait, qy + qvy * wait, qvx, qvy, perception.CHOICE_REACTION_S,
                           scene.absorb.get(mid, D.CONTROL_EST_MPS)))
     cx, cy = sx - scene.ball_offset[0], sy - scene.ball_offset[1]
     react = perception.CHOICE_REACTION_S
@@ -77,8 +81,8 @@ def reference(scene, tx, ty, mx, my, age, lofted, pace, receiver):
             t_f, i_f = ref_reach(points, rests, t_end, sx, sy, ux, uy, *taker[:5], math.inf, None, False,
                                  heads=False)
             if t_f < math.inf and all(
-                    ref_reach(points, rests, t_end, sx, sy, ux, uy, ox, oy, ovx, ovy, react, t_f,
-                              scene.goal_x if keeper else None, False)[0] > t_f
+                    ref_reach(points, rests, t_end, sx, sy, ux, uy, ox + ovx * wait, oy + ovy * wait,
+                              ovx, ovy, react, t_f, scene.goal_x if keeper else None, False)[0] > t_f
                     for ox, oy, ovx, ovy, keeper in scene.moving):
                 take, at = t_f, i_f
         _, _, z, g, vz = points[at]
@@ -87,7 +91,8 @@ def reference(scene, tx, ty, mx, my, age, lofted, pace, receiver):
         rel = relative_speed(g * ux, g * uy, vz, taker[2], taker[3])
         p = 1.0 if offball.headed(False, z) else D.sigmoid((taker[5] - rel) / D.CONTROL_MARGIN_MPS)
         horizon = take + D.OPPONENT_LATE_S
-        for ox, oy, ovx, ovy, keeper in scene.moving:
+        for ox0, oy0, ovx, ovy, keeper in scene.moving:
+            ox, oy = ox0 + ovx * wait, oy0 + ovy * wait
             d = math.hypot(ox - cx, oy - cy)
             p *= 1 - D.body_hit(points, take, sx, sy, ux, uy, ox, oy, ovx, ovy, react,
                                 perception.POSITION_ERROR_PER_M * d, perception.VELOCITY_ERROR_PER_M * d)

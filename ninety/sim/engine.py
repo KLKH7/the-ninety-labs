@@ -20,11 +20,10 @@ import math
 import random
 from dataclasses import dataclass, field
 
-from ninety.sim import ball, decisions, offball, perception, profiles, setpieces
+from ninety.sim import ball, decisions, offball, perception, profiles, setpieces, shape
 from ninety.sim import team as team_mod
 from ninety.sim.body import (
     BODY_HEIGHT,
-    BODY_RADIUS,
     BODY_RESTITUTION,
     BRAKE_MAX,
     CONTROL_M,
@@ -33,6 +32,7 @@ from ninety.sim.body import (
     F0_MEAN,
     FOOT_REACH_Z,
     HAND_REACH_Z,
+    TURN_RATE,
     V0_MEAN,
     Body,
     can_get_to,
@@ -61,12 +61,11 @@ COVER_M = 8.0  # design: the covering player stays this far behind the presser, 
 PERCEPTION_ERR = 0.03  # verify: m/s of misjudged ball velocity per metre between player and ball
 PRESS_GAP_M = 2.0  # design, verify: how close a presser stands (jockeys), goal-side of the ball carrier
 PERSONAL_SPACE_M = 1.2  # players steer to keep about this far from each other
-SHOULDER_TO_SHOULDER_M = 0.52  # P11: centres of two players in contact, shoulder to shoulder
 ANTICIPATE_S = 0.4  # verify: how far ahead players judge where others will be
 MISCONTROL_KEEP = 0.4  # verify: share of speed a ball keeps off a failed touch or a parry
 POST_RADIUS = 0.06  # Law 1: posts and crossbar at most 12 cm wide
 WOODWORK_RESTITUTION = 0.6  # verify
-BALL_TO_FEET = 12.0  # m/s: how fast the ball settles at a new carrier's feet
+BALL_TO_FEET = 12.0  # P6 (design): how fast a carried ball settles to his feet, m/s
 # Dribbling is a run of touches (D6): the ball is pushed ahead and the dribbler runs onto it, so
 # between touches it is free and a defender who gets there first wins it. All *design*, *verify*.
 TOUCH_CLOSE_M = 0.8  # how far ahead a touch puts the ball with an opponent close
@@ -223,6 +222,37 @@ def other(team: str) -> str:
     return "away" if team == "home" else "home"
 
 
+def first_low_within(x0: float, y0: float, z0: float, dx: float, dy: float, dz: float, px: float,
+                     py: float, r: float, top: float) -> float | None:
+    """The first share of the way along the step (x0, y0, z0) + s (dx, dy, dz), 0 to 1, at which
+    the ball is within r of (px, py) across the ground and no higher than `top`; None if never."""
+    fx, fy = x0 - px, y0 - py
+    a, b, c = dx * dx + dy * dy, fx * dx + fy * dy, fx * fx + fy * fy - r * r
+    if a < 1e-12:
+        lo, hi = (0.0, 1.0) if c <= 0 else (1.0, 0.0)
+    else:
+        disc = b * b - a * c
+        if disc < 0:
+            return None
+        root = math.sqrt(disc)
+        lo, hi = max(0.0, (-b - root) / a), min(1.0, (-b + root) / a)
+    if lo > hi:
+        return None
+    if z0 + lo * dz <= top:  # low enough as soon as it is in reach
+        return lo
+    if dz < 0:  # coming down: from when it drops below `top`, if still in reach
+        s = (top - z0) / dz
+        return s if s <= hi else None
+    return None
+
+
+def turn_toward(heading: float, target: float) -> float:
+    """P16: a body turns toward where he wants to face, at most TURN_RATE, never in one jump."""
+    step = TURN_RATE * DT
+    diff = (target - heading + math.pi) % (2 * math.pi) - math.pi
+    return (heading + clamp(diff, -step, step) + math.pi) % (2 * math.pi) - math.pi
+
+
 def clamp(v: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, v))
 
@@ -284,6 +314,7 @@ class Engine:
         self.last_touch: str | None = None
         self.kicked: dict | None = None  # the pass or shot event in flight, resolved when it ends
         self.kicked_at = -99.0
+        self.bumped: tuple[str, float] | None = None  # who it last came off, and his own clock
         self.kicker_clear = True  # the struck ball has left the kicker's body
         self.kicker_far = True  # ... and is beyond his reach, moving away (his body is in play again)
         self.released_by: str | None = None  # Law 12: a keeper who released it may not handle it again
@@ -303,8 +334,7 @@ class Engine:
         self.from_restart: str | None = None  # the restart the next kick is taken from
         self.read: tuple[str, float] | None = None  # (keeper, y): where he reads a shot is going
         # (keeper, start t, start y, signed travel, when his arms began to stretch)
-        # keeper, start, y at the start, travel, when he reacted, the longest the push can need
-        self.dive: tuple[str, float, float, float, float, float] | None = None
+        self.dive: tuple[float | str, ...] | None = None
         self.landed: tuple[str, float] | None = None  # (keeper, his arms' stretch start) while he is down
         self.shot_touched_by: str | None = None  # "keeper" or "defender": who got to the shot
         self.shot_was_on_target: bool | None = None  # was it going in when they first touched it?
@@ -361,6 +391,14 @@ class Engine:
         back_pass = bool(k) and k["type"] == "pass" and k["team"] == p.team and self.last_touch == k["player"]
         return offball.may_handle(p.role == "GK", self.in_own_box(p.team, x, y), self.released_by == p.id,
                                   back_pass)
+
+    def reacting_since(self, p: Player) -> float:
+        """When this player's reaction to the ball began. A ball that comes off his own body is
+        no new strike to him: he was already reacting to it, so his clock runs on from before;
+        everyone else reacts to it afresh (deflect)."""
+        if self.bumped and self.bumped[0] == p.id:
+            return self.bumped[1]
+        return self.kicked_at
 
     def reaction(self, p: Player) -> float:
         """Seconds before a player responds to the struck ball itself: a choice reaction (he must
@@ -507,19 +545,20 @@ class Engine:
                 if q.team == passer.team and q is not passer and fwd * (q.x - limit) > 0}
 
     def can_strike(self, carrier: Player, tx: float, ty: float) -> bool:
-        """The ball is on the side of his body facing the target, so he can strike it there
-        without the ball passing through him."""
-        return decisions.can_strike(self.ball[0] - carrier.x, self.ball[1] - carrier.y,
-                                    tx - self.ball[0], ty - self.ball[1])
+        """P16: can he strike it toward (tx, ty) now? The rule the passer's estimate uses too
+        (decisions.can_strike)."""
+        bx, by = self.ball[0], self.ball[1]
+        return decisions.can_strike(bx - carrier.x, by - carrier.y, carrier.heading, tx - bx, ty - by)
 
     def turn_to(self, carrier: Player, tx: float, ty: float, strike) -> None:
-        """He turns, taking the ball round to his kicking side; the strike waits until it is there."""
-        carrier.heading = math.atan2(ty - carrier.y, tx - carrier.x)
+        """He turns toward the target, no faster than a body turns (P16, tick_carrier), taking the
+        ball round with him; the strike waits until he faces it (can_strike)."""
         self.windup = (tx, ty, strike)
 
     def kick(self, carrier: Player, vx: float, vy: float, vz: float) -> None:
-        # Struck from where the ball is, at the carrier's feet on the side he faces. A ball moving
-        # away from a body never meets it (contact checks approach), so no placement is needed.
+        # Struck from where the ball is, against his body on the side he faces (can_strike: only
+        # once he faces within STRIKE_FACING of the line). Until it has left his body he does not
+        # meet it again (kicker_clear in contact).
         self.ball = (self.ball[0], self.ball[1], self.ball[2], vx, vy, vz)
         self.released_by = carrier.id
         self.last_deflection = None
@@ -531,6 +570,7 @@ class Engine:
         self.possessor = None
         self.last_touch = carrier.id
         self.kicked_at = self.t
+        self.bumped = None
         self.free_since = self.t  # the ball left a player's control: dives are timed from here
         self.landed = None  # a new strike: a keeper still down reacts to it afresh
         self.seen_going = self.ball_destination()
@@ -541,7 +581,7 @@ class Engine:
                 header: bool = False) -> tuple[float, float, float]:
         """The kick as struck, not as intended: direction, speed and launch angle scatter by the
         player's own error, which grows with ball speed, pressure, fatigue and the weaker foot
-        and shrinks with skill (profiles.Profile.kick_error, docs/GROUNDING.md A3). A `header` (P17)
+        and shrinks with skill (profiles.Profile.kick_error, docs/GROUNDING.md A3). A `header` (P18)
         has the header's error, whichever way it is struck."""
         ground = math.hypot(vx, vy)
         speed = math.sqrt(ground * ground + vz * vz)
@@ -580,7 +620,7 @@ class Engine:
         return aim_y + self.rng.gauss(0, spread)
 
     def shoot(self, carrier: Player, header: decisions.Scene | None = None) -> None:
-        """A shot: a kick, or a `header` (P17) from where he met the ball in the air."""
+        """A shot: a kick, or a `header` (P18) from where he met the ball in the air."""
         team = carrier.team
         gx = goal_x(team)
         if header is None and not self.can_strike(carrier, gx, PITCH_Y / 2):
@@ -620,7 +660,7 @@ class Engine:
                 pace: float = decisions.ARRIVE_MPS, receiver: str | None = None,
                 header: decisions.Scene | None = None, launch: tuple[float, float] | None = None) -> None:
         """Kick toward a point the carrier chose (where he believes a team-mate will be, or space),
-        meant for `receiver` if he chose one; or a `header` there (P17), from where he met the ball,
+        meant for `receiver` if he chose one; or a `header` there (P18), from where he met the ball,
         with the `launch` the option was estimated with (a header away)."""
         if header is None and not self.can_strike(carrier, tx, ty):
             self.turn_to(carrier, tx, ty,
@@ -735,14 +775,14 @@ class Engine:
         """Each team sends the player who thinks they can reach the ball's path first. Each player
         judges the ball's velocity with an error that grows with their distance from it, and the
         judgement is renewed (and sharpens) every few frames as the ball comes closer."""
-        if self.t - self.kicked_at < min(self.reaction(p) for p in self.players):
+        if all(self.t - self.reacting_since(p) < self.reaction(p) for p in self.players):
             return
         path = ball.predict(self.ball, DT, 6.0)
         best: dict[str, tuple[float, str, float, float]] = {}
         for p in self.players:
             if self.kicked and p.id == self.kicked["player"] and not self.touched_since_kick:
                 continue  # the kicker moves on; he does not run after his own pass or shot
-            if self.t - self.kicked_at < self.reaction(p):
+            if self.t - self.reacting_since(p) < self.reaction(p):
                 continue  # has not yet reacted to this strike
             sigma = PERCEPTION_ERR * math.hypot(self.ball[0] - p.x, self.ball[1] - p.y)
             ex, ey = self.rng.gauss(0, sigma), self.rng.gauss(0, sigma)
@@ -769,15 +809,20 @@ class Engine:
             self.plan_chase()
         self.contact(before)
 
-    def contact(self, before: ball.State) -> None:
+    def contact(self, before: ball.State, t0: float = 0.0, depth: int = 0, done: str | None = None) -> None:
         """The ball meets whoever is on its path this frame: a body deflects it at any time; a
-        deliberate touch, after reaction time, controls it if it is slow enough to absorb."""
+        deliberate touch, after reaction time, controls it if it is slow enough to absorb.
+        `before` is the ball t0 seconds into the frame (0 at its start); everyone is where they
+        are by then. After a deflection the rest of the frame is resolved the same way, so a
+        ball off one player can meet the next one in the same frame (up to three in a frame); the
+        one it came off (`done`) has had his touch of it this frame."""
+        dt = DT - t0
         x0, y0 = before[0], before[1]
         x1, y1, z1 = self.ball[0], self.ball[1], self.ball[2]
         dx, dy = x1 - x0, y1 - y0
-        seg = dx * dx + dy * dy
         kicker = self.by_id.get(self.last_touch) if self.last_touch else None
-        clear_of_body = kicker and math.hypot(x1 - kicker.x, y1 - kicker.y) > BODY_RADIUS + ball.RADIUS
+        clear_of_body = kicker and shape.clearance(
+            x1, y1, kicker.x + kicker.vx * DT, kicker.y + kicker.vy * DT, kicker.heading) > ball.RADIUS
         if not self.kicker_clear and clear_of_body:
             self.kicker_clear = True
         # Nor is his body in the way of his own strike until the ball is beyond where he can strike
@@ -788,41 +833,63 @@ class Engine:
             rx, ry = x1 - kicker.x, y1 - kicker.y
             away = rx * (self.ball[3] - kicker.vx) + ry * (self.ball[4] - kicker.vy) > 0
             self.kicker_far = away and math.hypot(rx, ry) > CONTROL_M
-        since = self.t - self.kicked_at
         hits = []
         back_on = self.t - self.free_since >= TOUCH_GAP_S
         for p in self.players:
-            if p is kicker and not self.kicker_clear:
+            if (p is kicker and not self.kicker_clear) or p.id == done:
                 continue
             if p.id == self.dribbler and not back_on:  # D6: mid-stride after his touch, not on it yet
                 continue
-            s = 0.0 if seg == 0 else clamp(((p.x - x0) * dx + (p.y - y0) * dy) / seg, 0.0, 1.0)
-            cx, cy = x0 + s * dx, y0 + s * dy
-            cz = before[2] + s * (z1 - before[2])
-            d = math.hypot(cx - p.x, cy - p.y)
-            # A body meets the ball only if, at the start of this step, the ball was moving toward
-            # it (relative to the player). Measured from the step's start, not the closest point,
-            # where the relative direction is sideways by construction.
-            closing = (self.ball[3] - p.vx) * (p.x - x0) + (self.ball[4] - p.vy) * (p.y - y0)
-            reach_m = self.reach(p, cx, cy, cz)
-            touch = since >= self.reaction(p) and reach_m is not None and d <= reach_m  # deliberate
-            if touch and offball.headed(self.hands(p, cx, cy), cz):
-                if self.goes_up(p):  # P17: met where its path first comes within his head's reach
-                    s_in = entry(x0 - p.x, y0 - p.y, dx, dy, reach_m)
-                    hits.append((s_in, "head", p, x0 + s_in * dx, y0 + s_in * dy,
-                                 before[2] + s_in * (z1 - before[2])))
-                    continue
-                # He lets it drop to his feet; if it meets his body on the way he cushions it there
-                # (chest or thigh), judged by his first touch as any control (A4), not a bounce.
-                touch = d <= BODY_RADIUS + ball.RADIUS and cz <= BODY_HEIGHT
-            if touch:
-                hits.append((s, "touch", p, cx, cy, cz))
-            elif d <= BODY_RADIUS + ball.RADIUS and cz <= BODY_HEIGHT and closing > 0 and \
-                    (p is not kicker or self.kicker_far):
-                hits.append((s, "body", p, cx, cy, cz))
+            # He moves this step too, at his velocity, so what meets him is the ball's path in his
+            # frame: from (x0, y0) to (x0 + rdx, y0 + rdy) against his body where it starts. A point
+            # s of the way along it is, on the pitch, that point plus s of his own step (mx, my).
+            qx, qy = p.x + p.vx * t0, p.y + p.vy * t0  # where he is when this part of the frame starts
+            mx, my = p.vx * dt, p.vy * dt
+            rdx, rdy = dx - mx, dy - my
+            hz = before[2]
+            rseg = rdx * rdx + rdy * rdy
+            sc = 0.0 if rseg == 0 else clamp(((qx - x0) * rdx + (qy - y0) * rdy) / rseg, 0.0, 1.0)
+            ex, ey = x0 + sc * dx, y0 + sc * dy  # judged where it comes closest
+            hands = self.hands(p, ex, ey)
+            since = (self.t - self.stretch_from(p) if hands
+                     else self.t - self.reacting_since(p) - self.reaction(p))
+            cushion = False
+            if self.t - self.reacting_since(p) >= self.reaction(p):  # a deliberate touch, first chance
+                firsts = []
+                for reach_m, top in offball.reach_limits(hands, since):
+                    st = first_low_within(x0, y0, hz, rdx, rdy, z1 - hz, qx, qy, reach_m, top)
+                    if st is not None:
+                        firsts.append((st, hz + st * (z1 - hz)))
+                for st, sz in sorted(firsts):
+                    kind = "touch"
+                    if offball.headed(hands, sz):
+                        # P18: a header, only if it is contested; otherwise he lets it drop to his
+                        # feet (a later chance this step, if any), and a ball that meets his body
+                        # on the way is cushioned there (a first touch)
+                        if not self.goes_up(p):
+                            cushion = True
+                            continue
+                        kind = "head"
+                    hits.append((st, kind, p, x0 + st * dx, y0 + st * dy, sz,
+                                 qx + st * mx, qy + st * my))  # his body may still meet it first
+                    break
+            # The body (shape.py, P11) is as wide as his shoulders and as deep as his chest, turned
+            # the way he faces: the ball meets it where its path first touches that outline.
+            sb = shape.first_contact(x0, y0, x0 + rdx, y0 + rdy, qx, qy, p.heading, ball.RADIUS)
+            if sb is None:
+                continue
+            ux, uy, bz = x0 + sb * rdx, y0 + sb * rdy, hz + sb * (z1 - hz)  # in his frame
+            # It meets the ball only if the ball is moving into the body there (relative to him):
+            # toward the nearest point of his spine, which is along the surface normal.
+            sx, sy = shape.nearest_on_spine(ux, uy, qx, qy, p.heading)
+            closing = (self.ball[3] - p.vx) * (sx - ux) + (self.ball[4] - p.vy) * (sy - uy)
+            # His own strike does not meet his body until it is beyond his reach and moving away.
+            if bz <= BODY_HEIGHT and closing > 0 and (p is not kicker or self.kicker_far):
+                hits.append((sb, "touch" if cushion else "body", p, ux + sb * mx, uy + sb * my, bz,
+                             qx + sb * mx, qy + sb * my))
         if not hits:
             return
-        s, kind, p, cx, cy, cz = min(hits, key=lambda h: h[0])
+        s, kind, p, cx, cy, cz, px, py = min(hits, key=lambda h: h[0])  # whoever it meets first
         if kind == "head":
             if not self.touched(p, cx, cy, True):  # a header is deliberate play (Law 11, the pass's end)
                 self.header(p, cx, cy, cz)
@@ -834,7 +901,14 @@ class Engine:
         if self.touched(p, cx, cy, controls):  # judged on the ball as it arrived
             return
         if controls:
-            self.ball = (cx, cy, cz, p.vx, p.vy, 0.0)
+            # Taken against his body (a chest or thigh), it is on its surface, never inside him.
+            sx, sy = shape.nearest_on_spine(cx, cy, px, py, p.heading)
+            gap = math.hypot(cx - sx, cy - sy)
+            if 1e-6 < gap < shape.RADIUS_M + ball.RADIUS:
+                k = (shape.RADIUS_M + ball.RADIUS) / gap
+                cx, cy = sx + (cx - sx) * k, sy + (cy - sy) * k
+            rest = (1.0 - s) * dt  # and it moves on with him for the rest of the step
+            self.ball = (cx + p.vx * rest, cy + p.vy * rest, cz, p.vx, p.vy, 0.0)
             if self.tackle:  # who came away with the ball decides the tackle
                 self.tackle["outcome"] = "success" if p.team == self.tackle["team"] else "fail"
                 self.tackle = None
@@ -848,10 +922,21 @@ class Engine:
                 self.emit("possession_change", p.team, cx, cy, player=p.id)
             self.give(p.id)
             return
-        self.deflect(p, cx, cy, cz, MISCONTROL_KEEP if kind == "touch" else BODY_RESTITUTION)
+        left = (1.0 - s) * dt
+        keep = MISCONTROL_KEEP if kind == "touch" else BODY_RESTITUTION
+        start = self.deflect(p, cx, cy, cz, keep, (px, py, left))
+        if left <= 1e-9:
+            return
+        # The rest of the frame, from where it left him: the posts and the lines first, as for
+        # any flight (tick_free), then whoever it meets next.
+        flown = self.ball
+        self.woodwork(start)
+        if self.went_out(start) or self.ball != flown or depth >= 2:
+            return
+        self.contact(start, DT - left, depth + 1, p.id)
 
     def goes_up(self, p: Player) -> bool:
-        """P17: does he head the ball (it is within his head's reach now) or let it drop to his feet?
+        """P18: does he head the ball (it is within his head's reach now) or let it drop to his feet?
         He goes up for it unless, in the ball's own flight from here, he can get to it at his feet
         before any opponent could get to it at all: an unchallenged ball is brought down, a
         contested one is headed. By the same reach and chase test as everything else
@@ -869,7 +954,7 @@ class Engine:
         return True
 
     def header(self, p: Player, cx: float, cy: float, cz: float) -> None:
-        """P17: he meets the ball in the air with his head, where its path reached him. Where it goes
+        """P18: he meets the ball in the air with his head, where its path reached him. Where it goes
         is his choice from what he believes, as any other (decisions.options with the scene's
         header: at goal, to a team-mate, or headed away), struck as a header from there
         (decisions.header_launch) with his own header error."""
@@ -884,12 +969,18 @@ class Engine:
             self.pass_to(p, *choice.target, lofted=True, receiver=choice.receiver, header=scene,
                          launch=choice.launch)
 
-    def deflect(self, p: Player, cx: float, cy: float, cz: float, keep: float) -> None:
+    def deflect(self, p: Player, cx: float, cy: float, cz: float, keep: float,
+                at: tuple[float, float, float] | None = None) -> ball.State:
         """The ball bounces off a player (a block, a parry, a heavy touch) and stays free. In the
         player's frame, the part of the ball's velocity into the body reverses and keeps `keep`
-        of its speed; the part along the body is unchanged."""
+        of its speed; the part along the body is unchanged. The body's surface is normal to the
+        line from the nearest point of its spine (shape.py). `at` is where he was when it met him
+        and how much of the frame is left (x, y, seconds); it leaves his surface there and flies
+        on, under gravity, for the rest of the frame. Returns the ball as it left him."""
+        px, py, left = at if at else (p.x, p.y, 0.0)
         rx, ry, vz = self.ball[3] - p.vx, self.ball[4] - p.vy, self.ball[5]
-        nx, ny = cx - p.x, cy - p.y
+        sx, sy = shape.nearest_on_spine(cx, cy, px, py, p.heading)
+        nx, ny = cx - sx, cy - sy
         n = math.hypot(nx, ny)
         if n > 1e-6:
             nx, ny = nx / n, ny / n
@@ -899,16 +990,21 @@ class Engine:
         into = rx * nx + ry * ny
         if into < 0:
             rx, ry = rx - (1 + keep) * into * nx, ry - (1 + keep) * into * ny
-        # It leaves from outside the body, never from inside it (the swept contact can overlap).
-        out = max(math.hypot(cx - p.x, cy - p.y), BODY_RADIUS + ball.RADIUS) + 0.05
-        self.ball = (p.x + nx * out, p.y + ny * out, cz, rx + p.vx, ry + p.vy, vz)
+        # It leaves from where it met him, on his surface, never from inside him.
+        out = max(math.hypot(cx - sx, cy - sy), shape.RADIUS_M + ball.RADIUS) + 0.001
+        # Then it flies on, at its new velocity and under gravity, for the rest of the frame.
+        start = (sx + nx * out, sy + ny * out, cz, rx + p.vx, ry + p.vy, vz)
+        self.ball = ball.step(start, left) if left > 1e-9 else start
         self.last_deflection = self.emit("deflection", p.team, cx, cy, player=p.id)  # a touch is truth too
         self.last_touch = p.id
         if p.id != self.dribbler:  # it came off someone else: no longer his touch to run onto
             self.dribbler = None
         self.kicker_clear = self.kicker_far = False
-        self.kicked_at = self.t  # a new strike of the ball: everyone reacts to it again
+        if not (self.bumped and self.bumped[0] == p.id):
+            self.bumped = (p.id, self.reacting_since(p))
+        self.kicked_at = self.t  # a new strike of the ball: everyone else reacts to it again
         self.chase = {}
+        return start
 
     def touched(self, p: Player, x: float, y: float, controls: bool) -> bool:
         """Resolve the pass or shot in flight from who touched it, and how: observed, never
@@ -1024,6 +1120,7 @@ class Engine:
             vx, vy, vz = (a - k * b for a, b in zip(v, n, strict=True))
             self.ball = (centre[0], centre[1], max(centre[2] - r, 0.0), vx, vy, vz)
             self.kicked_at = self.t
+            self.bumped = None
             self.chase = {}
             return
 
@@ -1449,8 +1546,8 @@ class Engine:
     def keeper_dive(self, p: Player) -> bool:
         """P15: once the keeper has reacted to a shot, he dives toward where it will cross his line:
         his body travels sideways (up to KEEPER_DIVE_TRAVEL_M, only as far as he needs beyond his
-        standing reach) with the one push of every dive (offball.dive_distance), and he is down for a
-        moment afterwards. True while the dive moves him."""
+        standing reach) with the full dive's push, and he is down for a moment afterwards. True
+        while the dive moves him."""
         k = self.kicked
         shot_at_him = k and k["type"] == "shot" and k["team"] != p.team and self.possessor is None
         reacted = self.t - self.kicked_at >= self.reaction(p)  # to the last touch, a deflection too
@@ -1464,29 +1561,38 @@ class Engine:
                 need = abs(cross - p.y) - offball.arm_reach_m(stretched)
                 if need > 0:
                     travel = math.copysign(min(need, KEEPER_DIVE_TRAVEL_M), cross - p.y)
-                    bound = offball.dive_time_from(travel, p.vy * math.copysign(1.0, travel), abs(p.vx))
-                    self.dive = (p.id, self.t, p.y, travel, self.kicked_at + self.reaction(p), bound)
+                    self.dive = (p.id, self.t, p.y, travel, self.kicked_at + self.reaction(p),
+                                 math.copysign(1.0, travel) * p.vy)  # his sideways run toward it
         if not self.dive or self.dive[0] != p.id:
             return False
-        _, start, y0, travel, _, bound = self.dive
+        _, start, y0, travel = self.dive[:4]
+        v0 = self.dive[5] if len(self.dive) > 5 else 0.0
         elapsed = self.t + DT - start
-        # The push (P15) is one force: it turns his velocity, however he was moving, toward the
-        # dive's (straight along his line at the peak speed, or faster if he already was) at no
-        # more than DIVE_ACCEL, so a keeper moving the other way, or off his line, is first stopped
-        # by it. A shorter dive is the same push ended sooner, never the full dive played faster.
-        # It ends once he has covered the travel, with the body still moving: he lands and brakes
-        # like any player (P2), rather than stopping dead in the air. `bound` is the longest that
-        # can take (it guards only against something stopping him).
-        side = math.copysign(1.0, travel)
-        dvx, dvy = -p.vx, side * max(offball.DIVE_PEAK_MPS, side * p.vy) - p.vy
-        need = math.hypot(dvx, dvy)
-        step = min(need, offball.DIVE_ACCEL * DT)
-        vx = p.vx + (dvx / need * step if need > 1e-9 else 0.0)
-        vy = p.vy + (dvy / need * step if need > 1e-9 else 0.0)
-        p.x, p.y = p.x + (p.vx + vx) / 2 * DT, p.y + (p.vy + vy) / 2 * DT  # even push over the frame
-        p.vx, p.vy = vx, vy
-        p.physique.grip_used = step  # the push is his grip this frame: nothing else adds to it
-        if side * (p.y - y0) >= abs(travel) or elapsed >= bound:
+        # A shorter dive is the same push, stopped once he has gone far enough: as hard as the full
+        # dive's, not harder. It starts from the sideways run he was already making (P2).
+        done, _ = offball.dive_motion(elapsed, v0)
+        landing = done >= abs(travel)
+        y = y0 + math.copysign(1.0, travel) * min(done, abs(travel))  # done < 0 while braking a run away
+        if landing:
+            # He lands carrying the speed the push gave him, for what is left of the frame, and
+            # slows on the ground from there (he is down: braking as any body does, P2), not in
+            # one frame.
+            reached = offball.dive_time_to(abs(travel), v0)
+            carried = math.copysign(offball.dive_motion(reached, v0)[1], travel)
+            y += carried * min(max(elapsed - reached, 0.0), DT)
+        # P2: the run he was making when he launched brakes with the grip the dive's push leaves
+        # (braking and pushing share one grip, BRAKE_MAX: while the push takes it all he carries his
+        # run), never stopping dead.
+        vy = carried if landing else (y - p.y) / DT
+        pushing = abs(vy - p.vy) / DT
+        grip = math.sqrt(max(BRAKE_MAX * BRAKE_MAX - pushing * pushing, 0.0))
+        brake = min(abs(p.vx), grip * DT)
+        p.vx -= math.copysign(brake, p.vx)
+        p.x += p.vx * DT
+        p.vy = (y - p.y) / DT
+        p.y = y
+        if landing:
+            p.vy = carried
             self.landed = (p.id, self.dive[4])
             self.dive = None
             self.off_balance[p.id] = self.t + offball.KEEPER_DOWN_S  # on the ground: getting up
@@ -1509,7 +1615,8 @@ class Engine:
                 u = math.hypot(ux, uy) or 1.0
                 tx, ty = p.x + ux / u * dist, p.y + uy / u * dist
             steer(p, tx, ty, top)
-            p.heading = perception.facing(p.heading, p.vx, p.vy, p.x, p.y, self.ball[0], self.ball[1])
+            p.heading = turn_toward(p.heading, perception.facing(p.heading, p.vx, p.vy, p.x, p.y,
+                                                                 self.ball[0], self.ball[1]))
         self.separate()
 
     def avoid(self, p: Player) -> tuple[float, float]:
@@ -1529,16 +1636,25 @@ class Engine:
         return nx, ny
 
     def separate(self) -> None:
-        """Bodies in contact (shoulder to shoulder, SHOULDER_TO_SHOULDER_M between centres) brace:
-        each stops closing on the other as fast as their own legs allow, never faster."""
+        """Bodies in contact (their shapes touch, shape.py: shoulder to shoulder at a shoulder
+        breadth between centres, chest to chest at a chest depth) brace: each stops closing on
+        the other as fast as their own legs allow, never faster."""
         grip = BRAKE_MAX * DT
+        reach = shape.SHOULDER_BREADTH_M  # no two bodies further apart than this can touch
         for i, a in enumerate(self.players):
             for b in self.players[i + 1:]:
-                dx, dy = b.x - a.x, b.y - a.y
-                d = math.hypot(dx, dy)
-                if d >= SHOULDER_TO_SHOULDER_M or d < 1e-6:
+                if abs(b.x - a.x) >= reach or abs(b.y - a.y) >= reach:
                     continue
-                nx, ny = dx / d, dy / d
+                d, ax, ay, bx, by = shape.between(a.x, a.y, a.heading, b.x, b.y, b.heading)
+                if d >= shape.CHEST_DEPTH_M:
+                    continue
+                if d > 1e-6:  # pushed apart along the line between their nearest surfaces
+                    nx, ny = (bx - ax) / d, (by - ay) / d
+                else:  # spines crossing: along the line between centres
+                    c = math.hypot(b.x - a.x, b.y - a.y)
+                    if c < 1e-6:
+                        continue
+                    nx, ny = (b.x - a.x) / c, (b.y - a.y) / c
                 closing = (a.vx - b.vx) * nx + (a.vy - b.vy) * ny
                 if closing <= 0:
                     continue
@@ -1587,23 +1703,27 @@ class Engine:
         # rather than jumping there.
         # A controlled ball travels with the carrier, then closes the remaining gap relative to
         # them, to his feet on the side he faces.
-        if not self.windup:  # turning to strike, he faces the target, not where he drifts
-            carrier.heading = perception.facing(carrier.heading, carrier.vx, carrier.vy, carrier.x,
-                                                carrier.y, carrier.x, carrier.y)
-        feet = BODY_RADIUS + ball.RADIUS
+        if self.windup:  # turning to strike, he turns to face the target, not where he drifts
+            want = math.atan2(self.windup[1] - carrier.y, self.windup[0] - carrier.x)
+        else:
+            want = perception.facing(carrier.heading, carrier.vx, carrier.vy, carrier.x, carrier.y,
+                                     carrier.x, carrier.y)
+        carrier.heading = turn_toward(carrier.heading, want)
         side = carrier.heading
         if not self.dribble_to and not self.windup:  # D8: holding, he keeps his body between ball and man
             near = min((q for q in self.players if q.team != carrier.team),
                        key=lambda q: math.hypot(q.x - carrier.x, q.y - carrier.y))
             if math.hypot(near.x - carrier.x, near.y - carrier.y) < SHIELD_M:
                 side = math.atan2(carrier.y - near.y, carrier.x - near.x)
+        feet = shape.surface(side, carrier.heading, pad=ball.RADIUS)  # against his body on that side
         fx, fy = carrier.x + math.cos(side) * feet, carrier.y + math.sin(side) * feet
         bx, by, bz = self.ball[0] + carrier.vx * DT, self.ball[1] + carrier.vy * DT, self.ball[2]
         dx, dy, dz = fx - bx, fy - by, -bz
         d = math.sqrt(dx * dx + dy * dy + dz * dz)
         step = min(d, BALL_TO_FEET * DT)
         if d > 1e-6:
-            bx, by, bz = bx + dx / d * step, by + dy / d * step, bz + dz / d * step
+            bx, by, bz = self.settle(carrier, bx, by, bz, fx, fy, side, step * math.hypot(dx, dy) / d)
+            bz = bz + dz / d * step
         before = self.ball
         self.ball = (bx, by, max(bz, 0.0), carrier.vx, carrier.vy, 0.0)
         if self.went_out(before):  # Law 9 applies to a ball at a player's feet too
@@ -1613,7 +1733,8 @@ class Engine:
             self.pressed[opp] = self.t
             self.emit("pressure", opp, presser.x, presser.y, player=presser.id, receiver=carrier.id)
         close = self.closest_opponent(carrier) < CLOSE_CONTROL_M
-        if self.dribble_to and not self.windup and not close and math.hypot(fx - bx, fy - by) < 0.15:
+        if (self.dribble_to and not self.windup and not close and math.hypot(fx - bx, fy - by) < 0.15
+                and self.can_strike(carrier, *self.dribble_to)):  # a touch is a kick: he faces it (P16)
             if self.touch_ahead(carrier):
                 return
         if self.windup:
@@ -1662,7 +1783,8 @@ class Engine:
             if holder and holder.team != p.team and math.hypot(p.x - bx, p.y - by) <= CONTROL_M:
                 self.poke(p, holder)
                 holder = None
-            elif victim and not self.restart and self.leg_meets(p.x, p.y, victim.x, victim.y, bx, by):
+            elif victim and not self.restart and self.leg_meets(p.x, p.y, victim.x, victim.y, bx, by,
+                                                                victim.heading):
                 self.foul(p, victim)
                 return
             else:
@@ -1713,32 +1835,34 @@ class Engine:
         far = math.hypot(ex - p.x, ey - p.y) or 1.0
         step = max(0.0, d - CONTROL_M) / far  # he covers what he would have to the ball now
         ax, ay = p.x + (ex - p.x) * step, p.y + (ey - p.y) * step
-        now = self.leg_meets(p.x, p.y, holder.x, holder.y, bx, by)
-        ahead = self.leg_meets(ax, ay, mx, my, ex, ey)
+        now = self.leg_meets(p.x, p.y, holder.x, holder.y, bx, by, holder.heading)
+        ahead = self.leg_meets(ax, ay, mx, my, ex, ey, holder.heading)
         # A carrier holding the ball with him this close shields it (tick_carrier, D8): the ball
         # goes to the far side of the man, so a lunge for it goes through him.
         shielded = False
         if not self.dribble_to and math.hypot(mx - ax, my - ay) < SHIELD_M:
-            g = math.hypot(mx - ax, my - ay) or 1.0
-            feet = BODY_RADIUS + ball.RADIUS
-            shielded = self.leg_meets(ax, ay, mx, my, mx + (mx - ax) / g * feet, my + (my - ay) / g * feet)
+            side = math.atan2(my - ay, mx - ax)  # away from the defender, as tick_carrier puts it
+            feet = shape.surface(side, holder.heading, pad=ball.RADIUS)
+            far_side = mx + math.cos(side) * feet, my + math.sin(side) * feet
+            shielded = self.leg_meets(ax, ay, mx, my, *far_side, holder.heading)
         if not (now or ahead or shielded):
             return 0.0
         threat = decisions.value(bx, by, own)  # their chance of scoring from having it here
         return clamp(1.0 - threat / PENALTY_GOAL_P, 0.0, 1.0)
 
     @staticmethod
-    def leg_meets(px: float, py: float, vx: float, vy: float, bx: float, by: float) -> bool:
+    def leg_meets(px: float, py: float, vx: float, vy: float, bx: float, by: float, heading: float) -> bool:
         """Law 12: a lunge that arrives with the ball gone still sweeps his leg toward it, a foot's
-        reach (CONTROL_M) from his body. If that leg passes through the man he went for, he has
-        made contact with the opponent, not the ball."""
+        reach (CONTROL_M) from his body. If that leg passes through the man he went for, at
+        (vx, vy) and facing `heading` (his body's outline: shape.py, P11), he has made contact with
+        the opponent, not the ball."""
         dx, dy = bx - px, by - py
         d = math.hypot(dx, dy)
         if d < 1e-6:
             return False
-        sx, sy = dx / d * min(d, CONTROL_M), dy / d * min(d, CONTROL_M)
-        k = clamp(((vx - px) * sx + (vy - py) * sy) / (sx * sx + sy * sy), 0.0, 1.0)
-        return math.hypot(px + k * sx - vx, py + k * sy - vy) <= BODY_RADIUS
+        fx, fy = px + dx / d * min(d, CONTROL_M), py + dy / d * min(d, CONTROL_M)
+        a0x, a0y, a1x, a1y = shape.spine(vx, vy, heading)
+        return shape.segments_closest(px, py, fx, fy, a0x, a0y, a1x, a1y)[1] <= shape.RADIUS_M
 
     def foul(self, p: Player, victim: Player) -> None:
         """Law 12: a careless challenge that hits the man: a direct free kick to his side where it
@@ -1792,8 +1916,60 @@ class Engine:
         self.possessor, self.dribbler, self.dribble_to, self.windup = None, None, None, None
         self.last_touch = p.id
         self.kicked_at = self.free_since = self.t
+        self.bumped = None
         self.kicker_clear, self.kicker_far, self.touched_since_kick = False, False, True
         self.plan_chase()
+
+    def settle(self, carrier: Player, bx: float, by: float, bz: float, fx: float, fy: float,
+               side: float, budget: float) -> tuple[float, float, float]:
+        """Move a carried ball `budget` metres across the ground toward his feet at (fx, fy):
+        straight, until its way would meet his body, then round the outline of his body (P11)
+        for the rest of the distance, never through him and never further than `budget`."""
+        hx, hy = fx - bx, fy - by
+        h = math.hypot(hx, hy)
+        if h < 1e-9:
+            return bx, by, bz
+        if shape.clearance(bx, by, carrier.x, carrier.y, carrier.heading) < ball.RADIUS - 1e-3:
+            # Overlapping him (after he turns, or placed on him for a restart): first out to his
+            # outline the way it lies from him (toward his feet if it sits on his centre), no
+            # further than the budget; then round, as below.
+            ox, oy = bx - carrier.x, by - carrier.y
+            out_a = math.atan2(oy, ox) if math.hypot(ox, oy) > 1e-6 else side
+            r = shape.surface(out_a, carrier.heading, pad=ball.RADIUS)
+            tx, ty = carrier.x + math.cos(out_a) * r, carrier.y + math.sin(out_a) * r
+            out = math.hypot(tx - bx, ty - by)
+            if out >= budget:
+                return bx + (tx - bx) / out * budget, by + (ty - by) / out * budget, bz
+            bx, by, budget = tx, ty, budget - out
+        else:
+            s = shape.first_contact(bx, by, fx, fy, carrier.x, carrier.y, carrier.heading, ball.RADIUS - 1e-3)
+            straight = h if s is None else s * h
+            if budget <= straight:
+                return bx + hx / h * budget, by + hy / h * budget, bz
+            bx, by, budget = bx + hx / h * straight, by + hy / h * straight, budget - straight
+        # Round his outline toward the side the feet are on, the short way, in small arcs whose
+        # chords add up to no more than what is left of the budget.
+        around = math.atan2(by - carrier.y, bx - carrier.x)
+        r = shape.surface(around, carrier.heading, pad=ball.RADIUS)
+        px, py = carrier.x + math.cos(around) * r, carrier.y + math.sin(around) * r
+        budget -= math.hypot(px - bx, py - by)  # onto the outline (at most a millimetre)
+        turn = (side - around + math.pi) % (2 * math.pi) - math.pi
+        sign, left = (1.0 if turn > 0 else -1.0), abs(turn)
+        while budget > 0 and left > 1e-9:
+            da = min(0.02, left)
+            a = around + sign * da
+            r = shape.surface(a, carrier.heading, pad=ball.RADIUS)
+            nx, ny = carrier.x + math.cos(a) * r, carrier.y + math.sin(a) * r
+            piece = math.hypot(nx - px, ny - py)
+            if piece > budget:
+                k = budget / piece
+                a = around + sign * da * k
+                r = shape.surface(a, carrier.heading, pad=ball.RADIUS)
+                nx, ny = carrier.x + math.cos(a) * r, carrier.y + math.sin(a) * r
+                piece = budget
+                da *= k
+            px, py, around, left, budget = nx, ny, a, left - da, budget - piece
+        return px, py, bz
 
     def touch_speed(self, carrier: Player, ux: float, uy: float, lo: float, hi: float) -> float | None:
         """D6: the hardest push up to `hi` that is his whatever his own kick error does to it (A3:
@@ -1881,6 +2057,7 @@ class Engine:
                    % (2 * math.pi) - math.pi)
         if not moving or turn > math.radians(TOUCH_EXPECTED_DEG):
             self.kicked_at = self.t
+            self.bumped = None
         self.free_since = self.t
         self.kicker_clear = self.kicker_far = False
         self.touched_since_kick = True
@@ -1940,8 +2117,8 @@ class Engine:
             "t": round(self.t, 3),
             "ball": {"x": round(bx, 3), "y": round(by, 3), "z": round(bz, 3)},
             "possessor": self.possessor,
-            "players": [{"id": p.id, "team": p.team, "x": round(p.x, 3), "y": round(p.y, 3)}
-                        for p in self.players],
+            "players": [{"id": p.id, "team": p.team, "x": round(p.x, 3), "y": round(p.y, 3),
+                         "heading": round(p.heading, 3)} for p in self.players],
         })
 
     def step(self) -> None:

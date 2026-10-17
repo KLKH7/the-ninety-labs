@@ -24,13 +24,6 @@ MAX_PLAYER_MPS = 10.5  # P1: peak match sprint speeds
 # fastest accelerators and is a design margin, not derived. Braking and turning: peak braking
 # about 8.5 m/s² (SD 1.1), so mean plus one SD is about 9.6, rounded to 10.
 MAX_PLAYER_ACCEL = 8.0
-# P15 (verify; the push-off time is from search results, not yet read in the paper): a keeper's
-# dive is a push-off, not a sprint start: it gives the body at most 4.0 m/s along his goal line in
-# about 0.40 to 0.48 s, so at most 4.0 / 0.40 = 10 m/s² of speeding up. Allowed only for what a dive
-# can be: a keeper inside his own penalty area, speeding up mostly along his goal line, and no
-# faster than the dive's peak at the end.
-DIVE_PEAK_MAX_MPS = 4.0
-MAX_KEEPER_DIVE_ACCEL = DIVE_PEAK_MAX_MPS / 0.40
 MAX_PLAYER_BRAKE = 10.0
 ACCEL_WINDOW_S = 0.2  # P2: speeds averaged over this window, so frame jitter is not acceleration
 MAX_BALL_MPS = 40.0  # P3: above the hardest shots on record
@@ -75,7 +68,7 @@ CORNER_ARC_M, CORNER_DISTANCE_M, BALL_RADIUS_M = 1.0, 9.15, 0.70 / (2 * math.pi)
 # legal ball (the lenient choice); whether it could be past a line, with the largest.
 BALL_RADIUS_MIN_M = 0.68 / (2 * math.pi)
 GOAL_HALF_WIDTH_M, CROSSBAR_M = 3.66, 2.44  # L6: Law 1, posts 7.32 m apart, bar 2.44 m high
-POST_WIDTH_M = 0.12  # P16: Law 1, posts and crossbar at most 12 cm wide
+POST_WIDTH_M = 0.12  # P17: Law 1, posts and crossbar at most 12 cm wide
 # Rounding: a point rounded to 0.5 mm in x and y lies within √2 × 0.5 mm of where it was, so its
 # distance to an exact point (the flag) is off by at most that. Two positions of the same still
 # ball, each rounded in x, y and z, differ by at most 2 × √3 × 0.5 mm.
@@ -140,9 +133,6 @@ def check_physics(events: list[dict], frames: list[dict], fps: float, roster: li
                   problems: Problems) -> None:
     """P1 to P6: speeds, acceleration, ground, gravity, ball at the possessor's feet."""
     dt = 1 / fps
-    lines = defended_lines(frames, {r["id"] for r in roster if r.get("role") == "GK"})
-    keeper_lines = {r["id"]: lines[r["team"]] for r in roster
-                    if r.get("role") == "GK" and r.get("team") in lines}
     # A kickoff restart may move everyone at once: the renderer cuts there.
     restarts = {e["frame"] for e in events if e["type"] == "kickoff"}
     # While the ball is out of play (Law 9) a new ball may be placed for the restart.
@@ -193,12 +183,7 @@ def check_physics(events: list[dict], frames: list[dict], fps: float, roster: li
             v1 = math.hypot(b["x"] - a["x"], b["y"] - a["y"]) / span
             v2 = math.hypot(p["x"] - b["x"], p["y"] - b["y"]) / span
             forward = (v2 - v1) / span
-            # A keeper's dive (P15): in his own area, gaining speed mostly along his goal line
-            # (y), and no faster than the dive's peak at the end of the window.
-            dive_like = (in_own_box(p, keeper_lines) and abs(ay) >= abs(ax)
-                         and v2 <= DIVE_PEAK_MAX_MPS + 2 * POSITION_PRECISION_M / span)
-            limit = MAX_KEEPER_DIVE_ACCEL if dive_like else MAX_PLAYER_ACCEL
-            if forward > limit or accel > MAX_PLAYER_BRAKE:
+            if forward > MAX_PLAYER_ACCEL or accel > MAX_PLAYER_BRAKE:
                 problems["P2 player acceleration"].append(
                     f"frame {f1['frame']}: {p['id']} accelerated at {accel:.1f} m/s² "
                     f"({forward:.1f} speeding up)"
@@ -353,7 +338,7 @@ def check_events(events: list[dict], frames: list[dict], fps: float, meta: dict,
     for e in events:
         if e["type"] == "interception":
             # the passes recorded before it: in the order recorded, since an interceptor may play
-            # the ball on in the same frame (a header, P17), after his interception
+            # the ball on in the same frame (a header, P18), after his interception
             before = [p for p in passes if order[p["id"]] < order[e["id"]]]
             if not before or before[-1]["outcome"] != "fail" or before[-1]["receiver"] != e["player"]:
                 problems["C8 event order"].append(f"{e['id']}: {e['player']} intercepted no failed pass")
@@ -375,14 +360,6 @@ def check_events(events: list[dict], frames: list[dict], fps: float, meta: dict,
                 problems["C9 score"].append(
                     f"meta says {team} scored {meta['score'].get(team, 0)}, goal events say {goals[team]}"
                 )
-
-
-def in_own_box(p: dict, keeper_lines: dict[str, float]) -> bool:
-    """Is this player a keeper inside the penalty area of the goal he defends (Law 1)?"""
-    line = keeper_lines.get(p["id"])
-    if line is None:
-        return False
-    return abs(p["x"] - line) <= PENALTY_DEPTH and abs(p["y"] - 34.0) <= PENALTY_HALF_WIDTH
 
 
 def defended_lines(frames: list[dict], keepers: set[str]) -> dict[str, float]:
@@ -479,7 +456,7 @@ def goal_crossing_problem(goal: dict, events: list[dict], by_frame: dict, fps: f
         return f"ball {mouth:.1f} m from the goal mouth the frame before"
     beyond = (b1["x"] - line) * inward < 0  # its centre already past the line
     # Past the line but outside a post's axis, or above the bar's: it cannot reach the goal
-    # without passing through the woodwork (P16).
+    # without passing through the woodwork (P17).
     if beyond and abs(b1["y"] - 34.0) > GOAL_HALF_WIDTH_M + POST_WIDTH_M / 2:
         return "ball beside or behind the post the frame before: it cannot enter the goal"
     if beyond and b1["z"] + BALL_RADIUS_MIN_M > CROSSBAR_M + POST_WIDTH_M / 2:
@@ -578,7 +555,7 @@ def goal_credit_problem(goal: dict, events: list[dict], frames: list[dict], team
 
 
 def check_woodwork(frames: list[dict], fps: float, problems: Problems) -> None:
-    """P16 (Law 1): the ball never passes through the goal frame (posts, crossbar and the
+    """P17 (Law 1): the ball never passes through the goal frame (posts, crossbar and the
     corners between them; frame_axes). Between two frames the ball is taken to move in a straight
     line; it is reported if its centre comes closer to the frame's axes than the smallest legal
     ball's radius plus the woodwork's half-width, less every error: the rounding, how far a
@@ -599,7 +576,7 @@ def check_woodwork(frames: list[dict], fps: float, problems: Problems) -> None:
                 continue
             gap = frame_distance(a, b, line)
             if gap < limit:
-                problems["P16 woodwork"].append(f"frame {f1['frame']}: ball through the goal frame at "
+                problems["P17 woodwork"].append(f"frame {f1['frame']}: ball through the goal frame at "
                                                 f"x = {line:.0f} (centre {gap:.3f} m from its axis)")
 
 

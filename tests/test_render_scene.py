@@ -51,12 +51,11 @@ def test_parts_box_contains_the_projected_feet_and_head():
     assert 40 < y1 - y0 < 130
 
 
-def test_dribbled_ball_is_drawn_ahead_of_the_feet():
+def test_the_ball_is_drawn_where_the_engine_has_it_even_at_a_carriers_feet():
     fr = {"ball": {"x": 50.0, "y": 30.0, "z": 0.0}, "possessor": "h1"}
-    x, y, z = drawn_ball(fr, 0.0)
-    assert x > 50.0 and y == 30.0
+    assert drawn_ball(fr) == (50.0, 30.0, 0.0)
     fr["possessor"] = None
-    assert drawn_ball(fr, 0.0) == (50.0, 30.0, 0.0)
+    assert drawn_ball(fr) == (50.0, 30.0, 0.0)
 
 
 def test_keypoints_cover_the_markings_and_project_exactly():

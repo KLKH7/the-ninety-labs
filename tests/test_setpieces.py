@@ -735,7 +735,7 @@ def test_l6_accepts_a_ball_rolling_along_the_line_into_the_goal(tmp_path):
     projected it backwards; the goal is when the whole ball is over."""
     clip = goal_clip(OWN_GOAL, None, path=creeping(33.4, dy=0.1))
     problems = run(tmp_path, clip)
-    assert "L6 goal" not in problems and "P16 woodwork" not in problems
+    assert "L6 goal" not in problems and "P17 woodwork" not in problems
 
 
 def test_l6_accepts_a_goal_in_off_the_post(tmp_path):
@@ -744,7 +744,7 @@ def test_l6_accepts_a_goal_in_off_the_post(tmp_path):
     it and called it wide. Mutation caught: a woodwork contact not treated as a change of path."""
     in_off = lambda n: (105.037 - 0.7 * (29 - max(n, 5)), 37.554 - 0.55 * (29 - max(n, 5)), 1.6)  # noqa: E731
     problems = run(tmp_path, goal_clip([SHOT], "h1", path=in_off))
-    assert "L6 goal" not in problems and "P16 woodwork" not in problems
+    assert "L6 goal" not in problems and "P17 woodwork" not in problems
 
 
 def test_a_ball_that_rolls_through_the_post_fails_p15(tmp_path):
@@ -753,21 +753,21 @@ def test_a_ball_that_rolls_through_the_post_fails_p15(tmp_path):
     A first fix of L6 accepted it. Seed 31's path, along the line at 0.4 m a frame from outside
     the post, must fail: the ball passes through the post (Law 1)."""
     clip = goal_clip(OWN_GOAL, None, path=creeping(32.5, z=1.1, dy=0.4))
-    assert "P16 woodwork" in run(tmp_path, clip)
+    assert "P17 woodwork" in run(tmp_path, clip)
 
 
 def test_a_ball_through_the_post_at_the_other_goal_fails_p15(tmp_path):
-    """Mutation caught: P16 checking only the goal at x = 105."""
+    """Mutation caught: P17 checking only the goal at x = 105."""
     path = creeping(32.5, z=1.1, dy=0.4)
     clip = goal_clip(OWN_GOAL, None, path=lambda n: (105.0 - path(n)[0], *path(n)[1:]))
-    assert "P16 woodwork" in run(tmp_path, clip)
+    assert "P17 woodwork" in run(tmp_path, clip)
 
 
 def test_a_ball_rolling_over_the_line_into_the_post_fails_p15(tmp_path):
     """A ball 2 cm outside the post's inner edge as it goes over overlaps the post: it would have
-    hit it. L6 cannot judge where it went after touching, so P16 is what rejects it."""
+    hit it. L6 cannot judge where it went after touching, so P17 is what rejects it."""
     clip = goal_clip(OWN_GOAL, None, path=creeping(34.0 + 3.66 - 0.111 + 0.02))
-    assert "P16 woodwork" in run(tmp_path, clip)
+    assert "P17 woodwork" in run(tmp_path, clip)
 
 
 def test_p15_leaves_balls_that_pass_clear_of_the_frame(tmp_path):
@@ -775,13 +775,13 @@ def test_p15_leaves_balls_that_pass_clear_of_the_frame(tmp_path):
     posts. A ball high over the post, and one at bar height outside the post, touch nothing."""
     for path in (creeping(32.5, z=3.3, dy=0.4), creeping(34.0 + 3.72 + 1.3, z=2.39, x_before=105.0, dx=0.6)):
         (tmp_path / str(path)).mkdir()
-        assert "P16 woodwork" not in run(tmp_path / str(path), goal_clip(OWN_GOAL, None, path=path))
+        assert "P17 woodwork" not in run(tmp_path / str(path), goal_clip(OWN_GOAL, None, path=path))
 
 
 def test_a_ball_never_passes_through_the_crossbar(tmp_path):
-    """P16: dropping through the bar from above, at the bar's height, is not a goal."""
+    """P17: dropping through the bar from above, at the bar's height, is not a goal."""
     clip = goal_clip(OWN_GOAL, None, path=lambda n: (104.0 + 0.04 * max(n - 5, 0), 34.0, 2.33))
-    assert "P16 woodwork" in run(tmp_path, clip)
+    assert "P17 woodwork" in run(tmp_path, clip)
 
 
 L6_SLOW = {  # audit 6: a slow ball let the old slack grow until these passed; and edge cases
@@ -812,7 +812,7 @@ def test_l6_accepts_slow_legal_goals(tmp_path, name):
     """Mutations caught: the whole-ball conditions judged with the largest legal ball (Law 2 allows
     68 to 70 cm; the lenient choice is the smallest); two roundings where the velocity has three."""
     problems = run(tmp_path, goal_clip(OWN_GOAL, None, path=L6_SLOW_LEGAL[name]))
-    assert "L6 goal" not in problems and "P16 woodwork" not in problems
+    assert "L6 goal" not in problems and "P17 woodwork" not in problems
 
 
 def test_l6_accepts_a_goal_in_off_the_bar(tmp_path):
@@ -821,14 +821,14 @@ def test_l6_accepts_a_goal_in_off_the_bar(tmp_path):
     out of the woodwork exemption."""
     in_off = lambda n: (104.98 - 0.6 * (29 - max(n, 5)), 34.0, 2.22 - 0.1 * (29 - max(n, 5)))  # noqa: E731
     problems = run(tmp_path, goal_clip([SHOT], "h1", path=in_off))
-    assert "L6 goal" not in problems and "P16 woodwork" not in problems
+    assert "L6 goal" not in problems and "P17 woodwork" not in problems
 
 
 @pytest.mark.parametrize("name", L6_SLOW)
 def test_l6_rejects_slow_balls_that_did_not_score(tmp_path, name):
     """Mutations caught: the one-frame bound on the whole ball going over dropped, or its rounding
     widened; gravity in the sideways slack; the whole-ball point on the wrong side of the line.
-    Balls whose body overlaps the woodwork are also reported by P16; L6 must reject them anyway."""
+    Balls whose body overlaps the woodwork are also reported by P17; L6 must reject them anyway."""
     problems = run(tmp_path, goal_clip(OWN_GOAL, None, path=L6_SLOW[name]))
     assert "L6 goal" in problems
 
@@ -865,7 +865,7 @@ def test_l6_judges_the_goal_the_conceding_keeper_defends(tmp_path):
 
 
 def test_real_engine_goals_are_credited_and_relabelling_them_fails(tmp_path):
-    """Engine output, not a fixture, and no pinned seed (lesson 25): the first three goals from
+    """Engine output, not a fixture, and no pinned seed (lesson 30): the first three goals from
     real engine corners each meet the contract, and giving one to the wrong player (or to nobody)
     fails C8. Which seeds score moves with the engine and even with the Python version (CI found
     2 goals in the 32 seeds that gave 4 locally), so it scans until it has three."""

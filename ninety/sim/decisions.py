@@ -16,7 +16,7 @@ import random
 from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
 
-from ninety.sim import ball, offball, perception, threat
+from ninety.sim import ball, offball, perception, shape, threat
 from ninety.sim import value as possession
 from ninety.sim.body import (
     BODY_HEIGHT,
@@ -26,6 +26,8 @@ from ninety.sim.body import (
     CS_MEAN,
     F0_MEAN,
     HEAD_SPEED_MPS,
+    STRIKE_FACING,
+    TURN_RATE,
     V0_MEAN,
     Body,
     can_get_to,
@@ -173,7 +175,7 @@ class Scene:
     heading: float = 0.0  # the way he faces, radians
     fresh: float = 1.0  # his slow store's share left (P10)
     ball_offset: tuple[float, float] = (0.0, 0.0)  # the ball relative to his body
-    # P17: he meets the ball in the air with his head, at this height (its lowest point), the ball
+    # P18: he meets the ball in the air with his head, at this height (its lowest point), the ball
     # arriving at this velocity: every option is a header from there.
     header: bool = False
     z: float = 0.0
@@ -217,7 +219,7 @@ def shot_estimate(x: float, y: float, goal_x: float, opponents: list[tuple[float
     a central shot), then compared with the typical shot those rates average over: better with no
     outfield defender he believes is in the triangle to the posts, a little worse with any; and by
     how much of the goal the keeper leaves open against a keeper in his usual spot. The keeper is
-    counted once. Struck at `speeds_kmh` (a header: P17, slower than a kick) against a keeper in his
+    counted once. Struck at `speeds_kmh` (a header: P18, slower than a kick) against a keeper in his
     usual spot facing the usual shot: a slower strike gives this keeper more time."""
     screened = any((ox, oy) != keeper and in_cone(x, y, goal_x, ox, oy) for ox, oy in opponents)
     q = typical_shot(x, y, goal_x) * (SCREENED_SHOT if screened else CLEAR_SHOT)
@@ -298,12 +300,33 @@ def turn_deg(direction: float, heading: float) -> float:
     return math.degrees((direction - heading + math.pi) % (2 * math.pi) - math.pi)
 
 
-def can_strike(ox: float, oy: float, dx: float, dy: float) -> bool:
-    """With the ball at (ox, oy) from his body, can he strike it toward (dx, dy) from the ball without
-    turning? Only if the ball is on the side of his body facing the target (or right at his feet)."""
+def can_strike(ox: float, oy: float, heading: float, dx: float, dy: float) -> bool:
+    """P16, the engine's own rule: with the ball at (ox, oy) from his body's centre and facing
+    `heading`, can he strike it toward (dx, dy) now? Only once he faces within STRIKE_FACING of it
+    (the widest run-up angle tested with no loss of speed or accuracy) with the ball on the side
+    of his body toward it, so its way out leaves his surface (shape.py) rather than passing
+    through him. A ball in his hands (a throw-in) needs neither."""
     if math.hypot(ox, oy) < 0.1:
         return True
-    return ox * dx + oy * dy >= 0
+    if abs(turn_deg(math.atan2(dy, dx), heading)) > math.degrees(STRIKE_FACING):
+        return False
+    sx, sy = shape.nearest_on_spine(ox, oy, 0.0, 0.0, heading)
+    return (ox - sx) * dx + (oy - sy) * dy >= 0
+
+
+def strike_turn(heading: float, dx: float, dy: float, thrown: bool = False) -> tuple[float, float]:
+    """P16: how far (degrees) the kick toward (dx, dy) is from the way he faces when he strikes it,
+    and how long he turns first (seconds). Facing within STRIKE_FACING he strikes now; else he
+    turns toward it at TURN_RATE until he is, and strikes at that angle. A throw-in leaves his hands
+    at once, at whatever angle (can_strike). *Design*, not counted: a ball behind him also comes
+    round to his front within a few frames; the engine turns in whole frames, so it strikes up to
+    one frame later and up to 14° nearer his facing; and he does not move while he turns, though in
+    the engine he brakes and the ball goes with him."""
+    off = turn_deg(math.atan2(dy, dx), heading)
+    limit = math.degrees(STRIKE_FACING)
+    if thrown or abs(off) <= limit:
+        return off, 0.0
+    return math.copysign(limit, off), math.radians(abs(off) - limit) / TURN_RATE
 
 
 def pass_skill(bx: float, tx: float, ty: float, lofted: bool, goal_x: float) -> str:
@@ -413,13 +436,13 @@ def flight(ground: float, up: float, z0: float = 0.0) -> Flight:
 
 HEADED_PASS_Z = 0.1  # design: a headed pass is aimed to arrive just above the ground, at his feet
 HEADER_AWAY_DEG = 35.0  # design: a header away (a clearance, a flick on) is struck up at this angle
-# P17 (design): how far ahead a player judges whether he can let a ball at head height drop to his
+# P18 (design): how far ahead a player judges whether he can let a ball at head height drop to his
 # feet before an opponent could get to it (engine.goes_up and the passer's race: one rule)
 DROP_HORIZON_S = 3.0
 
 
 def header_cap(scene: Scene, tx: float, ty: float) -> float:
-    """P17: the hardest he can head the ball toward (tx, ty), along that line: his head drives
+    """P18: the hardest he can head the ball toward (tx, ty), along that line: his head drives
     through it at HEAD_SPEED_MPS and the ball rebounds off it keeping BODY_RESTITUTION of their
     closing speed, so it leaves at (1 + e) V - e u, u being the ball's own speed along that line
     (negative when it comes at him). The ball's speed across the line is lost (a glancing flick on
@@ -463,9 +486,10 @@ def strike_nodes(scene: Scene, tx: float, ty: float, lofted: bool, pace: float
     error in radians, ground speed, vertical speed). Struck as estimated (ARRIVE pace along the
     ground, LOFT_DEG in the air), then scattered by his own kick error (profiles.strike_error) in the
     situation he strikes it in: the skill, the speed, the nearest opponent he sees, his fatigue, and
-    the foot (if the ball is on the wrong side he turns first, and strikes it the way he faces)."""
+    the foot, from how far off the way he faces he strikes it (strike_turn: he turns first if he
+    must, P16)."""
     dist = math.hypot(tx - scene.x, ty - scene.y)
-    if scene.header:  # P17: a headed pass, from where he meets it
+    if scene.header:  # P18: a headed pass, from where he meets it
         launch = headed_pass(scene, tx, ty)
         if launch is None:
             return []
@@ -474,8 +498,8 @@ def strike_nodes(scene: Scene, tx: float, ty: float, lofted: bool, pace: float
         ground, up = loft_launch(dist) if lofted else (launch_speed(dist, pace), 0.0)
     speed = math.hypot(ground, up)
     dx, dy = tx - scene.x, ty - scene.y
-    strikeable = scene.header or can_strike(*scene.ball_offset, dx, dy)
-    turn = turn_deg(math.atan2(dy, dx), scene.heading) if strikeable and not scene.header else 0.0
+    # a header meets the ball where it is, with his head: no turn and no weaker foot (P18)
+    turn = 0.0 if scene.header else strike_turn(scene.heading, dx, dy, scene.throw)[0]
     cx, cy = scene.x - scene.ball_offset[0], scene.y - scene.ball_offset[1]
     nearest = min((math.hypot(o[0] - cx, o[1] - cy) for o in scene.moving), default=math.inf)
     skill = pass_skill(scene.x, tx, ty, lofted, scene.goal_x)
@@ -690,17 +714,23 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
     direction = math.atan2(ty - sy, tx - sx)
     nodes = strike_nodes(scene, tx, ty, lofted, pace)
     cx, cy = sx - scene.ball_offset[0], sy - scene.ball_offset[1]
+    # P16: if he must turn before he can strike it, everyone else moves on meanwhile, each as the
+    # passer believes him to be going (he holds the ball where it is while he turns).
+    _, wait = (0.0, 0.0) if scene.header else strike_turn(scene.heading, tx - sx, ty - sy, scene.throw)
     # Team-mates, the one it is meant for first, from where the passer sees him and expecting it:
     # (x, y, vx, vy, reaction, first touch).
     seen = {m[0]: m for m in scene.mates}
     meant = seen.get(receiver, (receiver, mx, my, age))
-    mates = [(mx, my, *(meant[4:6] or (0.0, 0.0)), perception.SIMPLE_REACTION_S,
+    mvx, mvy = meant[4:6] or (0.0, 0.0)
+    mates = [(mx + mvx * wait, my + mvy * wait, mvx, mvy, perception.SIMPLE_REACTION_S,
               scene.absorb.get(receiver, CONTROL_EST_MPS))]
     for mid, qx, qy, _, *vel in scene.mates:
         if mid != receiver and (receiver is not None or (qx, qy) != (mx, my)):
-            mates.append((qx, qy, *(vel or (0.0, 0.0)), perception.CHOICE_REACTION_S,
+            qvx, qvy = vel or (0.0, 0.0)
+            mates.append((qx + qvx * wait, qy + qvy * wait, qvx, qvy, perception.CHOICE_REACTION_S,
                           scene.absorb.get(mid, CONTROL_EST_MPS)))
-    opponents = scene.moving
+    opponents = [(ox + ovx * wait, oy + ovy * wait, ovx, ovy, keeper)
+                 for ox, oy, ovx, ovy, keeper in scene.moving]
     # How far each player is from the ball's whole path at the widest spread of the strikes: a
     # lower bound on when he could get there (at top speed, straight), so the race can skip those
     # who could not be in it.
@@ -745,7 +775,7 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
         if taker is None:
             continue  # nobody of his gets to it before it goes out or comes to rest out of reach
         if offball.headed(False, points[at][2]):
-            # P17 (engine.goes_up): he lets it drop to his feet if he can take it there before any
+            # P18 (engine.goes_up): he lets it drop to his feet if he can take it there before any
             # opponent could get to it at all; otherwise he heads it.
             t_f, i_f = reach_time(points, t_end, rests, sx, sy, ux, uy, *taker[:5], take + DROP_HORIZON_S,
                                   heads=False)
@@ -757,7 +787,7 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
         _, a, z, g, vz = points[at]
         if at == len(points) - 1 and rests:
             g = vz = 0.0
-        if offball.headed(False, z):  # P17: he meets it with his head: won in the air, and what he
+        if offball.headed(False, z):  # P18: he meets it with his head: won in the air, and what he
             p = 1.0  # does with it is his next choice
         else:
             rel = relative_speed(g * ux, g * uy, vz, taker[2], taker[3])
@@ -810,7 +840,7 @@ def pass_option(scene: Scene, mate: tuple[str, float, float, float]) -> Option |
     ways = [(True, ARRIVE_MPS)] if scene.throw else [(False, pace) for pace in PASS_PACES]
     if not scene.throw and dist >= LOFT_FROM_M:
         ways.append((True, ARRIVE_MPS))
-    if scene.header:  # P17: headed, only as far as a header can get it there
+    if scene.header:  # P18: headed, only as far as a header can get it there
         if headed_pass(scene, tx, ty) is None:
             return None
         ways = [(True, ARRIVE_MPS)]
@@ -828,7 +858,7 @@ def shot_chance(scene: Scene) -> float:
     here went in, scaled by how this situation compares with an open one (blockers in the cone, the
     keeper's position), so shooting and moving the ball are judged on the same scale."""
     speeds = offball.SHOT_SPEEDS_KMH
-    if scene.header:  # P17: the speed his header at goal leaves at (engine.shoot)
+    if scene.header:  # P18: the speed his header at goal leaves at (engine.shoot)
         v = 3.6 * min(header_cap(scene, scene.goal_x, PITCH_Y / 2), offball.SHOT_SPEEDS_KMH[1] / 3.6)
         speeds = (v, v)
     q = shot_estimate(scene.x, scene.y, scene.goal_x, scene.opponents, scene.keeper, speeds)
@@ -846,7 +876,7 @@ def options(scene: Scene) -> list[Option]:
     p = pressure(scene)
     q = shot_chance(scene)
     in_range = abs(scene.goal_x - scene.x) < offball.SHOT_RANGE_M
-    if scene.header:  # P17: a header at goal only from where a header can reach it
+    if scene.header:  # P18: a header at goal only from where a header can reach it
         in_range = in_range and header_launch(scene, scene.goal_x, PITCH_Y / 2, 1.0) is not None
     if in_range:
         bias = 1.3 if "shoots_from_distance" in scene.traits else 1.0
@@ -861,7 +891,7 @@ def options(scene: Scene) -> list[Option]:
         out.append(Option("shoot", q * bias * (1 + 0.5 * scene.risk) - (1 - q) * lost,
                           (scene.goal_x, PITCH_Y / 2)))
     if scene.header:
-        # P17: in the air he can only head it: no dribble, nothing to hold. Or he heads it away, as
+        # P18: in the air he can only head it: no dribble, nothing to hold. Or he heads it away, as
         # far as he can, toward the side a clearance goes: in his own third that is a clearance,
         # elsewhere a flick on; either way a contest where it lands (as `clear`).
         wide = 4.0 if scene.y < PITCH_Y / 2 else PITCH_Y - 4.0

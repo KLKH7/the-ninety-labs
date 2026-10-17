@@ -130,7 +130,7 @@ def report(rows: list[dict]) -> str:
         f"{first['defenders'] + first['defending keeper']} ({first['defending keeper']}) / "
         f"{first['nobody']} | |",
         f"| Lofted deliveries | {sum(r['lofted'] for r in rows)} / {n} | |",
-        f"| Headers within {AFTER_S:.0f} s (P17): attackers / defenders; attackers' headers at goal | "
+        f"| Headers within {AFTER_S:.0f} s (P18): attackers / defenders; attackers' headers at goal | "
         f"{sum(r['heads'][0] for r in rows)} / {sum(r['heads'][1] for r in rows)}; "
         f"{sum(r['heads'][2] for r in rows)} | |",
         f"| Lofted delivery, kick to first bounce or touch below 0.15 m | {spread(flights)} | |",
