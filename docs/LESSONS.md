@@ -452,3 +452,16 @@ short and actionable. This file is public: no research sources, product names or
   Files are written with `allow_nan=False`, so a stray infinity or NaN fails at the source.
 - **Check:** `tests/test_event_score.py::test_a_time_outside_the_clip_still_gives_strict_json`
   fails on the original code.
+
+### 50. A measured spread already holds every cause; an extra error source must take its share
+- **What happened:** the kick's vertical error was set to the whole measured vertical spread at
+  the goal, and the engine then added its own speed spread on top. A slower ball drops more, so
+  the speed spread moved the ball up and down again: kicks scattered about 7% wider vertically than
+  the measurement they were built from.
+- **Rule:** when the engine draws several independent errors that each move the same measured
+  quantity, derive each one's share through the engine's own physics so that together they
+  reproduce the measurement, never set one of them to the whole of it.
+- **Check:** reproduce the source's measurement end to end through the engine (here, kicks fired at
+  the paper's setup land in the paper's ellipse), with a tolerance from the sample size, and remove
+  any known bias of the derivation (a linear split left the vertical about 1% wide) rather than
+  spend the tolerance on it.

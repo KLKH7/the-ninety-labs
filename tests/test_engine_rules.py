@@ -217,17 +217,65 @@ def test_execution_scatters_direction_by_the_profiles_error_and_never_kicks_down
 
 
 def test_execution_scatters_a_lofted_kicks_launch_angle_by_the_profiles_error():
-    # A3: a rising kick also flies higher or lower than meant, by the up-and-down part of his error
+    # A3: a rising kick also flies higher or lower than meant, by the up-and-down part of his error.
+    # Exact: each kick's launch angle is off by one of the draws execute makes, drawn with exactly
+    # loft_sd and centred on zero, so any mis-scaling or bias fails, however small.
     e, p = kicker()
     intended = math.degrees(math.atan2(6.0, 20.0))
+    expected = p.profile.kick_error("finishing", math.hypot(20.0, 6.0), 0.0, 1.0, False)[2]
+    draws = []
+    gauss = e.rng.gauss
+
+    def recorded(mu: float, sigma: float) -> float:
+        value = gauss(mu, sigma)
+        draws.append((mu, sigma, value))
+        return value
+
+    e.rng.gauss = recorded
     lofts = []
-    for _ in range(3000):
+    for _ in range(200):
+        draws.clear()
+        vx, vy, vz = e.execute(p, 20.0, 0.0, 6.0, "finishing")
+        off = math.degrees(math.atan2(vz, math.hypot(vx, vy))) - intended
+        matched = [(mu, sigma) for mu, sigma, value in draws if math.isclose(value, off, abs_tol=1e-9)]
+        assert matched == [(0, expected)]
+    # End to end, at about 4 standard errors (the SD's relative standard error is 1/sqrt(2n)):
+    e.rng.gauss = gauss
+    for _ in range(20000):
         vx, vy, vz = e.execute(p, 20.0, 0.0, 6.0, "finishing")
         lofts.append(math.degrees(math.atan2(vz, math.hypot(vx, vy))))
-    speed = math.hypot(20.0, 6.0)
-    expected = p.profile.kick_error("finishing", speed, 0.0, 1.0, False)[2]
-    assert abs(mean(lofts) - intended) < 0.2
-    assert abs(pstdev(lofts) - expected) < 0.1 * expected
+    assert abs(mean(lofts) - intended) < 4 * expected / math.sqrt(len(lofts))
+    assert abs(pstdev(lofts) / expected - 1) < 4 / math.sqrt(2 * len(lofts))
+
+
+def test_kicks_from_the_penalty_mark_land_in_the_measured_ellipse():
+    # A3, end to end: struck facing the paper's target (3.5 m across and 1.6 m up, 11 m out, about
+    # 21 m/s) at average skill, the engine's own kick error and flight spread the ball over the goal
+    # plane as the measured preferred-foot ellipse does (95% axes 4.08 m and 1.91 m, tilted 26.9
+    # degrees), the speed spread included: the vertical is not counted twice.
+    e, p = kicker()
+    bearing = math.atan2(3.5, 11.0)
+    p.heading = bearing
+    ground, up = ball.shot(math.hypot(11.0, 3.5), 21.0, 1.6, DT)
+    goal = p.x + 11.0
+    ys, zs = [], []
+    for _ in range(20000):
+        vx, vy, vz = e.execute(p, ground * math.cos(bearing), ground * math.sin(bearing), up, "finishing")
+        path = ball.predict((p.x, p.y, 0.0, vx, vy, vz), DT, 3.0)
+        for a, b in zip(path, path[1:], strict=False):
+            if (a[0] - goal) * (b[0] - goal) <= 0 and a[0] != b[0]:
+                f = (goal - a[0]) / (b[0] - a[0])
+                ys.append(a[1] + f * (b[1] - a[1]))
+                zs.append(a[2] + f * (b[2] - a[2]))
+                break
+    long_sd, short_sd = (axis / 2 / 2.448 for axis in (4.08, 1.91))
+    t = math.radians(26.9)
+    across = math.hypot(long_sd * math.cos(t), short_sd * math.sin(t))
+    height = math.hypot(long_sd * math.sin(t), short_sd * math.cos(t))
+    assert len(zs) == 20000
+    within = 4 / math.sqrt(2 * len(zs))  # 4 standard errors of an SD
+    assert abs(pstdev(ys) / across - 1) < within
+    assert abs(pstdev(zs) / height - 1) < within
 
 
 def mean_speed(e: Engine, p, deg: float) -> float:
