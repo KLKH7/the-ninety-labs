@@ -568,8 +568,8 @@ class Engine:
     def offside_offence(self, p: Player, x: float, y: float) -> None:
         """L10: an indirect free kick to the defending side where the offside player played it."""
         kicked = self.kicked
-        if kicked and kicked["type"] == "pass":
-            kicked.update(receiver=p.id, end_x=round(x, 2), end_y=round(y, 2), outcome="fail")
+        if kicked and kicked["type"] == "pass":  # not received: the offside event names him
+            kicked.update(end_x=round(x, 2), end_y=round(y, 2), outcome="fail")
         elif kicked and kicked["type"] == "shot":
             self.close_shot(kicked, x, y)
         self.kicked = None
@@ -717,9 +717,11 @@ class Engine:
             ground, up = decisions.launch_speed(dist, pace), 0.0
         skill = decisions.pass_skill(bx, tx, ty, lofted or throw, goal_x(carrier.team))
         vx, vy, vz = self.execute(carrier, *self.aim(bx, by, tx, ty, ground, up), skill, hands=throw)
-        # Receiver, end point and outcome are filled in when someone takes the ball or it goes out.
+        # Receiver, interceptor or deflector, end point and outcome are filled in when someone takes
+        # the ball or it goes out; only the intended team-mate is known at the kick.
         self.pass_target = (tx, ty)
-        self.kicked = self.emit("pass", carrier.team, bx, by, player=carrier.id,
+        self.kicked = self.emit("pass", carrier.team, bx, by, player=carrier.id, intended=receiver,
+                                interceptor=None, deflected_by=None,
                                 ball_speed_kmh=round(math.sqrt(vx * vx + vy * vy + vz * vz) * 3.6, 1))
         self.kick(carrier, vx, vy, vz)
         self.into_play = throw  # released from behind the line: not a new out while it comes in
@@ -1028,8 +1030,11 @@ class Engine:
                     outcome="success" if done else "fail",
                 )
                 self.kicked = None
-            elif not same_team:  # an opponent got to it: the pass has failed
-                kicked.update(receiver=p.id, end_x=round(x, 2), end_y=round(y, 2), outcome="fail")
+            elif not same_team:  # an opponent got to it first: the pass has failed
+                # He won it (interceptor) or only touched it (deflected_by): a touch says nothing
+                # about where the ball went next, so the two are never one field.
+                kicked.update(**{"interceptor" if controls else "deflected_by": p.id},
+                              end_x=round(x, 2), end_y=round(y, 2), outcome="fail")
                 if controls and self.in_the_lane(kicked, x, y):
                     # Cut out on its way: an interception. Collected where it was going (a long
                     # ball dropping to a defender) is a recovery: the possession change says it.
@@ -1184,6 +1189,8 @@ class Engine:
                 # His own pass went straight in: that strike was his attempt.
                 struck.update(type="shot", outcome="goal", receiver=None,
                               end_x=round(x, 2), end_y=round(y, 2))
+                for key in ("intended", "interceptor", "deflected_by"):  # passes only
+                    struck.pop(key, None)
             if scorer and not shot and touch and touch["player"] == scorer:
                 # It went in off him: the touch that sent it in is his attempt, as event data records it,
                 # and a team-mate's pass he turned in reached him there.
