@@ -63,7 +63,7 @@ def report(seeds: list[int], minutes: float) -> str:
         f"commit `{(git_commit() or 'unknown')[:7]}`; seeds {', '.join(map(str, seeds))}, "
         f"{minutes:g} minutes each; Python {platform.python_version()} on {platform.system()}. "
         "Simulator truth only: no detector numbers. The same seed simulates the same match on any "
-        "operating system (lesson 26), so these digits reproduce anywhere at this commit.",
+        "operating system (lesson 29), so these digits reproduce anywhere at this commit.",
         "",
         "For every event, the distance its reference object (the ball; the nearest player of the "
         "team for pressure and kick-off) moves between the event's frame and a frame early or late "

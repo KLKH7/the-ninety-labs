@@ -85,6 +85,15 @@ uv run ninety-render --seed 7 --seconds 10 --out runs/clip7 --mp4   # --mp4 need
 uv run ninety-slice --minute 2 --plant
 ```
 
+**Agents live in Foundry.** The Analyst and the Judge are published to our Foundry project as
+versioned prompt agents (`ninety-analyst`, `ninety-judge`), each with the `ninety-guardrail`
+content-safety policy: Microsoft's default filters plus Prompt Shields for jailbreaks and indirect
+attacks. A live run calls the versions pinned in `ninety/agents/foundry_agents.json` and refuses to
+start if the code has changed since they were published; CI checks the same. Each claim is one
+trace in Foundry's tracing view: the agents' calls, the MCP tool calls, and every fact-checking
+verdict with its reasons. After changing an agent's prompt, schema or tools:
+`NINETY_FOUNDRY_RESOURCE_ID=... uv run ninety-agents publish` (see `ninety/config.py`).
+
 **Running the slice without our Azure project.** Nothing here uses an API key: Azure checks who
 is calling (your `az login` locally, the app's managed identity in the cloud), and key access is
 off on our resources. A live run from your own clone will therefore fail to authenticate. Replay
@@ -94,7 +103,7 @@ a recorded run instead:
 uv run ninety-slice --replay replays/slice-minute2-plant.json
 ```
 
-Replay swaps only the two Foundry models for what they answered when recorded: the Analyst's
+Replay swaps only the two Foundry agents for what they answered when recorded: the Analyst's
 replies and the Judge's verdicts. The Agent Framework workflow, the handoffs and the code checks
 all run for real, so you see the planted number rejected and the rewrite accepted. If a prompt has
 changed since the recording, the replay stops rather than pair an old answer with a new question. Speech needs Azure, so `--speak` does not

@@ -69,7 +69,7 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_constants.py` fails if any module in `ninety/` assigns a top-level name
   twice.
 
-### 26. Same seed, same match, on every machine
+### 29. Same seed, same match, on every machine
 - **What happened:** seed 7 simulated a different match on macOS from the one on Linux, so the cue
   fixture test failed on a Mac and "156 cues" could not be reproduced there. The engine was
   deterministic; the C math library was not. Apple's `exp`, `erf`, `sin` and the rest disagree
@@ -128,12 +128,52 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_engine_rules.py::test_a_throw_in_taker_runs_to_his_spot_and_stops_there`
   asserts a throw-in happened before checking speeds; it fails on the old engine.
 
+### 30. Score only what was run
+- **What happened:** the vision scorer built labels from every row of `frames.jsonl`, and
+  flattening the detections dropped frames with an empty list, so it could not tell "ran and
+  found nothing" from "never ran". Detecting every 25th frame of a 250-frame clip with the COCO
+  RF-DETR checkpoint scored player recall 0.04 (TP 89, FN 2102); on the 10 frames actually run it
+  is 0.99 (TP 89, FN 1). The detections contract already said an empty list marks a run frame;
+  the scorer did not read it.
+- **Rule:** an evaluation scores only the inputs the system was given. Read the set of run
+  frames before any step that can drop empty records, and report how many were scored and
+  skipped, so a denominator is visible rather than assumed.
+- **Check:** `tests/test_vision_score.py::test_only_frames_the_detector_ran_on_are_scored`
+  fails on the original code (FN 6 instead of 3). The overlay tool (`ninety/eval/draw.py`) had
+  the same flaw and drew unrun frames as misses;
+  `tests/test_draw.py::test_only_frames_the_detector_ran_on_are_drawn_and_counted` fails on it
+  (4 misses over 3 frames instead of 2 over 2).
+
 ## Working in the repo
 
 ### 12. "No checks yet" is not "checks passed"
 - **What happened:** a pull request was merged before CI had started on its last commit,
   because the wait loop treated an empty check list as finished.
 - **Rule:** wait until every required check has reported, then merge.
+
+### 28. Green CI on an old base is not green on main
+- **What happened:** #55 changed the seed-7 match and merged at 05:55 UTC. #61 merged three
+  minutes later on CI that had run against the main before #55, because branch protection does
+  not require a branch to be up to date. Main went red: the recorded slice cited an event id
+  (`e00051`) that the new match no longer has.
+- **Rule:** if main has moved since a pull request's checks ran, merge main into the branch and
+  wait for CI again before merging, even when the files don't overlap. A recording or fixture
+  depends on the whole engine, not on the files its pull request touched.
+- **Check:** branch protection on `main` requires branches to be up to date (on since
+  2026-10-17), so GitHub will not merge until CI has passed on the branch with main merged in.
+
+### 30. A deploy is done when the live URL answers with the new commit
+- **What happened:** the first `azd provision` and deploy of the API failed three times, and each
+  earlier step said it had passed. A role id written from memory did not exist (`what-if` does not
+  check role ids). Leaving the Container Apps environment's mode unset gave an Express
+  environment, which cannot run jobs or OpenTelemetry. And an image built by Docker's legacy
+  builder on a Mac looked amd64 when inspected locally, but in Azure even `/bin/sh` failed with
+  `exec format error`. `azd` reported success every time.
+- **Rule:** look up every Azure id (`az role definition list --name ...`); set every mode the
+  platform would otherwise default; build images with BuildKit, never the legacy builder. A
+  deploy counts as done only when the public URL answers with the commit just deployed.
+- **Check:** the deploy workflow's smoke test passes only when `/api/health` reports the commit
+  it deployed.
 
 ### 13. Keep diffs to what you meant to change
 - **What happened:** a one-word schema change rewrote 131 lines because a tool reformatted the
@@ -184,9 +224,9 @@ short and actionable. This file is public: no research sources, product names or
   recorded prompt (fact-checker reasons, agent instructions). Never make the replayer tolerate a
   changed prompt: a shim that rewrites new wording back to old pairs an old answer with a new
   question.
-- **Check:** `test_every_committed_replay_still_replays` runs every committed replay (lesson 24).
+- **Check:** `test_every_committed_replay_still_replays` runs every committed replay (lesson 27).
 
-### 24. A committed recording must be replayed by a test, or it rots silently
+### 27. A committed recording must be replayed by a test, or it rots silently
 - **What happened:** the fact-checker started also reporting "clock 01:00 is not a cited clock",
   which changed the Analyst's retry prompt, and `replays/slice-minute2-plant.json` stopped
   replaying on main. Lesson 19's check was a manual step nobody ran, and
@@ -241,7 +281,7 @@ short and actionable. This file is public: no research sources, product names or
   fails on the original code.
 
 
-### 29. A minute is the football minute
+### 31. A minute is the football minute
 - **What happened:** the first match terrain labelled its turning points with the clock minute
   (33 for 33:00 to 33:59), while the agents and the fact-checking agent use the football minute
   (`ninety.match.facts.minute_of`: 34 for the same span). Every card read one minute early, and
