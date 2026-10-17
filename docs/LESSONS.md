@@ -61,9 +61,9 @@ short and actionable. This file is public: no research sources, product names or
 
 ### 24. A constant defined twice keeps only the last value
 - **What happened:** the engine defined the same constant name twice for two different ideas: how
-  far the covering player stands behind the presser (8 m), and the radius within which a
+  far goal-side of the ball the covering player stands (8 m), and the radius within which a
   team-mate counts as cover for a tackle (10 m). The second silently replaced the first, so the
-  cover stood 10 m back. Lint did not flag it.
+  cover stood 10 m from the ball. Lint did not flag it.
 - **Rule:** one name, one meaning. Name a constant after what it measures, not the word it shares
   with another rule.
 - **Check:** `tests/test_constants.py` fails if any module in `ninety/` assigns a top-level name
