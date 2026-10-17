@@ -180,6 +180,20 @@ def test_execution_scatters_direction_by_the_profiles_error_and_never_kicks_down
     assert max(e.execute(p, 35.9, 0.0, 0.0, "finishing")[0] for _ in range(500)) <= MAX_STRIKE_MPS
 
 
+def test_execution_scatters_a_lofted_kicks_launch_angle_by_the_profiles_error():
+    # A3: a rising kick also flies higher or lower than meant, by the up-and-down part of his error
+    e, p = kicker()
+    intended = math.degrees(math.atan2(6.0, 20.0))
+    lofts = []
+    for _ in range(3000):
+        vx, vy, vz = e.execute(p, 20.0, 0.0, 6.0, "finishing")
+        lofts.append(math.degrees(math.atan2(vz, math.hypot(vx, vy))))
+    speed = math.hypot(20.0, 6.0)
+    expected = p.profile.kick_error("finishing", speed, 0.0, 1.0, False)[2]
+    assert abs(mean(lofts) - intended) < 0.2
+    assert abs(pstdev(lofts) - expected) < 0.1 * expected
+
+
 def mean_speed(e: Engine, p, deg: float) -> float:
     a = math.radians(deg)
     return mean(math.hypot(*e.execute(p, 20 * math.cos(a), 20 * math.sin(a), 0.0, "passing")[:2])
