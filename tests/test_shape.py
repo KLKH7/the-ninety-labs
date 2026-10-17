@@ -1,5 +1,6 @@
 """Attacking shape (O6) and passes into space (O7)."""
 
+import math
 import random
 
 from ninety.sim import decisions as D
@@ -58,3 +59,34 @@ def test_with_the_ball_central_in_the_final_third_the_box_is_attacked_too():
     assert abs(at("RW", ball_x=60.0)[1] - 34.0) > 15.0  # before the final third: wide
     away = O.attacking_slot("RW", 105.0, 25.0, 34.0, 4.0)
     assert (away[0], round(away[1], 6)) == (7.0, 41.0)  # mirrored for the side attacking toward x = 0
+
+
+def test_the_box_runs_never_stack_two_attackers_on_one_spot():
+    for ball_y in (34.0, 40.0, 60.0):  # central, toward the wing, wide
+        for line in (101.0, 80.0):  # their line deep in the box, or high
+            spots = [slot(r, ball_x=80.0, ball_y=ball_y, line=line) for r in ("ST", "RCM", "RW", "LW")]
+            for i, a in enumerate(spots):
+                for b in spots[i + 1:]:
+                    assert math.hypot(a[0] - b[0], a[1] - b[1]) > 3.0, (ball_y, line, spots)
+    st, edge = slot("ST", ball_x=80.0, line=80.0), slot("RCM", ball_x=80.0, line=80.0)
+    assert abs((st[0] - edge[0]) - O.EDGE_BEHIND_M) < 1e-9  # the edge runner arrives behind the striker
+
+
+def test_no_spot_jumps_as_the_ball_becomes_wide():
+    for role in ("ST", "RW", "LW", "RCM"):
+        just_central = slot(role, ball_x=80.0, ball_y=34.0 + O.WIDE_BALL_M, line=101.0)
+        just_wide = slot(role, ball_x=80.0, ball_y=34.0 + O.WIDE_BALL_M + 0.01, line=101.0)
+        assert math.hypot(just_central[0] - just_wide[0], just_central[1] - just_wide[1]) < 0.5, role
+
+
+def test_a_ball_beyond_the_wide_mark_is_attacked_as_a_wide_ball():
+    wide = slot("ST", ball_x=80.0, ball_y=34.0 + O.WIDE_BALL_M + 4.0, line=101.0)
+    assert wide == (99.0, 34.0 + O.BOX_RUNS["ST"][1])  # the near six-yard-box corner, no further
+
+
+def test_box_runs_start_in_the_final_third_and_may_stand_level_with_the_ball():
+    inside = slot("ST", ball_x=O.FINAL_THIRD_M + 0.01, ball_y=34.0, line=101.0)
+    outside = slot("ST", ball_x=O.FINAL_THIRD_M, ball_y=34.0, line=101.0)
+    assert inside[0] == 99.0 and outside[0] < 99.0
+    level = slot("ST", ball_x=90.0, ball_y=34.0, line=80.0)  # their line behind the ball: level with it
+    assert level[0] == 90.0

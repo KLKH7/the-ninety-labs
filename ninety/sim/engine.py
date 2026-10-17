@@ -1400,16 +1400,18 @@ class Engine:
     @staticmethod
     def press_path(p: Player, fx: float, fy: float, ux: float, uy: float, gap: float) -> tuple[float, float]:
         """D8: the way a presser closes the carrier down. His spot is `gap` goal-side of where the
-        carrier is going, (fx, fy), on the line from there to the goal (direction (ux, uy)). Already
-        goal-side of that spot but off the line, he first gets into the lane at his own depth, so a
-        shot meets him on the way; once a foot's reach from the line (CONTROL_M), he steps up along
-        it. Level with the ball or behind it, he runs for the spot itself."""
+        carrier is going, (fx, fy), on the line from there to the goal (direction (ux, uy)). Goal-side
+        of that spot, he aims at the point of that line as far beyond the spot as he is off the line
+        (never nearer the carrier than the spot): on the line he steps straight up it; far off it he
+        first gets into it at about his own depth; in between he cuts in at 45 degrees, so a shot
+        meets him on the way. Level with the ball, behind it, or nearer the carrier than his spot,
+        he runs for the spot itself."""
         along = (p.x - fx) * ux + (p.y - fy) * uy  # how far goal-side of the carrier he is
-        if along > gap:
-            lx, ly = fx + ux * along, fy + uy * along  # the lane, at his depth
-            if math.hypot(p.x - lx, p.y - ly) > CONTROL_M:
-                return lx, ly
-        return fx + ux * gap, fy + uy * gap
+        if along <= gap:
+            return fx + ux * gap, fy + uy * gap
+        lateral = abs((p.x - fx) * uy - (p.y - fy) * ux)  # how far off the line
+        aim = gap + min(along - gap, lateral)
+        return fx + ux * aim, fy + uy * aim
 
     def presses_high(self, p: Player, brain: TeamBrain, bx: float, by: float) -> bool:
         """O9: is he the one of his side's pressing roles (roles.py) nearest the ball, while they

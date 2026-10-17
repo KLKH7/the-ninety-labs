@@ -1043,13 +1043,38 @@ def test_a_kick_clears_a_downed_keeper_before_judging_where_play_goes():
     assert seen == [None]
 
 
-def test_a_presser_off_the_lane_gets_into_it_first_then_closes_down_along_it():
-    from ninety.sim.body import CONTROL_M
+def test_a_presser_off_the_lane_cuts_into_it_then_closes_down_along_it():
     p = Engine(1).by_id["a4"]
     # The carrier is going to (30, 34); the lane runs toward the goal at x = 0; his spot is 2 m goal-side.
     p.x, p.y = 22.0, 39.0  # 8 m goal-side, 5 m off the lane
-    assert Engine.press_path(p, 30.0, 34.0, -1.0, 0.0, 2.0) == (22.0, 34.0)  # into the lane at his depth
-    p.y = 34.0 + CONTROL_M * 0.9  # within a foot's reach of the line
-    assert Engine.press_path(p, 30.0, 34.0, -1.0, 0.0, 2.0) == (28.0, 34.0)  # now he steps up along it
+    assert Engine.press_path(p, 30.0, 34.0, -1.0, 0.0, 2.0) == (23.0, 34.0)  # cuts in: 5 m beyond the spot
+    p.x, p.y = 22.0, 34.0  # on the line: straight up it to the spot
+    assert Engine.press_path(p, 30.0, 34.0, -1.0, 0.0, 2.0) == (28.0, 34.0)
+    p.x, p.y = 22.0, 54.0  # far off it: into the lane at his own depth first
+    assert Engine.press_path(p, 30.0, 34.0, -1.0, 0.0, 2.0) == (22.0, 34.0)
     p.x, p.y = 33.0, 39.0  # behind the ball: he runs for the spot itself
     assert Engine.press_path(p, 30.0, 34.0, -1.0, 0.0, 2.0) == (28.0, 34.0)
+    # No switch, so no stop-start: a step closer to the line moves his target by no more than the step.
+    for off in (0.5, 0.99, 1.0, 1.01, 2.0):
+        p.x, p.y = 22.0, 34.0 + off
+        near = Engine.press_path(p, 30.0, 34.0, -1.0, 0.0, 2.0)
+        p.y -= 0.02
+        nearer = Engine.press_path(p, 30.0, 34.0, -1.0, 0.0, 2.0)
+        assert math.hypot(near[0] - nearer[0], near[1] - nearer[1]) <= 0.02 + 1e-9
+
+
+def test_the_first_presser_takes_that_path_in_the_match():
+    e = Engine(1)
+    carrier, p = e.by_id["a10"], e.by_id["h4"]  # away attack toward x = 0; h4 defends that goal
+    carrier.x, carrier.y, carrier.vx, carrier.vy = 30.0, 34.0, 0.0, 0.0
+    e.ball = (30.0, 34.0, 0.0, 0.0, 0.0, 0.0)
+    e.give(carrier.id)
+    brain = e.brains["home"]
+    brain.in_possession, brain.changed_at, brain.pressers, brain.markers = False, e.t, [p.id], {}
+    p.x, p.y = 22.0, 39.0
+    tx, ty, _ = e.shape_target(p)
+    assert (round(tx, 6), round(ty, 6)) == (23.0, 34.0)
+    carrier.vx = -4.0  # running at goal: the lane is the one from where he is going (2 m on)
+    tx, ty, _ = e.shape_target(p)
+    assert (round(tx, 6), round(ty, 6)) == (22.0, 34.0)
+
