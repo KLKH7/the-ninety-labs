@@ -14,11 +14,12 @@ from ninety.sim.engine import Engine
 from ninety.sim.profiles import Profile
 
 
-def ref_flight(ground: float, up: float):
-    return D.fly((round(ground / D.LAUNCH_STEP_MPS), round(up / D.LAUNCH_STEP_MPS)))
+def ref_flight(ground: float, up: float, z0: float = 0.0):
+    key = (round(ground / D.LAUNCH_STEP_MPS), round(up / D.LAUNCH_STEP_MPS))
+    return D.fly(key + ((round(z0 / D.HEIGHT_STEP_M),) if z0 > 0 else ()))
 
 
-def ref_reach(points, rests, t_end, sx, sy, ux, uy, px, py, vx, vy, react, limit, box_x, late):
+def ref_reach(points, rests, t_end, sx, sy, ux, uy, px, py, vx, vy, react, limit, box_x, late, heads=True):
     """Hard: the first point he can play (a ball at rest whenever he gets there). Late: the least,
     over every playable point before `limit`, of when the ball and he could both be there."""
     best, at, last = math.inf, -1, len(points) - 1
@@ -30,8 +31,8 @@ def ref_reach(points, rests, t_end, sx, sy, ux, uy, px, py, vx, vy, react, limit
             continue
         bx, by = sx + ux * a, sy + uy * a
         hands = box_x is not None and D.in_box(bx, by, box_x)
-        reach_m, reach_z = offball.reach_for(hands, t - react)
-        if z > reach_z:
+        reach_m = offball.reach_at(hands, t - react, z, heads)
+        if reach_m is None:
             continue
         ok, gap, along = can_get_to(D.AVERAGE_BODY, bx - px, by - py, reach_m, vx, vy, t - react)
         if ok:
@@ -51,7 +52,7 @@ def reference(scene, tx, ty, mx, my, age, lofted, pace, receiver):
     sx, sy = scene.x, scene.y
     direction = math.atan2(ty - sy, tx - sx)
     # P16: everyone moves on while he turns
-    _, wait = D.strike_turn(scene.heading, tx - sx, ty - sy, scene.throw)
+    _, wait = (0.0, 0.0) if scene.header else D.strike_turn(scene.heading, tx - sx, ty - sy, scene.throw)
     seen = {m[0]: m for m in scene.mates}
     meant = seen.get(receiver, (receiver, mx, my, age))
     mvx, mvy = meant[4:6] or (0.0, 0.0)
@@ -66,7 +67,7 @@ def reference(scene, tx, ty, mx, my, age, lofted, pace, receiver):
     react = perception.CHOICE_REACTION_S
     total = 0.0
     for w, d_angle, ground, up in D.strike_nodes(scene, tx, ty, lofted, pace):
-        points, rests = ref_flight(ground, up)
+        points, rests = ref_flight(ground, up, scene.z)
         ux, uy = math.cos(direction + d_angle), math.sin(direction + d_angle)
         t_end = next((t for t, a, *_ in points if D.out_of_play(sx + ux * a, sy + uy * a)), math.inf)
         take, at, taker = math.inf, -1, None
@@ -76,11 +77,19 @@ def reference(scene, tx, ty, mx, my, age, lofted, pace, receiver):
                 take, at, taker = t, i, mate
         if taker is None:
             continue
-        _, _, _, g, vz = points[at]
+        if offball.headed(False, points[at][2]):  # he lets it drop if he gets it at his feet first
+            t_f, i_f = ref_reach(points, rests, t_end, sx, sy, ux, uy, *taker[:5], math.inf, None, False,
+                                 heads=False)
+            if t_f < math.inf and all(
+                    ref_reach(points, rests, t_end, sx, sy, ux, uy, ox + ovx * wait, oy + ovy * wait,
+                              ovx, ovy, react, t_f, scene.goal_x if keeper else None, False)[0] > t_f
+                    for ox, oy, ovx, ovy, keeper in scene.moving):
+                take, at = t_f, i_f
+        _, _, z, g, vz = points[at]
         if at == len(points) - 1 and rests:
             g = vz = 0.0
         rel = relative_speed(g * ux, g * uy, vz, taker[2], taker[3])
-        p = D.sigmoid((taker[5] - rel) / D.CONTROL_MARGIN_MPS)
+        p = 1.0 if offball.headed(False, z) else D.sigmoid((taker[5] - rel) / D.CONTROL_MARGIN_MPS)
         horizon = take + D.OPPONENT_LATE_S
         for ox0, oy0, ovx, ovy, keeper in scene.moving:
             ox, oy = ox0 + ovx * wait, oy0 + ovy * wait

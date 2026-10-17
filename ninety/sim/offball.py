@@ -12,7 +12,17 @@ from __future__ import annotations
 import math
 
 from ninety.sim import ball
-from ninety.sim.body import BODY_RADIUS, BRAKE_MAX, CONTROL_M, FOOT_REACH_Z, HAND_REACH_Z
+from ninety.sim.body import (
+    BODY_RADIUS,
+    BRAKE_MAX,
+    CONTROL_M,
+    FOOT_REACH_Z,
+    HAND_REACH_Z,
+    HEAD_JUMP_Z,
+    HEAD_REACH_M,
+    HEAD_STAND_Z,
+    JUMP_RISE_S,
+)
 from ninety.sim.perception import CHOICE_REACTION_S
 
 PITCH_X, PITCH_Y = 105.0, 68.0
@@ -73,10 +83,12 @@ def keeper_spot(ball_x: float, ball_y: float, own_goal_x: float) -> tuple[float,
     return best[1]
 
 
-def open_goal_share(x: float, y: float, goal_x: float, keeper: tuple[float, float]) -> float:
+def open_goal_share(x: float, y: float, goal_x: float, keeper: tuple[float, float],
+                    speeds_kmh: tuple[float, float] = SHOT_SPEEDS_KMH) -> float:
     """The share of the goal mouth, as seen from (x, y), that a keeper at `keeper` cannot get a hand
-    across before a typical shot gets there (P11, P15). Used by the keeper to choose where to
-    stand and by the shooter to judge him: one definition."""
+    across before a typical shot gets there (P11, P15), struck at `speeds_kmh` (a header: the speed
+    a header leaves at, P18). Used by the keeper to choose where to stand and by the shooter to
+    judge him: one definition."""
     def bearing(px: float, py: float) -> float:
         return math.atan2(py - y, abs(px - x))
     lo, hi = sorted((bearing(goal_x, PITCH_Y / 2 - GOAL_HALF_WIDTH),
@@ -87,7 +99,7 @@ def open_goal_share(x: float, y: float, goal_x: float, keeper: tuple[float, floa
         return 1.0
     gap = math.hypot(keeper[0] - x, keeper[1] - y)
     k = bearing(*keeper)
-    lo_kmh, hi_kmh = SHOT_SPEEDS_KMH
+    lo_kmh, hi_kmh = speeds_kmh
     open_share = 0.0
     for i in range(SHOT_SPEED_SAMPLES):  # over the speeds shots are struck at, not one typical speed
         speed = (lo_kmh + (hi_kmh - lo_kmh) * (i + 0.5) / SHOT_SPEED_SAMPLES) / 3.6
@@ -237,13 +249,39 @@ def may_handle(keeper: bool, in_own_box: bool, released_it: bool, back_pass: boo
     return keeper and in_own_box and not released_it and not back_pass
 
 
-def reach_for(hands: bool, stretched_s: float) -> tuple[float, float]:
-    """How far and how high a player can reach for the ball: a foot (CONTROL_M, below FOOT_REACH_Z),
-    or a keeper's hands, his arms stretched for `stretched_s` (since he reacted), up to HAND_REACH_Z.
-    One rule for the engine (engine.reach) and the passer's race (decisions.pass_confidence)."""
+def reach_at(hands: bool, since_react_s: float, z: float, heads: bool = True) -> float | None:
+    """P11: how far from his body's centre a player can play a ball whose lowest point is at height
+    `z`, `since_react_s` after he reacted to it. A keeper's hands (`hands`: in his box, Law 12)
+    reach up to HAND_REACH_Z, his arms stretched for that long. Otherwise a foot plays a ball below
+    FOOT_REACH_Z, and above it his head: standing (or stooping) up to HEAD_STAND_Z, or jumping up to
+    HEAD_JUMP_Z once he has had JUMP_RISE_S to rise; with `heads` False, only his feet (he lets it
+    drop: engine.goes_up). None: out of his reach at that height. One rule for the engine
+    (engine.reach) and the passer's race (decisions.pass_confidence)."""
     if hands:
-        return arm_reach_m(max(0.0, stretched_s)), HAND_REACH_Z
-    return CONTROL_M, FOOT_REACH_Z
+        return arm_reach_m(max(0.0, since_react_s)) if z <= HAND_REACH_Z else None
+    if z <= FOOT_REACH_Z:
+        return CONTROL_M
+    if heads and (z <= HEAD_STAND_Z or (z <= HEAD_JUMP_Z and since_react_s >= JUMP_RISE_S)):
+        return HEAD_REACH_M
+    return None
+
+
+def reach_limits(hands: bool, since_react_s: float, heads: bool = True) -> list[tuple[float, float]]:
+    """P11: (how far from his centre, up to what height) each part of him plays the ball,
+    `since_react_s` after he reacted: the same limits as reach_at, for a contact test along a path
+    (engine.contact): a keeper's hands; or his foot, then his head (standing, or jumping once he
+    has had time to rise)."""
+    if hands:
+        return [(arm_reach_m(max(0.0, since_react_s)), HAND_REACH_Z)]
+    zones = [(CONTROL_M, FOOT_REACH_Z)]
+    if heads:
+        zones.append((HEAD_REACH_M, HEAD_JUMP_Z if since_react_s >= JUMP_RISE_S else HEAD_STAND_Z))
+    return zones
+
+
+def headed(hands: bool, z: float) -> bool:
+    """A touch at this height is a header: above a foot's reach and not in a keeper's hands."""
+    return not hands and z > FOOT_REACH_Z
 
 
 def arm_reach_m(diving_s: float) -> float:

@@ -114,3 +114,32 @@ def shot(distance: float, speed: float, aim_height: float, dt: float) -> tuple[f
         return 0.0
     vz = _bisect(height_at, 0.0, speed * 0.6, aim_height)
     return math.sqrt(max(speed * speed - vz * vz, 0.01)), vz
+
+
+def aim_from(distance: float, speed: float, z0: float, aim_height: float, dt: float,
+             lowest_deg: float = -60.0, highest_deg: float = 40.0) -> tuple[float, float] | None:
+    """Horizontal and vertical launch speeds for a ball struck at `speed` with its lowest point at
+    `z0` (a header: struck in the air), so that it is at `aim_height` when it has travelled
+    `distance` (gravity and drag, the flight above), in flight: it has not come down before then. The
+    launch angle is searched between `lowest_deg` (struck down) and `highest_deg`; None if even the
+    highest does not get it there, or even the lowest is still above the aim."""
+    def height_at(angle: float) -> float:
+        c, s = math.cos(angle), math.sin(angle)
+        state = (0.0, 0.0, z0, speed * c, 0.0, speed * s)
+        for _ in range(int(8.0 / dt)):
+            nxt = step(state, dt)
+            if nxt[0] >= distance:
+                f = (distance - state[0]) / (nxt[0] - state[0])
+                return state[2] + f * (nxt[2] - state[2])
+            if nxt[2] <= 0.0 and state[5] <= 0.0:
+                # it comes down short: below the ground there, the shorter the lower, so the height
+                # at `distance` only rises with the angle and the search has one answer
+                return -1.0 - (distance - nxt[0]) / distance
+            state = nxt
+        return -2.0
+
+    lo, hi = math.radians(lowest_deg), math.radians(highest_deg)
+    if height_at(hi) < aim_height or height_at(lo) > aim_height:
+        return None  # out of reach, or so near that even struck down it is still above the aim
+    angle = _bisect(height_at, lo, hi, aim_height)
+    return speed * math.cos(angle), speed * math.sin(angle)

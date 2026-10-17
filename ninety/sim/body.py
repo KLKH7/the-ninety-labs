@@ -15,9 +15,26 @@ from ninety.sim.shape import SHOULDER_BREADTH_M
 GRAVITY = 9.81
 BODY_RADIUS = SHOULDER_BREADTH_M / 2  # P11: how far his body reaches sideways (the outline: shape.py)
 BODY_HEIGHT = 1.8  # a ball below this height can strike the body
+BODY_RESTITUTION = 0.3  # verify: share of the ball's speed into a body that it keeps (the head too)
 CONTROL_M = 1.0  # a foot reaches this far from the body's centre
 FOOT_REACH_Z = 1.0  # outfield players can play the ball below this height
 HAND_REACH_Z = 2.8  # P11: a jumping keeper's hand reach (standing about 2.35 m plus the jump)
+# P11: the head. A header meets the ball at the forehead, about 0.1 m below the top of the head, so
+# standing (or stooping) a player heads a ball whose lowest point is up to BODY_HEIGHT less that and
+# the ball's radius (its centre at the forehead); jumping (about 0.45 m with an arm swing, the same
+# jump as HAND_REACH_Z) he reaches higher, once he has had the time to rise. A header is played
+# within HEAD_REACH_M of his centre: the head over the body, leaning or stepping into it (design,
+# verify); no further than a foot reaches, so the race's lower bounds (decisions) hold for both.
+JUMP_M = 0.45  # P11 (verify for outfield players)
+HEAD_STAND_Z = BODY_HEIGHT - 0.1 - 0.11  # about 1.59 m: the ball's lowest point at a standing header
+HEAD_JUMP_Z = HEAD_STAND_Z + JUMP_M  # about 2.04 m
+JUMP_RISE_S = math.sqrt(2 * JUMP_M / GRAVITY)  # about 0.30 s from take-off to the top of the jump
+HEAD_REACH_M = 0.5  # design, verify
+# P18: the head drives through the ball at up to HEAD_SPEED_MPS (head closing speeds in purposeful
+# headers measured up to about 11 m/s; *verify*). The ball leaves along the line he heads it at that
+# speed, plus the share of its own speed into his head that it keeps (BODY_RESTITUTION): a hard
+# header is about 14 to 19 m/s.
+HEAD_SPEED_MPS = 11.0
 TURN_RATE = math.radians(350)  # P16: the fastest a body turns, 180° over a 0.52 s plant (rad/s)
 STRIKE_FACING = math.radians(60)  # P16 (design): the widest run-up angle tested with no loss
 F0_MEAN, F0_SD = 5.18, 0.46  # P2: acceleration from standing, m/s² (professional sprint tests)

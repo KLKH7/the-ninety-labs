@@ -521,14 +521,20 @@ def test_a_dribbler_touches_the_ball_on_only_once_he_faces_where_it_goes():
 
 
 def test_his_body_meets_a_ball_before_his_foot_can_if_it_gets_there_first():
-    e = Engine(1)
-    p = lone(e, "a6", 50.0, 30.0, math.pi)
-    e.possessor, e.last_touch, e.kicker_clear, e.kicked_at = None, "h2", True, e.t - 5.0
-    before = (49.75, 30.0, 1.3, 8.0, 0.0, -8.0)  # chest high, coming down onto him
-    e.ball = (49.75 + 8.0 * DT, 30.0, 1.3 - 8.0 * DT, 8.0, 0.0, -8.0)
-    e.contact(before)
-    hit = [ev for ev in e.match.events if ev["type"] == "deflection"]
-    assert hit and hit[0]["player"] == p.id and e.possessor is None  # off his chest, not a touch
+    # Chest high, coming down onto him: his body meets it before it is down to his feet. Before he
+    # has reacted it comes off his chest; once he has, alone (nobody to head it away from, P18), he
+    # lets it drop and cushions it there, at the same spot: a first touch, not a bounce.
+    for since, kind in ((0.0, "deflection"), (5.0, "possession_change")):
+        e = Engine(1)
+        p = lone(e, "a6", 50.0, 30.0, math.pi)
+        e.possessor, e.last_touch, e.kicker_clear, e.kicked_at = None, "h2", True, e.t - since
+        before = (49.75, 30.0, 1.3, 8.0, 0.0, -8.0)
+        e.ball = (49.75 + 8.0 * DT, 30.0, 1.3 - 8.0 * DT, 8.0, 0.0, -8.0)
+        e.contact(before)
+        hit = [ev for ev in e.match.events if ev["type"] in ("deflection", "possession_change")]
+        assert [ev["type"] for ev in hit] == [kind] and hit[0]["player"] == p.id
+        assert abs(hit[0]["x"] - (50.0 - shape.RADIUS_M - ball.RADIUS)) < 0.02  # on his chest
+        assert (e.possessor == p.id) == (kind == "possession_change")
 
 
 def test_a_ball_over_his_head_does_not_meet_his_body():
