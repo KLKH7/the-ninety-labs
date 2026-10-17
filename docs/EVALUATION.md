@@ -52,7 +52,7 @@ players), following the COCO evaluation conventions ([Lin et al., 2014](https://
 Within each frame and class, eligible detections are paired one-to-one, best-first. Player boxes
 match at IoU ≥ 0.50. Ball boxes match when their centre distance is ≤ 5 pixels. A label with no
 match is a false negative; a detection with no match is a false positive. The report contains
-TP, FP, FN, precision and recall overall, by class, and for the visibility groups below. Boxes
+TP, FP, FN, precision and recall overall, by class, and for the difficulty groups below. Boxes
 with visibility zero are not labels because they were not drawn. Run:
 
 ```bash
@@ -72,16 +72,38 @@ frame. It is not part of the pixel-box score above and must not be used to inter
 | Lenient | within 2.0 m | within 1.5 m | a looser comparison radius |
 
 **Difficulty groups.** Every true ball and player is put in groups using the renderer's
-labels, and TP, FP, FN, precision, recall and F1 are reported for each visibility group
-nested under its class (`visibility.player.visible`, for example), as well as overall:
+labels. TP, FP, FN, precision, recall and F1 are reported for each visibility group
+nested under its class (`visibility.player.visible`, for example), and independently for
+each image-boundary group (`image_boundary.player.edge-touching` and
+`image_boundary.player.interior`; likewise for `ball`), as well as overall:
 
 | Group | Rule (from `frames.jsonl`) |
 |---|---|
 | visible | visibility ≥ 0.9 |
 | partly hidden | 0.5 ≤ visibility < 0.9 |
 | mostly hidden | 0 < visibility < 0.5 |
-| in the air (ball) | height above 0.5 m, about knee height |
-| blurred | camera blur streak longer than 3 px, about half the width of a ball at broadcast distance |
+| edge-touching | saved bbox reaches any image boundary: x0 ≤ 0, y0 ≤ 0, x1 ≥ camera.width or y1 ≥ camera.height |
+| interior | saved bbox reaches none of those boundaries |
+| in the air (ball; planned) | height above 0.5 m, about knee height |
+| blurred (planned) | camera blur streak longer than 3 px, about half the width of a ball at broadcast distance |
+
+The boundary rule uses each frame's saved camera width and height, with no margin; labelled
+frames missing those dimensions fail rather than guessing a resolution. It does not measure
+a truncation percentage: saved boxes do not say how much of an object lies outside the image.
+A player with bbox `[1041, 705, 1053, 720]` in a 1280×720 image and visibility 1.0 is both
+visible and edge-touching. Occlusion visibility and boundary contact are separate axes.
+
+Matching runs once, not once per difficulty group. A matched prediction inherits its true
+label's group on each axis. An unmatched prediction is a false positive assigned to the
+nearest true label's group in the same frame and class (bbox centre distance; ties use the
+first label in saved order), even if that label was already matched. This is an attribution
+convention for group precision, not evidence of a false prediction's occlusion or boundary
+status. A false positive with no same-frame/class label remains in overall and by-class
+counts, but cannot be assigned to a difficulty group; group FP totals can therefore be lower
+than by-class FP totals. No prediction is matched twice or discarded from overall metrics.
+Unmatched labels count as FN in their groups. Precision is `null` without predictions
+(`TP + FP = 0`); recall is `null` without labels (`TP + FN = 0`); F1 follows the existing
+convention of `null` when either metric is undefined or both are zero.
 
 The ball target (recall ≥ 0.90) applies to balls at least half visible; the other groups are
 reported, never left out.
