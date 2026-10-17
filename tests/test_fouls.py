@@ -179,6 +179,96 @@ def test_a_taker_facing_away_turns_to_the_goal_before_he_strikes_the_penalty():
     assert off <= TURN_RATE * DT + 1e-9  # square to it, to one frame's turn
 
 
+def law14(e, taker, keeper):
+    """Everyone else where Law 14 puts them, as the wait before the kick would (out of the area,
+    behind the mark, 9.15 m from it)."""
+    for q in e.players:
+        if q is not taker and q is not keeper:
+            q.x, q.y = e.penalty_wait_spot(q)
+            q.vx = q.vy = 0.0
+
+
+def test_at_a_penalty_the_keeper_commits_at_the_strike_the_way_he_read_it():
+    """A2: he must commit before he can react to the ball, so he dives the way he read it, even
+    when the kick goes the other way, and has no second dive at the same kick."""
+    from ninety.sim.engine import DT
+
+    e = box_foul()
+    r = e.restart
+    taker, keeper = e.by_id[r.taker], e.keeper("away")
+    taker.x, taker.y, taker.heading = r.x - 0.3, r.y, 0.0  # behind the ball, facing goal
+    keeper.x, keeper.y, keeper.vx, keeper.vy = 105.0, 34.0, 0.0, 0.0  # on his line (Law 14)
+    law14(e, taker, keeper)
+    e.t = r.ready_at
+    e.decide = lambda *a, **k: None
+    e.keeper_read = lambda k, c, aim: 34.0 - 3.0 if aim > 34.0 else 34.0 + 3.0  # always the wrong way
+    dives, struck_at = [], None
+    for _ in range(3 * 25):
+        e.step()
+        if struck_at is None and any(ev["type"] == "shot" for ev in e.match.events):
+            struck_at = e.kicked_at
+        if e.dive and (not dives or dives[-1] != e.dive[:2]):
+            dives.append(e.dive[:2])
+            aim_side = 1.0 if e.ball[4] > 0 else -1.0  # the way the kick is going across the goal
+            assert e.dive[3] * aim_side < 0  # the way he read it, not the way it went
+    assert struck_at is not None and len(dives) == 1  # one dive, never a second at the same kick
+    assert dives[0][1] - struck_at <= 2 * DT  # at the strike, not after reacting (0.32 s or more)
+    assert keeper.profile.reaction() > 2 * DT
+
+
+def test_a_keeper_who_reads_a_penalty_down_the_middle_stays_there():
+    """A2: committing to the middle is staying put; he does not dive later at the same kick, even
+    at one going wide of him."""
+    import random
+
+    from ninety.sim import offball
+
+    wide = 0
+    for k in range(10):
+        e = box_foul()
+        r = e.restart
+        taker, keeper = e.by_id[r.taker], e.keeper("away")
+        taker.x, taker.y, taker.heading = r.x - 0.3, r.y, 0.0
+        keeper.x, keeper.y, keeper.vx, keeper.vy = 105.0, 34.0, 0.0, 0.0  # on his line (Law 14)
+        law14(e, taker, keeper)
+        e.t = r.ready_at
+        e.rng = random.Random(k)
+        e.decide = lambda *a, **k: None
+        e.keeper_read = lambda k, c, aim: k.y  # read on the spot where he stands
+        cross = None
+        for _ in range(3 * 25):
+            e.step()
+            assert not (e.dive and e.dive[0] == keeper.id)
+            if cross is None and e.kicked and e.kicked["type"] == "shot":
+                arrival = e.ball_at_x(keeper.x)
+                cross = arrival[1] if arrival else 34.0
+        wide += abs(cross - 34.0) > offball.arm_reach_m(10.0)  # beyond his arms at full stretch
+    assert wide  # some went beyond his reach standing, and still he did not dive
+
+
+def test_in_open_play_the_keeper_dives_only_once_he_has_reacted():
+    """A2, P15: only a penalty is committed to before the strike; any other shot he reacts to."""
+    from ninety.sim.engine import DT
+    from ninety.sim.saves import shoot_once
+
+    dives = []
+    real = __import__("ninety.sim.engine", fromlist=["Engine"]).Engine.keeper_dive
+
+    def spy(self, p):
+        moved = real(self, p)
+        if self.dive and self.dive[0] == p.id and not dives:
+            dives.append(self.dive[1] - self.kicked_at - self.reaction(p))
+        return moved
+    import ninety.sim.engine as en
+    en.Engine.keeper_dive = spy
+    try:
+        for seed in range(6):
+            shoot_once(seed, 16, "line")
+    finally:
+        en.Engine.keeper_dive = real
+    assert dives and all(late >= -DT / 2 for late in dives)
+
+
 def test_in_his_own_box_a_lunge_through_the_man_needs_a_surer_win():
     from ninety.sim.engine import COMMIT_P
 

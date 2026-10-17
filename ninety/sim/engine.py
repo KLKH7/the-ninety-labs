@@ -308,7 +308,9 @@ class Engine:
         self.pass_target: tuple[float, float] | None = None  # where the pass in flight was aimed
         self.offside: set[str] = set()  # L10: team-mates in an offside position when the ball was played
         self.from_restart: str | None = None  # the restart the next kick is taken from
-        self.read: tuple[str, float] | None = None  # (keeper, y): where he reads a shot is going
+        # (keeper, y, strike t): where he reads a shot is going; the strike's time if he must commit
+        # to it (a penalty, A2), else None
+        self.read: tuple[str, float, float | None] | None = None
         # (keeper, start t, start y, signed travel, when his arms began to stretch)
         self.dive: tuple[float | str, ...] | None = None
         self.landed: tuple[str, float] | None = None  # (keeper, his arms' stretch start) while he is down
@@ -618,7 +620,8 @@ class Engine:
         # before he can react to the ball itself; the read can be wrong (A2).
         keeper = self.keeper(other(team))
         read = self.keeper_read(keeper, carrier, ty)
-        self.read = None if read is None else (keeper.id, read)
+        commit = self.t if self.from_restart == "penalty_kick" else None  # kick() strikes it now
+        self.read = None if read is None else (keeper.id, read, commit)
         vx, vy, vz = self.execute(carrier, *self.aim(bx, by, gx, ty, ground, up), "finishing")
         speed = math.sqrt(vx * vx + vy * vy + vz * vz)
         # Outcome and end point are observed: set when the ball is touched, goes out or goes in.
@@ -1399,6 +1402,18 @@ class Engine:
         shot_at_him = k and k["type"] == "shot" and k["team"] != p.team and self.possessor is None
         reacted = self.t - self.kicked_at >= self.reaction(p)  # to the last touch, a deflection too
         fresh = self.dived_at.get(p.id) != self.kicked_at  # not already dived at this touch
+        committed = bool(self.read and self.read[0] == p.id and self.read[2] == self.kicked_at)
+        if (self.dive is None and shot_at_him and committed and fresh
+                and self.off_balance.get(p.id, -1.0) <= self.t):
+            # A2: at a penalty he commits at the strike, before he can react to the ball: he goes
+            # the way he read it, as far as his read (between the posts) or a full dive, and has no
+            # second dive at the same kick (a read on the spot is staying in the middle).
+            post = PITCH_Y / 2 - GOAL_HALF_WIDTH, PITCH_Y / 2 + GOAL_HALF_WIDTH
+            to = clamp(self.read[1], *post) - p.y
+            if to:
+                travel = math.copysign(min(abs(to), KEEPER_DIVE_TRAVEL_M), to)
+                self.dive = (p.id, self.t, p.y, travel, self.t, math.copysign(1.0, travel) * p.vy)
+            self.dived_at[p.id] = self.kicked_at
         if (self.dive is None and shot_at_him and reacted and fresh
                 and self.off_balance.get(p.id, -1.0) <= self.t):
             arrival = self.ball_at_x(p.x)  # where the ball's own flight takes it past him
