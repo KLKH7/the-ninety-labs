@@ -128,6 +128,19 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_engine_rules.py::test_a_throw_in_taker_runs_to_his_spot_and_stops_there`
   asserts a throw-in happened before checking speeds; it fails on the old engine.
 
+### 30. Score only what was run
+- **What happened:** the vision scorer built labels from every row of `frames.jsonl`, and
+  flattening the detections dropped frames with an empty list, so it could not tell "ran and
+  found nothing" from "never ran". Detecting every 25th frame of a 250-frame clip with the COCO
+  RF-DETR checkpoint scored player recall 0.04 (TP 89, FN 2102); on the 10 frames actually run it
+  is 0.99 (TP 89, FN 1). The detections contract already said an empty list marks a run frame;
+  the scorer did not read it.
+- **Rule:** an evaluation scores only the inputs the system was given. Read the set of run
+  frames before any step that can drop empty records, and report how many were scored and
+  skipped, so a denominator is visible rather than assumed.
+- **Check:** `tests/test_vision_score.py::test_only_frames_the_detector_ran_on_are_scored`
+  fails on the original code (FN 6 instead of 3).
+
 ## Working in the repo
 
 ### 12. "No checks yet" is not "checks passed"
