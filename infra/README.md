@@ -11,7 +11,9 @@ subscription allows five regions; that one has our models).
 | User-assigned managed identity | the app pulls its image with it (AcrPull); no registry password |
 | Log Analytics workspace | container logs; 30-day retention, 0.2 GB/day cap |
 | Container Apps job `render` + its identity | renders training clips in parallel executions (2 vCPU, 4 GiB each), on the public Playwright image |
-| Storage account + `renders` container | the rendered clips; shared keys and public access off, Entra roles only |
+| Storage account + `renders` container | the rendered clips (images and `clip.json`); shared keys and public access off, Entra roles only |
+| `truth` container | the answer key of every clip (`events.jsonl`, `frames.jsonl`): only the render job and the maintainer reader hold a role that reaches it, and CI checks that ([check_truth_sealed.py](check_truth_sealed.py)) |
+| Queues `render-requests`, `render-requests-failed` + job `render-queue` | the data factory: the Data agent queues requests, Azure starts one execution per request (up to six), failed requests are set aside with the error |
 
 Not managed here yet: the Foundry (`ninety-labs-ai`) and Speech (`ninety-labs-speech`)
 resources, created by hand earlier, and the $20 monthly budget alert. Cosmos DB, the Personalizer
@@ -66,7 +68,8 @@ fetches this repo at the commit `start` passes, and runs
 [render-job-start.sh](render-job-start.sh). This subscription does not allow ACR Tasks, and an
 emulated amd64 build of Chromium ran a laptop out of memory. Each execution renders its clips
 with software GL, runs the render checks, uploads passing clips to `renders/<run>/train/seed<N>/`
-(`clip.json` last, so a retried execution skips finished seeds) and reports failing ones in
+and their ground truth to `truth/<run>/train/seed<N>/` (`clip.json` last, so a retried execution
+skips finished seeds) and reports failing ones in
 `renders/<run>/failed/`. Test-set seeds are refused: the fixed test set is rendered once,
 locally, so its pixels never depend on the machine that drew them.
 
@@ -82,3 +85,27 @@ uv run ninety-render-check runs/dataset/v1/train/seed*   # check again after dow
 
 Estimated cost, from local timing (confirm on the first run): about 600 vCPU-seconds and 1,200 GiB-seconds per ten-second clip, so 200 clips sit inside
 the Consumption plan's monthly free grant; blobs are about 30 MB a clip.
+
+## The data factory: targeted rounds from the queue
+
+Where vision fails, the Vision Auditor writes failure clusters (`runs/<round>/clusters.json`, the
+handoff in [docs/TEAM.md](../docs/TEAM.md)). The Data agent
+([ninety/agents/data_agent.py](../ninety/agents/data_agent.py)) turns them into render requests:
+the clip budget split by misses, render settings the renderer accepts, training seeds only, one
+engine commit for the whole round. It writes the plan to `runs/<round>/requests.json`, then queues
+it. The `render-queue` job is started by Azure for each waiting request (the KEDA queue scaler,
+reading the queue as the render identity), renders it, and deletes it; a request for another
+commit, or with bad settings, is set aside in `render-requests-failed` at once, and a crash gets
+one retry.
+
+```bash
+azd env set RENDER_COMMIT "$(git rev-parse HEAD)"   # pushed sha or engine tag: what every execution runs
+azd provision                                       # creates the queue job on that commit
+infra/render-job.sh round runs/round1/clusters.json 2001 40   # Data agent: plan and queue 40 clips
+infra/render-job.sh queue                           # waiting and set-aside requests
+infra/render-job.sh status
+infra/render-job.sh download round1 runs/dataset    # clips and their truth, one folder per clip
+```
+
+Change `RENDER_COMMIT` only between rounds: requests made for the old commit are refused by the
+new job, by design, so a round never mixes engine versions.
