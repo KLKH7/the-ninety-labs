@@ -8,7 +8,7 @@ from statistics import mean, pstdev
 import pytest
 
 from ninety.sim import ball, offball, perception, shape
-from ninety.sim.body import TURN_RATE
+from ninety.sim.body import STRIKE_FACING, TURN_RATE
 from ninety.sim.engine import (
     AERIAL_ABSORB,
     BODY_RESTITUTION,
@@ -1441,7 +1441,8 @@ def test_a_thrower_turns_to_face_the_field_no_faster_than_a_body_turns_then_thro
             break
         e.t += DT
         e.frame += 1
-    assert thrown is not None and math.sin(thrown) > 0  # Law 15: thrown facing the field
+    assert thrown is not None  # Law 15: thrown facing the field, within the P16 strike angle of it
+    assert math.cos(thrown - math.pi / 2) >= math.cos(STRIKE_FACING) - 1e-9
     assert hands == [True]  # with both hands
 
 
@@ -1480,3 +1481,21 @@ def test_a_throw_has_no_kicking_side_so_where_he_faces_does_not_change_it():
         kicked.append(e.execute(p, 0.0, 10.0, 4.0, "passing"))
     assert thrown[0] == thrown[1]
     assert kicked[0] != kicked[1]  # a kick does depend on it (P13)
+
+
+def test_a_throw_taken_from_a_restart_and_never_entering_is_retaken_where_it_was_awarded():
+    e = Engine(1)
+    still(e)
+    e.possessor = None
+    e.stop("throw_in", "home", (40.0, 0.0))
+    taker = e.by_id[e.restart.taker]
+    taker.x, taker.y = throw_stand(40.0, 0.0)
+    e.restart.ready_at = e.t
+    e.tick_restart()  # placed: the throw is awarded at x = 40
+    # Released backwards and drifting along the line, away from where it was awarded.
+    e.possessor, e.last_touch, e.into_play = None, taker.id, True
+    e.ball = (41.3, -0.45, 1.9, 1.0, -4.0, 0.5)
+    assert e.went_out((41.26, -0.29, 1.88, 1.0, -4.0, 0.6))
+    r = e.restart
+    assert (r.kind, r.team, r.taker, r.x, r.y) == ("throw_in", "home", taker.id, 40.0, 0.0)
+    assert not e.into_play
