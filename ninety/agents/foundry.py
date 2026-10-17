@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import hashlib
+import inspect
 import json
 import sys
 import warnings
@@ -53,6 +54,10 @@ def definition(agent: Agent, guardrail: str = GUARDRAIL) -> PromptAgentDefinitio
     defn = to_prompt_agent(agent, rai_config=RaiConfig(rai_policy_name=guardrail))
     for tool in defn.get("tools") or []:
         tool["parameters"] = strict_schema(tool["parameters"])
+        if tool.get("description"):
+            # MCP tool descriptions are docstrings, which Python 3.13 dedents at compile time and
+            # 3.11/3.12 do not; clean them so every interpreter publishes and pins the same text.
+            tool["description"] = inspect.cleandoc(tool["description"])
     return defn
 
 

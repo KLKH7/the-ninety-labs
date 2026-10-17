@@ -88,6 +88,18 @@ short and actionable. This file is public: no research sources, product names or
   the C math library, and pins `fmath`'s results bit for bit; CI runs it and the cue fixture on
   Linux and macOS.
 
+### 31. A pin must hash the same on every supported Python
+- **What happened:** each Foundry agent is pinned by a hash of its definition, which includes the
+  match MCP tools' descriptions, and those are Python docstrings. Python 3.13 strips a
+  docstring's common indentation at compile time; 3.11 and 3.12 keep it. So the same commit
+  pinned the analyst as `ac3506fea4a55bf5` on 3.11/3.12 and `e0cd9e865dde8428` on 3.13, and the
+  pin test failed on 3.13, which `pyproject.toml` allows but CI did not run.
+- **Rule:** anything hashed, pinned or published is normalised first (`inspect.cleandoc` for
+  text taken from docstrings), and is the same bytes on every Python `pyproject.toml` allows.
+  Change a pin only by `uv run ninety-agents publish`, never by hand.
+- **Check:** `test_the_fingerprint_does_not_depend_on_docstring_indentation`; and
+  `uv run --python 3.11`, `3.12` and `3.13` print the same fingerprints for every agent.
+
 ## Checks that prove something
 
 ### 8. A check must be able to fail

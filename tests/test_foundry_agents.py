@@ -65,6 +65,25 @@ def test_tool_schemas_are_strict():
         assert "default" not in str(params)
 
 
+def test_the_fingerprint_does_not_depend_on_docstring_indentation():
+    # Python 3.13 dedents docstrings at compile time and 3.11/3.12 do not, and the MCP tools'
+    # descriptions are docstrings: the same code must pin the same version on every interpreter.
+    analyst = AGENTS[0]
+
+    def described(text):
+        tools = [
+            foundry.FunctionTool(name=t.name, description=text, input_model=t.parameters())
+            for t in analyst.default_options["tools"]
+        ]
+        agent = foundry.Agent(client=analyst.client, name=analyst.name, instructions="x", tools=tools)
+        return foundry.definition(agent)
+
+    kept = described("First line.\n    second line,\n    third line.")  # 3.11 and 3.12
+    stripped = described("First line.\nsecond line,\nthird line.")  # 3.13
+    assert foundry.fingerprint(kept) == foundry.fingerprint(stripped)
+    assert {t["description"] for t in kept["tools"]} == {"First line.\nsecond line,\nthird line."}
+
+
 def test_strict_schema_reaches_nested_objects():
     schema = {
         "type": "object",
