@@ -681,3 +681,13 @@ short and actionable. This file is public: no research sources, product names or
   heads it, lets it drop to his feet, cushions it on his body) and show each one in the new code.
 - **Check:** run both branches' tests on the merge before resolving any test conflict, and read
   each failure as a possible regression before treating it as an outdated expectation.
+
+### 69. A habit strengthens what a role does; it does not invent a new behaviour
+- **What happened:** a "runs in behind" habit, which any player could draw, added a run in behind
+  to whatever role he had, so centre-backs sprinted beyond the opponents' last line. Tests of the
+  new off-ball choice also passed with the role priors switched off, because they compared
+  pictures that differed in more than the prior.
+- **Rule:** a trait multiplies a prior the role already has. A test of a lean (a prior, a style)
+  holds everything else equal, so only the lean can tell the outcomes apart.
+- **Check:** mutation-test each prior (set it to 1, drop it from the worth); the test named after
+  it must go red.

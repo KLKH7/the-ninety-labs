@@ -15,7 +15,9 @@ def test_true_claim_passes():
 
 
 def test_planted_number_is_rejected():
-    text = f"{PASS['player']} plays a {PASS['distance_m'] + 37} m pass."
+    used = {v for v in PASS.values() if isinstance(v, int)}
+    planted = next(n for n in range(PASS["distance_m"] + 37, 1000) if n not in used)  # in no cited field
+    text = f"{PASS['player']} plays a {planted} m pass."
     verdict = check(Claim(text, [PASS["id"]]), KNOWN)
     assert not verdict.ok
     assert any("distance_m" in reason for reason in verdict.reasons)

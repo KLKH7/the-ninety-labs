@@ -689,7 +689,11 @@ def test_the_engine_uses_the_attacking_shape_with_the_ball():
     e.brains["home"].in_possession = True
     e.possessor = None  # a pass in flight: the shape still holds
     e.ball = (50.0, 34.0, 0.0, 0.0, 0.0, 0.0)
-    want = offball.attacking_slot("RB", 0.0, 50.0, 34.0, e.brains["away"].line_x)
+    from ninety.sim import roles
+    role, style = roles.role_of(p.profile.archetype), roles.STYLES[e.brains["home"].build_up]
+    seen = [w for w in (e.beliefs[p.id].where(q.id, e.t) for q in e.players if q.team != p.team) if w]
+    want = offball.attacking_slot("RB", 0.0, 50.0, 34.0, e.onside_limit("home", seen, 50.0),
+                                  role.forward_m + style.forward_m, role.inside_m - style.width_m)
     assert e.shape_target(p)[:2] == want
 
 
@@ -778,9 +782,12 @@ def test_every_off_ball_target_is_reached_just_in_time_through_the_real_path():
                 continue
             if s.brains[p.team].pressers[:1] == [p.id]:  # the presser keeps his work rate (T3)
                 continue
+            if s.presses_high(p, s.brains[p.team], *s.play_point(p)):  # so does a pressing role (O9)
+                continue
             tx, ty, speed = s.shape_target(p)
-            if s.chase.get(p.team, [None])[0] == p.id or (s.brains[p.team].in_possession and s.run_target(
-                    p, s.by_id[s.possessor], s.brains[p.team]) if s.possessor else False):
+            # O10: a forward run is a sprint, while a team-mate has the ball
+            running = s.possessor is not None and s.moves.get(p.id, ("hold",))[0] in offball.FORWARD_RUNS
+            if s.chase.get(p.team, [None])[0] == p.id or (s.brains[p.team].in_possession and running):
                 continue
             assert speed >= s.in_time(p, tx, ty) - 1e-9, (p.id, speed)
             checked += 1
@@ -888,9 +895,9 @@ def test_play_is_where_the_ball_is_once_a_pass_is_deflected_or_has_run_past_its_
 
 def test_a_kickoff_starts_a_new_phase_of_play():
     e = Engine(1)
-    e.dribbler, e.runs, e.chase = "h7", {"h9": (90.0, 30.0)}, {"home": ["h7"]}
+    e.dribbler, e.moves, e.chase = "h7", {"h9": ("in_behind", 90.0, 30.0, 0.0)}, {"home": ["h7"]}
     e.kickoff("away")
-    assert e.dribbler is None and not e.runs and not e.chase
+    assert e.dribbler is None and not e.moves and not e.chase
 
 
 def test_a_marker_chases_harder_when_his_man_runs_away_from_him_than_toward_him():
@@ -1758,3 +1765,40 @@ def test_a_thrower_arriving_faster_than_one_frame_of_braking_does_not_take_the_b
     e, taker = thrower_ready_at(sx, sy, vx=limit * 0.95)
     e.tick_restart()
     assert e.restart is None and e.throw_by == taker.id
+
+
+def test_a_presser_off_the_lane_cuts_into_it_then_closes_down_along_it():
+    p = Engine(1).by_id["a4"]
+    # The carrier is going to (30, 34); the lane runs toward the goal at x = 0; his spot is 2 m goal-side.
+    p.x, p.y = 22.0, 39.0  # 8 m goal-side, 5 m off the lane
+    assert Engine.press_path(p, 30.0, 34.0, -1.0, 0.0, 2.0) == (23.0, 34.0)  # cuts in: 5 m beyond the spot
+    p.x, p.y = 22.0, 34.0  # on the line: straight up it to the spot
+    assert Engine.press_path(p, 30.0, 34.0, -1.0, 0.0, 2.0) == (28.0, 34.0)
+    p.x, p.y = 22.0, 54.0  # far off it: into the lane at his own depth first
+    assert Engine.press_path(p, 30.0, 34.0, -1.0, 0.0, 2.0) == (22.0, 34.0)
+    p.x, p.y = 33.0, 39.0  # behind the ball: he runs for the spot itself
+    assert Engine.press_path(p, 30.0, 34.0, -1.0, 0.0, 2.0) == (28.0, 34.0)
+    # No switch, so no stop-start: a step closer to the line moves his target by no more than the step.
+    for off in (0.5, 0.99, 1.0, 1.01, 2.0):
+        p.x, p.y = 22.0, 34.0 + off
+        near = Engine.press_path(p, 30.0, 34.0, -1.0, 0.0, 2.0)
+        p.y -= 0.02
+        nearer = Engine.press_path(p, 30.0, 34.0, -1.0, 0.0, 2.0)
+        assert math.hypot(near[0] - nearer[0], near[1] - nearer[1]) <= 0.02 + 1e-9
+
+
+def test_the_first_presser_takes_that_path_in_the_match():
+    e = Engine(1)
+    carrier, p = e.by_id["a10"], e.by_id["h4"]  # away attack toward x = 0; h4 defends that goal
+    carrier.x, carrier.y, carrier.vx, carrier.vy = 30.0, 34.0, 0.0, 0.0
+    e.ball = (30.0, 34.0, 0.0, 0.0, 0.0, 0.0)
+    e.give(carrier.id)
+    brain = e.brains["home"]
+    brain.in_possession, brain.changed_at, brain.pressers, brain.markers = False, e.t, [p.id], {}
+    p.x, p.y = 22.0, 39.0
+    tx, ty, _ = e.shape_target(p)
+    assert (round(tx, 6), round(ty, 6)) == (23.0, 34.0)
+    carrier.vx = -4.0  # running at goal: the lane is the one from where he is going (2 m on)
+    tx, ty, _ = e.shape_target(p)
+    assert (round(tx, 6), round(ty, 6)) == (22.0, 34.0)
+

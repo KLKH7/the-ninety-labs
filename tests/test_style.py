@@ -9,7 +9,7 @@ from statistics import mean
 import pytest
 
 from ninety.sim import decisions as D
-from ninety.sim import perception
+from ninety.sim import perception, roles
 from ninety.sim import style as style_mod
 from ninety.sim.engine import Engine, simulate
 from ninety.sim.profiles import Profile
@@ -259,9 +259,17 @@ def test_the_carrier_reads_his_teams_style_and_whether_the_counter_is_on():
     countering = e.scene_for(carrier)
     brain.changed_at = e.t - TRANSITION_S - 1
     settled = e.scene_for(carrier)
-    assert countering.progress_weight > settled.progress_weight > 1.0
+    # One style system (render/latest): the counter dial weights ground gained in a counter; the
+    # directness dial reaches him through his team's build-up (high: direct), as a value per metre.
+    assert countering.progress_weight > settled.progress_weight == 1.0
     assert settled.loss_weight < 1.0
-    assert e.scene_for(e.by_id["a7"]).progress_weight == 1.0  # the away side plays the default
+    teamwork = 0.5 + carrier.profile["teamwork"]
+    assert brain.build_up == "direct"
+    assert settled.progress == pytest.approx(roles.STYLES["direct"].progress_per_m * teamwork)
+    away = e.by_id["a7"]
+    assert e.brains["away"].build_up == "quick"  # the default directness
+    assert e.scene_for(away).progress == pytest.approx(
+        roles.STYLES["quick"].progress_per_m * (0.5 + away.profile["teamwork"]))
 
 
 def test_a_high_counter_attacking_team_sends_its_midfielders_in_behind_while_the_counter_is_on():
@@ -283,7 +291,8 @@ def test_a_high_counter_attacking_team_sends_its_midfielders_in_behind_while_the
         brain.in_possession, brain.changed_at = True, e.t
         e.brains["away"].line_x = 70.0
         assert "runs_in_behind" not in runner.profile.traits
-        assert (e.run_target(runner, carrier, brain) is not None) is runs
+        # O10 replaced run_target: the run in behind is open to him (move_spot) only in the counter
+        assert (e.move_spot(runner, carrier, brain, "in_behind") is not None) is runs
 
 
 def test_on_ball_weights_never_go_negative_anywhere_on_the_dial():

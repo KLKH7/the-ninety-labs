@@ -187,6 +187,10 @@ class Scene:
     header: bool = False
     z: float = 0.0
     incoming: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    progress: float = 0.0  # T4: his team's intent, value per metre gained toward goal (roles.STYLES)
+    hold_decay: float = HOLD_DECAY  # D9: his team's tempo (roles.STYLES)
+    held: int = 0  # D9: decisions in a row he has already spent holding
+    flair: float = 0.5  # A8: how strongly he is drawn to the low-percentage option
 
 
 @dataclass
@@ -198,6 +202,7 @@ class Option:
     lofted: bool = False
     pace: float = ARRIVE_MPS  # a ground pass's arrival speed, as chosen
     launch: tuple[float, float] | None = None  # a header away: (ground, up) as estimated, struck so
+    chance: float = 1.0  # A8: his own estimate that it works (a pass arriving, a carry kept, a goal)
 
 
 def attack(goal_x: float) -> float:
@@ -822,11 +827,15 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
         # its path than he can run by then matters (a shortcut, like `lb`).
         reached = points[min(len(points) - 1, int(horizon / (RACE_STEP * DT)) + 1)][1]
         hx, hy = sx + ux * reached, sy + uy * reached
+        # A body in its way can stop it whoever chases; but they send one man after a free ball
+        # (engine.plan_chase: the one who gets to its path first), so only the soonest of them
+        # races the team-mate for it.
+        first = math.inf
         for ox, oy, ovx, ovy, keeper, lb, body, sigma0, sigma_v in rivals:
             if body:
                 p *= 1 - body_hit(points, take, sx, sy, ux, uy, ox, oy, ovx, ovy, react, sigma0, sigma_v)
-            if lb > horizon:
-                continue  # he could not be there soon enough to matter
+            if lb > horizon or lb > first:
+                continue  # he could not be there soon enough to matter, or another gets there sooner
             near = distance_to_segment(ox, oy, sx, sy, hx, hy) - (arm_max if keeper else CONTROL_M)
             if react + _soonest(near, math.hypot(ovx, ovy)) > horizon:
                 continue
@@ -834,10 +843,42 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
             # just short of the lane is nearly as much a risk as one who just reaches it.
             t, _ = reach_time(points, t_end, rests, sx, sy, ux, uy, ox, oy, ovx, ovy, react,
                               horizon, scene.goal_x if keeper else None, late=True)
-            if t <= horizon:
-                p *= sigmoid((t - take) / LANE_MARGIN_S)
+            first = min(first, t)
+        if first <= horizon:
+            p *= sigmoid((first - take) / LANE_MARGIN_S)
         total += w * p
     return total * (0.8 if age > STALE_S else 1.0)
+
+
+def lane_chance(sx: float, sy: float, tx: float, ty: float, opponents) -> float:
+    """D1, the same race at its simplest, for a pass a team-mate could play next: the ball at a
+    pass's average speed against the soonest opponent (an average body from standing, after
+    reacting) to any point of the lane, softened by LANE_MARGIN_S. No kick error, no first touch:
+    a cheap look one pass ahead, not the full estimate."""
+    length = math.hypot(tx - sx, ty - sy)
+    margin = math.inf
+    for ox, oy in opponents:
+        d, s = closest_on_segment(ox, oy, sx, sy, tx, ty)
+        margin = min(margin, generic_time(max(0.0, d - CONTROL_M)) - s * length / PASS_SPEED_EST_MPS)
+    return 1.0 if margin == math.inf else sigmoid(margin / LANE_MARGIN_S)
+
+
+def next_pass_value(scene: Scene, rx: float, ry: float, receiver: str | None) -> float:
+    """D1, one pass ahead: what a team-mate receiving at (rx, ry) could do next, his best pass to
+    another team-mate (not back to the passer), valued as any pass is: the chance it arrives times
+    what the ball is worth there, less what losing it would cost. Opponents where the passer sees
+    them now."""
+    best = -math.inf
+    for mid, mx, my, *_ in scene.mates:
+        if mid == receiver:
+            continue
+        d = math.hypot(mx - rx, my - ry)
+        if d < 4 or d > MAX_PASS_M:
+            continue
+        p = lane_chance(rx, ry, mx, my, scene.opponents)
+        lost = max(loss_cost((rx + mx) / 2, (ry + my) / 2, scene.goal_x), loss_cost(mx, my, scene.goal_x))
+        best = max(best, p * value(mx, my, scene.goal_x, scene.opponents, scene.keeper) - (1 - p) * lost)
+    return best
 
 
 def pass_option(scene: Scene, mate: tuple[str, float, float, float]) -> Option | None:
@@ -887,6 +928,8 @@ def aimed_pass(scene: Scene, mid: str, mx: float, my: float, age: float, tx: flo
     gain = our_value(scene, tx, ty)
     space = min((math.hypot(ox - tx, oy - ty) for ox, oy in scene.opponents), default=10.0)
     gain *= 0.7 + 0.3 * min(1.0, space / 5.0)  # a receiver with space can do more with it
+    # D1, one pass ahead: the ball there is worth at least what he can do with it next.
+    gain = max(gain, next_pass_value(scene, tx, ty, mid))
     # A pass that fails is lost along the lane or runs on to where it was aimed: the worse of the two.
     mx_, my_ = (scene.x + tx) / 2, (scene.y + ty) / 2
     lost = max(our_loss(scene, mx_, my_), our_loss(scene, tx, ty))
@@ -902,9 +945,10 @@ def aimed_pass(scene: Scene, mid: str, mx: float, my: float, age: float, tx: flo
     best = None
     for lofted, pace in ways:
         confidence = pass_confidence(scene, tx, ty, mx, my, age, lofted, pace, mid)
-        ev = confidence * gain - (1 - confidence) * lost
+        ahead = max(0.0, (tx - scene.x) * attack(scene.goal_x))
+        ev = confidence * (gain + scene.progress * ahead) - (1 - confidence) * lost
         if best is None or ev > best.value:
-            best = Option("pass", ev, (tx, ty), mid, lofted, pace)
+            best = Option("pass", ev, (tx, ty), mid, lofted, pace, chance=confidence)
     return best
 
 
@@ -944,7 +988,7 @@ def options(scene: Scene) -> list[Option]:
         missed = our_loss(scene, scene.goal_x - attack(scene.goal_x) * GOAL_KICK_M, PITCH_Y / 2)
         lost = blocked * our_loss(scene, scene.x, scene.y) + (1 - blocked) * missed
         out.append(Option("shoot", q * bias * (1 + 0.5 * scene.risk) - (1 - q) * lost,
-                          (scene.goal_x, PITCH_Y / 2)))
+                          (scene.goal_x, PITCH_Y / 2), chance=q))
     if scene.header:
         # P18: in the air he can only head it: no dribble, nothing to hold. Or he heads it away, as
         # far as he can, toward the side a clearance goes: in his own third that is a clearance,
@@ -976,14 +1020,18 @@ def options(scene: Scene) -> list[Option]:
             my_t = s * DRIBBLE_STEP_M / dribble_speed(scene.dribbling)
             win *= sigmoid((generic_time(d) - my_t) / RECEIVE_MARGIN_S)
         gain = our_value(scene, tx, ty)
+        gain += scene.progress * max(0.0, (tx - scene.x) * attack(scene.goal_x))  # T4: his team's intent
         ev = win * gain - (1 - win) * our_loss(scene, scene.x, scene.y)
-        out.append(Option("dribble", ev + (STICKY if scene.current == "dribble" else 0.0), (tx, ty)))
-    if abs(scene.goal_x - scene.x) > CLEAR_FROM * PITCH_X:  # in his own third: long and away
-        wide = 4.0 if scene.y < PITCH_Y / 2 else PITCH_Y - 4.0
+        sticky = STICKY if scene.current == "dribble" else 0.0
+        out.append(Option("dribble", ev + sticky, (tx, ty), chance=win))
+    if abs(scene.goal_x - scene.x) > CLEAR_FROM * PITCH_X and p > 0:  # pressed in his own third
+        # Long and away, toward where his most advanced team-mate is, not at a touchline: a long
+        # ball is a contest where it lands (an even one: design).
         tx = scene.x + attack(scene.goal_x) * 45.0
-        # A long ball away is a contest where it lands (an even one: design).
-        contest = 0.5 * value(tx, wide, scene.goal_x) - 0.5 * loss_cost(tx, wide, scene.goal_x)
-        out.append(Option("clear", contest, (tx, wide), lofted=True))
+        front = max(scene.mates, key=lambda m: m[1] * attack(scene.goal_x), default=None)
+        ty = min(PITCH_Y - 6.0, max(6.0, front[2])) if front else PITCH_Y / 2
+        contest = 0.5 * value(tx, ty, scene.goal_x) - 0.5 * loss_cost(tx, ty, scene.goal_x)
+        out.append(Option("clear", contest, (tx, ty), lofted=True, chance=0.5))  # the even contest
     # Holding is waiting to make a move a moment later: worth the best move open to him now, less
     # what the defence recovers while he waits (D9; *verify*: options only decay while he waits,
     # nothing here models a run developing). He cannot wait for ever, so when every move is a bad
@@ -991,27 +1039,88 @@ def options(scene: Scene) -> list[Option]:
     # half the time he is caught (p * 0.5); otherwise he still makes that move. Each decision
     # weighs holding afresh, so it carries no bonus for carrying on.
     best = max((o.value - (STICKY if o.kind == scene.current else 0.0) for o in out), default=0.0)
-    later = best * (1 - HOLD_DECAY) if best >= 0 else best * (1 + HOLD_DECAY)
+    # D9: per decision spent holding, so the longer he waits the less waiting is worth.
+    decay = 1 - fmath.ipow(1 - scene.hold_decay, scene.held + 1)
+    later = best * (1 - decay) if best >= 0 else best * (1 + decay)
     lose = 0.5 * p
-    out.append(Option("hold", (1 - lose) * later - lose * our_loss(scene, scene.x, scene.y)))
+    out.append(Option("hold", (1 - lose) * later - lose * our_loss(scene, scene.x, scene.y),
+                      chance=1 - lose))
     return out
 
 
 def temperature(scene: Scene) -> float:
-    """Design: how loosely the player chooses, relative to how different his options are. A good
-    decision-maker almost always takes the best option; pressure loosens his choice unless he is
-    composed."""
-    return (0.15 + 0.6 * (1 - scene.decisions)) * (1 + pressure(scene) * (1 - scene.composure))
+    return choice_temperature(scene.decisions, pressure(scene), scene.composure)
 
 
-def choose(scene: Scene, rng: random.Random) -> Option:
-    opts = options(scene)
-    values = [o.value for o in opts]
+def choice_temperature(decisions: float, pressed: float, composure: float) -> float:
+    """Design: how loosely the player chooses, relative to how different his options are. All of
+    the looseness is his decisions attribute (Kian, 2026-10-16): a perfect decision-maker always
+    takes the best option, a poor one often does not; pressure loosens his choice unless he is
+    composed. (There was a 0.15 floor every player shared: it made even the best decision-maker
+    take a clearly worse option, such as a 27 m shot, about one time in five.) One rule on the ball
+    (choose) and off it (offball.pick_move)."""
+    return 0.6 * (1 - decisions) * (1 + pressed * (1 - composure))
+
+
+def choice_spread(values: list[float]) -> float:
+    """D4: how far apart the options are (their standard deviation), never below the noise floor."""
     mean = sum(values) / len(values)
-    spread = math.sqrt(sum((v - mean) * (v - mean) for v in values) / len(values))
+    return max(math.sqrt(sum((v - mean) * (v - mean) for v in values) / len(values)), CHOICE_NOISE_FLOOR)
+
+
+def taste_key(scene: Scene, o: Option) -> tuple:
+    """Which option this is, the same from one look to the next while he has the ball: a pass by
+    who it is for and how, a carry by its direction relative to the goal, the rest by kind."""
+    if o.kind == "pass":
+        return o.kind, o.receiver, o.lofted
+    if o.kind == "dribble" and o.target:
+        goal = fmath.atan2(PITCH_Y / 2 - scene.y, scene.goal_x - scene.x)
+        turn = fmath.atan2(o.target[1] - scene.y, o.target[0] - scene.x) - goal
+        return o.kind, round(((turn + math.pi) % (2 * math.pi) - math.pi) / 0.8)
+    return (o.kind,)
+
+
+# A8: how choosing on the ball is split from executing (all *design*). Flair widens his
+# misjudgement of an option by this factor per unit of its risk (1 - chance) at the most flair,
+# narrowing it at the least, so the creative player tries the low-percentage option more and fails
+# with it more; an average player chooses as before. A habit pulls toward its one option by this
+# many units of misjudgement. Executing is the kick, the race and the touch, as before.
+FLAIR_SPREAD = 2.0
+HABIT_PULL = 0.5
+SHORT_PASS_M = 15.0  # A8: a pass this short is what a player who `plays_short` is drawn to
+
+
+def habit(scene: Scene, o: Option) -> float:
+    """A8: a habit is a pull toward one kind of option, never a second rating (each of the carry
+    directions he weighs gets the pull, so carrying as a whole gains a little more than one pull)."""
+    pull = 0.0
+    if o.kind == "dribble" and "takes_players_on" in scene.traits:
+        pull += HABIT_PULL
+    if o.kind == "pass" and o.target and "plays_short" in scene.traits \
+            and math.hypot(o.target[0] - scene.x, o.target[1] - scene.y) < SHORT_PASS_M:
+        pull += HABIT_PULL
+    return pull
+
+
+def choose(scene: Scene, rng: random.Random, tastes: dict | None = None) -> Option:
+    """D4: the option with the best value plus his own misjudgement of it. The misjudgement is a
+    random-utility draw (Gumbel), so a single choice is a softmax of the values; it is drawn once
+    per option and kept in `tastes` until he next scans the pitch (the engine resets it), so looking
+    again at the same options does not re-roll the dice (a choice he keeps rejecting does not become
+    certain by being asked four times a second). Flair and habits shape that misjudgement (A8)."""
+    opts = options(scene)
+    tastes = {} if tastes is None else tastes
     # D4: the randomness is a share of how far apart the options are, so a choice between close
     # options is loose and one between clearly different options is not, wherever on the pitch.
-    t = temperature(scene) * max(spread, CHOICE_NOISE_FLOOR)
-    top = max(o.value for o in opts)
-    weights = [fmath.exp((o.value - top) / t) for o in opts]
-    return rng.choices(opts, weights=weights)[0]
+    t = temperature(scene) * choice_spread([o.value for o in opts])
+    if t <= 0:  # a perfect decision-maker takes the best option
+        return max(opts, key=lambda o: o.value)
+
+    def taste(o: Option) -> float:
+        k = taste_key(scene, o)
+        if k not in tastes:
+            tastes[k] = -fmath.log(-fmath.log(max(rng.random(), 1e-12)))
+        gumbel = tastes[k]
+        return gumbel * fmath.exp(FLAIR_SPREAD * (scene.flair - 0.5) * (1 - o.chance)) + habit(scene, o)
+
+    return max(opts, key=lambda o: o.value / t + taste(o))

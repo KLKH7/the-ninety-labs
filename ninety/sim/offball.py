@@ -199,6 +199,35 @@ def run_in_behind(player: tuple[float, float], line_x: float, goal_x: float,
     return x, min(PITCH_Y - 1, max(1.0, player[1]))
 
 
+# O10: the moves a team-mate of the carrier weighs. Holding his spot in the shape (O6) is always
+# open; support (O3) to the nearest two; the rest are his role's (roles.py). A forward run keeps the
+# spot he chose while he carries on with it; the other moves follow the ball.
+MOVES = ("hold", "support", "short", "in_behind", "channel", "overlap", "late")
+FORWARD_RUNS = frozenset({"in_behind", "channel", "overlap", "late"})
+RUN_READ_S = 0.5  # design: at best anticipation he starts this long before the carrier is ready
+SAME_POCKET_M = 6.0  # design: a team-mate's run already attacks the space within this of a spot
+
+
+def receive_chance(runner_s: float, ball_s: float, opponent_s: float, margin_s: float) -> float:
+    """O10: the chance he would be first to a pass played to a spot (pitch control, Spearman 2018):
+    the ball and he must both get there (the later of the two) before the soonest opponent,
+    softened by `margin_s` as the passer's lane race is (D1)."""
+    return 1 / (1 + fmath.exp(-(opponent_s - max(runner_s, ball_s)) / margin_s))
+
+
+def pick_move(worth: dict[str, float], temperature: float, current: str | None, rng, sticky: float) -> str:
+    """O10, D4: the move he makes, from what each is worth: the best plus his own misjudgement of
+    each, a random-utility draw (so a softmax, as on the ball) whose spread is `temperature` times
+    how far apart the moves are (decisions.choice_temperature, decisions.choice_spread), with a
+    small bonus for carrying on with the move he is making."""
+    from ninety.sim.decisions import choice_spread
+    values = {k: v + (sticky if k == current else 0.0) for k, v in worth.items()}
+    t = temperature * choice_spread(list(values.values()))
+    if t <= 0:  # a perfect decision-maker makes the best move (D4)
+        return max(values, key=values.get)
+    return max(values, key=lambda k: values[k] / t - fmath.log(-fmath.log(max(rng.random(), 1e-12))))
+
+
 # O6: where each role stands while his team has the ball (design, *verify* against team shape in
 # possession: length about 31 to 46 m and width 35 to 48 m, Rico-Gonzalez review, so the widest
 # players stand about 21 m either side of the centre; formations in and
@@ -212,17 +241,36 @@ SHAPE_IN_POSSESSION = {
     "RW": (None, -21.0), "LW": (None, 21.0), "ST": (None, 0.0),
 }
 DEEPEST_M = 12.0  # nobody's in-possession spot is deeper than this from his own goal
+# O6: team length in possession is about 31 to 46 m (Rico-Gonzalez review, above); building from
+# deep a team is at its longest, so the forwards hold at least the top of that range beyond the back
+# line (onside), stretching the block instead of dropping with the ball.
+POSSESSION_LENGTH_M = 46.0
 BALL_SIDE_IN_POSSESSION = 0.15  # the shape leans this share toward the ball's side
 FINAL_THIRD_M = 70.0  # ball this far from his own goal: the box is attacked
-BOX_RUNS = {"ST": (99.0, 4.0), "far_winger": (98.0, -7.0), "RCM": (88.0, 0.0)}  # near post, far post, edge
+# O6: the box runs, (metres from his own goal line, metres across from the centre toward the ball's
+# side): near six-yard-box corner, far six-yard-box corner, edge of the box. *design*
+BOX_RUNS = {"ST": (99.0, 4.0), "far_winger": (98.0, -7.0), "RCM": (88.0, 0.0)}
+# O6: with the ball central in the final third the box is attacked too: the striker between the
+# centre-backs, each winger inside to the six-yard-box corner on his own side, a midfielder at the
+# edge (*design*: the same spots as the wide case, mirrored; he still waits onside for the pass).
+CENTRAL_BOX_RUNS = {"ST": (99.0, 0.0), "RW": (98.0, -7.0), "LW": (98.0, 7.0), "RCM": (88.0, 0.0)}
+WIDE_BALL_M = 12.0  # design: a ball this far off the centre line is attacked as a wide ball
+# The edge runner arrives behind the striker by as much as their spots are apart (99 - 88), also
+# when the onside line holds the striker back, so the two never stand on one spot.
+EDGE_BEHIND_M = BOX_RUNS["ST"][0] - BOX_RUNS["RCM"][0]
 
 
 def attacking_slot(role: str, own_goal_x: float, ball_x: float, ball_y: float,
-                   last_line_x: float) -> tuple[float, float] | None:
+                   last_line_x: float, forward_m: float = 0.0, inside_m: float = 0.0
+                   ) -> tuple[float, float] | None:
     # `last_line_x`: the furthest a player of this side may stand and be onside, as he sees it.
     """O6: where this role stands while his team has the ball. Heights follow the ball; attackers
-    stand on the opponents' last line (onside); with the ball wide in the final third, the striker,
-    the far-side winger and a midfielder attack the near post, the far post and the box edge."""
+    stand on the opponents' last line (onside); with the ball in the final third the box is attacked:
+    wide, the striker, the far-side winger and a midfielder attack the near six-yard-box corner, the
+    far one and the box edge; central, the striker the goal's centre, both wingers the six-yard-box
+    corner on their side and a midfielder the edge. As a central ball moves toward the wing, the
+    striker and the winger on that side slide toward their wide-ball spots, so nobody's spot jumps
+    when the ball becomes wide. Everyone waits onside for the delivery (L10)."""
     shape = SHAPE_IN_POSSESSION.get(role)
     if shape is None:
         return None
@@ -230,23 +278,51 @@ def attacking_slot(role: str, own_goal_x: float, ball_x: float, ball_y: float,
     ball_u = abs(ball_x - own_goal_x)
     last_u = abs(last_line_x - own_goal_x) - 1.0  # a step onside of their last defender
     across = 1.0 if fwd > 0 else -1.0  # width is mirrored for the side attacking toward x = 0
-    wide_ball = abs(ball_y - PITCH_Y / 2) > 12.0
-    if ball_u > FINAL_THIRD_M and wide_ball:
-        ball_side = 1.0 if ball_y > PITCH_Y / 2 else -1.0
-        far_winger = (role == "RW" and ball_side * across > 0) or (role == "LW" and ball_side * across < 0)
-        key = "far_winger" if far_winger else role
-        if key in BOX_RUNS:
-            u, side = BOX_RUNS[key]
-            u = min(u, max(last_u, ball_u))  # L10: he waits onside for the delivery
-            return own_goal_x + fwd * u, PITCH_Y / 2 + ball_side * side
+
+    def onside(u: float) -> float:
+        return min(u, max(last_u, ball_u))  # L10: he waits onside for the delivery
+
     behind, width = shape
+    # His spot in the shape: his role and his team's build-up style (roles.py) make it higher or
+    # deeper, nearer the centre or wider.
     if behind is None:
-        u = max(min(last_u, ball_u + 25.0), ball_u - 5.0)
+        back_u = max(DEEPEST_M, ball_u - SHAPE_IN_POSSESSION["RCB"][0])  # where his back line stands
+        reach = max(ball_u + 25.0, back_u + POSSESSION_LENGTH_M)
+        shape_u = min(max(min(last_u, reach), ball_u - 5.0) + min(forward_m, 0.0), last_u)
     else:
-        u = ball_u - behind
-    u = min(PITCH_X - 3.0, max(DEEPEST_M, u))
-    y = PITCH_Y / 2 + across * width + (ball_y - PITCH_Y / 2) * BALL_SIDE_IN_POSSESSION
-    return own_goal_x + fwd * u, min(PITCH_Y - 2.0, max(2.0, y))
+        shape_u = min(ball_u - behind + forward_m, max(last_u, ball_u))  # L10: never beyond the last line
+    shape_u = min(PITCH_X - 3.0, max(DEEPEST_M, shape_u))
+    sign = 1.0 if width > 0 else -1.0 if width < 0 else 0.0
+    width = width - sign * inside_m if sign else width
+    shape_y = min(PITCH_Y - 2.0, max(2.0, PITCH_Y / 2 + across * width
+                                     + (ball_y - PITCH_Y / 2) * BALL_SIDE_IN_POSSESSION))
+    if ball_u > FINAL_THIRD_M:
+        off = ball_y - PITCH_Y / 2
+        ball_side = 1.0 if off >= 0 else -1.0
+        striker_u = onside(BOX_RUNS["ST"][0])
+        spot = None
+        if abs(off) > WIDE_BALL_M:
+            toward = ball_side * across  # +1: the ball is on the left winger's side
+            far = (role == "RW" and toward > 0) or (role == "LW" and toward < 0)
+            key = "far_winger" if far else role
+            if key in BOX_RUNS:
+                u, side = BOX_RUNS[key]
+                spot = onside(u), PITCH_Y / 2 + ball_side * side
+        elif role in CENTRAL_BOX_RUNS:
+            u, side = CENTRAL_BOX_RUNS[role]
+            u, y = onside(u), PITCH_Y / 2 + across * side
+            t = abs(off) / WIDE_BALL_M  # how far toward a wide ball it is
+            if role == "ST":  # toward the near six-yard-box corner
+                y = PITCH_Y / 2 + t * ball_side * BOX_RUNS["ST"][1]
+            elif (y - PITCH_Y / 2) * ball_side > 0:  # the winger on the ball's side: toward his wing
+                u, y = u + t * (shape_u - u), y + t * (shape_y - y)
+            spot = u, y
+        if spot:
+            u, y = spot
+            if role == "RCM":
+                u = min(u, striker_u - EDGE_BEHIND_M)
+            return own_goal_x + fwd * u, y
+    return own_goal_x + fwd * shape_u, shape_y
 
 
 def keeper_reach_m(seconds: float, reaction_s: float, z: float) -> float:

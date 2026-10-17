@@ -75,6 +75,14 @@ class Style:
             w *= max(0.0, 1 + COUNTER_ATTACK_SPAN * tilt(self.counter_attacking))
         return w
 
+    def counter_weight(self, attacking_transition: bool) -> float:
+        """The counter-attacking part of progress_weight alone: directness reaches the player on
+        the ball through his team's build-up style (team.TeamBrain.build_up, roles.STYLES), so
+        ground gained is not rewarded twice."""
+        if not attacking_transition:
+            return 1.0
+        return max(0.0, 1 + COUNTER_ATTACK_SPAN * tilt(self.counter_attacking))
+
     def loss_weight(self) -> float:
         """How much the player on the ball fears losing it, against the engine's default."""
         return 1 - RISK_SPAN * tilt(self.risk)

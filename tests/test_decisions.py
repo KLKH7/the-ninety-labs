@@ -80,10 +80,25 @@ def test_pressure_is_felt_further_in_front_than_behind():
     assert ahead > 0 and behind == 0
 
 
-def test_clearing_is_only_an_option_in_his_own_third():
+def test_clearing_is_only_an_option_when_pressed_in_his_own_third():
     kinds = lambda s: {o.kind for o in D.options(s)}  # noqa: E731
-    assert "clear" in kinds(scene(x=10.0))
-    assert "clear" not in kinds(scene(x=60.0))
+    assert "clear" in kinds(scene(x=10.0, opponents=[(12.0, 34.0)]))  # pressed: kick it away
+    assert "clear" not in kinds(scene(x=10.0))  # unpressed: he builds instead
+    assert "clear" not in kinds(scene(x=60.0, opponents=[(62.0, 34.0)]))
+
+
+def test_a_clearance_goes_toward_his_most_advanced_team_mate_not_a_touchline():
+    mates = [("h9", 70.0, 40.0, 0.0), ("h3", 20.0, 5.0, 0.0)]
+    s = scene(x=10.0, y=10.0, opponents=[(12.0, 10.0)], mates=mates)
+    clear = next(o for o in D.options(s) if o.kind == "clear")
+    assert clear.target[1] == 40.0
+
+
+def test_a_team_that_means_to_progress_values_a_forward_pass_more():
+    mates = [("h9", 40.0, 34.0, 0.0)]
+    base = next(o for o in D.options(scene(x=20.0, mates=mates)) if o.kind == "pass")
+    keen = next(o for o in D.options(scene(x=20.0, mates=mates, progress=0.0006)) if o.kind == "pass")
+    assert keen.value > base.value
 
 
 def test_a_good_decision_maker_takes_the_best_option_more_often():
@@ -430,9 +445,21 @@ def test_the_passer_picks_the_pace_the_lane_needs():
     assert not tight.lofted and tight.pace > open_lane.pace
     assert D.launch_speed(20.0, 14.0) > D.launch_speed(20.0, 6.0)
 
-def test_options_closer_than_the_noise_floor_are_close_to_a_coin_flip():
+def test_a_perfect_decision_maker_always_takes_the_best_option():
     rng = random.Random(9)
     s = scene(x=60.0, decisions=1.0)
+    opts = [D.Option("a", 0.0200), D.Option("b", 0.0201)]
+    original = D.options
+    D.options = lambda _s: opts
+    try:
+        assert all(D.choose(s, rng).kind == "b" for _ in range(200))
+    finally:
+        D.options = original
+
+
+def test_options_closer_than_the_noise_floor_are_close_to_a_coin_flip():
+    rng = random.Random(9)
+    s = scene(x=60.0, decisions=0.5)  # an average decision-maker
     opts = [D.Option("a", 0.0200), D.Option("b", 0.0201)]
     picks = Counter()
     original = D.options
@@ -773,3 +800,11 @@ def test_a_thrown_pass_is_estimated_with_no_kicking_side():
     assert a == pytest.approx(b)  # as engine.execute throws it (hands=True)
     c = D.strike_nodes(scene(passer=passer, heading=math.radians(55)), 85.0, 34.0, True, 10.0)
     assert c != pytest.approx(a)  # a kick at that angle is not
+def test_they_send_one_man_after_the_ball_so_a_second_who_is_later_adds_no_risk():
+    # engine.plan_chase sends one opponent after a free ball: the passer's race is against him.
+    def conf(opponents):
+        return D.pass_confidence(scene(x=60.0, opponents=opponents), 80.0, 34.0, 80.0, 34.0, 0.0, False)
+
+    near = conf([(70.0, 38.0)])
+    assert near < conf([])  # he is a real risk
+    assert math.isclose(conf([(70.0, 38.0), (72.0, 39.0)]), near, abs_tol=0.02)  # the later one never goes
