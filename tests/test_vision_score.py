@@ -204,3 +204,33 @@ def test_boundary_rejects_invalid_dimensions(dimension):
     rows[0]["camera"]["height"] = dimension
     with pytest.raises(ValueError, match="dimensions"):
         score(rows, detections())
+
+
+def test_only_frames_the_detector_ran_on_are_scored(tmp_path, capsys):
+    # Three labelled frames; the detector ran on 0 (found everything) and 2 (found nothing),
+    # and never ran on 1. Frame 1's labels are not misses; frame 2's are.
+    rows = []
+    for number in (0, 1, 2):
+        row = frames()[0]
+        row["frame"] = number
+        rows.append(row)
+    frame_path = tmp_path / "frames.jsonl"
+    det_path = tmp_path / "detections.jsonl"
+    frame_path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    det_path.write_text(
+        json.dumps({"frame": 0, "detections": [
+            {k: v for k, v in d.items() if k != "frame"} for d in detections()
+        ]}) + "\n"
+        + json.dumps({"frame": 2, "detections": []}) + "\n"
+    )
+    main(["--frames", str(frame_path), "--detected", str(det_path)])
+    report = json.loads(capsys.readouterr().out)
+    assert report["overall"]["tp"] == 3
+    assert report["overall"]["fp"] == 0
+    assert report["overall"]["fn"] == 3  # frame 2 only; frame 1 was not run
+    assert report["frames"] == {"scored": 2, "label_frames_skipped": 1}
+
+
+def test_a_run_frame_missing_from_frames_jsonl_is_refused():
+    with pytest.raises(ValueError, match="not in frames.jsonl"):
+        score(frames(), [], run={0, 5})

@@ -71,6 +71,27 @@ uv run ninety-render-check runs/dataset/test/seed9000* --determinism --report do
 | Determinism | re-render the first clip; compare `frames.jsonl`, `events.jsonl` and image hashes | identical |
 | Split integrity | `ninety/render/splits.py`: test seeds are reserved; overrides are refused on the test set | unit tests |
 
+### What the data holds
+
+`ninety-data-stats` counts, per split and from the saved labels only, what a dataset can teach the
+detector: distinct seeds, frames after the stride, player and ball boxes, balls by visibility
+group, ball size in pixels at the training input size, and clips per render knob. With
+`--floors` it exits 1 when a split misses a floor. The floors were set before any training clip
+was counted, and each one's reason is beside it in `ninety/vision/data_stats.py`. Meeting them
+does not prove the data is enough; the learning curve decides that.
+
+```bash
+uv run ninety-data-stats runs/dataset --stride 5 --input 512x512 --out docs/eval/dataset-stats.json --floors
+```
+
+The floors are `TRAIN_FLOORS` and `TEST_FLOORS` in `ninety/vision/data_stats.py`, each with its
+reason; that file is the only table. `ball_visibility_lt_0_5_share` is the quantity PLAN.md
+freezes on and `ninety-render-check` reports (every frame with the ball in shot, not only the
+strided ones, fully hidden balls included); the ball-box counts are training labels and
+exclude visibility 0, so the train split's hidden-ball floor is `ball_boxes_mostly_hidden_share`,
+a share of those labels. Lighting and weather floors cover only the values the renderer can draw
+(`PLANNED` in `ninety/render/params.py`).
+
 ## Vision scoring
 
 Fixed before the first detector runs, so no rule is tuned to a result. Every vision report
@@ -85,7 +106,17 @@ Within each frame and class, eligible detections are paired one-to-one, best-fir
 match at IoU ≥ 0.50. Ball boxes match when their centre distance is ≤ 5 pixels. A label with no
 match is a false negative; a detection with no match is a false positive. The report contains
 TP, FP, FN, precision and recall overall, by class, and for the difficulty groups below. Boxes
-with visibility zero are not labels because they were not drawn. Run:
+with visibility zero are not labels because they were not drawn.
+
+Only frames the detector ran on are scored. A frame is run when it has a line in the
+detections file ([the detections contract](../ninety/vision/detections.py)); a line with an
+empty `detections` list is a run frame that found nothing, so its labels are false negatives.
+Labels on frames with no line are skipped, not counted as misses, so detecting every 25th frame
+scores those frames only. The run set is read before the per-frame lines are flattened, and a
+run frame missing from `frames.jsonl` is refused. The report's `frames` block gives `scored`
+(run frames) and `label_frames_skipped` (labelled frames with no line). In the flat format (one
+detection per line) a frame that found nothing cannot be written, so use the per-frame format.
+Run:
 
 ```bash
 uv run python -m ninety.eval.vision_score --frames runs/seed7/frames.jsonl \
