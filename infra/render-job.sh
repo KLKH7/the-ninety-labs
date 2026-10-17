@@ -63,8 +63,10 @@ print(json.dumps({"containers": [c]}))' "$commit" "$run" "$seed" "$count" "$set"
     ;;
   round)
     clusters=$2 first=$3 budget=$4 seconds=${NINETY_SECONDS:-10}
-    commit=$(az containerapp job list -g "$RG" --query "[?starts_with(name,'job-render-queue-')].properties.template.containers[0].env[?name=='NINETY_COMMIT'].value | [0][0]" -o tsv)
-    test -n "$commit" || { echo "no event-driven render job: pin a commit first (see the header)"; exit 1; }
+    queue_job=$(az containerapp job list -g "$RG" --query "[?starts_with(name,'job-render-queue-')].name | [0]" -o tsv)
+    test -n "$queue_job" || { echo "no event-driven render job: pin a commit first (see the header)"; exit 1; }
+    commit=$(az containerapp job show -g "$RG" -n "$queue_job" \
+      --query "properties.template.containers[0].env[?name=='NINETY_COMMIT'].value | [0]" -o tsv)
     uv run --group render-job python -m ninety.agents.data_agent "$clusters" \
       --first-seed "$first" --budget "$budget" --commit "$commit" --seconds "$seconds" --enqueue
     ;;
