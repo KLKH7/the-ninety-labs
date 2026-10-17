@@ -2,6 +2,10 @@ name: deploy
 
 # Runs after CI passes on main. Signs in to Azure with OIDC: GitHub issues a short-lived token
 # that Azure trusts only for this repo's main branch, so no Azure secret is stored anywhere.
+#
+# This job only deploys code (`azd deploy api`): it builds the image, pushes it and rolls a new
+# revision. Infrastructure changes are applied by `azd provision` from a maintainer's machine,
+# because the deploy identity is Contributor and cannot create role assignments (infra/README.md).
 on:
   workflow_run:
     workflows: [ci]
@@ -17,18 +21,53 @@ concurrency:
   group: deploy-main
   cancel-in-progress: false
 
+env:
+  AZURE_ENV_NAME: prod
+  AZURE_LOCATION: northcentralus
+  AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+  AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+  # Deploy exactly the commit CI passed, not whatever main points at when this job starts.
+  DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+
 jobs:
   deploy:
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
       - uses: azure/login@v2
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-      - name: Check access to the resource group
-        run: az group show -n "${{ vars.AZURE_RESOURCE_GROUP }}" --query "{name:name,location:location}" -o table
-      # The app deploy (Container Apps via Bicep) and the live smoke test are added with the
-      # first deployable service. See docs/PLAN.md.
+      - uses: Azure/setup-azd@v2
+      - name: Sign azd in with the same OIDC identity
+        run: >-
+          azd auth login --federated-credential-provider github
+          --client-id "${{ vars.AZURE_CLIENT_ID }}" --tenant-id "${{ vars.AZURE_TENANT_ID }}"
+      - name: Point azd at the provisioned registry
+        run: |
+          registry=$(az acr list -g "$AZURE_RESOURCE_GROUP" \
+            --query "[?tags.\"azd-env-name\"=='$AZURE_ENV_NAME'].loginServer | [0]" -o tsv)
+          test -n "$registry" || { echo "no registry for env $AZURE_ENV_NAME: run azd provision first"; exit 1; }
+          azd env new "$AZURE_ENV_NAME" --no-prompt
+          azd env set AZURE_CONTAINER_REGISTRY_ENDPOINT "$registry"
+          azd env set NINETY_COMMIT "$DEPLOY_SHA"
+      - run: azd deploy api --no-prompt
+      - name: Smoke test the live revision
+        # Passes only when the public URL answers with the commit just deployed, so an old
+        # revision still serving traffic is a failure, not a pass.
+        run: |
+          fqdn=$(az containerapp list -g "$AZURE_RESOURCE_GROUP" \
+            --query "[?tags.\"azd-service-name\"=='api' && tags.\"azd-env-name\"=='$AZURE_ENV_NAME'].properties.configuration.ingress.fqdn | [0]" -o tsv)
+          for attempt in $(seq 1 20); do
+            body=$(curl -fsS --max-time 30 "https://$fqdn/api/health" || true)
+            echo "attempt $attempt: $body"
+            if [ "$(echo "$body" | jq -r .commit 2>/dev/null)" = "$DEPLOY_SHA" ]; then exit 0; fi
+            sleep 15
+          done
+          echo "https://$fqdn/api/health never reported commit $DEPLOY_SHA"
+          exit 1

@@ -85,3 +85,15 @@ jobs:
       - uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  infra:
+    # Compiles and lints the Bicep, so a broken template fails here and not at `azd provision`.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: az bicep install
+      - name: Build, failing on any warning
+        run: |
+          az bicep build --file infra/main.bicep --stdout > /dev/null 2> diagnostics.txt
+          cat diagnostics.txt
+          ! grep -E "(Warning|Error) [A-Z]+[0-9]+" diagnostics.txt
