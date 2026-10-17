@@ -5,7 +5,12 @@
 #
 #   infra/render-job.sh start <run> <first> <total> <per> [set]  start ceil(total/per) executions
 #   infra/render-job.sh status                                  recent executions and their state
-#   infra/render-job.sh download <run> <dest>                   copy <run>/ from Blob Storage to <dest>
+#   infra/render-job.sh download <run> <dest>                   copy <run>/ (clips and their truth) to <dest>
+#   infra/render-job.sh round <clusters.json> <first> <budget>  Data agent: plan and enqueue a targeted round
+#   infra/render-job.sh queue                                   requests waiting and set aside
+#
+# `round` needs the event-driven job, created once a render commit is pinned:
+#   azd env set RENDER_COMMIT <pushed sha or engine tag> && azd provision
 #
 # Example: 150 clips, 25 per execution (6 in parallel), then 40 crowded clips on later seeds:
 #   infra/render-job.sh start v1 1 150 25
@@ -48,11 +53,28 @@ print(json.dumps({"containers": [c]}))' "$commit" "$run" "$seed" "$count" "$set"
   download)
     run=$2 dest=$3
     mkdir -p "$dest"
-    az storage blob download-batch --auth-mode login --account-name "$(env_value RENDER_STORAGE_ACCOUNT)" \
-      -s renders --pattern "$run/*" -d "$dest" -o none
+    # Images and clip.json from renders, events.jsonl and frames.jsonl from the sealed truth
+    # container (the maintainer reader may read both), into one folder per clip.
+    for container in renders truth; do
+      az storage blob download-batch --auth-mode login --account-name "$(env_value RENDER_STORAGE_ACCOUNT)" \
+        -s "$container" --pattern "$run/*" -d "$dest" -o none
+    done
     echo "downloaded $run/ to $dest"
     ;;
+  round)
+    clusters=$2 first=$3 budget=$4 seconds=${NINETY_SECONDS:-10}
+    commit=$(az containerapp job list -g "$RG" --query "[?starts_with(name,'job-render-queue-')].properties.template.containers[0].env[?name=='NINETY_COMMIT'].value | [0][0]" -o tsv)
+    test -n "$commit" || { echo "no event-driven render job: pin a commit first (see the header)"; exit 1; }
+    uv run --group render-job python -m ninety.agents.data_agent "$clusters" \
+      --first-seed "$first" --budget "$budget" --commit "$commit" --seconds "$seconds" --enqueue
+    ;;
+  queue)
+    account=$(env_value RENDER_STORAGE_ACCOUNT)
+    for q in render-requests render-requests-failed; do
+      echo "$q: $(az storage message peek --auth-mode login --account-name "$account" -q "$q" --num-messages 32 --query 'length(@)' -o tsv) message(s) (up to 32 shown)"
+    done
+    ;;
   *)
-    sed -n '2,13p' "$0"; exit 2
+    sed -n '2,18p' "$0"; exit 2
     ;;
 esac

@@ -25,6 +25,9 @@ param ciPrincipalId string = ''
 @description('Object id of a maintainer allowed to read rendered clips (Storage Blob Data Reader). Empty to skip.')
 param renderReaderPrincipalId string = ''
 
+@description('Commit the event-driven render job renders with: a pushed sha or an engine tag. Empty: no queue job.')
+param renderCommit string = ''
+
 var token = uniqueString(subscription().id, resourceGroup().id, environmentName)
 var tags = { 'azd-env-name': environmentName }
 
@@ -173,6 +176,33 @@ resource renders 'Microsoft.Storage/storageAccounts/blobServices/containers@2023
   properties: { publicAccess: 'None' }
 }
 
+// The answer key: events.jsonl and frames.jsonl of every clip (ninety/render/job.py). Written by
+// the render job and read by maintainers for training and scoring; nothing on the live path (the
+// API, and the live vision job when it lands) is granted it. infra/check_truth_sealed.py, run in CI,
+// fails if any role reaches it from an identity that is not on the allowed list.
+resource truth 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  parent: blobs
+  name: 'truth'
+  properties: { publicAccess: 'None' }
+}
+
+// Render requests from the Data agent (ninety/agents/data_agent.py). The event-driven job starts
+// one execution per waiting request; a request that fails twice moves to render-requests-failed.
+resource queues 'Microsoft.Storage/storageAccounts/queueServices@2023-05-01' = {
+  parent: storage
+  name: 'default'
+}
+
+resource renderRequests 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-05-01' = {
+  parent: queues
+  name: 'render-requests'
+}
+
+resource renderRequestsFailed 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-05-01' = {
+  parent: queues
+  name: 'render-requests-failed'
+}
+
 resource renderIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
   name: 'id-render-${token}'
   location: location
@@ -187,6 +217,10 @@ var renderBoot = 'python3 -c "import io,os,tarfile,urllib.request as u; d=u.urlo
 
 var blobContributor = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
 var blobReader = '2a2b9908-6ea1-4ae2-8e65-a410df84e7d1'
+// Looked up with az role definition list (docs/LESSONS.md, lesson 30).
+var queueContributor = '974c5e8b-45b9-4653-ba55-5f855dd0fb88' // take, delete and set aside requests
+var queueSender = 'c6a89b2d-59bc-44d0-9896-0f6e12d7b80a' // add requests
+var queueReader = '19e7f393-937e-4f77-808e-94535e297925' // see what is waiting
 
 resource renderWrite 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   scope: storage
@@ -205,6 +239,36 @@ resource renderRead 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!
     principalId: renderReaderPrincipalId
     principalType: 'User'
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', blobReader)
+  }
+}
+
+resource renderQueues 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: storage
+  name: guid(storage.id, renderIdentity.id, queueContributor)
+  properties: {
+    principalId: renderIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', queueContributor)
+  }
+}
+
+resource maintainerSends 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(renderReaderPrincipalId)) {
+  scope: storage
+  name: guid(storage.id, renderReaderPrincipalId, queueSender)
+  properties: {
+    principalId: renderReaderPrincipalId
+    principalType: 'User'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', queueSender)
+  }
+}
+
+resource maintainerReadsQueues 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(renderReaderPrincipalId)) {
+  scope: storage
+  name: guid(storage.id, renderReaderPrincipalId, queueReader)
+  properties: {
+    principalId: renderReaderPrincipalId
+    principalType: 'User'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', queueReader)
   }
 }
 
@@ -238,6 +302,66 @@ resource renderJob 'Microsoft.App/jobs@2024-03-01' = {
             { name: 'AZURE_CLIENT_ID', value: renderIdentity.properties.clientId }
             { name: 'AZURE_STORAGE_BLOB_URL', value: storage.properties.primaryEndpoints.blob }
             { name: 'AZURE_STORAGE_CONTAINER', value: renders.name }
+            { name: 'AZURE_STORAGE_TRUTH_CONTAINER', value: truth.name }
+          ]
+        }
+      ]
+    }
+  }
+}
+
+// The event-driven render job: Azure starts one execution per request waiting in render-requests
+// (the KEDA azure-queue scaler, reading the queue as the render identity), up to six at a time.
+// Every execution runs renderCommit; requests for any other commit are refused.
+resource renderQueueJob 'Microsoft.App/jobs@2025-01-01' = if (!empty(renderCommit)) {
+  name: 'job-render-queue-${token}'
+  location: location
+  tags: tags
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: { '${renderIdentity.id}': {} }
+  }
+  dependsOn: [renderWrite, renderQueues]
+  properties: {
+    environmentId: environment.id
+    workloadProfileName: 'Consumption'
+    configuration: {
+      triggerType: 'Event'
+      replicaTimeout: 4 * 3600
+      replicaRetryLimit: 0 // a failed request is retried through the queue, which counts attempts
+      eventTriggerConfig: {
+        parallelism: 1
+        replicaCompletionCount: 1
+        scale: {
+          minExecutions: 0
+          maxExecutions: 6
+          pollingInterval: 60
+          rules: [
+            {
+              name: 'render-requests'
+              type: 'azure-queue'
+              metadata: { accountName: storage.name, queueName: renderRequests.name, queueLength: '1' }
+              identity: renderIdentity.id
+            }
+          ]
+        }
+      }
+    }
+    template: {
+      containers: [
+        {
+          name: 'render'
+          image: renderImage
+          command: ['/bin/bash', '-c', renderBoot]
+          resources: { cpu: json('2'), memory: '4Gi' }
+          env: [
+            { name: 'AZURE_CLIENT_ID', value: renderIdentity.properties.clientId }
+            { name: 'AZURE_STORAGE_BLOB_URL', value: storage.properties.primaryEndpoints.blob }
+            { name: 'AZURE_STORAGE_CONTAINER', value: renders.name }
+            { name: 'AZURE_STORAGE_TRUTH_CONTAINER', value: truth.name }
+            { name: 'AZURE_STORAGE_QUEUE_URL', value: storage.properties.primaryEndpoints.queue }
+            { name: 'NINETY_QUEUE', value: renderRequests.name }
+            { name: 'NINETY_COMMIT', value: renderCommit }
           ]
         }
       ]
@@ -250,3 +374,4 @@ output AZURE_CONTAINER_APPS_ENVIRONMENT_ID string = environment.id
 output API_URL string = 'https://${api.properties.configuration.ingress.fqdn}'
 output RENDER_JOB_NAME string = renderJob.name
 output RENDER_STORAGE_ACCOUNT string = storage.name
+output RENDER_QUEUE_URL string = storage.properties.primaryEndpoints.queue
