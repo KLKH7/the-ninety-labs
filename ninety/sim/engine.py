@@ -98,7 +98,9 @@ BOARDS_M = 4.0  # verify: advertising boards behind the lines stop a ball (and p
 # ready in one to two seconds. He still has to reach the spot.
 RESTART_DELAY_S = {"throw_in": (1.0, 2.0), "goal_kick": (1.0, 2.0), "corner": (1.0, 2.0)}
 THROW_BEHIND_M = 0.55  # Law 15: his body stands outside the touchline, feet on or behind it
-THROW_REACH_M = 0.28  # both hands reach toward the pitch and still stay short of the line
+THROW_SPOT_M = 0.25  # design: within this of his spot he throws from where he stands, still behind the line
+THROW_SETTLED_MPS = BRAKE_MAX * DT  # he throws once one frame of braking would stop him (P2)
+THROW_REACH_M = 0.28  # both hands reach toward the pitch; the ball is over or behind the line
 THROW_HAND_Z = 1.85  # bottom of the ball just over the head (the centre sits one radius higher)
 
 # 4-3-3 anchors for a team attacking toward x=105, as (x, y) fractions of the pitch.
@@ -173,7 +175,7 @@ def throw_stand(x: float, line_y: float) -> tuple[float, float]:
 
 
 def throw_hands(x: float, y: float) -> tuple[float, float, float]:
-    """The ball in both hands, over the head, still off the pitch."""
+    """The ball in both hands, over the head, over or behind the touchline."""
     inward = 1.0 if y < PITCH_Y / 2 else -1.0
     return x, y + inward * THROW_REACH_M, THROW_HAND_Z
 
@@ -925,6 +927,7 @@ class Engine:
         if taker is None:
             taker = self.nearest(spot[0], spot[1], team).id
         lo, hi = RESTART_DELAY_S[kind]
+        self.dribbler = self.dribble_to = None  # the ball is dead: nobody is running onto a touch
         self.restart = Restart(kind, team, spot[0], spot[1], taker, self.t + self.rng.uniform(lo, hi))
 
     def tick_restart(self) -> None:
@@ -937,12 +940,18 @@ class Engine:
         r = self.restart
         taker = self.by_id[r.taker]
         spot = throw_stand(r.x, r.y) if r.kind == "throw_in" else (r.x, r.y)
-        if self.t < r.ready_at or math.hypot(taker.x - spot[0], taker.y - spot[1]) > CONTROL_M:
+        # A thrower must be at his spot, behind the line; anyone else is close enough when the ball
+        # is at his feet. Nobody is moved there: he runs (lesson 5).
+        near = THROW_SPOT_M if r.kind == "throw_in" else CONTROL_M
+        if self.t < r.ready_at or math.hypot(taker.x - spot[0], taker.y - spot[1]) > near:
+            return
+        if r.kind == "throw_in" and math.hypot(taker.vx, taker.vy) > THROW_SETTLED_MPS:
             return
         # While the ball is out of play a new one is placed: the only time the ball may jump.
         if r.kind == "throw_in":
-            taker.x, taker.y = spot
-            taker.vx = taker.vy = 0.0
+            # He takes the ball and stops within his own braking (lesson 5); he has moved this frame.
+            steer(taker, taker.x, taker.y, 0.0)
+            self.moved = taker.id
             taker.heading = math.pi / 2 if spot[1] < PITCH_Y / 2 else -math.pi / 2
             self.ball = (*throw_hands(taker.x, taker.y), 0.0, 0.0, 0.0)
         else:
@@ -1209,7 +1218,7 @@ class Engine:
         carrier = self.by_id[self.possessor]
         self.moved = carrier.id
         if self.throw_by == carrier.id:  # Law 15: held behind the line and thrown, not dribbled
-            carrier.vx = carrier.vy = 0.0
+            steer(carrier, carrier.x, carrier.y, 0.0)  # standing still, braking within his body
             carrier.heading = math.pi / 2 if carrier.y < PITCH_Y / 2 else -math.pi / 2
             self.ball = (*throw_hands(carrier.x, carrier.y), 0.0, 0.0, 0.0)
             if self.t >= self.hold_until:
@@ -1313,12 +1322,16 @@ class Engine:
             p = self.by_id[pid]
             holder = self.by_id.get(self.possessor) if self.possessor else self.by_id.get(self.dribbler or "")
             bx, by = self.ball[0], self.ball[1]
-            if holder and holder.team != p.team and math.hypot(p.x - bx, p.y - by) <= CONTROL_M:
+            # Law 15: a ball held for a throw-in is not in play, so a lunge that arrives then finds nothing.
+            held = holder is not None and self.throw_by == holder.id
+            if holder and holder.team != p.team and not held and math.hypot(p.x - bx, p.y - by) <= CONTROL_M:
                 self.poke(p, holder)
                 holder = None
             else:
                 self.off_balance[pid] = self.t + OFF_BALANCE_S
         if not holder or self.restart or self.hands(holder, holder.x, holder.y):  # Law 12: not his hands
+            return
+        if self.throw_by == holder.id:  # Law 15: not in play until it is thrown, so nobody challenges
             return
         for i, p in enumerate(self.players):
             if p.team == holder.team or p.role == "GK" or p.id in self.lunges:
