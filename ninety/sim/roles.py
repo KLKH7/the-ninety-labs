@@ -21,28 +21,36 @@ class Role:
     duty: int  # DEFEND, BALANCED or ATTACK: how far and how often he goes forward with the ball
     forward_m: float  # his in-possession spot, this many metres higher (negative: deeper)
     inside_m: float  # and this many metres nearer the centre (negative: wider)
-    runs: frozenset[str] = frozenset()  # the runs he makes when the carrier can play one
+    # O10: his prior on each off-ball move beyond holding his spot (offball.MOVES), as a weight on
+    # what the move is worth: 0 or absent means the move is not in his repertoire.
+    moves: tuple[tuple[str, float], ...] = ()
     high_press: bool = False  # out of possession he goes to the ball beyond his team's engagement line
 
+    def prior(self, kind: str) -> float:
+        return dict(self.moves).get(kind, 0.0)
 
-# In behind: beyond the last line. Diagonal: in behind, from wide toward the near half-space.
-# Overlap: beyond the ball on his own flank. Late: into the box once the ball is in the final third.
-# Drop: comes short toward the ball to receive in front of the block.
+
+# O10: the moves each role leans toward. A prior multiplies what the move is worth to his team, so a
+# role makes its run more often, never a run that is worth nothing. 1.5 is a role's signature move,
+# 1 an ordinary one, below 1 one it makes reluctantly. In behind: beyond the last line, in his lane.
+# Channel: in behind, from wide toward the near half-space. Overlap: beyond the ball on his own flank.
+# Late: into the box once the ball is in the final third. Short: toward the ball to receive in front
+# of the block. All *design*: common role concepts (Kian, 2026-10-15), never fitted to a match rate.
 ROLES = {
     "shot_stopper": Role(DEFEND, 0.0, 0.0),
     "sweeper_keeper": Role(DEFEND, 0.0, 0.0),
     "stopper": Role(DEFEND, -2.0, 0.0),
     "ball_playing": Role(BALANCED, 0.0, -3.0),  # splits wider to receive in build-up
     "defensive": Role(DEFEND, -6.0, 2.0),
-    "overlapping": Role(ATTACK, 6.0, 0.0, frozenset({"overlap"})),
-    "deep_playmaker": Role(BALANCED, -6.0, 0.0, frozenset({"drop"})),
-    "box_to_box": Role(ATTACK, 4.0, 0.0, frozenset({"late"}), high_press=True),
-    "ball_winner": Role(DEFEND, -3.0, 0.0),
-    "touchline_winger": Role(BALANCED, 0.0, -2.0),
-    "inside_forward": Role(ATTACK, 0.0, 5.0, frozenset({"diagonal"})),
-    "poacher": Role(ATTACK, 0.0, 0.0, frozenset({"in_behind"})),
-    "target_forward": Role(BALANCED, -4.0, 0.0, frozenset({"drop"})),
-    "pressing_forward": Role(ATTACK, 0.0, 0.0, frozenset({"in_behind"}), high_press=True),
+    "overlapping": Role(ATTACK, 6.0, 0.0, (("overlap", 1.5),)),
+    "deep_playmaker": Role(BALANCED, -6.0, 0.0, (("short", 1.5),)),
+    "box_to_box": Role(ATTACK, 4.0, 0.0, (("late", 1.5), ("short", 0.7)), high_press=True),
+    "ball_winner": Role(DEFEND, -3.0, 0.0, (("short", 0.7),)),
+    "touchline_winger": Role(BALANCED, 0.0, -2.0, (("in_behind", 1.0),)),
+    "inside_forward": Role(ATTACK, 0.0, 5.0, (("channel", 1.5), ("in_behind", 0.7), ("late", 0.7))),
+    "poacher": Role(ATTACK, 0.0, 0.0, (("in_behind", 1.5), ("late", 1.0))),
+    "target_forward": Role(BALANCED, -4.0, 0.0, (("short", 1.5), ("in_behind", 0.7))),
+    "pressing_forward": Role(ATTACK, 0.0, 0.0, (("in_behind", 1.0), ("short", 0.7)), high_press=True),
 }
 DEFAULT = Role(BALANCED, 0.0, 0.0)
 
@@ -67,6 +75,16 @@ STYLES = {
     "quick": Style(0.0, 0.0, (BALANCED, ATTACK), 0.0004, 0.2),
     "direct": Style(4.0, -2.0, (ATTACK,), 0.0006, 0.1),
 }
+
+# O10, T4: how each build-up style weighs the off-ball moves, on top of the role's prior. A patient
+# side wants players coming to the ball and fewer balls in behind; a direct side wants runs in behind
+# and fewer players coming short (the build-up settings of common team instructions). *design*
+STYLE_MOVES = {
+    "patient": {"short": 1.5, "in_behind": 0.7, "channel": 0.7},
+    "quick": {},
+    "direct": {"short": 0.7, "in_behind": 1.5, "channel": 1.5, "overlap": 0.7},
+}
+TRAIT_MOVES = {"runs_in_behind": {"in_behind": 1.5}}  # O10: a habit is a prior on one move (*design*)
 
 OVERLAP_AHEAD_M = 10.0  # an overlap runs this far beyond the ball, on his flank
 OVERLAP_TOUCHLINE_M = 4.0  # this far in from the touchline

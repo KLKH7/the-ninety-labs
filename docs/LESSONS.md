@@ -173,3 +173,13 @@ short and actionable. This file is public: no research sources, product names or
   the contact rule, the kick-error model), moved where both can import them, never a copy.
 - **Check:** `uv run python -m ninety.sim.calibration` on forced choices, not only chosen ones:
   chosen options hide a pessimistic estimate, because nobody picks what it underrates.
+
+### 24. A habit strengthens what a role does; it does not invent a new behaviour
+- **What happened:** a "runs in behind" habit, which any player could draw, added a run in behind
+  to whatever role he had, so centre-backs sprinted beyond the opponents' last line. Tests of the
+  new off-ball choice also passed with the role priors switched off, because they compared
+  pictures that differed in more than the prior.
+- **Rule:** a trait multiplies a prior the role already has. A test of a lean (a prior, a style)
+  holds everything else equal, so only the lean can tell the outcomes apart.
+- **Check:** mutation-test each prior (set it to 1, drop it from the worth); the test named after
+  it must go red.

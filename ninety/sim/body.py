@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from functools import lru_cache
 
 GRAVITY = 9.81
 BODY_RADIUS = 0.26  # P11: half a footballer's shoulder width (about 0.53 m over the deltoids)
@@ -156,3 +157,17 @@ def move(x: float, y: float, vx: float, vy: float, tx: float, ty: float, want_sp
     body.grip_used = math.hypot(nvx - vx, nvy - vy)
     body.spend(new_speed, (new_speed - speed) / dt, dt)
     return x + nvx * dt, y + nvy * dt, nvx, nvy
+
+
+@lru_cache(maxsize=8192)
+def sprint_cost_m(f0: float, v0: float, cs: float, gap_m: int, dt: float) -> float:
+    """P10: the metres above critical speed (with the cost of accelerating) that a fresh body spends
+    running `gap_m` flat out from standing, stopping there: the body's own rule (`move`, which
+    spends through `Body.spend`), run on a copy. Cached: it depends only on who he is and how far."""
+    body = Body(f0, v0, cs)
+    x = vx = 0.0
+    for _ in range(int(30 / dt)):
+        x, _, vx, _ = move(x, 0.0, vx, 0.0, float(gap_m), 0.0, math.inf, body, dt)
+        if gap_m - x < 0.1 and abs(vx) < 0.5:
+            break
+    return body.spent

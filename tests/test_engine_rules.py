@@ -4,7 +4,7 @@ the passer believes, keepers only anticipate shots, pressers stand goal-side, an
 import math
 from statistics import mean, pstdev
 
-from ninety.sim import ball, perception
+from ninety.sim import ball, offball, perception
 from ninety.sim.engine import BODY_RADIUS, BODY_RESTITUTION, DT, PRESS_GAP_M, Engine
 from ninety.sim.profiles import MAX_STRIKE_MPS
 
@@ -561,9 +561,12 @@ def test_every_off_ball_target_is_reached_just_in_time_through_the_real_path():
                 continue
             if s.brains[p.team].pressers[:1] == [p.id]:  # the presser keeps his work rate (T3)
                 continue
+            if s.presses_high(p, s.brains[p.team], *s.play_point(p)):  # so does a pressing role (O9)
+                continue
             tx, ty, speed = s.shape_target(p)
-            if s.chase.get(p.team, [None])[0] == p.id or (s.brains[p.team].in_possession and s.run_target(
-                    p, s.by_id[s.possessor], s.brains[p.team]) if s.possessor else False):
+            # O10: a forward run is a sprint, while a team-mate has the ball
+            running = s.possessor is not None and s.moves.get(p.id, ("hold",))[0] in offball.FORWARD_RUNS
+            if s.chase.get(p.team, [None])[0] == p.id or (s.brains[p.team].in_possession and running):
                 continue
             assert speed >= s.in_time(p, tx, ty) - 1e-9, (p.id, speed)
             checked += 1
@@ -671,9 +674,9 @@ def test_play_is_where_the_ball_is_once_a_pass_is_deflected_or_has_run_past_its_
 
 def test_a_kickoff_starts_a_new_phase_of_play():
     e = Engine(1)
-    e.dribbler, e.runs, e.chase = "h7", {"h9": (90.0, 30.0)}, {"home": ["h7"]}
+    e.dribbler, e.moves, e.chase = "h7", {"h9": ("in_behind", 90.0, 30.0, 0.0)}, {"home": ["h7"]}
     e.kickoff("away")
-    assert e.dribbler is None and not e.runs and not e.chase
+    assert e.dribbler is None and not e.moves and not e.chase
 
 
 def test_a_marker_chases_harder_when_his_man_runs_away_from_him_than_toward_him():

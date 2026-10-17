@@ -168,6 +168,35 @@ def run_in_behind(player: tuple[float, float], line_x: float, goal_x: float,
     return x, min(PITCH_Y - 1, max(1.0, player[1]))
 
 
+# O10: the moves a team-mate of the carrier weighs. Holding his spot in the shape (O6) is always
+# open; support (O3) to the nearest two; the rest are his role's (roles.py). A forward run keeps the
+# spot he chose while he carries on with it; the other moves follow the ball.
+MOVES = ("hold", "support", "short", "in_behind", "channel", "overlap", "late")
+FORWARD_RUNS = frozenset({"in_behind", "channel", "overlap", "late"})
+RUN_READ_S = 0.5  # design: at best anticipation he starts this long before the carrier is ready
+SAME_POCKET_M = 6.0  # design: a team-mate's run already attacks the space within this of a spot
+
+
+def receive_chance(runner_s: float, ball_s: float, opponent_s: float, margin_s: float) -> float:
+    """O10: the chance he would be first to a pass played to a spot (pitch control, Spearman 2018):
+    the ball and he must both get there (the later of the two) before the soonest opponent,
+    softened by `margin_s` as the passer's lane race is (D1)."""
+    return 1 / (1 + math.exp(-(opponent_s - max(runner_s, ball_s)) / margin_s))
+
+
+def pick_move(worth: dict[str, float], temperature: float, current: str | None, rng, sticky: float) -> str:
+    """O10, D4: the move he makes, from what each is worth: the best plus his own misjudgement of
+    each, a random-utility draw (so a softmax, as on the ball) whose spread is `temperature` times
+    how far apart the moves are (decisions.choice_temperature, decisions.choice_spread), with a
+    small bonus for carrying on with the move he is making."""
+    from ninety.sim.decisions import choice_spread
+    values = {k: v + (sticky if k == current else 0.0) for k, v in worth.items()}
+    t = temperature * choice_spread(list(values.values()))
+    if t <= 0:  # a perfect decision-maker makes the best move (D4)
+        return max(values, key=values.get)
+    return max(values, key=lambda k: values[k] / t - math.log(-math.log(max(rng.random(), 1e-12))))
+
+
 # O6: where each role stands while his team has the ball (design, *verify* against team shape in
 # possession: length about 31 to 46 m and width 35 to 48 m, Rico-Gonzalez review, so the widest
 # players stand about 21 m either side of the centre; formations in and

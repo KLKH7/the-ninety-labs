@@ -850,12 +850,23 @@ def options(scene: Scene) -> list[Option]:
 
 
 def temperature(scene: Scene) -> float:
+    return choice_temperature(scene.decisions, pressure(scene), scene.composure)
+
+
+def choice_temperature(decisions: float, pressed: float, composure: float) -> float:
     """Design: how loosely the player chooses, relative to how different his options are. All of
     the looseness is his decisions attribute (Kian, 2026-10-16): a perfect decision-maker always
     takes the best option, a poor one often does not; pressure loosens his choice unless he is
     composed. (There was a 0.15 floor every player shared: it made even the best decision-maker
-    take a clearly worse option, such as a 27 m shot, about one time in five.)"""
-    return 0.6 * (1 - scene.decisions) * (1 + pressure(scene) * (1 - scene.composure))
+    take a clearly worse option, such as a 27 m shot, about one time in five.) One rule on the ball
+    (choose) and off it (offball.pick_move)."""
+    return 0.6 * (1 - decisions) * (1 + pressed * (1 - composure))
+
+
+def choice_spread(values: list[float]) -> float:
+    """D4: how far apart the options are (their standard deviation), never below the noise floor."""
+    mean = sum(values) / len(values)
+    return max(math.sqrt(sum((v - mean) ** 2 for v in values) / len(values)), CHOICE_NOISE_FLOOR)
 
 
 def taste_key(scene: Scene, o: Option) -> tuple:
@@ -877,12 +888,9 @@ def choose(scene: Scene, rng: random.Random, tastes: dict | None = None) -> Opti
     again at the same options does not re-roll the dice (a choice he keeps rejecting does not become
     certain by being asked four times a second)."""
     opts = options(scene)
-    values = [o.value for o in opts]
-    mean = sum(values) / len(values)
-    spread = math.sqrt(sum((v - mean) ** 2 for v in values) / len(values))
     # D4: the randomness is a share of how far apart the options are, so a choice between close
     # options is loose and one between clearly different options is not, wherever on the pitch.
-    t = temperature(scene) * max(spread, CHOICE_NOISE_FLOOR)
+    t = temperature(scene) * choice_spread([o.value for o in opts])
     if t <= 0:  # a perfect decision-maker takes the best option
         return max(opts, key=lambda o: o.value)
     tastes = {} if tastes is None else tastes
