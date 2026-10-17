@@ -212,6 +212,36 @@ def test_execution_scatters_a_lofted_kicks_launch_angle_by_the_profiles_error():
     assert abs(pstdev(lofts) / expected - 1) < 4 / math.sqrt(2 * len(lofts))
 
 
+def test_kicks_from_the_penalty_mark_land_in_the_measured_ellipse():
+    # A3, end to end: struck facing the paper's target (3.5 m across and 1.6 m up, 11 m out, about
+    # 21 m/s) at average skill, the engine's own kick error and flight spread the ball over the goal
+    # plane as the measured preferred-foot ellipse does (95% axes 4.08 m and 1.91 m, tilted 26.9
+    # degrees), the speed spread included: the vertical is not counted twice.
+    e, p = kicker()
+    bearing = math.atan2(3.5, 11.0)
+    p.heading = bearing
+    ground, up = ball.shot(math.hypot(11.0, 3.5), 21.0, 1.6, DT)
+    goal = p.x + 11.0
+    ys, zs = [], []
+    for _ in range(20000):
+        vx, vy, vz = e.execute(p, ground * math.cos(bearing), ground * math.sin(bearing), up, "finishing")
+        path = ball.predict((p.x, p.y, 0.0, vx, vy, vz), DT, 3.0)
+        for a, b in zip(path, path[1:], strict=False):
+            if (a[0] - goal) * (b[0] - goal) <= 0 and a[0] != b[0]:
+                f = (goal - a[0]) / (b[0] - a[0])
+                ys.append(a[1] + f * (b[1] - a[1]))
+                zs.append(a[2] + f * (b[2] - a[2]))
+                break
+    long_sd, short_sd = (axis / 2 / 2.448 for axis in (4.08, 1.91))
+    t = math.radians(26.9)
+    across = math.hypot(long_sd * math.cos(t), short_sd * math.sin(t))
+    height = math.hypot(long_sd * math.sin(t), short_sd * math.cos(t))
+    assert len(zs) == 20000
+    within = 4 / math.sqrt(2 * len(zs))  # 4 standard errors of an SD
+    assert abs(pstdev(ys) / across - 1) < within
+    assert abs(pstdev(zs) / height - 1) < within
+
+
 def mean_speed(e: Engine, p, deg: float) -> float:
     a = math.radians(deg)
     return mean(math.hypot(*e.execute(p, 20 * math.cos(a), 20 * math.sin(a), 0.0, "passing")[:2])
