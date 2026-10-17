@@ -154,6 +154,43 @@ def pass_to_himself(c):
     c["events"][0]["receiver"] = "h1"
 
 
+def receiver_of_a_failed_pass(c):
+    c["events"][0]["outcome"] = "fail"
+
+
+def interceptor_on_his_own_team(c):
+    c["events"][0].update(receiver=None, outcome="fail", interceptor="h2")
+
+
+def intended_for_an_opponent(c):
+    c["events"][0]["intended"] = "a1"
+
+
+def intercepted_pass_completed(c):
+    c["events"][0]["interceptor"] = "a1"
+
+
+def interception_of_a_pass_cut_out_by_someone_else(c):
+    c["events"][0].update(receiver=None, outcome="fail", interceptor="a1")
+    c["events"].append(event("e2", 40, "interception", "home", "h2", x=50.0))
+
+
+def receiver_on_the_other_team(c):
+    c["events"][0]["receiver"] = "a1"
+
+
+def deflector_on_his_own_team(c):
+    c["events"][0].update(receiver=None, outcome="fail", deflected_by="h2")
+
+
+def deflected_pass_completed(c):
+    c["events"][0]["deflected_by"] = "a1"
+
+
+def pass_both_won_and_only_touched(c):
+    c["events"][0].update(receiver=None, outcome="fail", interceptor="a1", deflected_by="a1")
+
+
 def score_disagrees(c):
     c["meta"]["score"]["home"] = 1
 
@@ -179,6 +216,15 @@ def score_disagrees(c):
     (interception_from_nowhere, "C8 event order"),
     (goal_without_shot, "C8 event order"),
     (pass_to_himself, "C8 event order"),
+    (receiver_of_a_failed_pass, "C4 event players"),
+    (interceptor_on_his_own_team, "C4 event players"),
+    (intended_for_an_opponent, "C4 event players"),
+    (intercepted_pass_completed, "C4 event players"),
+    (interception_of_a_pass_cut_out_by_someone_else, "C8 event order"),
+    (receiver_on_the_other_team, "C4 event players"),
+    (deflector_on_his_own_team, "C4 event players"),
+    (deflected_pass_completed, "C4 event players"),
+    (pass_both_won_and_only_touched, "C4 event players"),
     (score_disagrees, "C9 score"),
 ])
 def test_planted_defect_fails(tmp_path, defect, check):
@@ -188,6 +234,19 @@ def test_planted_defect_fails(tmp_path, defect, check):
 
 
 # --- legal cases that must pass ----------------------------------------------------------------
+
+def test_an_interception_of_the_pass_its_interceptor_won_passes(tmp_path):
+    """C8 reads who won a failed pass from `interceptor`; the pass has no receiver."""
+    clip = clean_clip()
+    for f in clip["frames"]:  # a1 stands where the pass was going and takes it
+        f["players"][1].update(x=50.0, y=45.0)
+        f["players"][2].update(x=50.0, y=30.0)
+        if f["possessor"] == "h2":
+            f["possessor"] = "a1"
+    clip["events"][0].update(receiver=None, outcome="fail", interceptor="a1")
+    clip["events"].append(event("e2", PASS_AT + 25, "interception", "away", "a1", x=50.0))
+    assert run(tmp_path, clip) == {}
+
 
 def test_kickoff_restart_may_reset_positions(tmp_path):
     clip = clean_clip()

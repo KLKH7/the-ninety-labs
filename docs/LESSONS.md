@@ -69,7 +69,7 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_constants.py` fails if any module in `ninety/` assigns a top-level name
   twice.
 
-### 45. Same seed, same match, on every machine
+### 46. Same seed, same match, on every machine
 - **What happened:** seed 7 simulated a different match on macOS from the one on Linux, so the cue
   fixture test failed on a Mac and "156 cues" could not be reproduced there. The engine was
   deterministic; the C math library was not. Apple's `exp`, `erf`, `sin` and the rest disagree
@@ -135,7 +135,7 @@ short and actionable. This file is public: no research sources, product names or
   because the wait loop treated an empty check list as finished.
 - **Rule:** wait until every required check has reported, then merge.
 
-### 44. Green CI on an old base is not green on main
+### 45. Green CI on an old base is not green on main
 - **What happened:** #55 changed the seed-7 match and merged at 05:55 UTC. #61 merged three
   minutes later on CI that had run against the main before #55, because branch protection does
   not require a branch to be up to date. Main went red: the recorded slice cited an event id
@@ -320,9 +320,9 @@ short and actionable. This file is public: no research sources, product names or
   recorded prompt (fact-checker reasons, agent instructions). Never make the replayer tolerate a
   changed prompt: a shim that rewrites new wording back to old pairs an old answer with a new
   question.
-- **Check:** `test_every_committed_replay_still_replays` runs every committed replay (lesson 43).
+- **Check:** `test_every_committed_replay_still_replays` runs every committed replay (lesson 44).
 
-### 43. A committed recording must be replayed by a test, or it rots silently
+### 44. A committed recording must be replayed by a test, or it rots silently
 - **What happened:** the fact-checker started also reporting "clock 01:00 is not a cited clock",
   which changed the Analyst's retry prompt, and `replays/slice-minute2-plant.json` stopped
   replaying on main. Lesson 32's check was a manual step nobody ran, and
@@ -408,7 +408,25 @@ short and actionable. This file is public: no research sources, product names or
   the report shows breaking gets a test.
 - **Check:** `tests/test_penalties.py::test_a_penalty_never_comes_off_the_man_who_took_it`.
 
-### 42. A report another program reads must be strict JSON
+### 42. One field, one meaning: who a pass was for is not who got it
+- **What happened:** a pass event's `receiver` meant the team-mate who got a completed pass and,
+  on a failed one, the opponent who cut it out. The cue template read it as the target, so 12 of
+  the 15 failed-pass cues in the seed-7 fixture said things like "a2 looks for h8", h8 being the
+  home player who intercepted it. Lesson 23's checks passed: the verb followed the outcome, the
+  name did not.
+- **Rule:** a pass records each person in their own field: `intended` (whom the passer chose),
+  `receiver` (the team-mate who got it, completed passes only), `interceptor` (the opponent who won
+  a failed one) and `deflected_by` (an opponent who only touched it, which says nothing about where
+  it went next). Never reuse a field for a different role depending on the outcome. A word that
+  states a role ("finds", "cut out by") reads the field for that role, in the cue and in the
+  fact-checker.
+- **Check:** the validator's C4 fails a pass whose receiver or intended is an opponent, whose
+  interceptor or deflector is a team-mate, or whose receiver is set on a failed pass;
+  `tests/test_cues.py::test_no_cue_in_the_fixture_names_an_opponent_as_a_pass_target` fails on
+  the old fixture; `tests/test_factcheck.py::test_a_pass_finds_only_its_receiver` fails without
+  the fact-checker's role check.
+
+### 43. A report another program reads must be strict JSON
 - **What happened:** the event scoring harness used infinity for "the detected time is past the
   last frame, so the place cannot be right". That is correct inside the matching, but it was also
   written into the report, and Python's `json.dumps` writes it as `Infinity`, which JavaScript's
@@ -420,7 +438,7 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_event_score.py::test_a_time_outside_the_clip_still_gives_strict_json`
   fails on the original code.
 
-### 46. A test's premise holds by construction, not by a seed's draw
+### 47. A test's premise holds by construction, not by a seed's draw
 - **What happened:** porting the portable math onto the engine branch changed `gauss`, so every
   drawn player changed. `test_a_dribbler_whose_touch_is_declined_still_decides` assumed h6 in
   `Engine(1)` "could not run onto" a push from standing. That was true only of the old draw of him

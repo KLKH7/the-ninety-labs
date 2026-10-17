@@ -31,7 +31,7 @@ jobs:
       - run: uv run pytest -q
 
   portable:
-    # The same seed must simulate the same match on every machine (docs/LESSONS.md, lesson 45):
+    # The same seed must simulate the same match on every machine (docs/LESSONS.md, lesson 46):
     # the portable-math pins and the cue fixture, which embeds seed 7's events, on macOS too.
     runs-on: macos-latest
     steps:
