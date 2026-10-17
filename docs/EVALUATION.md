@@ -51,8 +51,11 @@ was counted, and each one's reason is beside it in `ninety/vision/data_stats.py`
 does not prove the data is enough; the learning curve decides that.
 
 ```bash
-uv run ninety-data-stats runs/dataset --stride 5 --input 512x512 --out docs/eval/dataset-stats.json --floors
+uv run ninety-data-stats <training clips> --stride 5 --input 640x640 --out docs/eval/dataset-stats.json --floors
 ```
+
+`--input` is the training input size (`resolution` in `ninety/vision/finetune.json`, 640), so the
+ball and player sizes in the report are what the detector sees.
 
 The floors are `TRAIN_FLOORS` and `TEST_FLOORS` in `ninety/vision/data_stats.py`, each with its
 reason; that file is the only table. `ball_visibility_lt_0_5_share` is the quantity PLAN.md
