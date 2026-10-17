@@ -16,7 +16,7 @@ import random
 from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
 
-from ninety.sim import ball, offball, perception, shape, threat
+from ninety.sim import ball, firsttouch, offball, perception, shape, threat
 from ninety.sim import value as possession
 from ninety.sim.body import (
     BODY_HEIGHT,
@@ -660,8 +660,9 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
     the first team-mate who can get to the ball's path takes it (reach_time), unless it leaves the
     pitch first, an opponent's body is in its way before he can react (body_hit), or an opponent
     gets there before him (each raced against that take, softened by LANE_MARGIN_S); and the
-    team-mate's first touch must kill the ball's speed relative to him (A4, the engine's own rule,
-    softened by CONTROL_MARGIN_MPS)."""
+    team-mate's first touch must keep the ball at his feet (A4, the engine's own touch in
+    firsttouch.py: the surface by the ball's height, what it cannot kill left to run; softened by
+    CONTROL_MARGIN_MPS)."""
     sx, sy = scene.x, scene.y
     direction = math.atan2(ty - sy, tx - sx)
     nodes = strike_nodes(scene, tx, ty, lofted, pace)
@@ -724,10 +725,13 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
                 take, at, taker = t, i, mate
         if taker is None:
             continue  # nobody of his gets to it before it goes out or comes to rest out of reach
-        _, a, _, g, vz = points[at]
+        _, a, z, g, vz = points[at]
         if at == len(points) - 1 and rests:
             g = vz = 0.0
-        p = sigmoid((taker[5] - relative_speed(g * ux, g * uy, vz, taker[2], taker[3])) / CONTROL_MARGIN_MPS)
+        # The engine's own touch (firsttouch.py): the surface by the ball's height where he takes it,
+        # and a touch that keeps it at his feet.
+        p = firsttouch.kept_estimate(relative_speed(g * ux, g * uy, vz, taker[2], taker[3]),
+                                     firsttouch.surface_absorb(taker[5], z), CONTROL_MARGIN_MPS)
         horizon = take + OPPONENT_LATE_S
         # Where the ball has got to by then, along this strike: nobody further from that stretch of
         # its path than he can run by then matters (a shortcut, like `lb`).

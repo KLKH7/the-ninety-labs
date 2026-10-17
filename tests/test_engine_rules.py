@@ -24,6 +24,7 @@ from ninety.sim.engine import (
     throw_hands,
     throw_stand,
 )
+from ninety.sim.firsttouch import KEEP_MPS
 from ninety.sim.profiles import FOOT_ABSORB_MPS, MAX_STRIKE_MPS
 from ninety.sim.style import Style
 from ninety.validate import check_physics
@@ -385,20 +386,27 @@ PAST_THIGH = (FOOT_BEST * AERIAL_ABSORB + FOOT_BEST) / 2  # past the best thigh,
 
 
 def test_a_high_ball_can_be_taken_on_the_body_and_a_poor_touch_is_worse():
-    # At chest height: a good first touch kills it, a poor one is a heavy touch.
+    # At chest height: a good first touch kills it, a poor one is a heavy touch: what the chest could
+    # not kill runs on, toward where he sends it (firsttouch.py), and he is not on it yet (D6).
     killed = _high_ball(1.0, CHEST, 1.35, True)
     assert killed.possessor == "a6" and killed.ball[3] == 0.0 and killed.ball[5] == 0.0
     assert not any(ev["type"] == "deflection" for ev in killed.match.events)
     heavy = _high_ball(0.0, CHEST, 1.35, True)
-    assert heavy.possessor is None
-    assert math.isclose(heavy.ball[3], -MISCONTROL_KEEP * CHEST, rel_tol=0.05)
+    assert heavy.possessor is None and heavy.dribbler == "a6"
+    assert not any(ev["type"] == "deflection" for ev in heavy.match.events)
+    left = CHEST - FOOT_WORST * AERIAL_ABSORB  # what a poor chest could not kill
+    assert left > KEEP_MPS and math.isclose(math.hypot(heavy.ball[3], heavy.ball[4]), left, rel_tol=0.3)
+    # Far too fast for the surface, it beats him and rebounds.
+    beat = _high_ball(0.0, 2.2 * FOOT_WORST * AERIAL_ABSORB, 1.35, True)
+    assert beat.possessor is None and beat.dribbler is None
+    assert math.isclose(beat.ball[3], -MISCONTROL_KEEP * 2.2 * FOOT_WORST * AERIAL_ABSORB, rel_tol=0.05)
     # The same arrival with no time to set himself still just rebounds off the body.
     cold = _high_ball(1.0, CHEST, 1.35, False)
     assert cold.possessor is None
     assert math.isclose(cold.ball[3], -BODY_RESTITUTION * CHEST, rel_tol=0.05)
     # A thigh is the same idea, and harder than a foot reached out to the side.
     thigh = _high_ball(1.0, PAST_THIGH, 0.7, True)
-    assert thigh.possessor is None and any(ev["type"] == "deflection" for ev in thigh.match.events)
+    assert thigh.possessor is None and thigh.dribbler == "a6"  # a heavy touch, where a foot keeps it
     foot = _high_ball(1.0, PAST_THIGH, 0.2, True, y=30.55)
     assert foot.possessor == "a6"
     # A clip of the outside rebounds even when he is ready and his touch is perfect.
