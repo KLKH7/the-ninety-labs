@@ -17,12 +17,13 @@ from __future__ import annotations
 
 import math
 import random
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 
 from ninety.sim import ball, decisions, offball, perception, profiles
 from ninety.sim.body import BRAKE_MAX, CS_MEAN, D0, F0_MEAN, V0_MEAN, Body
 from ninety.sim.body import move as move_body
 from ninety.sim.profiles import Profile
+from ninety.sim.style import Style, preset_name
 from ninety.sim.team import TeamBrain
 
 PITCH_X, PITCH_Y = 105.0, 68.0
@@ -39,7 +40,6 @@ DRIBBLE = 2.5
 DECIDE_EVERY = 6  # frames between the ball carrier's decisions (about 4 a second)
 PERCEIVE_EVERY = 6  # frames between a player's looks at the pitch (about 4 a second, staggered)
 BRAIN_EVERY = 12  # frames between a team brain's reads of the game (about 2 a second)
-ENGAGE_M = 20.0  # design: the first presser goes to the ball when it is this close
 COVER_M = 8.0  # design: the covering player stays this far behind the presser, goal-side
 PERCEPTION_ERR = 0.03  # verify: m/s of misjudged ball velocity per metre between player and ball
 CONTROL_M = 1.0  # a foot reaches this far from the body's centre
@@ -50,7 +50,6 @@ KEEPER_DIVE_EXTRA_M = 0.8  # P11: added as the dive stretches out, hips to finge
 DIVE_TIME_S = 0.5  # P11: design; a full dive to the post takes about 1 s including body travel
 BODY_RADIUS = 0.26  # P11: half a footballer's shoulder width (about 0.53 m over the deltoids)
 BODY_HEIGHT = 1.8
-PRESS_GAP_M = 2.0  # design, verify: how close a presser stands (jockeys), goal-side of the ball carrier
 PERSONAL_SPACE_M = 1.2  # players steer to keep about this far from each other
 SHOULDER_TO_SHOULDER_M = 0.52  # P11: centres of two players in contact, shoulder to shoulder
 ANTICIPATE_S = 0.4  # verify: how far ahead players judge where others will be
@@ -151,6 +150,7 @@ class Match:
     frames: list[dict] = field(default_factory=list)
     score: dict = field(default_factory=lambda: {"home": 0, "away": 0})
     roster: list[dict] = field(default_factory=list)
+    teams: dict = field(default_factory=dict)  # each team's strength and style: the scenario's settings
 
 
 def attack_dir(team: str) -> float:
@@ -197,14 +197,24 @@ def steer(p: Player, tx: float, ty: float, want_speed: float) -> None:
 
 
 class Engine:
-    def __init__(self, seed: int, strengths: dict[str, float] | None = None):
+    def __init__(self, seed: int, strengths: dict[str, float] | None = None,
+                 styles: dict[str, Style] | None = None):
         self.rng = random.Random(seed)
         # Perception draws from its own stream, so a change to what players see does not
         # reshuffle every other random draw in the match.
         self.sight_rng = random.Random(f"{seed}-perception")
         self.match = Match(seed=seed)
         self.players: list[Player] = []
-        self.strength = strengths or {team: profiles.team_strength(self.rng) for team in ("home", "away")}
+        # A strength not given is drawn, home first, so an unset match is the same as before.
+        given = strengths or {}
+        self.strength = {team: given[team] if team in given else profiles.team_strength(self.rng)
+                         for team in ("home", "away")}
+        self.styles = {team: (styles or {}).get(team, Style()) for team in ("home", "away")}
+        self.match.teams = {
+            team: {"strength": self.strength[team], "preset": preset_name(self.styles[team]),
+                   "style": asdict(self.styles[team])}
+            for team in ("home", "away")
+        }
         for team in ("home", "away"):
             for n, (role, fx, fy) in enumerate(FORMATION):
                 ax = fx * PITCH_X if team == "home" else (1 - fx) * PITCH_X
@@ -239,7 +249,7 @@ class Engine:
             for p in self.players
         ]
         self.beliefs = {p.id: perception.Belief(next_scan=self.rng.uniform(0, 3)) for p in self.players}
-        self.brains = {team: TeamBrain(team) for team in ("home", "away")}
+        self.brains = {team: TeamBrain(team, self.styles[team]) for team in ("home", "away")}
         self.ball: ball.State = (PITCH_X / 2, PITCH_Y / 2, 0.0, 0.0, 0.0, 0.0)
         self.possessor: str | None = None
         self.last_touch: str | None = None
@@ -1015,13 +1025,13 @@ class Engine:
             def on_pitch(x: float, y: float) -> tuple[float, float]:
                 return clamp(x, 0.5, PITCH_X - 0.5), clamp(y, 0.5, PITCH_Y - 0.5)
 
-            gap = PRESS_GAP_M
+            gap = brain.press_gap_m  # how tight the style presses (pressing intensity)
             if self.restart and self.restart.team != p.team:  # Laws 15 to 17: stand off the restart
                 gap = RESTART_DISTANCE_M[self.restart.kind]
             presser = self.by_id[brain.pressers[0]] if brain.pressers else None
             engaged = (
                 presser is not None
-                and math.hypot(bx - presser.x, by - presser.y) < ENGAGE_M
+                and math.hypot(bx - presser.x, by - presser.y) < brain.engage_m(self.t)
                 and brain.presses(self.t, bx)
             )
             if presser is p and engaged:
@@ -1504,5 +1514,6 @@ class Engine:
         return self.match
 
 
-def simulate(seed: int, minutes: float) -> Match:
-    return Engine(seed).run(minutes)
+def simulate(seed: int, minutes: float, strengths: dict[str, float] | None = None,
+             styles: dict[str, Style] | None = None) -> Match:
+    return Engine(seed, strengths, styles).run(minutes)

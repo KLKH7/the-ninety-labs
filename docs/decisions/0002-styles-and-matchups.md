@@ -50,10 +50,10 @@ styles and two team strengths.
 
 | Dial | What it changes in the engine | Exists today |
 |---|---|---|
-| Line height | the block the team brain picks (`BLOCKS`, T2) | yes, fixed at `mid` |
-| Pressing height | the line of engagement (`ENGAGE_FROM_GOAL_M`, T3), set separately from the line | yes, tied to the block |
-| Pressing intensity | how many players go to the ball and how close the presser stands (`PRESS_GAP_M`) | partly: one presser and one cover |
-| Counter-pressing | whether the team presses in the transition window after losing the ball (`TRANSITION_S`, T1) | yes, always on |
+| Line height | the block the team brain picks (`BLOCKS`, T2) | **built** (T4) |
+| Pressing height | the line of engagement (`ENGAGE_FROM_GOAL_M`, T3), set separately from the line | **built** (T4) |
+| Pressing intensity | how far the first presser goes to the ball and how close he stands (one presser and one cover, as before) | **built** (T4) |
+| Counter-pressing | whether the team presses in the transition window after losing the ball (`TRANSITION_S`, T1), and from how far | **built** (T4) |
 | Counter-attacking | in the window after winning the ball, more weight on forward passes, forward runs and carries | no |
 | Directness | weight on ground gained against keeping the ball, in option values (D1, D4) | no |
 | Risk | the cost of losing the ball in option values (D1); the game state moves it too (ENGINE.md §6) | no |
