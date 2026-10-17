@@ -178,6 +178,7 @@ class Scene:
     current: str | None = None  # what he is doing now (dribble or hold), for STICKY
     heading: float = 0.0  # the way he faces, radians
     fresh: float = 1.0  # his slow store's share left (P10)
+    held: int = 0  # D9: decisions in a row he has already spent holding
     ball_offset: tuple[float, float] = (0.0, 0.0)  # the ball relative to his body
 
 
@@ -849,12 +850,14 @@ def options(scene: Scene) -> list[Option]:
         gain = our_value(scene, tx, ty)
         ev = win * gain - (1 - win) * our_loss(scene, scene.x, scene.y)
         out.append(Option("dribble", ev + (STICKY if scene.current == "dribble" else 0.0), (tx, ty)))
-    if abs(scene.goal_x - scene.x) > CLEAR_FROM * PITCH_X:  # in his own third: long and away
-        wide = 4.0 if scene.y < PITCH_Y / 2 else PITCH_Y - 4.0
+    if abs(scene.goal_x - scene.x) > CLEAR_FROM * PITCH_X and p > 0:  # pressed in his own third
+        # Long and away, toward where his most advanced team-mate is, not at a touchline: a long
+        # ball is a contest where it lands (an even one: design).
         tx = scene.x + attack(scene.goal_x) * 45.0
-        # A long ball away is a contest where it lands (an even one: design).
-        contest = 0.5 * value(tx, wide, scene.goal_x) - 0.5 * loss_cost(tx, wide, scene.goal_x)
-        out.append(Option("clear", contest, (tx, wide), lofted=True))
+        front = max(scene.mates, key=lambda m: m[1] * attack(scene.goal_x), default=None)
+        ty = min(PITCH_Y - 6.0, max(6.0, front[2])) if front else PITCH_Y / 2
+        contest = 0.5 * value(tx, ty, scene.goal_x) - 0.5 * loss_cost(tx, ty, scene.goal_x)
+        out.append(Option("clear", contest, (tx, ty), lofted=True))
     # Holding is waiting to make a move a moment later: worth the best move open to him now, less
     # what the defence recovers while he waits (D9; *verify*: options only decay while he waits,
     # nothing here models a run developing). He cannot wait for ever, so when every move is a bad
@@ -862,27 +865,64 @@ def options(scene: Scene) -> list[Option]:
     # half the time he is caught (p * 0.5); otherwise he still makes that move. Each decision
     # weighs holding afresh, so it carries no bonus for carrying on.
     best = max((o.value - (STICKY if o.kind == scene.current else 0.0) for o in out), default=0.0)
-    later = best * (1 - HOLD_DECAY) if best >= 0 else best * (1 + HOLD_DECAY)
+    # D9: per decision spent holding, so the longer he waits the less waiting is worth.
+    decay = 1 - (1 - HOLD_DECAY) ** (scene.held + 1)
+    later = best * (1 - decay) if best >= 0 else best * (1 + decay)
     lose = 0.5 * p
     out.append(Option("hold", (1 - lose) * later - lose * our_loss(scene, scene.x, scene.y)))
     return out
 
 
 def temperature(scene: Scene) -> float:
-    """Design: how loosely the player chooses, relative to how different his options are. A good
-    decision-maker almost always takes the best option; pressure loosens his choice unless he is
-    composed."""
-    return (0.15 + 0.6 * (1 - scene.decisions)) * (1 + pressure(scene) * (1 - scene.composure))
+    return choice_temperature(scene.decisions, pressure(scene), scene.composure)
 
 
-def choose(scene: Scene, rng: random.Random) -> Option:
-    opts = options(scene)
-    values = [o.value for o in opts]
+def choice_temperature(decisions: float, pressed: float, composure: float) -> float:
+    """Design: how loosely the player chooses, relative to how different his options are. All of
+    the looseness is his decisions attribute (Kian, 2026-10-16): a perfect decision-maker always
+    takes the best option, a poor one often does not; pressure loosens his choice unless he is
+    composed. (There was a 0.15 floor every player shared: it made even the best decision-maker
+    take a clearly worse option, such as a 27 m shot, about one time in five.) One rule on the ball
+    (choose) and off it (offball.pick_move)."""
+    return 0.6 * (1 - decisions) * (1 + pressed * (1 - composure))
+
+
+def choice_spread(values: list[float]) -> float:
+    """D4: how far apart the options are (their standard deviation), never below the noise floor."""
     mean = sum(values) / len(values)
-    spread = math.sqrt(sum(fmath.ipow(v - mean, 2) for v in values) / len(values))
+    return max(math.sqrt(sum(fmath.ipow(v - mean, 2) for v in values) / len(values)), CHOICE_NOISE_FLOOR)
+
+
+def taste_key(scene: Scene, o: Option) -> tuple:
+    """Which option this is, the same from one look to the next while he has the ball: a pass by
+    who it is for and how, a carry by its direction relative to the goal, the rest by kind."""
+    if o.kind == "pass":
+        return o.kind, o.receiver, o.lofted
+    if o.kind == "dribble" and o.target:
+        goal = math.atan2(PITCH_Y / 2 - scene.y, scene.goal_x - scene.x)
+        turn = math.atan2(o.target[1] - scene.y, o.target[0] - scene.x) - goal
+        return o.kind, round(((turn + math.pi) % (2 * math.pi) - math.pi) / 0.8)
+    return (o.kind,)
+
+
+def choose(scene: Scene, rng: random.Random, tastes: dict | None = None) -> Option:
+    """D4: the option with the best value plus his own misjudgement of it. The misjudgement is a
+    random-utility draw (Gumbel), so a single choice is a softmax of the values; it is drawn once
+    per option and kept in `tastes` until he next scans the pitch (the engine resets it), so looking
+    again at the same options does not re-roll the dice (a choice he keeps rejecting does not become
+    certain by being asked four times a second)."""
+    opts = options(scene)
     # D4: the randomness is a share of how far apart the options are, so a choice between close
     # options is loose and one between clearly different options is not, wherever on the pitch.
-    t = temperature(scene) * max(spread, CHOICE_NOISE_FLOOR)
-    top = max(o.value for o in opts)
-    weights = [fmath.exp((o.value - top) / t) for o in opts]
-    return rng.choices(opts, weights=weights)[0]
+    t = temperature(scene) * choice_spread([o.value for o in opts])
+    if t <= 0:  # a perfect decision-maker takes the best option
+        return max(opts, key=lambda o: o.value)
+    tastes = {} if tastes is None else tastes
+
+    def taste(o: Option) -> float:
+        k = taste_key(scene, o)
+        if k not in tastes:
+            tastes[k] = -math.log(-math.log(max(rng.random(), 1e-12)))
+        return tastes[k]
+
+    return max(opts, key=lambda o: o.value / t + taste(o))

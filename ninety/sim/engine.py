@@ -359,6 +359,9 @@ class Engine:
         self.lunges: dict[str, float] = {}  # defender -> when his lunge reaches the ball
         self.lunge_at: dict[str, str] = {}  # defender -> the man he lunged at
         self.penalties = 0  # penalty kicks awarded (Law 14)
+        self.tastes: dict = {}  # D4: the carrier's misjudgement of each option, kept until he scans
+        self.holds = 0  # D9: decisions in a row the carrier has spent holding
+        self.taste_scan = -1.0  # the carrier's scan the tastes were drawn after
         self.evade_at: dict[str, float] = {}  # defender -> when the carrier reacts to his lunge
         self.off_balance: dict[str, float] = {}  # defender -> when he has recovered from a miss
         self.tackle: dict | None = None  # the tackle event whose outcome the next control decides
@@ -481,6 +484,8 @@ class Engine:
             self.poss_team = self.team_of(pid)
         self.possessor = pid
         self.last_touch = pid
+        self.tastes = {}  # D4: a new man on the ball judges his options afresh
+        self.holds = 0
         if pid != self.released_by:
             self.released_by = None
         self.new_phase()
@@ -768,7 +773,7 @@ class Engine:
                                 passer=prof, heading=carrier.heading, fresh=self.fresh(carrier),
                                 ball_offset=(self.ball[0] - carrier.x, self.ball[1] - carrier.y),
                                 progress_weight=style.progress_weight(brain.attacking_transition(self.t)),
-                                loss_weight=style.loss_weight())
+                                loss_weight=style.loss_weight(), held=self.holds)
         return scene
 
     def decide(self, carrier: Player, throw: bool = False) -> None:
@@ -792,7 +797,12 @@ class Engine:
             else:
                 self.hold_until = self.t + 0.5  # he looks again
             return
-        choice = decisions.choose(scene, self.rng)
+        # D4: his misjudgements last until he next looks around (P13 scans), not the whole spell.
+        scan = self.beliefs[carrier.id].next_scan
+        if scan != self.taste_scan:
+            self.tastes, self.taste_scan = {}, scan
+        choice = decisions.choose(scene, self.rng, self.tastes)
+        self.holds = self.holds + 1 if choice.kind == "hold" else 0
         if choice.kind == "pass" or choice.kind == "clear":
             self.pass_to(carrier, *choice.target, lofted=choice.lofted, pace=choice.pace,
                          receiver=choice.receiver)
