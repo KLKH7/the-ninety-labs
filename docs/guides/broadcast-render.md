@@ -53,8 +53,11 @@ datasets and beating them on motion blur).
 - kits: primary colour, secondary colour, pattern; the two teams must differ in colour and
   luminance; goalkeepers differ from both; referees in a third colour
 - skin tone, hair, height and build across the full human range
-- lighting: day, dusk, floodlit night; sun angle; shadow count and softness
-- weather: clear, overcast, light rain (streaks and wet grass sheen)
+- lighting: day, dusk, floodlit night; sun angle; shadow count and softness. **Day only for
+  now**: dusk, night and overcast render, but not yet like broadcast footage, so `PLANNED` in
+  `ninety/render/params.py` refuses them and every clip is a day clip (sun angle still varies)
+- weather: clear, overcast, light rain (streaks and wet grass sheen). **Clear only for now**,
+  for the same reason
 - grass hue and stripe width; pitch wear
 - camera: height, distance, FOV, pan lag, shake; occasional cut to a second angle
 - stadium: stand colour, crowd density, board colours

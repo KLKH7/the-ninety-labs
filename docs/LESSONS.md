@@ -162,6 +162,28 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** branch protection on `main` requires branches to be up to date (on since
   2026-10-17), so GitHub will not merge until CI has passed on the branch with main merged in.
 
+### 49. A deploy is done when the live URL answers with the new commit
+- **What happened:** the first `azd provision` and deploy of the API failed three times, and each
+  earlier step said it had passed. A role id written from memory did not exist (`what-if` does not
+  check role ids). Leaving the Container Apps environment's mode unset gave an Express
+  environment, which cannot run jobs or OpenTelemetry. And an image built by Docker's legacy
+  builder on a Mac looked amd64 when inspected locally, but in Azure even `/bin/sh` failed with
+  `exec format error`. `azd` reported success every time.
+- **Rule:** look up every Azure id (`az role definition list --name ...`); set every mode the
+  platform would otherwise default; build images with BuildKit, never the legacy builder. A
+  deploy counts as done only when the public URL answers with the commit just deployed.
+- **Check:** the deploy workflow's smoke test passes only when `/api/health` reports the commit
+  it deployed.
+
+### 50. A merge from main is a code change: test it before pushing
+- **What happened:** #80 pinned lighting and weather to day and clear; #70 merged into main
+  with tests that pushed `lighting=night` and `weather=rain` under their floors. Merging main
+  into #80 had no conflict, and it was pushed after only ruff and one manual run, so two tests
+  failed on the pushed head: correct code, tests written for the old knobs.
+- **Rule:** after merging main into a branch, run the full `uv run pytest` before pushing. A
+  clean merge only means no lines overlapped, not that the two changes agree.
+- **Check:** the merge commit's CI is green, and it was green locally before the push.
+
 ### 13. Keep diffs to what you meant to change
 - **What happened:** a one-word schema change rewrote 131 lines because a tool reformatted the
   whole file.
@@ -386,7 +408,7 @@ short and actionable. This file is public: no research sources, product names or
   branches had moved those limits to 12 + 12 × skill, so the same numbers now tested nothing: a
   "poor" chest killed the ball. Both branches had also numbered new lessons 18 to 23.
 - **Rule:** a test that checks a threshold derives its inputs from the constant (`FOOT_ABSORB_MPS`,
-  `AERIAL_ABSORB`), so a change to the constant moves the test with it. A new lesson takes the next
+  `firsttouch.CUSHION`), so a change to the constant moves the test with it. A new lesson takes the next
   number on `main` at merge time.
 - **Check:** `tests/test_engine_rules.py` high-ball tests build their speeds from the profile
   constants; `grep '^### ' docs/LESSONS.md` shows no number twice.
@@ -476,7 +498,7 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `grep` the rule's constants: they appear in one module and its tests, nowhere else;
   a test feeds the same case to the engine's function and to the estimate.
 
-### 49. A band is only as good as the sources that make it
+### 51. A band is only as good as the sources that make it
 - **What happened:** R7's published band, 20 to 45%, was cited to one Premier League study, which
   reports about 20%; the 35 to 45% came from a second study that was not cited. The same row still
   showed a 62% late drop measured on an engine two rebuilds old, and the late drop that did exist
