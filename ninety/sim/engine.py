@@ -259,7 +259,7 @@ def clamp(v: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, v))
 
 
-AVERAGE = 0.5  # an average player's attribute, for estimates about whoever ends up on the ball
+AVERAGE = decisions.AVERAGE  # an average player's attribute, for estimates about whoever ends up on the ball
 
 
 def settle_s(first_touch: float) -> float:
@@ -927,10 +927,14 @@ class Engine:
         if aerial:  # a thigh, chest or head kills its own share of what a foot does (A4)
             absorb = firsttouch.surface_absorb(foot, cz)
         sent = None  # a cushioned touch: the ball's velocity as it leaves him (firsttouch.py, A4)
+        worse = 1.0
+        if kind == "touch" and not hands:  # what makes this touch worse takes from the cushion (A4)
+            worse = self.touch_worse(p, rel, foot)
+            absorb /= worse
         if kind == "touch" and hands:  # a keeper holds what his hands can, or it beats them
             controls = rel <= absorb
         elif kind == "touch" and not firsttouch.beaten(rel, absorb, foot):
-            sent = self.cushion(p, cx, cy, firsttouch.residual(rel, absorb), cz if aerial else 0.0)
+            sent = self.cushion(p, cx, cy, firsttouch.residual(rel, absorb), cz if aerial else 0.0, worse)
             controls = firsttouch.at_feet(math.hypot(sent[0] - p.vx, sent[1] - p.vy))
         else:  # a ball he has not reacted to, or one far too fast for the surface: it rebounds
             controls = False
@@ -991,18 +995,32 @@ class Engine:
             w = view.where(q.id, self.t) if q.team != p.team else None
             if not w:
                 continue
-            ahead = (w[0] - p.x) * attack_dir(p.team) > 0
-            reach = decisions.PRESSURE_FRONT_M if ahead else decisions.PRESSURE_BEHIND_M
+            felt = perception.pressure_from(p.x, p.y, w[0], w[1], attack_dir(p.team))
             d = math.hypot(p.x - w[0], p.y - w[1])
-            if 1 - d / reach > worst and d > 1e-6:
-                worst, away = 1 - d / reach, ((p.x - w[0]) / d, (p.y - w[1]) / d)
+            if felt > worst and d > 1e-6:
+                worst, away = felt, ((p.x - w[0]) / d, (p.y - w[1]) / d)
         return fmath.atan2(dy + 2 * worst * away[1], dx + 2 * worst * away[0])
 
-    def cushion(self, p: Player, cx: float, cy: float, speed: float, z: float = 0.0) -> tuple[float, float]:
+    def touch_worse(self, p: Player, rel: float, foot: float) -> float:
+        """firsttouch.quality for the ball as it arrives at him: where it comes from against the way
+        he faces, the pressure of the nearest opponent (D2's zone, where they really are: this is the
+        touch, not his picture of it), his composure, his energy (the slow store's share left, P10, as
+        a kick's) and its speed relative to him."""
+        rvx, rvy = self.ball[3] - p.vx, self.ball[4] - p.vy
+        come = fmath.atan2(-rvy, -rvx)  # where it comes from, seen from him
+        approach = decisions.turn_deg(come, p.heading)
+        pressure = max((perception.pressure_from(p.x, p.y, q.x, q.y, attack_dir(p.team))
+                        for q in self.players if q.team != p.team), default=0.0)
+        energy = self.fresh(p)
+        return firsttouch.quality(approach, pressure, p.profile["composure"], energy, rel, foot)
+
+    def cushion(self, p: Player, cx: float, cy: float, speed: float, z: float = 0.0,
+                worse: float = 1.0) -> tuple[float, float]:
         """A4: a cushioned touch sends the ball on at `speed` (relative to him, what the surface did
         not kill) toward where he chose (touch_aim), struck with his first touch's own error (A3's
-        rule with first touch as the skill: wider with speed, pressure, fatigue, and with the surface
-        he meets it with at height z, firsttouch.AIM_ERROR). Never over a line
+        rule with first touch as the skill, wider with the speed he sends it at), times what makes
+        this touch worse (`worse`, firsttouch.quality) and the surface he meets it with at height z
+        (firsttouch.AIM_ERROR). Never over a line
         he can see: if it would come to rest out of play he turns it back in, the least he must.
         Returns the ball's velocity on the pitch as it leaves him."""
         # He cannot play it through himself (P11): from where he meets it, it goes no further into
@@ -1016,9 +1034,10 @@ class Engine:
 
         aim = across(self.touch_aim(p, cx, cy))
         if speed > 1e-6:
-            nearest = min(math.hypot(q.x - p.x, q.y - p.y) for q in self.players if q.team != p.team)
-            dir_sd, speed_sd, _, _ = p.profile.strike_error("first_touch", speed, nearest, self.fresh(p), 0.0)
-            dir_sd *= firsttouch.AIM_ERROR[firsttouch.surface(z)]
+            # Pressure and fatigue are in `worse` (firsttouch.quality), not counted twice here.
+            dir_sd, speed_sd, _, _ = p.profile.strike_error("first_touch", speed, math.inf, 1.0, 0.0)
+            dir_sd *= worse * firsttouch.AIM_ERROR[firsttouch.surface(z)]
+            speed_sd *= worse
             for k in range(13):  # 0, +15, -15, +30, ... up to 90 degrees from his aim (design)
                 turn = math.radians(15.0 * ((k + 1) // 2) * (1 if k % 2 else -1))
                 a = across(aim + turn)
