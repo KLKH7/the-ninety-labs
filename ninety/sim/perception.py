@@ -25,6 +25,18 @@ SCAN_INTERVAL_S = (1.5, 3.5)  # P13: design; scanning frequency varies with role
 EXTRAPOLATE_S = 1.0  # design: a sighting is carried forward at most this long, then held
 VELOCITY_ERROR_PER_M = 0.02  # design: misjudged speed, m/s per metre away
 STALE_ERROR_MPS = 1.0  # design: how fast the uncertainty about an unseen player grows
+# D2: pressure is felt in a zone longer in front of a player (toward the goal he attacks) than
+# behind him (Andrienko et al. 2017).
+PRESSURE_FRONT_M, PRESSURE_BEHIND_M = 9.0, 3.0
+
+
+def pressure_from(px: float, py: float, ox: float, oy: float, attack_sign: float) -> float:
+    """D2: 0 to 1, how closely an opponent at (ox, oy) presses a player at (px, py) who attacks
+    toward +x (attack_sign 1) or -x (-1): 1 at his body, 0 at the zone's edge."""
+    reach = PRESSURE_FRONT_M if (ox - px) * attack_sign > 0 else PRESSURE_BEHIND_M
+    return max(0.0, 1 - math.hypot(ox - px, oy - py) / reach)
+
+
 TURN_TO_BALL_M = 0.5  # a still player turns to the ball unless it is at his own feet
 
 

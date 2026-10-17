@@ -30,6 +30,7 @@ from ninety.render.camera import Camera, Director, blur_vector
 from ninety.render.params import RenderParams, sample_params
 from ninety.render.scene import (
     Gait,
+    advance_gaits,
     ball_parts,
     body_parts,
     crowded_start,
@@ -37,11 +38,9 @@ from ninety.render.scene import (
     parts_box,
     project_keypoints,
     sample_looks,
-    turn_toward,
-    update_gait,
 )
 from ninety.render.splits import split_of
-from ninety.sim.engine import FORMATION, FPS, simulate
+from ninety.sim.engine import FORMATION, FPS, PITCH_X, PITCH_Y, simulate
 
 ROOT = Path(__file__).resolve().parents[2]
 WEB = ROOT / "web"
@@ -53,6 +52,7 @@ CHROMIUM_ARGS = [
     "--disable-gpu-driver-bug-workarounds",
 ]
 WARMUP = 2 * FPS  # frames simulated before the window so the camera and gaits settle
+WINDOW_DRAWS = 50  # seeded windows tried for one with the ball on the pitch (choose_start)
 
 
 class RenderUnavailable(RuntimeError):
@@ -135,10 +135,23 @@ def _appearance(lk, p: RenderParams) -> dict:
 def choose_start(
     frames: list[dict], p: RenderParams, n: int, seed: int, earliest_s: float, latest_s: float
 ) -> int:
+    """A seeded random window, redrawn (from the same seeded sequence, so still reproducible) while
+    the ball is off the pitch for all of it: a dead ball lying behind a goal line or touchline
+    waiting for a restart is off camera, so such a clip has no ball to label or check."""
     earliest, latest = int(earliest_s * FPS), int(latest_s * FPS)
     if p.occlusion == "crowded":
         return crowded_start(frames, n, max(earliest, WARMUP), latest)
-    return random.Random(f"window-{seed}").randint(max(earliest, WARMUP), latest)
+    rng = random.Random(f"window-{seed}")
+    for _ in range(WINDOW_DRAWS):
+        start = rng.randint(max(earliest, WARMUP), latest)
+        if any(_on_pitch(f["ball"]) for f in frames[start : start + n]):
+            break
+    return start
+
+
+def _on_pitch(b: dict) -> bool:
+    """The ball within the pitch's lines (Law 1)."""
+    return 0.0 <= b["x"] <= PITCH_X and 0.0 <= b["y"] <= PITCH_Y
 
 
 def render_clip(
@@ -223,20 +236,7 @@ def render_clip(
         rows = []
         for fi in range(max(0, start - WARMUP), start + n):
             fr = frames[fi]
-            bx, by = fr["ball"]["x"], fr["ball"]["y"]
-            for pl in fr["players"]:
-                px, py = prev_xy.get(pl["id"], (pl["x"], pl["y"]))
-                g = gaits[pl["id"]]
-                held = g.heading
-                update_gait(g, pl["x"] - px, pl["y"] - py, 1 / FPS, (bx - pl["x"], by - pl["y"]))
-                prev_xy[pl["id"]] = (pl["x"], pl["y"])
-                if "heading" in pl:
-                    # The engine says where he wants to face. The body turns toward it.
-                    g.heading = turn_toward(held, pl["heading"], 1 / FPS)
-                    pl["heading"] = round(g.heading, 4)
-                    g.speed = math.hypot(pl.get("vx", 0.0), pl.get("vy", 0.0))
-                    g.action = pl.get("action", "stand")
-                    g.dive = pl.get("dive", 0.0)
+            advance_gaits(gaits, prev_xy, fr, 1 / FPS)
             ball = drawn_ball(fr)
             actors = [(pl["x"], pl["y"], pl.get("action", "")) for pl in fr["players"]]
             # The snapshot of a goal already has the ball on the centre spot. The event

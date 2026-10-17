@@ -19,6 +19,7 @@ from collections import Counter
 
 from ninety.eval.event_score import (
     EPS,
+    FOULED_PLACED,
     LENIENT_M,
     NOT_PLACED,
     PLAYER_PLACED,
@@ -81,6 +82,16 @@ def free_time(truth: list[dict], kind: str, team: str, end: float, rng: random.R
     raise ValueError(f"no free time for a {team} {kind} away from every true one")
 
 
+def room_near(truth: list[dict], kind: str, team: str, end: float, near: float) -> bool:
+    """Is there a time free_time(..., near=near) could return? Checked on the 0.01 s grid it rounds
+    to, without drawing, so choosing events by it leaves the random draws as they were."""
+    for k in range(round(200 * WINDOW_S), round(500 * WINDOW_S) + 1):
+        for t in (round(near - k / 100, 2), round(near + k / 100, 2)):
+            if 0 <= t <= end and clear_of(truth, kind, team, t):
+                return True
+    return False
+
+
 def misplaced(d: dict, distance: float, rng: random.Random) -> dict:
     """Move a detection's spot exactly `distance` from where it is, staying on the pitch."""
     for _ in range(100):
@@ -114,7 +125,7 @@ def fake_detections(truth: list[dict], frames: list[dict], seed: int,
 
     def ball_placed(e):
         # A moved spot near a player-placed event could land by another player and pass by luck.
-        return e["type"] not in PLAYER_PLACED | NOT_PLACED
+        return e["type"] not in PLAYER_PLACED | FOULED_PLACED | NOT_PLACED
 
     detected: list[dict] = []
     for damage in DAMAGES:
@@ -139,7 +150,10 @@ def fake_detections(truth: list[dict], frames: list[dict], seed: int,
                 detected.append(misplaced(as_detection(e, "d" + e["id"], frames), MISPLACE_M[damage], rng))
                 entry.update(truth_id=e["id"], type=e["type"], detected_type=e["type"])
             else:
-                e = take(damage)
+                # A far shift needs a free time near the event (in a crowded spell there may be none):
+                # chosen so by construction, not left to how busy the match happens to be.
+                e = take(damage, (lambda e: room_near(truth, e["type"], e["team"], end, e["t"]))
+                         if damage == "far_shift" else (lambda e: True))
                 entry.update(truth_id=e["id"], type=e["type"], detected_type=e["type"])
                 if damage == "near_shift":
                     shift = rng.choice((-1, 1)) * rng.uniform(NEAR_MIN_S, NEAR_MAX_S)

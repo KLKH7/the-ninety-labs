@@ -19,6 +19,12 @@ licence must be one of those three (see `AGENTS.md`).
 | pytest, ruff (development) | tests and lint | MIT |
 | uv (container build only) | installs `uv.lock` into the API image | MIT or Apache-2.0 |
 
+## Data
+
+| Data | Used for | Source and terms |
+|---|---|---|
+| `ninety/sim/data/expected_threat_12x8.json` | what having the ball in each area is worth (GROUNDING D9) | Expected Threat grid by Karun Singh, file open_xt_12x8_v1 (karun.in). Its licence is not stated: *verify* before release, or replace it with a grid measured from open event data |
+
 ## Vision group (`uv sync --group vision`)
 
 The detector's dependencies are in the optional `vision` group, so `uv sync` and CI do not

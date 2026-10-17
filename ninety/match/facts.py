@@ -34,8 +34,9 @@ def compact(event: dict) -> dict:
         "team": event["team"],
         "player": event["player"],
     }
-    if event["receiver"]:
-        out["receiver"] = event["receiver"]
+    for role in ("receiver", "intended", "interceptor", "deflected_by"):
+        if event.get(role):
+            out[role] = event[role]
     if event["outcome"]:
         out["outcome"] = event["outcome"]
     if event["ball_speed_kmh"] is not None:

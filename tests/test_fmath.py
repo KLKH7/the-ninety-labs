@@ -1,4 +1,4 @@
-"""The simulator's math is the same on every platform (lesson 29).
+"""The simulator's math is the same on every platform (lesson 46).
 
 macOS and Linux once simulated different matches from the same seed: their C math libraries
 disagree in the last bit, and a match is chaotic. ninety/sim/fmath.py computes with exactly
