@@ -8,34 +8,34 @@ A **deliberate touch** is a player who has reacted to the ball playing it (foot,
 
 | Surface | Touches | Controlled | Kept | Median speed, m/s |
 |---|---|---|---|---|
-| foot | 16683 | 99.7% | 99.9% | 6.9 |
-| air | 734 | 19.6% | 62.9% | 12.9 |
-| hands | 507 | 99.2% | 99.2% | 0.4 |
-| all but own dribble | 10239 | 93.8% | 97.2% | 10.4 |
-| all | 17924 | 96.4% | 98.4% | 7.3 |
+| foot | 16412 | 99.8% | 99.9% | 6.9 |
+| air | 759 | 17.1% | 60.5% | 13.0 |
+| hands | 485 | 99.8% | 99.8% | 0.4 |
+| all but own dribble | 10184 | 93.4% | 96.9% | 10.3 |
+| all | 17656 | 96.2% | 98.2% | 7.4 |
 
-Failed deliberate touches: 639, of which 590 in the air.
+Failed deliberate touches: 671, of which 629 in the air.
 
 ## By whose ball it was (controlled, of touches)
 
 | Whose ball | foot | air | hands | all |
 |---|---|---|---|---|
-| intended receiver | 99.6% of 5733 | 13.0% of 386 |  | 94.1% of 6119 |
-| team-mate | 99.6% of 2464 | 19.0% of 58 | 100.0% of 2 | 97.7% of 2524 |
-| opponent | 97.8% of 493 | 24.9% of 197 | 100.0% of 6 | 77.2% of 696 |
-| shot | 100.0% of 50 | 42.9% of 28 | 96.2% of 106 | 89.1% of 184 |
-| loose ball | 100.0% of 644 | 32.8% of 64 | 100.0% of 8 | 94.0% of 716 |
-| own dribble | 100.0% of 7299 | 100.0% of 1 | 100.0% of 385 | 100.0% of 7685 |
+| intended receiver | 99.7% of 5637 | 14.0% of 420 |  | 93.7% of 6057 |
+| team-mate | 99.5% of 2433 | 10.5% of 57 | 100.0% of 2 | 97.5% of 2492 |
+| opponent | 98.1% of 480 | 19.0% of 216 | 100.0% of 12 | 74.0% of 708 |
+| shot | 97.7% of 43 | 27.8% of 18 | 99.1% of 108 | 91.1% of 169 |
+| loose ball | 99.9% of 705 | 39.6% of 48 | 100.0% of 5 | 96.0% of 758 |
+| own dribble | 100.0% of 7114 |  | 100.0% of 358 | 100.0% of 7472 |
 
 ## By arriving speed (controlled, of touches)
 
 | Speed, m/s | foot | air | hands |
 |---|---|---|---|
-| 0 to 6 | 100.0% of 8035 | 100.0% of 12 | 100.0% of 388 |
-| 6 to 12 | 100.0% of 5955 | 50.2% of 247 | 100.0% of 21 |
-| 12 to 18 | 99.6% of 2606 | 1.7% of 458 | 100.0% of 62 |
-| 18 to 24 | 61.6% of 86 | 0.0% of 17 | 100.0% of 29 |
-| 24 and over | 0.0% of 1 |  | 42.9% of 7 |
+| 0 to 6 | 100.0% of 7874 | 100.0% of 14 | 100.0% of 361 |
+| 6 to 12 | 100.0% of 5939 | 46.8% of 233 | 100.0% of 19 |
+| 12 to 18 | 99.4% of 2523 | 1.4% of 497 | 100.0% of 72 |
+| 18 to 24 | 65.3% of 75 | 0.0% of 14 | 100.0% of 31 |
+| 24 and over | 0.0% of 1 | 0.0% of 1 | 50.0% of 2 |
 
 ## Where a kept ball ends up
 
@@ -43,30 +43,30 @@ Failed deliberate touches: 639, of which 590 in the air.
 
 | Surface | Kept | Had at once | Met at, median m | Not at once: median s | furthest, median m | furthest, 90th percentile m |
 |---|---|---|---|---|---|---|
-| foot | 16671 | 99.8% | 1.00 | 0.64 | 1.12 | 1.66 |
-| air | 462 | 31.0% | 0.55 | 0.88 | 1.21 | 2.26 |
-| hands | 503 | 100.0% | 1.17 | | | |
+| foot | 16400 | 99.8% | 1.00 | 0.64 | 1.12 | 1.30 |
+| air | 459 | 28.3% | 0.53 | 0.84 | 1.17 | 2.17 |
+| hands | 484 | 100.0% | 1.19 | | | |
 
 ## Body hits (the ball meets a body that is not playing it)
 
 | | foot height | in the air | Median speed, m/s |
 |---|---|---|---|
-| not reacted | 329 | 66 | 14.6 |
-| reacted, a glancing ball | 0 | 36 | 12.2 |
+| not reacted | 327 | 64 | 13.5 |
+| reacted, a glancing ball | 0 | 32 | 12.1 |
 
 ## Throw-ins
 
-303 throw-ins (37.9 a match).
+337 throw-ins (42.1 a match).
 
 | Measure | Engine | Published |
 |---|---|---|
-| first contact by a team-mate | 86.1% | 83% (Stone, Smith and Barry 2021) |
-| first contact by a team-mate who controls it | 10.9% | |
-| first contact by a team-mate who keeps it | 69.3% | |
-| possession held 5 s later | 69.6% | 54% retained (Stone 2021, by their own definition of retained, *verify*) |
+| first contact by a team-mate | 84.0% | 83% (Stone, Smith and Barry 2021) |
+| first contact by a team-mate who controls it | 8.9% | |
+| first contact by a team-mate who keeps it | 62.3% | |
+| possession held 5 s later | 59.1% | 54% retained (Stone 2021, by their own definition of retained, *verify*) |
 
 ## Passes
 
 | Measure | Engine | Published |
 |---|---|---|
-| completion | 87.8% of 9827 | 75 to 88% (R3, *verify*) |
+| completion | 87.5% of 9752 | 75 to 88% (R3, *verify*) |
