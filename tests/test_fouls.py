@@ -145,6 +145,37 @@ def test_when_the_penalty_is_taken_he_shoots_from_the_mark():
             break
     shots = [ev for ev in e.match.events if ev["type"] == "shot"]
     assert shots and shots[0]["player"] == taker.id and abs(shots[0]["x"] - r.x) < 0.05
+    assert ((taker.x - r.x) ** 2 + (taker.y - r.y) ** 2) ** 0.5 < 0.4  # stepped up: struck at his foot
+
+
+def test_a_taker_facing_away_turns_to_the_goal_before_he_strikes_the_penalty():
+    """P16: the ball on the mark is at his feet, not in his hands, so he faces the goal to strike it."""
+    import math
+
+    from ninety.sim.decisions import STRIKE_FACING
+
+    e = box_foul()
+    r = e.restart
+    taker = e.by_id[r.taker]
+    taker.x, taker.y, taker.heading = r.x, r.y, math.pi  # on the mark, his back to the goal
+    e.t = r.ready_at
+    e.decide = lambda *a, **k: None  # only Law 14 may make him shoot
+    heading_at_shot = None
+    keeper, other = e.keeper("away"), e.by_id["a4"]
+    for _ in range(4 * 25):
+        e.step()
+        if e.placed:  # placed, not yet kicked: Law 14 still holds everyone else
+            assert e.shape_target(keeper)[:2] == (105.0, 34.0)
+            assert e.shape_target(other)[:2] == e.penalty_wait_spot(other)
+        if any(ev["type"] == "shot" for ev in e.match.events):
+            heading_at_shot = taker.heading
+            break
+    assert heading_at_shot is not None
+    shot = next(ev for ev in e.match.events if ev["type"] == "shot")
+    assert (shot["x"], shot["y"]) == (r.x, r.y)  # Law 14: from the mark, the ball unmoved by his turn
+    to_goal = math.atan2(34.0 - taker.y, 105.0 - taker.x)
+    off = abs((heading_at_shot - to_goal + math.pi) % (2 * math.pi) - math.pi)
+    assert off <= STRIKE_FACING + 1e-9
 
 
 def test_in_his_own_box_a_lunge_through_the_man_needs_a_surer_win():

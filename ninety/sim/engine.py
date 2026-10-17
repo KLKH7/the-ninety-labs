@@ -77,6 +77,7 @@ TOUCH_EXPECTED_DEG = 30.0  # a touch within this of his running line needs no ne
 # is the shared race). All *design*, *verify*.
 OFF_BALANCE_S = 0.8  # a missed lunge leaves him out of the play this long
 CLOSE_CONTROL_M = 3.0  # with an opponent this close, a carrier keeps the ball at his feet
+AT_FOOT_M = 0.15  # design: a ball this close to his feet is at his foot, to touch or strike
 CLOSE_CONTROL_PACE = 0.6  # and carries it at this share of his dribbling speed
 COMMIT_COVER_M = 10.0  # a team-mate goal-side within this distance is cover to commit with
 LAST_DITCH_M = 18.0  # this near his own goal a defender commits without cover
@@ -336,6 +337,7 @@ class Engine:
         # (keeper, start t, start y, signed travel, when his arms began to stretch)
         self.dive: tuple[float | str, ...] | None = None
         self.landed: tuple[str, float] | None = None  # (keeper, his arms' stretch start) while he is down
+        self.dived_at: dict[str, float] = {}  # keeper -> the touch (kicked_at) he dived at (P15)
         self.shot_touched_by: str | None = None  # "keeper" or "defender": who got to the shot
         self.shot_was_on_target: bool | None = None  # was it going in when they first touched it?
         self.free_since = -99.0
@@ -344,6 +346,8 @@ class Engine:
         self.restart: Restart | None = None
         self.set_play: setpieces.Corner | None = None  # a corner routine being set up or played
         self.throw_by: str | None = None  # a throw-in taker holding the ball until he throws it
+        self.dead_ball: str | None = None  # a taker whose placed ball stays on its spot until he kicks it
+        self.placed: Restart | None = None  # that restart, in force until the ball is kicked or thrown
         self.throw_ready = 0.0
         self.dribble_to: tuple[float, float] | None = None  # the carrier's chosen carry, if any
         self.intended: str | None = None  # the team-mate a pass was played to: he expects it
@@ -450,7 +454,7 @@ class Engine:
         """Law 14: the defending keeper on his goal line between the posts; everyone else on the
         pitch, outside the penalty area, behind the mark and 9.15 m from it: his own target pushed
         out of the area and off the arc."""
-        r = self.restart
+        r = self.restart or self.placed
         gx = goal_x(r.team)  # the goal the kick is at
         out = -attack_dir(r.team)  # from that goal back up the pitch
         if p.role == "GK" and p.team != r.team:
@@ -548,7 +552,14 @@ class Engine:
         """P16: can he strike it toward (tx, ty) now? The rule the passer's estimate uses too
         (decisions.can_strike)."""
         bx, by = self.ball[0], self.ball[1]
-        return decisions.can_strike(bx - carrier.x, by - carrier.y, carrier.heading, tx - bx, ty - by)
+        if self.dead_ball == carrier.id:  # a placed ball does not come to him: he steps up to it
+            h = carrier.heading
+            feet = shape.surface(h, h, pad=ball.RADIUS)
+            fx, fy = carrier.x + math.cos(h) * feet, carrier.y + math.sin(h) * feet
+            if math.hypot(fx - bx, fy - by) >= AT_FOOT_M:
+                return False
+        return decisions.can_strike(bx - carrier.x, by - carrier.y, carrier.heading, tx - bx, ty - by,
+                                    thrown=carrier.id == self.throw_by)
 
     def turn_to(self, carrier: Player, tx: float, ty: float, strike) -> None:
         """He turns toward the target, no faster than a body turns (P16, tick_carrier), taking the
@@ -565,7 +576,7 @@ class Engine:
         exempt = self.from_restart in NO_OFFSIDE_FROM
         self.from_restart = None
         self.offside = set() if exempt else self.offside_positions(carrier)
-        self.throw_by = None  # a throw-in ends when the ball is thrown
+        self.throw_by = self.dead_ball = self.placed = None  # a restart ends when the ball is played
         self.dribbler = None
         self.possessor = None
         self.last_touch = carrier.id
@@ -1256,6 +1267,8 @@ class Engine:
         self.give(taker.id)
         self.hold_until = self.t + self.rng.uniform(0.5, 1.5)
         self.throw_by = taker.id if r.kind == "throw_in" else None
+        self.dead_ball = None if r.kind == "throw_in" else taker.id
+        self.placed = r
         self.throw_ready = self.t
         self.from_restart = r.kind
         if r.kind == "penalty_kick":  # Law 14: kicked forward, at goal (a shot like any other)
@@ -1375,10 +1388,11 @@ class Engine:
                     return sx, sy, SPRINT
                 far = math.hypot(sx - p.x, sy - p.y) > setpieces.SET_UP_FAR_M
                 return sx, sy, RECOVER if far else SHAPE
-        if self.restart and self.restart.kind == "penalty_kick" and p.id != self.restart.taker:
+        pending = self.restart or self.placed  # placed but not yet kicked, the restart still holds
+        if pending and pending.kind == "penalty_kick" and p.id != pending.taker:
             return *self.penalty_wait_spot(p), SHAPE  # Law 14: until the ball is kicked
-        if self.restart and self.restart.kind == "kick_off" and p.id != self.restart.taker:
-            return *self.kickoff_spot(p, self.restart.team), SHAPE  # Law 8: until the ball is kicked
+        if pending and pending.kind == "kick_off" and p.id != pending.taker:
+            return *self.kickoff_spot(p, pending.team), SHAPE  # Law 8: until the ball is kicked
         if self.restart and p.id == self.restart.taker:
             r = self.restart
             return clamp(r.x, 0.5, PITCH_X - 0.5), clamp(r.y, 0.5, PITCH_Y - 0.5), RECOVER
@@ -1445,8 +1459,8 @@ class Engine:
             def on_pitch(x: float, y: float) -> tuple[float, float]:
                 return clamp(x, 0.5, PITCH_X - 0.5), clamp(y, 0.5, PITCH_Y - 0.5)
             gap = PRESS_GAP_M
-            if self.restart and self.restart.team != p.team:  # Laws 15 to 17: stand off the restart
-                gap = RESTART_DISTANCE_M[self.restart.kind]
+            if pending and pending.team != p.team:  # Laws 13, 15 to 17: stand off it until it is taken
+                gap = RESTART_DISTANCE_M[pending.kind]
             presser = self.by_id[brain.pressers[0]] if brain.pressers else None
             engaged = presser is not None and brain.presses(self.t, bx)
             if presser is p and engaged:
@@ -1563,12 +1577,16 @@ class Engine:
     def keeper_dive(self, p: Player) -> bool:
         """P15: once the keeper has reacted to a shot, he dives toward where it will cross his line:
         his body travels sideways (up to KEEPER_DIVE_TRAVEL_M, only as far as he needs beyond his
-        standing reach) with the full dive's push, and he is down for a moment afterwards. True
-        while the dive moves him."""
+        standing reach) with the full dive's push, and he is down for a moment afterwards. One dive
+        per touch of the ball: once he is up again he does not dive a second time at the same shot;
+        only a new touch (a deflection restarts it) can set off another. True while the dive moves
+        him."""
         k = self.kicked
         shot_at_him = k and k["type"] == "shot" and k["team"] != p.team and self.possessor is None
         reacted = self.t - self.kicked_at >= self.reaction(p)  # to the last touch, a deflection too
-        if self.dive is None and shot_at_him and reacted and self.off_balance.get(p.id, -1.0) <= self.t:
+        fresh = self.dived_at.get(p.id) != self.kicked_at  # not already dived at this touch
+        if (self.dive is None and shot_at_him and reacted and fresh
+                and self.off_balance.get(p.id, -1.0) <= self.t):
             arrival = self.ball_at_x(p.x)  # where the ball's own flight takes it past him
             if arrival and arrival[2] <= HAND_REACH_Z:  # not one going over him
                 when, cross = arrival[0], arrival[1]
@@ -1580,6 +1598,7 @@ class Engine:
                     travel = math.copysign(min(need, KEEPER_DIVE_TRAVEL_M), cross - p.y)
                     self.dive = (p.id, self.t, p.y, travel, self.kicked_at + self.reaction(p),
                                  math.copysign(1.0, travel) * p.vy)  # his sideways run toward it
+                    self.dived_at[p.id] = self.kicked_at
         if not self.dive or self.dive[0] != p.id:
             return False
         _, start, y0, travel = self.dive[:4]
@@ -1692,6 +1711,9 @@ class Engine:
             if self.t >= self.hold_until:
                 self.decide(carrier, throw=True)
             return
+        if self.dead_ball == carrier.id:
+            self.tick_dead_ball(carrier)
+            return
         opp = other(carrier.team)
         presser = self.nearest(carrier.x, carrier.y, opp)  # who is physically there
         gap = math.hypot(presser.x - carrier.x, presser.y - carrier.y)
@@ -1750,7 +1772,7 @@ class Engine:
             self.pressed[opp] = self.t
             self.emit("pressure", opp, presser.x, presser.y, player=presser.id, receiver=carrier.id)
         close = self.closest_opponent(carrier) < CLOSE_CONTROL_M
-        if (self.dribble_to and not self.windup and not close and math.hypot(fx - bx, fy - by) < 0.15
+        if (self.dribble_to and not self.windup and not close and math.hypot(fx - bx, fy - by) < AT_FOOT_M
                 and self.can_strike(carrier, *self.dribble_to)):  # a touch is a kick: he faces it (P16)
             if self.touch_ahead(carrier):
                 return
@@ -1761,6 +1783,32 @@ class Engine:
             return
         if self.t >= self.hold_until and (self.frame + int(carrier.id[1:])) % DECIDE_EVERY == 0:
             self.decide(carrier)
+
+    def tick_dead_ball(self, carrier: Player) -> None:
+        """A placed ball stays on its spot until it is kicked (Laws 8, 13, 14, 16, 17). A taker who
+        must turn to strike it (P16) walks round behind it, toward where he means to play it, and
+        strikes it from the spot once he faces that way with the ball before him."""
+        bx, by = self.ball[0], self.ball[1]
+        self.ball = (bx, by, 0.0, 0.0, 0.0, 0.0)
+        aim = self.windup[:2] if self.windup else self.dribble_to
+        if not aim:
+            steer(carrier, carrier.x, carrier.y, DRIBBLE)
+            if self.t >= self.hold_until and (self.frame + int(carrier.id[1:])) % DECIDE_EVERY == 0:
+                self.decide(carrier)
+            return
+        line = math.atan2(aim[1] - by, aim[0] - bx)
+        back = shape.surface(line, line, pad=ball.RADIUS)  # the ball against his front, facing the line
+        steer(carrier, bx - math.cos(line) * back, by - math.sin(line) * back, DRIBBLE)
+        carrier.heading = turn_toward(carrier.heading, line)
+        if not self.can_strike(carrier, *aim):
+            return  # not yet at it, or not yet facing it
+        if self.windup:
+            strike, self.windup = self.windup[2], None
+            strike()
+        elif self.touch_ahead(carrier):  # touched on, it is played: the restart is over (Law 11 too)
+            self.dead_ball = self.placed = self.from_restart = None
+        else:  # no push is his: he waits on it and chooses again
+            self.dribble_to = None
 
     def closest_opponent(self, p: Player) -> float:
         return min(math.hypot(q.x - p.x, q.y - p.y) for q in self.players if q.team != p.team)
@@ -1806,8 +1854,8 @@ class Engine:
                 return
             else:
                 self.off_balance[pid] = self.t + OFF_BALANCE_S
-        if not holder or self.restart or self.hands(holder, holder.x, holder.y):  # Law 12: not his hands
-            return
+        if not holder or self.restart or self.placed or self.hands(holder, holder.x, holder.y):
+            return  # Law 12: not a ball in his hands; Laws 13 to 17: nor one not yet in play
         for i, p in enumerate(self.players):
             if p.team == holder.team or p.role == "GK" or p.id in self.lunges:
                 continue
@@ -2143,6 +2191,12 @@ class Engine:
         self.moved = None
         self.perceive_and_think()
         self.duels()
+        if self.throw_by != self.possessor:  # the throw-in ends once it is out of his hands, by any means
+            self.throw_by = None
+        if self.dead_ball != self.possessor:
+            self.dead_ball = None
+        if not (self.throw_by or self.dead_ball):
+            self.placed = None
         if self.possessor:
             self.tick_carrier()
         elif self.restart:

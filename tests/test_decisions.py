@@ -8,7 +8,7 @@ from collections import Counter
 import pytest
 
 from ninety.sim import decisions as D
-from ninety.sim import offball
+from ninety.sim import offball, shape
 from ninety.sim.body import FOOT_REACH_Z
 from ninety.sim.profiles import Profile
 from ninety.sim.value import CELLS_X, CELLS_Y, Table, Tables
@@ -730,7 +730,13 @@ def test_turning_first_gives_an_opponent_closing_on_the_lane_time_to_get_there()
 
 def test_a_throw_in_leaves_his_hands_at_once_whichever_way_he_faces(monkeypatch):
     # Law 15 / P16: a ball in his hands is thrown, not struck off his foot: no turn, no 60° cap.
-    assert D.can_strike(0.0, 0.0, math.pi, 1.0, 0.0)
+    assert D.can_strike(0.0, 0.0, math.pi, 1.0, 0.0, thrown=True)
+    # A dead ball at his feet (a free kick, a corner, a penalty) is struck off his foot: he turns first.
+    assert not D.can_strike(0.0, 0.0, math.pi, 1.0, 0.0)
+    # Facing the target with the ball placed where he stands, within his outline: no side to strike
+    # it from, so he steps behind it first; with it against his front he can strike.
+    assert not D.can_strike(0.0, 0.0, 0.0, 1.0, 0.0)
+    assert D.can_strike(shape.RADIUS_M + 0.01, 0.0, 0.0, 1.0, 0.0)
     turn, wait = D.strike_turn(math.pi, 1.0, 0.0, thrown=True)
     assert abs(turn) == pytest.approx(180.0) and wait == 0.0
     asked = []

@@ -18,9 +18,11 @@ ROOT = Path(__file__).resolve().parents[2]
 PITCH_X, PITCH_Y = 105.0, 68.0
 FINAL_THIRD_M = PITCH_X / 3  # from the goal attacked
 BOX_DEPTH_M, BOX_HALF_WIDTH_M = 16.5, 20.16  # Law 1
+PENALTY_MARK_M = 11.0  # Law 1
 # Per team per match, for reading the report only, from docs/GROUNDING.md R3 (itself *verify*).
 # A measure with no sourced figure is left blank rather than given a number nobody can trace.
-PUBLISHED = {"passes": "450 to 500 (R3, *verify*)", "completion": "75 to 88% (R3, *verify*)"}
+PUBLISHED = {"passes": "450 to 500 (R3, *verify*)", "completion": "75 to 88% (R3, *verify*)",
+             "penalty conversion": "74.8 to 89.6% by Premier League season (Opta via The Analyst, D10)"}
 
 
 def zone(x: float, y: float, goal_x: float) -> str | None:
@@ -61,6 +63,15 @@ def tally(m) -> dict[str, float]:
     out["completion"] = sum(e.get("outcome") == "success" for e in passes) / max(1, len(passes))
     for kind in ("shot", "goal", "tackle", "interception"):
         out[kind + "s"] = sum(e["type"] == kind for e in ev)
+    # A penalty: a shot struck straight from the restart placed on a penalty mark (Laws 1 and 14);
+    # the possession change a restart may record between the two is not play.
+    play = [e for e in ev if e["type"] != "possession_change"]
+    pens = [e for prev, e in zip(play, play[1:], strict=False)
+            if e["type"] == "shot" and prev["type"] == "set_piece" and prev["player"] == e["player"]
+            and (prev["x"], prev["y"]) == (e["x"], e["y"])
+            and e["y"] == PITCH_Y / 2 and e["x"] in (PENALTY_MARK_M, PITCH_X - PENALTY_MARK_M)]
+    out["penalties"] = len(pens)
+    out["penalty_goals"] = sum(e.get("outcome") == "goal" for e in pens)
     return {k: (v if k == "completion" else v / 2) for k, v in out.items()}
 
 
@@ -82,6 +93,9 @@ def main() -> None:
         v = mean(r[k] for r in runs)
         shown = f"{v:.0%}" if k == "completion" else f"{v:.1f}"
         lines.append(f"| {k.replace('_', ' ')} | {shown} | {PUBLISHED.get(k, '')} |")
+    pens, scored = sum(r["penalties"] for r in runs) * 2, sum(r["penalty_goals"] for r in runs) * 2
+    conv = f"{scored:g} of {pens:g} ({scored / pens:.0%})" if pens else "none taken"
+    lines.append(f"| penalty conversion (all matches) | {conv} | {PUBLISHED['penalty conversion']} |")
     Path(args.out).write_text("\n".join(lines) + "\n")
     print("\n".join(lines[4:]))
 

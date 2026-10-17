@@ -475,7 +475,10 @@ def test_scenario_corner_comes_from_play():
         m = simulate(seed, 0.05, "corner")
         first = m.frames[0]
         assert first["frame"] == 0 and first["t"] == 0.0, seed
-        holder = next(p for p in first["players"] if p["id"] == first["possessor"])
+        # who had it at the moment: still on it one step later, or the one who struck it in that step
+        pid = first["possessor"] or next(e["player"] for e in m.events
+                                         if e["frame"] <= 1 and e["type"] in ("pass", "shot"))
+        holder = next(p for p in first["players"] if p["id"] == pid)
         # its frame 0 is one step after the moment: the ball has moved at most one frame (40 m/s)
         assert holder["team"] == "home" and first["ball"]["x"] >= 70.0 - 40.0 / FPS, seed
         assert not any(e["type"] == "kickoff" for e in m.events), seed
@@ -865,7 +868,7 @@ def test_l6_judges_the_goal_the_conceding_keeper_defends(tmp_path):
 
 
 def test_real_engine_goals_are_credited_and_relabelling_them_fails(tmp_path):
-    """Engine output, not a fixture, and no pinned seed (lesson 30): the first three goals from
+    """Engine output, not a fixture, and no pinned seed (lesson 35): the first three goals from
     real engine corners each meet the contract, and giving one to the wrong player (or to nobody)
     fails C8. Which seeds score moves with the engine and even with the Python version (CI found
     2 goals in the 32 seeds that gave 4 locally), so it scans until it has three."""

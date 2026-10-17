@@ -300,15 +300,19 @@ def turn_deg(direction: float, heading: float) -> float:
     return math.degrees((direction - heading + math.pi) % (2 * math.pi) - math.pi)
 
 
-def can_strike(ox: float, oy: float, heading: float, dx: float, dy: float) -> bool:
+def can_strike(ox: float, oy: float, heading: float, dx: float, dy: float, thrown: bool = False) -> bool:
     """P16, the engine's own rule: with the ball at (ox, oy) from his body's centre and facing
     `heading`, can he strike it toward (dx, dy) now? Only once he faces within STRIKE_FACING of it
     (the widest run-up angle tested with no loss of speed or accuracy) with the ball on the side
     of his body toward it, so its way out leaves his surface (shape.py) rather than passing
-    through him. A ball in his hands (a throw-in) needs neither."""
-    if math.hypot(ox, oy) < 0.1:
+    through him; a ball within his outline (a dead ball placed where he stands) has no such side,
+    so he steps behind it first. A ball in his hands at a throw-in (`thrown`, Law 15) needs
+    neither; a ball at his feet does, a dead ball at a free kick, corner or penalty included."""
+    if thrown:
         return True
     if abs(turn_deg(math.atan2(dy, dx), heading)) > math.degrees(STRIKE_FACING):
+        return False
+    if shape.clearance(ox, oy, 0.0, 0.0, heading) <= 0:  # within his outline: no side to strike it from
         return False
     sx, sy = shape.nearest_on_spine(ox, oy, 0.0, 0.0, heading)
     return (ox - sx) * dx + (oy - sy) * dy >= 0
