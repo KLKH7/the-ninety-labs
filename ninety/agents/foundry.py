@@ -11,8 +11,9 @@ visible in Foundry: the agent, its version, its guardrail and its traces.
 `foundry_agents.json` pins each agent to a version and to the fingerprint of the definition it was
 published from. A live run refuses to start when the code no longer matches its pinned version, so
 a changed prompt cannot run under an old version's name (tests/test_foundry_agents.py checks the
-same thing in CI). Tools stay ours: the Analyst's tools are the MCP server's, declared on the
-published agent and executed here, so the agent still reads the match only through MCP.
+same thing in CI). The Analyst reads the match only through our MCP server, which Foundry calls
+itself at /mcp on the API (ninety/mcp/match_server.py), with the key held in the project connection
+`ninety-match-mcp` (infra/main.bicep).
 """
 
 from __future__ import annotations
@@ -25,13 +26,15 @@ import sys
 import warnings
 from pathlib import Path
 
-from agent_framework import Agent, FunctionTool, MCPStdioTool
+from agent_framework import Agent
 from agent_framework.foundry import FoundryChatClient, to_prompt_agent
 from azure.ai.projects.models import PromptAgentDefinition, RaiConfig
 
 from ninety import config
+from ninety.mcp import match_server
 
 REGISTRY = Path(__file__).with_name("foundry_agents.json")
+MCP_CONNECTION = "ninety-match-mcp"  # Foundry project connection holding the MCP key (infra/main.bicep)
 GUARDRAIL = "ninety-guardrail"  # Microsoft.CognitiveServices/accounts/raiPolicies in infra/main.bicep
 PREFIX = "ninety-"
 
@@ -50,27 +53,7 @@ def foundry_name(agent: Agent) -> str:
 def definition(agent: Agent, guardrail: str = GUARDRAIL) -> PromptAgentDefinition:
     """The prompt agent for `agent`. Fingerprints use the guardrail's name; publishing passes the
     full resource id Foundry requires, which holds our subscription id and stays out of the repo."""
-    defn = to_prompt_agent(agent, rai_config=RaiConfig(rai_policy_name=guardrail))
-    for tool in defn.get("tools") or []:
-        tool["parameters"] = strict_schema(tool["parameters"])
-    return defn
-
-
-def strict_schema(schema: dict) -> dict:
-    """Foundry declares function tools strict, so the model must send valid arguments; a strict
-    schema lists every property as required (optional ones are nullable) and allows no others.
-    The MCP server's schemas are not written that way, so declare them so here."""
-    schema = {k: v for k, v in schema.items() if k != "default"}  # strict mode has no defaults
-    if schema.get("type") == "object" and "properties" in schema:
-        schema["properties"] = {k: strict_schema(v) for k, v in schema["properties"].items()}
-        schema["required"] = list(schema["properties"])
-        schema["additionalProperties"] = False
-    for key in ("anyOf", "items"):
-        if isinstance(schema.get(key), list):
-            schema[key] = [strict_schema(s) for s in schema[key]]
-        elif isinstance(schema.get(key), dict):
-            schema[key] = strict_schema(schema[key])
-    return schema
+    return to_prompt_agent(agent, rai_config=RaiConfig(rai_policy_name=guardrail))
 
 
 def guardrail_id() -> str:
@@ -107,26 +90,30 @@ def pinned(agent: Agent, registry: dict[str, dict[str, str]] | None = None) -> t
     return name, entry["version"]
 
 
-def analyst_agent(client: FoundryChatClient, tools: list[FunctionTool]) -> Agent:
+def match_tool():
+    """Our MCP server as a Foundry-hosted tool: Foundry calls it, with the key from the project
+    connection; no approval step, and only the server's own read-only tools."""
+    return FoundryChatClient.get_mcp_tool(
+        name="match",
+        url=config.MATCH_MCP_URL,
+        description="Read-only events of a synthetic match, by match id and minute.",
+        approval_mode="never_require",
+        allowed_tools=list(match_server.TOOLS),
+        project_connection_id=MCP_CONNECTION,
+    )
+
+
+def analyst_agent(client: FoundryChatClient) -> Agent:
     from ninety.agents.slice import INSTRUCTIONS
 
-    return Agent(client=client, name="analyst", instructions=INSTRUCTIONS, tools=tools)
+    return Agent(client=client, name="analyst", instructions=INSTRUCTIONS, tools=[match_tool()])
 
 
-def build_agents(client: FoundryChatClient, match_tools: list[FunctionTool]) -> list[Agent]:
+def build_agents(client: FoundryChatClient) -> list[Agent]:
     """Every agent we publish, built exactly as the live workflow builds them."""
     from ninety.agents.judge import judge_agent
 
-    return [analyst_agent(client, match_tools), judge_agent(client)]
-
-
-def match_mcp(seed: int = 7, minutes: float = 5) -> MCPStdioTool:
-    return MCPStdioTool(
-        name="match",
-        command=sys.executable,
-        args=["-m", "ninety.mcp.match_server"],
-        env={"NINETY_SEED": str(seed), "NINETY_MINUTES": str(minutes)},
-    )
+    return [analyst_agent(client), judge_agent(client)]
 
 
 def chat_client(credential=None) -> FoundryChatClient:
@@ -176,21 +163,20 @@ async def _with_agents(action) -> int:
     from azure.identity import DefaultAzureCredential
 
     credential = DefaultAzureCredential()
-    async with match_mcp() as tools:
-        agents = build_agents(chat_client(credential), tools.functions)
-        if action == "status":
-            registry, stale = load_registry(), 0
-            for agent in agents:
-                try:
-                    name, version = pinned(agent, registry)
-                    print(f"{name}: version {version}, matches the code")
-                except RegistryDrift as e:
-                    print(e)
-                    stale += 1
-            return 1 if stale else 0
-        with AIProjectClient(endpoint=config.FOUNDRY_PROJECT, credential=credential) as project:
-            publish(project, agents)
-        return 0
+    agents = build_agents(chat_client(credential))
+    if action == "status":
+        registry, stale = load_registry(), 0
+        for agent in agents:
+            try:
+                name, version = pinned(agent, registry)
+                print(f"{name}: version {version}, matches the code")
+            except RegistryDrift as e:
+                print(e)
+                stale += 1
+        return 1 if stale else 0
+    with AIProjectClient(endpoint=config.FOUNDRY_PROJECT, credential=credential) as project:
+        publish(project, agents)
+    return 0
 
 
 def main() -> None:

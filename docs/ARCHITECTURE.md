@@ -210,7 +210,7 @@ budget alert covers the subscription. See [SECURITY.md](../SECURITY.md).
 | Training compute | Apple GPU (MPS) or free Colab | no GPU quota assumed |
 | Agents | Microsoft Agent Framework (Python); each agent published to Foundry as a versioned prompt agent with a content-safety guardrail, and called by its pinned version | multi-agent orchestration with handoffs and recovery; what ran is visible and versioned in Foundry |
 | Shared state | Ledger in Cosmos DB (free tier) | one versioned record every agent reads |
-| Agent tools | MCP server, read-only | standard tool interface, safe by construction |
+| Agent tools | MCP server, read-only, hosted at `/mcp` on the API and called by Foundry with a Key Vault key | standard tool interface, safe by construction; tool calls run server-side in Foundry |
 | Personalizer | separate Container App over A2A, in-process fallback | a real process boundary |
 | Speech | Azure AI Speech neural voices with SSML; stereo position from ball x in the browser | audio description |
 | Viewer | Vite + TypeScript; video with a canvas overlay synced to the graphics timeline | graphics drawn on the footage |

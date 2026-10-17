@@ -44,13 +44,15 @@ from ninety.agents import foundry, telemetry
 from ninety.agents.factcheck import Claim, Verdict, check
 from ninety.agents.judge import judge
 from ninety.match.facts import events_in
+from ninety.mcp import match_server
 
 MAX_REWRITES = 2
 REPLAY_FORMAT = 2
 
-INSTRUCTIONS = """You are the Analyst for a football broadcast. Use the match tools to read the
-events of the requested minute, then write ONE short sentence a commentator could say about the
-most interesting moment in that minute, and why it matters.
+INSTRUCTIONS = """You are the Analyst for a football broadcast. The request names a match (for
+example seed7) and a minute. Use the match tools, passing that match id, to read the events of that
+minute, then write ONE short sentence a commentator could say about the most interesting moment in
+that minute, and why it matters.
 
 Rules:
 - Only state facts you read from the tools. Every number you write must be a field of an event
@@ -164,16 +166,21 @@ def tamper(claim: Claim) -> Claim:
     return Claim(text=claim.text.rstrip(".") + ", at 143 km/h.", evidence=claim.evidence)
 
 
+def analyst_prompt(match: str, minute: int, feedback: list[str] | None = None) -> str:
+    prompt = f"Match {match}. Write the claim for minute {minute}."
+    if feedback:
+        prompt += " Your previous claim was rejected: " + "; ".join(feedback) + ". Fix it."
+    return prompt
+
+
 class AnalystExecutor(Executor):
-    def __init__(self, ask: Ask, trace: list[str], plant: bool, live: bool):
+    def __init__(self, ask: Ask, trace: list[str], plant: bool, live: bool, match: str):
         super().__init__(id="analyst")
-        self.ask, self.trace, self.plant, self.live = ask, trace, plant, live
+        self.ask, self.trace, self.plant, self.live, self.match = ask, trace, plant, live, match
 
     @handler
     async def write(self, task: Task, ctx: WorkflowContext[Draft]) -> None:
-        prompt = f"Write the claim for minute {task.minute}."
-        if task.feedback:
-            prompt += " Your previous claim was rejected: " + "; ".join(task.feedback) + ". Fix it."
+        prompt = analyst_prompt(self.match, task.minute, task.feedback)
         started = time.perf_counter()
         claim = parse_claim(await self.ask(prompt))
         if self.plant and task.attempt == 0:
@@ -220,7 +227,7 @@ async def run_workflow(
 ) -> Outcome:
     known = {e["id"]: e for e in events_in(seed, minutes, 1, int(minutes) + 1)}
     trace: list[str] = []
-    analyst = AnalystExecutor(ask, trace, plant, live)
+    analyst = AnalystExecutor(ask, trace, plant, live, match_server.match_id(seed))
     checker = FactCheckExecutor(known, judge_fn, trace, live)
     # A rejected claim goes back to the analyst with the reasons, at most MAX_REWRITES times.
     builder = WorkflowBuilder(start_executor=analyst)
@@ -236,18 +243,20 @@ async def run_slice(
 ) -> tuple[Outcome, list[Turn], str]:
     """Live run on Foundry, calling the published agent versions pinned in foundry_agents.json.
     Returns the outcome, every model answer (for --record) and which versions ran."""
+    if match_server.match_id(seed) not in match_server.MATCHES or minutes != match_server.MINUTES:
+        raise ValueError(
+            f"the match server serves {', '.join(match_server.MATCHES)} at {match_server.MINUTES} minutes"
+        )
     credential = DefaultAzureCredential()
     client = foundry.chat_client(credential)
     if trace_to == "foundry":
         await telemetry.trace_to_foundry(client, content)
     turns: list[Turn] = []
     async with contextlib.AsyncExitStack() as stack:
-        tools = await stack.enter_async_context(foundry.match_mcp(seed, minutes))
         # The local definitions only identify the pinned versions (and refuse to run if the code
-        # drifted from them); the published agents do the work. Tool calls run here, through MCP.
-        analyst_def, judge_def = foundry.build_agents(client, tools.functions)
+        # drifted from them); the published agents do the work. Foundry calls the match MCP server.
         ran, agents = [], []
-        for local, extra in ((analyst_def, {"tools": tools.functions}), (judge_def, {})):
+        for local in foundry.build_agents(client):
             name, version = foundry.pinned(local)
             ran.append(f"{name}:{version}")
             published = FoundryAgent(
@@ -255,7 +264,6 @@ async def run_slice(
                 agent_name=name,
                 agent_version=version,
                 credential=credential,
-                **extra,
             )
             agents.append(await stack.enter_async_context(published))
         agent, judge_ag = agents
@@ -294,9 +302,7 @@ def main() -> None:
         "--replay", metavar="JSON", help="replay a recording instead of calling Foundry (no Azure needed)"
     )
     ap.add_argument("--no-trace", action="store_true", help="do not send traces to Foundry")
-    ap.add_argument(
-        "--trace-content", action="store_true", help="include prompts and replies in the traces"
-    )
+    ap.add_argument("--trace-content", action="store_true", help="include prompts and replies in the traces")
     args = ap.parse_args()
     if args.replay and (args.record or args.speak):
         ap.error("--replay cannot be combined with --record or --speak (speech needs Azure)")
