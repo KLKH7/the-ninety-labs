@@ -63,8 +63,10 @@ def tally(m) -> dict[str, float]:
     out["completion"] = sum(e.get("outcome") == "success" for e in passes) / max(1, len(passes))
     for kind in ("shot", "goal", "tackle", "interception"):
         out[kind + "s"] = sum(e["type"] == kind for e in ev)
-    # A penalty: a shot struck straight from the restart placed on a penalty mark (Laws 1 and 14).
-    pens = [e for prev, e in zip(ev, ev[1:], strict=False)
+    # A penalty: a shot struck straight from the restart placed on a penalty mark (Laws 1 and 14);
+    # the possession change a restart may record between the two is not play.
+    play = [e for e in ev if e["type"] != "possession_change"]
+    pens = [e for prev, e in zip(play, play[1:], strict=False)
             if e["type"] == "shot" and prev["type"] == "set_piece" and prev["player"] == e["player"]
             and (prev["x"], prev["y"]) == (e["x"], e["y"])
             and e["y"] == PITCH_Y / 2 and e["x"] in (PENALTY_MARK_M, PITCH_X - PENALTY_MARK_M)]

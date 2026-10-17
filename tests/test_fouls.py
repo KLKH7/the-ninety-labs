@@ -166,6 +166,8 @@ def test_a_taker_facing_away_turns_to_the_goal_before_he_strikes_the_penalty():
             heading_at_shot = taker.heading
             break
     assert heading_at_shot is not None
+    shot = next(ev for ev in e.match.events if ev["type"] == "shot")
+    assert (shot["x"], shot["y"]) == (r.x, r.y)  # Law 14: from the mark, the ball unmoved by his turn
     to_goal = math.atan2(34.0 - taker.y, 105.0 - taker.x)
     off = abs((heading_at_shot - to_goal + math.pi) % (2 * math.pi) - math.pi)
     assert off <= STRIKE_FACING + 1e-9
