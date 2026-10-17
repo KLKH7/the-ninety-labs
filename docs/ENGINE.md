@@ -104,7 +104,7 @@ pressing), leading lowers it (deeper block).
 
 Every action goes through physics with error: direction, speed and height errors grow with
 distance, ball speed, pressure, fatigue, weak foot and body angle, and shrink with technique.
-A first touch fails more often on fast balls, under pressure and when tired.
+A first touch is a cushion, not a gate: the surface takes out what it can kill, the player sends the rest where he chooses with his own error, and a ball he cannot keep at his feet is a heavy touch the race decides (`firsttouch.py`, GROUNDING A4). What makes a touch worse (pressure, body angle, fatigue, speed) comes next.
 
 ### 8. Duels
 
