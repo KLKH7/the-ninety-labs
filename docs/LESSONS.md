@@ -68,6 +68,8 @@ short and actionable. This file is public: no research sources, product names or
 - **What happened:** a planted "ball never arrives" defect showed the ball-path check could
   never fail on short clips. Later, a new braking test stayed green with the braking limit set
   to infinity: an independent reviewer found it by breaking the limit on purpose.
+  Again in the throw-in fix (#44): every test stayed green with the spot tolerance widened to
+  1 m, the settle speed raised to 1 m/s, or a snap to the spot put back; each now has its own test.
 - **Check (mutation test):** for every new check or test, break the thing it guards (set the
   limit to infinity, remove the line) and confirm exactly the intended test goes red; then
   restore and confirm green.
