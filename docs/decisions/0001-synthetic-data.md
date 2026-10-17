@@ -117,7 +117,9 @@ max 0.0035 px; every player's foot inside its box; no frame with a label problem
 of seed 900001 matched labels and all 250 images byte for byte.
 
 - The ball is under 0.5 visible in 51 of 1,250 frames (**4.08%**; per clip 6.0%, 4.0%, 0%,
-  6.0%, 4.4%). Better than 0.08%, still under PLAN.md's 5% for the Oct 18 freeze.
+  6.0%, 4.4%). Better than 0.08%, but **short of the minimum**: PLAN.md and EVALUATION.md need
+  at least 5% before the test set is frozen (Oct 18), so it is not ready to freeze. Passing the
+  render checks does not change that.
 - Player height p05 is 16 px in seed 900001, under the guide's 30 px; the other four clips are
   31 to 54 px at p05, and every clip's p95 is 86 to 106 px. Not yet traced.
 
