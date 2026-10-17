@@ -364,6 +364,7 @@ class Engine:
         self.off_balance: dict[str, float] = {}  # defender -> when he has recovered from a miss
         self.tackle: dict | None = None  # the tackle event whose outcome the next control decides
         self.dribbler: str | None = None  # a carrier who pushed the ball ahead and is running onto it
+        self.loose_touch = False  # the dribbler's touch was a heavy first touch, not a carry
         self.last_deflection: dict | None = None  # the most recent deflection event
         self.seen_going: tuple[float, float] = (PITCH_X / 2, PITCH_Y / 2)  # where a struck ball is seen going
         self.pass_target: tuple[float, float] | None = None  # where the pass in flight was aimed
@@ -953,7 +954,7 @@ class Engine:
                     self.touched_since_kick = False
                     return
                 # back on a heavy first touch that won the ball from the other side: his now
-            if self.dribbler and p.team != self.team_of(self.dribbler):  # won off the dribbler: a tackle
+            if self.dribbler and p.team != self.team_of(self.dribbler) and not self.loose_touch:  # a tackle
                 self.emit("tackle", p.team, cx, cy, player=p.id, receiver=self.dribbler, outcome="success")
             if p.team != self.poss_team:
                 self.emit("possession_change", p.team, cx, cy, player=p.id)
@@ -961,10 +962,10 @@ class Engine:
             return
         left = (1.0 - s) * dt
         if sent is not None:  # a heavy touch: free until he is back on it (D6), the race decides
-            self.heavy_touch(p, cx, cy, cz, sent, left)
-            return
-        keep = MISCONTROL_KEEP if kind == "touch" else BODY_RESTITUTION
-        start = self.deflect(p, cx, cy, cz, keep, (px, py, left))
+            start = self.heavy_touch(p, cx, cy, cz, sent, (px, py, left))
+        else:
+            keep = MISCONTROL_KEEP if kind == "touch" else BODY_RESTITUTION
+            start = self.deflect(p, cx, cy, cz, keep, (px, py, left))
         if left <= 1e-9:
             return
         # The rest of the frame, from where it left him: the posts and the lines first, as for
@@ -1002,35 +1003,41 @@ class Engine:
         rule with first touch as the skill: wider with speed, pressure, fatigue). Never over a line
         he can see: if it would come to rest out of play he turns it back in, the least he must.
         Returns the ball's velocity on the pitch as it leaves him."""
-        aim = self.touch_aim(p, cx, cy)
         # He cannot play it through himself (P11): from where he meets it, it goes no further into
-        # his body than across it; an aim into him becomes a touch across him, on the nearer side.
+        # his body than across it; a way into him becomes a touch across him, on the nearer side.
+        # This holds for his aim, for each way he turns it from a line, and for the ball as struck.
         out = math.atan2(cy - p.y, cx - p.x)
-        off = (aim - out + math.pi) % (2 * math.pi) - math.pi
-        if abs(off) > math.pi / 2:
-            aim = out + math.copysign(math.pi / 2, off)
+
+        def across(a: float) -> float:
+            off = (a - out + math.pi) % (2 * math.pi) - math.pi
+            return out + math.copysign(math.pi / 2, off) if abs(off) > math.pi / 2 else a
+
+        aim = across(self.touch_aim(p, cx, cy))
         if speed > 1e-6:
             nearest = min(math.hypot(q.x - p.x, q.y - p.y) for q in self.players if q.team != p.team)
             dir_sd, speed_sd, _, _ = p.profile.strike_error("first_touch", speed, nearest, self.fresh(p), 0.0)
-            for k in range(13):  # 0, +15, -15, +30, ... degrees from his aim
+            for k in range(13):  # 0, +15, -15, +30, ... up to 90 degrees from his aim (design)
                 turn = math.radians(15.0 * ((k + 1) // 2) * (1 if k % 2 else -1))
-                a = aim + turn
+                a = across(aim + turn)
                 sent = (p.vx + speed * math.cos(a), p.vy + speed * math.sin(a))
                 path = ball.predict((cx, cy, 0.0, *sent, 0.0), DT, ball.FLIGHT_BOUND_S)
                 if not any(decisions.out_of_play(q[0], q[1]) for q in path):
                     aim = a
                     break
-            aim += math.radians(self.rng.gauss(0, dir_sd))
+            aim = across(aim + math.radians(self.rng.gauss(0, dir_sd)))
             speed = max(0.0, speed * (1 + self.rng.gauss(0, speed_sd)))
         return p.vx + speed * math.cos(aim), p.vy + speed * math.sin(aim)
 
     def heavy_touch(self, p: Player, cx: float, cy: float, cz: float, sent: tuple[float, float],
-                    left: float) -> None:
+                    at: tuple[float, float, float]) -> ball.State:
         """A touch that leaves the ball further than he can keep it at his feet: it runs free from
         where he met it, at the velocity he sent it (it drops from a thigh, chest or head), until he
         is back on it after TOUCH_GAP_S, as a dribbling touch does (D6). Who has it then is the race.
         Everyone else reacts to it as a new touch. It is a deflection in the data (DATA_CONTRACT: a
-        heavy touch that leaves the ball free)."""
+        heavy touch that leaves the ball free). It is a play of the ball, so offside is judged afresh
+        from it (Law 11). `at` is where he was and how much of the frame is left, as for deflect; it
+        leaves his surface there. Returns the ball as it left him."""
+        px, py, left = at
         k = self.kicked
         if k and k["type"] == "pass" and k["team"] == p.team:
             # A team-mate played it on purpose: the pass reached him there, completed (back to the
@@ -1040,6 +1047,13 @@ class Engine:
                      outcome="success" if done else "fail")
             self.kicked = None
         self.last_deflection = self.emit("deflection", p.team, cx, cy, player=p.id)
+        self.offside = self.offside_positions(p)  # Law 11: judged when a player plays the ball
+        sx, sy = shape.nearest_on_spine(cx, cy, px, py, p.heading)  # from his surface, never inside him
+        n, skin = math.hypot(cx - sx, cy - sy), shape.RADIUS_M + ball.RADIUS + 0.001
+        if n < skin:
+            ux, uy = (cx - sx, cy - sy) if n > 1e-6 else (math.cos(p.heading), math.sin(p.heading))
+            k = skin / (math.hypot(ux, uy) or 1.0)
+            cx, cy = sx + ux * k, sy + uy * k
         start = (cx, cy, cz, sent[0], sent[1], 0.0)
         self.ball = ball.step(start, left) if left > 1e-9 else start
         self.possessor = None
@@ -1049,7 +1063,9 @@ class Engine:
         self.kicker_clear = False
         self.kicked_at = self.t
         self.bumped = None
+        self.loose_touch = True  # nobody had it: winning it back off him is no tackle
         self.plan_chase()
+        return start
 
     def deflect(self, p: Player, cx: float, cy: float, cz: float, keep: float,
                 at: tuple[float, float, float] | None = None) -> ball.State:
@@ -2201,6 +2217,7 @@ class Engine:
         self.possessor = None
         self.last_touch = carrier.id
         self.dribbler = carrier.id
+        self.loose_touch = False
         # A touch that carries on the way he was running is what everyone watching expects; only
         # a sharp change of direction is a new event they must react to (P12).
         moving = math.hypot(carrier.vx, carrier.vy) > 1.0

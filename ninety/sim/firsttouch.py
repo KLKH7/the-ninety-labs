@@ -18,7 +18,7 @@ from ninety.sim.body import CONTROL_M
 
 BODY_TOUCH_Z = 0.45  # design (P14): above this, a ball he is under is a thigh, chest or head, not a foot
 AERIAL_ABSORB = 0.5  # design: those kill about half the pace a foot does (A4), same first touch
-TOUCH_GAP_S = 0.6  # D6: how long a touched ball runs before he is back on it
+TOUCH_GAP_S = 0.6  # D6 (design, verify): how long a touched ball runs before he is back on it
 # What he can let the ball run and still keep it at his feet: no more than his reach (CONTROL_M) opens
 # up between him and the ball before he is back on it (TOUCH_GAP_S). About 1.7 m/s.
 KEEP_MPS = CONTROL_M / TOUCH_GAP_S
