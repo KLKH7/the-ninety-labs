@@ -130,6 +130,7 @@ def choices(archetype: str, build_up: str = "quick", n: int = 300) -> dict[str, 
     make being worth the same to his team: only the priors tell the moves apart."""
     e, p, carrier, brain = runner(archetype, build_up)
     p.x = 70.0  # ahead of the ball by enough to come short as well as to run
+    p.profile.attributes["decisions"] = 0.3  # a loose decision-maker, so a lean shows as a lean (D4)
     e.move_worth = lambda *_: 0.02
     count: dict[str, int] = {}
     for _ in range(n):
