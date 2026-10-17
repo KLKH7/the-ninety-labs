@@ -80,7 +80,7 @@ TOUCH_EXPECTED_DEG = 30.0  # a touch within this of his running line needs no ne
 OFF_BALANCE_S = 0.8  # a missed lunge leaves him out of the play this long
 CLOSE_CONTROL_M = 3.0  # with an opponent this close, a carrier keeps the ball at his feet
 CLOSE_CONTROL_PACE = 0.6  # and carries it at this share of his dribbling speed
-COVER_TO_COMMIT_M = 10.0  # a team-mate goal-side within this distance is cover to commit with
+COVER_TO_COMMIT_M = 10.0  # design: a team-mate goal-side within this distance is cover to commit with
 LAST_DITCH_M = 18.0  # this near his own goal a defender commits without cover
 COMMIT_P = 0.6  # a defender commits only when he expects to win the race this often (aggression shifts it)
 # What a defender expects a penalty to cost: the chance it is scored. Premier League seasons run from
@@ -1828,6 +1828,7 @@ class Engine:
             if holder and holder.team != p.team and not held and math.hypot(p.x - bx, p.y - by) <= CONTROL_M:
                 self.poke(p, holder)
                 holder = None
+            # `not held`: defence in depth; a lunge cannot start during a held throw-in (below).
             elif victim and not self.restart and not held and self.leg_meets(
                     p.x, p.y, victim.x, victim.y, bx, by, victim.heading):
                 self.foul(p, victim)
