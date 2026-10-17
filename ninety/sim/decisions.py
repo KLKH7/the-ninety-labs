@@ -406,7 +406,11 @@ def through_options(scene: Scene, mate: tuple[str, float, float, float]) -> list
     out = []
     for lead in THROUGH_LEADS_M:
         tx, ty = mx + a * lead, my
-        if a * (scene.goal_x - tx) < GOAL_LINE_SPACE_M or not 1.0 <= ty <= PITCH_Y - 1.0:
+        if (
+            a * (scene.goal_x - tx) < GOAL_LINE_SPACE_M
+            or not 1.0 <= tx <= PITCH_X - 1.0
+            or not 1.0 <= ty <= PITCH_Y - 1.0
+        ):
             continue  # never at the goal line, nor beyond a touchline he is believed to be past
         dist = math.hypot(tx - scene.x, ty - scene.y)
         if dist < 4 or dist > MAX_PASS_M:
