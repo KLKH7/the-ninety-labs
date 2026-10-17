@@ -120,29 +120,44 @@ def team_strength(rng: random.Random) -> float:
 
 
 # A1 to A6: what each attribute changes.
-# A3: where preferred-foot instep kicks from the penalty mark (11 m, about 21 m/s) cross the goal
-# line: a tilted ellipse (Frontiers 2024, 16 players). Its 95% axes 4.08 m and 1.91 m (straight
-# kicks) are 2.448 SDs each way (chi-square, 2 dof: assumed, the paper does not say how its ellipse
-# was built), and its long axis lies about 30 degrees from horizontal (a blend of Figure 5's medians,
-# 27 degrees for straight kicks and 36 for cross kicks). The horizontal and vertical SDs are the
-# ellipse's own projections: 3.9 degrees across and 2.8 degrees up and down (the latter taken as the
-# launch angle's spread). Both grow the same way (design: one ellipse, scaled).
-KICK_ELLIPSE_95_M = (4.08, 1.91)
-KICK_ELLIPSE_TILT_DEG = 30.0
+# A3: where instep kicks from the penalty mark (11 m from the goal's centre, about 21 m/s) cross the
+# goal line, at a target 1.6 m high just inside a post (Frontiers 2024, 16 players, Figure 2A): a
+# tilted ellipse for each foot. Its 95% axes (straight kicks: 4.08 m by 1.91 m on the preferred foot,
+# 5.60 m by 2.28 m on the weaker) are 2.448 SDs each way (chi-square, 2 dof: assumed; the paper fits
+# a bivariate normal but does not say how it scales the ellipse); its long axis lies 26.9 and 29.4
+# degrees from horizontal (Figure 5's straight-kick medians, read from the figure's pixels).
+# Projected across and up and down, then seen from the kicking point at the target (design: its
+# edge at the post, 3.5 m from the centre), that is about 3.6 degrees across and 2.5 up and down on
+# the preferred foot (the latter taken as the launch angle's spread), and 1.34 times both on the
+# weaker. Both grow the same way with the strike (design: one ellipse, scaled).
+KICK_ELLIPSE_95_M = {"preferred": (4.08, 1.91), "weaker": (5.60, 2.28)}
+KICK_ELLIPSE_TILT_DEG = {"preferred": 26.9, "weaker": 29.4}
 KICK_REF_DIST_M = 11.0
+KICK_TARGET_M = (3.5, 1.6)  # across from the goal's centre, and high
 KICK_REF_SPEED = 21.0
 
 
-def _ellipse_sds_deg() -> tuple[float, float]:
-    """(horizontal, vertical) SD in degrees of the measured ellipse, seen from the kicking point."""
-    long_sd, short_sd = (math.degrees(math.atan(a / 2 / 2.448 / KICK_REF_DIST_M)) for a in KICK_ELLIPSE_95_M)
-    c, s = math.cos(math.radians(KICK_ELLIPSE_TILT_DEG)), math.sin(math.radians(KICK_ELLIPSE_TILT_DEG))
-    return (math.sqrt((long_sd * c) ** 2 + (short_sd * s) ** 2),
-            math.sqrt((long_sd * s) ** 2 + (short_sd * c) ** 2))
+def _ellipse_sds_deg(foot: str) -> tuple[float, float]:
+    """(across, up and down) SD in degrees of a foot's measured ellipse, seen from the kicking point:
+    the SDs in metres projected onto the goal's plane, then turned into angles where the target is
+    (a metre across there is cos^2 of its bearing over 11 m of angle; a metre up, cos^2 of its
+    elevation over its distance along the ground)."""
+    long_sd, short_sd = (a / 2 / 2.448 for a in KICK_ELLIPSE_95_M[foot])
+    tilt = math.radians(KICK_ELLIPSE_TILT_DEG[foot])
+    across_m = math.hypot(long_sd * math.cos(tilt), short_sd * math.sin(tilt))
+    up_m = math.hypot(long_sd * math.sin(tilt), short_sd * math.cos(tilt))
+    y, z = KICK_TARGET_M
+    ground = math.hypot(KICK_REF_DIST_M, y)
+    per_m_across = (KICK_REF_DIST_M / ground) ** 2 / KICK_REF_DIST_M
+    per_m_up = (ground * ground / (ground * ground + z * z)) / ground
+    return math.degrees(across_m * per_m_across), math.degrees(up_m * per_m_up)
 
 
-KICK_ERROR_DEG, LOFT_ERROR_DEG = _ellipse_sds_deg()  # about 3.9 and 2.8
-WEAK_FOOT_ERROR = 3.8 / 3.0  # A3: about 27% wider on the weaker foot ...
+KICK_ERROR_DEG, LOFT_ERROR_DEG = _ellipse_sds_deg("preferred")  # about 3.6 and 2.5
+# A3: the weaker foot's own ellipse against the preferred one's, across and up and down (both about
+# 1.34) ...
+WEAK_FOOT_ERROR = tuple(w / p for w, p in zip(_ellipse_sds_deg("weaker"), (KICK_ERROR_DEG, LOFT_ERROR_DEG),
+                                                strict=True))
 WEAK_FOOT_SPEED = 0.88  # A3: ... and about 12% slower
 FATIGUE_ERROR = 0.25  # A3: design, *verify*: about 25% wider when the slow store (P10) is spent
 SPEED_ERROR = 0.06  # design: spread of struck speed, as a share
@@ -259,17 +274,18 @@ class Profile:
                    weak_foot: bool, turn_deg: float = 0.0) -> tuple[float, float, float]:
         """Standard deviations of a kick's direction (degrees), speed (share) and launch angle
         (degrees). Average skill on the preferred foot at penalty speed, struck the way he faces,
-        gives the measured spread, about 3.9 degrees across and 2.8 up and down; both grow alike
-        with speed, pressure (less for the composed), fatigue, the angle across his body, and the
-        weaker foot (the sourced 27% at an average weak foot)."""
+        gives the measured spread, about 3.6 degrees across and 2.5 up and down; both grow alike
+        with speed, pressure (less for the composed), fatigue and the angle across his body, and on
+        the weaker foot follow its own measured ellipse (at an average weak-foot rating)."""
         scale = (1.6 - 1.2 * self[skill]) * (speed / KICK_REF_SPEED)
         scale *= 1 + 0.5 * pressure * (1 - self["composure"])
         scale *= 1 + FATIGUE_ERROR * (1 - capacity)
         scale *= 1 + TURN_ERROR * min(abs(turn_deg), 180.0) / 180.0
-        if weak_foot:
-            scale *= 1 + (WEAK_FOOT_ERROR - 1) * 2 * (1 - self["weak_foot"])
-        return (KICK_ERROR_DEG * scale, SPEED_ERROR * (1 + pressure * (1 - self["composure"])),
-                LOFT_ERROR_DEG * scale)
+        across, up = KICK_ERROR_DEG * scale, LOFT_ERROR_DEG * scale
+        if weak_foot:  # the measured weaker foot at an average weak-foot rating, more or less either side
+            across *= 1 + (WEAK_FOOT_ERROR[0] - 1) * 2 * (1 - self["weak_foot"])
+            up *= 1 + (WEAK_FOOT_ERROR[1] - 1) * 2 * (1 - self["weak_foot"])
+        return across, SPEED_ERROR * (1 + pressure * (1 - self["composure"])), up
 
     def strike_error(self, skill: str, speed: float, nearest_opponent_m: float, capacity: float,
                      turn_deg: float) -> tuple[float, float, float, float]:
