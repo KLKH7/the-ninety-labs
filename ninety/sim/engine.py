@@ -1029,7 +1029,9 @@ class Engine:
         """A touch that leaves the ball further than he can keep it at his feet: it runs free from
         where he met it, at the velocity he sent it (it drops from a thigh, chest or head), until he
         is back on it after TOUCH_GAP_S, as a dribbling touch does (D6). Who has it then is the race.
-        Everyone else reacts to it as a new touch."""
+        Everyone else reacts to it as a new touch. It is a deflection in the data (DATA_CONTRACT: a
+        heavy touch that leaves the ball free)."""
+        self.last_deflection = self.emit("deflection", p.team, cx, cy, player=p.id)
         start = (cx, cy, cz, sent[0], sent[1], 0.0)
         self.ball = ball.step(start, left) if left > 1e-9 else start
         self.possessor = None

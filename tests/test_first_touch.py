@@ -55,7 +55,9 @@ def test_a_fast_ball_is_a_heavy_touch_he_runs_onto_when_nobody_is_nearer():
     p.profile.attributes["first_touch"] = 0.0  # kills 12 m/s
     arrive(e, "h8", 20.0, 0.0)
     assert e.possessor is None and e.dribbler == "h8"  # 8 m/s left over: more than he keeps at his feet
-    assert not any(ev["type"] == "deflection" for ev in e.match.events)  # a touch, not a rebound
+    # In the data a heavy touch is a deflection (DATA_CONTRACT); unlike a rebound it is still his
+    # to run onto (dribbler).
+    assert [ev["player"] for ev in e.match.events if ev["type"] == "deflection"] == ["h8"]
     # It came at his front and his aim (the goal he attacks) is behind him: he takes it across his
     # body, never through it (P11): it leaves him moving away from him.
     bx, by, _, vx, vy, _ = e.ball

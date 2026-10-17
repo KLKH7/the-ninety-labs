@@ -528,7 +528,7 @@ def test_his_body_meets_a_ball_before_his_foot_can_if_it_gets_there_first():
     e.ball = (49.75 + 8.0 * DT, 30.0, 1.3 - 8.0 * DT, 8.0, 0.0, -8.0)
     e.contact(before)
     hit = [ev for ev in e.match.events if ev["type"] == "deflection"]
-    assert hit and hit[0]["player"] == p.id and e.possessor is None  # off his chest, not a touch
+    assert hit and hit[0]["player"] == p.id and e.possessor is None  # on his chest, not his foot
 
 
 def test_a_ball_over_his_head_does_not_meet_his_body():

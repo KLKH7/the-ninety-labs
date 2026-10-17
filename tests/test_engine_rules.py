@@ -392,8 +392,7 @@ def test_a_high_ball_can_be_taken_on_the_body_and_a_poor_touch_is_worse():
     assert killed.possessor == "a6" and killed.ball[3] == 0.0 and killed.ball[5] == 0.0
     assert not any(ev["type"] == "deflection" for ev in killed.match.events)
     heavy = _high_ball(0.0, CHEST, 1.35, True)
-    assert heavy.possessor is None and heavy.dribbler == "a6"
-    assert not any(ev["type"] == "deflection" for ev in heavy.match.events)
+    assert heavy.possessor is None and heavy.dribbler == "a6"  # still his to run onto, unlike a rebound
     left = CHEST - FOOT_WORST * AERIAL_ABSORB  # what a poor chest could not kill
     assert left > KEEP_MPS and math.isclose(math.hypot(heavy.ball[3], heavy.ball[4]), left, rel_tol=0.3)
     # Far too fast for the surface, it beats him and rebounds.
@@ -1538,8 +1537,9 @@ def test_a_throw_taken_from_a_restart_and_never_entering_is_retaken_where_it_was
 def test_a_throw_in_taker_runs_to_his_spot_and_stops_there():
     """Lesson 5: the taker was once moved the last metre to his spot in one frame (22 m/s) and
     stopped dead with the ball. The match must contain a throw-in, so the case is exercised; a
-    short clip with no restart would pass whatever the engine did."""
-    m = simulate(7, 6)
+    short clip with no restart would pass whatever the engine did. Twelve minutes: seed 7's first
+    throw-in came inside six until the cushioned touch changed the match's course, then at 8.2."""
+    m = simulate(7, 12)
     assert any(p["action"] == "throw" for fr in m.frames for p in fr["players"])
     problems = defaultdict(list)
     check_physics(m.events, m.frames, FPS, m.roster, problems)
