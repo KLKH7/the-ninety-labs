@@ -82,8 +82,28 @@ def error(p: Profile, **kw) -> float:
     return p.kick_error(**args)[0]
 
 
-def test_average_skill_at_penalty_speed_is_about_three_degrees():
-    assert abs(error(player()) - 3.0) < 0.01
+def test_average_skill_at_penalty_speed_gives_the_measured_ellipse():
+    # A3: the source's 95% ellipse from 11 m (axes 4.08 m and 1.91 m, tilted about 30 degrees):
+    # its across and up-and-down spreads, which together hold all of the ellipse's spread.
+    across, _, up = player().kick_error("finishing", 21.0, 0.0, 1.0, False)
+    assert abs(across - 3.89) < 0.01 and abs(up - 2.79) < 0.01
+    long_sd, short_sd = (math.degrees(math.atan(a / 2 / 2.448 / 11.0)) for a in (4.08, 1.91))
+    assert math.isclose(across ** 2 + up ** 2, long_sd ** 2 + short_sd ** 2)
+
+
+def test_launch_angle_error_grows_with_everything_direction_error_grows_with():
+    def both(p: Profile, **kw) -> tuple[float, float]:
+        args = {"skill": "finishing", "speed": 21.0, "pressure": 0.0, "capacity": 1.0, "weak_foot": False}
+        args.update(kw)
+        across, _, up = p.kick_error(**args)
+        return across, up
+    p = player()
+    ratio = both(p)[1] / both(p)[0]
+    for q, kw in ((player(finishing=0.1), {}), (p, {"speed": 30.0}), (p, {"pressure": 1.0}),
+                  (p, {"capacity": 0.0}), (p, {"weak_foot": True}), (p, {"turn_deg": 90.0})):
+        across, up = both(q, **kw)
+        assert up > both(p)[1]  # a harder, more hurried, tired or awkward strike also flies higher or lower
+        assert math.isclose(up / across, ratio)  # one ellipse, scaled
 
 
 def test_skill_narrows_error_and_speed_widens_it():

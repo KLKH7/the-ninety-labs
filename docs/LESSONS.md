@@ -184,3 +184,22 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** for each once-per-cause action, write a test where the cause outlives the action's
   own busy state (dive, land, get up, ball still coming) and require no repeat; and one where a
   new cause (a deflection) is allowed to trigger it again.
+
+### 25. Keep every dimension a source measured
+- **What happened:** the kick-error source measured a tilted ellipse of where shots cross the goal
+  line (a long and a short axis). The engine kept one number, their geometric mean (3°), as the
+  sideways error, and gave the up-and-down error a fixed 2° that did not grow with speed, pressure
+  or fatigue. Close shots almost never missed: none of 25 unblocked shots inside 25 m in one sample.
+- **Rule:** when a source reports a shape (axes, a covariance, a distribution), derive each
+  component the engine uses from it, in code, with the derivation beside it. A number that
+  summarises a measurement is not the measurement.
+- **Check:** for each sourced constant, ask "what did the source actually measure, in how many
+  dimensions?" and test the derived values against the source's own figures.
+
+### 26. A committed report must come from the committed code
+- **What happened:** two consecutive commits regenerated `docs/eval/funnel.md` (1.8 goals a team)
+  but the code as committed produced 2.5; the realism test went red with nobody noticing. Twelve
+  matches also hide a change of 0.3 goals a team in noise (standard error about 0.27).
+- **Rule:** regenerate a report from the exact tree being committed, after the last code change,
+  and state how big a difference the sample can resolve.
+- **Check:** re-run the report on a clean checkout of the commit and compare before merging.
