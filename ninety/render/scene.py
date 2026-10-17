@@ -48,6 +48,7 @@ def turn_toward(heading: float, target: float, dt: float, rate: float = 5.0) -> 
         diff = -cap
     return heading + diff
 
+
 SKIN_TONES = ("#f5d0b5", "#e8b897", "#d19a74", "#b07850", "#8d5a3b", "#6b4329", "#4a2e1d")
 HAIR_COLORS = ("#1b1410", "#3b2516", "#6b4a2b", "#a37a4c", "#d9c08c", "#2b2b2b", "#8a3b1d")
 
@@ -111,9 +112,7 @@ def update_gait(g: Gait, dx: float, dy: float, dt: float, face: tuple[float, flo
     g.phase = (g.phase + 2 * math.pi * d / _stride(speed)) % (2 * math.pi)
 
 
-def body_parts(
-    x: float, y: float, look: Look, g: Gait, ball: tuple[float, ...] | None = None
-) -> list[dict]:
+def body_parts(x: float, y: float, look: Look, g: Gait, ball: tuple[float, ...] | None = None) -> list[dict]:
     """Capsules (a, b, r) and spheres (a only) in world metres, tagged with a colour slot.
 
     The heading, speed and action come from the engine. The stride phase is how far these
@@ -421,14 +420,66 @@ def crowding(frame: dict, radius: float = 4.0) -> int:
     return sum(1 for p in frame["players"] if math.hypot(p["x"] - bx, p["y"] - by) <= radius)
 
 
-def crowded_start(frames: list[dict], n: int, earliest: int, latest: int, step: int = 25) -> int:
-    """Start frame of the n-frame window with the most players near the ball."""
-    best, best_score = earliest, -1.0
+# A player stands in for his drawn body: the torso capsule body_parts draws (radius 0.23 m at an
+# average build) up to the mean height sample_looks draws (1.81 m). Only the window choice uses
+# these; the labels still come from the drawn capsules and the pixels.
+OCCLUDER_RADIUS_M = 0.23
+OCCLUDER_HEIGHT_M = 1.81
+
+
+def ball_hidden(cam_pos: tuple[float, float, float], ball: tuple[float, float, float], players) -> bool:
+    """True if a player stands on the camera's line of sight to the ball's centre.
+
+    The sight line is a segment from the lens to the ball. A player blocks it when he stands
+    between the two in the pitch plane, within OCCLUDER_RADIUS_M of it, and the line passes
+    him below OCCLUDER_HEIGHT_M. A player beside or behind the ball, or under a ball in the
+    air, does not hide it, however close he is.
+    """
+    cx, cy, cz = cam_pos
+    bx, by, bz = ball[0], ball[1], ball[2] + BALL_RADIUS
+    dx, dy = bx - cx, by - cy
+    reach2 = dx * dx + dy * dy
+    if reach2 == 0:
+        return False
+    reach = math.sqrt(reach2)
+    for px, py in players:
+        ox, oy = px - cx, py - cy
+        along = (ox * dx + oy * dy) / reach2  # 0 at the lens, 1 at the ball
+        if not 0 < along < 1:
+            continue
+        if abs(ox * dy - oy * dx) / reach > OCCLUDER_RADIUS_M:
+            continue
+        if cz + along * (bz - cz) <= OCCLUDER_HEIGHT_M:
+            return True
+    return False
+
+
+def crowded_start(
+    frames: list[dict],
+    n: int,
+    earliest: int,
+    latest: int,
+    cam_positions: list[tuple[float, float, float]],
+    step: int = 25,
+) -> int:
+    """Start frame of the n-frame window where the ball is most often behind a player.
+
+    cam_positions[i] is where the broadcast lens stood at frame i. Occlusion is a matter of
+    where players stand on the line from that lens to the ball, not of how many are near it:
+    a crowd on the far side of the ball hides nothing. Players near the ball break ties.
+    """
+    hidden = [0] * (len(frames) + 1)  # prefix sums of hidden frames
+    for i, f in enumerate(frames[: len(cam_positions)]):
+        b = f["ball"]
+        players = [(p["x"], p["y"]) for p in f["players"]]
+        blocked = ball_hidden(cam_positions[i], (b["x"], b["y"], b["z"]), players)
+        hidden[i + 1] = hidden[i] + blocked
+    best, best_score = earliest, (-1, -1.0)
     for s in range(earliest, max(earliest, latest) + 1, step):
-        window = frames[s : s + n : 5]
-        if len(window) * 5 < n - 5:
+        if s + n > len(cam_positions):
             break
-        score = sum(crowding(f) for f in window) / len(window)
+        window = frames[s : s + n : 5]
+        score = (hidden[s + n] - hidden[s], sum(crowding(f) for f in window) / len(window))
         if score > best_score:
             best, best_score = s, score
     return best
