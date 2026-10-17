@@ -59,6 +59,16 @@ short and actionable. This file is public: no research sources, product names or
   already changed the ball's velocity.
 - **Rule:** read the state for any judgement before mutating it.
 
+### 40. A constant defined twice keeps only the last value
+- **What happened:** the engine defined the same constant name twice for two different ideas: how
+  far goal-side of the ball the covering player stands (8 m), and the radius within which a
+  team-mate counts as cover for a tackle (10 m). The second silently replaced the first, so the
+  cover stood 10 m from the ball. Lint did not flag it.
+- **Rule:** one name, one meaning. Name a constant after what it measures, not the word it shares
+  with another rule.
+- **Check:** `tests/test_constants.py` fails if any module in `ninety/` assigns a top-level name
+  twice.
+
 ## Checks that prove something
 
 ### 8. A check must be able to fail
@@ -68,6 +78,8 @@ short and actionable. This file is public: no research sources, product names or
 - **What happened:** a planted "ball never arrives" defect showed the ball-path check could
   never fail on short clips. Later, a new braking test stayed green with the braking limit set
   to infinity: an independent reviewer found it by breaking the limit on purpose.
+  Again in the throw-in fix (#44): every test stayed green with the spot tolerance widened to
+  1 m, the settle speed raised to 1 m/s, or a snap to the spot put back; each now has its own test.
 - **Check (mutation test):** for every new check or test, break the thing it guards (set the
   limit to infinity, remove the line) and confirm exactly the intended test goes red; then
   restore and confirm green.
@@ -87,6 +99,15 @@ short and actionable. This file is public: no research sources, product names or
   18 of 48 true ones, because it treated commentary ("a crucial intervention") as a false fact.
 - **Rule:** an evaluation reports misses and false rejections, tunes on one seed and is
   confirmed on a held-out one.
+
+### 41. A check that never meets the case cannot fail
+- **What happened:** the throw-in taker was moved the last metre to his spot in one frame (about
+  22 m/s) and stopped dead with the ball. The validator's speed check catches it, but CI validates
+  only a 3-minute clip, and the first throw-in of that seed comes after 5 minutes. The realism
+  report showed full-backs and wingers at 20 to 24 m/s, and nothing failed.
+- **Rule:** a check runs on data that contains the case it guards, and the test says so.
+- **Check:** `tests/test_engine_rules.py::test_a_throw_in_taker_runs_to_his_spot_and_stops_there`
+  asserts a throw-in happened before checking speeds; it fails on the old engine.
 
 ## Working in the repo
 
