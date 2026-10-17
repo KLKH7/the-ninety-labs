@@ -96,3 +96,26 @@ def test_a_team_presses_inside_its_line_of_engagement_or_straight_after_losing_t
     high = TeamBrain("home", Style(line_height=HIGH, pressing_height=HIGH))
     high.update(0.0, False, 95.0, {})
     assert high.presses(10.0, 95.0)  # a high block presses everywhere
+
+
+def test_each_side_draws_its_own_block():
+    from ninety.sim.engine import Engine
+    blocks = {(Engine(seed).brains["home"].block, Engine(seed).brains["away"].block) for seed in range(30)}
+    assert len({b for pair in blocks for b in pair}) == 3 and any(h != a for h, a in blocks)
+
+
+def test_the_forwards_wait_at_their_line_of_engagement_never_past_the_ball():
+    for team, own in (("home", 0.0), ("away", 105.0)):
+        brain = TeamBrain(team, Style())  # engages 60 m from its goal
+        brain.update(0.0, False, abs(own - 95.0), {})  # their keeper's ball
+        assert abs(abs(brain.slot("ST", 34.0, 34.0)[0] - own) - 60.0) < 1e-9
+        brain.update(1.0, False, abs(own - 56.0), {})  # 4 m inside it: up to the ball, not past it
+        assert abs(abs(brain.slot("ST", 34.0, 34.0)[0] - own) - 56.0) < 1e-9
+        brain.update(1.0, False, abs(own - 40.0), {})  # deep in our half: the block's own front
+        front = abs(brain.line_x - own) + team_mod.LINE_GAPS_M["attack"]
+        assert abs(abs(brain.slot("ST", 34.0, 34.0)[0] - own) - front) < 1e-9
+        # A high block engages everywhere, but never stands past the ball.
+        high = TeamBrain(team, Style(line_height=HIGH, pressing_height=HIGH))
+        high.update(0.0, False, abs(own - 80.0), {})
+        assert abs(high.slot("ST", 34.0, 34.0)[0] - own) <= 80.0 + 1e-9
+        assert abs(brain.slot("CM", 34.0, 34.0)[0] - brain.line_x) == team_mod.LINE_GAPS_M["midfield"]
