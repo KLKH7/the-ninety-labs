@@ -22,6 +22,7 @@ including the ones who can't see it.
 7. [docs/DATA_CONTRACT.md](docs/DATA_CONTRACT.md): what ground-truth data must contain, and how it is checked.
 8. [docs/ENGINE.md](docs/ENGINE.md): how the match engine makes football (players decide, physics happens, the referee observes) and the build order.
 9. [SECURITY.md](SECURITY.md): the repo and the demo are public.
+10. [docs/TEAM.md](docs/TEAM.md): the five roles, who owns which paths, the handoff dates. Ask which role you are working for, and change only that role's paths.
 
 Task-specific guides in `docs/guides/`:
 

@@ -107,3 +107,38 @@ realism pass and the simulator's set pieces must change.
 
 The final proof comes later: detector recall on the fixed test set before and after each
 targeted round.
+
+### Realism pass (Oct 14)
+
+The match being filmed is the full engine: players decide, the body and the ball move under
+physics, and the picture reads that state back. The ball is drawn where the engine left it.
+Heading, speed, a strike and a keeper's dive are the engine's, and the limbs are posed from
+them. The wide shot is a bowl of seats under a roof, with a grass surface and a run-off around
+the pitch. Each limb is one solid volume on the engine's capsule, with a chest and hips, so the
+labelled silhouette is still the body that was drawn. Stands, grass and roofs stay decor.
+What changed in the picture, and two knobs that used to fail loudly:
+
+- shirts carry a seeded pattern in a shader and a number from a glyph texture, both on the
+  capsules Python already labelled. The labelled silhouette is the one that is drawn
+- `weather=rain` darkens the grass, lowers its roughness and draws streaks. Streaks are an image
+  effect, like motion blur: they are not an occluder, and visibility stays a count of geometry
+- `camera_cut=true` leaves the gantry only when another angle frames the ball better: high
+  behind the goal while the ball is in that penalty area, a low three-quarter beside the goal
+  for the four seconds after a goal (aimed at the mouth, since the ball is already back on the
+  centre spot), a tighter lens beside the gantry for a throw or an aerial touch when that shot
+  still holds the player and the ball, or the far stand when play is on the far side, that
+  camera is much closer, and its shot still holds the ball and the opposite stand. Both that
+  shot and the gantry look up into the bowl on a lens long enough that a player still has a
+  body, so the stand is the backdrop. The gantry
+  is the shot the match is watched from, and each angle, including the return, is held for at
+  least four seconds. The gantry itself is lowered to 23° down to the near touchline (the
+  handbook's 22 to 24°) without moving the sampled height, so seed 5's draw stays put. The cut
+  is logged as `camera.angle`. A cut is not a pan, so the blur streak is zero on the frame the
+  camera jumps. The net is decor. On a goal it gives outward behind the line and settles, and
+  it stays out of the id pass
+- the stands hold drawn spectators, including a near stand that sits behind the gantry so the
+  reverse angle has a stadium behind the pitch. Sky, floodlight towers and sharpening are decor,
+  not occluders
+
+A referee is still not drawn. The renderer only draws, and the engine does not have an official
+yet. Inventing one would put a person on the pitch that the match does not contain.

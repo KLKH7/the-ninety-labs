@@ -111,6 +111,20 @@ short and actionable. This file is public: no research sources, product names or
 - **Rule:** test the command whose answer you need on its own (`grep -c`, then its exit code),
   and add a positive control: something you know is there must be found.
 
+### 30. Run the commands you document
+- **What happened:** the data contract told readers to run `ninety-sim` without `--out`, which
+  the CLI requires, so the first command a newcomer copied failed.
+- **Rule:** every command in a doc is copied from a run that worked, with all required
+  arguments.
+- **Check:** paste each documented command into a fresh shell before merging.
+
+### 31. Evidence has to fit in an agent's context
+- **What happened:** frame-based stats cited every frame they used, so one 90-minute match
+  produced 85 MB of facts (9.3 million source ids), too large for any agent or fact-checker.
+- **Rule:** cite frames as a range (`frames:<first>-<last>`); cite events by id; a value of zero
+  cites nothing.
+- **Check:** a test requires frame-based facts to cite one range, and caps the size of a clip's facts.
+
 ## Data and grounding
 
 ### 16. Read the primary source
@@ -247,3 +261,55 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `uv run python -m ninety.sim.penalties`, read beside Bar-Eli et al. 2007 by
   direction and by stop, never fitted to it; a test that a ball at his waist is touched where one
   under the bar at the same moment is not.
+
+### 32. Persisted replay prompts are an interface
+- **What happened:** making a rejection reason more specific changed the Analyst retry prompt,
+  so an existing recorded slice stopped replaying even though the workflow behavior was valid.
+- **Rule:** re-record the replay in the same pull request as any change to text that reaches a
+  recorded prompt (fact-checker reasons, agent instructions). Never make the replayer tolerate a
+  changed prompt: a shim that rewrites new wording back to old pairs an old answer with a new
+  question.
+- **Check:** run the committed replay fixture after changing fact-checker diagnostics.
+
+### 33. One clock for viewers and agents
+- **What happened:** agent-facing minute and second values were rounded and combined differently
+  from the scorebug's floored elapsed clock, producing off-by-one timestamps and occasional
+  second 60 values.
+- **Rule:** build the displayed clock in one shared function, and keep football's ordinal minute
+  as a separate field.
+- **Check:** compare every compact event's clock and seconds with the scorebug clock at its event
+  timestamp, including fractional seconds near a minute boundary.
+
+### 34. An evaluation's true labels must be true, and must not be quoted in the prompt
+- **What happened:** the fact-checker evaluation put "cautious" on every completed pass,
+  including one of 42 m at 96 km/h, and labelled the claim true; the Judge rejecting it was
+  counted as an error. The tone words being tested were also listed in the Judge's own
+  instructions, so a good score partly measured the quote.
+- **Rule:** attach a descriptive word only to events whose fields fit it, with the condition
+  written before reading any model output; test generalisation on words the prompt never uses.
+- **Check:** `tests/test_judge.py` fails if an evaluated tone word appears in the instructions,
+  or a tone claim is built on an event outside its condition.
+
+
+### 35. A graphic's words must follow the outcome, not just its numbers
+- **What happened:** the first template graphics wrote "h10 finds h6" for every pass with a
+  receiver, including the 10 failed passes in seed 7's first five minutes. The fact-checker's
+  code half passed them, because it checks numbers and player ids, not verbs. The Ledger also
+  dropped any fact source id it could not find, so a fact citing a missing event would have been
+  stored with less evidence instead of failing.
+- **Rule:** a word that states a result ("finds", "scores", "blocked") comes from the event's
+  `outcome` field. A citation that does not resolve is an error, never filtered out.
+- **Check:** `tests/test_cues.py::test_failed_pass_never_says_it_found_the_receiver` and
+  `tests/test_ledger.py::test_load_match_refuses_a_fact_citing_a_missing_event` fail on the
+  original code.
+
+### 36. A test's numbers come from the constants it tests
+- **What happened:** merging `main` into the engine branches, `main`'s high-ball tests used 6 and
+  12 m/s because they sat either side of `main`'s first-touch limits (8 + 8 × skill). The engine
+  branches had moved those limits to 12 + 12 × skill, so the same numbers now tested nothing: a
+  "poor" chest killed the ball. Both branches had also numbered new lessons 18 to 23.
+- **Rule:** a test that checks a threshold derives its inputs from the constant (`FOOT_ABSORB_MPS`,
+  `AERIAL_ABSORB`), so a change to the constant moves the test with it. A new lesson takes the next
+  number on `main` at merge time.
+- **Check:** `tests/test_engine_rules.py` high-ball tests build their speeds from the profile
+  constants; `grep '^### ' docs/LESSONS.md` shows no number twice.

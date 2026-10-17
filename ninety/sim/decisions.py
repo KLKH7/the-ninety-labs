@@ -432,6 +432,7 @@ def strike_nodes(scene: Scene, tx: float, ty: float, lofted: bool, pace: float
     speed = math.hypot(ground, up)
     dx, dy = tx - scene.x, ty - scene.y
     turn, _ = strike_turn(scene.heading, dx, dy, scene.throw)
+    turn = 0.0 if scene.throw else turn  # thrown with both hands: no kicking side (engine.execute)
     cx, cy = scene.x - scene.ball_offset[0], scene.y - scene.ball_offset[1]
     nearest = min((math.hypot(o[0] - cx, o[1] - cy) for o in scene.moving), default=math.inf)
     skill = pass_skill(scene.x, tx, ty, lofted, scene.goal_x)

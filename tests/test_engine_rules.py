@@ -7,8 +7,8 @@ from statistics import mean, pstdev
 import pytest
 
 from ninety.sim import ball, offball, perception, shape
-from ninety.sim.engine import BODY_RESTITUTION, DT, PRESS_GAP_M, Engine
-from ninety.sim.profiles import MAX_STRIKE_MPS
+from ninety.sim.engine import AERIAL_ABSORB, BODY_RESTITUTION, DT, MISCONTROL_KEEP, PRESS_GAP_M, Engine
+from ninety.sim.profiles import FOOT_ABSORB_MPS, MAX_STRIKE_MPS
 
 
 def still(e: Engine) -> None:
@@ -230,6 +230,9 @@ def test_a_throw_in_is_always_thrown_even_with_nobody_free():
     e.restart.ready_at = e.t
     e.tick_restart()
     assert e.throw_by == taker.id
+    assert taker.y < -0.3  # standing behind the near touchline
+    assert e.ball[1] < 0 and e.ball[2] > 1.5  # in the hands, off the pitch, not on a boot
+    assert e.pose(taker) == ("throw", 0.0)
     for b in e.beliefs.values():
         b.seen.clear()  # he can see nobody to throw to
     b = e.beliefs[taker.id]
@@ -244,8 +247,13 @@ def test_a_throw_in_is_always_thrown_even_with_nobody_free():
             break
         e.t += DT
         e.frame += 1
-    assert thrown_at is not None  # down the line once he has waited
+    assert thrown_at is not None and thrown_at <= 3.0  # down the line within a couple of seconds
     assert e.match.events[-1]["type"] == "pass" and e.ball[5] > 0  # thrown, through the air
+    assert e.ball[2] > 1.5  # it left his hands, not his foot
+    for _ in range(8):
+        e.tick_free()
+        e.t += DT
+    assert e.restart is None and e.ball[1] > 0  # it enters; the release is not a new throw-in
 
 
 def test_a_keeper_may_not_handle_a_team_mates_deliberate_pass():
@@ -320,11 +328,118 @@ def test_first_touch_decides_whether_a_ball_is_killed():
     assert outcomes == {1.0: True, 0.0: False}
 
 
+def _high_ball(touch: float, speed: float, z: float, reacted: bool, y: float = 30.0) -> Engine:
+    """A ball arriving on a standing outfielder. z is the bottom of the ball."""
+    e = Engine(1)
+    still(e)
+    p = e.by_id["a6"]
+    p.x, p.y = 50.0, 30.0
+    p.profile.attributes["first_touch"] = touch
+    e.possessor, e.last_touch, e.kicker_clear = None, "h2", True
+    e.kicked_at = e.t - (2.0 if reacted else 0.0)
+    e.ball = (49.7 + speed * DT, y, z, speed, 0.0, 0.0)
+    e.contact((49.7, y, z, speed, 0.0, 0.0))
+    return e
+
+
+# Speeds between what a body part kills at the worst and the best first touch (profiles.absorb_mps).
+FOOT_WORST, FOOT_BEST = FOOT_ABSORB_MPS[0], FOOT_ABSORB_MPS[0] + FOOT_ABSORB_MPS[1]
+CHEST = (FOOT_WORST + FOOT_BEST) / 2 * AERIAL_ABSORB  # a good chest kills it, a poor one does not
+PAST_THIGH = (FOOT_BEST * AERIAL_ABSORB + FOOT_BEST) / 2  # past the best thigh, inside the best foot
+
+
+def test_a_high_ball_can_be_taken_on_the_body_and_a_poor_touch_is_worse():
+    # At chest height: a good first touch kills it, a poor one is a heavy touch.
+    killed = _high_ball(1.0, CHEST, 1.35, True)
+    assert killed.possessor == "a6" and killed.ball[3] == 0.0 and killed.ball[5] == 0.0
+    assert not any(ev["type"] == "deflection" for ev in killed.match.events)
+    heavy = _high_ball(0.0, CHEST, 1.35, True)
+    assert heavy.possessor is None
+    assert math.isclose(heavy.ball[3], -MISCONTROL_KEEP * CHEST, rel_tol=0.05)
+    # The same arrival with no time to set himself still just rebounds off the body.
+    cold = _high_ball(1.0, CHEST, 1.35, False)
+    assert cold.possessor is None
+    assert math.isclose(cold.ball[3], -BODY_RESTITUTION * CHEST, rel_tol=0.05)
+    # A thigh is the same idea, and harder than a foot reached out to the side.
+    thigh = _high_ball(1.0, PAST_THIGH, 0.7, True)
+    assert thigh.possessor is None and any(ev["type"] == "deflection" for ev in thigh.match.events)
+    foot = _high_ball(1.0, PAST_THIGH, 0.2, True, y=30.55)
+    assert foot.possessor == "a6"
+    # A clip of the outside rebounds even when he is ready and his touch is perfect.
+    clip = _high_ball(1.0, CHEST, 1.35, True, y=30.32)
+    assert clip.possessor is None and any(ev["type"] == "deflection" for ev in clip.match.events)
+    # Already leaving him, or over his head, or past his shoulder: he does not take it.
+    e = Engine(1)
+    still(e)
+    p = e.by_id["a6"]
+    p.x, p.y = 50.0, 30.0
+    p.profile.attributes["first_touch"] = 1.0
+    e.possessor, e.last_touch, e.kicker_clear, e.kicked_at = None, "h2", True, e.t - 2.0
+    e.ball = (50.1 + CHEST * DT, 30.0, 1.35, CHEST, 0.0, 0.0)
+    e.contact((50.1, 30.0, 1.35, CHEST, 0.0, 0.0))
+    assert e.possessor is None and e.ball[3] == CHEST
+    over = _high_ball(1.0, CHEST, 2.1, True)
+    assert over.possessor is None and over.ball[3] == CHEST
+    wide = _high_ball(1.0, CHEST, 1.35, True, y=30.7)
+    assert wide.possessor is None and wide.ball[3] == CHEST
+
+
+def test_a_touch_names_the_part_and_a_carry_does_not():
+    chest = _high_ball(1.0, CHEST, 1.35, True)
+    assert chest.pose(chest.by_id["a6"])[0] == "chest"
+    chest.t += 0.35
+    assert chest.pose(chest.by_id["a6"])[0] != "chest"
+    thigh = _high_ball(1.0, PAST_THIGH, 0.7, True)
+    assert thigh.pose(thigh.by_id["a6"])[0] == "thigh"
+    foot = _high_ball(1.0, PAST_THIGH, 0.2, True, y=30.55)
+    assert foot.pose(foot.by_id["a6"])[0] == "foot"
+    cold = _high_ball(1.0, CHEST, 1.35, False)
+    assert cold.pose(cold.by_id["a6"])[0] not in ("chest", "thigh", "head", "foot", "hands")
+    e = Engine(1)
+    still(e)
+    p = e.by_id["a6"]
+    p.x, p.y = 50.0, 30.0
+    e.dribbler = p.id
+    e.possessor, e.last_touch, e.kicker_clear, e.kicked_at = None, "h2", True, e.t - 2.0
+    e.ball = (50.2 + 2.0 * DT, 30.0, 0.0, 2.0, 0.0, 0.0)
+    e.contact((50.2, 30.0, 0.0, 2.0, 0.0, 0.0))
+    assert e.pose(p)[0] != "foot"
+
+
+def test_a_dive_is_drawn_as_far_as_he_has_gone_and_until_he_is_up():
+    e = Engine(1)
+    k = _shot_at_keeper(e, (90.0, 34.0, 0.5, 25.0, 6.0, 0.0))  # heading for his left
+    assert e.pose(k)[0] != "dive"  # he has not reacted yet
+    e.t += e.reaction(k)
+    gone = []
+    while e.keeper_dive(k):
+        gone.append(abs(e.pose(k)[1]) if e.dive else 1.0)
+        e.t += DT
+    assert gone == sorted(gone) and gone[0] < 0.5 and gone[-1] == 1.0  # drawn as far as the engine has him
+    assert e.pose(k)[0] == "dive" and abs(e.pose(k)[1]) == 1.0  # down on the ground
+    e.t = e.off_balance[k.id] + DT
+    assert e.pose(k)[0] != "dive"  # up again
+
+
+def test_a_keeper_in_his_box_still_holds_a_high_ball_with_his_hands():
+    e = Engine(1)
+    still(e)
+    p = e.keeper("home")
+    p.x, p.y = 5.0, 34.0
+    p.profile.attributes["first_touch"] = 0.0  # a chest could not kill this
+    p.profile.attributes["handling"] = 1.0
+    e.possessor, e.last_touch, e.kicker_clear, e.kicked_at = None, "a6", True, e.t - 2.0
+    e.ball = (4.6 + 12.0 * DT, 34.0, 1.4, 12.0, 0.0, 0.0)
+    e.contact((4.6, 34.0, 1.4, 12.0, 0.0, 0.0))
+    assert e.possessor == p.id
+    assert e.pose(p)[0] == "hands"
+
+
 def test_a_long_ball_to_the_wing_is_struck_as_a_cross_and_a_shot_with_finishing(monkeypatch):
     e, p = kicker()
     used = []
     original = e.execute
-    monkeypatch.setattr(e, "execute", lambda *a: used.append(a[-1]) or original(*a))
+    monkeypatch.setattr(e, "execute", lambda *a, **kw: used.append(a[-1]) or original(*a, **kw))
     e.give(p.id)
     e.ball = (50.37, 34.0, 0.0, 0.0, 0.0, 0.0)
     e.pass_to(p, 85.0, 60.0, lofted=True)

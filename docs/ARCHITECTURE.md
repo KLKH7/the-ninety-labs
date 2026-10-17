@@ -79,8 +79,8 @@ the Game, a sports-science measurement or a published match statistic ([GROUNDIN
 | Match engine | **makes** the match: applies football logic and physics every 1/25 s and writes each frame and event | `ninety/sim` | running, physics gaps |
 | Ground truth | the engine's output: the synthetic data itself | `events.jsonl`, `frames.jsonl` | running |
 | Validator | **inspects** the output, independently of the engine's code: a clip that breaks a law, physics or its own events never reaches the renderer | `ninety/validate.py` | running, engine fails it today |
-| Renderer | draws the frames as broadcast video; decides nothing about football | `web/render` | planned |
-| Render labels | each player's and the ball's box, projected through the camera, so labels are exact | `web/render` | planned |
+| Renderer | draws the frames as broadcast video; decides nothing about football | `web/render`, `ninety/render` | running |
+| Render labels | each player's and the ball's box, projected through the camera, so labels are exact | `web/render` | running |
 | Vision pipeline | sees pixels only: detection, tracking, camera-to-pitch mapping, event rules | `ninety/vision` | planned |
 | Scoring | compares detected events with the answer key: precision and recall per event type | `ninety/eval` | planned |
 | Vision Auditor, Data agent | find where vision fails and ask the engine for more of exactly those scenes | `ninety/agents` | planned |
