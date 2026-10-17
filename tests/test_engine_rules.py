@@ -694,6 +694,9 @@ def test_off_the_ball_he_runs_only_as_fast_as_the_ball_could_get_there():
 def test_a_receiver_takes_the_ball_in_his_stride_instead_of_stopping_dead():
     e = Engine(1)
     p = e.by_id["h8"]
+    # Lesson 46: an average dribbler, set here, not whoever the seed happens to draw
+    # (portable math redrew h8 from a 0.69 dribbler to a 0.34 one).
+    p.profile.attributes["dribbling"] = 0.5
     for q in e.players:
         if q.team == "away":
             q.x, q.y = 100.0, 60.0  # nobody near him

@@ -11,9 +11,10 @@ for the way it is struck) is compared with whether a team-mate received it.
 from __future__ import annotations
 
 import argparse
-import random
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
+
+from ninety.sim import fmath
 
 ROOT = Path(__file__).resolve().parents[2]
 FORCE_SHARE = 0.15  # the share of decisions with a forced forward pass
@@ -26,7 +27,7 @@ def measure(seed: int, minutes: float = 90) -> list[tuple[float, bool, bool, boo
     from ninety.sim import decisions as D
     from ninety.sim.engine import Engine
 
-    rng = random.Random(f"{seed}-calibration")
+    rng = fmath.Random(f"{seed}-calibration")
     pending: dict[str, tuple[float, bool, bool]] = {}
     original = D.choose
 
@@ -70,7 +71,7 @@ def table(rows: list[tuple[float, bool, bool, bool]]) -> list[str]:
         if b:
             out.append(f"| {lo:.1f} to {min(hi, 1.0):.1f} | {len(b)} | {sum(r[0] for r in b) / len(b):.2f} | "
                        f"{sum(r[3] for r in b) / len(b):.2f} |")
-    brier = sum((r[0] - r[3]) ** 2 for r in rows) / max(1, len(rows))
+    brier = sum((r[0] - r[3]) * (r[0] - r[3]) for r in rows) / max(1, len(rows))
     out.append(f"\nBrier score {brier:.3f} over {len(rows)} passes.")
     return out
 

@@ -832,6 +832,9 @@ def test_a_dribbler_whose_touch_is_declined_still_decides():
     e.ball = (c.x + r, c.y, 0.0, 0.0, 0.0, 0.0)
     e.possessor = e.last_touch = c.id
     e.dribble_to, e.hold_until = (60.0, 34.0), e.t - 1.0
+    # Lesson 46: build the case rather than rely on h6's drawn body being too slow for any push
+    # (portable math redraws every profile); no push is his, so the touch is declined.
+    e.touch_speed = lambda *a, **kw: None
     calls = []
     e.decide = lambda p, **kw: calls.append(p.id)
     for _ in range(engine.DECIDE_EVERY):
