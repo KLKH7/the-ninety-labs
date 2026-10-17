@@ -262,3 +262,15 @@ short and actionable. This file is public: no research sources, product names or
 - **Rule:** regenerate a report from the exact tree being committed, after the last code change,
   and state how big a difference the sample can resolve.
 - **Check:** re-run the report on a clean checkout of the commit and compare before merging.
+
+### 32. A measured spread already holds every cause; an extra error source must take its share
+- **What happened:** the kick's vertical error was set to the whole measured vertical spread at
+  the goal, and the engine then added its own speed spread on top. A slower ball drops more, so
+  the speed spread moved the ball up and down again: kicks scattered about 7% wider vertically than
+  the measurement they were built from.
+- **Rule:** when the engine draws several independent errors that each move the same measured
+  quantity, derive each one's share through the engine's own physics so that together they
+  reproduce the measurement, never set one of them to the whole of it.
+- **Check:** reproduce the source's measurement end to end through the engine (here, kicks fired at
+  the paper's setup land in the paper's ellipse), with a tolerance from the sample size.
+
