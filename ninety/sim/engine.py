@@ -99,6 +99,8 @@ BOARDS_M = 4.0  # verify: advertising boards behind the lines stop a ball (and p
 # ready in one to two seconds. He still has to reach the spot.
 RESTART_DELAY_S = {"throw_in": (1.0, 2.0), "goal_kick": (1.0, 2.0), "corner": (1.0, 2.0)}
 THROW_BEHIND_M = 0.55  # Law 15: his body stands outside the touchline, feet on or behind it
+THROW_SPOT_M = 0.25  # design: within this of his spot he throws from where he stands, still behind the line
+THROW_SETTLED_MPS = 0.3  # design: he throws once he has (nearly) stopped, so nobody stops dead
 THROW_REACH_M = 0.28  # both hands reach toward the pitch and still stay short of the line
 THROW_HAND_Z = 1.85  # bottom of the ball just over the head (the centre sits one radius higher)
 
@@ -915,12 +917,15 @@ class Engine:
         r = self.restart
         taker = self.by_id[r.taker]
         spot = throw_stand(r.x, r.y) if r.kind == "throw_in" else (r.x, r.y)
-        if self.t < r.ready_at or math.hypot(taker.x - spot[0], taker.y - spot[1]) > CONTROL_M:
+        # A thrower must be at his spot, behind the line; anyone else is close enough when the ball
+        # is at his feet. Nobody is moved there: he runs (lesson 5).
+        near = THROW_SPOT_M if r.kind == "throw_in" else CONTROL_M
+        if self.t < r.ready_at or math.hypot(taker.x - spot[0], taker.y - spot[1]) > near:
+            return
+        if r.kind == "throw_in" and math.hypot(taker.vx, taker.vy) > THROW_SETTLED_MPS:
             return
         # While the ball is out of play a new one is placed: the only time the ball may jump.
         if r.kind == "throw_in":
-            taker.x, taker.y = spot
-            taker.vx = taker.vy = 0.0
             taker.heading = math.pi / 2 if spot[1] < PITCH_Y / 2 else -math.pi / 2
             self.ball = (*throw_hands(taker.x, taker.y), 0.0, 0.0, 0.0)
         else:

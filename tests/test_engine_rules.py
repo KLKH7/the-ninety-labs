@@ -2,6 +2,7 @@
 the passer believes, keepers only anticipate shots, pressers stand goal-side, and facing holds."""
 
 import math
+from collections import defaultdict
 from statistics import mean, pstdev
 
 from ninety.sim import ball, perception
@@ -10,11 +11,14 @@ from ninety.sim.engine import (
     BODY_RESTITUTION,
     DIVE_TIME_S,
     DT,
+    FPS,
     MAX_STRIKE_MPS,
     MISCONTROL_KEEP,
     PRESS_GAP_M,
     Engine,
+    simulate,
 )
+from ninety.validate import check_physics
 
 
 def still(e: Engine) -> None:
@@ -534,3 +538,14 @@ def test_a_blocked_pass_fails_and_a_pass_back_to_the_passer_is_not_completed():
     e.kicked = e.emit("pass", "home", 50.0, 34.0, player="h6")
     e.touched(e.by_id["h6"], 50.5, 34.0, controls=True)
     assert e.match.events[-1]["outcome"] == "fail" and e.match.events[-1]["receiver"] is None
+
+
+def test_a_throw_in_taker_runs_to_his_spot_and_stops_there():
+    """Lesson 5: the taker was once moved the last metre to his spot in one frame (22 m/s) and
+    stopped dead with the ball. The match must contain a throw-in, so the case is exercised; a
+    short clip with no restart would pass whatever the engine did."""
+    m = simulate(7, 6)
+    assert any(p["action"] == "throw" for fr in m.frames for p in fr["players"])
+    problems = defaultdict(list)
+    check_physics(m.events, m.frames, FPS, m.roster, problems)
+    assert not problems.get("P1 player speed") and not problems.get("P2 player acceleration"), dict(problems)
