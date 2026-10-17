@@ -199,6 +199,7 @@ class Scene:
     progress_weight: float = 1.0
     loss_weight: float = 1.0
     mate_velocity: dict[str, tuple[float, float]] = field(default_factory=dict)  # as he last saw them
+    opponent_velocity: list[tuple[float, float]] = field(default_factory=list)  # in the order of `opponents`
     current: str | None = None  # what he is doing now (dribble or hold), for STICKY
 
 
@@ -318,7 +319,7 @@ def pressure(scene: Scene) -> float:
 
 
 def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, age: float,
-                    lofted: bool, receiver_t: float | None = None) -> float | None:
+                    lofted: bool, receiver_t: float | None = None, runs: bool = False) -> float | None:
     """The passer's estimate that a pass to (tx, ty) reaches the team-mate at (mx, my) and is
     controlled: no opponent gets to the ball's path first, the team-mate gets there in time, and
     the ball arrives slowly enough to kill. None if a ground pass would stop short."""
@@ -328,7 +329,7 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
     if not math.isfinite(arrive):
         return None
     confidence = 1.0
-    for ox, oy in scene.opponents:  # can any opponent reach the ball's path before the ball?
+    for k, (ox, oy) in enumerate(scene.opponents):  # can any opponent reach the ball's path before the ball?
         d, s = closest_on_segment(ox, oy, scene.x, scene.y, tx, ty)
         along = s * dist  # how far along the pass his closest point is
         if lofted and along < 0.8 * dist:
@@ -336,7 +337,15 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
         t_ball = ground_time(v0, along) if not lofted else arrive
         if not math.isfinite(t_ball):
             t_ball = arrive
-        confidence *= sigmoid((generic_time(max(0.0, d - 1.0)) - t_ball) / LANE_MARGIN_S)
+        reach = max(0.0, d - 1.0)
+        if runs and k < len(scene.opponent_velocity) and d > 0:
+            # D9: for a pass into space the receiver's run is counted, so the defenders' are too.
+            px, py = scene.x + s * (tx - scene.x), scene.y + s * (ty - scene.y)
+            ovx, ovy = scene.opponent_velocity[k]
+            opp_t = running_time(reach, (ovx * (px - ox) + ovy * (py - oy)) / d)
+        else:
+            opp_t = generic_time(reach)
+        confidence *= sigmoid((opp_t - t_ball) / LANE_MARGIN_S)
     if receiver_t is None:
         receiver_t = generic_time(math.hypot(tx - mx, ty - my))
     confidence *= sigmoid((arrive + 0.5 - receiver_t) / RECEIVE_MARGIN_S)
@@ -402,7 +411,7 @@ def through_options(scene: Scene, mate: tuple[str, float, float, float]) -> list
         along = (vx * (tx - mx) + vy * (ty - my)) / lead  # his speed toward the spot
         receiver_t = running_time(math.hypot(tx - mx, ty - my), along)
         lofted = dist > LOFT_OVER_M
-        confidence = pass_confidence(scene, tx, ty, mx, my, age, lofted, receiver_t)
+        confidence = pass_confidence(scene, tx, ty, mx, my, age, lofted, receiver_t, runs=True)
         option = scored_pass(scene, mid, tx, ty, lofted, confidence)
         if option:
             out.append(option)
@@ -422,11 +431,15 @@ def shot_chance(scene: Scene) -> float:
 
 
 def options(scene: Scene) -> list[Option]:
-    out = [o for o in (pass_option(scene, mate) for mate in scene.mates) if o]
     if scene.throw:  # Law 15: a throw-in is thrown to someone; it is never a shot or a dribble
-        return out
+        return [o for o in (pass_option(scene, mate) for mate in scene.mates) if o]
+    # One pass per team-mate, aimed where he thinks it is worth most (to feet or into space ahead of
+    # him, D9): where to put the ball is part of choosing him, so he is not counted three times over.
+    out = []
     for mate in scene.mates:
-        out += through_options(scene, mate)
+        aims = [o for o in [pass_option(scene, mate), *through_options(scene, mate)] if o]
+        if aims:
+            out.append(max(aims, key=lambda o: o.value))
     here = our_value(scene, scene.x, scene.y)
     p = pressure(scene)
     q = shot_chance(scene)
