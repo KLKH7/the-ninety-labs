@@ -43,13 +43,13 @@ function start(D) {
   function stopCopy(t) {
     const side = t.team === 'home' ? 'Home' : 'Away', other = t.team === 'home' ? 'Away' : 'Home';
     const pct = t.passes ? Math.round(t.completed / t.passes * 100) : 0;
-    const shot = t.shots.length ? ` A shot came in this spell.` : '';
+    const shot = t.shots.length ? ' A shot came in the build-up.' : '';
     if (mode === 'casual') {
       const why = t.recoveries >= 2 ? `won the ball back ${t.recoveries} times` :
         t.pressures >= 3 ? `pressed ${t.pressures} times` : `kept it, ${t.completed} of ${t.passes} passes found a teammate`;
-      return `${side} took over. They ${why} and pushed ${other} back.${shot}`;
+      return `${side} took over and stayed on top for ${t.held} minutes, strongest at ${t.peak_minute}'. Going in, they ${why}.${shot}`;
     }
-    return `Swing ${t.swing > 0 ? '+' : ''}${t.swing} over 3 min. ${side}: ${t.completed}/${t.passes} passes (${pct}%), ${t.pressures} pressures, ${t.recoveries} recoveries; ${other} intercepted ${t.lost}.${shot}`;
+    return `On top ${t.minute}'–${t.until}' (${t.held} min), peak ${t.peak} at ${t.peak_minute}'. Build-up, 3 min: ${t.completed}/${t.passes} passes (${pct}%), ${t.pressures} pressures, ${t.recoveries} recoveries; ${other} intercepted ${t.lost}.${shot}`;
   }
 
   function renderStops() {
@@ -59,8 +59,8 @@ function start(D) {
       const b = document.createElement('button');
       b.className = 'stop'; b.id = `stop-${i}`;
       b.setAttribute('aria-current', String(i === current));
-      b.innerHTML = `<span class="min">${t.minute}'</span><span class="who ${t.team}-c">${t.team} surge</span>
-        <p>${stopCopy(t)}</p><span class="cite">${mode === 'analyst' ? `cites ${t.source_ids.length} events, ${t.source_ids[0]}–${t.source_ids[t.source_ids.length - 1]}` : `${t.source_ids.length} events behind this`}</span>`;
+      b.innerHTML = `<span class="min">${t.minute}'</span><span class="who ${t.team}-c">${t.team} take over</span>
+        <p>${stopCopy(t)}</p><span class="cite">${mode === 'analyst' ? (t.source_ids.length ? `cites ${t.source_ids.length} events, ${t.source_ids[0]}–${t.source_ids[t.source_ids.length - 1]}` : 'no events in the build-up') : `${t.source_ids.length} events behind this`}</span>`;
       b.onclick = () => { stopPlay(); goTo(i); };
       box.appendChild(b);
     });

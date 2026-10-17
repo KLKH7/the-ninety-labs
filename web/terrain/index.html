@@ -117,7 +117,7 @@ code { font: 12px var(--mono); }
   <section class="stops" id="stops" aria-label="Turning points"></section>
 
   <section class="notes">
-    <p><b style="color:var(--ink)">How it's built.</b> Height is threat: every fifth frame, the ball's spot is valued with the engine's possession-value table for the team that has it, then summed per minute and per 5 m strip of pitch. Home attacks toward the far end. Turning points are the five biggest 3-minute swings in momentum, at least 8 minutes apart. Each card's numbers are counted from the events in that window and cite them by id.</p>
+    <p><b style="color:var(--ink)">How it's built.</b> Height is threat: every fifth frame, the ball's spot is valued with the engine's possession-value table for the team that has it, then summed per minute and per 5 m strip of pitch. Home attacks toward the far end. A turning point is a minute where the side on top changes and the new side stays on top for at least 5 minutes; a swing inside one side's spell, or a shorter flicker, is not one. Each card's numbers are counted from the events of the 3 minutes before it and cite them by id.</p>
     <p><b style="color:var(--ink)">Limits.</b> The default file, seed 7, is a simulated 0–0 with two shots, so the shape is about territory and pressure, not goals. The threat table comes from <code>docs/eval/possession-value.md</code> and has not settled yet. The repo has no halves yet, so nobody switches ends.</p>
   </section>
 </div>

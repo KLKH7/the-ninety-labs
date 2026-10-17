@@ -4,8 +4,8 @@ For one clip it computes, all in code:
 - `grid`: per minute and per 5 m strip along the pitch, the threat of where the ball was, signed
   by the team that had it (home positive, away negative), in threat-seconds per minute;
 - `momentum`: home threat minus away threat per minute, averaged over five minutes;
-- `turning_points`: the largest three-minute swings in momentum, each with counts from the events
-  in that window and the ids of those events;
+- `turning_points`: the minutes where the side on top changes and holds it, each with how long it
+  held, its peak, and counts from the events of the build-up with the ids of those events;
 - `players`: each player's mean position per minute and involvement (passes, shots, tackles,
   interceptions, pressures).
 
@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import statistics
 import sys
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
@@ -33,9 +34,13 @@ from ninety.sim.value import PITCH_X, Table
 ZONES = 21  # 5 m strips, the threat table's own resolution along the pitch
 SAMPLE_EVERY = 5  # frames: 5 samples a second at 25 fps
 SMOOTH_MINUTES = 5
-SWING_MINUTES = 3
-TURNING_POINTS = 5
-TURNING_GAP = 8  # minutes between turning points, so one spell is not counted twice
+# Turning points (design values, tuned by eye on seed 7, not measured): a side is on top in a
+# minute when momentum is outside a dead band of a quarter of the match's own spread; it has
+# taken over when it stays on top for five minutes before the other side is. The counts on a
+# turning point come from the three minutes up to it.
+DEAD_BAND = 0.25
+HOLD_MINUTES = 5
+BUILD_UP_MINUTES = 3
 INVOLVEMENT = ("pass", "shot", "tackle", "interception", "pressure")
 PUBLISHED_TABLE = value.ROOT / "docs" / "eval" / "possession-value.md"
 
@@ -131,22 +136,35 @@ def build_terrain(events: list[Mapping], frames: Iterable[Mapping], roster: list
     }
 
 
+def _sides(momentum: list[float]) -> list[str | None]:
+    """Who is on top each minute; None inside the dead band, where neither side clearly is."""
+    band = DEAD_BAND * statistics.pstdev(momentum) if len(momentum) > 1 else 0.0
+    return ["home" if v > band else "away" if v < -band else None for v in momentum]
+
+
 def turning_points(events: list[Mapping], momentum: list[float], minutes: int) -> list[dict]:
+    """The minutes where the side on top changes and the new side stays on top for HOLD_MINUTES
+    before the other side takes over. A swing inside one side's spell is not a turning point."""
+    sides = _sides(momentum)
+    starts: list[tuple[int, str]] = []
+    on_top = None
+    for i, side in enumerate(sides):
+        if side is None or side == on_top:
+            continue
+        other = next((j for j in range(i, minutes) if sides[j] not in (side, None)), minutes)
+        if sum(s == side for s in sides[i:other]) >= HOLD_MINUTES:
+            starts.append((i, side))
+            on_top = side
+
     by_minute = defaultdict(list)
     for e in events:
         by_minute[_minute(e["t"], minutes)].append(e)
-    def size(i: int) -> float:
-        return -abs(momentum[i] - momentum[i - SWING_MINUTES])
-    swings = sorted(range(SWING_MINUTES, minutes), key=size)
     picked: list[dict] = []
-    for i in swings:
-        if len(picked) == TURNING_POINTS:
-            break
-        swing = round(momentum[i] - momentum[i - SWING_MINUTES], 2)
-        if swing == 0 or any(abs(i - p["minute"]) < TURNING_GAP for p in picked):
-            continue
-        window = [e for m in range(i - SWING_MINUTES + 1, i + 1) for e in by_minute[m]]
-        side = "home" if swing > 0 else "away"
+    for n, (i, side) in enumerate(starts):
+        until = starts[n + 1][0] - 1 if n + 1 < len(starts) else minutes - 1
+        sign = 1 if side == "home" else -1
+        peak = max(range(i, until + 1), key=lambda m: sign * momentum[m])
+        window = [e for m in range(max(0, i - BUILD_UP_MINUTES + 1), i + 1) for e in by_minute[m]]
         mine = [e for e in window if e.get("team") == side]
         theirs = [e for e in window if e.get("team") not in (side, None)]
         passes = [e for e in mine if e["type"] == "pass"]
@@ -155,7 +173,10 @@ def turning_points(events: list[Mapping], momentum: list[float], minutes: int) -
         picked.append({
             "minute": i,
             "team": side,
-            "swing": swing,
+            "until": until,
+            "held": sum(s == side for s in sides[i:until + 1]),
+            "peak_minute": peak,
+            "peak": abs(momentum[peak]),
             "passes": len(passes),
             "completed": sum(e.get("outcome") == "success" for e in passes),
             "pressures": sum(e["type"] == "pressure" for e in mine),
@@ -164,7 +185,7 @@ def turning_points(events: list[Mapping], momentum: list[float], minutes: int) -
             "shots": [e["id"] for e in window if e["type"] == "shot"],
             "source_ids": sorted({e["id"] for e in cited}),
         })
-    return sorted(picked, key=lambda p: p["minute"])
+    return picked
 
 
 def involvement(events: list[Mapping], player_id: str, minutes: int) -> list[int]:

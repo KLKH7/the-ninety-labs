@@ -1,6 +1,6 @@
 import pytest
 
-from ninety.intel.terrain import ZONES, build_terrain, threat_table
+from ninety.intel.terrain import HOLD_MINUTES, ZONES, build_terrain, threat_table, turning_points
 from ninety.sim.engine import simulate
 
 MINUTES = 12
@@ -27,14 +27,17 @@ def test_grid_signs_follow_the_team_in_possession(played):
         assert round(-sum(v for v in terrain["grid"][m] if v < 0), 1) <= terrain["away_threat"][m] + 0.1
 
 
-def test_turning_points_are_spaced_and_cite_real_events(played):
+def test_turning_points_alternate_hold_and_cite_real_events(played):
     match, terrain = played
     ids = {e["id"]: e for e in match.events}
-    minutes = [p["minute"] for p in terrain["turning_points"]]
-    assert minutes == sorted(minutes)
-    assert all(b - a >= 8 for a, b in zip(minutes, minutes[1:], strict=False))
-    for point in terrain["turning_points"]:
-        assert (point["swing"] > 0) == (point["team"] == "home")
+    points = terrain["turning_points"]
+    assert [p["minute"] for p in points] == sorted(p["minute"] for p in points)
+    assert all(a["team"] != b["team"] for a, b in zip(points, points[1:], strict=False))
+    for point in points:
+        sign = 1 if point["team"] == "home" else -1
+        assert sign * terrain["momentum"][point["minute"]] > 0
+        assert point["held"] >= HOLD_MINUTES
+        assert point["minute"] <= point["peak_minute"] <= point["until"]
         assert set(point["source_ids"]) <= ids.keys()
         passes = [i for i in point["source_ids"] if ids[i]["type"] == "pass"]
         assert len(passes) == point["passes"]
@@ -47,3 +50,15 @@ def test_player_threads_cover_the_roster(played):
     involved = sum(sum(p["involvement"]) for p in terrain["players"])
     assert involved == sum(e["type"] in ("pass", "shot", "tackle", "interception", "pressure")
                            and bool(e.get("player")) for e in match.events)
+
+
+def test_a_swing_inside_one_spell_is_not_a_turning_point():
+    away_spell_with_a_dip = [-3, -3, -3, -3, -3, -3, -1, -3, -3, -3, -3, -3]
+    points = turning_points([], away_spell_with_a_dip, len(away_spell_with_a_dip))
+    assert [(p["minute"], p["team"]) for p in points] == [(0, "away")]
+
+
+def test_a_short_flicker_is_not_a_turning_point():
+    flicker = [-3] * 6 + [3, 3] + [-3] * 6 + [3] * 6
+    points = turning_points([], flicker, len(flicker))
+    assert [(p["minute"], p["team"]) for p in points] == [(0, "away"), (14, "home")]

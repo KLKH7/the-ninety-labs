@@ -6,7 +6,7 @@ one view for it.
 ## `web/terrain`: match terrain (prototype)
 
 A 90-minute match drawn as a 3D surface: time runs along one axis, the pitch along the other, and
-height is threat (home rises, away sinks). The five biggest momentum swings are beacons and cards;
+height is threat (home rises, away sinks). Turning points (where the side on top changes and holds it for 5+ minutes) are beacons and cards;
 **Play the story** flies the camera through them. **Follow a player** draws one player's position
 minute by minute, with dots sized by involvement. **Casual fan / Analyst** words the same numbers
 two ways, and the analyst cards show which event ids they cite.
