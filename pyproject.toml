@@ -22,6 +22,7 @@ ninety-validate = "ninety.validate:main"
 ninety-render = "ninety.render.cli:render_main"
 ninety-dataset = "ninety.render.cli:dataset_main"
 ninety-render-check = "ninety.render.cli:check_main"
+ninety-grid = "ninety.sim.grid:main"
 
 [dependency-groups]
 dev = [
