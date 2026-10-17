@@ -17,7 +17,8 @@ generated it and the output file is committed. Rows marked *planned* have no res
 | Stats engine facts: hand-computed cases, planted defects, citations, size | `uv run pytest tests/test_stats.py` | test assertions | running |
 | Fact-checker rules (numbers, players, evidence ids) | `uv run pytest tests/test_factcheck.py` | test assertions | running |
 | Ledger versioning, evidence validation, and deterministic cue fixture | `uv run pytest tests/test_ledger.py tests/test_cues.py` | `tests/fixtures/cues-seed7.jsonl` and test assertions | running: 17 tests; 166 cues for seed 7, five minutes (83 passes, 19 of them failed; no shot in these five minutes, so shots and goals are covered by hand-built cases) |
-| Fact-checker catch rate on planted false claims, and true claims wrongly rejected | `uv run python -m ninety.eval.factcheck_eval` | `docs/eval/fact-checker.md` | re-run pending: the Judge's instructions and the tone kinds changed after the last run (fact split from tone, tone labels fitted to events, held-out and contradicted tone). Last published run, before that change, on held-out seeds 21,33: 129/129 false caught, 12/99 true rejected excluding service holds, all twelve on tone. |
+| Fact-checker catch rate on planted false claims, and true claims wrongly rejected, on the published Judge | `uv run python -m ninety.eval.factcheck_eval --seeds 21,33 --foundry`; nightly in `.github/workflows/evals.yml`, recorded in Foundry | `docs/eval/fact-checker.md` | running: held-out seeds 21,33, `ninety-judge:1` at commit `9be98bd`: 136/136 false claims caught (code alone 32/136); 7/105 true claims wrongly rejected excluding service holds (17/115 including them); 19 of 251 Judge calls failed and were held back (fail closed), more than earlier runs, not yet investigated |
+| Analyst first drafts that would air (code checks then the Judge), and Foundry's agent evaluators (task adherence, intent resolution, tool call accuracy; model-graded) on the same responses, published agents, held-out seeds | `uv run python -m ninety.agents.analyst_eval --foundry`; nightly in `.github/workflows/evals.yml`, recorded in Foundry | `docs/eval/analyst.md` | running: seeds 21,33, `ninety-analyst:3` (match tools called by Foundry over MCP) at commit `d911c0b`: 5/10 first drafts would air; Foundry evaluators intent resolution 10/10, tool call accuracy 10/10, task adherence 4/10. Ten drafts is a small sample: an identical run minutes earlier gave 6/10 and task adherence 1/10; the nightly history in Foundry is the better guide |
 | Recovery from injected failures | planned | `docs/eval/failure-table.md` | planned |
 | Ablation: one agent against the full workflow | planned | `docs/eval/ablation.md` | planned |
 | Latency to graphic and to speech (p50, p95); cost per match | planned | `docs/eval/latency-cost.md` | planned |
@@ -40,6 +41,27 @@ uv run ninety-render-check runs/dataset/test/seed9000* --determinism --report do
 | Determinism | re-render the first clip; compare `frames.jsonl`, `events.jsonl` and image hashes | identical |
 | Split integrity | `ninety/render/splits.py`: test seeds are reserved; overrides are refused on the test set | unit tests |
 
+### What the data holds
+
+`ninety-data-stats` counts, per split and from the saved labels only, what a dataset can teach the
+detector: distinct seeds, frames after the stride, player and ball boxes, balls by visibility
+group, ball size in pixels at the training input size, and clips per render knob. With
+`--floors` it exits 1 when a split misses a floor. The floors were set before any training clip
+was counted, and each one's reason is beside it in `ninety/vision/data_stats.py`. Meeting them
+does not prove the data is enough; the learning curve decides that.
+
+```bash
+uv run ninety-data-stats runs/dataset --stride 5 --input 512x512 --out docs/eval/dataset-stats.json --floors
+```
+
+The floors are `TRAIN_FLOORS` and `TEST_FLOORS` in `ninety/vision/data_stats.py`, each with its
+reason; that file is the only table. `ball_visibility_lt_0_5_share` is the quantity PLAN.md
+freezes on and `ninety-render-check` reports (every frame with the ball in shot, not only the
+strided ones, fully hidden balls included); the ball-box counts are training labels and
+exclude visibility 0, so the train split's hidden-ball floor is `ball_boxes_mostly_hidden_share`,
+a share of those labels. Lighting and weather floors cover only the values the renderer can draw
+(`PLANNED` in `ninety/render/params.py`).
+
 ## Vision scoring
 
 Fixed before the first detector runs, so no rule is tuned to a result. Every vision report
@@ -54,7 +76,17 @@ Within each frame and class, eligible detections are paired one-to-one, best-fir
 match at IoU ≥ 0.50. Ball boxes match when their centre distance is ≤ 5 pixels. A label with no
 match is a false negative; a detection with no match is a false positive. The report contains
 TP, FP, FN, precision and recall overall, by class, and for the difficulty groups below. Boxes
-with visibility zero are not labels because they were not drawn. Run:
+with visibility zero are not labels because they were not drawn.
+
+Only frames the detector ran on are scored. A frame is run when it has a line in the
+detections file ([the detections contract](../ninety/vision/detections.py)); a line with an
+empty `detections` list is a run frame that found nothing, so its labels are false negatives.
+Labels on frames with no line are skipped, not counted as misses, so detecting every 25th frame
+scores those frames only. The run set is read before the per-frame lines are flattened, and a
+run frame missing from `frames.jsonl` is refused. The report's `frames` block gives `scored`
+(run frames) and `label_frames_skipped` (labelled frames with no line). In the flat format (one
+detection per line) a frame that found nothing cannot be written, so use the per-frame format.
+Run:
 
 ```bash
 uv run python -m ninety.eval.vision_score --frames runs/seed7/frames.jsonl \
