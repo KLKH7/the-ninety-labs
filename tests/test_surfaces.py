@@ -37,8 +37,9 @@ def test_the_chest_drops_a_ball_at_his_feet_that_the_head_only_redirects():
     p.profile.attributes["first_touch"] = 0.5
     foot = p.profile.absorb_mps(False)
     # Faster than a head kills by more than he keeps at his feet, slower than a chest kills.
-    speed = (foot * firsttouch.CUSHION["chest"] + foot * firsttouch.CUSHION["head"] + firsttouch.KEEP_MPS) / 2
-    assert foot * firsttouch.CUSHION["head"] + firsttouch.KEEP_MPS < speed < foot * firsttouch.CUSHION["chest"]
+    chest_kills, head_kills = foot * firsttouch.CUSHION["chest"], foot * firsttouch.CUSHION["head"]
+    speed = (chest_kills + head_kills + firsttouch.KEEP_MPS) / 2
+    assert head_kills + firsttouch.KEEP_MPS < speed < chest_kills
     chest = ball_at(1.3, speed)
     assert chest.possessor == "a6" and chest.pose(chest.by_id["a6"])[0] == "chest"
     head = ball_at(1.7, speed)
@@ -67,7 +68,8 @@ def test_each_part_aims_as_well_as_it_is_made_to():
         assert sd / foot == pytest.approx(firsttouch.AIM_ERROR[part], rel=0.15)
 
 
-@pytest.mark.parametrize("z, part", [(0.7, "thigh"), (0.97, "thigh"), (1.3, "chest"), (1.52, "chest"), (1.7, "head")])
+@pytest.mark.parametrize("z, part", [(0.7, "thigh"), (0.97, "thigh"), (1.3, "chest"), (1.52, "chest"),
+                                     (1.7, "head")])
 def test_the_body_is_drawn_with_the_part_the_engine_used(z, part):
     e = ball_at(z, 4.0)
     assert e.pose(e.by_id["a6"])[0] == part == firsttouch.surface(z)
