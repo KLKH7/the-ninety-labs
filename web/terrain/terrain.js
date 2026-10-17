@@ -4,16 +4,24 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 const source = new URLSearchParams(location.search).get('data') || 'seed7.json';
-fetch(source)
-  .then(r => { if (!r.ok) throw new Error(`${source}: HTTP ${r.status}`); return r.json(); })
-  .then(start)
+// Turning-point wording is written by ninety/agents/cues.py next to the data, one cue per
+// persona; without that file the cards show only who took over and when.
+const cueSource = source.replace(/\.json$/, '.cues.jsonl');
+Promise.all([
+  fetch(source).then(r => { if (!r.ok) throw new Error(`${source}: HTTP ${r.status}`); return r.json(); }),
+  fetch(cueSource).then(r => r.ok ? r.text() : '').catch(() => ''),
+])
+  .then(([data, cueText]) => start(data, Object.fromEntries(cueText.split('\n').filter(Boolean)
+    .map(line => JSON.parse(line)).map(cue => [cue.id, cue]))))
   .catch(err => {
     const f = document.getElementById('fallback');
     f.textContent = `Could not load ${source}: ${err.message}. Serve web/ over HTTP (see web/README.md).`;
     f.hidden = false;
   });
 
-function start(D) {
+// Per-minute arrays are indexed from 0; index m is football minute m + 1, the minute every label
+// and every turning point uses.
+function start(D, cues) {
   const M = D.minutes, Z = D.zones;
   const W = 90, L = 42, H = 7;
   const maxCell = Math.max(...D.grid.flat().map(Math.abs));
@@ -40,16 +48,15 @@ function start(D) {
   const toZ = z => L / 2 - z / (Z - 1) * L;
   const zoneOfX = x => x / 105 * Z - 0.5;
 
+  const cueFor = t => cues[`cue-tp${t.minute}-${mode}`];
   function stopCopy(t) {
-    const side = t.team === 'home' ? 'Home' : 'Away', other = t.team === 'home' ? 'Away' : 'Home';
-    const pct = t.passes ? Math.round(t.completed / t.passes * 100) : 0;
-    const shot = t.shots.length ? ' A shot came in the build-up.' : '';
-    if (mode === 'casual') {
-      const why = t.recoveries >= 2 ? `won the ball back ${t.recoveries} times` :
-        t.pressures >= 3 ? `pressed ${t.pressures} times` : `kept it, ${t.completed} of ${t.passes} passes found a teammate`;
-      return `${side} took over and stayed on top for ${t.held} minutes, strongest at ${t.peak_minute}'. Going in, they ${why}.${shot}`;
-    }
-    return `On top ${t.minute}'–${t.until}' (${t.held} min), peak ${t.peak} at ${t.peak_minute}'. Build-up, 3 min: ${t.completed}/${t.passes} passes (${pct}%), ${t.pressures} pressures, ${t.recoveries} recoveries; ${other} intercepted ${t.lost}.${shot}`;
+    const cue = cueFor(t);
+    return cue ? cue.text : `${t.team === 'home' ? 'Home' : 'Away'} take over at ${t.minute}'.`;
+  }
+  function citation(t) {
+    const ids = (cueFor(t) || {}).evidence || [];
+    if (!ids.length) return 'no cue for this turning point';
+    return mode === 'analyst' ? `cites ${ids.length} events, ${ids[0]}–${ids[ids.length - 1]}` : `${ids.length} events behind this`;
   }
 
   function renderStops() {
@@ -60,7 +67,7 @@ function start(D) {
       b.className = 'stop'; b.id = `stop-${i}`;
       b.setAttribute('aria-current', String(i === current));
       b.innerHTML = `<span class="min">${t.minute}'</span><span class="who ${t.team}-c">${t.team} take over</span>
-        <p>${stopCopy(t)}</p><span class="cite">${mode === 'analyst' ? (t.source_ids.length ? `cites ${t.source_ids.length} events, ${t.source_ids[0]}–${t.source_ids[t.source_ids.length - 1]}` : 'no events in the build-up') : `${t.source_ids.length} events behind this`}</span>`;
+        <p>${stopCopy(t)}</p><span class="cite">${citation(t)}</span>`;
       b.onclick = () => { stopPlay(); goTo(i); };
       box.appendChild(b);
     });
@@ -72,13 +79,13 @@ function start(D) {
     const pts = mo.map((v, m) => `${x(m)},${y(v)}`).join(' ');
     let s = `<defs><clipPath id="up"><rect x="0" y="0" width="900" height="55"/></clipPath><clipPath id="dn"><rect x="0" y="55" width="900" height="55"/></clipPath></defs>`;
     s += `<line x1="0" x2="900" y1="55" y2="55" stroke="var(--line)" stroke-width="1"/>`;
-    [15, 30, 45, 60, 75].filter(m => m < M).forEach(m => s += `<line x1="${x(m)}" x2="${x(m)}" y1="4" y2="106" stroke="var(--line)" stroke-dasharray="2 4"/>
-      <text x="${x(m) + 3}" y="106" font-size="10" font-family="IBM Plex Mono, monospace" fill="var(--muted)">${m}'</text>`);
+    [15, 30, 45, 60, 75].filter(m => m <= M).forEach(m => s += `<line x1="${x(m - 1)}" x2="${x(m - 1)}" y1="4" y2="106" stroke="var(--line)" stroke-dasharray="2 4"/>
+      <text x="${x(m - 1) + 3}" y="106" font-size="10" font-family="IBM Plex Mono, monospace" fill="var(--muted)">${m}'</text>`);
     s += `<polygon points="0,55 ${pts} 900,55" fill="var(--home)" opacity=".35" clip-path="url(#up)"/>`;
     s += `<polygon points="0,55 ${pts} 900,55" fill="var(--away)" opacity=".35" clip-path="url(#dn)"/>`;
     s += `<polyline points="${pts}" fill="none" stroke="var(--ink)" stroke-width="1.5" vector-effect="non-scaling-stroke"/>`;
-    D.shots.forEach(sh => s += `<circle cx="${x(sh.minute)}" cy="${sh.team === 'home' ? 8 : 102}" r="3.5" fill="var(--${sh.team})"><title>${sh.team} shot, ${name(sh.player)}, ${sh.outcome.replace('_', ' ')}, ${sh.speed} km/h</title></circle>`);
-    D.turning_points.forEach((t, i) => s += `<line x1="${x(t.minute)}" x2="${x(t.minute)}" y1="4" y2="106" stroke="var(--${t.team})" stroke-width="2" vector-effect="non-scaling-stroke" opacity="${i === current ? 1 : .55}"/>`);
+    D.shots.forEach(sh => s += `<circle cx="${x(Math.max(0, sh.clock_min - 0.5))}" cy="${sh.team === 'home' ? 8 : 102}" r="3.5" fill="var(--${sh.team})"><title>${sh.team} shot, ${name(sh.player)}, ${sh.outcome.replace('_', ' ')}, ${sh.speed} km/h</title></circle>`);
+    D.turning_points.forEach((t, i) => s += `<line x1="${x(t.minute - 1)}" x2="${x(t.minute - 1)}" y1="4" y2="106" stroke="var(--${t.team})" stroke-width="2" vector-effect="non-scaling-stroke" opacity="${i === current ? 1 : .55}"/>`);
     if (cursorMin >= 0) s += `<line x1="${x(cursorMin)}" x2="${x(cursorMin)}" y1="0" y2="110" stroke="var(--ink)" stroke-width="1" vector-effect="non-scaling-stroke"/>`;
     svg.innerHTML = s;
   }
@@ -146,9 +153,10 @@ function start(D) {
     scene.add(pitch);
 
     D.turning_points.forEach((t, i) => {
-      const row = D.grid[t.minute];
+      const idx = t.minute - 1;
+      const row = D.grid[idx];
       let zi = 0; row.forEach((v, z) => { if (Math.abs(v) > Math.abs(row[zi])) zi = z; });
-      const h = heightAt(t.minute, zi);
+      const h = heightAt(idx, zi);
       const g = new THREE.Group();
       const top = Math.max(h, 0) + 6;
       const pole = new THREE.Mesh(new THREE.CylinderGeometry(.12, .12, top - Math.min(h, 0)), new THREE.MeshBasicMaterial());
@@ -156,8 +164,8 @@ function start(D) {
       const cap = new THREE.Mesh(new THREE.SphereGeometry(.7, 16, 12), new THREE.MeshBasicMaterial());
       cap.position.y = top;
       g.add(pole, cap);
-      g.position.set(toX(t.minute), 0, toZ(zi));
-      g.userData = { team: t.team, i, focus: new THREE.Vector3(toX(t.minute), h, toZ(zi)) };
+      g.position.set(toX(idx), 0, toZ(zi));
+      g.userData = { team: t.team, i, focus: new THREE.Vector3(toX(idx), h, toZ(zi)) };
       scene.add(g); beacons.push(g);
     });
 
@@ -173,7 +181,7 @@ function start(D) {
   function addAxisLabels(stage) {
     const a = document.createElement('div');
     a.className = 'axis'; a.style.left = '14px'; a.style.bottom = '10px';
-    a.textContent = "drag to orbit · scroll to zoom · time runs 0' → 90' · width is the pitch, home attacks away from you";
+    a.textContent = `drag to orbit · scroll to zoom · time runs 1' → ${M}' · width is the pitch, home attacks away from you`;
     stage.appendChild(a);
   }
 
@@ -235,7 +243,7 @@ function start(D) {
       const m = Math.round((hit.point.x + W / 2) / W * (M - 1)), z = Math.round((L / 2 - hit.point.z) / L * (Z - 1));
       const val = D.grid[m][z], cvc = D.control_vs_chaos[m];
       tip.hidden = false;
-      tip.innerHTML = `${m}' · ${z * 5}–${z * 5 + 5} m from home goal<br>` +
+      tip.innerHTML = `${m + 1}' · ${z * 5}–${z * 5 + 5} m from home goal<br>` +
         `threat <b class="${val >= 0 ? 'home' : 'away'}-c">${val >= 0 ? 'home' : 'away'} ${Math.abs(val).toFixed(2)}</b><br>` +
         (mode === 'analyst' ? `control−chaos (exp.) H ${cvc.home ?? '–'} · A ${cvc.away ?? '–'}` : `momentum ${D.momentum[m] >= 0 ? 'home' : 'away'}`);
     });
@@ -259,15 +267,15 @@ function start(D) {
     wantCam = focus.clone().add(new THREE.Vector3(-24, 20, 26));
   }
   function flyToMinute(m) {
-    cursorMin = m; current = D.turning_points.findIndex(t => t.minute === m);
-    document.getElementById('cursor-label').textContent = `${m}' · momentum ${D.momentum[m] >= 0 ? 'home' : 'away'} ${Math.abs(D.momentum[m]).toFixed(2)}`;
+    cursorMin = m; current = D.turning_points.findIndex(t => t.minute - 1 === m);
+    document.getElementById('cursor-label').textContent = `${m + 1}' · momentum ${D.momentum[m] >= 0 ? 'home' : 'away'} ${Math.abs(D.momentum[m]).toFixed(2)}`;
     renderStrip(); renderStops();
     const row = D.grid[m]; let zi = 0; row.forEach((v, z) => { if (Math.abs(v) > Math.abs(row[zi])) zi = z; });
     if (camera) flyTo(new THREE.Vector3(toX(m), heightAt(m, zi), toZ(zi)));
   }
   function goTo(i) {
     const t = D.turning_points[i];
-    flyToMinute(t.minute);
+    flyToMinute(t.minute - 1);
     current = i; renderStops(); renderStrip();
     if (beacons[i]) flyTo(beacons[i].userData.focus);
   }
@@ -278,10 +286,9 @@ function start(D) {
     document.getElementById('play').textContent = '■ Stop';
     playing = setInterval(() => { i += 1; if (i >= D.turning_points.length) return stopPlay(); goTo(i); }, 3200);
   };
-  ['casual', 'analyst'].forEach(m => document.getElementById(`mode-${m}`).onclick = () => {
+  ['casual', 'analyst', 'audio'].forEach(m => document.getElementById(`mode-${m}`).onclick = () => {
     mode = m;
-    document.getElementById('mode-casual').setAttribute('aria-pressed', String(m === 'casual'));
-    document.getElementById('mode-analyst').setAttribute('aria-pressed', String(m === 'analyst'));
+    ['casual', 'analyst', 'audio'].forEach(k => document.getElementById(`mode-${k}`).setAttribute('aria-pressed', String(m === k)));
     renderStops();
   });
   sel.onchange = buildThread;

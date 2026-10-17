@@ -9,6 +9,10 @@ For one clip it computes, all in code:
 - `players`: each player's mean position per minute and involvement (passes, shots, tackles,
   interceptions, pressures).
 
+Per-minute arrays are indexed from 0; index m covers the clock from m:00 to m:59, which is football
+minute m + 1 (`ninety.match.facts.minute_of`). Every `minute` field on a turning point is a football
+minute, so it reads the same as the minutes the agents and the fact-checking agent use.
+
 Threat comes from the engine's possession-value table (`ninety/sim/value.py`). That table is not
 committed while it is still being measured, so without it this reads the latest published round
 from docs/eval/possession-value.md and says so.
@@ -130,7 +134,7 @@ def build_terrain(events: list[Mapping], frames: Iterable[Mapping], roster: list
             "involvement": involvement(events, r["id"], minutes),
         } for r in roster],
         "shots": [{
-            "id": e["id"], "minute": round(e["t"] / 60, 1), "team": e["team"], "player": e.get("player"),
+            "id": e["id"], "clock_min": round(e["t"] / 60, 1), "team": e["team"], "player": e.get("player"),
             "x": e["x"], "outcome": e.get("outcome"), "speed": e.get("ball_speed_kmh"),
         } for e in events if e["type"] == "shot"],
     }
@@ -171,11 +175,11 @@ def turning_points(events: list[Mapping], momentum: list[float], minutes: int) -
         cited = passes + [e for e in mine if e["type"] == "pressure" or _is_recovery(e)] + \
             [e for e in theirs if e["type"] == "interception"] + [e for e in window if e["type"] == "shot"]
         picked.append({
-            "minute": i,
+            "minute": i + 1,
             "team": side,
-            "until": until,
+            "until": until + 1,
             "held": sum(s == side for s in sides[i:until + 1]),
-            "peak_minute": peak,
+            "peak_minute": peak + 1,
             "peak": abs(momentum[peak]),
             "passes": len(passes),
             "completed": sum(e.get("outcome") == "success" for e in passes),

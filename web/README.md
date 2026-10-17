@@ -6,19 +6,24 @@ one view for it.
 ## `web/terrain`: match terrain (prototype)
 
 A 90-minute match drawn as a 3D surface: time runs along one axis, the pitch along the other, and
-height is threat (home rises, away sinks). Turning points (where the side on top changes and holds it for 5+ minutes) are beacons and cards;
-**Play the story** flies the camera through them. **Follow a player** draws one player's position
-minute by minute, with dots sized by involvement. **Casual fan / Analyst** words the same numbers
-two ways, and the analyst cards show which event ids they cite.
+height is threat (home rises, away sinks). Turning points (where the side on top changes and
+holds it for 5+ minutes) are beacons and cards; **Play the story** flies the camera through them.
+**Follow a player** draws one player's position minute by minute, with dots sized by involvement.
+**Casual fan / Analyst / Audio description** switches the card wording, and the analyst cards show
+which event ids they cite.
 
-Every number comes from `ninety/intel/terrain.py`; the page only lays it out. `seed7.json` is
-seed 7 at 90 minutes (a 0–0 with two shots).
+Every number comes from `ninety/intel/terrain.py`, and every card sentence from
+`turning_point_cues` in `ninety/agents/cues.py`: overlay cues (`schemas/overlay_cue.schema.json`)
+written by code templates and passed through the fact-checking agent's number check, with no model
+call. The page only lays them out. `seed7.json` and `seed7.cues.jsonl` are seed 7 at 90 minutes
+(a 0–0 with two shots).
 
 ```bash
 npm ci --prefix web
 uv run ninety-sim --seed 7 --minutes 90 --out runs/seed7      # about 3 minutes
 uv run python -m ninety.intel.terrain runs/seed7 web/terrain/seed7.json
-python -m http.server -d web 8000   # open http://localhost:8000/terrain/  (?data=other.json for another file)
+uv run python -m ninety.agents.cues --terrain web/terrain/seed7.json --clip runs/seed7 --out web/terrain/seed7.cues.jsonl
+python -m http.server -d web 8000   # open http://localhost:8000/terrain/  (?data=other.json loads other.json and other.cues.jsonl)
 ```
 
 Limits: the threat table is not committed while it is measured, so the terrain reads the latest

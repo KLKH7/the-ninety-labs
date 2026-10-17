@@ -1,6 +1,7 @@
 import pytest
 
 from ninety.intel.terrain import HOLD_MINUTES, ZONES, build_terrain, threat_table, turning_points
+from ninety.match.facts import minute_of
 from ninety.sim.engine import simulate
 
 MINUTES = 12
@@ -35,13 +36,13 @@ def test_turning_points_alternate_hold_and_cite_real_events(played):
     assert all(a["team"] != b["team"] for a, b in zip(points, points[1:], strict=False))
     for point in points:
         sign = 1 if point["team"] == "home" else -1
-        assert sign * terrain["momentum"][point["minute"]] > 0
+        assert sign * terrain["momentum"][point["minute"] - 1] > 0
         assert point["held"] >= HOLD_MINUTES
         assert point["minute"] <= point["peak_minute"] <= point["until"]
         assert set(point["source_ids"]) <= ids.keys()
         passes = [i for i in point["source_ids"] if ids[i]["type"] == "pass"]
         assert len(passes) == point["passes"]
-        assert all(point["minute"] - 3 < ids[i]["t"] / 60 < point["minute"] + 1 for i in point["source_ids"])
+        assert all(point["minute"] - 3 <= minute_of(ids[i]) <= point["minute"] for i in point["source_ids"])
 
 
 def test_player_threads_cover_the_roster(played):
@@ -55,10 +56,19 @@ def test_player_threads_cover_the_roster(played):
 def test_a_swing_inside_one_spell_is_not_a_turning_point():
     away_spell_with_a_dip = [-3, -3, -3, -3, -3, -3, -1, -3, -3, -3, -3, -3]
     points = turning_points([], away_spell_with_a_dip, len(away_spell_with_a_dip))
-    assert [(p["minute"], p["team"]) for p in points] == [(0, "away")]
+    assert [(p["minute"], p["team"]) for p in points] == [(1, "away")]
 
 
 def test_a_short_flicker_is_not_a_turning_point():
     flicker = [-3] * 6 + [3, 3] + [-3] * 6 + [3] * 6
     points = turning_points([], flicker, len(flicker))
-    assert [(p["minute"], p["team"]) for p in points] == [(0, "away"), (14, "home")]
+    assert [(p["minute"], p["team"]) for p in points] == [(1, "away"), (15, "home")]
+
+
+def test_turning_point_minutes_are_football_minutes():
+    # planted defect: the first version labelled clock minute 33 (33:00-33:59) as "33'"
+    momentum = [3.0] * 5 + [-3.0] * 7
+    events = [{"id": "e1", "t": 5 * 60 + 10, "type": "pass", "team": "away", "outcome": "success"}]
+    away = next(p for p in turning_points(events, momentum, len(momentum)) if p["team"] == "away")
+    assert away["minute"] == minute_of(events[0]) == 6
+    assert away["source_ids"] == ["e1"]

@@ -177,3 +177,15 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_cues.py::test_failed_pass_never_says_it_found_the_receiver` and
   `tests/test_ledger.py::test_load_match_refuses_a_fact_citing_a_missing_event` fail on the
   original code.
+
+
+### 24. A minute is the football minute
+- **What happened:** the first match terrain labelled its turning points with the clock minute
+  (33 for 33:00 to 33:59), while the agents and the fact-checking agent use the football minute
+  (`ninety.match.facts.minute_of`: 34 for the same span). Every card read one minute early, and
+  nothing failed, because the terrain never went through the checker.
+- **Rule:** any minute shown to a viewer is `minute_of`. Arrays may be indexed from 0, but say so
+  where they are built, and convert at the edge. Route generated wording through the checker so a
+  wrong minute cannot air.
+- **Check:** `tests/test_terrain.py::test_turning_point_minutes_are_football_minutes` fails on the
+  original code.
