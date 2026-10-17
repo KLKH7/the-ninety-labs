@@ -22,6 +22,10 @@ param apiExists bool = false
 @description('Object id of the GitHub Actions service principal, granted image push. Empty to skip.')
 param ciPrincipalId string = ''
 
+@secure()
+@description('Only to create or rotate the MCP key: written to Key Vault when set; left alone when empty.')
+param mcpKey string = ''
+
 @description('The Foundry resource and project, created by hand before this file; referenced, not managed.')
 param foundryAccountName string = 'ninety-labs-ai'
 param foundryProjectName string = 'the-ninety-labs'
@@ -82,6 +86,38 @@ resource ciPush 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empt
 // Set the mode explicitly: left out, Azure now creates an Express environment, which cannot run
 // Container Apps jobs or OpenTelemetry and failed to pull our image with the managed identity.
 // Only the 2026-03-02-preview API exposes environmentMode.
+// Key Vault holds the key Foundry's agents use to call the match MCP server at /mcp. The API reads
+// it through its managed identity; the Foundry connection gets it at deployment. Never in the repo.
+resource vault 'Microsoft.KeyVault/vaults@2023-07-01' = {
+  name: 'kv-ninety-${take(token, 13)}'
+  location: location
+  tags: tags
+  properties: {
+    tenantId: subscription().tenantId
+    sku: { family: 'A', name: 'standard' }
+    enableRbacAuthorization: true
+    enabledForTemplateDeployment: true
+  }
+}
+
+resource mcpKeySecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empty(mcpKey)) {
+  parent: vault
+  name: 'mcp-key'
+  properties: { value: mcpKey }
+}
+
+var secretsUser = '4633458b-17de-408a-b874-0445c86b69e6' // Key Vault Secrets User (az role definition list)
+
+resource apiReadsSecrets 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: vault
+  name: guid(vault.id, apiIdentity.id, secretsUser)
+  properties: {
+    principalId: apiIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', secretsUser)
+  }
+}
+
 resource environment 'Microsoft.App/managedEnvironments@2026-03-02-preview' = {
   name: 'cae-ninety-${token}'
   location: location
@@ -112,7 +148,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
     type: 'UserAssigned'
     userAssignedIdentities: { '${apiIdentity.id}': {} }
   }
-  dependsOn: [apiPull]
+  dependsOn: [apiPull, apiReadsSecrets, mcpKeySecret]
   properties: {
     managedEnvironmentId: environment.id
     workloadProfileName: 'Consumption'
@@ -124,6 +160,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
         transport: 'auto'
       }
       registries: [{ server: registry.properties.loginServer, identity: apiIdentity.id }]
+      secrets: [{ name: 'mcp-key', keyVaultUrl: '${vault.properties.vaultUri}secrets/mcp-key', identity: apiIdentity.id }]
     }
     template: {
       containers: [
@@ -132,6 +169,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
           // A public placeholder until the first `azd deploy api`; after that, the deployed image.
           image: apiExists ? apiImage.outputs.image : 'mcr.microsoft.com/k8se/quickstart:latest'
           resources: { cpu: json('0.25'), memory: '0.5Gi' }
+          env: [{ name: 'NINETY_MCP_KEY', secretRef: 'mcp-key' }]
           probes: apiExists
             ? [
                 { type: 'Readiness', httpGet: { path: '/api/health', port: 8000 }, periodSeconds: 10 }
@@ -222,6 +260,23 @@ resource guardrail 'Microsoft.CognitiveServices/accounts/raiPolicies@2025-06-01'
       { name: 'Indirect Attack', blocking: true, enabled: true, source: 'Prompt' }
       { name: 'Protected Material Text', blocking: true, enabled: true, source: 'Completion' }
     ]
+  }
+}
+
+// The match MCP server as a Foundry tool connection: the published Analyst names it, and Foundry
+// sends the key with every call (ninety/agents/foundry.py, MCP_CONNECTION).
+resource vaultForDeployment 'Microsoft.KeyVault/vaults@2023-07-01' existing = {
+  name: vault.name
+}
+
+module mcpConnection 'modules/mcp-connection.bicep' = {
+  name: 'mcp-connection'
+  dependsOn: [mcpKeySecret]
+  params: {
+    foundryAccountName: foundryAccountName
+    foundryProjectName: foundryProjectName
+    target: 'https://${api.properties.configuration.ingress.fqdn}/mcp'
+    key: vaultForDeployment.getSecret('mcp-key')
   }
 }
 

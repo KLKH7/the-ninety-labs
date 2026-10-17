@@ -5,11 +5,12 @@ rate the same responses.
     uv run python -m ninety.agents.analyst_eval --foundry    # also records both in Foundry
 
 The published Analyst (the version pinned in foundry_agents.json) writes one claim per match
-minute, reading the match only through the MCP server. Our fact-checker (code checks, then the
-published Judge) decides whether that first draft would reach the screen: the number that matters
-on air, decided in code and by the Judge, not by an evaluator model. Foundry's built-in evaluators
-(task adherence, intent resolution, tool call accuracy) then score the stored responses by id;
-they are model-graded opinions, reported beside our verdicts, never in place of them.
+minute, reading the match only through the MCP server, which Foundry calls. Our fact-checker (code
+checks, then the published Judge) decides whether that first draft would reach the screen: the
+number that matters on air, decided in code and by the Judge, not by an evaluator model.
+Foundry's built-in evaluators (task adherence, intent resolution, tool call accuracy) then score
+the stored responses by id; they are model-graded opinions, reported beside our verdicts, never in
+place of them.
 """
 
 from __future__ import annotations
@@ -28,13 +29,14 @@ from ninety import config
 from ninety.agents import foundry, foundry_evals
 from ninety.agents.factcheck import check
 from ninety.agents.judge import judge
-from ninety.agents.slice import parse_claim
+from ninety.agents.slice import analyst_prompt, parse_claim
 from ninety.match.facts import events_in
+from ninety.mcp import match_server
 
 ROOT = Path(__file__).resolve().parents[2]
 FOUNDRY_EVAL = "ninety-analyst-first-draft"
 EVALUATORS = ["task_adherence", "intent_resolution", "tool_call_accuracy"]
-MINUTES = 5  # the clip length the slice uses; one claim per minute
+MINUTES = match_server.MINUTES  # one claim per minute of a served match
 
 
 async def drafts(seeds: list[int]) -> tuple[list[dict], str]:
@@ -45,27 +47,21 @@ async def drafts(seeds: list[int]) -> tuple[list[dict], str]:
     for seed in seeds:
         known = {e["id"]: e for e in events_in(seed, MINUTES, 1, MINUTES + 1)}
         async with contextlib.AsyncExitStack() as stack:
-            tools = await stack.enter_async_context(foundry.match_mcp(seed, MINUTES))
-            analyst_def, judge_def = foundry.build_agents(foundry.chat_client(credential), tools.functions)
             agents, labels = [], []
-            for local, extra in ((analyst_def, {"tools": tools.functions}), (judge_def, {})):
+            for local in foundry.build_agents(foundry.chat_client(credential)):
                 name, version = foundry.pinned(local)
                 labels.append(f"{name}:{version}")
-                agents.append(
-                    await stack.enter_async_context(
-                        FoundryAgent(
-                            project_endpoint=config.FOUNDRY_PROJECT,
-                            agent_name=name,
-                            agent_version=version,
-                            credential=credential,
-                            **extra,
-                        )
-                    )
+                published = FoundryAgent(
+                    project_endpoint=config.FOUNDRY_PROJECT,
+                    agent_name=name,
+                    agent_version=version,
+                    credential=credential,
                 )
+                agents.append(await stack.enter_async_context(published))
             analyst, judge_agent = agents
             ran = ", ".join(labels)
             for minute in range(1, MINUTES + 1):
-                response = await analyst.run(f"Write the claim for minute {minute}.")
+                response = await analyst.run(analyst_prompt(match_server.match_id(seed), minute))
                 row = {
                     "seed": seed,
                     "minute": minute,
