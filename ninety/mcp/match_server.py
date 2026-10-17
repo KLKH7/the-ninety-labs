@@ -22,7 +22,8 @@ server = FastMCP("ninety-match")
 def list_events(minute_from: int, minute_to: int, event_type: str | None = None) -> list[dict]:
     """Events between two match minutes (inclusive), oldest first. Optionally one type:
     pass, shot, goal, tackle, interception or pressure. Each event has id, clock, minute, second,
-    type, team, player, and where relevant receiver, outcome, ball_speed_kmh and distance_m."""
+    type, team, player, and where relevant receiver (completed passes), intended (who a pass was
+    for), interceptor (who cut it out), outcome, ball_speed_kmh and distance_m."""
     types = (event_type,) if event_type in AGENT_TYPES else AGENT_TYPES
     return events_in(SEED, MINUTES, minute_from, minute_to, types)[:60]
 

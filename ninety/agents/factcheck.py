@@ -80,7 +80,8 @@ def _roster_ids(known: dict[str, dict], roster: Iterable[Mapping | str] | None) 
         values = [
             value
             for event in known.values()
-            for value in (event.get("player"), event.get("receiver"))
+            for value in (event.get("player"), event.get("receiver"), event.get("intended"),
+                          event.get("interceptor"))
             if value
         ]
     else:
@@ -145,7 +146,8 @@ def check(
     cited_players = {
         value
         for event in evidence
-        for value in (event.get("player"), event.get("receiver"))
+        for value in (event.get("player"), event.get("receiver"), event.get("intended"),
+                      event.get("interceptor"))
         if value
     }
     named_players = {

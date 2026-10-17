@@ -568,7 +568,8 @@ class Engine:
         """L10: an indirect free kick to the defending side where the offside player played it."""
         kicked = self.kicked
         if kicked and kicked["type"] == "pass":
-            kicked.update(receiver=p.id, end_x=round(x, 2), end_y=round(y, 2), outcome="fail")
+            # Failed: he was offside. Not its receiver (that is a completed pass's) nor an interceptor.
+            kicked.update(end_x=round(x, 2), end_y=round(y, 2), outcome="fail")
         elif kicked and kicked["type"] == "shot":
             self.close_shot(kicked, x, y)
         self.kicked = None
@@ -716,9 +717,12 @@ class Engine:
             ground, up = decisions.launch_speed(dist, pace), 0.0
         skill = decisions.pass_skill(bx, tx, ty, lofted or throw, goal_x(carrier.team))
         vx, vy, vz = self.execute(carrier, *self.aim(bx, by, tx, ty, ground, up), skill, hands=throw)
-        # Receiver, end point and outcome are filled in when someone takes the ball or it goes out.
+        # Receiver, interceptor, end point and outcome are filled in when someone takes the ball or
+        # it goes out.
         self.pass_target = (tx, ty)
-        self.kicked = self.emit("pass", carrier.team, bx, by, player=carrier.id,
+        # Only the intended team-mate is known at the kick (his intention, recorded as such).
+        self.kicked = self.emit("pass", carrier.team, bx, by, player=carrier.id, intended=receiver,
+                                interceptor=None,
                                 ball_speed_kmh=round(math.sqrt(vx * vx + vy * vy + vz * vz) * 3.6, 1))
         self.kick(carrier, vx, vy, vz)
         self.into_play = throw  # released from behind the line: not a new out while it comes in
@@ -1028,7 +1032,7 @@ class Engine:
                 )
                 self.kicked = None
             elif not same_team:  # an opponent got to it: the pass has failed
-                kicked.update(receiver=p.id, end_x=round(x, 2), end_y=round(y, 2), outcome="fail")
+                kicked.update(interceptor=p.id, end_x=round(x, 2), end_y=round(y, 2), outcome="fail")
                 if controls and self.in_the_lane(kicked, x, y):
                     # Cut out on its way: an interception. Collected where it was going (a long
                     # ball dropping to a defender) is a recovery: the possession change says it.

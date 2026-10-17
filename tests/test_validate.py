@@ -154,6 +154,27 @@ def pass_to_himself(c):
     c["events"][0]["receiver"] = "h1"
 
 
+def receiver_of_a_failed_pass(c):
+    c["events"][0]["outcome"] = "fail"
+
+
+def interceptor_on_his_own_team(c):
+    c["events"][0].update(receiver=None, outcome="fail", interceptor="h2")
+
+
+def intended_for_an_opponent(c):
+    c["events"][0]["intended"] = "a1"
+
+
+def intercepted_pass_completed(c):
+    c["events"][0]["interceptor"] = "a1"
+
+
+def interception_of_a_pass_cut_out_by_someone_else(c):
+    c["events"][0].update(receiver=None, outcome="fail", interceptor="a1")
+    c["events"].append(event("e2", 40, "interception", "home", "h2", x=50.0))
+
+
 def score_disagrees(c):
     c["meta"]["score"]["home"] = 1
 
@@ -179,6 +200,11 @@ def score_disagrees(c):
     (interception_from_nowhere, "C8 event order"),
     (goal_without_shot, "C8 event order"),
     (pass_to_himself, "C8 event order"),
+    (receiver_of_a_failed_pass, "C4 event players"),
+    (interceptor_on_his_own_team, "C4 event players"),
+    (intended_for_an_opponent, "C4 event players"),
+    (intercepted_pass_completed, "C4 event players"),
+    (interception_of_a_pass_cut_out_by_someone_else, "C8 event order"),
     (score_disagrees, "C9 score"),
 ])
 def test_planted_defect_fails(tmp_path, defect, check):
