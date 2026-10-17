@@ -12,3 +12,7 @@ SPEECH_REGION = os.environ.get("NINETY_SPEECH_REGION", "northcentralus")
 # Full resource id of the Speech resource, needed for Entra auth on the TTS endpoint:
 #   az cognitiveservices account show -n ninety-labs-speech -g ninety-labs --query id -o tsv
 SPEECH_RESOURCE_ID = os.environ.get("NINETY_SPEECH_RESOURCE_ID", "")
+
+# Full resource id of the Foundry resource, needed to attach the guardrail when publishing agents:
+#   az cognitiveservices account show -n ninety-labs-ai -g ninety-labs --query id -o tsv
+FOUNDRY_RESOURCE_ID = os.environ.get("NINETY_FOUNDRY_RESOURCE_ID", "")

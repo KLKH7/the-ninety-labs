@@ -10,14 +10,20 @@ subscription allows five regions; that one has our models).
 | Container Registry (Basic) | holds the API image; admin user off |
 | User-assigned managed identity | the app pulls its image with it (AcrPull); no registry password |
 | Log Analytics workspace | container logs; 30-day retention, 0.2 GB/day cap |
+| Application Insights + a Foundry project connection (`appinsights-tracing`) | agent traces, shown in Foundry's tracing view; stored in the capped workspace above |
+| Foundry content-safety policy `ninety-guardrail` | attached to every published agent: Microsoft's default filters plus Prompt Shields for jailbreaks and indirect attacks |
 
-Not managed here yet: the Foundry (`ninety-labs-ai`) and Speech (`ninety-labs-speech`)
-resources, created by hand earlier, and the $20 monthly budget alert. Cosmos DB, the Personalizer
-app and Application Insights are added with the code that uses them
+The Foundry resource (`ninety-labs-ai`) and its project were created by hand earlier: the Bicep
+references them to add the connection and the policy, but does not manage them. Also not managed
+here yet: Speech (`ninety-labs-speech`) and the $20 monthly budget alert. Cosmos DB and the
+Personalizer app are added with the code that uses them
 ([ARCHITECTURE.md](../docs/ARCHITECTURE.md#deployment-on-azure)).
 
-Rough cost: the registry is the only fixed charge (Basic, about $5 a month). The app and logs sit
-inside the monthly free grants at demo traffic.
+The agents themselves are published from code, not Bicep: `uv run ninety-agents publish`
+(ninety/agents/foundry.py) creates a new Foundry version of any agent whose definition changed.
+
+Rough cost: the registry is the only fixed charge (Basic, about $5 a month). The app, logs and
+traces sit inside the monthly free grants at demo traffic.
 
 ## Who runs what
 
