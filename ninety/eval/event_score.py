@@ -107,9 +107,12 @@ def match(truth: list[dict], detected: list[dict], window_s: float = WINDOW_S,
         used_detected.add(j)
         t, d = truth[i], detected[j]
         err = place_error(d, frames) if frames is not None else None
+        # Infinity stays inside the matching: strict JSON has no Infinity, and the agents read this.
+        outside = err is not None and math.isinf(err)
         pairs.append({"truth_id": t["id"], "detected_id": d["id"], "type": t["type"], "team": t["team"],
                       "dt_s": round(d["t"] - t["t"], 6),
-                      "place_error_m": round(err, 6) if err is not None else None,
+                      "place_error_m": round(err, 6) if err is not None and not outside else None,
+                      "outside_frames": outside,
                       "distance_m": round(math.hypot(d["x"] - t["x"], d["y"] - t["y"]), 6)})
     return pairs
 
@@ -190,7 +193,8 @@ def main(argv: list[str] | None = None) -> None:
     report["inputs"] = {"truth": str(args.truth), "frames": str(args.frames), "detected": str(args.detected),
                         "git_commit": git_commit(), "date": datetime.date.today().isoformat()}
     args.report.parent.mkdir(parents=True, exist_ok=True)
-    args.report.write_text(json.dumps(report, indent=2) + "\n")
+    # allow_nan=False: fail here rather than write a report a strict JSON parser rejects.
+    args.report.write_text(json.dumps(report, indent=2, allow_nan=False) + "\n")
     summary = {rule: {k: {m: v[m] for m in ("tp", "fp", "fn", "precision", "recall", "f1")}
                       for k, v in report[rule]["per_type"].items()}
                for rule in ("strict", "lenient", "time_only")}

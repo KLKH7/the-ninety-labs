@@ -10,12 +10,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from ninety.sim.style import COUNTER_PRESS_ENGAGE_M, ENGAGE_M, PRESS_GAP_M, Style
+
 PITCH_X, PITCH_Y = 105.0, 68.0
 TRANSITION_S = 5.0  # T1: the window after the ball changes hands (counter-press about 5 to 6 s)
 # T2: defensive line, metres from own goal line, by block (low 12-22, mid 25-35, high 35-50).
 BLOCKS = {"low": (12.0, 22.0), "mid": (25.0, 35.0), "high": (35.0, 50.0)}
-# T3: where a team starts pressing the ball, metres from its own goal, by block (the line of
-# engagement); outside it they hold their shape. *design*, *verify*.
+# T3: where a team starts pressing the ball, metres from its own goal, by pressing height (the
+# line of engagement); outside it they hold their shape. *design*, *verify*.
 ENGAGE_FROM_GOAL_M = {"low": 40.0, "mid": 60.0, "high": 105.0}
 LINE_FOLLOWS_BALL = 0.5  # design: how far the line moves for each metre the ball moves
 GOAL_SIDE_OF_BALL_M = 5.0  # design: with the ball inside the block, the line drops to stay this far goal-side
@@ -39,12 +41,20 @@ def forward(team: str) -> float:
 @dataclass
 class TeamBrain:
     team: str
-    block: str = "mid"
+    style: Style = field(default_factory=Style)
+    block: str = ""  # the line's block; from the style unless given
     in_possession: bool = False
     changed_at: float = -99.0
     line_x: float = 0.0
     pressers: list[str] = field(default_factory=list)
     markers: dict[str, tuple[float, float]] = field(default_factory=dict)  # defender -> spot
+
+    def __post_init__(self) -> None:
+        self.block = self.block or self.style.level("line_height")
+        self.engage_from_goal_m = ENGAGE_FROM_GOAL_M[self.style.level("pressing_height")]
+        self.press_gap_m = PRESS_GAP_M[self.style.level("pressing_intensity")]
+        self._engage_m = ENGAGE_M[self.style.level("pressing_intensity")]
+        self._counter_engage_m = COUNTER_PRESS_ENGAGE_M[self.style.level("counter_pressing")]
 
     def update(self, now: float, has_ball: bool, ball_x: float, time_to_ball: dict[str, float]) -> None:
         """Read the game: who has the ball, where it is, and who of ours could reach it soonest.
@@ -62,14 +72,29 @@ class TeamBrain:
         ranked = sorted(time_to_ball, key=time_to_ball.get)
         self.pressers = [] if has_ball else ranked[:2]  # first presser, then cover
 
+    def counter_pressing(self, now: float) -> bool:
+        """In the window after losing the ball (T1), and the style counter-presses."""
+        return self._counter_engage_m is not None and now - self.changed_at < TRANSITION_S
+
+    def attacking_transition(self, now: float) -> bool:
+        """In the window after winning the ball (T1), when a counter-attack is on."""
+        return self.in_possession and now - self.changed_at < TRANSITION_S
+
     def presses(self, now: float, ball_x: float) -> bool:
         """Out of possession, does the team go to the ball? Straight after losing it (the
         counter-press window, T1), or once the ball is inside its line of engagement (T3)."""
         if self.in_possession:
             return False
-        if now - self.changed_at < TRANSITION_S:
+        if self.counter_pressing(now):
             return True
-        return abs(ball_x - own_goal_x(self.team)) <= ENGAGE_FROM_GOAL_M[self.block]
+        return abs(ball_x - own_goal_x(self.team)) <= self.engage_from_goal_m
+
+    def engage_m(self, now: float) -> float:
+        """How far the first presser will go to the ball: further while counter-pressing, if
+        the style says so."""
+        if self.counter_pressing(now):
+            return max(self._engage_m, self._counter_engage_m)
+        return self._engage_m
 
     def slot(self, role: str, anchor_y: float, ball_y: float) -> tuple[float, float] | None:
         """Where a player of this role belongs out of possession: his line's height from the

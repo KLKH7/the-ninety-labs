@@ -206,6 +206,18 @@ def test_a_time_outside_the_clip_has_nowhere_to_be_right():
     assert counts(report, rule="lenient") == (0, 1, 1)
 
 
+def test_a_time_outside_the_clip_still_gives_strict_json():
+    # The agents (R4) read the report, and JavaScript's JSON.parse rejects Infinity and NaN. The
+    # time-only pair is kept, its place marked unmeasurable rather than infinitely wrong.
+    truth = [ev("t1", 4.8, x=ball_x(4.8))]
+    report = score(truth, [det("d1", 5.5, x=ball_x(5.5))], frames(5.0))
+    json.dumps(report, allow_nan=False)
+    [pair] = report["time_only"]["pairs"]
+    assert (pair["place_error_m"], pair["outside_frames"]) == (None, True)
+    inside = score(truth, [det("d1", 4.4, x=ball_x(4.4))], frames(5.0))["time_only"]["pairs"][0]
+    assert (inside["place_error_m"], inside["outside_frames"]) == (0.0, False)
+
+
 def test_a_substitution_is_graded_on_time_only():
     truth = [ev("t1", 1.0, kind="substitution", x=52.5, y=0.0)]
     report = score(truth, [det("d1", 1.0, kind="substitution", x=90.0, y=60.0)], frames())
@@ -217,6 +229,7 @@ def test_pairs_report_time_place_and_distance_to_the_true_event():
     pairs = score(truth, [det("d1", 2.2, x=ball_x(2.2), y=34.5)], frames())["strict"]["pairs"]
     assert pairs == [{"truth_id": "t1", "detected_id": "d1", "type": "pass", "team": "home",
                       "dt_s": pytest.approx(0.2), "place_error_m": pytest.approx(0.5),
+                      "outside_frames": False,
                       "distance_m": pytest.approx(math.hypot(2.0, 0.5))}]
 
 

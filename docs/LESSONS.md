@@ -59,6 +59,35 @@ short and actionable. This file is public: no research sources, product names or
   already changed the ball's velocity.
 - **Rule:** read the state for any judgement before mutating it.
 
+### 24. A constant defined twice keeps only the last value
+- **What happened:** the engine defined the same constant name twice for two different ideas: how
+  far goal-side of the ball the covering player stands (8 m), and the radius within which a
+  team-mate counts as cover for a tackle (10 m). The second silently replaced the first, so the
+  cover stood 10 m from the ball. Lint did not flag it.
+- **Rule:** one name, one meaning. Name a constant after what it measures, not the word it shares
+  with another rule.
+- **Check:** `tests/test_constants.py` fails if any module in `ninety/` assigns a top-level name
+  twice.
+
+### 26. Same seed, same match, on every machine
+- **What happened:** seed 7 simulated a different match on macOS from the one on Linux, so the cue
+  fixture test failed on a Mac and "156 cues" could not be reproduced there. The engine was
+  deterministic; the C math library was not. Apple's `exp`, `erf`, `sin` and the rest disagree
+  with glibc's in the last bit for some inputs, a player's profile differed by one bit, and a
+  chaotic match grew that into different events within two minutes. A report already noted "the
+  same seed can simulate a slightly different match on another operating system" without
+  anyone tracing it. Review of the fix then found its helpers silently wrong outside the range
+  the engine uses (`sin(1e20)` gave 2.7e27; the inverse cdf gave -14.06 for p = 1e-100), and
+  the check blind to `from random import Random`.
+- **Rule:** code that writes ground truth or a published number computes with operations IEEE
+  754 rounds exactly (+, -, *, /, `sqrt`) and `ninety/sim/fmath.py`, never `math.exp`,
+  `math.sin`, `**`, `random.gauss` or `NormalDist`. A difference between machines is a defect
+  to trace, not a caveat to print. A numerical helper computes its whole stated domain or
+  refuses what it cannot.
+- **Check:** `tests/test_fmath.py` fails if `ninety/sim`, `ninety/match` or `ninety/eval` calls
+  the C math library, and pins `fmath`'s results bit for bit; CI runs it and the cue fixture on
+  Linux and macOS.
+
 ## Checks that prove something
 
 ### 8. A check must be able to fail
@@ -68,6 +97,8 @@ short and actionable. This file is public: no research sources, product names or
 - **What happened:** a planted "ball never arrives" defect showed the ball-path check could
   never fail on short clips. Later, a new braking test stayed green with the braking limit set
   to infinity: an independent reviewer found it by breaking the limit on purpose.
+  Again in the throw-in fix (#44): every test stayed green with the spot tolerance widened to
+  1 m, the settle speed raised to 1 m/s, or a snap to the spot put back; each now has its own test.
 - **Check (mutation test):** for every new check or test, break the thing it guards (set the
   limit to infinity, remove the line) and confirm exactly the intended test goes red; then
   restore and confirm green.
@@ -87,6 +118,15 @@ short and actionable. This file is public: no research sources, product names or
   18 of 48 true ones, because it treated commentary ("a crucial intervention") as a false fact.
 - **Rule:** an evaluation reports misses and false rejections, tunes on one seed and is
   confirmed on a held-out one.
+
+### 25. A check that never meets the case cannot fail
+- **What happened:** the throw-in taker was moved the last metre to his spot in one frame (about
+  22 m/s) and stopped dead with the ball. The validator's speed check catches it, but CI validates
+  only a 3-minute clip, and the first throw-in of that seed comes after 5 minutes. The realism
+  report showed full-backs and wingers at 20 to 24 m/s, and nothing failed.
+- **Rule:** a check runs on data that contains the case it guards, and the test says so.
+- **Check:** `tests/test_engine_rules.py::test_a_throw_in_taker_runs_to_his_spot_and_stops_there`
+  asserts a throw-in happened before checking speeds; it fails on the old engine.
 
 ## Working in the repo
 
@@ -144,7 +184,17 @@ short and actionable. This file is public: no research sources, product names or
   recorded prompt (fact-checker reasons, agent instructions). Never make the replayer tolerate a
   changed prompt: a shim that rewrites new wording back to old pairs an old answer with a new
   question.
-- **Check:** run the committed replay fixture after changing fact-checker diagnostics.
+- **Check:** `test_every_committed_replay_still_replays` runs every committed replay (lesson 24).
+
+### 24. A committed recording must be replayed by a test, or it rots silently
+- **What happened:** the fact-checker started also reporting "clock 01:00 is not a cited clock",
+  which changed the Analyst's retry prompt, and `replays/slice-minute2-plant.json` stopped
+  replaying on main. Lesson 19's check was a manual step nobody ran, and
+  `tests/test_slice_replay.py` passed because it only built synthetic recordings.
+- **Rule:** every file in `replays/` is replayed by a test in CI. When that test fails, re-record
+  (lesson 19); never edit the JSON by hand.
+- **Check:** `tests/test_slice_replay.py::test_every_committed_replay_still_replays` fails on the
+  stale recording and passes on the re-recorded one.
 
 ### 20. One clock for viewers and agents
 - **What happened:** agent-facing minute and second values were rounded and combined differently
@@ -178,8 +228,20 @@ short and actionable. This file is public: no research sources, product names or
   `tests/test_ledger.py::test_load_match_refuses_a_fact_citing_a_missing_event` fail on the
   original code.
 
+### 26. A report another program reads must be strict JSON
+- **What happened:** the event scoring harness used infinity for "the detected time is past the
+  last frame, so the place cannot be right". That is correct inside the matching, but it was also
+  written into the report, and Python's `json.dumps` writes it as `Infinity`, which JavaScript's
+  `JSON.parse` and most other parsers reject. The report format even documented it, so the
+  agents (R4) could have failed on one late detection.
+- **Rule:** a value that only steers a computation stays inside it; what is written out is plain
+  JSON, with `null` plus a named flag (here `outside_frames`) for a case that has no number.
+  Files are written with `allow_nan=False`, so a stray infinity or NaN fails at the source.
+- **Check:** `tests/test_event_score.py::test_a_time_outside_the_clip_still_gives_strict_json`
+  fails on the original code.
 
-### 24. A minute is the football minute
+
+### 27. A minute is the football minute
 - **What happened:** the first match terrain labelled its turning points with the clock minute
   (33 for 33:00 to 33:59), while the agents and the fact-checking agent use the football minute
   (`ninety.match.facts.minute_of`: 34 for the same span). Every card read one minute early, and

@@ -20,6 +20,10 @@ totals were tuned. This is the design for the next builds; what already runs is 
    totals only judge the result.
 5. **Every build is audited** by an independent reviewer for scripted outcomes before it
    merges ([LESSONS.md](LESSONS.md), lesson 4).
+6. **A seed is the same match on every machine.** The engine draws from `fmath.Random` and
+   computes `exp`, `sin`, `atan2` and the normal distribution with `ninety/sim/fmath.py`,
+   never the C math library, whose last bit differs between operating systems
+   ([LESSONS.md](LESSONS.md), lesson 26).
 
 ## The loop
 
@@ -131,6 +135,8 @@ Each style has a **fingerprint** measured from the events it produced: pressing 
 (opposition passes per defensive action), possession share, directness, long-ball share,
 crosses, field tilt. A high-press team must come out with intense pressing; if it does not,
 a cause is wrong. Fingerprints are measured, never forced.
+
+Dials, presets, strength, predictions and the matchup grid: [decision 0002](decisions/0002-styles-and-matchups.md).
 
 ## Using the research
 

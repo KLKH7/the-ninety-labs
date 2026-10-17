@@ -16,7 +16,7 @@ import random
 from bisect import bisect_left
 from dataclasses import dataclass
 
-from ninety.sim import ball
+from ninety.sim import ball, fmath
 from ninety.sim import value as possession
 
 PITCH_X, PITCH_Y = 105.0, 68.0
@@ -86,9 +86,9 @@ def _arrival_speed(launch: tuple[float, float]) -> float:
     path = ball.predict((0.0, 0.0, 0.0, ground, 0.0, up), DT, 6.0)
     for state in path[1:]:
         if state[5] < 0 and state[2] <= RECEIVE_HEIGHT_M:
-            return math.sqrt(state[3] ** 2 + state[4] ** 2 + state[5] ** 2)
+            return math.sqrt(state[3] * state[3] + state[4] * state[4] + state[5] * state[5])
     last = path[-1]
-    return math.sqrt(last[3] ** 2 + last[4] ** 2 + last[5] ** 2)
+    return math.sqrt(last[3] * last[3] + last[4] * last[4] + last[5] * last[5])
 
 
 ARRIVAL = [_arrival_speed(launch) for launch in LOFT]
@@ -130,8 +130,8 @@ def _generic_time(distance: float) -> float:
         return GENERIC_REACTION_S
     t = distance / 9.9 + tau
     for _ in range(8):
-        f = 9.9 * t - 9.9 * tau * (1 - math.exp(-t / tau)) - distance
-        t -= f / max(9.9 * (1 - math.exp(-t / tau)), 1e-6)
+        f = 9.9 * t - 9.9 * tau * (1 - fmath.exp(-t / tau)) - distance
+        t -= f / max(9.9 * (1 - fmath.exp(-t / tau)), 1e-6)
     return GENERIC_REACTION_S + max(t, 0.0)
 
 
@@ -145,7 +145,7 @@ def generic_time(distance: float) -> float:
 
 
 def sigmoid(x: float) -> float:
-    return 1 / (1 + math.exp(-max(-30.0, min(30.0, x))))
+    return 1 / (1 + fmath.exp(-max(-30.0, min(30.0, x))))
 
 
 def lunge_time(distance: float, tackling: float = 0.5) -> float:
@@ -175,6 +175,10 @@ class Scene:
     traits: tuple[str, ...]
     risk: float  # -1 protect a lead ... +1 chase the game
     throw: bool = False  # Law 15: a throw-in, so every pass is thrown (lofted) and nothing else
+    # The team's style (T4): how much ground gained from here is worth, and how much losing the
+    # ball costs, against the defaults. Both 1 for a mid style.
+    progress_weight: float = 1.0
+    loss_weight: float = 1.0
     current: str | None = None  # what he is doing now (dribble or hold), for STICKY
 
 
@@ -192,8 +196,8 @@ def attack(goal_x: float) -> float:
 
 
 def goal_angle(x: float, y: float, goal_x: float) -> float:
-    a = math.atan2(PITCH_Y / 2 + GOAL_HALF_WIDTH - y, abs(goal_x - x))
-    b = math.atan2(PITCH_Y / 2 - GOAL_HALF_WIDTH - y, abs(goal_x - x))
+    a = fmath.atan2(PITCH_Y / 2 + GOAL_HALF_WIDTH - y, abs(goal_x - x))
+    b = fmath.atan2(PITCH_Y / 2 - GOAL_HALF_WIDTH - y, abs(goal_x - x))
     return abs(a - b)
 
 
@@ -258,6 +262,22 @@ def value(x: float, y: float, goal_x: float, opponents: list[tuple[float, float]
     return shot_estimate(x, y, goal_x, list(opponents), keeper) + PROGRESS_VALUE * progress
 
 
+def our_value(scene: Scene, x: float, y: float) -> float:
+    """What the player on the ball thinks having it at (x, y) is worth to his team. His team's
+    style (T4: directness, counter-attacking) adds to or takes from the ground gained from where
+    the ball is now, at PROGRESS_VALUE per pitch length, times the style's weight less one: a
+    direct team likes going forward more and back less, a patient one the reverse."""
+    gained = attack(scene.goal_x) * (x - scene.x) / PITCH_X
+    tilt = PROGRESS_VALUE * (scene.progress_weight - 1) * gained
+    return value(x, y, scene.goal_x, scene.opponents, scene.keeper) + tilt
+
+
+def our_loss(scene: Scene, x: float, y: float) -> float:
+    """What the player on the ball thinks losing it at (x, y) costs, as his team's style fears it
+    (T4: risk). What it is worth to the opponents is theirs, so it is not style-weighted."""
+    return loss_cost(x, y, scene.goal_x) * scene.loss_weight
+
+
 def loss_cost(x: float, y: float, goal_x: float) -> float:
     """What losing the ball here costs: what having it here is worth to the opponents."""
     own_goal = PITCH_X - goal_x
@@ -316,12 +336,12 @@ def pass_option(scene: Scene, mate: tuple[str, float, float, float]) -> Option |
     confidence = pass_confidence(scene, tx, ty, mx, my, age, lofted)
     if confidence is None:
         return None
-    gain = value(tx, ty, scene.goal_x, scene.opponents, scene.keeper)
+    gain = our_value(scene, tx, ty)
     space = min((math.hypot(ox - tx, oy - ty) for ox, oy in scene.opponents), default=10.0)
     gain *= 0.7 + 0.3 * min(1.0, space / 5.0)  # a receiver with space can do more with it
     # A pass that fails is lost along the lane or runs on to where it was aimed: the worse of the two.
     mx_, my_ = (scene.x + tx) / 2, (scene.y + ty) / 2
-    lost = max(loss_cost(mx_, my_, scene.goal_x), loss_cost(tx, ty, scene.goal_x))
+    lost = max(our_loss(scene, mx_, my_), our_loss(scene, tx, ty))
     return Option("pass", confidence * gain - (1 - confidence) * lost, (tx, ty), mid, lofted)
 
 
@@ -341,7 +361,7 @@ def options(scene: Scene) -> list[Option]:
     out = [o for o in (pass_option(scene, mate) for mate in scene.mates) if o]
     if scene.throw:  # Law 15: a throw-in is thrown to someone; it is never a shot or a dribble
         return out
-    here = value(scene.x, scene.y, scene.goal_x, scene.opponents, scene.keeper)
+    here = our_value(scene, scene.x, scene.y)
     p = pressure(scene)
     q = shot_chance(scene)
     if abs(scene.goal_x - scene.x) < 40:
@@ -350,16 +370,16 @@ def options(scene: Scene) -> list[Option]:
         # saved, which gives the ball back from deep (a goal kick or the keeper's hands).
         blockers = sum(in_cone(scene.x, scene.y, scene.goal_x, ox, oy) for ox, oy in scene.opponents
                        if (ox, oy) != scene.keeper)
-        blocked = 1 - BLOCKER_FACTOR ** blockers
+        blocked = 1 - fmath.ipow(BLOCKER_FACTOR, blockers)
         # A miss or a save gives them the ball deep in their own half (a goal kick or the keeper's).
-        missed = loss_cost(scene.goal_x - attack(scene.goal_x) * GOAL_KICK_M, PITCH_Y / 2, scene.goal_x)
-        lost = blocked * loss_cost(scene.x, scene.y, scene.goal_x) + (1 - blocked) * missed
+        missed = our_loss(scene, scene.goal_x - attack(scene.goal_x) * GOAL_KICK_M, PITCH_Y / 2)
+        lost = blocked * our_loss(scene, scene.x, scene.y) + (1 - blocked) * missed
         out.append(Option("shoot", q * bias * (1 + 0.5 * scene.risk) - (1 - q) * lost,
                           (scene.goal_x, PITCH_Y / 2)))
     for turn in (0.0, 0.8, -0.8):  # straight at goal, or angled away
-        heading = math.atan2(PITCH_Y / 2 - scene.y, scene.goal_x - scene.x) + turn
-        tx = scene.x + DRIBBLE_STEP_M * math.cos(heading)
-        ty = scene.y + DRIBBLE_STEP_M * math.sin(heading)
+        heading = fmath.atan2(PITCH_Y / 2 - scene.y, scene.goal_x - scene.x) + turn
+        tx = scene.x + DRIBBLE_STEP_M * fmath.cos(heading)
+        ty = scene.y + DRIBBLE_STEP_M * fmath.sin(heading)
         if not (1 <= tx <= PITCH_X - 1 and 1 <= ty <= PITCH_Y - 1):
             continue
         # Can an opponent reach the carry anywhere along it before he has carried the ball past?
@@ -373,10 +393,10 @@ def options(scene: Scene) -> list[Option]:
                 continue
             my_t = s * DRIBBLE_STEP_M / dribble_speed(scene.dribbling)
             win *= sigmoid((generic_time(d) - my_t) / RECEIVE_MARGIN_S)
-        gain = value(tx, ty, scene.goal_x, scene.opponents, scene.keeper)
-        ev = win * gain - (1 - win) * loss_cost(scene.x, scene.y, scene.goal_x)
+        gain = our_value(scene, tx, ty)
+        ev = win * gain - (1 - win) * our_loss(scene, scene.x, scene.y)
         out.append(Option("dribble", ev + (STICKY if scene.current == "dribble" else 0.0), (tx, ty)))
-    hold = here * (1 - p) - p * 0.5 * loss_cost(scene.x, scene.y, scene.goal_x)
+    hold = here * (1 - p) - p * 0.5 * our_loss(scene, scene.x, scene.y)
     out.append(Option("hold", hold + (STICKY if scene.current == "hold" else 0.0)))
     if abs(scene.goal_x - scene.x) > CLEAR_FROM * PITCH_X:  # in his own third: long and away
         wide = 4.0 if scene.y < PITCH_Y / 2 else PITCH_Y - 4.0
@@ -394,5 +414,5 @@ def choose(scene: Scene, rng: random.Random) -> Option:
     opts = options(scene)
     t = temperature(scene)
     top = max(o.value for o in opts)
-    weights = [math.exp((o.value - top) / t) for o in opts]
+    weights = [fmath.exp((o.value - top) / t) for o in opts]
     return rng.choices(opts, weights=weights)[0]

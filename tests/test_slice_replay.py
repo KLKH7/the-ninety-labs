@@ -5,6 +5,7 @@ The answers here are written by the test from the match's own events, not record
 
 import asyncio
 import json
+from pathlib import Path
 
 import pytest
 
@@ -14,7 +15,9 @@ from ninety.match.facts import events_in
 
 SEED, MINUTES, MINUTE = 7, 5, 2
 KNOWN = {e["id"]: e for e in events_in(SEED, MINUTES, 1, int(MINUTES) + 1)}
-PASS = next(e for e in KNOWN.values() if e["minute"] == MINUTE and e["type"] == "pass" and "distance_m" in e)
+# A completed pass, so "finds" is true of it (lesson 23); the first pass of the minute may have failed.
+PASS = next(e for e in KNOWN.values() if e["minute"] == MINUTE and e["type"] == "pass"
+            and e.get("outcome") == "success" and "receiver" in e and "distance_m" in e)
 CLAIM = Claim(f"{PASS['player']} finds {PASS['receiver']} with a {PASS['distance_m']} m pass.", [PASS["id"]])
 REPLY = json.dumps({"text": CLAIM.text, "evidence": CLAIM.evidence})
 FIRST = f"Write the claim for minute {MINUTE}."
@@ -77,3 +80,17 @@ def test_unknown_format_is_refused(tmp_path):
     path.write_text(json.dumps({"format": 99}))
     with pytest.raises(ValueError):
         Recording.load(path)
+
+
+REPLAYS = sorted((Path(__file__).resolve().parent.parent / "replays").glob("*.json"))
+
+
+def test_there_are_committed_replays():
+    assert REPLAYS, "replays/ holds no recordings, so the test below checks nothing"
+
+
+@pytest.mark.parametrize("path", REPLAYS, ids=lambda p: p.name)
+def test_every_committed_replay_still_replays(path):
+    # A recording no test replays rots silently when a prompt changes (lessons 19 and 24).
+    outcome = asyncio.run(replay_slice(Recording.load(path)))
+    assert outcome.attempts >= 1

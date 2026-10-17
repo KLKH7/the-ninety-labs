@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import math
 
+from ninety.sim import fmath
+
 PITCH_X, PITCH_Y = 105.0, 68.0
 GOAL_HALF_WIDTH = 3.66
 KEEPER_DEPTH = (1.0, 6.0)  # O1: design: metres off the line, further the further away the ball is
@@ -84,14 +86,14 @@ def support_spot(player: tuple[float, float], ball: tuple[float, float], goal_x:
     px, py = player
     forward = 1.0 if goal_x > bx else -1.0
     side = 1.0 if py >= by else -1.0
-    angle = math.atan2(side * 0.7, forward)  # a forward diagonal on his side
+    angle = fmath.atan2(side * 0.7, forward)  # a forward diagonal on his side
     if pressure_from:  # turn away from where the pressure comes from
         ax, ay = pressure_from
         if (ay - by) * side > 0:
-            angle = math.atan2(side * 1.0, -forward * 0.3)
+            angle = fmath.atan2(side * 1.0, -forward * 0.3)
     dist = min(SUPPORT_RANGE_M[1], max(SUPPORT_RANGE_M[0], math.hypot(px - bx, py - by)))
-    x = bx + math.cos(angle) * dist
-    y = by + math.sin(angle) * dist
+    x = bx + fmath.cos(angle) * dist
+    y = by + fmath.sin(angle) * dist
     return min(PITCH_X - 1, max(1.0, x)), min(PITCH_Y - 1, max(1.0, y))
 
 

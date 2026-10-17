@@ -10,6 +10,8 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
+from ninety.sim import fmath
+
 GRAVITY = 9.81
 F0_MEAN, F0_SD = 5.18, 0.46  # P2: acceleration from standing, m/s² (professional sprint tests)
 V0_MEAN, V0_SD = 10.0, 0.3  # P9: top-speed capability, m/s; a sprint-test fit gives about 10.3
@@ -38,7 +40,7 @@ class Body:
     @property
     def ceiling(self) -> float:
         """The slow store: how full the reserve can refill, falling with work done all match."""
-        return D0 * math.exp(-self.spent / (SLOW_SCALE * D0))
+        return D0 * fmath.exp(-self.spent / (SLOW_SCALE * D0))
 
     def top_speed(self) -> float:
         """Critical-speed model: with an empty reserve no running above critical speed is
@@ -59,7 +61,7 @@ class Body:
         top = self.top_speed()
         u = clamp(speed_along, 0.0, top)
         tau = top / self.f0
-        return top * seconds - (top - u) * tau * (1 - math.exp(-seconds / tau))
+        return top * seconds - (top - u) * tau * (1 - fmath.exp(-seconds / tau))
 
     def time_to_cover(self, gap: float, speed_along: float = 0.0) -> float:
         """Seconds to run `gap` metres along a line. A player moving away from it must first
@@ -79,7 +81,7 @@ class Body:
         t = target / max(top, 1e-6) + tau  # a start past the answer: speed only rises
         for _ in range(12):
             f = self.distance_in(t, u) - target
-            speed = top - (top - u) * math.exp(-t / tau)
+            speed = top - (top - u) * fmath.exp(-t / tau)
             step = f / max(speed, 1e-6)
             t -= step
             if abs(step) < 1e-4:
@@ -97,7 +99,7 @@ class Body:
         else:
             depth = min(1.0, effort / self.cs)
             tau = TAU_LIGHT + (TAU_HEAVY - TAU_LIGHT) * depth
-            self.reserve += (self.ceiling - self.reserve) * (1 - math.exp(-dt / tau))
+            self.reserve += (self.ceiling - self.reserve) * (1 - fmath.exp(-dt / tau))
         self.reserve = clamp(self.reserve, 0.0, self.ceiling)
 
 
