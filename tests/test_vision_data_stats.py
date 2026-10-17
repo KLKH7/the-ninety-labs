@@ -55,6 +55,18 @@ def test_splits_are_counted_apart_with_their_seeds(tmp_path):
     assert s["train"]["seeds"] == [1, 3] and s["test"]["seeds"] == [900001]
 
 
+def test_a_seed_counted_twice_is_refused(tmp_path):
+    d = write_clip(tmp_path, 1, "train", [1.0])
+    rerender = tmp_path / "seed1.rerender"  # what ninety-render-check --determinism leaves behind
+    rerender.mkdir()
+    for f in ("clip.json", "frames.jsonl"):
+        (rerender / f).write_text((d / f).read_text())
+    with pytest.raises(ValueError, match="seed 1 appears twice"):
+        dataset_stats([d, rerender], stride=1)
+    with pytest.raises(ValueError, match="appears twice"):
+        dataset_stats([d, d], stride=1)
+
+
 def big_train():
     """A train split exactly at every floor."""
     n = FLOORS["clips"]

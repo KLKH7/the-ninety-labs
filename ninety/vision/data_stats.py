@@ -134,9 +134,15 @@ def dataset_stats(clip_dirs: list[Path], stride: int = 5, input_size: tuple[int,
     if stride < 1:
         raise ValueError(f"stride must be at least 1, got {stride}")
     accs: dict[str, dict] = {}
-    for d in clip_dirs:
-        split = json.loads((Path(d) / "clip.json").read_text())["split"]
-        clip_stats(Path(d), accs.setdefault(split, _empty()), stride, input_size)
+    seen: dict[int, Path] = {}
+    for d in map(Path, clip_dirs):
+        clip = json.loads((d / "clip.json").read_text())
+        # a seed counted twice inflates every floor: a directory passed twice, or the <seed>.rerender
+        # copy that `ninety-render-check --determinism` leaves beside a clip
+        if clip["seed"] in seen:
+            raise ValueError(f"seed {clip['seed']} appears twice: {seen[clip['seed']]} and {d}")
+        seen[clip["seed"]] = d
+        clip_stats(d, accs.setdefault(clip["split"], _empty()), stride, input_size)
     return {split: _finish(acc) for split, acc in sorted(accs.items())}
 
 
