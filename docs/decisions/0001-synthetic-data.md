@@ -105,6 +105,22 @@ passes (above zero), but the test set is too easy, because the simulator has no 
 kicks or goalmouth scrambles, so players rarely crowd the ball. That is the first thing the
 realism pass and the simulator's set pieces must change.
 
+### Second measurement (Oct 17, day and clear only, same 5 seeds)
+
+Dusk, night, overcast and rain did not yet look like broadcast footage, so every clip is now a
+clear day (`PLANNED` in `ninety/render/params.py`). Four of the five test seeds had been
+overcast, dusk or rain, and the engine has changed since Oct 14 (portable math, #55), so the
+whole test set was re-rendered at commit `e587b48`.
+
+From `docs/eval/render-checks.json`: ball projection error mean 0.08 px, max 0.26 px; keypoints
+max 0.0035 px; every player's foot inside its box; no frame with a label problem; the re-render
+of seed 900001 matched labels and all 250 images byte for byte.
+
+- The ball is under 0.5 visible in 51 of 1,250 frames (**4.08%**; per clip 6.0%, 4.0%, 0%,
+  6.0%, 4.4%). Better than 0.08%, still under PLAN.md's 5% for the Oct 18 freeze.
+- Player height p05 is 16 px in seed 900001, under the guide's 30 px; the other four clips are
+  31 to 54 px at p05, and every clip's p95 is 86 to 106 px. Not yet traced.
+
 The final proof comes later: detector recall on the fixed test set before and after each
 targeted round.
 
