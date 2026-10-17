@@ -16,10 +16,9 @@ that the world is then arranged to match. Every limit cites its source in docs/G
 from __future__ import annotations
 
 import math
-import random
 from dataclasses import asdict, dataclass, field
 
-from ninety.sim import ball, decisions, offball, perception, profiles
+from ninety.sim import ball, decisions, fmath, offball, perception, profiles
 from ninety.sim.body import BRAKE_MAX, CS_MEAN, D0, F0_MEAN, V0_MEAN, Body
 from ninety.sim.body import move as move_body
 from ninety.sim.profiles import Profile
@@ -201,10 +200,10 @@ def steer(p: Player, tx: float, ty: float, want_speed: float) -> None:
 class Engine:
     def __init__(self, seed: int, strengths: dict[str, float] | None = None,
                  styles: dict[str, Style] | None = None):
-        self.rng = random.Random(seed)
+        self.rng = fmath.Random(seed)
         # Perception draws from its own stream, so a change to what players see does not
         # reshuffle every other random draw in the match.
-        self.sight_rng = random.Random(f"{seed}-perception")
+        self.sight_rng = fmath.Random(f"{seed}-perception")
         self.match = Match(seed=seed)
         self.players: list[Player] = []
         # A strength not given is drawn, home first: with none given the match is the same as before.
@@ -404,7 +403,7 @@ class Engine:
 
     def turn_to(self, carrier: Player, tx: float, ty: float, strike) -> None:
         """He turns, taking the ball round to his kicking side; the strike waits until it is there."""
-        carrier.heading = math.atan2(ty - carrier.y, tx - carrier.x)
+        carrier.heading = fmath.atan2(ty - carrier.y, tx - carrier.x)
         self.windup = (tx, ty, strike)
 
     def kick(self, carrier: Player, vx: float, vy: float, vz: float) -> None:
@@ -439,17 +438,17 @@ class Engine:
         if hands:
             turn, weak = 0.0, False
         else:
-            turn = math.degrees((math.atan2(vy, vx) - p.heading + math.pi) % (2 * math.pi) - math.pi)
+            turn = math.degrees((fmath.atan2(vy, vx) - p.heading + math.pi) % (2 * math.pi) - math.pi)
             weak = (turn > WEAK_SIDE_DEG) if p.profile.foot == "right" else (turn < -WEAK_SIDE_DEG)
         fresh = p.physique.ceiling / D0  # the slow store: fatigue over the match, not one sprint
         dir_sd, speed_sd, loft_sd = p.profile.kick_error(skill, speed, pressure, fresh, weak, turn)
-        angle = math.atan2(vy, vx) + math.radians(self.rng.gauss(0, dir_sd))
-        loft = math.atan2(vz, ground) + (math.radians(self.rng.gauss(0, loft_sd)) if vz > 0 else 0.0)
+        angle = fmath.atan2(vy, vx) + math.radians(self.rng.gauss(0, dir_sd))
+        loft = fmath.atan2(vz, ground) + (math.radians(self.rng.gauss(0, loft_sd)) if vz > 0 else 0.0)
         # A mishit can carry almost nothing (floor: design); no strike exceeds a foot's limit.
         speed *= max(0.3, 1 + self.rng.gauss(0, speed_sd)) * (p.profile.weak_foot_speed() if weak else 1.0)
         speed = min(speed, MAX_STRIKE_MPS)
-        ground, up = speed * math.cos(loft), speed * math.sin(loft)  # a low drive may go into the turf
-        return ground * math.cos(angle), ground * math.sin(angle), up
+        ground, up = speed * fmath.cos(loft), speed * fmath.sin(loft)  # a low drive may go into the turf
+        return ground * fmath.cos(angle), ground * fmath.sin(angle), up
 
     def aim(self, sx: float, sy: float, tx: float, ty: float, ground: float, up: float):
         d = math.hypot(tx - sx, ty - sy) or 1.0
@@ -642,7 +641,7 @@ class Engine:
                 along = (p.vx * dx + p.vy * dy) / (math.hypot(dx, dy) or 1.0)
                 # Running away from the point, he must first brake to a stop (time and distance).
                 brake_t = max(0.0, -along) / BRAKE_MAX
-                extra = min(0.0, along) ** 2 / (2 * BRAKE_MAX)
+                extra = along * along / (2 * BRAKE_MAX) if along < 0 else 0.0
                 reachable = gap + extra <= p.physique.distance_in(t - brake_t, max(0.0, along))
                 if reachable or k + 2 >= len(path):
                     arrive = t if reachable else p.physique.time_to_cover(gap, along)
@@ -707,7 +706,7 @@ class Engine:
         if kind == "touch":
             self._show_touch(p, cx, cy, cz, aerial)
         vx, vy, vz = self.ball[3], self.ball[4], self.ball[5]
-        rel = math.sqrt((vx - p.vx) ** 2 + (vy - p.vy) ** 2 + vz * vz)
+        rel = math.sqrt((vx - p.vx) * (vx - p.vx) + (vy - p.vy) * (vy - p.vy) + vz * vz)
         absorb = p.profile.absorb_mps(hands=self.hands(p, cx, cy))
         if aerial:
             absorb *= AERIAL_ABSORB
@@ -1250,8 +1249,8 @@ class Engine:
                 key=lambda q: math.hypot(q.x - carrier.x, q.y - carrier.y),
             )
             if math.hypot(near.x - carrier.x, near.y - carrier.y) < SHIELD_M:
-                side = math.atan2(carrier.y - near.y, carrier.x - near.x)
-        fx, fy = carrier.x + math.cos(side) * feet, carrier.y + math.sin(side) * feet
+                side = fmath.atan2(carrier.y - near.y, carrier.x - near.x)
+        fx, fy = carrier.x + fmath.cos(side) * feet, carrier.y + fmath.sin(side) * feet
         bx, by, bz = self.ball[0] + carrier.vx * DT, self.ball[1] + carrier.vy * DT, self.ball[2]
         dx, dy, dz = fx - bx, fy - by, -bz
         d = math.sqrt(dx * dx + dy * dy + dz * dz)
@@ -1351,12 +1350,14 @@ class Engine:
         """The carrier, having reacted to a lunge, pushes the ball away from the defender's foot,
         to the side that keeps him going forward; a better dribbler moves it quicker."""
         bx, by = self.ball[0], self.ball[1]
-        away = math.atan2(by - defender.y, bx - defender.x)
-        fwd = math.atan2(0.0, attack_dir(carrier.team))
+        away = fmath.atan2(by - defender.y, bx - defender.x)
+        fwd = fmath.atan2(0.0, attack_dir(carrier.team))
         sides = (away + math.pi / 2, away - math.pi / 2)
         angle = min(sides, key=lambda a: abs((a - fwd + math.pi) % (2 * math.pi) - math.pi))
         speed = EVADE_MPS + 2.0 * carrier.profile["dribbling"]
-        vx, vy, vz = self.execute(carrier, math.cos(angle) * speed, math.sin(angle) * speed, 0.0, "dribbling")
+        vx, vy, vz = self.execute(
+            carrier, fmath.cos(angle) * speed, fmath.sin(angle) * speed, 0.0, "dribbling"
+        )
         self.ball = (bx, by, self.ball[2], vx, vy, vz)
         self.possessor, self.dribbler, self.dribble_to = None, carrier.id, None
         self.last_touch = carrier.id
@@ -1367,17 +1368,17 @@ class Engine:
         """A tackle that reaches the ball knocks it loose; whoever then controls it decides the
         tackle (won or lost)."""
         heading = (
-            math.atan2(p.vy, p.vx)
+            fmath.atan2(p.vy, p.vx)
             if math.hypot(p.vx, p.vy) > 0.5
-            else math.atan2(self.ball[1] - p.y, self.ball[0] - p.x)
+            else fmath.atan2(self.ball[1] - p.y, self.ball[0] - p.x)
         )
         angle = heading + math.radians(self.rng.gauss(0.0, 40.0))
         self.ball = (
             self.ball[0],
             self.ball[1],
             0.0,
-            holder.vx * 0.3 + POKE_MPS * math.cos(angle),
-            holder.vy * 0.3 + POKE_MPS * math.sin(angle),
+            holder.vx * 0.3 + POKE_MPS * fmath.cos(angle),
+            holder.vy * 0.3 + POKE_MPS * fmath.sin(angle),
             0.0,
         )
         self.tackle = self.emit(
@@ -1420,7 +1421,7 @@ class Engine:
         # a sharp change of direction is a new event they must react to (P12).
         moving = math.hypot(carrier.vx, carrier.vy) > 1.0
         turn = abs(
-            (math.atan2(vy, vx) - math.atan2(carrier.vy, carrier.vx) + math.pi) % (2 * math.pi) - math.pi
+            (fmath.atan2(vy, vx) - fmath.atan2(carrier.vy, carrier.vx) + math.pi) % (2 * math.pi) - math.pi
         )
         if not moving or turn > math.radians(TOUCH_EXPECTED_DEG):
             self.kicked_at = self.t
@@ -1465,7 +1466,7 @@ class Engine:
                 and KEEPER_STAND_REACH_M < dist <= reach + 0.5
                 and math.hypot(self.ball[3], self.ball[4]) > 3
             ):
-                side = math.sin(math.atan2(self.ball[1] - p.y, self.ball[0] - p.x) - p.heading)
+                side = fmath.sin(fmath.atan2(self.ball[1] - p.y, self.ball[0] - p.x) - p.heading)
                 end = self.free_since + self.reaction(p) + DIVE_TIME_S
                 self.dive_show[p.id] = (end, 1.0 if side >= 0 else -1.0)
                 return "dive", round(diving if side >= 0 else -diving, 3)

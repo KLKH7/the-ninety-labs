@@ -30,6 +30,16 @@ jobs:
       - run: uv sync --locked
       - run: uv run pytest -q
 
+  portable:
+    # The same seed must simulate the same match on every machine (docs/LESSONS.md, lesson 26):
+    # the portable-math pins and the cue fixture, which embeds seed 7's events, on macOS too.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - run: uv sync --locked
+      - run: uv run pytest -q tests/test_fmath.py tests/test_cues.py
+
   smoke:
     # Runs the CLI end to end; every event and every 100th frame must match the published schemas.
     runs-on: ubuntu-latest
