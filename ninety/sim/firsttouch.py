@@ -1,12 +1,13 @@
 """The first touch: one rule for the engine's touch and the passer's estimate of it (A4).
 
 A player who has reacted to the ball and reaches it cushions it: the surface he meets it with
-takes out up to what it can kill of the ball's speed relative to him (A4: `Profile.absorb_mps`, a
-thigh, chest or head AERIAL_ABSORB of a foot's), and he sends what is left toward where he chose,
-with his own error. What is left decides the rest, never a roll: a ball slow enough for him to
+(by the ball's height: foot, thigh, chest or head) takes out up to what it can kill of the ball's
+speed relative to him (A4: `Profile.absorb_mps` for a foot, CUSHION of that for the others), and he
+sends what is left toward where he chose, with his own error, wider on a surface he aims less well
+with (AIM_ERROR). What is left decides the rest, never a roll: a ball slow enough for him to
 keep up with stays at his feet; anything more is a heavy touch, free until he is back on it after
 TOUCH_GAP_S, like a dribbling touch (D6), and whoever reaches it first has it. A ball far too fast
-for the surface beats it and rebounds, as a ball he has not reacted to does. Constants cite
+for him to steer beats the surface and rebounds, as a ball he has not reacted to does. Constants cite
 docs/GROUNDING.md (A4, P14, D6).
 """
 
@@ -17,25 +18,39 @@ import math
 from ninety.sim.body import CONTROL_M
 
 BODY_TOUCH_Z = 0.45  # design (P14): above this, a ball he is under is a thigh, chest or head, not a foot
-AERIAL_ABSORB = 0.5  # design: those kill about half the pace a foot does (A4), same first touch
+# A4, P14: the part that meets a ball, by the height of the ball's bottom: each up to the height
+# given (design: thigh or raised foot from 0.45 to 0.9 m, chest 1.1 to 1.5 m, head above 1.6 m; the
+# gaps between go to the nearer part, at 1.0 and 1.55 m).
+SURFACES = (("foot", BODY_TOUCH_Z), ("thigh", 1.0), ("chest", 1.55), ("head", math.inf))
+# design: what each kills, as a share of what his foot kills (no study measures a first touch by
+# body part; GROUNDING A4). The chest gives most and drops the ball at his feet; the head kills
+# least and redirects (skilled headers can send a ball on faster than it came, A4).
+CUSHION = {"foot": 1.0, "thigh": 0.5, "chest": 0.75, "head": 0.25}
+# design: how much wider his direction error is with each, against the foot's.
+AIM_ERROR = {"foot": 1.0, "thigh": 1.5, "chest": 2.0, "head": 1.25}
 TOUCH_GAP_S = 0.6  # D6: how long a touched ball runs before he is back on it
 # What he can let the ball run and still keep it at his feet: no more than his reach (CONTROL_M) opens
 # up between him and the ball before he is back on it (TOUCH_GAP_S). About 1.7 m/s.
 KEEP_MPS = CONTROL_M / TOUCH_GAP_S
-# design, *verify*: a ball more than this many times what the surface kills beats it: it rebounds
-# off him (MISCONTROL_KEEP in the engine) rather than being steered.
-BEATEN_FACTOR = 2.0
+
+
+def surface(z: float) -> str:
+    """The part of him a ball meets at height z (its bottom): foot, thigh, chest or head."""
+    return next(name for name, top in SURFACES if z <= top)
 
 
 def surface_absorb(foot_absorb: float, z: float) -> float:
-    """What the surface he meets it with can kill (m/s, relative to him): the foot's, or a thigh,
-    chest or head's above BODY_TOUCH_Z."""
-    return foot_absorb * (AERIAL_ABSORB if z > BODY_TOUCH_Z else 1.0)
+    """What the surface he meets it with can kill (m/s, relative to him): his foot's, or the
+    CUSHION share of it for a thigh, chest or head."""
+    return foot_absorb * CUSHION[surface(z)]
 
 
-def beaten(rel: float, absorb: float) -> bool:
-    """Is the ball far too fast for the surface to steer at all?"""
-    return rel > BEATEN_FACTOR * absorb
+def beaten(rel: float, absorb: float, foot_absorb: float) -> bool:
+    """Is the ball far too fast for the surface to steer at all? He can steer on what is left after
+    the surface's cushion up to what his foot could kill (design, *verify*); more beats him and it
+    rebounds (MISCONTROL_KEEP in the engine). On the foot, twice what it kills; a head kills little
+    but still steers a ball well beyond that."""
+    return rel > absorb + foot_absorb
 
 
 def residual(rel: float, absorb: float) -> float:

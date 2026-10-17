@@ -527,8 +527,9 @@ def test_his_body_meets_a_ball_before_his_foot_can_if_it_gets_there_first():
     before = (49.75, 30.0, 1.3, 8.0, 0.0, -8.0)  # chest high, coming down onto him
     e.ball = (49.75 + 8.0 * DT, 30.0, 1.3 - 8.0 * DT, 8.0, 0.0, -8.0)
     e.contact(before)
-    hit = [ev for ev in e.match.events if ev["type"] == "deflection"]
-    assert hit and hit[0]["player"] == p.id and e.possessor is None  # on his chest, not his foot
+    # It meets his chest first (the part drawn is the part the engine used, firsttouch.surface),
+    # before his foot could reach down to it; the chest cushions it (A4).
+    assert e.pose(p)[0] == "chest"
 
 
 def test_a_ball_over_his_head_does_not_meet_his_body():
@@ -644,7 +645,9 @@ def test_a_ball_he_fails_to_control_keeps_flying_and_falling_for_the_rest_of_the
     p = lone(e, "a6", 50.0, 30.0, math.pi)
     p.profile.attributes["first_touch"] = 0.0  # it will not stick
     e.possessor, e.last_touch, e.kicker_clear, e.kicked_at = None, "h2", True, e.t - 5.0
-    before = (49.5, 30.0, 0.6, 3.0, 0.0, -12.0)  # dropping hard at his feet, within his reach
+    # dropping hard at his feet and driven at him, within his reach, too fast for him to steer
+    # (firsttouch.beaten: more than his thigh kills plus his foot's 12 m/s)
+    before = (49.5, 30.0, 0.6, 22.0, 0.0, -12.0)
     e.ball = ball.step(before, DT)
     e.contact(before)
     assert any(ev["type"] == "deflection" for ev in e.match.events) and e.possessor is None
