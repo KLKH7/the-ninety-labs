@@ -25,7 +25,10 @@ commit=$(git rev-parse HEAD)
 git branch -r --contains "$commit" | grep -q . || { echo "push $commit first"; exit 1; }
 
 echo "== code at $commit"
-git archive --format=tar.gz "$commit" | "${ssh_[@]}" 'rm -rf ninety && mkdir ninety && tar -xzf - -C ninety'
+# replace everything but the installed environment; clips and data from an earlier run are removed,
+# so a later fetch never mistakes an old run's clips for this run's
+git archive --format=tar.gz "$commit" | "${ssh_[@]}" \
+  'mkdir -p ninety && find ninety -mindepth 1 -maxdepth 1 ! -name .venv ! -name out -exec rm -rf {} + && tar -xzf - -C ninety'
 
 echo "== environment"
 "${ssh_[@]}" "bash -lc '
@@ -71,4 +74,6 @@ else
     echo started: tail -f ninety/train-$name.log
   '"
 fi
-echo "When training ends: rsync -a -e 'ssh -i $key -p $port' $host:ninety/out/$name/ runs/train/$name/"
+# the checkpoint the vision report uses and the run's records; last.ckpt (optimizer state, ~0.5 GB) and
+# the EMA copies stay on the machine
+echo "When training ends: mkdir -p runs/train/$name && for f in checkpoint_best_total.pth train-manifest.json metrics.csv training_config.json; do scp -P $port -i $key $host:ninety/out/$name/\$f runs/train/$name/; done"
