@@ -145,6 +145,7 @@ def test_when_the_penalty_is_taken_he_shoots_from_the_mark():
             break
     shots = [ev for ev in e.match.events if ev["type"] == "shot"]
     assert shots and shots[0]["player"] == taker.id and abs(shots[0]["x"] - r.x) < 0.05
+    assert ((taker.x - r.x) ** 2 + (taker.y - r.y) ** 2) ** 0.5 < 0.4  # stepped up: struck at his foot
 
 
 def test_a_taker_facing_away_turns_to_the_goal_before_he_strikes_the_penalty():
@@ -160,8 +161,12 @@ def test_a_taker_facing_away_turns_to_the_goal_before_he_strikes_the_penalty():
     e.t = r.ready_at
     e.decide = lambda *a, **k: None  # only Law 14 may make him shoot
     heading_at_shot = None
+    keeper, other = e.keeper("away"), e.by_id["a4"]
     for _ in range(4 * 25):
         e.step()
+        if e.placed:  # placed, not yet kicked: Law 14 still holds everyone else
+            assert e.shape_target(keeper)[:2] == (105.0, 34.0)
+            assert e.shape_target(other)[:2] == e.penalty_wait_spot(other)
         if any(ev["type"] == "shot" for ev in e.match.events):
             heading_at_shot = taker.heading
             break

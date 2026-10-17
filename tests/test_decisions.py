@@ -729,7 +729,7 @@ def test_a_throw_in_leaves_his_hands_at_once_whichever_way_he_faces(monkeypatch)
     # Facing the target with the ball placed where he stands, within his outline: no side to strike
     # it from, so he steps behind it first; with it against his front he can strike.
     assert not D.can_strike(0.0, 0.0, 0.0, 1.0, 0.0)
-    assert D.can_strike(shape.RADIUS_M + 0.11, 0.0, 0.0, 1.0, 0.0)
+    assert D.can_strike(shape.RADIUS_M + 0.01, 0.0, 0.0, 1.0, 0.0)
     turn, wait = D.strike_turn(math.pi, 1.0, 0.0, thrown=True)
     assert abs(turn) == pytest.approx(180.0) and wait == 0.0
     asked = []
