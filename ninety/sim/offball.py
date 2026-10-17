@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import math
 
-from ninety.sim import ball
+from ninety.sim import ball, fmath
 from ninety.sim.body import (
     BODY_RADIUS,
     BRAKE_MAX,
@@ -67,10 +67,10 @@ def keeper_spot(ball_x: float, ball_y: float, own_goal_x: float) -> tuple[float,
     he can get in the time the shot takes: against a far shot he stays deep, where his dive has time
     to unfold; against a near one he comes out and narrows the angle."""
     gy = PITCH_Y / 2
-    a1 = math.atan2(gy - GOAL_HALF_WIDTH - ball_y, own_goal_x - ball_x)
-    a2 = math.atan2(gy + GOAL_HALF_WIDTH - ball_y, own_goal_x - ball_x)
-    mid = math.atan2(math.sin(a1) + math.sin(a2), math.cos(a1) + math.cos(a2))
-    ux, uy = math.cos(mid), math.sin(mid)  # from the ball toward the goal, between the posts
+    a1 = fmath.atan2(gy - GOAL_HALF_WIDTH - ball_y, own_goal_x - ball_x)
+    a2 = fmath.atan2(gy + GOAL_HALF_WIDTH - ball_y, own_goal_x - ball_x)
+    mid = fmath.atan2(fmath.sin(a1) + fmath.sin(a2), fmath.cos(a1) + fmath.cos(a2))
+    ux, uy = fmath.cos(mid), fmath.sin(mid)  # from the ball toward the goal, between the posts
     if abs(ux) < 1e-6:
         return own_goal_x, gy
     to_line = (own_goal_x - ball_x) / ux  # along the bisector to the goal line
@@ -98,7 +98,7 @@ def open_goal_share(x: float, y: float, goal_x: float, keeper: tuple[float, floa
     across before a typical shot gets there (P11, P15). Used by the keeper to choose where to
     stand and by the shooter to judge him: one definition."""
     def bearing(px: float, py: float) -> float:
-        return math.atan2(py - y, abs(px - x))
+        return fmath.atan2(py - y, abs(px - x))
     lo, hi = sorted((bearing(goal_x, PITCH_Y / 2 - GOAL_HALF_WIDTH),
                      bearing(goal_x, PITCH_Y / 2 + GOAL_HALF_WIDTH)))
     if hi <= lo:
@@ -113,7 +113,7 @@ def open_goal_share(x: float, y: float, goal_x: float, keeper: tuple[float, floa
         speed = (lo_kmh + (hi_kmh - lo_kmh) * (i + 0.5) / SHOT_SPEED_SAMPLES) / 3.6
         for j in range(SHOT_HEIGHT_SAMPLES):  # and the heights they are aimed at: his reach differs
             z = SHOT_AIM_Z_M[0] + (SHOT_AIM_Z_M[1] - SHOT_AIM_Z_M[0]) * (j + 0.5) / SHOT_HEIGHT_SAMPLES
-            half = math.atan2(keeper_reach_m(gap / speed, CHOICE_REACTION_S, z), max(gap, 1e-6))
+            half = fmath.atan2(keeper_reach_m(gap / speed, CHOICE_REACTION_S, z), max(gap, 1e-6))
             covered = max(0.0, min(hi, k + half) - max(lo, k - half))
             open_share += (hi - lo - covered) / (hi - lo) / SHOT_SPEED_SAMPLES / SHOT_HEIGHT_SAMPLES
     return open_share
@@ -169,14 +169,14 @@ def support_spot(player: tuple[float, float], ball: tuple[float, float], goal_x:
     px, py = player
     forward = 1.0 if goal_x > bx else -1.0
     side = 1.0 if py >= by else -1.0
-    angle = math.atan2(side * 0.7, forward)  # a forward diagonal on his side
+    angle = fmath.atan2(side * 0.7, forward)  # a forward diagonal on his side
     if pressure_from:  # turn away from where the pressure comes from
         ax, ay = pressure_from
         if (ay - by) * side > 0:
-            angle = math.atan2(side * 1.0, -forward * 0.3)
+            angle = fmath.atan2(side * 1.0, -forward * 0.3)
     dist = min(SUPPORT_RANGE_M[1], max(SUPPORT_RANGE_M[0], math.hypot(px - bx, py - by)))
-    x = bx + math.cos(angle) * dist
-    y = by + math.sin(angle) * dist
+    x = bx + fmath.cos(angle) * dist
+    y = by + fmath.sin(angle) * dist
     return min(PITCH_X - 1, max(1.0, x)), min(PITCH_Y - 1, max(1.0, y))
 
 

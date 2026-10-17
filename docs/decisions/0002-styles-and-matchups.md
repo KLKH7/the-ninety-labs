@@ -140,8 +140,12 @@ Against that baseline, differences in goals between styles mean nothing. So:
 
 ## The matchup grid
 
-Simulation only, no rendering. Run by `ninety.sim.patterns` (extended) and written to
-`docs/eval/sim-styles.md`.
+Simulation only, no rendering. Run by `uv run ninety-grid --seeds 20 --minutes 90 --workers 4`
+(`ninety/sim/grid.py`, fingerprints in `ninety/sim/fingerprint.py`), written to
+`docs/eval/sim-styles.md` and, for the viewer, `docs/eval/sim-styles.json`. Each match's result is
+cached in `runs/grid/results.jsonl`, so a run resumes where it stopped or is split across machines.
+Each directional prediction is reported as agreeing or disagreeing, and "within noise" when the two
+95% intervals overlap.
 
 - **Style grid:** the five presets against each other, 15 pairings (mirror matches included),
   both sides at strength 0, 20 seeds each, home and away swapped on alternate seeds.
