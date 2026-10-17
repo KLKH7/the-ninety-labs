@@ -17,7 +17,7 @@ generated it and the output file is committed. Rows marked *planned* have no res
 | Fact-checker rules (numbers, players, evidence ids) | `uv run pytest tests/test_factcheck.py` | test assertions | running |
 | Ledger versioning, evidence validation, and deterministic cue fixture | `uv run pytest tests/test_ledger.py tests/test_cues.py` | `tests/fixtures/cues-seed7.jsonl` and test assertions | running: 17 tests; 122 cues for seed 7, five minutes (61 passes, 9 of them failed; the engine made no shots in that window, so shots and goals are covered by hand-built cases) |
 | Fact-checker catch rate on planted false claims, and true claims wrongly rejected | `uv run python -m ninety.eval.factcheck_eval` | `docs/eval/fact-checker.md` | re-run pending: the Judge's instructions and the tone kinds changed after the last run (fact split from tone, tone labels fitted to events, held-out and contradicted tone). Last published run, before that change, on held-out seeds 21,33: 129/129 false caught, 12/99 true rejected excluding service holds, all twelve on tone. |
-| Match engine touches: control by surface, whose ball and speed; throw-ins; pass completion | `uv run python -m ninety.sim.touches` (seeds 40 to 47) | `docs/eval/touches.md`, `docs/eval/funnel-touches.md` | running: a report, never a gate; comparisons fixed below. Baseline on 5aba718: throw-ins 84.8% first contact by a team-mate, 70.0% held 5 s later; completion 79.7% |
+| Match engine touches: control by surface, whose ball and speed; throw-ins; pass completion | `uv run python -m ninety.sim.touches` (seeds 40 to 47) | `docs/eval/touches.md`, `docs/eval/funnel-touches.md` | running: a report, never a gate; comparisons fixed below. Baseline on e8982ef: throw-ins 86.5% first contact by a team-mate, 70.4% held 5 s later; completion 79.5% |
 | Recovery from injected failures | planned | `docs/eval/failure-table.md` | planned |
 | Ablation: one agent against the full workflow | planned | `docs/eval/ablation.md` | planned |
 | Latency to graphic and to speech (p50, p95); cost per match | planned | `docs/eval/latency-cost.md` | planned |
@@ -26,7 +26,7 @@ generated it and the output file is committed. Rows marked *planned* have no res
 
 How a player meets the ball is about to change (a cushioned first touch, a surface for each height,
 and what makes a touch worse; [ENGINE.md](ENGINE.md), layer 7). These comparisons were fixed
-**before** the first of those changes, on the engine at `claude/engine-to-main` 5aba718, so no
+**before** the first of those changes, on the engine at `claude/engine-to-main` e8982ef, so no
 cushion or error is set after looking at where it lands (lessons 2 and 3).
 
 ```bash
