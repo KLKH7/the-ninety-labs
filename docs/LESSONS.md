@@ -184,7 +184,17 @@ short and actionable. This file is public: no research sources, product names or
   recorded prompt (fact-checker reasons, agent instructions). Never make the replayer tolerate a
   changed prompt: a shim that rewrites new wording back to old pairs an old answer with a new
   question.
-- **Check:** run the committed replay fixture after changing fact-checker diagnostics.
+- **Check:** `test_every_committed_replay_still_replays` runs every committed replay (lesson 24).
+
+### 24. A committed recording must be replayed by a test, or it rots silently
+- **What happened:** the fact-checker started also reporting "clock 01:00 is not a cited clock",
+  which changed the Analyst's retry prompt, and `replays/slice-minute2-plant.json` stopped
+  replaying on main. Lesson 19's check was a manual step nobody ran, and
+  `tests/test_slice_replay.py` passed because it only built synthetic recordings.
+- **Rule:** every file in `replays/` is replayed by a test in CI. When that test fails, re-record
+  (lesson 19); never edit the JSON by hand.
+- **Check:** `tests/test_slice_replay.py::test_every_committed_replay_still_replays` fails on the
+  stale recording and passes on the re-recorded one.
 
 ### 20. One clock for viewers and agents
 - **What happened:** agent-facing minute and second values were rounded and combined differently
