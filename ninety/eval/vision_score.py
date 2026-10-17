@@ -17,6 +17,7 @@ PLAYER_IOU = 0.50
 BALL_DISTANCE_PX = 5.0
 DEFAULT_THRESHOLD = 0.5
 VISIBILITY_GROUPS = ("visible", "partly hidden", "mostly hidden")
+BOUNDARY_GROUPS = ("edge-touching", "interior")
 
 
 def load_jsonl(path: str | Path) -> list[dict]:
@@ -54,6 +55,14 @@ def visibility_group(visibility: float) -> str | None:
     if visibility > 0:
         return "mostly hidden"
     return None
+
+
+def boundary_group(box: Iterable[float], camera: Mapping) -> str:
+    width, height = float(camera["width"]), float(camera["height"])
+    if not all(math.isfinite(value) and value > 0 for value in (width, height)):
+        raise ValueError("camera image dimensions must be finite and positive")
+    x0, y0, x1, y1 = _box(box)
+    return "edge-touching" if x0 <= 0 or y0 <= 0 or x1 >= width or y1 >= height else "interior"
 
 
 def ground_truth(frames: Iterable[Mapping]) -> list[dict]:
@@ -142,43 +151,50 @@ def score(
     detections: Iterable[Mapping],
     threshold: float = DEFAULT_THRESHOLD,
 ) -> dict:
-    """Return overall and visibility-group pixel metrics."""
+    """Return overall, visibility and image-boundary pixel metrics."""
     frames = list(frames)
     labels = ground_truth(frames)
+    cameras = {int(row["frame"]): row.get("camera", {}) for row in frames}
+    boundary = [boundary_group(label["bbox"], cameras[label["frame"]]) for label in labels]
     detections = [dict(d) for d in detections]
     eligible = [d for d in detections if float(d.get("score", 0.0)) >= threshold]
     pairs = match(labels, eligible, threshold=threshold)
     matched_truth = {p["truth"] for p in pairs}
     matched_detection = {p["detection"] for p in pairs}
     overall = _metrics(len(pairs), len(eligible) - len(pairs), len(labels) - len(pairs))
-    groups = {}
-    for cls in CLASSES:
-        groups[cls] = {}
-        for group in VISIBILITY_GROUPS:
-            group_truth = {
-                i for i, label in enumerate(labels)
-                if label["cls"] == cls and visibility_group(label["visibility"]) == group
-            }
-            group_pairs = [p for p in pairs if p["truth"] in group_truth]
-            # A false positive has no visibility of its own. Attribute it to
-            # the nearest drawn label only when it is in the same frame/class;
-            # isolated false positives remain in overall metrics.
-            group_fp = 0
-            for di, detected in enumerate(eligible):
-                if di in matched_detection or detected["cls"] != cls:
-                    continue
-                nearby = [
-                    (center_distance(label["bbox"], detected["bbox"]), i)
-                    for i, label in enumerate(labels)
-                    if label["frame"] == detected["frame"] and label["cls"] == cls
-                ]
-                if nearby and visibility_group(labels[min(nearby)[1]]["visibility"]) == group:
-                    group_fp += 1
-            groups[cls][group] = _metrics(
-                len(group_pairs),
-                group_fp,
-                len(group_truth - matched_truth),
-            )
+    difficulty = {}
+    for axis, names, assignments in (
+        ("visibility", VISIBILITY_GROUPS, [visibility_group(label["visibility"]) for label in labels]),
+        ("image_boundary", BOUNDARY_GROUPS, boundary),
+    ):
+        groups = {}
+        difficulty[axis] = groups
+        for cls in CLASSES:
+            groups[cls] = {}
+            for group in names:
+                group_truth = {
+                    i for i, label in enumerate(labels)
+                    if label["cls"] == cls and assignments[i] == group
+                }
+                group_pairs = [p for p in pairs if p["truth"] in group_truth]
+                # Unmatched detections inherit the nearest same-frame/class
+                # label's group; isolated false positives stay in overall metrics.
+                group_fp = 0
+                for di, detected in enumerate(eligible):
+                    if di in matched_detection or detected["cls"] != cls:
+                        continue
+                    nearby = [
+                        (center_distance(label["bbox"], detected["bbox"]), i)
+                        for i, label in enumerate(labels)
+                        if label["frame"] == detected["frame"] and label["cls"] == cls
+                    ]
+                    if nearby and assignments[min(nearby)[1]] == group:
+                        group_fp += 1
+                groups[cls][group] = _metrics(
+                    len(group_pairs),
+                    group_fp,
+                    len(group_truth - matched_truth),
+                )
     by_class = {}
     for cls in CLASSES:
         truth_cls = [i for i, label in enumerate(labels) if label["cls"] == cls]
@@ -192,7 +208,7 @@ def score(
             "ball_center_distance_px": BALL_DISTANCE_PX,
             "match": "same frame/class, one-to-one, best-first",
         },
-        "overall": overall, "by_class": by_class, "visibility": groups,
+        "overall": overall, "by_class": by_class, **difficulty,
         "pairs": pairs,
     }
 
