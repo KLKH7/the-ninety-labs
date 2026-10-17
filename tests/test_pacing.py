@@ -413,3 +413,49 @@ def test_the_chase_plan_judges_outfield_players_at_their_chosen_speed(monkeypatc
     p.physique, p.x, p.y, p.vx, p.vy = Body(5.18, 10.0, 3.9), 40.0, 34.0, 0.0, 0.0
     e.reach = lambda p, bx, by, bz, at: (1.0, 2.0)
     assert e.can_reach(p, 51.0, 34.0, 0.0, 2.5)[0] and not e.can_reach(p, 51.0, 34.0, 0.0, 2.5, cap=5.0)[0]
+
+
+def test_the_speed_rule_at_its_stated_points():
+    """P17's shape: half of the speed above critical when worth equals what the run costs flat out
+    (cost counted at his top-speed capability, design), and a run worth nothing that costs nothing
+    is not made."""
+    body = worn(Body(5.18, 10.0, 3.9), 0.4)
+    body.reserve = 0.2 * D0  # fatigue has lowered what his body allows; the cost still counts v0
+    metres = pacing.metres_above(30.0, body.v0, body.cs)
+    c = pacing.cost(body, 0.5, 60 * MIN, metres)
+    assert body.top_speed() < body.v0
+    half = body.cs + (body.v0 - body.cs) / 2
+    assert math.isclose(pacing.run_speed(body, 0.5, 0.5, 60 * MIN, c, 30.0), half)
+    assert not pacing.accepts(Body(5.18, 10.0, 3.9), 0.5, 0.5, 0.0, 0.0, 0.0)
+
+
+def test_the_engine_prices_his_own_run_with_his_own_attributes_and_his_teams_pressing_distance():
+    """Engine.run_speed passes the length of the run he would make and his own stamina and work
+    rate; the press is priced to his team's pressing distance (T4)."""
+    e = Engine(1, styles={"home": Style(pressing_intensity=0.8), "away": Style()})
+    p = e.by_id["h9"]
+    worn(p.physique, 0.4)
+    p.x, p.y = 40.0, 20.0
+    p.profile.attributes["stamina"], p.profile.attributes["work_rate"] = 0.9, 0.2
+    e.t = 50 * MIN
+    asked = e.run_speed(p, 0.004, 52.0, 25.0)
+    assert asked == pacing.run_speed(p.physique, 0.9, 0.2, e.t, 0.004, 13.0)
+    assert asked != pacing.run_speed(p.physique, 0.5, 0.5, e.t, 0.004, 13.0)
+    e.possessor, e.restart, e.kicked = "a10", None, None
+    e.by_id["a10"].x, e.by_id["a10"].y = 52.5, 34.0
+    e.ball = (52.5, 34.0, 0.0, 0.0, 0.0, 0.0)
+    q = e.by_id["h7"]
+    q.x, q.y, q.vx, q.vy = 42.5, 34.0, 0.0, 0.0
+    gap = e.brains["home"].press_gap_m
+    assert gap == 1.5  # high pressing intensity stands tighter than the default 2 m
+    _, metres = e.press_run(q)
+    assert math.isclose(metres, pacing.metres_above(10.0 - gap, e.press_pace(q), q.physique.cs))
+
+
+def test_the_brain_asks_its_players_soonest_first():
+    """T3: the suggestion is the order they could reach the ball, soonest first."""
+    from ninety.sim.team import TeamBrain
+
+    brain = TeamBrain("home")
+    brain.update(0.0, False, 50.0, {"h6": 2.0, "h7": 0.5, "h8": 1.2})
+    assert brain.ranked == ["h7", "h8", "h6"] and brain.pressers == ["h7", "h8"]

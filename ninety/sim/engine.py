@@ -853,7 +853,7 @@ class Engine:
         before_he_plays = decisions.sigmoid((controlled_at + decisions.GENERIC_REACTION_S - in_reach)
                                             / decisions.LANE_MARGIN_S)
         wins = before_he_plays * decisions.tackle_chance(reach, p.profile["tackling"])
-        theirs = decisions.value(tx, ty, goal_x(other(p.team)))
+        theirs = decisions.value(tx, ty, goal_x(other(p.team)))  # design: closing down removes all of it
         metres = pacing.metres_above(max(0.0, d - gap), pace, p.physique.cs)
         return closed * theirs + wins * decisions.value(tx, ty, goal_x(p.team)), metres
 
