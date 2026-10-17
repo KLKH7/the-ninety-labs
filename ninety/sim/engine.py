@@ -520,7 +520,8 @@ class Engine:
         """P16: can he strike it toward (tx, ty) now? The rule the passer's estimate uses too
         (decisions.can_strike)."""
         bx, by = self.ball[0], self.ball[1]
-        return decisions.can_strike(bx - carrier.x, by - carrier.y, carrier.heading, tx - bx, ty - by)
+        return decisions.can_strike(bx - carrier.x, by - carrier.y, carrier.heading, tx - bx, ty - by,
+                                    thrown=carrier.id == self.throw_by)
 
     def turn_to(self, carrier: Player, tx: float, ty: float, strike) -> None:
         """He turns toward the target, no faster than a body turns (P16, tick_carrier), taking the

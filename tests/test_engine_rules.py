@@ -1027,6 +1027,24 @@ def test_the_passing_side_knows_where_its_pass_was_meant_and_the_other_side_reac
     assert e.play_point(team="away") == (68.0, 34.0)
 
 
+def test_the_thrower_may_throw_whichever_way_he_faces_but_a_free_kick_taker_must_turn():
+    """P16: only the ball in his hands at a throw-in is exempt from facing; a dead ball at his feet is not."""
+    import math
+
+    e = Engine(1)
+    still(e)
+    e.possessor = None
+    e.stop("throw_in", "home", (50.0, 0.0))
+    taker = e.by_id[e.restart.taker]
+    taker.x, taker.y = 50.0, 0.0
+    e.restart.ready_at = e.t
+    e.tick_restart()
+    taker.heading = -math.pi / 2  # facing off the pitch, the throw is into it
+    assert e.can_strike(taker, 50.0, 20.0)
+    e.throw_by = None  # the same ball at his feet, as at a free kick
+    assert not e.can_strike(taker, 50.0, 20.0)
+
+
 def test_a_throw_in_is_meant_for_the_team_mate_it_is_thrown_to():
     e = Engine(1)
     p = e.by_id["h2"]
