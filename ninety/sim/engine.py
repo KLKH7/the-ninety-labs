@@ -1915,6 +1915,8 @@ class Engine:
         self.moved = None
         self.perceive_and_think()
         self.duels()
+        if self.throw_by != self.possessor:  # the throw-in ends once it is out of his hands, by any means
+            self.throw_by = None
         if self.possessor:
             self.tick_carrier()
         elif self.restart:

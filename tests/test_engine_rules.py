@@ -1045,6 +1045,27 @@ def test_the_thrower_may_throw_whichever_way_he_faces_but_a_free_kick_taker_must
     assert not e.can_strike(taker, 50.0, 20.0)
 
 
+def test_the_throw_in_ends_when_the_ball_leaves_his_hands_any_way_at_all():
+    """Knocked from his hands and won back, it is a ball at his feet: no second throw, and P16 holds."""
+    import math
+
+    e = Engine(1)
+    still(e)
+    e.possessor = None
+    e.stop("throw_in", "home", (50.0, 0.0))
+    taker = e.by_id[e.restart.taker]
+    taker.x, taker.y = 50.0, 0.0
+    e.restart.ready_at = e.t
+    e.tick_restart()
+    assert e.throw_by == taker.id
+    e.possessor = None  # poked out of his hands before he threw it
+    e.step()
+    assert e.throw_by is None
+    e.give(taker.id)  # he wins it back
+    taker.heading = -math.pi / 2
+    assert not e.can_strike(taker, 50.0, 20.0)
+
+
 def test_a_throw_in_is_meant_for_the_team_mate_it_is_thrown_to():
     e = Engine(1)
     p = e.by_id["h2"]

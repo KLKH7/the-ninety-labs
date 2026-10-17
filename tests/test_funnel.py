@@ -26,3 +26,17 @@ def test_completion_counts_only_received_passes():
               {"type": "pass", "outcome": None}, {"type": "shot"}]
     t = tally(match([("h1", 50.0)], events))
     assert abs(t["completion"] - 1 / 3) < 1e-9 and t["passes"] == 3 / 2 and t["shots"] == 1 / 2
+
+
+def test_a_penalty_is_a_shot_struck_from_the_mark_straight_from_its_restart():
+    mark = {"x": 94.0, "y": 34.0}
+    events = [{"type": "set_piece", "player": "h1", **mark},
+              {"type": "shot", "player": "h1", "outcome": "goal", **mark},
+              {"type": "set_piece", "player": "h1", **mark},
+              {"type": "shot", "player": "h1", "outcome": "on_target", **mark},
+              {"type": "set_piece", "player": "h1", "x": 80.0, "y": 34.0},  # a free kick, not on the mark
+              {"type": "shot", "player": "h1", "outcome": "goal", "x": 80.0, "y": 34.0},
+              {"type": "pass", "player": "h1", **mark},  # from the mark, but not from the restart
+              {"type": "shot", "player": "h1", "outcome": "goal", **mark}]
+    t = tally(match([("h1", 50.0)], events))
+    assert t["penalties"] == 2 / 2 and t["penalty_goals"] == 1 / 2
