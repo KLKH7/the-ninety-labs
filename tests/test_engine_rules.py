@@ -181,17 +181,35 @@ def test_execution_scatters_direction_by_the_profiles_error_and_never_kicks_down
 
 
 def test_execution_scatters_a_lofted_kicks_launch_angle_by_the_profiles_error():
-    # A3: a rising kick also flies higher or lower than meant, by the up-and-down part of his error
+    # A3: a rising kick also flies higher or lower than meant, by the up-and-down part of his error.
+    # Exact: each kick's launch angle is off by one of the draws execute makes, drawn with exactly
+    # loft_sd and centred on zero, so any mis-scaling or bias fails, however small.
     e, p = kicker()
     intended = math.degrees(math.atan2(6.0, 20.0))
+    expected = p.profile.kick_error("finishing", math.hypot(20.0, 6.0), 0.0, 1.0, False)[2]
+    draws = []
+    gauss = e.rng.gauss
+
+    def recorded(mu: float, sigma: float) -> float:
+        value = gauss(mu, sigma)
+        draws.append((mu, sigma, value))
+        return value
+
+    e.rng.gauss = recorded
     lofts = []
-    for _ in range(3000):
+    for _ in range(200):
+        draws.clear()
+        vx, vy, vz = e.execute(p, 20.0, 0.0, 6.0, "finishing")
+        off = math.degrees(math.atan2(vz, math.hypot(vx, vy))) - intended
+        matched = [(mu, sigma) for mu, sigma, value in draws if math.isclose(value, off, abs_tol=1e-9)]
+        assert matched == [(0, expected)]
+    # End to end, at about 4 standard errors (the SD's relative standard error is 1/sqrt(2n)):
+    e.rng.gauss = gauss
+    for _ in range(20000):
         vx, vy, vz = e.execute(p, 20.0, 0.0, 6.0, "finishing")
         lofts.append(math.degrees(math.atan2(vz, math.hypot(vx, vy))))
-    speed = math.hypot(20.0, 6.0)
-    expected = p.profile.kick_error("finishing", speed, 0.0, 1.0, False)[2]
-    assert abs(mean(lofts) - intended) < 0.2
-    assert abs(pstdev(lofts) - expected) < 0.1 * expected
+    assert abs(mean(lofts) - intended) < 4 * expected / math.sqrt(len(lofts))
+    assert abs(pstdev(lofts) / expected - 1) < 4 / math.sqrt(2 * len(lofts))
 
 
 def mean_speed(e: Engine, p, deg: float) -> float:
