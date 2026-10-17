@@ -146,7 +146,7 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** branch protection on `main` requires branches to be up to date (on since
   2026-10-17), so GitHub will not merge until CI has passed on the branch with main merged in.
 
-### 29. A deploy is done when the live URL answers with the new commit
+### 30. A deploy is done when the live URL answers with the new commit
 - **What happened:** the first `azd provision` and deploy of the API failed three times, and each
   earlier step said it had passed. A role id written from memory did not exist (`what-if` does not
   check role ids). Leaving the Container Apps environment's mode unset gave an Express
