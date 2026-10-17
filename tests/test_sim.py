@@ -1,5 +1,6 @@
 import json
 from collections import Counter
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 from jsonschema import validate
@@ -49,4 +50,22 @@ def test_football_realistic_rates_over_a_full_match():
     assert c["tackle"] > 0 and c["interception"] > 0 and c["pressure"] > 0
     completed = sum(1 for e in m.events if e["type"] == "pass" and e["outcome"] == "success")
     assert 0.7 <= completed / c["pass"] <= 0.9
-    assert 1 <= c["goal"] <= 6, c  # a Premier League match averages about 2.8
+
+
+GOAL_SEEDS = (7, 11, 21, 31)  # the first four of ninety.sim.funnel's default seeds
+GOALS_PER_MATCH = 2.8  # a Premier League match averages about 2.8 (R4: about 1.4 a team)
+
+
+def _goals(seed: int) -> int:
+    return sum(e["type"] == "goal" for e in simulate(seed, 90).events)
+
+
+def test_goals_per_match_over_several_matches():
+    # One match's goals are too noisy to bound: about Poisson with mean 2.8, a correct engine scores
+    # 0 in about 6% of matches and 7 or more in about 2%. The mean over n matches has a standard
+    # error of about sqrt(2.8 / n); the bound is three of them either side (design: a correct engine
+    # fails it by chance about 0.3% of the time).
+    with ProcessPoolExecutor() as pool:
+        goals = list(pool.map(_goals, GOAL_SEEDS))
+    mean, se = sum(goals) / len(goals), (GOALS_PER_MATCH / len(goals)) ** 0.5
+    assert GOALS_PER_MATCH - 3 * se <= mean <= GOALS_PER_MATCH + 3 * se, goals
