@@ -696,11 +696,15 @@ def test_a_receiver_takes_the_ball_in_his_stride_instead_of_stopping_dead():
     e.give(p.id)
     e.ball = (p.x + 0.37, p.y, 0.0, 5.0, 0.0, 0.0)
     e.hold_until = e.t + 0.5  # settling the ball
-    for _ in range(10):
+    frames, v = 10, 5.0
+    for _ in range(frames):
         e.tick_carrier()
         e.t += 1 / 25
     assert p.vx > 2.0  # still going his way, at a dribbling pace
-    assert p.x > 50.0 + 1.5
+    # further than a man who stops dead, braking as hard as he can (P2), goes in the same time
+    t = frames / 25
+    stopping = min(v * v / (2 * BRAKE_MAX), v * t - BRAKE_MAX * t * t / 2)
+    assert p.x - 50.0 > stopping
 
 
 def test_every_off_ball_target_is_reached_just_in_time_through_the_real_path():

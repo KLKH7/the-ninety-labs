@@ -69,6 +69,25 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_constants.py` fails if any module in `ninety/` assigns a top-level name
   twice.
 
+### 46. Same seed, same match, on every machine
+- **What happened:** seed 7 simulated a different match on macOS from the one on Linux, so the cue
+  fixture test failed on a Mac and "156 cues" could not be reproduced there. The engine was
+  deterministic; the C math library was not. Apple's `exp`, `erf`, `sin` and the rest disagree
+  with glibc's in the last bit for some inputs, a player's profile differed by one bit, and a
+  chaotic match grew that into different events within two minutes. A report already noted "the
+  same seed can simulate a slightly different match on another operating system" without
+  anyone tracing it. Review of the fix then found its helpers silently wrong outside the range
+  the engine uses (`sin(1e20)` gave 2.7e27; the inverse cdf gave -14.06 for p = 1e-100), and
+  the check blind to `from random import Random`.
+- **Rule:** code that writes ground truth or a published number computes with operations IEEE
+  754 rounds exactly (+, -, *, /, `sqrt`) and `ninety/sim/fmath.py`, never `math.exp`,
+  `math.sin`, `**`, `random.gauss` or `NormalDist`. A difference between machines is a defect
+  to trace, not a caveat to print. A numerical helper computes its whole stated domain or
+  refuses what it cannot.
+- **Check:** `tests/test_fmath.py` fails if `ninety/sim`, `ninety/match` or `ninety/eval` calls
+  the C math library, and pins `fmath`'s results bit for bit; CI runs it and the cue fixture on
+  Linux and macOS.
+
 ## Checks that prove something
 
 ### 8. A check must be able to fail
@@ -115,6 +134,17 @@ short and actionable. This file is public: no research sources, product names or
 - **What happened:** a pull request was merged before CI had started on its last commit,
   because the wait loop treated an empty check list as finished.
 - **Rule:** wait until every required check has reported, then merge.
+
+### 45. Green CI on an old base is not green on main
+- **What happened:** #55 changed the seed-7 match and merged at 05:55 UTC. #61 merged three
+  minutes later on CI that had run against the main before #55, because branch protection does
+  not require a branch to be up to date. Main went red: the recorded slice cited an event id
+  (`e00051`) that the new match no longer has.
+- **Rule:** if main has moved since a pull request's checks ran, merge main into the branch and
+  wait for CI again before merging, even when the files don't overlap. A recording or fixture
+  depends on the whole engine, not on the files its pull request touched.
+- **Check:** branch protection on `main` requires branches to be up to date (on since
+  2026-10-17), so GitHub will not merge until CI has passed on the branch with main merged in.
 
 ### 13. Keep diffs to what you meant to change
 - **What happened:** a one-word schema change rewrote 131 lines because a tool reformatted the
@@ -290,7 +320,17 @@ short and actionable. This file is public: no research sources, product names or
   recorded prompt (fact-checker reasons, agent instructions). Never make the replayer tolerate a
   changed prompt: a shim that rewrites new wording back to old pairs an old answer with a new
   question.
-- **Check:** run the committed replay fixture after changing fact-checker diagnostics.
+- **Check:** `test_every_committed_replay_still_replays` runs every committed replay (lesson 44).
+
+### 44. A committed recording must be replayed by a test, or it rots silently
+- **What happened:** the fact-checker started also reporting "clock 01:00 is not a cited clock",
+  which changed the Analyst's retry prompt, and `replays/slice-minute2-plant.json` stopped
+  replaying on main. Lesson 32's check was a manual step nobody ran, and
+  `tests/test_slice_replay.py` passed because it only built synthetic recordings.
+- **Rule:** every file in `replays/` is replayed by a test in CI. When that test fails, re-record
+  (lesson 32); never edit the JSON by hand.
+- **Check:** `tests/test_slice_replay.py::test_every_committed_replay_still_replays` fails on the
+  stale recording and passes on the re-recorded one.
 
 ### 33. One clock for viewers and agents
 - **What happened:** agent-facing minute and second values were rounded and combined differently
@@ -386,7 +426,30 @@ short and actionable. This file is public: no research sources, product names or
   the old fixture; `tests/test_factcheck.py::test_a_pass_finds_only_its_receiver` fails without
   the fact-checker's role check.
 
-### 47. A rule two places use lives in one place
+### 43. A report another program reads must be strict JSON
+- **What happened:** the event scoring harness used infinity for "the detected time is past the
+  last frame, so the place cannot be right". That is correct inside the matching, but it was also
+  written into the report, and Python's `json.dumps` writes it as `Infinity`, which JavaScript's
+  `JSON.parse` and most other parsers reject. The report format even documented it, so the
+  agents (R4) could have failed on one late detection.
+- **Rule:** a value that only steers a computation stays inside it; what is written out is plain
+  JSON, with `null` plus a named flag (here `outside_frames`) for a case that has no number.
+  Files are written with `allow_nan=False`, so a stray infinity or NaN fails at the source.
+- **Check:** `tests/test_event_score.py::test_a_time_outside_the_clip_still_gives_strict_json`
+  fails on the original code.
+
+### 47. A test's premise holds by construction, not by a seed's draw
+- **What happened:** porting the portable math onto the engine branch changed `gauss`, so every
+  drawn player changed. `test_a_dribbler_whose_touch_is_declined_still_decides` assumed h6 in
+  `Engine(1)` "could not run onto" a push from standing. That was true only of the old draw of him
+  (acceleration 0.41, dribbling 0.30); the new one (0.51, 0.24) can, so the touch was taken and the
+  test failed on behaviour it was never about.
+- **Rule:** the situation a test is about is set directly (a stubbed method, a set attribute), never
+  left to what a seed happens to draw. A test that means to cover a draw says so and checks it.
+- **Check:** the test sets `e.touch_speed` to decline; it still fails when a declined touch skips
+  the decision (mutation run on the merge of `main`'s portable math).
+
+### 69. A rule two places use lives in one place
 - **What happened:** when the engine began taking a high ball on the thigh, chest or head, at half
   a foot's pace (A4), the passer's estimate kept judging every reception by the foot. Passers
   thought lofted passes were safer than the engine made them, for every pass since. Nothing failed:

@@ -9,6 +9,7 @@ generated it and the output file is committed. Rows marked *planned* have no res
 | Keeper saves (isolated central shots at 8 to 25 m against the O1 position, and on-target shots in 12 matches) | `uv run python -m ninety.sim.saves` | `docs/eval/saves.md` | running: a report beside GROUNDING O1, never a target |
 | Penalties (scored, keeper's side, stops, on target) | `uv run python -m ninety.sim.penalties` | `docs/eval/penalties.md` | running: a report beside published figures, never a target |
 | Event and frame schema validity | CI `smoke` job | CI log | running |
+| Same seed, same match on every machine: the simulator's math pinned bit for bit, and no C math library call where ground truth or a published number is computed | `uv run pytest tests/test_fmath.py tests/test_cues.py`; CI `portable` job on macOS, `test` on Linux | test assertions | running: seeds 1, 2, 3, 11, 42 (3 minutes) and seed 7 (5 minutes, every frame at full precision) are identical on macOS arm64 and Linux arm64 and x86_64, Python 3.11 and 3.12 |
 | Ground-truth data meets the data contract (consistency and physics) | `uv run ninety-validate <clip>` | command output | running: the engine meets the contract on full matches (seeds 7, 11, 21); CI runs it on the smoke clip |
 | Render checks (projection error, label completeness, determinism, ball occlusion share) | `uv run ninety-render-check <clips> --determinism --report docs/eval/render-checks.json`; CI `render` job on every push | `docs/eval/render-checks.json`, CI log | running |
 | Off-the-shelf detector recall on renders (guide check 2) | planned | `docs/eval/render-checks.json` | planned |
@@ -17,7 +18,7 @@ generated it and the output file is committed. Rows marked *planned* have no res
 | Targeted data rounds, before and after | planned | `docs/eval/vision-report-v{n}.json` | planned |
 | Stats engine facts: hand-computed cases, planted defects, citations, size | `uv run pytest tests/test_stats.py` | test assertions | running |
 | Fact-checker rules (numbers, players, evidence ids) | `uv run pytest tests/test_factcheck.py` | test assertions | running |
-| Ledger versioning, evidence validation, and deterministic cue fixture | `uv run pytest tests/test_ledger.py tests/test_cues.py` | `tests/fixtures/cues-seed7.jsonl` and test assertions | running: 20 tests; 146 cues for seed 7, five minutes (140 for its 70 passes, 10 of them failed, and 6 for its 3 shots; no goal in that window, so goals are covered by hand-built cases) |
+| Ledger versioning, evidence validation, and deterministic cue fixture | `uv run pytest tests/test_ledger.py tests/test_cues.py` | `tests/fixtures/cues-seed7.jsonl` and test assertions | running: 20 tests; 98 cues for seed 7, five minutes (49 passes, 17 of them failed; the engine made no shots in that window, so shots and goals are covered by hand-built cases) |
 | Fact-checker catch rate on planted false claims, and true claims wrongly rejected | `uv run python -m ninety.eval.factcheck_eval` | `docs/eval/fact-checker.md` | re-run pending: the Judge's instructions and the tone kinds changed after the last run (fact split from tone, tone labels fitted to events, held-out and contradicted tone). Since then a pass also carries `intended`, `interceptor` and `deflected_by` (lesson 42), so the Judge sees those fields; the code half now rejects a pass said to "find" or "pick out" anyone but its receiver (other wordings, such as "connects with", are still the Judge's), which catches "intercepted pass called completed" without the Judge; and two kinds test that rule (a failed pass, or one another team-mate got, said to find the player it was for). None of this is in the published numbers. Last published run, before that change, on held-out seeds 21,33: 129/129 false caught, 12/99 true rejected excluding service holds, all twelve on tone. |
 | Match engine touches: control by surface, whose ball and speed; throw-ins; pass completion | `uv run python -m ninety.sim.touches` (seeds 40 to 47) | `docs/eval/touches.md`, `docs/eval/funnel-touches.md` | running: a report, never a gate; comparisons fixed below. Seeds 40 to 47, before and after the cushioned touch (base 8c6e06e): thigh, chest or head touches 3,756 then 759 (passers now judge them by the engine's own rule), kept 58% then 61%; all touches except the dribbler's own kept 87% then 97%; throw-ins 87.1% then 84.0% first contact by a team-mate (Stone 2021: 83%), 66.0% then 59.1% held 5 s later (54%); completion 80.4% then 87.5% (R3: 75 to 88%) |
 | Recovery from injected failures | planned | `docs/eval/failure-table.md` | planned |
@@ -211,7 +212,8 @@ Each of `pairs` is one match:
 | `truth_id`, `detected_id` | the two events' `id` |
 | `type`, `team` | shared by both |
 | `dt_s` | detected time minus true time, seconds; positive means late |
-| `place_error_m` | the spot's distance to the reference object at the detected time; `null` for a substitution; written as `Infinity` (not valid strict JSON) when the detected time is past the last frame, which can happen only in `time_only` |
+| `place_error_m` | the spot's distance to the reference object at the detected time; `null` when it cannot be measured: for a substitution, or when `outside_frames` is `true` |
+| `outside_frames` | `true` when the detected time is outside the truth frames (usually past the last one), so there is nothing to be right about; such a pair can appear only in `time_only`, since `strict` and `lenient` reject it |
 | `distance_m` | the spot's distance to the true event's spot |
 
 Example from the commands above on Windows, on fake detections, so the numbers grade the
@@ -228,4 +230,5 @@ in shot and less than half visible. The target before freezing the test set is a
 - **The test set is fixed and separate.** Clips used to score detection are never used to train it,
   and targeted data rounds never add clips to the test set.
 - **Every report records its inputs:** git commit, seeds, model versions and the date.
-- **Results are reproducible:** each command runs from a clean clone after `uv sync`.
+- **Results are reproducible:** each command runs from a clean clone after `uv sync`, and gives the
+  same numbers on any operating system (lesson 46).

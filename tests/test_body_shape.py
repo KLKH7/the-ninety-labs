@@ -824,7 +824,9 @@ def test_a_dribbler_whose_touch_is_declined_still_decides():
     e = Engine(1)
     still(e)
     c = e.by_id["h6"]
-    c.x, c.y, c.heading = 40.0, 34.0, 0.0  # standing: no push is his (he could not run onto it)
+    c.x, c.y, c.heading = 40.0, 34.0, 0.0
+    # No push is his. Set directly: whether he could run onto one depends on the seed's draw of him.
+    e.touch_speed = lambda *args: None
     for q in e.players:
         if q is not c:
             q.x, q.y = 90.0 if q.team == "away" else 10.0, 5.0 + 2 * int(q.id[1:])

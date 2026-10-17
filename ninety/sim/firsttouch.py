@@ -12,8 +12,7 @@ docs/GROUNDING.md (A4, P14, D6).
 
 from __future__ import annotations
 
-import math
-
+from ninety.sim import fmath
 from ninety.sim.body import CONTROL_M
 
 BODY_TOUCH_Z = 0.45  # design (P14): above this, a ball he is under is a thigh, chest or head, not a foot
@@ -53,4 +52,4 @@ def kept_estimate(rel: float, absorb: float, margin: float) -> float:
     softened by `margin` (m/s). A heavy touch is counted as lost, though the race for it may still
     go his way (*verify*: pessimistic, as a failed touch was before)."""
     x = (absorb + KEEP_MPS - rel) / margin
-    return 1.0 / (1.0 + math.exp(-max(-30.0, min(30.0, x))))
+    return 1.0 / (1.0 + fmath.exp(-max(-30.0, min(30.0, x))))
