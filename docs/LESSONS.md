@@ -241,7 +241,7 @@ short and actionable. This file is public: no research sources, product names or
   fails on the original code.
 
 
-### 27. A minute is the football minute
+### 29. A minute is the football minute
 - **What happened:** the first match terrain labelled its turning points with the clock minute
   (33 for 33:00 to 33:59), while the agents and the fact-checking agent use the football minute
   (`ninety.match.facts.minute_of`: 34 for the same span). Every card read one minute early, and
