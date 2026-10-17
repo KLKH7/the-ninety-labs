@@ -40,6 +40,27 @@ uv run ninety-render-check runs/dataset/test/seed9000* --determinism --report do
 | Determinism | re-render the first clip; compare `frames.jsonl`, `events.jsonl` and image hashes | identical |
 | Split integrity | `ninety/render/splits.py`: test seeds are reserved; overrides are refused on the test set | unit tests |
 
+### What the data holds
+
+`ninety-data-stats` counts, per split and from the saved labels only, what a dataset can teach the
+detector: distinct seeds, frames after the stride, player and ball boxes, balls by visibility
+group, ball size in pixels at the training input size, and clips per render knob. With
+`--floors` it exits 1 when a split misses a floor. The floors were set before any training clip
+was counted, and each one's reason is beside it in `ninety/vision/data_stats.py`. Meeting them
+does not prove the data is enough; the learning curve decides that.
+
+```bash
+uv run ninety-data-stats runs/dataset --stride 5 --input 512x512 --out docs/eval/dataset-stats.json --floors
+```
+
+The floors are `TRAIN_FLOORS` and `TEST_FLOORS` in `ninety/vision/data_stats.py`, each with its
+reason; that file is the only table. `ball_visibility_lt_0_5_share` is the quantity PLAN.md
+freezes on and `ninety-render-check` reports (every frame with the ball in shot, not only the
+strided ones, fully hidden balls included); the ball-box counts are training labels and
+exclude visibility 0, so the train split's hidden-ball floor is `ball_boxes_mostly_hidden_share`,
+a share of those labels. Lighting and weather floors cover only the values the renderer can draw
+(`PLANNED` in `ninety/render/params.py`).
+
 ## Vision scoring
 
 Fixed before the first detector runs, so no rule is tuned to a result. Every vision report
