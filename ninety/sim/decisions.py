@@ -16,7 +16,7 @@ import random
 from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
 
-from ninety.sim import ball, offball, perception, threat
+from ninety.sim import ball, offball, perception, shape, threat
 from ninety.sim import value as possession
 from ninety.sim.body import (
     BODY_HEIGHT,
@@ -25,6 +25,8 @@ from ninety.sim.body import (
     CS_MEAN,
     F0_MEAN,
     FOOT_REACH_Z,
+    STRIKE_FACING,
+    TURN_RATE,
     V0_MEAN,
     Body,
     can_get_to,
@@ -289,12 +291,33 @@ def turn_deg(direction: float, heading: float) -> float:
     return math.degrees((direction - heading + math.pi) % (2 * math.pi) - math.pi)
 
 
-def can_strike(ox: float, oy: float, dx: float, dy: float) -> bool:
-    """With the ball at (ox, oy) from his body, can he strike it toward (dx, dy) from the ball without
-    turning? Only if the ball is on the side of his body facing the target (or right at his feet)."""
+def can_strike(ox: float, oy: float, heading: float, dx: float, dy: float) -> bool:
+    """P16, the engine's own rule: with the ball at (ox, oy) from his body's centre and facing
+    `heading`, can he strike it toward (dx, dy) now? Only once he faces within STRIKE_FACING of it
+    (the widest run-up angle tested with no loss of speed or accuracy) with the ball on the side
+    of his body toward it, so its way out leaves his surface (shape.py) rather than passing
+    through him. A ball in his hands (a throw-in) needs neither."""
     if math.hypot(ox, oy) < 0.1:
         return True
-    return ox * dx + oy * dy >= 0
+    if abs(turn_deg(math.atan2(dy, dx), heading)) > math.degrees(STRIKE_FACING):
+        return False
+    sx, sy = shape.nearest_on_spine(ox, oy, 0.0, 0.0, heading)
+    return (ox - sx) * dx + (oy - sy) * dy >= 0
+
+
+def strike_turn(heading: float, dx: float, dy: float, thrown: bool = False) -> tuple[float, float]:
+    """P16: how far (degrees) the kick toward (dx, dy) is from the way he faces when he strikes it,
+    and how long he turns first (seconds). Facing within STRIKE_FACING he strikes now; else he
+    turns toward it at TURN_RATE until he is, and strikes at that angle. A throw-in leaves his hands
+    at once, at whatever angle (can_strike). *Design*, not counted: a ball behind him also comes
+    round to his front within a few frames; the engine turns in whole frames, so it strikes up to
+    one frame later and up to 14° nearer his facing; and he does not move while he turns, though in
+    the engine he brakes and the ball goes with him."""
+    off = turn_deg(math.atan2(dy, dx), heading)
+    limit = math.degrees(STRIKE_FACING)
+    if thrown or abs(off) <= limit:
+        return off, 0.0
+    return math.copysign(limit, off), math.radians(abs(off) - limit) / TURN_RATE
 
 
 def pass_skill(bx: float, tx: float, ty: float, lofted: bool, goal_x: float) -> str:
@@ -402,12 +425,13 @@ def strike_nodes(scene: Scene, tx: float, ty: float, lofted: bool, pace: float
     error in radians, ground speed, vertical speed). Struck as estimated (ARRIVE pace along the
     ground, LOFT_DEG in the air), then scattered by his own kick error (profiles.strike_error) in the
     situation he strikes it in: the skill, the speed, the nearest opponent he sees, his fatigue, and
-    the foot (if the ball is on the wrong side he turns first, and strikes it the way he faces)."""
+    the foot, from how far off the way he faces he strikes it (strike_turn: he turns first if he
+    must, P16)."""
     dist = math.hypot(tx - scene.x, ty - scene.y)
     ground, up = loft_launch(dist) if lofted else (launch_speed(dist, pace), 0.0)
     speed = math.hypot(ground, up)
     dx, dy = tx - scene.x, ty - scene.y
-    turn = turn_deg(math.atan2(dy, dx), scene.heading) if can_strike(*scene.ball_offset, dx, dy) else 0.0
+    turn, _ = strike_turn(scene.heading, dx, dy, scene.throw)
     cx, cy = scene.x - scene.ball_offset[0], scene.y - scene.ball_offset[1]
     nearest = min((math.hypot(o[0] - cx, o[1] - cy) for o in scene.moving), default=math.inf)
     skill = pass_skill(scene.x, tx, ty, lofted, scene.goal_x)
@@ -620,17 +644,23 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
     direction = math.atan2(ty - sy, tx - sx)
     nodes = strike_nodes(scene, tx, ty, lofted, pace)
     cx, cy = sx - scene.ball_offset[0], sy - scene.ball_offset[1]
+    # P16: if he must turn before he can strike it, everyone else moves on meanwhile, each as the
+    # passer believes him to be going (he holds the ball where it is while he turns).
+    _, wait = strike_turn(scene.heading, tx - sx, ty - sy, scene.throw)
     # Team-mates, the one it is meant for first, from where the passer sees him and expecting it:
     # (x, y, vx, vy, reaction, first touch).
     seen = {m[0]: m for m in scene.mates}
     meant = seen.get(receiver, (receiver, mx, my, age))
-    mates = [(mx, my, *(meant[4:6] or (0.0, 0.0)), perception.SIMPLE_REACTION_S,
+    mvx, mvy = meant[4:6] or (0.0, 0.0)
+    mates = [(mx + mvx * wait, my + mvy * wait, mvx, mvy, perception.SIMPLE_REACTION_S,
               scene.absorb.get(receiver, CONTROL_EST_MPS))]
     for mid, qx, qy, _, *vel in scene.mates:
         if mid != receiver and (receiver is not None or (qx, qy) != (mx, my)):
-            mates.append((qx, qy, *(vel or (0.0, 0.0)), perception.CHOICE_REACTION_S,
+            qvx, qvy = vel or (0.0, 0.0)
+            mates.append((qx + qvx * wait, qy + qvy * wait, qvx, qvy, perception.CHOICE_REACTION_S,
                           scene.absorb.get(mid, CONTROL_EST_MPS)))
-    opponents = scene.moving
+    opponents = [(ox + ovx * wait, oy + ovy * wait, ovx, ovy, keeper)
+                 for ox, oy, ovx, ovy, keeper in scene.moving]
     # How far each player is from the ball's whole path at the widest spread of the strikes: a
     # lower bound on when he could get there (at top speed, straight), so the race can skip those
     # who could not be in it.

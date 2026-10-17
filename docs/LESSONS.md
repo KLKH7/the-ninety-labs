@@ -174,7 +174,66 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `uv run python -m ninety.sim.calibration` on forced choices, not only chosen ones:
   chosen options hide a pessimistic estimate, because nobody picks what it underrates.
 
-### 24. A trigger guarded only by "not busy now" fires again when the busy state ends
+### 24. What collides is what is drawn
+- **What happened:** the engine's body was a round cylinder 0.52 m across; the renderer drew a
+  round trunk 0.32 m across (deeper than a real chest), turned by its own smoothing of the motion
+  rather than the engine's heading, and drew a carried ball 0.55 m ahead of where the engine had
+  it. Balls bounced off players in empty air, and the
+  labels showed contacts that the pixels did not.
+- **Rule:** one body shape (`ninety/sim/shape.py`), oriented by the engine's heading (which turns
+  at a sourced rate, never in a jump), is used by the contact physics and the renderer; the
+  renderer draws the ball where the engine has it. Where drawn and simulated bodies still differ
+  (the legs, running arms and lean), say so in GROUNDING rather than claim they match. Measure a
+  change's "before" from a clean worktree of the base commit, never from the tree being edited.
+- **Check:** `tests/test_body_shape.py` checks cross-sections of the drawn body against the shape
+  over its whole area at chest height (nothing outside it, the share it fills as GROUNDING
+  states), the clip's gaits take the engine's heading, and `drawn_ball` returns the engine's
+  position.
+
+### 25. A new limit breaks every rule that assumed the old instant behaviour
+- **What happened:** turning was made to take time, but the strike still fired as soon as the
+  ball was on the target's side of the body, which with a slow turn meant striking along the
+  chest; passers knocked their own passes off themselves, and deflections doubled. The tests
+  read the new constant back, so they could not see it.
+- **Rule:** when a change makes something take time (a turn, a reaction), find every rule that
+  waited for it and make it wait for the real state, with a sourced threshold. Pin a sourced
+  constant with a test that states the source's number (180° in about 0.52 s), not the constant.
+- **Check:** before and after, measure the outcomes the change could disturb (here: kick angle
+  off the body, self-deflections, deflections, interceptions) on the same seeds.
+
+### 26. A limit on angle is not a limit on distance
+- **What happened:** a carried ball was sent round the carrier's body with its turn per frame
+  limited, but its distance from him was set straight onto his outline, so a ball a metre away
+  jumped up to 1.24 m in one frame, through him. It was under every validator limit, and the
+  test started with the ball already on the outline.
+- **Rule:** bound what actually moves (the distance per frame), and test from a state that is
+  not already the answer.
+- **Check:** a test measures per-frame movement from awkward starting places (ahead, beside,
+  behind) against the speed limit it claims.
+
+### 27. A contact must not swallow the rest of the frame
+- **What happened:** a deflected ball was put back where it met the player and the rest of that
+  frame's travel was dropped. A ball he kept failing to control hovered at knee height for
+  seconds while its falling speed grew, touched again every frame; the gravity check let it
+  through, because a touch excuses the frames around it. Short runs never showed it; a full
+  match did (one player "deflected" it 96 times in a row).
+- **Rule:** after a contact, spend the rest of the frame: the ball flies on, and whoever it meets
+  next in that time is resolved too. Measure on full-length matches, not only short clips.
+- **Check:** the longest run of consecutive deflection events by one player over 90 minutes
+  (seeds 7, 11, 21, other events between them ignored) is a few, not dozens (1 to 4 measured; base 9 or 10).
+
+### 28. A comment that names a physical rule is a claim to measure
+- **What happened:** the keeper's dive said "a shorter dive is the same push, over sooner", but
+  the code replayed the full dive's timing sped up, so a 0.5 m dive launched at about 46 m/s²
+  against 16 for a full one, and every dive ended by setting him down from full speed in one
+  frame. Tests checked where the dive ended, never how hard it pushed, so both passed for months.
+- **Rule:** when a comment or GROUNDING row states how a body moves (the same push, braking as
+  legs allow), a test measures that quantity frame by frame (speed gained or lost per frame),
+  not only where the movement ends.
+- **Check:** for any motion profile, a test sweeps its inputs (here, every dive length) and
+  bounds the per-frame change in speed; mutate the profile's scaling and the test must fail.
+
+### 29. A trigger guarded only by "not busy now" fires again when the busy state ends
 - **What happened:** a keeper's dive was allowed whenever he was not diving and not on the
   ground. A slow shot was still on its way after he had dived, landed and got up, so he dived a
   second time at the same ball. Every condition checked the present; none remembered that the
@@ -185,7 +244,7 @@ short and actionable. This file is public: no research sources, product names or
   own busy state (dive, land, get up, ball still coming) and require no repeat; and one where a
   new cause (a deflection) is allowed to trigger it again.
 
-### 25. Keep every dimension a source measured
+### 30. Keep every dimension a source measured
 - **What happened:** the kick-error source measured a tilted ellipse of where shots cross the goal
   line (a long and a short axis). The engine kept one number, their geometric mean (3°), as the
   sideways error, and gave the up-and-down error a fixed 2° that did not grow with speed, pressure
@@ -196,7 +255,7 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** for each sourced constant, ask "what did the source actually measure, in how many
   dimensions?" and test the derived values against the source's own figures.
 
-### 26. A committed report must come from the committed code
+### 31. A committed report must come from the committed code
 - **What happened:** two commits regenerated `docs/eval/funnel.md` (1.8 goals a team), yet the
   code of the later one, re-run on a clean checkout of that commit, produced 2.5; the realism test went red with nobody noticing. Twelve
   matches also hide a change of 0.3 goals a team in noise (standard error about 0.27).
