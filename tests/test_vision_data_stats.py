@@ -116,6 +116,25 @@ def test_lt_half_share_matches_render_check_with_a_fully_hidden_ball(tmp_path):
     assert train["ball_boxes_mostly_hidden_excluding_fully_hidden"] == 1
 
 
+def test_lt_half_share_counts_every_frame_whatever_the_stride(tmp_path):
+    # The render check counts every frame; a share under the same name must not move with the
+    # training stride. Hidden ball only on frames the stride skips: 4 of 10 frames.
+    from ninety.render.checks import occlusion
+
+    clip = write_clip(tmp_path, 1, "test", n_frames=10)
+    rows = [json.loads(line) for line in (clip / "frames.jsonl").read_text().splitlines()]
+    for row in rows:
+        if row["frame"] in (1, 2, 3, 4):
+            row["ball"]["visibility"] = 0.2
+    (clip / "frames.jsonl").write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+    want = occlusion(rows)["ball_visibility_lt_0_5_share"]
+    assert want == 0.4
+    for stride in (1, 5):
+        test = dataset_stats(find_clips([tmp_path]), stride=stride)["splits"]["test"]
+        assert test["ball_visibility_lt_0_5_share"] == want
+        assert test["ball_in_frame"] == 10
+
+
 def test_floors_loop_over_the_values_the_renderer_allows(monkeypatch):
     from ninety.render import params
 

@@ -95,7 +95,9 @@ def clip_stats(clip_dir: Path, *, stride: int, input_size: tuple[int, int] | Non
     ball_visibility = Counter(
         visibility_group(lab["visibility"]) for lab in labels if lab["cls"] == "ball"
     )
-    in_frame = [row["ball"] for row in used if (row.get("ball") or {}).get("bbox") is not None]
+    # Every frame, not only the strided ones: the same quantity as `ninety-render-check`, so the
+    # share is a property of the clip and does not move with the training stride.
+    in_frame = [row["ball"] for row in frames if (row.get("ball") or {}).get("bbox") is not None]
     return {
         "seed": meta["seed"],
         "ball_in_frame": len(in_frame),
@@ -139,7 +141,7 @@ def summarise(clips: list[dict]) -> dict:
         "ball_boxes": ball_boxes,
         "ball_by_visibility": by_visibility,
         "ball_in_frame": in_frame,
-        # PLANNED quantity: the render check's name and denominator (ball in shot, v = 0 included)
+        # PLAN.md's quantity: the render check's name and denominator (ball in shot, v = 0 included)
         "ball_visibility_lt_0_5_share": round(lt_half / in_frame, 4) if in_frame else None,
         # training labels only: 0 < visibility < 0.5, a fully hidden ball has no box
         "ball_boxes_mostly_hidden_excluding_fully_hidden": by_visibility["mostly hidden"],
