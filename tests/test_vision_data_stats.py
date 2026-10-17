@@ -95,6 +95,37 @@ def test_repeated_seed_is_refused_not_deduped(tmp_path):
         dataset_stats(find_clips([tmp_path]))
 
 
+def test_overlapping_roots_count_each_clip_once(tmp_path):
+    clip = write_clip(tmp_path / "data", 1, "train")
+    once = dataset_stats(find_clips([tmp_path / "data"]))
+    roots = [tmp_path / "data", clip, tmp_path / "data", tmp_path / "data" / ".." / "data"]
+    assert dataset_stats(find_clips(roots)) == once
+
+
+def test_stride_cannot_change_the_test_floor_result(tmp_path):
+    clip = write_clip(tmp_path, 900001, "test", n_frames=100)
+    rows = [json.loads(line) for line in (clip / "frames.jsonl").read_text().splitlines()]
+    rows[0]["ball"]["visibility"] = 0.3
+    (clip / "frames.jsonl").write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+    results = set()
+    for stride in (1, 2, 5, 10, 50):
+        test = dataset_stats([clip], stride=stride)["splits"]["test"]
+        results.add((test["ball_visibility_lt_0_5_share"], tuple(floor_failures({"test": test}))))
+    assert len(results) == 1
+
+
+def test_a_share_just_under_the_floor_is_not_rounded_up(tmp_path):
+    # 50 hidden balls in 1,001 frames in shot is 0.04995: under the 5% floor, though it rounds to 0.05
+    clip = write_clip(tmp_path, 900001, "test", n_frames=1001)
+    rows = [json.loads(line) for line in (clip / "frames.jsonl").read_text().splitlines()]
+    for row in rows[:50]:
+        row["ball"]["visibility"] = 0.3
+    (clip / "frames.jsonl").write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+    test = dataset_stats([clip], stride=1)["splits"]["test"]
+    assert test["ball_visibility_lt_0_5_share"] == 50 / 1001
+    assert any(f.startswith("test ball_visibility_lt_0_5_share") for f in floor_failures({"test": test}))
+
+
 def test_distinct_seeds_reported(tmp_path):
     write_clip(tmp_path, 1, "train")
     write_clip(tmp_path, 2, "train")

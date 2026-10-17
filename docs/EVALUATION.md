@@ -55,9 +55,10 @@ uv run ninety-data-stats runs/dataset --stride 5 --input 512x512 --out docs/eval
 
 The floors are `TRAIN_FLOORS` and `TEST_FLOORS` in `ninety/vision/data_stats.py`, each with its
 reason; that file is the only table. `ball_visibility_lt_0_5_share` is the quantity PLAN.md
-freezes on and `ninety-render-check` reports (frames with the ball in shot, fully hidden balls
-included); the ball-box counts are training labels and exclude visibility 0. Lighting and weather
-floors cover only the values the renderer can draw (`PLANNED` in `ninety/render/params.py`).
+freezes on and `ninety-render-check` reports (every frame with the ball in shot, not only the
+strided ones, fully hidden balls included); the ball-box counts are training labels and
+exclude visibility 0. Lighting and weather floors cover only the values the renderer can draw
+(`PLANNED` in `ninety/render/params.py`).
 
 ## Vision scoring
 

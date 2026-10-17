@@ -141,8 +141,9 @@ def summarise(clips: list[dict]) -> dict:
         "ball_boxes": ball_boxes,
         "ball_by_visibility": by_visibility,
         "ball_in_frame": in_frame,
-        # PLAN.md's quantity: the render check's name and denominator (ball in shot, v = 0 included)
-        "ball_visibility_lt_0_5_share": round(lt_half / in_frame, 4) if in_frame else None,
+        # PLAN.md's quantity: the render check's name and denominator (ball in shot, v = 0 included);
+        # unrounded, because a floor compares it exactly and 0.04995 must not pass as 0.05
+        "ball_visibility_lt_0_5_share": _share(lt_half, in_frame),
         # training labels only: 0 < visibility < 0.5, a fully hidden ball has no box
         "ball_boxes_mostly_hidden_excluding_fully_hidden": by_visibility["mostly hidden"],
         "ball_size_px": {
@@ -204,12 +205,19 @@ def floor_failures(splits: dict) -> list[str]:
 
 
 def find_clips(roots: Iterable[Path]) -> list[Path]:
-    """Clip directories under the roots: any directory holding clip.json and frames.jsonl."""
-    found = []
+    """Clip directories under the roots: any directory holding clip.json and frames.jsonl.
+
+    Each directory is returned once, however many roots reach it, so overlapping roots cannot
+    inflate the counts. A copy of a clip in another directory is still found, and refused as a
+    repeated seed.
+    """
+    found: dict[Path, None] = {}
     for root in roots:
         candidates = [root, *sorted(p for p in root.rglob("*") if p.is_dir())]
-        found += [d for d in candidates if (d / "clip.json").is_file() and (d / "frames.jsonl").is_file()]
-    return found
+        for d in candidates:
+            if (d / "clip.json").is_file() and (d / "frames.jsonl").is_file():
+                found.setdefault(d.resolve())
+    return list(found)
 
 
 def main(argv: list[str] | None = None) -> None:
