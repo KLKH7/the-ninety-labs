@@ -448,3 +448,14 @@ short and actionable. This file is public: no research sources, product names or
   left to what a seed happens to draw. A test that means to cover a draw says so and checks it.
 - **Check:** the test sets `e.touch_speed` to decline; it still fails when a declined touch skips
   the decision (mutation run on the merge of `main`'s portable math).
+
+### 69. A rule two places use lives in one place
+- **What happened:** when the engine began taking a high ball on the thigh, chest or head, at half
+  a foot's pace (A4), the passer's estimate kept judging every reception by the foot. Passers
+  thought lofted passes were safer than the engine made them, for every pass since. Nothing failed:
+  each half was tested on its own.
+- **Rule:** a rule that both the engine and a player's estimate apply (the first touch, the kick
+  error, the reach) is one function in one module that both call. Never two copies kept in step by
+  hand.
+- **Check:** `grep` the rule's constants: they appear in one module and its tests, nowhere else;
+  a test feeds the same case to the engine's function and to the estimate.

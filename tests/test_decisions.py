@@ -9,6 +9,7 @@ import pytest
 
 from ninety.sim import decisions as D
 from ninety.sim import offball
+from ninety.sim.firsttouch import AERIAL_ABSORB, BODY_TOUCH_Z, KEEP_MPS
 from ninety.sim.profiles import Profile
 from ninety.sim.value import CELLS_X, CELLS_Y, Table, Tables
 
@@ -314,7 +315,15 @@ def test_the_first_touch_is_judged_on_the_speed_a_lofted_ball_comes_down_at():
     def conf(absorb):
         s = scene(x=60.0, absorb={"h9": absorb})
         return D.pass_confidence(s, 90.0, 34.0, 90.0, 34.0, 0.0, True, D.ARRIVE_MPS, "h9")
-    assert conf(landing + 4.0) > 0.8 > 0.2 > conf(landing - 4.0)  # the landing speed, not the launch
+    # The landing speed, not the launch, on the surface it meets where it first comes within his
+    # reach (above BODY_TOUCH_Z a thigh, killing AERIAL_ABSORB of a foot's pace, as the engine
+    # takes it); kept when what that touch cannot kill stays at his feet (KEEP_MPS).
+    # Averaged over his kick error some strikes are taken lower, on the foot, so it never falls to
+    # nothing; judged on the launch speed instead it would be near nothing at `needed`.
+    surface = AERIAL_ABSORB if down[2] > BODY_TOUCH_Z else 1.0
+    needed = (landing - KEEP_MPS) / surface  # the foot skill (absorb_mps) that just keeps it
+    worse, at, better = (conf(needed + k * 4.0 / surface) for k in (-1, 0, 1))
+    assert worse < at < better and 0.3 < at < 0.8
 
 def test_a_shot_into_a_crowd_risks_losing_the_ball_where_he_stands():
     shoot = lambda s: next(o for o in D.options(s) if o.kind == "shoot")  # noqa: E731

@@ -523,12 +523,14 @@ def test_a_dribbler_touches_the_ball_on_only_once_he_faces_where_it_goes():
 def test_his_body_meets_a_ball_before_his_foot_can_if_it_gets_there_first():
     e = Engine(1)
     p = lone(e, "a6", 50.0, 30.0, math.pi)
+    # Set directly, not left to the seed's draw of him: a touch too poor for his chest to keep it.
+    p.profile.attributes["first_touch"] = 0.0
     e.possessor, e.last_touch, e.kicker_clear, e.kicked_at = None, "h2", True, e.t - 5.0
     before = (49.75, 30.0, 1.3, 8.0, 0.0, -8.0)  # chest high, coming down onto him
     e.ball = (49.75 + 8.0 * DT, 30.0, 1.3 - 8.0 * DT, 8.0, 0.0, -8.0)
     e.contact(before)
     hit = [ev for ev in e.match.events if ev["type"] == "deflection"]
-    assert hit and hit[0]["player"] == p.id and e.possessor is None  # off his chest, not a touch
+    assert hit and hit[0]["player"] == p.id and e.possessor is None  # on his chest, not his foot
 
 
 def test_a_ball_over_his_head_does_not_meet_his_body():
