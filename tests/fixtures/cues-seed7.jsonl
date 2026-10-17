@@ -152,5 +152,5 @@
 {"anchor":null,"evidence":["e00119"],"id":"cue-e00119-casual","kind":"pass_arc","lang":"en","persona":"casual","replaces":null,"slot":"lower_third","t_in":277.16,"t_out":282.16,"text":"h8 finds h4","verified":false}
 {"anchor":null,"evidence":["e00120"],"id":"cue-e00120-analyst","kind":"pass_arc","lang":"en","persona":"analyst","replaces":null,"slot":"lower_third","t_in":281.6,"t_out":286.6,"text":"h4 pass (incomplete), 54 m, 99 km/h","verified":false}
 {"anchor":null,"evidence":["e00120"],"id":"cue-e00120-casual","kind":"pass_arc","lang":"en","persona":"casual","replaces":null,"slot":"lower_third","t_in":281.6,"t_out":286.6,"text":"h4 plays a pass","verified":false}
-{"anchor":null,"evidence":["e00124"],"id":"cue-e00124-analyst","kind":"pass_arc","lang":"en","persona":"analyst","replaces":null,"slot":"lower_third","t_in":298.48,"t_out":303.48,"text":"a2 \u2192 a9, 48 km/h","verified":false}
+{"anchor":null,"evidence":["e00124"],"id":"cue-e00124-analyst","kind":"pass_arc","lang":"en","persona":"analyst","replaces":null,"slot":"lower_third","t_in":298.48,"t_out":303.48,"text":"a2 \u2192 a9 (in flight), 48 km/h","verified":false}
 {"anchor":null,"evidence":["e00124"],"id":"cue-e00124-casual","kind":"pass_arc","lang":"en","persona":"casual","replaces":null,"slot":"lower_third","t_in":298.48,"t_out":303.48,"text":"a2 looks for a9","verified":false}

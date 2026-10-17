@@ -74,6 +74,12 @@ def test_an_intercepted_pass_names_who_it_was_for_and_who_cut_it_out():
     assert no_target["casual"] == "h7's pass is cut out by a4"
 
 
+def test_a_pass_still_in_flight_does_not_read_as_completed():
+    in_flight = {k: v for k, v in PASS.items() if k != "distance_m"}  # no end point yet
+    texts = _cue_texts({**in_flight, "receiver": None, "intended": "h9", "outcome": None})
+    assert texts == {"analyst": "h7 → h9 (in flight), 61.0 km/h", "casual": "h7 looks for h9"}
+
+
 def test_a_touched_pass_is_deflected_not_cut_out():
     """An opponent who only touched a pass did not win it, and the ball may still have reached its
     target: the cue says so much and no more."""

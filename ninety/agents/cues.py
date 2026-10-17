@@ -49,6 +49,8 @@ def _pass_text(event: dict, persona: str) -> str:
     parts = [f"{player} → {target}" if target else f"{player} pass"]
     if outcome == "fail":
         parts[0] += f" ({stopped})" if stopped else " (incomplete)"
+    elif outcome is None and target:
+        parts[0] += " (in flight)"
     if event.get("distance_m") is not None:
         parts.append(f"{event['distance_m']} m")
     if event.get("ball_speed_kmh") is not None:

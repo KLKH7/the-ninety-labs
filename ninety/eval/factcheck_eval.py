@@ -68,7 +68,8 @@ def cases(seed: int, minutes: float) -> list[dict]:
 
     def teammate(e):
         squad = [f"{e['team'][0]}{n}" for n in range(2, 12)]
-        return next(p for p in squad if p not in (e["player"], e.get("receiver")))
+        # not the passer, his receiver or the team-mate he meant it for (a claim naming him is not false)
+        return next(p for p in squad if p not in (e["player"], e.get("receiver"), e.get("intended")))
 
     # (truth, events, template). Templates read the compact event's fields, plus {mate} (a teammate
     # not in the event) and {rival} (the other team).

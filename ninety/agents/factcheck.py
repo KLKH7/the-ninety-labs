@@ -38,9 +38,14 @@ CLOCK = re.compile(r"(?<![\w.:])(?P<clock>\d{1,3}:\d{2})(?!\d)")
 # The synthetic squads' player ids (h1..h11, a1..a11). Names in this form are always checked,
 # even when the player is in no known event, so a claim cannot name an uninvolved player.
 PLAYER = re.compile(r"\b[ha](?:[1-9]|1[01])\b")
-# A verb that says a pass arrived names the player who got it, so that name must be a cited pass's
-# `receiver`: a pass's `intended` or `interceptor` is a cited player too, but did not receive it.
-FOUND = re.compile(r"\b(?:finds|found|picks out|picked out)\s+(?P<player>[ha](?:[1-9]|1[01]))\b", re.I)
+# A verb that says a pass arrived names the player who got it, so that name must be the `receiver` of
+# a cited pass: a pass's `intended` or `interceptor` is a cited player too, but did not receive it.
+# With the passer named before the verb, it must be his pass that reached that player.
+FOUND = re.compile(
+    r"(?:\b(?P<passer>[ha](?:[1-9]|1[01]))(?:'s pass)?\s+)?"
+    r"\b(?:finds|found|picks out|picked out)\s+(?P<player>[ha](?:[1-9]|1[01]))\b",
+    re.I,
+)
 NUMBER_FIELDS = ("minute", "second", "ball_speed_kmh", "distance_m")
 
 
@@ -160,10 +165,15 @@ def check(
     } | set(PLAYER.findall(claim.text))
     for name in sorted(named_players - cited_players):
         reasons.append(f"player {name} does not appear in the cited evidence")
-    received = {event.get("receiver") for event in evidence if event.get("type") == "pass"}
+    passes = [event for event in evidence if event.get("type") == "pass"]
     for match in FOUND.finditer(claim.text):
-        name = match.group("player")
-        if name in cited_players and name not in received:
-            reasons.append(f"player {name} received no cited pass")
+        name, passer = match.group("player").lower(), (match.group("passer") or "").lower()
+        if passer and passer not in {p.get("player") for p in passes}:
+            continue  # not a pass he made ("a4 found h9 in possession", citing a tackle)
+        if not passer and not passes:
+            continue
+        found = {(p.get("player"), p.get("receiver")) for p in passes}
+        if not any(r == name and (not passer or s == passer) for s, r in found):
+            reasons.append(f"player {name} received no cited pass" + (f" from {passer}" if passer else ""))
 
     return Verdict(ok=not reasons, reasons=reasons)
