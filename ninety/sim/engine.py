@@ -1292,12 +1292,16 @@ class Engine:
             p = self.by_id[pid]
             holder = self.by_id.get(self.possessor) if self.possessor else self.by_id.get(self.dribbler or "")
             bx, by = self.ball[0], self.ball[1]
-            if holder and holder.team != p.team and math.hypot(p.x - bx, p.y - by) <= CONTROL_M:
+            # Law 15: a ball held for a throw-in is not in play, so a lunge that arrives then finds nothing.
+            held = holder is not None and self.throw_by == holder.id
+            if holder and holder.team != p.team and not held and math.hypot(p.x - bx, p.y - by) <= CONTROL_M:
                 self.poke(p, holder)
                 holder = None
             else:
                 self.off_balance[pid] = self.t + OFF_BALANCE_S
         if not holder or self.restart or self.hands(holder, holder.x, holder.y):  # Law 12: not his hands
+            return
+        if self.throw_by == holder.id:  # Law 15: not in play until it is thrown, so nobody challenges
             return
         for i, p in enumerate(self.players):
             if p.team == holder.team or p.role == "GK" or p.id in self.lunges:

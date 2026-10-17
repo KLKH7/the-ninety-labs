@@ -17,6 +17,8 @@ from ninety.sim.engine import (
     PRESS_GAP_M,
     Engine,
     simulate,
+    throw_hands,
+    throw_stand,
 )
 from ninety.validate import check_physics
 
@@ -234,7 +236,7 @@ def test_a_throw_in_is_always_thrown_even_with_nobody_free():
     e.possessor = None
     e.stop("throw_in", "home", (50.0, 0.0))
     taker = e.by_id[e.restart.taker]
-    taker.x, taker.y = 50.0, 0.0
+    taker.x, taker.y = throw_stand(50.0, 0.0)  # he has run to his spot behind the line
     e.restart.ready_at = e.t
     e.tick_restart()
     assert e.throw_by == taker.id
@@ -549,3 +551,37 @@ def test_a_throw_in_taker_runs_to_his_spot_and_stops_there():
     problems = defaultdict(list)
     check_physics(m.events, m.frames, FPS, m.roster, problems)
     assert not problems.get("P1 player speed") and not problems.get("P2 player acceleration"), dict(problems)
+
+
+def throw_in_scene() -> tuple[Engine, object, object]:
+    """Home's h9 holds the ball for a throw-in on the near touchline; away's a5 is within lunge
+    reach with a team-mate covering goal-side, so in open play he could commit (D8)."""
+    e = Engine(1)
+    still(e)
+    thrower, defender, cover = e.by_id["h9"], e.by_id["a5"], e.by_id["a3"]
+    thrower.x, thrower.y = 56.1, -0.45
+    defender.x, defender.y = 56.6, 0.4
+    cover.x, cover.y = 60.0, 4.0
+    e.restart, e.possessor, e.dribbler, e.throw_by = None, thrower.id, None, thrower.id
+    e.ball = (*throw_hands(thrower.x, thrower.y), 0.0, 0.0, 0.0)
+    e.hold_until = e.t + 99.0
+    return e, thrower, defender
+
+
+def test_nobody_challenges_a_ball_held_for_a_throw_in():
+    """Law 15: the ball is not in play until it is thrown."""
+    e, _, defender = throw_in_scene()
+    defender.profile.attributes["aggression"] = 1.0
+    for frame in range(60):
+        e.frame = frame
+        e.duels()
+    assert defender.id not in e.lunges
+
+
+def test_a_lunge_that_arrives_during_a_throw_in_finds_nothing():
+    e, thrower, defender = throw_in_scene()
+    held = e.ball
+    e.lunges[defender.id] = e.t  # started before the ball went out, arriving now
+    e.duels()
+    assert e.possessor == thrower.id and e.ball == held
+    assert not any(ev["type"] == "tackle" for ev in e.match.events)
