@@ -16,6 +16,7 @@ from __future__ import annotations
 import math
 
 from ninety.sim.body import CONTROL_M
+from ninety.sim.profiles import FATIGUE_ERROR, TURN_ERROR
 
 BODY_TOUCH_Z = 0.45  # design (P14): above this, a ball he is under is a thigh, chest or head, not a foot
 # A4, P14: the part that meets a ball, by the height of the ball's bottom: each up to the height
@@ -69,3 +70,37 @@ def kept_estimate(rel: float, absorb: float, margin: float) -> float:
     go his way (*verify*: pessimistic, as a failed touch was before)."""
     x = (absorb + KEEP_MPS - rel) / margin
     return 1.0 / (1.0 + math.exp(-max(-30.0, min(30.0, x))))
+
+
+# What makes a touch worse (A4): each factor scales his direction error up and his cushion down by
+# the same factor, from `quality`. First-touch skill acts through A4's kill limit (absorb_mps) and
+# A3's skill term in the error, as before.
+PRESSURE_WORSE = 0.5  # as A3's kick error: full pressure (D2's zone) half again worse, less if composed
+# A4's kill limits are set for an ordinary reception: an average player facing a pass that arrives at
+# a typical 12 to 15 m/s. Faster than that (from its middle, TYPICAL_ARRIVAL_MPS) the touch gets worse:
+# by SPEED_WORSE for every foot-kill's worth of speed above it (design).
+TYPICAL_ARRIVAL_MPS = 13.5  # A4: the middle of the 12 to 15 m/s a typical professional pass arrives at
+SPEED_WORSE = 0.5
+FRONT_ON_SHARE = 0.2  # design: facing it, the ordinary way to receive, costs a fifth of having his back to it
+
+
+def approach_penalty(approach_deg: float) -> float:
+    """0 to 1 for where the ball comes from against the way he faces (degrees, 0 = from straight in
+    front): 0 side-on (90), the open body; 1 with his back to it (180); FRONT_ON_SHARE facing it."""
+    a = abs((approach_deg + 180.0) % 360.0 - 180.0)
+    return (a - 90.0) / 90.0 if a >= 90.0 else FRONT_ON_SHARE * (90.0 - a) / 90.0
+
+
+def quality(approach_deg: float, pressure: float, composure: float, energy: float, rel: float,
+            foot_absorb: float) -> float:
+    """How much worse this touch is than his best: his direction error is multiplied by it and what
+    his surface kills divided by it (1 at best). The angle the ball comes from against the way he
+    faces (up to half again, A3's TURN_ERROR), pressure from the nearest opponent in D2's zone
+    (PRESSURE_WORSE, eased by composure as A3's is), his energy (what is left of a fresh player's
+    reserve, A3's FATIGUE_ERROR) and the ball's speed relative to him beyond a typical pass's, against
+    what his foot kills (SPEED_WORSE)."""
+    scale = 1 + TURN_ERROR * approach_penalty(approach_deg)
+    scale *= 1 + PRESSURE_WORSE * pressure * (1 - composure)
+    scale *= 1 + FATIGUE_ERROR * (1 - max(0.0, min(1.0, energy)))
+    scale *= 1 + SPEED_WORSE * max(0.0, rel - TYPICAL_ARRIVAL_MPS) / max(foot_absorb, 1e-6)
+    return scale

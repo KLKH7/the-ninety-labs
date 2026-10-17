@@ -11,7 +11,7 @@ from ninety.sim import decisions as D
 from ninety.sim import offball, perception
 from ninety.sim.body import can_get_to, relative_speed
 from ninety.sim.engine import Engine
-from ninety.sim.firsttouch import CUSHION, KEEP_MPS, SURFACES
+from ninety.sim.firsttouch import CUSHION, KEEP_MPS, SURFACES, quality
 from ninety.sim.profiles import Profile
 
 
@@ -84,7 +84,12 @@ def reference(scene, tx, ty, mx, my, age, lofted, pace, receiver):
         # The engine's touch: the part the ball meets at its height (SURFACES) kills its CUSHION share
         # of a foot's pace, and he keeps it if what is left is no more than KEEP_MPS.
         part = next(name for name, top in SURFACES if z <= top)
-        absorb = taker[5] * CUSHION[part]
+        # Made worse by what the passer can know (firsttouch.quality): the team-mate facing it,
+        # fresh, of average composure, the nearest opponent he sees to where it is taken (D2).
+        bx, by = sx + ux * points[at][1], sy + uy * points[at][1]
+        felt = max((perception.pressure_from(bx, by, ox, oy, D.attack(scene.goal_x))
+                    for ox, oy in scene.opponents), default=0.0)
+        absorb = taker[5] * CUSHION[part] / quality(0.0, felt, 0.5, 1.0, rel, taker[5])
         p = D.sigmoid((absorb + KEEP_MPS - rel) / D.CONTROL_MARGIN_MPS)
         horizon = take + D.OPPONENT_LATE_S
         for ox0, oy0, ovx, ovy, keeper in scene.moving:
