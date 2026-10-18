@@ -557,3 +557,16 @@ short and actionable. This file is public: no research sources, product names or
   fails with the height-only test restored;
   `tests/test_decisions.py::test_the_passer_expects_a_dropping_ball_into_his_man_to_meet_the_thigh`
   fails if the estimate takes it on the foot.
+
+### 73. A rate that swings match to match needs enough matches before it is read
+- **What happened:** the touch report's eight seeds put the engine at 1.0 goals a team after "what
+  makes a touch worse", and the pull request, GROUNDING A4 and EVALUATION recorded it as a held-out
+  miss against the published 1.4. A match's goals run from 0 to 8, so eight matches cannot measure
+  goals a team to better than about ±0.3. Over 24 seeds the same engine gave 1.44, and the change
+  against the engine before it was -0.25 ± 0.18: noise.
+- **Rule:** before calling a per-match rate (goals, penalties, cards) a hit or a miss against a
+  published figure, give its standard error and use enough matches that the error is smaller than
+  the gap being claimed; compare two engines on the same seeds. A rate measured on too few matches is
+  reported with its error, never as a hit or a miss.
+- **Check:** every goals-per-team figure in GROUNDING and EVALUATION says how many matches it is
+  over; a before-and-after claim on goals gives the paired difference and its standard error.
