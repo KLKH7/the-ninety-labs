@@ -529,3 +529,17 @@ short and actionable. This file is public: no research sources, product names or
   turns green while the behaviour behind it does not move, is not a fix.
 - **Check:** for any change that moves a held-out check, list what else moved (stoppages, where
   play happens) and say what did not.
+
+### 54. Every way the ball moves must pass through the same collisions
+- **What happened:** the goal frame was made exact for a ball in flight and for the rest of a
+  frame after a deflection, but a ball carried at a player's feet and a dead ball rolling on after
+  it went out each moved by their own code, which never asked about the frame. A keeper holding
+  the ball beside his post carried it into the post. It stayed hidden until an unrelated change
+  moved the random stream onto that situation. Calling the collision there was not enough: the
+  carried ball stored the carrier's velocity, not how it moved that frame, so the collision missed
+  it entering and never pushed it out once it was in.
+- **Rule:** list every place that writes the ball's position (free flight, contact, the carrier,
+  restarts) and make each one go through the same collision rules, judged on the motion the ball
+  actually made that frame.
+- **Check:** `grep -n "self.ball = " ninety/sim/engine.py`; for each, say which collisions it goes
+  through, and test the ones that move the ball (a must-fail test per path).

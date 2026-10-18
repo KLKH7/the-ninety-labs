@@ -1446,3 +1446,38 @@ def test_the_dives_push_stays_within_what_legs_give():
         side, _, landed = _dive_speeds(travel)
         speeds = [0.0] + side[:landed + 1]
         assert max(b - a for a, b in zip(speeds, speeds[1:], strict=False)) <= MAX_PLAYER_ACCEL * DT + 1e-9
+
+
+def _clear_of_frame(e) -> float:
+    from ninety.sim.engine import POST_RADIUS, frame_gap
+    centre = (e.ball[0], e.ball[1], e.ball[2] + ball.RADIUS)
+    return frame_gap(centre, 105.0)[0] - (ball.RADIUS + POST_RADIUS)
+
+
+def test_a_carried_ball_does_not_pass_through_the_post():
+    # P17: the keeper holds the ball beside his post and moves toward his goal line; the ball he
+    # carries meets the post like any other ball (scenario corner, seed 2, found it inside the post).
+    e = Engine(1)
+    gk = e.by_id["a1"]
+    gk.x, gk.y, gk.vx, gk.vy = 104.4, 37.4, 3.0, 0.0
+    e.ball = (104.6, 37.7, 0.4, 3.0, 0.0, 0.0)
+    e.give(gk.id)
+    worst = math.inf
+    for _ in range(25):
+        e.tick_carrier()
+        if e.possessor is None:
+            break
+        worst = min(worst, _clear_of_frame(e))
+    assert worst > -1e-6
+
+
+def test_a_dead_ball_rolling_on_does_not_pass_through_the_post():
+    # P17: after it goes out the dead ball rolls on (tick_restart); it still meets the frame.
+    e = Engine(1)
+    e.stop("goal_kick", "away", (99.5, 34.0), "a1")
+    e.ball = (105.5, 37.72, 0.4, -3.0, 0.0, 0.0)  # behind the post, rolling back toward it
+    worst = math.inf
+    for _ in range(10):
+        e.tick_restart()
+        worst = min(worst, _clear_of_frame(e))
+    assert worst > -1e-6

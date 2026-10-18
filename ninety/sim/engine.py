@@ -1244,12 +1244,15 @@ class Engine:
         self.restart = Restart(kind, team, spot[0], spot[1], taker, self.t + self.rng.uniform(lo, hi))
 
     def tick_restart(self) -> None:
-        # The dead ball rolls on until it stops or reaches the advertising boards.
-        bx, by, bz, vx, vy, vz = ball.step(self.ball, DT)
+        # The dead ball rolls on until it stops or reaches the advertising boards, meeting the goal
+        # frame on the way like any other ball (P17).
+        before = self.ball
+        bx, by, bz, vx, vy, vz = ball.step(before, DT)
         if not (-BOARDS_M <= bx <= PITCH_X + BOARDS_M and -BOARDS_M <= by <= PITCH_Y + BOARDS_M):
             bx, by = clamp(bx, -BOARDS_M, PITCH_X + BOARDS_M), clamp(by, -BOARDS_M, PITCH_Y + BOARDS_M)
             vx = vy = 0.0
         self.ball = (bx, by, bz, vx, vy, vz)
+        self.woodwork(before)
         r = self.restart
         taker = self.by_id[r.taker]
         if r.kind == "corner":  # placed, then struck on the taker's run-up (setpieces.py)
@@ -1769,7 +1772,14 @@ class Engine:
             bx, by, bz = self.settle(carrier, bx, by, bz, fx, fy, side, step * math.hypot(dx, dy) / d)
             bz = bz + dz / d * step
         before = self.ball
-        self.ball = (bx, by, max(bz, 0.0), carrier.vx, carrier.vy, 0.0)
+        # P17: a carried ball meets the frame like any other, judged on how it really moved this
+        # frame (drawn to his feet, not only with him); untouched, it keeps his velocity.
+        bz = max(bz, 0.0)
+        moved = ((bx - before[0]) / DT, (by - before[1]) / DT, (bz - before[2]) / DT)
+        self.ball = (bx, by, bz, *moved)
+        self.woodwork((*before[:3], *moved))
+        if self.ball[:3] == (bx, by, bz):
+            self.ball = (bx, by, bz, carrier.vx, carrier.vy, 0.0)
         if self.went_out(before):  # Law 9 applies to a ball at a player's feet too
             self.possessor = None
             return
