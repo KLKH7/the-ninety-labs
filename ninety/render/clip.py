@@ -3,6 +3,7 @@
 Output directory layout:
 
     clip.json       seed, split, window, every render parameter, player looks, tool versions
+    meta.json       the data contract's clip metadata: fps, seed, roster (id, team, role), score
     events.jsonl    ground-truth match events inside the clip window (match_event schema)
     frames.jsonl    one row per frame (frame schema): positions, camera, boxes, visibility, keypoints
     images/NNNNN.jpg
@@ -332,6 +333,17 @@ def render_clip(
         for e in events:
             f.write(json.dumps(e) + "\n")
     clip["event_counts"] = dict(Counter(e["type"] for e in events))
+    # The data contract's metadata (docs/DATA_CONTRACT.md), so `ninety-validate` can check the clip.
+    # The score counts the goals in this clip's events, the same events the validator adds up (C9).
+    meta = {
+        "fps": p.fps,
+        "seed": seed,
+        "clip_id": clip["clip_id"],
+        "roster": [{k: r[k] for k in ("id", "team", "role")} for r in match.roster],
+        "score": {team: sum(1 for e in events if e["type"] == "goal" and e["team"] == team)
+                  for team in ("home", "away")},
+    }
+    (out / "meta.json").write_text(json.dumps(meta, indent=2))
     clip["ball_visibility_lt_0_5"] = round(
         sum(1 for r in rows if r["ball"]["visibility"] < 0.5 and r["ball"]["bbox"])
         / max(1, sum(1 for r in rows if r["ball"]["bbox"])),

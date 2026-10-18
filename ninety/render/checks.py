@@ -12,6 +12,7 @@ import math
 from pathlib import Path
 
 from ninety.render.camera import project_with
+from ninety.validate import validate
 
 PROJECTION_TOL_PX = 1.0  # guide: ground truth projects onto its pixels within 1 px
 EDGE_MARGIN_PX = 2  # objects cut by the image border have a shifted centroid; skip them
@@ -149,6 +150,7 @@ def check_clip(clip_dir: Path) -> dict:
     proj = projection_errors(frames)
     comp = label_completeness(clip, frames, clip_dir)
     occ = occlusion(frames)
+    contract = validate(clip_dir)  # docs/DATA_CONTRACT.md: every clip passes `ninety-validate`
     passed = {
         "projection_ball_lt_1px": proj["ball_px"]["max"] is not None
         and proj["ball_px"]["max"] < PROJECTION_TOL_PX,
@@ -156,6 +158,7 @@ def check_clip(clip_dir: Path) -> dict:
         or proj["keypoint_px"]["max"] < PROJECTION_TOL_PX,
         "player_feet_in_boxes": proj["player_foot_outside_box"] == 0,
         "labels_complete": comp["ok"],
+        "data_contract": not contract,
     }
     return {
         "clip": clip["clip_id"],
@@ -164,5 +167,6 @@ def check_clip(clip_dir: Path) -> dict:
         "projection": proj,
         "labels": comp,
         "occlusion": occ,
+        "data_contract": contract,
         "passed": passed,
     }
