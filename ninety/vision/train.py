@@ -57,20 +57,6 @@ def resume_from(out: Path) -> Path:
     return last
 
 
-def init_from(checkpoint: Path) -> dict:
-    """Start from one of our checkpoints, not COCO: it must come with its manifest and match its hash."""
-    manifest = checkpoint.with_name("train-manifest.json")
-    if not manifest.exists():
-        raise FileNotFoundError(
-            f"{manifest} is missing: an initial checkpoint must carry its training record"
-        )
-    record = json.loads(manifest.read_text())
-    actual = sha256(checkpoint)
-    if record.get("checkpoint_sha256") != actual:
-        raise ValueError(f"{checkpoint} does not match the sha256 in {manifest}")
-    return {"name": record["name"], "commit": record.get("commit"), "checkpoint_sha256": actual}
-
-
 def train_kwargs(cfg: dict, data: Path, out: Path, resume: Path | None = None) -> dict:
     return {
         **({"resume": str(resume)} if resume else {}),
@@ -102,12 +88,6 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--name", required=True, help="checkpoint name for detections.jsonl, e.g. ours-v1")
     ap.add_argument("--epochs", type=int, default=None, help="override for a smoke run only")
     ap.add_argument(
-        "--init",
-        type=Path,
-        default=None,
-        help="start from our checkpoint (with its manifest) instead of COCO",
-    )
-    ap.add_argument(
         "--resume",
         action="store_true",
         help="continue a killed run from <out>/last.ckpt, same config and data",
@@ -120,8 +100,7 @@ def main(argv: list[str] | None = None) -> None:
     a.out.mkdir(parents=True, exist_ok=True)
     resume = resume_from(a.out) if a.resume else None
     started = dt.datetime.now(dt.UTC)
-    init = init_from(a.init) if a.init else None
-    model = load(str(a.init) if a.init else None)
+    model = load()
     model.train(**train_kwargs(cfg, a.data, a.out, resume))
     best = a.out / BEST
     manifest = {
@@ -133,7 +112,6 @@ def main(argv: list[str] | None = None) -> None:
         "config": cfg,
         "epochs_override": a.epochs,
         "resumed_from": str(resume) if resume else None,
-        "initialized_from": init,
         "dataset": {
             k: {kk: vv for kk, vv in v.items() if kk != "seeds"} if isinstance(v, dict) else v
             for k, v in dataset.items()
