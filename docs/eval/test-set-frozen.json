@@ -5,7 +5,7 @@
   "commit_note": "engine-v1 (b319f21) plus one renderer change, cca498c (#118): scenery occludes in the id pass. The engine is unchanged; renderer 0.3.2.",
   "rendered_by": "uv run ninety-dataset --split test --seconds 10, once, locally",
   "render_checks": "docs/eval/render-checks.json (all passed, determinism identical)",
-  "contract_check": "uv run ninety-render-meta, then uv run ninety-validate, at 524ad2f (#96): 5 of 5 meet the data contract. meta.json is written from each clip's own clip.json, frames.jsonl and events.jsonl and is outside the digests below, which still match",
+  "contract_check": "uv run ninety-render-meta on runs/test-frozen-cca498c/test, then uv run ninety-validate with the validator of 524ad2f (#96) and of #108: 5 of 5 meet the data contract. meta.json is written from each clip's own clip.json, frames.jsonl and events.jsonl and is outside the digests below, which still match",
   "seeds": [
     900001,
     900002,
