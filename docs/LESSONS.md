@@ -144,7 +144,7 @@ short and actionable. This file is public: no research sources, product names or
   `tests/test_draw.py::test_only_frames_the_detector_ran_on_are_drawn_and_counted` fails on it
   (4 misses over 3 frames instead of 2 over 2).
 
-### 70. A rule for every clip must run on every kind of clip
+### 72. A rule for every clip must run on every kind of clip
 - **What happened:** AGENTS.md says every clip passes `ninety-validate`, but the renderer wrote
   `clip.json` and never the contract's `meta.json`, so the validator rejected every rendered clip
   ("missing meta.json") and no training clip was ever checked against the contract. The render
