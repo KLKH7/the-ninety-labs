@@ -11,7 +11,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_the_protocol_is_the_one_written_down():
-    text = (ROOT / "docs/EVALUATION.md").read_text()
+    doc = (ROOT / "docs/EVALUATION.md").read_text()
+    text = doc[doc.index("## Late drop in high-intensity running (R7)"):]  # its own section
+    text = text[:text.index("\n## ", 1)]
     m = re.search(r"(\d+) full matches, seeds (\d+) to (\d+), 90 minutes", text)
     assert m, "EVALUATION.md must state the R7 seeds"
     n, first, last = map(int, m.groups())
