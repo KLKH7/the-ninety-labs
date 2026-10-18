@@ -123,6 +123,80 @@ of seed 900001 matched labels and all 250 images byte for byte.
 - Player height p05 is 16 px in seed 900001, under the guide's 30 px; the other four clips are
   31 to 54 px at p05, and every clip's p95 is 86 to 106 px. Not yet traced.
 
+### Third measurement (Oct 17, hard cases drawn from the seed)
+
+`kit_contrast` and `occlusion` used to change only with `--set`, which the test set refuses, so
+the test set could never hold a crowded window or low-contrast kits. They are now drawn from the
+seed at `HARD_CASE_RATE` = 0.3, set from the train floors before rendering, not from this number.
+Re-rendered at commit `6269283`: seeds 900001, 900002 and 900004 are crowded, 900004 has
+low-contrast kits.
+
+All checks pass (ball projection max 0.30 px, keypoints max 0.0015 px, determinism identical).
+
+- The ball is under 0.5 visible in 55 of 1,250 frames (**4.40%**; crowded clips 6.4%, 8.8%,
+  2.4%; natural clips 0% and 4.4%). Still **short of the 5% minimum**, so the test set is still
+  not ready to freeze. The rate is not raised to reach 5%; whether to move the freeze or change
+  the test set's design is R2's decision.
+- Player height p05 is 9 px in seed 900004 (the 16 px case moved from 900001 to 900004 with the
+  new window), under the guide's 30 px. Not yet traced; a camera cut is the first suspect.
+
+### Fourth measurement (Oct 17, the reconciled engine, #37)
+
+The match engine changed under the test set (#37 merged into main), so the same five seeds were
+re-rendered at commit `443c4d5` with the same render parameters.
+
+- The ball is under 0.5 visible in 80 of 1,250 frames (**6.4%**; per clip 8.0%, 8.0%, 4.4%,
+  9.6%, 2.0%). This **meets the 5% minimum** for the first time; no render parameter changed to
+  get there.
+- **The render check fails** (`all_passed: false`): in seed 900002 (frames 4524 to 4529) player
+  a11 stands just below the bottom of the frame (his foot projects to y = 807 of 720) and only
+  his head is drawn, with no body under it. The box ends at his chin (y = 718), so the check
+  takes him for a whole player inside the frame and his foot is outside the box. The check is
+  right: a floating head is a rendering defect a viewer would see. Traced and fixed in the
+  fifth measurement.
+- Player height p05 is 19 px in seed 900001 (under the guide's 30 px), and p95 is 160 px in seed
+  900002 (over its 120 px). Both traced in the fifth measurement.
+
+### Fifth measurement (Oct 18, bodies drawn as their capsules)
+
+**The floating head.** `body_parts` labels every part as a capsule, `parts_box` bounds it as one
+and the body-shape tests measure it as one, but `web/render` drew each part as a lathe that
+closed to a point at both joints. Nothing was drawn between the top of the trunk (1.36 of his
+height over 1.84 m) and the base of the neck (1.44), so wherever the bottom edge of the frame
+crossed a player at that height, the frame held his head and neck and no shoulders, and his box
+ended at the chin. a11 in seed 900002 was that case for five frames. Each part now has round caps
+at both joints, so the drawn part is the labelled capsule and the trunk, neck and arms meet.
+`tests/test_render_body.py` slides the bottom edge from a player's shins to his chin (1.65 m and
+1.98 m players, side-on and facing away) and fails if his box ever stops short of it; it failed
+at 1.26 to 1.28 m and 1.52 m before the fix (renderer 0.3.1).
+
+**The player heights.** Both numbers were real boxes, but neither was a whole player in the main
+view:
+
+- p05 19 px (900001): every box below p05 was a player cut by an image edge, which the statistic
+  counted as a short player (it skipped only boxes cut by the top edge). Whole players in that
+  clip are 60 px at p05 (traced on a re-render with the same p05, median and p95).
+- p95 160 px (900002 at `443c4d5`): every box above p95 was in the `net` angle, the low
+  three-quarter beside the goal for four seconds after a goal, which is meant to be close. The
+  main view in that clip was 67 to 85 px (p05 to p95).
+
+The statistic now counts only boxes not cut by any edge, and reports each camera angle, since the
+guide's 30 to 120 px is for the main view.
+
+Re-rendered at commit `45e638d` (main with #83 merged into this branch; same seeds and render
+parameters). All checks pass, including determinism (labels and all 250 images of seed 900001
+identical):
+
+- ball projection max 0.26 px, keypoints max 0.0014 px, every player's foot inside its box, no
+  frame with a label problem.
+- The ball is under 0.5 visible in 79 of 1,250 frames (**6.32%**; per clip 8.8%, 13.6%, 2.0%,
+  3.6%, 3.6%), above the 5% minimum. This branch without the fix (`e699c8f`) gives 5.52%: round
+  shoulders, hips and feet are a little more body to hide the ball behind.
+- Whole players in the main view are 50 to 99 px tall (p05 to p95, per clip), inside the
+  guide's 30 to 120 px. The other angles: `tight` 82 to 142 px, `reverse` (far stand) 41 to 90 px.
+- #83 (energy in players' choices) changed the matches, so the windows differ from `443c4d5`'s and
+  a11's frames are no longer in seed 900002's clip; the test above is what holds the fix.
+
 The final proof comes later: detector recall on the fixed test set before and after each
 targeted round.
 
