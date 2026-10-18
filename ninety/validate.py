@@ -78,7 +78,24 @@ def check_schema(events: list[dict], frames: list[dict], problems: Problems) -> 
             problems["C1 frame schema"].append(f"frame {f.get('frame')}: {err.message}")
 
 
-def check_frames(events: list[dict], frames: list[dict], fps: float, problems: Problems) -> None:
+def loose_from_the_cut(frames: list[dict], upto: int) -> bool:
+    """In a window that opens after the kickoff, nobody held the ball from its first frame until frame
+    `upto`, so play that began before the cut (a pass in the air, a dead ball) may still be running.
+    A window is never excused a judgement just because the event that settles it is missing."""
+    return frames[0]["frame"] > 0 and not any(f.get("possessor") for f in frames if f["frame"] < upto)
+
+
+def in_flight_from_the_cut(frames: list[dict], upto: int) -> bool:
+    """Loose from the cut (above) and moving every frame up to frame `upto`: a pass or shot struck
+    before the cut is still travelling. Moving is more than the two roundings of a position can
+    make (2 * POSITION_PRECISION_M), so a ball at rest is never taken for one in flight."""
+    pos = [(f["ball"]["x"], f["ball"]["y"], f["ball"]["z"]) for f in frames if f["frame"] <= upto]
+    return loose_from_the_cut(frames, upto) and all(
+        math.dist(a, b) > 2 * POSITION_PRECISION_M for a, b in zip(pos, pos[1:], strict=False))
+
+
+def check_frames(events: list[dict], frames: list[dict], fps: float, problems: Problems,
+                 cut: bool = False) -> None:
     """C2 frame order; C3 the same players throughout, except legal substitutions."""
     for i, f in enumerate(frames):
         if f["frame"] != frames[0]["frame"] + i:
@@ -102,7 +119,12 @@ def check_frames(events: list[dict], frames: list[dict], fps: float, problems: P
             problems["C3 roster"].append(f"frame {f['frame']}: players change without a substitution")
             continue
         earlier = [e for e in events if e["frame"] < sub["frame"] and e["type"] != "pressure"]
-        if not earlier or earlier[-1]["type"] not in STOPPAGES:
+        # In a window (cut) that shows the ball loose since its first frame, the stoppage may be before
+        # it, if play does not go on without a restart (Law 3: substitutions only at a stoppage).
+        after = [e for e in events if e["frame"] > sub["frame"] and e["type"] in ON_BALL]
+        before_the_cut = cut and not earlier and loose_from_the_cut(frames, sub["frame"]) \
+            and (not after or after[0]["type"] in RESTARTS)
+        if not before_the_cut and (not earlier or earlier[-1]["type"] not in STOPPAGES):
             problems["C3 roster"].append(f"{sub['id']}: substitution while the ball is in play")
         made[sub["team"]] += 1
         if made[sub["team"]] > MAX_SUBSTITUTIONS:
@@ -110,14 +132,21 @@ def check_frames(events: list[dict], frames: list[dict], fps: float, problems: P
 
 
 def check_physics(events: list[dict], frames: list[dict], fps: float, roster: list[dict],
-                  problems: Problems) -> None:
+                  problems: Problems, cut: bool = False) -> None:
     """P1 to P6: speeds, acceleration, ground, gravity, ball at the possessor's feet."""
     dt = 1 / fps
-    # A kickoff restart may move everyone at once: the renderer cuts there.
-    restarts = {e["frame"] for e in events if e["type"] == "kickoff"}
+    # A restart may move everyone at once: kickoff, and the frame a dead ball is placed
+    # for a corner, throw, goal kick, free kick or penalty.
+    restarts = {e["frame"] for e in events if e["type"] in ("kickoff", "out_of_play", "foul", "offside")}
     # While the ball is out of play (Law 9) a new ball may be placed for the restart.
     dead: set[int] = set()
     out_at = None
+    # A window that opens on a dead ball: its first event is a restart, and nobody held the ball
+    # before it, because the ball went out before the cut.
+    first_play = next((e for e in events if e["type"] != "pressure"), None)
+    if cut and first_play is not None and first_play["type"] in RESTARTS \
+            and loose_from_the_cut(frames, first_play["frame"]):
+        out_at = frames[0]["frame"]
     for e in events:
         if e["type"] in DEAD_FROM and out_at is None:
             out_at = e["frame"]
@@ -138,7 +167,7 @@ def check_physics(events: list[dict], frames: list[dict], fps: float, roster: li
                 problems["P1 player speed"].append(f"frame {f['frame']}: {p['id']} moved at {speed:.1f} m/s")
         b, a = prev["ball"], f["ball"]
         speed = math.dist((a["x"], a["y"], a["z"]), (b["x"], b["y"], b["z"])) / dt
-        if speed > MAX_BALL_MPS and f["frame"] not in dead:
+        if speed > MAX_BALL_MPS and f["frame"] not in dead and f["frame"] not in restarts:
             problems["P3 ball speed"].append(f"frame {f['frame']}: ball moved at {speed:.1f} m/s")
 
     # P2: acceleration from speeds averaged over a short window, skipping windows with a restart.
@@ -252,8 +281,15 @@ def check_contacts(events: list[dict], frames: list[dict], keepers: set[str], pr
                         f"{e['id']}: {e['type']} by {e['player']}, but the ball was moving away from him")
 
 
-def check_events(events: list[dict], frames: list[dict], fps: float, meta: dict, problems: Problems) -> None:
-    """C4 to C9: events agree with frames, come in an order that makes sense, and add up."""
+def check_events(events: list[dict], frames: list[dict], fps: float, meta: dict, problems: Problems,
+                 cut: bool = False) -> None:
+    """C4 to C9: events agree with frames, come in an order that makes sense, and add up.
+
+    In a window cut from a longer match (cut), what happened beyond the cut is not in the clip, so a
+    judgement that needs it is not made, and only when the frames show it: a pass nobody has held
+    since it was played, still heading for its end point at the last frame with nothing after it,
+    and an interception or goal with the ball loose and moving from the first frame to it. Every
+    judgement whose evidence lies inside the clip is made exactly as for a whole match."""
     by_frame = {f["frame"]: f for f in frames}
     first, last = frames[0]["frame"], frames[-1]["frame"]
     team_of = {p["id"]: p["team"] for f in frames for p in f["players"]}
@@ -296,7 +332,19 @@ def check_events(events: list[dict], frames: list[dict], fps: float, meta: dict,
             later = [n["frame"] for n in events if n["frame"] > e["frame"] and n["type"] in ON_BALL]
             until = min(later, default=last)
             balls = [by_frame[n]["ball"] for n in range(e["frame"], until + 1) if n in by_frame]
-            if not any(math.hypot(b["x"] - e["end_x"], b["y"] - e["end_y"]) <= NEAR_M for b in balls):
+            # The clip ends before anything else happens to it: nobody has held the ball since it was
+            # played, and its last frame's motion, carried on in a straight line, passes within NEAR_M
+            # of the end point ahead of it.
+            final = by_frame[last]["ball"]
+            prior = by_frame.get(last - 1, by_frame[last])["ball"]
+            vx, vy = final["x"] - prior["x"], final["y"] - prior["y"]
+            wx, wy = e["end_x"] - final["x"], e["end_y"] - final["y"]
+            ahead = (wx * vx + wy * vy) / ((vx * vx + vy * vy) or math.inf)
+            closing = ahead > 0 and math.hypot(wx - ahead * vx, wy - ahead * vy) <= NEAR_M
+            held = any(by_frame[n].get("possessor") for n in range(e["frame"] + 1, last + 1) if n in by_frame)
+            still_going = cut and not later and not held and closing
+            if not still_going and \
+                    not any(math.hypot(b["x"] - e["end_x"], b["y"] - e["end_y"]) <= NEAR_M for b in balls):
                 where = f"({e['end_x']}, {e['end_y']})"
                 problems["C7 ball path"].append(f"{e['id']} {e['type']}: ball never reaches {where}")
         if e["type"] in ("pass", "shot") and e["frame"] > first:
@@ -319,10 +367,14 @@ def check_events(events: list[dict], frames: list[dict], fps: float, meta: dict,
     for e in events:
         if e["type"] == "interception":
             before = [p for p in passes if p["frame"] <= e["frame"]]
+            if not before and cut and in_flight_from_the_cut(frames, e["frame"]):
+                continue
             if not before or before[-1]["outcome"] != "fail" or before[-1].get("interceptor") != e["player"]:
                 problems["C8 event order"].append(f"{e['id']}: {e['player']} intercepted no failed pass")
         if e["type"] == "goal" and e.get("player"):  # an own goal (no scorer) needs no shot
             before = [s for s in shots if s["frame"] <= e["frame"]]
+            if not before and cut and in_flight_from_the_cut(frames, e["frame"]):
+                continue
             if not before or before[-1]["outcome"] != "goal" or before[-1]["player"] != e["player"]:
                 problems["C8 event order"].append(f"{e['id']}: goal by {e['player']} without a scoring shot")
 
@@ -358,11 +410,19 @@ def validate(clip: Path) -> Problems:
     check_schema(events, frames, problems)
     if problems:
         return dict(problems)
-    check_frames(events, frames, fps, problems)
+    # A window cut from a longer match names the match frames it covers, and must cover exactly them.
+    window = meta.get("window")
+    if window is not None:
+        span = (frames[0]["frame"], frames[-1]["frame"]) if frames else None
+        if not isinstance(window, dict) or span != (window.get("first_frame"), window.get("last_frame")):
+            problems["C1 files"].append(f"meta.json window {window} does not match the frames {span}")
+            return dict(problems)
+    cut = window is not None
+    check_frames(events, frames, fps, problems, cut)
     if any(k.startswith("C2") for k in problems):
         return dict(problems)
-    check_physics(events, frames, fps, meta.get("roster", []), problems)
-    check_events(events, frames, fps, meta, problems)
+    check_physics(events, frames, fps, meta.get("roster", []), problems, cut)
+    check_events(events, frames, fps, meta, problems, cut)
     return dict(problems)
 
 

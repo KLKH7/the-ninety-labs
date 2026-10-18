@@ -120,6 +120,32 @@ def test_looks_are_seeded_and_varied():
     assert a == b
     assert len({lk.skin for lk in a}) > 2 and len({lk.height_m for lk in a}) > 10
     assert all(1.65 <= lk.height_m <= 1.98 for lk in a)
+    # Hair shape is a second draw. These four fields are the looks-1 stream and must not move.
+    assert [(lk.id, lk.height_m, lk.build, lk.skin, lk.hair) for lk in a] == [
+        ("h1", 1.826, 1.048, "#8d5a3b", "#2b2b2b"),
+        ("h2", 1.839, 1.139, "#b07850", "#2b2b2b"),
+        ("h3", 1.737, 0.967, "#8d5a3b", "#6b4a2b"),
+        ("h4", 1.853, 1.122, "#6b4329", "#a37a4c"),
+        ("h5", 1.696, 1.008, "#f5d0b5", "#3b2516"),
+        ("h6", 1.671, 1.028, "#b07850", "#3b2516"),
+        ("h7", 1.781, 0.994, "#8d5a3b", "#3b2516"),
+        ("h8", 1.795, 0.978, "#d19a74", "#3b2516"),
+        ("h9", 1.783, 1.1, "#8d5a3b", "#6b4a2b"),
+        ("h10", 1.917, 1.045, "#4a2e1d", "#6b4a2b"),
+        ("h11", 1.772, 0.936, "#f5d0b5", "#a37a4c"),
+        ("a1", 1.844, 1.086, "#e8b897", "#6b4a2b"),
+        ("a2", 1.746, 1.052, "#8d5a3b", "#8a3b1d"),
+        ("a3", 1.892, 1.106, "#d19a74", "#a37a4c"),
+        ("a4", 1.808, 1.115, "#6b4329", "#1b1410"),
+        ("a5", 1.701, 1.103, "#e8b897", "#d9c08c"),
+        ("a6", 1.787, 1.114, "#e8b897", "#1b1410"),
+        ("a7", 1.86, 1.118, "#b07850", "#3b2516"),
+        ("a8", 1.806, 0.913, "#f5d0b5", "#3b2516"),
+        ("a9", 1.74, 0.984, "#8d5a3b", "#d9c08c"),
+        ("a10", 1.743, 1.052, "#4a2e1d", "#1b1410"),
+        ("a11", 1.816, 0.958, "#d19a74", "#a37a4c"),
+    ]
+    assert {lk.hair_style for lk in a} == {"bald", "short", "crown"}
 
 
 GANTRY = (52.5, -35.0, 20.0)
