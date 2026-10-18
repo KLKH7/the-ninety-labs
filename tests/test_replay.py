@@ -77,7 +77,7 @@ def test_a_judge_replay_is_keyed_by_the_claim():
 def test_the_slice_imports_the_moved_names_back():
     for name in ("Turn", "Recording", "ReplayMismatch", "replayer", "judge_prompt", "REPLAY_FORMAT"):
         assert getattr(slice, name) is getattr(replay, name)
-    assert replay.REPLAY_FORMAT == 2
+    assert replay.REPLAY_FORMAT == 3
 
 
 def test_the_committed_slice_recording_round_trips_byte_for_byte(tmp_path):

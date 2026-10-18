@@ -390,6 +390,21 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_slice_replay.py::test_every_committed_replay_still_replays` fails on the
   stale recording and passes on the re-recorded one.
 
+### 80. A replay pins the interface it tests, not the engine underneath
+- **What happened:** `replays/slice-minute2-plant.json` held only the models' answers, and the
+  replay rebuilt the fact-checker's events from the local engine. Every engine change changed the
+  checker's rejection reasons, so the Analyst's retry prompt changed and the replay failed, even
+  though no prompt or check had changed. Each break needed a live Foundry re-record from the
+  owner's Mac and a manual deploy of the branch's API.
+- **Rule:** a recording carries every input it was made against that is not under test (here the
+  match events the checker read), and the replay uses those. It still fails on a change to what
+  it tests (a prompt, a check's message, a handoff); a changed engine only warns that the
+  recording is stale.
+- **Check:** `tests/test_slice_replay.py::test_the_committed_replay_survives_an_engine_change`
+  plants an engine change and expects the same outcome and a `StaleRecording` warning;
+  `test_a_changed_analyst_prompt_still_fails_the_committed_replay` and
+  `test_a_changed_fact_check_message_still_fails_the_committed_replay` must still fail the replay.
+
 ### 33. One clock for viewers and agents
 - **What happened:** agent-facing minute and second values were rounded and combined differently
   from the scorebug's floored elapsed clock, producing off-by-one timestamps and occasional
@@ -557,7 +572,7 @@ short and actionable. This file is public: no research sources, product names or
   builds two windows where counting players near the ball picks the wrong one. Before a batch,
   `uv run ninety-data-stats <2-3 crowded clips> --stride 5 --input 640x640` shows the share.
 
-### 75. Copy an identity string from the system, not from the docs
+### 81. Copy an identity string from the system, not from the docs
 - **What happened:** the `agents-live` setup told the maintainer to trust the OIDC subject
   `repo:KLKH7/the-ninety-labs:environment:agents-live`, the format GitHub's docs show. This repo's
   tokens carry the owner and repo ids (`repo:KLKH7@210092633/the-ninety-labs@1417939631:...`),

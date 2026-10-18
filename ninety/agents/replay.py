@@ -8,8 +8,9 @@ instead (docs/LESSONS.md, lessons 32 and 44).
 
 Two formats:
 
-- `Recording`, format `REPLAY_FORMAT` (2): the thin slice (ninety/agents/slice.py), one Analyst and
-  one Judge. Its files in replays/ load and replay byte for byte as before the move.
+- `Recording`, format `REPLAY_FORMAT` (3): the thin slice (ninety/agents/slice.py), one Analyst and
+  one Judge, with the match events the live run checked claims against (lesson 80). Its files in
+  replays/ load and replay byte for byte as before the move.
 - `WorkflowRecording`, format `WORKFLOW_REPLAY_FORMAT` (1): any workflow and any roles. It also
   stores the commit it ran on and the published agent versions it called (`pins`), so a replay
   says what it is a replay of.
@@ -24,7 +25,7 @@ from pathlib import Path
 
 from ninety.agents.factcheck import Claim, Verdict
 
-REPLAY_FORMAT = 2
+REPLAY_FORMAT = 3
 WORKFLOW_REPLAY_FORMAT = 1
 
 Ask = Callable[[str], Awaitable[str]]
@@ -51,6 +52,7 @@ class Recording:
     model: str
     recorded_at: str
     turns: list[Turn]
+    events: list[dict]  # what the fact-checker checked claims against in the live run
 
     def save(self, path: str | Path) -> None:
         path = Path(path)
@@ -60,8 +62,12 @@ class Recording:
     @classmethod
     def load(cls, path: str | Path) -> Recording:
         data = json.loads(Path(path).read_text())
-        if data.pop("format", None) != REPLAY_FORMAT:
-            raise ValueError(f"{path}: not a format {REPLAY_FORMAT} slice recording")
+        found = data.pop("format", None)
+        if found != REPLAY_FORMAT:
+            raise ValueError(
+                f"{path}: format {found} slice recording, this code replays format {REPLAY_FORMAT}"
+                + (" (format 2 has no match events): record it again with --record" if found == 2 else "")
+            )
         data["turns"] = [Turn(**t) for t in data["turns"]]
         return cls(**data)
 

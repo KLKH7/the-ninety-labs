@@ -19,6 +19,11 @@ replies and the Judge's verdicts. The workflow, the handoffs and the code checks
 so anyone can run the slice without access to our Azure resources. If a prompt no longer matches
 the recording (the code checks changed, say), the replay stops instead of pairing an old answer
 with a new question.
+
+A recording also carries the match events the live run checked claims against, and the replay
+checks against those, not against a fresh simulation: a replay pins the agents' interface (prompts,
+checks, handoffs), not the engine underneath (docs/LESSONS.md, lesson 80). When the engine now
+produces different events, the replay still runs and warns that the recording is stale.
 """
 
 from __future__ import annotations
@@ -30,6 +35,7 @@ import json
 import re
 import sys
 import time
+import warnings
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 
@@ -79,6 +85,10 @@ class Task:
     minute: int
     feedback: list[str] = field(default_factory=list)
     attempt: int = 0
+
+
+class StaleRecording(UserWarning):
+    """The engine now produces different events from those a recording was made against."""
 
 
 @dataclass
@@ -162,10 +172,23 @@ class FactCheckExecutor(Executor):
             await ctx.yield_output(Outcome(False, draft.claim, attempt, self.trace))
 
 
+def match_events(seed: int, minutes: float) -> list[dict]:
+    """The events the fact-checker knows: every minute of the match, from the engine."""
+    return events_in(seed, minutes, 1, int(minutes) + 1)
+
+
 async def run_workflow(
-    ask: Ask, judge_fn: Judge, minute: int, plant: bool, seed: int, minutes: float, live: bool
+    ask: Ask,
+    judge_fn: Judge,
+    minute: int,
+    plant: bool,
+    seed: int,
+    minutes: float,
+    live: bool,
+    events: list[dict] | None = None,
 ) -> Outcome:
-    known = {e["id"]: e for e in events_in(seed, minutes, 1, int(minutes) + 1)}
+    """Runs the slice; checks claims against `events`, or the engine's events when not given."""
+    known = {e["id"]: e for e in (match_events(seed, minutes) if events is None else events)}
     trace: list[str] = []
     analyst = AnalystExecutor(ask, trace, plant, live, match_server.match_id(seed))
     checker = FactCheckExecutor(known, judge_fn, trace, live)
@@ -180,9 +203,10 @@ async def run_workflow(
 
 async def run_slice(
     minute: int, plant: bool, seed: int, minutes: float, trace_to: str = "foundry", content: bool = False
-) -> tuple[Outcome, list[Turn], str]:
+) -> tuple[Outcome, list[Turn], str, list[dict]]:
     """Live run on Foundry, calling the published agent versions pinned in foundry_agents.json.
-    Returns the outcome, every model answer (for --record) and which versions ran."""
+    Returns the outcome, every model answer and the events checked against (for --record), and
+    which versions ran."""
     if match_server.match_id(seed) not in match_server.MATCHES or minutes != match_server.MINUTES:
         raise ValueError(
             f"the match server serves {', '.join(match_server.MATCHES)} at {match_server.MINUTES} minutes"
@@ -218,16 +242,25 @@ async def run_slice(
             turns.append(Turn("judge", judge_prompt(claim), json.dumps(asdict(verdict))))
             return verdict
 
-        outcome = await run_workflow(ask, judge_live, minute, plant, seed, minutes, live=True)
+        events = match_events(seed, minutes)
+        outcome = await run_workflow(ask, judge_live, minute, plant, seed, minutes, True, events)
     telemetry.flush()
-    return outcome, turns, f"{', '.join(ran)} on {config.MODEL}"
+    return outcome, turns, f"{', '.join(ran)} on {config.MODEL}", events
 
 
 async def replay_slice(recording: Recording) -> Outcome:
-    """Re-runs the workflow and the code checks with the recorded answers in place of the models."""
+    """Re-runs the workflow and the code checks with the recorded answers in place of the models,
+    against the recorded events. Warns (never fails) when the engine has moved on from them."""
     r = recording
+    if match_events(r.seed, r.minutes) != r.events:
+        warnings.warn(
+            f"the engine now produces different events for seed {r.seed}; the replay checks "
+            f"against the {len(r.events)} recorded on {r.recorded_at}. Record it again to refresh it.",
+            StaleRecording,
+            stacklevel=2,
+        )
     ask, judge_replay = replayer(r.turns)
-    return await run_workflow(ask, judge_replay, r.minute, r.plant, r.seed, r.minutes, live=False)
+    return await run_workflow(ask, judge_replay, r.minute, r.plant, r.seed, r.minutes, False, r.events)
 
 
 def main() -> None:
@@ -260,7 +293,7 @@ def main() -> None:
             sys.exit(f"replay stopped: {e}. Record it again with --record.")
     else:
         try:
-            outcome, turns, ran = asyncio.run(
+            outcome, turns, ran, events = asyncio.run(
                 run_slice(
                     args.minute,
                     args.plant,
@@ -275,7 +308,9 @@ def main() -> None:
         print(f"ran {ran}")
         if args.record:
             stamp = datetime.now(UTC).isoformat(timespec="seconds")
-            Recording(args.minute, args.seed, args.minutes, args.plant, ran, stamp, turns).save(args.record)
+            Recording(args.minute, args.seed, args.minutes, args.plant, ran, stamp, turns, events).save(
+                args.record
+            )
     for line in outcome.trace:
         print(line)
     verdict = "ACCEPTED" if outcome.accepted else "REJECTED"
