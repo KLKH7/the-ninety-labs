@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 
 from ninety.render.checks import check_clip, digest
-from ninety.render.clip import ROOT, RenderUnavailable, browser_page, render_clip
+from ninety.render.clip import ROOT, RenderUnavailable, browser_page, render_clip, write_meta
 from ninety.render.params import parse_override
 from ninety.render.splits import TEST_SEEDS, check_seed, split_of, train_seeds
 
@@ -143,6 +143,15 @@ def _git_commit() -> str | None:
         ).stdout.strip()
     except (OSError, subprocess.CalledProcessError):
         return None
+
+
+def meta_main(argv: list[str] | None = None) -> None:
+    """Write meta.json for clips rendered before the renderer wrote it, from their own files."""
+    ap = argparse.ArgumentParser(description=meta_main.__doc__)
+    ap.add_argument("clips", nargs="+", type=Path, help="clip directories")
+    for d in ap.parse_args(argv).clips:
+        meta = write_meta(d)
+        print(json.dumps({"clip": str(d), "window": meta["window"], "score": meta["score"]}), flush=True)
 
 
 def check_main(argv: list[str] | None = None) -> None:
