@@ -44,6 +44,26 @@ audit then found the fixes physically wrong or inconsistent (lesson 36).
 | Kicks aimed down the middle | The Analyst (Opta), Feb 2024 | 21.2% of Premier League penalties aimed down the middle (35 of 165). Keepers "move late" and "can't move too early". |
 | Penalty save rate | premierleague.com | 17.7% of all penalties saved (407 of 2,296); 7.5% to 26.3% by season. *Verify.* |
 
+## Measured hand paths (Higueras-Herbada et al. 2020, Figure 2)
+
+The paper plots the keepers' mean hand position (both hands averaged) against time before the ball
+reaches the goal. It covers the 88 kicks where the keeper dived to the ball's side and went for it
+with both hands. Contact is at about 525 ms before the ball arrives. Values read from the figure, so
+about (*verify* against the data if they can be had):
+
+| | At contact | At the ball's arrival | Change |
+|---|---|---|---|
+| Hand height, high kicks (ball at 2.03 m) | about 0.5 to 0.65 m, a crouch | about 1.5 to 1.65 m | rises about 1 m from about 250 to 300 ms before arrival: roughly 4 m/s, levelling off about 80 ms before it |
+| Hand height, low kicks (ball at 0.37 m) | about 0.5 to 0.85 m | about 0.15 to 0.5 m | drifts down over the last 200 ms |
+| Hands across the goal (ball at about 2.3 m) | about 0 to 0.4 m | about 2 m (1.1 to 3.4 m by kicker) | about 2 m in the last 450 ms |
+
+So the hands start low, not in the middle third. They rise only about 1 m, at about 4 m/s, once the
+height is known. They never reach a high kick's mean height, which is why high kicks are saved
+least (9.1%).
+
+These measure the hands only. The body's height in the air has no source yet; it stays *design*,
+bounded below the hands.
+
 ## Proposed model
 
 One mechanism, built whole, with every estimate of the keeper updated in the same change (lesson 23).
@@ -54,9 +74,10 @@ One mechanism, built whole, with every estimate of the keeper updated in the sam
      direction, and the trailing leg behind.
    - Both hands and body are bounded in height by where the body actually is.
    - Once he has landed he is on the ground and covers only what a body lying there can.
-   - Sources: P11, P15, Monteiro.
-   - *Design, needs a source:* the height of the body over the dive, and how fast the hands can
-     move up or down once the height is known.
+   - Sources: P11, P15, Monteiro; the hands' height over time from Higueras-Herbada Figure 2
+     (above): from a crouch at about 0.5 to 0.6 m, up about 1 m at about 4 m/s or down, once the
+     ball's height is known.
+   - *Design:* the body's height over the dive, kept below the hands.
 2. **One function says where his hands and body can be at time t.** The touch, the body contact,
    the dive planner (`keeper_dive`'s `need`), the shooter's judgement (`offball.keeper_reach_m`, O1)
    and the passer's race (`reach_for`) all use it.
