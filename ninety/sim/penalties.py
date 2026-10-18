@@ -1,0 +1,132 @@
+"""How penalties end against the keeper, in the form the published studies report them: where the
+kick ended (the middle or a side third of the goal's width, and the third of its height) against
+what the keeper did (stayed, or dived toward or away from it). A report, never a gate: nothing in
+the engine is tuned to these numbers (docs/GROUNDING.md P15, A2; decision 0002).
+
+    uv run python -m ninety.sim.penalties    # writes docs/eval/penalties.md
+"""
+
+from __future__ import annotations
+
+import argparse
+from collections import Counter, defaultdict
+from concurrent.futures import ProcessPoolExecutor
+from pathlib import Path
+
+from ninety.sim.engine import FPS, PENALTY_MARK_M, PITCH_Y, Engine, attack_dir, goal_x, other
+
+ROOT = Path(__file__).resolve().parents[2]
+GOAL_HALF_WIDTH_M, CROSSBAR_M = 3.66, 2.44  # Law 1
+THIRD_WIDE_M = 2 * GOAL_HALF_WIDTH_M / 3  # Bar-Eli et al. 2007 divide the goal into 3 x 3 cells
+THIRD_HIGH_M = CROSSBAR_M / 3  # Higueras-Herbada et al. 2020: low, middle, high by thirds of 244 cm
+WARM_UP_S = 20.0  # play this long first, so the penalty is given in an ordinary state of play
+KICK_LIMIT_S = 200.0  # a bound only: the wait before a penalty is 100 to 140 s (D10)
+KEPT = ("on_target", "blocked")  # saved, or parried and cleared by a defender ("blocked" in the record)
+ON_TARGET = ("goal", *KEPT)
+
+# Published, by the same cells: Bar-Eli et al. 2007, Table 2 (286 penalties on target), stops over kicks.
+BAR_ELI = {("side", "toward"): (31, 113), ("side", "away"): (0, 83), ("side", "stay"): (0, 8),
+           ("middle", "dive"): (5, 72), ("middle", "stay"): (6, 10)}
+BAR_ELI_ALL = (42, 286)
+# Higueras-Herbada et al. 2020 (Frontiers in Psychology 11:311): saves by the height of the kick.
+HEIGHT_SAVED = {"low": "16.5%", "middle": "33.5%", "high": "9.1%"}
+
+
+def one(seed: int) -> dict | None:
+    """One penalty, given after WARM_UP_S of play to the side's best finisher, with the real wait
+    before it: where it crossed the keeper's line, what the keeper did, and how it ended."""
+    e = Engine(seed)
+    e.kickoff("home")
+    for _ in range(int(WARM_UP_S * FPS)):
+        e.step()
+    e.possessor = None
+    e.kicked = None
+    team = "home"
+    mark = (goal_x(team) - attack_dir(team) * PENALTY_MARK_M, PITCH_Y / 2)
+    outfield = [q for q in e.players if q.team == team and q.role != "GK"]
+    taker = max(outfield, key=lambda q: q.profile["finishing"])
+    keeper = e.keeper(other(team))
+    e.stop("penalty_kick", team, mark, taker.id)
+    rec: dict = {"seed": seed}
+    shot = None
+    for _ in range(int(KICK_LIMIT_S * FPS)):
+        e.step()
+        if shot is None and e.kicked and e.kicked["type"] == "shot":
+            shot = e.kicked
+        if shot is not None and "cross" not in rec:
+            arrival = e.ball_at_x(keeper.x)
+            if arrival:
+                rec["cross"], rec["z"] = arrival[1] - PITCH_Y / 2, arrival[2]
+        if shot is not None and "dive" not in rec and e.dive and e.dive[0] == keeper.id:
+            rec["dive"] = e.dive[3]
+        if shot is not None and shot.get("outcome"):
+            rec["outcome"] = shot["outcome"]
+            return rec
+    return rec if "outcome" in rec else None
+
+
+def tabulate(kicks: list[dict]) -> dict:
+    """Group kicks on target by the published cells: the third of the goal's width the kick ended
+    in against what the keeper did, and the third of its height; kept out of each."""
+    cells: dict = defaultdict(Counter)
+    heights: dict = defaultdict(Counter)
+    total = Counter()
+    for k in kicks:
+        if k.get("outcome") not in ON_TARGET or "cross" not in k:
+            continue
+        kept = k["outcome"] in KEPT
+        total["n"] += 1
+        total["kept"] += kept
+        where = "middle" if abs(k["cross"]) < THIRD_WIDE_M / 2 else "side"
+        dive = k.get("dive")
+        if dive is None:
+            act = "stay"
+        elif where == "middle":
+            act = "dive"
+        else:
+            act = "toward" if dive * k["cross"] > 0 else "away"
+        cells[(where, act)]["n"] += 1
+        cells[(where, act)]["kept"] += kept
+        band = "low" if k["z"] < THIRD_HIGH_M else ("middle" if k["z"] < 2 * THIRD_HIGH_M else "high")
+        heights[band]["n"] += 1
+        heights[band]["kept"] += kept
+    return {"total": total, "cells": cells, "heights": heights}
+
+
+def share(kept: int, n: int) -> str:
+    return f"{kept} of {n} ({kept / n:.1%})" if n else "none"
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--kicks", type=int, default=400)
+    ap.add_argument("--out", default=str(ROOT / "docs/eval/penalties.md"))
+    args = ap.parse_args()
+    with ProcessPoolExecutor() as pool:
+        kicks = [k for k in pool.map(one, range(args.kicks)) if k]
+    t = tabulate(kicks)
+    outcomes = Counter(k.get("outcome") for k in kicks)
+    lines = ["# Penalties against the keeper", "",
+             f"Generated by `uv run python -m ninety.sim.penalties` with {args.kicks} penalties (seeds 0 to "
+             f"{args.kicks - 1}): {WARM_UP_S:g} s of play, then a penalty to the home side's best finisher "
+             "with the real wait before the kick. Each kick is placed by where it crossed the keeper's line: "
+             "the middle or a side third of the goal's width, and the third of its height. Kept out: "
+             "saved, or parried and cleared by a defender (the shot record calls that blocked). "
+             "\"Stay\" is a keeper who did not dive. A report, never a target.", "",
+             f"Outcomes: {dict(sorted(outcomes.items(), key=lambda kv: str(kv[0])))}.", "",
+             "| Kick ended | Keeper | Kept out | Bar-Eli et al. 2007, Table 2 |", "|---|---|---|---|"]
+    for key in BAR_ELI:
+        c = t["cells"][key]
+        lines.append(f"| {key[0]} third | {key[1]} | {share(c['kept'], c['n'])} | {share(*BAR_ELI[key])} |")
+    total = t["total"]
+    lines.append(f"| all on target | | {share(total['kept'], total['n'])} | {share(*BAR_ELI_ALL)} |")
+    lines += ["", "| Height | Kept out | Higueras-Herbada et al. 2020, saved |", "|---|---|---|"]
+    for band in ("low", "middle", "high"):
+        c = t["heights"][band]
+        lines.append(f"| {band} | {share(c['kept'], c['n'])} | {HEIGHT_SAVED[band]} |")
+    Path(args.out).write_text("\n".join(lines) + "\n")
+    print("\n".join(lines[6:]))
+
+
+if __name__ == "__main__":
+    main()
