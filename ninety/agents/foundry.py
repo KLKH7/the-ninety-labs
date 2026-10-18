@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import hashlib
+import inspect
 import json
 import sys
 import warnings
@@ -37,6 +38,7 @@ REGISTRY = Path(__file__).with_name("foundry_agents.json")
 MCP_CONNECTION = "ninety-match-mcp"  # Foundry project connection holding the MCP key (infra/main.bicep)
 GUARDRAIL = "ninety-guardrail"  # Microsoft.CognitiveServices/accounts/raiPolicies in infra/main.bicep
 PREFIX = "ninety-"
+DESCRIPTIONS = {"description", "server_description"}  # keys whose text can come from a docstring
 
 # to_prompt_agent is marked experimental; we pin agent-framework-foundry in uv.lock and test it.
 warnings.filterwarnings("ignore", message=r"\[TO_PROMPT_AGENT\]")
@@ -52,8 +54,24 @@ def foundry_name(agent: Agent) -> str:
 
 def definition(agent: Agent, guardrail: str = GUARDRAIL) -> PromptAgentDefinition:
     """The prompt agent for `agent`. Fingerprints use the guardrail's name; publishing passes the
-    full resource id Foundry requires, which holds our subscription id and stays out of the repo."""
-    return to_prompt_agent(agent, rai_config=RaiConfig(rai_policy_name=guardrail))
+    full resource id Foundry requires, which holds our subscription id and stays out of the repo.
+
+    Tool descriptions come from docstrings, which Python 3.13 dedents at compile time and 3.11 and
+    3.12 do not; they are cleaned here so the fingerprint and what is published agree on every
+    Python we support."""
+    defn = to_prompt_agent(agent, rai_config=RaiConfig(rai_policy_name=guardrail))
+    return PromptAgentDefinition(_clean_descriptions(defn.as_dict()))
+
+
+def _clean_descriptions(node):
+    if isinstance(node, dict):
+        return {
+            k: inspect.cleandoc(v) if k in DESCRIPTIONS and isinstance(v, str) else _clean_descriptions(v)
+            for k, v in node.items()
+        }
+    if isinstance(node, list):
+        return [_clean_descriptions(v) for v in node]
+    return node
 
 
 def guardrail_id() -> str:
