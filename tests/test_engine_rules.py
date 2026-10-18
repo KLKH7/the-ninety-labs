@@ -1472,12 +1472,53 @@ def test_a_carried_ball_does_not_pass_through_the_post():
 
 
 def test_a_dead_ball_rolling_on_does_not_pass_through_the_post():
-    # P17: after it goes out the dead ball rolls on (tick_restart); it still meets the frame.
+    # P17: just out over the goal line, the dead ball rolls on across behind the goal (tick_restart);
+    # it still meets the post.
     e = Engine(1)
     e.stop("goal_kick", "away", (99.5, 34.0), "a1")
-    e.ball = (105.5, 37.72, 0.4, -3.0, 0.0, 0.0)  # behind the post, rolling back toward it
+    e.ball = (105.12, 38.4, 0.0, 0.1, -5.0, 0.0)
     worst = math.inf
     for _ in range(10):
         e.tick_restart()
         worst = min(worst, _clear_of_frame(e))
     assert worst > -1e-6
+
+
+def test_a_carried_ball_touching_the_post_slides_along_it():
+    # Lesson 27: drawn partly into the post and partly along it, the ball stops going into the post
+    # but moves on along it, and is never inside it.
+    from ninety.sim.engine import POST_RADIUS, frame_gap
+    e = Engine(1)
+    touching = ball.RADIUS + POST_RADIUS
+    _, axis = frame_gap((104.8, 37.7, ball.RADIUS), 105.0)
+    start = (axis[0] - touching - 1e-4, axis[1], 0.0)
+    e.carry_ball(start, (start[0] + 0.05, start[1] - 0.05, 0.0), (0.0, 0.0, 0.0))
+    assert _clear_of_frame(e) > -1e-6
+    assert e.ball[1] < start[1] - 0.04  # it slid along the post
+
+
+def test_a_carry_that_never_meets_the_frame_keeps_the_carriers_velocity():
+    e = Engine(1)
+    p = e.by_id["h6"]
+    p.x, p.y, p.vx, p.vy = 50.0, 34.0, 4.0, 1.0
+    e.ball = (50.6, 34.1, 0.0, 4.0, 1.0, 0.0)
+    e.give(p.id)
+    e.tick_carrier()
+    assert e.possessor == p.id and e.ball[3:] == (p.vx, p.vy, 0.0)
+
+
+def test_carried_and_controlled_balls_both_go_through_the_frame_rule():
+    import sys
+    e = Engine(1)
+    seen = set()
+    carry = e.carry_ball
+
+    def spy(*a):
+        seen.add(sys._getframe(1).f_code.co_name)
+        return carry(*a)
+
+    e.carry_ball = spy
+    e.kickoff("home")
+    for _ in range(25 * 60):
+        e.step()
+    assert {"tick_carrier", "contact"} <= seen

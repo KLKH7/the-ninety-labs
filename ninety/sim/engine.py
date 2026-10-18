@@ -941,7 +941,7 @@ class Engine:
                 k = (shape.RADIUS_M + ball.RADIUS) / gap
                 cx, cy = sx + (cx - sx) * k, sy + (cy - sy) * k
             rest = (1.0 - s) * dt  # and it moves on with him for the rest of the step
-            self.ball = (cx + p.vx * rest, cy + p.vy * rest, cz, p.vx, p.vy, 0.0)
+            self.carry_ball((cx, cy, cz), (cx + p.vx * rest, cy + p.vy * rest, cz), (p.vx, p.vy, 0.0))
             if self.tackle:  # who came away with the ball decides the tackle
                 self.tackle["outcome"] = "success" if p.team == self.tackle["team"] else "fail"
                 self.tackle = None
@@ -1156,6 +1156,33 @@ class Engine:
             self.bumped = None
             self.chase = {}
             return
+
+    def carry_ball(self, start: tuple[float, float, float], target: tuple[float, float, float],
+                   keep: tuple[float, float, float]) -> None:
+        """P17: move a ball a player carries or has just controlled from `start` to `target`,
+        meeting the goal frame like any other ball (woodwork), judged on how it really moves. If it
+        meets the frame, the part of the move into the frame stops there and the rest slides along
+        it (lesson 27: a contact does not swallow the rest of the move), a micrometre clear of it so
+        the slide is not read as a new contact. Untouched, it keeps the velocity `keep` (his)."""
+        moved = tuple((b - a) / DT for a, b in zip(start, target, strict=True))
+        self.ball = (*target, *moved)
+        self.woodwork((*start, *moved))
+        if self.ball[:3] == tuple(target):
+            self.ball = (*target, *keep)
+            return
+        cx, cy, cz = self.ball[:3]
+        line = 0.0 if cx < PITCH_X / 2 else PITCH_X
+        _, axis = frame_gap((cx, cy, cz + ball.RADIUS), line)
+        n = unit(cx - axis[0], cy - axis[1], cz + ball.RADIUS - axis[2])
+        rest = [b - a for a, b in zip((cx, cy, cz), target, strict=True)]
+        into = sum(r * k for r, k in zip(rest, n, strict=True))
+        if into < 0:
+            rest = [r - into * k + 1e-6 * k for r, k in zip(rest, n, strict=True)]
+        end = (cx + rest[0], cy + rest[1], max(cz + rest[2], 0.0))
+        slide = tuple(r / DT for r in rest)
+        self.ball = (*end, *slide)
+        self.woodwork((cx, cy, cz, *slide))
+        self.ball = (*self.ball[:3], *((b - a) / DT for a, b in zip(start, self.ball[:3], strict=True)))
 
     def went_out(self, before: ball.State) -> bool:
         """Law 9: out once the whole ball has crossed a goal line or touchline. Where and how high
@@ -1772,14 +1799,7 @@ class Engine:
             bx, by, bz = self.settle(carrier, bx, by, bz, fx, fy, side, step * math.hypot(dx, dy) / d)
             bz = bz + dz / d * step
         before = self.ball
-        # P17: a carried ball meets the frame like any other, judged on how it really moved this
-        # frame (drawn to his feet, not only with him); untouched, it keeps his velocity.
-        bz = max(bz, 0.0)
-        moved = ((bx - before[0]) / DT, (by - before[1]) / DT, (bz - before[2]) / DT)
-        self.ball = (bx, by, bz, *moved)
-        self.woodwork((*before[:3], *moved))
-        if self.ball[:3] == (bx, by, bz):
-            self.ball = (bx, by, bz, carrier.vx, carrier.vy, 0.0)
+        self.carry_ball(before[:3], (bx, by, max(bz, 0.0)), (carrier.vx, carrier.vy, 0.0))
         if self.went_out(before):  # Law 9 applies to a ball at a player's feet too
             self.possessor = None
             return
@@ -1787,7 +1807,8 @@ class Engine:
             self.pressed[opp] = self.t
             self.emit("pressure", opp, presser.x, presser.y, player=presser.id, receiver=carrier.id)
         close = self.closest_opponent(carrier) < CLOSE_CONTROL_M
-        if (self.dribble_to and not self.windup and not close and math.hypot(fx - bx, fy - by) < AT_FOOT_M
+        if (self.dribble_to and not self.windup and not close
+                and math.hypot(fx - self.ball[0], fy - self.ball[1]) < AT_FOOT_M
                 and self.can_strike(carrier, *self.dribble_to)):  # a touch is a kick: he faces it (P16)
             if self.touch_ahead(carrier):
                 return

@@ -532,14 +532,17 @@ short and actionable. This file is public: no research sources, product names or
 
 ### 54. Every way the ball moves must pass through the same collisions
 - **What happened:** the goal frame was made exact for a ball in flight and for the rest of a
-  frame after a deflection, but a ball carried at a player's feet and a dead ball rolling on after
-  it went out each moved by their own code, which never asked about the frame. A keeper holding
-  the ball beside his post carried it into the post. It stayed hidden until an unrelated change
-  moved the random stream onto that situation. Calling the collision there was not enough: the
-  carried ball stored the carrier's velocity, not how it moved that frame, so the collision missed
-  it entering and never pushed it out once it was in.
+  frame after a deflection, but a ball carried at a player's feet, a ball moved on with a player in
+  the frame he controls it, and a dead ball rolling on after it went out each moved by their own
+  code, which never asked about the frame. A keeper holding the ball beside his post carried it into
+  the post; it stayed hidden until a change moved the random stream onto that situation. Calling the
+  collision there was not enough twice over: the carried ball stored the carrier's velocity, not how
+  it moved that frame, so the collision missed it entering; and once judged correctly, a carried
+  ball that touched the frame stuck to it (0.72 s hanging under the bar in one match), because the
+  collision kept it at the contact and the next frame's pull pushed it back in, as lesson 27 warns.
 - **Rule:** list every place that writes the ball's position (free flight, contact, the carrier,
-  restarts) and make each one go through the same collision rules, judged on the motion the ball
-  actually made that frame.
+  control, restarts) and make each one go through the same collision rules, judged on the motion
+  the ball actually made that frame, with the rest of the move resolved after a contact.
 - **Check:** `grep -n "self.ball = " ninety/sim/engine.py`; for each, say which collisions it goes
-  through, and test the ones that move the ball (a must-fail test per path).
+  through, and test the ones that move the ball (a must-fail test per path, and one that the paths
+  call the shared rule).
