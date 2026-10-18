@@ -3,7 +3,7 @@
 `math.exp`, `math.sin` and the other transcendental functions call the platform's C library, and
 Apple's and glibc's disagree in the last bit for some inputs (about 1 `exp` in 500, 1 `erf` in 3).
 A match is chaotic, so one bit in a player's profile became a different match on macOS and on
-Linux (lesson 26). These functions use only operations IEEE 754 requires to round exactly (+, -,
+Linux (lesson 46). These functions use only operations IEEE 754 requires to round exactly (+, -,
 *, /, sqrt) and exact ones (floor, frexp, ldexp), so every platform computes the same result.
 
 `exp`, `log`, `sin`, `cos` and `atan2` follow fdlibm's algorithms and coefficients (see

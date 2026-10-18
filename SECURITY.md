@@ -36,7 +36,7 @@ Please do not open a public issue. Use GitHub's
 - **Viewer input is data.** Free text a viewer types (a favourite player, a question) is
   length-capped, validated against the roster or an allow-list where possible, and never treated
   as an instruction.
-- **Tools are read-only and scoped.** The MCP server exposes match-query tools only: no file
+- **Tools are read-only and scoped.** The MCP server exposes match-query tools only, over a fixed list of precomputed matches, and its public endpoint answers only with the key held in Key Vault and the Foundry connection: no file
   system, shell, network fetch or write access.
 - **The fact-checking agent gates output.** Any sentence whose numbers or entities are not in the
   evidence is rejected before it reaches the screen.
@@ -46,7 +46,9 @@ Please do not open a public issue. Use GitHub's
   collected beyond optional viewer preferences, which stay in the browser.
 
 ### Supply chain
-- **Dependencies are pinned** (`uv.lock`) and limited to permissive licences, with two narrow
-  exceptions; never GPL or AGPL. The full rule is in [AGENTS.md](AGENTS.md) (Hard rules).
+- **Dependencies are pinned** (`uv.lock`) and limited to permissive licences, with three narrow
+  exceptions for runtimes bundled in a dependency's wheel; never GPL or AGPL otherwise. The full rule
+  is in [AGENTS.md](AGENTS.md) (Hard rules); every locked package and its licence is listed in
+  [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), checked by `tests/test_third_party_notices.py`.
 - **Dependabot alerts and security updates** are on.
 - **CI** runs tests and a secret scan on every push.

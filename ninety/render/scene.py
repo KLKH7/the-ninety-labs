@@ -1,8 +1,12 @@
 """Scene geometry shared by the labels (Python) and the pixels (three.js).
 
-Players are built from capsules (thighs, shins, torso, arms) and spheres (head, hair). Python
-computes every capsule in world coordinates for every frame and sends them to the page, so the
-geometry that is drawn and the geometry that is labelled are the same numbers.
+Players are labelled from capsules (thighs, shins, torso, arms) and spheres (head, hair). Python
+computes every capsule in world coordinates for every frame. The page skins a mesh inside that
+volume and draws the capsules for the ball. The labelled box stays the capsule box. Standing, trunk and
+arms are drawn to fill the body shape the engine's contact physics uses (ninety/sim/shape.py)
+between hip and shoulder height, turned the way the engine says he faces. The legs are narrower
+than that shape, and running, the arms swing and the trunk leans outside it (docs/GROUNDING.md,
+P11).
 """
 
 from __future__ import annotations
@@ -12,6 +16,7 @@ import random
 from dataclasses import dataclass
 
 from ninety.render.camera import Camera
+from ninety.sim import shape
 
 BALL_RADIUS = 0.11
 STRIDE_M = 1.7  # fallback, used only where a caller has no speed yet
@@ -48,6 +53,7 @@ def turn_toward(heading: float, target: float, dt: float, rate: float = 5.0) -> 
         diff = -cap
     return heading + diff
 
+
 SKIN_TONES = ("#f5d0b5", "#e8b897", "#d19a74", "#b07850", "#8d5a3b", "#6b4329", "#4a2e1d")
 HAIR_COLORS = ("#1b1410", "#3b2516", "#6b4a2b", "#a37a4c", "#d9c08c", "#2b2b2b", "#8a3b1d")
 
@@ -63,10 +69,13 @@ class Look:
     build: float  # 0.9 slim .. 1.15 broad
     skin: str
     hair: str
+    hair_style: str = "short"  # bald, short, crown. A second draw, so the fields above stay put.
 
 
 def sample_looks(players: list[dict], seed: int) -> list[Look]:
     rng = random.Random(f"looks-{seed}")
+    # Own stream. Drawing it on `rng` would move the next player's height and shirt colour.
+    shape = random.Random(f"looks-shape-{seed}")
     looks = []
     for p in players:
         looks.append(
@@ -78,6 +87,7 @@ def sample_looks(players: list[dict], seed: int) -> list[Look]:
                 build=round(rng.uniform(0.9, 1.15), 3),
                 skin=rng.choice(SKIN_TONES),
                 hair=rng.choice(HAIR_COLORS),
+                hair_style=shape.choice(("bald", "short", "short", "crown")),
             )
         )
     return looks
@@ -109,6 +119,40 @@ def update_gait(g: Gait, dx: float, dy: float, dt: float, face: tuple[float, flo
     diff = (target - g.heading + math.pi) % (2 * math.pi) - math.pi
     g.heading = turn_toward(g.heading, g.heading + diff, dt)
     g.phase = (g.phase + 2 * math.pi * d / _stride(speed)) % (2 * math.pi)
+
+
+def advance_gaits(gaits: dict[str, Gait], prev_xy: dict[str, tuple[float, float]], frame: dict,
+                  dt: float) -> None:
+    """One frame of every player's gait: stride from how far he moved, and the way he faces, his
+    speed and his pose from the engine (face), so the body is drawn turned as it collides."""
+    bx, by = frame["ball"]["x"], frame["ball"]["y"]
+    for pl in frame["players"]:
+        px, py = prev_xy.get(pl["id"], (pl["x"], pl["y"]))
+        update_gait(gaits[pl["id"]], pl["x"] - px, pl["y"] - py, dt, (bx - pl["x"], by - pl["y"]))
+        prev_xy[pl["id"]] = (pl["x"], pl["y"])
+        face(gaits[pl["id"]], pl)
+
+
+def face(g: Gait, player: dict) -> None:
+    """Turn the drawn body the way the engine says he faces, when the frame says (the engine
+    already limits how fast a body turns, GROUNDING P16), so it is drawn as it collides. The
+    engine's speed and pose (run, strike, dive, throw, the part that met the ball) come with it."""
+    if "heading" in player:
+        g.heading = player["heading"]
+    if "vx" in player:
+        g.speed = math.hypot(player["vx"], player.get("vy", 0.0))
+    if "action" in player:
+        g.action = player["action"]
+        g.dive = player.get("dive", 0.0)
+
+
+def reach_sign(x: float, y: float, g: Gait, ball: tuple[float, ...] | None) -> float:
+    """Which foot the ball is on: 1 is his left, -1 his right. 0 if the pose does not pick a side."""
+    if ball is None or g.action not in ("strike", "foot", "thigh"):
+        return 0.0
+    hx, hy = math.cos(g.heading), math.sin(g.heading)
+    lateral = (ball[0] - x) * -hy + (ball[1] - y) * hx
+    return 1.0 if lateral >= 0 else -1.0
 
 
 def body_parts(
@@ -173,6 +217,10 @@ def body_parts(
         scale = min(1.0, max_m / dist)
         return of + vf * scale, os + vs * scale, max(oz + vz * scale, 0.02)
 
+    sleeve_r = 0.06 * k
+    arm_r = 0.048 * k
+    # The outer edge of the sleeves is the shoulder breadth over the deltoids (shape.py, P11).
+    shoulder_y = shape.SHOULDER_BREADTH_M / 2 - sleeve_r
     parts = []
     for side, sign in (("l", 1.0), ("r", -1.0)):
         swing = amp * s * sign
@@ -234,11 +282,10 @@ def body_parts(
         parts.append({"n": f"thigh_{side}", "a": hip, "b": knee, "r": round(0.085 * k * w, 4), "c": "shorts"})
         parts.append({"n": f"shin_{side}", "a": knee, "b": ankle, "r": round(0.058 * k * w, 4), "c": "socks"})
         parts.append({"n": f"boot_{side}", "a": ankle, "b": toe, "r": round(0.042 * k, 4), "c": "boots"})
-        # Opposite arm, elbow kept bent so a run pumps instead of hanging straight.
+        # Opposite arm, elbow kept bent so a run pumps instead of hanging straight. Standing, the
+        # sleeve hangs inside the deltoid and the hand inside the shoulder breadth (shape.py, P11).
         pump = -swing * (1.35 if pressing else 0.65)
-        if g.action == "dive":
-            pump = dive * sign * 0.15 * k
-        shoulder = at(lean, 0.20 * k * w * sign, 1.42 * k)
+        shoulder = at(lean, shoulder_y * sign, 1.40 * k)
         if kicking:
             elbow = at(lean + 0.08 * k, 0.24 * k * w * sign, 1.22 * k)
             hand = at(lean + 0.16 * k, 0.16 * k * w * sign, 1.05 * k)
@@ -263,42 +310,26 @@ def body_parts(
             elbow = at(lean, 0.28 * k * sign, 1.22 * k)
             hand = at(lean + 0.04 * k, 0.16 * k * sign, 1.02 * k)
         else:
-            elbow = at(pump * 0.55 + lean, 0.26 * k * w * sign, 1.16 * k)
-            hand = at(pump * 0.12 + lean, 0.18 * k * w * sign, 0.96 * k)
-        parts.append({"n": f"arm_{side}", "a": shoulder, "b": elbow, "r": round(0.05 * k, 4), "c": "shirt"})
-        parts.append({"n": f"forearm_{side}", "a": elbow, "b": hand, "r": round(0.038 * k, 4), "c": "skin"})
-    hip_r = round(min(0.16 * k * (0.9 + 0.1 * w), 0.20), 4)
-    # The contact cylinder is 0.26 m. The shirt fills toward it and does not stick past it.
-    torso_r = round(min(0.23 * (0.92 + 0.08 * w), 0.245), 4)
-    sh_r = round(min(0.075 * k, 0.08), 4)
-    sh_side = round(min(0.175 * k * w, 0.26 - sh_r), 4)
-    parts.append(
-        {
-            "n": "hips",
-            "a": at(0.0, 0.0, 0.90 * k),
-            "b": at(lean * 0.4, 0.0, 1.02 * k),
-            "r": hip_r,
-            "c": "shorts",
-        }
-    )
-    parts.append(
-        {
-            "n": "torso",
-            "a": at(lean * 0.4, 0.0, 1.04 * k),
-            "b": at(lean, 0.0, 1.40 * k),
-            "r": torso_r,
-            "c": "shirt",
-        }
-    )
-    parts.append(
-        {
-            "n": "shoulders",
-            "a": at(lean, sh_side, 1.40 * k),
-            "b": at(lean, -sh_side, 1.40 * k),
-            "r": sh_r,
-            "c": "shirt",
-        }
-    )
+            elbow = at(pump * 0.55 + lean, shoulder_y * sign, 1.16 * k)
+            hand = at(pump * 0.12 + lean, (shoulder_y + sleeve_r - arm_r) * sign, 0.93 * k)
+        parts.append({"n": f"arm_{side}", "a": shoulder, "b": elbow, "r": round(sleeve_r, 4), "c": "shirt"})
+        parts.append({"n": f"forearm_{side}", "a": elbow, "b": hand, "r": round(arm_r, 4), "c": "skin"})
+    # The trunk: three capsules side by side, each as thick as the chest is deep, filling the width
+    # up to the inside of the hanging arms, so at chest height, trunk and arms span the engine's
+    # body (shape.py) across and front to back.
+    half = shape.CHEST_DEPTH_M / 2
+    arm_inner = shoulder_y + sleeve_r - 2 * arm_r
+    trunk_y = max(0.0, arm_inner - half)
+    for side, sign in (("l", 1.0), ("", 0.0), ("r", -1.0)):
+        parts.append(
+            {
+                "n": f"torso_{side}" if side else "torso",
+                "a": at(lean * 0.4, trunk_y * sign, 0.98 * k),
+                "b": at(lean, trunk_y * sign, 1.36 * k),
+                "r": round(half, 4),
+                "c": "shirt",
+            }
+        )
     parts.append(
         {
             "n": "neck",
@@ -356,7 +387,8 @@ def ball_parts(x: float, y: float, z: float, spin: tuple[float, float, float] | 
 
 
 def drawn_ball(frame: dict, carrier_heading: float | None = None) -> tuple[float, float, float]:
-    """The ball is drawn where the engine left it, including at a carrier's feet."""
+    """Where the ball is drawn: where the engine has it. A carrier's ball is already against his
+    body on the side he faces (engine.py, tick_carrier), so it is drawn there, not moved."""
     b = frame["ball"]
     return (b["x"], b["y"], b["z"])
 
@@ -421,14 +453,66 @@ def crowding(frame: dict, radius: float = 4.0) -> int:
     return sum(1 for p in frame["players"] if math.hypot(p["x"] - bx, p["y"] - by) <= radius)
 
 
-def crowded_start(frames: list[dict], n: int, earliest: int, latest: int, step: int = 25) -> int:
-    """Start frame of the n-frame window with the most players near the ball."""
-    best, best_score = earliest, -1.0
+# A player stands in for his drawn body: the torso capsule body_parts draws (radius 0.23 m at an
+# average build) up to the mean height sample_looks draws (1.81 m). Only the window choice uses
+# these; the labels still come from the drawn capsules and the pixels.
+OCCLUDER_RADIUS_M = 0.23
+OCCLUDER_HEIGHT_M = 1.81
+
+
+def ball_hidden(cam_pos: tuple[float, float, float], ball: tuple[float, float, float], players) -> bool:
+    """True if a player stands on the camera's line of sight to the ball's centre.
+
+    The sight line is a segment from the lens to the ball. A player blocks it when he stands
+    between the two in the pitch plane, within OCCLUDER_RADIUS_M of it, and the line passes
+    him below OCCLUDER_HEIGHT_M. A player beside or behind the ball, or under a ball in the
+    air, does not hide it, however close he is.
+    """
+    cx, cy, cz = cam_pos
+    bx, by, bz = ball[0], ball[1], ball[2] + BALL_RADIUS
+    dx, dy = bx - cx, by - cy
+    reach2 = dx * dx + dy * dy
+    if reach2 == 0:
+        return False
+    reach = math.sqrt(reach2)
+    for px, py in players:
+        ox, oy = px - cx, py - cy
+        along = (ox * dx + oy * dy) / reach2  # 0 at the lens, 1 at the ball
+        if not 0 < along < 1:
+            continue
+        if abs(ox * dy - oy * dx) / reach > OCCLUDER_RADIUS_M:
+            continue
+        if cz + along * (bz - cz) <= OCCLUDER_HEIGHT_M:
+            return True
+    return False
+
+
+def crowded_start(
+    frames: list[dict],
+    n: int,
+    earliest: int,
+    latest: int,
+    cam_positions: list[tuple[float, float, float]],
+    step: int = 25,
+) -> int:
+    """Start frame of the n-frame window where the ball is most often behind a player.
+
+    cam_positions[i] is where the broadcast lens stood at frame i. Occlusion is a matter of
+    where players stand on the line from that lens to the ball, not of how many are near it:
+    a crowd on the far side of the ball hides nothing. Players near the ball break ties.
+    """
+    hidden = [0] * (len(frames) + 1)  # prefix sums of hidden frames
+    for i, f in enumerate(frames[: len(cam_positions)]):
+        b = f["ball"]
+        players = [(p["x"], p["y"]) for p in f["players"]]
+        blocked = ball_hidden(cam_positions[i], (b["x"], b["y"], b["z"]), players)
+        hidden[i + 1] = hidden[i] + blocked
+    best, best_score = earliest, (-1, -1.0)
     for s in range(earliest, max(earliest, latest) + 1, step):
-        window = frames[s : s + n : 5]
-        if len(window) * 5 < n - 5:
+        if s + n > len(cam_positions):
             break
-        score = sum(crowding(f) for f in window) / len(window)
+        window = frames[s : s + n : 5]
+        score = (hidden[s + n] - hidden[s], sum(crowding(f) for f in window) / len(window))
         if score > best_score:
             best, best_score = s, score
     return best

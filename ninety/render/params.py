@@ -21,8 +21,16 @@ KIT_CONTRAST = ("normal", "low")
 # Shirt graphics. Colours stay fictional; a pattern is not a real club's kit.
 PATTERNS = ("solid", "stripes", "hoops", "sash", "halves")
 
-# Knob -> values that are accepted but not drawn. Empty: rain and camera cuts are built.
-PLANNED: dict[str, tuple] = {}
+# Share of seeds drawn as each hard case (low-contrast kits; a crowded clip window), each on its
+# own. Set from the train floors in ninety/vision/data_stats.py (each hard case in at least 20% of
+# clips) before any clip was rendered at this rate: 150 clips at 0.3 average 45 of each, about
+# 2.7 standard deviations above the floor of 30. Not tuned to any test-set number.
+HARD_CASE_RATE = 0.3
+
+# Knob -> the only values rendered for now. Dusk, night, overcast and rain are drawn by
+# web/render but do not look like broadcast footage yet, so every clip is a clear day until they
+# do; asking for one fails instead of putting a bad render into a dataset.
+PLANNED: dict[str, tuple] = {"lighting": ("day",), "weather": ("clear",)}
 
 # Fictional three-letter codes; none is a Premier League club code.
 TEAM_CODES = ("ASH", "CRW", "DUN", "ELM", "FEN", "GRV", "HLT", "IVY", "KST", "MRL", "OAK", "QRY")
@@ -75,7 +83,7 @@ class RenderParams:
     motion_blur: float = 0.5  # shutter as a fraction of the frame interval
     noise: float = 0.012  # sensor noise amplitude, linear 0..1
     jpeg_quality: float = 0.88
-    occlusion: str = "natural"  # "crowded" picks the clip window with most players near the ball
+    occlusion: str = "natural"  # "crowded" picks the window where players most often hide the ball
     home_code: str = "ASH"
     away_code: str = "CRW"
     boards: tuple[str, ...] = BOARD_BRANDS
@@ -155,11 +163,19 @@ def sample_params(seed: int, **overrides) -> RenderParams:
         lead_s=round(rng.uniform(0.2, 0.5), 2),
         shake_m=round(rng.uniform(0.0, 0.15), 3),
     )
-    lighting = rng.choice(LIGHTING)
+    # Lighting is still drawn, then set to day (see PLANNED), so every later draw of a seed and
+    # hence its camera, kits and stadium stay where they were.
+    drawn_lighting = rng.choice(LIGHTING)
+    lighting = "day"
     elevation = {"day": rng.uniform(30, 60), "dusk": rng.uniform(8, 18), "night": 45.0, "overcast": 50.0}[
         lighting
     ]
-    contrast = overrides.get("kit_contrast", "normal")
+    # Hard cases are drawn from the seed too, so the fixed test set (which refuses overrides) holds
+    # them. Their own stream: a seed drawn normal and natural keeps every draw it had.
+    hard = random.Random(f"render-hard-{seed}")
+    drawn_contrast = "low" if hard.random() < HARD_CASE_RATE else "normal"
+    drawn_occlusion = "crowded" if hard.random() < HARD_CASE_RATE else "natural"
+    contrast = overrides.get("kit_contrast", drawn_contrast)
     home, away, hgk, agk = sample_kits(rng, contrast)
     codes = rng.sample(TEAM_CODES, 2)
     base = RenderParams(
@@ -167,8 +183,9 @@ def sample_params(seed: int, **overrides) -> RenderParams:
         lighting=lighting,
         sun_azimuth_deg=round(rng.uniform(0, 360), 1),
         sun_elevation_deg=round(elevation, 1),
-        weather="overcast" if lighting == "overcast" else "clear",
+        weather="clear",
         kit_contrast=contrast,
+        occlusion=drawn_occlusion,
         home_kit=home,
         away_kit=away,
         home_gk=hgk,
@@ -184,15 +201,13 @@ def sample_params(seed: int, **overrides) -> RenderParams:
         away_code=codes[1],
     )
     # Appended draws. Everything above is the original sequence and must stay in this order.
-    weather = base.weather
-    if weather == "clear" and rng.random() < 0.34:
-        weather = "rain"
+    if drawn_lighting != "overcast":
+        rng.random()  # the rain draw, kept so the camera cut and patterns stay where they were
     base = replace(
         base,
         home_pattern=rng.choice(PATTERNS),
         away_pattern=rng.choice(PATTERNS),
         camera_cut=rng.random() < 0.30,
-        weather=weather,
     )
     return apply_overrides(base, overrides)
 

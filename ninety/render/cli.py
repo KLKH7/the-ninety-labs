@@ -12,11 +12,12 @@ import datetime as dt
 import json
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
 from ninety.render.checks import check_clip, digest
-from ninety.render.clip import ROOT, RenderUnavailable, browser_page, render_clip
+from ninety.render.clip import ROOT, RenderUnavailable, browser_page, render_clip, write_meta
 from ninety.render.params import parse_override
 from ninety.render.splits import TEST_SEEDS, check_seed, split_of, train_seeds
 
@@ -47,7 +48,7 @@ def render_main(argv: list[str] | None = None) -> None:
         action="append",
         default=[],
         metavar="KEY=VALUE",
-        help="override a render parameter, e.g. lighting=night, kit_contrast=low, occlusion=crowded, "
+        help="override a render parameter, e.g. kit_contrast=low, occlusion=crowded, "
         "camera.half_width_m=12 (repeatable)",
     )
     _add_render_args(ap)
@@ -144,6 +145,15 @@ def _git_commit() -> str | None:
         return None
 
 
+def meta_main(argv: list[str] | None = None) -> None:
+    """Write meta.json for clips rendered before the renderer wrote it, from their own files."""
+    ap = argparse.ArgumentParser(description=meta_main.__doc__)
+    ap.add_argument("clips", nargs="+", type=Path, help="clip directories")
+    for d in ap.parse_args(argv).clips:
+        meta = write_meta(d)
+        print(json.dumps({"clip": str(d), "window": meta["window"], "score": meta["score"]}), flush=True)
+
+
 def check_main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description="Run the render guide's checks over rendered clips.")
     ap.add_argument("clips", nargs="+", type=Path, help="clip directories")
@@ -176,15 +186,18 @@ def check_main(argv: list[str] | None = None) -> None:
     if a.determinism:
         first = a.clips[0]
         clip = json.loads((first / "clip.json").read_text())
-        again = first.parent / f"{first.name}.rerender"
-        render_clip(
-            clip["seed"],
-            again,
-            seconds=clip["frames"] / clip["fps"],
-            start_s=clip["t_start"],
-            overrides=clip["overrides"],
-        )
-        da, db = digest(first), digest(again)
+        # Re-render into a temporary folder: a copy left beside the clip is the same seed twice
+        # to anything that walks the dataset.
+        with tempfile.TemporaryDirectory(prefix=f"{first.name}-rerender-") as tmp:
+            again = Path(tmp) / first.name
+            render_clip(
+                clip["seed"],
+                again,
+                seconds=clip["frames"] / clip["fps"],
+                start_s=clip["t_start"],
+                overrides=clip["overrides"],
+            )
+            da, db = digest(first), digest(again)
         summary["determinism"] = {
             "clip": clip["clip_id"],
             "frames_jsonl_identical": da["frames_jsonl"] == db["frames_jsonl"],

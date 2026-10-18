@@ -31,7 +31,7 @@ jobs:
       - run: uv run pytest -q
 
   portable:
-    # The same seed must simulate the same match on every machine (docs/LESSONS.md, lesson 26):
+    # The same seed must simulate the same match on every machine (docs/LESSONS.md, lesson 46):
     # the portable-math pins and the cue fixture, which embeds seed 7's events, on macOS too.
     runs-on: macos-latest
     steps:
@@ -80,7 +80,7 @@ jobs:
       - run: npm ci --prefix web
       - run: uv sync --locked
       - run: uv run playwright install --with-deps chromium
-      - run: uv run pytest -q tests/test_render_clip.py
+      - run: uv run pytest -q tests/test_render_clip.py tests/test_render_body.py
         env:
           NINETY_REQUIRE_RENDER: "1"
       - run: uv run ninety-render --seed 7 --seconds 2 --out runs/ci-clip
@@ -95,3 +95,17 @@ jobs:
       - uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  infra:
+    # Compiles and lints the Bicep, so a broken template fails here and not at `azd provision`.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: az bicep install
+      - name: Build, failing on any warning
+        run: |
+          az bicep build --file infra/main.bicep --stdout > arm.json 2> diagnostics.txt
+          cat diagnostics.txt
+          ! grep -E "(Warning|Error) " diagnostics.txt
+      - name: Ground truth is sealed from the live path
+        run: python3 infra/check_truth_sealed.py arm.json

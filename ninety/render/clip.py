@@ -3,6 +3,7 @@
 Output directory layout:
 
     clip.json       seed, split, window, every render parameter, player looks, tool versions
+    meta.json       the data contract's clip metadata: fps, seed, window, roster (id, team, role), score
     events.jsonl    ground-truth match events inside the clip window (match_event schema)
     frames.jsonl    one row per frame (frame schema): positions, camera, boxes, visibility, keypoints
     images/NNNNN.jpg
@@ -30,18 +31,18 @@ from ninety.render.camera import Camera, Director, blur_vector
 from ninety.render.params import RenderParams, sample_params
 from ninety.render.scene import (
     Gait,
+    advance_gaits,
     ball_parts,
     body_parts,
     crowded_start,
+    reach_sign,
     drawn_ball,
     parts_box,
     project_keypoints,
     sample_looks,
-    turn_toward,
-    update_gait,
 )
 from ninety.render.splits import split_of
-from ninety.sim.engine import FORMATION, FPS, simulate
+from ninety.sim.engine import FORMATION, FPS, PITCH_X, PITCH_Y, simulate
 
 ROOT = Path(__file__).resolve().parents[2]
 WEB = ROOT / "web"
@@ -53,6 +54,7 @@ CHROMIUM_ARGS = [
     "--disable-gpu-driver-bug-workarounds",
 ]
 WARMUP = 2 * FPS  # frames simulated before the window so the camera and gaits settle
+WINDOW_DRAWS = 50  # seeded windows tried for one with the ball on the pitch (choose_start)
 
 
 class RenderUnavailable(RuntimeError):
@@ -129,16 +131,49 @@ def _appearance(lk, p: RenderParams) -> dict:
         "colors": {**kit_colors(p, lk.team, lk.role), "skin": lk.skin, "hair": lk.hair},
         "pattern": pattern,
         "number": int(lk.id[1:]),
+        "height_m": lk.height_m,
+        "build": lk.build,
+        "hair_style": lk.hair_style,
     }
+
+
+def camera_positions(frames: list[dict], p: RenderParams, seed: int) -> list[tuple[float, float, float]]:
+    """Where the broadcast lens stands at each frame, from the director the render uses.
+
+    Run from the first frame rather than from the window's warm-up, so a cut's timing can
+    differ from the render's by a few frames. Good enough to rank windows; the labels are
+    measured on the render itself.
+    """
+    director = Director(p.camera, p.width, p.height, p.fps, seed, cuts=p.camera_cut)
+    out = []
+    for fr in frames:
+        ball = drawn_ball(fr)
+        actors = [(pl["x"], pl["y"], pl.get("action", "")) for pl in fr["players"]]
+        out.append(tuple(director.step(ball[0], ball[1], actors).position))
+    return out
 
 
 def choose_start(
     frames: list[dict], p: RenderParams, n: int, seed: int, earliest_s: float, latest_s: float
 ) -> int:
+    """A seeded random window, redrawn (from the same seeded sequence, so still reproducible) while
+    the ball is off the pitch for all of it: a dead ball lying behind a goal line or touchline
+    waiting for a restart is off camera, so such a clip has no ball to label or check."""
     earliest, latest = int(earliest_s * FPS), int(latest_s * FPS)
     if p.occlusion == "crowded":
-        return crowded_start(frames, n, max(earliest, WARMUP), latest)
-    return random.Random(f"window-{seed}").randint(max(earliest, WARMUP), latest)
+        cams = camera_positions(frames[: latest + n], p, seed)
+        return crowded_start(frames, n, max(earliest, WARMUP), latest, cams)
+    rng = random.Random(f"window-{seed}")
+    for _ in range(WINDOW_DRAWS):
+        start = rng.randint(max(earliest, WARMUP), latest)
+        if any(_on_pitch(f["ball"]) for f in frames[start : start + n]):
+            break
+    return start
+
+
+def _on_pitch(b: dict) -> bool:
+    """The ball within the pitch's lines (Law 1)."""
+    return 0.0 <= b["x"] <= PITCH_X and 0.0 <= b["y"] <= PITCH_Y
 
 
 def render_clip(
@@ -223,20 +258,7 @@ def render_clip(
         rows = []
         for fi in range(max(0, start - WARMUP), start + n):
             fr = frames[fi]
-            bx, by = fr["ball"]["x"], fr["ball"]["y"]
-            for pl in fr["players"]:
-                px, py = prev_xy.get(pl["id"], (pl["x"], pl["y"]))
-                g = gaits[pl["id"]]
-                held = g.heading
-                update_gait(g, pl["x"] - px, pl["y"] - py, 1 / FPS, (bx - pl["x"], by - pl["y"]))
-                prev_xy[pl["id"]] = (pl["x"], pl["y"])
-                if "heading" in pl:
-                    # The engine says where he wants to face. The body turns toward it.
-                    g.heading = turn_toward(held, pl["heading"], 1 / FPS)
-                    pl["heading"] = round(g.heading, 4)
-                    g.speed = math.hypot(pl.get("vx", 0.0), pl.get("vy", 0.0))
-                    g.action = pl.get("action", "stand")
-                    g.dive = pl.get("dive", 0.0)
+            advance_gaits(gaits, prev_xy, fr, 1 / FPS)
             ball = drawn_ball(fr)
             actors = [(pl["x"], pl["y"], pl.get("action", "")) for pl in fr["players"]]
             # The snapshot of a goal already has the ball on the centre spot. The event
@@ -288,7 +310,18 @@ def render_clip(
                         "id": pl["id"],
                         "parts": parts,
                         "box": parts_box(cam, parts),
-                        "heading": gaits[pl["id"]].heading,
+                        "heading": g.heading,
+                        "pose": {
+                            "action": g.action,
+                            "phase": round(g.phase, 4),
+                            "speed": round(g.speed, 3),
+                            "reach": reach_sign(pl["x"], pl["y"], g, ball if meet else None),
+                            "dive": round(g.dive, 3),
+                            "plant_l": [round(v, 4) for v in g.plant_l] if g.plant_l else None,
+                            "plant_r": [round(v, 4) for v in g.plant_r] if g.plant_r else None,
+                            "x": round(pl["x"], 4),
+                            "y": round(pl["y"], 4),
+                        },
                     }
                 )
                 row_players.append(pl)
@@ -338,9 +371,33 @@ def render_clip(
         4,
     )
     (out / "clip.json").write_text(json.dumps(clip, indent=2))
+    write_meta(out)
     if mp4:
         _encode_mp4(out, p.fps)
     return clip
+
+
+def write_meta(out: Path) -> dict:
+    """Write the data contract's meta.json (docs/DATA_CONTRACT.md) from the clip's own files, so
+    `ninety-validate` can check it. Also backfills clips rendered before the renderer wrote it."""
+    clip = json.loads((out / "clip.json").read_text())
+    with open(out / "frames.jsonl") as f:
+        frames = [json.loads(line) for line in f if line.strip()]
+    with open(out / "events.jsonl") as f:
+        events = [json.loads(line) for line in f if line.strip()]
+    meta = {
+        "fps": clip["fps"],
+        "seed": clip["seed"],
+        "clip_id": clip["clip_id"],
+        # A window cut from a longer match: events before or after it are not in the clip.
+        "window": {"first_frame": frames[0]["frame"], "last_frame": frames[-1]["frame"]},
+        "roster": [{k: lk[k] for k in ("id", "team", "role")} for lk in clip["looks"]],
+        # The goals in this clip's events, the same events the validator adds up (C9).
+        "score": {team: sum(1 for e in events if e["type"] == "goal" and e["team"] == team)
+                  for team in ("home", "away")},
+    }
+    (out / "meta.json").write_text(json.dumps(meta, indent=2))
+    return meta
 
 
 @contextmanager
