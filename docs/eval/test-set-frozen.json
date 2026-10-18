@@ -1,7 +1,8 @@
 {
   "frozen": "2026-10-18",
   "tag": "engine-v1",
-  "commit": "b319f210f7e1635a056894c867526e5099f5be8b",
+  "commit": "cca498cf172f0055918aa7f973be33b42244b85b",
+  "commit_note": "engine-v1 (b319f21) plus one renderer change, cca498c (#118): scenery occludes in the id pass. The engine is unchanged; renderer 0.3.2.",
   "rendered_by": "uv run ninety-dataset --split test --seconds 10, once, locally",
   "render_checks": "docs/eval/render-checks.json (all passed, determinism identical)",
   "contract_check": "pending #96: meta.json is backfilled with ninety-render-meta and ninety-validate run once #96 lands; neither changes the hashes below",
@@ -13,10 +14,12 @@
     900005
   ],
   "ball_in_shot": 1250,
-  "ball_visibility_lt_0_5": 78,
-  "ball_visibility_lt_0_5_share": 0.0624,
+  "ball_visibility_lt_0_5": 188,
+  "ball_visibility_lt_0_5_share": 0.1504,
   "floor": 0.05,
   "meets_floor": true,
+  "ball_visibility_0": 113,
+  "ball_visibility_between_0_and_0_5": 75,
   "clips": [
     {
       "seed": 900001,
@@ -84,7 +87,7 @@
         ]
       },
       "renderer": {
-        "version": "0.3.1",
+        "version": "0.3.2",
         "three": "0.170.0",
         "gl": "swiftshader",
         "chromium": "141.0.7390.37"
@@ -164,7 +167,7 @@
         ]
       },
       "renderer": {
-        "version": "0.3.1",
+        "version": "0.3.2",
         "three": "0.170.0",
         "gl": "swiftshader",
         "chromium": "141.0.7390.37"
@@ -244,15 +247,15 @@
         ]
       },
       "renderer": {
-        "version": "0.3.1",
+        "version": "0.3.2",
         "three": "0.170.0",
         "gl": "swiftshader",
         "chromium": "141.0.7390.37"
       },
       "ball_in_shot": 250,
-      "ball_visibility_lt_0_5": 5,
+      "ball_visibility_lt_0_5": 115,
       "digest": {
-        "frames_jsonl": "abf6f904760e0b1481635f38647f5e9b3be7423b81a3e299912d5394c2afc6da",
+        "frames_jsonl": "c5f1c5185d2211ff2e31f75c391db32977e651c0677ef4ac65836a327498590a",
         "events_jsonl": "f1af86bbf017125ba8372c180fa3da2bb5733c9b059d0556912e47833d5f791c",
         "images": "7336185edf43e921ba3b25bd4c4f26e6e5eef4b768b3251d69b9013598dfa016",
         "image_count": 250
@@ -324,7 +327,7 @@
         ]
       },
       "renderer": {
-        "version": "0.3.1",
+        "version": "0.3.2",
         "three": "0.170.0",
         "gl": "swiftshader",
         "chromium": "141.0.7390.37"
@@ -404,7 +407,7 @@
         ]
       },
       "renderer": {
-        "version": "0.3.1",
+        "version": "0.3.2",
         "three": "0.170.0",
         "gl": "swiftshader",
         "chromium": "141.0.7390.37"
@@ -417,6 +420,24 @@
         "images": "a2679340cd673397d978c49aac828f9ed43e80c7d1caabe00f19357a90357181",
         "image_count": 250
       }
+    }
+  ],
+  "history": [
+    {
+      "commit": "b319f210f7e1635a056894c867526e5099f5be8b",
+      "renderer": "0.3.1",
+      "ball_visibility_lt_0_5": 78,
+      "ball_visibility_lt_0_5_share": 0.0624,
+      "superseded_because": "ground-truth defect: the id pass ignored scenery, so in seed 900003 a dead ball 0.5 m behind the far advertising boards was labelled visibility 1.0 for 110 frames. Found from detector misses; scope then measured over every split (#118).",
+      "changed": {
+        "900003": {
+          "frames_jsonl": [
+            "abf6f904760e0b1481635f38647f5e9b3be7423b81a3e299912d5394c2afc6da",
+            "c5f1c5185d2211ff2e31f75c391db32977e651c0677ef4ac65836a327498590a"
+          ]
+        }
+      },
+      "unchanged": "every images and events_jsonl hash, and the frames_jsonl of the other four clips"
     }
   ]
 }
