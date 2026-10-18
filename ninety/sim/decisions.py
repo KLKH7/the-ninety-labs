@@ -736,10 +736,10 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
         # speed and the opponents he sees near where it is taken (D2's zone); the team-mate is
         # taken to face it, as one expecting it does, fresh and of average composure.
         # A receiver runs onto the ball's path, so it comes into his body: above BODY_TOUCH_Z, the
-        # part its height gives (design, verify, A4, D1: pessimistic where the engine finds him beside
-        # it, with a foot. Judging that from where he stands now made passers over-rate dropping
-        # balls: touch report, seeds 40 to 47, intended receivers kept 89.5% of passes that way,
-        # 94.4% with this bound, 94.2% before the engine's fix).
+        # part its height gives (design, verify, A4, D1): pessimistic where the engine finds him beside
+        # it, with a foot. The calibration report checks it is a bound, not a fit (`ninety.sim.calibration`,
+        # forced passes, seeds 1 to 6, on main b319f21: received more often than estimated in every
+        # bin from 0.0 to 0.7, as a cautious estimate should be).
         rel = relative_speed(g * ux, g * uy, vz, taker[2], taker[3])
         tx_, ty_ = sx + ux * a, sy + uy * a
         felt = max((perception.pressure_from(tx_, ty_, ox, oy, attack(scene.goal_x))

@@ -613,7 +613,8 @@ short and actionable. This file is public: no research sources, product names or
   a heavy touch. The first fix also let the passer's estimate judge "into his body" from where the
   receiver stood, but receivers run onto the ball's path: passers then over-rated dropping balls
   and receivers kept fewer of them (89.5% against 94.2% on the base, seeds 40 to 47). The estimate
-  keeps the thigh for a dropping ball, as a cautious bound.
+  keeps the thigh for a dropping ball, as a cautious bound, and the calibration report (forced
+  passes) checks that it under-estimates rather than fits.
 - **Rule:** when porting a rule between engines, carry over every condition it was guarded by (here,
   "into his body"), and check it against the receiving engine's own definitions (here, foot reach).
 - **Check:** after a port, compare event counts by kind (deflections, passes) with the parent on the
