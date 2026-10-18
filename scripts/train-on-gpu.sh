@@ -7,6 +7,7 @@
 #   SSH_PORT=12345 scripts/train-on-gpu.sh root@1.2.3.4 azure:v2los,v2 ours-v2  # RunPod; v2los first wins
 #   scripts/train-on-gpu.sh ubuntu@1.2.3.4 runs/coco/v2 ours-v2
 #   EPOCHS=1 ...                                   a smoke run; the manifest records the override
+#   INIT=runs/train/ours-v2 CONFIG=ninety/vision/finetune-short.json ...   continue from our checkpoint
 #
 # azure:<runs>: a read-only SAS link to the `renders` container, valid 6 hours, is made here with
 # your Azure sign-in and sent to the machine over SSH's stdin, never as an argument or a file. The
@@ -20,6 +21,8 @@ host=$1 data=$2 name=$3
 key=~/.ssh/ninety_lambda
 port=${SSH_PORT:-22}
 epochs_arg=${EPOCHS:+--epochs $EPOCHS}  # a smoke run only; real runs use finetune.json's epochs
+config_arg=${CONFIG:+--config $CONFIG}  # another committed config, e.g. a short fine-tune
+init_arg=${INIT:+--init init/checkpoint_best_total.pth}  # INIT=runs/train/ours-v2: start from our checkpoint
 ssh_=(ssh -i "$key" -p "$port" -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=60 "$host")
 commit=$(git rev-parse HEAD)
 git branch -r --contains "$commit" | grep -q . || { echo "push $commit first"; exit 1; }
@@ -29,6 +32,12 @@ echo "== code at $commit"
 # so a later fetch never mistakes an old run's clips for this run's
 git archive --format=tar.gz "$commit" | "${ssh_[@]}" \
   'mkdir -p ninety && find ninety -mindepth 1 -maxdepth 1 ! -name .venv ! -name out -exec rm -rf {} + && tar -xzf - -C ninety'
+
+if [ -n "${INIT:-}" ]; then
+  echo "== initial checkpoint from $INIT"
+  "${ssh_[@]}" 'mkdir -p ninety/init'
+  scp -q -P "$port" -i "$key" "$INIT/checkpoint_best_total.pth" "$INIT/train-manifest.json" "$host:ninety/init/"
+fi
 
 echo "== environment"
 "${ssh_[@]}" "bash -lc '
@@ -60,7 +69,7 @@ if [[ $data == azure:* ]]; then
     $fetches
     unset RENDERS_SAS_URL
     rm -rf data && uv run --no-sync python -m ninety.vision.coco_export clips/seed* --out data --config ninety/vision/finetune.json
-    NINETY_COMMIT=$commit nohup uv run --no-sync python -m ninety.vision.train --data data --out out/$name --name $name $epochs_arg > train-$name.log 2>&1 &
+    NINETY_COMMIT=$commit nohup uv run --no-sync python -m ninety.vision.train --data data --out out/$name --name $name $epochs_arg $config_arg $init_arg > train-$name.log 2>&1 &
     echo started: tail -f ninety/train-$name.log
   '"
 else
@@ -70,7 +79,7 @@ else
   echo "== train $name"
   "${ssh_[@]}" "bash -lc '
     cd ninety && export PATH=\$HOME/.local/bin:\$PATH
-    NINETY_COMMIT=$commit nohup uv run --no-sync python -m ninety.vision.train --data data --out out/$name --name $name $epochs_arg > train-$name.log 2>&1 &
+    NINETY_COMMIT=$commit nohup uv run --no-sync python -m ninety.vision.train --data data --out out/$name --name $name $epochs_arg $config_arg $init_arg > train-$name.log 2>&1 &
     echo started: tail -f ninety/train-$name.log
   '"
 fi
