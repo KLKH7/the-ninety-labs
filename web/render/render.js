@@ -1502,8 +1502,12 @@ class BroadcastRenderer {
       const out = { full: 0, visible: 0, bbox: null, centroid: null };
       objects[o.id] = out;
       if (!o.box || body.used === 0) continue;
-      const x0 = Math.max(0, Math.floor(o.box[0]) - 3), x1 = Math.min(W, Math.ceil(o.box[2]) + 3);
-      const y0 = Math.max(0, Math.floor(o.box[1]) - 3), y1 = Math.min(H, Math.ceil(o.box[3]) + 3);
+      // The capsule box is the label. Hair, a boot, or a dive can sit outside
+      // it, and the sideline camera makes that about 80px. The solo count has
+      // to include the silhouette or visible/full goes over 1.
+      const pad = 80;
+      const x0 = Math.max(0, Math.floor(o.box[0]) - pad), x1 = Math.min(W, Math.ceil(o.box[2]) + pad);
+      const y0 = Math.max(0, Math.floor(o.box[1]) - pad), y1 = Math.min(H, Math.ceil(o.box[3]) + pad);
       if (x1 <= x0 || y1 <= y0) continue;
       this.idMode(true, body);
       R.setScissorTest(true);
