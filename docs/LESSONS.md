@@ -154,16 +154,25 @@ short and actionable. This file is public: no research sources, product names or
   that went out before the window.
   The first fix withheld a judgement whenever the event that settles it was missing from the
   clip; an independent review then passed five planted defects whose evidence was inside the
-  window (a pass to a player who held the ball, an interception from a man in possession).
+  window (a pass to a player who held the ball, an interception from a man in possession). The
+  owner's review of the second version found four more: a ball heading 60° wide of its end point
+  counted as "closing", a pass held mid-window then let go counted as unfinished, a ball at rest
+  for four seconds counted as a pass in flight, and open play after a substitution did not count
+  as play. One "legal" goal fixture gave a goal with the ball at rest 55 m out.
 - **Rule:** a contract every clip must meet is run by the code that makes clips, as part of the
   check that decides whether a clip ships. A clip that is part of something larger says so in
   its metadata, and a check withholds a judgement only when the clip's own frames show the play
   from beyond the cut still running (the ball loose since the first frame, a pass still closing
-  on its end at the last). A missing event alone is never a reason.
+  on its end at the last). A missing event alone is never a reason. Each condition is the strict
+  physical one (the ball's path meets the end point, the ball is moving), not a proxy for it
+  (getting closer, nobody touching it). A legal fixture must itself be football. A test asserts the
+  message it expects, not only the check's key, so another problem filed under that key cannot
+  turn it red.
 - **Check:** `tests/test_render_clip.py::test_a_rendered_clip_meets_the_data_contract` fails on
   the old renderer; `check_clip` reports `data_contract`, so the render job refuses a clip that
   fails it; the window tests in `tests/test_validate.py` pass each cut case, fail the same clip
-  without `window`, and fail each of the review's planted defects (20 mutations, all killed).
+  without `window`, and fail each planted defect from both reviews. 26 mutations of the rule:
+  all killed except one equivalent mutant (a ball at rest within reach already meets C7).
 
 ## Working in the repo
 
