@@ -764,3 +764,26 @@ def test_a_pass_running_away_from_its_end_point_at_the_cut_fails(tmp_path):
     clip = clean_clip()
     clip["events"][0]["end_x"] = 35.0
     assert fails(run(tmp_path, cut(clip, 0, 20)), "C7 ball path", "ball never reaches")
+
+
+def test_a_substitution_then_open_play_then_a_restart_fails(tmp_path):
+    """C3: h12 plays the ball at 140, before the first restart (a set piece at 145), so it was in play."""
+    clip = clean_clip()
+    substitute(clip, 120, with_stoppage=False)
+    for f in clip["frames"][130:]:
+        f["possessor"] = "h12"
+    clip["events"].append(event("e4", 140, "pass", "home", "h12", x=50.0, outcome="fail"))
+    clip["events"].append(event("e5", 145, "set_piece", "home", "h12", x=50.0))
+    problems = run(tmp_path, cut(loose(clip, 100, 129), 100, 149))
+    assert fails(problems, "C3 roster", "substitution while the ball is in play")
+
+
+def test_a_pass_heading_4m_wide_of_its_end_point_at_the_cut_fails(tmp_path):
+    """C7: the ball is aimed at (50, 34), so its line passes 4 m from (50, 30): outside NEAR_M (2.5),
+    inside twice it."""
+    clip = clean_clip()
+    a = math.atan2(4.0, 10.0)
+    for f in clip["frames"][PASS_AT:]:
+        d = min((f["frame"] - PASS_AT) / 25, 1.0) * 10
+        f["ball"]["x"], f["ball"]["y"], f["possessor"] = 40 + d * math.cos(a), 30 + d * math.sin(a), None
+    assert fails(run(tmp_path, cut(clip, 0, 12)), "C7 ball path", "ball never reaches")
