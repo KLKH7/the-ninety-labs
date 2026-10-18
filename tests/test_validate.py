@@ -787,3 +787,29 @@ def test_a_pass_heading_4m_wide_of_its_end_point_at_the_cut_fails(tmp_path):
         d = min((f["frame"] - PASS_AT) / 25, 1.0) * 10
         f["ball"]["x"], f["ball"]["y"], f["possessor"] = 40 + d * math.cos(a), 30 + d * math.sin(a), None
     assert fails(run(tmp_path, cut(clip, 0, 12)), "C7 ball path", "ball never reaches")
+
+
+def test_an_interception_of_a_ball_at_rest_whose_stored_position_jitters_fails(tmp_path):
+    """C8: the ball lies at rest at (50, 30), but each stored position rounds to the nearest
+    millimetre, so x and y can each flip by 1 mm between frames (about 1.4 mm in all). That is
+    rounding, not flight, so the interception at 140 is judged."""
+    clip = loose(clean_clip(), 30, 149)
+    for f in clip["frames"]:
+        f["players"][2].update(x=50.5, y=30.0)
+        if f["frame"] >= 40:
+            step = 0.001 * (f["frame"] % 2)
+            f["ball"]["x"], f["ball"]["y"] = 50.0 + step, 30.0 + step
+    for f in clip["frames"][140:]:
+        f["possessor"] = "a1"
+    clip["events"].append(event("e2", 140, "interception", "away", "a1", x=50.0))
+    assert fails(run(tmp_path, cut(clip, 40, 149)), "C8 event order", "intercepted no failed pass")
+
+
+def test_an_interception_of_a_slow_pass_from_before_the_cut_passes_c8(tmp_path):
+    """A pass struck before the cut, nearly spent: the ball rolls 1 cm a frame (0.25 m/s), far more than
+    rounding can show, into a1's path at frame 100. It is still in flight, so C8 is withheld."""
+    clip = ball_rolling_from_the_first_frame(clean_clip())
+    for f in clip["frames"]:
+        f["ball"]["x"] = 49.0 + 0.01 * f["frame"]
+    problems = run(tmp_path, cut(clip, 1, 149))
+    assert not fails(problems, "C8 event order", "intercepted no failed pass")
