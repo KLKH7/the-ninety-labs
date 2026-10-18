@@ -151,6 +151,9 @@ short and actionable. This file is public: no research sources, product names or
 - **Rule:** a guard made of several conditions gets one case per condition that is wrong in that
   way only.
 - **Check:** delete each condition in turn; a test must fail each time (lesson 21's mutation test).
+- **Also:** a guard's fallback is part of the guard. `train-on-gpu.sh` fell back to our real
+  storage account's name when none was set, putting it in a public repo. A missing setting stops
+  the script with what to set; it never falls back to a real resource name.
 
 ### 74. A before-and-after changes one thing
 - **What happened:** the COCO baseline ran at rfdetr's default input size, 512, and the fine-tuned
