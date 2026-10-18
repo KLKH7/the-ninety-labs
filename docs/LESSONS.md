@@ -337,3 +337,15 @@ short and actionable. This file is public: no research sources, product names or
   same change (lesson 23). A test states the source's number, never the constant (lesson 25).
 - **Check:** per-frame speed change on the first frames of any action timed in the past; list every
   state a flag is true in (lesson 33); reproduce the source's table at the outcome, not the input.
+
+### 37. Count a kick by its own flight, not by the label the engine gave its ending
+- **What happened:** the first penalty report counted "on target" from the shot record. The engine
+  calls a kick blocked when any defender touches it, so 12 kicks going wide or into the woodwork
+  were counted as kept out. It calls a save tipped round the post off target, because it judges
+  after the touch, so 8 saves were left out. 29 penalties that were never taken were dropped without
+  a word. The audit failed it; the headline barely moved (30.9% to 28.5%), but the cells did.
+- **Rule:** a report that compares with a study decides each case the way the study did, from the
+  measured quantity (where the kick's own flight crosses), never from a label another part of the
+  engine assigns. Every case it drops is counted in the report, with the reason.
+- **Check:** list how many cases each exclusion removes; trace a sample of each outcome label
+  against the quantity it is supposed to mean.
