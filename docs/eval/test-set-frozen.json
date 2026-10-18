@@ -4,7 +4,7 @@
   "commit": "b319f210f7e1635a056894c867526e5099f5be8b",
   "rendered_by": "uv run ninety-dataset --split test --seconds 10, once, locally",
   "render_checks": "docs/eval/render-checks.json (all passed, determinism identical)",
-  "contract_check": "pending #96: meta.json is backfilled with ninety-render-meta and ninety-validate run once #96 lands; neither changes the hashes below",
+  "contract_check": "uv run ninety-render-meta, then uv run ninety-validate, at 524ad2f (#96): 5 of 5 meet the data contract. meta.json is written from each clip's own clip.json, frames.jsonl and events.jsonl and is outside the digests below, which still match",
   "seeds": [
     900001,
     900002,
@@ -96,7 +96,8 @@
         "events_jsonl": "e88b9d319263a05f08ec13d376df219a569c02f12f0defd89dad0a8fec77fbe5",
         "images": "93549e749a7063cbfd8a31421657401bd4b0d893eb743e111b5abafdaa816951",
         "image_count": 250
-      }
+      },
+      "meta_json_sha256": "88b40b33b7c5ea5f60eb846732011c1f97ee8bf0afee0bb837a3c2d89f8bfb27"
     },
     {
       "seed": 900002,
@@ -176,7 +177,8 @@
         "events_jsonl": "c03ca03b1f623bbf46e53a03b20da0f908b4675ea9d1341cf4218b74b55209a1",
         "images": "aef7959ebfd4a77982f8d24df1699045091f4d3ddf3325f1d84cb44225eec7c4",
         "image_count": 250
-      }
+      },
+      "meta_json_sha256": "00d7b100192121a03493fad040c7dcc5089a7d9950cafae1c21cee05f0df7593"
     },
     {
       "seed": 900003,
@@ -256,7 +258,8 @@
         "events_jsonl": "f1af86bbf017125ba8372c180fa3da2bb5733c9b059d0556912e47833d5f791c",
         "images": "7336185edf43e921ba3b25bd4c4f26e6e5eef4b768b3251d69b9013598dfa016",
         "image_count": 250
-      }
+      },
+      "meta_json_sha256": "be05c513002a115ef0883d2fa1e91b6f8d697f6588c92eb2540804ee857c02b3"
     },
     {
       "seed": 900004,
@@ -336,7 +339,8 @@
         "events_jsonl": "1c388956ecf9c77662d0ff4d0a691522d3b1daf302d5062800d61671b84bce79",
         "images": "26e6f7dc4a5e0aeba88b48d15d13ddde3b652b0e99817b3eb2abc11e84be58b8",
         "image_count": 250
-      }
+      },
+      "meta_json_sha256": "ea3f2af935041edae7a8ec3aede5021c1cafee49ac09f231911ad76620f96d7a"
     },
     {
       "seed": 900005,
@@ -416,7 +420,8 @@
         "events_jsonl": "7539dced007695e6925e3d32832241c2e29a4eb778e80cf1afa5f9620c4bda25",
         "images": "a2679340cd673397d978c49aac828f9ed43e80c7d1caabe00f19357a90357181",
         "image_count": 250
-      }
+      },
+      "meta_json_sha256": "46c5f7eddcf3ffb1a6d7e6c789a54632fc90cdd0f666186bf5c0476f20d581a0"
     }
   ]
 }
