@@ -1459,8 +1459,8 @@ class Engine:
         if p.id == r.taker and r.kind == "throw_in":
             return math.pi / 2 if p.y < PITCH_Y / 2 else -math.pi / 2
         if p.id == r.taker:
-            return math.atan2(PITCH_Y / 2 - p.y, goal_x(p.team) - p.x)
-        return math.atan2(r.y - p.y, r.x - p.x)
+            return fmath.atan2(PITCH_Y / 2 - p.y, goal_x(p.team) - p.x)
+        return fmath.atan2(r.y - p.y, r.x - p.x)
 
     def place_restart(self) -> None:
         """Put every player on his mark and the ball on the spot. The one legal jump."""
