@@ -4,11 +4,11 @@ import math
 import random
 from statistics import mean, pstdev
 
-from ninety.sim.profiles import ATTRIBUTES, Profile
+from ninety.sim.profiles import ATTRIBUTES, MIND, Profile
 
 
 def player(**attributes) -> Profile:
-    base = {a: 0.5 for a in ATTRIBUTES}
+    base = {a: 0.5 for a in ATTRIBUTES + MIND}
     base.update(attributes)
     return Profile("Test Player", "right", base)
 
@@ -16,9 +16,9 @@ def player(**attributes) -> Profile:
 def test_profiles_are_synthetic_complete_and_reproducible():
     a, b = Profile.generate("ST", random.Random(4)), Profile.generate("ST", random.Random(4))
     assert a == b
-    assert set(a.attributes) == set(ATTRIBUTES)
+    assert set(a.attributes) == set(ATTRIBUTES + MIND)
     assert all(0.0 <= v <= 1.0 for v in a.attributes.values())
-    assert all(1 <= a.rating(x) <= 20 for x in ATTRIBUTES)
+    assert all(1 <= a.rating(x) <= 20 for x in ATTRIBUTES + MIND)
     assert len(a.name.split()) == 2
 
 

@@ -18,6 +18,12 @@ from ninety.sim.body import CS_MEAN, CS_SD, F0_MEAN, F0_SD, V0_MEAN, V0_SD, Body
 ATTRIBUTES = ("pace", "acceleration", "stamina", "passing", "crossing", "finishing", "first_touch",
               "dribbling", "tackling", "decisions", "composure", "vision", "anticipation",
               "work_rate", "aggression", "weak_foot", "handling", "reflexes")
+# A8: how a player chooses on the ball, kept apart from how well he executes. Flair: how strongly he
+# is drawn to the unexpected, low-percentage option; it never makes it come off. Teamwork: how much
+# his team's instructions weigh in his choice. Drawn from their own stream (`mind_rng`), so adding
+# them leaves every other attribute of every player as it was.
+MIND = ("flair", "teamwork")
+MIND_FACTOR = {"teamwork": "intelligence"}  # flair belongs to no factor and quality does not lift it
 TRAITS = ("shoots_from_distance", "takes_players_on", "stays_wide", "runs_in_behind", "plays_short")
 
 # How a squad is generated (docs/GROUNDING.md A1, A6, A7). Every attribute starts as a score in
@@ -78,6 +84,15 @@ ARCHETYPES = {
                                     "tackling": -0.9}),
            ("pressing_forward", 0.3, {"finishing": 1.0, "work_rate": 1.4, "stamina": 0.7, "pace": 0.4,
                                       "tackling": -0.3})],
+}
+# A8: each archetype's lean in the MIND attributes, z shifts (design: common role concepts, a creative
+# winger, a disciplined ball-winner).
+MIND_SHIFTS = {
+    "stopper": {"flair": -0.8}, "defensive": {"flair": -0.4, "teamwork": 0.4},
+    "deep_playmaker": {"flair": 0.6}, "box_to_box": {"teamwork": 0.4},
+    "ball_winner": {"flair": -0.6, "teamwork": 0.6}, "touchline_winger": {"flair": 0.6},
+    "inside_forward": {"flair": 1.0}, "poacher": {"flair": 0.3}, "target_forward": {"flair": -0.3},
+    "pressing_forward": {"teamwork": 0.8},
 }
 # Share of left-footed players by position (design; about a fifth to a quarter overall).
 # A wide player usually has the foot on his own side; an inside forward the other one.
@@ -154,9 +169,10 @@ class Profile:
 
     @classmethod
     def generate(cls, role: str, rng: random.Random, strength: float = 0.0,
-                 archetype: str | None = None) -> Profile:
+                 archetype: str | None = None, mind_rng: random.Random | None = None) -> Profile:
         """One player for a position, in a team of the given strength (the archetype is drawn
-        by its share unless given)."""
+        by its share unless given). The MIND attributes come from `mind_rng` (by default a stream
+        of its own derived from his name), never from `rng`."""
         group = ROLE_GROUP[role]
         names = ARCHETYPES[group]
         if archetype is None:
@@ -187,7 +203,17 @@ class Profile:
         if archetype == "inside_forward":  # cuts inside onto his stronger foot
             left = 1 - left if role in ("LW", "RW") else left
         foot = "left" if rng.random() < left else "right"
-        return cls(synthetic_name(rng), foot, attributes, traits, archetype, round(quality, 3))
+        name = synthetic_name(rng)
+        mind_rng = mind_rng or fmath.Random(f"{name}-{role}-mind")
+        for a in MIND:
+            if a in MIND_FACTOR:
+                own = math.sqrt(1 - QUALITY_LOADING * QUALITY_LOADING - FACTOR_LOADING * FACTOR_LOADING)
+                za = QUALITY_LOADING * quality + FACTOR_LOADING * factors[MIND_FACTOR[a]]
+            else:
+                own, za = 1.0, 0.0
+            lean = MIND_SHIFTS.get(archetype, {}).get(a, 0.0)
+            attributes[a] = fmath.normal_cdf(SKILL_SCALE * (lean + za + own * mind_rng.gauss(0.0, 1.0)))
+        return cls(name, foot, attributes, traits, archetype, round(quality, 3))
 
     def __getitem__(self, attribute: str) -> float:
         return self.attributes[attribute]

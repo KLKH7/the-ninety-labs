@@ -211,6 +211,13 @@ def goal_x(team: str) -> float:
     return PITCH_X if team == "home" else 0.0
 
 
+def instructed(weight: float, teamwork: float) -> float:
+    """A8: a team instruction's weight (1 is none) as a player follows it: the instruction's pull
+    away from 1 times (0.5 + teamwork), so as given at average teamwork, half again at the most,
+    half at the least; never below 0, as the style's own weight (T4)."""
+    return max(0.0, 1 + (weight - 1) * (0.5 + teamwork))
+
+
 def other(team: str) -> str:
     return "away" if team == "home" else "home"
 
@@ -776,8 +783,9 @@ class Engine:
                                 absorb={m[0]: self.by_id[m[0]].profile.absorb_mps(False) for m in mates},
                                 passer=prof, heading=carrier.heading, fresh=self.fresh(carrier),
                                 ball_offset=(self.ball[0] - carrier.x, self.ball[1] - carrier.y),
-                                progress_weight=style.progress_weight(brain.attacking_transition(self.t)),
-                                loss_weight=style.loss_weight(), held=self.holds)
+                                progress_weight=instructed(style.progress_weight(brain.attacking_transition(self.t)),
+                                                           prof["teamwork"]),
+                                loss_weight=style.loss_weight(), held=self.holds, flair=prof["flair"])
         return scene
 
     def decide(self, carrier: Player, throw: bool = False) -> None:
@@ -1769,7 +1777,10 @@ class Engine:
             prior = max(prior, 1.0)
         for trait in p.profile.traits:  # a habit strengthens a move of his role; it never adds one
             prior *= roles.TRAIT_MOVES.get(trait, {}).get(kind, 1.0)
-        return prior * roles.style_weight(style_tilt(brain.style.directness), kind)
+        # A8: his team's instruction weighs as much as his teamwork makes it (as at average, squared
+        # at the most, not at all at the least).
+        weight = roles.style_weight(style_tilt(brain.style.directness), kind)
+        return prior * fmath.exp(2 * p.profile["teamwork"] * fmath.log(weight)) if weight > 0 else 0.0
 
     def move_worth(self, p: Player, carrier: Player, spot: tuple[float, float]) -> float:
         """O10: what being at `spot` is worth to his team, as he sees the pitch: the chance the
