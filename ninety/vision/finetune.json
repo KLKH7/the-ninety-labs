@@ -1,0 +1,52 @@
+{
+  "notes": {
+    "val_seeds": "Chosen before any training: the last 15 bulk seeds and the last 5 of each hard-case set of render run v1, so validation has the same mix as training. Never test seeds.",
+    "stride": "Every 5th frame (5 fps): nearer frames are near copies of each other.",
+    "resolution": "640, divisible by patch 16 x windows 2. At the default 512 the median ball is 7.1 px (docs/eval/dataset-stats.json); 640 gives about 8.9 px for a 1.6x cost. Larger is a measured ablation, not a default.",
+    "batch": "4 images, gradients accumulated 4 times: an effective batch of 16, rfdetr's default target. It was 2 x 8 (the same optimisation, half the memory) while training on a 24 GB Mac, where 4 x 4 took about 18 GB of unified memory; a 24 GB GPU holds 4 x 4.",
+    "epochs": "Up to 30 with early stopping on validation mAP (patience 5), the original setting. It was cut to 12 for compute while training on an Apple GPU (about 54 min an epoch); restored before the first full run, which trains on a rented RTX 4090 (AGENTS.md, #84).",
+    "seed": "Fixed so a rerun on the same data gives the same model, up to GPU nondeterminism.",
+    "num_workers": "8 data-loading workers on the GPU machine: with 2 the RTX 4090 sat at 13-23% busy while the loader ran at 90% CPU. Speed only; the data and the order of training are unchanged."
+  },
+  "val_seeds": [
+    108,
+    109,
+    110,
+    111,
+    112,
+    113,
+    114,
+    115,
+    116,
+    117,
+    118,
+    119,
+    120,
+    121,
+    122,
+    2041,
+    2042,
+    2043,
+    2044,
+    2045,
+    3041,
+    3042,
+    3043,
+    3044,
+    3045
+  ],
+  "stride": 5,
+  "resolution": 640,
+  "train": {
+    "epochs": 30,
+    "batch_size": 4,
+    "grad_accum_steps": 4,
+    "lr": 0.0001,
+    "lr_encoder": 0.00015,
+    "early_stopping": true,
+    "early_stopping_patience": 5,
+    "checkpoint_interval": 5,
+    "num_workers": 8,
+    "seed": 7
+  }
+}
