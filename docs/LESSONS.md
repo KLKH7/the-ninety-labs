@@ -536,3 +536,16 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_render_scene.py::test_the_crowded_window_is_the_one_where_the_ball_is_hidden`
   builds two windows where counting players near the ball picks the wrong one. Before a batch,
   `uv run ninety-data-stats <2-3 crowded clips> --stride 5 --input 640x640` shows the share.
+
+### 72. Copy an identity string from the system, not from the docs
+- **What happened:** the `agents-live` setup told the maintainer to trust the OIDC subject
+  `repo:KLKH7/the-ninety-labs:environment:agents-live`, the format GitHub's docs show. This repo's
+  tokens carry the owner and repo ids (`repo:KLKH7@210092633/the-ninety-labs@1417939631:...`),
+  as the existing `main` credential already showed. The credential was created, `az` reported
+  success, and no run could ever have signed in with it.
+- **Rule:** an identifier another system must match exactly (an OIDC subject, a role id, a
+  resource id) is read from that system or copied from a working sibling, never written from
+  memory or a generic doc (as lesson 49). Setup steps say how to see the value in use.
+- **Check:** `az ad app federated-credential list --id "$CLIENT_ID" --query "[].subject"` shows
+  every subject with the same prefix; the setup is done only when the first approved
+  `agents-live` run passes `azure/login`.

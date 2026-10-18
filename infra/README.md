@@ -54,16 +54,24 @@ One-time setup, by Kian:
 1. In the repo's Settings, Environments, create `agents-live` and add yourself as a required
    reviewer, so no run reaches Azure without your approval.
 2. Add a federated credential to the deploy app registration (the `AZURE_CLIENT_ID` repo
-   variable) that trusts that environment:
+   variable) that trusts that environment. This repo's OIDC subjects carry the owner and repo
+   ids (`repo:KLKH7@210092633/the-ninety-labs@1417939631:...`), so copy the prefix of the
+   existing `main` credential rather than writing `repo:KLKH7/the-ninety-labs:...`, which Azure
+   would never match:
 
    ```bash
-   az ad app federated-credential create --id <AZURE_CLIENT_ID repo variable> --parameters '{
+   CLIENT_ID=$(gh variable get AZURE_CLIENT_ID -R KLKH7/the-ninety-labs)
+   az ad app federated-credential list --id "$CLIENT_ID" --query "[].subject" -o tsv  # the format in use
+   az ad app federated-credential create --id "$CLIENT_ID" --parameters '{
      "name": "github-agents-live",
      "issuer": "https://token.actions.githubusercontent.com",
-     "subject": "repo:KLKH7/the-ninety-labs:environment:agents-live",
+     "subject": "repo:KLKH7@210092633/the-ninety-labs@1417939631:environment:agents-live",
      "audiences": ["api://AzureADTokenExchange"]
    }'
    ```
+
+   Done when the list shows both subjects with the same `repo:...@...` prefix, and the first
+   approved run passes its `azure/login` step.
 
 3. For `publish`, add the repo variable `NINETY_FOUNDRY_RESOURCE_ID` (a resource id, not a
    secret: `az cognitiveservices account show -n ninety-labs-ai -g ninety-labs --query id -o tsv`).
