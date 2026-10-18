@@ -338,7 +338,8 @@ def check_events(events: list[dict], frames: list[dict], fps: float, meta: dict,
             balls = [by_frame[n]["ball"] for n in range(e["frame"], until + 1) if n in by_frame]
             # The clip ends before anything else happens to it: nobody has held the ball since it was
             # played, and its last frame's motion, carried on in a straight line, passes within NEAR_M
-            # of the end point ahead of it.
+            # of the end point ahead of it. A pass struck on the last frame has no flight in the clip
+            # at all (its last motion is the touch before the kick), so there is nothing to judge.
             final = by_frame[last]["ball"]
             prior = by_frame.get(last - 1, by_frame[last])["ball"]
             vx, vy = final["x"] - prior["x"], final["y"] - prior["y"]
@@ -346,7 +347,8 @@ def check_events(events: list[dict], frames: list[dict], fps: float, meta: dict,
             ahead = (wx * vx + wy * vy) / ((vx * vx + vy * vy) or math.inf)
             closing = ahead > 0 and math.hypot(wx - ahead * vx, wy - ahead * vy) <= NEAR_M
             held = any(by_frame[n].get("possessor") for n in range(e["frame"] + 1, last + 1) if n in by_frame)
-            still_going = cut and not later and not held and closing
+            struck_at_the_cut = e["frame"] == last
+            still_going = cut and not later and (struck_at_the_cut or (not held and closing))
             if not still_going and \
                     not any(math.hypot(b["x"] - e["end_x"], b["y"] - e["end_y"]) <= NEAR_M for b in balls):
                 where = f"({e['end_x']}, {e['end_y']})"

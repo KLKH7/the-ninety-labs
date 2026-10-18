@@ -836,3 +836,42 @@ def test_a_ball_rolling_2mm_a_frame_is_in_flight_for_c8(tmp_path):
         f["ball"]["x"] = round(49.0 + 0.002 * f["frame"], 3)
     problems = run(tmp_path, cut(clip, 1, 149))
     assert not fails(problems, "C8 event order", "intercepted no failed pass")
+
+
+def struck_away_from_its_end_point(strike: int) -> dict:
+    """h1 dribbles toward x=50 and, at frame `strike`, plays a pass to (10, 20), behind him and wide:
+    the ball's motion up to the strike points 45 degrees off the end point."""
+    clip = clean_clip()
+    for f in clip["frames"]:
+        x = 40.0 + 0.1 * min(f["frame"], strike)
+        f["ball"]["x"], f["players"][0]["x"] = x, x
+        f["possessor"] = "h1" if f["frame"] < strike else None
+        if f["frame"] > strike:  # the struck ball runs back toward (10, 20)
+            u = (f["frame"] - strike) * 0.6
+            f["ball"]["x"], f["ball"]["y"] = 40.0 + 0.1 * strike - u, 30.0 - u / 3
+    x = 40.0 + 0.1 * strike
+    clip["events"] = [event("e1", strike, "pass", "home", "h1", x=x, end_x=10.0, end_y=20.0,
+                            outcome="fail", ball_speed_kmh=54.0)]
+    return clip
+
+
+def test_a_pass_struck_on_the_windows_last_frame_passes_c7(tmp_path):
+    """C7: none of the pass's flight is in the clip; its last motion is h1's dribble, not the kick."""
+    assert not fails(run(tmp_path, cut(struck_away_from_its_end_point(60), 0, 60)), "C7 ball path",
+                     "ball never reaches")
+
+
+def test_a_pass_struck_one_frame_before_the_windows_end_is_judged(tmp_path):
+    """C7: one frame of flight is in the clip, so the pass is judged: here the ball has gone the
+    wrong way, away from (10, 20)."""
+    clip = struck_away_from_its_end_point(59)
+    for f in clip["frames"][60:]:  # the struck ball runs on toward x=50, away from the end point
+        f["ball"]["x"], f["ball"]["y"] = 45.9 + 0.6 * (f["frame"] - 59), 30.0
+    assert fails(run(tmp_path, cut(clip, 0, 60)), "C7 ball path", "ball never reaches")
+
+
+def test_a_pass_struck_on_the_last_frame_of_a_whole_clip_is_still_judged(tmp_path):
+    """C7: without a window there is no cut, so the last-frame exemption does not apply."""
+    clip = cut(struck_away_from_its_end_point(60), 0, 60)
+    del clip["meta"]["window"]
+    assert fails(run(tmp_path, clip), "C7 ball path", "ball never reaches")
