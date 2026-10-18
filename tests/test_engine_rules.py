@@ -17,7 +17,9 @@ from ninety.sim.engine import (
     DT,
     FPS,
     MISCONTROL_KEEP,
+    PICTURE_RESTART_S,
     RESTART_DELAY_S,
+    RESTART_DISTANCE_M,
     Engine,
     simulate,
     throw_hands,
@@ -150,6 +152,82 @@ def test_nobody_presses_inside_the_law_distance_at_a_corner():
     brain.in_possession, brain.pressers = False, [presser.id]
     tx, ty, _ = e.shape_target(presser)
     assert math.hypot(tx - 105.0, ty - 0.0) >= 9.15 - 0.6  # the target is kept on the pitch
+
+
+def _scatter(e: Engine) -> None:
+    for i, p in enumerate(e.players):
+        p.x, p.y = 15.0 + i * 3.0, 12.0
+
+
+def test_a_restart_places_the_taker_and_the_ball_and_holds_briefly():
+    """The picture puts everyone on the mark. The Opta window stays in RESTART_DELAY_S."""
+    cases = [
+        ("corner", "home", (105.0, 0.0), None),
+        ("corner", "away", (0.0, 68.0), None),
+        ("throw_in", "home", (40.0, 0.0), None),
+        ("throw_in", "away", (70.0, 68.0), None),
+        ("goal_kick", "home", (5.5, 34.0), "gk"),
+        ("free_kick", "away", (80.0, 20.0), None),
+        ("penalty_kick", "home", (94.0, 34.0), None),
+    ]
+    for kind, team, spot, who in cases:
+        e = Engine(1)
+        still(e)
+        e.possessor = None
+        _scatter(e)
+        taker_id = next(p.id for p in e.players if p.team == team and p.role == "GK") if who == "gk" else None
+        e.stop(kind, team, spot, taker_id)
+        taker = e.by_id[e.restart.taker]
+        assert e.restart.ready_at - e.t <= PICTURE_RESTART_S[1]
+        assert e.possessor is None
+        assert e.ball[2] == e.ball[3] == e.ball[4] == e.ball[5] == 0.0
+        if kind == "throw_in":
+            sx, sy = throw_stand(*spot)
+            assert math.hypot(taker.x - sx, taker.y - sy) < 0.05
+            assert taker.y < 0.0 or taker.y > 68.0
+            line = 0.0 if spot[1] < 34.0 else 68.0
+            assert abs(e.ball[1] - line) < 0.05 and abs(e.ball[0] - spot[0]) < 0.05
+        elif kind == "penalty_kick":
+            assert math.hypot(e.ball[0] - spot[0], e.ball[1] - spot[1]) < 0.05
+            assert math.hypot(taker.x - spot[0], taker.y - spot[1]) > 0.2
+        else:
+            assert math.hypot(taker.x - spot[0], taker.y - spot[1]) < 2.0
+            assert math.hypot(e.ball[0] - taker.x, e.ball[1] - taker.y) < 0.05
+        gap = RESTART_DISTANCE_M[kind]
+        for p in e.players:
+            if p.team != team:
+                assert math.hypot(p.x - spot[0], p.y - spot[1]) >= gap - 0.6, (kind, p.id)
+        mark = (taker.x, taker.y)
+        ball_at = e.ball[:2]
+        for _ in range(10):  # 0.4 s, inside the 0.7 s minimum hold
+            e.step()
+        assert e.restart is not None and e.restart.kind == kind
+        assert math.hypot(taker.x - mark[0], taker.y - mark[1]) < 0.5
+        assert math.hypot(e.ball[0] - ball_at[0], e.ball[1] - ball_at[1]) < 0.15
+        assert math.hypot(e.ball[3], e.ball[4]) < 0.05
+
+
+def test_kickoff_keeps_its_pause_and_the_centre_spot():
+    e = Engine(1)
+    e.kickoff("home")
+    wait = e.restart.ready_at - e.t
+    assert RESTART_DELAY_S["kick_off"][0] <= wait <= RESTART_DELAY_S["kick_off"][1]
+    taker = e.by_id[e.restart.taker]
+    assert (taker.x, taker.y) == (105 / 2, 68 / 2)
+    assert e.ball[:2] == (105 / 2, 68 / 2)
+
+
+def test_the_kickoff_is_one_pass_back():
+    e = Engine(1)
+    still(e)
+    e.kickoff("home")
+    e.restart.ready_at = e.t
+    taker_id = e.restart.taker
+    for _ in range(int(4 / DT)):
+        e.step()
+        if e.kicked and e.kicked["type"] == "pass" and e.kicked["player"] == taker_id:
+            break
+    assert e.pass_target is not None and e.pass_target[0] < 52.5
 
 
 def test_facing_wraps_at_half_a_turn_and_holds_when_the_ball_is_at_his_feet():
@@ -648,7 +726,8 @@ def test_the_engine_uses_the_attacking_shape_with_the_ball():
     e.brains["home"].in_possession = True
     e.possessor = None  # a pass in flight: the shape still holds
     e.ball = (50.0, 34.0, 0.0, 0.0, 0.0, 0.0)
-    want = offball.attacking_slot("RB", 0.0, 50.0, 34.0, e.brains["away"].line_x)
+    wide = offball.STAYS_WIDE_M if "stays_wide" in p.profile.traits else 0.0
+    want = offball.attacking_slot("RB", 0.0, 50.0, 34.0, e.brains["away"].line_x, wide)
     assert e.shape_target(p)[:2] == want
 
 
@@ -1574,10 +1653,9 @@ def test_a_throw_taken_from_a_restart_and_never_entering_is_retaken_where_it_was
 
 
 def test_a_throw_in_taker_runs_to_his_spot_and_stops_there():
-    """Lesson 5: the taker was once moved the last metre to his spot in one frame (22 m/s) and
-    stopped dead with the ball. The match must contain a throw-in, so the case is exercised; a
-    short clip with no restart would pass whatever the engine did. Twelve minutes: seed 7's first
-    throw-in came inside six until the cushioned touch changed the match's course, then at 8.2."""
+    """A dead ball places everyone on the mark in one frame. That jump is the restart the
+    validator allows. Every other frame still has to obey the speed and braking limits. The
+    match must contain a throw-in, so the case is exercised."""
     m = simulate(7, 12)
     assert any(p["action"] == "throw" for fr in m.frames for p in fr["players"])
     problems = defaultdict(list)
@@ -1660,15 +1738,15 @@ def test_taking_the_ball_for_a_throw_in_never_brakes_or_speeds_him_up_beyond_his
 
 
 def thrower_ready_at(x: float, y: float, vx: float = 0.0, vy: float = 0.0) -> tuple[Engine, object]:
-    """Home's h9 is the taker of a throw-in where the ball crossed the near touchline at x = 50,
-    standing at (x, y) and moving at (vx, vy); the restart is ready now."""
+    """Home's h9 is the taker of a throw-in where the ball crossed the near touchline at x = 50.
+    stop() has already put him on the mark. These arguments are where he is once it is ready."""
     e = Engine(1)
     still(e)
     taker = e.by_id["h9"]
-    taker.x, taker.y, taker.vx, taker.vy = x, y, vx, vy
     e.possessor = None
     e.ball = (50.0, -1.0, 0.0, 0.0, 0.0, 0.0)
     e.stop("throw_in", "home", (50.0, 0.0), taker=taker.id)
+    taker.x, taker.y, taker.vx, taker.vy = x, y, vx, vy
     e.restart.ready_at = e.t
     return e, taker
 
