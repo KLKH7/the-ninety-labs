@@ -813,3 +813,26 @@ def test_an_interception_of_a_slow_pass_from_before_the_cut_passes_c8(tmp_path):
         f["ball"]["x"] = 49.0 + 0.01 * f["frame"]
     problems = run(tmp_path, cut(clip, 1, 149))
     assert not fails(problems, "C8 event order", "intercepted no failed pass")
+
+
+def test_an_interception_of_a_ball_at_rest_jittering_on_all_three_axes_fails(tmp_path):
+    """C8: rounding can flip x, y and z by 1 mm each between frames (sqrt(3) mm in space): still at rest."""
+    clip = loose(clean_clip(), 30, 149)
+    for f in clip["frames"]:
+        f["players"][2].update(x=50.5, y=30.0)
+        if f["frame"] >= 40:
+            step = 0.001 * (f["frame"] % 2)
+            f["ball"]["x"], f["ball"]["y"], f["ball"]["z"] = 50.0 + step, 30.0 + step, step
+    for f in clip["frames"][140:]:
+        f["possessor"] = "a1"
+    clip["events"].append(event("e2", 140, "interception", "away", "a1", x=50.0))
+    assert fails(run(tmp_path, cut(clip, 40, 149)), "C8 event order", "intercepted no failed pass")
+
+
+def test_a_ball_rolling_2mm_a_frame_is_in_flight_for_c8(tmp_path):
+    """C8: 2 mm a frame on one axis (5 cm/s) is more than rounding can show (sqrt(3) mm): still moving."""
+    clip = ball_rolling_from_the_first_frame(clean_clip())
+    for f in clip["frames"]:
+        f["ball"]["x"] = round(49.0 + 0.002 * f["frame"], 3)
+    problems = run(tmp_path, cut(clip, 1, 149))
+    assert not fails(problems, "C8 event order", "intercepted no failed pass")
