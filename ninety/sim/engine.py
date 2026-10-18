@@ -1647,7 +1647,8 @@ class Engine:
                 behind = max(COVER_BEHIND_M, gap + 2)
                 cx, cy = on_pitch(bx + gx * behind, by + gy * behind)
                 # A shot can come from wherever the ball is now (as the keeper sets himself): within
-                # shooting range the cover gets into the lane at his work rate, not in time for a pass.
+                # shooting range the cover gets into the lane at his work rate, not in time for a
+                # pass (design).
                 shooting = math.hypot(own[0] - bx, own[1] - by) < offball.SHOT_RANGE_M
                 return cx, cy, work if shooting else self.in_time(p, cx, cy)
             slot = brain.slot(p.role, p.ay, clamp(by, 0, PITCH_Y))
@@ -1825,6 +1826,7 @@ class Engine:
                 return None
             limit = self.onside_limit(p.team, seen, carrier.x)  # L10: never into an offside spot
             spot_x = spot_x if (limit - spot_x) * fwd >= 0 else limit
+            # Across, halfway between the carrier and the centre (design): in front of the block.
             return clamp(spot_x, 1.0, PITCH_X - 1.0), (carrier.y + PITCH_Y / 2) / 2
         # The forward runs: only while he is onside, and only when the carrier can play one (O4):
         # not pressed, and the ball under control or about to be (he reads it coming, sooner the
@@ -1839,14 +1841,14 @@ class Engine:
             return None
         ball_u = (carrier.x - (PITCH_X - gx)) * fwd  # metres from his own goal line
         spot = None
-        if kind == "overlap":
+        if kind == "overlap":  # only beyond his own third (design)
             if abs(carrier.y - p.ay) < roles.OVERLAP_FLANK_M and (carrier.x - p.x) * fwd > 0 \
                     and ball_u > PITCH_X / 3:
                 side = 1.0 if p.ay > PITCH_Y / 2 else -1.0
                 spot = (clamp(carrier.x + fwd * roles.OVERLAP_AHEAD_M, 1.0, PITCH_X - 1.0),
                         PITCH_Y / 2 + side * (PITCH_Y / 2 - roles.OVERLAP_TOUCHLINE_M))
         elif kind == "late":
-            if ball_u > offball.FINAL_THIRD_M:
+            if ball_u > offball.FINAL_THIRD_M:  # around the penalty spot, within 4 m of the centre (design)
                 spot = gx - fwd * roles.LATE_RUN_DEPTH_M, clamp(carrier.y, PITCH_Y / 2 - 4, PITCH_Y / 2 + 4)
         else:  # in behind their last line as he sees it
             behind = offball.run_in_behind((p.x, p.y), second_last, gx, can_play, onside)

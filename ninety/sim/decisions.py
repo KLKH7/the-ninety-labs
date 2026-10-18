@@ -871,6 +871,7 @@ def options(scene: Scene) -> list[Option]:
         # ball is a contest where it lands (an even one: design).
         tx = scene.x + attack(scene.goal_x) * 45.0
         front = max(scene.mates, key=lambda m: m[1] * attack(scene.goal_x), default=None)
+        # It lands at least 6 m in from the touchline (design), so the contest is in play.
         ty = min(PITCH_Y - 6.0, max(6.0, front[2])) if front else PITCH_Y / 2
         contest = 0.5 * value(tx, ty, scene.goal_x) - 0.5 * loss_cost(tx, ty, scene.goal_x)
         out.append(Option("clear", contest, (tx, ty), lofted=True, chance=0.5))  # the even contest

@@ -844,3 +844,13 @@ def test_they_send_one_man_after_the_ball_so_a_second_who_is_later_adds_no_risk(
     near = conf([(70.0, 38.0)])
     assert near < conf([])  # he is a real risk
     assert math.isclose(conf([(70.0, 38.0), (72.0, 39.0)]), near, abs_tol=0.02)  # the later one never goes
+
+
+def test_a_lane_is_open_by_the_race_to_it():
+    """O10's look one pass ahead (D1's race at its simplest): nobody near the lane leaves it open, a
+    man standing on it closes it, and one further off closes it less."""
+    assert D.lane_chance(50.0, 34.0, 70.0, 34.0, []) == 1.0
+    on = D.lane_chance(50.0, 34.0, 70.0, 34.0, [(60.0, 34.0)])
+    near = D.lane_chance(50.0, 34.0, 70.0, 34.0, [(60.0, 39.0)])
+    far = D.lane_chance(50.0, 34.0, 70.0, 34.0, [(60.0, 60.0)])
+    assert on < 0.5 < far and on < near < far

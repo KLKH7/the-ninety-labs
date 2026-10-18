@@ -161,6 +161,14 @@ def test_a_move_is_worth_the_chance_he_is_found_times_the_race_times_the_ball_th
         assert e.move_worth(p, carrier, spot) == 0.0
     finally:
         D.value = real
+    real_lane = D.lane_chance
+    try:
+        D.lane_chance = lambda *a, **k: 1.0
+        found = e.move_worth(p, carrier, spot)
+        D.lane_chance = lambda *a, **k: 0.5  # the carrier is half as likely to find him there
+        assert found > 0 and math.isclose(e.move_worth(p, carrier, spot), 0.5 * found)
+    finally:
+        D.lane_chance = real_lane
 
 
 def priced(e, p, x, y):
@@ -310,3 +318,20 @@ def test_a_counter_attacking_side_sends_its_central_midfielders_in_behind_on_the
     brain.changed_at = e.t - 60.0  # the counter is over
     assert e.move_prior(p, brain, "in_behind") == 0.0
 
+
+
+def test_only_the_pressing_role_nearest_the_ball_presses_high():
+    """O9: of his side's pressing roles, the one nearest the ball goes; the others hold the block."""
+    e = Engine(3)
+    e.brains["home"].in_possession = False
+    for q in e.players:
+        if q.team == "home":
+            q.profile = dataclasses.replace(q.profile, archetype="poacher")  # no pressing role
+    near, far = e.by_id["h9"], e.by_id["h10"]
+    for q in (near, far):
+        q.profile = dataclasses.replace(q.profile, archetype="pressing_forward")
+    near.x, near.y, far.x, far.y = 60.0, 34.0, 70.0, 34.0
+    assert e.presses_high(near, e.brains["home"], 55.0, 34.0)
+    assert not e.presses_high(far, e.brains["home"], 55.0, 34.0)
+    e.brains["home"].in_possession = True
+    assert not e.presses_high(near, e.brains["home"], 55.0, 34.0)  # only out of possession

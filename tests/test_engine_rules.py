@@ -1726,3 +1726,45 @@ def test_the_first_presser_takes_that_path_in_the_match():
     carrier.vx = -4.0  # running at goal: the lane is the one from where he is going (2 m on)
     tx, ty, _ = e.shape_target(p)
     assert (round(tx, 6), round(ty, 6)) == (22.0, 34.0)
+
+
+def test_the_cover_hurries_into_the_lane_within_shooting_range():
+    """T3: away from goal the cover gets there in time for a pass; within shooting range he goes at
+    his work rate, since a shot can come from where the ball is now."""
+    for ball_x, hurried in ((52.0, False), (20.0, True)):
+        e = Engine(1, styles={"home": Style()})
+        still(e)
+        carrier = next(p for p in e.players if p.team == "away" and p.role == "CM")
+        presser = next(p for p in e.players if p.team == "home" and p.role == "CM")
+        cover = next(p for p in e.players if p.team == "home" and p.role == "RCM")
+        carrier.x, carrier.y = ball_x, 34.0
+        presser.x, presser.y = ball_x - 3.0, 34.0
+        e.ball = (ball_x, 34.0, 0.0, 0.0, 0.0, 0.0)
+        e.possessor = carrier.id
+        brain = e.brains["home"]
+        brain.in_possession, brain.pressers, brain.markers = False, [presser.id, cover.id], {}
+        tx, ty, speed = e.shape_target(cover)
+        assert speed == (e.press_pace(cover) if hurried else e.in_time(cover, tx, ty))
+
+
+def test_his_misjudgements_last_until_he_next_looks_around(monkeypatch):
+    """D4: the carrier keeps his misjudgements between decisions, and draws them afresh once he has
+    scanned the pitch again (P13)."""
+    from ninety.sim import decisions
+    e = Engine(3)
+    carrier = e.by_id["h7"]
+    e.give(carrier.id)
+    seen = []
+
+    def choose(scene, rng, tastes):
+        seen.append(tastes)
+        return decisions.Option("hold", 0.0)
+
+    monkeypatch.setattr(decisions, "choose", choose)
+    e.decide(carrier)
+    seen[-1]["kept"] = 1.0
+    e.decide(carrier)
+    assert seen[-1].get("kept") == 1.0  # the same look: the same misjudgements
+    e.beliefs[carrier.id].next_scan += 1.0  # he has looked around again
+    e.decide(carrier)
+    assert "kept" not in seen[-1]

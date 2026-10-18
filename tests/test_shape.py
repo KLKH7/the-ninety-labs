@@ -90,3 +90,11 @@ def test_box_runs_start_in_the_final_third_and_may_stand_level_with_the_ball():
     assert inside[0] == 99.0 and outside[0] < 99.0
     level = slot("ST", ball_x=90.0, ball_y=34.0, line=80.0)  # their line behind the ball: level with it
     assert level[0] == 90.0
+
+
+def test_the_forwards_hold_the_cited_team_length_beyond_their_back_line():
+    """O6: with the ball deep, the striker holds at least 46 m beyond his own back line, the top of
+    the 31 to 46 m team length the Rico-González review reports, instead of dropping with the ball."""
+    back = O.DEEPEST_M  # the ball 30 m out: his back line stands at the deepest spot
+    spot = O.attacking_slot("ST", 0.0, 30.0, 34.0, 100.0)
+    assert spot[0] - back >= 46.0
