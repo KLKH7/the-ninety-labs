@@ -371,11 +371,13 @@ class Profile:
         head, which turns to the ball, so no foot and no angle across the body; its direction and
         height are HEADER_ERROR times less precise. `level` as in kick_error."""
         pressure = min(1.0, max(0.0, (PRESSURE_M - nearest_opponent_m) / PRESSURE_M))
+        typical = {} if level is None else {"level": level}  # only the estimate's comparison sets it
         if header:
-            dir_sd, speed_sd, loft_sd = self.kick_error(skill, speed, pressure, capacity, False, level=level)
+            dir_sd, speed_sd, loft_sd = self.kick_error(skill, speed, pressure, capacity, False, **typical)
             return dir_sd * HEADER_ERROR, speed_sd, loft_sd * HEADER_ERROR, 1.0
         weak = (turn_deg > WEAK_SIDE_DEG) if self.foot == "right" else (turn_deg < -WEAK_SIDE_DEG)
-        dir_sd, speed_sd, loft_sd = self.kick_error(skill, speed, pressure, capacity, weak, turn_deg, level)
+        dir_sd, speed_sd, loft_sd = self.kick_error(skill, speed, pressure, capacity, weak, turn_deg,
+                                                    **typical)
         return dir_sd, speed_sd, loft_sd, self.weak_foot_speed() if weak else 1.0
 
     def weak_foot_speed(self) -> float:
