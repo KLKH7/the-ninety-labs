@@ -898,7 +898,7 @@ def test_a_late_dive_never_shrinks_the_keepers_reach():
     k = _shot_at_keeper(e, (80.0, 34.0, 0.3, 20.0, 1.0, 0.0))
     e.t += e.reaction(k) + 0.4
     before = e.reach(k, 104.0, 34.0)[0]
-    e.dive = (k.id, e.t, k.y, 0.5, e.kicked_at + e.reaction(k))  # he decides to dive only now
+    e.dive = (k.id, e.t, k.y, 0.5, e.kicked_at + e.reaction(k), 0.0, 1.0)  # he decides to dive only now
     assert e.reach(k, 104.0, 34.0)[0] >= before
 
 
@@ -1256,7 +1256,7 @@ def test_a_new_strike_clears_a_keeper_landed_from_an_earlier_dive():
     e = Engine(1)
     p = e.by_id["h6"]
     e.give(p.id)
-    e.landed = ("a1", e.t - 1.0)
+    e.landed = ("a1", e.t - 1.0, 1.0)
     e.kick(p, 15.0, 0.0, 0.0)
     assert e.landed is None
 
@@ -1336,7 +1336,7 @@ def test_a_kick_clears_a_downed_keeper_before_judging_where_play_goes():
     e = Engine(1)
     p = e.by_id["h6"]
     e.give(p.id)
-    e.landed = ("a1", e.t - 5.0)
+    e.landed = ("a1", e.t - 5.0, 1.0)
     seen = []
     judge = e.ball_destination
     e.ball_destination = lambda: (seen.append(e.landed), judge())[1]
@@ -1352,7 +1352,7 @@ def _dive_speeds(travel: float, vx: float = 0.0, vy: float = 0.0
     e = Engine(1)
     k = e.by_id["a1"]
     k.x, k.y, k.heading, k.vx, k.vy = 100.0, 34.0, math.pi, vx, vy
-    e.dive = (k.id, e.t, k.y, travel, e.t, math.copysign(1.0, travel) * vy)
+    e.dive = (k.id, e.t, k.y, travel, e.t, math.copysign(1.0, travel) * vy, 1.0)
     side, ahead, landed = [], [], None
     for i in range(40):
         x0, y0 = k.x, k.y

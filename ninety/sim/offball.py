@@ -12,8 +12,9 @@ from __future__ import annotations
 import math
 
 from ninety.sim import ball
-from ninety.sim.body import BODY_RADIUS, BRAKE_MAX, CONTROL_M, FOOT_REACH_Z, HAND_REACH_Z
+from ninety.sim.body import BODY_HEIGHT, BODY_RADIUS, BRAKE_MAX, CONTROL_M, FOOT_REACH_Z, HAND_REACH_Z
 from ninety.sim.perception import CHOICE_REACTION_S
+from ninety.sim.shape import SHOULDER_BREADTH_M
 
 PITCH_X, PITCH_Y = 105.0, 68.0
 GOAL_HALF_WIDTH = 3.66
@@ -28,6 +29,24 @@ DIVE_PEAK_MPS = 3.8  # P15: the body's peak sideways speed (3.6 to 4.0)
 DIVE_PUSH_OFF_S = 0.48  # P15: how long the push-off lasts, speeding him up to DIVE_PEAK_MPS
 DIVE_TIME_S = DIVE_PUSH_OFF_S / 2 + KEEPER_DIVE_TRAVEL_M / DIVE_PEAK_MPS  # a full dive: about 0.62 s
 KEEPER_DOWN_S = 0.8  # design, verify: how long a keeper is on the ground after a dive
+# P15: the heights a keeper's hands can be at. At a strike they are low, in his crouch (about 0.5 to
+# 0.65 m); they go up or down only once the ball's flight shows its height, about 245 ms after the
+# strike, and then at about 4 m/s, up about 1 m in about 0.25 s (Higueras-Herbada et al. 2020,
+# Frontiers in Psychology 11:311, Fig. 2: hands at penalties, read from the figure, verify).
+HANDS_AT_STRIKE_Z = 0.6
+HEIGHT_FROM_FLIGHT_S = 0.245
+HANDS_VZ_MPS = 4.0
+HAND_SPAN_M = 0.2  # design: how far above or below his hands' centre a hand still meets the ball
+# P15: in the air, after the push-off, his trunk is laid out across the goal, facing the ball: as
+# thick, top to bottom, as his shoulders are broad (P11). Its centre of mass goes from his crouch
+# (design, verify: no source for its height) up by at most about 0.4 m, which is what it rises on a
+# dive at a high ball (0.40 to 0.43 m, Monteiro et al. 2022), or down toward a lower one, no lower
+# than lying on his side (design: no source for dives at a low ball), at the dive's pace. Down after
+# it, he lies on his side: his body as high as his shoulders are broad, a hand about an arm's reach
+# above the ground (design, from P11's standing reach).
+CROUCH_COM_Z = 0.9
+DIVE_RISE_M = 0.41
+DOWN_REACH_Z = KEEPER_STAND_REACH_M
 SHOT_SPEEDS_KMH = (70.0, 120.0)  # design, verify: the speeds shots are struck at (engine.shoot)
 SHOT_SPEED_SAMPLES = 8  # how finely that range is averaged over
 KEEPER_DEPTH = (1.0, 6.0)  # O1: design, verify: how far off his line he stands
@@ -237,13 +256,48 @@ def may_handle(keeper: bool, in_own_box: bool, released_it: bool, back_pass: boo
     return keeper and in_own_box and not released_it and not back_pass
 
 
-def reach_for(hands: bool, stretched_s: float) -> tuple[float, float]:
-    """How far and how high a player can reach for the ball: a foot (CONTROL_M, below FOOT_REACH_Z),
-    or a keeper's hands, his arms stretched for `stretched_s` (since he reacted), up to HAND_REACH_Z.
-    One rule for the engine (engine.reach) and the passer's race (decisions.pass_confidence)."""
+def reach_for(hands: bool, stretched_s: float, since_strike_s: float = math.inf,
+              down: bool = False) -> tuple[float, float, float]:
+    """How far, and between which heights (floor, top), a player can reach for the ball: a foot
+    (CONTROL_M, below FOOT_REACH_Z), or a keeper's hands, his arms stretched for `stretched_s` (since
+    he reacted), at the heights his hands can be at `since_strike_s` after the touch he reacted to
+    (hands_band), no higher than DOWN_REACH_Z while he is `down` after a dive. One rule for the
+    engine (engine.reach) and the passer's race (decisions.pass_confidence)."""
     if hands:
-        return arm_reach_m(max(0.0, stretched_s)), HAND_REACH_Z
-    return CONTROL_M, FOOT_REACH_Z
+        floor, top = hands_band(since_strike_s)
+        return arm_reach_m(max(0.0, stretched_s)), floor, min(top, DOWN_REACH_Z) if down else top
+    return CONTROL_M, 0.0, FOOT_REACH_Z
+
+
+def hands_band(since_strike_s: float) -> tuple[float, float]:
+    """P15: the heights (floor, top) a keeper's hands can be at `since_strike_s` after the strike:
+    within HAND_SPAN_M of his crouch until the flight shows the ball's height, then spreading up and
+    down at HANDS_VZ_MPS, between the ground and HAND_REACH_Z."""
+    moved = HANDS_VZ_MPS * max(0.0, since_strike_s - HEIGHT_FROM_FLIGHT_S)
+    return (max(0.0, HANDS_AT_STRIKE_Z - HAND_SPAN_M - moved),
+            min(HAND_REACH_Z, HANDS_AT_STRIKE_Z + HAND_SPAN_M + moved))
+
+
+def body_band(diving_s: float | None, toward_z: float = 0.0, down: bool = False) -> tuple[float, float]:
+    """P11, P15: the heights (floor, top) of the ball's centre at which it meets his body: on his
+    feet, and while his dive's push-off lasts, from the grass to BODY_HEIGHT; in the air, `diving_s`
+    into a dive at a ball crossing at `toward_z`, his laid-out trunk round dive_com_z; `down` after a
+    dive, lying on his side."""
+    half = SHOULDER_BREADTH_M / 2 + ball.RADIUS
+    if down:
+        return 0.0, 2 * half
+    if diving_s is None or diving_s < DIVE_PUSH_OFF_S:
+        return 0.0, BODY_HEIGHT
+    com = dive_com_z(diving_s, toward_z)
+    return max(0.0, com - half), com + half
+
+
+def dive_com_z(diving_s: float, toward_z: float) -> float:
+    """P15: his centre of mass's height `diving_s` into a dive at a ball crossing at `toward_z`: from
+    his crouch toward that height, by at most DIVE_RISE_M up and no lower than lying on his side, at
+    the pace of the dive's sideways travel (dive_progress)."""
+    goal = min(CROUCH_COM_Z + DIVE_RISE_M, max(SHOULDER_BREADTH_M / 2, toward_z))
+    return CROUCH_COM_Z + (goal - CROUCH_COM_Z) * dive_progress(diving_s)
 
 
 def arm_reach_m(diving_s: float) -> float:

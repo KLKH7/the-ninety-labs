@@ -846,7 +846,7 @@ def test_a_keeper_who_dives_while_running_brakes_his_run_and_does_not_stop_dead(
     e = Engine(1)
     k = e.by_id["a1"]
     k.x, k.y, k.heading, k.vx, k.vy = 100.0, 34.0, math.pi, -4.0, 0.0  # coming off his line
-    e.dive = (k.id, e.t, k.y, 1.0, e.t)  # diving to his left
+    e.dive = (k.id, e.t, k.y, 1.0, e.t, 0.0, 1.0)  # diving to his left
     seen = [k.vx]
     while e.dive is not None:
         x0 = k.x
@@ -864,7 +864,7 @@ def test_a_keeper_who_dives_while_barely_moving_stops_and_does_not_run_back():
     e = Engine(1)
     k = e.by_id["a1"]
     k.x, k.y, k.heading, k.vx, k.vy = 100.0, 34.0, math.pi, -0.1, 0.0  # under one frame's braking
-    e.dive = (k.id, e.t, k.y, 1.0, e.t)
+    e.dive = (k.id, e.t, k.y, 1.0, e.t, 0.0, 1.0)
     for _ in range(3):
         e.keeper_dive(k)
         assert k.vx == 0.0

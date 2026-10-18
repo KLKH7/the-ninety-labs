@@ -485,9 +485,9 @@ def reach_time(points, t_end: float, rests: bool, sx: float, sy: float, ux: floa
     play, by the engine's chase test (body.can_get_to, as engine.can_reach) with an average body:
     below foot height, within a foot's reach, after his reaction, braking first if he is running away
     from it. A keeper whose box is at `box_x` reaches with his hands there (engine.reach): the arms'
-    stretch since he reacted, up to HAND_REACH_Z. A ball that comes to rest on the pitch is reached
-    whenever he gets there. (inf, -1) if not before `limit` or before the ball is out of play at
-    `t_end`.
+    stretch since he reacted, at the heights his hands can be (offball.hands_band). A ball that comes
+    to rest on the pitch is reached whenever he gets there. (inf, -1) if not before `limit` or before
+    the ball is out of play at `t_end`.
 
     With `late`, a player who cannot get to any of it is given the soonest he could be at a point of
     the path if the ball waited for him there (as engine.plan_chase times a chaser who cannot make it:
@@ -509,8 +509,8 @@ def reach_time(points, t_end: float, rests: bool, sx: float, sy: float, ux: floa
         if t <= react and not resting:
             continue
         bx, by = sx + ux * a, sy + uy * a
-        reach_m, reach_z = _FOOT if box_x is None else _reach(bx, by, t, react, box_x)
-        if z > reach_z:
+        reach_m, floor, top = _FOOT if box_x is None else _reach(bx, by, t, react, box_x)
+        if not floor <= z <= top:
             continue
         dx, dy = bx - px, by - py
         if resting:  # it waits for him there: he takes it whenever he arrives
@@ -527,13 +527,13 @@ def reach_time(points, t_end: float, rests: bool, sx: float, sy: float, ux: floa
 _FOOT = offball.reach_for(False, 0.0)  # an outfield player's reach, the same at every moment
 
 
-def _reach(bx: float, by: float, t: float, react: float, box_x: float | None) -> tuple[float, float]:
-    """How far and how high he reaches for a ball at (bx, by), `t` seconds after the strike, by the
-    engine's own rules (offball.may_handle, offball.reach_for): a foot, or, for the opposing keeper
-    (his box at `box_x`), his hands in his box, stretched since he reacted. The pass is not his
-    release, nor a pass from his own side, so only his box decides."""
+def _reach(bx: float, by: float, t: float, react: float, box_x: float | None) -> tuple[float, float, float]:
+    """How far, and between which heights, he reaches for a ball at (bx, by), `t` seconds after the
+    strike, by the engine's own rules (offball.may_handle, offball.reach_for): a foot, or, for the
+    opposing keeper (his box at `box_x`), his hands in his box, stretched since he reacted. The pass
+    is not his release, nor a pass from his own side, so only his box decides."""
     hands = box_x is not None and offball.may_handle(True, in_box(bx, by, box_x), False, False)
-    return offball.reach_for(hands, t - react)
+    return offball.reach_for(hands, t - react, t)
 
 
 def _late_arrival(points, t_end: float, rests: bool, sx: float, sy: float, ux: float, uy: float,
@@ -552,8 +552,8 @@ def _late_arrival(points, t_end: float, rests: bool, sx: float, sy: float, ux: f
         if t > limit or t >= t_end or (t <= react and not (rests and i == last)):
             return None
         bx, by = sx + ux * a, sy + uy * a
-        reach_m, reach_z = _FOOT if box_x is None else _reach(bx, by, t, react, box_x)
-        return None if z > reach_z else (t, bx - px, by - py, reach_m)
+        reach_m, floor, top = _FOOT if box_x is None else _reach(bx, by, t, react, box_x)
+        return None if not floor <= z <= top else (t, bx - px, by - py, reach_m)
 
     def arrival(t: float, dx: float, dy: float, reach_m: float, best: float) -> float:
         # Exact: can_get_to and time_to_cover are one rule, so one who cannot get there even a
@@ -587,8 +587,8 @@ def _late_arrival(points, t_end: float, rests: bool, sx: float, sy: float, ux: f
         if t <= react and not (rests and i == last):
             continue
         bx, by = sx + ux * a, sy + uy * a
-        reach_m, reach_z = _FOOT if box_x is None else _reach(bx, by, t, react, box_x)
-        if z > reach_z:
+        reach_m, floor, top = _FOOT if box_x is None else _reach(bx, by, t, react, box_x)
+        if not floor <= z <= top:
             continue
         dx, dy = bx - px, by - py
         soonest = react + _soonest(math.hypot(dx, dy) - reach_m, speed)

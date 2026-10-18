@@ -30,8 +30,8 @@ def ref_reach(points, rests, t_end, sx, sy, ux, uy, px, py, vx, vy, react, limit
             continue
         bx, by = sx + ux * a, sy + uy * a
         hands = box_x is not None and D.in_box(bx, by, box_x)
-        reach_m, reach_z = offball.reach_for(hands, t - react)
-        if z > reach_z:
+        reach_m, floor, top = offball.reach_for(hands, t - react, t)
+        if not floor <= z <= top:
             continue
         ok, gap, along = can_get_to(D.AVERAGE_BODY, bx - px, by - py, reach_m, vx, vy, t - react)
         if ok:

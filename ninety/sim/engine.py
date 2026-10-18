@@ -22,7 +22,6 @@ from dataclasses import dataclass, field
 from ninety.sim import ball, decisions, offball, perception, profiles, shape
 from ninety.sim import team as team_mod
 from ninety.sim.body import (
-    BODY_HEIGHT,
     BRAKE_MAX,
     CONTROL_M,
     CS_MEAN,
@@ -199,10 +198,12 @@ def other(team: str) -> str:
     return "away" if team == "home" else "home"
 
 
-def first_low_within(x0: float, y0: float, z0: float, dx: float, dy: float, dz: float, px: float,
-                     py: float, r: float, top: float) -> float | None:
+def first_within(x0: float, y0: float, z0: float, dx: float, dy: float, dz: float, px: float,
+                 py: float, r: float, floor: float, top: float,
+                 ahead: tuple[float, float] | None = None) -> float | None:
     """The first share of the way along the step (x0, y0, z0) + s (dx, dy, dz), 0 to 1, at which
-    the ball is within r of (px, py) across the ground and no higher than `top`; None if never."""
+    the ball is within r of (px, py) across the ground, between `floor` and `top` in height and, with
+    `ahead` (a direction across the ground), not behind (px, py) along it; None if never."""
     fx, fy = x0 - px, y0 - py
     a, b, c = dx * dx + dy * dy, fx * dx + fy * dy, fx * fx + fy * fy - r * r
     if a < 1e-12:
@@ -213,14 +214,19 @@ def first_low_within(x0: float, y0: float, z0: float, dx: float, dy: float, dz: 
             return None
         root = math.sqrt(disc)
         lo, hi = max(0.0, (-b - root) / a), min(1.0, (-b + root) / a)
-    if lo > hi:
-        return None
-    if z0 + lo * dz <= top:  # low enough as soon as it is in reach
-        return lo
-    if dz < 0:  # coming down: from when it drops below `top`, if still in reach
-        s = (top - z0) / dz
-        return s if s <= hi else None
-    return None
+    # Each other condition is linear in s, so holds over an interval of the step: narrow to it.
+    bounds = [(z0 - top, dz), (floor - z0, -dz)]  # z0 + s dz <= top; floor <= z0 + s dz
+    if ahead:
+        bounds.append((-(fx * ahead[0] + fy * ahead[1]), -(dx * ahead[0] + dy * ahead[1])))
+    for c0, c1 in bounds:  # c0 + s c1 <= 0
+        if abs(c1) < 1e-12:
+            if c0 > 0:
+                return None
+        elif c1 > 0:
+            hi = min(hi, -c0 / c1)
+        else:
+            lo = max(lo, -c0 / c1)
+    return lo if lo <= hi else None
 
 
 def turn_toward(heading: float, target: float) -> float:
@@ -309,9 +315,10 @@ class Engine:
         self.offside: set[str] = set()  # L10: team-mates in an offside position when the ball was played
         self.from_restart: str | None = None  # the restart the next kick is taken from
         self.read: tuple[str, float] | None = None  # (keeper, y): where he reads a shot is going
-        # (keeper, start t, start y, signed travel, when his arms began to stretch)
+        # (keeper, start t, start y, signed travel, when his arms began to stretch, his sideways run
+        # toward it, the height the ball crosses at)
         self.dive: tuple[float | str, ...] | None = None
-        self.landed: tuple[str, float] | None = None  # (keeper, his arms' stretch start) while he is down
+        self.landed: tuple[str, float, float] | None = None  # (keeper, his arms' stretch start, side)
         self.dived_at: dict[str, float] = {}  # keeper -> the touch (kicked_at) he dived at (P15)
         self.shot_touched_by: str | None = None  # "keeper" or "defender": who got to the shot
         self.shot_was_on_target: bool | None = None  # was it going in when they first touched it?
@@ -389,13 +396,37 @@ class Engine:
             return perception.SIMPLE_REACTION_S
         return p.profile.reaction()
 
-    def reach(self, p: Player, x: float, y: float, at: float | None = None) -> tuple[float, float]:
-        """How far and how high this player can reach for a ball at (x, y), at time `at`
-        (offball.reach_for). His arms stretch from the moment he reacts to the last touch, whether
-        or not his body launches; a deflection does not un-stretch a dive already under way."""
-        hands = self.hands(p, x, y)
+    def reach(self, p: Player, x: float, y: float, at: float | None = None,
+              ahead: bool | None = None) -> tuple[float, float, float]:
+        """How far, and between which heights (floor, top), this player can reach for a ball at
+        (x, y), at time `at` (offball.reach_for). His arms stretch from the moment he reacts to the
+        last touch, whether or not his body launches; a deflection does not un-stretch a dive
+        already under way. Diving, or down after a dive, the stretch is toward the dive: behind it
+        (`ahead` False; judged from (x, y) if None) he has only his standing reach (P15)."""
+        if not self.hands(p, x, y):
+            return offball.reach_for(False, 0.0)
         at = self.t if at is None else at
-        return offball.reach_for(hands, at - self.stretch_from(p) if hands else 0.0)
+        side = self.dive_side(p)
+        if ahead is None:
+            ahead = side == 0 or (y - p.y) * side >= 0
+        stretched = at - self.stretch_from(p) if ahead else 0.0
+        return offball.reach_for(True, stretched, at - self.reacting_since(p), self.down(p))
+
+    def down(self, p: Player) -> bool:
+        """On the ground after a dive, getting up (P15)."""
+        return bool(self.landed and self.landed[0] == p.id and self.off_balance.get(p.id, -1.0) > self.t)
+
+    def dive_side(self, p: Player) -> float:
+        """The way across the pitch (+1 or -1 in y) he is diving, or lies after a dive; 0 on his feet."""
+        if self.dive and self.dive[0] == p.id:
+            return math.copysign(1.0, self.dive[3])
+        return self.landed[2] if self.down(p) else 0.0
+
+    def body_band(self, p: Player) -> tuple[float, float]:
+        """The heights (floor, top) at which the ball meets his body now (offball.body_band)."""
+        if self.dive and self.dive[0] == p.id:
+            return offball.body_band(self.t - self.dive[1], self.dive[6])
+        return offball.body_band(None, down=self.down(p))
 
     def give(self, pid: str) -> None:
         if self.team_of(pid) != self.poss_team:
@@ -729,8 +760,8 @@ class Engine:
         (reachable, gap still to close, his speed along the way); gap None if it is over his reach.
         His reach (a keeper's hands in his box), his speed along the way, and braking first if he
         is running away from it: one test for chasing a ball and for judging where play goes."""
-        reach_m, reach_z = self.reach(p, bx, by, at=self.t + t)
-        if bz > reach_z:
+        reach_m, floor, top = self.reach(p, bx, by, at=self.t + t)
+        if not floor <= bz <= top:
             return False, None, 0.0
         return can_get_to(p.physique, bx - p.x, by - p.y, reach_m, p.vx, p.vy, t - delay)
 
@@ -804,9 +835,16 @@ class Engine:
             hz = before[2]
             rseg = rdx * rdx + rdy * rdy
             sc = 0.0 if rseg == 0 else clamp(((qx - x0) * rdx + (qy - y0) * rdy) / rseg, 0.0, 1.0)
-            reach_m, reach_z = self.reach(p, x0 + sc * dx, y0 + sc * dy)  # judged where it comes closest
+            cx, cy = x0 + sc * dx, y0 + sc * dy  # his hands, or a foot, judged where it comes closest
             if self.t - self.reacting_since(p) >= self.reaction(p):  # a deliberate touch, first chance
-                st = first_low_within(x0, y0, hz, rdx, rdy, z1 - hz, qx, qy, reach_m, reach_z)
+                side = self.dive_side(p) if self.hands(p, cx, cy) else 0.0
+                reach_m, floor, top = self.reach(p, cx, cy, ahead=True)
+                st = first_within(x0, y0, hz, rdx, rdy, z1 - hz, qx, qy, reach_m, floor, top,
+                                  (0.0, side) if side else None)
+                if side:  # behind the dive, only his standing reach (P15)
+                    behind = first_within(x0, y0, hz, rdx, rdy, z1 - hz, qx, qy,
+                                          self.reach(p, cx, cy, ahead=False)[0], floor, top, (0.0, -side))
+                    st = min((s for s in (st, behind) if s is not None), default=None)
                 if st is not None:
                     hits.append((st, "touch", p, x0 + st * dx, y0 + st * dy, hz + st * (z1 - hz),
                                  qx + st * mx, qy + st * my))  # his body may still meet it first
@@ -820,7 +858,8 @@ class Engine:
             # toward the nearest point of his spine, which is along the surface normal.
             sx, sy = shape.nearest_on_spine(ux, uy, qx, qy, p.heading)
             closing = (self.ball[3] - p.vx) * (sx - ux) + (self.ball[4] - p.vy) * (sy - uy)
-            if bz <= BODY_HEIGHT and closing > 0:
+            low, high = self.body_band(p)
+            if low <= bz <= high and closing > 0:
                 hits.append((sb, "body", p, ux + sb * mx, uy + sb * my, bz, qx + sb * mx, qy + sb * my))
         if not hits:
             return
@@ -1369,7 +1408,7 @@ class Engine:
         to the touch that set it off), or his reaction to the last touch."""
         if self.dive and self.dive[0] == p.id:
             return self.dive[4]
-        if self.landed and self.landed[0] == p.id and self.off_balance.get(p.id, -1.0) > self.t:
+        if self.down(p):
             return self.landed[1]  # down after a dive: stretched out as he landed
         return self.kicked_at + self.reaction(p)
 
@@ -1411,12 +1450,13 @@ class Engine:
                 if need > 0:
                     travel = math.copysign(min(need, KEEPER_DIVE_TRAVEL_M), cross - p.y)
                     self.dive = (p.id, self.t, p.y, travel, self.kicked_at + self.reaction(p),
-                                 math.copysign(1.0, travel) * p.vy)  # his sideways run toward it
+                                 math.copysign(1.0, travel) * p.vy,  # his sideways run toward it
+                                 arrival[2])  # the height it crosses at, which his body goes toward
                     self.dived_at[p.id] = self.kicked_at
         if not self.dive or self.dive[0] != p.id:
             return False
         _, start, y0, travel = self.dive[:4]
-        v0 = self.dive[5] if len(self.dive) > 5 else 0.0
+        v0 = self.dive[5]
         elapsed = self.t + DT - start
         # A shorter dive is the same push, stopped once he has gone far enough: as hard as the full
         # dive's, not harder. It starts from the sideways run he was already making (P2).
@@ -1443,7 +1483,7 @@ class Engine:
         p.y = y
         if landing:
             p.vy = carried
-            self.landed = (p.id, self.dive[4])
+            self.landed = (p.id, self.dive[4], math.copysign(1.0, travel))
             self.dive = None
             self.off_balance[p.id] = self.t + offball.KEEPER_DOWN_S  # on the ground: getting up
         return True
