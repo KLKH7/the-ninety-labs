@@ -41,6 +41,38 @@ traces sit inside the monthly free grants at demo traffic.
 The split is deliberate: the GitHub OIDC identity is only Contributor, which cannot create role
 assignments, so it cannot grant itself or anything else more access.
 
+## Live agent steps from GitHub (`agents-live`)
+
+Sessions without Azure credentials run their live steps (publishing agents, recording replays,
+the evaluations) through [agents-live.yml](../.github/workflows/agents-live.yml): started by hand,
+it waits for a reviewer's approval, signs in with OIDC, runs the task at the chosen `ref`, and
+uploads the agent registry, `replays/`, `runs/eval/` and the commit as an artifact. It never
+pushes.
+
+One-time setup, by Kian:
+
+1. In the repo's Settings, Environments, create `agents-live` and add yourself as a required
+   reviewer, so no run reaches Azure without your approval.
+2. Add a federated credential to the deploy app registration (the `AZURE_CLIENT_ID` repo
+   variable) that trusts that environment:
+
+   ```bash
+   az ad app federated-credential create --id <AZURE_CLIENT_ID repo variable> --parameters '{
+     "name": "github-agents-live",
+     "issuer": "https://token.actions.githubusercontent.com",
+     "subject": "repo:KLKH7/the-ninety-labs:environment:agents-live",
+     "audiences": ["api://AzureADTokenExchange"]
+   }'
+   ```
+
+3. For `publish`, add the repo variable `NINETY_FOUNDRY_RESOURCE_ID` (a resource id, not a
+   secret: `az cognitiveservices account show -n ninety-labs-ai -g ninety-labs --query id -o tsv`).
+
+The identity is the same one deploy.yml and evals.yml use: Contributor on the resource group and
+Foundry User on the Foundry resource, so it cannot grant itself more access. `eval` already runs
+nightly as this identity; `publish` has not run as it yet, so the first `publish` run is the check
+that Foundry User may create agent versions.
+
 ## First-time setup
 
 ```bash
