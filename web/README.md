@@ -27,8 +27,8 @@ Knobs (`--set key=value`), all recorded in `clip.json`:
 |---|---|---|
 | `lighting` | `day` | built; `dusk`, `night` (four floodlight shadows) and `overcast` are drawn but not yet broadcast quality, so they are planned and refused |
 | `sun_azimuth_deg`, `sun_elevation_deg` | degrees | built |
-| `kit_contrast` | `normal`, `low` (similar luminance: the team-confusion case) | built |
-| `occlusion` | `natural`, `crowded` (picks the window with most players near the ball) | built |
+| `kit_contrast` | `normal`, `low` (similar luminance: the team-confusion case); drawn `low` for 30% of seeds | built |
+| `occlusion` | `natural`, `crowded` (picks the window where a player most often stands between the camera and the ball); drawn `crowded` for 30% of seeds | built |
 | `camera.height_m`, `camera.back_m`, `camera.offset_x_m` | gantry position | built |
 | `camera.half_width_m`, `camera.box_half_width_m` | zoom in open play and in the box | built |
 | `camera.pan_lag_s`, `camera.lead_s`, `camera.shake_m` | follow filter and jitter | built |

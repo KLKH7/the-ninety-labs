@@ -144,6 +144,26 @@ short and actionable. This file is public: no research sources, product names or
   `tests/test_draw.py::test_only_frames_the_detector_ran_on_are_drawn_and_counted` fails on it
   (4 misses over 3 frames instead of 2 over 2).
 
+### 73. Test each half of a guard with a case only that half catches
+- **What happened:** the export's leak guard refuses a clip if its seed is not a training seed *or*
+  its `clip.json` does not say `train`. The test's bad clips were wrong both ways at once, so
+  either half could be deleted and the test still passed (#76 review).
+- **Rule:** a guard made of several conditions gets one case per condition that is wrong in that
+  way only.
+- **Check:** delete each condition in turn; a test must fail each time (lesson 21's mutation test).
+- **Also:** a guard's fallback is part of the guard. `train-on-gpu.sh` fell back to our real
+  storage account's name when none was set, putting it in a public repo. A missing setting stops
+  the script with what to set; it never falls back to a real resource name.
+
+### 74. A before-and-after changes one thing
+- **What happened:** the COCO baseline ran at rfdetr's default input size, 512, and the fine-tuned
+  model at 640, so any gain mixed the training with the input size (#76 review).
+- **Rule:** a comparison changes only the thing it measures; everything else (input size, frames,
+  scorer, threshold) is the same on both sides, and the default that would differ is set
+  explicitly.
+- **Check:** the two `detections.jsonl` runs are made by one command with only `--checkpoint` and
+  `--weights` different; `tests/test_vision_finetune.py` pins the baseline to finetune.json's size.
+
 ## Working in the repo
 
 ### 12. "No checks yet" is not "checks passed"
@@ -370,6 +390,21 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_slice_replay.py::test_every_committed_replay_still_replays` fails on the
   stale recording and passes on the re-recorded one.
 
+### 80. A replay pins the interface it tests, not the engine underneath
+- **What happened:** `replays/slice-minute2-plant.json` held only the models' answers, and the
+  replay rebuilt the fact-checker's events from the local engine. Every engine change changed the
+  checker's rejection reasons, so the Analyst's retry prompt changed and the replay failed, even
+  though no prompt or check had changed. Each break needed a live Foundry re-record from the
+  owner's Mac and a manual deploy of the branch's API.
+- **Rule:** a recording carries every input it was made against that is not under test (here the
+  match events the checker read), and the replay uses those. It still fails on a change to what
+  it tests (a prompt, a check's message, a handoff); a changed engine only warns that the
+  recording is stale.
+- **Check:** `tests/test_slice_replay.py::test_the_committed_replay_survives_an_engine_change`
+  plants an engine change and expects the same outcome and a `StaleRecording` warning;
+  `test_a_changed_analyst_prompt_still_fails_the_committed_replay` and
+  `test_a_changed_fact_check_message_still_fails_the_committed_replay` must still fail the replay.
+
 ### 33. One clock for viewers and agents
 - **What happened:** agent-facing minute and second values were rounded and combined differently
   from the scorebug's floored elapsed clock, producing off-by-one timestamps and occasional
@@ -508,3 +543,31 @@ short and actionable. This file is public: no research sources, product names or
   records the engine commit the number came from.
 - **Check:** `uv run python -m ninety.sim.late_drop` prints the commit in `docs/eval/late-drop.md`;
   `tests/test_late_drop.py` fails if the seeds or band drift from `docs/EVALUATION.md`.
+
+### 70. What is labelled as drawn must be the shape that is drawn
+- **What happened:** `body_parts` labels each part a capsule, `parts_box` bounds it as one and
+  the body-shape tests measure it as one, but `web/render` drew each part as a lathe that closed
+  to a point at both joints. Between the top of the trunk and the base of the neck nothing was
+  drawn, so a player cut by the bottom of the frame at that height was a floating head with a box
+  ending at his chin (seed 900002 at `443c4d5`). The render check caught it only because his foot
+  happened to fall outside that box, and every Python test passed because none of them looked at
+  the drawn pixels.
+- **Rule:** the renderer draws the shape the labels and tests describe, and a test checks the
+  drawn pixels, not the Python model of them. The same goes for any summary number: the player
+  height percentiles counted boxes cut by the image edge as players, so a 19 px "player" was 19 px
+  of one.
+- **Check:** `tests/test_render_body.py` slides the bottom image edge from a player's shins to his
+  chin and fails if his drawn box ever stops short of it; `tests/test_render_checks.py` checks
+  that the height percentiles skip boxes cut by an edge.
+
+### 71. Select hard cases by their cause, not by something that travels with it
+- **What happened:** `occlusion=crowded` chose the clip window with the most players within 4 m
+  of the ball. A crowd on the far side of the ball hides nothing, so crowded clips reached only
+  4.0% mostly hidden balls in render run v1, and no number of them could lift the training set
+  to the 5% floor. The proposed fix was to render more of them.
+- **Rule:** a knob that targets a hard case selects on the geometry that makes it hard (here, a
+  player on the line from the camera to the ball). Before rendering a round, measure the knob's
+  own rate on two or three clips: a mix can never beat its best part.
+- **Check:** `tests/test_render_scene.py::test_the_crowded_window_is_the_one_where_the_ball_is_hidden`
+  builds two windows where counting players near the ball picks the wrong one. Before a batch,
+  `uv run ninety-data-stats <2-3 crowded clips> --stride 5 --input 640x640` shows the share.

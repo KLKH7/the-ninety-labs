@@ -34,7 +34,7 @@ never install (it comes only with the `rfdetr[plus]` extra).
 
 | Package | Used for | Licence |
 |---|---|---|
-| rfdetr 1.11.2, RF-DETR Small weights | object detection | Apache-2.0 |
+| rfdetr 1.11.2 (with its `train` extra), RF-DETR Small weights | object detection and fine-tuning | Apache-2.0 |
 | torch, torchvision | neural network runtime | BSD-3-Clause |
 | transformers, huggingface-hub, tokenizers, safetensors, hf-xet | model backbone and weight loading | Apache-2.0 |
 | supervision | detection utilities | MIT |
@@ -42,6 +42,13 @@ never install (it comes only with the `rfdetr[plus]` extra).
 | python-dateutil | matplotlib | Apache-2.0 or BSD-3-Clause |
 | numpy, scipy, sympy, mpmath, networkx, fsspec, jinja2, markupsafe, contourpy, cycler, kiwisolver, pygments | numerics and torch internals | BSD |
 | triton, typer, rich, markdown-it-py, mdurl, annotated-doc, filelock, pyparsing, fonttools, six, setuptools | torch (Linux) and CLI internals | MIT |
+| pytorch-lightning, lightning-utilities, torchmetrics, peft, accelerate (rfdetr `train` extra) | the training loop | Apache-2.0 |
+| faster-coco-eval, torch-hungarian, pyarrow, requests-toolbelt (rfdetr `train` extra) | COCO evaluation, matching, data loading | Apache-2.0 |
+| opencv-python-headless (rfdetr `train` extra) | image decoding in training | Apache-2.0; its wheels bundle FFmpeg (LGPL-2.1), used unmodified |
+| roboflow (rfdetr `train` extra) | not used: a client for Roboflow's hosted service, imported by rfdetr; we never call it and send no data to it | Apache-2.0 |
+| pycocotools, ultrafast-pycocotools, psutil | COCO metrics, system info | BSD |
+| hotcoco, simplejpeg, filetype, pillow-avif-plugin | COCO evaluation, JPEG decoding, file types | MIT |
+| vernier | rfdetr training internals | MIT OR Apache-2.0 |
 
 These come in with the vision group under other permissive licences, outside the three named
 above. None is copyleft for our code; they are listed so nothing is hidden.
