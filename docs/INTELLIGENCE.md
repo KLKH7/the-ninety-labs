@@ -49,3 +49,30 @@ term so the index stays in `[-1, 1]`; it is a range bound, not a tuned value. Ea
 exactly the contributing events (the team's passes and the opponent's pressure events and
 recoveries in the window) and its window scope. Claims about this index must
 call it an experimental signal and must not present it as an official league metric.
+
+## Windows and shifts
+
+`ninety/intel/windows.py` reads events only. Home attacks toward x = 105 for the whole match and
+away toward x = 0. Each team gets these facts in each 15-minute window (`WINDOW_S`), scoped
+`team:<side>:window:<n>`. Fifteen minutes is football's usual split and, measured on seeds 7 and 11
+over 90 minutes, the shortest window with enough events for a share to mean something: a median of
+11 attacking-third passes a window (a share's standard error near 0.15) and a defensive action in
+every team-window. Five-minute windows held 3, and a third of team-windows had no defensive action.
+
+- **PPDA** (`ppda`, passes per defensive action): the opponents' passes in their own 60% of the
+  pitch, divided by this team's tackles and interceptions in that zone. Lower means a more
+  intense press. A window with no defensive action there has no PPDA fact. The same function
+  feeds the style fingerprint (`ninety/sim/fingerprint.py`), so the two cannot disagree. The
+  measure is widely used in public football analytics (*verify*: cite its first definition).
+- **Field tilt** (`field_tilt`, share): this team's passes played from its attacking third,
+  divided by both teams' attacking-third passes. A window with none from either side has no fact.
+- **Passes a minute** (`passes_per_minute`): this team's passes in the window over its length.
+
+**Territory shift** (`territory_shift`): a side leads a window when its field tilt is more than one
+standard error from level (|tilt - 0.5| > 0.5 / sqrt(n), n the passes counted); closer than that the
+window cannot tell the sides apart, and nobody leads it. A shift is a window led by the other side
+from the last window that had a leader. One fact for the side that took over, scoped to that window,
+valued at its field tilt there, citing the passes counted. The first leader of the match is no shift.
+
+These are descriptive signals for an agent to explain. They are not predictions, and they read no
+ground-truth-only field.
