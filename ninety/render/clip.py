@@ -339,6 +339,8 @@ def render_clip(
         "fps": p.fps,
         "seed": seed,
         "clip_id": clip["clip_id"],
+        # A window cut from a longer match: events before or after it are not in the clip.
+        "window": {"first_frame": rows[0]["frame"], "last_frame": rows[-1]["frame"]},
         "roster": [{k: r[k] for k in ("id", "team", "role")} for r in match.roster],
         "score": {team: sum(1 for e in events if e["type"] == "goal" and e["team"] == team)
                   for team in ("home", "away")},

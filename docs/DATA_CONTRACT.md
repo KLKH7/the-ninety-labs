@@ -27,7 +27,20 @@ A clip is one directory:
 |---|---|---|
 | `events.jsonl` | one event per line | [`schemas/match_event.schema.json`](../schemas/match_event.schema.json) |
 | `frames.jsonl` | one frame per line, every frame | [`schemas/frame.schema.json`](../schemas/frame.schema.json) |
-| `meta.json` | `fps`; `roster` (each player's `id`, `team` and `role`, so the validator knows the goalkeepers); `seed` or scenario name; `score` | `fps` positive; goalkeepers from `roster` |
+| `meta.json` | `fps`; `roster` (each player's `id`, `team` and `role`, so the validator knows the goalkeepers); `seed` or scenario name; `score` (the goals in this clip's `events.jsonl`); `window`, for a clip cut from a longer match | `fps` positive; goalkeepers from `roster`; `score` against the goal events (C9); `window` against the frames |
+
+A rendered clip (`ninety-render`, `ninety-dataset`) is the same directory plus `clip.json` (the
+render parameters) and `images/`, and is checked the same way: `uv run ninety-validate <clip>`.
+
+**A window.** A rendered clip is a few seconds cut from a simulated match, so its `meta.json`
+carries `window: {"first_frame", "last_frame"}`, the match frames it covers, which must be its
+first and last frames. Its frames keep their match numbers, and its events are those inside it.
+What happened outside the window is not in the clip, so three judgements that need it are not
+made there: a pass with no later on-ball event in the clip that has not reached its end point by
+the last frame (C7); an interception, goal or substitution whose pass, shot or stoppage came
+before the first frame (C8, C3); and a window whose first restart comes before any stoppage, which
+opened on a dead ball (P3). Everything whose evidence lies inside the window is judged exactly as
+for a whole match, and the same clip without `window` fails.
 
 Coordinates are pitch metres: `x` 0 to 105 toward the right goal, `y` 0 to 68 from the near
 touchline, ball `z` is height. Player ids are `h1`..`h11` and `a1`..`a11`. Events from the

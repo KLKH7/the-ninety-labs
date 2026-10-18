@@ -144,6 +144,23 @@ short and actionable. This file is public: no research sources, product names or
   `tests/test_draw.py::test_only_frames_the_detector_ran_on_are_drawn_and_counted` fails on it
   (4 misses over 3 frames instead of 2 over 2).
 
+### 70. A rule for every clip must run on every kind of clip
+- **What happened:** AGENTS.md says every clip passes `ninety-validate`, but the renderer wrote
+  `clip.json` and never the contract's `meta.json`, so the validator rejected every rendered clip
+  ("missing meta.json") and no training clip was ever checked against the contract. The render
+  checks passed, because they checked pixels and boxes, not the contract. Given a `meta.json`, 10 of
+  25 training and test windows still failed, each on what lay beyond its cut: a pass still in the
+  air at the last frame, an interception whose pass came before the first, a restart for a ball
+  that went out before the window.
+- **Rule:** a contract every clip must meet is run by the code that makes clips, as part of the
+  check that decides whether a clip ships. A clip that is part of something larger says so in
+  its metadata, and a check withholds only the judgements whose evidence lies outside it. It never
+  passes something it could have judged from inside.
+- **Check:** `tests/test_render_clip.py::test_a_rendered_clip_meets_the_data_contract` fails on
+  the old renderer; `check_clip` reports `data_contract`, so the render job refuses a clip that
+  fails it; the window tests in `tests/test_validate.py` pass a cut case and fail the same clip
+  without `window`.
+
 ## Working in the repo
 
 ### 12. "No checks yet" is not "checks passed"

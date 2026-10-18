@@ -401,3 +401,120 @@ def test_a_pass_by_a_player_near_a_ball_someone_else_holds_fails(tmp_path):
     clip["events"][0]["player"] = "a1"
     clip["events"][0]["team"] = "away"
     assert "C8 event order" in run(tmp_path, clip)
+
+
+# --- a window cut from a longer match (a rendered clip) ----------------------------------------
+
+
+def cut(clip: dict, first: int, last: int) -> dict:
+    """Keep frames first..last and the events in them, as the renderer cuts a clip from a match."""
+    clip["frames"] = [f for f in clip["frames"] if first <= f["frame"] <= last]
+    clip["events"] = [e for e in clip["events"] if first <= e["frame"] <= last]
+    clip["meta"]["window"] = {"first_frame": first, "last_frame": last}
+    return clip
+
+
+def intercepted_clip() -> dict:
+    """The pass is cut out by a1, who stands where it was going (as in the interception test above)."""
+    clip = clean_clip()
+    for f in clip["frames"]:
+        f["players"][1].update(x=50.0, y=45.0)
+        f["players"][2].update(x=50.0, y=30.0)
+        if f["possessor"] == "h2":
+            f["possessor"] = "a1"
+    clip["events"][0].update(receiver=None, outcome="fail", interceptor="a1")
+    clip["events"].append(event("e2", PASS_AT + 25, "interception", "away", "a1", x=50.0))
+    return clip
+
+
+def test_a_pass_still_travelling_when_the_window_ends_passes(tmp_path):
+    """C7: the ball reaches (50, 30) at frame 30, after the cut; what it did next is not in the clip."""
+    assert run(tmp_path, cut(clean_clip(), 0, 20)) == {}
+
+
+def test_the_same_cut_pass_fails_in_a_clip_that_is_not_a_window(tmp_path):
+    clip = cut(clean_clip(), 0, 20)
+    del clip["meta"]["window"]
+    assert "C7 ball path" in run(tmp_path, clip)
+
+
+def test_a_pass_that_never_arrives_before_a_later_event_in_the_window_fails(tmp_path):
+    """C7 is withheld only at the cut: a later on-ball event inside the window still bounds the pass."""
+    clip = clean_clip()
+    clip["events"][0]["end_x"] = 80.0
+    clip["events"].append(event("e2", 60, "tackle", "away", "a1", x=50.0))
+    assert "C7 ball path" in run(tmp_path, cut(clip, 0, 149))
+
+
+def test_an_interception_whose_pass_was_before_the_window_passes(tmp_path):
+    assert run(tmp_path, cut(intercepted_clip(), 10, 149)) == {}
+
+
+def test_an_interception_from_nowhere_in_a_window_that_holds_the_pass_fails(tmp_path):
+    clip = clean_clip()
+    interception_from_nowhere(clip)
+    assert "C8 event order" in run(tmp_path, cut(clip, 0, 149))
+
+
+def test_a_goal_whose_shot_was_before_the_window_passes(tmp_path):
+    clip = clean_clip()
+    goal_without_shot(clip)
+    assert "C8 event order" not in run(tmp_path, cut(clip, 20, 149))
+
+
+def test_a_substitution_whose_stoppage_was_before_the_window_passes(tmp_path):
+    clip = clean_clip()
+    substitute(clip, 120, with_stoppage=False)
+    assert run(tmp_path, cut(clip, 100, 149)) == {}
+
+
+def test_a_substitution_in_play_inside_a_window_fails(tmp_path):
+    clip = clean_clip()
+    substitute(clip, 120, with_stoppage=False)
+    assert "C3 roster" in run(tmp_path, cut(clip, 0, 149))
+
+
+def test_a_window_that_does_not_match_its_frames_fails(tmp_path):
+    clip = cut(clean_clip(), 0, 20)
+    clip["meta"]["window"]["first_frame"] = 3
+    assert "C1 files" in run(tmp_path, clip)
+
+
+def dead_ball_clip(teleport_at: int | None = None) -> dict:
+    """The ball goes out at frame 100 and is placed 44.5 m away for a goal kick at frame 110."""
+    clip = clean_clip()
+    for n in range(100, 150):
+        clip["frames"][n]["possessor"] = None
+    for n in range(110, 150):
+        clip["frames"][n]["ball"]["x"] = 5.5
+    if teleport_at is not None:  # the ball jumps 20 m in one frame while in play
+        clip["frames"][teleport_at]["ball"]["x"] += 20.0
+    clip["events"].append(event("e2", 100, "out_of_play", "home", x=50.0))
+    clip["events"].append(event("e3", 110, "set_piece", "away", "a1", x=5.5))
+    return clip
+
+
+def test_a_window_that_opens_on_a_dead_ball_may_place_a_new_one(tmp_path):
+    """P3: the ball went out before the cut; the restart in the window places a new one."""
+    assert run(tmp_path, cut(dead_ball_clip(), 105, 149)) == {}
+
+
+def test_a_ball_placed_with_no_stoppage_in_a_whole_clip_fails(tmp_path):
+    clip = cut(dead_ball_clip(), 105, 149)
+    del clip["meta"]["window"]
+    assert "P3 ball speed" in run(tmp_path, clip)
+
+
+def test_a_ball_too_fast_before_a_stoppage_in_the_window_fails(tmp_path):
+    """The window holds the stoppage, so the ball was in play until then and P3 judges it."""
+    assert "P3 ball speed" in run(tmp_path, cut(dead_ball_clip(teleport_at=60), 0, 149))
+
+
+def test_a_ball_too_fast_before_a_goal_and_its_kickoff_in_the_window_fails(tmp_path):
+    """A goal is a stoppage too: the kickoff after it does not mean the window opened on a dead ball."""
+    clip = clean_clip()
+    clip["frames"][60]["ball"]["x"] += 20.0
+    clip["events"].append(event("e2", 100, "goal", "home", None, x=105.0, y=34.0))
+    clip["events"].append(event("e3", 110, "kickoff", "away", "a1", x=52.5, y=34.0))
+    clip["meta"]["score"]["home"] = 1
+    assert "P3 ball speed" in run(tmp_path, cut(clip, 0, 149))
