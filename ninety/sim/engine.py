@@ -18,7 +18,7 @@ from __future__ import annotations
 import math
 from dataclasses import asdict, dataclass, field
 
-from ninety.sim import ball, decisions, firsttouch, fmath, offball, perception, profiles, shape
+from ninety.sim import ball, decisions, firsttouch, fmath, offball, perception, profiles, roles, shape
 from ninety.sim import team as team_mod
 from ninety.sim.body import (
     BODY_HEIGHT,
@@ -33,6 +33,7 @@ from ninety.sim.body import (
     Body,
     can_get_to,
     relative_speed,
+    sprint_cost_m,
 )
 from ninety.sim.body import move as move_body
 from ninety.sim.decisions import PENALTY_DEPTH
@@ -40,6 +41,7 @@ from ninety.sim.firsttouch import BODY_TOUCH_Z, TOUCH_GAP_S  # A4, P14, D6
 from ninety.sim.offball import KEEPER_DIVE_TRAVEL_M
 from ninety.sim.profiles import Profile
 from ninety.sim.style import HIGH, LOW, MID, Style, preset_name
+from ninety.sim.style import tilt as style_tilt
 from ninety.sim.team import ROLE_LINE, TeamBrain
 
 PITCH_X, PITCH_Y = 105.0, 68.0
@@ -54,6 +56,7 @@ SHAPE = 3.0  # getting up after being beaten (design)
 DRIBBLE = 2.5
 DECIDE_EVERY = 6  # frames between the ball carrier's decisions (about 4 a second)
 PERCEIVE_EVERY = 6  # frames between a player's looks at the pitch (about 4 a second, staggered)
+LOOK_S = PERCEIVE_EVERY / FPS  # O10: off the ball he weighs his moves again once a look
 BRAIN_EVERY = 12  # frames between a team brain's reads of the game (about 2 a second)
 BLOCK_DIAL = {"low": LOW, "mid": MID, "high": HIGH}  # a drawn block as a style dial (T4)
 COVER_BEHIND_M = 8.0  # design: the covering player stands this far goal-side of the ball, behind the presser
@@ -289,6 +292,7 @@ class Engine:
         # Perception draws from its own stream, so a change to what players see does not
         # reshuffle every other random draw in the match.
         self.sight_rng = fmath.Random(f"{seed}-perception")
+        self.move_rng = fmath.Random(f"{seed}-offball")  # O10: off-ball choices
         self.match = Match(seed=seed)
         self.players: list[Player] = []
         # A strength not given is drawn, home first: with none given the match is the same as before.
@@ -391,7 +395,7 @@ class Engine:
         self.dive_show: dict[str, tuple[float, float]] = {}  # keeper -> (until, side)
         self.dribble_to: tuple[float, float] | None = None  # the carrier's chosen carry, if any
         self.intended: str | None = None  # the team-mate a pass was played to: he expects it
-        self.runs: dict[str, tuple[float, float, float]] = {}  # runner -> (x, y, started at)
+        self.moves: dict[str, tuple[str, float, float, float]] = {}  # O10: player -> (move, x, y, chosen at)
         self.moved: str | None = None  # the carrier, already moved this frame by tick_carrier
         self.hold_until = 0.0
         self.pressed: dict[str, float] = {}
@@ -499,7 +503,7 @@ class Engine:
         self.windup = None
         self.read = None
         self.intended = None
-        self.runs = {}
+        self.moves = {}
         self.touched_since_kick = False
         self.chase = {}
         self.dribble_to = None
@@ -1533,28 +1537,11 @@ class Engine:
             return mx, my, max(need, math.hypot(mvx + (mx - p.x) * close, mvy + (my - p.y) * close))
         carrier = self.by_id.get(self.possessor) if self.possessor else None
         if brain.in_possession and carrier and carrier.team == p.team and p.role != "GK":
-            run = self.run_target(p, carrier, brain)
-            if run:
-                return *run, SPRINT
-            mates = sorted(
-                (
-                    q
-                    for q in self.players
-                    if q.team == p.team and q.id not in (carrier.id,) and q.role != "GK"
-                ),
-                key=lambda q: math.hypot(q.x - carrier.x, q.y - carrier.y),
-            )
-            if p in mates[:2]:  # O3: the nearest two offer a diagonal option
-                presser = self.nearest(carrier.x, carrier.y, other(p.team))
-                sx, sy = offball.support_spot((p.x, p.y), (carrier.x, carrier.y), goal_x(p.team),
-                                              (presser.x, presser.y))
-                return sx, sy, self.in_time(p, sx, sy)
+            move = self.movement(p, carrier, brain)  # O10: hold, support, come short or run
+            if move:
+                return move
         if brain.in_possession and p.role != "GK":  # O6: the team's shape with the ball (also in flight)
-            seen = [w for w in (self.beliefs[p.id].where(q.id, self.t) for q in self.players
-                                if q.team != p.team) if w]
-            onside = self.onside_limit(p.team, seen, bx)  # L10: as far as he sees he may go
-            spot = offball.attacking_slot(p.role, PITCH_X - goal_x(p.team), clamp(bx, 0, PITCH_X),
-                                          clamp(by, 0, PITCH_Y), onside)
+            spot = self.hold_spot(p, brain, bx, by)
             if spot:
                 return *spot, self.in_time(p, *spot)
         if not brain.in_possession and p.role != "GK":
@@ -1580,11 +1567,23 @@ class Engine:
                 carrier = self.by_id.get(self.possessor) if self.possessor else None
                 lead_x = carrier.vx * JOCKEY_LOOKAHEAD_S if carrier else 0.0
                 lead_y = carrier.vy * JOCKEY_LOOKAHEAD_S if carrier else 0.0
-                return *on_pitch(bx + lead_x + gx * gap, by + lead_y + gy * gap), work
+                # Goal-side of where the carrier is going, on the line from there to the goal: the
+                # lane a shot from there would take (not the lane from where the ball is now).
+                fx, fy = bx + lead_x, by + lead_y
+                fd = math.hypot(own[0] - fx, own[1] - fy) or 1.0
+                ux, uy = (own[0] - fx) / fd, (own[1] - fy) / fd
+                return *on_pitch(*self.press_path(p, fx, fy, ux, uy, gap)), work
+            if not engaged and not self.restart and self.presses_high(p, brain, bx, by):
+                # O9: a pressing role goes to the carrier beyond the block's engagement line,
+                # goal-side and a step away, as the first presser does; the rest hold the block.
+                return *on_pitch(bx + gx * gap, by + gy * gap), work
             if engaged and brain.pressers[1:2] == [p.id]:  # cover: behind the presser, goal-side
                 behind = max(COVER_BEHIND_M, gap + 2)
                 cx, cy = on_pitch(bx + gx * behind, by + gy * behind)
-                return cx, cy, self.in_time(p, cx, cy)
+                # A shot can come from wherever the ball is now (as the keeper sets himself): within
+                # shooting range the cover gets into the lane at his work rate, not in time for a pass.
+                shooting = math.hypot(own[0] - bx, own[1] - by) < offball.SHOT_RANGE_M
+                return cx, cy, work if shooting else self.in_time(p, cx, cy)
             slot = brain.slot(p.role, p.ay, clamp(by, 0, PITCH_Y))
             if slot:
                 tx, ty = slot
@@ -1648,36 +1647,172 @@ class Engine:
             else:
                 brain.markers = {}
 
-    def run_target(self, p: Player, carrier: Player, brain: TeamBrain) -> tuple[float, float] | None:
-        """O4: forwards (and anyone who likes to) run in behind when the carrier has the ball
-        under control, facing forward and not pressed, while they are onside."""
-        if p.id in self.runs:
-            x, y, started = self.runs[p.id]
-            if self.t - started < 3.0:
-                return x, y
-            del self.runs[p.id]
-        likes = "runs_in_behind" in p.profile.traits
-        # A high counter-attacking style (T4) also sends the central midfielders forward while
-        # the counter is on.
-        countering = brain.style.level("counter_attacking") == "high" and brain.attacking_transition(self.t)
-        midfielder = ROLE_LINE.get(p.role) == "midfield"
-        if p.role not in ("ST", "RW", "LW") and not likes and not (countering and midfielder):
+    def hold_spot(self, p: Player, brain: TeamBrain, bx: float, by: float) -> tuple[float, float] | None:
+        """O6: his spot in the team's shape with the ball, shifted for his role (roles.py), never
+        beyond the onside line as he sees it (L10)."""
+        seen = [w for w in (self.beliefs[p.id].where(q.id, self.t) for q in self.players
+                            if q.team != p.team) if w]
+        onside = self.onside_limit(p.team, seen, bx)
+        role = roles.role_of(p.profile.archetype)
+        return offball.attacking_slot(p.role, PITCH_X - goal_x(p.team), clamp(bx, 0, PITCH_X),
+                                      clamp(by, 0, PITCH_Y), onside, role.forward_m, role.inside_m)
+
+    def movement(self, p: Player, carrier: Player, brain: TeamBrain) -> tuple[float, float, float] | None:
+        """O10: what he does while a team-mate has the ball. At each look he weighs the moves open
+        to him (offball.MOVES) by what each is worth to his team: the chance the carrier could find
+        him there, times the chance he would be first to the ball there, times what the ball is
+        worth there (an off-ball scoring opportunity, Spearman 2018), each times his role's, his
+        habits' and his team's prior on that move; then picks one as he picks on the ball (D4). A
+        forward run is a sprint to the spot he chose, kept while he carries on with it; the other
+        moves follow the ball. None: he holds his spot in the shape (O6)."""
+        made = self.moves.get(p.id)
+        if made and self.t - made[3] < LOOK_S:  # between looks he carries on
+            kind, spot = made[0], made[1:3]
+        else:
+            spots = {k: s for k in offball.MOVES if (s := self.move_spot(p, carrier, brain, k))}
+            if made and made[0] in offball.FORWARD_RUNS and made[0] in spots:
+                spots[made[0]] = made[1:3]  # carrying on with his run: the spot he is running to
+            if not spots:
+                self.moves.pop(p.id, None)
+                return None
+            worth = {k: self.move_prior(p, brain, k) * self.move_worth(p, carrier, s)
+                     for k, s in spots.items()}
+            heat = decisions.choice_temperature(p.profile["decisions"], 0.0, p.profile["composure"])
+            kind = offball.pick_move(worth, heat, made[0] if made else None, self.move_rng, decisions.STICKY)
+            spot = spots[kind]
+            self.moves[p.id] = (kind, *spot, self.t)
+        if kind in offball.FORWARD_RUNS:
+            return *spot, SPRINT
+        if kind == "hold":
             return None
-        settled = self.t >= self.hold_until
-        nearest = min(math.hypot(q.x - carrier.x, q.y - carrier.y) for q in self.players if q.team != p.team)
-        can_play = settled and nearest > decisions.PRESSURE_FRONT_M / 2
+        spot = self.move_spot(p, carrier, brain, kind)  # support and coming short follow the ball
+        return (*spot, self.in_time(p, *spot)) if spot else None
+
+    def move_prior(self, p: Player, brain: TeamBrain, kind: str) -> float:
+        """O10: how much his role, his habits and his team's style lean toward a move."""
+        if kind in ("hold", "support"):
+            return 1.0
+        prior = roles.role_of(p.profile.archetype).prior(kind)
+        # T4: a high counter-attacking style also sends the central midfielders in behind while the
+        # counter is on (as an ordinary move of theirs).
+        countering = brain.style.level("counter_attacking") == "high" and brain.attacking_transition(self.t)
+        if kind == "in_behind" and countering and ROLE_LINE.get(p.role) == "midfield":
+            prior = max(prior, 1.0)
+        for trait in p.profile.traits:  # a habit strengthens a move of his role; it never adds one
+            prior *= roles.TRAIT_MOVES.get(trait, {}).get(kind, 1.0)
+        return prior * roles.style_weight(style_tilt(brain.style.directness), kind)
+
+    def move_worth(self, p: Player, carrier: Player, spot: tuple[float, float]) -> float:
+        """O10: what being at `spot` is worth to his team, as he sees the pitch: the chance the
+        carrier finds him there (the passer's lane race, D1), times the chance he gets there and to
+        the ball first (offball.receive_chance), times what the ball is worth there (D7, D9)."""
         view = self.beliefs[p.id]
-        defenders = sorted(
-            (w[0] for w in (view.where(q.id, self.t) for q in self.players if q.team != p.team) if w),
-            key=lambda x: -attack_dir(p.team) * x,
-        )
-        second_last = defenders[1] if len(defenders) > 1 else PITCH_X - goal_x(p.team)
-        onside = (second_last - p.x) * attack_dir(p.team) >= 0
-        their_line = self.brains[other(p.team)].line_x
-        spot = offball.run_in_behind((p.x, p.y), their_line, goal_x(p.team), can_play, onside)
-        if spot:
-            self.runs[p.id] = (*spot, self.t)
-        return spot
+        opps = [w for w in (view.where(q.id, self.t) for q in self.players if q.team != p.team) if w]
+        sx, sy = spot
+        gap = math.hypot(sx - p.x, sy - p.y)
+        along = (p.vx * (sx - p.x) + p.vy * (sy - p.y)) / (gap or 1.0)
+        mine = p.physique.time_to_cover(gap, along)
+        ball_s = max(0.0, self.hold_until - self.t) + math.hypot(sx - carrier.x, sy - carrier.y) / \
+            decisions.PASS_SPEED_EST_MPS
+        theirs = min((decisions.generic_time(max(0.0, math.hypot(ox - sx, oy - sy) - CONTROL_M))
+                      for ox, oy in opps), default=math.inf)
+        first = offball.receive_chance(mine, ball_s, theirs, decisions.LANE_MARGIN_S)
+        found = decisions.lane_chance(carrier.x, carrier.y, sx, sy, opps)
+        return found * first * decisions.value(sx, sy, goal_x(p.team))
+
+    def move_spot(self, p: Player, carrier: Player, brain: TeamBrain,
+                  kind: str) -> tuple[float, float] | None:
+        """O3, O4, O6, O9, O10: where a move takes him, or None if it is not open to him now. Every
+        gate reads his own picture of the pitch (his beliefs), as his choice does."""
+        fwd, gx = attack_dir(p.team), goal_x(p.team)
+        if kind == "hold":
+            return self.hold_spot(p, brain, *self.play_point(p))
+        if kind == "support":  # O3: the nearest two offer a diagonal option
+            mates = sorted((q for q in self.players
+                            if q.team == p.team and q.id != carrier.id and q.role != "GK"),
+                           key=lambda q: math.hypot(q.x - carrier.x, q.y - carrier.y))
+            if p not in mates[:2]:
+                return None
+            presser = self.nearest(carrier.x, carrier.y, other(p.team))
+            return offball.support_spot((p.x, p.y), (carrier.x, carrier.y), gx, (presser.x, presser.y))
+        if self.move_prior(p, brain, kind) <= 0.0:
+            return None
+        view = self.beliefs[p.id]
+        seen = [w for w in (view.where(q.id, self.t) for q in self.players if q.team != p.team) if w]
+        if kind == "short":  # O9: back toward the ball, to receive in front of the block
+            spot_x = carrier.x + fwd * roles.DROP_AHEAD_M
+            if (p.x - spot_x) * fwd <= 0:  # he is not ahead of that spot: nothing to come short to
+                return None
+            limit = self.onside_limit(p.team, seen, carrier.x)  # L10: never into an offside spot
+            spot_x = spot_x if (limit - spot_x) * fwd >= 0 else limit
+            return clamp(spot_x, 1.0, PITCH_X - 1.0), (carrier.y + PITCH_Y / 2) / 2
+        # The forward runs: only while he is onside, and only when the carrier can play one (O4):
+        # not pressed, and the ball under control or about to be (he reads it coming, sooner the
+        # better his anticipation).
+        settles = self.hold_until - self.t <= offball.RUN_READ_S * p.profile["anticipation"]
+        nearest = min((math.hypot(x - carrier.x, y - carrier.y) for x, y in seen), default=math.inf)
+        can_play = settles and nearest > decisions.PRESSURE_FRONT_M / 2
+        defenders = sorted((x for x, _ in seen), key=lambda x: -fwd * x)
+        second_last = defenders[1] if len(defenders) > 1 else PITCH_X - gx
+        onside = (second_last - p.x) * fwd >= 0
+        if not (can_play and onside):
+            return None
+        ball_u = (carrier.x - (PITCH_X - gx)) * fwd  # metres from his own goal line
+        spot = None
+        if kind == "overlap":
+            if abs(carrier.y - p.ay) < roles.OVERLAP_FLANK_M and (carrier.x - p.x) * fwd > 0 \
+                    and ball_u > PITCH_X / 3:
+                side = 1.0 if p.ay > PITCH_Y / 2 else -1.0
+                spot = (clamp(carrier.x + fwd * roles.OVERLAP_AHEAD_M, 1.0, PITCH_X - 1.0),
+                        PITCH_Y / 2 + side * (PITCH_Y / 2 - roles.OVERLAP_TOUCHLINE_M))
+        elif kind == "late":
+            if ball_u > offball.FINAL_THIRD_M:
+                spot = gx - fwd * roles.LATE_RUN_DEPTH_M, clamp(carrier.y, PITCH_Y / 2 - 4, PITCH_Y / 2 + 4)
+        else:  # in behind their last line as he sees it
+            behind = offball.run_in_behind((p.x, p.y), second_last, gx, can_play, onside)
+            if behind and kind == "channel":
+                side = 1.0 if p.y > PITCH_Y / 2 else -1.0
+                spot = behind[0], PITCH_Y / 2 + side * roles.DIAGONAL_HALF_SPACE_M
+            elif behind:
+                spot = behind
+        if spot is None:
+            return None
+        # Two runners do not attack the same space: a team-mate already running there takes it.
+        for q, (k, x, y, _) in self.moves.items():
+            if q != p.id and k in offball.FORWARD_RUNS \
+                    and math.hypot(x - spot[0], y - spot[1]) < offball.SAME_POCKET_M:
+                return None
+        # P10: a run is a sprint, paid for from his reserve above critical speed: he makes it only
+        # if what is left would pay for sprinting it flat out (the body's own rule, body.sprint_cost_m),
+        # so a spent player cannot keep making them.
+        body = p.physique
+        gap = round(math.hypot(spot[0] - p.x, spot[1] - p.y))
+        return spot if sprint_cost_m(body.f0, body.v0, body.cs, gap, DT) <= body.reserve else None
+
+    @staticmethod
+    def press_path(p: Player, fx: float, fy: float, ux: float, uy: float, gap: float) -> tuple[float, float]:
+        """D8: the way a presser closes the carrier down. His spot is `gap` goal-side of where the
+        carrier is going, (fx, fy), on the line from there to the goal (direction (ux, uy)). Goal-side
+        of that spot, he aims at the point of that line as far beyond the spot as he is off the line
+        (never nearer the carrier than the spot): on the line he steps straight up it; far off it he
+        first gets into it at about his own depth; in between he cuts in at 45 degrees, so a shot
+        meets him on the way. Level with the ball, behind it, or nearer the carrier than his spot,
+        he runs for the spot itself."""
+        along = (p.x - fx) * ux + (p.y - fy) * uy  # how far goal-side of the carrier he is
+        if along <= gap:
+            return fx + ux * gap, fy + uy * gap
+        lateral = abs((p.x - fx) * uy - (p.y - fy) * ux)  # how far off the line
+        aim = gap + min(along - gap, lateral)
+        return fx + ux * aim, fy + uy * aim
+
+    def presses_high(self, p: Player, brain: TeamBrain, bx: float, by: float) -> bool:
+        """O9: is he the one of his side's pressing roles (roles.py) nearest the ball, while they
+        are out of possession? One goes; the block's own pressers take over inside its line."""
+        if brain.in_possession or not roles.role_of(p.profile.archetype).high_press:
+            return False
+        mine = [q for q in self.players if q.team == p.team and roles.role_of(q.profile.archetype).high_press
+                and self.off_balance.get(q.id, -1.0) <= self.t]
+        return min(mine, key=lambda q: math.hypot(q.x - bx, q.y - by)) is p
 
     def stretch_from(self, p: Player) -> float:
         """When the keeper's arms began to stretch: when his dive began to be prepared (his reaction

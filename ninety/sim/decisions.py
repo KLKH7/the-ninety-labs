@@ -766,6 +766,19 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
     return total * (0.8 if age > STALE_S else 1.0)
 
 
+def lane_chance(sx: float, sy: float, tx: float, ty: float, opponents) -> float:
+    """D1, the same race at its simplest, for a pass a team-mate could play next: the ball at a
+    pass's average speed against the soonest opponent (an average body from standing, after
+    reacting) to any point of the lane, softened by LANE_MARGIN_S. No kick error, no first touch:
+    a cheap look one pass ahead, not the full estimate."""
+    length = math.hypot(tx - sx, ty - sy)
+    margin = math.inf
+    for ox, oy in opponents:
+        d, s = closest_on_segment(ox, oy, sx, sy, tx, ty)
+        margin = min(margin, generic_time(max(0.0, d - CONTROL_M)) - s * length / PASS_SPEED_EST_MPS)
+    return 1.0 if margin == math.inf else sigmoid(margin / LANE_MARGIN_S)
+
+
 def pass_option(scene: Scene, mate: tuple[str, float, float, float]) -> Option | None:
     mid, mx, my, age, *moving = mate
     # O7: into the space he is running into, by the velocity the passer has seen; a team-mate
@@ -866,7 +879,7 @@ def options(scene: Scene) -> list[Option]:
     # weighs holding afresh, so it carries no bonus for carrying on.
     best = max((o.value - (STICKY if o.kind == scene.current else 0.0) for o in out), default=0.0)
     # D9: per decision spent holding, so the longer he waits the less waiting is worth.
-    decay = 1 - (1 - HOLD_DECAY) ** (scene.held + 1)
+    decay = 1 - fmath.ipow(1 - HOLD_DECAY, scene.held + 1)
     later = best * (1 - decay) if best >= 0 else best * (1 + decay)
     lose = 0.5 * p
     out.append(Option("hold", (1 - lose) * later - lose * our_loss(scene, scene.x, scene.y)))
@@ -899,8 +912,8 @@ def taste_key(scene: Scene, o: Option) -> tuple:
     if o.kind == "pass":
         return o.kind, o.receiver, o.lofted
     if o.kind == "dribble" and o.target:
-        goal = math.atan2(PITCH_Y / 2 - scene.y, scene.goal_x - scene.x)
-        turn = math.atan2(o.target[1] - scene.y, o.target[0] - scene.x) - goal
+        goal = fmath.atan2(PITCH_Y / 2 - scene.y, scene.goal_x - scene.x)
+        turn = fmath.atan2(o.target[1] - scene.y, o.target[0] - scene.x) - goal
         return o.kind, round(((turn + math.pi) % (2 * math.pi) - math.pi) / 0.8)
     return (o.kind,)
 
@@ -922,7 +935,7 @@ def choose(scene: Scene, rng: random.Random, tastes: dict | None = None) -> Opti
     def taste(o: Option) -> float:
         k = taste_key(scene, o)
         if k not in tastes:
-            tastes[k] = -math.log(-math.log(max(rng.random(), 1e-12)))
+            tastes[k] = -fmath.log(-fmath.log(max(rng.random(), 1e-12)))
         return tastes[k]
 
     return max(opts, key=lambda o: o.value / t + taste(o))

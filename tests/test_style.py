@@ -280,7 +280,9 @@ def test_a_high_counter_attacking_team_sends_its_midfielders_in_behind_while_the
         brain.in_possession, brain.changed_at = True, e.t
         e.brains["away"].line_x = 70.0
         assert "runs_in_behind" not in runner.profile.traits
-        assert (e.run_target(runner, carrier, brain) is not None) is runs
+        runner.profile.archetype = "ball_winner"  # no run in behind of his own (roles.py)
+        # O10: the counter opens the run to him; whether he makes it is his choice among his moves.
+        assert (e.move_spot(runner, carrier, brain, "in_behind") is not None) is runs
 
 
 def test_on_ball_weights_never_go_negative_anywhere_on_the_dial():
