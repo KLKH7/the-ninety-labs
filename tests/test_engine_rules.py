@@ -537,7 +537,9 @@ def test_the_engine_uses_the_attacking_shape_with_the_ball():
     e.brains["home"].in_possession = True
     e.possessor = None  # a pass in flight: the shape still holds
     e.ball = (50.0, 34.0, 0.0, 0.0, 0.0, 0.0)
-    want = offball.attacking_slot("RB", 0.0, 50.0, 34.0, e.brains["away"].line_x)
+    # L10: the onside line as he sees it, which places the forwards and so the lines between
+    seen = [w for w in (e.beliefs[p.id].where(q.id, e.t) for q in e.players if q.team == "away") if w]
+    want = offball.attacking_slot("RB", 0.0, 50.0, 34.0, e.onside_limit("home", seen, 50.0))
     assert e.shape_target(p)[:2] == want
 
 

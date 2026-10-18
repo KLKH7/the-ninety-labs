@@ -529,3 +529,21 @@ short and actionable. This file is public: no research sources, product names or
   turns green while the behaviour behind it does not move, is not a fix.
 - **Check:** for any change that moves a held-out check, list what else moved (stoppages, where
   play happens) and say what did not.
+
+### 53. Seven fixes to how options are valued, when the cause was where team-mates stood
+- **What happened:** possession seldom reached the final third, and seven attempts changed how a
+  carrier values his options (holding, lookahead, measured tables and others). None worked. The
+  option values were all about the same because the options themselves were all about the same:
+  the in-possession shape set every role's height behind the ball, so whoever had it found every
+  non-forward level with or behind him (all seven within 5 m of a centre-back on the ball) and the
+  front three 27 m ahead, with nobody between the lines. Set in lines from the team's own back
+  line instead, own-third possession fell from 56 to 39 percent. Separately, the shot estimate
+  judged defenders where they stood, though a shooter facing away turns before he strikes (P16),
+  which the pass estimate already counted: shots after a turn were blocked 24 percent of the time
+  against an estimated 9.
+- **Rule:** before changing how a decision weighs its options, measure what options it is offered
+  (who is where, relative to the man on the ball) and whether each estimate matches what the
+  engine then does. A flat set of values can be a flat set of choices.
+- **Check:** for any rate about where play happens, tabulate the options offered per decision
+  (count, direction, value) and each estimate against its measured outcome, split by the
+  conditions the engine treats differently (here: facing the goal or turning).

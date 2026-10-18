@@ -46,3 +46,33 @@ def test_box_runners_wait_onside_for_the_delivery():
     assert st[0] <= 92.0  # held a step onside of their line, not parked at the near post
     beyond_ball = slot("ST", ball_x=95.0, ball_y=60.0, line=93.0)
     assert beyond_ball[0] <= 95.0  # level with the ball at most, when the ball is further on
+
+
+def test_with_a_centre_back_on_the_ball_the_midfield_stands_ahead_of_him():
+    """O6, the defect: heights set behind the ball put every midfielder level with or behind a
+    centre-back on the ball, leaving him no one between the lines. The team stands in its own
+    lines, so they are ahead of him."""
+    for ball_x in (15.0, 25.0):  # in his own zone, every midfielder is ahead of him
+        for role in ("CM", "RCM", "LCM"):
+            assert slot(role, ball_x=ball_x)[0] > ball_x + 2.0
+    for role in ("RCM", "LCM"):  # stepped in with it, the two further forward still are
+        assert slot(role, ball_x=35.0)[0] > 35.0 + 5.0
+
+
+def test_the_lines_keep_their_order_and_the_team_its_length():
+    """O6: back line, then full-backs and the holding midfielder, then the other two midfielders,
+    then the forwards, wherever the ball is; the forwards no further than the team's length (Rico-
+    Gonzalez: 31 to 46 m in possession) ahead of the back line, and onside."""
+    for ball_x in range(5, 101, 5):
+        for line in (60.0, 80.0, 95.0, 103.0):
+            # L10: the onside line is never nearer his own goal than halfway or the ball (onside_limit)
+            line = max(line, 52.5, ball_x + 0.5)
+            u = {r: slot(r, ball_x=float(ball_x), ball_y=34.0, line=line)[0] for r in O.SHAPE_IN_POSSESSION}
+            assert u["RCB"] == u["LCB"] < u["RB"] == u["LB"] == u["CM"] < u["RCM"] == u["LCM"] < u["ST"]
+            assert u["ST"] - u["RCB"] <= O.TEAM_LENGTH_MAX_M + 1e-9
+            assert u["ST"] <= line - 1.0 + 1e-9  # a step onside of their line
+
+
+def test_the_back_line_follows_the_ball():
+    assert slot("RCB", ball_x=60.0)[0] == 60.0 - O.BACK_LINE_BEHIND_M
+    assert slot("RCB", ball_x=20.0)[0] == O.DEEPEST_M  # never deeper than this

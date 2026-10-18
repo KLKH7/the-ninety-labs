@@ -768,3 +768,77 @@ def test_a_throw_in_leaves_his_hands_at_once_whichever_way_he_faces(monkeypatch)
     D.pass_confidence(scene(throw=True, heading=math.pi, ball_offset=(0.0, 0.0)), 70.0, 34.0, 70.0, 34.0,
                       0.0, True)
     assert asked and all(len(a) == 5 and a[3] for a in asked)
+
+
+def _as_read(now, velocities, keeper=None):
+    """Opponents as engine.scene_for gives them: `opponents` (and the keeper) read ANTICIPATE_S
+    ahead, `moving` where seen now with the velocity seen."""
+    from ninety.sim.engine import ANTICIPATE_S
+    ahead = [(x + vx * ANTICIPATE_S, y + vy * ANTICIPATE_S)
+             for (x, y), (vx, vy) in zip(now, velocities, strict=True)]
+    moving = [(x, y, vx, vy, (x, y) == keeper) for (x, y), (vx, vy) in zip(now, velocities, strict=True)]
+    k = ahead[now.index(keeper)] if keeper else None
+    return dict(opponents=ahead, moving=moving, keeper=k)
+
+
+def test_a_shot_he_must_turn_for_is_judged_against_defenders_where_they_will_be_when_he_strikes():
+    """P16 for shots, as for passes: a shooter facing away turns before he strikes, and a defender
+    he sees running across meanwhile is in the way by then. Measured before this rule (8 matches):
+    shots after a turn were blocked 24% of the time against a 9% estimate; facing goal, 9% against 7%.
+    Mutations caught: the shot judged from where the defenders are read, whatever the turn; moved
+    on from where they are seen now rather than read a moment ahead (the facing shot's reading)."""
+    from ninety.sim.engine import ANTICIPATE_S
+    turn = D.strike_turn(math.pi, 20.0, 0.0)[1]
+    assert turn > 0.2
+    # Seen 3 m or so to the side of the shooting line, running across it: on it once he has turned.
+    now = [(90.0, 34.0 + 6.0 * (turn + ANTICIPATE_S))]
+    read = _as_read(now, [(0.0, -6.0)])
+    turned = scene(x=85.0, y=34.0, heading=math.pi, **read)
+    facing = scene(x=85.0, y=34.0, heading=0.0, **read)
+    still = scene(x=85.0, y=34.0, heading=math.pi, opponents=read["opponents"])
+    (ox, oy), = D.at_strike(turned)[0]
+    assert ox == pytest.approx(90.0) and oy == pytest.approx(34.0)
+    assert D.at_strike(facing)[0] == read["opponents"] and D.at_strike(still)[0] == read["opponents"]
+    assert D.shot_chance(turned) < D.shot_chance(still)
+
+
+def test_a_header_or_a_dead_ball_is_judged_by_its_own_turn():
+    """A header at goal is met as the ball comes, with no turn (engine.shoot); a free kick facing
+    away is squared up to before it is struck (P16, dead), a longer turn than in play. Mutations
+    caught: either case judged as a shot in play."""
+    read = _as_read([(90.0, 40.0)], [(0.0, -6.0)])
+    header = scene(x=85.0, y=34.0, heading=math.pi, header=True, **read)
+    assert D.at_strike(header)[0] == read["opponents"]
+    live, dead = (D.strike_turn(math.pi, 20.0, 0.0, False, d)[1] for d in (False, True))
+    assert dead > live
+    (_, oy), = D.at_strike(scene(x=85.0, y=34.0, heading=math.pi, dead=True, **read))[0]
+    assert oy == pytest.approx(read["opponents"][0][1] - 6.0 * dead)
+
+
+def test_each_opponent_moves_on_by_his_own_velocity_and_one_who_reaches_the_cone_blocks():
+    """The shot's blocker count is taken at the strike too: two defenders, one already in the cone
+    and one running into it, are both blockers once he has turned (more of the time the shot is
+    blocked, losing the ball at his feet), while the chance it scores is the same: screened
+    either way. Mutations caught: the blockers counted where they are read; velocities paired with
+    the wrong opponents."""
+    from ninety.sim.engine import ANTICIPATE_S
+    turn = D.strike_turn(math.pi, 20.0, 0.0)[1]
+    now = [(95.0, 34.0), (90.0, 34.0 + 6.0 * (turn + ANTICIPATE_S))]
+    read = _as_read(now, [(0.0, 0.0), (0.0, -6.0)])
+    turned = scene(x=85.0, y=34.0, heading=math.pi, **read)
+    seen = scene(x=85.0, y=34.0, heading=math.pi, opponents=read["opponents"])
+    assert D.at_strike(turned)[0] == [pytest.approx((95.0, 34.0)), pytest.approx((90.0, 34.0))]
+    assert D.shot_chance(turned) == pytest.approx(D.shot_chance(seen))
+
+    def shot(s):
+        return next(o for o in D.options(s) if o.kind == "shoot").value
+    assert shot(turned) < shot(seen)
+
+
+def test_the_keeper_is_judged_where_he_will_be_when_the_shot_is_struck():
+    turn = D.strike_turn(math.pi, 20.0, 0.0)[1]
+    k = (103.0, 30.0)
+    read = _as_read([k], [(0.0, 4.0)], keeper=k)
+    s = scene(x=85.0, y=34.0, heading=math.pi, **read)
+    opponents, keeper = D.at_strike(s)
+    assert keeper == pytest.approx((103.0, read["keeper"][1] + 4.0 * turn)) and opponents == [keeper]

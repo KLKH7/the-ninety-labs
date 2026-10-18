@@ -874,6 +874,25 @@ def pass_option(scene: Scene, mate: tuple[str, float, float, float]) -> Option |
     return best
 
 
+def at_strike(scene: Scene) -> tuple[list[tuple[float, float]], tuple[float, float] | None]:
+    """P16: the opponents and their keeper as the shot estimate judges them. Facing the goal, as he
+    reads them everywhere else: a moment ahead (`opponents`, anticipated by the engine). If he must
+    turn first (strike_turn), each has moved on meanwhile at the velocity he believes he has
+    (`moving`, in the order of `opponents`), as the pass race moves everyone on for the turn
+    (pass_confidence): a moment ahead of the strike, not of now. A header is met as it comes."""
+    wait = 0.0 if scene.header else strike_turn(scene.heading, scene.goal_x - scene.x,
+                                                PITCH_Y / 2 - scene.y, scene.throw, scene.dead)[1]
+    if wait <= 0 or not scene.moving:
+        return scene.opponents, scene.keeper
+    opponents, keeper = [], scene.keeper
+    for (ox, oy), (_, _, ovx, ovy, is_keeper) in zip(scene.opponents, scene.moving, strict=True):
+        at = (ox + ovx * wait, oy + ovy * wait)
+        opponents.append(at)
+        if is_keeper and keeper is not None:
+            keeper = at
+    return opponents, keeper
+
+
 def shot_chance(scene: Scene) -> float:
     """His estimate that a shot from here goes in. With measured tables (D7): how often shots from
     here went in, scaled by how this situation compares with an open one (blockers in the cone, the
@@ -882,7 +901,8 @@ def shot_chance(scene: Scene) -> float:
     if scene.header:  # P18: the speed his header at goal leaves at (engine.shoot)
         v = 3.6 * min(header_cap(scene, scene.goal_x, PITCH_Y / 2), offball.SHOT_SPEEDS_KMH[1] / 3.6)
         speeds = (v, v)
-    q = shot_estimate(scene.x, scene.y, scene.goal_x, scene.opponents, scene.keeper, speeds)
+    opponents, keeper = at_strike(scene)
+    q = shot_estimate(scene.x, scene.y, scene.goal_x, opponents, keeper, speeds)
     if POSSESSION is None:
         return q
     typical = typical_shot(scene.x, scene.y, scene.goal_x)  # what the measured rate averages over
@@ -903,8 +923,9 @@ def options(scene: Scene) -> list[Option]:
         bias = 1.3 if "shoots_from_distance" in scene.traits else 1.0
         # A shot that fails is either blocked, leaving the ball at his feet for them, or missed or
         # saved, which gives the ball back from deep (a goal kick or the keeper's hands).
-        blockers = sum(in_cone(scene.x, scene.y, scene.goal_x, ox, oy) for ox, oy in scene.opponents
-                       if (ox, oy) != scene.keeper)
+        opponents, keeper = at_strike(scene)
+        blockers = sum(in_cone(scene.x, scene.y, scene.goal_x, ox, oy) for ox, oy in opponents
+                       if (ox, oy) != keeper)
         blocked = 1 - BLOCKER_FACTOR ** blockers
         # A miss or a save gives them the ball deep in their own half (a goal kick or the keeper's).
         missed = loss_cost(scene.goal_x - attack(scene.goal_x) * GOAL_KICK_M, PITCH_Y / 2, scene.goal_x)

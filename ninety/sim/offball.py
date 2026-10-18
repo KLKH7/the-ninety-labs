@@ -183,18 +183,22 @@ def run_in_behind(player: tuple[float, float], line_x: float, goal_x: float,
     return x, min(PITCH_Y - 1, max(1.0, player[1]))
 
 
-# O6: where each role stands while his team has the ball (design, *verify* against team shape in
-# possession: length about 31 to 46 m and width 35 to 48 m, Rico-Gonzalez review, so the widest
-# players stand about 21 m either side of the centre; formations in and
-# out of possession differ, Shaw and Glickman 2019). Heights are metres from his own goal line,
-# relative to the ball; the attackers hold the opponents' last line, staying onside.
-# role: (metres behind the ball, or None for the opponents' last line; metres across from the centre)
+# O6: where each role stands while his team has the ball. The team stands in lines, as it does
+# without the ball (team.py): the back line a set distance behind the ball, the forwards on the
+# opponents' last line (onside), and the others spread across the team's length between them, so
+# whoever has the ball has team-mates ahead of him as well as behind. Team length in possession is
+# about 31 to 46 m and width 35 to 48 m (Rico-Gonzalez review), so the widest players stand about
+# 21 m either side of the centre; formations in and out of possession differ (Shaw and Glickman
+# 2019). Line shares and the back line's distance behind the ball are design, *verify*.
+# role: (share of the team's length ahead of its back line, or None for the forwards; metres across)
 SHAPE_IN_POSSESSION = {
-    "RCB": (24.0, -11.0), "LCB": (24.0, 11.0),
-    "RB": (8.0, -18.0), "LB": (8.0, 18.0),
-    "CM": (10.0, 0.0), "RCM": (3.0, -13.0), "LCM": (3.0, 13.0),
+    "RCB": (0.0, -11.0), "LCB": (0.0, 11.0),
+    "RB": (1 / 3, -18.0), "LB": (1 / 3, 18.0), "CM": (1 / 3, 0.0),
+    "RCM": (2 / 3, -13.0), "LCM": (2 / 3, 13.0),
     "RW": (None, -21.0), "LW": (None, 21.0), "ST": (None, 0.0),
 }
+BACK_LINE_BEHIND_M = 24.0  # the back line's distance behind the ball
+TEAM_LENGTH_MAX_M = 46.0  # the most a team stretches with the ball, back line to forwards (Rico-Gonzalez)
 DEEPEST_M = 12.0  # nobody's in-possession spot is deeper than this from his own goal
 BALL_SIDE_IN_POSSESSION = 0.15  # the shape leans this share toward the ball's side
 FINAL_THIRD_M = 70.0  # ball this far from his own goal: the box is attacked
@@ -204,9 +208,11 @@ BOX_RUNS = {"ST": (99.0, 4.0), "far_winger": (98.0, -7.0), "RCM": (88.0, 0.0)}  
 def attacking_slot(role: str, own_goal_x: float, ball_x: float, ball_y: float,
                    last_line_x: float) -> tuple[float, float] | None:
     # `last_line_x`: the furthest a player of this side may stand and be onside, as he sees it.
-    """O6: where this role stands while his team has the ball. Heights follow the ball; attackers
-    stand on the opponents' last line (onside); with the ball wide in the final third, the striker,
-    the far-side winger and a midfielder attack the near post, the far post and the box edge."""
+    """O6: where this role stands while his team has the ball. The back line follows the ball, the
+    attackers stand on the opponents' last line (onside) no further than the team's length ahead
+    of it, and the other lines are spread between; with the ball wide in the final third, the
+    striker, the far-side winger and a midfielder attack the near post, the far post and the box
+    edge."""
     shape = SHAPE_IN_POSSESSION.get(role)
     if shape is None:
         return None
@@ -223,11 +229,10 @@ def attacking_slot(role: str, own_goal_x: float, ball_x: float, ball_y: float,
             u, side = BOX_RUNS[key]
             u = min(u, max(last_u, ball_u))  # L10: he waits onside for the delivery
             return own_goal_x + fwd * u, PITCH_Y / 2 + ball_side * side
-    behind, width = shape
-    if behind is None:
-        u = max(min(last_u, ball_u + 25.0), ball_u - 5.0)
-    else:
-        u = ball_u - behind
+    share, width = shape
+    back_u = max(DEEPEST_M, ball_u - BACK_LINE_BEHIND_M)
+    front_u = max(min(last_u, back_u + TEAM_LENGTH_MAX_M), ball_u - 5.0)
+    u = front_u if share is None else back_u + share * (front_u - back_u)
     u = min(PITCH_X - 3.0, max(DEEPEST_M, u))
     y = PITCH_Y / 2 + across * width + (ball_y - PITCH_Y / 2) * BALL_SIDE_IN_POSSESSION
     return own_goal_x + fwd * u, min(PITCH_Y - 2.0, max(2.0, y))
