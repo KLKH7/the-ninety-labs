@@ -1,7 +1,10 @@
 """Rendered clips -> the COCO folders RF-DETR trains on (`train/`, `valid/`).
 
-    uv run python -m ninety.vision.coco_export runs/dataset/**/seed* --out runs/coco/v1 \
-        --val-seeds ninety/vision/finetune.json --stride 5 [--train-clips 50]
+    RENDERS_SAS_URL=<container SAS URL> uv run python -m ninety.vision.fetch_clips v2 --out clips
+    uv run python -m ninety.vision.coco_export clips/seed* --out runs/coco/v1 \
+        --config ninety/vision/finetune.json [--stride 5] [--train-clips 50]
+
+Pass training clips only: a pattern that also matches test clips is refused (see below).
 
 Labels come from `frames.jsonl` only, the renderer's exact boxes. A box with visibility 0 has
 nothing drawn and is not a label; a box cut by the image edge is kept, because the detector must
@@ -22,6 +25,7 @@ import argparse
 import hashlib
 import json
 import os
+import shutil
 from pathlib import Path
 
 from ninety.render.splits import split_of
@@ -75,6 +79,18 @@ def _split_clips(clip_dirs: list[Path], val_seeds: set[int]) -> dict[str, list[t
     return out
 
 
+def _place(src: Path, dst: Path) -> None:
+    """Link the frame into the split folder, or copy it where links are not allowed.
+
+    Windows lets only administrators, or accounts in Developer Mode, create symlinks; there the
+    frame is copied. The bytes are the same either way.
+    """
+    try:
+        os.symlink(src, dst)
+    except OSError:
+        shutil.copyfile(src, dst)
+
+
 def write_split(clips: list[tuple[int, Path]], out: Path, stride: int) -> dict:
     out.mkdir(parents=True, exist_ok=True)
     images, annotations = [], []
@@ -86,9 +102,9 @@ def write_split(clips: list[tuple[int, Path]], out: Path, stride: int) -> dict:
                 fr = json.loads(line)
                 image_id = len(images) + 1
                 name = f"seed{seed}_{fr['frame']:06d}.jpg"
-                link = out / name
-                if not link.exists():
-                    os.symlink((d / fr["image"]).resolve(), link)
+                dst = out / name
+                if not dst.exists():
+                    _place((d / fr["image"]).resolve(), dst)
                 cam = fr["camera"]
                 images.append(
                     {

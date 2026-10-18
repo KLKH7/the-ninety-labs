@@ -73,7 +73,16 @@ def test_export_keeps_one_frame_in_stride(tmp_path):
     assert len(load_split(tmp_path / "coco", "train")["images"]) == 2
 
 
-@pytest.mark.parametrize("bad_seed, split", [(900001, "test"), (950000, "reserved")])
+@pytest.mark.parametrize(
+    "bad_seed, split",
+    [
+        (900001, "test"),
+        (950000, "reserved"),
+        # wrong one way only, so each half of the guard is tested on its own:
+        (900001, "train"),  # a test seed whose clip.json says train: the seed check must catch it
+        (5, "test"),  # a training seed whose clip.json says test: the clip.json check must catch it
+    ],
+)
 def test_export_refuses_evaluation_seeds(tmp_path, bad_seed, split):
     dirs = [write_clip(tmp_path, 1), write_clip(tmp_path, bad_seed, split=split)]
     with pytest.raises(ValueError, match="not a training seed"):
@@ -169,7 +178,8 @@ def test_live_path_reads_no_labels(tmp_path):
 def test_inference_uses_the_resolution_the_checkpoint_was_trained_at(tmp_path):
     (tmp_path / "train-manifest.json").write_text(json.dumps({"config": {"resolution": 640}}))
     assert detect.trained_resolution(str(tmp_path / "checkpoint_best_total.pth")) == 640
-    assert detect.trained_resolution(None) is None
+    # the COCO baseline runs at the size we fine-tune at, so a gain is the training, not the input size
+    assert detect.trained_resolution(None) == CONFIG["resolution"]
     with pytest.raises(FileNotFoundError):
         detect.trained_resolution(str(tmp_path / "elsewhere" / "x.pth"))
 
@@ -181,3 +191,16 @@ def test_resume_continues_from_the_runs_last_checkpoint(tmp_path):
     last = train.resume_from(tmp_path)
     assert train.train_kwargs(CONFIG, Path("data"), tmp_path, last)["resume"] == str(tmp_path / "last.ckpt")
     assert "resume" not in train.train_kwargs(CONFIG, Path("data"), tmp_path)
+
+
+def test_export_copies_frames_where_symlinks_are_not_allowed(tmp_path, monkeypatch):
+    # Windows allows symlinks only for administrators or in Developer Mode
+    def no_symlinks(*args, **kwargs):
+        raise OSError("symbolic link privilege not held")
+
+    monkeypatch.setattr(coco_export.os, "symlink", no_symlinks)
+    dirs = [write_clip(tmp_path, s) for s in (1, 2)]
+    coco_export.export(dirs, tmp_path / "coco", val_seeds={2}, stride=1)
+    img = load_split(tmp_path / "coco", "train")["images"][0]
+    frame = tmp_path / "coco" / "train" / img["file_name"]
+    assert not frame.is_symlink() and frame.read_bytes() == b"jpg"
