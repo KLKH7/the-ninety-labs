@@ -197,6 +197,29 @@ identical):
 - #83 (energy in players' choices) changed the matches, so the windows differ from `443c4d5`'s and
   a11's frames are no longer in seed 900002's clip; the test above is what holds the fix.
 
+### Frozen (Oct 18, tag `engine-v1`)
+
+The test set is frozen at tag `engine-v1` (commit `b319f21`: main with #102's capsule bodies and
+#101's crowded window, which picks the window where a player stands on the line from the camera
+to the ball). The five seeds were rendered once, locally, with `ninety-dataset --split test`.
+Their parameters, and the sha256 of every clip's `frames.jsonl`, `events.jsonl` and images, are
+in `docs/eval/test-set-frozen.json`. From here on the test set is these files: a later engine or
+renderer change does not re-render it, and a re-render that does not match the hashes is a
+different test set.
+
+All render checks pass, including determinism (labels and all 250 images of seed 900001
+identical): ball projection max 0.26 px, keypoints max 0.0045 px, every player's foot inside its
+box, no frame with a label problem.
+
+- The ball is under 0.5 visible in 78 of 1,250 frames (**6.24%**; per clip 14.4%, 3.6%, 2.0%,
+  7.6%, 3.6%), above the 5% minimum. Seeds 900001, 900002 and 900004 are crowded and 900004 has
+  low-contrast kits, all drawn from the seed; no override, and no parameter was chosen from this
+  number.
+- Whole players in the main view are 52 to 101 px tall (p05 to p95, per clip), inside the
+  guide's 30 to 120 px.
+- The data-contract check is pending #96, which writes `meta.json`. It is backfilled and
+  validated once #96 lands, and that changes none of the frozen hashes.
+
 The final proof comes later: detector recall on the fixed test set before and after each
 targeted round.
 

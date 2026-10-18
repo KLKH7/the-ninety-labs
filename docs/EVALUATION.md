@@ -260,7 +260,8 @@ invented `shot` (none true) had `precision` 0.0 and `recall` and `f1` `null`.
 
 **The test set must be hard enough.** Each report states the share of test frames with the ball
 in shot and less than half visible. The target before freezing the test set is at least 5%
-(see [PLAN.md](PLAN.md#goals)).
+(see [PLAN.md](PLAN.md#goals)). Met: the test set was frozen on Oct 18 at tag `engine-v1` with 6.24%
+(78 of 1,250), recorded with every clip's hashes in `docs/eval/test-set-frozen.json`.
 
 ## Late drop in high-intensity running (R7)
 
