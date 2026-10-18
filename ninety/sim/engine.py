@@ -950,7 +950,8 @@ class Engine:
                 if st is not None:
                     tx, ty, tz = x0 + st * dx, y0 + st * dy, hz + st * (z1 - hz)
                     # Into his body above a foot, it is a thigh, chest or head (A4); beside him,
-                    # within his reach (P14), a foot at its full first touch (firsttouch.py).
+                    # within his reach (P14), a raised foot at its full first touch (design,
+                    # firsttouch.py).
                     high = into and tz > BODY_TOUCH_Z and not self.hands(p, tx, ty)
                     hits.append((st, "touch", p, tx, ty, tz, qx + st * mx, qy + st * my, high))
             # The body (shape.py, P11) is as wide as his shoulders and as deep as his chest, turned
