@@ -88,6 +88,18 @@ short and actionable. This file is public: no research sources, product names or
   the C math library, and pins `fmath`'s results bit for bit; CI runs it and the cue fixture on
   Linux and macOS.
 
+### 70. A rule ported onto another dial must keep its neutral point
+- **What happened:** A8 said teamwork scales the team's intent by (0.5 + teamwork). On the old
+  line the intent was an additive bonus (0 is none), so that scaled the instruction. Main's dial
+  is a weight where 1 is none: the same formula would have made a low-teamwork player value
+  ground gained less in itself, and pushed a patient side's weight below 0 at high teamwork.
+  The same port let a pressing role press at any height without the rows saying so.
+- **Rule:** when a rule moves onto a different parameter, write down what "no effect" is on the
+  new one and scale the deviation from it, keep the target's own bounds, and re-read the
+  GROUNDING row against the code it now describes.
+- **Check:** a test pins the neutral point (average attribute gives the dial as given, no
+  instruction stays no instruction) and the bound (`tests/test_creativity.py`).
+
 ## Checks that prove something
 
 ### 8. A check must be able to fail
