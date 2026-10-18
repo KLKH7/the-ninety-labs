@@ -12,7 +12,6 @@ from ninety.sim import ball, offball, perception, shape
 from ninety.sim.body import BRAKE_MAX, STRIKE_FACING, TURN_RATE
 from ninety.sim.body import move as move_body
 from ninety.sim.engine import (
-    AERIAL_ABSORB,
     BODY_RESTITUTION,
     COVER_BEHIND_M,
     DT,
@@ -24,6 +23,7 @@ from ninety.sim.engine import (
     throw_hands,
     throw_stand,
 )
+from ninety.sim.firsttouch import CUSHION, KEEP_MPS
 from ninety.sim.profiles import FOOT_ABSORB_MPS, MAX_STRIKE_MPS
 from ninety.sim.style import Style
 from ninety.validate import check_physics
@@ -394,25 +394,32 @@ def _high_ball(touch: float, speed: float, z: float, reacted: bool, y: float = 3
 
 # Speeds between what a body part kills at the worst and the best first touch (profiles.absorb_mps).
 FOOT_WORST, FOOT_BEST = FOOT_ABSORB_MPS[0], FOOT_ABSORB_MPS[0] + FOOT_ABSORB_MPS[1]
-CHEST = (FOOT_WORST + FOOT_BEST) / 2 * AERIAL_ABSORB  # a good chest kills it, a poor one does not
-PAST_THIGH = (FOOT_BEST * AERIAL_ABSORB + FOOT_BEST) / 2  # past the best thigh, inside the best foot
+CHEST = (FOOT_WORST + FOOT_BEST) / 2 * CUSHION["chest"]  # a good chest kills it, a poor one does not
+PAST_THIGH = (FOOT_BEST * CUSHION["thigh"] + FOOT_BEST) / 2  # past the best thigh, inside the best foot
 
 
 def test_a_high_ball_can_be_taken_on_the_body_and_a_poor_touch_is_worse():
-    # At chest height: a good first touch kills it, a poor one is a heavy touch.
+    # At chest height: a good first touch kills it, a poor one is a heavy touch: what the chest could
+    # not kill runs on, toward where he sends it (firsttouch.py), and he is not on it yet (D6).
     killed = _high_ball(1.0, CHEST, 1.35, True)
     assert killed.possessor == "a6" and killed.ball[3] == 0.0 and killed.ball[5] == 0.0
     assert not any(ev["type"] == "deflection" for ev in killed.match.events)
     heavy = _high_ball(0.0, CHEST, 1.35, True)
-    assert heavy.possessor is None
-    assert math.isclose(heavy.ball[3], -MISCONTROL_KEEP * CHEST, rel_tol=0.05)
+    assert heavy.possessor is None and heavy.dribbler == "a6"  # still his to run onto, unlike a rebound
+    left = CHEST - FOOT_WORST * CUSHION["chest"]  # what a poor chest could not kill
+    assert left > KEEP_MPS and math.isclose(math.hypot(heavy.ball[3], heavy.ball[4]), left, rel_tol=0.3)
+    # Far too fast for the surface, it beats him and rebounds.
+    fast = 1.1 * FOOT_WORST * (1 + CUSHION["chest"])  # past what his chest kills plus what he can steer
+    beat = _high_ball(0.0, fast, 1.35, True)
+    assert beat.possessor is None and beat.dribbler is None
+    assert math.isclose(beat.ball[3], -MISCONTROL_KEEP * fast, rel_tol=0.05)
     # The same arrival with no time to set himself still just rebounds off the body.
     cold = _high_ball(1.0, CHEST, 1.35, False)
     assert cold.possessor is None
     assert math.isclose(cold.ball[3], -BODY_RESTITUTION * CHEST, rel_tol=0.05)
     # A thigh is the same idea, and harder than a foot reached out to the side.
     thigh = _high_ball(1.0, PAST_THIGH, 0.7, True)
-    assert thigh.possessor is None and any(ev["type"] == "deflection" for ev in thigh.match.events)
+    assert thigh.possessor is None and thigh.dribbler == "a6"  # a heavy touch, where a foot keeps it
     foot = _high_ball(1.0, PAST_THIGH, 0.2, True, y=30.55)
     assert foot.possessor == "a6"
     # A clip of the outside rebounds even when he is ready and his touch is perfect.
@@ -480,7 +487,7 @@ def test_a_keeper_in_his_box_still_holds_a_high_ball_with_his_hands():
     p.profile.attributes["handling"] = 1.0
     e.possessor, e.last_touch, e.kicker_clear, e.kicked_at = None, "a6", True, e.t - 2.0
     hold = p.profile.absorb_mps(True)
-    fast = (hold * AERIAL_ABSORB + hold) / 2  # inside his hold, past what a chest of his would kill
+    fast = (hold * CUSHION["chest"] + hold) / 2  # inside his hold, past what a chest of his would kill
     e.ball = (4.6 + fast * DT, 34.0, 1.4, fast, 0.0, 0.0)
     e.contact((4.6, 34.0, 1.4, fast, 0.0, 0.0))
     assert e.possessor == p.id
@@ -650,7 +657,8 @@ def test_his_own_pass_that_goes_straight_in_is_his_shot_not_an_old_deflection():
     e.deflect(e.by_id["h10"], 60.0, 32.0, 0.3, 0.3)  # an earlier touch
     carrier = e.by_id["h10"]
     e.ball = (90.0, 30.0, 0.0, 0.0, 0.0, 0.0)
-    e.kicked = e.emit("pass", "home", 90.0, 30.0, player="h10")
+    e.kicked = e.emit("pass", "home", 90.0, 30.0, player="h10", intended="h9", interceptor=None,
+                      deflected_by=None)
     e.kick(carrier, 20.0, 4.0, 0.0)
     e.last_touch = "h10"
     e.scored("home", e.kicked, 105.0, 34.0)
@@ -658,6 +666,7 @@ def test_his_own_pass_that_goes_straight_in_is_his_shot_not_an_old_deflection():
     assert "deflection" in kinds  # the old touch stays what it was
     shot = next(ev for ev in e.match.events if ev["type"] == "shot")
     assert shot["outcome"] == "goal" and shot["x"] == 90.0
+    assert not {"intended", "interceptor", "deflected_by"} & set(shot)  # pass-only fields
 
 
 def test_an_opponent_cutting_a_pass_out_intercepts_but_collecting_it_where_it_was_going_recovers():
@@ -701,11 +710,15 @@ def test_a_receiver_takes_the_ball_in_his_stride_instead_of_stopping_dead():
     e.give(p.id)
     e.ball = (p.x + 0.37, p.y, 0.0, 5.0, 0.0, 0.0)
     e.hold_until = e.t + 0.5  # settling the ball
-    for _ in range(10):
+    frames, v = 10, 5.0
+    for _ in range(frames):
         e.tick_carrier()
         e.t += 1 / 25
     assert p.vx > 2.0  # still going his way, at a dribbling pace
-    assert p.x > 50.0 + 1.5
+    # further than a man who stops dead, braking as hard as he can (P2), goes in the same time
+    t = frames / 25
+    stopping = min(v * v / (2 * BRAKE_MAX), v * t - BRAKE_MAX * t * t / 2)
+    assert p.x - 50.0 > stopping
 
 
 def test_every_off_ball_target_is_reached_just_in_time_through_the_real_path():
@@ -1563,8 +1576,9 @@ def test_a_throw_taken_from_a_restart_and_never_entering_is_retaken_where_it_was
 def test_a_throw_in_taker_runs_to_his_spot_and_stops_there():
     """Lesson 5: the taker was once moved the last metre to his spot in one frame (22 m/s) and
     stopped dead with the ball. The match must contain a throw-in, so the case is exercised; a
-    short clip with no restart would pass whatever the engine did."""
-    m = simulate(7, 6)
+    short clip with no restart would pass whatever the engine did. Twelve minutes: seed 7's first
+    throw-in came inside six until the cushioned touch changed the match's course, then at 8.2."""
+    m = simulate(7, 12)
     assert any(p["action"] == "throw" for fr in m.frames for p in fr["players"])
     problems = defaultdict(list)
     check_physics(m.events, m.frames, FPS, m.roster, problems)

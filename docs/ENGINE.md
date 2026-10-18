@@ -20,6 +20,10 @@ totals were tuned. This is the design for the next builds; what already runs is 
    totals only judge the result.
 5. **Every build is audited** by an independent reviewer for scripted outcomes before it
    merges ([LESSONS.md](LESSONS.md), lesson 4).
+6. **A seed is the same match on every machine.** The engine draws from `fmath.Random` and
+   computes `exp`, `sin`, `atan2` and the normal distribution with `ninety/sim/fmath.py`,
+   never the C math library, whose last bit differs between operating systems
+   ([LESSONS.md](LESSONS.md), lesson 46).
 
 ## The loop
 
@@ -100,7 +104,7 @@ pressing), leading lowers it (deeper block).
 
 Every action goes through physics with error: direction, speed and height errors grow with
 distance, ball speed, pressure, fatigue, weak foot and body angle, and shrink with technique.
-A first touch fails more often on fast balls, under pressure and when tired.
+A first touch is a cushion, not a gate: the surface takes out what it can kill, the player sends the rest where he chooses with his own error, and a ball he cannot keep at his feet is a heavy touch the race decides (`firsttouch.py`, GROUNDING A4). Pressure, the body's angle to the ball, fatigue and a fast ball make it worse (`firsttouch.quality`).
 
 ### 8. Duels
 

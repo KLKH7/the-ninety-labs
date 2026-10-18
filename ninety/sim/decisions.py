@@ -16,7 +16,7 @@ import random
 from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
 
-from ninety.sim import ball, offball, perception, shape, threat
+from ninety.sim import ball, firsttouch, fmath, offball, perception, shape, threat
 from ninety.sim import value as possession
 from ninety.sim.body import (
     BODY_HEIGHT,
@@ -41,7 +41,7 @@ DT = 1 / 25
 GENERIC_REACTION_S = 0.365  # D1: how quickly the passer assumes an opponent reacts (P12)
 LANE_MARGIN_S = 0.25  # D1: design: how sharply the passer's confidence falls as a lane closes
 RECEIVE_MARGIN_S = 0.3  # design: how sharply a carrier's confidence falls as a defender closes on his carry
-PRESSURE_FRONT_M, PRESSURE_BEHIND_M = 9.0, 3.0  # D2: pressure zone, longer in front than behind
+PRESSURE_FRONT_M, PRESSURE_BEHIND_M = perception.PRESSURE_FRONT_M, perception.PRESSURE_BEHIND_M  # D2
 # D3: how often a shot goes in by distance from the goal's centre, for a central shot: the
 # share of real shots that scored by zone (six-yard box 31%, the rest of the central box 17.7%,
 # central outside the box 5.3%, long range 2.3%; American Soccer Analysis, 8,291 MLS shots, 2013).
@@ -77,6 +77,7 @@ LOFT_DEG = 30.0  # design: the launch angle of a lofted pass or a throw, as esti
 # A4: the passer's guess of what a first touch can kill: an average player's (one definition, profiles).
 CONTROL_EST_MPS = FOOT_ABSORB_MPS[0] + FOOT_ABSORB_MPS[1] * 0.5
 CONTROL_MARGIN_MPS = 2.0  # design: how sharply that guess falls off
+AVERAGE = 0.5  # an average player's attribute, for estimates about someone the passer cannot judge
 GOAL_KICK_M = 5.5  # Law 16: a goal kick is taken from the goal area
 STICKY = 0.003  # design: a small bonus for carrying on with the current choice (no flip-flopping)
 CLEAR_FROM = 2 / 3  # a clear is an option in his own third: this share of the pitch from the goal he attacks
@@ -120,8 +121,8 @@ def _generic_time(distance: float) -> float:
         return GENERIC_REACTION_S
     t = distance / 9.9 + tau
     for _ in range(8):
-        f = 9.9 * t - 9.9 * tau * (1 - math.exp(-t / tau)) - distance
-        t -= f / max(9.9 * (1 - math.exp(-t / tau)), 1e-6)
+        f = 9.9 * t - 9.9 * tau * (1 - fmath.exp(-t / tau)) - distance
+        t -= f / max(9.9 * (1 - fmath.exp(-t / tau)), 1e-6)
     return GENERIC_REACTION_S + max(t, 0.0)
 
 
@@ -135,7 +136,7 @@ def generic_time(distance: float) -> float:
 
 
 def sigmoid(x: float) -> float:
-    return 1 / (1 + math.exp(-max(-30.0, min(30.0, x))))
+    return 1 / (1 + fmath.exp(-max(-30.0, min(30.0, x))))
 
 
 def lunge_time(distance: float, tackling: float = 0.5) -> float:
@@ -195,8 +196,8 @@ def attack(goal_x: float) -> float:
 
 
 def goal_angle(x: float, y: float, goal_x: float) -> float:
-    a = math.atan2(PITCH_Y / 2 + GOAL_HALF_WIDTH - y, abs(goal_x - x))
-    b = math.atan2(PITCH_Y / 2 - GOAL_HALF_WIDTH - y, abs(goal_x - x))
+    a = fmath.atan2(PITCH_Y / 2 + GOAL_HALF_WIDTH - y, abs(goal_x - x))
+    b = fmath.atan2(PITCH_Y / 2 - GOAL_HALF_WIDTH - y, abs(goal_x - x))
     return abs(a - b)
 
 
@@ -299,12 +300,9 @@ def loss_cost(x: float, y: float, goal_x: float) -> float:
 def pressure(scene: Scene) -> float:
     """0 to 1: how closely the nearest opponent presses, judged in a zone longer in front of the
     player (toward the goal he attacks) than behind him."""
-    worst = 0.0
-    for ox, oy in scene.opponents:
-        ahead = (ox - scene.x) * attack(scene.goal_x) > 0
-        reach = PRESSURE_FRONT_M if ahead else PRESSURE_BEHIND_M
-        worst = max(worst, 1 - math.hypot(ox - scene.x, oy - scene.y) / reach)
-    return max(0.0, worst)
+    sign = attack(scene.goal_x)
+    return max((perception.pressure_from(scene.x, scene.y, ox, oy, sign) for ox, oy in scene.opponents),
+               default=0.0)
 
 
 def turn_deg(direction: float, heading: float) -> float:
@@ -318,7 +316,7 @@ def can_strike(ox: float, oy: float, heading: float, dx: float, dy: float) -> bo
     (the widest run-up angle tested with no loss of speed or accuracy) with the ball on the side
     of his body toward it, so its way out leaves his surface (shape.py) rather than passing
     through him. A throw-in is the engine's own case (engine.can_strike: in his hands)."""
-    if abs(turn_deg(math.atan2(dy, dx), heading)) > math.degrees(STRIKE_FACING):
+    if abs(turn_deg(fmath.atan2(dy, dx), heading)) > math.degrees(STRIKE_FACING):
         return False
     sx, sy = shape.nearest_on_spine(ox, oy, 0.0, 0.0, heading)
     return (ox - sx) * dx + (oy - sy) * dy >= 0
@@ -332,7 +330,7 @@ def strike_turn(heading: float, dx: float, dy: float, thrown: bool = False) -> t
     round to his front within a few frames; the engine turns in whole frames, so it strikes up to
     one frame later and up to 14° nearer his facing; and he does not move while he turns, though in
     the engine he brakes and the ball goes with him."""
-    off = turn_deg(math.atan2(dy, dx), heading)
+    off = turn_deg(fmath.atan2(dy, dx), heading)
     limit = math.degrees(STRIKE_FACING)
     if thrown or abs(off) <= limit:
         return off, 0.0
@@ -464,12 +462,12 @@ def strike_nodes(scene: Scene, tx: float, ty: float, lofted: bool, pace: float
             e = [0.0, 0.0, 0.0]
             e[i] = sign * NODE_SD * sd
             errors.append((1 / 6, tuple(e)))
-    loft0 = math.atan2(up, ground)
+    loft0 = fmath.atan2(up, ground)
     nodes = []
     for w, (d_deg, s_err, l_deg) in errors:
         v = struck_speed(speed, s_err, foot)
         loft = loft0 + math.radians(l_deg)
-        nodes.append((w, math.radians(d_deg), v * math.cos(loft), v * math.sin(loft)))
+        nodes.append((w, math.radians(d_deg), v * fmath.cos(loft), v * fmath.sin(loft)))
     return nodes
 
 
@@ -523,7 +521,7 @@ def reach_time(points, t_end: float, rests: bool, sx: float, sy: float, ux: floa
             reachable, gap, along = can_get_to(AVERAGE_BODY, dx, dy, reach_m, pvx, pvy, t - react)
             arrive = t if reachable else max(t, react + AVERAGE_BODY.time_to_cover(gap, along))
             return (arrive, i) if arrive <= limit else (math.inf, -1)
-        if dx * dx + dy * dy > (reach_m + _furthest(t - react, speed) + 1e-9) ** 2:
+        if dx * dx + dy * dy > fmath.ipow(reach_m + _furthest(t - react, speed) + 1e-9, 2):
             continue  # out of his range even flat out (a necessary condition, cheaply first)
         if can_get_to(AVERAGE_BODY, dx, dy, reach_m, pvx, pvy, t - react)[0]:
             return t, i
@@ -648,7 +646,8 @@ def body_hit(points, take: float, sx: float, sy: float, ux: float, uy: float,
             if side - r > BODY_SDS * sigma:
                 return 0.0
             spread = sigma * math.sqrt(2)
-            return 0.5 * (math.erf((r - side) / spread) - math.erf((-r - side) / spread))
+            # erf(a) - erf(b) = erfc(b) - erfc(a)
+            return 0.5 * (fmath.erfc((-r - side) / spread) - fmath.erfc((r - side) / spread))
         prev = (t, a, z)
     return 0.0
 
@@ -660,10 +659,11 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
     the first team-mate who can get to the ball's path takes it (reach_time), unless it leaves the
     pitch first, an opponent's body is in its way before he can react (body_hit), or an opponent
     gets there before him (each raced against that take, softened by LANE_MARGIN_S); and the
-    team-mate's first touch must kill the ball's speed relative to him (A4, the engine's own rule,
-    softened by CONTROL_MARGIN_MPS)."""
+    team-mate's first touch must keep the ball at his feet (A4, the engine's own touch in
+    firsttouch.py: the surface by the ball's height, what it cannot kill left to run; softened by
+    CONTROL_MARGIN_MPS)."""
     sx, sy = scene.x, scene.y
-    direction = math.atan2(ty - sy, tx - sx)
+    direction = fmath.atan2(ty - sy, tx - sx)
     nodes = strike_nodes(scene, tx, ty, lofted, pace)
     cx, cy = sx - scene.ball_offset[0], sy - scene.ball_offset[1]
     # P16: if he must turn before he can strike it, everyone else moves on meanwhile, each as the
@@ -688,11 +688,11 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
     # who could not be in it.
     longest = max(flight(g, u)[0][-1][1] for _, _, g, u in nodes)
     spread = max(abs(d) for _, d, _, _ in nodes)
-    ux0, uy0 = math.cos(direction), math.sin(direction)
+    ux0, uy0 = fmath.cos(direction), fmath.sin(direction)
     ex, ey = sx + ux0 * longest, sy + uy0 * longest
 
     def off_path(px: float, py: float) -> float:
-        return max(0.0, distance_to_segment(px, py, sx, sy, ex, ey) - longest * math.sin(spread))
+        return max(0.0, distance_to_segment(px, py, sx, sy, ex, ey) - longest * fmath.sin(spread))
 
     mate_lb = [m[4] + _soonest(off_path(m[0], m[1]) - CONTROL_M, math.hypot(m[2], m[3])) for m in mates]
     arm_max = offball.KEEPER_STAND_REACH_M + offball.KEEPER_DIVE_EXTRA_M
@@ -708,7 +708,7 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
     total = 0.0
     for w, d_angle, ground, up in nodes:
         points, rests = flight(ground, up)
-        ux, uy = math.cos(direction + d_angle), math.sin(direction + d_angle)
+        ux, uy = fmath.cos(direction + d_angle), fmath.sin(direction + d_angle)
         t_end = math.inf  # out of play (Law 9): the whole ball over a line
         for t, a, _, _, _ in points:
             bx, by = sx + ux * a, sy + uy * a
@@ -724,10 +724,19 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
                 take, at, taker = t, i, mate
         if taker is None:
             continue  # nobody of his gets to it before it goes out or comes to rest out of reach
-        _, a, _, g, vz = points[at]
+        _, a, z, g, vz = points[at]
         if at == len(points) - 1 and rests:
             g = vz = 0.0
-        p = sigmoid((taker[5] - relative_speed(g * ux, g * uy, vz, taker[2], taker[3])) / CONTROL_MARGIN_MPS)
+        # The engine's own touch (firsttouch.py): the surface by the ball's height where he takes it,
+        # made worse as the engine makes it (firsttouch.quality) by what the passer can know: its
+        # speed and the opponents he sees near where it is taken (D2's zone); the team-mate is
+        # taken to face it, as one expecting it does, fresh and of average composure.
+        rel = relative_speed(g * ux, g * uy, vz, taker[2], taker[3])
+        tx_, ty_ = sx + ux * a, sy + uy * a
+        felt = max((perception.pressure_from(tx_, ty_, ox, oy, attack(scene.goal_x))
+                    for ox, oy in scene.opponents), default=0.0)
+        worse = firsttouch.quality(0.0, felt, AVERAGE, 1.0, rel, taker[5])
+        p = firsttouch.kept_estimate(rel, firsttouch.surface_absorb(taker[5], z) / worse, CONTROL_MARGIN_MPS)
         horizon = take + OPPONENT_LATE_S
         # Where the ball has got to by then, along this strike: nobody further from that stretch of
         # its path than he can run by then matters (a shortcut, like `lb`).
@@ -809,16 +818,16 @@ def options(scene: Scene) -> list[Option]:
         # saved, which gives the ball back from deep (a goal kick or the keeper's hands).
         blockers = sum(in_cone(scene.x, scene.y, scene.goal_x, ox, oy) for ox, oy in scene.opponents
                        if (ox, oy) != scene.keeper)
-        blocked = 1 - BLOCKER_FACTOR ** blockers
+        blocked = 1 - fmath.ipow(BLOCKER_FACTOR, blockers)
         # A miss or a save gives them the ball deep in their own half (a goal kick or the keeper's).
         missed = our_loss(scene, scene.goal_x - attack(scene.goal_x) * GOAL_KICK_M, PITCH_Y / 2)
         lost = blocked * our_loss(scene, scene.x, scene.y) + (1 - blocked) * missed
         out.append(Option("shoot", q * bias * (1 + 0.5 * scene.risk) - (1 - q) * lost,
                           (scene.goal_x, PITCH_Y / 2)))
     for turn in (0.0, 0.8, -0.8):  # straight at goal, or angled away
-        heading = math.atan2(PITCH_Y / 2 - scene.y, scene.goal_x - scene.x) + turn
-        tx = scene.x + DRIBBLE_STEP_M * math.cos(heading)
-        ty = scene.y + DRIBBLE_STEP_M * math.sin(heading)
+        heading = fmath.atan2(PITCH_Y / 2 - scene.y, scene.goal_x - scene.x) + turn
+        tx = scene.x + DRIBBLE_STEP_M * fmath.cos(heading)
+        ty = scene.y + DRIBBLE_STEP_M * fmath.sin(heading)
         if not (1 <= tx <= PITCH_X - 1 and 1 <= ty <= PITCH_Y - 1):
             continue
         # Can an opponent reach the carry anywhere along it before he has carried the ball past?
@@ -865,10 +874,10 @@ def choose(scene: Scene, rng: random.Random) -> Option:
     opts = options(scene)
     values = [o.value for o in opts]
     mean = sum(values) / len(values)
-    spread = math.sqrt(sum((v - mean) ** 2 for v in values) / len(values))
+    spread = math.sqrt(sum(fmath.ipow(v - mean, 2) for v in values) / len(values))
     # D4: the randomness is a share of how far apart the options are, so a choice between close
     # options is loose and one between clearly different options is not, wherever on the pitch.
     t = temperature(scene) * max(spread, CHOICE_NOISE_FLOOR)
     top = max(o.value for o in opts)
-    weights = [math.exp((o.value - top) / t) for o in opts]
+    weights = [fmath.exp((o.value - top) / t) for o in opts]
     return rng.choices(opts, weights=weights)[0]

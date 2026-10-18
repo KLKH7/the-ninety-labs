@@ -27,6 +27,7 @@ from ninety.eval.event_score import (
     WINDOW_S,
     reference_point,
 )
+from ninety.sim import fmath
 from ninety.sim.engine import FPS
 
 # Misplace distances, one inside each band: within strict, between strict and lenient, beyond both.
@@ -81,11 +82,21 @@ def free_time(truth: list[dict], kind: str, team: str, end: float, rng: random.R
     raise ValueError(f"no free time for a {team} {kind} away from every true one")
 
 
+def room_near(truth: list[dict], kind: str, team: str, end: float, near: float) -> bool:
+    """Is there a time free_time(..., near=near) could return? Checked on the 0.01 s grid it rounds
+    to, without drawing, so choosing events by it leaves the random draws as they were."""
+    for k in range(round(200 * WINDOW_S), round(500 * WINDOW_S) + 1):
+        for t in (round(near - k / 100, 2), round(near + k / 100, 2)):
+            if 0 <= t <= end and clear_of(truth, kind, team, t):
+                return True
+    return False
+
+
 def misplaced(d: dict, distance: float, rng: random.Random) -> dict:
     """Move a detection's spot exactly `distance` from where it is, staying on the pitch."""
     for _ in range(100):
         a = rng.uniform(0, 2 * math.pi)
-        x, y = d["x"] + distance * math.cos(a), d["y"] + distance * math.sin(a)
+        x, y = d["x"] + distance * fmath.cos(a), d["y"] + distance * fmath.sin(a)
         if 0 <= x <= PITCH_X and 0 <= y <= PITCH_Y:
             return {**d, "x": x, "y": y}
     raise ValueError(f"cannot move {d['id']} {distance} m and stay on the pitch")
@@ -94,7 +105,7 @@ def misplaced(d: dict, distance: float, rng: random.Random) -> dict:
 def fake_detections(truth: list[dict], frames: list[dict], seed: int,
                     per_damage: int = 2) -> tuple[list[dict], list[dict]]:
     """Return (detected events, damage log). per_damage of each kind in DAMAGES."""
-    rng = random.Random(seed)
+    rng = fmath.Random(seed)  # the same draws as random.Random; refuses anything platform-dependent
     end = frames[-1]["t"]
     other_team = {"home": "away", "away": "home"}
     victims = [e for e in truth if isolated(truth, e)]
@@ -139,7 +150,10 @@ def fake_detections(truth: list[dict], frames: list[dict], seed: int,
                 detected.append(misplaced(as_detection(e, "d" + e["id"], frames), MISPLACE_M[damage], rng))
                 entry.update(truth_id=e["id"], type=e["type"], detected_type=e["type"])
             else:
-                e = take(damage)
+                # A far shift needs a free time near the event (in a crowded spell there may be none):
+                # chosen so by construction, not left to how busy the match happens to be.
+                e = take(damage, (lambda e: room_near(truth, e["type"], e["team"], end, e["t"]))
+                         if damage == "far_shift" else (lambda e: True))
                 entry.update(truth_id=e["id"], type=e["type"], detected_type=e["type"])
                 if damage == "near_shift":
                     shift = rng.choice((-1, 1)) * rng.uniform(NEAR_MIN_S, NEAR_MAX_S)

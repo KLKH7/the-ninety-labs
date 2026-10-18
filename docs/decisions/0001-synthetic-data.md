@@ -105,6 +105,58 @@ passes (above zero), but the test set is too easy, because the simulator has no 
 kicks or goalmouth scrambles, so players rarely crowd the ball. That is the first thing the
 realism pass and the simulator's set pieces must change.
 
+### Second measurement (Oct 17, day and clear only, same 5 seeds)
+
+Dusk, night, overcast and rain did not yet look like broadcast footage, so every clip is now a
+clear day (`PLANNED` in `ninety/render/params.py`). Four of the five test seeds had been
+overcast, dusk or rain, and the engine has changed since Oct 14 (portable math, #55), so the
+whole test set was re-rendered at commit `e587b48`.
+
+From `docs/eval/render-checks.json`: ball projection error mean 0.08 px, max 0.26 px; keypoints
+max 0.0035 px; every player's foot inside its box; no frame with a label problem; the re-render
+of seed 900001 matched labels and all 250 images byte for byte.
+
+- The ball is under 0.5 visible in 51 of 1,250 frames (**4.08%**; per clip 6.0%, 4.0%, 0%,
+  6.0%, 4.4%). Better than 0.08%, but **short of the minimum**: PLAN.md and EVALUATION.md need
+  at least 5% before the test set is frozen (Oct 18), so it is not ready to freeze. Passing the
+  render checks does not change that.
+- Player height p05 is 16 px in seed 900001, under the guide's 30 px; the other four clips are
+  31 to 54 px at p05, and every clip's p95 is 86 to 106 px. Not yet traced.
+
+### Third measurement (Oct 17, hard cases drawn from the seed)
+
+`kit_contrast` and `occlusion` used to change only with `--set`, which the test set refuses, so
+the test set could never hold a crowded window or low-contrast kits. They are now drawn from the
+seed at `HARD_CASE_RATE` = 0.3, set from the train floors before rendering, not from this number.
+Re-rendered at commit `6269283`: seeds 900001, 900002 and 900004 are crowded, 900004 has
+low-contrast kits.
+
+All checks pass (ball projection max 0.30 px, keypoints max 0.0015 px, determinism identical).
+
+- The ball is under 0.5 visible in 55 of 1,250 frames (**4.40%**; crowded clips 6.4%, 8.8%,
+  2.4%; natural clips 0% and 4.4%). Still **short of the 5% minimum**, so the test set is still
+  not ready to freeze. The rate is not raised to reach 5%; whether to move the freeze or change
+  the test set's design is R2's decision.
+- Player height p05 is 9 px in seed 900004 (the 16 px case moved from 900001 to 900004 with the
+  new window), under the guide's 30 px. Not yet traced; a camera cut is the first suspect.
+
+### Fourth measurement (Oct 17, the reconciled engine, #37)
+
+The match engine changed under the test set (#37 merged into main), so the same five seeds were
+re-rendered at commit `443c4d5` with the same render parameters.
+
+- The ball is under 0.5 visible in 80 of 1,250 frames (**6.4%**; per clip 8.0%, 8.0%, 4.4%,
+  9.6%, 2.0%). This **meets the 5% minimum** for the first time; no render parameter changed to
+  get there.
+- **The render check fails** (`all_passed: false`): in seed 900002 (frames 4524 to 4529) player
+  a11 stands just below the bottom of the frame (his foot projects to y = 807 of 720) and only
+  his head is drawn, with no body under it. The box ends at his chin (y = 718), so the check
+  takes him for a whole player inside the frame and his foot is outside the box. The check is
+  right: a floating head is a rendering defect a viewer would see. Not traced yet; the test set
+  is not ready to freeze until it is fixed and re-rendered.
+- Player height p05 is 19 px in seed 900001 (under the guide's 30 px), and p95 is 160 px in seed
+  900002 (over its 120 px). Both not yet traced.
+
 The final proof comes later: detector recall on the fixed test set before and after each
 targeted round.
 

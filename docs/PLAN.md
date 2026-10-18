@@ -192,7 +192,7 @@ deployed demo, the failure table, the video.
 | Risk | Mitigation |
 |---|---|
 | Detector trained on real footage does not transfer to renders, or renders are too easy | fine-tune on our renders (labels are exact); keep a hard, separate test set; render checks in CI |
-| No GPU quota | train on an Apple GPU or Colab; run inference on CPU over short clips |
+| No GPU quota | train on an Apple GPU or a rented GPU machine (RunPod, Lambda, Colab), synthetic renders only, deleted after the run; run inference on CPU over short clips |
 | Region limits | the student subscription allows five regions; everything runs in North Central US, which offers our models |
 | Preview features change (A2A, Foundry agents) | every remote piece has an in-process fallback behind the same interface |
 | Budget | scale to zero, cached Replay mode, passcode on Live mode, $20 alert |

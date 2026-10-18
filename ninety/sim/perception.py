@@ -13,6 +13,8 @@ import math
 import random
 from dataclasses import dataclass, field
 
+from ninety.sim import fmath
+
 SIMPLE_REACTION_S = 0.255  # P12: footballers' simple visual reaction
 CHOICE_REACTION_S = 0.365  # P12: reaction when a direction must also be chosen
 CHOICE_REACTION_RANGE_S = (0.41, 0.32)  # P12: slowest to fastest choice reaction across footballers
@@ -23,6 +25,18 @@ SCAN_INTERVAL_S = (1.5, 3.5)  # P13: design; scanning frequency varies with role
 EXTRAPOLATE_S = 1.0  # design: a sighting is carried forward at most this long, then held
 VELOCITY_ERROR_PER_M = 0.02  # design: misjudged speed, m/s per metre away
 STALE_ERROR_MPS = 1.0  # design: how fast the uncertainty about an unseen player grows
+# D2: pressure is felt in a zone longer in front of a player (toward the goal he attacks) than
+# behind him (Andrienko et al. 2017).
+PRESSURE_FRONT_M, PRESSURE_BEHIND_M = 9.0, 3.0
+
+
+def pressure_from(px: float, py: float, ox: float, oy: float, attack_sign: float) -> float:
+    """D2: 0 to 1, how closely an opponent at (ox, oy) presses a player at (px, py) who attacks
+    toward +x (attack_sign 1) or -x (-1): 1 at his body, 0 at the zone's edge."""
+    reach = PRESSURE_FRONT_M if (ox - px) * attack_sign > 0 else PRESSURE_BEHIND_M
+    return max(0.0, 1 - math.hypot(ox - px, oy - py) / reach)
+
+
 TURN_TO_BALL_M = 0.5  # a still player turns to the ball unless it is at his own feet
 
 
@@ -67,9 +81,9 @@ def facing(heading: float, vx: float, vy: float, x: float, y: float, bx: float, 
     """A moving player looks where he runs; a still one turns to the ball; when the ball is at
     his own feet (a direction that does not exist), he keeps the way he was facing."""
     if math.hypot(vx, vy) > 0.5:
-        return math.atan2(vy, vx)
+        return fmath.atan2(vy, vx)
     if math.hypot(bx - x, by - y) > TURN_TO_BALL_M:
-        return math.atan2(by - y, bx - x)
+        return fmath.atan2(by - y, bx - x)
     return heading
 
 
@@ -78,7 +92,7 @@ def visible(heading: float, x: float, y: float, ox: float, oy: float,
     dx, dy = ox - x, oy - y
     if math.hypot(dx, dy) <= SENSE_RADIUS_M:
         return True
-    off = (math.atan2(dy, dx) - heading + math.pi) % (2 * math.pi) - math.pi
+    off = (fmath.atan2(dy, dx) - heading + math.pi) % (2 * math.pi) - math.pi
     return abs(off) <= half_angle
 
 

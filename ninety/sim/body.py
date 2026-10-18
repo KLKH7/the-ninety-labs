@@ -10,6 +10,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
+from ninety.sim import fmath
 from ninety.sim.shape import SHOULDER_BREADTH_M
 
 GRAVITY = 9.81
@@ -53,7 +54,7 @@ class Body:
     @property
     def ceiling(self) -> float:
         """The slow store: how full the reserve can refill, falling with work done all match."""
-        return D0 * math.exp(-self.spent / (SLOW_SCALE * D0))
+        return D0 * fmath.exp(-self.spent / (SLOW_SCALE * D0))
 
     def top_speed(self) -> float:
         """Critical-speed model: with an empty reserve no running above critical speed is
@@ -66,20 +67,38 @@ class Body:
         speed available now, so fatigue lowers acceleration through that one top speed."""
         return self.f0 * max(0.0, 1 - speed / self.top_speed())
 
-    def distance_in(self, seconds: float, speed_along: float = 0.0) -> float:
+    def distance_in(self, seconds: float, speed_along: float = 0.0, cap: float | None = None) -> float:
         """How far this player can run in a straight line in the given time, from a current
-        speed along the line, under force-velocity acceleration: v(t) = V - (V - u)e^(-t/tau)."""
+        speed along the line, under force-velocity acceleration: v(t) = V - (V - u)e^(-t/tau).
+        With `cap` (a speed he chooses, P17) he speeds up the same way until he reaches it, then
+        holds it; his body still sets V."""
         if seconds <= 0:
             return 0.0
         top = self.top_speed()
+        if cap is not None and cap < top:
+            return self._capped_distance(seconds, speed_along, cap)
         u = clamp(speed_along, 0.0, top)
         tau = top / self.f0
-        return top * seconds - (top - u) * tau * (1 - math.exp(-seconds / tau))
+        return top * seconds - (top - u) * tau * (1 - fmath.exp(-seconds / tau))
 
-    def time_to_cover(self, gap: float, speed_along: float = 0.0) -> float:
+    def _capped_distance(self, seconds: float, speed_along: float, cap: float) -> float:
+        top = self.top_speed()
+        u = clamp(speed_along, 0.0, top)
+        if u >= cap:  # already faster than he chooses: he brakes down to it as any body brakes (P2)
+            slow = (u - cap) / BRAKE_MAX
+            t = min(seconds, slow)
+            return u * t - BRAKE_MAX * t * t / 2 + cap * max(0.0, seconds - slow)
+        tau = top / self.f0
+        reach_cap = tau * fmath.log((top - u) / (top - cap))  # when v(t) reaches his chosen speed
+        t = min(seconds, reach_cap)
+        run_up = top * t - (top - u) * tau * (1 - fmath.exp(-t / tau))
+        return run_up + cap * max(0.0, seconds - reach_cap)
+
+    def time_to_cover(self, gap: float, speed_along: float = 0.0, cap: float | None = None) -> float:
         """Seconds to run `gap` metres along a line. A player moving away from it must first
         brake to a stop, which takes time and adds distance, even if he is already within the gap
-        (as can_get_to charges it: one rule for whether he gets there and when)."""
+        (as can_get_to charges it: one rule for whether he gets there and when). `cap` as in
+        distance_in."""
         brake_t = extra = 0.0
         if speed_along < 0:
             brake_t = -speed_along / BRAKE_MAX
@@ -87,6 +106,8 @@ class Body:
             speed_along = 0.0
         if gap + extra <= 0:
             return 0.0
+        if cap is not None and cap < self.top_speed():
+            return brake_t + self._capped_time(gap + extra, speed_along, cap)
         # Newton's method: distance over time is smooth and its derivative is the speed.
         top = self.top_speed()
         u = clamp(speed_along, 0.0, top)
@@ -94,7 +115,7 @@ class Body:
         target = gap + extra
         t = target / max(top, 1e-6) + tau  # a start past the answer: speed only rises
         for _ in range(12):
-            fade = math.exp(-t / tau)
+            fade = fmath.exp(-t / tau)
             covered = top * t - (top - u) * tau * (1 - fade) if t > 0 else 0.0  # distance_in, inline
             f = covered - target
             speed = top - (top - u) * fade
@@ -103,6 +124,14 @@ class Body:
             if abs(step) < 1e-4:
                 break
         return brake_t + max(t, 0.0)
+
+    def _capped_time(self, target: float, speed_along: float, cap: float) -> float:
+        """The inverse of _capped_distance: bisection, since distance only grows with time."""
+        lo, hi = 0.0, target / max(cap, 1e-6) + self.top_speed() / self.f0 * 5
+        for _ in range(40):
+            mid = (lo + hi) / 2
+            lo, hi = (mid, hi) if self._capped_distance(mid, speed_along, cap) < target else (lo, mid)
+        return hi
 
     def spend(self, speed: float, accel: float, dt: float) -> None:
         """Running above critical speed spends the reserve, accelerating costs extra; running
@@ -115,27 +144,28 @@ class Body:
         else:
             depth = min(1.0, effort / self.cs)
             tau = TAU_LIGHT + (TAU_HEAVY - TAU_LIGHT) * depth
-            self.reserve += (self.ceiling - self.reserve) * (1 - math.exp(-dt / tau))
+            self.reserve += (self.ceiling - self.reserve) * (1 - fmath.exp(-dt / tau))
         self.reserve = clamp(self.reserve, 0.0, self.ceiling)
 
 
 def can_get_to(body: Body, dx: float, dy: float, reach_m: float, vx: float, vy: float,
-               seconds: float) -> tuple[bool, float, float]:
+               seconds: float, cap: float | None = None) -> tuple[bool, float, float]:
     """Can a player running at (vx, vy) get within `reach_m` of a point (dx, dy) away from him in
     `seconds` of running? (reachable, gap still to close, his speed along the way.) Running away
     from the point, he must first brake to a stop, which takes time and adds distance. One test
-    for the engine's chase (engine.can_reach) and the passer's estimate of it."""
+    for the engine's chase (engine.can_reach) and the passer's estimate of it. `cap`: a speed he
+    chooses to run at (P17), as in Body.distance_in."""
     d = math.hypot(dx, dy)
     gap = d - reach_m
     along = (vx * dx + vy * dy) / (d or 1.0)
     brake_t = max(0.0, -along) / BRAKE_MAX
-    extra = min(0.0, along) ** 2 / (2 * BRAKE_MAX)
-    return gap + extra <= body.distance_in(seconds - brake_t, max(0.0, along)), gap, along
+    extra = fmath.ipow(min(0.0, along), 2) / (2 * BRAKE_MAX)
+    return gap + extra <= body.distance_in(seconds - brake_t, max(0.0, along), cap), gap, along
 
 
 def relative_speed(bvx: float, bvy: float, bvz: float, pvx: float, pvy: float) -> float:
     """The ball's speed relative to a player running at (pvx, pvy): what a touch has to absorb."""
-    return math.sqrt((bvx - pvx) ** 2 + (bvy - pvy) ** 2 + bvz * bvz)
+    return math.sqrt(fmath.ipow(bvx - pvx, 2) + fmath.ipow(bvy - pvy, 2) + bvz * bvz)
 
 
 def clamp(v: float, lo: float, hi: float) -> float:
