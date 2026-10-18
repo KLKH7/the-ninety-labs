@@ -635,10 +635,9 @@ def test_a_keeper_reaches_a_ball_at_rest_in_his_box_with_his_hands_too():
     # A keeper 18 m to the side of where it stops, inside his box (his goal line at x = 95).
     at = lambda box: D.reach_time(points, math.inf, rests, 80.0, 34.0, 1.0, 0.0,  # noqa: E731
                                   90.0, 52.0, 0.0, 0.0, 0.365, 99.0, box)[0]
-    arms = D.offball.arm_reach_m(3.4 - 0.365)
-    assert math.isclose(at(95.0), 0.365 + D.AVERAGE_BODY.time_to_cover(18.0 - arms))
+    # Not diving at it, his hands reach as far as he stands (P11: about 1 m), as far as a foot does.
+    assert math.isclose(at(95.0), 0.365 + D.AVERAGE_BODY.time_to_cover(18.0 - 1.0))
     assert math.isclose(at(None), 0.365 + D.AVERAGE_BODY.time_to_cover(18.0 - D.CONTROL_M))
-    assert at(95.0) < at(None)
 
 
 def test_a_body_beyond_the_contact_cutoff_is_not_in_the_way_and_the_shortcut_agrees():

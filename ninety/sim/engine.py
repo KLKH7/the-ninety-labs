@@ -27,7 +27,6 @@ from ninety.sim.body import (
     CS_MEAN,
     D0,
     F0_MEAN,
-    HAND_REACH_Z,
     TURN_RATE,
     V0_MEAN,
     Body,
@@ -399,10 +398,12 @@ class Engine:
     def reach(self, p: Player, x: float, y: float, at: float | None = None,
               ahead: bool | None = None) -> tuple[float, float, float]:
         """How far, and between which heights (floor, top), this player can reach for a ball at
-        (x, y), at time `at` (offball.reach_for). His arms stretch from the moment he reacts to the
-        last touch, whether or not his body launches; a deflection does not un-stretch a dive
-        already under way. Diving, or down after a dive, the stretch is toward the dive: behind it
-        (`ahead` False; judged from (x, y) if None) he has only his standing reach (P15)."""
+        (x, y), at time `at` (offball.reach_for). His arms stretch out from the moment he launches a
+        dive, toward it: behind it (`ahead` False; judged from (x, y) if None), and on his feet, he
+        has his standing reach (P11, P15); a deflection does not un-stretch a dive already under
+        way. His hands' heights run from when the ball was struck (free_since), so a deflection on
+        its way does not take back what he has already seen of its flight. In the air, his hands are
+        within his reach of his centre of mass, above or below it."""
         if not self.hands(p, x, y):
             return offball.reach_for(False, 0.0)
         at = self.t if at is None else at
@@ -410,7 +411,12 @@ class Engine:
         if ahead is None:
             ahead = side == 0 or (y - p.y) * side >= 0
         stretched = at - self.stretch_from(p) if ahead else 0.0
-        return offball.reach_for(True, stretched, at - self.reacting_since(p), self.down(p))
+        reach_m, floor, top = offball.reach_for(True, stretched, at - self.free_since, self.down(p))
+        if self.dive and self.dive[0] == p.id:
+            arm = offball.arm_reach_m(at - self.dive[4])
+            com = offball.dive_com_z(at - self.dive[1], self.dive[6]) - ball.RADIUS  # for the ball's base
+            floor, top = max(floor, com - arm), min(top, com + arm)
+        return reach_m, floor, top
 
     def down(self, p: Player) -> bool:
         """On the ground after a dive, getting up (P15)."""
@@ -1404,13 +1410,12 @@ class Engine:
         return spot
 
     def stretch_from(self, p: Player) -> float:
-        """When the keeper's arms began to stretch: when his dive began to be prepared (his reaction
-        to the touch that set it off), or his reaction to the last touch."""
+        """When the keeper's arms began to stretch: when he launched his dive; never, on his feet."""
         if self.dive and self.dive[0] == p.id:
             return self.dive[4]
         if self.down(p):
             return self.landed[1]  # down after a dive: stretched out as he landed
-        return self.kicked_at + self.reaction(p)
+        return math.inf
 
     def ball_at_x(self, x: float, seconds: float = 10.0) -> tuple[float, float, float] | None:
         # `seconds`: only a bound; the ball's own path stops when it comes to rest
@@ -1429,8 +1434,8 @@ class Engine:
 
     def keeper_dive(self, p: Player) -> bool:
         """P15: once the keeper has reacted to a shot, he dives toward where it will cross his line:
-        his body travels sideways (up to KEEPER_DIVE_TRAVEL_M, only as far as he needs beyond his
-        standing reach) with the full dive's push, launched no sooner than it needs to be to get
+        his body travels sideways (up to KEEPER_DIVE_TRAVEL_M, only as far as his stretching arms will
+        not reach) with the full dive's push, launched no sooner than it needs to be to get a hand
         there as the ball does, and he is down for a moment afterwards. One dive
         per touch of the ball: once he is up again he does not dive a second time at the same shot;
         only a new touch (a deflection restarts it) can set off another. True while the dive moves
@@ -1442,18 +1447,19 @@ class Engine:
         if (self.dive is None and shot_at_him and reacted and fresh
                 and self.off_balance.get(p.id, -1.0) <= self.t):
             arrival = self.ball_at_x(p.x)  # where the ball's own flight takes it past him
-            if arrival and arrival[2] <= HAND_REACH_Z:  # not one going over him
-                when, cross = arrival[0], arrival[1]
-                # only as far as his body must go beyond what his arms will reach by then; his arms
-                # began to stretch when he reacted, whenever the dive itself starts
-                stretched = self.t - self.stretch_from(p) + when
-                need = abs(cross - p.y) - offball.arm_reach_m(stretched)
-                travel = math.copysign(min(max(need, 0.0), KEEPER_DIVE_TRAVEL_M), cross - p.y)
-                v0 = math.copysign(1.0, travel) * p.vy  # his sideways run toward it
-                # Not before he must (design): a dive launched sooner lands before the ball arrives
-                # and leaves him on the ground as it does. Until then he stays on his feet.
-                if need > 0 and when < offball.dive_time_to(abs(travel), v0) + DT:
-                    self.dive = (p.id, self.t, p.y, travel, self.kicked_at + self.reaction(p), v0,
+            if arrival and arrival[2] <= offball.hands_band(self.t - self.free_since + arrival[0])[1]:
+                when, cross = arrival[0], arrival[1]  # not one going over his hands
+                gap = abs(cross - p.y)
+                v0 = math.copysign(1.0, cross - p.y) * p.vy  # his sideways run toward it
+                # Beyond his standing reach he dives; not before he must (design): launched sooner,
+                # it would land before the ball arrives and leave him on the ground as it does. Until
+                # then he stays on his feet. (DT: one frame later he would be too late.) His body goes
+                # as far as the push carries it by then, or, if he is already late, as far as his
+                # arms, stretching from the launch, will not reach.
+                if gap > offball.KEEPER_STAND_REACH_M and when < offball.dive_cover_time(gap, v0) + DT:
+                    body = max(gap - offball.arm_reach_m(when), offball.dive_motion(when, v0)[0])
+                    travel = math.copysign(min(body, KEEPER_DIVE_TRAVEL_M), cross - p.y)
+                    self.dive = (p.id, self.t, p.y, travel, self.t, v0,
                                  arrival[2])  # the height it crosses at, which his body goes toward
                     self.dived_at[p.id] = self.kicked_at
         if not self.dive or self.dive[0] != p.id:

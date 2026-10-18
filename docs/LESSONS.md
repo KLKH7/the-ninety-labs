@@ -349,3 +349,15 @@ short and actionable. This file is public: no research sources, product names or
   engine assigns. Every case it drops is counted in the report, with the reason.
 - **Check:** list how many cases each exclusion removes; trace a sample of each outcome label
   against the quantity it is supposed to mean.
+
+### 38. Fixing one defect can expose another it hid; find the state at the outcome first
+- **What happened:** decision 0002 step 2 stopped a keeper lying on the ground from catching
+  chest-high balls. Isolated saves at 25 m then fell from 96% to 84%. At the moment each ball
+  crossed his line, 13 of the 18 goals went in high with him lying down. He dived as soon as he
+  reacted, so against a long shot he landed before it arrived. The old catch from the ground had
+  hidden that.
+- **Rule:** when a correct fix moves a rate, record the body's state when each outcome happens
+  (on his feet, in the air, down; ahead of or behind the dive) before changing anything else. Fix
+  what that shows, never the rate.
+- **Check:** a diagnostic that tallies goals by the keeper's state as the ball crosses his line,
+  run from a clean worktree before and after.

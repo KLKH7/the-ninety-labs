@@ -110,6 +110,54 @@ One mechanism, built whole, with every estimate of the keeper updated in the sam
 2. **The dive body and the shared reach function (items 1 and 2), for every dive.**
 3. **The penalty commit, aims and stays (items 3 and 4).**
 
+## Step 2 as built
+
+More measurements found for it: Monteiro et al. 2022 (*Sci. Rep.* 12:18493, Results), the centre of
+mass rises 0.40 to 0.43 m on a dive at a high corner; Monteiro et al. 2023 (preprint, SportRxiv,
+Table 1), 0.52 to 0.57 s from the near foot leaving the ground to peak speed, departure angle 13 to
+15 degrees.
+
+One rule, `offball.reach_for`, gives how far and between which heights a keeper reaches. The
+engine's touch and chase test (`engine.reach`, `can_reach`, `contact`) and the passer's race
+(`decisions._reach`) all call it. Heights are given for the ball's lowest point, which is what the
+engine keeps; the sources give the ball's centre, a radius higher.
+
+| Part | Rule | Source |
+|---|---|---|
+| Hands, height | crouched at the strike: the ball's centre within a hand's span (0.2 m, *design*) of 0.6 m. From 245 ms after the strike (the ball leaving a player, so a deflection on the way does not reset it) the band spreads up and down at 4 m/s. The figure shows about 1 m of that before the ball arrives; beyond it the same rate is assumed, up to a jump's reach of 2.8 m (*design*) | Higueras-Herbada et al. 2020, Fig. 2 |
+| Hands, across | on his feet: standing reach. Once he launches a dive, ahead of it (and lying after it): standing reach plus the stretch, from the launch; behind it: standing reach | P11, P15 |
+| Hands, in the air | within his reach of his centre of mass, above or below it | P11 |
+| Hands, down after a dive | no higher than about an arm's reach above the ground (1.0 m, *design* from P11's standing reach) | P11 |
+| Body, on his feet | grass to 1.8 m, as before | P11 |
+| Body, over the push-off | from that column to the laid-out trunk, evenly over the push-off (*design*: how he leans out is not sourced) | P15 |
+| Body, in the air | laid out across the goal: the ball's centre within half his shoulders' breadth (0.25 m) and a radius of his centre of mass. That goes from his crouch (0.9 m, *design*, *verify*) toward the height the ball crosses at, at most 0.41 m up and no lower than lying on his side (*design* below the crouch), at the pace of the dive's travel | Monteiro et al. 2022; P11 |
+| Body, down after a dive | lying on his side: up to his shoulders' breadth | P11 |
+
+**When he launches** (found while measuring step 2, lesson 38): he dived as soon as he had
+reacted, so against a long shot he landed and lay on the ground as it arrived. Once he has reacted,
+he now launches a dive only at a ball crossing beyond his standing reach, and only when a dive
+launched then just gets a hand there as the ball does (`offball.dive_cover_time`: the body's travel
+and the arms' stretch, both from the launch); until then he stays on his feet. His body goes as far
+as the push carries it by then. *Design*: no source for how late keepers leave a dive in open play.
+He knows the ball's flight exactly when he times it (as his dive already did); nothing in it is
+fitted to a save rate.
+
+**What the estimates share, and what they do not** (lesson 23):
+- The passer's race uses the same rule: standing reach (he does not dive at a pass) and the same
+  hands band.
+- The shooter's judgement (`offball.keeper_reach_m`, O1) covers distance across only, as if he
+  launched on reacting: an upper bound on how far across he gets by then. It ignores the hands'
+  height, so it overrates the keeper against a high shot that arrives early (a penalty: about 0.45 s,
+  hands up to about 1.6 m). A known gap, kept as it is in this step: making the shooter aim by height
+  belongs with the penalty aims in step 3.
+- The dive planner ignores height when deciding to dive, apart from not diving at a ball going over
+  his hands' reach by the time it arrives.
+
+In step 2 the dive still starts only after his reaction (0.32 to 0.41 s), and a penalty reaches
+him about 0.45 s after the strike. So at a penalty the ball nearly always arrives while the push-off
+lasts, and the laid-out body barely applies until step 3 has him commit before the strike. What
+changes penalties now is mainly the hands' height.
+
 ## Open questions, answered on approval
 
 - **The body's height during a dive, and how fast the hands can move up or down:** look for

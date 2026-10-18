@@ -484,8 +484,8 @@ def reach_time(points, t_end: float, rests: bool, sx: float, sy: float, ux: floa
     """(seconds, index of the path point) of the first point of the ball's path this player can
     play, by the engine's chase test (body.can_get_to, as engine.can_reach) with an average body:
     below foot height, within a foot's reach, after his reaction, braking first if he is running away
-    from it. A keeper whose box is at `box_x` reaches with his hands there (engine.reach): the arms'
-    stretch since he reacted, at the heights his hands can be (offball.hands_band). A ball that comes
+    from it. A keeper whose box is at `box_x` reaches with his hands there (engine.reach): his
+    standing reach, at the heights his hands can be (offball.hands_band). A ball that comes
     to rest on the pitch is reached whenever he gets there. (inf, -1) if not before `limit` or before
     the ball is out of play at `t_end`.
 
@@ -530,10 +530,10 @@ _FOOT = offball.reach_for(False, 0.0)  # an outfield player's reach, the same at
 def _reach(bx: float, by: float, t: float, react: float, box_x: float | None) -> tuple[float, float, float]:
     """How far, and between which heights, he reaches for a ball at (bx, by), `t` seconds after the
     strike, by the engine's own rules (offball.may_handle, offball.reach_for): a foot, or, for the
-    opposing keeper (his box at `box_x`), his hands in his box, stretched since he reacted. The pass
+    opposing keeper (his box at `box_x`), his hands in his box, at his standing reach. The pass
     is not his release, nor a pass from his own side, so only his box decides."""
     hands = box_x is not None and offball.may_handle(True, in_box(bx, by, box_x), False, False)
-    return offball.reach_for(hands, t - react, t)
+    return offball.reach_for(hands, 0.0, t)  # not diving at a pass: his standing reach
 
 
 def _late_arrival(points, t_end: float, rests: bool, sx: float, sy: float, ux: float, uy: float,

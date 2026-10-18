@@ -911,14 +911,14 @@ def test_a_late_dive_never_shrinks_the_keepers_reach():
 
 
 
-def test_before_he_reacts_the_keeper_has_only_his_standing_reach_then_it_grows():
-    from ninety.sim import offball
+def test_the_keeper_has_his_standing_reach_until_he_dives_then_it_grows():
     e = Engine(1)
-    k = _shot_at_keeper(e, (90.0, 34.0, 0.5, 25.0, 0.0, 0.0))
-    e.t += e.reaction(k) * 0.5
-    assert e.reach(k, 104.0, 34.0)[0] == offball.KEEPER_STAND_REACH_M
-    e.t += e.reaction(k) * 0.5 + 0.2
-    assert e.reach(k, 104.0, 34.0)[0] > offball.KEEPER_STAND_REACH_M
+    k = _shot_at_keeper(e, (90.0, 34.0, 0.5, 25.0, 6.0, 0.0))
+    e.t += e.reaction(k) * 1.5
+    assert e.reach(k, 104.0, 35.0)[0] == 1.0  # reacted, on his feet: his standing reach (P11)
+    assert _until_he_dives(e, k)
+    e.t += 0.2
+    assert e.reach(k, 104.0, 35.0)[0] > 1.0  # stretching toward his dive
 
 
 def test_a_deflection_does_not_unstretch_a_dive_already_under_way():
@@ -931,17 +931,17 @@ def test_a_deflection_does_not_unstretch_a_dive_already_under_way():
     assert e.reach(k, 104.0, 34.0)[0] == stretched
 
 
-def test_a_late_dive_counts_the_stretch_his_arms_already_have():
+def test_a_late_dive_stretches_from_the_launch_and_goes_as_far_as_the_arms_will_not():
     from ninety.sim import offball
     e = Engine(1)
-    k = _shot_at_keeper(e, (100.0, 34.0, 0.3, 20.0, 9.0, 0.0))  # close: his arms are still stretching
-    e.t += e.reaction(k) + 0.1  # he waits, then dives
+    k = _shot_at_keeper(e, (100.0, 34.0, 0.3, 20.0, 9.0, 0.0))  # close: he is already late
+    e.t += e.reaction(k) + 0.1
     when, cross, _ = e.ball_at_x(k.x)
     assert when < 0.4
     y0 = k.y
     assert e.keeper_dive(k)
-    assert e.dive[4] == e.kicked_at + e.reaction(k)  # his arms began when he reacted, not when he dived
-    want = min(abs(cross - y0) - offball.arm_reach_m(0.1 + when), offball.KEEPER_DIVE_TRAVEL_M)
+    assert e.dive[4] == e.t  # his arms stretch from the launch (P15)
+    want = min(abs(cross - y0) - offball.arm_reach_m(when), offball.KEEPER_DIVE_TRAVEL_M)
     assert abs(abs(e.dive[3]) - want) < 1e-6
 
 
@@ -1295,16 +1295,17 @@ def test_a_pass_records_where_play_is_seen_going_through_the_real_path():
     assert 48.0 < e.seen_going[0] <= 57.0  # where he meets it, stepping toward it: not the kick spot
 
 
-def test_can_reach_counts_a_keepers_stretching_hands_in_his_box_not_his_feet():
+def test_can_reach_counts_a_keepers_hands_in_his_box_not_his_feet():
     e = Engine(1)
     k = e.keeper("away")
     k.x, k.y, k.vx, k.vy = 103.0, 34.0, 0.0, 0.0
-    e.kicked_at = e.t - 0.1
-    t = e.reaction(k) + 0.6  # by then his arms are fully stretched
-    assert e.can_reach(k, 103.0, 35.7, 0.5, t, delay=t)[0]  # 1.7 m: his hands, without a step
+    e.kicked_at = e.free_since = e.t - 0.1
+    t = e.reaction(k) + 0.6  # by then his hands can be at any height
+    assert e.can_reach(k, 103.0, 34.9, 1.5, t, delay=t)[0]  # 0.9 m away at 1.5 m: his hands, no step
+    assert not e.can_reach(k, 103.0, 35.7, 1.5, t, delay=t)[0]  # 1.7 m: beyond his standing reach
     outfield = e.by_id["a4"]
     outfield.x, outfield.y, outfield.vx, outfield.vy = 60.0, 34.0, 0.0, 0.0
-    assert not e.can_reach(outfield, 60.0, 35.7, 0.5, t, delay=t)[0]  # a foot reaches 1 m
+    assert not e.can_reach(outfield, 60.0, 34.9, 1.5, t, delay=t)[0]  # above a foot's reach
 
 
 def test_can_reach_counts_his_speed_toward_the_ball_and_braking_away_from_it():

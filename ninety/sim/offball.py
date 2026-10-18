@@ -32,7 +32,10 @@ KEEPER_DOWN_S = 0.8  # design, verify: how long a keeper is on the ground after 
 # P15: the heights a keeper's hands can be at. At a strike they are low, in his crouch (about 0.5 to
 # 0.65 m); they go up or down only once the ball's flight shows its height, about 245 ms after the
 # strike, and then at about 4 m/s, up about 1 m in about 0.25 s (Higueras-Herbada et al. 2020,
-# Frontiers in Psychology 11:311, Fig. 2: hands at penalties, read from the figure, verify).
+# Frontiers in Psychology 11:311, Fig. 2: hands at penalties, read from the figure, verify). The
+# figure ends when the ball arrives; beyond that 1 m they are taken to go on at the same rate up to a
+# jump's reach (design). These are heights of the ball's centre; the engine keeps the ball's lowest
+# point, so the bands below are given for that.
 HANDS_AT_STRIKE_Z = 0.6
 HEIGHT_FROM_FLIGHT_S = 0.245
 HANDS_VZ_MPS = 4.0
@@ -270,26 +273,45 @@ def reach_for(hands: bool, stretched_s: float, since_strike_s: float = math.inf,
 
 
 def hands_band(since_strike_s: float) -> tuple[float, float]:
-    """P15: the heights (floor, top) a keeper's hands can be at `since_strike_s` after the strike:
-    within HAND_SPAN_M of his crouch until the flight shows the ball's height, then spreading up and
-    down at HANDS_VZ_MPS, between the ground and HAND_REACH_Z."""
+    """P15: the heights (floor, top) of the ball's lowest point at which a keeper's hands can meet it,
+    `since_strike_s` after the strike: the ball's centre within HAND_SPAN_M of his crouch until the
+    flight shows the ball's height, then spreading up and down at HANDS_VZ_MPS, between the ground
+    and HAND_REACH_Z."""
     moved = HANDS_VZ_MPS * max(0.0, since_strike_s - HEIGHT_FROM_FLIGHT_S)
-    return (max(0.0, HANDS_AT_STRIKE_Z - HAND_SPAN_M - moved),
-            min(HAND_REACH_Z, HANDS_AT_STRIKE_Z + HAND_SPAN_M + moved))
+    return (max(0.0, HANDS_AT_STRIKE_Z - HAND_SPAN_M - ball.RADIUS - moved),
+            min(HAND_REACH_Z, HANDS_AT_STRIKE_Z + HAND_SPAN_M - ball.RADIUS + moved))
 
 
 def body_band(diving_s: float | None, toward_z: float = 0.0, down: bool = False) -> tuple[float, float]:
-    """P11, P15: the heights (floor, top) of the ball's centre at which it meets his body: on his
-    feet, and while his dive's push-off lasts, from the grass to BODY_HEIGHT; in the air, `diving_s`
-    into a dive at a ball crossing at `toward_z`, his laid-out trunk round dive_com_z; `down` after a
-    dive, lying on his side."""
-    half = SHOULDER_BREADTH_M / 2 + ball.RADIUS
+    """P11, P15: the heights (floor, top) of the ball's lowest point at which it meets his body: on
+    his feet, from the grass to BODY_HEIGHT; `diving_s` into a dive at a ball crossing at `toward_z`,
+    his laid-out trunk round dive_com_z once the push-off is over, going from the one to the other
+    evenly over the push-off (design: how he leans out over it is not sourced); `down` after a dive,
+    lying on his side."""
+    half = SHOULDER_BREADTH_M / 2  # his trunk, laid out across the goal, is as thick as he is broad
     if down:
         return 0.0, 2 * half
-    if diving_s is None or diving_s < DIVE_PUSH_OFF_S:
+    if diving_s is None:
         return 0.0, BODY_HEIGHT
     com = dive_com_z(diving_s, toward_z)
-    return max(0.0, com - half), com + half
+    lo, hi = max(0.0, com - half - 2 * ball.RADIUS), com + half  # the ball's centre within half + R
+    k = min(1.0, max(0.0, diving_s) / DIVE_PUSH_OFF_S)
+    return lo * k, BODY_HEIGHT + (hi - BODY_HEIGHT) * k
+
+
+def dive_cover_time(metres: float, v0: float = 0.0) -> float:
+    """P15: how long a dive launched now takes to put his hand `metres` across: his body's travel
+    (dive_motion, at most KEEPER_DIVE_TRAVEL_M) plus his arms' reach, both from the launch (arm_reach_m);
+    a full dive's time if it never gets that far."""
+    def across(t: float) -> float:
+        return min(max(dive_motion(t, v0)[0], 0.0), KEEPER_DIVE_TRAVEL_M) + arm_reach_m(t)
+    lo, hi = 0.0, max(dive_time_to(KEEPER_DIVE_TRAVEL_M, v0), DIVE_TIME_S)  # all the way out
+    if across(hi) < metres:
+        return hi
+    for _ in range(40):
+        mid = (lo + hi) / 2
+        lo, hi = (lo, mid) if across(mid) >= metres else (mid, hi)
+    return hi
 
 
 def dive_com_z(diving_s: float, toward_z: float) -> float:
