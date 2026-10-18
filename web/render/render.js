@@ -559,7 +559,9 @@ const unitSphere = new THREE.SphereGeometry(1, 24, 16);
 function lathe(profile) {
   return new THREE.LatheGeometry(profile.map(([y, r]) => new THREE.Vector2(r, y)), 16);
 }
-// Height 1, radius 1 at the joints, slimmer through the middle. Stays inside the labelled capsule.
+// The shaft of a capsule: height 1, radius 1 at the joints, slimmer through the middle. Each part
+// also gets a round cap at both joints (Body.set), so the drawn part is the capsule (a, b, r) that
+// body_parts labels and parts_box bounds, and the trunk, neck and arms meet where they join.
 const limbGeo = lathe([[-0.5, 0.04], [-0.40, 0.96], [-0.12, 1.0], [0.18, 0.70], [0.40, 0.96], [0.5, 0.04]]);
 const calfGeo = lathe([[-0.5, 0.04], [-0.38, 0.78], [-0.05, 1.0], [0.22, 0.84], [0.40, 0.96], [0.5, 0.04]]);
 const torsoGeo = lathe([[-0.5, 0.06], [-0.32, 0.74], [0.05, 0.88], [0.30, 1.0], [0.44, 0.90], [0.5, 0.08]]);
@@ -690,6 +692,9 @@ class Body {
       const geo = p.n === 'shoulders' ? unitCylinder : p.n === 'torso' || p.n === 'hips' ? torsoGeo : p.n.startsWith('shin') ? calfGeo : limbGeo;
       const limb = this.mesh(geo, p.c, p.n);
       limb.matrix.compose(a.clone().addScaledVector(yAxis, len * 0.5), q, new THREE.Vector3(p.r * wx, len, p.r * dz));
+      const cap = new THREE.Vector3(p.r * wx, p.r, p.r * dz);
+      this.mesh(unitSphere, p.c, p.n).matrix.compose(a, q, cap);
+      this.mesh(unitSphere, p.c, p.n).matrix.compose(b, q, cap);
     }
     for (let i = this.used; i < this.pool.length; i++) this.pool[i].visible = false;
     this.group.visible = this.used > 0;
