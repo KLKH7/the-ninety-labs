@@ -1,6 +1,6 @@
 # 0002: A keeper's dive as a body in the world
 
-- **Status:** proposed, Oct 18, 2026. Needs approval before any engine code.
+- **Status:** accepted, Oct 18, 2026 (open questions answered below).
 - **Rubric:** technological implementation (a match engine whose outcomes emerge from grounded
   physics). It also matters for the demo video: a keeper who dives realistically is what a viewer
   sees.
@@ -89,9 +89,10 @@ One mechanism, built whole, with every estimate of the keeper updated in the sam
 2. **The dive body and the shared reach function (items 1 and 2), for every dive.**
 3. **The penalty commit, aims and stays (items 3 and 4).**
 
-## Open questions for approval
+## Open questions, answered on approval
 
-- **The body's height during a dive, and how fast the hands can move up or down:** no source is in
-  hand. Accept them as *design*, or find kinematics first?
-- **Whether a keeper stays more on middle kicks:** the cue that would cause it is not modelled.
-  Keep it independent (*design*) for now?
+- **The body's height during a dive, and how fast the hands can move up or down:** look for
+  measured kinematics first. Use *design* values only where none can be found, and mark them.
+- **Whether a keeper stays more on middle kicks:** keep staying independent of the kick for now
+  (*design*). Bar-Eli shows 10 of 82 on middle kicks against 8 of 204 on side kicks; the cue that
+  would cause the difference is not modelled.
