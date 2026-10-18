@@ -143,6 +143,10 @@ def test_pressure_fatigue_and_the_weaker_foot_widen_error():
     assert error(p, weak_foot=True) > error(p)
     assert error(player(composure=1.0), pressure=1.0) == error(player(composure=1.0))  # composed: no effect
     assert error(player(weak_foot=1.0), weak_foot=True) == error(player(weak_foot=1.0))  # two-footed
+    args = {"skill": "finishing", "speed": 21.0, "pressure": 0.0, "capacity": 1.0}
+    up = [player(weak_foot=r).kick_error(**args, weak_foot=True)[2] for r in (1.0, 0.5, 0.0)]
+    assert up[0] == player(weak_foot=1.0).kick_error(**args, weak_foot=False)[2]  # two-footed, up too
+    assert up[0] < up[1] < up[2]  # the weaker foot's launch spread widens as the rating falls
 
 
 def test_reflexes_set_the_choice_reaction_within_the_measured_range():

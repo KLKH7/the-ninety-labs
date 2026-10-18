@@ -119,11 +119,13 @@ def team_strength(rng: random.Random) -> float:
 
 # A1 to A6: what each attribute changes.
 # A3: where instep kicks from the penalty mark (11 m from the goal's centre, about 21 m/s) cross the
-# goal line, at a target 1.6 m high just inside a post (Frontiers 2024, 16 players, Figure 2A): a
+# goal line, at a target 1.6 m high just inside a post (Frontiers 2024, 16 players, Results and
+# Figures 4A-B): a
 # tilted ellipse for each foot. Its 95% axes (straight kicks: 4.08 m by 1.91 m on the preferred foot,
 # 5.60 m by 2.28 m on the weaker) are 2.448 SDs each way (chi-square, 2 dof: assumed; the paper fits
 # a bivariate normal but does not say how it scales the ellipse); its long axis lies 26.9 and 29.4
-# degrees from horizontal (Figure 5's straight-kick medians, read from the figure's pixels).
+# degrees from horizontal (Figure 5's straight-kick box-plot medians, read from the figure's pixels;
+# the paper finds no difference in orientation between conditions, so a tilt per foot is design).
 # Projected across and up and down, then seen from the kicking point at the target (design: its
 # edge at the post, 3.5 m from the centre), that is about 3.6 degrees across and 2.5 up and down on
 # the preferred foot (the latter taken as the launch angle's spread), and 1.34 times both on the

@@ -150,7 +150,8 @@ def test_player_in_no_known_event_is_still_rejected():
     events are the clip's less any that name him, so the test does not rely on someone happening
     to stay out of the clip (with every player in it, it had nobody to plant)."""
     absent = next(f"h{n}" for n in range(1, 12) if f"h{n}" not in (PASS["player"], PASS.get("receiver")))
-    known = {i: e for i, e in KNOWN.items() if absent not in (e["player"], e.get("receiver"))}
+    names = ("player", "receiver", "intended", "interceptor", "deflected_by")  # every field the checker reads
+    known = {i: e for i, e in KNOWN.items() if absent not in (e.get(k) for k in names)}
     verdict = check(Claim(f"{absent} starts the move.", [PASS["id"]]), known)
     assert not verdict.ok
     assert absent in verdict.reasons[0]
