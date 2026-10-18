@@ -6,12 +6,14 @@ job sets it, so the checks can never silently stop running there).
 
 import json
 import os
+import shutil
 from pathlib import Path
 
 import pytest
 from jsonschema import validate
 
 from ninety.render.checks import check_clip, digest, load_clip
+from ninety.render.cli import meta_main
 from ninety.render.clip import RenderUnavailable, browser_page, render_clip
 from ninety.validate import validate as validate_clip
 
@@ -60,6 +62,16 @@ def test_a_rendered_clip_meets_the_data_contract(clips):
     meta = json.loads((clips[0] / "meta.json").read_text())
     assert {r["role"] for r in meta["roster"]} >= {"GK"} and len(meta["roster"]) == 22
     assert check_clip(clips[0])["passed"]["data_contract"]
+
+
+def test_meta_is_rebuilt_from_the_clips_own_files(clips, tmp_path):
+    """`ninety-render-meta` backfills clips rendered before the renderer wrote meta.json."""
+    old = tmp_path / "old"
+    shutil.copytree(clips[0], old, ignore=shutil.ignore_patterns("images", "meta.json"))
+    assert validate_clip(old) == {"C1 files": ["missing meta.json"]}
+    meta_main([str(old)])
+    assert (old / "meta.json").read_text() == (clips[0] / "meta.json").read_text()
+    assert validate_clip(old) == {}
 
 
 def test_projection_error_under_one_pixel(clips):

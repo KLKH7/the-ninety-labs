@@ -152,14 +152,18 @@ short and actionable. This file is public: no research sources, product names or
   25 training and test windows still failed, each on what lay beyond its cut: a pass still in the
   air at the last frame, an interception whose pass came before the first, a restart for a ball
   that went out before the window.
+  The first fix withheld a judgement whenever the event that settles it was missing from the
+  clip; an independent review then passed five planted defects whose evidence was inside the
+  window (a pass to a player who held the ball, an interception from a man in possession).
 - **Rule:** a contract every clip must meet is run by the code that makes clips, as part of the
   check that decides whether a clip ships. A clip that is part of something larger says so in
-  its metadata, and a check withholds only the judgements whose evidence lies outside it. It never
-  passes something it could have judged from inside.
+  its metadata, and a check withholds a judgement only when the clip's own frames show the play
+  from beyond the cut still running (the ball loose since the first frame, a pass still closing
+  on its end at the last). A missing event alone is never a reason.
 - **Check:** `tests/test_render_clip.py::test_a_rendered_clip_meets_the_data_contract` fails on
   the old renderer; `check_clip` reports `data_contract`, so the render job refuses a clip that
-  fails it; the window tests in `tests/test_validate.py` pass a cut case and fail the same clip
-  without `window`.
+  fails it; the window tests in `tests/test_validate.py` pass each cut case, fail the same clip
+  without `window`, and fail each of the review's planted defects (20 mutations, all killed).
 
 ## Working in the repo
 

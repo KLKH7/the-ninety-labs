@@ -438,6 +438,20 @@ def test_the_same_cut_pass_fails_in_a_clip_that_is_not_a_window(tmp_path):
     assert "C7 ball path" in run(tmp_path, clip)
 
 
+def test_a_pass_received_short_of_its_end_point_fails_in_a_window(tmp_path):
+    """The ball reaches h2 at x=50 and he holds it to the last frame, so it never gets to x=80."""
+    clip = clean_clip()
+    clip["events"][0]["end_x"] = 80.0
+    assert "C7 ball path" in run(tmp_path, cut(clip, 0, 149))
+
+
+def test_a_loose_pass_moving_away_from_its_end_point_at_the_cut_fails(tmp_path):
+    """Nobody has it at the last frame (x=46), but it went by (45, 36), 6 m wide, and is moving away."""
+    clip = clean_clip()
+    clip["events"][0].update(end_x=45.0, end_y=36.0)
+    assert "C7 ball path" in run(tmp_path, cut(clip, 0, 20))
+
+
 def test_a_pass_that_never_arrives_before_a_later_event_in_the_window_fails(tmp_path):
     """C7 is withheld only at the cut: a later on-ball event inside the window still bounds the pass."""
     clip = clean_clip()
@@ -450,22 +464,73 @@ def test_an_interception_whose_pass_was_before_the_window_passes(tmp_path):
     assert run(tmp_path, cut(intercepted_clip(), 10, 149)) == {}
 
 
+def test_an_interception_while_a_player_holds_the_ball_in_the_window_fails(tmp_path):
+    """No pass in the window, but h1 holds the ball for 120 frames before a1 'intercepts' it."""
+    clip = clean_clip()
+    clip["events"] = []
+    for f in clip["frames"]:
+        f["ball"]["x"], f["possessor"] = 40.0, "h1"
+        f["players"][2].update(x=40.5, y=30.0)
+    for f in clip["frames"][120:]:
+        f["ball"]["x"], f["possessor"] = 40.5, "a1"
+    clip["events"].append(event("e2", 120, "interception", "away", "a1", x=40.0))
+    assert "C8 event order" in run(tmp_path, cut(clip, 1, 149))
+
+
+def test_a_window_from_the_kickoff_has_nothing_before_it(tmp_path):
+    """A window that opens at frame 0 starts with the match, so no judgement is withheld for its start."""
+    clip = loose(intercepted_clip(), 0, PASS_AT + 24)
+    clip["events"] = [e for e in clip["events"] if e["type"] == "interception"]
+    assert "C8 event order" in run(tmp_path, cut(clip, 0, 149))
+
+
 def test_an_interception_from_nowhere_in_a_window_that_holds_the_pass_fails(tmp_path):
     clip = clean_clip()
     interception_from_nowhere(clip)
     assert "C8 event order" in run(tmp_path, cut(clip, 0, 149))
 
 
+def loose(clip: dict, first: int, last: int) -> dict:
+    """Nobody holds the ball from frame first to frame last."""
+    for f in clip["frames"]:
+        if first <= f["frame"] <= last:
+            f["possessor"] = None
+    return clip
+
+
 def test_a_goal_whose_shot_was_before_the_window_passes(tmp_path):
+    """The shot was struck before the cut; the ball is loose from the first frame until the goal."""
     clip = clean_clip()
     goal_without_shot(clip)
-    assert "C8 event order" not in run(tmp_path, cut(clip, 20, 149))
+    assert "C8 event order" not in run(tmp_path, cut(loose(clip, 20, 149), 20, 149))
+
+
+def test_a_goal_without_a_shot_while_a_player_holds_the_ball_in_the_window_fails(tmp_path):
+    """h2 has held the ball since frame 30, inside the window, so no shot before the cut is in flight."""
+    clip = clean_clip()
+    goal_without_shot(clip)
+    assert "C8 event order" in run(tmp_path, cut(clip, 20, 149))
+
+
+def test_a_goal_after_a_missed_shot_by_someone_else_in_the_window_fails(tmp_path):
+    clip = loose(clean_clip(), 20, 149)
+    clip["events"].append(event("e2", 25, "shot", "home", "h1", outcome="off_target", x=40.0))
+    goal_without_shot(clip)
+    assert "C8 event order" in run(tmp_path, cut(clip, 20, 149))
 
 
 def test_a_substitution_whose_stoppage_was_before_the_window_passes(tmp_path):
+    """The ball went dead before the cut: nobody holds it from the first frame to the substitution."""
     clip = clean_clip()
     substitute(clip, 120, with_stoppage=False)
-    assert run(tmp_path, cut(clip, 100, 149)) == {}
+    assert run(tmp_path, cut(loose(clip, 100, 149), 100, 149)) == {}
+
+
+def test_a_substitution_while_a_player_holds_the_ball_in_the_window_fails(tmp_path):
+    """No event before it in the window, but h2 holds the ball until frame 110: the ball is in play."""
+    clip = clean_clip()
+    substitute(clip, 120, with_stoppage=False)
+    assert "C3 roster" in run(tmp_path, cut(clip, 100, 149))
 
 
 def test_a_substitution_in_play_inside_a_window_fails(tmp_path):
@@ -518,3 +583,58 @@ def test_a_ball_too_fast_before_a_goal_and_its_kickoff_in_the_window_fails(tmp_p
     clip["events"].append(event("e3", 110, "kickoff", "away", "a1", x=52.5, y=34.0))
     clip["meta"]["score"]["home"] = 1
     assert "P3 ball speed" in run(tmp_path, cut(clip, 0, 149))
+
+
+def drifts_toward_80(clip: dict, possessor: str | None) -> dict:
+    """After h2 gets the ball at frame 30 it keeps moving toward x=80, 0.05 m a frame, to the last frame."""
+    for f in clip["frames"][31:]:
+        x = 50.0 + 0.05 * (f["frame"] - 30)
+        f["ball"]["x"], f["possessor"] = x, possessor
+        if possessor:
+            f["players"][1]["x"] = x
+    return clip
+
+
+def test_a_pass_dribbled_toward_its_end_point_at_the_cut_fails(tmp_path):
+    """C7: h2 has the ball at the last frame; a held ball is no longer the pass, even closing on (80, 30)."""
+    clip = drifts_toward_80(clean_clip(), "h2")
+    clip["events"][0]["end_x"] = 80.0
+    assert "C7 ball path" in run(tmp_path, cut(clip, 0, 149))
+
+
+def test_a_pass_cut_off_by_a_later_event_in_the_window_fails_even_if_loose_at_the_cut(tmp_path):
+    """C7: a tackle at frame 60 ends the pass inside the window; the loose ball at the cut is not it."""
+    clip = drifts_toward_80(clean_clip(), None)
+    clip["events"][0]["end_x"] = 80.0
+    clip["events"].append(event("e2", 60, "tackle", "away", "a1", x=51.5))
+    assert "C7 ball path" in run(tmp_path, cut(clip, 0, 149))
+
+
+def test_a_substitution_after_an_in_play_event_in_the_window_fails(tmp_path):
+    """C3: the ball is loose from the cut, but a deflection inside the window shows it was in play."""
+    clip = clean_clip()
+    substitute(clip, 120, with_stoppage=False)
+    clip["events"].append(event("e4", 105, "deflection", "away", "a1", x=50.0))
+    clip["events"].sort(key=lambda e: e["frame"])
+    assert "C3 roster" in run(tmp_path, cut(loose(clip, 100, 149), 100, 149))
+
+
+def restart_after_a_jump(clip: dict) -> dict:
+    """The ball jumps 20 m at frame 60; a set piece at frame 140 is the window's first restart."""
+    clip["frames"][60]["ball"]["x"] += 20.0
+    clip["events"].append(event("e9", 140, "set_piece", "home", "h2", x=50.0))
+    return clip
+
+
+def test_a_jump_while_a_player_holds_the_ball_before_the_first_restart_fails(tmp_path):
+    """P3: h2 holds the ball from the cut, so the window did not open on a dead ball."""
+    clip = restart_after_a_jump(clean_clip())
+    assert "P3 ball speed" in run(tmp_path, cut(clip, 40, 149))
+
+
+def test_a_jump_after_an_in_play_event_before_the_first_restart_fails(tmp_path):
+    """P3: nobody holds the ball, but a deflection at frame 50 shows it was in play."""
+    clip = restart_after_a_jump(loose(clean_clip(), 40, 149))
+    clip["events"].append(event("e4", 50, "deflection", "away", "a1", x=50.0))
+    clip["events"].sort(key=lambda e: e["frame"])
+    assert "P3 ball speed" in run(tmp_path, cut(clip, 40, 149))
