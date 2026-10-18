@@ -83,7 +83,7 @@ class RenderParams:
     motion_blur: float = 0.5  # shutter as a fraction of the frame interval
     noise: float = 0.012  # sensor noise amplitude, linear 0..1
     jpeg_quality: float = 0.88
-    occlusion: str = "natural"  # "crowded" picks the clip window with most players near the ball
+    occlusion: str = "natural"  # "crowded" picks the window where players most often hide the ball
     home_code: str = "ASH"
     away_code: str = "CRW"
     boards: tuple[str, ...] = BOARD_BRANDS
