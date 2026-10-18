@@ -548,3 +548,17 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** for any rate about where play happens, tabulate the options offered per decision
   (count, direction, value) and each estimate against its measured outcome, split by the conditions
   the engine treats differently (here: facing the goal or turning).
+
+### 54. A rule written for the player's estimate that the engine never plays
+- **What happened:** holding the ball was valued as losing it "half the time he is pressed" (D9),
+  a guess written for the estimate alone. Measured, the engine never took a held ball within a
+  decision interval at any pressure (0 of 1,029 holds), because its defenders commit only within
+  lunge reach and a presser jockeys outside it. The guess made every hold, and every cross held
+  for a timed run, look far riskier than play made it. The first replacement copied D8's reach
+  and win chance but left out who may commit, how often, and that a defender tries every decision
+  interval; an audit caught it, and the commit rule now lives in one function both call.
+- **Rule:** every risk an estimate charges comes from the engine rule that produces it, called,
+  not copied; a rule that exists only in the estimate is a defect.
+- **Check:** for each estimated chance, tabulate it against what the engine then did, in the
+  conditions the estimate distinguishes (here: pressure, and holds of one interval against
+  several), before trusting it.

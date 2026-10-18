@@ -16,7 +16,7 @@ import math
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from ninety.sim import ball, decisions, perception
+from ninety.sim import ball, decisions, offball, perception
 
 if TYPE_CHECKING:  # pragma: no cover
     from ninety.sim.engine import Engine, Player
@@ -46,11 +46,11 @@ OWN_BOX_EDGE_M = 16.0  # S5 (design): the attacking keeper waits this far from h
 # toward the far post). Negative offsets are on the corner's side. Each corner moves every zone
 # by up to ZONE_JITTER_M, so no two routines aim at the same points.
 ATTACK_ZONES = {
-    "near_post": (5.5, -3.0),
+    "near_post": offball.RUN_ZONES["near_post"],
     "keeper": (1.5, -0.5),  # stands in front of the keeper, a screen
-    "centre": (7.0, 0.5),
-    "far_post": (5.0, 4.5),
-    "spot": (11.0, 1.5),
+    "centre": offball.RUN_ZONES["centre"],
+    "far_post": offball.RUN_ZONES["far_post"],
+    "spot": offball.RUN_ZONES["spot"],
     "edge": (18.5, 0.0),  # waits outside the box for a clearance
 }
 ZONE_JITTER_M = 1.5

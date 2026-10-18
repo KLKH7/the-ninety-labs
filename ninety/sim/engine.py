@@ -54,7 +54,7 @@ SPRINT = 99.0  # as fast as their body allows
 RECOVER = 6.0  # a restart taker or the keeper getting into position (design)
 SHAPE = 3.0  # getting up after being beaten (design)
 DRIBBLE = 2.5
-DECIDE_EVERY = 6  # frames between the ball carrier's decisions (about 4 a second)
+DECIDE_EVERY = decisions.DECIDE_EVERY  # frames between the ball carrier's decisions (D5)
 PERCEIVE_EVERY = 6  # frames between a player's looks at the pitch (about 4 a second, staggered)
 BRAIN_EVERY = 12  # frames between a team brain's reads of the game (about 2 a second)
 COVER_M = 8.0  # design: the covering player stays this far behind the presser, goal-side
@@ -79,9 +79,7 @@ OFF_BALANCE_S = 0.8  # a missed lunge leaves him out of the play this long
 CLOSE_CONTROL_M = 3.0  # with an opponent this close, a carrier keeps the ball at his feet
 AT_FOOT_M = 0.15  # design: a ball this close to his feet is at his foot, to touch or strike
 CLOSE_CONTROL_PACE = 0.6  # and carries it at this share of his dribbling speed
-COMMIT_COVER_M = 10.0  # a team-mate goal-side within this distance is cover to commit with
-LAST_DITCH_M = 18.0  # this near his own goal a defender commits without cover
-COMMIT_P = 0.6  # a defender commits only when he expects to win the race this often (aggression shifts it)
+COMMIT_P = decisions.COMMIT_P  # D8, one rule for the engine and the estimate
 # What a defender expects a penalty to cost: the chance it is scored. Premier League seasons run from
 # 74.8% (2022-23) to 89.6% (2023-24) (Opta via The Analyst); 0.8 is design within that range.
 PENALTY_GOAL_P = 0.8
@@ -352,6 +350,8 @@ class Engine:
         self.dribble_to: tuple[float, float] | None = None  # the carrier's chosen carry, if any
         self.intended: str | None = None  # the team-mate a pass was played to: he expects it
         self.runs: dict[str, tuple[float, float, float]] = {}  # runner -> (x, y, started at)
+        # X2: a cross held for a timed run: passer, runner, zone, when he reads it, when it is struck
+        self.cross_run: dict | None = None
         self.moved: str | None = None  # the carrier, already moved this frame by tick_carrier
         self.hold_until = 0.0
         self.pressed: dict[str, float] = {}
@@ -445,6 +445,7 @@ class Engine:
         self.read = None
         self.intended = None
         self.runs = {}
+        self.cross_run = None
         self.touched_since_kick = False
         self.chase = {}
         self.dribble_to = None
@@ -730,6 +731,7 @@ class Engine:
                 if at:  # a team-mate he has not seen cannot be picked
                     mates.append((q.id, *at, belief.age(q.id, self.t), *belief.velocity(q.id, self.t)))
         seen_opps = [w for w in (belief.where(q.id, self.t) for q in self.players if q.team == opp) if w]
+        limit = None
         if self.from_restart not in NO_OFFSIDE_FROM:  # L10: he does not pick a man he sees offside
             limit = self.onside_limit(team, seen_opps, self.ball[0])
             mates = [m for m in mates if attack_dir(team) * (m[1] - limit) <= 0]
@@ -761,7 +763,7 @@ class Engine:
                                 absorb={m[0]: self.by_id[m[0]].profile.absorb_mps(False) for m in mates},
                                 passer=prof, heading=carrier.heading, fresh=self.fresh(carrier),
                                 ball_offset=(self.ball[0] - carrier.x, self.ball[1] - carrier.y),
-                                dead=carrier.id == self.dead_ball)
+                                dead=carrier.id == self.dead_ball, onside_x=limit)
         return scene
 
     def decide(self, carrier: Player, throw: bool = False) -> None:
@@ -781,6 +783,14 @@ class Engine:
                 self.hold_until = self.t + 0.5  # he looks again
             return
         choice = decisions.choose(scene, self.rng)
+        if choice.kind == "pass" and choice.line:  # X1: a cross held for the runner's timed run (X2)
+            self.cross_run = dict(passer=carrier.id, runner=choice.receiver, aim=choice.target,
+                                  zone=choice.zone, line=choice.line,
+                                  read=self.t + perception.SIMPLE_REACTION_S, strike=self.t + choice.delay,
+                                  lofted=choice.lofted, pace=choice.pace)
+            self.hold_until = self.cross_run["strike"]
+            self.dribble_to = None  # he stops to cross it
+            return
         if choice.kind == "pass" or choice.kind == "clear":
             self.pass_to(carrier, *choice.target, lofted=choice.lofted, pace=choice.pace,
                          receiver=choice.receiver)
@@ -1374,6 +1384,33 @@ class Engine:
             onto = math.hypot(self.ball[3], self.ball[4]) + 1.0  # design: he closes on it at about 1 m/s
             return clamp(rest[0], 0.5, PITCH_X - 0.5), clamp(rest[1], 0.5, PITCH_Y - 0.5), onto
         # Targets stay on the pitch so players brake for the line instead of stopping dead at it.
+        run = self.cross_run
+        if run and self.possessor != run["passer"]:  # the ball is no longer his to cross
+            self.cross_run = run = None
+        if run and p.id == run["runner"]:
+            # X2: having read the crosser, he sets off for the zone when leaving now gets him to the
+            # onside line on his way just as the cross is struck; until then he holds where he is.
+            # He watches the line (L10, as he sees it): if it has stepped up he times his run to
+            # where it is now, and waits on it rather than run beyond it before the strike.
+            lx, ly = run["line"]
+            zx, zy = run["zone"]
+            fwd = attack_dir(p.team)
+            seen = [w for w in (self.beliefs[p.id].where(q.id, self.t) for q in self.players
+                                if q.team != p.team) if w]
+            limit = self.onside_limit(p.team, seen, self.ball[0]) - fwd * offball.ONSIDE_STEP_M
+            if fwd * (lx - limit) > 0 and abs(zx - p.x) > 1e-9:
+                share = max(0.0, min(1.0, (limit - p.x) / (zx - p.x)))
+                lx, ly = p.x + share * (zx - p.x), p.y + share * (zy - p.y)
+            gap = math.hypot(lx - p.x, ly - p.y)
+            left = run["strike"] - self.t
+            along = (p.vx * (lx - p.x) + p.vy * (ly - p.y)) / gap if gap > 1e-9 else 0.0
+            if self.t < run["read"]:
+                return p.x, p.y, SHAPE
+            if along > 0 and gap / along < left - DT:  # he would be over the line too soon
+                return lx, ly, gap / max(left, DT)  # so he arrives on it as it is struck
+            if p.physique.time_to_cover(gap, along) >= left - DT:
+                return zx, zy, SPRINT
+            return p.x, p.y, SHAPE
         if chase and chase[0] == p.id:
             return clamp(chase[1], 0.5, PITCH_X - 0.5), clamp(chase[2], 0.5, PITCH_Y - 0.5), SPRINT
         if self.read and self.read[0] == p.id and self.possessor is None and self.kicked:
@@ -1732,6 +1769,8 @@ class Engine:
             steer(carrier, tx, ty, pace)
             if math.hypot(tx - carrier.x, ty - carrier.y) < 1.0:
                 self.dribble_to = None
+        elif self.cross_run and self.cross_run["passer"] == carrier.id:  # X1: holding it for the run
+            steer(carrier, carrier.x, carrier.y, DRIBBLE)
         elif self.t < self.hold_until and carrier.role != "GK":
             # A4: settling the ball he does not stop dead: he takes it in his stride and carries on
             # the way he was going, no faster than he can dribble, slower in close control.
@@ -1747,14 +1786,17 @@ class Engine:
         # rather than jumping there.
         # A controlled ball travels with the carrier, then closes the remaining gap relative to
         # them, to his feet on the side he faces.
+        crossing = self.cross_run and self.cross_run["passer"] == carrier.id
         if self.windup:  # turning to strike, he turns to face the target, not where he drifts
             want = math.atan2(self.windup[1] - carrier.y, self.windup[0] - carrier.x)
+        elif crossing:  # X1: he turns to where he means to cross it while he waits for the run
+            want = math.atan2(self.cross_run["aim"][1] - carrier.y, self.cross_run["aim"][0] - carrier.x)
         else:
             want = perception.facing(carrier.heading, carrier.vx, carrier.vy, carrier.x, carrier.y,
                                      carrier.x, carrier.y)
         carrier.heading = turn_toward(carrier.heading, want)
         side = carrier.heading
-        if not self.dribble_to and not self.windup:  # D8: holding, he keeps his body between ball and man
+        if not self.dribble_to and not self.windup and not crossing:  # D8: holding, he shields it
             near = min((q for q in self.players if q.team != carrier.team),
                        key=lambda q: math.hypot(q.x - carrier.x, q.y - carrier.y))
             if math.hypot(near.x - carrier.x, near.y - carrier.y) < SHIELD_M:
@@ -1785,6 +1827,17 @@ class Engine:
             if self.can_strike(carrier, self.windup[0], self.windup[1]):
                 strike, self.windup = self.windup[2], None
                 strike()
+            return
+        run = self.cross_run
+        if run and run["passer"] == carrier.id and self.t >= run["strike"]:
+            # X1: the run is on: he strikes it at the runner as he sees him now (O7 re-aims it, or he
+            # chooses again if the runner is now offside or out of range)
+            self.cross_run = None
+            if self.can_strike(carrier, *run["aim"]):  # O7: aimed at the runner as he sees him now
+                self.strike_pass(carrier, *run["aim"], run["lofted"], False, run["pace"], run["runner"])
+            else:
+                self.pass_to(carrier, *run["aim"], lofted=run["lofted"], pace=run["pace"],
+                             receiver=run["runner"])
             return
         if self.t >= self.hold_until and (self.frame + int(carrier.id[1:])) % DECIDE_EVERY == 0:
             self.decide(carrier)
@@ -1822,13 +1875,9 @@ class Engine:
         """D8: delay, deny, then commit. A defender goes in only with a team-mate covering behind
         him, when the ball has run loose from the carrier, or as a last resort near his own goal;
         otherwise he jockeys and waits."""
+        mates = [(q.x, q.y) for q in self.players if q.team == p.team and q is not p]
         own = PITCH_X - goal_x(p.team)
-        if abs(bx - own) < LAST_DITCH_M:
-            return True
-        if math.hypot(bx - holder.x, by - holder.y) > CONTROL_M:  # a heavy touch: the ball is there
-            return True
-        return any(q.team == p.team and q is not p and abs(q.x - own) < abs(p.x - own)
-                   and math.hypot(q.x - p.x, q.y - p.y) < COMMIT_COVER_M for q in self.players)
+        return decisions.may_commit((p.x, p.y), own, (bx, by), (holder.x, holder.y), mates)
 
     def duels(self) -> None:
         """D8: defenders near the ball decide whether to tackle, and lunges that have arrived are
@@ -1872,12 +1921,10 @@ class Engine:
             lunge = decisions.lunge_time(d, p.profile["tackling"])
             # His estimate of winning the race: an average carrier needs a choice reaction to react.
             p_win = decisions.tackle_chance(d, p.profile["tackling"])
-            # He stays on his feet unless he expects to win it (aggressive players gamble sooner);
-            # a better decision-maker judges that line more sharply.
-            line = COMMIT_P - 0.2 * (p.profile["aggression"] - 0.5)
-            line = max(line, self.foul_line(p, holder, bx, by))
-            sharp = 0.02 + 0.08 * (1 - p.profile["decisions"])
-            if self.rng.random() < decisions.sigmoid((p_win - line) / sharp):
+            # He stays on his feet unless he expects to win it (decisions.commit_chance).
+            commit = decisions.commit_chance(p_win, p.profile["aggression"], p.profile["decisions"],
+                                             self.foul_line(p, holder, bx, by))
+            if self.rng.random() < commit:
                 self.lunges[p.id] = self.t + lunge
                 self.lunge_at[p.id] = holder.id
                 self.evade_at[p.id] = self.t + holder.profile.reaction()

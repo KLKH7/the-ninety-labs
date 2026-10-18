@@ -200,8 +200,13 @@ SHAPE_IN_POSSESSION = {
 BACK_LINE_BEHIND_M = 24.0  # the back line's distance behind the ball
 TEAM_LENGTH_MAX_M = 46.0  # the most a team stretches with the ball, back line to forwards (Rico-Gonzalez)
 DEEPEST_M = 12.0  # nobody's in-possession spot is deeper than this from his own goal
+ONSIDE_STEP_M = 1.0  # L10 (design): attackers hold a step onside of the line they see
 BALL_SIDE_IN_POSSESSION = 0.15  # the shape leans this share toward the ball's side
 FINAL_THIRD_M = 70.0  # ball this far from his own goal: the box is attacked
+# S5 (design): the box's zones attacking players run at, as (depth from the goal line, offset
+# across toward the far post): near post, centre, far post, penalty spot. A corner (setpieces) and
+# a cross in open play (decisions.cross_options) aim at the same zones.
+RUN_ZONES = {"near_post": (5.5, -3.0), "centre": (7.0, 0.5), "far_post": (5.0, 4.5), "spot": (11.0, 1.5)}
 BOX_RUNS = {"ST": (99.0, 4.0), "far_winger": (98.0, -7.0), "RCM": (88.0, 0.0)}  # near post, far post, edge
 
 
@@ -218,7 +223,7 @@ def attacking_slot(role: str, own_goal_x: float, ball_x: float, ball_y: float,
         return None
     fwd = 1.0 if own_goal_x < PITCH_X / 2 else -1.0
     ball_u = abs(ball_x - own_goal_x)
-    last_u = abs(last_line_x - own_goal_x) - 1.0  # a step onside of their last defender
+    last_u = abs(last_line_x - own_goal_x) - ONSIDE_STEP_M  # a step onside of their last defender
     across = 1.0 if fwd > 0 else -1.0  # width is mirrored for the side attacking toward x = 0
     wide_ball = abs(ball_y - PITCH_Y / 2) > 12.0
     if ball_u > FINAL_THIRD_M and wide_ball:

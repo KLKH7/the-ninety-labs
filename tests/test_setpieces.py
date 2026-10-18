@@ -475,12 +475,13 @@ def test_scenario_corner_comes_from_play():
         m = simulate(seed, 0.05, "corner")
         first = m.frames[0]
         assert first["frame"] == 0 and first["t"] == 0.0, seed
-        # who had it at the moment: still on it one step later, or the one who struck it in that step
-        pid = first["possessor"] or next(e["player"] for e in m.events
-                                         if e["frame"] <= 1 and e["type"] in ("pass", "shot"))
-        holder = next(p for p in first["players"] if p["id"] == pid)
+        # who had it at the moment: the kept attempt's engine, at the moment it opens from (in the
+        # step after it he may already have passed, shot or pushed the ball on in a dribble)
+        kept = m.seed - corner_seed(seed, 0)
+        moment = next(e for n, e in enumerate(corner_attempts(seed), start=1) if n == kept)
+        assert moment.possessor and moment.team_of(moment.possessor) == "home", seed
         # its frame 0 is one step after the moment: the ball has moved at most one frame (40 m/s)
-        assert holder["team"] == "home" and first["ball"]["x"] >= 70.0 - 40.0 / FPS, seed
+        assert moment.ball[0] >= 70.0 and first["ball"]["x"] >= 70.0 - 40.0 / FPS, seed
         assert not any(e["type"] == "kickoff" for e in m.events), seed
         out = next(e for e in m.events if e["type"] == "out_of_play" and e["x"] in (0.0, 105.0))
         assert out["frame"] > 0 and out["x"] == 105.0 and out["team"] == "away", seed

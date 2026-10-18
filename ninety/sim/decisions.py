@@ -39,6 +39,8 @@ PITCH_X, PITCH_Y = 105.0, 68.0
 GOAL_HALF_WIDTH = 3.66
 PENALTY_DEPTH, PENALTY_HALF_WIDTH = 16.5, 20.16  # Law 1
 DT = 1 / 25
+DECIDE_EVERY = 6  # D5: frames between the carrier's decisions (about 4 a second)
+DECIDE_INTERVAL_S = DECIDE_EVERY * DT
 GENERIC_REACTION_S = 0.365  # D1: how quickly the passer assumes an opponent reacts (P12)
 LANE_MARGIN_S = 0.25  # D1: design: how sharply the passer's confidence falls as a lane closes
 RECEIVE_MARGIN_S = 0.3  # design: how sharply a carrier's confidence falls as a defender closes on his carry
@@ -115,15 +117,23 @@ def dribble_speed(dribbling: float) -> float:
     return 2.5 + 2.0 * dribbling
 
 
+GENERIC_TOP_MPS, GENERIC_ACCEL = 9.9, 5.2  # an average body (generic_time)
+
+
 def _generic_time(distance: float) -> float:
-    tau = 9.9 / 5.2
+    tau = GENERIC_TOP_MPS / GENERIC_ACCEL
     if distance <= 0:
         return GENERIC_REACTION_S
-    t = distance / 9.9 + tau
+    t = distance / GENERIC_TOP_MPS + tau
     for _ in range(8):
-        f = 9.9 * t - 9.9 * tau * (1 - math.exp(-t / tau)) - distance
-        t -= f / max(9.9 * (1 - math.exp(-t / tau)), 1e-6)
+        f = GENERIC_TOP_MPS * t - GENERIC_TOP_MPS * tau * (1 - math.exp(-t / tau)) - distance
+        t -= f / max(GENERIC_TOP_MPS * (1 - math.exp(-t / tau)), 1e-6)
     return GENERIC_REACTION_S + max(t, 0.0)
+
+
+def generic_speed(running_s: float) -> float:
+    """An average body's speed this long after setting off from standing (generic_time's body)."""
+    return GENERIC_TOP_MPS * (1 - math.exp(-max(0.0, running_s) * GENERIC_ACCEL / GENERIC_TOP_MPS))
 
 
 GENERIC = [_generic_time(d * 0.25) for d in range(481)]  # 0 to 120 m, every 0.25 m
@@ -141,6 +151,35 @@ def sigmoid(x: float) -> float:
 
 def lunge_time(distance: float, tackling: float = 0.5) -> float:
     return LUNGE_S * (distance / LUNGE_REACH_M) * (1.4 - 0.8 * tackling)
+
+
+COMMIT_COVER_M = 10.0  # D8: a team-mate goal-side within this distance is cover to commit with
+LAST_DITCH_M = 18.0  # D8: this near his own goal a defender commits without cover
+COMMIT_P = 0.6  # D8: a defender commits only when he expects to win the race this often
+
+
+def may_commit(defender: tuple[float, float], own_goal_x: float, ball: tuple[float, float],
+               holder: tuple[float, float], mates: list[tuple[float, float]]) -> bool:
+    """D8: delay, deny, then commit. A defender goes in only with a team-mate (`mates`, his own
+    side's other players) covering behind him, when the ball has run loose from the carrier, or as
+    a last resort near his own goal; otherwise he jockeys and waits. One rule for the engine's
+    defenders (engine.duels) and the carrier's estimate of them (hold_risk)."""
+    if abs(ball[0] - own_goal_x) < LAST_DITCH_M:
+        return True
+    if math.hypot(ball[0] - holder[0], ball[1] - holder[1]) > CONTROL_M:  # a heavy touch: the ball is there
+        return True
+    px, py = defender
+    return any(abs(qx - own_goal_x) < abs(px - own_goal_x) and math.hypot(qx - px, qy - py) < COMMIT_COVER_M
+               for qx, qy in mates if (qx, qy) != (px, py))
+
+
+def commit_chance(p_win: float, aggression: float = 0.5, decisions: float = 0.5, line: float = 0.0) -> float:
+    """D8: the chance a defender within reach goes in, from his estimate of winning the race
+    (`p_win`): he stays on his feet unless he expects to win it, aggressive players gamble sooner,
+    and a better decision-maker judges that line more sharply; `line` raises it (engine.foul_line)."""
+    line = max(COMMIT_P - 0.2 * (aggression - 0.5), line)
+    sharp = 0.02 + 0.08 * (1 - decisions)
+    return sigmoid((p_win - line) / sharp)
 
 
 def tackle_chance(distance: float, tackling: float = 0.5) -> float:
@@ -181,6 +220,9 @@ class Scene:
     header: bool = False
     z: float = 0.0
     incoming: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    # L10: how far toward the goal he attacks a team-mate may stand and be onside, as he sees it
+    # (None: no offside, straight from a throw-in, goal kick or corner).
+    onside_x: float | None = None
 
 
 @dataclass
@@ -192,6 +234,11 @@ class Option:
     lofted: bool = False
     pace: float = ARRIVE_MPS  # a ground pass's arrival speed, as chosen
     launch: tuple[float, float] | None = None  # a header away: (ground, up) as estimated, struck so
+    # A cross to a timed run (cross_options): he holds it this long, then strikes it at the runner,
+    # who meanwhile goes to `line` (the onside line on his way) to be there, running, as it is struck.
+    delay: float = 0.0
+    line: tuple[float, float] | None = None
+    zone: tuple[float, float] | None = None  # where his run goes
 
 
 def attack(goal_x: float) -> float:
@@ -716,7 +763,8 @@ def body_hit(points, take: float, sx: float, sy: float, ux: float, uy: float,
 
 
 def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, age: float,
-                    lofted: bool, pace: float = ARRIVE_MPS, receiver: str | None = None) -> float:
+                    lofted: bool, pace: float = ARRIVE_MPS, receiver: str | None = None,
+                    run: tuple[float, float, float, float, float] | None = None) -> float:
     """The passer's estimate that a pass to (tx, ty), meant for the team-mate he sees at (mx, my),
     is received by a team-mate: averaged over the strikes his own kick error allows (strike_nodes),
     the first team-mate who can get to the ball's path takes it (reach_time), unless it leaves the
@@ -739,6 +787,12 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
     mvx, mvy = meant[4:6] or (0.0, 0.0)
     mates = [(mx + mvx * wait, my + mvy * wait, mvx, mvy, perception.SIMPLE_REACTION_S,
               scene.absorb.get(receiver, CONTROL_EST_MPS))]
+    if run is not None:
+        # A timed run (cross_options): he holds it `delay`, by when the runner is at (x, y), going
+        # (vx, vy), already running: no reaction to wait for. Everyone else moves on meanwhile.
+        rx, ry, rvx, rvy, delay = run
+        wait = max(wait, delay)
+        mates = [(rx, ry, rvx, rvy, 0.0, scene.absorb.get(receiver, CONTROL_EST_MPS))]
     for mid, qx, qy, _, *vel in scene.mates:
         if mid != receiver and (receiver is not None or (qx, qy) != (mx, my)):
             qvx, qvy = vel or (0.0, 0.0)
@@ -910,11 +964,85 @@ def shot_chance(scene: Scene) -> float:
     return min(1.0, measured * q / typical) if typical > 0 else 0.0
 
 
+def crossing_position(scene: Scene) -> bool:
+    """X1: in the final third and wider than the box: where a cross into the box comes from."""
+    from_goal = abs(scene.goal_x - scene.x)
+    return from_goal < PITCH_X - offball.FINAL_THIRD_M and abs(scene.y - PITCH_Y / 2) > PENALTY_HALF_WIDTH
+
+
+def timed_run(scene: Scene, mate: tuple, zone: tuple[float, float]
+              ) -> tuple[float, float, float, float, float] | None:
+    """X2: a team-mate's run at a zone of the box, timed to the cross as S10 times a corner's: he
+    reads the crosser shaping to cross (a simple reaction, P12), sets off from standing and is a
+    step onside of the line (L10, as the crosser sees it) on his way to the zone, at the speed his
+    run has reached, as it is struck. (x, y, vx, vy, seconds until then) where he is on the line, or at the
+    zone if it is onside; None if the zone is not ahead of him."""
+    _, mx, my = mate[:3]
+    zx, zy = zone
+    f = attack(scene.goal_x)
+    if f * (zx - mx) <= 0:
+        return None
+    lx, ly = zx, zy
+    line = None if scene.onside_x is None else scene.onside_x - f * offball.ONSIDE_STEP_M
+    if line is not None and f * (zx - line) > 0:
+        share = max(0.0, (line - mx) / (zx - mx))
+        lx, ly = mx + share * (zx - mx), my + share * (zy - my)
+    gap = math.hypot(lx - mx, ly - my)
+    running = generic_time(gap) - GENERIC_REACTION_S
+    speed = generic_speed(running)
+    d = math.hypot(zx - mx, zy - my)
+    return lx, ly, speed * (zx - mx) / d, speed * (zy - my) / d, perception.SIMPLE_REACTION_S + running
+
+
+def cross_options(scene: Scene) -> list[Option]:
+    """X1: from a crossing position, a cross at each zone of the box (S5's running zones) to the
+    team-mate whose timed run (X2) gets him there soonest. He holds it until the run is on: while
+    he holds he may lose it where he stands, as when holding (hold_risk). Aimed at the runner as he
+    will be, led by his run (O7), and judged by the passer's race with the runner already running."""
+    if scene.dead or not crossing_position(scene):  # open play: a placed ball is S-rules' business
+        return []
+    out = []
+    side = 1.0 if scene.y < PITCH_Y / 2 else -1.0  # the far post is away from the ball's side
+    for depth, across in offball.RUN_ZONES.values():
+        zone = (scene.goal_x - attack(scene.goal_x) * depth, PITCH_Y / 2 + side * across)
+        runs = [(m, r) for m in scene.mates if (r := timed_run(scene, m, zone))]
+        if not runs:
+            continue
+        mate, run = min(runs, key=lambda mr: mr[1][4] + math.hypot(zone[0] - mr[1][0], zone[1] - mr[1][1])
+                        / max(math.hypot(mr[1][2], mr[1][3]), 1.0))
+        rx, ry, rvx, rvy, delay = run
+        tx, ty = lead_target(scene.x, scene.y, scene.goal_x, (mate[0], rx, ry, 0.0, rvx, rvy))
+        dist = math.hypot(tx - scene.x, ty - scene.y)
+        if not MIN_PASS_M <= dist <= MAX_PASS_M:
+            continue
+        gain = value(tx, ty, scene.goal_x, scene.opponents, scene.keeper)
+        space = min((math.hypot(ox - tx, oy - ty) for ox, oy in scene.opponents), default=10.0)
+        gain *= 0.7 + 0.3 * min(1.0, space / 5.0)  # as any pass (pass_option)
+        lost = max(loss_cost((scene.x + tx) / 2, (scene.y + ty) / 2, scene.goal_x),
+                   loss_cost(tx, ty, scene.goal_x))
+        turn = strike_turn(scene.heading, tx - scene.x, ty - scene.y, scene.throw, scene.dead)[1]
+        hold = max(delay, turn)  # he turns to it while he holds (engine.tick_carrier)
+        keep = 1 - hold_risk(scene, hold)
+        ways = [(False, pace) for pace in PASS_PACES] + ([(True, ARRIVE_MPS)] if dist >= LOFT_FROM_M else [])
+        best = None
+        for lofted, pace in ways:
+            confidence = pass_confidence(scene, tx, ty, rx, ry, 0.0, lofted, pace, mate[0],
+                                         run=(rx, ry, rvx, rvy, delay))
+            ev = confidence * gain - (1 - confidence) * lost
+            ev = keep * ev - (1 - keep) * loss_cost(scene.x, scene.y, scene.goal_x)
+            if best is None or ev > best.value:
+                best = Option("pass", ev, (tx, ty), mate[0], lofted, pace, delay=hold,
+                              line=(rx, ry), zone=zone)
+        out.append(best)
+    return out
+
+
 def options(scene: Scene) -> list[Option]:
     out = [o for o in (pass_option(scene, mate) for mate in scene.mates) if o]
     if scene.throw:  # Law 15: a throw-in is thrown to someone; it is never a shot or a dribble
         return out
-    p = pressure(scene)
+    if not scene.header:
+        out.extend(cross_options(scene))
     q = shot_chance(scene)
     in_range = abs(scene.goal_x - scene.x) < offball.SHOT_RANGE_M
     if scene.header:  # P18: a header at goal only from where a header can reach it
@@ -974,14 +1102,37 @@ def options(scene: Scene) -> list[Option]:
     # Holding is waiting to make a move a moment later: worth the best move open to him now, less
     # what the defence recovers while he waits (D9; *verify*: options only decay while he waits,
     # nothing here models a run developing). He cannot wait for ever, so when every move is a bad
-    # one, waiting is a little worse still. Under pressure he loses the ball where he stands about
-    # half the time he is caught (p * 0.5); otherwise he still makes that move. Each decision
-    # weighs holding afresh, so it carries no bonus for carrying on.
+    # one, waiting is a little worse still. Meanwhile he loses it where he stands if an opponent
+    # gets within reach and wins the race to it (hold_risk, D8's race); otherwise he still makes
+    # that move. Each decision weighs holding afresh, so it carries no bonus for carrying on.
     best = max((o.value - (STICKY if o.kind == scene.current else 0.0) for o in out), default=0.0)
     later = best * (1 - HOLD_DECAY) if best >= 0 else best * (1 + HOLD_DECAY)
-    lose = 0.5 * p
+    lose = hold_risk(scene, DECIDE_INTERVAL_S)
     out.append(Option("hold", (1 - lose) * later - lose * loss_cost(scene.x, scene.y, scene.goal_x)))
     return out
+
+
+def hold_risk(scene: Scene, seconds: float) -> float:
+    """D8, as the engine plays it (engine.duels): the chance he loses the ball he holds, standing,
+    within `seconds`. Each opponent he sees, coming on as he sees him going (`moving`), decides once
+    each decision interval whether to go in: only within lunge reach of the ball, only when he may
+    (may_commit: cover, a loose ball, a last resort), and then as often as commit_chance says, an
+    average defender; going in, he wins it with tackle_chance. A keeper does not go in."""
+    bx, by = scene.x, scene.y
+    own = scene.goal_x  # the opponents' own goal
+    others = [(ox, oy) for ox, oy, *_ in scene.moving]
+    keep = 1.0
+    rolls = max(1, math.ceil(seconds / DECIDE_INTERVAL_S - 1e-9))
+    for ox, oy, ovx, ovy, keeper in scene.moving:
+        if keeper or not may_commit((ox, oy), own, (bx, by), (bx, by), others):
+            continue
+        for k in range(rolls):
+            t = k * DECIDE_INTERVAL_S
+            d = math.hypot(ox + ovx * t - bx, oy + ovy * t - by)
+            if d <= LUNGE_REACH_M:
+                p_win = tackle_chance(d)
+                keep *= 1 - commit_chance(p_win) * p_win
+    return 1 - keep
 
 
 def temperature(scene: Scene) -> float:

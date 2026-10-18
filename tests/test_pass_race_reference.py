@@ -48,7 +48,7 @@ def ref_reach(points, rests, t_end, sx, sy, ux, uy, px, py, vx, vy, react, limit
     return best, at
 
 
-def reference(scene, tx, ty, mx, my, age, lofted, pace, receiver):
+def reference(scene, tx, ty, mx, my, age, lofted, pace, receiver, run=None):
     sx, sy = scene.x, scene.y
     direction = math.atan2(ty - sy, tx - sx)
     # P16: everyone moves on while he turns
@@ -59,6 +59,10 @@ def reference(scene, tx, ty, mx, my, age, lofted, pace, receiver):
     mvx, mvy = meant[4:6] or (0.0, 0.0)
     mates = [(mx + mvx * wait, my + mvy * wait, mvx, mvy, perception.SIMPLE_REACTION_S,
               scene.absorb.get(receiver, D.CONTROL_EST_MPS))]
+    if run is not None:  # X1: a timed run, already running at the strike after he holds it
+        rx, ry, rvx, rvy, delay = run
+        wait = max(wait, delay)
+        mates = [(rx, ry, rvx, rvy, 0.0, scene.absorb.get(receiver, D.CONTROL_EST_MPS))]
     for mid, qx, qy, _, *vel in scene.mates:
         if mid != receiver:
             qvx, qvy = vel or (0.0, 0.0)
@@ -111,9 +115,9 @@ def estimates_asked(scene):
     asked = []
     production = D.pass_confidence
 
-    def record(*args):
-        asked.append(args)
-        return production(*args)
+    def record(*args, **kw):
+        asked.append((args, kw))
+        return production(*args, **kw)
     D.pass_confidence = record
     try:
         D.options(scene)
@@ -155,10 +159,13 @@ def test_the_estimate_is_the_naive_race_without_its_shortcuts(monkeypatch):
     asked = [a for s in scenes for a in estimates_asked(s)]
     assert len(asked) >= 400
     worst, middling = 0.0, 0
-    for args in asked:
-        fast = D.pass_confidence(*args)
-        worst = max(worst, abs(fast - reference(*args)))
+    for args, kw in asked:
+        fast = D.pass_confidence(*args, **kw)
+        worst = max(worst, abs(fast - reference(*args, **kw)))
         middling += 0.05 < fast < 0.95
-    print(f"{len(asked)} estimates, {middling} between 0.05 and 0.95, largest difference {worst:.1e}")
+    runs = sum("run" in kw for _, kw in asked)
+    print(f"{len(asked)} estimates ({runs} to timed runs), {middling} between 0.05 and 0.95, "
+          f"largest difference {worst:.1e}")
     assert worst <= 1e-12
     assert middling >= 40  # a control: many of the cases are genuinely in doubt
+    assert runs >= 20  # and crosses to timed runs (X1) among them

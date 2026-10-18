@@ -18,6 +18,7 @@ from ninety.sim.engine import FPS, Engine
 
 THIRD_M = 35.0  # a third of the pitch's length
 BOX_M = 16.5  # Law 1: the penalty area's depth
+PENALTY_HALF_WIDTH_M = D.PENALTY_HALF_WIDTH  # Law 1: the penalty area's half width
 BLOCK_WINDOW_S = 0.6  # a shot counts as blocked if an outfield opponent touches it this soon
 
 
@@ -89,6 +90,10 @@ def one(seed: int) -> Counter:
         c[f"pass_end_{third(u1)}"] += 1
         c[f"pass_forward_{third(u0)}"] += u1 - u0 > 5.0
         c["passes_done"] += x["outcome"] == "success"
+        if (third(u0) == "final" and abs(x["y"] - 34.0) > PENALTY_HALF_WIDTH_M
+                and u1 >= 105.0 - BOX_M and abs(x["end_y"] - 34.0) <= PENALTY_HALF_WIDTH_M):
+            c["crosses"] += 1  # from wider than the box in the final third, into the box
+            c["crosses_done"] += x["outcome"] == "success"
     c["passes"] = c["event_pass"]
     for (turned, box, predicted, estimate), shot in shots:
         k = f"shot_{'turned' if turned else 'facing'}_{'box' if box else 'outside'}"
@@ -126,6 +131,8 @@ def report(seeds: list[int], label: str) -> str:
         f"| Shots | {t['event_shot'] / n:.1f} | about 20 to 30 |",
         f"| Goals | {t['event_goal'] / n:.2f} | about 2.5 to 3 |",
         f"| Corners | {t['corners'] / n:.1f} | about 9 to 10 |",
+        f"| Crosses into the box (completed) | {t['crosses'] / n:.1f} "
+        f"({t['crosses_done'] / max(1, t['crosses']):.0%}) | |",
         f"| Offsides | {t['event_offside'] / n:.1f} | |",
         f"| Ball in play (min) | {t['live_frames'] / FPS / 60 / n:.1f} | about 55 |",
         f"| Final-third entries | {t['final_entries'] / n:.0f} | |",

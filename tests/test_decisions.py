@@ -398,21 +398,69 @@ def test_when_every_move_is_bad_waiting_is_a_little_worse_still(monkeypatch):
 
 
 def test_under_pressure_holding_is_never_better_than_both_of_its_outcomes(monkeypatch):
-    """With pressure he either loses the ball where he stands or still makes his move; holding is
-    a mix of the two, so it can never beat both (the old form valued the lost share at nothing)."""
+    """Holding he either loses the ball where he stands or still makes his move: a mix of the two,
+    so it can never beat both (the old form valued the lost share at nothing)."""
     hopeless = [(60.0 + dx, 34.0 + dy) for dx in (2.0, 4.0) for dy in (-3.0, 0.0, 3.0)]
     lost_here = -D.loss_cost(60.0, 34.0, 105.0)
-    for p in (0.0, 0.3, 0.6, 0.9, 1.0):
-        monkeypatch.setattr(D, "pressure", lambda _s, p=p: p)
+    for risk in (0.0, 0.3, 0.6, 0.9, 1.0):
+        monkeypatch.setattr(D, "hold_risk", lambda _s, _t, r=risk: r)
         opts = D.options(scene(opponents=hopeless))
         best = max(o.value for o in opts if o.kind != "hold")
         hold = next(o for o in opts if o.kind == "hold").value
         assert best < 0 and hold < max(best, lost_here)
-    calm = []
-    for p in (0.0, 0.5, 1.0):
-        monkeypatch.setattr(D, "pressure", lambda _s, p=p: p)
-        calm.append(next(o for o in D.options(scene(opponents=[(75.0, 50.0)])) if o.kind == "hold").value)
-    assert calm[0] > calm[1] > calm[2]
+
+
+def test_holding_is_risky_only_when_an_opponent_may_and_would_go_in_within_reach():
+    """D8, as the engine plays it (engine.duels): a defender goes in only within lunge reach, only
+    when he may (may_commit: cover goal-side, or a last resort near goal), as often as commit_chance
+    says, once each decision interval, and wins it with tackle_chance. Measured before this rule (6
+    matches): no hold was lost within a decision interval at any pressure, against an estimate of
+    half the pressure (up to 45%). Mutations caught: risk from pressure; no cover needed; the commit
+    chance left out; one go however long he holds; an opponent's run ignored; the keeper counted."""
+    cover = (70.0, 34.0)  # goal-side of the presser, within COMMIT_COVER_M
+    close = scene(opponents=[(61.2, 34.0), cover])
+    per_go = D.commit_chance(D.tackle_chance(1.2)) * D.tackle_chance(1.2)
+    assert D.hold_risk(close, D.DECIDE_INTERVAL_S) == pytest.approx(per_go)
+    assert 0 < per_go < D.tackle_chance(1.2)
+    assert D.hold_risk(close, 3 * D.DECIDE_INTERVAL_S) == pytest.approx(1 - (1 - per_go) ** 3)
+    assert D.hold_risk(scene(opponents=[(61.2, 34.0)]), 1.0) == 0.0  # no cover: he jockeys
+    last_ditch = scene(x=90.0, opponents=[(91.2, 34.0)])  # within LAST_DITCH_M of their goal
+    assert D.hold_risk(last_ditch, D.DECIDE_INTERVAL_S) == pytest.approx(per_go)
+    jockeying = scene(opponents=[(62.0, 34.0), cover])  # 2 m off, standing: the press gap (T3)
+    assert D.hold_risk(jockeying, 1.0) == 0.0
+    coming = scene(opponents=[(64.0, 34.0), cover],
+                   moving=[(64.0, 34.0, -8.0, 0.0, False), (*cover, 0.0, 0.0, False)])
+    assert D.hold_risk(coming, 2 * D.DECIDE_INTERVAL_S) == 0.0  # not within reach at his first two goes
+    assert D.hold_risk(coming, 3 * D.DECIDE_INTERVAL_S) > 0.0  # at his third, he is
+    keeper = scene(x=90.0, opponents=[(91.0, 34.0)], keeper=(91.0, 34.0))
+    assert D.hold_risk(keeper, 1.0) == 0.0  # a keeper never goes in (engine.duels)
+    calm = next(o for o in D.options(jockeying) if o.kind == "hold").value
+    risky = next(o for o in D.options(close) if o.kind == "hold").value
+    assert risky < calm
+    # Pressed hard (2 m off) but out of reach, he keeps it: holding is worth the move a moment later.
+    assert D.pressure(jockeying) > 0.7
+    best = max(o.value for o in D.options(jockeying) if o.kind != "hold")
+    assert calm == pytest.approx(best * (1 - D.HOLD_DECAY) if best >= 0 else best * (1 + D.HOLD_DECAY))
+
+
+def test_the_engine_and_the_estimate_share_d8s_commit_rule():
+    """Mutation caught: either side changing who may go in or how often."""
+    from ninety.sim.engine import Engine
+    e = Engine(1)
+    holder, d = e.by_id["h9"], e.by_id["a4"]
+    e.give(holder.id)
+    holder.x, holder.y = 60.0, 34.0
+    e.ball = (60.0, 34.0, 0.0, 0.0, 0.0, 0.0)
+    d.x, d.y = 61.2, 34.0
+    for q in e.players:
+        if q.team == "away" and q is not d:
+            q.x, q.y = 30.0, 5.0 + int(q.id[1:])
+    assert not e.may_commit(d, holder, 60.0, 34.0)
+    e.by_id["a3"].x, e.by_id["a3"].y = 70.0, 34.0
+    mates = [(q.x, q.y) for q in e.players if q.team == "away" and q is not d]
+    shared = D.may_commit((61.2, 34.0), 105.0, (60.0, 34.0), (60.0, 34.0), mates)
+    assert e.may_commit(d, holder, 60.0, 34.0) == shared
+    assert e.may_commit(d, holder, 60.0, 34.0)
 
 
 def test_choice_randomness_is_relative_to_how_different_the_options_are():
@@ -842,3 +890,105 @@ def test_the_keeper_is_judged_where_he_will_be_when_the_shot_is_struck():
     s = scene(x=85.0, y=34.0, heading=math.pi, **read)
     opponents, keeper = D.at_strike(s)
     assert keeper == pytest.approx((103.0, read["keeper"][1] + 4.0 * turn)) and opponents == [keeper]
+
+
+def test_a_timed_run_reaches_the_onside_line_at_speed_as_the_cross_is_struck():
+    """X2, as S10 times a corner's runs: from standing he reads the crosser (a simple reaction) and
+    is on the onside line on his way to the zone, at the speed his run has reached, when it is
+    struck. Mutations caught: the run timed from the zone rather than the line; his speed taken as
+    top speed (or nothing); a choice reaction for a run he is expecting; the line ignored."""
+    zone = (99.5, 37.0)
+    s = scene(x=85.0, y=6.0, onside_x=90.0)
+    lx, ly, vx, vy, delay = D.timed_run(s, ("h9", 84.0, 40.0, 0.0), zone)
+    assert lx == pytest.approx(90.0 - offball.ONSIDE_STEP_M) and 37.0 < ly < 40.0  # a step onside, on his way
+    gap = math.hypot(lx - 84.0, ly - 40.0)
+    running = D.generic_time(gap) - D.GENERIC_REACTION_S
+    assert delay == pytest.approx(D.perception.SIMPLE_REACTION_S + running)
+    assert math.hypot(vx, vy) == pytest.approx(D.generic_speed(running))
+    assert 0 < math.hypot(vx, vy) < D.GENERIC_TOP_MPS
+    assert vx > 0 and math.atan2(vy, vx) == pytest.approx(math.atan2(37.0 - 40.0, 99.5 - 84.0))
+    # A zone already onside is run at directly; one behind him is no run at all.
+    onside = D.timed_run(scene(x=85.0, y=6.0, onside_x=101.0), ("h9", 84.0, 40.0, 0.0), zone)
+    assert onside[:2] == pytest.approx(zone)
+    assert D.timed_run(s, ("h9", 100.0, 40.0, 0.0), zone) is None
+
+
+def test_a_cross_is_offered_only_from_a_crossing_position_and_is_aimed_at_a_timed_run():
+    """X1: from the final third, wider than the box, a cross at each zone of the box to the team-mate
+    whose timed run gets there soonest; held until the run is on (at least his own turn), aimed at
+    the runner led by his run. Mutations caught: offered from inside the box's width or outside the
+    final third; the runner not the one who gets there soonest."""
+    mates = [("h9", 86.0, 34.0, 0.0), ("h11", 70.0, 45.0, 0.0)]
+    wide = scene(x=88.0, y=6.0, mates=mates, opponents=[(92.0, 30.0)], onside_x=91.0)
+    crosses = D.cross_options(wide)
+    assert len(crosses) == len(offball.RUN_ZONES)
+    for c in crosses:
+        assert c.receiver == "h9" and c.kind == "pass" and c.line[0] <= 91.0 - offball.ONSIDE_STEP_M + 1e-9
+        run = D.timed_run(wide, mates[0], c.zone)
+        turn = D.strike_turn(wide.heading, c.target[0] - wide.x, c.target[1] - wide.y)[1]
+        assert c.delay == pytest.approx(max(run[4], turn))
+        lead = D.lead_target(wide.x, wide.y, wide.goal_x, ("h9", run[0], run[1], 0.0, run[2], run[3]))
+        assert c.target == pytest.approx(lead)
+    assert D.cross_options(scene(x=88.0, y=20.0, mates=mates, onside_x=91.0)) == []  # inside the box's width
+    assert D.cross_options(scene(x=60.0, y=6.0, mates=mates, onside_x=91.0)) == []  # not the final third
+
+
+def test_the_race_for_a_timed_cross_takes_the_runner_as_running_from_the_line_at_the_strike():
+    """The passer's race with a timed run (pass_confidence's `run`): the runner already running, no
+    reaction to wait for, and everyone else moved on while the crosser holds it. Mutation caught:
+    the runner given a reaction after the strike, or the hold not passed to the others."""
+    target = (91.5, 33.0)  # nearly at his feet: whether he must react first decides it
+    s = scene(x=88.0, y=6.0, mates=[("h9", 91.0, 33.0, 0.0)], onside_x=91.0,
+              opponents=[(92.5, 33.0)], moving=[(92.5, 33.0, 0.0, 0.0, False)])
+    reacting = D.pass_confidence(s, *target, 91.0, 33.0, 0.0, False, 6.0, "h9")
+    ready = D.pass_confidence(s, *target, 91.0, 33.0, 0.0, False, 6.0, "h9", run=(91.0, 33.0, 0.0, 0.0, 0.0))
+    assert ready > reacting
+    defended = scene(x=88.0, y=6.0, mates=[("h9", 86.0, 34.0, 0.0)], onside_x=91.0,
+                     opponents=[(100.0, 40.0)], moving=[(100.0, 40.0, -2.0, -6.0, False)])
+    now = D.pass_confidence(defended, *target, 91.0, 33.0, 0.0, True, D.ARRIVE_MPS, "h9",
+                            run=(91.0, 33.0, 7.0, -0.5, 0.0))
+    held = D.pass_confidence(defended, *target, 91.0, 33.0, 0.0, True, D.ARRIVE_MPS, "h9",
+                             run=(91.0, 33.0, 7.0, -0.5, 1.0))
+    assert held < now  # the defender running across has a second longer to get there
+
+
+def test_crosses_aim_near_and_far_by_the_ball_and_cost_what_holding_risks(monkeypatch):
+    """X1: the far-post zone is on the side away from the ball, the near post on its side; no cross
+    from a placed ball (open play only); and what he may lose while he holds lowers a cross's
+    worth. Mutations caught: the sides flipped; crosses from a dead ball; the hold risk ignored."""
+    mates = [("h9", 86.0, 34.0, 0.0)]
+    for y, near_side in ((6.0, -1.0), (62.0, 1.0)):
+        s = scene(x=88.0, y=y, mates=mates, onside_x=91.0)
+        zones = {c.zone for c in D.cross_options(s)}
+        depth, across = offball.RUN_ZONES["far_post"]
+        far = (105.0 - depth, 34.0 - near_side * across)
+        depth, across = offball.RUN_ZONES["near_post"]
+        near = (105.0 - depth, 34.0 - near_side * across)
+        assert far in zones and near in zones
+        assert (far[1] - 34.0) * near_side < 0 < (near[1] - 34.0) * near_side or across < 0
+    s = scene(x=88.0, y=6.0, mates=mates, onside_x=91.0)
+    assert D.cross_options(scene(x=88.0, y=6.0, mates=mates, onside_x=91.0, dead=True)) == []
+    monkeypatch.setattr(D, "hold_risk", lambda _s, _t: 0.0)
+    safe = {c.zone: c.value for c in D.cross_options(s)}
+    monkeypatch.setattr(D, "hold_risk", lambda _s, _t: 0.5)
+    risky = {c.zone: c.value for c in D.cross_options(s)}
+    assert all(risky[z] < safe[z] for z in safe)
+
+
+def test_he_holds_a_cross_for_the_run_or_his_own_turn_whichever_is_longer(monkeypatch):
+    """X1: he turns to it while he holds, so the hold, and what he risks over it, is the longer of
+    the run's time and his turn. Mutations caught: the turn dropped; the risk taken over the hold
+    less (or plus) the turn."""
+    asked = []
+    real = D.hold_risk
+    monkeypatch.setattr(D, "hold_risk", lambda s, t: asked.append(t) or real(s, t))
+    on_the_line = [("h9", 89.9, 34.0, 0.0)]  # already a step onside: the run takes a reaction
+    back = math.atan2(34.0 - 6.0, 97.0 - 88.0) + math.pi  # his back to the box
+    away = scene(x=88.0, y=6.0, heading=back, mates=on_the_line, onside_x=91.0)
+    crosses = D.cross_options(away)
+    assert crosses
+    for c in crosses:
+        turn = D.strike_turn(back, c.target[0] - away.x, c.target[1] - away.y)[1]
+        run = D.timed_run(away, on_the_line[0], c.zone)
+        assert turn > run[4] and c.delay == pytest.approx(turn)
+    assert asked and all(t == pytest.approx(c.delay) for t, c in zip(asked, crosses, strict=True))
