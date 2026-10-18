@@ -3,7 +3,7 @@
 import dataclasses
 import math
 
-from ninety.sim import engine, offball, perception, roles
+from ninety.sim import decisions, engine, offball, perception, roles
 from ninety.sim.body import Body, move, sprint_cost_m
 from ninety.sim.engine import PITCH_Y, Engine
 from ninety.sim.style import HIGH, MID
@@ -163,11 +163,17 @@ def test_a_move_is_worth_the_chance_he_is_found_times_the_race_times_the_ball_th
         D.value = real
 
 
-def test_a_run_keeps_its_spot_while_he_carries_on_and_is_a_sprint_from_the_first_frame():
+def priced(e, p, x, y):
+    """P17: the speed a forward run to (x, y) is asked at: the threat it adds, over its length."""
+    gain = decisions.value(x, y, engine.goal_x(p.team)) - decisions.value(*e.ball[:2], engine.goal_x(p.team))
+    return e.run_speed(p, gain, x, y)
+
+
+def test_a_run_keeps_its_spot_while_he_carries_on_and_is_run_from_the_first_frame():
     e, p, carrier, brain = runner("poacher")
     spot = e.move_spot(p, carrier, brain, "in_behind")
     e.move_worth = lambda _p, _c, s: 0.05 if s == spot else 0.0
-    assert e.movement(p, carrier, brain) == (*spot, engine.SPRINT)  # chosen and sprinting at once
+    assert e.movement(p, carrier, brain) == (*spot, priced(e, p, *spot))  # chosen and run at once
     e.moves[p.id] = ("in_behind", *spot, e.t - engine.LOOK_S - 0.01)  # his next look
     for q in e.players:  # their line has stepped up two metres: a fresh run would aim elsewhere
         if q.team == "away" and q.role != "GK":
@@ -175,14 +181,14 @@ def test_a_run_keeps_its_spot_while_he_carries_on_and_is_a_sprint_from_the_first
     sees_them(e)
     p.x += 2.0
     assert e.move_spot(p, carrier, brain, "in_behind") != spot
-    assert e.movement(p, carrier, brain) == (*spot, engine.SPRINT)
+    assert e.movement(p, carrier, brain) == (*spot, priced(e, p, *spot))
 
 
 def test_between_looks_he_carries_on_without_weighing_again():
     e, p, carrier, brain = runner("poacher")
     e.moves[p.id] = ("in_behind", 92.0, 30.0, e.t)
     e.move_worth = lambda *_: 1 / 0  # any weighing would fail
-    assert e.movement(p, carrier, brain) == (92.0, 30.0, engine.SPRINT)
+    assert e.movement(p, carrier, brain) == (92.0, 30.0, priced(e, p, 92.0, 30.0))
 
 
 def test_a_spent_player_cannot_make_the_run():
