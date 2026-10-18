@@ -307,3 +307,33 @@ short and actionable. This file is public: no research sources, product names or
   measured, and do mutation testing in a different checkout, or never at the same time.
 - **Check:** before trusting a run, re-run one of its seeds on a clean checkout of the commit and
   compare; record the commit and worktree with the numbers.
+
+### 35. A calibrated input the mechanism ignores; a headline rate that hides the cause
+- **What happened:** the keeper's penalty read was calibrated to Bar-Eli et al. (the right way 113
+  times in 204), but the dive ignored it: after his reaction time he dived toward the ball's true
+  crossing, though GROUNDING said he committed first. Making him commit raised saves from 31% to
+  47% of penalties on target (published 14.7%). Only the source's own breakdown (Table 2: where the
+  kick went against what the keeper did) showed why: he reached as far behind his dive as ahead of
+  it, his body blocked every height while he was in the air, and once down he still caught
+  chest-high balls.
+- **Rule:** when a calibrated input barely moves the outcome, check that the mechanism reads it.
+  Compare a model with its source cell by cell, not by the headline rate.
+- **Check:** for any rate with a published breakdown, fill the same table from the engine, from a
+  clean worktree, before and after.
+
+### 36. Patching toward one rate builds a pile of half-sourced fixes
+- **What happened:** KLKH7/the-ninety-labs#93 took five steps, each prompted by the penalty save
+  rate, and its audit failed it. A dive dated 115 ms before the strike started that late on the
+  clock but not in the world, so the keeper jumped 0.1 m in one frame. A flag meaning "in a dive"
+  was also true for a keeper lying on the ground, and let him catch without reacting. Shares that
+  Bar-Eli measured where kicks ended were applied to where they were aimed, before the kick's
+  error. A new limit on the keeper's reach did not reach the estimates that judge it (the dive
+  planner, the shooter's view of the keeper, the pass race). Tests read the source's constants back,
+  so changing a constant passed them. Every step lowered saves, and none looked for what raises them.
+- **Rule:** design the mechanism from its sources first, as a decision for review
+  (docs/decisions), then build it whole. An action a source starts before an event starts then in
+  the world. A distribution measured at the outcome is reproduced at the outcome, through the
+  engine's own errors (lesson 32). A limit on a body reaches every estimate of that body in the
+  same change (lesson 23). A test states the source's number, never the constant (lesson 25).
+- **Check:** per-frame speed change on the first frames of any action timed in the past; list every
+  state a flag is true in (lesson 33); reproduce the source's table at the outcome, not the input.
