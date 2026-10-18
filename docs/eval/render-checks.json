@@ -1,17 +1,17 @@
 {
-  "generated": "2026-10-17T23:31:34Z",
-  "commit": "443c4d5a145a7755d0331d6b1acf3992e3a8d427",
+  "generated": "2026-10-18T18:39:21Z",
+  "commit": "45e638daa83ca737371cd4a869880a1e4fae54b3",
   "command": "ninety-render-check runs/dataset/test/seed900001 runs/dataset/test/seed900002 runs/dataset/test/seed900003 runs/dataset/test/seed900004 runs/dataset/test/seed900005 --determinism --report docs/eval/render-checks.json",
   "summary": {
     "clips": 5,
     "frames": 1250,
-    "ball_projection_max_px": 0.247,
-    "ball_projection_mean_px": 0.0801,
-    "keypoint_projection_max_px": 0.0039,
-    "player_feet_outside_box": 5,
+    "ball_projection_max_px": 0.2645,
+    "ball_projection_mean_px": 0.0853,
+    "keypoint_projection_max_px": 0.0014,
+    "player_feet_outside_box": 0,
     "frames_with_label_problems": 0,
-    "ball_visibility_lt_0_5_share": 0.064,
-    "all_passed": false,
+    "ball_visibility_lt_0_5_share": 0.0632,
+    "all_passed": true,
     "determinism": {
       "clip": "seed900001",
       "frames_jsonl_identical": true,
@@ -50,13 +50,22 @@
       },
       "occlusion": {
         "ball_in_frame": 250,
-        "ball_visibility_lt_0_5_share": 0.08,
-        "player_boxes": 2539,
-        "player_visibility_lt_0_5_share": 0.0012,
+        "ball_visibility_lt_0_5_share": 0.088,
+        "player_boxes": 2541,
+        "player_visibility_lt_0_5_share": 0.0079,
         "player_height_px": {
-          "p05": 19,
-          "median": 70,
-          "p95": 86
+          "n": 1993,
+          "p05": 61,
+          "median": 72,
+          "p95": 87,
+          "by_angle": {
+            "main": {
+              "n": 1993,
+              "p05": 61,
+              "median": 72,
+              "p95": 87
+            }
+          }
         }
       },
       "passed": {
@@ -73,16 +82,16 @@
       "projection": {
         "ball_px": {
           "n": 250,
-          "mean": 0.0514,
-          "max": 0.2408
+          "mean": 0.072,
+          "max": 0.2645
         },
         "keypoint_px": {
-          "n": 1307,
-          "mean": 0.0005,
-          "max": 0.0017
+          "n": 1026,
+          "mean": 0.0004,
+          "max": 0.0014
         },
-        "player_foot_outside_box": 5,
-        "player_foot_checked": 1951
+        "player_foot_outside_box": 0,
+        "player_foot_checked": 2807
       },
       "labels": {
         "frames": 250,
@@ -91,19 +100,34 @@
       },
       "occlusion": {
         "ball_in_frame": 250,
-        "ball_visibility_lt_0_5_share": 0.08,
-        "player_boxes": 2188,
-        "player_visibility_lt_0_5_share": 0.0082,
+        "ball_visibility_lt_0_5_share": 0.136,
+        "player_boxes": 3029,
+        "player_visibility_lt_0_5_share": 0.0129,
         "player_height_px": {
-          "p05": 32,
-          "median": 72,
-          "p95": 160
+          "n": 2690,
+          "p05": 51,
+          "median": 73,
+          "p95": 130,
+          "by_angle": {
+            "main": {
+              "n": 2025,
+              "p05": 50,
+              "median": 67,
+              "p95": 87
+            },
+            "tight": {
+              "n": 665,
+              "p05": 84,
+              "median": 110,
+              "p95": 142
+            }
+          }
         }
       },
       "passed": {
         "projection_ball_lt_1px": true,
         "projection_keypoints_lt_1px": true,
-        "player_feet_in_boxes": false,
+        "player_feet_in_boxes": true,
         "labels_complete": true
       }
     },
@@ -114,16 +138,16 @@
       "projection": {
         "ball_px": {
           "n": 250,
-          "mean": 0.0711,
-          "max": 0.2115
+          "mean": 0.0863,
+          "max": 0.2569
         },
         "keypoint_px": {
-          "n": 2146,
-          "mean": 0.0006,
-          "max": 0.0039
+          "n": 567,
+          "mean": 0.0004,
+          "max": 0.0011
         },
         "player_foot_outside_box": 0,
-        "player_foot_checked": 2726
+        "player_foot_checked": 1801
       },
       "labels": {
         "frames": 250,
@@ -132,13 +156,34 @@
       },
       "occlusion": {
         "ball_in_frame": 250,
-        "ball_visibility_lt_0_5_share": 0.044,
-        "player_boxes": 3119,
-        "player_visibility_lt_0_5_share": 0.0077,
+        "ball_visibility_lt_0_5_share": 0.02,
+        "player_boxes": 1897,
+        "player_visibility_lt_0_5_share": 0.0,
         "player_height_px": {
-          "p05": 35,
-          "median": 66,
-          "p95": 89
+          "n": 1768,
+          "p05": 43,
+          "median": 77,
+          "p95": 107,
+          "by_angle": {
+            "main": {
+              "n": 632,
+              "p05": 68,
+              "median": 76,
+              "p95": 89
+            },
+            "reverse": {
+              "n": 615,
+              "p05": 41,
+              "median": 54,
+              "p95": 90
+            },
+            "tight": {
+              "n": 521,
+              "p05": 82,
+              "median": 93,
+              "p95": 114
+            }
+          }
         }
       },
       "passed": {
@@ -155,16 +200,16 @@
       "projection": {
         "ball_px": {
           "n": 250,
-          "mean": 0.0929,
-          "max": 0.2445
+          "mean": 0.0829,
+          "max": 0.2429
         },
         "keypoint_px": {
-          "n": 1718,
+          "n": 2091,
           "mean": 0.0004,
-          "max": 0.001
+          "max": 0.0009
         },
         "player_foot_outside_box": 0,
-        "player_foot_checked": 2673
+        "player_foot_checked": 2918
       },
       "labels": {
         "frames": 250,
@@ -173,13 +218,22 @@
       },
       "occlusion": {
         "ball_in_frame": 250,
-        "ball_visibility_lt_0_5_share": 0.096,
-        "player_boxes": 3226,
-        "player_visibility_lt_0_5_share": 0.0022,
+        "ball_visibility_lt_0_5_share": 0.036,
+        "player_boxes": 3488,
+        "player_visibility_lt_0_5_share": 0.014,
         "player_height_px": {
-          "p05": 51,
-          "median": 78,
-          "p95": 95
+          "n": 2590,
+          "p05": 66,
+          "median": 82,
+          "p95": 99,
+          "by_angle": {
+            "main": {
+              "n": 2590,
+              "p05": 66,
+              "median": 82,
+              "p95": 99
+            }
+          }
         }
       },
       "passed": {
@@ -214,13 +268,22 @@
       },
       "occlusion": {
         "ball_in_frame": 250,
-        "ball_visibility_lt_0_5_share": 0.02,
+        "ball_visibility_lt_0_5_share": 0.036,
         "player_boxes": 1604,
         "player_visibility_lt_0_5_share": 0.0,
         "player_height_px": {
+          "n": 1509,
           "p05": 53,
           "median": 66,
-          "p95": 83
+          "p95": 83,
+          "by_angle": {
+            "main": {
+              "n": 1509,
+              "p05": 53,
+              "median": 66,
+              "p95": 83
+            }
+          }
         }
       },
       "passed": {
