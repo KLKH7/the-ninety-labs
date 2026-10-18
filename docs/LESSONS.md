@@ -601,3 +601,15 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_render_scene.py::test_the_crowded_window_is_the_one_where_the_ball_is_hidden`
   builds two windows where counting players near the ball picks the wrong one. Before a batch,
   `uv run ninety-data-stats <2-3 crowded clips> --stride 5 --input 640x640` shows the share.
+
+### 84. A scorer reads labels by the rule written down, not by which fields are filled
+- **What happened:** EVALUATION.md says boxes with visibility zero are not labels, but
+  `vision_score.ground_truth()` kept any label with a box. When the re-frozen test set marked
+  balls behind the advertising boards as visibility 0 and kept their boxes, the scorer counted
+  113 undrawn balls as misses, and ball recall read 0.846 instead of 0.930. It was found after
+  the results were in; the rule it applies was written before them.
+- **Rule:** a scorer decides what counts as a label from the documented rule, in one function,
+  and never from whether a field happens to be present. A data change that fills a field it once
+  left empty must not change what is scored.
+- **Check:** `tests/test_vision_score.py::test_a_box_with_visibility_zero_is_not_a_label` gives
+  a player and a ball boxes at visibility 0 with no detection and fails if either counts as a miss.
