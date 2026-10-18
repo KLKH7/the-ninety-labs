@@ -17,6 +17,7 @@ generated it and the output file is committed. Rows marked *planned* have no res
 | Event precision, recall and F1 per type; possession accuracy; speed error | events: `uv run python -m ninety.eval.event_score --truth <clip>/events.jsonl --frames <clip>/frames.jsonl --detected <detected.jsonl> --report <report.json>` ([format](#event-report-format)); possession and speed planned | `docs/eval/vision-report-v{n}.json` | planned: the harness runs and is tested on damaged simulator events; no detector yet |
 | Targeted data rounds, before and after | planned | `docs/eval/vision-report-v{n}.json` | planned |
 | Stats engine facts: hand-computed cases, planted defects, citations, size | `uv run pytest tests/test_stats.py` | test assertions | running |
+| Shots by distance and long balls (R3, R4), by the protocol below | `uv run python -m ninety.sim.shot_report` | `docs/eval/shots.md` | running: a report, never a target |
 | Late drop in high-intensity running (R7), by the protocol below; distance and top speed by position on the same matches | `uv run python -m ninety.sim.late_drop` | `docs/eval/late-drop.md` | running |
 | Fact-checker rules (numbers, players, evidence ids) | `uv run pytest tests/test_factcheck.py` | test assertions | running |
 | Ledger versioning, evidence validation, and deterministic cue fixture | `uv run pytest tests/test_ledger.py tests/test_cues.py` | `tests/fixtures/cues-seed7.jsonl` and test assertions | running: 17 tests; 166 cues for seed 7, five minutes (106 for its 53 passes, 15 of them failed, and 10 for shots; the engine scored once in that window) |
@@ -225,6 +226,37 @@ invented `shot` (none true) had `precision` 0.0 and `recall` and `f1` `null`.
 **The test set must be hard enough.** Each report states the share of test frames with the ball
 in shot and less than half visible. The target before freezing the test set is at least 5%
 (see [PLAN.md](PLAN.md#goals)).
+
+## Shots by distance and long balls (R3, R4)
+
+Fixed on 2026-10-18, before the command had produced a number and before any engine change was
+measured with it. Changing any item below starts a new protocol, recorded here with its date.
+
+| Item | Fixed value |
+|---|---|
+| Matches | 12 full matches, seeds 201 to 212, 90 minutes each (`SEEDS` in `ninety/sim/shot_report.py`). None of these seeds was used to judge the engine before |
+| Shot | a `shot` event (headers included, penalties included); its distance is from where it was struck to the centre of the goal it was aimed at; outside the box is outside the penalty area (Law 1) |
+| Long ball | a kicked pass (not a throw-in, not a header) aimed more than 32 m from where it was struck: Opta's long ball is a pass of more than 35 yards (32 m), here read from the aim, not the end point |
+| Contested | at a long ball's first touch, a player of the other side is within a foot's reach (`CONTROL_M`, 1 m) of the ball |
+| Statistics | per match (both teams): shots, shots outside the box, goals; the share of shots from outside the box; the mean and median shot distance; shots, on target and goals by distance band (under 11, 11 to 16.5, 16.5 to 25, 25 to 32, over 32 m); long balls as a share of kicked passes, their completion, how they failed, the contested share and the nearest defender to the aim at the kick; on-ball decisions by distance band, the share that shot, and how often the shot was the best-valued option |
+
+| Engine number | Compared with | Source |
+|---|---|---|
+| share of shots from outside the box | 31.7 to 48.2% | Premier League, Opta: 31.7% in 2024-25 (to the date of the article, the lowest since 2003-04) and a peak of 48.2% in 2005-06 ([The Analyst](https://theanalyst.com/articles/premier-league-2024-25-shot-data)) |
+| shots from outside the box per match | 8.3 to 13.3 | Premier League, Opta: 8.3 in 2024-25, 13.3 in 2003-04 (the same article; [premierleague.com](https://www.premierleague.com/news/4272809)) |
+| mean shot distance | 14.8 to 17.6 m | Premier League average 16.2 yards in 2023-24, 19.3 in 2006-07 (premierleague.com, as above) |
+| long-ball completion | 47.3% | Premier League teams' average, Opta, 2018-19 ([Sports Illustrated](https://www.si.com/soccer/2018/11/23/surprising-statistics-reveal-chelsea-and-manchester-city-best-long-ball-premier-league-sides)) |
+| long balls as a share of a team's passes | 6.5 to 23.1% | the same article, by team |
+
+*Verify:* every figure above was read from search summaries of the articles, not the pages
+themselves (the network policy of the session that wrote this blocked them), and the Opta
+definitions (what counts as a shot's distance, a long ball) are not checked against ours.
+
+**Rules.** The report runs on the same 12 seeds after each engine change it judges, and its
+result is recorded in GROUNDING (R3, R4) whatever it shows. A held-out pattern: no constant is
+set, and no change kept or dropped, to bring a number onto a published figure (lessons 2, 3).
+Contested share, decisions and how long balls fail have no published figure; they are reported
+to find causes, never compared.
 
 ## Late drop in high-intensity running (R7)
 
