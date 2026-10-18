@@ -120,3 +120,12 @@ def test_the_fingerprint_does_not_depend_on_docstring_indentation():
     # What is published is the cleaned text the fingerprint hashed.
     (tool,) = foundry.definition(indented).as_dict()["tools"]
     assert tool["description"] == "Look at a minute.\n\nReturns its events."
+
+
+def test_an_mcp_tool_description_is_cleaned_too():
+    mcp = foundry.FoundryChatClient.get_mcp_tool(
+        name="match", url="https://example.invalid/mcp", description="Read events.\n\n    Read-only.\n    "
+    )
+    agent = foundry.Agent(client=AGENTS[0].client, name="probe", instructions="x", tools=[mcp])
+    (tool,) = foundry.definition(agent).as_dict()["tools"]
+    assert tool["server_description"] == "Read events.\n\nRead-only."

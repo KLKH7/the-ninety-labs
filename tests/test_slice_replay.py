@@ -135,12 +135,24 @@ def engine_changed(seed, minutes, first, last):
 
 
 def test_the_committed_replay_survives_an_engine_change(monkeypatch):
-    # Lesson 72: a replay pins the agents' interface, not the engine underneath.
+    # Lesson 73: a replay pins the agents' interface, not the engine underneath.
     before = asyncio.run(replay_slice(Recording.load(PLANT)))
     monkeypatch.setattr(slice_mod, "events_in", engine_changed)
     with pytest.warns(StaleRecording, match="Record it again"):
         after = asyncio.run(replay_slice(Recording.load(PLANT)))
     assert after == before and any(line.startswith("fact_checker: rejected") for line in after.trace)
+
+
+def speeds_only(seed, minutes, first, last):
+    """Same ids, same count; only the measured numbers move, the most likely engine drift."""
+    return [{**e, **{k: e[k] + 1 for k in ("ball_speed_kmh", "distance_m") if k in e}}
+            for e in ENGINE(seed, minutes, first, last)]
+
+
+def test_a_drift_in_numbers_alone_warns(monkeypatch):
+    monkeypatch.setattr(slice_mod, "events_in", speeds_only)
+    with pytest.warns(StaleRecording):
+        asyncio.run(replay_slice(Recording.load(PLANT)))
 
 
 def test_a_changed_analyst_prompt_still_fails_the_committed_replay(monkeypatch):
