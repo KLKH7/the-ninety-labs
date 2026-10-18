@@ -606,7 +606,7 @@ short and actionable. This file is public: no research sources, product names or
 - **What happened:** EVALUATION.md says boxes with visibility zero are not labels, but
   `vision_score.ground_truth()` kept any label with a box. When the re-frozen test set marked
   balls behind the advertising boards as visibility 0 and kept their boxes, the scorer counted
-  113 undrawn balls as misses, and ball recall read 0.846 instead of 0.930. It was found after
+  113 balls in shot and fully hidden as misses, and ball recall read 0.846 instead of 0.930. It was found after
   the results were in; the rule it applies was written before them.
 - **Rule:** a scorer decides what counts as a label from the documented rule, in one function,
   and never from whether a field happens to be present. A data change that fills a field it once
