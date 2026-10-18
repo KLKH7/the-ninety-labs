@@ -1,0 +1,21 @@
+name: ci-experiment
+# Temporary: measures the test suite at several worker counts. Removed before merge.
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  measure:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        n: ["0", "2", "3", "4"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12"
+      - run: uv sync --locked
+      - run: nproc; uv run python -c "import psutil; print('physical', psutil.cpu_count(logical=False), 'logical', psutil.cpu_count())"
+      - run: uv run pytest -n ${{ matrix.n }} --durations=25 -p no:cacheprovider | tail -40
