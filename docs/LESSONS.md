@@ -144,7 +144,7 @@ short and actionable. This file is public: no research sources, product names or
   `tests/test_draw.py::test_only_frames_the_detector_ran_on_are_drawn_and_counted` fails on it
   (4 misses over 3 frames instead of 2 over 2).
 
-### 52. Test each half of a guard with a case only that half catches
+### 73. Test each half of a guard with a case only that half catches
 - **What happened:** the export's leak guard refuses a clip if its seed is not a training seed *or*
   its `clip.json` does not say `train`. The test's bad clips were wrong both ways at once, so
   either half could be deleted and the test still passed (#76 review).
@@ -152,7 +152,7 @@ short and actionable. This file is public: no research sources, product names or
   way only.
 - **Check:** delete each condition in turn; a test must fail each time (lesson 21's mutation test).
 
-### 53. A before-and-after changes one thing
+### 74. A before-and-after changes one thing
 - **What happened:** the COCO baseline ran at rfdetr's default input size, 512, and the fine-tuned
   model at 640, so any gain mixed the training with the input size (#76 review).
 - **Rule:** a comparison changes only the thing it measures; everything else (input size, frames,
