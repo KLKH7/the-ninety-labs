@@ -1935,8 +1935,10 @@ class Engine:
     def keeper_dive(self, p: Player) -> bool:
         """P15: once the keeper has reacted to a shot, he dives toward where it will cross his line:
         his body travels sideways (up to KEEPER_DIVE_TRAVEL_M, only as far as he needs beyond his
-        standing reach) with the full dive's push, and he is down for a moment afterwards. True
-        while the dive moves him."""
+        standing reach) with the full dive's push, and he is down for a moment afterwards. One dive
+        per touch of the ball: once he is up again he does not dive a second time at the same shot;
+        only a new touch (a deflection restarts it) can set off another. True while the dive moves
+        him."""
         k = self.kicked
         shot_at_him = k and k["type"] == "shot" and k["team"] != p.team and self.possessor is None
         reacted = self.t - self.kicked_at >= self.reaction(p)  # to the last touch, a deflection too
