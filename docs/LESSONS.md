@@ -144,6 +144,56 @@ short and actionable. This file is public: no research sources, product names or
   `tests/test_draw.py::test_only_frames_the_detector_ran_on_are_drawn_and_counted` fails on it
   (4 misses over 3 frames instead of 2 over 2).
 
+### 72. A rule for every clip must run on every kind of clip
+- **What happened:** AGENTS.md says every clip passes `ninety-validate`, but the renderer wrote
+  `clip.json` and never the contract's `meta.json`, so the validator rejected every rendered clip
+  ("missing meta.json") and no training clip was ever checked against the contract. The render
+  checks passed, because they checked pixels and boxes, not the contract. Given a `meta.json`, 10 of
+  25 training and test windows still failed, each on what lay beyond its cut: a pass still in the
+  air at the last frame, an interception whose pass came before the first, a restart for a ball
+  that went out before the window.
+  The first fix withheld a judgement whenever the event that settles it was missing from the
+  clip; an independent review then passed five planted defects whose evidence was inside the
+  window (a pass to a player who held the ball, an interception from a man in possession). The
+  owner's review of the second version found four more: a ball heading 60° wide of its end point
+  counted as "closing", a pass held mid-window then let go counted as unfinished, a ball at rest
+  for four seconds counted as a pass in flight, and open play after a substitution did not count
+  as play. One "legal" goal fixture gave a goal with the ball at rest 55 m out.
+- **Rule:** a contract every clip must meet is run by the code that makes clips, as part of the
+  check that decides whether a clip ships. A clip that is part of something larger says so in
+  its metadata, and a check withholds a judgement only when the clip's own frames show the play
+  from beyond the cut still running (the ball loose since the first frame, a pass still closing
+  on its end at the last). A missing event alone is never a reason. Each condition is the strict
+  physical one (the ball's path meets the end point, the ball is moving), not a proxy for it
+  (getting closer, nobody touching it). A legal fixture must itself be football. A test asserts the
+  message it expects, not only the check's key, so another problem filed under that key cannot
+  turn it red.
+- **Check:** `tests/test_render_clip.py::test_a_rendered_clip_meets_the_data_contract` fails on
+  the old renderer; `check_clip` reports `data_contract`, so the render job refuses a clip that
+  fails it; the window tests in `tests/test_validate.py` pass each cut case, fail the same clip
+  without `window`, and fail each planted defect from both reviews. 26 mutations of the rule:
+  all killed except one equivalent mutant (a ball at rest within reach already meets C7).
+
+### 73. Test each half of a guard with a case only that half catches
+- **What happened:** the export's leak guard refuses a clip if its seed is not a training seed *or*
+  its `clip.json` does not say `train`. The test's bad clips were wrong both ways at once, so
+  either half could be deleted and the test still passed (#76 review).
+- **Rule:** a guard made of several conditions gets one case per condition that is wrong in that
+  way only.
+- **Check:** delete each condition in turn; a test must fail each time (lesson 21's mutation test).
+- **Also:** a guard's fallback is part of the guard. `train-on-gpu.sh` fell back to our real
+  storage account's name when none was set, putting it in a public repo. A missing setting stops
+  the script with what to set; it never falls back to a real resource name.
+
+### 74. A before-and-after changes one thing
+- **What happened:** the COCO baseline ran at rfdetr's default input size, 512, and the fine-tuned
+  model at 640, so any gain mixed the training with the input size (#76 review).
+- **Rule:** a comparison changes only the thing it measures; everything else (input size, frames,
+  scorer, threshold) is the same on both sides, and the default that would differ is set
+  explicitly.
+- **Check:** the two `detections.jsonl` runs are made by one command with only `--checkpoint` and
+  `--weights` different; `tests/test_vision_finetune.py` pins the baseline to finetune.json's size.
+
 ## Working in the repo
 
 ### 12. "No checks yet" is not "checks passed"
@@ -370,6 +420,21 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_slice_replay.py::test_every_committed_replay_still_replays` fails on the
   stale recording and passes on the re-recorded one.
 
+### 80. A replay pins the interface it tests, not the engine underneath
+- **What happened:** `replays/slice-minute2-plant.json` held only the models' answers, and the
+  replay rebuilt the fact-checker's events from the local engine. Every engine change changed the
+  checker's rejection reasons, so the Analyst's retry prompt changed and the replay failed, even
+  though no prompt or check had changed. Each break needed a live Foundry re-record from the
+  owner's Mac and a manual deploy of the branch's API.
+- **Rule:** a recording carries every input it was made against that is not under test (here the
+  match events the checker read), and the replay uses those. It still fails on a change to what
+  it tests (a prompt, a check's message, a handoff); a changed engine only warns that the
+  recording is stale.
+- **Check:** `tests/test_slice_replay.py::test_the_committed_replay_survives_an_engine_change`
+  plants an engine change and expects the same outcome and a `StaleRecording` warning;
+  `test_a_changed_analyst_prompt_still_fails_the_committed_replay` and
+  `test_a_changed_fact_check_message_still_fails_the_committed_replay` must still fail the replay.
+
 ### 33. One clock for viewers and agents
 - **What happened:** agent-facing minute and second values were rounded and combined differently
   from the scorebug's floored elapsed clock, producing off-by-one timestamps and occasional
@@ -537,7 +602,7 @@ short and actionable. This file is public: no research sources, product names or
   builds two windows where counting players near the ball picks the wrong one. Before a batch,
   `uv run ninety-data-stats <2-3 crowded clips> --stride 5 --input 640x640` shows the share.
 
-### 72. A ported rule keeps its condition, not just its threshold
+### 75. A ported rule keeps its condition, not just its threshold
 - **What happened:** porting `main`'s aerial touches, the engine flagged every touch in foot reach
   above 0.45 m as a thigh or chest, at half a foot's first touch. `main` applied that only to a ball
   coming into the body; the engine's foot reaches to 1 m. A knee-high pass met beside a player was
@@ -558,7 +623,7 @@ short and actionable. This file is public: no research sources, product names or
   `tests/test_decisions.py::test_the_passer_expects_a_dropping_ball_into_his_man_to_meet_the_thigh`
   fails if the estimate takes it on the foot.
 
-### 73. A rate that swings match to match needs enough matches before it is read
+### 76. A rate that swings match to match needs enough matches before it is read
 - **What happened:** the touch report's eight seeds put the engine at 1.0 goals a team after "what
   makes a touch worse", and the pull request, GROUNDING A4 and EVALUATION recorded it as a held-out
   miss against the published 1.4. A match's goals run from 0 to 8, so eight matches cannot measure
