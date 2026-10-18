@@ -28,9 +28,9 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - run: uv sync --locked
-      # Every test, spread over all of the runner's cores (pytest-xdist), so the job takes as long
-      # as its slowest test and not the sum of them all.
-      - run: uv run pytest -q -n auto --durations=15
+      # Every test, in one worker per physical core (pytest-xdist). The runner has 2 cores, 4 threads:
+      # measured on this suite, 2 workers took 13 min, 4 workers 22 min, one process 41 min.
+      - run: uv run pytest -q -n 2 --durations=15
 
   portable:
     # The same seed must simulate the same match on every machine (docs/LESSONS.md, lesson 46):
