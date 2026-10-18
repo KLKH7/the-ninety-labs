@@ -508,3 +508,15 @@ short and actionable. This file is public: no research sources, product names or
   records the engine commit the number came from.
 - **Check:** `uv run python -m ninety.sim.late_drop` prints the commit in `docs/eval/late-drop.md`;
   `tests/test_late_drop.py` fails if the seeds or band drift from `docs/EVALUATION.md`.
+
+### 70. Select hard cases by their cause, not by something that travels with it
+- **What happened:** `occlusion=crowded` chose the clip window with the most players within 4 m
+  of the ball. A crowd on the far side of the ball hides nothing, so crowded clips reached only
+  4.0% mostly hidden balls in render run v1, and no number of them could lift the training set
+  to the 5% floor. The proposed fix was to render more of them.
+- **Rule:** a knob that targets a hard case selects on the geometry that makes it hard (here, a
+  player on the line from the camera to the ball). Before rendering a round, measure the knob's
+  own rate on two or three clips: a mix can never beat its best part.
+- **Check:** `tests/test_render_scene.py::test_the_crowded_window_is_the_one_where_the_ball_is_hidden`
+  builds two windows where counting players near the ball picks the wrong one. Before a batch,
+  `uv run ninety-data-stats <2-3 crowded clips> --stride 5 --input 640x640` shows the share.
