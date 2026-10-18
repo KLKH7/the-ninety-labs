@@ -8,11 +8,22 @@ licence must be one of those three (see `AGENTS.md`).
 |---|---|---|
 | agent-framework-core, agent-framework-foundry | agents and workflow | MIT |
 | azure-identity | keyless Entra authentication | MIT |
+| azure-ai-projects | publishing agents to Microsoft Foundry | MIT |
+| azure-monitor-opentelemetry | agent traces to Application Insights and Foundry; brings OpenTelemetry (Apache-2.0), psutil (BSD-3-Clause), wrapt (BSD-2-Clause) and, through msrest, requests-oauthlib (ISC) | MIT |
 | httpx | Azure AI Speech REST calls | BSD-3-Clause |
 | jsonschema | data contract validation | MIT |
+| azure-storage-blob (`render-job` group) | render job uploads clips to Blob Storage | MIT |
 | mcp | MCP server and client | MIT |
+| starlette, uvicorn | the public API (`ninety/api`) | BSD-3-Clause |
 | pydantic (via agent-framework) | typed agent output | MIT |
 | pytest, ruff (development) | tests and lint | MIT |
+| uv (container build only) | installs `uv.lock` into the API image | MIT or Apache-2.0 |
+
+## Data
+
+| Data | Used for | Source and terms |
+|---|---|---|
+| `ninety/sim/data/expected_threat_12x8.json` | what having the ball in each area is worth (GROUNDING D9) | Expected Threat grid by Karun Singh, file open_xt_12x8_v1 (karun.in). Its licence is not stated: *verify* before release, or replace it with a grid measured from open event data |
 
 ## Vision group (`uv sync --group vision`)
 
@@ -23,7 +34,7 @@ never install (it comes only with the `rfdetr[plus]` extra).
 
 | Package | Used for | Licence |
 |---|---|---|
-| rfdetr 1.11.2, RF-DETR Small weights | object detection | Apache-2.0 |
+| rfdetr 1.11.2 (with its `train` extra), RF-DETR Small weights | object detection and fine-tuning | Apache-2.0 |
 | torch, torchvision | neural network runtime | BSD-3-Clause |
 | transformers, huggingface-hub, tokenizers, safetensors, hf-xet | model backbone and weight loading | Apache-2.0 |
 | supervision | detection utilities | MIT |
@@ -31,6 +42,13 @@ never install (it comes only with the `rfdetr[plus]` extra).
 | python-dateutil | matplotlib | Apache-2.0 or BSD-3-Clause |
 | numpy, scipy, sympy, mpmath, networkx, fsspec, jinja2, markupsafe, contourpy, cycler, kiwisolver, pygments | numerics and torch internals | BSD |
 | triton, typer, rich, markdown-it-py, mdurl, annotated-doc, filelock, pyparsing, fonttools, six, setuptools | torch (Linux) and CLI internals | MIT |
+| pytorch-lightning, lightning-utilities, torchmetrics, peft, accelerate (rfdetr `train` extra) | the training loop | Apache-2.0 |
+| faster-coco-eval, torch-hungarian, pyarrow, requests-toolbelt (rfdetr `train` extra) | COCO evaluation, matching, data loading | Apache-2.0 |
+| opencv-python-headless (rfdetr `train` extra) | image decoding in training | Apache-2.0; its wheels bundle FFmpeg (LGPL-2.1), used unmodified |
+| roboflow (rfdetr `train` extra) | not used: a client for Roboflow's hosted service, imported by rfdetr; we never call it and send no data to it | Apache-2.0 |
+| pycocotools, ultrafast-pycocotools, psutil | COCO metrics, system info | BSD |
+| hotcoco, simplejpeg, filetype, pillow-avif-plugin | COCO evaluation, JPEG decoding, file types | MIT |
+| vernier | rfdetr training internals | MIT OR Apache-2.0 |
 
 These come in with the vision group under other permissive licences, outside the three named
 above. None is copyleft for our code; they are listed so nothing is hidden.

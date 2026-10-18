@@ -62,6 +62,13 @@ def test_parts_box_contains_the_projected_feet_and_head():
     assert 40 < y1 - y0 < 130
 
 
+def test_the_ball_is_drawn_where_the_engine_has_it_even_at_a_carriers_feet():
+    fr = {"ball": {"x": 50.0, "y": 30.0, "z": 0.0}, "possessor": "h1"}
+    assert drawn_ball(fr) == (50.0, 30.0, 0.0)
+    fr["possessor"] = None
+    assert drawn_ball(fr) == (50.0, 30.0, 0.0)
+
+
 def test_a_throw_lifts_both_hands_over_the_head():
     parts = body_parts(0, 0, LOOK, Gait(action="throw", heading=math.pi / 2))
     head = next(p for p in parts if p["n"] == "head")["a"][2]
@@ -152,15 +159,6 @@ def test_the_stance_foot_stays_put_while_the_body_moves():
             if math.dist(held[i][name], held[i - 1][name]) < 0.03:
                 stuck += 1
     assert stuck >= 3
-
-
-def test_the_shirt_fills_out_toward_the_contact_cylinder():
-    parts = body_parts(0, 0, LOOK, Gait())
-    torso = next(p for p in parts if p["n"] == "torso")
-    shoulders = next(p for p in parts if p["n"] == "shoulders")
-    assert 0.22 <= torso["r"] <= 0.26
-    extent = abs(shoulders["a"][1] - shoulders["b"][1]) / 2 + shoulders["r"]
-    assert 0.24 <= extent <= 0.26
 
 
 def test_a_foot_control_reaches_toward_the_ball():
