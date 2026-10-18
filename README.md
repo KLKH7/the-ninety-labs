@@ -63,7 +63,7 @@ Full design, agent roles and deployment: [docs/ARCHITECTURE.md](docs/ARCHITECTUR
 | `ninety/vision` | Detection, tracking, camera-to-pitch mapping, possession, event rules |
 | `ninety/intel` | Deterministic stats engine (code computes every number) |
 | `ninety/agents` | Agent Framework workflow: Analyst, Tactician, Fact-checker, Producer, Personalizer, Describer |
-| `ninety/mcp` | MCP server exposing match tools to the agents |
+| `ninety/mcp` | MCP server exposing match tools to the agents; Foundry calls it at `/mcp` on the API |
 | `ninety/eval` | Grades automatically detected events against the ground-truth data |
 | `schemas` | JSON Schemas: match event, frame, on-screen graphic |
 | `web` | Viewer: video + overlays + persona controls |
@@ -85,6 +85,19 @@ uv run ninety-render --seed 7 --seconds 10 --out runs/clip7 --mp4   # --mp4 need
 uv run ninety-slice --minute 2 --plant
 ```
 
+**Agents live in Foundry.** The Analyst and the Judge are published to our Foundry project as
+versioned prompt agents (`ninety-analyst`, `ninety-judge`), each with the `ninety-guardrail`
+content-safety policy: Microsoft's default filters plus Prompt Shields for jailbreaks and indirect
+attacks. A live run calls the versions pinned in `ninety/agents/foundry_agents.json` and refuses to
+start if the code has changed since they were published; CI checks the same. The Analyst reads
+the match only through our MCP server, which Foundry calls itself at `/mcp` on the deployed API,
+sending a key it holds in a project connection (the key lives in Key Vault, never in the repo). The
+served matches (`seed7`, `seed21`, `seed33`) are simulated when the image is built, so a tool call
+is a lookup. Each claim is one
+trace in Foundry's tracing view: the agents' calls, the MCP tool calls, and every fact-checking
+verdict with its reasons. After changing an agent's prompt, schema or tools:
+`NINETY_FOUNDRY_RESOURCE_ID=... uv run ninety-agents publish` (see `ninety/config.py`).
+
 **Running the slice without our Azure project.** Nothing here uses an API key: Azure checks who
 is calling (your `az login` locally, the app's managed identity in the cloud), and key access is
 off on our resources. A live run from your own clone will therefore fail to authenticate. Replay
@@ -94,9 +107,10 @@ a recorded run instead:
 uv run ninety-slice --replay replays/slice-minute2-plant.json
 ```
 
-Replay swaps only the two Foundry models for what they answered when recorded: the Analyst's
+Replay swaps only the two Foundry agents for what they answered when recorded: the Analyst's
 replies and the Judge's verdicts. The Agent Framework workflow, the handoffs and the code checks
-all run for real, so you see the planted number rejected and the rewrite accepted. If a prompt has
+all run for real, so you see the planted number rejected and each rewrite checked until one is
+accepted or the claim is held back (the committed recording, one real run, ends held back). If a prompt has
 changed since the recording, the replay stops rather than pair an old answer with a new question. Speech needs Azure, so `--speak` does not
 replay. Team members refresh the recording with
 `uv run ninety-slice --minute 2 --plant --record replays/slice-minute2-plant.json`.

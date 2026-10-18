@@ -128,6 +128,22 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_engine_rules.py::test_a_throw_in_taker_runs_to_his_spot_and_stops_there`
   asserts a throw-in happened before checking speeds; it fails on the old engine.
 
+### 48. Score only what was run
+- **What happened:** the vision scorer built labels from every row of `frames.jsonl`, and
+  flattening the detections dropped frames with an empty list, so it could not tell "ran and
+  found nothing" from "never ran". Detecting every 25th frame of a 250-frame clip with the COCO
+  RF-DETR checkpoint scored player recall 0.04 (TP 89, FN 2102); on the 10 frames actually run it
+  is 0.99 (TP 89, FN 1). The detections contract already said an empty list marks a run frame;
+  the scorer did not read it.
+- **Rule:** an evaluation scores only the inputs the system was given. Read the set of run
+  frames before any step that can drop empty records, and report how many were scored and
+  skipped, so a denominator is visible rather than assumed.
+- **Check:** `tests/test_vision_score.py::test_only_frames_the_detector_ran_on_are_scored`
+  fails on the original code (FN 6 instead of 3). The overlay tool (`ninety/eval/draw.py`) had
+  the same flaw and drew unrun frames as misses;
+  `tests/test_draw.py::test_only_frames_the_detector_ran_on_are_drawn_and_counted` fails on it
+  (4 misses over 3 frames instead of 2 over 2).
+
 ## Working in the repo
 
 ### 12. "No checks yet" is not "checks passed"
@@ -145,6 +161,28 @@ short and actionable. This file is public: no research sources, product names or
   depends on the whole engine, not on the files its pull request touched.
 - **Check:** branch protection on `main` requires branches to be up to date (on since
   2026-10-17), so GitHub will not merge until CI has passed on the branch with main merged in.
+
+### 49. A deploy is done when the live URL answers with the new commit
+- **What happened:** the first `azd provision` and deploy of the API failed three times, and each
+  earlier step said it had passed. A role id written from memory did not exist (`what-if` does not
+  check role ids). Leaving the Container Apps environment's mode unset gave an Express
+  environment, which cannot run jobs or OpenTelemetry. And an image built by Docker's legacy
+  builder on a Mac looked amd64 when inspected locally, but in Azure even `/bin/sh` failed with
+  `exec format error`. `azd` reported success every time.
+- **Rule:** look up every Azure id (`az role definition list --name ...`); set every mode the
+  platform would otherwise default; build images with BuildKit, never the legacy builder. A
+  deploy counts as done only when the public URL answers with the commit just deployed.
+- **Check:** the deploy workflow's smoke test passes only when `/api/health` reports the commit
+  it deployed.
+
+### 50. A merge from main is a code change: test it before pushing
+- **What happened:** #80 pinned lighting and weather to day and clear; #70 merged into main
+  with tests that pushed `lighting=night` and `weather=rain` under their floors. Merging main
+  into #80 had no conflict, and it was pushed after only ruff and one manual run, so two tests
+  failed on the pushed head: correct code, tests written for the old knobs.
+- **Rule:** after merging main into a branch, run the full `uv run pytest` before pushing. A
+  clean merge only means no lines overlapped, not that the two changes agree.
+- **Check:** the merge commit's CI is green, and it was green locally before the push.
 
 ### 13. Keep diffs to what you meant to change
 - **What happened:** a one-word schema change rewrote 131 lines because a tool reformatted the
@@ -370,7 +408,7 @@ short and actionable. This file is public: no research sources, product names or
   branches had moved those limits to 12 + 12 × skill, so the same numbers now tested nothing: a
   "poor" chest killed the ball. Both branches had also numbered new lessons 18 to 23.
 - **Rule:** a test that checks a threshold derives its inputs from the constant (`FOOT_ABSORB_MPS`,
-  `AERIAL_ABSORB`), so a change to the constant moves the test with it. A new lesson takes the next
+  `firsttouch.CUSHION`), so a change to the constant moves the test with it. A new lesson takes the next
   number on `main` at merge time.
 - **Check:** `tests/test_engine_rules.py` high-ball tests build their speeds from the profile
   constants; `grep '^### ' docs/LESSONS.md` shows no number twice.
@@ -459,6 +497,17 @@ short and actionable. This file is public: no research sources, product names or
   hand.
 - **Check:** `grep` the rule's constants: they appear in one module and its tests, nowhere else;
   a test feeds the same case to the engine's function and to the estimate.
+
+### 51. A band is only as good as the sources that make it
+- **What happened:** R7's published band, 20 to 45%, was cited to one Premier League study, which
+  reports about 20%; the 35 to 45% came from a second study that was not cited. The same row still
+  showed a 62% late drop measured on an engine two rebuilds old, and the late drop that did exist
+  came from a design constant, not from players pacing themselves.
+- **Rule:** each end of a band names the source it comes from. A realism number is judged by a
+  protocol written before it is measured (matches, seeds, statistic, spread, band), and the row
+  records the engine commit the number came from.
+- **Check:** `uv run python -m ninety.sim.late_drop` prints the commit in `docs/eval/late-drop.md`;
+  `tests/test_late_drop.py` fails if the seeds or band drift from `docs/EVALUATION.md`.
 
 ### 70. A law the engine obeys, the players obey too
 - **What happened:** the duels refused to challenge a keeper who may handle the ball (Law 12), but

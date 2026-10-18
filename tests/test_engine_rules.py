@@ -12,7 +12,6 @@ from ninety.sim import ball, decisions, offball, perception, shape
 from ninety.sim.body import BRAKE_MAX, STRIKE_FACING, TURN_RATE
 from ninety.sim.body import move as move_body
 from ninety.sim.engine import (
-    AERIAL_ABSORB,
     BODY_RESTITUTION,
     COVER_BEHIND_M,
     DT,
@@ -24,7 +23,7 @@ from ninety.sim.engine import (
     throw_hands,
     throw_stand,
 )
-from ninety.sim.firsttouch import KEEP_MPS
+from ninety.sim.firsttouch import CUSHION, KEEP_MPS
 from ninety.sim.profiles import FOOT_ABSORB_MPS, MAX_STRIKE_MPS
 from ninety.sim.style import Style
 from ninety.validate import check_physics
@@ -462,8 +461,8 @@ def _high_ball(touch: float, speed: float, z: float, reacted: bool, y: float = 3
 
 # Speeds between what a body part kills at the worst and the best first touch (profiles.absorb_mps).
 FOOT_WORST, FOOT_BEST = FOOT_ABSORB_MPS[0], FOOT_ABSORB_MPS[0] + FOOT_ABSORB_MPS[1]
-CHEST = (FOOT_WORST + FOOT_BEST) / 2 * AERIAL_ABSORB  # a good chest kills it, a poor one does not
-PAST_THIGH = (FOOT_BEST * AERIAL_ABSORB + FOOT_BEST) / 2  # past the best thigh, inside the best foot
+CHEST = (FOOT_WORST + FOOT_BEST) / 2 * CUSHION["chest"]  # a good chest kills it, a poor one does not
+PAST_THIGH = (FOOT_BEST * CUSHION["thigh"] + FOOT_BEST) / 2  # past the best thigh, inside the best foot
 
 
 def test_a_high_ball_can_be_taken_on_the_body_and_a_poor_touch_is_worse():
@@ -474,12 +473,13 @@ def test_a_high_ball_can_be_taken_on_the_body_and_a_poor_touch_is_worse():
     assert not any(ev["type"] == "deflection" for ev in killed.match.events)
     heavy = _high_ball(0.0, CHEST, 1.35, True)
     assert heavy.possessor is None and heavy.dribbler == "a6"  # still his to run onto, unlike a rebound
-    left = CHEST - FOOT_WORST * AERIAL_ABSORB  # what a poor chest could not kill
+    left = CHEST - FOOT_WORST * CUSHION["chest"]  # what a poor chest could not kill
     assert left > KEEP_MPS and math.isclose(math.hypot(heavy.ball[3], heavy.ball[4]), left, rel_tol=0.3)
     # Far too fast for the surface, it beats him and rebounds.
-    beat = _high_ball(0.0, 2.2 * FOOT_WORST * AERIAL_ABSORB, 1.35, True)
+    fast = 1.1 * FOOT_WORST * (1 + CUSHION["chest"])  # past what his chest kills plus what he can steer
+    beat = _high_ball(0.0, fast, 1.35, True)
     assert beat.possessor is None and beat.dribbler is None
-    assert math.isclose(beat.ball[3], -MISCONTROL_KEEP * 2.2 * FOOT_WORST * AERIAL_ABSORB, rel_tol=0.05)
+    assert math.isclose(beat.ball[3], -MISCONTROL_KEEP * fast, rel_tol=0.05)
     # The same arrival with no time to set himself still just rebounds off the body.
     cold = _high_ball(1.0, CHEST, 1.35, False)
     assert cold.possessor is None
@@ -554,7 +554,7 @@ def test_a_keeper_in_his_box_still_holds_a_high_ball_with_his_hands():
     p.profile.attributes["handling"] = 1.0
     e.possessor, e.last_touch, e.kicker_clear, e.kicked_at = None, "a6", True, e.t - 2.0
     hold = p.profile.absorb_mps(True)
-    fast = (hold * AERIAL_ABSORB + hold) / 2  # inside his hold, past what a chest of his would kill
+    fast = (hold * CUSHION["chest"] + hold) / 2  # inside his hold, past what a chest of his would kill
     e.ball = (4.6 + fast * DT, 34.0, 1.4, fast, 0.0, 0.0)
     e.contact((4.6, 34.0, 1.4, fast, 0.0, 0.0))
     assert e.possessor == p.id

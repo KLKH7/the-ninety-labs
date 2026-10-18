@@ -8,9 +8,9 @@ from collections import Counter
 import pytest
 
 from ninety.sim import decisions as D
-from ninety.sim import offball
-from ninety.sim.firsttouch import AERIAL_ABSORB, BODY_TOUCH_Z, KEEP_MPS
-from ninety.sim.profiles import Profile
+from ninety.sim import firsttouch, offball
+from ninety.sim.firsttouch import KEEP_MPS, surface_absorb
+from ninety.sim.profiles import FOOT_ABSORB_MPS, Profile
 from ninety.sim.value import CELLS_X, CELLS_Y, Table, Tables
 
 
@@ -316,14 +316,31 @@ def test_the_first_touch_is_judged_on_the_speed_a_lofted_ball_comes_down_at():
         s = scene(x=60.0, absorb={"h9": absorb})
         return D.pass_confidence(s, 90.0, 34.0, 90.0, 34.0, 0.0, True, D.ARRIVE_MPS, "h9")
     # The landing speed, not the launch, on the surface it meets where it first comes within his
-    # reach (above BODY_TOUCH_Z a thigh, killing AERIAL_ABSORB of a foot's pace, as the engine
-    # takes it); kept when what that touch cannot kill stays at his feet (KEEP_MPS).
+    # reach (firsttouch.surface_absorb, as the engine takes it); kept when what that touch cannot
+    # kill stays at his feet (KEEP_MPS).
     # Averaged over his kick error some strikes are taken lower, on the foot, so it never falls to
     # nothing; judged on the launch speed instead it would be near nothing at `needed`.
-    surface = AERIAL_ABSORB if down[2] > BODY_TOUCH_Z else 1.0
+    surface = surface_absorb(1.0, down[2])
     needed = (landing - KEEP_MPS) / surface  # the foot skill (absorb_mps) that just keeps it
     worse, at, better = (conf(needed + k * 4.0 / surface) for k in (-1, 0, 1))
     assert worse < at < better and 0.3 < at < 0.8
+
+def test_the_estimate_takes_a_lofted_ball_on_the_thigh_with_the_thighs_own_cushion(monkeypatch):
+    # The same surface rule the engine uses (firsttouch.surface_absorb at the ball's height where he
+    # takes it). The estimate only ever takes a ball below FOOT_REACH_Z, so the foot or thigh: a
+    # ball higher than that is the engine's alone (its chest and head, tests/test_surfaces.py).
+    points, _ = D.flight(*D.loft_launch(30.0))
+    down = next(p for p in points[1:] if p[4] < 0 and p[2] <= D.FOOT_REACH_Z)
+    assert firsttouch.surface(down[2]) == "thigh"
+    landing = math.hypot(down[3], down[4])
+    skill = (landing - KEEP_MPS) / firsttouch.CUSHION["thigh"]  # just keeps it on the thigh as made
+
+    def conf(share):
+        monkeypatch.setitem(firsttouch.CUSHION, "thigh", share)
+        s = scene(x=60.0, absorb={"h9": skill})
+        return D.pass_confidence(s, 90.0, 34.0, 90.0, 34.0, 0.0, True, D.ARRIVE_MPS, "h9")
+    assert conf(0.25) + 0.1 < conf(0.5) < conf(1.0) - 0.1
+
 
 def test_a_shot_into_a_crowd_risks_losing_the_ball_where_he_stands():
     shoot = lambda s: next(o for o in D.options(s) if o.kind == "shoot")  # noqa: E731
@@ -578,6 +595,7 @@ def test_any_team_mate_who_gets_there_first_takes_it():
     s = scene(x=60.0, mates=[("h9", 90.0, 50.0, 0.0)])
     alone = D.pass_confidence(s, 90.0, 34.0, 90.0, 50.0, 0.0, False, 14.0, "h9")  # 16 m from him
     s.mates.append(("h8", 80.0, 34.0, 0.0))  # standing on its path
+    s.absorb["h8"] = FOOT_ABSORB_MPS[0] + FOOT_ABSORB_MPS[1]  # the race is tested here, not his touch
     assert alone < 0.1 < 0.5 < D.pass_confidence(s, 90.0, 34.0, 90.0, 50.0, 0.0, False, 14.0, "h9")
 
 
