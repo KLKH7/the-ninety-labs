@@ -1,6 +1,6 @@
 {
-  "generated": "2026-10-18T21:04:24Z",
-  "commit": "b319f210f7e1635a056894c867526e5099f5be8b",
+  "generated": "2026-10-18T23:12:46Z",
+  "commit": "cca498cf172f0055918aa7f973be33b42244b85b",
   "command": "ninety-render-check runs/dataset/test/seed900001 runs/dataset/test/seed900002 runs/dataset/test/seed900003 runs/dataset/test/seed900004 runs/dataset/test/seed900005 --determinism --report docs/eval/render-checks.json",
   "summary": {
     "clips": 5,
@@ -10,7 +10,7 @@
     "keypoint_projection_max_px": 0.0045,
     "player_feet_outside_box": 0,
     "frames_with_label_problems": 0,
-    "ball_visibility_lt_0_5_share": 0.0624,
+    "ball_visibility_lt_0_5_share": 0.1504,
     "all_passed": true,
     "determinism": {
       "clip": "seed900001",
@@ -156,7 +156,7 @@
       },
       "occlusion": {
         "ball_in_frame": 250,
-        "ball_visibility_lt_0_5_share": 0.02,
+        "ball_visibility_lt_0_5_share": 0.46,
         "player_boxes": 1897,
         "player_visibility_lt_0_5_share": 0.0,
         "player_height_px": {

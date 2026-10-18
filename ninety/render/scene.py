@@ -1,8 +1,8 @@
 """Scene geometry shared by the labels (Python) and the pixels (three.js).
 
-Players are built from capsules (thighs, shins, torso, arms) and spheres (head, hair). Python
-computes every capsule in world coordinates for every frame and sends them to the page, so the
-geometry that is drawn and the geometry that is labelled are the same numbers. Standing, trunk and
+Players are labelled from capsules (thighs, shins, torso, arms) and spheres (head, hair). Python
+computes every capsule in world coordinates for every frame. The page skins a mesh inside that
+volume and draws the capsules for the ball. The labelled box stays the capsule box. Standing, trunk and
 arms are drawn to fill the body shape the engine's contact physics uses (ninety/sim/shape.py)
 between hip and shoulder height, turned the way the engine says he faces. The legs are narrower
 than that shape, and running, the arms swing and the trunk leans outside it (docs/GROUNDING.md,
@@ -69,10 +69,13 @@ class Look:
     build: float  # 0.9 slim .. 1.15 broad
     skin: str
     hair: str
+    hair_style: str = "short"  # bald, short, crown. A second draw, so the fields above stay put.
 
 
 def sample_looks(players: list[dict], seed: int) -> list[Look]:
     rng = random.Random(f"looks-{seed}")
+    # Own stream. Drawing it on `rng` would move the next player's height and shirt colour.
+    shape = random.Random(f"looks-shape-{seed}")
     looks = []
     for p in players:
         looks.append(
@@ -84,6 +87,7 @@ def sample_looks(players: list[dict], seed: int) -> list[Look]:
                 build=round(rng.uniform(0.9, 1.15), 3),
                 skin=rng.choice(SKIN_TONES),
                 hair=rng.choice(HAIR_COLORS),
+                hair_style=shape.choice(("bald", "short", "short", "crown")),
             )
         )
     return looks
@@ -140,6 +144,15 @@ def face(g: Gait, player: dict) -> None:
     if "action" in player:
         g.action = player["action"]
         g.dive = player.get("dive", 0.0)
+
+
+def reach_sign(x: float, y: float, g: Gait, ball: tuple[float, ...] | None) -> float:
+    """Which foot the ball is on: 1 is his left, -1 his right. 0 if the pose does not pick a side."""
+    if ball is None or g.action not in ("strike", "foot", "thigh"):
+        return 0.0
+    hx, hy = math.cos(g.heading), math.sin(g.heading)
+    lateral = (ball[0] - x) * -hy + (ball[1] - y) * hx
+    return 1.0 if lateral >= 0 else -1.0
 
 
 def body_parts(
