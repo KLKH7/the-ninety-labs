@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parent.parent
 FRAME_SCHEMA = json.loads((ROOT / "schemas/frame.schema.json").read_text())
 EVENT_SCHEMA = json.loads((ROOT / "schemas/match_event.schema.json").read_text())
 SECONDS = 1.6
-OVERRIDES = {"occlusion": "crowded", "lighting": "night"}
+OVERRIDES = {"occlusion": "crowded", "kit_contrast": "low"}
 
 
 @pytest.fixture(scope="module")
@@ -49,7 +49,7 @@ def test_ground_truth_validates_against_the_schemas(clips):
     for ev in events:
         validate(ev, EVENT_SCHEMA)
     assert clip["seed"] == 11 and clip["split"] == "train"
-    assert clip["params"]["lighting"] == "night" and clip["overrides"] == OVERRIDES
+    assert clip["params"]["kit_contrast"] == "low" and clip["overrides"] == OVERRIDES
 
 
 def test_projection_error_under_one_pixel(clips):

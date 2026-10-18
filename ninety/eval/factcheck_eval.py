@@ -2,21 +2,30 @@
 claims it wrongly rejects. Claims are generated from the simulator, so the truth of each is known.
 
     uv run python -m ninety.eval.factcheck_eval            # writes docs/eval/fact-checker.md
+    uv run python -m ninety.eval.factcheck_eval --foundry  # also records the run in Foundry
+
+The Judge is the published Foundry agent at the version pinned in ninety/agents/foundry_agents.json,
+so the number describes what runs live; --local-judge measures the code's definition instead (for
+a prompt change before it is published). --foundry records every claim as one run of the
+`ninety-fact-checker` evaluation in Foundry, graded there by string checks that compare each
+verdict with the claim's known truth.
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
 import datetime
 import json
 import subprocess
 from pathlib import Path
 
-from agent_framework.foundry import FoundryChatClient
+from agent_framework.foundry import FoundryAgent
 from azure.identity import DefaultAzureCredential
 
 from ninety import config
+from ninety.agents import foundry, foundry_evals
 from ninety.agents.factcheck import Claim, check
 from ninety.agents.judge import judge, judge_agent
 from ninety.match.facts import events_in
@@ -42,10 +51,14 @@ def cases(seed: int, minutes: float) -> list[dict]:
     events = events_in(seed, minutes, 1, int(minutes) + 1)
     extended = events_in(seed, max(minutes, 90), 1, int(max(minutes, 90)) + 1)
     done = [e for e in events if e["type"] == "pass" and e.get("outcome") == "success" and "distance_m" in e]
-    # A failed pass an opponent reached: its `receiver` is that opponent, so a claim built on it can
-    # name him. One that went out or back to nobody has no receiver to format.
+    # A failed pass an opponent won (lesson 42: `interceptor`, not `receiver`). One that went out,
+    # back to nobody or only off an opponent has no interceptor to format.
     failed = [e for e in events if e["type"] == "pass" and e.get("outcome") == "fail" and "distance_m" in e
-              and "receiver" in e]
+              and "interceptor" in e]
+    # Passes the passer meant for a team-mate who did not get them: failed, or found someone else.
+    meant_failed = [e for e in events if e["type"] == "pass" and e.get("outcome") == "fail"
+                    and "distance_m" in e and "intended" in e]
+    meant_other = [e for e in done if e.get("intended") and e["intended"] != e.get("receiver")]
     tackles = [e for e in events if e["type"] == "tackle"]
     shots = [e for e in events if e["type"] == "shot" and e.get("outcome") != "goal"]
     # Long-range and fast shots are rare in 30 minutes, so the shot tone kinds read the full match,
@@ -64,7 +77,8 @@ def cases(seed: int, minutes: float) -> list[dict]:
 
     def teammate(e):
         squad = [f"{e['team'][0]}{n}" for n in range(2, 12)]
-        return next(p for p in squad if p not in (e["player"], e.get("receiver")))
+        # not the passer, his receiver or the team-mate he meant it for (a claim naming him is not false)
+        return next(p for p in squad if p not in (e["player"], e.get("receiver"), e.get("intended")))
 
     # (truth, events, template). Templates read the compact event's fields, plus {mate} (a teammate
     # not in the event) and {rival} (the other team).
@@ -149,9 +163,18 @@ def cases(seed: int, minutes: float) -> list[dict]:
         "false: invented importance": (
             False, interceptions, "{player} makes the most important intervention of the match."
         ),
-        # false meaning: only the judge can catch these
+        # The code half's role check (lesson 42) catches these: the player a pass "finds" must be its
+        # receiver, and the one it was meant for is a cited player but did not get it.
+        "false: failed pass called found by its intended": (
+            False, meant_failed, "{player} finds {intended} with a {distance_m} m pass."
+        ),
+        "false: pass called found by a team-mate it was not for": (
+            False, meant_other, "{player} finds {intended} with a {distance_m} m pass."
+        ),
+        # false meaning: only the judge could catch these when the report was published; the first
+        # is now also caught by the code half's role check.
         "meaning: intercepted pass called completed": (
-            False, failed, "{player} finds {receiver} with a {distance_m} m pass."
+            False, failed, "{player} finds {interceptor} with a {distance_m} m pass."
         ),
         "meaning: completed pass called cut out": (
             False, done, "{player}'s {distance_m} m pass to {receiver} is cut out."
@@ -242,11 +265,28 @@ def cases(seed: int, minutes: float) -> list[dict]:
     return out
 
 
-async def run(seeds: list[int], minutes: float, concurrency: int = 3) -> list[dict]:
-    client = FoundryChatClient(
-        project_endpoint=config.FOUNDRY_PROJECT, model=config.MODEL, credential=DefaultAzureCredential()
-    )
-    agent = judge_agent(client)
+@contextlib.asynccontextmanager
+async def judge_under_test(local: bool):
+    """The Judge to measure, and its label for the report: the published version by default."""
+    credential = DefaultAzureCredential()
+    local_judge = judge_agent(foundry.chat_client(credential))
+    if local:
+        yield local_judge, f"local definition on `{config.MODEL}`"
+        return
+    name, version = foundry.pinned(local_judge)
+    async with FoundryAgent(
+        project_endpoint=config.FOUNDRY_PROJECT, agent_name=name, agent_version=version, credential=credential
+    ) as published:
+        yield published, f"`{name}:{version}` on `{config.MODEL}`"
+
+
+async def run(seeds: list[int], minutes: float, concurrency: int = 3, local: bool = False):
+    """Every claim with both layers' verdicts, and the label of the Judge that gave them."""
+    async with judge_under_test(local) as (agent, label):
+        return await _run(agent, seeds, minutes, concurrency), label
+
+
+async def _run(agent, seeds: list[int], minutes: float, concurrency: int) -> list[dict]:
     gate = asyncio.Semaphore(concurrency)
     rows, known = [], {}
     for seed in seeds:
@@ -274,14 +314,16 @@ def passed(row: dict) -> bool:
     return bool(row["code_ok"] and row["judge_ok"])
 
 
-def report(rows: list[dict], seed: str) -> str:
+def report(
+    rows: list[dict], seed: str, judge_label: str = f"`{config.MODEL}`", foundry_run: dict | None = None
+) -> str:
     git = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True, text=True)
     sha = git.stdout.strip()
     lines = [
         "# Fact-checker evaluation",
         "",
         f"Generated by `uv run python -m ninety.eval.factcheck_eval` on {datetime.date.today()} "
-        f"at commit `{sha}`, simulator seeds {seed}, judge model `{config.MODEL}`. Each claim cites "
+        f"at commit `{sha}`, simulator seeds {seed}, judge {judge_label}. Each claim cites "
         "the one event it describes, so its truth is known. A layer *catches* a false claim by "
         "rejecting it, and *wrongly rejects* a true one.",
         "",
@@ -324,6 +366,16 @@ def report(rows: list[dict], seed: str) -> str:
         "## Every miss and false rejection",
         "",
     ]
+    if foundry_run:
+        lines[-2:-2] = [
+            f"**In Foundry:** [this run]({foundry_run['report_url']}) of the `{FOUNDRY_EVAL}` evaluation, "
+            f"{foundry_run['total']} items; "
+            + ", ".join(
+                f"{k} {v['passed']}/{foundry_run['total']}" for k, v in foundry_run["per_criterion"].items()
+            )
+            + ".",
+            "",
+        ]
     misses = [r for r in rows if passed(r) != r["true"]]
     for r in misses:
         why = "; ".join(r["reasons"]) or "accepted"
@@ -333,6 +385,30 @@ def report(rows: list[dict], seed: str) -> str:
     return "\n".join(lines) + "\n"
 
 
+FOUNDRY_EVAL = "ninety-fact-checker"
+
+
+def foundry_item(row: dict) -> dict[str, str]:
+    """One claim as Foundry sees it: what the fact-checker should do, and what each layer did.
+    A Judge service error or timeout holds the claim back, which counts as a rejection."""
+    expected = "accept" if row["true"] else "reject"
+    return {
+        "kind": row["kind"],
+        "seed": str(row["seed"]),
+        "claim": row["claim"].text,
+        "expected": expected,
+        "code_alone": "accept" if row["code_ok"] else "reject",
+        "verdict": "accept" if passed(row) else "reject",
+        "reasons": "; ".join(row["reasons"]),
+    }
+
+
+FOUNDRY_CRITERIA = [
+    foundry_evals.equals("fact-checker correct", "verdict", "expected"),
+    foundry_evals.equals("code checks alone correct", "code_alone", "expected"),
+]
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--seeds", default="7,21", help="comma-separated simulator seeds")
@@ -340,11 +416,20 @@ def main() -> None:
     ap.add_argument("--out", type=Path, default=ROOT / "docs/eval/fact-checker.md")
     ap.add_argument("--concurrency", type=int, default=3,
                     help="parallel Judge calls; lower it if Foundry returns service errors")
+    ap.add_argument("--local-judge", action="store_true",
+                    help="measure the code's Judge definition instead of the published version")
+    ap.add_argument("--foundry", action="store_true", help="record the run in Foundry's Evaluations")
     args = ap.parse_args()
     seeds = [int(seed) for seed in args.seeds.split(",")]
-    rows = asyncio.run(run(seeds, args.minutes, args.concurrency))
+    rows, label = asyncio.run(run(seeds, args.minutes, args.concurrency, args.local_judge))
+    foundry_run = None
+    if args.foundry:
+        foundry_run = foundry_evals.record(
+            FOUNDRY_EVAL, f"seeds {args.seeds}, judge {label.replace('`', '')}",
+            [foundry_item(r) for r in rows], FOUNDRY_CRITERIA,
+        )
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(report(rows, args.seeds))
+    args.out.write_text(report(rows, args.seeds, label, foundry_run))
     print(args.out.read_text())
     (args.out.with_suffix(".json")).write_text(
         json.dumps([{**r, "claim": r["claim"].text, "evidence": r["evidence"]} for r in rows], indent=1)

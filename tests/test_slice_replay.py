@@ -10,7 +10,15 @@ from pathlib import Path
 import pytest
 
 from ninety.agents.factcheck import Claim, check
-from ninety.agents.slice import Recording, ReplayMismatch, Turn, judge_prompt, replay_slice, tamper
+from ninety.agents.slice import (
+    Recording,
+    ReplayMismatch,
+    Turn,
+    analyst_prompt,
+    judge_prompt,
+    replay_slice,
+    tamper,
+)
 from ninety.match.facts import events_in
 
 SEED, MINUTES, MINUTE = 7, 5, 2
@@ -20,7 +28,7 @@ PASS = next(e for e in KNOWN.values() if e["minute"] == MINUTE and e["type"] == 
             and e.get("outcome") == "success" and "receiver" in e and "distance_m" in e)
 CLAIM = Claim(f"{PASS['player']} finds {PASS['receiver']} with a {PASS['distance_m']} m pass.", [PASS["id"]])
 REPLY = json.dumps({"text": CLAIM.text, "evidence": CLAIM.evidence})
-FIRST = f"Write the claim for minute {MINUTE}."
+FIRST = analyst_prompt("seed7", MINUTE)
 WRITE = Turn("analyst", FIRST, REPLY)
 SUPPORTED = Turn("judge", judge_prompt(CLAIM), json.dumps({"ok": True, "reasons": []}))
 
@@ -58,7 +66,7 @@ def test_replay_runs_the_planted_rejection_and_rewrite():
 def test_replay_stops_when_the_prompt_no_longer_matches():
     with pytest.raises(ReplayMismatch):
         asyncio.run(
-            replay_slice(recording([Turn("analyst", "Write the claim for minute 9.", REPLY)], plant=False))
+            replay_slice(recording([Turn("analyst", analyst_prompt("seed7", 9), REPLY)], plant=False))
         )
 
 
@@ -91,6 +99,6 @@ def test_there_are_committed_replays():
 
 @pytest.mark.parametrize("path", REPLAYS, ids=lambda p: p.name)
 def test_every_committed_replay_still_replays(path):
-    # A recording no test replays rots silently when a prompt changes (lessons 19 and 27).
+    # A recording no test replays rots silently when a prompt changes (lessons 32 and 44).
     outcome = asyncio.run(replay_slice(Recording.load(path)))
     assert outcome.attempts >= 1

@@ -23,7 +23,7 @@ totals were tuned. This is the design for the next builds; what already runs is 
 6. **A seed is the same match on every machine.** The engine draws from `fmath.Random` and
    computes `exp`, `sin`, `atan2` and the normal distribution with `ninety/sim/fmath.py`,
    never the C math library, whose last bit differs between operating systems
-   ([LESSONS.md](LESSONS.md), lesson 29).
+   ([LESSONS.md](LESSONS.md), lesson 46).
 
 ## The loop
 
@@ -53,7 +53,8 @@ about 0.6. Spin and swerve come later.
 - **Acceleration falls as speed rises**: about 5 m/s² from standing, approaching zero at top
   speed; braking up to about 8 m/s².
 - **Top speed per player**, about 8 to 9.5 m/s in matches, from the player's pace.
-- **Body size** for contact: a radius of about 0.26 m; shoulder-to-shoulder centres about 0.5 m.
+- **Body shape** for contact: shoulders wide (0.50 m) and chest deep (0.20 m), turned the way he
+  faces, the same outline the renderer draws (`ninety/sim/shape.py`, GROUNDING P11).
 - **Goalkeeper reach grows during a dive**: about 1 m standing, more as the dive goes on, so a
   save depends on when the keeper started moving and where the ball is.
 
@@ -103,7 +104,7 @@ pressing), leading lowers it (deeper block).
 
 Every action goes through physics with error: direction, speed and height errors grow with
 distance, ball speed, pressure, fatigue, weak foot and body angle, and shrink with technique.
-A first touch fails more often on fast balls, under pressure and when tired.
+A first touch is a cushion, not a gate: the surface takes out what it can kill, the player sends the rest where he chooses with his own error, and a ball he cannot keep at his feet is a heavy touch the race decides (`firsttouch.py`, GROUNDING A4). Pressure, the body's angle to the ball, fatigue and a fast ball make it worse (`firsttouch.quality`).
 
 ### 8. Duels
 
