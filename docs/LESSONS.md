@@ -529,3 +529,31 @@ short and actionable. This file is public: no research sources, product names or
   records the engine commit the number came from.
 - **Check:** `uv run python -m ninety.sim.late_drop` prints the commit in `docs/eval/late-drop.md`;
   `tests/test_late_drop.py` fails if the seeds or band drift from `docs/EVALUATION.md`.
+
+### 70. What is labelled as drawn must be the shape that is drawn
+- **What happened:** `body_parts` labels each part a capsule, `parts_box` bounds it as one and
+  the body-shape tests measure it as one, but `web/render` drew each part as a lathe that closed
+  to a point at both joints. Between the top of the trunk and the base of the neck nothing was
+  drawn, so a player cut by the bottom of the frame at that height was a floating head with a box
+  ending at his chin (seed 900002 at `443c4d5`). The render check caught it only because his foot
+  happened to fall outside that box, and every Python test passed because none of them looked at
+  the drawn pixels.
+- **Rule:** the renderer draws the shape the labels and tests describe, and a test checks the
+  drawn pixels, not the Python model of them. The same goes for any summary number: the player
+  height percentiles counted boxes cut by the image edge as players, so a 19 px "player" was 19 px
+  of one.
+- **Check:** `tests/test_render_body.py` slides the bottom image edge from a player's shins to his
+  chin and fails if his drawn box ever stops short of it; `tests/test_render_checks.py` checks
+  that the height percentiles skip boxes cut by an edge.
+
+### 71. Select hard cases by their cause, not by something that travels with it
+- **What happened:** `occlusion=crowded` chose the clip window with the most players within 4 m
+  of the ball. A crowd on the far side of the ball hides nothing, so crowded clips reached only
+  4.0% mostly hidden balls in render run v1, and no number of them could lift the training set
+  to the 5% floor. The proposed fix was to render more of them.
+- **Rule:** a knob that targets a hard case selects on the geometry that makes it hard (here, a
+  player on the line from the camera to the ball). Before rendering a round, measure the knob's
+  own rate on two or three clips: a mix can never beat its best part.
+- **Check:** `tests/test_render_scene.py::test_the_crowded_window_is_the_one_where_the_ball_is_hidden`
+  builds two windows where counting players near the ball picks the wrong one. Before a batch,
+  `uv run ninety-data-stats <2-3 crowded clips> --stride 5 --input 640x640` shows the share.
