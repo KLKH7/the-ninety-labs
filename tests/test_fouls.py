@@ -217,7 +217,8 @@ def test_at_a_penalty_the_keeper_commits_at_the_strike_the_way_he_read_it():
     assert dives[0][1] - struck_at <= 2 * DT  # at the strike, not after reacting (0.32 s or more)
     from ninety.sim.engine import PENALTY_DIVE_LEAD_S
 
-    assert dives[0][1] == pytest.approx(struck_at - PENALTY_DIVE_LEAD_S)  # set off just before it
+    assert dives[0][1] < struck_at  # set off just before it
+    assert dives[0][1] == pytest.approx(struck_at - PENALTY_DIVE_LEAD_S)
     assert keeper.profile.reaction() > 2 * DT
 
 

@@ -18,7 +18,7 @@ from ninety.sim.engine import (
 
 def test_his_dive_covers_the_middle_third_until_the_flight_shows_the_height():
     low, high = offball.MIDDLE_THIRD_Z
-    assert offball.dive_band(0.0) == (low, high) == offball.dive_band(offball.HEIGHT_FROM_FLIGHT_S)
+    assert offball.dive_band(0.0) == (low, high) == offball.dive_band(0.2)  # 245 ms (Higueras-Herbada)
     floor, top = offball.dive_band(0.4)  # then out toward the ground and his full reach, not at once
     assert 0.0 < floor < low and high < top < HAND_REACH_Z
     assert offball.dive_band(5.0) == pytest.approx((0.0, HAND_REACH_Z))
