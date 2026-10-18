@@ -759,7 +759,7 @@ def test_the_keeper_dives_toward_the_shot_after_reacting_then_is_down():
     e.possessor = None
     e.kicked = {"type": "shot", "team": "home"}
     e.ball = (90.0, 34.0, 0.5, 25.0, 6.0, 0.0)  # heading for about 3.4 m to his left
-    e.kicked_at = e.free_since = e.t
+    e.kicked_at = e.free_since = e.struck_at = e.t
     assert not e.keeper_dive(k)  # he has not reacted yet
     y0 = k.y
     assert _until_he_dives(e, k) and e.t >= e.kicked_at + e.reaction(k)
@@ -790,7 +790,7 @@ def _shot_at_keeper(e, ball):
     e.possessor = None
     e.kicked = {"type": "shot", "team": "home", "x": ball[0], "y": ball[1]}
     e.ball = ball
-    e.kicked_at = e.free_since = e.t
+    e.kicked_at = e.free_since = e.struck_at = e.t
     return k
 
 
@@ -1299,7 +1299,7 @@ def test_can_reach_counts_a_keepers_hands_in_his_box_not_his_feet():
     e = Engine(1)
     k = e.keeper("away")
     k.x, k.y, k.vx, k.vy = 103.0, 34.0, 0.0, 0.0
-    e.kicked_at = e.free_since = e.t - 0.1
+    e.kicked_at = e.free_since = e.struck_at = e.t - 0.1
     t = e.reaction(k) + 0.6  # by then his hands can be at any height
     assert e.can_reach(k, 103.0, 34.9, 1.5, t, delay=t)[0]  # 0.9 m away at 1.5 m: his hands, no step
     assert not e.can_reach(k, 103.0, 35.7, 1.5, t, delay=t)[0]  # 1.7 m: beyond his standing reach

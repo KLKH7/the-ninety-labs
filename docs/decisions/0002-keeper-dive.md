@@ -124,13 +124,13 @@ engine keeps; the sources give the ball's centre, a radius higher.
 
 | Part | Rule | Source |
 |---|---|---|
-| Hands, height | crouched at the strike: the ball's centre within a hand's span (0.2 m, *design*) of 0.6 m. From 245 ms after the strike (the ball leaving a player, so a deflection on the way does not reset it) the band spreads up and down at 4 m/s. The figure shows about 1 m of that before the ball arrives; beyond it the same rate is assumed, up to a jump's reach of 2.8 m (*design*) | Higueras-Herbada et al. 2020, Fig. 2 |
+| Hands, height | crouched at the strike: the ball's centre within a hand's span (0.2 m, *design*) of 0.6 m. From 245 ms after the last kick (a pass, shot or clearance; neither a deflection on the way nor a dribbler's touch resets it) the band spreads up and down at 4 m/s. The figure shows about 1 m of that before the ball arrives; beyond it the same rate is assumed, up to a jump's reach of 2.8 m (*design*) | Higueras-Herbada et al. 2020, Fig. 2 |
 | Hands, across | on his feet: standing reach. Once he launches a dive, ahead of it (and lying after it): standing reach plus the stretch, from the launch; behind it: standing reach | P11, P15 |
-| Hands, in the air | within his reach of his centre of mass, above or below it | P11 |
+| Hands, in the air | the ball's centre within his reach of his centre of mass: the further across, the less high | P11 |
 | Hands, down after a dive | no higher than about an arm's reach above the ground (1.0 m, *design* from P11's standing reach) | P11 |
 | Body, on his feet | grass to 1.8 m, as before | P11 |
 | Body, over the push-off | from that column to the laid-out trunk, evenly over the push-off (*design*: how he leans out is not sourced) | P15 |
-| Body, in the air | laid out across the goal: the ball's centre within half his shoulders' breadth (0.25 m) and a radius of his centre of mass. That goes from his crouch (0.9 m, *design*, *verify*) toward the height the ball crosses at, at most 0.41 m up and no lower than lying on his side (*design* below the crouch), at the pace of the dive's travel | Monteiro et al. 2022; P11 |
+| Body, in the air | laid out across the goal: the ball's centre within half his shoulders' breadth (0.25 m) and a radius of his centre of mass. That goes from his crouch (0.9 m, *design*, *verify*) toward the height the ball's centre crosses at, at most 0.41 m up and no lower than lying on his side (*design* below the crouch), at the pace of the dive's travel | Monteiro et al. 2022; P11 |
 | Body, down after a dive | lying on his side: up to his shoulders' breadth | P11 |
 
 **When he launches** (found while measuring step 2, lesson 38): he dived as soon as he had
@@ -140,14 +140,20 @@ launched then just gets a hand there as the ball does (`offball.dive_cover_time`
 and the arms' stretch, both from the launch); until then he stays on his feet. His body goes as far
 as the push carries it by then. *Design*: no source for how late keepers leave a dive in open play.
 He knows the ball's flight exactly when he times it (as his dive already did); nothing in it is
-fitted to a save rate.
+fitted to a save rate. Two changes happen in one frame, by design:
+- At the launch his hands' top falls from a jump's reach to what his reach allows above his
+  centre of mass. Once he has pushed off sideways he can no longer jump straight up.
+- At the landing his body and hands go from the air to lying on the ground. The fall to the grass
+  is not modelled. The landing is timed for the ball's arrival, so the ball has already reached him;
+  only a rebound meets him down.
 
 **What the estimates share, and what they do not** (lesson 23):
 - The passer's race uses the same rule: standing reach (he does not dive at a pass) and the same
   hands band.
 - The shooter's judgement (`offball.keeper_reach_m`, O1) covers distance across only, as if he
-  launched on reacting: an upper bound on how far across he gets by then. It ignores the hands'
-  height, so it overrates the keeper against a high shot that arrives early (a penalty: about 0.45 s,
+  launched on reacting from a standstill. That bounds how far across he gets only if he is standing
+  or moving away from the ball; a run toward it carries him further (`dive_motion`). It ignores the
+  hands' height, so it overrates the keeper against a high shot that arrives early (a penalty: about 0.45 s,
   hands up to about 1.6 m). A known gap, kept as it is in this step: making the shooter aim by height
   belongs with the penalty aims in step 3.
 - The dive planner ignores height when deciding to dive, apart from not diving at a ball going over

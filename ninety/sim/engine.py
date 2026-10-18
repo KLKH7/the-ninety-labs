@@ -322,6 +322,7 @@ class Engine:
         self.shot_touched_by: str | None = None  # "keeper" or "defender": who got to the shot
         self.shot_was_on_target: bool | None = None  # was it going in when they first touched it?
         self.free_since = -99.0
+        self.struck_at = -99.0  # the last kick (pass, shot, clearance): a keeper's hands follow its flight
         self.touched_since_kick = False
         self.chase: dict[str, tuple[str, float, float]] = {}  # team -> (player, x, y)
         self.restart: Restart | None = None
@@ -401,9 +402,9 @@ class Engine:
         (x, y), at time `at` (offball.reach_for). His arms stretch out from the moment he launches a
         dive, toward it: behind it (`ahead` False; judged from (x, y) if None), and on his feet, he
         has his standing reach (P11, P15); a deflection does not un-stretch a dive already under
-        way. His hands' heights run from when the ball was struck (free_since), so a deflection on
-        its way does not take back what he has already seen of its flight. In the air, his hands are
-        within his reach of his centre of mass, above or below it."""
+        way. His hands' heights run from the last kick (struck_at), so neither a deflection on the way
+        nor a dribbler's touch takes back what he has seen of its flight. In the air, his hands are
+        within his reach of his centre of mass: at (x, y), no higher than that reach allows across."""
         if not self.hands(p, x, y):
             return offball.reach_for(False, 0.0)
         at = self.t if at is None else at
@@ -411,11 +412,12 @@ class Engine:
         if ahead is None:
             ahead = side == 0 or (y - p.y) * side >= 0
         stretched = at - self.stretch_from(p) if ahead else 0.0
-        reach_m, floor, top = offball.reach_for(True, stretched, at - self.free_since, self.down(p))
+        reach_m, floor, top = offball.reach_for(True, stretched, at - self.struck_at, self.down(p))
         if self.dive and self.dive[0] == p.id:
-            arm = offball.arm_reach_m(at - self.dive[4])
-            com = offball.dive_com_z(at - self.dive[1], self.dive[6]) - ball.RADIUS  # for the ball's base
-            floor, top = max(floor, com - arm), min(top, com + arm)
+            across = math.hypot(x - p.x, y - p.y)
+            up = math.sqrt(max(reach_m * reach_m - across * across, 0.0)) if across <= reach_m else -math.inf
+            com = offball.dive_com_z(at - self.dive[1], self.dive[6])
+            top = min(top, com + up - ball.RADIUS)  # the ball's centre within his reach; its base below
         return reach_m, floor, top
 
     def down(self, p: Player) -> bool:
@@ -595,6 +597,7 @@ class Engine:
         self.kicked_at = self.t
         self.bumped = None
         self.free_since = self.t  # the ball left a player's control: dives are timed from here
+        self.struck_at = self.t
         self.landed = None  # a new strike: a keeper still down reacts to it afresh
         self.seen_going = self.ball_destination()
         self.kicker_clear = False
@@ -1447,7 +1450,7 @@ class Engine:
         if (self.dive is None and shot_at_him and reacted and fresh
                 and self.off_balance.get(p.id, -1.0) <= self.t):
             arrival = self.ball_at_x(p.x)  # where the ball's own flight takes it past him
-            if arrival and arrival[2] <= offball.hands_band(self.t - self.free_since + arrival[0])[1]:
+            if arrival and arrival[2] <= offball.hands_band(self.t - self.struck_at + arrival[0])[1]:
                 when, cross = arrival[0], arrival[1]  # not one going over his hands
                 gap = abs(cross - p.y)
                 v0 = math.copysign(1.0, cross - p.y) * p.vy  # his sideways run toward it
@@ -1460,7 +1463,7 @@ class Engine:
                     body = max(gap - offball.arm_reach_m(when), offball.dive_motion(when, v0)[0])
                     travel = math.copysign(min(body, KEEPER_DIVE_TRAVEL_M), cross - p.y)
                     self.dive = (p.id, self.t, p.y, travel, self.t, v0,
-                                 arrival[2])  # the height it crosses at, which his body goes toward
+                                 arrival[2] + ball.RADIUS)  # the ball's centre as it crosses, his body's aim
                     self.dived_at[p.id] = self.kicked_at
         if not self.dive or self.dive[0] != p.id:
             return False

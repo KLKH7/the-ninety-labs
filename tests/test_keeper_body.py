@@ -98,7 +98,7 @@ def _keeper(e, struck_ago=2.0):
     k.x, k.y, k.vx, k.vy = 104.0, 34.0, 0.0, 0.0
     e.possessor = None
     e.kicked = {"type": "shot", "team": "home", "x": 90.0, "y": 34.0}
-    e.kicked_at = e.free_since = e.t - struck_ago
+    e.kicked_at = e.free_since = e.struck_at = e.t - struck_ago
     return k
 
 
@@ -233,3 +233,111 @@ def test_he_launches_no_more_than_about_a_frame_before_he_must():
         e.t += engine.DT
     when, cross, _ = e.ball_at_x(k.x)
     assert when <= offball.dive_cover_time(abs(cross - 34.0)) + 0.04 * 1.5  # 25 frames a second
+
+
+def _launch(e, k, most_s=3.0):
+    """Fly the shot until he launches; (ball's time to cross him, crossing offset, its base height)."""
+    for _ in range(int(most_s * 25)):
+        if e.keeper_dive(k):
+            return e.ball_at_x(k.x)
+        e.ball = engine.ball.step(e.ball, engine.DT)
+        e.t += engine.DT
+    raise AssertionError("he never dived")
+
+
+def test_he_is_never_late_when_he_could_have_been_on_time():
+    for vy in (1.5, 2.5, 3.5):
+        e = Engine(1)
+        k = _keeper(e, struck_ago=0.0)
+        e.ball = (80.0, 34.0, 0.3, 20.0, vy, 0.0)
+        when, cross, _ = _launch(e, k)
+        assert when >= offball.dive_cover_time(abs(cross - 34.0)) - 1e-9  # launched in time, not a frame late
+
+
+def test_he_is_still_in_the_air_when_the_ball_reaches_him():
+    e = Engine(1)
+    k = _keeper(e, struck_ago=0.0)
+    e.ball = (80.0, 34.0, 0.3, 20.0, 2.5, 0.0)
+    when, _, _ = _launch(e, k)
+    for _ in range(int(when * 25) - 1):  # every frame before it arrives
+        e.keeper_dive(k)
+        e.t += engine.DT
+        assert e.dive is not None and not e.down(k)  # not lying on the ground as it comes
+
+
+def test_his_body_heads_for_the_balls_centre_as_it_crosses():
+    e = Engine(1)
+    k = _keeper(e, struck_ago=0.0)
+    e.ball = (80.0, 34.0, 0.3, 20.0, 2.5, 3.0)  # rising: crosses him high
+    _, _, z = _launch(e, k)
+    assert math.isclose(e.dive[6], z + R, abs_tol=1e-9)
+
+
+def test_after_a_dive_to_his_right_he_lies_that_way_and_reaches_that_way():
+    e = Engine(1)
+    k = _keeper(e, struck_ago=0.0)
+    e.ball = (80.0, 34.0, 0.3, 20.0, -2.5, 0.0)  # toward -y
+    _launch(e, k)
+    while e.dive is not None:
+        e.keeper_dive(k)
+        e.t += engine.DT
+    assert e.down(k) and e.dive_side(k) == -1.0
+    assert e.reach(k, k.x, k.y - 1.5)[0] > e.reach(k, k.x, k.y + 1.5)[0]  # stretched toward where he went
+
+
+def test_he_does_not_dive_at_a_ball_that_will_be_over_his_hands_when_it_arrives():
+    e = Engine(1)
+    k = _keeper(e, struck_ago=0.0)
+    # a penalty-like kick, wide of him and high: about 0.48 s to arrive, its base at about 1.9 m;
+    # his hands will be no higher than about 1.6 m by then (0.6 m, then 4 m/s from 0.245 s)
+    e.ball = (93.0, 34.0, 0.0, 25.0, 6.0, 7.0)
+    for _ in range(14):
+        assert not e.keeper_dive(k)
+        e.ball = engine.ball.step(e.ball, engine.DT)
+        e.t += engine.DT
+
+
+def test_running_toward_it_he_can_leave_his_dive_later():
+    def launched_at(vy):
+        e = Engine(1)
+        k = _keeper(e, struck_ago=0.0)
+        k.vy = vy
+        e.ball = (80.0, 34.0, 0.3, 20.0, 2.5, 0.0)
+        _launch(e, k)
+        return e.t
+    assert launched_at(2.0) > launched_at(0.0)  # his run is where the push starts from (P15)
+
+
+def test_the_body_is_fully_laid_out_when_the_push_off_ends():
+    com = offball.dive_com_z(0.48, 2.03)
+    lo, hi = offball.body_band(0.48, 2.03)  # P15: a 0.48 s push-off
+    assert math.isclose(hi, com + 0.25, abs_tol=1e-9) and math.isclose(lo, max(0.0, com - 0.25 - 2 * R))
+
+
+def test_in_the_air_his_reach_upward_shrinks_the_further_across_he_reaches():
+    e = Engine(1)
+    k = _keeper(e)
+    e.dive = (k.id, e.t - 0.6, k.y, 1.0, e.t - 0.6, 0.0, 1.0)
+    near = e.reach(k, k.x, k.y + 0.3)[2]
+    far = e.reach(k, k.x, k.y + 1.7)[2]
+    assert far < near  # a circle round his centre of mass, not a box
+
+
+def test_his_dive_lands_no_sooner_than_the_ball_arrives():
+    e = Engine(1)
+    k = _keeper(e, struck_ago=0.0)
+    e.ball = (80.0, 34.0, 0.3, 20.0, 2.5, 0.0)
+    when, _, _ = _launch(e, k)
+    assert offball.dive_time_to(abs(e.dive[3]), e.dive[5]) >= when - 1e-9
+
+
+def test_a_dribblers_touch_does_not_reset_his_hands_but_a_kick_does():
+    e = Engine(1)
+    k = _keeper(e)  # struck 2 s ago: his hands can be anywhere from the grass to 2.8 m
+    seen = e.reach(k, 104.0, 34.0)[1:]
+    e.free_since = e.t  # a dribbler's touch pushes the ball on
+    assert e.reach(k, 104.0, 34.0)[1:] == seen
+    p = e.by_id["h9"]
+    e.possessor = p.id
+    e.kick(p, 20.0, 0.0, 0.0)  # a new strike: crouched again, waiting to see its flight
+    assert e.reach(k, 104.0, 34.0)[1:] == offball.hands_band(0.0)
