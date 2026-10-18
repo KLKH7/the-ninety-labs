@@ -13,6 +13,7 @@ import * as THREE from 'three';
 const PX_PER_M = 35; // pitch texture resolution
 const GROUND = { x0: -6, x1: 111, y0: -6, y1: 74 }; // pitch plus apron covered by the texture
 const POST_ID = 250; // goal frame: an occluder with no label
+const SCENERY_ID = 251; // boards, stands, roofs and towers: occluders with no label
 
 function rng(seed) { // mulberry32
   let a = seed >>> 0;
@@ -861,6 +862,16 @@ class BroadcastRenderer {
       this.decor.push(net);
     }
     for (const m of [...this.decor, ...this.posts]) this.scene.add(m);
+    // Every opaque piece of scenery hides what is behind it in the full id pass, as it does in the
+    // picture: a ball resting behind the boards is not visible. Left out: the sky (always behind),
+    // the ground (nothing labelled is under it), the see-through nets and the shadow decals.
+    const notOccluders = new Set([sky, surround, pitch, this.shadows, ...this.nets]);
+    this.scenery = this.decor.filter((m) => m.isMesh && !notOccluders.has(m));
+    for (const m of this.scenery) {
+      m.userData.mat = m.material;
+      m.userData.idMat = idMaterial(SCENERY_ID);
+      m.userData.idMat.side = m.material.side; // the near boards face the pitch: no back face for the gantry
+    }
 
     this.setupLights(p);
 
@@ -1063,6 +1074,7 @@ class BroadcastRenderer {
 
   idMode(on, only = null) {
     for (const m of this.decor) m.visible = !on;
+    for (const m of this.scenery) { m.material = on ? m.userData.idMat : m.userData.mat; m.visible = !on || only === null; }
     for (const m of this.posts) { m.material = on ? m.userData.idMat : m.userData.mat; m.visible = !on || only === null; }
     for (const b of this.bodies) { b.useId(on); b.group.visible = b.used > 0 && (only === null || b === only); }
     this.scene.background = on ? new THREE.Color(0, 0, 0) : this.skyColor;
