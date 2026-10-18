@@ -6,4 +6,4 @@ and pixel boxes are counted. See docs/guides/broadcast-render.md and
 docs/decisions/0001-synthetic-data.md.
 """
 
-RENDERER_VERSION = "0.3.0"
+RENDERER_VERSION = "0.3.1"
