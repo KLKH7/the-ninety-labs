@@ -22,7 +22,7 @@ with a new question.
 
 A recording also carries the match events the live run checked claims against, and the replay
 checks against those, not against a fresh simulation: a replay pins the agents' interface (prompts,
-checks, handoffs), not the engine underneath (docs/LESSONS.md, lesson 70). When the engine now
+checks, handoffs), not the engine underneath (docs/LESSONS.md, lesson 72). When the engine now
 produces different events, the replay still runs and warns that the recording is stale.
 """
 

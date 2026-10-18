@@ -370,7 +370,7 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_slice_replay.py::test_every_committed_replay_still_replays` fails on the
   stale recording and passes on the re-recorded one.
 
-### 70. A replay pins the interface it tests, not the engine underneath
+### 72. A replay pins the interface it tests, not the engine underneath
 - **What happened:** `replays/slice-minute2-plant.json` held only the models' answers, and the
   replay rebuilt the fact-checker's events from the local engine. Every engine change changed the
   checker's rejection reasons, so the Analyst's retry prompt changed and the replay failed, even
