@@ -80,7 +80,7 @@ jobs:
       - run: npm ci --prefix web
       - run: uv sync --locked
       - run: uv run playwright install --with-deps chromium
-      - run: uv run pytest -q tests/test_render_clip.py
+      - run: uv run pytest -q tests/test_render_clip.py tests/test_render_body.py
         env:
           NINETY_REQUIRE_RENDER: "1"
       - run: uv run ninety-render --seed 7 --seconds 2 --out runs/ci-clip
