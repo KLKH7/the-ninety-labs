@@ -1,7 +1,7 @@
 """How penalties end against the keeper, in the form the published studies report them: where the
-kick ended (the middle or a side third of the goal's width, and the third of its height) against
-what the keeper did (stayed, or dived toward or away from it). A report, never a gate: nothing in
-the engine is tuned to these numbers (docs/GROUNDING.md P15, A2; decision 0002).
+kick crossed the keeper's line (the middle or a side third of the goal's width, and the third of
+its height) against what the keeper did (stayed, or dived toward or away from it). A report, never
+a gate: nothing in the engine is tuned to these numbers (docs/GROUNDING.md P15, A2; decision 0002).
 
     uv run python -m ninety.sim.penalties    # writes docs/eval/penalties.md
 """
@@ -13,16 +13,25 @@ from collections import Counter, defaultdict
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
-from ninety.sim.engine import FPS, PENALTY_MARK_M, PITCH_Y, Engine, attack_dir, goal_x, other
+from ninety.sim import ball
+from ninety.sim.engine import (
+    CROSSBAR,
+    FPS,
+    GOAL_HALF_WIDTH,
+    PENALTY_MARK_M,
+    PITCH_Y,
+    POST_RADIUS,
+    Engine,
+    attack_dir,
+    goal_x,
+    other,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
-GOAL_HALF_WIDTH_M, CROSSBAR_M = 3.66, 2.44  # Law 1
-THIRD_WIDE_M = 2 * GOAL_HALF_WIDTH_M / 3  # Bar-Eli et al. 2007 divide the goal into 3 x 3 cells
-THIRD_HIGH_M = CROSSBAR_M / 3  # Higueras-Herbada et al. 2020: low, middle, high by thirds of 244 cm
+THIRD_WIDE_M = 2 * GOAL_HALF_WIDTH / 3  # Bar-Eli et al. 2007 divide the goal into 3 x 3 cells
+THIRD_HIGH_M = CROSSBAR / 3  # Higueras-Herbada et al. 2020: low, middle, high by thirds of 244 cm
 WARM_UP_S = 20.0  # play this long first, so the penalty is given in an ordinary state of play
 KICK_LIMIT_S = 200.0  # a bound only: the wait before a penalty is 100 to 140 s (D10)
-KEPT = ("on_target", "blocked")  # saved, or parried and cleared by a defender ("blocked" in the record)
-ON_TARGET = ("goal", *KEPT)
 
 # Published, by the same cells: Bar-Eli et al. 2007, Table 2 (286 penalties on target), stops over kicks.
 BAR_ELI = {("side", "toward"): (31, 113), ("side", "away"): (0, 83), ("side", "stay"): (0, 8),
@@ -65,16 +74,26 @@ def one(seed: int) -> dict | None:
     return rec if "outcome" in rec else None
 
 
+def on_target(cross: float, z: float) -> bool:
+    """Whether a kick, by its own flight where it crosses the keeper's line (`cross` from the goal's
+    centre, `z` the ball's lowest point), goes in clear of the posts and the crossbar, by the engine's
+    own goal (engine.woodwork). Bar-Eli et al. 2007 left out kicks that hit the woodwork or went wide;
+    so does this, whatever then happened to the ball (a defender's touch, a save tipped wide)."""
+    clear = POST_RADIUS + ball.RADIUS
+    return abs(cross) < GOAL_HALF_WIDTH - clear and z + ball.RADIUS < CROSSBAR - clear
+
+
 def tabulate(kicks: list[dict]) -> dict:
-    """Group kicks on target by the published cells: the third of the goal's width the kick ended
-    in against what the keeper did, and the third of its height; kept out of each."""
+    """Group kicks on target (on_target, by their own flight) by the published cells: the third of
+    the goal's width the kick crossed in against what the keeper did, and the third of its height (the
+    ball's centre); kept out of each: whatever did not end a goal."""
     cells: dict = defaultdict(Counter)
     heights: dict = defaultdict(Counter)
     total = Counter()
     for k in kicks:
-        if k.get("outcome") not in ON_TARGET or "cross" not in k:
+        if "cross" not in k or not on_target(k["cross"], k["z"]):
             continue
-        kept = k["outcome"] in KEPT
+        kept = k["outcome"] != "goal"
         total["n"] += 1
         total["kept"] += kept
         where = "middle" if abs(k["cross"]) < THIRD_WIDE_M / 2 else "side"
@@ -87,7 +106,8 @@ def tabulate(kicks: list[dict]) -> dict:
             act = "toward" if dive * k["cross"] > 0 else "away"
         cells[(where, act)]["n"] += 1
         cells[(where, act)]["kept"] += kept
-        band = "low" if k["z"] < THIRD_HIGH_M else ("middle" if k["z"] < 2 * THIRD_HIGH_M else "high")
+        zc = k["z"] + ball.RADIUS
+        band = "low" if zc < THIRD_HIGH_M else ("middle" if zc < 2 * THIRD_HIGH_M else "high")
         heights[band]["n"] += 1
         heights[band]["kept"] += kept
     return {"total": total, "cells": cells, "heights": heights}
@@ -103,18 +123,29 @@ def main() -> None:
     ap.add_argument("--out", default=str(ROOT / "docs/eval/penalties.md"))
     args = ap.parse_args()
     with ProcessPoolExecutor() as pool:
-        kicks = [k for k in pool.map(one, range(args.kicks)) if k]
+        ran = list(pool.map(one, range(args.kicks)))
+    kicks = [k for k in ran if k]
     t = tabulate(kicks)
     outcomes = Counter(k.get("outcome") for k in kicks)
+    uncrossed = sum("cross" not in k for k in kicks)
+    wide = sum("cross" in k and not on_target(k["cross"], k["z"]) for k in kicks)
+    recorded = dict(sorted(outcomes.items(), key=lambda kv: str(kv[0])))
     lines = ["# Penalties against the keeper", "",
              f"Generated by `uv run python -m ninety.sim.penalties` with {args.kicks} penalties (seeds 0 to "
              f"{args.kicks - 1}): {WARM_UP_S:g} s of play, then a penalty to the home side's best finisher "
-             "with the real wait before the kick. Each kick is placed by where it crossed the keeper's line: "
-             "the middle or a side third of the goal's width, and the third of its height. Kept out: "
-             "saved, or parried and cleared by a defender (the shot record calls that blocked). "
-             "\"Stay\" is a keeper who did not dive. A report, never a target.", "",
-             f"Outcomes: {dict(sorted(outcomes.items(), key=lambda kv: str(kv[0])))}.", "",
-             "| Kick ended | Keeper | Kept out | Bar-Eli et al. 2007, Table 2 |", "|---|---|---|---|"]
+             "with the real wait before the kick. Each kick is placed by where its own flight crossed the "
+             "keeper's line (at the strike, before anyone touched it): the middle or a side third of the "
+             "goal's width, and the third of its height (the ball's centre). On target: clear of the posts "
+             "and the crossbar by that flight, as Bar-Eli et al. left out kicks off the woodwork or wide; "
+             "kept out: any of those that did not end a goal (saved, tipped wide, or cleared). "
+             "\"Stay\" is a keeper who did not dive. In the engine he dives only after seeing the ball, "
+             "toward where it really crosses, so he stays when it comes within his reach and never dives "
+             "the wrong way; Bar-Eli's keepers chose before the kick (GROUNDING A2, P15). A report, "
+             "never a target.", "",
+             f"Not taken within {KICK_LIMIT_S:g} s: {len(ran) - len(kicks)} (the taker never reached the "
+             f"mark). Taken but no crossing found: {uncrossed}. Off target by their own flight: {wide}. "
+             f"Outcomes as the engine recorded them: {recorded}.", "",
+             "| Kick crossed | Keeper | Kept out | Bar-Eli et al. 2007, Table 2 |", "|---|---|---|---|"]
     for key in BAR_ELI:
         c = t["cells"][key]
         lines.append(f"| {key[0]} third | {key[1]} | {share(c['kept'], c['n'])} | {share(*BAR_ELI[key])} |")
