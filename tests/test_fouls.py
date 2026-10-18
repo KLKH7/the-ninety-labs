@@ -1,5 +1,7 @@
 """Fouls (Law 12): a lunge that arrives with the ball gone and sweeps through the man he went for."""
 
+import pytest
+
 from ninety.sim.engine import Engine
 
 
@@ -213,6 +215,9 @@ def test_at_a_penalty_the_keeper_commits_at_the_strike_the_way_he_read_it():
             assert e.dive[3] * aim_side < 0  # the way he read it, not the way it went
     assert struck_at is not None and len(dives) == 1  # one dive, never a second at the same kick
     assert dives[0][1] - struck_at <= 2 * DT  # at the strike, not after reacting (0.32 s or more)
+    from ninety.sim.engine import PENALTY_DIVE_LEAD_S
+
+    assert dives[0][1] == pytest.approx(struck_at - PENALTY_DIVE_LEAD_S)  # set off just before it
     assert keeper.profile.reaction() > 2 * DT
 
 

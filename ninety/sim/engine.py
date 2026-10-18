@@ -831,15 +831,9 @@ class Engine:
             rseg = rdx * rdx + rdy * rdy
             sc = 0.0 if rseg == 0 else clamp(((qx - x0) * rdx + (qy - y0) * rdy) / rseg, 0.0, 1.0)
             reach_m, reach_z = self.reach(p, x0 + sc * dx, y0 + sc * dy)  # judged where it comes closest
-            floor, top = 0.0, reach_z
-            diving = self.dive is not None and self.dive[0] == p.id
-            down = bool(self.landed and self.landed[0] == p.id and self.off_balance.get(p.id, -1.0) > self.t)
-            if diving:  # P15: in the air he covers the heights his dive has reached so far
-                floor, top = offball.dive_band(self.t + t0 - self.kicked_at)
-                top = min(top, reach_z)
-            elif down:  # down after his dive, on the ground: the low third of the goal's height (design)
-                top = offball.MIDDLE_THIRD_Z[0]
-            diving = diving or down
+            band = self.keeper_band(p, self.t + t0)
+            diving = band is not None
+            floor, top = (band[0], min(band[1], reach_z)) if diving else (0.0, reach_z)
             if self.t - self.reacting_since(p) >= self.reaction(p) or diving:  # a deliberate touch
                 st = first_low_within(x0, y0, hz, rdx, rdy, z1 - hz, qx, qy, reach_m, top, floor)
                 if st is not None:
@@ -1399,6 +1393,17 @@ class Engine:
         if spot:
             self.runs[p.id] = (*spot, self.t)
         return spot
+
+    def keeper_band(self, p: Player, at: float) -> tuple[float, float] | None:
+        """P15: the heights (floor, top) a keeper's hands and body cover at time `at` while he dives
+        or is down after a dive; None when he is on his feet (his usual reach applies). In the air,
+        the heights his dive has reached so far since the touch he dived at; down on the ground,
+        the low third of the goal's height (design)."""
+        if self.dive is not None and self.dive[0] == p.id:
+            return offball.dive_band(at - self.kicked_at)
+        if self.landed and self.landed[0] == p.id and self.off_balance.get(p.id, -1.0) > self.t:
+            return 0.0, offball.MIDDLE_THIRD_Z[0]
+        return None
 
     def stretch_from(self, p: Player) -> float:
         """When the keeper's arms began to stretch: when his dive began to be prepared (his reaction
