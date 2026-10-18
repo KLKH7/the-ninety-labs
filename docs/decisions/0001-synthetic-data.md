@@ -140,6 +140,23 @@ All checks pass (ball projection max 0.30 px, keypoints max 0.0015 px, determini
 - Player height p05 is 9 px in seed 900004 (the 16 px case moved from 900001 to 900004 with the
   new window), under the guide's 30 px. Not yet traced; a camera cut is the first suspect.
 
+### Fourth measurement (Oct 17, the reconciled engine, #37)
+
+The match engine changed under the test set (#37 merged into main), so the same five seeds were
+re-rendered at commit `443c4d5` with the same render parameters.
+
+- The ball is under 0.5 visible in 80 of 1,250 frames (**6.4%**; per clip 8.0%, 8.0%, 4.4%,
+  9.6%, 2.0%). This **meets the 5% minimum** for the first time; no render parameter changed to
+  get there.
+- **The render check fails** (`all_passed: false`): in seed 900002 (frames 4524 to 4529) player
+  a11 stands just below the bottom of the frame (his foot projects to y = 807 of 720) and only
+  his head is drawn, with no body under it. The box ends at his chin (y = 718), so the check
+  takes him for a whole player inside the frame and his foot is outside the box. The check is
+  right: a floating head is a rendering defect a viewer would see. Not traced yet; the test set
+  is not ready to freeze until it is fixed and re-rendered.
+- Player height p05 is 19 px in seed 900001 (under the guide's 30 px), and p95 is 160 px in seed
+  900002 (over its 120 px). Both not yet traced.
+
 The final proof comes later: detector recall on the fixed test set before and after each
 targeted round.
 
