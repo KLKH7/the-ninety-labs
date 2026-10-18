@@ -472,4 +472,7 @@ short and actionable. This file is public: no research sources, product names or
   `offball.may_handle`), so a player never fears what the referee would not allow. A sibling of
   lesson 69.
 - **Check:** `tests/test_engine_rules.py::test_a_keeper_who_may_handle_it_feels_no_challenge_coming`
-  fails on the old code (pressure 0.87) and checks the same forward still presses him off his hands.
+  fails on the old code (pressure 0.87). The back-pass bar is tested with a real back pass struck
+  and controlled (`test_a_back_pass_he_has_controlled_is_still_not_his_to_handle`): the first
+  version of this fix only tested a state the engine never reaches, and the audit found the bar
+  was forgotten the moment he controlled the ball, in the duels and the decisions alike.

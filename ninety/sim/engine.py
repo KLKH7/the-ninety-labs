@@ -354,6 +354,10 @@ class Engine:
         self.bumped: tuple[str, float] | None = None  # who it last came off, and his own clock
         self.kicker_clear = True  # the struck ball has left the kicker's body
         self.released_by: str | None = None  # Law 12: a keeper who released it may not handle it again
+        # Law 12: a keeper a team-mate deliberately passed or threw it to may not handle it until
+        # someone else touches it. Kept here, not read from the pass in flight, because the pass is
+        # closed the moment he controls it.
+        self.no_hands: str | None = None
         # (x, y, strike): a carrier turning the ball onto his kicking side before he strikes it
         self.windup: tuple | None = None
         self.lunges: dict[str, float] = {}  # defender -> when his lunge reaches the ball
@@ -441,6 +445,7 @@ class Engine:
         """Law 12 (offball.may_handle) for this keeper and this ball."""
         k = self.kicked
         back_pass = bool(k) and k["type"] == "pass" and k["team"] == p.team and self.last_touch == k["player"]
+        back_pass = back_pass or self.no_hands == p.id
         return offball.may_handle(p.role == "GK", self.in_own_box(p.team, x, y), self.released_by == p.id,
                                   back_pass)
 
@@ -483,6 +488,8 @@ class Engine:
         self.last_touch = pid
         if pid != self.released_by:
             self.released_by = None
+        if pid != self.no_hands:
+            self.no_hands = None
         self.new_phase()
         self.hold_until = self.t + settle_s(self.by_id[pid].profile["first_touch"])
 
@@ -1120,6 +1127,8 @@ class Engine:
             self.dribbler = None  # a team-mate took it: the dribble is over
         if p.id != self.released_by:
             self.released_by = None
+        if p.id != self.no_hands:
+            self.no_hands = None
         kicked = self.kicked
         if not kicked:
             return
@@ -1127,6 +1136,8 @@ class Engine:
         if kicked["type"] == "pass":
             if same_team and controls:  # completed, unless it only came back to the passer
                 done = p.id != kicked["player"]
+                if done and p.role == "GK":  # Law 12: a team-mate's deliberate pass or throw-in
+                    self.no_hands = p.id
                 kicked.update(
                     receiver=p.id if done else None,
                     end_x=round(x, 2),
@@ -1312,6 +1323,7 @@ class Engine:
             taker = self.nearest(spot[0], spot[1], team).id
         lo, hi = RESTART_DELAY_S[kind]
         self.dribbler = self.dribble_to = None  # the ball is dead: nobody is running onto a touch
+        self.no_hands = None  # a restart is a new play (Law 12's back-pass bar ends with it)
         self.restart = Restart(kind, team, spot[0], spot[1], taker, self.t + self.rng.uniform(lo, hi))
 
     def tick_restart(self) -> None:
@@ -2228,6 +2240,8 @@ class Engine:
         self.possessor = None
         self.last_touch = carrier.id
         self.dribbler = carrier.id
+        if carrier.role == "GK":  # Law 12: pushed out to play at his feet, out of his hands; he may be
+            self.released_by = carrier.id  # challenged, and may not handle it again until another touch
         self.loose_touch = False
         # A touch that carries on the way he was running is what everyone watching expects; only
         # a sharp change of direction is a new event they must react to (P12).

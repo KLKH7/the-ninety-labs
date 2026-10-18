@@ -304,6 +304,14 @@ def test_a_keeper_may_not_handle_a_team_mates_deliberate_pass():
     assert e.hands(keeper, 6.0, 34.0)
 
 
+def see_all(e: Engine) -> None:
+    """Everyone sees everyone where they stand now."""
+    for p in e.players:
+        for q in e.players:
+            if q is not p:
+                e.beliefs[p.id].seen[q.id] = perception.Sighting(q.x, q.y, 0.0, 0.0, e.t)
+
+
 def keeper_with_a_forward_at_him(e: Engine):
     """The home keeper on the ball in his own box, an opponent 1.5 m in front, everyone seen."""
     keeper, forward = e.keeper("home"), e.by_id["a10"]
@@ -312,26 +320,69 @@ def keeper_with_a_forward_at_him(e: Engine):
     e.ball = (6.3, 34.0, 0.0, 0.0, 0.0, 0.0)
     e.restart = None
     e.give(keeper.id)
-    for p in e.players:
-        for q in e.players:
-            if q is not p:
-                e.beliefs[p.id].seen[q.id] = perception.Sighting(q.x, q.y, 0.0, 0.0, e.t)
+    see_all(e)
     return keeper
 
 
 def test_a_keeper_who_may_handle_it_feels_no_challenge_coming():
     """Law 12: nobody may challenge a keeper who may handle the ball, as the duels obey, so his
-    choice is not hurried by a forward at his face (D2). Off his hands (a team-mate's back pass)
-    the same forward presses him as he would anyone."""
+    choice is not hurried by a forward at his face (D2). Outside his box the same forward presses
+    him as he would anyone."""
     e = Engine(7)
     keeper = keeper_with_a_forward_at_him(e)
     assert e.hands(keeper, keeper.x, keeper.y)
-    scene = e.scene_for(keeper)
-    assert decisions.pressure(scene) == 0.0
-    e.kicked = {"type": "pass", "team": "home", "player": "h3"}  # a team-mate's back pass
-    e.last_touch = "h3"
+    assert decisions.pressure(e.scene_for(keeper)) == 0.0
+    e2 = Engine(7)
+    keeper = keeper_with_a_forward_at_him(e2)
+    for p in (keeper, e2.by_id["a10"]):
+        p.x += 12.0  # the same scene outside his box (it ends 16.5 m out)
+    e2.ball = (keeper.x + 0.3, 34.0, 0.0, 0.0, 0.0, 0.0)
+    see_all(e2)
+    assert not e2.hands(keeper, keeper.x, keeper.y)
+    assert decisions.pressure(e2.scene_for(keeper)) > 0.8
+
+
+def test_a_back_pass_he_has_controlled_is_still_not_his_to_handle():
+    """Law 12: a team-mate's deliberate pass may not be handled until someone else touches it. The
+    pass is closed the moment he controls it, so the bar must outlive it: he feels the forward and
+    may be challenged, until another player touches the ball."""
+    e = Engine(7)
+    keeper, mate, forward = e.keeper("home"), e.by_id["h3"], e.by_id["a10"]
+    for p in e.players:
+        if p not in (keeper, mate, forward):
+            p.x = 60.0  # clear the area
+    keeper.x, keeper.y, keeper.vx, keeper.vy = 6.0, 34.0, 0.0, 0.0
+    mate.x, mate.y, mate.vx, mate.vy = 22.0, 34.0, 0.0, 0.0
+    forward.x, forward.y, forward.vx, forward.vy = 9.0, 30.0, 0.0, 0.0
+    e.ball = (22.6, 34.0, 0.0, 0.0, 0.0, 0.0)
+    e.restart = None
+    e.give(mate.id)
+    mate.heading = math.pi
+    see_all(e)
+    e.pass_to(mate, keeper.x, keeper.y, lofted=False, pace=10.0, receiver=keeper.id)
+    for _ in range(400):
+        e.step()
+        if e.possessor == keeper.id:
+            break
+    assert e.possessor == keeper.id and e.kicked is None  # a real back pass, controlled
     assert not e.hands(keeper, keeper.x, keeper.y)
-    assert decisions.pressure(e.scene_for(keeper)) > 0.8
+    assert decisions.pressure(e.scene_for(keeper)) > 0.0
+    e.touched(forward, keeper.x, keeper.y, controls=False)  # another player touches it
+    assert e.hands(keeper, keeper.x, keeper.y)
+
+
+def test_a_keeper_who_pushes_it_out_to_dribble_has_released_it():
+    """Law 12 protects a keeper with the ball in his hands; one who plays it at his feet may be
+    challenged and may not pick it up again until someone else touches it."""
+    e = Engine(7)
+    keeper = keeper_with_a_forward_at_him(e)
+    e.by_id["a10"].x = 30.0  # space to push into
+    see_all(e)
+    assert e.hands(keeper, keeper.x, keeper.y)
+    e.dribble_to = (20.0, 34.0)
+    assert e.touch_ahead(keeper)
+    assert e.dribbler == keeper.id and e.released_by == keeper.id
+    assert not e.hands(keeper, keeper.x, keeper.y)
 
 
 def scatter(e: Engine, p, n: int = 1500) -> tuple[float, float]:

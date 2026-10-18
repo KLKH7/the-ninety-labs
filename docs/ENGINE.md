@@ -173,3 +173,30 @@ patterns, and audited independently before it merges.
 
 Batch 1 (contact and perception, built on a branch) merges with step 3, when realistic
 decisions replace the scripted ones it removed.
+
+## Known issues, parked (October 2026)
+
+Engine realism is parked before the submission deadline: the engine produces realistic enough
+matches for the video (13 seeds, 90 minutes, with #89: 3.7 goals and 30 shots a match, 85% pass
+completion), and the stats engine moves the rubric more. These were measured and left open. Each
+needs its own change, with a test that fails first and an independent audit (lesson 4).
+
+- **Passes into space (D11, PR #46):** built, not merged. With it, goals rise by about 2 a match
+  over 13 seeds; about half came from the keeper gap fixed with this note (#89). Re-measure on top
+  of #89, and check the through-ball rate against a cited source (about 1% of passes, *verify*;
+  it was 2 to 5%).
+- **Keeper distribution** (seeds 7, 11, 1003): short passes mostly arrive, but long balls arrive
+  only 14 to 33% of the time (about 40% real, *verify*); failed keeper passes lead to 1 to 6
+  opponent shots and up to 2 goals a match (a keeper error leading to a goal is about once in 20
+  matches, *verify*); keepers release the ball within about 2 s.
+- **Keepers dribble out** 12 to 69 times a match. There is no ball-in-hands state: a keeper who
+  may handle it carries it at his feet. Model picking it up (hold, throw, roll, kick), and Law 12's
+  six-second limit.
+- **Lofted pass estimate** was found too optimistic (estimated 0.79, realised 0.62); #66's
+  cushioned touch may have changed this, not re-measured.
+- **Keeper rushing** (O1) switches at a fixed 18 m instead of where he can be when the shot comes;
+  **the back line** reacts to a ball played behind it about 1 s late (the team brain's next read).
+- **Kick error and pressure events** still count a forward near a keeper with the ball in his hands
+  (GROUNDING D2 says so).
+- **Slice replay:** `replays/slice-minute2-plant.json` was recorded on `main`'s match and fails on
+  this engine until re-recorded with Foundry access.
