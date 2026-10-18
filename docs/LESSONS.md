@@ -307,3 +307,16 @@ short and actionable. This file is public: no research sources, product names or
   measured, and do mutation testing in a different checkout, or never at the same time.
 - **Check:** before trusting a run, re-run one of its seeds on a clean checkout of the commit and
   compare; record the commit and worktree with the numbers.
+
+### 35. A calibrated input the mechanism ignores; a headline rate that hides the cause
+- **What happened:** the keeper's penalty read was calibrated to Bar-Eli et al. (the right way 113
+  times in 204), but the dive ignored it: after his reaction time he dived toward the ball's true
+  crossing. Making him commit to the read, as GROUNDING already said he did, raised saves from 31%
+  to 47% of penalties on target (published 14.7%). Only the source's own breakdown (Table 2: kick
+  third by what the keeper did) showed why: the keeper reached as far behind his dive as ahead of
+  it, his body blocked every height while he was in the air, and once he landed he caught chest-high
+  balls lying on the ground.
+- **Rule:** when a calibrated input barely moves the outcome, check that the mechanism reads it.
+  Compare a model with its source cell by cell, not by the headline rate, and fix each cell's cause.
+- **Check:** for any rate with a published breakdown, run a diagnostic that fills the same table
+  (here `kick third x keeper action`), from a clean worktree, before and after.
