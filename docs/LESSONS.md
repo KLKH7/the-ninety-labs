@@ -509,7 +509,35 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `uv run python -m ninety.sim.late_drop` prints the commit in `docs/eval/late-drop.md`;
   `tests/test_late_drop.py` fails if the seeds or band drift from `docs/EVALUATION.md`.
 
-### 71. A trigger guarded only by "not busy now" fires again when the busy state ends
+### 70. What is labelled as drawn must be the shape that is drawn
+- **What happened:** `body_parts` labels each part a capsule, `parts_box` bounds it as one and
+  the body-shape tests measure it as one, but `web/render` drew each part as a lathe that closed
+  to a point at both joints. Between the top of the trunk and the base of the neck nothing was
+  drawn, so a player cut by the bottom of the frame at that height was a floating head with a box
+  ending at his chin (seed 900002 at `443c4d5`). The render check caught it only because his foot
+  happened to fall outside that box, and every Python test passed because none of them looked at
+  the drawn pixels.
+- **Rule:** the renderer draws the shape the labels and tests describe, and a test checks the
+  drawn pixels, not the Python model of them. The same goes for any summary number: the player
+  height percentiles counted boxes cut by the image edge as players, so a 19 px "player" was 19 px
+  of one.
+- **Check:** `tests/test_render_body.py` slides the bottom image edge from a player's shins to his
+  chin and fails if his drawn box ever stops short of it; `tests/test_render_checks.py` checks
+  that the height percentiles skip boxes cut by an edge.
+
+### 71. Select hard cases by their cause, not by something that travels with it
+- **What happened:** `occlusion=crowded` chose the clip window with the most players within 4 m
+  of the ball. A crowd on the far side of the ball hides nothing, so crowded clips reached only
+  4.0% mostly hidden balls in render run v1, and no number of them could lift the training set
+  to the 5% floor. The proposed fix was to render more of them.
+- **Rule:** a knob that targets a hard case selects on the geometry that makes it hard (here, a
+  player on the line from the camera to the ball). Before rendering a round, measure the knob's
+  own rate on two or three clips: a mix can never beat its best part.
+- **Check:** `tests/test_render_scene.py::test_the_crowded_window_is_the_one_where_the_ball_is_hidden`
+  builds two windows where counting players near the ball picks the wrong one. Before a batch,
+  `uv run ninety-data-stats <2-3 crowded clips> --stride 5 --input 640x640` shows the share.
+
+### 75. A trigger guarded only by "not busy now" fires again when the busy state ends
 - **What happened:** a keeper's dive was allowed whenever he was not diving and not on the
   ground. A slow shot was still on its way after he had dived, landed and got up, so he dived a
   second time at the same ball. Every condition checked the present; none remembered that the
@@ -520,7 +548,7 @@ short and actionable. This file is public: no research sources, product names or
   own busy state (dive, land, get up, ball still coming) and require no repeat; and one where a
   new cause (a deflection) is allowed to trigger it again.
 
-### 72. Keep every dimension a source measured
+### 76. Keep every dimension a source measured
 - **What happened:** the kick-error source measured a tilted ellipse of where shots cross the goal
   line (a long and a short axis). The engine kept one number, their geometric mean (3°), as the
   sideways error, and gave the up-and-down error a fixed 2° that did not grow with speed, pressure
@@ -531,7 +559,7 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** for each sourced constant, ask "what did the source actually measure, in how many
   dimensions?" and test the derived values against the source's own figures.
 
-### 73. A committed report must come from the committed code
+### 77. A committed report must come from the committed code
 - **What happened:** two commits regenerated `docs/eval/funnel.md` (1.8 goals a team), yet the
   code of the later one, re-run on a clean checkout of that commit, produced 2.5; the realism test went red with nobody noticing. Twelve
   matches also hide a change of 0.3 goals a team in noise (standard error about 0.27).
@@ -539,7 +567,7 @@ short and actionable. This file is public: no research sources, product names or
   and state how big a difference the sample can resolve.
 - **Check:** re-run the report on a clean checkout of the commit and compare before merging.
 
-### 74. A test's sample must survive a change that does not touch what it tests
+### 78. A test's sample must survive a change that does not touch what it tests
 - **What happened:** merging the measured kick error, which changes only where a struck ball
   goes, broke two tests that check something else. A styles test read the defensive line over
   three minutes of one seed: the gap between a high press and a low block fell from 7.8 m to
