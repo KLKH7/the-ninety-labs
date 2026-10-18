@@ -41,7 +41,7 @@ render-job = [
     "azure-storage-queue>=12.18.0",
 ]
 vision = [
-    "rfdetr==1.11.2",
+    "rfdetr[train]==1.11.2",
 ]
 
 [build-system]

@@ -174,6 +174,26 @@ short and actionable. This file is public: no research sources, product names or
   without `window`, and fail each planted defect from both reviews. 26 mutations of the rule:
   all killed except one equivalent mutant (a ball at rest within reach already meets C7).
 
+### 73. Test each half of a guard with a case only that half catches
+- **What happened:** the export's leak guard refuses a clip if its seed is not a training seed *or*
+  its `clip.json` does not say `train`. The test's bad clips were wrong both ways at once, so
+  either half could be deleted and the test still passed (#76 review).
+- **Rule:** a guard made of several conditions gets one case per condition that is wrong in that
+  way only.
+- **Check:** delete each condition in turn; a test must fail each time (lesson 21's mutation test).
+- **Also:** a guard's fallback is part of the guard. `train-on-gpu.sh` fell back to our real
+  storage account's name when none was set, putting it in a public repo. A missing setting stops
+  the script with what to set; it never falls back to a real resource name.
+
+### 74. A before-and-after changes one thing
+- **What happened:** the COCO baseline ran at rfdetr's default input size, 512, and the fine-tuned
+  model at 640, so any gain mixed the training with the input size (#76 review).
+- **Rule:** a comparison changes only the thing it measures; everything else (input size, frames,
+  scorer, threshold) is the same on both sides, and the default that would differ is set
+  explicitly.
+- **Check:** the two `detections.jsonl` runs are made by one command with only `--checkpoint` and
+  `--weights` different; `tests/test_vision_finetune.py` pins the baseline to finetune.json's size.
+
 ## Working in the repo
 
 ### 12. "No checks yet" is not "checks passed"
