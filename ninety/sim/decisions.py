@@ -174,6 +174,7 @@ class Scene:
     absorb: dict[str, float]  # team-mates' first touch (A4), by id
     passer: Profile  # who he is, for his own kick error (A3)
     throw: bool = False  # Law 15: a throw-in, so every pass is thrown (lofted) and nothing else
+    kickoff: bool = False  # the kick-off is one pass back, then open play
     # The team's style (T4): how much ground gained from here is worth, and how much losing the
     # ball costs, against the defaults. Both 1 for a mid style.
     progress_weight: float = 1.0
@@ -823,6 +824,8 @@ def shot_chance(scene: Scene) -> float:
 
 def options(scene: Scene) -> list[Option]:
     out = [o for o in (pass_option(scene, mate) for mate in scene.mates) if o]
+    if scene.kickoff:  # one pass back: nothing forward, and not a shot or a dribble
+        return [o for o in out if o.target and (o.target[0] - scene.x) * attack(scene.goal_x) < 0]
     if scene.throw:  # Law 15: a throw-in is thrown to someone; it is never a shot or a dribble
         return out
     p = pressure(scene)
