@@ -342,13 +342,15 @@ class Profile:
 
     # ---- A3: execution -------------------------------------------------------
     def kick_error(self, skill: str, speed: float, pressure: float, capacity: float,
-                   weak_foot: bool, turn_deg: float = 0.0) -> tuple[float, float, float]:
+                   weak_foot: bool, turn_deg: float = 0.0, level: float | None = None
+                   ) -> tuple[float, float, float]:
         """Standard deviations of a kick's direction (degrees), speed (share) and launch angle
         (degrees). Average skill on the preferred foot at penalty speed, struck the way he faces,
         gives the measured spread, about 3.6 degrees across and 2.3 of launch angle; both grow alike
         with speed, pressure (less for the composed), fatigue and the angle across his body, and on
-        the weaker foot follow its own measured ellipse (at an average weak-foot rating)."""
-        scale = (1.6 - 1.2 * self[skill]) * (speed / KICK_REF_SPEED)
+        the weaker foot follow its own measured ellipse (at an average weak-foot rating). `level`,
+        if given, stands in for his own rating of `skill` (the typical striker's, for comparison)."""
+        scale = (1.6 - 1.2 * (self[skill] if level is None else level)) * (speed / KICK_REF_SPEED)
         scale *= 1 + 0.5 * pressure * (1 - self["composure"])
         scale *= 1 + FATIGUE_ERROR * (1 - capacity)
         scale *= 1 + TURN_ERROR * min(abs(turn_deg), 180.0) / 180.0
@@ -359,20 +361,21 @@ class Profile:
         return across, SPEED_ERROR * (1 + pressure * (1 - self["composure"])), up
 
     def strike_error(self, skill: str, speed: float, nearest_opponent_m: float, capacity: float,
-                     turn_deg: float, header: bool = False) -> tuple[float, float, float, float]:
+                     turn_deg: float, header: bool = False, level: float | None = None
+                     ) -> tuple[float, float, float, float]:
         """The kick error of a strike in the situation it is struck in, one definition for the kick
         (engine.execute) and the striker's own estimate of it (decisions.pass_confidence):
         (direction SD in degrees, speed SD as a share, launch-angle SD in degrees, the share of the
         intended speed he gets off that foot). Pressure from the nearest opponent; the foot from
         the kick's direction against the way he faces (`turn_deg`). A `header` (P18) is met with the
         head, which turns to the ball, so no foot and no angle across the body; its direction and
-        height are HEADER_ERROR times less precise."""
+        height are HEADER_ERROR times less precise. `level` as in kick_error."""
         pressure = min(1.0, max(0.0, (PRESSURE_M - nearest_opponent_m) / PRESSURE_M))
         if header:
-            dir_sd, speed_sd, loft_sd = self.kick_error(skill, speed, pressure, capacity, False)
+            dir_sd, speed_sd, loft_sd = self.kick_error(skill, speed, pressure, capacity, False, level=level)
             return dir_sd * HEADER_ERROR, speed_sd, loft_sd * HEADER_ERROR, 1.0
         weak = (turn_deg > WEAK_SIDE_DEG) if self.foot == "right" else (turn_deg < -WEAK_SIDE_DEG)
-        dir_sd, speed_sd, loft_sd = self.kick_error(skill, speed, pressure, capacity, weak, turn_deg)
+        dir_sd, speed_sd, loft_sd = self.kick_error(skill, speed, pressure, capacity, weak, turn_deg, level)
         return dir_sd, speed_sd, loft_sd, self.weak_foot_speed() if weak else 1.0
 
     def weak_foot_speed(self) -> float:

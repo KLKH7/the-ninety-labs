@@ -991,15 +991,77 @@ def aimed_pass(scene: Scene, mid: str, mx: float, my: float, age: float, tx: flo
     return best
 
 
+TYPICAL_LEVEL = 0.5  # A3: the average rating, at which the kick error is the measured spread
+_AIM_NODES = 8  # how finely the aims (offball.SHOT_AIM_OFF_M, SHOT_AIM_Z_M) are averaged over
+
+
+def on_goal_share(dir_sd_deg: float, loft_sd_deg: float, distance: float) -> float:
+    """The share of shots that would cross the goal line inside the mouth, over the aims shots are
+    struck at (engine.shoot: either side of the centre, SHOT_AIM_OFF_M across and SHOT_AIM_Z_M up),
+    with a normal direction error and launch-angle error of these SDs, carried `distance` metres in a
+    straight line (*design*: drag and gravity bend the flight; the ratio shot_strike_factor takes of
+    two such shares leaves out most of what they change)."""
+    half = GOAL_HALF_WIDTH - ball.RADIUS  # the whole ball between the posts and under the bar
+    top = 2.44 - 2 * ball.RADIUS
+    sy = max(distance * fmath.sin(math.radians(dir_sd_deg)) / fmath.cos(math.radians(dir_sd_deg)), 1e-6)
+    sz = max(distance * fmath.sin(math.radians(loft_sd_deg)) / fmath.cos(math.radians(loft_sd_deg)), 1e-6)
+
+    def inside(lo: float, hi: float, mu: float, sd: float) -> float:  # P(lo < mu + error < hi)
+        r = sd * math.sqrt(2)
+        return 0.5 * (fmath.erfc((lo - mu) / r) - fmath.erfc((hi - mu) / r))
+
+    (a0, a1), (z0, z1) = offball.SHOT_AIM_OFF_M, offball.SHOT_AIM_Z_M
+    across = sum(inside(-half, half, a0 + (a1 - a0) * (k + 0.5) / _AIM_NODES, sy) for k in range(_AIM_NODES))
+    up = sum(inside(0.0, top, z0 + (z1 - z0) * (k + 0.5) / _AIM_NODES, sz) for k in range(_AIM_NODES))
+    return across / _AIM_NODES * up / _AIM_NODES
+
+
+def shot_strike_factor(scene: Scene, turn: float) -> float:
+    """D3 and A3 (lesson 18, lesson 23): the published rates are for the typical strike, so his shot
+    is scaled by how often his own strike, as the engine would strike it (Profile.strike_error: his
+    finishing, the foot and the angle across his body from `turn`), gets on goal against how often a
+    typical one does: an average finisher facing the goal, on his stronger foot, under the same
+    pressure and fatigue (those two cancel, since the typical shot's own are not known). Averaged
+    over the speeds shots are struck at (SHOT_SPEEDS_KMH, uniform: Simpson's weights). 1 for the
+    typical striker; a header is left at 1 (its own speed is judged in shot_estimate)."""
+    if scene.header:
+        return 1.0
+    d = math.hypot(scene.goal_x - scene.x, PITCH_Y / 2 - scene.y)
+    cx, cy = scene.x - scene.ball_offset[0], scene.y - scene.ball_offset[1]
+    nearest = min((math.hypot(o[0] - cx, o[1] - cy) for o in scene.moving), default=math.inf)
+    lo, hi = offball.SHOT_SPEEDS_KMH
+    mine = typical = 0.0
+    for w, kmh in ((1 / 6, lo), (4 / 6, (lo + hi) / 2), (1 / 6, hi)):
+        speed = kmh / 3.6
+        dir_sd, _, loft_sd, _ = scene.passer.strike_error("finishing", speed, nearest, scene.fresh, turn)
+        t_dir, _, t_loft, _ = scene.passer.strike_error("finishing", speed, nearest, scene.fresh, 0.0,
+                                                        level=TYPICAL_LEVEL)
+        mine += w * on_goal_share(dir_sd, loft_sd, d)
+        typical += w * on_goal_share(t_dir, t_loft, d)
+    return mine / typical if typical > 0 else 1.0
+
+
 def shot_chance(scene: Scene) -> float:
     """His estimate that a shot from here goes in. With measured tables (D7): how often shots from
     here went in, scaled by how this situation compares with an open one (blockers in the cone, the
-    keeper's position), so shooting and moving the ball are judged on the same scale."""
+    keeper's position), so shooting and moving the ball are judged on the same scale. If he must
+    first turn to face the goal (P16, as the pass estimate does), everyone moves on, as he believes
+    them to be going, for that long before the shot is judged, and he strikes at the angle the turn
+    leaves; his own strike against the typical one (shot_strike_factor)."""
     speeds = offball.SHOT_SPEEDS_KMH
     if scene.header:  # P18: the speed his header at goal leaves at (engine.shoot)
         v = 3.6 * min(header_cap(scene, scene.goal_x, PITCH_Y / 2), offball.SHOT_SPEEDS_KMH[1] / 3.6)
         speeds = (v, v)
-    q = shot_estimate(scene.x, scene.y, scene.goal_x, scene.opponents, scene.keeper, speeds)
+        turn, wait = 0.0, 0.0
+    else:
+        turn, wait = strike_turn(scene.heading, scene.goal_x - scene.x, PITCH_Y / 2 - scene.y)
+    opponents, keeper = scene.opponents, scene.keeper
+    if wait > 0 and scene.moving:
+        opponents = [(ox + ovx * wait, oy + ovy * wait) for ox, oy, ovx, ovy, _ in scene.moving]
+        keeper = next(((ox + ovx * wait, oy + ovy * wait) for ox, oy, ovx, ovy, k in scene.moving if k),
+                      keeper)
+    q = shot_estimate(scene.x, scene.y, scene.goal_x, opponents, keeper, speeds)
+    q = min(1.0, q * shot_strike_factor(scene, turn))
     if POSSESSION is None:
         return q
     typical = typical_shot(scene.x, scene.y, scene.goal_x)  # what the measured rate averages over

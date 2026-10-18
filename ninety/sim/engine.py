@@ -92,7 +92,7 @@ COMMIT_P = 0.6  # a defender commits only when he expects to win the race this o
 # What a defender expects a penalty to cost: the chance it is scored. Premier League seasons run from
 # 74.8% (2022-23) to 89.6% (2023-24) (Opta via The Analyst); 0.8 is design within that range.
 PENALTY_GOAL_P = 0.8
-SHOT_AIM_OFF_M = (0.5, 3.2)  # design: how far from the centre of the goal a shot is aimed
+SHOT_AIM_OFF_M = offball.SHOT_AIM_OFF_M  # one definition, which the shooter's estimate reads too
 # A2 at a penalty: the keeper must commit before the strike, against a kicker with time to disguise
 # it. On kicks to a side, keepers went the right way 113 times in 204 (Bar-Eli et al. 2007, Table 1,
 # 286 top-flight penalties): barely better than a guess. His read's spread is whatever gives that

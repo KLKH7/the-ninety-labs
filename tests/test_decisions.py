@@ -21,6 +21,10 @@ def hand_written_values(monkeypatch):
 
 
 PASSER = Profile.generate("CM", random.Random(7))  # a real passer: every estimate carries his kick error
+# The typical striker the published shot rates describe (D3, A3): an average finisher. Facing the goal
+# on his stronger foot, his own strike scales a shot by exactly 1 (shot_strike_factor).
+TYPICAL = copy.deepcopy(PASSER)
+TYPICAL.attributes["finishing"] = D.TYPICAL_LEVEL
 
 
 def scene(**kw) -> D.Scene:
@@ -338,8 +342,8 @@ def test_the_first_touch_is_judged_on_the_speed_a_lofted_ball_comes_down_at():
 
 def test_a_shot_into_a_crowd_risks_losing_the_ball_where_he_stands():
     shoot = lambda s: next(o for o in D.options(s) if o.kind == "shoot")  # noqa: E731
-    clear = scene(x=75.0)
-    crowded = scene(x=75.0, opponents=[(80.0, 34.0), (85.0, 33.0)])
+    clear = scene(x=75.0, passer=TYPICAL)
+    crowded = scene(x=75.0, opponents=[(80.0, 34.0), (85.0, 33.0)], passer=TYPICAL)
     q_clear = D.shot_estimate(75.0, 34.0, 105.0, [], None)
     q_crowd = D.shot_estimate(75.0, 34.0, 105.0, crowded.opponents, None)
     assert math.isclose(shoot(clear).value, q_clear - (1 - q_clear) * D.loss_cost(99.5, 34.0, 105.0))
@@ -392,8 +396,8 @@ def test_a_missed_shot_is_never_a_reward(monkeypatch):
 
 def test_the_shot_chance_is_the_measured_rate_scaled_by_the_situation(monkeypatch):
     monkeypatch.setattr(D, "POSSESSION", ramp(0.3, 0.0, finishing=0.2))
-    assert math.isclose(D.shot_chance(scene(x=90.0)), 0.2 * D.CLEAR_SHOT)  # the measured average, unscreened
-    blocked = scene(x=90.0, opponents=[(97.0, 34.0)])
+    assert math.isclose(D.shot_chance(scene(x=90.0, passer=TYPICAL)), 0.2 * D.CLEAR_SHOT)  # unscreened
+    blocked = scene(x=90.0, opponents=[(97.0, 34.0)], passer=TYPICAL)
     assert math.isclose(D.shot_chance(blocked), 0.2 * D.SCREENED_SHOT)
 
 
@@ -830,3 +834,34 @@ def test_they_send_one_man_after_the_ball_so_a_second_who_is_later_adds_no_risk(
     near = conf([(70.0, 38.0)])
     assert near < conf([])  # he is a real risk
     assert math.isclose(conf([(70.0, 38.0), (72.0, 39.0)]), near, abs_tol=0.02)  # the later one never goes
+
+
+def test_the_typical_striker_keeps_the_published_rate_and_his_own_strike_moves_it():
+    """D3, A3 (lesson 18): facing the goal on his stronger foot, an average finisher's shot is the
+    published rate (factor exactly 1); a poorer finisher's, or one struck across his body after a
+    turn, gets on goal less often and is worth less; a better finisher's more. Mutation caught: the
+    strike factor left out."""
+    def chance(finishing: float, heading: float = 0.0) -> float:
+        p = copy.deepcopy(PASSER)
+        p.attributes["finishing"] = finishing
+        return D.shot_chance(scene(x=80.0, passer=p, heading=heading))
+    typical = D.shot_estimate(80.0, 34.0, 105.0, [], None)
+    assert math.isclose(chance(D.TYPICAL_LEVEL), typical, rel_tol=1e-12)
+    assert chance(0.2) < typical < chance(0.8)
+    assert chance(D.TYPICAL_LEVEL, math.pi / 2) < typical  # turned 90 degrees away: struck across his body
+
+
+def test_a_defender_running_into_the_lane_while_he_turns_screens_the_shot():
+    """P16 in the shot (as in the pass estimate): if he must turn to face the goal first, everyone
+    moves on, as he sees them going, for that long. A defender just wide of the lane running across it
+    at 6 m/s is in it by the time a shooter facing his own goal can strike. Mutation caught: the
+    opponents left where they are."""
+    _, wait = D.strike_turn(math.pi, 25.0, 0.0)  # facing his own goal: 120 degrees to turn
+    defender = (95.0, 31.0)
+    moved = (defender[0], defender[1] + 6.0 * wait)
+    assert not D.in_cone(80.0, 34.0, 105.0, *defender) and D.in_cone(80.0, 34.0, 105.0, *moved)
+    running = [(defender[0], defender[1], 0.0, 6.0, False)]  # across the lane, at 6 m/s
+    turned = scene(x=80.0, passer=TYPICAL, heading=math.pi, opponents=[defender], moving=running)
+    still = scene(x=80.0, passer=TYPICAL, heading=math.pi, opponents=[defender],
+                  moving=[(defender[0], defender[1], 0.0, 0.0, False)])
+    assert D.shot_chance(turned) < D.shot_chance(still)

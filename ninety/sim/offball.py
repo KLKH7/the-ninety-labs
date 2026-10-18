@@ -42,6 +42,7 @@ KEEPER_DIVE_EXTRA_M = KEEPER_ARM_M - KEEPER_STAND_REACH_M  # added as the dive s
 # 245 ms after it, once they see where the ball is going (Higueras-Herbada et al. 2020).
 UP_AFTER_CONTACT_S = 0.245
 SHOT_AIM_Z_M = (0.1, 2.0)  # design: the heights shots are aimed at (engine.shoot)
+SHOT_AIM_OFF_M = (0.5, 3.2)  # design: how far from the centre of the goal a shot is aimed (engine.shoot)
 # P15: a dive launches the body sideways about 1.4 to 1.5 m (centre of mass, peak 3.6 to 4.0 m/s;
 # Monteiro et al. 2022, Sci. Rep.), pushed off over about 0.48 s of ground contact (Ibrahim et al.
 # 2019, J. Sports Sci.): so it speeds up at about 7.9 m/s², within what legs give (P2), then carries
