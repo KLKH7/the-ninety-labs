@@ -194,7 +194,7 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** the two `detections.jsonl` runs are made by one command with only `--checkpoint` and
   `--weights` different; `tests/test_vision_finetune.py` pins the baseline to finetune.json's size.
 
-### 80. A structural change chosen from a report, justified by half the engine, is tailoring; and a lesson only on a side branch protects nothing
+### 82. A structural change chosen from a report, justified by half the engine, is tailoring; and a lesson only on a side branch protects nothing
 - **What happened:** a full-match pass count was over a test's limit. Calibration showed forward
   passes rated too low. The passer's estimate raced every opponent while the engine sends one
   chaser, so the estimate was changed to race only the soonest. That made the calibration look
