@@ -508,11 +508,25 @@ def test_the_keeper_term_is_how_much_goal_he_leaves_open():
     assert D.shot_estimate(104, 34, 105, [], (95.0, 60.0)) <= 1.0  # a probability, even into an empty net
 
 
-def test_the_keeper_stays_home_against_far_shots_and_comes_out_against_near_ones():
+def test_the_keeper_sets_himself_deeper_the_further_the_ball_and_smoothly():
+    # O1 (design): near his line against a near shot, where his reaction time is shortest, further
+    # out the further the ball, up to his sweeping spot at the edge of shooting range; coming out to
+    # an attacker through on goal is the rush, not his set position. The old choice (the depth that
+    # left the least goal open) jumped between the ends of the range: 6 m out at 8 m, 1 m at 12 m.
     depth = lambda d: 105 - offball.keeper_spot(105 - d, 34, 105)[0]  # noqa: E731
-    assert depth(20) < depth(6)  # his dive has time against a far shot; a near one he must smother
+    depths = [depth(d / 2) for d in range(8, 81)]  # 4 m to 40 m, every half metre
+    assert all(b >= a for a, b in zip(depths, depths[1:], strict=False))  # never nearer as the ball goes further
+    assert max(b - a for a, b in zip(depths, depths[1:], strict=False)) < 0.1  # no jump
     assert offball.KEEPER_DEPTH[0] <= depth(16) <= offball.KEEPER_DEPTH[1]
     assert depth(50) == offball.KEEPER_DEPTH[1]  # out of shooting range: he sweeps
+
+
+def test_the_keeper_never_sets_himself_outside_his_posts():
+    # On a tight angle the bisector leaves the goal mouth a few metres out (the old spot from 14 m
+    # wide and 8 m out was 10.7 m off the goal's centre); he stands within the posts.
+    for d in (4, 8, 12, 20, 30):
+        for y in (0.5, 10.0, 20.0, 28.0, 40.0, 58.0):
+            assert abs(offball.keeper_spot(105 - d, y, 105)[1] - 34) <= 3.66 + 1e-9, (d, y)
 
 
 def test_the_keeper_stands_on_the_bisector_of_the_posts_not_the_line_to_the_goal_centre():
@@ -537,7 +551,7 @@ def test_a_keeper_behind_the_shooter_covers_nothing():
 
 def test_with_the_ball_almost_on_his_line_the_keeper_stays_on_it_between_the_posts():
     x, y = offball.keeper_spot(104.5, 0.5, 105)
-    assert (x, y) == (105, 34 - 3.66)  # at the near post
+    assert x == pytest.approx(105, abs=0.1) and y == pytest.approx(34 - 3.66)  # at the near post
 
 
 def test_out_of_shooting_range_the_keeper_sweeps_from_his_furthest_spot():
