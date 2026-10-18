@@ -3,6 +3,7 @@
 Output directory layout:
 
     clip.json       seed, split, window, every render parameter, player looks, tool versions
+    meta.json       the data contract's clip metadata: fps, seed, window, roster (id, team, role), score
     events.jsonl    ground-truth match events inside the clip window (match_event schema)
     frames.jsonl    one row per frame (frame schema): positions, camera, boxes, visibility, keypoints
     images/NNNNN.jpg
@@ -355,9 +356,33 @@ def render_clip(
         4,
     )
     (out / "clip.json").write_text(json.dumps(clip, indent=2))
+    write_meta(out)
     if mp4:
         _encode_mp4(out, p.fps)
     return clip
+
+
+def write_meta(out: Path) -> dict:
+    """Write the data contract's meta.json (docs/DATA_CONTRACT.md) from the clip's own files, so
+    `ninety-validate` can check it. Also backfills clips rendered before the renderer wrote it."""
+    clip = json.loads((out / "clip.json").read_text())
+    with open(out / "frames.jsonl") as f:
+        frames = [json.loads(line) for line in f if line.strip()]
+    with open(out / "events.jsonl") as f:
+        events = [json.loads(line) for line in f if line.strip()]
+    meta = {
+        "fps": clip["fps"],
+        "seed": clip["seed"],
+        "clip_id": clip["clip_id"],
+        # A window cut from a longer match: events before or after it are not in the clip.
+        "window": {"first_frame": frames[0]["frame"], "last_frame": frames[-1]["frame"]},
+        "roster": [{k: lk[k] for k in ("id", "team", "role")} for lk in clip["looks"]],
+        # The goals in this clip's events, the same events the validator adds up (C9).
+        "score": {team: sum(1 for e in events if e["type"] == "goal" and e["team"] == team)
+                  for team in ("home", "away")},
+    }
+    (out / "meta.json").write_text(json.dumps(meta, indent=2))
+    return meta
 
 
 @contextmanager
