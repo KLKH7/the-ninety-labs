@@ -1430,7 +1430,8 @@ class Engine:
     def keeper_dive(self, p: Player) -> bool:
         """P15: once the keeper has reacted to a shot, he dives toward where it will cross his line:
         his body travels sideways (up to KEEPER_DIVE_TRAVEL_M, only as far as he needs beyond his
-        standing reach) with the full dive's push, and he is down for a moment afterwards. One dive
+        standing reach) with the full dive's push, launched no sooner than it needs to be to get
+        there as the ball does, and he is down for a moment afterwards. One dive
         per touch of the ball: once he is up again he does not dive a second time at the same shot;
         only a new touch (a deflection restarts it) can set off another. True while the dive moves
         him."""
@@ -1447,10 +1448,12 @@ class Engine:
                 # began to stretch when he reacted, whenever the dive itself starts
                 stretched = self.t - self.stretch_from(p) + when
                 need = abs(cross - p.y) - offball.arm_reach_m(stretched)
-                if need > 0:
-                    travel = math.copysign(min(need, KEEPER_DIVE_TRAVEL_M), cross - p.y)
-                    self.dive = (p.id, self.t, p.y, travel, self.kicked_at + self.reaction(p),
-                                 math.copysign(1.0, travel) * p.vy,  # his sideways run toward it
+                travel = math.copysign(min(max(need, 0.0), KEEPER_DIVE_TRAVEL_M), cross - p.y)
+                v0 = math.copysign(1.0, travel) * p.vy  # his sideways run toward it
+                # Not before he must (design): a dive launched sooner lands before the ball arrives
+                # and leaves him on the ground as it does. Until then he stays on his feet.
+                if need > 0 and when < offball.dive_time_to(abs(travel), v0) + DT:
+                    self.dive = (p.id, self.t, p.y, travel, self.kicked_at + self.reaction(p), v0,
                                  arrival[2])  # the height it crosses at, which his body goes toward
                     self.dived_at[p.id] = self.kicked_at
         if not self.dive or self.dive[0] != p.id:

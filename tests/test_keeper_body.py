@@ -128,3 +128,21 @@ def test_the_engines_keeper_raises_his_hands_only_after_the_strike_shows_the_hei
     e.kicked_at = e.free_since = e.t  # just struck
     assert e.reach(k, 104.0, 34.0)[2] < 2.03  # a high kick's height: not yet
     assert e.reach(k, 104.0, 34.0, at=e.t + 2.0)[2] == 2.8
+
+
+def test_against_a_far_shot_he_waits_to_dive_so_he_is_not_down_when_it_arrives():
+    e = Engine(1)
+    k = e.keeper("away")
+    k.x, k.y, k.vx, k.vy = 104.0, 34.0, 0.0, 0.0
+    e.possessor = None
+    e.kicked = {"type": "shot", "team": "home", "x": 80.0, "y": 34.0}
+    e.ball = (80.0, 34.0, 0.3, 20.0, 2.5, 0.0)  # 24 m out: over a second to reach him, wide of him
+    e.kicked_at = e.free_since = e.t
+    e.t += e.reaction(k)
+    assert not e.keeper_dive(k)  # reacted, but a dive now would land well before the ball
+    while not e.keeper_dive(k):
+        e.ball = engine.ball.step(e.ball, engine.DT)
+        e.t += engine.DT
+        assert e.t < 3.0
+    when = e.ball_at_x(k.x)[0]
+    assert when <= offball.dive_time_to(abs(e.dive[3]), e.dive[5]) + engine.DT  # lands as it arrives

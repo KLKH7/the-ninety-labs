@@ -761,9 +761,8 @@ def test_the_keeper_dives_toward_the_shot_after_reacting_then_is_down():
     e.ball = (90.0, 34.0, 0.5, 25.0, 6.0, 0.0)  # heading for about 3.4 m to his left
     e.kicked_at = e.free_since = e.t
     assert not e.keeper_dive(k)  # he has not reacted yet
-    e.t += e.reaction(k)
     y0 = k.y
-    assert e.keeper_dive(k)
+    assert _until_he_dives(e, k) and e.t >= e.kicked_at + e.reaction(k)
     for _ in range(int(DIVE_TIME_S * 25) + 2):
         if not e.keeper_dive(k):
             break
@@ -772,6 +771,17 @@ def test_the_keeper_dives_toward_the_shot_after_reacting_then_is_down():
     # launched toward it, no further than a dive goes (and what is left of the frame he lands in)
     assert 1.0 < landed_at - y0 <= KEEPER_DIVE_TRAVEL_M + DIVE_PEAK_MPS / 25 + 1e-9
     assert e.dive is None and e.off_balance[k.id] > e.t - 1 / 25  # and down on the ground after it
+
+
+def _until_he_dives(e, k, most_s=3.0):
+    """Let the shot fly, frame by frame, until the keeper launches his dive (P15: once he has
+    reacted, no sooner than he must to get there as the ball does). True if he does."""
+    for _ in range(int(most_s * 25)):
+        if e.keeper_dive(k):
+            return True
+        e.ball = ball.step(e.ball, 1 / 25)
+        e.t += 1 / 25
+    return False
 
 
 def _shot_at_keeper(e, ball):
@@ -790,9 +800,9 @@ def test_the_dive_runs_in_the_match_loop_and_waits_for_the_keepers_reaction():
     y0 = k.y
     e.move_players()
     assert k.y == y0 or abs(k.y - y0) < 0.05  # nothing yet: he has not reacted
-    e.t += e.reaction(k)
-    for _ in range(8):
+    for _ in range(int(e.reaction(k) * 25) + 8):  # the shot flies on
         e.move_players()
+        e.ball = ball.step(e.ball, 1 / 25)
         e.t += 1 / 25
     assert k.y - y0 > 0.2  # launched by the match loop itself
 
@@ -811,8 +821,7 @@ def test_the_keeper_dives_once_per_touch_and_a_deflection_lets_him_dive_again():
     from ninety.sim.offball import DIVE_TIME_S, KEEPER_DOWN_S
     e = Engine(1)
     k = _shot_at_keeper(e, (80.0, 34.0, 0.2, 14.0, 1.5, 0.0))  # far out and slow, wide to his left
-    e.t += e.reaction(k)
-    assert e.keeper_dive(k)
+    assert _until_he_dives(e, k)
     for _ in range(int((DIVE_TIME_S + KEEPER_DOWN_S) * 25) + 3):  # the dive, then down, then up
         e.keeper_dive(k)
         e.t += 1 / 25
@@ -820,8 +829,8 @@ def test_the_keeper_dives_once_per_touch_and_a_deflection_lets_him_dive_again():
     k.y = 34.0  # back where he started: the same shot is as far from him as when he first dived
     assert not e.keeper_dive(k) and e.dive is None  # no second dive at the same touch
     e.kicked_at = e.t  # deflected on its way
-    e.t += e.reaction(k)
-    assert e.keeper_dive(k)  # a new touch: he may dive at it
+    e.ball = (e.ball[0], k.y, e.ball[2], e.ball[3], 6.0, e.ball[5])  # and sent wide of him again
+    assert _until_he_dives(e, k)  # a new touch: he may dive at it
 
 
 def test_no_dive_at_a_ball_going_over_the_bar():
@@ -879,8 +888,7 @@ def test_the_keeper_dives_at_a_dipping_shot_that_comes_in_under_the_bar():
     k = _shot_at_keeper(e, (80.0, 34.0, 0.3, 19.0, 3.0, 4.5))  # rises, then drops under the bar
     when, _, z = e.ball_at_x(k.x)
     assert z < 2.44  # it does come in under the bar, though a straight line says over
-    e.t += e.reaction(k)
-    assert e.keeper_dive(k)
+    assert _until_he_dives(e, k)
 
 
 def test_ball_at_x_interpolates_the_crossing_between_frames():
@@ -916,8 +924,7 @@ def test_before_he_reacts_the_keeper_has_only_his_standing_reach_then_it_grows()
 def test_a_deflection_does_not_unstretch_a_dive_already_under_way():
     e = Engine(1)
     k = _shot_at_keeper(e, (90.0, 34.0, 0.5, 25.0, 6.0, 0.0))
-    e.t += e.reaction(k)
-    assert e.keeper_dive(k)
+    assert _until_he_dives(e, k)
     e.t += 0.3
     stretched = e.reach(k, 104.0, 34.0)[0]
     e.kicked_at = e.t  # deflected mid-dive
@@ -948,8 +955,7 @@ def test_the_keeper_follows_a_slow_shot_however_long_it_takes_to_arrive():
 def test_a_keeper_down_after_a_dive_keeps_his_stretch_until_he_is_up():
     e = Engine(1)
     k = _shot_at_keeper(e, (90.0, 34.0, 0.5, 25.0, 6.0, 0.0))
-    e.t += e.reaction(k)
-    assert e.keeper_dive(k)
+    assert _until_he_dives(e, k)
     for _ in range(int(offball.DIVE_TIME_S * 25) + 2):
         e.keeper_dive(k)
         e.t += 1 / 25
