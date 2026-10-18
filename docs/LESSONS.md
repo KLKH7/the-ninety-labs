@@ -533,17 +533,18 @@ short and actionable. This file is public: no research sources, product names or
 ### 53. Seven fixes to how options are valued, when the cause was where team-mates stood
 - **What happened:** possession seldom reached the final third, and seven attempts changed how a
   carrier values his options (holding, lookahead, measured tables and others). None worked. The
-  option values were all about the same because the options themselves were all about the same:
-  the in-possession shape set every role's height behind the ball, so whoever had it found every
-  non-forward level with or behind him (all seven within 5 m of a centre-back on the ball) and the
-  front three 27 m ahead, with nobody between the lines. Set in lines from the team's own back
-  line instead, own-third possession fell from 56 to 39 percent. Separately, the shot estimate
-  judged defenders where they stood, though a shooter facing away turns before he strikes (P16),
-  which the pass estimate already counted: shots after a turn were blocked 24 percent of the time
-  against an estimated 9.
+  option values were all about the same because the options themselves were all about the same: the
+  in-possession shape set every role's height behind the ball, so whoever had it found every
+  non-forward level with or behind him (all seven within 5 m of a centre-back on the ball) and the front
+  three 27 m ahead, with nobody between the lines. Set in lines from the team's own back line
+  instead, own-third possession fell from 56 to 39 percent and final-third entries rose from 46 to
+  66 a match, though shots rose too (26 to 35), so the work is not finished. Separately, the shot
+  estimate judged defenders where they stood, though a shooter facing away turns before he strikes
+  (P16), which the pass estimate already counted: shots from outside the box after a turn were
+  blocked 21 percent of the time against an estimated 8 (docs/eval/play.md).
 - **Rule:** before changing how a decision weighs its options, measure what options it is offered
-  (who is where, relative to the man on the ball) and whether each estimate matches what the
-  engine then does. A flat set of values can be a flat set of choices.
+  (who is where, relative to the man on the ball) and whether each estimate matches what the engine
+  then does. A flat set of values can be a flat set of choices.
 - **Check:** for any rate about where play happens, tabulate the options offered per decision
-  (count, direction, value) and each estimate against its measured outcome, split by the
-  conditions the engine treats differently (here: facing the goal or turning).
+  (count, direction, value) and each estimate against its measured outcome, split by the conditions
+  the engine treats differently (here: facing the goal or turning).
