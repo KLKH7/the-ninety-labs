@@ -9,7 +9,7 @@ import pytest
 
 from ninety.sim import decisions as D
 from ninety.sim import offball
-from ninety.sim.body import FOOT_REACH_Z
+from ninety.sim.body import BODY_TOUCH_Z, GRAVITY
 from ninety.sim.profiles import Profile
 from ninety.sim.value import CELLS_X, CELLS_Y, Table, Tables
 
@@ -322,9 +322,13 @@ def test_a_failed_pass_is_costed_where_it_would_end_if_that_is_worse():
 
 
 def test_the_first_touch_is_judged_on_the_speed_a_lofted_ball_comes_down_at():
+    # Unchallenged, he lets it come down to his foot (below BODY_TOUCH_Z, engine.to_foot), so his
+    # foot's own limit is what it is judged against.
     points, _ = D.flight(*D.loft_launch(30.0))
-    down = next(p for p in points[1:] if p[4] < 0 and p[2] <= FOOT_REACH_Z)
-    landing, launch = math.hypot(down[3], down[4]), math.hypot(*D.loft_launch(30.0))
+    i = next(i for i in range(1, len(points)) if points[i - 1][4] < 0 and points[i][2] <= BODY_TOUCH_Z)
+    _, _, z0, g0, vz0 = points[i - 1]  # it comes down through a foot's height after this point
+    landing = math.hypot(g0, math.sqrt(vz0 * vz0 + 2 * GRAVITY * (z0 - BODY_TOUCH_Z)))
+    launch = math.hypot(*D.loft_launch(30.0))
     assert landing < 0.8 * launch  # drag slows it in the air
 
     def conf(absorb):
@@ -661,15 +665,20 @@ def test_a_first_touch_absorbs_the_balls_speed_relative_to_him():
 
 def test_the_estimate_judges_the_first_touch_by_the_part_of_him_the_ball_meets(monkeypatch):
     """A4 as engine.contact applies it: a ball taken above a foot's height, on the thigh or chest,
-    kills only AERIAL_ABSORB of what his foot would. The passer's estimate judged every touch below
-    head height by the foot, so the lofted passes it rated surest were the ones most often lost."""
-    def conf(lofted):
-        s = scene(x=60.0, mates=[("h9", 80.0, 34.0, 0.0)])
+    kills only AERIAL_ABSORB of what his foot would. Alone, he lets a lofted pass come down to his
+    foot (engine.to_foot), so the thigh's limit does not matter; with an opponent a metre or two from
+    where it drops, he must take it where he first can, on his thigh, and it does. Mutations caught:
+    every part killing what a foot does; never letting it come down to the foot."""
+    def conf(opponents, lofted=True):
+        s = scene(x=60.0, mates=[("h9", 80.0, 34.0, 0.0)], opponents=opponents)
         return D.pass_confidence(s, 80.0, 34.0, 80.0, 34.0, 0.0, lofted, D.PASS_PACES[1], "h9")
-    lofted, ground = conf(True), conf(False)
+    near = [(81.0, 35.0)]  # beyond him, 1.4 m from where the ball comes down
+    alone, pressed, ground = conf([]), conf(near), conf([], False)
+    assert pressed < alone
     monkeypatch.setattr(D, "AERIAL_ABSORB", 1.0)  # every part kills what a foot does
-    assert conf(True) > lofted  # a lofted pass dropping onto him is taken on the thigh
-    assert conf(False) == ground  # a ground pass meets his foot either way
+    assert conf([]) == alone  # alone it meets his foot either way
+    assert conf(near) > pressed  # pressed, on his thigh
+    assert conf([], False) == ground  # a ground pass meets his foot either way
 
 
 def test_a_mishit_keeps_some_speed_and_no_strike_beats_a_foot():

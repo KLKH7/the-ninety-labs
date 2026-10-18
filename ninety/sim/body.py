@@ -23,7 +23,7 @@ FOOT_REACH_Z = 1.0  # outfield players can play the ball below this height
 # A4, P14: the part of him a ball meets, by its height; here, not in the engine, so the passer's
 # estimate (decisions.pass_confidence) judges a first touch by the same rule as the engine's contact.
 BODY_TOUCH_Z = 0.45  # design (P14): above this, a ball he is under is a thigh, chest or head, not a foot
-AERIAL_ABSORB = 0.5  # design: those kill about half the pace a foot does (A4), same first touch
+AERIAL_ABSORB = 0.5  # verify (A4, no source found): those kill about half the pace a foot does
 THIGH_TOP_Z, CHEST_TOP_Z = 0.95, 1.50  # design (P14): the part by height; above the chest, the head
 # P11: a keeper's body, from published anthropometry. Premier League keepers stand 1.91 m on
 # average; the standing body's centre of mass is at about 56% of stature and standing reach (one

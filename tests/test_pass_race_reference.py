@@ -9,7 +9,15 @@ import random
 
 from ninety.sim import decisions as D
 from ninety.sim import offball, perception
-from ninety.sim.body import can_get_to, relative_speed
+from ninety.sim.body import (
+    AERIAL_ABSORB,
+    BODY_TOUCH_Z,
+    CHEST_TOP_Z,
+    FOOT_REACH_Z,
+    GRAVITY,
+    can_get_to,
+    relative_speed,
+)
 from ninety.sim.engine import Engine
 from ninety.sim.profiles import Profile
 
@@ -19,7 +27,8 @@ def ref_flight(ground: float, up: float, z0: float = 0.0):
     return D.fly(key + ((round(z0 / D.HEIGHT_STEP_M),) if z0 > 0 else ()))
 
 
-def ref_reach(points, rests, t_end, sx, sy, ux, uy, px, py, vx, vy, react, limit, box_x, late, heads=True):
+def ref_reach(points, rests, t_end, sx, sy, ux, uy, px, py, vx, vy, react, limit, box_x, late, heads=True,
+              top=math.inf):
     """Hard: the first point he can play (a ball at rest whenever he gets there). Late: the least,
     over every playable point before `limit`, of when the ball and he could both be there."""
     best, at, last = math.inf, -1, len(points) - 1
@@ -33,7 +42,7 @@ def ref_reach(points, rests, t_end, sx, sy, ux, uy, px, py, vx, vy, react, limit
         hands = box_x is not None and D.in_box(bx, by, box_x)
         reach_m, reach_z = offball.reach_for(hands, t - react, z, t - max(react, offball.UP_AFTER_CONTACT_S),
                                              heads)
-        if z > reach_z:
+        if z > min(reach_z, top):
             continue
         ok, gap, along = can_get_to(D.AVERAGE_BODY, bx - px, by - py, reach_m, vx, vy, t - react)
         if ok:
@@ -47,6 +56,25 @@ def ref_reach(points, rests, t_end, sx, sy, ux, uy, px, py, vx, vy, react, limit
         if arrive < best:
             best, at = arrive, i
     return best, at
+
+
+def unchallenged(scene, wait, points, rests, t_end, sx, sy, ux, uy, t_f):
+    """No opponent could get to it at all before he takes it at `t_f`."""
+    react = perception.CHOICE_REACTION_S
+    return t_f < math.inf and all(
+        ref_reach(points, rests, t_end, sx, sy, ux, uy, ox + ovx * wait, oy + ovy * wait,
+                  ovx, ovy, react, t_f, scene.goal_x if keeper else None, False)[0] > t_f
+        for ox, oy, ovx, ovy, keeper in scene.moving)
+
+
+def met(points, i, top):
+    """Where he meets it: as it comes down through the top of his touch since the point before, if it
+    did (falling faster by that drop), else at the point."""
+    z, g, vz = points[i][2:]
+    if i > 0 and points[i - 1][2] > top >= z and points[i - 1][4] < 0:
+        z0, g, vz0 = points[i - 1][2:]
+        z, vz = top, -math.sqrt(vz0 * vz0 + 2 * GRAVITY * (z0 - top))
+    return z, g, vz
 
 
 def reference(scene, tx, ty, mx, my, age, lofted, pace, receiver):
@@ -78,19 +106,23 @@ def reference(scene, tx, ty, mx, my, age, lofted, pace, receiver):
                 take, at, taker = t, i, mate
         if taker is None:
             continue
-        if offball.headed(False, points[at][2]):  # he lets it drop if he gets it at his feet first
-            t_f, i_f = ref_reach(points, rests, t_end, sx, sy, ux, uy, *taker[:5], math.inf, None, False,
-                                 heads=False)
-            if t_f < math.inf and all(
-                    ref_reach(points, rests, t_end, sx, sy, ux, uy, ox + ovx * wait, oy + ovy * wait,
-                              ovx, ovy, react, t_f, scene.goal_x if keeper else None, False)[0] > t_f
-                    for ox, oy, ovx, ovy, keeper in scene.moving):
+        if points[at][2] >= CHEST_TOP_Z:  # he lets it drop if he gets it at his feet first
+            t_f, i_f = ref_reach(points, rests, t_end, sx, sy, ux, uy, *taker[:5], take + D.DROP_HORIZON_S,
+                                 None, False, heads=False)
+            if unchallenged(scene, wait, points, rests, t_end, sx, sy, ux, uy, t_f):
                 take, at = t_f, i_f
-        _, _, z, g, vz = points[at]
+        z, g, vz = met(points, at, FOOT_REACH_Z)
+        if BODY_TOUCH_Z < z < CHEST_TOP_Z:  # on his thigh or chest, unless he can let it come to his foot
+            t_f, i_f = ref_reach(points, rests, t_end, sx, sy, ux, uy, *taker[:5], take + D.DROP_HORIZON_S,
+                                 None, False, heads=False, top=BODY_TOUCH_Z)
+            if unchallenged(scene, wait, points, rests, t_end, sx, sy, ux, uy, t_f):
+                take, at = t_f, i_f
+                z, g, vz = met(points, at, BODY_TOUCH_Z)
         if at == len(points) - 1 and rests:
             g = vz = 0.0
         rel = relative_speed(g * ux, g * uy, vz, taker[2], taker[3])
-        p = 1.0 if offball.headed(False, z) else D.sigmoid((taker[5] - rel) / D.CONTROL_MARGIN_MPS)
+        absorb = taker[5] * (AERIAL_ABSORB if z > BODY_TOUCH_Z else 1.0)
+        p = 1.0 if z >= CHEST_TOP_Z else D.sigmoid((absorb - rel) / D.CONTROL_MARGIN_MPS)
         horizon = take + D.OPPONENT_LATE_S
         first = math.inf  # they send one man after it (engine.plan_chase): the soonest races
         for ox0, oy0, ovx, ovy, keeper in scene.moving:

@@ -442,15 +442,24 @@ def test_a_ball_rising_through_his_reach_is_played_while_it_is_still_low():
 
 
 def test_a_dropping_ball_is_played_once_it_comes_down_into_reach():
-    e = Engine(1)
-    p = lone(e, "a6", 50.0, 30.0, math.pi)
-    e.possessor, e.last_touch, e.kicker_clear, e.kicked_at = None, "h2", True, e.t - 5.0
-    before = (49.0, 30.0, 1.5, 5.0, 0.0, -10.0)  # in reach across the ground, too high, falling
-    e.ball = (49.4, 30.0, 0.7, 5.0, 0.0, -10.0)
-    e.contact(before)
-    hit = [ev for ev in e.match.events if ev["type"] in ("deflection", "possession_change")]
-    assert hit and hit[0]["player"] == p.id
-    assert math.isclose(hit[0]["x"], 49.0 + 0.4 * (1.5 - body.FOOT_REACH_Z) / 0.8, abs_tol=0.03)
+    """Contested (an opponent could get to it before it comes down to his foot), he plays it as soon as it comes down into
+    his foot's reach (FOOT_REACH_Z); alone, he lets it come on down to his foot (BODY_TOUCH_Z,
+    engine.to_foot). Either way where it crosses that height, within the step."""
+    for contested, top in ((True, body.FOOT_REACH_Z), (False, body.BODY_TOUCH_Z)):
+        e = Engine(1)
+        p = lone(e, "a6", 50.0, 30.0, math.pi)
+        if contested:  # at his back: within a foot of where it comes down next, not of this step
+            q = e.by_id["h9"]
+            q.x, q.y = 50.5, 30.0
+        e.possessor, e.last_touch, e.kicker_clear, e.kicked_at = None, "h2", True, e.t - 5.0
+        # in reach across the ground, too high, falling 0.8 m this step through `top`
+        z0 = top + 0.5
+        before = (49.0, 30.0, z0, 5.0, 0.0, -10.0)
+        e.ball = (49.4, 30.0, z0 - 0.8, 5.0, 0.0, -10.0)
+        e.contact(before)
+        hit = [ev for ev in e.match.events if ev["type"] in ("deflection", "possession_change")]
+        assert hit and hit[0]["player"] == p.id, contested
+        assert math.isclose(hit[0]["x"], 49.0 + 0.4 * 0.5 / 0.8, abs_tol=0.03), contested
 
 
 def test_a_ball_he_controls_against_his_body_is_on_its_surface_not_inside_it():

@@ -704,3 +704,20 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** split the calibration by how the pass was struck (ground or lofted), not only by
   the estimate's own bins. A gap in one kind of pass points to a rule the estimate does not
   share with the engine.
+
+### 71. Where a player meets the ball is his choice; the first point he can reach is not a model of it
+- **What happened:** once the passer's estimate judged a touch by the body part (lesson 70), it
+  rated an unchallenged lofted pass 3% sure, and passers stopped lofting (46% to 6% of passes); the
+  90-minute match then had 57 shots. The cause was in the engine: the receiver ran to the first
+  point of the flight within a foot's reach (about 1 m up) and met it there, on his thigh, at half a
+  foot's control, so it rebounded. Real players let an unchallenged ball come down to the foot.
+  Fixing it also showed the engine's let-it-drop test followed the flight past the goal line, which
+  the estimate's race never did, and that a heading test's premise ("he cannot bring it down") had
+  come from the chase putting him under the ball, not from the ball.
+- **Rule:** when a player can choose where along a flight to play the ball (height, body part, the
+  spot he waits on), the engine decides it with a rule, the same one the estimate uses (lesson 23),
+  and moves him to where that rule needs him; a body's first reach is only the contested case. A
+  test whose premise depends on such a choice checks the premise by the engine's own rule.
+- **Check:** for each touch the estimate judges, count in real clips where the engine met the ball
+  (height, part) and how often it was controlled, before and after; a rule shared by the engine and
+  the estimate has a test on each side and the reference race (`tests/test_pass_race_reference.py`).

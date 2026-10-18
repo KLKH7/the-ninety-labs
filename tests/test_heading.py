@@ -11,6 +11,7 @@ import pytest
 from ninety.sim import ball, decisions, offball
 from ninety.sim.body import (
     BODY_RESTITUTION,
+    BODY_TOUCH_Z,
     CONTROL_M,
     FOOT_REACH_Z,
     HEAD_JUMP_Z,
@@ -113,10 +114,11 @@ DROPPING = (96.0, 29.0, 3.0, 0.0, 6.0, 1.0)  # coming down onto him: head height
 
 
 def cross_at_head(defender_gap: float | None, state: tuple = CROSS,
-                  upstream: float = 0.0) -> tuple[Engine, list[dict]]:
+                  upstream: float = 0.0, seconds: float = 1.2) -> tuple[Engine, list[dict]]:
     """A ball played toward an attacker (`state`: by default crossed at his head height from the
     wing), with a defender `defender_gap` metres from him (None: nobody near), everyone else far
-    away (`upstream`: the defender that much nearer where the ball comes from); played on for 1.2 s."""
+    away (`upstream`: the defender that much nearer where the ball comes from); played on for
+    `seconds`."""
     e = Engine(3)
     att = next(q for q in e.players if q.role == "ST" and q.team == "home")
     dfd = next(q for q in e.players if q.role == "RCB" and q.team == "away")
@@ -136,7 +138,7 @@ def cross_at_head(defender_gap: float | None, state: tuple = CROSS,
     e.last_touch = "h7"
     e.kicked_at = e.free_since = e.t - 2.0  # everyone has long reacted
     start = len(e.match.events)
-    for _ in range(int(1.2 / DT)):
+    for _ in range(int(seconds / DT)):
         e.step()
     return e, e.match.events[start:]
 
@@ -170,11 +172,49 @@ def test_an_unchallenged_ball_dropping_onto_him_is_brought_down_and_a_contested_
     assert headers_in(e, events)
 
 
+@pytest.mark.parametrize("distance", [15.0, 20.0])
+def test_an_unchallenged_lofted_pass_comes_down_to_his_foot_not_onto_his_thigh(distance):
+    """A4, P18 (engine.to_foot, foot_spot): alone, he waits a step beyond where a lofted pass drops to
+    a foot's height and takes it there, first time, with his foot, not on his thigh or chest (which
+    kill only AERIAL_ABSORB of its pace). Mutations caught: to_foot never true (he meets it at the
+    first point he can reach, his head or thigh); FOOT_SPOT_M = 0 (he stands where it drops and it
+    meets his body first)."""
+    ground, up = decisions.loft_launch(distance)
+    e, events = cross_at_head(None, (96.0, 34.0 - distance, 0.0, 0.0, ground, up), seconds=4.0)
+    att = next(q for q in e.players if q.role == "ST" and q.team == "home")
+    first = events[0]
+    assert (first["type"], first["player"]) == ("possession_change", att.id), events[:3]
+    assert e.match.frames[first["frame"]]["ball"]["z"] <= BODY_TOUCH_Z + 1e-3  # positions are to 1 mm
+
+
+# Over his head toward the goal line, and over it before it comes down to a foot's height
+PAST_HIM = (92.0, 30.0, 1.6, 10.0, 10.0, 3.0)
+
+
 def test_a_ball_flying_past_him_that_he_cannot_bring_down_is_headed():
-    """Unchallenged, but past him before he could get it at his feet: heading it is the only way to
-    play it. Mutation caught: an unchallenged ball never headed."""
-    e, events = cross_at_head(None, CROSS)
+    """Unchallenged, but past him and out of play before he could get it at his feet: heading it is
+    the only way to play it. (CROSS no longer is such a ball: running on with it, he gets it at his
+    feet, engine.to_foot.) Mutations caught: an unchallenged ball never headed; a ball out of play
+    still counted as one he gets at his feet."""
+    e, _ = cross_at_head(None, PAST_HIM, seconds=0)
+    att = next(q for q in e.players if q.role == "ST" and q.team == "home")
+    assert e.first_to_drop(att) is None  # the premise, by the engine's own rule
+    e, events = cross_at_head(None, PAST_HIM)
     assert headers_in(e, events)
+
+
+def test_a_ball_he_could_only_get_at_his_feet_beyond_the_line_is_not_one_he_lets_drop():
+    """Law 9 in P18 (engine.first_to_drop), as the passer's race ends a flight once it is out of play:
+    a ball over his head, wide of the post and out over the goal line before he could get it at his
+    feet, is not his at his feet, though it would be if the pitch went on. Mutation caught: the
+    flight followed past the line."""
+    e, _ = cross_at_head(None, (97.0, 40.0, 1.9, 6.0, 0.0, 1.5), seconds=0)
+    att = next(q for q in e.players if q.role == "ST" and q.team == "home")
+    path = ball.predict(e.ball, DT, decisions.DROP_HORIZON_S)
+    at_feet = [(bx, by) for k, (bx, by, bz, *_) in enumerate(path[1:], start=1)
+               if bz <= FOOT_REACH_Z and e.can_reach(att, bx, by, bz, k * DT, heads=False)[0]]
+    assert at_feet and all(decisions.out_of_play(bx, by) for bx, by in at_feet)  # only past the line
+    assert e.first_to_drop(att) is None
 
 
 def touches(z: float, who: str = "h1", x: float = 60.0) -> dict[str, list[str]]:

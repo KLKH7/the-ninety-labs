@@ -28,6 +28,8 @@ from ninety.sim.body import (
     CONTROL_M,
     CS_MEAN,
     F0_MEAN,
+    FOOT_REACH_Z,
+    GRAVITY,
     HEAD_SPEED_MPS,
     STRIKE_FACING,
     TURN_RATE,
@@ -565,7 +567,8 @@ def in_box(x: float, y: float, goal_x: float) -> bool:
 
 def reach_time(points, t_end: float, rests: bool, sx: float, sy: float, ux: float, uy: float,
                px: float, py: float, pvx: float, pvy: float, react: float, limit: float,
-               box_x: float | None = None, late: bool = False, heads: bool = True) -> tuple[float, int]:
+               box_x: float | None = None, late: bool = False, heads: bool = True,
+               top: float = math.inf) -> tuple[float, int]:
     """(seconds, index of the path point) of the first point of the ball's path this player can
     play, by the engine's chase test (body.can_get_to, as engine.can_reach) with an average body:
     below foot height, within a foot's reach, or above it his head's (P18), after his reaction,
@@ -578,7 +581,8 @@ def reach_time(points, t_end: float, rests: bool, sx: float, sy: float, ux: floa
     With `late`, a player who cannot get to any of it is given the soonest he could be at a point of
     the path if the ball waited for him there (as engine.plan_chase times a chaser who cannot make it:
     time_to_cover), over the points before `limit`: so how far he is from making it moves the estimate
-    smoothly, never all at once. With `heads` False only his feet count (he lets it drop).
+    smoothly, never all at once. With `heads` False only his feet count (he lets it drop), and only
+    below `top` (BODY_TOUCH_Z: he lets it come down to his foot, engine.to_foot).
     """
     speed = math.hypot(pvx, pvy)
     last = len(points) - 1
@@ -597,7 +601,7 @@ def reach_time(points, t_end: float, rests: bool, sx: float, sy: float, ux: floa
             continue
         bx, by = sx + ux * a, sy + uy * a
         reach_m, reach_z = _reach(bx, by, z, t, react, box_x, heads)
-        if z > reach_z:
+        if z > min(reach_z, top):
             continue
         dx, dy = bx - px, by - py
         if resting:  # it waits for him there: he takes it whenever he arrives
@@ -609,6 +613,20 @@ def reach_time(points, t_end: float, rests: bool, sx: float, sy: float, ux: floa
         if can_get_to(AVERAGE_BODY, dx, dy, reach_m, pvx, pvy, t - react)[0]:
             return t, i
     return math.inf, -1
+
+
+def met_at(points, at: int, top: float) -> tuple[float, float, float]:
+    """(height, ground speed, vertical speed) of the ball where a player whose touch reaches up to
+    `top` meets it at path point `at`: a ball that came down through `top` since the point before is
+    met as it does, at that height (engine.contact meets it there, first_low_within, between the
+    race's samples), falling faster by the drop (gravity; drag over that drop is neglected), and
+    before any bounce in between; otherwise at the point itself."""
+    _, _, z, g, vz = points[at]
+    if at > 0:
+        _, _, z0, g0, vz0 = points[at - 1]
+        if z0 > top >= z and vz0 < 0:
+            return top, g0, -math.sqrt(vz0 * vz0 + 2 * GRAVITY * (z0 - top))
+    return z, g, vz
 
 
 def _reach(bx: float, by: float, bz: float, t: float, react: float, box_x: float | None,
@@ -817,7 +835,18 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
                                scene.goal_x if keeper else None)[0] > t_f
                     for ox, oy, ovx, ovy, keeper, *_ in rivals):
                 take, at = t_f, i_f
-        _, a, z, g, vz = points[at]
+        z, g, vz = met_at(points, at, FOOT_REACH_Z)
+        if BODY_TOUCH_Z < z < CHEST_TOP_Z:
+            # A4, P18 (engine.to_foot): one he would meet on his thigh or chest he lets come on down
+            # to his foot if he can take it there before any opponent could get to it at all.
+            t_f, i_f = reach_time(points, t_end, rests, sx, sy, ux, uy, *taker[:5], take + DROP_HORIZON_S,
+                                  heads=False, top=BODY_TOUCH_Z)
+            if t_f < math.inf and all(
+                    reach_time(points, t_end, rests, sx, sy, ux, uy, ox, oy, ovx, ovy, react, t_f,
+                               scene.goal_x if keeper else None)[0] > t_f
+                    for ox, oy, ovx, ovy, keeper, *_ in rivals):
+                take, at = t_f, i_f
+                z, g, vz = met_at(points, at, BODY_TOUCH_Z)
         if at == len(points) - 1 and rests:
             g = vz = 0.0
         # A4, P18, as engine.contact decides the part: a ball he takes below the top of his chest

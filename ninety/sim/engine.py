@@ -24,6 +24,7 @@ from ninety.sim import team as team_mod
 from ninety.sim.body import (
     AERIAL_ABSORB,
     BODY_HEIGHT,
+    BODY_RADIUS,
     BODY_RESTITUTION,
     BODY_TOUCH_Z,
     BRAKE_MAX,
@@ -119,6 +120,10 @@ JOCKEY_LOOKAHEAD_S = 0.5  # a jockeying defender matches where the carrier is go
 POKE_MPS = 5.0  # how fast a tackled ball comes away
 THROW_WAIT_S = 2.0  # design: nobody free, so he throws; a longer look is dead time in a clip
 CHASE_EVERY = 4  # frames between re-planning who chases a free ball
+# A4, P18 (design, verify): a ball he lets come down to his foot he waits for midway between his
+# body's widest edge and his foot's reach beyond where it drops to a foot's height (about 0.68 m), so
+# it drops in front of him, onto his foot, not onto his body
+FOOT_SPOT_M = (BODY_RADIUS + ball.RADIUS + CONTROL_M) / 2
 GOAL_HALF_WIDTH, CROSSBAR = 3.66, 2.44  # Law 1
 GOAL_AREA_X = 5.5  # Law 1
 # Laws 15 to 17: opponents keep this far from a restart until the ball is in play.
@@ -413,6 +418,7 @@ class Engine:
         self.free_since = -99.0
         self.touched_since_kick = False
         self.chase: dict[str, tuple[str, float, float]] = {}  # team -> (player, x, y)
+        self._to_foot: dict[tuple, bool] = {}  # (frame, player, ball) -> to_foot, once a frame
         self.restart: Restart | None = None
         self.set_play: setpieces.Corner | None = None  # a corner routine being set up or played
         self.throw_by: str | None = None  # a throw-in taker holding the ball until he throws it
@@ -900,6 +906,7 @@ class Engine:
             return
         path = ball.predict(self.ball, DT, 6.0)
         best: dict[str, tuple[float, str, float, float]] = {}
+        misjudged: dict[str, tuple[float, float]] = {}  # the velocity error each judges it with
         for p in self.players:
             if self.kicked and p.id == self.kicked["player"] and not self.touched_since_kick:
                 continue  # the kicker moves on; he does not run after his own pass or shot
@@ -907,6 +914,7 @@ class Engine:
                 continue  # has not yet reacted to this strike
             sigma = PERCEPTION_ERR * math.hypot(self.ball[0] - p.x, self.ball[1] - p.y)
             ex, ey = self.rng.gauss(0, sigma), self.rng.gauss(0, sigma)
+            misjudged[p.id] = (ex, ey)
             for k in range(0, len(path), 2):
                 t = k * DT
                 bx, by, bz = path[k][0] + ex * t, path[k][1] + ey * t, path[k][2]
@@ -919,6 +927,29 @@ class Engine:
                         best[p.team] = (arrive, p.id, bx, by)
                     break
         self.chase = {team: (pid, x, y) for team, (_, pid, x, y) in best.items()}
+        for team, (pid, *_) in list(self.chase.items()):
+            spot = self.foot_spot(self.by_id[pid], path, *misjudged[pid])
+            if spot:
+                self.chase[team] = (pid, *spot)
+
+    def foot_spot(self, p: Player, path: list, ex: float, ey: float) -> tuple[float, float] | None:
+        """A4, P18: where he waits for a ball he lets come down to his foot (to_foot): beyond the
+        first point of its flight below BODY_TOUCH_Z that he can get to, along its line, by
+        FOOT_SPOT_M, so it drops in front of him to his foot rather than onto his body; the flight as he
+        judges it (`ex`, `ey`: his velocity error, as plan_chase). None if the ball is not one he lets
+        come down (or is already at a foot's height)."""
+        if self.ball[2] <= BODY_TOUCH_Z or self.hands(p, self.ball[0], self.ball[1]) or not self.to_foot(p):
+            return None
+        for k in range(1, len(path)):
+            t = k * DT
+            bx, by, bz = path[k][0] + ex * t, path[k][1] + ey * t, path[k][2]
+            if bz <= BODY_TOUCH_Z and self.can_reach(p, bx, by, bz, t, heads=False)[0]:
+                gvx, gvy = path[k][3] + ex, path[k][4] + ey
+                g = math.hypot(gvx, gvy)
+                if g < 1e-6:
+                    return bx, by
+                return bx + gvx / g * FOOT_SPOT_M, by + gvy / g * FOOT_SPOT_M
+        return None
 
     def tick_free(self) -> None:
         before = self.ball
@@ -991,6 +1022,12 @@ class Engine:
                             hits.append((sh, "head", p, x0 + sh * dx, y0 + sh * dy, sz,
                                          qx + sh * mx, qy + sh * my, True))
                             st = None  # he heads it: no later touch this step
+                # A4, P18: unchallenged, he lets it come down to his foot, unless it is already on
+                # his body there (dropping inside his outline): then it meets him where it is.
+                if st is not None and hz + st * (z1 - hz) > BODY_TOUCH_Z and not self.hands(p, ex, ey) \
+                        and shape.clearance(x0 + st * rdx, y0 + st * rdy, qx, qy, p.heading) > ball.RADIUS \
+                        and self.to_foot(p):
+                    st = first_low_within(x0, y0, hz, rdx, rdy, z1 - hz, qx, qy, reach_m, BODY_TOUCH_Z)
                 if st is not None:
                     tx, ty, tz = x0 + st * dx, y0 + st * dy, hz + st * (z1 - hz)
                     high = tz > BODY_TOUCH_Z and not self.hands(p, tx, ty)  # above a foot: thigh, chest
@@ -1082,18 +1119,34 @@ class Engine:
         (can_reach); the passer's race decides the same way (decisions.pass_confidence)."""
         return self.first_to_drop(p) != "feet"
 
-    def first_to_drop(self, p: Player) -> str | None:
+    def to_foot(self, p: Player) -> bool:
+        """P18, A4: a ball he has let drop (or that comes to him below his head) he lets come on down
+        to his foot, below BODY_TOUCH_Z, if in its own flight he can get to it there before any
+        opponent could get to it at all, rather than meeting it on his thigh or chest: the same test
+        as goes_up, at a foot's height (decisions.pass_confidence decides the same way). Decided
+        once a frame for the ball as it is (a deflection in the frame is a new ball)."""
+        key = (self.frame, p.id, self.ball)
+        if key not in self._to_foot:
+            if len(self._to_foot) > 64:
+                self._to_foot.clear()
+            self._to_foot[key] = self.first_to_drop(p, BODY_TOUCH_Z) == "feet"
+        return self._to_foot[key]
+
+    def first_to_drop(self, p: Player, top: float = FOOT_REACH_Z) -> str | None:
         """P18: in the ball's own flight from here, who gets to it first: an opponent ("rival"), or he
-        at his feet ("feet"); None if neither within DROP_HORIZON_S."""
+        at his feet, below `top` ("feet"); None if neither within DROP_HORIZON_S, or before it is out of
+        play (Law 9, as the passer's race ends it: decisions.out_of_play)."""
         path = ball.predict(self.ball, DT, decisions.DROP_HORIZON_S)
         rivals = [q for q in self.players if q.team != p.team]
         for k, (bx, by, bz, *_) in enumerate(path[1:], start=1):
+            if decisions.out_of_play(bx, by):
+                return None
             t = k * DT
             for q in rivals:
                 wait = max(0.0, self.kicked_at + self.reaction(q) - self.t)
                 if t >= wait and self.can_reach(q, bx, by, bz, t, delay=wait)[0]:
                     return "rival"  # an opponent could be there first
-            if bz <= FOOT_REACH_Z and self.can_reach(p, bx, by, bz, t, heads=False)[0]:
+            if bz <= top and self.can_reach(p, bx, by, bz, t, heads=False)[0]:
                 return "feet"  # at his feet first
         return None
 
