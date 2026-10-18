@@ -602,7 +602,7 @@ short and actionable. This file is public: no research sources, product names or
   builds two windows where counting players near the ball picks the wrong one. Before a batch,
   `uv run ninety-data-stats <2-3 crowded clips> --stride 5 --input 640x640` shows the share.
 
-### 84. A scorer reads labels by the rule written down, not by which fields are filled
+### 85. A scorer reads labels by the rule written down, not by which fields are filled
 - **What happened:** EVALUATION.md says boxes with visibility zero are not labels, but
   `vision_score.ground_truth()` kept any label with a box. When the re-frozen test set marked
   balls behind the advertising boards as visibility 0 and kept their boxes, the scorer counted
