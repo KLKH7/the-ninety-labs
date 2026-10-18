@@ -557,7 +557,7 @@ short and actionable. This file is public: no research sources, product names or
   builds two windows where counting players near the ball picks the wrong one. Before a batch,
   `uv run ninety-data-stats <2-3 crowded clips> --stride 5 --input 640x640` shows the share.
 
-### 72. Copy an identity string from the system, not from the docs
+### 75. Copy an identity string from the system, not from the docs
 - **What happened:** the `agents-live` setup told the maintainer to trust the OIDC subject
   `repo:KLKH7/the-ninety-labs:environment:agents-live`, the format GitHub's docs show. This repo's
   tokens carry the owner and repo ids (`repo:KLKH7@210092633/the-ninety-labs@1417939631:...`),
