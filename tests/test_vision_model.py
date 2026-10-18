@@ -17,7 +17,8 @@ def _pin(pyproject: dict) -> str:
     pins = [d for d in pyproject["dependency-groups"]["vision"] if re.match(r"rfdetr\b", d)]
     if len(pins) != 1:
         raise ValueError(f"expected one rfdetr requirement in the vision group, found {pins}")
-    m = re.fullmatch(r"rfdetr==([0-9][0-9A-Za-z.]*)", pins[0].replace(" ", ""))
+    # the train extra (PyTorch Lightning) is allowed; plus, which installs the PML-1.0 sizes, is not
+    m = re.fullmatch(r"rfdetr(?:\[train\])?==([0-9][0-9A-Za-z.]*)", pins[0].replace(" ", ""))
     if not m:
         raise ValueError(f"rfdetr must be pinned to an exact version with ==, not {pins[0]!r}")
     return m.group(1)
@@ -62,6 +63,7 @@ def test_model_field_is_valid_for_detections_jsonl():
         ["rfdetr>=1.11.2"],  # a range, not a pin
         ["rfdetr"],  # no version
         ["rfdetr[plus]==1.11.2"],  # the PML-1.0 extra
+        ["rfdetr[train,plus]==1.11.2"],  # plus smuggled in beside train
         [],  # missing
         ["rfdetr==1.11.2", "rfdetr==1.11.1"],  # ambiguous
     ],
