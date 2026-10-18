@@ -601,3 +601,18 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_render_scene.py::test_the_crowded_window_is_the_one_where_the_ball_is_hidden`
   builds two windows where counting players near the ball picks the wrong one. Before a batch,
   `uv run ninety-data-stats <2-3 crowded clips> --stride 5 --input 640x640` shows the share.
+
+### 81. Measure the worker count; a CI runner's threads are not cores
+- **What happened:** the test jobs took 15 to 40 minutes, so every merge left the other ready
+  pull requests another half hour behind. `pytest -n auto` started 4 workers on GitHub's 4-vCPU
+  runner, which has 2 physical cores, and the job took 22 minutes, against 13 with `-n 2` and 41
+  in one process (measured on the same tree, 2026-10-18). Full-match simulations also slow each
+  other down: `test_judge`'s two simulations took 498 s alone on a runner and 978 s next to the
+  90-minute realism test.
+- **Rule:** choose the worker count from a measured run on the real runner, not from `auto`.
+  Spread the slowest tests over separate machines (`--shard`, `tests/conftest.py`), and keep the
+  required check names as a gate that is green only when every shard passed. Every pull request
+  still runs every test.
+- **Check:** `tests/test_shard.py` fails if a test lands in no part or two, or if the slowest
+  tests share a part. Each shard prints its 10 slowest tests; when one shard runs much longer
+  than the others, update `SLOWEST` in `tests/conftest.py`.
