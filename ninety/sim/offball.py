@@ -206,13 +206,14 @@ SHAPE_IN_POSSESSION = {
     "RW": (None, -21.0), "LW": (None, 21.0), "ST": (None, 0.0),
 }
 DEEPEST_M = 12.0  # nobody's in-possession spot is deeper than this from his own goal
+STAYS_WIDE_M = 4.0  # design: stays_wide, further toward the touchline his role already occupies
 BALL_SIDE_IN_POSSESSION = 0.15  # the shape leans this share toward the ball's side
 FINAL_THIRD_M = 70.0  # ball this far from his own goal: the box is attacked
 BOX_RUNS = {"ST": (99.0, 4.0), "far_winger": (98.0, -7.0), "RCM": (88.0, 0.0)}  # near post, far post, edge
 
 
 def attacking_slot(role: str, own_goal_x: float, ball_x: float, ball_y: float,
-                   last_line_x: float) -> tuple[float, float] | None:
+                   last_line_x: float, wide_m: float = 0.0) -> tuple[float, float] | None:
     # `last_line_x`: the furthest a player of this side may stand and be onside, as he sees it.
     """O6: where this role stands while his team has the ball. Heights follow the ball; attackers
     stand on the opponents' last line (onside); with the ball wide in the final third, the striker,
@@ -240,6 +241,8 @@ def attacking_slot(role: str, own_goal_x: float, ball_x: float, ball_y: float,
         u = ball_u - behind
     u = min(PITCH_X - 3.0, max(DEEPEST_M, u))
     y = PITCH_Y / 2 + across * width + (ball_y - PITCH_Y / 2) * BALL_SIDE_IN_POSSESSION
+    if wide_m and width:
+        y += math.copysign(wide_m, across * width)  # his side of the pitch, further out
     return own_goal_x + fwd * u, min(PITCH_Y - 2.0, max(2.0, y))
 
 
