@@ -110,8 +110,10 @@ uv run ninety-slice --replay replays/slice-minute2-plant.json
 Replay swaps only the two Foundry agents for what they answered when recorded: the Analyst's
 replies and the Judge's verdicts. The Agent Framework workflow, the handoffs and the code checks
 all run for real, so you see the planted number rejected and each rewrite checked until one is
-accepted or the claim is held back (the committed recording, one real run, ends held back). If a prompt has
-changed since the recording, the replay stops rather than pair an old answer with a new question. Speech needs Azure, so `--speak` does not
+accepted or the claim is held back (the committed recording, one real run, is accepted on its third draft). If a prompt has
+changed since the recording, the replay stops rather than pair an old answer with a new question.
+The recording also holds the match events the live run checked against, so a change to the match
+engine does not break the replay; it only warns that the recording is stale. Speech needs Azure, so `--speak` does not
 replay. Team members refresh the recording with
 `uv run ninety-slice --minute 2 --plant --record replays/slice-minute2-plant.json`.
 
