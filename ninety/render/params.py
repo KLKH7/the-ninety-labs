@@ -21,6 +21,12 @@ KIT_CONTRAST = ("normal", "low")
 # Shirt graphics. Colours stay fictional; a pattern is not a real club's kit.
 PATTERNS = ("solid", "stripes", "hoops", "sash", "halves")
 
+# Share of seeds drawn as each hard case (low-contrast kits; a crowded clip window), each on its
+# own. Set from the train floors in ninety/vision/data_stats.py (each hard case in at least 20% of
+# clips) before any clip was rendered at this rate: 150 clips at 0.3 average 45 of each, about
+# 2.7 standard deviations above the floor of 30. Not tuned to any test-set number.
+HARD_CASE_RATE = 0.3
+
 # Knob -> the only values rendered for now. Dusk, night, overcast and rain are drawn by
 # web/render but do not look like broadcast footage yet, so every clip is a clear day until they
 # do; asking for one fails instead of putting a bad render into a dataset.
@@ -164,7 +170,12 @@ def sample_params(seed: int, **overrides) -> RenderParams:
     elevation = {"day": rng.uniform(30, 60), "dusk": rng.uniform(8, 18), "night": 45.0, "overcast": 50.0}[
         lighting
     ]
-    contrast = overrides.get("kit_contrast", "normal")
+    # Hard cases are drawn from the seed too, so the fixed test set (which refuses overrides) holds
+    # them. Their own stream: a seed drawn normal and natural keeps every draw it had.
+    hard = random.Random(f"render-hard-{seed}")
+    drawn_contrast = "low" if hard.random() < HARD_CASE_RATE else "normal"
+    drawn_occlusion = "crowded" if hard.random() < HARD_CASE_RATE else "natural"
+    contrast = overrides.get("kit_contrast", drawn_contrast)
     home, away, hgk, agk = sample_kits(rng, contrast)
     codes = rng.sample(TEAM_CODES, 2)
     base = RenderParams(
@@ -174,6 +185,7 @@ def sample_params(seed: int, **overrides) -> RenderParams:
         sun_elevation_deg=round(elevation, 1),
         weather="clear",
         kit_contrast=contrast,
+        occlusion=drawn_occlusion,
         home_kit=home,
         away_kit=away,
         home_gk=hgk,
