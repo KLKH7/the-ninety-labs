@@ -442,9 +442,9 @@ def test_a_ball_rising_through_his_reach_is_played_while_it_is_still_low():
 
 
 def test_a_dropping_ball_is_played_once_it_comes_down_into_reach():
-    """Contested (an opponent could get to it before it comes down to his foot), he plays it as soon as it comes down into
-    his foot's reach (FOOT_REACH_Z); alone, he lets it come on down to his foot (BODY_TOUCH_Z,
-    engine.to_foot). Either way where it crosses that height, within the step."""
+    """Contested (an opponent could get to it before it comes down to his foot), he plays it as soon
+    as it comes down into his foot's reach (FOOT_REACH_Z); alone, he lets it come on down to his
+    foot (BODY_TOUCH_Z, engine.to_foot). Either way where it crosses that height, within the step."""
     for contested, top in ((True, body.FOOT_REACH_Z), (False, body.BODY_TOUCH_Z)):
         e = Engine(1)
         p = lone(e, "a6", 50.0, 30.0, math.pi)
