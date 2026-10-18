@@ -135,7 +135,7 @@ def engine_changed(seed, minutes, first, last):
 
 
 def test_the_committed_replay_survives_an_engine_change(monkeypatch):
-    # Lesson 73: a replay pins the agents' interface, not the engine underneath.
+    # Lesson 80: a replay pins the agents' interface, not the engine underneath.
     before = asyncio.run(replay_slice(Recording.load(PLANT)))
     monkeypatch.setattr(slice_mod, "events_in", engine_changed)
     with pytest.warns(StaleRecording, match="Record it again"):
