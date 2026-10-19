@@ -623,7 +623,7 @@ short and actionable. This file is public: no research sources, product names or
   any of it is labelled visible (52 pixels on the old id pass). A ball in front of the boards must
   stay visible.
 
-### 85. Measure the worker count; a CI runner's threads are not cores
+### 86. Measure the worker count; a CI runner's threads are not cores
 - **What happened:** the test jobs took 15 to 40 minutes, so every merge left the other ready
   pull requests another half hour behind. `pytest -n auto` started 4 workers on GitHub's 4-vCPU
   runner, which has 2 physical cores, and the job took 22 minutes, against 13 with `-n 2` and 41
@@ -636,6 +636,6 @@ short and actionable. This file is public: no research sources, product names or
   Spread the slowest tests over separate machines (`--shard`, `tests/conftest.py`), and keep the
   required check names as a gate that is green only when every shard passed. Every pull request
   still runs every test.
-- **Check:** `tests/test_shard.py` fails if a test lands in no part or two, or if the slowest
-  tests share a part. Each shard prints its 10 slowest tests; when one shard runs much longer
+- **Check:** `tests/test_shard.py` fails if a test lands in no part or two, if the `--shard`
+  hook drops or repeats a test across K, or if the slowest tests share a part. Each shard prints its 10 slowest tests; when one shard runs much longer
   than the others, update `SLOWEST` in `tests/conftest.py`.
