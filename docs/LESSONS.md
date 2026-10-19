@@ -686,3 +686,14 @@ short and actionable. This file is public: no research sources, product names or
   hook drops or repeats a test across K, or if the slowest tests share a part. Each shard prints
   its 10 slowest tests; when one shard runs much longer than the others, update `SLOWEST` in
   `tests/conftest.py`.
+
+### 87. Re-rendering part of a run copies the run's settings, and is checked against it
+- **What happened:** to fix 30 v3 clips I launched the re-render with seed ranges only. v3 had
+  rendered its 2000s and 4000s with `occlusion=crowded` and its 3000s with `kit_contrast=low`, so
+  16 of the 30 came back with different parameters, and 5 of them filmed a different window.
+  Nothing failed: the job rendered exactly what it was asked for.
+- **Rule:** a partial re-render takes each seed's overrides from the original run's `clip.json`,
+  and before the new clips replace the old, their `params` and `overrides` must equal the
+  originals and their engine positions must match frame for frame.
+- **Check:** `docs/eval/dataset-v1.json` lists the run, commit and overrides of every clip; for
+  each replaced seed, compare `params` and `overrides` in both `clip.json` files.
