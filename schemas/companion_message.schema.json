@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/KLKH7/the-ninety-labs/schemas/companion_message.schema.json",
+  "title": "CompanionMessage",
+  "description": "One message from the server to the phone companion, told apart by type.",
+  "oneOf": [
+    { "$ref": "#/$defs/clock" },
+    { "$ref": "#/$defs/focus" },
+    { "$ref": "#/$defs/answer" },
+    { "$ref": "#/$defs/player_card" }
+  ],
+  "$defs": {
+    "clock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "t", "playing"],
+      "description": "Where the broadcast is, so the phone stays in step with the video.",
+      "properties": {
+        "type": { "const": "clock" },
+        "t": { "type": "number", "minimum": 0 },
+        "playing": { "type": "boolean" }
+      }
+    },
+    "focus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "player"],
+      "description": "The player the phone follows; null for none.",
+      "properties": {
+        "type": { "const": "focus" },
+        "player": { "type": ["string", "null"], "pattern": "^[ha]([1-9]|1[01])$" }
+      }
+    },
+    "answer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "answer"],
+      "properties": {
+        "type": { "const": "answer" },
+        "answer": { "$ref": "viewer_answer.schema.json" }
+      }
+    },
+    "player_card": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "player", "t_from", "t_to", "heat", "speed_kmh", "peak_kmh", "distance_m", "source"],
+      "description": "A player's stats over t_from..t_to, all computed by code.",
+      "properties": {
+        "type": { "const": "player_card" },
+        "player": { "type": "string", "pattern": "^[ha]([1-9]|1[01])$" },
+        "t_from": { "type": "number", "minimum": 0 },
+        "t_to": { "type": "number", "minimum": 0 },
+        "heat": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["nx", "ny", "cells"],
+          "description": "Share of time in each cell of an nx by ny grid over the pitch, row by row from y = 0, x = 0 first; cells has nx * ny entries.",
+          "properties": {
+            "nx": { "type": "integer", "minimum": 1 },
+            "ny": { "type": "integer", "minimum": 1 },
+            "cells": { "type": "array", "items": { "type": "number", "minimum": 0 } }
+          }
+        },
+        "speed_kmh": { "type": "number", "minimum": 0, "description": "Speed at t_to." },
+        "peak_kmh": { "type": "number", "minimum": 0 },
+        "distance_m": { "type": "number", "minimum": 0 },
+        "source": { "type": "string", "enum": ["truth", "tracked"], "description": "Positions from the ground-truth data (before Milestone 1) or from tracking the video." }
+      }
+    }
+  }
+}

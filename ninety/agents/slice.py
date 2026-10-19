@@ -36,10 +36,8 @@ import re
 import sys
 import time
 import warnings
-from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
-from pathlib import Path
 
 from agent_framework import Executor, WorkflowBuilder, WorkflowContext, handler
 from agent_framework.foundry import FoundryAgent
@@ -49,11 +47,26 @@ from ninety import config
 from ninety.agents import foundry, telemetry
 from ninety.agents.factcheck import Claim, Verdict, check
 from ninety.agents.judge import judge
+from ninety.agents.replay import (  # noqa: F401  (re-exported: the slice's names before the move)
+    REPLAY_FORMAT,
+    Ask,
+    Judge,
+    Recording,
+    ReplayMismatch,
+    Turn,
+    judge_prompt,
+    replayer,
+)
 from ninety.match.facts import events_in
 from ninety.mcp import match_server
 
 MAX_REWRITES = 2
-REPLAY_FORMAT = 3
+
+# The clock rule every agent that writes a time follows (one clock for viewers and agents, lesson 33).
+# ninety/agents/contracts.py imports it into the other agents' instructions.
+CLOCK_RULE = """- For a time, use the event's clock exactly as given (01:28), or its minute as an ordinal (in
+  minute 2); never combine minute and second into a clock.
+"""
 
 INSTRUCTIONS = """You are the Analyst for a football broadcast. The request names a match (for
 example seed7) and a minute. Use the match tools, passing that match id, to read the events of that
@@ -63,9 +76,7 @@ that minute, and why it matters.
 Rules:
 - Only state facts you read from the tools. Every number you write must be a field of an event
   you cite (minute, second, clock, ball_speed_kmh, distance_m) or a count of the events you cite.
-- For a time, use the event's clock exactly as given (01:28), or its minute as an ordinal (in
-  minute 2); never combine minute and second into a clock.
-- Name players by their ids exactly as given (for example h7 or a10).
+""" + CLOCK_RULE + """- Name players by their ids exactly as given (for example h7 or a10).
 - Reply with JSON only: {"text": "<sentence>", "evidence": ["<event id>", ...]}"""
 
 
@@ -76,84 +87,8 @@ class Task:
     attempt: int = 0
 
 
-@dataclass
-class Turn:
-    """One model answer: the Analyst's raw reply, or the Judge's verdict as JSON."""
-
-    role: str
-    prompt: str
-    response: str
-
-
-@dataclass
-class Recording:
-    """The models' answers from one live run, enough to replay it without Azure."""
-
-    minute: int
-    seed: int
-    minutes: float
-    plant: bool
-    model: str
-    recorded_at: str
-    turns: list[Turn]
-    events: list[dict]  # what the fact-checker checked claims against in the live run
-
-    def save(self, path: str | Path) -> None:
-        path = Path(path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps({"format": REPLAY_FORMAT, **asdict(self)}, indent=2) + "\n")
-
-    @classmethod
-    def load(cls, path: str | Path) -> Recording:
-        data = json.loads(Path(path).read_text())
-        found = data.pop("format", None)
-        if found != REPLAY_FORMAT:
-            raise ValueError(
-                f"{path}: format {found} slice recording, this code replays format {REPLAY_FORMAT}"
-                + (" (format 2 has no match events): record it again with --record" if found == 2 else "")
-            )
-        data["turns"] = [Turn(**t) for t in data["turns"]]
-        return cls(**data)
-
-
-class ReplayMismatch(RuntimeError):
-    pass
-
-
 class StaleRecording(UserWarning):
     """The engine now produces different events from those a recording was made against."""
-
-
-Ask = Callable[[str], Awaitable[str]]
-Judge = Callable[[Claim, list[dict]], Awaitable[Verdict]]
-
-
-def judge_prompt(claim: Claim) -> str:
-    """What identifies a Judge call in a recording: the claim and the ids it cites."""
-    return json.dumps({"text": claim.text, "evidence": claim.evidence})
-
-
-def replayer(turns: list[Turn]) -> tuple[Ask, Judge]:
-    """Answers each call with the recorded answer, in order, and refuses a call it never saw."""
-    queue = list(turns)
-
-    def next_answer(role: str, prompt: str) -> str:
-        if not queue:
-            raise ReplayMismatch(f"the recording has no {role} answer for: {prompt!r}")
-        turn = queue.pop(0)
-        if (turn.role, turn.prompt) != (role, prompt):
-            raise ReplayMismatch(
-                f"call changed since recording: {turn.role} {turn.prompt!r} -> {role} {prompt!r}"
-            )
-        return turn.response
-
-    async def ask(prompt: str) -> str:
-        return next_answer("analyst", prompt)
-
-    async def judge_replay(claim: Claim, evidence: list[dict]) -> Verdict:
-        return Verdict(**json.loads(next_answer("judge", judge_prompt(claim))))
-
-    return ask, judge_replay
 
 
 @dataclass
