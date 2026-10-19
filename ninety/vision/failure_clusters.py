@@ -153,6 +153,7 @@ def situation(label: dict) -> str:
 def audit(clips: list[Path], detections_name: str, threshold: float = DEFAULT_THRESHOLD) -> dict:
     """Per class, visibility group, situation and kit contrast: labels and misses."""
     table: dict = defaultdict(lambda: {"labels": 0, "missed": 0})
+    seeds, checkpoints = [], set()
     for clip in clips:
         meta = json.loads((clip / "clip.json").read_text())
         seed = int(meta["seed"])
@@ -162,6 +163,8 @@ def audit(clips: list[Path], detections_name: str, threshold: float = DEFAULT_TH
             )
         frames = load_jsonl(clip / "frames.jsonl")
         det_rows = load_jsonl(clip / detections_name)
+        seeds.append(seed)
+        checkpoints.update(str(r.get("model", {}).get("checkpoint")) for r in det_rows)
         run = frames_run(det_rows)
         labels = labels_with_context(frames, run)
         dets = [d for d in flatten(det_rows) if float(d.get("score", 0.0)) >= threshold]
@@ -175,7 +178,12 @@ def audit(clips: list[Path], detections_name: str, threshold: float = DEFAULT_TH
         {"cls": c, "visibility": v, "situation": s, "kit_contrast": k, **n}
         for (c, v, s, k), n in sorted(table.items())
     ]
-    return {"threshold": threshold, "clips": len(clips), "rows": rows}
+    if len(checkpoints) > 1:
+        raise ValueError(f"detections come from more than one checkpoint: {sorted(checkpoints)}")
+    return {
+        "threshold": threshold, "clips": len(clips), "seeds": sorted(seeds),
+        "detections": detections_name, "checkpoint": next(iter(checkpoints), None), "rows": rows,
+    }
 
 
 def summarize(rows: list[dict], cls: str, group: str = "mostly hidden") -> list[dict]:

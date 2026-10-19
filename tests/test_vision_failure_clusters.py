@@ -86,13 +86,16 @@ def write_clip(root, seed, ball_found):
     dets = [{"cls": "player", "bbox": OVER_BALL, "score": 0.9}]
     if ball_found:
         dets.append({"cls": "ball", "bbox": BALL_BOX, "score": 0.9})
-    (clip / "det.jsonl").write_text(json.dumps({"frame": 0, "detections": dets}) + "\n")
+    model = {"checkpoint": "ours-test"}
+    (clip / "det.jsonl").write_text(json.dumps({"frame": 0, "model": model, "detections": dets}) + "\n")
     return clip
 
 
 def test_the_audit_counts_misses_per_situation_and_hands_off_only_renderable_clusters(tmp_path):
     clips = [write_clip(tmp_path, 7001, ball_found=False), write_clip(tmp_path, 7002, ball_found=True)]
     report = audit(clips, "det.jsonl")
+    assert report["seeds"] == [7001, 7002]
+    assert (report["detections"], report["checkpoint"]) == ("det.jsonl", "ours-test")
     ball = [r for r in report["rows"] if r["cls"] == "ball"]
     assert ball == [{"cls": "ball", "visibility": "mostly hidden", "situation": "behind a player",
                      "kit_contrast": "low", "labels": 2, "missed": 1}]
@@ -106,11 +109,11 @@ def test_the_audit_counts_misses_per_situation_and_hands_off_only_renderable_clu
 
 
 def test_a_cluster_with_no_render_setting_is_not_handed_to_the_data_agent():
-    report = {"rows": [{"cls": "ball", "visibility": "mostly hidden", "situation": "behind the keeper",
+    report = {"rows": [{"cls": "ball", "visibility": "mostly hidden", "situation": "no occluder found",
                         "kit_contrast": "normal", "labels": 4, "missed": 3}]}
     h = handoff(report, "round1")
     assert h["clusters"] == []
-    assert h["unmapped"] == [{"name": "ball mostly hidden, behind the keeper", "misses": 3}]
+    assert h["unmapped"] == [{"name": "ball mostly hidden, no occluder found", "misses": 3}]
 
 
 @pytest.mark.parametrize("seed", [900001, 900042])
