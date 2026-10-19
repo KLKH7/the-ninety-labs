@@ -611,21 +611,6 @@ short and actionable. This file is public: no research sources, product names or
   builds two windows where counting players near the ball picks the wrong one. Before a batch,
   `uv run ninety-data-stats <2-3 crowded clips> --stride 5 --input 640x640` shows the share.
 
-### 81. Read a model's class ids from a trained model, by what the boxes look like
-- **What happened:** to map RF-DETR's class ids to player and ball, `detect.py` was checked
-  against a checkpoint trained for one epoch on 10 images. Its ids (1 and 2) were taken to mean
-  player and ball, but that model's output was noise. A trained model returns indices into
-  `class_names`: 0 player, 1 ball. So the merged mapping labelled every ball a player and
-  dropped every player. A validation check on ours-v2 caught it before any number was
-  published: one clip scored 0 true positives, 48 ball-sized "players" and 2,007 misses.
-- **Rule:** decide what each class id means with a trained model, from the boxes it draws (size,
-  shape, how many a frame), never from a smoke run's id counts. Then pin that measurement in a
-  test, with the numbers in its comment.
-- **Check:** `tests/test_vision_finetune.py::test_our_checkpoint_maps_by_index_into_class_names`
-  records the ours-v2 measurement (id 0: 32 x 71 px, about 6 a frame; id 1: 9 x 9 px, one a
-  frame). Before scoring a new checkpoint, run `detect.py` on one validation clip and score it.
-  Precision near zero with ball-sized boxes labelled player means the mapping is wrong.
-
 ### 75. A trigger guarded only by "not busy now" fires again when the busy state ends
 - **What happened:** a keeper's dive was allowed whenever he was not diving and not on the
   ground. A slow shot was still on its way after he had dived, landed and got up, so he dived a
@@ -669,6 +654,21 @@ short and actionable. This file is public: no research sources, product names or
   margin.
 - **Check:** before trusting a match-reading test, run its measurement on a longer window and a
   second engine version, and write both numbers next to it.
+
+### 81. Read a model's class ids from a trained model, by what the boxes look like
+- **What happened:** to map RF-DETR's class ids to player and ball, `detect.py` was checked
+  against a checkpoint trained for one epoch on 10 images. Its ids (1 and 2) were taken to mean
+  player and ball, but that model's output was noise. A trained model returns indices into
+  `class_names`: 0 player, 1 ball. So the merged mapping labelled every ball a player and
+  dropped every player. A validation check on ours-v2 caught it before any number was
+  published: one clip scored 0 true positives, 48 ball-sized "players" and 2,007 misses.
+- **Rule:** decide what each class id means with a trained model, from the boxes it draws (size,
+  shape, how many a frame), never from a smoke run's id counts. Then pin that measurement in a
+  test, with the numbers in its comment.
+- **Check:** `tests/test_vision_finetune.py::test_our_checkpoint_maps_by_index_into_class_names`
+  records the ours-v2 measurement (id 0: 32 x 71 px, about 6 a frame; id 1: 9 x 9 px, one a
+  frame). Before scoring a new checkpoint, run `detect.py` on one validation clip and score it.
+  Precision near zero with ball-sized boxes labelled player means the mapping is wrong.
 
 ### 84. Everything the picture draws in front of an object hides it in the labels
 - **What happened:** the id pass, which counts each object's visible pixels, hid all scenery. In
