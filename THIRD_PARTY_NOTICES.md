@@ -19,6 +19,7 @@ GPL or AGPL otherwise). Every locked package and its licence is listed below.
 | pydantic (via agent-framework) | typed agent output | MIT |
 | pytest, pytest-xdist and its execnet, ruff (development) | tests (in parallel workers) and lint | MIT |
 | numpy (development; also with the vision group) | the camera fit of event detection, tested in CI | BSD-3-Clause |
+| pillow (development; also with the vision group) | images for event detection's runtime truth guard, tested in CI | MIT-CMU |
 | uv (container build only) | installs `uv.lock` into the API image | MIT or Apache-2.0 |
 
 ## Viewer (`web/viewer`, development only)

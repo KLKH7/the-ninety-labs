@@ -2507,6 +2507,7 @@ dependencies = [
 dev = [
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "pillow" },
     { name = "pytest" },
     { name = "pytest-xdist" },
     { name = "ruff" },
@@ -2537,6 +2538,7 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "numpy", specifier = ">=2" },
+    { name = "pillow", specifier = ">=11" },
     { name = "pytest", specifier = ">=8" },
     { name = "pytest-xdist", specifier = ">=3.6" },
     { name = "ruff", specifier = ">=0.17.0" },
