@@ -113,6 +113,8 @@ class Outcome:
 def parse_claim(text: str) -> Claim:
     body = re.search(r"\{.*\}", text, re.S)
     data = json.loads(body.group() if body else text)
+    if not isinstance(data, dict):
+        raise ValueError(f"the Analyst's reply is not a JSON object: {text[:80]!r}")
     return Claim(text=str(data.get("text", "")), evidence=[str(i) for i in data.get("evidence", [])])
 
 
@@ -177,11 +179,13 @@ class FactCheckExecutor(Executor):
             telemetry.record_fact_check(attempt, word, evidence_ids, verdict.reasons)
             await ctx.send_message(Task(draft.task.minute, verdict.reasons, attempt))
         else:
-            held = verdict.category == "low_confidence"
-            word = "held" if held else "rejected"
-            self.trace.append(f"fact_checker: {word}, out of rewrites: " + "; ".join(verdict.reasons))
+            # The one verdict-to-status mapping (contracts imports this module, so import it here):
+            # a Judge outage or a bad reply holds the claim, as a low confidence does.
+            from ninety.agents.contracts import status_for
+
+            status = status_for(verdict)
+            self.trace.append(f"fact_checker: {status}, out of rewrites: " + "; ".join(verdict.reasons))
             telemetry.record_fact_check(attempt, "held_back", evidence_ids, verdict.reasons)
-            status = "held" if held else "rejected"
             await ctx.yield_output(Outcome(False, draft.claim, attempt, self.trace, status))
 
 

@@ -12,6 +12,9 @@ What airs:
   (ninety/agents/cues.py); an unsure detection gets none;
 - when an Analyst and a Judge are given, the claim the fact-checker verified, as an `insight` cue
   for the analyst persona. A claim resting on an unsure detection is held and never airs.
+- when the agents fail (an Analyst or tool outage, a malformed reply, no answer within
+  AGENTS_TIMEOUT_SECONDS), no insight airs and the template cues air as they would without models:
+  a failing agent never takes the graphics down with it (docs/eval/failure-table.md).
 
 Without models (the CLI) only the template cues are written: the agents need Foundry, or a
 recording made against these same detected events.
@@ -25,6 +28,8 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
+from agent_framework.exceptions import AgentFrameworkException
+from azure.core.exceptions import AzureError
 from jsonschema import validate
 
 from ninety.agents.cues import DISPLAY_SECONDS, SCHEMA, template_cues, write_fixture
@@ -35,6 +40,13 @@ from ninety.match import detected
 from ninety.match.facts import AGENT_TYPES, compact
 
 INSIGHT_SLOT = "top_right"  # apart from the template's lower third, so both can be on screen
+# Design: the longest the agents may take over one claim. It covers the Judge's own worst case
+# (three drafts, each with a 15 s Judge timeout tried twice: 90 s) plus the Analyst's replies; an
+# insight later than this is about a moment long gone from the screen.
+AGENTS_TIMEOUT_SECONDS = 120.0
+# What a failing agent raises: the model service, sign-in or network, or a reply that is not the
+# claim JSON (ninety/agents/slice.parse_claim).
+AGENT_FAILURES = (AgentFrameworkException, AzureError, ValueError)
 
 
 @dataclass
@@ -43,6 +55,7 @@ class LiveResult:
     facts: int
     held_detections: list[str]  # passes, shots and goals detected too unsure to air
     outcome: Outcome | None
+    agents_error: str | None = None  # why no claim was checked, when the agents failed
 
 
 def insight_cue(
@@ -80,6 +93,7 @@ async def run(
     ask: Ask | None = None,
     judge: Judge | None = None,
     minute: int | None = None,
+    timeout_seconds: float = AGENTS_TIMEOUT_SECONDS,
 ) -> LiveResult:
     events = detected.check([dict(e) for e in events], clip)
     ledger = InMemoryLedger()
@@ -89,7 +103,7 @@ async def run(
     held = [
         e["id"] for e in events if e["type"] in {"pass", "shot", "goal"} and e["id"] not in shown
     ]
-    outcome = None
+    outcome, agents_error = None, None
     if ask is not None and judge is not None and minute is not None:
         # The fact-checker knows what the Analyst can read over MCP: the compact detected events.
         rows = [compact(e) for e in events if e["type"] in AGENT_TYPES]
@@ -98,9 +112,18 @@ async def run(
         fact_records = {r.id: r for r in await ledger.query(kind="fact")}
         stat_events = {s["id"]: list(fact_records[s["id"]].evidence) for s in stats}
         times |= {s["id"]: fact_records[s["id"]].t for s in stats}
-        outcome = await run_workflow(
-            ask, judge, minute, False, int(clip.removeprefix("seed")), 0, False, rows, stats
-        )
+        try:
+            outcome = await asyncio.wait_for(
+                run_workflow(
+                    ask, judge, minute, False, int(clip.removeprefix("seed")), 0, False, rows, stats
+                ),
+                timeout=timeout_seconds,
+            )
+        except TimeoutError:
+            agents_error = f"no checked claim within {timeout_seconds:g} s"
+        except AGENT_FAILURES as e:
+            agents_error = f"{type(e).__name__}: {e}"
+    if outcome is not None:
         await ledger.append(Record(
             id=f"claim-minute{minute}", version=1, kind="claim", t=0.0, source="agents",
             confidence=None, evidence=tuple(i for i in outcome.claim.evidence if i in times),
@@ -115,7 +138,7 @@ async def run(
         ))
     facts = len(await ledger.query(kind="fact"))
     cues.sort(key=lambda c: (c["t_in"], c["id"]))
-    return LiveResult(cues, facts, held, outcome)
+    return LiveResult(cues, facts, held, outcome, agents_error)
 
 
 def main() -> None:
