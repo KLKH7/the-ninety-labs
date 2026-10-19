@@ -227,6 +227,16 @@ pull request.
 |---|---|---|---|
 | [`match_event.schema.json`](../schemas/match_event.schema.json) | one event, from ground truth or detected (`source`, `confidence`) | match engine, vision | stats engine, agents, scoring |
 | [`frame.schema.json`](../schemas/frame.schema.json) | positions at one frame | match engine, renderer, tracker | renderer, scoring |
-| [`overlay_cue.schema.json`](../schemas/overlay_cue.schema.json) | one timed on-screen graphic | Producer, Personalizer | viewer, WebVTT export |
+| [`overlay_cue.schema.json`](../schemas/overlay_cue.schema.json) | one timed on-screen graphic (optional `pan` for a spoken cue) | Producer, Personalizer, Describer | viewer, WebVTT export |
+| [`viewer_question.schema.json`](../schemas/viewer_question.schema.json) | a question typed on the phone companion (data, never instructions) | phone companion | Companion agent |
+| [`viewer_answer.schema.json`](../schemas/viewer_answer.schema.json) | the answer the phone shows; its number is computed by code | Companion agent | phone companion |
+| [`companion_message.schema.json`](../schemas/companion_message.schema.json) | server to phone: `clock`, `focus`, `answer` or `player_card` | API | phone companion |
+| [`agent_trace.schema.json`](../schemas/agent_trace.schema.json) | one step of the on-screen agent trace | agent workflow | viewer |
+
+The agents' typed contracts in Python (moments, explanations, reviews, profiles, descriptions,
+questions, answers, the model callables and `status_for`, the one mapping from a fact-checker
+verdict to a claim's status) are in [`ninety/agents/contracts.py`](../ninety/agents/contracts.py);
+the question, answer and trace dataclasses mirror their schemas, and `tests/test_schemas.py`
+holds them to it.
 
 What a ground-truth clip must contain, and the validator that checks it: [DATA_CONTRACT.md](DATA_CONTRACT.md).

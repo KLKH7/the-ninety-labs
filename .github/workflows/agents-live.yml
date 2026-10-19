@@ -1,0 +1,93 @@
+name: agents-live
+
+# Runs a live agent step on Azure for sessions that have no Azure credentials (cloud agent
+# sessions, contributors without access): publishing agent versions, recording replays, the
+# failure table, the ablation, the evaluations. A person starts it by hand, and the job waits for
+# a required reviewer of the `agents-live` environment to approve it before it signs in, because
+# it runs the code at `ref` with access to Foundry. Signs in with OIDC (no stored secret): Azure
+# trusts the `agents-live` environment of this repo, set up once as infra/README.md says.
+#
+# Its outputs come back as an artifact (the agent registry, replays/, runs/eval/ and the commit
+# they came from) for the session to commit; this workflow never pushes.
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: What to run
+        required: true
+        type: choice
+        options: [publish, record, failures, ablation, eval]
+      ref:
+        description: Branch, tag or commit to run
+        required: true
+        default: main
+      args:
+        description: Extra arguments for the task's command (space-separated)
+        required: false
+        default: ""
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: agents-live
+  cancel-in-progress: false
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    environment: agents-live
+    timeout-minutes: 60
+    env:
+      TASK: ${{ inputs.task }}
+      ARGS: ${{ inputs.args }}
+      # Not a secret: the resource id publishing needs to attach the guardrail (ninety/config.py).
+      NINETY_FOUNDRY_RESOURCE_ID: ${{ vars.NINETY_FOUNDRY_RESOURCE_ID }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+      - name: Record the commit
+        run: |
+          mkdir -p runs/agents-live runs/eval
+          git rev-parse HEAD | tee runs/agents-live/commit.txt
+          echo "$TASK at $(cat runs/agents-live/commit.txt)" >> "$GITHUB_STEP_SUMMARY"
+      - uses: astral-sh/setup-uv@v7
+      - run: uv sync --locked
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Run the task
+        # Inputs reach the shell as environment variables, never pasted into the script.
+        run: |
+          read -r -a extra <<< "$ARGS"
+          case "$TASK" in
+            publish)
+              uv run ninety-agents publish "${extra[@]}"
+              ;;
+            eval)
+              uv run python -m ninety.eval.factcheck_eval --seeds 21,33 --foundry --out runs/eval/fact-checker.md "${extra[@]}"
+              uv run python -m ninety.agents.analyst_eval --seeds 21,33 --foundry --out runs/eval/analyst.md "${extra[@]}"
+              ;;
+            record|failures|ablation)
+              echo "::error::task '$TASK' is not yet implemented"
+              exit 1
+              ;;
+            *)
+              echo "::error::unknown task '$TASK'"
+              exit 1
+              ;;
+          esac
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agents-live-${{ inputs.task }}-${{ github.run_id }}
+          path: |
+            runs/agents-live/commit.txt
+            ninety/agents/foundry_agents.json
+            replays/
+            runs/eval/
+          if-no-files-found: warn

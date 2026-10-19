@@ -100,3 +100,32 @@ def test_publish_needs_the_foundry_resource_id(tmp_path, monkeypatch):
     monkeypatch.setattr(foundry.config, "FOUNDRY_RESOURCE_ID", "")
     with pytest.raises(RuntimeError, match="NINETY_FOUNDRY_RESOURCE_ID"):
         foundry.publish(SimpleNamespace(agents=FakeAgents()), [AGENTS[1]], tmp_path / "r.json")
+
+
+def _probe(doc: str) -> foundry.Agent:
+    def look(minute: int) -> str:
+        return ""
+
+    look.__doc__ = doc
+    return foundry.Agent(client=AGENTS[0].client, name="probe", instructions="x", tools=[look])
+
+
+def test_the_fingerprint_does_not_depend_on_docstring_indentation():
+    # Python 3.13 dedents docstrings at compile time and 3.11 and 3.12 do not, so the same source
+    # gives either text; a pin made on one Python must hold on the others.
+    indented = _probe("Look at a minute.\n\n    Returns its events.\n    ")
+    dedented = _probe("Look at a minute.\n\nReturns its events.\n")
+    shas = {foundry.fingerprint(foundry.definition(a)) for a in (indented, dedented)}
+    assert len(shas) == 1
+    # What is published is the cleaned text the fingerprint hashed.
+    (tool,) = foundry.definition(indented).as_dict()["tools"]
+    assert tool["description"] == "Look at a minute.\n\nReturns its events."
+
+
+def test_an_mcp_tool_description_is_cleaned_too():
+    mcp = foundry.FoundryChatClient.get_mcp_tool(
+        name="match", url="https://example.invalid/mcp", description="Read events.\n\n    Read-only.\n    "
+    )
+    agent = foundry.Agent(client=AGENTS[0].client, name="probe", instructions="x", tools=[mcp])
+    (tool,) = foundry.definition(agent).as_dict()["tools"]
+    assert tool["server_description"] == "Read events.\n\nRead-only."

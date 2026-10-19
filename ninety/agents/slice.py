@@ -19,6 +19,11 @@ replies and the Judge's verdicts. The workflow, the handoffs and the code checks
 so anyone can run the slice without access to our Azure resources. If a prompt no longer matches
 the recording (the code checks changed, say), the replay stops instead of pairing an old answer
 with a new question.
+
+A recording also carries the match events the live run checked claims against, and the replay
+checks against those, not against a fresh simulation: a replay pins the agents' interface (prompts,
+checks, handoffs), not the engine underneath (docs/LESSONS.md, lesson 80). When the engine now
+produces different events, the replay still runs and warns that the recording is stale.
 """
 
 from __future__ import annotations
@@ -30,10 +35,9 @@ import json
 import re
 import sys
 import time
-from collections.abc import Awaitable, Callable
+import warnings
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
-from pathlib import Path
 
 from agent_framework import Executor, WorkflowBuilder, WorkflowContext, handler
 from agent_framework.foundry import FoundryAgent
@@ -41,13 +45,28 @@ from azure.identity import DefaultAzureCredential
 
 from ninety import config
 from ninety.agents import foundry, telemetry
-from ninety.agents.factcheck import Claim, Verdict, check
+from ninety.agents.factcheck import Claim, Verdict, check, confidence_gate
 from ninety.agents.judge import judge
+from ninety.agents.replay import (  # noqa: F401  (re-exported: the slice's names before the move)
+    REPLAY_FORMAT,
+    Ask,
+    Judge,
+    Recording,
+    ReplayMismatch,
+    Turn,
+    judge_prompt,
+    replayer,
+)
 from ninety.match.facts import events_in
 from ninety.mcp import match_server
 
 MAX_REWRITES = 2
-REPLAY_FORMAT = 2
+
+# The clock rule every agent that writes a time follows (one clock for viewers and agents, lesson 33).
+# ninety/agents/contracts.py imports it into the other agents' instructions.
+CLOCK_RULE = """- For a time, use the event's clock exactly as given (01:28), or its minute as an ordinal (in
+  minute 2); never combine minute and second into a clock.
+"""
 
 INSTRUCTIONS = """You are the Analyst for a football broadcast. The request names a match (for
 example seed7) and a minute. Use the match tools, passing that match id, to read the events of that
@@ -57,9 +76,7 @@ that minute, and why it matters.
 Rules:
 - Only state facts you read from the tools. Every number you write must be a field of an event
   you cite (minute, second, clock, ball_speed_kmh, distance_m) or a count of the events you cite.
-- For a time, use the event's clock exactly as given (01:28), or its minute as an ordinal (in
-  minute 2); never combine minute and second into a clock.
-- Name players by their ids exactly as given (for example h7 or a10).
+""" + CLOCK_RULE + """- Name players by their ids exactly as given (for example h7 or a10).
 - Reply with JSON only: {"text": "<sentence>", "evidence": ["<event id>", ...]}"""
 
 
@@ -70,75 +87,8 @@ class Task:
     attempt: int = 0
 
 
-@dataclass
-class Turn:
-    """One model answer: the Analyst's raw reply, or the Judge's verdict as JSON."""
-
-    role: str
-    prompt: str
-    response: str
-
-
-@dataclass
-class Recording:
-    """The models' answers from one live run, enough to replay it without Azure."""
-
-    minute: int
-    seed: int
-    minutes: float
-    plant: bool
-    model: str
-    recorded_at: str
-    turns: list[Turn]
-
-    def save(self, path: str | Path) -> None:
-        path = Path(path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps({"format": REPLAY_FORMAT, **asdict(self)}, indent=2) + "\n")
-
-    @classmethod
-    def load(cls, path: str | Path) -> Recording:
-        data = json.loads(Path(path).read_text())
-        if data.pop("format", None) != REPLAY_FORMAT:
-            raise ValueError(f"{path}: not a format {REPLAY_FORMAT} slice recording")
-        data["turns"] = [Turn(**t) for t in data["turns"]]
-        return cls(**data)
-
-
-class ReplayMismatch(RuntimeError):
-    pass
-
-
-Ask = Callable[[str], Awaitable[str]]
-Judge = Callable[[Claim, list[dict]], Awaitable[Verdict]]
-
-
-def judge_prompt(claim: Claim) -> str:
-    """What identifies a Judge call in a recording: the claim and the ids it cites."""
-    return json.dumps({"text": claim.text, "evidence": claim.evidence})
-
-
-def replayer(turns: list[Turn]) -> tuple[Ask, Judge]:
-    """Answers each call with the recorded answer, in order, and refuses a call it never saw."""
-    queue = list(turns)
-
-    def next_answer(role: str, prompt: str) -> str:
-        if not queue:
-            raise ReplayMismatch(f"the recording has no {role} answer for: {prompt!r}")
-        turn = queue.pop(0)
-        if (turn.role, turn.prompt) != (role, prompt):
-            raise ReplayMismatch(
-                f"call changed since recording: {turn.role} {turn.prompt!r} -> {role} {prompt!r}"
-            )
-        return turn.response
-
-    async def ask(prompt: str) -> str:
-        return next_answer("analyst", prompt)
-
-    async def judge_replay(claim: Claim, evidence: list[dict]) -> Verdict:
-        return Verdict(**json.loads(next_answer("judge", judge_prompt(claim))))
-
-    return ask, judge_replay
+class StaleRecording(UserWarning):
+    """The engine now produces different events from those a recording was made against."""
 
 
 @dataclass
@@ -153,6 +103,9 @@ class Outcome:
     claim: Claim
     attempts: int
     trace: list[str]
+    # verified, rejected (the claim was wrong) or held (it rests on a low-confidence detection),
+    # as ninety/agents/contracts.status_for maps the last verdict.
+    status: str = "verified"
 
 
 def parse_claim(text: str) -> Claim:
@@ -192,7 +145,8 @@ class AnalystExecutor(Executor):
 
 
 class FactCheckExecutor(Executor):
-    """Code checks first (free, exact about numbers, players and ids), then the Judge (meaning)."""
+    """Code checks first (free, exact about numbers, players and ids), then the confidence gate
+    (a claim resting on an unsure detection is held), then the Judge (meaning)."""
 
     def __init__(self, known: dict[str, dict], judge: Judge, trace: list[str], live: bool):
         super().__init__(id="fact_checker")
@@ -201,6 +155,8 @@ class FactCheckExecutor(Executor):
     @handler
     async def review(self, draft: Draft, ctx: WorkflowContext[Task, Outcome]) -> None:
         verdict = check(draft.claim, self.known)
+        if verdict.ok:
+            verdict = confidence_gate(draft.claim, self.known)
         if verdict.ok:
             evidence = [self.known[i] for i in draft.claim.evidence]
             started = time.perf_counter()
@@ -213,19 +169,37 @@ class FactCheckExecutor(Executor):
             telemetry.record_fact_check(attempt, "accepted", evidence_ids, [])
             await ctx.yield_output(Outcome(True, draft.claim, attempt, self.trace))
         elif draft.task.attempt < MAX_REWRITES:
-            self.trace.append("fact_checker: rejected: " + "; ".join(verdict.reasons))
-            telemetry.record_fact_check(attempt, "rejected", evidence_ids, verdict.reasons)
+            # A held claim goes back too: the writer may find a confident detection to cite.
+            word = "held" if verdict.category == "low_confidence" else "rejected"
+            self.trace.append(f"fact_checker: {word}: " + "; ".join(verdict.reasons))
+            telemetry.record_fact_check(attempt, word, evidence_ids, verdict.reasons)
             await ctx.send_message(Task(draft.task.minute, verdict.reasons, attempt))
         else:
-            self.trace.append("fact_checker: rejected, out of rewrites: " + "; ".join(verdict.reasons))
+            held = verdict.category == "low_confidence"
+            word = "held" if held else "rejected"
+            self.trace.append(f"fact_checker: {word}, out of rewrites: " + "; ".join(verdict.reasons))
             telemetry.record_fact_check(attempt, "held_back", evidence_ids, verdict.reasons)
-            await ctx.yield_output(Outcome(False, draft.claim, attempt, self.trace))
+            status = "held" if held else "rejected"
+            await ctx.yield_output(Outcome(False, draft.claim, attempt, self.trace, status))
+
+
+def match_events(seed: int, minutes: float) -> list[dict]:
+    """The events the fact-checker knows: every minute of the match, from the engine."""
+    return events_in(seed, minutes, 1, int(minutes) + 1)
 
 
 async def run_workflow(
-    ask: Ask, judge_fn: Judge, minute: int, plant: bool, seed: int, minutes: float, live: bool
+    ask: Ask,
+    judge_fn: Judge,
+    minute: int,
+    plant: bool,
+    seed: int,
+    minutes: float,
+    live: bool,
+    events: list[dict] | None = None,
 ) -> Outcome:
-    known = {e["id"]: e for e in events_in(seed, minutes, 1, int(minutes) + 1)}
+    """Runs the slice; checks claims against `events`, or the engine's events when not given."""
+    known = {e["id"]: e for e in (match_events(seed, minutes) if events is None else events)}
     trace: list[str] = []
     analyst = AnalystExecutor(ask, trace, plant, live, match_server.match_id(seed))
     checker = FactCheckExecutor(known, judge_fn, trace, live)
@@ -240,9 +214,10 @@ async def run_workflow(
 
 async def run_slice(
     minute: int, plant: bool, seed: int, minutes: float, trace_to: str = "foundry", content: bool = False
-) -> tuple[Outcome, list[Turn], str]:
+) -> tuple[Outcome, list[Turn], str, list[dict]]:
     """Live run on Foundry, calling the published agent versions pinned in foundry_agents.json.
-    Returns the outcome, every model answer (for --record) and which versions ran."""
+    Returns the outcome, every model answer and the events checked against (for --record), and
+    which versions ran."""
     if match_server.match_id(seed) not in match_server.MATCHES or minutes != match_server.MINUTES:
         raise ValueError(
             f"the match server serves {', '.join(match_server.MATCHES)} at {match_server.MINUTES} minutes"
@@ -278,16 +253,25 @@ async def run_slice(
             turns.append(Turn("judge", judge_prompt(claim), json.dumps(asdict(verdict))))
             return verdict
 
-        outcome = await run_workflow(ask, judge_live, minute, plant, seed, minutes, live=True)
+        events = match_events(seed, minutes)
+        outcome = await run_workflow(ask, judge_live, minute, plant, seed, minutes, True, events)
     telemetry.flush()
-    return outcome, turns, f"{', '.join(ran)} on {config.MODEL}"
+    return outcome, turns, f"{', '.join(ran)} on {config.MODEL}", events
 
 
 async def replay_slice(recording: Recording) -> Outcome:
-    """Re-runs the workflow and the code checks with the recorded answers in place of the models."""
+    """Re-runs the workflow and the code checks with the recorded answers in place of the models,
+    against the recorded events. Warns (never fails) when the engine has moved on from them."""
     r = recording
+    if match_events(r.seed, r.minutes) != r.events:
+        warnings.warn(
+            f"the engine now produces different events for seed {r.seed}; the replay checks "
+            f"against the {len(r.events)} recorded on {r.recorded_at}. Record it again to refresh it.",
+            StaleRecording,
+            stacklevel=2,
+        )
     ask, judge_replay = replayer(r.turns)
-    return await run_workflow(ask, judge_replay, r.minute, r.plant, r.seed, r.minutes, live=False)
+    return await run_workflow(ask, judge_replay, r.minute, r.plant, r.seed, r.minutes, False, r.events)
 
 
 def main() -> None:
@@ -320,7 +304,7 @@ def main() -> None:
             sys.exit(f"replay stopped: {e}. Record it again with --record.")
     else:
         try:
-            outcome, turns, ran = asyncio.run(
+            outcome, turns, ran, events = asyncio.run(
                 run_slice(
                     args.minute,
                     args.plant,
@@ -335,7 +319,9 @@ def main() -> None:
         print(f"ran {ran}")
         if args.record:
             stamp = datetime.now(UTC).isoformat(timespec="seconds")
-            Recording(args.minute, args.seed, args.minutes, args.plant, ran, stamp, turns).save(args.record)
+            Recording(args.minute, args.seed, args.minutes, args.plant, ran, stamp, turns, events).save(
+                args.record
+            )
     for line in outcome.trace:
         print(line)
     verdict = "ACCEPTED" if outcome.accepted else "REJECTED"

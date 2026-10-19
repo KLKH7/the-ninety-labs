@@ -3,6 +3,7 @@
 Output directory layout:
 
     clip.json       seed, split, window, every render parameter, player looks, tool versions
+    meta.json       the data contract's clip metadata: fps, seed, window, roster (id, team, role), score
     events.jsonl    ground-truth match events inside the clip window (match_event schema)
     frames.jsonl    one row per frame (frame schema): positions, camera, boxes, visibility, keypoints
     images/NNNNN.jpg
@@ -37,6 +38,7 @@ from ninety.render.scene import (
     drawn_ball,
     parts_box,
     project_keypoints,
+    reach_sign,
     sample_looks,
 )
 from ninety.render.splits import split_of
@@ -129,7 +131,26 @@ def _appearance(lk, p: RenderParams) -> dict:
         "colors": {**kit_colors(p, lk.team, lk.role), "skin": lk.skin, "hair": lk.hair},
         "pattern": pattern,
         "number": int(lk.id[1:]),
+        "height_m": lk.height_m,
+        "build": lk.build,
+        "hair_style": lk.hair_style,
     }
+
+
+def camera_positions(frames: list[dict], p: RenderParams, seed: int) -> list[tuple[float, float, float]]:
+    """Where the broadcast lens stands at each frame, from the director the render uses.
+
+    Run from the first frame rather than from the window's warm-up, so a cut's timing can
+    differ from the render's by a few frames. Good enough to rank windows; the labels are
+    measured on the render itself.
+    """
+    director = Director(p.camera, p.width, p.height, p.fps, seed, cuts=p.camera_cut)
+    out = []
+    for fr in frames:
+        ball = drawn_ball(fr)
+        actors = [(pl["x"], pl["y"], pl.get("action", "")) for pl in fr["players"]]
+        out.append(tuple(director.step(ball[0], ball[1], actors).position))
+    return out
 
 
 def choose_start(
@@ -140,7 +161,8 @@ def choose_start(
     waiting for a restart is off camera, so such a clip has no ball to label or check."""
     earliest, latest = int(earliest_s * FPS), int(latest_s * FPS)
     if p.occlusion == "crowded":
-        return crowded_start(frames, n, max(earliest, WARMUP), latest)
+        cams = camera_positions(frames[: latest + n], p, seed)
+        return crowded_start(frames, n, max(earliest, WARMUP), latest, cams)
     rng = random.Random(f"window-{seed}")
     for _ in range(WINDOW_DRAWS):
         start = rng.randint(max(earliest, WARMUP), latest)
@@ -288,7 +310,18 @@ def render_clip(
                         "id": pl["id"],
                         "parts": parts,
                         "box": parts_box(cam, parts),
-                        "heading": gaits[pl["id"]].heading,
+                        "heading": g.heading,
+                        "pose": {
+                            "action": g.action,
+                            "phase": round(g.phase, 4),
+                            "speed": round(g.speed, 3),
+                            "reach": reach_sign(pl["x"], pl["y"], g, ball if meet else None),
+                            "dive": round(g.dive, 3),
+                            "plant_l": [round(v, 4) for v in g.plant_l] if g.plant_l else None,
+                            "plant_r": [round(v, 4) for v in g.plant_r] if g.plant_r else None,
+                            "x": round(pl["x"], 4),
+                            "y": round(pl["y"], 4),
+                        },
                     }
                 )
                 row_players.append(pl)
@@ -338,9 +371,33 @@ def render_clip(
         4,
     )
     (out / "clip.json").write_text(json.dumps(clip, indent=2))
+    write_meta(out)
     if mp4:
         _encode_mp4(out, p.fps)
     return clip
+
+
+def write_meta(out: Path) -> dict:
+    """Write the data contract's meta.json (docs/DATA_CONTRACT.md) from the clip's own files, so
+    `ninety-validate` can check it. Also backfills clips rendered before the renderer wrote it."""
+    clip = json.loads((out / "clip.json").read_text())
+    with open(out / "frames.jsonl") as f:
+        frames = [json.loads(line) for line in f if line.strip()]
+    with open(out / "events.jsonl") as f:
+        events = [json.loads(line) for line in f if line.strip()]
+    meta = {
+        "fps": clip["fps"],
+        "seed": clip["seed"],
+        "clip_id": clip["clip_id"],
+        # A window cut from a longer match: events before or after it are not in the clip.
+        "window": {"first_frame": frames[0]["frame"], "last_frame": frames[-1]["frame"]},
+        "roster": [{k: lk[k] for k in ("id", "team", "role")} for lk in clip["looks"]],
+        # The goals in this clip's events, the same events the validator adds up (C9).
+        "score": {team: sum(1 for e in events if e["type"] == "goal" and e["team"] == team)
+                  for team in ("home", "away")},
+    }
+    (out / "meta.json").write_text(json.dumps(meta, indent=2))
+    return meta
 
 
 @contextmanager

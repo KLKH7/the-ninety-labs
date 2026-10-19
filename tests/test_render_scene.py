@@ -4,12 +4,14 @@ from ninety.render.camera import Camera
 from ninety.render.scene import (
     BALL_RADIUS,
     KEYPOINTS,
+    OCCLUDER_HEIGHT_M,
+    OCCLUDER_RADIUS_M,
     Gait,
     Look,
     _stride,
+    ball_hidden,
     body_parts,
     crowded_start,
-    crowding,
     drawn_ball,
     parts_box,
     project_keypoints,
@@ -118,15 +120,106 @@ def test_looks_are_seeded_and_varied():
     assert a == b
     assert len({lk.skin for lk in a}) > 2 and len({lk.height_m for lk in a}) > 10
     assert all(1.65 <= lk.height_m <= 1.98 for lk in a)
+    # Hair shape is a second draw. These four fields are the looks-1 stream and must not move.
+    assert [(lk.id, lk.height_m, lk.build, lk.skin, lk.hair) for lk in a] == [
+        ("h1", 1.826, 1.048, "#8d5a3b", "#2b2b2b"),
+        ("h2", 1.839, 1.139, "#b07850", "#2b2b2b"),
+        ("h3", 1.737, 0.967, "#8d5a3b", "#6b4a2b"),
+        ("h4", 1.853, 1.122, "#6b4329", "#a37a4c"),
+        ("h5", 1.696, 1.008, "#f5d0b5", "#3b2516"),
+        ("h6", 1.671, 1.028, "#b07850", "#3b2516"),
+        ("h7", 1.781, 0.994, "#8d5a3b", "#3b2516"),
+        ("h8", 1.795, 0.978, "#d19a74", "#3b2516"),
+        ("h9", 1.783, 1.1, "#8d5a3b", "#6b4a2b"),
+        ("h10", 1.917, 1.045, "#4a2e1d", "#6b4a2b"),
+        ("h11", 1.772, 0.936, "#f5d0b5", "#a37a4c"),
+        ("a1", 1.844, 1.086, "#e8b897", "#6b4a2b"),
+        ("a2", 1.746, 1.052, "#8d5a3b", "#8a3b1d"),
+        ("a3", 1.892, 1.106, "#d19a74", "#a37a4c"),
+        ("a4", 1.808, 1.115, "#6b4329", "#1b1410"),
+        ("a5", 1.701, 1.103, "#e8b897", "#d9c08c"),
+        ("a6", 1.787, 1.114, "#e8b897", "#1b1410"),
+        ("a7", 1.86, 1.118, "#b07850", "#3b2516"),
+        ("a8", 1.806, 0.913, "#f5d0b5", "#3b2516"),
+        ("a9", 1.74, 0.984, "#8d5a3b", "#d9c08c"),
+        ("a10", 1.743, 1.052, "#4a2e1d", "#1b1410"),
+        ("a11", 1.816, 0.958, "#d19a74", "#a37a4c"),
+    ]
+    assert {lk.hair_style for lk in a} == {"bald", "short", "crown"}
 
 
-def test_crowded_window_has_more_players_near_the_ball():
+GANTRY = (52.5, -35.0, 20.0)
+
+
+def test_a_player_between_the_lens_and_the_ball_hides_it():
+    ball = (52.5, 30.0, 0.0)
+    # 2 m in front of the ball, on the line: the sight line passes him at about 1.2 m.
+    assert ball_hidden(GANTRY, ball, [(52.5, 28.0)])
+    # The same distance behind the ball, beside it, or past the lens: nothing hidden.
+    assert not ball_hidden(GANTRY, ball, [(52.5, 32.0)])
+    assert not ball_hidden(GANTRY, ball, [(52.5 + OCCLUDER_RADIUS_M + 0.05, 28.0)])
+    assert not ball_hidden(GANTRY, ball, [(52.5, -40.0)])
+
+
+def test_the_sight_line_passes_over_a_player_far_in_front():
+    ball = (52.5, 30.0, 0.0)
+    # The line rises from the ball's centre (0.11 m) to the lens 65 m away; it clears a
+    # 1.81 m player who stands more than about 5.6 m in front of the ball.
+    clear = 65.0 * (OCCLUDER_HEIGHT_M - 0.11) / (GANTRY[2] - 0.11)
+    assert ball_hidden(GANTRY, ball, [(52.5, 30.0 - clear + 0.3)])
+    assert not ball_hidden(GANTRY, ball, [(52.5, 30.0 - clear - 0.3)])
+
+
+def test_a_ball_in_the_air_above_a_player_is_not_hidden_by_him():
+    assert not ball_hidden(GANTRY, (52.5, 30.0, 3.0), [(52.5, 29.5)])
+
+
+def _frames(windows: list[list[tuple[float, float]]], n: int) -> list[dict]:
+    """n frames per window, the ball at (52.5, 30) and players fixed where each window puts them."""
+    out = []
+    for players in windows:
+        for _ in range(n):
+            out.append(
+                {
+                    "ball": {"x": 52.5, "y": 30.0, "z": 0.0},
+                    "players": [{"x": x, "y": y} for x, y in players],
+                }
+            )
+    return out
+
+
+def test_the_crowded_window_is_the_one_where_the_ball_is_hidden():
+    n = 50
+    # First window: six players round the ball, all on the far side of it, so nothing is
+    # hidden. Second: one player on the sight line. Counting players near the ball picks the
+    # first; occlusion is the second.
+    far_side = [(52.5 + dx, 31.5 + dy) for dx in (-1.0, 0.0, 1.0) for dy in (0.0, 1.0)]
+    one_in_line = [(52.5, 28.5)]
+    frames = _frames([far_side, one_in_line], n)
+    cams = [GANTRY] * len(frames)
+    assert crowded_start(frames, n, 0, n, cams, step=n) == n
+
+
+def test_players_near_the_ball_break_a_tie_in_occlusion():
+    n = 50
+    frames = _frames([[(52.5, 34.0)], [(52.5, 31.0), (53.0, 31.0), (52.0, 31.0)]], n)
+    cams = [GANTRY] * len(frames)
+    assert crowded_start(frames, n, 0, n, cams, step=n) == n
+
+
+def test_crowded_window_on_a_simulated_match_hides_the_ball_more_than_average():
     m = simulate(8, 3)
     n = 100
-    s = crowded_start(m.frames, n, 50, len(m.frames) - n - 1)
-    mean = lambda a: sum(crowding(f) for f in m.frames[a : a + n]) / n  # noqa: E731
-    overall = sum(crowding(f) for f in m.frames) / len(m.frames)
-    assert mean(s) >= overall
+    cams = [GANTRY] * len(m.frames)
+    s = crowded_start(m.frames, n, 50, len(m.frames) - n - 1, cams)
+
+    def hidden(f):
+        b = f["ball"]
+        return ball_hidden(GANTRY, (b["x"], b["y"], b["z"]), [(p["x"], p["y"]) for p in f["players"]])
+
+    window = sum(hidden(f) for f in m.frames[s : s + n]) / n
+    overall = sum(hidden(f) for f in m.frames) / len(m.frames)
+    assert window > overall
 
 
 def test_ball_radius_is_regulation():

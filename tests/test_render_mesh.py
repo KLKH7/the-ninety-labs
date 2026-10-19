@@ -1,0 +1,164 @@
+"""The skinned body stays inside the capsule box the labels use.
+
+The page draws the mesh. The box is still the capsules from body_parts. Head, feet and,
+on a throw, the hands have to project inside that box. A planted foot stays on its plant
+while the hips move on.
+"""
+
+import math
+import os
+
+import pytest
+
+from ninety.render.camera import Camera
+from ninety.render.clip import RenderUnavailable, _appearance, browser_page
+from ninety.render.meshpose import world_markers
+from ninety.render.params import sample_params
+from ninety.render.scene import Gait, Look, body_parts, parts_box, reach_sign
+
+LOOK = Look("h1", "home", "CM", 1.84, 1.0, "#c68642", "#1b1410")
+CAM = Camera((52.5, -35.0, 20.0), (40.0, 30.0, 0.0), 20.0, 1280, 720)
+
+
+def _box_for(action, phase, speed, dive=0.0, ball=None, heading=0.4):
+    g = Gait(action=action, phase=phase, speed=speed, dive=dive, heading=heading)
+    parts = body_parts(40.0, 30.0, LOOK, g, ball)
+    box = parts_box(CAM, parts)
+    reach = reach_sign(40.0, 30.0, g, ball)
+    pts = world_markers(
+        40.0, 30.0, heading, LOOK.height_m, action, phase, speed, reach, g.dive,
+        g.plant_l, g.plant_r,
+    )
+    return box, pts
+
+
+def _inside(box, point, pad=2.0):
+    """Head and feet stay in the capsule box. The sole may sit 4 px under it.
+
+    The boot capsule is held off the grass. The mesh sole is on the grass, and the
+    ground point under a player is already allowed 4 px past the bottom of this box.
+    """
+    uv = CAM.project(point)
+    assert uv is not None, point
+    x0, y0, x1, y1 = box
+    assert x0 - pad <= uv[0] <= x1 + pad and y0 - pad <= uv[1] <= y1 + 4.0, (uv, box)
+
+
+def test_head_and_feet_project_inside_the_capsule_box():
+    ball = (40.7, 30.25, 0.15)
+    cases = [
+        ("stand", 0.0, 0.0, 0.0, None),
+        ("run", 0.4, 5.5, 0.0, None),
+        ("run", 1.7, 6.0, 0.0, None),
+        ("run", 3.4, 5.0, 0.0, None),
+        ("run", 4.8, 4.5, 0.0, None),
+        ("walk", 1.1, 1.3, 0.0, None),
+        ("strike", 0.2, 0.4, 0.0, ball),
+        ("foot", 0.2, 0.8, 0.0, ball),
+        ("thigh", 0.3, 0.6, 0.0, (40.3, 30.4, 0.9)),
+        ("chest", 0.0, 0.2, 0.0, None),
+        ("head", 0.0, 0.2, 0.0, None),
+        ("hands", 0.0, 0.2, 0.0, None),
+        ("throw", 0.0, 0.0, 0.0, None),
+        ("dive", 0.2, 1.0, 0.8, None),
+        ("dive", 0.2, 1.0, -0.7, None),
+        ("shield", 0.0, 0.3, 0.0, None),
+    ]
+    for action, phase, speed, dive, at in cases:
+        box, pts = _box_for(action, phase, speed, dive, at)
+        assert box is not None, action
+        for name in ("head", "foot_l", "foot_r"):
+            _inside(box, pts[name])
+        if action == "throw":
+            _inside(box, pts["hand_l"])
+            _inside(box, pts["hand_r"])
+
+
+def test_the_planted_foot_does_not_skate_with_the_hip():
+    plant = (10.45, 20.02)
+    a = world_markers(10.0, 20.0, 0.0, 1.84, "run", 0.6, 5.0, 0.0, 0.0, plant, None)
+    b = world_markers(10.22, 20.0, 0.0, 1.84, "run", 2.1, 5.0, 0.0, 0.0, plant, None)
+    for foot in (a["foot_l"], b["foot_l"]):
+        assert math.hypot(foot[0] - plant[0], foot[1] - plant[1]) < 0.22
+        assert foot[2] < 0.12
+    moved = math.hypot(a["foot_l"][0] - b["foot_l"][0], a["foot_l"][1] - b["foot_l"][1])
+    assert moved < 0.12
+
+
+@pytest.fixture(scope="module")
+def page():
+    try:
+        with browser_page() as (pg, _):
+            yield pg
+    except RenderUnavailable as e:
+        if os.environ.get("NINETY_REQUIRE_RENDER") == "1":
+            raise
+        pytest.skip(str(e))
+
+
+def test_the_page_skins_the_same_body_the_box_uses(page):
+    """Beauty and the id pass are the same mesh, and it agrees with the Python markers."""
+    p = sample_params(5)
+    params = {**p.to_dict(), "width": 1280, "height": 720}
+    page.evaluate("cfg => window.ninety.init(cfg)",
+                  {"seed": 5, "params": params, "objects": [_appearance(LOOK, p)]})
+    ball = (40.7, 30.25, 0.12)
+    g = Gait(action="run", phase=1.2, speed=5.2, heading=0.4)
+    parts = body_parts(40.0, 30.0, LOOK, g, None)
+    pose = {
+        "action": "run", "phase": 1.2, "speed": 5.2, "reach": 0, "dive": 0,
+        "plant_l": list(g.plant_l) if g.plant_l else None,
+        "plant_r": list(g.plant_r) if g.plant_r else None,
+        "x": 40.0, "y": 30.0,
+    }
+    spec = {
+        "index": 0,
+        "camera": {"position": list(CAM.position), "R": CAM.R, "fov_v_deg": CAM.fov_v_deg},
+        "objects": [{"id": LOOK.id, "parts": parts, "box": parts_box(CAM, parts), "heading": 0.4,
+                     "pose": pose}],
+        "keypoints": [], "blur": [0.0, 0.0], "score": [0, 0], "clock": "00:00",
+        "goal_age": None, "goal_side": None, "net": None, "want_image": False, "want_markers": True,
+    }
+    res = page.evaluate("s => window.ninety.frame(s)", spec)
+    drawn = res["objects"][LOOK.id]["bbox"]
+    assert drawn is not None and res["objects"][LOOK.id]["full"] > 200
+    box = spec["objects"][0]["box"]
+    # The id pass counts the same mesh the beauty pass drew. A couple of pixels of filter is the edge.
+    assert box[0] - 4 <= drawn[0] and drawn[2] <= box[2] + 4
+    assert box[1] - 4 <= drawn[1] and drawn[3] <= box[3] + 4
+    py = world_markers(40, 30, 0.4, 1.84, "run", 1.2, 5.2, 0, 0, g.plant_l, g.plant_r)
+    js = res["markers"][LOOK.id]
+    for name in ("head", "foot_l", "foot_r"):
+        assert math.dist(py[name], js[name]) < 0.015, (name, py[name], js[name])
+    # A strike on the same body, so the kicking foot is the one the capsule reaches with.
+    g2 = Gait(action="strike", heading=0.0)
+    parts2 = body_parts(40.0, 30.0, LOOK, g2, ball)
+    pose2 = {
+        "action": "strike", "phase": 0, "speed": 0.3,
+        "reach": reach_sign(40, 30, g2, ball), "dive": 0,
+        "plant_l": None, "plant_r": None, "x": 40.0, "y": 30.0,
+    }
+    spec["objects"] = [{"id": LOOK.id, "parts": parts2, "box": parts_box(CAM, parts2), "heading": 0.0,
+                        "pose": pose2}]
+    spec["index"] = 1
+    res2 = page.evaluate("s => window.ninety.frame(s)", spec)
+    py2 = world_markers(40, 30, 0.0, 1.84, "strike", 0, 0.3, pose2["reach"], 0, None, None)
+    js2 = res2["markers"][LOOK.id]
+    assert math.dist(py2["foot_r"] if pose2["reach"] <= 0 else py2["foot_l"], 
+                      js2["foot_r"] if pose2["reach"] <= 0 else js2["foot_l"]) < 0.015
+    assert res2["objects"][LOOK.id]["full"] > 200
+    # A bald slim player and a broad crown still land in the capsule box.
+    for style, build in (("bald", 0.9), ("crown", 1.15)):
+        look = Look(LOOK.id, "home", "CM", 1.84, build, LOOK.skin, LOOK.hair, hair_style=style)
+        g3 = Gait(action="run", phase=1.2, speed=5.2, heading=0.4)
+        parts3 = body_parts(40.0, 30.0, look, g3, None)
+        pose3 = dict(pose, build=build, hair_style=style)
+        spec["objects"] = [{"id": look.id, "parts": parts3, "box": parts_box(CAM, parts3), "heading": 0.4,
+                            "pose": pose3}]
+        spec["index"] += 1
+        res3 = page.evaluate("s => window.ninety.frame(s)", spec)
+        drawn3 = res3["objects"][look.id]["bbox"]
+        box3 = spec["objects"][0]["box"]
+        assert drawn3 is not None and res3["objects"][look.id]["full"] > 200
+        assert box3[0] - 4 <= drawn3[0] and drawn3[2] <= box3[2] + 4, (style, drawn3, box3)
+        assert box3[1] - 4 <= drawn3[1] and drawn3[3] <= box3[3] + 4, (style, drawn3, box3)

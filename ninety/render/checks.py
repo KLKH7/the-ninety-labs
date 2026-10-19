@@ -12,6 +12,7 @@ import math
 from pathlib import Path
 
 from ninety.render.camera import project_with
+from ninety.validate import validate
 
 PROJECTION_TOL_PX = 1.0  # guide: ground truth projects onto its pixels within 1 px
 EDGE_MARGIN_PX = 2  # objects cut by the image border have a shifted centroid; skip them
@@ -116,15 +117,33 @@ def occlusion(frames: list[dict]) -> dict:
         )
         if players
         else None,
-        "player_height_px": _height_stats(players),
+        "player_height_px": _height_stats(frames),
     }
 
 
-def _height_stats(players: list[dict]) -> dict | None:
-    hs = sorted(p["bbox"][3] - p["bbox"][1] for p in players if p["visibility"] > 0.9 and p["bbox"][1] > 0)
-    if not hs:
+def _height_stats(frames: list[dict]) -> dict | None:
+    """Box heights of whole, unoccluded players, overall and per camera angle.
+
+    A box cut by any image edge holds only part of a player, so it is no measure of how tall
+    players are drawn. The guide's 30 to 120 px is for the main view, hence the split by angle.
+    """
+    by_angle: dict[str, list[int]] = {}
+    for f in frames:
+        w, h = f["camera"]["width"], f["camera"]["height"]
+        angle = f["camera"].get("angle", "main")
+        for p in f["players"]:
+            if p["bbox"] and p["visibility"] > 0.9 and _inside(p["bbox"], w, h):
+                by_angle.setdefault(angle, []).append(p["bbox"][3] - p["bbox"][1])
+    if not by_angle:
         return None
-    return {"p05": hs[len(hs) // 20], "median": hs[len(hs) // 2], "p95": hs[len(hs) * 19 // 20]}
+
+    def q(hs: list[int]) -> dict:
+        hs = sorted(hs)
+        n = len(hs)
+        return {"n": n, "p05": hs[n // 20], "median": hs[n // 2], "p95": hs[n * 19 // 20]}
+
+    every = [x for hs in by_angle.values() for x in hs]
+    return {**q(every), "by_angle": {a: q(by_angle[a]) for a in sorted(by_angle)}}
 
 
 def digest(clip_dir: Path, images: int | None = None) -> dict:
@@ -149,6 +168,7 @@ def check_clip(clip_dir: Path) -> dict:
     proj = projection_errors(frames)
     comp = label_completeness(clip, frames, clip_dir)
     occ = occlusion(frames)
+    contract = validate(clip_dir)  # docs/DATA_CONTRACT.md: every clip passes `ninety-validate`
     passed = {
         "projection_ball_lt_1px": proj["ball_px"]["max"] is not None
         and proj["ball_px"]["max"] < PROJECTION_TOL_PX,
@@ -156,6 +176,7 @@ def check_clip(clip_dir: Path) -> dict:
         or proj["keypoint_px"]["max"] < PROJECTION_TOL_PX,
         "player_feet_in_boxes": proj["player_foot_outside_box"] == 0,
         "labels_complete": comp["ok"],
+        "data_contract": not contract,
     }
     return {
         "clip": clip["clip_id"],
@@ -164,5 +185,6 @@ def check_clip(clip_dir: Path) -> dict:
         "projection": proj,
         "labels": comp,
         "occlusion": occ,
+        "data_contract": contract,
         "passed": passed,
     }

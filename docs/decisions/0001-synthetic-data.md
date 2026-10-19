@@ -123,6 +123,137 @@ of seed 900001 matched labels and all 250 images byte for byte.
 - Player height p05 is 16 px in seed 900001, under the guide's 30 px; the other four clips are
   31 to 54 px at p05, and every clip's p95 is 86 to 106 px. Not yet traced.
 
+### Third measurement (Oct 17, hard cases drawn from the seed)
+
+`kit_contrast` and `occlusion` used to change only with `--set`, which the test set refuses, so
+the test set could never hold a crowded window or low-contrast kits. They are now drawn from the
+seed at `HARD_CASE_RATE` = 0.3, set from the train floors before rendering, not from this number.
+Re-rendered at commit `6269283`: seeds 900001, 900002 and 900004 are crowded, 900004 has
+low-contrast kits.
+
+All checks pass (ball projection max 0.30 px, keypoints max 0.0015 px, determinism identical).
+
+- The ball is under 0.5 visible in 55 of 1,250 frames (**4.40%**; crowded clips 6.4%, 8.8%,
+  2.4%; natural clips 0% and 4.4%). Still **short of the 5% minimum**, so the test set is still
+  not ready to freeze. The rate is not raised to reach 5%; whether to move the freeze or change
+  the test set's design is R2's decision.
+- Player height p05 is 9 px in seed 900004 (the 16 px case moved from 900001 to 900004 with the
+  new window), under the guide's 30 px. Not yet traced; a camera cut is the first suspect.
+
+### Fourth measurement (Oct 17, the reconciled engine, #37)
+
+The match engine changed under the test set (#37 merged into main), so the same five seeds were
+re-rendered at commit `443c4d5` with the same render parameters.
+
+- The ball is under 0.5 visible in 80 of 1,250 frames (**6.4%**; per clip 8.0%, 8.0%, 4.4%,
+  9.6%, 2.0%). This **meets the 5% minimum** for the first time; no render parameter changed to
+  get there.
+- **The render check fails** (`all_passed: false`): in seed 900002 (frames 4524 to 4529) player
+  a11 stands just below the bottom of the frame (his foot projects to y = 807 of 720) and only
+  his head is drawn, with no body under it. The box ends at his chin (y = 718), so the check
+  takes him for a whole player inside the frame and his foot is outside the box. The check is
+  right: a floating head is a rendering defect a viewer would see. Traced and fixed in the
+  fifth measurement.
+- Player height p05 is 19 px in seed 900001 (under the guide's 30 px), and p95 is 160 px in seed
+  900002 (over its 120 px). Both traced in the fifth measurement.
+
+### Fifth measurement (Oct 18, bodies drawn as their capsules)
+
+**The floating head.** `body_parts` labels every part as a capsule, `parts_box` bounds it as one
+and the body-shape tests measure it as one, but `web/render` drew each part as a lathe that
+closed to a point at both joints. Nothing was drawn between the top of the trunk (1.36 of his
+height over 1.84 m) and the base of the neck (1.44), so wherever the bottom edge of the frame
+crossed a player at that height, the frame held his head and neck and no shoulders, and his box
+ended at the chin. a11 in seed 900002 was that case for five frames. Each part now has round caps
+at both joints, so the drawn part is the labelled capsule and the trunk, neck and arms meet.
+`tests/test_render_body.py` slides the bottom edge from a player's shins to his chin (1.65 m and
+1.98 m players, side-on and facing away) and fails if his box ever stops short of it; it failed
+at 1.26 to 1.28 m and 1.52 m before the fix (renderer 0.3.1).
+
+**The player heights.** Both numbers were real boxes, but neither was a whole player in the main
+view:
+
+- p05 19 px (900001): every box below p05 was a player cut by an image edge, which the statistic
+  counted as a short player (it skipped only boxes cut by the top edge). Whole players in that
+  clip are 60 px at p05 (traced on a re-render with the same p05, median and p95).
+- p95 160 px (900002 at `443c4d5`): every box above p95 was in the `net` angle, the low
+  three-quarter beside the goal for four seconds after a goal, which is meant to be close. The
+  main view in that clip was 67 to 85 px (p05 to p95).
+
+The statistic now counts only boxes not cut by any edge, and reports each camera angle, since the
+guide's 30 to 120 px is for the main view.
+
+Re-rendered at commit `45e638d` (main with #83 merged into this branch; same seeds and render
+parameters). All checks pass, including determinism (labels and all 250 images of seed 900001
+identical):
+
+- ball projection max 0.26 px, keypoints max 0.0014 px, every player's foot inside its box, no
+  frame with a label problem.
+- The ball is under 0.5 visible in 79 of 1,250 frames (**6.32%**; per clip 8.8%, 13.6%, 2.0%,
+  3.6%, 3.6%), above the 5% minimum. This branch without the fix (`e699c8f`) gives 5.52%: round
+  shoulders, hips and feet are a little more body to hide the ball behind.
+- Whole players in the main view are 50 to 99 px tall (p05 to p95, per clip), inside the
+  guide's 30 to 120 px. The other angles: `tight` 82 to 142 px, `reverse` (far stand) 41 to 90 px.
+- #83 (energy in players' choices) changed the matches, so the windows differ from `443c4d5`'s and
+  a11's frames are no longer in seed 900002's clip; the test above is what holds the fix.
+
+### Frozen (Oct 18, tag `engine-v1`)
+
+The test set is frozen at tag `engine-v1` (commit `b319f21`: main with #102's capsule bodies and
+#101's crowded window, which picks the window where a player stands on the line from the camera
+to the ball). The five seeds were rendered once, locally, with `ninety-dataset --split test`.
+Their parameters, and the sha256 of every clip's `frames.jsonl`, `events.jsonl` and images, are
+in `docs/eval/test-set-frozen.json`. From here on the test set is these files: a later engine or
+renderer change does not re-render it, and a re-render that does not match the hashes is a
+different test set.
+
+All render checks pass, including determinism (labels and all 250 images of seed 900001
+identical): ball projection max 0.26 px, keypoints max 0.0045 px, every player's foot inside its
+box, no frame with a label problem.
+
+- The ball is under 0.5 visible in 78 of 1,250 frames (**6.24%**; per clip 14.4%, 3.6%, 2.0%,
+  7.6%, 3.6%), above the 5% minimum. Seeds 900001, 900002 and 900004 are crowded and 900004 has
+  low-contrast kits, all drawn from the seed; no override, and no parameter was chosen from this
+  number.
+- Whole players in the main view are 52 to 101 px tall (p05 to p95, per clip), inside the
+  guide's 30 to 120 px.
+- The data contract is checked: after #96, `ninety-render-meta` wrote each clip's `meta.json`
+  from its own files and `ninety-validate` passed all five. The frozen hashes are unchanged;
+  each `meta.json` has its own sha256 in `test-set-frozen.json`.
+
+### Re-frozen (Oct 18, a ground-truth defect found from detector misses)
+
+The detector session missed the ball in seed 900003 for about 5 s, and the frames showed why:
+the ball was resting off the pitch at (73.1, 72.0), 0.5 m behind the far advertising boards, and
+the picture showed only boards. The labels said visibility 1.0 with about 55 pixels, because the
+object-id pass hid all scenery. The render checks could not see it: each one compares the labels
+with the id pass.
+
+The fix (#118, `cca498c`, renderer 0.3.2) draws every opaque piece of scenery as an unlabelled
+occluder in the full id pass. The sky, the ground, the nets and the shadow decals stay out, each
+for a stated reason. `tests/test_render_occlusion.py` fails on the old id pass. The scope was
+measured over every split, not only where the detector failed: 110 ball labels in the test set
+(all in 900003) and an estimated 52 of about 88,000 in v2, v2los and topup1, with no player
+label changing.
+
+The test set was re-rendered once at `cca498c`, which is `engine-v1`'s engine plus that one
+renderer change. Every image and events file is byte-identical to the first freeze, and so are
+the labels of the other four clips. Only 900003's `frames.jsonl` changes: 110 frames go from
+visibility 1.0 to 0. `docs/eval/test-set-frozen.json` records both commits, the old and new
+hashes, and the reason. All render checks pass, determinism included.
+
+- The ball is under 0.5 visible in 188 of 1,250 frames (**15.0%**). 113 of those are fully
+  hidden: the 110 behind the boards, plus 3 more. 75 (6.0%) are partly drawn, under half visible,
+  which still meets the 5% minimum without the dead ball.
+- A dead ball behind the boards is not a hard case a detector can be expected to find, so
+  detection scores should be reported with fully hidden balls apart (EVALUATION.md's visibility
+  groups already do this).
+
+**Stored (Oct 19).** The re-frozen clips are in shared storage. Images and `clip.json` are in
+`renders/test-frozen-cca498c/`. `frames.jsonl`, `events.jsonl` and `meta.json` are in
+`truth-test/test-frozen-cca498c/`, a container of its own (#123), because training machines get a
+read link to `truth`. Re-downloaded, every hash matches `docs/eval/test-set-frozen.json`.
+
 The final proof comes later: detector recall on the fixed test set before and after each
 targeted round.
 

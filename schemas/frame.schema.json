@@ -8,6 +8,7 @@
   "properties": {
     "frame": { "type": "integer", "minimum": 0, "description": "Match frame index at 25 fps; event.frame refers to the same index." },
     "t": { "type": "number", "minimum": 0 },
+    "source": { "type": "string", "enum": ["truth", "tracked"], "description": "Where the positions come from: the ground-truth data, or the tracker run on the video. Absent means truth." },
     "clip": { "type": "string", "description": "Rendered frames: id of the clip this frame belongs to." },
     "image": { "type": "string", "description": "Rendered frames: image path relative to the clip directory." },
     "ball": {
@@ -83,7 +84,7 @@
     },
     "visibility": {
       "type": "number", "minimum": 0, "maximum": 1,
-      "description": "Share of the object's in-image pixels not hidden by other players, the ball, the goal frame or the scorebug, counted by the renderer."
+      "description": "Share of the object's in-image pixels not hidden by other players, the ball, the goal frame, the scenery (boards, stands, roofs, towers) or the scorebug, counted by the renderer. 0 with a bbox means in shot and fully hidden."
     },
     "point": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "type": "number" } },
     "point_or_null": { "type": ["array", "null"], "minItems": 2, "maxItems": 2, "items": { "type": "number" } },

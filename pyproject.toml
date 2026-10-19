@@ -22,17 +22,20 @@ dependencies = [
 [project.scripts]
 ninety-sim = "ninety.sim.cli:main"
 ninety-slice = "ninety.agents.slice:main"
+ninety-live = "ninety.agents.live:main"
 ninety-agents = "ninety.agents.foundry:main"
 ninety-validate = "ninety.validate:main"
 ninety-render = "ninety.render.cli:render_main"
 ninety-dataset = "ninety.render.cli:dataset_main"
 ninety-render-check = "ninety.render.cli:check_main"
+ninety-render-meta = "ninety.render.cli:meta_main"
 ninety-grid = "ninety.sim.grid:main"
 ninety-data-stats = "ninety.vision.data_stats:main"
 
 [dependency-groups]
 dev = [
     "pytest>=8",
+    "pytest-xdist>=3.6",
     "ruff>=0.17.0",
 ]
 render-job = [
@@ -40,7 +43,7 @@ render-job = [
     "azure-storage-queue>=12.18.0",
 ]
 vision = [
-    "rfdetr==1.11.2",
+    "rfdetr[train]==1.11.2",
 ]
 
 [build-system]
