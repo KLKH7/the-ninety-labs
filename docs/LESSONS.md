@@ -864,7 +864,7 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** the harness line for every mutation shows "N failed, M passed". Run one mutation by
   hand first and watch it go red before trusting the loop.
 
-### 97. A change to the picture bumps the renderer version in the same commit
+### 102. A change to the picture bumps the renderer version in the same commit
 - **What happened:** the skinned kit mesh (a3d228e) replaced the capsule players and left
   `RENDERER_VERSION` at 0.3.2. Dataset v1's clips at `cca498c` (capsules) and every clip rendered
   from main since (mesh) both record renderer 0.3.2, so `clip.json` cannot say which body a

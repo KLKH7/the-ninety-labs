@@ -7,6 +7,7 @@ docs/decisions/0001-synthetic-data.md.
 """
 
 # Bumped whenever the pixels or the labels change, so clip.json says which renderer drew a clip.
-# 0.4.0: players drawn on the skinned kit mesh (a3d228e), not the capsules 0.3.x drew; and the
-# `occlusion=keeper` window. 0.3.2 clips at cca498c and later main clips both said 0.3.2.
+# 0.4.0: players drawn on the skinned kit mesh (a3d228e), not the capsules 0.3.x drew; the
+# `occlusion=keeper` window; the crowded window counting only a live ball. Clips at cca498c and
+# main's clips before this both said 0.3.2 (docs/LESSONS.md, lesson 102).
 RENDERER_VERSION = "0.4.0"

@@ -487,6 +487,24 @@ def ball_hidden(cam_pos: tuple[float, float, float], ball: tuple[float, float, f
     return False
 
 
+def ball_live(prev: dict | None, frame: dict, pitch_x: float = 105.0, pitch_y: float = 68.0) -> bool:
+    """The ball is on the pitch and in play: someone has it, or it moved since the last frame.
+
+    A still ball nobody has is a dead ball waiting for a restart (Law 9: out of play after it
+    crosses a line or the referee stops play), and a ball off the pitch is not in play either.
+    A player standing beside a dead ball for the whole restart wait is not footage of a player
+    hiding the ball in play: on seed 7004 that wait filled a crowded window (250 frames counted
+    hidden, none hidden in the render).
+    """
+    b = frame["ball"]
+    if not (0.0 <= b["x"] <= pitch_x and 0.0 <= b["y"] <= pitch_y):
+        return False
+    if frame.get("possessor") is not None or prev is None:
+        return True
+    a = prev["ball"]
+    return (a["x"], a["y"], a["z"]) != (b["x"], b["y"], b["z"])
+
+
 def crowded_start(
     frames: list[dict],
     n: int,
@@ -495,7 +513,7 @@ def crowded_start(
     cam_positions: list[tuple[float, float, float]],
     step: int = 25,
 ) -> int:
-    """Start frame of the n-frame window where the ball is most often behind a player.
+    """Start frame of the n-frame window where the ball, in play, is most often behind a player.
 
     cam_positions[i] is where the broadcast lens stood at frame i. Occlusion is a matter of
     where players stand on the line from that lens to the ball, not of how many are near it:
@@ -505,7 +523,8 @@ def crowded_start(
     for i, f in enumerate(frames[: len(cam_positions)]):
         b = f["ball"]
         players = [(p["x"], p["y"]) for p in f["players"]]
-        blocked = ball_hidden(cam_positions[i], (b["x"], b["y"], b["z"]), players)
+        live = ball_live(frames[i - 1] if i else None, f)
+        blocked = live and ball_hidden(cam_positions[i], (b["x"], b["y"], b["z"]), players)
         hidden[i + 1] = hidden[i] + blocked
     best, best_score = earliest, (-1, -1.0)
     for s in range(earliest, max(earliest, latest) + 1, step):

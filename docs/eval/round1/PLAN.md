@@ -1,6 +1,6 @@
 # Targeted data round 1: plan
 
-Status: **plan, not rendered.** Rendering on Azure waits for the Coordinator's approval of the
+Status: **plan ready, not rendered.** Rendering on Azure waits for the Coordinator's approval of the
 spend. Nothing here has been trained on.
 
 **Rubric:** Technological implementation and Agentic design. The Vision Auditor's clusters go to
@@ -68,7 +68,7 @@ Counts are small (129 and 76 labels). These shares decide where clips go; they a
 
 | Cluster | Setting | Status |
 |---|---|---|
-| behind a player, behind a player in a crowd (ball and player) | `occlusion=crowded` | on main since #101 |
+| behind a player, behind a player in a crowd (ball and player) | `occlusion=crowded` | on main since #101; **this PR counts only a live ball** (section 4) |
 | behind the keeper | `occlusion=keeper` | **new in this PR** |
 
 `occlusion=keeper` (`ninety/render/scene.py`, `keeper_start`) picks the 10 s window, from the same
@@ -108,10 +108,44 @@ The Data agent splits the budget by misses (`ninety/agents/data_agent.py`, large
 
 ## 4. Expected effect: local sample
 
-`ninety-data-stats --floors` on a small local sample, one render process at a time (seeds 7001 to
-7004, each rendered three ways, renderer at this branch):
+Seeds 7001 to 7004, each rendered three ways at this branch (skinned mesh, main's engine), one
+render process at a time, about 4 minutes a clip on a Mac. `ninety-data-stats --stride 5 --input
+640x640 --floors` gives the training share (its count floors fail, as they must with 4 clips); the
+every-frame counts are from `frames.jsonl`.
 
-SAMPLE_TABLE
+| Window | Mostly hidden balls, stride 5 (`--floors` share) | Every frame: mostly hidden of balls in shot | Per clip | Players mostly hidden |
+|---|---|---|---|---|
+| natural (seed's own window) | 3 of 164 (1.8%) | 20 of 818 (2.4%) | 8, 0, 12, 0 | 0.60% |
+| `crowded` as on main | 3 of 200 (1.5%) | 37 of 1,000 (3.7%) | 0, 18, 19, 0 | 0.29% |
+| **`crowded`, ball in play (this PR)** | **17 of 200 (8.5%)** | **100 of 1,000 (10.0%)** | 41, 18, 19, 22 | 0.54% |
+| **`keeper` (this PR)** | **11 of 180 (6.1%)** | **57 of 1,000 (5.7%)**, plus 102 fully hidden | 30, 6, 8, 13 | 0.52% |
+
+Training floor for the share: 5%. Dataset v1 had 11.4% on capsules.
+
+**`crowded` as on main barely moved the share on the mesh, and this PR fixes the cause.** Two of
+its four windows were dead balls:
+- Seed 7004: a free-kick wait, the taker 0.21 m from a still ball for all 10 s.
+  `scene.ball_hidden` counted all 250 frames hidden; the render hid none.
+- Seed 7001: the ball lay off the pitch behind the goal line for the whole window.
+`crowded_start` now counts a frame only while the ball is live (`scene.ball_live`): on the pitch,
+and either held or moving. A still ball nobody has is a dead ball waiting for a restart (Law 9).
+Long still stretches are realistic dead time (restart timing is Opta's, GROUNDING R1), so this is
+the renderer's window choice, not the engine. The tests cover a dead-ball window losing to a live
+one and each condition of `ball_live`, all mutation-checked.
+
+**Known limit, not fixed here:** the predictor still models a player as the capsule torso
+(`OCCLUDER_RADIUS_M = 0.23`). On the mesh, about one in five frames it calls hidden is hidden in
+the render, against about two in five on dataset v1's capsule validation clips. It ranks windows
+well enough to reach 10%. Calibrating it to the mesh is a follow-up, measured the same way.
+
+Players: no window setting raises the share of mostly hidden players (0.3 to 0.6% in every
+setting). The player clusters' 18 clips still add crowded footage, but the plan does not promise a
+gain there.
+
+Expected effect of round 1 on dataset v1's training share: 69 crowded clips at about 9% and 11
+keeper clips at about 6% add about 300 mostly hidden ball labels at stride 5 (80 clips × 50 frames
+× about 0.9 balls in shot a frame × about 8%). That is about a fifth more than dataset v1's 1,579,
+all of them in the two situations where ours-v3 misses most.
 
 ## 5. The skinned mesh, and a test set to match
 
@@ -122,7 +156,7 @@ look and engine, and so does the demo footage. Scoring the after model only on t
 would publish numbers for a look the demo no longer shows.
 
 The mesh change did not bump `RENDERER_VERSION` (0.3.2 for both looks): fixed in this PR (0.4.0)
-with lesson 97.
+with lesson 102.
 
 **Proposal: round 1 and a re-frozen mesh test set come together, from the same commit.**
 1. Re-render the five test seeds (900001 to 900005, their own sampled parameters, no overrides) at

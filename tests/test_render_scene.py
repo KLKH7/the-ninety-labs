@@ -10,6 +10,7 @@ from ninety.render.scene import (
     Look,
     _stride,
     ball_hidden,
+    ball_live,
     body_parts,
     crowded_start,
     drawn_ball,
@@ -177,14 +178,16 @@ def test_a_ball_in_the_air_above_a_player_is_not_hidden_by_him():
     assert not ball_hidden(GANTRY, (52.5, 30.0, 3.0), [(52.5, 29.5)])
 
 
-def _frames(windows: list[list[tuple[float, float]]], n: int) -> list[dict]:
-    """n frames per window, the ball at (52.5, 30) and players fixed where each window puts them."""
+def _frames(windows: list[list[tuple[float, float]]], n: int, possessor: str | None = "h9") -> list[dict]:
+    """n frames per window, the ball at (52.5, 30) held by `possessor` (None: a still, dead ball),
+    and players fixed where each window puts them."""
     out = []
     for players in windows:
         for _ in range(n):
             out.append(
                 {
                     "ball": {"x": 52.5, "y": 30.0, "z": 0.0},
+                    "possessor": possessor,
                     "players": [{"x": x, "y": y} for x, y in players],
                 }
             )
@@ -208,6 +211,28 @@ def test_players_near_the_ball_break_a_tie_in_occlusion():
     frames = _frames([[(52.5, 34.0)], [(52.5, 31.0), (53.0, 31.0), (52.0, 31.0)]], n)
     cams = [GANTRY] * len(frames)
     assert crowded_start(frames, n, 0, n, cams, step=n) == n
+
+
+def test_a_player_beside_a_dead_ball_is_not_a_crowded_window():
+    n = 50
+    # First window: a free-kick wait, a player on the sight line beside a still ball nobody has.
+    # Second: the ball in play, hidden for fewer frames. The live window wins.
+    dead = _frames([[(52.5, 28.5)]], n, possessor=None)
+    live = _frames([[(52.5, 28.5)]], n // 5) + _frames([[(60.0, 40.0)]], n - n // 5)
+    cams = [GANTRY] * (2 * n)
+    assert crowded_start(dead + live, n, 0, n, cams, step=n) == n
+
+
+def test_a_ball_is_live_when_held_or_moving_and_on_the_pitch():
+    still = {"ball": {"x": 52.5, "y": 30.0, "z": 0.0}, "possessor": None}
+    held = {**still, "possessor": "h9"}
+    rolled = {"ball": {"x": 52.6, "y": 30.0, "z": 0.0}, "possessor": None}
+    off = {"ball": {"x": 106.0, "y": 30.0, "z": 0.0}, "possessor": "h9"}
+    assert not ball_live(still, still)
+    assert ball_live(still, held)
+    assert ball_live(still, rolled)
+    assert not ball_live(held, off)
+    assert not ball_live(held, {"ball": {"x": 52.5, "y": -0.1, "z": 0.0}, "possessor": "h9"})
 
 
 def test_crowded_window_on_a_simulated_match_hides_the_ball_more_than_average():
