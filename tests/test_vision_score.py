@@ -2,7 +2,16 @@ import json
 
 import pytest
 
-from ninety.eval.vision_score import main, score
+from ninety.eval import vision_score
+from ninety.eval.vision_score import BALL_DISTANCE_PX, PLAYER_IOU, main, score
+
+MODEL = {"name": "rf-detr", "size": "small", "version": "test", "checkpoint": "coco"}
+
+
+def contract_line(frame, found):
+    """One line of the detections contract (ninety/vision/detections.py)."""
+    return json.dumps({"clip": "seed1", "frame": frame, "t": frame / 25, "model": MODEL,
+                       "detections": [{k: v for k, v in d.items() if k != "frame"} for d in found]}) + "\n"
 
 
 def frames():
@@ -84,7 +93,7 @@ def test_cli(tmp_path, capsys):
     det_path = tmp_path / "detections.jsonl"
     report_path = tmp_path / "report.json"
     frame_path.write_text(json.dumps(frames()[0]) + "\n")
-    det_path.write_text("".join(json.dumps(d) + "\n" for d in detections()))
+    det_path.write_text(contract_line(0, detections()))
     main(["--frames", str(frame_path), "--detected", str(det_path), "--report", str(report_path)])
     assert json.loads(report_path.read_text())["overall"]["f1"] == 1.0
     assert json.loads(capsys.readouterr().out)["overall"]["tp"] == 3
@@ -217,12 +226,7 @@ def test_only_frames_the_detector_ran_on_are_scored(tmp_path, capsys):
     frame_path = tmp_path / "frames.jsonl"
     det_path = tmp_path / "detections.jsonl"
     frame_path.write_text("".join(json.dumps(row) + "\n" for row in rows))
-    det_path.write_text(
-        json.dumps({"frame": 0, "detections": [
-            {k: v for k, v in d.items() if k != "frame"} for d in detections()
-        ]}) + "\n"
-        + json.dumps({"frame": 2, "detections": []}) + "\n"
-    )
+    det_path.write_text(contract_line(0, detections()) + contract_line(2, []))
     main(["--frames", str(frame_path), "--detected", str(det_path)])
     report = json.loads(capsys.readouterr().out)
     assert report["overall"]["tp"] == 3
@@ -234,3 +238,65 @@ def test_only_frames_the_detector_ran_on_are_scored(tmp_path, capsys):
 def test_a_run_frame_missing_from_frames_jsonl_is_refused():
     with pytest.raises(ValueError, match="not in frames.jsonl"):
         score(frames(), [], run={0, 5})
+
+
+def test_cli_refuses_a_file_that_breaks_the_detections_contract(tmp_path):
+    frame_path = tmp_path / "frames.jsonl"
+    det_path = tmp_path / "detections.jsonl"
+    frame_path.write_text(json.dumps(frames()[0]) + "\n")
+    det_path.write_text("".join(json.dumps(d) + "\n" for d in detections()))  # flat, no model
+    with pytest.raises(ValueError, match="detections.jsonl:1"):
+        main(["--frames", str(frame_path), "--detected", str(det_path)])
+
+
+def one_label(cls, bbox):
+    return [{"frame": 0, "camera": {"width": 1280, "height": 720},
+             "boxes": [{"cls": cls, "bbox": bbox, "visibility": 1.0}]}]
+
+
+def player_moved(share):
+    """A 30 x 60 player box and a copy moved sideways by share x its width: IoU (1 - s) / (1 + s)."""
+    dx = 30 * share
+    return [100, 100, 130, 160], [100 + dx, 100, 130 + dx, 160]
+
+
+def test_a_player_copy_at_exactly_the_iou_rule_matches_and_just_past_it_misses():
+    # Shares derived from the constant (LESSONS 36), so a change to the rule moves the test with it.
+    limit = (1 - PLAYER_IOU) / (1 + PLAYER_IOU)
+    for share, matched in ((limit * 0.999, True), (limit * 1.01, False)):
+        truth, moved = player_moved(share)
+        row = score(one_label("player", truth), [{"frame": 0, "cls": "player", "bbox": moved, "score": 1.0}])
+        assert (row["overall"]["tp"], row["overall"]["fp"], row["overall"]["fn"]) == (
+            (1, 0, 0) if matched else (0, 1, 1)
+        ), share
+
+
+def test_a_ball_copy_at_exactly_the_distance_rule_matches_and_just_past_it_misses():
+    # Moved along x by an exactly representable distance, so "exactly the rule" is exact.
+    for dx, matched in ((BALL_DISTANCE_PX, True), (BALL_DISTANCE_PX + 0.25, False)):
+        row = score(one_label("ball", [400, 300, 410, 310]),
+                    [{"frame": 0, "cls": "ball", "bbox": [400 + dx, 300, 410 + dx, 310], "score": 1.0}])
+        assert (row["overall"]["tp"], row["overall"]["fp"], row["overall"]["fn"]) == (
+            (1, 0, 0) if matched else (0, 1, 1)
+        ), dx
+
+
+def test_a_ball_rule_is_a_centre_distance_not_an_overlap():
+    # Two ball boxes 4.2 px apart diagonally overlap little (IoU about 0.32) but sit within the rule.
+    row = score(one_label("ball", [400, 300, 410, 310]),
+                [{"frame": 0, "cls": "ball", "bbox": [403, 303, 413, 313], "score": 1.0}])
+    assert row["overall"]["tp"] == 1
+
+
+def test_the_match_rule_is_the_one_fixed_in_evaluation_md():
+    # Set before any real detections existed (docs/EVALUATION.md, Pixel boxes) and never fitted
+    # to a result: changing either value is a change to the published rule, not a tuning step.
+    assert PLAYER_IOU == 0.50
+    assert BALL_DISTANCE_PX == 5.0
+
+
+def test_a_player_copy_with_iou_exactly_the_rule_matches():
+    truth, moved = [100, 100, 130, 160], [110, 100, 140, 160]  # overlap 20 x 60 over union 40 x 60
+    assert vision_score.iou(truth, moved) == PLAYER_IOU
+    row = score(one_label("player", truth), [{"frame": 0, "cls": "player", "bbox": moved, "score": 1.0}])
+    assert row["overall"]["tp"] == 1
