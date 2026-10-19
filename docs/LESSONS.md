@@ -622,3 +622,21 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_render_occlusion.py` puts a ball 0.5 m behind the far boards and fails if
   any of it is labelled visible (52 pixels on the old id pass). A ball in front of the boards must
   stay visible.
+
+### 86. Measure the worker count; a CI runner's threads are not cores
+- **What happened:** the test jobs took 15 to 40 minutes, so every merge left the other ready
+  pull requests another half hour behind. `pytest -n auto` started 4 workers on GitHub's 4-vCPU
+  runner, which has 2 physical cores, and the job took 22 minutes, against 13 with `-n 2` and 41
+  in one process (measured on the same tree, 2026-10-18). Full-match simulations also slow each
+  other down: `test_judge`'s two simulations took 498 s alone on a runner and 978 s next to the
+  90-minute realism test. Split over three runners per Python version, the jobs took 12 and 13
+  minutes against 29 and 30 in one process (main at `1f0b74c`), and the slowest shard is the one
+  with `test_judge`, which simulates 120 match minutes in one test.
+- **Rule:** choose the worker count from a measured run on the real runner, not from `auto`.
+  Spread the slowest tests over separate machines (`--shard`, `tests/conftest.py`), and keep the
+  required check names as a gate that is green only when every shard passed. Every pull request
+  still runs every test.
+- **Check:** `tests/test_shard.py` fails if a test lands in no part or two, if the `--shard`
+  hook drops or repeats a test across K, or if the slowest tests share a part. Each shard prints
+  its 10 slowest tests; when one shard runs much longer than the others, update `SLOWEST` in
+  `tests/conftest.py`.
