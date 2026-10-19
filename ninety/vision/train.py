@@ -108,6 +108,12 @@ def main(argv: list[str] | None = None) -> None:
         help="start from our checkpoint (with its manifest) instead of COCO",
     )
     ap.add_argument(
+        "--dataset-list",
+        type=Path,
+        default=None,
+        help="dataset-list.json from fetch_clips --list: which dataset definition this trained on",
+    )
+    ap.add_argument(
         "--resume",
         action="store_true",
         help="continue a killed run from <out>/last.ckpt, same config and data",
@@ -134,6 +140,7 @@ def main(argv: list[str] | None = None) -> None:
         "epochs_override": a.epochs,
         "resumed_from": str(resume) if resume else None,
         "initialized_from": init,
+        "dataset_list": json.loads(a.dataset_list.read_text()) if a.dataset_list else None,
         "dataset": {
             k: {kk: vv for kk, vv in v.items() if kk != "seeds"} if isinstance(v, dict) else v
             for k, v in dataset.items()
