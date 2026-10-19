@@ -4,10 +4,13 @@
         --detections docs/eval/vision-report-v1/detections --out docs/eval/vision-report-v1.json
 
 Refuses a clip whose labels, events or images differ from docs/eval/test-set-frozen.json, so the
-report is always of the frozen test set. Each clip is scored on its own (frame numbers repeat
-across clips) and the counts are summed; precision, recall and F1 come from the summed counts with
-vision_score's conventions. Detections are committed next to the report, so anyone can rebuild it
-from the committed tree without the checkpoint or a GPU (docs/LESSONS.md, lesson 77).
+report is always of the frozen test set, and refuses a detections file that skips any of a clip's
+frames: vision_score scores only the frames a detector ran on, which is right for a detector run
+on every 25th frame, but a report of the test set claims every frame. Each clip is scored on its
+own (frame numbers repeat across clips) and the counts are summed; precision, recall and F1 come
+from the summed counts with vision_score's conventions. Detections are committed next to the
+report, so anyone can rebuild it from the committed tree without the checkpoint or a GPU
+(docs/LESSONS.md, lesson 77).
 
 Beyond vision_score's blocks the report adds two numbers that EVALUATION.md's groups do not give:
 `ball_at_least_half_visible` (the visible and partly hidden groups together) and
@@ -116,6 +119,12 @@ def build(test_dir: Path, det_dir: Path, freeze: dict, threshold: float = DEFAUL
         rows = load_jsonl(det_dir / f"seed{seed}.jsonl")
         checkpoints |= {r["model"]["checkpoint"] for r in rows}
         run = frames_run(rows)
+        missing = {int(r["frame"]) for r in frames} - run
+        if missing:
+            raise ValueError(
+                f"seed{seed}: the detector did not run on {len(missing)} of {len(frames)} frames "
+                f"(first {min(missing)}); a test-set report scores every frame"
+            )
         dets = flatten(rows)
         report = score(frames, dets, threshold, run=run)
         frames_scored += report["frames"]["scored"]

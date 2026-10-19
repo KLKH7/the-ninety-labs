@@ -134,3 +134,14 @@ def test_counts_are_grouped_by_the_clip_knobs(tmp_path):
     assert r["by_knob"]["occlusion"]["natural"]["ball"]["recall"] == 0.0
     assert r["by_knob"]["kit_contrast"]["normal"]["ball"]["tp"] == 1
     assert [c["occlusion"] for c in r["by_clip"]] == ["crowded", "natural", "crowded"]
+
+
+def test_a_detections_file_that_skips_frames_is_refused(tmp_path):
+    test, dets = tmp_path / "test", tmp_path / "dets"
+    d = write_clip(test, 1)
+    labels = d / "frames.jsonl"
+    first = json.loads(labels.read_text())
+    labels.write_text(labels.read_text() + json.dumps({**first, "frame": 1}) + "\n")
+    write_dets(dets, 1, [PLAYER])  # frame 0 only
+    with pytest.raises(ValueError, match="did not run on 1 of 2 frames"):
+        vision_report.build(test, dets, freeze_of(test, [1]))
