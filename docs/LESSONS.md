@@ -159,6 +159,8 @@ short and actionable. This file is public: no research sources, product names or
   counted as "closing", a pass held mid-window then let go counted as unfinished, a ball at rest
   for four seconds counted as a pass in flight, and open play after a substitution did not count
   as play. One "legal" goal fixture gave a goal with the ball at rest 55 m out.
+  Backfilling the first Azure top-up then showed the reverse: a pass struck on a clip's last frame
+  failed C7, judged on the dribble before the kick, because none of its flight was in the clip.
 - **Rule:** a contract every clip must meet is run by the code that makes clips, as part of the
   check that decides whether a clip ships. A clip that is part of something larger says so in
   its metadata, and a check withholds a judgement only when the clip's own frames show the play
