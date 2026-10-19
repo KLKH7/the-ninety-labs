@@ -237,3 +237,27 @@ def test_the_report_counts_only_what_was_measured():
     assert "refused: 1" in text and "not spoken, cue marked unavailable: e2" in text
     assert "| characters sent to speech (line text) | 22 |" in text
     assert "| model output tokens | not reported |" in text
+
+
+# -- Confidence ----------------------------------------------------------------------------------
+
+
+def test_an_unsure_detection_is_not_described_and_unsure_context_is_not_given_to_the_model():
+    from ninety.agents.factcheck import MIN_CONFIDENCE
+
+    unsure = {**SHOT, "source": "vision", "confidence": MIN_CONFIDENCE - 0.01}
+    d = Describer(speak=_speak)
+    assert _all(d, unsure) == []
+    assert not d.records[0]["aired"] and "held" in d.records[0]["problems"][0]
+    sure = {**SHOT, "source": "vision", "confidence": MIN_CONFIDENCE}
+    assert [s.description.source for s in _all(Describer(speak=_speak), sure)] == ["code"]
+
+    seen = []
+
+    async def model(event, around):
+        seen.extend(e["id"] for e in around)
+        return Description(event["id"], "H10 shoots", "", 0.0, "model")
+
+    unsure_pass = {**PASS, "source": "vision", "confidence": MIN_CONFIDENCE - 0.01}
+    lines = _all(Describer(speak=_speak, model=model), sure, [unsure_pass], verified=True)
+    assert seen == [] and lines[-1].cue["evidence"] == ["e00017"]

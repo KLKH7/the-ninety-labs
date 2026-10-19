@@ -38,7 +38,7 @@ from pydantic import BaseModel
 from ninety import config
 from ninety.agents import cues, telemetry
 from ninety.agents.contracts import Describe, Description, Speak
-from ninety.agents.factcheck import Claim, check
+from ninety.agents.factcheck import MIN_CONFIDENCE, Claim, check
 from ninety.match.facts import compact
 from ninety.speech.tts import ssml
 
@@ -130,6 +130,11 @@ def model_line(event: dict, description: Description,
     return Description(event["id"], text, ssml(text), pan_for(event["x"]), "model"), []
 
 
+def _confident(event: dict) -> bool:
+    """Ground-truth stand-in events carry no confidence and pass (factcheck.confidence_gate)."""
+    return event.get("confidence") is None or event["confidence"] >= MIN_CONFIDENCE
+
+
 def audio_cue(description: Description, t: float, evidence: Sequence[str], spoken: bool,
               replaces: str | None = None) -> dict:
     """The `audio_description` overlay cue for one line. `speech` says whether it was spoken; a
@@ -181,8 +186,17 @@ class Describer:
                        ) -> AsyncIterator[Spoken]:
         """Yields the code line first, spoken, then the model's line if the moment is verified and
         the line passes the fact-checker. The model starts at once, alongside the code line's
-        speech, and nothing waits for it before the code line is out."""
+        speech, and nothing waits for it before the code line is out.
+
+        Like a template graphic, the code line airs without the fact-checker's model half, so a
+        detection the detector is unsure of (below MIN_CONFIDENCE) is not described at all, and
+        unsure detections around it are not given to the model."""
         started = self.clock()
+        if not _confident(event):
+            held = f"held: detected with confidence {event['confidence']:.2f}, below {MIN_CONFIDENCE:.2f}"
+            self._record(event["id"], "code", None, None, [held])
+            return
+        around = [e for e in around if _confident(e)]
         code = code_description(event)
         upgrade = (asyncio.create_task(self._ask(event, around))
                    if verified and self.model is not None else None)

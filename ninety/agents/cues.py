@@ -9,7 +9,7 @@ from pathlib import Path
 
 from jsonschema import validate
 
-from ninety.agents.factcheck import Claim, check
+from ninety.agents.factcheck import MIN_CONFIDENCE, Claim, check
 from ninety.agents.ledger import InMemoryLedger, Ledger, load_match
 from ninety.match.facts import match_events
 
@@ -27,7 +27,7 @@ def _pass_text(event: dict, persona: str) -> str:
     """A pass names who it was for (`intended`), who got it (`receiver`, completed only), who cut it
     out (`interceptor`) and who only touched it (`deflected_by`): different people, never one field
     read as another. A touch is only a touch: "cut out" needs the opponent to have won it."""
-    player, outcome = event["player"], event.get("outcome")
+    player, outcome = _who(event), event.get("outcome")
     receiver, intended, interceptor = event.get("receiver"), event.get("intended"), event.get("interceptor")
     deflector = event.get("deflected_by")
     target = receiver or intended
@@ -58,8 +58,13 @@ def _pass_text(event: dict, persona: str) -> str:
     return ", ".join(parts)
 
 
+def _who(event: dict) -> str:
+    """The player, or the team when the detector could not say who it was."""
+    return event.get("player") or event["team"]
+
+
 def _shot_text(event: dict, persona: str) -> str:
-    player = event["player"]
+    player = _who(event)
     if event["type"] == "goal":
         return f"{player} scores"
     if persona == "casual":
@@ -116,11 +121,15 @@ def line(event: dict) -> str:
     return words.get(kind, f"{kind.replace('_', ' ')}, {player}")
 
 
-async def template_cues(ledger: Ledger) -> list[dict]:
+async def template_cues(ledger: Ledger, min_confidence: float = MIN_CONFIDENCE) -> list[dict]:
+    """A cue for every pass, shot and goal, except a detection the detector is unsure of: a
+    template airs without the fact-checker's model half, so it airs only on a confident one."""
     events = await ledger.query(kind="event")
     cues = []
     for record in events:
         if record.payload.get("type") not in {"pass", "shot", "goal"}:
+            continue
+        if record.confidence is not None and record.confidence < min_confidence:
             continue
         for persona in ("analyst", "casual"):
             text = _text(record.payload, persona)
