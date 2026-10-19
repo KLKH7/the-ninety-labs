@@ -275,6 +275,26 @@ def test_a_worse_passer_is_less_sure_of_a_pass_through_a_narrow_gap():
     assert poor < average < good and good - poor > 0.1
 
 
+def test_takes_players_on_raises_the_dribble_and_leaves_the_pass():
+    def vals(traits, kind):
+        return [o.value for o in D.options(scene(
+            x=70.0, mates=[("h9", 82.0, 34.0, 0.0)], traits=traits)) if o.kind == kind]
+    plain, on = vals((), "dribble"), vals(("takes_players_on",), "dribble")
+    assert plain and len(plain) == len(on)
+    assert all(math.isclose(b - a, D.TAKE_ON) for a, b in zip(plain, on, strict=True))
+    assert vals((), "pass") == vals(("takes_players_on",), "pass")
+
+
+def test_plays_short_raises_a_short_pass_and_lowers_a_long_one():
+    mates = [("near", 80.0, 34.0, 0.0), ("far", 100.0, 34.0, 0.0)]  # 10 m and 30 m
+    def by_receiver(traits):
+        return {o.receiver: o.value for o in D.options(scene(x=70.0, mates=mates, traits=traits))
+                if o.kind == "pass"}
+    plain, short = by_receiver(()), by_receiver(("plays_short",))
+    assert math.isclose(short["near"] - plain["near"], D.SHORT_PASS)
+    assert math.isclose(short["far"] - plain["far"], -D.SHORT_PASS)
+
+
 def test_carrying_on_with_a_dribble_is_slightly_preferred_and_holding_gets_no_bonus():
     def first(kind, s):
         return next(o for o in D.options(s) if o.kind == kind).value

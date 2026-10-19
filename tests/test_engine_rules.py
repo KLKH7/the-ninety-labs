@@ -634,7 +634,8 @@ def test_the_engine_uses_the_attacking_shape_with_the_ball():
     e.brains["home"].in_possession = True
     e.possessor = None  # a pass in flight: the shape still holds
     e.ball = (50.0, 34.0, 0.0, 0.0, 0.0, 0.0)
-    want = offball.attacking_slot("RB", 0.0, 50.0, 34.0, e.brains["away"].line_x)
+    wide = offball.STAYS_WIDE_M if "stays_wide" in p.profile.traits else 0.0
+    want = offball.attacking_slot("RB", 0.0, 50.0, 34.0, e.brains["away"].line_x, wide)
     assert e.shape_target(p)[:2] == want
 
 
