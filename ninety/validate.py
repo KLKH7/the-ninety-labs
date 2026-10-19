@@ -140,9 +140,8 @@ def check_physics(events: list[dict], frames: list[dict], fps: float, roster: li
                   problems: Problems, cut: bool = False) -> None:
     """P1 to P6: speeds, acceleration, ground, gravity, ball at the possessor's feet."""
     dt = 1 / fps
-    # A restart may move everyone at once: kickoff, and the frame a dead ball is placed
-    # for a corner, throw, goal kick, free kick or penalty.
-    restarts = {e["frame"] for e in events if e["type"] in ("kickoff", "out_of_play", "foul", "offside")}
+    # A kickoff restart may move everyone at once: the renderer cuts there.
+    restarts = {e["frame"] for e in events if e["type"] == "kickoff"}
     # While the ball is out of play (Law 9) a new ball may be placed for the restart.
     dead: set[int] = set()
     out_at = None
@@ -172,7 +171,7 @@ def check_physics(events: list[dict], frames: list[dict], fps: float, roster: li
                 problems["P1 player speed"].append(f"frame {f['frame']}: {p['id']} moved at {speed:.1f} m/s")
         b, a = prev["ball"], f["ball"]
         speed = math.dist((a["x"], a["y"], a["z"]), (b["x"], b["y"], b["z"])) / dt
-        if speed > MAX_BALL_MPS and f["frame"] not in dead and f["frame"] not in restarts:
+        if speed > MAX_BALL_MPS and f["frame"] not in dead:
             problems["P3 ball speed"].append(f"frame {f['frame']}: ball moved at {speed:.1f} m/s")
 
     # P2: acceleration from speeds averaged over a short window, skipping windows with a restart.

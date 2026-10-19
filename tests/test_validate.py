@@ -256,17 +256,6 @@ def test_kickoff_restart_may_reset_positions(tmp_path):
     assert "P1 player speed" not in run(tmp_path, clip)
 
 
-def test_a_dead_ball_may_place_everyone(tmp_path):
-    clip = clean_clip()
-    teleport(clip)
-    clip["events"].append(event("e2", 60, "out_of_play", "home", x=70.0, y=40.0))
-    assert "P1 player speed" not in run(tmp_path, clip)
-    # The same jump with no restart event is still a defect.
-    bare = clean_clip()
-    teleport(bare)
-    assert "P1 player speed" in run(tmp_path, bare)
-
-
 def lofted(clip):
     """The pass goes through the air under gravity instead of along the ground."""
     flight = 25 / FPS
