@@ -111,7 +111,8 @@ Within each frame and class, eligible detections are paired one-to-one, best-fir
 match at IoU ≥ 0.50. Ball boxes match when their centre distance is ≤ 5 pixels. A label with no
 match is a false negative; a detection with no match is a false positive. The report contains
 TP, FP, FN, precision and recall overall, by class, and for the difficulty groups below. Boxes
-with visibility zero are not labels because they were not drawn.
+with visibility zero are not labels: boxes are amodal, so an object in shot and fully hidden
+keeps its box, but there is nothing in the image to detect.
 
 Only frames the detector ran on are scored. A frame is run when it has a line in the
 detections file ([the detections contract](../ninety/vision/detections.py)); a line with an

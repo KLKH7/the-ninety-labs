@@ -655,6 +655,21 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** before trusting a match-reading test, run its measurement on a longer window and a
   second engine version, and write both numbers next to it.
 
+### 81. Read a model's class ids from a trained model, by what the boxes look like
+- **What happened:** to map RF-DETR's class ids to player and ball, `detect.py` was checked
+  against a checkpoint trained for one epoch on 10 images. Its ids (1 and 2) were taken to mean
+  player and ball, but that model's output was noise. A trained model returns indices into
+  `class_names`: 0 player, 1 ball. So the merged mapping labelled every ball a player and
+  dropped every player. A validation check on ours-v2 caught it before any number was
+  published: one clip scored 0 true positives, 48 ball-sized "players" and 2,007 misses.
+- **Rule:** decide what each class id means with a trained model, from the boxes it draws (size,
+  shape, how many a frame), never from a smoke run's id counts. Then pin that measurement in a
+  test, with the numbers in its comment.
+- **Check:** `tests/test_vision_finetune.py::test_our_checkpoint_maps_by_index_into_class_names`
+  records the ours-v2 measurement (id 0: 32 x 71 px, about 6 a frame; id 1: 9 x 9 px, one a
+  frame). Before scoring a new checkpoint, run `detect.py` on one validation clip and score it.
+  Precision near zero with ball-sized boxes labelled player means the mapping is wrong.
+
 ### 84. Everything the picture draws in front of an object hides it in the labels
 - **What happened:** the id pass, which counts each object's visible pixels, hid all scenery. In
   seed 900003 of the frozen test set (`engine-v1`) a dead ball rested 0.5 m behind the far
@@ -668,6 +683,18 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_render_occlusion.py` puts a ball 0.5 m behind the far boards and fails if
   any of it is labelled visible (52 pixels on the old id pass). A ball in front of the boards must
   stay visible.
+
+### 85. A scorer reads labels by the rule written down, not by which fields are filled
+- **What happened:** EVALUATION.md says boxes with visibility zero are not labels, but
+  `vision_score.ground_truth()` kept any label with a box. When the re-frozen test set marked
+  balls behind the advertising boards as visibility 0 and kept their boxes, the scorer counted
+  113 balls in shot and fully hidden as misses, and ball recall read 0.846 instead of 0.930. It was found after
+  the results were in; the rule it applies was written before them.
+- **Rule:** a scorer decides what counts as a label from the documented rule, in one function,
+  and never from whether a field happens to be present. A data change that fills a field it once
+  left empty must not change what is scored.
+- **Check:** `tests/test_vision_score.py::test_a_box_with_visibility_zero_is_not_a_label` gives
+  a player and a ball boxes at visibility 0 with no detection and fails if either counts as a miss.
 
 ### 86. Measure the worker count; a CI runner's threads are not cores
 - **What happened:** the test jobs took 15 to 40 minutes, so every merge left the other ready

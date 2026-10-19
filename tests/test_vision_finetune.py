@@ -155,15 +155,16 @@ def test_loader_refuses_a_class_that_is_not_small(monkeypatch):
 
 
 def test_coco_ids_map_by_category_id_not_list_index():
-    label = detect.labels_for("coco")
+    # COCO ids are category ids: 1 person, 37 sports ball; class_names[1] would be "bicycle"
+    label = detect.labels_for("coco", ["person", "bicycle"])
     assert (label(1), label(37), label(2)) == ("player", "ball", None)
 
 
-def test_our_checkpoint_maps_by_category_id_not_list_index():
-    # our checkpoint returned ids 1 and 2 with class_names ["player", "ball"]: indexing the list
-    # would label players as balls and drop balls
-    label = detect.labels_for("ours-v1")
-    assert (label(1), label(2), label(0), label(3)) == ("player", "ball", None, None)
+def test_our_checkpoint_maps_by_index_into_class_names():
+    # measured on ours-v2: id 0 player-shaped boxes (32 x 71 px), id 1 one 9 x 9 px box a frame.
+    # The old mapping (1 player, 2 ball) labelled every ball a player and dropped every player.
+    label = detect.labels_for("ours-v2", ["player", "ball"])
+    assert (label(0), label(1), label(2), label(-1)) == ("player", "ball", None, None)
 
 
 def test_frame_detections_keep_the_floor_and_drop_other_classes():
