@@ -28,14 +28,41 @@ PUBLISHED_KM = {"centre-back": 9.1, "full-back": 10.1, "central midfield": 10.7,
                 "centre-forward": 9.6}
 PUBLISHED_TOP = {"centre-back": 7.9, "full-back": 8.1, "central midfield": 7.9, "winger": 8.6,
                  "centre-forward": 8.0}
+# Premier League tracking, all outfield players (GROUNDING R2; Kavanagh et al. 2024, Table 2):
+# 10.67 km a match, 2.84 km of it while the ball is out of play; with the ball in play 7.83 km
+# over 21.9 + 30.6 = 52.5 minutes (own team, then the opponents, in possession).
+PUBLISHED_IN_PLAY_KM, PUBLISHED_IN_PLAY_MIN, PUBLISHED_OUT_KM = 3.140 + 4.689, 21.9 + 30.6, 2.839
+
+
+def run(seed: int, minutes: float) -> tuple[Engine, set[int]]:
+    """Play the match exactly as Engine.run does, also noting each frame played while the ball was
+    out of play (a restart still to be taken)."""
+    engine = Engine(seed)
+    engine.kickoff("home")
+    dead = set()
+    for _ in range(int(minutes * 60 * FPS)):
+        if engine.restart:
+            dead.add(engine.frame)
+        engine.step()
+    return engine, dead
 
 
 def measure(seed: int, minutes: float = 90) -> dict:
-    engine = Engine(seed)
-    m = engine.run(minutes)
+    engine, dead = run(seed, minutes)
+    out = tally(engine.match, dead, minutes)
+    out["seed"] = seed
+    # The slow store's share left at the final whistle (P10), averaged over outfield players.
+    out["store_left"] = mean(p.physique.ceiling / D0 for p in engine.players if p.role != "GK")
+    return out
+
+
+def tally(m, dead: set[int], minutes: float) -> dict:
+    """What the frames show, per outfield player: distance (split by whether the ball was in play
+    in the frame moved to), high intensity, sprints, top speed; the late drop; team shape."""
     role = {r["id"]: r["role"] for r in m.roster}
     resets = {e["frame"] for e in m.events if e["type"] == "kickoff"}  # positions reset: not running
     dist = defaultdict(float)
+    dist_out = defaultdict(float)  # of which while the ball was out of play
     high = defaultdict(float)
     sprint_m = defaultdict(float)
     sprints = defaultdict(int)
@@ -62,6 +89,8 @@ def measure(seed: int, minutes: float = 90) -> dict:
                 continue
             speed = step * FPS
             dist[p["id"]] += step
+            if f["frame"] in dead:
+                dist_out[p["id"]] += step
             top[p["id"]] = max(top[p["id"]], speed)
             if speed > HIGH_INTENSITY:
                 high[p["id"]] += step
@@ -79,15 +108,15 @@ def measure(seed: int, minutes: float = 90) -> dict:
         if r in GROUPS:
             scale = 90 / minutes
             per_group[GROUPS[r]].append({
-                "km": dist[pid] / 1000 * scale, "high_m": high[pid] * scale,
-                "sprint_m": sprint_m[pid] * scale, "sprints": sprints[pid] * scale, "top": top[pid],
+                "km": dist[pid] / 1000 * scale, "out_km": dist_out[pid] / 1000 * scale,
+                "high_m": high[pid] * scale, "sprint_m": sprint_m[pid] * scale,
+                "sprints": sprints[pid] * scale, "top": top[pid],
             })
     late_drop = 1 - late_high / early_high if early_high else None
     team_shape = {k: (mean(v[0] for v in vals), mean(v[1] for v in vals)) for k, vals in shape.items()}
-    # The slow store's share left at the final whistle (P10), averaged over outfield players.
-    store = mean(p.physique.ceiling / D0 for p in engine.players if p.role != "GK")
-    return {"seed": seed, "groups": dict(per_group), "late_drop": late_drop, "shape": team_shape,
-            "early_high": early_high, "late_high": late_high, "store_left": store}
+    in_play_min = sum(1 for f in m.frames[1:] if f["frame"] not in dead) / FPS / 60 * 90 / minutes
+    return {"groups": dict(per_group), "late_drop": late_drop, "shape": team_shape,
+            "early_high": early_high, "late_high": late_high, "in_play_min": in_play_min}
 
 
 def report(results: list[dict]) -> str:
@@ -110,6 +139,23 @@ def report(results: list[dict]) -> str:
             f"| {mean(x['high_m'] for x in rows):.0f} | {mean(x['sprints'] for x in rows):.0f} "
             f"| {mean(x['top'] for x in rows):.1f} | {PUBLISHED_TOP[group]} |"
         )
+    in_play = mean(r["in_play_min"] for r in results)
+    lines += [
+        "",
+        f"**Ball in play and out of play.** The ball was in play {in_play:.1f} of 90 minutes on average. "
+        "Distance per outfield player while it was in play and while it was out (a restart still to "
+        "be taken), and the pace in play:",
+        "",
+        "| Position | In play, km | In play, m/min | Out of play, km |",
+        "|---|---|---|---|",
+    ]
+    for group in PUBLISHED_KM:
+        rows = [x for r in results for x in r["groups"].get(group, [])]
+        live = mean(x["km"] - x["out_km"] for x in rows)
+        out = mean(x["out_km"] for x in rows)
+        lines.append(f"| {group} | {live:.1f} | {live * 1000 / in_play:.0f} | {out:.1f} |")
+    lines.append(f"| published (Premier League, all outfield) | {PUBLISHED_IN_PLAY_KM:.1f} "
+                 f"| {PUBLISHED_IN_PLAY_KM * 1000 / PUBLISHED_IN_PLAY_MIN:.0f} | {PUBLISHED_OUT_KM:.1f} |")
     lines += ["", "| Team shape (outfield) | Length, m | Width, m |", "|---|---|---|"]
     for key, label in (("in", "in possession"), ("out", "out of possession")):
         rows = [r["shape"][key] for r in results if key in r["shape"]]
