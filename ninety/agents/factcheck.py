@@ -13,9 +13,10 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 
 # A number standing on its own: not part of an id like "e00042" or a player like "h7".
-# A sentence-ending period after it still counts ("in minute 2.").
+# A sentence-ending period after it still counts ("in minute 2."), and so does an English ordinal
+# ("the 9th minute", "his 3rd pass"): the number is the `n` group.
 NUMBER_PATTERN = r"\d+(?:\.\d+)?"
-NUMBER = re.compile(rf"(?<![\w.]){NUMBER_PATTERN}(?!\w)(?!\.\d)")
+NUMBER = re.compile(rf"(?<![\w.])(?P<n>{NUMBER_PATTERN})(?:st|nd|rd|th)?(?!\w)(?!\.\d)")
 DISTANCE_UNITS = r"(?:m|metre|metres|meter|meters)"
 SPEED_UNITS = r"(?:km/h|kph)"
 DISTANCE_NUMBER = re.compile(rf"(?P<number>{NUMBER_PATTERN})\s*{DISTANCE_UNITS}\b", re.I)
@@ -137,7 +138,7 @@ def check(
     for match in NUMBER.finditer(claim.text):
         if any(match.start() in span for span in clock_spans):
             continue
-        value = float(match.group())
+        value = float(match.group("n"))
         expected_field = _number_field(claim.text, match.start())
         if expected_field:
             values = {

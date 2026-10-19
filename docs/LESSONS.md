@@ -222,6 +222,18 @@ short and actionable. This file is public: no research sources, product names or
     older than a day.
   - A port's audit names the branches whose lessons it read.
 
+### 94. A pattern that reads numbers must read every way a number is written
+- **What happened:** the fact-checker's number pattern refused a digit followed by a letter, so it
+  would not read "h7" as a number. That also skipped every English ordinal: "in the 9th minute"
+  passed for an event in minute 2, and "his 97th pass" passed with no such count in the evidence,
+  although the clock rule tells the agents to write minutes as ordinals. The minute pattern
+  already knew the "9th minute" form; it was never reached. Found by the Personalizer's tests,
+  when a planted "7th pass" in a variant aired.
+- **Rule:** a check that reads values out of text is tested on every form the writers are told
+  to use, and on the forms a translation or rewording produces, with a defect planted in each.
+- **Check:** `tests/test_factcheck.py::test_an_ordinal_minute_must_be_the_cited_minute` and
+  `test_an_ordinal_count_must_be_in_the_evidence` fail on the old pattern.
+
 ## Working in the repo
 
 ### 12. "No checks yet" is not "checks passed"

@@ -14,6 +14,7 @@ licence must be one of those three (see `AGENTS.md`).
 | jsonschema | data contract validation | MIT |
 | azure-storage-blob (`render-job` group) | render job uploads clips to Blob Storage | MIT |
 | mcp | MCP server and client | MIT |
+| a2a-sdk (with its `http-server` extra) | the Personalizer's A2A server and client (`ninety/personalizer`); brings google-api-core, google-auth, googleapis-common-protos and proto-plus (Apache-2.0), protobuf (BSD-3-Clause), json-rpc (MIT), pyasn1 (BSD-2-Clause) and pyasn1-modules (BSD) | Apache-2.0 |
 | starlette, uvicorn | the public API (`ninety/api`) | BSD-3-Clause |
 | pydantic (via agent-framework) | typed agent output | MIT |
 | pytest, pytest-xdist and its execnet, ruff (development) | tests (in parallel workers) and lint | MIT |
