@@ -290,6 +290,13 @@ short and actionable. This file is public: no research sources, product names or
   cites nothing.
 - **Check:** a test requires frame-based facts to cite one range, and caps the size of a clip's facts.
 
+### 83. Admin pushes skip the gate
+- **What happened:** four commits went straight to main without CI (an admin can bypass branch
+  protection). They broke lint, the fmath ban (a `math.atan2` in the engine) and the cue fixture,
+  and every open pull request was blocked until a repair landed.
+- **Rule:** every change reaches main through a pull request whose CI has passed, admins included.
+- **Check:** `git log --first-parent origin/main` shows only pull-request merge commits.
+
 ## Data and grounding
 
 ### 16. Read the primary source

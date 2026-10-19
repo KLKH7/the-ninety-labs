@@ -1600,8 +1600,9 @@ class Engine:
             seen = [w for w in (self.beliefs[p.id].where(q.id, self.t) for q in self.players
                                 if q.team != p.team) if w]
             onside = self.onside_limit(p.team, seen, bx)  # L10: as far as he sees he may go
+            wide = offball.STAYS_WIDE_M if "stays_wide" in p.profile.traits else 0.0
             spot = offball.attacking_slot(p.role, PITCH_X - goal_x(p.team), clamp(bx, 0, PITCH_X),
-                                          clamp(by, 0, PITCH_Y), onside)
+                                          clamp(by, 0, PITCH_Y), onside, wide)
             if spot:
                 return *spot, self.in_time(p, *spot)
         if not brain.in_possession and p.role != "GK":

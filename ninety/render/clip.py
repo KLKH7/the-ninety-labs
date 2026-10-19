@@ -38,6 +38,7 @@ from ninety.render.scene import (
     drawn_ball,
     parts_box,
     project_keypoints,
+    reach_sign,
     sample_looks,
 )
 from ninety.render.splits import split_of
@@ -130,6 +131,9 @@ def _appearance(lk, p: RenderParams) -> dict:
         "colors": {**kit_colors(p, lk.team, lk.role), "skin": lk.skin, "hair": lk.hair},
         "pattern": pattern,
         "number": int(lk.id[1:]),
+        "height_m": lk.height_m,
+        "build": lk.build,
+        "hair_style": lk.hair_style,
     }
 
 
@@ -306,7 +310,18 @@ def render_clip(
                         "id": pl["id"],
                         "parts": parts,
                         "box": parts_box(cam, parts),
-                        "heading": gaits[pl["id"]].heading,
+                        "heading": g.heading,
+                        "pose": {
+                            "action": g.action,
+                            "phase": round(g.phase, 4),
+                            "speed": round(g.speed, 3),
+                            "reach": reach_sign(pl["x"], pl["y"], g, ball if meet else None),
+                            "dive": round(g.dive, 3),
+                            "plant_l": [round(v, 4) for v in g.plant_l] if g.plant_l else None,
+                            "plant_r": [round(v, 4) for v in g.plant_r] if g.plant_r else None,
+                            "x": round(pl["x"], 4),
+                            "y": round(pl["y"], 4),
+                        },
                     }
                 )
                 row_players.append(pl)
