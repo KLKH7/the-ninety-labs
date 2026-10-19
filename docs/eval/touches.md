@@ -8,34 +8,34 @@ A **deliberate touch** is a player who has reacted to the ball playing it (foot,
 
 | Surface | Touches | Controlled | Kept | Median speed, m/s |
 |---|---|---|---|---|
-| foot | 17343 | 98.4% | 99.5% | 7.4 |
-| air | 457 | 15.5% | 46.4% | 13.1 |
-| hands | 483 | 98.8% | 98.8% | 0.3 |
-| all but own dribble | 10626 | 93.7% | 96.8% | 10.2 |
-| all | 18283 | 96.3% | 98.1% | 7.5 |
+| foot | 17004 | 98.4% | 99.6% | 6.1 |
+| air | 441 | 19.7% | 51.9% | 12.7 |
+| hands | 414 | 99.3% | 99.3% | 0.3 |
+| all but own dribble | 9890 | 93.7% | 97.1% | 10.0 |
+| all | 17859 | 96.5% | 98.4% | 6.4 |
 
-Failed deliberate touches: 673, of which 386 in the air.
+Failed deliberate touches: 622, of which 354 in the air.
 
 ## By whose ball it was (controlled, of touches)
 
 | Whose ball | foot | air | hands | all |
 |---|---|---|---|---|
-| intended receiver | 97.2% of 6087 | 14.9% of 302 |  | 93.3% of 6389 |
-| team-mate | 98.1% of 2555 | 5.9% of 34 | 100.0% of 7 | 96.9% of 2596 |
-| opponent | 90.2% of 532 | 16.5% of 103 | 100.0% of 8 | 78.5% of 643 |
-| shot | 90.0% of 50 | 40.0% of 5 | 94.1% of 101 | 91.0% of 156 |
-| loose ball | 99.6% of 826 | 38.5% of 13 | 100.0% of 3 | 98.7% of 842 |
-| own dribble | 100.0% of 7293 |  | 100.0% of 364 | 100.0% of 7657 |
+| intended receiver | 97.5% of 5634 | 17.6% of 307 |  | 93.4% of 5941 |
+| team-mate | 98.2% of 2284 | 6.7% of 30 | 100.0% of 5 | 97.1% of 2319 |
+| opponent | 87.0% of 560 | 28.7% of 87 | 100.0% of 7 | 79.4% of 654 |
+| shot | 90.9% of 55 | 22.2% of 9 | 96.2% of 79 | 89.5% of 143 |
+| loose ball | 99.4% of 821 | 50.0% of 8 | 100.0% of 4 | 98.9% of 833 |
+| own dribble | 100.0% of 7650 |  | 100.0% of 319 | 100.0% of 7969 |
 
 ## By arriving speed (controlled, of touches)
 
 | Speed, m/s | foot | air | hands |
 |---|---|---|---|
-| 0 to 6 | 100.0% of 8112 |  | 100.0% of 368 |
-| 6 to 12 | 100.0% of 6560 | 40.2% of 127 | 100.0% of 18 |
-| 12 to 18 | 91.5% of 2606 | 6.1% of 326 | 100.0% of 55 |
-| 18 to 24 | 13.8% of 65 | 0.0% of 4 | 97.1% of 35 |
-| 24 and over |  |  | 28.6% of 7 |
+| 0 to 6 | 100.0% of 8481 | 100.0% of 1 | 100.0% of 321 |
+| 6 to 12 | 100.0% of 6198 | 42.2% of 161 | 100.0% of 23 |
+| 12 to 18 | 90.7% of 2264 | 6.6% of 271 | 100.0% of 42 |
+| 18 to 24 | 11.5% of 61 | 0.0% of 8 | 96.2% of 26 |
+| 24 and over |  |  | 0.0% of 2 |
 
 ## Where a kept ball ends up
 
@@ -43,30 +43,30 @@ Failed deliberate touches: 673, of which 386 in the air.
 
 | Surface | Kept | Had at once | Met at, median m | Not at once: median s | furthest, median m | furthest, 90th percentile m |
 |---|---|---|---|---|---|---|
-| foot | 17252 | 98.9% | 1.00 | 0.66 | 1.19 | 1.76 |
-| air | 212 | 33.0% | 0.36 | 0.84 | 1.16 | 2.31 |
-| hands | 477 | 100.0% | 1.17 | | | |
+| foot | 16929 | 98.9% | 0.99 | 0.72 | 1.20 | 1.75 |
+| air | 229 | 38.0% | 0.39 | 0.94 | 1.26 | 2.19 |
+| hands | 411 | 100.0% | 1.15 | | | |
 
 ## Body hits (the ball meets a body that is not playing it)
 
 | | foot height | in the air | Median speed, m/s |
 |---|---|---|---|
-| not reacted | 342 | 54 | 13.3 |
-| reacted, a glancing ball | 0 | 24 | 11.0 |
+| not reacted | 373 | 71 | 11.4 |
+| reacted, a glancing ball | 0 | 32 | 12.2 |
 
 ## Throw-ins
 
-303 throw-ins (37.9 a match).
+325 throw-ins (40.6 a match).
 
 | Measure | Engine | Published |
 |---|---|---|
-| first contact by a team-mate | 82.2% | 83% (Stone, Smith and Barry 2021) |
-| first contact by a team-mate who controls it | 24.4% | |
-| first contact by a team-mate who keeps it | 56.1% | |
-| possession held 5 s later | 58.4% | 54% retained (Stone 2021, by their own definition of retained, *verify*) |
+| first contact by a team-mate | 86.2% | 83% (Stone, Smith and Barry 2021) |
+| first contact by a team-mate who controls it | 29.8% | |
+| first contact by a team-mate who keeps it | 59.4% | |
+| possession held 5 s later | 56.6% | 54% retained (Stone 2021, by their own definition of retained, *verify*) |
 
 ## Passes
 
 | Measure | Engine | Published |
 |---|---|---|
-| completion | 88.8% of 10110 | 75 to 88% (R3, *verify*) |
+| completion | 87.6% of 9421 | 75 to 88% (R3, *verify*) |
