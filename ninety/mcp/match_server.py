@@ -24,8 +24,9 @@ from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
+from ninety.intel.windows import agent_rows
 from ninety.match import detected
-from ninety.match.facts import AGENT_TYPES, compact, events_in
+from ninety.match.facts import AGENT_TYPES, compact, events_in, match_events
 
 MINUTES = 5  # every served match is a five-minute clip, as the slice and the evaluations use
 # Simulator matches: the pre-M1 stand-in, kept for the committed replays and the agent evaluation.
@@ -53,6 +54,20 @@ def events_of(match: str) -> tuple[dict, ...]:
     return tuple(events_in(MATCHES[match], MINUTES, 1, MINUTES + 1))
 
 
+@lru_cache(maxsize=len(MATCHES) + len(DETECTED))
+def stats_of(match: str) -> tuple[dict, ...]:
+    """The match's window stats, computed by code from its full events (positions included, which
+    the compact events leave out): detected events for a detected clip, the simulator's otherwise."""
+    if match in DETECTED:
+        return tuple(agent_rows(detected.load(DETECTED[match]())))
+    if match not in MATCHES:
+        raise ValueError(f"unknown match {match!r}; available: {', '.join([*DETECTED, *MATCHES])}")
+    stored = Path(MATCH_DIR) / f"{match}.stats.json" if MATCH_DIR else None
+    if stored and stored.exists():
+        return tuple(json.loads(stored.read_text()))
+    return tuple(agent_rows(match_events(MATCHES[match], MINUTES)))
+
+
 def list_events(match: str, minute_from: int, minute_to: int, event_type: str | None) -> list[dict]:
     """Events of one match between two match minutes (inclusive), oldest first. `match` is the
     match id you were given (for example seed7). Optionally one event_type: pass, shot, goal,
@@ -66,10 +81,17 @@ def list_events(match: str, minute_from: int, minute_to: int, event_type: str | 
 
 
 def match_info(match: str) -> dict:
-    """One match: its id, length in minutes and the event types available."""
+    """One match: its id, length in minutes, the event types available, and its stats. Each stat
+    is computed by code for one team in one 15-minute window (the last window ends with the
+    match): ppda (the opponents' passes in their own 60% of the pitch per tackle or interception
+    there; lower is a harder press), field_tilt (the team's share of both sides' attacking-third
+    passes), passes_per_minute (tempo) and territory_shift (the other side took the territory in
+    that window). A stat has an id you may cite as evidence, minute_from and minute_to, its value
+    and unit, percent for a share, and how many events it counts. Quote its numbers as given."""
     events = events_of(match)  # refuses an unknown match
     minutes = max((e["minute"] for e in events), default=0) if match in DETECTED else MINUTES
-    return {"match": match, "minutes": minutes, "event_types": list(AGENT_TYPES)}
+    return {"match": match, "minutes": minutes, "event_types": list(AGENT_TYPES),
+            "stats": list(stats_of(match))}
 
 
 def make_server() -> FastMCP:
@@ -97,6 +119,8 @@ def precompute(out: Path) -> None:
     for match, seed in MATCHES.items():
         rows = events_in(seed, MINUTES, 1, MINUTES + 1)
         (out / f"{match}.json").write_text(json.dumps(rows, separators=(",", ":")))
+        stats = agent_rows(match_events(seed, MINUTES))
+        (out / f"{match}.stats.json").write_text(json.dumps(stats, separators=(",", ":")))
         print(f"{match}: {len(rows)} events")
 
 

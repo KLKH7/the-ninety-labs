@@ -863,3 +863,13 @@ short and actionable. This file is public: no research sources, product names or
   mutation, and a run with no "passed" count is a broken harness, not a surviving mutation.
 - **Check:** the harness line for every mutation shows "N failed, M passed". Run one mutation by
   hand first and watch it go red before trusting the loop.
+
+### 96. A mutation run against a red baseline catches everything
+- **What happened:** the mutation harness for the window stats ran with `-x` over two test files
+  while an existing test (`test_passes_a_minute_and_the_window_edges`) was already failing after
+  the merge. Every mutation reported "caught", including one that no test guarded (allowing a
+  stat's event count as a claim number); the same failure was catching them all.
+- **Rule:** run the suite the harness uses, unmutated, and see it green before the first
+  mutation; a mutation counts as caught only if a test that passes on the baseline fails on it.
+- **Check:** the harness's first line is the baseline run's "N passed, 0 failed"; with lesson 95,
+  each mutation line names the test that went red.

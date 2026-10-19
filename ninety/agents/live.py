@@ -30,6 +30,7 @@ from jsonschema import validate
 from ninety.agents.cues import DISPLAY_SECONDS, SCHEMA, template_cues, write_fixture
 from ninety.agents.ledger import InMemoryLedger, Record, load_match
 from ninety.agents.slice import Ask, Judge, Outcome, run_workflow
+from ninety.intel.windows import agent_rows
 from ninety.match import detected
 from ninety.match.facts import AGENT_TYPES, compact
 
@@ -44,9 +45,17 @@ class LiveResult:
     outcome: Outcome | None
 
 
-def insight_cue(outcome: Outcome, times: dict[str, float]) -> dict:
-    """The verified claim as an on-screen cue, timed from the last event it cites."""
+def insight_cue(
+    outcome: Outcome, times: dict[str, float], stat_events: dict[str, list[str]] | None = None
+) -> dict:
+    """The verified claim as an on-screen cue, timed from the last event it cites (for a window
+    stat, the last event the stat counts). A cue's evidence is event ids (the overlay schema), so
+    a cited stat is replaced by the events it counts."""
+    stat_events = stat_events or {}
     t_in = max(times[i] for i in outcome.claim.evidence)
+    evidence = list(dict.fromkeys(
+        j for i in outcome.claim.evidence for j in stat_events.get(i, [i])
+    ))
     cue = {
         "id": "insight-" + "-".join(outcome.claim.evidence),
         "t_in": t_in,
@@ -59,7 +68,7 @@ def insight_cue(outcome: Outcome, times: dict[str, float]) -> dict:
         "text": outcome.claim.text,
         "verified": True,
         "replaces": None,
-        "evidence": list(outcome.claim.evidence),
+        "evidence": evidence,
     }
     validate(cue, SCHEMA)
     return cue
@@ -84,9 +93,13 @@ async def run(
     if ask is not None and judge is not None and minute is not None:
         # The fact-checker knows what the Analyst can read over MCP: the compact detected events.
         rows = [compact(e) for e in events if e["type"] in AGENT_TYPES]
+        stats = agent_rows(events)  # the window stats, as the MCP server serves them
         times = {e["id"]: e["t"] for e in events}
+        fact_records = {r.id: r for r in await ledger.query(kind="fact")}
+        stat_events = {s["id"]: list(fact_records[s["id"]].evidence) for s in stats}
+        times |= {s["id"]: fact_records[s["id"]].t for s in stats}
         outcome = await run_workflow(
-            ask, judge, minute, False, int(clip.removeprefix("seed")), 0, False, rows
+            ask, judge, minute, False, int(clip.removeprefix("seed")), 0, False, rows, stats
         )
         await ledger.append(Record(
             id=f"claim-minute{minute}", version=1, kind="claim", t=0.0, source="agents",
@@ -94,7 +107,7 @@ async def run(
             payload={"text": outcome.claim.text, "status": outcome.status},
         ))
         if outcome.accepted:
-            cues.append(insight_cue(outcome, times))
+            cues.append(insight_cue(outcome, times, stat_events))
     for cue in cues:
         await ledger.append(Record(
             id=cue["id"], version=1, kind="cue", t=cue["t_in"], source="agents", confidence=None,

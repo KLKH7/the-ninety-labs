@@ -58,11 +58,19 @@ def test_field_tilt_is_a_share_of_both_sides_attacking_third_passes():
 
 
 def test_passes_a_minute_and_the_window_edges():
-    """Fifteen-minute windows: t = 899.9 is still the first, t = 900 the second."""
-    events = [ev(t, "pass", "home", 50.0) for t in (0.0, 400.0, 899.9)] + [ev(900.0, "pass", "home", 50.0)]
+    """Fifteen-minute windows: t = 899.9 is still the first, t = 900 the second. Away's pass at
+    t = 1800 plays the second window to its end."""
+    events = ([ev(t, "pass", "home", 50.0) for t in (0.0, 400.0, 899.9)] + [ev(900.0, "pass", "home", 50.0)]
+              + [ev(1800.0, "pass", "away", 50.0)])
     facts = window_facts(events)
     assert by(facts, "passes_per_minute", "team:home:window:0").value == 0.2
     assert by(facts, "passes_per_minute", "team:home:window:1").value == 0.07
+
+
+def test_a_window_that_ends_where_it_starts_has_no_tempo():
+    """The match's last event opens a window and nothing follows: no time played, no rate."""
+    events = [ev(10.0, "pass", "home", 50.0), ev(900.0, "pass", "home", 50.0)]
+    assert by(window_facts(events), "passes_per_minute", "team:home:window:1") is None
 
 
 def spell(start, home, away=0):

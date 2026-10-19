@@ -79,12 +79,29 @@ def _windows(events: list[Mapping], window_s: float) -> list[list[Mapping]]:
     return out
 
 
+def window_span(index: int, events: list[Mapping], window_s: float = WINDOW_S) -> tuple[float, float]:
+    """A window's start and end in seconds. The last window ends at the last event: a clip or a
+    match that stops mid-window has not played the rest of it, so its tempo is not diluted by
+    minutes that never happened."""
+    start = index * window_s
+    last = max((float(e.get("t", 0)) for e in events), default=start)
+    end = start + window_s
+    return start, (end if last >= end else max(last, start))
+
+
 def window_facts(events: Iterable[Mapping], window_s: float = WINDOW_S) -> list[Fact]:
     """PPDA, field tilt and passes a minute for each team in each window. A measure with nothing
     to count in a window (no defensive action for PPDA, no attacking-third pass for field tilt) is
-    left out rather than given an invented value."""
+    left out rather than given an invented value.
+
+    The same code reads ground truth and detected events (`source: vision`): each counts the events
+    it is given. A detected event's confidence is not used to drop it here: one unsure detection
+    moves a window's count by one, where it would decide a single-event claim alone, which the
+    fact-checker's confidence gate already holds (ninety/agents/factcheck.py)."""
     facts: list[Fact] = []
-    for index, window in enumerate(_windows(list(events), window_s)):
+    events = list(events)
+    for index, window in enumerate(_windows(events, window_s)):
+        start, end = window_span(index, events, window_s)
         for team in ("home", "away"):
             scope = f"team:{team}:window:{index}"
             passes, actions = ppda_events(team, window)
@@ -95,9 +112,9 @@ def window_facts(events: Iterable[Mapping], window_s: float = WINDOW_S) -> list[
             if tilt is not None:
                 facts.append(_fact("field_tilt", tilt, "share", scope, _ids(counted)))
             ours = [e for e in window if e.get("type") == "pass" and e["team"] == team]
-            if ours:
-                facts.append(_fact("passes_per_minute", len(ours) / (window_s / 60.0), "passes/min",
-                                   scope, _ids(ours)))
+            if ours and end > start:
+                facts.append(_fact("passes_per_minute", len(ours) / ((end - start) / 60.0),
+                                   "passes/min", scope, _ids(ours)))
     return facts
 
 
@@ -127,3 +144,36 @@ def territory_shifts(events: Iterable[Mapping], window_s: float = WINDOW_S) -> l
                                f"team:{side}:window:{index}", _ids(counted)))
         current = side
     return facts
+
+
+WINDOW_METRICS = ("ppda", "field_tilt", "passes_per_minute", "territory_shift")
+
+
+def agent_rows(events: Iterable[Mapping], window_s: float = WINDOW_S) -> list[dict]:
+    """The window facts as the agents read them (the MCP server's `match_info`, and what the
+    fact-checker checks a claim against). Same ids and values as the Ledger's facts, plus the
+    numbers a sentence about them may state: the window's first and last match minute and, for a
+    share, its percentage. Nothing here is computed anew; it is the facts, re-shaped."""
+    events = list(events)
+    facts = window_facts(events, window_s) + territory_shifts(events, window_s)
+    rows = []
+    for fact in sorted(facts, key=lambda f: f.id):
+        _, team, _, index = fact.scope.split(":")
+        start, end = window_span(int(index), events, window_s)
+        row = {
+            "id": fact.id,
+            "type": "stat",
+            "metric": fact.metric,
+            "team": team,
+            "window": int(index),
+            # Football minutes: minute 1 is 00:00 to 00:59 (ninety/match/facts.minute_of).
+            "minute_from": int(start // 60) + 1,
+            "minute_to": max(int(start // 60) + 1, math.ceil(end / 60)),
+            "value": fact.value,
+            "unit": fact.unit,
+            "events": len(fact.source_ids),
+        }
+        if fact.unit == "share":
+            row["percent"] = round(fact.value * 100)
+        rows.append(row)
+    return rows

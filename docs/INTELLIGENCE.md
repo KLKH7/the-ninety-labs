@@ -66,7 +66,8 @@ every team-window. Five-minute windows held 3, and a third of team-windows had n
   measure is widely used in public football analytics (*verify*: cite its first definition).
 - **Field tilt** (`field_tilt`, share): this team's passes played from its attacking third,
   divided by both teams' attacking-third passes. A window with none from either side has no fact.
-- **Passes a minute** (`passes_per_minute`): this team's passes in the window over its length.
+- **Passes a minute** (`passes_per_minute`): this team's passes in the window over its length The last
+  window ends at the last event, so a five-minute clip's tempo is over five minutes, not fifteen.
 
 **Territory shift** (`territory_shift`): a side leads a window when its field tilt is more than one
 standard error from level (|tilt - 0.5| > 0.5 / sqrt(n), n the passes counted); closer than that the
@@ -76,3 +77,27 @@ valued at its field tilt there, citing the passes counted. The first leader of t
 
 These are descriptive signals for an agent to explain. They are not predictions, and they read no
 ground-truth-only field.
+
+Each rule's source is in [GROUNDING.md](GROUNDING.md#statistics-the-numbers-the-agents-explain)
+(S1 to S5).
+
+### Truth and detected events
+
+The functions count whatever events they are given: ground truth for grading, detected events
+(`source: vision`, ninety/match/detected.py) on the live path. They read only `t`, `type`, `team`
+and `x`, which every detected event has (schemas/match_event.schema.json). A detection's confidence
+does not drop it from a count: one unsure detection moves a window's count by one, while a claim
+about that one event is held by the fact-checker's confidence gate. How far vision's window stats
+are from truth's on the same clip is to be measured once R3's detected events land
+(docs/EVALUATION.md).
+
+### How the agents read and check them
+
+- **Ledger:** `calculate_facts` includes every window fact, so `load_match` stores them as `fact`
+  records citing the events they count.
+- **MCP:** `match_info` returns them as `stats` (`windows.agent_rows`): the same id and value as
+  the Ledger's fact, plus the window's `minute_from` and `minute_to`, `percent` for a share, and how
+  many events it counts. The published Analyst already calls `match_info`, so no tool is added.
+- **Fact-checker:** a claim may cite a stat by id. The numbers it may state from one are its value,
+  its percent and its window's minutes; any other number is rejected as for an event. An insight
+  cue built on a stat lists the events the stat counts as its evidence, as the overlay schema asks.
