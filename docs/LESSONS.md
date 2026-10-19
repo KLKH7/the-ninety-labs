@@ -863,4 +863,3 @@ short and actionable. This file is public: no research sources, product names or
   mutation, and a run with no "passed" count is a broken harness, not a surviving mutation.
 - **Check:** the harness line for every mutation shows "N failed, M passed". Run one mutation by
   hand first and watch it go red before trusting the loop.
-
