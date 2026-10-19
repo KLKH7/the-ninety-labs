@@ -724,3 +724,19 @@ short and actionable. This file is public: no research sources, product names or
   originals and their engine positions must match frame for frame.
 - **Check:** `docs/eval/dataset-v1.json` lists the run, commit and overrides of every clip; for
   each replaced seed, compare `params` and `overrides` in both `clip.json` files.
+
+### 89. A count is not a cause: look at where the errors land before naming one
+- **What happened:** two explanations were passed on before anyone checked them. "The detector
+  fires on 45 of 113 fully hidden balls" was read as the model seeing balls behind the boards,
+  learned from the boards defect in its training labels. Checking where those detections were
+  showed none on the hidden ball (median 43 px away), 39 at a player's feet, 44 in one clip.
+  "Crowded scenes are the weakness (0.72 recall on validation)" was scored before #119, when
+  fully hidden objects counted as misses, which crowded windows have most of. On the test set the
+  crowded clips score within a few points of the others.
+- **Rule:** before a number becomes a finding or a plan, check what it counts: where the errors
+  sit, and which scorer and labels produced it. A cause is named only after looking at the
+  errors themselves; a number from before a scorer or label fix is re-measured or marked as such.
+- **Check:** `docs/eval/vision-report-v1.json` reports `hidden_ball_frames.on_the_hidden_ball`
+  and the median distance, not just the count, and `by_knob` gives the crowded clips on the test
+  set; `tests/test_vision_report.py` checks a detection at a player's feet is not counted as
+  on the hidden ball.
