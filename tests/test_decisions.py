@@ -515,7 +515,8 @@ def test_the_keeper_sets_himself_deeper_the_further_the_ball_and_smoothly():
     # left the least goal open) jumped between the ends of the range: 6 m out at 8 m, 1 m at 12 m.
     depth = lambda d: 105 - offball.keeper_spot(105 - d, 34, 105)[0]  # noqa: E731
     depths = [depth(d / 2) for d in range(8, 81)]  # 4 m to 40 m, every half metre
-    assert all(b >= a for a, b in zip(depths, depths[1:], strict=False))  # never nearer as the ball goes further
+    # never nearer his line as the ball goes further
+    assert all(b >= a for a, b in zip(depths, depths[1:], strict=False))
     assert max(b - a for a, b in zip(depths, depths[1:], strict=False)) < 0.1  # no jump
     assert offball.KEEPER_DEPTH[0] <= depth(16) <= offball.KEEPER_DEPTH[1]
     assert depth(50) == offball.KEEPER_DEPTH[1]  # out of shooting range: he sweeps
