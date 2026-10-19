@@ -30,16 +30,20 @@ from ninety.render import RENDERER_VERSION
 from ninety.render.camera import Camera, Director, blur_vector
 from ninety.render.params import RenderParams, sample_params
 from ninety.render.scene import (
+    LEAD_AHEAD_FRAMES,
     Gait,
     advance_gaits,
     ball_parts,
     body_parts,
+    contacts,
     crowded_start,
     drawn_ball,
+    mesh_pose,
     parts_box,
     project_keypoints,
     reach_sign,
     sample_looks,
+    touch_at,
 )
 from ninety.render.splits import split_of
 from ninety.sim.engine import FORMATION, FPS, PITCH_X, PITCH_Y, simulate
@@ -251,6 +255,7 @@ def render_clip(
         clip["scorebug_px"] = info["bugRect"]
         director = Director(p.camera, p.width, p.height, p.fps, seed, cuts=p.camera_cut)
         gaits = {lk.id: Gait() for lk in looks}
+        touches = contacts(frames)
         prev_xy: dict[str, tuple[float, float]] = {}
         prev_cam: Camera | None = None
         spin_angle = 0.0
@@ -258,7 +263,9 @@ def render_clip(
         rows = []
         for fi in range(max(0, start - WARMUP), start + n):
             fr = frames[fi]
-            advance_gaits(gaits, prev_xy, fr, 1 / FPS)
+            advance_gaits(gaits, prev_xy, fr, 1 / FPS, frames[min(fi + LEAD_AHEAD_FRAMES, len(frames) - 1)])
+            for pl in fr["players"]:
+                touch_at(gaits[pl["id"]], touches.get(pl["id"], []), fi, by_id[pl["id"]].height_m, FPS)
             ball = drawn_ball(fr)
             actors = [(pl["x"], pl["y"], pl.get("action", "")) for pl in fr["players"]]
             # The snapshot of a goal already has the ball on the centre spot. The event
@@ -296,6 +303,8 @@ def render_clip(
                 else None
             )
             if fi < start:
+                for pl in fr["players"]:  # the feet keep stepping through the warm-up
+                    body_parts(pl["x"], pl["y"], by_id[pl["id"]], gaits[pl["id"]])
                 continue
             index = fi - start
             spec_objects, row_players = [], []
@@ -305,23 +314,14 @@ def render_clip(
                 parts = body_parts(
                     pl["x"], pl["y"], by_id[pl["id"]], g, ball if meet else None
                 )
+                reach = reach_sign(pl["x"], pl["y"], g, ball if meet else None)
                 spec_objects.append(
                     {
                         "id": pl["id"],
                         "parts": parts,
                         "box": parts_box(cam, parts),
                         "heading": g.heading,
-                        "pose": {
-                            "action": g.action,
-                            "phase": round(g.phase, 4),
-                            "speed": round(g.speed, 3),
-                            "reach": reach_sign(pl["x"], pl["y"], g, ball if meet else None),
-                            "dive": round(g.dive, 3),
-                            "plant_l": [round(v, 4) for v in g.plant_l] if g.plant_l else None,
-                            "plant_r": [round(v, 4) for v in g.plant_r] if g.plant_r else None,
-                            "x": round(pl["x"], 4),
-                            "y": round(pl["y"], 4),
-                        },
+                        "pose": mesh_pose(g, pl["x"], pl["y"], reach),
                     }
                 )
                 row_players.append(pl)
