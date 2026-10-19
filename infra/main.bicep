@@ -324,6 +324,17 @@ resource truth 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-0
   properties: { publicAccess: 'None' }
 }
 
+// The frozen test set's answer key (frames.jsonl, events.jsonl; docs/eval/test-set-frozen.json), kept
+// apart from `truth` because training machines get a read link to `truth` (scripts/train-on-gpu.sh).
+// No training link names this container and no role is scoped to it: only the maintainer reader,
+// who scores, reaches it, through the account-wide read role. infra/check_truth_sealed.py checks all
+// three.
+resource truthTest 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  parent: blobs
+  name: 'truth-test'
+  properties: { publicAccess: 'None' }
+}
+
 // Render requests from the Data agent (ninety/agents/data_agent.py). The event-driven job starts
 // one execution per waiting request; a request that fails twice moves to render-requests-failed.
 resource queues 'Microsoft.Storage/storageAccounts/queueServices@2023-05-01' = {
