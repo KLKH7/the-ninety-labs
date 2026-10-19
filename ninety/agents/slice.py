@@ -135,7 +135,8 @@ class AnalystExecutor(Executor):
     async def write(self, task: Task, ctx: WorkflowContext[Draft]) -> None:
         prompt = analyst_prompt(self.match, task.minute, task.feedback)
         started = time.perf_counter()
-        claim = parse_claim(await self.ask(prompt))
+        with telemetry.stage_span("agents", attempt=task.attempt + 1):
+            claim = parse_claim(await self.ask(prompt))
         if self.plant and task.attempt == 0:
             claim = tamper(claim)
             self.trace.append("analyst: draft tampered on purpose (--plant)")
@@ -154,15 +155,16 @@ class FactCheckExecutor(Executor):
 
     @handler
     async def review(self, draft: Draft, ctx: WorkflowContext[Task, Outcome]) -> None:
-        verdict = check(draft.claim, self.known)
-        if verdict.ok:
-            verdict = confidence_gate(draft.claim, self.known)
-        if verdict.ok:
-            evidence = [self.known[i] for i in draft.claim.evidence]
-            started = time.perf_counter()
-            verdict = await self.judge(draft.claim, evidence)
-            took = f"{time.perf_counter() - started:.1f}s" if self.live else "replayed"
-            self.trace.append(f"judge: {'supported' if verdict.ok else 'not supported'} ({took})")
+        with telemetry.stage_span("fact_check", attempt=draft.task.attempt + 1):
+            verdict = check(draft.claim, self.known)
+            if verdict.ok:
+                verdict = confidence_gate(draft.claim, self.known)
+            if verdict.ok:
+                evidence = [self.known[i] for i in draft.claim.evidence]
+                started = time.perf_counter()
+                verdict = await self.judge(draft.claim, evidence)
+                took = f"{time.perf_counter() - started:.1f}s" if self.live else "replayed"
+                self.trace.append(f"judge: {'supported' if verdict.ok else 'not supported'} ({took})")
         attempt, evidence_ids = draft.task.attempt + 1, draft.claim.evidence
         if verdict.ok:
             self.trace.append("fact_checker: accepted")
