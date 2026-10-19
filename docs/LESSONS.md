@@ -684,6 +684,18 @@ short and actionable. This file is public: no research sources, product names or
   any of it is labelled visible (52 pixels on the old id pass). A ball in front of the boards must
   stay visible.
 
+### 85. A scorer reads labels by the rule written down, not by which fields are filled
+- **What happened:** EVALUATION.md says boxes with visibility zero are not labels, but
+  `vision_score.ground_truth()` kept any label with a box. When the re-frozen test set marked
+  balls behind the advertising boards as visibility 0 and kept their boxes, the scorer counted
+  113 balls in shot and fully hidden as misses, and ball recall read 0.846 instead of 0.930. It was found after
+  the results were in; the rule it applies was written before them.
+- **Rule:** a scorer decides what counts as a label from the documented rule, in one function,
+  and never from whether a field happens to be present. A data change that fills a field it once
+  left empty must not change what is scored.
+- **Check:** `tests/test_vision_score.py::test_a_box_with_visibility_zero_is_not_a_label` gives
+  a player and a ball boxes at visibility 0 with no detection and fails if either counts as a miss.
+
 ### 86. Measure the worker count; a CI runner's threads are not cores
 - **What happened:** the test jobs took 15 to 40 minutes, so every merge left the other ready
   pull requests another half hour behind. `pytest -n auto` started 4 workers on GitHub's 4-vCPU
