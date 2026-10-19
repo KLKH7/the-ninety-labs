@@ -32,6 +32,19 @@ param renderCommit string = ''
 @description('Only to create or rotate the MCP key: written to Key Vault when set; left alone when empty.')
 param mcpKey string = ''
 
+@secure()
+@description('Only to create or rotate the demo passcode that gates Live mode: written to Key Vault when set; left alone when empty.')
+param demoPasscode string = ''
+
+@description('Monthly cost budget for this resource group, in the billing currency (USD). 0: no budget.')
+param budgetAmount int = 20
+
+@description('Where the budget alert emails go. Kept in the azd environment, never in the repo. Empty: no budget.')
+param budgetEmail string = ''
+
+@description('First day of the budget\'s first month. Azure refuses a change after creation, so it is fixed, not today.')
+param budgetStart string = '2026-10-01'
+
 @description('The Foundry resource and project, created by hand before this file; referenced, not managed.')
 param foundryAccountName string = 'ninety-labs-ai'
 param foundryProjectName string = 'the-ninety-labs'
@@ -112,6 +125,12 @@ resource mcpKeySecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empt
   properties: { value: mcpKey }
 }
 
+resource passcodeSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empty(demoPasscode)) {
+  parent: vault
+  name: 'demo-passcode'
+  properties: { value: demoPasscode }
+}
+
 var vaultReaderRole = '4633458b-17de-408a-b874-0445c86b69e6' // built-in role "Key Vault Secrets User" (az role definition list)
 
 resource apiReadsSecrets 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
@@ -154,7 +173,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
     type: 'UserAssigned'
     userAssignedIdentities: { '${apiIdentity.id}': {} }
   }
-  dependsOn: [apiPull, apiReadsSecrets, mcpKeySecret]
+  dependsOn: [apiPull, apiReadsSecrets, mcpKeySecret, passcodeSecret]
   properties: {
     managedEnvironmentId: environment.id
     workloadProfileName: 'Consumption'
@@ -166,7 +185,10 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
         transport: 'auto'
       }
       registries: [{ server: registry.properties.loginServer, identity: apiIdentity.id }]
-      secrets: [{ name: 'mcp-key', keyVaultUrl: '${vault.properties.vaultUri}secrets/mcp-key', identity: apiIdentity.id }]
+      secrets: [
+        { name: 'mcp-key', keyVaultUrl: '${vault.properties.vaultUri}secrets/mcp-key', identity: apiIdentity.id }
+        { name: 'demo-passcode', keyVaultUrl: '${vault.properties.vaultUri}secrets/demo-passcode', identity: apiIdentity.id }
+      ]
     }
     template: {
       containers: [
@@ -175,7 +197,10 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
           // A public placeholder until the first `azd deploy api`; after that, the deployed image.
           image: apiExists ? apiImage.outputs.image : 'mcr.microsoft.com/k8se/quickstart:latest'
           resources: { cpu: json('0.25'), memory: '0.5Gi' }
-          env: [{ name: 'NINETY_MCP_KEY', secretRef: 'mcp-key' }]
+          env: [
+            { name: 'NINETY_MCP_KEY', secretRef: 'mcp-key' }
+            { name: 'NINETY_DEMO_PASSCODE', secretRef: 'demo-passcode' }
+          ]
           probes: apiExists
             ? [
                 { type: 'Readiness', httpGet: { path: '/api/health', port: 8000 }, periodSeconds: 10 }
@@ -184,7 +209,8 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             : []
         }
       ]
-      // Scale to zero between viewers; one replica is plenty for a demo and caps spend.
+      // Scale to zero between viewers; one replica is plenty for a demo and caps spend. Replay mode
+      // is static files, so a cold start (a few seconds) is the only cost of zero.
       scale: { minReplicas: 0, maxReplicas: 1 }
     }
   }
@@ -518,9 +544,30 @@ resource renderQueueJob 'Microsoft.App/jobs@2025-01-01' = if (!empty(renderCommi
   }
 }
 
+// The $20 alert (docs/PLAN.md, Budget): emails at half, at the full amount, and when Azure forecasts
+// the month will pass it. A budget only alerts, it never stops anything; the hard stops are scale to
+// zero, one replica, the capped log workspace and the subscription's own credit limit. Covers this
+// resource group, which holds everything the demo runs on, the Foundry resource included.
+resource budget 'Microsoft.Consumption/budgets@2024-08-01' = if (budgetAmount > 0 && !empty(budgetEmail)) {
+  name: 'budget-ninety-${environmentName}'
+  properties: {
+    category: 'Cost'
+    amount: budgetAmount
+    timeGrain: 'Monthly'
+    timePeriod: { startDate: budgetStart, endDate: '2027-09-30' }
+    notifications: {
+      actual50: { enabled: true, operator: 'GreaterThanOrEqualTo', threshold: 50, thresholdType: 'Actual', contactEmails: [budgetEmail] }
+      actual100: { enabled: true, operator: 'GreaterThanOrEqualTo', threshold: 100, thresholdType: 'Actual', contactEmails: [budgetEmail] }
+      forecast100: { enabled: true, operator: 'GreaterThan', threshold: 100, thresholdType: 'Forecasted', contactEmails: [budgetEmail] }
+    }
+  }
+}
+
 output AZURE_CONTAINER_REGISTRY_ENDPOINT string = registry.properties.loginServer
 output AZURE_CONTAINER_APPS_ENVIRONMENT_ID string = environment.id
 output API_URL string = 'https://${api.properties.configuration.ingress.fqdn}'
+output DEMO_URL string = 'https://${api.properties.configuration.ingress.fqdn}/'
+output BUDGET_NAME string = budgetAmount > 0 && !empty(budgetEmail) ? budget.name : ''
 output FOUNDRY_GUARDRAIL string = guardrail.name
 output RENDER_JOB_NAME string = renderJob.name
 output RENDER_STORAGE_ACCOUNT string = storage.name

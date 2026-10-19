@@ -16,3 +16,5 @@ infra
 web/node_modules
 .env
 .env.*
+web/viewer/node_modules
+web/viewer/dist

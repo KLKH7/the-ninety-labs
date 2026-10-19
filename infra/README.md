@@ -6,7 +6,7 @@ subscription allows five regions; that one has our models).
 
 | Resource | Why |
 |---|---|
-| Container Apps environment + `api` app | serves `ninety/api` over HTTPS; scales to zero, at most one replica |
+| Container Apps environment + `api` app | the whole public demo over HTTPS from one image: the viewer at `/`, the Replay bundle at `/bundle/`, the API, Live mode behind the passcode, and the MCP server at `/mcp`; scales to zero, at most one replica |
 | Container Registry (Basic) | holds the API image; admin user off |
 | User-assigned managed identity | the app pulls its image with it (AcrPull); no registry password |
 | Log Analytics workspace | container logs; 30-day retention, 0.2 GB/day cap |
@@ -16,13 +16,14 @@ subscription allows five regions; that one has our models).
 | `truth-test` container | the frozen test set's answer key (`docs/eval/test-set-frozen.json`), kept out of `truth` because training machines get a read link to `truth`; no role is scoped to it and no training link names it (CI: [check_truth_sealed.py](check_truth_sealed.py)) |
 | Queues `render-requests`, `render-requests-failed` + job `render-queue` | the data factory: the Data agent queues requests, Azure starts one execution per request (up to six), failed requests are set aside with the error |
 | Application Insights + a Foundry project connection (`appinsights-tracing`) | agent traces, shown in Foundry's tracing view; stored in the capped workspace above |
-| Key Vault (RBAC) + the `mcp-key` secret | the key Foundry uses to call the match MCP server at `/mcp`; the API reads it through its managed identity (Key Vault Secrets User) |
+| Key Vault (RBAC) + the `mcp-key` and `demo-passcode` secrets | the key Foundry uses to call the match MCP server at `/mcp`, and the passcode that gates Live mode; the API reads both through its managed identity (Key Vault Secrets User) |
+| Budget `budget-ninety-<env>` | the $20 monthly alert on this resource group: emails `BUDGET_EMAIL` at 50% and 100% actual and at a forecast over 100%; it alerts, it never stops anything |
 | Foundry project connection `ninety-match-mcp` | the MCP server as a Foundry tool connection, holding the key; the published Analyst names it |
 | Foundry content-safety policy `ninety-guardrail` | attached to every published agent: Microsoft's default filters plus Prompt Shields for jailbreaks and indirect attacks |
 
 The Foundry resource (`ninety-labs-ai`) and its project were created by hand earlier: the Bicep
 references them to add the connection and the policy, but does not manage them. Also not managed
-here yet: Speech (`ninety-labs-speech`) and the $20 monthly budget alert. Cosmos DB and the
+here yet: Speech (`ninety-labs-speech`). Cosmos DB and the
 Personalizer app are added with the code that uses them
 ([ARCHITECTURE.md](../docs/ARCHITECTURE.md#deployment-on-azure)).
 
@@ -30,14 +31,16 @@ The agents themselves are published from code, not Bicep: `uv run ninety-agents 
 (ninety/agents/foundry.py) creates a new Foundry version of any agent whose definition changed.
 
 Rough cost: the registry is the only fixed charge (Basic, about $5 a month). The app, logs and
-traces sit inside the monthly free grants at demo traffic.
+traces sit inside the monthly free grants at demo traffic. Costs in detail, and why everything
+scales to zero: [The deployed demo](#the-deployed-demo-m2).
 
 ## Who runs what
 
 | Command | Run by | Changes |
 |---|---|---|
-| `azd provision` | a maintainer, locally, with Owner on the resource group | resources and role assignments |
-| `azd deploy api` | GitHub Actions ([deploy.yml](../.github/workflows/deploy.yml)) after CI passes on `main` | a new image and revision only |
+| `azd provision` (or `azd up`) | a maintainer, locally, with Owner on the resource group | resources and role assignments |
+| `azd deploy api` | GitHub Actions ([deploy.yml](../.github/workflows/deploy.yml)) after CI passes on `main`, then the live smoke test | a new image and revision only |
+| live smoke test | [live-smoke.yml](../.github/workflows/live-smoke.yml), twice a day, against `NINETY_LIVE_URL` | nothing: reads the public site |
 
 The split is deliberate: the GitHub OIDC identity is only Contributor, which cannot create role
 assignments, so it cannot grant itself or anything else more access.
@@ -107,6 +110,92 @@ az deployment group what-if -g ninety-labs -f infra/main.bicep -p environmentNam
 ```
 
 CI compiles the Bicep on every pull request and fails on any warning.
+
+## The deployed demo (M2)
+
+One container app serves everything a judge opens, from one image ([Dockerfile](../Dockerfile)):
+
+- **Replay mode** (`/`): the viewer plays one clip that has already been through the whole chain
+  (`ninety-e2e`). It is files only: no model call, no compute beyond serving them, so a view costs
+  nothing. The bundle is synthetic and public, packed to the same bytes every time by
+  [replay.py](replay.py), published as a release asset, and pinned in the Dockerfile by URL and
+  SHA-256; a different asset fails the build. The image never needs Azure Storage, so the API's
+  identity holds no role on the account that keeps the answer key ([check_truth_sealed.py](check_truth_sealed.py)).
+- **Live mode** (`/api/live/...`): anything that costs a model call or speech, behind the demo
+  passcode (`x-demo-passcode`), read from Key Vault. Without a configured passcode it refuses
+  everyone.
+- **Headers:** a same-origin Content Security Policy (the viewer cannot be pointed at another site
+  or framed), `nosniff`, no referrer.
+- **Checks:** CI builds the image on every pull request with a fixture bundle, runs it and runs
+  [the live smoke test](../tests/test_live_smoke.py) against it; the deploy runs the same test on
+  the public URL, and [live-smoke.yml](../.github/workflows/live-smoke.yml) runs it twice a day
+  until judging ends.
+
+### Deploy from a clean clone
+
+The subscription is **Azure for Students**: a credit with a spending limit, and when the credit
+runs out Azure disables the subscription and the demo goes down until Nov 10 is over. So everything
+scales to zero by default and the budget alert fires at $20 (half the alert at $10).
+
+Use the environment name `prod` and the resource group `ninety-labs`. A second environment name
+in the same group would create a second registry and app, and repoint the shared Foundry
+connection (`ninety-match-mcp`) at the new app.
+
+```bash
+git clone https://github.com/KLKH7/the-ninety-labs && cd the-ninety-labs
+azd auth login && az login
+azd env new prod
+azd env set AZURE_SUBSCRIPTION_ID "$(az account show --query id -o tsv)"
+azd env set AZURE_RESOURCE_GROUP ninety-labs
+azd env set AZURE_LOCATION northcentralus
+azd env set CI_PRINCIPAL_ID "$(az ad sp show --id "$(gh variable get AZURE_CLIENT_ID)" --query id -o tsv)"
+azd env set RENDER_READER_PRINCIPAL_ID "$(az ad signed-in-user show --query id -o tsv)"
+azd env set BUDGET_EMAIL <where the budget alert goes>
+# Only when Key Vault lacks the secret (infra/preprovision.sh says which); store the passcode in
+# the password manager first, then clear it here after the provision:
+azd env set DEMO_PASSCODE "$(openssl rand -hex 12)"
+az deployment group what-if -g ninety-labs -f infra/main.bicep -p environmentName=prod \
+  ciPrincipalId=... renderReaderPrincipalId=... budgetEmail=...   # read-only preview
+azd up                                  # provision, then build the image locally and deploy it
+azd env set DEMO_PASSCODE ""
+gh variable set NINETY_LIVE_URL --body "$(azd env get-value API_URL)"
+NINETY_LIVE_URL="$(azd env get-value API_URL)" uv run pytest -q tests/test_live_smoke.py
+```
+
+`azd up` builds the image on this machine with Docker (the subscription does not allow ACR
+Tasks), and [preprovision.sh](preprovision.sh) stops it early if a Key Vault secret or the budget
+address is missing. Set `RENDER_COMMIT` too if the render queue job should keep its commit.
+
+A new Replay bundle (a better clip, the detector's events, a Foundry recording):
+
+```bash
+uv run ninety-e2e <clip> --out runs/replay [--replay <recording>]
+python3 infra/replay.py pack runs/replay runs/replay.tar.gz      # prints the sha256
+gh release create replay-<clip>-v<N> runs/replay.tar.gz --latest=false --title "Replay bundle <clip> v<N>" \
+  --notes "Synthetic demo bundle for the deployed viewer (infra/README.md)"
+# then set REPLAY_URL and REPLAY_SHA256 in the Dockerfile, in a pull request
+```
+
+### What it costs
+
+Estimates from Azure's published pay-as-you-go rates (Container Apps Consumption: about $0.000024 an
+active vCPU-second and $0.000003 a GiB-second), not measured bills; check the
+[pricing calculator](https://azure.microsoft.com/pricing/calculator/) and the Cost Management view
+after the first week, and replace this table with what it shows.
+
+| Item | Cost | Note |
+|---|---|---|
+| Container Registry, Basic | about $5 a month | the only fixed charge |
+| Container app, scale to zero | about $0.002 a view | 0.25 vCPU and 0.5 GiB for the ~5 minutes a replica stays up after the last request; inside the monthly free grant (180,000 vCPU-seconds, 360,000 GiB-seconds), which the render jobs share |
+| Container app kept warm (`minReplicas: 1`) | about $6 a month, $0.20 a day | optional, for the judging window only: no cold start (a few seconds) for the first judge |
+| Log Analytics and Application Insights | $0 to about $3 a month | 5 GB a month free; the workspace is capped at 0.2 GB a day |
+| Key Vault | cents | secrets are read when a revision starts |
+| Storage (renders, truth, queues) | under $1 a month | about 30 MB a clip |
+| Outbound data | $0 | 18 MB a view; the first 100 GB a month are free |
+| Budget alert, release asset, scheduled smoke test | $0 | |
+| Live mode | per run: model tokens and speech | behind the passcode; Replay mode makes no model call |
+
+Expected total with Replay traffic: about $5 to $8 a month, under half the alert.
 
 ## The MCP key
 
