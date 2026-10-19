@@ -3,7 +3,7 @@
 import pytest
 
 from ninety.intel.stats import player_movement_facts
-from ninety.intel.window import HEAT_NX, HEAT_NY, SPEED_NOW_S, player_window
+from ninety.intel.window import HEAT_NX, HEAT_NY, SPEED_NOW_S, player_window, team_flow
 
 
 def frame(i, **players):
@@ -90,3 +90,61 @@ def test_too_few_frames_give_no_window_and_a_bad_window_raises():
     assert player_window(frames, "h9", 0, 1.0) is None  # not in the frames
     with pytest.raises(ValueError):
         player_window(frames, "h7", 2.0, 1.0)
+
+
+# The team flow field (the wind map).
+
+
+def team_frames(velocities, n=26, team="home"):
+    """Players of one team, each at its own start, moving at its own (vx, vy) m/s; one away player
+    who stands still."""
+    out = []
+    for i in range(n):
+        players = [{"id": f"h{k + 1}", "team": team, "x": x + vx * i / 25, "y": y + vy * i / 25}
+                   for k, ((x, y), (vx, vy)) in enumerate(velocities)]
+        players.append({"id": "a1", "team": "away", "x": 100.0, "y": 60.0})
+        out.append({"frame": i, "t": i / 25, "players": players})
+    return out
+
+
+def test_a_team_running_plus_x_gives_a_field_pointing_plus_x():
+    starts = [(10.0 + 10 * k, 10.0 + 6 * k) for k in range(8)]
+    field = team_flow(team_frames([(s, (5.0, 0.0)) for s in starts]), "home", 0, 1.0)
+    crossed = [i for i, n in enumerate(field.count) if n]
+    assert crossed and all(field.vx[i] == 5.0 and field.vy[i] == 0.0 for i in crossed)
+    assert sum(field.count) == 8 * 25  # every step of every home player, nothing of the away team
+
+
+def test_an_empty_cell_has_count_zero_and_no_velocity():
+    field = team_flow(team_frames([((10.0, 10.0), (3.0, 1.0))]), "home", 0, 1.0, nx=3, ny=2)
+    assert field.count == (25, 0, 0, 0, 0, 0)
+    assert field.vx[1:] == (None,) * 5 and field.vy[1:] == (None,) * 5
+    away = team_flow(team_frames([((10.0, 10.0), (3.0, 1.0))]), "away", 0, 1.0, nx=3, ny=2)
+    assert away.count == (0, 0, 0, 0, 0, 25) and away.vx[5] == 0.0  # stood still: zero, not none
+
+
+def test_a_cell_is_the_mean_of_its_steps_weighted_by_steps():
+    # Two players in one cell at 2 and 4 m/s for the same time: 3 (not the sum 6, nor the max 4).
+    field = team_flow(team_frames([((10.0, 10.0), (2.0, 0.0)), ((11.0, 12.0), (4.0, 0.0))]), "home", 0, 1.0,
+                      nx=1, ny=1)
+    assert field.vx == (3.0,) and field.count == (50,)
+    # One of them for half the time: each step counts once, so 2 m/s for 25 steps and 4 m/s for 12.
+    frames = team_frames([((10.0, 10.0), (2.0, 0.0)), ((11.0, 12.0), (4.0, 0.0))])
+    for f in frames[13:]:
+        f["players"] = [p for p in f["players"] if p["id"] != "h2"]
+    field = team_flow(frames, "home", 0, 1.0, nx=1, ny=1)
+    assert field.count == (37,) and field.vx == (round((25 * 2 + 12 * 4) / 37, 2),)
+
+
+def test_a_kickoff_reset_does_not_blow_through_the_flow_field():
+    frames = team_frames([((60.0, 30.0), (2.0, 0.0))])
+    for f in frames[13:]:
+        f["players"][0]["x"] -= 30.0  # back to his own half at frame 13
+    field = team_flow(frames, "home", 0, 1.0, restarts=[13], nx=1, ny=1)
+    assert field.vx == (2.0,) and field.count == (24,)
+
+
+def test_the_flow_message_carries_its_source():
+    message = team_flow(team_frames([((10.0, 10.0), (3.0, 1.0))]), "home", 0, 1.0).message("truth")
+    assert message["type"] == "flow" and message["source"] == "truth"
+    assert len(message["vx"]) == len(message["count"]) == message["nx"] * message["ny"]

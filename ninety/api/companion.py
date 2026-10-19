@@ -5,6 +5,7 @@
     WS   /api/pair/{code}?role=phone   each phone receives them, the latest first
     GET  /api/minimap/{clip}?fps=5     downsampled positions (schemas/minimap.schema.json)
     GET  /api/card/{clip}/{player}?t_to=95.2[&t_from=0]   a player_card message
+    GET  /api/flow/{clip}/{team}?t_to=95.2[&t_from=0]     a flow message (the wind map)
     POST /api/ask                      a viewer_question -> an answer message
 
 Every message to the phone validates against schemas/companion_message.schema.json, and every
@@ -45,7 +46,7 @@ from starlette.websockets import WebSocket, WebSocketDisconnect, WebSocketState
 
 from ninety.agents import companion
 from ninety.agents.contracts import Answer, Ask, Judge, Question, schema_validator
-from ninety.intel.window import player_window
+from ninety.intel.window import player_window, team_flow
 from ninety.match import tracking
 from ninety.mcp import match_server
 
@@ -347,6 +348,26 @@ class Companion:
             return _error(404, f"no positions of {player} in that window")
         return JSONResponse(_send(window.card(track.source)))
 
+    async def flow(self, request: Request) -> JSONResponse:
+        if not self.limits["read"].allow(client_ip(request)):
+            return _error(429, "too many requests; wait a minute")
+        clip, team = request.path_params["clip"], request.path_params["team"]
+        if clip not in match_server.MATCHES:
+            return _error(404, f"unknown clip {clip!r}")
+        if team not in ("home", "away"):
+            return _error(422, "team must be home or away")
+        try:
+            q = _query_numbers(request, {"t_from", "t_to"}, {"t_to"})
+        except ValueError as exc:
+            return _error(422, str(exc))
+        t_from, t_to = q.get("t_from", 0.0), q["t_to"]
+        if not 0 <= t_from <= t_to:
+            return _error(422, "need 0 <= t_from <= t_to")
+        track = _track(clip)
+        t_to = min(t_to, track.duration)
+        field = team_flow(track.frames, team, min(t_from, t_to), t_to, track.restarts)
+        return JSONResponse(_send(field.message(track.source)))
+
     # --- questions -------------------------------------------------------------------------------
 
     def _live_mode(self, request: Request) -> bool | JSONResponse:
@@ -396,6 +417,7 @@ class Companion:
             WebSocketRoute("/api/pair/{code}", self.relay),
             Route("/api/minimap/{clip}", self.minimap, methods=["GET"]),
             Route("/api/card/{clip}/{player}", self.card, methods=["GET"]),
+            Route("/api/flow/{clip}/{team}", self.flow, methods=["GET"]),
             Route("/api/ask", self.ask, methods=["POST"]),
         ]
 

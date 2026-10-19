@@ -53,7 +53,8 @@ def test_an_unknown_field_inside_a_nested_answer_or_heat_map_is_rejected():
 
 
 def test_the_companion_fixture_holds_every_message_type():
-    assert [r["type"] for r in rows("companion_message")] == ["clock", "focus", "answer", "player_card"]
+    types = [r["type"] for r in rows("companion_message")]
+    assert types == ["clock", "focus", "answer", "player_card", "flow"]
 
 
 def test_a_companion_message_of_an_unknown_type_is_rejected():

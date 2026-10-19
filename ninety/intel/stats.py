@@ -193,39 +193,66 @@ def pressure_facts(events: Iterable[Mapping]) -> list[Fact]:
     return facts
 
 
-def player_movement_facts(frames: Iterable[Mapping], restarts: Iterable[int] = ()) -> list[Fact]:
-    """Compute player distance, peak speed, and sprint frames from tracking frames.
+@dataclass(frozen=True)
+class Step:
+    """One player's move from one frame to the next: where from and to, in pitch metres."""
+
+    player: str
+    team: str | None
+    t: float  # when the step ends
+    frame: int  # the frame it ends on
+    previous_frame: int
+    x0: float
+    y0: float
+    x1: float
+    y1: float
+    dt: float
+
+
+def player_steps(frames: Iterable[Mapping], restarts: Iterable[int] = ()) -> dict[str, list[Step]]:
+    """Each player's frame-to-frame steps, oldest first: what every movement statistic reads.
 
     `restarts` are the frames of kickoff events. A kickoff resets everyone to their own half at
     once (a legal case of the data contract, which the validator's P1 skips too), so the step into
     a kickoff frame is not movement; every other step counts, uncapped, so a teleport still shows."""
-    frames_list = _frames(frames)
     reset = {int(frame) for frame in restarts}
-    if len(frames_list) < 2:
-        return []
-    by_player: dict[str, list[tuple[float, float, float, str]]] = defaultdict(list)
-    for frame in frames_list:
+    by_player: dict[str, list[tuple[float, float, float, int, str | None]]] = defaultdict(list)
+    for frame in _frames(frames):
         for player in frame.get("players", []):
             by_player[str(player["id"])].append(
-                (float(frame["t"]), float(player["x"]), float(player["y"]), int(frame["frame"]))
+                (float(frame["t"]), float(player["x"]), float(player["y"]), int(frame["frame"]),
+                 player.get("team"))
             )
-
-    facts: list[Fact] = []
+    steps: dict[str, list[Step]] = {}
     for player, samples in sorted(by_player.items()):
+        steps[player] = [
+            Step(player, current[4], current[0], current[3], previous[3],
+                 previous[1], previous[2], current[1], current[2], current[0] - previous[0])
+            for previous, current in zip(samples, samples[1:], strict=False)
+            if current[0] - previous[0] > 0 and current[3] not in reset
+        ]
+    return steps
+
+
+def player_movement_facts(frames: Iterable[Mapping], restarts: Iterable[int] = ()) -> list[Fact]:
+    """Compute player distance, peak speed, and sprint frames from tracking frames, over
+    `player_steps` (so a kickoff reset in `restarts` is not movement)."""
+    frames_list = _frames(frames)
+    if len(frames_list) < 2:
+        return []
+    facts: list[Fact] = []
+    for player, steps in player_steps(frames_list, restarts).items():
         distance = 0.0
         peak = 0.0
         sprint_frames = 0
         cited: list[int] = []
-        for previous, current in zip(samples, samples[1:], strict=False):
-            dt = current[0] - previous[0]
-            if dt <= 0 or current[3] in reset:
-                continue
-            speed_kmh = math.hypot(current[1] - previous[1], current[2] - previous[2]) / dt * 3.6
-            distance += speed_kmh / 3.6 * dt
+        for step in steps:
+            speed_kmh = math.hypot(step.x1 - step.x0, step.y1 - step.y0) / step.dt * 3.6
+            distance += speed_kmh / 3.6 * step.dt
             peak = max(peak, speed_kmh)
             if speed_kmh >= SPRINT_THRESHOLD_KMH:
                 sprint_frames += 1
-            cited += [previous[3], current[3]]
+            cited += [step.previous_frame, step.frame]
         source_ids = _frame_span(cited)
         scope = f"player:{player}"
         facts.extend(

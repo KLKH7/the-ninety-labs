@@ -329,3 +329,13 @@ def test_the_caller_is_the_last_forwarded_address():
     forged = SimpleNamespace(headers={"x-forwarded-for": "6.6.6.6, 203.0.113.9"}, client=None)
     assert comp.client_ip(forged) == "203.0.113.9"
     assert comp.client_ip(SimpleNamespace(headers={}, client=SimpleNamespace(host="10.0.0.1"))) == "10.0.0.1"
+
+
+def test_a_flow_message_validates_and_points_the_way_the_team_runs(setup):
+    client, _, _ = setup
+    body = client.get("/api/flow/seed7/home?t_to=10").json()
+    MESSAGE.validate(body)
+    crossed = [i for i, n in enumerate(body["count"]) if n]
+    assert body["source"] == "truth" and crossed and all(body["vx"][i] == 5.0 for i in crossed)
+    assert client.get("/api/flow/seed7/both?t_to=10").status_code == 422
+    assert client.get("/api/flow/seed7/home").status_code == 422

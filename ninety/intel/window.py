@@ -6,6 +6,8 @@ Companion agent may cite.
     distance_run m      distance covered in the window
     heat_share   share  share of the window's frames spent in each cell of an nx by ny grid
 
+and, per team, a flow field (`team_flow`): the mean velocity of its players' steps in each cell.
+
 The first three are `player_movement_facts` (ninety/intel/stats.py) run on a slice of the frames,
 not a second implementation: speed_now is its distance over the last second's slice divided by
 that slice's time. Each fact's id names the player and the window, and it cites the frames it was
@@ -21,12 +23,18 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
 
-from ninety.intel.stats import Fact, _frame_span, player_movement_facts
+from ninety.intel.stats import Fact, _frame_span, player_movement_facts, player_steps
 
 PITCH_X, PITCH_Y = 105.0, 68.0  # Law 1, the engine's pitch (docs/GROUNDING.md, L1)
 SPEED_NOW_S = 1.0  # design: long enough to smooth one frame's noise, short enough to be "now"
 HEAT_NX, HEAT_NY = 12, 8  # design: cells of 8.75 x 8.5 m, about a penalty area's depth
 SPEED_PLACES, DISTANCE_PLACES, SHARE_PLACES = 1, 0, 4
+# The flow field shares the heat map's grid, so the phone lays both over one minimap.
+FLOW_NX, FLOW_NY = HEAT_NX, HEAT_NY
+# No smoothing beyond the window (design): each cell is the mean of every step taken in it over the
+# window, which averages out one frame's noise. A blur across cells would put flow in cells nobody
+# crossed, and an empty cell must show none. So there is no smoothing constant to tune.
+VELOCITY_PLACES = 2  # m/s; positions are stored to 1 mm, so a 0.04 s step resolves 0.035 m/s
 
 
 @dataclass(frozen=True)
@@ -162,3 +170,65 @@ def player_window(
             cells=heat_cells(samples, nx, ny), source_ids=_frame_span(int(f["frame"]) for f in window),
         ),
     )
+
+
+@dataclass(frozen=True)
+class Flow:
+    """A team's mean velocity per cell over a window: the "wind" of a wind map of play.
+
+    Built from `player_steps`, the steps the movement facts read (so a kickoff reset is not
+    movement). A step counts in the cell its midpoint is in; a cell's (vx, vy) is the mean of its
+    steps' velocities in m/s, and `count` is how many steps that is. A cell with no steps has
+    count 0 and no velocity (None). Cells are laid out as the heat map's, row by row from y = 0."""
+
+    team: str
+    t_from: float
+    t_to: float
+    nx: int
+    ny: int
+    vx: tuple[float | None, ...]
+    vy: tuple[float | None, ...]
+    count: tuple[int, ...]
+
+    def message(self, source: str) -> dict:
+        """The companion_message `flow` for this field. `source` is `truth` or `tracked`."""
+        return {
+            "type": "flow", "team": self.team, "t_from": self.t_from, "t_to": self.t_to,
+            "nx": self.nx, "ny": self.ny, "vx": list(self.vx), "vy": list(self.vy),
+            "count": list(self.count), "source": source,
+        }
+
+
+def team_flow(
+    frames: Iterable[Mapping],
+    team: str,
+    t_from: float,
+    t_to: float,
+    restarts: Iterable[int] = (),
+    nx: int = FLOW_NX,
+    ny: int = FLOW_NY,
+) -> Flow:
+    """The team's flow field from t_from to t_to (steps ending in the window, both ends included)."""
+    if not 0 <= t_from <= t_to:
+        raise ValueError(f"window {t_from}..{t_to}: t_from must be from 0 to t_to")
+    if nx < 1 or ny < 1:
+        raise ValueError("the flow grid needs at least one cell each way")
+    window = [
+        {"frame": f["frame"], "t": f["t"], "players": mine}
+        for f in frames
+        if t_from <= float(f["t"]) <= t_to and (mine := [p for p in f["players"] if p.get("team") == team])
+    ]
+    sum_vx, sum_vy, count = [0.0] * (nx * ny), [0.0] * (nx * ny), [0] * (nx * ny)
+    for steps in player_steps(window, restarts).values():
+        for step in steps:
+            mid_x, mid_y = (step.x0 + step.x1) / 2, (step.y0 + step.y1) / 2
+            cell = _cell(mid_y, PITCH_Y, ny) * nx + _cell(mid_x, PITCH_X, nx)
+            sum_vx[cell] += (step.x1 - step.x0) / step.dt
+            sum_vy[cell] += (step.y1 - step.y0) / step.dt
+            count[cell] += 1
+    mean = [
+        (round(sx / n, VELOCITY_PLACES) + 0.0, round(sy / n, VELOCITY_PLACES) + 0.0) if n else (None, None)
+        for sx, sy, n in zip(sum_vx, sum_vy, count, strict=True)
+    ]
+    vx, vy = tuple(m[0] for m in mean), tuple(m[1] for m in mean)
+    return Flow(team, t_from, t_to, nx, ny, vx, vy, tuple(count))

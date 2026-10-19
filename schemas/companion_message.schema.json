@@ -7,7 +7,8 @@
     { "$ref": "#/$defs/clock" },
     { "$ref": "#/$defs/focus" },
     { "$ref": "#/$defs/answer" },
-    { "$ref": "#/$defs/player_card" }
+    { "$ref": "#/$defs/player_card" },
+    { "$ref": "#/$defs/flow" }
   ],
   "$defs": {
     "clock": {
@@ -64,6 +65,24 @@
         "speed_kmh": { "type": "number", "minimum": 0, "description": "Speed at t_to." },
         "peak_kmh": { "type": "number", "minimum": 0 },
         "distance_m": { "type": "number", "minimum": 0 },
+        "source": { "type": "string", "enum": ["truth", "tracked"], "description": "Positions from the ground-truth data (before Milestone 1) or from tracking the video." }
+      }
+    },
+    "flow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "team", "t_from", "t_to", "nx", "ny", "vx", "vy", "count", "source"],
+      "description": "One team's mean player velocity per cell over t_from..t_to, for the wind map: cells laid out as player_card.heat, each of vx, vy and count with nx * ny entries. A cell nobody crossed has count 0 and null velocity. Computed by code (ninety/intel/window.py, team_flow).",
+      "properties": {
+        "type": { "const": "flow" },
+        "team": { "type": "string", "enum": ["home", "away"] },
+        "t_from": { "type": "number", "minimum": 0 },
+        "t_to": { "type": "number", "minimum": 0 },
+        "nx": { "type": "integer", "minimum": 1 },
+        "ny": { "type": "integer", "minimum": 1 },
+        "vx": { "type": "array", "items": { "type": ["number", "null"] }, "description": "m/s along x (toward x = 105)." },
+        "vy": { "type": "array", "items": { "type": ["number", "null"] }, "description": "m/s along y." },
+        "count": { "type": "array", "items": { "type": "integer", "minimum": 0 }, "description": "Frame-to-frame steps averaged in the cell." },
         "source": { "type": "string", "enum": ["truth", "tracked"], "description": "Positions from the ground-truth data (before Milestone 1) or from tracking the video." }
       }
     }
