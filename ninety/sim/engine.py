@@ -129,9 +129,6 @@ RESTART_DELAY_S = {"throw_in": (12, 20), "goal_kick": (24, 34), "corner": (24, 3
                    # about two minutes from the foul to the spot kick (same source, 2022-23)
                    "penalty_kick": (100, 140),
                    "kick_off": (1, 2)}
-# The picture places everyone on the mark and takes the restart after a short hold. The Opta
-# window above is the real-match record; spending it walking is dead time in a clip.
-PICTURE_RESTART_S = (0.7, 1.3)
 NO_OFFSIDE_FROM = ("throw_in", "goal_kick", "corner")  # Law 11: no offside offence direct from these
 INTERCEPT_SHARE = 0.85  # design: taken before this share of the way to its target, a pass is intercepted
 THROW_BEHIND_M = 0.55  # Law 15: his body stands outside the touchline, feet on or behind it (design)
@@ -372,7 +369,6 @@ class Engine:
         self.pass_target: tuple[float, float] | None = None  # where the pass in flight was aimed
         self.offside: set[str] = set()  # L10: team-mates in an offside position when the ball was played
         self.from_restart: str | None = None  # the restart the next kick is taken from
-        self.kickoff_taker: str | None = None  # owes the one pass back; clear once he plays it
         self.read: tuple[str, float] | None = None  # (keeper, y): where he reads a shot is going
         # (keeper, start t, start y, signed travel, when his arms began to stretch)
         self.dive: tuple[float | str, ...] | None = None
@@ -384,7 +380,6 @@ class Engine:
         self.touched_since_kick = False
         self.chase: dict[str, tuple[str, float, float]] = {}  # team -> (player, x, y)
         self.restart: Restart | None = None
-        self._hold_marks = False  # the frame a restart placed everyone: do not walk them off it
         self.throw_by: str | None = None  # a throw-in taker holding the ball until he throws it
         self.throw_ready = 0.0
         self.into_play = False  # released from behind the line; not a new out until it enters or falls away
@@ -489,8 +484,6 @@ class Engine:
         if pid != self.released_by:
             self.released_by = None
         self.new_phase()
-        if self.kickoff_taker and pid != self.kickoff_taker:
-            self.kickoff_taker = None  # someone else has it: the kick-off pass was not his to play
         self.hold_until = self.t + settle_s(self.by_id[pid].profile["first_touch"])
 
     def new_phase(self) -> None:
@@ -556,7 +549,6 @@ class Engine:
         self.poss_team = team
         self.kicked = None
         self.new_phase()
-        self.kickoff_taker = taker.id
         self.stop("kick_off", team, (PITCH_X / 2, PITCH_Y / 2), taker.id)
 
     # ---- decisions: players choose, the kick gives the ball a velocity -------
@@ -632,8 +624,6 @@ class Engine:
         self.dribbler = None
         self.possessor = None
         self.last_touch = carrier.id
-        if carrier.id == self.kickoff_taker:
-            self.kickoff_taker = None  # the pass back is the kick-off; open play from here
         self.kicked_at = self.t
         self.bumped = None
         self.free_since = self.t  # the ball left a player's control: dives are timed from here
@@ -781,27 +771,6 @@ class Engine:
                                 loss_weight=style.loss_weight())
         return scene
 
-    def play_kickoff(self, carrier: Player, scene: decisions.Scene) -> None:
-        """The kick-off is one pass to a team-mate behind the ball. They have just taken their
-        marks, so he plays it to where they stand. Forced, like a throw-in: no extra draw."""
-        fwd = attack_dir(carrier.team)
-        behind = [
-            q for q in self.players
-            if q.team == carrier.team and q.id != carrier.id and (q.x - scene.x) * fwd < 0
-        ]
-        scene.mates = [(q.id, q.x, q.y, 0.0, 0.0, 0.0) for q in behind]
-        scene.absorb = {q.id: q.profile.absorb_mps(False) for q in behind}
-        scene.kickoff = True
-        choice = max(decisions.options(scene), key=lambda o: o.value, default=None)
-        if choice is None:
-            mates = behind or [q for q in self.players if q.team == carrier.team and q.id != carrier.id]
-            q = min(mates, key=lambda p: (p.x - scene.x) * fwd)
-            dist = math.hypot(q.x - scene.x, q.y - scene.y)
-            self.pass_to(carrier, q.x, q.y, lofted=dist >= decisions.LOFT_FROM_M, receiver=q.id)
-            return
-        self.pass_to(carrier, *choice.target, lofted=choice.lofted, pace=choice.pace,
-                     receiver=choice.receiver)
-
     def decide(self, carrier: Player, throw: bool = False) -> None:
         """The carrier chooses from what he believes (ninety/sim/decisions.py)."""
         scene = self.scene_for(carrier)
@@ -822,9 +791,6 @@ class Engine:
                 )
             else:
                 self.hold_until = self.t + 0.5  # he looks again
-            return
-        if carrier.id == self.kickoff_taker:
-            self.play_kickoff(carrier, scene)
             return
         choice = decisions.choose(scene, self.rng)
         if choice.kind == "pass" or choice.kind == "clear":
@@ -1417,68 +1383,9 @@ class Engine:
     def stop(self, kind: str, team: str, spot: tuple[float, float], taker: str | None = None) -> None:
         if taker is None:
             taker = self.nearest(spot[0], spot[1], team).id
-        lo, hi = RESTART_DELAY_S[kind] if kind == "kick_off" else PICTURE_RESTART_S
+        lo, hi = RESTART_DELAY_S[kind]
         self.dribbler = self.dribble_to = None  # the ball is dead: nobody is running onto a touch
-        self.chase = {}
         self.restart = Restart(kind, team, spot[0], spot[1], taker, self.t + self.rng.uniform(lo, hi))
-        self.place_restart()
-
-    def restart_mark(self, p: Player) -> tuple[float, float]:
-        """Where he stands for this restart: the taker on the ball, Law 8 and Law 14 on their
-        marks, everyone else in shape toward the spot and the other side outside the law distance."""
-        r = self.restart
-        if p.id == r.taker:
-            if r.kind == "throw_in":
-                return throw_stand(r.x, r.y)
-            if r.kind == "penalty_kick":
-                behind = shape.surface(0.0, 0.0, pad=ball.RADIUS)
-                return r.x - attack_dir(p.team) * behind, r.y
-            if r.kind == "kick_off":
-                return PITCH_X / 2, PITCH_Y / 2
-            return clamp(r.x, 0.5, PITCH_X - 0.5), clamp(r.y, 0.5, PITCH_Y - 0.5)
-        if r.kind == "penalty_kick":
-            return self.penalty_wait_spot(p)
-        if r.kind == "kick_off":
-            return self.kickoff_spot(p, r.team)
-        bx, by = clamp(r.x, 0.0, PITCH_X), clamp(r.y, 0.0, PITCH_Y)
-        shift = (bx - PITCH_X / 2) * 0.45
-        push = 6 * attack_dir(p.team) if p.team == r.team else -4 * attack_dir(p.team)
-        tx = p.ax if p.role == "GK" else clamp(p.ax + shift + push, 2.0, PITCH_X - 2.0)
-        ty = p.ay + (by - p.ay) * 0.25
-        if p.team != r.team:
-            gap = RESTART_DISTANCE_M[r.kind]
-            dx, dy = tx - bx, ty - by
-            d = math.hypot(dx, dy)
-            if d < gap:
-                ux, uy = ((dx / d, dy / d) if d > 1e-6 else (-attack_dir(r.team), 0.0))
-                tx, ty = bx + ux * gap, by + uy * gap
-        return clamp(tx, 0.5, PITCH_X - 0.5), clamp(ty, 0.5, PITCH_Y - 0.5)
-
-    def restart_heading(self, p: Player) -> float:
-        r = self.restart
-        if p.id == r.taker and r.kind == "throw_in":
-            return math.pi / 2 if p.y < PITCH_Y / 2 else -math.pi / 2
-        if p.id == r.taker:
-            return math.atan2(PITCH_Y / 2 - p.y, goal_x(p.team) - p.x)
-        return math.atan2(r.y - p.y, r.x - p.x)
-
-    def place_restart(self) -> None:
-        """Put every player on his mark and the ball on the spot. The one legal jump."""
-        r = self.restart
-        for p in self.players:
-            p.x, p.y = self.restart_mark(p)
-            p.vx = p.vy = 0.0
-            p.heading = self.restart_heading(p)
-        taker = self.by_id[r.taker]
-        if r.kind == "throw_in":
-            bx, by = r.x, (0.0 if r.y < PITCH_Y / 2 else PITCH_Y)
-        elif r.kind == "penalty_kick":
-            bx, by = r.x, r.y
-        else:
-            bx, by = taker.x, taker.y
-        self.ball = (bx, by, 0.0, 0.0, 0.0, 0.0)
-        self.possessor = None
-        self._hold_marks = True
 
     def tick_restart(self) -> None:
         # The dead ball rolls on until it stops or reaches the advertising boards.
@@ -1490,7 +1397,8 @@ class Engine:
         r = self.restart
         taker = self.by_id[r.taker]
         spot = throw_stand(r.x, r.y) if r.kind == "throw_in" else (r.x, r.y)
-        # He was placed on this mark when the ball went dead. The hold is the only wait.
+        # A thrower must be at his spot, behind the line; anyone else is close enough when the ball
+        # is at his feet. Nobody is moved there: he runs (lesson 5).
         near = THROW_SPOT_M if r.kind == "throw_in" else CONTROL_M
         if self.t < r.ready_at or math.hypot(taker.x - spot[0], taker.y - spot[1]) > near:
             return
@@ -1929,9 +1837,6 @@ class Engine:
         return True
 
     def move_players(self) -> None:
-        if self._hold_marks:  # placed this frame: the snapshot is the set piece, not a step off it
-            self._hold_marks = False
-            return
         for p in self.players:
             if p.id == self.moved:
                 continue

@@ -120,27 +120,12 @@ BOX_LEAVE_M = 6.0  # the goal camera gives the ball back only once it is clearly
 FAR_CLOSER = 0.50  # the far stand is better when it is at most half the gantry's distance to the ball
 FAR_LEAVE = 0.70  # stay on that stand until it is no longer clearly closer
 GANTRY_LINE_DEG = 23.0  # handbook: 22-24° from the gantry down to the near touchline
-GANTRY_AIM_Z = 1.5  # a band of the far stand. Higher fills half the frame and crops the near players.
+GANTRY_AIM_Z = 4.5  # look up into the stand, so the bowl is the backdrop and not a lip under the sky
 GANTRY_HALF_M = 14.5  # longer than the widest sampled lens, so a player still has a body from here
-# One sideline camera, in front of the near stand (its lip is y=-46) and short of both end stands
-# (they start at x=-11 and x=116). It travels with the ball. Closer than the far gantry, so a
-# player is readable at 720p. Picture choices, not numbers taken from a game binary.
-SIDE_BACK_M = 18.0
-SIDE_HEIGHT_M = 10.5
-SIDE_HALF_M = 9.0
-SIDE_BOX_HALF_M = 7.0
-SIDE_AIM_Z = 0.4
-# y=-18 is in front of the near stand and short of both end stands (they occupy y from 2).
-# The x range is wide enough that a corner flag stays inside a 720p frame.
-SIDE_X_MIN, SIDE_X_MAX = 2.0, 103.0
 REVERSE_Z = 12.0  # above the lower far tier; the sampled gantry height puts this lens in the sky
-REVERSE_AIM_Z = 4.5  # this camera is low, so it looks up to keep the opposite bowl in the shot
 REVERSE_HALF_M = 16.0  # same kind of lens as the gantry, so the far angle is not a wide overview
-BLUR_CAP_PX = 12.0  # a longer streak at 720p breaks into steps
 TIGHT_ACTIONS = ("throw", "thigh", "chest", "head", "hands")
 NET_SETTLE_S = 2.6  # the mesh is back to rest by here; the angle itself holds CUT_HOLD_S
-GOAL_LOOK_S = 1.5  # the net, before the camera leaves it
-GOAL_PAN_S = 2.5  # travel to the centre spot. Look plus pan is the engine's KICKOFF_WAIT_S.
 
 
 def gantry_height(back_m: float, sampled: float) -> float:
@@ -184,12 +169,17 @@ def box_side(x: float, y: float, margin: float = 0.0) -> str:
 
 
 class Director:
-    """One sideline camera. It travels with the ball and stays in front of the near stand.
+    """Main broadcast camera: fixed gantry position, pans and zooms to follow the ball with lag.
 
-    Open play, the box, a throw and a corner are all this camera. It does not go behind a goal
-    or into the far stand: both of those sit inside the stadium mesh. When a goal is scored, a
-    low three-quarter beside that goal, aimed at the mouth the event recorded, then a pan back
-    to the sideline. The engine has already put the ball on the centre spot.
+    With `cuts`, it leaves the gantry only for an angle that frames the ball better, and then
+    stays there for at least CUT_HOLD_S. The gantry is the picture the match is watched from.
+    Behind the goal when the ball is in that penalty area, because the gantry sees that goal
+    edge-on. When a goal is scored, a low three-quarter beside that goal, aimed at the mouth
+    the event recorded, because the engine has already put the ball back on the centre spot.
+    A tighter lens beside the gantry for a throw or an aerial touch, when that shot still holds
+    the player and the ball. The far stand when play is on the far side and that camera is much
+    closer, and only while its shot still holds the ball and the opposite stand. The gantry aim
+    keeps updating during a cut, so the return is where it would have been.
     """
 
     def __init__(
@@ -197,7 +187,11 @@ class Director:
     ):
         self.p = params
         self.width, self.height, self.dt = width, height, 1.0 / fps
-        self.position: Vec = (52.5 + params.offset_x_m, -SIDE_BACK_M, SIDE_HEIGHT_M)
+        self.position: Vec = (
+            52.5 + params.offset_x_m,
+            -params.back_m,
+            gantry_height(params.back_m, params.height_m),
+        )
         self.players: list[tuple[float, float, str]] = []
         self.rng = random.Random(f"camera-{seed}")
         self.aim: list[float] | None = None
@@ -215,10 +209,11 @@ class Director:
     def _goal(self, bx: float, by: float, vx: float, vy: float) -> tuple[float, float, float]:
         ax = bx + vx * self.p.lead_s
         ay = by + vy * self.p.lead_s
-        ay = 34 + (ay - 34) * 0.85  # a little off the touchline, still on the ball
-        ax = min(max(ax, SIDE_X_MIN), SIDE_X_MAX)
-        ay = min(max(ay, 3.0), 65.0)
-        hw = SIDE_BOX_HALF_M if in_box(bx, by) else SIDE_HALF_M
+        ay = 34 + (ay - 34) * 0.75  # broadcasters rarely aim right at a touchline
+        ax = min(max(ax, 8.0), 97.0)
+        ay = min(max(ay, 12.0), 60.0)
+        wide = min(self.p.half_width_m, GANTRY_HALF_M)
+        hw = self.p.box_half_width_m if in_box(bx, by) else wide
         return ax, ay, hw
 
     def step(
@@ -231,12 +226,9 @@ class Director:
         self.players = [(p[0], p[1], p[2]) for p in players] if players else []
         if self.prev_ball is None:
             vx = vy = 0.0
-            jumped = False
         else:
-            dx, dy = ball_x - self.prev_ball[0], ball_y - self.prev_ball[1]
-            # A restart places the ball. The step is a cut, so it has no velocity to lead.
-            jumped = math.hypot(dx, dy) > 8.0
-            vx, vy = (0.0, 0.0) if jumped else (dx / self.dt, dy / self.dt)
+            vx = (ball_x - self.prev_ball[0]) / self.dt
+            vy = (ball_y - self.prev_ball[1]) / self.dt
         self._ball_v = (vx, vy)
         self.prev_ball = (ball_x, ball_y)
         gx, gy, ghw = self._goal(ball_x, ball_y, vx, vy)
@@ -254,10 +246,6 @@ class Director:
             self.aim[0] += sx
             self.aim[1] += sy
             self.half_width += (ghw - self.half_width) * z
-        if jumped:
-            self.aim = [gx, gy]
-            self.half_width = ghw
-        self._slide(self.aim[0], snap=jumped)
         self.t += self.dt
         fresh_goal = False
         if goal:
@@ -287,26 +275,12 @@ class Director:
                 return self._second(ball_x, ball_y, target)
         return self._main(target)
 
-    def _slide(self, aim_x: float, snap: bool = False) -> None:
-        """Travel along the near sideline. Never into a stand."""
-        want = min(max(aim_x, SIDE_X_MIN), SIDE_X_MAX)
-        if snap:
-            self.position = (want, -SIDE_BACK_M, SIDE_HEIGHT_M)
-            return
-        cur = self.position[0]
-        a = 1 - math.exp(-self.dt / max(self.p.pan_lag_s, 1e-3))
-        dx = (want - cur) * a
-        cap = MAX_PAN_MPS * self.dt
-        if abs(dx) > cap:
-            dx = math.copysign(cap, dx)
-        self.position = (cur + dx, -SIDE_BACK_M, SIDE_HEIGHT_M)
-
     def _reverse_pos(self) -> Vec:
         # 18 m past the far touchline. A full back_m lands inside the crowd mesh.
         return (52.5 - self.p.offset_x_m, 68.0 + 18.0, REVERSE_Z)
 
     def _reverse_shot(self, aim: Vec) -> Camera:
-        lifted = (aim[0], aim[1], aim[2] + REVERSE_AIM_Z)
+        lifted = (aim[0], aim[1], aim[2] + GANTRY_AIM_Z)
         return self._framed(self._reverse_pos(), lifted, REVERSE_HALF_M)
 
     def net_view(self) -> dict | None:
@@ -325,7 +299,7 @@ class Director:
         }
 
     def _net_due(self) -> bool:
-        return self.net is not None and self.t < self.net["t0"] + GOAL_LOOK_S + GOAL_PAN_S
+        return self.net is not None and self.t < self.net["t0"] + CUT_HOLD_S
 
     def _net_pos(self, side: str) -> Vec:
         left = side == "L"
@@ -357,10 +331,26 @@ class Director:
         return "net" + side
 
     def _better(self, bx: float, by: float, aim: Vec) -> str:
-        """Leave the sideline only when a goal is on the net camera. The box, a throw and the
-        far side stay here: the other angles sit inside the stands."""
+        """The angle that frames this ball better than the gantry, or '' to stay on the gantry."""
         if self._net_due():
             return "net" + self.net["side"]
+        incoming = self._incoming(bx, by)
+        if incoming:
+            return incoming
+        side = box_side(bx, by)
+        if side:
+            return side
+        if self._cut_kind in ("L", "R") and box_side(bx, by, BOX_LEAVE_M) == self._cut_kind:
+            return self._cut_kind
+        if self._tight(bx, by):
+            return "tight"
+        ball = (bx, by, 0.0)
+        gantry = math.dist(self.position, ball)
+        far = math.dist(self._reverse_pos(), ball)
+        limit = FAR_LEAVE if self._cut_kind == "reverse" else FAR_CLOSER
+        # Closer is not enough. On the far touchline the ball sits on the bottom and the bowl leaves.
+        if far < gantry * limit and self._reverse_readable(aim, bx, by):
+            return "reverse"
         return ""
 
     def _reverse_readable(self, aim: Vec, bx: float, by: float) -> bool:
@@ -383,7 +373,7 @@ class Director:
 
     def _main(self, target: Vec) -> Camera:
         # The stand sits behind the play. Aiming at the grass leaves the bowl above the frame.
-        lifted = (target[0], target[1], target[2] + SIDE_AIM_Z)
+        lifted = (target[0], target[1], target[2] + GANTRY_AIM_Z)
         dist = math.dist(self.position, lifted)
         hfov = 2 * math.atan(self.half_width / dist)
         vfov = 2 * math.atan(math.tan(hfov / 2) * self.height / self.width)
@@ -440,29 +430,22 @@ class Director:
             target = (min(max(bx, 0.0), 105.0), min(max(by, 8.0), 60.0), 0.5)
         return self._framed(pos, target, 7.0)
 
-    def _goal_beat(self, bx: float, by: float, aim: Vec) -> Camera:
-        """The net, then a pan to the gantry on the centre spot. Play is still waiting there."""
-        age = self.t - self.net["t0"]
-        net = self._net_shot(bx, by)
-        if age <= GOAL_LOOK_S:
-            self.angle = "net"
-            return net
-        self.angle = "kickoff"
-        u = min(1.0, (age - GOAL_LOOK_S) / GOAL_PAN_S)
-        s = u * u * (3.0 - 2.0 * u)
-        main = self._main(aim)
-        pos = tuple(net.position[i] + (main.position[i] - net.position[i]) * s for i in range(3))
-        target = tuple(net.target[i] + (main.target[i] - net.target[i]) * s for i in range(3))
-        fov = net.fov_v_deg + (main.fov_v_deg - net.fov_v_deg) * s
-        return Camera(pos, target, fov, self.width, self.height)
-
     def _second(self, bx: float, by: float, aim: Vec) -> Camera:
         if self._cut_kind in ("netL", "netR"):
-            if self._net_due():
-                return self._goal_beat(bx, by, aim)
             self.angle = "net"
             return self._net_shot(bx, by)
-        return self._main(aim)
+        if self._cut_kind == "tight":
+            self.angle = "tight"
+            target = (min(max(bx, 0.0), 105.0), min(max(by, -1.0), 69.0), 0.5)
+            return self._framed(self._tight_pos(), target, 9.0)
+        if self._cut_kind in ("L", "R"):
+            self.angle = "goal"
+            # High behind the goal, over the crossbar, so the posts do not hide the ball.
+            pos = (-8.5, 34.0, 11.0) if self._cut_kind == "L" else (113.5, 34.0, 11.0)
+            target = (min(max(bx, 1.0), 104.0), min(max(by, 8.0), 60.0), 0.4)
+            return self._framed(pos, target, 16.0)
+        self.angle = "reverse"
+        return self._reverse_shot(aim)
 
 
 def blur_vector(prev: Camera | None, cur: Camera, shutter: float) -> tuple[float, float]:
@@ -470,7 +453,6 @@ def blur_vector(prev: Camera | None, cur: Camera, shutter: float) -> tuple[float
 
     The world point at the image centre now is projected through last frame's camera; the
     displacement over one frame interval, times the shutter fraction, is the blur streak.
-    A streak longer than BLUR_CAP_PX is shortened. The recorded blur is the one drawn.
     """
     if prev is None or shutter <= 0:
         return (0.0, 0.0)
@@ -480,8 +462,5 @@ def blur_vector(prev: Camera | None, cur: Camera, shutter: float) -> tuple[float
     p = prev.project(cur.target)
     if p is None:
         return (0.0, 0.0)
-    dx, dy = (cur.width / 2 - p[0]) * shutter, (cur.height / 2 - p[1]) * shutter
-    length = math.hypot(dx, dy)
-    if length > BLUR_CAP_PX:
-        dx, dy = dx * BLUR_CAP_PX / length, dy * BLUR_CAP_PX / length
-    return (round(dx, 3), round(dy, 3))
+    dx, dy = cur.width / 2 - p[0], cur.height / 2 - p[1]
+    return (round(dx * shutter, 3), round(dy * shutter, 3))
