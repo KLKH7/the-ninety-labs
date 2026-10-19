@@ -281,7 +281,7 @@ def test_takes_players_on_raises_the_dribble_and_leaves_the_pass():
             x=70.0, mates=[("h9", 82.0, 34.0, 0.0)], traits=traits)) if o.kind == kind]
     plain, on = vals((), "dribble"), vals(("takes_players_on",), "dribble")
     assert plain and len(plain) == len(on)
-    assert all(math.isclose(b - a, D.TAKE_ON) for a, b in zip(plain, on))
+    assert all(math.isclose(b - a, D.TAKE_ON) for a, b in zip(plain, on, strict=True))
     assert vals((), "pass") == vals(("takes_players_on",), "pass")
 
 
