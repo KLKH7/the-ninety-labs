@@ -200,6 +200,8 @@ def test_measured_audio_length_replaces_the_estimate(tmp_path):
     assert all(s.duration_s == 0.8 and s.duration_source == "measured" for s in track.said)
     assert all((tmp_path / s.file).read_bytes() == fake_wav(0.8) for s in track.said)
     assert summary["mode"] == "azure" and summary["synth_p50_s"] == 0.25 == summary["synth_p95_s"]
+    assert summary["synth_requests"] == len(calls) == len(voice.audio)
+    assert summary["synth_chars"] == sum(len(m) for m in voice.audio)
     # Short audio leaves room for every event the estimate had to drop.
     assert len(track.said) == len(EVENTS)
 

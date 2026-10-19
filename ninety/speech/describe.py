@@ -106,6 +106,8 @@ class Track:
     said: list[Said]
     dropped: list[dict] = field(default_factory=list)
     mode: str = "estimated"
+    synth_requests: int = 0  # every line version synthesised, said or not
+    synth_chars: int = 0  # their SSML length: an upper bound on the characters billed
 
 
 # ---------------------------------------------------------------- where the play is
@@ -329,6 +331,8 @@ class Voice:
             s.synth_s = round(took, 3)
             (out / s.file).write_bytes(audio)
         track.mode = "azure"
+        track.synth_requests = len(self.audio)
+        track.synth_chars = sum(len(markup) for markup in self.audio)
 
 
 # ---------------------------------------------------------------- outputs
@@ -385,6 +389,8 @@ def write_track(track: Track, refused: list[dict], out: Path, t_start: float, vo
         "limit_lag_s": MAX_LAG_S,
         "synth_p50_s": _quantile(synth, 0.5),
         "synth_p95_s": _quantile(synth, 0.95),
+        "synth_requests": track.synth_requests,
+        "synth_chars": track.synth_chars,
         "vtt": "description.vtt",
     }
     doc = {**summary, "said": [asdict(s) for s in track.said], "dropped_lines": track.dropped,
