@@ -34,6 +34,7 @@ ninety-data-stats = "ninety.vision.data_stats:main"
 [dependency-groups]
 dev = [
     "pytest>=8",
+    "pytest-xdist>=3.6",
     "ruff>=0.17.0",
 ]
 render-job = [
