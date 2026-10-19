@@ -119,8 +119,6 @@ def test_short_fine_tune_validates_only_on_clips_dataset_v1_has():
     # coco_export refuses a val seed that is not among the clips: seed 111 is excluded from
     # dataset v1 and so left validation (finetune.json notes)
     listing = Path(vision_model.__file__).parents[2] / "docs" / "eval" / "dataset-v1.json"
-    if not listing.exists():
-        pytest.skip("dataset-v1.json arrives with #121")
     seeds = {c["seed"] for c in json.loads(listing.read_text())["clips_list"]}
     short = json.loads((Path(vision_model.__file__).parent / "finetune-short.json").read_text())
     assert set(short["val_seeds"]) <= seeds

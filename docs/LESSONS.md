@@ -159,6 +159,8 @@ short and actionable. This file is public: no research sources, product names or
   counted as "closing", a pass held mid-window then let go counted as unfinished, a ball at rest
   for four seconds counted as a pass in flight, and open play after a substitution did not count
   as play. One "legal" goal fixture gave a goal with the ball at rest 55 m out.
+  Backfilling the first Azure top-up then showed the reverse: a pass struck on a clip's last frame
+  failed C7, judged on the dribble before the kick, because none of its flight was in the clip.
 - **Rule:** a contract every clip must meet is run by the code that makes clips, as part of the
   check that decides whether a clip ships. A clip that is part of something larger says so in
   its metadata, and a check withholds a judgement only when the clip's own frames show the play
@@ -609,6 +611,50 @@ short and actionable. This file is public: no research sources, product names or
   builds two windows where counting players near the ball picks the wrong one. Before a batch,
   `uv run ninety-data-stats <2-3 crowded clips> --stride 5 --input 640x640` shows the share.
 
+### 75. A trigger guarded only by "not busy now" fires again when the busy state ends
+- **What happened:** a keeper's dive was allowed whenever he was not diving and not on the
+  ground. A slow shot was still on its way after he had dived, landed and got up, so he dived a
+  second time at the same ball. Every condition checked the present; none remembered that the
+  touch had already set off a dive.
+- **Rule:** an action that happens once per cause records the cause it answered (here the touch,
+  `kicked_at`) and checks it, rather than relying on a temporary state to block a repeat.
+- **Check:** for each once-per-cause action, write a test where the cause outlives the action's
+  own busy state (dive, land, get up, ball still coming) and require no repeat; and one where a
+  new cause (a deflection) is allowed to trigger it again.
+
+### 76. Keep every dimension a source measured
+- **What happened:** the kick-error source measured a tilted ellipse of where shots cross the goal
+  line (a long and a short axis). The engine kept one number, their geometric mean (3°), as the
+  sideways error, and gave the up-and-down error a fixed 2° that did not grow with speed, pressure
+  or fatigue. Close shots almost never missed: none of 25 unblocked shots inside 25 m in one sample.
+- **Rule:** when a source reports a shape (axes, a covariance, a distribution), derive each
+  component the engine uses from it, in code, with the derivation beside it. A number that
+  summarises a measurement is not the measurement.
+- **Check:** for each sourced constant, ask "what did the source actually measure, in how many
+  dimensions?" and test the derived values against the source's own figures.
+
+### 77. A committed report must come from the committed code
+- **What happened:** two commits regenerated `docs/eval/funnel.md` (1.8 goals a team), yet the
+  code of the later one, re-run on a clean checkout of that commit, produced 2.5; the realism test went red with nobody noticing. Twelve
+  matches also hide a change of 0.3 goals a team in noise (standard error about 0.27).
+- **Rule:** regenerate a report from the exact tree being committed, after the last code change,
+  and state how big a difference the sample can resolve.
+- **Check:** re-run the report on a clean checkout of the commit and compare before merging.
+
+### 78. A test's sample must survive a change that does not touch what it tests
+- **What happened:** merging the measured kick error, which changes only where a struck ball
+  goes, broke two tests that check something else. A styles test read the defensive line over
+  three minutes of one seed: the gap between a high press and a low block fell from 7.8 m to
+  5.0 m, against a 5 m margin, while over ten minutes it was 15.7 m and 12.7 m. A fact-checker
+  test needed some player to be absent from every event in a five-minute clip; after the change
+  all 22 took part, so it had nobody to plant.
+- **Rule:** a test that reads a match measures enough of it that an unrelated change cannot move
+  the result across its margin, and a test that needs a case builds that case itself rather than
+  waiting for the match to produce it. Lengthen the sample or build the case; never move the
+  margin.
+- **Check:** before trusting a match-reading test, run its measurement on a longer window and a
+  second engine version, and write both numbers next to it.
+
 ### 84. Everything the picture draws in front of an object hides it in the labels
 - **What happened:** the id pass, which counts each object's visible pixels, hid all scenery. In
   seed 900003 of the frozen test set (`engine-v1`) a dead ball rested 0.5 m behind the far
@@ -640,6 +686,17 @@ short and actionable. This file is public: no research sources, product names or
   hook drops or repeats a test across K, or if the slowest tests share a part. Each shard prints
   its 10 slowest tests; when one shard runs much longer than the others, update `SLOWEST` in
   `tests/conftest.py`.
+
+### 87. Re-rendering part of a run copies the run's settings, and is checked against it
+- **What happened:** to fix 30 v3 clips I launched the re-render with seed ranges only. v3 had
+  rendered its 2000s and 4000s with `occlusion=crowded` and its 3000s with `kit_contrast=low`, so
+  16 of the 30 came back with different parameters, and 5 of them filmed a different window.
+  Nothing failed: the job rendered exactly what it was asked for.
+- **Rule:** a partial re-render takes each seed's overrides from the original run's `clip.json`,
+  and before the new clips replace the old, their `params` and `overrides` must equal the
+  originals and their engine positions must match frame for frame.
+- **Check:** `docs/eval/dataset-v1.json` lists the run, commit and overrides of every clip; for
+  each replaced seed, compare `params` and `overrides` in both `clip.json` files.
 
 ### 88. When the data moves, the code that reads it moves in the same change
 - **What happened:** sealing the ground truth (0fda1f8) moved frames.jsonl and events.jsonl from
