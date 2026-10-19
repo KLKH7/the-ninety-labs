@@ -5,8 +5,8 @@ evaluation, and no string in their code (docstrings aside) names a truth or sett
 At run time, under an audit hook in a fresh interpreter (as tests/test_live_reads_no_truth.py):
 tracks and events on the committed observations, and the image stage on a synthetic clip whose
 frames.jsonl, events.jsonl, clip.json and meta.json are traps. Each run must show it did the work,
-so it cannot pass on nothing. The image stage needs numpy and an image library, so it runs where
-the vision group is installed.
+so it cannot pass on nothing. The image stage needs numpy and pillow, which the dev group installs,
+so it runs in CI and never skips.
 """
 
 from __future__ import annotations
@@ -114,8 +114,11 @@ def synthetic_clip(clip: Path) -> Path:
     """Two frames of grass with Law 1's markings as a known camera sees them, a detections file
     that found nothing, and the answer key's and the settings' file names as traps. Built here,
     outside the audited run, so writing the traps is not counted as opening them."""
-    np = pytest.importorskip("numpy")
-    Image = pytest.importorskip("PIL.Image")
+    # Imported, not skipped: numpy and pillow are in the dev group so CI runs this guard; without
+    # them it fails rather than passing quietly.
+    import numpy as np
+    from PIL import Image
+
     from ninety.vision import pitch
 
     (clip / "images").mkdir(parents=True)
