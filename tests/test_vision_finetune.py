@@ -115,6 +115,18 @@ def test_config_is_fixed_and_valid():
     assert kw["resolution"] == CONFIG["resolution"] and kw["epochs"] == CONFIG["train"]["epochs"]
 
 
+def test_short_fine_tune_validates_only_on_clips_dataset_v1_has():
+    # coco_export refuses a val seed that is not among the clips: seed 111 is excluded from
+    # dataset v1 and so left validation (finetune.json notes)
+    listing = Path(vision_model.__file__).parents[2] / "docs" / "eval" / "dataset-v1.json"
+    if not listing.exists():
+        pytest.skip("dataset-v1.json arrives with #121")
+    seeds = {c["seed"] for c in json.loads(listing.read_text())["clips_list"]}
+    short = json.loads((Path(vision_model.__file__).parent / "finetune-short.json").read_text())
+    assert set(short["val_seeds"]) <= seeds
+    assert short["val_seeds"] == CONFIG["val_seeds"]
+
+
 def test_training_needs_an_exported_dataset(tmp_path):
     with pytest.raises(FileNotFoundError):
         train.check_dataset(tmp_path)
