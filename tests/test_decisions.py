@@ -553,6 +553,12 @@ def test_a_keeper_behind_the_shooter_covers_nothing():
 def test_with_the_ball_almost_on_his_line_the_keeper_stays_on_it_between_the_posts():
     x, y = offball.keeper_spot(104.5, 0.5, 105)
     assert x == pytest.approx(105, abs=0.1) and y == pytest.approx(34 - 3.66)  # at the near post
+    # Close enough that his depth would put him within the 2 m close-down of the ball: on his line,
+    # level with the ball, or at the post when it is wide of it.
+    assert offball.keeper_spot(104, 34, 105) == (105, 34)
+    assert offball.keeper_spot(102, 34, 105) == (105, 34)
+    assert offball.keeper_spot(104.5, 29.5, 105) == (105, 34 - 3.66)
+    assert offball.keeper_spot(104.5, 38.5, 105) == (105, 34 + 3.66)
 
 
 def test_out_of_shooting_range_the_keeper_sweeps_from_his_furthest_spot():
