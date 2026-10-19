@@ -64,5 +64,6 @@ def test_the_cli_writes_cues_from_the_m1_clip(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr("sys.argv", ["ninety-live", "--out", str(out)])
     live.main()
     cues = [json.loads(line) for line in out.read_text().splitlines()]
-    assert cues and all(c["evidence"][0] in BY_ID for c in cues)
-    assert "stand-in" in capsys.readouterr().out  # until R3's detected events land
+    on_air = {i for c in cues for i in c["evidence"]}
+    assert cues and on_air <= {e["id"] for e in detected.load(detected.m1_path())}
+    assert ("stand-in" in capsys.readouterr().out) == detected.is_standin(detected.m1_path())

@@ -36,7 +36,7 @@ from ninety.agents.factcheck import Claim, Verdict
 from ninety.match import detected
 from ninety.mcp import match_server
 
-events = detected.load(detected.m1_path())
+events = detected.load(detected.FIXTURES / "detected-standin-seed900001.jsonl")
 sure = next(e for e in events if e["type"] == "pass" and e.get("receiver") and e["confidence"] >= 0.8)
 
 async def ask(prompt):
