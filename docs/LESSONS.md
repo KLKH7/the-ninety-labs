@@ -855,7 +855,7 @@ short and actionable. This file is public: no research sources, product names or
   every subject with the same prefix; the setup is done only when the first approved
   `agents-live` run passes `azure/login`.
 
-### 94. A mutation run that turns nothing red may not have run the tests
+### 95. A mutation run that turns nothing red may not have run the tests
 - **What happened:** a shell loop mutated nine lines of the M1 live path and reported "none red"
   for every one. zsh does not split an unquoted `$T` into words, so pytest got one path that did
   not exist and ran no test. Nine "surviving" mutations in a row looked like nine weak tests.
