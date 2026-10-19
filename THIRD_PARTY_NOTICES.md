@@ -16,7 +16,7 @@ licence must be one of those three (see `AGENTS.md`).
 | mcp | MCP server and client | MIT |
 | starlette, uvicorn | the public API (`ninety/api`) | BSD-3-Clause |
 | pydantic (via agent-framework) | typed agent output | MIT |
-| pytest, ruff (development) | tests and lint | MIT |
+| pytest, pytest-xdist and its execnet, ruff (development) | tests (in parallel workers) and lint | MIT |
 | uv (container build only) | installs `uv.lock` into the API image | MIT or Apache-2.0 |
 
 ## Data
