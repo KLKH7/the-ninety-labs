@@ -196,6 +196,32 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** the two `detections.jsonl` runs are made by one command with only `--checkpoint` and
   `--weights` different; `tests/test_vision_finetune.py` pins the baseline to finetune.json's size.
 
+### 82. A structural change chosen from a report, justified by half the engine, is tailoring; and a lesson only on a side branch protects nothing
+- **What happened:** a full-match pass count was over a test's limit. Calibration showed forward
+  passes rated too low. The passer's estimate raced every opponent while the engine sends one
+  chaser, so the estimate was changed to race only the soonest. That made the calibration look
+  better and turned the failing seed green. An audit found that the engine lets any opponent take
+  the ball by contact and re-plans its chaser every 4 frames. So the change was not the engine's
+  rule but an optimistic way of combining uncertainty wherever two opponents contest the ball,
+  and where play happens did not move at all. It was reverted on the R3 line (Oct 17), but the
+  lesson stayed on that branch. The same change, ported earlier from another branch, rode into
+  the forward-play port on main's line (#103) unchecked. There it was a prime suspect when goals
+  doubled (2.63 a team over 8 seeds, against 1.4 real).
+- **Rule:**
+  - Before changing how an estimate combines its parts, read every path in the engine that
+    decides the same outcome (here `plan_chase` and `contact`), not only the one that fits.
+  - A rate that moves for the wrong reason, or a check that turns green while the behaviour
+    behind it does not move, is not a fix.
+  - A lesson lands on main as soon as it is learned, in its own small pull request if its fix is
+    still on a branch.
+  - An audit of a port also reads the source line's LESSONS.
+- **Check:**
+  - For any change that moves a held-out check, list what else moved (stoppages, where play
+    happens) and say what did not.
+  - `git log --all -- docs/LESSONS.md` shows no lesson that exists only on an unmerged branch
+    older than a day.
+  - A port's audit names the branches whose lessons it read.
+
 ## Working in the repo
 
 ### 12. "No checks yet" is not "checks passed"
