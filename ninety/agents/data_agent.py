@@ -16,6 +16,8 @@ Rules:
   (ninety.render.params.sample_params validates them; a planned knob is refused).
 - The budget is split by misses, largest remainder first, so the split is exact and reproducible;
   a cluster with misses gets at least one clip while the budget lasts.
+- When the handoff states clips per cluster (the Vision Auditor's clusters.json does), they must
+  be this split, or the plan is refused.
 - Seeds are consecutive from --first-seed and must all be training seeds: a targeted round never
   touches the fixed test set, so its before and after scores stay honest.
 - Every request names the commit to render with; the job refuses any other, so a round comes from
@@ -83,6 +85,11 @@ def plan(
     clusters = handoff["clusters"]
     sets = [render_set(c.get("render") or {}) for c in clusters]
     counts = allocate(clusters, budget)
+    # The Vision Auditor writes the clips it expects (schemas/failure_clusters.schema.json); a
+    # handoff that disagrees with this split was made with another budget or another rule.
+    stated = [c.get("clips") for c in clusters]
+    if any(n is not None for n in stated) and stated != counts:
+        raise ValueError(f"handoff asks for {stated} clips, the budget of {budget} splits as {counts}")
     requests, seed = [], first_seed
     for cluster, count, settings in zip(clusters, counts, sets, strict=True):
         for start in range(seed, seed + count, per_request):
