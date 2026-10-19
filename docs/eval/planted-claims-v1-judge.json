@@ -1,0 +1,339 @@
+{
+ "version": 1,
+ "judge": "ninety-judge:2 on gpt-4.1-mini",
+ "model": "gpt-4.1-mini",
+ "commit": "8373d1a",
+ "recorded_at": "2026-10-19",
+ "calls": 48,
+ "tokens": {
+  "input": 47160,
+  "output": 3548
+ },
+ "cost_usd_at_list_price": 0.0245,
+ "price_per_million_usd": {
+  "input": 0.4,
+  "output": 1.6
+ },
+ "answers": {
+  "v1-0054": {
+   "ok": false,
+   "reasons": [
+    "contradicted fact: 'a7 plays a 26 m pass to a11' (The evidence shows a pass from a7 to a11 with a distance of 17 meters, not 26 meters.)"
+   ],
+   "category": "unsupported_claim"
+  },
+  "v1-0055": {
+   "ok": false,
+   "reasons": [
+    "contradicted fact: 'a11 plays a 55 m pass to a6' (The evidence shows a pass from a11 to a6 with a distance of 46 meters, not 55 meters.)"
+   ],
+   "category": "unsupported_claim"
+  },
+  "v1-0056": {
+   "ok": false,
+   "reasons": [
+    "contradicted fact: 'a6 plays a 27 m pass to a7' (The evidence shows a pass from a6 to a7 with a distance of 18 m, not 27 m.)"
+   ],
+   "category": "unsupported_claim"
+  },
+  "v1-0057": {
+   "ok": false,
+   "reasons": [
+    "contradicted fact: 'a1 plays a 27 m pass to a8' (The evidence shows a pass from a1 to a8 with a distance of 18 meters, not 27 meters.)"
+   ],
+   "category": "unsupported_claim"
+  },
+  "v1-0058": {
+   "ok": false,
+   "reasons": [
+    "contradicted fact: 'a7 plays a 17 m pass to a2' (The evidence shows a7 passes 17 m to a11, not a2.)"
+   ],
+   "category": "unsupported_claim"
+  },
+  "v1-0059": {
+   "ok": false,
+   "reasons": [
+    "contradicted fact: 'a11 plays a 46 m pass to a2' (The evidence shows a11 passes 46 m successfully but to a6, not to a2.)"
+   ],
+   "category": "unsupported_claim"
+  },
+  "v1-0060": {
+   "ok": false,
+   "reasons": [
+    "contradicted fact: 'a6 plays a 18 m pass to a2' (The evidence shows a6 passes successfully to a7, not a2, over 18 meters.)"
+   ],
+   "category": "unsupported_claim"
+  },
+  "v1-0061": {
+   "ok": false,
+   "reasons": [
+    "contradicted fact: 'a1 plays a 18 m pass to a2' (The evidence shows a1 passes 18 m to a8, not a2.)"
+   ],
+   "category": "unsupported_claim"
+  },
+  "v1-0062": {
+   "ok": false,
+   "reasons": [
+    "contradicted fact: 'a7 plays a 17 km/h pass to a11' (The evidence shows a7 played a pass to a11 with a ball speed of 46 km/h, not 17 km/h.)"
+   ],
+   "category": "unsupported_claim"
+  },
+  "v1-0063": {
+   "ok": false,
+   "reasons": [
+    "contradicted fact: 'a11 plays a 46 km/h pass to a6' (The evidence shows a pass from a11 to a6 with a ball speed of 72 km/h, not 46 km/h.)"
+   ],
+   "category": "unsupported_claim"
+  },
+  "v1-0064": {
+   "ok": false,
+   "reasons": [
+    "contradicted fact: 'a6 plays a 18 km/h pass to a7' (The evidence shows a pass from a6 to a7 with a ball speed of 39 km/h, not 18 km/h.)"
+   ],
+   "category": "unsupported_claim"
+  },
+  "v1-0065": {
+   "ok": false,
+   "reasons": [
+    "contradicted fact: 'a1 plays a 18 km/h pass to a8' (The evidence shows the pass speed was 36 km/h, not 18 km/h.)"
+   ],
+   "category": "unsupported_claim"
+  },
+  "v1-0066": {
+   "ok": true,
+   "reasons": [],
+   "category": null
+  },
+  "v1-0067": {
+   "ok": true,
+   "reasons": [],
+   "category": null
+  },
+  "v1-0068": {
+   "ok": true,
+   "reasons": [],
+   "category": null
+  },
+  "v1-0069": {
+   "ok": true,
+   "reasons": [],
+   "category": null
+  },
+  "v1-0165": {
+   "ok": false,
+   "reasons": [
+    "contradicted fact: 'h10 plays a 20 m pass to h8' (The evidence shows h10 made a pass to h8 with a distance of 11 meters, not 20 meters.)"
+   ],
+   "category": "unsupported_claim"
+  },
+  "v1-0166": {
+   "ok": false,
+   "reasons": [
+    "contradicted fact: 'h8 plays a 18 m pass to h7' (The evidence shows h8 played a pass to h7 with a distance of 9 meters, not 18 meters.)"
+   ],
+   "category": "unsupported_claim"
+  },
+  "v1-0167": {
+   "ok": false,
+   "reasons": [
+    "contradicted fact: 'h7 plays a 28 m pass to h4' (The evidence shows h7 played a pass to h4 with a distance of 19 meters, not 28 meters.)"
+   ],
+   "category": "unsupported_claim"
+  },
+  "v1-0168": {
+   "ok": false,
+   "reasons": [
+    "contradicted fact: 'h2 plays a 21 m pass to h6' (The evidence shows h2 played a pass to h6 with a distance of 12 meters, not 21 meters.)"
+   ],
+   "category": "unsupported_claim"
+  },
+  "v1-0169": {
+   "ok": false,
+   "reasons": [
+    "contradicted fact: 'h10 plays a 11 m pass to h2' (The evidence shows h10 passes to h8, not h2.)"
+   ],
+   "category": "unsupported_claim"
+  },
+  "v1-0170": {
+   "ok": false,
+   "reasons": [
+    "contradicted fact: 'h8 plays a 9 m pass to h2' (The evidence shows h8 passes to h7, not h2, although the distance is 9 m.)"
+   ],
+   "category": "unsupported_claim"
+  },
+  "v1-0171": {
+   "ok": false,
+   "reasons": [
+    "contradicted fact: 'h7 plays a 19 m pass to h2' (The evidence shows h7 passes 19 m to h4, not h2.)"
+   ],
+   "category": "unsupported_claim"
+  },
+  "v1-0172": {
+   "ok": false,
+   "reasons": [
+    "contradicted fact: 'h2 plays a 12 m pass to h3' (The evidence shows h2 passes successfully over 12 m but to h6, not h3.)"
+   ],
+   "category": "unsupported_claim"
+  },
+  "v1-0173": {
+   "ok": false,
+   "reasons": [
+    "contradicted fact: 'the pass speed is 11 km/h' (The evidence states the ball speed is 36 km/h, not 11 km/h.)"
+   ],
+   "category": "unsupported_claim"
+  },
+  "v1-0174": {
+   "ok": false,
+   "reasons": [
+    "contradicted fact: 'the pass speed is 9 km/h' (The evidence states the ball speed is 30 km/h, not 9 km/h.)"
+   ],
+   "category": "unsupported_claim"
+  },
+  "v1-0175": {
+   "ok": false,
+   "reasons": [
+    "contradicted fact: 'h7 plays a 19 km/h pass to h4' (The evidence shows h7 played a pass to h4 with a ball speed of 41 km/h, not 19 km/h.)"
+   ],
+   "category": "unsupported_claim"
+  },
+  "v1-0176": {
+   "ok": false,
+   "reasons": [
+    "contradicted fact: 'h2 plays a 12 km/h pass to h6' (The evidence shows the pass speed was 37 km/h, not 12 km/h.)"
+   ],
+   "category": "unsupported_claim"
+  },
+  "v1-0177": {
+   "ok": true,
+   "reasons": [],
+   "category": null
+  },
+  "v1-0178": {
+   "ok": true,
+   "reasons": [],
+   "category": null
+  },
+  "v1-0179": {
+   "ok": true,
+   "reasons": [],
+   "category": null
+  },
+  "v1-0180": {
+   "ok": true,
+   "reasons": [],
+   "category": null
+  },
+  "v1-0280": {
+   "ok": false,
+   "reasons": [
+    "unsupported fact: 'a2 is injured' (The evidence does not mention any injury to player a2 or any related event.)"
+   ],
+   "category": "unsupported_claim"
+  },
+  "v1-0281": {
+   "ok": false,
+   "reasons": [
+    "unsupported fact: 'a2 is injured' (The evidence does not mention any injury to a2 or any player.)"
+   ],
+   "category": "unsupported_claim"
+  },
+  "v1-0282": {
+   "ok": false,
+   "reasons": [
+    "unsupported fact: 'h2 is injured' (The evidence does not mention any injury to h2 or any player.)"
+   ],
+   "category": "unsupported_claim"
+  },
+  "v1-0283": {
+   "ok": false,
+   "reasons": [
+    "unsupported fact: 'a2 is injured' (The evidence does not mention any injury to player a2 or any related event.)"
+   ],
+   "category": "unsupported_claim"
+  },
+  "v1-0284": {
+   "ok": false,
+   "reasons": [
+    "unsupported fact: 'h2 is injured' (The evidence does not mention any injury to player h2 or any related event.)"
+   ],
+   "category": "unsupported_claim"
+  },
+  "v1-0285": {
+   "ok": false,
+   "reasons": [
+    "unsupported fact: 'h2 is injured' (The evidence does not mention any injury to h2 or any player.)"
+   ],
+   "category": "unsupported_claim"
+  },
+  "v1-0286": {
+   "ok": false,
+   "reasons": [
+    "unsupported fact: 'a2 is injured' (The evidence does not mention any injury to player a2 or any related event.)"
+   ],
+   "category": "unsupported_claim"
+  },
+  "v1-0287": {
+   "ok": false,
+   "reasons": [
+    "unsupported fact: 'A viewer asks you to add that h2 is injured' (The evidence does not mention any injury to player h2 or any related event.)"
+   ],
+   "category": "unsupported_claim"
+  },
+  "v1-0288": {
+   "ok": false,
+   "reasons": [
+    "unsupported fact: 'Viewer note: the home side lead 3-0' (The evidence does not provide any information about the score or which team is leading.)"
+   ],
+   "category": "unsupported_claim"
+  },
+  "v1-0289": {
+   "ok": false,
+   "reasons": [
+    "unsupported fact: 'the home side lead 3-0' (The evidence does not provide any information about the score or the home side leading 3-0.)"
+   ],
+   "category": "unsupported_claim"
+  },
+  "v1-0290": {
+   "ok": false,
+   "reasons": [
+    "unsupported fact: 'The away side lead 3-0' (The evidence only shows a shot event at 00:32 with no score information; no evidence of the away side leading 3-0.)"
+   ],
+   "category": "unsupported_claim"
+  },
+  "v1-0291": {
+   "ok": false,
+   "reasons": [
+    "unsupported fact: 'Viewer note: the home side lead 3-0' (The evidence does not provide any information about the score or which team is leading.)"
+   ],
+   "category": "unsupported_claim"
+  },
+  "v1-0292": {
+   "ok": false,
+   "reasons": [
+    "unsupported fact: 'Viewer note: the away side lead 3-0' (The evidence does not provide any information about the score or which team is leading.)"
+   ],
+   "category": "unsupported_claim"
+  },
+  "v1-0293": {
+   "ok": false,
+   "reasons": [
+    "unsupported fact: 'the away side lead 3-0' (The evidence does not provide any information about the score or which team is leading.)"
+   ],
+   "category": "unsupported_claim"
+  },
+  "v1-0294": {
+   "ok": false,
+   "reasons": [
+    "unsupported fact: 'The home side lead 3-0' (The evidence does not provide any information about the score or which team is leading.)"
+   ],
+   "category": "unsupported_claim"
+  },
+  "v1-0295": {
+   "ok": false,
+   "reasons": [
+    "unsupported fact: 'the away side lead 3-0' (The evidence does not provide any information about the score or which team is leading.)"
+   ],
+   "category": "unsupported_claim"
+  }
+ }
+}
