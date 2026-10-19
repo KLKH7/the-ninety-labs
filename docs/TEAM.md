@@ -117,7 +117,7 @@ If M1 slips, the cut list applies the same day. The never-cut list in PLAN.md ho
 
 ### Contracts
 
-The three schemas in `schemas/` are the only interface between roles. Code never reaches into
+The schemas in `schemas/` are the only interface between roles. Code never reaches into
 another role's internals.
 
 - **Every schema has a fixture** in `tests/fixtures/`, and a test checks that the fixture

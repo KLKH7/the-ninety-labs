@@ -116,7 +116,8 @@ function renderPipeline(b: Bundle) {
   const rows: [string, string, boolean?][] = [
     ["Clip", `${m.clip}, ${m.footage.frames} frames at ${m.fps} fps`],
     ["Detector", `${m.detector ?? "none"} (${m.detections.source}, ${m.detections.frames} frames)`],
-    ["Events", `${m.events.count} from ${m.events.source}`, m.events.source.startsWith("stand-in")],
+    ["Events", `${m.events.count}: ${m.events.source}`, m.events.standin],
+    ["Held", m.events.held.length ? `${m.events.held.join(", ")}: detected too unsure to air` : "none"],
     ["Stats", `${m.facts} facts computed in code`],
     ["Agents", `${m.agents.accepted} of ${m.agents.claims} claims accepted (${m.agents.mode}${m.agents.planted ? ", a false number planted on purpose" : ""})`],
     ["Graphics", `${m.cues} cues`],
@@ -150,7 +151,7 @@ function renderTrace(b: Bundle, seekTo: (matchT: number) => void) {
       head.className = "claim-head";
       const chip = document.createElement("span");
       chip.className = "chip";
-      chip.textContent = c.status === "accepted" ? "Accepted" : "Held back";
+      chip.textContent = c.status === "accepted" ? "Accepted" : c.verdict === "held" ? "Held: unsure" : "Rejected";
       const meta = document.createElement("span");
       meta.className = "meta";
       meta.textContent = `minute ${c.minute} · ${c.drafts} draft${c.drafts === 1 ? "" : "s"} · ${c.mode}`;
@@ -312,7 +313,8 @@ async function start() {
       onAirText.textContent = sentence;
       overlay.setAttribute("aria-label", sentence ? `On-screen graphics: ${sentence}` : "No graphics on screen");
       for (const li of document.querySelectorAll<HTMLElement>("#claims .claim")) {
-        const live = aired.some((c) => c.id.startsWith(`cue-${li.dataset.claim}-`));
+        const claim = b.claims.find((c) => c.id === li.dataset.claim);
+        const live = !!claim && aired.some((c) => c.kind === "insight" && c.evidence.join() === claim.evidence.join());
         if (live) li.setAttribute("aria-current", "true");
         else li.removeAttribute("aria-current");
       }

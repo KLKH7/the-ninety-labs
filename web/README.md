@@ -20,9 +20,8 @@ npm run build --prefix web/viewer        # static site in web/viewer/dist; open 
 | Stage | In the bundle | Today |
 |---|---|---|
 | Ingest | `detections.jsonl` | ours-v2's committed run on the frozen test set (`--detect live --weights W` runs RF-DETR) |
-| Interpret | `events.jsonl`, `facts.json` | events: R3's vision events by default once `ninety.vision.events` exists (`--events auto`); until then the simulator's, as a stand-in named on screen. `--demo` refuses the stand-in; stats from `ninety/intel/stats.py` |
-| Explain | `trace.json` | the Analyst → Fact-checker workflow with the real code checks; offline Analyst, or `--replay` a Foundry recording |
-| Render | `cues.jsonl` | template cues for every pass and shot, one fact-checked insight a minute |
+| Interpret | `events.jsonl`, `facts.json` | detected events (`ninety/match/detected.py`: source vision, with a confidence; ground truth refused): R3's file for the clip, or until it lands R4's hand-written stand-in, named on screen; `--demo` refuses the stand-in. Stats from `ninety/intel/stats.py` |
+| Explain + Render | `trace.json`, `cues.jsonl` | R4's live path (`ninety/agents/live.py`), the one place cues are built: template cues for confident passes and shots, the Analyst → Fact-checker workflow (offline Analyst, or `--replay` a Foundry recording), and the verified claim as an insight cue; unsure detections are held |
 | Personalize | persona in each cue | casual and analyst |
 
 Footage is `video.webm` (VP9, when ffmpeg is installed) or the JPEG frames (`--frames`).

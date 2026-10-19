@@ -52,10 +52,11 @@ def site(browser, tmp_path_factory):
     page.set_content('<body style="margin:0;background:#2e7d32"></body>')
     jpeg = page.screenshot(type="jpeg")
     page.close()
-    clip, detections = write_clip(tmp_path_factory.mktemp("clip"), jpeg)
+    clip, detections, events = write_clip(tmp_path_factory.mktemp("clip"), jpeg)
     www = root / "www"
     shutil.copytree(DIST, www)
-    args = [str(clip), "--out", str(www / "bundle"), "--detections", str(detections), "--frames", "--plant"]
+    args = [str(clip), "--out", str(www / "bundle"), "--detections", str(detections), "--frames", "--plant",
+            "--events-file", str(events)]
     # Playwright's sync API holds this thread's event loop; ninety-e2e runs its own in another.
     worker = threading.Thread(target=e2e.main, args=(args,))
     worker.start()
@@ -95,7 +96,7 @@ def test_trace_shows_the_rejection_and_the_accepted_claim(browser, site):
     assert "h8 shot, on target, 101 km/h." in claim.inner_text()
     assert claim.locator(".step.reject").count() == 1
     assert "143" in claim.locator(".step.reject").inner_text()
-    assert "ground truth" in page.locator("#pipeline").inner_text()
+    assert "Events" in page.locator("#pipeline").inner_text()
     assert not errors
 
 
@@ -104,19 +105,21 @@ def test_graphics_follow_the_clock_and_the_persona(browser, site):
     assert match_t(page) == pytest.approx(T_START, abs=0.05)
     page.get_by_role("button", name="Watch it").click()  # to just before the shot
     page.wait_for_function("document.querySelector('#overlay').dataset.t > 60.6")
+    page.keyboard.press("2")  # the verified insight airs for the analyst (ninety/agents/live.py)
     page.keyboard.press(".")  # frame by frame up to the shot at 61.2 s
     for _ in range(25):
-        if "cue-claim-m2-casual" in on_air(page):
+        if "insight-e2" in on_air(page):
             break
         page.keyboard.press(".")
-    assert "cue-claim-m2-casual" in on_air(page) and "cue-e2-casual" in on_air(page)
+    assert page.get_by_role("radio", name="Analyst").get_attribute("aria-checked") == "true"
+    assert set(on_air(page)) == {"insight-e2", "cue-e2-analyst"}
     assert "Fact-checked: h8 shot, on target, 101 km/h" in page.locator("#on-air").inner_text()
     assert page.locator("#claims .claim").get_attribute("aria-current") == "true"
 
-    page.keyboard.press("2")
-    page.wait_for_function("document.querySelector('#overlay').dataset.onAir.includes('analyst')")
-    assert page.get_by_role("radio", name="Analyst").get_attribute("aria-checked") == "true"
-    assert set(on_air(page)) == {"cue-claim-m2-analyst", "cue-e2-analyst"}
+    page.keyboard.press("1")
+    page.wait_for_function("document.querySelector('#overlay').dataset.onAir === 'cue-e2-casual'")
+    assert page.get_by_role("radio", name="Casual").get_attribute("aria-checked") == "true"
+    assert page.locator("#claims .claim").get_attribute("aria-current") is None
     assert not errors
 
 

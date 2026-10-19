@@ -828,3 +828,26 @@ short and actionable. This file is public: no research sources, product names or
   and the median distance, not just the count, and `by_knob` gives the crowded clips on the test
   set; `tests/test_vision_report.py` checks a detection at a player's feet is not counted as
   on the hidden ball.
+
+### 93. Copy an identity string from the system, not from the docs
+- **What happened:** the `agents-live` setup told the maintainer to trust the OIDC subject
+  `repo:KLKH7/the-ninety-labs:environment:agents-live`, the format GitHub's docs show. This repo's
+  tokens carry the owner and repo ids (`repo:KLKH7@210092633/the-ninety-labs@1417939631:...`),
+  as the existing `main` credential already showed. The credential was created, `az` reported
+  success, and no run could ever have signed in with it.
+- **Rule:** an identifier another system must match exactly (an OIDC subject, a role id, a
+  resource id) is read from that system or copied from a working sibling, never written from
+  memory or a generic doc (as lesson 49). Setup steps say how to see the value in use.
+- **Check:** `az ad app federated-credential list --id "$CLIENT_ID" --query "[].subject"` shows
+  every subject with the same prefix; the setup is done only when the first approved
+  `agents-live` run passes `azure/login`.
+
+### 94. A mutation run that turns nothing red may not have run the tests
+- **What happened:** a shell loop mutated nine lines of the M1 live path and reported "none red"
+  for every one. zsh does not split an unquoted `$T` into words, so pytest got one path that did
+  not exist and ran no test. Nine "surviving" mutations in a row looked like nine weak tests.
+- **Rule:** a mutation harness prints the test run's own pass and fail counts next to each
+  mutation, and a run with no "passed" count is a broken harness, not a surviving mutation.
+- **Check:** the harness line for every mutation shows "N failed, M passed". Run one mutation by
+  hand first and watch it go red before trusting the loop.
+

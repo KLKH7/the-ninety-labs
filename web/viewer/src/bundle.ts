@@ -33,6 +33,7 @@ export interface ClaimTrace {
   minute: number;
   t: number | null;
   status: "accepted" | "held_back";
+  verdict: string; // the workflow's: verified, rejected or held
   drafts: number;
   planted: boolean;
   mode: string;
@@ -51,7 +52,7 @@ export interface Manifest {
   footage: { kind: "video" | "frames"; src: string; pattern?: string; frames: number };
   detector: string | null;
   detections: { source: string; frames: number };
-  events: { source: string; count: number };
+  events: { source: string; count: number; standin: boolean; held: string[] };
   facts: number;
   agents: { mode: string; planted: boolean; claims: number; accepted: number };
   cues: number;

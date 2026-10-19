@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/KLKH7/the-ninety-labs/schemas/viewer_answer.schema.json",
+  "title": "ViewerAnswer",
+  "description": "The answer the phone companion shows. value is computed by code from the cited evidence, never by a model; the Companion agent only words text. Mirrors ninety.agents.contracts.Answer.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "text", "metric", "value", "unit", "evidence", "t_from", "t_to"],
+  "properties": {
+    "status": { "type": "string", "enum": ["verified", "held", "rejected", "unanswerable"], "description": "Only verified answers show their text; held means still being checked." },
+    "text": { "type": "string" },
+    "metric": { "type": ["string", "null"], "description": "The stat the value is, e.g. distance_m or top_speed_kmh." },
+    "value": { "type": ["number", "null"] },
+    "unit": { "type": ["string", "null"], "description": "e.g. m, km/h, passes." },
+    "evidence": { "type": "array", "items": { "type": "string" }, "description": "Event and fact ids behind the answer." },
+    "t_from": { "type": ["number", "null"], "minimum": 0, "description": "Start of the stretch of match the answer covers, in seconds." },
+    "t_to": { "type": ["number", "null"], "minimum": 0 }
+  }
+}

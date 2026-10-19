@@ -9,55 +9,46 @@ Stages (the brief's names), each writing one file in the bundle:
 1. Ingest: detections. `--detections FILE` reads a detector run that was already made (the
    default is the committed ours-v2 run on the frozen test set, docs/eval/vision-report-v1);
    `--detect live --weights W` runs RF-DETR (ninety.vision.detect, needs `uv sync --group vision`).
-2. Interpret: events, then stats. `--events vision` calls R3's detector of events from the
-   detections, and is what the default `--events auto` picks as soon as that module exists. Until
-   then auto falls back to `stand-in`: the simulator's events for the clip, labelled ground truth in
-   the bundle and on screen. `--demo` refuses the stand-in, so it can never reach the demo.
-   Stats come from ninety.intel.stats: code computes every number.
-3. Explain: the Analyst and the Fact-checker (ninety.agents.slice.run_workflow), offline: a
-   deterministic Analyst writes the claim from the events, and the real code checks gate it. With
-   `--replay FILE` the recorded Foundry answers stand in for the models instead. No Azure, no live
-   model call, in either mode.
-4. Render: overlay cues (schemas/overlay_cue.schema.json): template cues for every pass and shot,
-   and one verified insight per minute, aired only if the Fact-checker accepted it.
+2. Interpret: detected events (ninety/match/detected.py: source vision, with a confidence; ground
+   truth is refused). `--events-file` names them; by default R3's file for the clip, or until it
+   lands the hand-written stand-in, which the bundle and the viewer name as one. `--demo` refuses
+   the stand-in. Only the events inside the clip's window go on.
+3. Explain and 4. Render: R4's live path (ninety/agents/live.py), the one place cues are built:
+   template cues for every confident pass and shot, and the Analyst -> Fact-checker workflow, whose
+   verified claim airs as an insight cue and whose claims on unsure detections are held. The models
+   are offline: a deterministic Analyst writes from the events and the code checks gate it, or
+   `--replay FILE` answers with a Foundry recording. No Azure, no live model call.
 5. Personalize: analyst and casual cues side by side; the viewer switches between them.
 
 The bundle (manifest.json, cues.jsonl, trace.json, events.jsonl, facts.json, detections.jsonl and
-the footage as video.webm or frames/) is all the viewer reads. Nothing in it but `events.jsonl`
-under the stand-in comes from ground truth, and the manifest names that.
+the footage as video.webm or frames/) is all the viewer reads. This module never opens the clip's
+events.jsonl or frames.jsonl: they are the answer key (tests/test_e2e.py checks).
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
-import importlib.util
 import json
 import re
 import shutil
 import subprocess
 import sys
 import warnings
-from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from jsonschema import validate
-
-from ninety.agents.cues import SCHEMA as CUE_SCHEMA
-from ninety.agents.cues import _text, template_cues
+from ninety.agents import live
+from ninety.agents.cues import _text
 from ninety.agents.factcheck import Claim, Verdict
-from ninety.agents.ledger import InMemoryLedger, load_match
-from ninety.agents.slice import Recording, replayer, run_workflow
+from ninety.agents.slice import Recording, replayer, tamper
 from ninety.intel.stats import calculate_facts
+from ninety.match import detected
 from ninety.match.facts import AGENT_TYPES, compact, minute_of
 
 ROOT = Path(__file__).resolve().parents[1]
 RECORDED_DETECTIONS = ROOT / "docs" / "eval" / "vision-report-v1" / "detections"
-EVENT_SCHEMA = json.loads((ROOT / "schemas" / "match_event.schema.json").read_text())
 BUNDLE_FORMAT = 1
-INSIGHT_SECONDS = 6.0  # an insight is a sentence, not a lower-third tag: a second longer to read
-STAND_IN = "stand-in: the simulator's events for this clip (ground truth), until vision events land"
 
 # What makes a moment worth the one sentence a minute gets, most first. A goal beats a shot beats a
 # turnover beats a pass; among equals, the faster ball.
@@ -101,58 +92,24 @@ def detections_for(clip: Clip, path: Path | None, live: bool, weights: Path | No
     return path
 
 
-# ---------------------------------------------------------------- 2 Interpret: events and stats
-
-EventSource = Callable[[Clip, list], list[dict]]
+# ---------------------------------------------------------------- 2 Interpret: detected events
 
 
-def stand_in_events(clip: Clip, detections: list) -> list[dict]:
-    """The simulator's events for the clip. Ground truth: allowed on the live path only until M1."""
-    path = clip.dir / "events.jsonl"
-    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+def detected_events(clip: Clip, path: Path | None, demo: bool) -> tuple[list[dict], str]:
+    """The clip's detected events inside its window, and where they came from."""
+    path = path or detected.m1_path(clip.id)
+    if not path.exists():
+        raise SystemExit(f"no detected events at {path}: pass --events-file")
+    if demo and detected.is_standin(path):
+        raise SystemExit(f"--demo refuses {path.name}: a hand-written stand-in, not the detector's output")
+    t0, t1 = clip.meta["t_start"], clip.meta["t_end"]
+    events = [e for e in detected.load(path) if t0 <= e["t"] <= t1]
+    label = f"hand-written stand-in ({path.name}), not the detector's output" if detected.is_standin(path) \
+        else f"detected ({path.name})"
+    return events, label
 
 
-def vision_events(clip: Clip, detections: list) -> list[dict]:
-    """R3's events detected from video (ninety.vision.events); refuses to run until it exists."""
-    try:
-        from ninety.vision.events import detect_events  # type: ignore[import-not-found]
-    except ImportError as e:
-        raise SystemExit(f"--events vision needs ninety.vision.events.detect_events ({e})") from e
-    return detect_events(detections, clip.meta)
-
-
-def vision_available() -> bool:
-    return importlib.util.find_spec("ninety.vision.events") is not None
-
-
-def resolve_events(choice: str, demo: bool) -> str:
-    """Which event source runs. Vision as soon as it exists; the ground-truth stand-in only when it
-    does not, and never on the demo path (AGENTS.md: nothing on the live path reads ground truth)."""
-    source = ("vision" if vision_available() else "stand-in") if choice == "auto" else choice
-    if demo and source == "stand-in":
-        raise SystemExit("--demo refuses the ground-truth stand-in: use --events vision or --events-file")
-    return source
-
-
-def events_from_file(path: Path) -> list[dict]:
-    """Events detected earlier and written as JSONL. Only vision events: ground truth is refused."""
-    events = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
-    truth = [e.get("id") for e in events if e.get("source") != "vision"]
-    if truth:
-        raise SystemExit(f"{path}: events {truth[:3]} are not source=vision: detected events only")
-    return events
-
-
-EVENT_SOURCES: dict[str, EventSource] = {"stand-in": stand_in_events, "vision": vision_events}
-
-
-def checked_events(events: list[dict]) -> list[dict]:
-    for event in events:
-        validate(event, EVENT_SCHEMA)
-    return sorted(events, key=lambda e: (e["t"], e["id"]))
-
-
-# ---------------------------------------------------------------- 3 Explain: claims, fact-checked
+# ---------------------------------------------------------------- 3 Explain and 4 Render: the live path
 
 
 def most_interesting(events: list[dict]) -> dict | None:
@@ -164,19 +121,26 @@ def most_interesting(events: list[dict]) -> dict | None:
     return min(ranked, key=lambda e: (INTEREST[e["type"]], -speed(e), e["second"], e["id"]))
 
 
-def offline_analyst(events: list[dict]):
+def offline_analyst(events: list[dict], plant: bool):
     """A deterministic Analyst with the published one's reply format, written from the same events.
-    It stands in for the model when there is no Azure: the workflow and the code checks are real."""
+    It stands in for the model when there is no Azure: the workflow and the code checks are real.
+    With `plant`, its first draft carries a false number (slice.tamper) for the checker to catch."""
     by_minute: dict[int, list[dict]] = {}
     for event in events:
         by_minute.setdefault(event["minute"], []).append(event)
+    calls = 0
 
     async def ask(prompt: str) -> str:
+        nonlocal calls
+        calls += 1
         minute = int(prompt.split("minute ")[1].split(".")[0])
         event = most_interesting(by_minute.get(minute, []))
         if event is None:
             return json.dumps({"text": "", "evidence": []})
-        return json.dumps({"text": _text(event, "analyst") + ".", "evidence": [event["id"]]})
+        claim = Claim(_text(event, "analyst") + ".", [event["id"]])
+        if plant and calls == 1:
+            claim = tamper(claim)
+        return json.dumps({"text": claim.text, "evidence": claim.evidence})
 
     return ask
 
@@ -190,7 +154,7 @@ TOOK = re.compile(r" \((?:(?P<s>[0-9.]+)s|replayed)\)$")
 
 
 def trace_step(line: str, moment: str, judged: bool) -> dict:
-    """One workflow trace line as an agent_trace step (schemas/agent_trace.schema.json, PR #105):
+    """One workflow trace line as an agent_trace step (schemas/agent_trace.schema.json):
     {role, moment, action, ms, detail}. Offline, the Judge is named as not run."""
     role, _, detail = line.partition(": ")
     took = TOOK.search(detail)
@@ -211,77 +175,50 @@ def trace_step(line: str, moment: str, judged: bool) -> dict:
     return {"role": role, "moment": moment, "action": action, "ms": ms, "detail": detail}
 
 
-async def explain(events: list[dict], seed: int, plant: bool, recording: Recording | None) -> list[dict]:
-    """One claim per minute the clip covers, through the Analyst -> Fact-checker workflow."""
-    claims = []
+async def explain_and_render(
+    events: list[dict], clip: str, plant: bool, recording: Recording | None
+) -> tuple[list[dict], list[dict], list[str]]:
+    """live.run once per minute the clip covers: its cues (merged by id), one claim trace per
+    minute that had something to say, and the detections too unsure to air."""
     agent_events = [compact(e) for e in events if e["type"] in AGENT_TYPES]
-    minutes = sorted({minute_of(e) for e in events})
+    cues: dict[str, dict] = {}
+    claims: list[dict] = []
+    held: set[str] = set()
+    minutes = sorted({minute_of(e) for e in events}) or [None]
     for minute in minutes:
-        if recording is not None:
-            if recording.minute != minute:
-                continue
-            ask, judge_fn = replayer(recording.turns)
-            known = recording.events
+        if minute is None or (recording is None and most_interesting(
+                [e for e in agent_events if e["minute"] == minute]) is None):
+            ask = judge = None  # a quiet minute: template cues only
+        elif recording is not None:
+            ask, judge = replayer(recording.turns)
         else:
-            ask, judge_fn = offline_analyst(agent_events), judge_not_run
-            known = agent_events
-            if most_interesting([e for e in agent_events if e["minute"] == minute]) is None:
-                continue
+            ask, judge = offline_analyst(agent_events, plant), judge_not_run
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            outcome = await run_workflow(ask, judge_fn, minute, plant, seed, 0, False, known)
-        t = min((e["t"] for e in events if e["id"] in set(outcome.claim.evidence)), default=None)
-        judged = recording is not None
+            result = await live.run(events, clip, ask, judge, minute if ask else None)
+        cues.update({c["id"]: c for c in result.cues})
+        held.update(result.held_detections)
+        outcome = result.outcome
+        if outcome is None:
+            continue
+        times = {e["id"]: e["t"] for e in events}
+        moment = f"claim-m{minute}"
         claims.append(
             {
-                "id": f"claim-m{minute}",
+                "id": moment,
                 "minute": minute,
-                "t": t,
+                "t": max((times[i] for i in outcome.claim.evidence if i in times), default=None),
                 "status": "accepted" if outcome.accepted else "held_back",
+                "verdict": outcome.status,
                 "drafts": outcome.attempts,
-                "planted": plant,
+                "planted": plant and recording is None,
                 "mode": "replay" if recording is not None else "offline",
                 "text": outcome.claim.text,
                 "evidence": outcome.claim.evidence,
-                "steps": [trace_step(line, f"claim-m{minute}", judged) for line in outcome.trace],
+                "steps": [trace_step(line, moment, recording is not None) for line in outcome.trace],
             }
         )
-    return claims
-
-
-# ---------------------------------------------------------------- 4 Render: cues
-
-
-def insight_cues(claims: list[dict]) -> list[dict]:
-    """An accepted claim airs in the top-right slot for both personas; a held-back one never airs."""
-    cues = []
-    for claim in claims:
-        if claim["status"] != "accepted" or claim["t"] is None:
-            continue
-        for persona in ("analyst", "casual"):
-            cue = {
-                "id": f"cue-{claim['id']}-{persona}",
-                "t_in": claim["t"],
-                "t_out": round(claim["t"] + INSIGHT_SECONDS, 2),
-                "kind": "insight",
-                "slot": "top_right",
-                "anchor": None,
-                "persona": persona,
-                "lang": "en",
-                "text": claim["text"],
-                "verified": True,
-                "replaces": None,
-                "evidence": claim["evidence"],
-            }
-            validate(cue, CUE_SCHEMA)
-            cues.append(cue)
-    return cues
-
-
-async def build_cues(events: list[dict]) -> list[dict]:
-    ledger = InMemoryLedger()
-    await load_match(ledger, events, ())
-    return await template_cues(ledger)
+    return sorted(cues.values(), key=lambda c: (c["t_in"], c["id"])), claims, sorted(held)
 
 
 # ---------------------------------------------------------------- footage
@@ -328,17 +265,10 @@ async def run(args: argparse.Namespace) -> dict:
     if det_path != out / "detections.jsonl":
         shutil.copyfile(det_path, out / "detections.jsonl")
 
-    if args.events_file:
-        events = checked_events(events_from_file(args.events_file))
-        events_source = f"vision: {args.events_file.name}"
-    else:
-        source = resolve_events(args.events, args.demo)
-        events = checked_events(EVENT_SOURCES[source](clip, detections))
-        events_source = STAND_IN if source == "stand-in" else "vision"
+    events, events_source = detected_events(clip, args.events_file, args.demo)
     facts = [f.as_dict() for f in calculate_facts(events)]
     recording = Recording.load(args.replay) if args.replay else None
-    claims = await explain(events, clip.meta["seed"], args.plant, recording)
-    cues = sorted(await build_cues(events) + insight_cues(claims), key=lambda c: (c["t_in"], c["id"]))
+    cues, claims, held = await explain_and_render(events, clip.id, args.plant, recording)
     footage = write_footage(clip, out, encode=not args.frames)
 
     write_jsonl(out / "events.jsonl", events)
@@ -356,9 +286,10 @@ async def run(args: argparse.Namespace) -> dict:
         "footage": footage,
         "detector": None if model is None else f"{model.name} {model.size} {model.checkpoint}",
         "detections": {"source": "live" if args.detect == "live" else "recorded", "frames": len(detections)},
-        "events": {"source": events_source, "count": len(events)},
+        "events": {"source": events_source, "count": len(events), "standin": "stand-in" in events_source,
+                   "held": held},
         "facts": len(facts),
-        "agents": {"mode": "replay" if recording else "offline", "planted": args.plant,
+        "agents": {"mode": "replay" if recording else "offline", "planted": args.plant and not recording,
                    "claims": len(claims), "accepted": sum(c["status"] == "accepted" for c in claims)},
         "cues": len(cues),
         "files": ["detections.jsonl", "events.jsonl", "facts.json", "trace.json", "cues.jsonl"],
@@ -374,11 +305,9 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--detect", choices=("recorded", "live"), default="recorded")
     ap.add_argument("--detections", type=Path, default=None, help="a detections.jsonl to use (recorded)")
     ap.add_argument("--weights", type=Path, default=None, help="our checkpoint, for --detect live")
-    ap.add_argument("--events", choices=("auto", *EVENT_SOURCES), default="auto",
-                    help="auto: vision once ninety.vision.events exists, else the labelled stand-in")
-    ap.add_argument("--demo", action="store_true", help="the demo path: refuse ground-truth events")
     ap.add_argument("--events-file", type=Path, default=None,
-                    help="detected events already written (match_event JSONL, source vision)")
+                    help="detected events (default: R3's for the clip, else the hand-written stand-in)")
+    ap.add_argument("--demo", action="store_true", help="the demo path: refuse the hand-written stand-in")
     ap.add_argument("--replay", type=Path, default=None, help="a slice recording to answer for the models")
     ap.add_argument("--plant", action="store_true", help="plant a false number in the first draft")
     ap.add_argument("--frames", action="store_true", help="ship JPEG frames instead of encoding video.webm")
