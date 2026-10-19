@@ -655,6 +655,21 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** before trusting a match-reading test, run its measurement on a longer window and a
   second engine version, and write both numbers next to it.
 
+### 81. Read a model's class ids from a trained model, by what the boxes look like
+- **What happened:** to map RF-DETR's class ids to player and ball, `detect.py` was checked
+  against a checkpoint trained for one epoch on 10 images. Its ids (1 and 2) were taken to mean
+  player and ball, but that model's output was noise. A trained model returns indices into
+  `class_names`: 0 player, 1 ball. So the merged mapping labelled every ball a player and
+  dropped every player. A validation check on ours-v2 caught it before any number was
+  published: one clip scored 0 true positives, 48 ball-sized "players" and 2,007 misses.
+- **Rule:** decide what each class id means with a trained model, from the boxes it draws (size,
+  shape, how many a frame), never from a smoke run's id counts. Then pin that measurement in a
+  test, with the numbers in its comment.
+- **Check:** `tests/test_vision_finetune.py::test_our_checkpoint_maps_by_index_into_class_names`
+  records the ours-v2 measurement (id 0: 32 x 71 px, about 6 a frame; id 1: 9 x 9 px, one a
+  frame). Before scoring a new checkpoint, run `detect.py` on one validation clip and score it.
+  Precision near zero with ball-sized boxes labelled player means the mapping is wrong.
+
 ### 84. Everything the picture draws in front of an object hides it in the labels
 - **What happened:** the id pass, which counts each object's visible pixels, hid all scenery. In
   seed 900003 of the frozen test set (`engine-v1`) a dead ball rested 0.5 m behind the far
@@ -668,6 +683,18 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_render_occlusion.py` puts a ball 0.5 m behind the far boards and fails if
   any of it is labelled visible (52 pixels on the old id pass). A ball in front of the boards must
   stay visible.
+
+### 85. A scorer reads labels by the rule written down, not by which fields are filled
+- **What happened:** EVALUATION.md says boxes with visibility zero are not labels, but
+  `vision_score.ground_truth()` kept any label with a box. When the re-frozen test set marked
+  balls behind the advertising boards as visibility 0 and kept their boxes, the scorer counted
+  113 balls in shot and fully hidden as misses, and ball recall read 0.846 instead of 0.930. It was found after
+  the results were in; the rule it applies was written before them.
+- **Rule:** a scorer decides what counts as a label from the documented rule, in one function,
+  and never from whether a field happens to be present. A data change that fills a field it once
+  left empty must not change what is scored.
+- **Check:** `tests/test_vision_score.py::test_a_box_with_visibility_zero_is_not_a_label` gives
+  a player and a ball boxes at visibility 0 with no detection and fails if either counts as a miss.
 
 ### 86. Measure the worker count; a CI runner's threads are not cores
 - **What happened:** the test jobs took 15 to 40 minutes, so every merge left the other ready
@@ -687,7 +714,18 @@ short and actionable. This file is public: no research sources, product names or
   its 10 slowest tests; when one shard runs much longer than the others, update `SLOWEST` in
   `tests/conftest.py`.
 
-### 87. A ported rule keeps its condition, not just its threshold
+### 87. Re-rendering part of a run copies the run's settings, and is checked against it
+- **What happened:** to fix 30 v3 clips I launched the re-render with seed ranges only. v3 had
+  rendered its 2000s and 4000s with `occlusion=crowded` and its 3000s with `kit_contrast=low`, so
+  16 of the 30 came back with different parameters, and 5 of them filmed a different window.
+  Nothing failed: the job rendered exactly what it was asked for.
+- **Rule:** a partial re-render takes each seed's overrides from the original run's `clip.json`,
+  and before the new clips replace the old, their `params` and `overrides` must equal the
+  originals and their engine positions must match frame for frame.
+- **Check:** `docs/eval/dataset-v1.json` lists the run, commit and overrides of every clip; for
+  each replaced seed, compare `params` and `overrides` in both `clip.json` files.
+
+### 88. A ported rule keeps its condition, not just its threshold
 - **What happened:** porting `main`'s aerial touches, the engine flagged every touch in foot reach
   above 0.45 m as a thigh or chest, at half a foot's first touch. `main` applied that only to a ball
   coming into the body; the engine's foot reaches to 1 m. A knee-high pass met beside a player was
@@ -709,7 +747,7 @@ short and actionable. This file is public: no research sources, product names or
   `tests/test_decisions.py::test_the_passer_expects_a_dropping_ball_into_his_man_to_meet_the_thigh`
   fails if the estimate takes it on the foot.
 
-### 88. A rate that swings match to match needs enough matches before it is read
+### 89. A rate that swings match to match needs enough matches before it is read
 - **What happened:** the touch report's eight seeds put the engine at 1.0 goals a team after "what
   makes a touch worse", and the pull request, GROUNDING A4 and EVALUATION recorded it as a held-out
   miss against the published 1.4. A match's goals run from 0 to 8, so eight matches cannot measure
@@ -722,7 +760,7 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** every goals-per-team figure in GROUNDING and EVALUATION says how many matches it is
   over; a before-and-after claim on goals gives the paired difference and its standard error.
 
-### 89. The same seed does not pair two engines
+### 90. The same seed does not pair two engines
 - **What happened:** #90 was measured against main on seeds 40 to 47 and the per-seed differences
   gave -1.0 goals a team with a "paired" standard error of 0.34, reported as likely real. But any
   engine change makes the two matches part within about a minute (seed 7's events differ from
