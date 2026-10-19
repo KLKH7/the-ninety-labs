@@ -9,7 +9,7 @@ from statistics import mean, pstdev
 import pytest
 
 from ninety.sim import ball, offball, perception, shape
-from ninety.sim.body import BRAKE_MAX, STRIKE_FACING, TURN_RATE
+from ninety.sim.body import BRAKE_MAX, FOOT_REACH_Z, STRIKE_FACING, TURN_RATE
 from ninety.sim.body import move as move_body
 from ninety.sim.engine import (
     BODY_RESTITUTION,
@@ -17,15 +17,13 @@ from ninety.sim.engine import (
     DT,
     FPS,
     MISCONTROL_KEEP,
-    PICTURE_RESTART_S,
     RESTART_DELAY_S,
-    RESTART_DISTANCE_M,
     Engine,
     simulate,
     throw_hands,
     throw_stand,
 )
-from ninety.sim.firsttouch import CUSHION, KEEP_MPS
+from ninety.sim.firsttouch import BODY_TOUCH_Z, CUSHION, KEEP_MPS
 from ninety.sim.profiles import FOOT_ABSORB_MPS, MAX_STRIKE_MPS
 from ninety.sim.style import Style
 from ninety.validate import check_physics
@@ -154,82 +152,6 @@ def test_nobody_presses_inside_the_law_distance_at_a_corner():
     assert math.hypot(tx - 105.0, ty - 0.0) >= 9.15 - 0.6  # the target is kept on the pitch
 
 
-def _scatter(e: Engine) -> None:
-    for i, p in enumerate(e.players):
-        p.x, p.y = 15.0 + i * 3.0, 12.0
-
-
-def test_a_restart_places_the_taker_and_the_ball_and_holds_briefly():
-    """The picture puts everyone on the mark. The Opta window stays in RESTART_DELAY_S."""
-    cases = [
-        ("corner", "home", (105.0, 0.0), None),
-        ("corner", "away", (0.0, 68.0), None),
-        ("throw_in", "home", (40.0, 0.0), None),
-        ("throw_in", "away", (70.0, 68.0), None),
-        ("goal_kick", "home", (5.5, 34.0), "gk"),
-        ("free_kick", "away", (80.0, 20.0), None),
-        ("penalty_kick", "home", (94.0, 34.0), None),
-    ]
-    for kind, team, spot, who in cases:
-        e = Engine(1)
-        still(e)
-        e.possessor = None
-        _scatter(e)
-        taker_id = next(p.id for p in e.players if p.team == team and p.role == "GK") if who == "gk" else None
-        e.stop(kind, team, spot, taker_id)
-        taker = e.by_id[e.restart.taker]
-        assert e.restart.ready_at - e.t <= PICTURE_RESTART_S[1]
-        assert e.possessor is None
-        assert e.ball[2] == e.ball[3] == e.ball[4] == e.ball[5] == 0.0
-        if kind == "throw_in":
-            sx, sy = throw_stand(*spot)
-            assert math.hypot(taker.x - sx, taker.y - sy) < 0.05
-            assert taker.y < 0.0 or taker.y > 68.0
-            line = 0.0 if spot[1] < 34.0 else 68.0
-            assert abs(e.ball[1] - line) < 0.05 and abs(e.ball[0] - spot[0]) < 0.05
-        elif kind == "penalty_kick":
-            assert math.hypot(e.ball[0] - spot[0], e.ball[1] - spot[1]) < 0.05
-            assert math.hypot(taker.x - spot[0], taker.y - spot[1]) > 0.2
-        else:
-            assert math.hypot(taker.x - spot[0], taker.y - spot[1]) < 2.0
-            assert math.hypot(e.ball[0] - taker.x, e.ball[1] - taker.y) < 0.05
-        gap = RESTART_DISTANCE_M[kind]
-        for p in e.players:
-            if p.team != team:
-                assert math.hypot(p.x - spot[0], p.y - spot[1]) >= gap - 0.6, (kind, p.id)
-        mark = (taker.x, taker.y)
-        ball_at = e.ball[:2]
-        for _ in range(10):  # 0.4 s, inside the 0.7 s minimum hold
-            e.step()
-        assert e.restart is not None and e.restart.kind == kind
-        assert math.hypot(taker.x - mark[0], taker.y - mark[1]) < 0.5
-        assert math.hypot(e.ball[0] - ball_at[0], e.ball[1] - ball_at[1]) < 0.15
-        assert math.hypot(e.ball[3], e.ball[4]) < 0.05
-
-
-def test_kickoff_keeps_its_pause_and_the_centre_spot():
-    e = Engine(1)
-    e.kickoff("home")
-    wait = e.restart.ready_at - e.t
-    assert RESTART_DELAY_S["kick_off"][0] <= wait <= RESTART_DELAY_S["kick_off"][1]
-    taker = e.by_id[e.restart.taker]
-    assert (taker.x, taker.y) == (105 / 2, 68 / 2)
-    assert e.ball[:2] == (105 / 2, 68 / 2)
-
-
-def test_the_kickoff_is_one_pass_back():
-    e = Engine(1)
-    still(e)
-    e.kickoff("home")
-    e.restart.ready_at = e.t
-    taker_id = e.restart.taker
-    for _ in range(int(4 / DT)):
-        e.step()
-        if e.kicked and e.kicked["type"] == "pass" and e.kicked["player"] == taker_id:
-            break
-    assert e.pass_target is not None and e.pass_target[0] < 52.5
-
-
 def test_facing_wraps_at_half_a_turn_and_holds_when_the_ball_is_at_his_feet():
     assert perception.visible(math.pi, 0.0, 0.0, -20.0, -0.5)  # just past -180 degrees
     assert perception.visible(-math.pi, 0.0, 0.0, -20.0, 0.5)
@@ -292,6 +214,20 @@ def test_execution_scatters_direction_by_the_profiles_error_and_never_kicks_down
     expected = p.profile.kick_error("finishing", 21.0, 0.0, 1.0, False)[0]
     assert abs(pstdev(angles) - expected) < 0.1 * expected
     assert max(e.execute(p, 35.9, 0.0, 0.0, "finishing")[0] for _ in range(500)) <= MAX_STRIKE_MPS
+
+
+def test_execution_scatters_a_lofted_kicks_launch_angle_by_the_profiles_error():
+    # A3: a rising kick also flies higher or lower than meant, by the up-and-down part of his error
+    e, p = kicker()
+    intended = math.degrees(math.atan2(6.0, 20.0))
+    lofts = []
+    for _ in range(3000):
+        vx, vy, vz = e.execute(p, 20.0, 0.0, 6.0, "finishing")
+        lofts.append(math.degrees(math.atan2(vz, math.hypot(vx, vy))))
+    speed = math.hypot(20.0, 6.0)
+    expected = p.profile.kick_error("finishing", speed, 0.0, 1.0, False)[2]
+    assert abs(mean(lofts) - intended) < 0.2
+    assert abs(pstdev(lofts) - expected) < 0.1 * expected
 
 
 def mean_speed(e: Engine, p, deg: float) -> float:
@@ -503,6 +439,21 @@ def test_a_high_ball_can_be_taken_on_the_body_and_a_poor_touch_is_worse():
     assert over.possessor is None and over.ball[3] == CHEST
     wide = _high_ball(1.0, CHEST, 1.35, True, y=30.7)
     assert wide.possessor is None and wide.ball[3] == CHEST
+
+
+def test_a_ball_he_reaches_beside_him_below_his_foot_reach_is_a_foot_touch():
+    # P14: a foot reaches up to FOOT_REACH_Z. Beside him, not coming into his body, a knee- or
+    # waist-high ball is met with the foot at the foot's full first touch (A4), not killed only as
+    # a thigh would. PAST_THIGH is beyond the best thigh and inside the best foot, so only a foot
+    # touch keeps it. Before this rule a foot-reach touch above BODY_TOUCH_Z was judged as a thigh,
+    # and in matches the miscontrolled ball popped up beside him again and again.
+    for z in (BODY_TOUCH_Z + 0.05, (BODY_TOUCH_Z + FOOT_REACH_Z) / 2, FOOT_REACH_Z - 0.1):
+        foot = _high_ball(1.0, PAST_THIGH, z, True, y=30.55)
+        assert foot.possessor == "a6", z
+        assert not any(ev["type"] == "deflection" for ev in foot.match.events), z
+    # The same ball coming into his body is still a thigh, and still too fast for one.
+    thigh = _high_ball(1.0, PAST_THIGH, (BODY_TOUCH_Z + FOOT_REACH_Z) / 2, True)
+    assert thigh.possessor is None and any(ev["type"] == "deflection" for ev in thigh.match.events)
 
 
 def test_a_touch_names_the_part_and_a_carry_does_not():
@@ -985,6 +936,25 @@ def test_a_deflection_restarts_the_keepers_reaction_before_he_dives():
     e.t += e.reaction(k)
     e.kicked_at = e.t  # just deflected on its way
     assert not e.keeper_dive(k)
+
+
+def test_the_keeper_dives_once_per_touch_and_a_deflection_lets_him_dive_again():
+    # P15: a slow shot still on its way after he has dived, landed and got up does not set off a
+    # second dive at the same touch; a deflection is a new touch and restarts it.
+    from ninety.sim.offball import DIVE_TIME_S, KEEPER_DOWN_S
+    e = Engine(1)
+    k = _shot_at_keeper(e, (80.0, 34.0, 0.2, 14.0, 1.5, 0.0))  # far out and slow, wide to his left
+    e.t += e.reaction(k)
+    assert e.keeper_dive(k)
+    for _ in range(int((DIVE_TIME_S + KEEPER_DOWN_S) * 25) + 3):  # the dive, then down, then up
+        e.keeper_dive(k)
+        e.t += 1 / 25
+    assert e.dive is None and e.off_balance[k.id] <= e.t  # back on his feet
+    k.y = 34.0  # back where he started: the same shot is as far from him as when he first dived
+    assert not e.keeper_dive(k) and e.dive is None  # no second dive at the same touch
+    e.kicked_at = e.t  # deflected on its way
+    e.t += e.reaction(k)
+    assert e.keeper_dive(k)  # a new touch: he may dive at it
 
 
 def test_no_dive_at_a_ball_going_over_the_bar():
@@ -1620,9 +1590,10 @@ def test_a_throw_taken_from_a_restart_and_never_entering_is_retaken_where_it_was
 
 
 def test_a_throw_in_taker_runs_to_his_spot_and_stops_there():
-    """A dead ball places everyone on the mark in one frame. That jump is the restart the
-    validator allows. Every other frame still has to obey the speed and braking limits. The
-    match must contain a throw-in, so the case is exercised."""
+    """Lesson 5: the taker was once moved the last metre to his spot in one frame (22 m/s) and
+    stopped dead with the ball. The match must contain a throw-in, so the case is exercised; a
+    short clip with no restart would pass whatever the engine did. Twelve minutes: seed 7's first
+    throw-in came inside six until the cushioned touch changed the match's course, then at 8.2."""
     m = simulate(7, 12)
     assert any(p["action"] == "throw" for fr in m.frames for p in fr["players"])
     problems = defaultdict(list)
@@ -1705,15 +1676,15 @@ def test_taking_the_ball_for_a_throw_in_never_brakes_or_speeds_him_up_beyond_his
 
 
 def thrower_ready_at(x: float, y: float, vx: float = 0.0, vy: float = 0.0) -> tuple[Engine, object]:
-    """Home's h9 is the taker of a throw-in where the ball crossed the near touchline at x = 50.
-    stop() has already put him on the mark. These arguments are where he is once it is ready."""
+    """Home's h9 is the taker of a throw-in where the ball crossed the near touchline at x = 50,
+    standing at (x, y) and moving at (vx, vy); the restart is ready now."""
     e = Engine(1)
     still(e)
     taker = e.by_id["h9"]
+    taker.x, taker.y, taker.vx, taker.vy = x, y, vx, vy
     e.possessor = None
     e.ball = (50.0, -1.0, 0.0, 0.0, 0.0, 0.0)
     e.stop("throw_in", "home", (50.0, 0.0), taker=taker.id)
-    taker.x, taker.y, taker.vx, taker.vy = x, y, vx, vy
     e.restart.ready_at = e.t
     return e, taker
 

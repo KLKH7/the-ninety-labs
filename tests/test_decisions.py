@@ -281,7 +281,7 @@ def test_takes_players_on_raises_the_dribble_and_leaves_the_pass():
             x=70.0, mates=[("h9", 82.0, 34.0, 0.0)], traits=traits)) if o.kind == kind]
     plain, on = vals((), "dribble"), vals(("takes_players_on",), "dribble")
     assert plain and len(plain) == len(on)
-    assert all(math.isclose(b - a, D.TAKE_ON) for a, b in zip(plain, on))
+    assert all(math.isclose(b - a, D.TAKE_ON) for a, b in zip(plain, on, strict=True))
     assert vals((), "pass") == vals(("takes_players_on",), "pass")
 
 
@@ -813,3 +813,18 @@ def test_a_thrown_pass_is_estimated_with_no_kicking_side():
     assert a == pytest.approx(b)  # as engine.execute throws it (hands=True)
     c = D.strike_nodes(scene(passer=passer, heading=math.radians(55)), 85.0, 34.0, True, 10.0)
     assert c != pytest.approx(a)  # a kick at that angle is not
+
+
+
+def test_the_passer_expects_a_dropping_ball_into_his_man_to_meet_the_thigh():
+    # A4 (design): a receiver runs onto the ball's path, so the estimate takes a ball dropping into
+    # his reach above BODY_TOUCH_Z on the thigh or chest, whether he stands on its line now or just
+    # beside it: a cautious bound where the engine finds him beside it, with a foot.
+    mid = FOOT_ABSORB_MPS[0] + FOOT_ABSORB_MPS[1] / 2
+    on = scene(x=60.0, absorb={"h9": mid}, mates=[("h9", 84.0, 34.0, 0.0)])
+    beside = scene(x=60.0, absorb={"h9": mid}, mates=[("h9", 84.0, 34.6, 0.0)])
+    into = D.pass_confidence(on, 84.0, 34.0, 84.0, 34.0, 0.0, True, 18.0, "h9")
+    near = D.pass_confidence(beside, 84.0, 34.0, 84.0, 34.6, 0.0, True, 18.0, "h9")
+    assert near == pytest.approx(into, abs=0.02)
+    # and as a thigh: well below what the same ball on the foot would be judged
+    assert into < 0.5
