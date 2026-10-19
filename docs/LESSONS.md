@@ -637,5 +637,6 @@ short and actionable. This file is public: no research sources, product names or
   required check names as a gate that is green only when every shard passed. Every pull request
   still runs every test.
 - **Check:** `tests/test_shard.py` fails if a test lands in no part or two, if the `--shard`
-  hook drops or repeats a test across K, or if the slowest tests share a part. Each shard prints its 10 slowest tests; when one shard runs much longer
-  than the others, update `SLOWEST` in `tests/conftest.py`.
+  hook drops or repeats a test across K, or if the slowest tests share a part. Each shard prints
+  its 10 slowest tests; when one shard runs much longer than the others, update `SLOWEST` in
+  `tests/conftest.py`.

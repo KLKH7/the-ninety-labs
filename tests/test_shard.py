@@ -33,8 +33,8 @@ def test_shard_k_of_n_runs_every_test_once_across_k():
         ran = []
         for k in range(1, n + 1):
             suite, dropped = items(nodeids), []
-            config = SimpleNamespace(getoption=lambda _, s=f"{k}/{n}": s,
-                                     hook=SimpleNamespace(pytest_deselected=lambda items: dropped.extend(items)))
+            hook = SimpleNamespace(pytest_deselected=lambda items, d=dropped: d.extend(items))
+            config = SimpleNamespace(getoption=lambda _, s=f"{k}/{n}": s, hook=hook)
             pytest_collection_modifyitems(config, suite)
             assert len(suite) + len(dropped) == len(nodeids)
             ran += [s.nodeid for s in suite]
