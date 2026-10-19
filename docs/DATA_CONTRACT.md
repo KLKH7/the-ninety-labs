@@ -27,7 +27,33 @@ A clip is one directory:
 |---|---|---|
 | `events.jsonl` | one event per line | [`schemas/match_event.schema.json`](../schemas/match_event.schema.json) |
 | `frames.jsonl` | one frame per line, every frame | [`schemas/frame.schema.json`](../schemas/frame.schema.json) |
-| `meta.json` | `fps`; `roster` (each player's `id`, `team` and `role`, so the validator knows the goalkeepers); `seed` or scenario name; `score` | `fps` positive; goalkeepers from `roster` |
+| `meta.json` | `fps`; `roster` (each player's `id`, `team` and `role`, so the validator knows the goalkeepers); `seed` or scenario name; `score` (the goals in this clip's `events.jsonl`); `window`, for a clip cut from a longer match | `fps` positive; goalkeepers from `roster`; `score` against the goal events (C9); `window` against the frames |
+
+A rendered clip (`ninety-render`, `ninety-dataset`) is the same directory plus `clip.json` (the
+render parameters) and `images/`, and is checked the same way: `uv run ninety-validate <clip>`.
+
+**A window.** A rendered clip is a few seconds cut from a simulated match, so its `meta.json`
+carries `window: {"first_frame", "last_frame"}`, the match frames it covers, which must be its
+first and last frames. Its frames keep their match numbers, and its events are those inside it.
+What happened outside the window is not in the clip, so a judgement that needs it is withheld,
+and only when the clip's own frames show that play from beyond the cut is still running:
+
+- C7: a pass with no later on-ball event in the clip, which nobody has held since it was played,
+  and whose last frame's motion, carried on in a straight line, passes within `NEAR_M` of its end
+  point ahead of it; or a pass struck on the clip's last frame, none of whose flight is in the clip;
+- C8: an interception or goal with no pass or shot before it in the clip, and the ball loose and
+  moving from the first frame up to it (moving: farther than rounding alone can move a ball at
+  rest, `2 * sqrt(3) * POSITION_PRECISION_M` a frame, about 1.7 mm, so a ball at rest is not a
+  pass in flight);
+- C3: a substitution with no event before it in the clip, nobody holding the ball from the first
+  frame up to it, and no open play after it before a restart (Law 3);
+- P3: a window whose first event is a restart, with nobody holding the ball before it, opened on
+  a dead ball, so a new ball may be placed.
+
+A window that opens at frame 0 starts with the match and is withheld nothing at its start. A
+missing event alone never excuses a judgement, everything whose evidence lies inside the window is
+judged exactly as for a whole match, and the same clip without `window` fails. Clips rendered before
+the renderer wrote `meta.json` get it from their own files: `uv run ninety-render-meta <clip>...`.
 
 Coordinates are pitch metres: `x` 0 to 105 toward the right goal, `y` 0 to 68 from the near
 touchline, ball `z` is height. Player ids are `h1`..`h11` and `a1`..`a11`. Events from the

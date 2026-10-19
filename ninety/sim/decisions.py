@@ -14,7 +14,7 @@ from __future__ import annotations
 import math
 import random
 from bisect import bisect_left, bisect_right
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from ninety.sim import ball, firsttouch, fmath, offball, perception, shape, threat
 from ninety.sim import value as possession
@@ -80,6 +80,9 @@ CONTROL_MARGIN_MPS = 2.0  # design: how sharply that guess falls off
 AVERAGE = 0.5  # an average player's attribute, for estimates about someone the passer cannot judge
 GOAL_KICK_M = 5.5  # Law 16: a goal kick is taken from the goal area
 STICKY = 0.003  # design: a small bonus for carrying on with the current choice (no flip-flopping)
+TAKE_ON = 0.01  # design: takes_players_on adds this to a dribble. A close call, not a command.
+SHORT_PASS_M, LONG_PASS_M = 15.0, 25.0
+SHORT_PASS = 0.008  # design: plays_short adds this under SHORT_PASS_M and subtracts it over LONG_PASS_M
 CLEAR_FROM = 2 / 3  # a clear is an option in his own third: this share of the pitch from the goal he attacks
 
 
@@ -731,6 +734,11 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
         # made worse as the engine makes it (firsttouch.quality) by what the passer can know: its
         # speed and the opponents he sees near where it is taken (D2's zone); the team-mate is
         # taken to face it, as one expecting it does, fresh and of average composure.
+        # A receiver runs onto the ball's path, so it comes into his body: above BODY_TOUCH_Z, the
+        # part its height gives (design, verify, A4, D1): pessimistic where the engine finds him beside
+        # it, with a foot. The calibration report checks it is a bound, not a fit (`ninety.sim.calibration`,
+        # forced passes, seeds 1 to 6, on main b319f21: received more often than estimated in every
+        # bin from 0.0 to 0.7, as a cautious estimate should be).
         rel = relative_speed(g * ux, g * uy, vz, taker[2], taker[3])
         tx_, ty_ = sx + ux * a, sy + uy * a
         felt = max((perception.pressure_from(tx_, ty_, ox, oy, attack(scene.goal_x))
@@ -791,7 +799,19 @@ def pass_option(scene: Scene, mate: tuple[str, float, float, float]) -> Option |
         ev = confidence * gain - (1 - confidence) * lost
         if best is None or ev > best.value:
             best = Option("pass", ev, (tx, ty), mid, lofted, pace)
+    if best and "plays_short" in scene.traits:
+        best = replace(best, value=best.value + short_pass_bias(dist))
     return best
+
+
+def short_pass_bias(dist: float) -> float:
+    """plays_short: a short pass is a better idea and a long one a worse one. The pass itself
+    is unchanged."""
+    if dist <= SHORT_PASS_M:
+        return SHORT_PASS
+    if dist >= LONG_PASS_M:
+        return -SHORT_PASS
+    return SHORT_PASS * (1 - 2 * (dist - SHORT_PASS_M) / (LONG_PASS_M - SHORT_PASS_M))
 
 
 def shot_chance(scene: Scene) -> float:
@@ -843,6 +863,8 @@ def options(scene: Scene) -> list[Option]:
             win *= sigmoid((generic_time(d) - my_t) / RECEIVE_MARGIN_S)
         gain = our_value(scene, tx, ty)
         ev = win * gain - (1 - win) * our_loss(scene, scene.x, scene.y)
+        if "takes_players_on" in scene.traits:
+            ev += TAKE_ON
         out.append(Option("dribble", ev + (STICKY if scene.current == "dribble" else 0.0), (tx, ty)))
     if abs(scene.goal_x - scene.x) > CLEAR_FROM * PITCH_X:  # in his own third: long and away
         wide = 4.0 if scene.y < PITCH_Y / 2 else PITCH_Y - 4.0

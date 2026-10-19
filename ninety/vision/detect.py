@@ -8,10 +8,12 @@ Reads only the images and each frame's `clip`, `frame` and `t`, never its labels
 path, and ground truth is for grading. Keeps every detection down to SCORE_FLOOR; choosing a
 threshold is the scorer's job.
 
-rfdetr returns category ids, not indices into `class_names`, for both checkpoints (checked on our
-frames): the COCO checkpoint gives COCO ids (1 person, 37 sports ball), ours gives the ids in
-coco_export.CATEGORIES (1 player, 2 ball). Indexing `class_names` would turn every player into a
-ball and drop every ball.
+The two checkpoints number classes differently. The COCO checkpoint returns COCO category ids
+(1 person, 37 sports ball); indexing its 80 `class_names` with them is off by one. Our fine-tuned
+checkpoint returns indices into its `class_names` (["player", "ball"]): with ours-v2 on validation
+frames, id 0 gave player-shaped boxes (median 32 x 71 px, about 6 a frame) and id 1 one ball-shaped
+box a frame (median 9 x 9 px). Read the ids by box shape on a trained model: a barely trained one
+puts out noise, which is how this was once mapped backwards (docs/LESSONS.md).
 
 Both checkpoints run at the same input size, so the baseline comparison changes one thing: the COCO
 baseline runs at finetune.json's resolution (640), not rfdetr's default (512), and our checkpoint
@@ -24,21 +26,26 @@ import argparse
 import json
 from pathlib import Path
 
-from ninety.vision.coco_export import CATEGORIES
 from ninety.vision.detections import SCORE_FLOOR, Detection, FrameDetections, write_detections
 from ninety.vision.model import load, model
 
 FINETUNE_CONFIG = Path(__file__).with_name("finetune.json")
 
 COCO_TO_OURS = {1: "player", 37: "ball"}  # rfdetr.assets.coco_classes: person, sports ball
-OURS = {c["id"]: c["name"] for c in CATEGORIES}  # 1 player, 2 ball
+OURS = {"player", "ball"}
 
 
-def labels_for(checkpoint: str):
-    """class_id -> our class or None. Both checkpoints return category ids, never class_names indices."""
+def labels_for(checkpoint: str, class_names: list[str]):
+    """class_id -> our class or None: a COCO category id for the COCO checkpoint, an index into
+    `class_names` for ours."""
     if checkpoint == "coco":
         return COCO_TO_OURS.get
-    return OURS.get
+
+    def label(class_id: int) -> str | None:
+        name = class_names[class_id] if 0 <= class_id < len(class_names) else None
+        return name if name in OURS else None
+
+    return label
 
 
 def trained_resolution(weights: str | None) -> int:
@@ -102,7 +109,7 @@ def main(argv: list[str] | None = None) -> None:
     if (a.checkpoint == "coco") != (a.weights is None):
         ap.error("--weights is required for our checkpoints and not allowed for coco")
     det = load(a.weights, resolution=a.resolution or trained_resolution(a.weights))
-    label = labels_for(a.checkpoint)
+    label = labels_for(a.checkpoint, det.class_names)
     field = model(a.checkpoint)
     rows = frame_rows(a.clip, a.stride)
     out_rows = []

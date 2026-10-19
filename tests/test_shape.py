@@ -19,6 +19,18 @@ def test_with_the_ball_the_team_spreads_wide_and_its_attackers_hold_the_last_lin
     assert slot("RCB")[0] < 50.0 < st[0]  # centre-backs behind the ball, striker ahead of it
 
 
+def test_stays_wide_moves_him_toward_his_own_touchline():
+    home = slot("RB")
+    wider = O.attacking_slot("RB", 0.0, 50.0, 34.0, 80.0, O.STAYS_WIDE_M)
+    assert wider[1] < home[1]  # the right back's side is the near touchline
+    assert abs(wider[1] - home[1]) == O.STAYS_WIDE_M
+    centre = slot("ST", ball_x=60.0, line=80.0)
+    still = O.attacking_slot("ST", 0.0, 60.0, 34.0, 80.0, O.STAYS_WIDE_M)
+    assert still == centre  # a central role has no touchline to drift to
+    away = O.attacking_slot("RB", 105.0, 55.0, 34.0, 25.0, O.STAYS_WIDE_M)
+    assert abs(wider[0] - (105 - away[0])) < 1e-9 and abs(wider[1] - (68 - away[1])) < 1e-9
+
+
 def test_the_shape_mirrors_for_the_team_attacking_the_other_way():
     home = slot("RB", ball_x=50.0, ball_y=34.0, line=80.0, own=0.0)
     away = slot("RB", ball_x=55.0, ball_y=34.0, line=25.0, own=105.0)

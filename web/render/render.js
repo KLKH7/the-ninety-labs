@@ -13,6 +13,7 @@ import * as THREE from 'three';
 const PX_PER_M = 35; // pitch texture resolution
 const GROUND = { x0: -6, x1: 111, y0: -6, y1: 74 }; // pitch plus apron covered by the texture
 const POST_ID = 250; // goal frame: an occluder with no label
+const SCENERY_ID = 251; // boards, stands, roofs and towers: occluders with no label
 
 function rng(seed) { // mulberry32
   let a = seed >>> 0;
@@ -576,14 +577,297 @@ function idMaterial(id) {
   });
 }
 
-const ROUGHNESS = { shirt: 0.82, shorts: 0.84, socks: 0.78, skin: 0.55, hair: 0.7, boots: 0.6, ball: 0.38 };
+// The match body. Python sends the action; these angles are the same ones meshpose.py builds.
+// Object space is Y-up metres, +X his left, +Z the way he faces. Positive bone X swings a limb back.
+const MESH_CONTACT = new Set(['strike', 'foot', 'thigh', 'chest', 'head', 'hands', 'throw', 'dive', 'shield']);
+const THIGH_CAND = [-0.9, -0.55, -0.25, 0.05, 0.35, 0.6];
+const THIGH_Z = [-0.4, -0.15, 0.0, 0.15, 0.4];
+const CALF_CAND = [0.05, 0.35, 0.7, 1.1, 1.5];
+
+let playerPromise = null;
+function loadPlayer() {
+  if (!playerPromise) {
+    playerPromise = fetch('./assets/player.json').then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  }
+  return playerPromise;
+}
+
+function xz(spec) {
+  return Array.isArray(spec) ? [spec[0], spec[1]] : [spec, 0];
+}
+
+function rotX(a) {
+  const c = Math.cos(a), s = Math.sin(a);
+  return [1, 0, 0, 0, c, s, 0, -s, c];
+}
+
+function rotZ(a) {
+  const c = Math.cos(a), s = Math.sin(a);
+  return [c, s, 0, -s, c, 0, 0, 0, 1];
+}
+
+function matvec(R, x, y, z) {
+  return [
+    R[0] * x + R[3] * y + R[6] * z,
+    R[1] * x + R[4] * y + R[7] * z,
+    R[2] * x + R[5] * y + R[8] * z,
+  ];
+}
+
+function matmul(a, b) {
+  const c0 = matvec(a, b[0], b[1], b[2]);
+  const c1 = matvec(a, b[3], b[4], b[5]);
+  const c2 = matvec(a, b[6], b[7], b[8]);
+  return [c0[0], c0[1], c0[2], c1[0], c1[1], c1[2], c2[0], c2[1], c2[2]];
+}
+
+function transpose9(R) {
+  return [R[0], R[3], R[6], R[1], R[4], R[7], R[2], R[5], R[8]];
+}
+
+function localRot(spec) {
+  const [x, z] = xz(spec);
+  return matmul(rotZ(z), rotX(x));
+}
+
+function mirrorPose(angles) {
+  const out = {};
+  for (const [key, spec] of Object.entries(angles)) {
+    let name = key;
+    if (key.endsWith('_l')) name = key.slice(0, -2) + '_r';
+    else if (key.endsWith('_r')) name = key.slice(0, -2) + '_l';
+    const [x, z] = xz(spec);
+    out[name] = Array.isArray(spec) ? [x, -z] : x;
+  }
+  return out;
+}
+
+function scalePose(angles, factor, keepZ) {
+  const out = {};
+  for (const [key, spec] of Object.entries(angles)) {
+    const [x, z] = xz(spec);
+    out[key] = Array.isArray(spec) ? [x * factor, keepZ ? z : z * factor] : x * factor;
+  }
+  return out;
+}
+
+function copyPose(raw) {
+  const out = {};
+  for (const [key, spec] of Object.entries(raw)) out[key] = Array.isArray(spec) ? [spec[0], spec[1]] : spec;
+  return out;
+}
+
+function gaitPose(s, run) {
+  const left = (s + 1) / 2, right = (1 - s) / 2;
+  const out = {};
+  for (const base of ['thigh', 'calf', 'foot']) {
+    const lv = run[base + '_l'], rv = run[base + '_r'];
+    out[base + '_l'] = lv * left + rv * right;
+    out[base + '_r'] = rv * left + lv * right;
+  }
+  for (const base of ['upperarm', 'lowerarm']) {
+    const [lx, lz] = xz(run[base + '_l']);
+    const [rx, rz] = xz(run[base + '_r']);
+    out[base + '_l'] = [lx * left + rx * right, lz];
+    out[base + '_r'] = [rx * left + lx * right, rz];
+  }
+  if (run.spine_01 != null) out.spine_01 = run.spine_01;
+  if (run.spine_02 != null) out.spine_02 = run.spine_02;
+  return out;
+}
+
+function poseBones(angles, bones) {
+  const heads = new Array(bones.length);
+  const rots = new Array(bones.length);
+  for (let i = 0; i < bones.length; i++) {
+    const bone = bones[i];
+    const local = localRot(angles[bone.name] ?? 0);
+    if (bone.parent < 0) {
+      rots[i] = matmul(bone.R, local);
+      heads[i] = bone.head;
+      continue;
+    }
+    const swing = matmul(rots[bone.parent], transpose9(bones[bone.parent].R));
+    const ph = bones[bone.parent].head;
+    const swung = matvec(swing, bone.head[0] - ph[0], bone.head[1] - ph[1], bone.head[2] - ph[2]);
+    const parent = heads[bone.parent];
+    heads[i] = [parent[0] + swung[0], parent[1] + swung[1], parent[2] + swung[2]];
+    rots[i] = matmul(swing, matmul(bone.R, local));
+  }
+  return { heads, rots };
+}
+
+function skinOne(pos, skin, posed, bones) {
+  let x = 0, y = 0, z = 0, wsum = 0;
+  for (let i = 0; i < 8; i += 2) {
+    const b = skin[i], w = skin[i + 1];
+    if (b < 0 || !w) continue;
+    const rh = bones[b].head, R = bones[b].R;
+    const lx = pos[0] - rh[0], ly = pos[1] - rh[1], lz = pos[2] - rh[2];
+    const l0 = R[0] * lx + R[1] * ly + R[2] * lz;
+    const l1 = R[3] * lx + R[4] * ly + R[5] * lz;
+    const l2 = R[6] * lx + R[7] * ly + R[8] * lz;
+    const P = posed.rots[b], h = posed.heads[b];
+    x += w * (P[0] * l0 + P[3] * l1 + P[6] * l2 + h[0]);
+    y += w * (P[1] * l0 + P[4] * l1 + P[7] * l2 + h[1]);
+    z += w * (P[2] * l0 + P[5] * l1 + P[8] * l2 + h[2]);
+    wsum += w;
+  }
+  return wsum ? [x, y, z] : pos;
+}
+
+function toObject(x, y, heading, height, wx, wy) {
+  const k = height / 1.84;
+  const hx = Math.cos(heading), hy = Math.sin(heading);
+  const dx = (wx - x) / k, dy = (wy - y) / k;
+  return [-hy * dx + hx * dy, 0, hx * dx + hy * dy];
+}
+
+function toWorld(x, y, heading, height, p) {
+  const k = height / 1.84;
+  const hx = Math.cos(heading), hy = Math.sin(heading);
+  return [
+    x + k * (-hy * p[0] + hx * p[2]),
+    y + k * (hx * p[0] + hy * p[2]),
+    k * p[1],
+  ];
+}
+
+function plantLeg(angles, side, target, bones, markers) {
+  let best = null;
+  let bestErr = 0;
+  for (const thigh of THIGH_CAND) {
+    for (const tz of THIGH_Z) {
+      for (const calf of CALF_CAND) {
+        const trial = Object.assign({}, angles);
+        trial['thigh_' + side] = [thigh, tz];
+        trial['calf_' + side] = calf;
+        trial['foot_' + side] = 0.12;
+        const foot = skinOne(markers['foot_' + side].pos, markers['foot_' + side].skin, poseBones(trial, bones), bones);
+        const err = Math.hypot(foot[0] - target[0], foot[1] - target[1], foot[2] - target[2]) + 3 * Math.max(0, foot[1] - 0.04);
+        if (!best || err < bestErr) { best = trial; bestErr = err; }
+      }
+    }
+  }
+  return bestErr > 0.45 ? angles : best;
+}
+
+function anglesFor(player, pose, heading, height) {
+  const poses = player.poses;
+  const action = pose.action || 'stand';
+  const speed = pose.speed || 0;
+  let angles;
+  if (action === 'strike' && poses.strike) {
+    angles = pose.reach > 0 ? mirrorPose(poses.strike) : copyPose(poses.strike);
+  } else if (action === 'foot' && poses.foot) {
+    angles = pose.reach > 0 ? mirrorPose(poses.foot) : copyPose(poses.foot);
+  } else if (action === 'thigh' && poses.thigh) {
+    angles = pose.reach > 0 ? mirrorPose(poses.thigh) : copyPose(poses.thigh);
+  } else if (poses[action] && MESH_CONTACT.has(action)) {
+    angles = copyPose(poses[action]);
+    if (action === 'dive') {
+      const mag = Math.min(1, Math.abs(pose.dive || 0));
+      if ((pose.dive || 0) < 0) angles = mirrorPose(angles);
+      angles = scalePose(angles, mag > 0.35 ? mag : 0.35, false);
+    }
+  } else if (action === 'stand' || speed < player.standSpeed) {
+    angles = copyPose(poses.stand);
+  } else {
+    angles = gaitPose(Math.sin(pose.phase || 0), poses.run);
+    if (action !== 'run' && speed < player.fullStrideSpeed) angles = scalePose(angles, player.walkScale, true);
+    if (!MESH_CONTACT.has(action)) {
+      const x = pose.x, y = pose.y;
+      if (pose.plant_l) angles = plantLeg(angles, 'l', toObject(x, y, heading, height, pose.plant_l[0], pose.plant_l[1]), player.bones, player.markers);
+      if (pose.plant_r) angles = plantLeg(angles, 'r', toObject(x, y, heading, height, pose.plant_r[0], pose.plant_r[1]), player.bones, player.markers);
+    }
+  }
+  return angles;
+}
+
+function bindPart(part, bones) {
+  const n = part.pos.length / 3;
+  const bi = new Int16Array(n * 4);
+  const bw = new Float32Array(n * 4);
+  const locals = new Float32Array(n * 12);
+  for (let i = 0; i < n; i++) {
+    const x = part.pos[i * 3], y = part.pos[i * 3 + 1], z = part.pos[i * 3 + 2];
+    for (let k = 0; k < 4; k++) {
+      const b = part.skin[i * 8 + k * 2];
+      const w = part.skin[i * 8 + k * 2 + 1];
+      bi[i * 4 + k] = b;
+      bw[i * 4 + k] = w;
+      if (b < 0 || !w) continue;
+      const rh = bones[b].head, R = bones[b].R;
+      const lx = x - rh[0], ly = y - rh[1], lz = z - rh[2];
+      const o = (i * 4 + k) * 3;
+      locals[o] = R[0] * lx + R[1] * ly + R[2] * lz;
+      locals[o + 1] = R[3] * lx + R[4] * ly + R[5] * lz;
+      locals[o + 2] = R[6] * lx + R[7] * ly + R[8] * lz;
+    }
+  }
+  return { bi, bw, locals, n };
+}
+
+// Eight pixels of head. The cap sits inside the scalp, so it grows out by a few
+// centimetres. A scale would turn that shell into a fin. Build widens the
+// shoulders. Feet stay put so the boot capsules still cover them.
+const HAIR_GROW = { short: 0.035, crown: 0.07 };
+
+function shapeOutline(array, part, build, style) {
+  const grow = part === 'hair' ? (HAIR_GROW[style] || 0) : 0;
+  const b = build || 1;
+  for (let i = 0; i < array.length; i += 3) {
+    let x = array[i];
+    let y = array[i + 1];
+    let z = array[i + 2];
+    if (b !== 1) {
+      const t = y <= 0.55 ? 0 : y >= 1.3 ? 1 : (y - 0.55) / 0.75;
+      x *= 1 + (b - 1) * t;
+    }
+    if (grow) {
+      const dx = x, dy = y - 1.58, dz = z - 0.05;
+      const len = Math.hypot(dx, dy, dz) || 1;
+      x += dx / len * grow;
+      y += dy / len * grow;
+      z += dz / len * grow;
+    }
+    array[i] = x;
+    array[i + 1] = y;
+    array[i + 2] = z;
+  }
+}
+
+function skinPositions(bind, posed, out) {
+  const { bi, bw, locals, n } = bind;
+  for (let i = 0; i < n; i++) {
+    let x = 0, y = 0, z = 0;
+    for (let k = 0; k < 4; k++) {
+      const w = bw[i * 4 + k];
+      if (!w) continue;
+      const R = posed.rots[bi[i * 4 + k]];
+      const h = posed.heads[bi[i * 4 + k]];
+      const o = (i * 4 + k) * 3;
+      const lx = locals[o], ly = locals[o + 1], lz = locals[o + 2];
+      x += w * (R[0] * lx + R[3] * ly + R[6] * lz + h[0]);
+      y += w * (R[1] * lx + R[4] * ly + R[7] * lz + h[1]);
+      z += w * (R[2] * lx + R[5] * ly + R[8] * lz + h[2]);
+    }
+    out[i * 3] = x; out[i * 3 + 1] = y; out[i * 3 + 2] = z;
+  }
+}
+
+const ROUGHNESS = { shirt: 0.82, shorts: 0.84, socks: 0.78, skin: 0.55, hair: 0.7, boots: 0.6, ball: 0.38, eyes: 0.35 };
 const METALNESS = { boots: 0.04, ball: 0.05 };
 
 class Body {
   // One labelled object: a player or the ball, built from capsules and spheres.
-  constructor(id, spec, scene) {
+  constructor(id, spec, scene, player) {
     this.id = id;
     this.group = new THREE.Group();
+    this.heightM = spec.height_m || 1.84;
+    this.build = spec.build ?? 1;
+    this.hairStyle = spec.hair_style || 'short';
+    this.player = player;
     const colors = spec.colors;
     this.number = spec.number ?? null;
     this.pattern = spec.pattern || 'solid';
@@ -614,7 +898,49 @@ class Body {
     this.idMat = idMaterial(id);
     this.pool = [];
     this.used = 0;
+    this.skin = null;
+    if (player && colors.shirt) this.buildSkin(colors);
     scene.add(this.group);
+  }
+
+  buildSkin(colors) {
+    const slotMat = {
+      body: this.materials.skin,
+      jersey: this.materials.shirt,
+      shorts: this.materials.shorts,
+      socks: this.materials.socks,
+      shoes: this.materials.boots,
+      hair: this.materials.hair,
+      brows: this.materials.hair,
+    };
+    this.eyeMat = new THREE.MeshStandardMaterial({ color: 0xf3f1ec, roughness: 0.35 });
+    slotMat.eyes = this.eyeMat;
+    this.skin = [];
+    for (const name of this.player.partOrder) {
+      const part = this.player.parts[name];
+      const mat = slotMat[name];
+      if (!part || !mat) continue;
+      mat.side = THREE.DoubleSide;
+      if (name !== 'body' && name !== 'eyes') {
+        mat.polygonOffset = true;
+        mat.polygonOffsetFactor = -2;
+        mat.polygonOffsetUnits = -2;
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(part.pos), 3));
+      geo.setIndex(part.idx);
+      geo.computeVertexNormals();
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.castShadow = true;
+      mesh.receiveShadow = false;
+      mesh.frustumCulled = false;
+      mesh.userData.mat = mat;
+      mesh.userData.part = name;
+      mesh.userData.bind = bindPart(part, this.player.bones);
+      this.group.add(mesh);
+      this.skin.push(mesh);
+    }
+    this.used = this.skin.length;
   }
 
   materialFor(slot) {
@@ -639,7 +965,11 @@ class Body {
     return m;
   }
 
-  set(parts, heading) {
+  set(parts, heading, pose) {
+    if (this.skin) {
+      this.poseMesh(parts, heading, pose || { action: 'stand', phase: 0, speed: 0, reach: 0, dive: 0 });
+      return;
+    }
     this.used = 0;
     const face = heading || 0;
     const fx = Math.cos(face), fy = Math.sin(face);
@@ -700,7 +1030,69 @@ class Body {
     this.group.visible = this.used > 0;
   }
 
+  poseMesh(parts, heading, pose) {
+    const face = heading || 0;
+    const fx = Math.cos(face), fy = Math.sin(face);
+    const hl = parts.find((p) => p.n === 'thigh_l');
+    const hr = parts.find((p) => p.n === 'thigh_r');
+    const x = pose.x != null ? pose.x : (hl && hr ? (hl.a[0] + hr.a[0]) / 2 : parts[0].a[0]);
+    const y = pose.y != null ? pose.y : (hl && hr ? (hl.a[1] + hr.a[1]) / 2 : parts[0].a[1]);
+    if (this.kit) {
+      this.kit.uOrigin.value.set(x, y);
+      this.kit.uFwd.value.set(fx, fy);
+      this.kit.uLeft.value.set(-fy, fx);
+      if (this.materials.socks) {
+        const sock = this.materials.socks.userData.kit;
+        sock.uOrigin.value.copy(this.kit.uOrigin.value);
+        sock.uFwd.value.copy(this.kit.uFwd.value);
+        sock.uLeft.value.copy(this.kit.uLeft.value);
+      }
+    }
+    const k = this.heightM / 1.84;
+    this.group.position.set(x, y, 0);
+    this.group.scale.set(k, k, k);
+    this.group.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(
+      new THREE.Vector3(-fy, fx, 0), new THREE.Vector3(0, 0, 1), new THREE.Vector3(fx, fy, 0),
+    ));
+    const placed = Object.assign({}, pose, { x, y });
+    const angles = anglesFor(this.player, placed, face, this.heightM);
+    const posed = poseBones(angles, this.player.bones);
+    const build = pose.build != null ? pose.build : this.build;
+    const style = pose.hair_style || this.hairStyle;
+    for (const mesh of this.skin) {
+      const attr = mesh.geometry.attributes.position;
+      skinPositions(mesh.userData.bind, posed, attr.array);
+      const part = mesh.userData.part;
+      const bald = style === 'bald' && part === 'hair';
+      mesh.visible = !bald;
+      if (!bald) shapeOutline(attr.array, part, build, style);
+      attr.needsUpdate = true;
+      mesh.geometry.computeVertexNormals();
+    }
+    this.used = this.skin.length;
+    this.group.visible = true;
+    this._markers = { angles, x, y, face };
+  }
+
+  markerWorld(pose, heading) {
+    if (!this.skin) return null;
+    const face = heading || 0;
+    const x = pose && pose.x != null ? pose.x : 0;
+    const y = pose && pose.y != null ? pose.y : 0;
+    const angles = anglesFor(this.player, Object.assign({ action: 'stand' }, pose, { x, y }), face, this.heightM);
+    const posed = poseBones(angles, this.player.bones);
+    const out = {};
+    for (const [name, marker] of Object.entries(this.player.markers)) {
+      out[name] = toWorld(x, y, face, this.heightM, skinOne(marker.pos, marker.skin, posed, this.player.bones));
+    }
+    return out;
+  }
+
   useId(on) {
+    if (this.skin) {
+      for (const m of this.skin) m.material = on ? this.idMat : m.userData.mat;
+      return;
+    }
     for (let i = 0; i < this.used; i++) {
       const m = this.pool[i];
       m.material = on ? this.idMat : this.materialFor(m.userData.slot);
@@ -711,6 +1103,7 @@ class Body {
 class BroadcastRenderer {
   async init(cfg) {
     const surfaces = await loadGrass();
+    const player = await loadPlayer();
     const grass = surfaces.color;
     const grassN = surfaces.normal;
     const p = cfg.params;
@@ -861,11 +1254,21 @@ class BroadcastRenderer {
       this.decor.push(net);
     }
     for (const m of [...this.decor, ...this.posts]) this.scene.add(m);
+    // Every opaque piece of scenery hides what is behind it in the full id pass, as it does in the
+    // picture: a ball resting behind the boards is not visible. Left out: the sky (always behind),
+    // the ground (nothing labelled is under it), the see-through nets and the shadow decals.
+    const notOccluders = new Set([sky, surround, pitch, this.shadows, ...this.nets]);
+    this.scenery = this.decor.filter((m) => m.isMesh && !notOccluders.has(m));
+    for (const m of this.scenery) {
+      m.userData.mat = m.material;
+      m.userData.idMat = idMaterial(SCENERY_ID);
+      m.userData.idMat.side = m.material.side; // the near boards face the pitch: no back face for the gantry
+    }
 
     this.setupLights(p);
 
     // players and ball, ids 1..n in the order Python sends them
-    this.bodies = cfg.objects.map((o, i) => new Body(i + 1, o, this.scene));
+    this.bodies = cfg.objects.map((o, i) => new Body(i + 1, o, this.scene, player));
     this.bodyById = Object.fromEntries(cfg.objects.map((o, i) => [o.id, this.bodies[i]]));
 
     // offscreen targets: multisampled beauty pass, and a plain id pass
@@ -1063,6 +1466,7 @@ class BroadcastRenderer {
 
   idMode(on, only = null) {
     for (const m of this.decor) m.visible = !on;
+    for (const m of this.scenery) { m.material = on ? m.userData.idMat : m.userData.mat; m.visible = !on || only === null; }
     for (const m of this.posts) { m.material = on ? m.userData.idMat : m.userData.mat; m.visible = !on || only === null; }
     for (const b of this.bodies) { b.useId(on); b.group.visible = b.used > 0 && (only === null || b === only); }
     this.scene.background = on ? new THREE.Color(0, 0, 0) : this.skyColor;
@@ -1072,7 +1476,7 @@ class BroadcastRenderer {
     const T = [performance.now()];
     this.skyColor = this.skyColor ?? this.scene.background;
     this.setCamera(spec.camera);
-    for (const o of spec.objects) this.bodyById[o.id].set(o.parts, o.heading);
+    for (const o of spec.objects) this.bodyById[o.id].set(o.parts, o.heading, o.pose);
     const dummy = this._shadow || (this._shadow = new THREE.Object3D());
     let si = 0;
     for (const o of spec.objects) {
@@ -1110,8 +1514,12 @@ class BroadcastRenderer {
       const out = { full: 0, visible: 0, bbox: null, centroid: null };
       objects[o.id] = out;
       if (!o.box || body.used === 0) continue;
-      const x0 = Math.max(0, Math.floor(o.box[0]) - 3), x1 = Math.min(W, Math.ceil(o.box[2]) + 3);
-      const y0 = Math.max(0, Math.floor(o.box[1]) - 3), y1 = Math.min(H, Math.ceil(o.box[3]) + 3);
+      // The capsule box is the label. Hair, a boot, or a dive can sit outside
+      // it, and the sideline camera makes that about 80px. The solo count has
+      // to include the silhouette or visible/full goes over 1.
+      const pad = 80;
+      const x0 = Math.max(0, Math.floor(o.box[0]) - pad), x1 = Math.min(W, Math.ceil(o.box[2]) + pad);
+      const y0 = Math.max(0, Math.floor(o.box[1]) - pad), y1 = Math.min(H, Math.ceil(o.box[3]) + pad);
       if (x1 <= x0 || y1 <= y0) continue;
       this.idMode(true, body);
       R.setScissorTest(true);
@@ -1177,7 +1585,15 @@ class BroadcastRenderer {
     const image = spec.want_image ? this.renderer.domElement.toDataURL('image/jpeg', this.p.jpeg_quality) : null;
     T.push(performance.now());
     const ms = T.slice(1).map((t, i) => Math.round(t - T[i]));
-    return { objects, keypoints, image, ms: { solo: ms[0], id: ms[1], beauty: ms[2], encode: ms[3] } };
+    let markers = null;
+    if (spec.want_markers) {
+      markers = {};
+      for (const o of spec.objects) {
+        const body = this.bodyById[o.id];
+        if (body.skin) markers[o.id] = body.markerWorld(o.pose, o.heading);
+      }
+    }
+    return { objects, keypoints, image, markers, ms: { solo: ms[0], id: ms[1], beauty: ms[2], encode: ms[3] } };
   }
 }
 
