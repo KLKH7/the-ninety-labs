@@ -71,6 +71,7 @@ jobs:
             eval)
               uv run python -m ninety.eval.factcheck_eval --seeds 21,33 --foundry --out runs/eval/fact-checker.md "${extra[@]}"
               uv run python -m ninety.agents.analyst_eval --seeds 21,33 --foundry --out runs/eval/analyst.md "${extra[@]}"
+              uv run python -m ninety.agents.companion_eval --seeds 21,33 --foundry --out runs/eval/companion.md
               ;;
             record|failures|ablation)
               echo "::error::task '$TASK' is not yet implemented"
