@@ -864,7 +864,20 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** the harness line for every mutation shows "N failed, M passed". Run one mutation by
   hand first and watch it go red before trusting the loop.
 
-### 97. An argmin over a flat or bimodal objective is a coin toss between its ends
+### 96. A fallback is real only when a test injects the failure through the live path
+- **What happened:** the M1 live path had fail-closed Judge handling and a single status mapping
+  (`contracts.status_for`), and both looked done. Injecting each failure through `live.run` for
+  the failure table showed two gaps: the workflow kept its own mapping, so a Judge outage ended
+  as `rejected` (the claim is wrong) instead of `held` (it could not be checked); and an Analyst
+  that failed, hung on an MCP call or replied with prose raised out of `live.run`, taking the
+  template graphics down with it.
+- **Rule:** every fallback claimed in docs/eval/failure-table.md is a row produced by injecting
+  that failure into the real path, asserted by a test with the expected outcome written in the
+  test. A status is computed by `status_for`, never re-derived.
+- **Check:** `uv run pytest tests/test_failure_table.py`; removing the `live.run` fallback or
+  restoring the old status line turns a row red.
+
+### 100. An argmin over a flat or bimodal objective is a coin toss between its ends
 - **What happened:** the keeper set his depth as the one, of 1 to 6 m, that left the least of the
   goal open. Against a central ball he stood 6 m off his line at 8 and 10 m, 1 m at 12 m, 6 m at
   18 m and 1 m at 20 m; from 14 m wide and 8 m out he stood 10.7 m off the goal's centre, outside
