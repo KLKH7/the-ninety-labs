@@ -72,12 +72,16 @@ The targets still hold: players above 0.95 recall and balls at least half visibl
    came from one episode in seed 900003 (report v1, finding 4). Dataset v1 also replaced the
    training clips whose ball rests behind the boards with relabelled ones (`v3boards`). That
    may be why, but this report does not test it.
-3. **Hidden players improved most.** Mostly hidden players went from 0.747 to 0.893 recall and
-   partly hidden from 0.870 to 0.949.
+3. **Hidden players improved most.** Mostly hidden players went from 0.747 to 0.893 recall
+   (about 2.9 standard errors of ours-v2's rate on 75 labels), and partly hidden from 0.870 to
+   0.949 (about 2.8 on 138). Paired on the same labels, ours-v3 finds all 56 mostly hidden
+   players ours-v2 found, plus 11 more.
 4. **Mostly hidden balls are still the weakness.** Recall 0.493 (37 of 75) against 0.413 (31 of
-   75); precision rose from 0.596 to 0.841. With 75 labels, a difference of six balls is about one
-   standard error (√(0.45 × 0.55 / 75) ≈ 0.057). The gain is suggestive, not measured, so the
-   next targeted round still goes here.
+   75); precision rose from 0.596 to 0.841. Unpaired, six balls is about 1.4 standard errors of
+   ours-v2's rate (0.057 on 75 labels). Paired on the same labels it is cleaner: ours-v3 finds all
+   31 that ours-v2 found and 6 more, losing none (a two-sided sign test on 6 to 0 gives p ≈ 0.03).
+   That test was chosen after seeing the data, and half the balls are still missed, so the next
+   targeted round still goes here.
 5. **Crowded scenes are not a separate weakness on this test set.** That was already the case for
    ours-v2 (report v1, finding 3), and ours-v3 keeps it. Seed 900001, a crowded clip, has the
    lowest ball recall (0.806). That is one clip, so it marks where to look, not a rate.
