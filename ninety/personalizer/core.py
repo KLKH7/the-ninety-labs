@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 from collections import Counter
 from dataclasses import asdict
 
@@ -25,7 +26,8 @@ from azure.core.exceptions import AzureError
 from pydantic import BaseModel, ValidationError
 
 from ninety.agents.contracts import Personalize, Profile, Variant
-from ninety.agents.factcheck import NUMBER, PLAYER, Claim, check
+from ninety.agents.factcheck import CLOCK, NUMBER, PLAYER, Claim, _normalize_clock, check
+from ninety.agents.judge import _input_error
 from ninety.agents.slice import Ask
 
 log = logging.getLogger(__name__)
@@ -40,6 +42,15 @@ VARIANT_MAX_CHARS = 500
 # The personas a model rewrites for. "audio" is the Describer's (ninety/agents/contracts.py), so an
 # audio profile gets the verified text unchanged.
 WRITTEN = ("analyst", "casual", "club", "player_focus")
+SOURCE_LANG = "en"  # the language verified claims are written in
+# A team the claim names by id (ninety/agents/cues._who: when the detector could not say which player
+# it was), and the words that name it in each language. The instructions say to translate everything
+# but player ids and numbers, so a Spanish variant may call the home side "local".
+TEAM = re.compile(r"\b(?:home|away)\b")
+TEAM_WORDS = {
+    "en": {"home": ("home",), "away": ("away",)},
+    "es": {"home": ("home", "local", "locales"), "away": ("away", "visitante", "visitantes")},
+}
 
 INSTRUCTIONS = """You rewrite one verified football commentary line for different viewers.
 You get one JSON object: CLAIM (the verified sentence), EVIDENCE (the match events it cites) and
@@ -105,7 +116,7 @@ def parse(text: str) -> dict[int, str]:
     return {item.i: item.text for item in out.variants}
 
 
-def problem(claim: Claim, evidence: list[dict], text: str) -> str | None:
+def problem(claim: Claim, evidence: list[dict], text: str, lang: str = "en") -> str | None:
     """Why a variant must not air, or None. The fact-checker's code half judges it as a claim with
     the verified claim's evidence; and every number and player id of the verified claim must still
     be there, so a changed number or id is caught even when the new one is in the evidence."""
@@ -115,6 +126,8 @@ def problem(claim: Claim, evidence: list[dict], text: str) -> str | None:
         return f"over {VARIANT_MAX_CHARS} characters"
     if any(ord(c) < 32 and c not in "\t\n\r" for c in text):
         return "control characters"
+    if _input_error(text):  # the Judge's own refusal of instruction-like or fake role-tag text
+        return "instruction-like text"
     verdict = check(Claim(text, list(claim.evidence)), {e["id"]: e for e in evidence})
     if not verdict.ok:
         return "; ".join(verdict.reasons)
@@ -124,6 +137,15 @@ def problem(claim: Claim, evidence: list[dict], text: str) -> str | None:
     gone = set(PLAYER.findall(claim.text)) - set(PLAYER.findall(text))
     if gone:
         return f"player ids lost or changed: {', '.join(sorted(gone))}"
+    clocks = Counter(_normalize_clock(c) for c in CLOCK.findall(claim.text))
+    lost_clocks = clocks - Counter(_normalize_clock(c) for c in CLOCK.findall(text))
+    if lost_clocks:
+        return f"clocks lost or changed: {', '.join(sorted(lost_clocks.elements()))}"
+    words = TEAM_WORDS.get(lang, TEAM_WORDS["en"])
+    teams = [t for t in set(TEAM.findall(claim.text))
+             if not any(re.search(rf"\b{w}\b", text, re.I) for w in words[t])]
+    if teams:
+        return f"teams lost: {', '.join(sorted(teams))}"
     return None
 
 
@@ -136,7 +158,7 @@ def recheck(
     for i, p in enumerate(profiles):
         text = texts.get(i)
         if p.persona in WRITTEN:
-            why = "no variant" if text is None else problem(claim, evidence, text)
+            why = "no variant" if text is None else problem(claim, evidence, text, p.lang)
             if why is None:
                 variants.append(Variant(p.persona, p.lang, text, tuple(claim.evidence)))
                 continue

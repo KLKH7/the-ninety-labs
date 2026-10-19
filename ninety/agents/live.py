@@ -12,6 +12,10 @@ What airs:
   (ninety/agents/cues.py); an unsure detection gets none;
 - when an Analyst and a Judge are given, the claim the fact-checker verified, as an `insight` cue
   for the analyst persona. A claim resting on an unsure detection is held and never airs.
+- when a Personalizer is given too (ninety/personalizer: over A2A, or in-process), that claim
+  reworded for the other personas and in Spanish: one more `insight` cue per variant that passes
+  the fact-checker again (ninety/personalizer/cues.py). A variant that fails is never shown, and a
+  Personalizer that fails takes nothing else down with it.
 
 Without models (the CLI) only the template cues are written: the agents need Foundry, or a
 recording made against these same detected events.
@@ -22,16 +26,19 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from jsonschema import validate
 
+from ninety.agents.contracts import Personalize, Profile, TraceStep
 from ninety.agents.cues import DISPLAY_SECONDS, SCHEMA, template_cues, write_fixture
 from ninety.agents.ledger import InMemoryLedger, Record, load_match
 from ninety.agents.slice import Ask, Judge, Outcome, run_workflow
 from ninety.match import detected
 from ninety.match.facts import AGENT_TYPES, compact
+from ninety.personalizer import cues as personal
 
 INSIGHT_SLOT = "top_right"  # apart from the template's lower third, so both can be on screen
 
@@ -42,6 +49,9 @@ class LiveResult:
     facts: int
     held_detections: list[str]  # passes, shots and goals detected too unsure to air
     outcome: Outcome | None
+    # the Personalizer's variants that did not air: (persona, lang, status, reasons)
+    refused_variants: list[tuple[str, str, str, list[str]]] = field(default_factory=list)
+    trace: list[TraceStep] = field(default_factory=list)
 
 
 def insight_cue(outcome: Outcome, times: dict[str, float]) -> dict:
@@ -71,6 +81,8 @@ async def run(
     ask: Ask | None = None,
     judge: Judge | None = None,
     minute: int | None = None,
+    personalize: Personalize | None = None,
+    profiles: list[Profile] | None = None,
 ) -> LiveResult:
     events = detected.check([dict(e) for e in events], clip)
     ledger = InMemoryLedger()
@@ -80,7 +92,7 @@ async def run(
     held = [
         e["id"] for e in events if e["type"] in {"pass", "shot", "goal"} and e["id"] not in shown
     ]
-    outcome = None
+    outcome, refused, trace = None, [], []
     if ask is not None and judge is not None and minute is not None:
         # The fact-checker knows what the Analyst can read over MCP: the compact detected events.
         rows = [compact(e) for e in events if e["type"] in AGENT_TYPES]
@@ -95,6 +107,11 @@ async def run(
         ))
         if outcome.accepted:
             cues.append(insight_cue(outcome, times))
+            if personalize is not None:
+                personalized, refused = await _personalized(
+                    outcome.claim, events, rows, times, judge, personalize, profiles, trace
+                )
+                cues.extend(personalized)
     for cue in cues:
         await ledger.append(Record(
             id=cue["id"], version=1, kind="cue", t=cue["t_in"], source="agents", confidence=None,
@@ -102,7 +119,43 @@ async def run(
         ))
     facts = len(await ledger.query(kind="fact"))
     cues.sort(key=lambda c: (c["t_in"], c["id"]))
-    return LiveResult(cues, facts, held, outcome)
+    return LiveResult(cues, facts, held, outcome, refused, trace)
+
+
+async def _personalized(
+    claim, events, rows, times, judge, personalize, profiles, trace
+) -> tuple[list[dict], list[tuple[str, str, str, list[str]]]]:
+    """The verified claim for every other profile, each variant checked again before it airs."""
+    moment = "-".join(claim.evidence)
+    if profiles is None:
+        profiles = personal.profiles_for(next(e for e in events if e["id"] == claim.evidence[0]))
+    known = {r["id"]: r for r in rows}
+    started = time.perf_counter()
+    try:
+        variants = await personalize(claim, [known[i] for i in claim.evidence], profiles)
+    except Exception as error:  # a defect in the Personalizer: the analyst insight still airs
+        detail = f"{type(error).__name__}: {error}"
+        trace.append(TraceStep("personalizer", moment, "error", _ms(started), detail))
+        return [], []
+    route = getattr(personalize, "last_route", "") or "in_process"  # RemotePersonalizer says which
+    trace.append(TraceStep("personalizer", moment, route.split(":")[0], _ms(started), route))
+    asked, seen, kept = {(p.persona, p.lang) for p in profiles}, set(), []
+    for v in variants:  # only what was asked for, once each
+        if (v.persona, v.lang) in asked and (v.persona, v.lang) not in seen:
+            seen.add((v.persona, v.lang))
+            kept.append(v)
+    checked = await personal.verify(claim, kept, known, judge)
+    for variant, status, reasons in checked.refused:
+        detail = f"{variant.persona}/{variant.lang}: " + "; ".join(reasons)
+        trace.append(TraceStep("fact_checker", moment, status, 0.0, detail))
+    t_in = max(times[i] for i in claim.evidence)
+    shown = [personal.variant_cue(v, t_in) for v in checked.shown]
+    trace.append(TraceStep("producer", moment, "air", 0.0, f"{len(shown)} of {len(kept)} variants"))
+    return shown, [(v.persona, v.lang, status, reasons) for v, status, reasons in checked.refused]
+
+
+def _ms(started: float) -> float:
+    return round((time.perf_counter() - started) * 1000, 1)
 
 
 def main() -> None:
