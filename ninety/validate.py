@@ -32,6 +32,9 @@ GRAVITY = 9.81  # P5
 # football with a drag coefficient up to 0.5 (radius 0.11 m, 410 g, air 1.2 kg/m³); verify.
 DRAG_K_MAX = 0.5 * 1.2 * 0.5 * math.pi * 0.11**2 / 0.41
 POSITION_PRECISION_M = 0.0005  # positions are written to the nearest millimetre
+# C8: the farthest a ball at rest can appear to move between two frames from rounding alone: up to
+# 2 * POSITION_PRECISION_M on each of three axes.
+ROUNDING_STEP_M = 2 * math.sqrt(3) * POSITION_PRECISION_M
 
 AIRBORNE_M = 0.3  # P5: the ball is in flight above this height
 AT_FEET_M = 1.5  # P6: how far the ball may be from the player who has it
@@ -87,11 +90,13 @@ def loose_from_the_cut(frames: list[dict], upto: int) -> bool:
 
 def in_flight_from_the_cut(frames: list[dict], upto: int) -> bool:
     """Loose from the cut (above) and moving every frame up to frame `upto`: a pass or shot struck
-    before the cut is still travelling. Moving is more than the two roundings of a position can
-    make (2 * POSITION_PRECISION_M), so a ball at rest is never taken for one in flight."""
+    before the cut is still travelling. Moving is farther than rounding alone can move it, so a
+    ball at rest is never taken for one in flight: each of the two positions is rounded by up to
+    POSITION_PRECISION_M on each of three axes, so a ball at rest can appear to move by up to
+    2 * POSITION_PRECISION_M per axis, sqrt(3) times that in space."""
     pos = [(f["ball"]["x"], f["ball"]["y"], f["ball"]["z"]) for f in frames if f["frame"] <= upto]
     return loose_from_the_cut(frames, upto) and all(
-        math.dist(a, b) > 2 * POSITION_PRECISION_M for a, b in zip(pos, pos[1:], strict=False))
+        math.dist(a, b) > ROUNDING_STEP_M for a, b in zip(pos, pos[1:], strict=False))
 
 
 def check_frames(events: list[dict], frames: list[dict], fps: float, problems: Problems,
@@ -135,9 +140,8 @@ def check_physics(events: list[dict], frames: list[dict], fps: float, roster: li
                   problems: Problems, cut: bool = False) -> None:
     """P1 to P6: speeds, acceleration, ground, gravity, ball at the possessor's feet."""
     dt = 1 / fps
-    # A restart may move everyone at once: kickoff, and the frame a dead ball is placed
-    # for a corner, throw, goal kick, free kick or penalty.
-    restarts = {e["frame"] for e in events if e["type"] in ("kickoff", "out_of_play", "foul", "offside")}
+    # A kickoff restart may move everyone at once: the renderer cuts there.
+    restarts = {e["frame"] for e in events if e["type"] == "kickoff"}
     # While the ball is out of play (Law 9) a new ball may be placed for the restart.
     dead: set[int] = set()
     out_at = None
@@ -167,7 +171,7 @@ def check_physics(events: list[dict], frames: list[dict], fps: float, roster: li
                 problems["P1 player speed"].append(f"frame {f['frame']}: {p['id']} moved at {speed:.1f} m/s")
         b, a = prev["ball"], f["ball"]
         speed = math.dist((a["x"], a["y"], a["z"]), (b["x"], b["y"], b["z"])) / dt
-        if speed > MAX_BALL_MPS and f["frame"] not in dead and f["frame"] not in restarts:
+        if speed > MAX_BALL_MPS and f["frame"] not in dead:
             problems["P3 ball speed"].append(f"frame {f['frame']}: ball moved at {speed:.1f} m/s")
 
     # P2: acceleration from speeds averaged over a short window, skipping windows with a restart.
@@ -334,7 +338,8 @@ def check_events(events: list[dict], frames: list[dict], fps: float, meta: dict,
             balls = [by_frame[n]["ball"] for n in range(e["frame"], until + 1) if n in by_frame]
             # The clip ends before anything else happens to it: nobody has held the ball since it was
             # played, and its last frame's motion, carried on in a straight line, passes within NEAR_M
-            # of the end point ahead of it.
+            # of the end point ahead of it. A pass struck on the last frame has no flight in the clip
+            # at all (its last motion is the touch before the kick), so there is nothing to judge.
             final = by_frame[last]["ball"]
             prior = by_frame.get(last - 1, by_frame[last])["ball"]
             vx, vy = final["x"] - prior["x"], final["y"] - prior["y"]
@@ -342,7 +347,8 @@ def check_events(events: list[dict], frames: list[dict], fps: float, meta: dict,
             ahead = (wx * vx + wy * vy) / ((vx * vx + vy * vy) or math.inf)
             closing = ahead > 0 and math.hypot(wx - ahead * vx, wy - ahead * vy) <= NEAR_M
             held = any(by_frame[n].get("possessor") for n in range(e["frame"] + 1, last + 1) if n in by_frame)
-            still_going = cut and not later and not held and closing
+            struck_at_the_cut = e["frame"] == last
+            still_going = cut and not later and (struck_at_the_cut or (not held and closing))
             if not still_going and \
                     not any(math.hypot(b["x"] - e["end_x"], b["y"] - e["end_y"]) <= NEAR_M for b in balls):
                 where = f"({e['end_x']}, {e['end_y']})"

@@ -174,7 +174,6 @@ class Scene:
     absorb: dict[str, float]  # team-mates' first touch (A4), by id
     passer: Profile  # who he is, for his own kick error (A3)
     throw: bool = False  # Law 15: a throw-in, so every pass is thrown (lofted) and nothing else
-    kickoff: bool = False  # the kick-off is one pass back, then open play
     # The team's style (T4): how much ground gained from here is worth, and how much losing the
     # ball costs, against the defaults. Both 1 for a mid style.
     progress_weight: float = 1.0
@@ -735,6 +734,11 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
         # made worse as the engine makes it (firsttouch.quality) by what the passer can know: its
         # speed and the opponents he sees near where it is taken (D2's zone); the team-mate is
         # taken to face it, as one expecting it does, fresh and of average composure.
+        # A receiver runs onto the ball's path, so it comes into his body: above BODY_TOUCH_Z, the
+        # part its height gives (design, verify, A4, D1): pessimistic where the engine finds him beside
+        # it, with a foot. The calibration report checks it is a bound, not a fit (`ninety.sim.calibration`,
+        # forced passes, seeds 1 to 6, on main b319f21: received more often than estimated in every
+        # bin from 0.0 to 0.7, as a cautious estimate should be).
         rel = relative_speed(g * ux, g * uy, vz, taker[2], taker[3])
         tx_, ty_ = sx + ux * a, sy + uy * a
         felt = max((perception.pressure_from(tx_, ty_, ox, oy, attack(scene.goal_x))
@@ -824,8 +828,6 @@ def shot_chance(scene: Scene) -> float:
 
 def options(scene: Scene) -> list[Option]:
     out = [o for o in (pass_option(scene, mate) for mate in scene.mates) if o]
-    if scene.kickoff:  # one pass back: nothing forward, and not a shot or a dribble
-        return [o for o in out if o.target and (o.target[0] - scene.x) * attack(scene.goal_x) < 0]
     if scene.throw:  # Law 15: a throw-in is thrown to someone; it is never a shot or a dribble
         return out
     p = pressure(scene)
