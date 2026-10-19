@@ -11,6 +11,9 @@ personalized for every viewer, including live audio description for blind and lo
 
 All clubs, players and matches are synthetic. No real match data or footage is used.
 
+That is the design. What runs and is measured today, and what is still being built, is in
+[Status](#status).
+
 ## Why
 
 Football event data is still typed by hand. Opta assigns three analysts per match, StatsBomb two
@@ -44,6 +47,7 @@ Full design, agent roles and deployment: [docs/ARCHITECTURE.md](docs/ARCHITECTUR
 | [ARCHITECTURE](docs/ARCHITECTURE.md) | design rules, system and agent diagrams, Azure deployment, technology decisions |
 | [PLAN](docs/PLAN.md) | goals, timeline, milestones, day-by-day schedule |
 | [CHALLENGE_MAP](docs/CHALLENGE_MAP.md) | every requirement of the brief, where it is built, and its status |
+| [Video script](docs/video-script.md) | the 2-minute demo video beat by beat, what each shot needs, and the submission checklist |
 | [EVALUATION](docs/EVALUATION.md) | how every published number is measured |
 | [ENGINE](docs/ENGINE.md) | how the match engine makes football: agents decide, physics happens, the referee observes |
 | [DATA_CONTRACT](docs/DATA_CONTRACT.md) | what ground-truth data must contain, and the validator that checks it |
@@ -60,13 +64,14 @@ Full design, agent roles and deployment: [docs/ARCHITECTURE.md](docs/ARCHITECTUR
 | `ninety/sim` | Seeded match engine: events + per-frame positions (the ground-truth data) |
 | `ninety/render` | Broadcast camera, player bodies, ground-truth labels, render checks, train/test split |
 | `web/render` | Broadcast-style three.js renderer that turns a sim run into video |
-| `ninety/vision` | Detection, tracking, camera-to-pitch mapping, possession, event rules |
+| `ninety/vision` | Detection (RF-DETR Small fine-tuned on our renders) and training; tracking, camera-to-pitch mapping, possession and event rules are planned |
 | `ninety/intel` | Deterministic stats engine (code computes every number) |
-| `ninety/agents` | Agent Framework workflow: Analyst, Tactician, Fact-checker, Producer, Personalizer, Describer |
+| `ninety/agents` | Agent Framework workflow: Analyst and fact-checking agent (Judge) on Foundry, the live path to overlay cues, the Data agent; Producer, Personalizer and Describer are in open pull requests |
 | `ninety/mcp` | MCP server exposing match tools to the agents; Foundry calls it at `/mcp` on the API |
-| `ninety/eval` | Grades automatically detected events against the ground-truth data |
-| `schemas` | JSON Schemas: match event, frame, on-screen graphic |
-| `web` | Viewer: video + overlays + persona controls |
+| `ninety/match` | Detected events: the one loader the live path uses; it refuses ground truth |
+| `ninety/eval` | Grades detections and detected events against the ground-truth data; the fact-checker evaluation |
+| `schemas` | JSON Schemas: match event, frame, on-screen graphic, agent trace, viewer question and answer |
+| `web` | `web/render`: the broadcast renderer. `web/viewer`: the viewer (video, graphics on the footage, analyst and casual switch, agent trace) |
 | `infra` | `azd` / Bicep for Azure Container Apps |
 
 ## Quick start
@@ -119,11 +124,33 @@ replay. Team members refresh the recording with
 
 ## Status
 
-Working toward **M1, end to end on one clip (Oct 20)**. Running today: the seeded match engine,
-the broadcast renderer with exact ground truth and render checks in CI
-([decision 0001](docs/decisions/0001-synthetic-data.md)), data contracts, CI and the deploy pipeline. See [docs/PLAN.md](docs/PLAN.md). This README
-describes the design; measured results are published in [docs/EVALUATION.md](docs/EVALUATION.md)
-as they land.
+Audited against `main` on Oct 19; [docs/CHALLENGE_MAP.md](docs/CHALLENGE_MAP.md) has every
+requirement with its status. Working toward **M1, end to end on one clip**.
+
+**Measured on `main`:**
+
+| What | Number | Evidence |
+|---|---|---|
+| Player detection on the frozen test set (1,250 frames of footage the model never saw) | recall 0.994, precision 0.999 | [vision-report-v2](docs/eval/vision-report-v2.md) |
+| Ball detection, ball at least half visible | recall 0.964, precision 0.994 | [vision-report-v2](docs/eval/vision-report-v2.md) |
+| Ball detection, ball mostly hidden (the known weakness) | recall 0.493, precision 0.841 | [vision-report-v2](docs/eval/vision-report-v2.md) |
+| False detections, all classes, after a retrain on footage from the test set's engine | 121 down to 27; a phantom ball where the ball is fully hidden in 1 of 113 frames, down from 45 | [vision-report-v2](docs/eval/vision-report-v2.md) against [vision-report-v1](docs/eval/vision-report-v1.md) |
+| Planted false claims caught by the fact-checking agent | 136 / 136 (code checks alone: 32 / 136) | [fact-checker.md](docs/eval/fact-checker.md) |
+| True claims wrongly rejected | 7 / 105, leaving out 10 held back when the Judge service failed (17 / 115 with them) | [fact-checker.md](docs/eval/fact-checker.md) |
+
+**Running on `main`:** the seeded match engine and the broadcast renderer with exact ground
+truth and render checks in CI ([decision 0001](docs/decisions/0001-synthetic-data.md)); a frozen
+test set and the data contract; the stats engine; the Analyst and fact-checking agent on Foundry
+over MCP (`ninety-slice`, replayable without Azure); the live path from detected events to overlay
+cues, with a confidence gate and a test that it never reads ground truth (`ninety-live`); one clip
+through the whole chain with no Azure (`ninety-e2e`), opened in the viewer, which draws the
+graphics on the footage and switches analyst and casual (local, not yet deployed); the Data
+agent and the event-driven render job; CI, and a deploy of the API on every green `main`.
+
+**Not yet:** events detected from the video (until they land the live path reads a hand-written
+stand-in and says so), so there is no event-level precision or recall yet; the viewer deployed; the
+multi-agent workflow, Personalizer and audio description (open pull requests); player tags, player
+cam, recaps, translation, the ablation and failure tables. See [docs/PLAN.md](docs/PLAN.md).
 
 ## License
 

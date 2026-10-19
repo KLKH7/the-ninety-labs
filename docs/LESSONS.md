@@ -866,3 +866,12 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `az ad app federated-credential list --id "$CLIENT_ID" --query "[].subject"` shows
   every subject with the same prefix; the setup is done only when the first approved
   `agents-live` run passes `azure/login`.
+
+### 95. A mutation run that turns nothing red may not have run the tests
+- **What happened:** a shell loop mutated nine lines of the M1 live path and reported "none red"
+  for every one. zsh does not split an unquoted `$T` into words, so pytest got one path that did
+  not exist and ran no test. Nine "surviving" mutations in a row looked like nine weak tests.
+- **Rule:** a mutation harness prints the test run's own pass and fail counts next to each
+  mutation, and a run with no "passed" count is a broken harness, not a surviving mutation.
+- **Check:** the harness line for every mutation shows "N failed, M passed". Run one mutation by
+  hand first and watch it go red before trusting the loop.
