@@ -108,7 +108,24 @@ live path.
 
 ## How the agents read data
 
-Agents call the MCP tool `list_events`, which reads from [`ninety/match/facts.py`](../ninety/match/facts.py).
-That function is the only place that knows where events come from. Today it runs the
-simulator, as a stand-in until the vision pipeline exists; from Milestone 1 it reads detected
-events. Changing the engine changes nothing in the agents, the fact-checker or their eval.
+From Milestone 1 the live path (the Ledger, the stats, the MCP tool `list_events`, the
+fact-checker and the overlay cues) reads detected events only, through
+[`ninety/match/detected.py`](../ninety/match/detected.py). That module accepts only valid
+`match_event` records with `"source": "vision"` and a `confidence`. It refuses ground-truth
+events and any file named `events.jsonl` or `frames.jsonl`. `uv run ninety-live --out cues.jsonl`
+runs the path on the M1 clip ([`ninety/agents/live.py`](../ninety/agents/live.py)).
+[`tests/test_live_reads_no_truth.py`](../tests/test_live_reads_no_truth.py) runs the path with
+an audit hook on every file it opens. It fails if the path opens the answer key or loads any of
+our code that writes, reads or fetches it.
+
+Until the detector's events for the M1 clip land (`tests/fixtures/detected-seed900001.jsonl`),
+the path reads a hand-written stand-in, `tests/fixtures/detected-standin-seed900001.jsonl`. Every
+one of its ids starts with `standin-`, and it was never derived from ground truth.
+
+The fact-checker holds back any claim that cites a detection below `MIN_CONFIDENCE`
+([`ninety/agents/factcheck.py`](../ninety/agents/factcheck.py)), and no template cue airs on such
+a detection. The threshold is a design value until it is measured from the event report.
+
+The simulator's matches (`seed7`, `seed21`, `seed33` in [`ninety/mcp/match_server.py`](../ninety/mcp/match_server.py))
+remain the pre-M1 stand-in for the committed replays and the agent evaluation. The simulator is
+imported only when those are asked for.
