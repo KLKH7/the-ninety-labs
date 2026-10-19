@@ -15,7 +15,7 @@ Rules for every shot, from [BRIEF.md](BRIEF.md#submission-checklist) and
   then it is not said.
 - Never show the demo passcode, keys, connection strings or Azure resource names.
 
-Status of each shot was checked against `main` at `930445c` (Oct 19). **Capturable** means it can
+Status of each shot was checked against `main` at `9b8782e` (Oct 19, after the viewer merged). **Capturable** means it can
 be recorded from `main` today; **not yet** names what has to land first.
 
 ## Beats
@@ -31,7 +31,7 @@ key it never sees."
 
 **Needs.** Events detected from pixels (tracking, camera-to-pitch mapping, possession and event
 rules in `ninety/vision`); a scoring panel fed by `ninety/eval/event_score.py`, kept outside the
-live path; the viewer (#127). Numbers `[from vision-report with event scores]`.
+live path, shown in the viewer (`web/viewer`). Numbers `[from vision-report with event scores]`.
 
 **Status: not yet.** Events from pixels are not on `main`; the live path reads a hand-written
 stand-in. **Fallback if events are not measured by M3:** detector boxes against ground-truth boxes
@@ -68,13 +68,17 @@ line).
 agent rejects it, cites the event, and sends it back. The rewrite passes. In testing it caught all
 136 planted false claims. The analyst gets the evidence; the casual fan gets one line."
 
-**Needs.** `ninety-slice --replay replays/slice-minute2-plant.json` (on `main`); the trace panel
-and persona switch in the viewer (#127); per-persona variants (#131) if more than the template
+**Needs.** `ninety-e2e <clip> --out <bundle> --plant` opened in the viewer, or
+`ninety-slice --replay replays/slice-minute2-plant.json` for the Foundry recording (both on `main`);
+per-persona variants (#131) if more than the template
 cues' analyst and casual wording is shown. Number from [fact-checker.md](eval/fact-checker.md)
 (136 / 136; re-read it at lock in case a newer run is committed).
 
-**Status: partly capturable.** The rejection and rewrite run today in the terminal from the
-recorded replay, with no Azure needed. The viewer's trace panel and persona switch need #127.
+**Status: capturable locally.** `ninety-e2e --plant` shows the rejection in the viewer's agent
+trace, and the viewer switches analyst and casual. Two caveats: offline, the Analyst is a
+deterministic stand-in and the Judge does not run (code checks only), so for the Foundry agents use
+`--replay` with a recording; and the events are the hand-written stand-in, which the viewer names.
+Not from the deployed app until the viewer is deployed.
 
 ### 4. Screen dark: audio description only (1:00 to 1:15)
 
@@ -100,12 +104,12 @@ screen: the code-written line airs in its place and the trace shows the fallback
 follows one player. Switch to Spanish. Now we cut the model service: the code-written line airs
 instead, and the match never goes silent. Every number on screen was computed by code."
 
-**Needs.** The viewer drawing cues at detected positions (#127); player tags and player cam
+**Needs.** The viewer drawing cues at detected positions (on `main`); player tags and player cam
 (planned); Spanish variants (#131); an injected failure with its fallback, from the failure table
 (`docs/eval/failure-table.md`, planned); the template cues (on `main`).
 
-**Status: not yet.** Overlay cues are produced on `main` (`ninety-live`) but not drawn on footage;
-player cam and the failure table are not built.
+**Status: partly capturable.** The viewer draws graphics on the footage locally (from the
+stand-in events); player cam, Spanish and the failure table are not on `main`.
 
 ### 6. Results and the Microsoft stack (1:40 to 2:00)
 
@@ -132,9 +136,9 @@ runs long.
 |---|---|---|
 | 1 | events detected from pixels, scored; scoring panel | `ninety/vision`, `ninety/eval`, viewer |
 | 2 | targeted round 1 with a before and after | Vision Auditor, Data agent, a vision report |
-| 3 | viewer trace panel and persona switch | #127, #131 |
+| 3 | the viewer deployed; Personalizer variants if shown | M2, #131 |
 | 4 | Describer with speech | #129 |
-| 5 | viewer graphics on footage, player cam, Spanish, failure table | #127, #131, planned work |
+| 5 | player cam, Spanish, failure table | #131, planned work |
 | all | the viewer deployed, so shots come from the deployed app | M2 |
 
 ## Submission checklist: still missing
@@ -146,6 +150,6 @@ From [BRIEF.md](BRIEF.md#submission-checklist), as of Oct 19:
 | Public GitHub repo | done: the repo is public |
 | Project page naming the Microsoft and Azure technologies | missing: not drafted (PLAN, Oct 26) |
 | Demo video under 2 minutes, public YouTube or Vimeo URL, no third-party marks or music | missing: this script is a draft; recording Oct 25 to 26 |
-| Working demo link, free to use, live until Nov 10 | missing: only the API (`/api/health`, and `/mcp` for Foundry) deploys from `main`; there is no public viewer to link |
+| Working demo link, free to use, live until Nov 10 | missing: only the API (`/api/health`, and `/mcp` for Foundry) deploys from `main`; the viewer runs locally only, so there is nothing public to link |
 | Built after Sep 29; dependencies used under their licences | on track: the first commit is Oct 13; licences recorded in [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md); re-check at submission for any dependency added since |
 | Submitted by Oct 27, 11:59 pm PT | pending: we submit by 12 pm PT |

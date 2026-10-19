@@ -71,7 +71,7 @@ Full design, agent roles and deployment: [docs/ARCHITECTURE.md](docs/ARCHITECTUR
 | `ninety/match` | Detected events: the one loader the live path uses; it refuses ground truth |
 | `ninety/eval` | Grades detections and detected events against the ground-truth data; the fact-checker evaluation |
 | `schemas` | JSON Schemas: match event, frame, on-screen graphic, agent trace, viewer question and answer |
-| `web` | The broadcast renderer today (`web/render`); the viewer (video, graphics, persona switch) is in pull request #127 |
+| `web` | `web/render`: the broadcast renderer. `web/viewer`: the viewer (video, graphics on the footage, analyst and casual switch, agent trace) |
 | `infra` | `azd` / Bicep for Azure Container Apps |
 
 ## Quick start
@@ -141,11 +141,13 @@ requirement with its status. Working toward **M1, end to end on one clip**.
 truth and render checks in CI ([decision 0001](docs/decisions/0001-synthetic-data.md)); a frozen
 test set and the data contract; the stats engine; the Analyst and fact-checking agent on Foundry
 over MCP (`ninety-slice`, replayable without Azure); the live path from detected events to overlay
-cues, with a confidence gate and a test that it never reads ground truth (`ninety-live`); the Data
+cues, with a confidence gate and a test that it never reads ground truth (`ninety-live`); one clip
+through the whole chain with no Azure (`ninety-e2e`), opened in the viewer, which draws the
+graphics on the footage and switches analyst and casual (local, not yet deployed); the Data
 agent and the event-driven render job; CI, and a deploy of the API on every green `main`.
 
 **Not yet:** events detected from the video (until they land the live path reads a hand-written
-stand-in and says so), so there is no event-level precision or recall yet; the viewer; the
+stand-in and says so), so there is no event-level precision or recall yet; the viewer deployed; the
 multi-agent workflow, Personalizer and audio description (open pull requests); player tags, player
 cam, recaps, translation, the ablation and failure tables. See [docs/PLAN.md](docs/PLAN.md).
 
