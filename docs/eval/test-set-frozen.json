@@ -6,6 +6,13 @@
   "rendered_by": "uv run ninety-dataset --split test --seconds 10, once, locally",
   "render_checks": "docs/eval/render-checks.json (all passed, determinism identical)",
   "contract_check": "uv run ninety-render-meta on runs/test-frozen-cca498c/test, then uv run ninety-validate with the validator of 524ad2f (#96) and of #108: 5 of 5 meet the data contract. meta.json is written from each clip's own clip.json, frames.jsonl and events.jsonl and is outside the digests below, which still match",
+  "storage": {
+    "images_and_clip_json": "renders/test-frozen-cca498c/test/seed<N>/",
+    "frames_events_meta": "truth-test/test-frozen-cca498c/test/seed<N>/",
+    "verified": "2026-10-19: re-downloaded from storage, every clip's frames, events and images sha256 matches the digests below",
+    "truth_test": "a container of its own (#123): training links reach truth, never truth-test",
+    "dataset_v1_meta": "every one of dataset v1's 308 training clips also has meta.json in truth/<run>/train/seed<N>/, beside its labels (uploaded and sha256-verified 2026-10-19)"
+  },
   "seeds": [
     900001,
     900002,
