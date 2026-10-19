@@ -147,3 +147,14 @@ def test_events_file_reads_detected_events_and_refuses_ground_truth(tmp_path):
     with pytest.raises(SystemExit, match="source=vision"):
         e2e.main([str(clip), "--out", str(tmp_path / "c"), "--detections", str(detections), "--frames",
                   "--events-file", str(truth)])
+
+
+def test_auto_picks_vision_once_it_exists_and_the_demo_refuses_ground_truth(monkeypatch):
+    monkeypatch.setattr(e2e, "vision_available", lambda: True)
+    assert e2e.resolve_events("auto", demo=True) == "vision"
+    monkeypatch.setattr(e2e, "vision_available", lambda: False)
+    assert e2e.resolve_events("auto", demo=False) == "stand-in"
+    with pytest.raises(SystemExit, match="--demo refuses"):
+        e2e.resolve_events("auto", demo=True)
+    with pytest.raises(SystemExit, match="--demo refuses"):
+        e2e.resolve_events("stand-in", demo=True)

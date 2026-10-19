@@ -20,7 +20,7 @@ npm run build --prefix web/viewer        # static site in web/viewer/dist; open 
 | Stage | In the bundle | Today |
 |---|---|---|
 | Ingest | `detections.jsonl` | ours-v2's committed run on the frozen test set (`--detect live --weights W` runs RF-DETR) |
-| Interpret | `events.jsonl`, `facts.json` | events: the simulator's, as a stand-in, named on screen until R3's vision events land (`--events vision`); stats from `ninety/intel/stats.py` |
+| Interpret | `events.jsonl`, `facts.json` | events: R3's vision events by default once `ninety.vision.events` exists (`--events auto`); until then the simulator's, as a stand-in named on screen. `--demo` refuses the stand-in; stats from `ninety/intel/stats.py` |
 | Explain | `trace.json` | the Analyst → Fact-checker workflow with the real code checks; offline Analyst, or `--replay` a Foundry recording |
 | Render | `cues.jsonl` | template cues for every pass and shot, one fact-checked insight a minute |
 | Personalize | persona in each cue | casual and analyst |

@@ -10,8 +10,9 @@ Stages (the brief's names), each writing one file in the bundle:
    default is the committed ours-v2 run on the frozen test set, docs/eval/vision-report-v1);
    `--detect live --weights W` runs RF-DETR (ninety.vision.detect, needs `uv sync --group vision`).
 2. Interpret: events, then stats. `--events vision` calls R3's detector of events from the
-   detections. `--events stand-in` (the default until that lands) reads the simulator's events for
-   the clip, and says so in the bundle and on screen: ground truth must leave the live path at M1.
+   detections, and is what the default `--events auto` picks as soon as that module exists. Until
+   then auto falls back to `stand-in`: the simulator's events for the clip, labelled ground truth in
+   the bundle and on screen. `--demo` refuses the stand-in, so it can never reach the demo.
    Stats come from ninety.intel.stats: code computes every number.
 3. Explain: the Analyst and the Fact-checker (ninety.agents.slice.run_workflow), offline: a
    deterministic Analyst writes the claim from the events, and the real code checks gate it. With
@@ -30,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import importlib.util
 import json
 import re
 import shutil
@@ -117,6 +119,19 @@ def vision_events(clip: Clip, detections: list) -> list[dict]:
     except ImportError as e:
         raise SystemExit(f"--events vision needs ninety.vision.events.detect_events ({e})") from e
     return detect_events(detections, clip.meta)
+
+
+def vision_available() -> bool:
+    return importlib.util.find_spec("ninety.vision.events") is not None
+
+
+def resolve_events(choice: str, demo: bool) -> str:
+    """Which event source runs. Vision as soon as it exists; the ground-truth stand-in only when it
+    does not, and never on the demo path (AGENTS.md: nothing on the live path reads ground truth)."""
+    source = ("vision" if vision_available() else "stand-in") if choice == "auto" else choice
+    if demo and source == "stand-in":
+        raise SystemExit("--demo refuses the ground-truth stand-in: use --events vision or --events-file")
+    return source
 
 
 def events_from_file(path: Path) -> list[dict]:
@@ -317,8 +332,9 @@ async def run(args: argparse.Namespace) -> dict:
         events = checked_events(events_from_file(args.events_file))
         events_source = f"vision: {args.events_file.name}"
     else:
-        events = checked_events(EVENT_SOURCES[args.events](clip, detections))
-        events_source = STAND_IN if args.events == "stand-in" else "vision"
+        source = resolve_events(args.events, args.demo)
+        events = checked_events(EVENT_SOURCES[source](clip, detections))
+        events_source = STAND_IN if source == "stand-in" else "vision"
     facts = [f.as_dict() for f in calculate_facts(events)]
     recording = Recording.load(args.replay) if args.replay else None
     claims = await explain(events, clip.meta["seed"], args.plant, recording)
@@ -358,7 +374,9 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--detect", choices=("recorded", "live"), default="recorded")
     ap.add_argument("--detections", type=Path, default=None, help="a detections.jsonl to use (recorded)")
     ap.add_argument("--weights", type=Path, default=None, help="our checkpoint, for --detect live")
-    ap.add_argument("--events", choices=tuple(EVENT_SOURCES), default="stand-in")
+    ap.add_argument("--events", choices=("auto", *EVENT_SOURCES), default="auto",
+                    help="auto: vision once ninety.vision.events exists, else the labelled stand-in")
+    ap.add_argument("--demo", action="store_true", help="the demo path: refuse ground-truth events")
     ap.add_argument("--events-file", type=Path, default=None,
                     help="detected events already written (match_event JSONL, source vision)")
     ap.add_argument("--replay", type=Path, default=None, help="a slice recording to answer for the models")
