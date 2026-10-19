@@ -193,9 +193,14 @@ def pressure_facts(events: Iterable[Mapping]) -> list[Fact]:
     return facts
 
 
-def player_movement_facts(frames: Iterable[Mapping]) -> list[Fact]:
-    """Compute player distance, peak speed, and sprint frames from tracking frames."""
+def player_movement_facts(frames: Iterable[Mapping], restarts: Iterable[int] = ()) -> list[Fact]:
+    """Compute player distance, peak speed, and sprint frames from tracking frames.
+
+    `restarts` are the frames of kickoff events. A kickoff resets everyone to their own half at
+    once (a legal case of the data contract, which the validator's P1 skips too), so the step into
+    a kickoff frame is not movement; every other step counts, uncapped, so a teleport still shows."""
     frames_list = _frames(frames)
+    reset = {int(frame) for frame in restarts}
     if len(frames_list) < 2:
         return []
     by_player: dict[str, list[tuple[float, float, float, str]]] = defaultdict(list)
@@ -213,7 +218,7 @@ def player_movement_facts(frames: Iterable[Mapping]) -> list[Fact]:
         cited: list[int] = []
         for previous, current in zip(samples, samples[1:], strict=False):
             dt = current[0] - previous[0]
-            if dt <= 0:
+            if dt <= 0 or current[3] in reset:
                 continue
             speed_kmh = math.hypot(current[1] - previous[1], current[2] - previous[2]) / dt * 3.6
             distance += speed_kmh / 3.6 * dt
@@ -281,6 +286,7 @@ def calculate_facts(events: Iterable[Mapping], frames: Iterable[Mapping] = ()) -
     frame_list = _frames(frames)
     facts = pass_facts(event_list) + shot_facts(event_list) + pressure_facts(event_list)
     if frame_list:
-        facts += possession_facts(frame_list) + player_movement_facts(frame_list)
+        kickoffs = [int(e["frame"]) for e in event_list if e.get("type") == "kickoff" and "frame" in e]
+        facts += possession_facts(frame_list) + player_movement_facts(frame_list, kickoffs)
     facts += control_vs_chaos(event_list)
     return sorted(facts, key=lambda fact: fact.id)

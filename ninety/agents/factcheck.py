@@ -3,6 +3,10 @@
 A claim passes only if every event it cites exists, every player it names appears in that
 evidence, and every number it states can be read off the evidence: a cited field, a count of
 cited events, or the minute. Anything else is rejected with a reason the writer can act on.
+
+Evidence may also hold computed facts (ninety/intel/stats.py `Fact.as_dict()`: metric, value, unit,
+scope). A cited fact's value counts only when it is written with the fact's unit ("31.2 km/h" for a
+km/h fact), never as a bare number, and a fact scoped to a player (`player:h7...`) cites that player.
 """
 
 from __future__ import annotations
@@ -47,6 +51,9 @@ FOUND = re.compile(
     re.I,
 )
 NUMBER_FIELDS = ("minute", "second", "ball_speed_kmh", "distance_m")
+# The unit a fact must be written with to stand for each event field's kind of number.
+FIELD_UNITS = {"distance_m": "m", "ball_speed_kmh": "km/h"}
+FACT_PLAYER = re.compile(r"^player:(?P<player>[ha](?:[1-9]|1[01]))(?::|$)")
 
 
 @dataclass
@@ -100,7 +107,23 @@ def _roster_ids(known: dict[str, dict], roster: Iterable[Mapping | str] | None) 
     return {str(value) for value in values if value}
 
 
+def _is_fact(item: Mapping) -> bool:
+    return "metric" in item and "unit" in item and "value" in item
+
+
+def _fact_values(evidence: list[dict], unit: str) -> set[float]:
+    return {float(f["value"]) for f in evidence if _is_fact(f) and f["unit"] == unit}
+
+
+def _unit_follows(text: str, end: int, unit: str) -> bool:
+    """Is `unit` written straight after the number ending at `end` ("512 m", "3 frames")?"""
+    return re.match(rf"\s*{re.escape(unit)}(?!\w)", text[end:], re.I) is not None
+
+
 def allowed_numbers(events: list[dict]) -> set[float]:
+    """Numbers a claim may state bare: event fields and counts. A fact's value is not one of them:
+    it needs its unit (see `check`)."""
+    events = [e for e in events if not _is_fact(e)]
     values: set[float] = {float(len(events))}
     for event in events:
         values.update(float(event[name]) for name in NUMBER_FIELDS if name in event)
@@ -145,11 +168,17 @@ def check(
                 for event in evidence
                 if event.get(expected_field) is not None
             }
+            if expected_field in FIELD_UNITS:
+                values |= _fact_values(evidence, FIELD_UNITS[expected_field])
             if value not in values:
                 reasons.append(
                     f"number {match.group()} is not a cited {expected_field}"
                 )
-        elif value not in allowed:
+        elif value not in allowed and not any(
+            float(f["value"]) == value and _unit_follows(claim.text, match.end(), str(f["unit"]))
+            for f in evidence
+            if _is_fact(f)
+        ):
             reasons.append(f"number {match.group()} is not in the cited evidence")
     cited_players = {
         value
@@ -157,6 +186,10 @@ def check(
         for value in (event.get("player"), event.get("receiver"), event.get("intended"),
                       event.get("interceptor"), event.get("deflected_by"))
         if value
+    } | {
+        found.group("player")
+        for fact in evidence
+        if _is_fact(fact) and (found := FACT_PLAYER.match(str(fact.get("scope", ""))))
     }
     named_players = {
         player_id

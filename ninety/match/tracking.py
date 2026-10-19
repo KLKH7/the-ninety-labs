@@ -1,0 +1,97 @@
+"""Where the served matches' players are, frame by frame: what the phone's minimap and the window
+facts read (ninety/intel/window.py).
+
+Until Milestone 1 the positions are the simulator's, so every frame says `source: truth`: a stand-in
+for tracking the video, as the agents read simulator events until then (AGENTS.md, "Ground truth is
+the answer key"). After it, tracked positions replace them under `source: tracked`, and a test keeps
+the live path off `truth`.
+
+Frames keep only what the companion needs (frame, t, the ball's x and y, each player's id, team, x,
+y): the frame schema's required fields, without the ball's height. Like the match events, the
+served matches are simulated when the image is built (`match_server --precompute`), so a request
+never starts a simulation.
+"""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
+
+from ninety.sim.engine import FPS, simulate
+
+FRAMES_DIR = "frames"  # inside NINETY_MATCH_DIR, beside the matches' event files
+SOURCE = "truth"  # the simulator's positions (see the module docstring)
+
+
+def slim(frame: dict, source: str = SOURCE) -> dict:
+    """One engine frame cut to what the companion reads."""
+    ball = frame["ball"]
+    return {
+        "frame": frame["frame"],
+        "t": frame["t"],
+        "source": source,
+        "ball": {"x": ball["x"], "y": ball["y"]},
+        "players": [{"id": p["id"], "team": p["team"], "x": p["x"], "y": p["y"]} for p in frame["players"]],
+    }
+
+
+@dataclass(frozen=True)
+class Track:
+    """One match's frames, oldest first, at the engine's FPS."""
+
+    match: str
+    frames: tuple[dict, ...]
+    restarts: tuple[int, ...] = ()  # kickoff frames: everyone is reset there, which is not movement
+
+    @property
+    def source(self) -> str:
+        sources = {f.get("source", SOURCE) for f in self.frames}
+        if len(sources) != 1:
+            raise ValueError(f"{self.match}: frames mix sources {sorted(sources)}")
+        return sources.pop()
+
+    @property
+    def roster(self) -> tuple[str, ...]:
+        """Every player in the match's frames."""
+        return tuple(sorted({p["id"] for f in self.frames for p in f["players"]}))
+
+    @property
+    def duration(self) -> float:
+        return float(self.frames[-1]["t"]) if self.frames else 0.0
+
+    def between(self, t_from: float, t_to: float) -> list[dict]:
+        """The frames from t_from to t_to, both included."""
+        return [f for f in self.frames if t_from <= f["t"] <= t_to]
+
+
+def kickoffs(events: list[dict]) -> tuple[int, ...]:
+    return tuple(int(e["frame"]) for e in events if e["type"] == "kickoff")
+
+
+def from_match(match: str, run) -> Track:
+    """A Track from a simulated match (ninety.sim.engine.Match)."""
+    return Track(match, tuple(slim(f) for f in run.frames), kickoffs(run.events))
+
+
+def write(out: Path, track: Track) -> Path:
+    path = out / FRAMES_DIR / f"{track.match}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    body = {"restarts": list(track.restarts), "frames": list(track.frames)}
+    path.write_text(json.dumps(body, separators=(",", ":")))
+    return path
+
+
+@lru_cache(maxsize=4)
+def track(match: str, seed: int, minutes: float, match_dir: str = "") -> Track:
+    """A served match's frames: read from match_dir when it holds them (the image's precomputed
+    matches, ninety/mcp/match_server.py), else simulated."""
+    stored = Path(match_dir) / FRAMES_DIR / f"{match}.json" if match_dir else None
+    if stored and stored.exists():
+        body = json.loads(stored.read_text())
+        return Track(match, tuple(body["frames"]), tuple(body["restarts"]))
+    return from_match(match, simulate(seed, minutes))
+
+
+__all__ = ["FPS", "SOURCE", "Track", "from_match", "kickoffs", "slim", "track", "write"]

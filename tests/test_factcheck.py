@@ -197,3 +197,50 @@ def test_found_about_a_tackle_or_pressure_is_not_read_as_a_pass():
     failed = {**tackle, "id": "e3", "type": "pass", "receiver": None, "intended": "a9", "outcome": "fail"}
     known["e3"] = failed
     assert not check(Claim("a4 finds h9.", ["e1", "e3"]), known).ok
+
+
+# Computed facts as evidence (the Companion's window facts, ninety/intel/window.py).
+SPEED = {"id": "peak_speed:player_h7_window_0.00-95.20", "metric": "peak_speed", "value": 27.3,
+         "unit": "km/h", "scope": "player:h7:window:0.00-95.20", "source_ids": ["frames:0-2380"]}
+RUN = {"id": "distance_run:player_h7_window_0.00-95.20", "metric": "distance_run", "value": 151.0,
+       "unit": "m", "scope": "player:h7:window:0.00-95.20", "source_ids": ["frames:0-2380"]}
+FACTS = {f["id"]: f for f in (SPEED, RUN)}
+
+
+def test_a_cited_facts_value_with_its_unit_passes():
+    assert check(Claim("h7's top speed so far is 27.3 km/h.", [SPEED["id"]]), FACTS).ok
+    assert check(Claim("h7 has covered 151 m so far.", [RUN["id"]]), FACTS).ok
+
+
+def test_a_facts_value_needs_its_unit():
+    verdict = check(Claim("h7 has hit 27.3 so far.", [SPEED["id"]]), FACTS)
+    assert not verdict.ok and verdict.reasons == ["number 27.3 is not in the cited evidence"]
+
+
+def test_a_facts_value_with_another_unit_is_rejected():
+    verdict = check(Claim("h7 has covered 27.3 m.", [SPEED["id"]]), FACTS)
+    assert not verdict.ok and verdict.reasons == ["number 27.3 is not a cited distance_m"]
+    assert not check(Claim("h7 is at 151 km/h.", [RUN["id"], SPEED["id"]]), FACTS).ok
+
+
+def test_a_number_a_cited_fact_does_not_hold_is_rejected():
+    verdict = check(Claim("h7 is running at 50 km/h.", [SPEED["id"]]), FACTS)
+    assert not verdict.ok and verdict.reasons == ["number 50 is not a cited ball_speed_kmh"]
+
+
+def test_a_facts_unit_counts_only_straight_after_its_number():
+    # "frames" is the fact's unit, but here it follows another number.
+    sprints = {"id": "s", "metric": "sprint_frames", "value": 3.0, "unit": "frames", "scope": "player:h7"}
+    assert check(Claim("h7 sprinted for 3 frames.", ["s"]), {"s": sprints}).ok
+    assert not check(Claim("h7 sprinted 3 times in 40 frames.", ["s"]), {"s": sprints}).ok
+
+
+def test_a_fact_scoped_to_a_player_cites_only_that_player():
+    assert check(Claim("h7 has covered 151 m so far.", [RUN["id"]]), FACTS).ok
+    verdict = check(Claim("a7 has covered 151 m so far.", [RUN["id"]]), FACTS)
+    assert not verdict.ok and verdict.reasons == ["player a7 does not appear in the cited evidence"]
+
+
+def test_a_fact_is_not_counted_as_an_event():
+    # Two cited facts are not "2" of anything a claim may state.
+    assert not check(Claim("h7 has 2 numbers.", [RUN["id"], SPEED["id"]]), FACTS).ok

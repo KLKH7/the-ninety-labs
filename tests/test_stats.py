@@ -84,6 +84,28 @@ def test_movement_by_hand_and_never_capped():
     assert f["peak_speed:player_h1"].source_ids == ("frames:0-3",)
 
 
+def test_a_kickoff_reset_is_not_movement():
+    # Everyone is put back in his own half at a kickoff (a legal case of the data contract), here
+    # 50 m in one frame. Counted, it was a 4,500 km/h "peak speed".
+    frames = [_frame(0, h1=(0, 0)), _frame(1, h1=(0.4, 0)), _frame(2, h1=(50.4, 0)), _frame(3, h1=(50.8, 0))]
+    f = _by_id(player_movement_facts(frames, restarts=[2]))
+    assert f["distance_run:player_h1"].value == 0.8
+    assert f["peak_speed:player_h1"].value == 36
+    # Only the step into the kickoff frame is skipped: the same jump anywhere else still shows.
+    assert _by_id(player_movement_facts(frames, restarts=[3]))["peak_speed:player_h1"].value == 4500
+
+
+def test_no_player_outruns_the_contract_over_a_clip_with_goals():
+    # Seed 7's first five minutes have two kickoffs after goals (frames 1306 and 3920), so the case
+    # this guards is in the data (lesson 41). Before the fix h7's peak speed read 4,739 km/h.
+    from ninety.validate import MAX_PLAYER_MPS
+
+    match = simulate(7, 5)
+    assert [e["frame"] for e in match.events if e["type"] == "kickoff"][1:], "no kickoff after a goal"
+    peaks = [f for f in calculate_facts(match.events, match.frames) if f.metric == "peak_speed"]
+    assert len(peaks) == 22 and max(f.value for f in peaks) <= MAX_PLAYER_MPS * 3.6
+
+
 def test_pressure_reports_zero_for_a_team_without_pressure():
     f = _by_id(pressure_facts([_event("p1", "pressure", "home")]))
     assert f["pressure_events:team_home"].value == 1

@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/KLKH7/the-ninety-labs/schemas/minimap.schema.json",
+  "title": "Minimap",
+  "description": "A clip's positions for the phone companion's minimap (GET /api/minimap/{clip}), downsampled to fps, in pitch metres to 0.1 m (x from 0 to 105, y from 0 to 68). The phone shows the frame at the laptop's clock. source says where the positions come from: the ground-truth data (before Milestone 1) or tracking the video.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["clip", "source", "fps", "roster", "frames"],
+  "properties": {
+    "clip": { "type": "string" },
+    "source": { "type": "string", "enum": ["truth", "tracked"] },
+    "fps": { "type": "integer", "minimum": 1, "maximum": 25 },
+    "roster": { "type": "array", "items": { "type": "string", "pattern": "^[ha]([1-9]|1[01])$" } },
+    "frames": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["t", "ball", "players"],
+        "properties": {
+          "t": { "type": "number", "minimum": 0 },
+          "ball": { "$ref": "#/$defs/xy" },
+          "players": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "prefixItems": [
+                { "type": "string", "pattern": "^[ha]([1-9]|1[01])$" },
+                { "type": "number" },
+                { "type": "number" }
+              ],
+              "minItems": 3,
+              "maxItems": 3,
+              "description": "[player id, x, y]"
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "xy": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2 }
+  }
+}

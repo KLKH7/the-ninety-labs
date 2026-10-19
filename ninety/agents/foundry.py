@@ -129,9 +129,10 @@ def analyst_agent(client: FoundryChatClient) -> Agent:
 
 def build_agents(client: FoundryChatClient) -> list[Agent]:
     """Every agent we publish, built exactly as the live workflow builds them."""
+    from ninety.agents.companion import companion_agent
     from ninety.agents.judge import judge_agent
 
-    return [analyst_agent(client), judge_agent(client)]
+    return [analyst_agent(client), judge_agent(client), companion_agent(client)]
 
 
 def chat_client(credential=None) -> FoundryChatClient:
