@@ -13,7 +13,7 @@
   "v3 seeds replaced": "13 15 25 26 28 34 54 56 57 63 101 105 110 122 2033 3003 3005 3013 3016 3030 3037 3042 4004 4015 4020 4027 4032 4033 4038 4047: the ball rests behind the boards, labelled visible at renderer 0.3.1; re-rendered at cca498c (v3boards, v3boards-set)",
   "v3boards seeds not used": "2033 3003 3005 3013 3016 3030 3037 3042 4004 4015 4020 4027 4032 4033 4038 4047: launched without v3's overrides; v3boards-set has them"
  },
- "contract_check": "pending #108's validator on main",
+ "contract_check": "308 of 308 meet the data contract: meta.json backfilled with ninety-render-meta, each clip validated with ninety.validate at 0dd5190 (main with #108), one process",
  "by_run": {
   "v3": 248,
   "topup1": 30,
