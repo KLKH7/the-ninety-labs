@@ -7,6 +7,7 @@ engine change can take it away (lessons 47 and 78). Each test fails without the 
 
 import asyncio
 import json
+import textwrap
 import warnings
 from pathlib import Path
 
@@ -24,7 +25,9 @@ from ninety.agents.ledger import InMemoryLedger
 from ninety.agents.replay import ReplayMismatch, Turn, WorkflowRecording, judge_prompt
 from ninety.agents.slice import MAX_REWRITES, StaleRecording
 from ninety.agents.workflow import MAX_MOMENTS_PER_MINUTE, run_workflow
+from ninety.match import detected
 from ninety.match.facts import compact
+from ninety.mcp import match_server
 
 MINUTE = 2
 
@@ -181,22 +184,71 @@ def test_detected_events_reach_the_analyst_inline():
     run(Models.scripted({"tactician": [reply(true_claim(MAIN))]}, analyst=analyst),
         events=detected, inline_events=True)
     (prompt,) = asked
-    assert "EVENTS: " in prompt and json.dumps(KNOWN[MAIN], separators=(",", ":")) in prompt
+    main = next(e for e in detected if e["id"] == MAIN)
+    assert "EVENTS: " in prompt and json.dumps(compact(main), separators=(",", ":")) in prompt
     assert LATER["id"] not in prompt  # only the minute's
 
 
 def test_events_from_a_file_must_be_detected(tmp_path):
     path = tmp_path / "detected.jsonl"
     path.write_text("".join(json.dumps({**e, "source": "vision", "confidence": 0.8}) + "\n" for e in EVENTS))
-    assert [e["id"] for e in workflow.detected_events(path)] == [e["id"] for e in EVENTS]
-    # One case per half of the guard (lesson 73): the ground truth even with a confidence, then a
-    # detection without one.
+    events, match, inline = workflow.detected_events(path)
+    assert [e["id"] for e in events] == [e["id"] for e in sorted(EVENTS, key=lambda e: e["t"])]
+    assert (match, inline) == ("detected", True)
+    # One case per half of the loader's guard (lesson 73): the ground truth even with a
+    # confidence, then a detection without one.
     path.write_text(json.dumps({**EVENTS[0], "confidence": 0.9}) + "\n")
-    with pytest.raises(ValueError, match="detected events"):
+    with pytest.raises(ValueError, match="never ground truth"):
         workflow.detected_events(path)
-    path.write_text(json.dumps({**EVENTS[0], "source": "vision"}) + "\n")  # no confidence
-    with pytest.raises(ValueError, match="detected events"):
+    path.write_text(json.dumps({**EVENTS[0], "source": "vision"}) + "\n")
+    with pytest.raises(ValueError, match="needs a confidence"):
         workflow.detected_events(path)
+
+
+def test_a_clip_the_mcp_server_serves_is_read_through_the_tools():
+    path = match_server.DETECTED[detected.M1_CLIP]()
+    events, match, inline = workflow.detected_events(path)
+    assert (match, inline) == (detected.M1_CLIP, False) and events
+
+
+def test_a_claim_on_an_unsure_detection_goes_back_and_a_confident_rewrite_airs():
+    sure, unsure = PASSES[0], PASSES[1]
+    events = [{**e, "source": "vision", "confidence": 0.3 if e is unsure else 0.9} for e in EVENTS]
+    ledger = InMemoryLedger()
+    evidence = {sure["id"]: [sure["id"], unsure["id"]]}
+    result = run(models(analyst=(picks(sure["id"], evidence=evidence),),
+                        tactician=[reply(true_claim(unsure["id"])), reply(true_claim(sure["id"]))]),
+                 events=events, ledger=ledger)
+    versions = history(ledger, f"m-{sure['id']}")
+    assert [v["status"] for v in versions] == ["draft", "held", "draft", "verified"]
+    assert versions[1]["category"] == "low_confidence"
+    assert result.reviews[0].aired == true_claim(sure["id"])
+
+
+def test_an_unsure_detection_with_no_graphic_on_air_is_no_moment():
+    unsure = PASSES[0]
+    events = [{**e, "source": "vision", "confidence": 0.3 if e is unsure else 0.9} for e in EVENTS]
+    result = run(models(analyst=(picks(unsure["id"]),)), events=events)
+    assert result.moments == []
+    assert any("no graphic on air" in s.detail for s in result.trace if s.action == "drop")
+
+
+def test_the_workflow_on_detected_events_reads_no_ground_truth():
+    # M1 guard (tests/test_live_reads_no_truth.py), run on the workflow with scripted models.
+    from tests.test_live_reads_no_truth import run_live_path, truth_reads
+
+    script = textwrap.dedent("""
+        from ninety.agents import workflow
+        from ninety.agents.contracts import Models
+        standin = detected.FIXTURES / "detected-standin-seed900001.jsonl"
+        events, match, inline = workflow.detected_events(standin)
+        moment = json.dumps({"moments": [{"main_event": sure["id"], "evidence": [sure["id"]]}]})
+        models = Models.scripted({"analyst": [moment], "tactician": [asyncio.run(ask(""))]}, judge=judge)
+        minute = int(sure["t"] // 60) + 1
+        out = asyncio.run(workflow.run_workflow(models, events, minute, match, inline_events=inline))
+        assert [c for c in out.cues if c["kind"] == "insight"], out.trace
+    """)
+    assert truth_reads(run_live_path(script)) == []
 
 
 # Tactician, Challenger, fact-checker, Producer -------------------------------------------------
@@ -330,16 +382,16 @@ def test_a_challenger_failure_is_skipped():
 
     result = run(Models.scripted({"analyst": [picks(MAIN)], "tactician": [reply(true_claim(MAIN))]},
                                  challenger=challenger))
-    assert result.reviews[0].aired == true_claim(MAIN) and ("challenger", "fail") in steps(result)
+    assert result.reviews[0].aired == true_claim(MAIN) and ("challenger", "skip") in steps(result)
 
 
 def test_the_trace_runs_in_order_and_says_whose_claim_aired():
     result = run(models(tactician=[reply(true_claim(MAIN))] * 2), plant=True)
     assert steps(result) == [
         ("producer", "templates"), ("analyst", "pick"),
-        ("tactician", "plant"), ("tactician", "draft"), ("challenger", "agree"),
+        ("tactician", "tamper"), ("tactician", "draft"), ("challenger", "agree"),
         ("fact_checker", "reject"), ("tactician", "rewrite"),
-        ("judge", "supported"), ("fact_checker", "verify"), ("producer", "air"),
+        ("judge", "verify"), ("fact_checker", "verify"), ("producer", "air"),
     ]
     assert result.trace[-1].detail == f"the tactician's claim replaces cue-{MAIN}-analyst"
 

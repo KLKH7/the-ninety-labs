@@ -18,8 +18,8 @@ The graph (Agent Framework `WorkflowBuilder`), as docs/ARCHITECTURE.md draws it:
    it is skipped.
 5. The fact-checker checks both claims with the slice's `fact_check`: the code checks, then the
    confidence gate, then the Judge. A claim may cite only its moment's evidence. A rejected
-   claim goes back to its author with the reasons, at most MAX_REWRITES times; a held one is not
-   rewritten.
+   claim goes back to its author with the reasons, at most MAX_REWRITES times, and so does one
+   held on an unsure detection; one held because the check could not be done is not.
 6. Producer.air (code) airs the Tactician's claim if it is verified, else the Challenger's if
    that is, else the template stays. The insight replaces the template in its slot.
 
@@ -53,14 +53,14 @@ from ninety.agents.contracts import (
     Moment,
     Review,
     TraceStep,
-    schema_validator,
     status_for,
 )
 from ninety.agents.cues import TEMPLATE_TYPES, template_cues
-from ninety.agents.factcheck import Claim, Verdict
+from ninety.agents.factcheck import Claim, Verdict, confidence_gate
 from ninety.agents.ledger import InMemoryLedger, Ledger, Record, load_match
 from ninety.agents.replay import Replayer, ReplayMismatch, Turn, WorkflowRecording, judge_prompt
-from ninety.agents.slice import CLOCK_RULE, MAX_REWRITES, Gate, StaleRecording, fact_check, open_gate, tamper
+from ninety.agents.slice import CLOCK_RULE, MAX_REWRITES, Gate, StaleRecording, fact_check, tamper
+from ninety.match import detected
 from ninety.match.facts import AGENT_TYPES, compact, match_events
 from ninety.mcp import match_server
 
@@ -74,10 +74,6 @@ MAX_MOMENTS_PER_MINUTE = 3
 # has moved past; its claim is held and the template stays. The Judge has its own timeout.
 MODEL_TIMEOUT_SECONDS = 60.0
 INSIGHT_PERSONA = "analyst"  # the insight replaces this persona's template; the Personalizer does the rest
-EVENT = schema_validator("match_event")
-OPTIONAL_EVENT_FIELDS = (
-    "receiver", "intended", "interceptor", "deflected_by", "end_x", "end_y", "outcome", "ball_speed_kmh",
-)
 
 MOMENT_ANALYST_INSTRUCTIONS = """You are the Analyst for a football broadcast. The request names a
 match (for example seed7) and a minute. Use the match tools, passing that match id, to read the
@@ -161,10 +157,12 @@ def parse_challenge(text: str) -> Claim | None:
     return claim
 
 
-def parse_moments(text: str, window: dict[str, dict], minute: int) -> tuple[list[Moment], list[str]]:
+def parse_moments(
+    text: str, window: dict[str, dict], minute: int, on_air: set[str]
+) -> tuple[list[Moment], list[str]]:
     """The Analyst's moments that stand, and why each other one was dropped. Every id must be an
-    event of the minute; the main event must be one a template airs for; at most
-    MAX_MOMENTS_PER_MINUTE, in the Analyst's order."""
+    event of the minute; the main event must have a template graphic on air (`on_air`), the one
+    its insight replaces; at most MAX_MOMENTS_PER_MINUTE, in the Analyst's order."""
     picks = _json(text).get("moments")
     if not isinstance(picks, list):
         raise ValueError("no moments list")
@@ -179,6 +177,8 @@ def parse_moments(text: str, window: dict[str, dict], minute: int) -> tuple[list
             dropped.append(f"{main or '?'}: not events of minute {minute}: {', '.join(unknown) or 'no list'}")
         elif window[main]["type"] not in TEMPLATE_TYPES:
             dropped.append(f"{main}: a {window[main]['type']} has no graphic to replace")
+        elif main not in on_air:
+            dropped.append(f"{main}: no graphic on air to replace (detected too unsure to air)")
         elif any(m.main_event == main for m in moments):
             dropped.append(f"{main}: already a moment")
         elif len(moments) == MAX_MOMENTS_PER_MINUTE:
@@ -186,6 +186,17 @@ def parse_moments(text: str, window: dict[str, dict], minute: int) -> tuple[list
         else:
             moments.append(Moment(f"m-{main}", main, evidence, minute))
     return moments, dropped
+
+
+# The trace's actions for a verdict: the words the viewer's trace panel reads (with tamper, draft,
+# skip, air and handoff).
+ACTION = {"verified": "verify", "rejected": "reject", "held": "hold"}
+
+
+def sent_back(verdict: Verdict) -> bool:
+    """A claim goes back to its author when it is wrong, or rests on an unsure detection (the
+    writer may cite a confident one), as the slice does; never when the check itself failed."""
+    return status_for(verdict) == "rejected" or verdict.category == "low_confidence"
 
 
 # ---------------------------------------------------------------------------------------------
@@ -337,7 +348,8 @@ class Analyst(Executor):
         moments: list[Moment] = []
         if reply is not None:
             try:
-                moments, dropped = parse_moments(reply, window, pick.minute)
+                on_air = {e for c in run.cues for e in c["evidence"]}
+                moments, dropped = parse_moments(reply, window, pick.minute, on_air)
             except (ValueError, AttributeError) as e:
                 error = f"bad reply: {e}"
             else:
@@ -370,7 +382,7 @@ class Tactician(Executor):
     ) -> None:
         run, case, started = self.run, msg.case, time.perf_counter()
         draft = case.tactician
-        rewrite = draft if draft.status == "rejected" else None
+        rewrite = draft if draft.attempt else None  # it is only called again when sent back
         reply, error = await _call(run.models.tactician, tactician_prompt(case.moment, run.known, rewrite))
         claim = None
         if reply is not None:
@@ -392,7 +404,7 @@ class Tactician(Executor):
             return
         if run.plant and case.moment == run.moments[0] and draft.attempt == 0:
             claim = tamper(claim)
-            run.step("tactician", case.moment.id, "plant", started, "draft tampered on purpose (--plant)")
+            run.step("tactician", case.moment.id, "tamper", started, "draft tampered on purpose (--plant)")
         draft.claim, draft.attempt, draft.status, draft.verdict = claim, draft.attempt + 1, "draft", None
         await run.write_claim(case, draft)
         run.step("tactician", case.moment.id, "rewrite" if rewrite else "draft", started,
@@ -421,9 +433,10 @@ class Challenger(Executor):
                 alternative = parse_challenge(reply)
             except (ValueError, AttributeError) as e:
                 error = f"bad reply: {e}"
-        if error:
-            run.step("challenger", case.moment.id, "fail",
-                     started, f"{error}; " + ("the rejection stands" if rewrite else "skipped"))
+        if error and rewrite:
+            run.step("challenger", case.moment.id, "fail", started, f"{error}; the rejection stands")
+        elif error:
+            run.step("challenger", case.moment.id, "skip", started, error)
         elif alternative is None:
             run.step("challenger", case.moment.id, "withdraw" if rewrite else "agree", started)
         else:
@@ -458,7 +471,7 @@ class FactChecker(Executor):
             started = time.perf_counter()
             checked = await fact_check(draft.claim, scope, run.models.judge, run.gate)
             if checked.judge_seconds is not None:
-                run.step("judge", case.moment.id, "supported" if checked.verdict.ok else "not supported",
+                run.step("judge", case.moment.id, ACTION[status_for(checked.verdict)],
                          time.perf_counter() - checked.judge_seconds, checked.verdict.category or "")
             draft.verdict, draft.status = checked.verdict, status_for(checked.verdict)
             await run.write_claim(case, draft)
@@ -466,18 +479,17 @@ class FactChecker(Executor):
             telemetry.record_fact_check(
                 draft.attempt, draft.status, draft.claim.evidence, checked.verdict.reasons
             )
-            if draft.status == "rejected" and draft.attempt <= MAX_REWRITES:
-                run.step("fact_checker", case.moment.id, "reject", started,
+            if sent_back(draft.verdict) and draft.attempt <= MAX_REWRITES:
+                run.step("fact_checker", case.moment.id, ACTION[draft.status], started,
                          f"back to the {draft.author}: {reasons}")
                 author = ToTactician if draft.author == "tactician" else ToChallenger
                 await ctx.send_message(author(case))
                 return
-            action = {"verified": "verify", "held": "hold", "rejected": "reject"}[draft.status]
-            if draft.status == "rejected":
+            if sent_back(draft.verdict):
                 detail = f"{draft.author}'s claim, out of rewrites: {reasons}"
             else:
                 detail = f"{draft.author}'s claim" + (f": {reasons}" if reasons else "")
-            run.step("fact_checker", case.moment.id, action, started, detail)
+            run.step("fact_checker", case.moment.id, ACTION[draft.status], started, detail)
         await ctx.send_message(ToProducer(case))
 
 
@@ -554,7 +566,7 @@ async def run_workflow(
     live: bool = False,
     inline_events: bool = False,
     ledger: Ledger | None = None,
-    gate: Gate = open_gate,
+    gate: Gate = confidence_gate,
 ) -> Result:
     """One minute through the workflow. `events` are full match events (simulated or detected);
     the agents see them compacted, and claims are checked against those."""
@@ -596,20 +608,14 @@ def simulated_events(seed: int, minutes: float) -> list[dict]:
     return agent_events([dict(e) for e in match_events(seed, minutes)])
 
 
-def detected_events(path: Path) -> list[dict]:
-    """Detected events from a JSON-lines file: each one meets the match event schema, comes from
-    vision with a confidence, never from the ground truth (AGENTS.md: nothing on the live path
-    reads it)."""
-    events = []
-    for n, line in enumerate(Path(path).read_text().splitlines(), 1):
-        if not line.strip():
-            continue
-        event = json.loads(line)
-        EVENT.validate(event)
-        if event["source"] != "vision" or event.get("confidence") is None:
-            raise ValueError(f"{path}:{n}: --events takes detected events (source vision, with a confidence)")
-        events.append({**dict.fromkeys(OPTIONAL_EVENT_FIELDS), "player": None, **event})
-    return agent_events(events)
+def detected_events(path: Path) -> tuple[list[dict], str, bool]:
+    """Detected events from a file, through the one loader that refuses ground truth
+    (ninety/match/detected.py), with the match id the Analyst asks for and whether it needs them
+    inline: a clip the MCP server serves is read through the tools like any other match."""
+    events = agent_events(detected.load(path))
+    served = next((m for m, where in match_server.DETECTED.items()
+                   if Path(where()).resolve() == Path(path).resolve()), None)
+    return events, served or Path(path).stem, served is None
 
 
 # ---------------------------------------------------------------------------------------------
@@ -771,7 +777,7 @@ def main() -> None:
         from ninety.agents.foundry import RegistryDrift
 
         if args.events:
-            events, match, inline, seed = detected_events(args.events), args.events.stem, True, None
+            (events, match, inline), seed = detected_events(args.events), None
         else:
             match, inline, seed = match_server.match_id(args.seed), False, args.seed
             if match not in match_server.MATCHES or args.minutes != match_server.MINUTES:
