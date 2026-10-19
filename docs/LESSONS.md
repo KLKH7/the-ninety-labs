@@ -841,3 +841,17 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `az ad app federated-credential list --id "$CLIENT_ID" --query "[].subject"` shows
   every subject with the same prefix; the setup is done only when the first approved
   `agents-live` run passes `azure/login`.
+
+### 94. A legal exception in the contract is an exception in every reader of the same data
+- **What happened:** after a goal the kickoff puts every player back in his own half in one frame.
+  The data contract allows it, and the validator's speed check and the late-drop report both skip
+  it. The stats engine did not: `player_movement_facts` counted the reset as running, so seed 7's
+  h7 had a 4,739 km/h peak speed and 52 m of extra distance in the Ledger's facts. No test failed,
+  because the movement tests were built by hand and never contained a kickoff. It came to light
+  when the phone companion first showed the number.
+- **Rule:** when the contract makes an exception (a kickoff reset, a dead ball being replaced),
+  every computation over the same frames applies it in the same place, and one shared function
+  (`stats.player_steps`) decides which steps count as movement.
+- **Check:** `tests/test_stats.py::test_no_player_outruns_the_contract_over_a_clip_with_goals`
+  runs on seed 7, which has two kickoffs after goals, and holds every player's peak speed under
+  the validator's limit. It fails on the old code.
