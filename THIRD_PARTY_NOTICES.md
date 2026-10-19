@@ -65,11 +65,10 @@ These come in with the vision group under other permissive licences, all within 
 
 ## Every locked dependency
 
-All 179 packages in `uv.lock`, with the licence their published metadata gives, written
-one way per licence. Where the metadata gives none, the licence was read from the wheel's
-metadata or its bundled licence file: azure-core and azure-core-tracing-opentelemetry (MIT),
-playwright (Apache-2.0), faster-coco-eval and torch-hungarian (Apache-2.0), and the NVIDIA wheels
-(NVIDIA proprietary, free to redistribute; Linux only, under PyTorch in the `vision` group).
+All 181 packages in `uv.lock`, with the licence their published metadata gives, written
+one way per licence. Ten publish no licence on PyPI; how each was checked from its wheel is in
+[Packages that publish no licence](#packages-that-publish-no-licence). The NVIDIA wheels (free to
+redistribute) are Linux only and come in with PyTorch in the `vision` group.
 `tests/test_third_party_notices.py` fails if a locked package is missing here or a licence is
 outside the rule in `AGENTS.md`.
 
@@ -111,6 +110,7 @@ outside the rule in `AGENTS.md`.
 | cuda-toolkit | 13.0.3.0 | NVIDIA proprietary |
 | cycler | 0.12.1 | BSD |
 | defusedxml | 0.7.1 | PSF-2.0 |
+| execnet | 2.1.2 | MIT |
 | faster-coco-eval | 1.8.0 | Apache-2.0 |
 | filelock | 4.2.0 | MIT |
 | filetype | 1.2.0 | MIT |
@@ -208,6 +208,7 @@ outside the rule in `AGENTS.md`.
 | pyjwt | 2.15.1 | MIT |
 | pyparsing | 3.3.3 | MIT |
 | pytest | 9.1.1 | MIT |
+| pytest-xdist | 3.8.0 | MIT |
 | python-dateutil | 2.9.0.post0 | Apache-2.0 OR BSD-3-Clause |
 | python-dotenv | 1.2.4 | BSD-3-Clause |
 | python-multipart | 0.0.32 | Apache-2.0 |
@@ -254,6 +255,21 @@ outside the rule in `AGENTS.md`.
 | vernier | 0.5.4 | MIT OR Apache-2.0 |
 | wrapt | 2.5.1 | BSD-2-Clause |
 | yarl | 1.25.1 | Apache-2.0 |
+
+## Packages that publish no licence
+
+Ten of the packages above publish no licence on PyPI (no licence expression, field or classifier,
+checked against PyPI's metadata for the locked version on 2026-10-19), so each was read from the
+locked wheel itself, its metadata and its bundled licence file:
+
+| Package | What the wheel says | Recorded as |
+|---|---|---|
+| azure-core, azure-core-tracing-opentelemetry | `License-Expression: MIT`; LICENSE is Microsoft's MIT licence | MIT |
+| playwright | `License-Expression: Apache-2.0`; LICENSE is Apache 2.0 | Apache-2.0 |
+| faster-coco-eval, torch-hungarian | no expression; the bundled LICENSE is Apache 2.0 | Apache-2.0 |
+| nvidia-cuda-runtime, nvidia-cudnn-cu13, nvidia-nvshmem-cu13 | `License-Expression: LicenseRef-NVIDIA-Proprietary`; License.txt is NVIDIA's licence agreement | NVIDIA proprietary |
+| nvidia-nccl-cu13 | `License-Expression: LicenseRef-NVIDIA-Proprietary`, though its License.txt is a BSD-style notice | NVIDIA proprietary (the metadata, the stricter of the two) |
+| cuda-toolkit | a 2.5 KB meta-package with no code, no licence field and no licence file; it only requires the NVIDIA libraries | NVIDIA proprietary, with the libraries it installs |
 
 ## Bundled inside dependencies' wheels
 
