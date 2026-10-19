@@ -40,10 +40,11 @@ and only when the clip's own frames show that play from beyond the cut is still 
 
 - C7: a pass with no later on-ball event in the clip, which nobody has held since it was played,
   and whose last frame's motion, carried on in a straight line, passes within `NEAR_M` of its end
-  point ahead of it;
+  point ahead of it; or a pass struck on the clip's last frame, none of whose flight is in the clip;
 - C8: an interception or goal with no pass or shot before it in the clip, and the ball loose and
-  moving from the first frame up to it (moving: more than the two roundings of a position allow,
-  `2 * POSITION_PRECISION_M` a frame, so a ball at rest is not a pass in flight);
+  moving from the first frame up to it (moving: farther than rounding alone can move a ball at
+  rest, `2 * sqrt(3) * POSITION_PRECISION_M` a frame, about 1.7 mm, so a ball at rest is not a
+  pass in flight);
 - C3: a substitution with no event before it in the clip, nobody holding the ball from the first
   frame up to it, and no open play after it before a restart (Law 3);
 - P3: a window whose first event is a restart, with nobody holding the ball before it, opened on
