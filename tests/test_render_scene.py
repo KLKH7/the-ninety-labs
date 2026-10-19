@@ -13,6 +13,9 @@ from ninety.render.scene import (
     body_parts,
     crowded_start,
     drawn_ball,
+    in_penalty_area,
+    keeper_busy,
+    keeper_start,
     parts_box,
     project_keypoints,
     sample_looks,
@@ -222,6 +225,50 @@ def test_crowded_window_on_a_simulated_match_hides_the_ball_more_than_average():
     assert window > overall
 
 
+def _keeper_frames(windows: list[tuple[str, tuple[float, float]]], n: int) -> list[dict]:
+    """n frames per window: the home keeper's action and where the ball is."""
+    return [
+        {"ball": {"x": bx, "y": by, "z": 0.0},
+         "players": [{"id": "h1", "role": "GK", "x": 2.0, "y": 34.0, "action": action},
+                     {"id": "h5", "role": "LB", "x": 20.0, "y": 50.0, "action": "foot"}]}
+        for action, (bx, by) in windows
+        for _ in range(n)
+    ]
+
+
+def test_the_keeper_window_is_the_one_where_a_keeper_handles_or_dives():
+    n = 50
+    # First window: the ball in the box but the keeper only stands. Second: he dives.
+    frames = _keeper_frames([("stand", (8.0, 34.0)), ("dive", (60.0, 34.0))], n)
+    assert keeper_start(frames, n, 0, n, step=n) == n
+    # An outfield player's touch is not a keeper's.
+    frames = _keeper_frames([("stand", (60.0, 34.0)), ("stand", (8.0, 34.0))], n)
+    frames[10]["players"][1]["action"] = "hands"
+    assert keeper_start(frames, n, 0, n, step=n) == n
+
+
+def test_with_no_keeper_action_the_ball_in_a_penalty_area_decides():
+    n = 50
+    frames = _keeper_frames([("stand", (52.5, 34.0)), ("stand", (95.0, 40.0))], n)
+    assert keeper_start(frames, n, 0, n, step=n) == n
+
+
+def test_the_penalty_area_is_law_one_size():
+    assert in_penalty_area({"x": 16.5, "y": 34.0 + 20.16})
+    assert not in_penalty_area({"x": 16.6, "y": 34.0})
+    assert not in_penalty_area({"x": 5.0, "y": 34.0 + 20.2})
+    assert in_penalty_area({"x": 105.0 - 16.5, "y": 34.0 - 20.16})
+
+
+def test_keeper_window_on_a_simulated_match_is_busier_than_average():
+    m = simulate(8, 3)
+    n = 100
+    s = keeper_start(m.frames, n, 50, len(m.frames) - n - 1)
+    window = sum(keeper_busy(f) for f in m.frames[s : s + n]) / n
+    overall = sum(keeper_busy(f) for f in m.frames) / len(m.frames)
+    assert window > overall
+
+
 def test_ball_radius_is_regulation():
     assert 0.105 <= BALL_RADIUS <= 0.112
 
@@ -279,3 +326,14 @@ def test_a_header_moves_the_head_toward_the_ball():
     base = next(p for p in standing if p["n"] == "head")["a"]
     ball = (0.3, 0.1, 1.5 + BALL_RADIUS)
     assert math.dist(head, ball) < math.dist(base, ball)
+
+
+def test_occlusion_keeper_chooses_the_keeper_window():
+    from ninety.render.clip import WARMUP, choose_start
+    from ninety.render.params import sample_params
+
+    m = simulate(8, 5)
+    p = sample_params(8, occlusion="keeper")
+    n = 250
+    start = choose_start(m.frames, p, n, 8, 10.0, 240.0)
+    assert start == keeper_start(m.frames, n, max(250, WARMUP), 240 * 25)

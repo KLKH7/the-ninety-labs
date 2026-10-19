@@ -1,0 +1,453 @@
+{
+  "threshold": 0.5,
+  "clips": 24,
+  "rows": [
+    {
+      "cls": "ball",
+      "visibility": "mostly hidden",
+      "situation": "behind a player",
+      "kit_contrast": "low",
+      "labels": 16,
+      "missed": 7
+    },
+    {
+      "cls": "ball",
+      "visibility": "mostly hidden",
+      "situation": "behind a player",
+      "kit_contrast": "normal",
+      "labels": 79,
+      "missed": 31
+    },
+    {
+      "cls": "ball",
+      "visibility": "mostly hidden",
+      "situation": "behind a player in a crowd",
+      "kit_contrast": "low",
+      "labels": 2,
+      "missed": 1
+    },
+    {
+      "cls": "ball",
+      "visibility": "mostly hidden",
+      "situation": "behind a player in a crowd",
+      "kit_contrast": "normal",
+      "labels": 4,
+      "missed": 2
+    },
+    {
+      "cls": "ball",
+      "visibility": "mostly hidden",
+      "situation": "behind the keeper",
+      "kit_contrast": "low",
+      "labels": 2,
+      "missed": 2
+    },
+    {
+      "cls": "ball",
+      "visibility": "mostly hidden",
+      "situation": "behind the keeper",
+      "kit_contrast": "normal",
+      "labels": 15,
+      "missed": 7
+    },
+    {
+      "cls": "ball",
+      "visibility": "mostly hidden",
+      "situation": "no occluder found",
+      "kit_contrast": "low",
+      "labels": 7,
+      "missed": 3
+    },
+    {
+      "cls": "ball",
+      "visibility": "mostly hidden",
+      "situation": "no occluder found",
+      "kit_contrast": "normal",
+      "labels": 4,
+      "missed": 3
+    },
+    {
+      "cls": "ball",
+      "visibility": "partly hidden",
+      "situation": "behind a player",
+      "kit_contrast": "low",
+      "labels": 67,
+      "missed": 3
+    },
+    {
+      "cls": "ball",
+      "visibility": "partly hidden",
+      "situation": "behind a player",
+      "kit_contrast": "normal",
+      "labels": 48,
+      "missed": 3
+    },
+    {
+      "cls": "ball",
+      "visibility": "partly hidden",
+      "situation": "behind a player in a crowd",
+      "kit_contrast": "low",
+      "labels": 10,
+      "missed": 1
+    },
+    {
+      "cls": "ball",
+      "visibility": "partly hidden",
+      "situation": "behind a player in a crowd",
+      "kit_contrast": "normal",
+      "labels": 6,
+      "missed": 3
+    },
+    {
+      "cls": "ball",
+      "visibility": "partly hidden",
+      "situation": "behind the keeper",
+      "kit_contrast": "low",
+      "labels": 3,
+      "missed": 0
+    },
+    {
+      "cls": "ball",
+      "visibility": "partly hidden",
+      "situation": "behind the keeper",
+      "kit_contrast": "normal",
+      "labels": 6,
+      "missed": 1
+    },
+    {
+      "cls": "ball",
+      "visibility": "partly hidden",
+      "situation": "no occluder found",
+      "kit_contrast": "low",
+      "labels": 9,
+      "missed": 1
+    },
+    {
+      "cls": "ball",
+      "visibility": "partly hidden",
+      "situation": "no occluder found",
+      "kit_contrast": "normal",
+      "labels": 10,
+      "missed": 0
+    },
+    {
+      "cls": "ball",
+      "visibility": "visible",
+      "situation": "behind a player",
+      "kit_contrast": "low",
+      "labels": 46,
+      "missed": 0
+    },
+    {
+      "cls": "ball",
+      "visibility": "visible",
+      "situation": "behind a player",
+      "kit_contrast": "normal",
+      "labels": 73,
+      "missed": 1
+    },
+    {
+      "cls": "ball",
+      "visibility": "visible",
+      "situation": "behind a player in a crowd",
+      "kit_contrast": "low",
+      "labels": 1,
+      "missed": 0
+    },
+    {
+      "cls": "ball",
+      "visibility": "visible",
+      "situation": "behind a player in a crowd",
+      "kit_contrast": "normal",
+      "labels": 6,
+      "missed": 1
+    },
+    {
+      "cls": "ball",
+      "visibility": "visible",
+      "situation": "behind the goal frame",
+      "kit_contrast": "low",
+      "labels": 1,
+      "missed": 0
+    },
+    {
+      "cls": "ball",
+      "visibility": "visible",
+      "situation": "behind the goal frame",
+      "kit_contrast": "normal",
+      "labels": 1,
+      "missed": 0
+    },
+    {
+      "cls": "ball",
+      "visibility": "visible",
+      "situation": "behind the keeper",
+      "kit_contrast": "low",
+      "labels": 14,
+      "missed": 0
+    },
+    {
+      "cls": "ball",
+      "visibility": "visible",
+      "situation": "behind the keeper",
+      "kit_contrast": "normal",
+      "labels": 8,
+      "missed": 0
+    },
+    {
+      "cls": "ball",
+      "visibility": "visible",
+      "situation": "no occluder found",
+      "kit_contrast": "low",
+      "labels": 310,
+      "missed": 2
+    },
+    {
+      "cls": "ball",
+      "visibility": "visible",
+      "situation": "no occluder found",
+      "kit_contrast": "normal",
+      "labels": 330,
+      "missed": 8
+    },
+    {
+      "cls": "ball",
+      "visibility": "visible",
+      "situation": "off the pitch, by the boards",
+      "kit_contrast": "low",
+      "labels": 7,
+      "missed": 2
+    },
+    {
+      "cls": "ball",
+      "visibility": "visible",
+      "situation": "off the pitch, by the boards",
+      "kit_contrast": "normal",
+      "labels": 8,
+      "missed": 0
+    },
+    {
+      "cls": "player",
+      "visibility": "mostly hidden",
+      "situation": "behind a player",
+      "kit_contrast": "low",
+      "labels": 33,
+      "missed": 5
+    },
+    {
+      "cls": "player",
+      "visibility": "mostly hidden",
+      "situation": "behind a player",
+      "kit_contrast": "normal",
+      "labels": 29,
+      "missed": 6
+    },
+    {
+      "cls": "player",
+      "visibility": "mostly hidden",
+      "situation": "behind a player in a crowd",
+      "kit_contrast": "low",
+      "labels": 6,
+      "missed": 4
+    },
+    {
+      "cls": "player",
+      "visibility": "mostly hidden",
+      "situation": "no occluder found",
+      "kit_contrast": "normal",
+      "labels": 8,
+      "missed": 3
+    },
+    {
+      "cls": "player",
+      "visibility": "partly hidden",
+      "situation": "at the frame's edge",
+      "kit_contrast": "normal",
+      "labels": 6,
+      "missed": 0
+    },
+    {
+      "cls": "player",
+      "visibility": "partly hidden",
+      "situation": "behind a player",
+      "kit_contrast": "low",
+      "labels": 140,
+      "missed": 7
+    },
+    {
+      "cls": "player",
+      "visibility": "partly hidden",
+      "situation": "behind a player",
+      "kit_contrast": "normal",
+      "labels": 131,
+      "missed": 4
+    },
+    {
+      "cls": "player",
+      "visibility": "partly hidden",
+      "situation": "behind a player in a crowd",
+      "kit_contrast": "low",
+      "labels": 19,
+      "missed": 3
+    },
+    {
+      "cls": "player",
+      "visibility": "partly hidden",
+      "situation": "behind the keeper",
+      "kit_contrast": "low",
+      "labels": 4,
+      "missed": 0
+    },
+    {
+      "cls": "player",
+      "visibility": "partly hidden",
+      "situation": "behind the keeper",
+      "kit_contrast": "normal",
+      "labels": 1,
+      "missed": 0
+    },
+    {
+      "cls": "player",
+      "visibility": "partly hidden",
+      "situation": "no occluder found",
+      "kit_contrast": "low",
+      "labels": 2,
+      "missed": 1
+    },
+    {
+      "cls": "player",
+      "visibility": "partly hidden",
+      "situation": "no occluder found",
+      "kit_contrast": "normal",
+      "labels": 9,
+      "missed": 1
+    },
+    {
+      "cls": "player",
+      "visibility": "visible",
+      "situation": "at the frame's edge",
+      "kit_contrast": "low",
+      "labels": 467,
+      "missed": 15
+    },
+    {
+      "cls": "player",
+      "visibility": "visible",
+      "situation": "at the frame's edge",
+      "kit_contrast": "normal",
+      "labels": 712,
+      "missed": 22
+    },
+    {
+      "cls": "player",
+      "visibility": "visible",
+      "situation": "behind a player",
+      "kit_contrast": "low",
+      "labels": 170,
+      "missed": 3
+    },
+    {
+      "cls": "player",
+      "visibility": "visible",
+      "situation": "behind a player",
+      "kit_contrast": "normal",
+      "labels": 276,
+      "missed": 2
+    },
+    {
+      "cls": "player",
+      "visibility": "visible",
+      "situation": "behind a player in a crowd",
+      "kit_contrast": "low",
+      "labels": 18,
+      "missed": 0
+    },
+    {
+      "cls": "player",
+      "visibility": "visible",
+      "situation": "behind the keeper",
+      "kit_contrast": "low",
+      "labels": 8,
+      "missed": 0
+    },
+    {
+      "cls": "player",
+      "visibility": "visible",
+      "situation": "behind the keeper",
+      "kit_contrast": "normal",
+      "labels": 7,
+      "missed": 0
+    },
+    {
+      "cls": "player",
+      "visibility": "visible",
+      "situation": "no occluder found",
+      "kit_contrast": "low",
+      "labels": 4281,
+      "missed": 7
+    },
+    {
+      "cls": "player",
+      "visibility": "visible",
+      "situation": "no occluder found",
+      "kit_contrast": "normal",
+      "labels": 5152,
+      "missed": 5
+    }
+  ],
+  "summary": {
+    "ball": [
+      {
+        "situation": "behind a player",
+        "labels": 95,
+        "missed": 38,
+        "recall": 0.6,
+        "missed_low_contrast": 7
+      },
+      {
+        "situation": "behind the keeper",
+        "labels": 17,
+        "missed": 9,
+        "recall": 0.471,
+        "missed_low_contrast": 2
+      },
+      {
+        "situation": "no occluder found",
+        "labels": 11,
+        "missed": 6,
+        "recall": 0.455,
+        "missed_low_contrast": 3
+      },
+      {
+        "situation": "behind a player in a crowd",
+        "labels": 6,
+        "missed": 3,
+        "recall": 0.5,
+        "missed_low_contrast": 1
+      }
+    ],
+    "player": [
+      {
+        "situation": "behind a player",
+        "labels": 62,
+        "missed": 11,
+        "recall": 0.823,
+        "missed_low_contrast": 5
+      },
+      {
+        "situation": "behind a player in a crowd",
+        "labels": 6,
+        "missed": 4,
+        "recall": 0.333,
+        "missed_low_contrast": 4
+      },
+      {
+        "situation": "no occluder found",
+        "labels": 8,
+        "missed": 3,
+        "recall": 0.625,
+        "missed_low_contrast": 0
+      }
+    ]
+  }
+}

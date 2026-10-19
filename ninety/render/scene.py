@@ -516,3 +516,42 @@ def crowded_start(
         if score > best_score:
             best, best_score = s, score
     return best
+
+
+# A goalkeeper's own touches and his dive: the actions the engine names when he handles the ball
+# or throws himself at it (ninety/sim). Arms over the ball are what hides it from the lens.
+KEEPER_ACTIONS = ("hands", "dive", "throw")
+# The penalty area, 16.5 m from the goal line and 40.32 m wide (Law 1): where a keeper handles.
+PENALTY_DEPTH_M = 16.5
+PENALTY_HALF_WIDTH_M = 20.16
+
+
+def keeper_busy(frame: dict) -> bool:
+    return any(p.get("role") == "GK" and p.get("action") in KEEPER_ACTIONS for p in frame["players"])
+
+
+def in_penalty_area(ball: dict, pitch_x: float = 105.0, pitch_y: float = 68.0) -> bool:
+    near_goal = ball["x"] <= PENALTY_DEPTH_M or ball["x"] >= pitch_x - PENALTY_DEPTH_M
+    return near_goal and abs(ball["y"] - pitch_y / 2) <= PENALTY_HALF_WIDTH_M
+
+
+def keeper_start(frames: list[dict], n: int, earliest: int, latest: int, step: int = 25) -> int:
+    """Start frame of the n-frame window where a goalkeeper most often handles or dives.
+
+    A keeper's catch, parry or dive puts his arms and body over the ball, the situation `crowded`
+    does not aim at: it ranks windows by outfield players on the sight line. Frames with the
+    ball in a penalty area break ties, so a match with no keeper action still gets a goalmouth.
+    """
+    busy = [0] * (len(frames) + 1)
+    box = [0] * (len(frames) + 1)
+    for i, f in enumerate(frames):
+        busy[i + 1] = busy[i] + keeper_busy(f)
+        box[i + 1] = box[i] + in_penalty_area(f["ball"])
+    best, best_score = earliest, (-1, -1)
+    for s in range(earliest, max(earliest, latest) + 1, step):
+        if s + n > len(frames):
+            break
+        score = (busy[s + n] - busy[s], box[s + n] - box[s])
+        if score > best_score:
+            best, best_score = s, score
+    return best

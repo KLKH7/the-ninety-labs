@@ -863,3 +863,16 @@ short and actionable. This file is public: no research sources, product names or
   mutation, and a run with no "passed" count is a broken harness, not a surviving mutation.
 - **Check:** the harness line for every mutation shows "N failed, M passed". Run one mutation by
   hand first and watch it go red before trusting the loop.
+
+### 97. A change to the picture bumps the renderer version in the same commit
+- **What happened:** the skinned kit mesh (a3d228e) replaced the capsule players and left
+  `RENDERER_VERSION` at 0.3.2. Dataset v1's clips at `cca498c` (capsules) and every clip rendered
+  from main since (mesh) both record renderer 0.3.2, so `clip.json` cannot say which body a
+  detector was trained or tested on. Found while planning targeted round 1, which renders from
+  main and would have mixed the two looks under one version.
+- **Rule:** any change to what `web/render` draws or how labels are counted bumps
+  `ninety/render/__init__.py`'s `RENDERER_VERSION` in the same commit; a dataset or test-set
+  manifest names the version, and two looks never share one.
+- **Check:** `git log -p -- web/render ninety/render/scene.py ninety/render/meshpose.py` since the
+  last bump shows no picture change without a version change; a dataset manifest's `renderers`
+  lists one version per look.
