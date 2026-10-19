@@ -17,6 +17,7 @@ licence must be one of those three (see `AGENTS.md`).
 | starlette, uvicorn | the public API (`ninety/api`) | BSD-3-Clause |
 | pydantic (via agent-framework) | typed agent output | MIT |
 | pytest, pytest-xdist and its execnet, ruff (development) | tests (in parallel workers) and lint | MIT |
+| numpy (development; also with the vision group) | the camera fit of event detection, tested in CI | BSD-3-Clause |
 | uv (container build only) | installs `uv.lock` into the API image | MIT or Apache-2.0 |
 
 ## Data

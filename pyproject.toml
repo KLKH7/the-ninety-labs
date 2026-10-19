@@ -33,6 +33,7 @@ ninety-data-stats = "ninety.vision.data_stats:main"
 
 [dependency-groups]
 dev = [
+    "numpy>=2",  # the camera fit of event detection (ninety/vision/pitch.py), tested in CI
     "pytest>=8",
     "pytest-xdist>=3.6",
     "ruff>=0.17.0",
