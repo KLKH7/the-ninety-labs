@@ -222,7 +222,7 @@ short and actionable. This file is public: no research sources, product names or
     older than a day.
   - A port's audit names the branches whose lessons it read.
 
-### 94. A pattern that reads numbers must read every way a number is written
+### 95. A pattern that reads numbers must read every way a number is written
 - **What happened:** the fact-checker's number pattern refused a digit followed by a letter, so it
   would not read "h7" as a number. That also skipped every English ordinal: "in the 9th minute"
   passed for an event in minute 2, and "his 97th pass" passed with no such count in the evidence,
@@ -841,7 +841,20 @@ short and actionable. This file is public: no research sources, product names or
   set; `tests/test_vision_report.py` checks a detection at a player's feet is not counted as
   on the hidden ball.
 
-### 93. Copy an identity string from the system, not from the docs
+### 93. A dependency that needs a rule change merges after the rule
+- **What happened:** #63 added rfdetr and PyTorch, which bring in tqdm (MPL-2.0), pillow
+  (MIT-CMU), FFmpeg inside `av` (LGPL) and NVIDIA CUDA (proprietary). The licence rule in
+  `AGENTS.md` still said "MIT, Apache-2.0 or BSD only", and #68, which widened it, sat in draft.
+  #63 merged anyway, so `main` broke its own written rule for a day. An audit of all 179 locked
+  packages then found licences the rule never named (Zlib, BSL-1.0, CC0-1.0, CNRI-Python) and GPL
+  runtimes bundled inside numpy, scipy and matplotlib wheels.
+- **Rule:** a PR that adds a dependency outside the written rule waits for the rule change to
+  merge first. Every locked package is listed with its licence in `THIRD_PARTY_NOTICES.md`.
+- **Check:** `tests/test_third_party_notices.py` fails when a locked package (name and version) is
+  missing from the notices, or when its licence is not one the rule allows. It was mutation-checked:
+  removing a row and relabelling a package GPL each make it fail.
+
+### 94. Copy an identity string from the system, not from the docs
 - **What happened:** the `agents-live` setup told the maintainer to trust the OIDC subject
   `repo:KLKH7/the-ninety-labs:environment:agents-live`, the format GitHub's docs show. This repo's
   tokens carry the owner and repo ids (`repo:KLKH7@210092633/the-ninety-labs@1417939631:...`),
