@@ -798,3 +798,17 @@ short and actionable. This file is public: no research sources, product names or
   the same seeds still matters, for reproducing a run, not for cancelling noise.
 - **Check:** for a before-and-after on a match rate, report both errors; if the paired one is not
   clearly smaller, quote the unpaired one.
+
+### 91. When the data moves, the code that reads it moves in the same change
+- **What happened:** sealing the ground truth (0fda1f8) moved frames.jsonl and events.jsonl from
+  the `renders` container to `truth`. The training fetcher still read frames.jsonl from `renders`,
+  so a fetch of any later run would have downloaded images with no labels, and coco_export would
+  have stopped on the first clip. Separately, dataset v1 picks each clip's run and drops seed 111,
+  but the fetcher took whole runs, and the pinned validation seeds still named 111. Both were found
+  by reading the dataset definition against the tools before renting a GPU, not on the GPU.
+- **Rule:** a change to where data lives lists every reader of it and updates them, or names the
+  ones left behind. Before a paid training run, dry-run the launcher against the exact dataset
+  definition it will train on.
+- **Check:** `tests/test_vision_fetch_clips.py` takes labels from `truth` and each seed from the run
+  the list names; `tests/test_vision_finetune.py` checks the short fine-tune's validation seeds are
+  all in `docs/eval/dataset-v1.json`.
