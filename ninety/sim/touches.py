@@ -185,8 +185,9 @@ def report(results: list[dict], minutes: float = 90) -> str:
         "each. A report beside published figures, never a target: nothing in the engine is tuned to "
         "these numbers. The comparisons are fixed in docs/EVALUATION.md ('Match engine: touches').",
         "",
-        "A **deliberate touch** is a player who has reacted to the ball playing it (foot, or above "
-        f"{BODY_TOUCH_Z} m thigh, chest or head, shown here as *air*, or a keeper's hands). A **body "
+        "A **deliberate touch** is a player who has reacted to the ball playing it (foot, or, for a ball "
+        f"coming into his body above {BODY_TOUCH_Z} m, thigh, chest or head, shown here as *air*, or a "
+        "keeper's hands). A **body "
         "hit** is the ball meeting a body that is not playing it. **Controlled** is the engine's "
         "verdict at the touch; **kept** is read off the frames afterwards: he was the next player to "
         f"have the ball, within {KEEP_WINDOW_S:g} s, before any stoppage. Speeds are the ball's "

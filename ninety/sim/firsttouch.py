@@ -1,7 +1,8 @@
 """The first touch: one rule for the engine's touch and the passer's estimate of it (A4).
 
 A player who has reacted to the ball and reaches it cushions it: the surface he meets it with
-(by the ball's height: foot, thigh, chest or head) takes out up to what it can kill of the ball's
+(by the ball's height for a ball coming into his body: foot, thigh, chest or head; beside him,
+within a foot's reach, the foot) takes out up to what it can kill of the ball's
 speed relative to him (A4: `Profile.absorb_mps` for a foot, CUSHION of that for the others), and he
 sends what is left toward where he chose, with his own error, wider on a surface he aims less well
 with (AIM_ERROR). What is left decides the rest, never a roll: a ball slow enough for him to
@@ -19,10 +20,12 @@ from ninety.sim import fmath
 from ninety.sim.body import CONTROL_M
 from ninety.sim.profiles import FATIGUE_ERROR, PRESSURE_ERROR, TURN_ERROR
 
-BODY_TOUCH_Z = 0.45  # design (P14): above this, a ball he is under is a thigh, chest or head, not a foot
-# A4, P14: the part that meets a ball, by the height of the ball's bottom: each up to the height
-# given (design: thigh or raised foot from 0.45 to 0.9 m, chest 1.1 to 1.5 m, head above 1.6 m; the
-# gaps between go to the nearer part, at 1.0 and 1.55 m).
+BODY_TOUCH_Z = 0.45  # design (P14): above this, a ball coming into his body is a thigh, chest or head
+# A4, P14: the part that meets a ball coming into his body, by the height of the ball's bottom: each
+# up to the height given (design: thigh from 0.45 to 0.9 m, chest 1.1 to 1.5 m, head above 1.6 m; the
+# gaps between go to the nearer part, at 1.0 and 1.55 m). A ball beside him, within a foot's reach
+# (P14, up to FOOT_REACH_Z), he meets with a raised foot at the foot's full share (design, verify:
+# no study measures a raised foot's first touch against a foot's at the ground).
 SURFACES = (("foot", BODY_TOUCH_Z), ("thigh", 1.0), ("chest", 1.55), ("head", math.inf))
 # design: what each kills, as a share of what his foot kills (no study measures a first touch by
 # body part; GROUNDING A4). The chest gives most and drops the ball at his feet; the head kills
