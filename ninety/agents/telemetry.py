@@ -3,7 +3,8 @@ project (infra/main.bicep), where Foundry's tracing view shows them.
 
 Agent Framework already records a span for each agent call, model call and tool call. We add two of
 our own, so a run reads as football: `ninety.claim` around one claim's whole life (drafts,
-checks, rewrites), and `ninety.fact_check` for each verdict, with the reasons a draft was rejected.
+checks, rewrites) in the slice, `ninety.minute` around one minute of the workflow, and
+`ninety.fact_check` for each verdict, with the reasons a draft was rejected.
 
 Prompt and reply text is recorded only with `content=True` (`--trace-content`): today it is
 synthetic match data, but once viewers type into the app their words must not reach the logs.
@@ -41,6 +42,16 @@ def claim_span(minute: int, seed: int, planted: bool, live: bool):
     with tracer().start_as_current_span("ninety.claim") as span:
         span.set_attributes(
             {"ninety.minute": minute, "ninety.seed": seed, "ninety.planted": planted, "ninety.live": live}
+        )
+        yield span
+
+
+@contextmanager
+def minute_span(minute: int, match: str, planted: bool, live: bool):
+    """The workflow's span: one minute's moments, claims, checks and graphics."""
+    with tracer().start_as_current_span("ninety.minute") as span:
+        span.set_attributes(
+            {"ninety.minute": minute, "ninety.match": match, "ninety.planted": planted, "ninety.live": live}
         )
         yield span
 

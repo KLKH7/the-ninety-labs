@@ -16,6 +16,7 @@ from ninety.match.facts import match_events
 DISPLAY_SECONDS = 5.0  # Long enough to read a lower-third without competing with the next event.
 ROOT = Path(__file__).resolve().parents[2]
 SCHEMA = json.loads((ROOT / "schemas" / "overlay_cue.schema.json").read_text())
+TEMPLATE_TYPES = ("pass", "shot", "goal")  # the events a template graphic airs for
 
 
 # Words that state a result follow the event's outcome field: "finds" only for a completed
@@ -80,7 +81,7 @@ async def template_cues(ledger: Ledger) -> list[dict]:
     events = await ledger.query(kind="event")
     cues = []
     for record in events:
-        if record.payload.get("type") not in {"pass", "shot", "goal"}:
+        if record.payload.get("type") not in TEMPLATE_TYPES:
             continue
         for persona in ("analyst", "casual"):
             text = _text(record.payload, persona)

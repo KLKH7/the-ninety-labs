@@ -36,6 +36,7 @@ import re
 import sys
 import time
 import warnings
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 
@@ -141,8 +142,40 @@ class AnalystExecutor(Executor):
         await ctx.send_message(Draft(task=task, claim=claim))
 
 
+Gate = Callable[[Claim, list[dict]], Verdict]
+
+
+def open_gate(claim: Claim, evidence: list[dict]) -> Verdict:
+    """The confidence gate's place in the order: after the code checks, before the Judge. A stub
+    that passes every claim until the gate on detection confidence is built; a claim it stops is
+    held (category `low_confidence`, contracts.status_for), never sent back for a rewrite."""
+    return Verdict(ok=True)
+
+
+@dataclass
+class Checked:
+    verdict: Verdict
+    judge_seconds: float | None  # how long the Judge took; None when it was not asked
+
+
+async def fact_check(claim: Claim, known: dict[str, dict], judge: Judge, gate: Gate = open_gate) -> Checked:
+    """The fact-checking agent, for the slice and the workflow alike: the code checks first (free,
+    exact about numbers, players and ids), then the confidence gate, then the Judge (meaning),
+    which is asked only when the code passes."""
+    verdict = check(claim, known)
+    if not verdict.ok:
+        return Checked(verdict, None)
+    evidence = [known[i] for i in claim.evidence]
+    verdict = gate(claim, evidence)
+    if not verdict.ok:
+        return Checked(verdict, None)
+    started = time.perf_counter()
+    verdict = await judge(claim, evidence)
+    return Checked(verdict, time.perf_counter() - started)
+
+
 class FactCheckExecutor(Executor):
-    """Code checks first (free, exact about numbers, players and ids), then the Judge (meaning)."""
+    """The slice's fact-checker: fact_check, then accept, send back or hold."""
 
     def __init__(self, known: dict[str, dict], judge: Judge, trace: list[str], live: bool):
         super().__init__(id="fact_checker")
@@ -150,12 +183,10 @@ class FactCheckExecutor(Executor):
 
     @handler
     async def review(self, draft: Draft, ctx: WorkflowContext[Task, Outcome]) -> None:
-        verdict = check(draft.claim, self.known)
-        if verdict.ok:
-            evidence = [self.known[i] for i in draft.claim.evidence]
-            started = time.perf_counter()
-            verdict = await self.judge(draft.claim, evidence)
-            took = f"{time.perf_counter() - started:.1f}s" if self.live else "replayed"
+        checked = await fact_check(draft.claim, self.known, self.judge)
+        verdict = checked.verdict
+        if checked.judge_seconds is not None:
+            took = f"{checked.judge_seconds:.1f}s" if self.live else "replayed"
             self.trace.append(f"judge: {'supported' if verdict.ok else 'not supported'} ({took})")
         attempt, evidence_ids = draft.task.attempt + 1, draft.claim.evidence
         if verdict.ok:
@@ -220,7 +251,7 @@ async def run_slice(
         # The local definitions only identify the pinned versions (and refuse to run if the code
         # drifted from them); the published agents do the work. Foundry calls the match MCP server.
         ran, agents = [], []
-        for local in foundry.build_agents(client):
+        for local in foundry.slice_agents(client):
             name, version = foundry.pinned(local)
             ran.append(f"{name}:{version}")
             published = FoundryAgent(

@@ -109,7 +109,8 @@ def test_a_replay_on_the_engine_it_was_recorded_on_does_not_warn():
         asyncio.run(replay_slice(recording([WRITE, SUPPORTED], plant=False)))
 
 
-REPLAYS = sorted((Path(__file__).resolve().parent.parent / "replays").glob("*.json"))
+# The slice's recordings; the workflow's (workflow-*.json) are replayed by tests/test_workflow.py.
+REPLAYS = sorted((Path(__file__).resolve().parent.parent / "replays").glob("slice-*.json"))
 
 
 def test_there_are_committed_replays():

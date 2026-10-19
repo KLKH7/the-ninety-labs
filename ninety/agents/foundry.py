@@ -127,11 +127,51 @@ def analyst_agent(client: FoundryChatClient) -> Agent:
     return Agent(client=client, name="analyst", instructions=INSTRUCTIONS, tools=[match_tool()])
 
 
-def build_agents(client: FoundryChatClient) -> list[Agent]:
-    """Every agent we publish, built exactly as the live workflow builds them."""
+def moment_analyst_agent(client: FoundryChatClient) -> Agent:
+    """The workflow's Analyst: picks the moments of a minute, through the same MCP tools. Its own
+    agent, so the slice's Analyst (and its recorded prompts) stay exactly as they are."""
+    from ninety.agents.workflow import MOMENT_ANALYST_INSTRUCTIONS
+
+    return Agent(
+        client=client, name="moment-analyst", instructions=MOMENT_ANALYST_INSTRUCTIONS, tools=[match_tool()]
+    )
+
+
+def tactician_agent(client: FoundryChatClient) -> Agent:
+    from ninety.agents.contracts import TACTICIAN_INSTRUCTIONS
+
+    return Agent(client=client, name="tactician", instructions=TACTICIAN_INSTRUCTIONS)
+
+
+def challenger_agent(client: FoundryChatClient) -> Agent:
+    from ninety.agents.contracts import CHALLENGER_INSTRUCTIONS
+
+    return Agent(client=client, name="challenger", instructions=CHALLENGER_INSTRUCTIONS)
+
+
+def slice_agents(client: FoundryChatClient) -> list[Agent]:
+    """The thin slice's agents, in the order it calls them: the Analyst, then the Judge."""
     from ninety.agents.judge import judge_agent
 
     return [analyst_agent(client), judge_agent(client)]
+
+
+def workflow_agents(client: FoundryChatClient) -> dict[str, Agent]:
+    """The workflow's agents by role (ninety/agents/workflow.py). The Judge is the slice's."""
+    from ninety.agents.judge import judge_agent
+
+    return {
+        "analyst": moment_analyst_agent(client),
+        "tactician": tactician_agent(client),
+        "challenger": challenger_agent(client),
+        "judge": judge_agent(client),
+    }
+
+
+def build_agents(client: FoundryChatClient) -> list[Agent]:
+    """Every agent we publish, once each, built exactly as the live runs build them."""
+    agents = {a.name: a for a in [*slice_agents(client), *workflow_agents(client).values()]}
+    return list(agents.values())
 
 
 def chat_client(credential=None) -> FoundryChatClient:
