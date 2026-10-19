@@ -197,6 +197,57 @@ identical):
 - #83 (energy in players' choices) changed the matches, so the windows differ from `443c4d5`'s and
   a11's frames are no longer in seed 900002's clip; the test above is what holds the fix.
 
+### Frozen (Oct 18, tag `engine-v1`)
+
+The test set is frozen at tag `engine-v1` (commit `b319f21`: main with #102's capsule bodies and
+#101's crowded window, which picks the window where a player stands on the line from the camera
+to the ball). The five seeds were rendered once, locally, with `ninety-dataset --split test`.
+Their parameters, and the sha256 of every clip's `frames.jsonl`, `events.jsonl` and images, are
+in `docs/eval/test-set-frozen.json`. From here on the test set is these files: a later engine or
+renderer change does not re-render it, and a re-render that does not match the hashes is a
+different test set.
+
+All render checks pass, including determinism (labels and all 250 images of seed 900001
+identical): ball projection max 0.26 px, keypoints max 0.0045 px, every player's foot inside its
+box, no frame with a label problem.
+
+- The ball is under 0.5 visible in 78 of 1,250 frames (**6.24%**; per clip 14.4%, 3.6%, 2.0%,
+  7.6%, 3.6%), above the 5% minimum. Seeds 900001, 900002 and 900004 are crowded and 900004 has
+  low-contrast kits, all drawn from the seed; no override, and no parameter was chosen from this
+  number.
+- Whole players in the main view are 52 to 101 px tall (p05 to p95, per clip), inside the
+  guide's 30 to 120 px.
+- The data-contract check is pending #96, which writes `meta.json`. It is backfilled and
+  validated once #96 lands, and that changes none of the frozen hashes.
+
+### Re-frozen (Oct 18, a ground-truth defect found from detector misses)
+
+The detector session missed the ball in seed 900003 for about 5 s, and the frames showed why:
+the ball was resting off the pitch at (73.1, 72.0), 0.5 m behind the far advertising boards, and
+the picture showed only boards. The labels said visibility 1.0 with about 55 pixels, because the
+object-id pass hid all scenery. The render checks could not see it: each one compares the labels
+with the id pass.
+
+The fix (#118, `cca498c`, renderer 0.3.2) draws every opaque piece of scenery as an unlabelled
+occluder in the full id pass. The sky, the ground, the nets and the shadow decals stay out, each
+for a stated reason. `tests/test_render_occlusion.py` fails on the old id pass. The scope was
+measured over every split, not only where the detector failed: 110 ball labels in the test set
+(all in 900003) and an estimated 52 of about 88,000 in v2, v2los and topup1, with no player
+label changing.
+
+The test set was re-rendered once at `cca498c`, which is `engine-v1`'s engine plus that one
+renderer change. Every image and events file is byte-identical to the first freeze, and so are
+the labels of the other four clips. Only 900003's `frames.jsonl` changes: 110 frames go from
+visibility 1.0 to 0. `docs/eval/test-set-frozen.json` records both commits, the old and new
+hashes, and the reason. All render checks pass, determinism included.
+
+- The ball is under 0.5 visible in 188 of 1,250 frames (**15.0%**). 113 of those are fully
+  hidden: the 110 behind the boards, plus 3 more. 75 (6.0%) are partly drawn, under half visible,
+  which still meets the 5% minimum without the dead ball.
+- A dead ball behind the boards is not a hard case a detector can be expected to find, so
+  detection scores should be reported with fully hidden balls apart (EVALUATION.md's visibility
+  groups already do this).
+
 The final proof comes later: detector recall on the fixed test set before and after each
 targeted round.
 
