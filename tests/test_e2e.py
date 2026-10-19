@@ -55,17 +55,18 @@ def test_the_claim_is_about_the_shot_and_carries_its_numbers(tmp_path):
     assert claim["text"] == "h8 shot, on target, 101 km/h."
     assert claim["mode"] == "offline" and manifest["agents"]["mode"] == "offline"
     # Offline the Judge never ran; the trace must not say it did.
-    judge = [s for s in claim["steps"] if s["agent"] == "judge"]
-    assert judge and all("not run offline" in s["message"] for s in judge)
-    assert not any("replayed" in s["message"] for s in claim["steps"])
+    judge = [s for s in claim["steps"] if s["role"] == "judge"]
+    assert judge and all(s["action"] == "skip" and "not run offline" in s["detail"] for s in judge)
+    assert not any("replayed" in s["detail"] for s in claim["steps"])
 
 
 def test_a_planted_number_is_rejected_then_fixed(tmp_path):
     out, manifest = run(tmp_path, "--plant")
     (claim,) = json.loads((out / "trace.json").read_text())["claims"]
     assert claim["drafts"] == 2 and claim["status"] == "accepted" and claim["planted"]
-    rejected = [s for s in claim["steps"] if s["agent"] == "fact_checker" and "rejected" in s["message"]]
-    assert len(rejected) == 1 and "143" in rejected[0]["message"]
+    rejected = [s for s in claim["steps"] if s["role"] == "fact_checker" and s["action"] == "reject"]
+    assert len(rejected) == 1 and "143" in rejected[0]["detail"]
+    assert [s["action"] for s in claim["steps"]] == ["tamper", "draft", "reject", "draft", "skip", "verify"]
     insight = [c for c in cues(out) if c["kind"] == "insight"]
     assert insight and all("143" not in c["text"] and c["verified"] for c in insight)
     assert manifest["agents"]["planted"]
@@ -79,6 +80,7 @@ def test_a_claim_the_fact_checker_never_accepts_never_airs(tmp_path, monkeypatch
     out, manifest = run(tmp_path)
     (claim,) = json.loads((out / "trace.json").read_text())["claims"]
     assert claim["status"] == "held_back" and claim["drafts"] == 3
+    assert claim["steps"][-1]["action"] == "hold"
     assert not [c for c in cues(out) if c["kind"] == "insight"]
     assert manifest["agents"]["accepted"] == 0
     # The template cues still air: they passed the code checks on their own.
@@ -112,3 +114,36 @@ def test_most_interesting_prefers_a_shot_then_the_faster_ball():
     assert e2e.most_interesting(passes)["id"] == "p2"
     assert e2e.most_interesting([*passes, shot])["id"] == "s1"
     assert e2e.most_interesting([]) is None
+
+
+def test_trace_steps_have_the_agent_trace_shape(tmp_path):
+    """schemas/agent_trace.schema.json (PR #105): checked against the schema once it is on main."""
+    out, _ = run(tmp_path, "--plant")
+    (claim,) = json.loads((out / "trace.json").read_text())["claims"]
+    schema = ROOT / "schemas/agent_trace.schema.json"
+    for step in claim["steps"]:
+        assert set(step) == {"role", "moment", "action", "ms", "detail"} and step["moment"] == claim["id"]
+        if schema.exists():
+            validate(step, json.loads(schema.read_text()))
+
+
+def test_trace_step_reads_live_timings():
+    step = e2e.trace_step("judge: not supported (1.4s)", "claim-m3", judged=True)
+    assert step == {"role": "judge", "moment": "claim-m3", "action": "reject", "ms": 1400.0,
+                    "detail": "not supported"}
+
+
+def test_events_file_reads_detected_events_and_refuses_ground_truth(tmp_path):
+    clip, detections = write_clip(tmp_path)
+    detected = tmp_path / "detected.jsonl"
+    detected.write_text("".join(json.dumps(dict(e, source="vision", confidence=0.8)) + "\n" for e in EVENTS))
+    out = tmp_path / "b"
+    e2e.main([str(clip), "--out", str(out), "--detections", str(detections), "--frames",
+              "--events-file", str(detected)])
+    manifest = json.loads((out / "manifest.json").read_text())
+    assert manifest["events"] == {"source": "vision: detected.jsonl", "count": len(EVENTS)}
+    truth = tmp_path / "truth.jsonl"
+    truth.write_text("".join(json.dumps(e) + "\n" for e in EVENTS))
+    with pytest.raises(SystemExit, match="source=vision"):
+        e2e.main([str(clip), "--out", str(tmp_path / "c"), "--detections", str(detections), "--frames",
+                  "--events-file", str(truth)])

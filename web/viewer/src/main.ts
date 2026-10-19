@@ -162,10 +162,13 @@ function renderTrace(b: Bundle, seekTo: (matchT: number) => void) {
       steps.className = "steps";
       for (const s of c.steps) {
         const step = document.createElement("li");
-        step.className = `step ${s.agent}${/rejected/.test(s.message) ? " rejected" : ""}`;
+        step.className = `step ${s.role} ${s.action}`;
         const who = document.createElement("strong");
-        who.textContent = s.agent.replace("_", " ");
-        step.append(who, ` ${s.message}`);
+        who.textContent = s.role.replace("_", " ");
+        const what = document.createElement("span");
+        what.className = "action";
+        what.textContent = s.action;
+        step.append(who, " ", what, ` ${s.detail}${s.ms ? ` (${(s.ms / 1000).toFixed(1)} s)` : ""}`);
         steps.append(step);
       }
       li.append(head, text, steps);

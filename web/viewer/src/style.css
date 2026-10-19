@@ -63,8 +63,10 @@ kbd { font: 600 0.75em ui-monospace, monospace; border: 1px solid var(--line); b
 .claim-text { font-weight: 600; margin: 8px 0; }
 .steps { margin: 0; padding-left: 18px; font-size: 0.85rem; color: var(--muted); display: grid; gap: 4px; }
 .step strong { color: var(--ink); text-transform: capitalize; }
-.step.rejected { color: var(--bad); }
-.step.rejected strong { color: var(--bad); }
+.step .action { font: 600 0.72rem ui-monospace, monospace; text-transform: uppercase; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+.step.reject, .step.hold { color: var(--bad); }
+.step.reject strong, .step.hold strong { color: var(--bad); }
+.step.verify .action { color: var(--accent); border-color: var(--accent); }
 .seek { margin-top: 10px; background: none; border: 1px solid var(--line); color: var(--ink); border-radius: 6px; padding: 6px 10px; font: inherit; cursor: pointer; }
 
 @media (prefers-reduced-motion: no-preference) {

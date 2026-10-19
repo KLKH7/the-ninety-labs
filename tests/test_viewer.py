@@ -93,8 +93,8 @@ def test_trace_shows_the_rejection_and_the_accepted_claim(browser, site):
     assert claim.count() == 1
     assert claim.locator(".chip").text_content() == "Accepted"
     assert "h8 shot, on target, 101 km/h." in claim.inner_text()
-    assert claim.locator(".step.rejected").count() == 1
-    assert "143" in claim.locator(".step.rejected").inner_text()
+    assert claim.locator(".step.reject").count() == 1
+    assert "143" in claim.locator(".step.reject").inner_text()
     assert "ground truth" in page.locator("#pipeline").inner_text()
     assert not errors
 

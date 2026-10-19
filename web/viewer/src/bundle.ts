@@ -13,14 +13,19 @@ export interface Cue {
   persona: string;
   lang: string;
   text: string;
+  pan?: number;
   replaces?: string | null;
   verified?: boolean;
   evidence: string[];
 }
 
+/** schemas/agent_trace.schema.json (PR #105) */
 export interface Step {
-  agent: string;
-  message: string;
+  role: string;
+  moment: string;
+  action: string;
+  ms: number;
+  detail: string;
 }
 
 export interface ClaimTrace {

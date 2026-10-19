@@ -31,6 +31,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -118,6 +119,15 @@ def vision_events(clip: Clip, detections: list) -> list[dict]:
     return detect_events(detections, clip.meta)
 
 
+def events_from_file(path: Path) -> list[dict]:
+    """Events detected earlier and written as JSONL. Only vision events: ground truth is refused."""
+    events = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    truth = [e.get("id") for e in events if e.get("source") != "vision"]
+    if truth:
+        raise SystemExit(f"{path}: events {truth[:3]} are not source=vision: detected events only")
+    return events
+
+
 EVENT_SOURCES: dict[str, EventSource] = {"stand-in": stand_in_events, "vision": vision_events}
 
 
@@ -161,17 +171,29 @@ async def judge_not_run(claim: Claim, evidence: list[dict]) -> Verdict:
     return Verdict(ok=True, reasons=[])
 
 
-def trace_steps(lines: list[str], judged: bool) -> list[dict]:
-    """The workflow's trace lines as {agent, message}, naming the offline Judge for what it is."""
-    steps = []
-    for line in lines:
-        agent, _, message = line.partition(": ")
-        if agent == "judge" and not judged:
-            message = "not run offline: the code checks alone decided"
-        elif not judged:
-            message = message.replace("(replayed)", "(offline analyst)")
-        steps.append({"agent": agent, "message": message})
-    return steps
+TOOK = re.compile(r" \((?:(?P<s>[0-9.]+)s|replayed)\)$")
+
+
+def trace_step(line: str, moment: str, judged: bool) -> dict:
+    """One workflow trace line as an agent_trace step (schemas/agent_trace.schema.json, PR #105):
+    {role, moment, action, ms, detail}. Offline, the Judge is named as not run."""
+    role, _, detail = line.partition(": ")
+    took = TOOK.search(detail)
+    ms = round(float(took["s"]) * 1000, 1) if took and took["s"] else 0.0
+    detail = TOOK.sub("", detail)
+    if role == "analyst":
+        action = "tamper" if detail.startswith("draft tampered") else "draft"
+    elif role == "judge":
+        action = "verify" if detail.startswith("supported") else "reject"
+        if not judged:
+            action, detail = "skip", "not run offline: the code checks alone decided"
+    elif detail.startswith("rejected, out of rewrites: "):
+        action, detail = "hold", detail.removeprefix("rejected, out of rewrites: ")
+    elif detail.startswith("rejected: "):
+        action, detail = "reject", detail.removeprefix("rejected: ")
+    else:
+        action = "verify"
+    return {"role": role, "moment": moment, "action": action, "ms": ms, "detail": detail}
 
 
 async def explain(events: list[dict], seed: int, plant: bool, recording: Recording | None) -> list[dict]:
@@ -194,6 +216,7 @@ async def explain(events: list[dict], seed: int, plant: bool, recording: Recordi
             warnings.simplefilter("ignore")
             outcome = await run_workflow(ask, judge_fn, minute, plant, seed, 0, False, known)
         t = min((e["t"] for e in events if e["id"] in set(outcome.claim.evidence)), default=None)
+        judged = recording is not None
         claims.append(
             {
                 "id": f"claim-m{minute}",
@@ -205,7 +228,7 @@ async def explain(events: list[dict], seed: int, plant: bool, recording: Recordi
                 "mode": "replay" if recording is not None else "offline",
                 "text": outcome.claim.text,
                 "evidence": outcome.claim.evidence,
-                "steps": trace_steps(outcome.trace, judged=recording is not None),
+                "steps": [trace_step(line, f"claim-m{minute}", judged) for line in outcome.trace],
             }
         )
     return claims
@@ -290,7 +313,12 @@ async def run(args: argparse.Namespace) -> dict:
     if det_path != out / "detections.jsonl":
         shutil.copyfile(det_path, out / "detections.jsonl")
 
-    events = checked_events(EVENT_SOURCES[args.events](clip, detections))
+    if args.events_file:
+        events = checked_events(events_from_file(args.events_file))
+        events_source = f"vision: {args.events_file.name}"
+    else:
+        events = checked_events(EVENT_SOURCES[args.events](clip, detections))
+        events_source = STAND_IN if args.events == "stand-in" else "vision"
     facts = [f.as_dict() for f in calculate_facts(events)]
     recording = Recording.load(args.replay) if args.replay else None
     claims = await explain(events, clip.meta["seed"], args.plant, recording)
@@ -312,7 +340,7 @@ async def run(args: argparse.Namespace) -> dict:
         "footage": footage,
         "detector": None if model is None else f"{model.name} {model.size} {model.checkpoint}",
         "detections": {"source": "live" if args.detect == "live" else "recorded", "frames": len(detections)},
-        "events": {"source": STAND_IN if args.events == "stand-in" else "vision", "count": len(events)},
+        "events": {"source": events_source, "count": len(events)},
         "facts": len(facts),
         "agents": {"mode": "replay" if recording else "offline", "planted": args.plant,
                    "claims": len(claims), "accepted": sum(c["status"] == "accepted" for c in claims)},
@@ -331,6 +359,8 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--detections", type=Path, default=None, help="a detections.jsonl to use (recorded)")
     ap.add_argument("--weights", type=Path, default=None, help="our checkpoint, for --detect live")
     ap.add_argument("--events", choices=tuple(EVENT_SOURCES), default="stand-in")
+    ap.add_argument("--events-file", type=Path, default=None,
+                    help="detected events already written (match_event JSONL, source vision)")
     ap.add_argument("--replay", type=Path, default=None, help="a slice recording to answer for the models")
     ap.add_argument("--plant", action="store_true", help="plant a false number in the first draft")
     ap.add_argument("--frames", action="store_true", help="ship JPEG frames instead of encoding video.webm")
