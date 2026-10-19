@@ -11,7 +11,7 @@ import json
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Literal, Protocol
+from typing import Literal, Protocol, get_args
 
 from jsonschema import validate
 from jsonschema.exceptions import ValidationError
@@ -19,7 +19,8 @@ from jsonschema.exceptions import ValidationError
 from ninety.intel.stats import calculate_facts
 from ninety.match.facts import compact
 
-Kind = Literal["event", "fact", "claim", "cue"]
+Kind = Literal["event", "fact", "moment", "claim", "cue"]
+KINDS: tuple[str, ...] = get_args(Kind)
 OVERLAY_SCHEMA = json.loads(
     (Path(__file__).resolve().parents[2] / "schemas" / "overlay_cue.schema.json").read_text()
 )
@@ -126,7 +127,7 @@ class InMemoryLedger:
     def _validate(self, record: Record) -> None:
         if not record.id:
             raise ValueError("record id must not be empty")
-        if record.kind not in {"event", "fact", "claim", "cue"}:
+        if record.kind not in KINDS:
             raise ValueError(f"record {record.id}: invalid kind {record.kind!r}")
         try:
             json.dumps(record.payload)
@@ -148,9 +149,17 @@ class InMemoryLedger:
                 raise ValueError(f"record {record.id}: cue payload fails overlay schema: {exc}") from exc
         if record.kind == "event" and record.source == "vision" and record.confidence is None:
             raise ValueError(f"record {record.id}: vision event requires confidence")
-        if record.kind == "claim" and record.payload.get("status") not in {
-            "draft", "verified", "rejected", "held"
-        }:
+        if record.kind in {"moment", "claim"}:
+            # Imported here: the contracts pull in the agent stack, which the cue CLI does not need.
+            from ninety.agents import contracts
+        if record.kind == "moment":
+            try:
+                moment = contracts.Moment(**{**record.payload, "evidence": tuple(record.payload["evidence"])})
+            except (KeyError, TypeError, ValueError) as exc:
+                raise ValueError(f"record {record.id}: payload is not a moment: {exc}") from exc
+            if moment.id != record.id or moment.evidence != tuple(record.evidence):
+                raise ValueError(f"record {record.id}: a moment's id and evidence are the record's")
+        if record.kind == "claim" and record.payload.get("status") not in contracts.CLAIM_STATUSES:
             raise ValueError(f"record {record.id}: invalid claim status")
 
 

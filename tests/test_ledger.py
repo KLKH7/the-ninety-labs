@@ -88,3 +88,40 @@ def test_load_match_keeps_frame_ranges_out_of_evidence_and_times_them():
     for fact in framed:
         assert not any(s.startswith("frames:") for s in fact.evidence)
         assert 0 < fact.t <= match.frames[-1]["t"]
+
+
+def moment(id="m1", main="e1", evidence=("e1",), minute=2):
+    return record(id, kind="moment", source="producer", evidence=evidence,
+                  payload={"id": id, "main_event": main, "evidence": list(evidence), "minute": minute})
+
+
+def test_a_moment_is_stored_with_its_evidence():
+    ledger = InMemoryLedger()
+    run(ledger.append(record("e1")))
+    stored = run(ledger.append(moment()))
+    assert stored.kind == "moment" and run(ledger.query(kind="moment")) == [stored]
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        moment(main="e2"),  # the main event is not in its evidence
+        moment(minute=0),  # minute is the football ordinal
+        record("m1", kind="moment", source="producer", evidence=("e1",), payload={"id": "m1"}),
+        record("m1", kind="moment", source="producer", evidence=("e1",),
+               payload={"id": "m2", "main_event": "e1", "evidence": ["e1"], "minute": 2}),
+        record("m1", kind="moment", source="producer", evidence=(),
+               payload={"id": "m1", "main_event": "e1", "evidence": ["e1"], "minute": 2}),
+    ],
+    ids=["main-not-cited", "minute-0", "not-a-moment", "other-id", "evidence-differs"],
+)
+def test_a_bad_moment_is_rejected(bad):
+    ledger = InMemoryLedger()
+    run(ledger.append(record("e1")))
+    with pytest.raises(ValueError, match="m1"):
+        run(ledger.append(bad))
+
+
+def test_an_unknown_kind_is_still_rejected():
+    with pytest.raises(ValueError, match="invalid kind"):
+        run(InMemoryLedger().append(record("x", kind="highlight")))

@@ -195,7 +195,7 @@ def test_the_committed_fixture_is_what_the_code_detects_from_the_committed_obser
 def test_one_kit_in_sun_and_in_shadow_is_one_side():
     # Shadow scales a shirt's three channels together. These kits are dark, as seed 900001's are:
     # clustered by raw colour, the bright away shirts are one group and everything else the other
-    # (lesson 94); by chromaticity, each kit is one group whatever the light.
+    # (lesson 98); by chromaticity, each kit is one group whatever the light.
     home_sun, home_shade = [60.0, 25.0, 25.0], [18.0, 7.5, 7.5]
     away_sun, away_shade = [40.0, 50.0, 90.0], [12.0, 15.0, 27.0]
     def scene(f):
