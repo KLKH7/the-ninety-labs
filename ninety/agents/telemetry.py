@@ -56,3 +56,20 @@ def record_fact_check(attempt: int, verdict: str, evidence: list[str], reasons: 
                 "ninety.reasons": reasons,
             }
         )
+
+
+def record_description(event_id: str, source: str, aired: bool, ms_to_speech: float | None,
+                       problems: list[str]) -> None:
+    """One audio-description line: who wrote it, whether it aired and was spoken, and how long from
+    the event reaching the Describer to audio in hand (ninety/agents/describer.py)."""
+    with tracer().start_as_current_span("ninety.describe") as span:
+        span.set_attributes(
+            {
+                "ninety.event": event_id,
+                "ninety.source": source,
+                "ninety.aired": aired,
+                "ninety.spoken": ms_to_speech is not None,
+                "ninety.ms_to_speech": -1.0 if ms_to_speech is None else ms_to_speech,
+                "ninety.problems": problems,
+            }
+        )

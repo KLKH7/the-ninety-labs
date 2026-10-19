@@ -76,6 +76,46 @@ def _text(event: dict, persona: str) -> str:
     return _pass_text(event, persona) if event["type"] == "pass" else _shot_text(event, persona)
 
 
+def _tackle_text(event: dict) -> str:
+    """`outcome` is the engine's: success, the tackler's team came away with the ball; fail, the
+    other team did; none, not yet settled."""
+    player, challenged, outcome = event["player"], event.get("receiver"), event.get("outcome")
+    target = f" {challenged}" if challenged else ""
+    if outcome == "success":
+        return f"{player} wins the ball" + (f" from {challenged}" if challenged else "")
+    if outcome == "fail":
+        other = "away" if event["team"] == "home" else "home"
+        return f"{player} challenges{target}, and the {other} side keep the ball"
+    return f"{player} challenges{target}"
+
+
+def line(event: dict) -> str:
+    """The plain words for any event, as the casual persona says them: the template graphics' line
+    for a pass, shot or goal, and a short line for every other kind. The Describer speaks it."""
+    kind, player, other = event["type"], event.get("player"), event.get("receiver")
+    side = f"the {event['team']} side"
+    if not player:  # a detected event may not know who acted
+        return {"out_of_play": "The ball goes out of play", "goal": f"Goal for {side}"}.get(
+            kind, f"{kind.replace('_', ' ')} by {side}")
+    if kind in {"pass", "shot", "goal"}:
+        return _text(event, "casual")
+    if kind == "tackle":
+        return _tackle_text(event)
+    words = {
+        "kickoff": f"{player} kicks off",
+        "interception": f"{player} intercepts",
+        "pressure": f"{player} presses" + (f" {other}" if other else ""),
+        "possession_change": f"{player} has the ball for {side}",
+        "out_of_play": "The ball goes out of play",
+        "set_piece": f"{player} takes the set piece",
+        "deflection": f"{player} gets a touch",
+        "offside": f"{player} is offside",
+        "foul": f"Foul by {player}" + (f" on {other}" if other else ""),
+        "substitution": (f"{other} comes on for {player}" if other else f"{player} goes off"),
+    }
+    return words.get(kind, f"{kind.replace('_', ' ')}, {player}")
+
+
 async def template_cues(ledger: Ledger) -> list[dict]:
     events = await ledger.query(kind="event")
     cues = []

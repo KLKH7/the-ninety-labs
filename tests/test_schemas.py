@@ -98,6 +98,15 @@ def test_an_overlay_cue_may_carry_a_pan_within_stereo():
             validator.validate({**cue, "pan": pan})
 
 
+def test_a_spoken_cue_says_whether_speech_was_available():
+    cue = json.loads((FIXTURES / "cues-seed7.jsonl").read_text().splitlines()[0])
+    validator = schema_validator("overlay_cue")
+    for speech in ("spoken", "unavailable"):
+        validator.validate({**cue, "kind": "audio_description", "speech": speech})
+    with pytest.raises(ValidationError):
+        validator.validate({**cue, "kind": "audio_description", "speech": "maybe"})
+
+
 def test_a_frame_says_whether_it_is_truth_or_tracked():
     frame = {"frame": 0, "t": 0.0, "ball": {"x": 52.5, "y": 34.0, "z": 0.11}, "players": []}
     validator = schema_validator("frame")

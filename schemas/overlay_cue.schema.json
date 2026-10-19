@@ -20,6 +20,7 @@
     "lang": { "type": "string", "description": "BCP-47 tag, e.g. en, es, ar." },
     "text": { "type": "string" },
     "pan": { "type": "number", "minimum": -1, "maximum": 1, "description": "Stereo position for a spoken cue, where the play is: -1 the left of the camera's view, 0 the centre, 1 the right." },
+    "speech": { "type": "string", "enum": ["spoken", "unavailable"], "description": "For an audio_description cue: whether its line was spoken, or speech was unavailable and the viewer should show or read the text instead." },
     "replaces": { "type": ["string", "null"] },
     "verified": { "type": "boolean" },
     "evidence": { "type": "array", "items": { "type": "string" }, "description": "Event ids behind the cue." }
