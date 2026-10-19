@@ -115,6 +115,16 @@ def test_config_is_fixed_and_valid():
     assert kw["resolution"] == CONFIG["resolution"] and kw["epochs"] == CONFIG["train"]["epochs"]
 
 
+def test_short_fine_tune_validates_only_on_clips_dataset_v1_has():
+    # coco_export refuses a val seed that is not among the clips: seed 111 is excluded from
+    # dataset v1 and so left validation (finetune.json notes)
+    listing = Path(vision_model.__file__).parents[2] / "docs" / "eval" / "dataset-v1.json"
+    seeds = {c["seed"] for c in json.loads(listing.read_text())["clips_list"]}
+    short = json.loads((Path(vision_model.__file__).parent / "finetune-short.json").read_text())
+    assert set(short["val_seeds"]) <= seeds
+    assert short["val_seeds"] == CONFIG["val_seeds"]
+
+
 def test_training_needs_an_exported_dataset(tmp_path):
     with pytest.raises(FileNotFoundError):
         train.check_dataset(tmp_path)
@@ -205,3 +215,33 @@ def test_export_copies_frames_where_symlinks_are_not_allowed(tmp_path, monkeypat
     img = load_split(tmp_path / "coco", "train")["images"][0]
     frame = tmp_path / "coco" / "train" / img["file_name"]
     assert not frame.is_symlink() and frame.read_bytes() == b"jpg"
+
+
+def test_init_needs_our_checkpoint_with_a_matching_manifest(tmp_path):
+    ckpt = tmp_path / "checkpoint_best_total.pth"
+    ckpt.write_bytes(b"weights")
+    with pytest.raises(FileNotFoundError, match="training record"):
+        train.init_from(ckpt)
+    (tmp_path / "train-manifest.json").write_text(
+        json.dumps({"name": "ours-v2", "commit": "abc", "checkpoint_sha256": "0" * 64})
+    )
+    with pytest.raises(ValueError, match="does not match"):
+        train.init_from(ckpt)
+    (tmp_path / "train-manifest.json").write_text(
+        json.dumps({"name": "ours-v2", "commit": "abc", "checkpoint_sha256": train.sha256(ckpt)})
+    )
+    assert train.init_from(ckpt) == {
+        "name": "ours-v2",
+        "commit": "abc",
+        "checkpoint_sha256": train.sha256(ckpt),
+    }
+
+
+def test_the_short_config_differs_only_where_its_notes_say():
+    short = json.loads((Path(vision_model.__file__).parent / "finetune-short.json").read_text())
+    assert {k: v for k, v in short.items() if k not in ("train", "notes")} == {
+        k: v for k, v in CONFIG.items() if k not in ("train", "notes")
+    }
+    changed = {k for k in CONFIG["train"] if short["train"][k] != CONFIG["train"][k]}
+    assert changed == {"epochs", "lr", "lr_encoder", "early_stopping_patience"}
+    assert short["train"]["lr"] < CONFIG["train"]["lr"]

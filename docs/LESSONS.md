@@ -196,6 +196,32 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** the two `detections.jsonl` runs are made by one command with only `--checkpoint` and
   `--weights` different; `tests/test_vision_finetune.py` pins the baseline to finetune.json's size.
 
+### 82. A structural change chosen from a report, justified by half the engine, is tailoring; and a lesson only on a side branch protects nothing
+- **What happened:** a full-match pass count was over a test's limit. Calibration showed forward
+  passes rated too low. The passer's estimate raced every opponent while the engine sends one
+  chaser, so the estimate was changed to race only the soonest. That made the calibration look
+  better and turned the failing seed green. An audit found that the engine lets any opponent take
+  the ball by contact and re-plans its chaser every 4 frames. So the change was not the engine's
+  rule but an optimistic way of combining uncertainty wherever two opponents contest the ball,
+  and where play happens did not move at all. It was reverted on the R3 line (Oct 17), but the
+  lesson stayed on that branch. The same change, ported earlier from another branch, rode into
+  the forward-play port on main's line (#103) unchecked. There it was a prime suspect when goals
+  doubled (2.63 a team over 8 seeds, against 1.4 real).
+- **Rule:**
+  - Before changing how an estimate combines its parts, read every path in the engine that
+    decides the same outcome (here `plan_chase` and `contact`), not only the one that fits.
+  - A rate that moves for the wrong reason, or a check that turns green while the behaviour
+    behind it does not move, is not a fix.
+  - A lesson lands on main as soon as it is learned, in its own small pull request if its fix is
+    still on a branch.
+  - An audit of a port also reads the source line's LESSONS.
+- **Check:**
+  - For any change that moves a held-out check, list what else moved (stoppages, where play
+    happens) and say what did not.
+  - `git log --all -- docs/LESSONS.md` shows no lesson that exists only on an unmerged branch
+    older than a day.
+  - A port's audit names the branches whose lessons it read.
+
 ## Working in the repo
 
 ### 12. "No checks yet" is not "checks passed"
@@ -725,7 +751,69 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `docs/eval/dataset-v1.json` lists the run, commit and overrides of every clip; for
   each replaced seed, compare `params` and `overrides` in both `clip.json` files.
 
-### 89. A count is not a cause: look at where the errors land before naming one
+### 88. A ported rule keeps its condition, not just its threshold
+- **What happened:** porting `main`'s aerial touches, the engine flagged every touch in foot reach
+  above 0.45 m as a thigh or chest, at half a foot's first touch. `main` applied that only to a ball
+  coming into the body; the engine's foot reaches to 1 m. A knee-high pass met beside a player was
+  miscontrolled and popped up beside him to be miscontrolled again: before the cushioned touch, 158
+  deflections in 30 minutes of seed 7, 52 by the same player straight after his own, against 35
+  before the port, and about 80 fewer passes a team per match over 24 matches. The cushioned touch
+  then copied the same height-only test into the shared first-touch rule; there it made such a ball
+  a heavy touch. The first fix also let the passer's estimate judge "into his body" from where the
+  receiver stood, but receivers run onto the ball's path: passers then over-rated dropping balls
+  and receivers kept fewer of them (89.5% against 94.2% on the base, seeds 40 to 47). The estimate
+  keeps the thigh for a dropping ball, as a cautious bound, and the calibration report (forced
+  passes) checks that it under-estimates rather than fits.
+- **Rule:** when porting a rule between engines, carry over every condition it was guarded by (here,
+  "into his body"), and check it against the receiving engine's own definitions (here, foot reach).
+- **Check:** after a port, compare event counts by kind (deflections, passes) with the parent on the
+  same seed, and rerun the touch report: an estimate made more optimistic shows there before it shows
+  in goals. `tests/test_engine_rules.py::test_a_ball_he_reaches_beside_him_below_his_foot_reach_is_a_foot_touch`
+  fails with the height-only test restored;
+  `tests/test_decisions.py::test_the_passer_expects_a_dropping_ball_into_his_man_to_meet_the_thigh`
+  fails if the estimate takes it on the foot.
+
+### 89. A rate that swings match to match needs enough matches before it is read
+- **What happened:** the touch report's eight seeds put the engine at 1.0 goals a team after "what
+  makes a touch worse", and the pull request, GROUNDING A4 and EVALUATION recorded it as a held-out
+  miss against the published 1.4. A match's goals run from 0 to 8, so eight matches cannot measure
+  goals a team to better than about ±0.3. Over 24 seeds the same engine gave 1.44, and the change
+  against the engine before it was -0.25 ± 0.18: noise.
+- **Rule:** before calling a per-match rate (goals, penalties, cards) a hit or a miss against a
+  published figure, give its standard error and use enough matches that the error is smaller than
+  the gap being claimed; compare two engines on the same seeds. A rate measured on too few matches is
+  reported with its error, never as a hit or a miss.
+- **Check:** every goals-per-team figure in GROUNDING and EVALUATION says how many matches it is
+  over; a before-and-after claim on goals gives the paired difference and its standard error.
+
+### 90. The same seed does not pair two engines
+- **What happened:** #90 was measured against main on seeds 40 to 47 and the per-seed differences
+  gave -1.0 goals a team with a "paired" standard error of 0.34, reported as likely real. But any
+  engine change makes the two matches part within about a minute (seed 7's events differ from
+  73 s on), so a seed's two matches are independent draws, not a pair. Over 24 seeds the
+  difference was -0.44 with a standard error of 0.28, and the paired and unpaired errors agreed
+  (0.276 and 0.279).
+- **Rule:** treat two engines on the same seeds as independent samples. Give the unpaired
+  standard error, and use enough matches that it is smaller than the gap being claimed. Running
+  the same seeds still matters, for reproducing a run, not for cancelling noise.
+- **Check:** for a before-and-after on a match rate, report both errors; if the paired one is not
+  clearly smaller, quote the unpaired one.
+
+### 91. When the data moves, the code that reads it moves in the same change
+- **What happened:** sealing the ground truth (0fda1f8) moved frames.jsonl and events.jsonl from
+  the `renders` container to `truth`. The training fetcher still read frames.jsonl from `renders`,
+  so a fetch of any later run would have downloaded images with no labels, and coco_export would
+  have stopped on the first clip. Separately, dataset v1 picks each clip's run and drops seed 111,
+  but the fetcher took whole runs, and the pinned validation seeds still named 111. Both were found
+  by reading the dataset definition against the tools before renting a GPU, not on the GPU.
+- **Rule:** a change to where data lives lists every reader of it and updates them, or names the
+  ones left behind. Before a paid training run, dry-run the launcher against the exact dataset
+  definition it will train on.
+- **Check:** `tests/test_vision_fetch_clips.py` takes labels from `truth` and each seed from the run
+  the list names; `tests/test_vision_finetune.py` checks the short fine-tune's validation seeds are
+  all in `docs/eval/dataset-v1.json`.
+
+### 92. A count is not a cause: look at where the errors land before naming one
 - **What happened:** two explanations were passed on before anyone checked them. "The detector
   fires on 45 of 113 fully hidden balls" was read as the model seeing balls behind the boards,
   learned from the boards defect in its training labels. Checking where those detections were

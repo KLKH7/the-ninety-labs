@@ -1,6 +1,6 @@
 {
   "notes": {
-    "val_seeds": "Chosen before any training: the last 15 bulk seeds and the last 5 of each hard-case set of render run v1, so validation has the same mix as training. Never test seeds.",
+    "val_seeds": "Chosen before any training: the last 15 bulk seeds and the last 5 of each hard-case set of render run v1, so validation has the same mix as training. Never test seeds. Seed 111 left validation on 2026-10-19 (25 to 24 clips): it failed the render checks twice (b319f21 and cca498c) and dataset v1 excludes it (docs/eval/dataset-v1.json). It was removed, not replaced, because choosing a substitute after seeing results would be choosing the validation set by them. ours-v2 validated on all 25 (its train-manifest.json).",
     "stride": "Every 5th frame (5 fps): nearer frames are near copies of each other.",
     "resolution": "640, divisible by patch 16 x windows 2. At the default 512 the median ball is 7.1 px (docs/eval/dataset-stats.json); 640 gives about 8.9 px for a 1.6x cost. Larger is a measured ablation, not a default.",
     "batch": "4 images, gradients accumulated 4 times: an effective batch of 16, rfdetr's default target. It was 2 x 8 (the same optimisation, half the memory) while training on a 24 GB Mac, where 4 x 4 took about 18 GB of unified memory; a 24 GB GPU holds 4 x 4.",
@@ -12,7 +12,6 @@
     108,
     109,
     110,
-    111,
     112,
     113,
     114,
