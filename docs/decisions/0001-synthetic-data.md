@@ -248,6 +248,13 @@ hashes, and the reason. All render checks pass, determinism included.
   detection scores should be reported with fully hidden balls apart (EVALUATION.md's visibility
   groups already do this).
 
+**Stored and contract-checked (Oct 19).** The re-frozen clips are in shared storage. Images and
+`clip.json` are in `renders/test-frozen-cca498c/`. `frames.jsonl`, `events.jsonl` and `meta.json` are
+in `truth-test/test-frozen-cca498c/`, a container of its own (#123), because training machines get a
+read link to `truth`. Re-downloaded, every hash matches `docs/eval/test-set-frozen.json`. With
+`meta.json` from `ninety-render-meta`, all five meet the data contract at `0dd5190` (#108), which
+settles the check that was pending on #96.
+
 The final proof comes later: detector recall on the fixed test set before and after each
 targeted round.
 
