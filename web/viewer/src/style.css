@@ -1,0 +1,72 @@
+:root {
+  --bg: #0b1018;
+  --panel: #131b27;
+  --line: #233044;
+  --ink: #eef2f7;
+  --muted: #9aa7b8;
+  --accent: #36d39a;
+  --tag: #f2c14e;
+  --bad: #ff7a7a;
+  --focus: #7cc4ff;
+  --aspect: 16 / 9;
+  color-scheme: dark;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); line-height: 1.45; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+kbd { font: 600 0.75em ui-monospace, monospace; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; color: var(--muted); }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.skip { position: absolute; left: 16px; top: -48px; background: var(--focus); color: #000; padding: 8px 12px; border-radius: 6px; z-index: 2; }
+.skip:focus { top: 8px; }
+
+.bar { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 24px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.bar h1 { font-size: 1.1rem; margin: 0 auto 0 0; letter-spacing: 0.02em; }
+.bar h1 span { color: var(--accent); }
+.persona { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; }
+.persona button { background: none; border: 0; color: var(--muted); font: inherit; font-weight: 600; padding: 6px 16px; border-radius: 999px; cursor: pointer; }
+.persona button[aria-checked="true"] { background: var(--ink); color: var(--bg); }
+.persona button[aria-checked="true"] kbd { color: var(--bg); border-color: var(--bg); }
+.toggle { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); cursor: pointer; }
+
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; padding: 16px; max-width: 1600px; margin: 0 auto; }
+@media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+
+.stage { position: relative; aspect-ratio: var(--aspect); background: #000; border-radius: 8px; overflow: hidden; }
+.stage video, .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.stage canvas[hidden], .stage video[hidden] { display: none; }
+
+.controls { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+.controls button { background: var(--ink); color: var(--bg); border: 0; border-radius: 6px; font: inherit; font-weight: 700; padding: 8px 18px; min-width: 88px; cursor: pointer; }
+.controls input[type="range"] { flex: 1; accent-color: var(--accent); }
+.controls output { font: 600 1rem ui-monospace, monospace; min-width: 5ch; }
+.keys { color: var(--muted); font-size: 0.85rem; margin: 8px 0; }
+
+.pipeline { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 12px 0 0; padding: 12px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; font-size: 0.9rem; }
+.pipeline dt { color: var(--muted); }
+.pipeline dd { margin: 0; }
+.pipeline dd.warn { color: var(--tag); }
+.pipeline dd.warn::before { content: "⚠ "; }
+
+.trace { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; align-self: start; }
+.trace h2 { margin: 0 0 4px; font-size: 1.05rem; }
+.trace .hint { color: var(--muted); font-size: 0.85rem; margin: 0 0 12px; }
+#claims { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.claim { border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+.claim[aria-current="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.claim-head { display: flex; align-items: center; gap: 10px; }
+.chip { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 8px; border-radius: 999px; }
+.accepted .chip { background: var(--accent); color: #04130d; }
+.held_back .chip { background: var(--bad); color: #1d0505; }
+.meta { color: var(--muted); font-size: 0.8rem; }
+.claim-text { font-weight: 600; margin: 8px 0; }
+.steps { margin: 0; padding-left: 18px; font-size: 0.85rem; color: var(--muted); display: grid; gap: 4px; }
+.step strong { color: var(--ink); text-transform: capitalize; }
+.step.rejected { color: var(--bad); }
+.step.rejected strong { color: var(--bad); }
+.seek { margin-top: 10px; background: none; border: 1px solid var(--line); color: var(--ink); border-radius: 6px; padding: 6px 10px; font: inherit; cursor: pointer; }
+
+@media (prefers-reduced-motion: no-preference) {
+  html[data-motion="full"] .claim { transition: border-color 0.2s, box-shadow 0.2s; }
+}

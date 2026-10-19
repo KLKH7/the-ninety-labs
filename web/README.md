@@ -1,6 +1,38 @@
 # web
 
-Viewer and broadcast renderer (three.js). The viewer is planned.
+Viewer and broadcast renderer (three.js).
+
+## `web/viewer`: the viewer
+
+Plays one clip with on-screen graphics drawn on the footage from `overlay_cue` records, a persona
+switch (casual / analyst) and the agent trace: each claim the Analyst drafted and the
+Fact-checker's verdict. It reads only a bundle written by `ninety-e2e`
+([ninety/e2e.py](../ninety/e2e.py)), which runs the whole chain on one clip with no Azure:
+
+```bash
+uv run ninety-e2e runs/test-frozen-cca498c/test/seed900001 --out runs/e2e/seed900001 --plant
+npm ci --prefix web/viewer
+npm run dev --prefix web/viewer          # http://localhost:5173, bundle from runs/e2e/seed900001
+NINETY_BUNDLE=runs/e2e/other npm run dev --prefix web/viewer    # another bundle
+npm run build --prefix web/viewer        # static site in web/viewer/dist; open it with ?bundle=<url>
+```
+
+| Stage | In the bundle | Today |
+|---|---|---|
+| Ingest | `detections.jsonl` | ours-v2's committed run on the frozen test set (`--detect live --weights W` runs RF-DETR) |
+| Interpret | `events.jsonl`, `facts.json` | events: the simulator's, as a stand-in, named on screen until R3's vision events land (`--events vision`); stats from `ninety/intel/stats.py` |
+| Explain | `trace.json` | the Analyst → Fact-checker workflow with the real code checks; offline Analyst, or `--replay` a Foundry recording |
+| Render | `cues.jsonl` | template cues for every pass and shot, one fact-checked insight a minute |
+| Personalize | persona in each cue | casual and analyst |
+
+Footage is `video.webm` (VP9, when ffmpeg is installed) or the JPEG frames (`--frames`).
+
+Accessibility from day one: every control works from the keyboard (<kbd>Space</kbd> play,
+<kbd>←</kbd>/<kbd>→</kbd> one second, <kbd>,</kbd>/<kbd>.</kbd> one frame, <kbd>1</kbd>/<kbd>2</kbd>
+persona, <kbd>D</kbd> detections), the persona switch is an ARIA radio group, what is on air is
+announced in a polite live region and named on the graphics canvas, and graphics stop sliding and
+fading when the system asks for reduced motion (or the "Reduce motion" box is ticked).
+`tests/test_viewer.py` drives all of this in headless Chromium.
 
 ## `web/render`: broadcast renderer
 

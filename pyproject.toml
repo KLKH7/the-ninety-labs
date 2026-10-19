@@ -30,6 +30,7 @@ ninety-render-check = "ninety.render.cli:check_main"
 ninety-render-meta = "ninety.render.cli:meta_main"
 ninety-grid = "ninety.sim.grid:main"
 ninety-data-stats = "ninety.vision.data_stats:main"
+ninety-e2e = "ninety.e2e:main"
 
 [dependency-groups]
 dev = [
