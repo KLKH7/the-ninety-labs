@@ -100,7 +100,8 @@ def test_the_page_skins_the_same_body_the_box_uses(page):
     """Beauty and the id pass are the same mesh, and it agrees with the Python markers."""
     p = sample_params(5)
     params = {**p.to_dict(), "width": 1280, "height": 720}
-    page.evaluate("cfg => window.ninety.init(cfg)", {"seed": 5, "params": params, "objects": [_appearance(LOOK, p)]})
+    page.evaluate("cfg => window.ninety.init(cfg)",
+                  {"seed": 5, "params": params, "objects": [_appearance(LOOK, p)]})
     ball = (40.7, 30.25, 0.12)
     g = Gait(action="run", phase=1.2, speed=5.2, heading=0.4)
     parts = body_parts(40.0, 30.0, LOOK, g, None)
@@ -113,7 +114,8 @@ def test_the_page_skins_the_same_body_the_box_uses(page):
     spec = {
         "index": 0,
         "camera": {"position": list(CAM.position), "R": CAM.R, "fov_v_deg": CAM.fov_v_deg},
-        "objects": [{"id": LOOK.id, "parts": parts, "box": parts_box(CAM, parts), "heading": 0.4, "pose": pose}],
+        "objects": [{"id": LOOK.id, "parts": parts, "box": parts_box(CAM, parts), "heading": 0.4,
+                     "pose": pose}],
         "keypoints": [], "blur": [0.0, 0.0], "score": [0, 0], "clock": "00:00",
         "goal_age": None, "goal_side": None, "net": None, "want_image": False, "want_markers": True,
     }
@@ -136,7 +138,8 @@ def test_the_page_skins_the_same_body_the_box_uses(page):
         "reach": reach_sign(40, 30, g2, ball), "dive": 0,
         "plant_l": None, "plant_r": None, "x": 40.0, "y": 30.0,
     }
-    spec["objects"] = [{"id": LOOK.id, "parts": parts2, "box": parts_box(CAM, parts2), "heading": 0.0, "pose": pose2}]
+    spec["objects"] = [{"id": LOOK.id, "parts": parts2, "box": parts_box(CAM, parts2), "heading": 0.0,
+                        "pose": pose2}]
     spec["index"] = 1
     res2 = page.evaluate("s => window.ninety.frame(s)", spec)
     py2 = world_markers(40, 30, 0.0, 1.84, "strike", 0, 0.3, pose2["reach"], 0, None, None)
@@ -150,7 +153,8 @@ def test_the_page_skins_the_same_body_the_box_uses(page):
         g3 = Gait(action="run", phase=1.2, speed=5.2, heading=0.4)
         parts3 = body_parts(40.0, 30.0, look, g3, None)
         pose3 = dict(pose, build=build, hair_style=style)
-        spec["objects"] = [{"id": look.id, "parts": parts3, "box": parts_box(CAM, parts3), "heading": 0.4, "pose": pose3}]
+        spec["objects"] = [{"id": look.id, "parts": parts3, "box": parts_box(CAM, parts3), "heading": 0.4,
+                            "pose": pose3}]
         spec["index"] += 1
         res3 = page.evaluate("s => window.ninety.frame(s)", spec)
         drawn3 = res3["objects"][look.id]["bbox"]

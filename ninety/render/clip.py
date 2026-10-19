@@ -35,10 +35,10 @@ from ninety.render.scene import (
     ball_parts,
     body_parts,
     crowded_start,
-    reach_sign,
     drawn_ball,
     parts_box,
     project_keypoints,
+    reach_sign,
     sample_looks,
 )
 from ninety.render.splits import split_of
