@@ -30,8 +30,13 @@ def test_planted_set_is_what_it_says():
     supported = {(c["seed"], c["text"]) for c in claims if c["family"] == "recorded" and c["true"]
                  and c["judge"] and c["judge"]["ok"]}
     assert all((c["seed"], c["text"]) in supported for c in phantom)
-    viewer = [c for c in claims if c["family"] == "viewer input"]
+    frozen = planted.load(judge_path=None)["claims"]  # the set alone, without later Judge answers
+    viewer = [c for c in frozen if c["family"] == "viewer input"]
     assert viewer and all(not c["true"] and c["judge"] is None for c in viewer)
+    # Later answers fill only claims the set had no answer for, and never replace one.
+    for before, after in zip(frozen, claims, strict=True):
+        filled = before["judge"] is None and after.get("judge_recorded") == "later"
+        assert after["judge"] == before["judge"] or filled
 
 
 def test_full_variant_is_the_live_fact_checker():

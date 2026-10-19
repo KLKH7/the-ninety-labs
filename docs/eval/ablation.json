@@ -1150,7 +1150,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "rejected",
    "layer": "judge"
   }
  },
@@ -1171,7 +1171,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "rejected",
    "layer": "judge"
   }
  },
@@ -1192,7 +1192,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "rejected",
    "layer": "judge"
   }
  },
@@ -1213,7 +1213,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "rejected",
    "layer": "judge"
   }
  },
@@ -1234,7 +1234,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "rejected",
    "layer": "judge"
   }
  },
@@ -1255,7 +1255,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "rejected",
    "layer": "judge"
   }
  },
@@ -1276,7 +1276,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "rejected",
    "layer": "judge"
   }
  },
@@ -1297,7 +1297,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "rejected",
    "layer": "judge"
   }
  },
@@ -1318,7 +1318,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "rejected",
    "layer": "judge"
   }
  },
@@ -1339,7 +1339,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "rejected",
    "layer": "judge"
   }
  },
@@ -1360,7 +1360,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "rejected",
    "layer": "judge"
   }
  },
@@ -1381,7 +1381,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "rejected",
    "layer": "judge"
   }
  },
@@ -1402,7 +1402,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "verified",
    "layer": "judge"
   }
  },
@@ -1423,7 +1423,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "verified",
    "layer": "judge"
   }
  },
@@ -1444,7 +1444,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "verified",
    "layer": "judge"
   }
  },
@@ -1465,7 +1465,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "verified",
    "layer": "judge"
   }
  },
@@ -3481,7 +3481,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "rejected",
    "layer": "judge"
   }
  },
@@ -3502,7 +3502,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "rejected",
    "layer": "judge"
   }
  },
@@ -3523,7 +3523,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "rejected",
    "layer": "judge"
   }
  },
@@ -3544,7 +3544,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "rejected",
    "layer": "judge"
   }
  },
@@ -3565,7 +3565,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "rejected",
    "layer": "judge"
   }
  },
@@ -3586,7 +3586,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "rejected",
    "layer": "judge"
   }
  },
@@ -3607,7 +3607,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "rejected",
    "layer": "judge"
   }
  },
@@ -3628,7 +3628,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "rejected",
    "layer": "judge"
   }
  },
@@ -3649,7 +3649,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "rejected",
    "layer": "judge"
   }
  },
@@ -3670,7 +3670,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "rejected",
    "layer": "judge"
   }
  },
@@ -3691,7 +3691,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "rejected",
    "layer": "judge"
   }
  },
@@ -3712,7 +3712,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "rejected",
    "layer": "judge"
   }
  },
@@ -3733,7 +3733,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "verified",
    "layer": "judge"
   }
  },
@@ -3754,7 +3754,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "verified",
    "layer": "judge"
   }
  },
@@ -3775,7 +3775,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "verified",
    "layer": "judge"
   }
  },
@@ -3796,7 +3796,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "verified",
    "layer": "judge"
   }
  },
@@ -5896,7 +5896,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "rejected",
    "layer": "judge"
   }
  },
@@ -5917,7 +5917,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "rejected",
    "layer": "judge"
   }
  },
@@ -5938,7 +5938,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "rejected",
    "layer": "judge"
   }
  },
@@ -5959,7 +5959,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "rejected",
    "layer": "judge"
   }
  },
@@ -5980,7 +5980,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "rejected",
    "layer": "judge"
   }
  },
@@ -6001,7 +6001,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "rejected",
    "layer": "judge"
   }
  },
@@ -6022,7 +6022,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "rejected",
    "layer": "judge"
   }
  },
@@ -6043,7 +6043,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "rejected",
    "layer": "judge"
   }
  },
@@ -6064,7 +6064,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "rejected",
    "layer": "judge"
   }
  },
@@ -6085,7 +6085,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "rejected",
    "layer": "judge"
   }
  },
@@ -6106,7 +6106,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "rejected",
    "layer": "judge"
   }
  },
@@ -6127,7 +6127,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "rejected",
    "layer": "judge"
   }
  },
@@ -6148,7 +6148,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "rejected",
    "layer": "judge"
   }
  },
@@ -6169,7 +6169,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "rejected",
    "layer": "judge"
   }
  },
@@ -6190,7 +6190,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "rejected",
    "layer": "judge"
   }
  },
@@ -6211,7 +6211,7 @@
    "layer": "code checks"
   },
   "no typed facts": {
-   "status": "unmeasured",
+   "status": "rejected",
    "layer": "judge"
   }
  }

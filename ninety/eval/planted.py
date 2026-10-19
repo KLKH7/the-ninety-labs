@@ -38,6 +38,8 @@ ROOT = Path(__file__).resolve().parents[2]
 RECORDING = ROOT / "docs/eval/fact-checker.json"
 VERSION = 1
 PATH = ROOT / f"docs/eval/planted-claims-v{VERSION}.json"
+# The published Judge's answers to the claims no earlier run asked it (ninety/eval/planted_judge.py).
+JUDGE_PATH = ROOT / f"docs/eval/planted-claims-v{VERSION}-judge.json"
 SOURCE = "docs/eval/fact-checker.json: ninety-judge:1 on gpt-4.1-mini, seeds 21,33, commit 9be98bd"
 
 # The recorded true claims the derived families are built on: one simple kind per event type.
@@ -122,10 +124,23 @@ def build(recording: list[dict]) -> dict:
     }
 
 
-def load(path: Path = PATH) -> dict:
+def load(path: Path = PATH, judge_path: Path | None = JUDGE_PATH) -> dict:
+    """The set, with the later-recorded Judge answers filled in where the set has none (each such
+    claim marked `judge_recorded: "later"`). A failed call leaves the claim unanswered."""
     data = json.loads(path.read_text())
     if data["version"] != VERSION:
         raise ValueError(f"{path}: planted set version {data['version']}, this code reads {VERSION}")
+    data["later"] = None
+    if judge_path is not None and judge_path.exists():
+        later = json.loads(judge_path.read_text())
+        if later["version"] != VERSION:
+            raise ValueError(f"{judge_path}: answers for version {later['version']}, not {VERSION}")
+        data["later"] = {k: v for k, v in later.items() if k != "answers"}
+        for item in data["claims"]:
+            answer = later["answers"].get(item["id"])
+            failed = answer is None or answer["category"] in (*HELD_CATEGORIES, "invalid_response")
+            if item["judge"] is None and not failed:
+                item["judge"], item["judge_recorded"] = answer, "later"
     return data
 
 
