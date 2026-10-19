@@ -149,7 +149,7 @@ jobs:
 
   image:
     # Builds the demo image the way the deploy does, runs it and calls it, so a file the code reads
-    # at run time but the image leaves out fails here, before merge (docs/LESSONS.md, lesson 96).
+    # at run time but the image leaves out fails here, before merge (docs/LESSONS.md, lesson 97).
     # The Replay bundle is a small fixture packed here (tests/fixture_bundle.py) and served from the
     # runner, pinned by its own hash, so the job needs no release asset and no Azure. Then the live
     # smoke test (tests/test_live_smoke.py) runs against the container, as the deploy runs it live.
