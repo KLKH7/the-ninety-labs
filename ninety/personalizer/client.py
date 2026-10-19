@@ -82,7 +82,10 @@ class RemotePersonalizer:
             self.last_route, self.last_dropped = f"fallback: {why}", {}
             log.warning("personalizer %s after %.0f ms; in-process fallback", why, _ms(started))
             return await self.fallback(claim, evidence, profiles)
-        variants, self.last_dropped = recheck(claim, evidence, profiles, _texts(data, profiles))
+        variants, dropped = recheck(claim, evidence, profiles, _texts(data, profiles))
+        # The server's reasons first: a variant it replaced comes back as the verified text, which
+        # passes here, so only the server knows why. A reason this side found wins over it.
+        self.last_dropped = {**_server_dropped(data, profiles), **dropped}
         self.last_route = "remote"
         return variants
 
@@ -122,6 +125,17 @@ def _texts(data: object, profiles: list[Profile]) -> dict[int, str]:
             if isinstance(v.get("text"), str):
                 texts[i] = v["text"]
     return texts
+
+
+def _server_dropped(data: dict, profiles: list[Profile]) -> dict[int, str]:
+    """The server's drop reasons, for the trace only: they never decide what airs."""
+    reported = data.get("dropped")
+    if not isinstance(reported, dict):
+        return {}
+    return {
+        int(i): f"server: {why}" for i, why in reported.items()
+        if isinstance(i, str) and i.isdigit() and int(i) < len(profiles) and isinstance(why, str)
+    }
 
 
 def _ms(started: float) -> float:

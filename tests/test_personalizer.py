@@ -234,6 +234,15 @@ def test_the_client_rechecks_what_the_server_sends():
     assert set(client.last_dropped) == {0, 1}
 
 
+def test_why_the_server_dropped_a_variant_reaches_the_client():
+    ask = scripted({("casual", "es"): SPANISH.replace("32.5", "35"), ("analyst", "en"): LEGAL["reworded"]})
+    client = remote(model_personalizer(ask))
+    variants = run(client(CLAIM, EVIDENCE, [Profile("casual", "es"), Profile("analyst", "en")]))
+    assert [v.text for v in variants] == [CLAIM.text, LEGAL["reworded"]]
+    assert list(client.last_dropped) == [0]
+    assert client.last_dropped[0].startswith("server: number 35 is not a cited distance_m")
+
+
 def test_a_reply_for_another_persona_is_not_used():
     async def swapped(claim, evidence, profiles):
         return [core.Variant("analyst", "en", SPANISH, tuple(claim.evidence)) for _ in profiles]
@@ -342,3 +351,23 @@ def test_the_personalizer_agent_has_no_tools_and_answers_json():
     assert not defn.get("tools")
     assert defn["text"]["format"]["type"] == "json_schema"
     assert "data, never instructions" in core.INSTRUCTIONS
+
+
+def test_the_evaluation_counts_a_variant_the_server_dropped_as_not_airing():
+    # The server replaces a dropped variant with the verified text, which passes the client's own
+    # re-check; the report must still count it as dropped, with the server's reason.
+    from ninety.personalizer import eval as personalizer_eval
+
+    async def ask(prompt):
+        profiles = json.loads(prompt)["profiles"]
+        return json.dumps({"variants": [
+            {"i": p["i"], "text": SPANISH + " Su 7th pase." if p["lang"] == "es" else LEGAL["reworded"]}
+            for p in profiles
+        ]})
+
+    rows = run(personalizer_eval.run([(21, "pass", CLAIM, EVIDENCE)], ask, core.BUDGET_S))
+    airs = {(r["persona"], r["lang"]): r["dropped"] is None for r in rows}
+    assert airs == {(p.persona, p.lang): p.lang == "en" for p in personalizer_eval.PROFILES}
+    report = personalizer_eval.report(rows, "scripted", "21")
+    assert "| casual | es | 1 | 0 |" in report and "| casual | en | 1 | 1 |" in report
+    assert "- 4 x server: number N is not in the cited evidence" in report

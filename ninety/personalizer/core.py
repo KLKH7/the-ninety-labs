@@ -154,16 +154,24 @@ async def verified_text(claim: Claim, evidence: list[dict], profiles: list[Profi
 
 def model_personalizer(ask: Ask, timeout_s: float = BUDGET_S) -> Personalize:
     """Personalize with a model: one call for all profiles, then the re-check. If the model fails
-    or is slow, every profile gets the verified text."""
+    or is slow, every profile gets the verified text. `.explained` gives the same variants with why
+    each dropped one was dropped, by profile number, for the server to report."""
 
-    async def personalize(claim: Claim, evidence: list[dict], profiles: list[Profile]) -> list[Variant]:
+    async def explained(
+        claim: Claim, evidence: list[dict], profiles: list[Profile]
+    ) -> tuple[list[Variant], dict[int, str]]:
         if not profiles:
-            return []
+            return [], {}
         try:
             reply = await asyncio.wait_for(ask(prompt(claim, evidence, profiles)), timeout=timeout_s)
         except (TimeoutError, AgentFrameworkException, AzureError) as e:
             log.warning("personalizer model failed (%s); verified text for every profile", type(e).__name__)
-            reply = ""
-        return recheck(claim, evidence, profiles, parse(reply))[0]
+            variants, dropped = recheck(claim, evidence, profiles, {})
+            return variants, {i: f"model failed: {type(e).__name__}" for i in dropped}
+        return recheck(claim, evidence, profiles, parse(reply))
 
+    async def personalize(claim: Claim, evidence: list[dict], profiles: list[Profile]) -> list[Variant]:
+        return (await explained(claim, evidence, profiles))[0]
+
+    personalize.explained = explained
     return personalize

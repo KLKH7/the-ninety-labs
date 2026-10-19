@@ -4,10 +4,11 @@ One request is one A2A message with one data part:
 
     {"claim": {"text": ..., "evidence": [...]}, "evidence": [<event>, ...], "profiles": [<Profile>, ...]}
 
-and the reply is one message with one data part, {"variants": [<Variant>, ...]}, one per profile in
-order. Profiles are rebuilt with `Profile`, which refuses any value outside its allow-lists, so a
-viewer's text never reaches the model; a request that fails validation is refused with an A2A
-invalid-params error before any model call.
+and the reply is one message with one data part, {"variants": [<Variant>, ...], "dropped": {...}}:
+one variant per profile in order, and why the server replaced a profile's variant with the verified
+text, by profile number. Profiles are rebuilt with `Profile`, which refuses any value outside its
+allow-lists, so a viewer's text never reaches the model; a request that fails validation is
+refused with an A2A invalid-params error before any model call.
 
     uv run uvicorn --factory ninety.personalizer.server:live_app --port 8001
 
@@ -96,8 +97,15 @@ class PersonalizerExecutor(AgentExecutor):
             claim, evidence, profiles = read_request(parts[0])
         except ValueError as e:
             raise InvalidParamsError(str(e)) from None
-        variants = await self.personalize(claim, evidence, profiles)
-        reply = {"variants": [{**asdict(v), "evidence": list(v.evidence)} for v in variants]}
+        explained = getattr(self.personalize, "explained", None)  # core.model_personalizer's
+        if explained is not None:
+            variants, dropped = await explained(claim, evidence, profiles)
+        else:
+            variants, dropped = await self.personalize(claim, evidence, profiles), {}
+        reply = {
+            "variants": [{**asdict(v), "evidence": list(v.evidence)} for v in variants],
+            "dropped": {str(i): why for i, why in dropped.items()},  # JSON keys are strings
+        }
         await event_queue.enqueue_event(new_data_message(reply, context_id=context.context_id))
 
     async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:

@@ -17,6 +17,7 @@ import asyncio
 import contextlib
 import datetime
 import json
+import re
 import subprocess
 import time
 from collections import Counter
@@ -106,8 +107,9 @@ def report(rows: list[dict], label: str, seeds: str) -> str:
         mine = [r for r in rows if (r["persona"], r["lang"]) == (p.persona, p.lang)]
         lines.append(f"| {p.persona} | {p.lang} | {len(mine)} | {sum(r['dropped'] is None for r in mine)} |")
     routes = Counter(r["route"] for r in requests)
-    # A reason up to its first detail ("number 7 is not ..." keeps its words, not every number).
-    dropped = Counter(r["dropped"].split(":")[0] for r in rows if r["dropped"] is not None)
+    # Reasons grouped by their words: the numbers in them become N.
+    dropped = Counter(re.sub(r"\d+(?:\.\d+)?(?:st|nd|rd|th)?", "N", r["dropped"])
+                      for r in rows if r["dropped"] is not None)
     lines += [
         "",
         f"Requests: {', '.join(f'{n} {route}' for route, n in routes.most_common())}. "
