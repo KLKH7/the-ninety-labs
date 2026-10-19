@@ -8,14 +8,14 @@ from ninety.eval.vision_score import BALL_DISTANCE_PX, PLAYER_IOU, main, score
 MODEL = {"name": "rf-detr", "size": "small", "version": "test", "checkpoint": "coco"}
 
 
-def contract_line(frame, found):
+def contract_line(frame, found, clip="seed1"):
     """One line of the detections contract (ninety/vision/detections.py)."""
-    return json.dumps({"clip": "seed1", "frame": frame, "t": frame / 25, "model": MODEL,
+    return json.dumps({"clip": clip, "frame": frame, "t": frame / 25, "model": MODEL,
                        "detections": [{k: v for k, v in d.items() if k != "frame"} for d in found]}) + "\n"
 
 
 def frames():
-    return [{"frame": 0, "camera": {"width": 1280, "height": 720}, "players": [
+    return [{"frame": 0, "clip": "seed1", "camera": {"width": 1280, "height": 720}, "players": [
         {"id": "h1", "bbox": [10, 10, 30, 50], "visibility": 1.0},
         {"id": "h2", "bbox": [60, 10, 80, 50], "visibility": 0.4},
     ], "ball": {"bbox": [40, 40, 50, 50], "visibility": 0.8}}]
@@ -300,3 +300,43 @@ def test_a_player_copy_with_iou_exactly_the_rule_matches():
     assert vision_score.iou(truth, moved) == PLAYER_IOU
     row = score(one_label("player", truth), [{"frame": 0, "cls": "player", "bbox": moved, "score": 1.0}])
     assert row["overall"]["tp"] == 1
+
+
+def write_clip(tmp_path, rows, lines):
+    frame_path, det_path = tmp_path / "frames.jsonl", tmp_path / "detections.jsonl"
+    frame_path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    det_path.write_text("".join(lines))
+    return ["--frames", str(frame_path), "--detected", str(det_path)]
+
+
+def test_detections_from_another_clip_are_refused_even_when_the_frames_overlap(tmp_path):
+    # The same frame number in another clip of the same match: by frame alone it would score.
+    args = write_clip(tmp_path, frames(), [contract_line(0, detections(), clip="seed2")])
+    with pytest.raises(ValueError, match="clip seed2"):
+        main(args)
+
+
+def test_detections_naming_two_clips_are_refused(tmp_path):
+    rows = frames() + [{**frames()[0], "frame": 1}]
+    args = write_clip(tmp_path, rows, [contract_line(0, detections()),
+                                       contract_line(1, detections(), clip="seed2")])
+    with pytest.raises(ValueError, match="one clip per file"):
+        main(args)
+
+
+def test_frames_without_a_clip_are_refused(tmp_path):
+    rows = [{k: v for k, v in frames()[0].items() if k != "clip"}]
+    with pytest.raises(ValueError, match="no clip"):
+        main(write_clip(tmp_path, rows, [contract_line(0, detections())]))
+
+
+def test_the_stream_a_fixture_reads_as_four_run_frames_one_of_them_empty():
+    # Plumbing only: the fixture's boxes are made up and do not line up with a render.
+    from pathlib import Path
+
+    fixture = Path(__file__).parent / "fixtures" / "detections-seed900001.jsonl"
+    found, run, clips = vision_score.read_run(fixture)
+    assert run == {1200, 1201, 1202, 1203}
+    assert clips == {"seed900001"}
+    assert 1202 not in {d["frame"] for d in found}
+    assert min(d["score"] for d in found) == 0.05

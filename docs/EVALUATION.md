@@ -145,7 +145,10 @@ Labels on frames with no line are skipped, not counted as misses, so detecting e
 scores those frames only. The run set is read before the per-frame lines are flattened, and a
 run frame missing from `frames.jsonl` is refused. The report's `frames` block gives `scored`
 (run frames) and `label_frames_skipped` (labelled frames with no line). A file that breaks the
-contract is refused at its first bad line. Run:
+contract is refused at its first bad line. A detections file is scored against one clip only: its
+`clip` must equal the `clip` of every `frames.jsonl` row, or it is refused. Frame numbers are match
+frames, so two clips of one match can share some, and pairing by frame alone would score
+detections against the wrong clip. Run:
 
 ```bash
 uv run python -m ninety.eval.vision_score --frames runs/seed7/frames.jsonl \

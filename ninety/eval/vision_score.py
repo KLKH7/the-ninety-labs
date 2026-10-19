@@ -272,12 +272,24 @@ def score(
     }
 
 
-def read_run(path: str | Path) -> tuple[list[dict], set[int]]:
-    """A detections file as (flat detections, frames run), read by the contract's reader."""
+def read_run(path: str | Path) -> tuple[list[dict], set[int], set[str]]:
+    """A detections file as (flat detections, frames run, clips named), read by the contract's reader."""
     rows = read_detections(path)
     detections = [{"frame": fd.frame, "cls": d.cls, "bbox": list(d.bbox), "score": d.score}
                   for fd in rows for d in fd.detections]
-    return detections, {fd.frame for fd in rows}
+    return detections, {fd.frame for fd in rows}, {fd.clip for fd in rows}
+
+
+def check_clip(frames: Iterable[Mapping], clips: set[str]) -> None:
+    """Refuse detections from another clip. Frame numbers are match frames, so two clips of the
+    same match can share some: matching by frame alone would score them against the wrong one."""
+    truth = {row.get("clip") for row in frames}
+    if None in truth:
+        raise ValueError("frames.jsonl has a row with no clip, so the detections' clip cannot be checked")
+    if len(truth) > 1 or len(clips) > 1:
+        raise ValueError(f"one clip per file: frames.jsonl has {sorted(truth)}, detections {sorted(clips)}")
+    if clips and clips != truth:
+        raise ValueError(f"detections are for clip {sorted(clips)[0]}, frames.jsonl is {sorted(truth)[0]}")
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -287,8 +299,10 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD)
     parser.add_argument("--report", type=Path)
     args = parser.parse_args(argv)
-    detections, run = read_run(args.detected)
-    report = score(load_jsonl(args.frames), detections, args.threshold, run=run)
+    frames = load_jsonl(args.frames)
+    detections, run, clips = read_run(args.detected)
+    check_clip(frames, clips)
+    report = score(frames, detections, args.threshold, run=run)
     text = json.dumps(report, indent=2) + "\n"
     if args.report:
         args.report.write_text(text)
