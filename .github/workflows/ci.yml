@@ -146,3 +146,24 @@ jobs:
           ! grep -E "(Warning|Error) " diagnostics.txt
       - name: Ground truth is sealed from the live path
         run: python3 infra/check_truth_sealed.py arm.json
+
+  image:
+    # Builds the demo image the way the deploy does, runs it and calls it, so a file the code reads
+    # at run time but the image leaves out fails here, before merge (docs/LESSONS.md, lesson 96).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: docker build -t ninety-api --build-arg NINETY_COMMIT=${{ github.sha }} .
+      - name: The image serves health and an MCP call on the detected-events match
+        run: |
+          KEY=$(openssl rand -hex 16)  # made per run: no key-like literal in the repo
+          docker run -d --name api -p 8000:8000 -e NINETY_MCP_KEY="$KEY" ninety-api
+          for i in $(seq 1 30); do curl -fsS localhost:8000/api/health && break; sleep 1; done
+          test "$(curl -fsS localhost:8000/api/health | jq -r .commit)" = "${{ github.sha }}"
+          curl -fsS localhost:8000/mcp -H "x-api-key: $KEY" \
+            -H "accept: application/json, text/event-stream" -H "content-type: application/json" \
+            -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"match_info","arguments":{"match":"seed900001"}}}' \
+            | tee mcp.json
+          jq -e '.result.isError == false' mcp.json
+      - if: failure()
+        run: docker logs api || true
