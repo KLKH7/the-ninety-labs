@@ -83,7 +83,7 @@
     },
     "visibility": {
       "type": "number", "minimum": 0, "maximum": 1,
-      "description": "Share of the object's in-image pixels not hidden by other players, the ball, the goal frame or the scorebug, counted by the renderer."
+      "description": "Share of the object's in-image pixels not hidden by other players, the ball, the goal frame, the scenery (boards, stands, roofs, towers) or the scorebug, counted by the renderer. 0 with a bbox means in shot and fully hidden."
     },
     "point": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "type": "number" } },
     "point_or_null": { "type": ["array", "null"], "minItems": 2, "maxItems": 2, "items": { "type": "number" } },
