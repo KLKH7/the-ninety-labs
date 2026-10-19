@@ -131,32 +131,23 @@ def test_a_late_phone_gets_the_latest_clock_and_focus_first(setup):
         laptop.send_json({"type": "focus", "player": "a7"})
         laptop.send_json({"type": "clock", "t": 2.0, "playing": False})
         with client.websocket_connect(f"/api/pair/{code}?role=phone") as phone:
+            # The newer clock is the sentinel: without the latest state, it would come first (and
+            # the test fails rather than waiting for a message that never comes).
+            laptop.send_json({"type": "clock", "t": 3.0, "playing": True})
             assert phone.receive_json() == {"type": "clock", "t": 2.0, "playing": False}
             assert phone.receive_json() == {"type": "focus", "player": "a7"}
+            assert phone.receive_json() == {"type": "clock", "t": 3.0, "playing": True}
 
 
 @pytest.mark.parametrize(
     "bad",
     [
         {"type": "clock", "t": 1.0, "playing": True, "extra": 1},  # an unknown field
-        {
-            "type": "answer",
-            "answer": {
-                "status": "verified",
-                "text": "h7 is at 50 km/h",
-                "metric": None,
-                "value": None,
-                "unit": None,
-                "evidence": [],
-                "t_from": None,
-                "t_to": None,
-            },
-        },
         {"type": "focus", "player": "h12"},  # off the roster's id pattern
         "not json",
     ],
 )
-def test_the_relay_closes_on_anything_but_a_valid_clock_or_focus(setup, bad):
+def test_the_relay_closes_on_a_message_that_fails_the_schema(setup, bad):
     client, _, _ = setup
     code = pair(client)
     with client.websocket_connect(f"/api/pair/{code}?role=laptop") as laptop:
@@ -164,6 +155,21 @@ def test_the_relay_closes_on_anything_but_a_valid_clock_or_focus(setup, bad):
         with pytest.raises(WebSocketDisconnect) as closed:
             laptop.receive_text()
     assert closed.value.code == 1007
+
+
+ANSWER = {
+    "type": "answer",
+    "answer": {"status": "verified", "text": "h7 is at 50 km/h", "metric": None, "value": None,
+               "unit": None, "evidence": [], "t_from": None, "t_to": None},
+}
+
+
+def test_only_clock_and_focus_are_relayed():
+    # A valid answer or player card from the laptop is refused: only the server writes those.
+    MESSAGE.validate(ANSWER)
+    assert comp.Companion._relayable(json.dumps(ANSWER)) is None
+    clock = {"type": "clock", "t": 1.0, "playing": True}
+    assert comp.Companion._relayable(json.dumps(clock)) == clock
 
 
 def test_a_phone_only_listens_and_a_room_has_one_laptop(setup):
