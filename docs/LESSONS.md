@@ -159,6 +159,8 @@ short and actionable. This file is public: no research sources, product names or
   counted as "closing", a pass held mid-window then let go counted as unfinished, a ball at rest
   for four seconds counted as a pass in flight, and open play after a substitution did not count
   as play. One "legal" goal fixture gave a goal with the ball at rest 55 m out.
+  Backfilling the first Azure top-up then showed the reverse: a pass struck on a clip's last frame
+  failed C7, judged on the dribble before the kick, because none of its flight was in the clip.
 - **Rule:** a contract every clip must meet is run by the code that makes clips, as part of the
   check that decides whether a clip ships. A clip that is part of something larger says so in
   its metadata, and a check withholds a judgement only when the clip's own frames show the play
@@ -263,6 +265,13 @@ short and actionable. This file is public: no research sources, product names or
 - **Rule:** cite frames as a range (`frames:<first>-<last>`); cite events by id; a value of zero
   cites nothing.
 - **Check:** a test requires frame-based facts to cite one range, and caps the size of a clip's facts.
+
+### 83. Admin pushes skip the gate
+- **What happened:** four commits went straight to main without CI (an admin can bypass branch
+  protection). They broke lint, the fmath ban (a `math.atan2` in the engine) and the cue fixture,
+  and every open pull request was blocked until a repair landed.
+- **Rule:** every change reaches main through a pull request whose CI has passed, admins included.
+- **Check:** `git log --first-parent origin/main` shows only pull-request merge commits.
 
 ## Data and grounding
 
@@ -602,7 +611,83 @@ short and actionable. This file is public: no research sources, product names or
   builds two windows where counting players near the ball picks the wrong one. Before a batch,
   `uv run ninety-data-stats <2-3 crowded clips> --stride 5 --input 640x640` shows the share.
 
-### 75. A ported rule keeps its condition, not just its threshold
+### 75. A trigger guarded only by "not busy now" fires again when the busy state ends
+- **What happened:** a keeper's dive was allowed whenever he was not diving and not on the
+  ground. A slow shot was still on its way after he had dived, landed and got up, so he dived a
+  second time at the same ball. Every condition checked the present; none remembered that the
+  touch had already set off a dive.
+- **Rule:** an action that happens once per cause records the cause it answered (here the touch,
+  `kicked_at`) and checks it, rather than relying on a temporary state to block a repeat.
+- **Check:** for each once-per-cause action, write a test where the cause outlives the action's
+  own busy state (dive, land, get up, ball still coming) and require no repeat; and one where a
+  new cause (a deflection) is allowed to trigger it again.
+
+### 76. Keep every dimension a source measured
+- **What happened:** the kick-error source measured a tilted ellipse of where shots cross the goal
+  line (a long and a short axis). The engine kept one number, their geometric mean (3°), as the
+  sideways error, and gave the up-and-down error a fixed 2° that did not grow with speed, pressure
+  or fatigue. Close shots almost never missed: none of 25 unblocked shots inside 25 m in one sample.
+- **Rule:** when a source reports a shape (axes, a covariance, a distribution), derive each
+  component the engine uses from it, in code, with the derivation beside it. A number that
+  summarises a measurement is not the measurement.
+- **Check:** for each sourced constant, ask "what did the source actually measure, in how many
+  dimensions?" and test the derived values against the source's own figures.
+
+### 77. A committed report must come from the committed code
+- **What happened:** two commits regenerated `docs/eval/funnel.md` (1.8 goals a team), yet the
+  code of the later one, re-run on a clean checkout of that commit, produced 2.5; the realism test went red with nobody noticing. Twelve
+  matches also hide a change of 0.3 goals a team in noise (standard error about 0.27).
+- **Rule:** regenerate a report from the exact tree being committed, after the last code change,
+  and state how big a difference the sample can resolve.
+- **Check:** re-run the report on a clean checkout of the commit and compare before merging.
+
+### 78. A test's sample must survive a change that does not touch what it tests
+- **What happened:** merging the measured kick error, which changes only where a struck ball
+  goes, broke two tests that check something else. A styles test read the defensive line over
+  three minutes of one seed: the gap between a high press and a low block fell from 7.8 m to
+  5.0 m, against a 5 m margin, while over ten minutes it was 15.7 m and 12.7 m. A fact-checker
+  test needed some player to be absent from every event in a five-minute clip; after the change
+  all 22 took part, so it had nobody to plant.
+- **Rule:** a test that reads a match measures enough of it that an unrelated change cannot move
+  the result across its margin, and a test that needs a case builds that case itself rather than
+  waiting for the match to produce it. Lengthen the sample or build the case; never move the
+  margin.
+- **Check:** before trusting a match-reading test, run its measurement on a longer window and a
+  second engine version, and write both numbers next to it.
+
+### 84. Everything the picture draws in front of an object hides it in the labels
+- **What happened:** the id pass, which counts each object's visible pixels, hid all scenery. In
+  seed 900003 of the frozen test set (`engine-v1`) a dead ball rested 0.5 m behind the far
+  advertising boards for 110 frames. The picture showed only boards, and the labels said
+  visibility 1.0. Every render check passed, because each one compared the labels with the id
+  pass, not with the picture. The detector found it by missing a ball that the picture does not
+  show.
+- **Rule:** anything opaque that the beauty pass draws is an occluder in the full id pass, unless
+  it is listed as an exception with a reason (sky, ground, see-through nets, shadow decals). Before
+  re-rendering, measure the scope over every split, not only the frames a model missed.
+- **Check:** `tests/test_render_occlusion.py` puts a ball 0.5 m behind the far boards and fails if
+  any of it is labelled visible (52 pixels on the old id pass). A ball in front of the boards must
+  stay visible.
+
+### 86. Measure the worker count; a CI runner's threads are not cores
+- **What happened:** the test jobs took 15 to 40 minutes, so every merge left the other ready
+  pull requests another half hour behind. `pytest -n auto` started 4 workers on GitHub's 4-vCPU
+  runner, which has 2 physical cores, and the job took 22 minutes, against 13 with `-n 2` and 41
+  in one process (measured on the same tree, 2026-10-18). Full-match simulations also slow each
+  other down: `test_judge`'s two simulations took 498 s alone on a runner and 978 s next to the
+  90-minute realism test. Split over three runners per Python version, the jobs took 12 and 13
+  minutes against 29 and 30 in one process (main at `1f0b74c`), and the slowest shard is the one
+  with `test_judge`, which simulates 120 match minutes in one test.
+- **Rule:** choose the worker count from a measured run on the real runner, not from `auto`.
+  Spread the slowest tests over separate machines (`--shard`, `tests/conftest.py`), and keep the
+  required check names as a gate that is green only when every shard passed. Every pull request
+  still runs every test.
+- **Check:** `tests/test_shard.py` fails if a test lands in no part or two, if the `--shard`
+  hook drops or repeats a test across K, or if the slowest tests share a part. Each shard prints
+  its 10 slowest tests; when one shard runs much longer than the others, update `SLOWEST` in
+  `tests/conftest.py`.
+
+### 87. A ported rule keeps its condition, not just its threshold
 - **What happened:** porting `main`'s aerial touches, the engine flagged every touch in foot reach
   above 0.45 m as a thigh or chest, at half a foot's first touch. `main` applied that only to a ball
   coming into the body; the engine's foot reaches to 1 m. A knee-high pass met beside a player was
@@ -624,7 +709,7 @@ short and actionable. This file is public: no research sources, product names or
   `tests/test_decisions.py::test_the_passer_expects_a_dropping_ball_into_his_man_to_meet_the_thigh`
   fails if the estimate takes it on the foot.
 
-### 76. A rate that swings match to match needs enough matches before it is read
+### 88. A rate that swings match to match needs enough matches before it is read
 - **What happened:** the touch report's eight seeds put the engine at 1.0 goals a team after "what
   makes a touch worse", and the pull request, GROUNDING A4 and EVALUATION recorded it as a held-out
   miss against the published 1.4. A match's goals run from 0 to 8, so eight matches cannot measure
@@ -636,3 +721,16 @@ short and actionable. This file is public: no research sources, product names or
   reported with its error, never as a hit or a miss.
 - **Check:** every goals-per-team figure in GROUNDING and EVALUATION says how many matches it is
   over; a before-and-after claim on goals gives the paired difference and its standard error.
+
+### 89. The same seed does not pair two engines
+- **What happened:** #90 was measured against main on seeds 40 to 47 and the per-seed differences
+  gave -1.0 goals a team with a "paired" standard error of 0.34, reported as likely real. But any
+  engine change makes the two matches part within about a minute (seed 7's events differ from
+  73 s on), so a seed's two matches are independent draws, not a pair. Over 24 seeds the
+  difference was -0.44 with a standard error of 0.28, and the paired and unpaired errors agreed
+  (0.276 and 0.279).
+- **Rule:** treat two engines on the same seeds as independent samples. Give the unpaired
+  standard error, and use enough matches that it is smaller than the gap being claimed. Running
+  the same seeds still matters, for reproducing a run, not for cancelling noise.
+- **Check:** for a before-and-after on a match rate, report both errors; if the paired one is not
+  clearly smaller, quote the unpaired one.
