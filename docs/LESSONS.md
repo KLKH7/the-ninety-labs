@@ -725,7 +725,55 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `docs/eval/dataset-v1.json` lists the run, commit and overrides of every clip; for
   each replaced seed, compare `params` and `overrides` in both `clip.json` files.
 
-### 88. When the data moves, the code that reads it moves in the same change
+### 88. A ported rule keeps its condition, not just its threshold
+- **What happened:** porting `main`'s aerial touches, the engine flagged every touch in foot reach
+  above 0.45 m as a thigh or chest, at half a foot's first touch. `main` applied that only to a ball
+  coming into the body; the engine's foot reaches to 1 m. A knee-high pass met beside a player was
+  miscontrolled and popped up beside him to be miscontrolled again: before the cushioned touch, 158
+  deflections in 30 minutes of seed 7, 52 by the same player straight after his own, against 35
+  before the port, and about 80 fewer passes a team per match over 24 matches. The cushioned touch
+  then copied the same height-only test into the shared first-touch rule; there it made such a ball
+  a heavy touch. The first fix also let the passer's estimate judge "into his body" from where the
+  receiver stood, but receivers run onto the ball's path: passers then over-rated dropping balls
+  and receivers kept fewer of them (89.5% against 94.2% on the base, seeds 40 to 47). The estimate
+  keeps the thigh for a dropping ball, as a cautious bound, and the calibration report (forced
+  passes) checks that it under-estimates rather than fits.
+- **Rule:** when porting a rule between engines, carry over every condition it was guarded by (here,
+  "into his body"), and check it against the receiving engine's own definitions (here, foot reach).
+- **Check:** after a port, compare event counts by kind (deflections, passes) with the parent on the
+  same seed, and rerun the touch report: an estimate made more optimistic shows there before it shows
+  in goals. `tests/test_engine_rules.py::test_a_ball_he_reaches_beside_him_below_his_foot_reach_is_a_foot_touch`
+  fails with the height-only test restored;
+  `tests/test_decisions.py::test_the_passer_expects_a_dropping_ball_into_his_man_to_meet_the_thigh`
+  fails if the estimate takes it on the foot.
+
+### 89. A rate that swings match to match needs enough matches before it is read
+- **What happened:** the touch report's eight seeds put the engine at 1.0 goals a team after "what
+  makes a touch worse", and the pull request, GROUNDING A4 and EVALUATION recorded it as a held-out
+  miss against the published 1.4. A match's goals run from 0 to 8, so eight matches cannot measure
+  goals a team to better than about ±0.3. Over 24 seeds the same engine gave 1.44, and the change
+  against the engine before it was -0.25 ± 0.18: noise.
+- **Rule:** before calling a per-match rate (goals, penalties, cards) a hit or a miss against a
+  published figure, give its standard error and use enough matches that the error is smaller than
+  the gap being claimed; compare two engines on the same seeds. A rate measured on too few matches is
+  reported with its error, never as a hit or a miss.
+- **Check:** every goals-per-team figure in GROUNDING and EVALUATION says how many matches it is
+  over; a before-and-after claim on goals gives the paired difference and its standard error.
+
+### 90. The same seed does not pair two engines
+- **What happened:** #90 was measured against main on seeds 40 to 47 and the per-seed differences
+  gave -1.0 goals a team with a "paired" standard error of 0.34, reported as likely real. But any
+  engine change makes the two matches part within about a minute (seed 7's events differ from
+  73 s on), so a seed's two matches are independent draws, not a pair. Over 24 seeds the
+  difference was -0.44 with a standard error of 0.28, and the paired and unpaired errors agreed
+  (0.276 and 0.279).
+- **Rule:** treat two engines on the same seeds as independent samples. Give the unpaired
+  standard error, and use enough matches that it is smaller than the gap being claimed. Running
+  the same seeds still matters, for reproducing a run, not for cancelling noise.
+- **Check:** for a before-and-after on a match rate, report both errors; if the paired one is not
+  clearly smaller, quote the unpaired one.
+
+### 91. When the data moves, the code that reads it moves in the same change
 - **What happened:** sealing the ground truth (0fda1f8) moved frames.jsonl and events.jsonl from
   the `renders` container to `truth`. The training fetcher still read frames.jsonl from `renders`,
   so a fetch of any later run would have downloaded images with no labels, and coco_export would
