@@ -217,8 +217,9 @@ box, no frame with a label problem.
   number.
 - Whole players in the main view are 52 to 101 px tall (p05 to p95, per clip), inside the
   guide's 30 to 120 px.
-- The data-contract check is pending #96, which writes `meta.json`. It is backfilled and
-  validated once #96 lands, and that changes none of the frozen hashes.
+- The data contract is checked: after #96, `ninety-render-meta` wrote each clip's `meta.json`
+  from its own files and `ninety-validate` passed all five. The frozen hashes are unchanged;
+  each `meta.json` has its own sha256 in `test-set-frozen.json`.
 
 ### Re-frozen (Oct 18, a ground-truth defect found from detector misses)
 
