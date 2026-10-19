@@ -19,6 +19,8 @@
 # list:<file>: the same, but for exactly the clips the definition lists (fetch_clips --list). Runs
 # since the ground truth was sealed keep frames.jsonl in the `truth` container, so a second
 # read-only link, to `truth`, goes over stdin the same way; the manifest records the list's sha256.
+# The truth link covers its whole container, so it must never hold the test set's answer key: the
+# frozen test set's ground truth lives in a container this script never links.
 #
 # Copies this repo at the current commit (which must be pushed). Training runs detached; copy the
 # run back with the command printed at the end. Delete the machine afterwards; this never does.

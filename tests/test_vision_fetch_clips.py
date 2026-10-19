@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from ninety.vision.fetch_clips import plan, plan_list, read_list, wanted
+from ninety.vision.fetch_clips import check_empty, fetch_list, plan, plan_list, read_list, wanted
 
 
 def test_keeps_labels_and_every_fifth_frame():
@@ -76,3 +76,17 @@ def test_a_list_refuses_a_test_seed_and_a_seed_twice(tmp_path):
         read_list(write_list(tmp_path, [{"seed": 900001, "run": "v3"}]))
     with pytest.raises(ValueError, match="twice"):
         read_list(write_list(tmp_path, [{"seed": 3, "run": "v3"}, {"seed": 3, "run": "v3boards"}]))
+
+
+def test_a_list_fetch_refuses_an_out_that_already_holds_a_clip(tmp_path):
+    # export trains on every seed* folder in out: a leftover clip would be trained on unlisted
+    out = tmp_path / "clips"
+    check_empty(out)  # missing is fine
+    out.mkdir()
+    check_empty(out)  # empty is fine
+    (out / "seed82").mkdir()
+    with pytest.raises(ValueError, match="already holds 1 clips"):
+        check_empty(out)
+    # and the fetch stops before it reads the list or touches storage
+    with pytest.raises(ValueError, match="needs an empty --out"):
+        fetch_list(tmp_path / "no-such-list.json", out, 5, 1)

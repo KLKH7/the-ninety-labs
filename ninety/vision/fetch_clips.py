@@ -17,8 +17,13 @@ clip.json in the `renders` container and frames.jsonl in the `truth` container (
 so a list fetch reads both. The list's sha256 is written to <out>/dataset-list.json, so the training
 manifest can say which definition it trained on.
 
-The SAS URLs come only from the environment, is read-only, and is never printed or written to
-disk. Only training seeds are fetched; a test or reserved seed in the run is refused.
+The SAS URLs come only from the environment, are read-only, and are never printed or written to
+disk. Only training seeds are fetched; a test or reserved seed in the run is refused. The truth
+link must never reach the test set's answer key: it goes to a rented machine and covers its whole
+container, so the frozen test set's ground truth lives in a container training never links.
+
+A list fetch refuses an `--out` that already holds a clip: coco_export trains on every `seed*`
+folder there, so a clip left from an earlier fetch would be trained on without being listed.
 """
 
 from __future__ import annotations
@@ -133,7 +138,18 @@ def _env_container(var: str, what: str):
     return ContainerClient.from_container_url(url)
 
 
+def check_empty(out: Path) -> None:
+    """A list fetch starts from no clips: anything already in `out` would be trained on unlisted."""
+    leftover = sorted(d.name for d in out.glob("seed*")) if out.exists() else []
+    if leftover:
+        raise ValueError(
+            f"{out} already holds {len(leftover)} clips ({', '.join(leftover[:3])}...): "
+            "a list fetch needs an empty --out, so only the listed clips are trained on"
+        )
+
+
 def fetch_list(path: Path, out: Path, stride: int, workers: int) -> None:
+    check_empty(out)
     picks = read_list(path)
     renders = _env_container("RENDERS_SAS_URL", "renders")
     truth = _env_container("TRUTH_SAS_URL", "truth")
