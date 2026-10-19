@@ -45,7 +45,7 @@ from azure.identity import DefaultAzureCredential
 
 from ninety import config
 from ninety.agents import foundry, telemetry
-from ninety.agents.factcheck import Claim, Verdict, check
+from ninety.agents.factcheck import Claim, Verdict, check, confidence_gate
 from ninety.agents.judge import judge
 from ninety.agents.replay import (  # noqa: F401  (re-exported: the slice's names before the move)
     REPLAY_FORMAT,
@@ -103,6 +103,9 @@ class Outcome:
     claim: Claim
     attempts: int
     trace: list[str]
+    # verified, rejected (the claim was wrong) or held (it rests on a low-confidence detection),
+    # as ninety/agents/contracts.status_for maps the last verdict.
+    status: str = "verified"
 
 
 def parse_claim(text: str) -> Claim:
@@ -142,7 +145,8 @@ class AnalystExecutor(Executor):
 
 
 class FactCheckExecutor(Executor):
-    """Code checks first (free, exact about numbers, players and ids), then the Judge (meaning)."""
+    """Code checks first (free, exact about numbers, players and ids), then the confidence gate
+    (a claim resting on an unsure detection is held), then the Judge (meaning)."""
 
     def __init__(self, known: dict[str, dict], judge: Judge, trace: list[str], live: bool):
         super().__init__(id="fact_checker")
@@ -151,6 +155,8 @@ class FactCheckExecutor(Executor):
     @handler
     async def review(self, draft: Draft, ctx: WorkflowContext[Task, Outcome]) -> None:
         verdict = check(draft.claim, self.known)
+        if verdict.ok:
+            verdict = confidence_gate(draft.claim, self.known)
         if verdict.ok:
             evidence = [self.known[i] for i in draft.claim.evidence]
             started = time.perf_counter()
@@ -163,13 +169,18 @@ class FactCheckExecutor(Executor):
             telemetry.record_fact_check(attempt, "accepted", evidence_ids, [])
             await ctx.yield_output(Outcome(True, draft.claim, attempt, self.trace))
         elif draft.task.attempt < MAX_REWRITES:
-            self.trace.append("fact_checker: rejected: " + "; ".join(verdict.reasons))
-            telemetry.record_fact_check(attempt, "rejected", evidence_ids, verdict.reasons)
+            # A held claim goes back too: the writer may find a confident detection to cite.
+            word = "held" if verdict.category == "low_confidence" else "rejected"
+            self.trace.append(f"fact_checker: {word}: " + "; ".join(verdict.reasons))
+            telemetry.record_fact_check(attempt, word, evidence_ids, verdict.reasons)
             await ctx.send_message(Task(draft.task.minute, verdict.reasons, attempt))
         else:
-            self.trace.append("fact_checker: rejected, out of rewrites: " + "; ".join(verdict.reasons))
+            held = verdict.category == "low_confidence"
+            word = "held" if held else "rejected"
+            self.trace.append(f"fact_checker: {word}, out of rewrites: " + "; ".join(verdict.reasons))
             telemetry.record_fact_check(attempt, "held_back", evidence_ids, verdict.reasons)
-            await ctx.yield_output(Outcome(False, draft.claim, attempt, self.trace))
+            status = "held" if held else "rejected"
+            await ctx.yield_output(Outcome(False, draft.claim, attempt, self.trace, status))
 
 
 def match_events(seed: int, minutes: float) -> list[dict]:
