@@ -35,6 +35,9 @@ MATCHES = {"seed7": 7, "seed21": 21, "seed33": 33}  # the demo match and the hel
 DETECTED = {detected.M1_CLIP: detected.m1_path}
 MATCH_DIR = os.environ.get("NINETY_MATCH_DIR", "")
 MAX_EVENTS = 60
+# Each match's window stats are stored under their own folder: the top level holds one file per
+# match id and nothing else.
+STATS_DIR = "stats"
 TOOLS = ("list_events", "match_info")  # the published Analyst may call only these (tests check they exist)
 
 def match_id(seed: int) -> str:
@@ -62,7 +65,7 @@ def stats_of(match: str) -> tuple[dict, ...]:
         return tuple(agent_rows(detected.load(DETECTED[match]())))
     if match not in MATCHES:
         raise ValueError(f"unknown match {match!r}; available: {', '.join([*DETECTED, *MATCHES])}")
-    stored = Path(MATCH_DIR) / f"{match}.stats.json" if MATCH_DIR else None
+    stored = Path(MATCH_DIR) / STATS_DIR / f"{match}.json" if MATCH_DIR else None
     if stored and stored.exists():
         return tuple(json.loads(stored.read_text()))
     return tuple(agent_rows(match_events(MATCHES[match], MINUTES)))
@@ -120,7 +123,8 @@ def precompute(out: Path) -> None:
         rows = events_in(seed, MINUTES, 1, MINUTES + 1)
         (out / f"{match}.json").write_text(json.dumps(rows, separators=(",", ":")))
         stats = agent_rows(match_events(seed, MINUTES))
-        (out / f"{match}.stats.json").write_text(json.dumps(stats, separators=(",", ":")))
+        (out / STATS_DIR).mkdir(exist_ok=True)
+        (out / STATS_DIR / f"{match}.json").write_text(json.dumps(stats, separators=(",", ":")))
         print(f"{match}: {len(rows)} events")
 
 
