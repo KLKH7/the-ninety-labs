@@ -74,9 +74,16 @@ def test_compact_adds_nothing_to_a_ground_truth_event():
     assert "confidence" not in compact(truth)
 
 
-def test_the_mcp_server_serves_the_m1_clip_from_detected_events():
+def test_the_mcp_server_serves_the_m1_clip_from_detected_events(monkeypatch):
+    monkeypatch.setitem(match_server.DETECTED, detected.M1_CLIP, lambda: STANDIN)
     match_server.events_of.cache_clear()
     served = match_server.list_events(detected.M1_CLIP, 1, 2, None)
     assert served and all(e["id"].startswith("standin-") and "confidence" in e for e in served)
     assert {e["minute"] for e in match_server.list_events(detected.M1_CLIP, 2, 2, None)} == {2}
     assert match_server.match_info(detected.M1_CLIP)["minutes"] == 2
+    match_server.events_of.cache_clear()
+
+
+def test_the_m1_clip_loads_whichever_file_is_in_place():
+    events = detected.load(detected.m1_path())  # R3's detected events once landed, else the stand-in
+    assert events and {e["source"] for e in events} == {"vision"}
