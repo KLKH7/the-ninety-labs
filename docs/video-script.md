@@ -15,7 +15,7 @@ Rules for every shot, from [BRIEF.md](BRIEF.md#submission-checklist) and
   then it is not said.
 - Never show the demo passcode, keys, connection strings or Azure resource names.
 
-Status of each shot was checked against `main` at `9b8782e` (Oct 19, after the viewer merged). **Capturable** means it can
+Status of each shot was checked against `main` at `b4d9402` (Oct 19, after the viewer and vision-report-v2 merged). **Capturable** means it can
 be recorded from `main` today; **not yet** names what has to land first.
 
 ## Beats
@@ -36,7 +36,7 @@ live path, shown in the viewer (`web/viewer`). Numbers `[from vision-report with
 **Status: not yet.** Events from pixels are not on `main`; the live path reads a hand-written
 stand-in. **Fallback if events are not measured by M3:** detector boxes against ground-truth boxes
 on a test clip, drawn by `ninety/eval/draw.py`, with the object numbers from the latest merged
-vision report (v1 today: players 0.990 recall, ball at least half visible 0.966). Say "players and
+vision report (v2 today: players 0.994 recall, ball at least half visible 0.964). Say "players and
 ball", never "events", in that case.
 
 ### 2. Targeted synthetic data raises recall (0:15 to 0:35)
@@ -54,8 +54,9 @@ Vision Auditor's failure clusters; the Data agent and render job (on `main`). Nu
 `[from the round-1 vision report]`.
 
 **Status: not yet.** The Data agent and render job run; no targeted round has a result. Note that
-vision-report-v2 (#132) is a retrain on engine-matched data, not a targeted round: it may be
-shown as "more matched data" but not voiced as the targeted round.
+[vision-report-v2](eval/vision-report-v2.md) is a matched-engine retrain, not a targeted round: it
+may be shown as "training on footage from the same engine cut false detections from 121 to 27",
+but never voiced as the targeted round.
 
 ### 3. The fact-checker rejects a planted claim (0:35 to 1:00)
 
@@ -116,14 +117,14 @@ stand-in events); player cam, Spanish and the failure table are not on `main`.
 **Picture.** A results card, each number with the file it comes from; the stack; the repo and
 demo links.
 
-**Voice (41 words).** "Player recall `[0.990]` on footage the model never saw. Every claim checked
+**Voice (41 words).** "Player recall `[0.994]` on footage the model never saw. Every claim checked
 before it airs. Built on Microsoft Foundry, Agent Framework, MCP and Azure AI Speech, deployed on
 Azure Container Apps. Code computes every number; agents only explain. The Ninety Labs."
 
-**Needs.** The final merged vision report (v1 today; v2 once #132 merges) and, if available, the
+**Needs.** The final merged vision report (v2 today) and, if available, the
 event-level scores and the ablation; the deployed demo link (M2).
 
-**Status: capturable** as a card, with v1's numbers. Update the numbers and links at lock.
+**Status: capturable** as a card, with v2's numbers. Update the numbers and links at lock.
 
 ## Word count
 
