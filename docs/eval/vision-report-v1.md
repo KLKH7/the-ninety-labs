@@ -58,14 +58,18 @@ content can move (ball recall ranges from 0.815 to 1.000 across clips, `by_clip`
    the most. On the test set the three crowded clips score 0.988 (players) and 0.920 (ball)
    against 0.993 and 0.949 for the others. The validation figure was most likely the scorer's
    error, not the model's; it is not re-measured here.
-4. **When the ball is hidden, the model reports a ball at a player's feet.** In 45 of the 113
-   frames where the ball is in shot but fully hidden, a ball detection at score ≥ 0.5 appears; none
-   is on the hidden ball (`hidden_ball_frames.on_the_hidden_ball` = 0, median 43 px away). 44 of
+4. **In one episode, with the ball hidden behind the boards, the model reports a ball at a nearby
+   player's feet.** In 45 of the 113 frames where the ball is in shot but fully hidden, a ball
+   detection at score ≥ 0.5 appears; none is on the hidden ball (`hidden_ball_frames.on_the_hidden_ball` = 0, median 43 px away). 44 of
    the 45 are one episode in seed 900003, a dead ball resting behind the far boards while a player
    stands near it. By inspection (not in the builder), 39 of the 45 sit at a player's feet (centre
    within the lower quarter of a player's box). These 45 are over half of the 84 ball false
-   positives. A ball tracker must not trust a single-frame ball when the ball was last seen
-   going out of view.
+   positives. The evidence is one episode, so this is a case to watch, not a measured rate; a ball
+   tracker should not trust a single-frame ball when the ball was last seen going out of view.
+   ours-v2's training labels did contain the boards defect, but barely: about 52 balls behind the
+   boards among 80,185 in-shot ball labels (6 of 54,502 in v2, 46 of 25,683 in v2los; sight-line
+   estimate from #118's scope count), 29 of them labelled at least half visible. Far too few to
+   teach the model to see through boards, which fits detections landing 43 px away.
 5. **The training renders predate the test set's engine.** ours-v2 trained on renders from
    `1e4db3c` and `416430d`; the test set comes from `engine-v1` (`b319f21`, re-frozen at
    `cca498c`). The engine changed in between, so this is a mismatch. vision-report-v2 closes it:
