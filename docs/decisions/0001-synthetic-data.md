@@ -217,8 +217,9 @@ box, no frame with a label problem.
   number.
 - Whole players in the main view are 52 to 101 px tall (p05 to p95, per clip), inside the
   guide's 30 to 120 px.
-- The data-contract check is pending #96, which writes `meta.json`. It is backfilled and
-  validated once #96 lands, and that changes none of the frozen hashes.
+- The data contract is checked: after #96, `ninety-render-meta` wrote each clip's `meta.json`
+  from its own files and `ninety-validate` passed all five. The frozen hashes are unchanged;
+  each `meta.json` has its own sha256 in `test-set-frozen.json`.
 
 ### Re-frozen (Oct 18, a ground-truth defect found from detector misses)
 
@@ -248,12 +249,10 @@ hashes, and the reason. All render checks pass, determinism included.
   detection scores should be reported with fully hidden balls apart (EVALUATION.md's visibility
   groups already do this).
 
-**Stored and contract-checked (Oct 19).** The re-frozen clips are in shared storage. Images and
-`clip.json` are in `renders/test-frozen-cca498c/`. `frames.jsonl`, `events.jsonl` and `meta.json` are
-in `truth-test/test-frozen-cca498c/`, a container of its own (#123), because training machines get a
-read link to `truth`. Re-downloaded, every hash matches `docs/eval/test-set-frozen.json`. With
-`meta.json` from `ninety-render-meta`, all five meet the data contract at `0dd5190` (#108), which
-settles the check that was pending on #96.
+**Stored (Oct 19).** The re-frozen clips are in shared storage. Images and `clip.json` are in
+`renders/test-frozen-cca498c/`. `frames.jsonl`, `events.jsonl` and `meta.json` are in
+`truth-test/test-frozen-cca498c/`, a container of its own (#123), because training machines get a
+read link to `truth`. Re-downloaded, every hash matches `docs/eval/test-set-frozen.json`.
 
 The final proof comes later: detector recall on the fixed test set before and after each
 targeted round.
