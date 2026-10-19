@@ -218,7 +218,7 @@ def detect(rows: list[dict]) -> tuple[list[dict], dict]:
         events.append(e)
 
     out_frames = [path[i].frame for i in outs]
-    for a, b in zip(sp, sp[1:] + [None], strict=True):
+    for a, b in zip(sp, sp[1:] + [None] if sp else [], strict=True):
         team = a.track.team
         if team is None:
             continue

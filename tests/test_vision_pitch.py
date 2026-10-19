@@ -12,6 +12,7 @@ import math
 import numpy as np
 import pytest
 
+from ninety.eval.event_score import STRICT_M
 from ninety.vision import pitch
 
 W, H = 1280, 720
@@ -75,14 +76,19 @@ def small_grid(monkeypatch):
     monkeypatch.setattr(pitch, "TILTS", tuple(np.arange(0.06, 0.2501, 0.01)))
 
 
-# What the camera is for: where a pixel lands on the pitch. A quarter of the strict 1 m radius of
-# docs/EVALUATION.md, so calibration uses up little of it. First set at a tenth; widened after
-# measuring 0.13 m at worst (median 0.02 to 0.06 m) on these perfect scenes, where the gantry's
-# weak line-of-sight position limits it. Said so in the pull request that set it.
-PITCH_ERROR_M = 0.25
-# With a narrow lens the gantry's distance trades against zoom (the fit's valley along the line of
-# sight; perfect markings leave it within tens of centimetres, the clip about 3 m): a bound that
-# catches a gantry in the wrong place, not a precision.
+# The fit's precision, set before any result: half its marking pixels within MAX_MEDIAN_PX of a
+# projected marking (pitch.py). That is what these tests hold it to.
+#
+# Away from the markings the gantry's weak position along the line of sight (with a narrow lens,
+# distance trades against zoom) still moves the ground by up to 3.4 to 4.0 px on these perfect
+# scenes, measured after the fit (0.13 m at worst); on seed 900001, a median 2.6 px, 90% within
+# 14.7 px. That limit is reported in docs/EVALUATION.md, not asserted here.
+#
+# A downstream budget, not a precision: calibration may use up a quarter of the strict 1 m radius
+# events are graded by. Set after measuring 0.13 m at worst on these scenes, and said so.
+DOWNSTREAM_BUDGET_M = STRICT_M / 4
+# With a narrow lens the gantry's distance trades against zoom (perfect markings leave it within
+# tens of centimetres, the clip about 2 m): a bound that catches a gantry in the wrong place.
 GANTRY_GROSS_M = 2.0
 
 
@@ -102,7 +108,8 @@ def test_the_gantry_is_recovered_from_frames_that_pan_across_the_pitch(small_gri
     assert math.dist(g, GANTRY) < GANTRY_GROSS_M, g
     for v, a in zip(truths, anchors, strict=True):
         fit = pitch.refine(pitch.search(a, W, H, gantry=g, keep=1)[0], a)
-        assert pitch_error(fit, v) < PITCH_ERROR_M
+        assert pitch._median(fit, a) <= pitch.MAX_MEDIAN_PX
+        assert pitch_error(fit, v) < DOWNSTREAM_BUDGET_M
 
 
 def test_a_frame_with_too_few_markings_is_not_ok():
@@ -146,5 +153,6 @@ def test_a_clip_is_tracked_frame_to_frame_and_every_frame_is_ok(pan, small_grid)
     # sight (the test above pans widely for that); tracking is judged by where pixels land.
     _, fits = pitch.fit_clip(pts, W, H, anchor_every=3)
     assert all(f.ok for f in fits)
-    for f, v in zip(fits, truths, strict=True):
-        assert pitch_error(f.view, v) < PITCH_ERROR_M
+    for f, v, a in zip(fits, truths, pts, strict=True):
+        assert pitch._median(f.view, a) <= pitch.MAX_MEDIAN_PX
+        assert pitch_error(f.view, v) < DOWNSTREAM_BUDGET_M

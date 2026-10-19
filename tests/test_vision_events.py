@@ -157,6 +157,13 @@ def test_a_ball_drawn_over_a_player_beyond_the_line_is_not_out_of_play():
     assert ev.out_of_play(tr.ball_path(rows)) == [0]
 
 
+def test_a_clip_where_nobody_has_the_ball_gives_no_events_and_no_error():
+    # Found by the runtime truth guard (a synthetic clip with no ball): with no spells, pairing
+    # each spell with the next raised instead of returning nothing.
+    events, summary = ev.detect([row(f, crowd(f)) for f in range(10)])
+    assert events == [] and summary["spells"] == 0
+
+
 def test_every_detected_event_is_a_valid_match_event_the_scorer_accepts(tmp_path):
     import jsonschema
 

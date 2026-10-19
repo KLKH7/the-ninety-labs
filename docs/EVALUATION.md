@@ -307,7 +307,7 @@ scorer's pairing (player IoU 0.5, ball centre 5 px) and the planned "in the air"
 | Shots | 0 of 1: read as a pass (the ball's height, below) |
 | Out of play | none true, 1 false: the same shot reaching the keeper |
 | Outside M1's scope | 2 possession changes and 1 pressure, counted as misses |
-| Camera | 245 of 250 frames trusted; the 5 rejected (1791 to 1796) are the fast pan after the shot. The gantry lands about 2 m from the true one, along the line of sight |
+| Camera | 245 of 250 frames trusted (median marking error per frame 1.2 px, at most 1.499 px against the 1.5 px set beforehand: several frames pass narrowly); the 5 rejected (1791 to 1796) are the fast pan after the shot. The gantry lands 1.85 m from the true one, along the line of sight. That is the fit's limit: away from the markings it moves the ground by a median 2.6 px (90% within 14.7 px, near the horizon at most 40.5 px) against the true camera; on perfect synthetic markings, by 3.4 to 4.0 px at most |
 | Players on the pitch | median 0.22 m, 90% within 1.44 m (1,817 detections) |
 | Ball on the ground | median 0.09 m, 90% within 0.26 m (181 frames) |
 | Ball in the air | median 7.1 m (15 frames): placed on the ground (below) |
