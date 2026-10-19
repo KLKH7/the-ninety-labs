@@ -20,6 +20,19 @@ GPL or AGPL otherwise). Every locked package and its licence is listed below.
 | pytest, pytest-xdist and its execnet, ruff (development) | tests (in parallel workers) and lint | MIT |
 | uv (container build only) | installs `uv.lock` into the API image | MIT or Apache-2.0 |
 
+## Viewer (`web/viewer`, development only)
+
+The viewer ships as plain HTML, CSS and JavaScript with no runtime dependency. These build it, and
+none reaches the page a viewer opens. Pinned in `web/viewer/package-lock.json`.
+
+| Package | Used for | Licence |
+|---|---|---|
+| vite 6.4.4, and through it esbuild, rollup, postcss, nanoid and 57 more | dev server and build | MIT |
+| typescript 5.9.3 | type checking | Apache-2.0 |
+| @types/node | types for the build config | MIT |
+| source-map-js (through vite) | source maps | BSD-3-Clause |
+| picocolors (through vite) | coloured terminal output | ISC |
+
 ## Data
 
 | Data | Used for | Source and terms |
