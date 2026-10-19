@@ -28,7 +28,6 @@ from mcp.server.transport_security import TransportSecuritySettings
 
 from ninety.match import detected, tracking
 from ninety.match.facts import AGENT_TYPES, compact, events_in, select
-from ninety.sim.engine import simulate
 
 MINUTES = 5  # every served match is a five-minute clip, as the slice and the evaluations use
 # Simulator matches: the pre-M1 stand-in, kept for the committed replays and the agent evaluation.
@@ -98,6 +97,8 @@ server = make_server()
 def precompute(out: Path) -> None:
     """Writes each served match's events, and its frames for the phone companion
     (ninety/match/tracking.py), from one simulation."""
+    from ninety.sim.engine import simulate  # the pre-M1 stand-in; never on the live path
+
     out.mkdir(parents=True, exist_ok=True)
     for match, seed in MATCHES.items():
         run = simulate(seed, MINUTES)

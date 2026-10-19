@@ -19,7 +19,10 @@ from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
-from ninety.sim.engine import FPS, simulate
+# The engine's frame rate (ninety/sim/engine.py FPS; tests/test_tracking.py holds them equal). Set
+# here rather than imported, so reading precomputed frames never loads the simulator, which the
+# live path must not (tests/test_live_reads_no_truth.py).
+FPS = 25
 
 FRAMES_DIR = "frames"  # inside NINETY_MATCH_DIR, beside the matches' event files
 SOURCE = "truth"  # the simulator's positions (see the module docstring)
@@ -91,6 +94,8 @@ def track(match: str, seed: int, minutes: float, match_dir: str = "") -> Track:
     if stored and stored.exists():
         body = json.loads(stored.read_text())
         return Track(match, tuple(body["frames"]), tuple(body["restarts"]))
+    from ninety.sim.engine import simulate  # the pre-M1 stand-in; never on the live path
+
     return from_match(match, simulate(seed, minutes))
 
 
