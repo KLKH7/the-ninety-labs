@@ -1,0 +1,157 @@
+{
+ "matches": 16,
+ "minutes": 320.0,
+ "ball_jumps_gt3m_per90": 74.8,
+ "ball_jump_median_m": 7.9,
+ "frames_with_a_player_over_speed_limit_per90": 2.8,
+ "goal_to_kickoff_s": [
+  0.0,
+  0.0,
+  0.0,
+  0.0,
+  0.0,
+  0.0,
+  0.0,
+  0.0,
+  0.0,
+  0.0
+ ],
+ "restarts_kicked_by_taker": {
+  "throw_in": 167,
+  "free_kick": 83,
+  "goal_kick": 28,
+  "corner": 24
+ },
+ "encroached_at_the_kick": {
+  "free_kick": 47,
+  "throw_in": 49,
+  "goal_kick": 12,
+  "corner": 1
+ },
+ "examples": [
+  [
+   "seed7",
+   "free_kick",
+   127.0,
+   [
+    "a11"
+   ]
+  ],
+  [
+   "seed7",
+   "free_kick",
+   198.0,
+   [
+    "h10"
+   ]
+  ],
+  [
+   "seed7",
+   "free_kick",
+   331.3,
+   [
+    "a11"
+   ]
+  ],
+  [
+   "seed7",
+   "throw_in",
+   487.6,
+   [
+    "a9"
+   ]
+  ],
+  [
+   "seed7",
+   "goal_kick",
+   555.0,
+   [
+    "h9",
+    "h10",
+    "h11"
+   ]
+  ],
+  [
+   "seed7",
+   "free_kick",
+   623.5,
+   [
+    "a4"
+   ]
+  ],
+  [
+   "seed7",
+   "throw_in",
+   671.4,
+   [
+    "h5"
+   ]
+  ],
+  [
+   "seed7",
+   "throw_in",
+   718.0,
+   [
+    "a8"
+   ]
+  ],
+  [
+   "seed7",
+   "free_kick",
+   792.6,
+   [
+    "a5"
+   ]
+  ],
+  [
+   "seed7",
+   "free_kick",
+   1070.0,
+   [
+    "h2"
+   ]
+  ],
+  [
+   "seed7",
+   "free_kick",
+   1185.8,
+   [
+    "a6",
+    "a9"
+   ]
+  ],
+  [
+   "seed11",
+   "free_kick",
+   211.8,
+   [
+    "a10"
+   ]
+  ]
+ ],
+ "held_out": {
+  "shots_per_team_90_mean_se": [
+   13.92,
+   1.13
+  ],
+  "goals_per_team_90_mean_se": [
+   1.41,
+   0.45
+  ],
+  "completion": 0.842,
+  "shots_within_10s_of_own_restart": 40,
+  "shots_otherwise": 59,
+  "first_pass_failed_share": {
+   "throw_in": 0.15,
+   "free_kick": 0.15,
+   "goal_kick": 0.14,
+   "corner": 0.36
+  },
+  "ball_lost_within_5s_share": {
+   "throw_in": 0.38,
+   "free_kick": 0.2,
+   "goal_kick": 0.03,
+   "corner": 0.4
+  }
+ }
+}
