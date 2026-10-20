@@ -37,6 +37,7 @@ from agent_framework.exceptions import AgentFrameworkException
 from azure.core.exceptions import AzureError
 from jsonschema import validate
 
+from ninety.agents import telemetry
 from ninety.agents.contracts import Personalize, Profile, TraceStep
 from ninety.agents.cues import DISPLAY_SECONDS, SCHEMA, template_cues, write_fixture
 from ninety.agents.ledger import InMemoryLedger, Record, load_match
@@ -100,8 +101,10 @@ async def run(
 ) -> LiveResult:
     events = detected.check([dict(e) for e in events], clip)
     ledger = InMemoryLedger()
-    await load_match(ledger, events, ())  # stats from the detected events; no tracking frames yet
-    cues = await template_cues(ledger)
+    with telemetry.stage_span("stats", events=len(events)):
+        await load_match(ledger, events, ())  # stats from the detected events; no tracking frames yet
+    with telemetry.stage_span("cue", kind="template"):
+        cues = await template_cues(ledger)
     shown = {i for cue in cues for i in cue["evidence"]}
     held = [
         e["id"] for e in events if e["type"] in {"pass", "shot", "goal"} and e["id"] not in shown
@@ -127,17 +130,20 @@ async def run(
             payload={"text": outcome.claim.text, "status": outcome.status},
         ))
         if outcome.accepted:
-            cues.append(insight_cue(outcome, times))
+            with telemetry.stage_span("cue", kind="insight"):
+                cues.append(insight_cue(outcome, times))
             if personalize is not None:
-                personalized, refused = await _personalized(
-                    outcome.claim, events, rows, times, judge, personalize, profiles, trace
-                )
+                with telemetry.stage_span("cue", kind="personalized"):
+                    personalized, refused = await _personalized(
+                        outcome.claim, events, rows, times, judge, personalize, profiles, trace
+                    )
                 cues.extend(personalized)
-    for cue in cues:
-        await ledger.append(Record(
-            id=cue["id"], version=1, kind="cue", t=cue["t_in"], source="agents", confidence=None,
-            evidence=tuple(cue["evidence"]), payload=cue,
-        ))
+    with telemetry.stage_span("cue", kind="ledger"):
+        for cue in cues:
+            await ledger.append(Record(
+                id=cue["id"], version=1, kind="cue", t=cue["t_in"], source="agents", confidence=None,
+                evidence=tuple(cue["evidence"]), payload=cue,
+            ))
     facts = len(await ledger.query(kind="fact"))
     cues.sort(key=lambda c: (c["t_in"], c["id"]))
     return LiveResult(cues, facts, held, outcome, agents_error, refused, trace)
