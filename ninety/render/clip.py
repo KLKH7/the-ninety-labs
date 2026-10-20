@@ -38,6 +38,8 @@ from ninety.render.scene import (
     contacts,
     crowded_start,
     drawn_ball,
+    hold_at,
+    holds,
     keeper_start,
     mesh_pose,
     parts_box,
@@ -258,7 +260,8 @@ def render_clip(
         clip["scorebug_px"] = info["bugRect"]
         director = Director(p.camera, p.width, p.height, p.fps, seed, cuts=p.camera_cut)
         gaits = {lk.id: Gait() for lk in looks}
-        touches = contacts(frames)
+        touches = contacts(frames, match.events)
+        held = holds(frames)
         prev_xy: dict[str, tuple[float, float]] = {}
         prev_cam: Camera | None = None
         spin_angle = 0.0
@@ -267,9 +270,11 @@ def render_clip(
         for fi in range(max(0, start - WARMUP), start + n):
             fr = frames[fi]
             advance_gaits(gaits, prev_xy, fr, 1 / FPS, frames[min(fi + LEAD_AHEAD_FRAMES, len(frames) - 1)])
-            for pl in fr["players"]:
-                touch_at(gaits[pl["id"]], touches.get(pl["id"], []), fi, by_id[pl["id"]].height_m, FPS)
             ball = drawn_ball(fr)
+            for pl in fr["players"]:
+                g, h = gaits[pl["id"]], by_id[pl["id"]].height_m
+                touch_at(g, touches.get(pl["id"], []), fi, h, FPS, pl["x"], pl["y"])
+                hold_at(g, held.get(pl["id"], []), fi, ball, h, FPS)
             actors = [(pl["x"], pl["y"], pl.get("action", "")) for pl in fr["players"]]
             # The snapshot of a goal already has the ball on the centre spot. The event
             # carries the mouth it crossed, and the frame before it carries the pace.
