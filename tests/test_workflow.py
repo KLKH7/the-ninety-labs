@@ -474,6 +474,25 @@ def test_every_committed_workflow_replay_still_replays(path):
     assert result.moments and result.model_calls == len(WorkflowRecording.load(path).turns)
 
 
+def test_there_is_a_committed_workflow_replay():
+    assert WORKFLOW_REPLAYS, "replays/ holds no workflow recording, so the test above checks nothing"
+
+
+def test_the_committed_live_recording_shows_the_planted_number_caught_and_insights_on_air():
+    # replays/workflow-minute2-plant.json, recorded live on the published agents (agents-live).
+    recording = WorkflowRecording.load(WORKFLOW_REPLAYS[0].parent / "workflow-minute2-plant.json")
+    assert recording.inputs["plant"] and recording.pins
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", StaleRecording)
+        result = asyncio.run(workflow.replay_workflow(recording))
+    first = next(s for s in result.trace if s.role == "fact_checker")
+    assert first.action == "reject" and "143 is not a cited" in first.detail  # the code check, not the Judge
+    aired = insights(result)
+    assert aired and all(c["verified"] and c["replaces"].startswith("cue-") for c in aired)
+    assert [c["replaces"] for c in aired] == [f"cue-{m.main_event}-analyst" for m in result.moments
+                                              if any(r.moment_id == m.id and r.aired for r in result.reviews)]
+
+
 # Live sign-in ------------------------------------------------------------------------------
 
 
