@@ -43,7 +43,7 @@ import warnings
 from dataclasses import dataclass
 from pathlib import Path
 
-from ninety.agents import live
+from ninety.agents import live, telemetry
 from ninety.agents.cues import _text
 from ninety.agents.factcheck import Claim, Verdict
 from ninety.agents.slice import Recording, replayer, tamper
@@ -263,16 +263,19 @@ async def run(args: argparse.Namespace) -> dict:
     out: Path = args.out
     out.mkdir(parents=True, exist_ok=True)
 
-    det_path = detections_for(clip, args.detections, args.detect == "live", args.weights,
-                              out / "detections.jsonl")
     from ninety.vision.detections import read_detections
 
-    detections = read_detections(det_path)
+    with telemetry.stage_span("detect", source=args.detect, frames=len(clip.images)):
+        det_path = detections_for(clip, args.detections, args.detect == "live", args.weights,
+                                  out / "detections.jsonl")
+        detections = read_detections(det_path)
     if det_path != out / "detections.jsonl":
         shutil.copyfile(det_path, out / "detections.jsonl")
 
-    events, events_source = detected_events(clip, args.events_file, args.demo)
-    facts = [f.as_dict() for f in calculate_facts(events)]
+    with telemetry.stage_span("events"):
+        events, events_source = detected_events(clip, args.events_file, args.demo)
+    with telemetry.stage_span("stats", events=len(events)):
+        facts = [f.as_dict() for f in calculate_facts(events)]
     recording = Recording.load(args.replay) if args.replay else None
     cues, claims, held = await explain_and_render(events, clip.id, args.plant, recording)
     voice = describe.Voice() if args.speech == "azure" else None
