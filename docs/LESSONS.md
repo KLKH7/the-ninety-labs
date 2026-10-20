@@ -1179,3 +1179,16 @@ short and actionable. This file is public: no research sources, product names or
   (`test_the_gantry_frames_the_play_with_the_pitch_filling_the_picture`,
   `test_the_viewpoint_changes_no_faster_than_a_broadcast_and_never_flickers`,
   `test_a_pan_eases_in_and_out`); each fails on the 0.5.0 director.
+
+### 118. Build a media branch from an empty tree, and look at what it holds before pushing
+- **What happened:** review clips for the camera pull request went on a new orphan branch made by
+  `git checkout --orphan`, which keeps the whole working tree staged. The `git rm` meant to empty
+  it refused, but the shell line went on past it (`;` after `&&`), so the push carried a copy of
+  every tracked file with the media. It was public code, with no secrets and no untracked files,
+  and the branch was rebuilt within minutes; the clips themselves were left out, ignored by the
+  copied `.gitignore`.
+- **Rule:** start a media branch empty (`git switch --orphan`, or `git rm -rf --cached .`), add the
+  files by name (`git add -f` when `.gitignore` covers them), and list the commit's tree before
+  pushing. A multi-step shell line that changes a repository stops at its first failure.
+- **Check:** `git ls-tree -r --name-only origin/pr-assets/<name>` lists only the media.
+

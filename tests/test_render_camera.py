@@ -4,8 +4,10 @@ from functools import cache
 from ninety.render import edit
 from ninety.render.camera import (
     CUT_HOLD_S,
+    HOLD_SHARE,
     MAX_PAN_MPS,
     PAN_ACCEL_MPS2,
+    ZOOM_ACCEL_MPS2,
     Camera,
     Director,
     blur_vector,
@@ -235,7 +237,7 @@ def test_director_is_deterministic():
     assert runs[0] == runs[1]
 
 
-# Seeds the director's design was not tuned on (the lens, STANDS_TOP and the follow were chosen on
+# Seeds the director's design was not tuned on (the lens, STANDS_MAX and the follow were chosen on
 # seeds 7, 21 and 42).
 HELD_OUT = (3, 5)
 
@@ -329,7 +331,7 @@ def test_the_viewpoint_changes_no_faster_than_a_broadcast_and_never_flickers():
 def test_play_on_the_far_side_keeps_the_stands_a_band_across_the_top():
     """The far side is foreshortened: from a low gantry (13 m up, 31 m back, a sampled seed's) the
     lens aimed at a ball on the far touchline shows more stand than pitch. The gantry tilts down
-    along its line of sight instead, so the far edge of the pitch stays in the top STANDS_TOP of
+    along its line of sight instead, so the far edge of the pitch stays in the top STANDS_MAX of
     the picture and the ball stays in the middle of it across."""
     low = CameraParams(height_m=13.2, back_m=31.1, offset_x_m=-1.6, half_width_m=21.0, shake_m=0.0)
     for spot in [(52.5, 64.0), (30.0, 60.0), (10.8, 65.1)]:  # last: seed 42's far corner
@@ -339,6 +341,53 @@ def test_play_on_the_far_side_keeps_the_stands_a_band_across_the_top():
         u, v = cam.project((*spot, 0.11))
         assert pitch_share(cam) >= 0.6, spot
         assert 0.2 * 1280 <= u <= 0.8 * 1280 and 0.15 * 720 <= v <= 0.85 * 720, (spot, u, v)
+
+
+def test_the_gantry_holds_still_while_the_ball_moves_about_one_area():
+    """Old (0.5.1's first clips): the aim was locked to the ball, so every short pass was a pan and
+    the picture swung left and right. The operator frames the play: passes inside one area leave
+    the gantry where it is."""
+    d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=1)
+    for _ in range(50):
+        d.step(50.0, 34.0)
+    start = tuple(d.aim)
+    travel = 0.0
+    for i in range(200):  # short passes, 3 m either way, a second each way
+        prev = tuple(d.aim)
+        d.step(50.0 + 3.0 * math.sin(2 * math.pi * i / 50), 34.0)
+        travel += math.dist(prev, d.aim)
+    assert travel < 1.0 and math.dist(start, d.aim) < 0.5, travel
+
+
+def test_the_zoom_never_pumps_or_turns_round_in_a_frame():
+    """Old: the box's closer lens came in as the ball entered a penalty area and went straight back
+    out as it left, the zoom's pace flipping from in to out in one frame. Now the lens stays in
+    until the ball is BOX_LEAVE_M clear of the box, and the zoom gathers pace at most
+    ZOOM_ACCEL_MPS2."""
+    d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=1)
+    widths = []
+    for i in range(400):  # in and out of the box's edge every second, then away up the pitch
+        x = 15.0 + 3.0 * math.sin(2 * math.pi * i / 25) if i < 250 else 15.0 + 0.3 * (i - 250)
+        d.step(x, 34.0)
+        widths.append(d.half_width)
+    rates = [(b - a) * 25 for a, b in zip(widths, widths[1:], strict=False)]
+    assert max(abs(b - a) * 25 for a, b in zip(rates, rates[1:], strict=False)) <= ZOOM_ACCEL_MPS2 + 1e-6
+    held = widths[60:250]
+    assert max(held) - min(held) < 0.2  # the box lens stays in while the ball is about its edge
+    assert widths[-1] > max(held) + 2.0  # and goes back out once play has left
+
+
+def test_a_header_or_a_catch_in_live_play_stays_on_the_gantry():
+    """Old: an aerial touch or a keeper's catch cut to the tighter lens in the middle of an attack.
+    The director stays on the wide shot through attacks; a throw-in still cuts closer."""
+    for action in ("head", "chest", "thigh", "hands"):
+        d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=True)
+        for _ in range(25 * 3):
+            d.step(30.0, 34.0, [(30.0, 34.2, action)])
+            assert d.angle == "main", action
+    d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=True)
+    d.step(52.5, 0.4, [(52.5, -0.2, "throw")])
+    assert d.angle == "tight"
 
 
 def test_a_pan_eases_in_and_out():
@@ -357,5 +406,6 @@ def test_a_pan_eases_in_and_out():
     assert max(changes) <= PAN_ACCEL_MPS2 + 1e-6, max(changes)
     # The long ball's first frame moves the aim's lead 7.8 m on; the aim gains one frame's speed.
     assert speeds[49] <= PAN_ACCEL_MPS2 / 25 + 1e-6, speeds[48:52]
+    # Settled with the play inside the hold either side of the centre (HOLD_SHARE of the half-width).
     u, v = cam.project((77.2, 34.0, 0.0))
-    assert speeds[-1] < 0.1 and abs(u - 640) < 64 and abs(v - 360) < 72  # settled on the play
+    assert speeds[-1] < 0.1 and abs(u - 640) <= HOLD_SHARE * 640 + 8 and abs(v - 360) < 72, (u, v)

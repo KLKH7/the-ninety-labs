@@ -1685,14 +1685,21 @@ class BroadcastRenderer {
         uniform sampler2D tex; uniform vec2 blur; uniform vec2 res; uniform float noise; uniform float frame; uniform float rain;
         varying vec2 vUv;
         float hash(vec2 p){ p = fract(p * vec2(443.897, 441.423)); p += dot(p, p.yx + 19.19 + fract(frame * 0.6180339)); return fract((p.x + p.y) * p.x); }
+        // The exposure: the picture smeared along the pan over the shutter.
+        vec3 smear(vec2 uv, vec2 d){
+          vec3 s = vec3(0.0);
+          for (int k = 0; k < 9; k++) s += texture2D(tex, uv + d * (float(k) / 8.0 - 0.5)).rgb;
+          return s / 9.0;
+        }
         void main(){
           vec2 d = vec2(blur.x, -blur.y) / res;
           vec2 px = 1.0 / res;
-          vec3 c = vec3(0.0);
-          for (int k = 0; k < 9; k++) c += texture2D(tex, vUv + d * (float(k) / 8.0 - 0.5)).rgb;
-          c /= 9.0;
-          vec3 nbor = texture2D(tex, vUv + vec2(px.x, 0.0)).rgb + texture2D(tex, vUv - vec2(px.x, 0.0)).rgb
-            + texture2D(tex, vUv + vec2(0.0, px.y)).rgb + texture2D(tex, vUv - vec2(0.0, px.y)).rgb;
+          vec3 c = smear(vUv, d);
+          // The camera sharpens what the sensor recorded, the smear included. Sharpened against the
+          // unsmeared picture, a pan split every edge in two: a dark copy where it is, bright ones at
+          // either end of its smear (the critic of 0.5.1's first clips: "two ghost copies").
+          vec3 nbor = smear(vUv + vec2(px.x, 0.0), d) + smear(vUv - vec2(px.x, 0.0), d)
+            + smear(vUv + vec2(0.0, px.y), d) + smear(vUv - vec2(0.0, px.y), d);
           c += (c - nbor * 0.25) * 0.4;
           if (rain > 0.0) {
             c *= 0.9;
