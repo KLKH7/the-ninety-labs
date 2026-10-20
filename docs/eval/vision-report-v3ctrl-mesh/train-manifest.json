@@ -1,0 +1,88 @@
+{
+  "name": "ours-v4-ctrl",
+  "started": "2026-10-20T05:19:25Z",
+  "finished": "2026-10-20T06:11:39Z",
+  "commit": "60529afa257ac1e656cb40af6cf7c397ed5298c3",
+  "rfdetr": "1.11.2",
+  "config": {
+    "notes": {
+      "val_seeds": "Chosen before any training: the last 15 bulk seeds and the last 5 of each hard-case set of render run v1, so validation has the same mix as training. Never test seeds. Seed 111 left validation on 2026-10-19 (25 to 24 clips): it failed the render checks twice (b319f21 and cca498c) and dataset v1 excludes it (docs/eval/dataset-v1.json). It was removed, not replaced, because choosing a substitute after seeing results would be choosing the validation set by them. ours-v2 validated on all 25 (its train-manifest.json). Unchanged for round 1: the 24 validation clips stay dataset v1's, and every new clip trains, so both runs stop early on the same clips; choosing new validation clips after seeing round 1 would be choosing them by it.",
+      "stride": "Every 5th frame (5 fps): nearer frames are near copies of each other.",
+      "resolution": "640, divisible by patch 16 x windows 2. At the default 512 the median ball is 7.1 px (docs/eval/dataset-stats.json); 640 gives about 8.9 px for a 1.6x cost. Larger is a measured ablation, not a default.",
+      "batch": "4 images, gradients accumulated 4 times: an effective batch of 16, rfdetr's default target. It was 2 x 8 (the same optimisation, half the memory) while training on a 24 GB Mac, where 4 x 4 took about 18 GB of unified memory; a 24 GB GPU holds 4 x 4.",
+      "epochs": "Up to 8 with early stopping (patience 3): the model already detects players and the ball after 30 epochs of v2/v2los; this adapts it to engine-v1 renders. Set before the run.",
+      "seed": "Fixed so a rerun on the same data gives the same model, up to GPU nondeterminism.",
+      "num_workers": "8 data-loading workers on the GPU machine: with 2 the RTX 4090 sat at 13-23% busy while the loader ran at 90% CPU. Speed only; the data and the order of training are unchanged.",
+      "purpose": "Targeted round 1 (docs/eval/round1/PLAN.md): ours-v4 and ours-v4-ctrl both continue from ours-v3 (--init) with every setting of finetune-short.json, on dataset v1 plus 80 clips rendered at 91d1e3b: the 80 targeted clips of round 1 (docs/eval/dataset-v2-round1.json) or 80 untargeted clips on the seeds' own draws (docs/eval/dataset-v2-ctrl.json). Only those 80 clips differ between the two runs, so v4 minus v4-ctrl on the mesh test set is the effect of targeting. Set before either run.",
+      "lr": "Half of finetune.json's (5e-5, encoder 7.5e-5), the usual choice when continuing from a trained checkpoint, so the adaptation does not undo what it learned. Set before the run."
+    },
+    "val_seeds": [
+      108,
+      109,
+      110,
+      112,
+      113,
+      114,
+      115,
+      116,
+      117,
+      118,
+      119,
+      120,
+      121,
+      122,
+      2041,
+      2042,
+      2043,
+      2044,
+      2045,
+      3041,
+      3042,
+      3043,
+      3044,
+      3045
+    ],
+    "stride": 5,
+    "resolution": 640,
+    "train": {
+      "epochs": 8,
+      "batch_size": 4,
+      "grad_accum_steps": 4,
+      "lr": 5e-05,
+      "lr_encoder": 7.5e-05,
+      "early_stopping": true,
+      "early_stopping_patience": 3,
+      "checkpoint_interval": 5,
+      "num_workers": 8,
+      "seed": 7
+    }
+  },
+  "epochs_override": null,
+  "resumed_from": null,
+  "initialized_from": {
+    "name": "ours-v3",
+    "commit": "4a6f26efdcc5229ee6f18df8ee5dc152496c0c70",
+    "checkpoint_sha256": "3b2d5cf4a1d29cb0f7fc13b817bdf00b69369c3a0d5edaf522b287a7a4c014c9"
+  },
+  "dataset_list": {
+    "path": "docs/eval/dataset-v2-ctrl.json",
+    "sha256": "40a00550254d23d042a709ede29c168707950e69aec9691b3261a61468caa397",
+    "clips": 388
+  },
+  "dataset": {
+    "stride": 5,
+    "train_clips": null,
+    "train": {
+      "clips": 364,
+      "images": 18200,
+      "annotations": 189989
+    },
+    "valid": {
+      "clips": 24,
+      "images": 1200,
+      "annotations": 12572
+    }
+  },
+  "checkpoint": "checkpoint_best_total.pth",
+  "checkpoint_sha256": "351071056516c077ad39294b5c567b73ef761272dc5c682cbbcb4282b7385ecc"
+}
