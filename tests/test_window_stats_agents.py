@@ -30,11 +30,19 @@ def as_truth(events):
 
 
 def test_detected_and_ground_truth_events_give_the_same_stats():
-    """One rule for both: the stats read only t, type, team and x, never the source."""
+    """One rule for both: the stats read only t, type, team and x, never the source. The detector
+    may emit no tackle or interception (R3's first detections are passes only); then there is no
+    PPDA, never an invented one."""
     events = detected.load(detected.m1_path())
     rows = agent_rows(events)
-    assert {r["metric"] for r in rows} >= {"ppda", "field_tilt", "passes_per_minute"}
+    assert {"passes_per_minute"} <= {r["metric"] for r in rows}
+    defends = any(e["type"] in {"tackle", "interception"} for e in events)
+    assert defends or "ppda" not in {r["metric"] for r in rows}
     assert agent_rows(as_truth(events)) == rows
+    # The stand-in has defensive actions, so both sides of the PPDA rule are exercised.
+    standin = detected.load(STANDIN)
+    assert agent_rows(as_truth(standin)) == agent_rows(standin)
+    assert {"ppda", "field_tilt", "passes_per_minute"} <= {r["metric"] for r in agent_rows(standin)}
 
 
 def test_the_stand_in_by_hand():

@@ -48,7 +48,7 @@ async def drafts(seeds: list[int]) -> tuple[list[dict], str]:
         known = {e["id"]: e for e in events_in(seed, MINUTES, 1, MINUTES + 1)}
         async with contextlib.AsyncExitStack() as stack:
             agents, labels = [], []
-            for local in foundry.build_agents(foundry.chat_client(credential)):
+            for local in foundry.slice_agents(foundry.chat_client(credential)):
                 name, version = foundry.pinned(local)
                 labels.append(f"{name}:{version}")
                 published = FoundryAgent(
