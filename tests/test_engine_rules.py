@@ -1777,15 +1777,38 @@ def test_the_receiver_stops_heading_for_the_target_once_it_is_no_longer_on_its_w
 
 
 def test_nobody_is_sent_to_chase_a_ball_beyond_the_touchline():
-    # Law 9: a ball rolling hard over the line is planned for only up to the line; the chase was once
-    # planned on its predicted path beyond it, sending players to points off the pitch.
+    from ninety.sim import decisions
+    # Law 9: a ball rolling hard over the line is planned for only up to the line, as each player
+    # judges its path; the chase was once planned on its predicted path beyond it, off the pitch.
+    for seed in range(30):  # whatever each player's misjudgement of the ball
+        e = Engine(seed)
+        e.possessor = None
+        for q in e.players:
+            q.x, q.y, q.vx, q.vy = (20.0 if q.team == "home" else 85.0), 30.0, 0.0, 0.0
+        e.ball = (52.0, 60.0, 0.0, 0.0, 14.0, 0.0)  # out over y = 68 in well under a second
+        e.kicked_at = e.free_since = e.t - 3.0
+        e.kicked = None
+        e.plan_chase()
+        assert e.chase, seed
+        assert all(decisions.out_of_play(x, y) is False for _, x, y in e.chase.values()), seed
+
+
+def test_a_throw_still_coming_in_over_the_line_is_chased():
+    # Law 15: a thrown ball behind the touchline is coming in; its path on the pitch is chased.
     e = Engine(1)
     e.possessor = None
-    for q in e.players:
-        q.x, q.y, q.vx, q.vy = (20.0 if q.team == "home" else 85.0), 30.0, 0.0, 0.0
-    e.ball = (52.0, 60.0, 0.0, 0.0, 14.0, 0.0)  # out over y = 68 in well under a second
+    e.ball = (52.0, 68.4, 1.5, 0.0, -6.0, 0.0)  # just behind the line, thrown in
     e.kicked_at = e.free_since = e.t - 3.0
     e.kicked = None
     e.plan_chase()
     assert e.chase
-    assert all(-0.2 <= y <= 68.2 and -0.2 <= x <= 105.2 for _, x, y in e.chase.values())
+
+
+def test_the_receiver_is_timed_to_the_ball_and_the_chase_takes_over_once_he_is_sent():
+    e, _, mate = _pass_in_flight()
+    tx, ty, speed = e.shape_target(mate)
+    due = e.pass_arrives_in()
+    assert 0 < due < e.ball_eta(tx, ty)  # the ball's own arrival, not arrival plus settling
+    assert abs(speed - math.hypot(tx - mate.x, ty - mate.y) / due) < 1e-9
+    e.chase = {"home": (mate.id, 66.0, 38.5)}  # he has reacted and is sent to its path
+    assert e.shape_target(mate)[:2] == (66.0, 38.5)
