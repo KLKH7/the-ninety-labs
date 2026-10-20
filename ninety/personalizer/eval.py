@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import contextlib
 import datetime
 import json
 import re
@@ -25,7 +24,6 @@ from pathlib import Path
 
 import httpx
 
-from ninety import config
 from ninety.agents.contracts import LANGS, Profile
 from ninety.agents.factcheck import check
 from ninety.personalizer import core
@@ -50,25 +48,6 @@ def claims(seeds: list[int], minutes: float, limit: int) -> list[tuple]:
         ok = [r for r in rows if check(r["claim"], {e["id"]: e for e in r["evidence"]}).ok]
         out += [(seed, r["kind"], r["claim"], r["evidence"]) for r in ok[:limit]]
     return out
-
-
-@contextlib.asynccontextmanager
-async def published_personalizer():
-    from agent_framework.foundry import FoundryAgent
-    from azure.identity import DefaultAzureCredential
-
-    from ninety.agents import foundry
-
-    credential = DefaultAzureCredential()
-    name, version = foundry.pinned(core.personalizer_agent(foundry.chat_client(credential)))
-    async with FoundryAgent(
-        project_endpoint=config.FOUNDRY_PROJECT, agent_name=name, agent_version=version, credential=credential
-    ) as agent:
-
-        async def ask(text: str) -> str:
-            return (await agent.run(text)).text
-
-        yield ask, f"`{name}:{version}` on `{config.MODEL}`"
 
 
 async def run(cases: list[tuple], ask, budget_s: float) -> list[dict]:
@@ -107,6 +86,7 @@ def report(rows: list[dict], label: str, seeds: str) -> str:
         mine = [r for r in rows if (r["persona"], r["lang"]) == (p.persona, p.lang)]
         lines.append(f"| {p.persona} | {p.lang} | {len(mine)} | {sum(r['dropped'] is None for r in mine)} |")
     routes = Counter(r["route"] for r in requests)
+    failed = model_failures(rows)
     # Reasons grouped by their words: the numbers in them become N.
     dropped = Counter(re.sub(r"\d+(?:\.\d+)?(?:st|nd|rd|th)?", "N", r["dropped"])
                       for r in rows if r["dropped"] is not None)
@@ -114,7 +94,8 @@ def report(rows: list[dict], label: str, seeds: str) -> str:
         "",
         f"Requests: {', '.join(f'{n} {route}' for route, n in routes.most_common())}. "
         f"Time per request: p50 {times[len(times) // 2]:.0f} ms, p95 {times[int(len(times) * 0.95)]:.0f} ms, "
-        f"max {times[-1]:.0f} ms.",
+        f"max {times[-1]:.0f} ms. The model gave no answer in {failed} of {len(requests)} requests; "
+        "their profiles count as not airing.",
         "",
         "## Why variants were dropped",
         "",
@@ -123,12 +104,31 @@ def report(rows: list[dict], label: str, seeds: str) -> str:
     return "\n".join(lines) + "\n"
 
 
-async def _main(args) -> str:
+class NothingMeasured(RuntimeError):
+    """The model never answered, so the run measured an outage, not the Personalizer."""
+
+
+def model_failures(rows: list[dict]) -> int:
+    """Requests in which the model gave no answer at all: a server-side model failure, or the
+    client's fallback. These measure the service, never how well the Personalizer writes."""
+    failed = {(r["seed"], r["claim"]) for r in rows
+              if r["route"] != "remote" or (r["dropped"] or "").startswith("server: model failed")}
+    return len(failed)
+
+
+async def _main(args, published=core.published_ask) -> str:
     seeds = [int(s) for s in args.seeds.split(",")]
-    cases = claims(seeds, args.minutes, args.limit)
-    async with published_personalizer() as (ask, label):
+    # Sign in before the slow part: building the claims simulates matches for minutes, and the
+    # agents-live sign-in expires five minutes after login (an earlier run measured only that).
+    async with published() as (ask, label):
+        cases = claims(seeds, args.minutes, args.limit)
         rows = await run(cases, ask, args.budget)
     (args.out.with_suffix(".json")).write_text(json.dumps(rows, indent=1, ensure_ascii=False))
+    requests = len({(r["seed"], r["claim"]) for r in rows})
+    if model_failures(rows) == requests:
+        raise NothingMeasured(
+            f"the model answered none of {requests} requests; see {args.out.with_suffix('.json')}"
+        )
     return report(rows, label, args.seeds)
 
 

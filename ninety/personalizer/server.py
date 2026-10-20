@@ -135,25 +135,16 @@ def live_app() -> Starlette:
     import contextlib
     import os
 
-    from agent_framework.foundry import FoundryAgent
-    from azure.identity import DefaultAzureCredential
+    from ninety.personalizer.core import model_personalizer, published_ask
 
-    from ninety import config
-    from ninety.agents import foundry
-    from ninety.personalizer.core import model_personalizer, personalizer_agent
-
-    credential = DefaultAzureCredential()
-    name, version = foundry.pinned(personalizer_agent(foundry.chat_client(credential)))
-    published = FoundryAgent(
-        project_endpoint=config.FOUNDRY_PROJECT, agent_name=name, agent_version=version, credential=credential
-    )
+    published = {}  # the Ask, once the lifespan has signed in
 
     async def ask(text: str) -> str:
-        return (await published.run(text)).text
+        return await published["ask"](text)
 
     @contextlib.asynccontextmanager
     async def lifespan(app):
-        async with published:
+        async with published_ask() as (published["ask"], _):
             yield
 
     from ninety.personalizer import translate

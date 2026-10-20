@@ -371,3 +371,95 @@ def test_the_evaluation_counts_a_variant_the_server_dropped_as_not_airing():
     report = personalizer_eval.report(rows, "scripted", "21")
     assert "| casual | es | 1 | 0 |" in report and "| casual | en | 1 | 1 |" in report
     assert "- 4 x server: number N is not in the cited evidence" in report
+
+
+# ---------------------------------------------------------------------------------------------
+# The live path: an async credential, signed in first, and no report from an outage
+# ---------------------------------------------------------------------------------------------
+
+
+def test_published_ask_signs_in_with_the_async_credential_before_anything_else(monkeypatch):
+    # The sync credential blocks the event loop (11.6 s against a 3 s budget in a live run), and a
+    # late first token met an expired sign-in: so the async one, and its token fetched on entry.
+    import agent_framework.foundry
+    import azure.identity.aio
+
+    calls = []
+
+    class Credential:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        async def get_token(self, scope):
+            calls.append(("token", scope))
+
+    class Agent:
+        def __init__(self, **kwargs):
+            calls.append(("agent", kwargs["credential"]))
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+    monkeypatch.setattr(azure.identity.aio, "DefaultAzureCredential", Credential)
+    monkeypatch.setattr(agent_framework.foundry, "FoundryAgent", Agent)
+
+    async def enter():
+        async with core.published_ask() as (ask, label):
+            return label
+
+    label = run(enter())
+    assert calls[0] == ("token", core.FOUNDRY_SCOPE)
+    assert calls[1][0] == "agent" and isinstance(calls[1][1], Credential)
+    assert label.startswith("`ninety-personalizer:")
+
+
+def eval_args(tmp_path):
+    import argparse
+
+    return argparse.Namespace(seeds="21", minutes=1.0, limit=1, budget=core.BUDGET_S, out=tmp_path / "p.md")
+
+
+def published_with(ask, order):
+    import contextlib
+
+    @contextlib.asynccontextmanager
+    async def published():
+        order.append("signed in")
+        yield ask, "scripted"
+
+    return published
+
+
+def test_the_evaluation_signs_in_before_it_simulates_the_claims(monkeypatch, tmp_path):
+    from ninety.personalizer import eval as personalizer_eval
+
+    order = []
+
+    def claims(seeds, minutes, limit):
+        order.append("claims")
+        return [(21, "pass", CLAIM, EVIDENCE)]
+
+    monkeypatch.setattr(personalizer_eval, "claims", claims)
+    ask = scripted({(p.persona, p.lang): LEGAL["reworded"] for p in personalizer_eval.PROFILES})
+    report = run(personalizer_eval._main(eval_args(tmp_path), published_with(ask, order)))
+    assert order == ["signed in", "claims"]
+    assert "The model gave no answer in 0 of 1 requests" in report
+
+
+def test_a_run_in_which_the_model_never_answered_writes_no_report(monkeypatch, tmp_path):
+    # A live run once reported "0 of 160 air" when every model call had failed to sign in.
+    from ninety.personalizer import eval as personalizer_eval
+
+    monkeypatch.setattr(personalizer_eval, "claims", lambda *a: [(21, "pass", CLAIM, EVIDENCE)])
+
+    async def down(prompt):
+        raise TimeoutError
+
+    with pytest.raises(personalizer_eval.NothingMeasured):
+        run(personalizer_eval._main(eval_args(tmp_path), published_with(down, [])))

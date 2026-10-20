@@ -234,6 +234,22 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_factcheck.py::test_an_ordinal_minute_must_be_the_cited_minute` and
   `test_an_ordinal_count_must_be_in_the_evidence` fail on the old pattern.
 
+### 111. An evaluation that measured an outage must not publish a number
+- **What happened:** the first live Personalizer evaluation reported "0 of 160 variants air"
+  and a p95 of 11.6 s against a 3 s budget. Neither described the Personalizer. The run simulated
+  matches for twenty minutes before its first model call, and by then GitHub's five-minute sign-in
+  had expired, so every call failed and every profile got the verified text. The fallback worked;
+  the report still looked like a result. The 11.6 s came from the sync Azure credential, which
+  runs `az` on the event loop and so stalls the client's own deadline in the same process; in the
+  deployed server it would stall every other request too.
+- **Rule:** an evaluation of a model counts the requests the model never answered apart from the
+  ones the checks rejected, and writes no report when it answered none. A live caller signs in
+  before its slow work, and async code uses the async credential (`azure.identity.aio`).
+- **Check:** `tests/test_personalizer.py::test_a_run_in_which_the_model_never_answered_writes_no_report`,
+  `test_the_evaluation_signs_in_before_it_simulates_the_claims` and
+  `test_published_ask_signs_in_with_the_async_credential_before_anything_else` each fail when
+  their rule is removed.
+
 ## Working in the repo
 
 ### 12. "No checks yet" is not "checks passed"

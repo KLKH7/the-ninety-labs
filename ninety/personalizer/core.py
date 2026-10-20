@@ -14,6 +14,7 @@ field, never in the instructions.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import re
@@ -197,3 +198,36 @@ def model_personalizer(ask: Ask, timeout_s: float = BUDGET_S) -> Personalize:
 
     personalize.explained = explained
     return personalize
+
+
+# Foundry's token scope (azure-ai-projects' default credential_scopes).
+FOUNDRY_SCOPE = "https://ai.azure.com/.default"
+
+
+@contextlib.asynccontextmanager
+async def published_ask():
+    """The published `ninety-personalizer` at its pinned version, as an Ask, with its label.
+
+    The credential is the async one (azure.identity.aio): the sync one runs `az` or a managed
+    identity request on the event loop, which stalls every other request and the client's own
+    deadline (an evaluation request took 11.6 s against the 3 s budget). The first token is fetched
+    on entry, so a caller signs in while its sign-in is fresh: GitHub's OIDC assertion lasts five
+    minutes, and the agents-live evaluation once spent twenty simulating claims first."""
+    from agent_framework.foundry import FoundryAgent
+    from azure.identity.aio import DefaultAzureCredential
+
+    from ninety import config
+    from ninety.agents import foundry
+
+    async with DefaultAzureCredential() as credential:
+        await credential.get_token(FOUNDRY_SCOPE)
+        name, version = foundry.pinned(personalizer_agent(foundry.chat_client(credential)))
+        async with FoundryAgent(
+            project_endpoint=config.FOUNDRY_PROJECT, agent_name=name, agent_version=version,
+            credential=credential,
+        ) as agent:
+
+            async def ask(text: str) -> str:
+                return (await agent.run(text)).text
+
+            yield ask, f"`{name}:{version}` on `{config.MODEL}`"
