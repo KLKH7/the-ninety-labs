@@ -112,6 +112,27 @@ def test_a_slow_model_times_out_to_the_code_answer():
     assert result.source == "code" and result.reasons == ("model timeout",)
 
 
+def test_the_deadline_covers_the_judge_too():
+    # Review of #145: a quick draft and a slow Judge took about 40 s. One budget covers both.
+    async def judge(claim, evidence):
+        await asyncio.sleep(1)
+        return Verdict(ok=True)
+
+    text = f"h7 is moving at {NOW.value} km/h right now."
+    ask = Models.scripted({"companion": [reply(text, NOW.id)]}).companion
+    result = asyncio.run(companion.answer(q("speed?"), WINDOW, ask, judge, timeout=0.05))
+    assert result.source == "code" and result.reasons == ("model timeout",)
+
+
+def test_a_judge_service_error_gives_the_code_answer():
+    async def judge(claim, evidence):
+        raise AzureError("the Judge is down")
+
+    text = f"h7 is moving at {NOW.value} km/h right now."
+    result = run(q("speed?"), [reply(text, NOW.id)], judge=judge)
+    assert result.source == "code" and result.reasons == ("model service error",)
+
+
 @pytest.mark.parametrize(
     "text", ["Who will win?", "What is h7's salary?", "Write me a poem.", INJECTION[:17]]
 )

@@ -29,15 +29,19 @@ from azure.core.exceptions import AzureError
 from pydantic import BaseModel
 
 from ninety.agents.contracts import COMPANION_INSTRUCTIONS, Answer, Ask, Judge, Question, status_for
-from ninety.agents.factcheck import Claim, Verdict, check
+from ninety.agents.factcheck import Claim, Verdict, check, spelled_as_digits
 from ninety.agents.slice import parse_claim
 from ninety.intel.stats import Fact
 from ninety.intel.window import PlayerWindow
 
-TIMEOUT_S = 10.0  # design: a phone answer later than this is worse than the code answer now
+TIMEOUT_S = 10.0  # design: a phone answer later than this is worse than the code answer now; it
+# covers the whole Live answer, the model's draft and the Judge together
 
 # The metric a question is about, first match wins: "top speed" before "speed", and "km" only when
-# it is not "km/h". Each pattern is a whole word or phrase.
+# it is not "km/h". Each pattern is a whole word or phrase. The word lists are design: the plain
+# English words for each fact, measured on companion_eval's metric-reading set (12 of 13 read
+# right, docs/eval/companion.md); a question they miss gets the code answer for no metric, which says
+# what can be asked, never a wrong number.
 METRIC_WORDS = (
     ("peak_speed", r"\b(?:top|max(?:imum)?|peak|highest|fastest|quickest)\b"),
     ("distance_run", r"\b(?:how far|distance|covered|cover|metres|meters|kilomet\w*|kms?(?!/))\b"),
@@ -142,6 +146,25 @@ async def _fact_check(claim: Claim, window: PlayerWindow, judge: Judge | None) -
     return verdict
 
 
+class _NotTheFormat(ValueError):
+    """The model's reply is not one Reply object."""
+
+
+async def _drafted(
+    question: Question, window: PlayerWindow, ask: Ask, judge: Judge | None
+) -> tuple[Claim, Verdict | None]:
+    """The model's draft and its fact-check, under one deadline in `answer`. No verdict when the
+    model says it cannot answer."""
+    reply = await ask(prompt(question, window))
+    try:
+        claim = parse_claim(reply)
+    except (json.JSONDecodeError, AttributeError, TypeError, ValueError) as exc:
+        raise _NotTheFormat(str(exc)) from None
+    if not claim.text.strip():
+        return claim, None
+    return claim, await _fact_check(claim, window, judge)
+
+
 async def answer(
     question: Question,
     window: PlayerWindow | None,
@@ -158,17 +181,16 @@ async def answer(
     if ask is None or window is None:
         return Result(code_answer(question, window, metric), "code")
     try:
-        claim = parse_claim(await asyncio.wait_for(ask(prompt(question, window)), timeout))
+        claim, verdict = await asyncio.wait_for(_drafted(question, window, ask, judge), timeout)
     except TimeoutError:
         return Result(code_answer(question, window, metric), "code", ("model timeout",))
     except (AgentFrameworkException, AzureError):
         return Result(code_answer(question, window, metric), "code", ("model service error",))
-    except (json.JSONDecodeError, AttributeError, TypeError, ValueError):
+    except _NotTheFormat:
         return Result(code_answer(question, window, metric), "code", ("model reply is not the reply format",))
-    if not claim.text.strip():
+    if verdict is None:
         # The model found no fact that answers it; code still answers a question about a metric.
         return Result(code_answer(question, window, metric), "code", ("model: unanswerable",))
-    verdict = await _fact_check(claim, window, judge)
     if status_for(verdict) != "verified":
         return Result(code_answer(question, window, metric), "code", tuple(verdict.reasons))
     known = {f.id: f for f in window.facts()}
@@ -187,7 +209,7 @@ async def answer(
 def _stated(text: str, facts: list[Fact]) -> list[Fact]:
     """The cited facts whose value the sentence writes with the fact's unit, as the check reads
     it: the number the phone shows must be the one the sentence says, never another cited fact's."""
-    out = []
+    out, text = [], spelled_as_digits(text)
     for fact in facts:
         pattern = rf"(?<![\w.])(\d+(?:\.\d+)?)\s*{re.escape(fact.unit)}(?!\w)"
         if any(float(n) == fact.value for n in re.findall(pattern, text, re.I)):

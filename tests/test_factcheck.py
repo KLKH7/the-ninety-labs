@@ -1,3 +1,5 @@
+import pytest
+
 from ninety.agents.factcheck import Claim, check
 from ninety.match.facts import compact, events_in
 
@@ -281,3 +283,31 @@ def test_a_tracked_players_fact_cites_only_that_track():
     for other in ("h-t1", "a-t12", "h7"):
         verdict = check(Claim(f"{other} has covered 151 m so far.", [run["id"]]), known)
         assert not verdict.ok and verdict.reasons == [f"player {other} does not appear in the cited evidence"]
+
+
+@pytest.mark.parametrize("text", [
+    "h7's top speed is 50 km/h.",  # spaced
+    "h7's top speed is 50km/h.",  # the unit glued on
+    "h7's top speed is 50kph.",
+    "h7 has covered 9999m.",
+    "h7's top speed is fifty km/h.",  # in words
+    "h7's top speed is Fifty-Two km/h.",
+    "h7 has covered one hundred and two m.",
+    "h7 has covered two thousand metres.",
+    "h7 made 7 sprints.",  # a bare count the evidence does not hold
+    "h7 made seven sprints.",
+])
+def test_a_planted_number_in_any_written_form_is_rejected(text):
+    # Review of #145: the glued and spelled forms passed the check, so a model following an
+    # injected instruction could air a number the evidence does not hold.
+    assert not check(Claim(text, [SPEED["id"]]), FACTS).ok
+
+
+@pytest.mark.parametrize("text", [
+    "h7's top speed so far is 27.3km/h.",
+    "h7 has covered 151m so far.",
+    "h7 is one of the quickest, at 27.3 km/h.",  # "one of" is not a count
+    "No one has been quicker than h7's 27.3 km/h.",
+])
+def test_a_true_number_in_any_written_form_passes(text):
+    assert check(Claim(text, [SPEED["id"], RUN["id"]]), FACTS).ok
