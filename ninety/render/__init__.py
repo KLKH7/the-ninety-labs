@@ -35,4 +35,8 @@ docs/decisions/0001-synthetic-data.md.
 # cuts closer only for a throw-in, as a medium shot; no shot is shorter than 4 s; a pan smears
 # instead of splitting every edge in two (the sharpening read the unsmeared picture); the
 # goalmouth and centre wear is faint, pale turf in the mowing stripes.
-RENDERER_VERSION = "0.5.1"
+# 0.5.2: players are drawn at their own height (the body mesh stands 1.684 m, not 1.84 m, so every
+# player was 91.5% of his height), with proportions measured against Drillis and Contini; walking
+# and running, a foot is planted for its stance and carried on an arc through its swing, never
+# dragged along the grass; the stride lengthens and the swing lifts with speed.
+RENDERER_VERSION = "0.5.2"

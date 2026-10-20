@@ -896,6 +896,30 @@ def test_the_passer_expects_a_dropping_ball_into_his_man_to_meet_the_thigh():
     assert into < 0.5
 
 
+def test_a_shot_is_an_option_only_within_range_of_the_goal_straight_line():
+    # D3, SHOT_RANGE_M: 36 m along the pitch but 25 m out wide is 44 m from the goal's centre, beyond
+    # the range and beyond the published rates; it was once offered (the range was along x only).
+    kinds = lambda s: {o.kind for o in D.options(s)}  # noqa: E731
+    wide = scene(x=105.0 - 36.0, y=34.0 - 25.0)
+    assert math.hypot(105.0 - wide.x, 34.0 - wide.y) > offball.SHOT_RANGE_M
+    assert "shoot" not in kinds(wide)
+    assert "shoot" in kinds(scene(x=105.0 - 36.0, y=34.0 - 10.0))  # 37 m: in range
+    assert "shoot" in kinds(scene(x=105.0 - 39.0, y=34.0))  # central, just inside
+    # from the goal's centre, not a post: 40.7 m from the centre (39.1 m from the near post) is out,
+    # 39.0 m from the centre (40.5 m from the far post) is in
+    assert "shoot" not in kinds(scene(x=69.0, y=15.0))
+    assert "shoot" in kinds(scene(x=69.0, y=19.0))
+    # the side attacking x = 0 alike
+    assert "shoot" not in kinds(scene(x=36.0, y=34.0 + 25.0, goal_x=0.0))
+
+
+def test_the_shot_rates_end_where_shooting_range_ends():
+    # D3: no rate is extrapolated past the last sourced zone and the range (once a straight line to
+    # 0 at 105 m, which nothing sourced).
+    assert D.SHOT_ANCHORS[-1][0] == offball.SHOT_RANGE_M
+    assert D.rate_at(offball.SHOT_RANGE_M + 1.0) == 0.0
+    assert D.rate_at(35.0) > 0.0
+
 def _odds(s, a, b, *others):
     w = D.choice_weights(s, [a, b, *others])
     return w[0] / w[1]

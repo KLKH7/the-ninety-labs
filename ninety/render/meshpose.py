@@ -20,7 +20,7 @@ ASSET = Path(__file__).resolve().parents[2] / "web" / "render" / "assets" / "pla
 # The asset's stature: the top of its skull, in the asset's own metres (the body mesh's highest
 # vertex; its hair reaches 1.70). A player `height_m` tall is the asset scaled by
 # height_m / ASSET_STATURE_M, so he is drawn as tall as he is. It was taken as 1.84 m, which drew
-# every player at 91.5% of his height (lesson 141).
+# every player at 91.5% of his height (lesson 143).
 ASSET_STATURE_M = 1.684
 # The forehead, where a header meets the ball: between the brows (1.59) and the top of the skull.
 BROW_Y = 1.63
