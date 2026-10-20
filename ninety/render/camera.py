@@ -121,11 +121,14 @@ def in_box(x: float, y: float) -> bool:
 
 CUT_HOLD_S = 4.0  # a cut stays put this long; shorter than this reads as a flicker
 GANTRY_LINE_DEG = 23.0  # handbook: 22-24° from the gantry down to the near touchline
-GANTRY_HALF_M = 14.5  # longer than the widest sampled lens, so a player still has a body from here
-# Play on the far side is foreshortened, so the same width of ground shows more of the stand above
-# it: the lens closes up as the play goes away, down to this share of its width at the far corners
-# (design; 0.7 against 1.0 and 0.6 on seeds 7, 21 and 42, test_render_camera uses other seeds).
-ZOOM_MIN = 0.7
+# The widest the gantry goes in open play, against the sampled 17 to 24 m: aimed at the play on the
+# grass, the pitch fills the picture and 8 to 15 players are in shot (docs/guides/broadcast-render.md),
+# each about 65 px tall. Play on the far side is foreshortened, so the same width of ground shows
+# more of the stand above it: the lens closes up as the play goes away, down to ZOOM_MIN of its
+# width at the far corners. Design: 18 m and 0.85 against 14.5 to 22 m and 0.7 to 1.0 on seeds 7,
+# 21 and 42; test_render_camera measures other seeds.
+GANTRY_HALF_M = 18.0
+ZOOM_MIN = 0.85
 TIGHT_ACTIONS = ("throw", "thigh", "chest", "head", "hands")
 NET_SETTLE_S = 2.6  # the mesh is back to rest by here; the angle itself holds CUT_HOLD_S
 

@@ -279,9 +279,10 @@ def _broadcast(seed):
 def test_the_gantry_frames_the_play_with_the_pitch_filling_the_picture():
     """Old (0.5.0 and before): the gantry aimed 4.5 m above the play to keep the stand behind it, so
     the stands filled 40 to 75% of the picture and the players were small at the bottom (well
-    framed in 4 to 32% of live frames on seeds 7, 21 and 42). A broadcast keeps the play near the
+    framed in 13 to 47% of live frames on seeds 7, 21 and 42). A broadcast keeps the play near the
     middle with the pitch filling most of the picture: in live play, at least 85% of frames have
-    the pitch over PITCH_SHARE_MIN of the picture and the ball in the CENTRAL box (camera.py)."""
+    the pitch over PITCH_SHARE_MIN of the picture and the ball in the CENTRAL box (camera.py), and
+    the median frame has 8 to 15 players in shot (docs/guides/broadcast-render.md)."""
     for seed in HELD_OUT:
         m, rows = _broadcast(seed)
         dead = set()
@@ -291,11 +292,19 @@ def test_the_gantry_frames_the_play_with_the_pitch_filling_the_picture():
         live = [(fi, cam) for fi, cam in live if 0 <= m.frames[fi]["ball"]["x"] <= 105
                 and 0 <= m.frames[fi]["ball"]["y"] <= 68]
         assert len(live) >= 200, (seed, len(live))  # never vacuous: 40 s of live play
-        ok = 0
+        ok, in_shot = 0, []
         for fi, cam in live:
             b = m.frames[fi]["ball"]
             ok += well_framed(cam, (b["x"], b["y"], b["z"] + 0.11))
+            seen = 0
+            for q in m.frames[fi]["players"]:
+                # In shot: his feet inside the picture's width and above its bottom, his head below its top.
+                feet, head = cam.project((q["x"], q["y"], 0.0)), cam.project((q["x"], q["y"], 1.8))
+                if feet is not None and head is not None:
+                    seen += 0 <= feet[0] < 1280 and feet[1] < 720 and head[1] >= 0
+            in_shot.append(seen)
         assert ok / len(live) >= 0.85, (seed, ok, len(live))
+        assert 8 <= sorted(in_shot)[len(in_shot) // 2] <= 15, (seed, sorted(in_shot))
 
 
 def test_the_viewpoint_changes_no_faster_than_a_broadcast_and_never_flickers():
