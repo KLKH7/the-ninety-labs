@@ -17,4 +17,7 @@ docs/decisions/0001-synthetic-data.md.
 # 0.4.2: the stride plants each foot where the gait has it on the grass and takes and gives back
 # the plant over three frames; stand, walk and jog blend by speed; a tackle's poke is drawn as the
 # tackler's foot on the ball; no limb jumps in a frame (#150, after 0.4.1's review clips).
-RENDERER_VERSION = "0.4.2"
+# 0.4.3: while a foot plays the ball the other one stands and steps after the body; a planted foot
+# left beyond the leg's reach steps at once; a lowered leg that cannot reach its plant stays above
+# the grass; a keeper stoops less on the move (render-check feet in boxes, seeds 7 and 11).
+RENDERER_VERSION = "0.4.3"

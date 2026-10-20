@@ -130,6 +130,7 @@ HOLD_STAND_Z = 1.0
 HOLD_BEND = 1.5
 HOLD_DROP_M = 0.33  # as low as the planted legs still reach with flat feet (measured on the asset)
 HOLD_EASE_S = 0.16
+HOLD_RUN_MPS = 4.0  # at this speed or faster a keeper takes the ball without dropping his hips (design)
 TOUCH_PARTS = ("foot", "thigh", "chest", "head")
 HEADER_LIFT_MAX = 0.3  # a header above the standing brow is drawn as a jump, at most this high
 HEADER_AIR_S = 0.24  # half the time in the air
@@ -145,6 +146,7 @@ LUNGE_MAX = 0.3
 # the lowered leg was measured to reach with a flat foot).
 LOW_HOLD_M = 0.3
 LOW_M = 0.05  # how far the hips drop before the body counts as lowered (a lunge, a stoop)
+OUT_OF_REACH_M = 0.45  # a planted foot this far from where it stands is beyond the leg (asset m, measured)
 
 
 def _wrap(a: float) -> float:
@@ -469,7 +471,9 @@ def hold_at(g: Gait, runs: list[tuple[int, int]], fi: int, ball: tuple[float, fl
         "w": round(w, 4),
         "bend": round(HOLD_BEND * depth, 4),
     }
-    g.lift = min(g.lift, -round(HOLD_DROP_M * depth * k * w, 4))
+    # On the move he stoops less: lowered, the legs could not reach feet the body is running past.
+    moving = max(0.0, 1.0 - g.speed / HOLD_RUN_MPS)
+    g.lift = min(g.lift, -round(HOLD_DROP_M * depth * k * w * moving, 4))
 
 
 def face(g: Gait, player: dict) -> None:
@@ -528,9 +532,12 @@ def _feet(g: Gait, x: float, y: float, k: float) -> None:
     if g.touch is not None and g.touch["w"] > 0 and g.touch["part"] in ("foot", "strike", "thigh"):
         busy = g.touch["side"]
     lunge = g.lift < -LOW_M * k  # the support foot stays down under a lunge, whatever the pose
-    if (g.action not in PLANT_ACTIONS and not lunge) or g.lift > 0.02:
+    # While a foot or thigh plays the ball, the other foot is the support: it stands, and steps after
+    # the body, instead of following the stride into the air.
+    support = lunge or busy is not None
+    if (g.action not in PLANT_ACTIONS and not support) or g.lift > 0.02:
         g.feet = {}
-    elif g.action != "stand" and g.speed >= 0.45 and not lunge:
+    elif g.action != "stand" and g.speed >= 0.45 and not support:
         half = _duty(g.speed) * math.pi
         per_frame = 2 * math.pi * g.speed * FRAME_S / _stride(g.speed)
         ph = g.phase % (2 * math.pi)
@@ -592,7 +599,18 @@ def _feet(g: Gait, x: float, y: float, k: float) -> None:
                 if foot["swing"] is None:
                     foot["z"], foot["over"] = 0.0, False
             g.feet[side] = foot
-        stepping = any(f["swing"] is not None for f in g.feet.values())
+        # A planted foot the body has left beyond the leg's reach steps at once, whatever the other
+        # foot is doing: held there, the leg cannot reach it and is drawn through the grass.
+        for side, sign in (("l", 1.0), ("r", -1.0)):
+            foot = g.feet[side]
+            hx_, hy_ = _home(x, y, pel, k, sign)
+            gone = math.hypot(foot["x"] - hx_, foot["y"] - hy_)
+            held = side == busy and g.touch["w"] >= 0.5
+            if foot["swing"] is None and not held and gone > OUT_OF_REACH_M * k:
+                start = (foot["x"], foot["y"], foot["yaw"], 0, _step_frames(gone))
+                foot["swing"], foot["over"] = start, False
+        # One foot steps at a time; the foot playing the ball is the touch's, not a step.
+        stepping = any(f["swing"] is not None for s, f in g.feet.items() if s != busy)
         if not stepping:
             # Once the body has stopped turning he squares up: a foot half as far off steps too.
             settle = SETTLE if abs(g.lead) < 0.05 else 1.0

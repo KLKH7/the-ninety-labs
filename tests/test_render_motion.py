@@ -17,6 +17,7 @@ from ninety.render.scene import (
     LEAD_AHEAD_FRAMES,
     LEAD_MAX,
     PLANT_AHEAD_MAX,
+    STEP_LIFT,
     Gait,
     Look,
     _step_m,
@@ -448,3 +449,58 @@ def test_a_tackle_puts_the_tacklers_foot_on_the_ball_and_neither_body_jumps():
         jumps = enumerate(_jumps(drawn[who]))
         over = [(i, round(mv, 3), round(cap, 3)) for i, (mv, cap) in jumps if mv > cap]
         assert not over, (who, over)
+
+
+def test_a_kick_straight_after_a_touch_stands_on_its_other_foot():
+    """Old (0.4.2): a touch then a strike while walking left the other foot to the stride, which
+    lifted it as the kick swung: both feet in the air, the drawn body above the label's foot line
+    (render-check player_feet_in_boxes, seeds 7 and 11). While a foot plays the ball the other one
+    stands, and steps after the body; no foot goes through the grass."""
+    frames, touch_at_frame, kick_at = [], 12, 22
+    x, bx0 = 40.0, 0.0
+    for i in range(40):
+        v = 2.2
+        x += v / FPS
+        if i < touch_at_frame:
+            ball = {"x": x + 2.0, "y": 30.3, "z": 0.0, "vx": 0.0, "vy": 0.0}
+        elif i <= kick_at:
+            ball = {"x": x + 0.45, "y": 30.25, "z": 0.0, "vx": v, "vy": 0.0}
+        else:
+            t = (i - kick_at) / FPS
+            ball = {"x": bx0 + 15.0 * t, "y": 30.25, "z": 0.0, "vx": 15.0, "vy": 0.0}
+        if i == kick_at:
+            bx0 = ball["x"]
+        if touch_at_frame <= i < touch_at_frame + 4:
+            action = "foot"
+        else:
+            action = "strike" if 18 <= i <= kick_at else "walk"
+        frames.append({"ball": ball, "possessor": "h1" if touch_at_frame <= i <= kick_at else None,
+                       "players": [{"id": "h1", "x": x, "y": 30.0, "vx": v, "vy": 0.0, "heading": 0.0,
+                                    "action": action, "dive": 0.0}]})
+    drawn = _draw(frames)["h1"]
+    for i, (pose, m, _, _) in enumerate(drawn):
+        assert min(m["foot_l"][2], m["foot_r"][2]) > -0.03, (i, m["foot_l"], m["foot_r"])
+        touch = pose["touch"]
+        if touch and touch["part"] in ("foot", "strike") and touch["w"] >= 0.9:  # the touch, the kick
+            other = "foot_r" if touch["side"] == "l" else "foot_l"
+            # It stands, or takes a low step after the body (STEP_LIFT, 8 cm): it is not swung up.
+            assert m[other][2] < STEP_LIFT + 0.04, (i, touch["part"], m[other])
+
+
+def test_a_keeper_stooping_on_the_run_keeps_his_feet_on_the_grass():
+    """Old (0.4.2): a keeper gathering a ground ball at 3 m/s dropped his hips while a foot stayed
+    planted behind him beyond the leg's reach; the leg gave up and the foot was drawn 0.34 m
+    through the grass. Now a foot left beyond reach steps at once, he stoops less on the move,
+    and a lowered leg that cannot reach its plant reaches toward it above the grass."""
+    frames, x = [], 20.0
+    for i in range(36):
+        v = 3.0 if i < 30 else 1.0
+        x += v / FPS
+        holding = 16 <= i <= 24
+        frames.append({"possessor": "h1" if holding else None,
+                       "ball": {"x": x + 0.3, "y": 34.0, "z": 0.0, "vx": v, "vy": 0.0},
+                       "players": [{"id": "h1", "x": x, "y": 34.0, "vx": v, "vy": 0.0, "heading": 0.0,
+                                    "action": "hands" if holding else "run", "dive": 0.0}]})
+    drawn = _draw(frames)["h1"]
+    for i, (pose, m, _, _) in enumerate(drawn):
+        assert min(m["foot_l"][2], m["foot_r"][2]) > -0.03, (i, pose["lift"], m["foot_l"], m["foot_r"])
