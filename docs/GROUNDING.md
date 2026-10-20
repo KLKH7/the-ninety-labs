@@ -200,6 +200,23 @@ engine versions on the same seeds, never by a count set as a target. Engine colu
 | V2 | the same seed renders the same frames | render guide | hard | ❌ | planned |
 | V3 | every box has a visibility fraction, so occluded players are not graded as misses | render guide | hard | ❌ | planned |
 
+### Vision scoring: how detections are graded
+
+These rows give the reasons for the matching rules in [EVALUATION.md](EVALUATION.md#vision-scoring)
+and the published numbers our detector is compared with. Every value was set before any real
+detections were scored, and none is changed to fit a result. A row marked *design* names its
+reason; the value itself is ours.
+
+| ID | Rule or reference | Source | Used by |
+|---|---|---|---|
+| S1 | in pixels, a detected player matches a true one at IoU 0.5 or more | PASCAL VOC (Everingham et al. 2010, *IJCV* 88:303–338); COCO's AP50 (Lin et al. 2014, [arXiv 1405.0312](https://arxiv.org/abs/1405.0312)) | `vision_score.py` |
+| S2 | in pixels, a detected ball matches the true ball when their centres are 5 px apart or less. IoU is not used for the ball: at 9 to 11 px across, a 3 px offset already drops IoU to about 0.3 | TrackNet counts a ball within 5 px as found, on 1280 × 720 broadcast video, our render size (Huang et al. 2019, [arXiv 1907.03698](https://arxiv.org/abs/1907.03698)) | `vision_score.py` |
+| S3 | on the pitch, strict: a detection matches within 1.0 m. *Design*, for this reason: players are often about 2 m apart, and a radius of half that spacing cannot hand a detection to a neighbour 2 m from its own player. Not set by measurement precision: professional optical tracking places players to about 0.1 m | a player's time within 2 m of an opponent, summed over opponents, averages 11.5 minutes a match (forwards 20.8), LaLiga, 60 matches, Tracab tracking ([Garrido et al. 2021, *Front. Psychol.* 12:723414](https://doi.org/10.3389/fpsyg.2021.723414)); TRACAB position error 0.08 to 0.09 m RMSE against VICON ([Linke et al. 2020, *PLOS ONE* 15:e0230179](https://doi.org/10.1371/journal.pone.0230179), *verify*: read from the abstract) | `event_score.py` (`STRICT_M`), `vision_pitch_score.py` (#159) |
+| S4 | on the pitch, lenient: the ball within 2.0 m, a player within 1.5 m. *Design*, reported beside strict for comparison, never as the headline. For scale: a data provider's hand-logged pass locations sit a mean 1.59 m (SD 0.82) from positional data, so the lenient ball radius is about as loose as the event data our detector is meant to replace. The 1.5 m player radius is the possession distance of P6 | [Cortez et al. 2025, *Appl. Sci.* 15:8694](https://doi.org/10.3390/app15158694) (*verify*: read from the abstract; the full text is restricted); P6 | `event_score.py` (`LENIENT_M`), `vision_pitch_score.py` (#159) |
+| S5 | for scale only: the SoccerNet Game State Reconstruction benchmark grades pitch positions with a 5 m tolerance, so S3 and S4 are stricter than the field's public benchmark | [Somers et al. 2024, arXiv 2404.11335](https://arxiv.org/abs/2404.11335), Eq. 4 | none (context) |
+| S6 | published off-the-shelf player detection on real broadcast football: before fine-tuning on football, YOLOv8 found 46.0% of players (precision 95.2%, AP50 80.3%) and RT-DETR 50.8% (precision 92.0%, AP50 80.4%) on the SoccerNet 2023 tracking test set; fine-tuned, YOLOv8 reached 93.8%. The paper states neither the starting weights nor the score threshold, so the number gives scale, not a like-for-like comparison | [Yeung, Ide and Fujii 2024, arXiv 2405.12070](https://arxiv.org/abs/2405.12070), Table 2 | the COCO baseline in `render-checks.json` (planned) |
+| S7 | published off-the-shelf ball detection: no football figure found. The nearest: a COCO-trained YOLOv3, not retrained, found 11 of 2,189 balls (recall 0.5%) in beach volleyball video. Another sport and camera, so it shows only that an off-the-shelf detector misses small balls; a football figure is asked of the organisers | [Hiemann et al. 2021, *Sensors* 21:3214](https://doi.org/10.3390/s21093214), Table 3 | the COCO baseline in `render-checks.json` (planned) |
+
 ## Order of work
 
 1. ~~Fix C3 so a legal substitution passes.~~ Done.
