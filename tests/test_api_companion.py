@@ -116,7 +116,7 @@ MOST_TRIES = 1000  # every limit and cap is far below this (a test asserts it)
 
 def tries_until(status, send, most=MOST_TRIES):
     """How many calls of `send` succeed before one answers `status`. Bounded: a limit raised past
-    `most` fails here at once instead of hanging the run (lesson 124)."""
+    `most` fails here at once instead of hanging the run (lesson 125)."""
     for n in range(most):
         if send(n) == status:
             return n
@@ -155,7 +155,7 @@ def test_rooms_are_capped(setup):
 # --- the relay -------------------------------------------------------------------------------------
 # Driven on one event loop, as uvicorn runs every connection. (Starlette's TestClient gives each
 # WebSocket its own thread and loop, so a relay crossed threads there, and a message could be lost
-# and a test hang: a harness that is not the server, lesson 124.) Every receive has a deadline.
+# and a test hang: a harness that is not the server, lesson 125.) Every receive has a deadline.
 
 RECEIVE_S = 5.0
 
@@ -507,7 +507,7 @@ def test_a_phone_only_listens_and_a_room_has_one_laptop(setup):
 
 
 def test_a_served_kickoff_reset_mid_window_is_not_movement(monkeypatch):
-    # Lesson 123's case on the served path: h7 is put back 25 m at frame 125, a kickoff. The card and
+    # Lesson 124's case on the served path: h7 is put back 25 m at frame 125, a kickoff. The card and
     # the answer must read the 18 km/h run, not a 2,250 km/h jump (review of #145: dropping the
     # restarts anywhere between the track and the window left every test green).
     plain = track()
