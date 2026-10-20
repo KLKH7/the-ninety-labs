@@ -63,7 +63,8 @@ HANG_S = 60.0  # longer than any timeout here: a call that never answers
 
 
 def claim_on(event_id: str, known: dict[str, dict]) -> Claim:
-    """A true claim about one detected pass, worded from its facts (the detector reads no players)."""
+    """A true claim about one detected pass, worded from its facts at team level (a detection may name
+    nobody: ninety/vision/events.py, attribution)."""
     e = known[event_id]
     side = "Away" if e["team"] == "away" else "Home"
     return Claim(f"{side} complete a pass of {e['distance_m']} m at {e['ball_speed_kmh']} km/h.", [event_id])

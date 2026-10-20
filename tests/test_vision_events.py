@@ -100,6 +100,61 @@ def test_a_pass_won_by_an_opponent_fails():
     assert [(e["type"], e["team"], e["outcome"]) for e in events] == [("pass", "home", "fail")]
 
 
+def test_a_completed_pass_names_its_passer_and_receiver_by_side_and_track():
+    events, summary = ev.detect(pass_scene(BLUE))
+    p = next(e for e in events if e["type"] == "pass")
+    # Tracks are numbered as they start: the crowd's eight, then the passer, then the receiver.
+    assert (p["player"], p["receiver"], p["interceptor"]) == ("h-t9", "h-t10", None)
+    assert summary["named"] == {"player": 1, "receiver": 1, "interceptor": 0}
+
+
+def test_a_pass_the_other_side_takes_names_the_interceptor_not_a_receiver():
+    events, _ = ev.detect(pass_scene(RED))
+    p = next(e for e in events if e["type"] == "pass")
+    assert (p["player"], p["receiver"], p["interceptor"]) == ("h-t9", None, "a-t10")
+
+
+def rival_scene(gap):
+    """pass_scene(BLUE) with an away player standing still at the strike spot's side, `gap` metres
+    farther from the ball (at 50.3, 34) than the passer (0.3 m from it) is."""
+    rows = pass_scene(BLUE)
+    for r in rows:
+        r["players"].append({"bbox": [400, 0, 410, 30], "score": 0.9, "x": 50.3, "y": 34.0 + 0.3 + gap,
+                             "rgb": RED})
+    return rows
+
+
+def test_a_rival_within_the_position_error_leaves_the_passer_unnamed_and_keeps_the_side():
+    events, _ = ev.detect(rival_scene(ev.RIVAL_M - 0.05))
+    p = next(e for e in events if e["type"] == "pass")
+    assert p["player"] is None and p["team"] == "home" and p["outcome"] == "success"
+    assert p["receiver"] == "h-t10"  # nobody near the receiver: he is still named
+
+
+def test_a_rival_beyond_the_position_error_does_not():
+    events, _ = ev.detect(rival_scene(ev.RIVAL_M + 0.05))
+    assert next(e for e in events if e["type"] == "pass")["player"] == "h-t9"
+
+
+def test_a_track_the_companion_does_not_draw_is_never_named():
+    ball = tr.BallPoint(2, 10.0, 10.0, 0.9)
+
+    def track(id_, n, team="home"):
+        return tr.Track(id_, frames=list(range(n)), xy=[(10.2, 10.0)] * n, team=team)
+
+    assert ev.attribute(track(1, ev.MIN_TRACK_FRAMES), ball, []) == "h-t1"
+    assert ev.attribute(track(1, ev.MIN_TRACK_FRAMES - 1), ball, []) is None  # a fragment
+    assert ev.attribute(track(1, ev.MIN_TRACK_FRAMES, team=None), ball, []) is None  # no side
+    assert ev.attribute(track(1, 3), tr.BallPoint(9, 10.0, 10.0, 0.9), []) is None  # not seen then
+
+
+def test_out_of_play_names_nobody():
+    events, _ = ev.detect(pass_scene(BLUE, speed=30.0)[:21] + [
+        row(f, crowd(f) + [(50.0, 34.0, BLUE)], (106.0, 34.0)) for f in range(21, 30)])
+    outs = [e for e in events if e["type"] == "out_of_play"]
+    assert outs and all(e["player"] is None for e in outs)
+
+
 def test_a_ball_rolling_past_a_player_is_not_his():
     # The ball runs at 12 m/s straight past a red player standing on its line: without the
     # relative-speed test he would have a spell, and the pass would be cut in two.

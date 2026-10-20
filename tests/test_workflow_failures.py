@@ -12,15 +12,16 @@ BASE = ROWS["none"]
 
 # scenario -> (claim status, verdict category, Judge calls, an insight airs, template graphics lost)
 EXPECTED = {
-    # The insight, then its variants re-checked (casual and club in English pass; the Spanish ones
-    # are held, since the stand-in Personalizer returns English): three Judge calls.
-    "none": ("verified", None, 3, True, 0),
+    # The insight, then its variants re-checked (casual, club and player_focus in English pass: the
+    # detected pass names its passer's track, so the player-focus variant is written too; the
+    # Spanish ones are held, since the stand-in Personalizer returns English): four Judge calls.
+    "none": ("verified", None, 4, True, 0),
     # The real Judge wrapper retries once, then holds: two calls, then the template stays.
     "judge timeout": ("held", "timeout", 2, False, 0),
     # The Tactician never answers, so there is nothing for the Judge to read.
     "tactician outage": ("held", "service", 0, False, 0),
     # The insight still airs; the in-process fallback gives the variants, re-checked the same way.
-    "personalizer down": ("verified", None, 3, True, 0),
+    "personalizer down": ("verified", None, 4, True, 0),
     # The confidence gate holds the claim before the Judge, and the unsure pass's two graphics
     # (analyst and casual) are not drawn.
     "low confidence": ("held", "low_confidence", 0, False, 2),

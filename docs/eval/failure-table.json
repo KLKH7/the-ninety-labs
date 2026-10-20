@@ -12,7 +12,7 @@
    "status": "verified",
    "category": null,
    "reasons": [],
-   "judge_asked": 3,
+   "judge_asked": 4,
    "insights": [
     {
      "text": "Away complete a pass of 8 m at 42 km/h.",
@@ -34,6 +34,13 @@
      "lang": "en",
      "verified": true,
      "passes_check": true
+    },
+    {
+     "text": "Away complete a pass of 8 m at 42 km/h.",
+     "persona": "player_focus",
+     "lang": "en",
+     "verified": true,
+     "passes_check": true
     }
    ],
    "templates": [
@@ -51,9 +58,10 @@
    "fallback": [
     "fact_checker held: analyst/es: no translation: the verified English text",
     "fact_checker held: casual/es: no translation: the verified English text",
-    "fact_checker held: club/es: no translation: the verified English text"
+    "fact_checker held: club/es: no translation: the verified English text",
+    "fact_checker held: player_focus/es: no translation: the verified English text"
    ],
-   "model_calls": 6,
+   "model_calls": 7,
    "recovered": {
     "templates stay": true,
     "nothing unverified airs": true,
@@ -157,7 +165,7 @@
    "status": "verified",
    "category": null,
    "reasons": [],
-   "judge_asked": 3,
+   "judge_asked": 4,
    "insights": [
     {
      "text": "Away complete a pass of 8 m at 42 km/h.",
@@ -176,6 +184,13 @@
     {
      "text": "Away complete a pass of 8 m at 42 km/h.",
      "persona": "club",
+     "lang": "en",
+     "verified": true,
+     "passes_check": true
+    },
+    {
+     "text": "Away complete a pass of 8 m at 42 km/h.",
+     "persona": "player_focus",
      "lang": "en",
      "verified": true,
      "passes_check": true
@@ -201,9 +216,10 @@
     "personalizer fallback: fallback: refused",
     "fact_checker held: analyst/es: no translation: the verified English text",
     "fact_checker held: casual/es: no translation: the verified English text",
-    "fact_checker held: club/es: no translation: the verified English text"
+    "fact_checker held: club/es: no translation: the verified English text",
+    "fact_checker held: player_focus/es: no translation: the verified English text"
    ],
-   "model_calls": 6,
+   "model_calls": 7,
    "recovered": {
     "templates stay": true,
     "nothing unverified airs": true,

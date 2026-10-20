@@ -27,5 +27,10 @@
     "pass": 4,
     "shot": 0,
     "out_of_play": 1
+  },
+  "named": {
+    "player": 4,
+    "receiver": 2,
+    "interceptor": 1
   }
 }
