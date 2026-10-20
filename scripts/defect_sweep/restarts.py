@@ -10,8 +10,8 @@ A light measurement to size the restart defects before and after a fix, not a ru
   (Laws 13, 15, 17: 9.15 m from a free kick or corner, 2 m from a throw-in) or, at a goal kick,
   inside the kicking side's penalty area (Law 16). The kind of restart is read from the event that
   stopped play and where the ball is placed;
-- stuck restarts: a stoppage with no restart within 200 s (the longest grounded wait is a
-  penalty's, up to 140 s, GROUNDING R1), or none by the end of the match;
+- stuck restarts: a stoppage whose ball is not kicked within 200 s (R1's longest wait, a
+  penalty's 140 s, plus a minute's margin: design), or not by the end of the match;
 - second touch (Laws 8, 13 to 17): the taker's first pass or shot more than 1 m from where the
   restart was set (he carried the set ball first), or his next touch after it before anyone else's;
 - held-out outcomes (never targets): shots and goals a team per 90 with the standard error over
@@ -59,7 +59,7 @@ def measure(run: Path) -> dict:
     end_t = frames[-1]["t"]
     for i, e in enumerate(events):
         if e["type"] in ("out_of_play", "foul", "offside", "goal"):
-            nxt = next((k for k in events[i + 1:] if k["type"] in ("set_piece", "kickoff")), None)
+            nxt = next((k for k in events[i + 1:] if k["type"] in ("pass", "shot")), None)
             if (nxt["t"] if nxt else end_t) - e["t"] > 200 and (nxt or end_t - e["t"] > 200):
                 out["stuck"] += 1
     touches = ("pass", "shot", "deflection", "interception", "tackle")
