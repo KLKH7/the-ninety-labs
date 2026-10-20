@@ -234,7 +234,7 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_factcheck.py::test_an_ordinal_minute_must_be_the_cited_minute` and
   `test_an_ordinal_count_must_be_in_the_evidence` fail on the old pattern.
 
-### 113. An evaluation that measured an outage must not publish a number
+### 126. An evaluation that measured an outage must not publish a number
 - **What happened:** the first live Personalizer evaluation reported "0 of 160 variants air"
   and a p95 of 11.6 s against a 3 s budget. Neither described the Personalizer. The run simulated
   matches for twenty minutes before its first model call, and by then GitHub's five-minute sign-in

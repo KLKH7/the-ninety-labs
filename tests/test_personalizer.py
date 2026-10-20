@@ -7,6 +7,7 @@ import asyncio
 import json
 import socket
 import time
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -393,8 +394,12 @@ def test_published_ask_signs_in_with_the_async_credential_before_anything_else(m
         async def __aexit__(self, *exc):
             return False
 
-        async def get_token(self, scope):
+        async def get_token(self, scope, **kwargs):
             calls.append(("token", scope))
+            return SimpleNamespace(token="t", expires_on=time.time() + 3600)
+
+        async def close(self):
+            calls.append(("closed",))
 
     class Agent:
         def __init__(self, **kwargs):
@@ -411,6 +416,8 @@ def test_published_ask_signs_in_with_the_async_credential_before_anything_else(m
 
     async def enter():
         async with core.published_ask() as (ask, label):
+            # A second token request inside the run reuses the kept token (credentials.SignedIn).
+            await calls[1][1].get_token(calls[0][1])
             return label
 
     label = run(enter())
@@ -420,7 +427,12 @@ def test_published_ask_signs_in_with_the_async_credential_before_anything_else(m
     endpoint = "https://x.services.ai.azure.com/api/projects/p"
     sdk = AIProjectClientConfiguration(endpoint=endpoint, credential=object())
     assert calls[0] == ("token", *sdk.credential_scopes)
-    assert calls[1][0] == "agent" and isinstance(calls[1][1], Credential)
+    from ninety.agents import credentials
+
+    assert calls[1][0] == "agent" and isinstance(calls[1][1], credentials.SignedIn)
+    assert isinstance(calls[1][1].inner, Credential)
+    assert [c[0] for c in calls].count("token") == 1, "the kept token is reused, not fetched again"
+    assert calls[-1] == ("closed",)
     assert label.startswith("`ninety-personalizer:")
 
 

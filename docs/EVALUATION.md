@@ -456,7 +456,7 @@ words it; code decides what airs.
   answer (a client fallback, or a failed model call on the server) counts in its own column, and
   air rates and times are over answered requests only. Past `MAX_UNANSWERED_SHARE` (a fifth, a
   design choice) the run writes no report, because which claims an outage hits depends on when it
-  struck (lesson 113).
+  struck (lesson 126).
 - **The fallback.** The remote has `BUDGET_S` = 3 s (a design choice: a little over a third of the
   8 s p95 target from event to verified graphic in PLAN.md, to be revisited when
   `latency-cost.md` measures the split). On a timeout, a 5xx or a refused connection the in-process
