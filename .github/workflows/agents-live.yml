@@ -16,7 +16,7 @@ on:
         description: What to run
         required: true
         type: choice
-        options: [publish, record, failures, ablation, eval, personalizer, describe]
+        options: [publish, record, failures, ablation, eval, personalizer]
       ref:
         description: Branch, tag or commit to run
         required: true
@@ -48,8 +48,6 @@ jobs:
       ARGS: ${{ inputs.args }}
       # Not a secret: the resource id publishing needs to attach the guardrail (ninety/config.py).
       NINETY_FOUNDRY_RESOURCE_ID: ${{ vars.NINETY_FOUNDRY_RESOURCE_ID }}
-      # Not a secret either: the Speech resource id that Entra auth on the TTS endpoint needs.
-      NINETY_SPEECH_RESOURCE_ID: ${{ vars.NINETY_SPEECH_RESOURCE_ID }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -80,8 +78,6 @@ jobs:
               ;;
             personalizer)
               uv run python -m ninety.personalizer.eval --seeds 21,33 --out runs/eval/personalizer.md "${extra[@]}"
-            describe)
-              uv run python -m ninety.agents.describer --out runs/eval/describer-latency.md "${extra[@]}"
               ;;
             record|failures|ablation)
               echo "::error::task '$TASK' is not yet implemented"

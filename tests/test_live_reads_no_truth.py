@@ -63,20 +63,6 @@ assert personalize.last_route == "remote"
 assert {c["lang"] for c in result.cues if c["kind"] == "insight"} == {"en", "es"}
 assert match_server.list_events(detected.M1_CLIP, 1, 99, None)
 match_server.match_info(detected.M1_CLIP)
-
-from ninety.agents.describer import Describer
-
-async def speak(ssml):
-    return ssml.encode()
-
-async def describe_all():
-    describer = Describer(speak=speak)
-    lines = []
-    for e in events:
-        lines += [s async for s in describer.describe(e)]
-    return lines
-
-assert asyncio.run(describe_all())
 """
 
 

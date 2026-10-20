@@ -3,7 +3,6 @@ the Speech SDK's licence is proprietary, and this project uses permissive licenc
 
 from __future__ import annotations
 
-import asyncio
 import time
 from xml.sax.saxutils import escape
 
@@ -14,29 +13,16 @@ from ninety import config
 
 _credential = DefaultAzureCredential()
 
-VOICE = "en-GB-RyanNeural"
-LANG = "en-GB"
-# Quotes too: the text is character data today, but an escaped quote can never close an attribute.
-_ENTITIES = {'"': "&quot;", "'": "&apos;"}
 
-
-def ssml(text: str, voice: str = VOICE, lang: str = LANG) -> str:
-    """One spoken line as SSML. The text is escaped (&, <, > and both quotes), so nothing in it
-    can become markup: an event's or a model's words are always read out, never obeyed."""
-    return (
-        f'<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="{lang}">'
-        f'<voice name="{voice}">{escape(text, _ENTITIES)}</voice></speak>'
-    )
-
-
-def synthesize(text: str, voice: str = VOICE) -> tuple[bytes, float]:
+def synthesize(text: str, voice: str = "en-GB-RyanNeural") -> tuple[bytes, float]:
     """Returns MP3 bytes and the seconds the request took."""
-    return synthesize_ssml(ssml(text, voice))
+    # Quotes too (as ninety/speech/describe.py): an escaped quote can never close an attribute.
+    body = escape(text, {'"': "&quot;", "'": "&apos;"})
+    ssml = f'<speak version="1.0" xml:lang="en-GB"><voice name="{voice}">{body}</voice></speak>'
+    return synthesize_ssml(ssml)
 
 
-def synthesize_ssml(
-    document: str, output_format: str = "audio-24khz-48kbitrate-mono-mp3"
-) -> tuple[bytes, float]:
+def synthesize_ssml(ssml: str, output_format: str = "audio-24khz-48kbitrate-mono-mp3") -> tuple[bytes, float]:
     """Audio for an SSML document (ninety/speech/describe.py writes them), and the seconds the
     request took."""
     if not config.SPEECH_RESOURCE_ID:
@@ -51,14 +37,8 @@ def synthesize_ssml(
             "X-Microsoft-OutputFormat": output_format,
             "User-Agent": "the-ninety-labs",
         },
-        content=document.encode(),
+        content=ssml.encode(),
         timeout=20,
     )
     response.raise_for_status()
     return response.content, time.perf_counter() - started
-
-
-async def speak(document: str) -> bytes:
-    """The `Speak` contract (ninety/agents/contracts.py): SSML in, MP3 out, off the event loop."""
-    audio, _ = await asyncio.to_thread(synthesize_ssml, document)
-    return audio
