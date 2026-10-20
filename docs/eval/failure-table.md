@@ -9,22 +9,29 @@ The Judge is the real wrapper (its retry, timeout and verdicts) around a stand-i
 other models are scripted. Data: `docs/eval/failure-table.json`. The M1 live path's own table
 is `docs/eval/failure-table-m1.md`.
 
-| Injected failure | Claim | Fallback that ran | On screen | Recovers |
+| Injected failure | Claim | Fallbacks and holds in the trace | On screen | Recovers |
 |---|---|---|---|---|
-| nothing (the baseline) | verified | none needed | 8 template graphics (as with no failure); verified insight "Away complete a pass of 8 m at 42 km/h." | yes |
+| nothing (the baseline) | verified | fact_checker held: analyst/es: no translation: the verified English text; fact_checker held: casual/es: no translation: the verified English text; fact_checker held: club/es: no translation: the verified English text | 8 template graphics (as with no failure); verified insight "Away complete a pass of 8 m at 42 km/h." | yes |
 | the Judge never answers (every call outlasts its timeout, retried once) | held (timeout) | judge hold: timeout; fact_checker hold: tactician's claim: judge timeout; claim held back; producer template: cue-v00001-analyst stays: held | 8 template graphics (as with no failure); no insight | yes |
 | the Tactician's Foundry endpoint cannot be reached | held (service), Judge not asked | tactician fail: ServiceRequestError: injected: the Foundry endpoint cannot be reached; template stays; producer template: cue-v00001-analyst stays: held | 8 template graphics (as with no failure); no insight | yes |
+| the Personalizer's service refuses the connection (its container is down) | verified | personalizer fallback: fallback: refused; fact_checker held: analyst/es: no translation: the verified English text; fact_checker held: casual/es: no translation: the verified English text; fact_checker held: club/es: no translation: the verified English text | 8 template graphics (as with no failure); verified insight "Away complete a pass of 8 m at 42 km/h." | yes |
 | the detector reports the event the Tactician cites at confidence 0.3, below 0.5 | held (low_confidence), Judge not asked | fact_checker hold: tactician's claim: event v00005 was detected with confidence 0.30, below 0.50: cite a confident detection; producer template: cue-v00001-analyst stays: held | 6 of 8 template graphics (the ones on the unsure detection are not drawn); no insight | yes |
 
-**Recovered: 3 of 3** injected failures. A row recovers when every template
+**Recovered: 4 of 4** injected failures. A row recovers when every template
 graphic stays on air (less those on an unsure detection, which the confidence gate keeps off
-the screen), nothing airs that the fact-checker did not pass, the claim ends held or rejected,
-and the fallback is recorded in the trace.
+the screen), nothing airs that the fact-checker did not pass, the claim ends as it must (held
+or rejected; verified when only the Personalizer failed, since the insight needs no
+Personalizer), and the fallback is recorded in the trace. In every row, the Spanish variants
+are held: the stand-in Personalizer and its in-process fallback answer in English, and a
+variant airs only in its own language.
 
 ## Budgets
 
 - The Judge: 15 s per call in production, retried once, then the claim is held (fail closed).
   Here 0.05 s, so the timeout row runs the same code path in a blink.
+- The Personalizer: `personalizer.core.BUDGET_S` per call in production; on a timeout, a 5xx or
+  a refused connection the in-process fallback answers (the verified text), here after the
+  refusal, so the row takes milliseconds.
 - A writer (Analyst, Tactician, Challenger): 60 s in production (`workflow.MODEL_TIMEOUT_SECONDS`), then its claim is held and the template stays.
 - The confidence gate: a claim citing a detection below 0.5 is held before the Judge
   is asked, and never rewritten; a template graphic is drawn only for a detection at or above it.

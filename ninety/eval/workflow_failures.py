@@ -26,6 +26,7 @@ import asyncio
 import functools
 import json
 import logging
+import socket
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -40,6 +41,7 @@ from ninety.agents.factcheck import MIN_CONFIDENCE, Claim
 from ninety.agents.judge import judge as judge_call
 from ninety.match import detected
 from ninety.mcp import match_server
+from ninety.personalizer.client import RemotePersonalizer
 
 ROOT = Path(__file__).resolve().parents[2]
 COMMAND = "uv run python -m ninety.eval.workflow_failures"
@@ -90,6 +92,20 @@ async def outage(prompt: str) -> str:
     raise ServiceRequestError("injected: the Foundry endpoint cannot be reached")
 
 
+def nobody_listening() -> str:
+    """A local address nothing listens on: a connection to it is refused at once, as when the
+    Personalizer's container is down."""
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    return f"http://127.0.0.1:{port}"
+
+
+def personalizer_down(agent) -> dict:
+    # The real A2A client (its budget, its outage rule, its in-process fallback), to a dead address.
+    return {"personalizer": RemotePersonalizer(nobody_listening(), budget_s=2.0)}
+
+
 @dataclass(frozen=True)
 class Scenario:
     name: str
@@ -99,14 +115,17 @@ class Scenario:
     tactician_cites: str = MAIN
     override: Callable[[JudgeAgent], dict] = lambda agent: {}
     judge_hangs: bool = False
+    claim: str = "held"  # how the moment's claim must end
 
 
 SCENARIOS = [
-    Scenario("none", "nothing (the baseline)"),
+    Scenario("none", "nothing (the baseline)", claim="verified"),
     Scenario("judge timeout", "the Judge never answers (every call outlasts its timeout, retried once)",
              judge_hangs=True),
     Scenario("tactician outage", "the Tactician's Foundry endpoint cannot be reached",
              override=lambda agent: {"tactician": outage}),
+    Scenario("personalizer down", "the Personalizer's service refuses the connection (its container is down)",
+             override=personalizer_down, claim="verified"),
     Scenario("low confidence",
              f"the detector reports the event the Tactician cites at confidence {UNSURE}, "
              f"below {MIN_CONFIDENCE}",
@@ -137,12 +156,20 @@ def run(scenario: Scenario) -> dict:
     events = events_for(scenario)
     known = {e["id"]: compact(e) for e in workflow.agent_events(events)}
     models, agent = models_for(scenario, known)
-    result = asyncio.run(workflow.run_workflow(models, events, MINUTE, detected.M1_CLIP))
+
+    async def go():
+        try:
+            return await workflow.run_workflow(models, events, MINUTE, detected.M1_CLIP, personalize=True)
+        finally:
+            if isinstance(models.personalizer, RemotePersonalizer):
+                await models.personalizer.close()
+
+    result = asyncio.run(go())
     review = next((r for r in result.reviews if r.moment_id == f"m-{MAIN}"), None)
     templates = sorted(c["id"] for c in result.cues if c["kind"] != "insight")
     insights = [c for c in result.cues if c["kind"] == "insight"]
     fallback = [f"{s.role} {s.action}: {s.detail}".rstrip(": ") for s in result.trace
-                if s.action in ("fail", "skip", "template", "held", "hold")]
+                if s.action in ("fail", "skip", "template", "held", "hold", "fallback", "error")]
     verdict = review.primary if review else None
     return {
         "scenario": scenario.name,
@@ -151,7 +178,8 @@ def run(scenario: Scenario) -> dict:
         "category": verdict.category if verdict else None,
         "reasons": list(verdict.reasons) if verdict else [],
         "judge_asked": agent.asked,
-        "insights": [{"text": c["text"], "verified": c.get("verified", False)} for c in insights],
+        "insights": [{"text": c["text"], "persona": c["persona"], "lang": c.get("lang", "en"),
+                      "verified": c.get("verified", False)} for c in insights],
         "templates": templates,
         "fallback": fallback,
         "model_calls": result.model_calls,
@@ -165,13 +193,14 @@ def recovered(row: dict, base: dict) -> dict[str, bool]:
     return {
         "templates stay": lost == gated and set(row["templates"]) <= set(base["templates"]),
         "nothing unverified airs": all(i["verified"] for i in row["insights"]),
-        "claim held or rejected": row["status"] in ("held", "rejected") if row["scenario"] != "none"
-        else row["status"] == "verified",
+        "claim ends as it must": row["status"] == CLAIM[row["scenario"]]
+        or (CLAIM[row["scenario"]] == "held" and row["status"] == "rejected"),
         "fallback recorded": bool(row["fallback"]) if row["scenario"] != "none" else True,
     }
 
 
 UNSURE_EVENTS = {e for s in SCENARIOS for e, c in s.confidence.items() if c < MIN_CONFIDENCE}
+CLAIM = {s.name: s.claim for s in SCENARIOS}
 
 
 def rows() -> list[dict]:
@@ -204,7 +233,7 @@ def report(table: list[dict]) -> str:
         "other models are scripted. Data: `docs/eval/failure-table.json`. The M1 live path's own table",
         "is `docs/eval/failure-table-m1.md`.",
         "",
-        "| Injected failure | Claim | Fallback that ran | On screen | Recovers |",
+        "| Injected failure | Claim | Fallbacks and holds in the trace | On screen | Recovers |",
         "|---|---|---|---|---|",
     ]
     for r in table:
@@ -224,13 +253,19 @@ def report(table: list[dict]) -> str:
         "",
         f"**Recovered: {ok} of {len(failures)}** injected failures. A row recovers when every template",
         "graphic stays on air (less those on an unsure detection, which the confidence gate keeps off",
-        "the screen), nothing airs that the fact-checker did not pass, the claim ends held or rejected,",
-        "and the fallback is recorded in the trace.",
+        "the screen), nothing airs that the fact-checker did not pass, the claim ends as it must (held",
+        "or rejected; verified when only the Personalizer failed, since the insight needs no",
+        "Personalizer), and the fallback is recorded in the trace. In every row, the Spanish variants",
+        "are held: the stand-in Personalizer and its in-process fallback answer in English, and a",
+        "variant airs only in its own language.",
         "",
         "## Budgets",
         "",
         "- The Judge: 15 s per call in production, retried once, then the claim is held (fail closed).",
         f"  Here {JUDGE_TIMEOUT_S} s, so the timeout row runs the same code path in a blink.",
+        "- The Personalizer: `personalizer.core.BUDGET_S` per call in production; on a timeout, a 5xx or",
+        "  a refused connection the in-process fallback answers (the verified text), here after the",
+        "  refusal, so the row takes milliseconds.",
         f"- A writer (Analyst, Tactician, Challenger): {workflow.MODEL_TIMEOUT_SECONDS:.0f} s in production"
         " (`workflow.MODEL_TIMEOUT_SECONDS`), then its claim is held and the template stays.",
         f"- The confidence gate: a claim citing a detection below {MIN_CONFIDENCE} is held before the Judge",

@@ -9,10 +9,24 @@
    "status": "verified",
    "category": null,
    "reasons": [],
-   "judge_asked": 1,
+   "judge_asked": 3,
    "insights": [
     {
      "text": "Away complete a pass of 8 m at 42 km/h.",
+     "persona": "analyst",
+     "lang": "en",
+     "verified": true
+    },
+    {
+     "text": "Away complete a pass of 8 m at 42 km/h.",
+     "persona": "casual",
+     "lang": "en",
+     "verified": true
+    },
+    {
+     "text": "Away complete a pass of 8 m at 42 km/h.",
+     "persona": "club",
+     "lang": "en",
      "verified": true
     }
    ],
@@ -26,12 +40,16 @@
     "cue-v00005-analyst",
     "cue-v00005-casual"
    ],
-   "fallback": [],
-   "model_calls": 4,
+   "fallback": [
+    "fact_checker held: analyst/es: no translation: the verified English text",
+    "fact_checker held: casual/es: no translation: the verified English text",
+    "fact_checker held: club/es: no translation: the verified English text"
+   ],
+   "model_calls": 6,
    "recovered": {
     "templates stay": true,
     "nothing unverified airs": true,
-    "claim held or rejected": true,
+    "claim ends as it must": true,
     "fallback recorded": true
    },
    "recovers": true
@@ -65,7 +83,7 @@
    "recovered": {
     "templates stay": true,
     "nothing unverified airs": true,
-    "claim held or rejected": true,
+    "claim ends as it must": true,
     "fallback recorded": true
    },
    "recovers": true
@@ -98,7 +116,59 @@
    "recovered": {
     "templates stay": true,
     "nothing unverified airs": true,
-    "claim held or rejected": true,
+    "claim ends as it must": true,
+    "fallback recorded": true
+   },
+   "recovers": true
+  },
+  {
+   "scenario": "personalizer down",
+   "injected": "the Personalizer's service refuses the connection (its container is down)",
+   "status": "verified",
+   "category": null,
+   "reasons": [],
+   "judge_asked": 3,
+   "insights": [
+    {
+     "text": "Away complete a pass of 8 m at 42 km/h.",
+     "persona": "analyst",
+     "lang": "en",
+     "verified": true
+    },
+    {
+     "text": "Away complete a pass of 8 m at 42 km/h.",
+     "persona": "casual",
+     "lang": "en",
+     "verified": true
+    },
+    {
+     "text": "Away complete a pass of 8 m at 42 km/h.",
+     "persona": "club",
+     "lang": "en",
+     "verified": true
+    }
+   ],
+   "templates": [
+    "cue-v00001-analyst",
+    "cue-v00001-casual",
+    "cue-v00002-analyst",
+    "cue-v00002-casual",
+    "cue-v00003-analyst",
+    "cue-v00003-casual",
+    "cue-v00005-analyst",
+    "cue-v00005-casual"
+   ],
+   "fallback": [
+    "personalizer fallback: fallback: refused",
+    "fact_checker held: analyst/es: no translation: the verified English text",
+    "fact_checker held: casual/es: no translation: the verified English text",
+    "fact_checker held: club/es: no translation: the verified English text"
+   ],
+   "model_calls": 6,
+   "recovered": {
+    "templates stay": true,
+    "nothing unverified airs": true,
+    "claim ends as it must": true,
     "fallback recorded": true
    },
    "recovers": true
@@ -129,7 +199,7 @@
    "recovered": {
     "templates stay": true,
     "nothing unverified airs": true,
-    "claim held or rejected": true,
+    "claim ends as it must": true,
     "fallback recorded": true
    },
    "recovers": true

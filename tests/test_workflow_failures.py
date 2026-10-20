@@ -12,11 +12,15 @@ BASE = ROWS["none"]
 
 # scenario -> (claim status, verdict category, Judge calls, an insight airs, template graphics lost)
 EXPECTED = {
-    "none": ("verified", None, 1, True, 0),
+    # The insight, then its variants re-checked (casual and club in English pass; the Spanish ones
+    # are held, since the stand-in Personalizer returns English): three Judge calls.
+    "none": ("verified", None, 3, True, 0),
     # The real Judge wrapper retries once, then holds: two calls, then the template stays.
     "judge timeout": ("held", "timeout", 2, False, 0),
     # The Tactician never answers, so there is nothing for the Judge to read.
     "tactician outage": ("held", "service", 0, False, 0),
+    # The insight still airs; the in-process fallback gives the variants, re-checked the same way.
+    "personalizer down": ("verified", None, 3, True, 0),
     # The confidence gate holds the claim before the Judge, and the unsure pass's two graphics
     # (analyst and casual) are not drawn.
     "low confidence": ("held", "low_confidence", 0, False, 2),
@@ -39,8 +43,15 @@ def test_failure_row(name):
     assert len(BASE["templates"]) - len(row["templates"]) == lost
     if lost:  # only the unsure detection's graphics are gone
         assert all(f"-{wf.SIDE}-" in i for i in set(BASE["templates"]) - set(row["templates"]))
-    if name != "none":
+    if row["status"] == "held":
         assert any("stays" in step for step in row["fallback"])  # the trace says the template stayed
+
+
+def test_with_the_personalizer_down_the_fallback_answers_and_the_viewer_sees_the_same():
+    row = ROWS["personalizer down"]
+    assert "personalizer fallback: fallback: refused" in row["fallback"]  # the real client's route
+    assert not any(step.startswith("personalizer") for step in BASE["fallback"])  # in process, no failure
+    assert row["insights"] == BASE["insights"]
 
 
 def test_every_injected_failure_recovers():
@@ -54,10 +65,86 @@ def test_the_recovery_check_can_fail():
               "templates": BASE["templates"][1:], "fallback": [], "status": "verified"}
     assert wf.recovered(broken, BASE) == {
         "templates stay": False, "nothing unverified airs": False,
-        "claim held or rejected": False, "fallback recorded": False,
+        "claim ends as it must": False, "fallback recorded": False,
     }
 
 
 def test_the_committed_table_is_up_to_date():
     stale = [p.name for p, text in wf.render().items() if not p.exists() or p.read_text() != text]
     assert stale == [], f"run {wf.COMMAND}"
+
+
+# --- the Personalizer node itself (ninety/agents/workflow.py, Personalizer) -----------------------
+
+
+def minute(personalize: bool, **override):
+    import asyncio
+
+    from ninety.agents import workflow
+    from ninety.match import detected
+    from ninety.match.facts import compact
+
+    scenario = wf.SCENARIOS[0]
+    events = wf.events_for(scenario)
+    known = {e["id"]: compact(e) for e in workflow.agent_events(events)}
+    models, _ = wf.models_for(scenario, known)
+    if override:
+        from dataclasses import replace
+
+        models = replace(models, **override)
+    run = workflow.run_workflow(models, events, wf.MINUTE, detected.M1_CLIP, personalize=personalize)
+    return asyncio.run(run)
+
+
+def test_the_personalizer_is_off_unless_asked():
+    result = minute(False)
+    assert not [s for s in result.trace if s.role == "personalizer"]
+    assert [c["persona"] for c in result.cues if c["kind"] == "insight"] == ["analyst"]
+
+
+def test_a_personalizer_that_raises_leaves_the_insight_on_air():
+    async def broken(claim, evidence, profiles):
+        raise RuntimeError("injected: a defect in the Personalizer")
+
+    result = minute(True, personalizer=broken)
+    assert [s.action for s in result.trace if s.role == "personalizer"] == ["error"]
+    assert [c["persona"] for c in result.cues if c["kind"] == "insight"] == ["analyst"]
+    assert result.reviews[0].status == "verified"
+
+
+def test_every_variant_is_fact_checked_before_it_airs():
+    async def inflating(claim, evidence, profiles):
+        from ninety.agents.contracts import Variant
+
+        # Every persona gets a number the evidence does not hold.
+        return [Variant(p.persona, p.lang, claim.text.replace("42 km/h", "99 km/h"), tuple(claim.evidence))
+                for p in profiles]
+
+    result = minute(True, personalizer=inflating)
+    assert [c["persona"] for c in result.cues if c["kind"] == "insight"] == ["analyst"]
+    refused = [s for s in result.trace if s.role == "fact_checker" and "99" in s.detail]
+    assert refused  # each inflated variant was refused, and none aired
+
+
+def test_the_live_cli_personalizes_in_process_when_no_service_is_set(monkeypatch, tmp_path, capsys):
+    from tests.test_workflow import GOOD_RUN, SUPPORTED, cli, detected_file, live
+
+    monkeypatch.delenv("NINETY_PERSONALIZER_URL", raising=False)
+    live(monkeypatch, {**GOOD_RUN, "judge": [SUPPORTED] * 6})
+    cues = tmp_path / "cues.jsonl"
+    cli(monkeypatch, "--events", detected_file(tmp_path), "--personalize", "--cues-out", cues)
+    import json
+
+    aired = [json.loads(line) for line in cues.read_text().splitlines()]
+    personas = {c["persona"] for c in aired if c["kind"] == "insight"}
+    assert {"analyst", "casual"} <= personas  # the insight, and a variant re-checked and aired
+    assert "personalizer" in capsys.readouterr().out
+
+
+def test_personalize_cannot_be_recorded_yet(monkeypatch, tmp_path):
+    import pytest as pt
+
+    from tests.test_workflow import cli
+
+    with pt.raises(SystemExit):
+        cli(monkeypatch, "--personalize", "--record", tmp_path / "r.json")
