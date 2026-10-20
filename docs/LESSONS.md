@@ -1106,3 +1106,15 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_replay.py::test_every_committed_recording_round_trips_byte_for_byte`
   fails with an unclaimed file in `replays/`, and fails when a workflow recording no longer saves
   byte for byte.
+
+### 116. Knowing where the ball is going is only useful if you go there
+- **What happened:** O8 said the team-mate a pass is played to "knows where it was meant", and the
+  engine used that only to set his shape: he took up his slot around the target, not the target, and
+  a short pass struck slightly off often ran past him into touch. The chase, which takes over once he
+  reacts, followed the ball's predicted path past the touchline and sent players to points off the
+  pitch, while `ball_destination` cut the same path at the line.
+- **Rule:** when a rule gives a player knowledge, check what he does with it in the movement code, not
+  only in the estimate; and two rules that read one path (the chase and where play is going) cut it
+  at the same line.
+- **Check:** `tests/test_engine_rules.py::test_the_team_mate_a_pass_is_played_to_goes_to_meet_it` and
+  `::test_nobody_is_sent_to_chase_a_ball_beyond_the_touchline`.
