@@ -974,6 +974,17 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_describe.py::test_the_default_run_makes_no_azure_call`; mutate by adding
   the import at module top and watch it go red.
 
+### 106. Look for an open pull request on the same task before building it
+- **What happened:** a session was handed "build the Personalizer over A2A" and built it, tests and
+  mutation run included, before it noticed that draft #131 was the same task, further along. Two
+  Personalizers with different packages, interfaces and fallback rules were then one merge away.
+  The overlap showed up only when another PR's challenge map named #131.
+- **Rule:** before writing code for a task, search the open pull requests and the session notes for
+  it (`gh pr list --search "<task words>"`, the notes folder). If one exists, extend it with a PR
+  stacked on its branch, or ask the Coordinator. Never build a second one.
+- **Check:** the PR description names the search run and what it found. This PR is stacked on #131
+  (base `agents/personalizer`) and adds only what #131 lacks.
+
 ### 105. A mutation run against a red baseline catches everything
 - **What happened:** the mutation harness for the window stats ran with `-x` over two test files
   while an existing test (`test_passes_a_minute_and_the_window_edges`) was already failing after
