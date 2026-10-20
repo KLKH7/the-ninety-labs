@@ -80,7 +80,7 @@ def test_a_typed_code_tells_the_phone_its_clip(setup):
 
 def test_looking_up_codes_shares_the_join_limit(setup):
     client, _, _ = setup
-    statuses = [client.get("/api/pair/NOPE42").status_code for _ in range(comp.LIMITS["join"] + 1)]
+    statuses = [client.get("/api/pair/NOPE42").status_code for _ in range(bounded(comp.LIMITS["join"] + 1))]
     assert statuses == [404] * comp.LIMITS["join"] + [429]
 
 
@@ -123,8 +123,17 @@ def tries_until(status, send, most=MOST_TRIES):
     pytest.fail(f"no {status} within {most} tries")
 
 
+def bounded(n):
+    """A loop count read from a limit, refused if a raised limit would make the loop hang."""
+    assert n < MOST_TRIES, f"{n} is past what a test loops over: the limit was raised"
+    return n
+
+
 def test_every_limit_and_cap_is_one_these_tests_can_reach():
     assert max([*comp.LIMITS.values(), comp.MAX_PHONES, comp.MAX_ROOMS]) < MOST_TRIES
+    # A relayed message is a clock or a focus, under 60 bytes: its cap is never above what an HTTP
+    # body may be, so a raised cap fails here rather than letting a laptop fan out megabytes.
+    assert comp.MAX_MESSAGE_BYTES <= comp.MAX_BODY_BYTES
 
 
 def test_pairing_is_rate_limited(setup):
@@ -321,7 +330,7 @@ def test_a_room_takes_max_phones_and_no_more(setup):
 
     async def run():
         phones = [await Socket(client.app, f"/api/pair/{code}?role=phone").__aenter__()
-                  for _ in range(comp.MAX_PHONES)]
+                  for _ in range(bounded(comp.MAX_PHONES))]
         try:
             return await refused(client.app, f"/api/pair/{code}?role=phone")
         finally:
@@ -338,7 +347,7 @@ def test_the_laptop_may_send_the_relay_limit_a_minute_and_no_more(setup):
 
     async def run():
         async with Socket(client.app, f"/api/pair/{code}?role=laptop") as laptop:
-            for _ in range(comp.LIMITS["relay"]):
+            for _ in range(bounded(comp.LIMITS["relay"])):
                 await laptop.send(clock)
             open_after_limit = await closed_within(laptop, 0.5)
             await laptop.send(clock)
@@ -581,7 +590,7 @@ def test_questions_are_rate_limited_by_session(setup):
 def test_questions_are_rate_limited_by_address(setup):
     client, _, _ = setup
     per_session = comp.LIMITS["ask_session"]
-    codes = [pair(client) for _ in range(comp.LIMITS["ask_ip"] // per_session + 1)]
+    codes = [pair(client) for _ in range(bounded(comp.LIMITS["ask_ip"] // per_session + 1))]
     # Spread over sessions, so the per-session limit is never what refuses.
     assert tries_until(429, lambda n: ask(client, codes[n % len(codes)]).status_code) == comp.LIMITS["ask_ip"]
 

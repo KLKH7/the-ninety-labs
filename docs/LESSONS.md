@@ -1191,3 +1191,17 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_api_companion.py`'s `refused()` fails when the server closes before the
   accept, and every refusal test goes through it; moving `_refuse` back to a bare close turns them red.
 
+
+### 126. A number check that reads one written form lets every other form through
+- **What happened:** the fact-check read a number only when no letter followed it, to skip ids
+  like "e00042". So "50km/h", "50kph" and "9999m" were never read, nor was "fifty km/h": a model
+  following an injected instruction could air a number the evidence does not hold. The phone
+  companion made that reachable from a viewer's text, and its evaluation missed it because the
+  scripted attacker wrote only the spaced form and the leak count used the check's own pattern.
+  The reviewer's audit found it on #145.
+- **Rule:** a check on what a writer says reads every form a writer can produce: a unit glued on
+  or spaced, digits or words. An evaluation of that check plants each form and counts leaks with
+  its own reader, never the check's pattern.
+- **Check:** `tests/test_factcheck.py::test_a_planted_number_in_any_written_form_is_rejected`
+  plants each form; `docs/eval/companion.md` plants the glued and spelled forms, and on the old
+  check its count shows 4 of them airing on seed 7.
