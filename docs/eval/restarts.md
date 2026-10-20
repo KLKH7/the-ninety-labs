@@ -93,27 +93,32 @@ rates are not yet sourced.
 
 ## After a goal (the celebration)
 
-Measured on the same 16 seeds against `main` with the change above (`cf3b17a`), the celebration
-branch at `edd6ce7`; its raw output in [restarts/celebration-branch.json](restarts/celebration-branch.json):
+Measured on the same 16 seeds, 20 minutes each, against `main` at `8b426b5` (with #156, this
+report's first change, and since then #160, #163, #164 and #166 from the engine-decisions work), the
+celebration branch merged onto it at `8c7bb1b`; raw output in
+[restarts/main-8b426b5.json](restarts/main-8b426b5.json) and
+[restarts/celebration-branch.json](restarts/celebration-branch.json):
 
 | | Before | After |
 |---|---:|---:|
-| Seconds from a goal to the kick-off | 13.7 to 19.2 (11 goals) | 62.8 to 88.3 (10 goals) |
-| Ball in play, share of the 20 minutes | 56.6% | 53.6% |
-| Shots a team per 90 | 19.0 ± 2.1 | 15.9 ± 1.7 |
-| Goals a team per 90 | 1.6 ± 0.5 | 1.4 ± 0.4 |
-| Pass completion | 79.6% | 79.4% |
+| Seconds from a goal to the kick-off | 15.6 to 19.2 (10 goals) | 61.4 to 83.0 (9 kick-offs) |
+| Ball in play, share of the 20 minutes | 61.9% | 60.7% |
+| Shots a team per 90 | 15.9 ± 1.6 | 15.2 ± 1.9 |
+| Goals a team per 90 | 1.4 ± 0.4 | 1.4 ± 0.4 |
+| Pass completion | 84.8% | 84.5% |
 | Restart defects (jumps, encroachment, carried set balls, stuck restarts) | 0 | 0 |
-| Matches meeting the data contract (`ninety-validate`) | 16 of 16 | 16 of 16 |
+| Matches meeting the data contract (`ninety-validate`) | 15 of 16 | 15 of 16 |
 
 A goal's celebration "may last one, one and a half minutes" (Collina, FIFA, 2022): the kick-off now
 comes 60 to 90 s after the goal (GROUNDING L4). Ball in play is about 55.8% of a Premier League
 match's total time, added time included (Opta via The Analyst, 2023); these 20-minute matches have
-no added time. Shots, goals and completion are unchanged within noise: a team per 90 minutes of
-match time has 5% less time with the ball in play, and the matches part after their first goal
-(lesson 90). Football-sense, per 90: FS1 20.8 to 18.0, FS2 16.0 to 12.9, FS6 29.5 to 26.7, FS7 287
-to 266, FS9 0.8 to 0.6. Up to a match's first goal nothing changes: seed 21 is frame for frame the
-same as on `main` until its goal at 5:03.
+no added time. Shots, goals and completion are unchanged within noise; the matches part after their
+first goal (lesson 90). Football-sense, per 90: FS1 17.2 to 19.4, FS2 7.6 to 7.9, FS6 27.8 to 23.9,
+FS7 296 to 298, FS9 1.7 to 1.1. Up to a match's first goal nothing changes: seed 21, which has no
+goal in its 20 minutes, is frame for frame the same on both. It is also the one match failing the
+contract, on both: its shot at 4:37 is blocked, touched again by the shooter, tackled and only then
+collected, and the shot's end point is written where it was collected (C7). That is open-play event
+logic, outside this change.
 
 ### The huddle
 
