@@ -1100,3 +1100,14 @@ short and actionable. This file is public: no research sources, product names or
   the kick, including the frame the restart is given, and fails on a ball or player step faster
   than the validator's limits. `scripts/defect_sweep/restarts.py` counts ball jumps over 3 m per
   90 minutes (0 over 16 matches of 20 minutes, `docs/eval/restarts.md`).
+
+### 121. A Law is all of its clauses: read the whole restart, not the part the defect named
+- **What happened:** the restart fix enforced the distances and "in play when kicked and clearly
+  moves", and took any movement of the set ball as the kick. The taker could then carry the set
+  ball off and pass it, touching it twice before anyone else (55 of 340 restarts). The owner saw it
+  in a clip as "he passed to himself". The same Laws (8, 13 to 17) say the taker may not touch it
+  again until another player has; that clause was never implemented, so no test asked for it.
+- **Rule:** when implementing a Law, list every clause of it in the GROUNDING row and give each a
+  test, including the clauses no defect report mentioned.
+- **Check:** `uv run pytest tests/test_restarts.py -k "dribble or first_touch or again"`; on the
+  engine before the fix the set ball's first movement is not a pass or shot by the taker.

@@ -428,3 +428,132 @@ def test_at_a_goal_kick_an_opponent_near_the_side_of_the_area_goes_out_wide():
     e.restart = Restart("goal_kick", "home", 5.5, 34.0, "h1", e.t + 5)
     tx, ty = e.keep_off(e.by_id["a9"], 5.0, 53.0)  # deep, a metre inside the side of the area
     assert tx == 5.0 and ty >= PITCH_Y / 2 + PENALTY_HALF_WIDTH + KEEP_OFF_MARGIN_M - 1e-9
+
+
+def test_a_set_piece_offers_no_dribble():
+    """Laws 8, 13, 16, 17: carrying a set ball off is touching it twice before anyone else has."""
+    from ninety.sim import decisions
+    e = Engine(3)
+    e.possessor = "h9"
+    scene = e.scene_for(e.by_id["h9"])
+    assert any(o.kind == "dribble" for o in decisions.options(scene))  # open play: he may carry it
+    scene.set_piece = True
+    assert not any(o.kind == "dribble" for o in decisions.options(scene))
+
+
+def set_free_kick_in_space(seed: int) -> tuple[Engine, object]:
+    """A home free kick in midfield with nobody within 15 m of it: carrying it would tempt him."""
+    e = Engine(seed)
+    still(e)
+    e.possessor = None
+    e.stop("free_kick", "home", (50.0, 34.0))
+    r = e.restart
+    taker = e.by_id[r.taker]
+    for p in e.players:
+        if p is not taker and math.hypot(p.x - 50.0, p.y - 34.0) < 15.0:
+            p.x = 50.0 - 16.0 if p.team == "home" else 50.0 + 16.0
+    taker.x, taker.y = 49.64, 34.0
+    r.carried_by = taker.id
+    e.ball = (50.0, 34.0, 0.0, 0.0, 0.0, 0.0)
+    r.ready_at = e.t
+    return e, taker
+
+
+def test_a_free_kick_is_played_away_with_its_first_touch():
+    """Defect: the taker carried the set ball 2 to 17 m and then passed it (49 of 368 restarts on
+    main). The set ball first moves when he passes or shoots it, from its spot."""
+    for seed in (3, 4, 5, 6):
+        e, taker = set_free_kick_in_space(seed)
+        n = len(e.match.events)
+        for _ in range(int(20 / DT)):
+            e.step()
+            if math.dist(e.ball[:2], (50.0, 34.0)) > 1e-6:  # it has moved: what moved it?
+                struck = [ev for ev in e.match.events[n:] if ev["type"] in ("pass", "shot")]
+                assert struck and struck[0]["player"] == taker.id, seed
+                assert (struck[0]["x"], struck[0]["y"]) == (50.0, 34.0), seed
+                break
+        else:
+            raise AssertionError("the free kick was never taken")
+
+
+def test_the_restart_taker_does_not_play_it_again_before_another_player():
+    """Defect: after a restart the taker could play the ball again before anyone else touched it."""
+    e, taker = set_free_kick_in_space(3)
+    e.restart = None
+    e.possessor = taker.id
+    e.from_restart = "free_kick"
+    taker.heading = 0.0
+    e.kick(taker, 2.5, 0.0, 0.0)  # a soft tap forward that stops about 2.5 m on
+    taker.vx = 3.0  # and he runs on after it
+    for _ in range(int(3 / DT)):
+        e.step()
+        assert e.possessor != taker.id
+    mate = e.by_id["h7"]
+    mate.x, mate.y = e.ball[0] + 0.3, e.ball[1]
+    for _ in range(int(2 / DT)):
+        e.step()
+        if e.possessor == mate.id:
+            break
+    assert e.possessor == mate.id and e.restart_kicker is None  # another player has touched it
+
+
+def test_the_taker_steps_round_a_set_ball_never_through_it():
+    """Law 13: the set ball stays still while he gets to the side of it he will strike it from."""
+    from ninety.sim import shape
+    e, taker = set_free_kick_in_space(3)
+    for _ in range(3):
+        e.step()
+    assert e.set_by is not None and e.possessor == taker.id
+    struck = []
+    e.windup = (30.0, 34.0, lambda: struck.append((taker.x, taker.y)))  # to play it back, behind him
+    e.hold_until = e.t + 99.0
+    for _ in range(int(5 / DT)):
+        e.moved = None
+        e.tick_carrier()
+        if struck:
+            break
+        e.move_players()
+        assert e.ball[:3] == (50.0, 34.0, 0.0)
+        assert shape.clearance(e.ball[0], e.ball[1], taker.x, taker.y, taker.heading) >= 0.0
+        e.t += DT
+        e.frame += 1
+    assert struck and struck[0][0] > 50.0  # struck from the far side of the ball from the target
+
+
+def test_a_taker_still_walking_in_does_not_take_the_restart():
+    e, taker = set_free_kick_in_space(3)
+    taker.vx = 1.0  # walking onto the ball
+    e.tick_restart()
+    assert e.restart is not None
+    taker.vx = 0.0
+    e.tick_restart()
+    assert e.restart is None
+
+
+def kicked_restart() -> tuple[Engine, object]:
+    e, taker = set_free_kick_in_space(3)
+    e.restart = None
+    e.possessor = taker.id
+    e.from_restart = "free_kick"
+    taker.heading = 0.0
+    e.kick(taker, 6.0, 0.0, 0.0)
+    return e, taker
+
+
+def test_a_deflection_off_an_opponent_frees_the_restart_taker():
+    """Any other player's touch counts, an opponent's deflection too, not only winning the ball."""
+    e, taker = kicked_restart()
+    assert e.restart_kicker == taker.id
+    e.touched(e.by_id["a7"], 52.0, 34.0, controls=False)
+    assert e.restart_kicker is None
+
+
+def test_the_restart_taker_does_not_chase_it_even_after_it_comes_off_himself():
+    """It came back off his own body: that is no other player's touch, so he still may not play it."""
+    e, taker = kicked_restart()
+    e.touched(taker, 50.5, 34.0, controls=False)  # it hits him (accidental)
+    assert e.touched_since_kick and e.restart_kicker == taker.id
+    e.ball = (50.6, 34.0, 0.0, 0.5, 0.0, 0.0)  # trickling at his feet, nobody else near
+    e.t += 1.0  # everyone has reacted
+    e.plan_chase()
+    assert e.chase.get("home", (None,))[0] != taker.id

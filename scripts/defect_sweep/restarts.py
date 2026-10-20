@@ -10,6 +10,8 @@ A light measurement to size the restart defects before and after a fix, not a ru
   (Laws 13, 15, 17: 9.15 m from a free kick or corner, 2 m from a throw-in) or, at a goal kick,
   inside the kicking side's penalty area (Law 16). The kind of restart is read from the event that
   stopped play and where the ball is placed;
+- second touch (Laws 8, 13 to 17): the taker's first pass or shot more than 1 m from where the
+  restart was set (he carried the set ball first), or his next touch after it before anyone else's;
 - held-out outcomes (never targets): shots and goals a team per 90 with the standard error over
   matches, pass completion, shots within 10 s of the shooting side's own restart, the first pass
   after each kind of restart failing, and the ball lost within 5 s of it.
@@ -50,7 +52,20 @@ def measure(run: Path) -> dict:
            "shots": sum(e["type"] == "shot" for e in events),
            "goals": sum(e["type"] == "goal" for e in events),
            "passes": 0, "completed": 0, "shots_after_own_restart": 0,
-           "set": {}, "first_failed": {}, "lost_5s": {}}
+           "set": {}, "first_failed": {}, "lost_5s": {}, "carried_set_ball": 0, "touched_again": 0}
+    touches = ("pass", "shot", "deflection", "interception", "tackle")
+    for i, e in enumerate(events):
+        if e["type"] not in ("set_piece", "kickoff"):
+            continue
+        kick = next((k for k in events[i + 1:] if k["type"] in ("pass", "shot")), None)
+        if kick is None or kick["player"] != e["player"]:
+            continue
+        if math.hypot(kick["x"] - e["x"], kick["y"] - e["y"]) > 1.0:
+            out["carried_set_ball"] += 1
+        j = events.index(kick)
+        nxt = next((k for k in events[j + 1:] if k["type"] in touches and k.get("player")), None)
+        if nxt and nxt["player"] == e["player"]:
+            out["touched_again"] += 1
     last = None  # (time, team) of the last restart
     for e in events:
         if e["type"] in ("set_piece", "kickoff"):
@@ -148,6 +163,8 @@ def main() -> None:
         "goal_to_kickoff_s": [s for r in runs for s in r["goal_to_kick_s"]],
         "restarts_kicked_by_taker": restarts,
         "encroached_at_the_kick": encroached,
+        "taker_carried_the_set_ball": sum(r["carried_set_ball"] for r in runs),
+        "taker_touched_it_again_first": sum(r["touched_again"] for r in runs),
         "examples": [x for r in runs for x in r["encroach_examples"]][:12],
         "held_out": {
             "shots_per_team_90_mean_se": per_team_90("shots"),

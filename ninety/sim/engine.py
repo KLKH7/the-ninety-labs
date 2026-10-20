@@ -138,7 +138,7 @@ NO_OFFSIDE_FROM = ("throw_in", "goal_kick", "corner")  # Law 11: no offside offe
 INTERCEPT_SHARE = 0.85  # design: taken before this share of the way to its target, a pass is intercepted
 THROW_BEHIND_M = 0.55  # Law 15: his body stands outside the touchline, feet on or behind it (design)
 THROW_SPOT_M = 0.25  # design: within this of his spot he throws from where he stands, still behind the line
-THROW_SETTLED_MPS = BRAKE_MAX * DT  # he throws once one frame of braking would stop him (P2)
+THROW_SETTLED_MPS = BRAKE_MAX * DT  # a taker takes it once one frame of braking would stop him (P2)
 THROW_REACH_M = 0.28  # design: both hands reach toward the pitch and still stay short of the line
 THROW_HAND_Z = 1.85  # design: bottom of the ball just over an average head (no stature per player)
 
@@ -399,6 +399,8 @@ class Engine:
         self.restart: Restart | None = None
         # Laws 13, 15 to 17: a restart that has been set but not yet kicked; the opponents keep off
         self.set_by: Restart | None = None
+        # Laws 8, 13 to 17: who took the last restart, until another player has touched the ball
+        self.restart_kicker: str | None = None
         self.throw_by: str | None = None  # a throw-in taker holding the ball until he throws it
         self.throw_ready = 0.0
         self.into_play = False  # released from behind the line; not a new out until it enters or falls away
@@ -495,6 +497,8 @@ class Engine:
         return offball.reach_for(True, at - start, z, at - self.rise_from(p))
 
     def give(self, pid: str) -> None:
+        if pid != self.restart_kicker:
+            self.restart_kicker = None
         if self.team_of(pid) != self.poss_team:
             self.pressed.clear()
             self.poss_team = self.team_of(pid)
@@ -651,6 +655,9 @@ class Engine:
         self.released_by = carrier.id
         self.last_deflection = None
         exempt = self.from_restart in NO_OFFSIDE_FROM
+        # Laws 8, 13 to 17: having taken the restart he may not play it again until another
+        # player has touched it (the woodwork is not a player)
+        self.restart_kicker = carrier.id if self.from_restart else None
         self.from_restart = None
         self.set_by = None  # Laws 13, 16, 17: in play once it is kicked and clearly moves
         self.offside = set() if exempt else self.offside_positions(carrier)
@@ -826,6 +833,7 @@ class Engine:
             else:
                 self.hold_until = self.t + 0.5  # he looks again
             return
+        scene.set_piece = self.set_by is not None  # the set ball is played away, never carried
         choice = decisions.choose(scene, self.rng)
         if choice.kind == "pass" or choice.kind == "clear":
             self.pass_to(carrier, *choice.target, lofted=choice.lofted, pace=choice.pace,
@@ -911,6 +919,8 @@ class Engine:
         for p in self.players:
             if self.kicked and p.id == self.kicked["player"] and not self.touched_since_kick:
                 continue  # the kicker moves on; he does not run after his own pass or shot
+            if p.id == self.restart_kicker:
+                continue  # Laws 8, 13 to 17: nor after his restart until someone else has touched it
             if self.t - self.reacting_since(p) < self.reaction(p):
                 continue  # has not yet reacted to this strike
             sigma = PERCEPTION_ERR * math.hypot(self.ball[0] - p.x, self.ball[1] - p.y)
@@ -979,7 +989,7 @@ class Engine:
             # On course into his body: its path crosses his outline (P11), not beside him or a clip.
             sl = 0.0 if rseg == 0 else ((qx - x0) * rdx + (qy - y0) * rdy) / rseg
             into = shape.clearance(x0 + sl * rdx, y0 + sl * rdy, qx, qy, p.heading) <= 0
-            if reacted:  # a deliberate touch, first chance
+            if reacted and p.id != self.restart_kicker:  # a deliberate touch, first chance
                 st = first_low_within(x0, y0, hz, rdx, rdy, z1 - hz, qx, qy, reach_m, reach_z)
                 if st is not None:
                     tx, ty, tz = x0 + st * dx, y0 + st * dy, hz + st * (z1 - hz)
@@ -1231,6 +1241,8 @@ class Engine:
             self.dribbler = None  # a team-mate took it: the dribble is over
         if p.id != self.released_by:
             self.released_by = None
+        if p.id != self.restart_kicker:
+            self.restart_kicker = None  # another player has touched it: the restart taker may again
         kicked = self.kicked
         if not kicked:
             return
@@ -1423,6 +1435,7 @@ class Engine:
             taker = self.nearest(spot[0], spot[1], team).id
         lo, hi = RESTART_DELAY_S[kind]
         self.dribbler = self.dribble_to = None  # the ball is dead: nobody is running onto a touch
+        self.restart_kicker = None  # a new stoppage ends the last restart's bar
         self.restart = Restart(kind, team, spot[0], spot[1], taker, self.t + self.rng.uniform(lo, hi))
 
     def restart_ball_spot(self, r: Restart) -> tuple[float, float]:
@@ -1544,8 +1557,8 @@ class Engine:
             placed = math.dist(self.ball[:3], (*self.restart_ball_spot(r), 0.0)) <= 1e-6
         if not placed:
             return
-        if r.kind == "throw_in" and math.hypot(taker.vx, taker.vy) > THROW_SETTLED_MPS:
-            return
+        if math.hypot(taker.vx, taker.vy) > THROW_SETTLED_MPS:
+            return  # he takes it standing, stopped within one frame of braking, not still walking in
         if r.kind == "kick_off" and not self.lined_up_for_kickoff(r):
             return
         if r.kind == "throw_in":  # Law 15: from behind the line, in both hands over his head
@@ -1693,10 +1706,11 @@ class Engine:
             pace = decisions.dribble_speed(p.profile["dribbling"]) if r.carried_by == p.id else RECOVER
             if r.kind == "throw_in":
                 return *throw_stand(r.x, r.y), pace
-            # Behind the ball on its spot, against his body as he faces up the pitch, so the set ball
-            # stays where it was put until he kicks it (Law 13: stationary; Law 14: on the mark).
+            # Behind the ball on its spot as he faces up the pitch, clear of it whichever way he is
+            # turned (his shoulder's reach, P11), so the set ball stays where it was put until he
+            # kicks it (Law 13: stationary; Law 14: on the mark).
             sx, sy = self.restart_ball_spot(r)
-            behind = shape.surface(0.0, 0.0, pad=ball.RADIUS)
+            behind = shape.surface(math.pi / 2, 0.0, pad=ball.RADIUS)
             return sx - attack_dir(p.team) * behind, sy, pace
         bx, by = self.play_point(p)  # O8: where the ball is going, once a pass is struck
         poss_team = self.team_of(self.possessor) if self.possessor else None
@@ -2157,7 +2171,20 @@ class Engine:
         opp = other(carrier.team)
         presser = self.nearest(carrier.x, carrier.y, opp)  # who is physically there
         gap = math.hypot(presser.x - carrier.x, presser.y - carrier.y)
-        if self.windup:  # turning the ball onto his kicking side
+        if self.windup and self.set_by:
+            # A set ball stays still (Law 13): he steps round it to behind its line to the target,
+            # against his body as he faces it, instead of turning it onto his foot.
+            # He goes round it, never through it: as far as his shoulder reaches with the ball
+            # against it (P11), at most KEEP_OFF_STEP_DEG round at a time, as opponents go round
+            # a restart's circle.
+            bx, by = self.ball[0], self.ball[1]
+            behind = shape.surface(math.pi / 2, 0.0, pad=ball.RADIUS)
+            want = fmath.atan2(by - self.windup[1], bx - self.windup[0])  # away from the target
+            here = fmath.atan2(carrier.y - by, carrier.x - bx)
+            turn = (want - here + math.pi) % (2 * math.pi) - math.pi
+            a = here + clamp(turn, -math.radians(KEEP_OFF_STEP_DEG), math.radians(KEEP_OFF_STEP_DEG))
+            steer(carrier, bx + fmath.cos(a) * behind, by + fmath.sin(a) * behind, DRIBBLE)
+        elif self.windup:  # turning the ball onto his kicking side
             steer(carrier, carrier.x, carrier.y, DRIBBLE)
         elif self.dribble_to:  # carrying the ball where he chose, as fast as his dribbling allows
             tx, ty = self.dribble_to
@@ -2204,13 +2231,14 @@ class Engine:
         dx, dy, dz = fx - bx, fy - by, -bz
         d = math.sqrt(dx * dx + dy * dy + dz * dz)
         step = min(d, BALL_TO_FEET * DT)
-        if self.set_by and not self.windup and not self.dribble_to:
+        still_ball = self.set_by is not None and not self.dribble_to
+        if still_ball:
             bx, by, bz = self.ball[:3]  # the set ball stays where it was put (Law 13: stationary)
         elif d > 1e-6:
             bx, by, bz = self.settle(carrier, bx, by, bz, fx, fy, side, step * math.hypot(dx, dy) / d)
             bz = bz + dz / d * step
         before = self.ball
-        self.ball = (bx, by, max(bz, 0.0), carrier.vx, carrier.vy, 0.0)
+        self.ball = (bx, by, max(bz, 0.0), *((0.0, 0.0) if still_ball else (carrier.vx, carrier.vy)), 0.0)
         if self.went_out(before):  # Law 9 applies to a ball at a player's feet too
             self.possessor = None
             return
