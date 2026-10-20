@@ -10,7 +10,9 @@
   "storage": {
     "images_and_clip_json": "renders/test-frozen-91d1e3b/test/seed<N>/",
     "frames_events_meta": "truth-test/test-frozen-91d1e3b/test/seed<N>/",
-    "uploaded": "pending: the maintainer reader cannot write to storage; a maintainer uploads the local copy, then verifies every digest below"
+    "uploaded": "2026-10-20: uploaded by a maintainer (Entra login, temporary role, removed after); renders holds 1255 blobs (1250 images, 5 clip.json), truth-test 15 (frames, events, meta), truth 0",
+    "verified": "2026-10-20: re-downloaded from storage, every clip's frames, events and images digest and meta.json sha256 match the digests below",
+    "truth_test": "a container of its own (#123): training links reach truth, never truth-test"
   },
   "seeds": [
     900001,
