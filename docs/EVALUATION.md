@@ -408,6 +408,16 @@ wrong here, but the side is: on validation, 4 of 14 passes carry the wrong team.
 kit-colour side naming (`ninety/vision/track.py`), one of the M1 detector's own steps; its
 re-derivation follows. A team-level claim inherits that error, which the fact-checker cannot see.
 
+**Side confidence** (`team_confidence`, an optional field on detected events). It is the weaker of
+two margins: how much nearer the holder's kit is to its own side's colour than to the other side's,
+and how one-sided the clip's vote on which colour is home was. A keeper's is how far he stands from
+halfway. Defined before it was measured; no threshold is set from it. **It does not yet tell a wrong
+side from a right one:** on validation the 4 wrong sides score 0.175, 0.408, 0.445 and 0.983, and the
+10 right ones score 0.261 to 0.939 ([eval/attribution-derive.md](eval/attribution-derive.md)). A gate
+at 0.5 would hold 3 of the wrong 4 and 8 of the right 10. It is there so the agents have a field to
+gate on once the side naming is re-derived. Until then, gating on it alone does not protect a
+team-level claim.
+
 ## Late drop in high-intensity running (R7)
 
 Fixed on 2026-10-17, before any engine change was measured with it and before the command had

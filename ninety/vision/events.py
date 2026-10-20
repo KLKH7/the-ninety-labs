@@ -263,8 +263,9 @@ def detect(rows: list[dict], join_breaks: bool = True) -> tuple[list[dict], dict
     outs = out_of_play(path)
     events: list[dict] = []
 
-    def event(kind, frame, team, x, y, conf, **kw):
-        e = {"id": "", "t": t_of[frame], "frame": frame, "type": kind, "team": team, "player": None,
+    def event(kind, frame, team, x, y, conf, side=None, **kw):
+        e = {"id": "", "t": t_of[frame], "frame": frame, "type": kind, "team": team, "team_confidence": side,
+             "player": None,
              "receiver": None, "x": _clip(x, PITCH_X), "y": _clip(y, PITCH_Y), "end_x": None, "end_y": None,
              "outcome": None, "ball_speed_kmh": None, "source": "vision", "confidence": round(conf, 3)}
         if kind == "pass":
@@ -289,17 +290,19 @@ def detect(rows: list[dict], join_breaks: bool = True) -> tuple[list[dict], dict
         speed = _speed_kmh(path, i)
         who = attribute(a.track, path[i], tracks)
         if heads_for_goal(path, i, team):
-            event("shot", a.last, team, path[i].x, path[i].y, conf, ball_speed_kmh=speed, player=who)
+            event("shot", a.last, team, path[i].x, path[i].y, conf, a.track.side_confidence,
+                  ball_speed_kmh=speed, player=who)
             continue
         if gone is not None:
             g = path[index[gone]]
-            event("pass", a.last, team, path[i].x, path[i].y, conf, outcome="fail", ball_speed_kmh=speed,
+            event("pass", a.last, team, path[i].x, path[i].y, conf, a.track.side_confidence, outcome="fail",
+                  ball_speed_kmh=speed,
                   end_x=_clip(g.x, PITCH_X), end_y=_clip(g.y, PITCH_Y), player=who)
             continue
         j = index[b.first]
         mate = b.track.team == team
         next_who = attribute(b.track, path[j], tracks)
-        event("pass", a.last, team, path[i].x, path[i].y, conf, ball_speed_kmh=speed,
+        event("pass", a.last, team, path[i].x, path[i].y, conf, a.track.side_confidence, ball_speed_kmh=speed,
               outcome="success" if mate else "fail", player=who,
               receiver=next_who if mate else None, interceptor=None if mate else next_who,
               end_x=_clip(path[j].x, PITCH_X), end_y=_clip(path[j].y, PITCH_Y))
@@ -308,7 +311,8 @@ def detect(rows: list[dict], join_breaks: bool = True) -> tuple[list[dict], dict
         last = [s for s in sp if s.last < f and s.track.team]
         if not last:
             continue
-        event("out_of_play", f, last[-1].track.team, path[i].x, path[i].y, path[i].score)
+        event("out_of_play", f, last[-1].track.team, path[i].x, path[i].y, path[i].score,
+              last[-1].track.side_confidence)
     events.sort(key=lambda e: (e["frame"], e["type"]))
     for n, e in enumerate(events, start=1):
         e["id"] = f"v{n:05d}"

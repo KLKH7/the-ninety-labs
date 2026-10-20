@@ -1,6 +1,6 @@
 {
   "command": "uv run python -m ninety.eval.attribution_derive --clips <render run v1>/train --observations <dir> --seeds <the validation seeds> --out docs/eval/attribution-derive",
-  "commit": "ef055eba192f093d0b692afba257fbb7d73e8cd9",
+  "commit": "df4ce13aa8e5c8694c92f536f16ed9eb77950ef6",
   "date": "2026-10-20",
   "seeds": [
     108,
@@ -229,6 +229,26 @@
       "matched": 14,
       "team_right": 10,
       "team_accuracy": 0.7142857142857143,
+      "team_confidence": {
+        "right": [
+          0.261,
+          0.27,
+          0.408,
+          0.408,
+          0.442,
+          0.464,
+          0.464,
+          0.464,
+          0.864,
+          0.939
+        ],
+        "wrong": [
+          0.175,
+          0.408,
+          0.445,
+          0.983
+        ]
+      },
       "player": {
         "truth_names": 14,
         "named": 5,
@@ -258,6 +278,10 @@
       "matched": 0,
       "team_right": 0,
       "team_accuracy": null,
+      "team_confidence": {
+        "right": [],
+        "wrong": []
+      },
       "player": {
         "truth_names": 0,
         "named": 0,
@@ -270,7 +294,11 @@
     "out_of_play": {
       "matched": 0,
       "team_right": 0,
-      "team_accuracy": null
+      "team_accuracy": null,
+      "team_confidence": {
+        "right": [],
+        "wrong": []
+      }
     }
   },
   "clips": [

@@ -113,7 +113,8 @@ def clip(seed: int, test_dir: Path, observations: Path | list[Path]) -> dict:
     out = []
     for t, d in match(truth, detected):
         rec = {"type": t["type"], "truth_id": t["id"], "detected_id": d["id"],
-               "dt_s": round(d["t"] - t["t"], 3), "team": {"truth": t["team"], "detected": d["team"]}}
+               "dt_s": round(d["t"] - t["t"], 3),
+               "team": {"truth": t["team"], "detected": d["team"], "confidence": d.get("team_confidence")}}
         for role in NAMED[t["type"]]:
             named = d.get(role)
             actual = who(named, role_frame(d, role, got), tracks, obs, frames) if named else None
@@ -146,6 +147,17 @@ def got_ball_frames(rows: list[dict], detected: list[dict]) -> dict[str, int]:
             for e in detected if e["type"] == "pass"}
 
 
+def side_confidence(pairs: list[dict]) -> dict:
+    """The detected side's team_confidence on the pairs whose side is right, and on those whose is
+    wrong, each sorted (a pair without one is left out)."""
+    out: dict[str, list[float]] = {"right": [], "wrong": []}
+    for p in pairs:
+        c = p["team"].get("confidence")
+        if c is not None:
+            out["right" if p["team"]["truth"] == p["team"]["detected"] else "wrong"].append(c)
+    return {k: sorted(v) for k, v in out.items()}
+
+
 def grade(clips: list[dict]) -> dict:
     """Per type: team accuracy over matched events; per role, how many the truth names, how many the
     detector names, and how many of those are the right player."""
@@ -154,7 +166,9 @@ def grade(clips: list[dict]) -> dict:
         pairs = [p for c in clips for p in c["pairs"] if p["type"] == kind]
         right_team = sum(1 for p in pairs if p["team"]["truth"] == p["team"]["detected"])
         row = {"matched": len(pairs), "team_right": right_team,
-               "team_accuracy": ratio(right_team, len(pairs))}
+               "team_accuracy": ratio(right_team, len(pairs)),
+               # Reported, never used to set anything here: the side's confidence when right and when wrong.
+               "team_confidence": side_confidence(pairs)}
         for role in NAMED[kind]:
             rs = [p[role] for p in pairs]
             named = [r for r in rs if r["detected"]]
@@ -203,6 +217,9 @@ def report_md(body: dict) -> str:
             r = row[role]
             lines.append(lead + f"| {role} | {r['truth_names']} | {r['named']} | {r['right']} "
                          f"| {r['unchecked']} | {r['left_null']} |")
+    tc = g["pass"]["team_confidence"]
+    lines += ["", f"Side confidence (`team_confidence`) of matched passes: right side {tc['right']}; "
+                  f"wrong side {tc['wrong'] or 'none'}."]
     f = false_names(body["clips"])
     lines += [
         "",
@@ -225,7 +242,8 @@ def report_md(body: dict) -> str:
             names = "; ".join(f"{r} {p[r]['detected'] or 'null'} is {p[r]['is'] or '-'}, "
                               f"truth {p[r]['truth'] or 'none'}" for r in ROLES if r in p)
             lines.append(f"  - {p['detected_id']} = {p['truth_id']} ({p['type']}, dt {p['dt_s']} s): team "
-                         f"{p['team']['detected']}, truth {p['team']['truth']}"
+                         f"{p['team']['detected']} ({p['team'].get('confidence')}), "
+                         f"truth {p['team']['truth']}"
                          + (f"; {names}" if names else ""))
         for u in c["unmatched_detected"]:
             names = "".join(f", {r} {u[r]} is {u['is'][r] or '?'}" for r in ROLES if r in u)

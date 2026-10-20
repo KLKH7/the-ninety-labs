@@ -1,6 +1,6 @@
 {
   "command": "uv run python -m ninety.eval.attribution_score --test-dir runs/test-frozen-cca498c/test --observations docs/eval/attribution --observations tests/fixtures --out docs/eval/attribution",
-  "commit": "ef055eba192f093d0b692afba257fbb7d73e8cd9",
+  "commit": "df4ce13aa8e5c8694c92f536f16ed9eb77950ef6",
   "date": "2026-10-20",
   "rule": {
     "rival_m": 1.89,
@@ -14,6 +14,17 @@
       "matched": 6,
       "team_right": 6,
       "team_accuracy": 1.0,
+      "team_confidence": {
+        "right": [
+          0.342,
+          0.381,
+          0.609,
+          0.649,
+          0.75,
+          0.923
+        ],
+        "wrong": []
+      },
       "player": {
         "truth_names": 6,
         "named": 6,
@@ -43,6 +54,10 @@
       "matched": 0,
       "team_right": 0,
       "team_accuracy": null,
+      "team_confidence": {
+        "right": [],
+        "wrong": []
+      },
       "player": {
         "truth_names": 0,
         "named": 0,
@@ -55,7 +70,11 @@
     "out_of_play": {
       "matched": 0,
       "team_right": 0,
-      "team_accuracy": null
+      "team_accuracy": null,
+      "team_confidence": {
+        "right": [],
+        "wrong": []
+      }
     }
   },
   "false_names": {
@@ -115,7 +134,8 @@
           "dt_s": -0.08,
           "team": {
             "truth": "away",
-            "detected": "away"
+            "detected": "away",
+            "confidence": 0.923
           },
           "player": {
             "truth": "a6",
@@ -140,7 +160,8 @@
           "dt_s": 0.04,
           "team": {
             "truth": "away",
-            "detected": "away"
+            "detected": "away",
+            "confidence": 0.75
           },
           "player": {
             "truth": "a2",
@@ -165,7 +186,8 @@
           "dt_s": 0.0,
           "team": {
             "truth": "away",
-            "detected": "away"
+            "detected": "away",
+            "confidence": 0.381
           },
           "player": {
             "truth": "a1",
@@ -250,7 +272,8 @@
           "dt_s": 0.0,
           "team": {
             "truth": "home",
-            "detected": "home"
+            "detected": "home",
+            "confidence": 0.609
           },
           "player": {
             "truth": "h3",
@@ -307,7 +330,8 @@
           "dt_s": 0.08,
           "team": {
             "truth": "away",
-            "detected": "away"
+            "detected": "away",
+            "confidence": 0.649
           },
           "player": {
             "truth": "a8",
@@ -332,7 +356,8 @@
           "dt_s": -0.16,
           "team": {
             "truth": "away",
-            "detected": "away"
+            "detected": "away",
+            "confidence": 0.342
           },
           "player": {
             "truth": "a7",

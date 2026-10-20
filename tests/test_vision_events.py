@@ -177,6 +177,40 @@ def test_a_new_track_may_continue_an_old_one_only_when_never_seen_together_and_w
     assert not ev.may_continue(a, track(15, 20, 10.0))
 
 
+def test_side_confidence_is_the_weaker_of_the_kit_and_the_side_vote():
+    # Identical shirts: each kit sits on its own colour (margin 1). Red is deeper toward x = 105 in
+    # 20 frames; in the last 6 the sides swap places (new tracks), so the vote is 14 of 26.
+    def swapped(f):
+        return [(x, y, RED if c is BLUE else BLUE) for x, y, c in crowd(f)]
+    rows = [row(f, crowd(f) if f < 20 else swapped(f)) for f in range(26)]
+    for r in rows[20:]:  # keep each colour on its own y, so the swap is of ends, not of rows
+        for d in r["players"]:
+            d["y"] = 60.0 if d["rgb"] is BLUE else 62.0
+    tracks = tr.track_players(rows)
+    info = tr.assign_teams(tracks)
+    assert info["frames_voting"] == 26 and abs(info["vote_margin"]) == 14
+    assert {t.side_confidence for t in tracks if t.team} == {round(14 / 26, 3)}
+
+
+def test_a_kit_nearer_the_other_side_is_less_sure_and_a_keeper_is_as_sure_as_he_is_deep():
+    off_blue = [45.0, 60.0, 185.0]  # near the blue kit, a little toward red: still blue, less surely
+    rows = [row(f, crowd(f) + [(60.0, 50.0, off_blue), (101.0, 34.0, GREEN_KEEPER)]) for f in range(30)]
+    tracks = tr.track_players(rows)
+    tr.assign_teams(tracks)
+    by_colour = {tuple(t.rgb[0]): t for t in tracks}
+    assert 0 < by_colour[tuple(off_blue)].side_confidence < by_colour[tuple(BLUE)].side_confidence
+    assert by_colour[tuple(off_blue)].team == "home"
+    assert by_colour[tuple(GREEN_KEEPER)].side_confidence == round((101.0 - 52.5) / 52.5, 3)
+
+
+def test_a_detected_event_carries_its_holders_side_confidence():
+    events, _ = ev.detect(pass_scene(BLUE))
+    tracks = tr.track_players(pass_scene(BLUE))
+    tr.assign_teams(tracks)
+    passer = next(t for t in tracks if t.xy[0] == (50.0, 34.0))
+    assert [e["team_confidence"] for e in events if e["type"] == "pass"] == [passer.side_confidence]
+
+
 def test_out_of_play_names_nobody():
     events, _ = ev.detect(pass_scene(BLUE, speed=30.0)[:21] + [
         row(f, crowd(f) + [(50.0, 34.0, BLUE)], (106.0, 34.0)) for f in range(21, 30)])

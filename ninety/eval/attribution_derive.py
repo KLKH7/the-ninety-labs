@@ -154,7 +154,9 @@ def report_md(body: dict) -> str:
         "",
         "## Development numbers (attribution on these clips, with the constants in the code at this commit)",
         "",
-        f"Passes matched {dev['matched']}, team right {dev['team_right']}.",
+        f"Passes matched {dev['matched']}, team right {dev['team_right']}. Side confidence "
+        f"(`team_confidence`, reported only): right side {dev['team_confidence']['right']}; "
+        f"wrong side {dev['team_confidence']['wrong']}.",
         "",
         "| Role | Truth names | Named | Right | Not checkable | Left null |",
         "|---|---|---|---|---|---|",
