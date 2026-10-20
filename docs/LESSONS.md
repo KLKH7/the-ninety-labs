@@ -1041,15 +1041,16 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `uv run pytest tests/test_latency_cost.py -k half_boundary`; its case of 13,327 input
   and 12 output tokens fails on float arithmetic.
 
-### 110. A workflow's queue is part of what it does: read how the platform queues it
-- **What happened:** `agents-live.yml` put every run in one concurrency group, `agents-live`, with
-  `cancel-in-progress: false`, read as "runs wait their turn". GitHub keeps at most one pending
-  run per group, and a newer dispatch cancels the pending one whatever that setting says. Runs
-  from four sessions' branches each waited for approval, and each was cancelled by the next
-  session's dispatch. They showed only as `cancelled`, and the approver approved only the one
-  still alive.
-- **Rule:** a concurrency group is chosen for what must never run at the same time (here one
-  branch's runs), not for the whole workflow, and a setting's meaning is read in the platform's
-  documentation, not inferred from its name. A cancelled run nobody cancelled is a defect to trace.
-- **Check:** `.github/workflows/agents-live.yml` groups by `inputs.ref`. Dispatch from two
-  branches before approving either: both stay `waiting`.
+### 109. A defect seen by eye is a lead until the data and the grounding confirm it
+- **What happened:** in the defect sweep (`docs/eval/defect-sweep-7ee8720.md`) 30 reviewers
+  watched top-down sheets of 300 match minutes. The two most reported types were wrong:
+  - "Long dead-ball waits" (70 per 90 minutes): the waits match GROUNDING R1.
+  - "Bunching around the ball": the data shows 6-7 players within 15 m, never the 13-14
+    reported. The sheets' 2.3 m dots made players 2-3 m apart look like one crowd.
+  The owner had reported bunching from watching clips too. A ranking by raw report counts would
+  have put both above the stalemate that is the real worst defect.
+- **Rule:** a visual review produces candidates. Before a type ranks work, a second reviewer
+  measures examples in `frames.jsonl` against `docs/GROUNDING.md`. The catalogue shows each
+  type's verdicts, and refuted types are listed as refuted, not dropped silently.
+- **Check:** every row of the sweep's ranked table has a "verified" entry, and the "What did not
+  hold up" section names each refuted type with the numbers that refuted it.
