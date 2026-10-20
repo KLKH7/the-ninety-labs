@@ -14,6 +14,7 @@ from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from statistics import mean, stdev
 
+from ninety.sim import fmath
 from ninety.sim.engine import simulate
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -33,7 +34,7 @@ GOALS_MISS_RATE = 0.01  # design: how often a league scoring like the real one m
 
 def poisson_quantile(lam: float, q: float) -> int:
     """The smallest k with P(X <= k) >= q, for X Poisson with mean lam."""
-    term = cdf = math.exp(-lam)
+    term = cdf = fmath.exp(-lam)
     k = 0
     while cdf < q:
         k += 1
