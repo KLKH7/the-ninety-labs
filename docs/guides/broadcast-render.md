@@ -43,6 +43,7 @@ Real broadcast footage has properties detectors depend on. Match them:
 | Grass | Mowing stripes, wear near goals and centre | Striped texture, wear map |
 | Image | Compression blocks, slight noise, sharpening halos | Add mild noise and JPEG/H.264-style compression at export |
 | Other | Scorebug, crowd, advertising boards | A generic scorebug and boards with **made-up brands only** |
+| Dead balls | The director cuts away from the wait and back to the restart | Hold the stoppage, then cut to the restart being set (`ninety/render/edit.py`); record each cut in `meta.json`, never cut over an event |
 
 ## 3. Randomize what varies between real matches
 

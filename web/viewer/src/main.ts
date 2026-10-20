@@ -195,6 +195,28 @@ function renderTrace(b: Bundle, seekTo: (matchT: number) => void) {
   );
 }
 
+/** Video time against match time across the broadcast's cuts (ninety/match/timeline.py): a bundle
+ * without segments is one run of frames from its start. */
+function timeline(m: Bundle["manifest"]) {
+  const segs = m.segments?.length ? m.segments : [{ index: 0, frame: Math.round(m.t_start * m.fps), frames: m.footage.frames }];
+  const matchTime = (v: number) => {
+    const i = Math.max(0, Math.floor(v * m.fps));
+    let seg = segs[0];
+    for (const s of segs) if (s.index <= i) seg = s;
+    return (seg.frame + (v * m.fps - seg.index)) / m.fps;
+  };
+  const videoTime = (t: number) => {
+    const f = t * m.fps;
+    for (const s of segs) {
+      if (f < s.frame) return s.index / m.fps; // inside a cut: shown where the cut is
+      if (f < s.frame + s.frames) return (s.index + f - s.frame) / m.fps;
+    }
+    const last = segs[segs.length - 1];
+    return (last.index + last.frames) / m.fps;
+  };
+  return { matchTime, videoTime };
+}
+
 async function start() {
   const base = new URLSearchParams(location.search).get("bundle") ?? "bundle/";
   let b: Bundle;
@@ -210,6 +232,7 @@ async function start() {
   overlay.height = m.height;
   document.documentElement.style.setProperty("--aspect", `${m.width} / ${m.height}`);
   const footage = m.footage.kind === "video" ? videoFootage(b) : frameFootage(b);
+  const { matchTime, videoTime } = timeline(m);
   scrub.max = String(footage.duration);
   scrub.step = String(1 / m.fps);
   const detections = new Map(b.detections.map((f) => [Math.round(f.t * m.fps), f]));
@@ -284,7 +307,7 @@ async function start() {
   }
 
   const seekMatch = (matchT: number) => {
-    footage.seek(Math.max(0, matchT - m.t_start - 0.5));
+    footage.seek(Math.max(0, videoTime(matchT) - 0.5));
     overlay.focus();
   };
   const togglePlay = () => (footage.paused() ? footage.play() : footage.pause());
@@ -335,7 +358,7 @@ async function start() {
         voiceBox.dispatchEvent(new Event("change"));
         break;
       case "r":
-        if (persona === "audio" && voiceBox.checked) narrator.repeat(m.t_start + footage.time());
+        if (persona === "audio" && voiceBox.checked) narrator.repeat(matchTime(footage.time()));
         break;
     }
   });
@@ -343,7 +366,7 @@ async function start() {
   const ctx = overlay.getContext("2d")!;
   const frame = () => {
     const v = footage.time();
-    const t = m.t_start + v;
+    const t = matchTime(v);
     const aired: Cue[] = onAir(b.cues, persona, t);
     ctx.clearRect(0, 0, overlay.width, overlay.height);
     if (showBoxes.checked) drawDetections(ctx, detections.get(Math.round(t * m.fps)));

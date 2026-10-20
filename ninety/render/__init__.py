@@ -17,4 +17,7 @@ docs/decisions/0001-synthetic-data.md.
 # 0.4.2: the stride plants each foot where the gait has it on the grass and takes and gives back
 # the plant over three frames; stand, walk and jog blend by speed; a tackle's poke is drawn as the
 # tackler's foot on the ball; no limb jumps in a frame (#150, after 0.4.1's review clips).
-RENDERER_VERSION = "0.4.2"
+# 0.5.0: the broadcast cuts from a stoppage to its restart instead of showing the whole dead ball
+# (ninety/render/edit.py; meta.json `cuts`, clip.json `segments`), and the match is simulated to a
+# fixed horizon, so a clip's events no longer depend on how its start was found.
+RENDERER_VERSION = "0.5.0"

@@ -206,6 +206,16 @@ class Director:
         self.net: dict | None = None  # the goal the mesh and the low angle are still showing
         self._ball_v = (0.0, 0.0)
 
+    def cut(self) -> None:
+        """The edit cuts away from a dead ball to its restart (edit.py): the next frame is a new
+        shot on the gantry, framed on the ball where it is then, with no pan carried over and no
+        second angle or goal net held across the cut."""
+        self.aim = None
+        self.prev_ball = None
+        self._cut_kind = ""
+        self._cut_until = -1.0
+        self.net = None
+
     def _goal(self, bx: float, by: float, vx: float, vy: float) -> tuple[float, float, float]:
         ax = bx + vx * self.p.lead_s
         ay = by + vy * self.p.lead_s

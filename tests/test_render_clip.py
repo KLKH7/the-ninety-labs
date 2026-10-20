@@ -12,9 +12,11 @@ from pathlib import Path
 import pytest
 from jsonschema import validate
 
+from ninety.render import edit
 from ninety.render.checks import check_clip, digest, load_clip
 from ninety.render.cli import meta_main
-from ninety.render.clip import RenderUnavailable, browser_page, render_clip
+from ninety.render.clip import SIM_MARGIN_S, RenderUnavailable, browser_page, render_clip
+from ninety.sim.engine import simulate
 from ninety.validate import validate as validate_clip
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -111,3 +113,34 @@ def test_images_are_720p_jpeg(clips):
     i = first.index(b"\xff\xc0")
     h, w = int.from_bytes(first[i + 5 : i + 7], "big"), int.from_bytes(first[i + 7 : i + 9], "big")
     assert (w, h) == (1280, 720)
+
+
+@pytest.fixture(scope="module")
+def cut_clip(page, tmp_path_factory):
+    """A clip that opens 10 frames before the first dead ball of seed 11's match the broadcast cuts
+    through. The cut is found from the match, as render_clip finds it, so a change to the engine
+    moves the clip with it instead of leaving it on open play (lesson 78)."""
+    match = simulate(11, (240.0 + SECONDS + SIM_MARGIN_S) / 60)  # render_clip's horizon
+    first = edit.cuts(match.events, 25)[0]
+    out = tmp_path_factory.mktemp("cut") / "c"
+    render_clip(11, out, seconds=SECONDS, start_s=(first.first_frame - 10) / 25, page=page)
+    return out, first
+
+
+def test_a_clip_cuts_from_the_stoppage_to_the_restart_and_still_meets_the_contract(cut_clip):
+    out, first = cut_clip
+    clip, frames, events = load_clip(out)
+    numbers = [f["frame"] for f in frames]
+    assert len(frames) == round(SECONDS * 25)
+    assert numbers[:10] == list(range(first.first_frame - 10, first.first_frame))
+    assert numbers[10] == first.last_frame + 1 and numbers[10:] == list(range(numbers[10], numbers[-1] + 1))
+    assert clip["cuts"] == [first.as_dict()]
+    assert clip["segments"] == [{"index": 0, "frame": numbers[0], "frames": 10},
+                                {"index": 10, "frame": numbers[10], "frames": len(frames) - 10}]
+    assert json.loads((out / "meta.json").read_text())["cuts"] == [first.as_dict()]
+    assert [f["image"] for f in frames] == [f"images/{i:05d}.jpg" for i in range(len(frames))]
+    assert all(e["frame"] in numbers for e in events)
+    # The picture after the cut is a new shot, not a pan from the last one: it is not streaked.
+    assert frames[10]["blur_px"] == [0.0, 0.0]
+    assert validate_clip(out) == {}
+    assert check_clip(out)["passed"]["data_contract"]

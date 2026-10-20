@@ -53,7 +53,7 @@ Kind: **hard** fails the clip; **warn** is reported. Columns show what exists to
 | ID | Check | Source | Kind | Validator | Engine |
 |---|---|---|---|---|---|
 | C1 | files present, `fps` positive, every row matches its schema | our schemas | hard | ✅ | ✅ |
-| C2 | frames consecutive, `t = frame / fps` | CDF (event and tracking in sync) | hard | ✅ | ✅ |
+| C2 | frames consecutive, `t = frame / fps`, except across a broadcast cut that `meta.json` records: a cut leaves out match frames only between a stoppage and the restart that ends it (out of play, a foul, offside or a goal until the set piece or kick-off), and never a frame an event is on. How long the picture stays on the stoppage and comes back before the restart is *design* (`ninety/render/edit.py`) | CDF (event and tracking in sync); Laws 9, 10, 11, 12 (when the ball is out of play) | hard | ✅ | ✅ |
 | C3 | same players throughout, except a substitution: only during a stoppage, at most five a team | Law 3 | hard | ✅ | ❌ no substitutions |
 | C4 | every player in an event is in the frames, on the right team | our schemas | hard | ✅ | ✅ |
 | C5 | each event's frame exists and its time matches | CDF | hard | ✅ | ✅ |

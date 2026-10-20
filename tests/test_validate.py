@@ -875,3 +875,97 @@ def test_a_pass_struck_on_the_last_frame_of_a_whole_clip_is_still_judged(tmp_pat
     clip = cut(struck_away_from_its_end_point(60), 0, 60)
     del clip["meta"]["window"]
     assert fails(run(tmp_path, clip), "C7 ball path", "ball never reaches")
+
+
+# --- a broadcast cut through a dead ball (ninety/render/edit.py) --------------------------------
+
+
+def restart_clip() -> dict:
+    """h2 lets the ball run out at frame 40 and it lies dead; a1 walks 15 m to take the restart,
+    and at frame 130 the set piece is his (the ball placed at his spot). The picture may cut from
+    frame 60 to frame 120: a1 is somewhere else after the cut, and that is not running."""
+    clip = clean_clip()
+    for f in clip["frames"]:
+        n = f["frame"]
+        if n >= 40:
+            f["possessor"] = "a1" if n >= 130 else None
+        # a1 sets off at frame 41 and is at his spot by frame 129 (smoothstep: up to 6.4 m/s and
+        # 7.3 m/s², inside P1 and P2); most of the walk is inside the cut.
+        u = min(max((n - 41) / 88, 0.0), 1.0)
+        f["players"][2].update(x=75.0 - 15.0 * u * u * (3 - 2 * u), y=40.0)
+        if n >= 130:
+            f["ball"].update(x=60.0, y=40.0)
+    clip["events"] += [event("e2", 40, "out_of_play", "home", x=50.0),
+                       event("e3", 130, "set_piece", "away", "a1", x=60.0, y=40.0)]
+    return clip
+
+
+def cut_away(clip: dict, first: int, last: int, record: bool = True) -> dict:
+    """Leave out frames first..last as the broadcast does, and record it in meta.json."""
+    clip["frames"] = [f for f in clip["frames"] if not first <= f["frame"] <= last]
+    if record:
+        clip["meta"]["cuts"] = [{"first_frame": first, "last_frame": last}]
+    return clip
+
+
+def test_a_dead_ball_clip_without_a_cut_passes(tmp_path):
+    assert run(tmp_path, restart_clip()) == {}
+
+
+def test_a_recorded_cut_through_a_dead_ball_passes(tmp_path):
+    """The players are elsewhere after the cut; that is the edit, not a 15 m jump in a frame."""
+    assert run(tmp_path, cut_away(restart_clip(), 60, 120)) == {}
+
+
+def test_a_gap_in_the_frames_that_no_cut_records_fails(tmp_path):
+    problems = run(tmp_path, cut_away(restart_clip(), 60, 120, record=False))
+    assert fails(problems, "C2 frame order", "frame 121 at position 60, after frame 59")
+
+
+def test_a_recorded_cut_that_is_not_a_gap_in_the_frames_fails(tmp_path):
+    clip = restart_clip()
+    clip["meta"]["cuts"] = [{"first_frame": 60, "last_frame": 120}]
+    assert fails(run(tmp_path, clip), "C2 frame order", "is not a gap between two frames")
+
+
+def test_a_recorded_cut_of_other_frames_than_the_gap_fails(tmp_path):
+    clip = cut_away(restart_clip(), 60, 120)
+    clip["meta"]["cuts"] = [{"first_frame": 60, "last_frame": 119}]
+    problems = run(tmp_path, clip)
+    assert fails(problems, "C2 frame order", "frame 121 at position 60")
+    assert fails(problems, "C2 frame order", "is not a gap between two frames")
+
+
+def test_a_cut_through_play_fails(tmp_path):
+    """The pass from frame 5 is in flight until frame 30: cutting there hides play."""
+    assert fails(run(tmp_path, cut_away(restart_clip(), 10, 20)), "C2 frame order", "the ball was in play")
+
+
+def test_a_cut_after_the_restart_fails(tmp_path):
+    problems = run(tmp_path, cut_away(restart_clip(), 132, 140))
+    assert fails(problems, "C2 frame order", "the ball was in play")
+
+
+def test_a_cut_over_an_event_fails(tmp_path):
+    """Nothing that happened is cut: the event would be on no frame of the clip."""
+    clip = restart_clip()
+    clip["events"].append(event("e4", 90, "pressure", "away", "a1", x=67.5, y=40.0))
+    assert fails(run(tmp_path, cut_away(clip, 60, 120)), "C5 event frame", "frame 90 is not in frames.jsonl")
+
+
+def test_a_cut_in_a_window_opened_on_a_dead_ball_passes(tmp_path):
+    """The stoppage is before the window; its first event is the restart, and nobody held the ball
+    from its first frame to the cut."""
+    clip = cut_away(cut(restart_clip(), 45, 149), 60, 120)
+    assert run(tmp_path, clip) == {}
+
+
+def test_a_cut_in_a_window_whose_ball_was_held_before_it_fails(tmp_path):
+    clip = cut(restart_clip(), 45, 149)
+    for f in clip["frames"]:
+        if f["frame"] == 50:
+            f["possessor"] = "a1"
+            f["ball"].update(x=75.0, y=40.0)
+            f["players"][2].update(x=75.0, y=40.0)
+    problems = run(tmp_path, cut_away(clip, 60, 120))
+    assert fails(problems, "C2 frame order", "the ball was in play")

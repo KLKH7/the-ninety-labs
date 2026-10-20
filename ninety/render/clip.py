@@ -26,7 +26,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from ninety.match.clock import match_clock
-from ninety.render import RENDERER_VERSION
+from ninety.render import RENDERER_VERSION, edit
 from ninety.render.camera import Camera, Director, blur_vector
 from ninety.render.params import RenderParams, sample_params
 from ninety.render.scene import (
@@ -61,6 +61,11 @@ CHROMIUM_ARGS = [
     "--disable-gpu-driver-bug-workarounds",
 ]
 WARMUP = 2 * FPS  # frames simulated before the window so the camera and gaits settle
+# The match is simulated this far past the latest frame a clip could need, whatever its start, so
+# a clip and its re-render with the same window see the same events: an outcome settled after the
+# window (a tackle won once someone controls the ball) is settled in both. It also leaves room for
+# the dead balls a clip cuts through (edit.py): a penalty's wait is up to 140 s (R1).
+SIM_MARGIN_S = 180.0
 WINDOW_DRAWS = 50  # seeded windows tried for one with the ball on the pitch (choose_start)
 
 
@@ -203,7 +208,7 @@ def render_clip(
     if p.fps != FPS:
         raise ValueError(f"the simulator runs at {FPS} fps")
     earliest_s, latest_s = 10.0, 240.0
-    sim_end_s = (start_s if start_s is not None else latest_s) + seconds + 1
+    sim_end_s = max(latest_s, start_s or 0.0) + seconds + SIM_MARGIN_S
     match = simulate(seed, sim_end_s / 60)
     frames = match.frames
     start = (
@@ -211,8 +216,14 @@ def render_clip(
         if start_s is not None
         else choose_start(frames, p, n, seed, earliest_s, latest_s)
     )
-    if start + n > len(frames):
+    # The broadcast cuts from a stoppage to its restart (edit.py): the clip shows n frames, which
+    # may span more of the match. A start inside a cut opens the clip where the cut ends.
+    every_cut = edit.cuts(match.events, FPS) if p.dead_ball_cut else []
+    show = edit.shown(start, n, every_cut, len(frames))
+    if len(show) < n:
         raise ValueError("clip window runs past the simulated match")
+    made = edit.used(every_cut, show)
+    start = show[0]
 
     roles = {
         f"{team[0]}{i + 1}": role for team in ("home", "away") for i, (role, _, _) in enumerate(FORMATION)
@@ -230,7 +241,7 @@ def render_clip(
 
     goals = [e for e in match.events if e["type"] == "goal"]
     goal_at = {e["frame"]: e for e in goals}
-    t0, t1 = frames[start]["t"], frames[start + n - 1]["t"]
+    t0, t1 = frames[show[0]]["t"], frames[show[-1]]["t"]
     clip = {
         "clip_id": f"seed{seed}",
         "seed": seed,
@@ -240,6 +251,10 @@ def render_clip(
         "fps": p.fps,
         "t_start": t0,
         "t_end": t1,
+        # The match frames the broadcast cut away from, and the runs of frames it shows: image i of
+        # a segment is match frame `frame` + (i - `index`) (edit.py, docs/DATA_CONTRACT.md).
+        "cuts": [c.as_dict() for c in made],
+        "segments": [s.as_dict() for s in edit.segments(show)],
         "renderer": {
             "version": RENDERER_VERSION,
             "three": _three_version(),
@@ -267,7 +282,15 @@ def render_clip(
         spin_angle = 0.0
         spin_axis = None
         rows = []
-        for fi in range(max(0, start - WARMUP), start + n):
+        index = 0
+        for fi, draw in _plan(edit.segments(show)):
+            if fi is None:
+                # A cut: the picture comes back on the restart. Bodies and the camera start afresh
+                # there and settle over the warm-up before it, as at the start of the clip.
+                gaits = {lk.id: Gait() for lk in looks}
+                prev_xy, prev_cam = {}, None
+                director.cut()
+                continue
             fr = frames[fi]
             advance_gaits(gaits, prev_xy, fr, 1 / FPS, frames[min(fi + LEAD_AHEAD_FRAMES, len(frames) - 1)])
             ball = drawn_ball(fr)
@@ -310,11 +333,10 @@ def render_clip(
                 if spin_axis is not None
                 else None
             )
-            if fi < start:
+            if not draw:
                 for pl in fr["players"]:  # the feet keep stepping through the warm-up
                     body_parts(pl["x"], pl["y"], by_id[pl["id"]], gaits[pl["id"]])
                 continue
-            index = fi - start
             spec_objects, row_players = [], []
             for pl in fr["players"]:
                 g = gaits[pl["id"]]
@@ -364,6 +386,7 @@ def render_clip(
             rows.append(
                 _frame_row(fr, cam, ball, row_players, res, kps, blur, image, clip["clip_id"], director.angle)
             )
+            index += 1
 
     with open(out / "frames.jsonl", "w") as f:
         for r in rows:
@@ -385,6 +408,20 @@ def render_clip(
     return clip
 
 
+def _plan(segs: list[edit.Segment]) -> list[tuple[int | None, bool]]:
+    """The match frames to step through, in order, as (frame, drawn): before each segment its
+    warm-up (stepped, not drawn), then the segment. (None, False) marks a cut before a segment."""
+    out: list[tuple[int | None, bool]] = []
+    for k, s in enumerate(segs):
+        lo = max(0, s.frame - WARMUP)
+        if k:
+            out.append((None, False))
+            lo = max(lo, segs[k - 1].frame + segs[k - 1].frames)
+        out += [(f, False) for f in range(lo, s.frame)]
+        out += [(f, True) for f in range(s.frame, s.frame + s.frames)]
+    return out
+
+
 def write_meta(out: Path) -> dict:
     """Write the data contract's meta.json (docs/DATA_CONTRACT.md) from the clip's own files, so
     `ninety-validate` can check it. Also backfills clips rendered before the renderer wrote it."""
@@ -399,6 +436,8 @@ def write_meta(out: Path) -> dict:
         "clip_id": clip["clip_id"],
         # A window cut from a longer match: events before or after it are not in the clip.
         "window": {"first_frame": frames[0]["frame"], "last_frame": frames[-1]["frame"]},
+        # Dead balls the broadcast cut away from: their frames are not in the clip (edit.py).
+        "cuts": clip.get("cuts", []),
         "roster": [{k: lk[k] for k in ("id", "team", "role")} for lk in clip["looks"]],
         # The goals in this clip's events, the same events the validator adds up (C9).
         "score": {team: sum(1 for e in events if e["type"] == "goal" and e["team"] == team)

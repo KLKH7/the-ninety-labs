@@ -1106,3 +1106,17 @@ short and actionable. This file is public: no research sources, product names or
   and re-measure.
 - **Check:** `tests/test_shape.py::test_the_team_is_never_longer_than_the_published_range_and_the_back_line_never_ahead_of_the_ball`
   sweeps ball and line positions; on the old rule it fails (48 m long with the ball 35 m out).
+
+### 112. A clip's truth must not depend on how long the match was simulated
+- **What happened:** `ninety-render` simulated the match to the end of the window it chose (240 s
+  plus the clip), but its own determinism check re-rendered the same window with `--start`, which
+  simulated only to the window's end plus a second. The engine settles some outcomes after the fact
+  (a tackle is won or lost when someone next controls the ball), so a tackle near the end of crowded
+  seed 11's window was `fail` in the clip and `null` in its re-render: frames and images identical,
+  `events.jsonl` not. Found while adding the broadcast's dead-ball cuts, which make a clip span more
+  of the match than its length.
+- **Rule:** the simulation's horizon is fixed by the latest frame a clip could need, never by how
+  its start was found: `max(latest start, start) + length + SIM_MARGIN_S` (`ninety/render/clip.py`),
+  long enough for the outcomes and the dead balls after it.
+- **Check:** `ninety-render-check --determinism` on a window with a tackle near its end compares
+  `events_identical`; `tests/test_render_clip.py` renders the same seed twice.
