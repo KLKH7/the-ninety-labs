@@ -1377,3 +1377,13 @@ short and actionable. This file is public: no research sources, product names or
   seen is the same choice: hold the random draw, or repeated asking makes a rejected option certain.
   Check a stated intent ("almost always the best") against logged choices.
 - **Check:** `tests/test_decisions.py::test_a_hopeless_option_does_not_loosen_the_choice_between_two_good_ones`.
+
+### 138. A range named as a distance is measured as one
+- **What happened:** the shot option was offered "inside 40 m of the goal" (`SHOT_RANGE_M`'s own
+  comment), but the code compared only the distance along the pitch. From out wide, players were
+  offered and took shots 40 to 50 m from goal, judged by a rate table that is only an unsourced tail
+  beyond 40 m: 22 of 156 shots in 20 matches (seeds 3 to 112 at 20 minutes) came from beyond 40.5 m,
+  none after the fix.
+- **Rule:** a threshold is applied in the quantity its comment and its source use (here the distance
+  to the goal's centre, as D3's rates are). Search for every use of a constant when its meaning is fixed.
+- **Check:** `tests/test_decisions.py::test_a_shot_is_an_option_only_within_range_of_the_goal_straight_line`.
