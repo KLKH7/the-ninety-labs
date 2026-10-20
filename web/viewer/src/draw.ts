@@ -117,7 +117,8 @@ function drawInsight(ctx: CanvasRenderingContext2D, cue: Cue, a: number, W: numb
   roundRect(ctx, x, y, 6, h, 3);
   ctx.font = `700 16px ${FONT}`;
   ctx.textBaseline = "top";
-  ctx.fillText(cue.verified ? "✓ FACT-CHECKED" : "UNVERIFIED", x + pad, y + pad);
+  const label = cue.verified ? "✓ FACT-CHECKED" : "UNVERIFIED";
+  ctx.fillText(cue.fallback ? `${label} · FALLBACK` : label, x + pad, y + pad);
   ctx.fillStyle = INK;
   ctx.font = `600 26px ${FONT}`;
   lines.forEach((line, i) => ctx.fillText(line, x + pad, y + 54 + i * 34));
@@ -162,6 +163,23 @@ function drawCaption(ctx: CanvasRenderingContext2D, cue: Cue, a: number, W: numb
   ctx.restore();
 }
 
+/** A small badge, top left, while a cue on air is a fallback: says what failed, so a viewer knows
+ * the template graphic is standing in for an explanation that did not pass, or come. */
+function drawFallback(ctx: CanvasRenderingContext2D, why: string, a: number) {
+  const text = `FALLBACK · ${why.toUpperCase()}`;
+  ctx.save();
+  ctx.globalAlpha = a;
+  ctx.font = `700 16px ${FONT}`;
+  const w = ctx.measureText(text).width + 24;
+  ctx.fillStyle = PANEL;
+  roundRect(ctx, 40, 40, w, 30, 6);
+  ctx.fillStyle = TAG;
+  roundRect(ctx, 40, 40, 5, 30, 3);
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, 54, 55);
+  ctx.restore();
+}
+
 export function drawCues(ctx: CanvasRenderingContext2D, cues: Cue[], o: DrawOptions) {
   const { width: W, height: H } = ctx.canvas;
   for (const cue of cues) {
@@ -171,4 +189,6 @@ export function drawCues(ctx: CanvasRenderingContext2D, cues: Cue[], o: DrawOpti
     else if (cue.slot === "top_right") drawInsight(ctx, cue, a, W);
     else drawLowerThird(ctx, cue, a, W, H);
   }
+  const fallback = cues.find((c) => c.fallback && c.kind !== "insight");
+  if (fallback) drawFallback(ctx, fallback.fallback!, presence(fallback, o.t, o.reduceMotion));
 }

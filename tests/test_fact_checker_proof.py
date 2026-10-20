@@ -1,4 +1,4 @@
-"""The fact-checker's proof (docs/eval/fact-checker-planted.md, ablation.md, failure-table.md):
+"""The fact-checker's proof (docs/eval/fact-checker-planted.md, ablation.md, failure-table-m1.md):
 the committed files are what the code produces, and the ablation's `full` variant is the fact-checker
 the live workflow runs, claim by claim."""
 

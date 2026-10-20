@@ -2,6 +2,8 @@
 
     GET  /api/health   the commit this image was built from (the deploy smoke test reads it)
     POST /mcp          the match MCP server (ninety/mcp/match_server.py), for Foundry's agents
+    /api/pair[/{code}], /api/minimap, /api/card, /api/flow, /api/ask   the phone companion
+                       (ninety/api/companion.py); NINETY_COMPANION=off leaves it unmounted
 
 /mcp needs the `x-api-key` header. The key lives in Key Vault; the container reads it through its
 managed identity and Foundry holds it in a project connection (infra/main.bicep), so it is never
@@ -22,6 +24,8 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from ninety.api import companion as companion_api
+from ninety.api.companion import Companion
 from ninety.mcp import match_server
 
 # Set at image build time (Dockerfile ARG); "dev" when run from a checkout.
@@ -54,8 +58,9 @@ class RequireKey:
         await self.app(scope, receive, send)
 
 
-def build(key: str | None = None) -> Starlette:
+def build(key: str | None = None, companion: Companion | None = None) -> Starlette:
     mcp = match_server.make_server()
+    companion = companion or companion_api.from_env()
     mcp_app = mcp.streamable_http_app()
 
     @contextlib.asynccontextmanager
@@ -67,6 +72,7 @@ def build(key: str | None = None) -> Starlette:
         routes=[
             Route("/api/health", health, methods=["GET"]),
             Route("/mcp", RequireKey(mcp_app, key)),
+            *(companion.routes() if companion else []),
         ],
         lifespan=lifespan,
     )
