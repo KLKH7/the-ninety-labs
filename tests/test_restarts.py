@@ -781,6 +781,66 @@ def test_they_leave_the_huddle_one_by_one_and_face_the_scorer_while_in_it():
         assert math.dist(place, (f.x, f.y)) >= shape.SHOULDER_BREADTH_M - 1e-9  # clear of his body
 
 
+def test_places_are_worked_out_once_a_frame_from_where_everyone_was():
+    """Defect (second audit): each team-mate's place was worked out when his own turn came, from
+    positions some team-mates had already moved to that frame, and two could be given the same
+    place. The places are worked out once a frame, before anyone moves (gather)."""
+    e, _ = scored_engine()
+    c = e.celebration
+    e.gather()
+    fixed = dict(c.places)
+    mover = e.by_id[c.ring[0]]
+    mover.x, mover.y = mover.x + 8.0, mover.y - 6.0  # as if he had moved first this frame
+    assert all(e.huddle_spot(c, e.by_id[pid]) == fixed[pid] for pid in c.ring[1:])
+
+
+def test_who_is_joining_is_judged_from_each_ones_own_place():
+    """A team-mate joins the others within GATHER_REACH_M of his own place, not of the scorer: one
+    outward of his place, in reach of it but out of reach of the scorer, is joining, and one a
+    little further out is not. The scorer joins once in reach of the flag he runs to, not before,
+    and there he turns to his team-mates, not to the ball (L4)."""
+    from ninety.sim.engine import GATHER_REACH_M
+    e, _ = scored_engine()
+    c = e.celebration
+    f = e.by_id[c.focus]
+    f.x, f.y = c.spot  # at the flag
+    for q in e.players:
+        q.vx = q.vy = 0.0
+    e.gather()
+    assert c.focus in e.side_by_side
+    pid = c.ring[0]
+    px, py = c.places[pid]
+    d = math.dist((px, py), (f.x, f.y))
+    ux, uy = (px - f.x) / d, (py - f.y) / d  # outward along his own bearing: his place stays put
+    q = e.by_id[pid]
+    for out, joining in ((GATHER_REACH_M - 0.5, True), (GATHER_REACH_M + 0.5, False)):
+        q.x, q.y = px + ux * out, py + uy * out
+        e.gather()
+        assert math.dist((q.x, q.y), (f.x, f.y)) > GATHER_REACH_M  # premise: out of the scorer's reach
+        assert (pid in e.side_by_side) is joining, out
+    for pid in c.ring:  # all on their places, the ball behind the scorer
+        p = e.by_id[pid]
+        p.x, p.y = c.places[pid]
+    e.gather()
+    e.ball = (f.x + 2.0, f.y - 3.0, 0.0, 0.0, 0.0, 0.0)
+    mx = sum(e.by_id[pid].x for pid in c.ring) / len(c.ring)
+    my = sum(e.by_id[pid].y for pid in c.ring) / len(c.ring)
+    assert e.looks_at(f) == pytest.approx((mx, my))
+    f.x, f.y = c.spot[0] - 2 * GATHER_REACH_M, c.spot[1] + 2 * GATHER_REACH_M  # still running to it
+    e.gather()
+    assert c.focus not in e.side_by_side
+
+
+def test_a_celebration_draws_from_its_own_random_stream():
+    """How long each celebrates is drawn from the celebration's own stream, so a change to the
+    celebration moves no other random draw in the match (lesson 90)."""
+    e = Engine(2)
+    e.run(1)
+    before = e.rng.getstate()
+    e.celebrate("home", "h9")
+    assert e.rng.getstate() == before
+
+
 def test_after_the_celebration_they_walk_back_at_least_at_a_walking_pace():
     """L4: at least a normal walking pace, 1.36 m/s for men aged 20 to 29 (Bohannon & Andrews
     2011), not a minute-long trudge; faster only if a walk would not get him back in time."""

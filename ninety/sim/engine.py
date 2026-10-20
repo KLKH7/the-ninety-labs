@@ -148,8 +148,9 @@ RESTART_DELAY_S = {"throw_in": (12, 20), "goal_kick": (24, 34), "corner": (24, 3
 CELEBRATION_S = (15.0, 25.0)
 # design: team-mates round a scorer stand a shoulder's breadth apart (P11) with a little to spare
 HUDDLE_SPACING_M = 0.55
-# P2: this far from his place a team-mate running at RECOVER has started braking for it; from here
-# on he is joining the others, and stands as close to them as bodies allow
+# design: from where a team-mate running at RECOVER must start braking for his place (stopping as
+# body.stopping_speed has him, with P2's grip), he is joining the others, and stands as close to
+# them as bodies allow; the switch at that distance is design, about 3.2 m
 GATHER_REACH_M = stopping_distance(RECOVER)
 # L4: after a goal players walk back at least at a normal walking pace: men aged 20 to 29 walk at
 # about 1.36 m/s (Bohannon & Andrews 2011, Physiotherapy 97:182, a meta-analysis of 23,111 adults,
@@ -338,6 +339,8 @@ class Engine:
         # Perception draws from its own stream, so a change to what players see does not
         # reshuffle every other random draw in the match.
         self.sight_rng = fmath.Random(f"{seed}-perception")
+        # So does a goal's celebration: how long each celebrates moves no other draw (lesson 90).
+        self.celebration_rng = fmath.Random(f"{seed}-celebration")
         self.match = Match(seed=seed)
         self.players: list[Player] = []
         # A strength not given is drawn, home first: with none given the match is the same as before.
@@ -1530,7 +1533,7 @@ class Engine:
         mates = [q.id for q in side if q is not focus]
         # each team-mate stops at his own moment, so they leave him one by one, not as one body;
         # the one they celebrate goes last
-        leave = {pid: self.t + self.rng.uniform(*CELEBRATION_S) for pid in mates}
+        leave = {pid: self.t + self.celebration_rng.uniform(*CELEBRATION_S) for pid in mates}
         leave[focus.id] = max(leave.values())
         self.celebration = Celebration(team, focus.id, spot, leave[focus.id], mates, leave)
 
@@ -1549,7 +1552,9 @@ class Engine:
         if not mates:
             return {}
         bear = {q.id: fmath.atan2(q.y - f.y, q.x - f.x) for q in mates}
-        mean = fmath.atan2(sum(fmath.sin(a) for a in bear.values()), sum(fmath.cos(a) for a in bear.values()))
+        # math.fsum: one exact rounding, the same on every Python (lesson 134)
+        mean = fmath.atan2(math.fsum(fmath.sin(a) for a in bear.values()),
+                           math.fsum(fmath.cos(a) for a in bear.values()))
         order = sorted(bear, key=lambda pid: (bear[pid] - mean + math.pi) % (2 * math.pi))
         n = len(order)
         radius = max(n * HUDDLE_SPACING_M / math.pi, shape.SHOULDER_BREADTH_M)
@@ -1595,7 +1600,8 @@ class Engine:
                 return f.x, f.y
             around = [self.by_id[pid] for pid in c.places if pid in self.side_by_side]
             if around:
-                return sum(q.x for q in around) / len(around), sum(q.y for q in around) / len(around)
+                n = len(around)
+                return math.fsum(q.x for q in around) / n, math.fsum(q.y for q in around) / n
         return self.ball[0], self.ball[1]
 
     def stop(self, kind: str, team: str, spot: tuple[float, float], taker: str | None = None,

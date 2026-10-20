@@ -1424,6 +1424,8 @@ short and actionable. This file is public: no research sources, product names or
   place of his own, at least a shoulder's breadth from the next (P11), chosen so that no two runs
   to them cross. A test of a crowd measures the clearance between bodies (`shape.between`), not
   the distance between centres.
-- **Check:** `uv run pytest tests/test_restarts.py -k "overlap or side_they_come_from"`; with every
-  team-mate sent to the scorer's centre the overlap test fails. `docs/eval/restarts.md` ("The
-  huddle") counts the frames with bodies in each other over a whole celebration.
+- **Check:** `uv run pytest tests/test_restarts.py -k "overlap or side_they_come_from or once_a_frame"`;
+  with every team-mate sent to the scorer's centre the overlap test fails (none ever stands at a
+  place of his own), and with places worked out one player at a time, in the order they move, the
+  once-a-frame test fails. `scripts/defect_sweep/huddle.py` counts the frames with bodies in each
+  other over a whole celebration (`docs/eval/restarts.md`, "The huddle").
