@@ -1118,3 +1118,19 @@ short and actionable. This file is public: no research sources, product names or
   counts within seconds, never times out. `tests/test_api_companion.py` drives the relay on one
   loop with a 5 s deadline per receive, and 150 repeats on 4 workers under full CPU load pass;
   `test_a_newer_clock_never_overtakes_a_phones_catch_up` fails without the single flusher.
+
+### 114. A WebSocket tested only through the test client is untested in the server a browser reaches
+- **What happened:** the phone relay's tests all passed through Starlette's TestClient, which
+  speaks WebSocket in process. The first time a real browser joined through uvicorn, every
+  connection answered 404: uvicorn upgrades a WebSocket only when a WebSocket library is
+  installed, and none was locked, so the deployed image could never have served the relay. The
+  same run showed the relay's close codes (4404 unknown code, 4429 room full) never reach a
+  browser: closed before the server accepts, a WebSocket arrives in the browser as 1006 whatever
+  code the server chose.
+- **Rule:** a feature a browser uses over the network is tested once through the real server and a
+  real browser, not only through an in-process client. A close code the client must read is sent
+  after the accept.
+- **Check:** `tests/test_phone.py` runs the companion routes in uvicorn and joins from Chromium;
+  CI's `image` job asks the built image for a WebSocket upgrade and needs `101` (it answers 404
+  without `websockets` in `uv.lock`). The phone treats a close before the accept as "unknown code
+  or unreachable" (`web/phone/src/feed.ts`) until the relay accepts before closing.

@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b1018" />
+    <title>The Ninety Labs phone companion</title>
+    <link rel="stylesheet" href="./src/style.css" />
+  </head>
+  <body data-state="pair">
+    <div class="sticky">
+    <p class="mockbar" id="mockbar" hidden>Mock data: made-up positions, not a real match</p>
+    <header class="top">
+      <span class="brand" aria-hidden="true">Ninety <b>Labs</b></span>
+      <span class="clock-wrap"><span class="sr-only">Match time </span><output id="clock" aria-live="off">0:00</output></span>
+      <span class="status" id="status" role="status" data-state="off">Not connected</span>
+    </header>
+    </div>
+    <p class="sr-only" id="announce" aria-live="polite"></p>
+
+    <main>
+      <section id="pair" aria-labelledby="pair-title">
+        <h1 id="pair-title">Follow the match on your phone</h1>
+        <p class="lede">Enter the 6-character code on the laptop's screen, or scan its QR code with your camera.</p>
+        <form id="pair-form" novalidate>
+          <label for="code">Pairing code</label>
+          <input
+            id="code"
+            name="code"
+            autocomplete="off"
+            autocapitalize="characters"
+            autocorrect="off"
+            spellcheck="false"
+            maxlength="6"
+            inputmode="text"
+            aria-describedby="pair-error"
+          />
+          <button type="submit" class="primary" id="connect">Connect</button>
+          <p id="pair-error" class="error" role="alert"></p>
+        </form>
+        <ul class="features">
+          <li><strong>A live minimap</strong> in step with the laptop's video.</li>
+          <li><strong>Tap a player</strong> for their speed and where they have been.</li>
+          <li><strong>Ask a question.</strong> Every number is computed by code and checked by the fact-checking agent.</li>
+        </ul>
+      </section>
+
+      <section id="live" hidden aria-label="Live match">
+        <section class="card" aria-labelledby="map-title">
+          <div class="row">
+            <h2 id="map-title">Minimap</h2>
+            <button type="button" class="toggle" id="wind-toggle" aria-pressed="false" hidden>Team movement</button>
+          </div>
+          <div class="map" id="map-box">
+            <canvas id="map" role="img" aria-label="Minimap"></canvas>
+            <canvas id="wind" aria-hidden="true" hidden></canvas>
+          </div>
+          <div class="which" id="which" role="group" aria-labelledby="which-title" hidden>
+            <p id="which-title">Which player?</p>
+            <div class="which-row" id="which-row"></div>
+          </div>
+          <div class="legend" aria-hidden="true">
+            <span class="key home">Home</span><span class="key away">Away</span><span class="tap">Tap a dot to pick a player</span>
+          </div>
+          <div id="wind-words" class="wind-words" hidden></div>
+          <div class="now" id="now-box">
+            <button type="button" class="toggle" id="now">What's happening?</button>
+            <p id="now-said" aria-live="polite"></p>
+          </div>
+          <p id="refused" class="refused" role="alert" hidden></p>
+          <details class="roster" id="roster-box">
+            <summary>Choose a player from a list</summary>
+            <div class="roster-grid" id="roster" role="group" aria-label="Players"></div>
+          </details>
+        </section>
+
+        <p class="card hint-card" id="pick-hint">Tap a player on the minimap to see their speed and heat map.</p>
+
+        <section class="card player" id="player" aria-labelledby="player-title" hidden>
+          <div class="row">
+            <h2 id="player-title" tabindex="-1">Player</h2>
+            <button type="button" class="close" id="close-player" aria-label="Close the player card">✕</button>
+          </div>
+          <div class="stats">
+            <p class="stat big"><span class="label">Speed now</span><span class="value"><span id="speed">–</span> <small>km/h</small></span></p>
+            <p class="stat"><span class="label">Top speed</span><span class="value"><span id="peak">–</span> <small>km/h</small></span></p>
+            <p class="stat"><span class="label">Distance</span><span class="value"><span id="distance">–</span> <small>m</small></span></p>
+          </div>
+          <h3 id="heat-title">Heat map</h3>
+          <canvas id="heat" role="img" aria-label="Heat map"></canvas>
+          <p class="fine" id="heat-legend"></p>
+          <p class="fine" id="card-note">Computed by code from tracked positions.</p>
+        </section>
+
+        <section class="card ask" id="ask" aria-labelledby="ask-title">
+          <h2 id="ask-title">Ask about <span id="ask-who">a player</span></h2>
+          <div class="chips" id="chips" role="group" aria-label="Suggested questions"></div>
+          <form id="ask-form">
+            <label for="question" class="sr-only">Your question</label>
+            <input id="question" maxlength="200" autocomplete="off" enterkeyhint="send" placeholder="Ask about speed or distance" />
+            <button type="submit" class="primary" id="ask-button">Ask</button>
+          </form>
+          <p class="fine">Your question is sent as data, never as instructions. Answers use only numbers computed by code, and the fact-checking agent checks them.</p>
+          <ol id="answers" class="answers" aria-live="polite" aria-relevant="additions"></ol>
+        </section>
+      </section>
+    </main>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>
