@@ -9,3 +9,4 @@ runs/
 node_modules/
 *.mp4
 .azure/
+web/viewer/dist/

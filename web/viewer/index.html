@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>The Ninety Labs viewer</title>
+    <link rel="stylesheet" href="./src/style.css" />
+  </head>
+  <body>
+    <a class="skip" href="#trace">Skip to the agent trace</a>
+    <header class="bar">
+      <h1>The Ninety <span>Labs</span></h1>
+      <div class="persona" role="radiogroup" aria-label="Persona" id="persona">
+        <button type="button" role="radio" data-persona="casual" aria-checked="true">Casual <kbd>1</kbd></button>
+        <button type="button" role="radio" data-persona="analyst" aria-checked="false">Analyst <kbd>2</kbd></button>
+      </div>
+      <label class="toggle"><input type="checkbox" id="reduce-motion" /> Reduce motion</label>
+    </header>
+
+    <main class="layout">
+      <section class="player" aria-label="Match clip">
+        <div class="stage" id="stage">
+          <video id="video" muted playsinline preload="auto" aria-hidden="true"></video>
+          <canvas id="frames" aria-hidden="true" hidden></canvas>
+          <canvas id="overlay" tabindex="0" role="img" aria-label="On-screen graphics"></canvas>
+        </div>
+        <div class="controls">
+          <button type="button" id="play" aria-label="Play">Play</button>
+          <input type="range" id="scrub" min="0" max="1" step="0.04" value="0" aria-label="Position in the clip" />
+          <output id="clock" aria-live="off">00:00</output>
+          <label class="toggle"><input type="checkbox" id="show-boxes" checked /> Detections <kbd>D</kbd></label>
+        </div>
+        <p class="sr-only" id="on-air" aria-live="polite"></p>
+        <p class="keys">
+          <kbd>Space</kbd> play or pause · <kbd>←</kbd> <kbd>→</kbd> 1 s · <kbd>,</kbd> <kbd>.</kbd> one frame ·
+          <kbd>1</kbd> <kbd>2</kbd> persona · <kbd>D</kbd> detections
+        </p>
+        <dl class="pipeline" id="pipeline"></dl>
+      </section>
+
+      <aside class="trace" id="trace" tabindex="-1" aria-labelledby="trace-title">
+        <h2 id="trace-title">Agent trace</h2>
+        <p class="hint">Each claim the Analyst drafted, and the Fact-checker's verdict. Only accepted claims air.</p>
+        <ol id="claims"></ol>
+      </aside>
+    </main>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

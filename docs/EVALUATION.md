@@ -14,19 +14,21 @@ generated it and the output file is committed. Rows marked *planned* have no res
 | Render checks (projection error, label completeness, determinism, ball occlusion share) | `uv run ninety-render-check <clips> --determinism --report docs/eval/render-checks.json`; CI `render` job on every push | `docs/eval/render-checks.json`, CI log | running |
 | Training data against its floors (clips, frames, player and ball boxes, balls by visibility, ball size at the training input, clips per render knob) | `uv run ninety-data-stats <train clips> --stride 5 --input 640x640 --out docs/eval/dataset-stats.json --floors` | `docs/eval/dataset-stats.json` | running: dataset v1, 308 training clips, all on `engine-v1`'s engine (`docs/eval/dataset-v1.json` lists each clip's run and commit): 248 from v3, 30 from topup1 (`occlusion=crowded`, `kit_contrast=low`), both at `b319f21` with renderer 0.3.1, and 30 at `cca498c` (renderer 0.3.2, #118) replacing the v3 clips whose ball rests behind the boards, labelled visible at 0.3.1 (1,043 of v3's 13,443 ball training labels). 0.3.2 changes labels only, so the two renderers' images mix. Seed 82 is dropped (a blocked shot is touched again after the window's cut, which no clip can show) and seed 111 failed the render checks twice (one foot outside its box). Meets every train floor: 1,579 mostly hidden ball labels of 13,856 (11.4%) against 400 and 5%, low-contrast kits 43.8% and crowded windows 60% against 20%. All 308 meet the data contract (`ninety-render-meta`, then `ninety-validate`'s checks at `0dd5190`, main with #108). The floors were set before any data was counted; the learning curve decides whether they are enough |
 | Off-the-shelf detector recall on renders (guide check 2) | planned | `docs/eval/render-checks.json` | planned |
-| Detection precision and recall (players, ball) on the fixed test set, by difficulty, strict and lenient matching | pixel boxes: `uv run python -m ninety.eval.vision_report --test <frozen test clips> --detections <seed<N>.jsonl folder> --out <report.json>`; pitch-level strict and lenient matching planned | `docs/eval/vision-report-v{n}.json`, `docs/eval/vision-report-v1.md` | running for pixel boxes: ours-v2 on the frozen test set, players 0.990 recall at 0.996 precision, ball at least half visible 0.966 at 0.983, ball mostly hidden 0.413 (v1). Pitch-level matching planned |
-| Event precision, recall and F1 per type; possession accuracy; speed error | events: `uv run python -m ninety.eval.event_score --truth <clip>/events.jsonl --frames <clip>/frames.jsonl --detected <detected.jsonl> --report <report.json>` ([format](#event-report-format)); possession and speed planned | `docs/eval/vision-report-v{n}.json` | planned: the harness runs and is tested on damaged simulator events; no detector yet |
+| Detection precision and recall (players, ball) on the fixed test set, by difficulty, strict and lenient matching | pixel boxes: `uv run python -m ninety.eval.vision_report --test <frozen test clips> --detections <seed<N>.jsonl folder> --out <report.json>`; pitch-level strict and lenient matching planned | `docs/eval/vision-report-v{n}.json`, `docs/eval/vision-report-v1.md`, `docs/eval/vision-report-v2.md` | running for pixel boxes: ours-v3 on the frozen test set, players 0.994 recall at 0.999 precision, ball at least half visible 0.964 at 0.994, ball mostly hidden 0.493 at 0.841 (v2; ours-v2 in v1). Pitch-level matching planned |
+| Event precision, recall and F1 per type; possession accuracy; speed error | events: `uv run python -m ninety.eval.event_score --truth <clip>/events.jsonl --frames <clip>/frames.jsonl --detected <detected.jsonl> --report <report.json>` ([format](#event-report-format)); positions: `uv run python -m ninety.eval.pitch_score` ([event detection from video](#event-detection-from-video)); possession and speed planned | `docs/eval/event-report-v1/` | running on one clip: seed 900001, detected from video (ours-v2, camera from the markings): passes 3 of 4 at strict F1 0.75; the shot read as a pass and one false out of play (the ball's height, planned); ball on the ground placed to a median 0.09 m, players 0.22 m. One 10 s clip is a smoke test, not a rate |
 | Targeted data rounds, before and after | planned | `docs/eval/vision-report-v{n}.json` | planned |
 | Stats engine facts: hand-computed cases, planted defects, citations, size | `uv run pytest tests/test_stats.py` | test assertions | running |
 | Late drop in high-intensity running (R7), by the protocol below; distance and top speed by position on the same matches | `uv run python -m ninety.sim.late_drop` | `docs/eval/late-drop.md` | running |
 | Fact-checker rules (numbers, players, evidence ids) | `uv run pytest tests/test_factcheck.py` | test assertions | running |
 | Ledger versioning, evidence validation, and deterministic cue fixture | `uv run pytest tests/test_ledger.py tests/test_cues.py` | `tests/fixtures/cues-seed7.jsonl` and test assertions | running: 21 tests; 108 cues for seed 7, five minutes (96 for its 48 passes, 12 of them failed and one still in flight at the end, 8 for its 4 shots and 4 for its 2 goals) |
+| Fact-checker on the frozen planted-claim set, offline: catch rate, true claims wrongly stopped, the layer that decided, claims held for low-confidence detections | `uv run python -m ninety.eval.fact_checker_proof` (offline, seconds of CPU; `--check` fails if a committed file is stale, as `tests/test_fact_checker_proof.py` does) | `docs/eval/fact-checker-planted.md`, set `docs/eval/planted-claims-v1.json` | running: 175/175 planted false claims kept off air (127 recorded, 16 on phantom low-confidence detections, all held by the confidence gate, 32 with viewer text spliced in); 7/121 true claims wrongly stopped, all by the recorded Judge. Judge answers are those recorded from `ninety-judge:1` at `9be98bd`; the gate threshold (0.5) is a design value until detector calibration is measured |
 | Fact-checker catch rate on planted false claims, and true claims wrongly rejected, on the published Judge | `uv run python -m ninety.eval.factcheck_eval --seeds 21,33 --foundry`; nightly in `.github/workflows/evals.yml`, recorded in Foundry | `docs/eval/fact-checker.md` | running: held-out seeds 21,33, `ninety-judge:1` at commit `9be98bd`: 136/136 false claims caught (code alone 32/136); 7/105 true claims wrongly rejected excluding service holds (17/115 including them); 19 of 251 Judge calls failed and were held back (fail closed), more than earlier runs, not yet investigated |
 | Analyst first drafts that would air (code checks then the Judge), and Foundry's agent evaluators (task adherence, intent resolution, tool call accuracy; model-graded) on the same responses, published agents, held-out seeds | `uv run python -m ninety.agents.analyst_eval --foundry`; nightly in `.github/workflows/evals.yml`, recorded in Foundry | `docs/eval/analyst.md` | running: seeds 21,33, `ninety-analyst:3` (match tools called by Foundry over MCP) at commit `d911c0b`: 5/10 first drafts would air; Foundry evaluators intent resolution 10/10, tool call accuracy 10/10, task adherence 4/10. Ten drafts is a small sample: an identical run minutes earlier gave 6/10 and task adherence 1/10; the nightly history in Foundry is the better guide |
 | Match engine touches: control by surface, whose ball and speed; throw-ins; pass completion | `uv run python -m ninety.sim.touches` (seeds 40 to 47) | `docs/eval/touches.md`, `docs/eval/funnel-touches.md` | running: a report, never a gate; comparisons fixed below. Seeds 40 to 47, before and after the cushioned touch (base d38ce9b): thigh, chest or head touches 3,693 then 706 (passers now judge them by the engine's own rule), kept 59% then 61%; all touches except the dribbler's own kept 87% then 97%; throw-ins 89.5% then 86.1% first contact by a team-mate (Stone 2021: 83%), 67.3% then 58.3% held 5 s later (54%); completion 82.1% then 88.2% (R3: 75 to 88%). With a surface for each height (same seeds and base): thigh, chest or head touches 690, kept 62.5%; throw-ins 87.3% first contact by a team-mate, 67.6% held 5 s later; completion 87.4%. With what makes a touch worse: thigh, chest or head kept 46.4%; throw-ins 87.5% first contact by a team-mate, 54.1% held 5 s later (Stone 2021: 54%); completion 87.2%; goals 1.44 a team over seeds 40 to 63 (1.0 on the eight seeds alone, within noise; lesson 89). With the foot-reach touch, on main b319f21: thigh, chest or head touches 457, kept 46.4%; throw-ins 82.2% first contact by a team-mate, 58.4% held 5 s later; completion 88.8%; goals 1.08 a team against 1.52 on main over seeds 40 to 63 (difference -0.44, standard error 0.28: not settled; 0.75 against 1.75 on the eight seeds alone) |
 | Multi-agent workflow: moments, both claims fact-checked, rewrites to their author, insight replaces the template; failures leave the template on air | `uv run pytest tests/test_workflow.py`; `uv run ninety-workflow --replay <recording>` | test assertions | running with scripted models in tests; live recording pending |
-| Recovery from injected failures | planned | `docs/eval/failure-table.md` | planned |
-| Ablation: one agent against the full workflow | planned | `docs/eval/ablation.md` | planned |
+| Recovery from injected failures (Judge down, Judge timeout, Judge malformed reply, Analyst or MCP tool error, MCP timeout, Analyst malformed reply, low-confidence detection) | `uv run python -m ninety.eval.fact_checker_proof` (offline, seconds of CPU; `--check` fails if a committed file is stale, as `tests/test_fact_checker_proof.py` does) | `docs/eval/failure-table.md` | running: 7 of 7 recovered on the live path with stand-in models: nothing unverified aired and the template cues stayed up; each row asserted by `tests/test_failure_table.py`. Latencies not measured (stand-in models) |
+| Ablation: the fact-checker without the confidence gate, without typed facts, and absent, on the same planted set | `uv run python -m ninety.eval.fact_checker_proof` (offline, seconds of CPU; `--check` fails if a committed file is stale, as `tests/test_fact_checker_proof.py` does) | `docs/eval/ablation.md`, per claim `docs/eval/ablation.json` | running: false claims on air: full 0/175, no gate 16/175 (every phantom detection), no typed facts (the Judge alone) 24/175: every phantom plus 8 claims stating the minute and second as a clock ("1:05" for 00:05), which only the code checks catch, no fact-checker 175/175. The Judge answers to the 48 claims only the code checks had seen were recorded once from `ninety-judge:2` (`uv run python -m ninety.eval.planted_judge`, 48 calls, 50,708 tokens, $0.025 at list price) |
+| Ablation: one agent with every tool against the full workflow | planned | `docs/eval/ablation.md` | planned |
 | Latency to graphic and to speech (p50, p95); cost per match | planned | `docs/eval/latency-cost.md` | planned |
 
 ## Match engine: touches
@@ -265,6 +267,64 @@ in shot and less than half visible. The target before freezing the test set is a
 (see [PLAN.md](PLAN.md#goals)). Met: the test set was frozen on Oct 18 at `engine-v1`'s engine with renderer 0.3.2 (`cca498c`,
 after the scenery-occlusion fix, #118): 15.0% (188 of 1,250), of which 6.0% (75) are partly drawn and
 113 fully hidden. Every clip's hashes and the first freeze are in `docs/eval/test-set-frozen.json`.
+
+## Event detection from video
+
+The first events made from the picture alone, for M1: one frozen test clip, seed 900001 (10 s,
+250 frames, `engine-v1`, renderer 0.3.2), detected with ours-v2 (vision-report-v1). The live path
+reads the clip's `images/` and the detections, nothing else: no `frames.jsonl`, `events.jsonl`,
+`clip.json` or `meta.json` (`tests/test_vision_live_path.py` checks the code and a run). Grading
+then reads the answer key.
+
+```bash
+T=runs/test-frozen-cca498c/test/seed900001   # the frozen test clip (docs/eval/test-set-frozen.json)
+uv run --group vision python -m ninety.vision.observe $T \
+  --detections docs/eval/vision-report-v1/detections/seed900001.jsonl \
+  --out tests/fixtures/observations-seed900001.jsonl
+uv run python -m ninety.vision.events tests/fixtures/observations-seed900001.jsonl \
+  --out tests/fixtures/detected-seed900001.jsonl --summary docs/eval/event-report-v1/summary-seed900001.json
+uv run python -m ninety.eval.event_score --truth $T/events.jsonl --frames $T/frames.jsonl \
+  --detected tests/fixtures/detected-seed900001.jsonl --report docs/eval/event-report-v1/events-seed900001.json
+uv run python -m ninety.eval.pitch_score --frames $T/frames.jsonl \
+  --observations tests/fixtures/observations-seed900001.jsonl --report docs/eval/event-report-v1/pitch-seed900001.json
+```
+
+| Stage | What it does | Code |
+|---|---|---|
+| Camera | white-marking pixels (brighter and bluer than the grass on both sides, detected players and ball masked) fitted to Law 1's markings: one gantry for the clip (found from every 25th frame), pan, tilt and zoom per frame (tracked from the last good frame). A frame is trusted when half its marking pixels lie within 1.5 px of a projected marking | `ninety/vision/pitch.py` |
+| On the pitch | each box's foot point (players) or centre one radius up (ball) through that frame's camera; shirt colour from the box's upper middle | `ninety/vision/observe.py` |
+| Tracks and teams | players linked in pitch metres; two kits by chromaticity (shadow-proof, lesson 98); the side defending x = 105 is away (the engine's one convention) | `ninety/vision/track.py` |
+| Events | possession: the ball within 1.5 m of a player's feet and moving with him (GROUNDING P6); a pass from one spell to the next, a shot when the strike heads between the posts, out of play when the whole ball is over a line for 3 frames | `ninety/vision/events.py` |
+
+Events are graded by the rules above (Vision scoring), unchanged: same type and team within 1.0 s,
+spot within 1.0 m (strict) of the ball at the detected time. Pitch positions use the pixel
+scorer's pairing (player IoU 0.5, ball centre 5 px) and the planned "in the air" height (0.5 m).
+
+**Results, seed 900001** (`docs/eval/event-report-v1/`):
+
+| Measure | Result |
+|---|---|
+| Passes (strict: 1.0 s, 1.0 m) | 3 of 4 found, 1 false: precision, recall and F1 0.75; time error at most 0.08 s, place error at most 0.09 m. The miss was struck 0.08 s before the clip ends, with nobody receiving it inside the clip; the false pass is the shot |
+| Shots | 0 of 1: read as a pass (the ball's height, below) |
+| Out of play | none true, 1 false: the same shot reaching the keeper |
+| Outside M1's scope | 2 possession changes and 1 pressure, counted as misses |
+| Camera | 245 of 250 frames trusted (median marking error per frame 1.2 px, at most 1.499 px against the 1.5 px set beforehand: several frames pass narrowly); the 5 rejected (1791 to 1796) are the fast pan after the shot. The gantry lands 1.85 m from the true one, along the line of sight. That is the fit's limit: away from the markings it moves the ground by a median 2.6 px (90% within 14.7 px, near the horizon at most 40.5 px) against the true camera; on perfect synthetic markings, by 3.4 to 4.0 px at most |
+| Players on the pitch | median 0.22 m, 90% within 1.44 m (1,817 detections) |
+| Ball on the ground | median 0.09 m, 90% within 0.26 m (181 frames) |
+| Ball in the air | median 7.1 m (15 frames): placed on the ground (below) |
+| Teams | home's kit learned as red-brown, away's as blue, and the side named in 241 of 245 frames' votes; every detected pass has its true team |
+
+**Read with care.** One 10-second clip holds 4 passes, 1 shot and no out of play; a single event
+moves a rate by 25 points. This shows the pipeline works end to end and where it fails, not how
+well it will do on a match. The other four test clips (two with camera cuts, which the camera fit
+does not yet follow) are next.
+
+**Not yet:** the ball's height. A lofted ball is placed on the ground beyond where it is, which
+turns this clip's shot (a ball rising to 1.3 m) into a pass whose path misses the posts, and puts it
+over the goal line as it reaches the keeper (the false out of play). Fitting its flight needs air
+drag as well as gravity: over its first 0.4 s, drag moves a 30 m/s ball about as far as gravity
+does, and a drag-free fit tilts the flight along the camera's line of sight, wrongly even through
+the true camera. Possession changes, pressure and the player's identity are not detected.
 
 ## Late drop in high-intensity running (R7)
 

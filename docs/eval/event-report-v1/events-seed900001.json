@@ -1,0 +1,325 @@
+{
+  "rules": {
+    "time_window_s": 1.0,
+    "strict_m": 1.0,
+    "lenient_m": 2.0,
+    "match": "same type and team, one to one, nearest first; spot judged at the detected time"
+  },
+  "time_only": {
+    "per_type": {
+      "out_of_play": {
+        "true": 0,
+        "detected": 1,
+        "tp": 0,
+        "fp": 1,
+        "fn": 0,
+        "precision": 0.0,
+        "recall": null,
+        "f1": null,
+        "time_error_s": null,
+        "distance_m": null
+      },
+      "pass": {
+        "true": 4,
+        "detected": 4,
+        "tp": 3,
+        "fp": 1,
+        "fn": 1,
+        "precision": 0.75,
+        "recall": 0.75,
+        "f1": 0.75,
+        "time_error_s": {
+          "mean": 0.04,
+          "max": 0.08
+        },
+        "distance_m": {
+          "mean": 0.238348,
+          "max": 0.353412
+        }
+      },
+      "possession_change": {
+        "true": 2,
+        "detected": 0,
+        "tp": 0,
+        "fp": 0,
+        "fn": 2,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null,
+        "time_error_s": null,
+        "distance_m": null
+      },
+      "pressure": {
+        "true": 1,
+        "detected": 0,
+        "tp": 0,
+        "fp": 0,
+        "fn": 1,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null,
+        "time_error_s": null,
+        "distance_m": null
+      },
+      "shot": {
+        "true": 1,
+        "detected": 0,
+        "tp": 0,
+        "fp": 0,
+        "fn": 1,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null,
+        "time_error_s": null,
+        "distance_m": null
+      }
+    },
+    "pairs": [
+      {
+        "truth_id": "e00055",
+        "detected_id": "v00005",
+        "type": "pass",
+        "team": "away",
+        "dt_s": 0.0,
+        "place_error_m": 0.035355,
+        "outside_frames": false,
+        "distance_m": 0.036056
+      },
+      {
+        "truth_id": "e00050",
+        "detected_id": "v00002",
+        "type": "pass",
+        "team": "away",
+        "dt_s": 0.04,
+        "place_error_m": 0.05954,
+        "outside_frames": false,
+        "distance_m": 0.353412
+      },
+      {
+        "truth_id": "e00049",
+        "detected_id": "v00001",
+        "type": "pass",
+        "team": "away",
+        "dt_s": -0.08,
+        "place_error_m": 0.087573,
+        "outside_frames": false,
+        "distance_m": 0.325576
+      }
+    ]
+  },
+  "strict": {
+    "per_type": {
+      "out_of_play": {
+        "true": 0,
+        "detected": 1,
+        "tp": 0,
+        "fp": 1,
+        "fn": 0,
+        "precision": 0.0,
+        "recall": null,
+        "f1": null,
+        "time_error_s": null,
+        "distance_m": null
+      },
+      "pass": {
+        "true": 4,
+        "detected": 4,
+        "tp": 3,
+        "fp": 1,
+        "fn": 1,
+        "precision": 0.75,
+        "recall": 0.75,
+        "f1": 0.75,
+        "time_error_s": {
+          "mean": 0.04,
+          "max": 0.08
+        },
+        "distance_m": {
+          "mean": 0.238348,
+          "max": 0.353412
+        }
+      },
+      "possession_change": {
+        "true": 2,
+        "detected": 0,
+        "tp": 0,
+        "fp": 0,
+        "fn": 2,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null,
+        "time_error_s": null,
+        "distance_m": null
+      },
+      "pressure": {
+        "true": 1,
+        "detected": 0,
+        "tp": 0,
+        "fp": 0,
+        "fn": 1,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null,
+        "time_error_s": null,
+        "distance_m": null
+      },
+      "shot": {
+        "true": 1,
+        "detected": 0,
+        "tp": 0,
+        "fp": 0,
+        "fn": 1,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null,
+        "time_error_s": null,
+        "distance_m": null
+      }
+    },
+    "pairs": [
+      {
+        "truth_id": "e00055",
+        "detected_id": "v00005",
+        "type": "pass",
+        "team": "away",
+        "dt_s": 0.0,
+        "place_error_m": 0.035355,
+        "outside_frames": false,
+        "distance_m": 0.036056
+      },
+      {
+        "truth_id": "e00050",
+        "detected_id": "v00002",
+        "type": "pass",
+        "team": "away",
+        "dt_s": 0.04,
+        "place_error_m": 0.05954,
+        "outside_frames": false,
+        "distance_m": 0.353412
+      },
+      {
+        "truth_id": "e00049",
+        "detected_id": "v00001",
+        "type": "pass",
+        "team": "away",
+        "dt_s": -0.08,
+        "place_error_m": 0.087573,
+        "outside_frames": false,
+        "distance_m": 0.325576
+      }
+    ]
+  },
+  "lenient": {
+    "per_type": {
+      "out_of_play": {
+        "true": 0,
+        "detected": 1,
+        "tp": 0,
+        "fp": 1,
+        "fn": 0,
+        "precision": 0.0,
+        "recall": null,
+        "f1": null,
+        "time_error_s": null,
+        "distance_m": null
+      },
+      "pass": {
+        "true": 4,
+        "detected": 4,
+        "tp": 3,
+        "fp": 1,
+        "fn": 1,
+        "precision": 0.75,
+        "recall": 0.75,
+        "f1": 0.75,
+        "time_error_s": {
+          "mean": 0.04,
+          "max": 0.08
+        },
+        "distance_m": {
+          "mean": 0.238348,
+          "max": 0.353412
+        }
+      },
+      "possession_change": {
+        "true": 2,
+        "detected": 0,
+        "tp": 0,
+        "fp": 0,
+        "fn": 2,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null,
+        "time_error_s": null,
+        "distance_m": null
+      },
+      "pressure": {
+        "true": 1,
+        "detected": 0,
+        "tp": 0,
+        "fp": 0,
+        "fn": 1,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null,
+        "time_error_s": null,
+        "distance_m": null
+      },
+      "shot": {
+        "true": 1,
+        "detected": 0,
+        "tp": 0,
+        "fp": 0,
+        "fn": 1,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null,
+        "time_error_s": null,
+        "distance_m": null
+      }
+    },
+    "pairs": [
+      {
+        "truth_id": "e00055",
+        "detected_id": "v00005",
+        "type": "pass",
+        "team": "away",
+        "dt_s": 0.0,
+        "place_error_m": 0.035355,
+        "outside_frames": false,
+        "distance_m": 0.036056
+      },
+      {
+        "truth_id": "e00050",
+        "detected_id": "v00002",
+        "type": "pass",
+        "team": "away",
+        "dt_s": 0.04,
+        "place_error_m": 0.05954,
+        "outside_frames": false,
+        "distance_m": 0.353412
+      },
+      {
+        "truth_id": "e00049",
+        "detected_id": "v00001",
+        "type": "pass",
+        "team": "away",
+        "dt_s": -0.08,
+        "place_error_m": 0.087573,
+        "outside_frames": false,
+        "distance_m": 0.325576
+      }
+    ]
+  },
+  "headline": {
+    "rule": "strict",
+    "pass_f1": 0.75
+  },
+  "inputs": {
+    "truth": "runs/test-frozen-cca498c/test/seed900001/events.jsonl",
+    "frames": "runs/test-frozen-cca498c/test/seed900001/frames.jsonl",
+    "detected": "tests/fixtures/detected-seed900001.jsonl",
+    "git_commit": "64bd19b9501830eeb0aff8af4fc8ac3aed207145",
+    "date": "2026-10-19"
+  }
+}

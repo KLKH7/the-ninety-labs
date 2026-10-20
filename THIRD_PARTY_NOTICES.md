@@ -18,7 +18,22 @@ GPL or AGPL otherwise). Every locked package and its licence is listed below.
 | starlette, uvicorn | the public API (`ninety/api`) | BSD-3-Clause |
 | pydantic (via agent-framework) | typed agent output | MIT |
 | pytest, pytest-xdist and its execnet, ruff (development) | tests (in parallel workers) and lint | MIT |
+| numpy (development; also with the vision group) | the camera fit of event detection, tested in CI | BSD-3-Clause |
+| pillow (development; also with the vision group) | images for event detection's runtime truth guard, tested in CI | MIT-CMU |
 | uv (container build only) | installs `uv.lock` into the API image | MIT or Apache-2.0 |
+
+## Viewer (`web/viewer`, development only)
+
+The viewer ships as plain HTML, CSS and JavaScript with no runtime dependency. These build it, and
+none reaches the page a viewer opens. Pinned in `web/viewer/package-lock.json`.
+
+| Package | Used for | Licence |
+|---|---|---|
+| vite 6.4.4, and through it esbuild, rollup, postcss, nanoid and 57 more | dev server and build | MIT |
+| typescript 5.9.3 | type checking | Apache-2.0 |
+| @types/node | types for the build config | MIT |
+| source-map-js (through vite) | source maps | BSD-3-Clause |
+| picocolors (through vite) | coloured terminal output | ISC |
 
 ## Data
 
