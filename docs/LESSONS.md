@@ -1099,4 +1099,4 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `uv run pytest tests/test_restarts.py` records every frame from before the stop to
   the kick, including the frame the restart is given, and fails on a ball or player step faster
   than the validator's limits. `scripts/defect_sweep/restarts.py` counts ball jumps over 3 m per
-  90 minutes (0 on seeds 7, 11, 21, 42 at 20 minutes).
+  90 minutes (0 over 16 matches of 20 minutes, `docs/eval/restarts.md`).
