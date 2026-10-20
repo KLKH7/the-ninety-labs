@@ -1,1 +1,2 @@
-{"role": "fact_checker", "moment": "m-e00046", "action": "reject", "ms": 412.0, "detail": "number 143 is not a cited ball_speed_kmh"}
+{"role": "fact_checker", "moment": "m-e00046", "action": "reject", "ms": 412.0, "detail": "number 143 is not a cited ball_speed_kmh", "fallback": ""}
+{"role": "producer", "moment": "m-v00001", "action": "template", "ms": 0.4, "detail": "cue-v00001-analyst stays: held", "fallback": "held: timeout"}

@@ -123,6 +123,32 @@ jobs:
         env:
           NINETY_REQUIRE_VIEWER: "1"
 
+  phone:
+    # Type-checks and builds the phone companion and the viewer, then drives the phone at phone size
+    # on its mock feed and against the companion API with the viewer pairing it: pairing, clock sync,
+    # evidence, an injected question, and no ground truth on screen (tests/test_phone.py).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            web/phone/package-lock.json
+            web/viewer/package-lock.json
+      - run: npm ci --prefix web/phone
+      - run: npm run build --prefix web/phone
+      - run: npm run build:mock --prefix web/phone  # the dev bundle with the mock feed, for the mock tests
+      - run: npm ci --prefix web/viewer
+      - run: npm run build --prefix web/viewer
+      - run: uv sync --locked
+      - run: uv run playwright install --with-deps chromium
+      - run: uv run pytest -q tests/test_phone.py
+        env:
+          NINETY_REQUIRE_PHONE: "1"
+
   secret-scan:
     runs-on: ubuntu-latest
     steps:
@@ -165,5 +191,16 @@ jobs:
             -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"match_info","arguments":{"match":"seed900001"}}}' \
             | tee mcp.json
           jq -e '.result.isError == false' mcp.json
+      - name: The image upgrades the phone relay's WebSocket (uvicorn needs a WebSocket library for it)
+        run: |
+          docker run -d --name companion -p 8001:8000 -e NINETY_COMPANION=standin ninety-api
+          for i in $(seq 1 30); do curl -fsS localhost:8001/api/health && break; sleep 1; done
+          CODE=$(curl -fsS localhost:8001/api/pair -H "content-type: application/json" -d '{"clip":"seed7"}' | jq -r .code)
+          NONCE=$(openssl rand -base64 16)  # the handshake's nonce, made per run (RFC 6455)
+          curl -sS -i -N --max-time 3 -H "Connection: Upgrade" -H "Upgrade: websocket" \
+            -H "Sec-WebSocket-Version: 13" -H "Sec-WebSocket-Key: $NONCE" \
+            "localhost:8001/api/pair/$CODE?role=laptop" > ws.txt || true
+          head -1 ws.txt
+          head -1 ws.txt | grep -q " 101 "
       - if: failure()
-        run: docker logs api || true
+        run: docker logs api || true; docker logs companion || true

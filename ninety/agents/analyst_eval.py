@@ -23,10 +23,9 @@ import subprocess
 from pathlib import Path
 
 from agent_framework.foundry import FoundryAgent
-from azure.identity import DefaultAzureCredential
 
 from ninety import config
-from ninety.agents import foundry, foundry_evals
+from ninety.agents import credentials, foundry, foundry_evals
 from ninety.agents.factcheck import check
 from ninety.agents.judge import judge
 from ninety.agents.slice import analyst_prompt, parse_claim
@@ -42,10 +41,17 @@ MINUTES = match_server.MINUTES  # one claim per minute of a served match
 async def drafts(seeds: list[int]) -> tuple[list[dict], str]:
     """One first draft per minute per seed, each with its response id and the fact-checker's
     verdict. Returns the rows and which agent versions ran."""
-    credential = DefaultAzureCredential()
+    async with credentials.new_credential() as credential:
+        # Signed in before the simulations, which can outlast agents-live's sign-in (credentials.py).
+        await credentials.sign_in(credential)
+        known_by_seed = {s: {e["id"]: e for e in events_in(s, MINUTES, 1, MINUTES + 1)} for s in seeds}
+        return await _drafts(credential, seeds, known_by_seed)
+
+
+async def _drafts(credential, seeds: list[int], known_by_seed: dict[int, dict]) -> tuple[list[dict], str]:
     rows, ran = [], ""
     for seed in seeds:
-        known = {e["id"]: e for e in events_in(seed, MINUTES, 1, MINUTES + 1)}
+        known = known_by_seed[seed]
         async with contextlib.AsyncExitStack() as stack:
             agents, labels = [], []
             for local in foundry.slice_agents(foundry.chat_client(credential)):
@@ -92,14 +98,16 @@ async def drafts(seeds: list[int]) -> tuple[list[dict], str]:
 async def foundry_scores(response_ids: list[str]) -> dict:
     from agent_framework.foundry import evaluate_traces
 
-    results = await evaluate_traces(
-        response_ids=response_ids,
-        evaluators=EVALUATORS,
-        client=foundry.chat_client(),
-        model=config.MODEL,
-        eval_name="ninety-analyst-agent-evaluators",
-        timeout=900,
-    )
+    async with credentials.new_credential() as credential:
+        await credentials.sign_in(credential)
+        results = await evaluate_traces(
+            response_ids=response_ids,
+            evaluators=EVALUATORS,
+            client=foundry.chat_client(credential),
+            model=config.MODEL,
+            eval_name="ninety-analyst-agent-evaluators",
+            timeout=900,
+        )
     return {
         "status": results.status,
         "report_url": results.report_url,

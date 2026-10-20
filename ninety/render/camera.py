@@ -114,9 +114,9 @@ MAX_PAN_MPS = 22.0  # fastest the aim point moves across the ground
 PAN_ACCEL_MPS2 = 40.0
 
 
-def in_box(x: float, y: float) -> bool:
-    """True when (x, y) is inside either penalty area."""
-    return 13.84 <= y <= 54.16 and (x <= 16.5 or x >= 88.5)
+def in_box(x: float, y: float, margin: float = 0.0) -> bool:
+    """True when (x, y) is inside either penalty area, widened by `margin` metres."""
+    return 13.84 - margin <= y <= 54.16 + margin and (x <= 16.5 + margin or x >= 88.5 - margin)
 
 
 CUT_HOLD_S = 4.0  # a cut stays put this long; shorter than this reads as a flicker
@@ -126,12 +126,30 @@ GANTRY_LINE_DEG = 23.0  # handbook: 22-24° from the gantry down to the near tou
 # each about 65 px tall. Design: 18 m against 14.5 to 22 m on seeds 7, 21 and 42; test_render_camera
 # measures other seeds.
 GANTRY_HALF_M = 18.0
-# The stands are a band across the top of the picture, at most this share of it, as the main
-# camera shows them. The far side is foreshortened, so with play over there the gantry tilts down
-# along its line of sight just enough to keep the far edge of the pitch at this line, the ball in
-# the upper half (design, after the review of 0.4.1: the stands filled 40 to 75% of the picture).
-STANDS_TOP = 0.25
-TIGHT_ACTIONS = ("throw", "thigh", "chest", "head", "hands")
+# The stands are a band across the top of the picture, at most this share of it. The far side is
+# foreshortened, so with play over there the gantry tilts down along its line of sight just enough
+# to keep the far edge of the pitch at this line; nearer, it frames the play and the stands are
+# what is left above it (design, after the review of 0.4.1: the stands filled 40 to 75% of the
+# picture; at 0.25 the line held still and left a third of the picture empty grass below play).
+STANDS_MAX = 0.35
+# The operator frames the play, not the ball: the aim is pulled from the ball toward the players
+# around it (weighted by nearness, out to PLAY_RADIUS_M), PLAY_PULL of the way, and the gantry
+# holds still while that stays within HOLD_SHARE of the half-width either side of where it points,
+# so a pass inside one area is not a pan (design, after the critic of 0.5.1's first clips: the
+# camera was locked to the ball and swung with every pass).
+PLAY_RADIUS_M = 20.0
+PLAY_PULL = 0.35
+HOLD_SHARE = 0.3
+# The box's closer lens comes in when the ball is in a penalty area and goes back out only once the
+# ball is this far clear of it; the zoom eases like a pan (ZOOM_ACCEL_MPS2: metres of half-width a
+# second, a second), so the lens never pumps in and out or reverses in a frame.
+BOX_LEAVE_M = 6.0
+ZOOM_ACCEL_MPS2 = 6.0
+# Live play stays on the gantry through every attack; the tighter lens comes up for a throw-in, a
+# set piece, and for the restart after an edit cut: a medium shot, the taker about a third of the
+# picture high (TIGHT_HALF_M either side of him).
+TIGHT_ACTIONS = ("throw",)
+TIGHT_HALF_M = 5.0
 NET_SETTLE_S = 2.6  # the mesh is back to rest by here; the angle itself holds CUT_HOLD_S
 
 
@@ -208,12 +226,13 @@ class Director:
 
     The gantry is the picture the match is watched from. It aims at the play on the grass, so the
     pitch fills the picture; tilts down along its line of sight when play is far off, so the stands
-    stay a band across the top (STANDS_TOP); takes the tighter lens near either goal; and eases
-    each pan in and out (PAN_ACCEL_MPS2).
+    stay a band across the top (STANDS_MAX); frames the play rather than the ball and holds still
+    while the ball moves about inside that frame (HOLD_SHARE); takes a closer lens in either box;
+    and eases each pan and zoom in and out (PAN_ACCEL_MPS2, ZOOM_ACCEL_MPS2).
 
     With `cuts`, it leaves the gantry for two shots, each held at least CUT_HOLD_S: a tighter lens
-    beside the gantry for a throw or an aerial touch, when that shot still holds the player and the
-    ball, and, when a goal is scored, a low three-quarter beside that goal, aimed at the mouth the
+    beside the gantry for a throw-in, when that shot still holds the thrower and the ball, and,
+    when a goal is scored, a low three-quarter beside that goal, aimed at the mouth the
     event recorded, because the engine has already put the ball back on the centre spot. Live play
     is never shown from across the pitch or from behind a goal: every camera it uses stands on the
     gantry's side, so left and right stay where the viewer has them (the 180-degree rule, as a
@@ -237,6 +256,8 @@ class Director:
         self.aim_v = [0.0, 0.0]  # how fast the aim point is moving across the ground (m/s)
         self.tight_aim: list[float] | None = None  # the tighter lens's own aim, while it is up
         self.tight_v = [0.0, 0.0]
+        self.zoom_v = 0.0  # how fast the half-width is changing (m/s)
+        self._box = False  # the box's closer lens is in (BOX_LEAVE_M)
         self.half_width = params.half_width_m
         self.prev_ball: tuple[float, float] | None = None
         self.shake_phase = (self.rng.uniform(0, 6.28), self.rng.uniform(0, 6.28))
@@ -253,6 +274,8 @@ class Director:
         self.aim = None
         self.aim_v = [0.0, 0.0]
         self.tight_aim = None
+        self.zoom_v = 0.0
+        self._box = False
         self.prev_ball = None
         self._cut_kind = ""
         self._cut_until = -1.0
@@ -266,19 +289,40 @@ class Director:
         self._cut_until = self.t + self.dt + CUT_HOLD_S  # from the restart's first frame
 
     def _goal(self, bx: float, by: float, vx: float, vy: float) -> tuple[float, float, float]:
-        ax = bx + vx * self.p.lead_s
-        ay = by + vy * self.p.lead_s
+        px, py = self._play(bx, by)
+        ax = px + vx * self.p.lead_s
+        ay = py + vy * self.p.lead_s
         ay = 34 + (ay - 34) * 0.75  # broadcasters rarely aim right at a touchline
         ax = min(max(ax, 8.0), 97.0)
         ay = min(max(ay, 12.0), 60.0)
-        wide = min(self.p.half_width_m, GANTRY_HALF_M)
-        hw = self.p.box_half_width_m if in_box(bx, by) else wide
+        if in_box(bx, by):
+            self._box = True
+        elif not in_box(bx, by, BOX_LEAVE_M):
+            self._box = False
+        hw = self.p.box_half_width_m if self._box else min(self.p.half_width_m, GANTRY_HALF_M)
+        if self.aim is not None:
+            # Held while the play stays near where the gantry points; past that, the play is kept at
+            # the edge of the hold as the pan takes it along.
+            zone = HOLD_SHARE * hw
+            ax = min(max(self.aim[0], ax - zone), ax + zone)
         ax, ay = self._below_stands(ax, ay, hw)
         return ax, ay, hw
 
+    def _play(self, bx: float, by: float) -> tuple[float, float]:
+        """Where the play is: the ball, pulled PLAY_PULL of the way toward the players around it,
+        each weighted by how near he is, to nothing at PLAY_RADIUS_M."""
+        sw = sx = sy = 0.0
+        for x, y, _ in self.players:
+            w = 1.0 - math.hypot(x - bx, y - by) / PLAY_RADIUS_M
+            if w > 0.0:
+                sw, sx, sy = sw + w, sx + w * x, sy + w * y
+        if sw <= 0.0:
+            return bx, by
+        return bx + PLAY_PULL * (sx / sw - bx), by + PLAY_PULL * (sy / sw - by)
+
     def _below_stands(self, ax: float, ay: float, hw: float) -> tuple[float, float]:
         """The aim on the line of sight to (ax, ay), there or nearer the gantry, that keeps the far
-        edge of the pitch on that line (the far touchline, or a goal line) in the top STANDS_TOP of
+        edge of the pitch on that line (the far touchline, or a goal line) in the top STANDS_MAX of
         the picture. Tilting down lifts that edge in the picture and leaves the play where it is
         across it, so the nearest aim that does it is found by halving along the line."""
         gx, gy = self.position[0], self.position[1]
@@ -289,7 +333,7 @@ class Director:
         if abs(dx) > 1e-9:
             out = min(out, ((105.0 if dx > 0 else 0.0) - gx) / dx)
         edge = (gx + out * dx, gy + out * dy, 0.0)
-        line = STANDS_TOP * self.height
+        line = STANDS_MAX * self.height
 
         def lifted(t: float) -> bool:
             uv = self._shot((gx + t * dx, gy + t * dy, 0.0), hw).project(edge)
@@ -331,8 +375,13 @@ class Director:
             self.half_width = ghw
         else:
             self._ease(self.aim, self.aim_v, gx, gy)
-            z = 1 - math.exp(-self.dt / (self.p.pan_lag_s * 2.5))
-            self.half_width += (ghw - self.half_width) * z
+            # The zoom is a spring too, slower than the pan, so it gathers and loses pace and never
+            # turns round in a frame.
+            w = 2.0 / (self.p.pan_lag_s * 2.5)
+            acc = w * w * (ghw - self.half_width) - 2 * w * self.zoom_v
+            acc = min(max(acc, -ZOOM_ACCEL_MPS2), ZOOM_ACCEL_MPS2)
+            self.zoom_v += acc * self.dt
+            self.half_width += self.zoom_v * self.dt
         self.t += self.dt
         fresh_goal = False
         if goal:
@@ -439,8 +488,9 @@ class Director:
         dist = max(math.dist(position, target), 1.0)
         hfov = 2 * math.atan(half_width / dist)
         vfov = 2 * math.atan(math.tan(hfov / 2) * self.height / self.width)
-        # A cut stays a broadcast lens. Clamping does not move the aim point, so the ball stays centred.
-        vfov = min(max(vfov, math.radians(8.0)), math.radians(32.0))
+        # A cut stays a broadcast lens (a box lens zooms to about 1 degree across). Clamping does not
+        # move the aim point, so the ball stays centred.
+        vfov = min(max(vfov, math.radians(2.0)), math.radians(32.0))
         return Camera(position, target, math.degrees(vfov), self.width, self.height)
 
     def _tight_pos(self) -> Vec:
@@ -459,7 +509,7 @@ class Director:
                 best, actor = dist, (px, py)
         if actor is None:
             return False
-        shot = self._framed(self._tight_pos(), (bx, by, 0.5), 9.0)
+        shot = self._framed(self._tight_pos(), (bx, by, 0.5), TIGHT_HALF_M)
         ball = shot.project((bx, by, 0.3))
         feet = shot.project((actor[0], actor[1], 0.0))
         head = shot.project((actor[0], actor[1], 1.7))
@@ -486,7 +536,7 @@ class Director:
             self.angle = "net"
             return self._net_shot()
         self.angle = "tight"
-        return self._framed(self._tight_pos(), (self.tight_aim[0], self.tight_aim[1], 0.5), 9.0)
+        return self._framed(self._tight_pos(), (self.tight_aim[0], self.tight_aim[1], 0.8), TIGHT_HALF_M)
 
 
 def blur_vector(prev: Camera | None, cur: Camera, shutter: float) -> tuple[float, float]:

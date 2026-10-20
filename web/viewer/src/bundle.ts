@@ -17,6 +17,8 @@ export interface Cue {
   pan?: number;
   replaces?: string | null;
   verified?: boolean;
+  /** Set only when the cue is on air because something failed (e.g. "held: timeout"). */
+  fallback?: string;
   evidence: string[];
 }
 

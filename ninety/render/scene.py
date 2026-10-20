@@ -678,7 +678,7 @@ def _swing_lift(speed: float) -> float:
 def _stride_feet(g: Gait, x: float, y: float, k: float, pel: float) -> None:
     """Walking and running, each foot is on the grass for its stance and carried through the air for
     its swing, every frame at a place, never a pose: the gait's two stored poses swing a foot back
-    and forth along one path, so a foot left to them drags along the grass (lesson 117).
+    and forth along one path, so a foot left to them drags along the grass (lesson 141).
 
     The stride's phase says which: a foot's stance is centred on STANCE_CENTRE, as long as the
     duty share of the stride (_duty) but no longer than the leg reaches under the hips, from

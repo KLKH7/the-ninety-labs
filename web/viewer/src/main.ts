@@ -1,3 +1,4 @@
+import { PhonePanel } from "./companion";
 import { type Bundle, type ClaimTrace, type Cue, PERSONAS, type Persona, clock, loadBundle, onAir } from "./bundle";
 import { drawCues, drawDetections } from "./draw";
 import { Narrator } from "./narrator";
@@ -315,6 +316,7 @@ async function start() {
   scrub.addEventListener("input", () => footage.seek(Number(scrub.value)));
   renderPipeline(b);
   renderTrace(b, seekMatch);
+  const phone = new PhonePanel(m.clip, { time: () => m.t_start + footage.time(), playing: () => !footage.paused() });
 
   document.addEventListener("keydown", (e) => {
     const target = e.target as HTMLElement;
@@ -372,6 +374,7 @@ async function start() {
     if (showBoxes.checked) drawDetections(ctx, detections.get(Math.round(t * m.fps)));
     drawCues(ctx, aired, { t, reduceMotion: reduceMotionBox.checked });
     narrator.update(t, !footage.paused(), persona === "audio" && voiceBox.checked);
+    phone.tick();
 
     const ids = aired.map((c) => c.id).sort().join(" ");
     overlay.dataset.onAir = ids;
@@ -380,7 +383,10 @@ async function start() {
       lastAired = ids;
       const sentence = aired
         .sort((a, c) => (a.slot === "top_right" ? -1 : c.slot === "top_right" ? 1 : 0))
-        .map((c) => (c.verified && c.kind !== "audio_description" ? `Fact-checked: ${c.text}` : c.text).replace(/\.$/, ""))
+        .map((c) => {
+          const said = (c.verified && c.kind !== "audio_description" ? `Fact-checked: ${c.text}` : c.text).replace(/\.$/, "");
+          return c.fallback ? `${said} (fallback: ${c.fallback})` : said;
+        })
         .join(". ");
       onAirText.textContent = sentence;
       overlay.setAttribute("aria-label", sentence ? `On-screen graphics: ${sentence}` : "No graphics on screen");

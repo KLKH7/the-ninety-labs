@@ -7,7 +7,8 @@
     { "$ref": "#/$defs/clock" },
     { "$ref": "#/$defs/focus" },
     { "$ref": "#/$defs/answer" },
-    { "$ref": "#/$defs/player_card" }
+    { "$ref": "#/$defs/player_card" },
+    { "$ref": "#/$defs/flow" }
   ],
   "$defs": {
     "clock": {
@@ -28,26 +29,31 @@
       "description": "The player the phone follows; null for none.",
       "properties": {
         "type": { "const": "focus" },
-        "player": { "type": ["string", "null"], "pattern": "^[ha]([1-9]|1[01])$" }
+        "player": { "type": ["string", "null"], "pattern": "^[ha]([1-9]|1[01]|-t[0-9]+)$" }
       }
     },
     "answer": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "answer"],
+      "required": ["type", "answer", "source"],
       "properties": {
         "type": { "const": "answer" },
-        "answer": { "$ref": "viewer_answer.schema.json" }
+        "answer": { "$ref": "viewer_answer.schema.json" },
+        "source": { "type": "string", "enum": ["code", "model"], "description": "Who wrote the answer: code (it passed the code checks) or the Companion agent (it passed the code checks and the Judge), so the phone can label it honestly." }
       }
     },
     "player_card": {
       "type": "object",
       "additionalProperties": false,
       "required": ["type", "player", "t_from", "t_to", "heat", "speed_kmh", "peak_kmh", "distance_m", "source"],
-      "description": "A player's stats over t_from..t_to, all computed by code.",
+      "description": "A player's stats over t_from..t_to, all computed by code. The player id follows source: a squad id (h7) for ground truth, a team plus track id (h-t12) for tracked positions.",
+      "allOf": [
+        { "if": { "properties": { "source": { "const": "truth" } }, "required": ["source"] }, "then": { "properties": { "player": { "pattern": "^[ha]([1-9]|1[01])$" } } } },
+        { "if": { "properties": { "source": { "const": "tracked" } }, "required": ["source"] }, "then": { "properties": { "player": { "pattern": "^[ha]-t[0-9]+$" } } } }
+      ],
       "properties": {
         "type": { "const": "player_card" },
-        "player": { "type": "string", "pattern": "^[ha]([1-9]|1[01])$" },
+        "player": { "type": "string", "pattern": "^[ha]([1-9]|1[01]|-t[0-9]+)$" },
         "t_from": { "type": "number", "minimum": 0 },
         "t_to": { "type": "number", "minimum": 0 },
         "heat": {
@@ -64,6 +70,24 @@
         "speed_kmh": { "type": "number", "minimum": 0, "description": "Speed at t_to." },
         "peak_kmh": { "type": "number", "minimum": 0 },
         "distance_m": { "type": "number", "minimum": 0 },
+        "source": { "type": "string", "enum": ["truth", "tracked"], "description": "Positions from the ground-truth data (before Milestone 1) or from tracking the video." }
+      }
+    },
+    "flow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "team", "t_from", "t_to", "nx", "ny", "vx", "vy", "count", "source"],
+      "description": "One team's mean player velocity per cell over t_from..t_to, for the wind map: cells laid out as player_card.heat, each of vx, vy and count with nx * ny entries. A cell nobody crossed has count 0 and null velocity. Computed by code (ninety/intel/window.py, team_flow).",
+      "properties": {
+        "type": { "const": "flow" },
+        "team": { "type": "string", "enum": ["home", "away"] },
+        "t_from": { "type": "number", "minimum": 0 },
+        "t_to": { "type": "number", "minimum": 0 },
+        "nx": { "type": "integer", "minimum": 1 },
+        "ny": { "type": "integer", "minimum": 1 },
+        "vx": { "type": "array", "items": { "type": ["number", "null"] }, "description": "m/s along x (toward x = 105)." },
+        "vy": { "type": "array", "items": { "type": ["number", "null"] }, "description": "m/s along y." },
+        "count": { "type": "array", "items": { "type": "integer", "minimum": 0 }, "description": "Frame-to-frame steps averaged in the cell." },
         "source": { "type": "string", "enum": ["truth", "tracked"], "description": "Positions from the ground-truth data (before Milestone 1) or from tracking the video." }
       }
     }

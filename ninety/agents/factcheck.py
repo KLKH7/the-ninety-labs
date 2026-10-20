@@ -3,6 +3,10 @@
 A claim passes only if every event it cites exists, every player it names appears in that
 evidence, and every number it states can be read off the evidence: a cited field, a count of
 cited events, or the minute. Anything else is rejected with a reason the writer can act on.
+
+Evidence may also hold computed facts (ninety/intel/stats.py `Fact.as_dict()`: metric, value, unit,
+scope). A cited fact's value counts only when it is written with the fact's unit ("31.2 km/h" for a
+km/h fact), never as a bare number, and a fact scoped to a player (`player:h7...`) cites that player.
 """
 
 from __future__ import annotations
@@ -12,11 +16,40 @@ from collections import Counter
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 
-# A number standing on its own: not part of an id like "e00042" or a player like "h7".
-# A sentence-ending period after it still counts ("in minute 2."), and so does an English ordinal
-# ("the 9th minute", "his 3rd pass"): the number is the `n` group.
+# A number standing on its own: not part of an id like "e00042" or a player like "h7". A
+# sentence-ending period after it still counts ("in minute 2."), and so do an English ordinal ("the
+# 9th minute") and a unit written straight after it ("50km/h", "9999m"): the number is the `n`
+# group. Every form a writer can produce is read, or a model could air a number by gluing it.
 NUMBER_PATTERN = r"\d+(?:\.\d+)?"
-NUMBER = re.compile(rf"(?<![\w.])(?P<n>{NUMBER_PATTERN})(?:st|nd|rd|th)?(?!\w)(?!\.\d)")
+NUMBER = re.compile(rf"(?<![\w.])(?P<n>{NUMBER_PATTERN})(?:st|nd|rd|th)?(?!\d)(?!\.\d)")
+# Numbers written as words ("fifty km/h", "twenty-eight", "two hundred and five") are numbers too:
+# `check` reads them as digits. Words combine only as English writes one number: a tens word and a
+# units word, and a number before "hundred" or "thousand". Two small numbers side by side are two
+# numbers, never a sum ("one-two" is not 3).
+UNITS = "one two three four five six seven eight nine".split()
+TEENS = "ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen".split()
+TENS = "twenty thirty forty fifty sixty seventy eighty ninety".split()
+WORD_VALUES = (
+    {"zero": 0}
+    | {w: i for i, w in enumerate(UNITS, 1)}
+    | {w: i for i, w in enumerate(TEENS, 10)}
+    | {w: 10 * i for i, w in enumerate(TENS, 2)}
+)
+_WORD = rf"(?:{'|'.join(sorted([*WORD_VALUES, 'hundred', 'thousand'], key=len, reverse=True))})"
+_UNIT, _TEEN, _TENS = (rf"(?:{'|'.join(words)})" for words in (UNITS, TEENS, TENS))
+_BELOW_100 = rf"(?:{_TENS}(?:[\s-]+{_UNIT}\b)?|{_TEEN}|{_UNIT}|zero)"
+_BELOW_1000 = rf"(?:(?:{_UNIT}\s+)?hundred(?:\s+(?:and\s+)?{_BELOW_100}\b)?|{_BELOW_100})"
+WORD_NUMBER = re.compile(
+    rf"\b(?:(?:{_BELOW_1000}\s+)?thousand(?:\s+(?:and\s+)?{_BELOW_1000}\b)?|{_BELOW_1000})\b", re.I
+)
+# Number words that are no count: football's idioms (a one-two, a one-on-one, a one-touch pass, a
+# two-footed tackle, a one-handed save) and the pronoun "one" ("one of", "no one").
+NOT_A_COUNT = re.compile(
+    r"\bone[\s-]twos?\b|\bone[\s-]on[\s-]one\b|\bone[\s-]v(?:s\.?|\.)?[\s-]one\b"
+    r"|\b(?:one|two)[\s-](?:touch|time|footed|handed)\b"
+    r"|\b(?:no|the)\s+one\b|\bone(?=\s+(?:of|another)\b)",
+    re.I,
+)
 DISTANCE_UNITS = r"(?:m|metre|metres|meter|meters)"
 SPEED_UNITS = r"(?:km/h|kph)"
 DISTANCE_NUMBER = re.compile(rf"(?P<number>{NUMBER_PATTERN})\s*{DISTANCE_UNITS}\b", re.I)
@@ -36,18 +69,26 @@ SECOND_NUMBER = re.compile(
 )
 # A clock form, "12:34", is the elapsed scorebug clock in compact event facts.
 CLOCK = re.compile(r"(?<![\w.:])(?P<clock>\d{1,3}:\d{2})(?!\d)")
-# The synthetic squads' player ids (h1..h11, a1..a11). Names in this form are always checked,
-# even when the player is in no known event, so a claim cannot name an uninvolved player.
-PLAYER = re.compile(r"\b[ha](?:[1-9]|1[01])\b")
+# Player ids: the synthetic squads' (h1..h11, a1..a11) in ground-truth data, and a team plus track
+# id (h-t12) in tracked data, since the tracker reads no shirt numbers and a track is never mapped
+# to one. Names in either form are always checked, even when the player is in no known event, so a
+# claim cannot name an uninvolved player.
+SQUAD_ID = r"[ha](?:[1-9]|1[01])"
+TRACK_ID = r"[ha]-t\d+"
+PLAYER_ID = rf"(?:{SQUAD_ID}|{TRACK_ID})"
+PLAYER = re.compile(rf"\b{PLAYER_ID}\b")
 # A verb that says a pass arrived names the player who got it, so that name must be the `receiver` of
 # a cited pass: a pass's `intended` or `interceptor` is a cited player too, but did not receive it.
 # With the passer named before the verb, it must be his pass that reached that player.
 FOUND = re.compile(
-    r"(?:\b(?P<passer>[ha](?:[1-9]|1[01]))(?:'s pass)?\s+)?"
-    r"\b(?:finds|found|picks out|picked out)\s+(?P<player>[ha](?:[1-9]|1[01]))\b",
+    rf"(?:\b(?P<passer>{PLAYER_ID})(?:'s pass)?\s+)?"
+    rf"\b(?:finds|found|picks out|picked out)\s+(?P<player>{PLAYER_ID})\b",
     re.I,
 )
 NUMBER_FIELDS = ("minute", "second", "ball_speed_kmh", "distance_m")
+# The unit a fact must be written with to stand for each event field's kind of number.
+FIELD_UNITS = {"distance_m": "m", "ball_speed_kmh": "km/h"}
+FACT_PLAYER = re.compile(rf"^player:(?P<player>{PLAYER_ID})(?::|$)")
 # A cited window stat (ninety/intel/windows.agent_rows, `type: stat`) is a number code computed:
 # its value, its percentage for a share, and the minutes its window spans may be stated.
 STAT_FIELDS = ("value", "percent", "minute_from", "minute_to")
@@ -110,7 +151,53 @@ def _roster_ids(known: dict[str, dict], roster: Iterable[Mapping | str] | None) 
     return {str(value) for value in values if value}
 
 
+def _is_fact(item: Mapping) -> bool:
+    """A computed fact (`Fact.as_dict()`), whose value needs its unit. Events and cited window stats
+    (`type: stat`, which states its value bare) carry a `type`; a fact does not."""
+    return "type" not in item and "metric" in item and "unit" in item and "value" in item
+
+
+def _fact_values(evidence: list[dict], unit: str) -> set[float]:
+    return {float(f["value"]) for f in evidence if _is_fact(f) and f["unit"] == unit}
+
+
+def _word_value(phrase: str) -> int:
+    """The value of one well-formed number in words (WORD_NUMBER matched it, so a units word only
+    ever follows a tens word or leads a scale)."""
+    total = current = 0
+    for word in re.findall(rf"\b{_WORD}\b", phrase, re.I):
+        word = word.lower()
+        if word in WORD_VALUES:
+            current += WORD_VALUES[word]
+        elif word == "hundred":
+            current = max(current, 1) * 100
+        else:
+            total, current = total + max(current, 1) * 1000, 0
+    return total + current
+
+
+def spelled_as_digits(text: str) -> str:
+    """The text with every number written in words replaced by its digits ("fifty km/h" becomes
+    "50 km/h"), so the number checks read it like any other."""
+    idioms = [range(m.start(), m.end()) for m in NOT_A_COUNT.finditer(text)]
+
+    def digits(m: re.Match) -> str:
+        if any(m.start() in span for span in idioms):
+            return m.group()
+        return str(_word_value(m.group()))
+
+    return WORD_NUMBER.sub(digits, text)
+
+
+def _unit_follows(text: str, end: int, unit: str) -> bool:
+    """Is `unit` written straight after the number ending at `end` ("512 m", "3 frames")?"""
+    return re.match(rf"\s*{re.escape(unit)}(?!\w)", text[end:], re.I) is not None
+
+
 def allowed_numbers(events: list[dict]) -> set[float]:
+    """Numbers a claim may state bare: event fields and counts. A fact's value is not one of them:
+    it needs its unit (see `check`)."""
+    events = [e for e in events if not _is_fact(e)]
     values: set[float] = {float(len(events))}
     for event in events:
         values.update(float(event[name]) for name in NUMBER_FIELDS if name in event)
@@ -135,7 +222,6 @@ def check(
     evidence = [known[i] for i in claim.evidence if i in known]
 
     allowed = allowed_numbers(evidence)
-    clock_spans = [range(match.start(), match.end()) for match in CLOCK.finditer(claim.text)]
     for match in CLOCK.finditer(claim.text):
         cited_clocks = {
             _normalize_clock(event["clock"])
@@ -146,11 +232,13 @@ def check(
         normalized = _normalize_clock(clock)
         if normalized not in cited_clocks:
             reasons.append(f"clock {clock} is not a cited clock")
-    for match in NUMBER.finditer(claim.text):
+    text = spelled_as_digits(claim.text)
+    clock_spans = [range(match.start(), match.end()) for match in CLOCK.finditer(text)]
+    for match in NUMBER.finditer(text):
         if any(match.start() in span for span in clock_spans):
             continue
         value = float(match.group("n"))
-        expected_field = _number_field(claim.text, match.start())
+        expected_field = _number_field(text, match.start())
         if expected_field:
             values = {
                 float(event[name])
@@ -158,11 +246,17 @@ def check(
                 for name in FIELD_ALIASES.get(expected_field, (expected_field,))
                 if event.get(name) is not None
             }
+            if expected_field in FIELD_UNITS:
+                values |= _fact_values(evidence, FIELD_UNITS[expected_field])
             if value not in values:
                 reasons.append(
                     f"number {match.group()} is not a cited {expected_field}"
                 )
-        elif value not in allowed:
+        elif value not in allowed and not any(
+            float(f["value"]) == value and _unit_follows(text, match.end(), str(f["unit"]))
+            for f in evidence
+            if _is_fact(f)
+        ):
             reasons.append(f"number {match.group()} is not in the cited evidence")
     cited_players = {
         value
@@ -170,6 +264,10 @@ def check(
         for value in (event.get("player"), event.get("receiver"), event.get("intended"),
                       event.get("interceptor"), event.get("deflected_by"))
         if value
+    } | {
+        found.group("player")
+        for fact in evidence
+        if _is_fact(fact) and (found := FACT_PLAYER.match(str(fact.get("scope", ""))))
     }
     named_players = {
         player_id

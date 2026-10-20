@@ -29,7 +29,10 @@ docs/decisions/0001-synthetic-data.md.
 # fixed horizon, so a clip's events no longer depend on how its start was found.
 # 0.5.1: the gantry aims at the play on the grass with a wider lens (18 m), so the pitch fills the
 # picture with 8 to 15 players in shot; with play far off it tilts down its line of sight so the
-# stands stay a band across the top; it eases each pan in and out; live play keeps to the gantry's
-# side (no far stand, no camera behind a goal) and the tight lens has its own eased aim; no shot is
-# shorter than 4 s; the goalmouth and centre wear is faint, pale turf in the mowing stripes.
+# stands stay at most a third of the picture; it frames the play rather than the ball and holds
+# still while the ball moves about one area; pans and zooms ease in and out, and the box's lens
+# does not pump; live play keeps to the gantry's side (no far stand, no camera behind a goal) and
+# cuts closer only for a throw-in, as a medium shot; no shot is shorter than 4 s; a pan smears
+# instead of splitting every edge in two (the sharpening read the unsmeared picture); the
+# goalmouth and centre wear is faint, pale turf in the mowing stripes.
 RENDERER_VERSION = "0.5.1"

@@ -482,7 +482,7 @@ def _slides(drawn):
 def test_a_foot_on_the_grass_does_not_slide_from_a_standstill_to_a_sprint_and_back():
     """Old: the stride swung each foot back and forth along one path between two stored poses, so a
     walking foot skimmed along the grass and a landing foot blended onto its plant: a quarter of the
-    frames a foot was on the grass it slid more than 2 cm, up to 23 cm (lesson 117). Now a foot on
+    frames a foot was on the grass it slid more than 2 cm, up to 23 cm (lesson 141). Now a foot on
     the grass stays where it landed (within the leg search's precision, 2 cm) and a swinging foot
     is lifted, from a standstill to 7 m/s and back, and running a bend."""
     profile = [0.0] * 15 + [min(7.0, 0.1 * i) for i in range(1, 71)] + [7.0] * 25
