@@ -249,7 +249,7 @@ def test_a_fact_is_not_counted_as_an_event():
 
 
 def test_an_ordinal_minute_must_be_the_cited_minute():
-    # "the 9th minute" was never read as a number, so any ordinal passed (lesson 95).
+    # "the 9th minute" was never read as a number, so any ordinal passed (lesson 130).
     minute = CLOCK_EVENT["minute"]
     suffix = {1: "st", 2: "nd", 3: "rd"}.get(minute, "th")
     assert check(Claim(f"A pass in the {minute}{suffix} minute.", [CLOCK_EVENT["id"]]), KNOWN).ok
