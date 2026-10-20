@@ -99,10 +99,31 @@ football, and should not drive work:
 | Players bunch around the ball and stand still | Standing still: confirmed (#1). Bunching: not confirmed by the data (see above) |
 | Recycle passes in their own box | Confirmed, the worst defect (#1) |
 | Pass out of play | Confirmed for unpressured clearances (#4); pressured misplaced passes are normal |
-| Chase loose balls badly | Seen 4 times; the 1 s sheets under-sample it, so it needs a frame-level rule (football-sense) |
-| The keeper never comes out | One report of a keeper not sweeping, and several of keepers wandering out with the ball. Not established either way by this method: needs a race rule (who reaches a through ball first) |
+| Chase loose balls badly | Seen only 4 times on the 1 s sheets, which under-sample it; football-sense's frame-level rule FS1 (chaser runs away from a loose ball) counts 27 per 90 on 7ee8720, so it is real and common |
+| The keeper never comes out | One report of a keeper not sweeping, and several of keepers wandering out with the ball. Football-sense's race rule FS3 (keeper stays home when he would win the race) finds 0 on 7ee8720, so not confirmed at this commit |
 | Mirrored advertising boards | Confirmed (#6), with a likely one-line cause |
 | Crude motion | Confirmed as kicks with no kick pose (#10) and ghosted blur (#7); no sliding or spinning bodies were found in 20 clips |
+
+## Rule coverage by football-sense
+
+Football-sense (PR #149, rules FS1 to FS9 in `docs/GROUNDING.md` under "Football sense") counts
+some of these types by rule. Its baseline on 7ee8720 (seeds 7, 11, 21, 42, 20 minutes each):
+
+| Row here | Football-sense rule | Its count |
+|---|---|---|
+| 1, own-box half | FS6 passes starting and ending in the passer's own box; FS9 more than half the outfielders in their own box for 2 s or more | 202.5 and 63 per 90 |
+| 1, frozen block | FS4 still outfielders (under 0.5 m/s) of the team without the ball, a distribution with no pass line | 8 or more still in 23% of open play |
+| 1, no forward runs | FS7 square or back passes with an onside, unmarked teammate 5 m or more ahead (indirect) | 490 per 90 |
+| 4 | FS2 pass into touch with no opponent within 3 m of the passer | 23.6 per 90 |
+| chaser (not verified here) | FS1 chaser runs away from a loose ball | 27 per 90 |
+| keeper not coming out | FS3 | 0 |
+| bunching (refuted here) | FS5 clump within 10 m | 0 |
+| loose ball ignored | FS8 | 0 |
+
+Not covered by a rule yet: #1's exact-x line clamp and "possession in own third for over 20 s
+with the nearest defender over 15 m away", #2 ball teleports, #3 kickoff reset, #5
+encroachment, #11 shot range, #12 stacked bodies. `scripts/defect_sweep/measure.py` gives first
+proxies for #1, #2, #11 and #12.
 
 ## Limits
 
@@ -112,7 +133,6 @@ football, and should not drive work:
   a foot missing the ball) are under-counted there. The broadcast sample is 5 minutes in all.
 - Reviewer rates depend on how each reviewer split instances; the verified rows and the measured
   columns are the evidence.
-- Football-sense's rule checker will count #1, #2, #4, #5 and #12 exactly; this sweep ranks them.
 
 ## Example strips
 
