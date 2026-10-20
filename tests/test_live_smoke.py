@@ -4,7 +4,13 @@
 
 Skipped without NINETY_LIVE_URL. The deploy workflow sets it with NINETY_REQUIRE_LIVE=1, so there
 it can never silently skip, and NINETY_EXPECT_COMMIT, so an old revision still serving is a failure.
-Reads only: it calls no route that costs a model call, and sends neither the MCP key nor the passcode.
+Reads only: it calls no route that costs a model call and never sends the passcode. It sends the MCP
+key only when given one (NINETY_MCP_KEY: CI's own container), to time the tools Foundry calls.
+
+Timing: the first request may wake a replica scaled to zero, and Foundry's first MCP call waits for
+that same cold start inside its 100 s tool timeout (Dockerfile). So the first request must answer
+within COLD_S, leaving the call itself the rest, and warm requests within WARM_S. Both are design
+limits, not measurements: the cold start measured 50 s on 0.25 vCPU on Oct 20 (infra/main.bicep).
 """
 
 import json
@@ -16,20 +22,62 @@ import urllib.request
 import pytest
 
 URL = os.environ.get("NINETY_LIVE_URL", "").rstrip("/")
+MCP_KEY = os.environ.get("NINETY_MCP_KEY", "")
+COLD_S = 60.0  # design: of Foundry's 100 s MCP timeout, 40 s stay for the tool call itself
+WARM_S = 2.0  # design: a warm request is a lookup; anything slower is a fault to find
+TOOL_S = 5.0  # design: a warm MCP tool call reads precomputed or detected events, never simulates
 pytestmark = pytest.mark.skipif(not URL and os.environ.get("NINETY_REQUIRE_LIVE") != "1",
                                 reason="NINETY_LIVE_URL is not set")
 
 
-def get(path: str, method: str = "GET", body: bytes | None = None) -> tuple[int, dict, bytes]:
+def get(path: str, method: str = "GET", body: bytes | None = None,
+        headers: dict | None = None) -> tuple[int, dict, bytes]:
     if not URL:
         pytest.fail("NINETY_REQUIRE_LIVE=1 but NINETY_LIVE_URL is not set")
-    req = urllib.request.Request(URL + path, method=method, data=body,
-                                 headers={"content-type": "application/json"} if body else {})
+    sent = ({"content-type": "application/json"} if body else {}) | (headers or {})
+    req = urllib.request.Request(URL + path, method=method, data=body, headers=sent)
     try:
-        with urllib.request.urlopen(req, timeout=60) as r:  # the first call may wake a cold replica
+        with urllib.request.urlopen(req, timeout=100) as r:  # the first call may wake a cold replica
             return r.status, dict(r.headers), r.read()
     except urllib.error.HTTPError as e:
         return e.code, dict(e.headers), e.read()
+
+
+def timed(*args, **kwargs) -> tuple[float, tuple[int, dict, bytes]]:
+    start = time.monotonic()
+    answer = get(*args, **kwargs)
+    return time.monotonic() - start, answer
+
+
+@pytest.fixture(scope="module", autouse=True)
+def first_contact() -> float:
+    """The module's first request, timed: it is the one that may wake a replica scaled to zero."""
+    seconds, (status, _, _) = timed("/api/health")
+    assert status == 200
+    return seconds
+
+
+def test_a_cold_start_leaves_foundry_time_for_the_call(first_contact):
+    assert first_contact < COLD_S, f"first request took {first_contact:.1f} s"
+
+
+def test_warm_requests_are_quick():
+    slowest = max(timed("/api/health")[0] for _ in range(3))
+    assert slowest < WARM_S, f"a warm /api/health took {slowest:.2f} s"
+
+
+@pytest.mark.skipif(not MCP_KEY, reason="NINETY_MCP_KEY not given (it lives in Key Vault)")
+@pytest.mark.parametrize("tool, arguments", [
+    ("match_info", {"match": "seed900001"}),
+    ("list_events", {"match": "seed900001", "minute_from": 2, "minute_to": 2, "event_type": None}),
+])
+def test_the_m1_clips_mcp_tools_answer_quickly(tool, arguments):
+    params = {"name": tool, "arguments": arguments}
+    call = {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": params}
+    seconds, (status, _, body) = timed("/mcp", "POST", json.dumps(call).encode(), {
+        "x-api-key": MCP_KEY, "accept": "application/json, text/event-stream"})
+    assert status == 200 and json.loads(body)["result"]["isError"] is False, body[:300]
+    assert seconds < TOOL_S, f"{tool} took {seconds:.2f} s"
 
 
 def test_health_reports_the_deployed_commit():

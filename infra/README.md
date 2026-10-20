@@ -195,8 +195,8 @@ after the first week, and replace this table with what it shows.
 | Item | Cost | Note |
 |---|---|---|
 | Container Registry, Basic | about $5 a month | the only fixed charge |
-| Container app, scale to zero | about $0.002 a view | 0.25 vCPU and 0.5 GiB for the ~5 minutes a replica stays up after the last request; inside the monthly free grant (180,000 vCPU-seconds, 360,000 GiB-seconds), which the render jobs share |
-| Container app kept warm (`minReplicas: 1`) | about $6 a month, $0.20 a day | optional, for the judging window only: no cold start (a few seconds) for the first judge |
+| Container app, scale to zero | about $0.005 a view | 0.5 vCPU and 1 GiB for the ~5 minutes a replica stays up after the last request; inside the monthly free grant (180,000 vCPU-seconds, 360,000 GiB-seconds), which the render jobs share |
+| Container app kept warm (`azd env set API_MIN_REPLICAS 1`, then `azd provision`) | about $0.40 a day, about $5.50 for Oct 28 to Nov 10 | optional, for the judging window only: no cold start for the first judge or for Foundry's first MCP call; set it back to 0 after |
 | Log Analytics and Application Insights | $0 to about $3 a month | 5 GB a month free; the workspace is capped at 0.2 GB a day |
 | Key Vault | cents | secrets are read when a revision starts |
 | Storage (renders, truth, queues) | under $1 a month | about 30 MB a clip |
@@ -205,6 +205,14 @@ after the first week, and replace this table with what it shows.
 | Live mode | per run: model tokens and speech | behind the passcode; Replay mode makes no model call |
 
 Expected total with Replay traffic: about $5 to $8 a month, under half the alert.
+
+**Cold start.** At zero replicas the first request waits for a replica: on Oct 20, at 0.25 vCPU, it
+took 50 s (system log: 2 s to schedule, 8 s to pull the image, 6 s to create the container, about
+33 s of our own Python start-up before the first passing probe; warm requests took 0.15 s). Foundry's
+first MCP call waits for the same start inside its 100 s tool timeout. The app now runs at 0.5 vCPU,
+which shortens the start-up share, and the live smoke test fails a first request slower than 60 s.
+Most of the start-up is imports the phone companion pulls in at load (the Foundry, OpenAI and Blob
+SDKs, about 3.6 of 4.6 s on a laptop); loading them on first use would shorten it further.
 
 ## The MCP key
 

@@ -198,6 +198,7 @@ jobs:
       - name: The image serves health and an MCP call on the detected-events match
         run: |
           KEY=$(openssl rand -hex 16)  # made per run: no key-like literal in the repo
+          echo "::add-mask::$KEY" && echo "NINETY_MCP_KEY=$KEY" >> "$GITHUB_ENV"  # for the smoke test's timed MCP calls
           docker run -d --name api -p 8000:8000 -e NINETY_MCP_KEY="$KEY" \
             -e NINETY_DEMO_PASSCODE="$(openssl rand -hex 16)" ninety-api
           for i in $(seq 1 30); do curl -fsS localhost:8000/api/health && break; sleep 1; done

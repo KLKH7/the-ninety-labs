@@ -36,6 +36,11 @@ param mcpKey string = ''
 @description('Only to create or rotate the demo passcode that gates Live mode: written to Key Vault when set; left alone when empty.')
 param demoPasscode string = ''
 
+@description('Replicas the demo app keeps running. 0 scales to zero between viewers (the default; a first request then waits for a cold start, about 50 s measured on 0.25 vCPU). 1 keeps one warm, for the judging window only: infra/README.md has the cost.')
+@minValue(0)
+@maxValue(1)
+param apiMinReplicas int = 0
+
 @description('Monthly cost budget for this resource group, in the billing currency (USD). 0: no budget.')
 param budgetAmount int = 20
 
@@ -196,7 +201,10 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
           name: 'api'
           // A public placeholder until the first `azd deploy api`; after that, the deployed image.
           image: apiExists ? apiImage.outputs.image : 'mcr.microsoft.com/k8se/quickstart:latest'
-          resources: { cpu: json('0.25'), memory: '0.5Gi' }
+          // Half a vCPU: most of a cold start is our own Python start-up (about 33 of 50 s on a quarter
+          // vCPU, from the Container Apps system log on Oct 20), which scales with CPU. Billed per
+          // active second only, so scale to zero still costs nothing between viewers.
+          resources: { cpu: json('0.5'), memory: '1Gi' }
           env: [
             { name: 'NINETY_MCP_KEY', secretRef: 'mcp-key' }
             { name: 'NINETY_DEMO_PASSCODE', secretRef: 'demo-passcode' }
@@ -209,9 +217,10 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             : []
         }
       ]
-      // Scale to zero between viewers; one replica is plenty for a demo and caps spend. Replay mode
-      // is static files, so a cold start (a few seconds) is the only cost of zero.
-      scale: { minReplicas: 0, maxReplicas: 1 }
+      // Scale to zero between viewers by default; one replica is plenty for a demo and caps spend.
+      // The price of zero is a cold start on the first request (about 50 s measured on 0.25 vCPU,
+      // Oct 20), which Foundry's first MCP call also waits for; apiMinReplicas 1 removes it.
+      scale: { minReplicas: apiMinReplicas, maxReplicas: 1 }
     }
   }
 }
