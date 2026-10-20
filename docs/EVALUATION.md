@@ -17,7 +17,8 @@ generated it and the output file is committed. Rows marked *planned* have no res
 | Detection precision and recall (players, ball) on the fixed test set, by difficulty, strict and lenient matching | pixel boxes: `uv run python -m ninety.eval.vision_report --test <frozen test clips> --detections <seed<N>.jsonl folder> --out <report.json>`; pitch-level strict and lenient matching planned | `docs/eval/vision-report-v{n}.json`, `docs/eval/vision-report-v1.md`, `docs/eval/vision-report-v2.md` | running for pixel boxes: ours-v3 on the frozen test set, players 0.994 recall at 0.999 precision, ball at least half visible 0.964 at 0.994, ball mostly hidden 0.493 at 0.841 (v2; ours-v2 in v1). Pitch-level matching planned |
 | Event precision, recall and F1 per type; possession accuracy; speed error | events: `uv run python -m ninety.eval.event_score --truth <clip>/events.jsonl --frames <clip>/frames.jsonl --detected <detected.jsonl> --report <report.json>` ([format](#event-report-format)); positions: `uv run python -m ninety.eval.pitch_score` ([event detection from video](#event-detection-from-video)); possession and speed planned | `docs/eval/event-report-v1/` | running on one clip: seed 900001, detected from video (ours-v2, camera from the markings): passes 3 of 4 at strict F1 0.75; the shot read as a pass and one false out of play (the ball's height, planned); ball on the ground placed to a median 0.09 m, players 0.22 m. One 10 s clip is a smoke test, not a rate |
 | Targeted data rounds, before and after | failure clusters from validation clips only: `uv run python -m ninety.vision.failure_clusters <val clips> --detections <file> --round <round> --out docs/eval/<round>/clusters.json`, then `ninety.agents.data_agent` | `docs/eval/round1/` (clusters, audit, plan), `docs/eval/vision-report-v{n}.json` | planned: round 1 clustered and planned ([round1/PLAN.md](eval/round1/PLAN.md)), not rendered |
-| Stats engine facts: hand-computed cases, planted defects, citations, size | `uv run pytest tests/test_stats.py` | test assertions | running |
+| Stats engine facts: hand-computed cases, planted defects, citations, size | `uv run pytest tests/test_stats.py tests/test_windows.py tests/test_window_stats_agents.py` | test assertions | running |
+| Window stats on detected events against the same clip's ground truth (PPDA, field tilt, passes a minute per team-window) | to be built once R3's detected events for seed900001 land | | planned |
 | Late drop in high-intensity running (R7), by the protocol below; distance and top speed by position on the same matches | `uv run python -m ninety.sim.late_drop` | `docs/eval/late-drop.md` | running |
 | Fact-checker rules (numbers, players, evidence ids) | `uv run pytest tests/test_factcheck.py` | test assertions | running |
 | Personalizer rules: the A2A round trip, the fallback within its budget, the re-check of every variant, every persona and language, profile validation ([below](#personalizer)) | `uv run pytest tests/test_personalizer.py` | test assertions | running in process: 38 tests, 18 of 18 mutants of the rules killed; not yet deployed |
@@ -105,18 +106,43 @@ a share of those labels. Lighting and weather floors cover only the values the r
 
 Fixed before the first detector runs, so no rule is tuned to a result. Every vision report
 gives precision and recall (both kinds of error), on the fixed test set only. The pixel scorer
-accepts `frames.jsonl` labels and detection records (`frame`, `cls`, `bbox`, `score`) and applies
-a default score threshold of 0.5. This is an object-detection AP50-style rule (IoU 0.50 for
-players), following the COCO evaluation conventions ([Lin et al., 2014](https://arxiv.org/abs/1405.0312)).
+reads `frames.jsonl` labels and a `detections.jsonl` file through the contract's own reader
+(`read_detections` in [ninety/vision/detections.py](../ninety/vision/detections.py)), and applies
+a default score threshold of 0.5.
 
 ### Pixel boxes
 
-Within each frame and class, eligible detections are paired one-to-one, best-first. Player boxes
-match at IoU ≥ 0.50. Ball boxes match when their centre distance is ≤ 5 pixels. A label with no
-match is a false negative; a detection with no match is a false positive. The report contains
-TP, FP, FN, precision and recall overall, by class, and for the difficulty groups below. Boxes
-with visibility zero are not labels: boxes are amodal, so an object in shot and fully hidden
-keeps its box, but there is nothing in the image to detect.
+Within each frame and class, eligible detections (score ≥ 0.5) are paired one-to-one, best
+match first (highest IoU for players, smallest centre distance for the ball). A label with no
+match is a false negative; a detection with no match is a false positive. The report contains TP, FP,
+FN, precision and recall overall, by class, and for the difficulty groups below. Boxes with
+visibility zero are not labels: boxes are amodal, so an object in shot and fully hidden keeps its
+box, but there is nothing in the image to detect.
+
+| Class | Match rule | Source |
+|---|---|---|
+| player | IoU ≥ 0.50 | the PASCAL VOC rule ([Everingham et al., 2010](https://doi.org/10.1007/s11263-009-0275-4)), kept as AP50 in COCO ([Lin et al., 2014](https://arxiv.org/abs/1405.0312)) |
+| ball | centre distance ≤ 5 px | TrackNet's positioning-error limit for a ball in 1280×720 broadcast video, beyond which a detection is a false prediction ([Huang et al., 2019](https://arxiv.org/abs/1907.03698)); our renders are 1280×720 too |
+
+Why the ball is not judged by IoU: its box is about 9 to 11 px at native size (the larger side,
+`ball_size_px` in `docs/eval/dataset-stats.json`, scaled back from the 640 training input), so a
+centre 3 px off already brings IoU down to about 0.3: an overlap rule would mostly measure how
+the box edges round. Label precision: box edges are whole pixels, so a label's centre is exact
+to 0.5 px, a tenth of the 5 px rule. Both values were set before any real detections existed and
+are never changed to fit a result; `tests/test_vision_score.py` pins them, and its boundary tests
+(IoU exactly 0.50 and a ball exactly 5 px off both match, 5.25 px misses) derive from them.
+
+**The scorer is checked against planted damage.** `ninety/eval/fake_box_detections.py` copies
+every label (drawn, visibility above zero) as a detection with score 1.0, then drops some, moves some by a known number of
+pixels inside the rule (half the player IoU limit; 2.5 px for the ball) or past it (twice the
+limit; 10 px), and adds false boxes that overlap no label. Damage goes only where no neighbour
+could be confused with it, and is refused otherwise. The recall and precision the scorer must
+report (overall, by class and by visibility group) come from that damage log alone, never from
+the scorer:
+
+```bash
+uv run python -m ninety.eval.fake_box_detections runs/dataset/test/seed*
+```
 
 Only frames the detector ran on are scored. A frame is run when it has a line in the
 detections file ([the detections contract](../ninety/vision/detections.py)); a line with an
@@ -124,9 +150,11 @@ empty `detections` list is a run frame that found nothing, so its labels are fal
 Labels on frames with no line are skipped, not counted as misses, so detecting every 25th frame
 scores those frames only. The run set is read before the per-frame lines are flattened, and a
 run frame missing from `frames.jsonl` is refused. The report's `frames` block gives `scored`
-(run frames) and `label_frames_skipped` (labelled frames with no line). In the flat format (one
-detection per line) a frame that found nothing cannot be written, so use the per-frame format.
-Run:
+(run frames) and `label_frames_skipped` (labelled frames with no line). A file that breaks the
+contract is refused at its first bad line. A detections file is scored against one clip only: its
+`clip` must equal the `clip` of every `frames.jsonl` row, or it is refused. Frame numbers are match
+frames, so two clips of one match can share some, and pairing by frame alone would score
+detections against the wrong clip. Run:
 
 ```bash
 uv run python -m ninety.eval.vision_score --frames runs/seed7/frames.jsonl \

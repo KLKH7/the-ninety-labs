@@ -289,7 +289,10 @@ def test_the_penalty_area_is_law_one_size():
 
 
 def test_keeper_window_on_a_simulated_match_is_busier_than_average():
-    m = simulate(8, 3)
+    # Ten minutes, not three, so the match has keeper actions whatever an unrelated engine change
+    # does (lesson 78). Seed 8, keeper-busy frames over 3 / 10 minutes: 72 / 215 on main at 7ee8720,
+    # 0 / 55 with the smooth keeper depth (O1), where three minutes held none and the test read 0 > 0.
+    m = simulate(8, 10)
     n = 100
     s = keeper_start(m.frames, n, 50, len(m.frames) - n - 1)
     window = sum(keeper_busy(f) for f in m.frames[s : s + n]) / n
