@@ -88,6 +88,16 @@ def test_the_answer_inside_a_companion_message_is_a_viewer_answer():
     Answer(**{**answer, "evidence": tuple(answer["evidence"])})
 
 
+def test_an_overlay_cue_may_say_it_is_a_fallback_and_older_cues_still_validate():
+    cue = json.loads((FIXTURES / "cues-seed7.jsonl").read_text().splitlines()[0])
+    validator = schema_validator("overlay_cue")
+    assert "fallback" not in cue
+    validator.validate(cue)  # optional: every cue written before it still validates
+    validator.validate({**cue, "fallback": "held: timeout"})
+    with pytest.raises(ValidationError):
+        validator.validate({**cue, "fallback": ""})  # a badge must say what failed
+
+
 def test_an_overlay_cue_may_carry_a_pan_within_stereo():
     cue = json.loads((FIXTURES / "cues-seed7.jsonl").read_text().splitlines()[0])
     validator = schema_validator("overlay_cue")
