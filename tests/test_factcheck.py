@@ -346,3 +346,16 @@ def test_football_idioms_are_words_not_counts(text):
 def test_planted_counts_in_words_are_still_read(text, read):
     verdict = check(Claim(text, ["p1", "p2"]), ONE_TWO)
     assert not verdict.ok and any(f"number {read} " in r for r in verdict.reasons)
+
+
+@pytest.mark.parametrize("text, digits", [
+    ("Home lead two-one.", "Home lead 2-1."),  # a score: two numbers, never 3
+    ("They line up four-four-two.", "They line up 4-4-2."),  # a formation, never 10
+    ("twenty-eight", "28"),
+    ("two hundred and five", "205"),
+    ("three thousand and twelve", "3012"),
+])
+def test_number_words_combine_only_into_one_well_formed_number(text, digits):
+    from ninety.agents.factcheck import spelled_as_digits
+
+    assert spelled_as_digits(text) == digits
