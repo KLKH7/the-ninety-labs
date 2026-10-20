@@ -11,3 +11,4 @@ node_modules/
 .azure/
 web/viewer/dist/
 web/phone/dist/
+web/phone/dist-mock/

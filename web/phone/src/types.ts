@@ -2,7 +2,8 @@
 // schemas/minimap.schema.json, schemas/viewer_question.schema.json and viewer_answer.schema.json.
 // tests/test_phone.py validates every payload the phone received against those schemas.
 
-export type Source = "truth" | "tracked";
+/** Where positions come from. "mock" is the phone's own made-up data (mock.ts), never the API's. */
+export type Source = "truth" | "tracked" | "mock";
 export type Team = "home" | "away";
 
 export interface ClockMessage {
@@ -67,6 +68,10 @@ export interface Question {
 
 export interface ViewerAnswer {
   status: "verified" | "held" | "rejected" | "unanswerable";
+  /** Who wrote the text: "model" (the Companion agent, then the code checks and the Judge) or
+   * "code" (a template filled from the cited fact, through the code checks only). Asked of W5 on
+   * #145; until the API sends it, an answer counts as code's, which it is without the passcode. */
+  source?: "code" | "model";
   text: string;
   metric: string | null;
   value: number | null;

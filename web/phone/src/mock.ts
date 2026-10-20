@@ -93,7 +93,7 @@ export class MockFeed implements Feed {
       speed_kmh: round((perSecond[perSecond.length - 1] ?? 0) * 3.6, 1),
       peak_kmh: round(Math.max(0, ...perSecond) * 3.6, 1),
       distance_m: round(steps.reduce((a, b) => a + b, 0), 0),
-      source: "tracked",
+      source: "mock",
     };
   }
 
@@ -126,7 +126,7 @@ export class MockFeed implements Feed {
       vx: count.map((c, k) => (c ? round(sx[k] / c, 2) : null)),
       vy: count.map((c, k) => (c ? round(sy[k] / c, 2) : null)),
       count,
-      source: "tracked",
+      source: "mock",
     };
   }
 
@@ -147,6 +147,8 @@ export class MockFeed implements Feed {
     const [value, unit] =
       metric === "speed_now" ? [card.speed_kmh, "km/h"] : metric === "peak_speed" ? [card.peak_kmh, "km/h"] : [card.distance_m, "m"];
     const scope = `player_${q.player}_window_${card.t_from.toFixed(2)}-${card.t_to.toFixed(2)}`;
+    // A code answer, as the API's without the passcode: no `source`, which the phone reads as
+    // code's (main.ts, badgeFor). It never claims "model", so it is never shown as fact-checked.
     return {
       type: "answer",
       answer: {

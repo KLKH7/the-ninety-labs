@@ -136,3 +136,42 @@ def test_the_builder_takes_any_clips_observations(tmp_path):
     assert frames and {f["clip"] for f in frames} == {"demo42"}
     tf.main([str(OBSERVATIONS), "--clip", "seed900001", "--out", str(tmp_path / "m1.jsonl")])
     assert (tmp_path / "m1.jsonl").read_text() == FIXTURE.read_text()
+
+
+# --- the builder's own rules, each on its own (not only through the fixture) ---------------------------
+
+
+def fake_tracks(monkeypatch, tracks, balls):
+    """track.py's steps replaced by fixed results, so a rule of tracked_frames is tested alone."""
+    monkeypatch.setattr(tr, "track_players", lambda rows: tracks)
+    monkeypatch.setattr(tr, "assign_teams", lambda ts: {"reason": "fixed by the test"})
+    monkeypatch.setattr(tr, "ball_path", lambda rows: [tr.BallPoint(f, 50.0, 30.0, 0.9) for f in balls])
+
+
+def rows(frames, ok=lambda f: True):
+    return [{"frame": f, "camera": {"ok": ok(f)}, "players": [], "ball": []} for f in frames]
+
+
+def test_a_track_shorter_than_one_minimap_frame_is_left_out(monkeypatch):
+    n = tf.MIN_TRACK_FRAMES
+    short = tr.Track(1, list(range(n - 1)), [(10.0, 10.0)] * (n - 1), team="home")
+    long = tr.Track(2, list(range(n)), [(20.0, 20.0)] * n, team="away")
+    fake_tracks(monkeypatch, [short, long], range(n))
+    ids = {p["id"] for f in tf.build(rows(range(n)), "c")["frames"] for p in f["players"]}
+    assert ids == {"a-t2"}
+
+
+def test_a_frame_whose_camera_fit_failed_is_left_out(monkeypatch):
+    t = tr.Track(3, list(range(10)), [(30.0, 30.0)] * 10, team="home")
+    fake_tracks(monkeypatch, [t], range(10))
+    frames = tf.build(rows(range(10), ok=lambda f: f != 4), "c")["frames"]
+    assert [f["frame"] for f in frames] == [0, 1, 2, 3, 5, 6, 7, 8, 9]
+
+
+def test_a_tracked_player_is_his_side_and_his_track_never_a_shirt_number(monkeypatch):
+    home = tr.Track(7, list(range(10)), [(30.0, 30.0)] * 10, team="home")
+    away = tr.Track(12, list(range(10)), [(60.0, 30.0)] * 10, team="away")
+    nobody = tr.Track(13, list(range(10)), [(60.0, 40.0)] * 10, team=None)  # no team: not shown
+    fake_tracks(monkeypatch, [home, away, nobody], range(10))
+    ids = {p["id"] for f in tf.build(rows(range(10)), "c")["frames"] for p in f["players"]}
+    assert ids == {"h-t7", "a-t12"}

@@ -40,8 +40,9 @@ npm ci --prefix web/phone
 npm run dev --prefix web/phone            # http://localhost:5173/mock-laptop.html, then "Open the phone"
 ```
 
-`?mock=1` reads the mock feed: positions from a formula in `mock/make_mock.py`, not from the
-simulator, so they are nobody's ground truth; the page says "Mock data" on every screen. The mock
+The mock is in the dev server and the dev bundle only (`npm run build:mock`, into `dist-mock/`);
+`npm run build`, what ships, leaves it out. There, `?mock=1` reads the mock feed: positions from a formula in `mock/make_mock.py`, not from the
+simulator, so they are nobody's ground truth. They are labelled `source: mock`, which the phone accepts only from the mock feed, and the page says "Mock data" on every screen. The mock
 laptop page (`mock-laptop.html`) plays a clock and relays it to phones in the same browser.
 
 Against the API (`/api` is proxied to port 8000):
@@ -50,5 +51,5 @@ Against the API (`/api` is proxied to port 8000):
 NINETY_COMPANION=standin uv run uvicorn ninety.api.app:app --port 8000
 ```
 
-Tests: `npm run build --prefix web/phone && npm run build --prefix web/viewer`, then
+Tests: `npm run build --prefix web/phone && npm run build:mock --prefix web/phone && npm run build --prefix web/viewer`, then
 `NINETY_REQUIRE_PHONE=1 uv run pytest tests/test_phone.py`.

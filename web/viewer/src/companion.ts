@@ -5,9 +5,11 @@
 
 import qrcode from "qrcode-generator";
 
-const EVERY_MS = 1000;
+const EVERY_MS = 1000; // design: the phone runs the clock on between messages; once a second corrects drift
 const MIN_GAP_MS = 200; // the API's relay allows 600 messages a minute; a dragged scrubber stays under it
-const JUMP_S = 0.3; // a change in time this much off the running clock is a seek
+// design: past the phone's 0.2 s tolerance (web/phone/src/clock.ts) with room for a frame's jitter,
+// so a seek is sent at once and ordinary playback is not.
+const JUMP_S = 0.3;
 
 export interface Playback {
   time(): number; // match time, in seconds

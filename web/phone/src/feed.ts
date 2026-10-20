@@ -50,13 +50,14 @@ export class ApiError extends Error {
   }
 }
 
-function onlyTracked<T extends { source: string }>(what: string, payload: T): T {
-  if (payload.source !== "tracked") throw new GroundTruth(what);
-  return payload;
-}
-
-/** The feed with every positional payload checked: anything not `source: tracked` throws. */
+/** The feed with every positional payload checked: from the API, anything not `source: tracked`
+ * throws; from the mock, anything not `source: mock`, so made-up data can never pass as tracked. */
 export function guarded(feed: Feed, seen: (payload: unknown) => void = () => {}): Feed {
+  const allowed = feed.mock ? "mock" : "tracked";
+  const onlyTracked = <T extends { source: string }>(what: string, payload: T): T => {
+    if (payload.source !== allowed) throw new GroundTruth(what);
+    return payload;
+  };
   const record = <T>(p: T): T => {
     seen(p);
     return p;

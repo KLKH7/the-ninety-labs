@@ -62,13 +62,14 @@ export function describe(f: Flow): string {
     forward += sign * ux * c;
     n += c;
     const speed = Math.hypot(ux, uy);
-    if (speed > bestSpeed && c >= 3) {
+    if (speed > bestSpeed && c >= 3) { // design: a cell crossed in under 3 steps is one stride, not a flow
       bestSpeed = speed;
       best = k;
     }
   });
   if (!n) return `${name}: not seen moving in this window.`;
   forward /= n;
+  // design: under 0.3 m/s (about a slow walk) a team's average drift is called holding, not moving.
   const overall = Math.abs(forward) < 0.3 ? "holding their line" : forward > 0 ? `pushing forward (${forward.toFixed(1)} m/s)` : `dropping back (${(-forward).toFixed(1)} m/s)`;
   if (best < 0) return `${name}: ${overall}.`;
   const x = ((best % f.nx) + 0.5) * (PITCH_X / f.nx);

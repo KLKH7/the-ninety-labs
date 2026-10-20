@@ -165,7 +165,7 @@ export function attacksRight(side: "home" | "away"): boolean {
  * left and right as the team sees them, facing the goal it attacks. */
 export function zoneFor(side: "home" | "away", x: number, y: number): string {
   const forward = attacksRight(side) ? x : PITCH_X - x; // metres from the team's own goal line
-  const depth = forward < 35 ? "defensive third" : forward < 70 ? "middle third" : "attacking third";
+  const depth = forward < 35 ? "defensive third" : forward < 70 ? "middle third" : "attacking third"; // thirds of 105 m
   // Facing x = 105 with y = 0 at the top of the map, a team's left is the top; facing x = 0, the bottom.
   const leftness = attacksRight(side) ? PITCH_Y - y : y;
   const flank = leftness > (2 * PITCH_Y) / 3 ? "left" : leftness < PITCH_Y / 3 ? "right" : "centre";
@@ -177,6 +177,8 @@ export function describePlay(pos: Positions, name: (id: string) => string): stri
   const [bx, by] = pos.ball;
   const half = bx < PITCH_X / 2 ? "Home" : "Away";
   const goalDistance = Math.min(bx, PITCH_X - bx);
+  // design: within 20 m (a little past the penalty area's 16.5 m) is "close to goal"; within 40 m
+  // "in their half"; the 25 m either side of halfway is "around halfway".
   const where = goalDistance < 20 ? `close to ${half}'s goal` : goalDistance < 40 ? `in ${half}'s half` : "around halfway";
   const near = [...pos.players].sort((a, b) => Math.hypot(a[1] - bx, a[2] - by) - Math.hypot(b[1] - bx, b[2] - by))[0];
   if (!near) return `The ball is ${where}.`;

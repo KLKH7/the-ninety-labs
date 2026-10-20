@@ -3,8 +3,9 @@
 The positions come from a formula, not from the simulator: two teams hold a 4-4-2 shape that slides
 toward the ball, the nearest player of each team goes to it, and the ball moves from player to
 player. Since nothing simulated them, they are nobody's ground truth (AGENTS.md, "Ground truth is the
-answer key"). The file is labelled `source: tracked` because it stands in for what the tracker will
-serve, and the phone shows "Mock data" on every screen while it reads it (web/phone/src/mock.ts).
+answer key"). The file is labelled `source: mock`, which the phone accepts only from its mock feed
+(web/phone/src/feed.ts), and it shows "Mock data" on every screen while it reads it. The mock is built
+only into the dev bundle (`npm run build:mock`), never into the production one.
 It does not show football; it gives the UI 22 moving dots, a ball and stats that agree with the dots.
 
     uv run python web/phone/mock/make_mock.py      # rewrites the file; same output every run
@@ -104,7 +105,7 @@ def build() -> dict:
             "ball": [round(ball[0], 1), round(ball[1], 1)],
             "players": [[p, round(pos[p][0], 1), round(pos[p][1], 1)] for p in ids],
         })
-    return {"clip": "mock", "source": "tracked", "fps": FPS, "roster": sorted(ids), "frames": frames}
+    return {"clip": "mock", "source": "mock", "fps": FPS, "roster": sorted(ids), "frames": frames}
 
 
 def text(body: dict) -> str:

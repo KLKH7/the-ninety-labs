@@ -6,7 +6,6 @@
 
 import { LaptopClock } from "./clock";
 import { ApiError, type Closed, type Feed, GroundTruth, HttpFeed, type Link, guarded } from "./feed";
-import { MockFeed } from "./mock";
 import { CODE_ALPHABET, CODE_LENGTH } from "./mockrelay";
 import { COLORS, type Positions, type View, describeHeat, describePlay, drawHeat, drawPitch, drawPlayers, fit, positionsAt, within } from "./pitch";
 import {
@@ -27,11 +26,19 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 const params = new URLSearchParams(location.search);
 
 const CARD_EVERY_MS = 1000; // speed now is a one-second mean (ninety/intel/window.py)
+// design: a 30 s field moves little in 5 s, and two flows every 5 s stay far under the API's 120
+// reads a minute (ninety/api/companion.py, LIMITS) beside the card's one a second.
 const FLOW_EVERY_MS = 5000;
 
 /** Every payload the phone received, for tests/test_phone.py to check against the schemas. */
 const seen: unknown[] = [];
-const feed: Feed = guarded(params.get("mock") === "1" ? new MockFeed() : new HttpFeed(), (p) => seen.push(p));
+// The mock exists only in the dev bundle (`vite build --mode mock`): in production this condition is
+// false at build time, so neither mock.ts nor its data is in the bundle.
+let source: Feed = new HttpFeed();
+if (__PHONE_MOCK__) {
+  if (params.get("mock") === "1") source = new (await import("./mock")).MockFeed();
+}
+const feed: Feed = guarded(source, (p) => seen.push(p));
 const laptop = new LaptopClock();
 
 interface State {
@@ -428,11 +435,19 @@ function renderChips() {
 }
 
 const STATUS_WORDS: Record<ViewerAnswer["status"], string> = {
-  verified: "Fact-checked",
+  verified: "Fact-checked", // only for the Companion agent's answers: see `badgeFor`
   held: "Still being checked",
   rejected: "Refused by the fact-checker",
   unanswerable: "Can't answer that",
 };
+
+/** What an answer's badge may claim: "Fact-checked" only when the fact-checking agent's Judge saw
+ * it (a model answer); a code answer is the cited fact in a template, through the code checks only. */
+function badgeFor(a: ViewerAnswer): string {
+  if (a.status !== "verified") return STATUS_WORDS[a.status];
+  if (a.source === "model") return STATUS_WORDS.verified;
+  return feed.mock ? "Computed from mock positions" : "Computed from tracked positions";
+}
 
 const METRIC_WORDS: Record<string, string> = {
   speed_now: "speed now",
@@ -488,7 +503,8 @@ function renderAnswer(question: string, at: number, a: ViewerAnswer | null, fail
   asked.textContent = `You asked at ${clock(at)}: “${question}”`; // shown as text, never as markup
   const badge = document.createElement("span");
   badge.className = "badge";
-  badge.textContent = a ? STATUS_WORDS[a.status] : "Not sent";
+  badge.textContent = a ? badgeFor(a) : "Not sent";
+  li.dataset.source = a?.source ?? "code";
   const body = document.createElement("p");
   body.className = "said";
   if (!a) body.textContent = failed;
@@ -525,7 +541,11 @@ function evidence(a: ViewerAnswer): HTMLElement[] {
   ];
   if (a.t_from !== null && a.t_to !== null) rows.push(["Over", `${clock(a.t_from)} to ${clock(a.t_to)} of the match`]);
   rows.push(["Computed by", `code, from ${feed.mock ? "the mock positions" : "positions tracked from the video"}`]);
-  rows.push(["Checked by", "the fact-checking agent, against the cited facts"]);
+  rows.push(
+    a.source === "model"
+      ? ["Checked by", "the fact-checking agent: code checks the number against the cited fact, then the Judge reads the sentence"]
+      : ["Checked by", "code: the number is the cited fact itself, put in a fixed sentence; no AI wrote it"],
+  );
   for (const [k, v] of rows) {
     const dt = document.createElement("dt");
     dt.textContent = k;

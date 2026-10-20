@@ -7,7 +7,8 @@ import type { ClockMessage } from "./types";
 /** One minimap frame at the feed's 5 fps: the phone cannot show the match any finer than this. */
 export const TOLERANCE_S = 0.2;
 /** The laptop sends at least once a second; after this long without a message the phone stops
- * running the clock on and says it lost the laptop, rather than drift ahead of a stalled video. */
+ * running the clock on and says it lost the laptop, rather than drift ahead of a stalled video.
+ * design: four missed messages, so one slow network moment does not flash "Laptop lost". */
 export const STALE_S = 4;
 
 export class LaptopClock {

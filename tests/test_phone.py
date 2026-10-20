@@ -1,15 +1,16 @@
 """The phone companion (web/phone) in headless Chromium at phone size, on its mock feed and against
 the companion API itself (ninety/api/companion.py), with the laptop viewer (web/viewer) pairing it.
 
-Needs the built phone and viewer (`npm ci --prefix web/phone && npm run build --prefix web/phone`,
-the same for web/viewer) and Playwright's Chromium. Skipped without them, unless
+Needs the built phone, its mock build and the viewer (`npm ci --prefix web/phone && npm run build
+--prefix web/phone && npm run build:mock --prefix web/phone`, and `npm run build` for web/viewer)
+and Playwright's Chromium. Skipped without them, unless
 NINETY_REQUIRE_PHONE=1 (the CI phone job sets it, so the tests can never silently stop running).
 
 What it holds:
 - the mock's positions are what mock/make_mock.py writes, and every payload the phone receives,
   mock or API, matches its schema;
 - pairing by code, through the mock relay and through the API's room, with the viewer's QR panel;
-- the phone's clock stays within TOLERANCE_S (web/phone/src/clock.ts) of the laptop's;
+- the phone's clock stays within 0.2 s of the laptop's (the claim in CHALLENGE_MAP);
 - an injected question is refused and shown as text; answers show their evidence one tap away;
 - nothing labelled `source: truth` is ever drawn: not the mock's, not the API's stand-in.
 """
@@ -34,6 +35,7 @@ from ninety.agents.contracts import schema_validator
 ROOT = Path(__file__).resolve().parent.parent
 PHONE = ROOT / "web" / "phone"
 DIST = PHONE / "dist"
+MOCK_DIST = PHONE / "dist-mock"  # the dev bundle: the phone plus its mock feed and mock laptop
 VIEWER_DIST = ROOT / "web" / "viewer" / "dist"
 PHONE_SIZE = {"width": 375, "height": 812}
 MINIMAP = schema_validator("minimap")
@@ -45,14 +47,9 @@ INJECTION = (
 )
 
 
-def constant(path: Path, name: str) -> float:
-    """A number defined in the phone's TypeScript, so the test checks the shipped value."""
-    match = re.search(rf"export const {name} = ([0-9.]+);", path.read_text())
-    assert match, f"{name} not found in {path}"
-    return float(match.group(1))
-
-
-TOLERANCE_S = constant(PHONE / "src" / "clock.ts", "TOLERANCE_S")
+# The claim the README and CHALLENGE_MAP make: one frame of the 5 fps minimap. Pinned here, not read
+# from web/phone/src/clock.ts, so the code under test cannot loosen its own test.
+TOLERANCE_S = 0.2
 
 
 def unavailable(reason: str):
@@ -72,8 +69,9 @@ def test_the_mock_positions_are_the_scripts_output_and_match_the_schema():
     spec.loader.exec_module(make_mock)
     body = make_mock.build()
     assert (PHONE / "mock" / "minimap.json").read_text() == make_mock.text(body), "re-run make_mock.py"
-    MINIMAP.validate(body)
-    assert body["source"] == "tracked" and body["clip"] == "mock"
+    # Labelled `mock`, which only the phone's mock feed accepts; otherwise the minimap schema's shape.
+    assert body["source"] == "mock" and body["clip"] == "mock"
+    MINIMAP.validate({**body, "source": "tracked"})
     assert all(len(f["players"]) == 22 for f in body["frames"])
 
 
@@ -82,9 +80,9 @@ def test_the_mock_positions_are_the_scripts_output_and_match_the_schema():
 
 @pytest.fixture(scope="module")
 def browser():
-    for dist in (DIST, VIEWER_DIST):
+    for dist in (DIST, MOCK_DIST, VIEWER_DIST):
         if not (dist / "index.html").exists():
-            unavailable(f"{dist} is not built: npm run build --prefix {dist.parent.relative_to(ROOT)}")
+            unavailable(f"{dist} is not built (see this file's docstring)")
     try:
         from playwright.sync_api import sync_playwright
 
@@ -100,8 +98,8 @@ def browser():
 
 @pytest.fixture(scope="module")
 def mock_site(browser):
-    """The built phone at /phone/, served the way a static host would; the mock needs no API."""
-    root = Path(DIST.parent / "dist")
+    """The phone's dev bundle, served the way a static host would; the mock needs no API."""
+    root = MOCK_DIST
     handler = functools.partial(SimpleHTTPRequestHandler, directory=str(root))
     handler.log_message = lambda *a: None
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
@@ -154,9 +152,14 @@ def seen(phone) -> list[dict]:
     return phone.evaluate("window.ninetyPhone.seen")
 
 
-def validate_seen(payloads: list[dict]):
+def validate_seen(payloads: list[dict], mock: bool = False):
+    """Every payload against its schema. The mock's are labelled `source: mock` (and never anything
+    else); past that label they must have exactly the API's shape."""
     assert payloads
     for p in payloads:
+        if "source" in p:
+            assert (p["source"] == "mock") == mock, p.get("type", "minimap")
+            p = {**p, "source": "tracked"} if mock else p
         (MINIMAP if "frames" in p else MESSAGE).validate(p)
 
 
@@ -184,7 +187,7 @@ def test_pairing_by_code_refuses_a_wrong_code_then_shows_the_minimap(browser, mo
     phone.click("#connect")
     phone.wait_for_selector("body[data-state=live]")
     phone.wait_for_function("document.querySelector('#map').dataset.dots === '22'")
-    assert phone.get_attribute("#map", "data-source") == "tracked"
+    assert phone.get_attribute("#map", "data-source") == "mock"
     assert phone.inner_text("#status") in ("Paused", "Synced")
     assert not errors
 
@@ -243,14 +246,15 @@ def test_answers_show_their_evidence_one_tap_away(browser, mock_site):
     answer = phone.locator("#answers .answer").first
     answer.wait_for()
     assert answer.get_attribute("data-status") == "verified"
-    assert answer.locator(".badge").text_content() == "Fact-checked"
+    # A code answer: the cited fact in a fixed sentence. "Fact-checked" is only for the Judge's.
+    assert answer.locator(".badge").text_content() == "Computed from mock positions"
     toggle = answer.locator(".evidence-toggle")
     evidence = answer.locator(".evidence-wrap")
     assert toggle.text_content() == "Show the evidence" and evidence.is_hidden()
     toggle.click()  # one tap
     assert toggle.get_attribute("aria-expanded") == "true" and toggle.text_content() == "Hide the evidence"
     assert evidence.is_visible()
-    assert "Away 7's top speed" in evidence.inner_text() and "fact-checking agent" in evidence.inner_text()
+    assert "Away 7's top speed" in evidence.inner_text() and "no AI wrote it" in evidence.inner_text()
     answer.get_by_text("Technical detail").click()
     assert re.search(r"peak_speed:player_a7_window_0\.00-\d+\.\d\d", evidence.inner_text())
     assert "Away 7's top speed so far" in answer.locator(".said").inner_text()  # names, not ids
@@ -295,7 +299,7 @@ def test_every_payload_the_phone_receives_matches_its_schema(browser, mock_site)
     phone.click("#wind-toggle")
     phone.wait_for_function("document.querySelector('#wind').dataset.t")
     payloads = seen(phone)
-    validate_seen(payloads)
+    validate_seen(payloads, mock=True)
     kinds = {p.get("type", "minimap") for p in payloads}
     assert {"minimap", "clock", "focus", "player_card", "answer", "flow"} <= kinds
     assert not errors
@@ -314,10 +318,12 @@ def test_the_wind_map_loads_only_when_turned_on_and_describes_both_teams(browser
     assert not errors
 
 
-def test_positions_labelled_ground_truth_are_never_drawn(browser, mock_site):
-    """The guard, on the mock path: the same file relabelled `source: truth` draws nothing."""
+@pytest.mark.parametrize("label", ["truth", "tracked"])
+def test_positions_labelled_ground_truth_are_never_drawn(browser, mock_site, label):
+    """The guard, on the mock path: the mock's file relabelled `truth` draws nothing, and nor does it
+    relabelled `tracked`: made-up positions can never pass as the video's."""
     body = json.loads((PHONE / "mock" / "minimap.json").read_text())
-    body["source"] = "truth"
+    body["source"] = label
     laptop, phone, errors, requests = mock_pair(browser, mock_site, minimap_body=body)
     phone.wait_for_selector("#refused:not([hidden])")
     phone.wait_for_timeout(500)
@@ -326,7 +332,8 @@ def test_positions_labelled_ground_truth_are_never_drawn(browser, mock_site):
     assert "positions aren't available" in phone.inner_text("#refused")
     for hidden in ("#map-box", "#ask", "#roster-box", "#player"):
         assert phone.locator(hidden).is_hidden(), hidden
-    assert phone.inner_text("#status") == "Clock only"  # the clock still follows the laptop
+    # The clock still follows the laptop, and the status says only the clock is shown.
+    phone.wait_for_function("document.querySelector('#status').textContent === 'Clock only'", timeout=5_000)
     assert not errors
 
 
@@ -464,10 +471,12 @@ def test_the_viewer_pairs_a_phone_through_the_api_and_the_clocks_agree(browser, 
     url = api_site
     viewer, phone, errors, _, _ = pair_through_viewer(browser, url)
     lap = lambda: float(viewer.get_attribute("#overlay", "data-t"))  # noqa: E731
-    phone.wait_for_function("window.ninetyPhone.laptop.heard")
+    phone.wait_for_selector("#refused:not([hidden])", timeout=10_000)  # the truth minimap, refused
+    phone.wait_for_function("window.ninetyPhone.laptop.heard", timeout=10_000)
     assert abs(phone_t(phone) - lap()) <= TOLERANCE_S
-    # The API's stand-ins are ground truth, so the phone shows the clock alone, and says so.
-    assert phone.inner_text("#status") == "Clock only"
+    # The API's stand-ins are ground truth, so the phone shows the clock alone, and says so (the
+    # status is redrawn each animation frame, so it follows the refusal by a frame: wait for it).
+    phone.wait_for_function("document.querySelector('#status').textContent === 'Clock only'", timeout=5_000)
     viewer.click("#play")
     phone.wait_for_function("window.ninetyPhone.laptop.isPlaying()")
     for _ in range(3):  # the clip is 3 s long
@@ -535,7 +544,9 @@ def tracked_api(browser):
     server = uvicorn.Server(config)
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()
+    deadline = time.monotonic() + 10
     while not server.started:
+        assert time.monotonic() < deadline, "the API did not start"
         time.sleep(0.05)
     yield f"http://127.0.0.1:{port}/"
     server.should_exit = True
@@ -569,3 +580,131 @@ def test_the_phone_shows_the_tracked_m1_clip_through_the_api(browser, tracked_ap
         assert re.fullmatch(r"Covering \d+ s of play: .*", page.inner_text("#heat-span"))
         validate_seen(seen(page))
         assert not errors
+
+
+def test_the_production_build_carries_no_mock():
+    if not (DIST / "index.html").exists():
+        unavailable(f"{DIST} is not built")
+    assert not (DIST / "mock-laptop.html").exists()
+    assets = list((DIST / "assets").iterdir())
+    assert not [a for a in assets if a.name.startswith("minimap")]
+    assert not [a for a in assets if a.suffix == ".js" and "mock-pair" in a.read_text()]
+
+
+# --- the phone against a faked API: each guard and label on its own ----------------------------------
+# The phone's production bundle, with /api answered by the test: a payload the real API would never
+# send (truth-labelled where the phone already trusts the clip) reaches each guard directly.
+
+MOCK_MINIMAP = json.loads((PHONE / "mock" / "minimap.json").read_text())
+
+
+def fake_api(browser, site, *, card=None, flow=None, answer=None):
+    ctx = browser.new_context(viewport=PHONE_SIZE)
+    requests: list[str] = []
+    ctx.on("request", lambda r: requests.append(r.url))
+    tracked = {**MOCK_MINIMAP, "source": "tracked", "clip": "demo"}
+
+    def relay(ws):
+        ws.send(json.dumps({"type": "clock", "t": 30.0, "playing": False}))
+
+    ctx.route_web_socket(re.compile(r".*/api/pair/.*"), relay)
+    routes = {"minimap": tracked, "card": card, "flow": flow, "ask": answer}
+    for name, body in routes.items():
+        if body is not None:
+            ctx.route(re.compile(rf".*/api/{name}\b.*"), lambda route, _request, body=body: route.fulfill(
+                content_type="application/json", body=json.dumps(body)))
+    page = ctx.new_page()
+    errors = watch(page)
+    page.goto(f"{site}?code=K7MP3Q&clip=demo")
+    page.wait_for_selector("body[data-state=live]")
+    page.wait_for_function("document.querySelector('#map').dataset.dots === '22'", timeout=10_000)
+    return page, errors, requests
+
+
+@pytest.fixture(scope="module")
+def prod_site(browser):
+    handler = functools.partial(SimpleHTTPRequestHandler, directory=str(DIST))
+    handler.log_message = lambda *a: None
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    yield f"http://127.0.0.1:{server.server_address[1]}/"
+    server.shutdown()
+
+
+CARD = {"type": "player_card", "player": "a7", "t_from": 0.0, "t_to": 30.0,
+        "heat": {"nx": 2, "ny": 1, "cells": [0.4, 0.6]}, "speed_kmh": 12.4, "peak_kmh": 29.8,
+        "distance_m": 512.0, "source": "truth"}
+FLOW = {"type": "flow", "team": "home", "t_from": 0.0, "t_to": 30.0, "nx": 2, "ny": 1,
+        "vx": [1.0, None], "vy": [0.0, None], "count": [10, 0], "source": "truth"}
+
+
+def test_a_ground_truth_player_card_is_never_shown(browser, prod_site):
+    page, errors, requests = fake_api(browser, prod_site, card=CARD)
+    page.click("#roster-box summary")
+    page.get_by_role("button", name="Away 7", exact=True).click()
+    page.wait_for_function("performance.getEntriesByType('resource').some(e => e.name.includes('api/card/'))")
+    page.wait_for_timeout(500)
+    assert page.locator("#player").is_hidden()
+    assert page.inner_text("#speed") == "–" and "12.4" not in page.inner_text("body")
+    assert not errors
+
+
+def test_a_ground_truth_flow_field_is_never_drawn(browser, prod_site):
+    page, errors, requests = fake_api(browser, prod_site, flow={**FLOW})
+    page.click("#wind-toggle")
+    page.wait_for_function("document.querySelector('#wind-words').textContent.includes('ground-truth')")
+    assert page.get_attribute("#wind", "data-t") is None  # no field was set, so nothing drawn
+    assert not errors
+
+
+def answered(page, text: str):
+    page.click("#roster-box summary")
+    page.get_by_role("button", name="Away 7", exact=True).click()
+    page.fill("#question", text)
+    page.click("#ask-button")
+    answer = page.locator("#answers .answer:not(.pending)").first
+    answer.wait_for(timeout=10_000)
+    return answer
+
+
+VERIFIED = {"status": "verified", "text": "a7 is moving at 12.4 km/h right now.", "metric": "speed_now",
+            "value": 12.4, "unit": "km/h", "evidence": ["speed_now:player_a7_window_0.00-30.00"],
+            "t_from": 0.0, "t_to": 30.0}
+
+
+@pytest.mark.parametrize(("source", "badge"), [
+    (None, "Computed from tracked positions"),  # today's API: no source, and no passcode, so code
+    ("code", "Computed from tracked positions"),
+    ("model", "Fact-checked"),  # only an answer the Judge passed
+])
+def test_an_answer_says_fact_checked_only_when_the_judge_saw_it(browser, prod_site, source, badge):
+    body = dict(VERIFIED, **({"source": source} if source else {}))
+    page, errors, _ = fake_api(browser, prod_site, answer={"type": "answer", "answer": body})
+    answer = answered(page, "How fast is Away 7 now?")
+    assert answer.locator(".badge").text_content() == badge
+    answer.locator(".evidence-toggle").click()
+    said = answer.locator(".evidence-wrap").inner_text()
+    assert ("the fact-checking agent" in said) == (source == "model")
+    assert not errors
+
+
+def test_the_apis_own_answer_to_an_injection_is_shown_as_refused(browser, api_site, prod_site):
+    """The injection, through the real API (code answers, as deployed without a passcode), then its
+    answer through the phone: the API's own wording of the refusal, never the planted claim."""
+    import urllib.request
+
+    request = urllib.request.Request(f"{api_site}api/pair", data=b'{"clip": "seed7"}',
+                                     headers={"content-type": "application/json"})
+    code = json.loads(urllib.request.urlopen(request).read())["code"]
+    question = json.dumps({"session": code, "player": "h7", "text": INJECTION[:200], "t": 5.0}).encode()
+    request = urllib.request.Request(f"{api_site}api/ask", data=question,
+                                     headers={"content-type": "application/json"})
+    reply = json.loads(urllib.request.urlopen(request).read())
+    MESSAGE.validate(reply)
+    assert reply["answer"]["status"] == "unanswerable" and reply["answer"]["value"] is None
+    page, errors, _ = fake_api(browser, prod_site, answer=reply)
+    answer = answered(page, INJECTION[:200])
+    assert answer.locator(".badge").text_content() == "Can't answer that"
+    assert "cheated" not in answer.locator(".said").inner_text()
+    assert answer.locator(".figure").count() == 0 and answer.locator("img").count() == 0
+    assert page.evaluate("window.pwned") is None and not errors

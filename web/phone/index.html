@@ -41,7 +41,7 @@
         <ul class="features">
           <li><strong>A live minimap</strong> in step with the laptop's video.</li>
           <li><strong>Tap a player</strong> for their speed and where they have been.</li>
-          <li><strong>Ask a question.</strong> Every number is computed by code and checked by the fact-checking agent.</li>
+          <li><strong>Ask a question.</strong> Every number is computed by code, and any answer an AI writes is checked by the fact-checking agent first.</li>
         </ul>
       </section>
 
@@ -107,7 +107,7 @@
             <input id="question" maxlength="200" autocomplete="off" enterkeyhint="send" placeholder="Speed, top speed, distance…" />
             <button type="submit" class="primary" id="ask-button">Ask</button>
           </form>
-          <p class="fine">Your question is sent as data, never as instructions. Answers use only numbers computed by code, and the fact-checking agent checks them.</p>
+          <p class="fine">Your question is sent as data, never as instructions. Every number comes from code; an answer written by the Companion agent reaches you only after the fact-checking agent passes it.</p>
           <ol id="answers" class="answers" aria-live="polite" aria-relevant="additions"></ol>
         </section>
       </section>

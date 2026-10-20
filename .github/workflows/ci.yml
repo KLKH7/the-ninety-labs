@@ -140,6 +140,7 @@ jobs:
             web/viewer/package-lock.json
       - run: npm ci --prefix web/phone
       - run: npm run build --prefix web/phone
+      - run: npm run build:mock --prefix web/phone  # the dev bundle with the mock feed, for the mock tests
       - run: npm ci --prefix web/viewer
       - run: npm run build --prefix web/viewer
       - run: uv sync --locked
