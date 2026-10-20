@@ -154,8 +154,8 @@ The same for both arms. Only the arm's 170 clips differ.
 |---|---|---|
 | Azure render: 170 targeted, 170 control, 24 validation | 364 clips at about $0.04 | **about $14.60** |
 | Local render: 30 test clips and 8 keeper re-check clips | Mac, about 50 and 32 min | $0 |
-| GPU: two fine-tunes on a 1g.24gb slice | about 80 min each as in round 1, plus about 30 min setup and fetch: about 3.2 h | **about $2.20** at $0.69 an hour |
-| **Total** | | **about $17** |
+| GPU: two fine-tunes and the test and validation detection on a 1g.24gb slice | about 80 min per fine-tune as in round 1, about 30 min of detection, about 30 min of setup and fetch: about 3.7 h | **about $2.55** at $0.69 an hour |
+| **Total** | | **about $17.20** |
 
 Wall time from the go:
 
