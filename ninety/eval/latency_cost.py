@@ -3,10 +3,13 @@
     uv run python -m ninety.eval.latency_cost                  # rebuild docs/eval/latency-cost.md
     uv run python -m ninety.eval.latency_cost --check          # fail if the report is out of date
     uv run python -m ninety.eval.latency_cost --measure <clip> # time the chain again, re-count tokens
+    uv run python -m ninety.eval.latency_cost --recount        # re-count tokens only, keep the timings
 
 The report is rendered only from docs/eval/latency-cost.json, so rebuilding it is byte for byte
-the same (tests/test_latency_cost.py). `--measure` is the only step that runs anything, and it
-calls no Azure service:
+the same (tests/test_latency_cost.py). `--measure` and `--recount` are the only steps that run
+anything, and they call no Azure service. `--recount` is for a change that moves the token counts
+(an agent's instructions, an MCP tool's description, the recording) but not the chain's timing: it
+rebuilds the counts and keeps the timings, with the commit they were measured at:
 
 - Latency: ninety-e2e offline on one clip, and the committed slice replay, `--runs` times each in
   this process. Every stage records a `ninety.stage` span (ninety/agents/telemetry.py); the spans
@@ -240,6 +243,17 @@ def measure(clip: Path, runs: int) -> dict:
     }
 
 
+def recount(data: dict) -> dict:
+    """The data with its token counts rebuilt from the recording and the code as they are now; the
+    timings and the commit and date they were measured at are kept, and the recount's are added."""
+    from ninety.agents.slice import Recording
+
+    commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True,
+                            cwd=ROOT).stdout.strip()
+    return {**data, "calls": model_calls(Recording.load(RECORDING)), "graphics_text": graphics_text(),
+            "recounted": {"commit": commit, "date": time.strftime("%Y-%m-%d")}}
+
+
 def graphics_text() -> dict:
     rows = [json.loads(line) for line in CUES.read_text().splitlines()]
     casual = [r for r in rows if r["persona"] == "casual"]
@@ -276,7 +290,9 @@ def render(data: dict) -> str:
         "do not edit by hand. `--measure <clip>` re-times the chain and re-counts the tokens; it calls",
         "no Azure service.",
         "",
-        f"Measured {data['measured']} at commit `{data['commit']}` on {data['machine']}.",
+        f"Measured {data['measured']} at commit `{data['commit']}` on {data['machine']}."
+        + (f" Tokens re-counted {data['recounted']['date']} at commit `{data['recounted']['commit']}`."
+           if "recounted" in data else ""),
         "",
         "## Latency, stage by stage",
         "",
@@ -425,10 +441,13 @@ def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description="Build docs/eval/latency-cost.md (latency and cost).")
     ap.add_argument("--measure", type=Path, metavar="CLIP", help="re-measure on this clip, then rebuild")
     ap.add_argument("--runs", type=int, default=30, help="timed runs per scenario with --measure")
+    ap.add_argument("--recount", action="store_true", help="re-count the tokens, keep the timings, rebuild")
     ap.add_argument("--check", action="store_true", help="fail if the report is not what the data gives")
     args = ap.parse_args(argv)
     if args.measure:
         DATA.write_text(json.dumps(measure(args.measure, args.runs), indent=2) + "\n")
+    elif args.recount:
+        DATA.write_text(json.dumps(recount(json.loads(DATA.read_text())), indent=2) + "\n")
     text = render(json.loads(DATA.read_text()))
     if args.check:
         if REPORT.read_text() != text:

@@ -84,13 +84,9 @@ def list_events(match: str, minute_from: int, minute_to: int, event_type: str | 
 
 
 def match_info(match: str) -> dict:
-    """One match: its id, length in minutes, the event types available, and its stats. Each stat
-    is computed by code for one team in one 15-minute window (the last window ends with the
-    match): ppda (the opponents' passes in their own 60% of the pitch per tackle or interception
-    there; lower is a harder press), field_tilt (the team's share of both sides' attacking-third
-    passes), passes_per_minute (tempo) and territory_shift (the other side took the territory in
-    that window). A stat has an id you may cite as evidence, minute_from and minute_to, its value
-    and unit, percent for a share, and how many events it counts. Quote its numbers as given."""
+    """One match: its id, length in minutes, event types, and stats computed by code for each
+    team in each 15-minute window (ppda, field_tilt, passes_per_minute, territory_shift). Cite a
+    stat by id; quote its value, percent or minutes as given."""
     events = events_of(match)  # refuses an unknown match
     minutes = max((e["minute"] for e in events), default=0) if match in DETECTED else MINUTES
     return {"match": match, "minutes": minutes, "event_types": list(AGENT_TYPES),

@@ -108,3 +108,16 @@ def test_the_published_data_matches_the_recording():
     data = json.loads(lc.DATA.read_text())
     assert data["calls"] == lc.model_calls(Recording.load(lc.RECORDING))
     assert data["graphics_text"] == lc.graphics_text()
+
+
+def test_a_recount_rebuilds_the_tokens_and_keeps_the_timings():
+    data = json.loads(lc.DATA.read_text())
+    stale = {**data, "calls": [], "graphics_text": {}}
+    fresh = lc.recount(stale)
+    assert fresh["calls"] == lc.model_calls(Recording.load(lc.RECORDING))
+    assert fresh["graphics_text"] == lc.graphics_text()
+    assert {k: fresh[k] for k in ("latency", "commit", "measured", "machine")} == {
+        k: data[k] for k in ("latency", "commit", "measured", "machine")
+    }
+    assert set(fresh["recounted"]) == {"commit", "date"}
+    assert "Tokens re-counted" in lc.render(fresh)
