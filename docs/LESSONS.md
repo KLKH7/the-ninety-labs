@@ -909,3 +909,16 @@ short and actionable. This file is public: no research sources, product names or
   first frame) and is tested on that layout, not only on whole matches.
 - **Check:** `tests/test_event_score.py::test_a_window_cut_from_a_match_is_graded_by_frame_number`
   and `::test_a_window_with_a_missing_frame_is_refused` fail on the old code.
+
+### 100. A workflow's queue is part of what it does: read how the platform queues it
+- **What happened:** `agents-live.yml` put every run in one concurrency group, `agents-live`, with
+  `cancel-in-progress: false`, read as "runs wait their turn". GitHub keeps at most one pending
+  run per group, and a newer dispatch cancels the pending one whatever that setting says. Runs
+  from four sessions' branches each waited for approval, and each was cancelled by the next
+  session's dispatch. They showed only as `cancelled`, and the approver approved only the one
+  still alive.
+- **Rule:** a concurrency group is chosen for what must never run at the same time (here one
+  branch's runs), not for the whole workflow, and a setting's meaning is read in the platform's
+  documentation, not inferred from its name. A cancelled run nobody cancelled is a defect to trace.
+- **Check:** `.github/workflows/agents-live.yml` groups by `inputs.ref`. Dispatch from two
+  branches before approving either: both stay `waiting`.
