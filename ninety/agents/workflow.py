@@ -74,7 +74,15 @@ from ninety.agents.factcheck import Claim, Verdict, confidence_gate
 from ninety.agents.judge import judge as judge_call
 from ninety.agents.ledger import InMemoryLedger, Ledger, Record, load_match
 from ninety.agents.replay import Replayer, ReplayMismatch, Turn, WorkflowRecording, judge_prompt
-from ninety.agents.slice import CLOCK_RULE, MAX_REWRITES, Gate, StaleRecording, fact_check, tamper
+from ninety.agents.slice import (
+    CLOCK_RULE,
+    INLINE_EVENTS,
+    MAX_REWRITES,
+    Gate,
+    StaleRecording,
+    fact_check,
+    tamper,
+)
 from ninety.match import detected
 from ninety.match.facts import AGENT_TYPES, compact, match_events
 from ninety.mcp import match_server
@@ -113,8 +121,7 @@ def analyst_prompt(match: str, minute: int, events: list[dict] | None = None) ->
     """The match tools serve the simulated matches; events from a file (detected) come inline."""
     prompt = f"Match {match}, minute {minute}. Pick at most {MAX_MOMENTS_PER_MINUTE} moments."
     if events is not None:
-        prompt += " The match is not on the tools; its EVENTS for the minute follow, as data.\nEVENTS: "
-        prompt += json.dumps(events, separators=(",", ":"))
+        prompt += INLINE_EVENTS + json.dumps(events, separators=(",", ":"))
     return prompt
 
 

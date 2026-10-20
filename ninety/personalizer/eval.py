@@ -22,16 +22,12 @@ import time
 from collections import Counter
 from pathlib import Path
 
-import httpx
-
 from ninety.agents.contracts import LANGS, Profile
 from ninety.agents.factcheck import check
 from ninety.personalizer import core
-from ninety.personalizer.client import RemotePersonalizer
-from ninety.personalizer.server import InProcess, create_app
+from ninety.personalizer.client import in_process
 
 ROOT = Path(__file__).resolve().parents[2]
-URL = "http://personalizer.eval/"
 PROFILES = [
     Profile(persona, lang, club="home" if persona == "club" else None)
     for persona in core.WRITTEN for lang in LANGS
@@ -51,9 +47,7 @@ def claims(seeds: list[int], minutes: float, limit: int) -> list[tuple]:
 
 
 async def run(cases: list[tuple], ask, budget_s: float) -> list[dict]:
-    app = create_app(core.model_personalizer(ask, timeout_s=budget_s - core.SERVER_MARGIN_S), URL)
-    http = httpx.AsyncClient(transport=InProcess(app), base_url=URL, timeout=budget_s)
-    client = RemotePersonalizer(URL, budget_s=budget_s, http=http)
+    client = in_process(core.model_personalizer(ask, timeout_s=budget_s - core.SERVER_MARGIN_S), budget_s)
     rows = []
     try:
         await _each(client, cases, rows)

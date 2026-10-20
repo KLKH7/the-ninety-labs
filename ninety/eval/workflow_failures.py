@@ -41,7 +41,7 @@ from types import SimpleNamespace
 from azure.core.exceptions import ServiceRequestError
 
 from ninety.agents import workflow
-from ninety.agents.contracts import Models
+from ninety.agents.contracts import Models, Review
 from ninety.agents.factcheck import MIN_CONFIDENCE, Claim, check
 from ninety.agents.judge import RETRY_LIMIT
 from ninety.agents.judge import judge as judge_call
@@ -198,7 +198,13 @@ def models_for(
         "challenger": ['{"agree": true}'],
     }
     judge = functools.partial(judge_call, agent, timeout_seconds=JUDGE_TIMEOUT_S)
-    return Models.scripted(replies, judge=judge, **scenario.override(agent)), agent
+    # A working Personalizer's stand-in: each persona keeps the claim's words, and its Spanish is
+    # the English marked "[es] " (translate.mock, not a translation), so a Spanish profile airs.
+    from ninety.personalizer import translate
+
+    personalizer = translate.translated(Models.scripted().personalizer, translate.mock)
+    fakes = {"personalizer": personalizer, **scenario.override(agent)}
+    return Models.scripted(replies, judge=judge, **fakes), agent
 
 
 def run(scenario: Scenario, ground: Ground | None = None) -> dict:
@@ -221,7 +227,7 @@ def run(scenario: Scenario, ground: Ground | None = None) -> dict:
 
 
 def injection(scenario: Scenario, counter: list[int], known: dict[str, dict],
-              ground: Ground) -> Callable[[Models], Models]:
+              ground: Ground, personalizer=None) -> Callable[[Models], Models]:
     """For --live: the scenario's failure in place of the live model, every Judge call counted. A
     claim on the unsure detection is injected at the Analyst (the moment that offers it) and the
     Tactician (the claim): live models would not reliably cite it, and the row is about what the
@@ -249,7 +255,8 @@ def injection(scenario: Scenario, counter: list[int], known: dict[str, dict],
             counter[0] += 1
             return await judge(claim, evidence)
 
-        return replace(models, judge=counted, **swapped)
+        live = {} if personalizer is None else {"personalizer": personalizer}
+        return replace(models, judge=counted, **{**live, **swapped})
 
     return inject
 
@@ -257,27 +264,47 @@ def injection(scenario: Scenario, counter: list[int], known: dict[str, dict],
 async def live_rows(seeds: tuple[int, ...] = SEEDS) -> list[list[dict]]:
     """Every scenario with the published agents, one live minute each (agents-live): on the M1
     clip and on each held-out seed. One credential, signed in before the seeds are simulated (a
-    simulation can outlast agents-live's five-minute sign-in), serves every minute."""
+    simulation can outlast agents-live's five-minute sign-in), serves every minute.
+
+    Every agent reads the one match this commit simulated: the Analyst gets the minute's events
+    inline, never from the deployed match tools, which serve the matches the deployed image
+    simulated with its own engine (and took 50.7 s to answer through Foundry against 2.6 s inline, on
+    2026-10-20: lesson 90). The Personalizer is the published one behind the A2A server in this process, so
+    the Spanish profiles get Spanish; without it every variant is the verified English text."""
     from ninety.agents import credentials
     from ninety.match.facts import compact
+    from ninety.personalizer import core
+    from ninety.personalizer.client import in_process
 
     tables = []
     async with credentials.new_credential() as credential:
         await credentials.sign_in(credential)
         grounds = [m1_ground(), *(seed_ground(s) for s in seeds)]
-        for ground in grounds:
-            out = []
-            for scenario in applicable(ground):
-                events, counter = events_for(scenario, ground), [0]
-                known = {e["id"]: compact(e) for e in workflow.agent_events(events)}
-                result, *_ = await workflow.run_live(
-                    lambda events=events: events, MINUTE, ground.match, False, False, trace_to="none",
-                    personalize=True, inject=injection(scenario, counter, known, ground),
-                    credential=credential,
-                )
-                out.append(row(scenario, result, counter[0], ground))
-            tables.append(out)
+        async with core.published_ask(credential) as (ask, _):
+            for ground in grounds:
+                out = []
+                for scenario in applicable(ground):
+                    events, counter = events_for(scenario, ground), [0]
+                    known = {e["id"]: compact(e) for e in workflow.agent_events(events)}
+                    personalizer = in_process(core.model_personalizer(ask))
+                    try:
+                        result, *_ = await workflow.run_live(
+                            lambda events=events: events, MINUTE, ground.match, True, False,
+                            trace_to="none", personalize=True, credential=credential,
+                            inject=injection(scenario, counter, known, ground, personalizer),
+                        )
+                    finally:
+                        await personalizer.close()
+                    out.append(row(scenario, result, counter[0], ground))
+                tables.append(out)
     return tables
+
+
+def minute_claim(reviews: list[Review]) -> Review | None:
+    """The minute's claim: the one that aired, else the Analyst's first moment's. The scripted
+    Analyst offers one moment, the main pass; a live Analyst picks its own, so a row looked up by
+    the main pass's id found none whenever the model preferred another moment."""
+    return next((r for r in reviews if r.aired is not None), reviews[0] if reviews else None)
 
 
 def row(scenario: Scenario, result, judge_asked: int, ground: Ground) -> dict:
@@ -286,7 +313,7 @@ def row(scenario: Scenario, result, judge_asked: int, ground: Ground) -> dict:
     # Each aired text checked again here, by the code checks, against the minute's events: a
     # measurement of what aired, independent of the `verified` flag the cue carries.
     known = {e["id"]: compact(e) for e in workflow.agent_events(events_for(scenario, ground))}
-    review = next((r for r in result.reviews if r.moment_id == f"m-{ground.main}"), None)
+    review = minute_claim(result.reviews)
     templates = sorted(c["id"] for c in result.cues if c["kind"] != "insight")
     insights = [c for c in result.cues if c["kind"] == "insight"]
     fallback = [f"{s.role} {s.action}: {s.detail}".rstrip(": ") for s in result.trace
@@ -309,6 +336,9 @@ def row(scenario: Scenario, result, judge_asked: int, ground: Ground) -> dict:
         "badges": sorted({c["fallback"] for c in result.cues if c.get("fallback")}),
         "trace_fallbacks": [f"{s.role}: {s.fallback}" for s in result.trace if s.fallback],
         "fallback": fallback,
+        # A profile whose variant did not air: the fact-checker held or rejected it.
+        "variants_refused": [s.detail for s in result.trace if s.role == "fact_checker"
+                             and s.action in ("held", "rejected") and "/" in s.detail.split(":")[0]],
         "model_calls": result.model_calls,
     }
 
@@ -326,6 +356,9 @@ def recovered(row: dict, base: dict) -> dict[str, bool]:
         if FALLBACK[row["scenario"]] else row["trace_fallbacks"] == [],
         # The viewer shows a cue's `fallback` as a badge: on screen in every failure, never without one.
         "fallback badge on screen": bool(row["badges"]) == (row["scenario"] != "none"),
+        # Without a failure every profile gets its own variant: a Spanish profile held on the
+        # English text is the safe outcome of a defect, so the baseline fails (the reviewer's ruling).
+        "every variant airs without a failure": row["scenario"] != "none" or not row["variants_refused"],
     }
 
 
@@ -379,13 +412,16 @@ def table_lines(table: list[dict]) -> list[str]:
         "the screen), every aired text passes the code checks again, the claim ends exactly as it must",
         "(held; verified when only the Personalizer failed, since the insight needs no Personalizer),",
         "the failure's own fallback is marked in the trace, and a fallback badge is on screen (the",
-        "cue's `fallback`, which the viewer draws); the baseline has neither.",
+        "cue's `fallback`, which the viewer draws); the baseline has neither, and airs every profile's",
+        "variant in its own language.",
     ]
     held_es = [r for r in table if any("/es:" in step for step in r["fallback"])]
     if held_es:
+        down = sum(any(f.startswith("personalizer:") for f in r["trace_fallbacks"]) for r in held_es)
         lines += [
-            f"In {len(held_es)} of {len(table)} rows the Spanish variants are held: the Personalizer that",
-            "answered gave English text, and a variant airs only in its own language.",
+            f"In {len(held_es)} of {len(table)} rows the Spanish variants are held, since a variant airs",
+            f"only in its own language: in {down} the Personalizer was down and its fallback is the",
+            f"English text; in {len(held_es) - down} the Personalizer answered and its Spanish did not pass.",
         ]
     return lines
 
@@ -418,7 +454,8 @@ def report(table: list[dict], live: bool = False, ground: str = detected.M1_CLIP
         "fact-checking agent with its confidence gate, Producer) on the M1 clip's detected events",
         f"(`{detected.M1_CLIP}`, minute {MINUTE}), with one failure injected at the model boundary.",
         "The Judge is the real wrapper (its retry, timeout and verdicts) around a stand-in agent; the",
-        "other models are scripted. Data: `docs/eval/failure-table.json`. The M1 live path's own table",
+        "other models are scripted, and the Personalizer's Spanish is the English marked `[es] `.",
+        "Data: `docs/eval/failure-table.json`. The M1 live path's own table",
         "is `docs/eval/failure-table-m1.md`.",
         "",
     ]

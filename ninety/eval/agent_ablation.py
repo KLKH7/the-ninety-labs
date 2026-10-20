@@ -4,14 +4,15 @@
 
 On the held-out seeds (21 and 33), every minute of the served match runs through two arms:
 
-- **one agent**: the slice's Analyst (`ninety-analyst`), one published agent with the match's MCP
-  tools, writes the minute's claim, and it airs as written: no Tactician, no Challenger, no
-  fact-checking agent. This is what a single tool-using agent would put on screen.
+- **one agent**: the slice's Analyst (`ninety-analyst`), one published agent, writes the minute's
+  claim, and it airs as written: no Tactician, no Challenger, no fact-checking agent. This is what
+  a single agent would put on screen.
 - **graph**: the multi-agent workflow (ninety/agents/workflow.py): the moment Analyst, the
   Tactician, the Challenger, the fact-checking agent (code checks, confidence gate, the Judge with
   rewrites) and the Producer. Only verified claims air.
 
-Every aired claim of both arms is then graded the same way, against the simulated match's own
+Both arms read the minute's events inline, from the match this commit simulated, and every aired
+claim of both arms is then graded the same way, against that match's own
 events (grading is the answer key's allowed use): the code checks (numbers, players, cited ids)
 and the published Judge (meaning). The graph cannot air a claim its own fact-checker failed, so a
 false claim it airs is one the grader's second Judge call disagrees with; the one-agent arm airs
@@ -67,11 +68,21 @@ async def grade(claim: Claim, known: dict[str, dict], judge: Judge) -> dict:
     }
 
 
-async def one_agent_minute(ask: Ask, match: str, minute: int) -> tuple[list[Claim], int, str]:
+def window(known: dict[str, dict], minute: int) -> list[dict]:
+    """The minute's events as both arms read them: inline, from the match this commit simulated and
+    the grader grades against. The deployed match tools serve the matches the deployed image
+    simulated, with its own engine: a one-agent run once aired a goal at 03:03 on seed 33, which had
+    no shot here (lesson 90)."""
+    return [e for e in known.values() if e["minute"] == minute]
+
+
+async def one_agent_minute(
+    ask: Ask, match: str, minute: int, known: dict[str, dict]
+) -> tuple[list[Claim], int, str]:
     """The single agent's claim for the minute, aired unchecked. Returns the aired claims, the model
     calls, and why nothing aired, if nothing did."""
     try:
-        reply = await ask(analyst_prompt(match, minute))
+        reply = await ask(analyst_prompt(match, minute, events=window(known, minute)))
     except Exception as e:  # a failed call airs nothing
         return [], 1, f"{type(e).__name__}"
     try:
@@ -85,7 +96,7 @@ async def graph_minute(
     models: Models, events: list[dict], match: str, minute: int
 ) -> tuple[list[Claim], int, str]:
     """The workflow's verified claims for the minute, and its model calls."""
-    result = await workflow.run_workflow(models, events, minute, match)
+    result = await workflow.run_workflow(models, events, minute, match, inline_events=True)
     aired = [r.aired for r in result.reviews if r.aired is not None]
     held = sum(r.status == "held" for r in result.reviews)
     rejected = sum(r.status == "rejected" for r in result.reviews)
@@ -106,7 +117,7 @@ async def run(
             for arm in arms:
                 started = time.perf_counter()
                 if arm == "one agent":
-                    aired, calls, why = await one_agent_minute(one_agent, match, minute)
+                    aired, calls, why = await one_agent_minute(one_agent, match, minute, known)
                 else:
                     aired, calls, why = await graph_minute(graph_models, events, match, minute)
                 seconds = time.perf_counter() - started
@@ -154,14 +165,15 @@ def report(body: dict, ran: str) -> str:
         "(the engine that simulated the seeds). Committed as the run wrote it; live models vary from run",
         "to run. Data: `docs/eval/ablation-agents.json`.",
         "",
-        "- **one agent**: the slice's Analyst, one published agent with the match's MCP tools, writes the",
-        "  minute's claim, and it airs as written.",
+        "- **one agent**: the slice's Analyst, one published agent, writes the minute's claim, and it airs",
+        "  as written.",
         "- **graph**: the workflow (moment Analyst, Tactician, Challenger, fact-checking agent with the",
         "  confidence gate and the Judge, Producer); only verified claims air.",
         "",
-        "Every aired claim of both arms is graded the same way, against the simulated match's events: the",
-        "code checks (numbers, players, cited ids), then the published Judge. A claim is *false* if either",
-        "fails it.",
+        "Both arms read the minute's events inline, from the match this commit simulated, not from the",
+        "deployed match tools, whose matches the deployed image simulated with its own engine. Every aired",
+        "claim of both arms is graded the same way, against those events: the code checks (numbers,",
+        "players, cited ids), then the published Judge. A claim is *false* if either fails it.",
         "",
         "| Arm | Claims aired | False on air | of which: code checks | of which: Judge "
         "| Minutes with an insight | Model calls |",

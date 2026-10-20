@@ -57,6 +57,44 @@ def test_a_claim_the_judge_fails_counts_as_false_even_if_the_code_passes():
     assert body["arms"]["graph"]["false_by_judge"] == 1
 
 
+def inline_ids(prompt: str) -> set[str]:
+    _, sep, events = prompt.partition("EVENTS: ")
+    assert sep, f"no events inline, so the agent read the deployed match tools: {prompt!r}"
+    return {e["id"] for e in json.loads(events)}
+
+
+def test_both_arms_read_the_match_the_grader_grades():
+    # Lesson 90: the one-agent arm once read the deployed match tools, simulated by the deployed
+    # image's engine, and aired a goal the grader's match does not have. Both arms now get the
+    # minute's events inline, from the same events the grader checks against.
+    from dataclasses import replace
+
+    from ninety.agents import workflow
+    from ninety.match.facts import compact
+
+    prompts = {"one agent": [], "graph": []}
+
+    async def one_agent(prompt: str) -> str:
+        prompts["one agent"].append(prompt)
+        return reply(true_claim(FIRST))
+
+    graph = Models.scripted({"analyst": [picks(FIRST), picks(MAIN)]}, judge=Judge())
+
+    async def analyst(prompt: str) -> str:
+        prompts["graph"].append(prompt)
+        return await scripted_analyst(prompt)
+
+    scripted_analyst = graph.analyst
+    asyncio.run(ab.run(replace(graph, analyst=analyst), one_agent, Judge(), {SEED: EVENTS}, minutes=2))
+    graded = {e["id"] for e in workflow.agent_events(EVENTS)}
+    for arm, sent in prompts.items():
+        assert len(sent) == 2, arm  # one prompt a minute
+        for minute, prompt in enumerate(sent, start=1):
+            ids = inline_ids(prompt)
+            assert ids and ids <= graded, (arm, ids - graded)
+            assert ids == {e["id"] for e in workflow.agent_events(EVENTS) if compact(e)["minute"] == minute}
+
+
 def test_a_failed_or_unreadable_single_agent_reply_airs_nothing():
     async def down(prompt):
         raise RuntimeError("injected")
@@ -64,8 +102,8 @@ def test_a_failed_or_unreadable_single_agent_reply_airs_nothing():
     async def prose(prompt):
         return "I think it was a great pass."
 
-    assert asyncio.run(ab.one_agent_minute(down, "seed21", 1))[0] == []
-    assert asyncio.run(ab.one_agent_minute(prose, "seed21", 1))[0] == []
+    assert asyncio.run(ab.one_agent_minute(down, "seed21", 1, {}))[0] == []
+    assert asyncio.run(ab.one_agent_minute(prose, "seed21", 1, {}))[0] == []
 
 
 def test_the_report_is_strict_json_and_names_the_false_claims():

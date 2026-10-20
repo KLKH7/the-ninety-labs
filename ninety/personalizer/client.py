@@ -160,6 +160,17 @@ def _ms(started: float) -> float:
 URL_ENV = "NINETY_PERSONALIZER_URL"
 
 
+def in_process(personalize: Personalize, budget_s: float = BUDGET_S) -> RemotePersonalizer:
+    """The A2A server in this process behind the real client, for the evaluations: the same
+    request, re-check and deadlines as the deployed service, with no container to deploy."""
+    from ninety.personalizer.server import InProcess, create_app
+
+    url = "http://personalizer.in-process/"
+    transport = InProcess(create_app(personalize, url))
+    http = httpx.AsyncClient(transport=transport, base_url=url, timeout=budget_s)
+    return RemotePersonalizer(url, budget_s=budget_s, http=http)
+
+
 def from_env(env: dict[str, str] | None = None) -> Personalize:
     """The live path's Personalizer: the A2A service at NINETY_PERSONALIZER_URL with the in-process
     fallback behind it, or the fallback alone when no URL is set. With NINETY_TRANSLATOR on, the

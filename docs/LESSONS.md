@@ -809,7 +809,12 @@ short and actionable. This file is public: no research sources, product names or
   standard error, and use enough matches that it is smaller than the gap being claimed. Running
   the same seeds still matters, for reproducing a run, not for cancelling noise.
 - **Check:** for a before-and-after on a match rate, report both errors; if the paired one is not
-  clearly smaller, quote the unpaired one.
+  clearly smaller, quote the unpaired one. On the agent side too, one seed is one match only if one
+  engine made it. The deployed match tools serve the matches the deployed image simulated, so in
+  an evaluation graded against this commit's simulation every agent gets the minute's events
+  inline. The live ablation's one-agent arm once read the tools and aired a goal on seed 33 that
+  had no shot here. `tests/test_agent_ablation.py::test_both_arms_read_the_match_the_grader_grades`
+  and `tests/test_workflow_failures.py::test_the_live_run_injects_each_failure_around_the_published_agents`.
 
 ### 91. When the data moves, the code that reads it moves in the same change
 - **What happened:** sealing the ground truth (0fda1f8) moved frames.jsonl and events.jsonl from
