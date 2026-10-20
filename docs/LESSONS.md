@@ -1329,3 +1329,75 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** CI's pytest matrix runs 3.11 and 3.12. `tests/test_tracked_frames.py` rebuilds
   `tests/fixtures/tracked-seed900001.json` on both; with `sum` in `tracked_frames.smooth` it
   fails on 3.11.
+
+### 135. Noise in a belief is a misjudgement that persists, not a fresh draw every look
+- **What happened:** the team chose its chaser for a loose ball from each player's estimate of where
+  the ball was going, with an error redrawn every four frames. Two players about as near swapped the
+  chase back and forth; the one dropped went back to his shape and turned away from the ball, a fan
+  sees a player run away from a loose ball (FS1). The flicker came from the redraw, not from anything
+  either player saw.
+- **Rule:** a perception error is held for as long as what is perceived has not changed (here, one
+  strike or touch of the ball) and shrinks with what he sees (distance), so a decision built on it
+  changes only when the situation does.
+- **Check:** `tests/test_engine_rules.py::test_a_chaser_is_not_swapped_by_a_fresh_guess_while_nothing_changes`
+  fails when the misjudgement is redrawn on every plan.
+
+### 136. One match's goals are a draw: check a rare outcome over many matches
+- **What happened:** CI's full-match test bounded one match's goals at 1 to 6. The chaser's pull
+  request (#160) failed it: seed 11 ended 0-0 with 27 shots and 1,116 passes, where main's engine
+  had won the same seed 3-0, and two engines on the same seed are not a pair (lesson 90). Over 20
+  matches of 20 minutes it scored 1.46 goals a team per 90 against main's 1.91 (difference -0.45,
+  standard error 0.68), and on the base before main 1.57 against 1.12 (+0.45, 0.60): no settled
+  difference either way. A match's goals are close to Poisson around 2.8 (GROUNDING R4), so an
+  engine that scores like the real league failed that bound about one change in twelve, and one
+  scoring half as often still passed it three times in four.
+- **Rule:** a test bounds one match's count only where a realistic engine is almost never outside
+  it (passes, tackles, pressures, counted in tens or hundreds). A rare outcome (goals, penalties,
+  cards) is checked over many matches against the range a real sample of that many matches shows,
+  computed from the source's figures and the outcome's distribution before any engine number is
+  read. When those matches cost too much for every pull request, the check runs on demand, on the
+  same matches as the report that measures the outcome, and the pull request that changes the
+  engine posts its result.
+- **Check:** for each per-match bound in `tests/`, work out how often a league at the source's
+  figure falls outside it; above 1%, it moves to a many-match check. Goals:
+  `NINETY_HELD_OUT=1 uv run pytest tests/test_sim.py -k twelve` runs the funnel's 12 matches (R4);
+  `tests/test_funnel.py` pins the range and its arithmetic in every CI run.
+
+### 137. A random choice scaled by the spread of all options loosens when a bad option is added
+- **What happened:** the carrier's softmax took its randomness as a share of the spread of all his
+  options' values, so a choice between close options would be loose and one between clearly
+  different options would not. The spread included the hopeless options (a 50 m pass into a crowd, a
+  shot from 44 m), so every bad option widened it and made the choice between the good ones looser.
+  Choices logged on seeds 7 and 21 showed him taking his best option in about a third of decisions,
+  against the rule's own "a good decision-maker almost always takes the best option".
+- **Rule:** in a choice rule, the odds between two options depend only on those two and on the
+  chooser; a scale for the randomness is fixed in the options' own units, never taken from the set
+  of options on offer. A habit is a pull in units of that randomness, not a bonus in the options'
+  units, or changing the scale turns it into a command. A choice asked again before anything new is
+  seen is the same choice: hold the random draw, or repeated asking makes a rejected option certain.
+  Check a stated intent ("almost always the best") against logged choices.
+- **Check:** `tests/test_decisions.py::test_a_hopeless_option_does_not_loosen_the_choice_between_two_good_ones`.
+
+### 138. A range named as a distance is measured as one
+- **What happened:** the shot option was offered "inside 40 m of the goal" (`SHOT_RANGE_M`'s own
+  comment), but the code compared only the distance along the pitch. From out wide, players were
+  offered and took shots 40 to 50 m from goal, judged by a rate table that is only an unsourced tail
+  beyond 40 m: 22 of 156 shots in 20 matches (seeds 3 to 112 at 20 minutes) came from beyond 40.5 m,
+  none after the fix.
+- **Rule:** a threshold is applied in the quantity its comment and its source use (here the distance
+  to the goal's centre, as D3's rates are). Search for every use of a constant when its meaning is fixed.
+- **Check:** `tests/test_decisions.py::test_a_shot_is_an_option_only_within_range_of_the_goal_straight_line`.
+
+### 139. Knowing where the ball is going is only useful if you go there
+- **What happened:** O8 said the team-mate a pass is played to "knows where it was meant", and the
+  engine used that only to set his shape: he took up his slot around the target, not the target, and
+  a short pass struck slightly off often ran past him into touch. The chase, which takes over once he
+  reacts, was planned on the ball's predicted path past the touchline, on points up to 20 m off the
+  pitch, while `ball_destination` stopped the same path at the line. The first fix cut the true path,
+  but each player then adds his own misjudgement of it, so his judged points could still fall past
+  the line: an audit found the test passing on only 91 of 100 seeds.
+- **Rule:** when a rule gives a player knowledge, check what he does with it in the movement code, not
+  only in the estimate. A limit on what a player can do (Law 9 here) is applied to the path as he
+  judges it, where he makes the choice, and tested over many seeds, not one.
+- **Check:** `tests/test_engine_rules.py::test_the_team_mate_a_pass_is_played_to_goes_to_meet_it` and
+  `::test_nobody_is_sent_to_chase_a_ball_beyond_the_touchline`.
