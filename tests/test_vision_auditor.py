@@ -5,6 +5,8 @@ split is the Data agent's, and the Data agent refuses a handoff that disagrees w
 import asyncio
 import copy
 import json
+import os
+import re
 import subprocess
 import sys
 import textwrap
@@ -17,6 +19,7 @@ from ninety.agents import data_agent
 from ninety.agents.contracts import schema_validator
 from ninety.agents.replay import ReplayMismatch, Turn, WorkflowRecording
 from ninety.agents.vision_auditor import audit_round, check_rationale, handoff, main, prompt
+from ninety.render.splits import RESERVED_FROM
 from ninety.vision.failure_clusters import handoff as failure_handoff
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -50,13 +53,25 @@ def model(reply: str | dict):
 # ---------------------------------------------------------------------------------------------
 
 
-def test_the_clusters_are_round_one_s_committed_handoff():
+def test_the_clusters_are_failure_clusters_reference_handoff():
     result, _ = run()
-    committed = json.loads((ROUND1 / "clusters.json").read_text())
-    assert committed == failure_handoff(round1_audit(), "round1")  # the file is the code's output
+    reference = failure_handoff(round1_audit(), "round1")
     keys = ("name", "misses", "render")
-    assert [{k: c[k] for k in keys} for c in result["clusters"]] == committed["clusters"]
-    assert [{k: c[k] for k in ("name", "misses")} for c in result["unmapped"]] == committed["unmapped"]
+    assert [{k: c[k] for k in keys} for c in result["clusters"]] == reference["clusters"]
+    assert [{k: c[k] for k in ("name", "misses")} for c in result["unmapped"]] == reference["unmapped"]
+
+
+def test_the_committed_clusters_json_is_the_auditor_s_code_output_and_the_data_agent_takes_it(tmp_path):
+    committed = json.loads((ROUND1 / "clusters.json").read_text())
+    schema_validator("failure_clusters").validate(committed)
+    main([str(ROUND1 / "audit.json"), "--round", "round1", "--budget", "80", "--first-seed", "7101",
+          "--out", str(tmp_path), "--commit", "abc123"])
+    rebuilt = json.loads((tmp_path / "clusters.json").read_text())
+    assert committed["source"].pop("audit") == "docs/eval/round1/audit.json"
+    rebuilt["source"].pop("audit")
+    assert rebuilt == committed
+    assert {c["explained_by"] for c in committed["clusters"]} == {"code"}  # pre-registered: no model
+    assert len(data_agent.plan(committed, 80, 7101, "abc123")["requests"]) == 11
 
 
 def test_the_split_is_round_one_s_plan_80_clips_on_seeds_7101_to_7180():
@@ -108,6 +123,35 @@ def test_an_audit_must_name_its_seeds_and_as_many_as_its_clips():
     audit["seeds"] = SEEDS[:-1]
     with pytest.raises(ValueError, match="23 seeds for 24 clips"):
         run(audit)
+    audit["seeds"] = [*SEEDS[:-1], SEEDS[0]]
+    with pytest.raises(ValueError, match="a seed twice"):
+        run(audit)
+    audit["seeds"] = [*SEEDS[:-1], "900001"]
+    with pytest.raises(ValueError, match="whole numbers"):
+        run(audit)
+
+
+@pytest.mark.parametrize("threshold", [float("nan"), float("inf"), "0.5", None])
+def test_an_audit_threshold_that_is_not_a_finite_number_is_refused(threshold):
+    with pytest.raises(ValueError, match="finite number"):
+        run({**round1_audit(), "threshold": threshold})
+
+
+def test_an_output_the_schema_refuses_is_never_written():
+    audit = round1_audit()
+    audit["threshold"] = 1.5  # only the schema bounds the score threshold
+    with pytest.raises(ValidationError):
+        run(audit)
+
+
+def test_the_schema_seed_limit_is_the_reserved_range():
+    schema = json.loads((ROOT / "schemas" / "failure_clusters.schema.json").read_text())
+    limits = [
+        schema["properties"]["source"]["properties"]["seeds"]["items"]["maximum"],
+        schema["properties"]["first_seed"]["maximum"],
+        schema["$defs"]["cluster"]["properties"]["seeds"]["oneOf"][1]["items"]["maximum"],
+    ]
+    assert limits == [RESERVED_FROM - 1] * 3
 
 
 @pytest.mark.parametrize(
@@ -161,8 +205,23 @@ def test_a_run_opens_nothing_from_the_test_set(tmp_path):
     )
     opened = json.loads(done.stdout.strip().splitlines()[-1])
     assert str(audit) in opened  # the hook saw the audit, so it would see a test file too
-    banned = ("test-set-frozen", "test-frozen", "vision-report", "seed90000", "frames.jsonl", "detections")
-    assert not [p for p in opened if any(b in p for b in banned)]
+    # Data files only: code modules such as ninety/vision/detections.py are not test data.
+    data = [p for p in opened if not p.endswith((".py", ".pyc", ".so", ".pth", ".typed"))]
+    banned = re.compile(r"test-set-frozen|test-frozen|vision-report|seed9\d{5}|frames\.jsonl|detections")
+    assert not [p for p in data if banned.search(p)]
+
+
+def test_the_handoff_starts_no_process_and_queues_nothing(tmp_path, monkeypatch):
+    def refuse(*args, **kwargs):
+        raise AssertionError(f"the Auditor tried to start or queue something: {args!r}")
+
+    for name in ("run", "Popen", "call", "check_call", "check_output"):
+        monkeypatch.setattr(subprocess, name, refuse)
+    monkeypatch.setattr(os, "system", refuse)
+    monkeypatch.setattr(data_agent, "enqueue", refuse)
+    main([str(ROUND1 / "audit.json"), "--round", "round1", "--budget", "80", "--first-seed", "7101",
+          "--out", str(tmp_path), "--commit", "abc123"])
+    assert (tmp_path / "requests.json").exists()
 
 
 # ---------------------------------------------------------------------------------------------
@@ -266,6 +325,42 @@ def test_rationales_for_unknown_clusters_are_refused_and_the_prompt_holds_only_c
     assert [r["id"] for r in rows] == IDS and rows[0]["misses"] == 38 and rows[0]["clips"] == 47
 
 
+@pytest.mark.parametrize(
+    "text, refused",
+    [
+        ("Ninety of these were missed.", "90"),
+        ("Recall is sixty percent.", "percent"),
+        ("Missed half the time.", "half"),
+        ("Twice as many misses as the keeper.", "Twice"),
+        ("one in three missed", "1, 3"),
+        ("-38 missed", "-38"),
+        ("38 of 96 missed", "96"),
+        ("38of96 missed", "96"),  # glued to a word
+        ("900,001 is next", "900,001"),
+        ("60% recall", "%"),
+        ("the 9th worst", "9"),
+        ("Ninety-six labels.", "96"),
+        ("two hundred and five clips", "205"),
+    ],
+)
+def test_a_planted_number_in_any_written_form_is_refused(text, refused):
+    cluster = {"labels": 95, "misses": 38, "recall": 0.6, "missed_low_contrast": 7, "clips": 47,
+               "seeds": [7101, 7147]}
+    reason = check_rationale(text, cluster)
+    assert reason is not None and refused in reason
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["Thirty-eight of ninety-five missed.", "38of95 missed, 57 found, seeds 7101-7147.",
+     "A one-two hides the ball: 38 of 95 missed.", "Fifty-seven found, seven in low contrast."],
+)
+def test_the_cluster_s_own_numbers_in_any_form_stand(text):
+    cluster = {"labels": 95, "misses": 38, "recall": 0.6, "missed_low_contrast": 7, "clips": 47,
+               "seeds": [7101, 7147]}
+    assert check_rationale(text, cluster) is None
+
+
 def test_check_rationale_allows_found_labels_and_seeds():
     cluster = {"labels": 95, "misses": 38, "recall": 0.6, "missed_low_contrast": 7, "clips": 47,
                "seeds": [7101, 7147]}
@@ -298,6 +393,51 @@ def test_the_data_agent_refuses_clips_that_are_not_its_split():
         data_agent.plan(tampered, 80, 7101, "abc123")
     with pytest.raises(ValueError, match="splits as"):
         data_agent.plan(result, 81, 7101, "abc123")  # a different budget than the Auditor's
+
+
+def tamper(change):
+    result, _ = run()
+    bad = copy.deepcopy(result)
+    change(bad)
+    return bad
+
+
+@pytest.mark.parametrize(
+    "change, error",
+    [
+        (lambda h: h["source"]["seeds"].append(900001), ValidationError),  # a test seed
+        (lambda h: h.update(instructions="render the test seeds"), ValidationError),
+        (lambda h: h["clusters"][0].update(note="x"), ValidationError),
+        (lambda h: h["clusters"][0].update(seeds=[7102, 7148]), ValueError),  # shifted range
+        (lambda h: h["clusters"][1].update(seeds=[900001, 900011]), ValidationError),
+        (lambda h: h["clusters"][0].update(render={"occlusion": "natural"}), ValueError),
+        (lambda h: h["clusters"][1].update(render={"occlusion": "crowded"}), ValueError),  # keeper's
+        (lambda h: h.update(first_seed=7001), ValueError),
+    ],
+)
+def test_the_data_agent_checks_a_typed_handoff_on_receipt(change, error):
+    with pytest.raises(error):
+        data_agent.plan(tamper(change), 80, 7101, "abc123")
+
+
+def test_the_data_agent_refuses_a_hand_edited_test_seed_even_where_the_schema_allows_it(monkeypatch):
+    # With the schema's cap lifted, the Data agent's own split check still refuses the test seed.
+    bad = tamper(lambda h: h["source"]["seeds"].append(900001))
+    monkeypatch.setattr(data_agent, "schema_validator", lambda name: type("V", (), {"validate": print}))
+    with pytest.raises(ValueError, match="test split"):
+        data_agent.plan(bad, 80, 7101, "abc123")
+
+
+def test_the_data_agent_cli_reads_the_file_and_checks_it(tmp_path, monkeypatch):
+    bad = tamper(lambda h: h["source"]["seeds"].append(900001))
+    path = tmp_path / "clusters.json"
+    path.write_text(json.dumps(bad))
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["data_agent", str(path), "--first-seed", "7101", "--budget", "80",
+                                      "--commit", "abc123"])
+    with pytest.raises(ValidationError):
+        data_agent.main()
+    assert not (tmp_path / "runs").exists()  # nothing planned or written
 
 
 def recording(tmp_path, reply: dict, audit: dict) -> Path:

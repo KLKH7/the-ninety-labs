@@ -33,6 +33,7 @@ import argparse
 import asyncio
 import hashlib
 import json
+import math
 import re
 import time
 from collections.abc import Awaitable, Callable
@@ -42,6 +43,7 @@ from pathlib import Path
 
 from ninety.agents import data_agent
 from ninety.agents.contracts import TraceStep, schema_validator
+from ninety.agents.factcheck import NUMBER_PATTERN, spelled_as_digits
 from ninety.agents.replay import Replayer, Turn, WorkflowRecording
 from ninety.eval.vision_score import CLASSES, VISIBILITY_GROUPS
 from ninety.render.params import KIT_CONTRAST
@@ -54,7 +56,16 @@ ROLE = "vision_auditor"
 WORKFLOW = "vision-auditor"
 GROUP = "mostly hidden"  # the weakness vision-report-v2 names (finding 4); the round targets it
 RATIONALE_MAX_CHARS = 200
-NUMBER = re.compile(r"\d+(?:\.\d+)?")
+# A rationale may hold no ids, so every digit run is a number, wherever it sits ("38of95" is two),
+# with thousands commas and a sign. Number words are read by the fact-checker's own reader
+# (factcheck.spelled_as_digits, lesson 69), and words for a share or a multiple, which name a
+# number without its digits, are refused outright (lesson 129).
+DIGITS = re.compile(rf"(?:(?<![\w.])-)?(?:\d{{1,3}}(?:,\d{{3}})+(?:\.\d+)?|{NUMBER_PATTERN})")
+SHARE_WORDS = re.compile(
+    r"\b(?:half|halves|halved|thirds?|quarters?|twice|double[sd]?|triple[sd]?|treble[sd]?|dozens?"
+    r"|percent|per\s+cent|percentage)\b|%",
+    re.I,
+)
 
 INSTRUCTIONS = (
     "You are the Vision Auditor. Below are failure clusters of a football object detector, each "
@@ -75,11 +86,18 @@ def check_audit(audit: dict) -> dict:
     seeds = audit.get("seeds")
     if not isinstance(seeds, list) or not seeds:
         raise ValueError("audit must list the seeds it was measured on")
+    if not all(isinstance(s, int) and not isinstance(s, bool) for s in seeds):
+        raise ValueError("audit seeds must be whole numbers")
+    if len(set(seeds)) != len(seeds):
+        raise ValueError("audit names a seed twice")
     if len(seeds) != audit.get("clips"):
         raise ValueError(f"audit names {len(seeds)} seeds for {audit.get('clips')} clips")
-    wrong = [s for s in seeds if split_of(int(s)) != "train"]
+    wrong = [s for s in seeds if split_of(s) != "train"]
     if wrong:
         raise ValueError(f"seeds {wrong} are not training seeds; the Auditor never reads the test set")
+    threshold = audit.get("threshold")
+    if not (isinstance(threshold, (int, float)) and math.isfinite(threshold)):
+        raise ValueError(f"audit threshold must be a finite number, got {threshold!r}")
     for row in audit["rows"]:
         if (
             row["cls"] not in CLASSES
@@ -162,7 +180,10 @@ def check_rationale(text: object, cluster: dict) -> str | None:
     if any(ord(c) < 32 for c in text):
         return "control characters"
     allowed = facts(cluster)
-    invented = [n for n in NUMBER.findall(text) if float(n) not in allowed]
+    if share := SHARE_WORDS.search(text):
+        return f"a share or multiple in words: {share.group()}"
+    read = DIGITS.findall(spelled_as_digits(text))
+    invented = [n for n in read if float(n.replace(",", "")) not in allowed]
     if invented:
         return f"numbers not in the cluster: {', '.join(invented)}"
     return None
@@ -299,13 +320,13 @@ def handoff(result: dict, commit: str, trace: list[TraceStep]) -> dict:
 
 def write(out: Path, result: dict, plan: dict, trace: list[TraceStep]) -> None:
     out.mkdir(parents=True, exist_ok=True)
-    (out / "clusters.json").write_text(json.dumps(result, indent=2) + "\n")
-    (out / "requests.json").write_text(json.dumps(plan, indent=2) + "\n")
+    (out / "clusters.json").write_text(json.dumps(result, indent=2, allow_nan=False) + "\n")
+    (out / "requests.json").write_text(json.dumps(plan, indent=2, allow_nan=False) + "\n")
     validator = schema_validator("agent_trace")
     rows = [asdict(s) for s in trace]
     for row in rows:
         validator.validate(row)
-    (out / "trace.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+    (out / "trace.jsonl").write_text("".join(json.dumps(r, allow_nan=False) + "\n" for r in rows))
 
 
 def _live_ask() -> Ask:  # pragma: no cover - needs Azure

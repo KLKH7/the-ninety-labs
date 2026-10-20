@@ -17,7 +17,9 @@ Rules:
 - The budget is split by misses, largest remainder first, so the split is exact and reproducible;
   a cluster with misses gets at least one clip while the budget lasts.
 - When the handoff states clips per cluster (the Vision Auditor's clusters.json does), they must
-  be this split, or the plan is refused.
+  be this split, or the plan is refused. A typed handoff is also checked on receipt, not only by
+  its writer: the schema, every source seed a training seed, each cluster's render setting the one
+  failure_clusters.RENDER gives its situation, and its seed range the one this split gives it.
 - Seeds are consecutive from --first-seed and must all be training seeds: a targeted round never
   touches the fixed test set, so its before and after scores stay honest.
 - Every request names the commit to render with; the job refuses any other, so a round comes from
@@ -34,8 +36,10 @@ import json
 import subprocess
 from pathlib import Path
 
+from ninety.agents.contracts import schema_validator
 from ninety.render.params import sample_params
 from ninety.render.splits import check_seed
+from ninety.vision.failure_clusters import RENDER
 
 PER_REQUEST = 10  # clips per job execution: about 50 minutes at the measured 5 minutes a clip
 SECONDS = 10.0
@@ -71,6 +75,24 @@ def render_set(render: dict) -> str:
     return ";".join(f"{k}={str(v).lower() if isinstance(v, bool) else v}" for k, v in sorted(render.items()))
 
 
+def check_typed(handoff: dict, counts: list[int], first_seed: int) -> None:
+    """The Vision Auditor's clusters.json, checked on receipt: the schema, training seeds only, the
+    renderer's setting for each situation, and the clips and seeds this agent would give it."""
+    schema_validator("failure_clusters").validate(handoff)
+    for s in handoff["source"]["seeds"]:
+        check_seed(s, "train")
+    if handoff["first_seed"] != first_seed:
+        raise ValueError(f"handoff was split from seed {handoff['first_seed']}, not {first_seed}")
+    seed = first_seed
+    for c, n in zip(handoff["clusters"], counts, strict=True):
+        if c["render"] != RENDER[c["situation"]]:
+            raise ValueError(f"{c['name']}: render {c['render']} is not the setting for {c['situation']!r}")
+        want = [seed, seed + n - 1] if n else None
+        if c["seeds"] != want:
+            raise ValueError(f"{c['name']}: seeds {c['seeds']}, this split gives {want}")
+        seed += n
+
+
 def plan(
     handoff: dict,
     budget: int,
@@ -90,6 +112,8 @@ def plan(
     stated = [c.get("clips") for c in clusters]
     if any(n is not None for n in stated) and stated != counts:
         raise ValueError(f"handoff asks for {stated} clips, the budget of {budget} splits as {counts}")
+    if "source" in handoff:  # the typed shape (schemas/failure_clusters.schema.json)
+        check_typed(handoff, counts, first_seed)
     requests, seed = [], first_seed
     for cluster, count, settings in zip(clusters, counts, sets, strict=True):
         for start in range(seed, seed + count, per_request):
@@ -156,7 +180,7 @@ def main() -> None:
     result = plan(handoff, args.budget, args.first_seed, args.commit or pushed_head(), seconds=args.seconds)
     out = Path("runs") / result["round"] / "requests.json"
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(result, indent=2) + "\n")
+    out.write_text(json.dumps(result, indent=2, allow_nan=False) + "\n")
     for c in result["clusters"]:
         print(f"{c['clips']:4d} clips  {c['name']}  [{c['set'] or 'no overrides'}]")
     print(f"{len(result['requests'])} requests written to {out}")
