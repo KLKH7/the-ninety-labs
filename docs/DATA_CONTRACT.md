@@ -53,11 +53,15 @@ and only when the clip's own frames show that play from beyond the cut is still 
 **A cut.** A broadcast does not show the whole of a stoppage: the engine plays every second of
 the wait before a restart (GROUNDING R1: 16 s for a throw-in, up to 41 s for a free kick), and the
 rendered picture stays on the stoppage a moment, then cuts to the restart being set
-(`ninety/render/edit.py`). The match frames it leaves out are recorded in `meta.json` as
-`cuts: [{"first_frame", "last_frame"}]`, and the frames on either side keep their match numbers and
-times. A cut lies wholly inside a dead ball, from an event that stops play (`out_of_play`, `foul`,
-`offside`, `goal`) to the restart that ends it (`set_piece`, `kickoff`), and never over a frame an
-event is on, so every event of the clip is on a frame it shows (C2, C5). The physics checks judge
+(`ninety/render/edit.py`). Only a broadcast clip cuts (`dead_ball_cut`, on in `ninety-render`
+outside the test set): datasets, the Azure job, training rounds and the test sets show every frame.
+The match frames a cut leaves out are recorded in `meta.json` as `cuts: [{"first_frame",
+"last_frame"}]` (frame numbers), and the frames on either side keep their match numbers and times.
+A cut lies wholly inside a dead ball, and the clip shows that ball dead at both ends: the event that
+stopped play (`out_of_play`, `foul`, `offside`, `goal`) before the cut and the restart that ends it
+(`set_piece`, `kickoff`) after it are both events of the clip, no touch of the ball in play and no
+other restart lies between them, and no event is inside the cut, so every event of the clip is on a
+frame it shows (C2, C5). The physics checks judge
 consecutive frames only, never the jump across a cut. `clip.json` also carries `segments`, the runs
 of consecutive frames the images show (image `index` is match frame `frame`): whatever maps video
 time to match time (the viewer, the audio description) reads them through `ninety/match/timeline.py`

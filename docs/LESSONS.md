@@ -809,7 +809,15 @@ short and actionable. This file is public: no research sources, product names or
   standard error, and use enough matches that it is smaller than the gap being claimed. Running
   the same seeds still matters, for reproducing a run, not for cancelling noise.
 - **Check:** for a before-and-after on a match rate, report both errors; if the paired one is not
-  clearly smaller, quote the unpaired one.
+  clearly smaller, quote the unpaired one. On the agent side too, one seed is one match only if one
+  engine made it. The deployed match tools serve the matches the deployed image simulated, so in
+  an evaluation graded against this commit's simulation every agent gets the minute's events
+  inline, under a match id no server serves, and an agent that calls the tools anyway fails the
+  call. A prompt alone does not enforce it: the tools are called inside Foundry. The live
+  ablation's one-agent arm once read the tools and aired a goal on seed 33 that had no shot here.
+  `tests/test_agent_ablation.py::test_both_arms_read_the_match_the_grader_grades`,
+  `::test_a_live_arm_that_calls_the_match_tools_fails_that_call` and
+  `tests/test_workflow.py::test_an_agent_given_its_events_inline_that_calls_the_match_tools_fails_its_call`.
 
 ### 91. When the data moves, the code that reads it moves in the same change
 - **What happened:** sealing the ground truth (0fda1f8) moved frames.jsonl and events.jsonl from
@@ -1402,6 +1410,30 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_engine_rules.py::test_the_team_mate_a_pass_is_played_to_goes_to_meet_it` and
   `::test_nobody_is_sent_to_chase_a_ball_beyond_the_touchline`.
 
+### 147. A budget is set from the call it bounds, measured; and a cancelled request is awaited
+- **What happened:** the live Personalizer evaluation (run 39429424313, at 0689342) answered none of
+  its 20 requests: all 160 variants were "fallback: timeout" at 3002 to 3274 ms. The 3 s budget was a
+  design share of the 8 s target, never measured against the call. Locally, the published
+  `ninety-personalizer:1` on gpt-4.1-mini took 3.2 to 4.7 s (median 4.0 s) for one claim's 8
+  variants, over A2A as well as direct. Two more defects hid behind it. First, the server's model
+  deadline equalled the client's budget, so the client always gave up first and the server's
+  fallback, with its reasons, never got back. Second, the client cancelled a request at the deadline
+  and never awaited it. In process, that cancellation ran on into a2a-sdk 1.2.3's server code, which
+  swallows it (`ActiveTask.subscribe` catches CancelledError) and waits forever for a task a
+  message-only agent never creates. Those tasks were destroyed when the loop closed, and that
+  produced the "Task was destroyed but it is pending" and OpenTelemetry "created in a different
+  Context" errors at exit. Those errors came after every request, so they did not block a response.
+- **Rule:** a latency budget cites a measurement of the call it bounds, and a test holds it above
+  the slowest measured call. A layer's own deadline ends inside its caller's
+  (`SERVER_MARGIN_S`), so the inner fallback answers rather than the outer timeout. A task cancelled
+  at a deadline is kept and awaited before the client closes. An in-process server runs each request
+  in its own task (`server.InProcess`), as uvicorn does, so a client's cancellation never enters the
+  server.
+- **Check:** `tests/test_personalizer.py::test_the_budget_is_over_the_slowest_measured_model_call`,
+  `::test_a_slow_model_is_answered_by_the_server_with_its_reasons_not_cut_off_by_the_client`,
+  `::test_a_request_cut_off_at_the_deadline_is_awaited_on_close` and
+  `::test_the_evaluation_leaves_no_request_running_when_the_client_gives_up`.
+
 ### 140. A clip's truth must not depend on how long the match was simulated
 - **What happened:** `ninety-render` simulated the match to the end of the window it chose (240 s
   plus the clip), but its own determinism check re-rendered the same window with `--start`, which
@@ -1434,7 +1466,7 @@ short and actionable. This file is public: no research sources, product names or
   `test_the_viewpoint_changes_no_faster_than_a_broadcast_and_never_flickers`,
   `test_a_pan_eases_in_and_out`); each fails on the 0.5.0 director.
 
-### 142. Build a media branch from an empty tree, and look at what it holds before pushing
+### 150. Build a media branch from an empty tree, and look at what it holds before pushing
 - **What happened:** review clips for the camera pull request went on a new orphan branch made by
   `git checkout --orphan`, which keeps the whole working tree staged. The `git rm` meant to empty
   it refused, but the shell line went on past it (`;` after `&&`), so the push carried a copy of
@@ -1446,7 +1478,22 @@ short and actionable. This file is public: no research sources, product names or
   pushing. A multi-step shell line that changes a repository stops at its first failure.
 - **Check:** `git ls-tree -r --name-only origin/pr-assets/<name>` lists only the media.
 
-### 143. Measure an asset before scaling by it, and drive feet by place, not by pose
+### 153. An exemption is stated in what the clip shows at both ends, and attacked with planted clips
+- **What happened:** the contract check for a broadcast cut (C2) accepted a gap when the last stoppage
+  or restart before it was a stoppage, or when a window opened on a loose ball, and looked at no
+  other event. An independent review's planted clips found two holes. A pass after the stoppage put
+  the ball back in play unseen by it. A window of open play with a gap and no event at all passed.
+  The renderer only made legal cuts, so no clip was wrong, but the validator would have passed a
+  wrong one. The cut was also on by default, so dataset and test-set renders would have cut too.
+- **Rule:** an exemption in a contract check is stated in what the clip itself shows, here both the
+  stoppage and the restart as events of the clip with nothing live between them. It is tested with
+  planted clips that try to abuse it, written by someone other than its author. A feature that
+  changes what a dataset contains is off by default and turned on where it is wanted.
+- **Check:** `tests/test_validate.py` (the planted cut clips; they fail on `aef43f5`) and
+  `test_every_check_the_validator_reports_has_a_planted_defect`;
+  `tests/test_render_params.py::test_only_a_broadcast_clip_cuts_through_dead_balls`.
+
+### 154. Measure an asset before scaling by it, and drive feet by place, not by pose
 - **What happened:** two defects in how the skinned players were drawn, both since the mesh
   (a3d228e), both invisible to every test because each test measured the code against itself.
   The body asset is 1.684 m to the top of its skull, but every scale treated it as 1.84 m, so each

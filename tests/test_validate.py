@@ -937,35 +937,100 @@ def test_a_recorded_cut_of_other_frames_than_the_gap_fails(tmp_path):
 
 
 def test_a_cut_through_play_fails(tmp_path):
-    """The pass from frame 5 is in flight until frame 30: cutting there hides play."""
-    assert fails(run(tmp_path, cut_away(restart_clip(), 10, 20)), "C2 frame order", "the ball was in play")
+    """The pass from frame 5 is in flight until frame 30, before any stoppage: cutting there hides play."""
+    problems = run(tmp_path, cut_away(restart_clip(), 10, 20))
+    assert fails(problems, "C2 frame order", "no stoppage before it or no restart after it")
 
 
 def test_a_cut_after_the_restart_fails(tmp_path):
     problems = run(tmp_path, cut_away(restart_clip(), 132, 140))
-    assert fails(problems, "C2 frame order", "the ball was in play")
+    assert fails(problems, "C2 frame order", "no stoppage before it or no restart after it")
 
 
 def test_a_cut_over_an_event_fails(tmp_path):
     """Nothing that happened is cut: the event would be on no frame of the clip."""
     clip = restart_clip()
     clip["events"].append(event("e4", 90, "pressure", "away", "a1", x=67.5, y=40.0))
-    assert fails(run(tmp_path, cut_away(clip, 60, 120)), "C5 event frame", "frame 90 is not in frames.jsonl")
+    assert fails(run(tmp_path, cut_away(clip, 60, 120)), "C2 frame order", "hides e4 pressure")
 
 
-def test_a_cut_in_a_window_opened_on_a_dead_ball_passes(tmp_path):
-    """The stoppage is before the window; its first event is the restart, and nobody held the ball
-    from its first frame to the cut."""
-    clip = cut_away(cut(restart_clip(), 45, 149), 60, 120)
-    assert run(tmp_path, clip) == {}
+def test_a_cut_that_hides_the_restart_fails(tmp_path):
+    """The set piece at 130 is inside the cut: no restart is shown after it."""
+    problems = run(tmp_path, cut_away(restart_clip(), 60, 135))
+    assert fails(problems, "C2 frame order", "no stoppage before it or no restart after it")
 
 
-def test_a_cut_in_a_window_whose_ball_was_held_before_it_fails(tmp_path):
+def test_a_cut_in_a_window_opened_on_a_dead_ball_fails(tmp_path):
+    """Coordinator decision (Oct 20): a cut shows the ball dead at both ends, its stoppage and its
+    restart both in the clip. A window opened after the stoppage shows only the restart: before, C2
+    took a loose ball from the window's first frame for a dead one, and a window of open play with
+    a gap and no event at all passed (the independent review's planted clips)."""
+    problems = run(tmp_path, cut_away(cut(restart_clip(), 45, 149), 60, 120))
+    assert fails(problems, "C2 frame order", "no stoppage before it or no restart after it")
     clip = cut(restart_clip(), 45, 149)
-    for f in clip["frames"]:
-        if f["frame"] == 50:
-            f["possessor"] = "a1"
-            f["ball"].update(x=75.0, y=40.0)
-            f["players"][2].update(x=75.0, y=40.0)
+    clip["events"] = [e for e in clip["events"] if e["frame"] < 45]  # a window with no event in it
     problems = run(tmp_path, cut_away(clip, 60, 120))
-    assert fails(problems, "C2 frame order", "the ball was in play")
+    assert fails(problems, "C2 frame order", "no stoppage before it or no restart after it")
+
+
+def test_play_between_the_stoppage_and_the_cut_fails(tmp_path):
+    """The independent review's first planted clip: the stoppage at 40, then a pass at 50 puts the
+    ball back in play before the cut. C2 used to look only at stoppages and restarts before the cut,
+    so the pass was invisible to it and the cut passed."""
+    clip = restart_clip()
+    clip["events"].append(event("e4", 50, "pass", "away", "a1", "a2", x=75.0, y=40.0, end_x=70.0,
+                                end_y=40.0, outcome="success", intended="a2"))
+    problems = run(tmp_path, cut_away(clip, 60, 120))
+    assert fails(problems, "C2 frame order", "the ball was in play (e4 pass)")
+
+
+@pytest.mark.parametrize("stop", ["out_of_play", "foul", "offside"])
+def test_a_cut_from_each_kind_of_stoppage_passes(tmp_path, stop):
+    clip = restart_clip()
+    for e in clip["events"]:
+        if e["id"] == "e2":
+            e["type"] = stop
+    assert run(tmp_path, cut_away(clip, 60, 120)) == {}
+
+
+@pytest.mark.parametrize("record", [
+    {"first_frame": 60.0, "last_frame": 120},
+    {"first_frame": True, "last_frame": 120},
+    {"first_frame": "60", "last_frame": 120},
+    {"first_frame": 60},
+])
+def test_a_cut_record_that_is_not_two_frame_numbers_fails_c1(tmp_path, record):
+    """A cut given as 80.0 used to match the gap (80, ...) and pass (the independent review)."""
+    clip = cut_away(restart_clip(), 60, 120)
+    clip["meta"]["cuts"] = [record]
+    assert fails(run(tmp_path, clip), "C1 files", "meta.json cuts must be a list of")
+
+
+def test_a_ball_is_not_in_flight_across_a_cut():
+    """C8's excuse for an interception or goal whose pass or shot came before a window needs the
+    ball seen moving every frame: across a broadcast cut it is not seen."""
+    from ninety.validate import in_flight_from_the_cut
+
+    frames = [{"frame": n, "possessor": None, "ball": {"x": 30.0 + 0.5 * n, "y": 30.0, "z": 0.0}}
+              for n in list(range(10, 20)) + list(range(60, 70))]
+    assert in_flight_from_the_cut(frames, 19)
+    assert not in_flight_from_the_cut(frames, 65)
+
+
+def test_a_frame_that_breaks_its_schema_fails_c1(tmp_path):
+    """Lesson 8: C1's frame schema had no planted defect (the independent review of #180)."""
+    clip = clean_clip()
+    clip["frames"][3]["ball"]["z"] = "high"
+    assert fails(run(tmp_path, clip), "C1 frame schema", "frame 3:")
+
+
+def test_every_check_the_validator_reports_has_a_planted_defect():
+    """Lesson 8: a check that no planted defect has made fail is not known to fail at all. Every
+    problem the validator can report is named in this file (the independent review of #180)."""
+    import re
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    keys = set(re.findall(r'problems\["([A-Z]\d+ [^"]+)"\]', (root / "ninety/validate.py").read_text()))
+    tests = Path(__file__).read_text()
+    assert keys and not {k for k in keys if f'"{k}"' not in tests}

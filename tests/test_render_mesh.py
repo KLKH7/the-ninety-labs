@@ -227,7 +227,7 @@ def test_the_page_turns_steps_and_touches_like_the_python_pose(page):
 
 def test_a_player_is_drawn_as_tall_as_he_is(page):
     """The mesh's skull top is ASSET_STATURE_M in its own metres; scaled as a 1.84 m body it drew
-    every player at 91.5% of his height (lesson 143). A standing, bald player seen from the side at
+    every player at 91.5% of his height (lesson 154). A standing, bald player seen from the side at
     eye level is now drawn from the grass to his height, within 2%, at every drawn stature."""
     p = sample_params(5)
     params = {**p.to_dict(), "width": 1280, "height": 720}

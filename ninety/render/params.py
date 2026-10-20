@@ -68,8 +68,11 @@ class RenderParams:
     sun_elevation_deg: float = 40.0
     weather: str = "clear"
     camera_cut: bool = False
-    # The broadcast cuts from a stoppage to its restart instead of showing the whole wait (edit.py).
-    dead_ball_cut: bool = True
+    # A broadcast clip cuts from a stoppage to its restart instead of showing the whole wait (edit.py).
+    # Off here: datasets, the Azure job, training rounds and the test sets show every frame, since a
+    # cut would thin the crowded and keeper windows unevenly and change what a test set measures.
+    # `ninety-render` (viewer and demo clips) turns it on for every seed outside the test set.
+    dead_ball_cut: bool = False
     kit_contrast: str = "normal"
     home_kit: Kit = Kit("#c8102e", "#ffffff", "#c8102e")
     away_kit: Kit = Kit("#1d4ed8", "#1d4ed8", "#ffffff")

@@ -97,7 +97,10 @@ def in_flight_from_the_cut(frames: list[dict], upto: int) -> bool:
     ball at rest is never taken for one in flight: each of the two positions is rounded by up to
     POSITION_PRECISION_M on each of three axes, so a ball at rest can appear to move by up to
     2 * POSITION_PRECISION_M per axis, sqrt(3) times that in space."""
-    pos = [(f["ball"]["x"], f["ball"]["y"], f["ball"]["z"]) for f in frames if f["frame"] <= upto]
+    seen = [f for f in frames if f["frame"] <= upto]
+    if not all(consecutive(a, b) for a, b in zip(seen, seen[1:], strict=False)):
+        return False  # across a broadcast cut (C2) the ball's flight is not shown
+    pos = [(f["ball"]["x"], f["ball"]["y"], f["ball"]["z"]) for f in seen]
     return loose_from_the_cut(frames, upto) and all(
         math.dist(a, b) > ROUNDING_STEP_M for a, b in zip(pos, pos[1:], strict=False))
 
@@ -119,7 +122,7 @@ def check_frames(events: list[dict], frames: list[dict], fps: float, problems: P
         gap = (prev["frame"] + 1, f["frame"] - 1)
         if f["frame"] > prev["frame"] + 1 and gap in recorded:
             made.add(gap)
-            check_cut(gap, events, frames, problems, cut)
+            check_cut(gap, events, problems)
         else:
             problems["C2 frame order"].append(
                 f"frame {f['frame']} at position {i}, after frame {prev['frame']}")
@@ -157,21 +160,26 @@ def check_frames(events: list[dict], frames: list[dict], fps: float, problems: P
             problems["C3 roster"].append(f"{sub['id']}: {sub['team']} over {MAX_SUBSTITUTIONS} substitutions")
 
 
-def check_cut(gap: tuple[int, int], events: list[dict], frames: list[dict], problems: Problems,
-              window: bool) -> None:
-    """C2: the broadcast cut away only from a dead ball: after a stoppage, with no restart between
-    it and the cut, and back before the restart that ends it. Nothing that happened is cut: an event
-    inside it would be on no frame of the clip (C5). In a window opened on a dead ball the stoppage
-    is before the window: its first event is then a restart, and nobody held the ball before it."""
+def check_cut(gap: tuple[int, int], events: list[dict], problems: Problems) -> None:
+    """C2: the broadcast cut away only from a dead ball, and the clip shows it dead at both ends: a
+    stoppage before the cut and the restart after it, both events of the clip, and between the two
+    no touch of the ball in play (TOUCHES) and no other restart. Nothing that happened is cut: an
+    event inside it would be on no frame of the clip (C5). A clip that opens or ends inside a dead
+    ball shows that ball dead at one end only, so it is not cut there."""
     first, last = gap
-    before = [e for e in events if e["frame"] < first and e["type"] in CUT_FROM | RESTARTS]
-    after = [e for e in events if e["frame"] > last and e["type"] != "pressure"]
-    stopped = bool(before) and before[-1]["type"] in CUT_FROM
-    opened_dead = window and not before and loose_from_the_cut(frames, first) \
-        and not any(e["frame"] < first and e["type"] != "pressure" for e in events)
-    restarted = not after or after[0]["type"] in RESTARTS
-    if not (stopped or opened_dead) or not restarted:
-        problems["C2 frame order"].append(f"cut {gap}: the ball was in play")
+    stops = [e for e in events if e["frame"] < first and e["type"] in CUT_FROM]
+    restarts = [e for e in events if e["frame"] > last and e["type"] in RESTARTS]
+    if not stops or not restarts:
+        problems["C2 frame order"].append(f"cut {gap}: no stoppage before it or no restart after it")
+        return
+    stop, restart = stops[-1]["frame"], restarts[0]["frame"]
+    live = [e for e in events if stop < e["frame"] < restart and (e["type"] in TOUCHES | RESTARTS)]
+    inside = [e for e in events if first <= e["frame"] <= last]
+    if live:
+        e = live[0]
+        problems["C2 frame order"].append(f"cut {gap}: the ball was in play ({e['id']} {e['type']})")
+    if inside:
+        problems["C2 frame order"].append(f"cut {gap}: hides {inside[0]['id']} {inside[0]['type']}")
 
 
 def check_physics(events: list[dict], frames: list[dict], fps: float, roster: list[dict],
@@ -465,8 +473,11 @@ def validate(clip: Path) -> Problems:
             return dict(problems)
     cut = window is not None
     cuts = meta.get("cuts", [])
-    if not isinstance(cuts, list) or not all(isinstance(c, dict) for c in cuts):
-        problems["C1 files"].append("meta.json cuts must be a list of {first_frame, last_frame}")
+    frame_number = lambda v: type(v) is int  # noqa: E731  (80.0 is not frame 80, nor True frame 1)
+    if not isinstance(cuts, list) or not all(
+            isinstance(c, dict) and frame_number(c.get("first_frame")) and frame_number(c.get("last_frame"))
+            for c in cuts):
+        problems["C1 files"].append("meta.json cuts must be a list of {first_frame, last_frame} numbers")
         return dict(problems)
     check_frames(events, frames, fps, problems, cut, cuts)
     if any(k.startswith("C2") for k in problems):

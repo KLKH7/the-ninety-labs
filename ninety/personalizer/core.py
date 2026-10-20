@@ -33,11 +33,20 @@ from ninety.agents.slice import Ask
 
 log = logging.getLogger(__name__)
 
-# Design choice: personalising may take at most 3 s, a little over a third of the 8 s p95 target
-# from event to verified graphic (docs/PLAN.md, Goals), because the fact-checker spends the rest.
-# The template graphic is already on screen, so waiting longer buys a nicer sentence at the cost
-# of a later one. Revisit when docs/eval/latency-cost.md measures the real split.
-BUDGET_S = 3.0
+# How long the Producer waits for the Personalizer before every profile gets the verified text.
+# Measured, not chosen: the published `ninety-personalizer:1` on gpt-4.1-mini took 3.2 to 4.7 s
+# (median 4.0 s) to write one claim's 8 variants, in 8 calls on 2026-10-20 (lesson 147); every one
+# was over the old 3 s budget, which is why the live evaluation timed out 20 of 20 requests. Split
+# into one call per language in parallel it still took 2.2 to 3.0 s. 6 s is the slowest measured
+# call plus about a quarter for the network and load (design), to revisit with the live
+# evaluation's p95. The analyst's verified insight airs without waiting: only the other personas'
+# variants come this late, and the template graphic is on screen meanwhile.
+BUDGET_S = 6.0
+# The server's own model call ends this much sooner than the client's budget (design: the A2A
+# round trip and the re-check), so a slow model is answered by the server's fallback, with its
+# reasons, rather than cut off by the client's deadline with none.
+SERVER_MARGIN_S = 0.5
+MODEL_TIMEOUT_S = BUDGET_S - SERVER_MARGIN_S
 # The longest variant that airs: the fact-checker's own cap on a claim (ninety/agents/judge.py).
 VARIANT_MAX_CHARS = 500
 # The personas a model rewrites for. "audio" is the Describer's (ninety/agents/contracts.py), so an
@@ -175,7 +184,7 @@ async def verified_text(claim: Claim, evidence: list[dict], profiles: list[Profi
     return recheck(claim, evidence, profiles, {})[0]
 
 
-def model_personalizer(ask: Ask, timeout_s: float = BUDGET_S) -> Personalize:
+def model_personalizer(ask: Ask, timeout_s: float = MODEL_TIMEOUT_S) -> Personalize:
     """Personalize with a model: one call for all profiles, then the re-check. If the model fails
     or is slow, every profile gets the verified text. `.explained` gives the same variants with why
     each dropped one was dropped, by profile number, for the server to report."""
@@ -201,13 +210,14 @@ def model_personalizer(ask: Ask, timeout_s: float = BUDGET_S) -> Personalize:
 
 
 @contextlib.asynccontextmanager
-async def published_ask():
+async def published_ask(credential=None):
     """The published `ninety-personalizer` at its pinned version, as an Ask, with its label.
+    A caller that already signed in passes its credential; otherwise one is made and signed in.
 
     The credential is every live run's (ninety/agents/credentials.py): the async one, kept by
     SignedIn. The sync one runs `az` or a managed identity request on the event loop, which stalls
     every other request and the client's own deadline (an evaluation request took 11.6 s against
-    the 3 s budget). It signs in on entry, so a caller signs in while its sign-in is fresh:
+    the 3 s budget of the time). It signs in on entry, so a caller signs in while its sign-in is fresh:
     GitHub's OIDC assertion lasts five minutes, and the agents-live evaluation once spent twenty
     simulating claims first."""
     from agent_framework.foundry import FoundryAgent
@@ -215,8 +225,10 @@ async def published_ask():
     from ninety import config
     from ninety.agents import credentials, foundry
 
-    async with credentials.new_credential() as credential:
-        await credentials.sign_in(credential)
+    async with contextlib.AsyncExitStack() as stack:
+        if credential is None:
+            credential = await stack.enter_async_context(credentials.new_credential())
+            await credentials.sign_in(credential)
         name, version = foundry.pinned(personalizer_agent(foundry.chat_client(credential)))
         async with FoundryAgent(
             project_endpoint=config.FOUNDRY_PROJECT, agent_name=name, agent_version=version,
