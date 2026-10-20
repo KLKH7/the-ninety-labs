@@ -31,7 +31,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: agents-live
+  group: agents-live-${{ inputs.ref }}
   cancel-in-progress: false
 
 jobs:
