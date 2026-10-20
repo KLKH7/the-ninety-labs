@@ -6,5 +6,9 @@
   "ninety-judge": {
     "definition_sha": "2b04c8ad1ac3c950",
     "version": "2"
+  },
+  "ninety-personalizer": {
+    "definition_sha": "6ea7cb9fb8d81c74",
+    "version": "1"
   }
 }
