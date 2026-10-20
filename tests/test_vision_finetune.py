@@ -245,3 +245,18 @@ def test_the_short_config_differs_only_where_its_notes_say():
     changed = {k for k in CONFIG["train"] if short["train"][k] != CONFIG["train"][k]}
     assert changed == {"epochs", "lr", "lr_encoder", "early_stopping_patience"}
     assert short["train"]["lr"] < CONFIG["train"]["lr"]
+
+
+def test_the_frame_index_holds_no_labels_and_detection_reads_only_it(tmp_path):
+    from ninety.vision.frame_index import write_index
+
+    d = write_clip(tmp_path, 1, n=6)
+    want = detect.frame_rows(d)
+    index = write_index(d)
+    rows = [json.loads(line) for line in index.read_text().splitlines()]
+    assert all(set(r) == {"clip", "frame", "t", "image"} for r in rows)
+    # On a machine without the answer key: only the images and the index.
+    for name in ("frames.jsonl", "clip.json"):
+        (d / name).unlink()
+    assert detect.frame_rows(d) == want
+    assert detect.frame_rows(d, stride=2) == want[::2]
