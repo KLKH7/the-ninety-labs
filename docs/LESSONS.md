@@ -1108,20 +1108,6 @@ short and actionable. This file is public: no research sources, product names or
   fails with an unclaimed file in `replays/`, and fails when a workflow recording no longer saves
   byte for byte.
 
-### 116. Knowing where the ball is going is only useful if you go there
-- **What happened:** O8 said the team-mate a pass is played to "knows where it was meant", and the
-  engine used that only to set his shape: he took up his slot around the target, not the target, and
-  a short pass struck slightly off often ran past him into touch. The chase, which takes over once he
-  reacts, was planned on the ball's predicted path past the touchline, on points up to 20 m off the
-  pitch, while `ball_destination` stopped the same path at the line. The first fix cut the true path,
-  but each player then adds his own misjudgement of it, so his judged points could still fall past
-  the line: an audit found the test passing on only 91 of 100 seeds.
-- **Rule:** when a rule gives a player knowledge, check what he does with it in the movement code, not
-  only in the estimate. A limit on what a player can do (Law 9 here) is applied to the path as he
-  judges it, where he makes the choice, and tested over many seeds, not one.
-- **Check:** `tests/test_engine_rules.py::test_the_team_mate_a_pass_is_played_to_goes_to_meet_it` and
-  `::test_nobody_is_sent_to_chase_a_ball_beyond_the_touchline`.
-
 ### 120. An exemption in a check is where a defect hides: reach the state, do not place it
 - **What happened:** the engine placed a new ball at the taker's feet at every restart and reset
   all 22 players at every goal. The validator exempts dead-ball windows from the ball-speed check
@@ -1175,6 +1161,7 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_credentials.py`. Each site takes the token before it simulates, and
   hands the same `SignedIn` credential to every client; deleting any `sign_in` turns its test
   red. An AST check keeps `azure.identity.DefaultAzureCredential` out of the live modules.
+
 ### 124. Judge a drawn motion over the frames around the moment, and watch the clip
 - **What happened:** #146 made the foot reach the ball on the contact frame and its tests measured
   exactly that, so they passed while the kick lost its swing: the foot was eased in from at most
@@ -1264,7 +1251,6 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_api_companion.py`'s `refused()` fails when the server closes before the
   accept, and every refusal test goes through it; moving `_refuse` back to a bare close turns them red.
 
-
 ### 129. A number check that reads one written form lets every other form through
 - **What happened:** the fact-check read a number only when no letter followed it, to skip ids
   like "e00042". So "50km/h", "50kph" and "9999m" were never read, nor was "fifty km/h": a model
@@ -1285,3 +1271,17 @@ short and actionable. This file is public: no research sources, product names or
   `test_football_idioms_are_words_not_counts` passes each idiom with its passes cited. Measured
   for false rejections: the 412 recorded claim texts in `replays/`, `docs/eval/` and the fixtures
   read the same numbers as before, and `fact_checker_proof --check` and both replays pass.
+
+### 139. Knowing where the ball is going is only useful if you go there
+- **What happened:** O8 said the team-mate a pass is played to "knows where it was meant", and the
+  engine used that only to set his shape: he took up his slot around the target, not the target, and
+  a short pass struck slightly off often ran past him into touch. The chase, which takes over once he
+  reacts, was planned on the ball's predicted path past the touchline, on points up to 20 m off the
+  pitch, while `ball_destination` stopped the same path at the line. The first fix cut the true path,
+  but each player then adds his own misjudgement of it, so his judged points could still fall past
+  the line: an audit found the test passing on only 91 of 100 seeds.
+- **Rule:** when a rule gives a player knowledge, check what he does with it in the movement code, not
+  only in the estimate. A limit on what a player can do (Law 9 here) is applied to the path as he
+  judges it, where he makes the choice, and tested over many seeds, not one.
+- **Check:** `tests/test_engine_rules.py::test_the_team_mate_a_pass_is_played_to_goes_to_meet_it` and
+  `::test_nobody_is_sent_to_chase_a_ball_beyond_the_touchline`.
