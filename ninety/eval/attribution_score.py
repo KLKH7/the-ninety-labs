@@ -162,6 +162,15 @@ def grade(clips: list[dict]) -> dict:
     return out
 
 
+def false_names(clips: list[dict]) -> dict:
+    """Names on detected events that match no true event: what the agents would be told about
+    something that did not happen as detected, and who those names really are."""
+    named = [(u[r], u["is"][r]) for c in clips for u in c["unmatched_detected"] for r in ROLES if r in u]
+    return {"false_events": sum(len(c["unmatched_detected"]) for c in clips),
+            "false_events_named": sum(1 for c in clips for u in c["unmatched_detected"] if u["is"]),
+            "names": len(named), "names_checkable": sum(1 for _, who_ in named if who_ is not None)}
+
+
 def report_md(body: dict) -> str:
     g = body["grade"]
     lines = [
@@ -185,7 +194,11 @@ def report_md(body: dict) -> str:
             r = row[role]
             lines.append(lead + f"| {role} | {r['truth_names']} | {r['named']} | {r['right']} "
                          f"| {r['unchecked']} | {r['left_null']} |")
+    f = false_names(body["clips"])
     lines += [
+        "",
+        f"False events (no true event of their type within 1.0 s): {f['false_events']}, of which "
+        f"{f['false_events_named']} name someone ({f['names']} names; who each really is, below).",
         "",
         "Read with care: a handful of events. A clip whose camera is trusted on no frame (a camera cut",
         "the fit does not follow) gives no events, so nothing of it is graded here; its passes are",
@@ -218,6 +231,7 @@ def main(argv: list[str] | None = None) -> None:
                     help="a dir of observations-seed<N>.jsonl; repeat to search several, first found wins")
     ap.add_argument("--seeds", default="900001,900002,900003,900004,900005")
     ap.add_argument("--out", type=Path, required=True, help="writes <out>.json and <out>.md")
+    ap.add_argument("--check", action="store_true", help="fail unless the committed report is up to date")
     a = ap.parse_args(argv)
     seeds = [int(s) for s in a.seeds.split(",")]
     clips = [clip(s, a.test_dir, a.observations) for s in seeds]
@@ -228,11 +242,31 @@ def main(argv: list[str] | None = None) -> None:
         "rule": {"rival_m": ev.RIVAL_M, "control_m": ev.CONTROL_M, "min_track_frames": ev.MIN_TRACK_FRAMES,
                  "window_s": WINDOW_S, "player_iou": PLAYER_IOU},
         "grade": grade(clips),
+        "false_names": false_names(clips),
         "clips": clips,
     }
-    a.out.with_suffix(".json").write_text(json.dumps(body, indent=2) + "\n")
-    a.out.with_suffix(".md").write_text(report_md(body))
+    write_or_check(a.out, body, report_md, a.check)
     print(json.dumps(body["grade"], indent=1))
+
+
+def dump(body: dict) -> str:
+    """Strict JSON: a NaN or infinity is an error, never written (lesson 43)."""
+    return json.dumps(body, indent=2, allow_nan=False) + "\n"
+
+
+def write_or_check(out: Path, body: dict, md, check: bool) -> None:
+    """Write <out>.json and <out>.md, or with `check` fail unless the committed ones are what this
+    code makes now. The commit and date are taken from the committed file, so only results count."""
+    if check:
+        old = json.loads(out.with_suffix(".json").read_text())
+        body = {**body, "commit": old.get("commit"), "date": old.get("date")}
+        files = ((out.with_suffix(".json"), dump(body)), (out.with_suffix(".md"), md(body)))
+        stale = [f.name for f, text in files if f.read_text() != text]
+        if stale:
+            raise SystemExit(f"stale: {', '.join(stale)}; rerun without --check")
+        return
+    out.with_suffix(".json").write_text(dump(body))
+    out.with_suffix(".md").write_text(md(body))
 
 
 if __name__ == "__main__":

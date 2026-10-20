@@ -86,11 +86,13 @@ OUT_FRAMES = 3
 RIVAL_M = 1.44
 # One player in two tracks. The tracker drops a player whose position jumps past its gate (a
 # sprint plus the camera fit's jitter) and starts a new track the next frame, so his dribble can
-# read as a pass to himself (seed 900004: twice). Two tracks never seen in the same frame, the
-# second starting within the tracker's own MAX_GAP_FRAMES of the first's end and within reach of
-# where it ended, may be one player: a pass between them cannot be told from his own touch, so
-# none is recorded. Reach is REACH_MPS (track.py's bound above match top speeds, GROUNDING R6) over
-# the gap, plus RIVAL_M, the position error, for where each was seen.
+# read as a pass to himself. Two tracks never seen in the same frame, the second starting within
+# the tracker's own MAX_GAP_FRAMES of the first's end and within reach of where it ended, may be
+# one player: a pass between them cannot be told from his own touch, so none is recorded. Reach is
+# REACH_MPS over the gap, plus RIVAL_M, the position error, for where each was seen. REACH_MPS is a
+# player's top-speed capability, about 10 m/s (GROUNDING P9; match peaks are lower, 7.9 to 8.6 m/s,
+# R6), so no player covers more. The rule's form was chosen on test seed 900004 (two self-passes
+# there); it is kept or dropped on validation clips only (docs/eval/attribution-plan.md).
 REACH_MPS = 10.0
 
 

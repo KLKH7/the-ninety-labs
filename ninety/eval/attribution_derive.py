@@ -23,7 +23,7 @@ import datetime
 import json
 from pathlib import Path
 
-from ninety.eval.attribution_score import clip, grade, match, truth_player
+from ninety.eval.attribution_score import clip, grade, match, truth_player, write_or_check
 from ninety.eval.event_score import git_commit, load_events
 from ninety.eval.pitch_score import _summary, errors
 from ninety.vision import events as ev
@@ -87,6 +87,7 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--observations", type=Path, required=True)
     ap.add_argument("--seeds", required=True)
     ap.add_argument("--out", type=Path, required=True, help="writes <out>.json and <out>.md")
+    ap.add_argument("--check", action="store_true", help="fail unless the committed report is up to date")
     a = ap.parse_args(argv)
     seeds = [int(s) for s in a.seeds.split(",")]
     if banned := sorted(set(seeds) & test_seeds()):
@@ -106,8 +107,7 @@ def main(argv: list[str] | None = None) -> None:
         "development_attribution": dev,
         "clips": [{k: v for k, v in c.items() if k != "player_errors"} for c in per],
     }
-    a.out.with_suffix(".json").write_text(json.dumps(body, indent=2) + "\n")
-    a.out.with_suffix(".md").write_text(report_md(body))
+    write_or_check(a.out, body, report_md, a.check)
     rule = body["track_break_rule"]
     print(json.dumps({"players_position_error": pooled, "track_break_rule": rule["totals"],
                       "removed_self": rule["removed_self"], "removed_not_self": rule["removed_not_self"]},

@@ -172,6 +172,9 @@ def test_a_new_track_may_continue_an_old_one_only_when_never_seen_together_and_w
     assert not ev.may_continue(a, track(11, 20, reach_1 + 0.01))
     assert not ev.may_continue(a, track(10, 20, 0.0))  # seen in the same frame: two players
     assert not ev.may_continue(a, track(11 + tr.MAX_GAP_FRAMES, 40, 0.0))  # lost too long
+    # Five frames on, 10 m away: farther than a player runs in 0.2 s at any speed (P9), however
+    # large the position error is taken to be within reason.
+    assert not ev.may_continue(a, track(15, 20, 10.0))
 
 
 def test_out_of_play_names_nobody():

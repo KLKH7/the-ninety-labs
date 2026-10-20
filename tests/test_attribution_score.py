@@ -118,3 +118,45 @@ def test_derive_refuses_a_test_seed(tmp_path):
     with pytest.raises(SystemExit, match="test seeds"):
         de.main(["--clips", str(tmp_path), "--observations", str(tmp_path), "--seeds", str(seed),
                  "--out", str(tmp_path / "x")])
+
+
+def test_the_report_is_strict_json_a_nan_is_an_error_never_written():
+    import math
+
+    import pytest
+    with pytest.raises(ValueError):
+        at.dump({"x": math.nan})
+    assert at.dump({"x": 1.0}) == '{\n  "x": 1.0\n}\n'
+
+
+def test_check_fails_on_a_stale_report_and_passes_on_a_current_one(tmp_path):
+    import pytest
+    out = tmp_path / "r"
+    body = {"commit": "a", "date": "d", "x": 1}
+    md = lambda b: f"x={b['x']}\n"  # noqa: E731
+    at.write_or_check(out, body, md, check=False)
+    at.write_or_check(out, {**body, "commit": "b", "date": "e"}, md, check=True)  # only results count
+    with pytest.raises(SystemExit, match="stale"):
+        at.write_or_check(out, {**body, "x": 2}, md, check=True)
+
+
+def test_a_box_that_barely_overlaps_a_true_player_is_nobody():
+    from ninety.vision import track as tr
+    t = tr.Track(1, frames=[0], xy=[(1.0, 2.0)], team="home")
+    obs = {0: {"players": [{"bbox": [0, 0, 10, 30], "score": 0.9, "x": 1.0, "y": 2.0}]}}
+
+    def truth(box):
+        return {0: {"players": [{"id": "h7", "bbox": box, "visibility": 1.0}]}}
+    assert at.truth_player(t, 0, obs, truth([0, 0, 10, 30])) == "h7"
+    assert at.truth_player(t, 0, obs, truth([0, 0, 10, 14])) is None  # IoU 0.47: under 0.5
+    assert at.truth_player(t, 0, obs, truth([5, 0, 15, 30])) is None  # IoU 0.33
+
+
+def test_false_events_count_their_names_and_who_those_really_are():
+    clips = [{"unmatched_detected": [
+        {"id": "v1", "type": "pass", "player": "h-t1", "receiver": "h-t2",
+         "is": {"player": "h3", "receiver": "h3"}},
+        {"id": "v2", "type": "out_of_play", "is": {}},
+        {"id": "v3", "type": "pass", "player": "h-t4", "is": {"player": None}}]}]
+    assert at.false_names(clips) == {"false_events": 3, "false_events_named": 2, "names": 3,
+                                     "names_checkable": 2}
