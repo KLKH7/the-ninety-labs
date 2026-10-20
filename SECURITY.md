@@ -46,6 +46,9 @@ Please do not open a public issue. Use GitHub's
   collected beyond optional viewer preferences, which stay in the browser.
 
 ### Supply chain
-- **Dependencies are pinned** (`uv.lock`) and limited to MIT, Apache-2.0 or BSD licenses; no AGPL.
+- **Dependencies are pinned** (`uv.lock`) and limited to permissive licences, with three narrow
+  exceptions for runtimes bundled in a dependency's wheel; never GPL or AGPL otherwise. The full rule
+  is in [AGENTS.md](AGENTS.md) (Hard rules); every locked package and its licence is listed in
+  [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), checked by `tests/test_third_party_notices.py`.
 - **Dependabot alerts and security updates** are on.
 - **CI** runs tests and a secret scan on every push.

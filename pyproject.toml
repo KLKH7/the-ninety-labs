@@ -22,6 +22,7 @@ dependencies = [
 [project.scripts]
 ninety-sim = "ninety.sim.cli:main"
 ninety-slice = "ninety.agents.slice:main"
+ninety-live = "ninety.agents.live:main"
 ninety-agents = "ninety.agents.foundry:main"
 ninety-validate = "ninety.validate:main"
 ninety-render = "ninety.render.cli:render_main"
@@ -30,9 +31,12 @@ ninety-render-check = "ninety.render.cli:check_main"
 ninety-render-meta = "ninety.render.cli:meta_main"
 ninety-grid = "ninety.sim.grid:main"
 ninety-data-stats = "ninety.vision.data_stats:main"
+ninety-e2e = "ninety.e2e:main"
 
 [dependency-groups]
 dev = [
+    "numpy>=2",  # the camera fit of event detection (ninety/vision/pitch.py), tested in CI
+    "pillow>=11",  # images for the runtime truth guard of event detection (tests/test_vision_live_path.py)
     "pytest>=8",
     "pytest-xdist>=3.6",
     "ruff>=0.17.0",
