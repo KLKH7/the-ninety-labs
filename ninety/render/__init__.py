@@ -20,4 +20,6 @@ docs/decisions/0001-synthetic-data.md.
 # 0.4.3: while a foot plays the ball the other one stands and steps after the body; a planted foot
 # left beyond the leg's reach steps at once; a lowered leg that cannot reach its plant stays above
 # the grass; a keeper stoops less on the move (render-check feet in boxes, seeds 7 and 11).
-RENDERER_VERSION = "0.4.3"
+# 0.4.4: a foot that has played the ball comes back to the grass from where the touch drew it, so
+# a first touch then a strike with the other foot on the move keeps a foot on the grass (seed 7).
+RENDERER_VERSION = "0.4.4"

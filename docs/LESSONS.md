@@ -996,6 +996,20 @@ short and actionable. This file is public: no research sources, product names or
   `test_setting_off_running_and_pulling_up_moves_no_limb_in_a_jump` and the tackle test, which cap
   how far any limb moves relative to the body in one frame.
 
+### 113. A check that fails on a few frames names a class of defect: sweep every frame for it
+- **What happened:** render-check failed `player_feet_in_boxes` at 0.4.2 on 2 foot checks each of
+  seeds 7 and 11. The 0.4.3 fix traced those four frames to three causes, tested each, and the
+  re-render of seed 7 then failed 7 checks in two other sequences: a pass cushioned with one foot
+  and struck with the other on the move left the first foot's plant where it stood before the
+  touch, 2 m behind by the strike, and the mesh hung both feet in the air for half a second. The
+  four frames were instances; the class was a plant the body has left behind.
+- **Rule:** when a picture check fails on a few frames, name the class of defect, measure it over
+  every player-frame of the clips in Python (no render needed: the mesh's markers come from
+  `meshpose`), and fix every sequence that shows it before re-rendering.
+- **Check:** `test_a_first_touch_then_a_strike_on_the_move_keeps_a_foot_on_the_grass` fails on
+  `0312d60` and passes; the #150 comment of Oct 20 has the sweep (both mesh feet above 0.2 m with
+  the body not jumping, every player-frame of seeds 7 and 11) and the render-check output.
+
 ### 106. Look for an open pull request on the same task before building it
 - **What happened:** a session was handed "build the Personalizer over A2A" and built it, tests and
   mutation run included, before it noticed that draft #131 was the same task, further along. Two

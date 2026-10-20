@@ -487,6 +487,43 @@ def test_a_kick_straight_after_a_touch_stands_on_its_other_foot():
             assert m[other][2] < STEP_LIFT + 0.04, (i, touch["part"], m[other])
 
 
+def test_a_first_touch_then_a_strike_on_the_move_keeps_a_foot_on_the_grass():
+    """Old (0.4.3): a pass cushioned with the left foot while walking at 3.1 m/s, then struck with
+    the right, left the left foot's plant where it stood before the touch. By the strike the body
+    was 2 m on, beyond the leg's reach, so the mesh hung that foot 0.3 to 0.6 m up while the right
+    foot swung: the whole body in the air for half a second (render-check player_feet_in_boxes,
+    seed 7, h3 at 23.5 s and h10 at 33.4 s). A foot that has played the ball comes back to the
+    grass from where the touch drew it."""
+    frames, x, v = [], 30.0, 3.1
+    touch, strike = 20, (31, 33)  # the first frame of the cushion; the strike's wind-up frames
+    for i in range(48):
+        v = 3.1 if i <= strike[0] else max(0.0, v - 0.26)
+        x += v / FPS
+        if i < touch:
+            # The pass comes at him at 11.7 m/s (seed 7, h3), to his left foot.
+            ball = {"x": x + 0.2 + 11.7 * (touch - i) / FPS, "y": 30.05, "z": 0.0, "vx": -11.7, "vy": 0.0}
+        elif i <= strike[1]:
+            # Cushioned, then carried 0.2 m ahead of him; it rolls across to his right to be struck.
+            y = 30.05 if i < strike[0] - 2 else 29.95
+            ball = {"x": x + 0.2, "y": y, "z": 0.0, "vx": v, "vy": 0.0}
+        else:
+            t = (i - strike[1]) / FPS
+            ball = {"x": frames[strike[1]]["ball"]["x"] + 6.5 * t, "y": 29.95 + 19.5 * t, "z": 0.0,
+                    "vx": 6.5, "vy": 19.5}
+        action = ("foot" if touch <= i < touch + 8 else "strike" if strike[0] <= i <= strike[1]
+                  else _engine_action(v))
+        frames.append({"ball": ball, "possessor": "h1" if touch <= i <= strike[1] else None,
+                       "players": [{"id": "h1", "x": x, "y": 30.0, "vx": v, "vy": 0.0, "heading": 0.0,
+                                    "action": action, "dive": 0.0}]})
+    drawn = _draw(frames)["h1"]
+    assert any(p["touch"] and p["touch"]["part"] == "foot" and p["touch"]["side"] == "l" for p, *_ in drawn)
+    assert any(p["touch"] and p["touch"]["part"] == "strike" and p["touch"]["side"] == "r" for p, *_ in drawn)
+    for i, (pose, m, _, _) in enumerate(drawn):
+        # Walking, a foot is always on the grass, or on a low step after the body (STEP_LIFT).
+        low = min(m["foot_l"][2], m["foot_r"][2])
+        assert -0.03 < low < STEP_LIFT + 0.04, (i, pose["touch"], m["foot_l"], m["foot_r"])
+
+
 def test_a_keeper_stooping_on_the_run_keeps_his_feet_on_the_grass():
     """Old (0.4.2): a keeper gathering a ground ball at 3 m/s dropped his hips while a foot stayed
     planted behind him beyond the leg's reach; the leg gave up and the foot was drawn 0.34 m

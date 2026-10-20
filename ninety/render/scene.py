@@ -214,6 +214,7 @@ class Gait:
     touch: dict | None = None  # the part meeting the ball now: part, side, at (world), w
     hold: dict | None = None  # a held ball: at (world, its centre), w, bend
     supporting: bool = False  # the feet stand and step for a touch or a lunge (_feet)
+    played: str | None = None  # the foot that played the ball last frame (_feet)
     lift: float = 0.0  # metres the body is raised (a header's jump) or lowered (a lunge, a stoop)
 
 
@@ -532,6 +533,12 @@ def _feet(g: Gait, x: float, y: float, k: float) -> None:
     busy = None
     if g.touch is not None and g.touch["w"] > 0 and g.touch["part"] in ("foot", "strike", "thigh"):
         busy = g.touch["side"]
+    # A foot that has just played the ball comes back to the grass from where the touch drew it
+    # (g.ankle), not from where it stood before the touch: the body has moved on since, and a foot
+    # left there can be beyond the leg's reach (a first touch then a strike on the move).
+    if g.played is not None and g.played != busy:
+        g.feet.pop(g.played, None)
+    g.played = busy
     lunge = g.lift < -LOW_M * k  # the support foot stays down under a lunge, whatever the pose
     # While a foot or thigh plays the ball, the other foot is the support: it stands, and steps after
     # the body, instead of following the stride into the air.
@@ -787,6 +794,7 @@ def body_parts(
     # The outer edge of the sleeves is the shoulder breadth over the deltoids (shape.py, P11).
     shoulder_y = shape.SHOULDER_BREADTH_M / 2 - sleeve_r
     parts = []
+    played: dict[str, tuple[float, float, float]] = {}  # the sole a touch draws, side -> (x, y, height)
     for side, sign in (("l", 1.0), ("r", -1.0)):
         # The same stride as the mesh's (meshpose.gait): at sin(phase) = 1 the right foot is forward.
         swing = -amp * s * sign
@@ -823,6 +831,8 @@ def body_parts(
                                 for a, b in ((knee, pk), (ankle, pa), (toe, pt)))
         if touch is not None and touch["part"] in ("foot", "strike", "thigh") and touch["side"] == side:
             knee, ankle, toe = _reach_leg(hip, knee, ankle, toe, touch, (hx, hy), k)
+            played[side] = (ankle[0] + hx * ANKLE_BACK * k, ankle[1] + hy * ANKLE_BACK * k,
+                            max(ankle[2] - 0.08 * k, 0.0))
         parts.append({"n": f"thigh_{side}", "a": hip, "b": knee, "r": round(0.085 * k * w, 4), "c": "shorts"})
         parts.append({"n": f"shin_{side}", "a": knee, "b": ankle, "r": round(0.058 * k * w, 4), "c": "socks"})
         parts.append({"n": f"boot_{side}", "a": ankle, "b": toe, "r": round(0.042 * k, 4), "c": "boots"})
@@ -844,11 +854,14 @@ def body_parts(
             hand = at(pump * 0.12 + lean, (shoulder_y + sleeve_r - arm_r) * sign, 0.93 * k)
         parts.append({"n": f"arm_{side}", "a": shoulder, "b": elbow, "r": round(sleeve_r, 4), "c": "shirt"})
         parts.append({"n": f"forearm_{side}", "a": elbow, "b": hand, "r": round(arm_r, 4), "c": "skin"})
-    # Where each foot is drawn now, for a step that starts from it (_feet): on its plant, or where
-    # the mesh's stride has it. The capsules' own stride is the label's, not the picture's.
+    # Where each foot is drawn now, for a step that starts from it (_feet): on the ball, on its
+    # plant, or where the mesh's stride has it. The capsules' own stride is the label's, not the
+    # picture's.
     for side in ("l", "r"):
         plant = g.plant_l if side == "l" else g.plant_r
-        if plant is not None and (len(plant) < 5 or plant[4] >= 0.5):
+        if side in played:
+            g.ankle[side] = played[side]
+        elif plant is not None and (len(plant) < 5 or plant[4] >= 0.5):
             g.ankle[side] = (plant[0], plant[1], plant[3])
         else:
             g.ankle[side] = strided[side]
