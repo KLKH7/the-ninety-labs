@@ -307,6 +307,17 @@ async def audit_round(
     return result, trace.steps
 
 
+def untyped(result: dict) -> dict:
+    """clusters.json on the fields `failure_clusters --out` wrote before the Auditor (round, then
+    name, misses and render), in its key order: what round 2's pre-registration (#158) fixed."""
+    return {
+        "round": result["round"],
+        "clusters": [{"name": c["name"], "misses": c["misses"], "render": c["render"]}
+                     for c in result["clusters"]],
+        "unmapped": [{"name": c["name"], "misses": c["misses"]} for c in result["unmapped"]],
+    }
+
+
 def handoff(result: dict, commit: str, trace: list[TraceStep]) -> dict:
     """The Data agent's plan from the Auditor's clusters; nothing is enqueued here."""
     t = time.perf_counter()

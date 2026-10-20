@@ -18,7 +18,7 @@ from jsonschema.exceptions import ValidationError
 from ninety.agents import data_agent
 from ninety.agents.contracts import schema_validator
 from ninety.agents.replay import ReplayMismatch, Turn, WorkflowRecording
-from ninety.agents.vision_auditor import audit_round, check_rationale, handoff, main, prompt
+from ninety.agents.vision_auditor import audit_round, check_rationale, handoff, main, prompt, untyped
 from ninety.render.splits import RESERVED_FROM
 from ninety.vision.failure_clusters import handoff as failure_handoff
 
@@ -72,6 +72,24 @@ def test_the_committed_clusters_json_is_the_auditor_s_code_output_and_the_data_a
     assert rebuilt == committed
     assert {c["explained_by"] for c in committed["clusters"]} == {"code"}  # pre-registered: no model
     assert len(data_agent.plan(committed, 80, 7101, "abc123")["requests"]) == 11
+
+
+# What `failure_clusters --out` wrote for round 1 before the Auditor took over clusters.json
+# (main at 91d1e3b, #136): the file round 1 rendered from, kept byte for byte.
+PRE_AUDITOR = Path(__file__).resolve().parent / "fixtures" / "round1-clusters-failure-clusters-out.json"
+
+
+def test_without_a_model_the_auditor_is_byte_identical_to_the_pre_registered_handoff(tmp_path):
+    """Round 2's amendment (docs/eval/round2/PLAN.md, section 9): run with no model, the Auditor's
+    clusters.json on the old fields is the old file byte for byte, and so is what the Data agent plans."""
+    main([str(ROUND1 / "audit.json"), "--round", "round1", "--budget", "80", "--first-seed", "7101",
+          "--out", str(tmp_path), "--commit", "abc123"])
+    typed = json.loads((tmp_path / "clusters.json").read_text())
+    old = PRE_AUDITOR.read_bytes()
+    assert (json.dumps(untyped(typed), indent=2) + "\n").encode() == old
+    assert (json.dumps(failure_handoff(round1_audit(), "round1"), indent=2) + "\n").encode() == old
+    from_old = data_agent.plan(json.loads(old), 80, 7101, "abc123")
+    assert (tmp_path / "requests.json").read_bytes() == (json.dumps(from_old, indent=2) + "\n").encode()
 
 
 def test_the_split_is_round_one_s_plan_80_clips_on_seeds_7101_to_7180():

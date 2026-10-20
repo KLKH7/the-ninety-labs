@@ -186,3 +186,29 @@ Wall time from the go:
 - **Render commit:** not chosen yet (section 2).
 - **Deviations:** none yet. Any change after this commit is listed here with its date and reason,
   before results are read.
+
+### Amendment (Oct 20, before any render)
+
+Tooling only, made before any round-2 clip, test clip or model exists: the targeted arm, its
+clusters, its split and every number in sections 1 to 8 are unchanged.
+
+Since #140, `ninety.vision.failure_clusters` writes only the audit (`--audit`), and the Vision
+Auditor writes `clusters.json`. Step 2 of section 6 now runs as two commands, the Auditor **with no
+model** (no `--replay`, no `--record`):
+
+    uv run python -m ninety.vision.failure_clusters <mesh validation clips>/seed* \
+        --detections <ours-v4 detections file> --audit docs/eval/round2/audit.json
+    uv run python -m ninety.agents.vision_auditor docs/eval/round2/audit.json --round round2 \
+        --budget 170 --first-seed 7501 --out docs/eval/round2 --commit <render commit>
+
+- The keeper re-check (step 4) runs before the second command. If it moves `keeper` to
+  `unmapped`, that is done in `failure_clusters.RENDER`, which both the old and the new step read.
+- The new `clusters.json` is typed (`schemas/failure_clusters.schema.json`): it adds fields such as
+  labels, recall, clips, seeds and a code-written rationale, so the file itself is not the old
+  bytes. On the fields `failure_clusters --out` wrote (round; each cluster's name, misses and
+  render; unmapped), it is **byte-identical** to the old file. The Data agent's `requests.json`
+  from it is byte-identical to the one from the old file.
+- **Proof:** `tests/test_vision_auditor.py::test_without_a_model_the_auditor_is_byte_identical_to_the_pre_registered_handoff`
+  runs both on round 1's inputs against the file round 1 rendered from, kept byte for byte in
+  `tests/fixtures/round1-clusters-failure-clusters-out.json`.
+- With a model, the Auditor's order can move a tied clip. Using it here would be a deviation.
