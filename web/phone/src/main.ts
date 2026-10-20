@@ -383,9 +383,11 @@ function showCard(c: PlayerCard) {
   // stretch the positions really cover, not the one asked for.
   const from = Math.max(c.t_from, state.minimap?.frames[0]?.t ?? c.t_from);
   $("heat-title").textContent = `Heat map, ${clock(from)} to ${clock(c.t_to)}`;
-  const span = c.t_to - from;
-  $("heat-short").hidden = span >= 60;
-  $("heat-short").textContent = `Only ${Math.round(span)} seconds so far: the heat map means more as the match goes on.`;
+  // Always say how much play the card covers, so a short window is never mistaken for a match.
+  const span = Math.max(0, c.t_to - from);
+  $("heat-span").textContent =
+    `Covering ${span < 60 ? `${Math.round(span)} s` : `${Math.floor(span / 60)} min ${Math.round(span % 60)} s`} of play` +
+    (span < 60 ? ": the heat map means more as the match goes on." : ".");
   $("player").dataset.t = String(c.t_to);
   const heat = $<HTMLCanvasElement>("heat");
   const v = fit(heat);

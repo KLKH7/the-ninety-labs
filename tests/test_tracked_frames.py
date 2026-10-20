@@ -25,8 +25,7 @@ FRAME = schema_validator("frame")
 def test_the_committed_tracked_frames_are_what_the_builder_writes_from_the_observations():
     body = tf.build(tr.read_observations(OBSERVATIONS), "seed900001")
     assert FIXTURE.read_text() == tf.text(body), (
-        "re-run: uv run python -m ninety.vision.tracked_frames tests/fixtures/observations-seed900001.jsonl "
-        "--clip seed900001 --out tests/fixtures/tracked-seed900001.json"
+        "re-run: uv run python -m ninety.vision.tracked_frames tests/fixtures/observations-seed900001.jsonl"
     )
 
 
@@ -127,3 +126,14 @@ def test_the_ball_is_filled_across_short_gaps_only():
     assert ball[gap // 2][0] == 10.0 + 10.0 * (gap // 2) / gap  # on the line between the two
     assert all(f in ball for f in range(gap + 1))
     assert not any(gap + i in ball for i in range(1, gap + 1))  # one frame too long: left out
+
+
+def test_the_builder_takes_any_clips_observations(tmp_path):
+    # The freeze-day clip runs through the same command: id and output follow the file's name.
+    obs = tmp_path / "observations-demo42.jsonl"
+    obs.write_text(OBSERVATIONS.read_text())
+    tf.main([str(obs)])
+    body = json.loads((tmp_path / "tracked-demo42.json").read_text())
+    assert body["frames"] and {f["clip"] for f in body["frames"]} == {"demo42"}
+    tf.main([str(OBSERVATIONS), "--clip", "seed900001", "--out", str(tmp_path / "m1.json")])
+    assert (tmp_path / "m1.json").read_text() == FIXTURE.read_text()

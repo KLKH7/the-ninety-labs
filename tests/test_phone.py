@@ -226,6 +226,7 @@ def test_tapping_a_player_shows_their_speed_and_heat_map(browser, mock_site):
     assert float(phone.inner_text("#speed")) >= 0
     assert float(phone.inner_text("#peak")) >= float(phone.inner_text("#speed"))
     assert "Heat map of Away 7: Most often in his" in phone.get_attribute("#heat", "aria-label")
+    assert phone.inner_text("#heat-span").startswith("Covering ")
     # The same choice without the map, for a screen reader: the roster's buttons.
     phone.click("#roster-box summary")
     phone.get_by_role("button", name="Home 4", exact=True).click()
@@ -557,6 +558,7 @@ def test_the_phone_shows_the_tracked_m1_clip_through_the_api(browser, tracked_ap
         page.click("#roster-box summary")
         page.locator("#roster .who").first.click()
         page.wait_for_function("document.querySelector('#speed').textContent !== '–'")
-        assert "player" in page.inner_text("#player-title")
+        assert re.fullmatch(r"(Home|Away) player · track \d+", page.inner_text("#player-title"))
+        assert re.fullmatch(r"Covering \d+ s of play: .*", page.inner_text("#heat-span"))
         validate_seen(seen(page))
         assert not errors

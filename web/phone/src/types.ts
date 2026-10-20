@@ -99,10 +99,10 @@ export function shirt(player: string): string {
   return isTrack(player) ? player.slice(3) : player.slice(1);
 }
 
-/** "Home 7" for h7, "Home player 12" for the tracked h-t12: synthetic teams have no names. */
+/** "Home 7" for h7, "Away player · track 12" for the tracked a-t12: never an invented shirt number. */
 export function playerName(player: string): string {
   const side = team(player) === "home" ? "Home" : "Away";
-  return isTrack(player) ? `${side} player ${shirt(player)}` : `${side} ${shirt(player)}`;
+  return isTrack(player) ? `${side} player · track ${shirt(player)}` : `${side} ${shirt(player)}`;
 }
 
 /** Match time as m:ss. */

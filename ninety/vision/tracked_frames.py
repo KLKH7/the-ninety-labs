@@ -20,8 +20,12 @@ Three steps on top of track.py:
 - **Ids.** The tracker sees no shirt numbers, so a tracked player is his side and his track, as
   `h-t12`; the phone names him "Home player, track 12".
 
-    uv run python -m ninety.vision.tracked_frames tests/fixtures/observations-seed900001.jsonl \\
-        --clip seed900001 --out tests/fixtures/tracked-seed900001.json
+    uv run python -m ninety.vision.tracked_frames <observations.jsonl> [--clip ID] [--out FILE]
+
+Any clip's observations: the clip id defaults to the file's name (observations-<clip>.jsonl), and
+the output to tracked-<clip>.json beside it. The M1 fixture:
+
+    uv run python -m ninety.vision.tracked_frames tests/fixtures/observations-seed900001.jsonl
 """
 
 from __future__ import annotations
@@ -136,13 +140,22 @@ def text(body: dict) -> str:
     return json.dumps(body, separators=(",", ":")) + "\n"
 
 
+def clip_of(observations: Path) -> str:
+    stem = observations.stem
+    if not stem.startswith("observations-") or stem == "observations-":
+        raise SystemExit(f"{observations}: name it observations-<clip>.jsonl, or pass --clip")
+    return stem.removeprefix("observations-")
+
+
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("observations", type=Path)
-    ap.add_argument("--clip", required=True)
-    ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("observations", type=Path, help="observations.jsonl from ninety.vision.observe")
+    ap.add_argument("--clip", help="the clip id (default: from observations-<clip>.jsonl)")
+    ap.add_argument("--out", type=Path, help="where to write (default: tracked-<clip>.json beside it)")
     args = ap.parse_args(argv)
-    body = build(tr.read_observations(args.observations), args.clip)
+    clip = args.clip or clip_of(args.observations)
+    args.out = args.out or args.observations.with_name(f"tracked-{clip}.json")
+    body = build(tr.read_observations(args.observations), clip)
     args.out.write_text(text(body))
     print(f"{args.out}: {len(body['frames'])} frames, {body['how']['kept']} tracks")
 
