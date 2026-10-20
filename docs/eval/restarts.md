@@ -117,19 +117,31 @@ changes: seed 21 is frame for frame the same as on `main` until its goal at 5:03
 ### The huddle
 
 The first version sent every team-mate to the scorer's own centre: in 32 to 63% of celebration
-frames two bodies were more than 5 cm into each other (the audit's count, three planted goals; open
-play 0 to 0.6%). Now each runs to his own place on an arc round the scorer, a shoulder's breadth
-apart, on the side he comes from and in the order of the team-mates' bearings, and only within 3 m
-of the scorer do team-mates stand closer than the usual personal space (GROUNDING L4). Over the
-whole celebration of a planted goal on 8 seeds (2, 3, 5, 7, 11, 21, 42, 101), 0 to 2.2% of frames
-(mean 1.3%) have two bodies more than 5 cm into each other, at most 0.4 s a goal, and none once
-they have gathered (`test_gathered_round_the_scorer_no_two_bodies_overlap`). The rest come from runs that
-arrive too fast to stop at a place a shoulder's breadth from the next: the engine's steering bends a
-run round a team-mate but does not slow it, and bodies in contact brace only with the grip left
-after steering (`separate`). Fixing that is a change to every player's movement, not this one's.
-Four other ways were measured on the same goals and were worse, a mean of 2.2 to 4.2% of frames:
-places fixed at the goal, places kept once reached, each stopping on his own line to the scorer
-behind those already there, and standing close only once slower than a walk.
+frames two bodies were more than 5 cm into each other (the audit's count, three planted goals).
+Now each runs to his own place on an arc round the scorer, a shoulder's breadth apart, on the side
+he comes from and in the order of the team-mates' bearings; the places are worked out for all of
+them once a frame; within a player's stopping distance of his place (P2) team-mates stand closer
+than the usual personal space; and each leaves at his own moment (GROUNDING L4).
+
+Counted by [`scripts/defect_sweep/huddle.py`](../../scripts/defect_sweep/huddle.py) over the whole
+celebration of a planted goal on 12 seeds not used while designing it (1, 4, 6, 8 to 10, 12 to 17):
+
+| | Before (`1f43b86`) | After |
+|---|---:|---:|
+| Frames with two bodies more than 5 cm into each other, mean over seeds | 2.1% | 1.2% |
+| worst seed | 5.3% | 3.0% |
+| longest a goal | 0.9 s | 0.7 s |
+| Frames once all stand at their places, settled, until the first leaves | 4 of 1,228 | 0 of 169 |
+| The same count over a minute of open play from the same seeds | 0.3% | 0.3% |
+
+(Before, "at their places" was counted as within 3 m of the scorer, the rule of the time.) What
+remains comes from the last few arriving at a run beside a team-mate already in place: a shoulder's
+breadth between places leaves 5 cm to spare, and the engine's steering bends a run round a
+team-mate but does not slow it. The audit measured that wider places, or a longer reach, would cut
+it further; those values were not changed after seeing that. Four other ways of placing them were
+tried on the design seeds (2, 3, 5, 7, 11, 21, 42, 101) and were worse there, a mean of 2.2 to 4.2%
+of frames: places fixed at the goal, places kept once reached, each stopping on his own line to the
+scorer behind those already there, and standing close only once slower than a walk.
 
 ## Reproduce
 

@@ -33,6 +33,7 @@ from ninety.sim.body import (
     Body,
     can_get_to,
     relative_speed,
+    stopping_distance,
     stopping_speed,
 )
 from ninety.sim.body import move as move_body
@@ -141,12 +142,14 @@ RESTART_DELAY_S = {"throw_in": (12, 20), "goal_kick": (24, 34), "corner": (24, 3
                    "penalty_kick": (100, 140),
                    "kick_off": (1, 2),
                    "kick_off_after_goal": (60, 90)}
-# design: how long the scorer's run and his team-mates' gathering round him last; the rest of the
-# minute or more before the kick-off is the walk back (L4)
+# design: how long each of the scorers celebrates, the scorer's run and his team-mates' gathering
+# round him; the rest of the minute or more before the kick-off is the walk back (L4)
 CELEBRATION_S = (15.0, 25.0)
 # design: team-mates round a scorer stand a shoulder's breadth apart (P11) with a little to spare
 HUDDLE_SPACING_M = 0.55
-HUDDLE_REACH_M = 3.0  # design: this near the one they celebrate, team-mates count as gathered
+# P2: this far from his place a team-mate running at RECOVER has started braking for it; from here
+# on he is joining the others, and stands as close to them as bodies allow
+GATHER_REACH_M = stopping_distance(RECOVER)
 # L4: after a goal players walk back at least at a normal walking pace: men aged 20 to 29 walk at
 # about 1.36 m/s (Bohannon & Andrews 2011, Physiotherapy 97:182, a meta-analysis of 23,111 adults,
 # as tabulated by the University of Toronto's iWalk guide)
@@ -209,9 +212,11 @@ class Restart:
 class Celebration:
     team: str  # the side that scored
     focus: str  # the scorer (or, for an own goal, the scoring side's player nearest the ball)
-    spot: tuple[float, float]  # where he runs: the corner flag nearest him at that end (design)
-    until: float
+    spot: tuple[float, float]  # where he goes: the corner flag nearest him at that end, a keeper stays
+    until: float  # when the last of them stops celebrating
     ring: list[str] = field(default_factory=list)  # the team-mates who run to him
+    leave: dict[str, float] = field(default_factory=dict)  # when each, the focus too, stops celebrating
+    places: dict[str, tuple[float, float]] = field(default_factory=dict)  # this frame's places round him
 
 
 @dataclass
@@ -426,6 +431,7 @@ class Engine:
         # Laws 13, 15 to 17: a restart that has been set but not yet kicked; the opponents keep off
         self.set_by: Restart | None = None
         self.celebration: Celebration | None = None  # a goal just scored: the scorers celebrate (L4)
+        self.side_by_side: set[str] = set()  # this frame, who stands as close to team-mates as bodies allow
         # Laws 8, 13 to 17: who took the last restart, until another player has touched the ball
         self.restart_kicker: str | None = None
         self.throw_by: str | None = None  # a throw-in taker holding the ball until he throws it
@@ -1483,39 +1489,74 @@ class Engine:
         else:
             flag_y = 0.5 if focus.y < PITCH_Y / 2 else PITCH_Y - 0.5
             spot = (clamp(goal_x(team), 0.5, PITCH_X - 0.5), flag_y)
-        until = self.t + self.rng.uniform(*CELEBRATION_S)
-        self.celebration = Celebration(team, focus.id, spot, until, [p.id for p in side if p is not focus])
+        mates = [q.id for q in side if q is not focus]
+        # each stops at his own moment, so they leave one by one, not as one body
+        leave = {pid: self.t + self.rng.uniform(*CELEBRATION_S) for pid in (focus.id, *mates)}
+        self.celebration = Celebration(team, focus.id, spot, max(leave.values()), mates, leave)
 
-    def huddle_spot(self, c: Celebration, p: Player) -> tuple[float, float]:
-        """His place round the focus: on an arc facing the side the team-mates come from (their
-        mean bearing from him now), HUDDLE_SPACING_M apart, in the order of their bearings, so no
-        path to it crosses the focus or another's; the arc is at most a half-circle, far enough out
-        to hold them all and clear of the focus's body."""
-        focus = self.by_id[c.focus]
-        mates = [self.by_id[pid] for pid in c.ring]
-        bear = {q.id: fmath.atan2(q.y - focus.y, q.x - focus.x) for q in mates}
-        mx = sum(fmath.cos(a) for a in bear.values())
-        my = sum(fmath.sin(a) for a in bear.values())
-        mean = fmath.atan2(my, mx)
-        rel = {pid: (a - mean + math.pi) % (2 * math.pi) - math.pi for pid, a in bear.items()}
-        order = sorted(c.ring, key=lambda pid: rel[pid])
+    def celebrating(self, p: Player) -> bool:
+        c = self.celebration
+        return c is not None and self.t < c.leave.get(p.id, 0.0)
+
+    def huddle_places(self, c: Celebration) -> dict[str, tuple[float, float]]:
+        """The places round the focus of the team-mates still celebrating, worked out for all of
+        them from where they all are now: on an arc facing the side they come from (their mean
+        bearing from him), HUDDLE_SPACING_M apart, in the order of their bearings, so no two runs
+        to them cross; at most a half-circle, far enough out to hold them all and clear of his body.
+        As they leave, those still there close up round him."""
+        f = self.by_id[c.focus]
+        mates = [self.by_id[pid] for pid in c.ring if self.t < c.leave[pid]]
+        if not mates:
+            return {}
+        bear = {q.id: fmath.atan2(q.y - f.y, q.x - f.x) for q in mates}
+        mean = fmath.atan2(sum(fmath.sin(a) for a in bear.values()), sum(fmath.cos(a) for a in bear.values()))
+        order = sorted(bear, key=lambda pid: (bear[pid] - mean + math.pi) % (2 * math.pi))
         n = len(order)
         radius = max(n * HUDDLE_SPACING_M / math.pi, shape.SHOULDER_BREADTH_M)
         step = HUDDLE_SPACING_M / radius
-        a = mean + (order.index(p.id) - (n - 1) / 2) * step
-        return focus.x + fmath.cos(a) * radius, focus.y + fmath.sin(a) * radius
+        places = {}
+        for k, pid in enumerate(order):
+            a = mean + (k - (n - 1) / 2) * step
+            places[pid] = (f.x + fmath.cos(a) * radius, f.y + fmath.sin(a) * radius)
+        return places
+
+    def huddle_spot(self, c: Celebration, p: Player) -> tuple[float, float]:
+        """His place round the focus this frame (huddle_places, worked out once a frame in gather)."""
+        if p.id not in c.places:
+            c.places = self.huddle_places(c)
+        return c.places[p.id]
+
+    def gather(self) -> None:
+        """Once a frame, before anyone moves: the places round the one they celebrate, and who is
+        joining the others. A team-mate within GATHER_REACH_M of his place (the focus of the spot he
+        runs to) stands as close to them as bodies allow (together)."""
+        self.side_by_side = set()
+        c = self.celebration
+        if c is None:
+            return
+        c.places = self.huddle_places(c)
+        for pid, (x, y) in [(c.focus, c.spot), *c.places.items()]:
+            p = self.by_id[pid]
+            if self.celebrating(p) and math.hypot(p.x - x, p.y - y) < GATHER_REACH_M:
+                self.side_by_side.add(pid)
 
     def together(self, p: Player, q: Player) -> bool:
-        """Team-mates who mean to stand side by side (gathered round a scorer) keep only clear of
-        each other's bodies, not the usual personal space; on the way there they keep it as ever.
-        Gathered: both within HUDDLE_REACH_M of the one they celebrate (design)."""
+        """Team-mates who mean to stand side by side keep only clear of each other's bodies, not the
+        usual personal space; on the way there they keep it as ever (gather)."""
+        return p.team == q.team and p.id in self.side_by_side and q.id in self.side_by_side
+
+    def looks_at(self, p: Player) -> tuple[float, float]:
+        """What a still player turns to: the ball; round a scorer, the scorer, and the scorer to
+        his team-mates round him."""
         c = self.celebration
-        if c is None or self.t >= c.until or not (p.team == q.team == c.team):
-            return False
-        if not ((p.id in c.ring or p.id == c.focus) and (q.id in c.ring or q.id == c.focus)):
-            return False
-        f = self.by_id[c.focus]
-        return all(math.hypot(r.x - f.x, r.y - f.y) < HUDDLE_REACH_M for r in (p, q))
+        if c is not None and p.id in self.side_by_side:
+            if p.id != c.focus:
+                f = self.by_id[c.focus]
+                return f.x, f.y
+            around = [self.by_id[pid] for pid in c.places if pid in self.side_by_side]
+            if around:
+                return sum(q.x for q in around) / len(around), sum(q.y for q in around) / len(around)
+        return self.ball[0], self.ball[1]
 
     def stop(self, kind: str, team: str, spot: tuple[float, float], taker: str | None = None,
              delay: str | None = None) -> None:
@@ -1807,7 +1848,7 @@ class Engine:
         if self.restart and self.restart.kind == "penalty_kick" and p.id != self.restart.taker:
             return *self.penalty_wait_spot(p), SHAPE  # Law 14: until the ball is kicked
         c = self.celebration
-        if c and self.t < c.until and (p.id == c.focus or p.id in c.ring):
+        if c and self.celebrating(p):
             if p.id == c.focus:  # the scorer runs off to celebrate
                 return *c.spot, RECOVER
             return *self.huddle_spot(c, p), RECOVER  # his team-mates run to their places by him
@@ -2150,7 +2191,7 @@ class Engine:
                 tx, ty = p.x + ux / u * dist, p.y + uy / u * dist
             steer(p, tx, ty, top)
             p.heading = turn_toward(p.heading, perception.facing(p.heading, p.vx, p.vy, p.x, p.y,
-                                                                 self.ball[0], self.ball[1]))
+                                                                 *self.looks_at(p)))
         self.separate()
 
     def keep_off(self, p: Player, tx: float, ty: float) -> tuple[float, float]:
@@ -2796,6 +2837,7 @@ class Engine:
         if r and (self.possessor != r.taker
                   or math.dist(self.ball[:3], (*self.restart_ball_spot(r), 0.0)) > 1e-6):
             self.set_by = None  # it has moved (a touch on, turning it onto his foot): in play
+        self.gather()
         self.move_players()
         self.snapshot()
         self.t += DT

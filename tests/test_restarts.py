@@ -6,7 +6,7 @@ import math
 
 import pytest
 
-from ninety.sim import ball
+from ninety.sim import ball, shape
 from ninety.sim.decisions import PENALTY_DEPTH, PENALTY_HALF_WIDTH
 from ninety.sim.engine import (
     BALL_TO_FEET,
@@ -692,7 +692,7 @@ def test_the_scorers_team_mates_run_to_him_and_then_walk_back():
     c = e.celebration
     assert c is not None and c.focus == scorer and c.team == "home"
     gathered = 0
-    while e.t < c.until:
+    while e.t < c.leave[scorer] - DT:  # until he stops celebrating
         e.step()
         s = e.by_id[scorer]
         gathered = max(gathered, sum(math.hypot(p.x - s.x, p.y - s.y) < 3.0 for p in e.players
@@ -718,26 +718,70 @@ def test_an_own_goal_is_celebrated_round_the_scoring_sides_nearest_player():
 
 def test_gathered_round_the_scorer_no_two_bodies_overlap():
     """Defect: team-mates all ran for the scorer's own centre and ended inside each other (32 to 63%
-    of celebration frames had bodies more than 5 cm into each other). Gathered, each has his own
-    place by him and keeps clear of the others' bodies (P11)."""
+    of celebration frames had bodies more than 5 cm into each other). Once all of them stand at
+    their places (within half a place's spacing, settled: one frame of braking would stop them,
+    P2), and until the first leaves, no two bodies are inside each other (P11)."""
     from ninety.sim import shape
+    from ninety.sim.engine import HUDDLE_SPACING_M, THROW_SETTLED_MPS
     for seed in (2, 7):
         e, _ = scored_engine(seed)
         c = e.celebration
-        while e.t < c.until:
+        gathered = 0
+        while e.t < min(c.leave.values()):
             e.step()
-        home = [p for p in e.players if p.team == "home"]
-        for i, a in enumerate(home):
-            for b in home[i + 1:]:
-                d = shape.between(a.x, a.y, a.heading, b.x, b.y, b.heading)[0]
-                assert shape.CHEST_DEPTH_M - d <= 0.05, (seed, a.id, b.id)
+            ring = [e.by_id[pid] for pid in c.ring]
+            if not all(math.dist((p.x, p.y), c.places[p.id]) < HUDDLE_SPACING_M / 2
+                       and math.hypot(p.vx, p.vy) <= THROW_SETTLED_MPS for p in ring):
+                continue
+            gathered += 1
+            home = [p for p in e.players if p.team == "home"]
+            for i, a in enumerate(home):
+                for b in home[i + 1:]:
+                    d = shape.between(a.x, a.y, a.heading, b.x, b.y, b.heading)[0]
+                    assert shape.CHEST_DEPTH_M - d <= 0.05, (seed, round(e.t, 2), a.id, b.id)
+        assert gathered > 0  # premise (lesson 47): they did all gather
+
+
+def test_they_leave_the_huddle_one_by_one_and_face_the_scorer_while_in_it():
+    """Each stops celebrating at his own moment (L4), so they do not walk back as one body, and
+    those still there close up round him; while gathered, each faces the one they celebrate, and
+    he faces them, not the ball."""
+
+    def off(heading: float, x: float, y: float, tx: float, ty: float) -> float:
+        return abs((heading - math.atan2(ty - y, tx - x) + math.pi) % (2 * math.pi) - math.pi)
+
+    for seed in (2, 7):
+        e, _ = scored_engine(seed)
+        c = e.celebration
+        assert max(c.leave.values()) - min(c.leave.values()) > 1.0
+        first = min(c.ring, key=lambda pid: c.leave[pid])  # the first team-mate to go
+        while e.t < c.leave[first] - DT:
+            e.step()
+        f = e.by_id[c.focus]
+        for pid in c.ring:
+            p = e.by_id[pid]
+            assert pid in e.side_by_side, (seed, pid)
+            assert off(p.heading, p.x, p.y, f.x, f.y) < math.pi / 2, (seed, pid)
+        if e.t < c.leave[c.focus]:
+            mx = sum(e.by_id[pid].x for pid in c.ring) / len(c.ring)
+            my = sum(e.by_id[pid].y for pid in c.ring) / len(c.ring)
+            assert off(f.heading, f.x, f.y, mx, my) < math.pi / 2, seed
+        radius = max(math.dist(xy, (f.x, f.y)) for xy in c.places.values())
+        e.step()
+        e.step()
+        assert first not in c.places
+        assert max(math.dist(xy, (f.x, f.y)) for xy in c.places.values()) < radius - 0.1  # closing up
+        last = max(c.ring, key=lambda pid: c.leave[pid])
+        c.leave.update({pid: e.t for pid in c.ring if pid != last})  # all but one have gone
+        (place,) = e.huddle_places(c).values()
+        assert math.dist(place, (f.x, f.y)) >= shape.SHOULDER_BREADTH_M - 1e-9  # clear of his body
 
 
 def test_after_the_celebration_they_walk_back_at_least_at_a_walking_pace():
     """L4: at least a normal walking pace, 1.36 m/s for men aged 20 to 29 (Bohannon & Andrews
     2011), not a minute-long trudge; faster only if a walk would not get him back in time."""
     e, _ = scored_engine()
-    e.celebration.until = e.t  # over
+    e.celebration.leave = dict.fromkeys(e.celebration.leave, e.t)  # over
     p = e.by_id["h7"]
     p.x, p.y = 100.0, 5.0  # far from his spot, a minute or more before the kick-off
     kx, ky = e.kickoff_spot(p, e.restart.team)
@@ -812,19 +856,37 @@ def test_team_mates_take_places_on_the_side_they_come_from_in_the_order_they_com
 
 
 def test_team_mates_stand_close_only_once_gathered_round_the_scorer():
-    """L4: within HUDDLE_REACH_M of the scorer, team-mates keep only clear of each other's bodies,
-    so they can stand side by side; further off, on the way in, they keep the usual personal space."""
+    """L4: within GATHER_REACH_M of his place (P2: where one running at RECOVER brakes for it) a
+    team-mate keeps only clear of the others' bodies, so they stand side by side round the scorer;
+    further off, on the way in, he keeps the usual personal space."""
+    from ninety.sim.engine import GATHER_REACH_M, HUDDLE_SPACING_M, PERSONAL_SPACE_M
     e, _ = scored_engine()
     c = e.celebration
-    f = e.by_id[c.focus]
-    a, b = (e.by_id[pid] for pid in c.ring[:2])
-    for i, q in enumerate(p for p in e.players if p not in (a, b, f)):  # everyone else well away
+    for i, q in enumerate(p for p in e.players if p.team == "away"):  # the opponents well away
         q.x, q.y = 5.0, 2.0 + 3.0 * i
     for q in e.players:
         q.vx = q.vy = 0.0
-    a.x, a.y, b.x, b.y = f.x - 1.0, f.y + 1.0, f.x - 1.8, f.y + 1.0  # 0.8 m apart, both by him
+    for pid in c.ring:  # every team-mate on his place
+        q = e.by_id[pid]
+        q.x, q.y = e.huddle_spot(c, q)
+    e.gather()
+    a = e.by_id[c.ring[0]]
+    b = min((e.by_id[pid] for pid in c.ring[1:]), key=lambda q: math.hypot(q.x - a.x, q.y - a.y))
+    assert HUDDLE_SPACING_M - 0.01 < math.hypot(a.x - b.x, a.y - b.y) < PERSONAL_SPACE_M  # premise
     assert e.together(a, b)
-    assert e.avoid(a) == (0.0, 0.0)
-    a.x, a.y, b.x, b.y = f.x - 10.0, f.y + 5.0, f.x - 10.8, f.y + 5.0  # 0.8 m apart, still coming
+    assert math.hypot(*e.avoid(a)) == 0.0
+    e.side_by_side.discard(b.id)  # only one of them joining: they keep their space
+    assert not e.together(a, b) and not e.together(b, a)
+    e.gather()
+    # P2: the reach is how far a player running at RECOVER needs to stop
+    from ninety.sim.body import BRAKE_MAX
+    from ninety.sim.engine import RECOVER
+    assert GATHER_REACH_M == pytest.approx(RECOVER ** 2 / (2 * 0.8 * BRAKE_MAX))
+    away = 2 * GATHER_REACH_M + 5.0  # both well outside reach of their places, as close as before
+    dx, dy = b.x - a.x, b.y - a.y
+    a.x, a.y = c.spot[0] - away, c.spot[1] + away
+    b.x, b.y = a.x + dx, a.y + dy
+    e.gather()
     assert not e.together(a, b)
-    assert e.avoid(a)[0] > 0.0  # bends away from b
+    ax, ay = e.avoid(a)
+    assert ax * dx + ay * dy < 0.0  # bends away from b
