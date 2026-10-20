@@ -20,7 +20,10 @@ RUN uv sync --locked
 # Read by the code at run time: the event schema (ninety/match/detected.py) and the detected events
 # the MCP server serves for the M1 clip. .dockerignore keeps the rest of tests/ out.
 COPY schemas ./schemas
-COPY tests/fixtures/detected-*.jsonl ./tests/fixtures/
+# The whole folder, which .dockerignore narrows to the detected events and, once committed, the
+# tracked positions the phone companion serves (ninety/match/tracking.py): a COPY glob that
+# matches no file fails the build, and the tracked file does not exist yet.
+COPY tests/fixtures/ ./tests/fixtures/
 
 # The matches the MCP server serves, simulated now so a tool call is a lookup, never a simulation
 # (Foundry gives an MCP call 100 s; one simulation takes longer than that on a quarter CPU).

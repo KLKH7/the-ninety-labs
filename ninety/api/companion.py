@@ -24,12 +24,12 @@ replica (infra/main.bicep), so a phone and its laptop always reach the same room
 would need a shared store (or session affinity) first. A restart forgets every room, and the
 laptop pairs again.
 
-Which mode runs is NINETY_COMPANION (`app_mode`): unset, the routes are not mounted, which is the
-deployed configuration; `standin` serves the simulator's matches, labelled `source: truth` in every
-message, for building the phone locally; `on` serves only tracked positions and answers 503 for a
-clip whose positions are ground truth. Nothing tracks positions from the video yet, so after
-Milestone 1 the companion stays off where it is deployed (AGENTS.md, "Ground truth is the answer
-key"), and turns on when tracked positions exist (ninety/match/tracking.py).
+Which mode runs is NINETY_COMPANION (`from_env`). Unset or `on`, the deployed configuration: the
+routes are mounted and serve only tracked positions (the M1 clip, seed900001, from its tracked
+frames file, ninety/match/tracking.py), and a clip whose positions are ground truth gets a 503, so
+nothing on the live path reads the answer key (AGENTS.md). `standin` also serves the simulator's
+matches, labelled `source: truth` in every message, for building the phone locally. `off` mounts
+nothing.
 """
 
 from __future__ import annotations
@@ -65,7 +65,10 @@ RELAYED = {"clock", "focus"}  # what a laptop may send; answers and cards come f
 FPS_CHOICES = (1, 5, 25)  # divisors of the engine's 25 fps, so frames are evenly spaced
 MINIMAP_PLACES = 1  # 0.1 m: finer than a phone's dot, coarser than the tracker's error
 PASSCODE_HEADER = "x-ninety-passcode"
-MODES = ("standin", "on")  # NINETY_COMPANION; unset means the routes are not mounted
+MODES = ("on", "standin", "off")  # NINETY_COMPANION; unset means `on`
+# Every clip the companion knows: the simulator stand-ins (served only in `standin`) and the clips
+# served from tracked positions.
+CLIPS = (*sorted(match_server.MATCHES), *tracking.TRACKED_CLIPS)
 # Requests a client may make in a minute (design: a person tapping, never a script).
 LIMITS = {"pair": 6, "read": 120, "ask_ip": 20, "ask_session": 10, "relay": 600}
 SESSION_MODEL_CALLS, DAY_MODEL_CALLS = 20, 400  # design: about $1 a day at the demo's model price
@@ -78,7 +81,7 @@ PAIR_BODY = Draft202012Validator(
         "type": "object",
         "additionalProperties": False,
         "required": ["clip"],
-        "properties": {"clip": {"type": "string", "enum": sorted(match_server.MATCHES)}},
+        "properties": {"clip": {"type": "string", "enum": list(CLIPS)}},
     }
 )
 
@@ -176,6 +179,10 @@ def _seed(clip: str) -> int:
 
 
 def _track(clip: str) -> tracking.Track:
+    """A clip's positions: tracked from the video, or a simulator stand-in's (labelled truth).
+    Raises tracking.NotTracked when a tracked clip has no usable tracked frames."""
+    if clip in tracking.TRACKED_CLIPS:
+        return tracking.tracked(clip)
     return tracking.track(clip, _seed(clip), match_server.MINUTES, match_server.MATCH_DIR)
 
 
@@ -213,7 +220,10 @@ class Companion:
     def _served(self, clip: str) -> tracking.Track | JSONResponse:
         """The clip's track, or a 503 when its positions are ground truth and this server may not
         serve them (AGENTS.md: nothing on the live path reads the answer key after Milestone 1)."""
-        track = _track(clip)
+        try:
+            track = _track(clip)
+        except tracking.NotTracked as exc:
+            return _error(503, str(exc))
         if track.source == tracking.SOURCE and not self.allow_truth:
             return _error(503, "positions are ground truth; the companion needs tracked positions")
         return track
@@ -243,6 +253,9 @@ class Companion:
             PAIR_BODY.validate(body)
         except (json.JSONDecodeError, ValidationError) as exc:
             return _error(422, f"invalid pairing request: {getattr(exc, 'message', exc)}")
+        served = self._served(body["clip"])  # a clip this server cannot show is never paired
+        if isinstance(served, JSONResponse):
+            return served
         self._purge()
         if len(self.rooms) >= MAX_ROOMS:
             return _error(503, "too many rooms open; try again later")
@@ -342,7 +355,7 @@ class Companion:
         if not self.limits["read"].allow(client_ip(request)):
             return _error(429, "too many requests; wait a minute")
         clip = request.path_params["clip"]
-        if clip not in match_server.MATCHES:
+        if clip not in CLIPS:
             return _error(404, f"unknown clip {clip!r}")
         try:
             fps = int(_query_numbers(request, {"fps"}).get("fps", 5))
@@ -383,7 +396,7 @@ class Companion:
         if not self.limits["read"].allow(client_ip(request)):
             return _error(429, "too many requests; wait a minute")
         clip, player = request.path_params["clip"], request.path_params["player"]
-        if clip not in match_server.MATCHES:
+        if clip not in CLIPS:
             return _error(404, f"unknown clip {clip!r}")
         track = self._served(clip)
         if isinstance(track, JSONResponse):
@@ -406,7 +419,7 @@ class Companion:
         if not self.limits["read"].allow(client_ip(request)):
             return _error(429, "too many requests; wait a minute")
         clip, team = request.path_params["clip"], request.path_params["team"]
-        if clip not in match_server.MATCHES:
+        if clip not in CLIPS:
             return _error(404, f"unknown clip {clip!r}")
         if team not in ("home", "away"):
             return _error(422, "team must be home or away")
@@ -532,11 +545,13 @@ async def foundry_models() -> LiveModels:
 
 
 def from_env(env: dict[str, str] | None = None) -> Companion | None:
-    """The companion NINETY_COMPANION asks for: None (unset, as deployed), the local stand-in, or
-    `on`, which refuses ground-truth positions. Any other value is a typo that must not pass silently."""
-    mode = (os.environ if env is None else env).get("NINETY_COMPANION", "")
-    if not mode:
-        return None
+    """The companion NINETY_COMPANION asks for. Unset or `on` (as deployed): mounted, serving only
+    tracked positions, with a 503 for a clip whose positions are ground truth. `standin`: the
+    simulator matches too, labelled truth, for building the phone locally. `off`: not mounted. Any
+    other value is a typo that must not pass silently."""
+    mode = (os.environ if env is None else env).get("NINETY_COMPANION", "") or "on"
     if mode not in MODES:
         raise ValueError(f"NINETY_COMPANION={mode!r}: use one of {', '.join(MODES)}, or leave it unset")
+    if mode == "off":
+        return None
     return Companion(live=foundry_models, allow_truth=mode == "standin")

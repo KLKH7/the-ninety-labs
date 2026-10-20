@@ -205,10 +205,13 @@ works because the app runs as one replica (`maxReplicas: 1` in `infra/main.bicep
 replica would need a shared store or session affinity first. A scale-to-zero restart forgets every
 room, and the laptop pairs again.
 
-`NINETY_COMPANION` decides whether it runs. Unset, as deployed, the routes are not mounted.
-`standin`, for local work, serves the simulator's matches labelled `source: truth`. `on` serves
-tracked positions only and refuses ground truth with a 503. Nothing tracks positions from the
-video yet, so the companion stays off in the demo until R3's tracks land.
+`NINETY_COMPANION` decides what it serves. Unset or `on`, as deployed, the routes are mounted and
+serve only tracked positions: the M1 clip (seed900001), the clip the laptop plays, from its
+tracked frames file (`tests/fixtures/tracked-seed900001.jsonl`, written from
+`ninety/vision/track.py`). A clip whose positions are ground truth gets a 503, so the live path
+never reads the answer key. Until the tracked file exists, pairing that clip answers 503 too.
+`standin`, for local work, also serves the simulator's matches, labelled `source: truth`. `off`
+mounts nothing.
 
 ## Technology decisions
 

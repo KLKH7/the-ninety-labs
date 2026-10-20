@@ -456,16 +456,26 @@ def test_a_flow_message_validates_and_points_the_way_the_team_runs(setup):
 # --- ground truth stays off the deployed path ------------------------------------------------------
 
 
-def test_the_deployed_configuration_serves_no_companion(monkeypatch):
-    # infra sets no NINETY_COMPANION, so the deployed API has no companion route at all.
+def test_the_deployed_configuration_mounts_the_companion_and_refuses_truth(monkeypatch):
+    # infra sets no NINETY_COMPANION: the routes are mounted in `on`, and a clip whose positions are
+    # ground truth is never paired or served. Until the M1 clip's tracked file exists, it says so.
     monkeypatch.delenv("NINETY_COMPANION", raising=False)
+    monkeypatch.setattr(comp, "_track", lambda clip: track("truth"))
+    client = TestClient(api.build("k" * 64))
+    r = client.post("/api/pair", json={"clip": "seed7"})
+    assert r.status_code == 503 and "ground truth" in r.json()["error"]
+    assert client.get("/api/minimap/seed7").status_code == 503
+    assert comp.from_env({}).allow_truth is False
+
+
+def test_off_mounts_nothing(monkeypatch):
+    monkeypatch.setenv("NINETY_COMPANION", "off")
     client = TestClient(api.build("k" * 64))
     assert client.post("/api/pair", json={"clip": "seed7"}).status_code == 404
-    assert client.get("/api/minimap/seed7").status_code == 404
-    assert comp.from_env({}) is None
+    assert comp.from_env({"NINETY_COMPANION": "off"}) is None
 
 
-def test_the_modes_are_standin_or_on_and_a_typo_fails():
+def test_the_modes_are_on_standin_or_off_and_a_typo_fails():
     assert comp.from_env({"NINETY_COMPANION": "standin"}).allow_truth is True
     assert comp.from_env({"NINETY_COMPANION": "on"}).allow_truth is False
     with pytest.raises(ValueError, match="NINETY_COMPANION='yes'"):
@@ -474,16 +484,51 @@ def test_the_modes_are_standin_or_on_and_a_typo_fails():
 
 def test_on_refuses_ground_truth_positions_everywhere(monkeypatch):
     monkeypatch.setattr(comp, "_track", lambda clip: track("truth"))
-    app = comp.Companion(passcode="", live=None, clock=Clock())  # `on`: allow_truth is off by default
+    clock = Clock()
+    app = comp.Companion(passcode="", live=None, clock=clock)  # `on`: allow_truth is off by default
     client = TestClient(api.build("k" * 64, app))
-    code = pair(client)
+    r = client.post("/api/pair", json={"clip": "seed7"})
+    assert r.status_code == 503 and "ground truth" in r.json()["error"]
+    app.rooms["ABCDEF"] = comp.Room("ABCDEF", "seed7", clock() + 60)  # as if paired before a switch
     for response in (
         client.get("/api/minimap/seed7"),
         client.get("/api/card/seed7/h7?t_to=10"),
         client.get("/api/flow/seed7/home?t_to=10"),
-        ask(client, code),
+        ask(client, "ABCDEF"),
     ):
         assert response.status_code == 503 and "ground truth" in response.json()["error"]
+
+
+def test_the_m1_clip_without_its_tracked_file_is_refused_not_faked(monkeypatch, tmp_path):
+    from ninety.match import tracking
+
+    monkeypatch.setattr(tracking, "FIXTURES", tmp_path)  # no tracked-seed900001.jsonl in it
+    tracking.tracked.cache_clear()
+    client = TestClient(api.build("k" * 64, comp.Companion(passcode="", live=None, clock=Clock())))
+    r = client.post("/api/pair", json={"clip": "seed900001"})
+    assert r.status_code == 503 and "no tracked positions yet" in r.json()["error"]
+    tracking.tracked.cache_clear()
+
+
+def test_the_m1_clip_is_paired_and_served_from_its_tracked_file(monkeypatch, tmp_path):
+    from ninety.match import tracking
+
+    rows = [{**f, "ball": {**f["ball"], "z": 0.0}} for f in track("tracked").frames]
+    (tmp_path / "tracked-seed900001.jsonl").write_text("\n".join(json.dumps(r) for r in rows))
+    monkeypatch.setattr(tracking, "FIXTURES", tmp_path)
+    tracking.tracked.cache_clear()
+    try:
+        client = TestClient(api.build("k" * 64, comp.Companion(passcode="", live=None, clock=Clock())))
+        code = client.post("/api/pair", json={"clip": "seed900001"}).json()["code"]
+        body = client.get("/api/minimap/seed900001").json()
+        assert body["source"] == "tracked" and body["roster"] == ["a7", "h7"]
+        card = client.get("/api/card/seed900001/h7?t_to=10").json()
+        MESSAGE.validate(card)
+        assert card["source"] == "tracked" and card["speed_kmh"] == 18.0
+        answer = ask(client, code).json()["answer"]
+        assert answer["status"] == "verified" and answer["value"] == 18.0
+    finally:
+        tracking.tracked.cache_clear()
 
 
 def test_on_serves_tracked_positions(monkeypatch):
