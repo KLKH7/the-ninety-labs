@@ -1402,6 +1402,30 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_engine_rules.py::test_the_team_mate_a_pass_is_played_to_goes_to_meet_it` and
   `::test_nobody_is_sent_to_chase_a_ball_beyond_the_touchline`.
 
+### 147. A budget is set from the call it bounds, measured; and a cancelled request is awaited
+- **What happened:** the live Personalizer evaluation (run 39429424313, at 0689342) answered none of
+  its 20 requests: all 160 variants were "fallback: timeout" at 3002 to 3274 ms. The 3 s budget was a
+  design share of the 8 s target, never measured against the call. Locally, the published
+  `ninety-personalizer:1` on gpt-4.1-mini took 3.2 to 4.7 s (median 4.0 s) for one claim's 8
+  variants, over A2A as well as direct. Two more defects hid behind it. First, the server's model
+  deadline equalled the client's budget, so the client always gave up first and the server's
+  fallback, with its reasons, never got back. Second, the client cancelled a request at the deadline
+  and never awaited it. In process, that cancellation ran on into a2a-sdk 1.2.3's server code, which
+  swallows it (`ActiveTask.subscribe` catches CancelledError) and waits forever for a task a
+  message-only agent never creates. Those tasks were destroyed when the loop closed, and that
+  produced the "Task was destroyed but it is pending" and OpenTelemetry "created in a different
+  Context" errors at exit. Those errors came after every request, so they did not block a response.
+- **Rule:** a latency budget cites a measurement of the call it bounds, and a test holds it above
+  the slowest measured call. A layer's own deadline ends inside its caller's
+  (`SERVER_MARGIN_S`), so the inner fallback answers rather than the outer timeout. A task cancelled
+  at a deadline is kept and awaited before the client closes. An in-process server runs each request
+  in its own task (`server.InProcess`), as uvicorn does, so a client's cancellation never enters the
+  server.
+- **Check:** `tests/test_personalizer.py::test_the_budget_is_over_the_slowest_measured_model_call`,
+  `::test_a_slow_model_is_answered_by_the_server_with_its_reasons_not_cut_off_by_the_client`,
+  `::test_a_request_cut_off_at_the_deadline_is_awaited_on_close` and
+  `::test_the_evaluation_leaves_no_request_running_when_the_client_gives_up`.
+
 ### 151. A new check of what a model writes starts from the reader we already have
 - **What happened:** the Vision Auditor's rationale check (#140) read numbers as digit runs only,
   written fresh beside the fact-checker's reader, which lesson 129 had already widened to number
