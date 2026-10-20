@@ -1095,18 +1095,6 @@ short and actionable. This file is public: no research sources, product names or
   body in the way), the row says so (GROUNDING D9). A new kind of kick does not get its own physics.
 - **Check:** `tests/test_decisions.py::test_an_unpressed_clearance_is_not_aimed_where_his_kick_error_puts_it_out`.
 
-### 113. Noise in a belief is a misjudgement that persists, not a fresh draw every look
-- **What happened:** the team chose its chaser for a loose ball from each player's estimate of where
-  the ball was going, with an error redrawn every four frames. Two players about as near swapped the
-  chase back and forth; the one dropped went back to his shape and turned away from the ball, a fan
-  sees a player run away from a loose ball (FS1). The flicker came from the redraw, not from anything
-  either player saw.
-- **Rule:** a perception error is held for as long as what is perceived has not changed (here, one
-  strike or touch of the ball) and shrinks with what he sees (distance), so a decision built on it
-  changes only when the situation does.
-- **Check:** `tests/test_engine_rules.py::test_a_chaser_is_not_swapped_by_a_fresh_guess_while_nothing_changes`
-  fails when the misjudgement is redrawn on every plan.
-
 ### 113. A test over a folder says which files are its own
 - **What happened:** two tests read every file in `replays/` as a slice recording (`*.json`):
   the committed-replay test and the byte-for-byte round trip. Both passed while the folder held
@@ -1118,3 +1106,15 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_replay.py::test_every_committed_recording_round_trips_byte_for_byte`
   fails with an unclaimed file in `replays/`, and fails when a workflow recording no longer saves
   byte for byte.
+
+### 117. Noise in a belief is a misjudgement that persists, not a fresh draw every look
+- **What happened:** the team chose its chaser for a loose ball from each player's estimate of where
+  the ball was going, with an error redrawn every four frames. Two players about as near swapped the
+  chase back and forth; the one dropped went back to his shape and turned away from the ball, a fan
+  sees a player run away from a loose ball (FS1). The flicker came from the redraw, not from anything
+  either player saw.
+- **Rule:** a perception error is held for as long as what is perceived has not changed (here, one
+  strike or touch of the ball) and shrinks with what he sees (distance), so a decision built on it
+  changes only when the situation does.
+- **Check:** `tests/test_engine_rules.py::test_a_chaser_is_not_swapped_by_a_fresh_guess_while_nothing_changes`
+  fails when the misjudgement is redrawn on every plan.
