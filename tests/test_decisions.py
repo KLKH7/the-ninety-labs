@@ -275,31 +275,76 @@ def test_a_worse_passer_is_less_sure_of_a_pass_through_a_narrow_gap():
     assert poor < average < good and good - poor > 0.1
 
 
-def test_takes_players_on_raises_the_dribble_and_leaves_the_pass():
-    def vals(traits, kind):
-        return [o.value for o in D.options(scene(
-            x=70.0, mates=[("h9", 82.0, 34.0, 0.0)], traits=traits)) if o.kind == kind]
-    plain, on = vals((), "dribble"), vals(("takes_players_on",), "dribble")
-    assert plain and len(plain) == len(on)
-    assert all(math.isclose(b - a, D.TAKE_ON) for a, b in zip(plain, on, strict=True))
-    assert vals((), "pass") == vals(("takes_players_on",), "pass")
+def _weights(s):
+    opts = D.options(s)
+    return opts, D.choice_weights(s, opts)
 
 
-def test_plays_short_raises_a_short_pass_and_lowers_a_long_one():
+def test_takes_players_on_pulls_him_toward_a_dribble_and_rates_nothing_differently():
+    # A habit multiplies the odds of its option by e^HABIT_PULL against the rest: a close call, not
+    # a command (it was once +0.01 goals on the dribble, an 85-fold preference at his temperature).
+    base = dict(x=70.0, mates=[("h9", 82.0, 34.0, 0.0)])
+    plain_opts, plain = _weights(scene(**base))
+    on_opts, on = _weights(scene(**base, traits=("takes_players_on",)))
+    assert [o.value for o in plain_opts] == [o.value for o in on_opts]  # nothing re-rated
+    k_drib = next(i for i, o in enumerate(plain_opts) if o.kind == "dribble")
+    k_pass = next(i for i, o in enumerate(plain_opts) if o.kind == "pass")
+    ratio = (on[k_drib] / on[k_pass]) / (plain[k_drib] / plain[k_pass])
+    assert math.isclose(ratio, math.exp(D.HABIT_PULL), rel_tol=1e-9)
+
+
+def test_plays_short_pulls_him_toward_a_short_pass_and_away_from_a_long_one():
     mates = [("near", 80.0, 34.0, 0.0), ("far", 100.0, 34.0, 0.0)]  # 10 m and 30 m
-    def by_receiver(traits):
-        return {o.receiver: o.value for o in D.options(scene(x=70.0, mates=mates, traits=traits))
-                if o.kind == "pass"}
-    plain, short = by_receiver(()), by_receiver(("plays_short",))
-    assert math.isclose(short["near"] - plain["near"], D.SHORT_PASS)
-    assert math.isclose(short["far"] - plain["far"], -D.SHORT_PASS)
+    def odds(traits):
+        opts, w = _weights(scene(x=70.0, mates=mates, traits=traits))
+        near = next(i for i, o in enumerate(opts) if o.receiver == "near")
+        far = next(i for i, o in enumerate(opts) if o.receiver == "far")
+        return w[near] / w[far], [o.value for o in opts]
+    (plain, plain_values), (short, short_values) = odds(()), odds(("plays_short",))
+    assert plain_values == short_values
+    assert math.isclose(short / plain, math.exp(2 * D.HABIT_PULL), rel_tol=1e-9)  # +1 near, -1 far
 
 
-def test_carrying_on_with_a_dribble_is_slightly_preferred_and_holding_gets_no_bonus():
-    def first(kind, s):
-        return next(o for o in D.options(s) if o.kind == kind).value
-    assert math.isclose(first("dribble", scene(current="dribble")) - first("dribble", scene()), D.STICKY)
-    assert math.isclose(first("hold", scene(current="dribble")), first("hold", scene()))  # raw best
+def test_carrying_on_with_a_dribble_is_a_pull_and_holding_gets_none():
+    opts, carry = _weights(scene(current="dribble"))
+    fresh_opts, fresh = _weights(scene())
+    assert [o.value for o in opts] == [o.value for o in fresh_opts]
+    d = next(i for i, o in enumerate(opts) if o.kind == "dribble")
+    h = next(i for i, o in enumerate(opts) if o.kind == "hold")
+    assert math.isclose((carry[d] / carry[h]) / (fresh[d] / fresh[h]), math.exp(D.HABIT_PULL), rel_tol=1e-9)
+
+
+def test_a_misjudgement_is_held_until_he_scans_again(monkeypatch):
+    # D4: asked again about the same options he answers the same way (his misjudgement is kept in
+    # `tastes` until he next scans), so an option he keeps rejecting does not become certain. Three
+    # options well within his noise of each other, so a fresh look is genuinely in doubt.
+    s = scene(x=80.0)
+    close = [D.Option("pass", 0.0100, (90.0, 30.0), "h9"), D.Option("pass", 0.0098, (75.0, 50.0), "h7"),
+             D.Option("dribble", 0.0097, (86.0, 34.0))]
+    monkeypatch.setattr(D, "options", lambda _: close)
+    rng = random.Random(3)
+    tastes = {}
+    first = D.choose(s, rng, tastes)
+    assert all(D.choose(s, rng, tastes) is first for _ in range(20))
+    fresh = {id(D.choose(s, rng, {})) for _ in range(60)}
+    assert len(fresh) == 3  # each new look (new tastes) can change his mind
+
+
+def test_held_misjudgements_choose_as_the_weights_say(monkeypatch):
+    # Gumbel-max: one draw per option chooses each option with the softmax's chance (choice_weights).
+    # Four options within the noise of each other, so the shape of the noise shows in every share.
+    s = scene(x=80.0)
+    opts = [D.Option("pass", 0.0100, (90.0, 30.0), "h9"), D.Option("pass", 0.0092, (75.0, 50.0), "h7"),
+            D.Option("dribble", 0.0085, (86.0, 34.0)), D.Option("hold", 0.0078)]
+    w = D.choice_weights(s, opts)
+    assert min(w) / sum(w) > 0.08  # all genuinely in contention
+    monkeypatch.setattr(D, "options", lambda _: opts)  # the same options every time
+    rng = random.Random(11)
+    n = 6000
+    counts = Counter(opts.index(D.choose(s, rng, {})) for _ in range(n))
+    for i, wi in enumerate(w):
+        p = wi / sum(w)
+        assert abs(counts[i] / n - p) < 4 * math.sqrt(p * (1 - p) / n) + 1e-3
 
 
 def test_a_throw_in_is_only_ever_a_throw():
@@ -460,7 +505,7 @@ def test_under_pressure_holding_is_never_better_than_both_of_its_outcomes(monkey
     assert calm[0] > calm[1] > calm[2]
 
 
-def test_choice_randomness_is_relative_to_how_different_the_options_are():
+def test_a_good_decision_maker_usually_takes_the_best_option_in_midfield():
     rng = random.Random(4)
     s = scene(x=60.0, decisions=1.0, mates=[("h9", 75.0, 34.0, 0.0)])
     best = max(D.options(s), key=lambda o: o.value).kind
@@ -475,7 +520,7 @@ def test_the_passer_picks_the_pace_the_lane_needs():
     assert not tight.lofted and tight.pace > open_lane.pace
     assert D.launch_speed(20.0, 14.0) > D.launch_speed(20.0, 6.0)
 
-def test_options_closer_than_the_noise_floor_are_close_to_a_coin_flip():
+def test_options_closer_than_the_noise_scale_are_close_to_a_coin_flip():
     rng = random.Random(9)
     s = scene(x=60.0, decisions=1.0)
     opts = [D.Option("a", 0.0200), D.Option("b", 0.0201)]
@@ -874,6 +919,52 @@ def test_the_shot_rates_end_where_shooting_range_ends():
     assert D.SHOT_ANCHORS[-1][0] == offball.SHOT_RANGE_M
     assert D.rate_at(offball.SHOT_RANGE_M + 1.0) == 0.0
     assert D.rate_at(35.0) > 0.0
+
+def _odds(s, a, b, *others):
+    w = D.choice_weights(s, [a, b, *others])
+    return w[0] / w[1]
+
+
+def test_a_hopeless_option_does_not_loosen_the_choice_between_two_good_ones():
+    # D4: the odds between two options depend on how far apart those two are, not on how bad a third
+    # is (the randomness was once a share of the spread of all options, so a hopeless one widened it).
+    s = scene(x=60.0)
+    good, fair = D.Option("pass", 0.010, (70.0, 34.0)), D.Option("pass", 0.006, (60.0, 20.0))
+    hopeless = D.Option("shoot", -0.05, (105.0, 34.0))
+    assert abs(_odds(s, good, fair) - _odds(s, good, fair, hopeless)) < 1e-9
+
+
+def test_a_good_decision_maker_almost_always_takes_a_clearly_better_option():
+    better, worse = D.Option("pass", 0.012, (70.0, 34.0)), D.Option("dribble", 0.002, (66.0, 34.0))
+    sharp = scene(x=60.0, decisions=1.0, composure=1.0)
+    others = [D.Option("pass", 0.002, (55.0, y)) for y in (10.0, 20.0, 50.0)]
+    w = D.choice_weights(sharp, [better, worse, *others])
+    assert w[0] / sum(w) > 0.95
+    # options much closer than the noise scale are a near coin-flip, whoever he is
+    near = D.Option("pass", 0.0120 - 0.1 * D.CHOICE_NOISE_GOALS, (60.0, 50.0))
+    assert 0.6 < _odds(sharp, better, near) < 2.0
+
+
+def test_opponent_pressure_loosens_the_choice_unless_he_is_composed():
+    better, worse = D.Option("pass", 0.012, (70.0, 34.0)), D.Option("pass", 0.008, (50.0, 34.0))
+    free = scene(x=60.0, composure=0.0)
+    pressed = scene(x=60.0, composure=0.0, opponents=[(62.0, 34.0)])
+    calm = scene(x=60.0, composure=1.0, opponents=[(62.0, 34.0)])
+    assert D.pressure(pressed) > 0.5
+    assert _odds(pressed, better, worse) < _odds(free, better, worse)
+    assert abs(_odds(calm, better, worse) - _odds(free, better, worse)) < 1e-9
+
+
+def test_a_habit_stays_a_close_call():
+    # D4, A5: a trait never more than doubles his odds of its option; it is not a command.
+    assert 1.2 < math.exp(D.HABIT_PULL) < 2.0
+
+
+def test_calibration_still_drives_the_real_choice():
+    # ninety.sim.calibration replaces D.choose; it must take the held misjudgement as choose does.
+    from ninety.sim import calibration
+    rows = calibration.measure(7, minutes=0.5)
+    assert rows and all(0.0 <= r[0] <= 1.0 for r in rows)
 
 def test_an_unpressed_clearance_is_not_aimed_where_his_kick_error_puts_it_out():
     # Alone in his own third by the touchline: the widest aim, 4 m from the line, goes out with

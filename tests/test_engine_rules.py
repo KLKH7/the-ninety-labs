@@ -1753,3 +1753,103 @@ def test_a_thrower_arriving_faster_than_one_frame_of_braking_does_not_take_the_b
     e, taker = thrower_ready_at(sx, sy, vx=limit * 0.95)
     e.tick_restart()
     assert e.restart is None and e.throw_by == taker.id
+
+
+def test_a_carriers_misjudgement_is_kept_until_he_scans_again(monkeypatch):
+    # D4: the engine hands decisions.choose the same tastes while his look at the pitch is the same,
+    # and fresh ones once he has scanned again.
+    from ninety.sim import decisions
+    e = Engine(1)
+    carrier = e.by_id["h6"]
+    e.possessor = carrier.id
+    e.ball = (carrier.x, carrier.y, 0.0, 0.0, 0.0, 0.0)
+    seen = []
+
+    def spy(scene, rng, tastes=None):
+        seen.append(tastes)
+        return decisions.Option("hold", 0.0)
+
+    monkeypatch.setattr(decisions, "choose", spy)
+    e.decide(carrier)
+    e.decide(carrier)
+    assert seen[0] is seen[1] and isinstance(seen[0], dict)
+    e.beliefs[carrier.id].next_scan += 2.0  # he has scanned: a new look
+    e.decide(carrier)
+    assert seen[2] is not seen[0]
+
+
+def test_a_new_possession_is_a_new_look_at_his_options():
+    # D4: losing the ball and winning it back within one scan does not reuse his old misjudgement.
+    e = Engine(1)
+    carrier = e.by_id["h6"]
+    e.tastes[carrier.id] = (e.beliefs[carrier.id].next_scan, {("hold",): 3.0})
+    e.give("a6")
+    e.give(carrier.id)
+    assert carrier.id not in e.tastes
+
+def _two_near_a_loose_ball():
+    """A loose ball rolling slowly across midfield, two home players about as near it on either
+    side, everyone else far away and still, the strike long since reacted to."""
+    e = Engine(1)
+    e.possessor = None
+    e.ball = (52.0, 34.0, 0.0, 0.0, 2.0, 0.0)  # rolling across, between them
+    e.kicked_at = e.free_since = e.t - 3.0
+    for q in e.players:
+        q.x, q.y, q.vx, q.vy = (5.0 if q.team == "home" else 100.0), (2.0 + int(q.id[1:]) * 5.0), 0.0, 0.0
+    a, b = e.by_id["h6"], e.by_id["h7"]
+    a.x, a.y = 46.0, 38.0
+    b.x, b.y = 58.0, 38.0
+    # The same body and reaction for both, so they are about as near by construction, not by a
+    # seed's draw of their profiles (lesson 47).
+    b.physique, b.profile = a.physique, a.profile
+    return e, a, b
+
+
+def test_a_chaser_is_not_swapped_by_a_fresh_guess_while_nothing_changes():
+    # Frozen positions, one strike: re-planning the chase must not hand it back and forth between
+    # two players about as near (it once redrew each player's misjudgement every few frames, and
+    # the one dropped turned away from the ball).
+    e, a, b = _two_near_a_loose_ball()
+    chasers = set()
+    for _ in range(40):
+        e.plan_chase()
+        chasers.add(e.chase["home"][0])
+    assert chasers <= {a.id, b.id} and len(chasers) == 1
+    e.ball = (52.0, 34.0, 0.0, 0.0, 2.0, 0.0)  # pushed on by a touch: a new flight, judged afresh
+    seen = set()
+    for k in range(40):
+        e.free_since = e.t - 2.0 - k * 1e-3
+        e.plan_chase()
+        seen.add(e.chase["home"][0])
+    assert seen == {a.id, b.id}  # the premise: both are real contenders, so a hold is what kept one
+
+
+def test_a_misjudgement_shrinks_as_he_comes_closer_to_the_ball():
+    e, a, b = _two_near_a_loose_ball()
+    for q in (a, b):
+        q.x, q.y = 5.0, 60.0  # out of it: only the chosen player's estimate is read below
+    p = e.by_id["h8"]
+    targets = []
+    for d in (30.0, 6.0):
+        p.x, p.y = 52.0 - d, 38.0
+        e.misjudged, e.misjudged_at = {p.id: (3.0, 0.0)}, (e.kicked_at, e.free_since)
+        e.plan_chase()
+        assert e.chase["home"][0] == p.id
+        targets.append(e.chase["home"][1])
+    truth = 52.0  # rolling straight across: the true path stays at x = 52
+    assert abs(targets[1] - truth) < abs(targets[0] - truth)
+
+
+def test_a_new_strike_is_judged_afresh_and_a_clearly_nearer_player_always_chases():
+    e, a, b = _two_near_a_loose_ball()
+    seen = set()
+    for k in range(40):  # each a new touch of the ball: the misjudgement is drawn again
+        e.kicked_at = e.t - 3.0 - k * 1e-3
+        e.plan_chase()
+        seen.add(e.chase["home"][0])
+    assert seen == {a.id, b.id}  # about as near: either may judge himself sooner
+    b.x, b.y = 70.0, 50.0  # now clearly further
+    for k in range(20):
+        e.kicked_at = e.t - 4.0 - k * 1e-3
+        e.plan_chase()
+        assert e.chase["home"][0] == a.id
