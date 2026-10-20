@@ -54,6 +54,32 @@ def test_with_the_personalizer_down_the_fallback_answers_and_the_viewer_sees_the
     assert row["insights"] == BASE["insights"]
 
 
+# scenario -> the fallback badges on screen
+BADGES = {
+    "none": [],
+    "judge timeout": ["held: timeout"],
+    "tactician outage": ["held: service"],
+    "personalizer down": ["personalizer: refused"],
+    "low confidence": ["held: low_confidence"],
+}
+
+
+# scenario -> the trace steps marked as fallbacks, which the agent trace shows
+TRACE_FALLBACKS = {
+    "none": [],
+    "judge timeout": ["producer: held: timeout"],
+    "tactician outage": ["tactician: template", "producer: held: service"],
+    "personalizer down": ["personalizer: personalizer: refused"],
+    "low confidence": ["producer: held: low_confidence"],
+}
+
+
+@pytest.mark.parametrize("name", list(BADGES))
+def test_a_failure_puts_a_fallback_badge_on_screen_and_in_the_trace(name):
+    assert ROWS[name]["badges"] == BADGES[name]
+    assert ROWS[name]["trace_fallbacks"] == TRACE_FALLBACKS[name]
+
+
 def test_every_injected_failure_recovers():
     assert [r["scenario"] for r in ROWS.values() if not r["recovers"]] == []
 
@@ -63,9 +89,9 @@ def test_the_recovery_check_can_fail():
     # each count: the table's "yes" is a measurement, not a constant.
     broken = {**ROWS["tactician outage"], "insights": [{"text": "x", "verified": False}],
               "templates": BASE["templates"][1:], "fallback": [], "status": "verified"}
-    assert wf.recovered(broken, BASE) == {
+    assert wf.recovered({**broken, "badges": []}, BASE) == {
         "templates stay": False, "nothing unverified airs": False,
-        "claim ends as it must": False, "fallback recorded": False,
+        "claim ends as it must": False, "fallback recorded": False, "fallback badge on screen": False,
     }
 
 

@@ -44,7 +44,7 @@ import sys
 import time
 import warnings
 from collections.abc import Awaitable, Callable
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -310,9 +310,10 @@ class Run:
     cues: list[dict] = field(default_factory=list)
     t: dict[str, float] = field(default_factory=dict)  # event id -> seconds, for Ledger records
 
-    def step(self, role: str, moment: str, action: str, started: float, detail: str = "") -> None:
+    def step(self, role: str, moment: str, action: str, started: float, detail: str = "",
+             fallback: str = "") -> None:
         ms = (time.perf_counter() - started) * 1000
-        self.trace.append(TraceStep(role, moment, action, round(ms, 1), detail))
+        self.trace.append(TraceStep(role, moment, action, round(ms, 1), detail, fallback))
 
     async def write_claim(self, case: Case, draft: Draft) -> None:
         verdict = draft.verdict if draft.status != "draft" else None
@@ -447,7 +448,7 @@ class Tactician(Executor):
             if rewrite is None:  # nothing written: held, and there is nothing to challenge
                 draft.verdict = Verdict(False, [f"tactician failed ({error}); claim held back"], category)
                 draft.status = status_for(draft.verdict)
-                run.step("tactician", case.moment.id, "fail", started, f"{error}; template stays")
+                run.step("tactician", case.moment.id, "fail", started, f"{error}; template stays", "template")
                 await ctx.send_message(ToProducer(case))
             else:  # its rejected version stands
                 run.step("tactician", case.moment.id, "fail", started, f"{error}; the rejection stands")
@@ -572,8 +573,20 @@ class Producer(Executor):
                     await ctx.send_message(ToPersonalizer(case, aired.claim))
                     return
             else:
-                run.step("producer", case.moment.id, "template", started, f"{template} stays: {status}")
+                why = f"{status}: {primary.category}" if primary and primary.category else status
+                run.step("producer", case.moment.id, "template", started, f"{template} stays: {status}", why)
+                await self.badge(template, why)
         await next_moment(run, case, ctx)
+
+    async def badge(self, template_id: str, why: str) -> None:
+        """The template that stayed says so on screen: a new version of its cue, with `fallback`."""
+        for i, cue in enumerate(self.run.cues):
+            if cue["id"] == template_id:
+                self.run.cues[i] = badged = {**cue, "fallback": why}
+                await self.run.ledger.append(Record(
+                    id=template_id, version=2, kind="cue", t=badged["t_in"], source="producer",
+                    confidence=None, evidence=tuple(badged["evidence"]), payload=badged,
+                ))
 
     async def insight(self, moment: Moment, claim: Claim, template_id: str) -> dict:
         template = (await self.run.ledger.get(template_id)).payload
@@ -608,10 +621,17 @@ class Personalizer(Executor):
         from ninety.agents.live import _personalized
 
         run = self.run
+        before = len(run.trace)
         variants, _ = await _personalized(
             msg.claim, run.events, list(run.known.values()), run.t, guarded(run.models.judge),
             run.models.personalizer, None, run.trace,
         )
+        # A variant from the in-process fallback is badged as one, on screen and in the trace.
+        route = next((s for s in run.trace[before:] if s.role == "personalizer"), None)
+        if route is not None and route.action == "fallback":
+            why = "personalizer: " + route.detail.split(":", 1)[-1].strip()
+            run.trace[run.trace.index(route)] = replace(route, fallback=why)
+            variants = [{**v, "fallback": why} for v in variants]
         run.cues.extend(variants)
         await next_moment(run, msg.case, ctx)
 

@@ -40,6 +40,8 @@
     "cue-v00005-analyst",
     "cue-v00005-casual"
    ],
+   "badges": [],
+   "trace_fallbacks": [],
    "fallback": [
     "fact_checker held: analyst/es: no translation: the verified English text",
     "fact_checker held: casual/es: no translation: the verified English text",
@@ -50,7 +52,8 @@
     "templates stay": true,
     "nothing unverified airs": true,
     "claim ends as it must": true,
-    "fallback recorded": true
+    "fallback recorded": true,
+    "fallback badge on screen": true
    },
    "recovers": true
   },
@@ -74,6 +77,12 @@
     "cue-v00005-analyst",
     "cue-v00005-casual"
    ],
+   "badges": [
+    "held: timeout"
+   ],
+   "trace_fallbacks": [
+    "producer: held: timeout"
+   ],
    "fallback": [
     "judge hold: timeout",
     "fact_checker hold: tactician's claim: judge timeout; claim held back",
@@ -84,7 +93,8 @@
     "templates stay": true,
     "nothing unverified airs": true,
     "claim ends as it must": true,
-    "fallback recorded": true
+    "fallback recorded": true,
+    "fallback badge on screen": true
    },
    "recovers": true
   },
@@ -108,6 +118,13 @@
     "cue-v00005-analyst",
     "cue-v00005-casual"
    ],
+   "badges": [
+    "held: service"
+   ],
+   "trace_fallbacks": [
+    "tactician: template",
+    "producer: held: service"
+   ],
    "fallback": [
     "tactician fail: ServiceRequestError: injected: the Foundry endpoint cannot be reached; template stays",
     "producer template: cue-v00001-analyst stays: held"
@@ -117,7 +134,8 @@
     "templates stay": true,
     "nothing unverified airs": true,
     "claim ends as it must": true,
-    "fallback recorded": true
+    "fallback recorded": true,
+    "fallback badge on screen": true
    },
    "recovers": true
   },
@@ -158,6 +176,12 @@
     "cue-v00005-analyst",
     "cue-v00005-casual"
    ],
+   "badges": [
+    "personalizer: refused"
+   ],
+   "trace_fallbacks": [
+    "personalizer: personalizer: refused"
+   ],
    "fallback": [
     "personalizer fallback: fallback: refused",
     "fact_checker held: analyst/es: no translation: the verified English text",
@@ -169,7 +193,8 @@
     "templates stay": true,
     "nothing unverified airs": true,
     "claim ends as it must": true,
-    "fallback recorded": true
+    "fallback recorded": true,
+    "fallback badge on screen": true
    },
    "recovers": true
   },
@@ -191,6 +216,12 @@
     "cue-v00003-analyst",
     "cue-v00003-casual"
    ],
+   "badges": [
+    "held: low_confidence"
+   ],
+   "trace_fallbacks": [
+    "producer: held: low_confidence"
+   ],
    "fallback": [
     "fact_checker hold: tactician's claim: event v00005 was detected with confidence 0.30, below 0.50: cite a confident detection",
     "producer template: cue-v00001-analyst stays: held"
@@ -200,7 +231,8 @@
     "templates stay": true,
     "nothing unverified airs": true,
     "claim ends as it must": true,
-    "fallback recorded": true
+    "fallback recorded": true,
+    "fallback badge on screen": true
    },
    "recovers": true
   }

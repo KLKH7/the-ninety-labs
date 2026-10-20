@@ -181,6 +181,8 @@ def run(scenario: Scenario) -> dict:
         "insights": [{"text": c["text"], "persona": c["persona"], "lang": c.get("lang", "en"),
                       "verified": c.get("verified", False)} for c in insights],
         "templates": templates,
+        "badges": sorted({c["fallback"] for c in result.cues if c.get("fallback")}),
+        "trace_fallbacks": [f"{s.role}: {s.fallback}" for s in result.trace if s.fallback],
         "fallback": fallback,
         "model_calls": result.model_calls,
     }
@@ -196,6 +198,8 @@ def recovered(row: dict, base: dict) -> dict[str, bool]:
         "claim ends as it must": row["status"] == CLAIM[row["scenario"]]
         or (CLAIM[row["scenario"]] == "held" and row["status"] == "rejected"),
         "fallback recorded": bool(row["fallback"]) if row["scenario"] != "none" else True,
+        # The viewer shows a cue's `fallback` as a badge: on screen in every failure, never without one.
+        "fallback badge on screen": bool(row["badges"]) == (row["scenario"] != "none"),
     }
 
 
@@ -242,6 +246,8 @@ def report(table: list[dict]) -> str:
         screen = (f"{kept} template graphics (as with no failure); {aired}" if kept == len(base["templates"])
                   else f"{kept} of {len(base['templates'])} template graphics (the ones on the unsure "
                        f"detection are not drawn); {aired}")
+        if r["badges"]:
+            screen += "; badge: " + ", ".join(f"FALLBACK ({b})" for b in r["badges"])
         why = f"{r['status']}" + (f" ({r['category']})" if r["category"] else "")
         if r["scenario"] != "none" and r["judge_asked"] == 0:
             why += ", Judge not asked"
@@ -255,9 +261,10 @@ def report(table: list[dict]) -> str:
         "graphic stays on air (less those on an unsure detection, which the confidence gate keeps off",
         "the screen), nothing airs that the fact-checker did not pass, the claim ends as it must (held",
         "or rejected; verified when only the Personalizer failed, since the insight needs no",
-        "Personalizer), and the fallback is recorded in the trace. In every row, the Spanish variants",
-        "are held: the stand-in Personalizer and its in-process fallback answer in English, and a",
-        "variant airs only in its own language.",
+        "Personalizer), the fallback is recorded in the trace, and a fallback badge is on screen (the",
+        "cue's `fallback`, which the viewer draws), never without a failure. In every row, the",
+        "Spanish variants are held: the stand-in Personalizer and its in-process fallback answer in",
+        "English, and a variant airs only in its own language.",
         "",
         "## Budgets",
         "",

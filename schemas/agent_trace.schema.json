@@ -5,12 +5,47 @@
   "description": "One step in the on-screen agent trace: which agent did what for which moment, and how long it took. Mirrors ninety.agents.contracts.TraceStep.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["role", "moment", "action", "ms", "detail"],
+  "required": [
+    "role",
+    "moment",
+    "action",
+    "ms",
+    "detail"
+  ],
   "properties": {
-    "role": { "type": "string", "enum": ["analyst", "tactician", "challenger", "fact_checker", "judge", "producer", "personalizer", "describer", "companion"] },
-    "moment": { "type": "string", "description": "Id of the moment the step was for." },
-    "action": { "type": "string", "minLength": 1, "description": "What it did, e.g. draft, reject, verify, hold, air, handoff." },
-    "ms": { "type": "number", "minimum": 0 },
-    "detail": { "type": "string" }
+    "role": {
+      "type": "string",
+      "enum": [
+        "analyst",
+        "tactician",
+        "challenger",
+        "fact_checker",
+        "judge",
+        "producer",
+        "personalizer",
+        "describer",
+        "companion"
+      ]
+    },
+    "moment": {
+      "type": "string",
+      "description": "Id of the moment the step was for."
+    },
+    "action": {
+      "type": "string",
+      "minLength": 1,
+      "description": "What it did, e.g. draft, reject, verify, hold, air, handoff."
+    },
+    "ms": {
+      "type": "number",
+      "minimum": 0
+    },
+    "detail": {
+      "type": "string"
+    },
+    "fallback": {
+      "type": "string",
+      "description": "Set when this step is a fallback, saying which (e.g. \"template\", \"personalizer: refused\"); empty when it is not."
+    }
   }
 }
