@@ -647,3 +647,57 @@ def test_every_kind_of_restart_is_taken():
         e.stop(kind, team, spot)
         e.restart.ready_at = e.t + 2.0
         run_until(e, taken, 60)
+
+
+def scored_engine() -> tuple[Engine, str]:
+    """A minute of seed 2's play, then home scores: h9 puts it in the away net."""
+    e = Engine(2)
+    e.run(1)
+    e.possessor, e.restart, e.set_by, e.throw_by, e.dribbler = None, None, None, None, None
+    scorer = e.by_id["h9"]
+    scorer.x, scorer.y = 100.0, 30.0
+    e.ball = (106.0, 33.0, 0.5, 2.0, 0.0, 0.0)  # in the net
+    e.kicked = e.emit("shot", "home", 95.0, 33.0, player=scorer.id)
+    e.shot_was_on_target = True
+    e.scored("home", e.kicked, 105.0, 33.0)
+    return e, scorer.id
+
+
+def test_after_a_goal_the_kick_off_waits_for_the_celebration():
+    """Defect: the kick-off came about 17 s after a goal; a goal's celebration alone may last one to
+    one and a half minutes (FIFA's referees' chief, 2022). L4: 60 to 90 s, once Law 8 holds."""
+    e, _ = scored_engine()
+    goal_t = e.t
+    track = run_until(e, taken, 150)
+    kicked = e.t - goal_t
+    assert kicked >= 60.0
+    assert biggest_ball_step(track) <= MAX_STEP_M and fastest_player(track) <= MAX_PLAYER_MPS
+
+
+def test_the_scorers_team_mates_run_to_him_and_then_walk_back():
+    e, scorer = scored_engine()
+    c = e.celebration
+    assert c is not None and c.focus == scorer and c.team == "home"
+    gathered = 0
+    while e.t < c.until:
+        e.step()
+        s = e.by_id[scorer]
+        gathered = max(gathered, sum(math.hypot(p.x - s.x, p.y - s.y) < 3.0 for p in e.players
+                                     if p.team == "home" and p.role != "GK" and p.id != scorer))
+    assert gathered >= 5  # most of his outfield team-mates have reached him
+    assert math.hypot(e.by_id[scorer].x - c.spot[0], e.by_id[scorer].y - c.spot[1]) < 3.0  # at the flag
+    run_until(e, taken, 120)
+    assert e.celebration is None  # over once the kick-off is taken
+
+
+def test_an_own_goal_is_celebrated_round_the_scoring_sides_nearest_player():
+    e = Engine(2)
+    e.run(1)
+    e.possessor, e.restart, e.set_by, e.throw_by, e.dribbler = None, None, None, None, None
+    e.ball = (106.0, 33.0, 0.5, 2.0, 0.0, 0.0)
+    e.last_touch, e.kicked = "a4", None  # an away defender put it into his own net
+    e.scored("home", None, 105.0, 33.0)
+    c = e.celebration
+    nearest = min((p for p in e.players if p.team == "home" and p.role != "GK"),
+                  key=lambda p: math.hypot(p.x - 106.0, p.y - 33.0))
+    assert c.team == "home" and c.focus == nearest.id

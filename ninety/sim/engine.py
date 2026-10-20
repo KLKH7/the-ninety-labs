@@ -131,13 +131,19 @@ BOARDS_M = 4.0  # verify: advertising boards behind the lines stop a ball (and p
 # R1: seconds from the ball going out to the restart. Means from Opta timing of the Premier League
 # (The Analyst): throw-ins about 16 s (2022-23; 17.9 in 2025-26), goal kicks 29 to 30 s, free kicks
 # 31.3 to 40.9 s by team (2022-23; mean taken as the middle), corners about half a minute (only a
-# combined figure is published). The spread around each mean is design. Kickoff: design, long
-# enough to see (a goal's celebration, about 72 s in the same data, is not modelled).
+# combined figure is published). The spread around each mean is design. The kick-off that starts the
+# match: design, long enough to see. After a goal (L4): FIFA's referees' chief, on added time at the
+# 2022 World Cup, put a goal's celebration at "one, one and a half minutes" (Collina, November 2022);
+# Opta's guide gives 72 s for the celebration after a penalty goal (The Analyst, May 2023).
 RESTART_DELAY_S = {"throw_in": (12, 20), "goal_kick": (24, 34), "corner": (24, 36),
                    "free_kick": (29, 41),
                    # about two minutes from the foul to the spot kick (same source, 2022-23)
                    "penalty_kick": (100, 140),
-                   "kick_off": (1, 2)}
+                   "kick_off": (1, 2),
+                   "kick_off_after_goal": (60, 90)}
+# design: how long the scorer's run and his team-mates' gathering round him last; the rest of the
+# minute or more before the kick-off is the walk back (L4)
+CELEBRATION_S = (10.0, 20.0)
 NO_OFFSIDE_FROM = ("throw_in", "goal_kick", "corner")  # Law 11: no offside offence direct from these
 INTERCEPT_SHARE = 0.85  # design: taken before this share of the way to its target, a pass is intercepted
 THROW_BEHIND_M = 0.55  # Law 15: his body stands outside the touchline, feet on or behind it (design)
@@ -190,6 +196,14 @@ class Restart:
     carried_by: str | None = None  # who has the dead ball at his feet (or in his hands)
     passed_by: str | None = None  # who knocked it on toward the spot, while it is still rolling
     gathered_at: float = 0.0  # when the one who has it took it
+
+
+@dataclass
+class Celebration:
+    team: str  # the side that scored
+    focus: str  # the scorer (or, for an own goal, the scoring side's player nearest the ball)
+    spot: tuple[float, float]  # where he runs: the corner flag nearest him at that end (design)
+    until: float
 
 
 @dataclass
@@ -403,6 +417,7 @@ class Engine:
         self.restart: Restart | None = None
         # Laws 13, 15 to 17: a restart that has been set but not yet kicked; the opponents keep off
         self.set_by: Restart | None = None
+        self.celebration: Celebration | None = None  # a goal just scored: the scorers celebrate (L4)
         # Laws 8, 13 to 17: who took the last restart, until another player has touched the ball
         self.restart_kicker: str | None = None
         self.throw_by: str | None = None  # a throw-in taker holding the ball until he throws it
@@ -577,7 +592,8 @@ class Engine:
         self.poss_team = team
         self.kicked = None
         self.new_phase()
-        self.stop("kick_off", team, (PITCH_X / 2, PITCH_Y / 2), taker.id)
+        self.stop("kick_off", team, (PITCH_X / 2, PITCH_Y / 2), taker.id,
+                  delay="kick_off" if setup else "kick_off_after_goal")
 
     def lined_up_for_kickoff(self, r: Restart) -> bool:
         """Law 8: everyone but the kicker in his own half, and the opponents outside the centre
@@ -1440,12 +1456,26 @@ class Engine:
                     kicked.update(receiver=None if own else scorer, end_x=touch["x"], end_y=touch["y"],
                                   outcome="fail" if own else "success")
         self.emit("goal", team, x, y, player=scorer)
+        self.celebrate(team, scorer)
         self.kickoff(other(team))
 
-    def stop(self, kind: str, team: str, spot: tuple[float, float], taker: str | None = None) -> None:
+    def celebrate(self, team: str, scorer: str | None) -> None:
+        """L4 (design): the scorer runs off toward the corner flag nearest him at the end he scored at,
+        and his outfield team-mates run to him; after CELEBRATION_S they walk back for the kick-off.
+        An own goal has no scorer: the side's outfielder nearest the ball is the one they run to."""
+        side = [p for p in self.players if p.team == team and p.role != "GK"]
+        focus = self.by_id[scorer] if scorer else min(
+            side, key=lambda p: math.hypot(p.x - self.ball[0], p.y - self.ball[1]))
+        flag_y = 0.5 if focus.y < PITCH_Y / 2 else PITCH_Y - 0.5
+        flag_x = clamp(goal_x(team), 0.5, PITCH_X - 0.5)
+        until = self.t + self.rng.uniform(*CELEBRATION_S)
+        self.celebration = Celebration(team, focus.id, (flag_x, flag_y), until)
+
+    def stop(self, kind: str, team: str, spot: tuple[float, float], taker: str | None = None,
+             delay: str | None = None) -> None:
         if taker is None:
             taker = self.nearest(spot[0], spot[1], team).id
-        lo, hi = RESTART_DELAY_S[kind]
+        lo, hi = RESTART_DELAY_S[delay or kind]
         self.dribbler = self.dribble_to = None  # the ball is dead: nobody is running onto a touch
         self.restart_kicker = None  # a new stoppage ends the last restart's bar
         self.restart = Restart(kind, team, spot[0], spot[1], taker, self.t + self.rng.uniform(lo, hi))
@@ -1601,6 +1631,7 @@ class Engine:
             spot = self.restart_ball_spot(r)
             self.ball = (*spot, 0.0, 0.0, 0.0, 0.0)
         self.restart = None
+        self.celebration = None  # play restarts: any celebration is over
         self.set_by = r if r.kind not in ("throw_in", "penalty_kick") else None
         self.emit("kickoff" if r.kind == "kick_off" else "set_piece", r.team, *spot, player=taker.id,
                   **({} if r.kind == "kick_off" else {"outcome": None}))
@@ -1729,9 +1760,17 @@ class Engine:
             return p.x + (sx - p.x) / d * CONTROL_M, p.y + (sy - p.y) / d * CONTROL_M, DRIBBLE
         if self.restart and self.restart.kind == "penalty_kick" and p.id != self.restart.taker:
             return *self.penalty_wait_spot(p), SHAPE  # Law 14: until the ball is kicked
+        c = self.celebration
+        if c and self.t < c.until and p.team == c.team and p.role != "GK":
+            if p.id == c.focus:  # the scorer runs off to celebrate
+                return *c.spot, RECOVER
+            focus = self.by_id[c.focus]  # his team-mates run to him
+            return focus.x, focus.y, RECOVER
         kick_off = self.restart or self.set_by
         if kick_off and kick_off.kind == "kick_off" and p.id != kick_off.taker:
-            return *self.kickoff_spot(p, kick_off.team), SHAPE  # Law 8: until the ball is kicked
+            # Law 8: in his own half until the ball is kicked, walking back in time for it (O8)
+            kx, ky = self.kickoff_spot(p, kick_off.team)
+            return kx, ky, self.in_time(p, kx, ky)
         if self.restart and p.id == self.restart.taker:
             r = self.restart
             # With the ball at his feet he goes no faster than he can carry it (D1).
