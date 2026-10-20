@@ -137,6 +137,8 @@ def test_when_the_penalty_is_taken_he_shoots_from_the_mark():
     r = e.restart
     taker = e.by_id[r.taker]
     taker.x, taker.y, taker.heading = r.x - 0.9, r.y, 0.0  # in reach of the mark, not on it
+    r.carried_by = taker.id  # he has fetched the ball (tests/test_restarts.py)
+    e.ball = (r.x - 0.5, r.y, 0.0, 0.0, 0.0, 0.0)
     e.t = r.ready_at
     e.decide = lambda *a, **k: None  # only Law 14 may make him shoot
     for _ in range(25):
