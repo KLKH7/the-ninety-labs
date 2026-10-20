@@ -197,3 +197,30 @@ def test_audio_description_is_silent_with_the_voice_off(browser, site):
     page.keyboard.press("1")
     assert not page.is_visible("#voice-toggle")
     assert not errors
+
+
+def test_a_fallback_cue_says_so_on_screen_and_to_a_screen_reader(browser, site):
+    # A template graphic that stayed because the agents' claim was held carries `fallback`
+    # (schemas/overlay_cue.schema.json); the viewer badges it and says it.
+    import json
+
+    ctx = browser.new_context(viewport={"width": 1280, "height": 900})
+
+    def badged(route):
+        cues = [json.loads(line) for line in route.fetch().text().splitlines() if line.strip()]
+        cues = [c if c["kind"] == "insight" else {**c, "fallback": "held: timeout"} for c in cues]
+        route.fulfill(body="".join(json.dumps(c) + "\n" for c in cues), content_type="application/x-ndjson")
+
+    ctx.route("**/bundle/cues.jsonl", badged)
+    page = ctx.new_page()
+    errors: list[str] = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.goto(site)
+    page.wait_for_selector("body[data-state=ready] #overlay[data-t]")
+    page.get_by_role("button", name="Watch it").click()
+    for _ in range(40):
+        if "fallback" in page.inner_text("#on-air"):
+            break
+        page.keyboard.press(".")
+    assert "(fallback: held: timeout)" in page.inner_text("#on-air")
+    assert not errors

@@ -270,6 +270,7 @@ class TraceStep:
     action: str
     ms: float
     detail: str = ""
+    fallback: str = ""  # set when the step is a fallback, saying which; the viewer badges it
 
     def __post_init__(self) -> None:
         _require(self.role in get_args(Role), f"unknown role {self.role!r}")

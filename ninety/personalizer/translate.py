@@ -88,9 +88,9 @@ def azure(
 ) -> Translate:
     """Azure Translator, v3 `translate`, called with an Entra ID token: no key in the repo or the image."""
     if credential is None:
-        from azure.identity.aio import DefaultAzureCredential
+        from ninety.agents.credentials import new_credential
 
-        credential = DefaultAzureCredential()
+        credential = new_credential()  # the shared signed-in credential: a token kept, not fetched per call
     url = endpoint.rstrip("/") + "/translator/text/v3.0/translate"
 
     async def translate(text: str, lang: str) -> str:
