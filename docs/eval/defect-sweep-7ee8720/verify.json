@@ -1,0 +1,329 @@
+[
+ {
+  "type": "overlap_stacked",
+  "seed": 131,
+  "match_time": "03:03",
+  "verdict": "confirmed",
+  "evidence": "Dead ball (home free kick, foul 02:57, taken 03:30). a7-a8 centre distance under 1 m for 25.3 s (03:03-03:30, median 0.60 m inside that window, min 0.21 m), under 0.5 m for 6.0 s, spines crossing (engine shape model, bodies intersect) for 2.9 s. a7-a10 under 1 m for 9.7 s (min 0.32 m), a8-a10 under 1 m for 3.5 s (min 0.75 m). All three sit at (73.5-74.4, 29.0-29.9), exactly 9.15 m from the ball on the line from the ball to the away goal, walking at 0.1-1.6 m/s.",
+  "real_football": "At a free kick 42 m from goal, defenders spread to mark runners at 9.15 m or more. Only a defensive wall stands shoulder to shoulder (about 0.5 m between centres, side by side across the shot line, never inside each other), and a wall this far out is rare.",
+  "likely_cause": "ninety/sim/engine.py shape_target (out-of-possession branch, about line 1620): during a restart only the gap changes to RESTART_DISTANCE_M, so the presser (ball + goal-direction * 9.15) and the cover (max(COVER_BEHIND_M, gap+2)) are sent to the same point on the ball-to-goal line, and other slots do not account for them. separate() (about line 1880) only removes closing speed and never pushes apart bodies that already overlap, so walkers stay stacked."
+ },
+ {
+  "type": "overlap_stacked",
+  "seed": 11,
+  "match_time": "08:13",
+  "verdict": "partly",
+  "evidence": "No overlap. Over 07:45-09:00, a4-a5 min 2.81 m, a4-a8 min 1.01 m, a5-a8 min 0.98 m (under 1 m for only 1.3 s at 08:25-08:26); no body contact. They form a line about 1-1.2 m apart at (92.6-93.0, 15-19), not (97,10), from about 08:22 (dead ball, away goal kick taken by a1 at 08:20) to about 08:30, i.e. about 8 s that runs into open play after the restart.",
+  "real_football": "Three team-mates standing about 1 m apart in a line at their own goal kick is unusual (they spread to offer passes), but they do not intersect. The report's 'drawn on one spot' comes from the contact-sheet dots, which are 2.3 m across.",
+  "likely_cause": "Contact-sheet dot size (runs/sweep/tactical.py draws dots r=6 px at PX=5.2 px/m, i.e. 2.3 m wide) makes a 1 m gap look like one spot. The tight line itself comes from the shape slots in ninety/sim/engine.py shape_target and offball.attacking_slot, which do not keep team-mates apart beyond PERSONAL_SPACE_M = 1.2 m."
+ },
+ {
+  "type": "overlap_stacked",
+  "seed": 211,
+  "match_time": "02:29",
+  "verdict": "refuted",
+  "evidence": "Over 02:15-02:50, a10-h7 min 0.88 m (under 1 m for 0.2 s at 02:36), median 6.5 m. At 02:28-02:32 they are 1.7-4.3 m apart near (31-34, 29-33). Nobody is within 8 m of (14,35). Before 09:31, no pair in the match is under 0.6 m for 1 s or more.",
+  "real_football": "A striker standing 2-4 m from the opposing holding midfielder is normal marking distance in open play.",
+  "likely_cause": "Rendering artefact in the contact sheet: dots are 2.3 m wide (tactical.py r=6 px, 5.2 px/m), so players 2-3 m apart draw on top of each other. No engine defect."
+ },
+ {
+  "type": "set_piece_encroachment",
+  "seed": 11,
+  "match_time": "04:41",
+  "verdict": "confirmed",
+  "evidence": "Home goal kick: ball out at 04:39.7, ball placed and set_piece event at 05:04.28, kicked at 05:05.96. From 04:51, a9, a10 and a11 walk at about 0.5 m/s toward the home goal line and are inside the penalty area for most of the wait. At the moment the ball is placed: a9 (1.5,52.8), a10 (1.4,36.9) 5.0 m from the ball, a11 (2.2,20.5). At the kick: all three are still inside the area, and a10 has closed to (5.8,34.9), 0.9 m from the ball, inside the goal area.",
+  "real_football": "Law 16: opponents must be outside the penalty area until the ball is kicked and clearly moves. Pressing forwards wait on the edge of the area at about 16.5 m.",
+  "likely_cause": "ninety/sim/engine.py: (1) tick_restart (about line 1422) sets self.restart = None when the taker reaches the ball, then holds for 0.5-1.5 s (hold_until), so pressers are free to close in before the kick; (2) in shape_target only the two pressers use RESTART_DISTANCE_M, and the goal-kick value is a 12 m radius from the ball, not the penalty area, so the other players' slots, which follow the dead ball lying at (-4,44), walk into the area."
+ },
+ {
+  "type": "set_piece_encroachment",
+  "seed": 71,
+  "match_time": "03:13",
+  "verdict": "confirmed",
+  "evidence": "Home goal kick: ball out at 02:59.5, placed at 03:32.48, kicked at 03:33.84. a10 and a11 are inside the area from 03:03 and 03:06, walking steadily toward the goal line (16.2 to 1.9 m from it). At the kick: a10 (3.6,40.9), 7.1 m from the ball, and a11 (3.2,27.2), 7.2 m, both inside the goal area's width and depth.",
+  "real_football": "Law 16: opponents must be outside the penalty area at the goal kick, and standing 2-4 m off the goal line is never allowed.",
+  "likely_cause": "The same as seed 11: shape slots in ninety/sim/engine.py shape_target ignore the restart (only the pressers get RESTART_DISTANCE_M['goal_kick'], a 12 m radius), and the dead ball out at (-4,68) drags the forwards' slots toward the goal line."
+ },
+ {
+  "type": "set_piece_encroachment",
+  "seed": 199,
+  "match_time": "00:28",
+  "verdict": "partly",
+  "evidence": "Free kick: foul at 00:26.4, placed at 01:04.16, kicked at 01:05.68 (a 39 s wait, within R1's 31-41 s). During the wait a9 holds 9.1 m from the ball where it lies (46.7,38.2), on the 9.15 m line rather than 3.6 m. a6/a10/a7 are not stacked: they are 2.7-11 m apart (a10-a9 is under 1 m for 10.5 s, min 0.60 m). The real breach is at the restart: the ball jumps 1.2 m to the foul spot, and a9 sprints in at 3-6 m/s, from 10.0 m at 01:04.4 to 4.8 m at the kick (a10 is 8.4 m away).",
+  "real_football": "Law 13: opponents stay 9.15 m away until the ball is in play, and a defender who charges before the kick is cautioned and the kick is retaken. Standing at 9.1 m during the wait is correct.",
+  "likely_cause": "ninety/sim/engine.py tick_restart (about line 1422): self.restart is cleared and the ball given to the taker at placement, with a 0.5-1.5 s hold_until before the kick. Opponents go back to normal pressing (shape_target gap = press_gap_m) during that hold. The stall is the R1 wait, not the encroachment."
+ },
+ {
+  "type": "bunching",
+  "seed": 127,
+  "match_time": "01:38",
+  "verdict": "refuted",
+  "evidence": "Players (keepers included) within 15 m of the ball during 01:32-01:46: median 6, max 10 (one moment at 01:41-01:43), never 13. Home 20-43 m long by 35-43 m wide, away 31-42 m by 40-57 m, both within R8. Outfield players span y 10-58 and x 33-86. The match median is 4 within 15 m (p95 8).",
+  "real_football": "R8: team length 31-46 m and width 35-48 m. A centre-circle duel with 6-10 players within 15 m is normal.",
+  "likely_cause": "Rendering artefact in the contact sheet: dots 2.3 m wide make a 6-10 player cluster read as twice as many. No engine defect."
+ },
+ {
+  "type": "bunching",
+  "seed": 43,
+  "match_time": "00:09",
+  "verdict": "refuted",
+  "evidence": "Within 15 m of the ball during 00:03-00:18: median 7, max 11, at least 10 for only 1.2 s (00:10-00:11). Home 28-44 m long by 39-47 m wide, away 25-36 m by 33-42 m. Outfield y spans 11-57, so the y<20 half is not empty. The home centre-backs sit at x 24-30 just after kickoff, a normal back line. The match median is 4 (p95 8).",
+  "real_football": "Within R8 for team length and width. Centre-backs 25-35 m behind the ball straight after kickoff are normal.",
+  "likely_cause": "Contact-sheet dot size exaggerates clusters. No engine defect. The away team is slightly narrow (33-35 m) at 00:10-00:12, at the low edge of R8."
+ },
+ {
+  "type": "bunching",
+  "seed": 71,
+  "match_time": "04:09",
+  "verdict": "refuted",
+  "evidence": "Within 15 m of the ball during 04:03-04:18: median 6, max 10 (at least 10 for 1.1 s at 04:10). Home 27-47 m long by 34-49 m wide, away 25-49 m by 33-46 m. Outfield y spans 9-58, with 2-4 outfield players in the wide strips (y<13.6 or >54.4) at every second.",
+  "real_football": "Within R8. The flanks are not empty.",
+  "likely_cause": "Contact-sheet dot size exaggerates clusters. No engine defect."
+ },
+ {
+  "type": "pass_out_unpressured",
+  "seed": 97,
+  "match_time": "03:42",
+  "verdict": "confirmed",
+  "evidence": "h7 at (11.9,34.2), 0.9 m from keeper h1, nearest opponent a10 27.5 m (next 36 m); no intended receiver (intended=null): this is the 'clear' option, whose fixed target is (x+45, 64) = (56.9,64); launched 117 km/h at 35 deg vs 33 deg to that target (about 2 deg off), landed near (55,65) and bounced out at (59.9,68). Aim, not execution, put it out. Six team-mates within 18 m, all unmarked",
+  "real_football": "a centre-back with the ball beside his keeper and no opponent within 25 m keeps it and plays short; a clearance is a response to pressure in or near the box",
+  "likely_cause": "ninety/sim/decisions.py options(): the 'clear' option is offered whenever the carrier is in his own third (CLEAR_FROM) regardless of pressure, aimed at a fixed spot 4 m from the touchline 45 m upfield and valued as an even contest (0.5 value - 0.5 loss) whoever is near it; engine.py pass_to logs it as a 'pass' with intended=null"
+ },
+ {
+  "type": "pass_out_unpressured",
+  "seed": 23,
+  "match_time": "05:44",
+  "verdict": "partly",
+  "evidence": "h8 at (43.6,39.8) under full pressure (a10 0.7 m), ground pass intended h5 at (32.6,57.0), 20.5 m; struck 64 km/h (17.8 m/s, high for 20 m) at 105 deg vs 123 deg to h5 (13-18 deg off, allowing for a lead), passing about 6.5 m in front of h5; h5 walked at 1.4-2.7 m/s for 1.3 s before running; ball out at (36.4,68), 11.7 m from h5. Not unpressured: the type label is wrong for this example",
+  "real_football": "a pass played with an opponent at arm's length often goes astray and a wide player who cannot reach it lets it run out; normal. The intended receiver standing still for 1.3 s while it runs past is the weak part",
+  "likely_cause": "execution error (ninety/sim/profiles.py kick_error: pressure, turn of about 50 deg across the body) plus the intended receiver's slow reaction to a misplaced ball (engine.py intended-receiver chase/offball)"
+ },
+ {
+  "type": "pass_out_unpressured",
+  "seed": 199,
+  "match_time": "03:40",
+  "verdict": "confirmed",
+  "evidence": "h7 at (34.2,40.1) just after a regain (possession 219.16, strike 219.88), a7 1.9 m (partial pressure); intended=null 'clear', target (79.2,64) 51 m away, launched 111 km/h at 36 deg vs 28 deg to target (about 8 deg off); crossed y=68 still in the air (z 1.2 m) at x 73.4. Repeat 08:08 (t 487.16): h7 at (34.1,40.6) again just inside his own third (x<35), nearest opponent 5.9 m, same clear, out at (87.6,68). Clears are 155 of 3,758 passes across the 30 seeds; 44 of them end out at a touchline",
+  "real_football": "at the edge of his own third with team-mates within 3-16 m and only one opponent close, a midfielder plays out; a hoof to a spot 4 m from the touchline goes out with any leftward error",
+  "likely_cause": "ninety/sim/decisions.py options(): 'clear' target fixed at 4 m from the touchline 45 m upfield (wide = 4.0 / PITCH_Y-4.0), offered for any x inside CLEAR_FROM of the pitch, with no team-mate as target and an even-contest value independent of who is there"
+ },
+ {
+  "type": "backward_pass_to_own_goal",
+  "seed": 163,
+  "match_time": "03:15",
+  "verdict": "partly",
+  "evidence": "Not backward: h11 at (34.2,49.6), 0.9 s after re-winning the ball, under heavy pressure (a6 1.1 m, a9 2.5 m); intended=null 'clear' to (79.2,64); launched 116 km/h at 12.5 deg vs 18 deg to target, landed about (84,60) about 50 m out, then rolled 22 m and out over the goal line at (105,65). Nearest forward team-mate h10 at (51.5,37)",
+  "real_football": "clearing long under a two-man press at his own third's edge is ordinary; a clearance that runs through for a goal kick happens, though players usually aim it at a forward or into the channel rather than a fixed spot near the flag",
+  "likely_cause": "ninety/sim/decisions.py 'clear' option: fixed spot 45 m upfield and 4 m in from the touchline, no receiver; distance capped at the 45 m loft table (loft_launch), so it lands and rolls on unchecked"
+ },
+ {
+  "type": "backward_pass_to_own_goal",
+  "seed": 11,
+  "match_time": "06:09",
+  "verdict": "partly",
+  "evidence": "a10 (away, attacks -x) at (55.4,28.9) under a double press (h2 1.5 m, h6 1.7 m) plays a ground pass back 28.7 m to intended a4 at (81.3,16.4), 24 m from his own goal line, not his corner; struck 79 km/h at -38 deg vs -26 deg to a4 (12 deg off, about 2 SD of the modelled error); passed 8 m wide of a4, who walked 1.5 m/s for 1.1 s before chasing; out at (92.7,0)",
+  "real_football": "a pass back to the full-back to escape a double press is normal; under that pressure it is sometimes misplaced and runs out. The choice is fine; the miss is execution plus a slow receiver",
+  "likely_cause": "execution error under pressure (ninety/sim/profiles.py kick_error, PRESSURE_ERROR, turn of 45 deg) and the intended receiver's delayed reaction to an off-line ball; not a decision defect"
+ },
+ {
+  "type": "backward_pass_to_own_goal",
+  "seed": 131,
+  "match_time": "02:48",
+  "verdict": "refuted",
+  "evidence": "h10 receives at (76.5,26.8), 29 m from goal but crowded (a4 2.5 m, a3 5.0 m, a8 5.6 m); lofted 70 km/h pass 27.7 m back to intended h3 at (49.5,20.8), received (with a heavy touch). Executed as aimed",
+  "real_football": "with three defenders within 6 m at 29 m out, recycling to a free centre-back is a normal choice; a 29 m shot through that block is worth about 2% (D3 long range). The position was not 'promising'",
+  "likely_cause": "none; normal decision (ninety/sim/decisions.py pass scoring)"
+ },
+ {
+  "type": "shot_silly",
+  "seed": 42,
+  "match_time": "01:46",
+  "verdict": "refuted",
+  "evidence": "h9 shoots from (75.4,18.5), 33 m from goal centre, launched 83 km/h at 37 deg vs 28 deg to goal centre and 33 deg to the far post (4 deg wide of the far post, a normal miss); it hits a8 at (79.5,21.3) 0.24 s later and the deflection runs to (87.1,5.2). The logged end_x/end_y is where the deflected ball was picked up, not the aim, so the 70 deg 'wrong direction' is a drawing artefact. Under pressure (a11 2.8 m)",
+  "real_football": "a 33 m strike under pressure that is blocked is ordinary, if not a high-value choice",
+  "likely_cause": "contact-sheet shot arrow drawn from (x,y) to the event's end_x/end_y, which is the final ball position after a block/deflection, not the shot's direction (runs/sweep/tactical.py, the shot/pass arrow from ev x,y to end_x,end_y); engine fine"
+ },
+ {
+  "type": "shot_silly",
+  "seed": 97,
+  "match_time": "06:09",
+  "verdict": "confirmed",
+  "evidence": "h10 at (69.7,37.4), 35.3 m out, a3 2.3 m directly in the line to goal (72.0,37.7); shot 95 km/h deflected off a3 0.08 s later at (71.7,37.1), and ran on about 50 m at 17-20 m/s, out at (105,0). Team-mate h9 2.2 m away, h11 13.7 m free",
+  "real_football": "nobody shoots from 35 m with a defender standing 2 m in front of the ball; he would pass or carry. Across the 30 seeds 30 of 92 shots are from beyond 35 m, far above real play where such shots are a few percent",
+  "likely_cause": "ninety/sim/decisions.py shoot option: blocked = 1 - BLOCKER_FACTOR**blockers treats a defender 2 m in front like any defender in the cone (half the time), and SHOT_RANGE_M = 40 m (offball.py) is tested along x only; also the deflection keeps most of the ball's speed (contact restitution)"
+ },
+ {
+  "type": "shot_silly",
+  "seed": 11,
+  "match_time": "00:43",
+  "verdict": "confirmed",
+  "evidence": "h11 at (70.9,55.6): 40.4 m from goal centre, 38.5 m from the near post at a wide angle (21.6 m off the centre line); nearest opponent a6 5.2 m (unpressured); h10 free 17 m inside. Shot 88 km/h at -21 deg vs -28 deg to the near post, wide; keeper a1 caught it at (100.1,44.5)",
+  "real_football": "a wide player 40 m out near the touchline with time crosses or passes; a shot from there is close to worthless and rare",
+  "likely_cause": "ninety/sim/offball.py SHOT_RANGE_M = 40 compared to abs(goal_x - x) only in decisions.py options() (34.1 m here), so wide 40 m shots are offered; D3's typical_shot rate for long range then competes with passes"
+ },
+ {
+  "type": "dead_ball_wait",
+  "seed": 31,
+  "match_time": "00:59",
+  "verdict": "partly",
+  "evidence": "(a) wait length: foul 56.24 s, penalty kick 175.44 s = 119.2 s; RESTART_DELAY_S penalty_kick is uniform(100,140), grounded in GROUNDING D10 ('about two minutes from the foul to the kick', Opta via The Analyst), so the length is NOT a defect and the reviewer's '30-60 s' is wrong. (b) behaviour: players walk to their Law 14 wait spots (x=17.5, edge of the area) by ~62 s, then all 20 outfielders stand still for 113 s: mean outfield speed 0.01 m/s from 63 to 175 s, 0 of 20 above 0.5 m/s, every displacement 0.0 m. The ball lies where the foul left it (15.7,52.5) for the whole wait and jumps 19.1 m onto the mark in the kick frame; nobody places it. Then the goal at 176.04 s resets all 22 players (max jump 61.6 m) into a kickoff.",
+  "real_football": "the ~2 min (with VAR) is real, but players are not statues: they argue, jostle at the box edge, the keeper bounces on his line, the taker places the ball on the mark himself",
+  "likely_cause": "ninety/sim/engine.py RESTART_DELAY_S['penalty_kick'] (100,140) is fine; the freeze comes from tick_restart/target for a penalty_kick returning the fixed penalty_wait_spot (engine.py ~1531) so once arrived nobody moves; ball moved to the mark only at the kick (tick_restart: 'a penalty is placed on the mark')"
+ },
+ {
+  "type": "dead_ball_wait",
+  "seed": 53,
+  "match_time": "05:41",
+  "verdict": "partly",
+  "evidence": "(a) out_of_play 341.84 -> throw 359.24 = 17.4 s; all six throw-ins in the clip wait 13.6-17.4 s (15.0, 15.5, 17.4, 13.6, 14.9, 15.0): inside R1's ~16 s mean, drawn from uniform(12,20). (b) not static: during 343-359 s median outfield mean speed 0.70 m/s, 15 of 20 above 0.5 m/s, players reposition 5-18 m (h9 17.5 m). Nobody fetches the ball: it rests at the boards (76.4,-4.0), nearest player 4.8-6.5 m, and it jumps 6.7 m into a5's hands at the throw.",
+  "real_football": "mean ~16 s is right, but real throw-in delays spread widely (quick throws in a few seconds, slow ones 25 s+); the thrower or a ball boy gets the ball",
+  "likely_cause": "ninety/sim/engine.py RESTART_DELAY_S['throw_in'] = (12,20): a narrow uniform spread (marked design in R1), so every throw lands near 15 s; ball placed into hands in tick_restart ('a new one is placed')"
+ },
+ {
+  "type": "dead_ball_wait",
+  "seed": 181,
+  "match_time": "02:22",
+  "verdict": "refuted",
+  "evidence": "(a) out_of_play 142.24 -> throw 162.04 = 19.8 s, inside R1 (~16 s) and the (12,20) draw. (b) not frozen: 144-162 s median outfield mean speed 0.88 m/s, 18 of 20 above 0.5 m/s, displacements 10-25 m (a10 25 m). Only the thrower a11 stands still (0.14 m/s) at his spot for ~18 s; the ball lies at the boards (49.5,-4.0) 4.1 m from him and hops 4.4 m to his hands at the throw.",
+  "real_football": "a ~20 s throw-in with players walking into position is normal; a thrower standing motionless with the ball out of his hands for 18 s is slightly odd",
+  "likely_cause": "minor residue only: ninety/sim/engine.py tick_restart waits for ready_at with the taker already on throw_stand and no retrieval step for the ball"
+ },
+ {
+  "type": "restart_ball_teleport",
+  "seed": 101,
+  "match_time": "03:39",
+  "verdict": "confirmed",
+  "evidence": "foul by h11 at (2.95,57.09) at 185.32 s; the ball rolls on to (14.8,23.1) and rests from ~194 s, nearest player 5-7 m, nobody goes to it; at the free kick (219.36 s, 34 s wait, within R1) it jumps 36.0 m in one frame to a9's feet at the foul spot. Players are walking (mean 0.54 m/s), not frozen.",
+  "real_football": "the ball is stopped or returned to the spot by a player or the referee; it never travels 36 m in 0.04 s",
+  "likely_cause": "ninety/sim/engine.py tick_restart: non-throw restarts set self.ball = (taker.x, taker.y, ...) once the taker reaches the spot, while the dead ball itself keeps rolling (tick_restart's ball.step) with no one sent to fetch it; the jump is by design ('the only time the ball may jump') but visible on a top-down sheet and a wide camera"
+ },
+ {
+  "type": "restart_ball_teleport",
+  "seed": 149,
+  "match_time": "08:27",
+  "verdict": "confirmed",
+  "evidence": "foul by h8 at (45.02,41.72) at 470.24 s while a pass was in flight; the dead ball rolls 57 m to (102.4,37.1) in the away six-yard box and rests from ~480 s (a1 3.6 m away, does nothing); at 506.40 s (36 s wait, within R1) it jumps 57.5 m in one frame to a7 at the foul spot. Outfield mean speed 0.47 m/s during the wait.",
+  "real_football": "the whistle stops play; a ball that runs on is collected or a new one is thrown in; no instant 58 m relocation",
+  "likely_cause": "same as seed 101: ninety/sim/engine.py tick_restart lets the dead ball roll to rest (up to the boards) and replaces it at the taker's feet at the kick"
+ },
+ {
+  "type": "restart_ball_teleport",
+  "seed": 97,
+  "match_time": "06:54",
+  "verdict": "confirmed",
+  "evidence": "this is a kickoff reset, not a set-piece ball jump: goal and kickoff events both at 414.88 s (frame 10372); in that frame the ball jumps 52.6 m to the centre spot and all 22 players jump >1 m (median 31.1 m, max h11 55.9 m); everyone stands still 2.5 s, then a10 kicks off (first pass 418.40 s).",
+  "real_football": "a goal is followed by ~72 s of celebration and a walk back (R1's own note); a broadcast hides the reset with replays",
+  "likely_cause": "ninety/sim/engine.py Engine.kickoff sets every p.x,p.y = kickoff_spot() at once ('the broadcast cuts, so positions reset'; validate.py line 143 exempts kickoff frames); RESTART_DELAY_S['kick_off'] (1,2) design"
+ },
+ {
+  "type": "kickoff_teleport",
+  "seed": 211,
+  "match_time": "05:29",
+  "verdict": "confirmed",
+  "evidence": "goal and kickoff at 328.8 s (frame 8220): ball jumps 52.2 m (0.4,30.8)->(52.5,34.0), 21 of 22 players jump >1 m in one frame (median 13.2 m, max a5 52.7 m); first kickoff pass 331.32 s, 2.5 s after the goal.",
+  "real_football": "about 72 s of celebration and walk back before the kickoff (R1)",
+  "likely_cause": "ninety/sim/engine.py Engine.kickoff: instant reposition of all players and ball, kick_off delay (1,2) s; celebration not modelled (R1 notes it)"
+ },
+ {
+  "type": "kickoff_teleport",
+  "seed": 7,
+  "match_time": "00:52",
+  "verdict": "confirmed",
+  "evidence": "goal and kickoff at 52.24 s (frame 1306): ball jumps 51.8 m, all 22 players jump >1 m in that one frame (median 44.4 m, max h5 60.8 m); away kick off and first pass at 54.56 s, 2.3 s after the goal.",
+  "real_football": "about 72 s of celebration and walk back before the kickoff (R1)",
+  "likely_cause": "ninety/sim/engine.py Engine.kickoff (teleport by design, exempted in ninety/validate.py ~143)"
+ },
+ {
+  "type": "kickoff_teleport",
+  "seed": 13,
+  "match_time": "06:48",
+  "verdict": "confirmed",
+  "evidence": "goal and kickoff at 408.76 s (frame 10219): ball jumps 52.5 m from the goal line to the centre spot, 21 of 22 players jump >1 m in that frame (median 17.3 m, max a10 31.9 m); first pass 411.44 s, 2.7 s after the goal. Reviewer's '0 s' is the event time; the kick itself is ~2.7 s later.",
+  "real_football": "about 72 s of celebration and walk back before the kickoff (R1)",
+  "likely_cause": "ninety/sim/engine.py Engine.kickoff (teleport by design, exempted in ninety/validate.py ~143)"
+ },
+ {
+  "type": "own_box_recycling",
+  "seed": 23,
+  "match_time": "04:33",
+  "verdict": "confirmed",
+  "evidence": "h6->h1 back-pass 28 m (not 35) from x39 with nearest away 15.7 m; then h1->h4->h6->h7 at x 11-24 over 277.7-291 s (13 s) with nearest away 32-44 m. Away not 'entirely' stationary: back four 0.47-0.52 m/s pinned at x=83.0 (all four within 0.15 m of 83.0 for 73 s from 23.6 s; 193 s of 600 in total), midfield at x=71.0 (0.55-0.73 m/s); only a9-a11 move (1.3-1.8 m/s) at x~57",
+  "real_football": "an unpressed team with 30-40 m of space in front does not circulate inside its own box; centre-backs step or carry forward into the space and the build-up moves to the halfway area within seconds",
+  "likely_cause": "two shape rules meet: ninety/sim/offball.py attacking_slot (SHAPE_IN_POSSESSION heights are metres behind the ball, floored at DEEPEST_M=12 m, so with the ball deep nobody stands between the box and the forwards 25 m ahead of the ball) and ninety/sim/team.py TeamBrain.update/presses (away low block: line capped at BLOCKS['low'][1]=22 m from goal, engagement 40 m, so the ball 65+ m from the away goal is never pressed)"
+ },
+ {
+  "type": "own_box_recycling",
+  "seed": 181,
+  "match_time": "00:13",
+  "verdict": "partly",
+  "evidence": "Context is defending: home shot at 10.6 s, saved by a1 at 11.9 s. At 13.0 s a2-a7 at x 93-96 and a8/a9 at x 86, but 5 home players (h6, h8-h11, x 76-93) are near, not 4. The odd part follows the save: with a1 holding the ball (13-17 s), a2-a8 stay at x 91-96 (9-14 m from goal), midfield mean x 92.7 versus defence 93.9 at 16 s; a1->a3 at 14.3 s, then a3->a9 forward at 16.3 s. Total about 4 s",
+  "real_football": "dropping into the box while a shot comes in is normal; once the keeper holds the ball, full-backs go wide and midfielders show 20-35 m from goal for the distribution",
+  "likely_cause": "ninety/sim/offball.py attacking_slot: with the ball in the keeper's hands every non-forward spot is ball depth minus 3-24 m, floored at DEEPEST_M=12 m, so the team stays piled at 12-16 m after it wins the ball"
+ },
+ {
+  "type": "own_box_recycling",
+  "seed": 211,
+  "match_time": "01:53",
+  "verdict": "partly",
+  "evidence": "Keeper-defender-keeper is 4 passes over 112.3-119.3 s (about 7 s, not 15): a7->a1, a7->a4, a4->a1, then a1->a10 out to x78. Over 113-118 s a2-a8 all at x 88.5-94 (6+ of 7 outfielders 10-17 m from goal for 9.0 s from 112.8 s); midfield mean x 92.8, deeper than the defence's 92.3 at 118 s. Only h9 presses (6.6-33.7 m away); home back four at x 22-23, midfield at 34-35",
+  "real_football": "a keeper/centre-back circulation of 5-10 s against one presser is normal; seven outfielders on their own 18-yard line with midfielders level with or behind the centre-backs is not",
+  "likely_cause": "ninety/sim/offball.py attacking_slot (SHAPE_IN_POSSESSION offsets behind the ball plus the DEEPEST_M=12 m floor put CM 10 m and RCM/LCM 3 m behind a ball that is already at 12-16 m, so they land on the same line as the centre-backs)"
+ },
+ {
+  "type": "no_press_frozen_block",
+  "seed": 113,
+  "match_time": "08:12",
+  "verdict": "confirmed",
+  "evidence": "490-534 s: home D x=34.0-35.0, all four within 0.15 m of x=35.0 for 30.4 s from 500.2 s (80.5 s in the match), midfield exactly 47.0 (35+12), h10/h11 at 60.0-61 (the mid line of engagement); D/M mean speed 0.65-0.73 m/s, path about 30 m in 44 s; only h9 moves (2.1 m/s, 94 m). Away plays 11 passes at x 85-102 over 492-513 s with the nearest home player 20-42 m away; 6+ of 7 away outfielders 10-17 m from their goal for 25.5 s from 491.8 s",
+  "real_football": "a mid block may concede the build-up, but its line shuffles and steps with the ball (outfielders average about 1.7-2.0 m/s, R2) and does not sit on one fixed x for half a minute; and an opponent recycling in its own box for 20 s is a pressing trigger",
+  "likely_cause": "ninety/sim/team.py TeamBrain.update: depth=min(hi, max(lo, 0.5*ball_from_goal)) saturates at BLOCKS['mid'][1]=35 m once the ball is >70 m from goal, and slot() gives all four defenders the same x (LINE_GAPS_M defence 0) and the midfield +12 m; presses() returns False beyond ENGAGE_FROM_GOAL_M['mid']=60 m, so only a lone forward goes",
+  "clamp_check": "confirmed: back four at x=35.000+/-0.15 (mid block cap) for 30.4 s continuously"
+ },
+ {
+  "type": "no_press_frozen_block",
+  "seed": 43,
+  "match_time": "04:57",
+  "verdict": "confirmed",
+  "evidence": "297-358 s (61 s): away has the ball throughout (24 passes, ball x 56-96, nearest home 7-36 m, mostly 20-36 m). Home D x=22.0 exactly over 307-320 s and 342-358 s; it steps to 26-27 only at 322-332 s after the h10/a7 tackles; midfield at 34.0. D/M mean speed 0.62-1.01 m/s; h9/h10 1.86-1.97 m/s (h10 and h9 are the movers, as claimed). Back four within 0.15 m of 22.0 for 135.5 s of 600, longest 66.2 s from 510.8 s",
+  "real_football": "a low block when the ball is in the opponent's half still steps up as the ball goes back and squeezes play; a back line on one exact x for over a minute, 50-75 m from the ball, does not happen",
+  "likely_cause": "ninety/sim/team.py TeamBrain.update: low block depth capped at BLOCKS['low'][1]=22 m whenever the ball is >44 m from goal (LINE_FOLLOWS_BALL 0.5); presses() only inside ENGAGE_FROM_GOAL_M['low']=40 m; players walk to the identical slot and stand (O8 pacing)",
+  "clamp_check": "confirmed: back four at x=22.000+/-0.15 (low block cap) for up to 66 s"
+ },
+ {
+  "type": "no_press_frozen_block",
+  "seed": 233,
+  "match_time": "08:14",
+  "verdict": "confirmed",
+  "evidence": "494-560 s: h2-h8 x-ranges 1.9-6.2 m, mean speed 0.44-0.50 m/s (reviewer's numbers reproduce); D pinned at x=22.0 and M at 34.0 from about 509 s to 560 s; h10 median x 54.6 (alone near halfway), h9/h11 at x 46. Away plays 17 passes at x 80-98 over 494-527 s with the nearest home player 21-49 m away (own-box recycling for 33 s); 6+ of 7 away outfielders 10-17 m from goal for 13.2 s and 10.9 s spells",
+  "real_football": "as above; and 33 s of circulation inside the opponent's box with nobody within 20 m is not seen in professional football (the defending side presses, or the side in possession progresses)",
+  "likely_cause": "ninety/sim/team.py TeamBrain.update/presses (low block cap 22 m, engagement 40 m) for the home side; ninety/sim/offball.py attacking_slot DEEPEST_M floor for the away side's 12-16 m line",
+  "clamp_check": "confirmed: back four at x=22.0+/-0.15 for 114 s of 600, longest 57.7 s"
+ },
+ {
+  "type": "line_shape_broken",
+  "seed": 31,
+  "match_time": "04:17",
+  "verdict": "confirmed",
+  "evidence": "a2-a8 stand at x 89.8-93.4 (12-15 m from goal, inside the box, not x 88.5) at 268 and 275 s; 6+ of 7 within 10-17 m of goal for 20.8 s from 261.0 s and 11.8 s from 304.2 s (61.6 s in the match). Forwards a9-a11 at x 65-66, so a 25-27 m empty gap. 10 passes at x 90-95 over 259-277 s, nearest home 18-44 m. Repeat at 07:49-08:20 is shorter (7.0 s spell from 470.6 s). Opposite: home back four at x=22.0 for 284 s of 600 (47%), longest 75.5 s, D/M mean speed 0.26-0.30 m/s",
+  "real_football": "a build-up shape spreads in depth: centre-backs at the box edges, full-backs high and wide, a pivot between the lines, team length about 31-46 m in possession (R8)",
+  "likely_cause": "ninety/sim/offball.py attacking_slot: u = ball_u - behind, clamped to DEEPEST_M=12 m; with the ball 12-16 m from goal the CB (24 m behind), FB (8), CM (10) and RCM/LCM (3) spots all collapse onto the 12 m floor, so seven players share one x"
+ },
+ {
+  "type": "line_shape_broken",
+  "seed": 127,
+  "match_time": "02:47",
+  "verdict": "confirmed",
+  "evidence": "After a save (shot 163.3 s), at 174.0 s h2-h8 stand at x 10.5-13.2 across y 18-52 (the reviewer said x 13-17). 6+ of 7 within 10-17 m of goal in 7.1 s (170.7 s) and 7.6 s (183.7 s) spells, not 25 s continuously; 63.4 s in the match. h7 is at x 12.0, not in the six-yard box (keeper at 5.3). 12 passes over 166-193 s, mostly inside x<30",
+  "real_football": "as for seed 31: a goalkeeper build-up spreads its players in depth and width; seven in one column on the box line is not a real shape",
+  "likely_cause": "ninety/sim/offball.py attacking_slot DEEPEST_M=12 m floor (all non-forward roles share it when the ball is near the keeper)"
+ },
+ {
+  "type": "line_shape_broken",
+  "seed": 11,
+  "match_time": "05:08",
+  "verdict": "partly",
+  "evidence": "Goal kick: ball out at 279.7 s, taken at 304.3 s (24.6 s, normal per R1). At 304.0 s a9-a11 stand at x 1.6-2.5 (inside the home goal area), midfield at x 43, back four at x 55: forwards to midfield gap about 41 m, to the back four 53 m, team length 53 m (R8: 31-46). From 309 s, after the kick, forwards x 14-20, midfield 34-49 (mean 44-47, not 50-60), back four 60: gap about 27-30 m to the midfield, about 42 m to the defence. The ball stays at x=-4 during the wait and then appears on the spot",
+  "real_football": "pressing a goal kick with the front three is normal, but the team pushes up behind them (length stays under about 46 m), and by Law 16 opponents must stay outside the penalty area until the kick is taken",
+  "likely_cause": "ninety/sim/team.py TeamBrain.update: under high pressing (ENGAGE_FROM_GOAL_M['high']=105) the forwards' front_x is the ball's own depth, while the line is capped at BLOCKS['high'][1]=50 m from goal, so length grows without limit; Law 16 penalty-area exclusion only applies to the presser (GROUNDING L8 notes 'other players are not yet kept out')"
+ }
+]
