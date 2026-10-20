@@ -435,8 +435,11 @@ def main() -> None:
     if args.live:
         tables = [rows(t) for t in asyncio.run(live_rows())]
         args.out.mkdir(parents=True, exist_ok=True)
-        md = "\n".join(report(t, live=True, ground=t[0]["match"]) for t in tables)
-        body = {"command": COMMAND + " --live", "minute": MINUTE, "models": "the published Foundry agents",
+        commit = workflow._commit()  # the engine the seeds were simulated with, and everything else
+        reports = "\n".join(report(t, live=True, ground=t[0]["match"]) for t in tables)
+        md = f"Run at commit `{commit}` (the engine that simulated the seeds, and the rest).\n\n{reports}"
+        body = {"command": COMMAND + " --live", "commit": commit, "minute": MINUTE,
+                "models": "the published Foundry agents",
                 "grounds": [{"match": t[0]["match"], "rows": t} for t in tables]}
         for name, text in (("failure-table-live.md", md),
                            ("failure-table-live.json", json.dumps(body, indent=1, allow_nan=False) + "\n")):

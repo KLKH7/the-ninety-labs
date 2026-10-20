@@ -117,3 +117,4 @@ def test_the_live_command_runs_both_arms_on_the_published_agents(monkeypatch, tm
     assert "ninety-analyst" in body["ran"] and "ninety-tactician" in body["ran"]
     assert (tmp_path / "ablation-agents.md").read_text().startswith("# Ablation: one agent")
     assert order[:2] == ["token", "simulate"] and order.count("token") == 1  # signed in once, first
+    assert len(body["commit"]) == 40 and body["commit"] in (tmp_path / "ablation-agents.md").read_text()

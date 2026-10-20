@@ -229,3 +229,4 @@ def test_the_live_run_injects_each_failure_around_the_published_agents(monkeypat
         assert "personalizer fallback: fallback: refused" in rows["personalizer down"]["fallback"]
     md = (tmp_path / "failure-table-live.md").read_text()
     assert md.count("# Failure table") == 3 and "live, seed33" in md
+    assert len(body["commit"]) == 40 and body["commit"] in md  # which engine simulated the seeds
