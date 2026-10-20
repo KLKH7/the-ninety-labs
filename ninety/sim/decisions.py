@@ -187,6 +187,7 @@ class Scene:
     absorb: dict[str, float]  # team-mates' first touch (A4), by id
     passer: Profile  # who he is, for his own kick error (A3)
     throw: bool = False  # Law 15: a throw-in, so every pass is thrown (lofted) and nothing else
+    set_piece: bool = False  # Laws 8, 13, 16, 17: a set ball, played away, never carried off
     # The team's style (T4): how much ground gained from here is worth, and how much losing the
     # ball costs, against the defaults. Both 1 for a mid style.
     progress_weight: float = 1.0
@@ -905,7 +906,8 @@ def options(scene: Scene) -> list[Option]:
         lost = blocked * our_loss(scene, scene.x, scene.y) + (1 - blocked) * missed
         out.append(Option("shoot", q * bias * (1 + 0.5 * scene.risk) - (1 - q) * lost,
                           (scene.goal_x, PITCH_Y / 2)))
-    for turn in (0.0, 0.8, -0.8):  # straight at goal, or angled away
+    # Laws 8, 13, 16, 17: carrying a set ball off is touching it twice before anyone else has.
+    for turn in () if scene.set_piece else (0.0, 0.8, -0.8):  # straight at goal, or angled away
         heading = fmath.atan2(PITCH_Y / 2 - scene.y, scene.goal_x - scene.x) + turn
         tx = scene.x + DRIBBLE_STEP_M * fmath.cos(heading)
         ty = scene.y + DRIBBLE_STEP_M * fmath.sin(heading)
