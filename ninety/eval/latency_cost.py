@@ -34,6 +34,7 @@ import tempfile
 import time
 import warnings
 from collections import defaultdict
+from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 
 from ninety.agents import telemetry
@@ -47,7 +48,7 @@ RECORDING = ROOT / "replays" / "slice-minute2-plant.json"
 CUES = ROOT / "tests" / "fixtures" / "cues-seed7.jsonl"
 CUES_MINUTES = 5
 
-BUDGET_USD = 0.50  # docs/PLAN.md: model and speech spend per match
+BUDGET_USD = Decimal("0.50")  # docs/PLAN.md: model and speech spend per match
 MATCH_MINUTES = 90  # one claim a minute (ninety/e2e.py: the one sentence a minute gets)
 TARGET_GRAPHIC_P95_S = 8.0  # docs/PLAN.md
 TARGET_SPEECH_P50_S, TARGET_SPEECH_P95_S = 2.0, 4.0  # docs/PLAN.md
@@ -79,10 +80,11 @@ INPUT_DZ, OUTPUT_DZ = "gpt 4.1 mini Inp Data Zone Tokens", "gpt 4.1 mini Outp Da
 SPEECH, SPEECH_HD = "S1 Neural Text To Speech Characters", "Neural HD Text to Speech Characters"
 
 
-def price(meter: str) -> float:
-    """USD for one unit (a token, a character)."""
+def price(meter: str) -> Decimal:
+    """USD for one unit (a token, a character), exactly. Money is Decimal throughout, so a total
+    does not depend on the order it was summed in or on the Python version's float sum."""
     usd, per, _ = PRICES["items"][meter]
-    return usd / per
+    return Decimal(str(usd)) / per
 
 
 def tokens(text: str) -> int:
@@ -264,8 +266,11 @@ def graphics_text() -> dict:
 # ---------------------------------------------------------------- the report
 
 
-def cost(calls: list[dict], input_meter: str = INPUT, output_meter: str = OUTPUT) -> float:
-    return sum(c["input"] * price(input_meter) + c["output"] * price(output_meter) for c in calls)
+def cost(calls: list[dict], input_meter: str = INPUT, output_meter: str = OUTPUT) -> Decimal:
+    return sum(
+        (c["input"] * price(input_meter) + c["output"] * price(output_meter) for c in calls),
+        Decimal(0),
+    )
 
 
 def clean_claim(calls: list[dict]) -> list[dict]:
@@ -275,8 +280,11 @@ def clean_claim(calls: list[dict]) -> list[dict]:
     return [c for c in calls if c["turn"] in (first, judge)]
 
 
-def usd(x: float) -> str:
-    return f"${x:.4f}" if x < 0.01 else f"${x:.3f}"
+def usd(x: Decimal) -> str:
+    """Four places below a cent, three above, rounded half up (a price on the half rounds the way
+    a reader expects, whatever its binary neighbours)."""
+    places = Decimal("0.0001") if x < Decimal("0.01") else Decimal("0.001")
+    return f"${Decimal(x).quantize(places, rounding=ROUND_HALF_UP)}"
 
 
 def render(data: dict) -> str:

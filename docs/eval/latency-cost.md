@@ -98,7 +98,7 @@ What the budget leaves for them, in characters of the S1 neural voice:
 | After | Left | Characters a match | A minute |
 |---|---:|---:|---:|
 | every claim accepted first time | $0.267 | 17,827 | 198 |
-| every claim three drafts | $0.018 | 1,233 | 14 |
+| every claim three drafts | $0.019 | 1,233 | 14 |
 
 For scale: the casual persona's graphics in `tests/fixtures/cues-seed7.jsonl` say 908 characters in 5 minutes (54 cues), 182 a minute, and a spoken line is longer
 ("Home 10" for h10, units in full). Speaking every described event in the Azure voice fits only

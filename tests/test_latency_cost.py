@@ -3,6 +3,7 @@ and the cost arithmetic. No Azure: the e2e run is offline and the agents run fro
 
 import asyncio
 import json
+from decimal import Decimal
 
 import pytest
 from opentelemetry.sdk.trace import TracerProvider
@@ -77,9 +78,10 @@ def test_tokens_round_up_at_four_characters():
 
 def test_cost_uses_the_quoted_meters():
     call = {"turn": 1, "role": "judge", "call": "verdict", "input": 1000, "output": 1000}
-    assert lc.cost([call]) == pytest.approx(0.0004 + 0.0016)
-    assert lc.cost([call], lc.INPUT_DZ, lc.OUTPUT_DZ) == pytest.approx(0.00044 + 0.00176)
-    assert lc.price(lc.SPEECH) == pytest.approx(15 / 1_000_000)
+    # Exact, not approximately: money is Decimal (see the half-boundary test below).
+    assert lc.cost([call]) == Decimal("0.0004") + Decimal("0.0016")
+    assert lc.cost([call], lc.INPUT_DZ, lc.OUTPUT_DZ) == Decimal("0.00044") + Decimal("0.00176")
+    assert lc.price(lc.SPEECH) == Decimal(15) / 1_000_000
 
 
 def test_an_analyst_turn_is_two_calls_and_a_judge_turn_one():
@@ -121,3 +123,19 @@ def test_a_recount_rebuilds_the_tokens_and_keeps_the_timings():
     }
     assert set(fresh["recounted"]) == {"commit", "date"}
     assert "Tokens re-counted" in lc.render(fresh)
+
+
+@pytest.mark.parametrize("calls", [
+    # Exactly $0.00535 each way: 13,375 input tokens at $0.0004 per 1,000.
+    [{"input": 13_375, "output": 0}],
+    # $0.00535 again, summed in an order a float total lands below the half: half-up must not care.
+    [{"input": 1, "output": 0}] * 13_375,
+    [{"input": 3_375, "output": 0}, {"input": 0, "output": 2_500}],
+    # 13,327 input and 12 output tokens: $0.00535, which the float total stores as just below it.
+    [{"input": 13_327, "output": 12}],
+])
+def test_money_on_a_half_boundary_rounds_half_up_whatever_the_sum_order(calls):
+    """Python 3.12's sum() of floats is compensated and 3.11's is not, so a float total on a
+    half boundary rendered $0.0054 on one and $0.0053 on the other (the per-clip upper bound)."""
+    assert lc.usd(lc.cost(calls)) == "$0.0054"
+    assert lc.usd(lc.cost(list(reversed(calls)))) == "$0.0054"
