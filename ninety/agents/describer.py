@@ -29,12 +29,11 @@ from agent_framework import Agent
 from pydantic import BaseModel
 
 from ninety import config
-from ninety.agents.contracts import Describe, Description, Judge
+from ninety.agents.contracts import Describe, Description, Judge, status_for
 from ninety.agents.factcheck import MIN_CONFIDENCE, Claim, check
 from ninety.match.facts import compact
 
-# As the Judge's (ninety/agents/judge.py): each of the model and the Judge gets this long. The code
-# line is on the schedule either way.
+# As the Judge's own (ninety/agents/judge.py). The code line is on the schedule either way.
 MODEL_TIMEOUT_S = 15.0
 
 INSTRUCTIONS = """You are the audio describer for a football broadcast, speaking to blind and
@@ -112,11 +111,15 @@ async def upgrades(events: Sequence[dict], cues: Sequence[dict], model: Describe
         verdict = check(claim, {e["id"]: e for e in evidence})
         if not verdict.ok:
             return "code checks: " + "; ".join(verdict.reasons)
+        # The Judge keeps its own timeout and retry (ninety/agents/judge.py), and says a held claim
+        # with a verdict, not an error. The one mapping decides (contracts.status_for): only
+        # "verified" airs; held, rejected, an unknown category or an error keep the code line.
         try:
-            verdict = await asyncio.wait_for(judge(claim, evidence), timeout_s)
+            verdict = await judge(claim, evidence)
+            status = status_for(verdict)
         except Exception as e:  # noqa: BLE001  fail closed: an unjudged line never airs
             return f"judge unavailable: {type(e).__name__}: {e}"
-        return None if verdict.ok else "judge: " + "; ".join(verdict.reasons)
+        return None if status == "verified" else f"judge {status}: " + "; ".join(verdict.reasons)
 
     done = await asyncio.gather(*(ask(*a) for a in asks))
     return {cue_id: text for cue_id, text, _ in done if text}, [record for _, _, record in done]

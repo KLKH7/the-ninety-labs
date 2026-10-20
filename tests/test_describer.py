@@ -191,7 +191,7 @@ def test_a_model_line_the_judge_refuses_never_airs(line):
     texts, calls = asyncio.run(describer.upgrades(EVENTS, [CLAIM], model_answering(line),
                                                   judge_refusing(*CONTRADICTIONS, seen=seen)))
     assert seen == [(line, ["e1", "e2"], ["e1", "e2"])], "the Judge sees the line and all its evidence"
-    assert texts == {} and calls[0]["problem"].startswith("judge:")
+    assert texts == {} and calls[0]["problem"].startswith("judge rejected:")
     track, _ = d.describe(EVENTS, [CLAIM], upgrades=texts)
     assert said_for(track, CLAIM["id"]).source == "insight", "the code line stays"
 
@@ -203,18 +203,30 @@ def test_the_judge_only_sees_lines_the_code_checks_pass():
     assert seen == [] and texts == {} and calls[0]["problem"].startswith("code checks:")
 
 
-def test_a_failing_or_late_judge_keeps_the_code_line():
+def test_a_judge_that_raises_keeps_the_code_line():
     async def down(claim, evidence):
         raise ConnectionError("judge down")
 
-    async def late(claim, evidence):
-        await asyncio.sleep(1)
-        return Verdict(ok=True)
+    texts, calls = asyncio.run(describer.upgrades(EVENTS, [CLAIM], model_answering(MODEL_LINE), down))
+    assert texts == {} and "judge unavailable: ConnectionError" in calls[0]["problem"]
 
-    for judge, why in ((down, "ConnectionError"), (late, "TimeoutError")):
-        texts, calls = asyncio.run(describer.upgrades(EVENTS, [CLAIM], model_answering(MODEL_LINE), judge,
-                                                      timeout_s=0.05))
-        assert texts == {} and "judge unavailable" in calls[0]["problem"] and why in calls[0]["problem"]
+
+@pytest.mark.parametrize("category", ["timeout", "service", "invalid_response", "low_confidence"])
+def test_a_held_verdict_the_judge_returns_keeps_the_code_line(category):
+    # The real judge() returns these rather than raising (ninety/agents/judge.py): fail closed.
+    async def held(claim, evidence):
+        return Verdict(ok=False, reasons=[f"{category}; claim held back"], category=category)
+
+    texts, calls = asyncio.run(describer.upgrades(EVENTS, [CLAIM], model_answering(MODEL_LINE), held))
+    assert texts == {} and calls[0]["problem"].startswith("judge held:")
+
+
+def test_an_unknown_verdict_category_keeps_the_code_line():
+    async def odd(claim, evidence):
+        return Verdict(ok=False, reasons=["?"], category="something_new")
+
+    texts, calls = asyncio.run(describer.upgrades(EVENTS, [CLAIM], model_answering(MODEL_LINE), odd))
+    assert texts == {} and "unknown verdict category" in calls[0]["problem"]
 
 
 def test_a_model_line_needs_the_claims_own_code_line_to_pass():
