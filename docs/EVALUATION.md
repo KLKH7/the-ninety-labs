@@ -345,6 +345,8 @@ scorer's pairing (player IoU 0.5, ball centre 5 px) and the planned "in the air"
 | Ball in the air | median 7.1 m (15 frames): placed on the ground (below) |
 | Teams | home's kit learned as red-brown, away's as blue, and the side named in 241 of 245 frames' votes; every detected pass has its true team |
 
+**Not fully held out.** The event detector's own constants (`ninety/vision/events.py`: possession, spell, shot and out-of-play thresholds) were developed while looking at this test clip, seed 900001, so these numbers are partly tuned to the test set. Re-deriving them on validation clips, then re-scoring the test set once, is under way.
+
 **Read with care.** One 10-second clip holds 4 passes, 1 shot and no out of play; a single event
 moves a rate by 25 points. This shows the pipeline works end to end and where it fails, not how
 well it will do on a match. The other four test clips (two with camera cuts, which the camera fit
