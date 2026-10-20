@@ -1410,6 +1410,23 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_engine_rules.py::test_the_team_mate_a_pass_is_played_to_goes_to_meet_it` and
   `::test_nobody_is_sent_to_chase_a_ball_beyond_the_touchline`.
 
+### 146. A detector that starts naming players turns its false events into false evidence
+- **What happened:** detected passes began to name their passer and receiver by track (`h-t12`) so
+  the agents could talk about them. Scoring the names against the truth found both of seed 900004's
+  false passes were one player in two tracks: the tracker lost a dribbler for a frame and picked him
+  up as a new track, so his own touch read as "h-t6 finds h-t12". The fact-checker cannot catch that:
+  the claim matches its evidence, and the evidence is wrong. Matched events alone would have shown
+  every name right.
+- **Rule:** when a detected event gains a field the agents will repeat (a name, a team, an outcome),
+  grade that field on the false events too, and leave it null, or the event out, wherever the
+  footage cannot tell. A pass between two tracks never seen together, the second starting within
+  reach of where the first ended, is not recorded. That rule's form was found on a test clip, and
+  its distance first came from one: both were then decided on validation clips only, with the
+  plan committed first (docs/eval/attribution-plan.md). A constant read off a test clip is tuned to it.
+- **Check:** `docs/eval/attribution.md` lists every unmatched detected event with the players its
+  names really are; `tests/test_vision_events.py::test_a_dribbler_the_tracker_loses_and_picks_up_again_is_not_a_pass_to_himself`
+  fails without the rule.
+
 ### 147. A budget is set from the call it bounds, measured; and a cancelled request is awaited
 - **What happened:** the live Personalizer evaluation (run 39429424313, at 0689342) answered none of
   its 20 requests: all 160 variants were "fallback: timeout" at 3002 to 3274 ms. The 3 s budget was a
