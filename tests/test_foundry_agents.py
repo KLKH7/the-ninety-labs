@@ -63,6 +63,36 @@ def test_the_judge_has_no_tools():
     assert "tools" not in foundry.definition(AGENTS[1]).as_dict()
 
 
+def test_the_companion_has_no_tools_and_answers_in_the_reply_format():
+    # It reads only the facts in its prompt: no match tools, no way to fetch anything else.
+    companion = next(a for a in AGENTS if a.name == "companion")
+    defn = foundry.definition(companion).as_dict()
+    assert "tools" not in defn
+    assert defn["text"]["format"]["type"] == "json_schema"
+
+
+WORKFLOW = foundry.workflow_agents(foundry.chat_client(DefaultAzureCredential()))
+
+
+def test_the_workflow_analyst_reads_the_match_only_through_our_mcp_server():
+    (tool,) = foundry.definition(WORKFLOW["analyst"]).as_dict()["tools"]
+    assert tool["type"] == "mcp" and tool["server_url"] == config.MATCH_MCP_URL
+    assert tool["allowed_tools"] == list(match_server.TOOLS)
+
+
+@pytest.mark.parametrize("role", ["tactician", "challenger"])
+def test_the_writers_have_no_tools(role):
+    # They read only the moment they are given, as data in the prompt.
+    assert "tools" not in foundry.definition(WORKFLOW[role]).as_dict()
+
+
+def test_every_workflow_agent_is_published_and_the_judge_is_the_slices():
+    names = {foundry.foundry_name(a) for a in AGENTS}
+    assert {foundry.foundry_name(a) for a in WORKFLOW.values()} <= names
+    assert foundry.foundry_name(WORKFLOW["judge"]) == foundry.foundry_name(AGENTS[1])
+    assert len(names) == len(AGENTS)  # published once each
+
+
 class FakeAgents:
     def __init__(self, latest=None):
         self.latest, self.created = latest, []

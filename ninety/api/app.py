@@ -8,8 +8,10 @@
     GET  /api/health       the commit this image was built from (the deploy smoke test reads it)
     GET  /api/live/status  Live mode's gate: answers only with the demo passcode
     POST /mcp              the match MCP server (ninety/mcp/match_server.py), for Foundry's agents
+    /api/pair[/{code}], /api/minimap, /api/card, /api/flow, /api/ask   the phone companion
+                           (ninety/api/companion.py); NINETY_COMPANION=off leaves it unmounted
 
-/mcp needs the `x-api-key` header and Live mode the `x-demo-passcode` header. Both values live in
+/mcp needs the `x-api-key` header and Live mode the `x-ninety-passcode` header. Both values live in
 Key Vault; the container reads them through its managed identity (infra/main.bicep), so neither is
 ever in the repo. Without a configured value the route refuses every call: fail closed. Live
 routes (agent runs, speech) mount under /api/live, behind the passcode, as they land.
@@ -27,17 +29,19 @@ from pathlib import Path
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse, RedirectResponse
-from starlette.routing import Mount, Route
+from starlette.routing import Match, Mount, Route
 from starlette.staticfiles import StaticFiles
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from ninety.api import companion as companion_api
+from ninety.api.companion import Companion
 from ninety.mcp import match_server
 
 ROOT = Path(__file__).resolve().parents[2]
 # Set at image build time (Dockerfile ARG); "dev" when run from a checkout.
 COMMIT = os.environ.get("NINETY_COMMIT") or "dev"
 KEY_HEADER = b"x-api-key"
-PASSCODE_HEADER = b"x-demo-passcode"
+PASSCODE_HEADER = b"x-ninety-passcode"  # the same header the phone companion's /api/ask reads
 VIEWER_DIR = Path(os.environ.get("NINETY_VIEWER_DIR") or ROOT / "web" / "viewer" / "dist")
 PHONE_DIR = Path(os.environ.get("NINETY_PHONE_DIR") or ROOT / "web" / "phone" / "dist")
 REPLAY_DIR = Path(os.environ.get("NINETY_REPLAY_DIR") or ROOT / "runs" / "replay")
@@ -56,6 +60,15 @@ SECURITY_HEADERS = [
 
 async def health(request: Request) -> JSONResponse:
     return JSONResponse({"status": "ok", "commit": COMMIT})
+
+
+async def no_route(request: Request) -> JSONResponse:
+    # Starlette lets a later full match beat an earlier route that matched the path but not the
+    # method, so the 405 that route would have given is restored here.
+    for route in request.app.router.routes:
+        if route.matches(request.scope)[0] == Match.PARTIAL:
+            return JSONResponse({"error": "method not allowed"}, status_code=405)
+    return JSONResponse({"error": "no such route"}, status_code=404)
 
 
 async def live_status(request: Request) -> JSONResponse:
@@ -115,9 +128,10 @@ class SecurityHeaders:
         await self.app(scope, receive, with_headers)
 
 
-def build(key: str | None = None, passcode: str | None = None, viewer: Path | None = None,
-          replay: Path | None = None, phone: Path | None = None) -> Starlette:
+def build(key: str | None = None, companion: Companion | None = None, *, passcode: str | None = None,
+          viewer: Path | None = None, replay: Path | None = None, phone: Path | None = None) -> Starlette:
     mcp = match_server.make_server()
+    companion = companion or companion_api.from_env()
     mcp_app = mcp.streamable_http_app()
     viewer = VIEWER_DIR if viewer is None else viewer
     replay = REPLAY_DIR if replay is None else replay
@@ -133,6 +147,9 @@ def build(key: str | None = None, passcode: str | None = None, viewer: Path | No
         Route("/api/health", health, methods=["GET"]),
         Mount("/api/live", RequireKey(live, passcode, PASSCODE_HEADER, "NINETY_DEMO_PASSCODE", "Live mode")),
         Route("/mcp", RequireKey(mcp_app, key)),
+        *(companion.routes() if companion else []),
+        # Anything else under /api is a 404 from the API, never the static site's answer.
+        Route("/api/{rest:path}", no_route, methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"]),
     ]
     # A checkout without a built viewer, phone or Replay bundle still serves the API. The image has
     # the viewer and the bundle (Dockerfile), and the live smoke test fails if either is missing.

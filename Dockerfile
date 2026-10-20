@@ -30,14 +30,20 @@ RUN uv sync --locked
 # Read by the code at run time: the event schema (ninety/match/detected.py) and the detected events
 # the MCP server serves for the M1 clip. .dockerignore keeps the rest of tests/ out.
 COPY schemas ./schemas
-COPY tests/fixtures/detected-*.jsonl ./tests/fixtures/
+# The whole folder, which .dockerignore narrows to the detected events and, once committed, the
+# tracked positions the phone companion serves (ninety/match/tracking.py): a COPY glob that
+# matches no file fails the build, and the tracked file does not exist yet.
+COPY tests/fixtures/ ./tests/fixtures/
 
 # The matches the MCP server serves, simulated now so a tool call is a lookup, never a simulation
 # (Foundry gives an MCP call 100 s; one simulation takes longer than that on a quarter CPU).
 ENV NINETY_MATCH_DIR=/app/matches
+# The phone companion's frames are written beside them; a missing one would make a request simulate.
 RUN uv run --no-sync python -m ninety.mcp.match_server --precompute /app/matches \
     && uv run --no-sync python -c "from ninety.mcp import match_server as m; \
-[m.events_of(k) for k in (*m.DETECTED, *m.MATCHES)]"
+[m.events_of(k) for k in (*m.DETECTED, *m.MATCHES)]" \
+    && uv run --no-sync python -c "import pathlib; from ninety.mcp import match_server as m; \
+assert all((pathlib.Path(m.MATCH_DIR) / 'frames' / f'{k}.json').exists() for k in m.MATCHES)"
 
 # Replay mode: one clip already through the whole chain (ninety-e2e), packed by infra/replay.py and
 # published as a release asset. Refused unless its bytes match the pinned hash, so a changed or

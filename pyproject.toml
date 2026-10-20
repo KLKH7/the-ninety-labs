@@ -18,11 +18,13 @@ dependencies = [
     "playwright==1.56.0",
     "starlette>=1.8.0",
     "uvicorn>=0.54.0",
+    "websockets>=15",
 ]
 
 [project.scripts]
 ninety-sim = "ninety.sim.cli:main"
 ninety-slice = "ninety.agents.slice:main"
+ninety-workflow = "ninety.agents.workflow:main"
 ninety-live = "ninety.agents.live:main"
 ninety-agents = "ninety.agents.foundry:main"
 ninety-validate = "ninety.validate:main"

@@ -6,6 +6,8 @@ through these tools, naming the match they were asked about. Two transports, the
     uv run python -m ninety.mcp.match_server                       # stdio, for local agents
     uv run python -m ninety.mcp.match_server --precompute matches/  # write the served matches
 
+Precomputing also writes each match's frames, which the phone companion reads (ninety/api/companion.py).
+
 Over HTTP it is mounted at /mcp in the API (ninety/api/app.py), where Foundry's published
 Analyst calls it with a key (infra/main.bicep). The served matches are a fixed list, simulated
 when the image is built: a call never starts a simulation, so it answers in milliseconds and
@@ -25,8 +27,8 @@ from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
 from ninety.intel.windows import agent_rows
-from ninety.match import detected
-from ninety.match.facts import AGENT_TYPES, compact, events_in, match_events
+from ninety.match import detected, tracking
+from ninety.match.facts import AGENT_TYPES, compact, events_in, match_events, select
 
 MINUTES = 5  # every served match is a five-minute clip, as the slice and the evaluations use
 # Simulator matches: the pre-M1 stand-in, kept for the committed replays and the agent evaluation.
@@ -114,14 +116,20 @@ server = make_server()
 
 
 def precompute(out: Path) -> None:
+    """Writes each served match's events, its window stats, and its frames for the phone companion
+    (ninety/match/tracking.py), all from one simulation."""
+    from ninety.sim.engine import simulate  # the pre-M1 stand-in; never on the live path
+
     out.mkdir(parents=True, exist_ok=True)
     for match, seed in MATCHES.items():
-        rows = events_in(seed, MINUTES, 1, MINUTES + 1)
+        run = simulate(seed, MINUTES)
+        rows = select(run.events, 1, MINUTES + 1)
         (out / f"{match}.json").write_text(json.dumps(rows, separators=(",", ":")))
-        stats = agent_rows(match_events(seed, MINUTES))
+        tracking.write(out, tracking.from_match(match, run))
+        stats = agent_rows(run.events)  # the same simulation's events as match_events gives
         (out / STATS_DIR).mkdir(exist_ok=True)
         (out / STATS_DIR / f"{match}.json").write_text(json.dumps(stats, separators=(",", ":")))
-        print(f"{match}: {len(rows)} events")
+        print(f"{match}: {len(rows)} events, {len(run.frames)} frames")
 
 
 def main() -> None:

@@ -22,7 +22,7 @@ def site(tmp_path):
     phone.mkdir()
     (phone / "index.html").write_text("<!doctype html><title>phone</title>")
     (tmp_path / "secret.txt").write_text("outside the bundle")
-    return TestClient(api.build("k" * 64, "p" * 24, viewer, replay, phone))
+    return TestClient(api.build("k" * 64, passcode="p" * 24, viewer=viewer, replay=replay, phone=phone))
 
 
 def test_the_viewer_is_served_at_the_root(site):
@@ -60,21 +60,28 @@ def test_every_response_carries_the_security_headers(site):
         assert h["x-content-type-options"] == "nosniff", path
 
 
+def test_unknown_api_routes_are_the_apis_404_not_the_sites(site):
+    for method in ("get", "post"):
+        r = getattr(site, method)("/api/nope")
+        assert r.status_code == 404 and r.json() == {"error": "no such route"}, method
+
+
 def test_live_mode_needs_the_passcode(site):
     assert site.get("/api/live/status").status_code == 401
-    assert site.get("/api/live/status", headers={"x-demo-passcode": "wrong"}).status_code == 401
-    assert site.get("/api/live/status", headers={"x-demo-passcode": "p" * 24}).json() == {"live": "ok"}
+    assert site.get("/api/live/status", headers={"x-ninety-passcode": "wrong"}).status_code == 401
+    assert site.get("/api/live/status", headers={"x-ninety-passcode": "p" * 24}).json() == {"live": "ok"}
 
 
 def test_live_mode_without_a_configured_passcode_refuses_everyone(tmp_path):
     # Fail closed: a missing Key Vault reference must not open Live mode.
-    client = TestClient(api.build("k" * 64, "", tmp_path / "none", tmp_path / "none"))
+    client = TestClient(api.build("k" * 64, passcode="", viewer=tmp_path / "none", replay=tmp_path / "none"))
     assert client.get("/api/live/status").status_code == 503
-    assert client.get("/api/live/status", headers={"x-demo-passcode": ""}).status_code == 503
+    assert client.get("/api/live/status", headers={"x-ninety-passcode": ""}).status_code == 503
 
 
 def test_without_a_viewer_or_bundle_the_api_still_answers(tmp_path):
-    client = TestClient(api.build("k" * 64, "p" * 24, tmp_path / "none", tmp_path / "none"))
+    none = tmp_path / "none"
+    client = TestClient(api.build("k" * 64, passcode="p" * 24, viewer=none, replay=none, phone=none))
     assert client.get("/api/health").status_code == 200
     assert client.get("/").status_code == 404
     assert client.get("/bundle/manifest.json").status_code == 404
