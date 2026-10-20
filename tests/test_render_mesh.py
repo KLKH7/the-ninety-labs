@@ -251,3 +251,20 @@ def test_a_player_is_drawn_as_tall_as_he_is(page):
         sole, crown = cam.project((40.0, 30.0, 0.0)), cam.project((40.0, 30.0, stature))
         drawn, real = box[3] - box[1], sole[1] - crown[1]
         assert abs(drawn / real - 1.0) < 0.02, (stature, drawn, real)
+
+
+def test_the_body_has_a_mans_proportions_and_its_stature_is_the_scale():
+    """The drawn body is the asset scaled to the player's height, so its joints must sit where a
+    man's do, as fractions of stature (Drillis and Contini 1966, as tabulated in Winter,
+    Biomechanics and Motor Control of Human Movement, fig. 4.1): knee 0.285, hip 0.530, shoulder
+    0.818, chin 0.870. The asset is a standing A-pose, so elbow and wrist are not compared. Within
+    0.03 of stature (about 5 cm): where a joint centre sits inside a skinned mesh is not known more
+    closely than that. And ASSET_STATURE_M is the top of the body mesh's skull."""
+    from ninety.render.meshpose import ASSET_STATURE_M, asset
+
+    data = asset()
+    body = data["parts"]["body"]["pos"]
+    assert abs(max(body[1::3]) - ASSET_STATURE_M) < 1e-3
+    head = {b["name"]: b["head"] for b in data["bones"]}
+    for bone, ratio in (("calf_l", 0.285), ("thigh_l", 0.530), ("upperarm_l", 0.818), ("neck_01", 0.870)):
+        assert abs(head[bone][1] / ASSET_STATURE_M - ratio) < 0.03, (bone, head[bone][1] / ASSET_STATURE_M)
