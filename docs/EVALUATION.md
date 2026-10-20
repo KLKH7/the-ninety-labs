@@ -21,8 +21,8 @@ generated it and the output file is committed. Rows marked *planned* have no res
 | Window stats on detected events against the same clip's ground truth (PPDA, field tilt, passes a minute per team-window) | to be built once R3's detected events for seed900001 land | | planned |
 | Late drop in high-intensity running (R7), by the protocol below; distance and top speed by position on the same matches | `uv run python -m ninety.sim.late_drop` | `docs/eval/late-drop.md` | running |
 | Fact-checker rules (numbers, players, evidence ids) | `uv run pytest tests/test_factcheck.py` | test assertions | running |
-| Personalizer rules: the A2A round trip, the fallback within its budget, the re-check of every variant, every persona and language, profile validation ([below](#personalizer)) | `uv run pytest tests/test_personalizer.py` | test assertions | running in process: 38 tests, 18 of 18 mutants of the rules killed; not yet deployed |
-| Personalizer variants from the published agent that pass the re-check and air, by persona and language, and time per A2A request | `uv run python -m ninety.personalizer.eval --seeds 21,33` (agents-live task `personalizer`) | `docs/eval/personalizer.md` | planned: waits for `ninety-personalizer` to be published |
+| Personalizer rules: the A2A round trip, the fallback within its budget, the re-check of every variant, every persona and language, profile validation ([below](#personalizer)) | `uv run pytest tests/test_personalizer.py` | test assertions | running in process: 46 tests; 18 of 18 mutants of the rules killed, and 16 of 17 of the live path and its evaluation (the survivor is equivalent: an unanswered request never airs); not yet deployed |
+| Personalizer variants from the published agent that pass the re-check and air, by persona and language, and time per A2A request | `uv run python -m ninety.personalizer.eval --seeds 21,33` (agents-live task `personalizer`) | `docs/eval/personalizer.md` | planned: `ninety-personalizer:1` is published. The first live run (agents-live 39346085408, 2026-10-20) measured nothing: its sign-in had expired before the first model call, so all 20 requests fell back to the verified text. The evaluation now signs in before it simulates and refuses to write a report when the model never answered |
 | Ledger versioning, evidence validation, and deterministic cue fixture | `uv run pytest tests/test_ledger.py tests/test_cues.py` | `tests/fixtures/cues-seed7.jsonl` and test assertions | running: 21 tests; 134 cues for seed 7, five minutes (132 for its 66 passes, 17 of them failed and one still in flight at the end, 2 for its 1 shot; no goal) |
 | Fact-checker on the frozen planted-claim set, offline: catch rate, true claims wrongly stopped, the layer that decided, claims held for low-confidence detections | `uv run python -m ninety.eval.fact_checker_proof` (offline, seconds of CPU; `--check` fails if a committed file is stale, as `tests/test_fact_checker_proof.py` does) | `docs/eval/fact-checker-planted.md`, set `docs/eval/planted-claims-v1.json` | running: 175/175 planted false claims kept off air (127 recorded, 16 on phantom low-confidence detections, all held by the confidence gate, 32 with viewer text spliced in); 7/121 true claims wrongly stopped, all by the recorded Judge. Judge answers are those recorded from `ninety-judge:1` at `9be98bd`; the gate threshold (0.5) is a design value until detector calibration is measured |
 | Fact-checker catch rate on planted false claims, and true claims wrongly rejected, on the published Judge | `uv run python -m ninety.eval.factcheck_eval --seeds 21,33 --foundry`; nightly in `.github/workflows/evals.yml`, recorded in Foundry | `docs/eval/fact-checker.md` | running: held-out seeds 21,33, `ninety-judge:1` at commit `9be98bd`: 136/136 false claims caught (code alone 32/136); 7/105 true claims wrongly rejected excluding service holds (17/115 including them); 19 of 251 Judge calls failed and were held back (fail closed), more than earlier runs, not yet investigated |
@@ -489,6 +489,11 @@ words it; code decides what airs.
   whatever the server returns, so a server that skipped its check still cannot air a changed number.
   The server reports why it replaced a variant; those reasons reach the trace and the evaluation,
   never the decision of what airs.
+- **The live evaluation measures only what the model answered.** A request the model did not
+  answer (a client fallback, or a failed model call on the server) counts in its own column, and
+  air rates and times are over answered requests only. Past `MAX_UNANSWERED_SHARE` (a fifth, a
+  design choice) the run writes no report, because which claims an outage hits depends on when it
+  struck (lesson 131).
 - **The fallback.** The remote has `BUDGET_S` = 3 s (a design choice: a little over a third of the
   8 s p95 target from event to verified graphic in PLAN.md, to be revisited when
   `latency-cost.md` measures the split). On a timeout, a 5xx or a refused connection the in-process
@@ -513,7 +518,7 @@ number survival as a set rather than a count, no player survival, no length cap,
 still airing, the audio persona rewritten. Client: trusting the server's variants, ignoring which
 persona a reply is for, falling back on any error, treating a 4xx as a 5xx, no 5xx rule, no
 refused rule, no deadline, waiting for the cancelled call to unwind. Server: profiles not
-validated, extra profile fields allowed. Fact-checker: ordinals not read as numbers (lesson 95).
+validated, extra profile fields allowed. Fact-checker: ordinals not read as numbers (lesson 130).
 The length-cap mutant survived the first run; its test was added after.
 
 ## Rules
