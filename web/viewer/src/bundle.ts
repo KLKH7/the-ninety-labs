@@ -1,6 +1,7 @@
 // The bundle `ninety-e2e` writes (ninety/e2e.py), and the one rule for what is on screen.
 
-export type Persona = "casual" | "analyst";
+export type Persona = "casual" | "analyst" | "audio";
+export const PERSONAS: Persona[] = ["casual", "analyst", "audio"];
 
 /** schemas/overlay_cue.schema.json */
 export interface Cue {
@@ -56,6 +57,32 @@ export interface Manifest {
   facts: number;
   agents: { mode: string; planted: boolean; claims: number; accepted: number };
   cues: number;
+  audio?: { mode: string; lines: number; dropped: number; max_lag_s: number; vtt: string };
+}
+
+/** One line of audio.json (ninety/speech/describe.py `Said`). */
+export interface AudioLine {
+  id: string;
+  event: string;
+  t_event: number;
+  t_in: number;
+  t_out: number;
+  lag_s: number;
+  pan: number;
+  text: string;
+  spoken: string;
+  source: "event" | "insight";
+  duration_source: "estimated" | "measured";
+  file: string | null;
+}
+
+export interface AudioTrack {
+  mode: "estimated" | "azure";
+  voice: string;
+  lines: number;
+  dropped: number;
+  max_lag_s: number;
+  said: AudioLine[];
 }
 
 export interface FrameDetections {
@@ -70,6 +97,7 @@ export interface Bundle {
   cues: Cue[];
   claims: ClaimTrace[];
   detections: FrameDetections[];
+  audio: AudioTrack | null; // bundles from before the Describer have none
 }
 
 export const BUNDLE_FORMAT = 1;
@@ -92,12 +120,13 @@ export async function loadBundle(base: string): Promise<Bundle> {
   if (manifest.format !== BUNDLE_FORMAT) {
     throw new Error(`bundle format ${manifest.format}; this viewer reads format ${BUNDLE_FORMAT}`);
   }
-  const [cues, trace, detections] = await Promise.all([
+  const [cues, trace, detections, audio] = await Promise.all([
     get(base, "cues.jsonl").then((t) => jsonl<Cue>(t)),
     get(base, "trace.json").then((t) => JSON.parse(t) as { claims: ClaimTrace[] }),
     get(base, "detections.jsonl").then((t) => jsonl<FrameDetections>(t)),
+    manifest.audio ? get(base, "audio.json").then((t) => JSON.parse(t) as AudioTrack) : Promise.resolve(null),
   ]);
-  return { base, manifest, cues, claims: trace.claims, detections };
+  return { base, manifest, cues, claims: trace.claims, detections, audio };
 }
 
 /**
