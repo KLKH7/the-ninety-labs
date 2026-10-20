@@ -27,8 +27,9 @@ docs/decisions/0001-synthetic-data.md.
 # 0.5.0: the broadcast cuts from a stoppage to its restart instead of showing the whole dead ball
 # (ninety/render/edit.py; meta.json `cuts`, clip.json `segments`), and the match is simulated to a
 # fixed horizon, so a clip's events no longer depend on how its start was found.
-# 0.5.1: the gantry aims at the play on the grass, so the pitch fills the picture, closes up as play
-# goes away and eases each pan in and out; live play keeps to the gantry's side (no far stand, no
-# camera behind a goal) and the tight lens has its own eased aim; no shot is shorter than 4 s; the
-# goalmouth and centre wear is faint, pale turf in the mowing stripes instead of brown blotches.
+# 0.5.1: the gantry aims at the play on the grass with a wider lens (18 m), so the pitch fills the
+# picture with 8 to 15 players in shot; with play far off it tilts down its line of sight so the
+# stands stay a band across the top; it eases each pan in and out; live play keeps to the gantry's
+# side (no far stand, no camera behind a goal) and the tight lens has its own eased aim; no shot is
+# shorter than 4 s; the goalmouth and centre wear is faint, pale turf in the mowing stripes.
 RENDERER_VERSION = "0.5.1"

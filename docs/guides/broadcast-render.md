@@ -35,7 +35,7 @@ Real broadcast footage has properties detectors depend on. Match them:
 |---|---|---|
 | Resolution | 1280x720 or 1920x1080, 25 fps | Render 1280x720 at 25 fps by default |
 | Main camera | High in the stand near halfway, about 15 to 25 m up and 30 to 40 m back | Place it there; never a top-down or behind-goal main view |
-| Framing | Follows the ball with lag, keeps 8 to 15 players in shot; the pitch fills most of the picture, the stands a band across the top | Aim at the play on the grass, ease each pan in and out, close up on the box and as play goes away; at least 85% of live frames well framed (`test_render_camera`) |
+| Framing | Follows the ball with lag, keeps 8 to 15 players in shot; the pitch fills most of the picture, the stands a band across the top | Aim at the play on the grass with a lens 18 m either side; with play far off, tilt down along the line of sight so the stands stay in the top quarter; close up on the box; ease each pan in and out; at least 85% of live frames well framed and 8 to 15 players in the median frame (`test_render_camera`) |
 | Shots | One change of shot every 9 s on average, replays included (SoccerNet-v2, Deliège et al. 2021); live play from one side of the ground | The gantry and a tighter lens beside it in live play, the low angle by the net after a goal; each shot held at least 4 s, none started within 4 s of an edit cut |
 | Motion | Fast pans blur the image | Motion blur proportional to pan speed |
 | Players | About 30 to 120 px tall in the main view; far side ones small | Keep scale realistic; do not zoom so far that every player is huge |
