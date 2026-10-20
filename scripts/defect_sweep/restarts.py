@@ -10,6 +10,8 @@ A light measurement to size the restart defects before and after a fix, not a ru
   (Laws 13, 15, 17: 9.15 m from a free kick or corner, 2 m from a throw-in) or, at a goal kick,
   inside the kicking side's penalty area (Law 16). The kind of restart is read from the event that
   stopped play and where the ball is placed;
+- stuck restarts: a stoppage with no restart within 200 s (the longest grounded wait is a
+  penalty's, up to 140 s, GROUNDING R1), or none by the end of the match;
 - second touch (Laws 8, 13 to 17): the taker's first pass or shot more than 1 m from where the
   restart was set (he carried the set ball first), or his next touch after it before anyone else's;
 - held-out outcomes (never targets): shots and goals a team per 90 with the standard error over
@@ -52,7 +54,14 @@ def measure(run: Path) -> dict:
            "shots": sum(e["type"] == "shot" for e in events),
            "goals": sum(e["type"] == "goal" for e in events),
            "passes": 0, "completed": 0, "shots_after_own_restart": 0,
-           "set": {}, "first_failed": {}, "lost_5s": {}, "carried_set_ball": 0, "touched_again": 0}
+           "set": {}, "first_failed": {}, "lost_5s": {}, "carried_set_ball": 0, "touched_again": 0,
+           "stuck": 0}
+    end_t = frames[-1]["t"]
+    for i, e in enumerate(events):
+        if e["type"] in ("out_of_play", "foul", "offside", "goal"):
+            nxt = next((k for k in events[i + 1:] if k["type"] in ("set_piece", "kickoff")), None)
+            if (nxt["t"] if nxt else end_t) - e["t"] > 200 and (nxt or end_t - e["t"] > 200):
+                out["stuck"] += 1
     touches = ("pass", "shot", "deflection", "interception", "tackle")
     for i, e in enumerate(events):
         if e["type"] not in ("set_piece", "kickoff"):
@@ -163,6 +172,7 @@ def main() -> None:
         "goal_to_kickoff_s": [s for r in runs for s in r["goal_to_kick_s"]],
         "restarts_kicked_by_taker": restarts,
         "encroached_at_the_kick": encroached,
+        "stuck_restarts": sum(r["stuck"] for r in runs),
         "taker_carried_the_set_ball": sum(r["carried_set_ball"] for r in runs),
         "taker_touched_it_again_first": sum(r["touched_again"] for r in runs),
         "examples": [x for r in runs for x in r["encroach_examples"]][:12],

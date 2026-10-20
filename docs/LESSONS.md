@@ -1111,3 +1111,14 @@ short and actionable. This file is public: no research sources, product names or
   test, including the clauses no defect report mentioned.
 - **Check:** `uv run pytest tests/test_restarts.py -k "dribble or first_touch or again"`; on the
   engine before the fix the set ball's first movement is not a pass or shot by the taker.
+
+### 122. A rule every kind of case shares is tested on every kind, run to the end
+- **What happened:** moving the restart taker a ball's width behind the ball was tested on a
+  free kick only. At a corner the readiness check still measured from the corner point, the taker
+  stood 1.09 m from it, and the corner was never taken: 7 of 16 measured matches froze for the
+  rest of their 20 minutes. Every unit test passed; only the 16-match measurement showed it.
+- **Rule:** a change to a rule that every restart (or every kind of any case) goes through gets a
+  test that runs each kind to completion. A measurement counts stuck states as a defect, not as
+  quiet time.
+- **Check:** `uv run pytest tests/test_restarts.py -k every_kind`; `scripts/defect_sweep/restarts.py`
+  reports `stuck_restarts`, which must be 0.

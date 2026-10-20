@@ -1570,7 +1570,7 @@ class Engine:
             r.carried_by, r.passed_by = None, carrier.id
             return
         taker = self.by_id[r.taker]
-        spot = throw_stand(r.x, r.y) if r.kind == "throw_in" else (r.x, r.y)
+        spot = throw_stand(r.x, r.y) if r.kind == "throw_in" else self.restart_ball_spot(r)
         # A thrower must be at his spot, behind the line, with the ball in his hands over his head;
         # anyone else is close enough when the ball is on the spot at his feet. Nobody and no ball
         # is moved there: he fetches it and runs (lesson 5).

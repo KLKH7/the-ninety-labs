@@ -633,3 +633,17 @@ def test_the_restart_taker_does_not_take_it_on_his_chest_either():
         e.t += DT
         e.frame += 1
         assert e.possessor != taker.id
+
+
+def test_every_kind_of_restart_is_taken():
+    """Defect: with the taker standing a ball's width behind a corner's spot, the corner was never
+    taken (the readiness check measured from the corner point) and the match stood still."""
+    for kind, team, spot in (("corner", "away", (0.0, 68.0)), ("corner", "home", (PITCH_X, 0.0)),
+                             ("goal_kick", "home", (5.5, 34.0)), ("free_kick", "away", (30.0, 10.0)),
+                             ("throw_in", "home", (60.0, 68.0))):
+        e = Engine(3)
+        e.possessor = None
+        e.ball = (spot[0] + (1.5 if spot[0] < PITCH_X / 2 else -1.5), spot[1], 0.0, 0.0, 0.0, 0.0)
+        e.stop(kind, team, spot)
+        e.restart.ready_at = e.t + 2.0
+        run_until(e, taken, 60)
