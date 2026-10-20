@@ -6,21 +6,24 @@ from __future__ import annotations
 import pytest
 
 from ninety.eval import workflow_failures as wf
+from ninety.match.facts import compact
 
 ROWS = {r["scenario"]: r for r in wf.rows()}
 BASE = ROWS["none"]
+KNOWN = {e["id"]: compact(e) for e in wf.workflow.agent_events(list(wf.m1_ground().events))}
 
 # scenario -> (claim status, verdict category, Judge calls, an insight airs, template graphics lost)
 EXPECTED = {
-    # The insight, then its variants re-checked (casual, club and player_focus in English pass: the
-    # detected pass names its passer's track, so the player-focus variant is written too; the
-    # Spanish ones are held, since the stand-in Personalizer returns English): four Judge calls.
-    "none": ("verified", None, 4, True, 0),
+    # The insight, then its seven variants re-checked (casual, club and player_focus in English;
+    # analyst, casual, club and player_focus in the stand-in's marked Spanish). player_focus is
+    # written because the detected pass names its passer's track: eight Judge calls.
+    "none": ("verified", None, 8, True, 0),
     # The real Judge wrapper retries once, then holds: two calls, then the template stays.
     "judge timeout": ("held", "timeout", 2, False, 0),
     # The Tactician never answers, so there is nothing for the Judge to read.
     "tactician outage": ("held", "service", 0, False, 0),
-    # The insight still airs; the in-process fallback gives the variants, re-checked the same way.
+    # The insight still airs; the in-process fallback gives the English variants (casual, club and
+    # player_focus), re-checked the same way, and no Spanish, which is held: four Judge calls.
     "personalizer down": ("verified", None, 4, True, 0),
     # The confidence gate holds the claim before the Judge, and the unsure pass's two graphics
     # (analyst and casual) are not drawn.
@@ -52,7 +55,112 @@ def test_with_the_personalizer_down_the_fallback_answers_and_the_viewer_sees_the
     row = ROWS["personalizer down"]
     assert "personalizer fallback: fallback: refused" in row["fallback"]  # the real client's route
     assert not any(step.startswith("personalizer") for step in BASE["fallback"])  # in process, no failure
-    assert row["insights"] == BASE["insights"]
+    # The fallback is the verified English text: the English profiles see what they see without the
+    # failure, and the Spanish ones are held rather than shown English.
+    assert row["insights"] == [i for i in BASE["insights"] if i["lang"] == "en"]
+    assert {i["lang"] for i in BASE["insights"]} == {"en", "es"}
+    # player_focus too: the detected pass names its passer's track.
+    assert [v.split(":")[0] for v in row["variants_refused"]] == ["analyst/es", "casual/es", "club/es",
+                                                                 "player_focus/es"]
+
+
+def test_the_row_reads_the_minute_s_claim_whichever_moment_the_analyst_picked():
+    # A live Analyst picks its own moments; the row's claim is the one that aired, else the first
+    # moment's, never a lookup by the scripted main pass's id (live rows read "none" that way).
+    from ninety.agents.contracts import Review
+    from ninety.agents.factcheck import Claim, Verdict
+
+    held = Review("m-e00051", Verdict(False, ["timeout"], "timeout"), None, None, "held")
+    aired = Review("m-e00034", Verdict(True), None, Claim("h9 finds h6.", ["e00034"]), "verified")
+    rejected = Review("m-e00040", Verdict(False, ["wrong number"], "numbers"), None, None, "rejected")
+    assert wf.minute_claim([held, aired]) is aired
+    assert wf.minute_claim([rejected, held]) is rejected
+    assert wf.minute_claim([]) is None
+
+
+def test_a_baseline_on_another_moment_than_the_main_pass_still_reads_its_claim():
+    # The live baseline on M1 read "none" with a verified insight on screen: the Analyst had led
+    # with another moment than the scripted main pass. Here it leads with the second pass.
+    async def analyst(prompt: str) -> str:
+        return wf.picks(wf.SIDE, [wf.SIDE, wf.MAIN])
+
+    other = wf.Scenario("none", "nothing (the baseline)", claim="verified",
+                        override=lambda agent: {"analyst": analyst})
+    row = wf.run(other)
+    assert row["insights"] and row["status"] == "verified"
+
+
+def test_the_headline_says_when_the_baseline_fails():
+    assert "**Baseline: passes. Recovered: 4 of 4**" in "\n".join(wf.table_lines(wf.rows()))
+    english = baseline_with(personalizer_writing(lambda text: text.replace("complete", "completes")))
+    table = wf.rows([english, *[r for r in wf.rows() if r["scenario"] != "none"]])
+    assert "**Baseline: fails. Recovered: 4 of 4**" in "\n".join(wf.table_lines(table))
+
+
+def test_every_moment_s_claim_must_end_as_the_failure_says():
+    # A live minute has up to three moments: held means each held, verified means one aired and
+    # none held. A rejected claim beside a verified one is the fact-checker working.
+    assert not wf.ends_as_it_must(["held", "rejected"], "held")  # lesson 96: rejected is not held
+    assert wf.ends_as_it_must(["held", "held", "held"], "held")
+    assert not wf.ends_as_it_must([], "held")
+    assert not wf.ends_as_it_must(["verified", "held"], "verified")
+    assert wf.ends_as_it_must(["rejected", "verified"], "verified")
+    assert not wf.ends_as_it_must(["rejected"], "verified")
+
+
+def personalizer_writing(spanish):
+    """A stand-in Personalizer: each persona keeps the claim's words; `spanish(text)` gives the
+    Spanish profiles' text, or None to leave them out."""
+    from ninety.agents.contracts import Variant
+
+    async def personalize(claim, evidence, profiles):
+        out = []
+        for p in profiles:
+            text = claim.text if p.lang == "en" else spanish(claim.text)
+            if text is not None:
+                out.append(Variant(p.persona, p.lang, text, tuple(claim.evidence)))
+        return out
+
+    return personalize
+
+
+def baseline_with(personalize) -> dict:
+    scenario = wf.Scenario("none", "nothing (the baseline)", claim="verified",
+                           override=lambda agent: {"personalizer": personalize})
+    return wf.run(scenario)
+
+
+def test_the_baseline_fails_when_a_spanish_profile_reads_english_with_a_word_changed():
+    # The byte-for-byte check alone let this air: English for a Spanish viewer, one word changed.
+    row = baseline_with(personalizer_writing(lambda text: text.replace("complete", "completes")))
+    assert row["variants_refused"] == [] and len(row["variants_english"]) == 4  # with player_focus
+    assert not wf.recovered(row, row)["every variant airs without a failure"]
+
+
+def test_the_baseline_fails_when_the_spanish_profiles_are_left_out():
+    row = baseline_with(personalizer_writing(lambda text: None))
+    assert row["variants_refused"] == [] and row["variants_english"] == []
+    assert sorted(row["variants_missing"]) == ["analyst/es", "casual/es", "club/es", "player_focus/es"]
+    assert not wf.recovered(row, row)["every variant airs without a failure"]
+
+
+def test_the_offline_spanish_is_spanish():
+    assert {i["lang"] for i in BASE["insights"]} == {"en", "es"}
+    assert BASE["variants_english"] == BASE["variants_missing"] == BASE["variants_refused"] == []
+    spanish = [i["text"] for i in BASE["insights"] if i["lang"] == "es"]
+    assert spanish and all(text == wf.claim_in_spanish(wf.MAIN, KNOWN) for text in spanish)
+
+
+def test_the_baseline_fails_when_a_spanish_profile_gets_english():
+    # The reviewer's ruling: without a failure, a Spanish profile held on the English text is a
+    # defect (here, a Personalizer that writes no Spanish), so the baseline does not recover.
+    from ninety.agents.contracts import Models
+
+    english_only = wf.Scenario("none", "nothing (the baseline)", claim="verified",
+                               override=lambda agent: {"personalizer": Models.scripted().personalizer})
+    row = wf.run(english_only)
+    assert row["variants_refused"] and not wf.recovered(row, row)["every variant airs without a failure"]
+    assert all(wf.recovered(BASE, BASE).values())
 
 
 # scenario -> the fallback badges on screen
@@ -95,7 +203,8 @@ def planted(name: str, column: str) -> dict:
         first = {**row["insights"][0], "verified": True, "passes_check": False}
         row["insights"] = [first, *row["insights"][1:]]
     elif column == "claim ends as it must":
-        row["status"] = "rejected"  # held was expected: rejected is not the same end (lesson 96)
+        # Held was expected: a second moment rejected is not the same end (lesson 96).
+        row["statuses"] = [*row["statuses"], "rejected"]
     elif column == "fallback recorded":
         row["trace_fallbacks"] = []  # the Spanish variants' holds are still in row["fallback"]
     elif column == "fallback badge on screen":
@@ -227,11 +336,13 @@ def test_personalize_cannot_be_recorded_yet(monkeypatch, tmp_path):
 def test_the_live_run_injects_each_failure_around_the_published_agents(monkeypatch, tmp_path):
     # agents-live task=failures, with W1's fake Foundry in place of the published agents and a fake
     # sign-in: no Azure. Three grounds: the M1 clip, then the held-out seeds (here W1's built match).
+    import contextlib
     import json
     import sys
 
     from ninety.agents import credentials, workflow
     from ninety.match.facts import compact
+    from ninety.personalizer import core
     from tests.test_workflow import EVENTS, PASSES, SUPPORTED, Credential, FakeFoundry
 
     order: list[str] = []
@@ -258,7 +369,48 @@ def test_the_live_run_injects_each_failure_around_the_published_agents(monkeypat
         replies["moment-analyst"] += [wf.picks(main, [main, side])] * 4
         replies["tactician"] += [wf.reply(wf.claim_on(main, known))] * 3
         replies["challenger"] += ['{"agree": true}'] * challenges
-    monkeypatch.setattr(workflow, "FoundryAgent", FakeFoundry(replies))
+    fake, prompts = FakeFoundry(replies), []
+
+    def recording(**kwargs):
+        agent = fake(**kwargs)
+        answer = agent.run
+
+        async def run(prompt):
+            prompts.append((agent.name, prompt))
+            return await answer(prompt)
+
+        agent.run = run
+        return agent
+
+    monkeypatch.setattr(workflow, "FoundryAgent", recording)
+    personalizer_asked: list[str] = []
+
+    def spanish(text: str) -> str:  # the claims here are wf.claim_on's, worded as claim_in_spanish's
+        return text.replace("complete a pass of", "completa un pase de").replace(" at ", " a ")
+
+    @contextlib.asynccontextmanager
+    async def published_ask(credential=None):
+        # The published Personalizer's stand-in: each profile its claim, the Spanish ones marked.
+        assert credential is not None  # the run's own credential, already signed in
+        async def ask(text: str) -> str:
+            personalizer_asked.append(text)
+            body = json.loads(text)
+            return json.dumps({"variants": [
+                {"i": p["i"], "text": spanish(body["claim"]) if p["lang"] == "es" else body["claim"]}
+                for p in body["profiles"]]})
+
+        yield ask, "stand-in"
+
+    monkeypatch.setattr(core, "published_ask", published_ask)
+    from ninety.personalizer.client import RemotePersonalizer
+
+    closed, close = [], RemotePersonalizer.close
+
+    async def counted_close(self):
+        closed.append(self)
+        await close(self)
+
+    monkeypatch.setattr(RemotePersonalizer, "close", counted_close)
     monkeypatch.setattr(sys, "argv", ["workflow_failures", "--live", "--out", str(tmp_path)])
     wf.main()
     body = json.loads((tmp_path / "failure-table-live.json").read_text())
@@ -275,6 +427,17 @@ def test_the_live_run_injects_each_failure_around_the_published_agents(monkeypat
         else:  # the seeds' events are simulator stand-ins, with no detection confidence to doubt
             assert "low confidence" not in rows
         assert "personalizer fallback: fallback: refused" in rows["personalizer down"]["fallback"]
+        base = rows["none"]
+        assert base["variants_refused"] == [] and "es" in {i["lang"] for i in base["insights"]}
+    # Every Analyst read its minute inline, never the deployed match tools (lesson 90), and the
+    # Personalizer's model wrote the variants.
+    analysts = [p for name, p in prompts if name == "ninety-moment-analyst"]
+    assert analysts and all("EVENTS: " in p and "-inline, minute" in p for p in analysts)
+    assert personalizer_asked
+    # Every Personalizer client the run opened is closed: one in process per row, and the
+    # dead-address one each "Personalizer down" row swaps in.
+    rows_run = sum(len(g["rows"]) for g in body["grounds"])
+    assert len(closed) == rows_run + len(body["grounds"])
     md = (tmp_path / "failure-table-live.md").read_text()
     assert md.count("# Failure table") == 3 and "live, seed33" in md
     assert len(body["commit"]) == 40 and body["commit"] in md  # which engine simulated the seeds
