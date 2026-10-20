@@ -1748,6 +1748,9 @@ def _two_near_a_loose_ball():
     a, b = e.by_id["h6"], e.by_id["h7"]
     a.x, a.y = 46.0, 38.0
     b.x, b.y = 58.0, 38.0
+    # The same body and reaction for both, so they are about as near by construction, not by a
+    # seed's draw of their profiles (lesson 47).
+    b.physique, b.profile = a.physique, a.profile
     return e, a, b
 
 
@@ -1761,6 +1764,29 @@ def test_a_chaser_is_not_swapped_by_a_fresh_guess_while_nothing_changes():
         e.plan_chase()
         chasers.add(e.chase["home"][0])
     assert chasers <= {a.id, b.id} and len(chasers) == 1
+    e.ball = (52.0, 34.0, 0.0, 0.0, 2.0, 0.0)  # pushed on by a touch: a new flight, judged afresh
+    seen = set()
+    for k in range(40):
+        e.free_since = e.t - 2.0 - k * 1e-3
+        e.plan_chase()
+        seen.add(e.chase["home"][0])
+    assert seen == {a.id, b.id}  # the premise: both are real contenders, so a hold is what kept one
+
+
+def test_a_misjudgement_shrinks_as_he_comes_closer_to_the_ball():
+    e, a, b = _two_near_a_loose_ball()
+    for q in (a, b):
+        q.x, q.y = 5.0, 60.0  # out of it: only the chosen player's estimate is read below
+    p = e.by_id["h8"]
+    targets = []
+    for d in (30.0, 6.0):
+        p.x, p.y = 52.0 - d, 38.0
+        e.misjudged, e.misjudged_at = {p.id: (3.0, 0.0)}, (e.kicked_at, e.free_since)
+        e.plan_chase()
+        assert e.chase["home"][0] == p.id
+        targets.append(e.chase["home"][1])
+    truth = 52.0  # rolling straight across: the true path stays at x = 52
+    assert abs(targets[1] - truth) < abs(targets[0] - truth)
 
 
 def test_a_new_strike_is_judged_afresh_and_a_clearly_nearer_player_always_chases():

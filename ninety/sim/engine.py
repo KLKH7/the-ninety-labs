@@ -380,9 +380,10 @@ class Engine:
         self.touched_since_kick = False
         self.chase: dict[str, tuple[str, float, float]] = {}  # team -> (player, x, y)
         # Each player's misjudgement of the ball's velocity, in units of his error at that distance
-        # (PERCEPTION_ERR), held for one strike of the ball (kicked_at) and shrinking as he nears it.
+        # (PERCEPTION_ERR), held while the ball's flight is unchanged: from one strike, touch or push
+        # (kicked_at, free_since) to the next; it shrinks as he nears the ball.
         self.misjudged: dict[str, tuple[float, float]] = {}
-        self.misjudged_at = -99.0
+        self.misjudged_at: tuple[float, float] = (-99.0, -99.0)
         self.restart: Restart | None = None
         self.throw_by: str | None = None  # a throw-in taker holding the ball until he throws it
         self.throw_ready = 0.0
@@ -873,11 +874,11 @@ class Engine:
     def plan_chase(self) -> None:
         """Each team sends the player who thinks they can reach the ball's path first. Each player
         judges the ball's velocity with an error that grows with their distance from it. His
-        misjudgement is one for the whole of a strike (drawn when the ball is struck or touched, then
-        held): it sharpens as he comes closer, because it scales with the distance, but it is not
-        drawn afresh every few frames, which made two players about as near swap the chase back and
-        forth and each turn away from the ball in turn (*design*: an estimate improves with what he
-        sees; it does not jump at random)."""
+        misjudgement is one for each flight of the ball (drawn when the ball is struck, touched or
+        pushed on, then held): it sharpens as he comes closer, because it scales with the distance,
+        but it is not drawn afresh every few frames, which made two players about as near swap the
+        chase back and forth and each turn away from the ball in turn (*design*: an estimate improves
+        with what he sees; it does not jump at random)."""
         if all(self.t - self.reacting_since(p) < self.reaction(p) for p in self.players):
             return
         path = ball.predict(self.ball, DT, 6.0)
@@ -888,8 +889,9 @@ class Engine:
             if self.t - self.reacting_since(p) < self.reaction(p):
                 continue  # has not yet reacted to this strike
             sigma = PERCEPTION_ERR * math.hypot(self.ball[0] - p.x, self.ball[1] - p.y)
-            if self.misjudged_at != self.kicked_at:  # a new strike: everyone judges it afresh
-                self.misjudged, self.misjudged_at = {}, self.kicked_at
+            flight = (self.kicked_at, self.free_since)
+            if self.misjudged_at != flight:  # a new strike, touch or push: everyone judges it afresh
+                self.misjudged, self.misjudged_at = {}, flight
             if p.id not in self.misjudged:
                 self.misjudged[p.id] = (self.rng.gauss(0, 1), self.rng.gauss(0, 1))
             zx, zy = self.misjudged[p.id]
