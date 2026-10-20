@@ -877,7 +877,53 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `uv run pytest tests/test_failure_table.py`; removing the `live.run` fallback or
   restoring the old status line turns a row red.
 
-### 97. A drawn body moves the way its markers move, frame by frame
+### 97. A robust loss pulls only from as far as its scale reaches
+- **What happened:** the camera search (`ninety/vision/pitch.py`) ranked its coarse grid of views
+  with the fine fit's Cauchy loss, 3 px. A grid view sits tens of pixels from the right one, where
+  that loss is flat, so the ranking was close to noise: with the true gantry held fixed, 3 of 10
+  frames of seed 900001 fitted, and the gantry search settled 20 m from the truth. The objective
+  was not at fault: the true camera scored 3.8 against the search's 24. The grid also aimed only at
+  points on the pitch, while the broadcast camera looks beyond the far touchline.
+- **Rule:** before blaming an objective, score it at the answer. A coarse-to-fine search uses at
+  each stage a loss scale that matches how far its starts are from the answer (here 20 px to rank,
+  then 12 and 3 px to refine), and its grid covers the whole space the answer can be in.
+- **Check:** `tests/test_vision_pitch.py` recovers known cameras from their own markings, at four
+  pans including a midfield view the old grid could not reach.
+
+### 98. Cluster on what does not change with the light
+- **What happened:** teams came from 2-means on each track's shirt colour. In seed 900001 the stand's
+  shadow covers half the pitch, and the two clusters learned were two greys (#292c3f and #666374)
+  for a maroon and a blue kit: players were split by light, both away passes were labelled home,
+  and every pass matched its true event in time and place but not in team.
+- **Rule:** make a feature that tells objects apart invariant to what varies within one of them
+  before clustering it (here chromaticity, each channel over their sum, which shadow leaves
+  alone), and check the clusters against labels on one clip before trusting them.
+- **Check:** `tests/test_vision_events.py::test_one_kit_in_sun_and_in_shadow_is_one_side` fails
+  when the feature is raw colour.
+
+### 99. A scorer reads a clip the way the data contract writes it
+- **What happened:** `ninety/eval/event_score.py` found a frame by its position from 0, which holds
+  for a whole match. The test set's clips are windows that keep the match's frame numbers
+  (docs/DATA_CONTRACT.md), so the first detected events graded on one were refused.
+- **Rule:** a scorer takes its inputs' layout from the contract (here, a window starts at its own
+  first frame) and is tested on that layout, not only on whole matches.
+- **Check:** `tests/test_event_score.py::test_a_window_cut_from_a_match_is_graded_by_frame_number`
+  and `::test_a_window_with_a_missing_frame_is_refused` fail on the old code.
+
+### 100. A file the code reads at run time must be in the image, and CI must build the image
+- **What happened:** #128 made `ninety/match/detected.py` read `schemas/match_event.schema.json` at
+  import and the MCP server load `tests/fixtures/detected-standin-seed900001.jsonl`. The Dockerfile
+  never copied `schemas/`, and `.dockerignore` drops `tests/`. Every test passed, because tests run
+  from a checkout; the first place the image was built was the deploy after merge, which failed, and
+  `main` could no longer deploy.
+- **Rule:** a change that makes the code read a file outside `ninety/` at run time adds it to the
+  Dockerfile in the same pull request. The image is built and called in CI on every pull request,
+  not first at deploy.
+- **Check:** the CI `image` job builds the Dockerfile, runs it, and calls `/api/health` and an MCP
+  tool on every kind of served match; the Dockerfile itself loads every served match after the
+  precompute. Mutation-checked: removing `COPY schemas` fails the build at the precompute step.
+
+### 101. A drawn body moves the way its markers move, frame by frame
 - **What happened:** the skinned mesh was turned as one rigid object by the engine's heading. A
   player turning on the spot spun on his base, both feet sweeping 5 cm a frame across the grass;
   a strike was a stored pose wherever the ball was, its foot about 0.5 m off it. Running plants
