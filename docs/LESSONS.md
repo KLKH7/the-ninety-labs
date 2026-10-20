@@ -974,7 +974,74 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_describe.py::test_the_default_run_makes_no_azure_call`; mutate by adding
   the import at module top and watch it go red.
 
-### 105. A workflow's queue is part of what it does: read how the platform queues it
+### 106. Look for an open pull request on the same task before building it
+- **What happened:** a session was handed "build the Personalizer over A2A" and built it, tests and
+  mutation run included, before it noticed that draft #131 was the same task, further along. Two
+  Personalizers with different packages, interfaces and fallback rules were then one merge away.
+  The overlap showed up only when another PR's challenge map named #131.
+- **Rule:** before writing code for a task, search the open pull requests and the session notes for
+  it (`gh pr list --search "<task words>"`, the notes folder). If one exists, extend it with a PR
+  stacked on its branch, or ask the Coordinator. Never build a second one.
+- **Check:** the PR description names the search run and what it found. This PR is stacked on #131
+  (base `agents/personalizer`) and adds only what #131 lacks.
+
+### 107. Outcome numbers can look right while the football looks dumb: watch clips and count the nonsense
+- **What happened:** goals, shots, saves and pass completion sat inside their published bands
+  for weeks, so the engine was judged good. When the owner finally watched review clips, the play
+  was poor across the board: passes into touch with nobody near the passer, a chaser running away
+  from a loose ball, teams passing among themselves inside their own box, defenders standing
+  still. Every engine change had been measured by outcome rates; nobody watched a clip, and
+  nothing counted the play itself. On engine `7ee8720` the football-sense checker found 202 passes
+  a 90 from a team's own box into its own box, and the team without the ball with eight or more
+  outfield players standing for almost a quarter of open play.
+- **Rule:** an outcome rate is a held-out check, not proof the football is sensible. Every engine
+  pull request posts a watched 60-second clip and the football-sense counts (FS1 to FS9) on seeds
+  7, 11, 21 and 42 at 20 minutes, before and after; a fix names the type it targets and shows that
+  count fall without another rising. When someone watching finds a new kind of nonsense, it
+  becomes a defect type with a must-fail scene before it is fixed.
+- **Check:** the pull request has a clip link and the `ninety-football-sense` table for both
+  commits ([EVALUATION.md](EVALUATION.md#football-sense-fs1-to-fs9)).
+
+### 103. An argmin over a flat or bimodal objective is a coin toss between its ends
+- **What happened:** the keeper set his depth as the one, of 1 to 6 m, that left the least of the
+  goal open. Against a central ball he stood 6 m off his line at 8 and 10 m, 1 m at 12 m, 6 m at
+  18 m and 1 m at 20 m; from 14 m wide and 8 m out he stood 10.7 m off the goal's centre, outside
+  his post. The objective was sampled at a few shot speeds and heights, so it zigzagged between
+  neighbouring depths; integrated finely it was still bimodal, with the two ends nearly equal and
+  the middle worst, because nothing in it made coming out costly. The argmin picked whichever end
+  won by a hair, and a metre's change in the ball flipped it. The rule's own source (keepers come
+  off their line on 3.4% of shots, close in) had been read as support for a set position.
+- **Rule:** before trusting an optimised choice, plot the objective over the whole range at the
+  situations that matter; if it is flat, jagged or has several minima, the choice is not a model of
+  behaviour. Use a smooth rule (marked *design*) until the missing cost is modelled, and read the
+  source's own numbers before citing it for a direction.
+- **Check:** a test that the choice is monotonic and has no jump over the range it is used on, and
+  one for the geometry it must respect (here within the posts):
+  `tests/test_decisions.py::test_the_keeper_sets_himself_deeper_the_further_the_ball_and_smoothly`
+  and `::test_the_keeper_never_sets_himself_outside_his_posts`.
+
+### 105. A mutation run against a red baseline catches everything
+- **What happened:** the mutation harness for the window stats ran with `-x` over two test files
+  while an existing test (`test_passes_a_minute_and_the_window_edges`) was already failing after
+  the merge. Every mutation reported "caught", including one that no test guarded (allowing a
+  stat's event count as a claim number); the same failure was catching them all.
+- **Rule:** run the suite the harness uses, unmutated, and see it green before the first
+  mutation; a mutation counts as caught only if a test that passes on the baseline fails on it.
+- **Check:** the harness's first line is the baseline run's "N passed, 0 failed"; with lesson 95,
+  each mutation line names the test that went red.
+
+### 108. Money is computed exactly and rounded half up
+- **What happened:** the latency-cost report summed prices as floats. The per-clip upper bound is
+  exactly $0.00535, and Python 3.12's `sum()` of floats is compensated while 3.11's is not, so the
+  total fell either side of the half: the report rendered $0.0054 on 3.12 and $0.0053 on 3.11, and
+  CI failed on 3.11 only.
+- **Rule:** money is computed exactly (`Decimal` from the quoted price strings, or integer
+  micro-dollars) and rounded half up when shown. A float total on a half boundary renders
+  differently across Python versions and sum orders.
+- **Check:** `uv run pytest tests/test_latency_cost.py -k half_boundary`; its case of 13,327 input
+  and 12 output tokens fails on float arithmetic.
+
+### 110. A workflow's queue is part of what it does: read how the platform queues it
 - **What happened:** `agents-live.yml` put every run in one concurrency group, `agents-live`, with
   `cancel-in-progress: false`, read as "runs wait their turn". GitHub keeps at most one pending
   run per group, and a newer dispatch cancels the pending one whatever that setting says. Runs

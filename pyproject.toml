@@ -33,6 +33,7 @@ ninety-render-meta = "ninety.render.cli:meta_main"
 ninety-grid = "ninety.sim.grid:main"
 ninety-data-stats = "ninety.vision.data_stats:main"
 ninety-e2e = "ninety.e2e:main"
+ninety-football-sense = "ninety.eval.football_sense:main"
 
 [dependency-groups]
 dev = [

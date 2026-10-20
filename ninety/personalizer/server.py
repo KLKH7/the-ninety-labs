@@ -91,8 +91,9 @@ class PersonalizerExecutor(AgentExecutor):
 
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
         parts = get_data_parts(context.message.parts) if context.message else []
-        if len(parts) != 1:
-            raise InvalidParamsError("send exactly one data part")
+        if len(parts) != 1 or len(context.message.parts) != 1:
+            # A text part is refused, not skipped: a request is data, never instructions.
+            raise InvalidParamsError("send exactly one data part and nothing else")
         try:
             claim, evidence, profiles = read_request(parts[0])
         except ValueError as e:
@@ -155,5 +156,10 @@ def live_app() -> Starlette:
         async with published:
             yield
 
+    from ninety.personalizer import translate
+
+    personalize = model_personalizer(ask)
+    if (translator := translate.from_env()) is not None:  # NINETY_TRANSLATOR, off by default
+        personalize = translate.translated(personalize, translator)
     url = os.environ.get("NINETY_PERSONALIZER_URL", "http://localhost:8001/")
-    return create_app(model_personalizer(ask), url, lifespan)
+    return create_app(personalize, url, lifespan)

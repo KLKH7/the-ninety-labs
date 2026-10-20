@@ -28,6 +28,23 @@ def test_a_precomputed_match_is_the_computed_match(tmp_path, monkeypatch):
     stored = json.loads((tmp_path / "seed7.json").read_text())
     assert stored == events_in(7, match_server.MINUTES, 1, match_server.MINUTES + 1)
     assert sorted(p.stem for p in tmp_path.glob("*.json")) == sorted(match_server.MATCHES)
+    stats = json.loads((tmp_path / match_server.STATS_DIR / "seed7.json").read_text())
+    assert stats == match_server.agent_rows(match_server.match_events(7, match_server.MINUTES))
+    assert sorted(p.stem for p in (tmp_path / match_server.STATS_DIR).glob("*.json")) == sorted(
+        match_server.MATCHES
+    )
+
+
+def test_the_server_reads_precomputed_stats(tmp_path, monkeypatch):
+    # The stored stats are what match_info serves, not a fresh simulation.
+    (tmp_path / match_server.STATS_DIR).mkdir()
+    (tmp_path / match_server.STATS_DIR / "seed7.json").write_text(json.dumps([{"id": "s"}]))
+    monkeypatch.setattr(match_server, "MATCH_DIR", str(tmp_path))
+    match_server.stats_of.cache_clear()
+    try:
+        assert match_server.stats_of("seed7") == ({"id": "s"},)
+    finally:
+        match_server.stats_of.cache_clear()
 
 
 def test_the_server_reads_a_precomputed_match(tmp_path, monkeypatch):
