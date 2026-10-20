@@ -58,6 +58,8 @@ from ninety.agents.replay import (  # noqa: F401  (re-exported: the slice's name
     judge_prompt,
     replayer,
 )
+from ninety.intel.windows import agent_rows
+from ninety.match import facts
 from ninety.match.facts import events_in
 from ninety.mcp import match_server
 
@@ -216,6 +218,12 @@ def match_events(seed: int, minutes: float) -> list[dict]:
     return events_in(seed, minutes, 1, int(minutes) + 1)
 
 
+def match_stats(seed: int, minutes: float) -> list[dict]:
+    """The window stats the fact-checker knows, from the engine's full events, as the MCP server
+    serves them (ninety/intel/windows.agent_rows)."""
+    return agent_rows(facts.match_events(seed, minutes))
+
+
 async def run_workflow(
     ask: Ask,
     judge_fn: Judge,
@@ -225,9 +233,14 @@ async def run_workflow(
     minutes: float,
     live: bool,
     events: list[dict] | None = None,
+    stats: list[dict] | None = None,
 ) -> Outcome:
-    """Runs the slice; checks claims against `events`, or the engine's events when not given."""
-    known = {e["id"]: e for e in (match_events(seed, minutes) if events is None else events)}
+    """Runs the slice; checks claims against `events` and `stats`, or the engine's when not given.
+    A claim may cite an event or a window stat by id."""
+    if events is None:
+        events = match_events(seed, minutes)
+        stats = match_stats(seed, minutes) if stats is None else stats
+    known = {e["id"]: e for e in [*events, *(stats or ())]}
     trace: list[str] = []
     analyst = AnalystExecutor(ask, trace, plant, live, match_server.match_id(seed))
     checker = FactCheckExecutor(known, judge_fn, trace, live)
@@ -282,7 +295,9 @@ async def run_slice(
             return verdict
 
         events = match_events(seed, minutes)
-        outcome = await run_workflow(ask, judge_live, minute, plant, seed, minutes, True, events)
+        outcome = await run_workflow(
+            ask, judge_live, minute, plant, seed, minutes, True, events, match_stats(seed, minutes)
+        )
     telemetry.flush()
     return outcome, turns, f"{', '.join(ran)} on {config.MODEL}", events
 
@@ -291,7 +306,10 @@ async def replay_slice(recording: Recording) -> Outcome:
     """Re-runs the workflow and the code checks with the recorded answers in place of the models,
     against the recorded events. Warns (never fails) when the engine has moved on from them."""
     r = recording
+    # The stats are not recorded: the engine's, while its events still match the recording's.
+    stats = match_stats(r.seed, r.minutes)
     if match_events(r.seed, r.minutes) != r.events:
+        stats = []
         warnings.warn(
             f"the engine now produces different events for seed {r.seed}; the replay checks "
             f"against the {len(r.events)} recorded on {r.recorded_at}. Record it again to refresh it.",
@@ -299,7 +317,9 @@ async def replay_slice(recording: Recording) -> Outcome:
             stacklevel=2,
         )
     ask, judge_replay = replayer(r.turns)
-    return await run_workflow(ask, judge_replay, r.minute, r.plant, r.seed, r.minutes, False, r.events)
+    return await run_workflow(
+        ask, judge_replay, r.minute, r.plant, r.seed, r.minutes, False, r.events, stats
+    )
 
 
 def main() -> None:

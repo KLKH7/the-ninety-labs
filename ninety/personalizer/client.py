@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import time
 from dataclasses import asdict
 
@@ -140,3 +141,18 @@ def _server_dropped(data: dict, profiles: list[Profile]) -> dict[int, str]:
 
 def _ms(started: float) -> float:
     return (time.perf_counter() - started) * 1000
+
+
+URL_ENV = "NINETY_PERSONALIZER_URL"
+
+
+def from_env(env: dict[str, str] | None = None) -> Personalize:
+    """The live path's Personalizer: the A2A service at NINETY_PERSONALIZER_URL with the in-process
+    fallback behind it, or the fallback alone when no URL is set. With NINETY_TRANSLATOR on, the
+    fallback translates the verified text too, so Spanish survives the service being down."""
+    from ninety.personalizer import translate
+
+    env = dict(os.environ) if env is None else env
+    translator = translate.from_env(env)
+    fallback = verified_text if translator is None else translate.translated(verified_text, translator)
+    return RemotePersonalizer(env[URL_ENV], fallback=fallback) if env.get(URL_ENV) else fallback
