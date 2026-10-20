@@ -14,7 +14,7 @@ from __future__ import annotations
 import math
 import random
 from bisect import bisect_left, bisect_right
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 
 from ninety.sim import ball, firsttouch, fmath, offball, perception, shape, threat
 from ninety.sim import value as possession
@@ -45,10 +45,13 @@ PRESSURE_FRONT_M, PRESSURE_BEHIND_M = perception.PRESSURE_FRONT_M, perception.PR
 # D3: how often a shot goes in by distance from the goal's centre, for a central shot: the
 # share of real shots that scored by zone (six-yard box 31%, the rest of the central box 17.7%,
 # central outside the box 5.3%, long range 2.3%; American Soccer Analysis, 8,291 MLS shots, 2013).
-# Distances are the zones' approximate middles (*verify*); beyond 40 m is *design*. A player's
+# Distances are the zones' approximate middles (*verify*); 40 m, the end of shooting range
+# (offball.SHOT_RANGE_M), is *design*, and no shot is offered beyond it, so the table ends there. A
+# check, not a fit: shots from about 32 m to halfway scored 2.5% (Premier League, 929 shots) and 1.9%
+# (Bundesliga, 880) in 2012-13, direct free kicks included (Rathke 2017, Table 1, zone 8). A player's
 # sense of a good chance comes from what goes in, not from the open goal he sees.
-SHOT_ANCHORS = ((0.0, 0.31), (3.0, 0.31), (11.0, 0.177), (20.0, 0.053), (30.0, 0.023), (40.0, 0.01),
-                (105.0, 0.0))
+SHOT_ANCHORS = ((0.0, 0.31), (3.0, 0.31), (11.0, 0.177), (20.0, 0.053), (30.0, 0.023),
+                (offball.SHOT_RANGE_M, 0.01))  # the 1% at the end of range: *design*
 BLOCKER_FACTOR = 0.5  # design, verify: each defender in the shooting cone blocks the shot half the time
 # D3: the zone rates are averages over real shots, which usually face a defender. Relative to that
 # average, a shot with no outfield defender in the triangle between the ball and the posts (the
@@ -61,7 +64,10 @@ CLEAR_SHOT, SCREENED_SHOT = _UNSCREENED / _AVERAGE, _SCREENED / _AVERAGE
 # D3: keepers save about 76.5% of on-target shots: 826 of 1,079 (Perez-Arroniz et al. 2025, 2,238
 # La Liga shots); the typical shot behind the zone rates faces that keeper.
 KEEPER_SAVES = 826 / 1079
-CHOICE_NOISE_FLOOR = 0.005  # design, verify: options closer than about this (in goals) are a near coin-flip
+# D4: the scale of the choice's randomness, in goals (design, verify): options much closer than this
+# are a near coin-flip, options further apart than it are told apart; the decision maker's own
+# factors (temperature) scale it.
+CHOICE_NOISE_GOALS = 0.005
 HOLD_DECAY = 0.1  # design, verify: share of the ball's worth lost per decision spent holding
 STALE_S = 2.0  # design: a team-mate not seen for this long is a less certain option
 # D8: the tackle race, shared by the defender deciding to commit (engine.duels) and the carrier
@@ -79,10 +85,14 @@ CONTROL_EST_MPS = FOOT_ABSORB_MPS[0] + FOOT_ABSORB_MPS[1] * 0.5
 CONTROL_MARGIN_MPS = 2.0  # design: how sharply that guess falls off
 AVERAGE = 0.5  # an average player's attribute, for estimates about someone the passer cannot judge
 GOAL_KICK_M = 5.5  # Law 16: a goal kick is taken from the goal area
-STICKY = 0.003  # design: a small bonus for carrying on with the current choice (no flip-flopping)
-TAKE_ON = 0.01  # design: takes_players_on adds this to a dribble. A close call, not a command.
-SHORT_PASS_M, LONG_PASS_M = 15.0, 25.0
-SHORT_PASS = 0.008  # design: plays_short adds this under SHORT_PASS_M and subtracts it over LONG_PASS_M
+# D4, A5 (design): a habit or carrying on with the current dribble is a pull toward that option of
+# this many units of the player's own misjudgement (his odds of it times e^0.5, about 1.6, whoever he
+# is and wherever he is): a close call, never a command and never a second rating of the option.
+# Once a bonus in goals (dribbling with takes_players_on +0.01, carrying on +0.003, a short pass with
+# plays_short +0.008), which a choice made in goals at his own temperature turned into an 85-fold
+# preference. The pull is the one A8 creativity was given on the forward-play branch (#103).
+HABIT_PULL = 0.5
+SHORT_PASS_M, LONG_PASS_M = 15.0, 25.0  # plays_short: drawn to passes under this, away from those over
 CLEAR_FROM = 2 / 3  # a clear is an option in his own third: this share of the pitch from the goal he attacks
 CLEAR_AHEAD_M = 45.0  # design: a clearance is aimed this far up the pitch
 # Design: and this far in from the touchline on his side, away from goal but far enough in to stay in
@@ -185,7 +195,7 @@ class Scene:
     # ball costs, against the defaults. Both 1 for a mid style.
     progress_weight: float = 1.0
     loss_weight: float = 1.0
-    current: str | None = None  # what he is doing now (dribble or hold), for STICKY
+    current: str | None = None  # what he is doing now (a dribble), for the pull of carrying on
     heading: float = 0.0  # the way he faces, radians
     fresh: float = 1.0  # his slow store's share left (P10)
     ball_offset: tuple[float, float] = (0.0, 0.0)  # the ball relative to his body
@@ -212,7 +222,8 @@ def goal_angle(x: float, y: float, goal_x: float) -> float:
 
 
 def rate_at(distance: float) -> float:
-    """D3: the real scoring rate of a central shot from this distance, between the anchors."""
+    """D3: the real scoring rate of a central shot from this distance, between the anchors; none
+    beyond the last (out of shooting range)."""
     for (d0, r0), (d1, r1) in zip(SHOT_ANCHORS, SHOT_ANCHORS[1:], strict=False):
         if distance <= d1:
             return r0 + (r1 - r0) * (distance - d0) / (d1 - d0)
@@ -806,19 +817,17 @@ def pass_option(scene: Scene, mate: tuple[str, float, float, float]) -> Option |
         ev = confidence * gain - (1 - confidence) * lost
         if best is None or ev > best.value:
             best = Option("pass", ev, (tx, ty), mid, lofted, pace)
-    if best and "plays_short" in scene.traits:
-        best = replace(best, value=best.value + short_pass_bias(dist))
     return best
 
 
-def short_pass_bias(dist: float) -> float:
-    """plays_short: a short pass is a better idea and a long one a worse one. The pass itself
-    is unchanged."""
+def short_pass_lean(dist: float) -> float:
+    """plays_short: +1 toward a pass under SHORT_PASS_M, -1 away from one over LONG_PASS_M, and in
+    between from one to the other. A share of HABIT_PULL; the pass itself is unchanged."""
     if dist <= SHORT_PASS_M:
-        return SHORT_PASS
+        return 1.0
     if dist >= LONG_PASS_M:
-        return -SHORT_PASS
-    return SHORT_PASS * (1 - 2 * (dist - SHORT_PASS_M) / (LONG_PASS_M - SHORT_PASS_M))
+        return -1.0
+    return 1 - 2 * (dist - SHORT_PASS_M) / (LONG_PASS_M - SHORT_PASS_M)
 
 
 def clear_value(scene: Scene, tx: float, ty: float, contest: float) -> float:
@@ -889,7 +898,9 @@ def options(scene: Scene) -> list[Option]:
         return out
     p = pressure(scene)
     q = shot_chance(scene)
-    if abs(scene.goal_x - scene.x) < offball.SHOT_RANGE_M:
+    # D3: a shot is an option inside SHOT_RANGE_M of the goal's centre, straight-line, as the rates it
+    # is judged by are (it was once along the pitch only, offering shots from 40 to 50 m out wide).
+    if math.hypot(scene.goal_x - scene.x, PITCH_Y / 2 - scene.y) < offball.SHOT_RANGE_M:
         bias = 1.3 if "shoots_from_distance" in scene.traits else 1.0
         # A shot that fails is either blocked, leaving the ball at his feet for them, or missed or
         # saved, which gives the ball back from deep (a goal kick or the keeper's hands).
@@ -921,9 +932,7 @@ def options(scene: Scene) -> list[Option]:
             win *= sigmoid((generic_time(d) - my_t) / RECEIVE_MARGIN_S)
         gain = our_value(scene, tx, ty)
         ev = win * gain - (1 - win) * our_loss(scene, scene.x, scene.y)
-        if "takes_players_on" in scene.traits:
-            ev += TAKE_ON
-        out.append(Option("dribble", ev + (STICKY if scene.current == "dribble" else 0.0), (tx, ty)))
+        out.append(Option("dribble", ev, (tx, ty)))
     if abs(scene.goal_x - scene.x) > CLEAR_FROM * PITCH_X:  # in his own third: long and away
         tx = scene.x + attack(scene.goal_x) * CLEAR_AHEAD_M
         ty = CLEAR_IN_FROM_LINE_M if scene.y < PITCH_Y / 2 else PITCH_Y - CLEAR_IN_FROM_LINE_M
@@ -934,9 +943,9 @@ def options(scene: Scene) -> list[Option]:
     # what the defence recovers while he waits (D9; *verify*: options only decay while he waits,
     # nothing here models a run developing). He cannot wait for ever, so when every move is a bad
     # one, waiting is a little worse still. Under pressure he loses the ball where he stands about
-    # half the time he is caught (p * 0.5); otherwise he still makes that move. Each decision
-    # weighs holding afresh, so it carries no bonus for carrying on.
-    best = max((o.value - (STICKY if o.kind == scene.current else 0.0) for o in out), default=0.0)
+    # half the time he is caught (p * 0.5); otherwise he still makes that move. Holding carries no
+    # pull for carrying on.
+    best = max((o.value for o in out), default=0.0)
     later = best * (1 - HOLD_DECAY) if best >= 0 else best * (1 + HOLD_DECAY)
     lose = 0.5 * p
     out.append(Option("hold", (1 - lose) * later - lose * our_loss(scene, scene.x, scene.y)))
@@ -944,20 +953,68 @@ def options(scene: Scene) -> list[Option]:
 
 
 def temperature(scene: Scene) -> float:
-    """Design: how loosely the player chooses, relative to how different his options are. A good
-    decision-maker almost always takes the best option; pressure loosens his choice unless he is
-    composed."""
+    """D4 (design): how loosely the player chooses, as a share of CHOICE_NOISE_GOALS. A good
+    decision-maker almost always takes the best option; opponent pressure loosens his choice unless
+    he is composed (pressure worsens footballers' decision quality: Musculus et al. 2021)."""
     return (0.15 + 0.6 * (1 - scene.decisions)) * (1 + pressure(scene) * (1 - scene.composure))
 
 
-def choose(scene: Scene, rng: random.Random) -> Option:
+def pull(scene: Scene, o: Option) -> float:
+    """D4, A5: how far a habit or carrying on draws him to this option, in units of his own
+    misjudgement (HABIT_PULL each): takes_players_on toward a dribble, carrying on toward the dribble
+    he is on, plays_short toward a short pass and away from a long one."""
+    p = 0.0
+    if o.kind == "dribble" and "takes_players_on" in scene.traits:
+        p += HABIT_PULL
+    if o.kind == "dribble" and scene.current == "dribble":
+        p += HABIT_PULL
+    if o.kind == "pass" and o.target and "plays_short" in scene.traits:
+        p += HABIT_PULL * short_pass_lean(math.hypot(o.target[0] - scene.x, o.target[1] - scene.y))
+    return p
+
+
+def score(scene: Scene, o: Option, top: float, t: float) -> float:
+    """D4: an option's score before his misjudgement: its value against the best one's, in units of
+    his temperature in goals `t` (temperature times CHOICE_NOISE_GOALS), plus the pull of a habit."""
+    return (o.value - top) / t + pull(scene, o)
+
+
+def choice_weights(scene: Scene, opts: list[Option]) -> list[float]:
+    """D4: each option's chance of being chosen, up to a factor: exp(score). The odds between two
+    options depend only on those two and on him, never on what else is on offer. The randomness
+    was once a share of the spread of all his options, so a hopeless option widened it and loosened
+    the choice between the good ones: the best option was taken in about a third of decisions."""
+    top, t = max(o.value for o in opts), temperature(scene) * CHOICE_NOISE_GOALS
+    return [fmath.exp(score(scene, o, top, t)) for o in opts]
+
+
+def taste_key(scene: Scene, o: Option) -> tuple:
+    """Which option this is from one look to the next while he has the ball: a pass by who it is for
+    and how, a carry by its direction against the goal, the rest by kind (from #103)."""
+    if o.kind == "pass":
+        return o.kind, o.receiver, o.lofted
+    if o.kind == "dribble" and o.target:
+        goal = fmath.atan2(PITCH_Y / 2 - scene.y, scene.goal_x - scene.x)
+        turn = fmath.atan2(o.target[1] - scene.y, o.target[0] - scene.x) - goal
+        return o.kind, round(((turn + math.pi) % (2 * math.pi) - math.pi) / 0.8)
+    return (o.kind,)
+
+
+def choose(scene: Scene, rng: random.Random, tastes: dict | None = None) -> Option:
+    """D4: the option with the best score plus his own misjudgement of it, a random-utility draw
+    (Gumbel), so a single choice falls as choice_weights say. The draw is made once per option and
+    kept in `tastes` until he next scans the pitch (the engine starts a new `tastes` then): asked
+    again four times a second about the same options he answers the same way, so an option he keeps
+    rejecting does not become certain by being asked, and how loosely he chooses does not grow with
+    his time on the ball (from #103)."""
     opts = options(scene)
-    values = [o.value for o in opts]
-    mean = sum(values) / len(values)
-    spread = math.sqrt(sum(fmath.ipow(v - mean, 2) for v in values) / len(values))
-    # D4: the randomness is a share of how far apart the options are, so a choice between close
-    # options is loose and one between clearly different options is not, wherever on the pitch.
-    t = temperature(scene) * max(spread, CHOICE_NOISE_FLOOR)
-    top = max(o.value for o in opts)
-    weights = [fmath.exp((o.value - top) / t) for o in opts]
-    return rng.choices(opts, weights=weights)[0]
+    tastes = {} if tastes is None else tastes
+    top, t = max(o.value for o in opts), temperature(scene) * CHOICE_NOISE_GOALS
+
+    def taste(o: Option) -> float:
+        k = taste_key(scene, o)
+        if k not in tastes:
+            tastes[k] = -fmath.log(-fmath.log(max(rng.random(), 1e-12)))
+        return tastes[k]
+
+    return max(opts, key=lambda o: score(scene, o, top, t) + taste(o))

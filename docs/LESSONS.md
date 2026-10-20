@@ -222,7 +222,7 @@ short and actionable. This file is public: no research sources, product names or
     older than a day.
   - A port's audit names the branches whose lessons it read.
 
-### 95. A pattern that reads numbers must read every way a number is written
+### 130. A pattern that reads numbers must read every way a number is written
 - **What happened:** the fact-checker's number pattern refused a digit followed by a letter, so it
   would not read "h7" as a number. That also skipped every English ordinal: "in the 9th minute"
   passed for an event in minute 2, and "his 97th pass" passed with no such count in the evidence,
@@ -1202,7 +1202,207 @@ short and actionable. This file is public: no research sources, product names or
   pass; removing any one of the three parts of the fix fails one of them or the tackle's limb cap.
   The sweep at 0.4.5: 0 such player-frames on seeds 7 and 11 (worst 0.18 m), from 21.
 
-### 126. A figure keeps the case it was measured for
+### 126. A legal exception in the contract is an exception in every reader of the same data
+- **What happened:** after a goal the kickoff puts every player back in his own half in one frame.
+  The data contract allows it, and the validator's speed check and the late-drop report both skip
+  it. The stats engine did not: `player_movement_facts` counted the reset as running, so seed 7's
+  h7 had a 4,739 km/h peak speed and 52 m of extra distance in the Ledger's facts. No test failed,
+  because the movement tests were built by hand and never contained a kickoff. It came to light
+  when the phone companion first showed the number.
+- **Rule:** when the contract makes an exception (a kickoff reset, a dead ball being replaced),
+  every computation over the same frames applies it in the same place, and one shared function
+  (`stats.player_steps`) decides which steps count as movement.
+- **Check:** `tests/test_stats.py::test_a_kickoff_reset_is_not_movement` puts a reset into a
+  kickoff frame (legal under the contract) and fails on the old code;
+  `test_no_player_outruns_the_contract_over_a_restart_after_a_goal` runs the engine's own restart
+  partway through a match and holds every player's peak speed under the validator's limit. (The
+  engine teleported players at a kickoff until #156; they now walk back, so the engine case is the
+  walk, and the reset is pinned by the hand-built frames.)
+
+### 127. A test that waits for its rule hangs when the rule breaks, and a hang is not a red test
+- **What happened:** two WebSocket tests on the phone relay checked their rule by waiting for a
+  message (a close, the room's latest state). With the rule mutated, the message never came and
+  pytest blocked for about 40 minutes, until the process was killed by hand. A CI job would have waited
+  out its timeout rather than failing on the test that names the rule.
+  The same tests then hung CI's full run with the rule intact: Starlette's TestClient gives each
+  WebSocket its own thread and event loop, so the laptop's relay wrote into another thread's
+  socket, and under load a message was lost. uvicorn never does that; but the same tests, moved
+  onto one loop, showed a real bug: a laptop message relayed while a joining phone was still
+  being sent the latest state could overtake it, leaving the phone on a stale clock.
+- **Rule:** a test that waits for a message sends a sentinel the broken code would deliver first,
+  or tests the rule directly, so a broken rule fails the test at once. Every receive has a
+  deadline. Concurrency is tested the way the server runs it (one event loop for every
+  connection), never through a harness that adds threads the server does not have.
+- **Check:** each mutation of the relay (`ninety/api/companion.py`) fails with pytest's own
+  counts within seconds, never times out. `tests/test_api_companion.py` drives the relay on one
+  loop with a 5 s deadline per receive, and 150 repeats on 4 workers under full CPU load pass;
+  `test_a_newer_clock_never_overtakes_a_phones_catch_up` fails without the single flusher.
+
+### 128. A refusal a browser cannot read is no refusal: close a WebSocket after accepting it
+- **What happened:** the phone relay refused a join (unknown code, room full, laptop taken) by
+  closing the WebSocket before accepting it, and its tests read the close codes 4404, 4409 and 4429
+  from an ASGI harness. A browser never sees a close sent before the handshake completes: uvicorn
+  answers it with a 403 and the page reads 1006, so the phone could not say "unknown code" or
+  "room full". W6 found it by running the phone in a real browser (#162).
+- **Rule:** a WebSocket refusal the client must act on is sent after `accept()`, with its code; a
+  refusal takes no slot, so accepting first changes nothing else. A test of a refusal checks that
+  the accept came first, not only the code.
+- **Check:** `tests/test_api_companion.py`'s `refused()` fails when the server closes before the
+  accept, and every refusal test goes through it; moving `_refuse` back to a bare close turns them red.
+
+
+### 129. A number check that reads one written form lets every other form through
+- **What happened:** the fact-check read a number only when no letter followed it, to skip ids
+  like "e00042". So "50km/h", "50kph" and "9999m" were never read, nor was "fifty km/h": a model
+  following an injected instruction could air a number the evidence does not hold. The phone
+  companion made that reachable from a viewer's text, and its evaluation missed it because the
+  scripted attacker wrote only the spaced form and the leak count used the check's own pattern.
+  The reviewer's audit found it on #145.
+  The first fix then summed any run of number words, so "a one-two" read as 3 and "a one-on-one"
+  as a count of 1, and true commentary from every agent was rejected (the reviewer again).
+- **Rule:** a check on what a writer says reads every form a writer can produce: a unit glued on
+  or spaced, digits or words. It reads words only as English writes one number, and an idiom
+  ("one-two", "one-touch", "no one") is no number. An evaluation of that check plants each form
+  and counts leaks with its own reader, never the check's pattern, and a change to the reader is
+  measured for false rejections too (lesson 11).
+- **Check:** `tests/test_factcheck.py::test_a_planted_number_in_any_written_form_is_rejected`
+  plants each form; `docs/eval/companion.md` plants the glued and spelled forms, and on the old
+  check its count shows 4 of them airing on seed 7.
+  `test_football_idioms_are_words_not_counts` passes each idiom with its passes cited. Measured
+  for false rejections: the 412 recorded claim texts in `replays/`, `docs/eval/` and the fixtures
+  read the same numbers as before, and `fact_checker_proof --check` and both replays pass.
+
+### 131. An evaluation that measured an outage must not publish a number
+- **What happened:** the first live Personalizer evaluation reported "0 of 160 variants air"
+  and a p95 of 11.6 s against a 3 s budget. Neither described the Personalizer. The run simulated
+  matches for twenty minutes before its first model call, and by then GitHub's five-minute sign-in
+  had expired, so every call failed and every profile got the verified text. The fallback worked;
+  the report still looked like a result. The 11.6 s came from the sync Azure credential, which
+  runs `az` on the event loop and so stalls the client's own deadline in the same process; in the
+  deployed server it would stall every other request too.
+- **Rule:** an evaluation of a model counts the requests the model never answered apart from the
+  ones the checks rejected, and writes no report when it answered none. A live caller signs in
+  before its slow work, and async code uses the async credential (`azure.identity.aio`).
+- **Check:** `tests/test_personalizer.py::test_a_run_in_which_the_model_never_answered_writes_no_report`,
+  `test_the_evaluation_signs_in_before_it_simulates_the_claims` and
+  `test_published_ask_signs_in_with_the_async_credential_before_anything_else` each fail when
+  their rule is removed.
+
+### 132. A WebSocket tested only through the test client is untested in the server a browser reaches
+- **What happened:** the phone relay's tests all passed through Starlette's TestClient, which
+  speaks WebSocket in process. The first time a real browser joined through uvicorn, every
+  connection answered 404: uvicorn upgrades a WebSocket only when a WebSocket library is
+  installed, and none was locked, so the deployed image could never have served the relay. The
+  same run found lesson 128's unreadable refusals.
+- **Rule:** a feature a browser uses over the network is tested once through the real server and a
+  real browser, not only through an in-process client. (A close code the client must read is sent after the accept: lesson 128.)
+- **Check:** `tests/test_phone.py` runs the companion routes in uvicorn and joins from Chromium;
+  CI's `image` job asks the built image for a WebSocket upgrade and needs `101` (it answers 404
+  without `websockets` in `uv.lock`). The phone still reads a close before the accept as "unknown
+  code or unreachable" (`web/phone/src/feed.ts`), for a server that refuses that way.
+
+### 133. Positions from a fit, summed frame to frame, read the fit's jitter as running
+- **What happened:** the phone's speed and distance come from the companion's window facts, which
+  sum each player's frame-to-frame steps. On simulator positions that is exact. On positions
+  tracked from the video, the camera fit moves a foot point by up to about 0.5 m between
+  neighbouring frames, more than a sprinter covers in one (0.34 m). Every tracked player's top
+  speed read 53 to 89 km/h, and a player standing still read 16 km/h. The numbers would have
+  passed the fact-checker, because they were the cited facts.
+- **Rule:** before a stat computed for exact positions reads measured ones, grade it against the
+  ground truth on the measured data (offline), and smooth at the stat's own time scale if the
+  noise demands it. Choose the width from the stat's definition, not from the error it gives.
+- **Check:** `docs/eval/companion-tracked.md` grades speed now, top speed and distance with and
+  without the smoothing (top speed 55.6 against 1.9 km/h median error).
+  `tests/test_tracked_frames.py::test_smoothing_turns_jitter_back_into_standing_and_keeps_running`
+  fails with the smoothing removed, and
+  `test_a_track_ends_at_the_speed_its_player_was_running` fails with a plain average, which lags
+  at a track's end.
+
+### 134. `sum()` of floats is not the same number on every Python
+- **What happened:** the phone's tracked frames file is committed, and a test rebuilds it and needs
+  the same bytes. It passed on Python 3.12 and failed on 3.11. Python 3.12 made `sum()` of floats
+  use compensated addition, so a smoothed position's last digit moved, and a rounding at 0.01 m
+  went the other way.
+- **Rule:** code whose output is committed and compared byte for byte adds floats with
+  `math.fsum` (one exact rounding, the same everywhere), or rounds well away from the noise.
+  This is lesson 46's rule for the engine, applied to every committed output.
+- **Check:** CI's pytest matrix runs 3.11 and 3.12. `tests/test_tracked_frames.py` rebuilds
+  `tests/fixtures/tracked-seed900001.json` on both; with `sum` in `tracked_frames.smooth` it
+  fails on 3.11.
+
+### 135. Noise in a belief is a misjudgement that persists, not a fresh draw every look
+- **What happened:** the team chose its chaser for a loose ball from each player's estimate of where
+  the ball was going, with an error redrawn every four frames. Two players about as near swapped the
+  chase back and forth; the one dropped went back to his shape and turned away from the ball, a fan
+  sees a player run away from a loose ball (FS1). The flicker came from the redraw, not from anything
+  either player saw.
+- **Rule:** a perception error is held for as long as what is perceived has not changed (here, one
+  strike or touch of the ball) and shrinks with what he sees (distance), so a decision built on it
+  changes only when the situation does.
+- **Check:** `tests/test_engine_rules.py::test_a_chaser_is_not_swapped_by_a_fresh_guess_while_nothing_changes`
+  fails when the misjudgement is redrawn on every plan.
+
+### 136. One match's goals are a draw: check a rare outcome over many matches
+- **What happened:** CI's full-match test bounded one match's goals at 1 to 6. The chaser's pull
+  request (#160) failed it: seed 11 ended 0-0 with 27 shots and 1,116 passes, where main's engine
+  had won the same seed 3-0, and two engines on the same seed are not a pair (lesson 90). Over 20
+  matches of 20 minutes it scored 1.46 goals a team per 90 against main's 1.91 (difference -0.45,
+  standard error 0.68), and on the base before main 1.57 against 1.12 (+0.45, 0.60): no settled
+  difference either way. A match's goals are close to Poisson around 2.8 (GROUNDING R4), so an
+  engine that scores like the real league failed that bound about one change in twelve, and one
+  scoring half as often still passed it three times in four.
+- **Rule:** a test bounds one match's count only where a realistic engine is almost never outside
+  it (passes, tackles, pressures, counted in tens or hundreds). A rare outcome (goals, penalties,
+  cards) is checked over many matches against the range a real sample of that many matches shows,
+  computed from the source's figures and the outcome's distribution before any engine number is
+  read. When those matches cost too much for every pull request, the check runs on demand, on the
+  same matches as the report that measures the outcome, and the pull request that changes the
+  engine posts its result.
+- **Check:** for each per-match bound in `tests/`, work out how often a league at the source's
+  figure falls outside it; above 1%, it moves to a many-match check. Goals:
+  `NINETY_HELD_OUT=1 uv run pytest tests/test_sim.py -k twelve` runs the funnel's 12 matches (R4);
+  `tests/test_funnel.py` pins the range and its arithmetic in every CI run.
+
+### 137. A random choice scaled by the spread of all options loosens when a bad option is added
+- **What happened:** the carrier's softmax took its randomness as a share of the spread of all his
+  options' values, so a choice between close options would be loose and one between clearly
+  different options would not. The spread included the hopeless options (a 50 m pass into a crowd, a
+  shot from 44 m), so every bad option widened it and made the choice between the good ones looser.
+  Choices logged on seeds 7 and 21 showed him taking his best option in about a third of decisions,
+  against the rule's own "a good decision-maker almost always takes the best option".
+- **Rule:** in a choice rule, the odds between two options depend only on those two and on the
+  chooser; a scale for the randomness is fixed in the options' own units, never taken from the set
+  of options on offer. A habit is a pull in units of that randomness, not a bonus in the options'
+  units, or changing the scale turns it into a command. A choice asked again before anything new is
+  seen is the same choice: hold the random draw, or repeated asking makes a rejected option certain.
+  Check a stated intent ("almost always the best") against logged choices.
+- **Check:** `tests/test_decisions.py::test_a_hopeless_option_does_not_loosen_the_choice_between_two_good_ones`.
+
+### 138. A range named as a distance is measured as one
+- **What happened:** the shot option was offered "inside 40 m of the goal" (`SHOT_RANGE_M`'s own
+  comment), but the code compared only the distance along the pitch. From out wide, players were
+  offered and took shots 40 to 50 m from goal, judged by a rate table that is only an unsourced tail
+  beyond 40 m: 22 of 156 shots in 20 matches (seeds 3 to 112 at 20 minutes) came from beyond 40.5 m,
+  none after the fix.
+- **Rule:** a threshold is applied in the quantity its comment and its source use (here the distance
+  to the goal's centre, as D3's rates are). Search for every use of a constant when its meaning is fixed.
+- **Check:** `tests/test_decisions.py::test_a_shot_is_an_option_only_within_range_of_the_goal_straight_line`.
+
+### 139. Knowing where the ball is going is only useful if you go there
+- **What happened:** O8 said the team-mate a pass is played to "knows where it was meant", and the
+  engine used that only to set his shape: he took up his slot around the target, not the target, and
+  a short pass struck slightly off often ran past him into touch. The chase, which takes over once he
+  reacts, was planned on the ball's predicted path past the touchline, on points up to 20 m off the
+  pitch, while `ball_destination` stopped the same path at the line. The first fix cut the true path,
+  but each player then adds his own misjudgement of it, so his judged points could still fall past
+  the line: an audit found the test passing on only 91 of 100 seeds.
+- **Rule:** when a rule gives a player knowledge, check what he does with it in the movement code, not
+  only in the estimate. A limit on what a player can do (Law 9 here) is applied to the path as he
+  judges it, where he makes the choice, and tested over many seeds, not one.
+- **Check:** `tests/test_engine_rules.py::test_the_team_mate_a_pass_is_played_to_goes_to_meet_it` and
+  `::test_nobody_is_sent_to_chase_a_ball_beyond_the_touchline`.
+
+### 140. A figure keeps the case it was measured for
 - **What happened:** GROUNDING R1 cited Opta's guide to time-wasting for "a goal's celebration,
   about 72 s", and the restart work planned the kick-off after every goal around it. Read again,
   the article gives 72 s for the celebration after a penalty goal, in its paragraph on penalties;
@@ -1214,7 +1414,7 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** every row of GROUNDING that cites a time or a rate names its case; R1 and L4 now cite
   the penalty figure as a penalty figure and the goal figure from its own source.
 
-### 127. Players sent to one point end up inside each other: give each his own place
+### 141. Players sent to one point end up inside each other: give each his own place
 - **What happened:** the goal celebration sent every team-mate to the scorer's own position. Steering
   bends a run round another player but does not slow it, and bodies in contact brace only with the
   grip steering leaves, so ten players arriving at one point at a sprint ended up in each other: in
@@ -1224,11 +1424,13 @@ short and actionable. This file is public: no research sources, product names or
   place of his own, at least a shoulder's breadth from the next (P11), chosen so that no two runs
   to them cross. A test of a crowd measures the clearance between bodies (`shape.between`), not
   the distance between centres.
-- **Check:** `uv run pytest tests/test_restarts.py -k "overlap or side_they_come_from"`; with every
-  team-mate sent to the scorer's centre the overlap test fails. `docs/eval/restarts.md` ("The
-  huddle") counts the frames with bodies in each other over a whole celebration.
+- **Check:** `uv run pytest tests/test_restarts.py -k "overlap or side_they_come_from or once_a_frame"`;
+  with every team-mate sent to the scorer's centre the overlap test fails (none ever stands at a
+  place of his own), and with places worked out one player at a time, in the order they move, the
+  once-a-frame test fails. `scripts/defect_sweep/huddle.py` counts the frames with bodies in each
+  other over a whole celebration (`docs/eval/restarts.md`, "The huddle").
 
-### 128. A point one rule puts exactly on a boundary is on it for every other rule
+### 142. A point one rule puts exactly on a boundary is on it for every other rule
 - **What happened:** the keep-off rule moves an opponent's target to the edge of the 9.65 m circle,
   and the wall stands on that edge. A second rule sends a player round the circle while his
   straight way "comes closer than 9.65 m". For a place on the edge, straight in from further out,

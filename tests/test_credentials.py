@@ -148,7 +148,8 @@ def test_sign_in_asks_for_the_foundry_token_once_and_keeps_it(order):
 # foundry.py keeps the sync credential for publishing, through the sync AIProjectClient; its chat
 # client has no default (test above).
 LIVE = ["ninety/agents/slice.py", "ninety/eval/factcheck_eval.py", "ninety/agents/analyst_eval.py",
-        "ninety/agents/workflow.py", "ninety/agents/credentials.py"]
+        "ninety/agents/workflow.py", "ninety/agents/credentials.py", "ninety/api/companion.py",
+        "ninety/personalizer/core.py", "ninety/personalizer/eval.py", "ninety/personalizer/server.py"]
 
 
 @pytest.mark.parametrize("path", LIVE)

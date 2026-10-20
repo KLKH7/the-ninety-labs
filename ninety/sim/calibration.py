@@ -31,11 +31,11 @@ def measure(seed: int, minutes: float = 90) -> list[tuple[float, bool, bool, boo
     pending: dict[str, tuple[float, bool, bool]] = {}
     original = D.choose
 
-    def choose(scene, r):
+    def choose(scene, r, tastes=None):
         forward = [o for o in D.options(scene) if o.kind == "pass"
                    and (o.target[0] - scene.x) * D.attack(scene.goal_x) > FORWARD_M]
         forced = bool(forward) and rng.random() < FORCE_SHARE
-        o = rng.choice(forward) if forced else original(scene, r)
+        o = rng.choice(forward) if forced else original(scene, r, tastes)
         if o.kind == "pass":
             mate = next(m for m in scene.mates if m[0] == o.receiver)
             c = D.pass_confidence(scene, *o.target, mate[1], mate[2], mate[3], o.lofted, o.pace, o.receiver)

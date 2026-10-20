@@ -4,8 +4,10 @@ import json
 
 import pytest
 
+from ninety.match import tracking
 from ninety.match.facts import events_in
 from ninety.mcp import match_server
+from ninety.sim.engine import simulate
 
 
 def test_an_unknown_match_is_refused(monkeypatch):
@@ -28,6 +30,14 @@ def test_a_precomputed_match_is_the_computed_match(tmp_path, monkeypatch):
     stored = json.loads((tmp_path / "seed7.json").read_text())
     assert stored == events_in(7, match_server.MINUTES, 1, match_server.MINUTES + 1)
     assert sorted(p.stem for p in tmp_path.glob("*.json")) == sorted(match_server.MATCHES)
+    # The phone companion's frames, from the same simulation, read back as the computed track.
+    frames = tmp_path / tracking.FRAMES_DIR
+    assert sorted(p.stem for p in frames.glob("*.json")) == sorted(match_server.MATCHES)
+    tracking.track.cache_clear()
+    read = tracking.track("seed7", 7, match_server.MINUTES, str(tmp_path))
+    computed = tracking.from_match("seed7", simulate(7, match_server.MINUTES))
+    assert read == computed and read.restarts == computed.restarts
+    tracking.track.cache_clear()
     stats = json.loads((tmp_path / match_server.STATS_DIR / "seed7.json").read_text())
     assert stats == match_server.agent_rows(match_server.match_events(7, match_server.MINUTES))
     assert sorted(p.stem for p in (tmp_path / match_server.STATS_DIR).glob("*.json")) == sorted(

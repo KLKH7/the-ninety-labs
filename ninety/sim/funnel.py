@@ -1,6 +1,7 @@
 """How a simulated match moves the ball up the pitch: possessions, entries, shots, goals, duels,
-beside published figures. A report, never a gate: nothing in the engine is tuned to these
-numbers (docs/GROUNDING.md, R rows).
+beside published figures. A report, never a fitting target: nothing in the engine is tuned to these
+numbers (docs/GROUNDING.md, R rows). Goals a team over the 12 matches are also a held-out check
+(R4): they must fall where a real league's 12 matches would (`goals_range`, lesson 136).
 
     uv run python -m ninety.sim.funnel    # 12 matches; writes docs/eval/funnel.md
 """
@@ -8,10 +9,12 @@ numbers (docs/GROUNDING.md, R rows).
 from __future__ import annotations
 
 import argparse
+import math
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
-from statistics import mean
+from statistics import mean, stdev
 
+from ninety.sim import fmath
 from ninety.sim.engine import simulate
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -21,6 +24,43 @@ BOX_DEPTH_M, BOX_HALF_WIDTH_M = 16.5, 20.16  # Law 1
 # Per team per match, for reading the report only, from docs/GROUNDING.md R3 (itself *verify*).
 # A measure with no sourced figure is left blank rather than given a number nobody can trace.
 PUBLISHED = {"passes": "450 to 500 (R3, *verify*)", "completion": "75 to 88% (R3, *verify*)"}
+SEEDS = (7, 11, 21, 31, 41, 51, 61, 71, 81, 91, 101, 111)
+# R4: goals a match in the Premier League, the lowest and highest season in the league's own table
+# of 2014-15 to 2023-24 (premierleague.com, 25 April 2024): 2.57 in 2014-15, 3.26 in 2023-24 (335 of
+# its 380 matches played).
+GOALS_A_MATCH = (2.57, 3.26)
+GOALS_MISS_RATE = 0.01  # design: how often a league scoring like the real one may fail the check
+
+
+def poisson_quantile(lam: float, q: float) -> int:
+    """The smallest k with P(X <= k) >= q, for X Poisson with mean lam. Each term is carried as
+    its logarithm, so a mean too large for exp(-lam) still sums: terms far below the mode
+    underflow to nothing, those near it do not."""
+    if not 0.0 < q < 1.0:
+        raise ValueError(f"a quantile needs 0 < q < 1, not {q}")
+    log_term = -lam
+    cdf = fmath.exp(log_term)
+    k = 0
+    beyond = lam + 40.0 * math.sqrt(lam) + 40.0  # 40 standard deviations out the sum is 1 to the last bit
+    while cdf < q:
+        k += 1
+        if k > beyond:
+            raise ArithmeticError(f"the Poisson sum for mean {lam} never reached {q}")
+        log_term += fmath.log(lam / k)
+        cdf += fmath.exp(log_term)
+    return k
+
+
+def goals_range(matches: int, miss: float = GOALS_MISS_RATE) -> tuple[float, float]:
+    """Goals a team a match that `matches` real matches show, but for a share `miss` of samples.
+
+    A match's goals are Poisson (Maher 1982, *Statistica Neerlandica* 36: 109-118), so the goals of
+    n matches are Poisson with n times the mean. The low end is the leanest season's lower tail,
+    the high end the richest season's upper tail, `miss / 2` each.
+    """
+    low = poisson_quantile(GOALS_A_MATCH[0] * matches, miss / 2)
+    high = poisson_quantile(GOALS_A_MATCH[1] * matches, 1 - miss / 2)
+    return low / (2 * matches), high / (2 * matches)
 
 
 def zone(x: float, y: float, goal_x: float) -> str | None:
@@ -64,9 +104,22 @@ def tally(m) -> dict[str, float]:
     return {k: (v if k == "completion" else v / 2) for k, v in out.items()}
 
 
+def goals_line(goals: list[float], minutes: float) -> str:
+    """The report's line on goals a team a match: the mean, its standard error (lesson 89) and, for
+    full matches only, whether it falls in a real league's range (R4): the range is for 90 minutes."""
+    error = stdev(goals) / math.sqrt(len(goals)) if len(goals) > 1 else float("nan")
+    line = f"Goals a team: {mean(goals):.2f} (standard error {error:.2f}, lesson 89)."
+    if minutes != 90:
+        return line + " The real range (R4) is for 90-minute matches, so none is given."
+    low, high = goals_range(len(goals))
+    verdict = "inside" if low <= mean(goals) <= high else "OUTSIDE"
+    return (line + f" A real league's {len(goals)} matches show {low:.2f} to {high:.2f}, but for "
+            f"{GOALS_MISS_RATE:.0%} of samples (R4): {verdict}.")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--seeds", default="7,11,21,31,41,51,61,71,81,91,101,111")
+    ap.add_argument("--seeds", default=",".join(map(str, SEEDS)))
     ap.add_argument("--minutes", type=float, default=90)
     ap.add_argument("--out", default=str(ROOT / "docs/eval/funnel.md"))
     args = ap.parse_args()
@@ -82,6 +135,7 @@ def main() -> None:
         v = mean(r[k] for r in runs)
         shown = f"{v:.0%}" if k == "completion" else f"{v:.1f}"
         lines.append(f"| {k.replace('_', ' ')} | {shown} | {PUBLISHED.get(k, '')} |")
+    lines += ["", goals_line([r["goals"] for r in runs], args.minutes)]
     Path(args.out).write_text("\n".join(lines) + "\n")
     print("\n".join(lines[4:]))
 
