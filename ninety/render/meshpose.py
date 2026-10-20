@@ -20,7 +20,7 @@ ASSET = Path(__file__).resolve().parents[2] / "web" / "render" / "assets" / "pla
 # The asset's stature: the top of its skull, in the asset's own metres (the body mesh's highest
 # vertex; its hair reaches 1.70). A player `height_m` tall is the asset scaled by
 # height_m / ASSET_STATURE_M, so he is drawn as tall as he is. It was taken as 1.84 m, which drew
-# every player at 91.5% of his height (lesson 113).
+# every player at 91.5% of his height (lesson 117).
 ASSET_STATURE_M = 1.684
 # The forehead, where a header meets the ball: between the brows (1.59) and the top of the skull.
 BROW_Y = 1.63
@@ -499,6 +499,12 @@ def pose_angles(pose: dict, heading: float, height_m: float) -> dict:
         pz = plant[3] if len(plant) > 3 else 0.0
         target = _to_object(x, y, heading, height_m, plant[0], plant[1], pz, lift)
         planted, err = _leg(angles, side, target, PLANT_FOOT, twist, f"foot_{side}", True)
+        if err > PLANT_GIVE_UP and lift < 0.0:
+            # Lowered, a foot the leg cannot reach is not left to the pose, which would put it through
+            # the grass: the leg reaches toward its plant and stays above the grass.
+            floor = -lift / (height_m / 1.84)
+            planted, err = _leg(angles, side, target, PLANT_FOOT, twist, f"foot_{side}", False, floor=floor)
+            err = 0.0
         if err <= PLANT_GIVE_UP:
             # A stride's plant comes and goes with a weight (scene.PLANT_EASE_FRAMES).
             w = float(plant[4]) if len(plant) > 4 and plant[4] is not None else 1.0

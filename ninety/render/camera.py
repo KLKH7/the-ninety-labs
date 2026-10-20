@@ -108,6 +108,10 @@ def project_with(P: list[list[float]], X: Vec) -> tuple[float, float] | None:
 
 
 MAX_PAN_MPS = 22.0  # fastest the aim point moves across the ground
+# An operator eases a pan in and out instead of starting and stopping it dead (design, after the
+# critic's review of 0.5.0: pans went from still to full speed in one frame). The aim point gathers
+# speed at most this fast, so a full-speed pan takes about half a second to build up.
+PAN_ACCEL_MPS2 = 40.0
 
 
 def in_box(x: float, y: float) -> bool:
@@ -116,16 +120,58 @@ def in_box(x: float, y: float) -> bool:
 
 
 CUT_HOLD_S = 4.0  # a cut stays put this long; shorter than this reads as a flicker
-BOX_LEAVE_M = 6.0  # the goal camera gives the ball back only once it is clearly out of the box
-FAR_CLOSER = 0.50  # the far stand is better when it is at most half the gantry's distance to the ball
-FAR_LEAVE = 0.70  # stay on that stand until it is no longer clearly closer
 GANTRY_LINE_DEG = 23.0  # handbook: 22-24° from the gantry down to the near touchline
-GANTRY_AIM_Z = 4.5  # look up into the stand, so the bowl is the backdrop and not a lip under the sky
-GANTRY_HALF_M = 14.5  # longer than the widest sampled lens, so a player still has a body from here
-REVERSE_Z = 12.0  # above the lower far tier; the sampled gantry height puts this lens in the sky
-REVERSE_HALF_M = 16.0  # same kind of lens as the gantry, so the far angle is not a wide overview
+# The widest the gantry goes in open play, against the sampled 17 to 24 m: aimed at the play on the
+# grass, the pitch fills the picture and 8 to 15 players are in shot (docs/guides/broadcast-render.md),
+# each about 65 px tall. Design: 18 m against 14.5 to 22 m on seeds 7, 21 and 42; test_render_camera
+# measures other seeds.
+GANTRY_HALF_M = 18.0
+# The stands are a band across the top of the picture, at most this share of it, as the main
+# camera shows them. The far side is foreshortened, so with play over there the gantry tilts down
+# along its line of sight just enough to keep the far edge of the pitch at this line, the ball in
+# the upper half (design, after the review of 0.4.1: the stands filled 40 to 75% of the picture).
+STANDS_TOP = 0.25
 TIGHT_ACTIONS = ("throw", "thigh", "chest", "head", "hands")
 NET_SETTLE_S = 2.6  # the mesh is back to rest by here; the angle itself holds CUT_HOLD_S
+
+
+# How a broadcast frames live play (design, after the Coordinator's review of 0.4.1 and broadcast
+# practice): the main camera keeps the play near the middle of the picture with the pitch filling
+# most of it, the stands a band across the top. A frame is well framed when the pitch (Law 1) covers
+# at least PITCH_SHARE_MIN of the picture and the ball is inside the CENTRAL box (shares of width
+# and height: left, right, top, bottom).
+PITCH_SHARE_MIN = 0.60
+CENTRAL = (0.2, 0.8, 0.15, 0.85)
+
+
+def pitch_share(cam: Camera, step: int = 40) -> float:
+    """The share of the picture that is the pitch (105 by 68 m on the ground), from a grid of rays
+    through the picture, `step` pixels apart, to the ground."""
+    right, down, fwd = cam.R
+    f = cam.focal_px
+    hit = total = 0
+    for v in range(step // 2, cam.height, step):
+        for u in range(step // 2, cam.width, step):
+            a, b = (u - cam.width / 2) / f, (v - cam.height / 2) / f
+            d = [fwd[i] + a * right[i] + b * down[i] for i in range(3)]
+            total += 1
+            if d[2] >= -1e-9:
+                continue  # above the horizon
+            s = -cam.position[2] / d[2]
+            x, y = cam.position[0] + s * d[0], cam.position[1] + s * d[1]
+            hit += 0.0 <= x <= 105.0 and 0.0 <= y <= 68.0
+    return hit / total
+
+
+def well_framed(cam: Camera, ball: Vec) -> bool:
+    """The pitch fills at least PITCH_SHARE_MIN of the picture and the ball is in its CENTRAL box."""
+    uv = cam.project(ball)
+    if uv is None:
+        return False
+    left, right, top, bottom = CENTRAL
+    across = left * cam.width <= uv[0] <= right * cam.width
+    down = top * cam.height <= uv[1] <= bottom * cam.height
+    return across and down and pitch_share(cam) >= PITCH_SHARE_MIN
 
 
 def gantry_height(back_m: float, sampled: float) -> float:
@@ -157,29 +203,22 @@ def net_push(age: float, speed: float, y: float, z: float, hit_y: float, hit_z: 
     return amp * fall * env * ring
 
 
-def box_side(x: float, y: float, margin: float = 0.0) -> str:
-    """'L' or 'R' when (x, y) is in that penalty area, widened by `margin` metres. Else ''."""
-    if not (13.84 - margin <= y <= 54.16 + margin):
-        return ""
-    if x <= 16.5 + margin:
-        return "L"
-    if x >= 88.5 - margin:
-        return "R"
-    return ""
-
-
 class Director:
     """Main broadcast camera: fixed gantry position, pans and zooms to follow the ball with lag.
 
-    With `cuts`, it leaves the gantry only for an angle that frames the ball better, and then
-    stays there for at least CUT_HOLD_S. The gantry is the picture the match is watched from.
-    Behind the goal when the ball is in that penalty area, because the gantry sees that goal
-    edge-on. When a goal is scored, a low three-quarter beside that goal, aimed at the mouth
-    the event recorded, because the engine has already put the ball back on the centre spot.
-    A tighter lens beside the gantry for a throw or an aerial touch, when that shot still holds
-    the player and the ball. The far stand when play is on the far side and that camera is much
-    closer, and only while its shot still holds the ball and the opposite stand. The gantry aim
-    keeps updating during a cut, so the return is where it would have been.
+    The gantry is the picture the match is watched from. It aims at the play on the grass, so the
+    pitch fills the picture; tilts down along its line of sight when play is far off, so the stands
+    stay a band across the top (STANDS_TOP); takes the tighter lens near either goal; and eases
+    each pan in and out (PAN_ACCEL_MPS2).
+
+    With `cuts`, it leaves the gantry for two shots, each held at least CUT_HOLD_S: a tighter lens
+    beside the gantry for a throw or an aerial touch, when that shot still holds the player and the
+    ball, and, when a goal is scored, a low three-quarter beside that goal, aimed at the mouth the
+    event recorded, because the engine has already put the ball back on the centre spot. Live play
+    is never shown from across the pitch or from behind a goal: every camera it uses stands on the
+    gantry's side, so left and right stay where the viewer has them (the 180-degree rule, as a
+    broadcast keeps them; SoccerNet-v2 counts one change of shot every 9 s, replays included).
+    The gantry aim keeps updating during a cut, so the return is where it would have been.
     """
 
     def __init__(
@@ -195,6 +234,9 @@ class Director:
         self.players: list[tuple[float, float, str]] = []
         self.rng = random.Random(f"camera-{seed}")
         self.aim: list[float] | None = None
+        self.aim_v = [0.0, 0.0]  # how fast the aim point is moving across the ground (m/s)
+        self.tight_aim: list[float] | None = None  # the tighter lens's own aim, while it is up
+        self.tight_v = [0.0, 0.0]
         self.half_width = params.half_width_m
         self.prev_ball: tuple[float, float] | None = None
         self.shake_phase = (self.rng.uniform(0, 6.28), self.rng.uniform(0, 6.28))
@@ -202,19 +244,26 @@ class Director:
         self.cuts = cuts
         self.angle = "main"
         self._cut_until = -1.0
-        self._cut_kind = ""  # "", "L", "R", "netL", "netR", "tight", or "reverse". Empty is the gantry.
+        self._cut_kind = ""  # "", "netL", "netR" or "tight". Empty is the gantry.
         self.net: dict | None = None  # the goal the mesh and the low angle are still showing
-        self._ball_v = (0.0, 0.0)
 
     def cut(self) -> None:
-        """The edit cuts away from a dead ball to its restart (edit.py): the next frame is a new
-        shot on the gantry, framed on the ball where it is then, with no pan carried over and no
-        second angle or goal net held across the cut."""
+        """The edit cuts away from a dead ball to its restart (edit.py): no pan, second angle or goal
+        net is carried across the cut, and the camera frames the ball afresh where it is then."""
         self.aim = None
+        self.aim_v = [0.0, 0.0]
+        self.tight_aim = None
         self.prev_ball = None
         self._cut_kind = ""
         self._cut_until = -1.0
         self.net = None
+
+    def open_on_restart(self) -> None:
+        """The first frame after a cut: the picture comes back on the restart with the tighter lens
+        beside the gantry, held CUT_HOLD_S, so the edit reads as a cut to another shot rather than
+        the players jumping about the same one (as a broadcast returns to a set piece)."""
+        self._cut_kind = "tight"
+        self._cut_until = self.t + self.dt + CUT_HOLD_S  # from the restart's first frame
 
     def _goal(self, bx: float, by: float, vx: float, vy: float) -> tuple[float, float, float]:
         ax = bx + vx * self.p.lead_s
@@ -224,7 +273,38 @@ class Director:
         ay = min(max(ay, 12.0), 60.0)
         wide = min(self.p.half_width_m, GANTRY_HALF_M)
         hw = self.p.box_half_width_m if in_box(bx, by) else wide
+        ax, ay = self._below_stands(ax, ay, hw)
         return ax, ay, hw
+
+    def _below_stands(self, ax: float, ay: float, hw: float) -> tuple[float, float]:
+        """The aim on the line of sight to (ax, ay), there or nearer the gantry, that keeps the far
+        edge of the pitch on that line (the far touchline, or a goal line) in the top STANDS_TOP of
+        the picture. Tilting down lifts that edge in the picture and leaves the play where it is
+        across it, so the nearest aim that does it is found by halving along the line."""
+        gx, gy = self.position[0], self.position[1]
+        dx, dy = ax - gx, ay - gy
+        if dy <= 0.0:
+            return ax, ay
+        out = (68.0 - gy) / dy
+        if abs(dx) > 1e-9:
+            out = min(out, ((105.0 if dx > 0 else 0.0) - gx) / dx)
+        edge = (gx + out * dx, gy + out * dy, 0.0)
+        line = STANDS_TOP * self.height
+
+        def lifted(t: float) -> bool:
+            uv = self._shot((gx + t * dx, gy + t * dy, 0.0), hw).project(edge)
+            return uv is None or uv[1] <= line
+
+        if lifted(1.0):
+            return ax, ay
+        lo, hi = -gy / dy, 1.0  # from the near touchline to the play
+        for _ in range(14):
+            mid = (lo + hi) / 2
+            if lifted(mid):
+                lo = mid
+            else:
+                hi = mid
+        return gx + lo * dx, gy + lo * dy
 
     def step(
         self,
@@ -232,29 +312,26 @@ class Director:
         ball_y: float,
         players: list | None = None,
         goal: tuple | None = None,
+        cut_in: float | None = None,
     ) -> Camera:
+        """The camera for the next frame. `cut_in` is how long until the edit's next cut, in seconds
+        (None when no cut follows): no angle starts or ends that close to one, because the cut is
+        itself the change of shot."""
         self.players = [(p[0], p[1], p[2]) for p in players] if players else []
         if self.prev_ball is None:
             vx = vy = 0.0
         else:
             vx = (ball_x - self.prev_ball[0]) / self.dt
             vy = (ball_y - self.prev_ball[1]) / self.dt
-        self._ball_v = (vx, vy)
         self.prev_ball = (ball_x, ball_y)
         gx, gy, ghw = self._goal(ball_x, ball_y, vx, vy)
         if self.aim is None:
             self.aim = [gx, gy]
+            self.aim_v = [0.0, 0.0]
             self.half_width = ghw
         else:
-            a = 1 - math.exp(-self.dt / self.p.pan_lag_s)
+            self._ease(self.aim, self.aim_v, gx, gy)
             z = 1 - math.exp(-self.dt / (self.p.pan_lag_s * 2.5))
-            sx, sy = (gx - self.aim[0]) * a, (gy - self.aim[1]) * a
-            step = math.hypot(sx, sy)
-            cap = MAX_PAN_MPS * self.dt  # an operator cannot whip the camera across the pitch
-            if step > cap:
-                sx, sy = sx * cap / step, sy * cap / step
-            self.aim[0] += sx
-            self.aim[1] += sy
             self.half_width += (ghw - self.half_width) * z
         self.t += self.dt
         fresh_goal = False
@@ -272,26 +349,47 @@ class Director:
         sy = self.p.shake_m * math.sin(2 * math.pi * 0.9 * self.t + self.shake_phase[1])
         target = (self.aim[0] + sx, self.aim[1] + sy, 0.0)
         self.angle = "main"
-        if self.cuts:
-            want = self._better(ball_x, ball_y, target)
-            # The hold covers every angle, including the return to the gantry, so a ball
-            # on the edge of the box cannot bounce the camera back and forth.
-            # A goal extends the low angle even when that shot is already up. Any other
-            # change waits out the hold, including the return to the gantry.
-            if fresh_goal or (self.t >= self._cut_until and want != self._cut_kind):
-                self._cut_kind = want
-                self._cut_until = self.t + CUT_HOLD_S
-            if self._cut_kind:
-                return self._second(ball_x, ball_y, target)
+        want = self._better(ball_x, ball_y) if self.cuts else ""
+        # The hold covers every angle, including the return to the gantry, so an action on the
+        # edge of the rule cannot bounce the camera back and forth. A goal starts the low angle at
+        # once, even over a hold. Near the edit's next cut nothing changes: the cut is the change.
+        steady = cut_in is not None and cut_in < CUT_HOLD_S
+        due = self.t >= self._cut_until - 1e-9 and want != self._cut_kind and not steady
+        if (fresh_goal and self.cuts) or due:
+            self._cut_kind = want
+            self._cut_until = self.t + CUT_HOLD_S
+        if self._cut_kind != "tight":
+            self.tight_aim = None
+        else:
+            # The tighter lens has its own operator: framed on the ball when the shot comes up,
+            # then following it, eased the same way.
+            spot = (min(max(ball_x, 0.0), 105.0), min(max(ball_y, -1.0), 69.0))
+            if self.tight_aim is None:
+                self.tight_aim, self.tight_v = list(spot), [0.0, 0.0]
+            else:
+                self._ease(self.tight_aim, self.tight_v, *spot)
+        if self._cut_kind:
+            return self._second()
         return self._main(target)
 
-    def _reverse_pos(self) -> Vec:
-        # 18 m past the far touchline. A full back_m lands inside the crowd mesh.
-        return (52.5 - self.p.offset_x_m, 68.0 + 18.0, REVERSE_Z)
-
-    def _reverse_shot(self, aim: Vec) -> Camera:
-        lifted = (aim[0], aim[1], aim[2] + GANTRY_AIM_Z)
-        return self._framed(self._reverse_pos(), lifted, REVERSE_HALF_M)
+    def _ease(self, aim: list[float], vel: list[float], gx: float, gy: float) -> None:
+        """Move an aim point toward (gx, gy) like a critically damped spring, gathering and losing
+        speed no faster than PAN_ACCEL_MPS2, never faster than MAX_PAN_MPS. Its stiffness, 2 over
+        the sampled lag, trails a ball at a steady pace by as much as a plain lag of that time did,
+        so the play stays as central as before while each pan eases in and out."""
+        w = 2.0 / self.p.pan_lag_s
+        ax = w * w * (gx - aim[0]) - 2 * w * vel[0]
+        ay = w * w * (gy - aim[1]) - 2 * w * vel[1]
+        acc = math.hypot(ax, ay)
+        if acc > PAN_ACCEL_MPS2:
+            ax, ay = ax * PAN_ACCEL_MPS2 / acc, ay * PAN_ACCEL_MPS2 / acc
+        ux, uy = vel[0] + ax * self.dt, vel[1] + ay * self.dt
+        speed = math.hypot(ux, uy)
+        if speed > MAX_PAN_MPS:  # an operator cannot whip the camera across the pitch
+            ux, uy = ux * MAX_PAN_MPS / speed, uy * MAX_PAN_MPS / speed
+        vel[0], vel[1] = ux, uy
+        aim[0] += ux * self.dt
+        aim[1] += uy * self.dt
 
     def net_view(self) -> dict | None:
         """The hit the mesh is still showing, or None once the cloth has settled."""
@@ -316,78 +414,26 @@ class Director:
         line = 0.0 if left else 105.0
         outward = -1.0 if left else 1.0
         # Far enough back that the whole goal reads, and off the near post so the
-        # pocket is a three-quarter rather than a flat wall.
+        # pocket is a three-quarter rather than a flat wall. On the gantry's side of the goal.
         return (line + outward * 7.6, 22.0, 3.6)
 
-    def _incoming(self, bx: float, by: float) -> str:
-        """A shot arriving in the box. Build-up in the box stays on the high goal camera."""
-        side = box_side(bx, by)
-        if not side:
-            return ""
-        vx, _vy = self._ball_v
-        pace = math.hypot(vx, _vy)
-        toward = vx < -8.0 if side == "L" else vx > 8.0
-        # A jump across the pitch is the director being shown a new spot, not a shot.
-        if not toward or not (10.0 <= pace <= 40.0):
-            return ""
-        pos = self._net_pos(side)
-        shot = self._framed(pos, (bx, by, 0.5), 7.0)
-        uv = shot.project((bx, by, 0.4))
-        if uv is None:
-            return ""
-        pad = 36
-        if not (pad <= uv[0] < self.width - pad and pad <= uv[1] < self.height - pad):
-            return ""
-        return "net" + side
-
-    def _better(self, bx: float, by: float, aim: Vec) -> str:
-        """The angle that frames this ball better than the gantry, or '' to stay on the gantry."""
+    def _better(self, bx: float, by: float) -> str:
+        """The angle that frames this moment better than the gantry, or '' to stay on the gantry."""
         if self._net_due():
             return "net" + self.net["side"]
-        incoming = self._incoming(bx, by)
-        if incoming:
-            return incoming
-        side = box_side(bx, by)
-        if side:
-            return side
-        if self._cut_kind in ("L", "R") and box_side(bx, by, BOX_LEAVE_M) == self._cut_kind:
-            return self._cut_kind
         if self._tight(bx, by):
             return "tight"
-        ball = (bx, by, 0.0)
-        gantry = math.dist(self.position, ball)
-        far = math.dist(self._reverse_pos(), ball)
-        limit = FAR_LEAVE if self._cut_kind == "reverse" else FAR_CLOSER
-        # Closer is not enough. On the far touchline the ball sits on the bottom and the bowl leaves.
-        if far < gantry * limit and self._reverse_readable(aim, bx, by):
-            return "reverse"
         return ""
 
-    def _reverse_readable(self, aim: Vec, bx: float, by: float) -> bool:
-        shot = self._reverse_shot(aim)
-        ball = shot.project((bx, by, 0.2))
-        # Seat deck of the opposite bowl. Above the frame, this angle is grass under the sky.
-        deck = shot.project((52.5, -68.0, 14.0))
-        if ball is None or deck is None:
-            return False
-        pad = 48
-        u, v = ball
-        du, dv = deck
-        # The bowl has to sit across the frame. Off to one side, the shot is the shell and the sky.
-        return (
-            pad <= u < self.width - pad
-            and pad <= v < self.height - pad
-            and 80 <= du < self.width - 80
-            and 0 <= dv < 160
-        )
-
     def _main(self, target: Vec) -> Camera:
-        # The stand sits behind the play. Aiming at the grass leaves the bowl above the frame.
-        lifted = (target[0], target[1], target[2] + GANTRY_AIM_Z)
-        dist = math.dist(self.position, lifted)
-        hfov = 2 * math.atan(self.half_width / dist)
+        return self._shot(target, self.half_width)
+
+    def _shot(self, target: Vec, half_width: float) -> Camera:
+        """The gantry aimed at `target`, `half_width` metres of ground either side of it."""
+        dist = math.dist(self.position, target)
+        hfov = 2 * math.atan(half_width / dist)
         vfov = 2 * math.atan(math.tan(hfov / 2) * self.height / self.width)
-        return Camera(self.position, lifted, math.degrees(vfov), self.width, self.height)
+        return Camera(self.position, target, math.degrees(vfov), self.width, self.height)
 
     def _framed(self, position: Vec, target: Vec, half_width: float) -> Camera:
         dist = max(math.dist(position, target), 1.0)
@@ -426,36 +472,21 @@ class Director:
 
         return inside(ball) and inside(feet) and 0 <= head[1] < self.height
 
-    def _net_shot(self, bx: float, by: float) -> Camera:
-        """Low, off the near post. The flight is followed. After the goal, the mouth is."""
+    def _net_shot(self) -> Camera:
+        """Low, off the near post, aimed at the mouth the goal went in by."""
         side = "L" if self._cut_kind == "netL" else "R"
-        pos = self._net_pos(side)
-        if self._net_due():
-            line = 0.0 if side == "L" else 105.0
-            outward = -1.0 if side == "L" else 1.0
-            y = min(max(self.net["y"], 31.0), 37.0)
-            z = min(max(self.net["z"], 0.4), 2.1)
-            target = (line + outward * 1.0, y, z)
-        else:
-            target = (min(max(bx, 0.0), 105.0), min(max(by, 8.0), 60.0), 0.5)
-        return self._framed(pos, target, 7.0)
+        line = 0.0 if side == "L" else 105.0
+        outward = -1.0 if side == "L" else 1.0
+        y = min(max(self.net["y"], 31.0), 37.0)
+        z = min(max(self.net["z"], 0.4), 2.1)
+        return self._framed(self._net_pos(side), (line + outward * 1.0, y, z), 7.0)
 
-    def _second(self, bx: float, by: float, aim: Vec) -> Camera:
+    def _second(self) -> Camera:
         if self._cut_kind in ("netL", "netR"):
             self.angle = "net"
-            return self._net_shot(bx, by)
-        if self._cut_kind == "tight":
-            self.angle = "tight"
-            target = (min(max(bx, 0.0), 105.0), min(max(by, -1.0), 69.0), 0.5)
-            return self._framed(self._tight_pos(), target, 9.0)
-        if self._cut_kind in ("L", "R"):
-            self.angle = "goal"
-            # High behind the goal, over the crossbar, so the posts do not hide the ball.
-            pos = (-8.5, 34.0, 11.0) if self._cut_kind == "L" else (113.5, 34.0, 11.0)
-            target = (min(max(bx, 1.0), 104.0), min(max(by, 8.0), 60.0), 0.4)
-            return self._framed(pos, target, 16.0)
-        self.angle = "reverse"
-        return self._reverse_shot(aim)
+            return self._net_shot()
+        self.angle = "tight"
+        return self._framed(self._tight_pos(), (self.tight_aim[0], self.tight_aim[1], 0.5), 9.0)
 
 
 def blur_vector(prev: Camera | None, cur: Camera, shutter: float) -> tuple[float, float]:

@@ -140,7 +140,10 @@ def test_a_clip_cuts_from_the_stoppage_to_the_restart_and_still_meets_the_contra
     assert json.loads((out / "meta.json").read_text())["cuts"] == [first.as_dict()]
     assert [f["image"] for f in frames] == [f"images/{i:05d}.jpg" for i in range(len(frames))]
     assert all(e["frame"] in numbers for e in events)
-    # The picture after the cut is a new shot, not a pan from the last one: it is not streaked.
+    # The picture after the cut is a new shot, not a pan from the last one: it is not streaked, and
+    # it comes back on the restart with the tighter lens, not the same framing the players jumped in.
     assert frames[10]["blur_px"] == [0.0, 0.0]
+    assert frames[9]["camera"]["angle"] != "tight" or frames[9]["camera"] != frames[10]["camera"]
+    assert frames[10]["camera"]["angle"] == "tight"
     assert validate_clip(out) == {}
     assert check_clip(out)["passed"]["data_contract"]

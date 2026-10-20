@@ -23,6 +23,7 @@ dependencies = [
 [project.scripts]
 ninety-sim = "ninety.sim.cli:main"
 ninety-slice = "ninety.agents.slice:main"
+ninety-workflow = "ninety.agents.workflow:main"
 ninety-live = "ninety.agents.live:main"
 ninety-agents = "ninety.agents.foundry:main"
 ninety-validate = "ninety.validate:main"

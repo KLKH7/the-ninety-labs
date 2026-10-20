@@ -35,12 +35,13 @@ Real broadcast footage has properties detectors depend on. Match them:
 |---|---|---|
 | Resolution | 1280x720 or 1920x1080, 25 fps | Render 1280x720 at 25 fps by default |
 | Main camera | High in the stand near halfway, about 15 to 25 m up and 30 to 40 m back | Place it there; never a top-down or behind-goal main view |
-| Framing | Follows the ball with lag, keeps 8 to 15 players in shot | Smooth pan with a lag filter; zoom in on set pieces and the box |
+| Framing | Follows the ball with lag, keeps 8 to 15 players in shot; the pitch fills most of the picture, the stands a band across the top | Aim at the play on the grass with a lens 18 m either side; with play far off, tilt down along the line of sight so the stands stay in the top quarter; close up on the box; ease each pan in and out; at least 85% of live frames well framed and 8 to 15 players in the median frame (`test_render_camera`) |
+| Shots | One change of shot every 9 s on average, replays included (SoccerNet-v2, Deliège et al. 2021); live play from one side of the ground | The gantry and a tighter lens beside it in live play, the low angle by the net after a goal; each shot held at least 4 s, none started within 4 s of an edit cut |
 | Motion | Fast pans blur the image | Motion blur proportional to pan speed |
 | Players | About 30 to 120 px tall in the main view; far side ones small | Keep scale realistic; do not zoom so far that every player is huge |
 | Ball | 5 to 15 px, often blurred or hidden | Keep it small; let it be occluded |
 | Light | Stadium floodlights cast 2 to 4 soft shadows per player; or daylight with one hard shadow | Both, randomized |
-| Grass | Mowing stripes, wear near goals and centre | Striped texture, wear map |
+| Grass | Mowing stripes, wear near goals and centre | Striped texture; wear is faint, paler turf that follows the stripes, never brown blotches |
 | Image | Compression blocks, slight noise, sharpening halos | Add mild noise and JPEG/H.264-style compression at export |
 | Other | Scorebug, crowd, advertising boards | A generic scorebug and boards with **made-up brands only** |
 | Dead balls | The director cuts away from the wait and back to the restart | Hold the stoppage, then cut to the restart being set (`ninety/render/edit.py`); record each cut in `meta.json`, never cut over an event |
@@ -60,7 +61,7 @@ datasets and beating them on motion blur).
 - weather: clear, overcast, light rain (streaks and wet grass sheen). **Clear only for now**,
   for the same reason
 - grass hue and stripe width; pitch wear
-- camera: height, distance, FOV, pan lag, shake; occasional cut to a second angle
+- camera: height, distance, FOV, pan lag, shake; occasional cut to the tighter lens beside the gantry
 - stadium: stand colour, crowd density, board colours
 
 Log every choice in the frame metadata. Never randomize something you cannot label.

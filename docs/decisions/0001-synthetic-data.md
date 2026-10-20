@@ -284,7 +284,10 @@ What changed in the picture, and two knobs that used to fail loudly:
   handbook's 22 to 24°) without moving the sampled height, so seed 5's draw stays put. The cut
   is logged as `camera.angle`. A cut is not a pan, so the blur streak is zero on the frame the
   camera jumps. The net is decor. On a goal it gives outward behind the line and settles, and
-  it stays out of the id pass
+  it stays out of the id pass. **Since 0.5.1** the far stand and the camera behind the goal are
+  gone from live play (they jumped the viewpoint between opposite sides of the ground), the
+  gantry aims at the play on the grass instead of up into the stand, and `camera.angle` is
+  `main`, `tight` or `net` (lesson 116)
 - the stands hold drawn spectators, including a near stand that sits behind the gantry so the
   reverse angle has a stadium behind the pitch. Sky, floodlight towers and sharpening are decor,
   not occluders

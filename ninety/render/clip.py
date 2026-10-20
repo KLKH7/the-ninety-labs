@@ -283,14 +283,19 @@ def render_clip(
         spin_axis = None
         rows = []
         index = 0
-        for fi, draw in _plan(edit.segments(show)):
+        reopen = False
+        for fi, draw, left in _plan(edit.segments(show)):
             if fi is None:
                 # A cut: the picture comes back on the restart. Bodies and the camera start afresh
                 # there and settle over the warm-up before it, as at the start of the clip.
                 gaits = {lk.id: Gait() for lk in looks}
                 prev_xy, prev_cam = {}, None
                 director.cut()
+                reopen = True
                 continue
+            if draw and reopen:
+                director.open_on_restart()
+                reopen = False
             fr = frames[fi]
             advance_gaits(gaits, prev_xy, fr, 1 / FPS, frames[min(fi + LEAD_AHEAD_FRAMES, len(frames) - 1)])
             ball = drawn_ball(fr)
@@ -309,7 +314,8 @@ def render_clip(
                 z = min(max(prevb["z"] + 0.11, 0.25), 2.15)
                 speed = math.hypot(prevb["vx"], prevb["vy"], prevb.get("vz", 0.0))
                 goal_arg = (side, ev["y"], z, speed)
-            cam = director.step(ball[0], ball[1], actors, goal_arg)
+            cut_in = None if left is None else left / FPS
+            cam = director.step(ball[0], ball[1], actors, goal_arg, cut_in)
             blur = blur_vector(prev_cam, cam, p.motion_blur)
             prev_cam = cam
             bvx, bvy = fr["ball"].get("vx", 0.0), fr["ball"].get("vy", 0.0)
@@ -408,17 +414,21 @@ def render_clip(
     return clip
 
 
-def _plan(segs: list[edit.Segment]) -> list[tuple[int | None, bool]]:
-    """The match frames to step through, in order, as (frame, drawn): before each segment its
-    warm-up (stepped, not drawn), then the segment. (None, False) marks a cut before a segment."""
-    out: list[tuple[int | None, bool]] = []
+def _plan(segs: list[edit.Segment]) -> list[tuple[int | None, bool, int | None]]:
+    """The match frames to step through, in order, as (frame, drawn, left): before each segment its
+    warm-up (stepped, not drawn), then the segment. `left` counts a drawn frame's segment frames
+    still to show, itself included, when a cut follows the segment, else None. (None, False, None)
+    marks a cut before a segment."""
+    out: list[tuple[int | None, bool, int | None]] = []
     for k, s in enumerate(segs):
         lo = max(0, s.frame - WARMUP)
         if k:
-            out.append((None, False))
+            out.append((None, False, None))
             lo = max(lo, segs[k - 1].frame + segs[k - 1].frames)
-        out += [(f, False) for f in range(lo, s.frame)]
-        out += [(f, True) for f in range(s.frame, s.frame + s.frames)]
+        end = s.frame + s.frames
+        last = k == len(segs) - 1
+        out += [(f, False, None) for f in range(lo, s.frame)]
+        out += [(f, True, None if last else end - f) for f in range(s.frame, end)]
     return out
 
 
