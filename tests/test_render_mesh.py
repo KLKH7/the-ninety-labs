@@ -223,3 +223,31 @@ def test_the_page_turns_steps_and_touches_like_the_python_pose(page):
         py = pose_markers(pose, heading, LOOK.height_m)
         for name in ("head", "foot_l", "foot_r", "hand_l", "hand_r", "brow", "chest", "thigh_top_l"):
             assert math.dist(py[name], js[name]) < 0.015, (i, pose["action"], name, py[name], js[name])
+
+
+def test_a_player_is_drawn_as_tall_as_he_is(page):
+    """The mesh's skull top is ASSET_STATURE_M in its own metres; scaled as a 1.84 m body it drew
+    every player at 91.5% of his height (lesson 113). A standing, bald player seen from the side at
+    eye level is now drawn from the grass to his height, within 2%, at every drawn stature."""
+    p = sample_params(5)
+    params = {**p.to_dict(), "width": 1280, "height": 720}
+    cam = Camera((40.0, 22.0, 0.95), (40.0, 30.0, 0.95), 20.0, 1280, 720)
+    for i, stature in enumerate((1.65, 1.84, 1.98)):
+        look = Look(f"h{i + 1}", "home", "CM", stature, 1.0, LOOK.skin, LOOK.hair, hair_style="bald")
+        page.evaluate("cfg => window.ninety.init(cfg)",
+                      {"seed": 5, "params": params, "objects": [_appearance(look, p)]})
+        g = Gait(action="stand", heading=0.0)
+        parts = body_parts(40.0, 30.0, look, g, None)
+        pose = {"action": "stand", "phase": 0.0, "speed": 0.0, "reach": 0, "dive": 0, "x": 40.0, "y": 30.0,
+                "plant_l": list(g.plant_l) if g.plant_l else None,
+                "plant_r": list(g.plant_r) if g.plant_r else None, "hair_style": "bald"}
+        camera = {"position": list(cam.position), "R": cam.R, "fov_v_deg": cam.fov_v_deg}
+        spec = {"index": 40 + i, "camera": camera,
+                "objects": [{"id": look.id, "parts": parts, "box": parts_box(cam, parts), "heading": 0.0,
+                             "pose": pose}],
+                "keypoints": [], "blur": [0.0, 0.0], "score": [0, 0], "clock": "00:00",
+                "goal_age": None, "goal_side": None, "net": None, "want_image": False}
+        box = page.evaluate("s => window.ninety.frame(s)", spec)["objects"][look.id]["bbox"]
+        sole, crown = cam.project((40.0, 30.0, 0.0)), cam.project((40.0, 30.0, stature))
+        drawn, real = box[3] - box[1], sole[1] - crown[1]
+        assert abs(drawn / real - 1.0) < 0.02, (stature, drawn, real)

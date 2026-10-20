@@ -10,7 +10,7 @@ his hands on it.
 import math
 
 from ninety.render.camera import Camera
-from ninety.render.meshpose import HOLD_SIDE, foot_yaw, pose_markers
+from ninety.render.meshpose import ASSET_STATURE_M, HOLD_SIDE, foot_yaw, pose_markers
 from ninety.render.scene import (
     BALL_RADIUS,
     KICK_SWING_S,
@@ -112,23 +112,27 @@ def test_a_planted_foot_keeps_pointing_the_way_it_landed_while_the_hips_turn():
 
 
 def test_a_run_lands_its_foot_where_the_leg_reaches():
-    """Old: a touchdown up to 0.58 m ahead, which the leg could not reach, so the foot slid onto it."""
+    """Old: a touchdown up to 0.58 m ahead, which the leg could not reach, so the foot slid onto it.
+    A landing is a foot coming down out of its swing (scene._stride_feet); the stride's phase moves
+    with the ground covered."""
+    k = LOOK.height_m / ASSET_STATURE_M
     for speed in (2.5, 4.0, 6.0, 8.0):
         g = Gait(action="run", speed=speed)
         x = 0.0
         landed = 0
-        for i in range(40):
-            g.phase = (i * 0.5) % (2 * math.pi)
+        for _ in range(40):
+            g.phase = (g.phase + 2 * math.pi * speed / FPS / (2 * _step_m(speed))) % (2 * math.pi)
             x += speed / FPS
-            before = (g.plant_l, g.plant_r)
+            before = (g.down_l, g.down_r)
             body_parts(x, 0.0, LOOK, g)
             pose = mesh_pose(g, x, 0.0, 0.0)
-            feet = pose_markers(pose, 0.0, 1.84)
-            for s, was, now in (("l", before[0], g.plant_l), ("r", before[1], g.plant_r)):
+            feet = pose_markers(pose, 0.0, LOOK.height_m)
+            sides = (("l", before[0], g.down_l, g.plant_l), ("r", before[1], g.down_r, g.plant_r))
+            for s, was, now, plant in sides:
                 if now and not was:
                     landed += 1
-                    assert now[0] - x <= PLANT_AHEAD_MAX + 1e-9
-                    assert math.dist(feet[f"foot_{s}"][:2], now[:2]) < 0.03, (speed, s)
+                    assert plant[0] - x <= PLANT_AHEAD_MAX * k + 1e-9, (speed, s, plant[0] - x)
+                    assert math.dist(feet[f"foot_{s}"][:2], plant[:2]) < 0.03, (speed, s)
         assert landed > 4
 
 
@@ -334,8 +338,8 @@ def test_a_keeper_holding_the_ball_has_his_hands_on_it():
             m = pose_markers(pose, g.heading, look.height_m)
             centre = (b["x"], b["y"], b["z"] + BALL_RADIUS)
             for s in "lr":
-                assert math.dist(m[f"hand_{s}"], centre) < HOLD_SIDE * look.height_m / 1.84 + 0.06, (
-                    z, fi, s, m[f"hand_{s}"])
+                side = HOLD_SIDE * look.height_m / ASSET_STATURE_M
+                assert math.dist(m[f"hand_{s}"], centre) < side + 0.06, (z, fi, s, m[f"hand_{s}"])
                 assert m[f"foot_{s}"][2] > -0.02, (z, fi, s, m[f"foot_{s}"])  # feet on, not in, the grass
             box = parts_box(cam, parts)
             for name in ("head", "hand_l", "hand_r", "foot_l", "foot_r"):
@@ -448,3 +452,59 @@ def test_a_tackle_puts_the_tacklers_foot_on_the_ball_and_neither_body_jumps():
         jumps = enumerate(_jumps(drawn[who]))
         over = [(i, round(mv, 3), round(cap, 3)) for i, (mv, cap) in jumps if mv > cap]
         assert not over, (who, over)
+
+
+def _run_frames(profile, turn_rate=0.0):
+    """One player running the speed `profile` (m/s a frame), turning at `turn_rate` rad/s."""
+    x, y, h, frames = 20.0, 30.0, 0.0, []
+    for v in profile:
+        h += turn_rate / FPS
+        x, y = x + math.cos(h) * v / FPS, y + math.sin(h) * v / FPS
+        frames.append({"ball": {"x": 80.0, "y": 50.0, "z": 0.0, "vx": 0.0, "vy": 0.0}, "possessor": None,
+                       "players": [{"id": "h1", "x": x, "y": y, "vx": v * math.cos(h), "vy": v * math.sin(h),
+                                    "heading": h, "action": _engine_action(v), "dive": 0.0}]})
+    return frames
+
+
+def _slides(drawn):
+    """How far each foot moves along the grass between two frames it is on the grass in."""
+    out = []
+    for (_, a, _, _), (_, b, _, _) in zip(drawn, drawn[1:], strict=False):
+        for s in "lr":
+            if a[f"foot_{s}"][2] < 0.02 and b[f"foot_{s}"][2] < 0.02:
+                out.append(math.dist(a[f"foot_{s}"][:2], b[f"foot_{s}"][:2]))
+    return out
+
+
+def test_a_foot_on_the_grass_does_not_slide_from_a_standstill_to_a_sprint_and_back():
+    """Old: the stride swung each foot back and forth along one path between two stored poses, so a
+    walking foot skimmed along the grass and a landing foot blended onto its plant: a quarter of the
+    frames a foot was on the grass it slid more than 2 cm, up to 23 cm (lesson 113). Now a foot on
+    the grass stays where it landed (within the leg search's precision, 2 cm) and a swinging foot
+    is lifted, from a standstill to 7 m/s and back, and running a bend."""
+    profile = [0.0] * 15 + [min(7.0, 0.1 * i) for i in range(1, 71)] + [7.0] * 25
+    profile += [max(0.0, 7.0 - 0.1 * i) for i in range(1, 71)] + [0.0] * 15
+    for frames in (_run_frames(profile), _run_frames([5.0] * 120, turn_rate=0.5)):
+        slides = _slides(_draw(frames)["h1"])
+        assert len(slides) > 30
+        assert max(slides) <= 0.02, sorted(slides)[-5:]
+
+
+def test_the_stride_lengthens_and_the_swing_lifts_with_speed():
+    """The same foot lands a stride (two steps, scene._step_m: Debaere 2013) further on each time,
+    and is carried higher through its swing the faster he runs."""
+    lifts = []
+    for speed in (1.5, 3.0, 5.0, 7.0):
+        drawn = _draw(_run_frames([speed] * 150))["h1"]
+        landings, top = [], 0.0
+        for (pa, _, _, _), (pb, mb, _, _) in zip(drawn, drawn[1:], strict=False):
+            was, now = pa["plant_l"], pb["plant_l"]
+            if now and now[3] == 0.0 and was and was[3] > 0.0:
+                landings.append(now[0])
+            top = max(top, mb["foot_l"][2])
+        strides = [b - a for a, b in zip(landings[1:], landings[2:], strict=False)]
+        assert strides, speed
+        for s in strides:
+            assert abs(s / (2 * _step_m(speed)) - 1.0) < 0.1, (speed, s, 2 * _step_m(speed))
+        lifts.append(top)
+    assert lifts == sorted(lifts) and lifts[0] > 0.05 and lifts[-1] > 0.3, lifts
