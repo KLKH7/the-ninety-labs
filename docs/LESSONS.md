@@ -1107,7 +1107,7 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_shape.py::test_the_team_is_never_longer_than_the_published_range_and_the_back_line_never_ahead_of_the_ball`
   sweeps ball and line positions; on the old rule it fails (48 m long with the ball 35 m out).
 
-### 112. A clip's truth must not depend on how long the match was simulated
+### 114. A clip's truth must not depend on how long the match was simulated
 - **What happened:** `ninety-render` simulated the match to the end of the window it chose (240 s
   plus the clip), but its own determinism check re-rendered the same window with `--start`, which
   simulated only to the window's end plus a second. The engine settles some outcomes after the fact
@@ -1120,3 +1120,21 @@ short and actionable. This file is public: no research sources, product names or
   long enough for the outcomes and the dead balls after it.
 - **Check:** `ninety-render-check --determinism` on a window with a tackle near its end compares
   `events_identical`; `tests/test_render_clip.py` renders the same seed twice.
+
+### 115. A camera rule is judged by what the viewer sees over whole matches, not by the shot that prompted it
+- **What happened:** the gantry was aimed 4.5 m above the play after a review found the stand a
+  thin lip under the sky, and second angles were added one at a time (high behind the goal when
+  the ball is in a box, the far stand when play is on the far side, a low angle for a shot
+  arriving). Each fixed the shot it was made for. Nobody measured the whole broadcast: the stands
+  filled 40 to 75% of the picture with the players small at the bottom (the pitch over 60% of the
+  picture with the ball central in 13 to 47% of live frames on seeds 7, 21 and 42), and with second
+  angles on the viewpoint changed 8.8 times a minute, with shots as short as 0.6 s, between
+  opposite sides of the ground. The owner found both by watching clips.
+- **Rule:** a change to how the camera is pointed is measured over whole simulated matches before
+  and after it: the share of live frames that are well framed, the shots per minute against
+  broadcast practice (SoccerNet-v2: one change every 9 s) and the shortest shot, and how fast the
+  pan gathers speed. The numbers go in the pull request.
+- **Check:** `tests/test_render_camera.py` measures all three on seeds the design was not tuned on
+  (`test_the_gantry_frames_the_play_with_the_pitch_filling_the_picture`,
+  `test_the_viewpoint_changes_no_faster_than_a_broadcast_and_never_flickers`,
+  `test_a_pan_eases_in_and_out`); each fails on the 0.5.0 director.

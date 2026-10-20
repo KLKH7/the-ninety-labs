@@ -73,18 +73,14 @@ function pitchTexture(p, rand) {
   g.fillRect(0, Y(0), W, H - Y(0));
   g.fillRect(0, 0, X(0), H);
   g.fillRect(X(105), 0, W - X(105), H);
-  // wear: goalmouths and the centre circle
+  // wear: goalmouths and the centre circle, as thin, pale grass. The shader tints it (uWear); the
+  // texture only breaks it up a little, a few pale tufts, never brown blotches across the area.
   const wearSpots = [[5, 34, 7], [100, 34, 7], [11, 34, 5], [94, 34, 5], [52.5, 34, 6]];
   for (const [wx, wy, wr] of wearSpots) {
-    const grad = g.createRadialGradient(X(wx), Y(wy), 0, X(wx), Y(wy), wr * PX_PER_M);
-    grad.addColorStop(0, `rgba(120,100,60,${0.55 * p.wear})`);
-    grad.addColorStop(1, 'rgba(120,100,60,0)');
-    g.fillStyle = grad;
-    g.fillRect(X(wx - wr), Y(wy + wr), 2 * wr * PX_PER_M, 2 * wr * PX_PER_M);
-    for (let k = 0; k < 400 * p.wear; k++) {
+    for (let k = 0; k < 120 * p.wear; k++) {
       const a = rand() * 6.283, r = Math.sqrt(rand()) * wr;
-      g.fillStyle = `rgba(110,90,55,${0.25 + 0.3 * rand()})`;
-      g.fillRect(X(wx + Math.cos(a) * r), Y(wy + Math.sin(a) * r), 4 + 6 * rand(), 3 + 5 * rand());
+      g.fillStyle = `rgba(150,150,90,${0.06 + 0.08 * rand()})`;
+      g.fillRect(X(wx + Math.cos(a) * r), Y(wy + Math.sin(a) * r), 3 + 4 * rand(), 2 + 3 * rand());
     }
   }
   // markings, 12 cm wide
@@ -152,6 +148,7 @@ function decoratePitch(mat, wet, grass, normal, p) {
     shader.uniforms.uStripe = { value: p.stripe_width_m };
     shader.uniforms.uX0 = { value: GROUND.x0 };
     shader.uniforms.uMow = { value: mow };
+    shader.uniforms.uWear = { value: p.wear };
     shader.vertexShader = 'varying vec3 vGrassW;\n' + shader.vertexShader;
     shader.vertexShader = shader.vertexShader.replace(
       '#include <project_vertex>',
@@ -160,6 +157,7 @@ function decoratePitch(mat, wet, grass, normal, p) {
     shader.fragmentShader = `
       varying vec3 vGrassW;
       uniform float uWet;
+      uniform float uWear;
       uniform sampler2D uGrass;
       uniform sampler2D uGrassN;
       uniform float uHasGrass;
@@ -192,7 +190,7 @@ function decoratePitch(mat, wet, grass, normal, p) {
     shader.fragmentShader = shader.fragmentShader.replace('#include <map_fragment>', `
       #include <map_fragment>
       float pale = smoothstep(0.62, 0.86, dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114)));
-      // The painted wear is a thin brown. Hold that brown. The stripe stays in the paint.
+      // The markings (pale) are never worn.
       float worn = 0.0;
       worn = max(worn, 1.0 - smoothstep(3.2, 7.0, length(vGrassW.xy - vec2(5.0, 34.0))));
       worn = max(worn, 1.0 - smoothstep(3.2, 7.0, length(vGrassW.xy - vec2(100.0, 34.0))));
@@ -200,7 +198,11 @@ function decoratePitch(mat, wet, grass, normal, p) {
       worn = max(worn, 1.0 - smoothstep(2.2, 5.0, length(vGrassW.xy - vec2(94.0, 34.0))));
       worn = max(worn, 1.0 - smoothstep(2.6, 6.0, length(vGrassW.xy - vec2(52.5, 34.0))));
       worn *= 1.0 - pale;
-      diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.25, 0.78, 0.50), worn);
+      // Worn turf is thinner, paler, yellower grass, not bare earth, and it follows the mowing:
+      // the stripe that lies toward the camera shows it a little more (design). A clip's wear
+      // (0.1 to 0.9) sets how much, at most 45% of the way to that tint.
+      worn *= uWear * 0.45 * (0.75 + 0.25 * stripeAlt(vGrassW.xy));
+      diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.12, 1.04, 0.78), worn);
       float clump = gnoise(vGrassW.xy * 0.22);
       diffuseColor.rgb *= mix(0.9 + 0.12 * clump, 1.0, pale);
       if (uHasGrass > 0.5) {
