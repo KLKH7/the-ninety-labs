@@ -19,6 +19,8 @@ import sys
 import textwrap
 from pathlib import Path
 
+from ninety.match import tracking
+
 ROOT = Path(__file__).resolve().parents[1]
 TRUTH_FILES = {"events.jsonl", "frames.jsonl"}
 TRUTH_DIRS = {"truth", "truth-test"}
@@ -63,6 +65,23 @@ assert personalize.last_route == "remote"
 assert {c["lang"] for c in result.cues if c["kind"] == "insight"} == {"en", "es"}
 assert match_server.list_events(detected.M1_CLIP, 1, 99, None)
 match_server.match_info(detected.M1_CLIP)
+
+# The phone companion as deployed (NINETY_COMPANION unset is `on`): the M1 clip from tracked
+# positions only, and every stand-in, whose positions are the simulator's, refused before any is read.
+from starlette.applications import Starlette
+from starlette.testclient import TestClient
+from ninety.api import companion as companion_api
+
+phone = TestClient(Starlette(routes=companion_api.from_env({}).routes()))
+for clip in match_server.MATCHES:
+    assert phone.post("/api/pair", json={"clip": clip}).status_code == 503
+    assert phone.get(f"/api/minimap/{clip}").status_code == 503
+    assert phone.get(f"/api/card/{clip}/h7?t_to=10").status_code == 503
+    assert phone.get(f"/api/flow/{clip}/home?t_to=10").status_code == 503
+m1 = phone.post("/api/pair", json={"clip": detected.M1_CLIP})
+assert m1.status_code in (201, 503), m1.text  # 503 until its tracked frames file is committed
+if m1.status_code == 201:
+    assert phone.get(f"/api/minimap/{detected.M1_CLIP}").json()["source"] == "tracked"
 """
 
 
@@ -89,10 +108,16 @@ def run_live_path(extra: str = "") -> dict:
 def truth_reads(run: dict) -> list[str]:
     reads = [
         p for p in run["opened"]
-        if Path(p).name in TRUTH_FILES or TRUTH_DIRS & set(Path(p).parts)
+        if Path(p).name in TRUTH_FILES or TRUTH_DIRS & set(Path(p).parts) or _precomputed_frames(p)
     ]
     loaded = [m for m in run["modules"] if any(m == f or m.startswith(f + ".") for f in FORBIDDEN)]
     return reads + loaded
+
+
+def _precomputed_frames(path: str) -> bool:
+    """A served stand-in's simulator frames, as the image precomputes them: <match dir>/frames/<clip>.json."""
+    p = Path(path)
+    return p.suffix == ".json" and p.parent.name == tracking.FRAMES_DIR
 
 
 def test_the_live_path_reads_no_ground_truth():
@@ -105,7 +130,12 @@ def test_the_guard_catches_a_truth_read(tmp_path):
     clip = tmp_path / "seed900001"
     clip.mkdir()
     (clip / "events.jsonl").write_text("")
-    planted = f"\nopen({str(clip / 'events.jsonl')!r}).read()\nimport ninety.sim.engine\n"
+    frames = tmp_path / "matches" / "frames"
+    frames.mkdir(parents=True)
+    (frames / "seed7.json").write_text("{}")
+    planted = (f"\nopen({str(clip / 'events.jsonl')!r}).read()\nimport ninety.sim.engine\n"
+               f"open({str(frames / 'seed7.json')!r}).read()\n")
     found = truth_reads(run_live_path(planted))
     assert any(p.endswith("events.jsonl") for p in found)
     assert "ninety.sim.engine" in found
+    assert any(p.endswith("frames/seed7.json") for p in found)  # the companion's stand-in frames
