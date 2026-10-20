@@ -1002,6 +1002,24 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** the pull request has a clip link and the `ninety-football-sense` table for both
   commits ([EVALUATION.md](EVALUATION.md#football-sense-fs1-to-fs9)).
 
+### 103. An argmin over a flat or bimodal objective is a coin toss between its ends
+- **What happened:** the keeper set his depth as the one, of 1 to 6 m, that left the least of the
+  goal open. Against a central ball he stood 6 m off his line at 8 and 10 m, 1 m at 12 m, 6 m at
+  18 m and 1 m at 20 m; from 14 m wide and 8 m out he stood 10.7 m off the goal's centre, outside
+  his post. The objective was sampled at a few shot speeds and heights, so it zigzagged between
+  neighbouring depths; integrated finely it was still bimodal, with the two ends nearly equal and
+  the middle worst, because nothing in it made coming out costly. The argmin picked whichever end
+  won by a hair, and a metre's change in the ball flipped it. The rule's own source (keepers come
+  off their line on 3.4% of shots, close in) had been read as support for a set position.
+- **Rule:** before trusting an optimised choice, plot the objective over the whole range at the
+  situations that matter; if it is flat, jagged or has several minima, the choice is not a model of
+  behaviour. Use a smooth rule (marked *design*) until the missing cost is modelled, and read the
+  source's own numbers before citing it for a direction.
+- **Check:** a test that the choice is monotonic and has no jump over the range it is used on, and
+  one for the geometry it must respect (here within the posts):
+  `tests/test_decisions.py::test_the_keeper_sets_himself_deeper_the_further_the_ball_and_smoothly`
+  and `::test_the_keeper_never_sets_himself_outside_his_posts`.
+
 ### 108. A total that matches can be two errors cancelling
 - **What happened:** for weeks the running report showed outfield distances of 9 to 12 km, close to
   the published 9 to 11, and nobody asked why. When restarts took their sourced time, distances fell
