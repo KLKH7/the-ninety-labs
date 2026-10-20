@@ -31,7 +31,12 @@ FORBIDDEN = (
 
 LIVE_PATH = """
 import asyncio, json
+import httpx
 from ninety.agents import live
+from ninety.personalizer import translate
+from ninety.personalizer.client import RemotePersonalizer
+from ninety.personalizer.core import verified_text
+from ninety.personalizer.server import create_app
 from ninety.agents.factcheck import Claim, Verdict
 from ninety.match import detected
 from ninety.mcp import match_server
@@ -45,8 +50,17 @@ async def ask(prompt):
 async def judge(claim, evidence):
     return Verdict(ok=True)
 
-result = asyncio.run(live.run(events, ask=ask, judge=judge, minute=int(sure["t"] // 60) + 1))
+# The Personalizer runs as it does live: over A2A to its own server (here in process), Spanish
+# through the translator path.
+spanish = translate.translated(verified_text, translate.mock)
+app = create_app(spanish, "http://personalizer/")
+http = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://personalizer/")
+personalize = RemotePersonalizer("http://personalizer/", http=http, fallback=spanish)
+result = asyncio.run(live.run(events, ask=ask, judge=judge, minute=int(sure["t"] // 60) + 1,
+                              personalize=personalize))
 assert result.outcome.accepted and result.cues
+assert personalize.last_route == "remote"
+assert {c["lang"] for c in result.cues if c["kind"] == "insight"} == {"en", "es"}
 assert match_server.list_events(detected.M1_CLIP, 1, 99, None)
 match_server.match_info(detected.M1_CLIP)
 """

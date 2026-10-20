@@ -974,6 +974,17 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_describe.py::test_the_default_run_makes_no_azure_call`; mutate by adding
   the import at module top and watch it go red.
 
+### 106. Look for an open pull request on the same task before building it
+- **What happened:** a session was handed "build the Personalizer over A2A" and built it, tests and
+  mutation run included, before it noticed that draft #131 was the same task, further along. Two
+  Personalizers with different packages, interfaces and fallback rules were then one merge away.
+  The overlap showed up only when another PR's challenge map named #131.
+- **Rule:** before writing code for a task, search the open pull requests and the session notes for
+  it (`gh pr list --search "<task words>"`, the notes folder). If one exists, extend it with a PR
+  stacked on its branch, or ask the Coordinator. Never build a second one.
+- **Check:** the PR description names the search run and what it found. This PR is stacked on #131
+  (base `agents/personalizer`) and adds only what #131 lacks.
+
 ### 103. A legal exception in the contract is an exception in every reader of the same data
 - **What happened:** after a goal the kickoff puts every player back in his own half in one frame.
   The data contract allows it, and the validator's speed check and the late-drop report both skip
@@ -988,7 +999,7 @@ short and actionable. This file is public: no research sources, product names or
   runs on seed 7, which has two kickoffs after goals, and holds every player's peak speed under
   the validator's limit. It fails on the old code.
 
-### 106. A test that waits for its rule hangs when the rule breaks, and a hang is not a red test
+### 107. A test that waits for its rule hangs when the rule breaks, and a hang is not a red test
 - **What happened:** two WebSocket tests on the phone relay checked their rule by waiting for a
   message (a close, the room's latest state). With the rule mutated, the message never came and
   pytest blocked for about 40 minutes, until the process was killed by hand. A CI job would have waited
