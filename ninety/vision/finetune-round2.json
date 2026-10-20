@@ -1,0 +1,53 @@
+{
+  "notes": {
+    "val_seeds": "Round 2 (docs/eval/round2/PLAN.md): 24 mesh clips on training seeds 7401-7424, rendered at the round's commit with each seed's own draws, chosen before any was rendered. Both arms validate and stop early on them.",
+    "stride": "Every 5th frame (5 fps): nearer frames are near copies of each other.",
+    "resolution": "640, divisible by patch 16 x windows 2. At the default 512 the median ball is 7.1 px (docs/eval/dataset-stats.json); 640 gives about 8.9 px for a 1.6x cost. Larger is a measured ablation, not a default.",
+    "batch": "4 images, gradients accumulated 4 times: an effective batch of 16, rfdetr's default target. It was 2 x 8 (the same optimisation, half the memory) while training on a 24 GB Mac, where 4 x 4 took about 18 GB of unified memory; a 24 GB GPU holds 4 x 4.",
+    "epochs": "Up to 8 with early stopping (patience 3): the model already detects players and the ball after 30 epochs of v2/v2los; this adapts it to engine-v1 renders. Set before the run.",
+    "seed": "Fixed so a rerun on the same data gives the same model, up to GPU nondeterminism.",
+    "num_workers": "8 data-loading workers on the GPU machine: with 2 the RTX 4090 sat at 13-23% busy while the loader ran at 90% CPU. Speed only; the data and the order of training are unchanged.",
+    "purpose": "Targeted round 2: ours-v5 and ours-v5-ctrl both continue from ours-v4 (--init) on the 160 round-1 clips (round1, round1ctrl) plus their arm's clips: the targeted windows or the same seeds with occlusion=natural. Only the arm's clips differ. Everything else equals finetune-round1.json. Set before any round-2 clip was rendered.",
+    "lr": "Half of finetune.json's (5e-5, encoder 7.5e-5), the usual choice when continuing from a trained checkpoint, so the adaptation does not undo what it learned. Set before the run."
+  },
+  "val_seeds": [
+    7401,
+    7402,
+    7403,
+    7404,
+    7405,
+    7406,
+    7407,
+    7408,
+    7409,
+    7410,
+    7411,
+    7412,
+    7413,
+    7414,
+    7415,
+    7416,
+    7417,
+    7418,
+    7419,
+    7420,
+    7421,
+    7422,
+    7423,
+    7424
+  ],
+  "stride": 5,
+  "resolution": 640,
+  "train": {
+    "epochs": 8,
+    "batch_size": 4,
+    "grad_accum_steps": 4,
+    "lr": 5e-05,
+    "lr_encoder": 7.5e-05,
+    "early_stopping": true,
+    "early_stopping_patience": 3,
+    "checkpoint_interval": 5,
+    "num_workers": 8,
+    "seed": 7
+  }
+}
