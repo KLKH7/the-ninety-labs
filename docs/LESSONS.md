@@ -1090,7 +1090,7 @@ short and actionable. This file is public: no research sources, product names or
   added separately, was aimed at one fixed spot 4 m from the touchline with no such check. With the
   passer's own kick error, about a third of clearances went straight out with nobody near.
 - **Rule:** an option that sends the ball somewhere is valued over the strikes the kicker's error
-  allows, with the same out-of-play and race rules the pass uses (`decisions.clear_value` reuses
-  `strike_nodes`, `flight`, `out_of_play` and `reach_time`); a new kind of kick does not get its own,
-  simpler physics.
+  allows, with the pass estimate's own pieces (`decisions.clear_value` reuses `strike_nodes`,
+  `flight`, `out_of_play`, `reach_time` and the P16 turn); where it simplifies them (a hard race, no
+  body in the way), the row says so (GROUNDING D9). A new kind of kick does not get its own physics.
 - **Check:** `tests/test_decisions.py::test_an_unpressed_clearance_is_not_aimed_where_his_kick_error_puts_it_out`.

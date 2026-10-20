@@ -856,7 +856,9 @@ def test_an_unpressed_clearance_is_not_aimed_where_his_kick_error_puts_it_out():
     # part of his kick error and nobody can get to it (it once was the only aim, whatever happened).
     s = scene(x=10.0, y=6.0)
     clear = next(o for o in D.options(s) if o.kind == "clear")
-    assert min(clear.target[1], D.PITCH_Y - clear.target[1]) > D.CLEAR_IN_FROM_LINE_M[0]
+    assert min(clear.target[1], D.PITCH_Y - clear.target[1]) > 4.0
+    assert clear.value > D.clear_value(s, clear.target[0], 4.0, 0.5 * D.value(clear.target[0], 4.0, s.goal_x)
+                                       - 0.5 * D.loss_cost(clear.target[0], 4.0, s.goal_x))
 
 
 def test_a_clearance_that_goes_out_costs_their_throw_in_and_one_in_play_is_the_contest():
@@ -876,3 +878,32 @@ def test_a_team_mate_who_can_get_there_keeps_a_wide_clearance_in_play():
     alone = D.clear_value(scene(x=10.0, y=34.0), tx, 64.0, 1.0)
     covered = D.clear_value(scene(x=10.0, y=34.0, mates=[("h7", 57.0, 65.0, 0.0)]), tx, 64.0, 1.0)
     assert alone < 0.6 and covered > alone + 0.3
+
+
+def test_his_own_kick_error_is_what_puts_a_wide_clearance_out():
+    # The same aim, 4 m from the line: pressed (an opponent at his back, too far from where it lands
+    # to reach it) his kick error is wider, so more of it goes out.
+    tx = 10.0 + D.CLEAR_AHEAD_M
+    free = D.clear_value(scene(x=10.0, y=6.0), tx, 4.0, 1.0)
+    pressed = D.clear_value(scene(x=10.0, y=6.0, opponents=[(8.5, 6.0)]), tx, 4.0, 1.0)
+    assert pressed < free < 1.0
+
+
+def test_an_opponent_who_gets_there_first_also_keeps_it_in_play():
+    # In play it is the contest, whoever reaches it (design); out it is their restart.
+    tx = 10.0 + D.CLEAR_AHEAD_M
+    alone = D.clear_value(scene(x=10.0, y=34.0), tx, 64.0, 1.0)
+    theirs = D.clear_value(scene(x=10.0, y=34.0, opponents=[(57.0, 65.0)]), tx, 64.0, 1.0)
+    assert theirs > alone + 0.3
+
+
+def test_the_restart_given_away_follows_the_line_the_ball_crossed():
+    gx = 105.0  # he attacks x = 105
+    assert D.restart_cost(60.0, -0.2, gx) == D.loss_cost(60.0, 0.0, gx)  # their throw-in there
+    assert D.restart_cost(60.0, 68.2, gx) == D.loss_cost(60.0, 68.0, gx)
+    kick = D.loss_cost(105.0 - D.GOAL_KICK_M, 34.0, gx)  # their goal kick, from their goal area
+    assert D.restart_cost(105.2, 30.0, gx) == kick
+    assert D.restart_cost(-0.2, 10.0, gx) == D.loss_cost(0.0, 0.0, gx)  # their corner at our end
+    assert D.restart_cost(105.1, 68.3, gx) == D.loss_cost(105.0, 68.0, gx)  # further over the touchline
+    # mirrored for the side attacking x = 0
+    assert D.restart_cost(-0.2, 30.0, 0.0) == D.loss_cost(D.GOAL_KICK_M, 34.0, 0.0)
