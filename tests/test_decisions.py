@@ -862,3 +862,11 @@ def test_a_shot_is_an_option_only_within_range_of_the_goal_straight_line():
     assert "shoot" in kinds(scene(x=105.0 - 39.0, y=34.0))  # central, just inside
     # the side attacking x = 0 alike
     assert "shoot" not in kinds(scene(x=36.0, y=34.0 + 25.0, goal_x=0.0))
+
+
+def test_the_shot_rates_end_where_shooting_range_ends():
+    # D3: no rate is extrapolated past the last sourced zone and the range (once a straight line to
+    # 0 at 105 m, which nothing sourced).
+    assert D.SHOT_ANCHORS[-1][0] == offball.SHOT_RANGE_M
+    assert D.rate_at(offball.SHOT_RANGE_M + 1.0) == 0.0
+    assert D.rate_at(35.0) > 0.0

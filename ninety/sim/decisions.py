@@ -45,10 +45,12 @@ PRESSURE_FRONT_M, PRESSURE_BEHIND_M = perception.PRESSURE_FRONT_M, perception.PR
 # D3: how often a shot goes in by distance from the goal's centre, for a central shot: the
 # share of real shots that scored by zone (six-yard box 31%, the rest of the central box 17.7%,
 # central outside the box 5.3%, long range 2.3%; American Soccer Analysis, 8,291 MLS shots, 2013).
-# Distances are the zones' approximate middles (*verify*); beyond 40 m is *design*. A player's
+# Distances are the zones' approximate middles (*verify*); 40 m, the end of shooting range
+# (offball.SHOT_RANGE_M), is *design*, and no shot is offered beyond it, so the table ends there. A
+# check, not a fit: shots from about 32 m to halfway scored 2.5% (Premier League, 929 shots) and 1.9%
+# (Bundesliga, 880) in 2012-13, direct free kicks included (Rathke 2017, Table 1, zone 8). A player's
 # sense of a good chance comes from what goes in, not from the open goal he sees.
-SHOT_ANCHORS = ((0.0, 0.31), (3.0, 0.31), (11.0, 0.177), (20.0, 0.053), (30.0, 0.023), (40.0, 0.01),
-                (105.0, 0.0))
+SHOT_ANCHORS = ((0.0, 0.31), (3.0, 0.31), (11.0, 0.177), (20.0, 0.053), (30.0, 0.023), (40.0, 0.01))
 BLOCKER_FACTOR = 0.5  # design, verify: each defender in the shooting cone blocks the shot half the time
 # D3: the zone rates are averages over real shots, which usually face a defender. Relative to that
 # average, a shot with no outfield defender in the triangle between the ball and the posts (the
@@ -205,7 +207,8 @@ def goal_angle(x: float, y: float, goal_x: float) -> float:
 
 
 def rate_at(distance: float) -> float:
-    """D3: the real scoring rate of a central shot from this distance, between the anchors."""
+    """D3: the real scoring rate of a central shot from this distance, between the anchors; none
+    beyond the last (out of shooting range)."""
     for (d0, r0), (d1, r1) in zip(SHOT_ANCHORS, SHOT_ANCHORS[1:], strict=False):
         if distance <= d1:
             return r0 + (r1 - r0) * (distance - d0) / (d1 - d0)
