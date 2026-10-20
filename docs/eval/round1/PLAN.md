@@ -185,3 +185,46 @@ Without the re-frozen test set, the published numbers would describe capsules.
 
 Order: merge this PR, render the 165 clips from that commit, freeze the mesh test set before any
 model is scored on it, then train and score.
+
+## 7. Rendered (2026-10-20)
+
+Everything was rendered from main `91d1e3b` (#136 and #146), with the Coordinator's approval.
+
+| Set | Run | Clips | Where | Checks |
+|---|---|---|---|---|
+| Round 1 | `round1`, seeds 7101–7180 | 80: 69 `crowded`, 11 `keeper` | Azure, 11 executions | 80 of 80 passed the render checks and meet the data contract |
+| Control | `round1ctrl`, seeds 7201–7280 | 80: the seeds' own draws (58 natural, 22 crowded) | Azure, 8 executions | 80 of 80, as above |
+| Mesh test set | `test-frozen-91d1e3b` | 5 | locally, software GL | [test-set-frozen-91d1e3b.json](../test-set-frozen-91d1e3b.json) |
+
+- Every Azure execution's `NINETY_COMMIT` was checked: all 19 were `91d1e3b`.
+- The data contract check ran `ninety-validate` at `91d1e3b`, one process.
+- Each dataset list ([dataset-v2-round1.json](../dataset-v2-round1.json),
+  [dataset-v2-ctrl.json](../dataset-v2-ctrl.json)) records every new clip's run, commit, renderer
+  and overrides.
+
+Mostly hidden balls at stride 5, the training labels (`ninety-data-stats --stride 5`):
+
+| | Ball boxes | Mostly hidden | Share |
+|---|---|---|---|
+| Round 1 | 3,971 | 390 | 9.8% |
+| Control | 3,730 | 275 | 7.4% |
+
+Every frame, by window:
+
+| Window | Mostly hidden balls |
+|---|---|
+| Round 1, `crowded` | 9.9% |
+| Round 1, `keeper` | 6.1% |
+| Control, natural | 5.8% |
+| Control, `crowded` | 11.2% |
+
+The control is closer to round 1 than the local sample suggested, for two reasons:
+- Its seeds drew `crowded` at their own 30% rate.
+- Its natural windows hide more (5.8%) than the four sample seeds did (2.4%).
+
+Round 1 adds 42% more mostly hidden ball labels than the control, plus 11 keeper windows the
+control has none of. The ablation measures that difference, no more.
+
+Training: [finetune-round1.json](../../../ninety/vision/finetune-round1.json). It is
+finetune-short.json from ours-v3, with the same 24 validation clips, so the two runs differ only in
+their 80 clips.
