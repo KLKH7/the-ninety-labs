@@ -121,6 +121,11 @@ RESTART_DISTANCE_M = {"throw_in": 2.0, "corner": 9.15, "goal_kick": PENALTY_DEPT
 PENALTY_MARK_M = 11.0  # Law 1: the penalty mark, 11 m from the goal line
 CORNER_ARC_M = 1.0  # Law 1: the corner arc's radius; Law 17 measures the 9.15 m from the arc
 KEEP_OFF_MARGIN_M = 0.5  # design: opponents aim this far outside a restart's distance, as at a kickoff
+# Law 13 and Bray (Plus Maths, 2014): at a direct free kick the defending side builds a wall at the
+# restart's distance that hides the goal from the near post to this far past its centre (Bray: two
+# thirds of the goal line, q = p / 3); the keeper covers the rest
+WALL_COVER_PAST_CENTRE_M = GOAL_HALF_WIDTH / 3
+WALL_ATTACKER_GAP_M = 1.0  # Law 13: with three or more defenders in a wall, attackers stay 1 m from it
 # design: the taker stands this far from a set ball's centre, so it is clear of him whichever way he
 # is turned (his shoulder's reach, P11) with a ball's width to spare for his steering
 SET_BALL_CLEAR_M = shape.surface(math.pi / 2, 0.0, pad=2 * ball.RADIUS)
@@ -196,6 +201,8 @@ class Restart:
     carried_by: str | None = None  # who has the dead ball at his feet (or in his hands)
     passed_by: str | None = None  # who knocked it on toward the spot, while it is still rolling
     gathered_at: float = 0.0  # when the one who has it took it
+    direct: bool = True  # a free kick that may be scored from directly (Law 13); offside's is indirect
+    wall: dict[str, tuple[float, float]] = field(default_factory=dict)  # defender -> his spot in it
 
 
 @dataclass
@@ -632,7 +639,8 @@ class Engine:
         self.emit("offside", p.team, x, y, player=p.id)
         self.possessor = None  # the ball is dead and rolls on until the free kick is taken
         self.chase = {}
-        self.stop("free_kick", other(p.team), (clamp(x, 0.5, PITCH_X - 0.5), clamp(y, 0.5, PITCH_Y - 0.5)))
+        self.stop("free_kick", other(p.team), (clamp(x, 0.5, PITCH_X - 0.5), clamp(y, 0.5, PITCH_Y - 0.5)),
+                  direct=False)  # Law 11: an indirect free kick
 
     def onside_limit(self, team: str, positions: list[tuple[float, float]], ball_x: float) -> float:
         """Law 11: how far toward the opponents' goal a player of `team` may stand and be onside:
@@ -1472,13 +1480,56 @@ class Engine:
         self.celebration = Celebration(team, focus.id, (flag_x, flag_y), until)
 
     def stop(self, kind: str, team: str, spot: tuple[float, float], taker: str | None = None,
-             delay: str | None = None) -> None:
+             delay: str | None = None, direct: bool = True) -> None:
         if taker is None:
             taker = self.nearest(spot[0], spot[1], team).id
         lo, hi = RESTART_DELAY_S[delay or kind]
         self.dribbler = self.dribble_to = None  # the ball is dead: nobody is running onto a touch
         self.restart_kicker = None  # a new stoppage ends the last restart's bar
-        self.restart = Restart(kind, team, spot[0], spot[1], taker, self.t + self.rng.uniform(lo, hi))
+        self.restart = Restart(kind, team, spot[0], spot[1], taker, self.t + self.rng.uniform(lo, hi),
+                               direct=direct)
+        if kind == "free_kick" and direct:
+            self.restart.wall = self.form_wall(self.restart)
+
+    def wall_spots(self, r: Restart) -> list[tuple[float, float]]:
+        """Law 13, Bray (2014): where a wall stands for a direct free kick within shooting range (the
+        distance inside which the shot is an option, offball.SHOT_RANGE_M). It hides the goal from
+        the near post to WALL_COVER_PAST_CENTRE_M past the centre, seen from the ball, on a line across
+        the kick at the restart's distance (and KEEP_OFF_MARGIN_M); its width over a shoulder's
+        breadth (P11) is how many stand in it, shoulder to shoulder (Bray divides by 0.45 m and
+        finds four at 22 m straight on, as this does). Spots off the pitch are left out."""
+        line = goal_x(r.team)  # the goal the kick is at
+        bx, by = self.restart_ball_spot(r)
+        if abs(line - bx) >= offball.SHOT_RANGE_M:
+            return []
+        mid_y = PITCH_Y / 2
+        near = mid_y - GOAL_HALF_WIDTH if by < mid_y else mid_y + GOAL_HALF_WIDTH
+        cover = mid_y + (WALL_COVER_PAST_CENTRE_M if near < mid_y else -WALL_COVER_PAST_CENTRE_M)
+        a_near = fmath.atan2(near - by, line - bx)
+        sweep = (fmath.atan2(cover - by, line - bx) - a_near + math.pi) % (2 * math.pi) - math.pi
+        mid = a_near + sweep / 2
+        d = RESTART_DISTANCE_M["free_kick"] + KEEP_OFF_MARGIN_M
+        width = 2 * d * math.tan(abs(sweep) / 2)
+        n = int(width / shape.SHOULDER_BREADTH_M)
+        cx, cy = bx + fmath.cos(mid) * d, by + fmath.sin(mid) * d
+        ux, uy = -fmath.sin(mid), fmath.cos(mid)  # across the line of the kick
+        spots = [(cx + ux * (i - (n - 1) / 2) * shape.SHOULDER_BREADTH_M,
+                  cy + uy * (i - (n - 1) / 2) * shape.SHOULDER_BREADTH_M) for i in range(n)]
+        return [(x, y) for x, y in spots if 0.5 <= x <= PITCH_X - 0.5 and 0.5 <= y <= PITCH_Y - 0.5]
+
+    def form_wall(self, r: Restart) -> dict[str, tuple[float, float]]:
+        """The defending side's outfielders nearest the wall's spots stand in it, the nearest pair of
+        player and spot first."""
+        spots = self.wall_spots(r)
+        free = [p for p in self.players if p.team != r.team and p.role != "GK"]
+        wall: dict[str, tuple[float, float]] = {}
+        while spots and free:
+            p, spot = min(((q, s) for q in free for s in spots),
+                          key=lambda ps: math.hypot(ps[0].x - ps[1][0], ps[0].y - ps[1][1]))
+            wall[p.id] = spot
+            free.remove(p)
+            spots.remove(spot)
+        return wall
 
     def restart_ball_spot(self, r: Restart) -> tuple[float, float]:
         """Where the ball goes for this restart: the mark for a penalty (Law 14), else where the
@@ -1783,6 +1834,10 @@ class Engine:
             sx, sy = self.restart_ball_spot(r)
             behind = SET_BALL_CLEAR_M
             return sx - attack_dir(p.team) * behind, sy, pace
+        wall = self.restart or self.set_by
+        if wall and p.id in wall.wall:  # Law 13: in the wall until the ball is kicked, there in time (O8)
+            wx, wy = wall.wall[p.id]
+            return wx, wy, self.in_time(p, wx, wy)
         bx, by = self.play_point(p)  # O8: where the ball is going, once a pass is struck
         poss_team = self.team_of(self.possessor) if self.possessor else None
         shift = (clamp(bx, 0, PITCH_X) - PITCH_X / 2) * 0.45
@@ -2114,6 +2169,15 @@ class Engine:
         out by the shortest way, KEEP_OFF_MARGIN_M clear, as the kick-off and penalty spots are;
         those two restarts have their own spots (kickoff_spot, penalty_wait_spot)."""
         r = self.restart or self.set_by
+        if r is not None and p.team == r.team and p.id != r.taker and len(r.wall) >= 3:
+            # Law 13: with three or more defenders in a wall, attackers keep 1 m from it
+            clear = WALL_ATTACKER_GAP_M + KEEP_OFF_MARGIN_M
+            for wx, wy in r.wall.values():
+                d = math.hypot(tx - wx, ty - wy)
+                if d < clear:
+                    ux, uy = ((tx - wx) / d, (ty - wy) / d) if d > 1e-6 else (-attack_dir(p.team), 0.0)
+                    tx, ty = wx + ux * clear, wy + uy * clear
+            return tx, ty
         if r is None or p.team == r.team or r.kind in ("kick_off", "penalty_kick"):
             return tx, ty
         if r.kind == "goal_kick":
@@ -2141,15 +2205,17 @@ class Engine:
                 on = [q for q in round_it if 0.5 <= q[0] <= PITCH_X - 0.5 and 0.5 <= q[1] <= PITCH_Y - 0.5]
                 if on:
                     tx, ty = min(on, key=lambda q: math.hypot(q[0] - ox, q[1] - oy))
-        # And he goes round the circle, not across it. Inside it, he first steps straight out; while
-        # the straight way to his target would cut inside, he aims along the circle, at most
+        # And he goes round the circle, not across it. Inside it, he first steps straight out, to
+        # KEEP_OFF_MARGIN_M past it (aimed at its edge, he would stop on the edge, still inside);
+        # while the straight way to his target would cut inside, he aims along the circle, at most
         # KEEP_OFF_STEP_DEG round from where he is.
         mx, my = p.x - bx, p.y - by
         m = math.hypot(mx, my)
-        out_x, out_y = (bx + mx / m * clear, by + my / m * clear) if m > 1e-6 else (tx, ty)
+        out = clear + KEEP_OFF_MARGIN_M
+        out_x, out_y = (bx + mx / m * out, by + my / m * out) if m > 1e-6 else (tx, ty)
         if 1e-6 < m < clear and 0.5 <= out_x <= PITCH_X - 0.5 and 0.5 <= out_y <= PITCH_Y - 0.5:
             tx, ty = out_x, out_y
-        elif m > 1e-6 and segment_distance(bx, by, p.x, p.y, tx, ty) < clear:
+        elif m > 1e-6 and (m < clear or segment_distance(bx, by, p.x, p.y, tx, ty) < clear):
             here, there = fmath.atan2(my, mx), fmath.atan2(ty - by, tx - bx)
             turn = (there - here + math.pi) % (2 * math.pi) - math.pi
             a = here + clamp(turn, -math.radians(KEEP_OFF_STEP_DEG), math.radians(KEEP_OFF_STEP_DEG))

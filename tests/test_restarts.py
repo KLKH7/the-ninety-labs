@@ -708,3 +708,77 @@ def test_an_own_goal_is_celebrated_round_the_scoring_sides_nearest_player():
     nearest = min((p for p in e.players if p.team == "home" and p.role != "GK"),
                   key=lambda p: math.hypot(p.x - 106.0, p.y - 33.0))
     assert c.team == "home" and c.focus == nearest.id
+
+
+def test_a_wall_is_sized_from_the_goal_it_must_hide():
+    """Bray (2014): the wall hides the goal from the near post to a third of the half-goal past its
+    centre, at the restart's distance; its width over a shoulder's breadth is how many stand in it.
+    His worked example: four at 22 m straight on. Closer and more central, more; further, fewer;
+    outside shooting range, none (Link et al. 2016: centrality and proximity increase the wall)."""
+    e = Engine(3)
+
+    def size(x: float, y: float) -> int:
+        return len(e.wall_spots(Restart("free_kick", "home", x, y, "h9", e.t + 5)))
+
+    assert size(PITCH_X - 22.0, 34.0) == 4
+    assert size(PITCH_X - 17.0, 34.0) > size(PITCH_X - 22.0, 34.0) > size(PITCH_X - 35.0, 34.0) > 0
+    assert size(PITCH_X - 22.0, 34.0) > size(PITCH_X - 20.0, 60.0)  # the same distance, a sharper angle
+    assert size(PITCH_X - 45.0, 34.0) == 0
+
+
+def test_a_direct_free_kick_22_m_out_is_taken_with_a_wall_in_place():
+    """Defect: at free kicks near goal the defenders stood wherever their marking put them, with 0 to
+    3 of them between the ball and the goal. The wall stands across the kick at 9.15 m when it is
+    struck, and nothing else of the defence is scripted."""
+    e = Engine(3)
+    still(e)
+    e.possessor = None
+    taker = e.by_id["h9"]
+    taker.x, taker.y = PITCH_X - 22.0 - 0.47, 34.0
+    e.ball = (PITCH_X - 22.0, 34.0, 0.0, 0.0, 0.0, 0.0)
+    e.stop("free_kick", "home", (PITCH_X - 22.0, 34.0), taker=taker.id)
+    e.restart.carried_by = taker.id
+    e.restart.ready_at = e.t + 15.0
+    wall = dict(e.restart.wall)
+    assert len(wall) == 4 and all(e.by_id[pid].team == "away" and e.by_id[pid].role != "GK" for pid in wall)
+    n = len(e.match.events)
+    for _ in range(int(40 / DT)):
+        e.step()
+        if any(ev["type"] in ("pass", "shot") for ev in e.match.events[n:]):
+            break
+    else:
+        raise AssertionError("the free kick was never struck")
+    for pid, (wx, wy) in wall.items():
+        p = e.by_id[pid]
+        assert math.hypot(p.x - wx, p.y - wy) < 1.0, pid  # in the wall when it is struck
+        assert math.hypot(p.x - (PITCH_X - 22.0), p.y - 34.0) >= 9.15, pid
+
+
+def test_an_indirect_free_kick_has_no_wall():
+    """Offside gives an indirect free kick (Law 11): it cannot be scored from directly."""
+    e = Engine(3)
+    e.possessor = None
+    e.offside_offence(e.by_id["a9"], 20.0, 34.0)  # away offside near the home goal: home's free kick
+    assert e.restart.kind == "free_kick" and not e.restart.direct and e.restart.wall == {}
+
+
+def test_attackers_keep_1_m_from_a_wall_of_three_or_more():
+    """Law 13: with three or more defenders in a wall, attackers stay at least 1 m from it."""
+    e = Engine(3)
+    e.possessor = None
+    e.stop("free_kick", "home", (PITCH_X - 22.0, 34.0), taker="h9")
+    assert len(e.restart.wall) >= 3
+    wx, wy = next(iter(e.restart.wall.values()))
+    tx, ty = e.keep_off(e.by_id["h10"], wx + 0.3, wy)
+    assert math.hypot(tx - wx, ty - wy) >= 1.0
+    assert e.keep_off(e.by_id["h10"], 60.0, 20.0) == (60.0, 20.0)  # away from the wall: untouched
+
+
+def test_the_wall_breaks_up_once_the_ball_is_in_play():
+    e = Engine(3)
+    e.possessor = None
+    e.stop("free_kick", "home", (PITCH_X - 22.0, 34.0), taker="h9")
+    pid, spot = next(iter(e.restart.wall.items()))
+    assert e.shape_target(e.by_id[pid])[:2] == spot
+    e.restart = None  # kicked and moving: in play
+    assert e.shape_target(e.by_id[pid])[:2] != spot
