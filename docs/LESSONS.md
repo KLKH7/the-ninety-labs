@@ -975,47 +975,6 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_describe.py::test_the_default_run_makes_no_azure_call`; mutate by adding
   the import at module top and watch it go red.
 
-### 105. Judge a drawn motion over the frames around the moment, and watch the clip
-- **What happened:** #146 made the foot reach the ball on the contact frame and its tests measured
-  exactly that, so they passed while the kick lost its swing: the foot was eased in from at most
-  0.4 m behind the ball, and a pass looked like a player standing still with the ball between his
-  feet. A lunge dropped the hips 0.24 m and snapped them back in two frames. Since the skinned
-  mesh (a3d228e) every stored pose bent both elbows about 80 degrees, so the forearms were held out
-  in front whatever the player did; and since Oct 15 the boards behind the goals had their print
-  flipped and read mirrored. No test looked at any of it; the owner found all four by watching
-  review clips. Measuring every limb frame by frame then found a fifth, in every run since #146: the
-  stride planted each foot a quarter of a cycle away from where the gait has it on the grass, so on
-  about one player-frame in five a foot jumped 0.3 to 1 m at a landing or lift-off.
-- **Rule:** a change to how a body moves is tested over the frames around the event, not only on
-  it: the swing before, the follow-through after, the rest pose's joints, and how far anything
-  moves in one frame. Every printed surface has a test that it reads left to right from each camera
-  that sees its print. A before/after clip goes on the pull request and someone watches it before
-  merge.
-- **Check:** `tests/test_render_motion.py` (arms hang and swing, the kick's backswing and
-  follow-through, the lunge's pace, the keeper's hands on the ball) and
-  `tests/test_render_stadium.py` each fail on `e50440c` and pass with the fix, and so do
-  `test_setting_off_running_and_pulling_up_moves_no_limb_in_a_jump` and the tackle test, which cap
-  how far any limb moves relative to the body in one frame.
-
-### 113. A check that fails on a few frames names a class of defect: sweep every frame for it
-- **What happened:** render-check failed `player_feet_in_boxes` at 0.4.2 on 2 foot checks each of
-  seeds 7 and 11. The 0.4.3 fix traced those four frames to three causes and tested each, and the
-  re-render of seed 7 failed 7 checks in two other sequences: a pass cushioned with one foot and
-  struck with the other on the move left the first foot's plant where it stood before the touch,
-  2 m behind by the strike, and the mesh hung both feet in the air. Fixing that sequence (0.4.4)
-  left 1 failure. A sweep of every player-frame of both clips then found 21 frames with both mesh
-  feet above 0.2 m and the body not jumping, in four players and two more causes: a touch that had
-  faded before the next one still let its foot go from the old plant, and a foot the touch caught
-  mid-stride came down over a whole slow step. The frames were instances; the class was a foot
-  the body has left behind.
-- **Rule:** when a picture check fails on a few frames, name the class of defect, measure it over
-  every player-frame of the clips in Python (no render needed: the mesh's markers come from
-  `meshpose`), and fix every sequence that shows it before re-rendering.
-- **Check:** `test_a_first_touch_then_a_strike_on_the_move_keeps_a_foot_on_the_grass` (both
-  cases) and `test_a_thigh_touch_on_the_move_keeps_a_foot_on_the_grass` fail on `0312d60` and
-  pass; removing any one of the three parts of the fix fails one of them or the tackle's limb cap.
-  The sweep at 0.4.5: 0 such player-frames on seeds 7 and 11 (worst 0.18 m), from 21.
-
 ### 106. Look for an open pull request on the same task before building it
 - **What happened:** a session was handed "build the Personalizer over A2A" and built it, tests and
   mutation run included, before it noticed that draft #131 was the same task, further along. Two
@@ -1202,3 +1161,44 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_credentials.py`. Each site takes the token before it simulates, and
   hands the same `SignedIn` credential to every client; deleting any `sign_in` turns its test
   red. An AST check keeps `azure.identity.DefaultAzureCredential` out of the live modules.
+### 124. Judge a drawn motion over the frames around the moment, and watch the clip
+- **What happened:** #146 made the foot reach the ball on the contact frame and its tests measured
+  exactly that, so they passed while the kick lost its swing: the foot was eased in from at most
+  0.4 m behind the ball, and a pass looked like a player standing still with the ball between his
+  feet. A lunge dropped the hips 0.24 m and snapped them back in two frames. Since the skinned
+  mesh (a3d228e) every stored pose bent both elbows about 80 degrees, so the forearms were held out
+  in front whatever the player did; and since Oct 15 the boards behind the goals had their print
+  flipped and read mirrored. No test looked at any of it; the owner found all four by watching
+  review clips. Measuring every limb frame by frame then found a fifth, in every run since #146: the
+  stride planted each foot a quarter of a cycle away from where the gait has it on the grass, so on
+  about one player-frame in five a foot jumped 0.3 to 1 m at a landing or lift-off.
+- **Rule:** a change to how a body moves is tested over the frames around the event, not only on
+  it: the swing before, the follow-through after, the rest pose's joints, and how far anything
+  moves in one frame. Every printed surface has a test that it reads left to right from each camera
+  that sees its print. A before/after clip goes on the pull request and someone watches it before
+  merge.
+- **Check:** `tests/test_render_motion.py` (arms hang and swing, the kick's backswing and
+  follow-through, the lunge's pace, the keeper's hands on the ball) and
+  `tests/test_render_stadium.py` each fail on `e50440c` and pass with the fix, and so do
+  `test_setting_off_running_and_pulling_up_moves_no_limb_in_a_jump` and the tackle test, which cap
+  how far any limb moves relative to the body in one frame.
+
+### 125. A check that fails on a few frames names a class of defect: sweep every frame for it
+- **What happened:** render-check failed `player_feet_in_boxes` at 0.4.2 on 2 foot checks each of
+  seeds 7 and 11. The 0.4.3 fix traced those four frames to three causes and tested each, and the
+  re-render of seed 7 failed 7 checks in two other sequences: a pass cushioned with one foot and
+  struck with the other on the move left the first foot's plant where it stood before the touch,
+  2 m behind by the strike, and the mesh hung both feet in the air. Fixing that sequence (0.4.4)
+  left 1 failure. A sweep of every player-frame of both clips then found 21 frames with both mesh
+  feet above 0.2 m and the body not jumping, in four players and two more causes: a touch that had
+  faded before the next one still let its foot go from the old plant, and a foot the touch caught
+  mid-stride came down over a whole slow step. The frames were instances; the class was a foot
+  the body has left behind.
+- **Rule:** when a picture check fails on a few frames, name the class of defect, measure it over
+  every player-frame of the clips in Python (no render needed: the mesh's markers come from
+  `meshpose`), and fix every sequence that shows it before re-rendering.
+- **Check:** `test_a_first_touch_then_a_strike_on_the_move_keeps_a_foot_on_the_grass` (both
+  cases) and `test_a_thigh_touch_on_the_move_keeps_a_foot_on_the_grass` fail on `0312d60` and
+  pass; removing any one of the three parts of the fix fails one of them or the tackle's limb cap.
+  The sweep at 0.4.5: 0 such player-frames on seeds 7 and 11 (worst 0.18 m), from 21.
+
