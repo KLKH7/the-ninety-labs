@@ -1151,3 +1151,15 @@ short and actionable. This file is public: no research sources, product names or
   fails with the smoothing removed, and
   `test_a_track_ends_at_the_speed_its_player_was_running` fails with a plain average, which lags
   at a track's end.
+
+### 116. `sum()` of floats is not the same number on every Python
+- **What happened:** the phone's tracked frames file is committed, and a test rebuilds it and needs
+  the same bytes. It passed on Python 3.12 and failed on 3.11. Python 3.12 made `sum()` of floats
+  use compensated addition, so a smoothed position's last digit moved, and a rounding at 0.01 m
+  went the other way.
+- **Rule:** code whose output is committed and compared byte for byte adds floats with
+  `math.fsum` (one exact rounding, the same everywhere), or rounds well away from the noise.
+  This is lesson 46's rule for the engine, applied to every committed output.
+- **Check:** CI's pytest matrix runs 3.11 and 3.12. `tests/test_tracked_frames.py` rebuilds
+  `tests/fixtures/tracked-seed900001.jsonl` on both; with `sum` in `tracked_frames.smooth` it
+  fails on 3.11.

@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from pathlib import Path
 
 from ninety.vision import track as tr
@@ -66,15 +67,17 @@ def smooth(
             hi += 1
         ts = frames[lo:hi]
         n = len(ts)
-        mt = sum(ts) / n
-        mx = sum(p[0] for p in xy[lo:hi]) / n
-        my = sum(p[1] for p in xy[lo:hi]) / n
-        var = sum((t - mt) ** 2 for t in ts)
+        # math.fsum, not sum: it rounds once, exactly, so every Python gives the same file (sum
+        # changed to compensated addition in 3.12, and the last digit moved; lesson 46).
+        mt = math.fsum(ts) / n
+        mx = math.fsum(p[0] for p in xy[lo:hi]) / n
+        my = math.fsum(p[1] for p in xy[lo:hi]) / n
+        var = math.fsum((t - mt) ** 2 for t in ts)
         if var == 0:
             out.append((mx, my))
             continue
-        bx = sum((t - mt) * (p[0] - mx) for t, p in zip(ts, xy[lo:hi], strict=True)) / var
-        by = sum((t - mt) * (p[1] - my) for t, p in zip(ts, xy[lo:hi], strict=True)) / var
+        bx = math.fsum((t - mt) * (p[0] - mx) for t, p in zip(ts, xy[lo:hi], strict=True)) / var
+        by = math.fsum((t - mt) * (p[1] - my) for t, p in zip(ts, xy[lo:hi], strict=True)) / var
         out.append((mx + bx * (f - mt), my + by * (f - mt)))
     return out
 
