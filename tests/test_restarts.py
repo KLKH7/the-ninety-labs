@@ -799,6 +799,9 @@ def wall_kick(seed: int = 3, at: tuple[float, float] = (PITCH_X - 22.0, 34.0)) -
     e.run(1)
     e.possessor, e.restart, e.set_by, e.throw_by, e.dribbler = None, None, None, None, None
     e.celebration = None
+    # the whistle ends what was in play, as foul() does: the ball in flight, the chase, any lunge
+    e.kicked, e.dribble_to, e.windup, e.chase = None, None, None, {}
+    e.lunges.clear(), e.lunge_at.clear(), e.evade_at.clear()
     taker = e.by_id["h9"]
     taker.x, taker.y, taker.vx, taker.vy = at[0] - 0.47, at[1], 0.0, 0.0
     e.ball = (*at, 0.0, 0.0, 0.0, 0.0)
@@ -888,6 +891,24 @@ def test_a_place_on_the_edge_of_the_circle_is_walked_to_straight_in():
     p.x, p.y = bx + (wx - bx) / d * 17.0, by + (wy - by) / d * 17.0  # 7 m further out, straight behind it
     tx, ty = e.keep_off(p, wx, wy)
     assert math.hypot(tx - bx, ty - by) < 17.0 - 1.0  # he heads in toward it, not round at his distance
+
+
+def test_a_wall_player_paces_the_whole_way_in_to_be_in_place_for_the_kick():
+    """Defect: a wall player's pace was set to reach the point behind the line just as the ball
+    could, so he was still stepping up into his place, 0.4 m short, when the kick was struck. He
+    paces the whole way in, by behind the line, to stand in his place by the time the kick may be
+    taken (R1's wait), and walks at least (L4)."""
+    e = wall_kick()
+    r = e.restart
+    pid, (wx, wy) = next(iter(r.wall.items()))
+    p = e.by_id[pid]
+    d = math.hypot(wx - r.x, wy - r.y)
+    ux, uy = (wx - r.x) / d, (wy - r.y) / d
+    p.x, p.y = wx + ux * 3.0 - uy * 20.0, wy + uy * 3.0 + ux * 20.0  # 20 m along the line, 3 m behind it
+    r.ready_at = e.t + 5.0
+    kx, ky = e.way_into_wall(r, p)
+    way = math.hypot(kx - p.x, ky - p.y) + math.hypot(wx - kx, wy - ky)
+    assert e.shape_target(p)[2] == pytest.approx(way / 5.0)
 
 
 def test_wall_members_stand_close_only_near_their_places():

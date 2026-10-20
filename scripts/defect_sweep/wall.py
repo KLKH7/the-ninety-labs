@@ -64,6 +64,9 @@ def planted(seeds: list[int]) -> None:
             e.run(1)
             e.possessor, e.restart, e.set_by, e.throw_by, e.dribbler = None, None, None, None, None
             e.celebration = None
+            # the whistle ends what was in play, as foul() does: the ball in flight, the chase, any lunge
+            e.kicked, e.dribble_to, e.windup, e.chase = None, None, None, {}
+            e.lunges.clear(), e.lunge_at.clear(), e.evade_at.clear()
             taker = e.by_id["h9"]
             taker.x, taker.y, taker.vx, taker.vy = bx - 0.47, by, 0.0, 0.0
             e.ball = (bx, by, 0.0, 0.0, 0.0, 0.0)

@@ -2026,7 +2026,11 @@ class Engine:
         wall = self.restart or self.set_by
         if wall and p.id in wall.wall:  # Law 13: in the wall until the ball is kicked
             wx, wy = self.way_into_wall(wall, p)
-            return wx, wy, max(WALK_MPS, self.in_time(p, wx, wy))  # at least a walk (L4), in time (O8)
+            # At least a walk (L4); faster if the whole way in, by behind the line, would not get
+            # him to his place by the time the kick may be taken (R1's wait).
+            px, py = wall.wall[p.id]
+            way = math.hypot(wx - p.x, wy - p.y) + math.hypot(px - wx, py - wy)
+            return wx, wy, max(WALK_MPS, way / max(wall.ready_at - self.t, DT))
         bx, by = self.play_point(p)  # O8: where the ball is going, once a pass is struck
         poss_team = self.team_of(self.possessor) if self.possessor else None
         shift = (clamp(bx, 0, PITCH_X) - PITCH_X / 2) * 0.45

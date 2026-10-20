@@ -152,15 +152,16 @@ many as a shoulder's breadth each fills across the part of the goal Bray's model
 step up into their places, and stand shoulder to shoulder.
 
 Twelve planted free kicks (seeds 2, 3, 5, 7; 22 m out straight on, 18 m out at y = 24, 27 m out at
-y = 44), by [`scripts/defect_sweep/wall.py`](../../scripts/defect_sweep/wall.py) `--planted`:
+y = 44), by [`scripts/defect_sweep/wall.py`](../../scripts/defect_sweep/wall.py) `--planted`; the
+first version ran on the engine of its time, so the minute of play before each kick differs:
 
 | | First version (`5813294`) | Now |
 |---|---:|---:|
-| Walls formed, every player on his place to within a ball's radius | {F1} | {F2} |
-| seconds into the stoppage | {S1} | {S2} |
-| Furthest a wall player is from his place when the kick is struck | {O1} | {O2} |
-| Gaps between neighbours' bodies when it is struck | {G1} | {G2} |
-| Frames with two of them more than 5 cm into each other while it forms | {D1} | {D2} |
+| Walls formed, every player on his place to within a ball's radius | 0 of 12 | 12 of 12 |
+| seconds into the stoppage | none formed | 12 to 40 s (stoppages 30 to 40 s) |
+| Furthest a wall player is from his place when the kick is struck | 0.2 to 1.0 m, and 7.4 m (below) | 0.02 m |
+| Gaps between neighbours' bodies when it is struck | 0.11 to 0.83 m | -0.01 to 0.03 m |
+| Frames with two of them more than 5 cm into each other while it forms | 0 of 11,004 | 58 of 11,011 (0.5%) |
 
 In the first version one wall player stood 7 m from his place through the whole stoppage: his
 place was on the edge of the 9.15 m circle, straight in from him, and rounding sent him round the
