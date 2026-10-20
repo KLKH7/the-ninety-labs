@@ -21,6 +21,7 @@ from typing import Literal, get_args
 from jsonschema import Draft202012Validator
 from referencing import Registry, Resource  # jsonschema's own reference resolver (MIT)
 
+from ninety.agents.factcheck import PLAYER_ID as PLAYER_ID_PATTERN
 from ninety.agents.factcheck import Claim, Verdict
 from ninety.agents.slice import CLOCK_RULE, Ask, Judge
 
@@ -63,8 +64,8 @@ _CUE_SCHEMA = json.loads((SCHEMAS / "overlay_cue.schema.json").read_text())
 PERSONAS: tuple[str, ...] = tuple(_CUE_SCHEMA["properties"]["persona"]["enum"])
 LANGS = ("en", "es")
 TEAMS = ("home", "away")
-# The synthetic squads' player ids, h1..h11 and a1..a11 (as factcheck.PLAYER), whole string only.
-PLAYER_ID = re.compile(r"[ha](?:[1-9]|1[01])")
+# A player id, a squad's (h7) or a tracked player's (h-t12), as factcheck.PLAYER, whole string only.
+PLAYER_ID = re.compile(PLAYER_ID_PATTERN)
 QUESTION_MAX_CHARS = 200
 SESSION_MAX_CHARS = 64
 

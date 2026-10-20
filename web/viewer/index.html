@@ -42,11 +42,25 @@
         <dl class="pipeline" id="pipeline"></dl>
       </section>
 
+      <div class="side">
+      <section class="phone-panel" id="phone-panel" aria-labelledby="phone-title">
+        <h2 id="phone-title">Connect your phone</h2>
+        <p class="hint">A minimap in step with this video, each player's speed and heat map, and fact-checked answers to your questions.</p>
+        <button type="button" id="phone-pair">Show a pairing code</button>
+        <div id="phone-pairing" hidden>
+          <div class="phone-qr" id="phone-qr" role="img" aria-label="QR code that opens the phone companion with this code"></div>
+          <p>Scan it with your phone's camera, or open <a id="phone-link" href="#"></a> and enter</p>
+          <p class="phone-code" id="phone-code"></p>
+        </div>
+        <p class="phone-state" id="phone-state" role="status"></p>
+        <p class="phone-error" id="phone-error" role="alert"></p>
+      </section>
       <aside class="trace" id="trace" tabindex="-1" aria-labelledby="trace-title">
         <h2 id="trace-title">Agent trace</h2>
         <p class="hint">Each claim the Analyst drafted, and the Fact-checker's verdict. Only accepted claims air.</p>
         <ol id="claims"></ol>
       </aside>
+      </div>
     </main>
     <script type="module" src="./src/main.ts"></script>
   </body>
