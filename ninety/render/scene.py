@@ -71,6 +71,9 @@ STEP_DIST = 0.25
 STEP_FRAMES = 7  # 0.28 s at 25 fps
 STEP_LIFT = 0.08
 STEP_PEAK_MPS = 3.0  # the fastest a stepping foot travels (design: a quick step, not a kick)
+# A foot caught in the air by a touch (the stride's swing) is down within this many frames, the rest
+# of a swing at walking pace, before it carries on low to where it stands (design).
+LAND_FRAMES = 3
 SETTLE = 0.5  # standing still, a foot that far (as a share of the step limits) squares up
 # Where a standing foot sits under the hips: the asset's rest pose (foot marker, object metres
 # for a 1.84 m body): lateral, forward.
@@ -536,8 +539,9 @@ def _feet(g: Gait, x: float, y: float, k: float) -> None:
     # A foot that has just played the ball comes back to the grass from where the touch drew it
     # (g.ankle), not from where it stood before the touch: the body has moved on since, and a foot
     # left there can be beyond the leg's reach (a first touch then a strike on the move).
-    if g.played is not None and g.played != busy:
-        g.feet.pop(g.played, None)
+    released = g.played if g.played != busy else None
+    if released is not None:
+        g.feet.pop(released, None)
     g.played = busy
     lunge = g.lift < -LOW_M * k  # the support foot stays down under a lunge, whatever the pose
     # While a foot or thigh plays the ball, the other foot is the support: it stands, and steps after
@@ -587,9 +591,11 @@ def _feet(g: Gait, x: float, y: float, k: float) -> None:
             if foot is None:
                 # A foot coming out of a stride or a touch starts where it was drawn last: on the
                 # grass it stays there, and in the air it comes down as a step to where it stands.
-                # Either way the leg takes the plant over PLANT_EASE_FRAMES.
+                # Out of the stride the leg takes the plant over PLANT_EASE_FRAMES; a foot the touch
+                # has just let go is drawn there already, and the leg keeps it.
                 fx, fy, fz = g.ankle.get(side, (hx_, hy_, 0.0))
-                foot = {"x": fx, "y": fy, "yaw": pel, "z": fz, "swing": None, "w": 0.0}
+                taken = 1.0 if side == released else 0.0
+                foot = {"x": fx, "y": fy, "yaw": pel, "z": fz, "swing": None, "w": taken}
                 if fz > 0.02:
                     frames = _step_frames(math.hypot(fx - hx_, fy - hy_))
                     foot["swing"], foot["over"] = (fx, fy, pel, 0, frames, fz), False
@@ -606,18 +612,28 @@ def _feet(g: Gait, x: float, y: float, k: float) -> None:
                     foot["yaw"] = syaw + _wrap(pel - syaw) * e
                     foot["over"] = e >= 1.0
                 done = min(age / steps, 1.0)
-                foot["z"] = z0 * (1.0 - done) + STEP_LIFT * k * math.sin(math.pi * done)
+                foot["z"] = z0 * max(0.0, 1.0 - age / LAND_FRAMES) + STEP_LIFT * k * math.sin(math.pi * done)
                 foot["swing"] = None if age >= steps else (sx, sy, syaw, age, steps, z0)
                 if foot["swing"] is None:
                     foot["z"], foot["over"] = 0.0, False
             g.feet[side] = foot
+        # The foot playing the ball keeps its plant (where the touch blends from and back to) within
+        # the leg's reach: the body goes on moving through a touch, and a plant left behind it is a
+        # foot the leg can only dangle toward. It is drawn along at the edge of the reach.
+        if busy is not None:
+            foot = g.feet[busy]
+            hx_, hy_ = _home(x, y, pel, k, 1.0 if busy == "l" else -1.0)
+            gone = math.hypot(foot["x"] - hx_, foot["y"] - hy_)
+            if foot["swing"] is None and gone > OUT_OF_REACH_M * k:
+                f = OUT_OF_REACH_M * k / gone
+                foot["x"], foot["y"] = hx_ + (foot["x"] - hx_) * f, hy_ + (foot["y"] - hy_) * f
         # A planted foot the body has left beyond the leg's reach steps at once, whatever the other
         # foot is doing: held there, the leg cannot reach it and is drawn through the grass.
         for side, sign in (("l", 1.0), ("r", -1.0)):
             foot = g.feet[side]
             hx_, hy_ = _home(x, y, pel, k, sign)
             gone = math.hypot(foot["x"] - hx_, foot["y"] - hy_)
-            held = side == busy and g.touch["w"] >= 0.5
+            held = side == busy  # the touch's own, kept within reach above
             if foot["swing"] is None and not held and gone > OUT_OF_REACH_M * k:
                 start = (foot["x"], foot["y"], foot["yaw"], 0, _step_frames(gone))
                 foot["swing"], foot["over"] = start, False
