@@ -120,12 +120,27 @@ class Budget:
 
 
 @dataclass
+class Outbox:
+    """What one phone still has to be sent, in order. One flusher at a time sends from it, so a
+    phone sees its catch-up and the laptop's later messages in the order they were stored, never a
+    newer clock overtaken by an older one."""
+
+    ws: WebSocket
+    items: deque[dict] = field(default_factory=deque)
+    flushing: bool = False
+
+
+@dataclass
 class Room:
+    """One pairing. The API runs on one event loop (one uvicorn worker, one replica), so the steps
+    between awaits run whole: claiming the laptop slot, a phone joining (outbox filled with the
+    latest state, then registered), and a message being stored and queued for every phone."""
+
     code: str
     clip: str
     expires: float
     laptop: WebSocket | None = None
-    phones: set[WebSocket] = field(default_factory=set)
+    phones: dict[WebSocket, Outbox] = field(default_factory=dict)
     latest: dict[str, dict] = field(default_factory=dict)  # last clock and focus, for late phones
 
 
@@ -244,20 +259,24 @@ class Companion:
         if room is None:
             await ws.close(code=4404)  # unknown or expired: the laptop pairs again
             return
-        if role == "laptop" and room.laptop is not None:
-            await ws.close(code=4409)  # one laptop per room
+        refused = (
+            4409 if role == "laptop" and room.laptop is not None  # one laptop per room
+            else 4429 if role == "phone" and len(room.phones) >= MAX_PHONES
+            else None
+        )
+        if refused is not None:
+            await ws.close(code=refused)
             return
-        if role == "phone" and len(room.phones) >= MAX_PHONES:
-            await ws.close(code=4429)
-            return
-        await ws.accept()
         if role == "laptop":
-            room.laptop = ws
-        else:
-            room.phones.add(ws)
-            for message in room.latest.values():
-                await ws.send_json(message)
+            room.laptop = ws  # claimed before the accept's await, so a second laptop cannot slip in
         try:
+            await ws.accept()
+            if role == "phone":
+                # Joined and caught up in one step: what was stored before is in the outbox first,
+                # what is stored after is queued behind it. Each message arrives once, in order.
+                box = Outbox(ws, deque(room.latest.values()))
+                room.phones[ws] = box
+                await self._flush(room, box)
             while True:
                 text = await ws.receive_text()
                 if self.room(code) is not room:
@@ -274,17 +293,32 @@ class Companion:
                     await ws.close(code=1007)  # not a clock or focus message
                     return
                 room.latest[message["type"]] = message
-                for phone in list(room.phones):
-                    try:
-                        await phone.send_json(message)
-                    except (WebSocketDisconnect, RuntimeError):
-                        room.phones.discard(phone)
+                boxes = list(room.phones.values())
+                for box in boxes:
+                    box.items.append(message)
+                for box in boxes:
+                    await self._flush(room, box)
         except WebSocketDisconnect:
             pass
         finally:
             if role == "laptop" and room.laptop is ws:
                 room.laptop = None
-            room.phones.discard(ws)
+            room.phones.pop(ws, None)
+
+    @staticmethod
+    async def _flush(room: Room, box: Outbox) -> None:
+        """Send what the phone is owed, unless another flusher already is (it sends this too)."""
+        if box.flushing:
+            return
+        box.flushing = True
+        try:
+            while box.items:
+                await box.ws.send_json(box.items.popleft())
+        except (WebSocketDisconnect, RuntimeError):  # the phone went away
+            room.phones.pop(box.ws, None)
+            box.items.clear()
+        finally:
+            box.flushing = False
 
     @staticmethod
     def _relayable(text: str) -> dict | None:
@@ -298,7 +332,7 @@ class Companion:
         return message if message["type"] in RELAYED else None
 
     async def _close_room(self, room: Room, code: int) -> None:
-        for ws in [room.laptop, *room.phones]:
+        for ws in [room.laptop, *list(room.phones)]:
             if ws is not None and ws.client_state == WebSocketState.CONNECTED:
                 await ws.close(code=code)
 

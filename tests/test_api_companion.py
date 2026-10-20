@@ -3,11 +3,11 @@
 The match is a small synthetic track (h7 running, a7 standing), so no test waits on a simulation.
 """
 
+import asyncio
 import json
 
 import pytest
 from starlette.testclient import TestClient
-from starlette.websockets import WebSocketDisconnect
 
 from ninety.agents.contracts import schema_validator
 from ninety.api import app as api
@@ -83,12 +83,7 @@ def test_pairing_expires(setup):
     clock.now += 1
     r = ask(client, code)
     assert r.status_code == 404 and "expired" in r.json()["error"]
-    with (
-        pytest.raises(WebSocketDisconnect) as closed,
-        client.websocket_connect(f"/api/pair/{code}?role=phone"),
-    ):
-        pass
-    assert closed.value.code == 4404
+    assert asyncio.run(refused(client.app, f"/api/pair/{code}?role=phone")) == 4404
 
 
 def test_pairing_rejects_an_unknown_field_or_clip(setup):
@@ -107,36 +102,146 @@ def test_pairing_is_rate_limited(setup):
 
 
 # --- the relay -------------------------------------------------------------------------------------
+# Driven on one event loop, as uvicorn runs every connection. (Starlette's TestClient gives each
+# WebSocket its own thread and loop, so a relay crossed threads there, and a message could be lost
+# and a test hang: a harness that is not the server, lesson 104.) Every receive has a deadline.
+
+RECEIVE_S = 5.0
+
+
+class Closed(Exception):
+    def __init__(self, code):
+        super().__init__(code)
+        self.code = code
+
+
+class Socket:
+    """One client WebSocket to the ASGI app, on the running event loop."""
+
+    def __init__(self, app, url):
+        path, _, query = url.partition("?")
+        self.app, self.path, self.query = app, path, query
+        self.to_app, self.from_app = asyncio.Queue(), asyncio.Queue()
+
+    async def __aenter__(self):
+        scope = {
+            "type": "websocket", "asgi": {"version": "3.0"}, "scheme": "ws", "path": self.path,
+            "raw_path": self.path.encode(), "query_string": self.query.encode(), "root_path": "",
+            "headers": [(b"host", b"testserver")], "client": ("testclient", 50000),
+            "server": ("testserver", 80), "subprotocols": [], "state": {},
+        }
+        self.task = asyncio.create_task(self.app(scope, self.to_app.get, self.from_app.put))
+        await self.to_app.put({"type": "websocket.connect"})
+        first = await self._next()
+        if first["type"] == "websocket.close":
+            await self._end()
+            raise Closed(first.get("code", 1000))
+        assert first["type"] == "websocket.accept", first
+        return self
+
+    async def _next(self):
+        return await asyncio.wait_for(self.from_app.get(), RECEIVE_S)
+
+    async def send(self, message):
+        text = message if isinstance(message, str) else json.dumps(message)
+        await self.to_app.put({"type": "websocket.receive", "text": text})
+
+    async def receive(self):
+        message = await self._next()
+        if message["type"] == "websocket.close":
+            raise Closed(message.get("code", 1000))
+        return json.loads(message["text"])
+
+    async def _end(self):
+        await self.to_app.put({"type": "websocket.disconnect", "code": 1000})
+        await asyncio.wait_for(asyncio.gather(self.task, return_exceptions=True), RECEIVE_S)
+
+    async def __aexit__(self, *exc):
+        await self._end()
+
+
+async def refused(app, url):
+    """The close code a connection is refused with."""
+    with pytest.raises(Closed) as closed:
+        async with Socket(app, url):
+            pass
+    return closed.value.code
 
 
 def test_the_relay_round_trip_carries_clock_and_focus_to_every_phone(setup):
     client, _, _ = setup
     code = pair(client)
-    with (
-        client.websocket_connect(f"/api/pair/{code}?role=laptop") as laptop,
-        client.websocket_connect(f"/api/pair/{code}?role=phone") as one,
-        client.websocket_connect(f"/api/pair/{code}?role=phone") as two,
-    ):
-        for message in ({"type": "clock", "t": 12.5, "playing": True}, {"type": "focus", "player": "h7"}):
-            laptop.send_json(message)
-            assert one.receive_json() == message == two.receive_json()
-            MESSAGE.validate(message)
+
+    async def run():
+        async with (
+            Socket(client.app, f"/api/pair/{code}?role=laptop") as laptop,
+            Socket(client.app, f"/api/pair/{code}?role=phone") as one,
+            Socket(client.app, f"/api/pair/{code}?role=phone") as two,
+        ):
+            for message in ({"type": "clock", "t": 12.5, "playing": True}, {"type": "focus", "player": "h7"}):
+                await laptop.send(message)
+                assert await one.receive() == message == await two.receive()
+                MESSAGE.validate(message)
+
+    asyncio.run(run())
 
 
-def test_a_late_phone_gets_the_latest_clock_and_focus_first(setup):
-    client, _, _ = setup
+def test_a_late_phone_gets_the_latest_clock_and_focus_first_then_the_rest_in_order(setup):
+    client, app, _ = setup
     code = pair(client)
-    with client.websocket_connect(f"/api/pair/{code}?role=laptop") as laptop:
-        laptop.send_json({"type": "clock", "t": 1.0, "playing": True})
-        laptop.send_json({"type": "focus", "player": "a7"})
-        laptop.send_json({"type": "clock", "t": 2.0, "playing": False})
-        with client.websocket_connect(f"/api/pair/{code}?role=phone") as phone:
-            # The newer clock is the sentinel: without the latest state, it would come first (and
-            # the test fails rather than waiting for a message that never comes).
-            laptop.send_json({"type": "clock", "t": 3.0, "playing": True})
-            assert phone.receive_json() == {"type": "clock", "t": 2.0, "playing": False}
-            assert phone.receive_json() == {"type": "focus", "player": "a7"}
-            assert phone.receive_json() == {"type": "clock", "t": 3.0, "playing": True}
+
+    async def stored(t):
+        """Until the room holds the clock at t: the phone joins after the relay stored it."""
+        async with asyncio.timeout(RECEIVE_S):
+            while app.rooms[code].latest.get("clock", {}).get("t") != t:
+                await asyncio.sleep(0)
+
+    async def run():
+        async with Socket(client.app, f"/api/pair/{code}?role=laptop") as laptop:
+            for message in ({"type": "clock", "t": 1.0, "playing": True}, {"type": "focus", "player": "a7"},
+                            {"type": "clock", "t": 2.0, "playing": False}):
+                await laptop.send(message)
+            await stored(2.0)
+            async with Socket(client.app, f"/api/pair/{code}?role=phone") as phone:
+                await laptop.send({"type": "clock", "t": 3.0, "playing": True})
+                got = [await phone.receive() for _ in range(3)]
+        assert got == [{"type": "clock", "t": 2.0, "playing": False}, {"type": "focus", "player": "a7"},
+                       {"type": "clock", "t": 3.0, "playing": True}]
+
+    asyncio.run(run())
+
+
+def test_a_newer_clock_never_overtakes_a_phones_catch_up():
+    # The laptop's message lands while the joining phone is still being sent the latest state: it
+    # must queue behind it. Sends that yield (as a real socket's do) are what let it overtake.
+    from collections import deque
+
+    sent = []
+
+    class SlowSocket:
+        """A socket whose first send is slow, as a real one's can be: a second sender running at
+        the same time would get its message out first."""
+
+        async def send_json(self, message):
+            for _ in range(5 if not sent else 0):
+                await asyncio.sleep(0)
+            sent.append(message)
+
+    async def run():
+        room = comp.Room("ABCDEF", "seed7", 1e12)
+        room.latest = {
+            "clock": {"type": "clock", "t": 2.0, "playing": True},
+            "focus": {"type": "focus", "player": "a7"},
+        }
+        box = comp.Outbox(SlowSocket(), deque(room.latest.values()))
+        room.phones[box.ws] = box
+        catch_up = asyncio.create_task(comp.Companion._flush(room, box))
+        await asyncio.sleep(0)  # the catch-up has started sending
+        box.items.append({"type": "clock", "t": 3.0, "playing": True})
+        await comp.Companion._flush(room, box)  # the relay: the catch-up's flusher sends it
+        await catch_up
+    asyncio.run(run())
+    assert [m.get("t", m.get("player")) for m in sent] == [2.0, "a7", 3.0]
 
 
 @pytest.mark.parametrize(
@@ -150,11 +255,15 @@ def test_a_late_phone_gets_the_latest_clock_and_focus_first(setup):
 def test_the_relay_closes_on_a_message_that_fails_the_schema(setup, bad):
     client, _, _ = setup
     code = pair(client)
-    with client.websocket_connect(f"/api/pair/{code}?role=laptop") as laptop:
-        laptop.send_text(bad if isinstance(bad, str) else json.dumps(bad))
-        with pytest.raises(WebSocketDisconnect) as closed:
-            laptop.receive_text()
-    assert closed.value.code == 1007
+
+    async def run():
+        async with Socket(client.app, f"/api/pair/{code}?role=laptop") as laptop:
+            await laptop.send(bad)
+            with pytest.raises(Closed) as closed:
+                await laptop.receive()
+            return closed.value.code
+
+    assert asyncio.run(run()) == 1007
 
 
 ANSWER = {
@@ -175,21 +284,18 @@ def test_only_clock_and_focus_are_relayed():
 def test_a_phone_only_listens_and_a_room_has_one_laptop(setup):
     client, _, _ = setup
     code = pair(client)
-    with client.websocket_connect(f"/api/pair/{code}?role=laptop"):
-        with (
-            pytest.raises(WebSocketDisconnect) as second,
-            client.websocket_connect(f"/api/pair/{code}?role=laptop"),
-        ):
-            pass
-        assert second.value.code == 4409
-        with client.websocket_connect(f"/api/pair/{code}?role=phone") as phone:
-            phone.send_json({"type": "clock", "t": 99.0, "playing": True})
-            with pytest.raises(WebSocketDisconnect) as closed:
-                phone.receive_text()
-            assert closed.value.code == 1008
-    with pytest.raises(WebSocketDisconnect) as bad, client.websocket_connect(f"/api/pair/{code}?role=judge"):
-        pass
-    assert bad.value.code == 4400
+
+    async def run():
+        async with Socket(client.app, f"/api/pair/{code}?role=laptop"):
+            assert await refused(client.app, f"/api/pair/{code}?role=laptop") == 4409
+            async with Socket(client.app, f"/api/pair/{code}?role=phone") as phone:
+                await phone.send({"type": "clock", "t": 99.0, "playing": True})
+                with pytest.raises(Closed) as closed:
+                    await phone.receive()
+                assert closed.value.code == 1008
+        assert await refused(client.app, f"/api/pair/{code}?role=judge") == 4400
+
+    asyncio.run(run())
 
 
 # --- reads -----------------------------------------------------------------------------------------

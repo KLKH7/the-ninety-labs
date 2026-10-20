@@ -971,7 +971,16 @@ short and actionable. This file is public: no research sources, product names or
   message (a close, the room's latest state). With the rule mutated, the message never came and
   pytest blocked for about 40 minutes, until the process was killed by hand. A CI job would have waited
   out its timeout rather than failing on the test that names the rule.
+  The same tests then hung CI's full run with the rule intact: Starlette's TestClient gives each
+  WebSocket its own thread and event loop, so the laptop's relay wrote into another thread's
+  socket, and under load a message was lost. uvicorn never does that; but the same tests, moved
+  onto one loop, showed a real bug: a laptop message relayed while a joining phone was still
+  being sent the latest state could overtake it, leaving the phone on a stale clock.
 - **Rule:** a test that waits for a message sends a sentinel the broken code would deliver first,
-  or tests the rule directly, so a broken rule fails the test at once.
-- **Check:** each mutation of the relay (`ninety/api/companion.py`) runs under `timeout 60` and
-  must fail with pytest's own counts, never time out.
+  or tests the rule directly, so a broken rule fails the test at once. Every receive has a
+  deadline. Concurrency is tested the way the server runs it (one event loop for every
+  connection), never through a harness that adds threads the server does not have.
+- **Check:** each mutation of the relay (`ninety/api/companion.py`) fails with pytest's own
+  counts within seconds, never times out. `tests/test_api_companion.py` drives the relay on one
+  loop with a 5 s deadline per receive, and 150 repeats on 4 workers under full CPU load pass;
+  `test_a_newer_clock_never_overtakes_a_phones_catch_up` fails without the single flusher.
