@@ -1734,3 +1734,45 @@ def test_a_thrower_arriving_faster_than_one_frame_of_braking_does_not_take_the_b
     e, taker = thrower_ready_at(sx, sy, vx=limit * 0.95)
     e.tick_restart()
     assert e.restart is None and e.throw_by == taker.id
+
+
+def _two_near_a_loose_ball():
+    """A loose ball rolling slowly across midfield, two home players about as near it on either
+    side, everyone else far away and still, the strike long since reacted to."""
+    e = Engine(1)
+    e.possessor = None
+    e.ball = (52.0, 34.0, 0.0, 0.0, 2.0, 0.0)  # rolling across, between them
+    e.kicked_at = e.free_since = e.t - 3.0
+    for q in e.players:
+        q.x, q.y, q.vx, q.vy = (5.0 if q.team == "home" else 100.0), (2.0 + int(q.id[1:]) * 5.0), 0.0, 0.0
+    a, b = e.by_id["h6"], e.by_id["h7"]
+    a.x, a.y = 46.0, 38.0
+    b.x, b.y = 58.0, 38.0
+    return e, a, b
+
+
+def test_a_chaser_is_not_swapped_by_a_fresh_guess_while_nothing_changes():
+    # Frozen positions, one strike: re-planning the chase must not hand it back and forth between
+    # two players about as near (it once redrew each player's misjudgement every few frames, and
+    # the one dropped turned away from the ball).
+    e, a, b = _two_near_a_loose_ball()
+    chasers = set()
+    for _ in range(40):
+        e.plan_chase()
+        chasers.add(e.chase["home"][0])
+    assert chasers <= {a.id, b.id} and len(chasers) == 1
+
+
+def test_a_new_strike_is_judged_afresh_and_a_clearly_nearer_player_always_chases():
+    e, a, b = _two_near_a_loose_ball()
+    seen = set()
+    for k in range(40):  # each a new touch of the ball: the misjudgement is drawn again
+        e.kicked_at = e.t - 3.0 - k * 1e-3
+        e.plan_chase()
+        seen.add(e.chase["home"][0])
+    assert seen == {a.id, b.id}  # about as near: either may judge himself sooner
+    b.x, b.y = 70.0, 50.0  # now clearly further
+    for k in range(20):
+        e.kicked_at = e.t - 4.0 - k * 1e-3
+        e.plan_chase()
+        assert e.chase["home"][0] == a.id
