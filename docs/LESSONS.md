@@ -1067,3 +1067,19 @@ short and actionable. This file is public: no research sources, product names or
   documentation, not inferred from its name. A cancelled run nobody cancelled is a defect to trace.
 - **Check:** `.github/workflows/agents-live.yml` groups by `inputs.ref`. Dispatch from two
   branches before approving either: both stay `waiting`.
+
+### 120. An exemption in a check is where a defect hides: reach the state, do not place it
+- **What happened:** the engine placed a new ball at the taker's feet at every restart and reset
+  all 22 players at every goal. The validator exempts dead-ball windows from the ball-speed check
+  and kickoff frames from the player-speed check, so nothing failed. The ball jumped more than
+  3 m in one frame about 70 times per 90 minutes (median 7.5 m), and every goal reset the pitch
+  in one frame. Viewers saw it; no test did.
+- **Rule:** a state the match needs (the ball on the restart spot, the teams in kick-off shape)
+  is reached by the engine's own movement: players go there and fetch the ball, within their
+  bodies and the ball's physics (lesson 5). An exemption in a check is allowed only for a real
+  discontinuity in the broadcast (a cut) and is listed as a known gap until the engine no longer
+  needs it.
+- **Check:** `uv run pytest tests/test_restarts.py` records every frame from before the stop to
+  the kick, including the frame the restart is given, and fails on a ball or player step faster
+  than the validator's limits. `scripts/defect_sweep/restarts.py` counts ball jumps over 3 m per
+  90 minutes (0 on seeds 7, 11, 21, 42 at 20 minutes).
