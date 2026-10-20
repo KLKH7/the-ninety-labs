@@ -832,7 +832,9 @@ def options(scene: Scene) -> list[Option]:
         return out
     p = pressure(scene)
     q = shot_chance(scene)
-    if abs(scene.goal_x - scene.x) < offball.SHOT_RANGE_M:
+    # D3: a shot is an option inside SHOT_RANGE_M of the goal's centre, straight-line, as the rates it
+    # is judged by are (it was once along the pitch only, offering shots from 40 to 50 m out wide).
+    if math.hypot(scene.goal_x - scene.x, PITCH_Y / 2 - scene.y) < offball.SHOT_RANGE_M:
         bias = 1.3 if "shoots_from_distance" in scene.traits else 1.0
         # A shot that fails is either blocked, leaving the ball at his feet for them, or missed or
         # saved, which gives the ball back from deep (a goal kick or the keeper's hands).

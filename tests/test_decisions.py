@@ -849,3 +849,16 @@ def test_the_passer_expects_a_dropping_ball_into_his_man_to_meet_the_thigh():
     assert near == pytest.approx(into, abs=0.02)
     # and as a thigh: well below what the same ball on the foot would be judged
     assert into < 0.5
+
+
+def test_a_shot_is_an_option_only_within_range_of_the_goal_straight_line():
+    # D3, SHOT_RANGE_M: 36 m along the pitch but 25 m out wide is 44 m from the goal's centre, beyond
+    # the range and beyond the published rates; it was once offered (the range was along x only).
+    kinds = lambda s: {o.kind for o in D.options(s)}  # noqa: E731
+    wide = scene(x=105.0 - 36.0, y=34.0 - 25.0)
+    assert math.hypot(105.0 - wide.x, 34.0 - wide.y) > offball.SHOT_RANGE_M
+    assert "shoot" not in kinds(wide)
+    assert "shoot" in kinds(scene(x=105.0 - 36.0, y=34.0 - 10.0))  # 37 m: in range
+    assert "shoot" in kinds(scene(x=105.0 - 39.0, y=34.0))  # central, just inside
+    # the side attacking x = 0 alike
+    assert "shoot" not in kinds(scene(x=36.0, y=34.0 + 25.0, goal_x=0.0))
