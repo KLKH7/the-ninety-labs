@@ -438,6 +438,26 @@ loose ball (FS1). FS3, FS5 and FS8 found nothing: the engine rarely plays a thro
 could reach first, and players do not clump within 10 m of the ball. A clump in a line, like
 the one in the owner's review clip, is wider than FS5's circle; FS4 and FS9 are where it shows.
 
+## Match engine: open held-out gaps
+
+Held-out checks the engine misses once the October 2026 fixes are all in (#160, #163, #164 and
+#166 on main `cf3b17a`), measured and never tuned: the funnel's 12 seeds (7, 11, 21, ..., 111) at
+90 minutes, and in brackets 20 matches of 20 minutes (seeds 3, 5, 7, 11, 13, 17, 21, 42, 101 to
+112). Each gap is a cause to find, not a number to reach (lesson 21); the likely causes are leads,
+not yet confirmed.
+
+| Measure, a match | Main `cf3b17a` | With the fixes | Real | Likely cause |
+|---|---:|---:|---|---|
+| throw-ins | 34.1 (38.0) | 26.1 (26.6) | 40 to 44 (GROUNDING R1) | fewer misplaced passes reach touch now that receivers meet the pass (#166) and clearances are aimed to stay in (#157); a tackle's poke goes out about 0.7 times a 90; nobody puts the ball out on purpose when pressed, and a clearance is never charged down |
+| passes | 1,086 (1,054) | 1,113 (1,168) | about 900 to 1,000 (GROUNDING R3) | too much safe recycling: a short safe pass is valued above a progressive one |
+| mean pass length | 15.4 m (15.6) | 13.6 m (13.6) | 15.85 m (Paris Saint-Germain) to 23.42 m (Rotherham), the shortest and longest team averages in 35 European leagues, 2018-19 (CIES Football Observatory Weekly Post 263, 20 May 2019, InStat data; its measure of length is not yet checked against ours, *verify*) | longer passes valued low or never offered: the space factor, the lane race's pessimism about late opponents (D1), or switches and through balls not generated as options |
+| passes over 30 m | 8.5% (8.9%) | 7.1% (6.5%) | no sourced figure yet | as above |
+| fouls | 33.2 (32.4) | 35.0 (32.4) | free kicks 25 to 35 (GROUNDING R1) | at the top of the range; not yet looked at |
+
+Pass completion is inside its band: 79.7% then 84.0% (R3: 75 to 88%). Goals a team: 1.08 then
+1.29 over the 12 matches, both inside the range a real league's 12 matches show (0.75 to 2.33,
+R4, lesson 118).
+
 ## Personalizer
 
 The Personalizer (`ninety/personalizer`) rewrites one claim the fact-checker already verified for
