@@ -984,3 +984,17 @@ short and actionable. This file is public: no research sources, product names or
   stacked on its branch, or ask the Coordinator. Never build a second one.
 - **Check:** the PR description names the search run and what it found. This PR is stacked on #131
   (base `agents/personalizer`) and adds only what #131 lacks.
+
+### 107. A defect seen by eye is a lead until the data and the grounding confirm it
+- **What happened:** in the defect sweep (`docs/eval/defect-sweep-7ee8720.md`) 30 reviewers
+  watched top-down sheets of 300 match minutes. The two most reported types were wrong:
+  - "Long dead-ball waits" (70 per 90 minutes): the waits match GROUNDING R1.
+  - "Bunching around the ball": the data shows 6-7 players within 15 m, never the 13-14
+    reported. The sheets' 2.3 m dots made players 2-3 m apart look like one crowd.
+  The owner had reported bunching from watching clips too. A ranking by raw report counts would
+  have put both above the stalemate that is the real worst defect.
+- **Rule:** a visual review produces candidates. Before a type ranks work, a second reviewer
+  measures examples in `frames.jsonl` against `docs/GROUNDING.md`. The catalogue shows each
+  type's verdicts, and refuted types are listed as refuted, not dropped silently.
+- **Check:** every row of the sweep's ranked table has a "verified" entry, and the "What did not
+  hold up" section names each refuted type with the numbers that refuted it.
