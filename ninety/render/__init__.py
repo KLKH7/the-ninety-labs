@@ -11,4 +11,17 @@ docs/decisions/0001-synthetic-data.md.
 # turns and touch poses (0.3.3 on its own); the `occlusion=keeper` window; the crowded window
 # counting only a live ball. Clips at cca498c and main's clips before the mesh was named both said
 # 0.3.2 (docs/LESSONS.md, lesson 102).
-RENDERER_VERSION = "0.4.0"
+# 0.4.1: arms hang standing and swing opposite the legs; a kick swings back and through the ball;
+# a lunge recovers over 0.28 s; a keeper's hands hold the ball; the boards behind the goals read
+# the right way round; the stands have walls and roofs that close the bowl.
+# 0.4.2: the stride plants each foot where the gait has it on the grass and takes and gives back
+# the plant over three frames; stand, walk and jog blend by speed; a tackle's poke is drawn as the
+# tackler's foot on the ball; no limb jumps in a frame (#150, after 0.4.1's review clips).
+# 0.4.3: while a foot plays the ball the other one stands and steps after the body; a planted foot
+# left beyond the leg's reach steps at once; a lowered leg that cannot reach its plant stays above
+# the grass; a keeper stoops less on the move (render-check feet in boxes, seeds 7 and 11).
+# 0.4.4: a foot that has played the ball comes back to the grass from where the touch drew it.
+# 0.4.5: a touch keeps its foot's plant within the leg's reach and lets the foot go from where it
+# is drawn; a foot a touch catches in the air lands within three frames. A touch on the move keeps
+# a foot on the grass (render-check feet in boxes, seed 7: 7 checks at 0.4.3, 1 at 0.4.4).
+RENDERER_VERSION = "0.4.5"
