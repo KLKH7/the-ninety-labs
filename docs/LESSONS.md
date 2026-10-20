@@ -222,6 +222,18 @@ short and actionable. This file is public: no research sources, product names or
     older than a day.
   - A port's audit names the branches whose lessons it read.
 
+### 95. A pattern that reads numbers must read every way a number is written
+- **What happened:** the fact-checker's number pattern refused a digit followed by a letter, so it
+  would not read "h7" as a number. That also skipped every English ordinal: "in the 9th minute"
+  passed for an event in minute 2, and "his 97th pass" passed with no such count in the evidence,
+  although the clock rule tells the agents to write minutes as ordinals. The minute pattern
+  already knew the "9th minute" form; it was never reached. Found by the Personalizer's tests,
+  when a planted "7th pass" in a variant aired.
+- **Rule:** a check that reads values out of text is tested on every form the writers are told
+  to use, and on the forms a translation or rewording produces, with a defect planted in each.
+- **Check:** `tests/test_factcheck.py::test_an_ordinal_minute_must_be_the_cited_minute` and
+  `test_an_ordinal_count_must_be_in_the_evidence` fail on the old pattern.
+
 ## Working in the repo
 
 ### 12. "No checks yet" is not "checks passed"
@@ -951,3 +963,124 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `git log -p -- web/render ninety/render/scene.py ninety/render/meshpose.py` since the
   last bump shows no picture change without a version change; a dataset manifest's `renderers`
   lists one version per look.
+
+### 104. "Never imported" is only tested in a fresh interpreter
+- **What happened:** a test meant to prove the default `ninety-e2e` run never loads the Azure
+  Speech client deleted it from `sys.modules` and ran the bundle. With the import moved to the top
+  of the Describer, it stayed green: the module was already loaded when the test file was, so
+  nothing imported it again. The mutation run caught it.
+- **Rule:** a test that a module stays unloaded imports the code under test in a new Python
+  process and reads `sys.modules` there.
+- **Check:** `tests/test_describe.py::test_the_default_run_makes_no_azure_call`; mutate by adding
+  the import at module top and watch it go red.
+
+### 106. Look for an open pull request on the same task before building it
+- **What happened:** a session was handed "build the Personalizer over A2A" and built it, tests and
+  mutation run included, before it noticed that draft #131 was the same task, further along. Two
+  Personalizers with different packages, interfaces and fallback rules were then one merge away.
+  The overlap showed up only when another PR's challenge map named #131.
+- **Rule:** before writing code for a task, search the open pull requests and the session notes for
+  it (`gh pr list --search "<task words>"`, the notes folder). If one exists, extend it with a PR
+  stacked on its branch, or ask the Coordinator. Never build a second one.
+- **Check:** the PR description names the search run and what it found. This PR is stacked on #131
+  (base `agents/personalizer`) and adds only what #131 lacks.
+
+### 107. Outcome numbers can look right while the football looks dumb: watch clips and count the nonsense
+- **What happened:** goals, shots, saves and pass completion sat inside their published bands
+  for weeks, so the engine was judged good. When the owner finally watched review clips, the play
+  was poor across the board: passes into touch with nobody near the passer, a chaser running away
+  from a loose ball, teams passing among themselves inside their own box, defenders standing
+  still. Every engine change had been measured by outcome rates; nobody watched a clip, and
+  nothing counted the play itself. On engine `7ee8720` the football-sense checker found 202 passes
+  a 90 from a team's own box into its own box, and the team without the ball with eight or more
+  outfield players standing for almost a quarter of open play.
+- **Rule:** an outcome rate is a held-out check, not proof the football is sensible. Every engine
+  pull request posts a watched 60-second clip and the football-sense counts (FS1 to FS9) on seeds
+  7, 11, 21 and 42 at 20 minutes, before and after; a fix names the type it targets and shows that
+  count fall without another rising. When someone watching finds a new kind of nonsense, it
+  becomes a defect type with a must-fail scene before it is fixed.
+- **Check:** the pull request has a clip link and the `ninety-football-sense` table for both
+  commits ([EVALUATION.md](EVALUATION.md#football-sense-fs1-to-fs9)).
+
+### 103. An argmin over a flat or bimodal objective is a coin toss between its ends
+- **What happened:** the keeper set his depth as the one, of 1 to 6 m, that left the least of the
+  goal open. Against a central ball he stood 6 m off his line at 8 and 10 m, 1 m at 12 m, 6 m at
+  18 m and 1 m at 20 m; from 14 m wide and 8 m out he stood 10.7 m off the goal's centre, outside
+  his post. The objective was sampled at a few shot speeds and heights, so it zigzagged between
+  neighbouring depths; integrated finely it was still bimodal, with the two ends nearly equal and
+  the middle worst, because nothing in it made coming out costly. The argmin picked whichever end
+  won by a hair, and a metre's change in the ball flipped it. The rule's own source (keepers come
+  off their line on 3.4% of shots, close in) had been read as support for a set position.
+- **Rule:** before trusting an optimised choice, plot the objective over the whole range at the
+  situations that matter; if it is flat, jagged or has several minima, the choice is not a model of
+  behaviour. Use a smooth rule (marked *design*) until the missing cost is modelled, and read the
+  source's own numbers before citing it for a direction.
+- **Check:** a test that the choice is monotonic and has no jump over the range it is used on, and
+  one for the geometry it must respect (here within the posts):
+  `tests/test_decisions.py::test_the_keeper_sets_himself_deeper_the_further_the_ball_and_smoothly`
+  and `::test_the_keeper_never_sets_himself_outside_his_posts`.
+
+### 105. A mutation run against a red baseline catches everything
+- **What happened:** the mutation harness for the window stats ran with `-x` over two test files
+  while an existing test (`test_passes_a_minute_and_the_window_edges`) was already failing after
+  the merge. Every mutation reported "caught", including one that no test guarded (allowing a
+  stat's event count as a claim number); the same failure was catching them all.
+- **Rule:** run the suite the harness uses, unmutated, and see it green before the first
+  mutation; a mutation counts as caught only if a test that passes on the baseline fails on it.
+- **Check:** the harness's first line is the baseline run's "N passed, 0 failed"; with lesson 95,
+  each mutation line names the test that went red.
+
+### 108. Money is computed exactly and rounded half up
+- **What happened:** the latency-cost report summed prices as floats. The per-clip upper bound is
+  exactly $0.00535, and Python 3.12's `sum()` of floats is compensated while 3.11's is not, so the
+  total fell either side of the half: the report rendered $0.0054 on 3.12 and $0.0053 on 3.11, and
+  CI failed on 3.11 only.
+- **Rule:** money is computed exactly (`Decimal` from the quoted price strings, or integer
+  micro-dollars) and rounded half up when shown. A float total on a half boundary renders
+  differently across Python versions and sum orders.
+- **Check:** `uv run pytest tests/test_latency_cost.py -k half_boundary`; its case of 13,327 input
+  and 12 output tokens fails on float arithmetic.
+
+### 109. A defect seen by eye is a lead until the data and the grounding confirm it
+- **What happened:** in the defect sweep (`docs/eval/defect-sweep-7ee8720.md`) 30 reviewers
+  watched top-down sheets of 300 match minutes. The two most reported types were wrong:
+  - "Long dead-ball waits" (70 per 90 minutes): the waits match GROUNDING R1.
+  - "Bunching around the ball": the data shows 6-7 players within 15 m, never the 13-14
+    reported. The sheets' 2.3 m dots made players 2-3 m apart look like one crowd.
+  The owner had reported bunching from watching clips too. A ranking by raw report counts would
+  have put both above the stalemate that is the real worst defect.
+- **Rule:** a visual review produces candidates. Before a type ranks work, a second reviewer
+  measures examples in `frames.jsonl` against `docs/GROUNDING.md`. The catalogue shows each
+  type's verdicts, and refuted types are listed as refuted, not dropped silently.
+- **Check:** every row of the sweep's ranked table has a "verified" entry, and the "What did not
+  hold up" section names each refuted type with the numbers that refuted it.
+
+### 110. A workflow's queue is part of what it does: read how the platform queues it
+- **What happened:** `agents-live.yml` put every run in one concurrency group, `agents-live`, with
+  `cancel-in-progress: false`, read as "runs wait their turn". GitHub keeps at most one pending
+  run per group, and a newer dispatch cancels the pending one whatever that setting says. Runs
+  from four sessions' branches each waited for approval, and each was cancelled by the next
+  session's dispatch. They showed only as `cancelled`, and the approver approved only the one
+  still alive.
+- **Rule:** a concurrency group is chosen for what must never run at the same time (here one
+  branch's runs), not for the whole workflow, and a setting's meaning is read in the platform's
+  documentation, not inferred from its name. A cancelled run nobody cancelled is a defect to trace.
+- **Check:** `.github/workflows/agents-live.yml` groups by `inputs.ref`. Dispatch from two
+  branches before approving either: both stay `waiting`.
+
+### 111. A shape measured only from the ball collapses onto it; instrument a choice before blaming its value
+- **What happened:** every in-possession spot was metres behind the ball, floored 12 m from goal.
+  With the ball 20 m out, both centre-backs, both full-backs and the holding midfielder shared that
+  floor inside the box, and the team passed around there: 224 own-box passes a 90 (seeds 7, 11, 21,
+  42). The investigation also named the pass value as a separate cause (forward passes never win).
+  Logging every choice showed otherwise: forward options in the own third were 30 m long with a
+  0.68 completion estimate against 16 m and 0.99 for square ones, because the shape left nobody at
+  a reachable forward distance. Bounding the team's length by R8 instead cut own-box passes to 33,
+  own-box camping (FS9) from 70 to 0 and the square-pass count (FS7) from 488 to 224 a 90, with no
+  change to how passes are valued.
+- **Rule:** a positional rule relative to a moving point needs a bound from the team's own measured
+  shape (length, width), not a floor that every role shares. Before changing how an option is
+  valued, log the options at each choice and see which term loses it; fix the upstream cause first
+  and re-measure.
+- **Check:** `tests/test_shape.py::test_the_team_is_never_longer_than_the_published_range_and_the_back_line_never_ahead_of_the_ball`
+  sweeps ball and line positions; on the old rule it fails (48 m long with the ball 35 m out).

@@ -42,6 +42,8 @@ kbd { font: 600 0.75em ui-monospace, monospace; border: 1px solid var(--line); b
 .controls input[type="range"] { flex: 1; accent-color: var(--accent); }
 .controls output { font: 600 1rem ui-monospace, monospace; min-width: 5ch; }
 .keys { color: var(--muted); font-size: 0.85rem; margin: 8px 0; }
+.audio-note { margin: 0 0 8px; padding: 8px 12px; border-left: 4px solid var(--accent); background: var(--panel); border-radius: 4px; }
+.toggle[hidden], #audio-keys[hidden], .audio-note[hidden] { display: none; }
 
 .pipeline { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 12px 0 0; padding: 12px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; font-size: 0.9rem; }
 .pipeline dt { color: var(--muted); }

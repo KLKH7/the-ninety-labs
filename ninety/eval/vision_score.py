@@ -1,13 +1,13 @@
 """Deterministic pixel-level scoring for player and ball detections.
 
-Ground-truth rows are read from ``frames.jsonl``. Detection JSONL may contain one
-flat mapping with ``frame``, ``cls``, ``bbox`` and ``score`` per line, or one row
-per frame with a ``detections`` list whose entries contain ``cls``, ``bbox`` and
-``score``.
+Ground-truth rows are read from ``frames.jsonl``; detections from ``detections.jsonl`` through the
+contract's own reader (``ninety.vision.detections.read_detections``), one line per frame the
+detector ran on. ``score`` takes them flattened, one mapping with ``frame``, ``cls``, ``bbox`` and
+``score`` per detection.
 
-Only frames the detector ran on are scored. In the per-frame format a frame with an empty
-``detections`` list was run and found nothing, so its labels are misses; a frame with no line
-was not run, so its labels are not counted at all.
+Only frames the detector ran on are scored. A frame with an empty ``detections`` list was run and
+found nothing, so its labels are misses; a frame with no line was not run, so its labels are not
+counted at all.
 """
 
 from __future__ import annotations
@@ -17,6 +17,8 @@ import json
 import math
 from collections.abc import Iterable, Mapping
 from pathlib import Path
+
+from ninety.vision.detections import read_detections
 
 CLASSES = ("player", "ball")
 PLAYER_IOU = 0.50
@@ -279,6 +281,26 @@ def score(
     }
 
 
+def read_run(path: str | Path) -> tuple[list[dict], set[int], set[str]]:
+    """A detections file as (flat detections, frames run, clips named), read by the contract's reader."""
+    rows = read_detections(path)
+    detections = [{"frame": fd.frame, "cls": d.cls, "bbox": list(d.bbox), "score": d.score}
+                  for fd in rows for d in fd.detections]
+    return detections, {fd.frame for fd in rows}, {fd.clip for fd in rows}
+
+
+def check_clip(frames: Iterable[Mapping], clips: set[str]) -> None:
+    """Refuse detections from another clip. Frame numbers are match frames, so two clips of the
+    same match can share some: matching by frame alone would score them against the wrong one."""
+    truth = {row.get("clip") for row in frames}
+    if None in truth:
+        raise ValueError("frames.jsonl has a row with no clip, so the detections' clip cannot be checked")
+    if len(truth) > 1 or len(clips) > 1:
+        raise ValueError(f"one clip per file: frames.jsonl has {sorted(truth)}, detections {sorted(clips)}")
+    if clips and clips != truth:
+        raise ValueError(f"detections are for clip {sorted(clips)[0]}, frames.jsonl is {sorted(truth)[0]}")
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Score pixel detections against frames.jsonl labels.")
     parser.add_argument("--frames", type=Path, required=True)
@@ -286,8 +308,10 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD)
     parser.add_argument("--report", type=Path)
     args = parser.parse_args(argv)
-    rows = load_jsonl(args.detected)
-    report = score(load_jsonl(args.frames), flatten(rows), args.threshold, run=frames_run(rows))
+    frames = load_jsonl(args.frames)
+    detections, run, clips = read_run(args.detected)
+    check_clip(frames, clips)
+    report = score(frames, detections, args.threshold, run=run)
     text = json.dumps(report, indent=2) + "\n"
     if args.report:
         args.report.write_text(text)

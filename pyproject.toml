@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 dependencies = [
+    "a2a-sdk[http-server]>=1.2.3",
     "agent-framework-core>=1.21.0",
     "agent-framework-foundry>=1.14.1",
     "azure-ai-projects>=2.7.0",
@@ -32,6 +33,7 @@ ninety-render-meta = "ninety.render.cli:meta_main"
 ninety-grid = "ninety.sim.grid:main"
 ninety-data-stats = "ninety.vision.data_stats:main"
 ninety-e2e = "ninety.e2e:main"
+ninety-football-sense = "ninety.eval.football_sense:main"
 
 [dependency-groups]
 dev = [

@@ -13,6 +13,7 @@
       <div class="persona" role="radiogroup" aria-label="Persona" id="persona">
         <button type="button" role="radio" data-persona="casual" aria-checked="true">Casual <kbd>1</kbd></button>
         <button type="button" role="radio" data-persona="analyst" aria-checked="false">Analyst <kbd>2</kbd></button>
+        <button type="button" role="radio" data-persona="audio" aria-checked="false">Audio description <kbd>3</kbd></button>
       </div>
       <label class="toggle"><input type="checkbox" id="reduce-motion" /> Reduce motion</label>
     </header>
@@ -29,12 +30,15 @@
           <input type="range" id="scrub" min="0" max="1" step="0.04" value="0" aria-label="Position in the clip" />
           <output id="clock" aria-live="off">00:00</output>
           <label class="toggle"><input type="checkbox" id="show-boxes" checked /> Detections <kbd>D</kbd></label>
+          <label class="toggle" id="voice-toggle" hidden><input type="checkbox" id="voice" checked /> Voice <kbd>V</kbd></label>
         </div>
         <p class="sr-only" id="on-air" aria-live="polite"></p>
         <p class="keys">
           <kbd>Space</kbd> play or pause · <kbd>←</kbd> <kbd>→</kbd> 1 s · <kbd>,</kbd> <kbd>.</kbd> one frame ·
-          <kbd>1</kbd> <kbd>2</kbd> persona · <kbd>D</kbd> detections
+          <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> persona · <kbd>D</kbd> detections
+          <span id="audio-keys" hidden>· <kbd>V</kbd> voice on or off · <kbd>R</kbd> repeat the last description</span>
         </p>
+        <p class="audio-note" id="audio-note" hidden></p>
         <dl class="pipeline" id="pipeline"></dl>
       </section>
 
