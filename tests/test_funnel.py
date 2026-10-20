@@ -3,7 +3,7 @@
 import math
 from types import SimpleNamespace
 
-from ninety.sim.funnel import GOALS_A_MATCH, goals_range, poisson_quantile, tally
+from ninety.sim.funnel import GOALS_MISS_RATE, goals_line, goals_range, poisson_quantile, tally
 
 ROSTER = [{"id": "h1", "team": "home"}, {"id": "a1", "team": "away"}]
 
@@ -38,22 +38,41 @@ def test_a_poisson_quantile_is_the_first_count_whose_cumulative_chance_reaches_i
         for q in (0.005, 0.5, 0.995):
             k = poisson_quantile(lam, q)
             assert poisson_cdf(lam, k) >= q and (k == 0 or poisson_cdf(lam, k - 1) < q), (lam, q, k)
+    assert poisson_quantile(1200.0, 0.5) in (1199, 1200)  # exp(-1200) underflows; the sum must not stall
 
 
-def miss(mu, matches=12):
-    """The chance that `matches` matches of a league scoring `mu` goals a match fall outside the
-    range: Poisson goals, counted exactly."""
-    low, high = goals_range(matches)
-    lam = mu * matches
-    return poisson_cdf(lam, round(low * 2 * matches) - 1) + 1 - poisson_cdf(lam, round(high * 2 * matches))
+# GROUNDING R4: the leanest and richest Premier League seasons in the source, goals a match.
+LEANEST, RICHEST = 2.57, 3.26
 
 
-def test_a_league_scoring_like_the_premier_league_passes_and_one_far_off_it_does_not():
-    # Legal: every season in the source's range passes all but about 1% of the time.
-    for mu in (GOALS_A_MATCH[0], 2.8, GOALS_A_MATCH[1]):
-        assert miss(mu) <= 0.01, mu
-    # Defects: an engine scoring a third as often, or twice as often, is caught nine times in ten.
-    assert miss(2.8 / 3) > 0.9 and miss(2.8 * 2) > 0.9
-    # The one-match check it replaces failed a real league about one time in eleven.
-    one = poisson_cdf(2.8, 0) + 1 - poisson_cdf(2.8, 6)
-    assert 0.08 < one < 0.09
+def tails(matches):
+    """The chance a league at the leanest season falls below the range, and at the richest above
+    it, over `matches` matches, with the range's ends as goal counts."""
+    low, high = (round(end * 2 * matches) for end in goals_range(matches))
+    return low, high, poisson_cdf(LEANEST * matches, low - 1), 1 - poisson_cdf(RICHEST * matches, high)
+
+
+def test_the_goals_range_is_the_tightest_one_each_real_season_passes_but_for_half_the_miss_rate():
+    assert goals_range(12) == (18 / 24, 56 / 24)  # the funnel's 12 matches
+    assert goals_range(24) == (42 / 48, 102 / 48)
+    for matches in (12, 24):
+        low, high, below, above = tails(matches)
+        assert below <= GOALS_MISS_RATE / 2 and above <= GOALS_MISS_RATE / 2, matches
+        # One goal tighter at either end and that end misses more than half the rate.
+        assert poisson_cdf(LEANEST * matches, low) > GOALS_MISS_RATE / 2, matches
+        assert 1 - poisson_cdf(RICHEST * matches, high - 1) > GOALS_MISS_RATE / 2, matches
+
+
+def test_an_engine_far_off_every_real_season_fails_the_goals_range():
+    # Defects: a third of the leanest season, or twice the richest, is caught at least nine times in
+    # ten (the nine in ten is design).
+    low, high, _, _ = tails(12)
+    assert poisson_cdf(LEANEST / 3 * 12, low - 1) >= 0.9
+    assert 1 - poisson_cdf(RICHEST * 2 * 12, high) >= 0.9
+
+
+def test_the_report_gives_goals_with_their_error_and_judges_only_full_matches():
+    inside = goals_line([1.0, 1.5] * 6, 90)
+    assert "1.25 (standard error 0.08" in inside and "0.75 to 2.33" in inside and inside.endswith("inside.")
+    assert goals_line([0.5, 0.75] * 6, 90).endswith("OUTSIDE.")  # 0.62 a team: below a real league's
+    assert "OUTSIDE" not in goals_line([0.0, 0.5] * 6, 20) and "none is given" in goals_line([1.0] * 4, 20)

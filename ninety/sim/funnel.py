@@ -33,13 +33,21 @@ GOALS_MISS_RATE = 0.01  # design: how often a league scoring like the real one m
 
 
 def poisson_quantile(lam: float, q: float) -> int:
-    """The smallest k with P(X <= k) >= q, for X Poisson with mean lam."""
-    term = cdf = fmath.exp(-lam)
+    """The smallest k with P(X <= k) >= q, for X Poisson with mean lam. Each term is carried as
+    its logarithm, so a mean too large for exp(-lam) still sums: terms far below the mode
+    underflow to nothing, those near it do not."""
+    if not 0.0 < q < 1.0:
+        raise ValueError(f"a quantile needs 0 < q < 1, not {q}")
+    log_term = -lam
+    cdf = fmath.exp(log_term)
     k = 0
+    beyond = lam + 40.0 * math.sqrt(lam) + 40.0  # 40 standard deviations out the sum is 1 to the last bit
     while cdf < q:
         k += 1
-        term *= lam / k
-        cdf += term
+        if k > beyond:
+            raise ArithmeticError(f"the Poisson sum for mean {lam} never reached {q}")
+        log_term += fmath.log(lam / k)
+        cdf += fmath.exp(log_term)
     return k
 
 
@@ -96,6 +104,19 @@ def tally(m) -> dict[str, float]:
     return {k: (v if k == "completion" else v / 2) for k, v in out.items()}
 
 
+def goals_line(goals: list[float], minutes: float) -> str:
+    """The report's line on goals a team a match: the mean, its standard error (lesson 89) and, for
+    full matches only, whether it falls in a real league's range (R4): the range is for 90 minutes."""
+    error = stdev(goals) / math.sqrt(len(goals)) if len(goals) > 1 else float("nan")
+    line = f"Goals a team: {mean(goals):.2f} (standard error {error:.2f}, lesson 89)."
+    if minutes != 90:
+        return line + " The real range (R4) is for 90-minute matches, so none is given."
+    low, high = goals_range(len(goals))
+    verdict = "inside" if low <= mean(goals) <= high else "OUTSIDE"
+    return (line + f" A real league's {len(goals)} matches show {low:.2f} to {high:.2f}, but for "
+            f"{GOALS_MISS_RATE:.0%} of samples (R4): {verdict}.")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--seeds", default=",".join(map(str, SEEDS)))
@@ -114,13 +135,7 @@ def main() -> None:
         v = mean(r[k] for r in runs)
         shown = f"{v:.0%}" if k == "completion" else f"{v:.1f}"
         lines.append(f"| {k.replace('_', ' ')} | {shown} | {PUBLISHED.get(k, '')} |")
-    goals = [r["goals"] for r in runs]
-    low, high = goals_range(len(runs))
-    error = stdev(goals) / math.sqrt(len(goals)) if len(goals) > 1 else float("nan")
-    lines += ["", f"Goals a team: {mean(goals):.2f} (standard error {error:.2f}, lesson 89). "
-              f"A real league's {len(runs)} matches show {low:.2f} to {high:.2f}, "
-              f"but for {GOALS_MISS_RATE:.0%} of samples (R4): "
-              f"{'inside' if low <= mean(goals) <= high else 'OUTSIDE'}."]
+    lines += ["", goals_line([r["goals"] for r in runs], args.minutes)]
     Path(args.out).write_text("\n".join(lines) + "\n")
     print("\n".join(lines[4:]))
 
