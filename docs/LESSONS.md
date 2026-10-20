@@ -809,7 +809,15 @@ short and actionable. This file is public: no research sources, product names or
   standard error, and use enough matches that it is smaller than the gap being claimed. Running
   the same seeds still matters, for reproducing a run, not for cancelling noise.
 - **Check:** for a before-and-after on a match rate, report both errors; if the paired one is not
-  clearly smaller, quote the unpaired one.
+  clearly smaller, quote the unpaired one. On the agent side too, one seed is one match only if one
+  engine made it. The deployed match tools serve the matches the deployed image simulated, so in
+  an evaluation graded against this commit's simulation every agent gets the minute's events
+  inline, under a match id no server serves, and an agent that calls the tools anyway fails the
+  call. A prompt alone does not enforce it: the tools are called inside Foundry. The live
+  ablation's one-agent arm once read the tools and aired a goal on seed 33 that had no shot here.
+  `tests/test_agent_ablation.py::test_both_arms_read_the_match_the_grader_grades`,
+  `::test_a_live_arm_that_calls_the_match_tools_fails_that_call` and
+  `tests/test_workflow.py::test_an_agent_given_its_events_inline_that_calls_the_match_tools_fails_its_call`.
 
 ### 91. When the data moves, the code that reads it moves in the same change
 - **What happened:** sealing the ground truth (0fda1f8) moved frames.jsonl and events.jsonl from
@@ -1429,3 +1437,27 @@ short and actionable. This file is public: no research sources, product names or
   place of his own), and with places worked out one player at a time, in the order they move, the
   once-a-frame test fails. `scripts/defect_sweep/huddle.py` counts the frames with bodies in each
   other over a whole celebration (`docs/eval/restarts.md`, "The huddle").
+
+### 147. A budget is set from the call it bounds, measured; and a cancelled request is awaited
+- **What happened:** the live Personalizer evaluation (run 39429424313, at 0689342) answered none of
+  its 20 requests: all 160 variants were "fallback: timeout" at 3002 to 3274 ms. The 3 s budget was a
+  design share of the 8 s target, never measured against the call. Locally, the published
+  `ninety-personalizer:1` on gpt-4.1-mini took 3.2 to 4.7 s (median 4.0 s) for one claim's 8
+  variants, over A2A as well as direct. Two more defects hid behind it. First, the server's model
+  deadline equalled the client's budget, so the client always gave up first and the server's
+  fallback, with its reasons, never got back. Second, the client cancelled a request at the deadline
+  and never awaited it. In process, that cancellation ran on into a2a-sdk 1.2.3's server code, which
+  swallows it (`ActiveTask.subscribe` catches CancelledError) and waits forever for a task a
+  message-only agent never creates. Those tasks were destroyed when the loop closed, and that
+  produced the "Task was destroyed but it is pending" and OpenTelemetry "created in a different
+  Context" errors at exit. Those errors came after every request, so they did not block a response.
+- **Rule:** a latency budget cites a measurement of the call it bounds, and a test holds it above
+  the slowest measured call. A layer's own deadline ends inside its caller's
+  (`SERVER_MARGIN_S`), so the inner fallback answers rather than the outer timeout. A task cancelled
+  at a deadline is kept and awaited before the client closes. An in-process server runs each request
+  in its own task (`server.InProcess`), as uvicorn does, so a client's cancellation never enters the
+  server.
+- **Check:** `tests/test_personalizer.py::test_the_budget_is_over_the_slowest_measured_model_call`,
+  `::test_a_slow_model_is_answered_by_the_server_with_its_reasons_not_cut_off_by_the_client`,
+  `::test_a_request_cut_off_at_the_deadline_is_awaited_on_close` and
+  `::test_the_evaluation_leaves_no_request_running_when_the_client_gives_up`.
