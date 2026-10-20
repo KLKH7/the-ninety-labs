@@ -51,6 +51,21 @@ kbd { font: 600 0.75em ui-monospace, monospace; border: 1px solid var(--line); b
 .pipeline dd.warn { color: var(--tag); }
 .pipeline dd.warn::before { content: "⚠ "; }
 
+.side { display: grid; gap: 16px; align-content: start; }
+.phone-panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; }
+.phone-panel h2 { margin: 0 0 4px; font-size: 1.05rem; }
+.phone-panel .hint { color: var(--muted); font-size: 0.85rem; margin: 0 0 12px; }
+#phone-pair { background: var(--accent); color: #04130d; border: 0; border-radius: 6px; font: inherit; font-weight: 700; padding: 8px 16px; cursor: pointer; }
+#phone-pair:disabled { opacity: 0.6; }
+.phone-qr { width: 168px; margin: 14px 0 8px; background: #fff; border-radius: 6px; line-height: 0; }
+.phone-qr svg { width: 100%; height: auto; }
+#phone-pairing p { margin: 4px 0; font-size: 0.85rem; color: var(--muted); }
+#phone-pairing a { color: var(--focus); overflow-wrap: anywhere; }
+#phone-pairing .phone-code { font: 800 1.9rem ui-monospace, monospace; letter-spacing: 0.25em; color: var(--ink); }
+#phone-pairing[hidden] { display: none; }
+.phone-state { margin: 8px 0 0; font-size: 0.85rem; color: var(--accent); }
+.phone-error { margin: 4px 0 0; font-size: 0.85rem; color: var(--bad); }
+.phone-state:empty, .phone-error:empty { display: none; }
 .trace { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; align-self: start; }
 .trace h2 { margin: 0 0 4px; font-size: 1.05rem; }
 .trace .hint { color: var(--muted); font-size: 0.85rem; margin: 0 0 12px; }
