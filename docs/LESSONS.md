@@ -996,7 +996,7 @@ short and actionable. This file is public: no research sources, product names or
   `test_setting_off_running_and_pulling_up_moves_no_limb_in_a_jump` and the tackle test, which cap
   how far any limb moves relative to the body in one frame.
 
-### 113. A check that fails on a few frames names a class of defect: sweep every frame for it
+### 114. A check that fails on a few frames names a class of defect: sweep every frame for it
 - **What happened:** render-check failed `player_feet_in_boxes` at 0.4.2 on 2 foot checks each of
   seeds 7 and 11. The 0.4.3 fix traced those four frames to three causes and tested each, and the
   re-render of seed 7 failed 7 checks in two other sequences: a pass cushioned with one foot and
@@ -1126,7 +1126,29 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_shape.py::test_the_team_is_never_longer_than_the_published_range_and_the_back_line_never_ahead_of_the_ball`
   sweeps ball and line positions; on the old rule it fails (48 m long with the ball 35 m out).
 
-### 114. A clip's truth must not depend on how long the match was simulated
+### 112. Every kick the decision layer aims is judged by the same Laws as a pass
+- **What happened:** the pass estimate counted a ball leaving the pitch (Law 9), but the clearance,
+  added separately, was aimed at one fixed spot 4 m from the touchline with no such check. With the
+  passer's own kick error, about a third of clearances went straight out with nobody near.
+- **Rule:** an option that sends the ball somewhere is valued over the strikes the kicker's error
+  allows, with the pass estimate's own pieces (`decisions.clear_value` reuses `strike_nodes`,
+  `flight`, `out_of_play`, `reach_time` and the P16 turn); where it simplifies them (a hard race, no
+  body in the way), the row says so (GROUNDING D9). A new kind of kick does not get its own physics.
+- **Check:** `tests/test_decisions.py::test_an_unpressed_clearance_is_not_aimed_where_his_kick_error_puts_it_out`.
+
+### 113. A test over a folder says which files are its own
+- **What happened:** two tests read every file in `replays/` as a slice recording (`*.json`):
+  the committed-replay test and the byte-for-byte round trip. Both passed while the folder held
+  only slice files. The first workflow recording (format 1) turned them red with "format 1 slice
+  recording", though nothing was wrong with either file.
+- **Rule:** a test that loops over a folder selects the files of its own kind by name
+  (`slice-*.json`, `workflow-*.json`), and fails when the folder holds a file no kind claims, so a
+  new file is never skipped in silence.
+- **Check:** `tests/test_replay.py::test_every_committed_recording_round_trips_byte_for_byte`
+  fails with an unclaimed file in `replays/`, and fails when a workflow recording no longer saves
+  byte for byte.
+
+### 115. A clip's truth must not depend on how long the match was simulated
 - **What happened:** `ninety-render` simulated the match to the end of the window it chose (240 s
   plus the clip), but its own determinism check re-rendered the same window with `--start`, which
   simulated only to the window's end plus a second. The engine settles some outcomes after the fact
@@ -1140,7 +1162,7 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `ninety-render-check --determinism` on a window with a tackle near its end compares
   `events_identical`; `tests/test_render_clip.py` renders the same seed twice.
 
-### 115. A camera rule is judged by what the viewer sees over whole matches, not by the shot that prompted it
+### 116. A camera rule is judged by what the viewer sees over whole matches, not by the shot that prompted it
 - **What happened:** the gantry was aimed 4.5 m above the play after a review found the stand a
   thin lip under the sky, and second angles were added one at a time (high behind the goal when
   the ball is in a box, the far stand when play is on the far side, a low angle for a shot

@@ -287,7 +287,7 @@ What changed in the picture, and two knobs that used to fail loudly:
   it stays out of the id pass. **Since 0.5.1** the far stand and the camera behind the goal are
   gone from live play (they jumped the viewpoint between opposite sides of the ground), the
   gantry aims at the play on the grass instead of up into the stand, and `camera.angle` is
-  `main`, `tight` or `net` (lesson 115)
+  `main`, `tight` or `net` (lesson 116)
 - the stands hold drawn spectators, including a near stand that sits behind the gantry so the
   reverse angle has a stadium behind the pitch. Sky, floodlight towers and sharpening are decor,
   not occluders
