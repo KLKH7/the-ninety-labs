@@ -1144,3 +1144,15 @@ short and actionable. This file is public: no research sources, product names or
   quiet time.
 - **Check:** `uv run pytest tests/test_restarts.py -k every_kind`; `scripts/defect_sweep/restarts.py`
   reports `stuck_restarts`, which must be 0.
+
+### 123. A figure keeps the case it was measured for
+- **What happened:** GROUNDING R1 cited Opta's guide to time-wasting for "a goal's celebration,
+  about 72 s", and the restart work planned the kick-off after every goal around it. Read again,
+  the article gives 72 s for the celebration after a penalty goal, in its paragraph on penalties;
+  it gives no figure for goals in general. A general figure was then found in a different source
+  (FIFA's referees' chief: a celebration "may last one, one and a half minutes").
+- **Rule:** when a number moves from a source into GROUNDING, the row names the case it was
+  measured for (which restart, which competition, which seasons) and quotes the sentence it
+  comes from; a number used for a wider case needs a source for that case.
+- **Check:** every row of GROUNDING that cites a time or a rate names its case; R1 and L4 now cite
+  the penalty figure as a penalty figure and the goal figure from its own source.
