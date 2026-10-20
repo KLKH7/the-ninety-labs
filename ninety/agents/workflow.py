@@ -22,6 +22,10 @@ The graph (Agent Framework `WorkflowBuilder`), as docs/ARCHITECTURE.md draws it:
    check could not be done, or it rests on an unsure detection) is not rewritten.
 6. Producer.air (code) airs the Tactician's claim if it is verified, else the Challenger's if
    that is, else the template stays. The insight replaces the template in its slot.
+7. With `personalize`, the Personalizer (A2A to its own service, ninety/personalizer/client.py, or
+   in process) rewrites an aired insight for each other persona and language; every variant is
+   fact-checked again before it airs, and the route it took (remote, or the in-process fallback
+   and why) is a trace step. A Personalizer failure never takes the insight off the screen.
 
 Every draft and every verdict is a new version of the claim in the Ledger, so a rejection stays
 visible. --replay answers each model call from a recording (ninety/agents/replay.py), in order and
@@ -40,7 +44,7 @@ import sys
 import time
 import warnings
 from collections.abc import Awaitable, Callable
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -48,6 +52,7 @@ from agent_framework import Executor, WorkflowBuilder, WorkflowContext, handler
 from agent_framework.foundry import FoundryAgent
 
 from ninety.agents import telemetry
+from ninety.agents.budgets import MODEL_TIMEOUT_SECONDS
 from ninety.agents.contracts import (
     Author,
     ClaimStatus,
@@ -56,6 +61,13 @@ from ninety.agents.contracts import (
     Review,
     TraceStep,
     status_for,
+)
+from ninety.agents.credentials import (  # noqa: F401  (FOUNDRY_SCOPE, TOKEN_MARGIN_SECONDS: tests read them here)
+    FOUNDRY_SCOPE,
+    TOKEN_MARGIN_SECONDS,
+    SignedIn,
+    new_credential,
+    sign_in_then_load,
 )
 from ninety.agents.cues import TEMPLATE_TYPES, template_cues
 from ninety.agents.factcheck import Claim, Verdict, confidence_gate
@@ -73,13 +85,7 @@ WORKFLOW = "minute"
 # model calls (SECURITY.md: spend is capped), and one insight every twenty seconds or so leaves the
 # template graphics on air most of the time rather than a queue of explanations running behind.
 MAX_MOMENTS_PER_MINUTE = 3
-# Design: a live writer that has not answered in a minute is writing about a moment the broadcast
-# has moved past; its claim is held and the template stays. The Judge has its own timeout.
-MODEL_TIMEOUT_SECONDS = 60.0
-# The Foundry project's token scope, the default of azure-ai-projects' client configuration.
-FOUNDRY_SCOPE = "https://ai.azure.com/.default"
-# Refresh a kept token this long before it expires: a model call may take MODEL_TIMEOUT_SECONDS.
-TOKEN_MARGIN_SECONDS = 2 * MODEL_TIMEOUT_SECONDS
+
 INSIGHT_PERSONA = "analyst"  # the insight replaces this persona's template; the Personalizer does the rest
 
 MOMENT_ANALYST_INSTRUCTIONS = """You are the Analyst for a football broadcast. The request names a
@@ -269,6 +275,12 @@ class ToProducer:
 
 
 @dataclass
+class ToPersonalizer:
+    case: Case
+    claim: Claim  # the aired insight
+
+
+@dataclass
 class Result:
     moments: list[Moment]
     reviews: list[Review]
@@ -289,15 +301,18 @@ class Run:
     plant: bool
     live: bool
     gate: Gate
+    personalize: bool = False
+    events: list[dict] = field(default_factory=list)  # in full, as the Personalizer's profiles read them
     trace: list[TraceStep] = field(default_factory=list)
     moments: list[Moment] = field(default_factory=list)
     reviews: list[Review] = field(default_factory=list)
     cues: list[dict] = field(default_factory=list)
     t: dict[str, float] = field(default_factory=dict)  # event id -> seconds, for Ledger records
 
-    def step(self, role: str, moment: str, action: str, started: float, detail: str = "") -> None:
+    def step(self, role: str, moment: str, action: str, started: float, detail: str = "",
+             fallback: str = "") -> None:
         ms = (time.perf_counter() - started) * 1000
-        self.trace.append(TraceStep(role, moment, action, round(ms, 1), detail))
+        self.trace.append(TraceStep(role, moment, action, round(ms, 1), detail, fallback))
 
     async def write_claim(self, case: Case, draft: Draft) -> None:
         verdict = draft.verdict if draft.status != "draft" else None
@@ -432,7 +447,7 @@ class Tactician(Executor):
             if rewrite is None:  # nothing written: held, and there is nothing to challenge
                 draft.verdict = Verdict(False, [f"tactician failed ({error}); claim held back"], category)
                 draft.status = status_for(draft.verdict)
-                run.step("tactician", case.moment.id, "fail", started, f"{error}; template stays")
+                run.step("tactician", case.moment.id, "fail", started, f"{error}; template stays", "template")
                 await ctx.send_message(ToProducer(case))
             else:  # its rejected version stands
                 run.step("tactician", case.moment.id, "fail", started, f"{error}; the rejection stands")
@@ -536,7 +551,9 @@ class Producer(Executor):
         self.run = run
 
     @handler
-    async def air(self, msg: ToProducer, ctx: WorkflowContext[ToTactician, Result]) -> None:
+    async def air(
+        self, msg: ToProducer, ctx: WorkflowContext[ToTactician | ToPersonalizer, Result]
+    ) -> None:
         run, case, started = self.run, msg.case, time.perf_counter()
         if case is not None:
             aired = next((d for d in (case.tactician, case.challenger) if d and d.status == "verified"), None)
@@ -551,12 +568,24 @@ class Producer(Executor):
                 run.step("producer", case.moment.id, "air", started,
                          f"the {aired.author}'s claim replaces {template}")
                 run.cues.append(cue)
+                if run.personalize:
+                    await ctx.send_message(ToPersonalizer(case, aired.claim))
+                    return
             else:
-                run.step("producer", case.moment.id, "template", started, f"{template} stays: {status}")
-            if case.rest:
-                await ctx.send_message(ToTactician(Case(case.rest[0], case.rest[1:])))
-                return
-        await ctx.yield_output(Result(run.moments, run.reviews, run.cues, run.trace, 0))
+                why = f"{status}: {primary.category}" if primary and primary.category else status
+                run.step("producer", case.moment.id, "template", started, f"{template} stays: {status}", why)
+                await self.badge(template, why)
+        await next_moment(run, case, ctx)
+
+    async def badge(self, template_id: str, why: str) -> None:
+        """The template that stayed says so on screen: a new version of its cue, with `fallback`."""
+        for i, cue in enumerate(self.run.cues):
+            if cue["id"] == template_id:
+                self.run.cues[i] = badged = {**cue, "fallback": why}
+                await self.run.ledger.append(Record(
+                    id=template_id, version=2, kind="cue", t=badged["t_in"], source="producer",
+                    confidence=None, evidence=tuple(badged["evidence"]), payload=badged,
+                ))
 
     async def insight(self, moment: Moment, claim: Claim, template_id: str) -> dict:
         template = (await self.run.ledger.get(template_id)).payload
@@ -567,6 +596,49 @@ class Producer(Executor):
             evidence=tuple(cue["evidence"]), payload=cue,
         ))
         return cue
+
+
+async def next_moment(run: Run, case: Case | None, ctx: WorkflowContext) -> None:
+    """On to the minute's next moment, or the minute's result when there is none."""
+    if case is not None and case.rest:
+        await ctx.send_message(ToTactician(Case(case.rest[0], case.rest[1:])))
+        return
+    await ctx.yield_output(Result(run.moments, run.reviews, run.cues, run.trace, 0))
+
+
+class Personalizer(Executor):
+    """The aired insight for every other persona and language, each variant fact-checked again. The
+    M1 path's step (ninety/agents/live.py), so both paths personalize the same way; it records the
+    route (remote, fallback and why, or error) as a trace step, and its failure leaves the insight."""
+
+    def __init__(self, run: Run):
+        super().__init__(id="personalizer")
+        self.run = run
+
+    @handler
+    async def personalize(self, msg: ToPersonalizer, ctx: WorkflowContext[ToTactician, Result]) -> None:
+        from ninety.agents.live import _personalized
+
+        run, started = self.run, time.perf_counter()
+        before = len(run.trace)
+        try:
+            variants, _ = await _personalized(
+                msg.claim, run.events, list(run.known.values()), run.t, guarded(run.models.judge),
+                run.models.personalizer, None, run.trace,
+            )
+            # A variant from the in-process fallback is badged as one, on screen and in the trace.
+            route = next((s for s in run.trace[before:] if s.role == "personalizer"), None)
+            if route is not None and route.action == "fallback":
+                why = "personalizer: " + route.detail.split(":", 1)[-1].strip()
+                run.trace[run.trace.index(route)] = replace(route, fallback=why)
+                variants = [{**v, "fallback": why} for v in variants]
+        except Exception as e:  # fail closed: no variant airs, the insight and the minute stay
+            del run.trace[before:]
+            run.step("personalizer", msg.case.moment.id, "error", started, f"{type(e).__name__}: {e}",
+                     "personalizer: error")
+            variants = []
+        run.cues.extend(variants)
+        await next_moment(run, msg.case, ctx)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -591,9 +663,10 @@ def _counted(models: Models) -> tuple[Models, list[int]]:
 
 def superstep_budget() -> int:
     """Each hop is a superstep: the start and the Analyst, then per moment a draft, a challenge, a
-    check and the air, plus two hops (write, check) for every rewrite of either claim; one spare.
+    check, the air and the Personalizer, plus two hops (write, check) for every rewrite of either
+    claim; one spare.
     Going over raises in the framework and loses the minute, so it moves with both limits."""
-    return 2 + MAX_MOMENTS_PER_MINUTE * (4 + 2 * 2 * MAX_REWRITES) + 1
+    return 2 + MAX_MOMENTS_PER_MINUTE * (5 + 2 * 2 * MAX_REWRITES) + 1
 
 
 def agent_events(events: list[dict]) -> list[dict]:
@@ -611,6 +684,7 @@ async def run_workflow(
     inline_events: bool = False,
     ledger: Ledger | None = None,
     gate: Gate = confidence_gate,
+    personalize: bool = False,
 ) -> Result:
     """One minute through the workflow. `events` are full match events (simulated or detected);
     the agents see them compacted, and claims are checked against those."""
@@ -619,9 +693,10 @@ async def run_workflow(
     await load_match(ledger, events, ())
     counted, calls = _counted(models)
     run = Run(counted, ledger, {e["id"]: compact(e) for e in events}, match, inline_events, plant, live, gate,
-              t={e["id"]: float(e["t"]) for e in events})
+              personalize, events, t={e["id"]: float(e["t"]) for e in events})
     start, analyst, tactician = ProducerStart(run), Analyst(run), Tactician(run)
     challenger, checker, producer = Challenger(run), FactChecker(run), Producer(run)
+    personalizer = Personalizer(run)
     workflow = (
         WorkflowBuilder(max_iterations=superstep_budget(), name="ninety-minute", start_executor=start)
         .add_edge(start, analyst)
@@ -629,7 +704,8 @@ async def run_workflow(
         .add_edge(tactician, challenger).add_edge(tactician, checker).add_edge(tactician, producer)
         .add_edge(challenger, checker)
         .add_edge(checker, tactician).add_edge(checker, challenger).add_edge(checker, producer)
-        .add_edge(producer, tactician)
+        .add_edge(producer, tactician).add_edge(producer, personalizer)
+        .add_edge(personalizer, tactician)
         .build()
     )
     with telemetry.minute_span(minute, match, plant, live) as span:
@@ -671,101 +747,84 @@ def _unused(role: str):
     return unused
 
 
-class SignedIn:
-    """An async credential that keeps each token it gets until shortly before it expires.
-
-    In agents-live, `azure/login` leaves the Azure CLI holding an OIDC client assertion that is
-    valid for five minutes; every token request after that fails (AADSTS700024, as the
-    Personalizer evaluation did 24 minutes in). A token itself lasts an hour or more, so a run
-    that signs in first and reuses its tokens never asks again within a run."""
-
-    def __init__(self, inner):
-        self.inner, self.tokens = inner, {}
-
-    async def get_token(self, *scopes: str, **kwargs):
-        token = self.tokens.get(scopes)
-        if token is None or token.expires_on - time.time() < TOKEN_MARGIN_SECONDS:
-            token = self.tokens[scopes] = await self.inner.get_token(*scopes, **kwargs)
-        return token
-
-    async def close(self) -> None:
-        await self.inner.close()
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *exc) -> None:
-        await self.close()
-
-
-def new_credential() -> SignedIn:
-    """The live run's credential: the aio DefaultAzureCredential, kept by SignedIn."""
-    from azure.identity.aio import DefaultAzureCredential
-
-    return SignedIn(DefaultAzureCredential())
-
-
-async def sign_in_then_load(credential, load_events: Callable[[], list[dict]]) -> list[dict]:
-    """Gets the Foundry token before anything slow (a simulation) can outlast the sign-in."""
-    await credential.get_token(FOUNDRY_SCOPE)
-    return load_events()
-
-
 async def run_live(
     load_events: Callable[[], list[dict]], minute: int, match: str, inline_events: bool, plant: bool,
-    trace_to: str = "foundry", content: bool = False,
+    trace_to: str = "foundry", content: bool = False, personalize: bool = False,
+    inject: Callable[[Models], Models] | None = None, credential: SignedIn | None = None,
 ) -> tuple[Result, list[Turn], dict[str, str], bool, list[dict]]:
     """Live on Foundry, calling the published versions pinned in foundry_agents.json. Signs in,
     then loads the events. Returns the result, every model answer, the versions that ran, whether
-    any model call failed, and the events the run checked against."""
+    any model call failed, and the events the run checked against. With `personalize`, aired
+    insights go to the Personalizer: its service when NINETY_PERSONALIZER_URL is set (A2A), else in
+    process (ninety/personalizer/client.from_env). `inject` swaps one of the live models for a
+    failing one (ninety/eval/workflow_failures.py --live). A run of several minutes passes its one
+    `credential`, signed in at its start (agents-live's sign-in lasts five minutes); else this run
+    makes and signs in its own."""
+    async with contextlib.AsyncExitStack() as owned:
+        if credential is None:
+            credential = await owned.enter_async_context(new_credential())
+        return await _run_live(credential, load_events, minute, match, inline_events, plant, trace_to,
+                               content, personalize, inject)
+
+
+async def _run_live(credential, load_events, minute, match, inline_events, plant, trace_to, content,
+                    personalize, inject):
     from ninety import config
     from ninety.agents import foundry
 
-    async with new_credential() as credential:
-        events = await sign_in_then_load(credential, load_events)
-        client = foundry.chat_client(credential)
-        if trace_to == "foundry":
-            await telemetry.trace_to_foundry(client, content)
-        turns: list[Turn] = []
-        failed = [False]
-        async with contextlib.AsyncExitStack() as stack:
-            pins, agents = {}, {}
-            for role, local in foundry.workflow_agents(client).items():
-                name, version = foundry.pinned(local)  # refuses to run when the code drifted from the pin
-                pins[name] = version
-                published = FoundryAgent(
-                    project_endpoint=config.FOUNDRY_PROJECT, agent_name=name, agent_version=version,
-                    credential=credential,
-                )
-                agents[role] = await stack.enter_async_context(published)
-
-            def ask(role: str):
-                async def answer(prompt: str) -> str:
-                    try:
-                        reply = await asyncio.wait_for(agents[role].run(prompt), MODEL_TIMEOUT_SECONDS)
-                        response = reply.text
-                    except BaseException:
-                        failed[0] = True
-                        raise
-                    turns.append(Turn(role, prompt, response))
-                    return response
-
-                return answer
-
-            async def judge_live(claim: Claim, evidence: list[dict]) -> Verdict:
-                verdict = await judge_call(agents["judge"], claim, evidence)
-                turns.append(Turn("judge", judge_prompt(claim), json.dumps(asdict(verdict))))
-                if status_for(verdict) == "held":  # the Judge could not judge: a failed model call
-                    failed[0] = True
-                return verdict
-
-            models = Models(
-                analyst=ask("analyst"), tactician=ask("tactician"), challenger=ask("challenger"),
-                judge=judge_live,
-                personalizer=_unused("personalizer"), describer=_unused("describer"),
-                companion=_unused("companion"), speak=_unused("speak"),
+    events = await sign_in_then_load(credential, load_events)
+    client = foundry.chat_client(credential)
+    if trace_to == "foundry":
+        await telemetry.trace_to_foundry(client, content)
+    turns: list[Turn] = []
+    failed = [False]
+    async with contextlib.AsyncExitStack() as stack:
+        pins, agents = {}, {}
+        for role, local in foundry.workflow_agents(client).items():
+            name, version = foundry.pinned(local)  # refuses to run when the code drifted from the pin
+            pins[name] = version
+            published = FoundryAgent(
+                project_endpoint=config.FOUNDRY_PROJECT, agent_name=name, agent_version=version,
+                credential=credential,
             )
-            result = await run_workflow(models, events, minute, match, plant, True, inline_events)
+            agents[role] = await stack.enter_async_context(published)
+
+        def ask(role: str):
+            async def answer(prompt: str) -> str:
+                try:
+                    reply = await asyncio.wait_for(agents[role].run(prompt), MODEL_TIMEOUT_SECONDS)
+                    response = reply.text
+                except BaseException:
+                    failed[0] = True
+                    raise
+                turns.append(Turn(role, prompt, response))
+                return response
+
+            return answer
+
+        async def judge_live(claim: Claim, evidence: list[dict]) -> Verdict:
+            verdict = await judge_call(agents["judge"], claim, evidence)
+            turns.append(Turn("judge", judge_prompt(claim), json.dumps(asdict(verdict))))
+            if status_for(verdict) == "held":  # the Judge could not judge: a failed model call
+                failed[0] = True
+            return verdict
+
+        personalizer = _unused("personalizer")
+        if personalize:
+            from ninety.personalizer import client as personalizer_client
+
+            personalizer = personalizer_client.from_env()
+            if hasattr(personalizer, "close"):
+                stack.push_async_callback(personalizer.close)
+        models = Models(
+            analyst=ask("analyst"), tactician=ask("tactician"), challenger=ask("challenger"),
+            judge=judge_live, personalizer=personalizer, describer=_unused("describer"),
+            companion=_unused("companion"), speak=_unused("speak"),
+        )
+        if inject is not None:
+            models = inject(models)
+        result = await run_workflow(models, events, minute, match, plant, True, inline_events,
+                                    personalize=personalize)
     telemetry.flush()
     return result, turns, pins, failed[0], events
 
@@ -842,9 +901,14 @@ def main() -> None:
     ap.add_argument("--cues-out", type=Path, metavar="JSONL", help="write every aired cue to this file")
     ap.add_argument("--no-trace", action="store_true", help="do not send traces to Foundry")
     ap.add_argument("--trace-content", action="store_true", help="include prompts and replies in the traces")
+    ap.add_argument("--personalize", action="store_true",
+                    help="send aired insights to the Personalizer (NINETY_PERSONALIZER_URL, else in process)")
     args = ap.parse_args()
     if args.replay and (args.record or args.events or args.plant):
         ap.error("--replay takes its events, minute and --plant from the recording; it cannot --record")
+    if args.personalize and (args.record or args.replay):
+        # A recording holds no Personalizer turns yet, so its replay could not answer them.
+        ap.error("--personalize cannot be recorded or replayed yet")
 
     if args.replay:
         recording = WorkflowRecording.load(args.replay)
@@ -872,6 +936,7 @@ def main() -> None:
                 (lambda: events) if args.events else (lambda: simulated_events(args.seed, args.minutes)),
                 args.minute, match, inline, args.plant,
                 trace_to="none" if args.no_trace else "foundry", content=args.trace_content,
+                personalize=args.personalize,
             ))
         except RegistryDrift as e:
             sys.exit(f"not run: {e}")

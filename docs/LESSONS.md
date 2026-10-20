@@ -883,7 +883,8 @@ short and actionable. This file is public: no research sources, product names or
   as `rejected` (the claim is wrong) instead of `held` (it could not be checked); and an Analyst
   that failed, hung on an MCP call or replied with prose raised out of `live.run`, taking the
   template graphics down with it.
-- **Rule:** every fallback claimed in docs/eval/failure-table.md is a row produced by injecting
+- **Rule:** every fallback claimed in a failure table (docs/eval/failure-table-m1.md, and the
+  multi-agent workflow's docs/eval/failure-table.md) is a row produced by injecting
   that failure into the real path, asserted by a test with the expected outcome written in the
   test. A status is computed by `status_for`, never re-derived.
 - **Check:** `uv run pytest tests/test_failure_table.py`; removing the `live.run` fallback or
@@ -1145,7 +1146,23 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `uv run pytest tests/test_restarts.py -k every_kind`; `scripts/defect_sweep/restarts.py`
   reports `stuck_restarts`, which must be 0.
 
-### 123. A legal exception in the contract is an exception in every reader of the same data
+### 123. An async client handed a sync credential signs in late and blocks the loop
+- **What happened:** the slice, the fact-checker evaluation and the Analyst evaluation each made
+  a sync `DefaultAzureCredential` and passed it to Foundry's async clients, and
+  `foundry.chat_client` made one by default. A sync credential fetches its token on the event
+  loop's thread, stalling every concurrent call. It fetches it only at the first model call,
+  after the evaluation has simulated its matches, by which time agents-live's five-minute OIDC
+  sign-in can have expired. The fact-checker evaluation lost 19 of 251 Judge calls, most likely to
+  this (not yet confirmed by a rerun). The workflow
+  (W1) had already fixed this for itself; the rest never took the fix.
+- **Rule:** every live run makes one aio credential (`credentials.new_credential`), signs in
+  (`credentials.sign_in`) before anything slow, and passes that object to the chat client and
+  every agent. A client factory takes no default credential.
+- **Check:** `tests/test_credentials.py`. Each site takes the token before it simulates, and
+  hands the same `SignedIn` credential to every client; deleting any `sign_in` turns its test
+  red. An AST check keeps `azure.identity.DefaultAzureCredential` out of the live modules.
+
+### 124. A legal exception in the contract is an exception in every reader of the same data
 - **What happened:** after a goal the kickoff puts every player back in his own half in one frame.
   The data contract allows it, and the validator's speed check and the late-drop report both skip
   it. The stats engine did not: `player_movement_facts` counted the reset as running, so seed 7's
@@ -1155,12 +1172,14 @@ short and actionable. This file is public: no research sources, product names or
 - **Rule:** when the contract makes an exception (a kickoff reset, a dead ball being replaced),
   every computation over the same frames applies it in the same place, and one shared function
   (`stats.player_steps`) decides which steps count as movement.
-- **Check:** `tests/test_stats.py::test_no_player_outruns_the_contract_over_a_kickoff_reset`
-  calls the engine's own kickoff reset partway through a match (first written on seed 7's goals,
-  until an engine change left seed 7 without one, lesson 78) and holds every player's peak speed
-  under the validator's limit. It fails on the old code.
+- **Check:** `tests/test_stats.py::test_a_kickoff_reset_is_not_movement` puts a reset into a
+  kickoff frame (legal under the contract) and fails on the old code;
+  `test_no_player_outruns_the_contract_over_a_restart_after_a_goal` runs the engine's own restart
+  partway through a match and holds every player's peak speed under the validator's limit. (The
+  engine teleported players at a kickoff until #156; they now walk back, so the engine case is the
+  walk, and the reset is pinned by the hand-built frames.)
 
-### 124. A test that waits for its rule hangs when the rule breaks, and a hang is not a red test
+### 125. A test that waits for its rule hangs when the rule breaks, and a hang is not a red test
 - **What happened:** two WebSocket tests on the phone relay checked their rule by waiting for a
   message (a close, the room's latest state). With the rule mutated, the message never came and
   pytest blocked for about 40 minutes, until the process was killed by hand. A CI job would have waited
@@ -1179,7 +1198,7 @@ short and actionable. This file is public: no research sources, product names or
   loop with a 5 s deadline per receive, and 150 repeats on 4 workers under full CPU load pass;
   `test_a_newer_clock_never_overtakes_a_phones_catch_up` fails without the single flusher.
 
-### 125. A refusal a browser cannot read is no refusal: close a WebSocket after accepting it
+### 126. A refusal a browser cannot read is no refusal: close a WebSocket after accepting it
 - **What happened:** the phone relay refused a join (unknown code, room full, laptop taken) by
   closing the WebSocket before accepting it, and its tests read the close codes 4404, 4409 and 4429
   from an ASGI harness. A browser never sees a close sent before the handshake completes: uvicorn
@@ -1191,7 +1210,8 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_api_companion.py`'s `refused()` fails when the server closes before the
   accept, and every refusal test goes through it; moving `_refuse` back to a bare close turns them red.
 
-### 126. A number check that reads one written form lets every other form through
+
+### 127. A number check that reads one written form lets every other form through
 - **What happened:** the fact-check read a number only when no letter followed it, to skip ids
   like "e00042". So "50km/h", "50kph" and "9999m" were never read, nor was "fifty km/h": a model
   following an injected instruction could air a number the evidence does not hold. The phone
@@ -1205,20 +1225,20 @@ short and actionable. This file is public: no research sources, product names or
   plants each form; `docs/eval/companion.md` plants the glued and spelled forms, and on the old
   check its count shows 4 of them airing on seed 7.
 
-### 127. A WebSocket tested only through the test client is untested in the server a browser reaches
+### 128. A WebSocket tested only through the test client is untested in the server a browser reaches
 - **What happened:** the phone relay's tests all passed through Starlette's TestClient, which
   speaks WebSocket in process. The first time a real browser joined through uvicorn, every
   connection answered 404: uvicorn upgrades a WebSocket only when a WebSocket library is
   installed, and none was locked, so the deployed image could never have served the relay. The
-  same run found lesson 125's unreadable refusals.
+  same run found lesson 126's unreadable refusals.
 - **Rule:** a feature a browser uses over the network is tested once through the real server and a
-  real browser, not only through an in-process client. (A close code the client must read is sent after the accept: lesson 125.)
+  real browser, not only through an in-process client. (A close code the client must read is sent after the accept: lesson 126.)
 - **Check:** `tests/test_phone.py` runs the companion routes in uvicorn and joins from Chromium;
   CI's `image` job asks the built image for a WebSocket upgrade and needs `101` (it answers 404
   without `websockets` in `uv.lock`). The phone still reads a close before the accept as "unknown
   code or unreachable" (`web/phone/src/feed.ts`), for a server that refuses that way.
 
-### 128. Positions from a fit, summed frame to frame, read the fit's jitter as running
+### 129. Positions from a fit, summed frame to frame, read the fit's jitter as running
 - **What happened:** the phone's speed and distance come from the companion's window facts, which
   sum each player's frame-to-frame steps. On simulator positions that is exact. On positions
   tracked from the video, the camera fit moves a foot point by up to about 0.5 m between
@@ -1235,7 +1255,7 @@ short and actionable. This file is public: no research sources, product names or
   `test_a_track_ends_at_the_speed_its_player_was_running` fails with a plain average, which lags
   at a track's end.
 
-### 129. `sum()` of floats is not the same number on every Python
+### 130. `sum()` of floats is not the same number on every Python
 - **What happened:** the phone's tracked frames file is committed, and a test rebuilds it and needs
   the same bytes. It passed on Python 3.12 and failed on 3.11. Python 3.12 made `sum()` of floats
   use compensated addition, so a smoothed position's last digit moved, and a rounding at 0.01 m
