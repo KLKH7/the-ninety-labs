@@ -237,7 +237,7 @@ async def run_slice(
         # The local definitions only identify the pinned versions (and refuse to run if the code
         # drifted from them); the published agents do the work. Foundry calls the match MCP server.
         ran, agents = [], []
-        for local in foundry.build_agents(client):
+        for local in foundry.slice_agents(client):
             name, version = foundry.pinned(local)
             ran.append(f"{name}:{version}")
             published = FoundryAgent(
