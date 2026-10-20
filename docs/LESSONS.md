@@ -1108,7 +1108,7 @@ short and actionable. This file is public: no research sources, product names or
   fails with an unclaimed file in `replays/`, and fails when a workflow recording no longer saves
   byte for byte.
 
-### 117. Noise in a belief is a misjudgement that persists, not a fresh draw every look
+### 114. Noise in a belief is a misjudgement that persists, not a fresh draw every look
 - **What happened:** the team chose its chaser for a loose ball from each player's estimate of where
   the ball was going, with an error redrawn every four frames. Two players about as near swapped the
   chase back and forth; the one dropped went back to his shape and turned away from the ball, a fan
