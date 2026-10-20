@@ -8,7 +8,7 @@
   "required": ["session", "player", "text", "t"],
   "properties": {
     "session": { "type": "string", "minLength": 1, "maxLength": 64, "description": "The viewer's session id, made by the server." },
-    "player": { "type": ["string", "null"], "pattern": "^[ha]([1-9]|1[01])$", "description": "The player the phone is focused on, if any." },
+    "player": { "type": ["string", "null"], "pattern": "^[ha]([1-9]|1[01]|-t[0-9]+)$", "description": "The player the phone is focused on, if any: a squad id (h7) or a tracked player's team plus track id (h-t12)." },
     "text": { "type": "string", "minLength": 1, "maxLength": 200 },
     "t": { "type": "number", "minimum": 0, "description": "Match time the question was asked at, in seconds." }
   }

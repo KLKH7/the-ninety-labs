@@ -17,6 +17,7 @@ GPL or AGPL otherwise). Every locked package and its licence is listed below.
 | mcp | MCP server and client | MIT |
 | a2a-sdk (with its `http-server` extra) | the Personalizer's A2A server and client (`ninety/personalizer`); brings google-api-core, google-auth, googleapis-common-protos and proto-plus (Apache-2.0), protobuf (BSD-3-Clause), json-rpc (MIT), pyasn1 (BSD-2-Clause), pyasn1-modules (BSD) and, before Python 3.13, culsans and aiologic (ISC) | Apache-2.0 |
 | starlette, uvicorn | the public API (`ninety/api`) | BSD-3-Clause |
+| websockets | the WebSocket protocol for uvicorn, which serves the phone relay (`ninety/api/companion.py`) | BSD-3-Clause |
 | pydantic (via agent-framework) | typed agent output | MIT |
 | pytest, pytest-xdist and its execnet, ruff (development) | tests (in parallel workers) and lint | MIT |
 | numpy (development; also with the vision group) | the camera fit of event detection, tested in CI | BSD-3-Clause |
@@ -81,7 +82,7 @@ These come in with the vision group under other permissive licences, all within 
 
 ## Every locked dependency
 
-All 192 packages in `uv.lock`, with the licence their published metadata gives, written
+All 193 packages in `uv.lock`, with the licence their published metadata gives, written
 one way per licence. Ten publish no licence on PyPI; how each was checked from its wheel is in
 [Packages that publish no licence](#packages-that-publish-no-licence). The NVIDIA wheels (free to
 redistribute) are Linux only and come in with PyTorch in the `vision` group.
@@ -280,6 +281,7 @@ outside the rule in `AGENTS.md`.
 | urllib3 | 2.8.0 | MIT |
 | uvicorn | 0.54.0 | BSD-3-Clause |
 | vernier | 0.5.4 | MIT OR Apache-2.0 |
+| websockets | 17.3 | BSD-3-Clause |
 | wrapt | 2.5.1 | BSD-2-Clause |
 | yarl | 1.25.1 | Apache-2.0 |
 
