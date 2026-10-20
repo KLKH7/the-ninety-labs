@@ -567,11 +567,11 @@
   "graphics_text": {
     "file": "tests/fixtures/cues-seed7.jsonl",
     "minutes": 5,
-    "cues": 64,
-    "chars": 1063
+    "cues": 80,
+    "chars": 1161
   },
   "recounted": {
-    "commit": "b6346b1",
+    "commit": "09d94f9",
     "date": "2026-10-20"
   }
 }
