@@ -910,7 +910,20 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_event_score.py::test_a_window_cut_from_a_match_is_graded_by_frame_number`
   and `::test_a_window_with_a_missing_frame_is_refused` fail on the old code.
 
-### 100. A workflow's queue is part of what it does: read how the platform queues it
+### 100. A file the code reads at run time must be in the image, and CI must build the image
+- **What happened:** #128 made `ninety/match/detected.py` read `schemas/match_event.schema.json` at
+  import and the MCP server load `tests/fixtures/detected-standin-seed900001.jsonl`. The Dockerfile
+  never copied `schemas/`, and `.dockerignore` drops `tests/`. Every test passed, because tests run
+  from a checkout; the first place the image was built was the deploy after merge, which failed, and
+  `main` could no longer deploy.
+- **Rule:** a change that makes the code read a file outside `ninety/` at run time adds it to the
+  Dockerfile in the same pull request. The image is built and called in CI on every pull request,
+  not first at deploy.
+- **Check:** the CI `image` job builds the Dockerfile, runs it, and calls `/api/health` and an MCP
+  tool on every kind of served match; the Dockerfile itself loads every served match after the
+  precompute. Mutation-checked: removing `COPY schemas` fails the build at the precompute step.
+
+### 101. A workflow's queue is part of what it does: read how the platform queues it
 - **What happened:** `agents-live.yml` put every run in one concurrency group, `agents-live`, with
   `cancel-in-progress: false`, read as "runs wait their turn". GitHub keeps at most one pending
   run per group, and a newer dispatch cancels the pending one whatever that setting says. Runs
