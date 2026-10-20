@@ -3,7 +3,7 @@ Round 3: the engine at ff67305 (each team-mate runs to his own place round the s
 him, and each leaves the huddle at his own moment), drawn by main's renderer (#150).
 - seed7-0048-goal-celebration.mp4: seed 7, 0:48 to 1:48. Goal at 0:51.3; the scorer runs to the corner
   flag and his team-mates gather round him (off camera: the broadcast camera follows the ball, which
-  the conceding keeper knocks back to the centre); everyone walks back; the kick-off comes at 2:11.
+  the conceding keeper knocks back to the centre); everyone walks back; the kick-off comes at 1:54, just after the clip.
 - tactical-seed7_t0000.jpg ... t0032: the same seconds top-down from the ground truth (red = home,
   the scorers), one panel a second: the run to the flag, the huddle breaking up a few at a time from
   about 1:09, and the walk back, spread out, are visible here.
