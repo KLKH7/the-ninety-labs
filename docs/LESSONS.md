@@ -159,6 +159,8 @@ short and actionable. This file is public: no research sources, product names or
   counted as "closing", a pass held mid-window then let go counted as unfinished, a ball at rest
   for four seconds counted as a pass in flight, and open play after a substitution did not count
   as play. One "legal" goal fixture gave a goal with the ball at rest 55 m out.
+  Backfilling the first Azure top-up then showed the reverse: a pass struck on a clip's last frame
+  failed C7, judged on the dribble before the kick, because none of its flight was in the clip.
 - **Rule:** a contract every clip must meet is run by the code that makes clips, as part of the
   check that decides whether a clip ships. A clip that is part of something larger says so in
   its metadata, and a check withholds a judgement only when the clip's own frames show the play
@@ -193,6 +195,44 @@ short and actionable. This file is public: no research sources, product names or
   explicitly.
 - **Check:** the two `detections.jsonl` runs are made by one command with only `--checkpoint` and
   `--weights` different; `tests/test_vision_finetune.py` pins the baseline to finetune.json's size.
+
+### 82. A structural change chosen from a report, justified by half the engine, is tailoring; and a lesson only on a side branch protects nothing
+- **What happened:** a full-match pass count was over a test's limit. Calibration showed forward
+  passes rated too low. The passer's estimate raced every opponent while the engine sends one
+  chaser, so the estimate was changed to race only the soonest. That made the calibration look
+  better and turned the failing seed green. An audit found that the engine lets any opponent take
+  the ball by contact and re-plans its chaser every 4 frames. So the change was not the engine's
+  rule but an optimistic way of combining uncertainty wherever two opponents contest the ball,
+  and where play happens did not move at all. It was reverted on the R3 line (Oct 17), but the
+  lesson stayed on that branch. The same change, ported earlier from another branch, rode into
+  the forward-play port on main's line (#103) unchecked. There it was a prime suspect when goals
+  doubled (2.63 a team over 8 seeds, against 1.4 real).
+- **Rule:**
+  - Before changing how an estimate combines its parts, read every path in the engine that
+    decides the same outcome (here `plan_chase` and `contact`), not only the one that fits.
+  - A rate that moves for the wrong reason, or a check that turns green while the behaviour
+    behind it does not move, is not a fix.
+  - A lesson lands on main as soon as it is learned, in its own small pull request if its fix is
+    still on a branch.
+  - An audit of a port also reads the source line's LESSONS.
+- **Check:**
+  - For any change that moves a held-out check, list what else moved (stoppages, where play
+    happens) and say what did not.
+  - `git log --all -- docs/LESSONS.md` shows no lesson that exists only on an unmerged branch
+    older than a day.
+  - A port's audit names the branches whose lessons it read.
+
+### 95. A pattern that reads numbers must read every way a number is written
+- **What happened:** the fact-checker's number pattern refused a digit followed by a letter, so it
+  would not read "h7" as a number. That also skipped every English ordinal: "in the 9th minute"
+  passed for an event in minute 2, and "his 97th pass" passed with no such count in the evidence,
+  although the clock rule tells the agents to write minutes as ordinals. The minute pattern
+  already knew the "9th minute" form; it was never reached. Found by the Personalizer's tests,
+  when a planted "7th pass" in a variant aired.
+- **Rule:** a check that reads values out of text is tested on every form the writers are told
+  to use, and on the forms a translation or rewording produces, with a defect planted in each.
+- **Check:** `tests/test_factcheck.py::test_an_ordinal_minute_must_be_the_cited_minute` and
+  `test_an_ordinal_count_must_be_in_the_evidence` fail on the old pattern.
 
 ## Working in the repo
 
@@ -608,3 +648,356 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_render_scene.py::test_the_crowded_window_is_the_one_where_the_ball_is_hidden`
   builds two windows where counting players near the ball picks the wrong one. Before a batch,
   `uv run ninety-data-stats <2-3 crowded clips> --stride 5 --input 640x640` shows the share.
+
+### 75. A trigger guarded only by "not busy now" fires again when the busy state ends
+- **What happened:** a keeper's dive was allowed whenever he was not diving and not on the
+  ground. A slow shot was still on its way after he had dived, landed and got up, so he dived a
+  second time at the same ball. Every condition checked the present; none remembered that the
+  touch had already set off a dive.
+- **Rule:** an action that happens once per cause records the cause it answered (here the touch,
+  `kicked_at`) and checks it, rather than relying on a temporary state to block a repeat.
+- **Check:** for each once-per-cause action, write a test where the cause outlives the action's
+  own busy state (dive, land, get up, ball still coming) and require no repeat; and one where a
+  new cause (a deflection) is allowed to trigger it again.
+
+### 76. Keep every dimension a source measured
+- **What happened:** the kick-error source measured a tilted ellipse of where shots cross the goal
+  line (a long and a short axis). The engine kept one number, their geometric mean (3°), as the
+  sideways error, and gave the up-and-down error a fixed 2° that did not grow with speed, pressure
+  or fatigue. Close shots almost never missed: none of 25 unblocked shots inside 25 m in one sample.
+- **Rule:** when a source reports a shape (axes, a covariance, a distribution), derive each
+  component the engine uses from it, in code, with the derivation beside it. A number that
+  summarises a measurement is not the measurement.
+- **Check:** for each sourced constant, ask "what did the source actually measure, in how many
+  dimensions?" and test the derived values against the source's own figures.
+
+### 77. A committed report must come from the committed code
+- **What happened:** two commits regenerated `docs/eval/funnel.md` (1.8 goals a team), yet the
+  code of the later one, re-run on a clean checkout of that commit, produced 2.5; the realism test went red with nobody noticing. Twelve
+  matches also hide a change of 0.3 goals a team in noise (standard error about 0.27).
+- **Rule:** regenerate a report from the exact tree being committed, after the last code change,
+  and state how big a difference the sample can resolve.
+- **Check:** re-run the report on a clean checkout of the commit and compare before merging.
+
+### 78. A test's sample must survive a change that does not touch what it tests
+- **What happened:** merging the measured kick error, which changes only where a struck ball
+  goes, broke two tests that check something else. A styles test read the defensive line over
+  three minutes of one seed: the gap between a high press and a low block fell from 7.8 m to
+  5.0 m, against a 5 m margin, while over ten minutes it was 15.7 m and 12.7 m. A fact-checker
+  test needed some player to be absent from every event in a five-minute clip; after the change
+  all 22 took part, so it had nobody to plant.
+- **Rule:** a test that reads a match measures enough of it that an unrelated change cannot move
+  the result across its margin, and a test that needs a case builds that case itself rather than
+  waiting for the match to produce it. Lengthen the sample or build the case; never move the
+  margin.
+- **Check:** before trusting a match-reading test, run its measurement on a longer window and a
+  second engine version, and write both numbers next to it.
+
+### 81. Read a model's class ids from a trained model, by what the boxes look like
+- **What happened:** to map RF-DETR's class ids to player and ball, `detect.py` was checked
+  against a checkpoint trained for one epoch on 10 images. Its ids (1 and 2) were taken to mean
+  player and ball, but that model's output was noise. A trained model returns indices into
+  `class_names`: 0 player, 1 ball. So the merged mapping labelled every ball a player and
+  dropped every player. A validation check on ours-v2 caught it before any number was
+  published: one clip scored 0 true positives, 48 ball-sized "players" and 2,007 misses.
+- **Rule:** decide what each class id means with a trained model, from the boxes it draws (size,
+  shape, how many a frame), never from a smoke run's id counts. Then pin that measurement in a
+  test, with the numbers in its comment.
+- **Check:** `tests/test_vision_finetune.py::test_our_checkpoint_maps_by_index_into_class_names`
+  records the ours-v2 measurement (id 0: 32 x 71 px, about 6 a frame; id 1: 9 x 9 px, one a
+  frame). Before scoring a new checkpoint, run `detect.py` on one validation clip and score it.
+  Precision near zero with ball-sized boxes labelled player means the mapping is wrong.
+
+### 84. Everything the picture draws in front of an object hides it in the labels
+- **What happened:** the id pass, which counts each object's visible pixels, hid all scenery. In
+  seed 900003 of the frozen test set (`engine-v1`) a dead ball rested 0.5 m behind the far
+  advertising boards for 110 frames. The picture showed only boards, and the labels said
+  visibility 1.0. Every render check passed, because each one compared the labels with the id
+  pass, not with the picture. The detector found it by missing a ball that the picture does not
+  show.
+- **Rule:** anything opaque that the beauty pass draws is an occluder in the full id pass, unless
+  it is listed as an exception with a reason (sky, ground, see-through nets, shadow decals). Before
+  re-rendering, measure the scope over every split, not only the frames a model missed.
+- **Check:** `tests/test_render_occlusion.py` puts a ball 0.5 m behind the far boards and fails if
+  any of it is labelled visible (52 pixels on the old id pass). A ball in front of the boards must
+  stay visible.
+
+### 85. A scorer reads labels by the rule written down, not by which fields are filled
+- **What happened:** EVALUATION.md says boxes with visibility zero are not labels, but
+  `vision_score.ground_truth()` kept any label with a box. When the re-frozen test set marked
+  balls behind the advertising boards as visibility 0 and kept their boxes, the scorer counted
+  113 balls in shot and fully hidden as misses, and ball recall read 0.846 instead of 0.930. It was found after
+  the results were in; the rule it applies was written before them.
+- **Rule:** a scorer decides what counts as a label from the documented rule, in one function,
+  and never from whether a field happens to be present. A data change that fills a field it once
+  left empty must not change what is scored.
+- **Check:** `tests/test_vision_score.py::test_a_box_with_visibility_zero_is_not_a_label` gives
+  a player and a ball boxes at visibility 0 with no detection and fails if either counts as a miss.
+
+### 86. Measure the worker count; a CI runner's threads are not cores
+- **What happened:** the test jobs took 15 to 40 minutes, so every merge left the other ready
+  pull requests another half hour behind. `pytest -n auto` started 4 workers on GitHub's 4-vCPU
+  runner, which has 2 physical cores, and the job took 22 minutes, against 13 with `-n 2` and 41
+  in one process (measured on the same tree, 2026-10-18). Full-match simulations also slow each
+  other down: `test_judge`'s two simulations took 498 s alone on a runner and 978 s next to the
+  90-minute realism test. Split over three runners per Python version, the jobs took 12 and 13
+  minutes against 29 and 30 in one process (main at `1f0b74c`), and the slowest shard is the one
+  with `test_judge`, which simulates 120 match minutes in one test.
+- **Rule:** choose the worker count from a measured run on the real runner, not from `auto`.
+  Spread the slowest tests over separate machines (`--shard`, `tests/conftest.py`), and keep the
+  required check names as a gate that is green only when every shard passed. Every pull request
+  still runs every test.
+- **Check:** `tests/test_shard.py` fails if a test lands in no part or two, if the `--shard`
+  hook drops or repeats a test across K, or if the slowest tests share a part. Each shard prints
+  its 10 slowest tests; when one shard runs much longer than the others, update `SLOWEST` in
+  `tests/conftest.py`.
+
+### 87. Re-rendering part of a run copies the run's settings, and is checked against it
+- **What happened:** to fix 30 v3 clips I launched the re-render with seed ranges only. v3 had
+  rendered its 2000s and 4000s with `occlusion=crowded` and its 3000s with `kit_contrast=low`, so
+  16 of the 30 came back with different parameters, and 5 of them filmed a different window.
+  Nothing failed: the job rendered exactly what it was asked for.
+- **Rule:** a partial re-render takes each seed's overrides from the original run's `clip.json`,
+  and before the new clips replace the old, their `params` and `overrides` must equal the
+  originals and their engine positions must match frame for frame.
+- **Check:** `docs/eval/dataset-v1.json` lists the run, commit and overrides of every clip; for
+  each replaced seed, compare `params` and `overrides` in both `clip.json` files.
+
+### 88. A ported rule keeps its condition, not just its threshold
+- **What happened:** porting `main`'s aerial touches, the engine flagged every touch in foot reach
+  above 0.45 m as a thigh or chest, at half a foot's first touch. `main` applied that only to a ball
+  coming into the body; the engine's foot reaches to 1 m. A knee-high pass met beside a player was
+  miscontrolled and popped up beside him to be miscontrolled again: before the cushioned touch, 158
+  deflections in 30 minutes of seed 7, 52 by the same player straight after his own, against 35
+  before the port, and about 80 fewer passes a team per match over 24 matches. The cushioned touch
+  then copied the same height-only test into the shared first-touch rule; there it made such a ball
+  a heavy touch. The first fix also let the passer's estimate judge "into his body" from where the
+  receiver stood, but receivers run onto the ball's path: passers then over-rated dropping balls
+  and receivers kept fewer of them (89.5% against 94.2% on the base, seeds 40 to 47). The estimate
+  keeps the thigh for a dropping ball, as a cautious bound, and the calibration report (forced
+  passes) checks that it under-estimates rather than fits.
+- **Rule:** when porting a rule between engines, carry over every condition it was guarded by (here,
+  "into his body"), and check it against the receiving engine's own definitions (here, foot reach).
+- **Check:** after a port, compare event counts by kind (deflections, passes) with the parent on the
+  same seed, and rerun the touch report: an estimate made more optimistic shows there before it shows
+  in goals. `tests/test_engine_rules.py::test_a_ball_he_reaches_beside_him_below_his_foot_reach_is_a_foot_touch`
+  fails with the height-only test restored;
+  `tests/test_decisions.py::test_the_passer_expects_a_dropping_ball_into_his_man_to_meet_the_thigh`
+  fails if the estimate takes it on the foot.
+
+### 89. A rate that swings match to match needs enough matches before it is read
+- **What happened:** the touch report's eight seeds put the engine at 1.0 goals a team after "what
+  makes a touch worse", and the pull request, GROUNDING A4 and EVALUATION recorded it as a held-out
+  miss against the published 1.4. A match's goals run from 0 to 8, so eight matches cannot measure
+  goals a team to better than about ±0.3. Over 24 seeds the same engine gave 1.44, and the change
+  against the engine before it was -0.25 ± 0.18: noise.
+- **Rule:** before calling a per-match rate (goals, penalties, cards) a hit or a miss against a
+  published figure, give its standard error and use enough matches that the error is smaller than
+  the gap being claimed; compare two engines on the same seeds. A rate measured on too few matches is
+  reported with its error, never as a hit or a miss.
+- **Check:** every goals-per-team figure in GROUNDING and EVALUATION says how many matches it is
+  over; a before-and-after claim on goals gives the paired difference and its standard error.
+
+### 90. The same seed does not pair two engines
+- **What happened:** #90 was measured against main on seeds 40 to 47 and the per-seed differences
+  gave -1.0 goals a team with a "paired" standard error of 0.34, reported as likely real. But any
+  engine change makes the two matches part within about a minute (seed 7's events differ from
+  73 s on), so a seed's two matches are independent draws, not a pair. Over 24 seeds the
+  difference was -0.44 with a standard error of 0.28, and the paired and unpaired errors agreed
+  (0.276 and 0.279).
+- **Rule:** treat two engines on the same seeds as independent samples. Give the unpaired
+  standard error, and use enough matches that it is smaller than the gap being claimed. Running
+  the same seeds still matters, for reproducing a run, not for cancelling noise.
+- **Check:** for a before-and-after on a match rate, report both errors; if the paired one is not
+  clearly smaller, quote the unpaired one.
+
+### 91. When the data moves, the code that reads it moves in the same change
+- **What happened:** sealing the ground truth (0fda1f8) moved frames.jsonl and events.jsonl from
+  the `renders` container to `truth`. The training fetcher still read frames.jsonl from `renders`,
+  so a fetch of any later run would have downloaded images with no labels, and coco_export would
+  have stopped on the first clip. Separately, dataset v1 picks each clip's run and drops seed 111,
+  but the fetcher took whole runs, and the pinned validation seeds still named 111. Both were found
+  by reading the dataset definition against the tools before renting a GPU, not on the GPU.
+- **Rule:** a change to where data lives lists every reader of it and updates them, or names the
+  ones left behind. Before a paid training run, dry-run the launcher against the exact dataset
+  definition it will train on.
+- **Check:** `tests/test_vision_fetch_clips.py` takes labels from `truth` and each seed from the run
+  the list names; `tests/test_vision_finetune.py` checks the short fine-tune's validation seeds are
+  all in `docs/eval/dataset-v1.json`.
+
+### 92. A count is not a cause: look at where the errors land before naming one
+- **What happened:** two explanations were passed on before anyone checked them. "The detector
+  fires on 45 of 113 fully hidden balls" was read as the model seeing balls behind the boards,
+  learned from the boards defect in its training labels. Checking where those detections were
+  showed none on the hidden ball (median 43 px away), 39 at a player's feet, 44 in one clip.
+  "Crowded scenes are the weakness (0.72 recall on validation)" was scored before #119, when
+  fully hidden objects counted as misses, which crowded windows have most of. On the test set the
+  crowded clips score within a few points of the others.
+- **Rule:** before a number becomes a finding or a plan, check what it counts: where the errors
+  sit, and which scorer and labels produced it. A cause is named only after looking at the
+  errors themselves; a number from before a scorer or label fix is re-measured or marked as such.
+- **Check:** `docs/eval/vision-report-v1.json` reports `hidden_ball_frames.on_the_hidden_ball`
+  and the median distance, not just the count, and `by_knob` gives the crowded clips on the test
+  set; `tests/test_vision_report.py` checks a detection at a player's feet is not counted as
+  on the hidden ball.
+
+### 93. A dependency that needs a rule change merges after the rule
+- **What happened:** #63 added rfdetr and PyTorch, which bring in tqdm (MPL-2.0), pillow
+  (MIT-CMU), FFmpeg inside `av` (LGPL) and NVIDIA CUDA (proprietary). The licence rule in
+  `AGENTS.md` still said "MIT, Apache-2.0 or BSD only", and #68, which widened it, sat in draft.
+  #63 merged anyway, so `main` broke its own written rule for a day. An audit of all 179 locked
+  packages then found licences the rule never named (Zlib, BSL-1.0, CC0-1.0, CNRI-Python) and GPL
+  runtimes bundled inside numpy, scipy and matplotlib wheels.
+- **Rule:** a PR that adds a dependency outside the written rule waits for the rule change to
+  merge first. Every locked package is listed with its licence in `THIRD_PARTY_NOTICES.md`.
+- **Check:** `tests/test_third_party_notices.py` fails when a locked package (name and version) is
+  missing from the notices, or when its licence is not one the rule allows. It was mutation-checked:
+  removing a row and relabelling a package GPL each make it fail.
+
+### 94. Copy an identity string from the system, not from the docs
+- **What happened:** the `agents-live` setup told the maintainer to trust the OIDC subject
+  `repo:KLKH7/the-ninety-labs:environment:agents-live`, the format GitHub's docs show. This repo's
+  tokens carry the owner and repo ids (`repo:KLKH7@210092633/the-ninety-labs@1417939631:...`),
+  as the existing `main` credential already showed. The credential was created, `az` reported
+  success, and no run could ever have signed in with it.
+- **Rule:** an identifier another system must match exactly (an OIDC subject, a role id, a
+  resource id) is read from that system or copied from a working sibling, never written from
+  memory or a generic doc (as lesson 49). Setup steps say how to see the value in use.
+- **Check:** `az ad app federated-credential list --id "$CLIENT_ID" --query "[].subject"` shows
+  every subject with the same prefix; the setup is done only when the first approved
+  `agents-live` run passes `azure/login`.
+
+### 95. A mutation run that turns nothing red may not have run the tests
+- **What happened:** a shell loop mutated nine lines of the M1 live path and reported "none red"
+  for every one. zsh does not split an unquoted `$T` into words, so pytest got one path that did
+  not exist and ran no test. Nine "surviving" mutations in a row looked like nine weak tests.
+- **Rule:** a mutation harness prints the test run's own pass and fail counts next to each
+  mutation, and a run with no "passed" count is a broken harness, not a surviving mutation.
+- **Check:** the harness line for every mutation shows "N failed, M passed". Run one mutation by
+  hand first and watch it go red before trusting the loop.
+
+### 96. A fallback is real only when a test injects the failure through the live path
+- **What happened:** the M1 live path had fail-closed Judge handling and a single status mapping
+  (`contracts.status_for`), and both looked done. Injecting each failure through `live.run` for
+  the failure table showed two gaps: the workflow kept its own mapping, so a Judge outage ended
+  as `rejected` (the claim is wrong) instead of `held` (it could not be checked); and an Analyst
+  that failed, hung on an MCP call or replied with prose raised out of `live.run`, taking the
+  template graphics down with it.
+- **Rule:** every fallback claimed in docs/eval/failure-table.md is a row produced by injecting
+  that failure into the real path, asserted by a test with the expected outcome written in the
+  test. A status is computed by `status_for`, never re-derived.
+- **Check:** `uv run pytest tests/test_failure_table.py`; removing the `live.run` fallback or
+  restoring the old status line turns a row red.
+
+### 97. A robust loss pulls only from as far as its scale reaches
+- **What happened:** the camera search (`ninety/vision/pitch.py`) ranked its coarse grid of views
+  with the fine fit's Cauchy loss, 3 px. A grid view sits tens of pixels from the right one, where
+  that loss is flat, so the ranking was close to noise: with the true gantry held fixed, 3 of 10
+  frames of seed 900001 fitted, and the gantry search settled 20 m from the truth. The objective
+  was not at fault: the true camera scored 3.8 against the search's 24. The grid also aimed only at
+  points on the pitch, while the broadcast camera looks beyond the far touchline.
+- **Rule:** before blaming an objective, score it at the answer. A coarse-to-fine search uses at
+  each stage a loss scale that matches how far its starts are from the answer (here 20 px to rank,
+  then 12 and 3 px to refine), and its grid covers the whole space the answer can be in.
+- **Check:** `tests/test_vision_pitch.py` recovers known cameras from their own markings, at four
+  pans including a midfield view the old grid could not reach.
+
+### 98. Cluster on what does not change with the light
+- **What happened:** teams came from 2-means on each track's shirt colour. In seed 900001 the stand's
+  shadow covers half the pitch, and the two clusters learned were two greys (#292c3f and #666374)
+  for a maroon and a blue kit: players were split by light, both away passes were labelled home,
+  and every pass matched its true event in time and place but not in team.
+- **Rule:** make a feature that tells objects apart invariant to what varies within one of them
+  before clustering it (here chromaticity, each channel over their sum, which shadow leaves
+  alone), and check the clusters against labels on one clip before trusting them.
+- **Check:** `tests/test_vision_events.py::test_one_kit_in_sun_and_in_shadow_is_one_side` fails
+  when the feature is raw colour.
+
+### 99. A scorer reads a clip the way the data contract writes it
+- **What happened:** `ninety/eval/event_score.py` found a frame by its position from 0, which holds
+  for a whole match. The test set's clips are windows that keep the match's frame numbers
+  (docs/DATA_CONTRACT.md), so the first detected events graded on one were refused.
+- **Rule:** a scorer takes its inputs' layout from the contract (here, a window starts at its own
+  first frame) and is tested on that layout, not only on whole matches.
+- **Check:** `tests/test_event_score.py::test_a_window_cut_from_a_match_is_graded_by_frame_number`
+  and `::test_a_window_with_a_missing_frame_is_refused` fail on the old code.
+
+### 100. A file the code reads at run time must be in the image, and CI must build the image
+- **What happened:** #128 made `ninety/match/detected.py` read `schemas/match_event.schema.json` at
+  import and the MCP server load `tests/fixtures/detected-standin-seed900001.jsonl`. The Dockerfile
+  never copied `schemas/`, and `.dockerignore` drops `tests/`. Every test passed, because tests run
+  from a checkout; the first place the image was built was the deploy after merge, which failed, and
+  `main` could no longer deploy.
+- **Rule:** a change that makes the code read a file outside `ninety/` at run time adds it to the
+  Dockerfile in the same pull request. The image is built and called in CI on every pull request,
+  not first at deploy.
+- **Check:** the CI `image` job builds the Dockerfile, runs it, and calls `/api/health` and an MCP
+  tool on every kind of served match; the Dockerfile itself loads every served match after the
+  precompute. Mutation-checked: removing `COPY schemas` fails the build at the precompute step.
+
+### 101. A drawn body moves the way its markers move, frame by frame
+- **What happened:** the skinned mesh was turned as one rigid object by the engine's heading. A
+  player turning on the spot spun on his base, both feet sweeping 5 cm a frame across the grass;
+  a strike was a stored pose wherever the ball was, its foot about 0.5 m off it. Running plants
+  were placed up to 0.58 m ahead of the hips, where the mesh's leg cannot put a flat foot (it
+  reaches 0.30 m), so the drawn foot landed short and slid onto its plant. The test of that
+  ("the planted foot does not skate") passed only because the leg search was coarse enough that
+  the foot missed by about the same amount on both frames it compared.
+- **Rule:** judge motion on the skinned markers the page draws, over consecutive frames: a foot
+  on the grass does not move, and a moving foot is lifted; a touch puts the named part on the
+  ball on the contact frame. Place targets where the drawn limb can reach (measure the reach on
+  the asset), and make a search fine enough that a test cannot pass by its error.
+- **Check:** `tests/test_render_motion.py` (turns on the spot, run touchdowns, kicks, thigh, chest
+  and header touches), each mutation-checked against the old behaviour; `tests/test_render_mesh.py`
+  holds the page's markers to the Python ones for the same poses.
+
+### 102. A change to the picture bumps the renderer version in the same commit
+- **What happened:** the skinned kit mesh (a3d228e) replaced the capsule players and left
+  `RENDERER_VERSION` at 0.3.2. Dataset v1's clips at `cca498c` (capsules) and every clip rendered
+  from main since (mesh) both record renderer 0.3.2, so `clip.json` cannot say which body a
+  detector was trained or tested on. Found while planning targeted round 1, which renders from
+  main and would have mixed the two looks under one version.
+- **Rule:** any change to what `web/render` draws or how labels are counted bumps
+  `ninety/render/__init__.py`'s `RENDERER_VERSION` in the same commit; a dataset or test-set
+  manifest names the version, and two looks never share one.
+- **Check:** `git log -p -- web/render ninety/render/scene.py ninety/render/meshpose.py` since the
+  last bump shows no picture change without a version change; a dataset manifest's `renderers`
+  lists one version per look.
+
+### 104. "Never imported" is only tested in a fresh interpreter
+- **What happened:** a test meant to prove the default `ninety-e2e` run never loads the Azure
+  Speech client deleted it from `sys.modules` and ran the bundle. With the import moved to the top
+  of the Describer, it stayed green: the module was already loaded when the test file was, so
+  nothing imported it again. The mutation run caught it.
+- **Rule:** a test that a module stays unloaded imports the code under test in a new Python
+  process and reads `sys.modules` there.
+- **Check:** `tests/test_describe.py::test_the_default_run_makes_no_azure_call`; mutate by adding
+  the import at module top and watch it go red.
+
+### 106. Look for an open pull request on the same task before building it
+- **What happened:** a session was handed "build the Personalizer over A2A" and built it, tests and
+  mutation run included, before it noticed that draft #131 was the same task, further along. Two
+  Personalizers with different packages, interfaces and fallback rules were then one merge away.
+  The overlap showed up only when another PR's challenge map named #131.
+- **Rule:** before writing code for a task, search the open pull requests and the session notes for
+  it (`gh pr list --search "<task words>"`, the notes folder). If one exists, extend it with a PR
+  stacked on its branch, or ask the Coordinator. Never build a second one.
+- **Check:** the PR description names the search run and what it found. This PR is stacked on #131
+  (base `agents/personalizer`) and adds only what #131 lacks.
+
+### 107. Outcome numbers can look right while the football looks dumb: watch clips and count the nonsense
+- **What happened:** goals, shots, saves and pass completion sat inside their published bands
+  for weeks, so the engine was judged good. When the owner finally watched review clips, the play
+  was poor across the board: passes into touch with nobody near the passer, a chaser running away
+  from a loose ball, teams passing among themselves inside their own box, defenders standing
+  still. Every engine change had been measured by outcome rates; nobody watched a clip, and
+  nothing counted the play itself. On engine `7ee8720` the football-sense checker found 202 passes
+  a 90 from a team's own box into its own box, and the team without the ball with eight or more
+  outfield players standing for almost a quarter of open play.
+- **Rule:** an outcome rate is a held-out check, not proof the football is sensible. Every engine
+  pull request posts a watched 60-second clip and the football-sense counts (FS1 to FS9) on seeds
+  7, 11, 21 and 42 at 20 minutes, before and after; a fix names the type it targets and shows that
+  count fall without another rising. When someone watching finds a new kind of nonsense, it
+  becomes a defect type with a must-fail scene before it is fixed.
+- **Check:** the pull request has a clip link and the `ninety-football-sense` table for both
+  commits ([EVALUATION.md](EVALUATION.md#football-sense-fs1-to-fs9)).

@@ -150,7 +150,8 @@ def test_player_in_no_known_event_is_still_rejected():
     events are the clip's less any that name him, so the test does not rely on someone happening
     to stay out of the clip (with every player in it, it had nobody to plant)."""
     absent = next(f"h{n}" for n in range(1, 12) if f"h{n}" not in (PASS["player"], PASS.get("receiver")))
-    known = {i: e for i, e in KNOWN.items() if absent not in (e["player"], e.get("receiver"))}
+    names = ("player", "receiver", "intended", "interceptor", "deflected_by")  # every field the checker reads
+    known = {i: e for i, e in KNOWN.items() if absent not in (e.get(k) for k in names)}
     verdict = check(Claim(f"{absent} starts the move.", [PASS["id"]]), known)
     assert not verdict.ok
     assert absent in verdict.reasons[0]
@@ -196,3 +197,18 @@ def test_found_about_a_tackle_or_pressure_is_not_read_as_a_pass():
     failed = {**tackle, "id": "e3", "type": "pass", "receiver": None, "intended": "a9", "outcome": "fail"}
     known["e3"] = failed
     assert not check(Claim("a4 finds h9.", ["e1", "e3"]), known).ok
+
+
+def test_an_ordinal_minute_must_be_the_cited_minute():
+    # "the 9th minute" was never read as a number, so any ordinal passed (lesson 95).
+    minute = CLOCK_EVENT["minute"]
+    suffix = {1: "st", 2: "nd", 3: "rd"}.get(minute, "th")
+    assert check(Claim(f"A pass in the {minute}{suffix} minute.", [CLOCK_EVENT["id"]]), KNOWN).ok
+    wrong = check(Claim(f"A pass in the {minute + 7}th minute.", [CLOCK_EVENT["id"]]), KNOWN)
+    assert not wrong.ok
+    assert wrong.reasons == [f"number {minute + 7}th is not a cited minute"]
+
+
+def test_an_ordinal_count_must_be_in_the_evidence():
+    verdict = check(Claim(f"{PASS['player']} plays his 97th pass.", [PASS["id"]]), KNOWN)
+    assert verdict.reasons == ["number 97th is not in the cited evidence"]

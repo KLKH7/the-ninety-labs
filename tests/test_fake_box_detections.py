@@ -162,3 +162,17 @@ def test_a_false_box_equally_near_two_labels_is_not_placed():
               {"frame": 0, "cls": "player", "bbox": [100, 0, 120, 40], "visibility": 0.3}]
     camera = {"width": W, "height": H}
     assert _false_box(labels[0], labels, camera, Draws([50, 0, 60, 100])) == [60, 100, 80, 140]
+
+
+def test_a_box_with_visibility_zero_is_neither_copied_nor_counted():
+    # The scorer does not count a fully hidden box as a label (#119), so the fake must neither copy
+    # it as a detection (a false alarm) nor expect it to be found (a planted miss).
+    rows = frames()
+    for row in rows:
+        row["players"].append({"id": "hidden", "bbox": [1000, 100, 1020, 140], "visibility": 0.0})
+    rows[0]["ball"]["visibility"] = 0.0
+    detections, expected = fake_box_detections(rows, seed=2, per_damage=2)
+    assert not any(d["bbox"] == [1000, 100, 1020, 140] for d in detections)
+    assert expected["by_class"]["player"]["tp"] + expected["by_class"]["player"]["fn"] == labels_of("player")
+    assert expected["by_class"]["ball"]["tp"] + expected["by_class"]["ball"]["fn"] == labels_of("ball") - 1
+    assert disagreements(expected, score(rows, detections)) == []

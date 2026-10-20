@@ -1,0 +1,19 @@
+{
+  "name": "ninety-viewer",
+  "private": true,
+  "version": "0.1.0",
+  "license": "MIT",
+  "description": "The viewer: a clip with on-screen graphics drawn from overlay cues, a persona switch and the agent trace.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.1",
+    "typescript": "5.9.3",
+    "vite": "6.4.4"
+  }
+}

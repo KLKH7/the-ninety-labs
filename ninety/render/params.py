@@ -16,7 +16,7 @@ from dataclasses import asdict, dataclass, field, fields, replace
 
 LIGHTING = ("day", "dusk", "night", "overcast")
 WEATHER = ("clear", "overcast", "rain")
-OCCLUSION = ("natural", "crowded")
+OCCLUSION = ("natural", "crowded", "keeper")
 KIT_CONTRAST = ("normal", "low")
 # Shirt graphics. Colours stay fictional; a pattern is not a real club's kit.
 PATTERNS = ("solid", "stripes", "hoops", "sash", "halves")
@@ -83,7 +83,9 @@ class RenderParams:
     motion_blur: float = 0.5  # shutter as a fraction of the frame interval
     noise: float = 0.012  # sensor noise amplitude, linear 0..1
     jpeg_quality: float = 0.88
-    occlusion: str = "natural"  # "crowded" picks the window where players most often hide the ball
+    # "crowded" picks the window where players most often hide the ball; "keeper" the one where a
+    # goalkeeper most often handles or dives (override only: seeds never draw it)
+    occlusion: str = "natural"
     home_code: str = "ASH"
     away_code: str = "CRW"
     boards: tuple[str, ...] = BOARD_BRANDS

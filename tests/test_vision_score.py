@@ -340,3 +340,41 @@ def test_the_stream_a_fixture_reads_as_four_run_frames_one_of_them_empty():
     assert clips == {"seed900001"}
     assert 1202 not in {d["frame"] for d in found}
     assert min(d["score"] for d in found) == 0.05
+
+
+def test_a_box_with_visibility_zero_is_not_a_label():
+    # EVALUATION.md: boxes with visibility zero are not labels. Boxes are amodal, so a ball in
+    # shot and fully hidden behind the boards keeps its box at visibility 0; it was once counted
+    # as a miss in by_class and overall.
+    frames = [{"frame": 0, "camera": {"width": 1280, "height": 720},
+               "players": [{"id": "h1", "bbox": [10, 10, 30, 50], "visibility": 1.0},
+                           {"id": "h2", "bbox": [60, 10, 80, 50], "visibility": 0.0}],
+               "ball": {"bbox": [40, 40, 50, 50], "visibility": 0.0}}]
+    detections = [{"frame": 0, "cls": "player", "bbox": [10, 10, 30, 50], "score": 0.9}]
+    report = score(frames, detections)
+    assert report["by_class"]["player"]["fn"] == 0
+    assert report["by_class"]["ball"]["fn"] == 0
+    assert report["overall"]["fn"] == 0
+    assert report["by_class"]["player"]["recall"] == 1.0
+
+
+@pytest.mark.parametrize("visibility", [0.01, 0.3])
+def test_a_box_just_above_zero_visibility_is_still_a_label(visibility):
+    # only visibility zero is skipped: a sliver of a ball or player can be detected, so missing it
+    # is a miss
+    frames = [{"frame": 0, "camera": {"width": 1280, "height": 720},
+               "players": [{"id": "h1", "bbox": [10, 10, 30, 50], "visibility": visibility}],
+               "ball": {"bbox": [40, 40, 50, 50], "visibility": visibility}}]
+    report = score(frames, [], run={0})
+    assert report["by_class"]["player"]["fn"] == 1
+    assert report["by_class"]["ball"]["fn"] == 1
+
+
+@pytest.mark.parametrize("visibility, misses", [(0.0, 0), (0.01, 1), (0.3, 1)])
+def test_the_boxes_path_skips_only_visibility_zero(visibility, misses):
+    frames = [{"frame": 0, "camera": {"width": 1280, "height": 720},
+               "boxes": [{"cls": "player", "bbox": [10, 10, 30, 50], "visibility": visibility},
+                         {"cls": "ball", "bbox": [40, 40, 50, 50], "visibility": visibility}]}]
+    report = score(frames, [], run={0})
+    assert report["by_class"]["player"]["fn"] == misses
+    assert report["by_class"]["ball"]["fn"] == misses

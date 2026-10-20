@@ -942,11 +942,17 @@ class Engine:
             # judged where it comes closest, at the height it is there (P11 envelope)
             reach_m, reach_z = self.reach(p, x0 + sc * dx, y0 + sc * dy, hz + sc * (z1 - hz))
             reacted = self.t - self.reacting_since(p) >= self.reaction(p)
+            # On course into his body: its path crosses his outline (P11), not beside him or a clip.
+            sl = 0.0 if rseg == 0 else ((qx - x0) * rdx + (qy - y0) * rdy) / rseg
+            into = shape.clearance(x0 + sl * rdx, y0 + sl * rdy, qx, qy, p.heading) <= 0
             if reacted:  # a deliberate touch, first chance
                 st = first_low_within(x0, y0, hz, rdx, rdy, z1 - hz, qx, qy, reach_m, reach_z)
                 if st is not None:
                     tx, ty, tz = x0 + st * dx, y0 + st * dy, hz + st * (z1 - hz)
-                    high = tz > BODY_TOUCH_Z and not self.hands(p, tx, ty)  # above a foot: thigh, chest
+                    # Into his body above a foot, it is a thigh, chest or head (A4); beside him,
+                    # within his reach (P14), a raised foot at its full first touch (design,
+                    # firsttouch.py).
+                    high = into and tz > BODY_TOUCH_Z and not self.hands(p, tx, ty)
                     hits.append((st, "touch", p, tx, ty, tz, qx + st * mx, qy + st * my, high))
             # The body (shape.py, P11) is as wide as his shoulders and as deep as his chest, turned
             # the way he faces: the ball meets it where its path first touches that outline.
@@ -962,8 +968,6 @@ class Engine:
                 # Above a foot, a player who has reacted gets a thigh, chest or head to it (A4); a
                 # ball he has not reacted to just rebounds off him.
                 # Only a ball on course into his body (its path crosses the outline), not a clip of it.
-                sl = 0.0 if rseg == 0 else ((qx - x0) * rdx + (qy - y0) * rdy) / rseg
-                into = shape.clearance(x0 + sl * rdx, y0 + sl * rdy, qx, qy, p.heading) <= 0
                 aerial = (reacted and into and bz > BODY_TOUCH_Z
                           and not self.hands(p, ux + sb * mx, uy + sb * my))
                 hits.append((sb, "touch" if aerial else "body", p, ux + sb * mx, uy + sb * my, bz,
@@ -1776,8 +1780,10 @@ class Engine:
     def keeper_dive(self, p: Player) -> bool:
         """P15: once the keeper has reacted to a shot, he dives toward where it will cross his line:
         his body travels sideways (up to KEEPER_DIVE_TRAVEL_M, only as far as he needs beyond his
-        standing reach) with the full dive's push, and he is down for a moment afterwards. True
-        while the dive moves him."""
+        standing reach) with the full dive's push, and he is down for a moment afterwards. One dive
+        per touch of the ball: once he is up again he does not dive a second time at the same shot;
+        only a new touch (a deflection restarts it) can set off another. True while the dive moves
+        him."""
         k = self.kicked
         shot_at_him = k and k["type"] == "shot" and k["team"] != p.team and self.possessor is None
         reacted = self.t - self.kicked_at >= self.reaction(p)  # to the last touch, a deflection too

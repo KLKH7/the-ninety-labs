@@ -1,6 +1,47 @@
 # web
 
-Viewer and broadcast renderer (three.js). The viewer is planned.
+Viewer and broadcast renderer (three.js).
+
+## `web/viewer`: the viewer
+
+Plays one clip with on-screen graphics drawn on the footage from `overlay_cue` records, a persona
+switch (casual / analyst) and the agent trace: each claim the Analyst drafted and the
+Fact-checker's verdict. It reads only a bundle written by `ninety-e2e`
+([ninety/e2e.py](../ninety/e2e.py)), which runs the whole chain on one clip with no Azure:
+
+```bash
+uv run ninety-e2e runs/test-frozen-cca498c/test/seed900001 --out runs/e2e/seed900001 --plant
+npm ci --prefix web/viewer
+npm run dev --prefix web/viewer          # http://localhost:5173, bundle from runs/e2e/seed900001
+NINETY_BUNDLE=runs/e2e/other npm run dev --prefix web/viewer    # another bundle
+npm run build --prefix web/viewer        # static site in web/viewer/dist; open it with ?bundle=<url>
+```
+
+| Stage | In the bundle | Today |
+|---|---|---|
+| Ingest | `detections.jsonl` | ours-v2's committed run on the frozen test set (`--detect live --weights W` runs RF-DETR) |
+| Interpret | `events.jsonl`, `facts.json` | detected events (`ninety/match/detected.py`: source vision, with a confidence; ground truth refused): R3's file for the clip, or until it lands R4's hand-written stand-in, named on screen; `--demo` refuses the stand-in. Stats from `ninety/intel/stats.py` |
+| Explain + Render | `trace.json`, `cues.jsonl` | R4's live path (`ninety/agents/live.py`), the one place cues are built: template cues for confident passes and shots, the Analyst → Fact-checker workflow (offline Analyst, or `--replay` a Foundry recording), and the verified claim as an insight cue; unsure detections are held |
+| Personalize | persona in each cue | casual, analyst and audio description |
+| Describe | `audio.json`, `description.vtt`, `audio` cues | the Describer (`ninety/speech/describe.py`): one spoken line per confident pass, shot, goal, tackle or interception, or the verified claim in its event's place; every line passes the fact-checker's code half, starts within 2 s of its event and never overlaps the last; `pan` from the ball's pitch x. Timing is estimated offline; `--speech azure` synthesises each line through Azure AI Speech and measures it (off by default) |
+
+Footage is `video.webm` (VP9, when ffmpeg is installed) or the JPEG frames (`--frames`).
+
+Accessibility from day one: every control works from the keyboard (<kbd>Space</kbd> play,
+<kbd>←</kbd>/<kbd>→</kbd> one second, <kbd>,</kbd>/<kbd>.</kbd> one frame, <kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd>
+persona, <kbd>D</kbd> detections), the persona switch is an ARIA radio group, what is on air is
+announced in a polite live region and named on the graphics canvas, and graphics stop sliding and
+fading when the system asks for reduced motion (or the "Reduce motion" box is ticked).
+
+
+**Audio description** (persona <kbd>3</kbd>) is for blind and low-vision fans. Each line is said
+once, as the clock passes its start; a seek or a pause stops the voice, so nothing is said late.
+With synthesised audio in the bundle the line itself is placed left to right where the play is;
+without it, a short tone placed by `pan` says where, and the browser's own voice says the line.
+<kbd>V</kbd> turns the voice off (the live region then speaks the lines to a screen reader
+instead; with the voice on it stays quiet, so nothing is said twice), <kbd>R</kbd> repeats the
+last line, and the line is drawn as a large caption across the frame where the sound is.
+`tests/test_viewer.py` drives all of this in headless Chromium.
 
 ## `web/render`: broadcast renderer
 

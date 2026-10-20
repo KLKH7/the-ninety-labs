@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/KLKH7/the-ninety-labs/schemas/viewer_question.schema.json",
+  "title": "ViewerQuestion",
+  "description": "A question a viewer types on the phone companion. It is data, never instructions (SECURITY.md): capped at 200 characters, and the server rejects unknown fields. Mirrors ninety.agents.contracts.Question.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["session", "player", "text", "t"],
+  "properties": {
+    "session": { "type": "string", "minLength": 1, "maxLength": 64, "description": "The viewer's session id, made by the server." },
+    "player": { "type": ["string", "null"], "pattern": "^[ha]([1-9]|1[01])$", "description": "The player the phone is focused on, if any." },
+    "text": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "t": { "type": "number", "minimum": 0, "description": "Match time the question was asked at, in seconds." }
+  }
+}

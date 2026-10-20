@@ -1,0 +1,17 @@
+{
+  "run": "ours-v3",
+  "checkpoint_sha256": "3b2d5cf4a1d29cb0f7fc13b817bdf00b69369c3a0d5edaf522b287a7a4c014c9",
+  "recorded": "2026-10-19T21:46:56Z",
+  "provider": "RunPod",
+  "gpu": "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 2g.48gb",
+  "gpu_memory_gib": 47.4,
+  "compute_capability": "12.0",
+  "nvidia_smi": [
+    "GPU 0: NVIDIA RTX PRO 6000 Blackwell Server Edition (UUID: GPU-04a80c7b-b426-b8ea-c98d-3e67c7769e84)",
+    "  MIG 2g.48gb     Device  0: (UUID: MIG-9d179d14-72ea-5f1f-abfa-743b91f61f30)"
+  ],
+  "torch": "2.14.1+cu130",
+  "cuda": "13.0",
+  "note": "ours-v2 trained on an RTX 4090 (24 GB); this run is a MIG 2g.48gb slice of an RTX PRO 6000 Blackwell",
+  "bound": "run and checkpoint_sha256 added after training from train-manifest.json, which train.py writes; the GPU fields were recorded on the machine during the run"
+}

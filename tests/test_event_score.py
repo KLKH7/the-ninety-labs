@@ -199,6 +199,24 @@ def test_pressure_is_placed_at_the_nearest_player_of_its_team():
     assert counts(at_a1, "pressure", rule="lenient") == (0, 1, 1)
 
 
+def test_a_window_cut_from_a_match_is_graded_by_frame_number():
+    # The test clips are windows that keep the match's frame numbers (DATA_CONTRACT.md); their
+    # first frame is not 0. The old scorer indexed by position and refused them.
+    window = [f for f in frames(5.0) if f["frame"] >= 50]
+    truth = [ev("t1", 3.0, x=ball_x(3.0))]
+    assert counts(score(truth, [det("d1", 3.0, x=ball_x(3.0))], window), rule="strict") == (1, 0, 0)
+    assert counts(score(truth, [det("d1", 3.0, x=ball_x(2.0))], window), rule="strict") == (0, 1, 1)
+    # Before the window there is nothing to be right about, as after the last frame.
+    early = score([ev("t2", 1.8, x=ball_x(1.8))], [det("d2", 1.9, x=ball_x(1.9))], window)
+    assert counts(early, rule="time_only") == (1, 0, 0) and counts(early, rule="lenient") == (0, 1, 1)
+
+
+def test_a_window_with_a_missing_frame_is_refused():
+    window = [f for f in frames(5.0) if f["frame"] >= 50 and f["frame"] != 60]
+    with pytest.raises(ValueError, match="consecutive"):
+        score([ev("t1", 3.0, x=ball_x(3.0))], [det("d1", 3.0, x=ball_x(3.0))], window)
+
+
 def test_a_time_outside_the_clip_has_nowhere_to_be_right():
     truth = [ev("t1", 4.8, x=ball_x(4.8))]
     report = score(truth, [det("d1", 5.5, x=ball_x(5.5))], frames(5.0))

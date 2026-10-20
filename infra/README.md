@@ -13,6 +13,7 @@ subscription allows five regions; that one has our models).
 | Container Apps job `render` + its identity | renders training clips in parallel executions (2 vCPU, 4 GiB each), on the public Playwright image |
 | Storage account + `renders` container | the rendered clips (images and `clip.json`); shared keys and public access off, Entra roles only |
 | `truth` container | the answer key of every clip (`events.jsonl`, `frames.jsonl`): only the render job and the maintainer reader hold a role that reaches it, and CI checks that ([check_truth_sealed.py](check_truth_sealed.py)) |
+| `truth-test` container | the frozen test set's answer key (`docs/eval/test-set-frozen.json`), kept out of `truth` because training machines get a read link to `truth`; no role is scoped to it and no training link names it (CI: [check_truth_sealed.py](check_truth_sealed.py)) |
 | Queues `render-requests`, `render-requests-failed` + job `render-queue` | the data factory: the Data agent queues requests, Azure starts one execution per request (up to six), failed requests are set aside with the error |
 | Application Insights + a Foundry project connection (`appinsights-tracing`) | agent traces, shown in Foundry's tracing view; stored in the capped workspace above |
 | Key Vault (RBAC) + the `mcp-key` secret | the key Foundry uses to call the match MCP server at `/mcp`; the API reads it through its managed identity (Key Vault Secrets User) |
@@ -40,6 +41,46 @@ traces sit inside the monthly free grants at demo traffic.
 
 The split is deliberate: the GitHub OIDC identity is only Contributor, which cannot create role
 assignments, so it cannot grant itself or anything else more access.
+
+## Live agent steps from GitHub (`agents-live`)
+
+Sessions without Azure credentials run their live steps (publishing agents, recording replays,
+the evaluations) through [agents-live.yml](../.github/workflows/agents-live.yml): started by hand,
+it waits for a reviewer's approval, signs in with OIDC, runs the task at the chosen `ref`, and
+uploads the agent registry, `replays/`, `runs/eval/` and the commit as an artifact. It never
+pushes.
+
+One-time setup, by Kian:
+
+1. In the repo's Settings, Environments, create `agents-live` and add yourself as a required
+   reviewer, so no run reaches Azure without your approval.
+2. Add a federated credential to the deploy app registration (the `AZURE_CLIENT_ID` repo
+   variable) that trusts that environment. This repo's OIDC subjects carry the owner and repo
+   ids (`repo:KLKH7@210092633/the-ninety-labs@1417939631:...`), so copy the prefix of the
+   existing `main` credential rather than writing `repo:KLKH7/the-ninety-labs:...`, which Azure
+   would never match:
+
+   ```bash
+   CLIENT_ID=$(gh variable get AZURE_CLIENT_ID -R KLKH7/the-ninety-labs)
+   az ad app federated-credential list --id "$CLIENT_ID" --query "[].subject" -o tsv  # the format in use
+   az ad app federated-credential create --id "$CLIENT_ID" --parameters '{
+     "name": "github-agents-live",
+     "issuer": "https://token.actions.githubusercontent.com",
+     "subject": "repo:KLKH7@210092633/the-ninety-labs@1417939631:environment:agents-live",
+     "audiences": ["api://AzureADTokenExchange"]
+   }'
+   ```
+
+   Done when the list shows both subjects with the same `repo:...@...` prefix, and the first
+   approved run passes its `azure/login` step.
+
+3. For `publish`, add the repo variable `NINETY_FOUNDRY_RESOURCE_ID` (a resource id, not a
+   secret: `az cognitiveservices account show -n ninety-labs-ai -g ninety-labs --query id -o tsv`).
+
+The identity is the same one deploy.yml and evals.yml use: Contributor on the resource group and
+Foundry User on the Foundry resource, so it cannot grant itself more access. `eval` already runs
+nightly as this identity; `publish` has not run as it yet, so the first `publish` run is the check
+that Foundry User may create agent versions.
 
 ## First-time setup
 

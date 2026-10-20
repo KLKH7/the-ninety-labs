@@ -111,13 +111,22 @@ def boundary_group(box: Iterable[float], camera: Mapping) -> str:
     return "edge-touching" if x0 <= 0 or y0 <= 0 or x1 >= width or y1 >= height else "interior"
 
 
+def _visible(label: Mapping) -> bool:
+    """A label counts when it has a box and some of it can be seen (visibility above zero).
+
+    Boxes are amodal: an object in shot but fully hidden keeps its box at visibility zero.
+    EVALUATION.md: such boxes are not labels, because there is nothing to detect.
+    """
+    return label.get("bbox") is not None and float(label.get("visibility", 1.0)) > 0
+
+
 def ground_truth(frames: Iterable[Mapping]) -> list[dict]:
-    """Flatten drawn labels from frame rows into scorer labels."""
+    """Flatten labels with something visible from frame rows into scorer labels."""
     labels = []
     for row in frames:
         frame = int(row["frame"])
         for label in row.get("boxes", []):
-            if label.get("bbox") is not None and label.get("cls") in CLASSES:
+            if _visible(label) and label.get("cls") in CLASSES:
                 labels.append({
                     "frame": frame, "cls": label["cls"], "bbox": label["bbox"],
                     "visibility": float(label.get("visibility", 1.0)),
@@ -125,13 +134,13 @@ def ground_truth(frames: Iterable[Mapping]) -> list[dict]:
         if row.get("boxes"):
             continue
         for player in row.get("players", []):
-            if player.get("bbox") is not None:
+            if _visible(player):
                 labels.append({
                     "frame": frame, "cls": "player", "bbox": player["bbox"],
                     "visibility": float(player.get("visibility", 1.0)),
                 })
         ball = row.get("ball", {})
-        if ball.get("bbox") is not None:
+        if _visible(ball):
             labels.append({
                 "frame": frame, "cls": "ball", "bbox": ball["bbox"],
                 "visibility": float(ball.get("visibility", 1.0)),

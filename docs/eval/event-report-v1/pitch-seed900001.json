@@ -1,0 +1,41 @@
+{
+  "frames": {
+    "observed": 250,
+    "camera_ok": 245,
+    "camera_not_ok": [
+      1791,
+      1792,
+      1794,
+      1795,
+      1796
+    ]
+  },
+  "players": {
+    "n": 1817,
+    "median_m": 0.22,
+    "p90_m": 1.441,
+    "max_m": 7.829
+  },
+  "ball_on_ground": {
+    "n": 181,
+    "median_m": 0.086,
+    "p90_m": 0.262,
+    "max_m": 0.553
+  },
+  "ball_in_the_air": {
+    "n": 15,
+    "median_m": 7.081,
+    "p90_m": 7.71,
+    "max_m": 7.738
+  },
+  "rules": {
+    "score_min": 0.5,
+    "player_iou": 0.5,
+    "ball_px": 5.0,
+    "ground_z_m": 0.5
+  },
+  "inputs": {
+    "frames": "runs/test-frozen-cca498c/test/seed900001/frames.jsonl",
+    "observations": "tests/fixtures/observations-seed900001.jsonl"
+  }
+}

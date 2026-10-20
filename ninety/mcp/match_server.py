@@ -24,10 +24,14 @@ from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
-from ninety.match.facts import AGENT_TYPES, events_in
+from ninety.match import detected
+from ninety.match.facts import AGENT_TYPES, compact, events_in
 
 MINUTES = 5  # every served match is a five-minute clip, as the slice and the evaluations use
+# Simulator matches: the pre-M1 stand-in, kept for the committed replays and the agent evaluation.
 MATCHES = {"seed7": 7, "seed21": 21, "seed33": 33}  # the demo match and the held-out evaluation seeds
+# Detected matches: the live path from Milestone 1, read from vision's detected events only.
+DETECTED = {detected.M1_CLIP: detected.m1_path}
 MATCH_DIR = os.environ.get("NINETY_MATCH_DIR", "")
 MAX_EVENTS = 60
 TOOLS = ("list_events", "match_info")  # the published Analyst may call only these (tests check they exist)
@@ -36,10 +40,13 @@ def match_id(seed: int) -> str:
     return f"seed{seed}"
 
 
-@lru_cache(maxsize=len(MATCHES))
+@lru_cache(maxsize=len(MATCHES) + len(DETECTED))
 def events_of(match: str) -> tuple[dict, ...]:
+    if match in DETECTED:
+        rows = detected.load(DETECTED[match]())
+        return tuple(compact(e) for e in rows if e["type"] in AGENT_TYPES)
     if match not in MATCHES:
-        raise ValueError(f"unknown match {match!r}; available: {', '.join(MATCHES)}")
+        raise ValueError(f"unknown match {match!r}; available: {', '.join([*DETECTED, *MATCHES])}")
     stored = Path(MATCH_DIR) / f"{match}.json" if MATCH_DIR else None
     if stored and stored.exists():
         return tuple(json.loads(stored.read_text()))
@@ -60,8 +67,9 @@ def list_events(match: str, minute_from: int, minute_to: int, event_type: str | 
 
 def match_info(match: str) -> dict:
     """One match: its id, length in minutes and the event types available."""
-    events_of(match)  # refuses an unknown match
-    return {"match": match, "minutes": MINUTES, "event_types": list(AGENT_TYPES)}
+    events = events_of(match)  # refuses an unknown match
+    minutes = max((e["minute"] for e in events), default=0) if match in DETECTED else MINUTES
+    return {"match": match, "minutes": minutes, "event_types": list(AGENT_TYPES)}
 
 
 def make_server() -> FastMCP:

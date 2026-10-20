@@ -40,10 +40,11 @@ and only when the clip's own frames show that play from beyond the cut is still 
 
 - C7: a pass with no later on-ball event in the clip, which nobody has held since it was played,
   and whose last frame's motion, carried on in a straight line, passes within `NEAR_M` of its end
-  point ahead of it;
+  point ahead of it; or a pass struck on the clip's last frame, none of whose flight is in the clip;
 - C8: an interception or goal with no pass or shot before it in the clip, and the ball loose and
-  moving from the first frame up to it (moving: more than the two roundings of a position allow,
-  `2 * POSITION_PRECISION_M` a frame, so a ball at rest is not a pass in flight);
+  moving from the first frame up to it (moving: farther than rounding alone can move a ball at
+  rest, `2 * sqrt(3) * POSITION_PRECISION_M` a frame, about 1.7 mm, so a ball at rest is not a
+  pass in flight);
 - C3: a substitution with no event before it in the clip, nobody holding the ball from the first
   frame up to it, and no open play after it before a restart (Law 3);
 - P3: a window whose first event is a restart, with nobody holding the ball before it, opened on
@@ -107,7 +108,24 @@ live path.
 
 ## How the agents read data
 
-Agents call the MCP tool `list_events`, which reads from [`ninety/match/facts.py`](../ninety/match/facts.py).
-That function is the only place that knows where events come from. Today it runs the
-simulator, as a stand-in until the vision pipeline exists; from Milestone 1 it reads detected
-events. Changing the engine changes nothing in the agents, the fact-checker or their eval.
+From Milestone 1 the live path (the Ledger, the stats, the MCP tool `list_events`, the
+fact-checker and the overlay cues) reads detected events only, through
+[`ninety/match/detected.py`](../ninety/match/detected.py). That module accepts only valid
+`match_event` records with `"source": "vision"` and a `confidence`. It refuses ground-truth
+events and any file named `events.jsonl` or `frames.jsonl`. `uv run ninety-live --out cues.jsonl`
+runs the path on the M1 clip ([`ninety/agents/live.py`](../ninety/agents/live.py)).
+[`tests/test_live_reads_no_truth.py`](../tests/test_live_reads_no_truth.py) runs the path with
+an audit hook on every file it opens. It fails if the path opens the answer key or loads any of
+our code that writes, reads or fetches it.
+
+Until the detector's events for the M1 clip land (`tests/fixtures/detected-seed900001.jsonl`),
+the path reads a hand-written stand-in, `tests/fixtures/detected-standin-seed900001.jsonl`. Every
+one of its ids starts with `standin-`, and it was never derived from ground truth.
+
+The fact-checker holds back any claim that cites a detection below `MIN_CONFIDENCE`
+([`ninety/agents/factcheck.py`](../ninety/agents/factcheck.py)), and no template cue airs on such
+a detection. The threshold is a design value until it is measured from the event report.
+
+The simulator's matches (`seed7`, `seed21`, `seed33` in [`ninety/mcp/match_server.py`](../ninety/mcp/match_server.py))
+remain the pre-M1 stand-in for the committed replays and the agent evaluation. The simulator is
+imported only when those are asked for.

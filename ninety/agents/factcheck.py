@@ -13,9 +13,10 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 
 # A number standing on its own: not part of an id like "e00042" or a player like "h7".
-# A sentence-ending period after it still counts ("in minute 2.").
+# A sentence-ending period after it still counts ("in minute 2."), and so does an English ordinal
+# ("the 9th minute", "his 3rd pass"): the number is the `n` group.
 NUMBER_PATTERN = r"\d+(?:\.\d+)?"
-NUMBER = re.compile(rf"(?<![\w.]){NUMBER_PATTERN}(?!\w)(?!\.\d)")
+NUMBER = re.compile(rf"(?<![\w.])(?P<n>{NUMBER_PATTERN})(?:st|nd|rd|th)?(?!\w)(?!\.\d)")
 DISTANCE_UNITS = r"(?:m|metre|metres|meter|meters)"
 SPEED_UNITS = r"(?:km/h|kph)"
 DISTANCE_NUMBER = re.compile(rf"(?P<number>{NUMBER_PATTERN})\s*{DISTANCE_UNITS}\b", re.I)
@@ -47,6 +48,10 @@ FOUND = re.compile(
     re.I,
 )
 NUMBER_FIELDS = ("minute", "second", "ball_speed_kmh", "distance_m")
+# Design: a detected event below this confidence is one the detector itself rates no likelier real
+# than not, so nothing built on it airs. To be replaced by the value measured from the event
+# report's precision at each confidence once detected events are scored (docs/EVALUATION.md).
+MIN_CONFIDENCE = 0.5
 
 
 @dataclass
@@ -137,7 +142,7 @@ def check(
     for match in NUMBER.finditer(claim.text):
         if any(match.start() in span for span in clock_spans):
             continue
-        value = float(match.group())
+        value = float(match.group("n"))
         expected_field = _number_field(claim.text, match.start())
         if expected_field:
             values = {
@@ -177,3 +182,22 @@ def check(
             reasons.append(f"player {name} received no cited pass" + (f" from {passer}" if passer else ""))
 
     return Verdict(ok=not reasons, reasons=reasons)
+
+
+def confidence_gate(
+    claim: Claim, known: dict[str, dict], min_confidence: float = MIN_CONFIDENCE
+) -> Verdict:
+    """Holds back a claim that cites a detected event the detector is not sure of.
+
+    Only detected events carry a confidence (ninety/match/facts.compact); ground-truth events in
+    the pre-M1 recordings have none and pass. The verdict's category, `low_confidence`, makes the
+    claim held, not rejected (ninety/agents/contracts.status_for): the claim may be right, but
+    nothing airs until a confident detection supports it.
+    """
+    reasons = [
+        f"event {i} was detected with confidence {known[i]['confidence']:.2f}, "
+        f"below {min_confidence:.2f}: cite a confident detection"
+        for i in claim.evidence
+        if i in known and known[i].get("confidence") is not None and known[i]["confidence"] < min_confidence
+    ]
+    return Verdict(ok=not reasons, reasons=reasons, category="low_confidence" if reasons else None)

@@ -13,6 +13,7 @@ import * as THREE from 'three';
 const PX_PER_M = 35; // pitch texture resolution
 const GROUND = { x0: -6, x1: 111, y0: -6, y1: 74 }; // pitch plus apron covered by the texture
 const POST_ID = 250; // goal frame: an occluder with no label
+const SCENERY_ID = 251; // boards, stands, roofs and towers: occluders with no label
 
 function rng(seed) { // mulberry32
   let a = seed >>> 0;
@@ -576,28 +577,68 @@ function idMaterial(id) {
   });
 }
 
-// The match body. Python sends the action; these angles are the same ones meshpose.py builds.
+// The match body. Python sends the pose; these angles are the same ones meshpose.py builds.
 // Object space is Y-up metres, +X his left, +Z the way he faces. Positive bone X swings a limb back.
+// A third angle, Y, twists a bone about its length (Root: the hips; spine: the chest; thigh: the foot).
 const MESH_CONTACT = new Set(['strike', 'foot', 'thigh', 'chest', 'head', 'hands', 'throw', 'dive', 'shield']);
 const THIGH_CAND = [-0.9, -0.55, -0.25, 0.05, 0.35, 0.6];
-const THIGH_Z = [-0.4, -0.15, 0.0, 0.15, 0.4];
+const THIGH_Z = [-0.6, -0.4, -0.15, 0.0, 0.15, 0.4, 0.6];
 const CALF_CAND = [0.05, 0.35, 0.7, 1.1, 1.5];
+const LEG_STEP = [0.15, 0.1, 0.17, 0.15];
+const HEEL_CAND = [0.0, 0.35, 0.7];
+const LEG_LIMIT = [[-1.8, 1.0], [-0.8, 0.8], [0.0, 2.2], [0.0, 0.9]];
+const REFINE = 6;
+// Every neighbour of the best so far, diagonals included (meshpose._MOVES3, _MOVES2).
+const MOVES3 = [];
+for (const a of [-1, 0, 1]) for (const b of [-1, 0, 1]) for (const c of [-1, 0, 1]) if (a || b || c) MOVES3.push([a, b, c]);
+const MOVES2 = [];
+for (const a of [-1, 0, 1]) for (const b of [-1, 0, 1]) if (a || b) MOVES2.push([a, b]);
+const PLANT_FOOT = 0.12;
+const STRIKE_FOOT = 0.4;
+const PLANT_GIVE_UP = 0.45;
+const LEAN_X = [-0.6, -0.4, -0.2, 0.0, 0.2, 0.4, 0.6];
+const LEAN_Z = [-0.4, -0.2, 0.0, 0.2, 0.4];
+const LEAN_STEP = [0.1, 0.1];
+const LEAN_LIMIT = [[-0.9, 0.9], [-0.6, 0.6]];
+const LEAN_SHARE = [['spine_01', 0.35], ['spine_02', 0.35], ['neck_01', 0.3]];
+const TWIST_SIGN = -1.0;
+const EXTRA = {
+  brow: ['head', [0.0, 1.70, 0.13]],
+  chest: ['spine_03', [0.0, 1.28, 0.14]],
+  thigh_top_l: ['thigh_l', [0.14, 0.64, 0.10]],
+  thigh_top_r: ['thigh_r', [-0.14, 0.64, 0.10]],
+};
 
 let playerPromise = null;
 function loadPlayer() {
   if (!playerPromise) {
-    playerPromise = fetch('./assets/player.json').then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    playerPromise = fetch('./assets/player.json').then((r) => (r.ok ? r.json() : null)).catch(() => null).then((p) => {
+      if (!p) return p;
+      // The touch surfaces, skinned wholly to one bone, beside the asset's own markers.
+      const index = {};
+      p.bones.forEach((b, i) => { index[b.name] = i; });
+      for (const [name, [bone, pos]] of Object.entries(EXTRA)) {
+        p.markers[name] = { pos, skin: [index[bone], 1.0, -1, 0.0, -1, 0.0, -1, 0.0] };
+      }
+      p.boneIndex = index;
+      return p;
+    });
   }
   return playerPromise;
 }
 
-function xz(spec) {
-  return Array.isArray(spec) ? [spec[0], spec[1]] : [spec, 0];
+function xzy(spec) {
+  return Array.isArray(spec) ? [spec[0], spec[1], spec.length > 2 ? spec[2] : 0] : [spec, 0, 0];
 }
 
 function rotX(a) {
   const c = Math.cos(a), s = Math.sin(a);
   return [1, 0, 0, 0, c, s, 0, -s, c];
+}
+
+function rotY(a) {
+  const c = Math.cos(a), s = Math.sin(a);
+  return [c, 0, -s, 0, 1, 0, s, 0, c];
 }
 
 function rotZ(a) {
@@ -625,8 +666,9 @@ function transpose9(R) {
 }
 
 function localRot(spec) {
-  const [x, z] = xz(spec);
-  return matmul(rotZ(z), rotX(x));
+  const [x, z, y] = xzy(spec);
+  const rot = matmul(rotZ(z), rotX(x));
+  return y ? matmul(rot, rotY(y)) : rot;
 }
 
 function mirrorPose(angles) {
@@ -635,8 +677,8 @@ function mirrorPose(angles) {
     let name = key;
     if (key.endsWith('_l')) name = key.slice(0, -2) + '_r';
     else if (key.endsWith('_r')) name = key.slice(0, -2) + '_l';
-    const [x, z] = xz(spec);
-    out[name] = Array.isArray(spec) ? [x, -z] : x;
+    const [x, z, y] = xzy(spec);
+    out[name] = Array.isArray(spec) ? (spec.length > 2 ? [x, -z, -y] : [x, -z]) : x;
   }
   return out;
 }
@@ -644,7 +686,7 @@ function mirrorPose(angles) {
 function scalePose(angles, factor, keepZ) {
   const out = {};
   for (const [key, spec] of Object.entries(angles)) {
-    const [x, z] = xz(spec);
+    const [x, z] = xzy(spec);
     out[key] = Array.isArray(spec) ? [x * factor, keepZ ? z : z * factor] : x * factor;
   }
   return out;
@@ -652,7 +694,7 @@ function scalePose(angles, factor, keepZ) {
 
 function copyPose(raw) {
   const out = {};
-  for (const [key, spec] of Object.entries(raw)) out[key] = Array.isArray(spec) ? [spec[0], spec[1]] : spec;
+  for (const [key, spec] of Object.entries(raw)) out[key] = Array.isArray(spec) ? spec.slice() : spec;
   return out;
 }
 
@@ -665,8 +707,8 @@ function gaitPose(s, run) {
     out[base + '_r'] = rv * left + lv * right;
   }
   for (const base of ['upperarm', 'lowerarm']) {
-    const [lx, lz] = xz(run[base + '_l']);
-    const [rx, rz] = xz(run[base + '_r']);
+    const [lx, lz] = xzy(run[base + '_l']);
+    const [rx, rz] = xzy(run[base + '_r']);
     out[base + '_l'] = [lx * left + rx * right, lz];
     out[base + '_r'] = [rx * left + lx * right, rz];
   }
@@ -675,10 +717,16 @@ function gaitPose(s, run) {
   return out;
 }
 
-function poseBones(angles, bones) {
-  const heads = new Array(bones.length);
-  const rots = new Array(bones.length);
-  for (let i = 0; i < bones.length; i++) {
+function addAngle(angles, bone, dx, dz, dy) {
+  const [x, z, y] = xzy(angles[bone] ?? 0);
+  angles[bone] = [x + dx, z + dz, y + dy];
+}
+
+function poseBones(angles, bones, upto) {
+  const n = upto == null ? bones.length : upto + 1;
+  const heads = new Array(n);
+  const rots = new Array(n);
+  for (let i = 0; i < n; i++) {
     const bone = bones[i];
     const local = localRot(angles[bone.name] ?? 0);
     if (bone.parent < 0) {
@@ -715,53 +763,130 @@ function skinOne(pos, skin, posed, bones) {
   return wsum ? [x, y, z] : pos;
 }
 
-function toObject(x, y, heading, height, wx, wy) {
+function pointOf(angles, name, player) {
+  const m = player.markers[name];
+  let upto = -1;
+  for (let i = 0; i < 8; i += 2) if (m.skin[i] > upto) upto = m.skin[i];
+  return skinOne(m.pos, m.skin, poseBones(angles, player.bones, upto), player.bones);
+}
+
+function toObject(x, y, heading, height, wx, wy, wz = 0, lift = 0) {
   const k = height / 1.84;
   const hx = Math.cos(heading), hy = Math.sin(heading);
   const dx = (wx - x) / k, dy = (wy - y) / k;
-  return [-hy * dx + hx * dy, 0, hx * dx + hy * dy];
+  return [-hy * dx + hx * dy, (wz - lift) / k, hx * dx + hy * dy];
 }
 
-function toWorld(x, y, heading, height, p) {
+function toWorld(x, y, heading, height, p, lift = 0) {
   const k = height / 1.84;
   const hx = Math.cos(heading), hy = Math.sin(heading);
   return [
     x + k * (-hy * p[0] + hx * p[2]),
     y + k * (hx * p[0] + hy * p[2]),
-    k * p[1],
+    k * p[1] + lift,
   ];
 }
 
-function plantLeg(angles, side, target, bones, markers) {
+function clampTo(v, lim) { return v < lim[0] ? lim[0] : v > lim[1] ? lim[1] : v; }
+
+// Thigh and calf angles that put `point` on `target`: a grid finds the basin, halving steps close in.
+// On the grass the sole stays level, or rolls onto its toes when left behind (meshpose._leg).
+function searchLeg(angles, side, target, foot, twist, point, ground, player, calfFixed, floor) {
+  const trial = (params) => {
+    const t = Object.assign({}, angles);
+    t['thigh_' + side] = [params[0], params[1], twist];
+    t['calf_' + side] = params[2];
+    t['foot_' + side] = ground ? foot - (params[0] + params[2]) + params[3] : foot;
+    const p = pointOf(t, point, player);
+    let err = Math.hypot(p[0] - target[0], p[1] - target[1], p[2] - target[2]);
+    if (ground) err += 3 * Math.max(0, p[1] - (target[1] + 0.04));
+    if (floor != null) err += 3 * Math.max(0, floor - p[1]); // a reaching foot stays above the grass
+    return [err, t];
+  };
   let best = null;
-  let bestErr = 0;
+  const calves = calfFixed != null ? [calfFixed] : CALF_CAND;
+  const heels = ground ? HEEL_CAND : [0.0];
   for (const thigh of THIGH_CAND) {
     for (const tz of THIGH_Z) {
-      for (const calf of CALF_CAND) {
-        const trial = Object.assign({}, angles);
-        trial['thigh_' + side] = [thigh, tz];
-        trial['calf_' + side] = calf;
-        trial['foot_' + side] = 0.12;
-        const foot = skinOne(markers['foot_' + side].pos, markers['foot_' + side].skin, poseBones(trial, bones), bones);
-        const err = Math.hypot(foot[0] - target[0], foot[1] - target[1], foot[2] - target[2]) + 3 * Math.max(0, foot[1] - 0.04);
-        if (!best || err < bestErr) { best = trial; bestErr = err; }
+      for (const calf of calves) {
+        for (const heel of heels) {
+          const [err, t] = trial([thigh, tz, calf, heel]);
+          if (!best || err < best[0]) best = [err, t, [thigh, tz, calf, heel]];
+        }
       }
     }
   }
-  return bestErr > 0.45 ? angles : best;
+  const steps = LEG_STEP.slice();
+  const moves = (calfFixed != null ? MOVES2 : MOVES3).slice();
+  if (ground) moves.push([0, 0, 0, 1], [0, 0, 0, -1]);
+  for (let it = 0; it < REFINE; it++) {
+    const centre = best[2];
+    for (const move of moves) {
+      const params = centre.slice();
+      for (let i = 0; i < move.length; i++) params[i] = clampTo(centre[i] + move[i] * steps[i], LEG_LIMIT[i]);
+      const [err, t] = trial(params);
+      if (err < best[0]) best = [err, t, params];
+    }
+    for (let i = 0; i < 4; i++) steps[i] /= 2;
+  }
+  return [best[1], best[0]];
+}
+
+// Lean the spine and neck so `point` (the chest or the brow) meets `target`.
+function searchLean(angles, target, point, player) {
+  const trial = (bx, bz) => {
+    const t = Object.assign({}, angles);
+    for (const [bone, share] of LEAN_SHARE) addAngle(t, bone, bx * share, bz * share, 0);
+    const p = pointOf(t, point, player);
+    return [Math.hypot(p[0] - target[0], p[1] - target[1], p[2] - target[2]), t];
+  };
+  let best = null;
+  for (const bx of LEAN_X) {
+    for (const bz of LEAN_Z) {
+      const [err, t] = trial(bx, bz);
+      if (!best || err < best[0]) best = [err, t, [bx, bz]];
+    }
+  }
+  const steps = LEAN_STEP.slice();
+  for (let it = 0; it < REFINE; it++) {
+    const centre = best[2];
+    for (const move of MOVES2) {
+      const params = [clampTo(centre[0] + move[0] * steps[0], LEAN_LIMIT[0]), clampTo(centre[1] + move[1] * steps[1], LEAN_LIMIT[1])];
+      const [err, t] = trial(params[0], params[1]);
+      if (err < best[0]) best = [err, t, params];
+    }
+    steps[0] /= 2; steps[1] /= 2;
+  }
+  return best[1];
+}
+
+function blendPose(base, touch, w) {
+  if (w >= 1) return touch;
+  const out = Object.assign({}, base);
+  const keys = new Set([...Object.keys(base), ...Object.keys(touch)]);
+  for (const key of keys) {
+    const a = xzy(base[key] ?? 0), b = xzy(touch[key] ?? 0);
+    if (a[0] === b[0] && a[1] === b[1] && a[2] === b[2]) continue;
+    out[key] = [a[0] + (b[0] - a[0]) * w, a[1] + (b[1] - a[1]) * w, a[2] + (b[2] - a[2]) * w];
+  }
+  return out;
+}
+
+function wrapAngle(a) {
+  const t = (a + Math.PI) % (2 * Math.PI);
+  return (t < 0 ? t + 2 * Math.PI : t) - Math.PI;
 }
 
 function anglesFor(player, pose, heading, height) {
   const poses = player.poses;
   const action = pose.action || 'stand';
   const speed = pose.speed || 0;
+  const x = pose.x, y = pose.y;
+  const lead = pose.lead || 0;
+  const lift = pose.lift || 0;
   let angles;
-  if (action === 'strike' && poses.strike) {
-    angles = pose.reach > 0 ? mirrorPose(poses.strike) : copyPose(poses.strike);
-  } else if (action === 'foot' && poses.foot) {
-    angles = pose.reach > 0 ? mirrorPose(poses.foot) : copyPose(poses.foot);
-  } else if (action === 'thigh' && poses.thigh) {
-    angles = pose.reach > 0 ? mirrorPose(poses.thigh) : copyPose(poses.thigh);
+  if ((action === 'strike' || action === 'foot' || action === 'thigh') && poses[action]) {
+    angles = pose.reach > 0 ? mirrorPose(poses[action]) : copyPose(poses[action]);
   } else if (poses[action] && MESH_CONTACT.has(action)) {
     angles = copyPose(poses[action]);
     if (action === 'dive') {
@@ -774,11 +899,38 @@ function anglesFor(player, pose, heading, height) {
   } else {
     angles = gaitPose(Math.sin(pose.phase || 0), poses.run);
     if (action !== 'run' && speed < player.fullStrideSpeed) angles = scalePose(angles, player.walkScale, true);
-    if (!MESH_CONTACT.has(action)) {
-      const x = pose.x, y = pose.y;
-      if (pose.plant_l) angles = plantLeg(angles, 'l', toObject(x, y, heading, height, pose.plant_l[0], pose.plant_l[1]), player.bones, player.markers);
-      if (pose.plant_r) angles = plantLeg(angles, 'r', toObject(x, y, heading, height, pose.plant_r[0], pose.plant_r[1]), player.bones, player.markers);
+  }
+  if (lead) {
+    // The hips lead a turn and the chest follows: Root turns the hips and legs, the lower spine
+    // turns the chest back to where the engine has it face.
+    addAngle(angles, 'Root', 0, lead, 0);
+    addAngle(angles, 'spine_01', 0, 0, -lead * 0.5);
+    addAngle(angles, 'spine_02', 0, 0, -lead * 0.5);
+  }
+  // scene.py plants a foot only when the pose stands on it.
+  for (const side of ['l', 'r']) {
+    const plant = pose['plant_' + side];
+    if (!plant) continue;
+    const twist = plant.length > 2 && plant[2] != null ? TWIST_SIGN * wrapAngle(plant[2] - heading - lead) : 0;
+    const pz = plant.length > 3 ? plant[3] : 0;
+    const target = toObject(x, y, heading, height, plant[0], plant[1], pz, lift);
+    const [planted, err] = searchLeg(angles, side, target, PLANT_FOOT, twist, 'foot_' + side, true, player);
+    if (err <= PLANT_GIVE_UP) angles = planted;
+  }
+  const touch = pose.touch;
+  if (touch && touch.w > 0) {
+    const side = touch.side || 'r';
+    const target = toObject(x, y, heading, height, touch.at[0], touch.at[1], touch.at[2], lift);
+    let reached;
+    if (touch.part === 'foot' || touch.part === 'strike') {
+      const foot = touch.part === 'strike' ? STRIKE_FOOT : PLANT_FOOT;
+      reached = searchLeg(angles, side, target, foot, 0, 'foot_' + side, false, player, null, -lift / (height / 1.84))[0];
+    } else if (touch.part === 'thigh') {
+      reached = searchLeg(angles, side, target, 0.25, 0, 'thigh_top_' + side, false, player, 1.5)[0];
+    } else {
+      reached = searchLean(angles, target, touch.part === 'head' ? 'brow' : 'chest', player);
     }
+    angles = blendPose(angles, reached, touch.w);
   }
   return angles;
 }
@@ -1048,7 +1200,7 @@ class Body {
       }
     }
     const k = this.heightM / 1.84;
-    this.group.position.set(x, y, 0);
+    this.group.position.set(x, y, pose.lift || 0);
     this.group.scale.set(k, k, k);
     this.group.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(
       new THREE.Vector3(-fy, fx, 0), new THREE.Vector3(0, 0, 1), new THREE.Vector3(fx, fy, 0),
@@ -1082,7 +1234,7 @@ class Body {
     const posed = poseBones(angles, this.player.bones);
     const out = {};
     for (const [name, marker] of Object.entries(this.player.markers)) {
-      out[name] = toWorld(x, y, face, this.heightM, skinOne(marker.pos, marker.skin, posed, this.player.bones));
+      out[name] = toWorld(x, y, face, this.heightM, skinOne(marker.pos, marker.skin, posed, this.player.bones), (pose && pose.lift) || 0);
     }
     return out;
   }
@@ -1253,6 +1405,16 @@ class BroadcastRenderer {
       this.decor.push(net);
     }
     for (const m of [...this.decor, ...this.posts]) this.scene.add(m);
+    // Every opaque piece of scenery hides what is behind it in the full id pass, as it does in the
+    // picture: a ball resting behind the boards is not visible. Left out: the sky (always behind),
+    // the ground (nothing labelled is under it), the see-through nets and the shadow decals.
+    const notOccluders = new Set([sky, surround, pitch, this.shadows, ...this.nets]);
+    this.scenery = this.decor.filter((m) => m.isMesh && !notOccluders.has(m));
+    for (const m of this.scenery) {
+      m.userData.mat = m.material;
+      m.userData.idMat = idMaterial(SCENERY_ID);
+      m.userData.idMat.side = m.material.side; // the near boards face the pitch: no back face for the gantry
+    }
 
     this.setupLights(p);
 
@@ -1455,6 +1617,7 @@ class BroadcastRenderer {
 
   idMode(on, only = null) {
     for (const m of this.decor) m.visible = !on;
+    for (const m of this.scenery) { m.material = on ? m.userData.idMat : m.userData.mat; m.visible = !on || only === null; }
     for (const m of this.posts) { m.material = on ? m.userData.idMat : m.userData.mat; m.visible = !on || only === null; }
     for (const b of this.bodies) { b.useId(on); b.group.visible = b.used > 0 && (only === null || b === only); }
     this.scene.background = on ? new THREE.Color(0, 0, 0) : this.skyColor;

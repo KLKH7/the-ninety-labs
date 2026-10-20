@@ -17,18 +17,35 @@ jobs:
       - run: uv sync --locked
       - run: uv run ruff check .
 
-  test:
+  pytest:
+    # Every test, split over three machines per Python version (tests/conftest.py, --shard), each
+    # running one worker per physical core (pytest-xdist; the runner has 2 cores, 4 threads).
+    # Full-match simulations slow each other down on a shared machine, so the slowest are kept apart.
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         python: ["3.11", "3.12"]
+        shard: ["1/3", "2/3", "3/3"]
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
         with:
           python-version: ${{ matrix.python }}
       - run: uv sync --locked
-      - run: uv run pytest -q
+      - run: uv run pytest -q -n 2 --shard ${{ matrix.shard }} --durations=10
+
+  test:
+    # The required checks `test (3.11)` and `test (3.12)`: green only when every shard passed.
+    needs: pytest
+    if: always()
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12"]
+    steps:
+      - run: test "${{ needs.pytest.result }}" = success
 
   portable:
     # The same seed must simulate the same match on every machine (docs/LESSONS.md, lesson 46):
@@ -86,6 +103,26 @@ jobs:
       - run: uv run ninety-render --seed 7 --seconds 2 --out runs/ci-clip
       - run: uv run ninety-render-check runs/ci-clip
 
+  viewer:
+    # Type-checks and builds the viewer, then drives it in headless Chromium on a bundle ninety-e2e
+    # writes: trace, persona switch, keyboard alone, reduced motion (tests/test_viewer.py).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/viewer/package-lock.json
+      - run: npm ci --prefix web/viewer
+      - run: npm run build --prefix web/viewer
+      - run: uv sync --locked
+      - run: uv run playwright install --with-deps chromium
+      - run: uv run pytest -q tests/test_viewer.py tests/test_e2e.py
+        env:
+          NINETY_REQUIRE_VIEWER: "1"
+
   secret-scan:
     runs-on: ubuntu-latest
     steps:
@@ -109,3 +146,24 @@ jobs:
           ! grep -E "(Warning|Error) " diagnostics.txt
       - name: Ground truth is sealed from the live path
         run: python3 infra/check_truth_sealed.py arm.json
+
+  image:
+    # Builds the demo image the way the deploy does, runs it and calls it, so a file the code reads
+    # at run time but the image leaves out fails here, before merge (docs/LESSONS.md, lesson 100).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: docker build -t ninety-api --build-arg NINETY_COMMIT=${{ github.sha }} .
+      - name: The image serves health and an MCP call on the detected-events match
+        run: |
+          KEY=$(openssl rand -hex 16)  # made per run: no key-like literal in the repo
+          docker run -d --name api -p 8000:8000 -e NINETY_MCP_KEY="$KEY" ninety-api
+          for i in $(seq 1 30); do curl -fsS localhost:8000/api/health && break; sleep 1; done
+          test "$(curl -fsS localhost:8000/api/health | jq -r .commit)" = "${{ github.sha }}"
+          curl -fsS localhost:8000/mcp -H "x-api-key: $KEY" \
+            -H "accept: application/json, text/event-stream" -H "content-type: application/json" \
+            -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"match_info","arguments":{"match":"seed900001"}}}' \
+            | tee mcp.json
+          jq -e '.result.isError == false' mcp.json
+      - if: failure()
+        run: docker logs api || true

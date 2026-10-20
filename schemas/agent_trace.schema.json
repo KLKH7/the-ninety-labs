@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/KLKH7/the-ninety-labs/schemas/agent_trace.schema.json",
+  "title": "AgentTraceStep",
+  "description": "One step in the on-screen agent trace: which agent did what for which moment, and how long it took. Mirrors ninety.agents.contracts.TraceStep.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["role", "moment", "action", "ms", "detail"],
+  "properties": {
+    "role": { "type": "string", "enum": ["analyst", "tactician", "challenger", "fact_checker", "judge", "producer", "personalizer", "describer", "companion"] },
+    "moment": { "type": "string", "description": "Id of the moment the step was for." },
+    "action": { "type": "string", "minLength": 1, "description": "What it did, e.g. draft, reject, verify, hold, air, handoff." },
+    "ms": { "type": "number", "minimum": 0 },
+    "detail": { "type": "string" }
+  }
+}
