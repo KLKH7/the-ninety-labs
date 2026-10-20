@@ -222,6 +222,18 @@ short and actionable. This file is public: no research sources, product names or
     older than a day.
   - A port's audit names the branches whose lessons it read.
 
+### 95. A pattern that reads numbers must read every way a number is written
+- **What happened:** the fact-checker's number pattern refused a digit followed by a letter, so it
+  would not read "h7" as a number. That also skipped every English ordinal: "in the 9th minute"
+  passed for an event in minute 2, and "his 97th pass" passed with no such count in the evidence,
+  although the clock rule tells the agents to write minutes as ordinals. The minute pattern
+  already knew the "9th minute" form; it was never reached. Found by the Personalizer's tests,
+  when a planted "7th pass" in a variant aired.
+- **Rule:** a check that reads values out of text is tested on every form the writers are told
+  to use, and on the forms a translation or rewording produces, with a defect planted in each.
+- **Check:** `tests/test_factcheck.py::test_an_ordinal_minute_must_be_the_cited_minute` and
+  `test_an_ordinal_count_must_be_in_the_evidence` fail on the old pattern.
+
 ## Working in the repo
 
 ### 12. "No checks yet" is not "checks passed"
@@ -951,6 +963,16 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `git log -p -- web/render ninety/render/scene.py ninety/render/meshpose.py` since the
   last bump shows no picture change without a version change; a dataset manifest's `renderers`
   lists one version per look.
+
+### 104. "Never imported" is only tested in a fresh interpreter
+- **What happened:** a test meant to prove the default `ninety-e2e` run never loads the Azure
+  Speech client deleted it from `sys.modules` and ran the bundle. With the import moved to the top
+  of the Describer, it stayed green: the module was already loaded when the test file was, so
+  nothing imported it again. The mutation run caught it.
+- **Rule:** a test that a module stays unloaded imports the code under test in a new Python
+  process and reads `sys.modules` there.
+- **Check:** `tests/test_describe.py::test_the_default_run_makes_no_azure_call`; mutate by adding
+  the import at module top and watch it go red.
 
 ### 105. A workflow's queue is part of what it does: read how the platform queues it
 - **What happened:** `agents-live.yml` put every run in one concurrency group, `agents-live`, with
