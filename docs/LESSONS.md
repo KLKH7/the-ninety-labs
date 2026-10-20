@@ -1067,3 +1067,16 @@ short and actionable. This file is public: no research sources, product names or
   documentation, not inferred from its name. A cancelled run nobody cancelled is a defect to trace.
 - **Check:** `.github/workflows/agents-live.yml` groups by `inputs.ref`. Dispatch from two
   branches before approving either: both stay `waiting`.
+
+### 111. Text a number is computed from must be the same on every supported Python
+- **What happened:** the latency-cost report counted the Analyst's input tokens from the match MCP
+  tools' descriptions, which are docstrings. Python 3.13 dedents docstrings at compile time and
+  3.11 and 3.12 do not, so the first Analyst call counted 513 tokens on 3.13 against the committed
+  508, and `test_the_published_data_matches_the_recording` failed on 3.13 only. CI runs 3.11 and
+  3.12, so it stayed green. `ninety/agents/foundry.py` already cleaned the same docstrings for
+  fingerprints; the eval did not.
+- **Rule:** text that feeds a committed number or fingerprint is normalised the same way wherever
+  it is read (`inspect.cleandoc` for docstrings), and the committed data is recounted from the
+  normalised text.
+- **Check:** `uv run -p 3.11 pytest tests/test_latency_cost.py`, then `-p 3.12` and `-p 3.13`;
+  all pass.

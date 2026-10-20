@@ -511,28 +511,28 @@
       "turn": 1,
       "role": "analyst",
       "call": "tool request",
-      "input": 558,
+      "input": 551,
       "output": 18
     },
     {
       "turn": 1,
       "role": "analyst",
       "call": "answer",
-      "input": 1768,
+      "input": 1761,
       "output": 51
     },
     {
       "turn": 2,
       "role": "analyst",
       "call": "tool request",
-      "input": 579,
+      "input": 572,
       "output": 18
     },
     {
       "turn": 2,
       "role": "analyst",
       "call": "answer",
-      "input": 1789,
+      "input": 1782,
       "output": 45
     },
     {
@@ -546,14 +546,14 @@
       "turn": 4,
       "role": "analyst",
       "call": "tool request",
-      "input": 677,
+      "input": 670,
       "output": 18
     },
     {
       "turn": 4,
       "role": "analyst",
       "call": "answer",
-      "input": 1887,
+      "input": 1880,
       "output": 27
     },
     {
@@ -571,7 +571,7 @@
     "chars": 990
   },
   "recounted": {
-    "commit": "a0e5782",
-    "date": "2026-10-19"
+    "commit": "2581ec3",
+    "date": "2026-10-20"
   }
 }

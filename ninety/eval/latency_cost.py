@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import inspect
 import json
 import math
 import platform
@@ -103,8 +104,10 @@ def percentile(values: list[float], q: float) -> float:
 async def _tool_definitions() -> str:
     from ninety.mcp import match_server
 
+    # Cleaned as Python 3.13 dedents docstrings and 3.11 and 3.12 do not (as foundry.definition).
     tools = await match_server.server.list_tools()
-    return json.dumps([{"name": t.name, "description": t.description, "parameters": t.inputSchema}
+    return json.dumps([{"name": t.name, "description": inspect.cleandoc(t.description or ""),
+                        "parameters": t.inputSchema}
                        for t in tools])
 
 
