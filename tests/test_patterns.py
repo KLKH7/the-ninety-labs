@@ -39,8 +39,9 @@ def test_the_report_plays_the_same_match_as_the_engine():
 
 def test_out_of_play_runs_from_the_stoppage_to_the_restart():
     # Seed 7's first minute holds balls going out and restarts taken; the test says so (lesson 41),
-    # and checks a goal or foul the same way if the draw holds one. The ball is out from the frame play stops until the frame the restart is
-    # taken, which is in play, and in play everywhere between a restart and the next stoppage.
+    # and checks a goal or foul the same way if the draw holds one. The ball is out from the frame
+    # play stops until the frame the restart is taken, which is in play, and in play everywhere
+    # between a restart and the next stoppage.
     engine, dead = patterns.run(7, 1)
     events = sorted((e["frame"], e["type"]) for e in engine.match.events
                     if e["type"] in ("out_of_play", "foul", "goal", "set_piece"))
