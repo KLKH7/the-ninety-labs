@@ -162,7 +162,7 @@ def validate_seen(payloads: list[dict], mock: bool = False):
     schema's `truth` branch: the mock numbers players like the simulator)."""
     assert payloads
     for p in payloads:
-        if "source" in p:
+        if "source" in p and p.get("type") != "answer":  # an answer's source is its author, code or model
             assert (p["source"] == "mock") == mock, p.get("type", "minimap")
             p = {**p, "source": "truth"} if mock else p
         (MINIMAP if "frames" in p else MESSAGE).validate(p)
@@ -679,13 +679,14 @@ VERIFIED = {"status": "verified", "text": "a7 is moving at 12.4 km/h right now."
 
 
 @pytest.mark.parametrize(("source", "badge"), [
-    (None, "Computed from tracked positions"),  # today's API: no source, and no passcode, so code
+    (None, "Computed from tracked positions"),  # an older API: no source, and no passcode, so code
     ("code", "Computed from tracked positions"),
     ("model", "Fact-checked"),  # only an answer the Judge passed
 ])
 def test_an_answer_says_fact_checked_only_when_the_judge_saw_it(browser, prod_site, source, badge):
-    body = dict(VERIFIED, **({"source": source} if source else {}))
-    page, errors, _ = fake_api(browser, prod_site, answer={"type": "answer", "answer": body})
+    # `source` rides on the answer message (companion_message.schema.json); an older server omits it.
+    message = {"type": "answer", "answer": VERIFIED, **({"source": source} if source else {})}
+    page, errors, _ = fake_api(browser, prod_site, answer=message)
     answer = answered(page, "How fast is Away 7 now?")
     assert answer.locator(".badge").text_content() == badge
     answer.locator(".evidence-toggle").click()

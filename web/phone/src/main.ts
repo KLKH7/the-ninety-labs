@@ -479,7 +479,7 @@ async function ask(text: string) {
   let failed = "";
   try {
     const message: AnswerMessage = await feed.ask({ session: state.code, player: state.selected, text: q, t: at });
-    answer = message.answer;
+    answer = { ...message.answer, source: message.source ?? message.answer.source };
   } catch (e) {
     failed =
       e instanceof ApiError && e.status === 429

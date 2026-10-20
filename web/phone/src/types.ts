@@ -68,9 +68,9 @@ export interface Question {
 
 export interface ViewerAnswer {
   status: "verified" | "held" | "rejected" | "unanswerable";
-  /** Who wrote the text: "model" (the Companion agent, then the code checks and the Judge) or
-   * "code" (a template filled from the cited fact, through the code checks only). Asked of W5 on
-   * #145; until the API sends it, an answer counts as code's, which it is without the passcode. */
+  /** Who wrote the text, copied from the answer message's `source` (main.ts): "model" (the
+   * Companion agent, then the code checks and the Judge) or "code" (a template filled from the
+   * cited fact, through the code checks only). Missing (an older server) counts as code. */
   source?: "code" | "model";
   text: string;
   metric: string | null;
@@ -84,6 +84,8 @@ export interface ViewerAnswer {
 export interface AnswerMessage {
   type: "answer";
   answer: ViewerAnswer;
+  /** schemas/companion_message.schema.json: who wrote the answer. */
+  source?: "code" | "model";
 }
 
 export const PITCH_X = 105;

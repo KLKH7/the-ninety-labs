@@ -136,21 +136,25 @@ export class MockFeed implements Feed {
     const none = (text: string, from: number | null = null, to: number | null = null): ViewerAnswer => ({
       status: "unanswerable", text, metric: null, value: null, unit: null, evidence: [], t_from: from, t_to: to,
     });
-    if (q.player === null) return { type: "answer", answer: none(`Tap a player first, then ask about ${ASKABLE}.`) };
+    if (q.player === null) {
+      return { type: "answer", source: "code", answer: none(`Tap a player first, then ask about ${ASKABLE}.`) };
+    }
     const card = await this.card("mock", q.player, q.t);
     if (metric === null) {
       return {
         type: "answer",
+        source: "code",
         answer: none(`I can only answer about ${q.player}'s speed, top speed and distance run.`, card.t_from, card.t_to),
       };
     }
     const [value, unit] =
       metric === "speed_now" ? [card.speed_kmh, "km/h"] : metric === "peak_speed" ? [card.peak_kmh, "km/h"] : [card.distance_m, "m"];
     const scope = `player_${q.player}_window_${card.t_from.toFixed(2)}-${card.t_to.toFixed(2)}`;
-    // A code answer, as the API's without the passcode: no `source`, which the phone reads as
-    // code's (main.ts, badgeFor). It never claims "model", so it is never shown as fact-checked.
+    // A code answer, as the API's without the passcode: it never claims "model", so it is never
+    // shown as fact-checked (main.ts, badgeFor).
     return {
       type: "answer",
+      source: "code",
       answer: {
         status: "verified",
         text: CODE_TEXT[metric](q.player, String(value)),
