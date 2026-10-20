@@ -33,7 +33,7 @@ from ninety.vision import events as ev
 from ninety.vision import track as tr
 
 COMMAND = ("uv run python -m ninety.eval.attribution_score --test-dir runs/test-frozen-cca498c/test "
-           "--observations <dir> --out docs/eval/attribution")
+           "--observations docs/eval/attribution --observations tests/fixtures --out docs/eval/attribution")
 TYPES = ("pass", "shot", "out_of_play")
 ROLES = ("player", "receiver", "interceptor")
 # The roles the detector names, per type: out of play names nobody (nor does the truth).
@@ -75,11 +75,21 @@ def role_frame(event: dict, role: str, detected_frames: dict[str, int]) -> int:
     return event["frame"] if role == "player" else detected_frames[event["id"]]
 
 
-def clip(seed: int, test_dir: Path, observations: Path) -> dict:
+def observations_file(seed: int, dirs: list[Path]) -> Path:
+    """The clip's observations from the first directory holding them."""
+    name = f"observations-seed{seed}.jsonl"
+    found = next((d / name for d in dirs if (d / name).exists()), None)
+    if found is None:
+        raise FileNotFoundError(f"{name} in none of {[str(d) for d in dirs]}")
+    return found
+
+
+def clip(seed: int, test_dir: Path, observations: Path | list[Path]) -> dict:
     root = test_dir / f"seed{seed}"
     truth = [e for e in load_events(root / "events.jsonl", "truth") if e["type"] in TYPES]
     frames = {f["frame"]: f for f in map(json.loads, (root / "frames.jsonl").read_text().splitlines())}
-    rows = tr.read_observations(observations / f"observations-seed{seed}.jsonl")
+    dirs = observations if isinstance(observations, list) else [observations]
+    rows = tr.read_observations(observations_file(seed, dirs))
     detected, summary = ev.detect(rows)
     tracks = {t.id: t for t in tr.track_players(rows)}
     tr.assign_teams(list(tracks.values()))
@@ -104,6 +114,7 @@ def clip(seed: int, test_dir: Path, observations: Path) -> dict:
                                 "is": {k: who(e[k], role_frame(e, k, got), tracks, obs, frames)
                                        for k in ROLES if e.get(k)}}
                                for e in detected if e["id"] not in matched],
+        "camera_ok": f"{summary['frames_camera_ok']} of {summary['frames']} frames",
         "teams": summary["teams"],
         "pairs": out,
     }
@@ -168,10 +179,20 @@ def report_md(body: dict) -> str:
             r = row[role]
             lines.append(lead + f"| {role} | {r['truth_names']} | {r['named']} | {r['right']} "
                          f"| {r['unchecked']} | {r['left_null']} |")
-    lines += ["", "## Per clip", ""]
+    lines += [
+        "",
+        "Read with care: a handful of events. A clip whose camera is trusted on no frame (a camera cut",
+        "the fit does not follow) gives no events, so nothing of it is graded here; its passes are",
+        "missed, not misnamed. A false event is listed under its clip with the players its names",
+        "really are: what the agents would be told about something that did not happen as detected.",
+        "",
+        "## Per clip",
+        "",
+    ]
     for c in body["clips"]:
         lines.append(f"- seed {c['seed']}: truth {c['truth']}, detected {c['detected']}, "
-                     f"{len(c['pairs'])} matched; teams: {c['teams'].get('reason')}")
+                     f"{len(c['pairs'])} matched; camera trusted on {c['camera_ok']}; "
+                     f"teams: {c['teams'].get('reason')}")
         for p in c["pairs"]:
             names = "; ".join(f"{r} {p[r]['detected'] or 'null'} is {p[r]['is'] or '-'}, "
                               f"truth {p[r]['truth'] or 'none'}" for r in ROLES if r in p)
@@ -187,7 +208,8 @@ def report_md(body: dict) -> str:
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--test-dir", type=Path, required=True, help="the frozen test clips (seed<N>/)")
-    ap.add_argument("--observations", type=Path, required=True, help="dir of observations-seed<N>.jsonl")
+    ap.add_argument("--observations", type=Path, action="append", required=True,
+                    help="a dir of observations-seed<N>.jsonl; repeat to search several, first found wins")
     ap.add_argument("--seeds", default="900001,900002,900003,900004,900005")
     ap.add_argument("--out", type=Path, required=True, help="writes <out>.json and <out>.md")
     a = ap.parse_args(argv)
