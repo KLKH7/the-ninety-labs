@@ -121,6 +121,9 @@ RESTART_DISTANCE_M = {"throw_in": 2.0, "corner": 9.15, "goal_kick": PENALTY_DEPT
 PENALTY_MARK_M = 11.0  # Law 1: the penalty mark, 11 m from the goal line
 CORNER_ARC_M = 1.0  # Law 1: the corner arc's radius; Law 17 measures the 9.15 m from the arc
 KEEP_OFF_MARGIN_M = 0.5  # design: opponents aim this far outside a restart's distance, as at a kickoff
+# design: the taker stands this far from a set ball's centre, so it is clear of him whichever way he
+# is turned (his shoulder's reach, P11) with a ball's width to spare for his steering
+SET_BALL_CLEAR_M = shape.surface(math.pi / 2, 0.0, pad=2 * ball.RADIUS)
 # design: going round a restart's circle he aims this far round at a time; the chord between two
 # points on it dips inside by at most 1 - cos(15°), under 4% of the radius (0.35 m at 9.65 m)
 KEEP_OFF_STEP_DEG = 30.0
@@ -644,12 +647,11 @@ class Engine:
         if not decisions.can_strike(bx - carrier.x, by - carrier.y, carrier.heading, tx - bx, ty - by):
             return False
         if self.set_by:
-            # A set ball lies where it was put, not at his feet: its way out must not pass through
-            # him (P11), or the kick comes straight back off his own body, a second touch.
-            d = math.hypot(tx - bx, ty - by) or 1.0
-            ex, ey = bx + (tx - bx) / d * CONTROL_M, by + (ty - by) / d * CONTROL_M
-            through = shape.first_contact(bx, by, ex, ey, carrier.x, carrier.y, carrier.heading, ball.RADIUS)
-            return through is None
+            # A set ball lies where it was put, not settled at his feet: struck while it touches
+            # his body (P11) it comes straight back off him, a second touch. Clear of him, its way
+            # out never meets him while he faces within STRIKE_FACING of it (checked over the
+            # pitch, tests/test_restarts.py).
+            return shape.clearance(bx, by, carrier.x, carrier.y, carrier.heading) >= ball.RADIUS
         return True
 
     def turn_to(self, carrier: Player, tx: float, ty: float, strike) -> None:
@@ -1022,7 +1024,7 @@ class Engine:
                 # Above a foot, a player who has reacted gets a thigh, chest or head to it (A4); a
                 # ball he has not reacted to just rebounds off him.
                 # Only a ball on course into his body (its path crosses the outline), not a clip of it.
-                aerial = (reacted and into and bz > BODY_TOUCH_Z
+                aerial = (reacted and into and bz > BODY_TOUCH_Z and p.id != self.restart_kicker
                           and not self.hands(p, ux + sb * mx, uy + sb * my))
                 hits.append((sb, "touch" if aerial else "body", p, ux + sb * mx, uy + sb * my, bz,
                              qx + sb * mx, qy + sb * my, aerial))
@@ -1468,6 +1470,22 @@ class Engine:
         side = [p for p in self.players if p.team == r.team and not (rolling and p.id == r.passed_by)]
         r.fetcher = min(side, key=lambda p: math.hypot(p.x - rx, p.y - ry)).id
 
+    def to_boards(self, p: Player, tx: float, ty: float) -> float:
+        """How far he can run toward (tx, ty) before he meets the advertising boards."""
+        dx, dy = tx - p.x, ty - p.y
+        d = math.hypot(dx, dy)
+        if d < 1e-9:
+            return math.inf
+        ux, uy = dx / d, dy / d
+        reach = math.inf
+        for u, at, lo, hi in ((ux, p.x, -BOARDS_M, PITCH_X + BOARDS_M),
+                              (uy, p.y, -BOARDS_M, PITCH_Y + BOARDS_M)):
+            if u > 1e-9:
+                reach = min(reach, (hi - at) / u)
+            elif u < -1e-9:
+                reach = min(reach, (lo - at) / u)
+        return max(0.0, reach)
+
     def dead_ball_rest(self) -> tuple[float, float]:
         """Where the dead ball will come to rest: along its own flight, or where the advertising
         boards stop it (tick_restart)."""
@@ -1701,8 +1719,9 @@ class Engine:
             ry = clamp(ry, -BOARDS_M + clear, PITCH_Y + BOARDS_M - clear)
             # Near the boards he goes no faster than he could stop before them, as he slows to
             # stop on any target (body.move): they are a wall, not a target he may overrun.
-            to_boards = min(p.x, PITCH_X - p.x, p.y, PITCH_Y - p.y) + BOARDS_M
-            return rx, ry, min(RECOVER, stopping_speed(to_boards))
+            # where he is running and where he means to run, whichever meets them first
+            room = min(self.to_boards(p, p.x + p.vx, p.y + p.vy), self.to_boards(p, rx, ry))
+            return rx, ry, min(RECOVER, stopping_speed(room))
         if self.restart and p.id == self.restart.carried_by and p.id != self.restart.taker:
             # He knocks it on to the spot from about where he took it, turning to face it first.
             sx, sy = self.restart_ball_spot(self.restart)
@@ -1719,11 +1738,11 @@ class Engine:
             pace = decisions.dribble_speed(p.profile["dribbling"]) if r.carried_by == p.id else RECOVER
             if r.kind == "throw_in":
                 return *throw_stand(r.x, r.y), pace
-            # Behind the ball on its spot as he faces up the pitch, clear of it whichever way he is
-            # turned (his shoulder's reach, P11), so the set ball stays where it was put until he
-            # kicks it (Law 13: stationary; Law 14: on the mark).
+            # Behind the ball on its spot as he faces up the pitch, clear of it (SET_BALL_CLEAR_M),
+            # so the set ball stays where it was put until he kicks it (Law 13: stationary; Law 14:
+            # on the mark).
             sx, sy = self.restart_ball_spot(r)
-            behind = shape.surface(math.pi / 2, 0.0, pad=ball.RADIUS)
+            behind = SET_BALL_CLEAR_M
             return sx - attack_dir(p.team) * behind, sy, pace
         bx, by = self.play_point(p)  # O8: where the ball is going, once a pass is struck
         poss_team = self.team_of(self.possessor) if self.possessor else None
@@ -2187,11 +2206,10 @@ class Engine:
         if self.windup and self.set_by:
             # A set ball stays still (Law 13): he steps round it to behind its line to the target,
             # against his body as he faces it, instead of turning it onto his foot.
-            # He goes round it, never through it: as far as his shoulder reaches with the ball
-            # against it (P11), at most KEEP_OFF_STEP_DEG round at a time, as opponents go round
-            # a restart's circle.
+            # He goes round it, never through it, SET_BALL_CLEAR_M from it, at most KEEP_OFF_STEP_DEG
+            # round at a time (the chord between dips 1.2 cm inside, within the ball's width spare).
             bx, by = self.ball[0], self.ball[1]
-            behind = shape.surface(math.pi / 2, 0.0, pad=ball.RADIUS)
+            behind = SET_BALL_CLEAR_M
             want = fmath.atan2(by - self.windup[1], bx - self.windup[0])  # away from the target
             here = fmath.atan2(carrier.y - by, carrier.x - bx)
             turn = (want - here + math.pi) % (2 * math.pi) - math.pi

@@ -4,6 +4,7 @@ is walked back to, never reset (row 3); opponents keep the Laws' distance until 
 
 import math
 
+from ninety.sim import ball
 from ninety.sim.decisions import PENALTY_DEPTH, PENALTY_HALF_WIDTH
 from ninety.sim.engine import (
     BALL_TO_FEET,
@@ -485,10 +486,14 @@ def test_the_restart_taker_does_not_play_it_again_before_another_player():
     taker.heading = 0.0
     e.kick(taker, 2.5, 0.0, 0.0)  # a soft tap forward that stops about 2.5 m on
     taker.vx = 3.0  # and he runs on after it
+    for p in e.players:  # nobody else near: only he could get to it
+        if p is not taker and p.team == "away":
+            p.x = max(p.x, 80.0)
     for _ in range(int(3 / DT)):
         e.step()
         assert e.possessor != taker.id
-    mate = e.by_id["h7"]
+    assert e.possessor is None and e.restart_kicker == taker.id  # nobody else has touched it yet
+    mate = next(p for p in e.players if p.team == "home" and p is not taker and p.role != "GK")
     mate.x, mate.y = e.ball[0] + 0.3, e.ball[1]
     for _ in range(int(2 / DT)):
         e.step()
@@ -513,8 +518,8 @@ def test_the_taker_steps_round_a_set_ball_never_through_it():
         if struck:
             break
         e.move_players()
-        assert e.ball[:3] == (50.0, 34.0, 0.0)
-        assert shape.clearance(e.ball[0], e.ball[1], taker.x, taker.y, taker.heading) >= 0.0
+        assert e.ball == (50.0, 34.0, 0.0, 0.0, 0.0, 0.0)  # still, and reported still
+        assert shape.clearance(e.ball[0], e.ball[1], taker.x, taker.y, taker.heading) >= ball.RADIUS
         e.t += DT
         e.frame += 1
     assert struck and struck[0][0] > 50.0  # struck from the far side of the ball from the target
@@ -583,5 +588,48 @@ def test_a_fetcher_near_the_boards_runs_no_faster_than_he_can_stop_before_them()
     p = e.by_id["h2"]
     p.x, p.y = 45.0, -3.0  # a metre from them
     e.restart.fetcher = p.id
+    p.vx, p.vy = 0.0, -5.0  # running at the boards
     _, _, speed = e.shape_target(p)
     assert speed <= stopping_speed(1.0) + 1e-9
+    p.x, p.y, p.vx, p.vy = 60.0, -3.0, -5.0, 0.0  # running along them toward the ball
+    _, _, speed = e.shape_target(p)
+    assert speed > stopping_speed(1.0) + 1.0  # not slowed by boards he is not running at
+
+
+def test_clear_of_his_body_a_strike_he_may_make_never_runs_into_him():
+    """The premise of the set-ball strike rule (engine.can_strike): over a grid of ball positions
+    and kick directions, a ball a full radius clear of his body that P16 lets him strike never meets
+    his body (P11) within a metre of its way out."""
+    from ninety.sim import decisions, shape
+    for i in range(-12, 13):
+        for j in range(-12, 13):
+            ox, oy = i * 0.05, j * 0.05
+            if shape.clearance(ox, oy, 0.0, 0.0, math.pi / 2) < ball.RADIUS:
+                continue
+            for deg in range(0, 360, 5):
+                dx, dy = math.cos(math.radians(deg)), math.sin(math.radians(deg))
+                if decisions.can_strike(ox, oy, math.pi / 2, dx, dy):
+                    hit = shape.first_contact(ox, oy, ox + dx, oy + dy, 0.0, 0.0, math.pi / 2, ball.RADIUS)
+                    assert hit is None, (ox, oy, deg)
+
+
+def test_the_taker_waits_a_balls_width_clear_of_the_set_ball():
+    from ninety.sim.engine import SET_BALL_CLEAR_M
+    e, taker = set_free_kick_in_space(3)
+    tx, ty, _ = e.shape_target(taker)
+    assert abs(math.hypot(tx - 50.0, ty - 34.0) - SET_BALL_CLEAR_M) < 1e-9
+
+
+def test_the_restart_taker_does_not_take_it_on_his_chest_either():
+    """The bar covers every deliberate touch: a ball arriving into his body at chest height."""
+    e, taker = kicked_restart()
+    e.possessor = None
+    taker.x, taker.y, taker.vx, taker.vy, taker.heading = 60.0, 34.0, 0.0, 0.0, math.pi
+    e.ball = (58.5, 34.0, 1.3, 4.0, 0.0, 0.0)  # coming at his chest
+    e.kicked_at = e.t - 2.0  # he has long reacted
+    e.kicker_clear = True
+    for _ in range(int(1 / DT)):
+        e.tick_free()
+        e.t += DT
+        e.frame += 1
+        assert e.possessor != taker.id
