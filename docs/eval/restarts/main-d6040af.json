@@ -31,6 +31,9 @@
   "goal_kick": 8,
   "corner": 2
  },
+ "stuck_restarts": 0,
+ "taker_carried_the_set_ball": 49,
+ "taker_touched_it_again_first": 3,
  "examples": [
   [
    "seed7",

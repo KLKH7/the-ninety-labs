@@ -22,12 +22,15 @@ columns are two samples, compared by their standard errors over matches.
 |---|---:|---:|
 | Ball moves more than 3 m in one frame, per 90 minutes | 74.8 (median jump 6.6 m) | 0 |
 | Frames where a player moves faster than the validator's limit, per 90 | 3.7 (the kick-off reset) | 0 |
-| Seconds from a goal to the kick-off | everyone reset in the goal's frame, kick 2 to 4 s later | 14.3 to 17.9 (7 goals): players walk back, the ball is fetched from the net |
-| Restarts with an opponent inside the Law's distance when the ball first moves | 133 of 330 | 0 of 311 |
-| of which free kicks (9.15 m) | 76 of 141 | 0 of 126 |
-| throw-ins (2 m) | 47 of 152 | 0 of 133 |
-| goal kicks (penalty area) | 8 of 29 | 0 of 36 |
-| corners (9.15 m from the ball) | 2 of 8 | 0 of 16 |
+| Seconds from a goal to the kick-off | everyone reset in the goal's frame, kick 2 to 4 s later | 16.0 to 19.1 (6 goals): players walk back, the ball is fetched from the net |
+| Restarts with an opponent inside the Law's distance when the ball first moves | 133 of 330 | 0 of 315 |
+| of which free kicks (9.15 m) | 76 of 141 | 0 of 119 |
+| throw-ins (2 m) | 47 of 152 | 0 of 143 |
+| goal kicks (penalty area) | 8 of 29 | 0 of 39 |
+| corners (9.15 m from the ball) | 2 of 8 | 0 of 14 |
+| Taker carries the set ball before his kick (a second touch, Laws 8, 13 to 17) | 49 | 0 |
+| Taker plays it again before another player has | 3 | 0 |
+| Stoppages never restarted (over 200 s) | 0 | 0 |
 | Matches meeting the data contract (`ninety-validate`) | 16 of 16 | 16 of 16 |
 
 Real football has no single-frame ball jumps and no player resets. The real time from a goal to
@@ -38,24 +41,25 @@ main the `kickoff` event is written in the goal's frame; now it is the kick itse
 
 | | Before | After |
 |---|---:|---:|
-| Shots a team per 90 (mean ± standard error over matches) | 17.7 ± 1.6 | 18.1 ± 1.5 |
-| Goals a team per 90 | 1.8 ± 0.5 (13 goals) | 1.0 ± 0.3 (7 goals) |
-| Pass completion | 79.7% | 80.9% |
-| Shots within 10 s of the shooting side's own restart | 43 | 39 |
-| Other shots | 83 | 90 |
-| First pass after a throw-in fails | 11% | 11% |
-| after a free kick | 25% | 19% |
+| Shots a team per 90 (mean ± standard error over matches) | 17.7 ± 1.6 | 18.3 ± 1.9 |
+| Goals a team per 90 | 1.8 ± 0.5 (13 goals) | 0.8 ± 0.4 (6 goals) |
+| Pass completion | 79.7% | 80.8% |
+| Shots within 10 s of the shooting side's own restart | 43 | 32 |
+| Other shots | 83 | 98 |
+| First pass after a throw-in fails | 11% | 5% |
+| after a free kick | 25% | 13% |
 | after a goal kick | 3% | 3% |
-| after a corner | 50% (8) | 24% (16) |
-| Ball lost within 5 s of a throw-in | 33% | 36% |
+| after a corner | 50% (8) | 20% (14) |
+| Ball lost within 5 s of a throw-in | 33% | 28% |
 
-Shots and completion are unchanged within noise. Goals fell by 0.85 a team per 90, about 1.5
-standard errors on 13 against 7 goals: not settled. 20-minute matches over-weight kick-offs.
-Nothing was tuned.
+Shots and completion are unchanged within noise. Goals are lower, by about 1.7 standard errors on
+13 against 6 goals: not settled. Two earlier versions of this change measured on the same seeds
+gave 1.0 and 2.0 goals a team per 90, which shows how loose 16 matches of 20 minutes are on goals.
+20-minute matches also over-weight kick-offs. Nothing was tuned.
 
 Football-sense (`uv run ninety-football-sense`, same matches, per 90 minutes; none of its rules
-looks at restarts): FS1 17.2 to 19.7, FS2 17.7 to 17.4, FS6 own-box passes 25.3 to 32.3, FS7 253
-to 278, FS9 1.4 to 1.4.
+looks at restarts): FS1 17.2 to 22.2, FS2 17.7 to 20.2, FS6 own-box passes 25.3 to 32.1, FS7 253
+to 273, FS9 1.4 to 1.4.
 
 ### On the earlier base
 
