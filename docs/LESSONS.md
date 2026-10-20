@@ -1116,3 +1116,41 @@ short and actionable. This file is public: no research sources, product names or
 - **Rule:** a threshold is applied in the quantity its comment and its source use (here the distance
   to the goal's centre, as D3's rates are). Search for every use of a constant when its meaning is fixed.
 - **Check:** `tests/test_decisions.py::test_a_shot_is_an_option_only_within_range_of_the_goal_straight_line`.
+
+### 120. An exemption in a check is where a defect hides: reach the state, do not place it
+- **What happened:** the engine placed a new ball at the taker's feet at every restart and reset
+  all 22 players at every goal. The validator exempts dead-ball windows from the ball-speed check
+  and kickoff frames from the player-speed check, so nothing failed. The ball jumped more than
+  3 m in one frame about 70 times per 90 minutes (median 7.5 m), and every goal reset the pitch
+  in one frame. Viewers saw it; no test did.
+- **Rule:** a state the match needs (the ball on the restart spot, the teams in kick-off shape)
+  is reached by the engine's own movement: players go there and fetch the ball, within their
+  bodies and the ball's physics (lesson 5). An exemption in a check is allowed only for a real
+  discontinuity in the broadcast (a cut) and is listed as a known gap until the engine no longer
+  needs it.
+- **Check:** `uv run pytest tests/test_restarts.py` records every frame from before the stop to
+  the kick, including the frame the restart is given, and fails on a ball or player step faster
+  than the validator's limits. `scripts/defect_sweep/restarts.py` counts ball jumps over 3 m per
+  90 minutes (0 over 16 matches of 20 minutes, `docs/eval/restarts.md`).
+
+### 121. A Law is all of its clauses: read the whole restart, not the part the defect named
+- **What happened:** the restart fix enforced the distances and "in play when kicked and clearly
+  moves", and took any movement of the set ball as the kick. The taker could then carry the set
+  ball off and pass it, touching it twice before anyone else (55 of 340 restarts). The owner saw it
+  in a clip as "he passed to himself". The same Laws (8, 13 to 17) say the taker may not touch it
+  again until another player has; that clause was never implemented, so no test asked for it.
+- **Rule:** when implementing a Law, list every clause of it in the GROUNDING row and give each a
+  test, including the clauses no defect report mentioned.
+- **Check:** `uv run pytest tests/test_restarts.py -k "dribble or first_touch or again"`; on the
+  engine before the fix the set ball's first movement is not a pass or shot by the taker.
+
+### 122. A rule every kind of case shares is tested on every kind, run to the end
+- **What happened:** moving the restart taker a ball's width behind the ball was tested on a
+  free kick only. At a corner the readiness check still measured from the corner point, the taker
+  stood 1.09 m from it, and the corner was never taken: 7 of 16 measured matches froze for the
+  rest of their 20 minutes. Every unit test passed; only the 16-match measurement showed it.
+- **Rule:** a change to a rule that every restart (or every kind of any case) goes through gets a
+  test that runs each kind to completion. A measurement counts stuck states as a defect, not as
+  quiet time.
+- **Check:** `uv run pytest tests/test_restarts.py -k every_kind`; `scripts/defect_sweep/restarts.py`
+  reports `stuck_restarts`, which must be 0.
