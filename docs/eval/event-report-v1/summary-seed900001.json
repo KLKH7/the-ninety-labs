@@ -4,22 +4,19 @@
   "ball_frames": 220,
   "tracks": 21,
   "teams": {
-    "chromaticity": {
+    "feature": "brightness",
+    "kits": {
       "home": [
-        0.533,
-        0.323,
-        0.144
+        3.321
       ],
       "away": [
-        0.281,
-        0.303,
-        0.416
+        6.104
       ]
     },
-    "reason": "deepest outfield player toward x = 105: colour 1 in 241 more frames",
+    "reason": "deepest outfield player toward x = 105: colour 0 in 245 more frames",
     "frames_voting": 245,
-    "vote_margin": 241,
-    "keepers": 0,
+    "vote_margin": 245,
+    "keepers": 4,
     "unassigned": 0
   },
   "spells": 5,

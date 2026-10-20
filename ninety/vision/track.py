@@ -43,6 +43,8 @@ PENALTY_AREA_X = 16.5  # Law 1 (GROUNDING L1)
 # The least spread two shirts of one kit show in chromaticity (JPEG and sensor noise), so a scene
 # of identical shirts still has a scale to measure outliers by (design).
 CHROMA_NOISE = 0.01
+# The same for brightness, in stops (log2 of the shirt's mean channel): a tenth of a stop (design).
+LIGHT_NOISE = 0.1
 
 
 def read_observations(path: Path | str) -> list[dict]:
@@ -133,27 +135,47 @@ def _add(t: Track, frame: int, d: dict) -> None:
 
 
 def _median_rgb(t: Track) -> tuple[float, float, float] | None:
-    """The track's kit as chromaticity (each channel over their sum) of its median shirt colour.
-    Sun and shadow scale all three channels together, so a kit half in the stand's shadow keeps
-    its chromaticity while its raw colour halves; clustering raw colour split the players by
-    light, not by side (seed 900001: two greys learned for a maroon and a blue kit)."""
     cols = [c for c in t.rgb if c is not None]
     if not cols:
         return None
-    med = [sorted(c[k] for c in cols)[len(cols) // 2] for k in range(3)]
+    return tuple(sorted(c[k] for c in cols)[len(cols) // 2] for k in range(3))
+
+
+# Two ways to tell kits apart, and each clip uses the one that separates its two kits better
+# (`two_colours`). Chromaticity (each channel over their sum) ignores light: sun and shadow scale
+# all three channels together, so a kit half in the stand's shadow keeps its chromaticity while its
+# raw colour halves (seed 900001: raw colour learned two greys for a maroon and a blue kit). But it
+# is blind to brightness, so a white and a black kit are one grey (validation seeds 115 and 121).
+# Brightness, in stops, tells those apart; shadow moves it too, which is why it is only chosen when
+# the kits differ by more than the light does.
+FEATURES = ("chromaticity", "brightness")
+NOISE = {"chromaticity": CHROMA_NOISE, "brightness": LIGHT_NOISE}
+
+
+def kit(t: Track, feature: str) -> tuple[float, ...] | None:
+    """The track's kit as a point in `feature`'s space, from its median shirt colour."""
+    med = _median_rgb(t)
+    if med is None:
+        return None
     total = sum(med) + 1e-9
-    return tuple(v / total for v in med)
+    if feature == "chromaticity":
+        return tuple(v / total for v in med)
+    return (math.log2(total / 3 + 1e-9),)
 
 
 def _dist(a, b) -> float:
     return math.dist(a, b)
 
 
-def two_colours(tracks: list[Track]) -> tuple[tuple, tuple] | None:
-    """The two outfield kit colours: 2-means on the tracks' median colours, each track weighted
-    by how many frames it has, started from the two tracks farthest apart. Deterministic."""
-    pts = [(c, len(t.frames)) for t in tracks if len(t.frames) >= MIN_COLOUR_FRAMES
-           and (c := _median_rgb(t)) is not None]
+def _mean(g: list[tuple[tuple, int]]) -> tuple:
+    w = sum(w for _, w in g)
+    return tuple(sum(c[k] * wt for c, wt in g) / w for k in range(len(g[0][0])))
+
+
+def _two_means(pts: list[tuple[tuple, int]]) -> tuple[tuple, tuple] | None:
+    """2-means on frame-weighted points, started from the two points farthest apart. Deterministic.
+    (A split along the main axis was tried on validation and kept seed 120 right only through a
+    tied side vote: docs/eval/detector-plan.md, Outcome.)"""
     if len(pts) < 2:
         return None
     a, b = max(((p, q) for p in pts for q in pts), key=lambda pq: _dist(pq[0][0], pq[1][0]))
@@ -163,21 +185,46 @@ def two_colours(tracks: list[Track]) -> tuple[tuple, tuple] | None:
         gb = [(c, w) for c, w in pts if _dist(c, ca) > _dist(c, cb)]
         if not ga or not gb:
             break
-        mean = lambda g: tuple(sum(c[k] * w for c, w in g) / sum(w for _, w in g) for k in range(3))  # noqa: E731
-        na, nb = mean(ga), mean(gb)
+        na, nb = _mean(ga), _mean(gb)
         if na == ca and nb == cb:
             break
         ca, cb = na, nb
-    # A goalkeeper or referee in a third colour would drag a centre: drop the far tracks once.
-    spread = sorted(min(_dist(c, ca), _dist(c, cb)) for c, _ in pts)
-    typical = max(spread[len(spread) // 2], CHROMA_NOISE)
-    core = [(c, w) for c, w in pts if min(_dist(c, ca), _dist(c, cb)) <= OUTLIER_FACTOR * typical]
-    ga = [(c, w) for c, w in core if _dist(c, ca) <= _dist(c, cb)]
-    gb = [(c, w) for c, w in core if _dist(c, ca) > _dist(c, cb)]
-    if ga and gb:
-        mean = lambda g: tuple(sum(c[k] * w for c, w in g) / sum(w for _, w in g) for k in range(3))  # noqa: E731
-        ca, cb = mean(ga), mean(gb)
     return ca, cb
+
+
+def separation(pts: list[tuple[tuple, int]], ca: tuple, cb: tuple, noise: float) -> float:
+    """How far apart the two centres are, in units of the points' spread about their own centre
+    (frame-weighted root mean square, at least `noise`): scale-free, so two features compare."""
+    sq = sum(w * min(_dist(c, ca), _dist(c, cb)) ** 2 for c, w in pts) / sum(w for _, w in pts)
+    return _dist(ca, cb) / max(math.sqrt(sq), noise)
+
+
+def two_colours(tracks: list[Track]) -> tuple[str, tuple, tuple] | None:
+    """The feature that tells the two outfield kits apart best, and the two kits in it: 2-means on
+    the tracks' kits (each weighted by its frames) in each feature, the one whose centres stand
+    farther apart for their spread kept. Deterministic."""
+    best = None
+    for feature in FEATURES:
+        pts = [(c, len(t.frames)) for t in tracks if len(t.frames) >= MIN_COLOUR_FRAMES
+               and (c := kit(t, feature)) is not None]
+        if len(pts) < 2:
+            return None
+        centres = _two_means(pts)
+        if centres is None:
+            continue
+        ca, cb = centres
+        # A goalkeeper or referee in a third colour would drag a centre: drop the far tracks once.
+        spread = sorted(min(_dist(c, ca), _dist(c, cb)) for c, _ in pts)
+        typical = max(spread[len(spread) // 2], NOISE[feature])
+        core = [(c, w) for c, w in pts if min(_dist(c, ca), _dist(c, cb)) <= OUTLIER_FACTOR * typical]
+        ga = [(c, w) for c, w in core if _dist(c, ca) <= _dist(c, cb)]
+        gb = [(c, w) for c, w in core if _dist(c, ca) > _dist(c, cb)]
+        if ga and gb:
+            ca, cb = _mean(ga), _mean(gb)
+        score = separation(core or pts, ca, cb, NOISE[feature])
+        if best is None or score > best[0]:
+            best = (score, feature, ca, cb)
+    return None if best is None else best[1:]
 
 
 def assign_teams(tracks: list[Track]) -> dict:
@@ -186,12 +233,12 @@ def assign_teams(tracks: list[Track]) -> dict:
     be seen in the output rather than guessed at."""
     colours = two_colours(tracks)
     if colours is None:
-        return {"chromaticity": None, "reason": "fewer than two tracks long enough to learn kits"}
-    ca, cb = colours
-    meds = [(t, _median_rgb(t)) for t in tracks]
+        return {"feature": None, "kits": None, "reason": "fewer than two tracks long enough to learn kits"}
+    feature, ca, cb = colours
+    meds = [(t, kit(t, feature)) for t in tracks]
     spread = sorted(min(_dist(c, ca), _dist(c, cb)) for t, c in meds if c is not None
                     and len(t.frames) >= MIN_COLOUR_FRAMES)
-    typical = max(spread[len(spread) // 2] if spread else 0.0, CHROMA_NOISE)
+    typical = max(spread[len(spread) // 2] if spread else 0.0, NOISE[feature])
     side: dict[int, int | None] = {}
     for t, c in meds:
         if c is None:
@@ -241,9 +288,10 @@ def assign_teams(tracks: list[Track]) -> dict:
         mx = sum(x for x, _ in k.xy) / len(k.xy)
         k.team = "away" if mx >= 52.5 else "home"
         k.side_confidence = round(min(1.0, abs(mx - 52.5) / 52.5), 3)
-    chroma = [[round(v, 3) for v in c] for c in (ca, cb)]
+    kits = [[round(v, 3) for v in c] for c in (ca, cb)]
     return {
-        "chromaticity": {"home": chroma[1 - away], "away": chroma[away]},
+        "feature": feature,
+        "kits": {"home": kits[1 - away], "away": kits[away]},
         "reason": reason,
         "frames_voting": voting,
         "vote_margin": votes if away == 0 else -votes,

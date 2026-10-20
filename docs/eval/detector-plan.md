@@ -120,3 +120,56 @@ from the 900001-only figures and why.
   - The Analyst does **not** see `team_confidence`: `ninety/match/facts.compact` passes `confidence`
     and drops it. This was checked by building the prompt from the fixture.
 - Lessons 148 and 149.
+
+## Outcome
+
+### Step A: side naming (validation)
+
+**A.1, the causes found.** Side accuracy per clip, by track frames, on main:
+
+| Seed | 108 | 115 | 116 | 120 | 121 | 2041 | 2042 | 2043 |
+|---|---|---|---|---|---|---|---|---|
+| Accuracy | 1.00 | 0.60 | 1.00 | 0.11 | 0.18 | 0.89 | 1.00 | 0.46 |
+
+Render run v1 keeps the engine's convention (home's keeper near x = 5 in every clip), so these are
+the detector's errors. Three causes:
+1. **White and black are one colour to chromaticity.** In 121 (white vs black) both kits read
+   grey and land in one cluster. Brightness tells them apart: the median log2 luminance is 7.0
+   for white and 2.7 for black. The same holds, more weakly, in 115 (white vs near-black purple)
+   and 2043 (dark green vs white).
+2. **Kit colours are read wrongly** by `observe.kit_rgb`:
+   - 120's blue home shirts read nearly white, and two white away shirts read cyan (red share 0.02);
+   - 2043's dark green reads grey, because the sampler drops grass-coloured pixels, a green
+     shirt's own;
+   - 108's green reads yellow in two tracks.
+   This needs the image stage re-run and is not fixed here (follow-up).
+3. **A tied side vote picks a side anyway:** `away = 0 if votes > 0 else 1`. Its
+   team_confidence is then 0, which shows it.
+
+**A.2, the change adopted:** each clip clusters its kits in chromaticity or in brightness,
+whichever gives the larger separation (centre distance over the frame-weighted spread, with a
+noise floor). It fixes cause 1.
+
+Variants measured (`uv run python -m ninety.eval.side_variants`; 13 clips, 14 matched passes):
+
+| Variant | Accuracy | Coverage | Teams right on passes |
+|---|---|---|---|
+| v0, main: chromaticity, farthest-pair start | 0.699 | 0.972 | 10 of 14 |
+| **v1, adopted: feature choice, farthest-pair start** | **0.801** | 0.941 | **11 of 14** |
+| v2: feature choice, trimmed main-axis start | 0.824 | 0.945 | 10 of 14 |
+| v3: chromaticity, trimmed main-axis start | 0.843 | 0.954 | 10 of 14 |
+| v4: chromaticity, main-axis start | 0.722 | 0.976 | 9 of 14 |
+| v5: feature choice, main-axis start | 0.898 | 0.947 | 12 of 14 |
+
+v5 scores highest but was **not adopted**. Its main-axis start was meant to stop an odd track
+seeding a kit (cause 2 as first read). On 120 it learned a "home" kit from the two cyan-reading
+away tracks and left the real home players unassigned. The side vote then tied at 0 and fell to
+the right name by default (cause 3). Its gain on 120 is luck, and coverage does not show it.
+
+v1 meets the plan's rule: accuracy rises (0.699 to 0.801) and passes do not fall (10 to 11).
+Coverage falls from 0.972 to 0.941: more tracks are left without a side. 115 gets worse (0.60 to
+0.44): its kit samples overlap in both features.
+
+**team_confidence:** unchanged in form; its colour margin is now in the feature chosen. On
+validation it orders a right side above a wrong one in 80% of (wrong, right) pass pairs; on main
+it was 55%.
