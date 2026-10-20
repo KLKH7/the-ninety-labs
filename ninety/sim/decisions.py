@@ -822,8 +822,6 @@ def pass_option(scene: Scene, mate: tuple[str, float, float, float]) -> Option |
 
 OPEN_RADIUS_M = 5.0  # O3: design: how far from his place in the shape an attacker moves to be open
 OPEN_LANE_STEP_M = 3.0  # O3: design: the pass lane is raced every this many metres, to the spot itself
-# O3: this late a defender, the passer's race is 98% his (D1, sigmoid of 4): more space buys nothing
-OPEN_ENOUGH_S = 4 * LANE_MARGIN_S
 
 
 def lane_margin(px: float, py: float, sx: float, sy: float,
@@ -850,30 +848,39 @@ def lane_margin(px: float, py: float, sx: float, sy: float,
 
 
 def open_spot(slot: tuple[float, float], offset: tuple[float, float], passer: tuple[float, float],
-              defenders: list[tuple[float, float]], onside_x: float, fwd: float) -> tuple[float, float]:
-    """O3: where, within OPEN_RADIUS_M of his place in the shape, an attacker off the ball stands to
-    be most open to a pass from the carrier (lane_margin against the defenders he believes are
-    there), as an offset from that place. He keeps the offset he has unless another beats it by
-    LANE_MARGIN_S, the passer's own sharpness in the race (D1), so a small shift of the defenders
-    does not move him. Never offside as he sees it (L10), never off the pitch, never out of
-    passing range (MAX_PASS_M)."""
+              defenders: list[tuple[float, float]], onside_x: float, goal_x: float) -> tuple[float, float]:
+    """O3: where, within OPEN_RADIUS_M of his place in the shape, an attacker off the ball stands so
+    that a pass to him is worth most, valued as the carrier values one (pass_option): the chance it
+    reaches him there (his lane raced, lane_margin, on D1's sigmoid) times what the ball is worth
+    there (D9, with pass_option's room to play), less the chance it is cut out times what losing it
+    costs. Open space that is worth something (Fernandez and Bornn 2018). Returned as an offset
+    from his place. He keeps the offset he has unless another is worth more by CHOICE_NOISE_GOALS:
+    options closer than that are a coin-flip to the carrier (D4), so moving would change nothing.
+    Never offside as he sees it (L10), never off the pitch, never out of passing range (MAX_PASS_M)."""
     sx, sy = slot
-    if math.hypot(sx - passer[0], sy - passer[1]) > MAX_PASS_M:
+    px, py = passer
+    if math.hypot(sx - px, sy - py) > MAX_PASS_M:
         return (0.0, 0.0)  # out of passing range: not an option to be open for
+    fwd = attack(goal_x)
     rings = [(0.0, 0.0)] + [(r * fmath.cos(a * math.pi / 4), r * fmath.sin(a * math.pi / 4))
                             for r in (OPEN_RADIUS_M / 2, OPEN_RADIUS_M) for a in range(8)]
 
     def legal(dx: float, dy: float) -> bool:
         x, y = sx + dx, sy + dy
         return (0.5 <= x <= PITCH_X - 0.5 and 0.5 <= y <= PITCH_Y - 0.5 and fwd * x <= fwd * onside_x
-                and math.hypot(x - passer[0], y - passer[1]) <= MAX_PASS_M)
+                and math.hypot(x - px, y - py) <= MAX_PASS_M)
 
-    def margin(o: tuple[float, float]) -> float:
-        return min(OPEN_ENOUGH_S, lane_margin(passer[0], passer[1], sx + o[0], sy + o[1], defenders))
+    def worth(o: tuple[float, float]) -> float:
+        x, y = sx + o[0], sy + o[1]
+        reaches = sigmoid(lane_margin(px, py, x, y, defenders) / LANE_MARGIN_S)
+        space = min((math.hypot(ox - x, oy - y) for ox, oy in defenders), default=10.0)
+        gain = value(x, y, goal_x) * (0.7 + 0.3 * min(1.0, space / 5.0))  # as pass_option values room
+        lost = max(loss_cost((px + x) / 2, (py + y) / 2, goal_x), loss_cost(x, y, goal_x))
+        return reaches * gain - (1 - reaches) * lost
 
     held = offset if legal(*offset) and math.hypot(*offset) <= OPEN_RADIUS_M + 1e-9 else (0.0, 0.0)
-    best = max((o for o in rings if legal(*o)), key=margin, default=held)
-    return best if margin(best) > margin(held) + LANE_MARGIN_S else held
+    best = max((o for o in rings if legal(*o)), key=worth, default=held)
+    return best if worth(best) > worth(held) + CHOICE_NOISE_GOALS else held
 
 
 def short_pass_lean(dist: float) -> float:

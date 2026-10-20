@@ -11,39 +11,46 @@ PASSER, SLOT = (45.0, 34.0), (60.0, 34.0)
 
 def test_an_attacker_whose_lane_is_blocked_moves_to_where_it_is_open():
     blocker = [(52.5, 34.3)]  # on the line from the carrier to his place in the shape
-    dx, dy = D.open_spot(SLOT, (0.0, 0.0), PASSER, blocker, 80.0, 1.0)
+    dx, dy = D.open_spot(SLOT, (0.0, 0.0), PASSER, blocker, 80.0, 105.0)
     assert abs(dy) > 1.0  # off the line, not along it
     blocked = D.lane_margin(*PASSER, *SLOT, blocker)
     opened = D.lane_margin(*PASSER, SLOT[0] + dx, SLOT[1] + dy, blocker)
     assert blocked < 0 < opened  # the defender would cut out the pass to his place, not to the new one
 
 
-def test_an_attacker_with_space_stays_at_his_place():
-    far = [(30.0, 10.0), (75.0, 60.0)]  # nobody near the lane: every spot is open enough
-    assert D.open_spot(SLOT, (0.0, 0.0), PASSER, far, 80.0, 1.0) == (0.0, 0.0)
-    assert D.open_spot(SLOT, (0.0, 0.0), PASSER, [], 80.0, 1.0) == (0.0, 0.0)
+def test_an_attacker_with_space_in_midfield_stays_and_one_near_goal_attacks_the_space():
+    far = [(30.0, 10.0), (75.0, 60.0)]  # nobody near: every spot is open
+    # In midfield 5 m forward is worth under CHOICE_NOISE_GOALS more (D9): not worth moving for.
+    assert D.open_spot(SLOT, (0.0, 0.0), PASSER, far, 80.0, 105.0) == (0.0, 0.0)
+    assert D.open_spot(SLOT, (0.0, 0.0), PASSER, [], 80.0, 105.0) == (0.0, 0.0)
+    # Near goal it is: he steps toward goal, as far as his radius and the onside line allow.
+    dx, dy = D.open_spot((85.0, 34.0), (0.0, 0.0), (70.0, 34.0), [], 95.0, 105.0)
+    assert dx > 2.0 and 85.0 + dx <= 95.0
+    dx, _ = D.open_spot((85.0, 34.0), (0.0, 0.0), (70.0, 34.0), [], 86.0, 105.0)
+    assert 85.0 + dx <= 86.0 + 1e-9  # never past the onside line as he sees it
 
 
 def test_he_keeps_his_spot_unless_another_is_clearly_more_open():
     blocker = [(52.5, 34.3)]
-    moved = D.open_spot(SLOT, (0.0, 0.0), PASSER, blocker, 80.0, 1.0)
-    assert D.open_spot(SLOT, moved, PASSER, blocker, 80.0, 1.0) == moved  # asked again: the same answer
+    moved = D.open_spot(SLOT, (0.0, 0.0), PASSER, blocker, 80.0, 105.0)
+    assert D.open_spot(SLOT, moved, PASSER, blocker, 80.0, 105.0) == moved  # asked again: the same answer
     nudged = [(52.5, 34.0)]  # the defender shifts a little: not enough to change his mind
-    assert D.open_spot(SLOT, moved, PASSER, nudged, 80.0, 1.0) == moved
+    assert D.open_spot(SLOT, moved, PASSER, nudged, 80.0, 105.0) == moved
 
 
 def test_he_never_moves_offside_off_the_pitch_or_out_of_passing_range():
     crowd = [(x, y) for x in (50.0, 55.0, 62.0) for y in (30.0, 34.0, 38.0)]
-    for slot, onside, fwd in (((60.0, 34.0), 61.0, 1.0), ((78.0, 10.0), 90.0, 1.0), ((76.0, 2.0), 90.0, 1.0),
-                              ((40.0, 34.0), 30.0, -1.0)):
-        dx, dy = D.open_spot(slot, (0.0, 0.0), PASSER, crowd + [(slot[0] - 4.0, slot[1])], onside, fwd)
+    for slot, onside, goal in (((60.0, 34.0), 61.0, 105.0), ((78.0, 10.0), 90.0, 105.0),
+                               ((76.0, 2.0), 90.0, 105.0), ((40.0, 34.0), 30.0, 0.0)):
+        fwd = 1.0 if goal else -1.0
+        dx, dy = D.open_spot(slot, (0.0, 0.0), PASSER, crowd + [(slot[0] - 4.0, slot[1])], onside, goal)
         x, y = slot[0] + dx, slot[1] + dy
         assert math.hypot(dx, dy) <= D.OPEN_RADIUS_M + 1e-9
         assert 0.5 <= x <= 104.5 and 0.5 <= y <= 67.5
         assert fwd * x <= fwd * onside + 1e-9
         assert math.hypot(x - PASSER[0], y - PASSER[1]) <= D.MAX_PASS_M + 1e-9
     # Out of passing range already, he is nobody's option: he keeps his place.
-    assert D.open_spot((100.0, 60.0), (0.0, 0.0), PASSER, crowd, 104.0, 1.0) == (0.0, 0.0)
+    assert D.open_spot((100.0, 60.0), (0.0, 0.0), PASSER, crowd, 104.0, 105.0) == (0.0, 0.0)
 
 
 def _carrier_and_mate():

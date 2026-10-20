@@ -1743,7 +1743,7 @@ class Engine:
         return wait + math.hypot(x - bx, y - by) / decisions.PASS_SPEED_EST_MPS
 
     def open_spot(self, p: Player, slot: tuple[float, float], onside: float) -> tuple[float, float]:
-        """O3: his place in the shape, moved to where he is most open to a pass from the carrier as he
+        """O3: his place in the shape, moved to where a pass from the carrier is worth most, as he
         last saw it (decisions.open_spot). He looks again only when he scans (P13), so between scans
         he keeps his offset and moves with the shape; with nobody on the ball he keeps it too."""
         carrier = self.by_id.get(self.possessor) if self.possessor else None
@@ -1754,7 +1754,7 @@ class Engine:
             defenders = [w for w in (view.where(q.id, self.t) for q in self.players
                                      if q.team != p.team and q.role != "GK") if w]
             self.open_at[p.id] = decisions.open_spot(slot, self.open_at.get(p.id, (0.0, 0.0)), at,
-                                                     defenders, onside, attack_dir(p.team))
+                                                     defenders, onside, goal_x(p.team))
         dx, dy = self.open_at.get(p.id, (0.0, 0.0))
         return clamp(slot[0] + dx, 0.5, PITCH_X - 0.5), clamp(slot[1] + dy, 0.5, PITCH_Y - 0.5)
 
