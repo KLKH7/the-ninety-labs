@@ -883,7 +883,8 @@ short and actionable. This file is public: no research sources, product names or
   as `rejected` (the claim is wrong) instead of `held` (it could not be checked); and an Analyst
   that failed, hung on an MCP call or replied with prose raised out of `live.run`, taking the
   template graphics down with it.
-- **Rule:** every fallback claimed in docs/eval/failure-table.md is a row produced by injecting
+- **Rule:** every fallback claimed in a failure table (docs/eval/failure-table-m1.md, and the
+  multi-agent workflow's docs/eval/failure-table.md) is a row produced by injecting
   that failure into the real path, asserted by a test with the expected outcome written in the
   test. A status is computed by `status_for`, never re-derived.
 - **Check:** `uv run pytest tests/test_failure_table.py`; removing the `live.run` fallback or
@@ -1125,3 +1126,79 @@ short and actionable. This file is public: no research sources, product names or
   and re-measure.
 - **Check:** `tests/test_shape.py::test_the_team_is_never_longer_than_the_published_range_and_the_back_line_never_ahead_of_the_ball`
   sweeps ball and line positions; on the old rule it fails (48 m long with the ball 35 m out).
+
+### 112. Every kick the decision layer aims is judged by the same Laws as a pass
+- **What happened:** the pass estimate counted a ball leaving the pitch (Law 9), but the clearance,
+  added separately, was aimed at one fixed spot 4 m from the touchline with no such check. With the
+  passer's own kick error, about a third of clearances went straight out with nobody near.
+- **Rule:** an option that sends the ball somewhere is valued over the strikes the kicker's error
+  allows, with the pass estimate's own pieces (`decisions.clear_value` reuses `strike_nodes`,
+  `flight`, `out_of_play`, `reach_time` and the P16 turn); where it simplifies them (a hard race, no
+  body in the way), the row says so (GROUNDING D9). A new kind of kick does not get its own physics.
+- **Check:** `tests/test_decisions.py::test_an_unpressed_clearance_is_not_aimed_where_his_kick_error_puts_it_out`.
+
+### 113. A test over a folder says which files are its own
+- **What happened:** two tests read every file in `replays/` as a slice recording (`*.json`):
+  the committed-replay test and the byte-for-byte round trip. Both passed while the folder held
+  only slice files. The first workflow recording (format 1) turned them red with "format 1 slice
+  recording", though nothing was wrong with either file.
+- **Rule:** a test that loops over a folder selects the files of its own kind by name
+  (`slice-*.json`, `workflow-*.json`), and fails when the folder holds a file no kind claims, so a
+  new file is never skipped in silence.
+- **Check:** `tests/test_replay.py::test_every_committed_recording_round_trips_byte_for_byte`
+  fails with an unclaimed file in `replays/`, and fails when a workflow recording no longer saves
+  byte for byte.
+
+### 120. An exemption in a check is where a defect hides: reach the state, do not place it
+- **What happened:** the engine placed a new ball at the taker's feet at every restart and reset
+  all 22 players at every goal. The validator exempts dead-ball windows from the ball-speed check
+  and kickoff frames from the player-speed check, so nothing failed. The ball jumped more than
+  3 m in one frame about 70 times per 90 minutes (median 7.5 m), and every goal reset the pitch
+  in one frame. Viewers saw it; no test did.
+- **Rule:** a state the match needs (the ball on the restart spot, the teams in kick-off shape)
+  is reached by the engine's own movement: players go there and fetch the ball, within their
+  bodies and the ball's physics (lesson 5). An exemption in a check is allowed only for a real
+  discontinuity in the broadcast (a cut) and is listed as a known gap until the engine no longer
+  needs it.
+- **Check:** `uv run pytest tests/test_restarts.py` records every frame from before the stop to
+  the kick, including the frame the restart is given, and fails on a ball or player step faster
+  than the validator's limits. `scripts/defect_sweep/restarts.py` counts ball jumps over 3 m per
+  90 minutes (0 over 16 matches of 20 minutes, `docs/eval/restarts.md`).
+
+### 121. A Law is all of its clauses: read the whole restart, not the part the defect named
+- **What happened:** the restart fix enforced the distances and "in play when kicked and clearly
+  moves", and took any movement of the set ball as the kick. The taker could then carry the set
+  ball off and pass it, touching it twice before anyone else (55 of 340 restarts). The owner saw it
+  in a clip as "he passed to himself". The same Laws (8, 13 to 17) say the taker may not touch it
+  again until another player has; that clause was never implemented, so no test asked for it.
+- **Rule:** when implementing a Law, list every clause of it in the GROUNDING row and give each a
+  test, including the clauses no defect report mentioned.
+- **Check:** `uv run pytest tests/test_restarts.py -k "dribble or first_touch or again"`; on the
+  engine before the fix the set ball's first movement is not a pass or shot by the taker.
+
+### 122. A rule every kind of case shares is tested on every kind, run to the end
+- **What happened:** moving the restart taker a ball's width behind the ball was tested on a
+  free kick only. At a corner the readiness check still measured from the corner point, the taker
+  stood 1.09 m from it, and the corner was never taken: 7 of 16 measured matches froze for the
+  rest of their 20 minutes. Every unit test passed; only the 16-match measurement showed it.
+- **Rule:** a change to a rule that every restart (or every kind of any case) goes through gets a
+  test that runs each kind to completion. A measurement counts stuck states as a defect, not as
+  quiet time.
+- **Check:** `uv run pytest tests/test_restarts.py -k every_kind`; `scripts/defect_sweep/restarts.py`
+  reports `stuck_restarts`, which must be 0.
+
+### 123. An async client handed a sync credential signs in late and blocks the loop
+- **What happened:** the slice, the fact-checker evaluation and the Analyst evaluation each made
+  a sync `DefaultAzureCredential` and passed it to Foundry's async clients, and
+  `foundry.chat_client` made one by default. A sync credential fetches its token on the event
+  loop's thread, stalling every concurrent call. It fetches it only at the first model call,
+  after the evaluation has simulated its matches, by which time agents-live's five-minute OIDC
+  sign-in can have expired. The fact-checker evaluation lost 19 of 251 Judge calls, most likely to
+  this (not yet confirmed by a rerun). The workflow
+  (W1) had already fixed this for itself; the rest never took the fix.
+- **Rule:** every live run makes one aio credential (`credentials.new_credential`), signs in
+  (`credentials.sign_in`) before anything slow, and passes that object to the chat client and
+  every agent. A client factory takes no default credential.
+- **Check:** `tests/test_credentials.py`. Each site takes the token before it simulates, and
+  hands the same `SignedIn` credential to every client; deleting any `sign_in` turns its test
+  red. An AST check keeps `azure.identity.DefaultAzureCredential` out of the live modules.

@@ -21,7 +21,9 @@ OUTPUTS = {
     "planted": ROOT / "docs/eval/fact-checker-planted.md",
     "ablation": ROOT / "docs/eval/ablation.md",
     "results": ROOT / "docs/eval/ablation.json",
-    "failures": ROOT / "docs/eval/failure-table.md",
+    # The M1 live path's failures (ninety/agents/live.run). The multi-agent workflow's table is
+    # docs/eval/failure-table.md (ninety/eval/workflow_failures.py).
+    "failures": ROOT / "docs/eval/failure-table-m1.md",
 }
 
 
