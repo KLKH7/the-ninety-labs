@@ -42,6 +42,7 @@ from ninety.agents.contracts import Personalize, Profile, TraceStep
 from ninety.agents.cues import DISPLAY_SECONDS, SCHEMA, template_cues, write_fixture
 from ninety.agents.ledger import InMemoryLedger, Record, load_match
 from ninety.agents.slice import Ask, Judge, Outcome, run_workflow
+from ninety.intel.windows import agent_rows
 from ninety.match import detected
 from ninety.match.facts import AGENT_TYPES, compact
 from ninety.personalizer import cues as personal
@@ -68,9 +69,17 @@ class LiveResult:
     trace: list[TraceStep] = field(default_factory=list)
 
 
-def insight_cue(outcome: Outcome, times: dict[str, float]) -> dict:
-    """The verified claim as an on-screen cue, timed from the last event it cites."""
+def insight_cue(
+    outcome: Outcome, times: dict[str, float], stat_events: dict[str, list[str]] | None = None
+) -> dict:
+    """The verified claim as an on-screen cue, timed from the last event it cites (for a window
+    stat, the last event the stat counts). A cue's evidence is event ids (the overlay schema), so
+    a cited stat is replaced by the events it counts."""
+    stat_events = stat_events or {}
     t_in = max(times[i] for i in outcome.claim.evidence)
+    evidence = list(dict.fromkeys(
+        j for i in outcome.claim.evidence for j in stat_events.get(i, [i])
+    ))
     cue = {
         "id": "insight-" + "-".join(outcome.claim.evidence),
         "t_in": t_in,
@@ -83,7 +92,7 @@ def insight_cue(outcome: Outcome, times: dict[str, float]) -> dict:
         "text": outcome.claim.text,
         "verified": True,
         "replaces": None,
-        "evidence": list(outcome.claim.evidence),
+        "evidence": evidence,
     }
     validate(cue, SCHEMA)
     return cue
@@ -113,10 +122,16 @@ async def run(
     if ask is not None and judge is not None and minute is not None:
         # The fact-checker knows what the Analyst can read over MCP: the compact detected events.
         rows = [compact(e) for e in events if e["type"] in AGENT_TYPES]
+        stats = agent_rows(events)  # the window stats, as the MCP server serves them
         times = {e["id"]: e["t"] for e in events}
+        fact_records = {r.id: r for r in await ledger.query(kind="fact")}
+        stat_events = {s["id"]: list(fact_records[s["id"]].evidence) for s in stats}
+        times |= {s["id"]: fact_records[s["id"]].t for s in stats}
         try:
             outcome = await asyncio.wait_for(
-                run_workflow(ask, judge, minute, False, int(clip.removeprefix("seed")), 0, False, rows),
+                run_workflow(
+                    ask, judge, minute, False, int(clip.removeprefix("seed")), 0, False, rows, stats
+                ),
                 timeout=timeout_seconds,
             )
         except TimeoutError:
@@ -131,7 +146,7 @@ async def run(
         ))
         if outcome.accepted:
             with telemetry.stage_span("cue", kind="insight"):
-                cues.append(insight_cue(outcome, times))
+                cues.append(insight_cue(outcome, times, stat_events))
             if personalize is not None:
                 with telemetry.stage_span("cue", kind="personalized"):
                     personalized, refused = await _personalized(
