@@ -1,6 +1,8 @@
 """The public API and the demo site, served from one Azure Container App.
 
     GET  /                 the viewer (web/viewer, built into the image)
+    GET  /phone/           the phone companion (web/phone), on the viewer's origin: the viewer's
+                           "connect your phone" QR code points at phone/ beside itself
     GET  /bundle/...       the Replay bundle the viewer plays: one clip through the whole chain,
                            made by ninety-e2e ahead of time (infra/replay.py), so a view costs nothing
     GET  /api/health       the commit this image was built from (the deploy smoke test reads it)
@@ -24,7 +26,7 @@ from pathlib import Path
 
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, RedirectResponse
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
@@ -37,6 +39,7 @@ COMMIT = os.environ.get("NINETY_COMMIT") or "dev"
 KEY_HEADER = b"x-api-key"
 PASSCODE_HEADER = b"x-demo-passcode"
 VIEWER_DIR = Path(os.environ.get("NINETY_VIEWER_DIR") or ROOT / "web" / "viewer" / "dist")
+PHONE_DIR = Path(os.environ.get("NINETY_PHONE_DIR") or ROOT / "web" / "phone" / "dist")
 REPLAY_DIR = Path(os.environ.get("NINETY_REPLAY_DIR") or ROOT / "runs" / "replay")
 
 # Same origin only: the viewer loads its scripts, styles, bundle and video from this host and
@@ -113,11 +116,12 @@ class SecurityHeaders:
 
 
 def build(key: str | None = None, passcode: str | None = None, viewer: Path | None = None,
-          replay: Path | None = None) -> Starlette:
+          replay: Path | None = None, phone: Path | None = None) -> Starlette:
     mcp = match_server.make_server()
     mcp_app = mcp.streamable_http_app()
     viewer = VIEWER_DIR if viewer is None else viewer
     replay = REPLAY_DIR if replay is None else replay
+    phone = PHONE_DIR if phone is None else phone
 
     @contextlib.asynccontextmanager
     async def lifespan(app: Starlette):
@@ -130,8 +134,12 @@ def build(key: str | None = None, passcode: str | None = None, viewer: Path | No
         Mount("/api/live", RequireKey(live, passcode, PASSCODE_HEADER, "NINETY_DEMO_PASSCODE", "Live mode")),
         Route("/mcp", RequireKey(mcp_app, key)),
     ]
-    # A checkout without a built viewer or a Replay bundle still serves the API; the image has both
-    # (Dockerfile), and the live smoke test (tests/test_live_smoke.py) fails if either is missing.
+    # A checkout without a built viewer, phone or Replay bundle still serves the API. The image has
+    # the viewer and the bundle (Dockerfile), and the live smoke test fails if either is missing.
+    if phone.is_dir():
+        # /phone without the slash would fall through to the viewer's mount at /; send it home.
+        routes.append(Route("/phone", lambda request: RedirectResponse("/phone/", status_code=308)))
+        routes.append(Mount("/phone", StaticFiles(directory=phone, html=True)))
     if replay.is_dir():
         routes.append(Mount("/bundle", StaticFiles(directory=replay)))
     if viewer.is_dir():

@@ -18,8 +18,11 @@ def site(tmp_path):
     replay.mkdir()
     (replay / "manifest.json").write_text(json.dumps({"format": 1}))
     (replay / "video.webm").write_bytes(bytes(range(256)) * 4)
+    phone = tmp_path / "phone"
+    phone.mkdir()
+    (phone / "index.html").write_text("<!doctype html><title>phone</title>")
     (tmp_path / "secret.txt").write_text("outside the bundle")
-    return TestClient(api.build("k" * 64, "p" * 24, viewer, replay))
+    return TestClient(api.build("k" * 64, "p" * 24, viewer, replay, phone))
 
 
 def test_the_viewer_is_served_at_the_root(site):
@@ -27,6 +30,15 @@ def test_the_viewer_is_served_at_the_root(site):
     assert r.status_code == 200 and "<title>viewer</title>" in r.text
     assert r.headers["cache-control"] == "no-store"
     assert "immutable" in site.get("/assets/index-abc.js").headers["cache-control"]
+
+
+def test_the_phone_companion_is_served_beside_the_viewer(site):
+    # The viewer's QR code points at phone/ relative to its own page (web/viewer/src/companion.ts).
+    for path in ("/phone/", "/phone"):
+        r = site.get(path)
+        assert r.status_code == 200 and "<title>phone</title>" in r.text, path
+    assert "frame-ancestors 'none'" in site.get("/phone/").headers["content-security-policy"]
+    assert site.get("/phone/../secret.txt").status_code == 404
 
 
 def test_the_replay_bundle_is_served_with_byte_ranges(site):
@@ -66,3 +78,4 @@ def test_without_a_viewer_or_bundle_the_api_still_answers(tmp_path):
     assert client.get("/api/health").status_code == 200
     assert client.get("/").status_code == 404
     assert client.get("/bundle/manifest.json").status_code == 404
+    assert client.get("/phone/").status_code == 404
