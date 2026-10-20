@@ -207,7 +207,8 @@ SHAPE_IN_POSSESSION = {
 }
 DEEPEST_M = 12.0  # nobody's in-possession spot is deeper than this from his own goal
 # O6, R8: a team in possession is at most this long, its deepest outfield player to its most
-# advanced: the top of the published in-possession range (31 to 46 m, Rico-Gonzalez review). With
+# advanced (*design*: a cap at the top of the typical lengths reported across studies, 31 to 46 m,
+# Rico-Gonzalez review; the source gives a range, not a maximum). With
 # the ball deep the team does not collapse onto it: the back line stands no further behind the
 # forwards than this, so the shape spreads, as teams spread most in build-up (stretch index and
 # effective area highest in build-up play, Hands et al. 2026, Int. J. Perf. Anal. Sport).
@@ -246,7 +247,7 @@ def attacking_slot(role: str, own_goal_x: float, ball_x: float, ball_y: float,
             return own_goal_x + fwd * u, PITCH_Y / 2 + ball_side * side
     behind, width = shape
     deepest = max(b for b, _ in SHAPE_IN_POSSESSION.values() if b is not None)
-    front_u = max(last_u, ball_u - 5.0)  # the forwards: their last line, never far behind the ball
+    front_u = last_u  # the forwards: their last line (and never far behind the ball, below)
     # R8: no longer than LENGTH_MAX_M, so the roles behind the ball move up; but the back line never
     # ahead of the ball (design: it stays goal-side of it, as cover if the ball is lost)
     up = min(deepest, max(0.0, front_u - LENGTH_MAX_M - (ball_u - deepest)))

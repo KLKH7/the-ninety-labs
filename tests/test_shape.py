@@ -85,13 +85,15 @@ def test_with_the_keeper_on_the_ball_only_the_centre_backs_stay_near_him():
 
 
 def test_the_team_is_never_longer_than_the_published_range_and_the_back_line_never_ahead_of_the_ball():
+    # Every ball position, central and wide (the box runs too), their line ahead of or behind it.
     for ball_x in range(0, 106, 5):
-        for line in range(max(53, ball_x), 105, 4):
-            spots = [slot(r, ball_x=float(ball_x), ball_y=34.0, line=float(line)) for r in ALL]
-            xs = [s[0] for s in spots]
-            assert max(xs) - min(xs) <= R8_LENGTH_MAX_M + 1e-9, (ball_x, line)
-            back = min(slot(r, ball_x=float(ball_x), line=float(line))[0] for r in BEHIND)
-            assert back <= max(ball_x, O.DEEPEST_M) + 1e-9, (ball_x, line)
+        for ball_y in (4.0, 20.0, 34.0, 50.0, 64.0):
+            for line in range(53, 105, 4):
+                spots = [slot(r, ball_x=float(ball_x), ball_y=ball_y, line=float(line)) for r in ALL]
+                xs = [s[0] for s in spots]
+                assert max(xs) - min(xs) <= R8_LENGTH_MAX_M + 1e-9, (ball_x, ball_y, line)
+                back = min(slot(r, ball_x=float(ball_x), ball_y=ball_y, line=float(line))[0] for r in BEHIND)
+                assert back <= max(ball_x, O.DEEPEST_M) + 1e-9, (ball_x, ball_y, line)
 
 
 def test_in_midfield_the_shape_is_the_template_behind_the_ball():
@@ -106,3 +108,22 @@ def test_pressed_high_the_team_may_still_be_deep():
     # Their last line 55 m out squeezes the team: the back line stays deep, the length is short.
     spots = {r: slot(r, ball_x=20.0, line=55.0) for r in ALL}
     assert spots["RCB"][0] == O.DEEPEST_M
+
+
+def test_with_the_ball_deep_the_forwards_still_hold_their_line_as_far_as_the_length_allows():
+    # Ball 20 m out, their line 70 m out: the back line moves up level with the ball and the
+    # striker stands 46 m ahead of it, pinning their defence (not 25 m from the ball, as it once was).
+    assert abs(slot("RCB", ball_x=20.0, line=70.0)[0] - 20.0) < 1e-9
+    assert abs(slot("ST", ball_x=20.0, line=70.0)[0] - (20.0 + R8_LENGTH_MAX_M)) < 1e-9
+
+
+def test_against_a_deep_block_the_whole_shape_moves_up():
+    # Ball on halfway, their line 85 m out: the forwards hold it and the team is 46 m long, so the
+    # centre-backs stand 38 m out, not 26 m.
+    assert abs(slot("ST", ball_x=50.0, line=85.0)[0] - 84.0) < 1e-9
+    assert abs(slot("RCB", ball_x=50.0, line=85.0)[0] - (84.0 - R8_LENGTH_MAX_M)) < 1e-9
+
+
+def test_with_the_ball_beyond_their_line_the_forwards_stay_near_it():
+    # Ball 90 m out in the middle, their line 85 m: nobody waits behind; forwards within 5 m of it.
+    assert slot("ST", ball_x=90.0, line=85.0)[0] >= 85.0
