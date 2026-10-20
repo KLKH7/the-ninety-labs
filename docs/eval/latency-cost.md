@@ -100,7 +100,7 @@ What the budget leaves for them, in characters of the S1 neural voice:
 | every claim accepted first time | $0.271 | 18,043 | 200 |
 | every claim three drafts | $0.028 | 1,881 | 21 |
 
-For scale: the casual persona's graphics in `tests/fixtures/cues-seed7.jsonl` say 908 characters in 5 minutes (54 cues), 182 a minute, and a spoken line is longer
+For scale: the casual persona's graphics in `tests/fixtures/cues-seed7.jsonl` say 990 characters in 5 minutes (63 cues), 198 a minute, and a spoken line is longer
 ("Home 10" for h10, units in full). Speaking every described event in the Azure voice fits only
 when the claims rarely need rewriting. The viewer's browser voice costs nothing; the Azure voice
 can be kept for shots, goals and verified claims.
