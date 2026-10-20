@@ -50,7 +50,8 @@ PRESSURE_FRONT_M, PRESSURE_BEHIND_M = perception.PRESSURE_FRONT_M, perception.PR
 # check, not a fit: shots from about 32 m to halfway scored 2.5% (Premier League, 929 shots) and 1.9%
 # (Bundesliga, 880) in 2012-13, direct free kicks included (Rathke 2017, Table 1, zone 8). A player's
 # sense of a good chance comes from what goes in, not from the open goal he sees.
-SHOT_ANCHORS = ((0.0, 0.31), (3.0, 0.31), (11.0, 0.177), (20.0, 0.053), (30.0, 0.023), (40.0, 0.01))
+SHOT_ANCHORS = ((0.0, 0.31), (3.0, 0.31), (11.0, 0.177), (20.0, 0.053), (30.0, 0.023),
+                (offball.SHOT_RANGE_M, 0.01))  # the 1% at the end of range: *design*
 BLOCKER_FACTOR = 0.5  # design, verify: each defender in the shooting cone blocks the shot half the time
 # D3: the zone rates are averages over real shots, which usually face a defender. Relative to that
 # average, a shot with no outfield defender in the triangle between the ball and the posts (the

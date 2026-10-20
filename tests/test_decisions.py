@@ -860,6 +860,10 @@ def test_a_shot_is_an_option_only_within_range_of_the_goal_straight_line():
     assert "shoot" not in kinds(wide)
     assert "shoot" in kinds(scene(x=105.0 - 36.0, y=34.0 - 10.0))  # 37 m: in range
     assert "shoot" in kinds(scene(x=105.0 - 39.0, y=34.0))  # central, just inside
+    # from the goal's centre, not a post: 40.7 m from the centre (39.1 m from the near post) is out,
+    # 39.0 m from the centre (40.5 m from the far post) is in
+    assert "shoot" not in kinds(scene(x=69.0, y=15.0))
+    assert "shoot" in kinds(scene(x=69.0, y=19.0))
     # the side attacking x = 0 alike
     assert "shoot" not in kinds(scene(x=36.0, y=34.0 + 25.0, goal_x=0.0))
 
