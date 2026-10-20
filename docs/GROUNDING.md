@@ -169,6 +169,28 @@ formula, not a check, so the columns say where it comes from and what tests it.
 | S4 | **Window length** 15 minutes: the shortest that held a median of 11 attacking-third passes a window and a defensive action in every team-window, measured on seeds 7 and 11 over 90 minutes; 5 minutes held 3 | measurement precision ([INTELLIGENCE.md](INTELLIGENCE.md#windows-and-shifts)) | stat | ✅ |
 | S5 | **Territory shift**: a side leads a window only when its field tilt is more than one standard error from level, 0.5 / sqrt(n) for n passes (the largest standard error a share of n can have, at 0.5); a shift is a window led by the other side from the last window that had a leader | the standard error of a binomial proportion, sqrt(p(1 - p) / n), at p = 0.5; one standard error is *design* | stat | ✅ |
 
+### Football sense: it looks like sensible football (counts)
+
+Outcome rates (R3, R4) can sit in their bands while the play looks wrong. These count what a fan
+would call dumb play, per 90 minutes, with timestamps to watch: `uv run ninety-football-sense
+<match dir>` (`ninety/eval/football_sense.py`, written apart from the engine; protocol in
+[EVALUATION.md](EVALUATION.md#football-sense-fs1-to-fs9)). They are counts, not pass/fail lines:
+there is no published rate for most of them, so a fix is judged by its count falling between
+engine versions on the same seeds, never by a count set as a target. Engine column: seeds 7, 11,
+21 and 42, 20 minutes each, engine `7ee8720` (2026-10-19).
+
+| ID | Check | Source | Checker | Engine |
+|---|---|---|---|---|
+| FS1 | a loose ball (it came off a player, a deflection or tackle, or is a failed pass nobody took; not a pass or shot in flight) below head height (2 m, *design*): the nearest player, within 3 m of it, ends 0.5 s later at least 0.5 m (*design*) further from where the ball went than braking straight at 8.5 m/s² would have left him. Not counted: the player who kicked it, for 1 s (*design*), or one in an offside position after a team-mate's pass | the 3 m and 0.5 s are the task's definition; braking from P2 ([Harper 2020](https://knowledge.lancashire.ac.uk/id/eprint/33971/)); offside from Law 11 | ✅ | 27 a 90 |
+| FS2 | a pass whose next on-ball event is the ball going out of play, nobody controlling it on the way, with no opponent within 3 m of the passer as he plays it | 3 m: the shortest reach of the pressure zone, behind the player (D2, Andrienko et al. 2017); out of play by Law 9, as the engine records it | ✅ | 23.6 a 90 |
+| FS3 | an opponent's pass on or near the ground (under 1 m, *design*) running toward a keeper's goal in the last 30 m (*design*): every player racing straight at 7 m/s (*design*, under the 7.9 to 8.6 m/s match peaks, R6) to meet it within 1 m along the path it actually took over the next 3 s (*design*), the keeper gets there at least 0.3 s (*design*) before the first attacker and before every defender, yet moves under 1 m toward it in the next second (*design*) and does not end up with it | race from R6; the rest *design* | ✅ | 0: in 80 minutes no contested through ball where the keeper was first; the engine plays very few balls into that space |
+| FS4 | outfield players moving under 0.5 m/s in open play, counted for the team with the ball and the team without it, from 3 s (*design*) after each restart; reported as a distribution, no line | 0.5 m/s is the task's definition; [Bradley 2009](https://sure.sunderland.ac.uk/id/eprint/3478/) calls 0 to 0.6 km/h standing (*verify*: read from the abstract) | ✅ report | with the ball, 5 or more still 9% of open play; without it, 5 or more still 32%, 8 or more 23% |
+| FS5 | more than half of all outfield players within 10 m of the ball for at least 1 s (*design*) of open play, from 3 s after a restart | the most compact published team, 31 m × 35 m (R8, Rico-González), spreads 10 outfield players over about 1,085 m²; a 10 m circle is under a third of that | ✅ | 0 |
+| FS6 | a pass that starts and ends in the passer's own penalty area; and a possession with three or more of them (*design*) | Law 1 (the area); the threshold is *design* | ✅ | 202.5 passes and 20.2 possessions a 90 |
+| FS7 | a pass whose forward part is under half its length (*design*) while an outfield team-mate other than its target is at least 5 m further forward than the ball (*design*), within 40 m (*design*), onside, with no opponent within 3 m of him and none within 2 m (*design*) of the line to him | 3 m from D2; offside from Law 11 | ✅ report | 490.5 a 90, 43% of passes; no published rate, so read between versions |
+| FS8 | a loose ball in open play moving under 1 m/s (*design*), nobody within 1 m (*design*), for 2 s (*design*), and the nearest player of neither team more than 1 m (*design*) closer by then | *design* | ✅ | 0 |
+| FS9 | more than half the outfield players of the team with the ball inside their own penalty area for 2 s (*design*) of open play, from 3 s after a restart | Law 1 (the area); the threshold is *design* | ✅ | 63 a 90 |
+
 ### Renderer truth: the labels match the pictures
 
 | ID | Check | Source | Kind | Validator | Renderer |
