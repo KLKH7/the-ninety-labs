@@ -557,3 +557,31 @@ def test_the_restart_taker_does_not_chase_it_even_after_it_comes_off_himself():
     e.t += 1.0  # everyone has reacted
     e.plan_chase()
     assert e.chase.get("home", (None,))[0] != taker.id
+
+
+def test_a_set_ball_beside_him_is_not_struck_through_his_own_body():
+    """Defect: a set ball at his shoulder was struck along his body and came straight back off him."""
+    e, taker = set_free_kick_in_space(3)
+    for _ in range(3):
+        e.step()
+    assert e.set_by is not None and e.possessor == taker.id
+    taker.heading = math.radians(83)  # as in seed 7 at 3:14
+    taker.x, taker.y = 50.34, 33.9  # the ball against his right shoulder
+    assert not e.can_strike(taker, 51.34, 42.31)  # its way out runs across his shoulder
+    taker.heading = math.atan2(8.31, 1.34)
+    taker.x, taker.y = 50.0 - 1.34 / 8.42 * 0.4, 34.0 - 8.31 / 8.42 * 0.4  # behind it, facing the kick
+    assert e.can_strike(taker, 51.34, 42.31)
+
+
+def test_a_fetcher_near_the_boards_runs_no_faster_than_he_can_stop_before_them():
+    """Defect: a fetcher ran at full pace at a ball against the boards and hit them."""
+    from ninety.sim.body import stopping_speed
+    e = Engine(3)
+    still(e)
+    free_kick(e, "home", 40.0, 0.5)
+    e.ball = (43.0, -4.0, 0.0, 0.0, 0.0, 0.0)  # against the boards
+    p = e.by_id["h2"]
+    p.x, p.y = 45.0, -3.0  # a metre from them
+    e.restart.fetcher = p.id
+    _, _, speed = e.shape_target(p)
+    assert speed <= stopping_speed(1.0) + 1e-9

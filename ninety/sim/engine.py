@@ -33,6 +33,7 @@ from ninety.sim.body import (
     Body,
     can_get_to,
     relative_speed,
+    stopping_speed,
 )
 from ninety.sim.body import move as move_body
 from ninety.sim.decisions import PENALTY_DEPTH, PENALTY_HALF_WIDTH
@@ -640,7 +641,16 @@ class Engine:
         if self.throw_by == carrier.id:  # Law 15: in his hands over his head, thrown at once
             return True
         bx, by = self.ball[0], self.ball[1]
-        return decisions.can_strike(bx - carrier.x, by - carrier.y, carrier.heading, tx - bx, ty - by)
+        if not decisions.can_strike(bx - carrier.x, by - carrier.y, carrier.heading, tx - bx, ty - by):
+            return False
+        if self.set_by:
+            # A set ball lies where it was put, not at his feet: its way out must not pass through
+            # him (P11), or the kick comes straight back off his own body, a second touch.
+            d = math.hypot(tx - bx, ty - by) or 1.0
+            ex, ey = bx + (tx - bx) / d * CONTROL_M, by + (ty - by) / d * CONTROL_M
+            through = shape.first_contact(bx, by, ex, ey, carrier.x, carrier.y, carrier.heading, ball.RADIUS)
+            return through is None
+        return True
 
     def turn_to(self, carrier: Player, tx: float, ty: float, strike) -> None:
         """He turns toward the target, no faster than a body turns (P16, tick_carrier), taking the
@@ -1689,7 +1699,10 @@ class Engine:
             rx, ry = self.dead_ball_rest()
             rx = clamp(rx, -BOARDS_M + clear, PITCH_X + BOARDS_M - clear)
             ry = clamp(ry, -BOARDS_M + clear, PITCH_Y + BOARDS_M - clear)
-            return rx, ry, RECOVER
+            # Near the boards he goes no faster than he could stop before them, as he slows to
+            # stop on any target (body.move): they are a wall, not a target he may overrun.
+            to_boards = min(p.x, PITCH_X - p.x, p.y, PITCH_Y - p.y) + BOARDS_M
+            return rx, ry, min(RECOVER, stopping_speed(to_boards))
         if self.restart and p.id == self.restart.carried_by and p.id != self.restart.taker:
             # He knocks it on to the spot from about where he took it, turning to face it first.
             sx, sy = self.restart_ball_spot(self.restart)
