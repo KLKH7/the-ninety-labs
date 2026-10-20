@@ -30,6 +30,10 @@ permissions:
   id-token: write
   contents: read
 
+# One group per branch, not one for the workflow: GitHub keeps at most one pending run per group
+# and a new dispatch cancels the pending one, whatever cancel-in-progress says, so a single group
+# silently dropped every session's run but the latest while they waited for approval (lesson 110).
+# Runs for the same branch still queue one behind the other.
 concurrency:
   group: agents-live-${{ inputs.ref }}
   cancel-in-progress: false
