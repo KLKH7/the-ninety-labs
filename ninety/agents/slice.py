@@ -36,6 +36,7 @@ import re
 import sys
 import time
 import warnings
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 
@@ -149,9 +150,34 @@ class AnalystExecutor(Executor):
         await ctx.send_message(Draft(task=task, claim=claim))
 
 
+Gate = Callable[[Claim, dict[str, dict]], Verdict]  # factcheck.confidence_gate's signature
+
+
+@dataclass
+class Checked:
+    verdict: Verdict
+    judge_seconds: float | None  # how long the Judge took; None when it was not asked
+
+
+async def fact_check(
+    claim: Claim, known: dict[str, dict], judge: Judge, gate: Gate = confidence_gate
+) -> Checked:
+    """The fact-checking agent, for the slice and the workflow alike: the code checks first (free,
+    exact about numbers, players and ids), then the confidence gate (a claim resting on an unsure
+    detection is held), then the Judge (meaning), which is asked only when both pass."""
+    verdict = check(claim, known)
+    if verdict.ok:
+        verdict = gate(claim, known)
+    if not verdict.ok:
+        return Checked(verdict, None)
+    evidence = [known[i] for i in claim.evidence]
+    started = time.perf_counter()
+    verdict = await judge(claim, evidence)
+    return Checked(verdict, time.perf_counter() - started)
+
+
 class FactCheckExecutor(Executor):
-    """Code checks first (free, exact about numbers, players and ids), then the confidence gate
-    (a claim resting on an unsure detection is held), then the Judge (meaning)."""
+    """The slice's fact-checker: fact_check, then accept, send back or hold."""
 
     def __init__(self, known: dict[str, dict], judge: Judge, trace: list[str], live: bool):
         super().__init__(id="fact_checker")
@@ -160,14 +186,10 @@ class FactCheckExecutor(Executor):
     @handler
     async def review(self, draft: Draft, ctx: WorkflowContext[Task, Outcome]) -> None:
         with telemetry.stage_span("fact_check", attempt=draft.task.attempt + 1):
-            verdict = check(draft.claim, self.known)
-            if verdict.ok:
-                verdict = confidence_gate(draft.claim, self.known)
-            if verdict.ok:
-                evidence = [self.known[i] for i in draft.claim.evidence]
-                started = time.perf_counter()
-                verdict = await self.judge(draft.claim, evidence)
-                took = f"{time.perf_counter() - started:.1f}s" if self.live else "replayed"
+            checked = await fact_check(draft.claim, self.known, self.judge)
+            verdict = checked.verdict
+            if checked.judge_seconds is not None:
+                took = f"{checked.judge_seconds:.1f}s" if self.live else "replayed"
                 self.trace.append(f"judge: {'supported' if verdict.ok else 'not supported'} ({took})")
         attempt, evidence_ids = draft.task.attempt + 1, draft.claim.evidence
         if verdict.ok:

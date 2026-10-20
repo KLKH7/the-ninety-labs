@@ -84,6 +84,12 @@ TAKE_ON = 0.01  # design: takes_players_on adds this to a dribble. A close call,
 SHORT_PASS_M, LONG_PASS_M = 15.0, 25.0
 SHORT_PASS = 0.008  # design: plays_short adds this under SHORT_PASS_M and subtracts it over LONG_PASS_M
 CLEAR_FROM = 2 / 3  # a clear is an option in his own third: this share of the pitch from the goal he attacks
+CLEAR_AHEAD_M = 45.0  # design: a clearance is aimed this far up the pitch
+# Design: and this far in from the touchline on his side, away from goal but far enough in to stay in
+# play with his kick error (Law 9). An aim 4 m in once sent a third of clearances out; weighed by
+# clear_value, the contest where it lands differs by under 0.0001 goals across the width, so only
+# staying in play tells aims apart, and a search over aims would be a coin toss on a flat value.
+CLEAR_IN_FROM_LINE_M = 20.0
 
 
 # D7: what having the ball is worth by area, measured from the engine's own matches
@@ -174,6 +180,7 @@ class Scene:
     absorb: dict[str, float]  # team-mates' first touch (A4), by id
     passer: Profile  # who he is, for his own kick error (A3)
     throw: bool = False  # Law 15: a throw-in, so every pass is thrown (lofted) and nothing else
+    set_piece: bool = False  # Laws 8, 13, 16, 17: a set ball, played away, never carried off
     # The team's style (T4): how much ground gained from here is worth, and how much losing the
     # ball costs, against the defaults. Both 1 for a mid style.
     progress_weight: float = 1.0
@@ -814,6 +821,56 @@ def short_pass_bias(dist: float) -> float:
     return SHORT_PASS * (1 - 2 * (dist - SHORT_PASS_M) / (LONG_PASS_M - SHORT_PASS_M))
 
 
+def clear_value(scene: Scene, tx: float, ty: float, contest: float) -> float:
+    """D9, Law 9: what a clearance aimed at (tx, ty) is worth, over the strikes his own kick error
+    allows (strike_nodes, lofted, as the pass estimate weighs them): `contest` if it stays in play,
+    or, if it crosses a line before any player (either side: whoever gets there, it is still the
+    contest, *design*) can get to it, minus the cost of their restart where it went out
+    (restart_cost). The race is the pass estimate's reach test (reach_time: average body, a keeper's
+    hands in his box) with everyone moved on while he turns to strike (P16), each after an average
+    choice reaction; unlike the pass estimate it is a hard race, with no softening, no body in the
+    way and no error in where he sees them (*design*)."""
+    sx, sy = scene.x, scene.y
+    direction = fmath.atan2(ty - sy, tx - sx)
+    _, wait = strike_turn(scene.heading, tx - sx, ty - sy, scene.throw)
+    react = perception.CHOICE_REACTION_S
+    players = []
+    for m in scene.mates:
+        mvx, mvy = m[4:6] or (0.0, 0.0)
+        players.append((m[1] + mvx * wait, m[2] + mvy * wait, mvx, mvy, None))
+    for ox, oy, ovx, ovy, keeper in scene.moving:
+        players.append((ox + ovx * wait, oy + ovy * wait, ovx, ovy, scene.goal_x if keeper else None))
+    total = 0.0
+    for w, d_angle, ground, up in strike_nodes(scene, tx, ty, True, ARRIVE_MPS):
+        points, rests = flight(ground, up)
+        ux, uy = fmath.cos(direction + d_angle), fmath.sin(direction + d_angle)
+        t_end, where = math.inf, None
+        for t, a, _, _, _ in points:
+            if out_of_play(sx + ux * a, sy + uy * a):
+                t_end, where = t, (sx + ux * a, sy + uy * a)
+                break
+        kept = where is None or any(
+            reach_time(points, t_end, rests, sx, sy, ux, uy, px, py, pvx, pvy, react, t_end, box)[0] < t_end
+            for px, py, pvx, pvy, box in players)
+        total += w * (contest if kept else -restart_cost(*where, scene.goal_x))
+    return total
+
+
+def restart_cost(x: float, y: float, goal_x: float) -> float:
+    """What the restart costs the side attacking `goal_x` when its ball goes out at (x, y), by the
+    line it crossed: their throw-in where it crossed a touchline (Law 15), their goal kick when it
+    crossed the goal line they attack (Law 16), their corner when it crossed his own (Law 17). Not
+    style-weighted, as the clearance's contest is not (T4)."""
+    over_y = max(-y, y - PITCH_Y, 0.0)
+    over_x = max(-x, x - PITCH_X, 0.0)
+    if over_y >= over_x:  # over a touchline (at a corner, the line it is further over)
+        return loss_cost(min(PITCH_X, max(0.0, x)), min(PITCH_Y, max(0.0, y)), goal_x)
+    if (x - PITCH_X / 2) * (goal_x - PITCH_X / 2) > 0:  # over the goal line he attacks
+        return loss_cost(goal_x - attack(goal_x) * GOAL_KICK_M, PITCH_Y / 2, goal_x)
+    own = PITCH_X - goal_x
+    return loss_cost(own, 0.0 if y < PITCH_Y / 2 else PITCH_Y, goal_x)
+
+
 def shot_chance(scene: Scene) -> float:
     """His estimate that a shot from here goes in. With measured tables (D7): how often shots from
     here went in, scaled by how this situation compares with an open one (blockers in the cone, the
@@ -844,7 +901,8 @@ def options(scene: Scene) -> list[Option]:
         lost = blocked * our_loss(scene, scene.x, scene.y) + (1 - blocked) * missed
         out.append(Option("shoot", q * bias * (1 + 0.5 * scene.risk) - (1 - q) * lost,
                           (scene.goal_x, PITCH_Y / 2)))
-    for turn in (0.0, 0.8, -0.8):  # straight at goal, or angled away
+    # Laws 8, 13, 16, 17: carrying a set ball off is touching it twice before anyone else has.
+    for turn in () if scene.set_piece else (0.0, 0.8, -0.8):  # straight at goal, or angled away
         heading = fmath.atan2(PITCH_Y / 2 - scene.y, scene.goal_x - scene.x) + turn
         tx = scene.x + DRIBBLE_STEP_M * fmath.cos(heading)
         ty = scene.y + DRIBBLE_STEP_M * fmath.sin(heading)
@@ -867,11 +925,11 @@ def options(scene: Scene) -> list[Option]:
             ev += TAKE_ON
         out.append(Option("dribble", ev + (STICKY if scene.current == "dribble" else 0.0), (tx, ty)))
     if abs(scene.goal_x - scene.x) > CLEAR_FROM * PITCH_X:  # in his own third: long and away
-        wide = 4.0 if scene.y < PITCH_Y / 2 else PITCH_Y - 4.0
-        tx = scene.x + attack(scene.goal_x) * 45.0
-        # A long ball away is a contest where it lands (an even one: design).
-        contest = 0.5 * value(tx, wide, scene.goal_x) - 0.5 * loss_cost(tx, wide, scene.goal_x)
-        out.append(Option("clear", contest, (tx, wide), lofted=True))
+        tx = scene.x + attack(scene.goal_x) * CLEAR_AHEAD_M
+        ty = CLEAR_IN_FROM_LINE_M if scene.y < PITCH_Y / 2 else PITCH_Y - CLEAR_IN_FROM_LINE_M
+        # A long ball away is a contest where it lands (an even one: design), if it stays in play.
+        contest = 0.5 * value(tx, ty, scene.goal_x) - 0.5 * loss_cost(tx, ty, scene.goal_x)
+        out.append(Option("clear", clear_value(scene, tx, ty, contest), (tx, ty), lofted=True))
     # Holding is waiting to make a move a moment later: worth the best move open to him now, less
     # what the defence recovers while he waits (D9; *verify*: options only decay while he waits,
     # nothing here models a run developing). He cannot wait for ever, so when every move is a bad
