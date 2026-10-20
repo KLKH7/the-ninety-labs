@@ -20,6 +20,8 @@ generated it and the output file is committed. Rows marked *planned* have no res
 | Stats engine facts: hand-computed cases, planted defects, citations, size | `uv run pytest tests/test_stats.py` | test assertions | running |
 | Late drop in high-intensity running (R7), by the protocol below; distance and top speed by position on the same matches | `uv run python -m ninety.sim.late_drop` | `docs/eval/late-drop.md` | running |
 | Fact-checker rules (numbers, players, evidence ids) | `uv run pytest tests/test_factcheck.py` | test assertions | running |
+| Personalizer rules: the A2A round trip, the fallback within its budget, the re-check of every variant, every persona and language, profile validation ([below](#personalizer)) | `uv run pytest tests/test_personalizer.py` | test assertions | running in process: 38 tests, 18 of 18 mutants of the rules killed; not yet deployed |
+| Personalizer variants from the published agent that pass the re-check and air, by persona and language, and time per A2A request | `uv run python -m ninety.personalizer.eval --seeds 21,33` (agents-live task `personalizer`) | `docs/eval/personalizer.md` | planned: waits for `ninety-personalizer` to be published |
 | Ledger versioning, evidence validation, and deterministic cue fixture | `uv run pytest tests/test_ledger.py tests/test_cues.py` | `tests/fixtures/cues-seed7.jsonl` and test assertions | running: 21 tests; 108 cues for seed 7, five minutes (96 for its 48 passes, 12 of them failed and one still in flight at the end, 8 for its 4 shots and 4 for its 2 goals) |
 | Fact-checker on the frozen planted-claim set, offline: catch rate, true claims wrongly stopped, the layer that decided, claims held for low-confidence detections | `uv run python -m ninety.eval.fact_checker_proof` (offline, seconds of CPU; `--check` fails if a committed file is stale, as `tests/test_fact_checker_proof.py` does) | `docs/eval/fact-checker-planted.md`, set `docs/eval/planted-claims-v1.json` | running: 175/175 planted false claims kept off air (127 recorded, 16 on phantom low-confidence detections, all held by the confidence gate, 32 with viewer text spliced in); 7/121 true claims wrongly stopped, all by the recorded Judge. Judge answers are those recorded from `ninety-judge:1` at `9be98bd`; the gate threshold (0.5) is a design value until detector calibration is measured |
 | Fact-checker catch rate on planted false claims, and true claims wrongly rejected, on the published Judge | `uv run python -m ninety.eval.factcheck_eval --seeds 21,33 --foundry`; nightly in `.github/workflows/evals.yml`, recorded in Foundry | `docs/eval/fact-checker.md` | running: held-out seeds 21,33, `ninety-judge:1` at commit `9be98bd`: 136/136 false claims caught (code alone 32/136); 7/105 true claims wrongly rejected excluding service holds (17/115 including them); 19 of 251 Judge calls failed and were held back (fail closed), more than earlier runs, not yet investigated |
@@ -354,6 +356,98 @@ other seeds.
 - **Known difference from the sources:** the engine plays 90 minutes with no half-time break
   (the real interval lets players recover), no stoppage time and no substitutes. Read the verdict
   with that in mind; the protocol does not adjust for it.
+
+## Football sense (FS1 to FS9)
+
+Goals, shots and pass completion sat inside their published bands while the play looked dumb to
+anyone who watched it (lesson 107). The football-sense checker counts the dumb play itself, per
+90 minutes, with the match clock of every case so a person can watch it:
+
+    uv run ninety-sim --seed 7 --minutes 20 --out runs/seed7
+    uv run ninety-football-sense runs/seed7 runs/seed11 runs/seed21 runs/seed42 --json found.json
+
+Each type's definition, thresholds and sources are in [GROUNDING.md](GROUNDING.md#football-sense-it-looks-like-sensible-football-counts).
+The checker reads only `frames.jsonl`, `events.jsonl` and `meta.json` and imports nothing from
+the engine. The ball is dead from a stoppage (out of play, goal, foul, offside) until the restart
+is kicked; which goal a team attacks comes from where its keeper stands. Each type has a scene
+that must be flagged and legal scenes that must not be, mutation-checked
+([`tests/test_football_sense.py`](../tests/test_football_sense.py)).
+
+**Protocol.** Every engine pull request runs the checker on seeds 7, 11, 21 and 42 at 20 minutes
+each, before and after, on the same commit pair, and posts the table with a watched 60-second
+clip. A fix names the type it targets and shows its count fall; the other types are held out, so
+a fix that moves one count by worsening another is visible. No count is a target and no engine
+constant is set by looking at one (lessons 2, 3 and 21). Read with care: 80 minutes resolves a
+type seen a few dozen times; a type seen a handful of times needs more matches before a change
+is read.
+
+**Engine `7ee8720`, 2026-10-19,** seeds 7, 11, 21, 42, 20 minutes each (80 minutes, 1,023 passes):
+
+| Defect | Count | Per 90 | seed 7 | 11 | 21 | 42 |
+|---|---:|---:|---:|---:|---:|---:|
+| FS1 chaser runs away from a loose ball | 24 | 27.0 | 2 | 9 | 4 | 9 |
+| FS2 unpressed pass straight out of play | 21 | 23.6 | 8 | 3 | 5 | 5 |
+| FS3 keeper stays home for a ball he would win | 0 | 0 | 0 | 0 | 0 | 0 |
+| FS5 more than half the outfield within 10 m of the ball | 0 | 0 | 0 | 0 | 0 | 0 |
+| FS6 pass from own box to own box | 180 | 202.5 | 13 | 25 | 73 | 69 |
+| FS6 possession with 3+ own-box passes | 18 | 20.2 | 2 | 5 | 6 | 5 |
+| FS7 square or back pass with a free option ahead | 436 | 490.5 | 79 | 85 | 140 | 132 |
+| FS8 loose ball at rest that nobody goes to | 0 | 0 | 0 | 0 | 0 | 0 |
+| FS9 team on the ball with most outfielders in own box | 56 | 63.0 | 9 | 10 | 6 | 31 |
+
+FS4, outfield players under 0.5 m/s, share of open-play time:
+
+| Still, at least | mean | 1 | 3 | 5 | 8 | 10 |
+|---|---:|---:|---:|---:|---:|---:|
+| team with the ball | 1.4 | 55% | 22% | 9% | 1% | 0% |
+| team without it | 2.9 | 51% | 37% | 32% | 23% | 1% |
+
+What it says: the worst types are teams passing inside their own box (FS6, FS9) while the team
+without the ball stands (FS4: eight or more still for almost a quarter of open play), passes
+played into touch with nobody near the passer (FS2), and chasers who run past or away from a
+loose ball (FS1). FS3, FS5 and FS8 found nothing: the engine rarely plays a through ball a keeper
+could reach first, and players do not clump within 10 m of the ball. A clump in a line, like
+the one in the owner's review clip, is wider than FS5's circle; FS4 and FS9 are where it shows.
+
+## Personalizer
+
+The Personalizer (`ninety/personalizer`) rewrites one claim the fact-checker already verified for
+each viewer profile: analyst, casual, club and player focus, in English and Spanish. The model only
+words it; code decides what airs.
+
+- **The re-check.** Every variant is checked by the fact-checker's code half (`factcheck.check`)
+  against the verified claim's own evidence, and must still contain every number (as a count, so a
+  repeated number cannot be lost) and every player id of the verified claim. A variant that fails,
+  or is missing, is replaced by the verified English text for that profile. The client re-checks
+  whatever the server returns, so a server that skipped its check still cannot air a changed number.
+  The server reports why it replaced a variant; those reasons reach the trace and the evaluation,
+  never the decision of what airs.
+- **The fallback.** The remote has `BUDGET_S` = 3 s (a design choice: a little over a third of the
+  8 s p95 target from event to verified graphic in PLAN.md, to be revisited when
+  `latency-cost.md` measures the split). On a timeout, a 5xx or a refused connection the in-process
+  fallback answers with the verified text at once. A 4xx or a malformed reply is a defect between
+  our own two programs and raises, so it is seen rather than hidden.
+- **Viewer input.** A profile is rebuilt with `Profile` on the server, whose every field is an
+  allow-list; any other value, or an extra field, is refused with an A2A invalid-params error before
+  the model is called. The model sees the profile only as a JSON field.
+
+What the re-check cannot see, so a reader of any number above knows its limits:
+
+- Two numbers of the claim swapped with each other (32.5 m and 12 m traded between two passes):
+  both still appear, and both are cited.
+- A verb that misstates a pass in Spanish. The fact-checker's role check reads English verbs
+  ("finds"); "encuentra a" is not read, so a Spanish variant relies on the model and on the player
+  ids being kept.
+- A Spanish variant left in English. It is faithful, so it airs.
+
+**Mutation run** (lesson 8), each rule broken in turn against `tests/test_personalizer.py` and
+`tests/test_factcheck.py`: all 18 killed. Re-check: no fact-check of the variant, no number survival,
+number survival as a set rather than a count, no player survival, no length cap, a dropped variant
+still airing, the audio persona rewritten. Client: trusting the server's variants, ignoring which
+persona a reply is for, falling back on any error, treating a 4xx as a 5xx, no 5xx rule, no
+refused rule, no deadline, waiting for the cancelled call to unwind. Server: profiles not
+validated, extra profile fields allowed. Fact-checker: ordinals not read as numbers (lesson 95).
+The length-cap mutant survived the first run; its test was added after.
 
 ## Rules
 
