@@ -42,6 +42,7 @@ from pathlib import Path
 
 from ninety.vision.track import (
     FPS,
+    MAX_GAP_FRAMES,
     BallPoint,
     Track,
     assign_teams,
@@ -83,6 +84,14 @@ OUT_FRAMES = 3
 # pitch-seed900001.json, players.p90_m): a rival that close may truly be the nearer one. Set from
 # that measurement before attribution was scored against the truth (docs/eval/attribution.md).
 RIVAL_M = 1.44
+# One player in two tracks. The tracker drops a player whose position jumps past its gate (a
+# sprint plus the camera fit's jitter) and starts a new track the next frame, so his dribble can
+# read as a pass to himself (seed 900004: twice). Two tracks never seen in the same frame, the
+# second starting within the tracker's own MAX_GAP_FRAMES of the first's end and within reach of
+# where it ended, may be one player: a pass between them cannot be told from his own touch, so
+# none is recorded. Reach is REACH_MPS (track.py's bound above match top speeds, GROUNDING R6) over
+# the gap, plus RIVAL_M, the position error, for where each was seen.
+REACH_MPS = 10.0
 
 
 @dataclass(frozen=True)
@@ -168,6 +177,14 @@ def attribute(t: Track, ball: BallPoint, tracks: list[Track]) -> str | None:
         if r is not None and math.hypot(r[0] - ball.x, r[1] - ball.y) < d + RIVAL_M:
             return None
     return player_id(t)
+
+
+def may_continue(a: Track, b: Track) -> bool:
+    """Whether track b may be track a's player, picked up again after the tracker lost him."""
+    gap = b.frames[0] - a.frames[-1]
+    if not 0 < gap <= MAX_GAP_FRAMES:
+        return False  # seen in the same frame: two players; or longer lost than the tracker waits
+    return math.dist(a.xy[-1], b.xy[0]) <= REACH_MPS * gap / FPS + RIVAL_M
 
 
 def _attacks_right(team: str) -> bool:
@@ -259,6 +276,8 @@ def detect(rows: list[dict]) -> tuple[list[dict], dict]:
             continue  # the clip ends with the ball still in play after him: nothing to judge yet
         if b is not None and b.track is a.track:
             continue  # he got it back himself: a touch, not a pass
+        if b is not None and may_continue(a.track, b.track):
+            continue  # perhaps him again in a new track: no pass can be told
         conf = path[i].score * min(1.0, a.frames / (2 * MIN_SPELL_FRAMES))
         speed = _speed_kmh(path, i)
         who = attribute(a.track, path[i], tracks)

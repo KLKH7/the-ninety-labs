@@ -148,6 +148,32 @@ def test_a_track_the_companion_does_not_draw_is_never_named():
     assert ev.attribute(track(1, 3), tr.BallPoint(9, 10.0, 10.0, 0.9), []) is None  # not seen then
 
 
+def test_a_dribbler_the_tracker_loses_and_picks_up_again_is_not_a_pass_to_himself():
+    # A blue player runs with the ball at 5 m/s; on frame 30 his detection jumps 1.5 m sideways
+    # (past the tracker's gate), so the tracker ends his track and starts another: two spells, one
+    # player. Without the rule this reads as a completed pass from him to himself.
+    rows = []
+    for f in range(60):
+        x, y = 40.0 + 5.0 * f / FPS, 34.0 + (1.5 if f >= 30 else 0.0)
+        rows.append(row(f, crowd(f) + [(x, y, BLUE)], (x + 0.3, y)))
+    tracks = tr.track_players(rows)
+    assert len([t for t in tracks if t.xy[0][1] < 50]) == 2  # the scene does split him
+    events, _ = ev.detect(rows)
+    assert [e for e in events if e["type"] == "pass"] == []
+
+
+def test_a_new_track_may_continue_an_old_one_only_when_never_seen_together_and_within_reach():
+    def track(first, last, x):
+        n = last - first + 1
+        return tr.Track(1, frames=list(range(first, last + 1)), xy=[(x, 0.0)] * n, team="home")
+    a = track(0, 10, 0.0)
+    reach_1 = ev.REACH_MPS / FPS + ev.RIVAL_M  # one frame later
+    assert ev.may_continue(a, track(11, 20, reach_1 - 0.01))
+    assert not ev.may_continue(a, track(11, 20, reach_1 + 0.01))
+    assert not ev.may_continue(a, track(10, 20, 0.0))  # seen in the same frame: two players
+    assert not ev.may_continue(a, track(11 + tr.MAX_GAP_FRAMES, 40, 0.0))  # lost too long
+
+
 def test_out_of_play_names_nobody():
     events, _ = ev.detect(pass_scene(BLUE, speed=30.0)[:21] + [
         row(f, crowd(f) + [(50.0, 34.0, BLUE)], (106.0, 34.0)) for f in range(21, 30)])
