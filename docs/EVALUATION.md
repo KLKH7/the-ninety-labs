@@ -361,7 +361,7 @@ other seeds.
 ## Football sense (FS1 to FS9)
 
 Goals, shots and pass completion sat inside their published bands while the play looked dumb to
-anyone who watched it (lesson 109). The football-sense checker counts the dumb play itself, per
+anyone who watched it (lesson 107). The football-sense checker counts the dumb play itself, per
 90 minutes, with the match clock of every case so a person can watch it:
 
     uv run ninety-sim --seed 7 --minutes 20 --out runs/seed7
