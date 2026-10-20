@@ -1134,3 +1134,20 @@ short and actionable. This file is public: no research sources, product names or
   CI's `image` job asks the built image for a WebSocket upgrade and needs `101` (it answers 404
   without `websockets` in `uv.lock`). The phone treats a close before the accept as "unknown code
   or unreachable" (`web/phone/src/feed.ts`) until the relay accepts before closing.
+
+### 115. Positions from a fit, summed frame to frame, read the fit's jitter as running
+- **What happened:** the phone's speed and distance come from the companion's window facts, which
+  sum each player's frame-to-frame steps. On simulator positions that is exact. On positions
+  tracked from the video, the camera fit moves a foot point by up to about 0.5 m between
+  neighbouring frames, more than a sprinter covers in one (0.34 m). Every tracked player's top
+  speed read 53 to 89 km/h, and a player standing still read 16 km/h. The numbers would have
+  passed the fact-checker, because they were the cited facts.
+- **Rule:** before a stat computed for exact positions reads measured ones, grade it against the
+  ground truth on the measured data (offline), and smooth at the stat's own time scale if the
+  noise demands it. Choose the width from the stat's definition, not from the error it gives.
+- **Check:** `docs/eval/companion-tracked.md` grades speed now, top speed and distance with and
+  without the smoothing (top speed 55.6 against 1.9 km/h median error).
+  `tests/test_tracked_frames.py::test_smoothing_turns_jitter_back_into_standing_and_keeps_running`
+  fails with the smoothing removed, and
+  `test_a_track_ends_at_the_speed_its_player_was_running` fails with a plain average, which lags
+  at a track's end.
