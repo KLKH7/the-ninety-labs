@@ -33,9 +33,9 @@ columns are two samples, compared by their standard errors over matches.
 | Stoppages never restarted (over 200 s) | 0 | 0 |
 | Matches meeting the data contract (`ninety-validate`) | 16 of 16 | 16 of 16 |
 
-Real football has no single-frame ball jumps and no player resets. The real time from a goal to
-the kick-off is about 72 s with the celebration (GROUNDING R1), which is still not modelled. On
-main the `kickoff` event is written in the goal's frame; now it is the kick itself.
+Real football has no single-frame ball jumps and no player resets. A goal stops a real match for a
+minute or more (GROUNDING L4); this change left it at 14 to 19 s, and the celebration (below) makes
+it 66 to 87 s. On main the `kickoff` event is written in the goal's frame; now it is the kick itself.
 
 ## Held-out outcomes
 
@@ -69,7 +69,8 @@ his goal kick, the ball rolled back to the centre after the goal rather than rea
 teams in their own halves at the kick-off, no opponent within 2 m at the throw-in. Its top football
 complaint, in this area but not caused by this change: players stand still through the 25 to 35 s
 stoppages, with no wall, no jostling and no organisation, and the kick-off comes about 17 s after a
-goal against about 72 s in real matches (R1). Those are the next restart work.
+goal against a minute or more in real matches (L4; the 72 s it was compared with then is a penalty
+goal's, lesson 124). The celebration below answers the second.
 
 ### On earlier bases
 
@@ -108,6 +109,23 @@ A goal's celebration "may last one, one and a half minutes" (Collina, FIFA, 2022
 comes 60 to 90 s after the goal (GROUNDING L4). Ball in play is about 55.8% of a Premier League
 match's total time, added time included (Opta via The Analyst, 2023); these 20-minute matches have
 no added time. Shots, goals and completion are unchanged within noise.
+
+### The huddle
+
+The first version sent every team-mate to the scorer's own centre: in 32 to 63% of celebration
+frames two bodies were more than 5 cm into each other (the audit's count, three planted goals; open
+play 0 to 0.6%). Now each runs to his own place on an arc round the scorer, a shoulder's breadth
+apart, on the side he comes from and in the order of the team-mates' bearings, and only within 3 m
+of the scorer do team-mates stand closer than the usual personal space (GROUNDING L4). Over the
+whole celebration of a planted goal on 8 seeds (2, 3, 5, 7, 11, 21, 42, 101), 0 to 2.2% of frames
+(mean 1.3%) have two bodies more than 5 cm into each other, at most 0.4 s a goal, and none once
+they have gathered (`test_gathered_round_the_scorer_no_two_bodies_overlap`). The rest come from runs that
+arrive too fast to stop at a place a shoulder's breadth from the next: the engine's steering bends a
+run round a team-mate but does not slow it, and bodies in contact brace only with the grip left
+after steering (`separate`). Fixing that is a change to every player's movement, not this one's.
+Four other ways were measured on the same goals and were worse, a mean of 2.2 to 4.2% of frames:
+places fixed at the goal, places kept once reached, each stopping on his own line to the scorer
+behind those already there, and standing close only once slower than a walk.
 
 ## Reproduce
 
