@@ -1,5 +1,6 @@
-import { type Bundle, type ClaimTrace, type Cue, type Persona, clock, loadBundle, onAir } from "./bundle";
+import { type Bundle, type ClaimTrace, type Cue, PERSONAS, type Persona, clock, loadBundle, onAir } from "./bundle";
 import { drawCues, drawDetections } from "./draw";
+import { Narrator } from "./narrator";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -12,6 +13,7 @@ const clockOut = $<HTMLOutputElement>("clock");
 const showBoxes = $<HTMLInputElement>("show-boxes");
 const reduceMotionBox = $<HTMLInputElement>("reduce-motion");
 const onAirText = $<HTMLParagraphElement>("on-air");
+const voiceBox = $<HTMLInputElement>("voice");
 
 /** Per-viewer conveniences only: storage can be missing or throw, and the page works without it. */
 const store = {
@@ -121,6 +123,13 @@ function renderPipeline(b: Bundle) {
     ["Stats", `${m.facts} facts computed in code`],
     ["Agents", `${m.agents.accepted} of ${m.agents.claims} claims accepted (${m.agents.mode}${m.agents.planted ? ", a false number planted on purpose" : ""})`],
     ["Graphics", `${m.cues} cues`],
+    [
+      "Described",
+      m.audio
+        ? `${m.audio.lines} lines spoken, ${m.audio.dropped} left out to keep pace, at most ${m.audio.max_lag_s.toFixed(1)} s after the play (${m.audio.mode === "azure" ? "Azure AI Speech" : "timing estimated, browser voice"})`
+        : "no audio description in this bundle",
+      !m.audio,
+    ],
   ];
   $("pipeline").replaceChildren(
     ...rows.flatMap(([k, v, warn]) => {
@@ -206,7 +215,28 @@ async function start() {
   const detections = new Map(b.detections.map((f) => [Math.round(f.t * m.fps), f]));
 
   let lastAired = "";
-  let persona: Persona = store.get("persona") === "analyst" ? "analyst" : "casual";
+  const rememberedPersona = store.get("persona") as Persona | null;
+  let persona: Persona = rememberedPersona && PERSONAS.includes(rememberedPersona) ? rememberedPersona : "casual";
+  const narrator = new Narrator(b.audio?.said ?? [], b.base);
+  document.body.dataset.voice = narrator.state.voice;
+  (window as unknown as { ninetyNarrator: Narrator }).ninetyNarrator = narrator; // read by tests/test_viewer.py
+  const audioNote = $("audio-note");
+  audioNote.textContent = !b.audio
+    ? "This bundle has no audio description: run ninety-e2e again."
+    : narrator.state.voice === "recorded"
+      ? "Spoken by Azure AI Speech, placed left to right where the play is."
+      : "Spoken by your browser's voice; a short tone, placed left to right, says where the play is.";
+  const rememberedVoice = store.get("voice");
+  voiceBox.checked = rememberedVoice !== "0";
+  const applyVoice = () => {
+    // With the voice on, the live region stays quiet so a screen reader does not say it twice.
+    onAirText.setAttribute("aria-live", persona === "audio" && voiceBox.checked ? "off" : "polite");
+  };
+  voiceBox.addEventListener("change", () => {
+    store.set("voice", voiceBox.checked ? "1" : "0");
+    if (!voiceBox.checked) narrator.stop();
+    applyVoice();
+  });
   const motionQuery = matchMedia("(prefers-reduced-motion: reduce)");
   const remembered = store.get("reduceMotion");
   reduceMotionBox.checked = remembered === null ? motionQuery.matches : remembered === "1";
@@ -232,6 +262,12 @@ async function start() {
       btn.tabIndex = on ? 0 : -1;
       if (on && focus) btn.focus();
     }
+    const audio = p === "audio";
+    $("voice-toggle").hidden = !audio;
+    $("audio-keys").hidden = !audio;
+    audioNote.hidden = !audio;
+    if (!audio) narrator.stop();
+    applyVoice();
     lastAired = ""; // announce what this persona sees now
   };
   for (const btn of personaButtons) {
@@ -241,7 +277,8 @@ async function start() {
       if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)) {
         e.preventDefault();
         e.stopPropagation();
-        setPersona(persona === "casual" ? "analyst" : "casual", true);
+        const step = e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 1;
+        setPersona(PERSONAS[(PERSONAS.indexOf(persona) + step + PERSONAS.length) % PERSONAS.length], true);
       }
     });
   }
@@ -286,8 +323,19 @@ async function start() {
       case "2":
         setPersona("analyst");
         break;
+      case "3":
+        setPersona("audio");
+        break;
       case "d":
         showBoxes.checked = !showBoxes.checked;
+        break;
+      case "v":
+        if (persona !== "audio") return;
+        voiceBox.checked = !voiceBox.checked;
+        voiceBox.dispatchEvent(new Event("change"));
+        break;
+      case "r":
+        if (persona === "audio" && voiceBox.checked) narrator.repeat(m.t_start + footage.time());
         break;
     }
   });
@@ -300,6 +348,7 @@ async function start() {
     ctx.clearRect(0, 0, overlay.width, overlay.height);
     if (showBoxes.checked) drawDetections(ctx, detections.get(Math.round(t * m.fps)));
     drawCues(ctx, aired, { t, reduceMotion: reduceMotionBox.checked });
+    narrator.update(t, !footage.paused(), persona === "audio" && voiceBox.checked);
 
     const ids = aired.map((c) => c.id).sort().join(" ");
     overlay.dataset.onAir = ids;
@@ -308,7 +357,7 @@ async function start() {
       lastAired = ids;
       const sentence = aired
         .sort((a, c) => (a.slot === "top_right" ? -1 : c.slot === "top_right" ? 1 : 0))
-        .map((c) => (c.verified ? `Fact-checked: ${c.text}` : c.text).replace(/\.$/, ""))
+        .map((c) => (c.verified && c.kind !== "audio_description" ? `Fact-checked: ${c.text}` : c.text).replace(/\.$/, ""))
         .join(". ");
       onAirText.textContent = sentence;
       overlay.setAttribute("aria-label", sentence ? `On-screen graphics: ${sentence}` : "No graphics on screen");

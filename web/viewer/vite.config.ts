@@ -9,6 +9,8 @@ const TYPES: Record<string, string> = {
   ".jsonl": "application/x-ndjson",
   ".webm": "video/webm",
   ".jpg": "image/jpeg",
+  ".wav": "audio/wav",
+  ".vtt": "text/vtt",
 };
 
 /** Serves the bundle with byte ranges, so the video seeks. Read-only, and never outside BUNDLE. */
