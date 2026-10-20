@@ -47,7 +47,7 @@ def test_a_press_lifts_the_foot_and_a_turn_does_not_snap():
 
 
 def test_running_swings_the_legs():
-    g = Gait()
+    g = Gait(action="run")  # the engine's pose above 4 m/s; "stand" is drawn standing
     for _ in range(10):
         update_gait(g, 0.28, 0.0, 0.04, None)  # 7 m/s along +x
     g.phase = math.pi / 2
