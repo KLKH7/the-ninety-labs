@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mock laptop for the phone companion</title>
+    <link rel="stylesheet" href="./src/style.css" />
+  </head>
+  <body class="mock-laptop">
+    <p class="mockbar">Mock laptop: plays a clock for the phone over this browser, with no server</p>
+    <main>
+      <h1>Mock laptop</h1>
+      <p>Pairing code <output id="code" class="big-code"></output></p>
+      <p><a id="phone-link" class="primary" href="#">Open the phone</a></p>
+      <div class="row">
+        <button type="button" class="primary" id="play">Play</button>
+        <output id="t">0:00</output>
+      </div>
+      <label for="seek">Match time</label>
+      <input type="range" id="seek" min="0" max="120" step="0.2" value="0" />
+      <label for="focus">Laptop focus</label>
+      <select id="focus"><option value="">none</option></select>
+    </main>
+    <script type="module" src="./src/mocklaptop.ts"></script>
+  </body>
+</html>

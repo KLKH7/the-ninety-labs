@@ -24,13 +24,16 @@ GPL or AGPL otherwise). Every locked package and its licence is listed below.
 | pillow (development; also with the vision group) | images for event detection's runtime truth guard, tested in CI | MIT-CMU |
 | uv (container build only) | installs `uv.lock` into the API image | MIT or Apache-2.0 |
 
-## Viewer (`web/viewer`, development only)
+## Viewer and phone companion (`web/viewer`, `web/phone`)
 
-The viewer ships as plain HTML, CSS and JavaScript with no runtime dependency. These build it, and
-none reaches the page a viewer opens. Pinned in `web/viewer/package-lock.json`.
+The viewer and the phone ship as plain HTML, CSS and JavaScript. One package reaches the page a
+viewer opens: qrcode-generator, which draws the viewer's "Connect your phone" QR code. The rest
+build them, and none reaches a page. Pinned in `web/viewer/package-lock.json` and
+`web/phone/package-lock.json` (the phone has no runtime dependency).
 
 | Package | Used for | Licence |
 |---|---|---|
+| qrcode-generator 2.0.4 (viewer, in the page) | the QR code of the phone's address | MIT |
 | vite 6.4.4, and through it esbuild, rollup, postcss, nanoid and 57 more | dev server and build | MIT |
 | typescript 5.9.3 | type checking | Apache-2.0 |
 | @types/node | types for the build config | MIT |
