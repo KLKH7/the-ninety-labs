@@ -52,7 +52,6 @@ SHOT_SPEED_SAMPLES = 8  # how finely that range is averaged over
 SHOT_HEIGHT_SAMPLES = 4  # and the heights shots are aimed at
 KEEPER_DEPTH = (1.0, 6.0)  # O1: design, verify: how far off his line he stands
 SHOT_RANGE_M = 40.0  # design: a shot is an option inside this distance of the goal
-KEEPER_DEPTH_STEP_M = 0.5  # O1: design: the depths he weighs, this far apart
 RUSH_RANGE_M = 18.0  # O1: design: an attacker this close and through on goal draws the keeper out
 CLOSE_DOWN_M = 2.0  # O1: design: how close the keeper gets to narrow the angle
 DANGER_RANGE_M = 25.0  # O2: design: attackers this near our goal are marked man to man
@@ -61,11 +60,22 @@ SUPPORT_RANGE_M = (8.0, 14.0)  # O3: a diagonal option about 5 to 15 m from the 
 RUN_BEYOND_M = 10.0  # O4: design: a run in behind aims this far beyond the defensive line
 
 
+def keeper_depth_m(distance: float) -> float:
+    """O1: how far off his line the keeper sets himself with the ball this far from his goal's
+    centre: near his line against a near shot, where his reaction time is shortest, further out the
+    further the ball is, up to his sweeping spot at the edge of shooting range (*design*, *verify*:
+    one published figure, an average of 4.8 m off the line with the ball in his own third, FIFA
+    Club World Cup 2021). Coming out to an attacker through on goal is the rush (close_down_spot)."""
+    lo, hi = KEEPER_DEPTH
+    return lo + (hi - lo) * min(1.0, max(0.0, distance) / SHOT_RANGE_M)
+
+
 def keeper_spot(ball_x: float, ball_y: float, own_goal_x: float) -> tuple[float, float]:
-    """O1: on the line that bisects the angle between the posts as seen from the ball, at the depth
-    (within KEEPER_DEPTH) that leaves the least of the goal open to a shot from there, given how far
-    he can get in the time the shot takes: against a far shot he stays deep, where his dive has time
-    to unfold; against a near one he comes out and narrows the angle."""
+    """O1: on the line that bisects the angle between the posts as seen from the ball, keeper_depth_m
+    off his line, and never outside the posts: on a tight angle, where the bisector leaves the goal
+    mouth, he comes back along it until he stands within them (*design*). Never nearer the ball than
+    when he rushes out to close it down; with the ball almost on his line he stays on it, between
+    the posts."""
     gy = PITCH_Y / 2
     a1 = fmath.atan2(gy - GOAL_HALF_WIDTH - ball_y, own_goal_x - ball_x)
     a2 = fmath.atan2(gy + GOAL_HALF_WIDTH - ball_y, own_goal_x - ball_x)
@@ -74,23 +84,13 @@ def keeper_spot(ball_x: float, ball_y: float, own_goal_x: float) -> tuple[float,
     if abs(ux) < 1e-6:
         return own_goal_x, gy
     to_line = (own_goal_x - ball_x) / ux  # along the bisector to the goal line
-    if math.hypot(own_goal_x - ball_x, gy - ball_y) > SHOT_RANGE_M:  # out of range: he sweeps
-        along = max(0.0, to_line - KEEPER_DEPTH[1] / abs(ux))
-        return ball_x + ux * along, ball_y + uy * along
-    best = None
-    lo, hi = KEEPER_DEPTH
-    for k in range(int((hi - lo) / KEEPER_DEPTH_STEP_M) + 1):
-        depth = lo + k * KEEPER_DEPTH_STEP_M
-        along = to_line - depth / abs(ux)
-        if along < CLOSE_DOWN_M:  # no nearer the ball than when he rushes out to close it down
-            continue
-        spot = ball_x + ux * along, ball_y + uy * along
-        open_share = open_goal_share(ball_x, ball_y, own_goal_x, spot)
-        if best is None or open_share < best[0] - 1e-12:
-            best = (open_share, spot)
-    if best is None:  # the ball is almost on his line: he stays on it, between the posts
+    along = to_line - keeper_depth_m(math.hypot(own_goal_x - ball_x, gy - ball_y)) / abs(ux)
+    off = ball_y + uy * along - gy
+    if abs(off) > GOAL_HALF_WIDTH and abs(uy) > 1e-9:  # outside the posts: back along the bisector
+        along = (gy + math.copysign(GOAL_HALF_WIDTH, off) - ball_y) / uy
+    if along < CLOSE_DOWN_M:  # the ball is almost on his line: he stays on it, between the posts
         return own_goal_x, min(gy + GOAL_HALF_WIDTH, max(gy - GOAL_HALF_WIDTH, ball_y))
-    return best[1]
+    return ball_x + ux * along, ball_y + uy * along
 
 
 def open_goal_share(x: float, y: float, goal_x: float, keeper: tuple[float, float]) -> float:

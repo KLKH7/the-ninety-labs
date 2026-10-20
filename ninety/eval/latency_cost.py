@@ -3,10 +3,13 @@
     uv run python -m ninety.eval.latency_cost                  # rebuild docs/eval/latency-cost.md
     uv run python -m ninety.eval.latency_cost --check          # fail if the report is out of date
     uv run python -m ninety.eval.latency_cost --measure <clip> # time the chain again, re-count tokens
+    uv run python -m ninety.eval.latency_cost --recount        # re-count tokens only, keep the timings
 
 The report is rendered only from docs/eval/latency-cost.json, so rebuilding it is byte for byte
-the same (tests/test_latency_cost.py). `--measure` is the only step that runs anything, and it
-calls no Azure service:
+the same (tests/test_latency_cost.py). `--measure` and `--recount` are the only steps that run
+anything, and they call no Azure service. `--recount` is for a change that moves the token counts
+(an agent's instructions, an MCP tool's description, the recording) but not the chain's timing: it
+rebuilds the counts and keeps the timings, with the commit they were measured at:
 
 - Latency: ninety-e2e offline on one clip, and the committed slice replay, `--runs` times each in
   this process. Every stage records a `ninety.stage` span (ninety/agents/telemetry.py); the spans
@@ -31,6 +34,7 @@ import tempfile
 import time
 import warnings
 from collections import defaultdict
+from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 
 from ninety.agents import telemetry
@@ -44,7 +48,7 @@ RECORDING = ROOT / "replays" / "slice-minute2-plant.json"
 CUES = ROOT / "tests" / "fixtures" / "cues-seed7.jsonl"
 CUES_MINUTES = 5
 
-BUDGET_USD = 0.50  # docs/PLAN.md: model and speech spend per match
+BUDGET_USD = Decimal("0.50")  # docs/PLAN.md: model and speech spend per match
 MATCH_MINUTES = 90  # one claim a minute (ninety/e2e.py: the one sentence a minute gets)
 TARGET_GRAPHIC_P95_S = 8.0  # docs/PLAN.md
 TARGET_SPEECH_P50_S, TARGET_SPEECH_P95_S = 2.0, 4.0  # docs/PLAN.md
@@ -76,10 +80,11 @@ INPUT_DZ, OUTPUT_DZ = "gpt 4.1 mini Inp Data Zone Tokens", "gpt 4.1 mini Outp Da
 SPEECH, SPEECH_HD = "S1 Neural Text To Speech Characters", "Neural HD Text to Speech Characters"
 
 
-def price(meter: str) -> float:
-    """USD for one unit (a token, a character)."""
+def price(meter: str) -> Decimal:
+    """USD for one unit (a token, a character), exactly. Money is Decimal throughout, so a total
+    does not depend on the order it was summed in or on the Python version's float sum."""
     usd, per, _ = PRICES["items"][meter]
-    return usd / per
+    return Decimal(str(usd)) / per
 
 
 def tokens(text: str) -> int:
@@ -240,6 +245,17 @@ def measure(clip: Path, runs: int) -> dict:
     }
 
 
+def recount(data: dict) -> dict:
+    """The data with its token counts rebuilt from the recording and the code as they are now; the
+    timings and the commit and date they were measured at are kept, and the recount's are added."""
+    from ninety.agents.slice import Recording
+
+    commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True,
+                            cwd=ROOT).stdout.strip()
+    return {**data, "calls": model_calls(Recording.load(RECORDING)), "graphics_text": graphics_text(),
+            "recounted": {"commit": commit, "date": time.strftime("%Y-%m-%d")}}
+
+
 def graphics_text() -> dict:
     rows = [json.loads(line) for line in CUES.read_text().splitlines()]
     casual = [r for r in rows if r["persona"] == "casual"]
@@ -250,8 +266,11 @@ def graphics_text() -> dict:
 # ---------------------------------------------------------------- the report
 
 
-def cost(calls: list[dict], input_meter: str = INPUT, output_meter: str = OUTPUT) -> float:
-    return sum(c["input"] * price(input_meter) + c["output"] * price(output_meter) for c in calls)
+def cost(calls: list[dict], input_meter: str = INPUT, output_meter: str = OUTPUT) -> Decimal:
+    return sum(
+        (c["input"] * price(input_meter) + c["output"] * price(output_meter) for c in calls),
+        Decimal(0),
+    )
 
 
 def clean_claim(calls: list[dict]) -> list[dict]:
@@ -261,8 +280,11 @@ def clean_claim(calls: list[dict]) -> list[dict]:
     return [c for c in calls if c["turn"] in (first, judge)]
 
 
-def usd(x: float) -> str:
-    return f"${x:.4f}" if x < 0.01 else f"${x:.3f}"
+def usd(x: Decimal) -> str:
+    """Four places below a cent, three above, rounded half up (a price on the half rounds the way
+    a reader expects, whatever its binary neighbours)."""
+    places = Decimal("0.0001") if x < Decimal("0.01") else Decimal("0.001")
+    return f"${Decimal(x).quantize(places, rounding=ROUND_HALF_UP)}"
 
 
 def render(data: dict) -> str:
@@ -276,7 +298,9 @@ def render(data: dict) -> str:
         "do not edit by hand. `--measure <clip>` re-times the chain and re-counts the tokens; it calls",
         "no Azure service.",
         "",
-        f"Measured {data['measured']} at commit `{data['commit']}` on {data['machine']}.",
+        f"Measured {data['measured']} at commit `{data['commit']}` on {data['machine']}."
+        + (f" Tokens re-counted {data['recounted']['date']} at commit `{data['recounted']['commit']}`."
+           if "recounted" in data else ""),
         "",
         "## Latency, stage by stage",
         "",
@@ -425,10 +449,13 @@ def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description="Build docs/eval/latency-cost.md (latency and cost).")
     ap.add_argument("--measure", type=Path, metavar="CLIP", help="re-measure on this clip, then rebuild")
     ap.add_argument("--runs", type=int, default=30, help="timed runs per scenario with --measure")
+    ap.add_argument("--recount", action="store_true", help="re-count the tokens, keep the timings, rebuild")
     ap.add_argument("--check", action="store_true", help="fail if the report is not what the data gives")
     args = ap.parse_args(argv)
     if args.measure:
         DATA.write_text(json.dumps(measure(args.measure, args.runs), indent=2) + "\n")
+    elif args.recount:
+        DATA.write_text(json.dumps(recount(json.loads(DATA.read_text())), indent=2) + "\n")
     text = render(json.loads(DATA.read_text()))
     if args.check:
         if REPORT.read_text() != text:
