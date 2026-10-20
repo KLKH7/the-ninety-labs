@@ -1,12 +1,11 @@
-Review media for the goal-celebration PR (branch engine/restarts-organisation). Synthetic matches.
-Round 3: the engine at ff67305 (each team-mate runs to his own place round the scorer, they face
-him, and each leaves the huddle at his own moment), drawn by main's renderer (#150).
-- seed7-0048-goal-celebration.mp4: seed 7, 0:48 to 1:48. Goal at 0:51.3; the scorer runs to the corner
-  flag and his team-mates gather round him (off camera: the broadcast camera follows the ball, which
-  the conceding keeper knocks back to the centre); everyone walks back; the kick-off comes at 1:54, just after the clip.
-- tactical-seed7_t0000.jpg ... t0032: the same seconds top-down from the ground truth (red = home,
-  the scorers), one panel a second: the run to the flag, the huddle breaking up a few at a time from
-  about 1:09, and the walk back, spread out, are visible here.
-- seed21-0045.mp4: the Coordinator's standard window. It has no goal, so this change leaves it frame for
-  frame as on main (checked on the position data); rendered in round 1, before #150's renderer.
-- *-sheet-NN.jpg: contact sheets, 2 frames a second, 16 to a sheet, that a fresh critic reviewed.
+Review media for the goal-celebration PR (#167, branch engine/restarts-organisation). Synthetic matches.
+Round 4: the engine at fa04f49 (merged with main 8b426b5), drawn by main's renderer.
+- seed7-0304-goal-celebration.mp4: seed 7, 3:04 to 4:04. The away side scores at 3:07; the scorer runs
+  to the corner flag and his team-mates gather round him, each at his own place (off camera: the
+  broadcast camera follows the ball back to the centre); from about 3:26 they leave him a few at a
+  time and walk back spread out; the kick-off comes at 4:12, just after the clip.
+- tactical-seed7-0304_t0000.jpg ... t0032: the same seconds top-down from the ground truth (blue =
+  away, the scorers; one panel a second): the run to the flag, the huddle and the walk back.
+- seed21-0045.mp4 and its sheets: the standard window, rendered in round 1. This branch leaves seed 21
+  frame for frame as main has it (it has no goal in 20 minutes), so a new render would show main.
+- *-sheet-NN.jpg: contact sheets, 2 frames a second, 16 to a sheet, as a fresh critic saw them.
