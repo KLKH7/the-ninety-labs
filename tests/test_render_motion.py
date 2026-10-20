@@ -2,14 +2,18 @@
 
 A turn on the spot is steps, not a figurine spun on its base: a foot on the grass stays put
 while the hips turn over it, and moves only lifted, one foot at a time. A touch puts the
-touching part on the ball on the frame the engine says it met it.
+touching part on the ball on the frame the engine says it met it; a kick gets there with a swing
+of the leg. Arms hang standing and swing opposite the legs moving; a keeper holding the ball has
+his hands on it.
 """
 
 import math
 
-from ninety.render.meshpose import foot_yaw, pose_markers
+from ninety.render.camera import Camera
+from ninety.render.meshpose import HOLD_SIDE, foot_yaw, pose_markers
 from ninety.render.scene import (
     BALL_RADIUS,
+    KICK_SWING_S,
     LEAD_AHEAD_FRAMES,
     LEAD_MAX,
     PLANT_AHEAD_MAX,
@@ -17,7 +21,10 @@ from ninety.render.scene import (
     Look,
     body_parts,
     contacts,
+    hold_at,
+    holds,
     mesh_pose,
+    parts_box,
     reach_sign,
     touch_at,
 )
@@ -148,7 +155,7 @@ def _drawn_touch(frames):
     for fi, fr in enumerate(frames):
         pl = fr["players"][0]
         g.heading, g.action, g.speed = pl["heading"], pl["action"], 0.0
-        touch_at(g, mine, fi, LOOK.height_m, FPS)
+        touch_at(g, mine, fi, LOOK.height_m, FPS, pl["x"], pl["y"])
         b = fr["ball"]
         ball = (b["x"], b["y"], b["z"])
         body_parts(pl["x"], pl["y"], LOOK, g, ball)
@@ -204,7 +211,7 @@ def test_a_ball_at_the_engines_full_reach_is_met_with_a_lunge_on_a_planted_foot(
     """The engine's foot meets a ball up to 1 m from his centre (P14); a standing leg reaches about
     0.45 m. Old: the stored pose, 0.6 m off it. Now the hips drop and the leg stretches to it,
     and the other foot stays on the grass."""
-    mine, drawn = _drawn_touch(_kick((50.2, 29.05), part="foot", out=(3.0, 0.0)))
+    mine, drawn = _drawn_touch(_kick((50.2, 29.05), part="foot", out=(3.0, 0.0), after=16))
     c = mine[0]["frame"]
     pose, markers, _ = drawn[c]
     assert pose["lift"] < -0.1
@@ -215,3 +222,121 @@ def test_a_ball_at_the_engines_full_reach_is_met_with_a_lunge_on_a_planted_foot(
     assert markers["foot_r"][2] > -0.005  # stretched, not through the grass
     assert markers["foot_l"][2] < 0.05  # the support foot is still on the grass
     assert drawn[-1][0]["lift"] == 0.0
+
+
+def _forward(m, name, heading=0.0, x=0.0, y=0.0):
+    """How far a marker is ahead of the body's centre, along the way he faces."""
+    return (m[name][0] - x) * math.cos(heading) + (m[name][1] - y) * math.sin(heading)
+
+
+def test_standing_arms_hang_by_his_sides():
+    """Old: both forearms held out in front, the hands 0.33 m ahead of him at 0.99 m, whatever the
+    action. Standing, a hand hangs below the wrist's standing height (0.485 of stature, Drillis and
+    Contini 1966, so 0.89 m for 1.84 m) and close to the side of the thigh."""
+    m = pose_markers({"action": "stand", "x": 0.0, "y": 0.0}, 0.0, 1.84)
+    for s in "lr":
+        assert m[f"hand_{s}"][2] < 0.485 * 1.84, (s, m[f"hand_{s}"])
+        assert abs(_forward(m, f"hand_{s}")) < 0.15, (s, m[f"hand_{s}"])
+
+
+def test_arms_swing_opposite_the_legs_walking_and_running():
+    """Each hand comes forward as the other side's foot does, and goes back past the hips (old: the
+    hands stayed 0.16 to 0.46 m in front all the way round a run). Walking, the elbows stay nearly
+    straight, so the hands stay below the wrist's standing height (old: 1.0 m and out in front)."""
+    for action, speed, swing in (("walk", 1.3, 0.15), ("run", 5.5, 0.35)):
+        hands, feet = {"l": [], "r": []}, {"l": [], "r": []}
+        for i in range(16):
+            pose = {"action": action, "speed": speed, "phase": i * 2 * math.pi / 16, "x": 0.0, "y": 0.0}
+            m = pose_markers(pose, 0.0, 1.84)
+            for s in "lr":
+                hands[s].append(_forward(m, f"hand_{s}"))
+                feet[s].append(_forward(m, f"foot_{s}"))
+                if action == "walk":
+                    assert m[f"hand_{s}"][2] < 0.485 * 1.84, (action, i, s, m[f"hand_{s}"])
+        for s in "lr":
+            h, f = hands[s], feet[s]
+            mh, mf = sum(h) / len(h), sum(f) / len(f)
+            cov = sum((a - mh) * (b - mf) for a, b in zip(h, f, strict=True))
+            norm = math.sqrt(sum((a - mh) ** 2 for a in h) * sum((b - mf) ** 2 for b in f))
+            assert cov / norm < -0.9, (action, s, cov / norm)  # the hand moves against its own foot
+            assert max(h) - min(h) > swing, (action, s, max(h) - min(h))
+            assert min(h) < 0.0, (action, s, min(h))  # and goes back past the hips
+
+
+def test_a_kick_swings_the_leg_back_behind_him_and_through_the_ball():
+    """Old (#146): the foot was eased toward the ball from at most 0.4 m behind it, so a pass from
+    the feet looked like standing still with the ball between the feet. Now the foot is drawn back
+    and up behind the hips, swings through to meet the ball on the contact frame, and follows on;
+    the arm on the other side goes out for balance."""
+    for ball_xy, foot, out in (((50.45, 29.85), "foot_r", 12.0), ((50.40, 30.18), "foot_l", 24.0)):
+        mine, drawn = _drawn_touch(_kick(ball_xy, before=12, after=14, out=(out, 0.0)))
+        c = mine[0]["frame"]
+        top = c - round(KICK_SWING_S * FPS)
+        _, m, _ = drawn[top]
+        assert m[foot][0] < 50.0 - 0.15, (out, m[foot])  # behind his hips (he stands at x = 50)
+        assert m[foot][2] > 0.25, (out, m[foot])  # and up off the grass
+        pose, markers, ball = drawn[c]
+        centre = (ball[0], ball[1], ball[2] + BALL_RADIUS)
+        assert math.dist(markers[foot], centre) < BALL_RADIUS + 0.08, (out, markers[foot], centre)
+        assert drawn[c + 3][1][foot][0] > markers[foot][0] + 0.15  # it follows through
+        assert drawn[c + 3][1][foot][2] > markers[foot][2] + 0.1  # rising
+        far = "hand_l" if foot == "foot_r" else "hand_r"
+        assert abs(markers[far][1] - 30.0) > 0.4, (out, markers[far])
+
+
+def test_a_lunge_goes_down_and_comes_back_up_over_several_frames():
+    """Old (#146): the hips dropped 0.24 m into the lunge in two frames and snapped back up in two
+    (12 to 15 cm a frame, 3 to 3.75 m/s). Now they sink and rise over TOUCH_RECOVER_S each way: no
+    frame moves them more than 7 cm (1.75 m/s)."""
+    mine, drawn = _drawn_touch(_kick((50.2, 29.05), part="foot", out=(3.0, 0.0), after=16))
+    lifts = [pose["lift"] for pose, _, _ in drawn]
+    assert min(lifts) < -0.2
+    steps = [abs(b - a) for a, b in zip(lifts, lifts[1:], strict=False)]
+    assert max(steps) <= 0.07, steps
+    assert lifts[-1] == 0.0
+
+
+def _held(ball_z=0.0, first=6, last=11, n=18):
+    """A keeper at (5, 34) facing +x with the ball 0.25 m in front of him; the frame names him its
+    possessor with his pose hands on frames first..last."""
+    frames = []
+    for i in range(n):
+        holding = first <= i <= last
+        frames.append({
+            "possessor": "h1" if holding else None,
+            "ball": {"x": 5.25, "y": 34.0, "z": ball_z, "vx": 0.0, "vy": 0.0},
+            "players": [{"id": "h1", "x": 5.0, "y": 34.0, "vx": 0.0, "vy": 0.0, "heading": 0.0,
+                         "action": "hands" if holding else "stand", "dive": 0.0}],
+        })
+    return frames
+
+
+def test_a_keeper_holding_the_ball_has_his_hands_on_it():
+    """Old: the hands pose reached forward at chest height wherever the ball was, so a ball the
+    engine has at his feet stayed at his feet with his hands out in front of him. Now each hand is
+    beside the ball while he holds it, stooping to it on the grass, and the label's box holds him."""
+    cam = Camera((52.5, -35.0, 20.0), (5.0, 34.0, 0.0), 20.0, 1280, 720)
+    look = Look("h1", "home", "GK", 1.90, 1.0, "#c68642", "#1b1410")
+    for z in (0.0, 1.0):
+        frames = _held(ball_z=z)
+        runs = holds(frames)["h1"]
+        g = Gait()
+        for fi, fr in enumerate(frames):
+            pl, b = fr["players"][0], fr["ball"]
+            g.heading, g.action, g.speed = pl["heading"], pl["action"], 0.0
+            touch_at(g, [], fi, look.height_m, FPS, pl["x"], pl["y"])
+            hold_at(g, runs, fi, (b["x"], b["y"], b["z"]), look.height_m, FPS)
+            parts = body_parts(pl["x"], pl["y"], look, g, (b["x"], b["y"], b["z"]))
+            if not runs[0][0] <= fi <= runs[0][1]:
+                continue
+            pose = mesh_pose(g, pl["x"], pl["y"], 0.0)
+            m = pose_markers(pose, g.heading, look.height_m)
+            centre = (b["x"], b["y"], b["z"] + BALL_RADIUS)
+            for s in "lr":
+                assert math.dist(m[f"hand_{s}"], centre) < HOLD_SIDE * look.height_m / 1.84 + 0.06, (
+                    z, fi, s, m[f"hand_{s}"])
+                assert m[f"foot_{s}"][2] > -0.02, (z, fi, s, m[f"foot_{s}"])  # feet on, not in, the grass
+            box = parts_box(cam, parts)
+            for name in ("head", "hand_l", "hand_r", "foot_l", "foot_r"):
+                u, v = cam.project(m[name])
+                assert box[0] - 3 <= u <= box[2] + 3 and box[1] - 3 <= v <= box[3] + 4, (z, name, (u, v), box)

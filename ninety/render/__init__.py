@@ -11,4 +11,7 @@ docs/decisions/0001-synthetic-data.md.
 # turns and touch poses (0.3.3 on its own); the `occlusion=keeper` window; the crowded window
 # counting only a live ball. Clips at cca498c and main's clips before the mesh was named both said
 # 0.3.2 (docs/LESSONS.md, lesson 102).
-RENDERER_VERSION = "0.4.0"
+# 0.4.1: arms hang standing and swing opposite the legs; a kick swings back and through the ball;
+# a lunge recovers over 0.28 s; a keeper's hands hold the ball; the boards behind the goals read
+# the right way round; the stands have walls and roofs that close the bowl.
+RENDERER_VERSION = "0.4.1"

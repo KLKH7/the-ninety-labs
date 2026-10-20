@@ -951,3 +951,21 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `git log -p -- web/render ninety/render/scene.py ninety/render/meshpose.py` since the
   last bump shows no picture change without a version change; a dataset manifest's `renderers`
   lists one version per look.
+
+### 105. Judge a drawn motion over the frames around the moment, and watch the clip
+- **What happened:** #146 made the foot reach the ball on the contact frame and its tests measured
+  exactly that, so they passed while the kick lost its swing: the foot was eased in from at most
+  0.4 m behind the ball, and a pass looked like a player standing still with the ball between his
+  feet. A lunge dropped the hips 0.24 m and snapped them back in two frames. Since the skinned
+  mesh (a3d228e) every stored pose bent both elbows about 80 degrees, so the forearms were held out
+  in front whatever the player did; and since Oct 15 the boards behind the goals had their print
+  flipped and read mirrored. No test looked at any of it; the owner found all four by watching
+  review clips.
+- **Rule:** a change to how a body moves is tested over the frames around the event, not only on
+  it: the swing before, the follow-through after, the rest pose's joints, and how far anything
+  moves in one frame. Every printed surface has a test that it reads left to right from each camera
+  that sees its print. A before/after clip goes on the pull request and someone watches it before
+  merge.
+- **Check:** `tests/test_render_motion.py` (arms hang and swing, the kick's backswing and
+  follow-through, the lunge's pace, the keeper's hands on the ball) and
+  `tests/test_render_stadium.py` each fail on `e50440c` and pass with the fix.

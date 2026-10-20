@@ -40,6 +40,7 @@ _MOVES2 = tuple((a, b) for a in (-1, 0, 1) for b in (-1, 0, 1) if (a, b) != (0, 
 PLANT_FOOT = 0.12  # the foot flat on the grass
 STRIKE_FOOT = 0.4  # the instep: toes pointed, as the stored strike pose has them
 PLANT_GIVE_UP = 0.45
+FLOOR_SLACK = 0.02  # how far under the grass a blended foot may dip before it is put back on it
 # The trunk's lean toward a ball on the chest or the head, shared by the lower spine and the neck.
 LEAN_X = (-0.6, -0.4, -0.2, 0.0, 0.2, 0.4, 0.6)
 LEAN_Z = (-0.4, -0.2, 0.0, 0.2, 0.4)
@@ -57,6 +58,26 @@ EXTRA = {
 }
 
 _CONTACT = {"strike", "foot", "thigh", "chest", "head", "hands", "throw", "dive", "shield"}
+_FEET = ("strike", "foot", "thigh")  # touches taken in stride: the stored pose gives only the arms
+# Holding the ball: the trunk bends over it (scene.py decides how far; this splits it down the
+# spine, the neck taking some back so the eyes stay on the ball) and a hand goes either side of it,
+# HOLD_SIDE from its centre: a ball's radius and a palm's thickness (design).
+HOLD_BEND = (("spine_01", 0.45), ("spine_02", 0.4), ("spine_03", 0.15), ("neck_01", -0.3))
+HOLD_SIDE = 0.14
+# Arm search (the same lists in render.js): upper arm X (back +) and Z (toward the body), lower arm
+# X and Z, Z given for the left arm and mirrored for the right. The elbow does not bend backwards:
+# the limits keep the lower arm on the side of its rest pose that folds forward.
+ARM_UX = (-2.2, -1.4, -0.7, 0.0)
+ARM_UZ = (-0.4, 0.2, 0.6, 1.0)
+ARM_LX = (-1.0, -0.4, 0.2)
+ARM_LZ = (-0.3, 0.2, 0.6)
+ARM_STEP = (0.3, 0.2, 0.25, 0.2)
+ARM_LIMIT = ((-2.8, 1.0), (-0.8, 1.3), (-1.6, 0.6), (-0.6, 1.0))
+ARM_PULL = 0.004
+_MOVES4 = tuple(
+    (a, b, c, d) for a in (-1, 0, 1) for b in (-1, 0, 1) for c in (-1, 0, 1) for d in (-1, 0, 1)
+    if (a, b, c, d) != (0, 0, 0, 0)
+)
 
 
 @lru_cache(maxsize=1)
@@ -158,22 +179,41 @@ def scale(angles: dict, factor: float, keep_z: bool = False) -> dict:
     return out
 
 
-def gait(s: float, run: dict) -> dict:
-    """s = sin(phase). +1 is the stored run (right foot forward). -1 is its mirror."""
+def gait(s: float, run: dict, walk: dict | None = None, arm_t: float = 1.0) -> dict:
+    """s = sin(phase). +1 is the stored run (right foot forward). -1 is its mirror.
+
+    The arms swing opposite the legs. Walking they swing from the shoulder with the elbows
+    nearly straight (the stored walk); running the elbows bend to about a right angle, more in
+    front than behind (the stored run). `arm_t` goes from the one to the other.
+    """
     left, right = (s + 1.0) / 2.0, (1.0 - s) / 2.0
     out = {}
     for base in ("thigh", "calf", "foot"):
         lv, rv = float(run[f"{base}_l"]), float(run[f"{base}_r"])
         out[f"{base}_l"] = lv * left + rv * right
         out[f"{base}_r"] = rv * left + lv * right
+    arms = run if walk is None else _blend_xz(walk, run, arm_t)
     for base in ("upperarm", "lowerarm"):
-        lx, lz = _xz(run[f"{base}_l"])
-        rx, rz = _xz(run[f"{base}_r"])
-        out[f"{base}_l"] = (lx * left + rx * right, lz)
-        out[f"{base}_r"] = (rx * left + lx * right, rz)
+        lx, lz = _xz(arms[f"{base}_l"])
+        rx, rz = _xz(arms[f"{base}_r"])
+        # The right arm's Z is the mirror of the left's: an arm in the other's place takes its Z negated.
+        out[f"{base}_l"] = (lx * left + rx * right, lz * left - rz * right)
+        out[f"{base}_r"] = (rx * left + lx * right, rz * left - lz * right)
     for bone in ("spine_01", "spine_02"):
         if bone in run:
             out[bone] = float(run[bone])
+    return out
+
+
+_ARMS = ("upperarm_l", "lowerarm_l", "upperarm_r", "lowerarm_r")
+
+
+def _blend_xz(a: dict, b: dict, t: float) -> dict:
+    out = {}
+    for key in _ARMS:
+        ax, az = _xz(a[key])
+        bx, bz = _xz(b[key])
+        out[key] = (ax + (bx - ax) * t, az + (bz - az) * t)
     return out
 
 
@@ -373,19 +413,17 @@ def _wrap(a: float) -> float:
     return (a + math.pi) % (2 * math.pi) - math.pi
 
 
-def pose_angles(pose: dict, heading: float, height_m: float) -> dict:
-    """The bone angles for one frame's pose. The same steps as anglesFor in render.js."""
+def _upper(pose: dict, heading: float, height_m: float) -> dict:
+    """The angles before the feet are placed: the action, the turn, the arms and a held ball.
+
+    Nothing after this moves a bone above the hips except a chest or head touch (_lean), so the
+    arms here are the arms drawn (arm_points)."""
     data = asset()
     poses = data["poses"]
     action = pose.get("action") or "stand"
     speed = pose.get("speed") or 0.0
-    reach = pose.get("reach") or 0.0
-    x, y = pose.get("x", 0.0), pose.get("y", 0.0)
     lead = pose.get("lead") or 0.0
-    lift = pose.get("lift") or 0.0
-    if action in ("strike", "foot", "thigh") and action in poses:
-        angles = mirror(poses[action]) if reach > 0 else dict_angles(poses[action])
-    elif action in poses and action in _CONTACT:
+    if action in poses and action in _CONTACT and action not in _FEET:
         base = dict_angles(poses[action])
         if action == "dive":
             dive = pose.get("dive") or 0.0
@@ -397,15 +435,39 @@ def pose_angles(pose: dict, heading: float, height_m: float) -> dict:
     elif action == "stand" or speed < data["standSpeed"]:
         angles = dict_angles(poses["stand"])
     else:
-        angles = gait(math.sin(pose.get("phase") or 0.0), poses["run"])
-        if action != "run" and speed < data["fullStrideSpeed"]:
-            angles = scale(angles, data["walkScale"], keep_z=True)
+        # A strike or a touch with the foot or thigh is taken in stride: the legs keep the gait
+        # and the touch (below) takes the one that meets the ball.
+        full = data["fullStrideSpeed"]
+        arm_t = 1.0 if action == "run" else _clamp((speed - full) / (data["armRunSpeed"] - full), 0.0, 1.0)
+        angles = gait(math.sin(pose.get("phase") or 0.0), poses["run"], poses["walk"], arm_t)
+        if action != "run" and speed < full:
+            legs = scale({k: v for k, v in angles.items() if k not in _ARMS}, data["walkScale"], keep_z=True)
+            angles.update(legs)
     if lead:
         # The hips lead a turn and the chest follows: Root turns the hips and legs, the lower
         # spine turns the chest back to where the engine has it face.
         _add(angles, "Root", dz=lead)
         _add(angles, "spine_01", dy=-lead * 0.5)
         _add(angles, "spine_02", dy=-lead * 0.5)
+    touch = pose.get("touch")
+    if touch and touch.get("w", 0.0) > 0.0 and touch["part"] in _FEET:
+        # The arms balance the kick or the touch: the far arm out and forward, the near one back
+        # (the stored poses are a right-footed touch).
+        arms = dict_angles(poses[touch["part"]])
+        arms = mirror(arms) if touch.get("side", "r") == "l" else arms
+        angles = _blend(angles, {**angles, **{k: arms[k] for k in _ARMS}}, float(touch["w"]))
+    hold = pose.get("hold")
+    if hold and hold.get("w", 0.0) > 0.0:
+        angles = _blend(angles, _hold(angles, pose, hold, heading, height_m), float(hold["w"]))
+    return angles
+
+
+def pose_angles(pose: dict, heading: float, height_m: float) -> dict:
+    """The bone angles for one frame's pose. The same steps as anglesFor in render.js."""
+    x, y = pose.get("x", 0.0), pose.get("y", 0.0)
+    lead = pose.get("lead") or 0.0
+    lift = pose.get("lift") or 0.0
+    angles = _upper(pose, heading, height_m)
     # scene.py plants a foot only when the pose stands on it.
     for side in ("l", "r"):
         plant = pose.get(f"plant_{side}")
@@ -427,12 +489,107 @@ def pose_angles(pose: dict, heading: float, height_m: float) -> dict:
             foot = STRIKE_FOOT if part == "strike" else PLANT_FOOT
             floor = -lift / (height_m / 1.84)
             reached, _ = _leg(angles, side, target, foot, 0.0, f"foot_{side}", False, floor=floor)
+            angles = _blend(angles, reached, float(touch["w"]))
+            # Halfway between a planted leg and a swing the knee can pass under the grass when the
+            # hips are low; then the foot is put on the grass where the blend had it.
+            p = _point(angles, f"foot_{side}")
+            if p[1] < floor - FLOOR_SLACK:
+                on_grass = (p[0], floor, p[2])
+                angles, _ = _leg(angles, side, on_grass, foot, 0.0, f"foot_{side}", False, floor=floor)
+            return angles
         elif part == "thigh":
             reached, _ = _leg(angles, side, target, 0.25, 0.0, f"thigh_top_{side}", False, calf_fixed=1.5)
         else:
             reached = _lean(angles, target, "brow" if part == "head" else "chest")
         angles = _blend(angles, reached, float(touch["w"]))
     return angles
+
+
+def _hold(angles: dict, pose: dict, hold: dict, heading: float, height_m: float) -> dict:
+    """Bend over a held ball (scene.py decides how far) and put a hand either side of it."""
+    out = dict(angles)
+    bend = float(hold.get("bend") or 0.0)
+    for bone, share in HOLD_BEND:
+        _add(out, bone, bend * share)
+    x, y, lift = pose.get("x", 0.0), pose.get("y", 0.0), pose.get("lift") or 0.0
+    bx, by, bz = hold["at"]
+    centre = _to_object(x, y, heading, height_m, bx, by, bz, lift)
+    k = height_m / 1.84
+    head, rot = _fk(out, max(_bone_index()["clavicle_l"], _bone_index()["clavicle_r"]))
+    for side, sign in (("l", 1.0), ("r", -1.0)):
+        target = (centre[0] + sign * HOLD_SIDE / k, centre[1], centre[2])
+        out = _arm(out, side, sign, target, head, rot)
+    return out
+
+
+def _arm_hand(angles: dict, side: str, head: list, rot: list) -> tuple[float, float, float]:
+    """The hand marker for these arm angles, from the posed shoulder girdle (head, rot)."""
+    i = _bone_index()
+    bones = asset()["bones"]
+    heads, rots = dict(enumerate(head)), dict(enumerate(rot))
+    for name in (f"upperarm_{side}", f"lowerarm_{side}", f"hand_{side}"):
+        b = i[name]
+        bone = bones[b]
+        parent = bone["parent"]
+        swing = _matmul(rots[parent], _transpose(_cols(bones[parent]["R"])))
+        offset = tuple(bone["head"][j] - bones[parent]["head"][j] for j in range(3))
+        swung = _matvec(swing, offset)
+        heads[b] = tuple(heads[parent][j] + swung[j] for j in range(3))
+        rots[b] = _matmul(swing, _matmul(_cols(bone["R"]), _local_rot(angles.get(name, 0.0))))
+    pos, skin = _marker(f"hand_{side}")
+    b = i[f"hand_{side}"]
+    rest = bones[b]["head"]
+    local = _matvec(_transpose(_cols(bones[b]["R"])), tuple(pos[j] - rest[j] for j in range(3)))
+    world = _matvec(rots[b], local)
+    return tuple(world[j] + heads[b][j] for j in range(3))
+
+
+def _arm(angles: dict, side: str, sign: float, target, head: list, rot: list) -> dict:
+    """Upper and lower arm angles that put the hand on `target`. Grid, then halving steps. A small
+    pull toward the hanging arm keeps the elbow bending the way an elbow bends."""
+    stand = asset()["poses"]["stand"]
+    rest = [*_xz(stand["upperarm_l"]), *_xz(stand["lowerarm_l"])]
+
+    def trial(params):
+        t = dict(angles)
+        t[f"upperarm_{side}"] = (params[0], params[1] * sign)
+        t[f"lowerarm_{side}"] = (params[2], params[3] * sign)
+        err = math.dist(_arm_hand(t, side, head, rot), target)
+        err += ARM_PULL * sum(abs(params[j] - rest[j]) for j in range(4))
+        return err, t
+
+    best = None
+    for ux in ARM_UX:
+        for uz in ARM_UZ:
+            for lx in ARM_LX:
+                for lz in ARM_LZ:
+                    err, t = trial((ux, uz, lx, lz))
+                    if best is None or err < best[0]:
+                        best = (err, t, [ux, uz, lx, lz])
+    steps = list(ARM_STEP)
+    for _ in range(REFINE):
+        centre = best[2]
+        for move in _MOVES4:
+            params = [_clamp(centre[j] + move[j] * steps[j], *ARM_LIMIT[j]) for j in range(4)]
+            err, t = trial(params)
+            if err < best[0]:
+                best = (err, t, params)
+        steps = [v / 2 for v in steps]
+    return best[1]
+
+
+def arm_points(pose: dict, heading: float, height_m: float) -> dict[str, list[float]]:
+    """World shoulder, elbow and hand of each arm as the mesh draws them (scene.py labels them)."""
+    angles = _upper(pose, heading, height_m)
+    head, _ = _fk(angles, max(_bone_index()["hand_l"], _bone_index()["hand_r"]))
+    markers = {}
+    i = _bone_index()
+    for side in ("l", "r"):
+        markers[f"shoulder_{side}"] = head[i[f"upperarm_{side}"]]
+        markers[f"elbow_{side}"] = head[i[f"lowerarm_{side}"]]
+        markers[f"hand_{side}"] = _point(angles, f"hand_{side}")
+    x, y, lift = pose.get("x", 0.0), pose.get("y", 0.0), pose.get("lift") or 0.0
+    return {name: list(to_world(x, y, heading, height_m, p, lift)) for name, p in markers.items()}
 
 
 def dict_angles(raw: dict) -> dict:
