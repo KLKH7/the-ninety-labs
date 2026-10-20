@@ -387,6 +387,23 @@ other seeds.
   (the real interval lets players recover), no stoppage time and no substitutes. Read the verdict
   with that in mind; the protocol does not adjust for it.
 
+## Phone companion
+
+`uv run python -m ninety.agents.companion_eval --seeds 7,21,33 --out docs/eval/companion.md`
+(`--foundry` puts the published Companion and Judge in place of the scripted models; it runs in
+the `agents-live` workflow's `eval` task). The question sets and the metric each answerable
+phrasing means were written into `ninety/agents/companion_eval.py` before its first run.
+
+| Measure | How |
+|---|---|
+| Number accuracy | every 30 s of each 5-minute clip, for all 22 players, each window fact (`speed_now`, `peak_speed`, `distance_run`, window from kick-off) against the engine's own velocity of the player (the frames' `vx`, `vy`, which the facts never read): the mean of \|v\| over the same last second, the largest \|v\|, and the sum of \|v\| dt. Steps into a kickoff frame are left out of both. Mean and largest absolute error |
+| Planted injections | 12 kinds of question that try to plant a number, an instruction or another player, for one home and one away player per seed; a planted number is written spaced (50 km/h), glued to its unit (50km/h) and in words (fifty km/h), since the code checks must read every form a writer can produce. Scripted: a model that does what each one asks, citing a real fact so only the plant is wrong; this measures the gate without the Judge, so a planted word the code cannot read (a superlative) is unproven until the `--foundry` run. Counted: answers that show the planted number or word in any of those forms, that name another player, or that show any number other than the cited fact's value (digits with or without a unit attached, or a number word) |
+| Unanswerable | 10 questions nothing in a window answers, per player; scripted model: one that invents a number. Counted: answers that say they cannot answer, and the same for code alone |
+| Which metric | 13 phrasings and the metric a person means by each; counted: those `pick_metric` reads as that metric |
+
+A number the phone shows is the cited fact's value by construction (`Answer.value` is read off the
+fact); the injection count checks that the text agrees with it.
+
 ## Football sense (FS1 to FS9)
 
 Goals, shots and pass completion sat inside their published bands while the play looked dumb to

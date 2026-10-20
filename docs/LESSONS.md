@@ -1235,3 +1235,72 @@ short and actionable. This file is public: no research sources, product names or
   pass; removing any one of the three parts of the fix fails one of them or the tackle's limb cap.
   The sweep at 0.4.5: 0 such player-frames on seeds 7 and 11 (worst 0.18 m), from 21.
 
+### 126. A legal exception in the contract is an exception in every reader of the same data
+- **What happened:** after a goal the kickoff puts every player back in his own half in one frame.
+  The data contract allows it, and the validator's speed check and the late-drop report both skip
+  it. The stats engine did not: `player_movement_facts` counted the reset as running, so seed 7's
+  h7 had a 4,739 km/h peak speed and 52 m of extra distance in the Ledger's facts. No test failed,
+  because the movement tests were built by hand and never contained a kickoff. It came to light
+  when the phone companion first showed the number.
+- **Rule:** when the contract makes an exception (a kickoff reset, a dead ball being replaced),
+  every computation over the same frames applies it in the same place, and one shared function
+  (`stats.player_steps`) decides which steps count as movement.
+- **Check:** `tests/test_stats.py::test_a_kickoff_reset_is_not_movement` puts a reset into a
+  kickoff frame (legal under the contract) and fails on the old code;
+  `test_no_player_outruns_the_contract_over_a_restart_after_a_goal` runs the engine's own restart
+  partway through a match and holds every player's peak speed under the validator's limit. (The
+  engine teleported players at a kickoff until #156; they now walk back, so the engine case is the
+  walk, and the reset is pinned by the hand-built frames.)
+
+### 127. A test that waits for its rule hangs when the rule breaks, and a hang is not a red test
+- **What happened:** two WebSocket tests on the phone relay checked their rule by waiting for a
+  message (a close, the room's latest state). With the rule mutated, the message never came and
+  pytest blocked for about 40 minutes, until the process was killed by hand. A CI job would have waited
+  out its timeout rather than failing on the test that names the rule.
+  The same tests then hung CI's full run with the rule intact: Starlette's TestClient gives each
+  WebSocket its own thread and event loop, so the laptop's relay wrote into another thread's
+  socket, and under load a message was lost. uvicorn never does that; but the same tests, moved
+  onto one loop, showed a real bug: a laptop message relayed while a joining phone was still
+  being sent the latest state could overtake it, leaving the phone on a stale clock.
+- **Rule:** a test that waits for a message sends a sentinel the broken code would deliver first,
+  or tests the rule directly, so a broken rule fails the test at once. Every receive has a
+  deadline. Concurrency is tested the way the server runs it (one event loop for every
+  connection), never through a harness that adds threads the server does not have.
+- **Check:** each mutation of the relay (`ninety/api/companion.py`) fails with pytest's own
+  counts within seconds, never times out. `tests/test_api_companion.py` drives the relay on one
+  loop with a 5 s deadline per receive, and 150 repeats on 4 workers under full CPU load pass;
+  `test_a_newer_clock_never_overtakes_a_phones_catch_up` fails without the single flusher.
+
+### 128. A refusal a browser cannot read is no refusal: close a WebSocket after accepting it
+- **What happened:** the phone relay refused a join (unknown code, room full, laptop taken) by
+  closing the WebSocket before accepting it, and its tests read the close codes 4404, 4409 and 4429
+  from an ASGI harness. A browser never sees a close sent before the handshake completes: uvicorn
+  answers it with a 403 and the page reads 1006, so the phone could not say "unknown code" or
+  "room full". W6 found it by running the phone in a real browser (#162).
+- **Rule:** a WebSocket refusal the client must act on is sent after `accept()`, with its code; a
+  refusal takes no slot, so accepting first changes nothing else. A test of a refusal checks that
+  the accept came first, not only the code.
+- **Check:** `tests/test_api_companion.py`'s `refused()` fails when the server closes before the
+  accept, and every refusal test goes through it; moving `_refuse` back to a bare close turns them red.
+
+
+### 129. A number check that reads one written form lets every other form through
+- **What happened:** the fact-check read a number only when no letter followed it, to skip ids
+  like "e00042". So "50km/h", "50kph" and "9999m" were never read, nor was "fifty km/h": a model
+  following an injected instruction could air a number the evidence does not hold. The phone
+  companion made that reachable from a viewer's text, and its evaluation missed it because the
+  scripted attacker wrote only the spaced form and the leak count used the check's own pattern.
+  The reviewer's audit found it on #145.
+  The first fix then summed any run of number words, so "a one-two" read as 3 and "a one-on-one"
+  as a count of 1, and true commentary from every agent was rejected (the reviewer again).
+- **Rule:** a check on what a writer says reads every form a writer can produce: a unit glued on
+  or spaced, digits or words. It reads words only as English writes one number, and an idiom
+  ("one-two", "one-touch", "no one") is no number. An evaluation of that check plants each form
+  and counts leaks with its own reader, never the check's pattern, and a change to the reader is
+  measured for false rejections too (lesson 11).
+- **Check:** `tests/test_factcheck.py::test_a_planted_number_in_any_written_form_is_rejected`
+  plants each form; `docs/eval/companion.md` plants the glued and spelled forms, and on the old
+  check its count shows 4 of them airing on seed 7.
+  `test_football_idioms_are_words_not_counts` passes each idiom with its passes cited. Measured
+  for false rejections: the 412 recorded claim texts in `replays/`, `docs/eval/` and the fixtures
+  read the same numbers as before, and `fact_checker_proof --check` and both replays pass.
