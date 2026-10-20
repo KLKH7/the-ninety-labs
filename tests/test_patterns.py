@@ -32,7 +32,34 @@ def test_distance_while_the_ball_is_out_is_split_from_the_rest():
 
 
 def test_the_report_plays_the_same_match_as_the_engine():
-    engine, dead = patterns.run(7, 0.5)
+    engine, _ = patterns.run(7, 0.5)
     other = Engine(7).run(0.5)
     assert engine.match.frames == other.frames and engine.match.events == other.events
+
+
+def test_out_of_play_runs_from_the_stoppage_to_the_restart():
+    # Seed 7's first minute holds balls going out, restarts taken and a goal; the test says so
+    # (lesson 41). The ball is out from the frame play stops until the frame the restart is
+    # taken, which is in play, and in play everywhere between a restart and the next stoppage.
+    engine, dead = patterns.run(7, 1)
+    events = sorted((e["frame"], e["type"]) for e in engine.match.events
+                    if e["type"] in ("out_of_play", "foul", "goal", "set_piece"))
+    kinds = {k for _, k in events}
+    assert {"out_of_play", "set_piece", "goal"} <= kinds
     assert 0 in dead, "the match starts with the kick-off still to be taken"
+    for (f, kind), nxt in zip(events, events[1:] + [(len(engine.match.frames), None)], strict=True):
+        if kind == "set_piece":
+            assert f - 1 in dead and f not in dead
+            assert not dead & set(range(f, nxt[0])), "in play between a restart and the next stoppage"
+        else:
+            assert f in dead
+
+
+def test_the_split_table_reads_pace_over_the_minutes_in_each_state():
+    rows = [{"km": 9.0, "out_km": 1.5}, {"km": 7.0, "out_km": 0.5}]  # two players per position
+    result = {"in_play_min": 60.0, "groups": dict.fromkeys(patterns.PUBLISHED_KM, rows)}
+    table = "\n".join(patterns.split_table([result]))
+    # in play 7.0 km over 60 minutes, out of play 1.0 km over the other 30
+    assert "| centre-back | 7.0 | 117 | 1.0 | 33 |" in table
+    assert "| all outfield | 7.0 | 117 | 1.0 | 33 |" in table
+    assert f"| {patterns.PUBLISHED_IN_PLAY_KM:.1f} | 149 | 2.8 | 65 |" in table

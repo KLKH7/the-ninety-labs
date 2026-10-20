@@ -926,13 +926,13 @@ short and actionable. This file is public: no research sources, product names or
 ### 101. A total that matches can be two errors cancelling
 - **What happened:** for weeks the running report showed outfield distances of 9 to 12 km, close to
   the published 9 to 11, and nobody asked why. When restarts took their sourced time, distances fell
-  to 6 to 9 km and the drop looked like a new fault. Splitting the distance by ball in play showed
-  the pace with the ball in play had been about 125 m a minute all along, against about 149 in
-  real football: the old total matched only because the ball was in play 80 of 90 minutes instead
-  of about 55.
+  to 6 to 9 km and the drop looked like a new fault. Splitting distance by whether the ball is in
+  play showed the pace with it in play had stayed at about 125 m a minute on the same seeds before
+  and after, against about 149 in real football: the old total matched only because the ball was in
+  play 80 of 90 minutes instead of about half.
 - **Rule:** before a total is called realistic, compare it in parts that each have a published
-  figure (time and pace with the ball in play, distance while it is out), on the same matches.
-  A total that agrees while its parts do not is two errors, not a match.
-- **Check:** `uv run python -m ninety.sim.patterns` prints distance by ball in play and out of
-  play beside Premier League tracking; `tests/test_patterns.py` checks the split on a hand-made
-  match and that the report plays the engine's own match.
+  figure (time and pace with the ball in play, pace while it is out), on the same matches. A total
+  that agrees while its parts do not is two errors, not a match.
+- **Check:** `uv run python -m ninety.sim.patterns` prints distance and pace in play and out of play
+  beside published tracking; `tests/test_patterns.py` checks the split against the match's own
+  stoppages and restarts, and that the report plays the engine's own match.

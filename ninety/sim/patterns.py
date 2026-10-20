@@ -28,22 +28,26 @@ PUBLISHED_KM = {"centre-back": 9.1, "full-back": 10.1, "central midfield": 10.7,
                 "centre-forward": 9.6}
 PUBLISHED_TOP = {"centre-back": 7.9, "full-back": 8.1, "central midfield": 7.9, "winger": 8.6,
                  "centre-forward": 8.0}
-# Premier League tracking, all outfield players (GROUNDING R2; Kavanagh et al. 2024, Table 2):
-# 10.67 km a match, 2.84 km of it while the ball is out of play; with the ball in play 7.83 km
-# over 21.9 + 30.6 = 52.5 minutes (own team, then the opponents, in possession).
-PUBLISHED_IN_PLAY_KM, PUBLISHED_IN_PLAY_MIN, PUBLISHED_OUT_KM = 3.140 + 4.689, 21.9 + 30.6, 2.839
+# One Premier League team's outfield players over 38 matches (GROUNDING R2; Kavanagh et al. 2024),
+# for reading the report only. Table 2: 3.140 + 4.689 km with the ball in play (own team, then the
+# opponents, in possession) and 2.839 km out of play, in a 95.5-minute match. Table 4: 142.9 and
+# 152.7 m a minute in those two phases, which last 21.9 and 30.6 minutes, and 65.4 out of play.
+PUBLISHED_IN_PLAY_KM, PUBLISHED_OUT_KM = 3.140 + 4.689, 2.839
+PUBLISHED_IN_PLAY_MPM = (142.9 * 21.9 + 152.7 * 30.6) / (21.9 + 30.6)
+PUBLISHED_OUT_MPM = 65.4
 
 
 def run(seed: int, minutes: float) -> tuple[Engine, set[int]]:
-    """Play the match exactly as Engine.run does, also noting each frame played while the ball was
-    out of play (a restart still to be taken)."""
+    """Play the match exactly as Engine.run does, also noting each frame in which players moved with
+    the ball out of play: a restart still to be taken when they moved (they move last in a frame, so
+    the frame the ball goes out counts as out, the frame the restart is taken as in play)."""
     engine = Engine(seed)
     engine.kickoff("home")
     dead = set()
     for _ in range(int(minutes * 60 * FPS)):
-        if engine.restart:
-            dead.add(engine.frame)
         engine.step()
+        if engine.restart:
+            dead.add(engine.frame - 1)
     return engine, dead
 
 
@@ -119,6 +123,33 @@ def tally(m, dead: set[int], minutes: float) -> dict:
             "early_high": early_high, "late_high": late_high, "in_play_min": in_play_min}
 
 
+def split_table(results: list[dict]) -> list[str]:
+    """Distance and pace per outfield player with the ball in play and out of play (a restart still
+    to be taken), beside the published figures. Pace is distance over the minutes in that state."""
+    in_play = mean(r["in_play_min"] for r in results)
+    out_min = 90 - in_play
+    lines = [
+        "",
+        f"**Ball in play and out of play.** The ball was in play {in_play:.1f} of 90 minutes on average "
+        f"({in_play / 90:.0%}; published {(21.9 + 30.6) / 95.5:.0%} of a 95.5-minute match).",
+        "",
+        "| Position | In play, km | In play, m/min | Out of play, km | Out of play, m/min |",
+        "|---|---|---|---|---|",
+    ]
+
+    def row(label: str, rows: list[dict]) -> str:
+        live = mean(x["km"] - x["out_km"] for x in rows)
+        out = mean(x["out_km"] for x in rows)
+        return (f"| {label} | {live:.1f} | {live * 1000 / in_play:.0f} | {out:.1f} "
+                f"| {out * 1000 / out_min:.0f} |")
+    for group in PUBLISHED_KM:
+        lines.append(row(group, [x for r in results for x in r["groups"].get(group, [])]))
+    lines.append(row("all outfield", [x for r in results for rows in r["groups"].values() for x in rows]))
+    lines.append(f"| published (one Premier League team, all outfield) | {PUBLISHED_IN_PLAY_KM:.1f} "
+                 f"| {PUBLISHED_IN_PLAY_MPM:.0f} | {PUBLISHED_OUT_KM:.1f} | {PUBLISHED_OUT_MPM:.0f} |")
+    return lines
+
+
 def report(results: list[dict]) -> str:
     lines = [
         "# Simulated running patterns",
@@ -139,23 +170,7 @@ def report(results: list[dict]) -> str:
             f"| {mean(x['high_m'] for x in rows):.0f} | {mean(x['sprints'] for x in rows):.0f} "
             f"| {mean(x['top'] for x in rows):.1f} | {PUBLISHED_TOP[group]} |"
         )
-    in_play = mean(r["in_play_min"] for r in results)
-    lines += [
-        "",
-        f"**Ball in play and out of play.** The ball was in play {in_play:.1f} of 90 minutes on average. "
-        "Distance per outfield player while it was in play and while it was out (a restart still to "
-        "be taken), and the pace in play:",
-        "",
-        "| Position | In play, km | In play, m/min | Out of play, km |",
-        "|---|---|---|---|",
-    ]
-    for group in PUBLISHED_KM:
-        rows = [x for r in results for x in r["groups"].get(group, [])]
-        live = mean(x["km"] - x["out_km"] for x in rows)
-        out = mean(x["out_km"] for x in rows)
-        lines.append(f"| {group} | {live:.1f} | {live * 1000 / in_play:.0f} | {out:.1f} |")
-    lines.append(f"| published (Premier League, all outfield) | {PUBLISHED_IN_PLAY_KM:.1f} "
-                 f"| {PUBLISHED_IN_PLAY_KM * 1000 / PUBLISHED_IN_PLAY_MIN:.0f} | {PUBLISHED_OUT_KM:.1f} |")
+    lines += split_table(results)
     lines += ["", "| Team shape (outfield) | Length, m | Width, m |", "|---|---|---|"]
     for key, label in (("in", "in possession"), ("out", "out of possession")):
         rows = [r["shape"][key] for r in results if key in r["shape"]]
