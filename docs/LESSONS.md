@@ -1108,21 +1108,6 @@ short and actionable. This file is public: no research sources, product names or
   fails with an unclaimed file in `replays/`, and fails when a workflow recording no longer saves
   byte for byte.
 
-### 114. A random choice scaled by the spread of all options loosens when a bad option is added
-- **What happened:** the carrier's softmax took its randomness as a share of the spread of all his
-  options' values, so a choice between close options would be loose and one between clearly
-  different options would not. The spread included the hopeless options (a 50 m pass into a crowd, a
-  shot from 44 m), so every bad option widened it and made the choice between the good ones looser.
-  Choices logged on seeds 7 and 21 showed him taking his best option in about a third of decisions,
-  against the rule's own "a good decision-maker almost always takes the best option".
-- **Rule:** in a choice rule, the odds between two options depend only on those two and on the
-  chooser; a scale for the randomness is fixed in the options' own units, never taken from the set
-  of options on offer. A habit is a pull in units of that randomness, not a bonus in the options'
-  units, or changing the scale turns it into a command. A choice asked again before anything new is
-  seen is the same choice: hold the random draw, or repeated asking makes a rejected option certain.
-  Check a stated intent ("almost always the best") against logged choices.
-- **Check:** `tests/test_decisions.py::test_a_hopeless_option_does_not_loosen_the_choice_between_two_good_ones`.
-
 ### 120. An exemption in a check is where a defect hides: reach the state, do not place it
 - **What happened:** the engine placed a new ball at the taker's feet at every restart and reset
   all 22 players at every goal. The validator exempts dead-ball windows from the ball-speed check
@@ -1176,6 +1161,7 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_credentials.py`. Each site takes the token before it simulates, and
   hands the same `SignedIn` credential to every client; deleting any `sign_in` turns its test
   red. An AST check keeps `azure.identity.DefaultAzureCredential` out of the live modules.
+
 ### 124. Judge a drawn motion over the frames around the moment, and watch the clip
 - **What happened:** #146 made the foot reach the ball on the contact frame and its tests measured
   exactly that, so they passed while the kick lost its swing: the foot was eased in from at most
@@ -1265,7 +1251,6 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_api_companion.py`'s `refused()` fails when the server closes before the
   accept, and every refusal test goes through it; moving `_refuse` back to a bare close turns them red.
 
-
 ### 129. A number check that reads one written form lets every other form through
 - **What happened:** the fact-check read a number only when no letter followed it, to skip ids
   like "e00042". So "50km/h", "50kph" and "9999m" were never read, nor was "fifty km/h": a model
@@ -1286,3 +1271,18 @@ short and actionable. This file is public: no research sources, product names or
   `test_football_idioms_are_words_not_counts` passes each idiom with its passes cited. Measured
   for false rejections: the 412 recorded claim texts in `replays/`, `docs/eval/` and the fixtures
   read the same numbers as before, and `fact_checker_proof --check` and both replays pass.
+
+### 137. A random choice scaled by the spread of all options loosens when a bad option is added
+- **What happened:** the carrier's softmax took its randomness as a share of the spread of all his
+  options' values, so a choice between close options would be loose and one between clearly
+  different options would not. The spread included the hopeless options (a 50 m pass into a crowd, a
+  shot from 44 m), so every bad option widened it and made the choice between the good ones looser.
+  Choices logged on seeds 7 and 21 showed him taking his best option in about a third of decisions,
+  against the rule's own "a good decision-maker almost always takes the best option".
+- **Rule:** in a choice rule, the odds between two options depend only on those two and on the
+  chooser; a scale for the randomness is fixed in the options' own units, never taken from the set
+  of options on offer. A habit is a pull in units of that randomness, not a bonus in the options'
+  units, or changing the scale turns it into a command. A choice asked again before anything new is
+  seen is the same choice: hold the random draw, or repeated asking makes a rejected option certain.
+  Check a stated intent ("almost always the best") against logged choices.
+- **Check:** `tests/test_decisions.py::test_a_hopeless_option_does_not_loosen_the_choice_between_two_good_ones`.
