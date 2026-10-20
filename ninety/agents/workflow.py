@@ -176,12 +176,17 @@ def parse_moments(
     moments: list[Moment] = []
     dropped: list[str] = []
     for pick in picks:
-        main = str(pick.get("main_event", "")) if isinstance(pick, dict) else ""
-        cited = pick.get("evidence", []) if isinstance(pick, dict) else []
-        evidence = tuple(dict.fromkeys([main, *(str(i) for i in cited if isinstance(cited, list))]))
+        main = pick.get("main_event") if isinstance(pick, dict) else None
+        cited = pick.get("evidence") if isinstance(pick, dict) else None
+        ids = isinstance(cited, list) and all(isinstance(i, str) for i in cited)
+        if not isinstance(main, str) or not ids:
+            name = main if isinstance(main, str) else "?"
+            dropped.append(f"{name}: not a moment (a main_event and a list of ids)")
+            continue
+        evidence = tuple(dict.fromkeys([main, *cited]))
         unknown = [i for i in evidence if i not in window]
-        if not isinstance(cited, list) or unknown:
-            dropped.append(f"{main or '?'}: not events of minute {minute}: {', '.join(unknown) or 'no list'}")
+        if unknown:
+            dropped.append(f"{main}: not events of minute {minute}: {', '.join(unknown)}")
         elif window[main]["type"] not in TEMPLATE_TYPES:
             dropped.append(f"{main}: a {window[main]['type']} has no graphic to replace")
         elif main not in on_air:
@@ -309,15 +314,36 @@ class Run:
         ))
 
 
-async def _call(ask: Callable[[str], Awaitable[str]], prompt: str) -> tuple[str | None, str]:
-    """A writer's reply, or None and why it failed. A replay that no longer matches is not a model
-    failure: it stops the run (lessons 32 and 44)."""
+def failure_category(error: BaseException) -> str:
+    """The verdict category for a model call that raised: a timeout, or the service."""
+    return "timeout" if isinstance(error, TimeoutError) else "service"
+
+
+async def _call(ask: Callable[[str], Awaitable[str]], prompt: str) -> tuple[str | None, str, str | None]:
+    """A writer's reply, or None, why it failed and the failure's verdict category. A replay that
+    no longer matches is not a model failure: it stops the run (lessons 32 and 44)."""
     try:
-        return await ask(prompt), ""
+        return await ask(prompt), "", None
     except ReplayMismatch:
         raise
     except Exception as e:  # any model failure degrades to the template, never stops the broadcast
-        return None, f"{type(e).__name__}: {e}"
+        return None, f"{type(e).__name__}: {e}", failure_category(e)
+
+
+def guarded(judge):
+    """The Judge, failing closed: an exception judge.py does not handle becomes a `service`
+    verdict, so the claim is held and the template stays (lesson 96)."""
+
+    async def judge_or_hold(claim: Claim, evidence: list[dict]) -> Verdict:
+        try:
+            return await judge(claim, evidence)
+        except ReplayMismatch:
+            raise
+        except Exception as e:
+            return Verdict(False, [f"judge failed ({type(e).__name__}: {e}); claim held back"],
+                           failure_category(e))
+
+    return judge_or_hold
 
 
 # ---------------------------------------------------------------------------------------------
@@ -353,13 +379,13 @@ class Analyst(Executor):
         run, started = self.run, time.perf_counter()
         window = {i: e for i, e in run.known.items() if e["minute"] == pick.minute}
         inline = list(window.values()) if run.inline_events else None
-        reply, error = await _call(run.models.analyst, analyst_prompt(run.match, pick.minute, inline))
+        reply, error, _ = await _call(run.models.analyst, analyst_prompt(run.match, pick.minute, inline))
         moments: list[Moment] = []
         if reply is not None:
             try:
                 on_air = {e for c in run.cues for e in c["evidence"]}
                 moments, dropped = parse_moments(reply, window, pick.minute, on_air)
-            except (ValueError, AttributeError) as e:
+            except Exception as e:  # any malformed reply is no moment; the templates stay
                 error = f"bad reply: {e}"
             else:
                 for reason in dropped:
@@ -392,19 +418,20 @@ class Tactician(Executor):
         run, case, started = self.run, msg.case, time.perf_counter()
         draft = case.tactician
         rewrite = draft if draft.attempt else None  # it is only called again when sent back
-        reply, error = await _call(run.models.tactician, tactician_prompt(case.moment, run.known, rewrite))
+        prompt = tactician_prompt(case.moment, run.known, rewrite)
+        reply, error, category = await _call(run.models.tactician, prompt)
         claim = None
         if reply is not None:
             try:
                 claim = parse_claim(reply)
-            except (ValueError, AttributeError) as e:
-                error = f"bad reply: {e}"
+            except Exception as e:  # any malformed reply: no claim, held
+                error, category = f"bad reply: {e}", "invalid_response"
             else:
-                error = "" if claim else "no claim"
+                error, category = ("", None) if claim else ("no claim", "invalid_response")
         if claim is None:
             if rewrite is None:  # nothing written: held, and there is nothing to challenge
-                draft.status = "held"
-                draft.verdict = Verdict(False, [f"tactician failed ({error}); claim held back"], "service")
+                draft.verdict = Verdict(False, [f"tactician failed ({error}); claim held back"], category)
+                draft.status = status_for(draft.verdict)
                 run.step("tactician", case.moment.id, "fail", started, f"{error}; template stays")
                 await ctx.send_message(ToProducer(case))
             else:  # its rejected version stands
@@ -435,12 +462,12 @@ class Challenger(Executor):
         rewrite = case.challenger if case.challenged else None
         case.challenged = True
         prompt = challenger_prompt(case.tactician.claim, case.moment, run.known, rewrite)
-        reply, error = await _call(run.models.challenger, prompt)
+        reply, error, _ = await _call(run.models.challenger, prompt)
         alternative = None
         if reply is not None:
             try:
                 alternative = parse_challenge(reply)
-            except (ValueError, AttributeError) as e:
+            except Exception as e:  # any malformed reply: no alternative, skipped
                 error = f"bad reply: {e}"
         if error and rewrite:
             run.step("challenger", case.moment.id, "fail", started, f"{error}; the rejection stands")
@@ -479,7 +506,7 @@ class FactChecker(Executor):
                 continue
             started = time.perf_counter()
             with telemetry.stage_span("fact_check", attempt=draft.attempt):
-                checked = await fact_check(draft.claim, scope, run.models.judge, run.gate)
+                checked = await fact_check(draft.claim, scope, guarded(run.models.judge), run.gate)
             if checked.judge_seconds is not None:
                 run.step("judge", case.moment.id, ACTION[status_for(checked.verdict)],
                          time.perf_counter() - checked.judge_seconds, checked.verdict.category or "")
@@ -562,6 +589,13 @@ def _counted(models: Models) -> tuple[Models, list[int]]:
     return Models(**{**vars(models), **fields}), calls
 
 
+def superstep_budget() -> int:
+    """Each hop is a superstep: the start and the Analyst, then per moment a draft, a challenge, a
+    check and the air, plus two hops (write, check) for every rewrite of either claim; one spare.
+    Going over raises in the framework and loses the minute, so it moves with both limits."""
+    return 2 + MAX_MOMENTS_PER_MINUTE * (4 + 2 * 2 * MAX_REWRITES) + 1
+
+
 def agent_events(events: list[dict]) -> list[dict]:
     """The events the agents may see and cite, in full (the Ledger needs their times)."""
     return [e for e in events if e["type"] in AGENT_TYPES]
@@ -588,11 +622,8 @@ async def run_workflow(
               t={e["id"]: float(e["t"]) for e in events})
     start, analyst, tactician = ProducerStart(run), Analyst(run), Tactician(run)
     challenger, checker, producer = Challenger(run), FactChecker(run), Producer(run)
-    # Each hop is a superstep: per moment a draft, a challenge, a check and the air, plus two hops
-    # for every rewrite of either claim.
-    steps = 3 + MAX_MOMENTS_PER_MINUTE * (4 + 2 * 2 * MAX_REWRITES)
     workflow = (
-        WorkflowBuilder(max_iterations=steps, name="ninety-minute", start_executor=start)
+        WorkflowBuilder(max_iterations=superstep_budget(), name="ninety-minute", start_executor=start)
         .add_edge(start, analyst)
         .add_edge(analyst, tactician).add_edge(analyst, producer)
         .add_edge(tactician, challenger).add_edge(tactician, checker).add_edge(tactician, producer)

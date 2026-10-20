@@ -708,3 +708,76 @@ def test_a_challenger_failing_on_its_rewrite_leaves_its_rejection_standing():
     assert "the rejection stands" in fail.detail
     assert history(ledger, f"m-{MAIN}", "challenger")[-1]["status"] == "rejected"
     assert result.reviews[0].aired == true_claim(MAIN)
+
+
+# Second review (4a91fa8): crash paths and bounds ---------------------------------------------
+
+
+@pytest.mark.parametrize("evidence", [None, "e00010", 7, {"id": MAIN}, [MAIN, None]])
+def test_a_malformed_moment_is_dropped_and_the_minute_goes_on(evidence):
+    reply_ = json.dumps({"moments": [{"main_event": MAIN, "evidence": evidence}]})
+    result = run(models(analyst=(reply_,)))
+    assert result.moments == [] and result.cues
+    assert any("not a moment" in s.detail for s in result.trace if s.action == "drop")
+
+
+DEEP = "[" * 100_000 + "]" * 100_000  # json.loads raises RecursionError, not ValueError
+
+@pytest.mark.parametrize("reply_", ['{"moments": [7]}', '{"moments": [{"main_event": 7, "evidence": []}]}',
+                                    '{"moments": {"a": 1}}', "[]", '{"moments": [null]}',
+                                    '{"moments": ' + DEEP + "}"])
+def test_an_analyst_reply_of_the_wrong_shape_is_no_moment(reply_):
+    result = run(models(analyst=(reply_,)))
+    assert result.moments == [] and result.reviews == [] and result.cues
+
+
+class RaisingAgent:
+    """A Judge agent whose service raises an error judge.py does not handle."""
+
+    async def run(self, prompt):
+        raise RuntimeError("unexpected")
+
+
+def test_a_judge_raising_outside_its_handled_errors_holds_the_claim_and_the_template_stays():
+    from ninety.agents import judge as judge_module
+
+    async def real_judge(claim, evidence):  # the live judge() on an agent that raises (lesson 96)
+        return await judge_module.judge(RaisingAgent(), claim, evidence)
+
+    ledger = InMemoryLedger()
+    result = run(models(tactician=[reply(true_claim(MAIN))], judge=real_judge), ledger=ledger)
+    (review,) = result.reviews
+    assert review.status == "held" and review.primary.category == "service" and insights(result) == []
+    assert history(ledger, f"m-{MAIN}")[-1]["status"] == "held"
+
+
+@pytest.mark.parametrize("failure, category", [
+    (TimeoutError(), "timeout"), (RuntimeError("down"), "service"), ("not json", "invalid_response"),
+    ('{"text": "", "evidence": []}', "invalid_response"), ('{"text": ' + DEEP + "}", "invalid_response"),
+])
+def test_a_tactician_failure_keeps_its_category_and_its_status_comes_from_status_for(failure, category):
+    async def tactician(prompt):
+        if isinstance(failure, Exception):
+            raise failure
+        return failure
+
+    result = run(Models.scripted({"analyst": [picks(MAIN)]}, tactician=tactician))
+    (review,) = result.reviews
+    assert review.primary.category == category and review.status == "held"
+
+
+def test_the_worst_case_minute_fits_the_superstep_budget():
+    # Three moments, both writers rejected by the code check on every draft: the most hops a minute
+    # can take. Going over the budget raises in the framework and loses the minute.
+    mains = [p["id"] for p in PASSES[:MAX_MOMENTS_PER_MINUTE]]
+    drafts = 1 + MAX_REWRITES
+    bad = [reply(false_claim(m)) for m in mains for _ in range(drafts)]
+    result = run(models(analyst=(picks(*mains),), tactician=bad, challenger=bad))
+    assert [r.status for r in result.reviews] == ["rejected"] * MAX_MOMENTS_PER_MINUTE
+    sent_back = [s for s in result.trace if s.action == "reject" and "back to the" in s.detail]
+    assert len(sent_back) == 2 * MAX_REWRITES * MAX_MOMENTS_PER_MINUTE
+
+
+def test_a_challenger_reply_that_cannot_be_parsed_is_skipped():
+    result = run(models(tactician=[reply(true_claim(MAIN))], challenger=['{"text": ' + DEEP + "}"]))
+    assert ("challenger", "skip") in steps(result) and result.reviews[0].aired == true_claim(MAIN)
