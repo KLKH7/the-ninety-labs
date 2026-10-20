@@ -17,7 +17,9 @@ import {
   type RelayMessage,
   type ViewerAnswer,
   clock,
+  isTrack,
   playerName,
+  shirt,
   team,
 } from "./types";
 
@@ -196,6 +198,9 @@ async function loadMinimap() {
   if (state.minimap) {
     renderRoster(state.minimap.roster);
     $("wind-toggle").hidden = false;
+    const tracked = state.minimap.roster.some(isTrack);
+    $("seen-note").hidden = !tracked;
+    $("roster-summary").textContent = tracked ? "Choose a player the camera has seen" : "Choose a player from a list";
   }
   renderChips();
 }
@@ -206,7 +211,7 @@ function renderRoster(roster: string[]) {
     b.type = "button";
     b.className = `who ${team(id)}`;
     b.dataset.player = id;
-    b.textContent = id.slice(1);
+    b.textContent = shirt(id);
     b.setAttribute("aria-label", playerName(id));
     b.setAttribute("aria-pressed", "false");
     b.addEventListener("click", () => {
@@ -217,7 +222,7 @@ function renderRoster(roster: string[]) {
   };
   $("roster").replaceChildren(
     ...(["home", "away"] as const).flatMap((side) => {
-      const ids = roster.filter((id) => team(id) === side).sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
+      const ids = roster.filter((id) => team(id) === side).sort((a, b) => Number(shirt(a)) - Number(shirt(b)));
       const label = document.createElement("p");
       label.className = "roster-team";
       label.textContent = side === "home" ? "Home" : "Away";
@@ -271,14 +276,38 @@ function describeMap(t: number, pos: Positions) {
   mapCanvas.setAttribute("aria-label", `Minimap at ${clock(t)}. ${describePlay(pos, playerName)}${who}`);
 }
 
-// On demand, for a fan who cannot see the laptop: one sentence, read out by the live region.
-$("now").addEventListener("click", () => {
-  const said = $("now-said");
-  said.textContent = "";
+// For a fan who cannot see the laptop: one sentence on demand, or, with "Describe as it happens"
+// on, a sentence whenever the play changes (the ball changes half, or the nearest player changes
+// side), at most one every LIVE_GAP_S of match time. The live region reads each one.
+const LIVE_GAP_S = 8; // design: about one sentence between two passes, so the reader can keep up
+let saidAt = -Infinity;
+let saidKey = "";
+
+function sayNow(t: number) {
   if (!lastPositions) return;
-  const sentence = `At ${clock(laptop.time())}: ${describePlay(lastPositions, playerName)}`;
+  const said = $("now-said");
+  const sentence = `At ${clock(t)}: ${describePlay(lastPositions, playerName)}`;
+  said.textContent = "";
+  saidAt = t;
   requestAnimationFrame(() => (said.textContent = sentence)); // a fresh change, so it is read again
-});
+}
+
+$("now").addEventListener("click", () => sayNow(laptop.time()));
+$<HTMLInputElement>("now-live").addEventListener("change", () => (saidKey = ""));
+
+function liveDescription(t: number, pos: Positions) {
+  const [bx, by] = pos.ball;
+  const near = [...pos.players].sort((a, b) => Math.hypot(a[1] - bx, a[2] - by) - Math.hypot(b[1] - bx, b[2] - by))[0];
+  const key = `${bx < 52.5 ? "home" : "away"}:${near ? team(near[0]) : ""}`;
+  const live = $<HTMLInputElement>("now-live").checked;
+  if (live && laptop.isPlaying() && key !== saidKey && t - saidAt >= LIVE_GAP_S) {
+    saidKey = key;
+    sayNow(t);
+  }
+  // An old sentence says how old it is, so it is never read as now.
+  const age = Math.floor(t - saidAt);
+  $("now-age").textContent = Number.isFinite(saidAt) && age >= 3 ? `(${age} s ago)` : "";
+}
 
 function announce(text: string) {
   $("announce").textContent = text;
@@ -350,13 +379,19 @@ function showCard(c: PlayerCard) {
   $("speed").textContent = c.speed_kmh.toFixed(1);
   $("peak").textContent = c.peak_kmh.toFixed(1);
   $("distance").textContent = String(Math.round(c.distance_m));
-  $("heat-title").textContent = `Heat map, ${clock(c.t_from)} to ${clock(c.t_to)}`;
+  // The card covers t_from..t_to, but nothing was tracked before the feed's first frame: say the
+  // stretch the positions really cover, not the one asked for.
+  const from = Math.max(c.t_from, state.minimap?.frames[0]?.t ?? c.t_from);
+  $("heat-title").textContent = `Heat map, ${clock(from)} to ${clock(c.t_to)}`;
+  const span = c.t_to - from;
+  $("heat-short").hidden = span >= 60;
+  $("heat-short").textContent = `Only ${Math.round(span)} seconds so far: the heat map means more as the match goes on.`;
   $("player").dataset.t = String(c.t_to);
   const heat = $<HTMLCanvasElement>("heat");
   const v = fit(heat);
   drawPitch(v);
   drawHeat(v, c.heat, team(c.player) === "home" ? COLORS.home : COLORS.away);
-  heat.setAttribute("aria-label", `Heat map of ${playerName(c.player)}: ${describeHeat(c.heat)}`);
+  heat.setAttribute("aria-label", `Heat map of ${playerName(c.player)}: ${describeHeat(c.heat, team(c.player))}`);
   const busiest = Math.max(...c.heat.cells);
   $("heat-legend").textContent = `Brighter means more time there; the brightest square is ${Math.round(busiest * 100)}% of the time.`;
   $("card-note").textContent =
@@ -405,7 +440,7 @@ const METRIC_WORDS: Record<string, string> = {
 
 /** The API names players by id (a7); fans read "Away 7". Only the names change, never a number. */
 function named(text: string): string {
-  return text.replace(/\b([ha])([1-9]|1[01])\b/g, (_, side: string, n: string) => playerName(side + n));
+  return text.replace(/\b[ha](?:-t\d+|[1-9]|1[01])\b/g, (id) => playerName(id));
 }
 
 let answerSeq = 0;
@@ -416,15 +451,17 @@ async function ask(text: string) {
   const button = $<HTMLButtonElement>("ask-button");
   if (button.getAttribute("aria-disabled") === "true") return;
   button.setAttribute("aria-disabled", "true"); // not `disabled`: that would drop a screen reader's focus
-  const asked = Math.max(0, laptop.time());
+  // About the shown player, ask at the card's time, so the answer and the card agree.
+  const at = state.card && state.card.player === state.selected ? state.card.t_to : Math.round(Math.max(0, laptop.time()) * 10) / 10;
   const pending = document.createElement("li");
   pending.className = "answer pending";
+  pending.setAttribute("aria-hidden", "true"); // the button's state says it; the answer is read when it comes
   pending.textContent = `Fact-checking: “${q}”`;
   $("answers").prepend(pending);
   let answer: ViewerAnswer | null = null;
   let failed = "";
   try {
-    const message: AnswerMessage = await feed.ask({ session: state.code, player: state.selected, text: q, t: asked });
+    const message: AnswerMessage = await feed.ask({ session: state.code, player: state.selected, text: q, t: at });
     answer = message.answer;
   } catch (e) {
     failed =
@@ -437,7 +474,7 @@ async function ask(text: string) {
     button.removeAttribute("aria-disabled");
   }
   if (input.value.trim() === q) input.value = "";
-  pending.replaceWith(renderAnswer(q, asked, answer, failed));
+  pending.replaceWith(renderAnswer(q, at, answer, failed));
 }
 
 function renderAnswer(question: string, at: number, a: ViewerAnswer | null, failed: string): HTMLLIElement {
@@ -479,7 +516,7 @@ function evidence(a: ViewerAnswer): HTMLElement[] {
   toggle.textContent = "Show the evidence";
   const panel = document.createElement("dl");
   panel.className = "evidence";
-  const who = a.evidence.map((id) => /player_([ha](?:[1-9]|1[01]))_/.exec(id)?.[1]).find(Boolean);
+  const who = a.evidence.map((id) => /player_([ha](?:-t\d+|[1-9]|1[01]))_/.exec(id)?.[1]).find(Boolean);
   const what = a.metric ? METRIC_WORDS[a.metric] ?? a.metric.replace(/_/g, " ") : "";
   const rows: [string, string][] = [
     ["What", `${who ? `${playerName(who)}'s ` : ""}${what}${a.value !== null ? `: ${a.value} ${a.unit ?? ""}`.trimEnd() : ""}`],
@@ -555,7 +592,7 @@ async function refreshFlow() {
     const words = $("wind-words");
     words.replaceChildren(
       ...[
-        `Wind map: where each team moved in the last ${WINDOW_S} seconds.`,
+        `Team movement over the last ${WINDOW_S} seconds.`,
         ...flows.map((f) => windWords!(f)),
       ].map((s) => {
         const p = document.createElement("p");
@@ -588,9 +625,10 @@ function frame(now: number) {
     const pos = positionsAt(state.minimap, t);
     drawPitch(v);
     if (pos) {
-      drawPlayers(v, pos, state.selected, state.wind);
+      drawPlayers(v, pos, state.selected);
       lastPositions = pos;
       describeMap(t, pos);
+      liveDescription(t, pos);
     }
     mapCanvas.dataset.t = t.toFixed(2);
     mapCanvas.dataset.dots = String(pos?.players.length ?? 0);
@@ -608,6 +646,9 @@ function frame(now: number) {
 }
 
 $("mockbar").hidden = !feed.mock;
+// The sticky header's height, so a focused element is never scrolled under it (style.css).
+const header = document.querySelector<HTMLElement>(".sticky")!;
+new ResizeObserver(() => document.documentElement.style.setProperty("--header-h", `${header.offsetHeight + 8}px`)).observe(header);
 renderChips();
 requestAnimationFrame(frame);
 const start = params.get("code");

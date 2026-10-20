@@ -402,6 +402,13 @@ phrasing means were written into `ninety/agents/companion_eval.py` before its fi
 A number the phone shows is the cited fact's value by construction (`Answer.value` is read off the
 fact); the injection count checks that the text agrees with it.
 
+### Tracked positions for the phone
+
+`uv run python -m ninety.eval.tracked_speed` grades the phone's speed now, top speed and distance
+from tracked positions against the ground truth, offline, with and without the shipped smoothing
+([companion-tracked.md](eval/companion-tracked.md)): on the M1 clip, a median error of 0.6 km/h
+for speed now and 1.9 km/h for top speed, against 55.6 km/h for top speed without smoothing.
+
 ## Football sense (FS1 to FS9)
 
 Goals, shots and pass completion sat inside their published bands while the play looked dumb to

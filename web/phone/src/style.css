@@ -54,7 +54,7 @@ h3 { font-size: 0.9rem; color: var(--muted); font-weight: 600; margin: 14px 0 6p
 
 main { padding: 16px; max-width: 560px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
 #live > *, #pair > * { min-width: 0; }
-html { overflow-x: clip; } /* clip, not hidden: hidden would unstick the header */
+html { overflow-x: clip; scroll-padding-top: var(--header-h, 120px); } /* clip, not hidden: hidden would unstick the header */
 
 /* Pairing */
 #pair { display: grid; gap: 14px; padding-top: 12px; }
@@ -106,13 +106,21 @@ html { overflow-x: clip; } /* clip, not hidden: hidden would unstick the header 
 .which-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .which-row .who { padding: 0 14px; }
 .now { margin-top: 10px; display: grid; gap: 6px; }
-.now .toggle { justify-self: start; }
+.now-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.check { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; font-weight: 600; }
+.check input { width: 22px; height: 22px; accent-color: var(--accent); }
+#now-age { margin: 0; }
+#now-age:empty { display: none; }
 #now-said { margin: 0; }
 #now-said:empty { display: none; }
 .refused { margin: 10px 0 0; padding: 12px; border-left: 4px solid var(--warn); background: var(--panel-2); border-radius: 6px; }
 
 .roster { margin-top: 10px; }
-.roster summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; color: var(--focus); font-weight: 600; }
+.roster summary { min-height: 44px; display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--focus); font-weight: 600; }
+summary { list-style: none; }
+summary::-webkit-details-marker { display: none; }
+summary::before { content: "▸"; display: inline-block; transition: transform 0.15s; }
+details[open] > summary::before { transform: rotate(90deg); }
 .roster-grid { display: grid; gap: 4px; margin-top: 6px; }
 .roster-team { margin: 6px 0 2px; font-size: 0.8rem; font-weight: 700; color: var(--muted); }
 .roster-row { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
@@ -127,7 +135,7 @@ html { overflow-x: clip; } /* clip, not hidden: hidden would unstick the header 
 #player-title:focus { outline: none; }
 #player-title:focus-visible { outline: 3px solid var(--focus); }
 .close { width: 48px; height: 48px; flex: none; border-radius: 50%; border: 1px solid var(--line); background: var(--panel-2); font-size: 1.1rem; }
-.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(6.4rem, 1fr)); gap: 8px; margin-top: 12px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(5.6rem, 100%), 1fr)); gap: 8px; margin-top: 12px; }
 .stat { margin: 0; display: grid; gap: 2px; padding: 10px 8px; min-width: 0; background: var(--panel-2); border-radius: 10px; }
 .stat .label { font-size: 0.8rem; color: var(--muted); font-weight: 600; }
 .stat .value { font: 700 1.15rem ui-monospace, Menlo, monospace; font-variant-numeric: tabular-nums; }
@@ -163,7 +171,7 @@ html { overflow-x: clip; } /* clip, not hidden: hidden would unstick the header 
 .evidence dt { color: var(--muted); }
 .evidence dd { margin: 0; overflow-wrap: anywhere; }
 .technical { margin-top: 8px; font-size: 0.82rem; color: var(--muted); }
-.technical summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; }
+.technical summary { min-height: 44px; display: flex; align-items: center; gap: 8px; cursor: pointer; }
 .technical .ids { margin: 0; font: 0.78rem ui-monospace, Menlo, monospace; overflow-wrap: anywhere; }
 
 /* The mock laptop page */

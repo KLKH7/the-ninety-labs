@@ -6,11 +6,11 @@
 // module only when the viewer turns the wind map on, and nothing else imports it. Deleting this
 // file and the `import("./wind")` in main.ts removes it.
 
-import { COLORS, type View } from "./pitch";
+import { COLORS, type View, attacksRight, zoneFor } from "./pitch";
 import { type Flow, PITCH_X, PITCH_Y, type Team } from "./types";
 
 export const WINDOW_S = 30; // design: about one phase of play
-const PER_TEAM = 220; // particles
+const PER_TEAM = 140; // particles; design: enough to read the flow, few enough to see the dots
 const SPEED_UP = 5; // design: real running speeds (1 to 7 m/s) drift too slowly to read at a glance
 const LIFE_S = [1.2, 2.6] as const;
 const STILL_SPEED = 0.4; // m/s; design: slower than a walk reads as standing, so it draws no streak
@@ -47,26 +47,35 @@ export function sample(f: Flow, x: number, y: number): [number, number] | null {
   return wsum > 0 ? [vx / wsum, vy / wsum] : null;
 }
 
-/** A team's overall drift in words, weighted by how often each cell was crossed. */
+/** A team's movement in words: forward or back overall, and where it was strongest. */
 export function describe(f: Flow): string {
-  let vx = 0;
-  let vy = 0;
-  let n = 0;
-  f.count.forEach((c, k) => {
-    if (!c || f.vx[k] === null || f.vy[k] === null) return;
-    vx += f.vx[k]! * c;
-    vy += f.vy[k]! * c;
-    n += c;
-  });
   const name = f.team === "home" ? "Home" : "Away";
-  if (!n) return `${name}: no movement in this window.`;
-  vx /= n;
-  vy /= n;
-  const speed = Math.hypot(vx, vy);
-  if (speed < 0.3) return `${name}: holding their shape, no clear drift.`;
-  const across = Math.abs(vx) >= Math.abs(vy);
-  const way = across ? (vx > 0 ? "toward the right of the map" : "toward the left of the map") : vy > 0 ? "toward the bottom side" : "toward the top side";
-  return `${name}: drifting ${way}, ${speed.toFixed(1)} m/s on average.`;
+  const sign = attacksRight(f.team) ? 1 : -1;
+  let forward = 0;
+  let n = 0;
+  let best = -1;
+  let bestSpeed = 0;
+  f.count.forEach((c, k) => {
+    const ux = f.vx[k];
+    const uy = f.vy[k];
+    if (!c || ux === null || uy === null) return;
+    forward += sign * ux * c;
+    n += c;
+    const speed = Math.hypot(ux, uy);
+    if (speed > bestSpeed && c >= 3) {
+      bestSpeed = speed;
+      best = k;
+    }
+  });
+  if (!n) return `${name}: not seen moving in this window.`;
+  forward /= n;
+  const overall = Math.abs(forward) < 0.3 ? "holding their line" : forward > 0 ? `pushing forward (${forward.toFixed(1)} m/s)` : `dropping back (${(-forward).toFixed(1)} m/s)`;
+  if (best < 0) return `${name}: ${overall}.`;
+  const x = ((best % f.nx) + 0.5) * (PITCH_X / f.nx);
+  const y = (Math.floor(best / f.nx) + 0.5) * (PITCH_Y / f.ny);
+  const ux = f.vx[best]!;
+  const way = sign * ux > Math.abs(f.vy[best]!) ? "forward" : sign * ux < -Math.abs(f.vy[best]!) ? "back" : "across";
+  return `${name}: ${overall}; fastest in their ${zoneFor(f.team, x, y)}, running ${way} at ${bestSpeed.toFixed(1)} m/s.`;
 }
 
 export class WindMap {

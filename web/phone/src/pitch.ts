@@ -1,7 +1,7 @@
 // Drawing the pitch, the players and a heat map onto a canvas. Pitch metres (x 0..105, y 0..68,
 // as the frame schema) map onto the canvas with y = 0 at the top.
 
-import { type Minimap, PITCH_X, PITCH_Y, team } from "./types";
+import { type Minimap, PITCH_X, PITCH_Y, shirt, team } from "./types";
 
 export const COLORS = {
   home: "#4ea1ff",
@@ -70,13 +70,20 @@ export interface Positions {
   players: [string, number, number][];
 }
 
-/** Positions at match time t, between the two nearest minimap frames, so the dots glide. */
+/** Positions at match time t, between the two nearest minimap frames, so the dots glide. Frames
+ * are found by their time, not their place in the list: tracked frames have gaps where the camera
+ * fit failed. */
 export function positionsAt(m: Minimap, t: number): Positions | null {
   const frames = m.frames;
   if (!frames.length) return null;
-  const t0 = frames[0].t;
-  const step = 1 / m.fps;
-  const i = Math.max(0, Math.min(frames.length - 1, Math.floor((t - t0) / step)));
+  let lo = 0;
+  let hi = frames.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (frames[mid].t <= t) lo = mid;
+    else hi = mid - 1;
+  }
+  const i = lo;
   const a = frames[i];
   const b = frames[Math.min(frames.length - 1, i + 1)];
   const k = b === a ? 0 : Math.max(0, Math.min(1, (t - a.t) / (b.t - a.t)));
@@ -121,12 +128,17 @@ export function drawPlayers(v: View, pos: Positions, selected: string | null, di
       ctx.stroke();
     }
     ctx.fillStyle = home ? COLORS.homeInk : COLORS.awayInk;
-    ctx.fillText(id.slice(1), px, py + 0.5);
+    ctx.fillText(shirt(id), px, py + 0.5);
   }
   ctx.globalAlpha = 1;
+  // The ball last and larger than its scale, with a halo, so it is the first thing the eye finds.
   const [bx, by] = pos.ball;
   ctx.beginPath();
-  ctx.arc(bx * sx, by * sy, 3.5, 0, Math.PI * 2);
+  ctx.arc(bx * sx, by * sy, 8, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(255,255,255,0.22)";
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(bx * sx, by * sy, 4.5, 0, Math.PI * 2);
   ctx.fillStyle = COLORS.ball;
   ctx.fill();
   ctx.lineWidth = 1.5;
@@ -143,27 +155,33 @@ export function within(v: View, pos: Positions, x: number, y: number, reach = 22
     .map(([id]) => id);
 }
 
-/** Which goal each team defends, read off where its players stand: the team further left defends
- * the left goal. The feed carries no attacking direction, so this is inferred, and said as such. */
-function leftTeam(pos: Positions): "home" | "away" {
-  const mean = (side: string) => {
-    const xs = pos.players.filter((p) => team(p[0]) === side).map((p) => p[1]);
-    return xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.length);
-  };
-  return mean("home") <= mean("away") ? "home" : "away";
+/** The engine's convention, which the tracker's team assignment also follows (ninety/sim/engine.py,
+ * ninety/vision/track.py): home attacks toward x = 105 in both halves, away toward x = 0. */
+export function attacksRight(side: "home" | "away"): boolean {
+  return side === "home";
+}
+
+/** Where (x, y) is for a team, in football words: depth (own half, attacking third...) and flank,
+ * left and right as the team sees them, facing the goal it attacks. */
+export function zoneFor(side: "home" | "away", x: number, y: number): string {
+  const forward = attacksRight(side) ? x : PITCH_X - x; // metres from the team's own goal line
+  const depth = forward < 35 ? "defensive third" : forward < 70 ? "middle third" : "attacking third";
+  // Facing x = 105 with y = 0 at the top of the map, a team's left is the top; facing x = 0, the bottom.
+  const leftness = attacksRight(side) ? PITCH_Y - y : y;
+  const flank = leftness > (2 * PITCH_Y) / 3 ? "left" : leftness < PITCH_Y / 3 ? "right" : "centre";
+  return flank === "centre" ? `${depth}, centrally` : `${depth}, on the ${flank}`;
 }
 
 /** One sentence on where the play is, in football words, for a screen reader. */
 export function describePlay(pos: Positions, name: (id: string) => string): string {
   const [bx, by] = pos.ball;
-  const left = leftTeam(pos) === "home" ? "Home" : "Away";
-  const right = left === "Home" ? "Away" : "Home";
-  const half = bx < PITCH_X / 2 ? left : right;
+  const half = bx < PITCH_X / 2 ? "Home" : "Away";
   const goalDistance = Math.min(bx, PITCH_X - bx);
   const where = goalDistance < 20 ? `close to ${half}'s goal` : goalDistance < 40 ? `in ${half}'s half` : "around halfway";
-  const flank = by < PITCH_Y / 3 ? ", on the top touchline side of the map" : by > (2 * PITCH_Y) / 3 ? ", on the bottom touchline side of the map" : ", in the middle";
   const near = [...pos.players].sort((a, b) => Math.hypot(a[1] - bx, a[2] - by) - Math.hypot(b[1] - bx, b[2] - by))[0];
-  return `The ball is ${where}${flank}. ${near ? `${name(near[0])} is nearest it.` : ""}`.trim();
+  if (!near) return `The ball is ${where}.`;
+  const side = team(near[0]);
+  return `The ball is ${where}. ${name(near[0])} is nearest it, in ${side === "home" ? "Home" : "Away"}'s ${zoneFor(side, bx, by)}.`;
 }
 
 /** A heat map: each cell shaded by its share of the window, the busiest cell at full strength. */
@@ -183,19 +201,16 @@ export function drawHeat(v: View, heat: { nx: number; ny: number; cells: number[
   ctx.globalAlpha = 1;
 }
 
-/** Where on the pitch a heat map is busiest, in words a screen reader can say. */
-export function describeHeat(heat: { nx: number; ny: number; cells: number[] }): string {
-  const thirds = [0, 0, 0];
-  const bands = [0, 0, 0];
-  heat.cells.forEach((share, k) => {
-    thirds[Math.min(2, Math.floor(((k % heat.nx) / heat.nx) * 3))] += share;
-    bands[Math.min(2, Math.floor((Math.floor(k / heat.nx) / heat.ny) * 3))] += share;
-  });
-  const total = thirds.reduce((a, b) => a + b, 0);
+/** Where a player spent most of his time, in football words, for a screen reader. */
+export function describeHeat(heat: { nx: number; ny: number; cells: number[] }, side: "home" | "away"): string {
+  const total = heat.cells.reduce((a, b) => a + b, 0);
   if (total <= 0) return "No time on the pitch yet.";
-  const t = thirds.indexOf(Math.max(...thirds));
-  const b = bands.indexOf(Math.max(...bands));
-  const third = ["left third", "middle third", "right third"][t];
-  const band = ["top side", "centre", "bottom side"][b];
-  return `Mostly in the ${third} of the map, ${band} (${Math.round((thirds[t] / total) * 100)}% of the time in that third).`;
+  const k = heat.cells.indexOf(Math.max(...heat.cells));
+  const x = ((k % heat.nx) + 0.5) * (PITCH_X / heat.nx);
+  const y = (Math.floor(k / heat.nx) + 0.5) * (PITCH_Y / heat.ny);
+  const ownHalf = heat.cells.reduce((sum, share, i) => {
+    const cx = ((i % heat.nx) + 0.5) * (PITCH_X / heat.nx);
+    return sum + ((attacksRight(side) ? cx < PITCH_X / 2 : cx > PITCH_X / 2) ? share : 0);
+  }, 0);
+  return `Most often in his ${zoneFor(side, x, y)}; ${Math.round((ownHalf / total) * 100)}% of the time in his own half.`;
 }

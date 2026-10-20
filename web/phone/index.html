@@ -59,17 +59,23 @@
             <p id="which-title">Which player?</p>
             <div class="which-row" id="which-row"></div>
           </div>
+          <p class="sr-only">Home attack to the right of the map, Away to the left.</p>
           <div class="legend" aria-hidden="true">
-            <span class="key home">Home</span><span class="key away">Away</span><span class="tap">Tap a dot to pick a player</span>
+            <span class="key home">Home →</span><span class="key away">← Away</span><span class="tap">Tap a dot to pick a player</span>
           </div>
+          <p class="fine" id="seen-note" hidden>Shows the players the broadcast camera can see, tracked from the video. The tracker reads no shirt numbers, so each player is numbered by his track.</p>
           <div id="wind-words" class="wind-words" hidden></div>
           <div class="now" id="now-box">
-            <button type="button" class="toggle" id="now">What's happening?</button>
+            <div class="now-row">
+              <button type="button" class="toggle" id="now">What's happening?</button>
+              <label class="check"><input type="checkbox" id="now-live" /> Describe as it happens</label>
+            </div>
             <p id="now-said" aria-live="polite"></p>
+            <p class="fine" id="now-age" aria-hidden="true"></p>
           </div>
           <p id="refused" class="refused" role="alert" hidden></p>
           <details class="roster" id="roster-box">
-            <summary>Choose a player from a list</summary>
+            <summary id="roster-summary">Choose a player from a list</summary>
             <div class="roster-grid" id="roster" role="group" aria-label="Players"></div>
           </details>
         </section>
@@ -89,6 +95,7 @@
           <h3 id="heat-title">Heat map</h3>
           <canvas id="heat" role="img" aria-label="Heat map"></canvas>
           <p class="fine" id="heat-legend"></p>
+          <p class="fine" id="heat-short" hidden></p>
           <p class="fine" id="card-note">Computed by code from tracked positions.</p>
         </section>
 
@@ -97,7 +104,7 @@
           <div class="chips" id="chips" role="group" aria-label="Suggested questions"></div>
           <form id="ask-form">
             <label for="question" class="sr-only">Your question</label>
-            <input id="question" maxlength="200" autocomplete="off" enterkeyhint="send" placeholder="Ask about speed or distance" />
+            <input id="question" maxlength="200" autocomplete="off" enterkeyhint="send" placeholder="Speed, top speed, distance…" />
             <button type="submit" class="primary" id="ask-button">Ask</button>
           </form>
           <p class="fine">Your question is sent as data, never as instructions. Answers use only numbers computed by code, and the fact-checking agent checks them.</p>

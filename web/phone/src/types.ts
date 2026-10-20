@@ -89,9 +89,20 @@ export function team(player: string): Team {
   return player.startsWith("h") ? "home" : "away";
 }
 
-/** "Home 7" for h7: synthetic teams have no names, only sides and shirt numbers. */
+/** A tracked player (h-t12): the tracker sees no shirt numbers, only a side and a track. */
+export function isTrack(player: string): boolean {
+  return /^[ha]-t\d+$/.test(player);
+}
+
+/** What the dot shows: the shirt number, or the track number. */
+export function shirt(player: string): string {
+  return isTrack(player) ? player.slice(3) : player.slice(1);
+}
+
+/** "Home 7" for h7, "Home player 12" for the tracked h-t12: synthetic teams have no names. */
 export function playerName(player: string): string {
-  return `${team(player) === "home" ? "Home" : "Away"} ${player.slice(1)}`;
+  const side = team(player) === "home" ? "Home" : "Away";
+  return isTrack(player) ? `${side} player ${shirt(player)}` : `${side} ${shirt(player)}`;
 }
 
 /** Match time as m:ss. */

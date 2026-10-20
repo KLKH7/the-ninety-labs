@@ -225,7 +225,7 @@ def test_tapping_a_player_shows_their_speed_and_heat_map(browser, mock_site):
     phone.wait_for_function("document.querySelector('#speed').textContent !== '–'")
     assert float(phone.inner_text("#speed")) >= 0
     assert float(phone.inner_text("#peak")) >= float(phone.inner_text("#speed"))
-    assert "Heat map of Away 7: Mostly in the" in phone.get_attribute("#heat", "aria-label")
+    assert "Heat map of Away 7: Most often in his" in phone.get_attribute("#heat", "aria-label")
     # The same choice without the map, for a screen reader: the roster's buttons.
     phone.click("#roster-box summary")
     phone.get_by_role("button", name="Home 4", exact=True).click()
@@ -271,6 +271,17 @@ def test_an_injected_question_is_refused_and_shown_only_as_text(browser, mock_si
     assert "cheated" in answer.locator(".asked").inner_text()  # the question, quoted as text...
     assert "cheated" not in answer.locator(".said").inner_text()  # ...and never in the answer
     assert answer.locator("img").count() == 0 and phone.evaluate("window.pwned") is None
+    assert not errors
+
+
+def test_a_screen_reader_hears_the_play_described_and_never_an_old_sentence_as_new(browser, mock_site):
+    laptop, phone, errors, _ = mock_pair(browser, mock_site)
+    said = phone.locator("#now-said")
+    assert said.get_attribute("aria-live") == "polite"
+    phone.check("#now-live")  # describe as it happens
+    phone.wait_for_function("document.querySelector('#now-said').textContent.startsWith('At ')")
+    assert re.search(r"The ball is .+\. (Home|Away) \d+ is nearest it, in (Home|Away)'s", said.inner_text())
+    phone.wait_for_function("document.querySelector('#now-age').textContent.includes('s ago')")
     assert not errors
 
 
@@ -480,3 +491,72 @@ def test_an_unknown_code_is_refused_by_the_api(browser, api_site):
     page.wait_for_function("/no laptop/i.test(document.querySelector('#pair-error').textContent)")
     assert page.get_attribute("body", "data-state") == "pair"
     assert not errors
+
+
+# --- the demo's path: tracked positions from the video, served by the API in `on` mode ------------
+
+TRACKED = ROOT / "tests" / "fixtures" / "tracked-seed900001.json"
+
+
+def tracked_track():
+    """The M1 clip's tracked positions (ninety/vision/tracked_frames.py), under a pairable name."""
+    from ninety.match.tracking import Track
+
+    body = json.loads(TRACKED.read_text())
+    return Track("seed7", tuple(body["frames"]), tuple(body["restarts"]))
+
+
+@pytest.fixture(scope="module")
+def tracked_api(browser, viewer_www):
+    import uvicorn
+    from starlette.applications import Starlette
+    from starlette.routing import Mount
+    from starlette.staticfiles import StaticFiles
+
+    from ninety.api import companion as comp
+
+    mp = pytest.MonkeyPatch()
+    mp.setattr(comp, "_track", lambda clip: tracked_track())
+    app = Starlette(routes=[
+        *comp.Companion(passcode="", live=None, allow_truth=False).routes(),  # `on`: tracked only
+        Mount("/phone", StaticFiles(directory=DIST, html=True)),
+    ])
+    port = free_port()
+    config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning", ws="websockets-sansio")
+    server = uvicorn.Server(config)
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    while not server.started:
+        time.sleep(0.05)
+    yield f"http://127.0.0.1:{port}/"
+    server.should_exit = True
+    thread.join(timeout=10)
+    mp.undo()
+
+
+@pytest.mark.xfail(strict=True, reason="#145's minimap and companion_message schemas allow only squad ids "
+                   "(h1..a11); tracked players are h-t12, so the API refuses to send them until W5 relaxes "
+                   "the pattern. Remove this mark when it does.")
+def test_the_phone_shows_the_tracked_m1_clip_through_the_api(browser, tracked_api):
+    import urllib.request
+
+    from websockets.sync.client import connect
+
+    request = urllib.request.Request(f"{tracked_api}api/pair", data=b'{"clip": "seed7"}',
+                                     headers={"content-type": "application/json"})
+    code = json.loads(urllib.request.urlopen(request).read())["code"]
+    with connect(f"{tracked_api.replace('http', 'ws')}api/pair/{code}?role=laptop") as laptop:
+        laptop.send(json.dumps({"type": "clock", "t": 70.0, "playing": False}))
+        page = browser.new_page(viewport=PHONE_SIZE)
+        errors = watch(page)
+        page.goto(f"{tracked_api}phone/?code={code}&clip=seed7")
+        page.wait_for_selector("body[data-state=live]")
+        page.wait_for_function("Number(document.querySelector('#map').dataset.dots) > 0")
+        assert page.get_attribute("#map", "data-source") == "tracked"
+        assert page.is_visible("#seen-note")
+        page.click("#roster-box summary")
+        page.locator("#roster .who").first.click()
+        page.wait_for_function("document.querySelector('#speed').textContent !== '–'")
+        assert "player" in page.inner_text("#player-title")
+        validate_seen(seen(page))
+        assert not errors
