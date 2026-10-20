@@ -104,7 +104,7 @@ def test_pairing_is_rate_limited(setup):
 # --- the relay -------------------------------------------------------------------------------------
 # Driven on one event loop, as uvicorn runs every connection. (Starlette's TestClient gives each
 # WebSocket its own thread and loop, so a relay crossed threads there, and a message could be lost
-# and a test hang: a harness that is not the server, lesson 104.) Every receive has a deadline.
+# and a test hang: a harness that is not the server, lesson 106.) Every receive has a deadline.
 
 RECEIVE_S = 5.0
 

@@ -16,7 +16,7 @@ on:
         description: What to run
         required: true
         type: choice
-        options: [publish, record, failures, ablation, eval]
+        options: [publish, record, failures, ablation, eval, personalizer]
       ref:
         description: Branch, tag or commit to run
         required: true
@@ -72,6 +72,9 @@ jobs:
               uv run python -m ninety.eval.factcheck_eval --seeds 21,33 --foundry --out runs/eval/fact-checker.md "${extra[@]}"
               uv run python -m ninety.agents.analyst_eval --seeds 21,33 --foundry --out runs/eval/analyst.md "${extra[@]}"
               uv run python -m ninety.agents.companion_eval --seeds 21,33 --foundry --out runs/eval/companion.md
+              ;;
+            personalizer)
+              uv run python -m ninety.personalizer.eval --seeds 21,33 --out runs/eval/personalizer.md "${extra[@]}"
               ;;
             record|failures|ablation)
               echo "::error::task '$TASK' is not yet implemented"

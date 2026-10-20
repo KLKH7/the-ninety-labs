@@ -20,6 +20,8 @@ generated it and the output file is committed. Rows marked *planned* have no res
 | Stats engine facts: hand-computed cases, planted defects, citations, size | `uv run pytest tests/test_stats.py` | test assertions | running |
 | Late drop in high-intensity running (R7), by the protocol below; distance and top speed by position on the same matches | `uv run python -m ninety.sim.late_drop` | `docs/eval/late-drop.md` | running |
 | Fact-checker rules (numbers, players, evidence ids) | `uv run pytest tests/test_factcheck.py` | test assertions | running |
+| Personalizer rules: the A2A round trip, the fallback within its budget, the re-check of every variant, every persona and language, profile validation ([below](#personalizer)) | `uv run pytest tests/test_personalizer.py` | test assertions | running in process: 38 tests, 18 of 18 mutants of the rules killed; not yet deployed |
+| Personalizer variants from the published agent that pass the re-check and air, by persona and language, and time per A2A request | `uv run python -m ninety.personalizer.eval --seeds 21,33` (agents-live task `personalizer`) | `docs/eval/personalizer.md` | planned: waits for `ninety-personalizer` to be published |
 | Ledger versioning, evidence validation, and deterministic cue fixture | `uv run pytest tests/test_ledger.py tests/test_cues.py` | `tests/fixtures/cues-seed7.jsonl` and test assertions | running: 21 tests; 108 cues for seed 7, five minutes (96 for its 48 passes, 12 of them failed and one still in flight at the end, 8 for its 4 shots and 4 for its 2 goals) |
 | Fact-checker on the frozen planted-claim set, offline: catch rate, true claims wrongly stopped, the layer that decided, claims held for low-confidence detections | `uv run python -m ninety.eval.fact_checker_proof` (offline, seconds of CPU; `--check` fails if a committed file is stale, as `tests/test_fact_checker_proof.py` does) | `docs/eval/fact-checker-planted.md`, set `docs/eval/planted-claims-v1.json` | running: 175/175 planted false claims kept off air (127 recorded, 16 on phantom low-confidence detections, all held by the confidence gate, 32 with viewer text spliced in); 7/121 true claims wrongly stopped, all by the recorded Judge. Judge answers are those recorded from `ninety-judge:1` at `9be98bd`; the gate threshold (0.5) is a design value until detector calibration is measured |
 | Fact-checker catch rate on planted false claims, and true claims wrongly rejected, on the published Judge | `uv run python -m ninety.eval.factcheck_eval --seeds 21,33 --foundry`; nightly in `.github/workflows/evals.yml`, recorded in Foundry | `docs/eval/fact-checker.md` | running: held-out seeds 21,33, `ninety-judge:1` at commit `9be98bd`: 136/136 false claims caught (code alone 32/136); 7/105 true claims wrongly rejected excluding service holds (17/115 including them); 19 of 251 Judge calls failed and were held back (fail closed), more than earlier runs, not yet investigated |
@@ -28,7 +30,7 @@ generated it and the output file is committed. Rows marked *planned* have no res
 | Recovery from injected failures (Judge down, Judge timeout, Judge malformed reply, Analyst or MCP tool error, MCP timeout, Analyst malformed reply, low-confidence detection) | `uv run python -m ninety.eval.fact_checker_proof` (offline, seconds of CPU; `--check` fails if a committed file is stale, as `tests/test_fact_checker_proof.py` does) | `docs/eval/failure-table.md` | running: 7 of 7 recovered on the live path with stand-in models: nothing unverified aired and the template cues stayed up; each row asserted by `tests/test_failure_table.py`. Latencies not measured (stand-in models) |
 | Ablation: the fact-checker without the confidence gate, without typed facts, and absent, on the same planted set | `uv run python -m ninety.eval.fact_checker_proof` (offline, seconds of CPU; `--check` fails if a committed file is stale, as `tests/test_fact_checker_proof.py` does) | `docs/eval/ablation.md`, per claim `docs/eval/ablation.json` | running: false claims on air: full 0/175, no gate 16/175 (every phantom detection), no typed facts (the Judge alone) 24/175: every phantom plus 8 claims stating the minute and second as a clock ("1:05" for 00:05), which only the code checks catch, no fact-checker 175/175. The Judge answers to the 48 claims only the code checks had seen were recorded once from `ninety-judge:2` (`uv run python -m ninety.eval.planted_judge`, 48 calls, 50,708 tokens, $0.025 at list price) |
 | Ablation: one agent with every tool against the full workflow | planned | `docs/eval/ablation.md` | planned |
-| Latency to graphic and to speech (p50, p95); cost per match | planned | `docs/eval/latency-cost.md` | planned |
+| Latency to graphic and to speech (p50, p95); cost per match | `uv run python -m ninety.eval.latency_cost --measure <clip>` (times `ninety-e2e` offline and the slice replay through `ninety.stage` OpenTelemetry spans; tokens rebuilt from the replay; prices from the Azure Retail Prices API, dated); without `--measure` it rebuilds the report byte for byte (`tests/test_latency_cost.py`) | `docs/eval/latency-cost.json`, `docs/eval/latency-cost.md` | running for the chain's own time and the model and claim-speech cost, at `3d21ab3`: event to graphic p95 0.08 s of compute on the stand-in events of `seed900001`, without RF-DETR inference or Foundry model time (planned: live spans in Application Insights); $0.23 to $0.47 a 90-minute match (one claim a minute, one to three drafts) against the $0.50 budget, tokens estimated at 4 characters each. Speech latency and the Describer's spoken characters planned |
 
 ## Match engine: touches
 
@@ -371,6 +373,46 @@ phrasing means were written into `ninety/agents/companion_eval.py` before its fi
 
 A number the phone shows is the cited fact's value by construction (`Answer.value` is read off the
 fact); the injection count checks that the text agrees with it.
+
+## Personalizer
+
+The Personalizer (`ninety/personalizer`) rewrites one claim the fact-checker already verified for
+each viewer profile: analyst, casual, club and player focus, in English and Spanish. The model only
+words it; code decides what airs.
+
+- **The re-check.** Every variant is checked by the fact-checker's code half (`factcheck.check`)
+  against the verified claim's own evidence, and must still contain every number (as a count, so a
+  repeated number cannot be lost) and every player id of the verified claim. A variant that fails,
+  or is missing, is replaced by the verified English text for that profile. The client re-checks
+  whatever the server returns, so a server that skipped its check still cannot air a changed number.
+  The server reports why it replaced a variant; those reasons reach the trace and the evaluation,
+  never the decision of what airs.
+- **The fallback.** The remote has `BUDGET_S` = 3 s (a design choice: a little over a third of the
+  8 s p95 target from event to verified graphic in PLAN.md, to be revisited when
+  `latency-cost.md` measures the split). On a timeout, a 5xx or a refused connection the in-process
+  fallback answers with the verified text at once. A 4xx or a malformed reply is a defect between
+  our own two programs and raises, so it is seen rather than hidden.
+- **Viewer input.** A profile is rebuilt with `Profile` on the server, whose every field is an
+  allow-list; any other value, or an extra field, is refused with an A2A invalid-params error before
+  the model is called. The model sees the profile only as a JSON field.
+
+What the re-check cannot see, so a reader of any number above knows its limits:
+
+- Two numbers of the claim swapped with each other (32.5 m and 12 m traded between two passes):
+  both still appear, and both are cited.
+- A verb that misstates a pass in Spanish. The fact-checker's role check reads English verbs
+  ("finds"); "encuentra a" is not read, so a Spanish variant relies on the model and on the player
+  ids being kept.
+- A Spanish variant left in English. It is faithful, so it airs.
+
+**Mutation run** (lesson 8), each rule broken in turn against `tests/test_personalizer.py` and
+`tests/test_factcheck.py`: all 18 killed. Re-check: no fact-check of the variant, no number survival,
+number survival as a set rather than a count, no player survival, no length cap, a dropped variant
+still airing, the audio persona rewritten. Client: trusting the server's variants, ignoring which
+persona a reply is for, falling back on any error, treating a 4xx as a 5xx, no 5xx rule, no
+refused rule, no deadline, waiting for the cancelled call to unwind. Server: profiles not
+validated, extra profile fields allowed. Fact-checker: ordinals not read as numbers (lesson 95).
+The length-cap mutant survived the first run; its test was added after.
 
 ## Rules
 

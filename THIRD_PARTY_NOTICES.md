@@ -15,6 +15,7 @@ GPL or AGPL otherwise). Every locked package and its licence is listed below.
 | jsonschema | data contract validation | MIT |
 | azure-storage-blob (`render-job` group) | render job uploads clips to Blob Storage | MIT |
 | mcp | MCP server and client | MIT |
+| a2a-sdk (with its `http-server` extra) | the Personalizer's A2A server and client (`ninety/personalizer`); brings google-api-core, google-auth, googleapis-common-protos and proto-plus (Apache-2.0), protobuf (BSD-3-Clause), json-rpc (MIT), pyasn1 (BSD-2-Clause), pyasn1-modules (BSD) and, before Python 3.13, culsans and aiologic (ISC) | Apache-2.0 |
 | starlette, uvicorn | the public API (`ninety/api`) | BSD-3-Clause |
 | pydantic (via agent-framework) | typed agent output | MIT |
 | pytest, pytest-xdist and its execnet, ruff (development) | tests (in parallel workers) and lint | MIT |
@@ -80,7 +81,7 @@ These come in with the vision group under other permissive licences, all within 
 
 ## Every locked dependency
 
-All 181 packages in `uv.lock`, with the licence their published metadata gives, written
+All 192 packages in `uv.lock`, with the licence their published metadata gives, written
 one way per licence. Ten publish no licence on PyPI; how each was checked from its wheel is in
 [Packages that publish no licence](#packages-that-publish-no-licence). The NVIDIA wheels (free to
 redistribute) are Linux only and come in with PyTorch in the `vision` group.
@@ -89,12 +90,14 @@ outside the rule in `AGENTS.md`.
 
 | Package | Version | Licence |
 |---|---|---|
+| a2a-sdk | 1.2.3 | Apache-2.0 |
 | accelerate | 1.15.0 | Apache-2.0 |
 | agent-framework-core | 1.21.0 | MIT |
 | agent-framework-foundry | 1.14.1 | MIT |
 | agent-framework-openai | 1.16.0 | MIT |
 | aiohappyeyeballs | 2.7.1 | PSF-2.0 |
 | aiohttp | 3.14.5 | Apache-2.0 AND MIT |
+| aiologic | 0.17.1 | ISC |
 | aiosignal | 1.4.0 | Apache-2.0 |
 | annotated-doc | 0.0.5 | MIT |
 | annotated-types | 0.8.0 | MIT |
@@ -123,6 +126,7 @@ outside the rule in `AGENTS.md`.
 | cuda-bindings | 13.4.4 | Apache-2.0 |
 | cuda-pathfinder | 1.8.3 | Apache-2.0 |
 | cuda-toolkit | 13.0.3.0 | NVIDIA proprietary |
+| culsans | 0.11.0 | ISC |
 | cycler | 0.12.1 | BSD |
 | defusedxml | 0.7.1 | PSF-2.0 |
 | execnet | 2.1.2 | MIT |
@@ -132,6 +136,9 @@ outside the rule in `AGENTS.md`.
 | fonttools | 4.67.0 | MIT |
 | frozenlist | 1.8.0 | Apache-2.0 |
 | fsspec | 2026.9.0 | BSD-3-Clause |
+| google-api-core | 2.42.0 | Apache-2.0 |
+| google-auth | 2.62.0 | Apache-2.0 |
+| googleapis-common-protos | 1.75.5 | Apache-2.0 |
 | greenlet | 3.5.6 | MIT AND PSF-2.0 |
 | h11 | 0.16.0 | MIT |
 | hf-xet | 1.7.0 | Apache-2.0 |
@@ -148,6 +155,7 @@ outside the rule in `AGENTS.md`.
 | isodate | 0.7.2 | BSD |
 | jinja2 | 3.1.6 | BSD |
 | jiter | 0.17.0 | MIT |
+| json-rpc | 1.15.0 | MIT |
 | jsonschema | 4.26.0 | MIT |
 | jsonschema-specifications | 2025.9.1 | MIT |
 | kiwisolver | 1.5.1 | BSD |
@@ -210,8 +218,12 @@ outside the rule in `AGENTS.md`.
 | playwright | 1.56.0 | Apache-2.0 |
 | pluggy | 1.6.0 | MIT |
 | propcache | 0.5.4 | Apache-2.0 |
+| proto-plus | 1.29.0 | Apache-2.0 |
+| protobuf | 7.36.2 | BSD-3-Clause |
 | psutil | 7.2.2 | BSD-3-Clause |
 | pyarrow | 26.0.0 | Apache-2.0 |
+| pyasn1 | 0.6.4 | BSD-2-Clause |
+| pyasn1-modules | 0.4.2 | BSD |
 | pycocotools | 2.0.11 | BSD-2-Clause |
 | pycparser | 3.11 | BSD-3-Clause |
 | pydantic | 2.14.1 | MIT |

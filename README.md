@@ -66,7 +66,8 @@ Full design, agent roles and deployment: [docs/ARCHITECTURE.md](docs/ARCHITECTUR
 | `web/render` | Broadcast-style three.js renderer that turns a sim run into video |
 | `ninety/vision` | Detection (RF-DETR Small fine-tuned on our renders) and training; tracking, camera-to-pitch mapping, possession and event rules are planned |
 | `ninety/intel` | Deterministic stats engine (code computes every number) |
-| `ninety/agents` | Agent Framework workflow: Analyst and fact-checking agent (Judge) on Foundry, the live path to overlay cues, the Data agent; Producer, Personalizer and Describer are in open pull requests |
+| `ninety/agents` | Agent Framework workflow: Analyst and fact-checking agent (Judge) on Foundry, the live path to overlay cues, the Data agent; Producer and Personalizer are in open pull requests |
+| `ninety/speech` | The Describer: audio description from fact-checked lines only, within 2 s of the play, placed in stereo; SSML and WebVTT; Azure AI Speech behind `--speech azure` |
 | `ninety/mcp` | MCP server exposing match tools to the agents; Foundry calls it at `/mcp` on the API |
 | `ninety/match` | Detected events: the one loader the live path uses; it refuses ground truth |
 | `ninety/eval` | Grades detections and detected events against the ground-truth data; the fact-checker evaluation |
@@ -149,7 +150,7 @@ agent and the event-driven render job; CI, and a deploy of the API on every gree
 
 **Not yet:** events detected from the video (until they land the live path reads a hand-written
 stand-in and says so), so there is no event-level precision or recall yet; the viewer deployed; the
-multi-agent workflow, Personalizer and audio description (open pull requests); player tags, player
+multi-agent workflow and Personalizer (open pull requests); the model-written Describer (today's lines are written by code); player tags, player
 cam, recaps, translation, the ablation and failure tables. See [docs/PLAN.md](docs/PLAN.md).
 
 ## License

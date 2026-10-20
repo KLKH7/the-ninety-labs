@@ -222,6 +222,18 @@ short and actionable. This file is public: no research sources, product names or
     older than a day.
   - A port's audit names the branches whose lessons it read.
 
+### 95. A pattern that reads numbers must read every way a number is written
+- **What happened:** the fact-checker's number pattern refused a digit followed by a letter, so it
+  would not read "h7" as a number. That also skipped every English ordinal: "in the 9th minute"
+  passed for an event in minute 2, and "his 97th pass" passed with no such count in the evidence,
+  although the clock rule tells the agents to write minutes as ordinals. The minute pattern
+  already knew the "9th minute" form; it was never reached. Found by the Personalizer's tests,
+  when a planted "7th pass" in a variant aired.
+- **Rule:** a check that reads values out of text is tested on every form the writers are told
+  to use, and on the forms a translation or rewording produces, with a defect planted in each.
+- **Check:** `tests/test_factcheck.py::test_an_ordinal_minute_must_be_the_cited_minute` and
+  `test_an_ordinal_count_must_be_in_the_evidence` fail on the old pattern.
+
 ## Working in the repo
 
 ### 12. "No checks yet" is not "checks passed"
@@ -952,6 +964,16 @@ short and actionable. This file is public: no research sources, product names or
   last bump shows no picture change without a version change; a dataset manifest's `renderers`
   lists one version per look.
 
+### 104. "Never imported" is only tested in a fresh interpreter
+- **What happened:** a test meant to prove the default `ninety-e2e` run never loads the Azure
+  Speech client deleted it from `sys.modules` and ran the bundle. With the import moved to the top
+  of the Describer, it stayed green: the module was already loaded when the test file was, so
+  nothing imported it again. The mutation run caught it.
+- **Rule:** a test that a module stays unloaded imports the code under test in a new Python
+  process and reads `sys.modules` there.
+- **Check:** `tests/test_describe.py::test_the_default_run_makes_no_azure_call`; mutate by adding
+  the import at module top and watch it go red.
+
 ### 103. A legal exception in the contract is an exception in every reader of the same data
 - **What happened:** after a goal the kickoff puts every player back in his own half in one frame.
   The data contract allows it, and the validator's speed check and the late-drop report both skip
@@ -966,7 +988,7 @@ short and actionable. This file is public: no research sources, product names or
   runs on seed 7, which has two kickoffs after goals, and holds every player's peak speed under
   the validator's limit. It fails on the old code.
 
-### 104. A test that waits for its rule hangs when the rule breaks, and a hang is not a red test
+### 106. A test that waits for its rule hangs when the rule breaks, and a hang is not a red test
 - **What happened:** two WebSocket tests on the phone relay checked their rule by waiting for a
   message (a close, the room's latest state). With the rule mutated, the message never came and
   pytest blocked for about 40 minutes, until the process was killed by hand. A CI job would have waited

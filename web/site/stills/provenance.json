@@ -1,0 +1,18 @@
+{
+  "image": "seed7-1970.jpg",
+  "truth_overlay": "seed7-1970-truth.svg",
+  "seed": 7,
+  "frame": 1970,
+  "renderer": {
+    "version": "0.3.2",
+    "three": "0.170.0",
+    "gl": "gpu",
+    "chromium": "141.0.7390.37"
+  },
+  "commit": "b4d9402",
+  "command": "uv run ninety-render --seed 7 --seconds 2 --gpu --out runs/site-still && uv run python web/site/stills.py runs/site-still --frame 1970",
+  "boxes": {
+    "players": 12,
+    "ball": true
+  }
+}
