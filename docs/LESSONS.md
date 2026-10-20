@@ -938,3 +938,16 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_render_motion.py` (turns on the spot, run touchdowns, kicks, thigh, chest
   and header touches), each mutation-checked against the old behaviour; `tests/test_render_mesh.py`
   holds the page's markers to the Python ones for the same poses.
+
+### 102. A change to the picture bumps the renderer version in the same commit
+- **What happened:** the skinned kit mesh (a3d228e) replaced the capsule players and left
+  `RENDERER_VERSION` at 0.3.2. Dataset v1's clips at `cca498c` (capsules) and every clip rendered
+  from main since (mesh) both record renderer 0.3.2, so `clip.json` cannot say which body a
+  detector was trained or tested on. Found while planning targeted round 1, which renders from
+  main and would have mixed the two looks under one version.
+- **Rule:** any change to what `web/render` draws or how labels are counted bumps
+  `ninety/render/__init__.py`'s `RENDERER_VERSION` in the same commit; a dataset or test-set
+  manifest names the version, and two looks never share one.
+- **Check:** `git log -p -- web/render ninety/render/scene.py ninety/render/meshpose.py` since the
+  last bump shows no picture change without a version change; a dataset manifest's `renderers`
+  lists one version per look.

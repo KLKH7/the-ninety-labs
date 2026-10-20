@@ -38,6 +38,7 @@ from ninety.render.scene import (
     contacts,
     crowded_start,
     drawn_ball,
+    keeper_start,
     mesh_pose,
     parts_box,
     project_keypoints,
@@ -167,6 +168,8 @@ def choose_start(
     if p.occlusion == "crowded":
         cams = camera_positions(frames[: latest + n], p, seed)
         return crowded_start(frames, n, max(earliest, WARMUP), latest, cams)
+    if p.occlusion == "keeper":
+        return keeper_start(frames, n, max(earliest, WARMUP), latest)
     rng = random.Random(f"window-{seed}")
     for _ in range(WINDOW_DRAWS):
         start = rng.randint(max(earliest, WARMUP), latest)

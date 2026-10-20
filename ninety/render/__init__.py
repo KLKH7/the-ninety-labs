@@ -6,4 +6,9 @@ and pixel boxes are counted. See docs/guides/broadcast-render.md and
 docs/decisions/0001-synthetic-data.md.
 """
 
-RENDERER_VERSION = "0.3.3"
+# Bumped whenever the pixels or the labels change, so clip.json says which renderer drew a clip.
+# 0.4.0: players drawn on the skinned kit mesh (a3d228e), not the capsules 0.3.x drew; #146's
+# turns and touch poses (0.3.3 on its own); the `occlusion=keeper` window; the crowded window
+# counting only a live ball. Clips at cca498c and main's clips before the mesh was named both said
+# 0.3.2 (docs/LESSONS.md, lesson 102).
+RENDERER_VERSION = "0.4.0"
