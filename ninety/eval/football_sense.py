@@ -362,7 +362,7 @@ def chaser_moves_away(m: Match) -> list[Finding]:
             kicked[m.frame_of(e)] = m.index(e["player"])
     out: list[Finding] = []
     flagged: set[int] = set()  # players flagged in the current loose spell
-    last_kick: tuple[int, int] = (-10**9, -1)
+    last_kick: tuple[int, int] = (-1_000_000_000, -1)
     for f in range(m.frames - w):
         if f in kicked:
             last_kick = (f, kicked[f])
