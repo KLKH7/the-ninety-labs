@@ -94,42 +94,55 @@ rates are not yet sourced.
 ## After a goal (the celebration)
 
 Measured on the same 16 seeds against `main` with the change above (`cf3b17a`), the celebration
-branch at `3e668c0`; its raw output in [restarts/celebration-branch.json](restarts/celebration-branch.json):
+branch at `edd6ce7`; its raw output in [restarts/celebration-branch.json](restarts/celebration-branch.json):
 
 | | Before | After |
 |---|---:|---:|
-| Seconds from a goal to the kick-off | 13.7 to 19.2 (11 goals) | 66.4 to 86.7 (8 goals) |
+| Seconds from a goal to the kick-off | 13.7 to 19.2 (11 goals) | 62.8 to 88.3 (10 goals) |
 | Ball in play, share of the 20 minutes | 56.6% | 53.6% |
-| Shots a team per 90 | 19.0 ± 2.1 | 17.6 ± 2.0 |
-| Goals a team per 90 | 1.6 ± 0.5 | 1.3 ± 0.4 |
-| Pass completion | 79.6% | 78.9% |
+| Shots a team per 90 | 19.0 ± 2.1 | 15.9 ± 1.7 |
+| Goals a team per 90 | 1.6 ± 0.5 | 1.4 ± 0.4 |
+| Pass completion | 79.6% | 79.4% |
 | Restart defects (jumps, encroachment, carried set balls, stuck restarts) | 0 | 0 |
 | Matches meeting the data contract (`ninety-validate`) | 16 of 16 | 16 of 16 |
 
 A goal's celebration "may last one, one and a half minutes" (Collina, FIFA, 2022): the kick-off now
 comes 60 to 90 s after the goal (GROUNDING L4). Ball in play is about 55.8% of a Premier League
 match's total time, added time included (Opta via The Analyst, 2023); these 20-minute matches have
-no added time. Shots, goals and completion are unchanged within noise (9 goals against 11; the
-matches part after their first goal, lesson 90). Football-sense, per 90: FS1 20.8 to 21.4, FS2 16.0
-to 11.8, FS6 29.5 to 30.9, FS7 287 to 269, FS9 0.8 to 1.1. Up to a match's first goal nothing
-changes: seed 21 is frame for frame the same as on `main` until its goal at 5:03.
+no added time. Shots, goals and completion are unchanged within noise: a team per 90 minutes of
+match time has 5% less time with the ball in play, and the matches part after their first goal
+(lesson 90). Football-sense, per 90: FS1 20.8 to 18.0, FS2 16.0 to 12.9, FS6 29.5 to 26.7, FS7 287
+to 266, FS9 0.8 to 0.6. Up to a match's first goal nothing changes: seed 21 is frame for frame the
+same as on `main` until its goal at 5:03.
 
 ### The huddle
 
 The first version sent every team-mate to the scorer's own centre: in 32 to 63% of celebration
-frames two bodies were more than 5 cm into each other (the audit's count, three planted goals; open
-play 0 to 0.6%). Now each runs to his own place on an arc round the scorer, a shoulder's breadth
-apart, on the side he comes from and in the order of the team-mates' bearings, and only within 3 m
-of the scorer do team-mates stand closer than the usual personal space (GROUNDING L4). Over the
-whole celebration of a planted goal on 8 seeds (2, 3, 5, 7, 11, 21, 42, 101), 0 to 2.2% of frames
-(mean 1.3%) have two bodies more than 5 cm into each other, at most 0.4 s a goal, and none once
-they have gathered (`test_gathered_round_the_scorer_no_two_bodies_overlap`). The rest come from runs that
-arrive too fast to stop at a place a shoulder's breadth from the next: the engine's steering bends a
-run round a team-mate but does not slow it, and bodies in contact brace only with the grip left
-after steering (`separate`). Fixing that is a change to every player's movement, not this one's.
-Four other ways were measured on the same goals and were worse, a mean of 2.2 to 4.2% of frames:
-places fixed at the goal, places kept once reached, each stopping on his own line to the scorer
-behind those already there, and standing close only once slower than a walk.
+frames two bodies were more than 5 cm into each other (the audit's count, three planted goals).
+Now each runs to his own place on an arc round the scorer, a shoulder's breadth apart, on the side
+he comes from and in the order of the team-mates' bearings; the places are worked out for all of
+them once a frame; within a player's stopping distance of his place (P2) team-mates stand closer
+than the usual personal space; and each leaves at his own moment (GROUNDING L4).
+
+Counted by [`scripts/defect_sweep/huddle.py`](../../scripts/defect_sweep/huddle.py) over the whole
+celebration of a planted goal on 12 seeds not used while designing it (1, 4, 6, 8 to 10, 12 to 17):
+
+| | Before (`1f43b86`) | After |
+|---|---:|---:|
+| Frames with two bodies more than 5 cm into each other, mean over seeds | 2.1% | 1.2% |
+| worst seed | 5.3% | 3.0% |
+| longest a goal | 0.9 s | 0.7 s |
+| Frames once all stand at their places, settled, until the first leaves | 4 of 1,228 | 0 of 169 |
+| The same count over a minute of open play from the same seeds | 0.3% | 0.3% |
+
+(Before, "at their places" was counted as within 3 m of the scorer, the rule of the time.) What
+remains comes from the last few arriving at a run beside a team-mate already in place: a shoulder's
+breadth between places leaves 5 cm to spare, and the engine's steering bends a run round a
+team-mate but does not slow it. The audit measured that wider places, or a longer reach, would cut
+it further; those values were not changed after seeing that. Four other ways of placing them were
+tried on the design seeds (2, 3, 5, 7, 11, 21, 42, 101) and were worse there, a mean of 2.2 to 4.2%
+of frames: places fixed at the goal, places kept once reached, each stopping on his own line to the
+scorer behind those already there, and standing close only once slower than a walk.
 
 ## Reproduce
 
