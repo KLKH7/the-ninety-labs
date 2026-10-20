@@ -1084,3 +1084,13 @@ short and actionable. This file is public: no research sources, product names or
   and re-measure.
 - **Check:** `tests/test_shape.py::test_the_team_is_never_longer_than_the_published_range_and_the_back_line_never_ahead_of_the_ball`
   sweeps ball and line positions; on the old rule it fails (48 m long with the ball 35 m out).
+
+### 112. A script inside YAML is code: parse it before a run is approved
+- **What happened:** resolving a merge conflict in `agents-live.yml`, two new `case` branches were
+  joined and the `;;` closing one was lost. The YAML still loaded and the merge was checked only
+  with a YAML parser, so the defect reached a live run: Kian approved it, it signed in to Azure,
+  and then failed on `syntax error near unexpected token ')'` without publishing anything.
+- **Rule:** a change to a workflow's `run:` block is checked as the shell it is, not only as YAML.
+  An approval for a live run is spent only on a script that parses.
+- **Check:** `tests/test_workflows.py` runs `bash -n` on every bash `run:` step of every workflow;
+  it fails on the shipped `agents-live.yml` (`7e76d15`) and passes on the fixed one.
