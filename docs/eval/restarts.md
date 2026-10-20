@@ -144,6 +144,28 @@ frames on the same seeds (an adapted copy of the script), a keeper's goal at 3.2
 goals from the far post or long range at 1.6 to 1.8%; and that wider places, or a longer reach, would
 cut overlaps further. Those values were set before and were not changed after seeing that.
 
+## The wall (free kicks)
+
+At a direct free kick within shooting range the defending side builds a wall (GROUNDING L14): as
+many as a shoulder's breadth each fills across the part of the goal Bray's model has it hide, at
+9.15 m and 0.5 m; they walk to it at least at a normal walking pace, come in behind the line and
+step up into their places, and stand shoulder to shoulder.
+
+Twelve planted free kicks (seeds 2, 3, 5, 7; 22 m out straight on, 18 m out at y = 24, 27 m out at
+y = 44), by [`scripts/defect_sweep/wall.py`](../../scripts/defect_sweep/wall.py) `--planted`:
+
+| | First version (`5813294`) | Now |
+|---|---:|---:|
+| Walls formed, every player on his place to within a ball's radius | {F1} | {F2} |
+| seconds into the stoppage | {S1} | {S2} |
+| Furthest a wall player is from his place when the kick is struck | {O1} | {O2} |
+| Gaps between neighbours' bodies when it is struck | {G1} | {G2} |
+| Frames with two of them more than 5 cm into each other while it forms | {D1} | {D2} |
+
+In the first version one wall player stood 7 m from his place through the whole stoppage: his
+place was on the edge of the 9.15 m circle, straight in from him, and rounding sent him round the
+circle at his own distance (lesson 142). Over the 16 matches below, {NAT}
+
 ## Reproduce
 
 ```bash

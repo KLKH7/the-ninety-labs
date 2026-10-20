@@ -730,6 +730,7 @@ def test_a_wall_is_sized_from_the_goal_it_must_hide():
     assert size(PITCH_X - 17.0, 34.0) > size(PITCH_X - 22.0, 34.0) > size(PITCH_X - 35.0, 34.0) > 0
     assert size(PITCH_X - 22.0, 34.0) > size(PITCH_X - 20.0, 60.0)  # the same distance, a sharper angle
     assert size(PITCH_X - 45.0, 34.0) == 0
+    assert size(PITCH_X - 30.0, 6.0) == 0  # 30 m up the pitch but 41 m from the goal's centre (lesson 138)
 
 
 def test_a_direct_free_kick_22_m_out_is_taken_with_a_wall_in_place():

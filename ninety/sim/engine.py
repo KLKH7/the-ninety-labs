@@ -1638,14 +1638,15 @@ class Engine:
 
     def wall_spots(self, r: Restart) -> list[tuple[float, float]]:
         """Law 13, Bray (2014): where a wall stands for a direct free kick within shooting range (the
-        distance inside which the shot is an option, offball.SHOT_RANGE_M). It hides the goal from
+        distance from the goal's centre, straight-line, inside which the shot is an option,
+        offball.SHOT_RANGE_M, measured as decisions measures it: lesson 138). It hides the goal from
         the near post to WALL_COVER_PAST_CENTRE_M past the centre, seen from the ball, on a line across
         the kick at the restart's distance (and KEEP_OFF_MARGIN_M); its width over a shoulder's
         breadth (P11) is how many stand in it, shoulder to shoulder (Bray divides by 0.45 m and
         finds four at 22 m straight on, as this does). Spots off the pitch are left out."""
         line = goal_x(r.team)  # the goal the kick is at
         bx, by = self.restart_ball_spot(r)
-        if abs(line - bx) >= offball.SHOT_RANGE_M:
+        if math.hypot(line - bx, PITCH_Y / 2 - by) >= offball.SHOT_RANGE_M:
             return []
         mid_y = PITCH_Y / 2
         near = mid_y - GOAL_HALF_WIDTH if by < mid_y else mid_y + GOAL_HALF_WIDTH
