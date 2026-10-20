@@ -17,14 +17,14 @@ from ninety.match.tracking import Track
 MESSAGE = schema_validator("companion_message")
 
 
-def track():
+def track(source="truth"):
     frames, x = [], 10.0
     for i in range(251):  # 10 s at 25 fps
         frames.append(
             {
                 "frame": i,
                 "t": round(i / 25, 3),
-                "source": "truth",
+                "source": source,
                 "ball": {"x": 52.5, "y": 34.0},
                 "players": [
                     {"id": "h7", "team": "home", "x": round(x, 3), "y": 30.0},
@@ -48,7 +48,7 @@ class Clock:
 def setup(monkeypatch):
     monkeypatch.setattr(comp, "_track", lambda clip: track())
     clock = Clock()
-    app = comp.Companion(passcode="", live=None, clock=clock)
+    app = comp.Companion(passcode="", live=None, clock=clock, allow_truth=True)  # the local stand-in
     return TestClient(api.build("k" * 64, app)), app, clock
 
 
@@ -277,7 +277,7 @@ class FakeLive:
 def live_setup(monkeypatch, replies, passcode="letmein"):
     monkeypatch.setattr(comp, "_track", lambda clip: track())
     live = FakeLive(replies)
-    app = comp.Companion(passcode=passcode, live=live.build, clock=Clock())
+    app = comp.Companion(passcode=passcode, live=live.build, clock=Clock(), allow_truth=True)
     return TestClient(api.build("k" * 64, app)), app, live
 
 
@@ -345,3 +345,47 @@ def test_a_flow_message_validates_and_points_the_way_the_team_runs(setup):
     assert body["source"] == "truth" and crossed and all(body["vx"][i] == 5.0 for i in crossed)
     assert client.get("/api/flow/seed7/both?t_to=10").status_code == 422
     assert client.get("/api/flow/seed7/home").status_code == 422
+
+
+# --- ground truth stays off the deployed path ------------------------------------------------------
+
+
+def test_the_deployed_configuration_serves_no_companion(monkeypatch):
+    # infra sets no NINETY_COMPANION, so the deployed API has no companion route at all.
+    monkeypatch.delenv("NINETY_COMPANION", raising=False)
+    client = TestClient(api.build("k" * 64))
+    assert client.post("/api/pair", json={"clip": "seed7"}).status_code == 404
+    assert client.get("/api/minimap/seed7").status_code == 404
+    assert comp.from_env({}) is None
+
+
+def test_the_modes_are_standin_or_on_and_a_typo_fails():
+    assert comp.from_env({"NINETY_COMPANION": "standin"}).allow_truth is True
+    assert comp.from_env({"NINETY_COMPANION": "on"}).allow_truth is False
+    with pytest.raises(ValueError, match="NINETY_COMPANION='yes'"):
+        comp.from_env({"NINETY_COMPANION": "yes"})
+
+
+def test_on_refuses_ground_truth_positions_everywhere(monkeypatch):
+    monkeypatch.setattr(comp, "_track", lambda clip: track("truth"))
+    app = comp.Companion(passcode="", live=None, clock=Clock())  # `on`: allow_truth is off by default
+    client = TestClient(api.build("k" * 64, app))
+    code = pair(client)
+    for response in (
+        client.get("/api/minimap/seed7"),
+        client.get("/api/card/seed7/h7?t_to=10"),
+        client.get("/api/flow/seed7/home?t_to=10"),
+        ask(client, code),
+    ):
+        assert response.status_code == 503 and "ground truth" in response.json()["error"]
+
+
+def test_on_serves_tracked_positions(monkeypatch):
+    monkeypatch.setattr(comp, "_track", lambda clip: track("tracked"))
+    client = TestClient(api.build("k" * 64, comp.Companion(passcode="", live=None, clock=Clock())))
+    body = client.get("/api/minimap/seed7").json()
+    assert body["source"] == "tracked"
+    card = client.get("/api/card/seed7/h7?t_to=10").json()
+    MESSAGE.validate(card)
+    assert card["source"] == "tracked"
+    assert ask(client, pair(client)).json()["answer"]["status"] == "verified"

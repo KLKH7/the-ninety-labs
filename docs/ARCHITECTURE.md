@@ -205,6 +205,11 @@ works because the app runs as one replica (`maxReplicas: 1` in `infra/main.bicep
 replica would need a shared store or session affinity first. A scale-to-zero restart forgets every
 room, and the laptop pairs again.
 
+`NINETY_COMPANION` decides whether it runs. Unset, as deployed, the routes are not mounted.
+`standin`, for local work, serves the simulator's matches labelled `source: truth`. `on` serves
+tracked positions only and refuses ground truth with a 503. Nothing tracks positions from the
+video yet, so the companion stays off in the demo until R3's tracks land.
+
 ## Technology decisions
 
 | Area | Decision | Reason |

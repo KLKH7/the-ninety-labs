@@ -24,7 +24,12 @@ replica (infra/main.bicep), so a phone and its laptop always reach the same room
 would need a shared store (or session affinity) first. A restart forgets every room, and the
 laptop pairs again.
 
-Until Milestone 1 the positions are the simulator's and say `source: truth` (ninety/match/tracking.py).
+Which mode runs is NINETY_COMPANION (`app_mode`): unset, the routes are not mounted, which is the
+deployed configuration; `standin` serves the simulator's matches, labelled `source: truth` in every
+message, for building the phone locally; `on` serves only tracked positions and answers 503 for a
+clip whose positions are ground truth. Nothing tracks positions from the video yet, so after
+Milestone 1 the companion stays off where it is deployed (AGENTS.md, "Ground truth is the answer
+key"), and turns on when tracked positions exist (ninety/match/tracking.py).
 """
 
 from __future__ import annotations
@@ -60,6 +65,7 @@ RELAYED = {"clock", "focus"}  # what a laptop may send; answers and cards come f
 FPS_CHOICES = (1, 5, 25)  # divisors of the engine's 25 fps, so frames are evenly spaced
 MINIMAP_PLACES = 1  # 0.1 m: finer than a phone's dot, coarser than the tracker's error
 PASSCODE_HEADER = "x-ninety-passcode"
+MODES = ("standin", "on")  # NINETY_COMPANION; unset means the routes are not mounted
 # Requests a client may make in a minute (design: a person tapping, never a script).
 LIMITS = {"pair": 6, "read": 120, "ask_ip": 20, "ask_session": 10, "relay": 600}
 SESSION_MODEL_CALLS, DAY_MODEL_CALLS = 20, 400  # design: about $1 a day at the demo's model price
@@ -179,13 +185,23 @@ class Companion:
         passcode: str | None = None,
         live: Callable[[], Awaitable[LiveModels]] | None = None,
         clock: Callable[[], float] = time.time,
+        allow_truth: bool = False,
     ):
         self.passcode = passcode if passcode is not None else os.environ.get("NINETY_DEMO_PASSCODE", "")
+        self.allow_truth = allow_truth  # only the local stand-in mode serves simulator positions
         self.live_factory, self.live_models = live, None
         self.clock = clock
         self.rooms: dict[str, Room] = {}
         self.limits = {name: RateLimit(n) for name, n in LIMITS.items()}
         self.budget = Budget(SESSION_MODEL_CALLS, DAY_MODEL_CALLS, clock)
+
+    def _served(self, clip: str) -> tracking.Track | JSONResponse:
+        """The clip's track, or a 503 when its positions are ground truth and this server may not
+        serve them (AGENTS.md: nothing on the live path reads the answer key after Milestone 1)."""
+        track = _track(clip)
+        if track.source == tracking.SOURCE and not self.allow_truth:
+            return _error(503, "positions are ground truth; the companion needs tracked positions")
+        return track
 
     # --- rooms -----------------------------------------------------------------------------------
 
@@ -300,7 +316,9 @@ class Companion:
             return _error(422, str(exc))
         if fps not in FPS_CHOICES:
             return _error(422, f"fps must be one of {list(FPS_CHOICES)}")
-        track = _track(clip)
+        track = self._served(clip)
+        if isinstance(track, JSONResponse):
+            return track
         step = tracking.FPS // fps
         frames = [
             {
@@ -323,8 +341,7 @@ class Companion:
         MINIMAP.validate(body)
         return JSONResponse(body)
 
-    def _window(self, clip: str, player: str, t_from: float, t_to: float):
-        track = _track(clip)
+    def _window(self, track: tracking.Track, player: str, t_from: float, t_to: float):
         t_to = min(t_to, track.duration)
         return track, player_window(track.frames, player, min(t_from, t_to), t_to, track.restarts)
 
@@ -334,7 +351,10 @@ class Companion:
         clip, player = request.path_params["clip"], request.path_params["player"]
         if clip not in match_server.MATCHES:
             return _error(404, f"unknown clip {clip!r}")
-        if player not in _track(clip).roster:
+        track = self._served(clip)
+        if isinstance(track, JSONResponse):
+            return track
+        if player not in track.roster:
             return _error(422, f"{player!r} is not on the roster of {clip}")
         try:
             q = _query_numbers(request, {"t_from", "t_to"}, {"t_to"})
@@ -343,7 +363,7 @@ class Companion:
         t_from, t_to = q.get("t_from", 0.0), q["t_to"]
         if not 0 <= t_from <= t_to:
             return _error(422, "need 0 <= t_from <= t_to")
-        track, window = self._window(clip, player, t_from, t_to)
+        track, window = self._window(track, player, t_from, t_to)
         if window is None:
             return _error(404, f"no positions of {player} in that window")
         return JSONResponse(_send(window.card(track.source)))
@@ -363,7 +383,9 @@ class Companion:
         t_from, t_to = q.get("t_from", 0.0), q["t_to"]
         if not 0 <= t_from <= t_to:
             return _error(422, "need 0 <= t_from <= t_to")
-        track = _track(clip)
+        track = self._served(clip)
+        if isinstance(track, JSONResponse):
+            return track
         t_to = min(t_to, track.duration)
         field = team_flow(track.frames, team, min(t_from, t_to), t_to, track.restarts)
         return JSONResponse(_send(field.message(track.source)))
@@ -397,12 +419,14 @@ class Companion:
             return _error(404, "unknown or expired session; pair again")
         if not self.limits["ask_session"].allow(question.session):
             return _error(429, "too many questions; wait a minute")
-        track = _track(room.clip)
+        track = self._served(room.clip)
+        if isinstance(track, JSONResponse):
+            return track
         if question.player is not None and question.player not in track.roster:
             return _error(422, f"{question.player!r} is not on the roster of {room.clip}")
         window = None
         if question.player is not None:
-            _, window = self._window(room.clip, question.player, 0.0, question.t)
+            _, window = self._window(track, question.player, 0.0, question.t)
         ask = judge = None
         if live and window is not None and self.budget.take(question.session):
             if self.live_models is None:
@@ -471,3 +495,14 @@ async def foundry_models() -> LiveModels:
         return await run_judge(judge_ag, claim, evidence)
 
     return LiveModels(ask, judge)
+
+
+def from_env(env: dict[str, str] | None = None) -> Companion | None:
+    """The companion NINETY_COMPANION asks for: None (unset, as deployed), the local stand-in, or
+    `on`, which refuses ground-truth positions. Any other value is a typo that must not pass silently."""
+    mode = (os.environ if env is None else env).get("NINETY_COMPANION", "")
+    if not mode:
+        return None
+    if mode not in MODES:
+        raise ValueError(f"NINETY_COMPANION={mode!r}: use one of {', '.join(MODES)}, or leave it unset")
+    return Companion(live=foundry_models, allow_truth=mode == "standin")
