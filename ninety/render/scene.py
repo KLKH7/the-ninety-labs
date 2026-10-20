@@ -71,6 +71,9 @@ STEP_DIST = 0.25
 STEP_FRAMES = 7  # 0.28 s at 25 fps
 STEP_LIFT = 0.08
 STEP_PEAK_MPS = 3.0  # the fastest a stepping foot travels (design: a quick step, not a kick)
+# A foot caught in the air by a touch (the stride's swing) is down within this many frames, the rest
+# of a swing at walking pace, before it carries on low to where it stands (design).
+LAND_FRAMES = 3
 SETTLE = 0.5  # standing still, a foot that far (as a share of the step limits) squares up
 # Where a standing foot sits under the hips: the asset's rest pose (foot marker, object metres
 # for a 1.84 m body): lateral, forward.
@@ -130,6 +133,7 @@ HOLD_STAND_Z = 1.0
 HOLD_BEND = 1.5
 HOLD_DROP_M = 0.33  # as low as the planted legs still reach with flat feet (measured on the asset)
 HOLD_EASE_S = 0.16
+HOLD_RUN_MPS = 4.0  # at this speed or faster a keeper takes the ball without dropping his hips (design)
 TOUCH_PARTS = ("foot", "thigh", "chest", "head")
 HEADER_LIFT_MAX = 0.3  # a header above the standing brow is drawn as a jump, at most this high
 HEADER_AIR_S = 0.24  # half the time in the air
@@ -145,6 +149,7 @@ LUNGE_MAX = 0.3
 # the lowered leg was measured to reach with a flat foot).
 LOW_HOLD_M = 0.3
 LOW_M = 0.05  # how far the hips drop before the body counts as lowered (a lunge, a stoop)
+OUT_OF_REACH_M = 0.45  # a planted foot this far from where it stands is beyond the leg (asset m, measured)
 
 
 def _wrap(a: float) -> float:
@@ -211,6 +216,8 @@ class Gait:
     ankle: dict = field(default_factory=dict)  # side -> last drawn sole (x, y, height): where a step starts
     touch: dict | None = None  # the part meeting the ball now: part, side, at (world), w
     hold: dict | None = None  # a held ball: at (world, its centre), w, bend
+    supporting: bool = False  # the feet stand and step for a touch or a lunge (_feet)
+    played: str | None = None  # the foot that played the ball last frame (_feet)
     lift: float = 0.0  # metres the body is raised (a header's jump) or lowered (a lunge, a stoop)
 
 
@@ -469,7 +476,9 @@ def hold_at(g: Gait, runs: list[tuple[int, int]], fi: int, ball: tuple[float, fl
         "w": round(w, 4),
         "bend": round(HOLD_BEND * depth, 4),
     }
-    g.lift = min(g.lift, -round(HOLD_DROP_M * depth * k * w, 4))
+    # On the move he stoops less: lowered, the legs could not reach feet the body is running past.
+    moving = max(0.0, 1.0 - g.speed / HOLD_RUN_MPS)
+    g.lift = min(g.lift, -round(HOLD_DROP_M * depth * k * w * moving, 4))
 
 
 def face(g: Gait, player: dict) -> None:
@@ -527,10 +536,24 @@ def _feet(g: Gait, x: float, y: float, k: float) -> None:
     busy = None
     if g.touch is not None and g.touch["w"] > 0 and g.touch["part"] in ("foot", "strike", "thigh"):
         busy = g.touch["side"]
+    # A foot that has just played the ball comes back to the grass from where the touch drew it
+    # (g.ankle), not from where it stood before the touch: the body has moved on since, and a foot
+    # left there can be beyond the leg's reach (a first touch then a strike on the move).
+    released = g.played if g.played != busy else None
+    if released is not None:
+        g.feet.pop(released, None)
+    g.played = busy
     lunge = g.lift < -LOW_M * k  # the support foot stays down under a lunge, whatever the pose
-    if (g.action not in PLANT_ACTIONS and not lunge) or g.lift > 0.02:
+    # While a foot or thigh plays the ball, the other foot is the support: it stands, and steps after
+    # the body, instead of following the stride into the air.
+    # Out of a touch or a lunge the feet go back to the stride once no foot is in the middle of a
+    # step: a stepping foot handed to the stride would be dropped where the stride has it.
+    stepping_now = any(f.get("swing") is not None for f in g.feet.values())
+    support = lunge or busy is not None or (g.supporting and stepping_now)
+    g.supporting = support
+    if (g.action not in PLANT_ACTIONS and not support) or g.lift > 0.02:
         g.feet = {}
-    elif g.action != "stand" and g.speed >= 0.45 and not lunge:
+    elif g.action != "stand" and g.speed >= 0.45 and not support:
         half = _duty(g.speed) * math.pi
         per_frame = 2 * math.pi * g.speed * FRAME_S / _stride(g.speed)
         ph = g.phase % (2 * math.pi)
@@ -568,9 +591,11 @@ def _feet(g: Gait, x: float, y: float, k: float) -> None:
             if foot is None:
                 # A foot coming out of a stride or a touch starts where it was drawn last: on the
                 # grass it stays there, and in the air it comes down as a step to where it stands.
-                # Either way the leg takes the plant over PLANT_EASE_FRAMES.
+                # Out of the stride the leg takes the plant over PLANT_EASE_FRAMES; a foot the touch
+                # has just let go is drawn there already, and the leg keeps it.
                 fx, fy, fz = g.ankle.get(side, (hx_, hy_, 0.0))
-                foot = {"x": fx, "y": fy, "yaw": pel, "z": fz, "swing": None, "w": 0.0}
+                taken = 1.0 if side == released else 0.0
+                foot = {"x": fx, "y": fy, "yaw": pel, "z": fz, "swing": None, "w": taken}
                 if fz > 0.02:
                     frames = _step_frames(math.hypot(fx - hx_, fy - hy_))
                     foot["swing"], foot["over"] = (fx, fy, pel, 0, frames, fz), False
@@ -587,12 +612,33 @@ def _feet(g: Gait, x: float, y: float, k: float) -> None:
                     foot["yaw"] = syaw + _wrap(pel - syaw) * e
                     foot["over"] = e >= 1.0
                 done = min(age / steps, 1.0)
-                foot["z"] = z0 * (1.0 - done) + STEP_LIFT * k * math.sin(math.pi * done)
+                foot["z"] = z0 * max(0.0, 1.0 - age / LAND_FRAMES) + STEP_LIFT * k * math.sin(math.pi * done)
                 foot["swing"] = None if age >= steps else (sx, sy, syaw, age, steps, z0)
                 if foot["swing"] is None:
                     foot["z"], foot["over"] = 0.0, False
             g.feet[side] = foot
-        stepping = any(f["swing"] is not None for f in g.feet.values())
+        # The foot playing the ball keeps its plant (where the touch blends from and back to) within
+        # the leg's reach: the body goes on moving through a touch, and a plant left behind it is a
+        # foot the leg can only dangle toward. It is drawn along at the edge of the reach.
+        if busy is not None:
+            foot = g.feet[busy]
+            hx_, hy_ = _home(x, y, pel, k, 1.0 if busy == "l" else -1.0)
+            gone = math.hypot(foot["x"] - hx_, foot["y"] - hy_)
+            if foot["swing"] is None and gone > OUT_OF_REACH_M * k:
+                f = OUT_OF_REACH_M * k / gone
+                foot["x"], foot["y"] = hx_ + (foot["x"] - hx_) * f, hy_ + (foot["y"] - hy_) * f
+        # A planted foot the body has left beyond the leg's reach steps at once, whatever the other
+        # foot is doing: held there, the leg cannot reach it and is drawn through the grass.
+        for side, sign in (("l", 1.0), ("r", -1.0)):
+            foot = g.feet[side]
+            hx_, hy_ = _home(x, y, pel, k, sign)
+            gone = math.hypot(foot["x"] - hx_, foot["y"] - hy_)
+            held = side == busy  # the touch's own, kept within reach above
+            if foot["swing"] is None and not held and gone > OUT_OF_REACH_M * k:
+                start = (foot["x"], foot["y"], foot["yaw"], 0, _step_frames(gone))
+                foot["swing"], foot["over"] = start, False
+        # One foot steps at a time; the foot playing the ball is the touch's, not a step.
+        stepping = any(f["swing"] is not None for s, f in g.feet.items() if s != busy)
         if not stepping:
             # Once the body has stopped turning he squares up: a foot half as far off steps too.
             settle = SETTLE if abs(g.lead) < 0.05 else 1.0
@@ -764,6 +810,7 @@ def body_parts(
     # The outer edge of the sleeves is the shoulder breadth over the deltoids (shape.py, P11).
     shoulder_y = shape.SHOULDER_BREADTH_M / 2 - sleeve_r
     parts = []
+    played: dict[str, tuple[float, float, float]] = {}  # the sole a touch draws, side -> (x, y, height)
     for side, sign in (("l", 1.0), ("r", -1.0)):
         # The same stride as the mesh's (meshpose.gait): at sin(phase) = 1 the right foot is forward.
         swing = -amp * s * sign
@@ -800,6 +847,8 @@ def body_parts(
                                 for a, b in ((knee, pk), (ankle, pa), (toe, pt)))
         if touch is not None and touch["part"] in ("foot", "strike", "thigh") and touch["side"] == side:
             knee, ankle, toe = _reach_leg(hip, knee, ankle, toe, touch, (hx, hy), k)
+            played[side] = (ankle[0] + hx * ANKLE_BACK * k, ankle[1] + hy * ANKLE_BACK * k,
+                            max(ankle[2] - 0.08 * k, 0.0))
         parts.append({"n": f"thigh_{side}", "a": hip, "b": knee, "r": round(0.085 * k * w, 4), "c": "shorts"})
         parts.append({"n": f"shin_{side}", "a": knee, "b": ankle, "r": round(0.058 * k * w, 4), "c": "socks"})
         parts.append({"n": f"boot_{side}", "a": ankle, "b": toe, "r": round(0.042 * k, 4), "c": "boots"})
@@ -821,11 +870,14 @@ def body_parts(
             hand = at(pump * 0.12 + lean, (shoulder_y + sleeve_r - arm_r) * sign, 0.93 * k)
         parts.append({"n": f"arm_{side}", "a": shoulder, "b": elbow, "r": round(sleeve_r, 4), "c": "shirt"})
         parts.append({"n": f"forearm_{side}", "a": elbow, "b": hand, "r": round(arm_r, 4), "c": "skin"})
-    # Where each foot is drawn now, for a step that starts from it (_feet): on its plant, or where
-    # the mesh's stride has it. The capsules' own stride is the label's, not the picture's.
+    # Where each foot is drawn now, for a step that starts from it (_feet): on the ball, on its
+    # plant, or where the mesh's stride has it. The capsules' own stride is the label's, not the
+    # picture's.
     for side in ("l", "r"):
         plant = g.plant_l if side == "l" else g.plant_r
-        if plant is not None and (len(plant) < 5 or plant[4] >= 0.5):
+        if side in played:
+            g.ankle[side] = played[side]
+        elif plant is not None and (len(plant) < 5 or plant[4] >= 0.5):
             g.ankle[side] = (plant[0], plant[1], plant[3])
         else:
             g.ankle[side] = strided[side]

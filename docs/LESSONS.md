@@ -996,6 +996,25 @@ short and actionable. This file is public: no research sources, product names or
   `test_setting_off_running_and_pulling_up_moves_no_limb_in_a_jump` and the tackle test, which cap
   how far any limb moves relative to the body in one frame.
 
+### 113. A check that fails on a few frames names a class of defect: sweep every frame for it
+- **What happened:** render-check failed `player_feet_in_boxes` at 0.4.2 on 2 foot checks each of
+  seeds 7 and 11. The 0.4.3 fix traced those four frames to three causes and tested each, and the
+  re-render of seed 7 failed 7 checks in two other sequences: a pass cushioned with one foot and
+  struck with the other on the move left the first foot's plant where it stood before the touch,
+  2 m behind by the strike, and the mesh hung both feet in the air. Fixing that sequence (0.4.4)
+  left 1 failure. A sweep of every player-frame of both clips then found 21 frames with both mesh
+  feet above 0.2 m and the body not jumping, in four players and two more causes: a touch that had
+  faded before the next one still let its foot go from the old plant, and a foot the touch caught
+  mid-stride came down over a whole slow step. The frames were instances; the class was a foot
+  the body has left behind.
+- **Rule:** when a picture check fails on a few frames, name the class of defect, measure it over
+  every player-frame of the clips in Python (no render needed: the mesh's markers come from
+  `meshpose`), and fix every sequence that shows it before re-rendering.
+- **Check:** `test_a_first_touch_then_a_strike_on_the_move_keeps_a_foot_on_the_grass` (both
+  cases) and `test_a_thigh_touch_on_the_move_keeps_a_foot_on_the_grass` fail on `0312d60` and
+  pass; removing any one of the three parts of the fix fails one of them or the tackle's limb cap.
+  The sweep at 0.4.5: 0 such player-frames on seeds 7 and 11 (worst 0.18 m), from 21.
+
 ### 106. Look for an open pull request on the same task before building it
 - **What happened:** a session was handed "build the Personalizer over A2A" and built it, tests and
   mutation run included, before it noticed that draft #131 was the same task, further along. Two
