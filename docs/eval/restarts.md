@@ -90,6 +90,25 @@ goals 1.4 ± 0.5 to 2.4 ± 0.6, most of the extra shots within 10 s of a side's 
 not appear (above). Which base's restart behaviour is realistic is open: real restart-retention
 rates are not yet sourced.
 
+## After a goal (the celebration)
+
+Measured on the same 16 seeds against `main` with the change above (`cf3b17a`), the celebration
+branch's raw output in [restarts/celebration-branch.json](restarts/celebration-branch.json):
+
+| | Before | After |
+|---|---:|---:|
+| Seconds from a goal to the kick-off | 13.7 to 19.2 (11 goals) | 66.4 to 87.3 (10 goals) |
+| Ball in play, share of the 20 minutes | 56.6% | 53.3% |
+| Shots a team per 90 | 19.0 ± 2.1 | 16.2 ± 1.6 |
+| Goals a team per 90 | 1.6 ± 0.5 | 1.6 ± 0.5 |
+| Pass completion | 79.6% | 80.3% |
+| Restart defects (jumps, encroachment, carried set balls, stuck restarts) | 0 | 0 |
+
+A goal's celebration "may last one, one and a half minutes" (Collina, FIFA, 2022): the kick-off now
+comes 60 to 90 s after the goal (GROUNDING L4). Ball in play is about 55.8% of a Premier League
+match's total time, added time included (Opta via The Analyst, 2023); these 20-minute matches have
+no added time. Shots, goals and completion are unchanged within noise.
+
 ## Reproduce
 
 ```bash
