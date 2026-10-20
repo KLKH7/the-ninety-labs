@@ -5,12 +5,21 @@ is walked back to, never reset (row 3); opponents keep the Laws' distance until 
 import math
 
 from ninety.sim.decisions import PENALTY_DEPTH, PENALTY_HALF_WIDTH
-from ninety.sim.engine import DT, PITCH_X, PITCH_Y, Engine, Restart, throw_stand
-from ninety.validate import MAX_PLAYER_MPS
+from ninety.sim.engine import (
+    BALL_TO_FEET,
+    DT,
+    KEEP_OFF_MARGIN_M,
+    PITCH_X,
+    PITCH_Y,
+    Engine,
+    Restart,
+    segment_distance,
+    throw_stand,
+)
+from ninety.validate import MAX_BALL_MPS, MAX_PLAYER_MPS
 
-# The fastest a dead ball can travel: a struck pass's launch speed is well under this (P3 in the
-# validator allows 45 m/s); a jump of more than this in one frame is a teleport.
-MAX_STEP_M = 45.0 * DT
+# The fastest a ball may travel (the validator's P3); a jump of more than this in a frame is a teleport.
+MAX_STEP_M = MAX_BALL_MPS * DT
 
 
 def still(e: Engine) -> None:
@@ -48,18 +57,42 @@ def fastest_player(track: list[tuple]) -> float:
 
 
 def test_a_dead_ball_that_rolled_away_is_fetched_to_the_spot_not_teleported():
-    """Defect: after the whistle the ball rolled on 30 m and appeared at the taker's feet."""
+    """Defect: after the whistle the ball rolled on and appeared at the taker's feet. Here the taker
+    starts 25 m from the spot and the ball rolls away from both, so it must really be fetched."""
     e = Engine(1)
     still(e)
     e.possessor = None
+    taker = e.by_id["h9"]
+    taker.x, taker.y = 40.0, 9.0
+    for p in e.players:  # nobody near the spot or the ball's path
+        if p.team == "home" and p is not taker and 30.0 < p.x < 75.0 and 24.0 < p.y < 44.0:
+            p.y = 50.0
     e.ball = (40.0, 34.0, 0.0, 8.0, 0.0, 0.0)  # rolling on toward x = 65 after the whistle
-    e.stop("free_kick", "home", (40.0, 34.0))
+    e.stop("free_kick", "home", (40.0, 34.0), taker=taker.id)
     e.restart.ready_at = e.t  # waits are R1's business; this is about the ball
-    track = run_until(e, taken, 60)
+    track = run_until(e, taken, 90)
+    assert len(track) > 5 / DT  # it took a real fetch, not a placement
     assert biggest_ball_step(track) <= MAX_STEP_M
-    set_piece = e.match.events[-1] if e.match.events[-1]["type"] == "set_piece" else e.match.events[-2]
-    assert set_piece["type"] == "set_piece"
-    assert math.hypot(set_piece["x"] - 40.0, set_piece["y"] - 34.0) < 1e-6  # Law 13: where it happened
+    # carried onto the spot at a carried ball's pace (P6), never put there
+    assert math.dist(track[-2][0], (40.0, 34.0, 0.0)) <= BALL_TO_FEET * DT + 1e-9
+    set_piece = next(ev for ev in reversed(e.match.events) if ev["type"] == "set_piece")
+    assert (set_piece["x"], set_piece["y"]) == (40.0, 34.0)  # Law 13: where it happened
+
+
+def test_a_carried_dead_ball_moves_no_faster_than_a_carried_ball_settles():
+    """P6: the ball goes to his feet at up to BALL_TO_FEET, never in one jump."""
+    e = Engine(1)
+    still(e)
+    e.possessor = None
+    e.stop("free_kick", "home", (40.0, 34.0))
+    r = e.restart
+    carrier = e.by_id[r.taker]
+    carrier.x, carrier.y, carrier.heading = 30.0, 34.0, 0.0
+    r.carried_by = carrier.id
+    e.ball = (30.0, 34.95, 0.0, 0.0, 0.0, 0.0)  # within his reach, beside him
+    e.tick_restart()
+    moved = math.dist(e.ball[:2], (30.0, 34.95))
+    assert 0.0 < moved <= BALL_TO_FEET * DT + 1e-9
 
 
 def test_a_ball_at_the_boards_is_fetched_for_the_throw_in_not_teleported():
@@ -108,13 +141,20 @@ def test_after_a_goal_the_players_walk_back_and_nobody_is_reset():
     assert fastest_player(track) <= MAX_PLAYER_MPS
     kick = e.match.events[-1]
     assert kick["type"] == "kickoff" and (kick["x"], kick["y"]) == (PITCH_X / 2, PITCH_Y / 2)
-    for p in e.players:  # Law 8 at the moment it is taken
-        if p.id == kick["player"]:
-            continue
-        own_half = p.x >= PITCH_X / 2 if p.team == "away" else p.x <= PITCH_X / 2
-        assert own_half, p.id
-        if p.team == "home":
-            assert math.hypot(p.x - PITCH_X / 2, p.y - PITCH_Y / 2) >= 9.15, p.id
+    # Law 8 holds until the ball is kicked and moves, including while the kicker stands over it.
+    for _ in range(int(5 / DT)):
+        for p in e.players:
+            if p.id == kick["player"]:
+                continue
+            own_half = p.x >= PITCH_X / 2 if p.team == "away" else p.x <= PITCH_X / 2
+            assert own_half, p.id
+            if p.team == "home":
+                assert math.hypot(p.x - PITCH_X / 2, p.y - PITCH_Y / 2) >= 9.15, p.id
+        e.step()
+        if math.dist(e.ball[:2], (PITCH_X / 2, PITCH_Y / 2)) > 1e-6:
+            break
+    else:
+        raise AssertionError("the kick-off was never kicked")
 
 
 def test_the_kickoff_waits_for_the_teams_to_line_up():
@@ -219,3 +259,117 @@ def test_nobody_challenges_a_set_ball_before_it_is_kicked():
         e.duels()
         e.frame += 1
     assert d.id not in e.lunges
+
+
+def free_kick(e: Engine, team: str, x: float, y: float) -> None:
+    e.possessor = None
+    e.restart = Restart("free_kick", team, x, y, "h9" if team == "home" else "a9", e.t + 5)
+
+
+def test_at_a_corner_opponents_keep_9_15_m_from_the_arc_not_the_ball():
+    """Law 17: from the corner arc (1 m radius, Law 1), so 10.15 m from the corner itself."""
+    e = Engine(3)
+    e.restart = Restart("corner", "home", PITCH_X, 0.0, "h11", e.t + 5)
+    d = e.by_id["a4"]
+    d.x, d.y = PITCH_X - 7.0, 6.5  # 9.55 m from the corner, 9.5 m from the ball on its spot
+    tx, ty = e.keep_off(d, PITCH_X - 7.0, 6.5)
+    assert math.hypot(tx - PITCH_X, ty) >= 9.15 + 1.0
+
+
+def test_an_opponent_goes_round_the_free_kick_circle_not_across_it():
+    e = Engine(3)
+    free_kick(e, "home", 60.0, 34.0)
+    d = e.by_id["a7"]
+    d.x, d.y = 60.0, 45.0  # outside, on one side; his target is straight across, on the other
+    tx, ty = e.keep_off(d, 60.0, 23.0)
+    clear = 9.15 + KEEP_OFF_MARGIN_M
+    # aimed along the circle: the chord to it dips inside by under 4% of the radius
+    assert segment_distance(60.0, 34.0, d.x, d.y, tx, ty) >= clear * math.cos(math.radians(15)) - 1e-9
+
+
+def test_at_a_goal_kick_an_opponents_target_is_moved_clear_of_the_area():
+    e = Engine(3)
+    e.restart = Restart("goal_kick", "home", 5.5, 34.0, "h1", e.t + 5)
+    tx, ty = e.keep_off(e.by_id["a9"], 10.0, 34.0)
+    assert tx >= PENALTY_DEPTH + KEEP_OFF_MARGIN_M - 1e-9 and ty == 34.0  # out the short way, up the pitch
+
+
+def test_a_throw_ins_2_m_is_measured_from_the_point_on_the_touchline():
+    """Law 15: the point where it is taken, on the line, not a spot inside the pitch."""
+    e = Engine(3)
+    e.restart = Restart("throw_in", "home", 50.0, 0.0, "h2", e.t + 5)
+    tx, ty = e.keep_off(e.by_id["a5"], 50.0, 2.2)
+    assert abs(math.hypot(tx - 50.0, ty) - (2.0 + KEEP_OFF_MARGIN_M)) < 1e-9
+
+
+def test_a_free_kick_in_the_kicking_sides_own_area_keeps_opponents_out_of_the_area():
+    """Law 13: at a free kick from inside its own penalty area, opponents stay outside the area."""
+    e = Engine(3)
+    free_kick(e, "home", 10.0, 34.0)
+    tx, ty = e.keep_off(e.by_id["a10"], 14.0, 50.0)  # 16.5 m from the ball, inside the area
+    assert tx > PENALTY_DEPTH or abs(ty - PITCH_Y / 2) > PENALTY_HALF_WIDTH
+
+
+def test_a_dead_ball_still_dropping_is_left_to_land():
+    e = Engine(3)
+    still(e)
+    free_kick(e, "home", 40.0, 34.0)
+    p = e.by_id["h9"]
+    p.x, p.y = 40.0, 34.0
+    e.ball = (40.3, 34.0, 0.6, 0.0, 0.0, -2.0)  # beside him, falling
+    e.tick_restart()
+    assert e.restart.carried_by is None
+    e.ball = (40.3, 34.0, 0.0, 0.0, 0.0, 0.0)  # on the ground: now he takes it
+    e.tick_restart()
+    assert e.restart.carried_by == p.id
+
+
+def test_a_dead_ball_faster_than_his_first_touch_kills_runs_on():
+    """A4: his foot kills at most absorb_mps of the ball's speed relative to him."""
+    e = Engine(3)
+    still(e)
+    free_kick(e, "home", 40.0, 34.0)
+    p = e.by_id["h9"]
+    p.x, p.y = 40.0, 34.0
+    fast = p.profile.absorb_mps(False) + 1.0
+    e.ball = (40.3, 34.0, 0.0, fast, 0.0, 0.0)
+    e.tick_restart()
+    assert e.restart.carried_by is None
+    e.ball = (40.3, 34.0, 0.0, fast - 2.0, 0.0, 0.0)
+    e.tick_restart()
+    assert e.restart.carried_by == p.id
+
+
+def test_the_fetcher_goes_where_the_ball_will_stop_and_is_replanned():
+    e = Engine(3)
+    still(e)
+    free_kick(e, "home", 40.0, 45.0)
+    e.ball = (40.0, 45.0, 0.0, 10.0, 0.0, 0.0)  # rolling on along the pitch, past everyone
+    e.tick_restart()
+    first = e.by_id[e.restart.fetcher]
+    tx, _, _ = e.shape_target(first)
+    assert tx > e.ball[0] + 10.0  # ahead, where it will come to rest, not where it is
+    first.x, first.y = 1.0, 1.0  # he is far away now: somebody nearer goes instead
+    for _ in range(8):
+        e.tick_restart()
+    assert e.restart.fetcher != first.id
+
+
+def test_a_set_ball_touched_on_is_in_play_and_the_opponents_may_close():
+    """Laws 13, 16, 17: in play once it is kicked and moves, by any touch, not only a pass."""
+    e = Engine(3)
+    still(e)
+    e.possessor = None
+    e.stop("free_kick", "home", (60.0, 34.0))
+    r = e.restart
+    taker = e.by_id[r.taker]
+    taker.x, taker.y = 59.7, 34.0
+    r.carried_by = taker.id
+    e.ball = (60.0, 34.0, 0.0, 0.0, 0.0, 0.0)
+    r.ready_at = e.t
+    e.step()
+    assert e.restart is None and e.set_by is not None
+    e.ball = (60.3, 34.0, 0.0, 1.0, 0.0, 0.0)  # he touches it on
+    e.step()
+    assert e.set_by is None
+    assert e.keep_off(e.by_id["a7"], 61.0, 34.0) == (61.0, 34.0)
