@@ -501,11 +501,13 @@ words it; code decides what airs.
   air rates and times are over answered requests only. Past `MAX_UNANSWERED_SHARE` (a fifth, a
   design choice) the run writes no report, because which claims an outage hits depends on when it
   struck (lesson 131).
-- **The fallback.** The remote has `BUDGET_S` = 3 s (a design choice: a little over a third of the
-  8 s p95 target from event to verified graphic in PLAN.md, to be revisited when
-  `latency-cost.md` measures the split). On a timeout, a 5xx or a refused connection the in-process
-  fallback answers with the verified text at once. A 4xx or a malformed reply is a defect between
-  our own two programs and raises, so it is seen rather than hidden.
+- **The fallback.** The remote has `BUDGET_S` = 6 s, from measurement: the published
+  Personalizer took 3.2 to 4.7 s (median 4.0 s) in 8 calls on 2026-10-20, all over the old 3 s
+  budget, so every live request timed out (lesson 147); 6 s is the slowest call plus about a
+  quarter (design). The server's own model call ends `SERVER_MARGIN_S` = 0.5 s sooner, so a slow
+  model is answered by the server's fallback with its reasons. On a timeout, a 5xx or a refused
+  connection the in-process fallback answers with the verified text at once. A 4xx or a malformed
+  reply is a defect between our own two programs and raises, so it is seen rather than hidden.
 - **Viewer input.** A profile is rebuilt with `Profile` on the server, whose every field is an
   allow-list; any other value, or an extra field, is refused with an A2A invalid-params error before
   the model is called. The model sees the profile only as a JSON field.

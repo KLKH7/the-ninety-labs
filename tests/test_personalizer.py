@@ -17,7 +17,7 @@ from ninety.agents.factcheck import Claim
 from ninety.personalizer import core
 from ninety.personalizer.client import PersonalizerError, RemotePersonalizer, outage
 from ninety.personalizer.core import WRITTEN, model_personalizer, problem, recheck
-from ninety.personalizer.server import create_app
+from ninety.personalizer.server import InProcess, create_app
 
 URL = "http://personalizer.test/"
 EVIDENCE = [
@@ -46,9 +46,9 @@ def scripted(texts):
     return ask
 
 
-def remote(personalize, budget_s=core.BUDGET_S):
+def remote(personalize, budget_s=core.BUDGET_S, transport=httpx.ASGITransport):
     app = create_app(personalize, URL)
-    http = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url=URL)
+    http = httpx.AsyncClient(transport=transport(app=app), base_url=URL)
     return RemotePersonalizer(URL, budget_s=budget_s, http=http)
 
 
@@ -110,6 +110,98 @@ def test_on_a_timeout_the_fallback_answers_within_the_budget():
     assert client.last_route == "fallback: timeout"
     assert elapsed < BUDGET + SLACK, elapsed
     assert [v.text for v in variants] == [CLAIM.text]
+
+
+def test_the_budget_is_over_the_slowest_measured_model_call():
+    # Lesson 147: ninety-personalizer:1 took 3.2 to 4.7 s for one claim's 8 variants, and the old
+    # 3 s budget timed out every request in the live evaluation.
+    slowest_measured_s = 4.7
+    assert core.MODEL_TIMEOUT_S > slowest_measured_s
+    assert core.MODEL_TIMEOUT_S == core.BUDGET_S - core.SERVER_MARGIN_S and core.SERVER_MARGIN_S > 0
+
+
+def test_a_slow_model_is_answered_by_the_server_with_its_reasons_not_cut_off_by_the_client():
+    # The evaluation's server gives its model the client's budget less the margin, so the server's
+    # fallback answers, with why, before the client's deadline (lesson 147: both were 3 s, so every
+    # slow request was a bare client timeout with no reasons).
+    from ninety.personalizer import eval as pe
+
+    async def slow(prompt):
+        await asyncio.sleep(30)
+
+    budget = core.SERVER_MARGIN_S + BUDGET
+    rows = run(pe.run([(7, "pass", CLAIM, EVIDENCE)], slow, budget))
+    assert {r["route"] for r in rows} == {"remote"}
+    assert any(r["dropped"] and r["dropped"].startswith("server: model failed: TimeoutError") for r in rows)
+
+
+def ours(task: asyncio.Task) -> bool:
+    """A request of ours still running: the client's call, or the in-process server's request."""
+    ours = ("RemotePersonalizer._send", "InProcess.__init__.<locals>.detached")
+    return getattr(task.get_coro(), "__qualname__", "") in ours
+
+
+def unfinished():
+    return [t for t in asyncio.all_tasks() if not t.done() and ours(t)]
+
+
+def test_a_request_cut_off_at_the_deadline_is_awaited_on_close():
+    # A request left pending when the loop closed was destroyed mid-flight in the live evaluation
+    # ("Task was destroyed but it is pending!"), and the A2A client's telemetry span then failed to
+    # detach. close() now waits for every cancelled request to unwind.
+    async def slow(prompt):
+        await asyncio.sleep(30)
+
+    async def go():
+        # The server's own model deadline is past the client's, so the client gives up first.
+        client = remote(model_personalizer(slow, timeout_s=2 * BUDGET), budget_s=BUDGET, transport=InProcess)
+        await client(CLAIM, EVIDENCE, [Profile("casual", "es")])
+        assert client.last_route == "fallback: timeout" and client.abandoned
+        await client.close()
+        return client, unfinished()
+
+    client, pending = run(go())
+    assert not client.abandoned and not pending, pending
+
+
+class Unwinding(httpx.AsyncBaseTransport):
+    """A server that never answers, over a connection that takes a moment to close once cancelled."""
+
+    async def handle_async_request(self, request):
+        try:
+            await asyncio.sleep(30)
+        finally:
+            await asyncio.sleep(BUDGET / 3)  # closing the connection
+
+
+def test_close_waits_for_a_cancelled_request_to_finish_unwinding():
+    async def go():
+        client = RemotePersonalizer(URL, budget_s=BUDGET, http=httpx.AsyncClient(transport=Unwinding()))
+        await client(CLAIM, EVIDENCE, [Profile("casual", "es")])
+        assert client.last_route == "fallback: timeout" and client.abandoned
+        await client.close()
+        return client, unfinished()
+
+    client, pending = run(go())
+    assert not client.abandoned and not pending, pending
+
+
+def test_the_evaluation_leaves_no_request_running_when_the_client_gives_up(monkeypatch):
+    # Over the plain ASGITransport the client's cancellation runs into a2a-sdk's server code, which
+    # swallows it and waits forever (lesson 147); the evaluation's InProcess server does not.
+    from ninety.personalizer import eval as pe
+
+    async def slow(prompt):
+        await asyncio.sleep(30)
+
+    monkeypatch.setattr(core, "SERVER_MARGIN_S", -BUDGET)  # the server's model outlasts the client
+
+    async def go():
+        rows = await pe.run([(7, "pass", CLAIM, EVIDENCE)], slow, BUDGET)
+        return rows, unfinished()
+
+    rows, pending = run(go())
+    assert {r["route"] for r in rows} == {"fallback: timeout"} and not pending, pending
 
 
 def mock(status):
@@ -370,6 +462,8 @@ def test_the_evaluation_counts_a_variant_the_server_dropped_as_not_airing():
     airs = {(r["persona"], r["lang"]): r["dropped"] is None for r in rows}
     assert airs == {(p.persona, p.lang): p.lang == "en" for p in personalizer_eval.PROFILES}
     report = personalizer_eval.report(rows, "scripted", "21")
+    assert f"budget {core.BUDGET_S} s." in report
+    assert "budget 30.0 s." in personalizer_eval.report(rows, "scripted", "21", 30.0)
     assert "| casual | es | 1 | 1 | 0 |" in report and "| casual | en | 1 | 1 | 1 |" in report
     assert "- 4 x server: number N is not in the cited evidence" in report
 

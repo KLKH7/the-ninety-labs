@@ -69,6 +69,7 @@ class RemotePersonalizer:
         self.client = ClientFactory(config).create(agent_card(url))
         self.last_route = ""  # "remote" or "fallback: <why>", for the trace
         self.last_dropped: dict[int, str] = {}  # profile number -> why its variant did not air
+        self.abandoned: set[asyncio.Task] = set()  # cancelled at the deadline, awaited on close
 
     async def __call__(self, claim: Claim, evidence: list[dict], profiles: list[Profile]) -> list[Variant]:
         if not profiles:
@@ -97,7 +98,11 @@ class RemotePersonalizer:
         done, _ = await asyncio.wait({task}, timeout=self.budget_s)
         if not done:
             task.cancel()
-            task.add_done_callback(lambda t: t.cancelled() or t.exception())  # nobody awaits it
+            # Kept until it unwinds, then awaited by close(): a task left pending when the loop
+            # closes is destroyed mid-request, and the A2A client's telemetry span then fails to
+            # detach ("created in a different Context"), which the live evaluation logged.
+            self.abandoned.add(task)
+            task.add_done_callback(self._unwound)
             raise TimeoutError(f"no reply within {self.budget_s} s")
         return task.result()
 
@@ -110,7 +115,16 @@ class RemotePersonalizer:
             raise PersonalizerError(f"expected one data part in the reply, got {len(parts)}")
         return parts[0]
 
+    def _unwound(self, task: asyncio.Task) -> None:
+        self.abandoned.discard(task)
+        if not task.cancelled():
+            task.exception()  # retrieved, so asyncio does not report it as never retrieved
+
     async def close(self) -> None:
+        if self.abandoned:  # bounded, in case one never unwinds
+            _, stuck = await asyncio.wait(set(self.abandoned), timeout=self.budget_s)
+            if stuck:
+                log.warning("%d personalizer requests still unwinding at close", len(stuck))
         await self.client.close()
 
 
