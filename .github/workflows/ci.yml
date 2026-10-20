@@ -149,7 +149,7 @@ jobs:
 
   image:
     # Builds the demo image the way the deploy does, runs it and calls it, so a file the code reads
-    # at run time but the image leaves out fails here, before merge (docs/LESSONS.md, lesson 97).
+    # at run time but the image leaves out fails here, before merge (docs/LESSONS.md, lesson 100).
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

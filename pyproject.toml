@@ -35,6 +35,8 @@ ninety-e2e = "ninety.e2e:main"
 
 [dependency-groups]
 dev = [
+    "numpy>=2",  # the camera fit of event detection (ninety/vision/pitch.py), tested in CI
+    "pillow>=11",  # images for the runtime truth guard of event detection (tests/test_vision_live_path.py)
     "pytest>=8",
     "pytest-xdist>=3.6",
     "ruff>=0.17.0",
