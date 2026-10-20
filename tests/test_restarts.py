@@ -721,11 +721,11 @@ def test_gathered_round_the_scorer_no_two_bodies_overlap():
     of celebration frames had bodies more than 5 cm into each other). Once all of them stand at
     their places (within half a place's spacing, settled: one frame of braking would stop them,
     P2), and until the first leaves, no two bodies are inside each other (P11)."""
-    from ninety.sim import shape
-    from ninety.sim.engine import HUDDLE_SPACING_M, THROW_SETTLED_MPS
+    from ninety.sim.engine import CELEBRATION_S, HUDDLE_SPACING_M, THROW_SETTLED_MPS
     for seed in (2, 7):
         e, _ = scored_engine(seed)
         c = e.celebration
+        c.leave = dict.fromkeys(c.leave, e.t + CELEBRATION_S[1])  # the longest: time for all to arrive
         gathered = 0
         while e.t < min(c.leave.values()):
             e.step()
