@@ -34,6 +34,7 @@ nothing.
 
 from __future__ import annotations
 
+import asyncio
 import hmac
 import json
 import os
@@ -57,10 +58,13 @@ from ninety.mcp import match_server
 
 CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"  # no 0/O, 1/I/L: read off a laptop screen
 CODE_LENGTH = 6
-PAIR_TTL_S = 2 * 60 * 60
+PAIR_TTL_S = 2 * 60 * 60  # design: longer than a match's broadcast with half-time, then pair again
 MAX_ROOMS = 500  # design: bounds memory; the demo needs a handful
-MAX_PHONES = 8  # per room
-MAX_MESSAGE_BYTES = 1024
+MAX_PHONES = 8  # design: a family's phones round one laptop; bounds what one code can fan out
+MAX_MESSAGE_BYTES = 1024  # design: a clock or focus message is under 60 bytes
+# design: a question is at most 200 characters, which JSON writes in at most 1,200 bytes (\u
+# escapes), plus its other fields; anything larger is refused before it is read.
+MAX_BODY_BYTES = 2048
 RELAYED = {"clock", "focus"}  # what a laptop may send; answers and cards come from the server
 FPS_CHOICES = (1, 5, 25)  # divisors of the engine's 25 fps, so frames are evenly spaced
 MINIMAP_PLACES = 1  # 0.1 m: finer than a phone's dot, coarser than the tracker's error
@@ -70,7 +74,8 @@ MODES = ("on", "standin", "off")  # NINETY_COMPANION; unset means `on`
 # served from tracked positions.
 CLIPS = (*sorted(match_server.MATCHES), *tracking.TRACKED_CLIPS)
 # Requests a client may make in a minute (design: a person tapping, never a script).
-LIMITS = {"pair": 6, "read": 120, "ask_ip": 20, "ask_session": 10, "relay": 600}
+LIMITS = {"pair": 6, "join": 30, "read": 120, "ask_ip": 20, "ask_session": 10, "relay": 600}
+SWEEP_KEYS = 10_000  # design: rate-limit keys kept before idle ones are swept
 SESSION_MODEL_CALLS, DAY_MODEL_CALLS = 20, 400  # design: about $1 a day at the demo's model price
 
 MESSAGE = schema_validator("companion_message")
@@ -94,7 +99,11 @@ class RateLimit:
         self.hits: dict[str, deque[float]] = defaultdict(deque)
 
     def allow(self, key: str) -> bool:
-        now, hits = self.clock(), self.hits[key]
+        now = self.clock()
+        if len(self.hits) > SWEEP_KEYS:  # drop keys idle for a whole window, so memory stays bounded
+            for stale in [k for k, h in self.hits.items() if not h or h[-1] <= now - self.window]:
+                del self.hits[stale]
+        hits = self.hits[key]
         while hits and hits[0] <= now - self.window:
             hits.popleft()
         if len(hits) >= self.limit:
@@ -145,6 +154,7 @@ class Room:
     laptop: WebSocket | None = None
     phones: dict[WebSocket, Outbox] = field(default_factory=dict)
     latest: dict[str, dict] = field(default_factory=dict)  # last clock and focus, for late phones
+    sending: set[asyncio.Task] = field(default_factory=set)  # flushes in flight, kept until done
 
 
 @dataclass
@@ -172,6 +182,24 @@ def _send(message: dict) -> dict:
     """Every message to the phone passes the schema first, or is never sent."""
     MESSAGE.validate(message)
     return message
+
+
+class TooLarge(ValueError):
+    """A request body over MAX_BODY_BYTES."""
+
+
+async def _read_body(request: Request, cap: int = MAX_BODY_BYTES) -> bytes:
+    """The body, read only as far as the cap: a declared length over it is refused unread, and a
+    stream that runs past it (chunked, or a length that lies) is cut off there."""
+    declared = request.headers.get("content-length")
+    if declared is not None and (not declared.isdigit() or int(declared) > cap):
+        raise TooLarge(f"body over {cap} bytes")
+    body = b""
+    async for chunk in request.stream():
+        body += chunk
+        if len(body) > cap:
+            raise TooLarge(f"body over {cap} bytes")
+    return body
 
 
 def _seed(clip: str) -> int:
@@ -212,6 +240,7 @@ class Companion:
         self.passcode = passcode if passcode is not None else os.environ.get("NINETY_DEMO_PASSCODE", "")
         self.allow_truth = allow_truth  # only the local stand-in mode serves simulator positions
         self.live_factory, self.live_models = live, None
+        self.live_lock = asyncio.Lock()
         self.clock = clock
         self.rooms: dict[str, Room] = {}
         self.limits = {name: RateLimit(n) for name, n in LIMITS.items()}
@@ -220,6 +249,10 @@ class Companion:
     def _served(self, clip: str) -> tracking.Track | JSONResponse:
         """The clip's track, or a 503 when its positions are ground truth and this server may not
         serve them (AGENTS.md: nothing on the live path reads the answer key after Milestone 1)."""
+        if clip not in tracking.TRACKED_CLIPS and not self.allow_truth:
+            # A stand-in's positions are the simulator's: refused by name, before any file is read
+            # or match simulated, so `on` never touches the answer key.
+            return _error(503, "positions are ground truth; the companion needs tracked positions")
         try:
             track = _track(clip)
         except tracking.NotTracked as exc:
@@ -234,6 +267,7 @@ class Companion:
         now = self.clock()
         for code in [c for c, room in self.rooms.items() if room.expires <= now]:
             del self.rooms[code]
+            self.budget.sessions.pop(code, None)  # the code was the session: its budget goes too
 
     def room(self, code: str) -> Room | None:
         self._purge()
@@ -249,8 +283,10 @@ class Companion:
         if not self.limits["pair"].allow(client_ip(request)):
             return _error(429, "too many pairings; wait a minute")
         try:
-            body = json.loads(await request.body() or b"{}")
+            body = json.loads(await _read_body(request) or b"{}")
             PAIR_BODY.validate(body)
+        except TooLarge as exc:
+            return _error(413, str(exc))
         except (json.JSONDecodeError, ValidationError) as exc:
             return _error(422, f"invalid pairing request: {getattr(exc, 'message', exc)}")
         served = self._served(body["clip"])  # a clip this server cannot show is never paired
@@ -264,6 +300,12 @@ class Companion:
         return JSONResponse({"code": room.code, "clip": room.clip, "expires_in": PAIR_TTL_S}, status_code=201)
 
     async def relay(self, ws: WebSocket) -> None:
+        # Joins are limited per address before the code is looked up, so codes cannot be guessed
+        # at speed (31^6 of them): a guessed code would let a stranger fill the phone slots, take
+        # a dropped laptop's place or spend the session's model budget.
+        if not self.limits["join"].allow(client_ip(ws)):
+            await ws.close(code=4429)
+            return
         code, role = ws.path_params["code"], ws.query_params.get("role")
         room = self.room(code)
         if role not in ("laptop", "phone") or set(ws.query_params) != {"role"}:
@@ -280,15 +322,20 @@ class Companion:
         if refused is not None:
             await ws.close(code=refused)
             return
+        # Each slot is taken in the same step as the check above, before the accept's await, so
+        # two joining at once can neither share the laptop slot nor pass the phone cap. A phone's
+        # outbox holds the latest state first and is not sent from until it is accepted, so a
+        # message stored meanwhile queues behind the catch-up: each arrives once, in order.
+        box = None
         if role == "laptop":
-            room.laptop = ws  # claimed before the accept's await, so a second laptop cannot slip in
+            room.laptop = ws
+        else:
+            box = Outbox(ws, deque(room.latest.values()), flushing=True)
+            room.phones[ws] = box
         try:
             await ws.accept()
-            if role == "phone":
-                # Joined and caught up in one step: what was stored before is in the outbox first,
-                # what is stored after is queued behind it. Each message arrives once, in order.
-                box = Outbox(ws, deque(room.latest.values()))
-                room.phones[ws] = box
+            if box is not None:
+                box.flushing = False
                 await self._flush(room, box)
             while True:
                 text = await ws.receive_text()
@@ -306,11 +353,12 @@ class Companion:
                     await ws.close(code=1007)  # not a clock or focus message
                     return
                 room.latest[message["type"]] = message
-                boxes = list(room.phones.values())
-                for box in boxes:
-                    box.items.append(message)
-                for box in boxes:
-                    await self._flush(room, box)
+                for phone_box in list(room.phones.values()):
+                    phone_box.items.append(message)
+                    # Each phone is sent to on its own task, so a stalled phone holds up only itself.
+                    task = asyncio.create_task(self._flush(room, phone_box))
+                    room.sending.add(task)
+                    task.add_done_callback(room.sending.discard)
         except WebSocketDisconnect:
             pass
         finally:
@@ -456,9 +504,11 @@ class Companion:
         if isinstance(live, JSONResponse):
             return live
         try:
-            body = json.loads(await request.body())
+            body = json.loads(await _read_body(request))
             QUESTION.validate(body)
             question = Question(**body)
+        except TooLarge as exc:
+            return _error(413, str(exc))
         except (json.JSONDecodeError, ValidationError, TypeError, ValueError) as exc:
             return _error(422, f"invalid question: {getattr(exc, 'message', exc)}")
         room = self.room(question.session)
@@ -476,8 +526,9 @@ class Companion:
             _, window = self._window(track, question.player, 0.0, question.t)
         ask = judge = None
         if live and window is not None and self.budget.take(question.session):
-            if self.live_models is None:
-                self.live_models = await self.live_factory()
+            async with self.live_lock:  # two first questions must not build two clients
+                if self.live_models is None:
+                    self.live_models = await self.live_factory()
             ask, judge = self.live_models.ask, self.live_models.judge
         result = await companion.answer(question, window, ask, judge)
         return JSONResponse(_send({"type": "answer", "answer": answer_json(result.answer)}))

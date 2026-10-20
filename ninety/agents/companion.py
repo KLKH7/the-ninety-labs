@@ -172,5 +172,24 @@ async def answer(
     if status_for(verdict) != "verified":
         return Result(code_answer(question, window, metric), "code", tuple(verdict.reasons))
     known = {f.id: f for f in window.facts()}
-    first = known[claim.evidence[0]]  # check() passed, so every cited id is a window fact
-    return Result(_from_fact(claim.text, first, tuple(claim.evidence), window), "model")
+    cited = [known[i] for i in claim.evidence]  # check() passed, so every cited id is a window fact
+    stated = _stated(claim.text, cited)
+    if len(stated) > 1:  # two numbers in one sentence: show the one the question asked about
+        stated = [f for f in stated if f.metric == metric]
+        if len(stated) != 1:
+            return Result(code_answer(question, window, metric), "code", ("states more than one fact",))
+    if not stated:  # a sentence with no number shows none
+        return Result(Answer("verified", claim.text, None, None, None, tuple(claim.evidence),
+                             window.t_from, window.t_to), "model")
+    return Result(_from_fact(claim.text, stated[0], tuple(claim.evidence), window), "model")
+
+
+def _stated(text: str, facts: list[Fact]) -> list[Fact]:
+    """The cited facts whose value the sentence writes with the fact's unit, as the check reads
+    it: the number the phone shows must be the one the sentence says, never another cited fact's."""
+    out = []
+    for fact in facts:
+        pattern = rf"(?<![\w.])(\d+(?:\.\d+)?)\s*{re.escape(fact.unit)}(?!\w)"
+        if any(float(n) == fact.value for n in re.findall(pattern, text, re.I)):
+            out.append(fact)
+    return out

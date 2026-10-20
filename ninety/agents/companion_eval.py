@@ -291,7 +291,8 @@ def report(seeds: list[int], foundry: bool) -> tuple[str, dict]:
             else "no Judge ran, so this is the code half of the fact-check alone. Every planted number, "
             "instruction and other player was stopped, but a planted word the code cannot read (a "
             "superlative such as \"fastest player ever recorded\") aired with the true number. In Live "
-            "the Judge judges such words; that run (`--foundry`) is pending."
+            "the Judge judges such words, so this row is unproven for Live until that run "
+            "(`--foundry`), which is pending."
         ),
         "",
         "| Question | Shown | Status |",
