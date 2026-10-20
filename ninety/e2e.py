@@ -18,7 +18,12 @@ Stages (the brief's names), each writing one file in the bundle:
    verified claim airs as an insight cue and whose claims on unsure detections are held. The models
    are offline: a deterministic Analyst writes from the events and the code checks gate it, or
    `--replay FILE` answers with a Foundry recording. No Azure, no live model call.
-5. Personalize: analyst and casual cues side by side; the viewer switches between them.
+5. Personalize: analyst and casual cues side by side; the viewer switches between them. The
+   Describer (ninety/speech/describe.py) adds the audio description persona: a spoken line per
+   confident event or verified claim, with its stereo position, as `audio` cues, audio.json and
+   description.vtt. Offline its timing is estimated and the viewer speaks with the browser's voice;
+   `--speech azure` synthesises each line through Azure AI Speech instead (off by default: a live
+   Azure call, so run it only when agreed).
 
 The bundle (manifest.json, cues.jsonl, trace.json, events.jsonl, facts.json, detections.jsonl and
 the footage as video.webm or frames/) is all the viewer reads. This module never opens the clip's
@@ -45,6 +50,7 @@ from ninety.agents.slice import Recording, replayer, tamper
 from ninety.intel.stats import calculate_facts
 from ninety.match import detected
 from ninety.match.facts import AGENT_TYPES, compact, minute_of
+from ninety.speech import describe
 
 ROOT = Path(__file__).resolve().parents[1]
 RECORDED_DETECTIONS = ROOT / "docs" / "eval" / "vision-report-v1" / "detections"
@@ -272,6 +278,12 @@ async def run(args: argparse.Namespace) -> dict:
         facts = [f.as_dict() for f in calculate_facts(events)]
     recording = Recording.load(args.replay) if args.replay else None
     cues, claims, held = await explain_and_render(events, clip.id, args.plant, recording)
+    voice = describe.Voice() if args.speech == "azure" else None
+    track, refused = describe.describe(events, cues, voice or describe.estimate)
+    if voice is not None:
+        voice.save(track, out)
+    cues = sorted(cues + describe.audio_cues(track), key=lambda c: (c["t_in"], c["id"]))
+    audio = describe.write_track(track, refused, out, clip.meta["t_start"])
     footage = write_footage(clip, out, encode=not args.frames)
 
     write_jsonl(out / "events.jsonl", events)
@@ -295,7 +307,9 @@ async def run(args: argparse.Namespace) -> dict:
         "agents": {"mode": "replay" if recording else "offline", "planted": args.plant and not recording,
                    "claims": len(claims), "accepted": sum(c["status"] == "accepted" for c in claims)},
         "cues": len(cues),
-        "files": ["detections.jsonl", "events.jsonl", "facts.json", "trace.json", "cues.jsonl"],
+        "audio": audio,
+        "files": ["detections.jsonl", "events.jsonl", "facts.json", "trace.json", "cues.jsonl", "audio.json",
+                  "description.vtt"],
     }
     (out / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     return manifest
@@ -313,6 +327,9 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--demo", action="store_true", help="the demo path: refuse the hand-written stand-in")
     ap.add_argument("--replay", type=Path, default=None, help="a slice recording to answer for the models")
     ap.add_argument("--plant", action="store_true", help="plant a false number in the first draft")
+    ap.add_argument("--speech", choices=("none", "azure"), default="none",
+                    help="audio description voice: none (estimated timing, the viewer's browser voice) or "
+                         "azure (synthesise every line through Azure AI Speech: a live call)")
     ap.add_argument("--frames", action="store_true", help="ship JPEG frames instead of encoding video.webm")
     return ap
 
@@ -325,6 +342,7 @@ def main(argv: list[str] | None = None) -> None:
         f"{manifest['clip']}: {manifest['detections']['frames']} frames detected, "
         f"{manifest['events']['count']} events ({manifest['events']['source']}), {manifest['facts']} facts, "
         f"{a['accepted']}/{a['claims']} claims accepted ({a['mode']}), {manifest['cues']} cues, "
+        f"{manifest['audio']['lines']} described ({manifest['audio']['mode']}), "
         f"footage {manifest['footage']['kind']} -> {args.out}"
     )
 
