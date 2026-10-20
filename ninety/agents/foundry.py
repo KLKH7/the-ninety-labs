@@ -24,7 +24,6 @@ import hashlib
 import inspect
 import json
 import sys
-import time
 import warnings
 from pathlib import Path
 
@@ -43,42 +42,6 @@ DESCRIPTIONS = {"description", "server_description"}  # keys whose text can come
 
 # to_prompt_agent is marked experimental; we pin agent-framework-foundry in uv.lock and test it.
 warnings.filterwarnings("ignore", message=r"\[TO_PROMPT_AGENT\]")
-
-
-# The Foundry project's token scope, the default of azure-ai-projects' client configuration.
-FOUNDRY_SCOPE = "https://ai.azure.com/.default"
-# Design: refresh a kept token this long before it expires, twice the longest model call any of our
-# agents waits for (ninety/agents/workflow.py MODEL_TIMEOUT_SECONDS, 60 s), so a token never runs
-# out during a call; tests/test_workflow.py holds the two together.
-TOKEN_MARGIN_SECONDS = 120.0
-
-
-class SignedIn:
-    """An async credential that keeps each token it gets until shortly before it expires.
-
-    In agents-live, `azure/login` leaves the Azure CLI holding an OIDC client assertion that is
-    valid for five minutes; every token request after that fails (AADSTS700024, as the
-    Personalizer evaluation did 24 minutes in). A token itself lasts an hour or more, so a run
-    that signs in first and reuses its tokens never asks again within a run. The workflow and
-    the Personalizer both sign in through this one class (lesson 69)."""
-
-    def __init__(self, inner):
-        self.inner, self.tokens = inner, {}
-
-    async def get_token(self, *scopes: str, **kwargs):
-        token = self.tokens.get(scopes)
-        if token is None or token.expires_on - time.time() < TOKEN_MARGIN_SECONDS:
-            token = self.tokens[scopes] = await self.inner.get_token(*scopes, **kwargs)
-        return token
-
-    async def close(self) -> None:
-        await self.inner.close()
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *exc) -> None:
-        await self.close()
 
 
 class RegistryDrift(RuntimeError):
