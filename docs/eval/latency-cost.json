@@ -568,10 +568,10 @@
     "file": "tests/fixtures/cues-seed7.jsonl",
     "minutes": 5,
     "cues": 56,
-    "chars": 882
+    "chars": 1002
   },
   "recounted": {
-    "commit": "ef29a8e",
+    "commit": "a599fe7",
     "date": "2026-10-20"
   }
 }

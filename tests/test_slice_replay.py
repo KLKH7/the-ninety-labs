@@ -24,11 +24,15 @@ from ninety.agents.slice import (
 )
 from ninety.match.facts import events_in
 
-SEED, MINUTES, MINUTE = 7, 5, 2
+SEED, MINUTES = 7, 5
 KNOWN = {e["id"]: e for e in events_in(SEED, MINUTES, 1, int(MINUTES) + 1)}
 # A completed pass, so "finds" is true of it (lesson 23); the first pass of the minute may have failed.
-PASS = next(e for e in KNOWN.values() if e["minute"] == MINUTE and e["type"] == "pass"
+# The minute is the first from the second on that has one, not a fixed minute: which minute has one
+# is the seed's draw, and changes with the engine (lesson 47).
+PASS = next(e for e in sorted(KNOWN.values(), key=lambda e: (e["minute"], e["second"]))
+            if e["minute"] >= 2 and e["type"] == "pass"
             and e.get("outcome") == "success" and "receiver" in e and "distance_m" in e)
+MINUTE = PASS["minute"]
 CLAIM = Claim(f"{PASS['player']} finds {PASS['receiver']} with a {PASS['distance_m']} m pass.", [PASS["id"]])
 REPLY = json.dumps({"text": CLAIM.text, "evidence": CLAIM.evidence})
 FIRST = analyst_prompt("seed7", MINUTE)
