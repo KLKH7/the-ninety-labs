@@ -1378,7 +1378,31 @@ short and actionable. This file is public: no research sources, product names or
   Check a stated intent ("almost always the best") against logged choices.
 - **Check:** `tests/test_decisions.py::test_a_hopeless_option_does_not_loosen_the_choice_between_two_good_ones`.
 
-### 138. A clip's truth must not depend on how long the match was simulated
+### 138. A range named as a distance is measured as one
+- **What happened:** the shot option was offered "inside 40 m of the goal" (`SHOT_RANGE_M`'s own
+  comment), but the code compared only the distance along the pitch. From out wide, players were
+  offered and took shots 40 to 50 m from goal, judged by a rate table that is only an unsourced tail
+  beyond 40 m: 22 of 156 shots in 20 matches (seeds 3 to 112 at 20 minutes) came from beyond 40.5 m,
+  none after the fix.
+- **Rule:** a threshold is applied in the quantity its comment and its source use (here the distance
+  to the goal's centre, as D3's rates are). Search for every use of a constant when its meaning is fixed.
+- **Check:** `tests/test_decisions.py::test_a_shot_is_an_option_only_within_range_of_the_goal_straight_line`.
+
+### 139. Knowing where the ball is going is only useful if you go there
+- **What happened:** O8 said the team-mate a pass is played to "knows where it was meant", and the
+  engine used that only to set his shape: he took up his slot around the target, not the target, and
+  a short pass struck slightly off often ran past him into touch. The chase, which takes over once he
+  reacts, was planned on the ball's predicted path past the touchline, on points up to 20 m off the
+  pitch, while `ball_destination` stopped the same path at the line. The first fix cut the true path,
+  but each player then adds his own misjudgement of it, so his judged points could still fall past
+  the line: an audit found the test passing on only 91 of 100 seeds.
+- **Rule:** when a rule gives a player knowledge, check what he does with it in the movement code, not
+  only in the estimate. A limit on what a player can do (Law 9 here) is applied to the path as he
+  judges it, where he makes the choice, and tested over many seeds, not one.
+- **Check:** `tests/test_engine_rules.py::test_the_team_mate_a_pass_is_played_to_goes_to_meet_it` and
+  `::test_nobody_is_sent_to_chase_a_ball_beyond_the_touchline`.
+
+### 140. A clip's truth must not depend on how long the match was simulated
 - **What happened:** `ninety-render` simulated the match to the end of the window it chose (240 s
   plus the clip), but its own determinism check re-rendered the same window with `--start`, which
   simulated only to the window's end plus a second. The engine settles some outcomes after the fact
@@ -1392,7 +1416,7 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `ninety-render-check --determinism` on a window with a tackle near its end compares
   `events_identical`; `tests/test_render_clip.py` renders the same seed twice.
 
-### 139. A camera rule is judged by what the viewer sees over whole matches, not by the shot that prompted it
+### 141. A camera rule is judged by what the viewer sees over whole matches, not by the shot that prompted it
 - **What happened:** the gantry was aimed 4.5 m above the play after a review found the stand a
   thin lip under the sky, and second angles were added one at a time (high behind the goal when
   the ball is in a box, the far stand when play is on the far side, a low angle for a shot
@@ -1410,7 +1434,7 @@ short and actionable. This file is public: no research sources, product names or
   `test_the_viewpoint_changes_no_faster_than_a_broadcast_and_never_flickers`,
   `test_a_pan_eases_in_and_out`); each fails on the 0.5.0 director.
 
-### 140. Build a media branch from an empty tree, and look at what it holds before pushing
+### 142. Build a media branch from an empty tree, and look at what it holds before pushing
 - **What happened:** review clips for the camera pull request went on a new orphan branch made by
   `git checkout --orphan`, which keeps the whole working tree staged. The `git rm` meant to empty
   it refused, but the shell line went on past it (`;` after `&&`), so the push carried a copy of
