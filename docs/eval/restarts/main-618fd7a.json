@@ -1,0 +1,163 @@
+{
+ "matches": 16,
+ "minutes": 320.0,
+ "ball_jumps_gt3m_per90": 66.7,
+ "ball_jump_median_m": 5.7,
+ "frames_with_a_player_over_speed_limit_per90": 2.8,
+ "goal_to_kickoff_s": [
+  0.0,
+  0.0,
+  0.0,
+  0.0,
+  0.0,
+  0.0,
+  0.0,
+  0.0,
+  0.0,
+  0.0
+ ],
+ "restarts_kicked_by_taker": {
+  "free_kick": 123,
+  "throw_in": 118,
+  "corner": 17,
+  "goal_kick": 32
+ },
+ "encroached_at_the_kick": {
+  "free_kick": 67,
+  "throw_in": 36,
+  "goal_kick": 12,
+  "corner": 2
+ },
+ "stuck_restarts": 0,
+ "taker_carried_the_set_ball": 51,
+ "taker_touched_it_again_first": 1,
+ "examples": [
+  [
+   "seed7",
+   "free_kick",
+   87.6,
+   [
+    "a6"
+   ]
+  ],
+  [
+   "seed7",
+   "free_kick",
+   138.4,
+   [
+    "h8"
+   ]
+  ],
+  [
+   "seed7",
+   "free_kick",
+   387.5,
+   [
+    "a9"
+   ]
+  ],
+  [
+   "seed7",
+   "throw_in",
+   408.9,
+   [
+    "h5"
+   ]
+  ],
+  [
+   "seed7",
+   "free_kick",
+   448.4,
+   [
+    "a9"
+   ]
+  ],
+  [
+   "seed7",
+   "free_kick",
+   585.7,
+   [
+    "a8"
+   ]
+  ],
+  [
+   "seed7",
+   "free_kick",
+   679.7,
+   [
+    "a7",
+    "a10"
+   ]
+  ],
+  [
+   "seed7",
+   "free_kick",
+   745.0,
+   [
+    "h6",
+    "h9"
+   ]
+  ],
+  [
+   "seed7",
+   "free_kick",
+   787.5,
+   [
+    "h9"
+   ]
+  ],
+  [
+   "seed7",
+   "goal_kick",
+   997.3,
+   [
+    "h9",
+    "h10",
+    "h11"
+   ]
+  ],
+  [
+   "seed7",
+   "goal_kick",
+   1076.6,
+   [
+    "h9",
+    "h10",
+    "h11"
+   ]
+  ],
+  [
+   "seed11",
+   "throw_in",
+   71.0,
+   [
+    "a5"
+   ]
+  ]
+ ],
+ "held_out": {
+  "shots_per_team_90_mean_se": [
+   17.44,
+   1.72
+  ],
+  "goals_per_team_90_mean_se": [
+   1.41,
+   0.5
+  ],
+  "completion": 0.798,
+  "shots_within_10s_of_own_restart": 36,
+  "shots_otherwise": 88,
+  "first_pass_failed_share": {
+   "throw_in": 0.08,
+   "free_kick": 0.21,
+   "goal_kick": 0.14,
+   "corner": 0.29
+  },
+  "ball_lost_within_5s_share": {
+   "throw_in": 0.29,
+   "free_kick": 0.2,
+   "goal_kick": 0.09,
+   "corner": 0.53
+  }
+ }
+}

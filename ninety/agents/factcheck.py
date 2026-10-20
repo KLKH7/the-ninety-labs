@@ -16,11 +16,25 @@ from collections import Counter
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 
-# A number standing on its own: not part of an id like "e00042" or a player like "h7".
-# A sentence-ending period after it still counts ("in minute 2."), and so does an English ordinal
-# ("the 9th minute", "his 3rd pass"): the number is the `n` group.
+# A number standing on its own: not part of an id like "e00042" or a player like "h7". A
+# sentence-ending period after it still counts ("in minute 2."), and so do an English ordinal ("the
+# 9th minute") and a unit written straight after it ("50km/h", "9999m"): the number is the `n`
+# group. Every form a writer can produce is read, or a model could air a number by gluing it.
 NUMBER_PATTERN = r"\d+(?:\.\d+)?"
-NUMBER = re.compile(rf"(?<![\w.])(?P<n>{NUMBER_PATTERN})(?:st|nd|rd|th)?(?!\w)(?!\.\d)")
+NUMBER = re.compile(rf"(?<![\w.])(?P<n>{NUMBER_PATTERN})(?:st|nd|rd|th)?(?!\d)(?!\.\d)")
+# Numbers written as words ("fifty km/h", "twenty-eight", "one hundred and two") are numbers too:
+# `check` reads them as digits. "one" in "one of", "one another", "no one" and "the one" is a
+# pronoun, not a count.
+WORD_VALUES = {
+    w: i for i, w in enumerate(
+        "zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen "
+        "fifteen sixteen seventeen eighteen nineteen".split()
+    )
+} | {w: 10 * i for i, w in enumerate("twenty thirty forty fifty sixty seventy eighty ninety".split(), 2)}
+SCALES = {"hundred": 100, "thousand": 1000}
+_WORD = rf"(?:{'|'.join(sorted([*WORD_VALUES, *SCALES], key=len, reverse=True))})"
+WORD_NUMBER = re.compile(rf"\b{_WORD}(?:(?:[\s-]+|\s+and\s+){_WORD})*\b", re.I)
+PRONOUN_ONE = re.compile(r"(?:\b(?:no|the)\s+one\b|\bone(?=\s+(?:of|another)\b))", re.I)
 DISTANCE_UNITS = r"(?:m|metre|metres|meter|meters)"
 SPEED_UNITS = r"(?:km/h|kph)"
 DISTANCE_NUMBER = re.compile(rf"(?P<number>{NUMBER_PATTERN})\s*{DISTANCE_UNITS}\b", re.I)
@@ -132,6 +146,33 @@ def _fact_values(evidence: list[dict], unit: str) -> set[float]:
     return {float(f["value"]) for f in evidence if _is_fact(f) and f["unit"] == unit}
 
 
+def _word_value(phrase: str) -> int:
+    total = current = 0
+    for word in re.findall(_WORD, phrase, re.I):
+        word = word.lower()
+        if word in WORD_VALUES:
+            current += WORD_VALUES[word]
+        elif word == "hundred":
+            current = max(current, 1) * 100
+        else:
+            total, current = total + max(current, 1) * 1000, 0
+    return total + current
+
+
+def spelled_as_digits(text: str) -> str:
+    """The text with every number written in words replaced by its digits ("fifty km/h" becomes
+    "50 km/h"), so the number checks read it like any other."""
+    pronouns = {m.start() for m in PRONOUN_ONE.finditer(text)}
+    pronouns |= {m.end() - 3 for m in PRONOUN_ONE.finditer(text)}
+
+    def digits(m: re.Match) -> str:
+        if m.group().lower() == "one" and m.start() in pronouns:
+            return m.group()
+        return str(_word_value(m.group()))
+
+    return WORD_NUMBER.sub(digits, text)
+
+
 def _unit_follows(text: str, end: int, unit: str) -> bool:
     """Is `unit` written straight after the number ending at `end` ("512 m", "3 frames")?"""
     return re.match(rf"\s*{re.escape(unit)}(?!\w)", text[end:], re.I) is not None
@@ -165,7 +206,6 @@ def check(
     evidence = [known[i] for i in claim.evidence if i in known]
 
     allowed = allowed_numbers(evidence)
-    clock_spans = [range(match.start(), match.end()) for match in CLOCK.finditer(claim.text)]
     for match in CLOCK.finditer(claim.text):
         cited_clocks = {
             _normalize_clock(event["clock"])
@@ -176,11 +216,13 @@ def check(
         normalized = _normalize_clock(clock)
         if normalized not in cited_clocks:
             reasons.append(f"clock {clock} is not a cited clock")
-    for match in NUMBER.finditer(claim.text):
+    text = spelled_as_digits(claim.text)
+    clock_spans = [range(match.start(), match.end()) for match in CLOCK.finditer(text)]
+    for match in NUMBER.finditer(text):
         if any(match.start() in span for span in clock_spans):
             continue
         value = float(match.group("n"))
-        expected_field = _number_field(claim.text, match.start())
+        expected_field = _number_field(text, match.start())
         if expected_field:
             values = {
                 float(event[name])
@@ -195,7 +237,7 @@ def check(
                     f"number {match.group()} is not a cited {expected_field}"
                 )
         elif value not in allowed and not any(
-            float(f["value"]) == value and _unit_follows(claim.text, match.end(), str(f["unit"]))
+            float(f["value"]) == value and _unit_follows(text, match.end(), str(f["unit"]))
             for f in evidence
             if _is_fact(f)
         ):

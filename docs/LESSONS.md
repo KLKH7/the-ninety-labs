@@ -1085,7 +1085,67 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_shape.py::test_the_team_is_never_longer_than_the_published_range_and_the_back_line_never_ahead_of_the_ball`
   sweeps ball and line positions; on the old rule it fails (48 m long with the ball 35 m out).
 
-### 112. A legal exception in the contract is an exception in every reader of the same data
+### 112. Every kick the decision layer aims is judged by the same Laws as a pass
+- **What happened:** the pass estimate counted a ball leaving the pitch (Law 9), but the clearance,
+  added separately, was aimed at one fixed spot 4 m from the touchline with no such check. With the
+  passer's own kick error, about a third of clearances went straight out with nobody near.
+- **Rule:** an option that sends the ball somewhere is valued over the strikes the kicker's error
+  allows, with the pass estimate's own pieces (`decisions.clear_value` reuses `strike_nodes`,
+  `flight`, `out_of_play`, `reach_time` and the P16 turn); where it simplifies them (a hard race, no
+  body in the way), the row says so (GROUNDING D9). A new kind of kick does not get its own physics.
+- **Check:** `tests/test_decisions.py::test_an_unpressed_clearance_is_not_aimed_where_his_kick_error_puts_it_out`.
+
+### 113. A test over a folder says which files are its own
+- **What happened:** two tests read every file in `replays/` as a slice recording (`*.json`):
+  the committed-replay test and the byte-for-byte round trip. Both passed while the folder held
+  only slice files. The first workflow recording (format 1) turned them red with "format 1 slice
+  recording", though nothing was wrong with either file.
+- **Rule:** a test that loops over a folder selects the files of its own kind by name
+  (`slice-*.json`, `workflow-*.json`), and fails when the folder holds a file no kind claims, so a
+  new file is never skipped in silence.
+- **Check:** `tests/test_replay.py::test_every_committed_recording_round_trips_byte_for_byte`
+  fails with an unclaimed file in `replays/`, and fails when a workflow recording no longer saves
+  byte for byte.
+
+### 120. An exemption in a check is where a defect hides: reach the state, do not place it
+- **What happened:** the engine placed a new ball at the taker's feet at every restart and reset
+  all 22 players at every goal. The validator exempts dead-ball windows from the ball-speed check
+  and kickoff frames from the player-speed check, so nothing failed. The ball jumped more than
+  3 m in one frame about 70 times per 90 minutes (median 7.5 m), and every goal reset the pitch
+  in one frame. Viewers saw it; no test did.
+- **Rule:** a state the match needs (the ball on the restart spot, the teams in kick-off shape)
+  is reached by the engine's own movement: players go there and fetch the ball, within their
+  bodies and the ball's physics (lesson 5). An exemption in a check is allowed only for a real
+  discontinuity in the broadcast (a cut) and is listed as a known gap until the engine no longer
+  needs it.
+- **Check:** `uv run pytest tests/test_restarts.py` records every frame from before the stop to
+  the kick, including the frame the restart is given, and fails on a ball or player step faster
+  than the validator's limits. `scripts/defect_sweep/restarts.py` counts ball jumps over 3 m per
+  90 minutes (0 over 16 matches of 20 minutes, `docs/eval/restarts.md`).
+
+### 121. A Law is all of its clauses: read the whole restart, not the part the defect named
+- **What happened:** the restart fix enforced the distances and "in play when kicked and clearly
+  moves", and took any movement of the set ball as the kick. The taker could then carry the set
+  ball off and pass it, touching it twice before anyone else (55 of 340 restarts). The owner saw it
+  in a clip as "he passed to himself". The same Laws (8, 13 to 17) say the taker may not touch it
+  again until another player has; that clause was never implemented, so no test asked for it.
+- **Rule:** when implementing a Law, list every clause of it in the GROUNDING row and give each a
+  test, including the clauses no defect report mentioned.
+- **Check:** `uv run pytest tests/test_restarts.py -k "dribble or first_touch or again"`; on the
+  engine before the fix the set ball's first movement is not a pass or shot by the taker.
+
+### 122. A rule every kind of case shares is tested on every kind, run to the end
+- **What happened:** moving the restart taker a ball's width behind the ball was tested on a
+  free kick only. At a corner the readiness check still measured from the corner point, the taker
+  stood 1.09 m from it, and the corner was never taken: 7 of 16 measured matches froze for the
+  rest of their 20 minutes. Every unit test passed; only the 16-match measurement showed it.
+- **Rule:** a change to a rule that every restart (or every kind of any case) goes through gets a
+  test that runs each kind to completion. A measurement counts stuck states as a defect, not as
+  quiet time.
+- **Check:** `uv run pytest tests/test_restarts.py -k every_kind`; `scripts/defect_sweep/restarts.py`
+  reports `stuck_restarts`, which must be 0.
+
+### 123. A legal exception in the contract is an exception in every reader of the same data
 - **What happened:** after a goal the kickoff puts every player back in his own half in one frame.
   The data contract allows it, and the validator's speed check and the late-drop report both skip
   it. The stats engine did not: `player_movement_facts` counted the reset as running, so seed 7's
@@ -1100,7 +1160,7 @@ short and actionable. This file is public: no research sources, product names or
   until an engine change left seed 7 without one, lesson 78) and holds every player's peak speed
   under the validator's limit. It fails on the old code.
 
-### 113. A test that waits for its rule hangs when the rule breaks, and a hang is not a red test
+### 124. A test that waits for its rule hangs when the rule breaks, and a hang is not a red test
 - **What happened:** two WebSocket tests on the phone relay checked their rule by waiting for a
   message (a close, the room's latest state). With the rule mutated, the message never came and
   pytest blocked for about 40 minutes, until the process was killed by hand. A CI job would have waited
@@ -1119,7 +1179,7 @@ short and actionable. This file is public: no research sources, product names or
   loop with a 5 s deadline per receive, and 150 repeats on 4 workers under full CPU load pass;
   `test_a_newer_clock_never_overtakes_a_phones_catch_up` fails without the single flusher.
 
-### 114. A refusal a browser cannot read is no refusal: close a WebSocket after accepting it
+### 125. A refusal a browser cannot read is no refusal: close a WebSocket after accepting it
 - **What happened:** the phone relay refused a join (unknown code, room full, laptop taken) by
   closing the WebSocket before accepting it, and its tests read the close codes 4404, 4409 and 4429
   from an ASGI harness. A browser never sees a close sent before the handshake completes: uvicorn
@@ -1131,20 +1191,34 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_api_companion.py`'s `refused()` fails when the server closes before the
   accept, and every refusal test goes through it; moving `_refuse` back to a bare close turns them red.
 
-### 115. A WebSocket tested only through the test client is untested in the server a browser reaches
+### 126. A number check that reads one written form lets every other form through
+- **What happened:** the fact-check read a number only when no letter followed it, to skip ids
+  like "e00042". So "50km/h", "50kph" and "9999m" were never read, nor was "fifty km/h": a model
+  following an injected instruction could air a number the evidence does not hold. The phone
+  companion made that reachable from a viewer's text, and its evaluation missed it because the
+  scripted attacker wrote only the spaced form and the leak count used the check's own pattern.
+  The reviewer's audit found it on #145.
+- **Rule:** a check on what a writer says reads every form a writer can produce: a unit glued on
+  or spaced, digits or words. An evaluation of that check plants each form and counts leaks with
+  its own reader, never the check's pattern.
+- **Check:** `tests/test_factcheck.py::test_a_planted_number_in_any_written_form_is_rejected`
+  plants each form; `docs/eval/companion.md` plants the glued and spelled forms, and on the old
+  check its count shows 4 of them airing on seed 7.
+
+### 127. A WebSocket tested only through the test client is untested in the server a browser reaches
 - **What happened:** the phone relay's tests all passed through Starlette's TestClient, which
   speaks WebSocket in process. The first time a real browser joined through uvicorn, every
   connection answered 404: uvicorn upgrades a WebSocket only when a WebSocket library is
   installed, and none was locked, so the deployed image could never have served the relay. The
-  same run found lesson 114's unreadable refusals.
+  same run found lesson 125's unreadable refusals.
 - **Rule:** a feature a browser uses over the network is tested once through the real server and a
-  real browser, not only through an in-process client. (A close code the client must read is sent after the accept: lesson 114.)
+  real browser, not only through an in-process client. (A close code the client must read is sent after the accept: lesson 125.)
 - **Check:** `tests/test_phone.py` runs the companion routes in uvicorn and joins from Chromium;
   CI's `image` job asks the built image for a WebSocket upgrade and needs `101` (it answers 404
   without `websockets` in `uv.lock`). The phone still reads a close before the accept as "unknown
   code or unreachable" (`web/phone/src/feed.ts`), for a server that refuses that way.
 
-### 116. Positions from a fit, summed frame to frame, read the fit's jitter as running
+### 128. Positions from a fit, summed frame to frame, read the fit's jitter as running
 - **What happened:** the phone's speed and distance come from the companion's window facts, which
   sum each player's frame-to-frame steps. On simulator positions that is exact. On positions
   tracked from the video, the camera fit moves a foot point by up to about 0.5 m between
@@ -1161,7 +1235,7 @@ short and actionable. This file is public: no research sources, product names or
   `test_a_track_ends_at_the_speed_its_player_was_running` fails with a plain average, which lags
   at a track's end.
 
-### 117. `sum()` of floats is not the same number on every Python
+### 129. `sum()` of floats is not the same number on every Python
 - **What happened:** the phone's tracked frames file is committed, and a test rebuilds it and needs
   the same bytes. It passed on Python 3.12 and failed on 3.11. Python 3.12 made `sum()` of floats
   use compensated addition, so a smoothed position's last digit moved, and a rounding at 0.01 m

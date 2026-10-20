@@ -40,6 +40,7 @@ from __future__ import annotations
 import asyncio
 import hmac
 import json
+import logging
 import os
 import secrets
 import time
@@ -58,6 +59,8 @@ from ninety.agents.contracts import Answer, Ask, Judge, Question, schema_validat
 from ninety.intel.window import player_window, team_flow
 from ninety.match import tracking
 from ninety.mcp import match_server
+
+log = logging.getLogger(__name__)
 
 CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"  # no 0/O, 1/I/L: read off a laptop screen
 CODE_LENGTH = 6
@@ -79,7 +82,11 @@ CLIPS = (*sorted(match_server.MATCHES), *tracking.TRACKED_CLIPS)
 # Requests a client may make in a minute (design: a person tapping, never a script).
 LIMITS = {"pair": 6, "join": 30, "read": 120, "ask_ip": 20, "ask_session": 10, "relay": 600}
 SWEEP_KEYS = 10_000  # design: rate-limit keys kept before idle ones are swept
-SESSION_MODEL_CALLS, DAY_MODEL_CALLS = 20, 400  # design: about $1 a day at the demo's model price
+# design: 20 Live answers a viewer, 400 a day. A Live answer (the Companion's draft and the Judge)
+# is about 1,400 tokens in and 100 out (our instructions and prompts at 4 characters a token, as
+# docs/eval/latency-cost.md counts them), so at gpt-4.1-mini's $0.0004 and $0.0016 per 1,000
+# (Azure Retail Prices, read 2026-10-19, in that report) a day's 400 cost at most about $0.29.
+SESSION_MODEL_CALLS, DAY_MODEL_CALLS = 20, 400
 
 MESSAGE = schema_validator("companion_message")
 QUESTION = schema_validator("viewer_question")
@@ -546,12 +553,26 @@ class Companion:
             _, window = self._window(track, question.player, 0.0, question.t)
         ask = judge = None
         if live and window is not None and self.budget.take(question.session):
-            async with self.live_lock:  # two first questions must not build two clients
-                if self.live_models is None:
-                    self.live_models = await self.live_factory()
-            ask, judge = self.live_models.ask, self.live_models.judge
+            models = await self._live_models()
+            if models is not None:
+                ask, judge = models.ask, models.judge
         result = await companion.answer(question, window, ask, judge)
-        return JSONResponse(_send({"type": "answer", "answer": answer_json(result.answer)}))
+        return JSONResponse(_send(
+            {"type": "answer", "answer": answer_json(result.answer), "source": result.source}
+        ))
+
+    async def _live_models(self) -> LiveModels | None:
+        """The Live models, built on the first Live question. A failure to build them (no identity,
+        Foundry unreachable, a pin missing) gives that question the code answer and is tried again on
+        the next one: any model failure gives a code answer, never a 500 (lesson 96)."""
+        async with self.live_lock:  # two first questions must not build two clients
+            if self.live_models is None:
+                try:
+                    self.live_models = await self.live_factory()
+                except Exception as exc:  # noqa: BLE001  whatever the SDK raises, the viewer gets code
+                    log.warning("could not build the Live models: %s", type(exc).__name__)
+                    return None
+            return self.live_models
 
     def routes(self) -> list:
         return [

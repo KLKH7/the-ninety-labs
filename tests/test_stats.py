@@ -95,29 +95,30 @@ def test_a_kickoff_reset_is_not_movement():
     assert _by_id(player_movement_facts(frames, restarts=[3]))["peak_speed:player_h1"].value == 4500
 
 
-def test_no_player_outruns_the_contract_over_a_kickoff_reset():
-    # The engine's own post-goal reset, called 20 s into a match, so the case is in the data
-    # whatever a seed draws (lessons 41 and 78; an engine change once left seed 7 without a goal).
-    # Before the fix a reset like this read as a 4,739 km/h peak speed.
+def test_no_player_outruns_the_contract_over_a_restart_after_a_goal():
+    # The engine's own restart after a goal, called 20 s into a match, so the case is in the data
+    # whatever a seed draws (lessons 41 and 78). Since #156 nobody is reset: everyone walks back to
+    # his kick-off spot, and that walk is real movement, measured like any other. (Before the
+    # kickoff skip, a reset like the old one read as a 4,739 km/h peak speed.)
     from ninety.sim.engine import FPS, Engine
     from ninety.validate import MAX_PLAYER_MPS
 
     engine = Engine(7)
-    engine.kickoff("home")
+    engine.kickoff("home", setup=True)
     for _ in range(20 * FPS):
         engine.step()
-    engine.kickoff("away")  # as after a goal: everyone back to his own half at once
-    for _ in range(10 * FPS):
+    engine.kickoff("away")  # as after a goal
+    start = engine.frame
+    for _ in range(90 * FPS):  # bounded: the kick is taken once everyone is back
         engine.step()
+        if [e for e in engine.match.events if e["type"] == "kickoff" and e["frame"] > start]:
+            break
     match = engine.match
-    kickoffs = [e["frame"] for e in match.events if e["type"] == "kickoff"]
-    assert kickoffs[1:], "the second kickoff is the reset this test is about"
-    reset = kickoffs[-1]
-    jumps = [
-        abs(p["x"] - q["x"]) for f0, f1 in zip(match.frames, match.frames[1:], strict=False)
-        if f1["frame"] == reset for p, q in zip(f0["players"], f1["players"], strict=True)
-    ]
-    assert max(jumps) > MAX_PLAYER_MPS / FPS * 10, "someone must really be moved by the reset"
+    kicked = [e["frame"] for e in match.events if e["type"] == "kickoff" and e["frame"] > start]
+    assert kicked, "the restart after the goal is the case this test is about"
+    before, after = match.frames[start], next(f for f in match.frames if f["frame"] == kicked[0])
+    walked = max(abs(p["x"] - q["x"]) for p, q in zip(before["players"], after["players"], strict=True))
+    assert walked > 10, "someone must walk a real distance back to his spot"
     peaks = [f for f in calculate_facts(match.events, match.frames) if f.metric == "peak_speed"]
     assert len(peaks) == 22 and max(f.value for f in peaks) <= MAX_PLAYER_MPS * 3.6
 

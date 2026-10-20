@@ -69,3 +69,14 @@ def test_a_missing_tracked_file_or_clip_is_refused(tmp_path):
         load(str(tmp_path / "tracked-seed900001.json"))
     with pytest.raises(tracking.NotTracked, match="not a tracked clip"):
         tracking.tracked("seed7")
+
+
+def test_the_kickoffs_are_the_restarts_a_track_carries():
+    # Review of #145: kickoffs() returning () left every test green, so a reset read as running.
+    events = [
+        {"type": "kickoff", "frame": 0}, {"type": "pass", "frame": 3}, {"type": "kickoff", "frame": 125},
+    ]
+    assert tracking.kickoffs(events) == (0, 125)
+    frames = [frame(i, source="truth", pid="h7") for i in range(3)]
+    run = type("Run", (), {"frames": frames, "events": events})
+    assert tracking.from_match("seed7", run).restarts == (0, 125)

@@ -35,10 +35,11 @@
     "answer": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "answer"],
+      "required": ["type", "answer", "source"],
       "properties": {
         "type": { "const": "answer" },
-        "answer": { "$ref": "viewer_answer.schema.json" }
+        "answer": { "$ref": "viewer_answer.schema.json" },
+        "source": { "type": "string", "enum": ["code", "model"], "description": "Who wrote the answer: code (it passed the code checks) or the Companion agent (it passed the code checks and the Judge), so the phone can label it honestly." }
       }
     },
     "player_card": {

@@ -14,8 +14,9 @@ that slice's time. Each fact's id names the player and the window, and it cites 
 computed from as one range (lesson 31).
 
 Values are rounded for the screen, so the number a viewer reads is the cited value exactly: speeds
-to 0.1 km/h and distances to the metre (frames store positions to 1 mm, so neither rounding hides
-anything the positions resolve, and a tracker's error is larger than both).
+to 0.1 km/h and distances to the metre. Frames store positions to 1 mm, so the rounding is coarser
+than the positions; it is chosen for the screen (design), and both steps are finer than a tracker's
+error on the M1 clip (top speed within 1.9 km/h of the truth, #162's offline grading).
 """
 
 from __future__ import annotations
@@ -27,8 +28,10 @@ from ninety.intel.stats import Fact, _frame_span, player_movement_facts, player_
 
 PITCH_X, PITCH_Y = 105.0, 68.0  # Law 1, the engine's pitch (docs/GROUNDING.md, L1)
 SPEED_NOW_S = 1.0  # design: long enough to smooth one frame's noise, short enough to be "now"
-HEAT_NX, HEAT_NY = 12, 8  # design: cells of 8.75 x 8.5 m, about a penalty area's depth
-SPEED_PLACES, DISTANCE_PLACES, SHARE_PLACES = 1, 0, 4
+# design: cells of 8.75 x 8.5 m, near square, about half a penalty area's depth (16.5 m, Law 1)
+HEAT_NX, HEAT_NY = 12, 8
+SPEED_PLACES, DISTANCE_PLACES = 1, 0  # design: 0.1 km/h and 1 m on screen (see the module docstring)
+SHARE_PLACES = 4  # design: a cell's share of the window to 0.01%, finer than the heat map draws
 # The flow field shares the heat map's grid, so the phone lays both over one minimap.
 FLOW_NX, FLOW_NY = HEAT_NX, HEAT_NY
 # No smoothing beyond the window (design): each cell is the mean of every step taken in it over the

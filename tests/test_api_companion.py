@@ -80,7 +80,7 @@ def test_a_typed_code_tells_the_phone_its_clip(setup):
 
 def test_looking_up_codes_shares_the_join_limit(setup):
     client, _, _ = setup
-    statuses = [client.get("/api/pair/NOPE42").status_code for _ in range(comp.LIMITS["join"] + 1)]
+    statuses = [client.get("/api/pair/NOPE42").status_code for _ in range(bounded(comp.LIMITS["join"] + 1))]
     assert statuses == [404] * comp.LIMITS["join"] + [429]
 
 
@@ -111,18 +111,51 @@ def test_pairing_rejects_an_unknown_field_or_clip(setup):
     assert client.post("/api/pair", content=b"{not json").status_code == 422
 
 
+MOST_TRIES = 1000  # every limit and cap is far below this (a test asserts it)
+
+
+def tries_until(status, send, most=MOST_TRIES):
+    """How many calls of `send` succeed before one answers `status`. Bounded: a limit raised past
+    `most` fails here at once instead of hanging the run (lesson 124)."""
+    for n in range(most):
+        if send(n) == status:
+            return n
+    pytest.fail(f"no {status} within {most} tries")
+
+
+def bounded(n):
+    """A loop count read from a limit, refused if a raised limit would make the loop hang."""
+    assert n < MOST_TRIES, f"{n} is past what a test loops over: the limit was raised"
+    return n
+
+
+def test_every_limit_and_cap_is_one_these_tests_can_reach():
+    assert max([*comp.LIMITS.values(), comp.MAX_PHONES, comp.MAX_ROOMS]) < MOST_TRIES
+    # A relayed message is a clock or a focus, under 60 bytes: its cap is never above what an HTTP
+    # body may be, so a raised cap fails here rather than letting a laptop fan out megabytes.
+    assert comp.MAX_MESSAGE_BYTES <= comp.MAX_BODY_BYTES
+
+
 def test_pairing_is_rate_limited(setup):
     client, _, _ = setup
-    codes = [
-        client.post("/api/pair", json={"clip": "seed7"}).status_code for _ in range(comp.LIMITS["pair"] + 1)
-    ]
-    assert codes[:-1] == [201] * comp.LIMITS["pair"] and codes[-1] == 429
+    send = lambda n: client.post("/api/pair", json={"clip": "seed7"}).status_code  # noqa: E731
+    assert tries_until(429, send) == comp.LIMITS["pair"]
+
+
+def test_rooms_are_capped(setup):
+    client, _, _ = setup
+
+    def send(n):  # each from its own address, so only the room cap can refuse it
+        headers = {"x-forwarded-for": f"10.0.{n // 250}.{n % 250}"}
+        return client.post("/api/pair", json={"clip": "seed7"}, headers=headers).status_code
+
+    assert tries_until(503, send) == comp.MAX_ROOMS
 
 
 # --- the relay -------------------------------------------------------------------------------------
 # Driven on one event loop, as uvicorn runs every connection. (Starlette's TestClient gives each
 # WebSocket its own thread and loop, so a relay crossed threads there, and a message could be lost
-# and a test hang: a harness that is not the server, lesson 113.) Every receive has a deadline.
+# and a test hang: a harness that is not the server, lesson 124.) Every receive has a deadline.
 
 RECEIVE_S = 5.0
 
@@ -291,6 +324,58 @@ def test_joins_are_rate_limited_per_address_before_the_code_is_looked_up(monkeyp
     assert asyncio.run(run()) == [4404, 4404, 4404, 4429]  # the fourth guess is not even looked up
 
 
+def test_a_room_takes_max_phones_and_no_more(setup):
+    client, _, _ = setup
+    code = pair(client)
+
+    async def run():
+        phones = [await Socket(client.app, f"/api/pair/{code}?role=phone").__aenter__()
+                  for _ in range(bounded(comp.MAX_PHONES))]
+        try:
+            return await refused(client.app, f"/api/pair/{code}?role=phone")
+        finally:
+            for phone in phones:
+                await phone._end()
+
+    assert asyncio.run(run()) == 4429
+
+
+def test_the_laptop_may_send_the_relay_limit_a_minute_and_no_more(setup):
+    client, _, _ = setup
+    code = pair(client)
+    clock = {"type": "clock", "t": 1.0, "playing": True}
+
+    async def run():
+        async with Socket(client.app, f"/api/pair/{code}?role=laptop") as laptop:
+            for _ in range(bounded(comp.LIMITS["relay"])):
+                await laptop.send(clock)
+            open_after_limit = await closed_within(laptop, 0.5)
+            await laptop.send(clock)
+            return open_after_limit, await closed_within(laptop, 2.0)
+
+    assert asyncio.run(run()) == (None, 1008)
+
+
+def test_a_message_over_the_size_cap_closes_the_laptop(setup):
+    client, _, _ = setup
+    code = pair(client)
+    body = json.dumps({"type": "clock", "t": 1.0, "playing": True})
+
+    def padded(size):
+        return body[:-1] + " " * (size - len(body)) + "}"
+
+    async def run():
+        async with Socket(client.app, f"/api/pair/{code}?role=phone") as phone:
+            async with Socket(client.app, f"/api/pair/{code}?role=laptop") as laptop:
+                await laptop.send(padded(comp.MAX_MESSAGE_BYTES))  # at the cap: relayed
+                relayed = await phone.receive()
+                await laptop.send(padded(comp.MAX_MESSAGE_BYTES + 1))
+                return relayed, await closed_within(laptop, 2.0)
+
+    relayed, closed = asyncio.run(run())
+    assert relayed["t"] == 1.0 and closed == 1007
+
+
 def test_phones_joining_at_once_cannot_pass_the_cap(setup, monkeypatch):
     client, app, _ = setup
     monkeypatch.setattr(comp, "MAX_PHONES", 2)
@@ -387,6 +472,7 @@ def test_the_relay_closes_on_a_message_that_fails_the_schema(setup, bad):
 
 ANSWER = {
     "type": "answer",
+    "source": "model",
     "answer": {"status": "verified", "text": "h7 is at 50 km/h", "metric": None, "value": None,
                "unit": None, "evidence": [], "t_from": None, "t_to": None},
 }
@@ -418,6 +504,26 @@ def test_a_phone_only_listens_and_a_room_has_one_laptop(setup):
 
 
 # --- reads -----------------------------------------------------------------------------------------
+
+
+def test_a_served_kickoff_reset_mid_window_is_not_movement(monkeypatch):
+    # Lesson 123's case on the served path: h7 is put back 25 m at frame 125, a kickoff. The card and
+    # the answer must read the 18 km/h run, not a 2,250 km/h jump (review of #145: dropping the
+    # restarts anywhere between the track and the window left every test green).
+    plain = track()
+    frames = [dict(f) for f in plain.frames]
+    for f in frames[125:]:
+        f["players"] = [{**f["players"][0], "x": round(f["players"][0]["x"] - 25.0, 3)}, f["players"][1]]
+    reset = Track("seed7", tuple(frames), (0, 125))
+    monkeypatch.setattr(comp, "_track", lambda clip: reset)
+    app = comp.Companion(passcode="", live=None, clock=Clock(), allow_truth=True)
+    client = TestClient(api.build("k" * 64, app))
+    card = client.get("/api/card/seed7/h7?t_to=10").json()
+    assert card["peak_kmh"] == 18.0 and card["distance_m"] == 50
+    answer = ask(client, pair(client), text="What's h7's top speed?").json()["answer"]
+    assert answer["value"] == 18.0
+    flow = client.get("/api/flow/seed7/home?t_to=10").json()
+    assert max(abs(v) for v in flow["vx"] if v is not None) < 5.1
 
 
 def test_the_minimap_is_downsampled_and_says_where_positions_come_from(setup):
@@ -478,13 +584,25 @@ def test_a_question_too_long_or_for_an_unknown_session_is_refused(setup):
 def test_questions_are_rate_limited_by_session(setup):
     client, _, _ = setup
     code = pair(client)
-    codes = [ask(client, code).status_code for _ in range(comp.LIMITS["ask_session"] + 1)]
-    assert codes[-1] == 429 and set(codes[:-1]) == {200}
+    assert tries_until(429, lambda n: ask(client, code).status_code) == comp.LIMITS["ask_session"]
+
+
+def test_questions_are_rate_limited_by_address(setup):
+    client, _, _ = setup
+    per_session = comp.LIMITS["ask_session"]
+    codes = [pair(client) for _ in range(bounded(comp.LIMITS["ask_ip"] // per_session + 1))]
+    # Spread over sessions, so the per-session limit is never what refuses.
+    assert tries_until(429, lambda n: ask(client, codes[n % len(codes)]).status_code) == comp.LIMITS["ask_ip"]
+
+
+def test_reads_are_rate_limited(setup):
+    client, _, _ = setup
+    assert tries_until(429, lambda n: client.get("/api/minimap/seed7").status_code) == comp.LIMITS["read"]
 
 
 class FakeLive:
-    def __init__(self, replies):
-        self.replies, self.prompts = list(replies), []
+    def __init__(self, replies, judge_ok=True):
+        self.replies, self.prompts, self.judged, self.judge_ok = list(replies), [], [], judge_ok
 
     async def build(self):
         async def ask(prompt):
@@ -494,14 +612,15 @@ class FakeLive:
         async def judge(claim, evidence):
             from ninety.agents.factcheck import Verdict
 
-            return Verdict(ok=True)
+            self.judged.append(claim.text)
+            return Verdict(ok=self.judge_ok, reasons=[] if self.judge_ok else ["overclaims"])
 
         return comp.LiveModels(ask, judge)
 
 
-def live_setup(monkeypatch, replies, passcode="letmein"):
+def live_setup(monkeypatch, replies, passcode="letmein", judge_ok=True):
     monkeypatch.setattr(comp, "_track", lambda clip: track())
-    live = FakeLive(replies)
+    live = FakeLive(replies, judge_ok)
     app = comp.Companion(passcode=passcode, live=live.build, clock=Clock(), allow_truth=True)
     return TestClient(api.build("k" * 64, app)), app, live
 
@@ -528,6 +647,51 @@ def test_live_injection_falls_back_to_the_code_answer(monkeypatch):
     )
     answer = r.json()["answer"]
     assert len(live.prompts) == 1 and "50" not in answer["text"] and answer["value"] == 18.0
+
+
+GOOD = json.dumps(
+    {"text": "h7 is going at 18.0 km/h.", "evidence": ["speed_now:player_h7_window_0.00-10.00"]}
+)
+
+
+def test_a_draft_the_judge_rejects_gets_the_code_answer(monkeypatch):
+    # Review of #145: with a Judge that always passes, dropping the Judge from the Live path left
+    # every test green. This one rejects: the draft must not air.
+    client, _, live = live_setup(monkeypatch, [GOOD], judge_ok=False)
+    message = ask(client, pair(client), headers={comp.PASSCODE_HEADER: "letmein"}).json()
+    MESSAGE.validate(message)
+    assert live.judged == ["h7 is going at 18.0 km/h."]
+    assert message["source"] == "code" and message["answer"]["text"] == "h7 is moving at 18 km/h right now."
+
+
+def test_a_draft_the_judge_passes_is_the_models_answer(monkeypatch):
+    client, _, live = live_setup(monkeypatch, [GOOD])
+    message = ask(client, pair(client), headers={comp.PASSCODE_HEADER: "letmein"}).json()
+    assert live.judged and message["source"] == "model"
+    assert message["answer"]["text"] == "h7 is going at 18.0 km/h."
+
+
+def test_replay_answers_are_labelled_code(setup):
+    client, _, _ = setup
+    assert ask(client, pair(client)).json()["source"] == "code"
+
+
+def test_a_failure_building_the_live_models_gives_the_code_answer_and_is_retried(monkeypatch):
+    # Lesson 96: any model failure gives a code answer, never a 500.
+    monkeypatch.setattr(comp, "_track", lambda clip: track())
+    builds = []
+
+    async def broken():
+        builds.append(1)
+        raise RuntimeError("no managed identity")
+
+    app = comp.Companion(passcode="letmein", live=broken, clock=Clock(), allow_truth=True)
+    client = TestClient(api.build("k" * 64, app))
+    code = pair(client)
+    for _ in range(2):
+        r = ask(client, code, headers={comp.PASSCODE_HEADER: "letmein"})
+        assert r.status_code == 200 and r.json()["source"] == "code"
+    assert len(builds) == 2 and app.live_models is None
 
 
 def test_live_model_calls_stop_when_the_session_budget_is_spent(monkeypatch):

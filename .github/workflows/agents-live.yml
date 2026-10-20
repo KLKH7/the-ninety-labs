@@ -77,10 +77,15 @@ jobs:
               uv run python -m ninety.agents.analyst_eval --seeds 21,33 --foundry --out runs/eval/analyst.md "${extra[@]}"
               uv run python -m ninety.agents.companion_eval --seeds 21,33 --foundry --out runs/eval/companion.md
               ;;
+            record)
+              # The workflow's live replay; commit the downloaded file unedited (lessons 32 and 44).
+              uv run ninety-workflow --minute 2 --plant --record replays/workflow-minute2-plant.json \
+                --cues-out runs/agents-live/workflow-cues.jsonl "${extra[@]}"
+              ;;
             personalizer)
               uv run python -m ninety.personalizer.eval --seeds 21,33 --out runs/eval/personalizer.md "${extra[@]}"
               ;;
-            record|failures|ablation)
+            failures|ablation)
               echo "::error::task '$TASK' is not yet implemented"
               exit 1
               ;;
@@ -94,7 +99,7 @@ jobs:
         with:
           name: agents-live-${{ inputs.task }}-${{ github.run_id }}
           path: |
-            runs/agents-live/commit.txt
+            runs/agents-live/
             ninety/agents/foundry_agents.json
             replays/
             runs/eval/
