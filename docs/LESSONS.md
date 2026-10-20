@@ -922,3 +922,19 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** the CI `image` job builds the Dockerfile, runs it, and calls `/api/health` and an MCP
   tool on every kind of served match; the Dockerfile itself loads every served match after the
   precompute. Mutation-checked: removing `COPY schemas` fails the build at the precompute step.
+
+### 101. A drawn body moves the way its markers move, frame by frame
+- **What happened:** the skinned mesh was turned as one rigid object by the engine's heading. A
+  player turning on the spot spun on his base, both feet sweeping 5 cm a frame across the grass;
+  a strike was a stored pose wherever the ball was, its foot about 0.5 m off it. Running plants
+  were placed up to 0.58 m ahead of the hips, where the mesh's leg cannot put a flat foot (it
+  reaches 0.30 m), so the drawn foot landed short and slid onto its plant. The test of that
+  ("the planted foot does not skate") passed only because the leg search was coarse enough that
+  the foot missed by about the same amount on both frames it compared.
+- **Rule:** judge motion on the skinned markers the page draws, over consecutive frames: a foot
+  on the grass does not move, and a moving foot is lifted; a touch puts the named part on the
+  ball on the contact frame. Place targets where the drawn limb can reach (measure the reach on
+  the asset), and make a search fine enough that a test cannot pass by its error.
+- **Check:** `tests/test_render_motion.py` (turns on the spot, run touchdowns, kicks, thigh, chest
+  and header touches), each mutation-checked against the old behaviour; `tests/test_render_mesh.py`
+  holds the page's markers to the Python ones for the same poses.
