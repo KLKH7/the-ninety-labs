@@ -1,7 +1,7 @@
 """How a simulated match moves the ball up the pitch: possessions, entries, shots, goals, duels,
 beside published figures. A report, never a fitting target: nothing in the engine is tuned to these
 numbers (docs/GROUNDING.md, R rows). Goals a team over the 12 matches are also a held-out check
-(R4): they must fall where a real league's 12 matches would (`goals_range`, lesson 118).
+(R4): they must fall where a real league's 12 matches would (`goals_range`, lesson 136).
 
     uv run python -m ninety.sim.funnel    # 12 matches; writes docs/eval/funnel.md
 """

@@ -53,7 +53,7 @@ def test_football_realistic_rates_over_a_full_match():
     c = Counter(e["type"] for e in m.events)
     # A Premier League match has roughly 800-1000 passes and 20-30 shots. Its goals are not read
     # from one match: they are a draw of a few (8% of Premier League matches end 0-0), checked over
-    # twelve below (lesson 118).
+    # twelve below (lesson 136).
     assert 600 <= c["pass"] <= 1300, c
     assert 10 <= c["shot"] <= 45, c
     assert 20 <= c["tackle"] <= 150, c
