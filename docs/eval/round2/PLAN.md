@@ -166,13 +166,20 @@ Wall time from the go:
 | ours-v4 on validation, clusters, keeper check | about 1.5 h |
 | Targeted arm (Azure) | about 1 h at 20 parallel executions |
 | Training | about 3.2 h |
-| Scoring, every frame of 30 clips | about 4 h per model on the Mac; the two primary models run at once (about 4 to 5 h) |
+| Scoring: detection for three models on every frame of 30 clips, on the GPU pod (below) | about 30 min |
 
-Scoring caveat:
-- Detection cannot run on the GPU pod as it is: `detect` reads frame numbers from `frames.jsonl`,
-  which is the test set's answer key, and that never leaves our storage.
-- A labels-free frame index (clip, frame, t, image) written at freeze time would let detection run
-  on the pod. That is a small change to `detect`; it is offered, not assumed.
+**Detection on the pod, approved by the Coordinator, with no answer key on it.**
+- Locally, `uv run python -m ninety.vision.frame_index <clip>...` writes each clip's `index.jsonl`:
+  clip id, frame, t and image path, and nothing else.
+  - For the test set this is every frame; for validation, every 5th.
+  - `detect` then reads only `index.jsonl` (`ninety/vision/detect.py`, `frame_rows`).
+- Only the rendered images and `index.jsonl` of the test, validation and arm sets go to the pod.
+  Never `frames.jsonl`, `events.jsonl`, `meta.json` or `clip.json` (which carries label counts),
+  and nothing from `truth-test`.
+- Test images go to the pod from the local frozen copy, checked against the freeze digests.
+- The raw `detections` files come back and are scored locally against the truth with
+  `ninety.eval.vision_report --freeze <round-2 freeze file>`. The detections are committed beside
+  each report, so the report rebuilds without the pod.
 
 ## 9. Deviations and the render commit
 
