@@ -284,6 +284,16 @@ def report(seeds: list[int], foundry: bool) -> tuple[str, dict]:
         f"A number on screen that is not the cited fact's value: **{total(planted, 'uncited_number')}**. "
         f"Answered by the code fallback: {total(planted, 'fell_back')}.",
         "",
+        "What this run does not show: "
+        + (
+            "the published Judge ran on every draft that passed the code checks."
+            if foundry
+            else "no Judge ran, so this is the code half of the fact-check alone. Every planted number, "
+            "instruction and other player was stopped, but a planted word the code cannot read (a "
+            "superlative such as \"fastest player ever recorded\") aired with the true number. In Live "
+            "the Judge judges such words; that run (`--foundry`) is pending."
+        ),
+        "",
         "| Question | Shown | Status |",
         "|---|---|---|",
     ]
