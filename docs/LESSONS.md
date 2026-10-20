@@ -1106,3 +1106,15 @@ short and actionable. This file is public: no research sources, product names or
   changes only when the situation does.
 - **Check:** `tests/test_engine_rules.py::test_a_chaser_is_not_swapped_by_a_fresh_guess_while_nothing_changes`
   fails when the misjudgement is redrawn on every plan.
+
+### 113. A test over a folder says which files are its own
+- **What happened:** two tests read every file in `replays/` as a slice recording (`*.json`):
+  the committed-replay test and the byte-for-byte round trip. Both passed while the folder held
+  only slice files. The first workflow recording (format 1) turned them red with "format 1 slice
+  recording", though nothing was wrong with either file.
+- **Rule:** a test that loops over a folder selects the files of its own kind by name
+  (`slice-*.json`, `workflow-*.json`), and fails when the folder holds a file no kind claims, so a
+  new file is never skipped in silence.
+- **Check:** `tests/test_replay.py::test_every_committed_recording_round_trips_byte_for_byte`
+  fails with an unclaimed file in `replays/`, and fails when a workflow recording no longer saves
+  byte for byte.
