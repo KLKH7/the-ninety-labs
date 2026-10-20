@@ -4,7 +4,7 @@
     uv run python scripts/defect_sweep/wall.py --planted 2 3 5 7
 
 With run folders: for each direct free kick within shooting range (a foul, then its kick, less than
-offball.SHOT_RANGE_M from the goal's centre, straight-line), the wall the engine plans for it
+offball.SHOT_RANGE_M from the goal's centre, straight-line; not a penalty), the wall the engine plans for it
 (Engine.wall_spots) and how many of its places have a defender on them, within a ball's radius,
 when the kick is struck.
 
@@ -23,7 +23,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from ninety.sim import ball, offball, shape  # noqa: E402
-from ninety.sim.engine import PITCH_X, PITCH_Y, Engine, Restart  # noqa: E402
+from ninety.sim.engine import PENALTY_MARK_M, PITCH_X, PITCH_Y, Engine, Restart  # noqa: E402
 
 DEEP_M = 0.05  # a body this far into another counts (as scripts/defect_sweep/huddle.py)
 PLANTED = [(PITCH_X - 22.0, 34.0), (PITCH_X - 18.0, 24.0), (PITCH_X - 27.0, 44.0)]
@@ -46,6 +46,8 @@ def natural(runs: list[str]) -> None:
             stopped, goal = None, (PITCH_X if x["team"] == "home" else 0.0)
             if math.hypot(goal - x["x"], PITCH_Y / 2 - x["y"]) >= offball.SHOT_RANGE_M:
                 continue
+            if math.hypot(abs(goal - x["x"]) - PENALTY_MARK_M, PITCH_Y / 2 - x["y"]) < 0.5:
+                continue  # a penalty kick (Law 14): no wall
             spots = e.wall_spots(Restart("free_kick", x["team"], x["x"], x["y"], x["player"], 0.0))
             kick = next((k for k in ev[i + 1:] if k["type"] in ("pass", "shot")), None)
             f = frames.get(kick["frame"]) if kick else None
