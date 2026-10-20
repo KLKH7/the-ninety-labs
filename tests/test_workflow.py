@@ -7,10 +7,12 @@ engine change can take it away (lessons 47 and 78). Each test fails without the 
 
 import asyncio
 import json
+import logging
 import textwrap
 import time
 import warnings
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -212,18 +214,21 @@ def test_a_clip_the_mcp_server_serves_is_read_through_the_tools():
     assert (match, inline) == (detected.M1_CLIP, False) and events
 
 
-def test_a_claim_on_an_unsure_detection_goes_back_and_a_confident_rewrite_airs():
+def test_a_claim_on_an_unsure_detection_is_held_and_never_rewritten():
+    # A rewrite cannot make an unsure detection sure (status_for: low_confidence is held).
     sure, unsure = PASSES[0], PASSES[1]
     events = [{**e, "source": "vision", "confidence": 0.3 if e is unsure else 0.9} for e in EVENTS]
-    ledger = InMemoryLedger()
+    ledger, judge = InMemoryLedger(), Judge()
     evidence = {sure["id"]: [sure["id"], unsure["id"]]}
     result = run(models(analyst=(picks(sure["id"], evidence=evidence),),
-                        tactician=[reply(true_claim(unsure["id"])), reply(true_claim(sure["id"]))]),
+                        tactician=[reply(true_claim(unsure["id"])), reply(true_claim(sure["id"]))],
+                        judge=judge),
                  events=events, ledger=ledger)
     versions = history(ledger, f"m-{sure['id']}")
-    assert [v["status"] for v in versions] == ["draft", "held", "draft", "verified"]
-    assert versions[1]["category"] == "low_confidence"
-    assert result.reviews[0].aired == true_claim(sure["id"])
+    assert [v["status"] for v in versions] == ["draft", "held"]
+    assert versions[1]["category"] == "low_confidence" and judge.asked == []
+    assert result.reviews[0].status == "held" and insights(result) == []
+    assert ("tactician", "rewrite") not in steps(result)
 
 
 def test_an_unsure_detection_with_no_graphic_on_air_is_no_moment():
@@ -547,3 +552,159 @@ def test_a_live_run_signs_in_before_it_loads_the_events():
 
     events = asyncio.run(workflow.sign_in_then_load(workflow.SignedIn(hour), load))
     assert order == ["token", "events"] and events == EVENTS
+
+
+# The live path, with fake Foundry agents: no Azure ------------------------------------------
+
+SUPPORTED = json.dumps({"statements": [{"text": "s", "kind": "fact", "verdict": "supported", "reason": "r"}]})
+SLOW = object()
+
+
+class FakeFoundry:
+    """Stands in for FoundryAgent: each published agent answers from its own list, in order. A
+    reply that is an exception is raised; SLOW never answers."""
+
+    def __init__(self, replies: dict[str, list]):
+        self.replies = {f"ninety-{role}": list(answers) for role, answers in replies.items()}
+        self.asked: list[str] = []
+
+    def __call__(self, project_endpoint, agent_name, agent_version, credential):
+        return FakeAgent(self, agent_name)
+
+
+class FakeAgent:
+    def __init__(self, foundry, name):
+        self.foundry, self.name = foundry, name
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return None
+
+    async def run(self, prompt):
+        self.foundry.asked.append(self.name)
+        reply = self.foundry.replies[self.name].pop(0)
+        if reply is SLOW:
+            await asyncio.sleep(60)
+        if isinstance(reply, Exception):
+            raise reply
+        return SimpleNamespace(text=reply, value=None)
+
+
+def live(monkeypatch, replies, credential=None):
+    foundry = FakeFoundry(replies)
+    monkeypatch.setattr(workflow, "FoundryAgent", foundry)
+    monkeypatch.setattr(workflow, "new_credential", lambda: workflow.SignedIn(credential or Credential(3600)))
+    return foundry
+
+
+def detected_file(tmp_path) -> Path:
+    path = tmp_path / "detected.jsonl"
+    path.write_text("".join(json.dumps({**e, "source": "vision", "confidence": 0.9}) + "\n" for e in EVENTS))
+    return path
+
+
+def cli(monkeypatch, *args):
+    monkeypatch.setattr("sys.argv", ["ninety-workflow", "--no-trace", *map(str, args)])
+    workflow.main()
+
+
+GOOD_RUN = {"moment-analyst": [picks(MAIN)], "tactician": [reply(true_claim(MAIN))],
+            "challenger": ['{"agree": true}'], "judge": [SUPPORTED]}
+
+
+def test_record_saves_the_live_replies_and_the_cli_prints_the_model_call_count(
+    monkeypatch, tmp_path, capsys, caplog
+):
+    caplog.set_level(logging.INFO, logger="agent_framework")  # restored after the test
+    live(monkeypatch, GOOD_RUN)
+    out, cues = tmp_path / "w.json", tmp_path / "cues.jsonl"
+    cli(monkeypatch, "--events", detected_file(tmp_path), "--record", out, "--cues-out", cues)
+    recording = WorkflowRecording.load(out)
+    assert [(t.role, t.response) for t in recording.turns] == [
+        ("analyst", picks(MAIN)), ("tactician", reply(true_claim(MAIN))), ("challenger", '{"agree": true}'),
+        ("judge", json.dumps({"ok": True, "reasons": [], "category": None})),
+    ]
+    roles = ("moment-analyst", "tactician", "challenger", "judge")
+    assert set(recording.pins) == {f"ninety-{role}" for role in roles}
+    printed = capsys.readouterr().out
+    assert "4 model call(s)" in printed
+    assert not [r for r in caplog.records if "superstep" in r.getMessage()]  # the framework is quiet
+    aired = [json.loads(line) for line in cues.read_text().splitlines() if '"insight"' in line]
+    assert [c["replaces"] for c in aired] == [f"cue-{MAIN}-analyst"]
+    # What --record saved replays to the same run, with no Azure.
+    replayed = asyncio.run(workflow.replay_workflow(recording))
+    assert insights(replayed) == aired
+
+
+def test_a_failed_live_call_saves_no_recording(monkeypatch, tmp_path, capsys):
+    live(monkeypatch, {**GOOD_RUN, "tactician": [RuntimeError("service down")], "judge": []})
+    out = tmp_path / "w.json"
+    cli(monkeypatch, "--events", detected_file(tmp_path), "--record", out)
+    assert not out.exists() and "not recorded" in capsys.readouterr().err
+
+
+def test_a_slow_live_judge_ends_held_with_its_timeout_and_the_run_is_not_recorded(monkeypatch, tmp_path):
+    from functools import partial
+
+    from ninety.agents import judge as judge_module
+
+    # The Judge's own timeout and retry decide (twice 0.6 s), never a cancellation around it.
+    monkeypatch.setattr(workflow, "judge_call", partial(judge_module.judge, timeout_seconds=0.6))
+    live(monkeypatch, {**GOOD_RUN, "judge": [SLOW, SLOW]})
+    result, turns, pins, failed, _ = asyncio.run(workflow.run_live(
+        lambda: EVENTS, MINUTE, "test", False, False, trace_to="none"))
+    (review,) = result.reviews
+    assert review.status == "held" and review.primary.category == "timeout" and failed
+    assert json.loads(turns[-1].response)["category"] == "timeout"  # the category reaches the recording
+    out = tmp_path / "w.json"
+    live(monkeypatch, {**GOOD_RUN, "judge": [SLOW, SLOW]})
+    cli(monkeypatch, "--events", detected_file(tmp_path), "--record", out)
+    assert not out.exists()
+
+
+def test_a_live_run_signs_in_before_it_loads_the_events_inside_run_live(monkeypatch):
+    order = []
+    hour = Credential(3600)
+
+    async def get_token(*scopes, **kwargs):
+        order.append("token")
+        return Token(time.time() + 3600)
+
+    hour.get_token = get_token
+    live(monkeypatch, GOOD_RUN, credential=hour)
+
+    def load():
+        order.append("events")
+        return EVENTS
+
+    asyncio.run(workflow.run_live(load, MINUTE, "test", False, False, trace_to="none"))
+    assert order[:2] == ["token", "events"]
+
+
+def test_a_claim_is_rewritten_at_most_max_rewrites_times():
+    calls = []
+
+    async def tactician(prompt):
+        calls.append(prompt)
+        return reply(true_claim(MAIN))
+
+    never = Judge(*[Verdict(False, ["unsupported fact"], "unsupported_claim")] * 10)
+    result = run(Models.scripted({"analyst": [picks(MAIN)]}, tactician=tactician, judge=never))
+    assert len(calls) == 1 + MAX_REWRITES and result.reviews[0].status == "rejected"
+
+
+def test_a_challenger_failing_on_its_rewrite_leaves_its_rejection_standing():
+    async def challenger(prompt):
+        if "rejected" in json.loads(prompt):
+            raise RuntimeError("model down")
+        return reply(false_claim(MAIN))
+
+    ledger = InMemoryLedger()
+    result = run(Models.scripted({"analyst": [picks(MAIN)], "tactician": [reply(true_claim(MAIN))]},
+                                 challenger=challenger), ledger=ledger)
+    fail = next(s for s in result.trace if s.role == "challenger" and s.action == "fail")
+    assert "the rejection stands" in fail.detail
+    assert history(ledger, f"m-{MAIN}", "challenger")[-1]["status"] == "rejected"
+    assert result.reviews[0].aired == true_claim(MAIN)

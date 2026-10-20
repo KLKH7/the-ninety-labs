@@ -18,8 +18,8 @@ The graph (Agent Framework `WorkflowBuilder`), as docs/ARCHITECTURE.md draws it:
    it is skipped.
 5. The fact-checker checks both claims with the slice's `fact_check`: the code checks, then the
    confidence gate, then the Judge. A claim may cite only its moment's evidence. A rejected
-   claim goes back to its author with the reasons, at most MAX_REWRITES times, and so does one
-   held on an unsure detection; one held because the check could not be done is not.
+   claim goes back to its author with the reasons, at most MAX_REWRITES times. A held claim (the
+   check could not be done, or it rests on an unsure detection) is not rewritten.
 6. Producer.air (code) airs the Tactician's claim if it is verified, else the Challenger's if
    that is, else the template stays. The insight replaces the template in its slot.
 
@@ -34,6 +34,7 @@ import argparse
 import asyncio
 import contextlib
 import json
+import logging
 import subprocess
 import sys
 import time
@@ -44,6 +45,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from agent_framework import Executor, WorkflowBuilder, WorkflowContext, handler
+from agent_framework.foundry import FoundryAgent
 
 from ninety.agents import telemetry
 from ninety.agents.contracts import (
@@ -57,6 +59,7 @@ from ninety.agents.contracts import (
 )
 from ninety.agents.cues import TEMPLATE_TYPES, template_cues
 from ninety.agents.factcheck import Claim, Verdict, confidence_gate
+from ninety.agents.judge import judge as judge_call
 from ninety.agents.ledger import InMemoryLedger, Ledger, Record, load_match
 from ninety.agents.replay import Replayer, ReplayMismatch, Turn, WorkflowRecording, judge_prompt
 from ninety.agents.slice import CLOCK_RULE, MAX_REWRITES, Gate, StaleRecording, fact_check, tamper
@@ -198,9 +201,11 @@ ACTION = {"verified": "verify", "rejected": "reject", "held": "hold"}
 
 
 def sent_back(verdict: Verdict) -> bool:
-    """A claim goes back to its author when it is wrong, or rests on an unsure detection (the
-    writer may cite a confident one), as the slice does; never when the check itself failed."""
-    return status_for(verdict) == "rejected" or verdict.category == "low_confidence"
+    """A claim goes back to its author only when it is wrong (status_for: rejected). A held claim
+    is not rewritten: neither a failed check nor an unsure detection (`low_confidence`) is
+    something the writer can fix. The slice sends a low-confidence claim back; its replay pins
+    that, so the slice keeps it."""
+    return status_for(verdict) == "rejected"
 
 
 # ---------------------------------------------------------------------------------------------
@@ -662,6 +667,13 @@ class SignedIn:
         await self.close()
 
 
+def new_credential() -> SignedIn:
+    """The live run's credential: the aio DefaultAzureCredential, kept by SignedIn."""
+    from azure.identity.aio import DefaultAzureCredential
+
+    return SignedIn(DefaultAzureCredential())
+
+
 async def sign_in_then_load(credential, load_events: Callable[[], list[dict]]) -> list[dict]:
     """Gets the Foundry token before anything slow (a simulation) can outlast the sign-in."""
     await credential.get_token(FOUNDRY_SCOPE)
@@ -675,14 +687,10 @@ async def run_live(
     """Live on Foundry, calling the published versions pinned in foundry_agents.json. Signs in,
     then loads the events. Returns the result, every model answer, the versions that ran, whether
     any model call failed, and the events the run checked against."""
-    from agent_framework.foundry import FoundryAgent
-    from azure.identity.aio import DefaultAzureCredential
-
     from ninety import config
     from ninety.agents import foundry
-    from ninety.agents.judge import judge
 
-    async with SignedIn(DefaultAzureCredential()) as credential:
+    async with new_credential() as credential:
         events = await sign_in_then_load(credential, load_events)
         client = foundry.chat_client(credential)
         if trace_to == "foundry":
@@ -714,8 +722,10 @@ async def run_live(
                 return answer
 
             async def judge_live(claim: Claim, evidence: list[dict]) -> Verdict:
-                verdict = await judge(agents["judge"], claim, evidence)
+                verdict = await judge_call(agents["judge"], claim, evidence)
                 turns.append(Turn("judge", judge_prompt(claim), json.dumps(asdict(verdict))))
+                if status_for(verdict) == "held":  # the Judge could not judge: a failed model call
+                    failed[0] = True
                 return verdict
 
             models = Models(
@@ -786,6 +796,8 @@ def print_result(result: Result, live: bool) -> None:
 
 
 def main() -> None:
+    # The framework logs every superstep at INFO; the CLI prints its own trace.
+    logging.getLogger("agent_framework").setLevel(logging.WARNING)
     ap = argparse.ArgumentParser(description="The multi-agent workflow over one minute, on Foundry.")
     ap.add_argument("--minute", type=int, default=2)
     ap.add_argument("--seed", type=int, default=7)
