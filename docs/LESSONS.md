@@ -1227,3 +1227,15 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `uv run pytest tests/test_restarts.py -k "overlap or side_they_come_from"`; with every
   team-mate sent to the scorer's centre the overlap test fails. `docs/eval/restarts.md` ("The
   huddle") counts the frames with bodies in each other over a whole celebration.
+
+### 128. A point one rule puts exactly on a boundary is on it for every other rule
+- **What happened:** the keep-off rule moves an opponent's target to the edge of the 9.65 m circle,
+  and the wall stands on that edge. A second rule sends a player round the circle while his
+  straight way "comes closer than 9.65 m". For a place on the edge, straight in from further out,
+  the closest point of that way is the place itself, and rounding put it a hair inside: the player
+  was sent round the circle at his own distance, which is where he already stood. He stood 7 m
+  from the wall through the whole stoppage. No test placed a target exactly on the edge.
+- **Rule:** where one rule produces points on a boundary that another rule tests, the test allows
+  for rounding (a named tolerance), and a test puts a point exactly on the boundary.
+- **Check:** `uv run pytest tests/test_restarts.py -k edge_of_the_circle`; it fails with the
+  tolerance set to 0.

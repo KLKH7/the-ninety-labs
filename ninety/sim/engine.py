@@ -126,6 +126,10 @@ KEEP_OFF_MARGIN_M = 0.5  # design: opponents aim this far outside a restart's di
 # thirds of the goal line, q = p / 3); the keeper covers the rest
 WALL_COVER_PAST_CENTRE_M = GOAL_HALF_WIDTH / 3
 WALL_ATTACKER_GAP_M = 1.0  # Law 13: with three or more defenders in a wall, attackers stay 1 m from it
+# design: a wall player first stands behind his place to within this much across the line (a few times
+# the 1 to 2 cm by which steering stops on a target), then steps forward into it
+WALL_LANE_M = 0.1
+ON_CIRCLE_M = 1e-6  # a target this close to a keep-off circle's edge is on it (rounding), not inside
 # design: the taker stands this far from a set ball's centre, so it is clear of him whichever way he
 # is turned (his shoulder's reach, P11) with a ball's width to spare for his steering
 SET_BALL_CLEAR_M = shape.surface(math.pi / 2, 0.0, pad=2 * ball.RADIUS)
@@ -151,7 +155,9 @@ RESTART_DELAY_S = {"throw_in": (12, 20), "goal_kick": (24, 34), "corner": (24, 3
 CELEBRATION_S = (15.0, 25.0)
 # design: team-mates round a scorer stand a shoulder's breadth apart (P11) with a little to spare
 HUDDLE_SPACING_M = 0.55
-HUDDLE_REACH_M = 3.0  # design: this near the one they celebrate, team-mates count as gathered
+# design: this near where they mean to stand side by side (round a scorer, in a wall), team-mates
+# count as gathered
+HUDDLE_REACH_M = 3.0
 # L4: after a goal players walk back at least at a normal walking pace: men aged 20 to 29 walk at
 # about 1.36 m/s (Bohannon & Andrews 2011, Physiotherapy 97:182, a meta-analysis of 23,111 adults,
 # as tabulated by the University of Toronto's iWalk guide)
@@ -1514,9 +1520,14 @@ class Engine:
         return focus.x + fmath.cos(a) * radius, focus.y + fmath.sin(a) * radius
 
     def together(self, p: Player, q: Player) -> bool:
-        """Team-mates who mean to stand side by side (gathered round a scorer) keep only clear of
-        each other's bodies, not the usual personal space; on the way there they keep it as ever.
-        Gathered: both within HUDDLE_REACH_M of the one they celebrate (design)."""
+        """Team-mates who mean to stand side by side keep only clear of each other's bodies, not the
+        usual personal space; on the way there they keep it as ever. Side by side: two in a free
+        kick's wall (Law 13), each within HUDDLE_REACH_M of his place in it, or two gathered round a
+        scorer, both within HUDDLE_REACH_M of the one they celebrate (design)."""
+        r = self.restart or self.set_by
+        if r and p.id in r.wall and q.id in r.wall:
+            return all(math.hypot(s.x - r.wall[s.id][0], s.y - r.wall[s.id][1]) < HUDDLE_REACH_M
+                       for s in (p, q))
         c = self.celebration
         if c is None or self.t >= c.until or not (p.team == q.team == c.team):
             return False
@@ -1562,6 +1573,21 @@ class Engine:
         spots = [(cx + ux * (i - (n - 1) / 2) * shape.SHOULDER_BREADTH_M,
                   cy + uy * (i - (n - 1) / 2) * shape.SHOULDER_BREADTH_M) for i in range(n)]
         return [(x, y) for x, y in spots if 0.5 <= x <= PITCH_X - 0.5 and 0.5 <= y <= PITCH_Y - 0.5]
+
+    def way_into_wall(self, r: Restart, p: Player) -> tuple[float, float]:
+        """Where he heads for his place in the wall: first a shoulder's breadth behind it, seen
+        from the ball, then, once there to within WALL_LANE_M across the line, forward into it. He
+        comes in behind the others and steps up between them, never walking along the line through
+        them (P11; design)."""
+        wx, wy = r.wall[p.id]
+        bx, by = self.restart_ball_spot(r)
+        d = math.hypot(wx - bx, wy - by)
+        ux, uy = (wx - bx) / d, (wy - by) / d  # from the ball through his place
+        across = abs((p.x - wx) * -uy + (p.y - wy) * ux)
+        if across <= WALL_LANE_M:
+            return wx, wy
+        behind = max(shape.SHOULDER_BREADTH_M, (p.x - wx) * ux + (p.y - wy) * uy)
+        return wx + ux * behind, wy + uy * behind
 
     def form_wall(self, r: Restart) -> dict[str, tuple[float, float]]:
         """The defending side's outfielders nearest the wall's spots stand in it, the nearest pair of
@@ -1881,9 +1907,9 @@ class Engine:
             behind = SET_BALL_CLEAR_M
             return sx - attack_dir(p.team) * behind, sy, pace
         wall = self.restart or self.set_by
-        if wall and p.id in wall.wall:  # Law 13: in the wall until the ball is kicked, there in time (O8)
-            wx, wy = wall.wall[p.id]
-            return wx, wy, self.in_time(p, wx, wy)
+        if wall and p.id in wall.wall:  # Law 13: in the wall until the ball is kicked
+            wx, wy = self.way_into_wall(wall, p)
+            return wx, wy, max(WALK_MPS, self.in_time(p, wx, wy))  # at least a walk (L4), in time (O8)
         bx, by = self.play_point(p)  # O8: where the ball is going, once a pass is struck
         poss_team = self.team_of(self.possessor) if self.possessor else None
         shift = (clamp(bx, 0, PITCH_X) - PITCH_X / 2) * 0.45
@@ -2261,7 +2287,7 @@ class Engine:
         out_x, out_y = (bx + mx / m * out, by + my / m * out) if m > 1e-6 else (tx, ty)
         if 1e-6 < m < clear and 0.5 <= out_x <= PITCH_X - 0.5 and 0.5 <= out_y <= PITCH_Y - 0.5:
             tx, ty = out_x, out_y
-        elif m > 1e-6 and (m < clear or segment_distance(bx, by, p.x, p.y, tx, ty) < clear):
+        elif m > 1e-6 and (m < clear or segment_distance(bx, by, p.x, p.y, tx, ty) < clear - ON_CIRCLE_M):
             here, there = fmath.atan2(my, mx), fmath.atan2(ty - by, tx - bx)
             turn = (there - here + math.pi) % (2 * math.pi) - math.pi
             a = here + clamp(turn, -math.radians(KEEP_OFF_STEP_DEG), math.radians(KEEP_OFF_STEP_DEG))
