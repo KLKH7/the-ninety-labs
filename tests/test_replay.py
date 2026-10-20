@@ -80,10 +80,16 @@ def test_the_slice_imports_the_moved_names_back():
     assert replay.REPLAY_FORMAT == 3
 
 
-def test_the_committed_slice_recording_round_trips_byte_for_byte(tmp_path):
-    for path in sorted((Path(__file__).resolve().parent.parent / "replays").glob("*.json")):
+def test_every_committed_recording_round_trips_byte_for_byte(tmp_path):
+    # Each file by its own format: slice-*.json is a Recording, workflow-*.json a WorkflowRecording.
+    replays = Path(__file__).resolve().parent.parent / "replays"
+    kinds = {"slice-*.json": Recording, "workflow-*.json": WorkflowRecording}
+    paths = {path: kind for pattern, kind in kinds.items() for path in replays.glob(pattern)}
+    assert set(paths) == set(replays.glob("*.json")), "a recording no format claims is not round-tripped"
+    assert any(kind is Recording for kind in paths.values())
+    for path, kind in sorted(paths.items()):
         out = tmp_path / path.name
-        Recording.load(path).save(out)
+        kind.load(path).save(out)
         assert out.read_bytes() == path.read_bytes(), path.name
 
 
