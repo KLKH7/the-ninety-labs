@@ -94,21 +94,25 @@ rates are not yet sourced.
 ## After a goal (the celebration)
 
 Measured on the same 16 seeds against `main` with the change above (`cf3b17a`), the celebration
-branch's raw output in [restarts/celebration-branch.json](restarts/celebration-branch.json):
+branch at `3e668c0`; its raw output in [restarts/celebration-branch.json](restarts/celebration-branch.json):
 
 | | Before | After |
 |---|---:|---:|
-| Seconds from a goal to the kick-off | 13.7 to 19.2 (11 goals) | 66.4 to 87.3 (10 goals) |
-| Ball in play, share of the 20 minutes | 56.6% | 53.3% |
-| Shots a team per 90 | 19.0 ± 2.1 | 16.2 ± 1.6 |
-| Goals a team per 90 | 1.6 ± 0.5 | 1.6 ± 0.5 |
-| Pass completion | 79.6% | 80.3% |
+| Seconds from a goal to the kick-off | 13.7 to 19.2 (11 goals) | 66.4 to 86.7 (8 goals) |
+| Ball in play, share of the 20 minutes | 56.6% | 53.6% |
+| Shots a team per 90 | 19.0 ± 2.1 | 17.6 ± 2.0 |
+| Goals a team per 90 | 1.6 ± 0.5 | 1.3 ± 0.4 |
+| Pass completion | 79.6% | 78.9% |
 | Restart defects (jumps, encroachment, carried set balls, stuck restarts) | 0 | 0 |
+| Matches meeting the data contract (`ninety-validate`) | 16 of 16 | 16 of 16 |
 
 A goal's celebration "may last one, one and a half minutes" (Collina, FIFA, 2022): the kick-off now
 comes 60 to 90 s after the goal (GROUNDING L4). Ball in play is about 55.8% of a Premier League
 match's total time, added time included (Opta via The Analyst, 2023); these 20-minute matches have
-no added time. Shots, goals and completion are unchanged within noise.
+no added time. Shots, goals and completion are unchanged within noise (9 goals against 11; the
+matches part after their first goal, lesson 90). Football-sense, per 90: FS1 20.8 to 21.4, FS2 16.0
+to 11.8, FS6 29.5 to 30.9, FS7 287 to 269, FS9 0.8 to 1.1. Up to a match's first goal nothing
+changes: seed 21 is frame for frame the same as on `main` until its goal at 5:03.
 
 ### The huddle
 
