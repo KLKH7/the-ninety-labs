@@ -70,7 +70,7 @@ teams in their own halves at the kick-off, no opponent within 2 m at the throw-i
 complaint, in this area but not caused by this change: players stand still through the 25 to 35 s
 stoppages, with no wall, no jostling and no organisation, and the kick-off comes about 17 s after a
 goal against a minute or more in real matches (L4; the 72 s it was compared with then is a penalty
-goal's, lesson 124). The celebration below answers the second.
+goal's, lesson 126). The celebration below answers the second.
 
 ### On earlier bases
 
