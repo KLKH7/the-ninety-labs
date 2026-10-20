@@ -20,7 +20,14 @@ Events, from one spell to the next:
 - the ball's centre goes beyond a line by more than its radius (Law 9: the whole ball over the
   line): out of play, for the team that had it last; a pass that went out first is `fail`.
 
-`player`, `receiver` and the other people fields are null: the detector sees shirts, not names.
+Who. The detector sees shirts, not names, so a player is his side and his track, `h-t12`, the id the
+phone companion's minimap shows (ninety/vision/tracked_frames.py). A pass or shot names its
+`player`, the spell's holder at the strike; a completed pass its `receiver` and a pass the other side
+took its `interceptor`, the next spell's holder at its first frame. Each is named only when it is
+unambiguous (`attribute`): no other track as near the ball, within the players' position error.
+Otherwise it stays null and the event keeps only its `team`, from the holder's kit colour, so the
+agents can still say what a side did. Out of play names nobody (the truth's names nobody either).
+`intended` and `deflected_by` stay null: neither is visible in a spell.
 `confidence` is a score from 0 to 1 (the ball detection's score at the strike, scaled down for a
 short spell), not a calibrated probability.
 """
@@ -35,6 +42,7 @@ from pathlib import Path
 
 from ninety.vision.track import (
     FPS,
+    MAX_GAP_FRAMES,
     BallPoint,
     Track,
     assign_teams,
@@ -42,6 +50,7 @@ from ninety.vision.track import (
     read_observations,
     track_players,
 )
+from ninety.vision.tracked_frames import MIN_TRACK_FRAMES, player_id
 
 # Law 1 (GROUNDING L1): goal 7.32 m wide, centred on y = 34.
 PITCH_X, PITCH_Y = 105.0, 68.0
@@ -69,6 +78,25 @@ SHOT_MAX_M = 35.0
 # The ball must be over a line for this many frames running before it is out: a single frame
 # beyond is as likely the camera fit as the ball (design).
 OUT_FRAMES = 3
+# Attribution. The holder is within CONTROL_M of the ball by construction; he is named only when no
+# other track is within RIVAL_M of his own distance from it: a rival that close may truly be the
+# nearer one. RIVAL_M is the players' measured pitch-position error, its 90th percentile pooled over
+# ours-v2's validation clips (never test clips), rounded to cm: 1.886 m
+# (docs/eval/attribution-derive.json, players_position_error.p90_m; plan in
+# docs/eval/attribution-plan.md). It includes camera fits that went wrong on two of those clips;
+# the plan fixed the statistic before any was read, so it stands. tests/test_attribution_score.py
+# holds it to the committed measurement.
+RIVAL_M = 1.89
+# One player in two tracks. The tracker drops a player whose position jumps past its gate (a
+# sprint plus the camera fit's jitter) and starts a new track the next frame, so his dribble can
+# read as a pass to himself. Two tracks never seen in the same frame, the second starting within
+# the tracker's own MAX_GAP_FRAMES of the first's end and within reach of where it ended, may be
+# one player: a pass between them cannot be told from his own touch, so none is recorded. Reach is
+# REACH_MPS over the gap, plus RIVAL_M, the position error, for where each was seen. REACH_MPS is a
+# player's top-speed capability, about 10 m/s (GROUNDING P9; match peaks are lower, 7.9 to 8.6 m/s,
+# R6), so no player covers more. The rule's form was chosen on test seed 900004 (two self-passes
+# there); it is kept or dropped on validation clips only (docs/eval/attribution-plan.md).
+REACH_MPS = 10.0
 
 
 @dataclass(frozen=True)
@@ -139,6 +167,31 @@ def spells(path: list[BallPoint], tracks: list[Track]) -> list[Spell]:
     return [s for s in out if s.frames >= MIN_SPELL_FRAMES]
 
 
+def attribute(t: Track, ball: BallPoint, tracks: list[Track]) -> str | None:
+    """The track's player id (`h-t12`) when it plainly has the ball at this frame, else None: it is
+    not a track the companion draws (no team, or too short), it is not seen in this frame, or
+    another track (either side, or a referee) is within RIVAL_M of its distance from the ball."""
+    if t.team is None or len(t.frames) < MIN_TRACK_FRAMES:
+        return None
+    q = t.at(ball.frame)
+    if q is None:
+        return None
+    d = math.hypot(q[0] - ball.x, q[1] - ball.y)
+    for o in tracks:
+        r = o.at(ball.frame) if o is not t else None
+        if r is not None and math.hypot(r[0] - ball.x, r[1] - ball.y) < d + RIVAL_M:
+            return None
+    return player_id(t)
+
+
+def may_continue(a: Track, b: Track) -> bool:
+    """Whether track b may be track a's player, picked up again after the tracker lost him."""
+    gap = b.frames[0] - a.frames[-1]
+    if not 0 < gap <= MAX_GAP_FRAMES:
+        return False  # seen in the same frame: two players; or longer lost than the tracker waits
+    return math.dist(a.xy[-1], b.xy[0]) <= REACH_MPS * gap / FPS + RIVAL_M
+
+
 def _attacks_right(team: str) -> bool:
     return team == "home"  # the engine's convention, both halves (ninety/sim/engine.py)
 
@@ -197,8 +250,10 @@ def _speed_kmh(path: list[BallPoint], i: int) -> float | None:
     return round(steps[len(steps) // 2] * 3.6, 1)
 
 
-def detect(rows: list[dict]) -> tuple[list[dict], dict]:
-    """The detected events, and a summary of how they were found (teams, spells, counts)."""
+def detect(rows: list[dict], join_breaks: bool = True) -> tuple[list[dict], dict]:
+    """The detected events, and a summary of how they were found (teams, spells, counts).
+    `join_breaks=False` turns off the one-player-in-two-tracks rule (`may_continue`), for measuring
+    what it does (ninety/eval/attribution_derive.py); the live path always runs with it."""
     t_of = {r["frame"]: r["t"] for r in rows}
     tracks = track_players(rows)
     teams = assign_teams(tracks)
@@ -208,8 +263,9 @@ def detect(rows: list[dict]) -> tuple[list[dict], dict]:
     outs = out_of_play(path)
     events: list[dict] = []
 
-    def event(kind, frame, team, x, y, conf, **kw):
-        e = {"id": "", "t": t_of[frame], "frame": frame, "type": kind, "team": team, "player": None,
+    def event(kind, frame, team, x, y, conf, side=None, **kw):
+        e = {"id": "", "t": t_of[frame], "frame": frame, "type": kind, "team": team, "team_confidence": side,
+             "player": None,
              "receiver": None, "x": _clip(x, PITCH_X), "y": _clip(y, PITCH_Y), "end_x": None, "end_y": None,
              "outcome": None, "ball_speed_kmh": None, "source": "vision", "confidence": round(conf, 3)}
         if kind == "pass":
@@ -228,27 +284,35 @@ def detect(rows: list[dict]) -> tuple[list[dict], dict]:
             continue  # the clip ends with the ball still in play after him: nothing to judge yet
         if b is not None and b.track is a.track:
             continue  # he got it back himself: a touch, not a pass
+        if join_breaks and b is not None and may_continue(a.track, b.track):
+            continue  # perhaps him again in a new track: no pass can be told
         conf = path[i].score * min(1.0, a.frames / (2 * MIN_SPELL_FRAMES))
         speed = _speed_kmh(path, i)
+        who = attribute(a.track, path[i], tracks)
         if heads_for_goal(path, i, team):
-            event("shot", a.last, team, path[i].x, path[i].y, conf, ball_speed_kmh=speed)
+            event("shot", a.last, team, path[i].x, path[i].y, conf, a.track.side_confidence,
+                  ball_speed_kmh=speed, player=who)
             continue
         if gone is not None:
             g = path[index[gone]]
-            event("pass", a.last, team, path[i].x, path[i].y, conf, outcome="fail", ball_speed_kmh=speed,
-                  end_x=_clip(g.x, PITCH_X), end_y=_clip(g.y, PITCH_Y))
+            event("pass", a.last, team, path[i].x, path[i].y, conf, a.track.side_confidence, outcome="fail",
+                  ball_speed_kmh=speed,
+                  end_x=_clip(g.x, PITCH_X), end_y=_clip(g.y, PITCH_Y), player=who)
             continue
         j = index[b.first]
         mate = b.track.team == team
-        event("pass", a.last, team, path[i].x, path[i].y, conf, ball_speed_kmh=speed,
-              outcome="success" if mate else "fail",
+        next_who = attribute(b.track, path[j], tracks)
+        event("pass", a.last, team, path[i].x, path[i].y, conf, a.track.side_confidence, ball_speed_kmh=speed,
+              outcome="success" if mate else "fail", player=who,
+              receiver=next_who if mate else None, interceptor=None if mate else next_who,
               end_x=_clip(path[j].x, PITCH_X), end_y=_clip(path[j].y, PITCH_Y))
     for i in outs:
         f = path[i].frame
         last = [s for s in sp if s.last < f and s.track.team]
         if not last:
             continue
-        event("out_of_play", f, last[-1].track.team, path[i].x, path[i].y, path[i].score)
+        event("out_of_play", f, last[-1].track.team, path[i].x, path[i].y, path[i].score,
+              last[-1].track.side_confidence)
     events.sort(key=lambda e: (e["frame"], e["type"]))
     for n, e in enumerate(events, start=1):
         e["id"] = f"v{n:05d}"
@@ -260,6 +324,7 @@ def detect(rows: list[dict]) -> tuple[list[dict], dict]:
         "teams": teams,
         "spells": len(sp),
         "events": {k: sum(1 for e in events if e["type"] == k) for k in ("pass", "shot", "out_of_play")},
+        "named": {k: sum(1 for e in events if e.get(k)) for k in ("player", "receiver", "interceptor")},
     }
     return events, summary
 

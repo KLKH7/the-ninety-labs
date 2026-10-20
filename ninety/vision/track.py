@@ -62,6 +62,8 @@ class Track:
     scores: list[float] = field(default_factory=list)
     team: str | None = None  # "home", "away" or None (not known)
     keeper: bool = False
+    # How firmly the side was decided, 0 to 1 (`assign_teams`): a score, not a probability.
+    side_confidence: float | None = None
 
     def predict(self, frame: int) -> tuple[float, float]:
         x, y = self.xy[-1]
@@ -220,18 +222,30 @@ def assign_teams(tracks: list[Track]) -> dict:
     away = 0 if votes > 0 else 1
     reason = f"deepest outfield player toward x = 105: colour {away} in {abs(votes)} more frames"
     names = {away: "away", 1 - away: "home"}
-    for t in tracks:
+    voting = len([o for o in by_frame.values() if {s for _, s in o} == {0, 1}])
+    # An outfield side rests on two decisions, so its confidence is the weaker: how much nearer the
+    # track's kit is to its own colour than to the other (0 halfway between, 1 on its own centre),
+    # and how one-sided the clip's vote on which colour is home was (0 split, 1 unanimous).
+    clip_margin = abs(votes) / voting if voting else 0.0
+    for t, c in meds:
         s = side[t.id]
         if s is not None:
             t.team = names[s]
+            own, other = (ca, cb) if s == 0 else (cb, ca)
+            d_own, d_other = _dist(c, own), _dist(c, other)
+            colour_margin = (d_other - d_own) / (d_other + d_own) if d_other + d_own else 0.0
+            t.side_confidence = round(min(colour_margin, clip_margin), 3)
+    # A keeper's side is the half he stands in: his confidence is how far from halfway, as a share
+    # of the half.
     for k in keepers:
         mx = sum(x for x, _ in k.xy) / len(k.xy)
         k.team = "away" if mx >= 52.5 else "home"
+        k.side_confidence = round(min(1.0, abs(mx - 52.5) / 52.5), 3)
     chroma = [[round(v, 3) for v in c] for c in (ca, cb)]
     return {
         "chromaticity": {"home": chroma[1 - away], "away": chroma[away]},
         "reason": reason,
-        "frames_voting": len([o for o in by_frame.values() if {s for _, s in o} == {0, 1}]),
+        "frames_voting": voting,
         "vote_margin": votes if away == 0 else -votes,
         "keepers": len(keepers),
         "unassigned": sum(1 for t in tracks if t.team is None),
