@@ -883,7 +883,8 @@ short and actionable. This file is public: no research sources, product names or
   as `rejected` (the claim is wrong) instead of `held` (it could not be checked); and an Analyst
   that failed, hung on an MCP call or replied with prose raised out of `live.run`, taking the
   template graphics down with it.
-- **Rule:** every fallback claimed in docs/eval/failure-table.md is a row produced by injecting
+- **Rule:** every fallback claimed in a failure table (docs/eval/failure-table-m1.md, and the
+  multi-agent workflow's docs/eval/failure-table.md) is a row produced by injecting
   that failure into the real path, asserted by a test with the expected outcome written in the
   test. A status is computed by `status_for`, never re-derived.
 - **Check:** `uv run pytest tests/test_failure_table.py`; removing the `live.run` fallback or
@@ -1144,3 +1145,19 @@ short and actionable. This file is public: no research sources, product names or
   quiet time.
 - **Check:** `uv run pytest tests/test_restarts.py -k every_kind`; `scripts/defect_sweep/restarts.py`
   reports `stuck_restarts`, which must be 0.
+
+### 123. An async client handed a sync credential signs in late and blocks the loop
+- **What happened:** the slice, the fact-checker evaluation and the Analyst evaluation each made
+  a sync `DefaultAzureCredential` and passed it to Foundry's async clients, and
+  `foundry.chat_client` made one by default. A sync credential fetches its token on the event
+  loop's thread, stalling every concurrent call. It fetches it only at the first model call,
+  after the evaluation has simulated its matches, by which time agents-live's five-minute OIDC
+  sign-in can have expired. The fact-checker evaluation lost 19 of 251 Judge calls, most likely to
+  this (not yet confirmed by a rerun). The workflow
+  (W1) had already fixed this for itself; the rest never took the fix.
+- **Rule:** every live run makes one aio credential (`credentials.new_credential`), signs in
+  (`credentials.sign_in`) before anything slow, and passes that object to the chat client and
+  every agent. A client factory takes no default credential.
+- **Check:** `tests/test_credentials.py`. Each site takes the token before it simulates, and
+  hands the same `SignedIn` credential to every client; deleting any `sign_in` turns its test
+  red. An AST check keeps `azure.identity.DefaultAzureCredential` out of the live modules.
