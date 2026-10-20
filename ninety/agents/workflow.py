@@ -469,7 +469,8 @@ class FactChecker(Executor):
             if draft is None or draft.status != "draft":
                 continue
             started = time.perf_counter()
-            checked = await fact_check(draft.claim, scope, run.models.judge, run.gate)
+            with telemetry.stage_span("fact_check", attempt=draft.attempt):
+                checked = await fact_check(draft.claim, scope, run.models.judge, run.gate)
             if checked.judge_seconds is not None:
                 run.step("judge", case.moment.id, ACTION[status_for(checked.verdict)],
                          time.perf_counter() - checked.judge_seconds, checked.verdict.category or "")

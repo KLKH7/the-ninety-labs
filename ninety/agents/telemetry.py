@@ -6,6 +6,10 @@ our own, so a run reads as football: `ninety.claim` around one claim's whole lif
 checks, rewrites) in the slice, `ninety.minute` around one minute of the workflow, and
 `ninety.fact_check` for each verdict, with the reasons a draft was rejected.
 
+`ninety.stage` spans time the live chain stage by stage (STAGES), so latency from an event to its
+graphic is read off the same traces in Application Insights, or in memory for
+docs/eval/latency-cost.md (ninety/eval/latency_cost.py).
+
 Prompt and reply text is recorded only with `content=True` (`--trace-content`): today it is
 synthetic match data, but once viewers type into the app their words must not reach the logs.
 """
@@ -35,6 +39,21 @@ def flush() -> None:
     force_flush = getattr(provider, "force_flush", None)
     if force_flush:
         force_flush()
+
+
+# The live chain in order: frames to detections, detections to events, events to stats, the Analyst,
+# the fact-checker (code checks and the Judge), and the cues the graphics draw.
+STAGES = ("detect", "events", "stats", "agents", "fact_check", "cue")
+
+
+@contextmanager
+def stage_span(stage: str, **attributes):
+    """One stage's work, timed: a `ninety.stage` span named by its `ninety.stage` attribute."""
+    if stage not in STAGES:
+        raise ValueError(f"unknown stage {stage!r}; stages: {', '.join(STAGES)}")
+    with tracer().start_as_current_span("ninety.stage") as span:
+        span.set_attributes({"ninety.stage": stage, **{f"ninety.{k}": v for k, v in attributes.items()}})
+        yield span
 
 
 @contextmanager

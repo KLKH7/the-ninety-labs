@@ -197,3 +197,18 @@ def test_found_about_a_tackle_or_pressure_is_not_read_as_a_pass():
     failed = {**tackle, "id": "e3", "type": "pass", "receiver": None, "intended": "a9", "outcome": "fail"}
     known["e3"] = failed
     assert not check(Claim("a4 finds h9.", ["e1", "e3"]), known).ok
+
+
+def test_an_ordinal_minute_must_be_the_cited_minute():
+    # "the 9th minute" was never read as a number, so any ordinal passed (lesson 95).
+    minute = CLOCK_EVENT["minute"]
+    suffix = {1: "st", 2: "nd", 3: "rd"}.get(minute, "th")
+    assert check(Claim(f"A pass in the {minute}{suffix} minute.", [CLOCK_EVENT["id"]]), KNOWN).ok
+    wrong = check(Claim(f"A pass in the {minute + 7}th minute.", [CLOCK_EVENT["id"]]), KNOWN)
+    assert not wrong.ok
+    assert wrong.reasons == [f"number {minute + 7}th is not a cited minute"]
+
+
+def test_an_ordinal_count_must_be_in_the_evidence():
+    verdict = check(Claim(f"{PASS['player']} plays his 97th pass.", [PASS["id"]]), KNOWN)
+    assert verdict.reasons == ["number 97th is not in the cited evidence"]

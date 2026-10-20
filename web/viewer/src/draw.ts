@@ -139,11 +139,35 @@ function drawTag(ctx: CanvasRenderingContext2D, cue: Cue, a: number) {
   ctx.restore();
 }
 
+/** The spoken description as a large caption for low-vision fans, sitting across the frame
+ * where the sound is (its `pan`), never off the edge. */
+function drawCaption(ctx: CanvasRenderingContext2D, cue: Cue, a: number, W: number, H: number) {
+  const pad = 24, size = Math.round(H / 18);
+  ctx.save();
+  ctx.globalAlpha = a;
+  ctx.font = `700 ${size}px ${FONT}`;
+  const lines = wrap(ctx, cue.text, W * 0.6);
+  const w = Math.max(...lines.map((l) => ctx.measureText(l).width)) + pad * 2;
+  const h = lines.length * size * 1.25 + pad * 1.5;
+  const centre = W / 2 + (cue.pan ?? 0) * (W / 2 - w / 2 - 40);
+  const x = Math.max(40, Math.min(W - w - 40, centre - w / 2));
+  const y = H - h - 48;
+  ctx.fillStyle = "rgba(0, 0, 0, 0.9)";
+  roundRect(ctx, x, y, w, h, 10);
+  ctx.fillStyle = cue.verified ? ACCENT : TAG;
+  roundRect(ctx, x, y, w, 6, 3);
+  ctx.fillStyle = INK;
+  ctx.textBaseline = "top";
+  lines.forEach((line, i) => ctx.fillText(line, x + pad, y + pad * 0.9 + i * size * 1.25));
+  ctx.restore();
+}
+
 export function drawCues(ctx: CanvasRenderingContext2D, cues: Cue[], o: DrawOptions) {
   const { width: W, height: H } = ctx.canvas;
   for (const cue of cues) {
     const a = presence(cue, o.t, o.reduceMotion);
     if (cue.anchor) drawTag(ctx, cue, a);
+    else if (cue.kind === "audio_description") drawCaption(ctx, cue, a, W, H);
     else if (cue.slot === "top_right") drawInsight(ctx, cue, a, W);
     else drawLowerThird(ctx, cue, a, W, H);
   }

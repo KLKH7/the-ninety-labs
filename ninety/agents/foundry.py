@@ -150,7 +150,7 @@ def challenger_agent(client: FoundryChatClient) -> Agent:
 
 
 def slice_agents(client: FoundryChatClient) -> list[Agent]:
-    """The thin slice's agents, in the order it calls them: the Analyst, then the Judge."""
+    """The slice's agents, in the order it runs them: the Analyst, then the Judge."""
     from ninety.agents.judge import judge_agent
 
     return [analyst_agent(client), judge_agent(client)]
@@ -169,9 +169,12 @@ def workflow_agents(client: FoundryChatClient) -> dict[str, Agent]:
 
 
 def build_agents(client: FoundryChatClient) -> list[Agent]:
-    """Every agent we publish, once each, built exactly as the live runs build them."""
-    agents = {a.name: a for a in [*slice_agents(client), *workflow_agents(client).values()]}
-    return list(agents.values())
+    """Every agent we publish, once each, built exactly as the live runs build them. The
+    Personalizer runs in its own service (ninety/personalizer/server.py)."""
+    from ninety.personalizer.core import personalizer_agent
+
+    agents = [*slice_agents(client), *workflow_agents(client).values(), personalizer_agent(client)]
+    return list({a.name: a for a in agents}.values())
 
 
 def chat_client(credential=None) -> FoundryChatClient:
