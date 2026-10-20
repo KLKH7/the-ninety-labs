@@ -131,11 +131,11 @@ celebration of a planted goal (h9 scores from 100, 30) on 12 seeds not used whil
 
 | | Now |
 |---|---:|
-| Frames with two bodies more than 5 cm into each other, mean over seeds | {MEAN} |
-| worst seed | {WORST} |
-| longest a goal | {LONGEST} |
-| Frames once all stand at their places, settled, until the first leaves | {GATHERED} |
-| The same count over a minute of open play from the same seeds | {OPEN} |
+| Frames with two bodies more than 5 cm into each other, mean over seeds | 0.9% |
+| worst seed | 3.2% |
+| longest a goal | 0.8 s |
+| Frames once all stand at their places, settled, until the first leaves | 0 of 193 |
+| The same count over a minute of open play from the same seeds | 0.35% |
 
 What remains comes from the last few arriving at a run beside a team-mate already in place: a
 shoulder's breadth between places leaves 5 cm to spare, and the engine's steering bends a run round
