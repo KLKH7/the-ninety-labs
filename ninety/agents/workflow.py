@@ -59,6 +59,7 @@ from ninety.agents.contracts import (
 )
 from ninety.agents.cues import TEMPLATE_TYPES, template_cues
 from ninety.agents.factcheck import Claim, Verdict, confidence_gate
+from ninety.agents.foundry import FOUNDRY_SCOPE, TOKEN_MARGIN_SECONDS, SignedIn  # noqa: F401  (one definition, lesson 69)
 from ninety.agents.judge import judge as judge_call
 from ninety.agents.ledger import InMemoryLedger, Ledger, Record, load_match
 from ninety.agents.replay import Replayer, ReplayMismatch, Turn, WorkflowRecording, judge_prompt
@@ -76,10 +77,6 @@ MAX_MOMENTS_PER_MINUTE = 3
 # Design: a live writer that has not answered in a minute is writing about a moment the broadcast
 # has moved past; its claim is held and the template stays. The Judge has its own timeout.
 MODEL_TIMEOUT_SECONDS = 60.0
-# The Foundry project's token scope, the default of azure-ai-projects' client configuration.
-FOUNDRY_SCOPE = "https://ai.azure.com/.default"
-# Refresh a kept token this long before it expires: a model call may take MODEL_TIMEOUT_SECONDS.
-TOKEN_MARGIN_SECONDS = 2 * MODEL_TIMEOUT_SECONDS
 INSIGHT_PERSONA = "analyst"  # the insight replaces this persona's template; the Personalizer does the rest
 
 MOMENT_ANALYST_INSTRUCTIONS = """You are the Analyst for a football broadcast. The request names a
@@ -669,33 +666,6 @@ def _unused(role: str):
         raise NotImplementedError(f"the {role} is not part of this workflow")
 
     return unused
-
-
-class SignedIn:
-    """An async credential that keeps each token it gets until shortly before it expires.
-
-    In agents-live, `azure/login` leaves the Azure CLI holding an OIDC client assertion that is
-    valid for five minutes; every token request after that fails (AADSTS700024, as the
-    Personalizer evaluation did 24 minutes in). A token itself lasts an hour or more, so a run
-    that signs in first and reuses its tokens never asks again within a run."""
-
-    def __init__(self, inner):
-        self.inner, self.tokens = inner, {}
-
-    async def get_token(self, *scopes: str, **kwargs):
-        token = self.tokens.get(scopes)
-        if token is None or token.expires_on - time.time() < TOKEN_MARGIN_SECONDS:
-            token = self.tokens[scopes] = await self.inner.get_token(*scopes, **kwargs)
-        return token
-
-    async def close(self) -> None:
-        await self.inner.close()
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *exc) -> None:
-        await self.close()
 
 
 def new_credential() -> SignedIn:
