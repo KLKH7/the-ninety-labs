@@ -289,7 +289,7 @@ async def run(args: argparse.Namespace) -> dict:
         except RegistryDrift:
             raise  # a changed prompt must never run under an old version's name
         except Exception as e:  # noqa: BLE001  sign-in or outage: the code lines still air
-            upgrades, unavailable = None, f"{type(e).__name__}: {e}"
+            upgrades, unavailable = None, type(e).__name__  # the type only: no endpoint or token
     voice = describe.Voice() if args.speech == "azure" else None
     track, refused = describe.describe(events, cues, voice or describe.estimate, upgrades)
     if voice is not None:

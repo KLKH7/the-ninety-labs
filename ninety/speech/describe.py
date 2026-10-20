@@ -57,8 +57,10 @@ LEAD_IN_S = 0.15  # design: the voice's silence before the first word
 VOICE = "en-GB-RyanNeural"
 LANG = "en-GB"
 SLOT = "audio"
-# The Describer model's own limit (ninety/agents/describer.py, INSTRUCTIONS), held by code: a
-# longer line is refused rather than trusted to the schedule, which shortens only for a line behind.
+# design: the Describer model's own limit (ninety/agents/describer.py, INSTRUCTIONS), held by code.
+# One short sentence a fan can take in between plays; at WORDS_PER_SECOND it is about 8 s of voice.
+# A longer line is refused rather than trusted to the schedule, which shortens only for a line
+# behind it, so a long model line with nothing after it would otherwise be read in full.
 MODEL_MAX_WORDS = 20
 # Quotes too: an escaped quote can never close an attribute, wherever the builder puts the text.
 QUOTES = {'"': "&quot;", "'": "&apos;"}

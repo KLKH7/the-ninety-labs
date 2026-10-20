@@ -33,7 +33,10 @@ from ninety.agents.contracts import Describe, Description, Judge, status_for
 from ninety.agents.factcheck import MIN_CONFIDENCE, Claim, check
 from ninety.match.facts import compact
 
-# As the Judge's own (ninety/agents/judge.py). The code line is on the schedule either way.
+# design: the model gets the Judge's own budget (ninety/agents/judge.py, 15 s). It is not the 2 s
+# the track allows a line to lag its event: the model and the Judge run before the track is
+# scheduled (ninety/e2e.py awaits them), so this bounds how long building the bundle can wait on
+# them, at most this plus the Judge's own timeout and retry per verified moment.
 MODEL_TIMEOUT_S = 15.0
 
 INSTRUCTIONS = """You are the audio describer for a football broadcast, speaking to blind and
@@ -79,7 +82,11 @@ async def upgrades(events: Sequence[dict], cues: Sequence[dict], model: Describe
 
     Only a verified cue is a verified moment: the model is never asked about a draft, a held or a
     rejected claim. It is given the claim's last cited event as EVENT and the others as AROUND, and
-    never an unsure detection. All calls run at once; none delays the code track."""
+    never an unsure detection. The moments are asked concurrently, but the caller awaits them all
+    before it schedules the track: with a live model this is what building the track waits on.
+
+    A failure is recorded by its type only (never the message), so no endpoint, tenant or token
+    from an Azure error can reach audio.json or manifest.json."""
     by_id = {e["id"]: e for e in events}
     asks = []
     for cue in cues:
@@ -97,7 +104,7 @@ async def upgrades(events: Sequence[dict], cues: Sequence[dict], model: Describe
         try:
             answer = await asyncio.wait_for(model(event, around), timeout_s)
         except Exception as e:  # noqa: BLE001  any failure keeps the code line; recorded, not hidden
-            problem = f"model unavailable: {type(e).__name__}: {e}"
+            problem = f"model unavailable: {type(e).__name__}"
         else:
             problem = await fact_check(answer.text, [*around, event])
             text = answer.text if problem is None else None
@@ -105,7 +112,8 @@ async def upgrades(events: Sequence[dict], cues: Sequence[dict], model: Describe
         return cue_id, text, {"cue": cue_id, "ms": ms, "problem": problem}
 
     async def fact_check(text: str, cited: list[dict]) -> str | None:
-        """None if the line passes the code checks and then the Judge, else why it does not."""
+        """None if the line passes the code checks and then the Judge, else why it does not. The
+        confidence gate has already run: a moment resting on an unsure detection is never asked."""
         evidence = [compact(e) for e in cited]
         claim = Claim(text, [e["id"] for e in evidence])
         verdict = check(claim, {e["id"]: e for e in evidence})
@@ -118,7 +126,7 @@ async def upgrades(events: Sequence[dict], cues: Sequence[dict], model: Describe
             verdict = await judge(claim, evidence)
             status = status_for(verdict)
         except Exception as e:  # noqa: BLE001  fail closed: an unjudged line never airs
-            return f"judge unavailable: {type(e).__name__}: {e}"
+            return f"judge unavailable: {type(e).__name__}"
         return None if status == "verified" else f"judge {status}: " + "; ".join(verdict.reasons)
 
     done = await asyncio.gather(*(ask(*a) for a in asks))
