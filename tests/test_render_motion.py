@@ -19,6 +19,7 @@ from ninety.render.scene import (
     PLANT_AHEAD_MAX,
     Gait,
     Look,
+    _step_m,
     body_parts,
     contacts,
     hold_at,
@@ -340,3 +341,110 @@ def test_a_keeper_holding_the_ball_has_his_hands_on_it():
             for name in ("head", "hand_l", "hand_r", "foot_l", "foot_r"):
                 u, v = cam.project(m[name])
                 assert box[0] - 3 <= u <= box[2] + 3 and box[1] - 3 <= v <= box[3] + 4, (z, name, (u, v), box)
+
+
+def _limb_cap(v):
+    """The most a marker may move relative to the body in one frame at speed v (m/s): a runner's
+    swinging foot travels from behind him to ahead of him at about his running speed, so 1.6 times
+    it leaves room for its peak, and 3.5 m/s more for a quick step from a standstill (design). The
+    jumps this caps were 0.8 to 1.05 m in a frame, 20 to 26 m/s, which no limb does in a stride."""
+    return (1.6 * v + 3.5) / FPS
+
+
+def _draw(frames, events=None):
+    """Every player of engine-shaped frames drawn as clip.py draws them: gait, touches (with the
+    match's events), held balls, labels, then the mesh's markers."""
+    looks = {pl["id"]: Look(pl["id"], "home", "CM", 1.84, 1.0, "#c68642", "#1b1410")
+             for pl in frames[0]["players"]}
+    gaits = {pid: Gait() for pid in looks}
+    mine, held, prev = contacts(frames, events), holds(frames), {}
+    out = {pid: [] for pid in looks}
+    for fi, fr in enumerate(frames):
+        b = fr["ball"]
+        ball = (b["x"], b["y"], b["z"])
+        for pl in fr["players"]:
+            g = gaits[pl["id"]]
+            px, py = prev.get(pl["id"], (pl["x"], pl["y"]))
+            prev[pl["id"]] = (pl["x"], pl["y"])
+            dist = math.hypot(pl["x"] - px, pl["y"] - py)
+            stride = 2 * _step_m(math.hypot(pl["vx"], pl["vy"]))
+            g.phase = (g.phase + 2 * math.pi * dist / stride) % (2 * math.pi)
+            g.heading, g.action, g.speed = pl["heading"], pl["action"], math.hypot(pl["vx"], pl["vy"])
+            touch_at(g, mine.get(pl["id"], []), fi, 1.84, FPS, pl["x"], pl["y"])
+            hold_at(g, held.get(pl["id"], []), fi, ball, 1.84, FPS)
+            body_parts(pl["x"], pl["y"], looks[pl["id"]], g, ball)
+            pose = mesh_pose(g, pl["x"], pl["y"], 0.0)
+            m = pose_markers(pose, g.heading, 1.84)
+            rel = {k: (v[0] - pl["x"], v[1] - pl["y"], v[2]) for k, v in m.items()}
+            out[pl["id"]].append((pose, m, rel, g.speed))
+    return out
+
+
+def _jumps(drawn):
+    """Per frame, the largest move of the head, a hand or a foot relative to the body, against the cap."""
+    worst = []
+    for (_, _, a, va), (_, _, b, vb) in zip(drawn, drawn[1:], strict=False):
+        mv = max(math.dist(a[k], b[k]) for k in ("head", "hand_l", "hand_r", "foot_l", "foot_r"))
+        worst.append((mv, _limb_cap(max(va, vb))))
+    return worst
+
+
+def _engine_action(v):
+    return "stand" if v <= 0.5 else "walk" if v <= 4.0 else "run"  # engine.pose's thresholds
+
+
+def test_setting_off_running_and_pulling_up_moves_no_limb_in_a_jump():
+    """Old: the stride planted each foot a quarter of a cycle away from where the gait has it on the
+    grass, switched the stand pose and the walk's short stride on and off at fixed speeds, and
+    dropped plants whole, so a foot jumped up to a metre in one frame at every landing and lift
+    off. Now each marker moves at most _limb_cap in a frame, from a standstill up to a sprint and
+    back down."""
+    profile = [0.0] * 15 + [min(7.0, 0.1 * i) for i in range(1, 71)] + [7.0] * 25
+    profile += [max(0.0, 7.0 - 0.1 * i) for i in range(1, 71)] + [0.0] * 15
+    x, frames = 20.0, []
+    for v in profile:
+        x += v / FPS
+        frames.append({"ball": {"x": 80.0, "y": 50.0, "z": 0.0, "vx": 0.0, "vy": 0.0}, "possessor": None,
+                       "players": [{"id": "h1", "x": x, "y": 30.0, "vx": v, "vy": 0.0, "heading": 0.0,
+                                    "action": _engine_action(v), "dive": 0.0}]})
+    jumps = _jumps(_draw(frames)["h1"])
+    over = [(i, round(mv, 3), round(cap, 3)) for i, (mv, cap) in enumerate(jumps) if mv > cap]
+    assert not over, over
+
+
+def test_a_tackle_puts_the_tacklers_foot_on_the_ball_and_neither_body_jumps():
+    """The engine's tackle pokes the ball loose with no pose of its own (engine.poke); old, the
+    tackler ran in with no leg near the ball and the tackled carrier jumped into a stored pose and
+    out of it. Now the tackle event's frame has the tackler's foot on the ball, reached with a
+    lunge, and neither body moves a limb in a jump."""
+    frames, poke = [], 30
+    tx, cx, bx0 = 44.0, 52.0, 0.0
+    for i in range(55):
+        tv = 4.2 if i < poke else max(2.5, 4.2 - 0.1 * (i - poke))
+        cv = 2.0 if i < poke - 6 else max(0.3, 2.0 - 0.25 * (i - poke + 6))
+        tx += tv / FPS
+        cx -= cv / FPS
+        if i < poke:
+            ball = {"x": cx - 0.4, "y": 30.25, "z": 0.0, "vx": -cv, "vy": 0.0}
+        else:
+            t = (i - poke + 1) / FPS
+            ball = {"x": bx0 - 1.5 * t, "y": 30.25 - 4.7 * t, "z": 0.0, "vx": -1.5, "vy": -4.7}
+        if i == poke - 1:
+            bx0 = ball["x"]
+        frames.append({"frame": 1000 + i, "ball": ball, "possessor": "a1" if i < poke else None, "players": [
+            {"id": "h1", "x": tx, "y": 30.0, "vx": tv, "vy": 0.0, "heading": 0.0,
+             "action": _engine_action(tv), "dive": 0.0},
+            {"id": "a1", "x": cx, "y": 30.3, "vx": -cv, "vy": 0.0, "heading": math.pi,
+             "action": _engine_action(cv), "dive": 0.0},
+        ]})
+    events = [{"type": "tackle", "frame": 1000 + poke, "player": "h1", "receiver": "a1"}]
+    drawn = _draw(frames, events)
+    _, m, _, _ = drawn["h1"][poke]
+    a = frames[poke - 1]["ball"]
+    centre = (a["x"], a["y"], BALL_RADIUS)  # the poke met the ball where it lay as the tick began
+    reach = min(math.dist(m[f], centre) for f in ("foot_l", "foot_r"))
+    assert reach < BALL_RADIUS + 0.15, (reach, m["foot_l"], m["foot_r"])
+    for who in ("h1", "a1"):
+        jumps = enumerate(_jumps(drawn[who]))
+        over = [(i, round(mv, 3), round(cap, 3)) for i, (mv, cap) in jumps if mv > cap]
+        assert not over, (who, over)

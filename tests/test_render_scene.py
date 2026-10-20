@@ -38,8 +38,9 @@ def test_body_stands_on_the_pitch_and_is_as_tall_as_the_player():
 
 
 def test_a_press_lifts_the_foot_and_a_turn_does_not_snap():
-    jog = body_parts(0, 0, LOOK, Gait(action="walk", speed=3.0, phase=3 * math.pi / 2))
-    stroll = body_parts(0, 0, LOOK, Gait(action="walk", speed=1.0, phase=3 * math.pi / 2))
+    # At phase pi/2 the left foot trails, coming through (meshpose.gait: the right foot is forward).
+    jog = body_parts(0, 0, LOOK, Gait(action="walk", speed=3.0, phase=math.pi / 2))
+    stroll = body_parts(0, 0, LOOK, Gait(action="walk", speed=1.0, phase=math.pi / 2))
     ankle = lambda ps: next(p for p in ps if p["n"] == "shin_l")["b"][2]  # noqa: E731
     assert ankle(jog) > ankle(stroll) + 0.05
     turned = turn_toward(0.0, 2.0, 1 / 25)

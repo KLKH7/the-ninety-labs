@@ -982,7 +982,9 @@ short and actionable. This file is public: no research sources, product names or
   mesh (a3d228e) every stored pose bent both elbows about 80 degrees, so the forearms were held out
   in front whatever the player did; and since Oct 15 the boards behind the goals had their print
   flipped and read mirrored. No test looked at any of it; the owner found all four by watching
-  review clips.
+  review clips. Measuring every limb frame by frame then found a fifth, in every run since #146: the
+  stride planted each foot a quarter of a cycle away from where the gait has it on the grass, so on
+  about one player-frame in five a foot jumped 0.3 to 1 m at a landing or lift-off.
 - **Rule:** a change to how a body moves is tested over the frames around the event, not only on
   it: the swing before, the follow-through after, the rest pose's joints, and how far anything
   moves in one frame. Every printed surface has a test that it reads left to right from each camera
@@ -990,7 +992,9 @@ short and actionable. This file is public: no research sources, product names or
   merge.
 - **Check:** `tests/test_render_motion.py` (arms hang and swing, the kick's backswing and
   follow-through, the lunge's pace, the keeper's hands on the ball) and
-  `tests/test_render_stadium.py` each fail on `e50440c` and pass with the fix.
+  `tests/test_render_stadium.py` each fail on `e50440c` and pass with the fix, and so do
+  `test_setting_off_running_and_pulling_up_moves_no_limb_in_a_jump` and the tackle test, which cap
+  how far any limb moves relative to the body in one frame.
 
 ### 106. Look for an open pull request on the same task before building it
 - **What happened:** a session was handed "build the Personalizer over A2A" and built it, tests and

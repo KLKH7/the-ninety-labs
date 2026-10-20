@@ -260,7 +260,7 @@ def render_clip(
         clip["scorebug_px"] = info["bugRect"]
         director = Director(p.camera, p.width, p.height, p.fps, seed, cuts=p.camera_cut)
         gaits = {lk.id: Gait() for lk in looks}
-        touches = contacts(frames)
+        touches = contacts(frames, match.events)
         held = holds(frames)
         prev_xy: dict[str, tuple[float, float]] = {}
         prev_cam: Camera | None = None

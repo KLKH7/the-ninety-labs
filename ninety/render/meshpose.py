@@ -40,7 +40,13 @@ _MOVES2 = tuple((a, b) for a in (-1, 0, 1) for b in (-1, 0, 1) if (a, b) != (0, 
 PLANT_FOOT = 0.12  # the foot flat on the grass
 STRIKE_FOOT = 0.4  # the instep: toes pointed, as the stored strike pose has them
 PLANT_GIVE_UP = 0.45
-FLOOR_SLACK = 0.02  # how far under the grass a blended foot may dip before it is put back on it
+FLOOR_SLACK = 0.02
+# Between these speeds (m/s) the stand pose and the stride are blended (design): the engine's stand
+# and walk meet at 0.5 m/s, and a switch there made the legs jump.
+STAND_BLEND = (0.25, 0.9)
+# Between these speeds (m/s) the walk's stride (walkScale) grows to the full stride (design, either
+# side of the asset's fullStrideSpeed, 2.2 m/s, where the stride used to switch at once).
+STRIDE_GROW = (1.6, 2.8)  # how far under the grass a blended foot may dip before it is put back on it
 # The trunk's lean toward a ball on the chest or the head, shared by the lower spine and the neck.
 LEAN_X = (-0.6, -0.4, -0.2, 0.0, 0.2, 0.4, 0.6)
 LEAN_Z = (-0.4, -0.2, 0.0, 0.2, 0.4)
@@ -432,7 +438,7 @@ def _upper(pose: dict, heading: float, height_m: float) -> dict:
             angles = scale(base, mag if mag > 0.35 else 0.35)
         else:
             angles = base
-    elif action == "stand" or speed < data["standSpeed"]:
+    elif speed < STAND_BLEND[0] or (action == "stand" and speed < data["standSpeed"]):
         angles = dict_angles(poses["stand"])
     else:
         # A strike or a touch with the foot or thigh is taken in stride: the legs keep the gait
@@ -440,9 +446,16 @@ def _upper(pose: dict, heading: float, height_m: float) -> dict:
         full = data["fullStrideSpeed"]
         arm_t = 1.0 if action == "run" else _clamp((speed - full) / (data["armRunSpeed"] - full), 0.0, 1.0)
         angles = gait(math.sin(pose.get("phase") or 0.0), poses["run"], poses["walk"], arm_t)
-        if action != "run" and speed < full:
-            legs = scale({k: v for k, v in angles.items() if k not in _ARMS}, data["walkScale"], keep_z=True)
+        if action != "run" and speed < STRIDE_GROW[1]:
+            # A walk's short stride grows into the full one through a jog (STRIDE_GROW), not at once.
+            t = _clamp((speed - STRIDE_GROW[0]) / (STRIDE_GROW[1] - STRIDE_GROW[0]), 0.0, 1.0)
+            factor = data["walkScale"] + (1.0 - data["walkScale"]) * t
+            legs = scale({k: v for k, v in angles.items() if k not in _ARMS}, factor, keep_z=True)
             angles.update(legs)
+        if action != "run" and speed < STAND_BLEND[1]:
+            # Setting off and pulling up, the stride grows out of the stance and back into it.
+            t = (speed - STAND_BLEND[0]) / (STAND_BLEND[1] - STAND_BLEND[0])
+            angles = _blend(dict_angles(poses["stand"]), angles, t)
     if lead:
         # The hips lead a turn and the chest follows: Root turns the hips and legs, the lower
         # spine turns the chest back to where the engine has it face.
@@ -480,7 +493,9 @@ def pose_angles(pose: dict, heading: float, height_m: float) -> dict:
         target = _to_object(x, y, heading, height_m, plant[0], plant[1], pz, lift)
         planted, err = _leg(angles, side, target, PLANT_FOOT, twist, f"foot_{side}", True)
         if err <= PLANT_GIVE_UP:
-            angles = planted
+            # A stride's plant comes and goes with a weight (scene.PLANT_EASE_FRAMES).
+            w = float(plant[4]) if len(plant) > 4 and plant[4] is not None else 1.0
+            angles = _blend(angles, planted, w)
     touch = pose.get("touch")
     if touch and touch.get("w", 0.0) > 0.0:
         part, side, at = touch["part"], touch.get("side", "r"), touch["at"]
@@ -576,6 +591,15 @@ def _arm(angles: dict, side: str, sign: float, target, head: list, rot: list) ->
                 best = (err, t, params)
         steps = [v / 2 for v in steps]
     return best[1]
+
+
+def gait_foot(pose: dict, heading: float, height_m: float, side: str,
+              with_height: bool = False) -> tuple[float, ...]:
+    """Where the stride alone puts a foot on the pitch, (x, y) or (x, y, height of the sole): where
+    scene.py plants it, and where a step from the stride starts."""
+    p = _point(_upper(pose, heading, height_m), f"foot_{side}")
+    w = to_world(pose.get("x", 0.0), pose.get("y", 0.0), heading, height_m, p)
+    return (w[0], w[1], max(0.0, w[2])) if with_height else (w[0], w[1])
 
 
 def arm_points(pose: dict, heading: float, height_m: float) -> dict[str, list[float]]:

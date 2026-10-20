@@ -14,4 +14,7 @@ docs/decisions/0001-synthetic-data.md.
 # 0.4.1: arms hang standing and swing opposite the legs; a kick swings back and through the ball;
 # a lunge recovers over 0.28 s; a keeper's hands hold the ball; the boards behind the goals read
 # the right way round; the stands have walls and roofs that close the bowl.
-RENDERER_VERSION = "0.4.1"
+# 0.4.2: the stride plants each foot where the gait has it on the grass and takes and gives back
+# the plant over three frames; stand, walk and jog blend by speed; a tackle's poke is drawn as the
+# tackler's foot on the ball; no limb jumps in a frame (#150, after 0.4.1's review clips).
+RENDERER_VERSION = "0.4.2"

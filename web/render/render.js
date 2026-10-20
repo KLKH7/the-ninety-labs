@@ -668,6 +668,8 @@ const PLANT_FOOT = 0.12;
 const STRIKE_FOOT = 0.4;
 const PLANT_GIVE_UP = 0.45;
 const FLOOR_SLACK = 0.02;
+const STAND_BLEND = [0.25, 0.9]; // m/s: stand pose blended into the stride (meshpose.STAND_BLEND)
+const STRIDE_GROW = [1.6, 2.8]; // m/s: the walk's stride grows to the full stride (meshpose.STRIDE_GROW)
 const LEAN_X = [-0.6, -0.4, -0.2, 0.0, 0.2, 0.4, 0.6];
 const LEAN_Z = [-0.4, -0.2, 0.0, 0.2, 0.4];
 const LEAN_STEP = [0.1, 0.1];
@@ -976,17 +978,23 @@ function upperAngles(player, pose, heading, height) {
       if ((pose.dive || 0) < 0) angles = mirrorPose(angles);
       angles = scalePose(angles, mag > 0.35 ? mag : 0.35, false);
     }
-  } else if (action === 'stand' || speed < player.standSpeed) {
+  } else if (speed < STAND_BLEND[0] || (action === 'stand' && speed < player.standSpeed)) {
     angles = copyPose(poses.stand);
   } else {
     // A strike or a touch with the foot or thigh is taken in stride.
     const full = player.fullStrideSpeed;
     const armT = action === 'run' ? 1 : Math.min(Math.max((speed - full) / (player.armRunSpeed - full), 0), 1);
     angles = gaitPose(Math.sin(pose.phase || 0), poses.run, poses.walk, armT);
-    if (action !== 'run' && speed < full) {
+    if (action !== 'run' && speed < STRIDE_GROW[1]) {
+      // A walk's short stride grows into the full one through a jog (meshpose.STRIDE_GROW).
+      const t = Math.min(Math.max((speed - STRIDE_GROW[0]) / (STRIDE_GROW[1] - STRIDE_GROW[0]), 0), 1);
       const legs = {};
       for (const [key, v] of Object.entries(angles)) if (!ARMS.includes(key)) legs[key] = v;
-      Object.assign(angles, scalePose(legs, player.walkScale, true));
+      Object.assign(angles, scalePose(legs, player.walkScale + (1 - player.walkScale) * t, true));
+    }
+    // Setting off and pulling up, the stride grows out of the stance and back into it.
+    if (action !== 'run' && speed < STAND_BLEND[1]) {
+      angles = blendPose(copyPose(poses.stand), angles, (speed - STAND_BLEND[0]) / (STAND_BLEND[1] - STAND_BLEND[0]));
     }
   }
   if (lead) {
@@ -1023,7 +1031,8 @@ function anglesFor(player, pose, heading, height) {
     const pz = plant.length > 3 ? plant[3] : 0;
     const target = toObject(x, y, heading, height, plant[0], plant[1], pz, lift);
     const [planted, err] = searchLeg(angles, side, target, PLANT_FOOT, twist, 'foot_' + side, true, player);
-    if (err <= PLANT_GIVE_UP) angles = planted;
+    // A stride's plant comes and goes with a weight (scene.PLANT_EASE_FRAMES).
+    if (err <= PLANT_GIVE_UP) angles = blendPose(angles, planted, plant.length > 4 && plant[4] != null ? plant[4] : 1);
   }
   const touch = pose.touch;
   if (touch && touch.w > 0) {
