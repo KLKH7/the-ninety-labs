@@ -1434,7 +1434,7 @@ short and actionable. This file is public: no research sources, product names or
   `test_the_viewpoint_changes_no_faster_than_a_broadcast_and_never_flickers`,
   `test_a_pan_eases_in_and_out`); each fails on the 0.5.0 director.
 
-### 142. Build a media branch from an empty tree, and look at what it holds before pushing
+### 150. Build a media branch from an empty tree, and look at what it holds before pushing
 - **What happened:** review clips for the camera pull request went on a new orphan branch made by
   `git checkout --orphan`, which keeps the whole working tree staged. The `git rm` meant to empty
   it refused, but the shell line went on past it (`;` after `&&`), so the push carried a copy of
