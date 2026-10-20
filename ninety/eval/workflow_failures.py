@@ -34,7 +34,7 @@ import logging
 import socket
 import sys
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -55,6 +55,7 @@ OUT_JSON = ROOT / "docs" / "eval" / "failure-table.json"
 MINUTE = 2
 MAIN = "v00001"  # the M1 clip's confident completed pass in minute 2 (confidence 0.80)
 SIDE = "v00005"  # a second completed pass in the same minute, offered as evidence
+SEEDS = (21, 33)  # the held-out seeds (lesson 11): the live run's other two grounds
 UNSURE = 0.3  # the low-confidence row's confidence for SIDE: below MIN_CONFIDENCE
 JUDGE_TIMEOUT_S = 0.05  # production is 15 s (judge.judge); short here so the row runs in a blink
 HANG_S = 60.0  # longer than any timeout here: a call that never answers
@@ -112,12 +113,50 @@ def personalizer_down(agent) -> dict:
 
 
 @dataclass(frozen=True)
+class Ground:
+    """Where a scenario runs: a match, its events, and two completed passes in the minute (the
+    moment's main event and a second one offered as evidence)."""
+
+    match: str
+    events: tuple[dict, ...]
+    main: str
+    side: str
+
+
+def detections(ground: Ground) -> bool:
+    """Whether the ground's events are detections, with a confidence: the M1 clip's are; a held-out
+    seed's are the simulator's stand-ins, which have none."""
+    return all(e.get("source") != "truth" for e in ground.events)
+
+
+def applicable(ground: Ground) -> list[Scenario]:
+    """The scenarios a ground can run: the low-confidence row needs detections to be unsure of."""
+    return [s for s in SCENARIOS if detections(ground) or not s.unsure_side]
+
+
+def m1_ground() -> Ground:
+    events, _, _ = workflow.detected_events(match_server.DETECTED[detected.M1_CLIP]())
+    return Ground(detected.M1_CLIP, tuple(events), MAIN, SIDE)
+
+
+def seed_ground(seed: int) -> Ground:
+    """A held-out seed's minute: its first two completed passes, the simulator's events."""
+    from ninety.match.facts import compact
+
+    events = workflow.simulated_events(seed, match_server.MINUTES)
+    passes = [e["id"] for e in events if compact(e)["minute"] == MINUTE and e["type"] == "pass"
+              and e.get("outcome") == "success"]
+    if len(passes) < 2:
+        raise ValueError(f"seed {seed}: fewer than two completed passes in minute {MINUTE}")
+    return Ground(match_server.match_id(seed), tuple(events), passes[0], passes[1])
+
+
+@dataclass(frozen=True)
 class Scenario:
     name: str
     injected: str  # what failed, in words
-    # Changes to the M1 clip's events (event id -> confidence) and to the models, from a base set.
-    confidence: dict[str, float] = field(default_factory=dict)
-    tactician_cites: str = MAIN
+    unsure_side: bool = False  # the second pass is detected at UNSURE confidence
+    cites_side: bool = False  # the Tactician's claim is about the second pass
     override: Callable[[JudgeAgent], dict] = lambda agent: {}
     judge_hangs: bool = False
     claim: str = "held"  # how the moment's claim must end
@@ -134,60 +173,72 @@ SCENARIOS = [
     Scenario("low confidence",
              f"the detector reports the event the Tactician cites at confidence {UNSURE}, "
              f"below {MIN_CONFIDENCE}",
-             confidence={SIDE: UNSURE}, tactician_cites=SIDE),
+             unsure_side=True, cites_side=True),
 ]
 
 
-def events_for(scenario: Scenario) -> list[dict]:
-    events, _, _ = workflow.detected_events(match_server.DETECTED[detected.M1_CLIP]())
-    return [{**e, "confidence": scenario.confidence.get(e["id"], e.get("confidence"))} for e in events]
+def events_for(scenario: Scenario, ground: Ground | None = None) -> list[dict]:
+    ground = ground or m1_ground()
+    return [{**e, "confidence": UNSURE} if scenario.unsure_side and e["id"] == ground.side else dict(e)
+            for e in ground.events]
 
 
-def models_for(scenario: Scenario, known: dict[str, dict]) -> tuple[Models, JudgeAgent]:
+def models_for(
+    scenario: Scenario, known: dict[str, dict], ground: Ground | None = None
+) -> tuple[Models, JudgeAgent]:
+    ground = ground or m1_ground()
     agent = JudgeAgent(hang=scenario.judge_hangs)
+    cited = ground.side if scenario.cites_side else ground.main
     replies = {
-        "analyst": [picks(MAIN, [MAIN, SIDE])],
-        "tactician": [reply(claim_on(scenario.tactician_cites, known))],
+        "analyst": [picks(ground.main, [ground.main, ground.side])],
+        "tactician": [reply(claim_on(cited, known))],
         "challenger": ['{"agree": true}'],
     }
     judge = functools.partial(judge_call, agent, timeout_seconds=JUDGE_TIMEOUT_S)
     return Models.scripted(replies, judge=judge, **scenario.override(agent)), agent
 
 
-def run(scenario: Scenario) -> dict:
+def run(scenario: Scenario, ground: Ground | None = None) -> dict:
     """One row: run the minute with the failure injected, and record what the viewer would see."""
     from ninety.match.facts import compact
 
-    events = events_for(scenario)
+    ground = ground or m1_ground()
+    events = events_for(scenario, ground)
     known = {e["id"]: compact(e) for e in workflow.agent_events(events)}
-    models, agent = models_for(scenario, known)
+    models, agent = models_for(scenario, known, ground)
 
     async def go():
         try:
-            return await workflow.run_workflow(models, events, MINUTE, detected.M1_CLIP, personalize=True)
+            return await workflow.run_workflow(models, events, MINUTE, ground.match, personalize=True)
         finally:
             if isinstance(models.personalizer, RemotePersonalizer):
                 await models.personalizer.close()
 
-    return row(scenario, asyncio.run(go()), agent.asked)
+    return row(scenario, asyncio.run(go()), agent.asked, ground)
 
 
-def injection(scenario: Scenario, counter: list[int], known: dict[str, dict]) -> Callable[[Models], Models]:
+def injection(scenario: Scenario, counter: list[int], known: dict[str, dict],
+              ground: Ground) -> Callable[[Models], Models]:
     """For --live: the scenario's failure in place of the live model, every Judge call counted. A
-    claim on the unsure detection is injected at the Tactician: a live model would not reliably
-    cite it, and the row is about what the gate does when one does."""
+    claim on the unsure detection is injected at the Analyst (the moment that offers it) and the
+    Tactician (the claim): live models would not reliably cite it, and the row is about what the
+    gate does when one does."""
     from dataclasses import replace
 
     def inject(models: Models) -> Models:
         agent = JudgeAgent(hang=True)
         swapped = scenario.override(agent)
-        if scenario.tactician_cites != MAIN:
-            cited = reply(claim_on(scenario.tactician_cites, known))
+        if scenario.cites_side:
+            moment = picks(ground.main, [ground.main, ground.side])
+            cited = reply(claim_on(ground.side, known))
+
+            async def analyst(prompt: str) -> str:
+                return moment
 
             async def tactician(prompt: str) -> str:
                 return cited
 
-            swapped = {**swapped, "tactician": tactician}
+            swapped = {**swapped, "analyst": analyst, "tactician": tactician}
         judge = (functools.partial(judge_call, agent, timeout_seconds=JUDGE_TIMEOUT_S)
                  if scenario.judge_hangs else models.judge)
 
@@ -200,24 +251,34 @@ def injection(scenario: Scenario, counter: list[int], known: dict[str, dict]) ->
     return inject
 
 
-async def live_rows() -> list[dict]:
-    """Every scenario with the published agents: one live minute each (agents-live)."""
+async def live_rows(seeds: tuple[int, ...] = SEEDS) -> list[list[dict]]:
+    """Every scenario with the published agents, one live minute each (agents-live): on the M1
+    clip and on each held-out seed. One credential, signed in before the seeds are simulated (a
+    simulation can outlast agents-live's five-minute sign-in), serves every minute."""
+    from ninety.agents import credentials
     from ninety.match.facts import compact
 
-    out = []
-    for scenario in SCENARIOS:
-        events, counter = events_for(scenario), [0]
-        known = {e["id"]: compact(e) for e in workflow.agent_events(events)}
-        result, *_ = await workflow.run_live(
-            lambda events=events: events, MINUTE, detected.M1_CLIP, False, False, trace_to="none",
-            personalize=True, inject=injection(scenario, counter, known),
-        )
-        out.append(row(scenario, result, counter[0]))
-    return out
+    tables = []
+    async with credentials.new_credential() as credential:
+        await credentials.sign_in(credential)
+        grounds = [m1_ground(), *(seed_ground(s) for s in seeds)]
+        for ground in grounds:
+            out = []
+            for scenario in applicable(ground):
+                events, counter = events_for(scenario, ground), [0]
+                known = {e["id"]: compact(e) for e in workflow.agent_events(events)}
+                result, *_ = await workflow.run_live(
+                    lambda events=events: events, MINUTE, ground.match, False, False, trace_to="none",
+                    personalize=True, inject=injection(scenario, counter, known, ground),
+                    credential=credential,
+                )
+                out.append(row(scenario, result, counter[0], ground))
+            tables.append(out)
+    return tables
 
 
-def row(scenario: Scenario, result, judge_asked: int) -> dict:
-    review = next((r for r in result.reviews if r.moment_id == f"m-{MAIN}"), None)
+def row(scenario: Scenario, result, judge_asked: int, ground: Ground) -> dict:
+    review = next((r for r in result.reviews if r.moment_id == f"m-{ground.main}"), None)
     templates = sorted(c["id"] for c in result.cues if c["kind"] != "insight")
     insights = [c for c in result.cues if c["kind"] == "insight"]
     fallback = [f"{s.role} {s.action}: {s.detail}".rstrip(": ") for s in result.trace
@@ -225,6 +286,8 @@ def row(scenario: Scenario, result, judge_asked: int) -> dict:
     verdict = review.primary if review else None
     return {
         "scenario": scenario.name,
+        "match": ground.match,
+        "unsure": [ground.side] if scenario.unsure_side else [],
         "injected": scenario.injected,
         "status": review.status if review else "none",
         "category": verdict.category if verdict else None,
@@ -243,7 +306,7 @@ def row(scenario: Scenario, result, judge_asked: int) -> dict:
 def recovered(row: dict, base: dict) -> dict[str, bool]:
     """Each part of recovery, checked against the failure-free run."""
     lost = set(base["templates"]) - set(row["templates"])
-    gated = {i for i in lost if any(i.startswith(f"cue-{e}") for e in UNSURE_EVENTS)}
+    gated = {i for i in lost if any(i.startswith(f"cue-{e}-") for e in row["unsure"])}
     return {
         "templates stay": lost == gated and set(row["templates"]) <= set(base["templates"]),
         "nothing unverified airs": all(i["verified"] for i in row["insights"]),
@@ -255,7 +318,6 @@ def recovered(row: dict, base: dict) -> dict[str, bool]:
     }
 
 
-UNSURE_EVENTS = {e for s in SCENARIOS for e, c in s.confidence.items() if c < MIN_CONFIDENCE}
 CLAIM = {s.name: s.claim for s in SCENARIOS}
 
 
@@ -275,31 +337,11 @@ def results(table: list[dict], live: bool = False) -> str:
     return json.dumps(body, indent=1, allow_nan=False) + "\n"
 
 
-def report(table: list[dict], live: bool = False) -> str:
+def table_lines(table: list[dict]) -> list[str]:
+    """The table and its recovery count, as both the offline and the live report show them."""
     base = table[0]
     failures = [r for r in table if r["scenario"] != "none"]
     lines = [
-        "# Failure table: injected failures in the multi-agent workflow" + (", live" if live else ""),
-        "",
-    ]
-    if live:
-        lines += [
-            f"Generated by `{COMMAND} --live` in agents-live: each row is one live minute with the",
-            "published Foundry agents doing everything but the injected failure. Live models vary from run",
-            "to run; this file is committed as the run wrote it. The offline, byte-for-byte table is",
-            "`docs/eval/failure-table.md`.",
-            "",
-        ]
-    lines += [
-        f"Generated by `{COMMAND}` (offline, byte for byte; `--check` fails if this file",
-        "is stale, as `tests/test_workflow_failures.py` does). Each row runs the workflow itself",
-        "(`ninety/agents/workflow.run_workflow`: template graphics, Analyst, Tactician, Challenger, the",
-        "fact-checking agent with its confidence gate, Producer) on the M1 clip's detected events",
-        f"(`{detected.M1_CLIP}`, minute {MINUTE}), with one failure injected at the model boundary.",
-        "The Judge is the real wrapper (its retry, timeout and verdicts) around a stand-in agent; the",
-        "other models are scripted. Data: `docs/eval/failure-table.json`. The M1 live path's own table",
-        "is `docs/eval/failure-table-m1.md`.",
-        "",
         "| Injected failure | Claim | Fallbacks and holds in the trace | On screen | Recovers |",
         "|---|---|---|---|---|",
     ]
@@ -328,6 +370,37 @@ def report(table: list[dict], live: bool = False) -> str:
         "cue's `fallback`, which the viewer draws), never without a failure. In every row, the",
         "Spanish variants are held: the stand-in Personalizer and its in-process fallback answer in",
         "English, and a variant airs only in its own language.",
+    ]
+    return lines
+
+
+def report(table: list[dict], live: bool = False, ground: str = detected.M1_CLIP) -> str:
+    title = "# Failure table: injected failures in the multi-agent workflow"
+    lines = [title + (f", live, {ground}" if live else ""), ""]
+    if live:
+        lines += [
+            f"Generated by `{COMMAND} --live` in agents-live: each row is one live minute (minute",
+            f"{MINUTE} of `{ground}`) with the published Foundry agents doing everything but the injected",
+            "failure. The run covers the M1 clip and the held-out seeds 21 and 33; the seeds' events are the",
+            "simulator's stand-ins, with no detection confidence, so the low-confidence row runs on the M1",
+            "clip only. Live models vary from run to run; this file is committed as the run wrote it. The",
+            "offline, byte-for-byte table is `docs/eval/failure-table.md`.",
+            "",
+        ]
+        return "\n".join(lines + table_lines(table) + [""])
+    lines += [
+        f"Generated by `{COMMAND}` (offline, byte for byte; `--check` fails if this file",
+        "is stale, as `tests/test_workflow_failures.py` does). Each row runs the workflow itself",
+        "(`ninety/agents/workflow.run_workflow`: template graphics, Analyst, Tactician, Challenger, the",
+        "fact-checking agent with its confidence gate, Producer) on the M1 clip's detected events",
+        f"(`{detected.M1_CLIP}`, minute {MINUTE}), with one failure injected at the model boundary.",
+        "The Judge is the real wrapper (its retry, timeout and verdicts) around a stand-in agent; the",
+        "other models are scripted. Data: `docs/eval/failure-table.json`. The M1 live path's own table",
+        "is `docs/eval/failure-table-m1.md`.",
+        "",
+    ]
+    lines += table_lines(table)
+    lines += [
         "",
         "## Budgets",
         "",
@@ -360,13 +433,17 @@ def main() -> None:
     args = ap.parse_args()
     logging.getLogger("agent_framework").setLevel(logging.WARNING)  # its superstep chatter
     if args.live:
-        table = rows(asyncio.run(live_rows()))
+        tables = [rows(t) for t in asyncio.run(live_rows())]
         args.out.mkdir(parents=True, exist_ok=True)
-        for name, text in (("failure-table-live.md", report(table, live=True)),
-                           ("failure-table-live.json", results(table, live=True))):
+        md = "\n".join(report(t, live=True, ground=t[0]["match"]) for t in tables)
+        body = {"command": COMMAND + " --live", "minute": MINUTE, "models": "the published Foundry agents",
+                "grounds": [{"match": t[0]["match"], "rows": t} for t in tables]}
+        for name, text in (("failure-table-live.md", md),
+                           ("failure-table-live.json", json.dumps(body, indent=1, allow_nan=False) + "\n")):
             (args.out / name).write_text(text)
             print(f"wrote {args.out / name}")
-        print(f"recovered {sum(r['recovers'] for r in table[1:])} of {len(table) - 1}")
+        for t in tables:
+            print(f"{t[0]['match']}: recovered {sum(r['recovers'] for r in t[1:])} of {len(t) - 1}")
         return
     out = render()
     if args.check:

@@ -98,9 +98,17 @@ def test_the_live_command_runs_both_arms_on_the_published_agents(monkeypatch, tm
         "challenger": ['{"agree": true}'] * 2,
         "judge": [SUPPORTED] * 12,
     })
+    order: list[str] = []
+
+    class Signed(Credential):
+        async def get_token(self, *scopes, **kwargs):
+            order.append("token")
+            return await super().get_token(*scopes, **kwargs)
+
     monkeypatch.setattr("agent_framework.foundry.FoundryAgent", fake)
-    monkeypatch.setattr(credentials, "new_credential", lambda: credentials.SignedIn(Credential(3600)))
-    monkeypatch.setattr(workflow, "simulated_events", lambda seed, minutes: EVENTS)
+    monkeypatch.setattr(credentials, "new_credential", lambda: credentials.SignedIn(Signed(3600)))
+    monkeypatch.setattr(workflow, "simulated_events",
+                        lambda seed, minutes: order.append("simulate") or EVENTS)
     monkeypatch.setattr(ab, "MINUTES", 2)
     monkeypatch.setattr(sys, "argv", ["agent_ablation", "--live", "--seeds", "21", "--out", str(tmp_path)])
     ab.main()
@@ -108,3 +116,4 @@ def test_the_live_command_runs_both_arms_on_the_published_agents(monkeypatch, tm
     assert body["arms"]["one agent"]["false_aired"] == 1 and body["arms"]["graph"]["false_aired"] == 0
     assert "ninety-analyst" in body["ran"] and "ninety-tactician" in body["ran"]
     assert (tmp_path / "ablation-agents.md").read_text().startswith("# Ablation: one agent")
+    assert order[:2] == ["token", "simulate"] and order.count("token") == 1  # signed in once, first

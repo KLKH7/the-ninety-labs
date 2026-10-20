@@ -6,6 +6,8 @@
  "rows": [
   {
    "scenario": "none",
+   "match": "seed900001",
+   "unsure": [],
    "injected": "nothing (the baseline)",
    "status": "verified",
    "category": null,
@@ -60,6 +62,8 @@
   },
   {
    "scenario": "judge timeout",
+   "match": "seed900001",
+   "unsure": [],
    "injected": "the Judge never answers (every call outlasts its timeout, retried once)",
    "status": "held",
    "category": "timeout",
@@ -101,6 +105,8 @@
   },
   {
    "scenario": "tactician outage",
+   "match": "seed900001",
+   "unsure": [],
    "injected": "the Tactician's Foundry endpoint cannot be reached",
    "status": "held",
    "category": "service",
@@ -142,6 +148,8 @@
   },
   {
    "scenario": "personalizer down",
+   "match": "seed900001",
+   "unsure": [],
    "injected": "the Personalizer's service refuses the connection (its container is down)",
    "status": "verified",
    "category": null,
@@ -201,6 +209,10 @@
   },
   {
    "scenario": "low confidence",
+   "match": "seed900001",
+   "unsure": [
+    "v00005"
+   ],
    "injected": "the detector reports the event the Tactician cites at confidence 0.3, below 0.5",
    "status": "held",
    "category": "low_confidence",

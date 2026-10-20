@@ -177,26 +177,55 @@ def test_personalize_cannot_be_recorded_yet(monkeypatch, tmp_path):
 
 
 def test_the_live_run_injects_each_failure_around_the_published_agents(monkeypatch, tmp_path):
-    # agents-live task=failures, with W1's fake Foundry in place of the published agents: no Azure.
+    # agents-live task=failures, with W1's fake Foundry in place of the published agents and a fake
+    # sign-in: no Azure. Three grounds: the M1 clip, then the held-out seeds (here W1's built match).
     import json
     import sys
 
-    from tests.test_workflow import SUPPORTED, live
+    from ninety.agents import credentials, workflow
+    from ninety.match.facts import compact
+    from tests.test_workflow import EVENTS, PASSES, SUPPORTED, Credential, FakeFoundry
 
-    facts = {wf.MAIN: {"team": "away", "distance_m": 8, "ball_speed_kmh": 42}}
-    claim = wf.reply(wf.claim_on(wf.MAIN, facts))
-    n = len(wf.SCENARIOS)
-    live(monkeypatch, {"moment-analyst": [wf.picks(wf.MAIN, [wf.MAIN, wf.SIDE])] * n,
-                       "tactician": [claim] * n, "challenger": ['{"agree": true}'] * n,
-                       "judge": [SUPPORTED] * (4 * n)})
+    order: list[str] = []
+
+    class Signed(Credential):
+        async def get_token(self, *scopes, **kwargs):
+            order.append("token")
+            return await super().get_token(*scopes, **kwargs)
+
+    def simulate(seed, minutes):
+        order.append(f"simulate {seed}")
+        return EVENTS
+
+    monkeypatch.setattr(credentials, "new_credential", lambda: credentials.SignedIn(Signed(3600)))
+    monkeypatch.setattr(workflow, "simulated_events", simulate)
+    m1 = {wf.MAIN: {"team": "away", "distance_m": 8, "ball_speed_kmh": 42}}
+    built = {e["id"]: compact(e) for e in EVENTS}
+    seed = (PASSES[0]["id"], PASSES[1]["id"], built)
+    # The live models each scenario still calls: the Analyst in 4, the Tactician in 3; the
+    # Challenger in 4 on the M1 clip, 3 on a seed (the low-confidence row, M1 only, has its Analyst
+    # and Tactician injected).
+    replies = {"moment-analyst": [], "tactician": [], "challenger": [], "judge": [SUPPORTED] * 60}
+    for (main, side, known), challenges in (((wf.MAIN, wf.SIDE, m1), 4), (seed, 3), (seed, 3)):
+        replies["moment-analyst"] += [wf.picks(main, [main, side])] * 4
+        replies["tactician"] += [wf.reply(wf.claim_on(main, known))] * 3
+        replies["challenger"] += ['{"agree": true}'] * challenges
+    monkeypatch.setattr(workflow, "FoundryAgent", FakeFoundry(replies))
     monkeypatch.setattr(sys, "argv", ["workflow_failures", "--live", "--out", str(tmp_path)])
     wf.main()
     body = json.loads((tmp_path / "failure-table-live.json").read_text())
-    rows = {r["scenario"]: r for r in body["rows"]}
-    assert body["models"] == "the published Foundry agents"
-    assert [r["scenario"] for r in body["rows"] if not r["recovers"]] == []
-    assert rows["judge timeout"]["category"] == "timeout"
-    assert rows["tactician outage"]["category"] == "service"
-    assert rows["low confidence"]["category"] == "low_confidence"
-    assert "personalizer fallback: fallback: refused" in rows["personalizer down"]["fallback"]
-    assert "live" in (tmp_path / "failure-table-live.md").read_text().splitlines()[0]
+    assert [g["match"] for g in body["grounds"]] == ["seed900001", "seed21", "seed33"]
+    # Signed in once, first, before either held-out seed was simulated.
+    assert order[:3] == ["token", "simulate 21", "simulate 33"] and order.count("token") == 1
+    for ground in body["grounds"]:
+        rows = {r["scenario"]: r for r in ground["rows"]}
+        assert [n for n, r in rows.items() if not r["recovers"]] == [], ground["match"]
+        assert rows["judge timeout"]["category"] == "timeout"
+        assert rows["tactician outage"]["category"] == "service"
+        if ground["match"] == "seed900001":
+            assert rows["low confidence"]["category"] == "low_confidence"
+        else:  # the seeds' events are simulator stand-ins, with no detection confidence to doubt
+            assert "low confidence" not in rows
+        assert "personalizer fallback: fallback: refused" in rows["personalizer down"]["fallback"]
+    md = (tmp_path / "failure-table-live.md").read_text()
+    assert md.count("# Failure table") == 3 and "live, seed33" in md
