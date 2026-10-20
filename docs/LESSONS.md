@@ -1019,3 +1019,24 @@ short and actionable. This file is public: no research sources, product names or
   one for the geometry it must respect (here within the posts):
   `tests/test_decisions.py::test_the_keeper_sets_himself_deeper_the_further_the_ball_and_smoothly`
   and `::test_the_keeper_never_sets_himself_outside_his_posts`.
+
+### 105. A mutation run against a red baseline catches everything
+- **What happened:** the mutation harness for the window stats ran with `-x` over two test files
+  while an existing test (`test_passes_a_minute_and_the_window_edges`) was already failing after
+  the merge. Every mutation reported "caught", including one that no test guarded (allowing a
+  stat's event count as a claim number); the same failure was catching them all.
+- **Rule:** run the suite the harness uses, unmutated, and see it green before the first
+  mutation; a mutation counts as caught only if a test that passes on the baseline fails on it.
+- **Check:** the harness's first line is the baseline run's "N passed, 0 failed"; with lesson 95,
+  each mutation line names the test that went red.
+
+### 108. Money is computed exactly and rounded half up
+- **What happened:** the latency-cost report summed prices as floats. The per-clip upper bound is
+  exactly $0.00535, and Python 3.12's `sum()` of floats is compensated while 3.11's is not, so the
+  total fell either side of the half: the report rendered $0.0054 on 3.12 and $0.0053 on 3.11, and
+  CI failed on 3.11 only.
+- **Rule:** money is computed exactly (`Decimal` from the quoted price strings, or integer
+  micro-dollars) and rounded half up when shown. A float total on a half boundary renders
+  differently across Python versions and sum orders.
+- **Check:** `uv run pytest tests/test_latency_cost.py -k half_boundary`; its case of 13,327 input
+  and 12 output tokens fails on float arithmetic.
