@@ -278,19 +278,26 @@ async def run(args: argparse.Namespace) -> dict:
         facts = [f.as_dict() for f in calculate_facts(events)]
     recording = Recording.load(args.replay) if args.replay else None
     cues, claims, held = await explain_and_render(events, clip.id, args.plant, recording)
-    upgrades, model_calls, tokens = None, [], {}
+    upgrades, model_calls, tokens, unavailable = None, [], {}, None
     if args.describer == "foundry":
         from ninety.agents import describer  # Foundry and the agent framework: only behind the flag
+        from ninety.agents.foundry import RegistryDrift
 
-        async with describer.foundry_model(tokens) as model:
-            upgrades, model_calls = await describer.upgrades(events, cues, model)
+        try:
+            async with describer.foundry_model(tokens) as (model, judge):
+                upgrades, model_calls = await describer.upgrades(events, cues, model, judge)
+        except RegistryDrift:
+            raise  # a changed prompt must never run under an old version's name
+        except Exception as e:  # noqa: BLE001  sign-in or outage: the code lines still air
+            upgrades, unavailable = None, f"{type(e).__name__}: {e}"
     voice = describe.Voice() if args.speech == "azure" else None
     track, refused = describe.describe(events, cues, voice or describe.estimate, upgrades)
     if voice is not None:
         voice.save(track, out)
     cues = sorted(cues + describe.audio_cues(track), key=lambda c: (c["t_in"], c["id"]))
     audio = describe.write_track(track, refused, out, clip.meta["t_start"])
-    audio["describer"] = {"mode": args.describer, "calls": model_calls, "tokens": tokens}
+    audio["describer"] = {"mode": args.describer, "calls": model_calls, "tokens": tokens,
+                          "unavailable": unavailable}
     footage = write_footage(clip, out, encode=not args.frames)
 
     write_jsonl(out / "events.jsonl", events)

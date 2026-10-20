@@ -63,6 +63,19 @@ assert personalize.last_route == "remote"
 assert {c["lang"] for c in result.cues if c["kind"] == "insight"} == {"en", "es"}
 assert match_server.list_events(detected.M1_CLIP, 1, 99, None)
 match_server.match_info(detected.M1_CLIP)
+
+# Audio description: the model words each verified moment (a stand-in model here), the code and
+# the Judge check it, and the track is scheduled from the detected events and the live cues.
+from ninety.agents import describer
+from ninety.agents.contracts import Description
+from ninety.speech import describe
+
+async def model(event, around):
+    return Description(event["id"], f"{sure['player']} finds {sure['receiver']}", "", 0.0, "model")
+
+texts, calls = asyncio.run(describer.upgrades(events, result.cues, model, judge))
+track, refused = describe.describe(events, result.cues, upgrades=texts)
+assert calls and track.said
 """
 
 

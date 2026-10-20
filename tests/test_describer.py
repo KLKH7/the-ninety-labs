@@ -18,7 +18,8 @@ import pytest
 from ninety import e2e
 from ninety.agents import describer
 from ninety.agents.contracts import Description
-from ninety.agents.factcheck import MIN_CONFIDENCE
+from ninety.agents.factcheck import MIN_CONFIDENCE, Verdict
+from ninety.agents.foundry import RegistryDrift
 from ninety.speech import describe as d
 from ninety.speech import tts
 from tests.e2e_clip import write_clip
@@ -55,6 +56,23 @@ MODEL_LINE = "h8 shoots on target after h4 finds h8"
 
 def said_for(track: d.Track, key: str) -> d.Said:
     return next(s for s in track.said if s.event == key)
+
+
+async def judge_passes(claim, evidence):
+    return Verdict(ok=True)
+
+
+def judge_refusing(*lines: str, seen: list | None = None):
+    """A stand-in Judge: refuses exactly `lines`, as the published Judge refuses a contradiction."""
+    async def judge(claim, evidence):
+        if seen is not None:
+            seen.append((claim.text, list(claim.evidence), [e["id"] for e in evidence]))
+        if claim.text in lines:
+            return Verdict(ok=False, reasons=[f"contradicted fact: '{claim.text}'"],
+                           category="unsupported_claim")
+        return Verdict(ok=True)
+
+    return judge
 
 
 def model_answering(text: str, asked: list | None = None):
@@ -129,7 +147,7 @@ def test_the_model_is_asked_only_for_a_verified_moment_with_its_evidence():
     asked = []
     unverified = insight(["e1"], "h4 finds h8", verified=False)
     model = model_answering("h8 shoots", asked)
-    texts, calls = asyncio.run(describer.upgrades(EVENTS, [CLAIM, unverified], model))
+    texts, calls = asyncio.run(describer.upgrades(EVENTS, [CLAIM, unverified], model, judge_passes))
     assert asked == [("e2", ["e1"])], "the claim's last event, with the earlier evidence around it"
     assert texts == {CLAIM["id"]: "h8 shoots"} and [c["cue"] for c in calls] == [CLAIM["id"]]
 
@@ -137,10 +155,11 @@ def test_the_model_is_asked_only_for_a_verified_moment_with_its_evidence():
 def test_the_model_is_never_given_an_unsure_detection():
     asked = []
     unsure = [EVENTS[0] | {"confidence": MIN_CONFIDENCE - 0.01}, EVENTS[1]]
-    texts, _ = asyncio.run(describer.upgrades(unsure, [CLAIM], model_answering("h8 shoots", asked)))
+    model = model_answering("h8 shoots", asked)
+    texts, _ = asyncio.run(describer.upgrades(unsure, [CLAIM], model, judge_passes))
     assert asked == [] and texts == {}
     sure = [EVENTS[0] | {"confidence": MIN_CONFIDENCE}, EVENTS[1]]
-    texts, _ = asyncio.run(describer.upgrades(sure, [CLAIM], model_answering("h8 shoots", asked)))
+    texts, _ = asyncio.run(describer.upgrades(sure, [CLAIM], model, judge_passes))
     assert asked and texts
 
 
@@ -153,10 +172,58 @@ def test_a_failing_or_late_model_leaves_the_code_line_and_says_why():
         return Description(event["id"], "h8 shoots", "", 0.0, "model")
 
     for model, why in ((broken, "ConnectionError"), (late, "TimeoutError")):
-        texts, calls = asyncio.run(describer.upgrades(EVENTS, [CLAIM], model, timeout_s=0.01))
+        texts, calls = asyncio.run(describer.upgrades(EVENTS, [CLAIM], model, judge_passes, timeout_s=0.01))
         assert texts == {} and why in calls[0]["problem"]
         track, _ = d.describe(EVENTS, [CLAIM], upgrades=texts)
         assert said_for(track, CLAIM["id"]).source == "insight"
+
+
+# The review's four lines: each passes the code checks (ids, numbers and players are all cited),
+# yet each contradicts the evidence (e1 a completed pass, e2 a shot on target, no goal; h4 and h8
+# play for home). Only the Judge can refuse them.
+CONTRADICTIONS = ("h8 scores for home", "h8 shoots wide", "h4 loses the ball to the away side",
+                  "away h8 shoots")
+
+
+@pytest.mark.parametrize("line", CONTRADICTIONS)
+def test_a_model_line_the_judge_refuses_never_airs(line):
+    seen = []
+    texts, calls = asyncio.run(describer.upgrades(EVENTS, [CLAIM], model_answering(line),
+                                                  judge_refusing(*CONTRADICTIONS, seen=seen)))
+    assert seen == [(line, ["e1", "e2"], ["e1", "e2"])], "the Judge sees the line and all its evidence"
+    assert texts == {} and calls[0]["problem"].startswith("judge:")
+    track, _ = d.describe(EVENTS, [CLAIM], upgrades=texts)
+    assert said_for(track, CLAIM["id"]).source == "insight", "the code line stays"
+
+
+def test_the_judge_only_sees_lines_the_code_checks_pass():
+    seen = []
+    model = model_answering("h8 shoots at 143 km/h")
+    texts, calls = asyncio.run(describer.upgrades(EVENTS, [CLAIM], model, judge_refusing(seen=seen)))
+    assert seen == [] and texts == {} and calls[0]["problem"].startswith("code checks:")
+
+
+def test_a_failing_or_late_judge_keeps_the_code_line():
+    async def down(claim, evidence):
+        raise ConnectionError("judge down")
+
+    async def late(claim, evidence):
+        await asyncio.sleep(1)
+        return Verdict(ok=True)
+
+    for judge, why in ((down, "ConnectionError"), (late, "TimeoutError")):
+        texts, calls = asyncio.run(describer.upgrades(EVENTS, [CLAIM], model_answering(MODEL_LINE), judge,
+                                                      timeout_s=0.05))
+        assert texts == {} and "judge unavailable" in calls[0]["problem"] and why in calls[0]["problem"]
+
+
+def test_a_model_line_needs_the_claims_own_code_line_to_pass():
+    # The claim states a number its evidence does not hold: its code line is refused, and a model
+    # line for the same moment must not air in its place.
+    false_claim = insight(["e1", "e2"], "h8 shoots on target at 143 km/h")
+    track, refused = d.describe(EVENTS, [false_claim], upgrades={false_claim["id"]: MODEL_LINE})
+    assert all(s.event != false_claim["id"] for s in track.said)
+    assert any("143" in r["reason"] for r in refused)
 
 
 def test_the_published_agent_is_asked_for_words_and_its_tokens_are_counted():
@@ -192,6 +259,7 @@ def test_a_speech_outage_still_shows_every_line_and_its_cue_says_speech_is_unava
     assert all(c["speech"] == "unavailable" for c in d.audio_cues(track))
     summary = d.write_track(track, refused, tmp_path, 0.0)
     assert summary["synth_failed"] == len(voice.failed) > 0
+    assert summary["synth_requests"] == len(voice.failed), "a failed request is still a request"
     assert "ConnectionError" in next(iter(voice.failed.values()))
 
 
@@ -244,7 +312,7 @@ def test_e2e_with_the_describer_model_airs_its_checked_line(tmp_path, monkeypatc
     @contextlib.asynccontextmanager
     async def fake_foundry(tokens):
         tokens["input"] = 100
-        yield model_answering("h8 shoots on target", asked)
+        yield model_answering("h8 shoots on target", asked), judge_passes
 
     monkeypatch.setattr(describer, "foundry_model", fake_foundry)
     clip, detections, events_file = write_clip(tmp_path)
@@ -257,3 +325,30 @@ def test_e2e_with_the_describer_model_airs_its_checked_line(tmp_path, monkeypatc
     assert manifest["audio"]["describer"]["tokens"] == {"input": 100}
     assert asked, "the offline Analyst's verified claim is a verified moment"
     assert [s["source"] for s in audio["said"]].count("model") == 1
+    assert manifest["audio"]["describer"]["unavailable"] is None
+
+
+def run_with_foundry(tmp_path, monkeypatch, fails_with: Exception) -> tuple[dict, dict]:
+    @contextlib.asynccontextmanager
+    async def unreachable(tokens):
+        raise fails_with
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(describer, "foundry_model", unreachable)
+    clip, detections, events_file = write_clip(tmp_path)
+    out = tmp_path / "bundle"
+    e2e.main([str(clip), "--out", str(out), "--detections", str(detections), "--frames",
+              "--events-file", str(events_file), "--describer", "foundry"])
+    return (json.loads((out / "audio.json").read_text()),
+            json.loads((out / "manifest.json").read_text())["audio"]["describer"])
+
+
+def test_foundry_unreachable_at_start_still_writes_the_code_track(tmp_path, monkeypatch):
+    audio, record = run_with_foundry(tmp_path, monkeypatch, ConnectionError("sign-in expired"))
+    assert audio["said"] and all(s["source"] != "model" for s in audio["said"])
+    assert record["unavailable"] == "ConnectionError: sign-in expired" and record["calls"] == []
+
+
+def test_a_drifted_agent_still_refuses_to_run(tmp_path, monkeypatch):
+    with pytest.raises(RegistryDrift):
+        run_with_foundry(tmp_path, monkeypatch, RegistryDrift("ninety-describer changed since version 1"))

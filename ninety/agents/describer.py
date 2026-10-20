@@ -6,11 +6,13 @@ model half the architecture names ("model + Speech | verified events | spoken de
 code-written line"). For each verified insight cue it asks the published Foundry agent
 `ninety-describer` to say what happened, and who did it, for a fan who cannot see the screen.
 
-The model writes words only. Its line goes back to describe.candidates, which checks it with the
-fact-checker's code half (factcheck.check) against the claim's evidence, like every other line:
-a line that passes is said first, with the code line as its shorter fallback; a line that fails,
-or a model that errs or is late, leaves the code line, and the refusal says why. The SSML, the
-stereo position and the timing are always code.
+The model writes words only, and its line is spoken as fact-checked, so it passes the whole
+fact-checking agent before it may air: the code half (factcheck.check: ids, numbers, players) and
+then the Judge (ninety/agents/judge.py), which reads meaning the code cannot, such as a goal said
+of a saved shot or a player put on the wrong team. describe.candidates checks it once more against
+the claim's evidence. A line that passes is said first, with the code line as its shorter
+fallback; a line either half refuses, or a model or Judge that errs or is late, leaves the code
+line, and the record says why. The SSML, the stereo position and the timing are always code.
 
     uv run ninety-e2e <clip> --out <bundle> --describer foundry   # live: the published agent
 """
@@ -27,14 +29,13 @@ from agent_framework import Agent
 from pydantic import BaseModel
 
 from ninety import config
-from ninety.agents.contracts import Describe, Description
-from ninety.agents.factcheck import MIN_CONFIDENCE
+from ninety.agents.contracts import Describe, Description, Judge
+from ninety.agents.factcheck import MIN_CONFIDENCE, Claim, check
 from ninety.match.facts import compact
 
-# As the Judge's (ninety/agents/judge.py). The code line is on the schedule either way.
+# As the Judge's (ninety/agents/judge.py): each of the model and the Judge gets this long. The code
+# line is on the schedule either way.
 MODEL_TIMEOUT_S = 15.0
-# Fields compact() reads that a detected event may leave out (schemas/match_event.schema.json).
-_OPTIONAL = ("player", "outcome", "ball_speed_kmh", "end_x", "end_y")
 
 INSTRUCTIONS = """You are the audio describer for a football broadcast, speaking to blind and
 low-vision fans. You get one JSON object: the EVENT that just happened and the events AROUND it
@@ -66,21 +67,16 @@ def describer_agent(client) -> Agent:
     )
 
 
-def facts(event: dict) -> dict:
-    """The fields the fact-checker and the model may cite (ninety/match/facts.py), for a simulator
-    or a detected event alike."""
-    return compact({**{k: None for k in _OPTIONAL}, **event})
-
-
 def _confident(event: dict) -> bool:
     """Ground-truth stand-in events carry no confidence and pass (factcheck.confidence_gate)."""
     return event.get("confidence") is None or event["confidence"] >= MIN_CONFIDENCE
 
 
-async def upgrades(events: Sequence[dict], cues: Sequence[dict], model: Describe,
+async def upgrades(events: Sequence[dict], cues: Sequence[dict], model: Describe, judge: Judge,
                    timeout_s: float = MODEL_TIMEOUT_S) -> tuple[dict[str, str], list[dict]]:
-    """The model's line for each verified insight cue, by cue id, and a record of every call
-    (cue, milliseconds, and why there is no line when there is none).
+    """The model's line for each verified insight cue that the whole fact-checking agent passes
+    (code checks, then the Judge), by cue id, and a record of every call (cue, milliseconds, and
+    why there is no line when there is none).
 
     Only a verified cue is a verified moment: the model is never asked about a draft, a held or a
     rejected claim. It is given the claim's last cited event as EVENT and the others as AROUND, and
@@ -98,13 +94,29 @@ async def upgrades(events: Sequence[dict], cues: Sequence[dict], model: Describe
 
     async def ask(cue_id: str, event: dict, around: list[dict]) -> tuple[str, str | None, dict]:
         started = time.perf_counter()
+        text, problem = None, None
         try:
             answer = await asyncio.wait_for(model(event, around), timeout_s)
-            text, problem = answer.text, None
         except Exception as e:  # noqa: BLE001  any failure keeps the code line; recorded, not hidden
-            text, problem = None, f"model unavailable: {type(e).__name__}: {e}"
+            problem = f"model unavailable: {type(e).__name__}: {e}"
+        else:
+            problem = await fact_check(answer.text, [*around, event])
+            text = answer.text if problem is None else None
         ms = round((time.perf_counter() - started) * 1000)
         return cue_id, text, {"cue": cue_id, "ms": ms, "problem": problem}
+
+    async def fact_check(text: str, cited: list[dict]) -> str | None:
+        """None if the line passes the code checks and then the Judge, else why it does not."""
+        evidence = [compact(e) for e in cited]
+        claim = Claim(text, [e["id"] for e in evidence])
+        verdict = check(claim, {e["id"]: e for e in evidence})
+        if not verdict.ok:
+            return "code checks: " + "; ".join(verdict.reasons)
+        try:
+            verdict = await asyncio.wait_for(judge(claim, evidence), timeout_s)
+        except Exception as e:  # noqa: BLE001  fail closed: an unjudged line never airs
+            return f"judge unavailable: {type(e).__name__}: {e}"
+        return None if verdict.ok else "judge: " + "; ".join(verdict.reasons)
 
     done = await asyncio.gather(*(ask(*a) for a in asks))
     return {cue_id: text for cue_id, text, _ in done if text}, [record for _, _, record in done]
@@ -115,7 +127,7 @@ def foundry_describe(agent, tokens: dict[str, int]) -> Describe:
     The model's words are all that is kept: the SSML and the pan are rebuilt by describe.py."""
 
     async def describe(event: dict, around: list[dict]) -> Description:
-        prompt = json.dumps({"event": facts(event), "around": [facts(e) for e in around]},
+        prompt = json.dumps({"event": compact(event), "around": [compact(e) for e in around]},
                             separators=(",", ":"))
         response = await agent.run(prompt)
         value = response.value
@@ -132,15 +144,27 @@ def foundry_describe(agent, tokens: dict[str, int]) -> Describe:
 
 
 @contextlib.asynccontextmanager
-async def foundry_model(tokens: dict[str, int]) -> AsyncIterator[Describe]:
-    """The published `ninety-describer` at its pinned version (refuses to run on drift)."""
+async def foundry_model(tokens: dict[str, int]) -> AsyncIterator[tuple[Describe, Judge]]:
+    """The published `ninety-describer` and `ninety-judge`, each at its pinned version. Refuses
+    to run on drift (foundry.RegistryDrift), so a changed prompt never runs under an old name."""
     from agent_framework.foundry import FoundryAgent
     from azure.identity import DefaultAzureCredential
 
     from ninety.agents import foundry
+    from ninety.agents.judge import judge, judge_agent
 
     credential = DefaultAzureCredential()
-    name, version = foundry.pinned(describer_agent(foundry.chat_client(credential)))
-    async with FoundryAgent(project_endpoint=config.FOUNDRY_PROJECT, agent_name=name,
-                            agent_version=version, credential=credential) as agent:
-        yield foundry_describe(agent, tokens)
+    client = foundry.chat_client(credential)
+    pins = [foundry.pinned(describer_agent(client)), foundry.pinned(judge_agent(client))]
+    async with contextlib.AsyncExitStack() as stack:
+        writer, judge_ag = [
+            await stack.enter_async_context(FoundryAgent(
+                project_endpoint=config.FOUNDRY_PROJECT, agent_name=name, agent_version=version,
+                credential=credential))
+            for name, version in pins
+        ]
+
+        async def judge_live(claim: Claim, evidence: list[dict]):
+            return await judge(judge_ag, claim, evidence)
+
+        yield foundry_describe(writer, tokens), judge_live
