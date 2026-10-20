@@ -16,8 +16,11 @@ spec.loader.exec_module(replay)
 def bundle(root: Path) -> Path:
     root.mkdir()
     (root / "manifest.json").write_text(json.dumps({"format": 1}))
-    for name in ("cues.jsonl", "trace.json", "detections.jsonl", "events.jsonl", "facts.json"):
+    for name in ("cues.jsonl", "trace.json", "detections.jsonl", "events.jsonl", "facts.json", "audio.json",
+                 "description.vtt"):
         (root / name).write_text("{}\n")
+    (root / "audio").mkdir()
+    (root / "audio" / "a1.wav").write_bytes(b"RIFF")
     (root / "frames").mkdir()
     (root / "frames" / "00000.jpg").write_bytes(b"\xff\xd8")
     return root
@@ -31,7 +34,8 @@ def test_pack_is_byte_for_byte_repeatable(tmp_path):
     assert hashlib.sha256((tmp_path / "one.tar.gz").read_bytes()).hexdigest() == first
 
 
-ANSWER_KEY_AND_STRAYS = ["frames.jsonl", "clip.json", "meta.json", "images/00000.jpg", "frames/x.json"]
+ANSWER_KEY_AND_STRAYS = ["frames.jsonl", "clip.json", "meta.json", "images/00000.jpg", "frames/x.json",
+                         "audio/a1.json"]
 
 
 @pytest.mark.parametrize("extra", ANSWER_KEY_AND_STRAYS)

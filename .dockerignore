@@ -19,3 +19,6 @@ web/node_modules
 .env.*
 web/viewer/node_modules
 web/viewer/dist
+web/phone/node_modules
+web/phone/dist
+web/phone/dist-mock

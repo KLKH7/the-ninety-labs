@@ -49,6 +49,14 @@ def test_the_keyed_routes_are_configured_and_closed():
     assert status == 401
 
 
+def test_the_phone_companion_is_served_beside_the_viewer():
+    # The viewer's "connect your phone" QR code points at phone/ on its own origin.
+    status, headers, body = get("/phone/")
+    assert status == 200 and b"<html" in body.lower()
+    assert "connect-src 'self'" in {k.lower(): v for k, v in headers.items()}["content-security-policy"]
+    assert get("/phone/mock-laptop.html")[0] == 404  # the mock never ships
+
+
 def test_the_bundle_holds_no_answer_key():
     status, _, body = get("/bundle/manifest.json")
     assert status == 200 and json.loads(body)["format"] == 1

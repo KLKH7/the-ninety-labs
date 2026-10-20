@@ -6,7 +6,7 @@ subscription allows five regions; that one has our models).
 
 | Resource | Why |
 |---|---|
-| Container Apps environment + `api` app | the whole public demo over HTTPS from one image: the viewer at `/`, the Replay bundle at `/bundle/`, the API, Live mode behind the passcode, and the MCP server at `/mcp`; scales to zero, at most one replica |
+| Container Apps environment + `api` app | the whole public demo over HTTPS from one image: the viewer at `/`, the phone companion at `/phone/`, the Replay bundle at `/bundle/`, the API, Live mode behind the passcode, and the MCP server at `/mcp`; scales to zero, at most one replica |
 | Container Registry (Basic) | holds the API image; admin user off |
 | User-assigned managed identity | the app pulls its image with it (AcrPull); no registry password |
 | Log Analytics workspace | container logs; 30-day retention, 0.2 GB/day cap |
@@ -127,8 +127,11 @@ One container app serves everything a judge opens, from one image ([Dockerfile](
   [replay.py](replay.py), published as a release asset, and pinned in the Dockerfile by URL and
   SHA-256; a different asset fails the build. The image never needs Azure Storage, so the API's
   identity holds no role on the account that keeps the answer key ([check_truth_sealed.py](check_truth_sealed.py)).
-- **Live mode** (`/api/live/...`): anything that costs a model call or speech, behind the demo
-  passcode (`x-demo-passcode`), read from Key Vault. Without a configured passcode it refuses
+- **Phone companion** (`/phone/`): the phone app (web/phone), served on the viewer's origin, so
+  the viewer's "connect your phone" QR code points at it with no configuration; its API
+  (`/api/pair`, the WebSocket relay, `/api/ask`) runs in the same process (ninety/api/companion.py).
+- **Live mode** (`/api/live/...`, and the companion's `/api/ask`): anything that costs a model call or speech, behind the demo
+  passcode (`x-ninety-passcode`, one secret for both), read from Key Vault. Without a configured passcode it refuses
   everyone.
 - **Headers:** a same-origin Content Security Policy (the viewer cannot be pointed at another site
   or framed), `nosniff`, no referrer.

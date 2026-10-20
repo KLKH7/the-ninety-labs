@@ -27,15 +27,18 @@ from pathlib import Path
 
 # Everything a format-1 bundle may hold (ninety/e2e.py): the viewer reads these and nothing else.
 FILES = {"manifest.json", "cues.jsonl", "trace.json", "detections.jsonl", "events.jsonl", "facts.json",
-         "video.webm"}
-FRAMES = "frames/"  # JPEG footage, when the bundle was made with --frames
+         "video.webm", "audio.json", "description.vtt"}
+# Folders of footage and speech: JPEG frames (--frames) and the audio description's spoken lines
+# (ninety/speech/describe.py, when made with Azure Speech).
+FOLDERS = {"frames/": ".jpg", "audio/": ".wav"}
 
 
 def members(bundle: Path) -> list[Path]:
     files = sorted(p for p in bundle.rglob("*") if p.is_file())
     bad = [p.relative_to(bundle).as_posix() for p in files
            if p.relative_to(bundle).as_posix() not in FILES
-           and not (p.relative_to(bundle).as_posix().startswith(FRAMES) and p.suffix == ".jpg")]
+           and not any(p.relative_to(bundle).as_posix().startswith(folder) and p.suffix == suffix
+                       for folder, suffix in FOLDERS.items())]
     if bad:
         raise SystemExit(f"not a viewer file, refusing to publish: {', '.join(bad)}")
     manifest = json.loads((bundle / "manifest.json").read_text())
