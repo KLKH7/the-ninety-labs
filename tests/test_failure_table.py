@@ -1,5 +1,6 @@
-"""Every row of docs/eval/failure-table.md: the injected failure, the fallback that must run, and
-what the viewer must see. Expected values are written here, not read from the table."""
+"""Every row of docs/eval/failure-table-m1.md (the M1 live path's): the injected failure, the
+fallback that must run, and what the viewer must see. Expected values are written here, not read
+from the table."""
 
 import pytest
 

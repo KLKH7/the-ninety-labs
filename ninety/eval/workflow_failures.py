@@ -42,7 +42,8 @@ from azure.core.exceptions import ServiceRequestError
 
 from ninety.agents import workflow
 from ninety.agents.contracts import Models
-from ninety.agents.factcheck import MIN_CONFIDENCE, Claim
+from ninety.agents.factcheck import MIN_CONFIDENCE, Claim, check
+from ninety.agents.judge import RETRY_LIMIT
 from ninety.agents.judge import judge as judge_call
 from ninety.match import detected
 from ninety.mcp import match_server
@@ -57,7 +58,7 @@ MAIN = "v00001"  # the M1 clip's confident completed pass in minute 2 (confidenc
 SIDE = "v00005"  # a second completed pass in the same minute, offered as evidence
 SEEDS = (21, 33)  # the held-out seeds (lesson 11): the live run's other two grounds
 UNSURE = 0.3  # the low-confidence row's confidence for SIDE: below MIN_CONFIDENCE
-JUDGE_TIMEOUT_S = 0.05  # production is 15 s (judge.judge); short here so the row runs in a blink
+JUDGE_TIMEOUT_S = 0.05  # production: judge.judge's default; short here so the row runs in a blink
 HANG_S = 60.0  # longer than any timeout here: a call that never answers
 
 
@@ -159,21 +160,23 @@ class Scenario:
     cites_side: bool = False  # the Tactician's claim is about the second pass
     override: Callable[[JudgeAgent], dict] = lambda agent: {}
     judge_hangs: bool = False
-    claim: str = "held"  # how the moment's claim must end
+    claim: str = "held"  # how the moment's claim must end, exactly
+    fallback: str = ""  # the trace step this failure's fallback must mark ("role: what"); "" for none
 
 
 SCENARIOS = [
     Scenario("none", "nothing (the baseline)", claim="verified"),
-    Scenario("judge timeout", "the Judge never answers (every call outlasts its timeout, retried once)",
-             judge_hangs=True),
+    Scenario("judge timeout",
+             f"the Judge never answers (every call outlasts its timeout, retried {RETRY_LIMIT} time(s))",
+             judge_hangs=True, fallback="producer: held: timeout"),
     Scenario("tactician outage", "the Tactician's Foundry endpoint cannot be reached",
-             override=lambda agent: {"tactician": outage}),
+             override=lambda agent: {"tactician": outage}, fallback="tactician: template"),
     Scenario("personalizer down", "the Personalizer's service refuses the connection (its container is down)",
-             override=personalizer_down, claim="verified"),
+             override=personalizer_down, claim="verified", fallback="personalizer: personalizer: refused"),
     Scenario("low confidence",
              f"the detector reports the event the Tactician cites at confidence {UNSURE}, "
              f"below {MIN_CONFIDENCE}",
-             unsure_side=True, cites_side=True),
+             unsure_side=True, cites_side=True, fallback="producer: held: low_confidence"),
 ]
 
 
@@ -278,6 +281,11 @@ async def live_rows(seeds: tuple[int, ...] = SEEDS) -> list[list[dict]]:
 
 
 def row(scenario: Scenario, result, judge_asked: int, ground: Ground) -> dict:
+    from ninety.match.facts import compact
+
+    # Each aired text checked again here, by the code checks, against the minute's events: a
+    # measurement of what aired, independent of the `verified` flag the cue carries.
+    known = {e["id"]: compact(e) for e in workflow.agent_events(events_for(scenario, ground))}
     review = next((r for r in result.reviews if r.moment_id == f"m-{ground.main}"), None)
     templates = sorted(c["id"] for c in result.cues if c["kind"] != "insight")
     insights = [c for c in result.cues if c["kind"] == "insight"]
@@ -294,7 +302,9 @@ def row(scenario: Scenario, result, judge_asked: int, ground: Ground) -> dict:
         "reasons": list(verdict.reasons) if verdict else [],
         "judge_asked": judge_asked,
         "insights": [{"text": c["text"], "persona": c["persona"], "lang": c.get("lang", "en"),
-                      "verified": c.get("verified", False)} for c in insights],
+                      "verified": c.get("verified", False),
+                      "passes_check": check(Claim(c["text"], list(c["evidence"])), known).ok}
+                     for c in insights],
         "templates": templates,
         "badges": sorted({c["fallback"] for c in result.cues if c.get("fallback")}),
         "trace_fallbacks": [f"{s.role}: {s.fallback}" for s in result.trace if s.fallback],
@@ -309,16 +319,18 @@ def recovered(row: dict, base: dict) -> dict[str, bool]:
     gated = {i for i in lost if any(i.startswith(f"cue-{e}-") for e in row["unsure"])}
     return {
         "templates stay": lost == gated and set(row["templates"]) <= set(base["templates"]),
-        "nothing unverified airs": all(i["verified"] for i in row["insights"]),
-        "claim ends as it must": row["status"] == CLAIM[row["scenario"]]
-        or (CLAIM[row["scenario"]] == "held" and row["status"] == "rejected"),
-        "fallback recorded": bool(row["fallback"]) if row["scenario"] != "none" else True,
+        "nothing unverified airs": all(i["verified"] and i["passes_check"] for i in row["insights"]),
+        "claim ends as it must": row["status"] == CLAIM[row["scenario"]],
+        # This failure's own fallback, marked in the trace; none at all without a failure.
+        "fallback recorded": (FALLBACK[row["scenario"]] in row["trace_fallbacks"])
+        if FALLBACK[row["scenario"]] else row["trace_fallbacks"] == [],
         # The viewer shows a cue's `fallback` as a badge: on screen in every failure, never without one.
         "fallback badge on screen": bool(row["badges"]) == (row["scenario"] != "none"),
     }
 
 
 CLAIM = {s.name: s.claim for s in SCENARIOS}
+FALLBACK = {s.name: s.fallback for s in SCENARIOS}
 
 
 def rows(out: list[dict] | None = None) -> list[dict]:
@@ -364,14 +376,25 @@ def table_lines(table: list[dict]) -> list[str]:
         "",
         f"**Recovered: {ok} of {len(failures)}** injected failures. A row recovers when every template",
         "graphic stays on air (less those on an unsure detection, which the confidence gate keeps off",
-        "the screen), nothing airs that the fact-checker did not pass, the claim ends as it must (held",
-        "or rejected; verified when only the Personalizer failed, since the insight needs no",
-        "Personalizer), the fallback is recorded in the trace, and a fallback badge is on screen (the",
-        "cue's `fallback`, which the viewer draws), never without a failure. In every row, the",
-        "Spanish variants are held: the stand-in Personalizer and its in-process fallback answer in",
-        "English, and a variant airs only in its own language.",
+        "the screen), every aired text passes the code checks again, the claim ends exactly as it must",
+        "(held; verified when only the Personalizer failed, since the insight needs no Personalizer),",
+        "the failure's own fallback is marked in the trace, and a fallback badge is on screen (the",
+        "cue's `fallback`, which the viewer draws); the baseline has neither.",
     ]
+    held_es = [r for r in table if any("/es:" in step for step in r["fallback"])]
+    if held_es:
+        lines += [
+            f"In {len(held_es)} of {len(table)} rows the Spanish variants are held: the Personalizer that",
+            "answered gave English text, and a variant airs only in its own language.",
+        ]
     return lines
+
+
+def production_judge_timeout() -> float:
+    """The Judge's own default timeout (ninety/agents/judge.judge), as production calls it."""
+    import inspect
+
+    return inspect.signature(judge_call).parameters["timeout_seconds"].default
 
 
 def report(table: list[dict], live: bool = False, ground: str = detected.M1_CLIP) -> str:
@@ -404,7 +427,8 @@ def report(table: list[dict], live: bool = False, ground: str = detected.M1_CLIP
         "",
         "## Budgets",
         "",
-        "- The Judge: 15 s per call in production, retried once, then the claim is held (fail closed).",
+        f"- The Judge: {production_judge_timeout():g} s per call in production, retried {RETRY_LIMIT}",
+        "  time(s), then the claim is held (fail closed).",
         f"  Here {JUDGE_TIMEOUT_S} s, so the timeout row runs the same code path in a blink.",
         "- The Personalizer: `personalizer.core.BUDGET_S` per call in production; on a timeout, a 5xx or",
         "  a refused connection the in-process fallback answers (the verified text), here after the",

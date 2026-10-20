@@ -883,7 +883,8 @@ short and actionable. This file is public: no research sources, product names or
   as `rejected` (the claim is wrong) instead of `held` (it could not be checked); and an Analyst
   that failed, hung on an MCP call or replied with prose raised out of `live.run`, taking the
   template graphics down with it.
-- **Rule:** every fallback claimed in docs/eval/failure-table.md is a row produced by injecting
+- **Rule:** every fallback claimed in a failure table (docs/eval/failure-table-m1.md, and the
+  multi-agent workflow's docs/eval/failure-table.md) is a row produced by injecting
   that failure into the real path, asserted by a test with the expected outcome written in the
   test. A status is computed by `status_for`, never re-derived.
 - **Check:** `uv run pytest tests/test_failure_table.py`; removing the `live.run` fallback or

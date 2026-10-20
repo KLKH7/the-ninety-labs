@@ -84,15 +84,46 @@ def test_every_injected_failure_recovers():
     assert [r["scenario"] for r in ROWS.values() if not r["recovers"]] == []
 
 
-def test_the_recovery_check_can_fail():
-    # A row that aired an unchecked claim, dropped a template and recorded no fallback is caught on
-    # each count: the table's "yes" is a measurement, not a constant.
-    broken = {**ROWS["tactician outage"], "insights": [{"text": "x", "verified": False}],
-              "templates": BASE["templates"][1:], "fallback": [], "status": "verified"}
-    assert wf.recovered({**broken, "badges": []}, BASE) == {
-        "templates stay": False, "nothing unverified airs": False,
-        "claim ends as it must": False, "fallback recorded": False, "fallback badge on screen": False,
-    }
+def planted(name: str, column: str) -> dict:
+    """A row that recovers, with one defect planted: the one its column must catch."""
+    row = {**ROWS[name]}
+    if column == "templates stay":
+        row["templates"] = row["templates"][1:]
+    elif column == "nothing unverified airs":
+        # The cue still says verified, but its text fails the code checks: the flag is not trusted.
+        first = {**row["insights"][0], "verified": True, "passes_check": False}
+        row["insights"] = [first, *row["insights"][1:]]
+    elif column == "claim ends as it must":
+        row["status"] = "rejected"  # held was expected: rejected is not the same end (lesson 96)
+    elif column == "fallback recorded":
+        row["trace_fallbacks"] = []  # the Spanish variants' holds are still in row["fallback"]
+    elif column == "fallback badge on screen":
+        row["badges"] = []
+    return row
+
+
+@pytest.mark.parametrize(("name", "column"), [
+    ("tactician outage", "templates stay"),
+    ("personalizer down", "nothing unverified airs"),
+    ("low confidence", "claim ends as it must"),
+    ("judge timeout", "fallback recorded"),
+    ("personalizer down", "fallback badge on screen"),
+])
+def test_each_recovery_column_catches_its_own_defect(name, column):
+    assert all(wf.recovered(ROWS[name], BASE).values())
+    checks = wf.recovered(planted(name, column), BASE)
+    assert [c for c, ok in checks.items() if not ok] == [column]
+
+
+def test_the_baseline_fails_if_it_records_a_fallback_or_shows_a_badge():
+    marked = {**BASE, "trace_fallbacks": ["producer: held: timeout"]}
+    assert wf.recovered(marked, BASE)["fallback recorded"] is False
+    assert wf.recovered({**BASE, "badges": ["held: timeout"]}, BASE)["fallback badge on screen"] is False
+
+
+def test_every_aired_text_is_checked_again_and_passes():
+    for row in ROWS.values():
+        assert all(i["passes_check"] for i in row["insights"]), row["scenario"]
 
 
 def test_the_committed_table_is_up_to_date():
@@ -136,6 +167,22 @@ def test_a_personalizer_that_raises_leaves_the_insight_on_air():
     assert [s.action for s in result.trace if s.role == "personalizer"] == ["error"]
     assert [c["persona"] for c in result.cues if c["kind"] == "insight"] == ["analyst"]
     assert result.reviews[0].status == "verified"
+
+
+@pytest.mark.parametrize("shape", [None, ["a variant as a bare string"], [{"persona": "casual"}], 42],
+                         ids=["none", "strings", "dicts", "a number"])
+def test_a_personalizer_returning_a_bad_shape_never_loses_the_minute(shape):
+    # Whatever it returns, the node fails closed: no variant, the insight, the templates and the
+    # trace all stay, and the minute ends.
+    async def malformed(claim, evidence, profiles):
+        return shape
+
+    result = minute(True, personalizer=malformed)
+    assert [c["persona"] for c in result.cues if c["kind"] == "insight"] == ["analyst"]
+    assert result.reviews[0].status == "verified"
+    assert sorted(c["id"] for c in result.cues if c["kind"] != "insight") == BASE["templates"]
+    errors = [s for s in result.trace if s.role == "personalizer"]
+    assert [(s.action, s.fallback) for s in errors] == [("error", "personalizer: error")]
 
 
 def test_every_variant_is_fact_checked_before_it_airs():
@@ -230,3 +277,32 @@ def test_the_live_run_injects_each_failure_around_the_published_agents(monkeypat
     md = (tmp_path / "failure-table-live.md").read_text()
     assert md.count("# Failure table") == 3 and "live, seed33" in md
     assert len(body["commit"]) == 40 and body["commit"] in md  # which engine simulated the seeds
+
+def test_the_worst_personalized_minute_fits_the_superstep_budget():
+    # Three moments, both writers rejected on every draft but the Tactician's last, which airs and
+    # goes to the Personalizer: every hop a personalized minute can take. Over budget raises.
+    import asyncio
+
+    from ninety.agents import workflow
+    from ninety.agents.contracts import Models
+    from ninety.agents.slice import MAX_REWRITES
+    from tests.test_workflow import EVENTS, PASSES, Judge, false_claim, picks, reply, true_claim
+
+    mains = [p["id"] for p in PASSES[:workflow.MAX_MOMENTS_PER_MINUTE]]
+    tactician = [r for m in mains for r in [reply(false_claim(m))] * MAX_REWRITES + [reply(true_claim(m))]]
+    challenger = [reply(false_claim(m)) for m in mains for _ in range(1 + MAX_REWRITES)]
+    models = Models.scripted({"analyst": [picks(*mains)], "tactician": tactician, "challenger": challenger},
+                             judge=Judge())
+    result = asyncio.run(workflow.run_workflow(models, EVENTS, 2, "test", personalize=True))
+    assert [r.status for r in result.reviews] == ["verified"] * len(mains)
+    assert len([s for s in result.trace if s.role == "personalizer"]) == len(mains)
+
+
+@pytest.mark.parametrize("module", ["workflow_failures", "agent_ablation"])
+def test_a_report_with_a_nan_is_refused_not_written(module):
+    # Strict JSON (lesson 43): NaN is not JSON, so writing one must fail, not write "NaN".
+    import importlib
+
+    mod = importlib.import_module(f"ninety.eval.{module}")
+    with pytest.raises(ValueError):
+        mod.results({"rows": [{"x": float("nan")}]} if module == "agent_ablation" else [{"x": float("nan")}])

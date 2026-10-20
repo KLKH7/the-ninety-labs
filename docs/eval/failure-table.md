@@ -12,23 +12,24 @@ is `docs/eval/failure-table-m1.md`.
 | Injected failure | Claim | Fallbacks and holds in the trace | On screen | Recovers |
 |---|---|---|---|---|
 | nothing (the baseline) | verified | fact_checker held: analyst/es: no translation: the verified English text; fact_checker held: casual/es: no translation: the verified English text; fact_checker held: club/es: no translation: the verified English text | 8 template graphics (as with no failure); verified insight "Away complete a pass of 8 m at 42 km/h." | yes |
-| the Judge never answers (every call outlasts its timeout, retried once) | held (timeout) | judge hold: timeout; fact_checker hold: tactician's claim: judge timeout; claim held back; producer template: cue-v00001-analyst stays: held | 8 template graphics (as with no failure); no insight; badge: FALLBACK (held: timeout) | yes |
+| the Judge never answers (every call outlasts its timeout, retried 1 time(s)) | held (timeout) | judge hold: timeout; fact_checker hold: tactician's claim: judge timeout; claim held back; producer template: cue-v00001-analyst stays: held | 8 template graphics (as with no failure); no insight; badge: FALLBACK (held: timeout) | yes |
 | the Tactician's Foundry endpoint cannot be reached | held (service), Judge not asked | tactician fail: ServiceRequestError: injected: the Foundry endpoint cannot be reached; template stays; producer template: cue-v00001-analyst stays: held | 8 template graphics (as with no failure); no insight; badge: FALLBACK (held: service) | yes |
 | the Personalizer's service refuses the connection (its container is down) | verified | personalizer fallback: fallback: refused; fact_checker held: analyst/es: no translation: the verified English text; fact_checker held: casual/es: no translation: the verified English text; fact_checker held: club/es: no translation: the verified English text | 8 template graphics (as with no failure); verified insight "Away complete a pass of 8 m at 42 km/h."; badge: FALLBACK (personalizer: refused) | yes |
 | the detector reports the event the Tactician cites at confidence 0.3, below 0.5 | held (low_confidence), Judge not asked | fact_checker hold: tactician's claim: event v00005 was detected with confidence 0.30, below 0.50: cite a confident detection; producer template: cue-v00001-analyst stays: held | 6 of 8 template graphics (the ones on the unsure detection are not drawn); no insight; badge: FALLBACK (held: low_confidence) | yes |
 
 **Recovered: 4 of 4** injected failures. A row recovers when every template
 graphic stays on air (less those on an unsure detection, which the confidence gate keeps off
-the screen), nothing airs that the fact-checker did not pass, the claim ends as it must (held
-or rejected; verified when only the Personalizer failed, since the insight needs no
-Personalizer), the fallback is recorded in the trace, and a fallback badge is on screen (the
-cue's `fallback`, which the viewer draws), never without a failure. In every row, the
-Spanish variants are held: the stand-in Personalizer and its in-process fallback answer in
-English, and a variant airs only in its own language.
+the screen), every aired text passes the code checks again, the claim ends exactly as it must
+(held; verified when only the Personalizer failed, since the insight needs no Personalizer),
+the failure's own fallback is marked in the trace, and a fallback badge is on screen (the
+cue's `fallback`, which the viewer draws); the baseline has neither.
+In 2 of 5 rows the Spanish variants are held: the Personalizer that
+answered gave English text, and a variant airs only in its own language.
 
 ## Budgets
 
-- The Judge: 15 s per call in production, retried once, then the claim is held (fail closed).
+- The Judge: 15 s per call in production, retried 1
+  time(s), then the claim is held (fail closed).
   Here 0.05 s, so the timeout row runs the same code path in a blink.
 - The Personalizer: `personalizer.core.BUDGET_S` per call in production; on a timeout, a 5xx or
   a refused connection the in-process fallback answers (the verified text), here after the

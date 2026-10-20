@@ -157,3 +157,67 @@ def test_no_live_module_takes_the_sync_credential(path):
     sync = [n for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module == "azure.identity"
             and any(a.name == "DefaultAzureCredential" for a in n.names)]
     assert not sync, f"{path} imports azure.identity.DefaultAzureCredential: use credentials.new_credential"
+
+
+class Counting:
+    """An inner credential: every request asked, each token lasting `lifetime` seconds."""
+
+    def __init__(self, lifetime: float):
+        self.lifetime, self.asked = lifetime, []
+
+    async def get_token(self, *scopes, **kwargs):
+        self.asked.append((scopes, tuple(sorted(kwargs))))
+        token = Token()
+        token.expires_on = time.time() + self.lifetime
+        return token
+
+    async def close(self):
+        pass
+
+
+def test_the_token_margin_is_twice_a_model_call():
+    from ninety.agents import budgets
+
+    assert credentials.TOKEN_MARGIN_SECONDS == 2 * budgets.MODEL_TIMEOUT_SECONDS
+
+
+def test_a_token_lasting_less_than_the_margin_is_fetched_again():
+    # One model call's budget is inside the margin: such a token is never kept.
+    from ninety.agents import budgets
+
+    inner = Counting(budgets.MODEL_TIMEOUT_SECONDS)
+    signed = credentials.SignedIn(inner)
+    asyncio.run(signed.get_token(credentials.FOUNDRY_SCOPE))
+    asyncio.run(signed.get_token(credentials.FOUNDRY_SCOPE))
+    assert len(inner.asked) == 2
+
+
+def test_tokens_are_kept_per_scope():
+    inner = Counting(3600)
+    signed = credentials.SignedIn(inner)
+    for scope in ("a/.default", "b/.default", "a/.default"):
+        asyncio.run(signed.get_token(scope))
+    assert [s for s, _ in inner.asked] == [("a/.default",), ("b/.default",)]
+
+
+@pytest.mark.parametrize("kwargs", [{"claims": "challenge"}, {"enable_cae": True}])
+def test_a_claims_challenge_never_gets_the_kept_token(kwargs):
+    inner = Counting(3600)
+    signed = credentials.SignedIn(inner)
+    asyncio.run(signed.get_token(credentials.FOUNDRY_SCOPE))
+    asyncio.run(signed.get_token(credentials.FOUNDRY_SCOPE, **kwargs))  # asks again
+    asyncio.run(signed.get_token(credentials.FOUNDRY_SCOPE))  # the kept one serves ordinary calls
+    assert len(inner.asked) == 2 and inner.asked[1][1] == tuple(kwargs)
+
+
+def test_foundry_scores_signs_in_before_it_evaluates(monkeypatch, order):
+    from ninety.agents import analyst_eval as ae
+
+    async def evaluate_traces(**kwargs):
+        order.append("evaluate")
+        return type("R", (), {"status": "ok", "report_url": "u", "per_evaluator": {}})()
+
+    monkeypatch.setattr("agent_framework.foundry.evaluate_traces", evaluate_traces)
+    monkeypatch.setattr(ae.foundry, "chat_client", lambda credential: object())
+    assert asyncio.run(ae.foundry_scores(["r1"]))["status"] == "ok"
+    assert order[:2] == ["token", "evaluate"]

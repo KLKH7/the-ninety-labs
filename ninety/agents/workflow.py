@@ -52,6 +52,7 @@ from agent_framework import Executor, WorkflowBuilder, WorkflowContext, handler
 from agent_framework.foundry import FoundryAgent
 
 from ninety.agents import telemetry
+from ninety.agents.budgets import MODEL_TIMEOUT_SECONDS
 from ninety.agents.contracts import (
     Author,
     ClaimStatus,
@@ -84,9 +85,7 @@ WORKFLOW = "minute"
 # model calls (SECURITY.md: spend is capped), and one insight every twenty seconds or so leaves the
 # template graphics on air most of the time rather than a queue of explanations running behind.
 MAX_MOMENTS_PER_MINUTE = 3
-# Design: a live writer that has not answered in a minute is writing about a moment the broadcast
-# has moved past; its claim is held and the template stays. The Judge has its own timeout.
-MODEL_TIMEOUT_SECONDS = 60.0
+
 INSIGHT_PERSONA = "analyst"  # the insight replaces this persona's template; the Personalizer does the rest
 
 MOMENT_ANALYST_INSTRUCTIONS = """You are the Analyst for a football broadcast. The request names a
@@ -620,18 +619,24 @@ class Personalizer(Executor):
     async def personalize(self, msg: ToPersonalizer, ctx: WorkflowContext[ToTactician, Result]) -> None:
         from ninety.agents.live import _personalized
 
-        run = self.run
+        run, started = self.run, time.perf_counter()
         before = len(run.trace)
-        variants, _ = await _personalized(
-            msg.claim, run.events, list(run.known.values()), run.t, guarded(run.models.judge),
-            run.models.personalizer, None, run.trace,
-        )
-        # A variant from the in-process fallback is badged as one, on screen and in the trace.
-        route = next((s for s in run.trace[before:] if s.role == "personalizer"), None)
-        if route is not None and route.action == "fallback":
-            why = "personalizer: " + route.detail.split(":", 1)[-1].strip()
-            run.trace[run.trace.index(route)] = replace(route, fallback=why)
-            variants = [{**v, "fallback": why} for v in variants]
+        try:
+            variants, _ = await _personalized(
+                msg.claim, run.events, list(run.known.values()), run.t, guarded(run.models.judge),
+                run.models.personalizer, None, run.trace,
+            )
+            # A variant from the in-process fallback is badged as one, on screen and in the trace.
+            route = next((s for s in run.trace[before:] if s.role == "personalizer"), None)
+            if route is not None and route.action == "fallback":
+                why = "personalizer: " + route.detail.split(":", 1)[-1].strip()
+                run.trace[run.trace.index(route)] = replace(route, fallback=why)
+                variants = [{**v, "fallback": why} for v in variants]
+        except Exception as e:  # fail closed: no variant airs, the insight and the minute stay
+            del run.trace[before:]
+            run.step("personalizer", msg.case.moment.id, "error", started, f"{type(e).__name__}: {e}",
+                     "personalizer: error")
+            variants = []
         run.cues.extend(variants)
         await next_moment(run, msg.case, ctx)
 

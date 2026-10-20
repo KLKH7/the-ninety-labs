@@ -18,19 +18,22 @@
      "text": "Away complete a pass of 8 m at 42 km/h.",
      "persona": "analyst",
      "lang": "en",
-     "verified": true
+     "verified": true,
+     "passes_check": true
     },
     {
      "text": "Away complete a pass of 8 m at 42 km/h.",
      "persona": "casual",
      "lang": "en",
-     "verified": true
+     "verified": true,
+     "passes_check": true
     },
     {
      "text": "Away complete a pass of 8 m at 42 km/h.",
      "persona": "club",
      "lang": "en",
-     "verified": true
+     "verified": true,
+     "passes_check": true
     }
    ],
    "templates": [
@@ -64,7 +67,7 @@
    "scenario": "judge timeout",
    "match": "seed900001",
    "unsure": [],
-   "injected": "the Judge never answers (every call outlasts its timeout, retried once)",
+   "injected": "the Judge never answers (every call outlasts its timeout, retried 1 time(s))",
    "status": "held",
    "category": "timeout",
    "reasons": [
@@ -160,19 +163,22 @@
      "text": "Away complete a pass of 8 m at 42 km/h.",
      "persona": "analyst",
      "lang": "en",
-     "verified": true
+     "verified": true,
+     "passes_check": true
     },
     {
      "text": "Away complete a pass of 8 m at 42 km/h.",
      "persona": "casual",
      "lang": "en",
-     "verified": true
+     "verified": true,
+     "passes_check": true
     },
     {
      "text": "Away complete a pass of 8 m at 42 km/h.",
      "persona": "club",
      "lang": "en",
-     "verified": true
+     "verified": true,
+     "passes_check": true
     }
    ],
    "templates": [

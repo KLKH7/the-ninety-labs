@@ -14,7 +14,7 @@ What airs:
   for the analyst persona. A claim resting on an unsure detection is held and never airs.
 - when the agents fail (an Analyst or tool outage, a malformed reply, no answer within
   AGENTS_TIMEOUT_SECONDS), no insight airs and the template cues air as they would without models:
-  a failing agent never takes the graphics down with it (docs/eval/failure-table.md).
+  a failing agent never takes the graphics down with it (docs/eval/failure-table-m1.md).
 - when a Personalizer is given too (ninety/personalizer: over A2A, or in-process), that claim
   reworded for the other personas and in Spanish: one more `insight` cue per variant that passes
   the fact-checker again (ninety/personalizer/cues.py). A variant that fails is never shown, and a
