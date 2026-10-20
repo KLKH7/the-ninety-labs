@@ -502,7 +502,7 @@ def pose_angles(pose: dict, heading: float, height_m: float) -> dict:
         if err > PLANT_GIVE_UP and lift < 0.0:
             # Lowered, a foot the leg cannot reach is not left to the pose, which would put it through
             # the grass: the leg reaches toward its plant and stays above the grass.
-            floor = -lift / (height_m / 1.84)
+            floor = -lift / (height_m / ASSET_STATURE_M)
             planted, err = _leg(angles, side, target, PLANT_FOOT, twist, f"foot_{side}", False, floor=floor)
             err = 0.0
         if err <= PLANT_GIVE_UP:

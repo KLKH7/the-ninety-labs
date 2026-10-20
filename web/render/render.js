@@ -1039,7 +1039,7 @@ function anglesFor(player, pose, heading, height) {
     let [planted, err] = searchLeg(angles, side, target, PLANT_FOOT, twist, 'foot_' + side, true, player);
     if (err > PLANT_GIVE_UP && lift < 0) {
       // Lowered, an unreachable foot reaches toward its plant above the grass (meshpose.pose_angles).
-      planted = searchLeg(angles, side, target, PLANT_FOOT, twist, 'foot_' + side, false, player, null, -lift / (height / 1.84))[0];
+      planted = searchLeg(angles, side, target, PLANT_FOOT, twist, 'foot_' + side, false, player, null, -lift / (height / ASSET_STATURE_M))[0];
       err = 0;
     }
     // A stride's plant comes and goes with a weight (scene.PLANT_EASE_FRAMES).
