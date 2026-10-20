@@ -883,7 +883,8 @@ short and actionable. This file is public: no research sources, product names or
   as `rejected` (the claim is wrong) instead of `held` (it could not be checked); and an Analyst
   that failed, hung on an MCP call or replied with prose raised out of `live.run`, taking the
   template graphics down with it.
-- **Rule:** every fallback claimed in docs/eval/failure-table.md is a row produced by injecting
+- **Rule:** every fallback claimed in a failure table (docs/eval/failure-table-m1.md, and the
+  multi-agent workflow's docs/eval/failure-table.md) is a row produced by injecting
   that failure into the real path, asserted by a test with the expected outcome written in the
   test. A status is computed by `status_for`, never re-derived.
 - **Check:** `uv run pytest tests/test_failure_table.py`; removing the `live.run` fallback or
@@ -1145,7 +1146,63 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `uv run pytest tests/test_restarts.py -k every_kind`; `scripts/defect_sweep/restarts.py`
   reports `stuck_restarts`, which must be 0.
 
-### 123. A figure keeps the case it was measured for
+### 123. An async client handed a sync credential signs in late and blocks the loop
+- **What happened:** the slice, the fact-checker evaluation and the Analyst evaluation each made
+  a sync `DefaultAzureCredential` and passed it to Foundry's async clients, and
+  `foundry.chat_client` made one by default. A sync credential fetches its token on the event
+  loop's thread, stalling every concurrent call. It fetches it only at the first model call,
+  after the evaluation has simulated its matches, by which time agents-live's five-minute OIDC
+  sign-in can have expired. The fact-checker evaluation lost 19 of 251 Judge calls, most likely to
+  this (not yet confirmed by a rerun). The workflow
+  (W1) had already fixed this for itself; the rest never took the fix.
+- **Rule:** every live run makes one aio credential (`credentials.new_credential`), signs in
+  (`credentials.sign_in`) before anything slow, and passes that object to the chat client and
+  every agent. A client factory takes no default credential.
+- **Check:** `tests/test_credentials.py`. Each site takes the token before it simulates, and
+  hands the same `SignedIn` credential to every client; deleting any `sign_in` turns its test
+  red. An AST check keeps `azure.identity.DefaultAzureCredential` out of the live modules.
+### 124. Judge a drawn motion over the frames around the moment, and watch the clip
+- **What happened:** #146 made the foot reach the ball on the contact frame and its tests measured
+  exactly that, so they passed while the kick lost its swing: the foot was eased in from at most
+  0.4 m behind the ball, and a pass looked like a player standing still with the ball between his
+  feet. A lunge dropped the hips 0.24 m and snapped them back in two frames. Since the skinned
+  mesh (a3d228e) every stored pose bent both elbows about 80 degrees, so the forearms were held out
+  in front whatever the player did; and since Oct 15 the boards behind the goals had their print
+  flipped and read mirrored. No test looked at any of it; the owner found all four by watching
+  review clips. Measuring every limb frame by frame then found a fifth, in every run since #146: the
+  stride planted each foot a quarter of a cycle away from where the gait has it on the grass, so on
+  about one player-frame in five a foot jumped 0.3 to 1 m at a landing or lift-off.
+- **Rule:** a change to how a body moves is tested over the frames around the event, not only on
+  it: the swing before, the follow-through after, the rest pose's joints, and how far anything
+  moves in one frame. Every printed surface has a test that it reads left to right from each camera
+  that sees its print. A before/after clip goes on the pull request and someone watches it before
+  merge.
+- **Check:** `tests/test_render_motion.py` (arms hang and swing, the kick's backswing and
+  follow-through, the lunge's pace, the keeper's hands on the ball) and
+  `tests/test_render_stadium.py` each fail on `e50440c` and pass with the fix, and so do
+  `test_setting_off_running_and_pulling_up_moves_no_limb_in_a_jump` and the tackle test, which cap
+  how far any limb moves relative to the body in one frame.
+
+### 125. A check that fails on a few frames names a class of defect: sweep every frame for it
+- **What happened:** render-check failed `player_feet_in_boxes` at 0.4.2 on 2 foot checks each of
+  seeds 7 and 11. The 0.4.3 fix traced those four frames to three causes and tested each, and the
+  re-render of seed 7 failed 7 checks in two other sequences: a pass cushioned with one foot and
+  struck with the other on the move left the first foot's plant where it stood before the touch,
+  2 m behind by the strike, and the mesh hung both feet in the air. Fixing that sequence (0.4.4)
+  left 1 failure. A sweep of every player-frame of both clips then found 21 frames with both mesh
+  feet above 0.2 m and the body not jumping, in four players and two more causes: a touch that had
+  faded before the next one still let its foot go from the old plant, and a foot the touch caught
+  mid-stride came down over a whole slow step. The frames were instances; the class was a foot
+  the body has left behind.
+- **Rule:** when a picture check fails on a few frames, name the class of defect, measure it over
+  every player-frame of the clips in Python (no render needed: the mesh's markers come from
+  `meshpose`), and fix every sequence that shows it before re-rendering.
+- **Check:** `test_a_first_touch_then_a_strike_on_the_move_keeps_a_foot_on_the_grass` (both
+  cases) and `test_a_thigh_touch_on_the_move_keeps_a_foot_on_the_grass` fail on `0312d60` and
+  pass; removing any one of the three parts of the fix fails one of them or the tackle's limb cap.
+  The sweep at 0.4.5: 0 such player-frames on seeds 7 and 11 (worst 0.18 m), from 21.
+
+### 126. A figure keeps the case it was measured for
 - **What happened:** GROUNDING R1 cited Opta's guide to time-wasting for "a goal's celebration,
   about 72 s", and the restart work planned the kick-off after every goal around it. Read again,
   the article gives 72 s for the celebration after a penalty goal, in its paragraph on penalties;
@@ -1156,3 +1213,17 @@ short and actionable. This file is public: no research sources, product names or
   comes from; a number used for a wider case needs a source for that case.
 - **Check:** every row of GROUNDING that cites a time or a rate names its case; R1 and L4 now cite
   the penalty figure as a penalty figure and the goal figure from its own source.
+
+### 127. Players sent to one point end up inside each other: give each his own place
+- **What happened:** the goal celebration sent every team-mate to the scorer's own position. Steering
+  bends a run round another player but does not slow it, and bodies in contact brace only with the
+  grip steering leaves, so ten players arriving at one point at a sprint ended up in each other: in
+  32 to 63% of celebration frames two bodies overlapped by more than 5 cm. The tests counted players
+  within 3 m of the scorer, a distance between centres, and passed.
+- **Rule:** when several players head for the same spot (a huddle, a wall, a queue), each gets a
+  place of his own, at least a shoulder's breadth from the next (P11), chosen so that no two runs
+  to them cross. A test of a crowd measures the clearance between bodies (`shape.between`), not
+  the distance between centres.
+- **Check:** `uv run pytest tests/test_restarts.py -k "overlap or side_they_come_from"`; with every
+  team-mate sent to the scorer's centre the overlap test fails. `docs/eval/restarts.md` ("The
+  huddle") counts the frames with bodies in each other over a whole celebration.

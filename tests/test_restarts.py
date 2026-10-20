@@ -4,6 +4,8 @@ is walked back to, never reset (row 3); opponents keep the Laws' distance until 
 
 import math
 
+import pytest
+
 from ninety.sim import ball
 from ninety.sim.decisions import PENALTY_DEPTH, PENALTY_HALF_WIDTH
 from ninety.sim.engine import (
@@ -656,13 +658,17 @@ def test_every_kind_of_restart_is_taken_and_struck():
             raise AssertionError(f"the {kind} was never struck")
 
 
-def scored_engine() -> tuple[Engine, str]:
-    """A minute of seed 2's play, then home scores: h9 puts it in the away net."""
-    e = Engine(2)
+def scored_engine(seed: int = 2, scorer_id: str = "h9", at: tuple[float, float] = (100.0, 30.0),
+                  nearest: str | None = None) -> tuple[Engine, str]:
+    """A minute of play, then home scores: the scorer puts it in the away net from `at`. With
+    `nearest`, that team-mate stands right by the ball, nearer it than the scorer."""
+    e = Engine(seed)
     e.run(1)
     e.possessor, e.restart, e.set_by, e.throw_by, e.dribbler = None, None, None, None, None
-    scorer = e.by_id["h9"]
-    scorer.x, scorer.y = 100.0, 30.0
+    scorer = e.by_id[scorer_id]
+    scorer.x, scorer.y = at
+    if nearest:
+        e.by_id[nearest].x, e.by_id[nearest].y = 104.0, 33.0
     e.ball = (106.0, 33.0, 0.5, 2.0, 0.0, 0.0)  # in the net
     e.kicked = e.emit("shot", "home", 95.0, 33.0, player=scorer.id)
     e.shot_was_on_target = True
@@ -782,3 +788,117 @@ def test_the_wall_breaks_up_once_the_ball_is_in_play():
     assert e.shape_target(e.by_id[pid])[:2] == spot
     e.restart = None  # kicked and moving: in play
     assert e.shape_target(e.by_id[pid])[:2] != spot
+
+
+def test_gathered_round_the_scorer_no_two_bodies_overlap():
+    """Defect: team-mates all ran for the scorer's own centre and ended inside each other (32 to 63%
+    of celebration frames had bodies more than 5 cm into each other). Gathered, each has his own
+    place by him and keeps clear of the others' bodies (P11)."""
+    from ninety.sim import shape
+    for seed in (2, 7):
+        e, _ = scored_engine(seed)
+        c = e.celebration
+        while e.t < c.until:
+            e.step()
+        home = [p for p in e.players if p.team == "home"]
+        for i, a in enumerate(home):
+            for b in home[i + 1:]:
+                d = shape.between(a.x, a.y, a.heading, b.x, b.y, b.heading)[0]
+                assert shape.CHEST_DEPTH_M - d <= 0.05, (seed, a.id, b.id)
+
+
+def test_after_the_celebration_they_walk_back_at_least_at_a_walking_pace():
+    """L4: at least a normal walking pace, 1.36 m/s for men aged 20 to 29 (Bohannon & Andrews
+    2011), not a minute-long trudge; faster only if a walk would not get him back in time."""
+    e, _ = scored_engine()
+    e.celebration.until = e.t  # over
+    p = e.by_id["h7"]
+    p.x, p.y = 100.0, 5.0  # far from his spot, a minute or more before the kick-off
+    kx, ky = e.kickoff_spot(p, e.restart.team)
+    assert math.hypot(kx - p.x, ky - p.y) / (e.restart.ready_at - e.t) < 1.36  # premise: time to spare
+    assert e.shape_target(p)[2] == pytest.approx(1.36)
+    e.restart.ready_at = e.t + 1.0  # the kick-off is due: a walk would be late
+    assert e.shape_target(p)[2] > 1.36
+
+
+def test_the_scoring_keeper_does_not_join_in():
+    e, _ = scored_engine()
+    keeper = e.keeper("home")
+    tx, ty, _ = e.shape_target(keeper)
+    assert keeper.id not in e.celebration.ring
+    assert tx < PITCH_X / 2  # he goes back to his place in his own half
+
+
+def test_the_scorer_runs_to_the_flag_on_his_own_side_of_the_goal():
+    e, _ = scored_engine(at=(100.0, 30.0))
+    assert e.celebration.spot == (PITCH_X - 0.5, 0.5)
+    e, _ = scored_engine(at=(100.0, 38.0))
+    assert e.celebration.spot == (PITCH_X - 0.5, PITCH_Y - 0.5)
+
+
+def test_they_celebrate_round_the_scorer_not_whoever_is_nearest_the_ball():
+    e, scorer = scored_engine(nearest="h10")
+    side = [p for p in e.players if p.team == "home" and p.role != "GK"]
+    nearest = min(side, key=lambda p: math.hypot(p.x - e.ball[0], p.y - e.ball[1]))
+    assert nearest.id == "h10" != scorer  # premise (lesson 47): someone else is nearer the ball
+    assert e.celebration.focus == scorer
+
+
+def test_the_celebration_is_over_before_the_kick_off_may_be_taken():
+    """The longest celebration ends before the earliest kick-off (L4), so the walk back always
+    starts in time and the kick-off waits only for the stoppage R1 draws."""
+    from ninety.sim.engine import CELEBRATION_S, RESTART_DELAY_S
+    assert CELEBRATION_S[1] < RESTART_DELAY_S["kick_off_after_goal"][0]
+    for seed in (2, 3, 5):
+        e, _ = scored_engine(seed)
+        assert e.celebration.until < e.restart.ready_at
+
+
+def test_a_keeper_who_scores_celebrates_where_he_is():
+    e, keeper = scored_engine(scorer_id="h1", at=(40.0, 34.0))
+    c = e.celebration
+    assert c.focus == keeper and c.spot == (40.0, 34.0)
+    assert keeper not in c.ring and len(c.ring) == 10  # every outfielder runs to him
+
+
+def test_team_mates_take_places_on_the_side_they_come_from_in_the_order_they_come():
+    """L4: each team-mate's place round the scorer is on the side they come from (within a quarter
+    turn of their mean bearing) and in the order of their bearings, so no two runs cross."""
+    e, _ = scored_engine()
+    c = e.celebration
+    f = e.by_id[c.focus]
+    mates = [e.by_id[pid] for pid in c.ring]
+
+    def bearing(x: float, y: float) -> float:
+        return math.atan2(y - f.y, x - f.x)
+
+    mean = math.atan2(sum(math.sin(bearing(q.x, q.y)) for q in mates),
+                      sum(math.cos(bearing(q.x, q.y)) for q in mates))
+
+    def turn(a: float) -> float:  # how far round from the mean bearing, -pi to pi
+        return (a - mean + math.pi) % (2 * math.pi) - math.pi
+
+    places = {q.id: e.huddle_spot(c, q) for q in mates}
+    coming = sorted(c.ring, key=lambda pid: turn(bearing(e.by_id[pid].x, e.by_id[pid].y)))
+    assert coming != c.ring  # premise (lesson 47): their bearings are not the order of the list
+    assert sorted(c.ring, key=lambda pid: turn(bearing(*places[pid]))) == coming
+    assert all(abs(turn(bearing(*places[pid]))) <= math.pi / 2 for pid in c.ring)
+
+
+def test_team_mates_stand_close_only_once_gathered_round_the_scorer():
+    """L4: within HUDDLE_REACH_M of the scorer, team-mates keep only clear of each other's bodies,
+    so they can stand side by side; further off, on the way in, they keep the usual personal space."""
+    e, _ = scored_engine()
+    c = e.celebration
+    f = e.by_id[c.focus]
+    a, b = (e.by_id[pid] for pid in c.ring[:2])
+    for i, q in enumerate(p for p in e.players if p not in (a, b, f)):  # everyone else well away
+        q.x, q.y = 5.0, 2.0 + 3.0 * i
+    for q in e.players:
+        q.vx = q.vy = 0.0
+    a.x, a.y, b.x, b.y = f.x - 1.0, f.y + 1.0, f.x - 1.8, f.y + 1.0  # 0.8 m apart, both by him
+    assert e.together(a, b)
+    assert e.avoid(a) == (0.0, 0.0)
+    a.x, a.y, b.x, b.y = f.x - 10.0, f.y + 5.0, f.x - 10.8, f.y + 5.0  # 0.8 m apart, still coming
+    assert not e.together(a, b)
+    assert e.avoid(a)[0] > 0.0  # bends away from b

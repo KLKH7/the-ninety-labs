@@ -4,8 +4,10 @@ from ninety.match.facts import compact, events_in
 EVENTS = events_in(7, 5, 1, 5)
 KNOWN = {e["id"]: e for e in EVENTS}
 PASS = next(e for e in EVENTS if e["type"] == "pass" and "distance_m" in e and e.get("receiver"))
-# any event in the second minute of play (01:00 to 01:59), whatever the engine produces there
-CLOCK_EVENT = next(e for e in EVENTS if e["clock"].startswith("01:"))
+# the first event from 01:00 on, whatever the engine produces there: a minute past the first keeps the
+# ordinal minute ("2nd") and the clock ("01:xx") apart. Not a fixed minute: a stoppage can fill one
+# (after a goal the kick-off waits a minute or more, GROUNDING L4; lesson 47)
+CLOCK_EVENT = next(e for e in EVENTS if e["clock"] >= "01:00")
 
 
 def test_true_claim_passes():
@@ -105,7 +107,7 @@ def test_old_ordinal_clock_form_is_rejected():
 
 
 def test_clock_with_wrong_second_is_rejected():
-    wrong = f"01:{(int(CLOCK_EVENT['clock'][3:]) + 1) % 60:02d}"
+    wrong = f"{CLOCK_EVENT['clock'][:3]}{(int(CLOCK_EVENT['clock'][3:]) + 1) % 60:02d}"
     verdict = check(Claim(f"A pass at {wrong}.", [CLOCK_EVENT["id"]]), KNOWN)
     assert not verdict.ok
     assert any("clock" in reason for reason in verdict.reasons)

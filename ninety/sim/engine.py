@@ -50,7 +50,7 @@ DT = 1.0 / FPS
 # the ball could get there (in_time, O8), no faster; a few jobs are flat out. What he can reach is
 # limited by his own body (ninety/sim/body.py): acceleration, top speed, energy.
 SPRINT = 99.0  # as fast as their body allows (a keeper's dash, P17 does not price his)
-RECOVER = 6.0  # a restart taker or the keeper getting into position (design)
+RECOVER = 6.0  # a restart taker or the keeper getting into position, a goal's celebration runs (design)
 SHAPE = 3.0  # getting up after being beaten (design)
 DRIBBLE = 2.5
 DECIDE_EVERY = 6  # frames between the ball carrier's decisions (about 4 a second)
@@ -149,6 +149,9 @@ RESTART_DELAY_S = {"throw_in": (12, 20), "goal_kick": (24, 34), "corner": (24, 3
 # design: how long the scorer's run and his team-mates' gathering round him last; the rest of the
 # minute or more before the kick-off is the walk back (L4)
 CELEBRATION_S = (15.0, 25.0)
+# design: team-mates round a scorer stand a shoulder's breadth apart (P11) with a little to spare
+HUDDLE_SPACING_M = 0.55
+HUDDLE_REACH_M = 3.0  # design: this near the one they celebrate, team-mates count as gathered
 # L4: after a goal players walk back at least at a normal walking pace: men aged 20 to 29 walk at
 # about 1.36 m/s (Bohannon & Andrews 2011, Physiotherapy 97:182, a meta-analysis of 23,111 adults,
 # as tabulated by the University of Toronto's iWalk guide)
@@ -215,6 +218,7 @@ class Celebration:
     focus: str  # the scorer (or, for an own goal, the scoring side's player nearest the ball)
     spot: tuple[float, float]  # where he runs: the corner flag nearest him at that end (design)
     until: float
+    ring: list[str] = field(default_factory=list)  # the team-mates who run to him
 
 
 @dataclass
@@ -590,8 +594,9 @@ class Engine:
     def kickoff(self, team: str, setup: bool = False) -> None:
         """Law 8. At the start of the match (`setup`) the teams walk out to their kick-off spots
         before the first frame. After a goal nobody is moved: they make their own way back to their
-        spots, the ball is fetched to the centre mark (tick_restart), and the kick is taken once
-        everyone stands where Law 8 puts them, after a short pause rather than at once."""
+        spots after the celebration (celebrate), the ball is fetched to the centre mark
+        (tick_restart), and the kick is taken once everyone stands where Law 8 puts them and the
+        stoppage has run its time (L4: a minute or more after a goal, 1 to 2 s at the start)."""
         taker = next(p for p in self.players if p.team == team and p.role == "ST")
         if setup:
             for p in self.players:
@@ -1474,14 +1479,51 @@ class Engine:
     def celebrate(self, team: str, scorer: str | None) -> None:
         """L4 (design): the scorer runs off toward the corner flag nearest him at the end he scored at,
         and his outfield team-mates run to him; after CELEBRATION_S they walk back for the kick-off.
-        An own goal has no scorer: the side's outfielder nearest the ball is the one they run to."""
+        An own goal has no scorer: the side's outfielder nearest the ball is the one they run to. A
+        keeper who scores celebrates where he is. The team-mates gather on the side they come from
+        (huddle_spot), each at his own place, never on the same spot: bodies do not pass through each
+        other (P11)."""
         side = [p for p in self.players if p.team == team and p.role != "GK"]
         focus = self.by_id[scorer] if scorer else min(
             side, key=lambda p: math.hypot(p.x - self.ball[0], p.y - self.ball[1]))
-        flag_y = 0.5 if focus.y < PITCH_Y / 2 else PITCH_Y - 0.5
-        flag_x = clamp(goal_x(team), 0.5, PITCH_X - 0.5)
+        if focus.role == "GK":
+            spot = (focus.x, focus.y)
+        else:
+            flag_y = 0.5 if focus.y < PITCH_Y / 2 else PITCH_Y - 0.5
+            spot = (clamp(goal_x(team), 0.5, PITCH_X - 0.5), flag_y)
         until = self.t + self.rng.uniform(*CELEBRATION_S)
-        self.celebration = Celebration(team, focus.id, (flag_x, flag_y), until)
+        self.celebration = Celebration(team, focus.id, spot, until, [p.id for p in side if p is not focus])
+
+    def huddle_spot(self, c: Celebration, p: Player) -> tuple[float, float]:
+        """His place round the focus: on an arc facing the side the team-mates come from (their
+        mean bearing from him now), HUDDLE_SPACING_M apart, in the order of their bearings, so no
+        path to it crosses the focus or another's; the arc is at most a half-circle, far enough out
+        to hold them all and clear of the focus's body."""
+        focus = self.by_id[c.focus]
+        mates = [self.by_id[pid] for pid in c.ring]
+        bear = {q.id: fmath.atan2(q.y - focus.y, q.x - focus.x) for q in mates}
+        mx = sum(fmath.cos(a) for a in bear.values())
+        my = sum(fmath.sin(a) for a in bear.values())
+        mean = fmath.atan2(my, mx)
+        rel = {pid: (a - mean + math.pi) % (2 * math.pi) - math.pi for pid, a in bear.items()}
+        order = sorted(c.ring, key=lambda pid: rel[pid])
+        n = len(order)
+        radius = max(n * HUDDLE_SPACING_M / math.pi, shape.SHOULDER_BREADTH_M)
+        step = HUDDLE_SPACING_M / radius
+        a = mean + (order.index(p.id) - (n - 1) / 2) * step
+        return focus.x + fmath.cos(a) * radius, focus.y + fmath.sin(a) * radius
+
+    def together(self, p: Player, q: Player) -> bool:
+        """Team-mates who mean to stand side by side (gathered round a scorer) keep only clear of
+        each other's bodies, not the usual personal space; on the way there they keep it as ever.
+        Gathered: both within HUDDLE_REACH_M of the one they celebrate (design)."""
+        c = self.celebration
+        if c is None or self.t >= c.until or not (p.team == q.team == c.team):
+            return False
+        if not ((p.id in c.ring or p.id == c.focus) and (q.id in c.ring or q.id == c.focus)):
+            return False
+        f = self.by_id[c.focus]
+        return all(math.hypot(r.x - f.x, r.y - f.y) < HUDDLE_REACH_M for r in (p, q))
 
     def stop(self, kind: str, team: str, spot: tuple[float, float], taker: str | None = None,
              delay: str | None = None, direct: bool = True) -> None:
@@ -1816,11 +1858,10 @@ class Engine:
         if self.restart and self.restart.kind == "penalty_kick" and p.id != self.restart.taker:
             return *self.penalty_wait_spot(p), SHAPE  # Law 14: until the ball is kicked
         c = self.celebration
-        if c and self.t < c.until and p.team == c.team and p.role != "GK":
+        if c and self.t < c.until and (p.id == c.focus or p.id in c.ring):
             if p.id == c.focus:  # the scorer runs off to celebrate
                 return *c.spot, RECOVER
-            focus = self.by_id[c.focus]  # his team-mates run to him
-            return focus.x, focus.y, RECOVER
+            return *self.huddle_spot(c, p), RECOVER  # his team-mates run to their places by him
         kick_off = self.restart or self.set_by
         if kick_off and kick_off.kind == "kick_off" and p.id != kick_off.taker:
             # Law 8: in his own half until the ball is kicked, walking back (L4), faster if a walk
@@ -2253,8 +2294,9 @@ class Engine:
                 continue
             dx, dy = px - (q.x + q.vx * ANTICIPATE_S), py - (q.y + q.vy * ANTICIPATE_S)
             d = math.hypot(dx, dy)
-            if 1e-6 < d < PERSONAL_SPACE_M:
-                closeness = (PERSONAL_SPACE_M - d) / PERSONAL_SPACE_M  # 0 at the edge, 1 at contact
+            space = shape.SHOULDER_BREADTH_M if self.together(p, q) else PERSONAL_SPACE_M
+            if 1e-6 < d < space:
+                closeness = (space - d) / space  # 0 at the edge, 1 at contact
                 w = 4 * closeness * closeness / d  # urgency grows sharply as contact nears
                 nx, ny = nx + dx * w, ny + dy * w
         return nx, ny
