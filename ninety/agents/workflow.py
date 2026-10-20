@@ -73,6 +73,10 @@ MAX_MOMENTS_PER_MINUTE = 3
 # Design: a live writer that has not answered in a minute is writing about a moment the broadcast
 # has moved past; its claim is held and the template stays. The Judge has its own timeout.
 MODEL_TIMEOUT_SECONDS = 60.0
+# The Foundry project's token scope, the default of azure-ai-projects' client configuration.
+FOUNDRY_SCOPE = "https://ai.azure.com/.default"
+# Refresh a kept token this long before it expires: a model call may take MODEL_TIMEOUT_SECONDS.
+TOKEN_MARGIN_SECONDS = 2 * MODEL_TIMEOUT_SECONDS
 INSIGHT_PERSONA = "analyst"  # the insight replaces this persona's template; the Personalizer does the rest
 
 MOMENT_ANALYST_INSTRUCTIONS = """You are the Analyst for a football broadcast. The request names a
@@ -631,62 +635,98 @@ def _unused(role: str):
     return unused
 
 
+class SignedIn:
+    """An async credential that keeps each token it gets until shortly before it expires.
+
+    In agents-live, `azure/login` leaves the Azure CLI holding an OIDC client assertion that is
+    valid for five minutes; every token request after that fails (AADSTS700024, as the
+    Personalizer evaluation did 24 minutes in). A token itself lasts an hour or more, so a run
+    that signs in first and reuses its tokens never asks again within a run."""
+
+    def __init__(self, inner):
+        self.inner, self.tokens = inner, {}
+
+    async def get_token(self, *scopes: str, **kwargs):
+        token = self.tokens.get(scopes)
+        if token is None or token.expires_on - time.time() < TOKEN_MARGIN_SECONDS:
+            token = self.tokens[scopes] = await self.inner.get_token(*scopes, **kwargs)
+        return token
+
+    async def close(self) -> None:
+        await self.inner.close()
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc) -> None:
+        await self.close()
+
+
+async def sign_in_then_load(credential, load_events: Callable[[], list[dict]]) -> list[dict]:
+    """Gets the Foundry token before anything slow (a simulation) can outlast the sign-in."""
+    await credential.get_token(FOUNDRY_SCOPE)
+    return load_events()
+
+
 async def run_live(
-    events: list[dict], minute: int, match: str, inline_events: bool, plant: bool,
+    load_events: Callable[[], list[dict]], minute: int, match: str, inline_events: bool, plant: bool,
     trace_to: str = "foundry", content: bool = False,
-) -> tuple[Result, list[Turn], dict[str, str], bool]:
-    """Live on Foundry, calling the published versions pinned in foundry_agents.json. Returns the
-    result, every model answer, the versions that ran, and whether any model call failed."""
+) -> tuple[Result, list[Turn], dict[str, str], bool, list[dict]]:
+    """Live on Foundry, calling the published versions pinned in foundry_agents.json. Signs in,
+    then loads the events. Returns the result, every model answer, the versions that ran, whether
+    any model call failed, and the events the run checked against."""
     from agent_framework.foundry import FoundryAgent
-    from azure.identity import DefaultAzureCredential
+    from azure.identity.aio import DefaultAzureCredential
 
     from ninety import config
     from ninety.agents import foundry
     from ninety.agents.judge import judge
 
-    credential = DefaultAzureCredential()
-    client = foundry.chat_client(credential)
-    if trace_to == "foundry":
-        await telemetry.trace_to_foundry(client, content)
-    turns: list[Turn] = []
-    failed = [False]
-    async with contextlib.AsyncExitStack() as stack:
-        pins, agents = {}, {}
-        for role, local in foundry.workflow_agents(client).items():
-            name, version = foundry.pinned(local)  # refuses to run when the code drifted from the pin
-            pins[name] = version
-            published = FoundryAgent(
-                project_endpoint=config.FOUNDRY_PROJECT, agent_name=name, agent_version=version,
-                credential=credential,
+    async with SignedIn(DefaultAzureCredential()) as credential:
+        events = await sign_in_then_load(credential, load_events)
+        client = foundry.chat_client(credential)
+        if trace_to == "foundry":
+            await telemetry.trace_to_foundry(client, content)
+        turns: list[Turn] = []
+        failed = [False]
+        async with contextlib.AsyncExitStack() as stack:
+            pins, agents = {}, {}
+            for role, local in foundry.workflow_agents(client).items():
+                name, version = foundry.pinned(local)  # refuses to run when the code drifted from the pin
+                pins[name] = version
+                published = FoundryAgent(
+                    project_endpoint=config.FOUNDRY_PROJECT, agent_name=name, agent_version=version,
+                    credential=credential,
+                )
+                agents[role] = await stack.enter_async_context(published)
+
+            def ask(role: str):
+                async def answer(prompt: str) -> str:
+                    try:
+                        reply = await asyncio.wait_for(agents[role].run(prompt), MODEL_TIMEOUT_SECONDS)
+                        response = reply.text
+                    except BaseException:
+                        failed[0] = True
+                        raise
+                    turns.append(Turn(role, prompt, response))
+                    return response
+
+                return answer
+
+            async def judge_live(claim: Claim, evidence: list[dict]) -> Verdict:
+                verdict = await judge(agents["judge"], claim, evidence)
+                turns.append(Turn("judge", judge_prompt(claim), json.dumps(asdict(verdict))))
+                return verdict
+
+            models = Models(
+                analyst=ask("analyst"), tactician=ask("tactician"), challenger=ask("challenger"),
+                judge=judge_live,
+                personalizer=_unused("personalizer"), describer=_unused("describer"),
+                companion=_unused("companion"), speak=_unused("speak"),
             )
-            agents[role] = await stack.enter_async_context(published)
-
-        def ask(role: str):
-            async def answer(prompt: str) -> str:
-                try:
-                    response = (await asyncio.wait_for(agents[role].run(prompt), MODEL_TIMEOUT_SECONDS)).text
-                except BaseException:
-                    failed[0] = True
-                    raise
-                turns.append(Turn(role, prompt, response))
-                return response
-
-            return answer
-
-        async def judge_live(claim: Claim, evidence: list[dict]) -> Verdict:
-            verdict = await judge(agents["judge"], claim, evidence)
-            turns.append(Turn("judge", judge_prompt(claim), json.dumps(asdict(verdict))))
-            return verdict
-
-        models = Models(
-            analyst=ask("analyst"), tactician=ask("tactician"), challenger=ask("challenger"),
-            judge=judge_live,
-            personalizer=_unused("personalizer"), describer=_unused("describer"),
-            companion=_unused("companion"), speak=_unused("speak"),
-        )
-        result = await run_workflow(models, events, minute, match, plant, True, inline_events)
+            result = await run_workflow(models, events, minute, match, plant, True, inline_events)
     telemetry.flush()
-    return result, turns, pins, failed[0]
+    return result, turns, pins, failed[0], events
 
 
 def replay_models(replayer: Replayer) -> Models:
@@ -784,10 +824,10 @@ def main() -> None:
             if match not in match_server.MATCHES or args.minutes != match_server.MINUTES:
                 served = ", ".join(match_server.MATCHES)
                 sys.exit(f"the match server serves {served} at {match_server.MINUTES} minutes")
-            events = simulated_events(args.seed, args.minutes)
         try:
-            result, turns, pins, failed = asyncio.run(run_live(
-                events, args.minute, match, inline, args.plant,
+            result, turns, pins, failed, events = asyncio.run(run_live(
+                (lambda: events) if args.events else (lambda: simulated_events(args.seed, args.minutes)),
+                args.minute, match, inline, args.plant,
                 trace_to="none" if args.no_trace else "foundry", content=args.trace_content,
             ))
         except RegistryDrift as e:

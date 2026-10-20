@@ -8,6 +8,7 @@ engine change can take it away (lessons 47 and 78). Each test fails without the 
 import asyncio
 import json
 import textwrap
+import time
 import warnings
 from pathlib import Path
 
@@ -471,3 +472,59 @@ def test_every_committed_workflow_replay_still_replays(path):
         warnings.simplefilter("ignore", StaleRecording)
         result = asyncio.run(workflow.replay_workflow(WorkflowRecording.load(path)))
     assert result.moments and result.model_calls == len(WorkflowRecording.load(path).turns)
+
+
+# Live sign-in ------------------------------------------------------------------------------
+
+
+class Token:
+    def __init__(self, expires_on: float):
+        self.token, self.expires_on = "t", expires_on
+
+
+class Credential:
+    """Counts token requests; each token lasts `lifetime` seconds from when it is issued."""
+
+    def __init__(self, lifetime: float):
+        self.lifetime, self.asked, self.closed = lifetime, [], False
+
+    async def get_token(self, *scopes, **kwargs):
+        self.asked.append(scopes)
+        return Token(time.time() + self.lifetime)
+
+    async def close(self):
+        self.closed = True
+
+
+def test_signed_in_keeps_a_token_and_asks_again_only_near_its_expiry():
+    # agents-live's OIDC assertion is good for five minutes; a run must not ask again after it.
+    hour = Credential(3600)
+    signed = workflow.SignedIn(hour)
+    for _ in range(3):
+        asyncio.run(signed.get_token(workflow.FOUNDRY_SCOPE))
+    assert hour.asked == [(workflow.FOUNDRY_SCOPE,)]
+    short = Credential(workflow.TOKEN_MARGIN_SECONDS / 2)
+    signed = workflow.SignedIn(short)
+    asyncio.run(signed.get_token(workflow.FOUNDRY_SCOPE))
+    asyncio.run(signed.get_token(workflow.FOUNDRY_SCOPE))
+    assert len(short.asked) == 2
+    asyncio.run(signed.close())
+    assert short.closed
+
+
+def test_a_live_run_signs_in_before_it_loads_the_events():
+    order = []
+    hour = Credential(3600)
+
+    async def get_token(*scopes, **kwargs):
+        order.append("token")
+        return Token(time.time() + 3600)
+
+    hour.get_token = get_token
+
+    def load():
+        order.append("events")
+        return EVENTS
+
+    events = asyncio.run(workflow.sign_in_then_load(workflow.SignedIn(hour), load))
+    assert order == ["token", "events"] and events == EVENTS
