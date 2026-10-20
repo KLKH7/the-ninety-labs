@@ -1068,7 +1068,34 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `.github/workflows/agents-live.yml` groups by `inputs.ref`. Dispatch from two
   branches before approving either: both stay `waiting`.
 
-### 111. A total that matches can be two errors cancelling
+### 111. A shape measured only from the ball collapses onto it; instrument a choice before blaming its value
+- **What happened:** every in-possession spot was metres behind the ball, floored 12 m from goal.
+  With the ball 20 m out, both centre-backs, both full-backs and the holding midfielder shared that
+  floor inside the box, and the team passed around there: 224 own-box passes a 90 (seeds 7, 11, 21,
+  42). The investigation also named the pass value as a separate cause (forward passes never win).
+  Logging every choice showed otherwise: forward options in the own third were 30 m long with a
+  0.68 completion estimate against 16 m and 0.99 for square ones, because the shape left nobody at
+  a reachable forward distance. Bounding the team's length by R8 instead cut own-box passes to 33,
+  own-box camping (FS9) from 70 to 0 and the square-pass count (FS7) from 488 to 224 a 90, with no
+  change to how passes are valued.
+- **Rule:** a positional rule relative to a moving point needs a bound from the team's own measured
+  shape (length, width), not a floor that every role shares. Before changing how an option is
+  valued, log the options at each choice and see which term loses it; fix the upstream cause first
+  and re-measure.
+- **Check:** `tests/test_shape.py::test_the_team_is_never_longer_than_the_published_range_and_the_back_line_never_ahead_of_the_ball`
+  sweeps ball and line positions; on the old rule it fails (48 m long with the ball 35 m out).
+
+### 112. Every kick the decision layer aims is judged by the same Laws as a pass
+- **What happened:** the pass estimate counted a ball leaving the pitch (Law 9), but the clearance,
+  added separately, was aimed at one fixed spot 4 m from the touchline with no such check. With the
+  passer's own kick error, about a third of clearances went straight out with nobody near.
+- **Rule:** an option that sends the ball somewhere is valued over the strikes the kicker's error
+  allows, with the pass estimate's own pieces (`decisions.clear_value` reuses `strike_nodes`,
+  `flight`, `out_of_play`, `reach_time` and the P16 turn); where it simplifies them (a hard race, no
+  body in the way), the row says so (GROUNDING D9). A new kind of kick does not get its own physics.
+- **Check:** `tests/test_decisions.py::test_an_unpressed_clearance_is_not_aimed_where_his_kick_error_puts_it_out`.
+
+### 113. A total that matches can be two errors cancelling
 - **What happened:** for weeks the running report showed outfield distances of 9 to 12 km, close to
   the published 9 to 11, and nobody asked why. When restarts took their sourced time, distances fell
   to 6 to 9 km and the drop looked like a new fault. Splitting distance by whether the ball is in

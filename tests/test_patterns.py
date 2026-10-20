@@ -38,15 +38,16 @@ def test_the_report_plays_the_same_match_as_the_engine():
 
 
 def test_out_of_play_runs_from_the_stoppage_to_the_restart():
-    # Seed 7's first minute holds balls going out and restarts taken; the test says so (lesson 41),
-    # and checks a goal or foul the same way if the draw holds one. The ball is out from the frame
-    # play stops until the frame the restart is taken, which is in play, and in play everywhere
-    # between a restart and the next stoppage.
-    engine, dead = patterns.run(7, 1)
+    # The ball is out from the frame play stops (the ball out, a foul, an offside, a goal) until the
+    # frame the restart is taken, which is in play, and in play everywhere between a restart and
+    # the next stoppage: a stoppage this list does not know fails that last check. Seed 7's first
+    # three minutes hold stoppages and restarts taken; the test says so (lessons 41 and 47).
+    engine, dead = patterns.run(7, 3)
+    stops = ("out_of_play", "foul", "offside", "goal")
     events = sorted((e["frame"], e["type"]) for e in engine.match.events
-                    if e["type"] in ("out_of_play", "foul", "goal", "set_piece"))
-    kinds = {k for _, k in events}
-    assert {"out_of_play", "set_piece"} <= kinds
+                    if e["type"] in (*stops, "set_piece"))
+    kinds = [k for _, k in events]
+    assert kinds.count("set_piece") >= 2 and any(k in stops for k in kinds)
     assert 0 in dead, "the match starts with the kick-off still to be taken"
     for (f, kind), nxt in zip(events, events[1:] + [(len(engine.match.frames), None)], strict=True):
         if kind == "set_piece":
