@@ -1,6 +1,6 @@
 # Companion evaluation
 
-Measured by `uv run python -m ninety.agents.companion_eval --seeds 7,21,33` at commit `c3885c4`, on 5-minute clips. How each number is measured: [EVALUATION.md](../EVALUATION.md#phone-companion).
+Measured by `uv run python -m ninety.agents.companion_eval --seeds 7,21,33` at commit `be7f358`, on 5-minute clips. How each number is measured: [EVALUATION.md](../EVALUATION.md#phone-companion).
 
 ## Number accuracy: window facts against the engine's own velocity
 
