@@ -2,6 +2,11 @@
 
     uv run python -m ninety.eval.workflow_failures            # writes docs/eval/failure-table.{md,json}
     uv run python -m ninety.eval.workflow_failures --check    # fails if either is out of date
+    uv run python -m ninety.eval.workflow_failures --live --out runs/eval   # agents-live task=failures
+
+--live runs the same injections with the published Foundry agents doing everything else
+(workflow.run_live), so the rows show the real models around each failure. It needs Azure, is
+not deterministic, and writes failure-table-live.{md,json} for a session to commit unedited.
 
 Each row runs the workflow itself (ninety/agents/workflow.run_workflow: template graphics, the
 Analyst, the Tactician, the Challenger, the fact-checking agent with the confidence gate, the
@@ -164,7 +169,54 @@ def run(scenario: Scenario) -> dict:
             if isinstance(models.personalizer, RemotePersonalizer):
                 await models.personalizer.close()
 
-    result = asyncio.run(go())
+    return row(scenario, asyncio.run(go()), agent.asked)
+
+
+def injection(scenario: Scenario, counter: list[int], known: dict[str, dict]) -> Callable[[Models], Models]:
+    """For --live: the scenario's failure in place of the live model, every Judge call counted. A
+    claim on the unsure detection is injected at the Tactician: a live model would not reliably
+    cite it, and the row is about what the gate does when one does."""
+    from dataclasses import replace
+
+    def inject(models: Models) -> Models:
+        agent = JudgeAgent(hang=True)
+        swapped = scenario.override(agent)
+        if scenario.tactician_cites != MAIN:
+            cited = reply(claim_on(scenario.tactician_cites, known))
+
+            async def tactician(prompt: str) -> str:
+                return cited
+
+            swapped = {**swapped, "tactician": tactician}
+        judge = (functools.partial(judge_call, agent, timeout_seconds=JUDGE_TIMEOUT_S)
+                 if scenario.judge_hangs else models.judge)
+
+        async def counted(claim, evidence):
+            counter[0] += 1
+            return await judge(claim, evidence)
+
+        return replace(models, judge=counted, **swapped)
+
+    return inject
+
+
+async def live_rows() -> list[dict]:
+    """Every scenario with the published agents: one live minute each (agents-live)."""
+    from ninety.match.facts import compact
+
+    out = []
+    for scenario in SCENARIOS:
+        events, counter = events_for(scenario), [0]
+        known = {e["id"]: compact(e) for e in workflow.agent_events(events)}
+        result, *_ = await workflow.run_live(
+            lambda events=events: events, MINUTE, detected.M1_CLIP, False, False, trace_to="none",
+            personalize=True, inject=injection(scenario, counter, known),
+        )
+        out.append(row(scenario, result, counter[0]))
+    return out
+
+
+def row(scenario: Scenario, result, judge_asked: int) -> dict:
     review = next((r for r in result.reviews if r.moment_id == f"m-{MAIN}"), None)
     templates = sorted(c["id"] for c in result.cues if c["kind"] != "insight")
     insights = [c for c in result.cues if c["kind"] == "insight"]
@@ -177,7 +229,7 @@ def run(scenario: Scenario) -> dict:
         "status": review.status if review else "none",
         "category": verdict.category if verdict else None,
         "reasons": list(verdict.reasons) if verdict else [],
-        "judge_asked": agent.asked,
+        "judge_asked": judge_asked,
         "insights": [{"text": c["text"], "persona": c["persona"], "lang": c.get("lang", "en"),
                       "verified": c.get("verified", False)} for c in insights],
         "templates": templates,
@@ -207,8 +259,8 @@ UNSURE_EVENTS = {e for s in SCENARIOS for e, c in s.confidence.items() if c < MI
 CLAIM = {s.name: s.claim for s in SCENARIOS}
 
 
-def rows() -> list[dict]:
-    out = [run(s) for s in SCENARIOS]
+def rows(out: list[dict] | None = None) -> list[dict]:
+    out = [run(s) for s in SCENARIOS] if out is None else out
     base = out[0]
     for row in out:
         row["recovered"] = recovered(row, base)
@@ -216,18 +268,29 @@ def rows() -> list[dict]:
     return out
 
 
-def results(table: list[dict]) -> str:
+def results(table: list[dict], live: bool = False) -> str:
     # Strict JSON: another program reads it (lesson 43).
-    return json.dumps({"command": COMMAND, "clip": detected.M1_CLIP, "minute": MINUTE, "rows": table},
-                      indent=1, allow_nan=False) + "\n"
+    body = {"command": COMMAND + (" --live" if live else ""), "clip": detected.M1_CLIP, "minute": MINUTE,
+            "models": "the published Foundry agents" if live else "stand-ins", "rows": table}
+    return json.dumps(body, indent=1, allow_nan=False) + "\n"
 
 
-def report(table: list[dict]) -> str:
+def report(table: list[dict], live: bool = False) -> str:
     base = table[0]
     failures = [r for r in table if r["scenario"] != "none"]
     lines = [
-        "# Failure table: injected failures in the multi-agent workflow",
+        "# Failure table: injected failures in the multi-agent workflow" + (", live" if live else ""),
         "",
+    ]
+    if live:
+        lines += [
+            f"Generated by `{COMMAND} --live` in agents-live: each row is one live minute with the",
+            "published Foundry agents doing everything but the injected failure. Live models vary from run",
+            "to run; this file is committed as the run wrote it. The offline, byte-for-byte table is",
+            "`docs/eval/failure-table.md`.",
+            "",
+        ]
+    lines += [
         f"Generated by `{COMMAND}` (offline, byte for byte; `--check` fails if this file",
         "is stale, as `tests/test_workflow_failures.py` does). Each row runs the workflow itself",
         "(`ninety/agents/workflow.run_workflow`: template graphics, Analyst, Tactician, Challenger, the",
@@ -292,8 +355,19 @@ def render() -> dict[Path, str]:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--check", action="store_true", help="fail if a committed file is out of date")
+    ap.add_argument("--live", action="store_true", help="the published agents around each failure (Azure)")
+    ap.add_argument("--out", type=Path, default=ROOT / "runs" / "eval", help="--live: where to write")
     args = ap.parse_args()
     logging.getLogger("agent_framework").setLevel(logging.WARNING)  # its superstep chatter
+    if args.live:
+        table = rows(asyncio.run(live_rows()))
+        args.out.mkdir(parents=True, exist_ok=True)
+        for name, text in (("failure-table-live.md", report(table, live=True)),
+                           ("failure-table-live.json", results(table, live=True))):
+            (args.out / name).write_text(text)
+            print(f"wrote {args.out / name}")
+        print(f"recovered {sum(r['recovers'] for r in table[1:])} of {len(table) - 1}")
+        return
     out = render()
     if args.check:
         stale = [p for p, text in out.items() if not p.exists() or p.read_text() != text]

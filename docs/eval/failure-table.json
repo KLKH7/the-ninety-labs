@@ -2,6 +2,7 @@
  "command": "uv run python -m ninety.eval.workflow_failures",
  "clip": "seed900001",
  "minute": 2,
+ "models": "stand-ins",
  "rows": [
   {
    "scenario": "none",

@@ -745,12 +745,14 @@ def _unused(role: str):
 async def run_live(
     load_events: Callable[[], list[dict]], minute: int, match: str, inline_events: bool, plant: bool,
     trace_to: str = "foundry", content: bool = False, personalize: bool = False,
+    inject: Callable[[Models], Models] | None = None,
 ) -> tuple[Result, list[Turn], dict[str, str], bool, list[dict]]:
     """Live on Foundry, calling the published versions pinned in foundry_agents.json. Signs in,
     then loads the events. Returns the result, every model answer, the versions that ran, whether
     any model call failed, and the events the run checked against. With `personalize`, aired
     insights go to the Personalizer: its service when NINETY_PERSONALIZER_URL is set (A2A), else in
-    process (ninety/personalizer/client.from_env)."""
+    process (ninety/personalizer/client.from_env). `inject` swaps one of the live models for a
+    failing one (ninety/eval/workflow_failures.py --live)."""
     from ninety import config
     from ninety.agents import foundry
 
@@ -804,6 +806,8 @@ async def run_live(
                 judge=judge_live, personalizer=personalizer, describer=_unused("describer"),
                 companion=_unused("companion"), speak=_unused("speak"),
             )
+            if inject is not None:
+                models = inject(models)
             result = await run_workflow(models, events, minute, match, plant, True, inline_events,
                                         personalize=personalize)
     telemetry.flush()

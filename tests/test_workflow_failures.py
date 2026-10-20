@@ -174,3 +174,29 @@ def test_personalize_cannot_be_recorded_yet(monkeypatch, tmp_path):
 
     with pt.raises(SystemExit):
         cli(monkeypatch, "--personalize", "--record", tmp_path / "r.json")
+
+
+def test_the_live_run_injects_each_failure_around_the_published_agents(monkeypatch, tmp_path):
+    # agents-live task=failures, with W1's fake Foundry in place of the published agents: no Azure.
+    import json
+    import sys
+
+    from tests.test_workflow import SUPPORTED, live
+
+    facts = {wf.MAIN: {"team": "away", "distance_m": 8, "ball_speed_kmh": 42}}
+    claim = wf.reply(wf.claim_on(wf.MAIN, facts))
+    n = len(wf.SCENARIOS)
+    live(monkeypatch, {"moment-analyst": [wf.picks(wf.MAIN, [wf.MAIN, wf.SIDE])] * n,
+                       "tactician": [claim] * n, "challenger": ['{"agree": true}'] * n,
+                       "judge": [SUPPORTED] * (4 * n)})
+    monkeypatch.setattr(sys, "argv", ["workflow_failures", "--live", "--out", str(tmp_path)])
+    wf.main()
+    body = json.loads((tmp_path / "failure-table-live.json").read_text())
+    rows = {r["scenario"]: r for r in body["rows"]}
+    assert body["models"] == "the published Foundry agents"
+    assert [r["scenario"] for r in body["rows"] if not r["recovers"]] == []
+    assert rows["judge timeout"]["category"] == "timeout"
+    assert rows["tactician outage"]["category"] == "service"
+    assert rows["low confidence"]["category"] == "low_confidence"
+    assert "personalizer fallback: fallback: refused" in rows["personalizer down"]["fallback"]
+    assert "live" in (tmp_path / "failure-table-live.md").read_text().splitlines()[0]

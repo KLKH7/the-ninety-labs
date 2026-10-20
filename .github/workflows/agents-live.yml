@@ -84,7 +84,12 @@ jobs:
             personalizer)
               uv run python -m ninety.personalizer.eval --seeds 21,33 --out runs/eval/personalizer.md "${extra[@]}"
               ;;
-            failures|ablation)
+            failures)
+              # W2: each injected failure with the published agents around it; commit the two files
+              # the run writes unedited (runs/eval/failure-table-live.{md,json} -> docs/eval/).
+              uv run python -m ninety.eval.workflow_failures --live --out runs/eval "${extra[@]}"
+              ;;
+            ablation)
               echo "::error::task '$TASK' is not yet implemented"
               exit 1
               ;;
