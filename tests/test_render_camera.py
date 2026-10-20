@@ -10,6 +10,7 @@ from ninety.render.camera import (
     Director,
     blur_vector,
     net_push,
+    pitch_share,
     project_with,
     well_framed,
 )
@@ -234,7 +235,8 @@ def test_director_is_deterministic():
     assert runs[0] == runs[1]
 
 
-# Seeds the director's design was not tuned on (ZOOM_MIN and the follow were chosen on 7, 21, 42).
+# Seeds the director's design was not tuned on (the lens, STANDS_TOP and the follow were chosen on
+# seeds 7, 21 and 42).
 HELD_OUT = (3, 5)
 
 
@@ -324,6 +326,21 @@ def test_the_viewpoint_changes_no_faster_than_a_broadcast_and_never_flickers():
         assert all(cam.position[1] < 34.0 for _, cam, _, _ in rows), seed
 
 
+def test_play_on_the_far_side_keeps_the_stands_a_band_across_the_top():
+    """The far side is foreshortened: from a low gantry (13 m up, 31 m back, a sampled seed's) the
+    lens aimed at a ball on the far touchline shows more stand than pitch. The gantry tilts down
+    along its line of sight instead, so the far edge of the pitch stays in the top STANDS_TOP of
+    the picture and the ball stays in the middle of it across."""
+    low = CameraParams(height_m=13.2, back_m=31.1, offset_x_m=-1.6, half_width_m=21.0, shake_m=0.0)
+    for spot in [(52.5, 64.0), (30.0, 60.0), (10.8, 65.1)]:  # last: seed 42's far corner
+        d = Director(low, 1280, 720, 25, seed=1)
+        for _ in range(125):
+            cam = d.step(*spot)
+        u, v = cam.project((*spot, 0.11))
+        assert pitch_share(cam) >= 0.6, spot
+        assert 0.2 * 1280 <= u <= 0.8 * 1280 and 0.15 * 720 <= v <= 0.85 * 720, (spot, u, v)
+
+
 def test_a_pan_eases_in_and_out():
     """Old: the aim jumped from still to full pace in one frame when a long ball was struck and
     stopped dead, as no operator pans. It now gathers and loses speed at most PAN_ACCEL_MPS2, and
@@ -332,7 +349,7 @@ def test_a_pan_eases_in_and_out():
     path = [(30.0, 34.0)] * 50 + [(30.0 + 0.8 * i, 34.0) for i in range(1, 60)] + [(77.2, 34.0)] * 75
     aims = []
     for x, y in path:
-        d.step(x, y)
+        cam = d.step(x, y)
         aims.append(tuple(d.aim))
     speeds = [math.dist(a, b) * 25 for a, b in zip(aims, aims[1:], strict=False)]
     assert max(speeds) <= MAX_PAN_MPS + 1e-6
@@ -340,4 +357,5 @@ def test_a_pan_eases_in_and_out():
     assert max(changes) <= PAN_ACCEL_MPS2 + 1e-6, max(changes)
     # The long ball's first frame moves the aim's lead 7.8 m on; the aim gains one frame's speed.
     assert speeds[49] <= PAN_ACCEL_MPS2 / 25 + 1e-6, speeds[48:52]
-    assert speeds[-1] < 0.1 and math.dist(aims[-1], (77.2, 34.0)) < 1.0  # settled where play is
+    u, v = cam.project((77.2, 34.0, 0.0))
+    assert speeds[-1] < 0.1 and abs(u - 640) < 64 and abs(v - 360) < 72  # settled on the play

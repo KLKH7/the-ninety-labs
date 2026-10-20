@@ -123,12 +123,14 @@ CUT_HOLD_S = 4.0  # a cut stays put this long; shorter than this reads as a flic
 GANTRY_LINE_DEG = 23.0  # handbook: 22-24° from the gantry down to the near touchline
 # The widest the gantry goes in open play, against the sampled 17 to 24 m: aimed at the play on the
 # grass, the pitch fills the picture and 8 to 15 players are in shot (docs/guides/broadcast-render.md),
-# each about 65 px tall. Play on the far side is foreshortened, so the same width of ground shows
-# more of the stand above it: the lens closes up as the play goes away, down to ZOOM_MIN of its
-# width at the far corners. Design: 18 m and 0.85 against 14.5 to 22 m and 0.7 to 1.0 on seeds 7,
-# 21 and 42; test_render_camera measures other seeds.
+# each about 65 px tall. Design: 18 m against 14.5 to 22 m on seeds 7, 21 and 42; test_render_camera
+# measures other seeds.
 GANTRY_HALF_M = 18.0
-ZOOM_MIN = 0.85
+# The stands are a band across the top of the picture, at most this share of it, as the main
+# camera shows them. The far side is foreshortened, so with play over there the gantry tilts down
+# along its line of sight just enough to keep the far edge of the pitch at this line, the ball in
+# the upper half (design, after the review of 0.4.1: the stands filled 40 to 75% of the picture).
+STANDS_TOP = 0.25
 TIGHT_ACTIONS = ("throw", "thigh", "chest", "head", "hands")
 NET_SETTLE_S = 2.6  # the mesh is back to rest by here; the angle itself holds CUT_HOLD_S
 
@@ -205,8 +207,9 @@ class Director:
     """Main broadcast camera: fixed gantry position, pans and zooms to follow the ball with lag.
 
     The gantry is the picture the match is watched from. It aims at the play on the grass, so the
-    pitch fills the picture and the stands are a band across the top, closes up as the play goes
-    away (ZOOM_MIN), and eases each pan in and out (PAN_ACCEL_MPS2).
+    pitch fills the picture; tilts down along its line of sight when play is far off, so the stands
+    stay a band across the top (STANDS_TOP); takes the tighter lens near either goal; and eases
+    each pan in and out (PAN_ACCEL_MPS2).
 
     With `cuts`, it leaves the gantry for two shots, each held at least CUT_HOLD_S: a tighter lens
     beside the gantry for a throw or an aerial touch, when that shot still holds the player and the
@@ -270,9 +273,38 @@ class Director:
         ay = min(max(ay, 12.0), 60.0)
         wide = min(self.p.half_width_m, GANTRY_HALF_M)
         hw = self.p.box_half_width_m if in_box(bx, by) else wide
-        centre = math.dist(self.position[:2], (52.5, 34.0))
-        hw *= min(1.0, max(ZOOM_MIN, centre / math.dist(self.position[:2], (ax, ay))))
+        ax, ay = self._below_stands(ax, ay, hw)
         return ax, ay, hw
+
+    def _below_stands(self, ax: float, ay: float, hw: float) -> tuple[float, float]:
+        """The aim on the line of sight to (ax, ay), there or nearer the gantry, that keeps the far
+        edge of the pitch on that line (the far touchline, or a goal line) in the top STANDS_TOP of
+        the picture. Tilting down lifts that edge in the picture and leaves the play where it is
+        across it, so the nearest aim that does it is found by halving along the line."""
+        gx, gy = self.position[0], self.position[1]
+        dx, dy = ax - gx, ay - gy
+        if dy <= 0.0:
+            return ax, ay
+        out = (68.0 - gy) / dy
+        if abs(dx) > 1e-9:
+            out = min(out, ((105.0 if dx > 0 else 0.0) - gx) / dx)
+        edge = (gx + out * dx, gy + out * dy, 0.0)
+        line = STANDS_TOP * self.height
+
+        def lifted(t: float) -> bool:
+            uv = self._shot((gx + t * dx, gy + t * dy, 0.0), hw).project(edge)
+            return uv is None or uv[1] <= line
+
+        if lifted(1.0):
+            return ax, ay
+        lo, hi = -gy / dy, 1.0  # from the near touchline to the play
+        for _ in range(14):
+            mid = (lo + hi) / 2
+            if lifted(mid):
+                lo = mid
+            else:
+                hi = mid
+        return gx + lo * dx, gy + lo * dy
 
     def step(
         self,
@@ -394,8 +426,12 @@ class Director:
         return ""
 
     def _main(self, target: Vec) -> Camera:
+        return self._shot(target, self.half_width)
+
+    def _shot(self, target: Vec, half_width: float) -> Camera:
+        """The gantry aimed at `target`, `half_width` metres of ground either side of it."""
         dist = math.dist(self.position, target)
-        hfov = 2 * math.atan(self.half_width / dist)
+        hfov = 2 * math.atan(half_width / dist)
         vfov = 2 * math.atan(math.tan(hfov / 2) * self.height / self.width)
         return Camera(self.position, target, math.degrees(vfov), self.width, self.height)
 
