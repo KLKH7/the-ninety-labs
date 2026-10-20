@@ -2,7 +2,7 @@
 
     GET  /api/health   the commit this image was built from (the deploy smoke test reads it)
     POST /mcp          the match MCP server (ninety/mcp/match_server.py), for Foundry's agents
-    /api/pair, /api/minimap, /api/card, /api/flow, /api/ask   the phone companion
+    /api/pair[/{code}], /api/minimap, /api/card, /api/flow, /api/ask   the phone companion
                        (ninety/api/companion.py); NINETY_COMPANION=off leaves it unmounted
 
 /mcp needs the `x-api-key` header. The key lives in Key Vault; the container reads it through its

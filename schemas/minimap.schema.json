@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/KLKH7/the-ninety-labs/schemas/minimap.schema.json",
   "title": "Minimap",
-  "description": "A clip's positions for the phone companion's minimap (GET /api/minimap/{clip}), downsampled to fps, in pitch metres to 0.1 m (x from 0 to 105, y from 0 to 68). The phone shows the frame at the laptop's clock. source says where the positions come from: the ground-truth data (before Milestone 1) or tracking the video.",
+  "description": "A clip's positions for the phone companion's minimap (GET /api/minimap/{clip}), downsampled to fps, in pitch metres to 0.1 m (x from 0 to 105, y from 0 to 68). The phone shows the frame at the laptop's clock. source says where the positions come from: the ground-truth data (before Milestone 1) or tracking the video. Player ids follow it: a squad id (h7) for ground truth, a team plus track id (h-t12) for tracked positions, since the tracker reads no shirt numbers and a track is never given one.",
   "type": "object",
   "additionalProperties": false,
   "required": ["clip", "source", "fps", "roster", "frames"],
@@ -10,7 +10,7 @@
     "clip": { "type": "string" },
     "source": { "type": "string", "enum": ["truth", "tracked"] },
     "fps": { "type": "integer", "minimum": 1, "maximum": 25 },
-    "roster": { "type": "array", "items": { "type": "string", "pattern": "^[ha]([1-9]|1[01])$" } },
+    "roster": { "type": "array", "items": { "$ref": "#/$defs/player_id" } },
     "frames": {
       "type": "array",
       "items": {
@@ -25,7 +25,7 @@
             "items": {
               "type": "array",
               "prefixItems": [
-                { "type": "string", "pattern": "^[ha]([1-9]|1[01])$" },
+                { "$ref": "#/$defs/player_id" },
                 { "type": "number" },
                 { "type": "number" }
               ],
@@ -38,7 +38,32 @@
       }
     }
   },
+  "allOf": [
+    {
+      "if": { "properties": { "source": { "const": "truth" } }, "required": ["source"] },
+      "then": { "$ref": "#/$defs/ids_matching/squad" }
+    },
+    {
+      "if": { "properties": { "source": { "const": "tracked" } }, "required": ["source"] },
+      "then": { "$ref": "#/$defs/ids_matching/track" }
+    }
+  ],
   "$defs": {
+    "player_id": { "type": "string", "pattern": "^[ha]([1-9]|1[01]|-t[0-9]+)$" },
+    "ids_matching": {
+      "squad": {
+        "properties": {
+          "roster": { "items": { "pattern": "^[ha]([1-9]|1[01])$" } },
+          "frames": { "items": { "properties": { "players": { "items": { "prefixItems": [{ "pattern": "^[ha]([1-9]|1[01])$" }] } } } } }
+        }
+      },
+      "track": {
+        "properties": {
+          "roster": { "items": { "pattern": "^[ha]-t[0-9]+$" } },
+          "frames": { "items": { "properties": { "players": { "items": { "prefixItems": [{ "pattern": "^[ha]-t[0-9]+$" }] } } } } }
+        }
+      }
+    },
     "xy": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2 }
   }
 }

@@ -18,6 +18,8 @@ MESSAGE = schema_validator("companion_message")
 
 
 def track(source="truth"):
+    # Tracked players carry a team plus track id: the tracker reads no shirt numbers.
+    home, away = ("h-t7", "a-t7") if source == "tracked" else ("h7", "a7")
     frames, x = [], 10.0
     for i in range(251):  # 10 s at 25 fps
         frames.append(
@@ -27,8 +29,8 @@ def track(source="truth"):
                 "source": source,
                 "ball": {"x": 52.5, "y": 34.0},
                 "players": [
-                    {"id": "h7", "team": "home", "x": round(x, 3), "y": 30.0},
-                    {"id": "a7", "team": "away", "x": 80.0, "y": 40.0},
+                    {"id": home, "team": "home", "x": round(x, 3), "y": 30.0},
+                    {"id": away, "team": "away", "x": 80.0, "y": 40.0},
                 ],
             }
         )
@@ -64,6 +66,22 @@ def ask(client, code, text="How fast is h7 going?", player="h7", t=10.0, headers
 
 
 # --- pairing ---------------------------------------------------------------------------------------
+
+
+def test_a_typed_code_tells_the_phone_its_clip(setup):
+    client, _, clock = setup
+    code = pair(client, "seed21")
+    clock.now += 60
+    assert client.get(f"/api/pair/{code}").json() == {"clip": "seed21", "expires_in": 2 * 60 * 60 - 60}
+    assert client.get("/api/pair/NOPE42").status_code == 404
+    clock.now += 2 * 60 * 60
+    assert client.get(f"/api/pair/{code}").status_code == 404  # expired
+
+
+def test_looking_up_codes_shares_the_join_limit(setup):
+    client, _, _ = setup
+    statuses = [client.get("/api/pair/NOPE42").status_code for _ in range(comp.LIMITS["join"] + 1)]
+    assert statuses == [404] * comp.LIMITS["join"] + [429]
 
 
 def test_pairing_gives_a_six_character_code_for_two_hours(setup):
@@ -173,11 +191,29 @@ class Socket:
 
 
 async def refused(app, url):
-    """The close code a connection is refused with."""
-    with pytest.raises(Closed) as closed:
-        async with Socket(app, url):
-            pass
+    """The close code a connection is refused with. The refusal comes after an accept: a browser
+    never sees a close sent before it (it reads 1006), so the phone could not say why."""
+    socket = Socket(app, url)
+    try:
+        await socket.__aenter__()
+    except Closed as before:
+        raise AssertionError(f"closed with {before.code} before the accept: a browser sees 1006") from None
+    try:
+        with pytest.raises(Closed) as closed:
+            await socket.receive()
+    finally:
+        await socket._end()
     return closed.value.code
+
+
+async def closed_within(socket, seconds=0.5):
+    """The code an open socket is closed with soon, or None if it stays open."""
+    try:
+        message = await asyncio.wait_for(socket.from_app.get(), seconds)
+    except TimeoutError:
+        return None
+    assert message["type"] == "websocket.close", message
+    return message.get("code", 1000)
 
 
 def test_the_relay_round_trip_carries_clock_and_focus_to_every_phone(setup):
@@ -262,15 +298,13 @@ def test_phones_joining_at_once_cannot_pass_the_cap(setup, monkeypatch):
 
     async def run():
         sockets = [Socket(client.app, f"/api/pair/{code}?role=phone", slow_accept=5) for _ in range(3)]
-        joined = await asyncio.gather(*(s.__aenter__() for s in sockets), return_exceptions=True)
-        refused_codes = [j.code for j in joined if isinstance(j, Closed)]
-        for j in joined:
-            if not isinstance(j, BaseException):
-                await j.__aexit__(None, None, None)
-        return refused_codes, len(app.rooms[code].phones) if code in app.rooms else None
+        joined = await asyncio.gather(*(s.__aenter__() for s in sockets))  # every one is accepted
+        codes = await asyncio.gather(*(closed_within(s) for s in joined))
+        for s in joined:
+            await s._end()
+        return sorted(codes, key=str)
 
-    refused_codes, _ = asyncio.run(run())
-    assert refused_codes == [4429]
+    assert asyncio.run(run()) == [4429, None, None]
 
 
 def test_an_oversized_body_is_refused_unread(setup):
@@ -587,7 +621,7 @@ def test_on_refuses_ground_truth_positions_everywhere(monkeypatch):
 def test_the_m1_clip_without_its_tracked_file_is_refused_not_faked(monkeypatch, tmp_path):
     from ninety.match import tracking
 
-    monkeypatch.setattr(tracking, "FIXTURES", tmp_path)  # no tracked-seed900001.jsonl in it
+    monkeypatch.setattr(tracking, "FIXTURES", tmp_path)  # no tracked-seed900001.json in it
     tracking.tracked.cache_clear()
     client = TestClient(api.build("k" * 64, comp.Companion(passcode="", live=None, clock=Clock())))
     r = client.post("/api/pair", json={"clip": "seed900001"})
@@ -599,18 +633,18 @@ def test_the_m1_clip_is_paired_and_served_from_its_tracked_file(monkeypatch, tmp
     from ninety.match import tracking
 
     rows = [{**f, "ball": {**f["ball"], "z": 0.0}} for f in track("tracked").frames]
-    (tmp_path / "tracked-seed900001.jsonl").write_text("\n".join(json.dumps(r) for r in rows))
+    (tmp_path / "tracked-seed900001.json").write_text(json.dumps({"restarts": [], "frames": rows}))
     monkeypatch.setattr(tracking, "FIXTURES", tmp_path)
     tracking.tracked.cache_clear()
     try:
         client = TestClient(api.build("k" * 64, comp.Companion(passcode="", live=None, clock=Clock())))
         code = client.post("/api/pair", json={"clip": "seed900001"}).json()["code"]
         body = client.get("/api/minimap/seed900001").json()
-        assert body["source"] == "tracked" and body["roster"] == ["a7", "h7"]
-        card = client.get("/api/card/seed900001/h7?t_to=10").json()
+        assert body["source"] == "tracked" and body["roster"] == ["a-t7", "h-t7"]
+        card = client.get("/api/card/seed900001/h-t7?t_to=10").json()
         MESSAGE.validate(card)
         assert card["source"] == "tracked" and card["speed_kmh"] == 18.0
-        answer = ask(client, code).json()["answer"]
+        answer = ask(client, code, "How fast is h-t7 going?", "h-t7").json()["answer"]
         assert answer["status"] == "verified" and answer["value"] == 18.0
     finally:
         tracking.tracked.cache_clear()
@@ -621,9 +655,10 @@ def test_on_serves_tracked_positions(monkeypatch):
     client = TestClient(api.build("k" * 64, comp.Companion(passcode="", live=None, clock=Clock())))
     body = client.get("/api/minimap/seed900001").json()
     assert body["source"] == "tracked"
-    card = client.get("/api/card/seed900001/h7?t_to=10").json()
+    card = client.get("/api/card/seed900001/h-t7?t_to=10").json()
     MESSAGE.validate(card)
     assert card["source"] == "tracked"
-    assert ask(client, pair(client, "seed900001")).json()["answer"]["status"] == "verified"
+    answer = ask(client, pair(client, "seed900001"), "How fast is h-t7 going?", "h-t7").json()["answer"]
+    assert answer["status"] == "verified"
     # A stand-in is refused by name, even when its frames would say tracked: `on` never loads one.
     assert client.get("/api/minimap/seed7").status_code == 503

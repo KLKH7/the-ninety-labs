@@ -11,7 +11,7 @@ runs
 replays
 tests
 !tests/fixtures/detected-*.jsonl
-!tests/fixtures/tracked-*.jsonl
+!tests/fixtures/tracked-*.json
 docs
 infra
 web/node_modules

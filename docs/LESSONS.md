@@ -1118,3 +1118,16 @@ short and actionable. This file is public: no research sources, product names or
   counts within seconds, never times out. `tests/test_api_companion.py` drives the relay on one
   loop with a 5 s deadline per receive, and 150 repeats on 4 workers under full CPU load pass;
   `test_a_newer_clock_never_overtakes_a_phones_catch_up` fails without the single flusher.
+
+### 114. A refusal a browser cannot read is no refusal: close a WebSocket after accepting it
+- **What happened:** the phone relay refused a join (unknown code, room full, laptop taken) by
+  closing the WebSocket before accepting it, and its tests read the close codes 4404, 4409 and 4429
+  from an ASGI harness. A browser never sees a close sent before the handshake completes: uvicorn
+  answers it with a 403 and the page reads 1006, so the phone could not say "unknown code" or
+  "room full". W6 found it by running the phone in a real browser (#162).
+- **Rule:** a WebSocket refusal the client must act on is sent after `accept()`, with its code; a
+  refusal takes no slot, so accepting first changes nothing else. A test of a refusal checks that
+  the accept came first, not only the code.
+- **Check:** `tests/test_api_companion.py`'s `refused()` fails when the server closes before the
+  accept, and every refusal test goes through it; moving `_refuse` back to a bare close turns them red.
+

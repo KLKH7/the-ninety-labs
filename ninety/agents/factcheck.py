@@ -40,21 +40,26 @@ SECOND_NUMBER = re.compile(
 )
 # A clock form, "12:34", is the elapsed scorebug clock in compact event facts.
 CLOCK = re.compile(r"(?<![\w.:])(?P<clock>\d{1,3}:\d{2})(?!\d)")
-# The synthetic squads' player ids (h1..h11, a1..a11). Names in this form are always checked,
-# even when the player is in no known event, so a claim cannot name an uninvolved player.
-PLAYER = re.compile(r"\b[ha](?:[1-9]|1[01])\b")
+# Player ids: the synthetic squads' (h1..h11, a1..a11) in ground-truth data, and a team plus track
+# id (h-t12) in tracked data, since the tracker reads no shirt numbers and a track is never mapped
+# to one. Names in either form are always checked, even when the player is in no known event, so a
+# claim cannot name an uninvolved player.
+SQUAD_ID = r"[ha](?:[1-9]|1[01])"
+TRACK_ID = r"[ha]-t\d+"
+PLAYER_ID = rf"(?:{SQUAD_ID}|{TRACK_ID})"
+PLAYER = re.compile(rf"\b{PLAYER_ID}\b")
 # A verb that says a pass arrived names the player who got it, so that name must be the `receiver` of
 # a cited pass: a pass's `intended` or `interceptor` is a cited player too, but did not receive it.
 # With the passer named before the verb, it must be his pass that reached that player.
 FOUND = re.compile(
-    r"(?:\b(?P<passer>[ha](?:[1-9]|1[01]))(?:'s pass)?\s+)?"
-    r"\b(?:finds|found|picks out|picked out)\s+(?P<player>[ha](?:[1-9]|1[01]))\b",
+    rf"(?:\b(?P<passer>{PLAYER_ID})(?:'s pass)?\s+)?"
+    rf"\b(?:finds|found|picks out|picked out)\s+(?P<player>{PLAYER_ID})\b",
     re.I,
 )
 NUMBER_FIELDS = ("minute", "second", "ball_speed_kmh", "distance_m")
 # The unit a fact must be written with to stand for each event field's kind of number.
 FIELD_UNITS = {"distance_m": "m", "ball_speed_kmh": "km/h"}
-FACT_PLAYER = re.compile(r"^player:(?P<player>[ha](?:[1-9]|1[01]))(?::|$)")
+FACT_PLAYER = re.compile(rf"^player:(?P<player>{PLAYER_ID})(?::|$)")
 # A cited window stat (ninety/intel/windows.agent_rows, `type: stat`) is a number code computed:
 # its value, its percentage for a share, and the minutes its window spans may be stated.
 STAT_FIELDS = ("value", "percent", "minute_from", "minute_to")

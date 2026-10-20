@@ -29,7 +29,7 @@
       "description": "The player the phone follows; null for none.",
       "properties": {
         "type": { "const": "focus" },
-        "player": { "type": ["string", "null"], "pattern": "^[ha]([1-9]|1[01])$" }
+        "player": { "type": ["string", "null"], "pattern": "^[ha]([1-9]|1[01]|-t[0-9]+)$" }
       }
     },
     "answer": {
@@ -45,10 +45,14 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["type", "player", "t_from", "t_to", "heat", "speed_kmh", "peak_kmh", "distance_m", "source"],
-      "description": "A player's stats over t_from..t_to, all computed by code.",
+      "description": "A player's stats over t_from..t_to, all computed by code. The player id follows source: a squad id (h7) for ground truth, a team plus track id (h-t12) for tracked positions.",
+      "allOf": [
+        { "if": { "properties": { "source": { "const": "truth" } }, "required": ["source"] }, "then": { "properties": { "player": { "pattern": "^[ha]([1-9]|1[01])$" } } } },
+        { "if": { "properties": { "source": { "const": "tracked" } }, "required": ["source"] }, "then": { "properties": { "player": { "pattern": "^[ha]-t[0-9]+$" } } } }
+      ],
       "properties": {
         "type": { "const": "player_card" },
-        "player": { "type": "string", "pattern": "^[ha]([1-9]|1[01])$" },
+        "player": { "type": "string", "pattern": "^[ha]([1-9]|1[01]|-t[0-9]+)$" },
         "t_from": { "type": "number", "minimum": 0 },
         "t_to": { "type": "number", "minimum": 0 },
         "heat": {

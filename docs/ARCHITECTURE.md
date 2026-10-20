@@ -198,7 +198,10 @@ budget alert covers the subscription. See [SECURITY.md](../SECURITY.md).
 
 **The phone companion** ([`ninety/api/companion.py`](../ninety/api/companion.py)) runs in the
 same API Container App. The laptop pairs (`POST /api/pair`, a 6-character code valid for 2 hours),
-and the phone joins a WebSocket room at `/api/pair/{code}`. The laptop's clock and focus messages
+and the phone joins a WebSocket room at `/api/pair/{code}` (a typed code first reads its clip from
+`GET /api/pair/{code}`). A refused join is accepted and then closed with its code, since a browser
+never sees a close sent before the accept. uvicorn speaks WebSocket through the locked `websockets`
+package; without one it answers the relay with 404. The laptop's clock and focus messages
 are relayed to the phone, which reads the minimap, player cards and the wind map (`flow`) over HTTP
 and asks questions at `/api/ask`. Rooms, rate limits and the model budget are held in memory. That
 works because the app runs as one replica (`maxReplicas: 1` in `infra/main.bicep`). A second
@@ -207,8 +210,11 @@ room, and the laptop pairs again.
 
 `NINETY_COMPANION` decides what it serves. Unset or `on`, as deployed, the routes are mounted and
 serve only tracked positions: the M1 clip (seed900001), the clip the laptop plays, from its
-tracked frames file (`tests/fixtures/tracked-seed900001.jsonl`, written from
-`ninety/vision/track.py`). A clip whose positions are ground truth gets a 503, so the live path
+tracked frames file (`tests/fixtures/tracked-seed900001.json`, written by
+`ninety/vision/tracked_frames.py` from the tracks of `ninety/vision/track.py`). The tracker reads
+no shirt numbers, so a tracked player's id is its team plus track id (`h-t12`), never a squad id;
+the schemas take squad ids only from ground truth and track ids only from tracked positions. A clip
+whose positions are ground truth gets a 503, so the live path
 never reads the answer key. Until the tracked file exists, pairing that clip answers 503 too.
 `standin`, for local work, also serves the simulator's matches, labelled `source: truth`. `off`
 mounts nothing.
