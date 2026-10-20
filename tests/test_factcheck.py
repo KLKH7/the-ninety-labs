@@ -200,7 +200,7 @@ def test_found_about_a_tackle_or_pressure_is_not_read_as_a_pass():
 
 
 def test_an_ordinal_minute_must_be_the_cited_minute():
-    # "the 9th minute" was never read as a number, so any ordinal passed (lesson 95).
+    # "the 9th minute" was never read as a number, so any ordinal passed (lesson 114).
     minute = CLOCK_EVENT["minute"]
     suffix = {1: "st", 2: "nd", 3: "rd"}.get(minute, "th")
     assert check(Claim(f"A pass in the {minute}{suffix} minute.", [CLOCK_EVENT["id"]]), KNOWN).ok

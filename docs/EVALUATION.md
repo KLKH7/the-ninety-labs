@@ -474,7 +474,7 @@ number survival as a set rather than a count, no player survival, no length cap,
 still airing, the audio persona rewritten. Client: trusting the server's variants, ignoring which
 persona a reply is for, falling back on any error, treating a 4xx as a 5xx, no 5xx rule, no
 refused rule, no deadline, waiting for the cancelled call to unwind. Server: profiles not
-validated, extra profile fields allowed. Fact-checker: ordinals not read as numbers (lesson 95).
+validated, extra profile fields allowed. Fact-checker: ordinals not read as numbers (lesson 114).
 The length-cap mutant survived the first run; its test was added after.
 
 ## Rules
