@@ -1065,9 +1065,10 @@ short and actionable. This file is public: no research sources, product names or
 - **Rule:** when the contract makes an exception (a kickoff reset, a dead ball being replaced),
   every computation over the same frames applies it in the same place, and one shared function
   (`stats.player_steps`) decides which steps count as movement.
-- **Check:** `tests/test_stats.py::test_no_player_outruns_the_contract_over_a_clip_with_goals`
-  runs on seed 7, which has two kickoffs after goals, and holds every player's peak speed under
-  the validator's limit. It fails on the old code.
+- **Check:** `tests/test_stats.py::test_no_player_outruns_the_contract_over_a_kickoff_reset`
+  calls the engine's own kickoff reset partway through a match (first written on seed 7's goals,
+  until an engine change left seed 7 without one, lesson 78) and holds every player's peak speed
+  under the validator's limit. It fails on the old code.
 
 ### 111. A test that waits for its rule hangs when the rule breaks, and a hang is not a red test
 - **What happened:** two WebSocket tests on the phone relay checked their rule by waiting for a

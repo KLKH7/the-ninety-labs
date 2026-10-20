@@ -36,7 +36,7 @@ def test_a_precomputed_match_is_the_computed_match(tmp_path, monkeypatch):
     tracking.track.cache_clear()
     read = tracking.track("seed7", 7, match_server.MINUTES, str(tmp_path))
     computed = tracking.from_match("seed7", simulate(7, match_server.MINUTES))
-    assert read == computed and read.restarts == computed.restarts and read.restarts[1:]
+    assert read == computed and read.restarts == computed.restarts
     tracking.track.cache_clear()
     stats = json.loads((tmp_path / match_server.STATS_DIR / "seed7.json").read_text())
     assert stats == match_server.agent_rows(match_server.match_events(7, match_server.MINUTES))

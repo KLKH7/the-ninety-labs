@@ -95,13 +95,29 @@ def test_a_kickoff_reset_is_not_movement():
     assert _by_id(player_movement_facts(frames, restarts=[3]))["peak_speed:player_h1"].value == 4500
 
 
-def test_no_player_outruns_the_contract_over_a_clip_with_goals():
-    # Seed 7's first five minutes have two kickoffs after goals (frames 1306 and 3920), so the case
-    # this guards is in the data (lesson 41). Before the fix h7's peak speed read 4,739 km/h.
+def test_no_player_outruns_the_contract_over_a_kickoff_reset():
+    # The engine's own post-goal reset, called 20 s into a match, so the case is in the data
+    # whatever a seed draws (lessons 41 and 78; an engine change once left seed 7 without a goal).
+    # Before the fix a reset like this read as a 4,739 km/h peak speed.
+    from ninety.sim.engine import FPS, Engine
     from ninety.validate import MAX_PLAYER_MPS
 
-    match = simulate(7, 5)
-    assert [e["frame"] for e in match.events if e["type"] == "kickoff"][1:], "no kickoff after a goal"
+    engine = Engine(7)
+    engine.kickoff("home")
+    for _ in range(20 * FPS):
+        engine.step()
+    engine.kickoff("away")  # as after a goal: everyone back to his own half at once
+    for _ in range(10 * FPS):
+        engine.step()
+    match = engine.match
+    kickoffs = [e["frame"] for e in match.events if e["type"] == "kickoff"]
+    assert kickoffs[1:], "the second kickoff is the reset this test is about"
+    reset = kickoffs[-1]
+    jumps = [
+        abs(p["x"] - q["x"]) for f0, f1 in zip(match.frames, match.frames[1:], strict=False)
+        if f1["frame"] == reset for p, q in zip(f0["players"], f1["players"], strict=True)
+    ]
+    assert max(jumps) > MAX_PLAYER_MPS / FPS * 10, "someone must really be moved by the reset"
     peaks = [f for f in calculate_facts(match.events, match.frames) if f.metric == "peak_speed"]
     assert len(peaks) == 22 and max(f.value for f in peaks) <= MAX_PLAYER_MPS * 3.6
 
