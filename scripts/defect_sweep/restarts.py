@@ -71,6 +71,8 @@ def measure(run: Path) -> dict:
             continue
         if math.hypot(kick["x"] - e["x"], kick["y"] - e["y"]) > 1.0:
             out["carried_set_ball"] += 1
+        if kick.get("receiver") not in (None, e["player"]):
+            continue  # a team-mate received it: another player has touched it since
         j = events.index(kick)
         nxt = next((k for k in events[j + 1:] if k["type"] in touches and k.get("player")), None)
         if nxt and nxt["player"] == e["player"]:
