@@ -963,3 +963,13 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `git log -p -- web/render ninety/render/scene.py ninety/render/meshpose.py` since the
   last bump shows no picture change without a version change; a dataset manifest's `renderers`
   lists one version per look.
+
+### 104. "Never imported" is only tested in a fresh interpreter
+- **What happened:** a test meant to prove the default `ninety-e2e` run never loads the Azure
+  Speech client deleted it from `sys.modules` and ran the bundle. With the import moved to the top
+  of the Describer, it stayed green: the module was already loaded when the test file was, so
+  nothing imported it again. The mutation run caught it.
+- **Rule:** a test that a module stays unloaded imports the code under test in a new Python
+  process and reads `sys.modules` there.
+- **Check:** `tests/test_describe.py::test_the_default_run_makes_no_azure_call`; mutate by adding
+  the import at module top and watch it go red.
