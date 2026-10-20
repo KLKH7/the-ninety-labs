@@ -357,6 +357,58 @@ other seeds.
   (the real interval lets players recover), no stoppage time and no substitutes. Read the verdict
   with that in mind; the protocol does not adjust for it.
 
+## Football sense (FS1 to FS9)
+
+Goals, shots and pass completion sat inside their published bands while the play looked dumb to
+anyone who watched it (lesson 107). The football-sense checker counts the dumb play itself, per
+90 minutes, with the match clock of every case so a person can watch it:
+
+    uv run ninety-sim --seed 7 --minutes 20 --out runs/seed7
+    uv run ninety-football-sense runs/seed7 runs/seed11 runs/seed21 runs/seed42 --json found.json
+
+Each type's definition, thresholds and sources are in [GROUNDING.md](GROUNDING.md#football-sense-it-looks-like-sensible-football-counts).
+The checker reads only `frames.jsonl`, `events.jsonl` and `meta.json` and imports nothing from
+the engine. The ball is dead from a stoppage (out of play, goal, foul, offside) until the restart
+is kicked; which goal a team attacks comes from where its keeper stands. Each type has a scene
+that must be flagged and legal scenes that must not be, mutation-checked
+([`tests/test_football_sense.py`](../tests/test_football_sense.py)).
+
+**Protocol.** Every engine pull request runs the checker on seeds 7, 11, 21 and 42 at 20 minutes
+each, before and after, on the same commit pair, and posts the table with a watched 60-second
+clip. A fix names the type it targets and shows its count fall; the other types are held out, so
+a fix that moves one count by worsening another is visible. No count is a target and no engine
+constant is set by looking at one (lessons 2, 3 and 21). Read with care: 80 minutes resolves a
+type seen a few dozen times; a type seen a handful of times needs more matches before a change
+is read.
+
+**Engine `7ee8720`, 2026-10-19,** seeds 7, 11, 21, 42, 20 minutes each (80 minutes, 1,023 passes):
+
+| Defect | Count | Per 90 | seed 7 | 11 | 21 | 42 |
+|---|---:|---:|---:|---:|---:|---:|
+| FS1 chaser runs away from a loose ball | 24 | 27.0 | 2 | 9 | 4 | 9 |
+| FS2 unpressed pass straight out of play | 21 | 23.6 | 8 | 3 | 5 | 5 |
+| FS3 keeper stays home for a ball he would win | 0 | 0 | 0 | 0 | 0 | 0 |
+| FS5 more than half the outfield within 10 m of the ball | 0 | 0 | 0 | 0 | 0 | 0 |
+| FS6 pass from own box to own box | 180 | 202.5 | 13 | 25 | 73 | 69 |
+| FS6 possession with 3+ own-box passes | 18 | 20.2 | 2 | 5 | 6 | 5 |
+| FS7 square or back pass with a free option ahead | 436 | 490.5 | 79 | 85 | 140 | 132 |
+| FS8 loose ball at rest that nobody goes to | 0 | 0 | 0 | 0 | 0 | 0 |
+| FS9 team on the ball with most outfielders in own box | 56 | 63.0 | 9 | 10 | 6 | 31 |
+
+FS4, outfield players under 0.5 m/s, share of open-play time:
+
+| Still, at least | mean | 1 | 3 | 5 | 8 | 10 |
+|---|---:|---:|---:|---:|---:|---:|
+| team with the ball | 1.4 | 55% | 22% | 9% | 1% | 0% |
+| team without it | 2.9 | 51% | 37% | 32% | 23% | 1% |
+
+What it says: the worst types are teams passing inside their own box (FS6, FS9) while the team
+without the ball stands (FS4: eight or more still for almost a quarter of open play), passes
+played into touch with nobody near the passer (FS2), and chasers who run past or away from a
+loose ball (FS1). FS3, FS5 and FS8 found nothing: the engine rarely plays a through ball a keeper
+could reach first, and players do not clump within 10 m of the ball. A clump in a line, like
+the one in the owner's review clip, is wider than FS5's circle; FS4 and FS9 are where it shows.
+
 ## Personalizer
 
 The Personalizer (`ninety/personalizer`) rewrites one claim the fact-checker already verified for

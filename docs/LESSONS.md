@@ -984,3 +984,20 @@ short and actionable. This file is public: no research sources, product names or
   stacked on its branch, or ask the Coordinator. Never build a second one.
 - **Check:** the PR description names the search run and what it found. This PR is stacked on #131
   (base `agents/personalizer`) and adds only what #131 lacks.
+
+### 107. Outcome numbers can look right while the football looks dumb: watch clips and count the nonsense
+- **What happened:** goals, shots, saves and pass completion sat inside their published bands
+  for weeks, so the engine was judged good. When the owner finally watched review clips, the play
+  was poor across the board: passes into touch with nobody near the passer, a chaser running away
+  from a loose ball, teams passing among themselves inside their own box, defenders standing
+  still. Every engine change had been measured by outcome rates; nobody watched a clip, and
+  nothing counted the play itself. On engine `7ee8720` the football-sense checker found 202 passes
+  a 90 from a team's own box into its own box, and the team without the ball with eight or more
+  outfield players standing for almost a quarter of open play.
+- **Rule:** an outcome rate is a held-out check, not proof the football is sensible. Every engine
+  pull request posts a watched 60-second clip and the football-sense counts (FS1 to FS9) on seeds
+  7, 11, 21 and 42 at 20 minutes, before and after; a fix names the type it targets and shows that
+  count fall without another rising. When someone watching finds a new kind of nonsense, it
+  becomes a defect type with a must-fail scene before it is fixed.
+- **Check:** the pull request has a clip link and the `ninety-football-sense` table for both
+  commits ([EVALUATION.md](EVALUATION.md#football-sense-fs1-to-fs9)).
