@@ -14,7 +14,7 @@ from ninety.render.camera import Camera
 from ninety.render.clip import RenderUnavailable, _appearance, browser_page
 from ninety.render.meshpose import world_markers
 from ninety.render.params import sample_params
-from ninety.render.scene import Gait, Look, body_parts, parts_box, reach_sign
+from ninety.render.scene import PLANT_AHEAD_MAX, Gait, Look, body_parts, parts_box, reach_sign
 
 LOOK = Look("h1", "home", "CM", 1.84, 1.0, "#c68642", "#1b1410")
 CAM = Camera((52.5, -35.0, 20.0), (40.0, 30.0, 0.0), 20.0, 1280, 720)
@@ -75,7 +75,8 @@ def test_head_and_feet_project_inside_the_capsule_box():
 
 
 def test_the_planted_foot_does_not_skate_with_the_hip():
-    plant = (10.45, 20.02)
+    # A run lands its foot no further ahead than the mesh's leg reaches (scene.PLANT_AHEAD_MAX).
+    plant = (10.0 + PLANT_AHEAD_MAX, 20.02)
     a = world_markers(10.0, 20.0, 0.0, 1.84, "run", 0.6, 5.0, 0.0, 0.0, plant, None)
     b = world_markers(10.22, 20.0, 0.0, 1.84, "run", 2.1, 5.0, 0.0, 0.0, plant, None)
     for foot in (a["foot_l"], b["foot_l"]):
@@ -162,3 +163,46 @@ def test_the_page_skins_the_same_body_the_box_uses(page):
         assert drawn3 is not None and res3["objects"][look.id]["full"] > 200
         assert box3[0] - 4 <= drawn3[0] and drawn3[2] <= box3[2] + 4, (style, drawn3, box3)
         assert box3[1] - 4 <= drawn3[1] and drawn3[3] <= box3[3] + 4, (style, drawn3, box3)
+
+
+def test_the_page_turns_steps_and_touches_like_the_python_pose(page):
+    """Hips ahead of the chest, feet planted and twisted or stepping, and each touch: the page's
+    skinned markers are the Python ones (meshpose.pose_markers), so the tests of the motion
+    (test_render_motion.py) hold for the pixels."""
+    from ninety.render.meshpose import pose_markers
+
+    p = sample_params(5)
+    params = {**p.to_dict(), "width": 1280, "height": 720}
+    page.evaluate("cfg => window.ninety.init(cfg)",
+                  {"seed": 5, "params": params, "objects": [_appearance(LOOK, p)]})
+    base = {"phase": 0.0, "speed": 0.0, "reach": 0, "dive": 0, "x": 40.0, "y": 30.0, "lift": 0.0}
+    poses = [
+        {**base, "action": "stand", "lead": 0.35,
+         "plant_l": [40.05, 30.22, 0.9, 0.0], "plant_r": [39.9, 29.8, 0.2, 0.06]},
+        {**base, "action": "run", "phase": 1.2, "speed": 5.2, "lead": -0.2,
+         "plant_l": [40.2, 30.15, 0.3, 0.0], "plant_r": None},
+        {**base, "action": "strike", "reach": -1.0, "speed": 0.3,
+         "touch": {"part": "strike", "side": "r", "at": [40.35, 29.85, 0.05], "w": 0.7}},
+        {**base, "action": "thigh", "reach": 1.0,
+         "touch": {"part": "thigh", "side": "l", "at": [40.15, 30.1, 0.62], "w": 1.0}},
+        {**base, "action": "chest",
+         "touch": {"part": "chest", "side": "r", "at": [40.3, 30.0, 1.25], "w": 1.0}},
+        {**base, "action": "head", "lift": 0.2,
+         "touch": {"part": "head", "side": "r", "at": [40.2, 30.0, 1.95], "w": 1.0}},
+    ]
+    for i, pose in enumerate(poses):
+        heading = 0.4
+        g = Gait(action=pose["action"], heading=heading)
+        parts = body_parts(40.0, 30.0, LOOK, g, None)
+        spec = {
+            "index": 10 + i,
+            "camera": {"position": list(CAM.position), "R": CAM.R, "fov_v_deg": CAM.fov_v_deg},
+            "objects": [{"id": LOOK.id, "parts": parts, "box": parts_box(CAM, parts), "heading": heading,
+                         "pose": pose}],
+            "keypoints": [], "blur": [0.0, 0.0], "score": [0, 0], "clock": "00:00",
+            "goal_age": None, "goal_side": None, "net": None, "want_image": False, "want_markers": True,
+        }
+        js = page.evaluate("s => window.ninety.frame(s)", spec)["markers"][LOOK.id]
+        py = pose_markers(pose, heading, LOOK.height_m)
+        for name in ("head", "foot_l", "foot_r", "brow", "chest", "thigh_top_l"):
+            assert math.dist(py[name], js[name]) < 0.015, (pose["action"], name, py[name], js[name])
