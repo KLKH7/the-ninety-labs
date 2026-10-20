@@ -757,6 +757,8 @@ def body_parts(
         scale = min(1.0, max_m / dist)
         return of + vf * scale, os + vs * scale, max(oz + vz * scale, 0.02)
 
+    strided = {side: gait_foot(_gait_pose(g, x, y), g.heading, look.height_m, side, with_height=True)
+               for side in ("l", "r")}
     sleeve_r = 0.06 * k
     arm_r = 0.048 * k
     # The outer edge of the sleeves is the shoulder breadth over the deltoids (shape.py, P11).
@@ -768,13 +770,17 @@ def body_parts(
         # The hips lead the chest in a turn (g.lead), so the hip joints sit turned by it.
         hip = at(-0.10 * k * sign * math.sin(g.lead), 0.10 * k * sign * math.cos(g.lead), 0.92 * k)
         plant = g.plant_l if sign > 0 else g.plant_r
-        # The trailing foot recovers. The knee folds up over it, then the leg reaches out to land.
-        recover = max(0.0, -swing) / amp if amp > 1e-4 else 0.0
-        knee_lift = recover * (0.26 * k if pressing else 0.08 * k)
-        foot_lift = recover * (0.16 * k if pressing else 0.035 * k)
-        knee = at(swing * 0.40 + 0.05 * k, 0.11 * k * sign, 0.48 * k + knee_lift)
-        ankle = at(swing, 0.11 * k * sign, 0.08 * k + foot_lift)
-        toe = at(swing + 0.13 * k, 0.11 * k * sign, 0.05 * k + foot_lift * 0.85)
+        # Off the grass the leg is where the mesh's stride has it (meshpose.gait_foot): the knee
+        # ahead of the line from hip to ankle, as a knee bends.
+        gx, gy, gz = strided[side]
+        ankle = [round(gx - hx * ANKLE_BACK * k, 4), round(gy - hy * ANKLE_BACK * k, 4),
+                 round(0.08 * k + gz, 4)]
+        toe = [round(gx + hx * 0.02 * k, 4), round(gy + hy * 0.02 * k, 4), round(0.05 * k + gz, 4)]
+        knee = [
+            round((hip[0] + ankle[0]) / 2 + hx * 0.10 * k, 4),
+            round((hip[1] + ankle[1]) / 2 + hy * 0.10 * k, 4),
+            round((hip[2] + ankle[2]) / 2 + 0.03 * k, 4),
+        ]
         if plant is not None:
             # A foot on the grass stays where it landed, pointing the way it landed; the body moves
             # and turns over it. A stepping foot is lifted off the grass on its way. A stride's
@@ -822,7 +828,7 @@ def body_parts(
         if plant is not None and (len(plant) < 5 or plant[4] >= 0.5):
             g.ankle[side] = (plant[0], plant[1], plant[3])
         else:
-            g.ankle[side] = gait_foot(_gait_pose(g, x, y), g.heading, look.height_m, side, with_height=True)
+            g.ankle[side] = strided[side]
     # The trunk: three capsules side by side, each as thick as the chest is deep, filling the width
     # up to the inside of the hanging arms, so at chest height, trunk and arms span the engine's
     # body (shape.py) across and front to back.

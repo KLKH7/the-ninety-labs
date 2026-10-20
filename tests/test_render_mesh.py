@@ -201,6 +201,11 @@ def test_the_page_turns_steps_and_touches_like_the_python_pose(page):
          "plant_l": [40.05, 30.22, 0.4, 0.0], "plant_r": [39.95, 29.83, 0.4, 0.0],
          "hold": {"at": [40.25, 30.1, 0.11], "w": 1.0, "bend": 1.4}},
         {**base, "action": "hands", "hold": {"at": [40.3, 30.12, 1.2], "w": 0.6, "bend": 0.0}},
+        # A stride's plant half taken (its weight), and speeds where the stand pose and the walk's
+        # short stride blend into the stride.
+        {**base, "action": "walk", "phase": 5.3, "speed": 2.0, "plant_l": [40.12, 30.2, 0.4, 0.0, 0.4]},
+        {**base, "action": "walk", "phase": 1.0, "speed": 0.6},
+        {**base, "action": "stand", "phase": 2.0, "speed": 0.4},
     ]
     for i, pose in enumerate(poses):
         heading = 0.4
