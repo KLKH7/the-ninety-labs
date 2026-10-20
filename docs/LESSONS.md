@@ -1362,3 +1362,18 @@ short and actionable. This file is public: no research sources, product names or
   figure falls outside it; above 1%, it moves to a many-match check. Goals:
   `NINETY_HELD_OUT=1 uv run pytest tests/test_sim.py -k twelve` runs the funnel's 12 matches (R4);
   `tests/test_funnel.py` pins the range and its arithmetic in every CI run.
+
+### 137. A random choice scaled by the spread of all options loosens when a bad option is added
+- **What happened:** the carrier's softmax took its randomness as a share of the spread of all his
+  options' values, so a choice between close options would be loose and one between clearly
+  different options would not. The spread included the hopeless options (a 50 m pass into a crowd, a
+  shot from 44 m), so every bad option widened it and made the choice between the good ones looser.
+  Choices logged on seeds 7 and 21 showed him taking his best option in about a third of decisions,
+  against the rule's own "a good decision-maker almost always takes the best option".
+- **Rule:** in a choice rule, the odds between two options depend only on those two and on the
+  chooser; a scale for the randomness is fixed in the options' own units, never taken from the set
+  of options on offer. A habit is a pull in units of that randomness, not a bonus in the options'
+  units, or changing the scale turns it into a command. A choice asked again before anything new is
+  seen is the same choice: hold the random draw, or repeated asking makes a rejected option certain.
+  Check a stated intent ("almost always the best") against logged choices.
+- **Check:** `tests/test_decisions.py::test_a_hopeless_option_does_not_loosen_the_choice_between_two_good_ones`.

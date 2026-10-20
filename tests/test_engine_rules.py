@@ -1755,6 +1755,38 @@ def test_a_thrower_arriving_faster_than_one_frame_of_braking_does_not_take_the_b
     assert e.restart is None and e.throw_by == taker.id
 
 
+def test_a_carriers_misjudgement_is_kept_until_he_scans_again(monkeypatch):
+    # D4: the engine hands decisions.choose the same tastes while his look at the pitch is the same,
+    # and fresh ones once he has scanned again.
+    from ninety.sim import decisions
+    e = Engine(1)
+    carrier = e.by_id["h6"]
+    e.possessor = carrier.id
+    e.ball = (carrier.x, carrier.y, 0.0, 0.0, 0.0, 0.0)
+    seen = []
+
+    def spy(scene, rng, tastes=None):
+        seen.append(tastes)
+        return decisions.Option("hold", 0.0)
+
+    monkeypatch.setattr(decisions, "choose", spy)
+    e.decide(carrier)
+    e.decide(carrier)
+    assert seen[0] is seen[1] and isinstance(seen[0], dict)
+    e.beliefs[carrier.id].next_scan += 2.0  # he has scanned: a new look
+    e.decide(carrier)
+    assert seen[2] is not seen[0]
+
+
+def test_a_new_possession_is_a_new_look_at_his_options():
+    # D4: losing the ball and winning it back within one scan does not reuse his old misjudgement.
+    e = Engine(1)
+    carrier = e.by_id["h6"]
+    e.tastes[carrier.id] = (e.beliefs[carrier.id].next_scan, {("hold",): 3.0})
+    e.give("a6")
+    e.give(carrier.id)
+    assert carrier.id not in e.tastes
+
 def _two_near_a_loose_ball():
     """A loose ball rolling slowly across midfield, two home players about as near it on either
     side, everyone else far away and still, the strike long since reacted to."""

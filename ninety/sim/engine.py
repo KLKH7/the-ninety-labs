@@ -405,6 +405,9 @@ class Engine:
         # (kicked_at, free_since) to the next; it shrinks as he nears the ball.
         self.misjudged: dict[str, tuple[float, float]] = {}
         self.misjudged_at: tuple[float, float] = (-99.0, -99.0)
+        # D4: each carrier's misjudgement of his options, held until he next scans: player -> (the
+        # scan it belongs to, as Belief.next_scan, option key -> draw).
+        self.tastes: dict[str, tuple[float, dict]] = {}
         self.restart: Restart | None = None
         # Laws 13, 15 to 17: a restart that has been set but not yet kicked; the opponents keep off
         self.set_by: Restart | None = None
@@ -513,6 +516,7 @@ class Engine:
             self.poss_team = self.team_of(pid)
         self.possessor = pid
         self.last_touch = pid
+        self.tastes.pop(pid, None)  # D4: a new possession is a new look at his options
         if pid != self.released_by:
             self.released_by = None
         self.new_phase()
@@ -851,7 +855,11 @@ class Engine:
                 self.hold_until = self.t + 0.5  # he looks again
             return
         scene.set_piece = self.set_by is not None  # the set ball is played away, never carried
-        choice = decisions.choose(scene, self.rng)
+        scan = self.beliefs[carrier.id].next_scan  # D4: a new look at the pitch, a fresh misjudgement
+        held = self.tastes.get(carrier.id)
+        if held is None or held[0] != scan:
+            held = self.tastes[carrier.id] = (scan, {})
+        choice = decisions.choose(scene, self.rng, held[1])
         if choice.kind == "pass" or choice.kind == "clear":
             self.pass_to(carrier, *choice.target, lofted=choice.lofted, pace=choice.pace,
                          receiver=choice.receiver)
