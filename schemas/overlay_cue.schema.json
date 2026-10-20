@@ -23,6 +23,7 @@
     "speech": { "type": "string", "enum": ["spoken", "unavailable"], "description": "For an audio_description cue: whether its line was spoken, or speech was unavailable and the viewer should show or read the text instead." },
     "replaces": { "type": ["string", "null"] },
     "verified": { "type": "boolean" },
+    "fallback": { "type": "string", "minLength": 1, "description": "Set only when this cue is on air because something failed, saying what: a template graphic that stayed because the agents' claim was held (e.g. \"held: timeout\"), or a variant from the Personalizer's in-process fallback (e.g. \"personalizer: refused\"). The viewer shows it as a fallback badge. Absent when nothing failed." },
     "evidence": { "type": "array", "items": { "type": "string" }, "description": "Event ids behind the cue." }
   }
 }

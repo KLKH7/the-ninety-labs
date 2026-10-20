@@ -196,6 +196,29 @@ The public demo has two modes. **Replay** serves a cached match and costs nothin
 **Live** re-runs the agents and speech on the demo clip and is passcode-gated. A $20 monthly
 budget alert covers the subscription. See [SECURITY.md](../SECURITY.md).
 
+**The phone companion** ([`ninety/api/companion.py`](../ninety/api/companion.py)) runs in the
+same API Container App. The laptop pairs (`POST /api/pair`, a 6-character code valid for 2 hours),
+and the phone joins a WebSocket room at `/api/pair/{code}` (a typed code first reads its clip from
+`GET /api/pair/{code}`). A refused join is accepted and then closed with its code, since a browser
+never sees a close sent before the accept. uvicorn speaks WebSocket through the locked `websockets`
+package; without one it answers the relay with 404. The laptop's clock and focus messages
+are relayed to the phone, which reads the minimap, player cards and the wind map (`flow`) over HTTP
+and asks questions at `/api/ask`. Rooms, rate limits and the model budget are held in memory. That
+works because the app runs as one replica (`maxReplicas: 1` in `infra/main.bicep`). A second
+replica would need a shared store or session affinity first. A scale-to-zero restart forgets every
+room, and the laptop pairs again.
+
+`NINETY_COMPANION` decides what it serves. Unset or `on`, as deployed, the routes are mounted and
+serve only tracked positions: the M1 clip (seed900001), the clip the laptop plays, from its
+tracked frames file (`tests/fixtures/tracked-seed900001.json`, written by
+`ninety/vision/tracked_frames.py` from the tracks of `ninety/vision/track.py`). The tracker reads
+no shirt numbers, so a tracked player's id is its team plus track id (`h-t12`), never a squad id;
+the schemas take squad ids only from ground truth and track ids only from tracked positions. A clip
+whose positions are ground truth gets a 503, so the live path
+never reads the answer key. Until the tracked file exists, pairing that clip answers 503 too.
+`standin`, for local work, also serves the simulator's matches, labelled `source: truth`. `off`
+mounts nothing.
+
 ## Technology decisions
 
 | Area | Decision | Reason |
@@ -230,7 +253,8 @@ pull request.
 | [`overlay_cue.schema.json`](../schemas/overlay_cue.schema.json) | one timed on-screen graphic (optional `pan` and `speech` for a spoken cue) | Producer, Personalizer, Describer | viewer, WebVTT export |
 | [`viewer_question.schema.json`](../schemas/viewer_question.schema.json) | a question typed on the phone companion (data, never instructions) | phone companion | Companion agent |
 | [`viewer_answer.schema.json`](../schemas/viewer_answer.schema.json) | the answer the phone shows; its number is computed by code | Companion agent | phone companion |
-| [`companion_message.schema.json`](../schemas/companion_message.schema.json) | server to phone: `clock`, `focus`, `answer` or `player_card` | API | phone companion |
+| [`companion_message.schema.json`](../schemas/companion_message.schema.json) | server to phone: `clock`, `focus`, `answer`, `player_card` or `flow` (a team's velocity per cell, for the wind map) | API ([`ninety/api/companion.py`](../ninety/api/companion.py)) | phone companion |
+| [`minimap.schema.json`](../schemas/minimap.schema.json) | a clip's downsampled positions for the phone's minimap, with `source` | API | phone companion |
 | [`agent_trace.schema.json`](../schemas/agent_trace.schema.json) | one step of the on-screen agent trace | agent workflow | viewer |
 
 The agents' typed contracts in Python (moments, explanations, reviews, profiles, descriptions,

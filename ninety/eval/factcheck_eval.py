@@ -22,10 +22,9 @@ import subprocess
 from pathlib import Path
 
 from agent_framework.foundry import FoundryAgent
-from azure.identity import DefaultAzureCredential
 
 from ninety import config
-from ninety.agents import foundry, foundry_evals
+from ninety.agents import credentials, foundry, foundry_evals
 from ninety.agents.factcheck import Claim, check
 from ninety.agents.judge import judge, judge_agent
 from ninety.match.facts import events_in
@@ -267,17 +266,20 @@ def cases(seed: int, minutes: float) -> list[dict]:
 
 @contextlib.asynccontextmanager
 async def judge_under_test(local: bool):
-    """The Judge to measure, and its label for the report: the published version by default."""
-    credential = DefaultAzureCredential()
-    local_judge = judge_agent(foundry.chat_client(credential))
-    if local:
-        yield local_judge, f"local definition on `{config.MODEL}`"
-        return
-    name, version = foundry.pinned(local_judge)
-    async with FoundryAgent(
-        project_endpoint=config.FOUNDRY_PROJECT, agent_name=name, agent_version=version, credential=credential
-    ) as published:
-        yield published, f"`{name}:{version}` on `{config.MODEL}`"
+    """The Judge to measure, and its label for the report: the published version by default. Signs
+    in first: the cases are simulated after this, and can outlast agents-live's sign-in."""
+    async with credentials.new_credential() as credential:
+        await credentials.sign_in(credential)
+        local_judge = judge_agent(foundry.chat_client(credential))
+        if local:
+            yield local_judge, f"local definition on `{config.MODEL}`"
+            return
+        name, version = foundry.pinned(local_judge)
+        async with FoundryAgent(
+            project_endpoint=config.FOUNDRY_PROJECT, agent_name=name, agent_version=version,
+            credential=credential,
+        ) as published:
+            yield published, f"`{name}:{version}` on `{config.MODEL}`"
 
 
 async def run(seeds: list[int], minutes: float, concurrency: int = 3, local: bool = False):

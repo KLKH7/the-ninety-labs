@@ -159,15 +159,15 @@ async def foundry_model(tokens: dict[str, int]) -> AsyncIterator[tuple[Describe,
     """The published `ninety-describer` and `ninety-judge`, each at its pinned version. Refuses
     to run on drift (foundry.RegistryDrift), so a changed prompt never runs under an old name."""
     from agent_framework.foundry import FoundryAgent
-    from azure.identity import DefaultAzureCredential
 
-    from ninety.agents import foundry
+    from ninety.agents import credentials, foundry
     from ninety.agents.judge import judge, judge_agent
 
-    credential = DefaultAzureCredential()
-    client = foundry.chat_client(credential)
-    pins = [foundry.pinned(describer_agent(client)), foundry.pinned(judge_agent(client))]
-    async with contextlib.AsyncExitStack() as stack:
+    async with credentials.new_credential() as credential, contextlib.AsyncExitStack() as stack:
+        # The run's one signed-in credential (ninety/agents/credentials.py), shared by both agents.
+        await credentials.sign_in(credential)
+        client = foundry.chat_client(credential)
+        pins = [foundry.pinned(describer_agent(client)), foundry.pinned(judge_agent(client))]
         writer, judge_ag = [
             await stack.enter_async_context(FoundryAgent(
                 project_endpoint=config.FOUNDRY_PROJECT, agent_name=name, agent_version=version,

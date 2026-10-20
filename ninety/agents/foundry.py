@@ -171,21 +171,23 @@ def workflow_agents(client: FoundryChatClient) -> dict[str, Agent]:
 def build_agents(client: FoundryChatClient) -> list[Agent]:
     """Every agent we publish, once each, built exactly as the live runs build them. The
     Personalizer runs in its own service (ninety/personalizer/server.py)."""
+    from ninety.agents.companion import companion_agent
     from ninety.agents.describer import describer_agent
     from ninety.personalizer.core import personalizer_agent
 
-    agents = [*slice_agents(client), *workflow_agents(client).values(), personalizer_agent(client),
-              describer_agent(client)]
+    agents = [
+        *slice_agents(client), *workflow_agents(client).values(), personalizer_agent(client),
+        companion_agent(client), describer_agent(client),
+    ]
     return list({a.name: a for a in agents}.values())
 
 
-def chat_client(credential=None) -> FoundryChatClient:
-    from azure.identity import DefaultAzureCredential
-
+def chat_client(credential) -> FoundryChatClient:
+    """The chat client for `credential`, which the caller owns. No default: a live caller passes its
+    run's signed-in aio credential (ninety/agents/credentials.py), never a fresh sync one, whose token
+    fetch would block the event loop and could come after agents-live's sign-in had expired."""
     return FoundryChatClient(
-        project_endpoint=config.FOUNDRY_PROJECT,
-        model=config.MODEL,
-        credential=credential or DefaultAzureCredential(),
+        project_endpoint=config.FOUNDRY_PROJECT, model=config.MODEL, credential=credential
     )
 
 

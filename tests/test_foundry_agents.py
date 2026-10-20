@@ -63,6 +63,14 @@ def test_the_judge_has_no_tools():
     assert "tools" not in foundry.definition(AGENTS[1]).as_dict()
 
 
+def test_the_companion_has_no_tools_and_answers_in_the_reply_format():
+    # It reads only the facts in its prompt: no match tools, no way to fetch anything else.
+    companion = next(a for a in AGENTS if a.name == "companion")
+    defn = foundry.definition(companion).as_dict()
+    assert "tools" not in defn
+    assert defn["text"]["format"]["type"] == "json_schema"
+
+
 WORKFLOW = foundry.workflow_agents(foundry.chat_client(DefaultAzureCredential()))
 
 

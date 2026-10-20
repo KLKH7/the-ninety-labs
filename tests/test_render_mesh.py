@@ -189,6 +189,23 @@ def test_the_page_turns_steps_and_touches_like_the_python_pose(page):
          "touch": {"part": "chest", "side": "r", "at": [40.3, 30.0, 1.25], "w": 1.0}},
         {**base, "action": "head", "lift": 0.2,
          "touch": {"part": "head", "side": "r", "at": [40.2, 30.0, 1.95], "w": 1.0}},
+        # The arms: a walk and a jog between the stored walk and run, a kick's balance half-way in
+        # (a stooped body whose blended foot is put back on the grass), and a keeper's hands on a
+        # ball at his feet and at his chest.
+        {**base, "action": "walk", "phase": 2.1, "speed": 1.4},
+        {**base, "action": "walk", "phase": 4.0, "speed": 3.1},
+        {**base, "action": "strike", "speed": 1.0, "lift": -0.3,
+         "plant_l": [40.1, 30.25, 0.4, 0.0], "plant_r": [39.95, 29.85, 0.4, 0.0],
+         "touch": {"part": "strike", "side": "r", "at": [39.7, 29.8, 0.4], "w": 0.35}},
+        {**base, "action": "hands", "lift": -0.3,
+         "plant_l": [40.05, 30.22, 0.4, 0.0], "plant_r": [39.95, 29.83, 0.4, 0.0],
+         "hold": {"at": [40.25, 30.1, 0.11], "w": 1.0, "bend": 1.4}},
+        {**base, "action": "hands", "hold": {"at": [40.3, 30.12, 1.2], "w": 0.6, "bend": 0.0}},
+        # A stride's plant half taken (its weight), and speeds where the stand pose and the walk's
+        # short stride blend into the stride.
+        {**base, "action": "walk", "phase": 5.3, "speed": 2.0, "plant_l": [40.12, 30.2, 0.4, 0.0, 0.4]},
+        {**base, "action": "walk", "phase": 1.0, "speed": 0.6},
+        {**base, "action": "stand", "phase": 2.0, "speed": 0.4},
     ]
     for i, pose in enumerate(poses):
         heading = 0.4
@@ -204,5 +221,5 @@ def test_the_page_turns_steps_and_touches_like_the_python_pose(page):
         }
         js = page.evaluate("s => window.ninety.frame(s)", spec)["markers"][LOOK.id]
         py = pose_markers(pose, heading, LOOK.height_m)
-        for name in ("head", "foot_l", "foot_r", "brow", "chest", "thigh_top_l"):
-            assert math.dist(py[name], js[name]) < 0.015, (pose["action"], name, py[name], js[name])
+        for name in ("head", "foot_l", "foot_r", "hand_l", "hand_r", "brow", "chest", "thigh_top_l"):
+            assert math.dist(py[name], js[name]) < 0.015, (i, pose["action"], name, py[name], js[name])

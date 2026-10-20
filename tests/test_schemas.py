@@ -17,6 +17,7 @@ STRICT = {
     "viewer_answer": "viewer_answer.jsonl",
     "agent_trace": "agent_trace.jsonl",
     "companion_message": "companion_message.jsonl",
+    "minimap": "minimap.jsonl",
 }
 MIRRORS = {"viewer_question": Question, "viewer_answer": Answer, "agent_trace": TraceStep}
 
@@ -52,7 +53,8 @@ def test_an_unknown_field_inside_a_nested_answer_or_heat_map_is_rejected():
 
 
 def test_the_companion_fixture_holds_every_message_type():
-    assert [r["type"] for r in rows("companion_message")] == ["clock", "focus", "answer", "player_card"]
+    types = [r["type"] for r in rows("companion_message")]
+    assert types == ["clock", "focus", "answer", "player_card", "flow"]
 
 
 def test_a_companion_message_of_an_unknown_type_is_rejected():
@@ -88,6 +90,16 @@ def test_the_answer_inside_a_companion_message_is_a_viewer_answer():
     Answer(**{**answer, "evidence": tuple(answer["evidence"])})
 
 
+def test_an_overlay_cue_may_say_it_is_a_fallback_and_older_cues_still_validate():
+    cue = json.loads((FIXTURES / "cues-seed7.jsonl").read_text().splitlines()[0])
+    validator = schema_validator("overlay_cue")
+    assert "fallback" not in cue
+    validator.validate(cue)  # optional: every cue written before it still validates
+    validator.validate({**cue, "fallback": "held: timeout"})
+    with pytest.raises(ValidationError):
+        validator.validate({**cue, "fallback": ""})  # a badge must say what failed
+
+
 def test_an_overlay_cue_may_carry_a_pan_within_stereo():
     cue = json.loads((FIXTURES / "cues-seed7.jsonl").read_text().splitlines()[0])
     validator = schema_validator("overlay_cue")
@@ -115,3 +127,46 @@ def test_a_frame_says_whether_it_is_truth_or_tracked():
         validator.validate({**frame, "source": source})
     with pytest.raises(ValidationError):
         validator.validate({**frame, "source": "detected"})
+
+
+# Player ids follow the positions' source: squad ids (h7) in ground truth, team plus track id (h-t12)
+# in tracked data, since the tracker reads no shirt numbers. A track is never given a shirt number.
+SQUAD, TRACK = "h7", "h-t12"
+
+
+def _minimap(source, roster_id, frame_id):
+    row = next(r for r in rows("minimap") if r["source"] == source)
+    frame = {**row["frames"][0], "players": [[frame_id, 1.0, 2.0]]}
+    return {**row, "roster": [roster_id], "frames": [frame]}
+
+
+@pytest.mark.parametrize("source, good, bad", [("truth", SQUAD, TRACK), ("tracked", TRACK, SQUAD)])
+def test_minimap_and_card_ids_follow_the_source(source, good, bad):
+    minimap, message = schema_validator("minimap"), schema_validator("companion_message")
+    minimap.validate(_minimap(source, good, good))
+    for roster_id, frame_id in ((bad, good), (good, bad)):
+        with pytest.raises(ValidationError):
+            minimap.validate(_minimap(source, roster_id, frame_id))
+    card = {**rows("companion_message")[3], "source": source}
+    message.validate({**card, "player": good})
+    with pytest.raises(ValidationError):
+        message.validate({**card, "player": bad})
+
+
+@pytest.mark.parametrize("player", ["h12", "h0", "h-7", "x-t1", "h-t", "a-t1x", "H7"])
+def test_an_id_of_neither_form_is_rejected_everywhere(player):
+    focus = {"type": "focus", "player": player}
+    with pytest.raises(ValidationError):
+        schema_validator("companion_message").validate(focus)
+    with pytest.raises(ValidationError):
+        schema_validator("viewer_question").validate({**rows("viewer_question")[0], "player": player})
+    with pytest.raises(ValueError):
+        Question(**{**rows("viewer_question")[0], "player": player})
+
+
+@pytest.mark.parametrize("player", [SQUAD, TRACK, "a11", "a-t3"])
+def test_focus_and_question_take_either_form(player):
+    schema_validator("companion_message").validate({"type": "focus", "player": player})
+    question = {**rows("viewer_question")[0], "player": player}
+    schema_validator("viewer_question").validate(question)
+    Question(**question)
