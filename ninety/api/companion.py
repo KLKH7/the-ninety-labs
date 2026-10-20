@@ -601,21 +601,23 @@ def answer_json(answer: Answer) -> dict:
 
 async def foundry_models() -> LiveModels:
     """The published Companion and Judge, at the versions pinned in foundry_agents.json. Signs in as
-    the Container App's managed identity (DefaultAzureCredential), so there is no key."""
+    the Container App's managed identity through the shared aio credential (ninety/agents/
+    credentials.py, lesson 69: a sync one would fetch its token on the event loop's thread and stall
+    every relay), signed in here, before the first question waits on it. No key."""
     import contextlib
 
     from agent_framework.foundry import FoundryAgent
-    from azure.identity import DefaultAzureCredential
 
     from ninety import config
-    from ninety.agents import foundry
+    from ninety.agents import credentials, foundry
     from ninety.agents.factcheck import Claim, Verdict
     from ninety.agents.judge import judge as run_judge
     from ninety.agents.judge import judge_agent
 
-    credential = DefaultAzureCredential()
-    client = foundry.chat_client(credential)
     stack = contextlib.AsyncExitStack()  # kept open for the life of the process
+    credential = await stack.enter_async_context(credentials.new_credential())
+    await credentials.sign_in(credential)
+    client = foundry.chat_client(credential)
     agents = []
     for local in (companion.companion_agent(client), judge_agent(client)):
         name, version = foundry.pinned(local)

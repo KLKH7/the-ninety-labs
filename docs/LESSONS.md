@@ -1218,9 +1218,16 @@ short and actionable. This file is public: no research sources, product names or
   companion made that reachable from a viewer's text, and its evaluation missed it because the
   scripted attacker wrote only the spaced form and the leak count used the check's own pattern.
   The reviewer's audit found it on #145.
+  The first fix then summed any run of number words, so "a one-two" read as 3 and "a one-on-one"
+  as a count of 1, and true commentary from every agent was rejected (the reviewer again).
 - **Rule:** a check on what a writer says reads every form a writer can produce: a unit glued on
-  or spaced, digits or words. An evaluation of that check plants each form and counts leaks with
-  its own reader, never the check's pattern.
+  or spaced, digits or words. It reads words only as English writes one number, and an idiom
+  ("one-two", "one-touch", "no one") is no number. An evaluation of that check plants each form
+  and counts leaks with its own reader, never the check's pattern, and a change to the reader is
+  measured for false rejections too (lesson 11).
 - **Check:** `tests/test_factcheck.py::test_a_planted_number_in_any_written_form_is_rejected`
   plants each form; `docs/eval/companion.md` plants the glued and spelled forms, and on the old
   check its count shows 4 of them airing on seed 7.
+  `test_football_idioms_are_words_not_counts` passes each idiom with its passes cited. Measured
+  for false rejections: the 412 recorded claim texts in `replays/`, `docs/eval/` and the fixtures
+  read the same numbers as before, and `fact_checker_proof --check` and both replays pass.

@@ -22,19 +22,34 @@ from dataclasses import dataclass, field
 # group. Every form a writer can produce is read, or a model could air a number by gluing it.
 NUMBER_PATTERN = r"\d+(?:\.\d+)?"
 NUMBER = re.compile(rf"(?<![\w.])(?P<n>{NUMBER_PATTERN})(?:st|nd|rd|th)?(?!\d)(?!\.\d)")
-# Numbers written as words ("fifty km/h", "twenty-eight", "one hundred and two") are numbers too:
-# `check` reads them as digits. "one" in "one of", "one another", "no one" and "the one" is a
-# pronoun, not a count.
-WORD_VALUES = {
-    w: i for i, w in enumerate(
-        "zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen "
-        "fifteen sixteen seventeen eighteen nineteen".split()
-    )
-} | {w: 10 * i for i, w in enumerate("twenty thirty forty fifty sixty seventy eighty ninety".split(), 2)}
-SCALES = {"hundred": 100, "thousand": 1000}
-_WORD = rf"(?:{'|'.join(sorted([*WORD_VALUES, *SCALES], key=len, reverse=True))})"
-WORD_NUMBER = re.compile(rf"\b{_WORD}(?:(?:[\s-]+|\s+and\s+){_WORD})*\b", re.I)
-PRONOUN_ONE = re.compile(r"(?:\b(?:no|the)\s+one\b|\bone(?=\s+(?:of|another)\b))", re.I)
+# Numbers written as words ("fifty km/h", "twenty-eight", "two hundred and five") are numbers too:
+# `check` reads them as digits. Words combine only as English writes one number: a tens word and a
+# units word, and a number before "hundred" or "thousand". Two small numbers side by side are two
+# numbers, never a sum ("one-two" is not 3).
+UNITS = "one two three four five six seven eight nine".split()
+TEENS = "ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen".split()
+TENS = "twenty thirty forty fifty sixty seventy eighty ninety".split()
+WORD_VALUES = (
+    {"zero": 0}
+    | {w: i for i, w in enumerate(UNITS, 1)}
+    | {w: i for i, w in enumerate(TEENS, 10)}
+    | {w: 10 * i for i, w in enumerate(TENS, 2)}
+)
+_WORD = rf"(?:{'|'.join(sorted([*WORD_VALUES, 'hundred', 'thousand'], key=len, reverse=True))})"
+_UNIT, _TEEN, _TENS = (rf"(?:{'|'.join(words)})" for words in (UNITS, TEENS, TENS))
+_BELOW_100 = rf"(?:{_TENS}(?:[\s-]+{_UNIT}\b)?|{_TEEN}|{_UNIT}|zero)"
+_BELOW_1000 = rf"(?:(?:{_UNIT}\s+)?hundred(?:\s+(?:and\s+)?{_BELOW_100}\b)?|{_BELOW_100})"
+WORD_NUMBER = re.compile(
+    rf"\b(?:(?:{_BELOW_1000}\s+)?thousand(?:\s+(?:and\s+)?{_BELOW_1000}\b)?|{_BELOW_1000})\b", re.I
+)
+# Number words that are no count: football's idioms (a one-two, a one-on-one, a one-touch pass, a
+# two-footed tackle, a one-handed save) and the pronoun "one" ("one of", "no one").
+NOT_A_COUNT = re.compile(
+    r"\bone[\s-]twos?\b|\bone[\s-]on[\s-]one\b|\bone[\s-]v(?:s\.?|\.)?[\s-]one\b"
+    r"|\b(?:one|two)[\s-](?:touch|time|footed|handed)\b"
+    r"|\b(?:no|the)\s+one\b|\bone(?=\s+(?:of|another)\b)",
+    re.I,
+)
 DISTANCE_UNITS = r"(?:m|metre|metres|meter|meters)"
 SPEED_UNITS = r"(?:km/h|kph)"
 DISTANCE_NUMBER = re.compile(rf"(?P<number>{NUMBER_PATTERN})\s*{DISTANCE_UNITS}\b", re.I)
@@ -147,8 +162,10 @@ def _fact_values(evidence: list[dict], unit: str) -> set[float]:
 
 
 def _word_value(phrase: str) -> int:
+    """The value of one well-formed number in words (WORD_NUMBER matched it, so a units word only
+    ever follows a tens word or leads a scale)."""
     total = current = 0
-    for word in re.findall(_WORD, phrase, re.I):
+    for word in re.findall(rf"\b{_WORD}\b", phrase, re.I):
         word = word.lower()
         if word in WORD_VALUES:
             current += WORD_VALUES[word]
@@ -162,11 +179,10 @@ def _word_value(phrase: str) -> int:
 def spelled_as_digits(text: str) -> str:
     """The text with every number written in words replaced by its digits ("fifty km/h" becomes
     "50 km/h"), so the number checks read it like any other."""
-    pronouns = {m.start() for m in PRONOUN_ONE.finditer(text)}
-    pronouns |= {m.end() - 3 for m in PRONOUN_ONE.finditer(text)}
+    idioms = [range(m.start(), m.end()) for m in NOT_A_COUNT.finditer(text)]
 
     def digits(m: re.Match) -> str:
-        if m.group().lower() == "one" and m.start() in pronouns:
+        if any(m.start() in span for span in idioms):
             return m.group()
         return str(_word_value(m.group()))
 

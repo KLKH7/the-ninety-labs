@@ -311,3 +311,38 @@ def test_a_planted_number_in_any_written_form_is_rejected(text):
 ])
 def test_a_true_number_in_any_written_form_passes(text):
     assert check(Claim(text, [SPEED["id"], RUN["id"]]), FACTS).ok
+
+
+# Review of #145: the word reader summed hyphenated words ("one-two" read as 3) and counted the
+# idioms' "one", so true commentary from any agent was rejected (lesson 11: both kinds of error).
+ONE_TWO = {
+    pid: {"id": pid, "type": "pass", "team": "home", "player": a, "receiver": b, "outcome": "success"}
+    for pid, a, b in (("p1", "h7", "h9"), ("p2", "h9", "h7"))
+}
+
+
+@pytest.mark.parametrize("text", [
+    "h7 and h9 play a one-two down the right.",
+    "A neat one-two between h7 and h9.",
+    "h7 and h9 work one-twos down the right.",
+    "h7 wins a one-on-one with h9.",
+    "h7 takes h9 on one v one.",
+    "h7 plays a one-touch pass to h9.",
+    "h9 sends it back first time, one-time, to h7.",
+    "h7 goes in two-footed on h9.",
+    "h7 is one of the busiest, linking with h9.",
+    "No one links better than h7 and h9.",
+])
+def test_football_idioms_are_words_not_counts(text):
+    assert check(Claim(text, ["p1", "p2"]), ONE_TWO).ok
+
+
+@pytest.mark.parametrize("text, read", [
+    ("h7 and h9 play twenty-eight passes.", "28"),
+    ("h7 and h9 trade three passes.", "3"),
+    ("Home keep it at one-nil.", "1"),
+    ("h7 and h9 string together two hundred and five passes.", "205"),
+])
+def test_planted_counts_in_words_are_still_read(text, read):
+    verdict = check(Claim(text, ["p1", "p2"]), ONE_TWO)
+    assert not verdict.ok and any(f"number {read} " in r for r in verdict.reasons)
