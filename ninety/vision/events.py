@@ -245,8 +245,10 @@ def _speed_kmh(path: list[BallPoint], i: int) -> float | None:
     return round(steps[len(steps) // 2] * 3.6, 1)
 
 
-def detect(rows: list[dict]) -> tuple[list[dict], dict]:
-    """The detected events, and a summary of how they were found (teams, spells, counts)."""
+def detect(rows: list[dict], join_breaks: bool = True) -> tuple[list[dict], dict]:
+    """The detected events, and a summary of how they were found (teams, spells, counts).
+    `join_breaks=False` turns off the one-player-in-two-tracks rule (`may_continue`), for measuring
+    what it does (ninety/eval/attribution_derive.py); the live path always runs with it."""
     t_of = {r["frame"]: r["t"] for r in rows}
     tracks = track_players(rows)
     teams = assign_teams(tracks)
@@ -276,7 +278,7 @@ def detect(rows: list[dict]) -> tuple[list[dict], dict]:
             continue  # the clip ends with the ball still in play after him: nothing to judge yet
         if b is not None and b.track is a.track:
             continue  # he got it back himself: a touch, not a pass
-        if b is not None and may_continue(a.track, b.track):
+        if join_breaks and b is not None and may_continue(a.track, b.track):
             continue  # perhaps him again in a new track: no pass can be told
         conf = path[i].score * min(1.0, a.frames / (2 * MIN_SPELL_FRAMES))
         speed = _speed_kmh(path, i)

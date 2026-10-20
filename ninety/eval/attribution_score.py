@@ -59,7 +59,13 @@ def who(name: str, frame: int, tracks: dict[int, tr.Track], obs: dict[int, dict]
         truth_frames: dict[int, dict]) -> str | None:
     """The true player behind a named track (`h-t12`) at this frame, or None when its box pairs with
     nobody."""
-    t = tracks[int(name.split("-t")[1])]
+    return truth_player(tracks[int(name.split("-t")[1])], frame, obs, truth_frames, name)
+
+
+def truth_player(t: tr.Track, frame: int, obs: dict[int, dict], truth_frames: dict[int, dict],
+                 name: str = "track") -> str | None:
+    """The true player whose box the track's detection at this frame overlaps most (IoU at least
+    0.5), or None."""
     xy = t.at(frame)
     dets = [d for d in obs[frame]["players"] if d["score"] >= SCORE_MIN and (d["x"], d["y"]) == xy]
     if xy is None or len(dets) != 1:

@@ -83,3 +83,38 @@ def test_a_clip_whose_truth_names_another_player_is_graded_wrong(tmp_path):
     row = at.grade([clip])["pass"]
     assert row["player"]["named"] == 1 and row["player"]["right"] == 0
     assert row["interceptor"]["right"] == 1
+
+
+# --- deriving the constants on non-test clips (ninety/eval/attribution_derive.py) ----------------
+
+
+def dribble_rows():
+    """test_vision_events' dribbler: one blue player with the ball, his track broken at frame 30."""
+    from tests.test_vision_events import FPS, crowd, row
+    rows = []
+    for f in range(60):
+        x, y = 40.0 + 5.0 * f / FPS, 34.0 + (1.5 if f >= 30 else 0.0)
+        rows.append(row(f, crowd(f) + [(x, y, BLUE)], (x + 0.3, y)))
+    return rows
+
+
+def test_derive_finds_the_self_pass_with_the_rule_off_and_none_with_it_on():
+    from ninety.eval import attribution_derive as de
+    rows = dribble_rows()
+    ids = CROWD + ["h7"]
+    frames = {r["frame"]: {"frame": r["frame"], "players": [
+        {"id": ids[i], "bbox": d["bbox"], "visibility": 1.0} for i, d in enumerate(r["players"])]}
+        for r in rows}
+    off = de.self_passes(rows, frames, join_breaks=False)["passes"]
+    assert [p["self"] for p in off] == [True] and off[0]["players"] == ["h7", "h7"]
+    assert de.self_passes(rows, frames, join_breaks=True)["passes"] == []
+
+
+def test_derive_refuses_a_test_seed(tmp_path):
+    import pytest
+
+    from ninety.eval import attribution_derive as de
+    seed = sorted(de.test_seeds())[0]
+    with pytest.raises(SystemExit, match="test seeds"):
+        de.main(["--clips", str(tmp_path), "--observations", str(tmp_path), "--seeds", str(seed),
+                 "--out", str(tmp_path / "x")])
