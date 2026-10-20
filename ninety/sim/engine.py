@@ -976,6 +976,12 @@ class Engine:
         if all(self.t - self.reacting_since(p) < self.reaction(p) for p in self.players):
             return
         path = ball.predict(self.ball, DT, 6.0)
+        # Law 9: once the whole ball is over a line it is out of play. A throw still behind the line is
+        # coming in, so the chase is planned from the first point of its path on the pitch.
+        start = next((k for k in range(0, len(path), 2) if not decisions.out_of_play(*path[k][:2])), None)
+        if start is None:
+            self.chase = {}
+            return
         best: dict[str, tuple[float, str, float, float]] = {}
         for p in self.players:
             if self.kicked and p.id == self.kicked["player"] and not self.touched_since_kick:
@@ -992,9 +998,16 @@ class Engine:
                 self.misjudged[p.id] = (self.rng.gauss(0, 1), self.rng.gauss(0, 1))
             zx, zy = self.misjudged[p.id]
             ex, ey = zx * sigma, zy * sigma
-            for k in range(0, len(path), 2):
+            last = None  # the last point on the pitch he could not yet reach: where he goes if none is
+            for k in range(start, len(path), 2):
                 t = k * DT
                 bx, by, bz = path[k][0] + ex * t, path[k][1] + ey * t, path[k][2]
+                if decisions.out_of_play(bx, by):
+                    # Law 9: past the line, as he judges it, nobody can play it: the last point on the
+                    # pitch is where he goes (it was once a point off the pitch, the path run on past it).
+                    if last is not None and (p.team not in best or last[0] < best[p.team][0]):
+                        best[p.team] = last
+                    break
                 # Judged at the speed he would chase it to there at (P17); a keeper is not priced.
                 goals = self.contest_goals(p.team, bx, by)
                 cap = None if p.role == "GK" else self.run_speed(p, goals, bx, by)
@@ -1006,6 +1019,7 @@ class Engine:
                     if p.team not in best or arrive < best[p.team][0]:
                         best[p.team] = (arrive, p.id, bx, by)
                     break
+                last = (p.physique.time_to_cover(gap, along, cap), p.id, bx, by)
         self.chase = {team: (pid, x, y) for team, (_, pid, x, y) in best.items()}
 
     def tick_free(self) -> None:
@@ -1763,6 +1777,28 @@ class Engine:
 
     # ---- tick ---------------------------------------------------------------
 
+    def pass_arrives_in(self) -> float:
+        """O8: how soon the ball in flight is level with where the pass was meant, by its own flight
+        (ball.predict, the engine's physics): the first point of its path as far along the pass as
+        the target, or, if it stops short, when it comes to rest."""
+        sx, sy = self.kicked["x"], self.kicked["y"]
+        tx, ty = self.pass_target
+        ux, uy = tx - sx, ty - sy
+        reach = ux * ux + uy * uy
+        path = ball.predict(self.ball, DT, ball.FLIGHT_BOUND_S)
+        level = (k for k, q in enumerate(path) if (q[0] - sx) * ux + (q[1] - sy) * uy >= reach)
+        return next(level, len(path) - 1) * DT
+
+    def passing_to_target(self) -> bool:
+        """A pass is on its way to where it was meant: struck, not deflected, short of its target."""
+        k = self.kicked
+        if not (k and k["type"] == "pass" and self.pass_target and not self.last_deflection):
+            return False
+        sx, sy = k["x"], k["y"]
+        tx, ty = self.pass_target
+        bx, by = self.ball[0], self.ball[1]
+        return (bx - sx) * (tx - sx) + (by - sy) * (ty - sy) < fmath.ipow(tx - sx, 2) + fmath.ipow(ty - sy, 2)
+
     def play_point(self, p: Player | None = None, team: str | None = None) -> tuple[float, float]:
         """Where play is, for setting shape (O8): once a pass is struck, players set up for where
         it is going rather than chasing the ball's every metre in flight. Only the passer and the
@@ -1771,21 +1807,18 @@ class Engine:
         (its own path). A team brain (`team`) of the passing side knows where it was meant; the
         other side's reacts like an average player."""
         bx, by = self.ball[0], self.ball[1]
-        if self.kicked and self.kicked["type"] == "pass" and self.pass_target and not self.last_deflection:
+        if self.passing_to_target():
             sx, sy = self.kicked["x"], self.kicked["y"]
-            tx, ty = self.pass_target
-            target_sq = fmath.ipow(tx - sx, 2) + fmath.ipow(ty - sy, 2)
-            if (bx - sx) * (tx - sx) + (by - sy) * (ty - sy) < target_sq:
-                if p is not None:
-                    knows = p.id in (self.intended, self.released_by)
-                else:
-                    knows = team == self.kicked["team"]
-                if knows:
-                    return self.pass_target  # he knows where it was meant to go
-                react = self.reaction(p) if p is not None else decisions.GENERIC_REACTION_S
-                if self.t - self.kicked_at < react:
-                    return sx, sy  # not yet reacted to the strike
-                return self.seen_going
+            if p is not None:
+                knows = p.id in (self.intended, self.released_by)
+            else:
+                knows = team == self.kicked["team"]
+            if knows:
+                return self.pass_target  # he knows where it was meant to go
+            react = self.reaction(p) if p is not None else decisions.GENERIC_REACTION_S
+            if self.t - self.kicked_at < react:
+                return sx, sy  # not yet reacted to the strike
+            return self.seen_going
         return bx, by
 
     def ball_destination(self) -> tuple[float, float]:
@@ -1849,6 +1882,14 @@ class Engine:
             goals = self.contest_goals(p.team, chase[1], chase[2])
             speed = SPRINT if p.role == "GK" else self.run_speed(p, goals, chase[1], chase[2])
             return clamp(chase[1], 0.5, PITCH_X - 0.5), clamp(chase[2], 0.5, PITCH_Y - 0.5), speed
+        if p.id == self.intended and self.passing_to_target():
+            # O8: the team-mate a pass is played to knows where it was meant (he expects it), so he goes
+            # there to meet it, as fast as he needs to be there when it is (by the ball's own flight),
+            # rather than to his place in the shape around it. Once he has reacted, a ball off its line
+            # is the chase's (above).
+            tx, ty = self.pass_target
+            tx, ty = clamp(tx, 0.5, PITCH_X - 0.5), clamp(ty, 0.5, PITCH_Y - 0.5)
+            return tx, ty, math.hypot(tx - p.x, ty - p.y) / max(self.pass_arrives_in(), DT)
         if self.read and self.read[0] == p.id and self.possessor is None and self.kicked:
             # Sideways at the depth he has set, not back toward his line: a keeper who has come out
             # to narrow the angle stays there.

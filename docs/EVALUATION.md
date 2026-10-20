@@ -23,7 +23,7 @@ generated it and the output file is committed. Rows marked *planned* have no res
 | Fact-checker rules (numbers, players, evidence ids) | `uv run pytest tests/test_factcheck.py` | test assertions | running |
 | Personalizer rules: the A2A round trip, the fallback within its budget, the re-check of every variant, every persona and language, profile validation ([below](#personalizer)) | `uv run pytest tests/test_personalizer.py` | test assertions | running in process: 46 tests; 18 of 18 mutants of the rules killed, and 16 of 17 of the live path and its evaluation (the survivor is equivalent: an unanswered request never airs); not yet deployed |
 | Personalizer variants from the published agent that pass the re-check and air, by persona and language, and time per A2A request | `uv run python -m ninety.personalizer.eval --seeds 21,33` (agents-live task `personalizer`) | `docs/eval/personalizer.md` | planned: `ninety-personalizer:1` is published. The first live run (agents-live 39346085408, 2026-10-20) measured nothing: its sign-in had expired before the first model call, so all 20 requests fell back to the verified text. The evaluation now signs in before it simulates and refuses to write a report when the model never answered |
-| Ledger versioning, evidence validation, and deterministic cue fixture | `uv run pytest tests/test_ledger.py tests/test_cues.py` | `tests/fixtures/cues-seed7.jsonl` and test assertions | running: 21 tests; 166 cues for seed 7, five minutes (152 for its 76 passes, 14 of them failed, 14 for its 7 shots; no goal) |
+| Ledger versioning, evidence validation, and deterministic cue fixture | `uv run pytest tests/test_ledger.py tests/test_cues.py` | `tests/fixtures/cues-seed7.jsonl` and test assertions | running: 21 tests; 174 cues for seed 7, five minutes (166 for its 83 passes, 15 of them failed and one still in flight at the end, 6 for its 3 shots and 2 for its 1 goal) |
 | Fact-checker on the frozen planted-claim set, offline: catch rate, true claims wrongly stopped, the layer that decided, claims held for low-confidence detections | `uv run python -m ninety.eval.fact_checker_proof` (offline, seconds of CPU; `--check` fails if a committed file is stale, as `tests/test_fact_checker_proof.py` does) | `docs/eval/fact-checker-planted.md`, set `docs/eval/planted-claims-v1.json` | running: 175/175 planted false claims kept off air (127 recorded, 16 on phantom low-confidence detections, all held by the confidence gate, 32 with viewer text spliced in); 7/121 true claims wrongly stopped, all by the recorded Judge. Judge answers are those recorded from `ninety-judge:1` at `9be98bd`; the gate threshold (0.5) is a design value until detector calibration is measured |
 | Fact-checker catch rate on planted false claims, and true claims wrongly rejected, on the published Judge | `uv run python -m ninety.eval.factcheck_eval --seeds 21,33 --foundry`; nightly in `.github/workflows/evals.yml`, recorded in Foundry | `docs/eval/fact-checker.md` | running: held-out seeds 21,33, `ninety-judge:1` at commit `9be98bd`: 136/136 false claims caught (code alone 32/136); 7/105 true claims wrongly rejected excluding service holds (17/115 including them); 19 of 251 Judge calls failed and were held back (fail closed), more than earlier runs, not yet investigated |
 | Analyst first drafts that would air (code checks then the Judge), and Foundry's agent evaluators (task adherence, intent resolution, tool call accuracy; model-graded) on the same responses, published agents, held-out seeds | `uv run python -m ninety.agents.analyst_eval --foundry`; nightly in `.github/workflows/evals.yml`, recorded in Foundry | `docs/eval/analyst.md` | running: seeds 21,33, `ninety-analyst:3` (match tools called by Foundry over MCP) at commit `d911c0b`: 5/10 first drafts would air; Foundry evaluators intent resolution 10/10, tool call accuracy 10/10, task adherence 4/10. Ten drafts is a small sample: an identical run minutes earlier gave 6/10 and task adherence 1/10; the nightly history in Foundry is the better guide |
@@ -462,6 +462,26 @@ played into touch with nobody near the passer (FS2), and chasers who run past or
 loose ball (FS1). FS3, FS5 and FS8 found nothing: the engine rarely plays a through ball a keeper
 could reach first, and players do not clump within 10 m of the ball. A clump in a line, like
 the one in the owner's review clip, is wider than FS5's circle; FS4 and FS9 are where it shows.
+
+## Match engine: open held-out gaps
+
+Held-out checks the engine misses once the October 2026 fixes are all in (#160, #163, #164 and
+#166 on main `cf3b17a`), measured and never tuned: the funnel's 12 seeds (7, 11, 21, ..., 111) at
+90 minutes, and in brackets 20 matches of 20 minutes (seeds 3, 5, 7, 11, 13, 17, 21, 42, 101 to
+112). Each gap is a cause to find, not a number to reach (lesson 21); the likely causes are leads,
+not yet confirmed.
+
+| Measure, a match | Main `cf3b17a` | With the fixes | Real | Likely cause |
+|---|---:|---:|---|---|
+| throw-ins | 34.1 (38.0) | 26.1 (26.6) | 40 to 44 (GROUNDING R1) | fewer misplaced passes reach touch now that receivers meet the pass (#166) and clearances are aimed to stay in (#157); a tackle's poke goes out about 0.7 times a 90; nobody puts the ball out on purpose when pressed, and a clearance is never charged down |
+| passes | 1,086 (1,054) | 1,113 (1,168) | about 900 to 1,000 (GROUNDING R3) | too much safe recycling: a short safe pass is valued above a progressive one |
+| mean pass length | 15.4 m (15.6) | 13.6 m (13.6) | 15.85 m (Paris Saint-Germain) to 23.42 m (Rotherham), the shortest and longest team averages in 35 European leagues, 2018-19 (CIES Football Observatory Weekly Post 263, 20 May 2019, InStat data; its measure of length is not yet checked against ours, *verify*) | longer passes valued low or never offered: the space factor, the lane race's pessimism about late opponents (D1), or switches and through balls not generated as options |
+| passes over 30 m | 8.5% (8.9%) | 7.1% (6.5%) | no sourced figure yet | as above |
+| fouls | 33.2 (32.4) | 35.0 (32.4) | free kicks 25 to 35 (GROUNDING R1) | at the top of the range; not yet looked at |
+
+Pass completion is inside its band: 79.7% then 84.0% (R3: 75 to 88%). Goals a team: 1.08 then
+1.29 over the 12 matches, both inside the range a real league's 12 matches show (0.75 to 2.33,
+R4, lesson 118).
 
 ## Personalizer
 

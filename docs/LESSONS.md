@@ -1378,7 +1378,31 @@ short and actionable. This file is public: no research sources, product names or
   Check a stated intent ("almost always the best") against logged choices.
 - **Check:** `tests/test_decisions.py::test_a_hopeless_option_does_not_loosen_the_choice_between_two_good_ones`.
 
-### 138. A figure keeps the case it was measured for
+### 138. A range named as a distance is measured as one
+- **What happened:** the shot option was offered "inside 40 m of the goal" (`SHOT_RANGE_M`'s own
+  comment), but the code compared only the distance along the pitch. From out wide, players were
+  offered and took shots 40 to 50 m from goal, judged by a rate table that is only an unsourced tail
+  beyond 40 m: 22 of 156 shots in 20 matches (seeds 3 to 112 at 20 minutes) came from beyond 40.5 m,
+  none after the fix.
+- **Rule:** a threshold is applied in the quantity its comment and its source use (here the distance
+  to the goal's centre, as D3's rates are). Search for every use of a constant when its meaning is fixed.
+- **Check:** `tests/test_decisions.py::test_a_shot_is_an_option_only_within_range_of_the_goal_straight_line`.
+
+### 139. Knowing where the ball is going is only useful if you go there
+- **What happened:** O8 said the team-mate a pass is played to "knows where it was meant", and the
+  engine used that only to set his shape: he took up his slot around the target, not the target, and
+  a short pass struck slightly off often ran past him into touch. The chase, which takes over once he
+  reacts, was planned on the ball's predicted path past the touchline, on points up to 20 m off the
+  pitch, while `ball_destination` stopped the same path at the line. The first fix cut the true path,
+  but each player then adds his own misjudgement of it, so his judged points could still fall past
+  the line: an audit found the test passing on only 91 of 100 seeds.
+- **Rule:** when a rule gives a player knowledge, check what he does with it in the movement code, not
+  only in the estimate. A limit on what a player can do (Law 9 here) is applied to the path as he
+  judges it, where he makes the choice, and tested over many seeds, not one.
+- **Check:** `tests/test_engine_rules.py::test_the_team_mate_a_pass_is_played_to_goes_to_meet_it` and
+  `::test_nobody_is_sent_to_chase_a_ball_beyond_the_touchline`.
+
+### 140. A figure keeps the case it was measured for
 - **What happened:** GROUNDING R1 cited Opta's guide to time-wasting for "a goal's celebration,
   about 72 s", and the restart work planned the kick-off after every goal around it. Read again,
   the article gives 72 s for the celebration after a penalty goal, in its paragraph on penalties;
@@ -1390,7 +1414,7 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** every row of GROUNDING that cites a time or a rate names its case; R1 and L4 now cite
   the penalty figure as a penalty figure and the goal figure from its own source.
 
-### 139. Players sent to one point end up inside each other: give each his own place
+### 141. Players sent to one point end up inside each other: give each his own place
 - **What happened:** the goal celebration sent every team-mate to the scorer's own position. Steering
   bends a run round another player but does not slow it, and bodies in contact brace only with the
   grip steering leaves, so ten players arriving at one point at a sprint ended up in each other: in
