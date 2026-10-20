@@ -1,6 +1,6 @@
 {
   "command": "uv run python -m ninety.eval.attribution_derive --clips <render run v1>/train --observations <dir> --seeds <the validation seeds> --out docs/eval/attribution-derive",
-  "commit": "df4ce13aa8e5c8694c92f536f16ed9eb77950ef6",
+  "commit": "2392884a3638ef1bc74efb076842586cdb0a9a8d",
   "date": "2026-10-20",
   "seeds": [
     108,
