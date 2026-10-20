@@ -58,6 +58,7 @@ from ninety.agents.contracts import (
     ClaimStatus,
     Models,
     Moment,
+    Personalize,
     Review,
     TraceStep,
     status_for,
@@ -758,24 +759,26 @@ async def run_live(
     load_events: Callable[[], list[dict]], minute: int, match: str, inline_events: bool, plant: bool,
     trace_to: str = "foundry", content: bool = False, personalize: bool = False,
     inject: Callable[[Models], Models] | None = None, credential: SignedIn | None = None,
+    personalizer: Personalize | None = None,
 ) -> tuple[Result, list[Turn], dict[str, str], bool, list[dict]]:
     """Live on Foundry, calling the published versions pinned in foundry_agents.json. Signs in,
     then loads the events. Returns the result, every model answer, the versions that ran, whether
     any model call failed, and the events the run checked against. With `personalize`, aired
-    insights go to the Personalizer: its service when NINETY_PERSONALIZER_URL is set (A2A), else in
-    process (ninety/personalizer/client.from_env). `inject` swaps one of the live models for a
-    failing one (ninety/eval/workflow_failures.py --live). A run of several minutes passes its one
-    `credential`, signed in at its start (agents-live's sign-in lasts five minutes); else this run
-    makes and signs in its own."""
+    insights go to `personalizer` if given, else to its service when NINETY_PERSONALIZER_URL is set
+    (A2A), else in process (ninety/personalizer/client.from_env). With `inline_events`, an agent
+    that calls the match tools anyway fails its call (foundry.ReadTheTools). `inject` swaps one of
+    the live models for a failing one (ninety/eval/workflow_failures.py --live). A run of several
+    minutes passes its one `credential`, signed in at its start (agents-live's sign-in lasts five
+    minutes); else this run makes and signs in its own."""
     async with contextlib.AsyncExitStack() as owned:
         if credential is None:
             credential = await owned.enter_async_context(new_credential())
         return await _run_live(credential, load_events, minute, match, inline_events, plant, trace_to,
-                               content, personalize, inject)
+                               content, personalize, inject, personalizer)
 
 
 async def _run_live(credential, load_events, minute, match, inline_events, plant, trace_to, content,
-                    personalize, inject):
+                    personalize, inject, given_personalizer):
     from ninety import config
     from ninety.agents import foundry
 
@@ -800,7 +803,7 @@ async def _run_live(credential, load_events, minute, match, inline_events, plant
             async def answer(prompt: str) -> str:
                 try:
                     reply = await asyncio.wait_for(agents[role].run(prompt), MODEL_TIMEOUT_SECONDS)
-                    response = reply.text
+                    response = foundry.inline_only(reply) if inline_events else reply.text
                 except BaseException:
                     failed[0] = True
                     raise
@@ -817,7 +820,9 @@ async def _run_live(credential, load_events, minute, match, inline_events, plant
             return verdict
 
         personalizer = _unused("personalizer")
-        if personalize:
+        if personalize and given_personalizer is not None:
+            personalizer = given_personalizer  # the caller's, closed by the caller
+        elif personalize:
             from ninety.personalizer import client as personalizer_client
 
             personalizer = personalizer_client.from_env()

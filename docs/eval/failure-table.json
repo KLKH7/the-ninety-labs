@@ -10,6 +10,9 @@
    "unsure": [],
    "injected": "nothing (the baseline)",
    "status": "verified",
+   "statuses": [
+    "verified"
+   ],
    "category": null,
    "reasons": [],
    "judge_asked": 6,
@@ -36,21 +39,21 @@
      "passes_check": true
     },
     {
-     "text": "[es] Away complete a pass of 8 m at 42 km/h.",
+     "text": "Away completa un pase de 8 m a 42 km/h.",
      "persona": "analyst",
      "lang": "es",
      "verified": true,
      "passes_check": true
     },
     {
-     "text": "[es] Away complete a pass of 8 m at 42 km/h.",
+     "text": "Away completa un pase de 8 m a 42 km/h.",
      "persona": "casual",
      "lang": "es",
      "verified": true,
      "passes_check": true
     },
     {
-     "text": "[es] Away complete a pass of 8 m at 42 km/h.",
+     "text": "Away completa un pase de 8 m a 42 km/h.",
      "persona": "club",
      "lang": "es",
      "verified": true,
@@ -71,6 +74,8 @@
    "trace_fallbacks": [],
    "fallback": [],
    "variants_refused": [],
+   "variants_english": [],
+   "variants_missing": [],
    "model_calls": 9,
    "recovered": {
     "templates stay": true,
@@ -88,6 +93,9 @@
    "unsure": [],
    "injected": "the Judge never answers (every call outlasts its timeout, retried 1 time(s))",
    "status": "held",
+   "statuses": [
+    "held"
+   ],
    "category": "timeout",
    "reasons": [
     "judge timeout; claim held back"
@@ -116,6 +124,8 @@
     "producer template: cue-v00001-analyst stays: held"
    ],
    "variants_refused": [],
+   "variants_english": [],
+   "variants_missing": [],
    "model_calls": 4,
    "recovered": {
     "templates stay": true,
@@ -133,6 +143,9 @@
    "unsure": [],
    "injected": "the Tactician's Foundry endpoint cannot be reached",
    "status": "held",
+   "statuses": [
+    "held"
+   ],
    "category": "service",
    "reasons": [
     "tactician failed (ServiceRequestError: injected: the Foundry endpoint cannot be reached); claim held back"
@@ -161,6 +174,8 @@
     "producer template: cue-v00001-analyst stays: held"
    ],
    "variants_refused": [],
+   "variants_english": [],
+   "variants_missing": [],
    "model_calls": 2,
    "recovered": {
     "templates stay": true,
@@ -178,6 +193,9 @@
    "unsure": [],
    "injected": "the Personalizer's service refuses the connection (its container is down)",
    "status": "verified",
+   "statuses": [
+    "verified"
+   ],
    "category": null,
    "reasons": [],
    "judge_asked": 3,
@@ -231,6 +249,8 @@
     "casual/es: no translation: the verified English text",
     "club/es: no translation: the verified English text"
    ],
+   "variants_english": [],
+   "variants_missing": [],
    "model_calls": 6,
    "recovered": {
     "templates stay": true,
@@ -250,6 +270,9 @@
    ],
    "injected": "the detector reports the event the Tactician cites at confidence 0.3, below 0.5",
    "status": "held",
+   "statuses": [
+    "held"
+   ],
    "category": "low_confidence",
    "reasons": [
     "event v00005 was detected with confidence 0.30, below 0.50: cite a confident detection"
@@ -275,6 +298,8 @@
     "producer template: cue-v00001-analyst stays: held"
    ],
    "variants_refused": [],
+   "variants_english": [],
+   "variants_missing": [],
    "model_calls": 3,
    "recovered": {
     "templates stay": true,

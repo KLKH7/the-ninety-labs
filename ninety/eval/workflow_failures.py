@@ -69,6 +69,14 @@ def claim_on(event_id: str, known: dict[str, dict]) -> Claim:
     return Claim(f"{side} complete a pass of {e['distance_m']} m at {e['ball_speed_kmh']} km/h.", [event_id])
 
 
+def claim_in_spanish(event_id: str, known: dict[str, dict]) -> str:
+    """The same claim worded in Spanish for the stand-in Personalizer: written here, by us, not a
+    model's or a service's translation. The team keeps its name, as the re-check allows."""
+    e = known[event_id]
+    side = "Away" if e["team"] == "away" else "Home"
+    return f"{side} completa un pase de {e['distance_m']} m a {e['ball_speed_kmh']} km/h."
+
+
 def reply(claim: Claim) -> str:
     return json.dumps({"text": claim.text, "evidence": claim.evidence})
 
@@ -199,10 +207,17 @@ def models_for(
     }
     judge = functools.partial(judge_call, agent, timeout_seconds=JUDGE_TIMEOUT_S)
     # A working Personalizer's stand-in: each persona keeps the claim's words, and its Spanish is
-    # the English marked "[es] " (translate.mock, not a translation), so a Spanish profile airs.
+    # the scripted wording above (claim_in_spanish), so a Spanish profile airs Spanish.
     from ninety.personalizer import translate
 
-    personalizer = translate.translated(Models.scripted().personalizer, translate.mock)
+    spanish = {claim_on(i, known).text: claim_in_spanish(i, known) for i in (ground.main, ground.side)}
+
+    async def scripted_translation(text: str, lang: str) -> str:
+        if lang != "es" or text not in spanish:
+            raise translate.TranslationUnavailable(f"no scripted {lang} wording for {text!r}")
+        return spanish[text]
+
+    personalizer = translate.translated(Models.scripted().personalizer, scripted_translation)
     fakes = {"personalizer": personalizer, **scenario.override(agent)}
     return Models.scripted(replies, judge=judge, **fakes), agent
 
@@ -227,7 +242,7 @@ def run(scenario: Scenario, ground: Ground | None = None) -> dict:
 
 
 def injection(scenario: Scenario, counter: list[int], known: dict[str, dict],
-              ground: Ground, personalizer=None) -> Callable[[Models], Models]:
+              ground: Ground, opened: list | None = None) -> Callable[[Models], Models]:
     """For --live: the scenario's failure in place of the live model, every Judge call counted. A
     claim on the unsure detection is injected at the Analyst (the moment that offers it) and the
     Tactician (the claim): live models would not reliably cite it, and the row is about what the
@@ -255,8 +270,9 @@ def injection(scenario: Scenario, counter: list[int], known: dict[str, dict],
             counter[0] += 1
             return await judge(claim, evidence)
 
-        live = {} if personalizer is None else {"personalizer": personalizer}
-        return replace(models, judge=counted, **{**live, **swapped})
+        if opened is not None and isinstance(swapped.get("personalizer"), RemotePersonalizer):
+            opened.append(swapped["personalizer"])  # the caller closes it
+        return replace(models, judge=counted, **swapped)
 
     return inject
 
@@ -267,10 +283,12 @@ async def live_rows(seeds: tuple[int, ...] = SEEDS) -> list[list[dict]]:
     simulation can outlast agents-live's five-minute sign-in), serves every minute.
 
     Every agent reads the one match this commit simulated: the Analyst gets the minute's events
-    inline, never from the deployed match tools, which serve the matches the deployed image
-    simulated with its own engine (and took 50.7 s to answer through Foundry against 2.6 s inline, on
-    2026-10-20: lesson 90). The Personalizer is the published one behind the A2A server in this process, so
-    the Spanish profiles get Spanish; without it every variant is the verified English text."""
+    inline under a match id no server serves, and a call to the match tools fails the call
+    (foundry.ReadTheTools). The deployed tools serve the matches the deployed image simulated with
+    its own engine, and through Foundry took 50.7 and 55.3 s on the M1 clip against the 60 s budget
+    (2.6 and 1.3 s inline; measured by hand on 2026-10-20, PR #182: lesson 90). The Personalizer
+    is the published one behind the A2A server in this process, so the Spanish profiles get Spanish;
+    without it every variant is the verified English text."""
     from ninety.agents import credentials
     from ninety.match.facts import compact
     from ninety.personalizer import core
@@ -284,27 +302,64 @@ async def live_rows(seeds: tuple[int, ...] = SEEDS) -> list[list[dict]]:
             for ground in grounds:
                 out = []
                 for scenario in applicable(ground):
-                    events, counter = events_for(scenario, ground), [0]
+                    events, counter, opened = events_for(scenario, ground), [0], []
                     known = {e["id"]: compact(e) for e in workflow.agent_events(events)}
-                    personalizer = in_process(core.model_personalizer(ask))
+                    opened.append(in_process(core.model_personalizer(ask)))
                     try:
                         result, *_ = await workflow.run_live(
-                            lambda events=events: events, MINUTE, ground.match, True, False,
-                            trace_to="none", personalize=True, credential=credential,
-                            inject=injection(scenario, counter, known, ground, personalizer),
+                            lambda events=events: events, MINUTE, match_server.unserved(ground.match), True,
+                            False, trace_to="none", personalize=True, credential=credential,
+                            personalizer=opened[0],
+                            inject=injection(scenario, counter, known, ground, opened),
                         )
                     finally:
-                        await personalizer.close()
+                        for client in opened:
+                            await client.close()
                     out.append(row(scenario, result, counter[0], ground))
                 tables.append(out)
     return tables
 
 
 def minute_claim(reviews: list[Review]) -> Review | None:
-    """The minute's claim: the one that aired, else the Analyst's first moment's. The scripted
+    """The claim the row shows: the one that aired, else the Analyst's first moment's. The scripted
     Analyst offers one moment, the main pass; a live Analyst picks its own, so a row looked up by
-    the main pass's id found none whenever the model preferred another moment."""
+    the main pass's id found none whenever the model preferred another moment. Recovery reads
+    every moment's status (`ends_as_it_must`), not this one alone."""
     return next((r for r in reviews if r.aired is not None), reviews[0] if reviews else None)
+
+
+def ends_as_it_must(statuses: list[str], expected: str) -> bool:
+    """Every moment of the minute, not one: held means each one held; verified means one aired and
+    none held (a claim the fact-checker rejected is the system working, not a failure)."""
+    if expected == "held":
+        return bool(statuses) and all(s == "held" for s in statuses)
+    return "verified" in statuses and "held" not in statuses
+
+
+def variant_gaps(result, known: dict[str, dict]) -> dict[str, list[str]]:
+    """For each aired claim, the profiles it was personalized for whose variant did not air in its
+    own language: refused by the fact-checker, reading as English (language.reads_english), or
+    never returned."""
+    from ninety.personalizer.cues import profiles_for
+    from ninety.personalizer.language import reads_english
+
+    refused = [s.detail for s in result.trace if s.role == "fact_checker"
+               and s.action in ("held", "rejected") and "/" in s.detail.split(":")[0]]
+    insights = [c for c in result.cues if c["kind"] == "insight"]
+    english = [f"{c['persona']}/{c['lang']}: {c['text']}" for c in insights
+               if c.get("lang", "en") != "en" and reads_english(c["text"])]
+    shown = {(tuple(c["evidence"]), c["persona"], c.get("lang", "en")) for c in insights}
+    gone = {d.split(":")[0] for d in refused}
+    missing = []
+    for review in result.reviews:
+        if review.aired is None or not review.aired.evidence:
+            continue
+        evidence = tuple(review.aired.evidence)
+        for p in profiles_for(known[evidence[0]]):
+            name = f"{p.persona}/{p.lang}"
+            if (evidence, p.persona, p.lang) not in shown and name not in gone:
+                missing.append(name)
+    return {"refused": refused, "english": english, "missing": missing}
 
 
 def row(scenario: Scenario, result, judge_asked: int, ground: Ground) -> dict:
@@ -325,6 +380,7 @@ def row(scenario: Scenario, result, judge_asked: int, ground: Ground) -> dict:
         "unsure": [ground.side] if scenario.unsure_side else [],
         "injected": scenario.injected,
         "status": review.status if review else "none",
+        "statuses": [r.status for r in result.reviews],
         "category": verdict.category if verdict else None,
         "reasons": list(verdict.reasons) if verdict else [],
         "judge_asked": judge_asked,
@@ -336,9 +392,7 @@ def row(scenario: Scenario, result, judge_asked: int, ground: Ground) -> dict:
         "badges": sorted({c["fallback"] for c in result.cues if c.get("fallback")}),
         "trace_fallbacks": [f"{s.role}: {s.fallback}" for s in result.trace if s.fallback],
         "fallback": fallback,
-        # A profile whose variant did not air: the fact-checker held or rejected it.
-        "variants_refused": [s.detail for s in result.trace if s.role == "fact_checker"
-                             and s.action in ("held", "rejected") and "/" in s.detail.split(":")[0]],
+        **{f"variants_{k}": v for k, v in variant_gaps(result, known).items()},
         "model_calls": result.model_calls,
     }
 
@@ -350,15 +404,17 @@ def recovered(row: dict, base: dict) -> dict[str, bool]:
     return {
         "templates stay": lost == gated and set(row["templates"]) <= set(base["templates"]),
         "nothing unverified airs": all(i["verified"] and i["passes_check"] for i in row["insights"]),
-        "claim ends as it must": row["status"] == CLAIM[row["scenario"]],
+        "claim ends as it must": ends_as_it_must(row["statuses"], CLAIM[row["scenario"]]),
         # This failure's own fallback, marked in the trace; none at all without a failure.
         "fallback recorded": (FALLBACK[row["scenario"]] in row["trace_fallbacks"])
         if FALLBACK[row["scenario"]] else row["trace_fallbacks"] == [],
         # The viewer shows a cue's `fallback` as a badge: on screen in every failure, never without one.
         "fallback badge on screen": bool(row["badges"]) == (row["scenario"] != "none"),
-        # Without a failure every profile gets its own variant: a Spanish profile held on the
-        # English text is the safe outcome of a defect, so the baseline fails (the reviewer's ruling).
-        "every variant airs without a failure": row["scenario"] != "none" or not row["variants_refused"],
+        # Without a failure every profile gets its own variant in its own language: a Spanish
+        # profile held on the English text, shown English, or left out is a defect, so the baseline
+        # fails (the reviewer's ruling).
+        "every variant airs without a failure": row["scenario"] != "none" or not (
+            row["variants_refused"] or row["variants_english"] or row["variants_missing"]),
     }
 
 
@@ -407,13 +463,15 @@ def table_lines(table: list[dict]) -> list[str]:
     ok = sum(r["recovers"] for r in failures)
     lines += [
         "",
-        f"**Recovered: {ok} of {len(failures)}** injected failures. A row recovers when every template",
+        f"**Baseline: {'passes' if base['recovers'] else 'fails'}. Recovered: {ok} of {len(failures)}**"
+        " injected failures. A row recovers when every template",
         "graphic stays on air (less those on an unsure detection, which the confidence gate keeps off",
-        "the screen), every aired text passes the code checks again, the claim ends exactly as it must",
-        "(held; verified when only the Personalizer failed, since the insight needs no Personalizer),",
-        "the failure's own fallback is marked in the trace, and a fallback badge is on screen (the",
-        "cue's `fallback`, which the viewer draws); the baseline has neither, and airs every profile's",
-        "variant in its own language.",
+        "the screen), every aired text passes the code checks again, every moment's claim ends as it",
+        "must (each held; verified when only the Personalizer failed, since the insight needs no",
+        "Personalizer: one aired and none held), the failure's own fallback is marked in the trace, and",
+        "a fallback badge is on screen (the cue's `fallback`, which the viewer draws). The baseline has",
+        "neither, and must air every profile's variant: none refused, none missing, and no Spanish one",
+        "reading as English (more English function words than Spanish, `personalizer/language.py`).",
     ]
     held_es = [r for r in table if any("/es:" in step for step in r["fallback"])]
     if held_es:
@@ -454,7 +512,8 @@ def report(table: list[dict], live: bool = False, ground: str = detected.M1_CLIP
         "fact-checking agent with its confidence gate, Producer) on the M1 clip's detected events",
         f"(`{detected.M1_CLIP}`, minute {MINUTE}), with one failure injected at the model boundary.",
         "The Judge is the real wrapper (its retry, timeout and verdicts) around a stand-in agent; the",
-        "other models are scripted, and the Personalizer's Spanish is the English marked `[es] `.",
+        "other models are scripted; the Personalizer's Spanish is a wording we wrote for the table",
+        "(`claim_in_spanish`), not a translation by a model or a service.",
         "Data: `docs/eval/failure-table.json`. The M1 live path's own table",
         "is `docs/eval/failure-table-m1.md`.",
         "",
@@ -507,7 +566,8 @@ def main() -> None:
             (args.out / name).write_text(text)
             print(f"wrote {args.out / name}")
         for t in tables:
-            print(f"{t[0]['match']}: recovered {sum(r['recovers'] for r in t[1:])} of {len(t) - 1}")
+            print(f"{t[0]['match']}: baseline {'passes' if t[0]['recovers'] else 'fails'}; "
+                  f"recovered {sum(r['recovers'] for r in t[1:])} of {len(t) - 1}")
         return
     out = render()
     if args.check:
