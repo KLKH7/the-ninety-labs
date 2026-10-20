@@ -135,25 +135,28 @@ def live_app() -> Starlette:
     import contextlib
     import os
 
-    from agent_framework.foundry import FoundryAgent
-    from azure.identity import DefaultAzureCredential
+    from agent_framework.exceptions import AgentFrameworkException
+    from azure.core.exceptions import AzureError
 
-    from ninety import config
-    from ninety.agents import foundry
-    from ninety.personalizer.core import model_personalizer, personalizer_agent
+    from ninety.agents.foundry import RegistryDrift
+    from ninety.personalizer.core import log, model_personalizer, published_ask
 
-    credential = DefaultAzureCredential()
-    name, version = foundry.pinned(personalizer_agent(foundry.chat_client(credential)))
-    published = FoundryAgent(
-        project_endpoint=config.FOUNDRY_PROJECT, agent_name=name, agent_version=version, credential=credential
-    )
+    published = {}  # the Ask, once the lifespan has signed in
 
     async def ask(text: str) -> str:
-        return (await published.run(text)).text
+        if "ask" not in published:  # sign-in failed at startup: the verified text, per request
+            raise AgentFrameworkException("the Personalizer is not signed in to Foundry")
+        return await published["ask"](text)
 
     @contextlib.asynccontextmanager
     async def lifespan(app):
-        async with published:
+        # A failed sign-in must not stop the server: every request then gets the verified text
+        # (model_personalizer catches the exception above), as for any other model outage.
+        async with contextlib.AsyncExitStack() as stack:
+            try:
+                published["ask"], _ = await stack.enter_async_context(published_ask())
+            except (AzureError, AgentFrameworkException, RegistryDrift) as e:
+                log.error("personalizer could not sign in (%s); serving the verified text", type(e).__name__)
             yield
 
     from ninety.personalizer import translate
