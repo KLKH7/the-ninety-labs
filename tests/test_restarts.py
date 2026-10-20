@@ -373,3 +373,58 @@ def test_a_set_ball_touched_on_is_in_play_and_the_opponents_may_close():
     e.step()
     assert e.set_by is None
     assert e.keep_off(e.by_id["a7"], 61.0, 34.0) == (61.0, 34.0)
+
+
+def holding_a_dead_ball_away_from_the_spot() -> tuple[Engine, object]:
+    """A home player, not the taker, has just taken the dead ball 20 m from the spot."""
+    e = Engine(3)
+    still(e)
+    free_kick(e, "home", 40.0, 34.0)
+    r = e.restart
+    p = e.by_id["h7"]
+    p.x, p.y, p.heading = 60.0, 34.0, math.pi  # facing the spot
+    r.carried_by, r.gathered_at = p.id, e.t
+    e.ball = (60.0 - 0.35, 34.0, 0.0, 0.0, 0.0, 0.0)  # at his feet, in front of him
+    return e, p
+
+
+def test_a_fetcher_settles_the_ball_before_he_knocks_it_on():
+    """A4: he has it under control only after his first touch has settled it (settle_s)."""
+    from ninety.sim.engine import settle_s
+    e, p = holding_a_dead_ball_away_from_the_spot()
+    e.tick_restart()
+    assert e.restart.carried_by == p.id  # not struck in the frame he took it
+    e.t += settle_s(p.profile["first_touch"])
+    e.tick_restart()
+    assert e.restart.carried_by is None and e.restart.passed_by == p.id
+    assert e.ball[3] < -1.0  # on its way back toward the spot
+
+
+def test_a_fetcher_faces_the_spot_before_he_knocks_it_on():
+    """P16: a strike needs him facing within STRIKE_FACING of its line."""
+    from ninety.sim.engine import settle_s
+    e, p = holding_a_dead_ball_away_from_the_spot()
+    p.heading = 0.0  # facing away from the spot, the ball behind him
+    e.ball = (60.0 + 0.35, 34.0, 0.0, 0.0, 0.0, 0.0)
+    e.t += settle_s(p.profile["first_touch"])
+    e.tick_restart()
+    assert e.restart.carried_by == p.id
+
+
+def test_taking_a_rolling_dead_ball_gives_it_his_velocity():
+    """The ball goes with him as a controlled ball does (P6), not dead still."""
+    e = Engine(3)
+    still(e)
+    free_kick(e, "home", 40.0, 34.0)
+    p = e.by_id["h9"]
+    p.x, p.y, p.vx, p.vy = 40.0, 34.0, 3.0, 0.0
+    e.ball = (40.3, 34.0, 0.0, 5.0, 0.0, 0.0)
+    e.tick_restart()
+    assert e.restart.carried_by == p.id and e.ball[3:5] == (3.0, 0.0)
+
+
+def test_at_a_goal_kick_an_opponent_near_the_side_of_the_area_goes_out_wide():
+    e = Engine(3)
+    e.restart = Restart("goal_kick", "home", 5.5, 34.0, "h1", e.t + 5)
+    tx, ty = e.keep_off(e.by_id["a9"], 5.0, 53.0)  # deep, a metre inside the side of the area
+    assert tx == 5.0 and ty >= PITCH_Y / 2 + PENALTY_HALF_WIDTH + KEEP_OFF_MARGIN_M - 1e-9
