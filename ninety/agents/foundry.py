@@ -127,6 +127,28 @@ def analyst_agent(client: FoundryChatClient) -> Agent:
     return Agent(client=client, name="analyst", instructions=INSTRUCTIONS, tools=[match_tool()])
 
 
+def moment_analyst_agent(client: FoundryChatClient) -> Agent:
+    """The workflow's Analyst: picks the moments of a minute, through the same MCP tools. Its own
+    agent, so the slice's Analyst (and its recorded prompts) stay exactly as they are."""
+    from ninety.agents.workflow import MOMENT_ANALYST_INSTRUCTIONS
+
+    return Agent(
+        client=client, name="moment-analyst", instructions=MOMENT_ANALYST_INSTRUCTIONS, tools=[match_tool()]
+    )
+
+
+def tactician_agent(client: FoundryChatClient) -> Agent:
+    from ninety.agents.contracts import TACTICIAN_INSTRUCTIONS
+
+    return Agent(client=client, name="tactician", instructions=TACTICIAN_INSTRUCTIONS)
+
+
+def challenger_agent(client: FoundryChatClient) -> Agent:
+    from ninety.agents.contracts import CHALLENGER_INSTRUCTIONS
+
+    return Agent(client=client, name="challenger", instructions=CHALLENGER_INSTRUCTIONS)
+
+
 def slice_agents(client: FoundryChatClient) -> list[Agent]:
     """The slice's agents, in the order it runs them: the Analyst, then the Judge."""
     from ninety.agents.judge import judge_agent
@@ -134,13 +156,27 @@ def slice_agents(client: FoundryChatClient) -> list[Agent]:
     return [analyst_agent(client), judge_agent(client)]
 
 
+def workflow_agents(client: FoundryChatClient) -> dict[str, Agent]:
+    """The workflow's agents by role (ninety/agents/workflow.py). The Judge is the slice's."""
+    from ninety.agents.judge import judge_agent
+
+    return {
+        "analyst": moment_analyst_agent(client),
+        "tactician": tactician_agent(client),
+        "challenger": challenger_agent(client),
+        "judge": judge_agent(client),
+    }
+
+
 def build_agents(client: FoundryChatClient) -> list[Agent]:
-    """Every agent we publish, built exactly as the live workflow builds them. The Personalizer
-    runs in its own service (ninety/personalizer/server.py)."""
+    """Every agent we publish, once each, built exactly as the live runs build them. The
+    Personalizer runs in its own service (ninety/personalizer/server.py)."""
     from ninety.agents.describer import describer_agent
     from ninety.personalizer.core import personalizer_agent
 
-    return [*slice_agents(client), personalizer_agent(client), describer_agent(client)]
+    agents = [*slice_agents(client), *workflow_agents(client).values(), personalizer_agent(client),
+              describer_agent(client)]
+    return list({a.name: a for a in agents}.values())
 
 
 def chat_client(credential=None) -> FoundryChatClient:
