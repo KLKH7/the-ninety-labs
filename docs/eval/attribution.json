@@ -1,6 +1,6 @@
 {
   "command": "uv run python -m ninety.eval.attribution_score --test-dir runs/test-frozen-cca498c/test --observations docs/eval/attribution --observations tests/fixtures --out docs/eval/attribution",
-  "commit": "4e2ca23b9d85e1731d29404c096cfa0ad632d005",
+  "commit": "ef055eba192f093d0b692afba257fbb7d73e8cd9",
   "date": "2026-10-20",
   "rule": {
     "rival_m": 1.89,
