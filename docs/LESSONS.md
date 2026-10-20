@@ -864,7 +864,95 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** the harness line for every mutation shows "N failed, M passed". Run one mutation by
   hand first and watch it go red before trusting the loop.
 
-### 96. A legal exception in the contract is an exception in every reader of the same data
+### 96. A fallback is real only when a test injects the failure through the live path
+- **What happened:** the M1 live path had fail-closed Judge handling and a single status mapping
+  (`contracts.status_for`), and both looked done. Injecting each failure through `live.run` for
+  the failure table showed two gaps: the workflow kept its own mapping, so a Judge outage ended
+  as `rejected` (the claim is wrong) instead of `held` (it could not be checked); and an Analyst
+  that failed, hung on an MCP call or replied with prose raised out of `live.run`, taking the
+  template graphics down with it.
+- **Rule:** every fallback claimed in docs/eval/failure-table.md is a row produced by injecting
+  that failure into the real path, asserted by a test with the expected outcome written in the
+  test. A status is computed by `status_for`, never re-derived.
+- **Check:** `uv run pytest tests/test_failure_table.py`; removing the `live.run` fallback or
+  restoring the old status line turns a row red.
+
+### 97. A robust loss pulls only from as far as its scale reaches
+- **What happened:** the camera search (`ninety/vision/pitch.py`) ranked its coarse grid of views
+  with the fine fit's Cauchy loss, 3 px. A grid view sits tens of pixels from the right one, where
+  that loss is flat, so the ranking was close to noise: with the true gantry held fixed, 3 of 10
+  frames of seed 900001 fitted, and the gantry search settled 20 m from the truth. The objective
+  was not at fault: the true camera scored 3.8 against the search's 24. The grid also aimed only at
+  points on the pitch, while the broadcast camera looks beyond the far touchline.
+- **Rule:** before blaming an objective, score it at the answer. A coarse-to-fine search uses at
+  each stage a loss scale that matches how far its starts are from the answer (here 20 px to rank,
+  then 12 and 3 px to refine), and its grid covers the whole space the answer can be in.
+- **Check:** `tests/test_vision_pitch.py` recovers known cameras from their own markings, at four
+  pans including a midfield view the old grid could not reach.
+
+### 98. Cluster on what does not change with the light
+- **What happened:** teams came from 2-means on each track's shirt colour. In seed 900001 the stand's
+  shadow covers half the pitch, and the two clusters learned were two greys (#292c3f and #666374)
+  for a maroon and a blue kit: players were split by light, both away passes were labelled home,
+  and every pass matched its true event in time and place but not in team.
+- **Rule:** make a feature that tells objects apart invariant to what varies within one of them
+  before clustering it (here chromaticity, each channel over their sum, which shadow leaves
+  alone), and check the clusters against labels on one clip before trusting them.
+- **Check:** `tests/test_vision_events.py::test_one_kit_in_sun_and_in_shadow_is_one_side` fails
+  when the feature is raw colour.
+
+### 99. A scorer reads a clip the way the data contract writes it
+- **What happened:** `ninety/eval/event_score.py` found a frame by its position from 0, which holds
+  for a whole match. The test set's clips are windows that keep the match's frame numbers
+  (docs/DATA_CONTRACT.md), so the first detected events graded on one were refused.
+- **Rule:** a scorer takes its inputs' layout from the contract (here, a window starts at its own
+  first frame) and is tested on that layout, not only on whole matches.
+- **Check:** `tests/test_event_score.py::test_a_window_cut_from_a_match_is_graded_by_frame_number`
+  and `::test_a_window_with_a_missing_frame_is_refused` fail on the old code.
+
+### 100. A file the code reads at run time must be in the image, and CI must build the image
+- **What happened:** #128 made `ninety/match/detected.py` read `schemas/match_event.schema.json` at
+  import and the MCP server load `tests/fixtures/detected-standin-seed900001.jsonl`. The Dockerfile
+  never copied `schemas/`, and `.dockerignore` drops `tests/`. Every test passed, because tests run
+  from a checkout; the first place the image was built was the deploy after merge, which failed, and
+  `main` could no longer deploy.
+- **Rule:** a change that makes the code read a file outside `ninety/` at run time adds it to the
+  Dockerfile in the same pull request. The image is built and called in CI on every pull request,
+  not first at deploy.
+- **Check:** the CI `image` job builds the Dockerfile, runs it, and calls `/api/health` and an MCP
+  tool on every kind of served match; the Dockerfile itself loads every served match after the
+  precompute. Mutation-checked: removing `COPY schemas` fails the build at the precompute step.
+
+### 101. A drawn body moves the way its markers move, frame by frame
+- **What happened:** the skinned mesh was turned as one rigid object by the engine's heading. A
+  player turning on the spot spun on his base, both feet sweeping 5 cm a frame across the grass;
+  a strike was a stored pose wherever the ball was, its foot about 0.5 m off it. Running plants
+  were placed up to 0.58 m ahead of the hips, where the mesh's leg cannot put a flat foot (it
+  reaches 0.30 m), so the drawn foot landed short and slid onto its plant. The test of that
+  ("the planted foot does not skate") passed only because the leg search was coarse enough that
+  the foot missed by about the same amount on both frames it compared.
+- **Rule:** judge motion on the skinned markers the page draws, over consecutive frames: a foot
+  on the grass does not move, and a moving foot is lifted; a touch puts the named part on the
+  ball on the contact frame. Place targets where the drawn limb can reach (measure the reach on
+  the asset), and make a search fine enough that a test cannot pass by its error.
+- **Check:** `tests/test_render_motion.py` (turns on the spot, run touchdowns, kicks, thigh, chest
+  and header touches), each mutation-checked against the old behaviour; `tests/test_render_mesh.py`
+  holds the page's markers to the Python ones for the same poses.
+
+### 102. A change to the picture bumps the renderer version in the same commit
+- **What happened:** the skinned kit mesh (a3d228e) replaced the capsule players and left
+  `RENDERER_VERSION` at 0.3.2. Dataset v1's clips at `cca498c` (capsules) and every clip rendered
+  from main since (mesh) both record renderer 0.3.2, so `clip.json` cannot say which body a
+  detector was trained or tested on. Found while planning targeted round 1, which renders from
+  main and would have mixed the two looks under one version.
+- **Rule:** any change to what `web/render` draws or how labels are counted bumps
+  `ninety/render/__init__.py`'s `RENDERER_VERSION` in the same commit; a dataset or test-set
+  manifest names the version, and two looks never share one.
+- **Check:** `git log -p -- web/render ninety/render/scene.py ninety/render/meshpose.py` since the
+  last bump shows no picture change without a version change; a dataset manifest's `renderers`
+  lists one version per look.
+
+### 103. A legal exception in the contract is an exception in every reader of the same data
 - **What happened:** after a goal the kickoff puts every player back in his own half in one frame.
   The data contract allows it, and the validator's speed check and the late-drop report both skip
   it. The stats engine did not: `player_movement_facts` counted the reset as running, so seed 7's
@@ -878,7 +966,7 @@ short and actionable. This file is public: no research sources, product names or
   runs on seed 7, which has two kickoffs after goals, and holds every player's peak speed under
   the validator's limit. It fails on the old code.
 
-### 97. A test that waits for its rule hangs when the rule breaks, and a hang is not a red test
+### 104. A test that waits for its rule hangs when the rule breaks, and a hang is not a red test
 - **What happened:** two WebSocket tests on the phone relay checked their rule by waiting for a
   message (a close, the room's latest state). With the rule mutated, the message never came and
   pytest blocked for about 40 minutes, until the process was killed by hand. A CI job would have waited
