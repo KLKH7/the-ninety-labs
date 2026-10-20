@@ -84,6 +84,10 @@ TAKE_ON = 0.01  # design: takes_players_on adds this to a dribble. A close call,
 SHORT_PASS_M, LONG_PASS_M = 15.0, 25.0
 SHORT_PASS = 0.008  # design: plays_short adds this under SHORT_PASS_M and subtracts it over LONG_PASS_M
 CLEAR_FROM = 2 / 3  # a clear is an option in his own third: this share of the pitch from the goal he attacks
+CLEAR_AHEAD_M = 45.0  # design: a clearance is aimed this far up the pitch
+# Design: and this far in from the touchline on his side (wide, away from goal), or further in, so
+# he can keep it in play when his kick error would put the widest aim over the line (Law 9).
+CLEAR_IN_FROM_LINE_M = (4.0, 12.0, 20.0)
 
 
 # D7: what having the ball is worth by area, measured from the engine's own matches
@@ -814,6 +818,42 @@ def short_pass_bias(dist: float) -> float:
     return SHORT_PASS * (1 - 2 * (dist - SHORT_PASS_M) / (LONG_PASS_M - SHORT_PASS_M))
 
 
+def clear_value(scene: Scene, tx: float, ty: float, contest: float) -> float:
+    """D1, Law 9: what a clearance aimed at (tx, ty) is worth, over the strikes his own kick error
+    allows (strike_nodes, lofted, as the pass estimate weighs them): the contest where it lands if it
+    stays in play, or, if it crosses a line before any player (either side, average body, average
+    reaction, reach_time) can get to it, the cost of their restart where it went out: a throw-in
+    there (Law 15) or a goal kick (Law 16)."""
+    sx, sy = scene.x, scene.y
+    direction = fmath.atan2(ty - sy, tx - sx)
+    react = perception.CHOICE_REACTION_S
+    players = [(m[1], m[2], *(m[4:6] or (0.0, 0.0)), None) for m in scene.mates]
+    players += [(ox, oy, ovx, ovy, scene.goal_x if keeper else None)
+                for ox, oy, ovx, ovy, keeper in scene.moving]
+    total = 0.0
+    for w, d_angle, ground, up in strike_nodes(scene, tx, ty, True, ARRIVE_MPS):
+        points, rests = flight(ground, up)
+        ux, uy = fmath.cos(direction + d_angle), fmath.sin(direction + d_angle)
+        t_end, where = math.inf, None
+        for t, a, _, _, _ in points:
+            if out_of_play(sx + ux * a, sy + uy * a):
+                t_end, where = t, (sx + ux * a, sy + uy * a)
+                break
+        kept = where is None or any(
+            reach_time(points, t_end, rests, sx, sy, ux, uy, px, py, pvx, pvy, react, t_end, box)[0] < t_end
+            for px, py, pvx, pvy, box in players)
+        if kept:
+            total += w * contest
+            continue
+        ox, oy = where
+        if 0.0 <= ox <= PITCH_X:  # over a touchline: their throw-in where it crossed
+            cost = our_loss(scene, ox, min(PITCH_Y, max(0.0, oy)))
+        else:  # over their goal line: their goal kick
+            cost = our_loss(scene, scene.goal_x - attack(scene.goal_x) * GOAL_KICK_M, PITCH_Y / 2)
+        total -= w * cost
+    return total
+
+
 def shot_chance(scene: Scene) -> float:
     """His estimate that a shot from here goes in. With measured tables (D7): how often shots from
     here went in, scaled by how this situation compares with an open one (blockers in the cone, the
@@ -867,11 +907,16 @@ def options(scene: Scene) -> list[Option]:
             ev += TAKE_ON
         out.append(Option("dribble", ev + (STICKY if scene.current == "dribble" else 0.0), (tx, ty)))
     if abs(scene.goal_x - scene.x) > CLEAR_FROM * PITCH_X:  # in his own third: long and away
-        wide = 4.0 if scene.y < PITCH_Y / 2 else PITCH_Y - 4.0
-        tx = scene.x + attack(scene.goal_x) * 45.0
-        # A long ball away is a contest where it lands (an even one: design).
-        contest = 0.5 * value(tx, wide, scene.goal_x) - 0.5 * loss_cost(tx, wide, scene.goal_x)
-        out.append(Option("clear", contest, (tx, wide), lofted=True))
+        tx = scene.x + attack(scene.goal_x) * CLEAR_AHEAD_M
+        best_clear = None
+        for inside in CLEAR_IN_FROM_LINE_M:
+            ty = inside if scene.y < PITCH_Y / 2 else PITCH_Y - inside
+            # A long ball away is a contest where it lands (an even one: design), if it stays in play.
+            contest = 0.5 * value(tx, ty, scene.goal_x) - 0.5 * loss_cost(tx, ty, scene.goal_x)
+            ev = clear_value(scene, tx, ty, contest)
+            if best_clear is None or ev > best_clear.value:
+                best_clear = Option("clear", ev, (tx, ty), lofted=True)
+        out.append(best_clear)
     # Holding is waiting to make a move a moment later: worth the best move open to him now, less
     # what the defence recovers while he waits (D9; *verify*: options only decay while he waits,
     # nothing here models a run developing). He cannot wait for ever, so when every move is a bad

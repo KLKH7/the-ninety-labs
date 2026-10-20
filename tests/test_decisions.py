@@ -849,3 +849,30 @@ def test_the_passer_expects_a_dropping_ball_into_his_man_to_meet_the_thigh():
     assert near == pytest.approx(into, abs=0.02)
     # and as a thigh: well below what the same ball on the foot would be judged
     assert into < 0.5
+
+
+def test_an_unpressed_clearance_is_not_aimed_where_his_kick_error_puts_it_out():
+    # Alone in his own third by the touchline: the widest aim, 4 m from the line, goes out with
+    # part of his kick error and nobody can get to it (it once was the only aim, whatever happened).
+    s = scene(x=10.0, y=6.0)
+    clear = next(o for o in D.options(s) if o.kind == "clear")
+    assert min(clear.target[1], D.PITCH_Y - clear.target[1]) > D.CLEAR_IN_FROM_LINE_M[0]
+
+
+def test_a_clearance_that_goes_out_costs_their_throw_in_and_one_in_play_is_the_contest():
+    s = scene(x=10.0, y=6.0)
+    tx = s.x + D.CLEAR_AHEAD_M
+    on_line = D.clear_value(s, tx, 0.5, 1.0)  # aimed at the line: most strikes cross it
+    inside = D.clear_value(s, tx, 34.0, 1.0)  # aimed at the middle: every strike stays in
+    assert on_line < 0.6
+    assert abs(inside - 1.0) < 1e-12
+    assert D.clear_value(s, tx, 0.5, 0.0) < 0  # out of play, it is their ball: a cost
+
+
+def test_a_team_mate_who_can_get_there_keeps_a_wide_clearance_in_play():
+    # From the middle, aimed 4 m from the far touchline: most strikes land and roll out low after
+    # 4 to 5 s, unless somebody gets to them first; a team-mate standing near there does.
+    tx = 10.0 + D.CLEAR_AHEAD_M
+    alone = D.clear_value(scene(x=10.0, y=34.0), tx, 64.0, 1.0)
+    covered = D.clear_value(scene(x=10.0, y=34.0, mates=[("h7", 57.0, 65.0, 0.0)]), tx, 64.0, 1.0)
+    assert alone < 0.6 and covered > alone + 0.3
