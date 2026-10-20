@@ -17,7 +17,7 @@ with the same scorer, threshold 0.5, every frame, detected on the same Mac.
 | ours-v4-ctrl | ours-v3 plus dataset v1 and 80 **untargeted** clips at `91d1e3b` | [vision-report-v3ctrl-mesh.json](../vision-report-v3ctrl-mesh.json) |
 | ours-v4 | ours-v3 plus dataset v1 and the 80 **round-1** clips at `91d1e3b` | [vision-report-v3-mesh.json](../vision-report-v3-mesh.json) |
 
-Precision / recall:
+Precision / recall (the stock COCO detector's row is in [vision-report-coco-mesh](../vision-report-coco-mesh.md)):
 
 | | Labels | ours-v3 | ours-v4-ctrl | ours-v4 |
 |---|---|---|---|---|

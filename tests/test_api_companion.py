@@ -118,10 +118,22 @@ class Closed(Exception):
 class Socket:
     """One client WebSocket to the ASGI app, on the running event loop."""
 
-    def __init__(self, app, url):
+    def __init__(self, app, url, slow_first_send=0, slow_accept=0):
         path, _, query = url.partition("?")
         self.app, self.path, self.query = app, path, query
         self.to_app, self.from_app = asyncio.Queue(), asyncio.Queue()
+        self.slow_first_send = slow_first_send  # loop turns the server's first message takes to send
+        self.slow_accept = slow_accept  # loop turns the server's accept takes
+
+    async def _from_server(self, message):
+        if message["type"] == "websocket.accept":
+            for _ in range(self.slow_accept):  # a real handshake yields: others join meanwhile
+                await asyncio.sleep(0)
+        if message["type"] == "websocket.send" and self.slow_first_send:
+            turns, self.slow_first_send = self.slow_first_send, 0
+            for _ in range(turns):  # as a real socket's send can: the loop runs other tasks meanwhile
+                await asyncio.sleep(0)
+        await self.from_app.put(message)
 
     async def __aenter__(self):
         scope = {
@@ -130,7 +142,7 @@ class Socket:
             "headers": [(b"host", b"testserver")], "client": ("testclient", 50000),
             "server": ("testserver", 80), "subprotocols": [], "state": {},
         }
-        self.task = asyncio.create_task(self.app(scope, self.to_app.get, self.from_app.put))
+        self.task = asyncio.create_task(self.app(scope, self.to_app.get, self._from_server))
         await self.to_app.put({"type": "websocket.connect"})
         first = await self._next()
         if first["type"] == "websocket.close":
@@ -209,6 +221,79 @@ def test_a_late_phone_gets_the_latest_clock_and_focus_first_then_the_rest_in_ord
                        {"type": "clock", "t": 3.0, "playing": True}]
 
     asyncio.run(run())
+
+
+def test_a_message_sent_during_a_phones_catch_up_still_reaches_it(setup):
+    # Review of #145: the phone must be registered before its catch-up is sent. Registered after,
+    # a laptop message arriving while the (slow) catch-up send is in flight reaches nobody.
+    client, app, _ = setup
+    code = pair(client)
+
+    async def run():
+        async with Socket(client.app, f"/api/pair/{code}?role=laptop") as laptop:
+            await laptop.send({"type": "clock", "t": 1.0, "playing": True})
+            async with asyncio.timeout(RECEIVE_S):
+                while "clock" not in app.rooms[code].latest:
+                    await asyncio.sleep(0)
+            async with Socket(client.app, f"/api/pair/{code}?role=phone", slow_first_send=50) as phone:
+                await laptop.send({"type": "focus", "player": "h7"})  # lands during the catch-up send
+                return [await phone.receive(), await phone.receive()]
+
+    clock, focus = {"type": "clock", "t": 1.0, "playing": True}, {"type": "focus", "player": "h7"}
+    assert asyncio.run(run()) == [clock, focus]
+
+
+def test_joins_are_rate_limited_per_address_before_the_code_is_looked_up(monkeypatch):
+    monkeypatch.setattr(comp, "_track", lambda clip: track())
+    monkeypatch.setitem(comp.LIMITS, "join", 3)
+    app = comp.Companion(passcode="", live=None, clock=Clock(), allow_truth=True)
+    client = TestClient(api.build("k" * 64, app))
+
+    async def run():
+        return [await refused(client.app, "/api/pair/NOPE42?role=phone") for _ in range(4)]
+
+    assert asyncio.run(run()) == [4404, 4404, 4404, 4429]  # the fourth guess is not even looked up
+
+
+def test_phones_joining_at_once_cannot_pass_the_cap(setup, monkeypatch):
+    client, app, _ = setup
+    monkeypatch.setattr(comp, "MAX_PHONES", 2)
+    code = pair(client)
+
+    async def run():
+        sockets = [Socket(client.app, f"/api/pair/{code}?role=phone", slow_accept=5) for _ in range(3)]
+        joined = await asyncio.gather(*(s.__aenter__() for s in sockets), return_exceptions=True)
+        refused_codes = [j.code for j in joined if isinstance(j, Closed)]
+        for j in joined:
+            if not isinstance(j, BaseException):
+                await j.__aexit__(None, None, None)
+        return refused_codes, len(app.rooms[code].phones) if code in app.rooms else None
+
+    refused_codes, _ = asyncio.run(run())
+    assert refused_codes == [4429]
+
+
+def test_an_oversized_body_is_refused_unread(setup):
+    client, _, _ = setup
+    code = pair(client)
+    big = json.dumps({"session": code, "player": "h7", "text": "x" * 100, "t": 1.0, "pad": "y" * 3000})
+    r = client.post("/api/ask", content=big, headers={"content-type": "application/json"})
+    assert r.status_code == 413
+    # A body sent in chunks, with no length declared, is cut off at the cap all the same.
+    chunks = (part.encode() for part in [big[:1000], big[1000:2000], big[2000:]])
+    assert client.post("/api/ask", content=chunks).status_code == 413
+    assert client.post("/api/pair", content=b"{" + b" " * 3000 + b"}").status_code == 413
+
+
+def test_a_declared_oversized_body_is_refused_before_a_byte_is_read():
+    from starlette.requests import Request
+
+    async def receive():
+        raise AssertionError("the body was read")
+
+    scope = {"type": "http", "method": "POST", "path": "/api/ask", "headers": [(b"content-length", b"5000")]}
+    with pytest.raises(comp.TooLarge):
+        asyncio.run(comp._read_body(Request(scope, receive)))
 
 
 def test_a_newer_clock_never_overtakes_a_phones_catch_up():
@@ -456,16 +541,26 @@ def test_a_flow_message_validates_and_points_the_way_the_team_runs(setup):
 # --- ground truth stays off the deployed path ------------------------------------------------------
 
 
-def test_the_deployed_configuration_serves_no_companion(monkeypatch):
-    # infra sets no NINETY_COMPANION, so the deployed API has no companion route at all.
+def test_the_deployed_configuration_mounts_the_companion_and_refuses_truth(monkeypatch):
+    # infra sets no NINETY_COMPANION: the routes are mounted in `on`, and a clip whose positions are
+    # ground truth is never paired or served. Until the M1 clip's tracked file exists, it says so.
     monkeypatch.delenv("NINETY_COMPANION", raising=False)
+    monkeypatch.setattr(comp, "_track", lambda clip: track("truth"))
+    client = TestClient(api.build("k" * 64))
+    r = client.post("/api/pair", json={"clip": "seed7"})
+    assert r.status_code == 503 and "ground truth" in r.json()["error"]
+    assert client.get("/api/minimap/seed7").status_code == 503
+    assert comp.from_env({}).allow_truth is False
+
+
+def test_off_mounts_nothing(monkeypatch):
+    monkeypatch.setenv("NINETY_COMPANION", "off")
     client = TestClient(api.build("k" * 64))
     assert client.post("/api/pair", json={"clip": "seed7"}).status_code == 404
-    assert client.get("/api/minimap/seed7").status_code == 404
-    assert comp.from_env({}) is None
+    assert comp.from_env({"NINETY_COMPANION": "off"}) is None
 
 
-def test_the_modes_are_standin_or_on_and_a_typo_fails():
+def test_the_modes_are_on_standin_or_off_and_a_typo_fails():
     assert comp.from_env({"NINETY_COMPANION": "standin"}).allow_truth is True
     assert comp.from_env({"NINETY_COMPANION": "on"}).allow_truth is False
     with pytest.raises(ValueError, match="NINETY_COMPANION='yes'"):
@@ -474,24 +569,61 @@ def test_the_modes_are_standin_or_on_and_a_typo_fails():
 
 def test_on_refuses_ground_truth_positions_everywhere(monkeypatch):
     monkeypatch.setattr(comp, "_track", lambda clip: track("truth"))
-    app = comp.Companion(passcode="", live=None, clock=Clock())  # `on`: allow_truth is off by default
+    clock = Clock()
+    app = comp.Companion(passcode="", live=None, clock=clock)  # `on`: allow_truth is off by default
     client = TestClient(api.build("k" * 64, app))
-    code = pair(client)
+    r = client.post("/api/pair", json={"clip": "seed7"})
+    assert r.status_code == 503 and "ground truth" in r.json()["error"]
+    app.rooms["ABCDEF"] = comp.Room("ABCDEF", "seed7", clock() + 60)  # as if paired before a switch
     for response in (
         client.get("/api/minimap/seed7"),
         client.get("/api/card/seed7/h7?t_to=10"),
         client.get("/api/flow/seed7/home?t_to=10"),
-        ask(client, code),
+        ask(client, "ABCDEF"),
     ):
         assert response.status_code == 503 and "ground truth" in response.json()["error"]
+
+
+def test_the_m1_clip_without_its_tracked_file_is_refused_not_faked(monkeypatch, tmp_path):
+    from ninety.match import tracking
+
+    monkeypatch.setattr(tracking, "FIXTURES", tmp_path)  # no tracked-seed900001.jsonl in it
+    tracking.tracked.cache_clear()
+    client = TestClient(api.build("k" * 64, comp.Companion(passcode="", live=None, clock=Clock())))
+    r = client.post("/api/pair", json={"clip": "seed900001"})
+    assert r.status_code == 503 and "no tracked positions yet" in r.json()["error"]
+    tracking.tracked.cache_clear()
+
+
+def test_the_m1_clip_is_paired_and_served_from_its_tracked_file(monkeypatch, tmp_path):
+    from ninety.match import tracking
+
+    rows = [{**f, "ball": {**f["ball"], "z": 0.0}} for f in track("tracked").frames]
+    (tmp_path / "tracked-seed900001.jsonl").write_text("\n".join(json.dumps(r) for r in rows))
+    monkeypatch.setattr(tracking, "FIXTURES", tmp_path)
+    tracking.tracked.cache_clear()
+    try:
+        client = TestClient(api.build("k" * 64, comp.Companion(passcode="", live=None, clock=Clock())))
+        code = client.post("/api/pair", json={"clip": "seed900001"}).json()["code"]
+        body = client.get("/api/minimap/seed900001").json()
+        assert body["source"] == "tracked" and body["roster"] == ["a7", "h7"]
+        card = client.get("/api/card/seed900001/h7?t_to=10").json()
+        MESSAGE.validate(card)
+        assert card["source"] == "tracked" and card["speed_kmh"] == 18.0
+        answer = ask(client, code).json()["answer"]
+        assert answer["status"] == "verified" and answer["value"] == 18.0
+    finally:
+        tracking.tracked.cache_clear()
 
 
 def test_on_serves_tracked_positions(monkeypatch):
     monkeypatch.setattr(comp, "_track", lambda clip: track("tracked"))
     client = TestClient(api.build("k" * 64, comp.Companion(passcode="", live=None, clock=Clock())))
-    body = client.get("/api/minimap/seed7").json()
+    body = client.get("/api/minimap/seed900001").json()
     assert body["source"] == "tracked"
-    card = client.get("/api/card/seed7/h7?t_to=10").json()
+    card = client.get("/api/card/seed900001/h7?t_to=10").json()
     MESSAGE.validate(card)
     assert card["source"] == "tracked"
-    assert ask(client, pair(client)).json()["answer"]["status"] == "verified"
+    assert ask(client, pair(client, "seed900001")).json()["answer"]["status"] == "verified"
+    # A stand-in is refused by name, even when its frames would say tracked: `on` never loads one.
+    assert client.get("/api/minimap/seed7").status_code == 503

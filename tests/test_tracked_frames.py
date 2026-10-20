@@ -17,7 +17,7 @@ from tests.test_vision_live_path import run_audited, truth_reads
 
 ROOT = Path(__file__).resolve().parents[1]
 OBSERVATIONS = ROOT / "tests" / "fixtures" / "observations-seed900001.jsonl"
-FIXTURE = ROOT / "tests" / "fixtures" / "tracked-seed900001.json"
+FIXTURE = ROOT / "tests" / "fixtures" / "tracked-seed900001.jsonl"
 REPORT = ROOT / "docs" / "eval" / "companion-tracked.json"
 FRAME = schema_validator("frame")
 
@@ -30,14 +30,13 @@ def test_the_committed_tracked_frames_are_what_the_builder_writes_from_the_obser
 
 
 def test_every_tracked_frame_meets_the_frame_schema_and_says_tracked():
-    body = json.loads(FIXTURE.read_text())
-    assert len(body["frames"]) > 200
-    for f in body["frames"]:
+    frames = [json.loads(line) for line in FIXTURE.read_text().splitlines()]
+    assert len(frames) > 200
+    for f in frames:
         FRAME.validate(f)
         assert f["source"] == "tracked" and f["clip"] == "seed900001"
         for p in f["players"]:
             assert re.fullmatch(r"[ha]-t\d+", p["id"]) and p["id"][0] == p["team"][0]
-    assert body["how"]["smooth_frames"] == tf.SMOOTH_FRAMES
 
 
 def test_the_graded_report_is_about_the_committed_file():
@@ -133,7 +132,7 @@ def test_the_builder_takes_any_clips_observations(tmp_path):
     obs = tmp_path / "observations-demo42.jsonl"
     obs.write_text(OBSERVATIONS.read_text())
     tf.main([str(obs)])
-    body = json.loads((tmp_path / "tracked-demo42.json").read_text())
-    assert body["frames"] and {f["clip"] for f in body["frames"]} == {"demo42"}
-    tf.main([str(OBSERVATIONS), "--clip", "seed900001", "--out", str(tmp_path / "m1.json")])
-    assert (tmp_path / "m1.json").read_text() == FIXTURE.read_text()
+    frames = [json.loads(line) for line in (tmp_path / "tracked-demo42.jsonl").read_text().splitlines()]
+    assert frames and {f["clip"] for f in frames} == {"demo42"}
+    tf.main([str(OBSERVATIONS), "--clip", "seed900001", "--out", str(tmp_path / "m1.jsonl")])
+    assert (tmp_path / "m1.jsonl").read_text() == FIXTURE.read_text()

@@ -1,6 +1,6 @@
 # The phone's numbers from tracked positions (seed900001, M1 clip)
 
-The companion's minimap, player cards and wind map read `tests/fixtures/tracked-seed900001.json`.
+The companion's minimap, player cards and wind map read `tests/fixtures/tracked-seed900001.jsonl`.
 It is built from the video's observations by `ninety/vision/tracked_frames.py`, with no answer key
 (`tests/test_tracked_frames.py` watches it run). This report grades those numbers against the
 ground truth, offline, which is the answer key's only allowed use.

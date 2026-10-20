@@ -407,11 +407,22 @@ def serve_api(viewer_www: Path, allow_truth: bool, source: str):
     return server, thread, mp, f"http://127.0.0.1:{port}/"
 
 
-@pytest.fixture(scope="module", params=["standin", "on"])
-def api_site(request, viewer_www):
-    """`standin` serves the truth-labelled track (local work only); `on` refuses it with a 503."""
-    server, thread, mp, url = serve_api(viewer_www, allow_truth=request.param == "standin", source="truth")
-    yield request.param, url
+@pytest.fixture(scope="module")
+def api_site(viewer_www):
+    """`standin` (local work only): the API serves the truth-labelled track, so only the phone's own
+    guard keeps it off the screen."""
+    server, thread, mp, url = serve_api(viewer_www, allow_truth=True, source="truth")
+    yield url
+    server.should_exit = True
+    thread.join(timeout=10)
+    mp.undo()
+
+
+@pytest.fixture(scope="module")
+def on_site(viewer_www):
+    """`on`, as deployed: the API refuses a clip whose positions are ground truth, pairing included."""
+    server, thread, mp, url = serve_api(viewer_www, allow_truth=False, source="truth")
+    yield url
     server.should_exit = True
     thread.join(timeout=10)
     mp.undo()
@@ -450,7 +461,7 @@ def pair_through_viewer(browser, url):
 
 
 def test_the_viewer_pairs_a_phone_through_the_api_and_the_clocks_agree(browser, api_site):
-    mode, url = api_site
+    url = api_site
     viewer, phone, errors, _, _ = pair_through_viewer(browser, url)
     lap = lambda: float(viewer.get_attribute("#overlay", "data-t"))  # noqa: E731
     phone.wait_for_function("window.ninetyPhone.laptop.heard")
@@ -467,14 +478,10 @@ def test_the_viewer_pairs_a_phone_through_the_api_and_the_clocks_agree(browser, 
 
 
 def test_ground_truth_from_the_api_never_reaches_the_screen(browser, api_site):
-    mode, url = api_site
-    viewer, phone, errors, requests, responses = pair_through_viewer(browser, url)
+    viewer, phone, errors, requests, responses = pair_through_viewer(browser, api_site)
     phone.wait_for_selector("#refused:not([hidden])")
     phone.wait_for_timeout(1500)  # long enough for a card or flow request, were one coming
-    if mode == "standin":
-        assert responses and responses[0]["source"] == "truth"  # it arrived, and the guard stopped it
-    else:
-        assert not responses  # the API refused it (503)
+    assert responses and responses[0]["source"] == "truth"  # it arrived, and the guard stopped it
     assert phone.get_attribute("#map", "data-source") == "refused"
     assert phone.get_attribute("#map", "data-dots") == "0"
     assert not [u for u in requests if re.search(r"/api/(card|flow|ask)", u)]
@@ -482,8 +489,20 @@ def test_ground_truth_from_the_api_never_reaches_the_screen(browser, api_site):
     assert not errors
 
 
+def test_the_deployed_api_will_not_pair_a_ground_truth_clip_and_the_viewer_says_so(browser, on_site):
+    page = browser.new_context(viewport={"width": 1280, "height": 900}).new_page()
+    errors = watch(page)
+    page.goto(on_site)
+    page.wait_for_selector("body[data-state=ready] #overlay[data-t]")
+    page.click("#phone-pair")
+    page.wait_for_function("document.querySelector('#phone-error').textContent.length > 0")
+    assert "ground truth" in page.inner_text("#phone-error")
+    assert page.locator("#phone-pairing").is_hidden() and page.locator("#phone-qr svg").count() == 0
+    assert not errors
+
+
 def test_an_unknown_code_is_refused_by_the_api(browser, api_site):
-    _, url = api_site
+    url = api_site
     page = browser.new_page(viewport=PHONE_SIZE)
     errors = watch(page)
     page.goto(f"{url}phone/?clip=seed7")
@@ -496,19 +515,10 @@ def test_an_unknown_code_is_refused_by_the_api(browser, api_site):
 
 # --- the demo's path: tracked positions from the video, served by the API in `on` mode ------------
 
-TRACKED = ROOT / "tests" / "fixtures" / "tracked-seed900001.json"
-
-
-def tracked_track():
-    """The M1 clip's tracked positions (ninety/vision/tracked_frames.py), under a pairable name."""
-    from ninety.match.tracking import Track
-
-    body = json.loads(TRACKED.read_text())
-    return Track("seed7", tuple(body["frames"]), tuple(body["restarts"]))
-
-
 @pytest.fixture(scope="module")
-def tracked_api(browser, viewer_www):
+def tracked_api(browser):
+    """The companion as deployed (`on`): the M1 clip from its committed tracked frames file
+    (ninety/match/tracking.py, `tracked`), and the phone at /phone/."""
     import uvicorn
     from starlette.applications import Starlette
     from starlette.routing import Mount
@@ -516,10 +526,8 @@ def tracked_api(browser, viewer_www):
 
     from ninety.api import companion as comp
 
-    mp = pytest.MonkeyPatch()
-    mp.setattr(comp, "_track", lambda clip: tracked_track())
     app = Starlette(routes=[
-        *comp.Companion(passcode="", live=None, allow_truth=False).routes(),  # `on`: tracked only
+        *comp.Companion(passcode="", live=None, allow_truth=False).routes(),
         Mount("/phone", StaticFiles(directory=DIST, html=True)),
     ])
     port = free_port()
@@ -532,25 +540,24 @@ def tracked_api(browser, viewer_www):
     yield f"http://127.0.0.1:{port}/"
     server.should_exit = True
     thread.join(timeout=10)
-    mp.undo()
 
 
-@pytest.mark.xfail(strict=True, reason="#145's minimap and companion_message schemas allow only squad ids "
-                   "(h1..a11); tracked players are h-t12, so the API refuses to send them until W5 relaxes "
-                   "the pattern. Remove this mark when it does.")
+@pytest.mark.xfail(strict=True, reason="#145 accepts only squad ids (h1..a11: tracking.ROSTER_ID and the "
+                   "companion schemas); tracked players are h-t12, so the API refuses the file until W5 "
+                   "widens the pattern, as the Coordinator decided. Remove this mark when it does.")
 def test_the_phone_shows_the_tracked_m1_clip_through_the_api(browser, tracked_api):
     import urllib.request
 
     from websockets.sync.client import connect
 
-    request = urllib.request.Request(f"{tracked_api}api/pair", data=b'{"clip": "seed7"}',
+    request = urllib.request.Request(f"{tracked_api}api/pair", data=b'{"clip": "seed900001"}',
                                      headers={"content-type": "application/json"})
     code = json.loads(urllib.request.urlopen(request).read())["code"]
     with connect(f"{tracked_api.replace('http', 'ws')}api/pair/{code}?role=laptop") as laptop:
         laptop.send(json.dumps({"type": "clock", "t": 70.0, "playing": False}))
         page = browser.new_page(viewport=PHONE_SIZE)
         errors = watch(page)
-        page.goto(f"{tracked_api}phone/?code={code}&clip=seed7")
+        page.goto(f"{tracked_api}phone/?code={code}&clip=seed900001")
         page.wait_for_selector("body[data-state=live]")
         page.wait_for_function("Number(document.querySelector('#map').dataset.dots) > 0")
         assert page.get_attribute("#map", "data-source") == "tracked"

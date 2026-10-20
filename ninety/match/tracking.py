@@ -15,6 +15,7 @@ never starts a simulation.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -26,6 +27,13 @@ FPS = 25
 
 FRAMES_DIR = "frames"  # inside NINETY_MATCH_DIR, beside the matches' event files
 SOURCE = "truth"  # the simulator's positions (see the module docstring)
+TRACKED = "tracked"  # positions from tracking the video (ninety/vision/track.py)
+ROOT = Path(__file__).resolve().parents[2]
+FIXTURES = ROOT / "tests" / "fixtures"
+# Clips the companion serves from tracked positions: the M1 clip the laptop plays
+# (ninety/match/detected.M1_CLIP), once its tracked frames file exists.
+TRACKED_CLIPS = ("seed900001",)
+ROSTER_ID = re.compile(r"^[ha](?:[1-9]|1[01])$")  # the companion schemas' player id
 
 
 def slim(frame: dict, source: str = SOURCE) -> dict:
@@ -99,4 +107,52 @@ def track(match: str, seed: int, minutes: float, match_dir: str = "") -> Track:
     return from_match(match, simulate(seed, minutes))
 
 
-__all__ = ["FPS", "SOURCE", "Track", "from_match", "kickoffs", "slim", "track", "write"]
+class NotTracked(ValueError):
+    """A clip's tracked frames are missing, or are not tracked positions the companion can serve."""
+
+
+def tracked_path(clip: str) -> Path:
+    return FIXTURES / f"tracked-{clip}.jsonl"
+
+
+@lru_cache(maxsize=4)
+def tracked(clip: str, path: str | None = None) -> Track:
+    """A clip's positions from tracking the video: one `frame.schema.json` frame a line, every one
+    `source: tracked`, frames strictly increasing, each player with a roster id (h1..h11, a1..a11)
+    and a team. Kickoff resets come from the clip's detected kickoff events. Anything else is
+    refused: the companion never shows positions it cannot vouch were tracked."""
+    from ninety.agents.contracts import schema_validator  # the frame schema, references resolved
+    from ninety.match import detected
+
+    if clip not in TRACKED_CLIPS:
+        raise NotTracked(f"{clip}: not a tracked clip")
+    file = Path(path) if path else tracked_path(clip)
+    if not file.exists():
+        raise NotTracked(f"{clip}: no tracked positions yet ({file.name})")
+    validator, frames, last = schema_validator("frame"), [], -1
+    for n, line in enumerate(file.read_text().splitlines(), 1):
+        if not line.strip():
+            continue
+        frame = json.loads(line)
+        errors = sorted(validator.iter_errors(frame), key=lambda e: list(e.path))
+        if errors:
+            raise NotTracked(f"{file.name}, line {n}: not a frame: {errors[0].message}")
+        if frame.get("source") != TRACKED:
+            raise NotTracked(f"{file.name}, line {n}: source {frame.get('source')!r}, not {TRACKED!r}")
+        if frame["frame"] <= last:
+            raise NotTracked(f"{file.name}, line {n}: frames are not strictly increasing")
+        bad = [p["id"] for p in frame["players"] if not ROSTER_ID.match(str(p["id"]))]
+        if bad:
+            raise NotTracked(f"{file.name}, line {n}: player ids {bad[:3]} are not roster ids")
+        last = frame["frame"]
+        frames.append(slim(frame, TRACKED))
+    if len(frames) < 2:
+        raise NotTracked(f"{file.name}: fewer than two frames")
+    events = detected.load(detected.m1_path(clip)) if clip == detected.M1_CLIP else []
+    return Track(clip, tuple(frames), kickoffs([e for e in events if "frame" in e]))
+
+
+__all__ = [
+    "FPS", "SOURCE", "TRACKED", "TRACKED_CLIPS", "NotTracked", "Track", "from_match", "kickoffs",
+    "slim", "track", "tracked", "tracked_path", "write",
+]

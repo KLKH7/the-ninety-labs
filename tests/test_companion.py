@@ -164,3 +164,29 @@ def test_every_code_answer_passes_the_check():
     for metric in companion.CODE_TEXT:
         answer = companion.code_answer(q("x"), WINDOW, metric)
         assert answer.status == "verified" and answer.metric == metric
+
+
+def test_the_number_shown_is_the_one_the_sentence_states():
+    # Review of #145: citing [distance_run, peak_speed] and writing a speed sentence put the
+    # distance (20 m) on the phone beside "28.8 km/h". The value must come from the stated fact.
+    result = run(q("How far has h7 run?"), [reply("h7's top speed so far is 28.8 km/h.", RUN.id, PEAK.id)])
+    assert result.source == "model"
+    assert (result.answer.metric, result.answer.value, result.answer.unit) == ("peak_speed", 28.8, "km/h")
+
+
+def test_a_sentence_with_no_number_shows_none():
+    result = run(q("Has h7 been running?"), [reply("h7 has been on the move.", RUN.id)])
+    assert result.source == "model" and result.answer.value is None and result.answer.metric is None
+
+
+def test_two_stated_numbers_show_the_one_asked_about_or_the_code_answer():
+    both = reply("h7 has covered 20 m and topped 28.8 km/h.", RUN.id, PEAK.id)
+    assert run(q("How far has h7 run?"), [both]).answer.metric == "distance_run"
+    unasked = run(q("Who is h7?"), [both])
+    assert unasked.source == "code" and unasked.reasons == ("states more than one fact",)
+
+
+def test_a_value_counts_as_stated_only_with_its_own_unit():
+    # 28.8 written as metres is not the top speed: the phone would show km/h beside a distance.
+    assert companion._stated("h7 has covered 28.8 m.", [PEAK]) == []
+    assert companion._stated("h7 topped 28.8 km/h.", [PEAK]) == [PEAK]
