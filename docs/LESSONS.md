@@ -1084,3 +1084,16 @@ short and actionable. This file is public: no research sources, product names or
   and re-measure.
 - **Check:** `tests/test_shape.py::test_the_team_is_never_longer_than_the_published_range_and_the_back_line_never_ahead_of_the_ball`
   sweeps ball and line positions; on the old rule it fails (48 m long with the ball 35 m out).
+
+### 114. A random choice scaled by the spread of all options loosens when a bad option is added
+- **What happened:** the carrier's softmax took its randomness as a share of the spread of all his
+  options' values, so a choice between close options would be loose and one between clearly
+  different options would not. The spread included the hopeless options (a 50 m pass into a crowd, a
+  shot from 44 m), so every bad option widened it and made the choice between the good ones looser.
+  Logged on seeds 7 and 21, he took his best option in about a third of decisions and a different
+  kind of action from the best in about a third, against the rule's own "a good decision-maker
+  almost always takes the best option".
+- **Rule:** in a choice rule, the odds between two options depend only on those two and on the
+  chooser; a scale for the randomness is fixed in the options' own units, never taken from the set
+  of options on offer. Check a stated intent ("almost always the best") against logged choices.
+- **Check:** `tests/test_decisions.py::test_a_hopeless_option_does_not_loosen_the_choice_between_two_good_ones`.

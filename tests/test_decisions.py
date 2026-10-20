@@ -849,3 +849,38 @@ def test_the_passer_expects_a_dropping_ball_into_his_man_to_meet_the_thigh():
     assert near == pytest.approx(into, abs=0.02)
     # and as a thigh: well below what the same ball on the foot would be judged
     assert into < 0.5
+
+
+def _odds(s, a, b, *others):
+    w = D.choice_weights(s, [a, b, *others])
+    return w[0] / w[1]
+
+
+def test_a_hopeless_option_does_not_loosen_the_choice_between_two_good_ones():
+    # D4: the odds between two options depend on how far apart those two are, not on how bad a third
+    # is (the randomness was once a share of the spread of all options, so a hopeless one widened it).
+    s = scene(x=60.0)
+    good, fair = D.Option("pass", 0.010, (70.0, 34.0)), D.Option("pass", 0.006, (60.0, 20.0))
+    hopeless = D.Option("shoot", -0.05, (105.0, 34.0))
+    assert abs(_odds(s, good, fair) - _odds(s, good, fair, hopeless)) < 1e-9
+
+
+def test_a_good_decision_maker_almost_always_takes_a_clearly_better_option():
+    better, worse = D.Option("pass", 0.012, (70.0, 34.0)), D.Option("dribble", 0.002, (66.0, 34.0))
+    sharp = scene(x=60.0, decisions=1.0, composure=1.0)
+    others = [D.Option("pass", 0.002, (55.0, y)) for y in (10.0, 20.0, 50.0)]
+    w = D.choice_weights(sharp, [better, worse, *others])
+    assert w[0] / sum(w) > 0.95
+    # options much closer than the noise scale are a near coin-flip, whoever he is
+    near = D.Option("pass", 0.0120 - 0.1 * D.CHOICE_NOISE_GOALS, (60.0, 50.0))
+    assert 0.6 < _odds(sharp, better, near) < 2.0
+
+
+def test_opponent_pressure_loosens_the_choice_unless_he_is_composed():
+    better, worse = D.Option("pass", 0.012, (70.0, 34.0)), D.Option("pass", 0.008, (50.0, 34.0))
+    free = scene(x=60.0, composure=0.0)
+    pressed = scene(x=60.0, composure=0.0, opponents=[(62.0, 34.0)])
+    calm = scene(x=60.0, composure=1.0, opponents=[(62.0, 34.0)])
+    assert D.pressure(pressed) > 0.5
+    assert _odds(pressed, better, worse) < _odds(free, better, worse)
+    assert abs(_odds(calm, better, worse) - _odds(free, better, worse)) < 1e-9

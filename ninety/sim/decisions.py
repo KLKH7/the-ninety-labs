@@ -61,7 +61,10 @@ CLEAR_SHOT, SCREENED_SHOT = _UNSCREENED / _AVERAGE, _SCREENED / _AVERAGE
 # D3: keepers save about 76.5% of on-target shots: 826 of 1,079 (Perez-Arroniz et al. 2025, 2,238
 # La Liga shots); the typical shot behind the zone rates faces that keeper.
 KEEPER_SAVES = 826 / 1079
-CHOICE_NOISE_FLOOR = 0.005  # design, verify: options closer than about this (in goals) are a near coin-flip
+# D4: the scale of the choice's randomness, in goals (design, verify): options much closer than this
+# are a near coin-flip, options further apart than it are told apart; the decision maker's own
+# factors (temperature) scale it.
+CHOICE_NOISE_GOALS = 0.005
 HOLD_DECAY = 0.1  # design, verify: share of the ball's worth lost per decision spent holding
 STALE_S = 2.0  # design: a team-mate not seen for this long is a less certain option
 # D8: the tackle race, shared by the defender deciding to commit (engine.duels) and the carrier
@@ -886,20 +889,22 @@ def options(scene: Scene) -> list[Option]:
 
 
 def temperature(scene: Scene) -> float:
-    """Design: how loosely the player chooses, relative to how different his options are. A good
-    decision-maker almost always takes the best option; pressure loosens his choice unless he is
-    composed."""
+    """D4 (design): how loosely the player chooses, as a share of CHOICE_NOISE_GOALS. A good
+    decision-maker almost always takes the best option; opponent pressure loosens his choice unless
+    he is composed (pressure worsens footballers' decision quality: Musculus et al. 2021)."""
     return (0.15 + 0.6 * (1 - scene.decisions)) * (1 + pressure(scene) * (1 - scene.composure))
+
+
+def choice_weights(scene: Scene, opts: list[Option]) -> list[float]:
+    """D4: each option's weight in the softmax, in goals at the player's own temperature, so the odds
+    between two options depend only on how far apart those two are and on him. The randomness was
+    once a share of the spread of all his options, so a hopeless option widened it and loosened the
+    choice between the good ones: the best option was taken in about a third of decisions."""
+    t = temperature(scene) * CHOICE_NOISE_GOALS
+    top = max(o.value for o in opts)
+    return [fmath.exp((o.value - top) / t) for o in opts]
 
 
 def choose(scene: Scene, rng: random.Random) -> Option:
     opts = options(scene)
-    values = [o.value for o in opts]
-    mean = sum(values) / len(values)
-    spread = math.sqrt(sum(fmath.ipow(v - mean, 2) for v in values) / len(values))
-    # D4: the randomness is a share of how far apart the options are, so a choice between close
-    # options is loose and one between clearly different options is not, wherever on the pitch.
-    t = temperature(scene) * max(spread, CHOICE_NOISE_FLOOR)
-    top = max(o.value for o in opts)
-    weights = [fmath.exp((o.value - top) / t) for o in opts]
-    return rng.choices(opts, weights=weights)[0]
+    return rng.choices(opts, weights=choice_weights(scene, opts))[0]
