@@ -142,8 +142,9 @@ RESTART_DELAY_S = {"throw_in": (12, 20), "goal_kick": (24, 34), "corner": (24, 3
                    "penalty_kick": (100, 140),
                    "kick_off": (1, 2),
                    "kick_off_after_goal": (60, 90)}
-# design: how long each of the scorers celebrates, the scorer's run and his team-mates' gathering
-# round him; the rest of the minute or more before the kick-off is the walk back (L4)
+# design: how long each of the scorer's team-mates celebrates with him (the run to him, the huddle);
+# the scorer stays until the last has gone; the rest of the minute or more before the kick-off is
+# the walk back (L4)
 CELEBRATION_S = (15.0, 25.0)
 # design: team-mates round a scorer stand a shoulder's breadth apart (P11) with a little to spare
 HUDDLE_SPACING_M = 0.55
@@ -1513,9 +1514,11 @@ class Engine:
             flag_y = 0.5 if focus.y < PITCH_Y / 2 else PITCH_Y - 0.5
             spot = (clamp(goal_x(team), 0.5, PITCH_X - 0.5), flag_y)
         mates = [q.id for q in side if q is not focus]
-        # each stops at his own moment, so they leave one by one, not as one body
-        leave = {pid: self.t + self.rng.uniform(*CELEBRATION_S) for pid in (focus.id, *mates)}
-        self.celebration = Celebration(team, focus.id, spot, max(leave.values()), mates, leave)
+        # each team-mate stops at his own moment, so they leave him one by one, not as one body;
+        # the one they celebrate goes last
+        leave = {pid: self.t + self.rng.uniform(*CELEBRATION_S) for pid in mates}
+        leave[focus.id] = max(leave.values())
+        self.celebration = Celebration(team, focus.id, spot, leave[focus.id], mates, leave)
 
     def celebrating(self, p: Player) -> bool:
         c = self.celebration

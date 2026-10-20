@@ -750,10 +750,15 @@ def test_they_leave_the_huddle_one_by_one_and_face_the_scorer_while_in_it():
     def off(heading: float, x: float, y: float, tx: float, ty: float) -> float:
         return abs((heading - math.atan2(ty - y, tx - x) + math.pi) % (2 * math.pi) - math.pi)
 
+    from ninety.sim.engine import CELEBRATION_S
     for seed in (2, 7):
         e, _ = scored_engine(seed)
         c = e.celebration
         assert max(c.leave.values()) - min(c.leave.values()) > 1.0
+        assert c.leave[c.focus] == max(c.leave.values())  # he goes last
+        # the longest celebration, still one by one: time for all to arrive whatever the first minute
+        c.leave = {pid: e.t + CELEBRATION_S[1] + k for k, pid in enumerate(sorted(c.ring, key=c.leave.get))}
+        c.leave[c.focus] = max(c.leave.values())
         first = min(c.ring, key=lambda pid: c.leave[pid])  # the first team-mate to go
         while e.t < c.leave[first] - DT:
             e.step()
@@ -762,10 +767,9 @@ def test_they_leave_the_huddle_one_by_one_and_face_the_scorer_while_in_it():
             p = e.by_id[pid]
             assert pid in e.side_by_side, (seed, pid)
             assert off(p.heading, p.x, p.y, f.x, f.y) < math.pi / 2, (seed, pid)
-        if e.t < c.leave[c.focus]:
-            mx = sum(e.by_id[pid].x for pid in c.ring) / len(c.ring)
-            my = sum(e.by_id[pid].y for pid in c.ring) / len(c.ring)
-            assert off(f.heading, f.x, f.y, mx, my) < math.pi / 2, seed
+        mx = sum(e.by_id[pid].x for pid in c.ring) / len(c.ring)
+        my = sum(e.by_id[pid].y for pid in c.ring) / len(c.ring)
+        assert off(f.heading, f.x, f.y, mx, my) < math.pi / 2, seed
         radius = max(math.dist(xy, (f.x, f.y)) for xy in c.places.values())
         e.step()
         e.step()
