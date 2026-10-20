@@ -26,7 +26,7 @@ proves it against the API itself and against the mock relabelled as truth.
 
 ## Tracked positions for the demo
 
-The phone's real data is the video's own: `tests/fixtures/tracked-seed900001.jsonl`, built from
+The phone's real data is the video's own: `tests/fixtures/tracked-seed900001.json`, built from
 the M1 clip's observations by `ninety/vision/tracked_frames.py` (tracks, teams, a one-second line
 fit against the camera fit's jitter), with no answer key. Graded offline in
 [companion-tracked.md](../../docs/eval/companion-tracked.md): speed now within 0.6 km/h (median),

@@ -1,8 +1,11 @@
 """The phone companion's routes: pairing, the relay, the minimap, player cards and questions.
 
     POST /api/pair                     {"clip": "seed7"} -> a 6-character code, valid for 2 hours
+    GET  /api/pair/{code}              {clip, expires_in}, for a phone given only the typed code
     WS   /api/pair/{code}?role=laptop  the laptop sends clock and focus messages
-    WS   /api/pair/{code}?role=phone   each phone receives them, the latest first
+    WS   /api/pair/{code}?role=phone   each phone receives them, the latest first; a refused join
+                                       is accepted, then closed with its code (4400, 4404, 4409,
+                                       4429), so a browser can read why
     GET  /api/minimap/{clip}?fps=5     downsampled positions (schemas/minimap.schema.json)
     GET  /api/card/{clip}/{player}?t_to=95.2[&t_from=0]   a player_card message
     GET  /api/flow/{clip}/{team}?t_to=95.2[&t_from=0]     a flow message (the wind map)
@@ -184,6 +187,13 @@ def _send(message: dict) -> dict:
     return message
 
 
+async def _refuse(ws: WebSocket, code: int) -> None:
+    """Refuse a join with a close code the phone can read. A close sent before the accept never
+    reaches a browser (it sees 1006), so the socket is accepted first; no slot has been taken."""
+    await ws.accept()
+    await ws.close(code=code)
+
+
 class TooLarge(ValueError):
     """A request body over MAX_BODY_BYTES."""
 
@@ -299,20 +309,30 @@ class Companion:
         self.rooms[room.code] = room
         return JSONResponse({"code": room.code, "clip": room.clip, "expires_in": PAIR_TTL_S}, status_code=201)
 
+    async def pairing(self, request: Request) -> JSONResponse:
+        """A pairing's clip and seconds left, for a phone given only the typed code (a scanned link
+        carries the clip). Under the join limit, so it is no faster a way to guess codes."""
+        if not self.limits["join"].allow(client_ip(request)):
+            return _error(429, "too many joins; wait a minute")
+        room = self.room(request.path_params["code"])
+        if room is None:
+            return _error(404, "unknown or expired code")
+        return JSONResponse({"clip": room.clip, "expires_in": max(0, int(room.expires - self.clock()))})
+
     async def relay(self, ws: WebSocket) -> None:
         # Joins are limited per address before the code is looked up, so codes cannot be guessed
         # at speed (31^6 of them): a guessed code would let a stranger fill the phone slots, take
         # a dropped laptop's place or spend the session's model budget.
         if not self.limits["join"].allow(client_ip(ws)):
-            await ws.close(code=4429)
+            await _refuse(ws, 4429)
             return
         code, role = ws.path_params["code"], ws.query_params.get("role")
         room = self.room(code)
         if role not in ("laptop", "phone") or set(ws.query_params) != {"role"}:
-            await ws.close(code=4400)
+            await _refuse(ws, 4400)
             return
         if room is None:
-            await ws.close(code=4404)  # unknown or expired: the laptop pairs again
+            await _refuse(ws, 4404)  # unknown or expired: the laptop pairs again
             return
         refused = (
             4409 if role == "laptop" and room.laptop is not None  # one laptop per room
@@ -320,7 +340,7 @@ class Companion:
             else None
         )
         if refused is not None:
-            await ws.close(code=refused)
+            await _refuse(ws, refused)
             return
         # Each slot is taken in the same step as the check above, before the accept's await, so
         # two joining at once can neither share the laptop slot nor pass the phone cap. A phone's
@@ -536,6 +556,7 @@ class Companion:
     def routes(self) -> list:
         return [
             Route("/api/pair", self.pair, methods=["POST"]),
+            Route("/api/pair/{code}", self.pairing, methods=["GET"]),
             WebSocketRoute("/api/pair/{code}", self.relay),
             Route("/api/minimap/{clip}", self.minimap, methods=["GET"]),
             Route("/api/card/{clip}/{player}", self.card, methods=["GET"]),

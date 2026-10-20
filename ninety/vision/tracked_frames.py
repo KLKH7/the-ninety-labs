@@ -1,10 +1,10 @@
 """Tracked positions for the phone companion: observations -> tracks -> frames, `source: tracked`.
 
-The companion's minimap, player cards and wind map read a clip's tracked frames file, one
-`frame.schema.json` frame a line (ninety/match/tracking.py, `tracked`). This writes it from the
-video, from the observations `ninety.vision.observe` makes, through the same tracks and teams as
-event detection (ninety/vision/track.py). Nothing here reads ground truth: this is the live path
-(tests/test_vision_live_path.py watches it run).
+The companion's minimap, player cards and wind map read a clip's tracked frames file:
+`{restarts, frames}`, each frame a `frame.schema.json` frame (ninety/match/tracking.py, `tracked`).
+This writes it from the video, from the observations `ninety.vision.observe` makes, through the
+same tracks and teams as event detection (ninety/vision/track.py). Nothing here reads ground
+truth: this is the live path (tests/test_vision_live_path.py watches it run).
 
 Three steps on top of track.py:
 - **Smoothing.** A player's pitch position jumps by up to about 0.5 m between neighbouring frames
@@ -23,7 +23,7 @@ Three steps on top of track.py:
     uv run python -m ninety.vision.tracked_frames <observations.jsonl> [--clip ID] [--out FILE]
 
 Any clip's observations: the clip id defaults to the file's name (observations-<clip>.jsonl), and
-the output to tracked-<clip>.jsonl beside it. The M1 fixture:
+the output to tracked-<clip>.json beside it. The M1 fixture:
 
     uv run python -m ninety.vision.tracked_frames tests/fixtures/observations-seed900001.jsonl
 """
@@ -97,8 +97,8 @@ def ball_positions(rows: list[dict]) -> dict[int, tuple[float, float]]:
 
 
 def build(rows: list[dict], clip: str, smooth_frames: int = SMOOTH_FRAMES) -> dict:
-    """The tracked frames (each meets schemas/frame.schema.json) and how they were made. Kickoff
-    resets are not here: the companion takes them from the clip's detected events."""
+    """The tracked frames (each meets schemas/frame.schema.json), their kickoff resets, and how they
+    were made."""
     tracks = tr.track_players(rows)
     teams = tr.assign_teams(tracks)
     kept = [t for t in tracks if t.team is not None and len(t.frames) >= MIN_TRACK_FRAMES]
@@ -124,6 +124,9 @@ def build(rows: list[dict], clip: str, smooth_frames: int = SMOOTH_FRAMES) -> di
             "players": sorted(at.get(f, []), key=lambda p: p["id"]),
         })
     return {
+        # Kickoff frames, whose reset is not running (ninety/intel/stats.py). The tracker finds none;
+        # the companion adds the clip's detected kickoffs (ninety/match/tracking.py, `tracked`).
+        "restarts": [],
         "frames": frames,
         "how": {
             "observations": len(rows),
@@ -136,8 +139,8 @@ def build(rows: list[dict], clip: str, smooth_frames: int = SMOOTH_FRAMES) -> di
 
 
 def text(body: dict) -> str:
-    """The file: one frame a line."""
-    return "".join(json.dumps(f, separators=(",", ":")) + "\n" for f in body["frames"])
+    """The file: `{restarts, frames}`, as ninety/match/tracking.py stores a match."""
+    return json.dumps({"restarts": body["restarts"], "frames": body["frames"]}, separators=(",", ":")) + "\n"
 
 
 def clip_of(observations: Path) -> str:
@@ -151,10 +154,10 @@ def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("observations", type=Path, help="observations.jsonl from ninety.vision.observe")
     ap.add_argument("--clip", help="the clip id (default: from observations-<clip>.jsonl)")
-    ap.add_argument("--out", type=Path, help="where to write (default: tracked-<clip>.jsonl beside it)")
+    ap.add_argument("--out", type=Path, help="where to write (default: tracked-<clip>.json beside it)")
     args = ap.parse_args(argv)
     clip = args.clip or clip_of(args.observations)
-    args.out = args.out or args.observations.with_name(f"tracked-{clip}.jsonl")
+    args.out = args.out or args.observations.with_name(f"tracked-{clip}.json")
     body = build(tr.read_observations(args.observations), clip)
     args.out.write_text(text(body))
     how = body["how"]

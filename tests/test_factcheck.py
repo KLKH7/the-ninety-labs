@@ -270,3 +270,14 @@ def test_a_cited_stat_keeps_its_bare_value_beside_a_cited_fact():
     assert check(Claim("Home press 60 of the time while h7 hits 27.3 km/h.", ["st", SPEED["id"]]), known).ok
     bare_fact = check(Claim("Home press 60 of the time while h7 hits 27.3.", ["st", SPEED["id"]]), known)
     assert bare_fact.reasons == ["number 27.3 is not in the cited evidence"]
+
+
+def test_a_tracked_players_fact_cites_only_that_track():
+    # Tracked players are a team plus track id (h-t12): naming another track, or a squad id, is
+    # naming a player the evidence does not hold.
+    run = {**RUN, "id": "distance_run:player_h-t12", "scope": "player:h-t12:window:0.00-95.20"}
+    known = {run["id"]: run}
+    assert check(Claim("h-t12 has covered 151 m so far.", [run["id"]]), known).ok
+    for other in ("h-t1", "a-t12", "h7"):
+        verdict = check(Claim(f"{other} has covered 151 m so far.", [run["id"]]), known)
+        assert not verdict.ok and verdict.reasons == [f"player {other} does not appear in the cited evidence"]

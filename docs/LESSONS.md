@@ -1119,23 +1119,32 @@ short and actionable. This file is public: no research sources, product names or
   loop with a 5 s deadline per receive, and 150 repeats on 4 workers under full CPU load pass;
   `test_a_newer_clock_never_overtakes_a_phones_catch_up` fails without the single flusher.
 
-### 114. A WebSocket tested only through the test client is untested in the server a browser reaches
+### 114. A refusal a browser cannot read is no refusal: close a WebSocket after accepting it
+- **What happened:** the phone relay refused a join (unknown code, room full, laptop taken) by
+  closing the WebSocket before accepting it, and its tests read the close codes 4404, 4409 and 4429
+  from an ASGI harness. A browser never sees a close sent before the handshake completes: uvicorn
+  answers it with a 403 and the page reads 1006, so the phone could not say "unknown code" or
+  "room full". W6 found it by running the phone in a real browser (#162).
+- **Rule:** a WebSocket refusal the client must act on is sent after `accept()`, with its code; a
+  refusal takes no slot, so accepting first changes nothing else. A test of a refusal checks that
+  the accept came first, not only the code.
+- **Check:** `tests/test_api_companion.py`'s `refused()` fails when the server closes before the
+  accept, and every refusal test goes through it; moving `_refuse` back to a bare close turns them red.
+
+### 115. A WebSocket tested only through the test client is untested in the server a browser reaches
 - **What happened:** the phone relay's tests all passed through Starlette's TestClient, which
   speaks WebSocket in process. The first time a real browser joined through uvicorn, every
   connection answered 404: uvicorn upgrades a WebSocket only when a WebSocket library is
   installed, and none was locked, so the deployed image could never have served the relay. The
-  same run showed the relay's close codes (4404 unknown code, 4429 room full) never reach a
-  browser: closed before the server accepts, a WebSocket arrives in the browser as 1006 whatever
-  code the server chose.
+  same run found lesson 114's unreadable refusals.
 - **Rule:** a feature a browser uses over the network is tested once through the real server and a
-  real browser, not only through an in-process client. A close code the client must read is sent
-  after the accept.
+  real browser, not only through an in-process client. (A close code the client must read is sent after the accept: lesson 114.)
 - **Check:** `tests/test_phone.py` runs the companion routes in uvicorn and joins from Chromium;
   CI's `image` job asks the built image for a WebSocket upgrade and needs `101` (it answers 404
-  without `websockets` in `uv.lock`). The phone treats a close before the accept as "unknown code
-  or unreachable" (`web/phone/src/feed.ts`) until the relay accepts before closing.
+  without `websockets` in `uv.lock`). The phone still reads a close before the accept as "unknown
+  code or unreachable" (`web/phone/src/feed.ts`), for a server that refuses that way.
 
-### 115. Positions from a fit, summed frame to frame, read the fit's jitter as running
+### 116. Positions from a fit, summed frame to frame, read the fit's jitter as running
 - **What happened:** the phone's speed and distance come from the companion's window facts, which
   sum each player's frame-to-frame steps. On simulator positions that is exact. On positions
   tracked from the video, the camera fit moves a foot point by up to about 0.5 m between
@@ -1152,7 +1161,7 @@ short and actionable. This file is public: no research sources, product names or
   `test_a_track_ends_at_the_speed_its_player_was_running` fails with a plain average, which lags
   at a track's end.
 
-### 116. `sum()` of floats is not the same number on every Python
+### 117. `sum()` of floats is not the same number on every Python
 - **What happened:** the phone's tracked frames file is committed, and a test rebuilds it and needs
   the same bytes. It passed on Python 3.12 and failed on 3.11. Python 3.12 made `sum()` of floats
   use compensated addition, so a smoothed position's last digit moved, and a rounding at 0.01 m
@@ -1161,5 +1170,5 @@ short and actionable. This file is public: no research sources, product names or
   `math.fsum` (one exact rounding, the same everywhere), or rounds well away from the noise.
   This is lesson 46's rule for the engine, applied to every committed output.
 - **Check:** CI's pytest matrix runs 3.11 and 3.12. `tests/test_tracked_frames.py` rebuilds
-  `tests/fixtures/tracked-seed900001.jsonl` on both; with `sum` in `tracked_frames.smooth` it
+  `tests/fixtures/tracked-seed900001.json` on both; with `sum` in `tracked_frames.smooth` it
   fails on 3.11.

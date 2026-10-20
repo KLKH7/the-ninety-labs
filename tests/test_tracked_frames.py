@@ -17,7 +17,7 @@ from tests.test_vision_live_path import run_audited, truth_reads
 
 ROOT = Path(__file__).resolve().parents[1]
 OBSERVATIONS = ROOT / "tests" / "fixtures" / "observations-seed900001.jsonl"
-FIXTURE = ROOT / "tests" / "fixtures" / "tracked-seed900001.jsonl"
+FIXTURE = ROOT / "tests" / "fixtures" / "tracked-seed900001.json"
 REPORT = ROOT / "docs" / "eval" / "companion-tracked.json"
 FRAME = schema_validator("frame")
 
@@ -30,7 +30,9 @@ def test_the_committed_tracked_frames_are_what_the_builder_writes_from_the_obser
 
 
 def test_every_tracked_frame_meets_the_frame_schema_and_says_tracked():
-    frames = [json.loads(line) for line in FIXTURE.read_text().splitlines()]
+    body = json.loads(FIXTURE.read_text())
+    assert set(body) == {"restarts", "frames"} and body["restarts"] == []
+    frames = body["frames"]
     assert len(frames) > 200
     for f in frames:
         FRAME.validate(f)
@@ -132,10 +134,10 @@ def test_the_builder_takes_any_clips_observations(tmp_path):
     obs = tmp_path / "observations-demo42.jsonl"
     obs.write_text(OBSERVATIONS.read_text())
     tf.main([str(obs)])
-    frames = [json.loads(line) for line in (tmp_path / "tracked-demo42.jsonl").read_text().splitlines()]
+    frames = json.loads((tmp_path / "tracked-demo42.json").read_text())["frames"]
     assert frames and {f["clip"] for f in frames} == {"demo42"}
-    tf.main([str(OBSERVATIONS), "--clip", "seed900001", "--out", str(tmp_path / "m1.jsonl")])
-    assert (tmp_path / "m1.jsonl").read_text() == FIXTURE.read_text()
+    tf.main([str(OBSERVATIONS), "--clip", "seed900001", "--out", str(tmp_path / "m1.json")])
+    assert (tmp_path / "m1.json").read_text() == FIXTURE.read_text()
 
 
 # --- the builder's own rules, each on its own (not only through the fixture) ---------------------------

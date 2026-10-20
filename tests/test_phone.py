@@ -31,6 +31,9 @@ from pathlib import Path
 import pytest
 
 from ninety.agents.contracts import schema_validator
+from ninety.api import companion as companion_api
+
+REAL_TRACK = companion_api._track  # before any fixture swaps in a synthetic track
 
 ROOT = Path(__file__).resolve().parent.parent
 PHONE = ROOT / "web" / "phone"
@@ -70,8 +73,9 @@ def test_the_mock_positions_are_the_scripts_output_and_match_the_schema():
     body = make_mock.build()
     assert (PHONE / "mock" / "minimap.json").read_text() == make_mock.text(body), "re-run make_mock.py"
     # Labelled `mock`, which only the phone's mock feed accepts; otherwise the minimap schema's shape.
+    # It names players by squad number, the schema's form for simulator positions (`truth`).
     assert body["source"] == "mock" and body["clip"] == "mock"
-    MINIMAP.validate({**body, "source": "tracked"})
+    MINIMAP.validate({**body, "source": "truth"})
     assert all(len(f["players"]) == 22 for f in body["frames"])
 
 
@@ -154,12 +158,13 @@ def seen(phone) -> list[dict]:
 
 def validate_seen(payloads: list[dict], mock: bool = False):
     """Every payload against its schema. The mock's are labelled `source: mock` (and never anything
-    else); past that label they must have exactly the API's shape."""
+    else); past that label they must have exactly the API's shape, in its squad-number form (the
+    schema's `truth` branch: the mock numbers players like the simulator)."""
     assert payloads
     for p in payloads:
         if "source" in p:
             assert (p["source"] == "mock") == mock, p.get("type", "minimap")
-            p = {**p, "source": "tracked"} if mock else p
+            p = {**p, "source": "truth"} if mock else p
         (MINIMAP if "frames" in p else MESSAGE).validate(p)
 
 
@@ -535,6 +540,9 @@ def tracked_api(browser):
 
     from ninety.api import companion as comp
 
+    # The real loader: other fixtures in this module serve a synthetic track while they live.
+    mp = pytest.MonkeyPatch()
+    mp.setattr(comp, "_track", REAL_TRACK)
     app = Starlette(routes=[
         *comp.Companion(passcode="", live=None, allow_truth=False).routes(),
         Mount("/phone", StaticFiles(directory=DIST, html=True)),
@@ -551,11 +559,9 @@ def tracked_api(browser):
     yield f"http://127.0.0.1:{port}/"
     server.should_exit = True
     thread.join(timeout=10)
+    mp.undo()
 
 
-@pytest.mark.xfail(strict=True, reason="#145 accepts only squad ids (h1..a11: tracking.ROSTER_ID and the "
-                   "companion schemas); tracked players are h-t12, so the API refuses the file until W5 "
-                   "widens the pattern, as the Coordinator decided. Remove this mark when it does.")
 def test_the_phone_shows_the_tracked_m1_clip_through_the_api(browser, tracked_api):
     import urllib.request
 
