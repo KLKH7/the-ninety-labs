@@ -90,8 +90,9 @@ jobs:
               uv run python -m ninety.eval.workflow_failures --live --out runs/eval "${extra[@]}"
               ;;
             ablation)
-              echo "::error::task '$TASK' is not yet implemented"
-              exit 1
+              # W2: one agent with every tool against the full graph, held-out seeds 21 and 33; commit
+              # runs/eval/ablation-agents.{md,json} unedited as docs/eval/ablation-agents.{md,json}.
+              uv run python -m ninety.eval.agent_ablation --live --seeds 21,33 --out runs/eval "${extra[@]}"
               ;;
             *)
               echo "::error::unknown task '$TASK'"
