@@ -820,6 +820,62 @@ def pass_option(scene: Scene, mate: tuple[str, float, float, float]) -> Option |
     return best
 
 
+OPEN_RADIUS_M = 5.0  # O3: design: how far from his place in the shape an attacker moves to be open
+OPEN_LANE_STEP_M = 3.0  # O3: design: the pass lane is raced every this many metres, to the spot itself
+# O3: this late a defender, the passer's race is 98% his (D1, sigmoid of 4): more space buys nothing
+OPEN_ENOUGH_S = 4 * LANE_MARGIN_S
+
+
+def lane_margin(px: float, py: float, sx: float, sy: float,
+                defenders: list[tuple[float, float]]) -> float:
+    """O3: how late the best-placed defender would be to a ground pass from (px, py) to (sx, sy):
+    over points of the lane every OPEN_LANE_STEP_M, the spot itself and his own nearest point of it,
+    his time to get a foot there (none within his reach, else generic_time: reacting, then an
+    average body from standing, D1) less the ball's at PASS_SPEED_EST_MPS. Positive, the lane is
+    open; the larger, the more open (a pitch-control race, Spearman 2018, on the engine's own)."""
+    d = math.hypot(sx - px, sy - py)
+    n = max(1, math.ceil(d / OPEN_LANE_STEP_M))
+    lane = [(px + (sx - px) * k / n, py + (sy - py) * k / n, d * k / n / PASS_SPEED_EST_MPS)
+            for k in range(1, n + 1)]
+
+    def gets_there(gap: float) -> float:  # within his foot's reach he needs no step (D1: in the way)
+        return 0.0 if gap <= _FOOT[0] else generic_time(gap - _FOOT[0])
+
+    worst = math.inf
+    for ox, oy in defenders:
+        off, share = closest_on_segment(ox, oy, px, py, sx, sy)  # where he would cut it out
+        worst = min(worst, gets_there(off) - share * d / PASS_SPEED_EST_MPS,
+                    *(gets_there(math.hypot(x - ox, y - oy)) - t for x, y, t in lane))
+    return worst
+
+
+def open_spot(slot: tuple[float, float], offset: tuple[float, float], passer: tuple[float, float],
+              defenders: list[tuple[float, float]], onside_x: float, fwd: float) -> tuple[float, float]:
+    """O3: where, within OPEN_RADIUS_M of his place in the shape, an attacker off the ball stands to
+    be most open to a pass from the carrier (lane_margin against the defenders he believes are
+    there), as an offset from that place. He keeps the offset he has unless another beats it by
+    LANE_MARGIN_S, the passer's own sharpness in the race (D1), so a small shift of the defenders
+    does not move him. Never offside as he sees it (L10), never off the pitch, never out of
+    passing range (MAX_PASS_M)."""
+    sx, sy = slot
+    if math.hypot(sx - passer[0], sy - passer[1]) > MAX_PASS_M:
+        return (0.0, 0.0)  # out of passing range: not an option to be open for
+    rings = [(0.0, 0.0)] + [(r * fmath.cos(a * math.pi / 4), r * fmath.sin(a * math.pi / 4))
+                            for r in (OPEN_RADIUS_M / 2, OPEN_RADIUS_M) for a in range(8)]
+
+    def legal(dx: float, dy: float) -> bool:
+        x, y = sx + dx, sy + dy
+        return (0.5 <= x <= PITCH_X - 0.5 and 0.5 <= y <= PITCH_Y - 0.5 and fwd * x <= fwd * onside_x
+                and math.hypot(x - passer[0], y - passer[1]) <= MAX_PASS_M)
+
+    def margin(o: tuple[float, float]) -> float:
+        return min(OPEN_ENOUGH_S, lane_margin(passer[0], passer[1], sx + o[0], sy + o[1], defenders))
+
+    held = offset if legal(*offset) and math.hypot(*offset) <= OPEN_RADIUS_M + 1e-9 else (0.0, 0.0)
+    best = max((o for o in rings if legal(*o)), key=margin, default=held)
+    return best if margin(best) > margin(held) + LANE_MARGIN_S else held
+
+
 def short_pass_lean(dist: float) -> float:
     """plays_short: +1 toward a pass under SHORT_PASS_M, -1 away from one over LONG_PASS_M, and in
     between from one to the other. A share of HABIT_PULL; the pass itself is unchanged."""

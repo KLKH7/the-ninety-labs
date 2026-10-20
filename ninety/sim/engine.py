@@ -408,6 +408,10 @@ class Engine:
         # D4: each carrier's misjudgement of his options, held until he next scans: player -> (the
         # scan it belongs to, as Belief.next_scan, option key -> draw).
         self.tastes: dict[str, tuple[float, dict]] = {}
+        # O3: each attacker off the ball's offset from his place in the shape, to be open to a pass,
+        # chosen when he last scanned and held until he next does; and who has scanned since.
+        self.open_at: dict[str, tuple[float, float]] = {}
+        self.open_due: set[str] = set()
         self.restart: Restart | None = None
         # Laws 13, 15 to 17: a restart that has been set but not yet kicked; the opponents keep off
         self.set_by: Restart | None = None
@@ -514,6 +518,7 @@ class Engine:
         if self.team_of(pid) != self.poss_team:
             self.pressed.clear()
             self.poss_team = self.team_of(pid)
+            self.open_at.clear()  # O3: a new possession: each attacker finds his space afresh
         self.possessor = pid
         self.last_touch = pid
         self.tastes.pop(pid, None)  # D4: a new possession is a new look at his options
@@ -1737,6 +1742,22 @@ class Engine:
             wait = settle_s(AVERAGE)
         return wait + math.hypot(x - bx, y - by) / decisions.PASS_SPEED_EST_MPS
 
+    def open_spot(self, p: Player, slot: tuple[float, float], onside: float) -> tuple[float, float]:
+        """O3: his place in the shape, moved to where he is most open to a pass from the carrier as he
+        last saw it (decisions.open_spot). He looks again only when he scans (P13), so between scans
+        he keeps his offset and moves with the shape; with nobody on the ball he keeps it too."""
+        carrier = self.by_id.get(self.possessor) if self.possessor else None
+        if p.id in self.open_due and carrier is not None and carrier.team == p.team:
+            self.open_due.discard(p.id)
+            view = self.beliefs[p.id]
+            at = view.where(carrier.id, self.t) or (carrier.x, carrier.y)
+            defenders = [w for w in (view.where(q.id, self.t) for q in self.players
+                                     if q.team != p.team and q.role != "GK") if w]
+            self.open_at[p.id] = decisions.open_spot(slot, self.open_at.get(p.id, (0.0, 0.0)), at,
+                                                     defenders, onside, attack_dir(p.team))
+        dx, dy = self.open_at.get(p.id, (0.0, 0.0))
+        return clamp(slot[0] + dx, 0.5, PITCH_X - 0.5), clamp(slot[1] + dy, 0.5, PITCH_Y - 0.5)
+
     def in_time(self, p: Player, tx: float, ty: float) -> float:
         """O8: the speed he chooses to get to (tx, ty): just enough to be there before the ball could
         be, so far from the ball he walks and near it he bursts; his body caps it."""
@@ -1876,6 +1897,7 @@ class Engine:
             spot = offball.attacking_slot(p.role, PITCH_X - goal_x(p.team), clamp(bx, 0, PITCH_X),
                                           clamp(by, 0, PITCH_Y), onside, wide)
             if spot:
+                spot = self.open_spot(p, spot, onside)
                 return *spot, self.in_time(p, *spot)
         if not brain.in_possession and p.role != "GK":
             own = PITCH_X - goal_x(p.team), PITCH_Y / 2
@@ -1933,7 +1955,7 @@ class Engine:
         for i, p in enumerate(self.players):
             if (self.frame + i) % PERCEIVE_EVERY == 0:
                 others = [st for st in states if st[0] != p.id]
-                perception.observe(
+                scanned = perception.observe(
                     self.beliefs[p.id],
                     (p.x, p.y, p.heading),
                     others,
@@ -1942,6 +1964,8 @@ class Engine:
                     p.profile.view_half_angle(),
                     p.profile.scan_interval(),
                 )
+                if scanned:
+                    self.open_due.add(p.id)  # O3: he may look again for space to be open in
         holder = self.restart.team if self.restart else self.poss_team
         for k, (team, brain) in enumerate(self.brains.items()):
             if (self.frame + k * BRAIN_EVERY // 2) % BRAIN_EVERY:
