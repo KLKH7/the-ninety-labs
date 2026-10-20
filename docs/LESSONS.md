@@ -1108,16 +1108,6 @@ short and actionable. This file is public: no research sources, product names or
   fails with an unclaimed file in `replays/`, and fails when a workflow recording no longer saves
   byte for byte.
 
-### 115. A range named as a distance is measured as one
-- **What happened:** the shot option was offered "inside 40 m of the goal" (`SHOT_RANGE_M`'s own
-  comment), but the code compared only the distance along the pitch. From out wide, players were
-  offered and took shots 40 to 50 m from goal, judged by a rate table that is only an unsourced tail
-  beyond 40 m: 22 of 156 shots in 20 matches (seeds 3 to 112 at 20 minutes) came from beyond 40.5 m,
-  none after the fix.
-- **Rule:** a threshold is applied in the quantity its comment and its source use (here the distance
-  to the goal's centre, as D3's rates are). Search for every use of a constant when its meaning is fixed.
-- **Check:** `tests/test_decisions.py::test_a_shot_is_an_option_only_within_range_of_the_goal_straight_line`.
-
 ### 120. An exemption in a check is where a defect hides: reach the state, do not place it
 - **What happened:** the engine placed a new ball at the taker's feet at every restart and reset
   all 22 players at every goal. The validator exempts dead-ball windows from the ball-speed check
@@ -1171,6 +1161,7 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_credentials.py`. Each site takes the token before it simulates, and
   hands the same `SignedIn` credential to every client; deleting any `sign_in` turns its test
   red. An AST check keeps `azure.identity.DefaultAzureCredential` out of the live modules.
+
 ### 124. Judge a drawn motion over the frames around the moment, and watch the clip
 - **What happened:** #146 made the foot reach the ball on the contact frame and its tests measured
   exactly that, so they passed while the kick lost its swing: the foot was eased in from at most
@@ -1260,7 +1251,6 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_api_companion.py`'s `refused()` fails when the server closes before the
   accept, and every refusal test goes through it; moving `_refuse` back to a bare close turns them red.
 
-
 ### 129. A number check that reads one written form lets every other form through
 - **What happened:** the fact-check read a number only when no letter followed it, to skip ids
   like "e00042". So "50km/h", "50kph" and "9999m" were never read, nor was "fifty km/h": a model
@@ -1281,3 +1271,13 @@ short and actionable. This file is public: no research sources, product names or
   `test_football_idioms_are_words_not_counts` passes each idiom with its passes cited. Measured
   for false rejections: the 412 recorded claim texts in `replays/`, `docs/eval/` and the fixtures
   read the same numbers as before, and `fact_checker_proof --check` and both replays pass.
+
+### 138. A range named as a distance is measured as one
+- **What happened:** the shot option was offered "inside 40 m of the goal" (`SHOT_RANGE_M`'s own
+  comment), but the code compared only the distance along the pitch. From out wide, players were
+  offered and took shots 40 to 50 m from goal, judged by a rate table that is only an unsourced tail
+  beyond 40 m: 22 of 156 shots in 20 matches (seeds 3 to 112 at 20 minutes) came from beyond 40.5 m,
+  none after the fix.
+- **Rule:** a threshold is applied in the quantity its comment and its source use (here the distance
+  to the goal's centre, as D3's rates are). Search for every use of a constant when its meaning is fixed.
+- **Check:** `tests/test_decisions.py::test_a_shot_is_an_option_only_within_range_of_the_goal_straight_line`.
