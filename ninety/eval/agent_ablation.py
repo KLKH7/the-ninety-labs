@@ -4,14 +4,16 @@
 
 On the held-out seeds (21 and 33), every minute of the served match runs through two arms:
 
-- **one agent**: the slice's Analyst (`ninety-analyst`), one published agent with the match's MCP
-  tools, writes the minute's claim, and it airs as written: no Tactician, no Challenger, no
-  fact-checking agent. This is what a single tool-using agent would put on screen.
+- **one agent**: the slice's Analyst (`ninety-analyst`), one published agent, writes the minute's
+  claim, and it airs as written: no Tactician, no Challenger, no fact-checking agent. This is what
+  a single agent would put on screen.
 - **graph**: the multi-agent workflow (ninety/agents/workflow.py): the moment Analyst, the
   Tactician, the Challenger, the fact-checking agent (code checks, confidence gate, the Judge with
   rewrites) and the Producer. Only verified claims air.
 
-Every aired claim of both arms is then graded the same way, against the simulated match's own
+Both arms get the minute's events inline, from the match this commit simulated, under a match id no
+server serves (a call to the match tools fails the call), and every aired claim of both arms is
+then graded the same way, against that match's own
 events (grading is the answer key's allowed use): the code checks (numbers, players, cited ids)
 and the published Judge (meaning). The graph cannot air a claim its own fact-checker failed, so a
 false claim it airs is one the grader's second Judge call disagrees with; the one-agent arm airs
@@ -67,11 +69,21 @@ async def grade(claim: Claim, known: dict[str, dict], judge: Judge) -> dict:
     }
 
 
-async def one_agent_minute(ask: Ask, match: str, minute: int) -> tuple[list[Claim], int, str]:
+def window(known: dict[str, dict], minute: int) -> list[dict]:
+    """The minute's events as both arms read them: inline, from the match this commit simulated and
+    the grader grades against. The deployed match tools serve the matches the deployed image
+    simulated, with its own engine: a one-agent run once aired a goal at 03:03 on seed 33, which had
+    no shot here (lesson 90)."""
+    return [e for e in known.values() if e["minute"] == minute]
+
+
+async def one_agent_minute(
+    ask: Ask, match: str, minute: int, known: dict[str, dict]
+) -> tuple[list[Claim], int, str]:
     """The single agent's claim for the minute, aired unchecked. Returns the aired claims, the model
     calls, and why nothing aired, if nothing did."""
     try:
-        reply = await ask(analyst_prompt(match, minute))
+        reply = await ask(analyst_prompt(match, minute, events=window(known, minute)))
     except Exception as e:  # a failed call airs nothing
         return [], 1, f"{type(e).__name__}"
     try:
@@ -85,11 +97,13 @@ async def graph_minute(
     models: Models, events: list[dict], match: str, minute: int
 ) -> tuple[list[Claim], int, str]:
     """The workflow's verified claims for the minute, and its model calls."""
-    result = await workflow.run_workflow(models, events, minute, match)
+    result = await workflow.run_workflow(models, events, minute, match, inline_events=True)
     aired = [r.aired for r in result.reviews if r.aired is not None]
     held = sum(r.status == "held" for r in result.reviews)
     rejected = sum(r.status == "rejected" for r in result.reviews)
-    why = "" if aired else f"{len(result.reviews)} moment(s): {held} held, {rejected} rejected"
+    failed = [s.detail for s in result.trace if s.role == "analyst" and s.action == "fail"]
+    why = "" if aired else "; ".join([f"{len(result.reviews)} moment(s): {held} held, {rejected} rejected",
+                                       *(f"analyst: {d}" for d in failed)])
     return aired, result.model_calls, why
 
 
@@ -100,13 +114,14 @@ async def run(
     """Both arms over every minute of every seed, each aired claim graded."""
     arms: dict[str, list[dict]] = {"one agent": [], "graph": []}
     for seed, events in events_by_seed.items():
-        match = match_server.match_id(seed)
+        # The inline events under a match id no server serves (lesson 90): a tool call errors.
+        match = match_server.unserved(match_server.match_id(seed))
         known = {e["id"]: compact(e) for e in workflow.agent_events(events)}
         for minute in range(1, minutes + 1):
             for arm in arms:
                 started = time.perf_counter()
                 if arm == "one agent":
-                    aired, calls, why = await one_agent_minute(one_agent, match, minute)
+                    aired, calls, why = await one_agent_minute(one_agent, match, minute, known)
                 else:
                     aired, calls, why = await graph_minute(graph_models, events, match, minute)
                 seconds = time.perf_counter() - started
@@ -154,14 +169,16 @@ def report(body: dict, ran: str) -> str:
         "(the engine that simulated the seeds). Committed as the run wrote it; live models vary from run",
         "to run. Data: `docs/eval/ablation-agents.json`.",
         "",
-        "- **one agent**: the slice's Analyst, one published agent with the match's MCP tools, writes the",
-        "  minute's claim, and it airs as written.",
+        "- **one agent**: the slice's Analyst, one published agent, writes the minute's claim, and it airs",
+        "  as written.",
         "- **graph**: the workflow (moment Analyst, Tactician, Challenger, fact-checking agent with the",
         "  confidence gate and the Judge, Producer); only verified claims air.",
         "",
-        "Every aired claim of both arms is graded the same way, against the simulated match's events: the",
-        "code checks (numbers, players, cited ids), then the published Judge. A claim is *false* if either",
-        "fails it.",
+        "Both arms get the minute's events inline, from the match this commit simulated, under a match",
+        "id no server serves; an agent that calls the deployed match tools anyway (the deployed image's",
+        "match, simulated with its own engine) fails that call. Every aired claim of both arms is graded",
+        "the same way, against those events: the code checks (numbers, players, cited ids), then the",
+        "published Judge. A claim is *false* if either fails it.",
         "",
         "| Arm | Claims aired | False on air | of which: code checks | of which: Judge "
         "| Minutes with an insight | Model calls |",
@@ -189,8 +206,14 @@ def report(body: dict, ran: str) -> str:
         "",
         "- The graph's aired claims already passed the same code checks and a Judge call, so a false",
         "  claim on its row is one where the grader's second Judge call disagreed with the first.",
-        "- The graph costs more model calls per minute (several agents, rewrites); the table says how",
-        "  many, beside what each arm put on screen.",
+        "- The arms do not get the same budget: the one agent has one call a minute and no retry, the",
+        "  graph several agents and rewrites. This compares what each puts on screen at its own cost",
+        "  (the table gives both), not two designs at a matched number of calls.",
+        "- The grader's Judge is the same published Judge the graph's fact-checker asked, so the",
+        "  grade is correlated with the graph's own filter, which favours the graph. The code checks",
+        "  are independent of it, and the table splits false claims by which check caught them.",
+        "- An agent that calls the match tools while given its events inline fails that call",
+        "  (`foundry.ReadTheTools`), so a minute's claims never come from the deployed image's match.",
         "",
     ]
     return "\n".join(lines)
@@ -222,7 +245,9 @@ async def live_arms():
 
         def ask(role: str) -> Ask:
             async def answer(prompt: str) -> str:
-                return (await asyncio.wait_for(agents[role].run(prompt), workflow.MODEL_TIMEOUT_SECONDS)).text
+                # Every arm gets its events inline: a call to the match tools fails the call.
+                reply = await asyncio.wait_for(agents[role].run(prompt), workflow.MODEL_TIMEOUT_SECONDS)
+                return foundry.inline_only(reply)
 
             return answer
 

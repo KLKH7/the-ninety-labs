@@ -592,7 +592,9 @@ def test_a_run_in_which_every_request_fell_back_writes_no_report(monkeypatch, tm
 
     monkeypatch.setattr(personalizer_eval, "claims", lambda *a: [(21, "pass", CLAIM, EVIDENCE)])
     down = Starlette(routes=[], exception_handlers={404: lambda request, exc: Response(status_code=503)})
-    monkeypatch.setattr(personalizer_eval, "create_app", lambda *a, **k: down)
+    from ninety.personalizer import server
+
+    monkeypatch.setattr(server, "create_app", lambda *a, **k: down)  # what client.in_process serves
     with pytest.raises(personalizer_eval.NothingMeasured, match="did not answer 1 of 1"):
         run(personalizer_eval._main(eval_args(tmp_path), published_with(scripted({}), [])))
 

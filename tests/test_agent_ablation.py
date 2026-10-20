@@ -57,6 +57,49 @@ def test_a_claim_the_judge_fails_counts_as_false_even_if_the_code_passes():
     assert body["arms"]["graph"]["false_by_judge"] == 1
 
 
+def inline_events(prompt: str) -> list[dict]:
+    _, sep, events = prompt.partition("EVENTS: ")
+    assert sep, f"no events inline, so the agent read the deployed match tools: {prompt!r}"
+    return json.loads(events)
+
+
+def test_both_arms_read_the_match_the_grader_grades():
+    # Lesson 90: the one-agent arm once read the deployed match tools, simulated by the deployed
+    # image's engine, and aired a goal the grader's match does not have. Both arms now get the
+    # minute's events inline, from the same events the grader checks against.
+    from dataclasses import replace
+
+    from ninety.agents import workflow
+    from ninety.match.facts import compact
+    from ninety.mcp import match_server
+
+    prompts = {"one agent": [], "graph": []}
+
+    async def one_agent(prompt: str) -> str:
+        prompts["one agent"].append(prompt)
+        return reply(true_claim(FIRST))
+
+    graph = Models.scripted({"analyst": [picks(FIRST), picks(MAIN)]}, judge=Judge())
+
+    async def analyst(prompt: str) -> str:
+        prompts["graph"].append(prompt)
+        return await scripted_analyst(prompt)
+
+    scripted_analyst = graph.analyst
+    asyncio.run(ab.run(replace(graph, analyst=analyst), one_agent, Judge(), {SEED: EVENTS}, minutes=2))
+    known = {e["id"]: compact(e) for e in workflow.agent_events(EVENTS)}  # what the grader grades
+    for arm, sent in prompts.items():
+        assert len(sent) == 2, arm  # one prompt a minute
+        for minute, prompt in enumerate(sent, start=1):
+            inline = inline_events(prompt)
+            assert inline and {e["id"] for e in inline} <= set(known), arm
+            # The same events, field for field: the grader's own, not ones with the same ids.
+            assert inline == [e for e in known.values() if e["minute"] == minute], arm
+            # Under a match id no server serves, so a tool call cannot return another match.
+            served = match_server.match_id(SEED)
+            assert f"{served}-inline" in prompt and f"{served} " not in prompt and f"{served}." not in prompt
+
+
 def test_a_failed_or_unreadable_single_agent_reply_airs_nothing():
     async def down(prompt):
         raise RuntimeError("injected")
@@ -64,8 +107,8 @@ def test_a_failed_or_unreadable_single_agent_reply_airs_nothing():
     async def prose(prompt):
         return "I think it was a great pass."
 
-    assert asyncio.run(ab.one_agent_minute(down, "seed21", 1))[0] == []
-    assert asyncio.run(ab.one_agent_minute(prose, "seed21", 1))[0] == []
+    assert asyncio.run(ab.one_agent_minute(down, "seed21", 1, {}))[0] == []
+    assert asyncio.run(ab.one_agent_minute(prose, "seed21", 1, {}))[0] == []
 
 
 def test_the_report_is_strict_json_and_names_the_false_claims():
@@ -118,3 +161,30 @@ def test_the_live_command_runs_both_arms_on_the_published_agents(monkeypatch, tm
     assert (tmp_path / "ablation-agents.md").read_text().startswith("# Ablation: one agent")
     assert order[:2] == ["token", "simulate"] and order.count("token") == 1  # signed in once, first
     assert len(body["commit"]) == 40 and body["commit"] in (tmp_path / "ablation-agents.md").read_text()
+
+
+def test_a_live_arm_that_calls_the_match_tools_fails_that_call(monkeypatch, tmp_path):
+    # Both arms get the minute inline; an agent that reads the tools anyway (the deployed image's
+    # match, lesson 90) airs nothing for that minute, and says why.
+    import sys
+
+    from ninety.agents import credentials, workflow
+    from tests.test_workflow import SUPPORTED, Credential, FakeFoundry, tool_reply
+
+    fake = FakeFoundry({
+        "analyst": [tool_reply(reply(true_claim(FIRST))), reply(false_claim(MAIN))],
+        "moment-analyst": [tool_reply(picks(FIRST)), picks(MAIN)],
+        "tactician": [reply(false_claim(MAIN))] * 4,
+        "challenger": ['{"agree": true}'] * 2,
+        "judge": [SUPPORTED] * 12,
+    })
+    monkeypatch.setattr("agent_framework.foundry.FoundryAgent", fake)
+    monkeypatch.setattr(credentials, "new_credential", lambda: credentials.SignedIn(Credential(3600)))
+    monkeypatch.setattr(workflow, "simulated_events", lambda seed, minutes: EVENTS)
+    monkeypatch.setattr(ab, "MINUTES", 2)
+    monkeypatch.setattr(sys, "argv", ["agent_ablation", "--live", "--seeds", "21", "--out", str(tmp_path)])
+    ab.main()
+    body = json.loads((tmp_path / "ablation-agents.json").read_text())
+    first = {arm: minutes[0] for arm, minutes in body["minutes_by_arm"].items()}
+    assert first["one agent"]["aired"] == [] and "ReadTheTools" in first["one agent"]["why_none"]
+    assert first["graph"]["aired"] == [] and "ReadTheTools" in first["graph"]["why_none"]

@@ -210,8 +210,9 @@ def model_personalizer(ask: Ask, timeout_s: float = MODEL_TIMEOUT_S) -> Personal
 
 
 @contextlib.asynccontextmanager
-async def published_ask():
+async def published_ask(credential=None):
     """The published `ninety-personalizer` at its pinned version, as an Ask, with its label.
+    A caller that already signed in passes its credential; otherwise one is made and signed in.
 
     The credential is every live run's (ninety/agents/credentials.py): the async one, kept by
     SignedIn. The sync one runs `az` or a managed identity request on the event loop, which stalls
@@ -224,8 +225,10 @@ async def published_ask():
     from ninety import config
     from ninety.agents import credentials, foundry
 
-    async with credentials.new_credential() as credential:
-        await credentials.sign_in(credential)
+    async with contextlib.AsyncExitStack() as stack:
+        if credential is None:
+            credential = await stack.enter_async_context(credentials.new_credential())
+            await credentials.sign_in(credential)
         name, version = foundry.pinned(personalizer_agent(foundry.chat_client(credential)))
         async with FoundryAgent(
             project_endpoint=config.FOUNDRY_PROJECT, agent_name=name, agent_version=version,
