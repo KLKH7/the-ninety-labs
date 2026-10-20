@@ -1,0 +1,301 @@
+{
+  "generated": "2026-10-20T01:03:07Z",
+  "commit": "91d1e3b1cea97ed9bbef75c628d98486a2af3124",
+  "command": "ninety-render-check runs/test-frozen-91d1e3b/test/seed900001 runs/test-frozen-91d1e3b/test/seed900002 runs/test-frozen-91d1e3b/test/seed900003 runs/test-frozen-91d1e3b/test/seed900004 runs/test-frozen-91d1e3b/test/seed900005 --determinism --report test-render-checks.json",
+  "summary": {
+    "clips": 5,
+    "frames": 1250,
+    "ball_projection_max_px": 0.2684,
+    "ball_projection_mean_px": 0.0813,
+    "keypoint_projection_max_px": 0.0033,
+    "player_feet_outside_box": 0,
+    "frames_with_label_problems": 0,
+    "ball_visibility_lt_0_5_share": 0.0664,
+    "all_passed": true,
+    "determinism": {
+      "clip": "seed900001",
+      "frames_jsonl_identical": true,
+      "events_identical": true,
+      "images_identical": true,
+      "images_compared": 250
+    }
+  },
+  "planned": {
+    "off_the_shelf_detector_recall": "needs the pretrained detector (Oct 18)",
+    "side_by_side_look": "manual; see docs/decisions/0001-synthetic-data.md"
+  },
+  "clips": [
+    {
+      "clip": "seed900001",
+      "seed": 900001,
+      "split": "test",
+      "projection": {
+        "ball_px": {
+          "n": 250,
+          "mean": 0.0804,
+          "max": 0.255
+        },
+        "keypoint_px": {
+          "n": 1448,
+          "mean": 0.0004,
+          "max": 0.0012
+        },
+        "player_foot_outside_box": 0,
+        "player_foot_checked": 1979
+      },
+      "labels": {
+        "frames": 250,
+        "problems": [],
+        "ok": true
+      },
+      "occlusion": {
+        "ball_in_frame": 250,
+        "ball_visibility_lt_0_5_share": 0.084,
+        "player_boxes": 2235,
+        "player_visibility_lt_0_5_share": 0.0027,
+        "player_height_px": {
+          "n": 1958,
+          "p05": 55,
+          "median": 69,
+          "p95": 87,
+          "by_angle": {
+            "main": {
+              "n": 1958,
+              "p05": 55,
+              "median": 69,
+              "p95": 87
+            }
+          }
+        }
+      },
+      "data_contract": {},
+      "passed": {
+        "projection_ball_lt_1px": true,
+        "projection_keypoints_lt_1px": true,
+        "player_feet_in_boxes": true,
+        "labels_complete": true,
+        "data_contract": true
+      }
+    },
+    {
+      "clip": "seed900002",
+      "seed": 900002,
+      "split": "test",
+      "projection": {
+        "ball_px": {
+          "n": 250,
+          "mean": 0.0711,
+          "max": 0.1869
+        },
+        "keypoint_px": {
+          "n": 3199,
+          "mean": 0.0005,
+          "max": 0.0033
+        },
+        "player_foot_outside_box": 0,
+        "player_foot_checked": 2407
+      },
+      "labels": {
+        "frames": 250,
+        "problems": [],
+        "ok": true
+      },
+      "occlusion": {
+        "ball_in_frame": 250,
+        "ball_visibility_lt_0_5_share": 0.108,
+        "player_boxes": 2661,
+        "player_visibility_lt_0_5_share": 0.0015,
+        "player_height_px": {
+          "n": 2369,
+          "p05": 30,
+          "median": 59,
+          "p95": 87,
+          "by_angle": {
+            "goal": {
+              "n": 1355,
+              "p05": 28,
+              "median": 47,
+              "p95": 82
+            },
+            "main": {
+              "n": 1014,
+              "p05": 53,
+              "median": 76,
+              "p95": 88
+            }
+          }
+        }
+      },
+      "data_contract": {},
+      "passed": {
+        "projection_ball_lt_1px": true,
+        "projection_keypoints_lt_1px": true,
+        "player_feet_in_boxes": true,
+        "labels_complete": true,
+        "data_contract": true
+      }
+    },
+    {
+      "clip": "seed900003",
+      "seed": 900003,
+      "split": "test",
+      "projection": {
+        "ball_px": {
+          "n": 250,
+          "mean": 0.0729,
+          "max": 0.2336
+        },
+        "keypoint_px": {
+          "n": 1119,
+          "mean": 0.0004,
+          "max": 0.0011
+        },
+        "player_foot_outside_box": 0,
+        "player_foot_checked": 1997
+      },
+      "labels": {
+        "frames": 250,
+        "problems": [],
+        "ok": true
+      },
+      "occlusion": {
+        "ball_in_frame": 250,
+        "ball_visibility_lt_0_5_share": 0.032,
+        "player_boxes": 2215,
+        "player_visibility_lt_0_5_share": 0.0063,
+        "player_height_px": {
+          "n": 1956,
+          "p05": 49,
+          "median": 67,
+          "p95": 121,
+          "by_angle": {
+            "main": {
+              "n": 1503,
+              "p05": 49,
+              "median": 63,
+              "p95": 87
+            },
+            "tight": {
+              "n": 453,
+              "p05": 82,
+              "median": 106,
+              "p95": 140
+            }
+          }
+        }
+      },
+      "data_contract": {},
+      "passed": {
+        "projection_ball_lt_1px": true,
+        "projection_keypoints_lt_1px": true,
+        "player_feet_in_boxes": true,
+        "labels_complete": true,
+        "data_contract": true
+      }
+    },
+    {
+      "clip": "seed900004",
+      "seed": 900004,
+      "split": "test",
+      "projection": {
+        "ball_px": {
+          "n": 250,
+          "mean": 0.0855,
+          "max": 0.2684
+        },
+        "keypoint_px": {
+          "n": 1261,
+          "mean": 0.0004,
+          "max": 0.0014
+        },
+        "player_foot_outside_box": 0,
+        "player_foot_checked": 3014
+      },
+      "labels": {
+        "frames": 250,
+        "problems": [],
+        "ok": true
+      },
+      "occlusion": {
+        "ball_in_frame": 250,
+        "ball_visibility_lt_0_5_share": 0.084,
+        "player_boxes": 3193,
+        "player_visibility_lt_0_5_share": 0.0025,
+        "player_height_px": {
+          "n": 2944,
+          "p05": 49,
+          "median": 66,
+          "p95": 88,
+          "by_angle": {
+            "main": {
+              "n": 2944,
+              "p05": 49,
+              "median": 66,
+              "p95": 88
+            }
+          }
+        }
+      },
+      "data_contract": {},
+      "passed": {
+        "projection_ball_lt_1px": true,
+        "projection_keypoints_lt_1px": true,
+        "player_feet_in_boxes": true,
+        "labels_complete": true,
+        "data_contract": true
+      }
+    },
+    {
+      "clip": "seed900005",
+      "seed": 900005,
+      "split": "test",
+      "projection": {
+        "ball_px": {
+          "n": 250,
+          "mean": 0.0966,
+          "max": 0.2411
+        },
+        "keypoint_px": {
+          "n": 1037,
+          "mean": 0.0004,
+          "max": 0.0013
+        },
+        "player_foot_outside_box": 0,
+        "player_foot_checked": 1119
+      },
+      "labels": {
+        "frames": 250,
+        "problems": [],
+        "ok": true
+      },
+      "occlusion": {
+        "ball_in_frame": 250,
+        "ball_visibility_lt_0_5_share": 0.024,
+        "player_boxes": 1455,
+        "player_visibility_lt_0_5_share": 0.0,
+        "player_height_px": {
+          "n": 1119,
+          "p05": 63,
+          "median": 68,
+          "p95": 85,
+          "by_angle": {
+            "main": {
+              "n": 1119,
+              "p05": 63,
+              "median": 68,
+              "p95": 85
+            }
+          }
+        }
+      },
+      "data_contract": {},
+      "passed": {
+        "projection_ball_lt_1px": true,
+        "projection_keypoints_lt_1px": true,
+        "player_feet_in_boxes": true,
+        "labels_complete": true,
+        "data_contract": true
+      }
+    }
+  ]
+}

@@ -1089,3 +1089,20 @@ short and actionable. This file is public: no research sources, product names or
   documentation, not inferred from its name. A cancelled run nobody cancelled is a defect to trace.
 - **Check:** `.github/workflows/agents-live.yml` groups by `inputs.ref`. Dispatch from two
   branches before approving either: both stay `waiting`.
+
+### 111. A shape measured only from the ball collapses onto it; instrument a choice before blaming its value
+- **What happened:** every in-possession spot was metres behind the ball, floored 12 m from goal.
+  With the ball 20 m out, both centre-backs, both full-backs and the holding midfielder shared that
+  floor inside the box, and the team passed around there: 224 own-box passes a 90 (seeds 7, 11, 21,
+  42). The investigation also named the pass value as a separate cause (forward passes never win).
+  Logging every choice showed otherwise: forward options in the own third were 30 m long with a
+  0.68 completion estimate against 16 m and 0.99 for square ones, because the shape left nobody at
+  a reachable forward distance. Bounding the team's length by R8 instead cut own-box passes to 33,
+  own-box camping (FS9) from 70 to 0 and the square-pass count (FS7) from 488 to 224 a 90, with no
+  change to how passes are valued.
+- **Rule:** a positional rule relative to a moving point needs a bound from the team's own measured
+  shape (length, width), not a floor that every role shares. Before changing how an option is
+  valued, log the options at each choice and see which term loses it; fix the upstream cause first
+  and re-measure.
+- **Check:** `tests/test_shape.py::test_the_team_is_never_longer_than_the_published_range_and_the_back_line_never_ahead_of_the_ball`
+  sweeps ball and line positions; on the old rule it fails (48 m long with the ball 35 m out).
