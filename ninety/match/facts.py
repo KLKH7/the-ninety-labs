@@ -57,9 +57,10 @@ def compact(event: dict) -> dict:
     return out
 
 
+def select(events, minute_from: int, minute_to: int, types=AGENT_TYPES) -> list[dict]:
+    """The compact events of the given types between two match minutes (inclusive)."""
+    return [compact(e) for e in events if minute_from <= minute_of(e) <= minute_to and e["type"] in types]
+
+
 def events_in(seed: int, minutes: float, minute_from: int, minute_to: int, types=AGENT_TYPES) -> list[dict]:
-    return [
-        compact(e)
-        for e in match_events(seed, minutes)
-        if minute_from <= minute_of(e) <= minute_to and e["type"] in types
-    ]
+    return select(match_events(seed, minutes), minute_from, minute_to, types)

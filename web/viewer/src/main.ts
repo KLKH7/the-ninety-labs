@@ -357,7 +357,10 @@ async function start() {
       lastAired = ids;
       const sentence = aired
         .sort((a, c) => (a.slot === "top_right" ? -1 : c.slot === "top_right" ? 1 : 0))
-        .map((c) => (c.verified && c.kind !== "audio_description" ? `Fact-checked: ${c.text}` : c.text).replace(/\.$/, ""))
+        .map((c) => {
+          const said = (c.verified && c.kind !== "audio_description" ? `Fact-checked: ${c.text}` : c.text).replace(/\.$/, "");
+          return c.fallback ? `${said} (fallback: ${c.fallback})` : said;
+        })
         .join(". ");
       onAirText.textContent = sentence;
       overlay.setAttribute("aria-label", sentence ? `On-screen graphics: ${sentence}` : "No graphics on screen");
