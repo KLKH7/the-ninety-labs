@@ -206,6 +206,13 @@ SHAPE_IN_POSSESSION = {
     "RW": (None, -21.0), "LW": (None, 21.0), "ST": (None, 0.0),
 }
 DEEPEST_M = 12.0  # nobody's in-possession spot is deeper than this from his own goal
+# O6, R8: a team in possession is at most this long, its deepest outfield player to its most
+# advanced (*design*: a cap at the top of the typical lengths reported across studies, 31 to 46 m,
+# Rico-Gonzalez review; the source gives a range, not a maximum). With
+# the ball deep the team does not collapse onto it: the back line stands no further behind the
+# forwards than this, so the shape spreads, as teams spread most in build-up (stretch index and
+# effective area highest in build-up play, Hands et al. 2026, Int. J. Perf. Anal. Sport).
+LENGTH_MAX_M = 46.0
 STAYS_WIDE_M = 4.0  # design: stays_wide, further toward the touchline his role already occupies
 BALL_SIDE_IN_POSSESSION = 0.15  # the shape leans this share toward the ball's side
 FINAL_THIRD_M = 70.0  # ball this far from his own goal: the box is attacked
@@ -217,7 +224,11 @@ def attacking_slot(role: str, own_goal_x: float, ball_x: float, ball_y: float,
     # `last_line_x`: the furthest a player of this side may stand and be onside, as he sees it.
     """O6: where this role stands while his team has the ball. Heights follow the ball; attackers
     stand on the opponents' last line (onside); with the ball wide in the final third, the striker,
-    the far-side winger and a midfielder attack the near post, the far post and the box edge."""
+    the far-side winger and a midfielder attack the near post, the far post and the box edge.
+    The team is at most LENGTH_MAX_M long (R8): when the ball is so deep that the roles behind it
+    would stand further than that behind the forwards, those roles move up together, keeping their
+    spacing, until the back line is LENGTH_MAX_M behind the forwards or level with the ball; the
+    forwards then hold no more than LENGTH_MAX_M ahead of the back line."""
     shape = SHAPE_IN_POSSESSION.get(role)
     if shape is None:
         return None
@@ -235,10 +246,15 @@ def attacking_slot(role: str, own_goal_x: float, ball_x: float, ball_y: float,
             u = min(u, max(last_u, ball_u))  # L10: he waits onside for the delivery
             return own_goal_x + fwd * u, PITCH_Y / 2 + ball_side * side
     behind, width = shape
+    deepest = max(b for b, _ in SHAPE_IN_POSSESSION.values() if b is not None)
+    front_u = last_u  # the forwards: their last line (and never far behind the ball, below)
+    # R8: no longer than LENGTH_MAX_M, so the roles behind the ball move up; but the back line never
+    # ahead of the ball (design: it stays goal-side of it, as cover if the ball is lost)
+    up = min(deepest, max(0.0, front_u - LENGTH_MAX_M - (ball_u - deepest)))
     if behind is None:
-        u = max(min(last_u, ball_u + 25.0), ball_u - 5.0)
+        u = max(min(front_u, ball_u - deepest + up + LENGTH_MAX_M), ball_u - 5.0)
     else:
-        u = ball_u - behind
+        u = ball_u - behind + up
     u = min(PITCH_X - 3.0, max(DEEPEST_M, u))
     y = PITCH_Y / 2 + across * width + (ball_y - PITCH_Y / 2) * BALL_SIDE_IN_POSSESSION
     if wide_m and width:
