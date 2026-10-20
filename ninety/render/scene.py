@@ -213,6 +213,7 @@ class Gait:
     ankle: dict = field(default_factory=dict)  # side -> last drawn sole (x, y, height): where a step starts
     touch: dict | None = None  # the part meeting the ball now: part, side, at (world), w
     hold: dict | None = None  # a held ball: at (world, its centre), w, bend
+    supporting: bool = False  # the feet stand and step for a touch or a lunge (_feet)
     lift: float = 0.0  # metres the body is raised (a header's jump) or lowered (a lunge, a stoop)
 
 
@@ -534,7 +535,11 @@ def _feet(g: Gait, x: float, y: float, k: float) -> None:
     lunge = g.lift < -LOW_M * k  # the support foot stays down under a lunge, whatever the pose
     # While a foot or thigh plays the ball, the other foot is the support: it stands, and steps after
     # the body, instead of following the stride into the air.
-    support = lunge or busy is not None
+    # Out of a touch or a lunge the feet go back to the stride once no foot is in the middle of a
+    # step: a stepping foot handed to the stride would be dropped where the stride has it.
+    stepping_now = any(f.get("swing") is not None for f in g.feet.values())
+    support = lunge or busy is not None or (g.supporting and stepping_now)
+    g.supporting = support
     if (g.action not in PLANT_ACTIONS and not support) or g.lift > 0.02:
         g.feet = {}
     elif g.action != "stand" and g.speed >= 0.45 and not support:
