@@ -1272,7 +1272,7 @@ short and actionable. This file is public: no research sources, product names or
   for false rejections: the 412 recorded claim texts in `replays/`, `docs/eval/` and the fixtures
   read the same numbers as before, and `fact_checker_proof --check` and both replays pass.
 
-### 130. A WebSocket tested only through the test client is untested in the server a browser reaches
+### 132. A WebSocket tested only through the test client is untested in the server a browser reaches
 - **What happened:** the phone relay's tests all passed through Starlette's TestClient, which
   speaks WebSocket in process. The first time a real browser joined through uvicorn, every
   connection answered 404: uvicorn upgrades a WebSocket only when a WebSocket library is
@@ -1285,7 +1285,7 @@ short and actionable. This file is public: no research sources, product names or
   without `websockets` in `uv.lock`). The phone still reads a close before the accept as "unknown
   code or unreachable" (`web/phone/src/feed.ts`), for a server that refuses that way.
 
-### 131. Positions from a fit, summed frame to frame, read the fit's jitter as running
+### 133. Positions from a fit, summed frame to frame, read the fit's jitter as running
 - **What happened:** the phone's speed and distance come from the companion's window facts, which
   sum each player's frame-to-frame steps. On simulator positions that is exact. On positions
   tracked from the video, the camera fit moves a foot point by up to about 0.5 m between
@@ -1302,7 +1302,7 @@ short and actionable. This file is public: no research sources, product names or
   `test_a_track_ends_at_the_speed_its_player_was_running` fails with a plain average, which lags
   at a track's end.
 
-### 132. `sum()` of floats is not the same number on every Python
+### 134. `sum()` of floats is not the same number on every Python
 - **What happened:** the phone's tracked frames file is committed, and a test rebuilds it and needs
   the same bytes. It passed on Python 3.12 and failed on 3.11. Python 3.12 made `sum()` of floats
   use compensated addition, so a smoothed position's last digit moved, and a rounding at 0.01 m
