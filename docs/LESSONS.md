@@ -1120,6 +1120,26 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_engine_rules.py::test_a_chaser_is_not_swapped_by_a_fresh_guess_while_nothing_changes`
   fails when the misjudgement is redrawn on every plan.
 
+### 118. One match's goals are a draw: check a rare outcome over many matches, against the range a real sample shows
+- **What happened:** CI's full-match test bounded one match's goals at 1 to 6. The chaser's pull
+  request (#160) failed it: seed 11 ended 0-0 with 27 shots and 1,116 passes, where main's engine
+  had won the same seed 3-0, and two engines on the same seed are not a pair (lesson 90). Over 20
+  matches of 20 minutes it scored 1.46 goals a team per 90 against main's 1.91 (difference -0.45,
+  standard error 0.68), and on the base before main it had scored 1.57 against 1.12: no drop. A
+  match's goals are close to Poisson around 2.8, so an engine that scores like the Premier League
+  fails that bound about one change in eleven (0-0 is 8.0% of Premier League matches since
+  1992-93: Opta, *The Analyst*, April 2024), and an engine scoring half as often still passed it three times in four.
+- **Rule:** a test bounds one match's count only where a realistic engine is almost never outside
+  it (passes, tackles, pressures, counted in tens or hundreds). A rare outcome (goals, penalties,
+  cards) is checked over many matches against the range a real sample of that many matches shows,
+  computed from the source's figures and the outcome's distribution before any engine number is
+  read. When those matches cost too much for every pull request, the check is run on demand and its
+  matches are the ones every engine change is measured on anyway.
+- **Check:** for each per-match bound in `tests/`, work out how often a league at the source's
+  figure falls outside it; above 1%, it moves to a many-match check. Goals:
+  `NINETY_HELD_OUT=1 uv run pytest tests/test_sim.py -k twelve` (the funnel's 12 matches, R4), and
+  `tests/test_funnel.py` keeps the range's own arithmetic honest.
+
 ### 120. An exemption in a check is where a defect hides: reach the state, do not place it
 - **What happened:** the engine placed a new ball at the taker's feet at every restart and reset
   all 22 players at every goal. The validator exempts dead-ball windows from the ball-speed check
