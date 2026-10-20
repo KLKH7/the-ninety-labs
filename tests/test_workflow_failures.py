@@ -14,15 +14,17 @@ KNOWN = {e["id"]: compact(e) for e in wf.workflow.agent_events(list(wf.m1_ground
 
 # scenario -> (claim status, verdict category, Judge calls, an insight airs, template graphics lost)
 EXPECTED = {
-    # The insight, then its five variants re-checked (casual and club in English; analyst, casual
-    # and club in the stand-in's marked Spanish): six Judge calls.
-    "none": ("verified", None, 6, True, 0),
+    # The insight, then its seven variants re-checked (casual, club and player_focus in English;
+    # analyst, casual, club and player_focus in the stand-in's marked Spanish). player_focus is
+    # written because the detected pass names its passer's track: eight Judge calls.
+    "none": ("verified", None, 8, True, 0),
     # The real Judge wrapper retries once, then holds: two calls, then the template stays.
     "judge timeout": ("held", "timeout", 2, False, 0),
     # The Tactician never answers, so there is nothing for the Judge to read.
     "tactician outage": ("held", "service", 0, False, 0),
-    # The insight still airs; the in-process fallback gives the variants, re-checked the same way.
-    "personalizer down": ("verified", None, 3, True, 0),
+    # The insight still airs; the in-process fallback gives the English variants (casual, club and
+    # player_focus), re-checked the same way, and no Spanish, which is held: four Judge calls.
+    "personalizer down": ("verified", None, 4, True, 0),
     # The confidence gate holds the claim before the Judge, and the unsure pass's two graphics
     # (analyst and casual) are not drawn.
     "low confidence": ("held", "low_confidence", 0, False, 2),
@@ -57,7 +59,9 @@ def test_with_the_personalizer_down_the_fallback_answers_and_the_viewer_sees_the
     # failure, and the Spanish ones are held rather than shown English.
     assert row["insights"] == [i for i in BASE["insights"] if i["lang"] == "en"]
     assert {i["lang"] for i in BASE["insights"]} == {"en", "es"}
-    assert [v.split(":")[0] for v in row["variants_refused"]] == ["analyst/es", "casual/es", "club/es"]
+    # player_focus too: the detected pass names its passer's track.
+    assert [v.split(":")[0] for v in row["variants_refused"]] == ["analyst/es", "casual/es", "club/es",
+                                                                 "player_focus/es"]
 
 
 def test_the_row_reads_the_minute_s_claim_whichever_moment_the_analyst_picked():
@@ -129,14 +133,14 @@ def baseline_with(personalize) -> dict:
 def test_the_baseline_fails_when_a_spanish_profile_reads_english_with_a_word_changed():
     # The byte-for-byte check alone let this air: English for a Spanish viewer, one word changed.
     row = baseline_with(personalizer_writing(lambda text: text.replace("complete", "completes")))
-    assert row["variants_refused"] == [] and len(row["variants_english"]) == 3
+    assert row["variants_refused"] == [] and len(row["variants_english"]) == 4  # with player_focus
     assert not wf.recovered(row, row)["every variant airs without a failure"]
 
 
 def test_the_baseline_fails_when_the_spanish_profiles_are_left_out():
     row = baseline_with(personalizer_writing(lambda text: None))
     assert row["variants_refused"] == [] and row["variants_english"] == []
-    assert sorted(row["variants_missing"]) == ["analyst/es", "casual/es", "club/es"]
+    assert sorted(row["variants_missing"]) == ["analyst/es", "casual/es", "club/es", "player_focus/es"]
     assert not wf.recovered(row, row)["every variant airs without a failure"]
 
 
