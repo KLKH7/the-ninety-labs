@@ -4,15 +4,18 @@ Skipped when three.js or Chromium is not installed, unless NINETY_REQUIRE_RENDER
 job sets it, so the checks can never silently stop running there).
 """
 
+import base64
 import json
 import os
 import shutil
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from jsonschema import validate
 
 from ninety.render import edit
+from ninety.render.camera import CUT_HOLD_S
 from ninety.render.checks import check_clip, digest, load_clip
 from ninety.render.cli import meta_main
 from ninety.render.clip import SIM_MARGIN_S, RenderUnavailable, browser_page, render_clip
@@ -115,35 +118,64 @@ def test_images_are_720p_jpeg(clips):
     assert (w, h) == (1280, 720)
 
 
+class StandInPage:
+    """render_clip's page without a browser: every truth row is Python's own, the picture is not
+    drawn (no boxes, no pixels). Enough to check what a cut does to the truth."""
+
+    context = SimpleNamespace(browser=SimpleNamespace(version="stand-in"))
+
+    def evaluate(self, js, arg):
+        if "init" in js:
+            return {"bugRect": [0, 0, 1, 1]}
+        return {"objects": {o["id"]: {"full": 0, "visible": 0, "bbox": None, "centroid": None}
+                            for o in arg["objects"]},
+                "keypoints": [False] * len(arg["keypoints"]),
+                "image": "data:image/jpeg;base64," + base64.b64encode(b"x").decode()}
+
+
 @pytest.fixture(scope="module")
-def cut_clip(page, tmp_path_factory):
-    """A clip that opens 10 frames before the first dead ball of seed 11's match the broadcast cuts
-    through. The cut is found from the match, as render_clip finds it, so a change to the engine
-    moves the clip with it instead of leaving it on open play (lesson 78)."""
-    match = simulate(11, (240.0 + SECONDS + SIM_MARGIN_S) / 60)  # render_clip's horizon
-    first = edit.cuts(match.events, 25)[0]
+def cut_clip(tmp_path_factory):
+    """A broadcast clip from a second before the stoppage of seed 11's first long dead ball to a
+    second past its restart. The cut is found from the match, as render_clip finds it, so a change
+    to the engine moves the clip with it (lesson 78)."""
+    first = None
+    match = simulate(11, (240.0 + 30.0 + SIM_MARGIN_S) / 60)
+    first = next(c for c in edit.cuts(match.events, 25) if c.stop >= 25)
+    start = first.stop - 25
+    seconds = (first.first_frame - start + first.restart + 25 - first.last_frame) / 25
     out = tmp_path_factory.mktemp("cut") / "c"
-    render_clip(11, out, seconds=SECONDS, start_s=(first.first_frame - 10) / 25, page=page)
-    return out, first
+    render_clip(11, out, seconds=seconds, start_s=start / 25, overrides={"dead_ball_cut": True},
+                page=StandInPage())
+    return out, first, start
 
 
 def test_a_clip_cuts_from_the_stoppage_to_the_restart_and_still_meets_the_contract(cut_clip):
-    out, first = cut_clip
+    """The clip shows the stoppage, then cuts, then comes back for the restart. Every shown row is
+    the engine's own frame of that number (render_clip draws from them), every event is on a shown
+    frame, and the clip meets the data contract (C2 accepts the recorded cut)."""
+    out, first, start = cut_clip
     clip, frames, events = load_clip(out)
     numbers = [f["frame"] for f in frames]
-    assert len(frames) == round(SECONDS * 25)
-    assert numbers[:10] == list(range(first.first_frame - 10, first.first_frame))
-    assert numbers[10] == first.last_frame + 1 and numbers[10:] == list(range(numbers[10], numbers[-1] + 1))
+    k = first.first_frame - start
+    assert numbers[:k] == list(range(start, first.first_frame))
+    assert numbers[k] == first.last_frame + 1 and numbers[k:] == list(range(numbers[k], numbers[-1] + 1))
+    assert first.stop in numbers and first.restart in numbers
     assert clip["cuts"] == [first.as_dict()]
-    assert clip["segments"] == [{"index": 0, "frame": numbers[0], "frames": 10},
-                                {"index": 10, "frame": numbers[10], "frames": len(frames) - 10}]
+    assert clip["segments"] == [{"index": 0, "frame": numbers[0], "frames": k},
+                                {"index": k, "frame": numbers[k], "frames": len(frames) - k}]
     assert json.loads((out / "meta.json").read_text())["cuts"] == [first.as_dict()]
     assert [f["image"] for f in frames] == [f"images/{i:05d}.jpg" for i in range(len(frames))]
     assert all(e["frame"] in numbers for e in events)
-    # The picture after the cut is a new shot, not a pan from the last one: it is not streaked, and
-    # it comes back on the restart with the tighter lens, not the same framing the players jumped in.
-    assert frames[10]["blur_px"] == [0.0, 0.0]
-    assert frames[9]["camera"]["angle"] != "tight" or frames[9]["camera"] != frames[10]["camera"]
-    assert frames[10]["camera"]["angle"] == "tight"
+    # The picture after the cut is a new shot, not a pan from the last one: unstreaked, and the
+    # gantry closed up on the restart; it eases back out to the wide shot before the kick.
+    fov = [f["camera"]["fov_v_deg"] for f in frames]
+    restart_at = numbers.index(first.restart)
+    assert frames[k]["blur_px"] == [0.0, 0.0]
+    assert frames[k]["camera"]["position"] == frames[k - 1]["camera"]["position"]
+    hold = round(CUT_HOLD_S * 25)
+    assert fov[k] < 0.6 * fov[k - 1]  # a cut to a closer shot, not the same framing
+    assert max(fov[k:k + hold]) < 1.2 * fov[k]  # held closed up for the shortest shot
+    assert fov[restart_at] > 2 * fov[k]  # and eased back out by the kick ...
+    assert max(abs(b - a) for a, b in zip(fov[k:], fov[k + 1:], strict=False)) < 0.5  # ... never snapped
     assert validate_clip(out) == {}
     assert check_clip(out)["passed"]["data_contract"]

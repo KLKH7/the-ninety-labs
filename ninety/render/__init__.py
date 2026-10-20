@@ -35,4 +35,7 @@ docs/decisions/0001-synthetic-data.md.
 # cuts closer only for a throw-in, as a medium shot; no shot is shorter than 4 s; a pan smears
 # instead of splitting every edge in two (the sharpening read the unsmeared picture); the
 # goalmouth and centre wear is faint, pale turf in the mowing stripes.
-RENDERER_VERSION = "0.5.1"
+# 0.5.2: a broadcast clip cuts only a dead ball whose stoppage and restart it shows, holds each side
+# of the cut at least 4 s, and comes back on the gantry closed up on the restart, easing out to the
+# wide shot before the kick; cuts are off by default, so datasets and the test sets show every frame.
+RENDERER_VERSION = "0.5.2"

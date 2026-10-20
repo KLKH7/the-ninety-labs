@@ -150,6 +150,9 @@ ZOOM_ACCEL_MPS2 = 6.0
 # picture high (TIGHT_HALF_M either side of him).
 TIGHT_ACTIONS = ("throw",)
 TIGHT_HALF_M = 5.0
+# After an edit cut the gantry comes back closed up on the restart (TIGHT_HALF_M) for CUT_HOLD_S,
+# then eases out to the wide shot over this long, before the kick (edit.SHOW_BEFORE_RESTART_S).
+OPEN_EASE_S = 2.0
 NET_SETTLE_S = 2.6  # the mesh is back to rest by here; the angle itself holds CUT_HOLD_S
 
 
@@ -258,6 +261,7 @@ class Director:
         self.tight_v = [0.0, 0.0]
         self.zoom_v = 0.0  # how fast the half-width is changing (m/s)
         self._box = False  # the box's closer lens is in (BOX_LEAVE_M)
+        self._open_until = -1.0  # the restart's closed-up shot after an edit cut (open_on_restart)
         self.half_width = params.half_width_m
         self.prev_ball: tuple[float, float] | None = None
         self.shake_phase = (self.rng.uniform(0, 6.28), self.rng.uniform(0, 6.28))
@@ -276,19 +280,29 @@ class Director:
         self.tight_aim = None
         self.zoom_v = 0.0
         self._box = False
+        self._open_until = -1.0
         self.prev_ball = None
         self._cut_kind = ""
         self._cut_until = -1.0
         self.net = None
 
     def open_on_restart(self) -> None:
-        """The first frame after a cut: the picture comes back on the restart with the tighter lens
-        beside the gantry, held CUT_HOLD_S, so the edit reads as a cut to another shot rather than
-        the players jumping about the same one (as a broadcast returns to a set piece)."""
-        self._cut_kind = "tight"
-        self._cut_until = self.t + self.dt + CUT_HOLD_S  # from the restart's first frame
+        """The first frame after a cut: the picture comes back on the restart with the gantry closed
+        up on it (TIGHT_HALF_M), so the edit reads as a cut to another shot rather than the players
+        jumping about the same one. It holds that CUT_HOLD_S, then eases back out to the wide shot
+        over the OPEN_EASE_S before the restart is taken (edit.SHOW_BEFORE_RESTART_S): one shot from
+        the gantry, no snap back after the kick. No second angle comes up while it does."""
+        self._open_until = self.t + self.dt + CUT_HOLD_S  # from the restart's first frame
+        self._cut_kind = ""
+        self._cut_until = self._open_until + OPEN_EASE_S
+        # A cut, not a zoom: the warm-up before the restart framed the play wide; the shot opens
+        # closed up on the restart at once.
+        self.aim = None
+        self.zoom_v = 0.0
 
     def _goal(self, bx: float, by: float, vx: float, vy: float) -> tuple[float, float, float]:
+        if self.t < self._open_until:  # closed up on the restart: the ball where it is set
+            return min(max(bx, 0.0), 105.0), min(max(by, 0.0), 68.0), TIGHT_HALF_M
         px, py = self._play(bx, by)
         ax = px + vx * self.p.lead_s
         ay = py + vy * self.p.lead_s

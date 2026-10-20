@@ -70,3 +70,29 @@ def test_the_timeline_maps_video_time_to_match_time_across_a_cut():
     # A match time inside the cut is shown where the cut is, and before the clip at its start.
     assert tl.to_video(15 / FPS) == 5 / FPS
     assert tl.to_video(0.0) == 0.0
+
+
+def test_a_clip_cuts_only_a_dead_ball_whose_stoppage_and_restart_it_shows():
+    """Coordinator decision (Oct 20): the dead ball is on screen at both ends of a cut. A clip that
+    opens inside a dead ball, or ends before its restart, shows every frame of it instead."""
+    c = Cut(110, 189, stop=100, restart=200)
+    frames, made = edit.plan(90, 60, [c], 1000)  # from before the stoppage to past the restart
+    assert made == [c] and frames[:20] == list(range(90, 110)) and frames[20:] == list(range(190, 230))
+    frames, made = edit.plan(105, 60, [c], 1000)  # opens after the stoppage
+    assert made == [] and frames == list(range(105, 165))
+    frames, made = edit.plan(90, 25, [c], 1000)  # ends before the restart
+    assert made == [] and frames == list(range(90, 115))
+    # With both cuts the clip would end at 349, one frame before b's restart: b is left out, and the
+    # clip shows b's wait up to its own end instead.
+    a, b = Cut(110, 189, stop=100, restart=200), Cut(260, 339, stop=250, restart=350)
+    frames, made = edit.plan(90, 100, [a, b], 1000)
+    assert made == [a] and frames == list(range(90, 110)) + list(range(190, 270))
+
+
+def test_every_hold_is_at_least_the_shortest_shot():
+    """No shot either side of a cut flickers (CUT_HOLD_S), and the restart's closed-up shot and its
+    ease back out are over before the kick (camera.open_on_restart)."""
+    from ninety.render.camera import CUT_HOLD_S, OPEN_EASE_S
+
+    assert edit.HOLD_AFTER_STOP_S >= CUT_HOLD_S and edit.HOLD_AFTER_GOAL_S >= CUT_HOLD_S
+    assert edit.SHOW_BEFORE_RESTART_S >= CUT_HOLD_S + OPEN_EASE_S

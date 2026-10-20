@@ -255,7 +255,7 @@ def _broadcast(seed):
     m = _match(seed)
     p = sample_params(seed)
     d = Director(p.camera, 1280, 720, 25, seed, cuts=True)
-    show = edit.shown(2 * 25, 100 * 25, edit.cuts(m.events, 25), len(m.frames))
+    show, _ = edit.plan(2 * 25, 100 * 25, edit.cuts(m.events, 25), len(m.frames))
     goals = {e["frame"]: e for e in m.events if e["type"] == "goal"}
     rows, reopen, after_cut = [], False, False
     for fi, draw, left in _plan(edit.segments(show)):

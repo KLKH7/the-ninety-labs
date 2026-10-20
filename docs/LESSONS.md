@@ -1446,3 +1446,18 @@ short and actionable. This file is public: no research sources, product names or
   pushing. A multi-step shell line that changes a repository stops at its first failure.
 - **Check:** `git ls-tree -r --name-only origin/pr-assets/<name>` lists only the media.
 
+### 153. An exemption is stated in what the clip shows at both ends, and attacked with planted clips
+- **What happened:** the contract check for a broadcast cut (C2) accepted a gap when the last stoppage
+  or restart before it was a stoppage, or when a window opened on a loose ball, and looked at no
+  other event. An independent review's planted clips found two holes. A pass after the stoppage put
+  the ball back in play unseen by it. A window of open play with a gap and no event at all passed.
+  The renderer only made legal cuts, so no clip was wrong, but the validator would have passed a
+  wrong one. The cut was also on by default, so dataset and test-set renders would have cut too.
+- **Rule:** an exemption in a contract check is stated in what the clip itself shows, here both the
+  stoppage and the restart as events of the clip with nothing live between them. It is tested with
+  planted clips that try to abuse it, written by someone other than its author. A feature that
+  changes what a dataset contains is off by default and turned on where it is wanted.
+- **Check:** `tests/test_validate.py` (the planted cut clips; they fail on `aef43f5`) and
+  `test_every_check_the_validator_reports_has_a_planted_defect`;
+  `tests/test_render_params.py::test_only_a_broadcast_clip_cuts_through_dead_balls`.
+

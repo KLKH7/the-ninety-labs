@@ -216,13 +216,12 @@ def render_clip(
         if start_s is not None
         else choose_start(frames, p, n, seed, earliest_s, latest_s)
     )
-    # The broadcast cuts from a stoppage to its restart (edit.py): the clip shows n frames, which
-    # may span more of the match. A start inside a cut opens the clip where the cut ends.
+    # A broadcast clip cuts from a stoppage to its restart (edit.py): the clip shows n frames, which
+    # may span more of the match. It cuts only a dead ball whose stoppage and restart it shows both.
     every_cut = edit.cuts(match.events, FPS) if p.dead_ball_cut else []
-    show = edit.shown(start, n, every_cut, len(frames))
+    show, made = edit.plan(start, n, every_cut, len(frames))
     if len(show) < n:
         raise ValueError("clip window runs past the simulated match")
-    made = edit.used(every_cut, show)
     start = show[0]
 
     roles = {
@@ -295,6 +294,7 @@ def render_clip(
                 continue
             if draw and reopen:
                 director.open_on_restart()
+                prev_cam = None  # a new shot: nothing streaks across the cut
                 reopen = False
             fr = frames[fi]
             advance_gaits(gaits, prev_xy, fr, 1 / FPS, frames[min(fi + LEAD_AHEAD_FRAMES, len(frames) - 1)])
