@@ -57,11 +57,15 @@ def reference_point(kind: str, team: str, t: float, frames: list[dict],
     k = round(t * FPS)
     if kind == "goal":  # the goal's own frame already shows the kickoff (engine.kickoff): the ball
         k -= 1          # as it crossed is the frame before, as the renderer reads it (clip.py)
-    if not 0 <= k < len(frames):
+    # A clip cut from a match keeps the match's frame numbers (docs/DATA_CONTRACT.md, a window),
+    # so frames are found by number from the first one, not by position from 0.
+    first = frames[0]["frame"] if frames else 0
+    if not 0 <= k - first < len(frames):
         return None
-    frame = frames[k]
+    frame = frames[k - first]
     if frame["frame"] != k:
-        raise ValueError(f"frames must be every frame from 0; position {k} holds frame {frame['frame']}")
+        raise ValueError(f"frames must be consecutive from frame {first}; position {k - first} "
+                         f"holds frame {frame['frame']}")
     if kind in PLAYER_PLACED | FOULED_PLACED:
         side = team if kind in PLAYER_PLACED else ("away" if team == "home" else "home")
         players = [p for p in frame["players"] if p["team"] == side]
