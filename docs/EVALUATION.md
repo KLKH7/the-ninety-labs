@@ -20,6 +20,8 @@ generated it and the output file is committed. Rows marked *planned* have no res
 | Stats engine facts: hand-computed cases, planted defects, citations, size | `uv run pytest tests/test_stats.py` | test assertions | running |
 | Late drop in high-intensity running (R7), by the protocol below; distance and top speed by position on the same matches | `uv run python -m ninety.sim.late_drop` | `docs/eval/late-drop.md` | running |
 | Fact-checker rules (numbers, players, evidence ids) | `uv run pytest tests/test_factcheck.py` | test assertions | running |
+| Personalizer rules: the A2A round trip, the fallback within its budget, the re-check of every variant, every persona and language, profile validation ([below](#personalizer)) | `uv run pytest tests/test_personalizer.py` | test assertions | running in process: 38 tests, 18 of 18 mutants of the rules killed; not yet deployed |
+| Personalizer variants from the published agent that pass the re-check and air, by persona and language, and time per A2A request | `uv run python -m ninety.personalizer.eval --seeds 21,33` (agents-live task `personalizer`) | `docs/eval/personalizer.md` | planned: waits for `ninety-personalizer` to be published |
 | Ledger versioning, evidence validation, and deterministic cue fixture | `uv run pytest tests/test_ledger.py tests/test_cues.py` | `tests/fixtures/cues-seed7.jsonl` and test assertions | running: 21 tests; 108 cues for seed 7, five minutes (96 for its 48 passes, 12 of them failed and one still in flight at the end, 8 for its 4 shots and 4 for its 2 goals) |
 | Fact-checker on the frozen planted-claim set, offline: catch rate, true claims wrongly stopped, the layer that decided, claims held for low-confidence detections | `uv run python -m ninety.eval.fact_checker_proof` (offline, seconds of CPU; `--check` fails if a committed file is stale, as `tests/test_fact_checker_proof.py` does) | `docs/eval/fact-checker-planted.md`, set `docs/eval/planted-claims-v1.json` | running: 175/175 planted false claims kept off air (127 recorded, 16 on phantom low-confidence detections, all held by the confidence gate, 32 with viewer text spliced in); 7/121 true claims wrongly stopped, all by the recorded Judge. Judge answers are those recorded from `ninety-judge:1` at `9be98bd`; the gate threshold (0.5) is a design value until detector calibration is measured |
 | Fact-checker catch rate on planted false claims, and true claims wrongly rejected, on the published Judge | `uv run python -m ninety.eval.factcheck_eval --seeds 21,33 --foundry`; nightly in `.github/workflows/evals.yml`, recorded in Foundry | `docs/eval/fact-checker.md` | running: held-out seeds 21,33, `ninety-judge:1` at commit `9be98bd`: 136/136 false claims caught (code alone 32/136); 7/105 true claims wrongly rejected excluding service holds (17/115 including them); 19 of 251 Judge calls failed and were held back (fail closed), more than earlier runs, not yet investigated |
@@ -406,6 +408,46 @@ played into touch with nobody near the passer (FS2), and chasers who run past or
 loose ball (FS1). FS3, FS5 and FS8 found nothing: the engine rarely plays a through ball a keeper
 could reach first, and players do not clump within 10 m of the ball. A clump in a line, like
 the one in the owner's review clip, is wider than FS5's circle; FS4 and FS9 are where it shows.
+
+## Personalizer
+
+The Personalizer (`ninety/personalizer`) rewrites one claim the fact-checker already verified for
+each viewer profile: analyst, casual, club and player focus, in English and Spanish. The model only
+words it; code decides what airs.
+
+- **The re-check.** Every variant is checked by the fact-checker's code half (`factcheck.check`)
+  against the verified claim's own evidence, and must still contain every number (as a count, so a
+  repeated number cannot be lost) and every player id of the verified claim. A variant that fails,
+  or is missing, is replaced by the verified English text for that profile. The client re-checks
+  whatever the server returns, so a server that skipped its check still cannot air a changed number.
+  The server reports why it replaced a variant; those reasons reach the trace and the evaluation,
+  never the decision of what airs.
+- **The fallback.** The remote has `BUDGET_S` = 3 s (a design choice: a little over a third of the
+  8 s p95 target from event to verified graphic in PLAN.md, to be revisited when
+  `latency-cost.md` measures the split). On a timeout, a 5xx or a refused connection the in-process
+  fallback answers with the verified text at once. A 4xx or a malformed reply is a defect between
+  our own two programs and raises, so it is seen rather than hidden.
+- **Viewer input.** A profile is rebuilt with `Profile` on the server, whose every field is an
+  allow-list; any other value, or an extra field, is refused with an A2A invalid-params error before
+  the model is called. The model sees the profile only as a JSON field.
+
+What the re-check cannot see, so a reader of any number above knows its limits:
+
+- Two numbers of the claim swapped with each other (32.5 m and 12 m traded between two passes):
+  both still appear, and both are cited.
+- A verb that misstates a pass in Spanish. The fact-checker's role check reads English verbs
+  ("finds"); "encuentra a" is not read, so a Spanish variant relies on the model and on the player
+  ids being kept.
+- A Spanish variant left in English. It is faithful, so it airs.
+
+**Mutation run** (lesson 8), each rule broken in turn against `tests/test_personalizer.py` and
+`tests/test_factcheck.py`: all 18 killed. Re-check: no fact-check of the variant, no number survival,
+number survival as a set rather than a count, no player survival, no length cap, a dropped variant
+still airing, the audio persona rewritten. Client: trusting the server's variants, ignoring which
+persona a reply is for, falling back on any error, treating a 4xx as a 5xx, no 5xx rule, no
+refused rule, no deadline, waiting for the cancelled call to unwind. Server: profiles not
+validated, extra profile fields allowed. Fact-checker: ordinals not read as numbers (lesson 95).
+The length-cap mutant survived the first run; its test was added after.
 
 ## Rules
 

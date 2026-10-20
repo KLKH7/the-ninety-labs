@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<title>The Ninety Labs</title>
+<meta name="description" content="AI that watches a synthetic football broadcast, logs every event, and describes it to every fan, including the ones who can't see it. What runs today, with the evidence for every number.">
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="top">
+  <div class="wrap top-row">
+    <p class="brand">The Ninety Labs</p>
+    <nav aria-label="Sections">
+      <ul>
+        <li><a href="#stages">Stages</a></li>
+        <li><a href="#results">Results</a></li>
+        <li><a href="#architecture">Architecture</a></li>
+        <li><a href="#stack">Microsoft stack</a></li>
+        <li><a href="#run">Run it</a></li>
+      </ul>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+<section class="hero" aria-labelledby="title">
+  <div class="wrap hero-grid">
+    <div>
+      <h1 id="title">AI that watches the match, logs every event, and describes it to every fan, including the ones who can't see it.</h1>
+      <p class="lede">An entry for the Microsoft x Premier League <em>Inside the Game</em> developer hackathon
+        (<em>The Synthetic Match Insights Engine for Premier League Studio</em>). We start one step earlier
+        than an event feed: from video. A detector watches a synthetic broadcast, a team of agents explains
+        what happened, a fact-checking agent rejects any claim the data does not support, and the result
+        is drawn back onto the footage for each kind of fan.</p>
+      <p class="note">Every club, player, kit and match here is synthetic, made by our own match engine and
+        renderer. This page describes what runs today; anything not built is marked
+        <span class="tag planned">planned</span> or <span class="tag progress">in progress</span>, and every
+        number links to the report it comes from.</p>
+      <p class="cta"><a class="button" href="https://github.com/KLKH7/the-ninety-labs">Source on GitHub</a>
+        <a class="button ghost" href="#run">Run it locally</a></p>
+    </div>
+    <figure class="still">
+      <div class="frame">
+        <img src="stills/seed7-1970.jpg" width="1280" height="720"
+             alt="A frame of our synthetic broadcast: a high side-on camera over a striped pitch, players in white and in dark blue kits spread around the centre circle, the ball in the right half, synthetic advertising boards along the stand and a score bug reading OAK 1, FEN 0.">
+        <img class="overlay" src="stills/seed7-1970-truth.svg" width="1280" height="720" alt="">
+      </div>
+      <figcaption>One frame rendered by our engine (<code>ninety-render --seed 7</code>, frame <code>1970</code>).
+        The boxes are the ground-truth labels the renderer writes for every visible player and the ball:
+        the answer key the detector is graded against. Nothing on the live path reads them.
+        <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/web/site/stills/provenance.json">How this still was made</a>.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section id="stages" class="band" aria-labelledby="stages-h">
+  <div class="wrap">
+    <h2 id="stages-h">The five stages, as they run today</h2>
+    <p class="section-lede">The brief asks for five stages. Each card says what runs on <code>main</code> now, with the
+      file that proves it, and what is not built yet.</p>
+
+    <ol class="stages">
+      <li class="stage" aria-labelledby="s-ingest">
+        <h3 id="s-ingest"><span class="step">Ingest</span> Automatic event detection</h3>
+        <p class="status"><span class="tag progress">in progress</span></p>
+        <p class="label">Runs today</p>
+        <ul>
+          <li>RF-DETR Small, fine-tuned only on our renders, finds players and the ball on a frozen test set of
+            <data value="1250" data-src="docs/eval/vision-report-v2.json" data-key="frames_scored" data-fmt="int">1,250</data>
+            frames from footage it never trained on. Player recall
+            <data value="0.994" data-src="docs/eval/vision-report-v2.json" data-key="by_class.player.recall" data-fmt="3">0.994</data>.
+            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/vision-report-v2.md">Vision report</a></li>
+          <li>The live path loads detected events only and refuses ground truth; a test fails if it ever opens the answer key.
+            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/tests/test_live_reads_no_truth.py">Test</a></li>
+        </ul>
+        <p class="label">Not yet</p>
+        <ul>
+          <li><span class="tag planned">planned</span> Events detected from the pixels (tracking, camera-to-pitch mapping,
+            possession and event rules). Until then the live path reads a hand-written stand-in and names it as one,
+            so there is no event-level precision or recall yet.</li>
+        </ul>
+      </li>
+
+      <li class="stage" aria-labelledby="s-interpret">
+        <h3 id="s-interpret"><span class="step">Interpret</span> A stats engine where code computes every number</h3>
+        <p class="status"><span class="tag running">running</span></p>
+        <p class="label">Runs today</p>
+        <ul>
+          <li>A deterministic stats engine turns events and tracking into pass, shot, possession, pressure and movement
+            facts, each citing the event ids or frame range it rests on.
+            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/ninety/intel/stats.py">Code</a>,
+            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/tests/test_stats.py">tests</a></li>
+        </ul>
+        <p class="label">Not yet</p>
+        <ul>
+          <li><span class="tag progress">in progress</span> Pressing, territory and tempo windows (open pull request).</li>
+          <li><span class="tag planned">planned</span> Pass difficulty and expected goals.</li>
+        </ul>
+      </li>
+
+      <li class="stage" aria-labelledby="s-explain">
+        <h3 id="s-explain"><span class="step">Explain</span> Agents, and a fact-checker that can say no</h3>
+        <p class="status"><span class="tag running">running</span></p>
+        <p class="label">Runs today</p>
+        <ul>
+          <li>An Analyst agent on Microsoft Foundry reads the match over our MCP server and drafts a claim. The
+            fact-checking agent (code checks, then a Judge agent) rejects what the data does not support and sends it back.
+            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/ninety/agents/factcheck.py">Code checks</a>,
+            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/ninety/agents/judge.py">Judge</a></li>
+          <li>It caught
+            <data value="136" data-src="docs/eval/fact-checker.json" data-key="false_caught_with_judge" data-fmt="int">136</data> of
+            <data value="136" data-src="docs/eval/fact-checker.json" data-key="false_claims" data-fmt="int">136</data>
+            planted false claims.
+            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/fact-checker.md">Evaluation</a></li>
+          <li>A claim resting on a low-confidence detection is held back.
+            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/tests/test_confidence_gate.py">Test</a></li>
+        </ul>
+        <p class="label">Not yet</p>
+        <ul>
+          <li><span class="tag progress">in progress</span> The multi-agent workflow with a Producer and handoffs (open pull request).</li>
+          <li><span class="tag planned">planned</span> A Tactician agent, and the ablation and failure tables.</li>
+        </ul>
+      </li>
+
+      <li class="stage" aria-labelledby="s-render">
+        <h3 id="s-render"><span class="step">Render</span> Graphics drawn on the footage</h3>
+        <p class="status"><span class="tag local">running locally</span></p>
+        <p class="label">Runs today</p>
+        <ul>
+          <li><code>ninety-e2e</code> runs one clip through the chain with no Azure and writes a bundle; the viewer draws the
+            overlay cues and detections on the footage, with the fact-checked insight and the agent trace.
+            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/ninety/e2e.py">Chain</a>,
+            <a href="https://github.com/KLKH7/the-ninety-labs/tree/main/web/viewer">viewer</a>,
+            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/tests/test_viewer.py">tests</a></li>
+        </ul>
+        <p class="label">Not yet</p>
+        <ul>
+          <li><span class="tag planned">planned</span> The viewer deployed as a public demo.</li>
+          <li><span class="tag planned">planned</span> Live name tags and speed badges on players.</li>
+        </ul>
+      </li>
+
+      <li class="stage" aria-labelledby="s-personalize">
+        <h3 id="s-personalize"><span class="step">Personalize</span> One match, every kind of fan</h3>
+        <p class="status"><span class="tag progress">in progress</span></p>
+        <p class="label">Runs today</p>
+        <ul>
+          <li>Analyst and casual versions of every graphic, switched from the keyboard in the viewer.
+            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/ninety/agents/cues.py">Cues</a></li>
+          <li>Speech from Azure AI Speech neural voices.
+            <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/ninety/speech/tts.py">Code</a></li>
+        </ul>
+        <p class="label">Not yet</p>
+        <ul>
+          <li><span class="tag progress">in progress</span> Audio description for blind and low-vision fans, spoken as play happens (open pull request).</li>
+          <li><span class="tag progress">in progress</span> A Personalizer agent over <abbr title="Agent2Agent protocol">A2A</abbr>, with Spanish variants, each re-checked (open pull request).</li>
+          <li><span class="tag planned">planned</span> Player cam and a single-metric view.</li>
+        </ul>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<section id="results" aria-labelledby="results-h">
+  <div class="wrap">
+    <h2 id="results-h">Measured results</h2>
+    <p class="section-lede">Each number is read from a committed report; a test fails if this page and the report disagree.
+      How each is measured: <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/EVALUATION.md">EVALUATION.md</a>.</p>
+
+    <h3>Detection on the frozen test set</h3>
+    <div class="table-wrap" role="region" aria-labelledby="vision-cap" tabindex="0">
+      <table>
+        <caption id="vision-cap">Detector <code>ours-v3</code> on footage it never saw, from
+          <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/vision-report-v2.md">vision report</a>
+          (<a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/vision-report-v2.json">data</a>)</caption>
+        <thead>
+          <tr><th scope="col">What</th><th scope="col">Recall</th><th scope="col">Precision</th><th scope="col">Found</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">Players</th>
+            <td><data value="0.994" data-src="docs/eval/vision-report-v2.json" data-key="by_class.player.recall" data-fmt="3">0.994</data></td>
+            <td><data value="0.999" data-src="docs/eval/vision-report-v2.json" data-key="by_class.player.precision" data-fmt="3">0.999</data></td>
+            <td><data value="9556" data-src="docs/eval/vision-report-v2.json" data-key="by_class.player.tp" data-fmt="int">9,556</data> of
+              <data value="9610" data-src="docs/eval/vision-report-v2.json" data-key="by_class.player.tp+fn" data-fmt="int">9,610</data></td>
+          </tr>
+          <tr>
+            <th scope="row">Ball, at least half visible</th>
+            <td><data value="0.964" data-src="docs/eval/vision-report-v2.json" data-key="ball_at_least_half_visible.recall" data-fmt="3">0.964</data></td>
+            <td><data value="0.994" data-src="docs/eval/vision-report-v2.json" data-key="ball_at_least_half_visible.precision" data-fmt="3">0.994</data></td>
+            <td><data value="1024" data-src="docs/eval/vision-report-v2.json" data-key="ball_at_least_half_visible.tp" data-fmt="int">1,024</data> of
+              <data value="1062" data-src="docs/eval/vision-report-v2.json" data-key="ball_at_least_half_visible.tp+fn" data-fmt="int">1,062</data></td>
+          </tr>
+          <tr>
+            <th scope="row">Players, mostly hidden</th>
+            <td><data value="0.893" data-src="docs/eval/vision-report-v2.json" data-key="visibility.player.mostly hidden.recall" data-fmt="3">0.893</data></td>
+            <td><data value="0.985" data-src="docs/eval/vision-report-v2.json" data-key="visibility.player.mostly hidden.precision" data-fmt="3">0.985</data></td>
+            <td><data value="67" data-src="docs/eval/vision-report-v2.json" data-key="visibility.player.mostly hidden.tp" data-fmt="int">67</data> of
+              <data value="75" data-src="docs/eval/vision-report-v2.json" data-key="visibility.player.mostly hidden.tp+fn" data-fmt="int">75</data></td>
+          </tr>
+          <tr>
+            <th scope="row">Ball, mostly hidden: our known weakness</th>
+            <td><data value="0.493" data-src="docs/eval/vision-report-v2.json" data-key="visibility.ball.mostly hidden.recall" data-fmt="3">0.493</data></td>
+            <td><data value="0.841" data-src="docs/eval/vision-report-v2.json" data-key="visibility.ball.mostly hidden.precision" data-fmt="3">0.841</data></td>
+            <td><data value="37" data-src="docs/eval/vision-report-v2.json" data-key="visibility.ball.mostly hidden.tp" data-fmt="int">37</data> of
+              <data value="75" data-src="docs/eval/vision-report-v2.json" data-key="visibility.ball.mostly hidden.tp+fn" data-fmt="int">75</data></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Retraining on footage from the test set's own engine cut false detections from
+      <data value="121" data-src="docs/eval/vision-report-v1.json" data-key="overall.fp" data-fmt="int">121</data> to
+      <data value="27" data-src="docs/eval/vision-report-v2.json" data-key="overall.fp" data-fmt="int">27</data>
+      (<a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/vision-report-v1.md">before</a>,
+      <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/vision-report-v2.md">after</a>). Where the ball is
+      in shot but fully hidden, a phantom ball now appears in
+      <data value="1" data-src="docs/eval/vision-report-v2.json" data-key="hidden_ball_frames.with_a_ball_detection" data-fmt="int">1</data> of
+      <data value="113" data-src="docs/eval/vision-report-v2.json" data-key="hidden_ball_frames.hidden_balls" data-fmt="int">113</data> frames, down from
+      <data value="45" data-src="docs/eval/vision-report-v1.json" data-key="hidden_ball_frames.with_a_ball_detection" data-fmt="int">45</data>.
+      Several things changed between the two models at once, so the report credits the whole change, not one cause.
+      This was a matched-engine retrain, not yet a round of targeted synthetic data aimed at a failure:
+      <span class="tag planned">planned</span></p>
+
+    <h3>The fact-checking agent</h3>
+    <div class="table-wrap" role="region" aria-labelledby="fc-cap" tabindex="0">
+      <table>
+        <caption id="fc-cap">Claims whose truth is known, each citing the event it describes, from the
+          <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/fact-checker.md">fact-checker evaluation</a>
+          (<a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/eval/fact-checker.json">data</a>)</caption>
+        <thead>
+          <tr><th scope="col">What</th><th scope="col">Code checks alone</th><th scope="col">Code checks and Judge</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">Planted false claims caught</th>
+            <td><data value="32" data-src="docs/eval/fact-checker.json" data-key="false_caught_code" data-fmt="int">32</data> of
+              <data value="136" data-src="docs/eval/fact-checker.json" data-key="false_claims" data-fmt="int">136</data></td>
+            <td><data value="136" data-src="docs/eval/fact-checker.json" data-key="false_caught_with_judge" data-fmt="int">136</data> of
+              <data value="136" data-src="docs/eval/fact-checker.json" data-key="false_claims" data-fmt="int">136</data></td>
+          </tr>
+          <tr>
+            <th scope="row">True claims wrongly rejected, leaving out claims held back when the Judge service failed</th>
+            <td><data value="0" data-src="docs/eval/fact-checker.json" data-key="true_rejected_code" data-fmt="int">0</data> of
+              <data value="115" data-src="docs/eval/fact-checker.json" data-key="true_claims" data-fmt="int">115</data></td>
+            <td><data value="7" data-src="docs/eval/fact-checker.json" data-key="true_rejected_with_judge_excluding_service" data-fmt="int">7</data> of
+              <data value="105" data-src="docs/eval/fact-checker.json" data-key="true_claims_excluding_service" data-fmt="int">105</data></td>
+          </tr>
+          <tr>
+            <th scope="row">True claims held back or rejected, counting service failures</th>
+            <td><data value="0" data-src="docs/eval/fact-checker.json" data-key="true_rejected_code" data-fmt="int">0</data> of
+              <data value="115" data-src="docs/eval/fact-checker.json" data-key="true_claims" data-fmt="int">115</data></td>
+            <td><data value="17" data-src="docs/eval/fact-checker.json" data-key="true_rejected_with_judge" data-fmt="int">17</data> of
+              <data value="115" data-src="docs/eval/fact-checker.json" data-key="true_claims" data-fmt="int">115</data></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Code checks catch wrong numbers, players and clocks. The Judge catches what code cannot: invented
+      intent or blame, a missed shot called a goal, and instructions smuggled into a claim. Its cost is caution:
+      it sometimes rejects a true claim that adds a word the data cannot support, and the claim is then held, never aired wrong.
+      Not measured yet: <span class="tag planned">planned</span> events detected from pixels, the ablation, and latency.</p>
+  </div>
+</section>
+
+<section id="architecture" class="band" aria-labelledby="arch-h">
+  <div class="wrap">
+    <h2 id="arch-h">Architecture</h2>
+    <figure class="diagram" tabindex="0" aria-label="Architecture diagram, scrolls sideways on narrow screens">
+      <svg viewBox="0 0 960 300" role="img" aria-labelledby="arch-title arch-desc">
+        <title id="arch-title">How The Ninety Labs fits together</title>
+        <desc id="arch-desc">Our match engine plays the football and writes ground truth. The renderer turns it into
+          broadcast video. Video flows through Ingest, Interpret, Explain, Render and Personalize. Ground truth goes
+          only to grading, which scores Ingest and decides which synthetic scenes to render next.</desc>
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" class="arrowhead"/>
+          </marker>
+        </defs>
+        <g class="node sim">
+          <rect x="10" y="30" width="160" height="70" rx="10"/>
+          <text x="90" y="60">Match engine</text>
+          <text x="90" y="82" class="sub">and broadcast renderer</text>
+        </g>
+        <g class="node">
+          <rect x="210" y="30" width="130" height="70" rx="10"/>
+          <text x="275" y="60">Ingest</text>
+          <text x="275" y="82" class="sub">detection</text>
+        </g>
+        <g class="node">
+          <rect x="360" y="30" width="130" height="70" rx="10"/>
+          <text x="425" y="60">Interpret</text>
+          <text x="425" y="82" class="sub">stats engine</text>
+        </g>
+        <g class="node">
+          <rect x="510" y="30" width="130" height="70" rx="10"/>
+          <text x="575" y="60">Explain</text>
+          <text x="575" y="82" class="sub">agents, fact-check</text>
+        </g>
+        <g class="node">
+          <rect x="660" y="30" width="130" height="70" rx="10"/>
+          <text x="725" y="60">Render</text>
+          <text x="725" y="82" class="sub">graphics on video</text>
+        </g>
+        <g class="node">
+          <rect x="810" y="30" width="140" height="70" rx="10"/>
+          <text x="880" y="60">Personalize</text>
+          <text x="880" y="82" class="sub">personas, speech</text>
+        </g>
+        <g class="edge">
+          <line x1="170" y1="65" x2="208" y2="65" marker-end="url(#arrow)"/>
+          <line x1="340" y1="65" x2="358" y2="65" marker-end="url(#arrow)"/>
+          <line x1="490" y1="65" x2="508" y2="65" marker-end="url(#arrow)"/>
+          <line x1="640" y1="65" x2="658" y2="65" marker-end="url(#arrow)"/>
+          <line x1="790" y1="65" x2="808" y2="65" marker-end="url(#arrow)"/>
+        </g>
+        <g class="node truth">
+          <rect x="10" y="190" width="160" height="70" rx="10"/>
+          <text x="90" y="220">Ground truth</text>
+          <text x="90" y="242" class="sub">the answer key</text>
+        </g>
+        <g class="node truth">
+          <rect x="210" y="190" width="280" height="70" rx="10"/>
+          <text x="350" y="220">Grading</text>
+          <text x="350" y="242" class="sub">precision and recall, failure clusters</text>
+        </g>
+        <g class="edge dashed">
+          <line x1="90" y1="100" x2="90" y2="188" marker-end="url(#arrow)"/>
+          <line x1="170" y1="225" x2="208" y2="225" marker-end="url(#arrow)"/>
+          <line x1="275" y1="102" x2="275" y2="188" marker-end="url(#arrow)"/>
+          <line x1="235" y1="188" x2="150" y2="102" marker-end="url(#arrow)"/>
+        </g>
+        <text x="560" y="210" class="sub left">Dashed: the grading loop. Ground truth never</text>
+        <text x="560" y="232" class="sub left">reaches the live path; a test enforces it.</text>
+        <text x="560" y="254" class="sub left">Failures decide which scenes to render next.</text>
+      </svg>
+    </figure>
+    <ul class="rules">
+      <li><strong>Code computes every number; models only explain.</strong> Agents read typed facts with their evidence, never raw
+        viewer text as instructions, and the fact-checking agent gates what reaches the screen.</li>
+      <li><strong>One football engine.</strong> Players decide, physics happens, the referee observes. Whatever makes the video
+        also writes the truth, so there are no generative video models.
+        <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/ENGINE.md">ENGINE.md</a></li>
+      <li><strong>Ground-truth data meets a contract.</strong> Every clip passes a validator and render checks in CI.
+        <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/DATA_CONTRACT.md">DATA_CONTRACT.md</a></li>
+      <li><strong>Football is grounded, not remembered.</strong> Every engine rule cites a Law of the Game, a study or a published statistic.
+        <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/GROUNDING.md">GROUNDING.md</a></li>
+    </ul>
+    <p>Full design, agent roles and deployment:
+      <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/ARCHITECTURE.md">ARCHITECTURE.md</a>. Every
+      requirement of the brief and its status:
+      <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/CHALLENGE_MAP.md">CHALLENGE_MAP.md</a>.</p>
+  </div>
+</section>
+
+<section id="stack" aria-labelledby="stack-h">
+  <div class="wrap">
+    <h2 id="stack-h">Microsoft and Azure technologies</h2>
+    <div class="table-wrap" role="region" aria-labelledby="stack-cap" tabindex="0">
+      <table>
+        <caption id="stack-cap">What each service does here, its status, and where it is in the repo</caption>
+        <thead>
+          <tr><th scope="col">Technology</th><th scope="col">What it does here</th><th scope="col">Status</th><th scope="col">Evidence</th></tr>
+        </thead>
+        <tbody>
+          <tr><th scope="row">Microsoft Foundry</th>
+            <td>Hosts the Analyst and Judge as versioned prompt agents, each with a content-safety guardrail (default filters plus Prompt Shields); runs the fact-checker evaluation; traces every claim</td>
+            <td><span class="tag running">running</span></td>
+            <td><a href="https://github.com/KLKH7/the-ninety-labs/blob/main/ninety/agents/foundry_agents.json">Pinned agent versions</a></td></tr>
+          <tr><th scope="row">Microsoft Agent Framework</th>
+            <td>The workflow around the agents: drafts, verdicts, rewrites and handoffs</td>
+            <td><span class="tag running">running</span></td>
+            <td><a href="https://github.com/KLKH7/the-ninety-labs/blob/main/ninety/agents/slice.py">Workflow</a></td></tr>
+          <tr><th scope="row">Model Context Protocol</th>
+            <td>A read-only match server Foundry calls at <code>/mcp</code> on our API, with a key held in Key Vault</td>
+            <td><span class="tag running">running</span></td>
+            <td><a href="https://github.com/KLKH7/the-ninety-labs/blob/main/ninety/mcp/match_server.py">MCP server</a></td></tr>
+          <tr><th scope="row">Azure AI Speech</th>
+            <td>Neural voices with SSML for spoken descriptions</td>
+            <td><span class="tag running">running</span></td>
+            <td><a href="https://github.com/KLKH7/the-ninety-labs/blob/main/ninety/speech/tts.py">Speech</a></td></tr>
+          <tr><th scope="row">Azure Container Apps</th>
+            <td>The API (deployed on every green <code>main</code>) and an event-driven render job that makes targeted synthetic data</td>
+            <td><span class="tag running">running</span></td>
+            <td><a href="https://github.com/KLKH7/the-ninety-labs/blob/main/infra/main.bicep">Bicep</a></td></tr>
+          <tr><th scope="row">Azure Storage, Key Vault, managed identity</th>
+            <td>Render clips in Blob Storage with ground truth sealed in its own container; render requests on a queue; no keys in the repo</td>
+            <td><span class="tag running">running</span></td>
+            <td><a href="https://github.com/KLKH7/the-ninety-labs/blob/main/infra/check_truth_sealed.py">Sealed-truth check</a></td></tr>
+          <tr><th scope="row">Application Insights</th>
+            <td>OpenTelemetry traces from the agents</td>
+            <td><span class="tag running">running</span></td>
+            <td><a href="https://github.com/KLKH7/the-ninety-labs/blob/main/ninety/agents/telemetry.py">Telemetry</a></td></tr>
+          <tr><th scope="row">Bicep, <code>azd</code>, GitHub Actions</th>
+            <td>Infrastructure as code; deploys sign in with OIDC, no stored secrets</td>
+            <td><span class="tag running">running</span></td>
+            <td><a href="https://github.com/KLKH7/the-ninety-labs/tree/main/infra">infra</a></td></tr>
+          <tr><th scope="row">Azure Cosmos DB</th>
+            <td>The shared ledger every agent reads (in memory today, behind the same interface)</td>
+            <td><span class="tag planned">planned</span></td>
+            <td><a href="https://github.com/KLKH7/the-ninety-labs/blob/main/ninety/agents/ledger.py">Ledger</a></td></tr>
+          <tr><th scope="row">Azure AI Translator</th>
+            <td>More languages for the graphics and speech</td>
+            <td><span class="tag planned">planned</span></td>
+            <td><a href="https://github.com/KLKH7/the-ninety-labs/blob/main/docs/CHALLENGE_MAP.md">Challenge map</a></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section id="run" class="band" aria-labelledby="run-h">
+  <div class="wrap">
+    <h2 id="run-h">Run it yourself</h2>
+    <p class="section-lede">One clip through the whole chain on a laptop, with no Azure account: the models are offline
+      (a deterministic Analyst and the code checks), and the viewer opens the bundle it writes.
+      Needs <code>uv</code>, Node and Chromium via Playwright.</p>
+<pre><code>uv sync
+npm ci --prefix web &amp;&amp; uv run playwright install chromium
+uv run ninety-dataset --split test --out runs/test-frozen
+uv run ninety-e2e runs/test-frozen/test/seed900001 --out runs/e2e/seed900001 --plant
+npm ci --prefix web/viewer
+NINETY_BUNDLE=runs/e2e/seed900001 npm run dev --prefix web/viewer</code></pre>
+    <p><code>--plant</code> puts a false number in the Analyst's first draft, so the agent trace in the viewer shows the
+      rejection and the rewrite. Detections default to the committed run of the previous detector,
+      <code>ours-v2</code>, on the test set, so no GPU is needed; rendering the test clips in software GL is slow but exact. Keyboard:
+      <kbd>Space</kbd> plays, the arrow keys step, <kbd>D</kbd> toggles detections, and the persona switch is a radio group.
+      To see the Foundry agents' own answers without our Azure project, replay a recorded run:</p>
+<pre><code>uv run ninety-slice --replay replays/slice-minute2-plant.json</code></pre>
+    <p>More: <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/README.md">README</a>,
+      <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/web/README.md">viewer guide</a>.
+      Public demo link: <span class="tag planned">planned</span></p>
+  </div>
+</section>
+
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p>The Ninety Labs. MIT licensed. All clubs, players, kits and matches are synthetic; no real match data or footage is used.
+      Not affiliated with the Premier League. Submission due <time datetime="2026-10-27">October 27, 2026</time>.</p>
+    <p>This page loads no scripts, fonts or trackers.
+      <a href="https://github.com/KLKH7/the-ninety-labs/blob/main/web/site/README.md">About this page</a></p>
+  </div>
+</footer>
+</body>
+</html>
