@@ -332,9 +332,13 @@ def test_a_misjudgement_is_held_until_he_scans_again(monkeypatch):
 
 def test_held_misjudgements_choose_as_the_weights_say(monkeypatch):
     # Gumbel-max: one draw per option chooses each option with the softmax's chance (choice_weights).
-    s = scene(x=80.0, mates=[("h9", 90.0, 30.0, 0.0), ("h7", 75.0, 50.0, 0.0)])
-    opts, w = _weights(s)
-    monkeypatch.setattr(D, "options", lambda _: opts)  # the same options every time, computed once
+    # Four options within the noise of each other, so the shape of the noise shows in every share.
+    s = scene(x=80.0)
+    opts = [D.Option("pass", 0.0100, (90.0, 30.0), "h9"), D.Option("pass", 0.0092, (75.0, 50.0), "h7"),
+            D.Option("dribble", 0.0085, (86.0, 34.0)), D.Option("hold", 0.0078)]
+    w = D.choice_weights(s, opts)
+    assert min(w) / sum(w) > 0.08  # all genuinely in contention
+    monkeypatch.setattr(D, "options", lambda _: opts)  # the same options every time
     rng = random.Random(11)
     n = 6000
     counts = Counter(opts.index(D.choose(s, rng, {})) for _ in range(n))
@@ -501,7 +505,7 @@ def test_under_pressure_holding_is_never_better_than_both_of_its_outcomes(monkey
     assert calm[0] > calm[1] > calm[2]
 
 
-def test_choice_randomness_is_relative_to_how_different_the_options_are():
+def test_a_good_decision_maker_usually_takes_the_best_option_in_midfield():
     rng = random.Random(4)
     s = scene(x=60.0, decisions=1.0, mates=[("h9", 75.0, 34.0, 0.0)])
     best = max(D.options(s), key=lambda o: o.value).kind
@@ -516,7 +520,7 @@ def test_the_passer_picks_the_pace_the_lane_needs():
     assert not tight.lofted and tight.pace > open_lane.pace
     assert D.launch_speed(20.0, 14.0) > D.launch_speed(20.0, 6.0)
 
-def test_options_closer_than_the_noise_floor_are_close_to_a_coin_flip():
+def test_options_closer_than_the_noise_scale_are_close_to_a_coin_flip():
     rng = random.Random(9)
     s = scene(x=60.0, decisions=1.0)
     opts = [D.Option("a", 0.0200), D.Option("b", 0.0201)]
@@ -925,3 +929,15 @@ def test_opponent_pressure_loosens_the_choice_unless_he_is_composed():
     assert D.pressure(pressed) > 0.5
     assert _odds(pressed, better, worse) < _odds(free, better, worse)
     assert abs(_odds(calm, better, worse) - _odds(free, better, worse)) < 1e-9
+
+
+def test_a_habit_stays_a_close_call():
+    # D4, A5: a trait never more than doubles his odds of its option; it is not a command.
+    assert 1.2 < math.exp(D.HABIT_PULL) < 2.0
+
+
+def test_calibration_still_drives_the_real_choice():
+    # ninety.sim.calibration replaces D.choose; it must take the held misjudgement as choose does.
+    from ninety.sim import calibration
+    rows = calibration.measure(7, minutes=0.5)
+    assert rows and all(0.0 <= r[0] <= 1.0 for r in rows)

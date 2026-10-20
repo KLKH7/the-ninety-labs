@@ -484,6 +484,7 @@ class Engine:
             self.poss_team = self.team_of(pid)
         self.possessor = pid
         self.last_touch = pid
+        self.tastes.pop(pid, None)  # D4: a new possession is a new look at his options
         if pid != self.released_by:
             self.released_by = None
         self.new_phase()

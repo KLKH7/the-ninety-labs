@@ -1757,3 +1757,13 @@ def test_a_carriers_misjudgement_is_kept_until_he_scans_again(monkeypatch):
     e.beliefs[carrier.id].next_scan += 2.0  # he has scanned: a new look
     e.decide(carrier)
     assert seen[2] is not seen[0]
+
+
+def test_a_new_possession_is_a_new_look_at_his_options():
+    # D4: losing the ball and winning it back within one scan does not reuse his old misjudgement.
+    e = Engine(1)
+    carrier = e.by_id["h6"]
+    e.tastes[carrier.id] = (e.beliefs[carrier.id].next_scan, {("hold",): 3.0})
+    e.give("a6")
+    e.give(carrier.id)
+    assert carrier.id not in e.tastes
