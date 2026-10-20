@@ -88,7 +88,7 @@ def test_without_a_model_the_auditor_is_byte_identical_to_the_pre_registered_han
     old = PRE_AUDITOR.read_bytes()
     assert (json.dumps(untyped(typed), indent=2) + "\n").encode() == old
     assert (json.dumps(failure_handoff(round1_audit(), "round1"), indent=2) + "\n").encode() == old
-    from_old = data_agent.plan(json.loads(old), 80, 7101, "abc123")
+    from_old = data_agent.split(json.loads(old), 80, 7101, "abc123")
     assert (tmp_path / "requests.json").read_bytes() == (json.dumps(from_old, indent=2) + "\n").encode()
 
 
@@ -409,7 +409,7 @@ def test_the_data_agent_refuses_clips_that_are_not_its_split():
     tampered["clusters"][0]["clips"] += 1
     with pytest.raises(ValueError, match="splits as"):
         data_agent.plan(tampered, 80, 7101, "abc123")
-    with pytest.raises(ValueError, match="splits as"):
+    with pytest.raises(ValueError, match="budget of 80"):
         data_agent.plan(result, 81, 7101, "abc123")  # a different budget than the Auditor's
 
 
@@ -436,6 +436,23 @@ def tamper(change):
 def test_the_data_agent_checks_a_typed_handoff_on_receipt(change, error):
     with pytest.raises(error):
         data_agent.plan(tamper(change), 80, 7101, "abc123")
+
+
+def test_the_data_agent_refuses_a_handoff_without_the_typed_shape():
+    # The reviewer's case: `source` deleted, the keeper cluster set to crowded, test seeds planted.
+    def strip(h):
+        del h["source"]
+        h["clusters"][1]["render"] = {"occlusion": "crowded"}
+        h["first_seed"] = 900001
+    with pytest.raises(ValidationError):
+        data_agent.plan(tamper(strip), 80, 900001, "abc123")
+    with pytest.raises(ValidationError):  # the old untyped shape is not planned either
+        data_agent.plan(json.loads(PRE_AUDITOR.read_text()), 80, 7101, "abc123")
+
+
+def test_the_data_agent_refuses_a_handoff_split_for_another_budget():
+    with pytest.raises(ValueError, match="budget of 80, not 81"):
+        data_agent.plan(tamper(lambda h: None), 81, 7101, "abc123")
 
 
 def test_the_data_agent_refuses_a_hand_edited_test_seed_even_where_the_schema_allows_it(monkeypatch):

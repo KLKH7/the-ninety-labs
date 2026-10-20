@@ -31,9 +31,9 @@ the Vision Auditor is the one writer of `clusters.json`, in the typed shape
 that way from the same audit, with no model:
 
     uv run python -m ninety.agents.vision_auditor docs/eval/round1/audit.json --round round1 \
-        --budget 80 --first-seed 7101 --out docs/eval/round1 --commit <render commit>
+        --budget 80 --first-seed 7101 --out runs/round1 --commit <render commit>
 
-It holds the same clusters, misses, render settings and split as the file round 1 was rendered from
+Its `clusters.json` there is the committed one (the trace and requests stay in `runs/`). It holds the same clusters, misses, render settings and split as the file round 1 was rendered from
 (a test rebuilds it and compares).
 
 ours-v3 on its validation clips (1,200 frames at stride 5):

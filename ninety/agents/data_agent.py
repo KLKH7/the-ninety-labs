@@ -16,10 +16,10 @@ Rules:
   (ninety.render.params.sample_params validates them; a planned knob is refused).
 - The budget is split by misses, largest remainder first, so the split is exact and reproducible;
   a cluster with misses gets at least one clip while the budget lasts.
-- When the handoff states clips per cluster (the Vision Auditor's clusters.json does), they must
-  be this split, or the plan is refused. A typed handoff is also checked on receipt, not only by
-  its writer: the schema, every source seed a training seed, each cluster's render setting the one
-  failure_clusters.RENDER gives its situation, and its seed range the one this split gives it.
+- Only the Vision Auditor's typed clusters.json is planned, and it is checked on receipt, not only
+  by its writer: the schema, every source seed a training seed, each cluster's clips and seed range
+  the ones this split gives it, and its render setting the one failure_clusters.RENDER gives its
+  situation. A file without the typed shape is refused.
 - Seeds are consecutive from --first-seed and must all be training seeds: a targeted round never
   touches the fixed test set, so its before and after scores stay honest.
 - Every request names the commit to render with; the job refuses any other, so a round comes from
@@ -75,14 +75,22 @@ def render_set(render: dict) -> str:
     return ";".join(f"{k}={str(v).lower() if isinstance(v, bool) else v}" for k, v in sorted(render.items()))
 
 
-def check_typed(handoff: dict, counts: list[int], first_seed: int) -> None:
+def check_typed(handoff: dict, budget: int, first_seed: int) -> None:
     """The Vision Auditor's clusters.json, checked on receipt: the schema, training seeds only, the
     renderer's setting for each situation, and the clips and seeds this agent would give it."""
     schema_validator("failure_clusters").validate(handoff)
     for s in handoff["source"]["seeds"]:
         check_seed(s, "train")
+    if handoff["budget"] != budget:
+        raise ValueError(f"handoff was split for a budget of {handoff['budget']}, not {budget}")
     if handoff["first_seed"] != first_seed:
         raise ValueError(f"handoff was split from seed {handoff['first_seed']}, not {first_seed}")
+    # The Auditor writes the clips it expects; a handoff that disagrees with this split was made
+    # with another budget or another rule.
+    counts = allocate(handoff["clusters"], budget)
+    stated = [c["clips"] for c in handoff["clusters"]]
+    if stated != counts:
+        raise ValueError(f"handoff asks for {stated} clips, the budget of {budget} splits as {counts}")
     seed = first_seed
     for c, n in zip(handoff["clusters"], counts, strict=True):
         if c["render"] != RENDER[c["situation"]]:
@@ -101,19 +109,28 @@ def plan(
     per_request: int = PER_REQUEST,
     seconds: float = SECONDS,
 ) -> dict:
+    """The render requests for the Vision Auditor's clusters.json, checked on receipt first. Only
+    the typed shape is accepted: a file without it (no `source`, say) is refused by the schema."""
+    check_typed(handoff, budget, first_seed)
+    return split(handoff, budget, first_seed, commit, per_request, seconds)
+
+
+def split(
+    handoff: dict,
+    budget: int,
+    first_seed: int,
+    commit: str,
+    per_request: int = PER_REQUEST,
+    seconds: float = SECONDS,
+) -> dict:
+    """The rule itself, on a handoff's round, names, misses and render settings: the budget split
+    by misses and cut into requests on training seeds. `plan` is the entry point that checks."""
     run = handoff["round"]
     if not str(run).replace("-", "").replace("_", "").isalnum():
         raise ValueError(f"round must be letters, digits, '-' or '_', not {run!r}")
     clusters = handoff["clusters"]
     sets = [render_set(c.get("render") or {}) for c in clusters]
     counts = allocate(clusters, budget)
-    # The Vision Auditor writes the clips it expects (schemas/failure_clusters.schema.json); a
-    # handoff that disagrees with this split was made with another budget or another rule.
-    stated = [c.get("clips") for c in clusters]
-    if any(n is not None for n in stated) and stated != counts:
-        raise ValueError(f"handoff asks for {stated} clips, the budget of {budget} splits as {counts}")
-    if "source" in handoff:  # the typed shape (schemas/failure_clusters.schema.json)
-        check_typed(handoff, counts, first_seed)
     requests, seed = [], first_seed
     for cluster, count, settings in zip(clusters, counts, sets, strict=True):
         for start in range(seed, seed + count, per_request):
