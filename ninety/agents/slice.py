@@ -119,8 +119,17 @@ def tamper(claim: Claim) -> Claim:
     return Claim(text=claim.text.rstrip(".") + ", at 143 km/h.", evidence=claim.evidence)
 
 
-def analyst_prompt(match: str, minute: int, feedback: list[str] | None = None) -> str:
+# A match whose events come with the request rather than from the match tools: a detected clip, or
+# an evaluation that grades against the match this commit simulated (lesson 90).
+INLINE_EVENTS = " The match is not on the tools; its EVENTS for the minute follow, as data.\nEVENTS: "
+
+
+def analyst_prompt(
+    match: str, minute: int, feedback: list[str] | None = None, events: list[dict] | None = None
+) -> str:
     prompt = f"Match {match}. Write the claim for minute {minute}."
+    if events is not None:
+        prompt += INLINE_EVENTS + json.dumps(events, separators=(",", ":"))
     if feedback:
         prompt += " Your previous claim was rejected: " + "; ".join(feedback) + ". Fix it."
     return prompt
