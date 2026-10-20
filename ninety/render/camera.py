@@ -205,16 +205,23 @@ class Director:
         self._cut_kind = ""  # "", "L", "R", "netL", "netR", "tight", or "reverse". Empty is the gantry.
         self.net: dict | None = None  # the goal the mesh and the low angle are still showing
         self._ball_v = (0.0, 0.0)
+        self._open_until = -1.0  # the restart's own shot after a cut (open_on_restart)
 
     def cut(self) -> None:
-        """The edit cuts away from a dead ball to its restart (edit.py): the next frame is a new
-        shot on the gantry, framed on the ball where it is then, with no pan carried over and no
-        second angle or goal net held across the cut."""
+        """The edit cuts away from a dead ball to its restart (edit.py): no pan, second angle or goal
+        net is carried across the cut, and the camera frames the ball afresh where it is then."""
         self.aim = None
         self.prev_ball = None
         self._cut_kind = ""
         self._cut_until = -1.0
         self.net = None
+        self._open_until = -1.0
+
+    def open_on_restart(self) -> None:
+        """The first frame after a cut: the picture comes back on the restart with the tighter lens
+        beside the gantry, held CUT_HOLD_S, so the edit reads as a cut to another shot rather than
+        the players jumping about the same one (as a broadcast returns to a set piece)."""
+        self._open_until = self.t + CUT_HOLD_S
 
     def _goal(self, bx: float, by: float, vx: float, vy: float) -> tuple[float, float, float]:
         ax = bx + vx * self.p.lead_s
@@ -272,6 +279,10 @@ class Director:
         sy = self.p.shake_m * math.sin(2 * math.pi * 0.9 * self.t + self.shake_phase[1])
         target = (self.aim[0] + sx, self.aim[1] + sy, 0.0)
         self.angle = "main"
+        if self.t < self._open_until:
+            self.angle = "tight"
+            spot = (min(max(ball_x, 0.0), 105.0), min(max(ball_y, -1.0), 69.0), 0.5)
+            return self._framed(self._tight_pos(), spot, 9.0)
         if self.cuts:
             want = self._better(ball_x, ball_y, target)
             # The hold covers every angle, including the return to the gantry, so a ball

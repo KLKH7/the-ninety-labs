@@ -283,6 +283,7 @@ def render_clip(
         spin_axis = None
         rows = []
         index = 0
+        reopen = False
         for fi, draw in _plan(edit.segments(show)):
             if fi is None:
                 # A cut: the picture comes back on the restart. Bodies and the camera start afresh
@@ -290,7 +291,11 @@ def render_clip(
                 gaits = {lk.id: Gait() for lk in looks}
                 prev_xy, prev_cam = {}, None
                 director.cut()
+                reopen = True
                 continue
+            if draw and reopen:
+                director.open_on_restart()
+                reopen = False
             fr = frames[fi]
             advance_gaits(gaits, prev_xy, fr, 1 / FPS, frames[min(fi + LEAD_AHEAD_FRAMES, len(frames) - 1)])
             ball = drawn_ball(fr)
