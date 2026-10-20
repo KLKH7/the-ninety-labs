@@ -508,11 +508,26 @@ def test_the_keeper_term_is_how_much_goal_he_leaves_open():
     assert D.shot_estimate(104, 34, 105, [], (95.0, 60.0)) <= 1.0  # a probability, even into an empty net
 
 
-def test_the_keeper_stays_home_against_far_shots_and_comes_out_against_near_ones():
+def test_the_keeper_sets_himself_deeper_the_further_the_ball_and_smoothly():
+    # O1 (design): near his line against a near shot, where his reaction time is shortest, further
+    # out the further the ball, up to his sweeping spot at the edge of shooting range; coming out to
+    # an attacker through on goal is the rush, not his set position. The old choice (the depth that
+    # left the least goal open) jumped between the ends of the range: 6 m out at 8 m, 1 m at 12 m.
     depth = lambda d: 105 - offball.keeper_spot(105 - d, 34, 105)[0]  # noqa: E731
-    assert depth(20) < depth(6)  # his dive has time against a far shot; a near one he must smother
+    depths = [depth(d / 2) for d in range(8, 81)]  # 4 m to 40 m, every half metre
+    # never nearer his line as the ball goes further
+    assert all(b >= a for a, b in zip(depths, depths[1:], strict=False))
+    assert max(b - a for a, b in zip(depths, depths[1:], strict=False)) < 0.1  # no jump
     assert offball.KEEPER_DEPTH[0] <= depth(16) <= offball.KEEPER_DEPTH[1]
     assert depth(50) == offball.KEEPER_DEPTH[1]  # out of shooting range: he sweeps
+
+
+def test_the_keeper_never_sets_himself_outside_his_posts():
+    # On a tight angle the bisector leaves the goal mouth a few metres out (the old spot from 14 m
+    # wide and 8 m out was 10.7 m off the goal's centre); he stands within the posts.
+    for d in (4, 8, 12, 20, 30):
+        for y in (0.5, 10.0, 20.0, 28.0, 40.0, 58.0):
+            assert abs(offball.keeper_spot(105 - d, y, 105)[1] - 34) <= 3.66 + 1e-9, (d, y)
 
 
 def test_the_keeper_stands_on_the_bisector_of_the_posts_not_the_line_to_the_goal_centre():
@@ -537,7 +552,13 @@ def test_a_keeper_behind_the_shooter_covers_nothing():
 
 def test_with_the_ball_almost_on_his_line_the_keeper_stays_on_it_between_the_posts():
     x, y = offball.keeper_spot(104.5, 0.5, 105)
-    assert (x, y) == (105, 34 - 3.66)  # at the near post
+    assert x == pytest.approx(105, abs=0.1) and y == pytest.approx(34 - 3.66)  # at the near post
+    # Close enough that his depth would put him within the 2 m close-down of the ball: on his line,
+    # level with the ball, or at the post when it is wide of it.
+    assert offball.keeper_spot(104, 34, 105) == (105, 34)
+    assert offball.keeper_spot(102, 34, 105) == (105, 34)
+    assert offball.keeper_spot(104.5, 29.5, 105) == (105, 34 - 3.66)
+    assert offball.keeper_spot(104.5, 38.5, 105) == (105, 34 + 3.66)
 
 
 def test_out_of_shooting_range_the_keeper_sweeps_from_his_furthest_spot():
@@ -828,3 +849,61 @@ def test_the_passer_expects_a_dropping_ball_into_his_man_to_meet_the_thigh():
     assert near == pytest.approx(into, abs=0.02)
     # and as a thigh: well below what the same ball on the foot would be judged
     assert into < 0.5
+
+
+def test_an_unpressed_clearance_is_not_aimed_where_his_kick_error_puts_it_out():
+    # Alone in his own third by the touchline: the widest aim, 4 m from the line, goes out with
+    # part of his kick error and nobody can get to it (it once was the only aim, whatever happened).
+    s = scene(x=10.0, y=6.0)
+    clear = next(o for o in D.options(s) if o.kind == "clear")
+    assert min(clear.target[1], D.PITCH_Y - clear.target[1]) > 4.0
+    assert clear.value > D.clear_value(s, clear.target[0], 4.0, 0.5 * D.value(clear.target[0], 4.0, s.goal_x)
+                                       - 0.5 * D.loss_cost(clear.target[0], 4.0, s.goal_x))
+
+
+def test_a_clearance_that_goes_out_costs_their_throw_in_and_one_in_play_is_the_contest():
+    s = scene(x=10.0, y=6.0)
+    tx = s.x + D.CLEAR_AHEAD_M
+    on_line = D.clear_value(s, tx, 0.5, 1.0)  # aimed at the line: most strikes cross it
+    inside = D.clear_value(s, tx, 34.0, 1.0)  # aimed at the middle: every strike stays in
+    assert on_line < 0.6
+    assert abs(inside - 1.0) < 1e-12
+    assert D.clear_value(s, tx, 0.5, 0.0) < 0  # out of play, it is their ball: a cost
+
+
+def test_a_team_mate_who_can_get_there_keeps_a_wide_clearance_in_play():
+    # From the middle, aimed 4 m from the far touchline: most strikes land and roll out low after
+    # 4 to 5 s, unless somebody gets to them first; a team-mate standing near there does.
+    tx = 10.0 + D.CLEAR_AHEAD_M
+    alone = D.clear_value(scene(x=10.0, y=34.0), tx, 64.0, 1.0)
+    covered = D.clear_value(scene(x=10.0, y=34.0, mates=[("h7", 57.0, 65.0, 0.0)]), tx, 64.0, 1.0)
+    assert alone < 0.6 and covered > alone + 0.3
+
+
+def test_his_own_kick_error_is_what_puts_a_wide_clearance_out():
+    # The same aim, 4 m from the line: pressed (an opponent at his back, too far from where it lands
+    # to reach it) his kick error is wider, so more of it goes out.
+    tx = 10.0 + D.CLEAR_AHEAD_M
+    free = D.clear_value(scene(x=10.0, y=6.0), tx, 4.0, 1.0)
+    pressed = D.clear_value(scene(x=10.0, y=6.0, opponents=[(8.5, 6.0)]), tx, 4.0, 1.0)
+    assert pressed < free < 1.0
+
+
+def test_an_opponent_who_gets_there_first_also_keeps_it_in_play():
+    # In play it is the contest, whoever reaches it (design); out it is their restart.
+    tx = 10.0 + D.CLEAR_AHEAD_M
+    alone = D.clear_value(scene(x=10.0, y=34.0), tx, 64.0, 1.0)
+    theirs = D.clear_value(scene(x=10.0, y=34.0, opponents=[(57.0, 65.0)]), tx, 64.0, 1.0)
+    assert theirs > alone + 0.3
+
+
+def test_the_restart_given_away_follows_the_line_the_ball_crossed():
+    gx = 105.0  # he attacks x = 105
+    assert D.restart_cost(60.0, -0.2, gx) == D.loss_cost(60.0, 0.0, gx)  # their throw-in there
+    assert D.restart_cost(60.0, 68.2, gx) == D.loss_cost(60.0, 68.0, gx)
+    kick = D.loss_cost(105.0 - D.GOAL_KICK_M, 34.0, gx)  # their goal kick, from their goal area
+    assert D.restart_cost(105.2, 30.0, gx) == kick
+    assert D.restart_cost(-0.2, 10.0, gx) == D.loss_cost(0.0, 0.0, gx)  # their corner at our end
+    assert D.restart_cost(105.1, 68.3, gx) == D.loss_cost(105.0, 68.0, gx)  # further over the touchline
+    # mirrored for the side attacking x = 0
+    assert D.restart_cost(-0.2, 30.0, 0.0) == D.loss_cost(D.GOAL_KICK_M, 34.0, 0.0)

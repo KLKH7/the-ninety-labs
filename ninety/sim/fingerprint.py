@@ -9,28 +9,22 @@ from __future__ import annotations
 import math
 from statistics import median
 
-PITCH_X = 105.0
+from ninety.intel.windows import (
+    PITCH_X,
+    attacking_third_passes,
+    from_own_goal,
+    other,
+    own_goal_x,
+    ppda_events,
+)
+
 LONG_PASS_M = 32.0  # a long ball: about 35 yards, the common event-data definition (*verify*)
 FAST_ATTACK_S = 10.0  # a shot within this long of winning the ball counts as a fast attack (*design*)
-PPDA_ZONE = 0.6  # PPDA counts the opponents' passes in their own 60% of the pitch
-DEFENSIVE_ACTIONS = {"tackle", "interception"}
 SHOT_BANDS_M = (12.0, 20.0)  # close, middle, far
-
-
-def own_goal_x(team: str) -> float:
-    return 0.0 if team == "home" else PITCH_X
 
 
 def forward(team: str) -> float:
     return 1.0 if team == "home" else -1.0
-
-
-def other(team: str) -> str:
-    return "away" if team == "home" else "home"
-
-
-def from_own_goal(team: str, x: float) -> float:
-    return abs(x - own_goal_x(team))
 
 
 def team_fingerprint(team: str, events: list[dict], possession_frames: list[str | None],
@@ -40,10 +34,8 @@ def team_fingerprint(team: str, events: list[dict], possession_frames: list[str 
     opp = other(team)
     passes = [e for e in events if e["type"] == "pass" and e["team"] == team and e.get("end_x") is not None]
     # PPDA: their passes in their own 60% of the pitch, per defensive action of ours in that zone.
-    their_passes = sum(1 for e in events if e["type"] == "pass" and e["team"] == opp
-                       and from_own_goal(opp, e["x"]) <= PPDA_ZONE * PITCH_X)
-    actions = sum(1 for e in events if e["type"] in DEFENSIVE_ACTIONS and e["team"] == team
-                  and from_own_goal(opp, e["x"]) <= PPDA_ZONE * PITCH_X)
+    their, ours = ppda_events(team, events)
+    their_passes, actions = len(their), len(ours)
     regains = [e for e in events if e["type"] == "possession_change" and e["team"] == team]
     shots = [e for e in events if e["type"] == "shot" and e["team"] == team]
     goal_x = PITCH_X - own_goal_x(team)
@@ -55,9 +47,8 @@ def team_fingerprint(team: str, events: list[dict], possession_frames: list[str 
     on_ball = sum(1 for p in possession_frames if p == team)
     owned = sum(1 for p in possession_frames if p is not None)
     possession = on_ball / owned if owned else 0.0
-    attacking_third = [e for e in passes if from_own_goal(team, e["x"]) >= 2 * PITCH_X / 3]
-    their_attacking_third = sum(1 for e in events if e["type"] == "pass" and e["team"] == opp
-                                and from_own_goal(opp, e["x"]) >= 2 * PITCH_X / 3)
+    attacking_third = attacking_third_passes(team, passes)
+    their_attacking_third = len(attacking_third_passes(opp, events))
     tilt_total = len(attacking_third) + their_attacking_third
     return {
         "possession": possession,

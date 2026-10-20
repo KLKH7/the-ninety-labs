@@ -53,6 +53,12 @@ it waits for a reviewer's approval, signs in with OIDC, runs the task at the cho
 uploads the agent registry, `replays/`, `runs/eval/` and the commit as an artifact. It never
 pushes.
 
+Runs are grouped by `ref`: each branch has its own queue, so a dispatch from one branch never
+cancels another branch's run while it waits for approval (GitHub keeps one pending run per group).
+The trade-off: two branches can publish at the same time, and if both changed the same agent each
+creates a version. Each branch commits the registry its own run returned, and `pinned()` refuses
+to run an agent whose code differs from its pinned version, so nothing runs under the wrong one.
+
 One-time setup, by Kian:
 
 1. In the repo's Settings, Environments, create `agents-live` and add yourself as a required

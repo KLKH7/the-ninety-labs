@@ -155,3 +155,45 @@ def test_reduced_motion_is_on_when_the_system_asks(browser, site):
     page, _ = open_viewer(browser, site, reduced_motion="no-preference")
     assert not page.is_checked("#reduce-motion")
     assert not errors
+
+
+def narrator(page) -> dict:
+    return page.evaluate("({...window.ninetyNarrator.state})")
+
+
+def play_to(page, t: float) -> None:
+    page.keyboard.press("Space")
+    page.wait_for_function(f"document.querySelector('#overlay').dataset.t >= {t}")
+    page.keyboard.press("Space")
+
+
+def test_audio_description_speaks_each_line_once_in_time(browser, site):
+    page, errors = open_viewer(browser, site)
+    page.keyboard.press("3")
+    assert page.get_by_role("radio", name="Audio description").get_attribute("aria-checked") == "true"
+    assert page.is_visible("#voice-toggle") and page.is_checked("#voice")
+    assert "where the play is" in page.locator("#audio-note").inner_text()
+    # With the voice on, the live region is quiet: a screen reader does not say each line twice.
+    assert page.get_attribute("#on-air", "aria-live") == "off"
+    page.get_by_role("button", name="Watch it").click()  # seeks past the first line, to 60.7 s
+    page.keyboard.press("3")
+    play_to(page, 62.85)
+    # mutation: say every line whose start is behind the clock (no SEEK_S guard) -> ad-e1 is said late
+    assert narrator(page)["spoken"] == ["ad-insight-e2"]
+    assert "ad-insight-e2" in on_air(page)
+    assert "143" not in page.locator("#on-air").inner_text()  # the planted number is never on air
+    assert not errors
+
+
+def test_audio_description_is_silent_with_the_voice_off(browser, site):
+    page, errors = open_viewer(browser, site)
+    page.keyboard.press("3")
+    page.keyboard.press("v")
+    assert not page.is_checked("#voice")
+    assert page.get_attribute("#on-air", "aria-live") == "polite"
+    # mutation: ignore the voice switch in Narrator.update -> lines are said anyway
+    play_to(page, 62.85)
+    assert narrator(page)["spoken"] == []
+    page.keyboard.press("1")
+    assert not page.is_visible("#voice-toggle")
+    assert not errors

@@ -27,6 +27,7 @@ import json
 from pathlib import Path
 
 from ninety.vision.detections import SCORE_FLOOR, Detection, FrameDetections, write_detections
+from ninety.vision.frame_index import INDEX
 from ninety.vision.model import load, model
 
 FINETUNE_CONFIG = Path(__file__).with_name("finetune.json")
@@ -62,7 +63,15 @@ def trained_resolution(weights: str | None) -> int:
 
 
 def frame_rows(clip_dir: Path, stride: int = 1) -> list[dict]:
-    """The frame fields the live path may read: clip id, frame index, time, image path."""
+    """The frame fields the live path may read: clip id, frame index, time, image path.
+
+    With a labels-free index.jsonl beside the images (ninety.vision.frame_index), it is the only
+    file read, so detection can run on a machine that holds no answer key.
+    """
+    index = clip_dir / INDEX
+    if index.exists():
+        rows = [json.loads(line) for line in index.read_text().splitlines() if line.strip()]
+        return [{**r, "image": clip_dir / r["image"]} for i, r in enumerate(rows) if not i % stride]
     clip_id = json.loads((clip_dir / "clip.json").read_text())["clip_id"]
     rows = []
     with open(clip_dir / "frames.jsonl") as f:
