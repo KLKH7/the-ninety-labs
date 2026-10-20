@@ -222,6 +222,18 @@ short and actionable. This file is public: no research sources, product names or
     older than a day.
   - A port's audit names the branches whose lessons it read.
 
+### 95. A pattern that reads numbers must read every way a number is written
+- **What happened:** the fact-checker's number pattern refused a digit followed by a letter, so it
+  would not read "h7" as a number. That also skipped every English ordinal: "in the 9th minute"
+  passed for an event in minute 2, and "his 97th pass" passed with no such count in the evidence,
+  although the clock rule tells the agents to write minutes as ordinals. The minute pattern
+  already knew the "9th minute" form; it was never reached. Found by the Personalizer's tests,
+  when a planted "7th pass" in a variant aired.
+- **Rule:** a check that reads values out of text is tested on every form the writers are told
+  to use, and on the forms a translation or rewording produces, with a defect planted in each.
+- **Check:** `tests/test_factcheck.py::test_an_ordinal_minute_must_be_the_cited_minute` and
+  `test_an_ordinal_count_must_be_in_the_evidence` fail on the old pattern.
+
 ## Working in the repo
 
 ### 12. "No checks yet" is not "checks passed"
@@ -923,7 +935,74 @@ short and actionable. This file is public: no research sources, product names or
   tool on every kind of served match; the Dockerfile itself loads every served match after the
   precompute. Mutation-checked: removing `COPY schemas` fails the build at the precompute step.
 
-### 101. A total that matches can be two errors cancelling
+### 101. A drawn body moves the way its markers move, frame by frame
+- **What happened:** the skinned mesh was turned as one rigid object by the engine's heading. A
+  player turning on the spot spun on his base, both feet sweeping 5 cm a frame across the grass;
+  a strike was a stored pose wherever the ball was, its foot about 0.5 m off it. Running plants
+  were placed up to 0.58 m ahead of the hips, where the mesh's leg cannot put a flat foot (it
+  reaches 0.30 m), so the drawn foot landed short and slid onto its plant. The test of that
+  ("the planted foot does not skate") passed only because the leg search was coarse enough that
+  the foot missed by about the same amount on both frames it compared.
+- **Rule:** judge motion on the skinned markers the page draws, over consecutive frames: a foot
+  on the grass does not move, and a moving foot is lifted; a touch puts the named part on the
+  ball on the contact frame. Place targets where the drawn limb can reach (measure the reach on
+  the asset), and make a search fine enough that a test cannot pass by its error.
+- **Check:** `tests/test_render_motion.py` (turns on the spot, run touchdowns, kicks, thigh, chest
+  and header touches), each mutation-checked against the old behaviour; `tests/test_render_mesh.py`
+  holds the page's markers to the Python ones for the same poses.
+
+### 102. A change to the picture bumps the renderer version in the same commit
+- **What happened:** the skinned kit mesh (a3d228e) replaced the capsule players and left
+  `RENDERER_VERSION` at 0.3.2. Dataset v1's clips at `cca498c` (capsules) and every clip rendered
+  from main since (mesh) both record renderer 0.3.2, so `clip.json` cannot say which body a
+  detector was trained or tested on. Found while planning targeted round 1, which renders from
+  main and would have mixed the two looks under one version.
+- **Rule:** any change to what `web/render` draws or how labels are counted bumps
+  `ninety/render/__init__.py`'s `RENDERER_VERSION` in the same commit; a dataset or test-set
+  manifest names the version, and two looks never share one.
+- **Check:** `git log -p -- web/render ninety/render/scene.py ninety/render/meshpose.py` since the
+  last bump shows no picture change without a version change; a dataset manifest's `renderers`
+  lists one version per look.
+
+### 104. "Never imported" is only tested in a fresh interpreter
+- **What happened:** a test meant to prove the default `ninety-e2e` run never loads the Azure
+  Speech client deleted it from `sys.modules` and ran the bundle. With the import moved to the top
+  of the Describer, it stayed green: the module was already loaded when the test file was, so
+  nothing imported it again. The mutation run caught it.
+- **Rule:** a test that a module stays unloaded imports the code under test in a new Python
+  process and reads `sys.modules` there.
+- **Check:** `tests/test_describe.py::test_the_default_run_makes_no_azure_call`; mutate by adding
+  the import at module top and watch it go red.
+
+### 106. Look for an open pull request on the same task before building it
+- **What happened:** a session was handed "build the Personalizer over A2A" and built it, tests and
+  mutation run included, before it noticed that draft #131 was the same task, further along. Two
+  Personalizers with different packages, interfaces and fallback rules were then one merge away.
+  The overlap showed up only when another PR's challenge map named #131.
+- **Rule:** before writing code for a task, search the open pull requests and the session notes for
+  it (`gh pr list --search "<task words>"`, the notes folder). If one exists, extend it with a PR
+  stacked on its branch, or ask the Coordinator. Never build a second one.
+- **Check:** the PR description names the search run and what it found. This PR is stacked on #131
+  (base `agents/personalizer`) and adds only what #131 lacks.
+
+### 107. Outcome numbers can look right while the football looks dumb: watch clips and count the nonsense
+- **What happened:** goals, shots, saves and pass completion sat inside their published bands
+  for weeks, so the engine was judged good. When the owner finally watched review clips, the play
+  was poor across the board: passes into touch with nobody near the passer, a chaser running away
+  from a loose ball, teams passing among themselves inside their own box, defenders standing
+  still. Every engine change had been measured by outcome rates; nobody watched a clip, and
+  nothing counted the play itself. On engine `7ee8720` the football-sense checker found 202 passes
+  a 90 from a team's own box into its own box, and the team without the ball with eight or more
+  outfield players standing for almost a quarter of open play.
+- **Rule:** an outcome rate is a held-out check, not proof the football is sensible. Every engine
+  pull request posts a watched 60-second clip and the football-sense counts (FS1 to FS9) on seeds
+  7, 11, 21 and 42 at 20 minutes, before and after; a fix names the type it targets and shows that
+  count fall without another rising. When someone watching finds a new kind of nonsense, it
+  becomes a defect type with a must-fail scene before it is fixed.
+- **Check:** the pull request has a clip link and the `ninety-football-sense` table for both
+  commits ([EVALUATION.md](EVALUATION.md#football-sense-fs1-to-fs9)).
+
+### 108. A total that matches can be two errors cancelling
 - **What happened:** for weeks the running report showed outfield distances of 9 to 12 km, close to
   the published 9 to 11, and nobody asked why. When restarts took their sourced time, distances fell
   to 6 to 9 km and the drop looked like a new fault. Splitting distance by whether the ball is in
