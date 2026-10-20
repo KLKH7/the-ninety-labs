@@ -964,7 +964,28 @@ short and actionable. This file is public: no research sources, product names or
   last bump shows no picture change without a version change; a dataset manifest's `renderers`
   lists one version per look.
 
-### 104. Outcome numbers can look right while the football looks dumb: watch clips and count the nonsense
+### 104. "Never imported" is only tested in a fresh interpreter
+- **What happened:** a test meant to prove the default `ninety-e2e` run never loads the Azure
+  Speech client deleted it from `sys.modules` and ran the bundle. With the import moved to the top
+  of the Describer, it stayed green: the module was already loaded when the test file was, so
+  nothing imported it again. The mutation run caught it.
+- **Rule:** a test that a module stays unloaded imports the code under test in a new Python
+  process and reads `sys.modules` there.
+- **Check:** `tests/test_describe.py::test_the_default_run_makes_no_azure_call`; mutate by adding
+  the import at module top and watch it go red.
+
+### 106. Look for an open pull request on the same task before building it
+- **What happened:** a session was handed "build the Personalizer over A2A" and built it, tests and
+  mutation run included, before it noticed that draft #131 was the same task, further along. Two
+  Personalizers with different packages, interfaces and fallback rules were then one merge away.
+  The overlap showed up only when another PR's challenge map named #131.
+- **Rule:** before writing code for a task, search the open pull requests and the session notes for
+  it (`gh pr list --search "<task words>"`, the notes folder). If one exists, extend it with a PR
+  stacked on its branch, or ask the Coordinator. Never build a second one.
+- **Check:** the PR description names the search run and what it found. This PR is stacked on #131
+  (base `agents/personalizer`) and adds only what #131 lacks.
+
+### 107. Outcome numbers can look right while the football looks dumb: watch clips and count the nonsense
 - **What happened:** goals, shots, saves and pass completion sat inside their published bands
   for weeks, so the engine was judged good. When the owner finally watched review clips, the play
   was poor across the board: passes into touch with nobody near the passer, a chaser running away
