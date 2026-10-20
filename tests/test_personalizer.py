@@ -369,7 +369,7 @@ def test_the_evaluation_counts_a_variant_the_server_dropped_as_not_airing():
     airs = {(r["persona"], r["lang"]): r["dropped"] is None for r in rows}
     assert airs == {(p.persona, p.lang): p.lang == "en" for p in personalizer_eval.PROFILES}
     report = personalizer_eval.report(rows, "scripted", "21")
-    assert "| casual | es | 1 | 0 |" in report and "| casual | en | 1 | 1 |" in report
+    assert "| casual | es | 1 | 1 | 0 |" in report and "| casual | en | 1 | 1 | 1 |" in report
     assert "- 4 x server: number N is not in the cited evidence" in report
 
 
@@ -414,7 +414,12 @@ def test_published_ask_signs_in_with_the_async_credential_before_anything_else(m
             return label
 
     label = run(enter())
-    assert calls[0] == ("token", core.FOUNDRY_SCOPE)
+    # The scope the SDK itself asks for, not our constant read back.
+    from azure.ai.projects.aio._configuration import AIProjectClientConfiguration
+
+    endpoint = "https://x.services.ai.azure.com/api/projects/p"
+    sdk = AIProjectClientConfiguration(endpoint=endpoint, credential=object())
+    assert calls[0] == ("token", *sdk.credential_scopes)
     assert calls[1][0] == "agent" and isinstance(calls[1][1], Credential)
     assert label.startswith("`ninety-personalizer:")
 
@@ -441,15 +446,22 @@ def test_the_evaluation_signs_in_before_it_simulates_the_claims(monkeypatch, tmp
 
     order = []
 
+    loops = []
+
     def claims(seeds, minutes, limit):
         order.append("claims")
+        try:
+            loops.append(asyncio.get_running_loop())
+        except RuntimeError:  # no loop in this thread: the simulation runs off the event loop
+            loops.append(None)
         return [(21, "pass", CLAIM, EVIDENCE)]
 
     monkeypatch.setattr(personalizer_eval, "claims", claims)
     ask = scripted({(p.persona, p.lang): LEGAL["reworded"] for p in personalizer_eval.PROFILES})
     report = run(personalizer_eval._main(eval_args(tmp_path), published_with(ask, order)))
     assert order == ["signed in", "claims"]
-    assert "The model gave no answer in 0 of 1 requests" in report
+    assert loops == [None], "the minutes-long simulation must not hold the event loop"
+    assert "the model answered 1 of them" in report
 
 
 def test_a_run_in_which_the_model_never_answered_writes_no_report(monkeypatch, tmp_path):
@@ -463,3 +475,107 @@ def test_a_run_in_which_the_model_never_answered_writes_no_report(monkeypatch, t
 
     with pytest.raises(personalizer_eval.NothingMeasured):
         run(personalizer_eval._main(eval_args(tmp_path), published_with(down, [])))
+
+
+def test_a_run_in_which_every_request_fell_back_writes_no_report(monkeypatch, tmp_path):
+    # The client-side half of "unanswered": the remote fails (5xx) and the client falls back.
+    from starlette.applications import Starlette
+    from starlette.responses import Response
+
+    from ninety.personalizer import eval as personalizer_eval
+
+    monkeypatch.setattr(personalizer_eval, "claims", lambda *a: [(21, "pass", CLAIM, EVIDENCE)])
+    down = Starlette(routes=[], exception_handlers={404: lambda request, exc: Response(status_code=503)})
+    monkeypatch.setattr(personalizer_eval, "create_app", lambda *a, **k: down)
+    with pytest.raises(personalizer_eval.NothingMeasured, match="did not answer 1 of 1"):
+        run(personalizer_eval._main(eval_args(tmp_path), published_with(scripted({}), [])))
+
+
+def outage_on(seeds_down):
+    """A model that answers every claim except those of the given seeds, whose calls time out."""
+    from ninety.personalizer import eval as personalizer_eval
+
+    good = scripted({(p.persona, p.lang): LEGAL["reworded"] for p in personalizer_eval.PROFILES})
+
+    async def ask(prompt):
+        if json.loads(prompt)["claim"].endswith(tuple(f"[{s}]" for s in seeds_down)):
+            raise TimeoutError
+        return await good(prompt)
+
+    return ask
+
+
+def five_claims():
+    # One claim per seed, told apart by a marker that adds no number or player.
+    return [(s, "pass", Claim(f"{CLAIM.text} [{s}]", CLAIM.evidence), EVIDENCE) for s in "abcde"]
+
+
+def test_a_partial_outage_counts_rates_and_times_over_answered_requests_only(monkeypatch, tmp_path):
+    from ninety.personalizer import eval as personalizer_eval
+
+    rows = run(personalizer_eval.run(five_claims(), outage_on("a"), core.BUDGET_S))
+    for r in rows:  # the unanswered request was slow, the answered ones fast
+        r["ms"] = 3000.0 if r["claim"].endswith("[a]") else 10.0
+    report = personalizer_eval.report(rows, "scripted", "a-e")
+    assert "the model answered 4 of them" in report
+    assert "| casual | es | 5 | 4 |" in report
+    assert "p50 10 ms, p95 10 ms, max 10 ms" in report
+    assert "- 1 x server: model failed: TimeoutError" in report.split("did not answer")[1]
+    assert "model failed" not in report.split("## Why variants were dropped")[1].split("## Requests")[0]
+
+
+def test_an_outage_past_the_allowed_share_writes_no_report(monkeypatch, tmp_path):
+    from ninety.personalizer import eval as personalizer_eval
+
+    monkeypatch.setattr(personalizer_eval, "claims", lambda *a: five_claims())
+    allowed = int(personalizer_eval.MAX_UNANSWERED_SHARE * 5)
+
+    def evaluate(down):
+        return run(personalizer_eval._main(eval_args(tmp_path), published_with(outage_on(down), [])))
+
+    assert f"the model answered {5 - allowed} of them" in evaluate("abcde"[:allowed])
+    with pytest.raises(personalizer_eval.NothingMeasured, match=f"did not answer {allowed + 1} of 5"):
+        evaluate("abcde"[:allowed + 1])
+
+
+def test_the_raw_rows_are_strict_json(monkeypatch, tmp_path):
+    # lesson 43: no bare NaN or Infinity in a file another program reads
+    from ninety.personalizer import eval as personalizer_eval
+
+    monkeypatch.setattr(personalizer_eval, "claims", lambda *a: [(21, "pass", CLAIM, EVIDENCE)])
+    real_run = personalizer_eval.run
+
+    async def nan_run(*a):
+        return [{**r, "ms": float("nan")} for r in await real_run(*a)]
+
+    monkeypatch.setattr(personalizer_eval, "run", nan_run)
+    ask = scripted({(p.persona, p.lang): LEGAL["reworded"] for p in personalizer_eval.PROFILES})
+    with pytest.raises(ValueError, match="JSON compliant"):
+        run(personalizer_eval._main(eval_args(tmp_path), published_with(ask, [])))
+
+
+def test_a_server_that_cannot_sign_in_still_serves_the_verified_text(monkeypatch):
+    import contextlib
+
+    from azure.core.exceptions import ClientAuthenticationError
+
+    from ninety.personalizer import server
+
+    @contextlib.asynccontextmanager
+    async def cannot_sign_in():
+        raise ClientAuthenticationError("expired")
+        yield
+
+    monkeypatch.setattr(core, "published_ask", cannot_sign_in)
+    app = server.live_app()
+
+    async def call():
+        async with app.router.lifespan_context(app):
+            http = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url=URL)
+            client = RemotePersonalizer(URL, http=http)
+            variants = await client(CLAIM, EVIDENCE, [Profile("casual", "es")])
+            return variants, client.last_dropped
+
+    variants, dropped = run(call())
+    assert [v.text for v in variants] == [CLAIM.text]
+    assert dropped == {0: "server: model failed: AgentFrameworkException"}
