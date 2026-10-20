@@ -1425,3 +1425,17 @@ short and actionable. This file is public: no research sources, product names or
   `::test_a_slow_model_is_answered_by_the_server_with_its_reasons_not_cut_off_by_the_client`,
   `::test_a_request_cut_off_at_the_deadline_is_awaited_on_close` and
   `::test_the_evaluation_leaves_no_request_running_when_the_client_gives_up`.
+
+### 153. A light module imports only light modules
+- **What happened:** the live API scales to zero, and its cold start was about 50 s, about 33 s of
+  it Python start-up on a fractional vCPU. `import ninety.api.app` loaded the agent framework, the
+  Foundry project client, the OpenAI client and the blob storage SDK. The cause was that
+  `ninety.agents.contracts`, which only declares types, imported three short names from
+  `ninety.agents.slice`, a live entry point that loads them all at its top. Locally the import
+  took 3.28 s (median of five fresh interpreters), against 1.00 s once they load on first use.
+- **Rule:** a module that only declares (contracts, rules, types) imports nothing that talks to a
+  service. A name two layers share lives in the lower one, and the entry point re-exports it. An
+  SDK that only a live call needs is imported inside that call.
+- **Check:** `tests/test_api_startup.py::test_importing_the_api_loads_no_model_sdk` reads
+  `sys.modules` in a fresh interpreter (lesson 104); `::test_the_check_sees_an_sdk_when_one_is_imported`
+  shows the check can go red.
