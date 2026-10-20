@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import math
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from ninety.render.camera import Camera
 from ninety.sim import shape
@@ -52,6 +52,60 @@ def turn_toward(heading: float, target: float, dt: float, rate: float = 5.0) -> 
     elif diff < -cap:
         diff = -cap
     return heading + diff
+
+
+# How a turn is drawn (design, renderer only: the engine's heading and position are unchanged).
+# The hips lead: they face where the engine has him face LEAD_AHEAD_FRAMES later (0.12 s), at
+# most LEAD_MAX ahead of the chest, which faces the engine's heading (what collides is what is
+# drawn, P11). A foot on the grass keeps its place and the way it points; the hips turn over it
+# until the hip runs out of rotation (HIP_ROT, inside the hip's 35 to 45 degree range either way),
+# then it pivots on the spot. Standing, a foot that has fallen STEP_DIST behind where it would
+# stand, or STEP_YAW behind the way the hips face, steps there: one foot at a time, each step
+# STEP_FRAMES long and lifting STEP_LIFT, so a turn on the spot is a run of short steps.
+LEAD_AHEAD_FRAMES = 3
+LEAD_MAX = 0.4
+HIP_ROT = 0.7
+STEP_YAW = 0.45
+STEP_DIST = 0.25
+STEP_FRAMES = 7  # 0.28 s at 25 fps
+STEP_LIFT = 0.08
+SETTLE = 0.5  # standing still, a foot that far (as a share of the step limits) squares up
+# Where a standing foot sits under the hips: the asset's rest pose (foot marker, object metres
+# for a 1.84 m body): lateral, forward.
+FOOT_HOME = (0.219, 0.127)
+ANKLE_BACK = 0.11  # the drawn ankle sits this far behind the foot marker (asset rest pose)
+# The furthest ahead of the hips the mesh's leg puts a flat foot on the grass, for a 1.84 m body
+# (measured from the asset: 1 cm short of a plant 0.30 m ahead, 3.6 cm at 0.35, 13.5 cm at 0.45).
+# A run lands no further, or the drawn foot lands short and slides forward to its plant.
+PLANT_AHEAD_MAX = 0.30
+PLANT_ACTIONS = ("stand", "walk", "run", "chest", "head")  # the gait plants their feet
+
+# How a touch is drawn (design). The engine says which part met the ball and the frame says where
+# the ball was. The touching part reaches that point on the contact frame, along the way the touch
+# pushed the ball (its change of velocity): drawn back over TOUCH_WIND_S, through the ball, on
+# for TOUCH_FOLLOW_S. A harder touch swings further. Weight eases in and out over TOUCH_EASE_S.
+TOUCH_WIND_S = 0.2
+TOUCH_FOLLOW_S = 0.2
+TOUCH_EASE_S = 0.08
+TOUCH_PARTS = ("foot", "thigh", "chest", "head")
+HEADER_LIFT_MAX = 0.3  # a header above the standing brow is drawn as a jump, at most this high
+HEADER_AIR_S = 0.24  # half the time in the air
+# A foot reaching a ball beyond a standing leg's reach lunges: the hips drop until the leg (hip to
+# sole LEG_M, for a 1.84 m body, from the asset) reaches it from a hip HIP_SIDE_M to that side,
+# by at most LUNGE_MAX (design). The engine's foot reaches 1 m from his centre (P14).
+LEG_M = 0.9
+HIP_SIDE_M = 0.1
+HIP_M = 0.91
+LUNGE_MAX = 0.3
+
+
+def _wrap(a: float) -> float:
+    return (a + math.pi) % (2 * math.pi) - math.pi
+
+
+def _ease(u: float) -> float:
+    u = min(max(u, 0.0), 1.0)
+    return u * u * (3.0 - 2.0 * u)
 
 
 SKIN_TONES = ("#f5d0b5", "#e8b897", "#d19a74", "#b07850", "#8d5a3b", "#6b4329", "#4a2e1d")
@@ -100,10 +154,15 @@ class Gait:
     speed: float = 0.0
     action: str = "stand"  # the engine's pose: run, or the part that met the ball
     dive: float = 0.0  # -1..1, keeper reaching to his left or right
-    plant_l: tuple[float, float] | None = None  # world xy of a foot that is down
-    plant_r: tuple[float, float] | None = None
+    plant_l: tuple[float, ...] | None = None  # world (x, y, yaw, lift) of a foot the mesh puts there
+    plant_r: tuple[float, ...] | None = None
     down_l: bool = False
     down_r: bool = False
+    lead: float = 0.0  # how far the hips are ahead of the chest in a turn (radians)
+    feet: dict = field(default_factory=dict)  # side -> foot on the grass or stepping (_stance)
+    ankle: dict = field(default_factory=dict)  # side -> last drawn ankle xy, where a step starts
+    touch: dict | None = None  # the part meeting the ball now: part, side, at (world), w
+    lift: float = 0.0  # metres the body is raised (a header's jump) or lowered (a lunge)
 
 
 def update_gait(g: Gait, dx: float, dy: float, dt: float, face: tuple[float, float] | None) -> None:
@@ -122,15 +181,126 @@ def update_gait(g: Gait, dx: float, dy: float, dt: float, face: tuple[float, flo
 
 
 def advance_gaits(gaits: dict[str, Gait], prev_xy: dict[str, tuple[float, float]], frame: dict,
-                  dt: float) -> None:
+                  dt: float, ahead: dict | None = None) -> None:
     """One frame of every player's gait: stride from how far he moved, and the way he faces, his
-    speed and his pose from the engine (face), so the body is drawn turned as it collides."""
+    speed and his pose from the engine (face), so the body is drawn turned as it collides.
+    `ahead` is the engine's frame LEAD_AHEAD_FRAMES on: the hips lead into the turn it holds."""
     bx, by = frame["ball"]["x"], frame["ball"]["y"]
+    later = {pl["id"]: pl for pl in ahead["players"]} if ahead else {}
     for pl in frame["players"]:
+        g = gaits[pl["id"]]
         px, py = prev_xy.get(pl["id"], (pl["x"], pl["y"]))
-        update_gait(gaits[pl["id"]], pl["x"] - px, pl["y"] - py, dt, (bx - pl["x"], by - pl["y"]))
+        update_gait(g, pl["x"] - px, pl["y"] - py, dt, (bx - pl["x"], by - pl["y"]))
         prev_xy[pl["id"]] = (pl["x"], pl["y"])
-        face(gaits[pl["id"]], pl)
+        face(g, pl)
+        nxt = later.get(pl["id"])
+        g.lead = 0.0
+        if nxt is not None and "heading" in nxt and "heading" in pl and g.action not in ("dive", "throw"):
+            g.lead = min(max(_wrap(nxt["heading"] - pl["heading"]), -LEAD_MAX), LEAD_MAX)
+
+
+def contacts(frames: list[dict]) -> dict[str, list[dict]]:
+    """Every touch the engine drew, per player: the frame the part meets the ball, the part, which
+    side of him the ball was, where the ball was, and how the touch changed its velocity.
+
+    A touch names its part from the frame it happened (scene pose, engine TOUCH_POSE_S), so that
+    frame shows the ball as it left the part. A strike is drawn over its wind-up; the ball leaves on
+    the frame after the last one, so the last wind-up frame shows the ball still at his foot.
+    """
+    out: dict[str, list[dict]] = {}
+    prev: dict[str, str] = {}
+    for i, fr in enumerate(frames):
+        for pl in fr["players"]:
+            a, was = pl.get("action", ""), prev.get(pl["id"], "")
+            prev[pl["id"]] = a
+            if a in TOUCH_PARTS and a != was:
+                at, part, v_in, v_out = i, a, max(i - 1, 0), i
+            elif was == "strike" and a != "strike" and i > 0:
+                at, part, v_in, v_out = i - 1, "strike", i - 1, i
+            else:
+                continue
+            who = next(p for p in frames[at]["players"] if p["id"] == pl["id"])
+            bi, bo = frames[v_in]["ball"], frames[v_out]["ball"]
+            b = frames[at]["ball"]
+            if part != "strike":
+                # The part met the ball inside the tick, where its path from the frame before
+                # passed closest to him; by this frame the ball has flown on from there.
+                b = _closest(bi, bo, who["x"], who["y"])
+            dvx = bo.get("vx", 0.0) - bi.get("vx", 0.0)
+            dvy = bo.get("vy", 0.0) - bi.get("vy", 0.0)
+            h = who.get("heading", 0.0)
+            hx, hy = math.cos(h), math.sin(h)
+            lateral = (b["x"] - who["x"]) * -hy + (b["y"] - who["y"]) * hx
+            out.setdefault(pl["id"], []).append({
+                "frame": at,
+                "part": part,
+                "side": "l" if lateral >= 0 else "r",
+                "ball": (b["x"], b["y"], b["z"] + BALL_RADIUS),
+                "dv": (dvx, dvy),
+                "out": math.hypot(bo.get("vx", 0.0), bo.get("vy", 0.0)),
+                "heading": h,
+                "at": (who["x"], who["y"]),
+            })
+    return out
+
+
+def _closest(a: dict, b: dict, x: float, y: float) -> dict:
+    """The point of the ball's straight path from `a` to `b` nearest (x, y), in the pitch plane."""
+    dx, dy = b["x"] - a["x"], b["y"] - a["y"]
+    n = dx * dx + dy * dy
+    t = 0.0 if n < 1e-12 else min(max(((x - a["x"]) * dx + (y - a["y"]) * dy) / n, 0.0), 1.0)
+    return {"x": a["x"] + dx * t, "y": a["y"] + dy * t, "z": a["z"] + (b["z"] - a["z"]) * t}
+
+
+def touch_at(g: Gait, mine: list[dict], fi: int, height_m: float, fps: int) -> None:
+    """Set the part meeting the ball at frame `fi` (g.touch) and any jump to a header (g.lift)."""
+    g.touch, g.lift = None, 0.0
+    best = None
+    for c in mine:
+        u = (fi - c["frame"]) / fps
+        if -TOUCH_WIND_S < u < TOUCH_FOLLOW_S and (best is None or abs(u) < abs(best[1])):
+            best = (c, u)
+    if best is None:
+        return
+    c, u = best
+    k = height_m / 1.84
+    part = c["part"]
+    dvx, dvy = c["dv"]
+    n = math.hypot(dvx, dvy)
+    dx, dy = (dvx / n, dvy / n) if n > 0.5 else (math.cos(c["heading"]), math.sin(c["heading"]))
+    bx, by, bz = c["ball"]
+    gap = {"foot": 0.02, "strike": 0.02, "thigh": 0.05}.get(part, 0.02)
+    px, py = bx - dx * (BALL_RADIUS + gap), by - dy * (BALL_RADIUS + gap)
+    pz = max(bz - 0.07, 0.03) if part in ("foot", "strike") else bz - 0.05 if part == "thigh" else bz
+    if part in ("foot", "strike"):
+        back = min(max(0.12 + 0.012 * c["out"], 0.12), 0.4) * k
+        follow = min(max(0.08 + 0.01 * c["out"], 0.08), 0.35) * k
+        rise = 0.6
+    else:
+        back, follow, rise = 0.08 * k, 0.05 * k, 0.0
+    if u < 0:
+        s = (u / TOUCH_WIND_S) ** 2
+        off, up = -back * s, back * rise * s
+    else:
+        q = math.sin(0.5 * math.pi * u / TOUCH_FOLLOW_S)
+        off, up = follow * q, follow * rise * 0.5 * q
+    w = min(_ease((u + TOUCH_WIND_S) / TOUCH_EASE_S), _ease((TOUCH_FOLLOW_S - u) / TOUCH_EASE_S))
+    g.touch = {
+        "part": part,
+        "side": c["side"],
+        "at": [round(px + dx * off, 4), round(py + dy * off, 4), round(max(pz + up, 0.02), 4)],
+        "w": round(w, 4),
+    }
+    if part in ("foot", "strike"):
+        far = math.hypot(px - c["at"][0], py - c["at"][1]) / k - HIP_SIDE_M
+        if far > 0:
+            hip = math.sqrt(max(LEG_M * LEG_M - far * far, 0.0))
+            drop = min(max(HIP_M - hip, 0.0), LUNGE_MAX) * k
+            g.lift = -round(drop * w, 4)
+    if part == "head":
+        rise_m = min(pz - 1.70 * k, HEADER_LIFT_MAX)
+        if rise_m > 0.02:
+            g.lift = round(rise_m * max(0.0, 1.0 - (u / HEADER_AIR_S) ** 2), 4)
 
 
 def face(g: Gait, player: dict) -> None:
@@ -148,11 +318,175 @@ def face(g: Gait, player: dict) -> None:
 
 def reach_sign(x: float, y: float, g: Gait, ball: tuple[float, ...] | None) -> float:
     """Which foot the ball is on: 1 is his left, -1 his right. 0 if the pose does not pick a side."""
-    if ball is None or g.action not in ("strike", "foot", "thigh"):
+    if g.action not in ("strike", "foot", "thigh"):
+        return 0.0
+    if g.touch is not None and g.touch["part"] in ("strike", "foot", "thigh"):
+        return 1.0 if g.touch["side"] == "l" else -1.0
+    if ball is None:
         return 0.0
     hx, hy = math.cos(g.heading), math.sin(g.heading)
     lateral = (ball[0] - x) * -hy + (ball[1] - y) * hx
     return 1.0 if lateral >= 0 else -1.0
+
+
+def _home(x: float, y: float, yaw: float, k: float, sign: float) -> tuple[float, float]:
+    hx, hy = math.cos(yaw), math.sin(yaw)
+    f, side = FOOT_HOME[1] * k, FOOT_HOME[0] * k * sign
+    return (x + hx * f - hy * side, y + hy * f + hx * side)
+
+
+def _feet(g: Gait, x: float, y: float, k: float) -> None:
+    """Which feet are on the grass this frame, where, and pointing which way (g.feet, g.plant_*).
+
+    Running, a foot lands a little ahead on its part of the stride and stays put until the stride
+    lifts it. Standing or shuffling, the feet stay put and step when the body has turned or moved
+    off them (STEP_*). Either way a foot on the grass keeps the way it pointed when it landed,
+    pivoting only when the hip can turn no further (HIP_ROT).
+    """
+    pel = g.heading + g.lead
+    busy = None
+    if g.touch is not None and g.touch["w"] > 0 and g.touch["part"] in ("foot", "strike", "thigh"):
+        busy = g.touch["side"]
+    lunge = g.lift < -0.01  # the support foot stays down under a lunge, whatever the pose
+    if (g.action not in PLANT_ACTIONS and not lunge) or g.lift > 0.02:
+        g.feet = {}
+    elif g.action != "stand" and g.speed >= 0.45 and not lunge:
+        step = _step_m(g.speed)
+        window = _duty(g.speed) * 2 * math.pi
+        ph = g.phase % (2 * math.pi)
+        for side, sign in (("l", 1.0), ("r", -1.0)):
+            on = ph < window if sign > 0 else ((ph - math.pi) % (2 * math.pi)) < window
+            foot = g.feet.get(side)
+            if foot is not None and foot["swing"] is not None:
+                foot = None
+            if on and foot is None and not (g.down_l if sign > 0 else g.down_r):
+                ahead = min(_duty(g.speed) * step, PLANT_AHEAD_MAX * k)
+                hx, hy = math.cos(g.heading), math.sin(g.heading)
+                foot = {"x": x + hx * ahead, "y": y + hy * ahead, "yaw": pel, "z": 0.0, "swing": None}
+            if not on or (foot is not None and math.hypot(foot["x"] - x, foot["y"] - y) > 0.72):
+                foot = None
+            if foot is None:
+                g.feet.pop(side, None)
+            else:
+                g.feet[side] = foot
+    else:
+        n = STEP_FRAMES
+        for side, sign in (("l", 1.0), ("r", -1.0)):
+            hx_, hy_ = _home(x, y, pel, k, sign)
+            foot = g.feet.get(side)
+            if foot is None:
+                # A foot coming out of a stride or a touch is put down where it was drawn last;
+                # from there it steps like any other.
+                fx, fy = g.ankle.get(side, (hx_, hy_))
+                foot = {"x": fx, "y": fy, "yaw": pel, "z": 0.0, "swing": None}
+            if foot["swing"] is not None:
+                sx, sy, syaw, age, steps = foot["swing"]
+                age += 1
+                # It travels while it is off the grass, and once over its spot comes straight down
+                # there, however the hips go on turning.
+                e = _ease((age / steps - 0.15) / 0.7)
+                if not foot.get("over"):
+                    foot["x"], foot["y"] = sx + (hx_ - sx) * e, sy + (hy_ - sy) * e
+                    foot["yaw"] = syaw + _wrap(pel - syaw) * e
+                    foot["over"] = e >= 1.0
+                foot["z"] = STEP_LIFT * k * math.sin(math.pi * min(age / steps, 1.0))
+                foot["swing"] = None if age >= steps else (sx, sy, syaw, age, steps)
+                if foot["swing"] is None:
+                    foot["z"], foot["over"] = 0.0, False
+            g.feet[side] = foot
+        stepping = lunge or any(f["swing"] is not None for f in g.feet.values())
+        if not stepping:
+            # Once the body has stopped turning he squares up: a foot half as far off steps too.
+            settle = SETTLE if abs(g.lead) < 0.05 else 1.0
+            worst = None
+            for side, sign in (("l", 1.0), ("r", -1.0)):
+                foot = g.feet[side]
+                hx_, hy_ = _home(x, y, pel, k, sign)
+                err = max(
+                    math.hypot(foot["x"] - hx_, foot["y"] - hy_) / (STEP_DIST * k * settle),
+                    abs(_wrap(foot["yaw"] - pel)) / (STEP_YAW * settle),
+                )
+                if err >= 1.0 and (worst is None or err > worst[0]):
+                    worst = (err, side)
+            if worst is not None:
+                foot = g.feet[worst[1]]
+                foot["swing"], foot["over"] = (foot["x"], foot["y"], foot["yaw"], 0, n), False
+    if busy is not None:
+        g.feet.pop(busy, None)
+    for foot in g.feet.values():
+        if foot["swing"] is None:
+            # The hips turn over a planted foot until the hip will turn no further; then it pivots.
+            rel = _wrap(foot["yaw"] - pel)
+            if abs(rel) > HIP_ROT:
+                foot["yaw"] = pel + math.copysign(HIP_ROT, rel)
+    for side in ("l", "r"):
+        foot = g.feet.get(side)
+        plant = None
+        if foot is not None:
+            plant = (round(foot["x"], 4), round(foot["y"], 4), round(foot["yaw"], 4), round(foot["z"], 4))
+        down = foot is not None and foot["swing"] is None
+        if side == "l":
+            g.plant_l, g.down_l = plant, down
+        else:
+            g.plant_r, g.down_r = plant, down
+
+
+def _reach_leg(hip, knee, ankle, toe, touch: dict, fwd: tuple[float, float], k: float):
+    """The touching leg's capsules, eased from the stride toward the ball by the touch's weight.
+
+    A foot reaches with its sole (the mesh's foot marker) and its knee folds forward, both thigh
+    and shin 0.42 m for a 1.84 m body; a thigh reaches with its knee and the shin hangs from it.
+    """
+    w = touch["w"]
+    tx, ty, tz = touch["at"]
+    seg = 0.42 * k
+    if touch["part"] == "thigh":
+        k2 = [tx, ty, max(tz, 0.3 * k)]
+        a2 = [tx - fwd[0] * 0.05 * k, ty - fwd[1] * 0.05 * k, max(k2[2] - 0.40 * k, 0.06 * k)]
+        t2 = [a2[0] + fwd[0] * 0.10 * k, a2[1] + fwd[1] * 0.10 * k, max(a2[2] - 0.04 * k, 0.04 * k)]
+    else:
+        a2 = [tx - fwd[0] * 0.08 * k, ty - fwd[1] * 0.08 * k, max(tz + 0.03 * k, 0.06 * k)]
+        vx, vy, vz = a2[0] - hip[0], a2[1] - hip[1], a2[2] - hip[2]
+        d = math.sqrt(vx * vx + vy * vy + vz * vz) or 1.0
+        if d > 2 * seg:  # out of reach: the leg straight toward it
+            a2 = [hip[0] + vx * 2 * seg / d, hip[1] + vy * 2 * seg / d, hip[2] + vz * 2 * seg / d]
+            vx, vy, vz, d = a2[0] - hip[0], a2[1] - hip[1], a2[2] - hip[2], 2 * seg
+        ux, uy, uz = vx / d, vy / d, vz / d
+        dot = fwd[0] * ux + fwd[1] * uy
+        nx, ny, nz = fwd[0] - dot * ux, fwd[1] - dot * uy, -dot * uz
+        nn = math.sqrt(nx * nx + ny * ny + nz * nz)
+        if nn < 1e-6:
+            nx, ny, nz, nn = 0.0, 0.0, 1.0, 1.0
+        bend = math.sqrt(max(seg * seg - (d / 2) ** 2, 0.0))
+        k2 = [
+            hip[0] + vx / 2 + nx / nn * bend,
+            hip[1] + vy / 2 + ny / nn * bend,
+            hip[2] + vz / 2 + nz / nn * bend,
+        ]
+        t2 = [a2[0] + fwd[0] * 0.13 * k, a2[1] + fwd[1] * 0.13 * k, max(a2[2] - 0.03 * k, 0.04 * k)]
+
+    def mix(p, q):
+        return [round(p[i] + (q[i] - p[i]) * w, 4) for i in range(3)]
+
+    return mix(knee, k2), mix(ankle, a2), mix(toe, t2)
+
+
+def mesh_pose(g: Gait, x: float, y: float, reach: float) -> dict:
+    """What the page needs to pose the mesh this frame (render.js anglesFor, meshpose.pose_angles)."""
+    return {
+        "action": g.action,
+        "phase": round(g.phase, 4),
+        "speed": round(g.speed, 3),
+        "reach": reach,
+        "dive": round(g.dive, 3),
+        "plant_l": [round(v, 4) for v in g.plant_l] if g.plant_l else None,
+        "plant_r": [round(v, 4) for v in g.plant_r] if g.plant_r else None,
+        "lead": round(g.lead, 4),
+        "lift": round(g.lift, 4),
+        "touch": g.touch,
+        "x": round(x, 4),
+        "y": round(y, 4),
+    }
 
 
 def body_parts(
@@ -190,20 +524,19 @@ def body_parts(
         lean = -0.14 * k  # the chest opens onto a ball he is under
     elif g.action == "head":
         lean = 0.12 * k
-    reach = None
-    if ball is not None and g.action in ("strike", "foot", "thigh"):
-        lateral = (ball[0] - x) * lx + (ball[1] - y) * ly
-        reach = 1.0 if lateral >= 0 else -1.0
-    if g.action in ("strike", "dive", "throw"):
-        g.plant_l = g.plant_r = None
-        g.down_l = g.down_r = False
+    reach = reach_sign(x, y, g, ball) or None
+    _feet(g, x, y, k)
+    touch = g.touch if g.touch is not None and g.touch["w"] > 0 else None
+    lift = g.lift
 
     def at(f: float, side: float, z: float) -> list[float]:
         # A dive reaches sideways and folds the body down. The feet stay on the grass.
         if dive and z > 0.35:
             side += dive * (0.25 + 0.7 * min(z / 1.5, 1.0)) * k
             z -= abs(dive) * 0.42 * k * min((z - 0.35) / 1.2, 1.0)
-        return [round(x + hx * f + lx * side, 4), round(y + hy * f + ly * side, 4), round(max(z, 0.02), 4)]
+        return [
+            round(x + hx * f + lx * side, 4), round(y + hy * f + ly * side, 4), round(max(z + lift, 0.02), 4)
+        ]
 
     def toward(of: float, os: float, oz: float, max_m: float) -> tuple[float, float, float]:
         """Body-frame point pulled toward the ball, and no further than the joint can reach."""
@@ -226,27 +559,9 @@ def body_parts(
         swing = amp * s * sign
         kicking = g.action == "strike" and sign == reach
         receiving = g.action in ("foot", "thigh") and sign == reach
-        hip = at(0.0, 0.10 * k * sign, 0.92 * k)
-        plant = None
-        if g.action not in ("strike", "dive", "throw") and g.speed >= 0.45 and not receiving:
-            ph = g.phase % (2 * math.pi)
-            window = _duty(g.speed) * 2 * math.pi
-            on = ph < window if sign > 0 else ((ph - math.pi) % (2 * math.pi)) < window
-            was = g.down_l if sign > 0 else g.down_r
-            held = g.plant_l if sign > 0 else g.plant_r
-            if on and not was:
-                ahead = min(_duty(g.speed) * step, 0.58)
-                held = (round(x + hx * ahead, 4), round(y + hy * ahead, 4))
-            if not on:
-                held = None
-            if held is not None and math.hypot(held[0] - x, held[1] - y) > 0.72:
-                held = None
-                on = False
-            if sign > 0:
-                g.down_l, g.plant_l = on, held
-            else:
-                g.down_r, g.plant_r = on, held
-            plant = held
+        # The hips lead the chest in a turn (g.lead), so the hip joints sit turned by it.
+        hip = at(-0.10 * k * sign * math.sin(g.lead), 0.10 * k * sign * math.cos(g.lead), 0.92 * k)
+        plant = g.plant_l if sign > 0 else g.plant_r
         if kicking:
             knee = at(0.28 * k, 0.12 * k * sign, 0.72 * k)
             ankle = at(0.48 * k, 0.10 * k * sign, 0.38 * k)
@@ -262,15 +577,18 @@ def body_parts(
             ankle = at(ff * 0.25, 0.11 * k * sign, 0.28 * k)
             toe = at(ff * 0.25 + 0.08 * k, 0.11 * k * sign, 0.12 * k)
         elif plant is not None:
-            # The support foot stays where it landed. The body moves over it.
-            az = 0.08 * k
+            # A foot on the grass stays where it landed, pointing the way it landed; the body moves
+            # and turns over it. A stepping foot is lifted off the grass on its way.
+            fx, fy = math.cos(plant[2]), math.sin(plant[2])
+            az = 0.08 * k + plant[3]
+            ax, ay = plant[0] - fx * ANKLE_BACK * k, plant[1] - fy * ANKLE_BACK * k
             knee = [
-                round((hip[0] + plant[0]) / 2, 4),
-                round((hip[1] + plant[1]) / 2, 4),
+                round((hip[0] + ax) / 2 + hx * 0.04 * k, 4),
+                round((hip[1] + ay) / 2 + hy * 0.04 * k, 4),
                 round((hip[2] + az) / 2 + 0.05 * k, 4),
             ]
-            ankle = [round(plant[0], 4), round(plant[1], 4), round(az, 4)]
-            toe = [round(plant[0] + hx * 0.13 * k, 4), round(plant[1] + hy * 0.13 * k, 4), round(0.05 * k, 4)]
+            ankle = [round(ax, 4), round(ay, 4), round(az, 4)]
+            toe = [round(ax + fx * 0.13 * k, 4), round(ay + fy * 0.13 * k, 4), round(0.05 * k + plant[3], 4)]
         else:
             # The trailing foot recovers. The knee folds up over it, then the leg reaches out to land.
             recover = max(0.0, -swing) / amp if amp > 1e-4 else 0.0
@@ -279,6 +597,9 @@ def body_parts(
             knee = at(swing * 0.40 + 0.05 * k, 0.11 * k * sign, 0.48 * k + knee_lift)
             ankle = at(swing, 0.11 * k * sign, 0.08 * k + foot_lift)
             toe = at(swing + 0.13 * k, 0.11 * k * sign, 0.05 * k + foot_lift * 0.85)
+        if touch is not None and touch["part"] in ("foot", "strike", "thigh") and touch["side"] == side:
+            knee, ankle, toe = _reach_leg(hip, knee, ankle, toe, touch, (hx, hy), k)
+        g.ankle[side] = (ankle[0] + hx * ANKLE_BACK * k, ankle[1] + hy * ANKLE_BACK * k)
         parts.append({"n": f"thigh_{side}", "a": hip, "b": knee, "r": round(0.085 * k * w, 4), "c": "shorts"})
         parts.append({"n": f"shin_{side}", "a": knee, "b": ankle, "r": round(0.058 * k * w, 4), "c": "socks"})
         parts.append({"n": f"boot_{side}", "a": ankle, "b": toe, "r": round(0.042 * k, 4), "c": "boots"})
@@ -353,7 +674,34 @@ def body_parts(
             "c": "hair",
         }
     )
+    if touch is not None and touch["part"] in ("chest", "head"):
+        _lean_to(parts, touch, head, (hx, hy), k, at(lean, 0.0, 1.28 * k))
     return parts
+
+
+def _lean_to(parts: list[dict], touch: dict, head: list[float], fwd: tuple[float, float], k: float,
+             chest: list[float]) -> None:
+    """Lean the upper body so the chest or the brow meets the ball, eased by the touch's weight."""
+    if touch["part"] == "head":
+        point = [head[0] + fwd[0] * 0.12 * k, head[1] + fwd[1] * 0.12 * k, head[2] + 0.06 * k]
+        moved = {"head": (1.0, 1.0), "hair": (1.0, 1.0), "neck": (0.5, 1.0)}
+    else:
+        point = [chest[0] + fwd[0] * 0.14 * k, chest[1] + fwd[1] * 0.14 * k, chest[2]]
+        moved = {"head": (1.0, 1.0), "hair": (1.0, 1.0), "neck": (1.0, 1.0),
+                 "torso": (0.0, 1.0), "torso_l": (0.0, 1.0), "torso_r": (0.0, 1.0),
+                 "arm_l": (1.0, 1.0), "arm_r": (1.0, 1.0), "forearm_l": (1.0, 1.0), "forearm_r": (1.0, 1.0)}
+    d = [(touch["at"][i] - point[i]) * touch["w"] for i in range(3)]
+    n = math.sqrt(sum(v * v for v in d))
+    cap = 0.35 * k
+    if n > cap:
+        d = [v * cap / n for v in d]
+    for part in parts:
+        if part["n"] not in moved:
+            continue
+        sa, sb = moved[part["n"]]
+        part["a"] = [round(part["a"][i] + d[i] * sa, 4) for i in range(3)]
+        if "b" in part:
+            part["b"] = [round(part["b"][i] + d[i] * sb, 4) for i in range(3)]
 
 
 def parts_box(cam: Camera, parts: list[dict]) -> tuple[float, float, float, float] | None:
@@ -487,6 +835,24 @@ def ball_hidden(cam_pos: tuple[float, float, float], ball: tuple[float, float, f
     return False
 
 
+def ball_live(prev: dict | None, frame: dict, pitch_x: float = 105.0, pitch_y: float = 68.0) -> bool:
+    """The ball is on the pitch and in play: someone has it, or it moved since the last frame.
+
+    A still ball nobody has is a dead ball waiting for a restart (Law 9: out of play after it
+    crosses a line or the referee stops play), and a ball off the pitch is not in play either.
+    A player standing beside a dead ball for the whole restart wait is not footage of a player
+    hiding the ball in play: on seed 7004 that wait filled a crowded window (250 frames counted
+    hidden, none hidden in the render).
+    """
+    b = frame["ball"]
+    if not (0.0 <= b["x"] <= pitch_x and 0.0 <= b["y"] <= pitch_y):
+        return False
+    if frame.get("possessor") is not None or prev is None:
+        return True
+    a = prev["ball"]
+    return (a["x"], a["y"], a["z"]) != (b["x"], b["y"], b["z"])
+
+
 def crowded_start(
     frames: list[dict],
     n: int,
@@ -495,7 +861,7 @@ def crowded_start(
     cam_positions: list[tuple[float, float, float]],
     step: int = 25,
 ) -> int:
-    """Start frame of the n-frame window where the ball is most often behind a player.
+    """Start frame of the n-frame window where the ball, in play, is most often behind a player.
 
     cam_positions[i] is where the broadcast lens stood at frame i. Occlusion is a matter of
     where players stand on the line from that lens to the ball, not of how many are near it:
@@ -505,7 +871,8 @@ def crowded_start(
     for i, f in enumerate(frames[: len(cam_positions)]):
         b = f["ball"]
         players = [(p["x"], p["y"]) for p in f["players"]]
-        blocked = ball_hidden(cam_positions[i], (b["x"], b["y"], b["z"]), players)
+        live = ball_live(frames[i - 1] if i else None, f)
+        blocked = live and ball_hidden(cam_positions[i], (b["x"], b["y"], b["z"]), players)
         hidden[i + 1] = hidden[i] + blocked
     best, best_score = earliest, (-1, -1.0)
     for s in range(earliest, max(earliest, latest) + 1, step):
@@ -513,6 +880,45 @@ def crowded_start(
             break
         window = frames[s : s + n : 5]
         score = (hidden[s + n] - hidden[s], sum(crowding(f) for f in window) / len(window))
+        if score > best_score:
+            best, best_score = s, score
+    return best
+
+
+# A goalkeeper's own touches and his dive: the actions the engine names when he handles the ball
+# or throws himself at it (ninety/sim). Arms over the ball are what hides it from the lens.
+KEEPER_ACTIONS = ("hands", "dive", "throw")
+# The penalty area, 16.5 m from the goal line and 40.32 m wide (Law 1): where a keeper handles.
+PENALTY_DEPTH_M = 16.5
+PENALTY_HALF_WIDTH_M = 20.16
+
+
+def keeper_busy(frame: dict) -> bool:
+    return any(p.get("role") == "GK" and p.get("action") in KEEPER_ACTIONS for p in frame["players"])
+
+
+def in_penalty_area(ball: dict, pitch_x: float = 105.0, pitch_y: float = 68.0) -> bool:
+    near_goal = ball["x"] <= PENALTY_DEPTH_M or ball["x"] >= pitch_x - PENALTY_DEPTH_M
+    return near_goal and abs(ball["y"] - pitch_y / 2) <= PENALTY_HALF_WIDTH_M
+
+
+def keeper_start(frames: list[dict], n: int, earliest: int, latest: int, step: int = 25) -> int:
+    """Start frame of the n-frame window where a goalkeeper most often handles or dives.
+
+    A keeper's catch, parry or dive puts his arms and body over the ball, the situation `crowded`
+    does not aim at: it ranks windows by outfield players on the sight line. Frames with the
+    ball in a penalty area break ties, so a match with no keeper action still gets a goalmouth.
+    """
+    busy = [0] * (len(frames) + 1)
+    box = [0] * (len(frames) + 1)
+    for i, f in enumerate(frames):
+        busy[i + 1] = busy[i] + keeper_busy(f)
+        box[i + 1] = box[i] + in_penalty_area(f["ball"])
+    best, best_score = earliest, (-1, -1)
+    for s in range(earliest, max(earliest, latest) + 1, step):
+        if s + n > len(frames):
+            break
+        score = (busy[s + n] - busy[s], box[s + n] - box[s])
         if score > best_score:
             best, best_score = s, score
     return best
