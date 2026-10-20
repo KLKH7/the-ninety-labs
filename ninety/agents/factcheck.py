@@ -55,6 +55,11 @@ NUMBER_FIELDS = ("minute", "second", "ball_speed_kmh", "distance_m")
 # The unit a fact must be written with to stand for each event field's kind of number.
 FIELD_UNITS = {"distance_m": "m", "ball_speed_kmh": "km/h"}
 FACT_PLAYER = re.compile(r"^player:(?P<player>[ha](?:[1-9]|1[01]))(?::|$)")
+# A cited window stat (ninety/intel/windows.agent_rows, `type: stat`) is a number code computed:
+# its value, its percentage for a share, and the minutes its window spans may be stated.
+STAT_FIELDS = ("value", "percent", "minute_from", "minute_to")
+# What a number read as a minute may match: an event's minute, or the span of a cited stat's window.
+FIELD_ALIASES = {"minute": ("minute", "minute_from", "minute_to")}
 # Design: a detected event below this confidence is one the detector itself rates no likelier real
 # than not, so nothing built on it airs. To be replaced by the value measured from the event
 # report's precision at each confidence once detected events are scored (docs/EVALUATION.md).
@@ -113,7 +118,9 @@ def _roster_ids(known: dict[str, dict], roster: Iterable[Mapping | str] | None) 
 
 
 def _is_fact(item: Mapping) -> bool:
-    return "metric" in item and "unit" in item and "value" in item
+    """A computed fact (`Fact.as_dict()`), whose value needs its unit. Events and cited window stats
+    (`type: stat`, which states its value bare) carry a `type`; a fact does not."""
+    return "type" not in item and "metric" in item and "unit" in item and "value" in item
 
 
 def _fact_values(evidence: list[dict], unit: str) -> set[float]:
@@ -132,6 +139,8 @@ def allowed_numbers(events: list[dict]) -> set[float]:
     values: set[float] = {float(len(events))}
     for event in events:
         values.update(float(event[name]) for name in NUMBER_FIELDS if name in event)
+        if event.get("type") == "stat":
+            values.update(float(event[name]) for name in STAT_FIELDS if name in event)
     values.update(float(n) for n in Counter(e["type"] for e in events).values())
     values.update(float(n) for n in Counter((e["team"], e["type"]) for e in events).values())
     return values
@@ -169,9 +178,10 @@ def check(
         expected_field = _number_field(claim.text, match.start())
         if expected_field:
             values = {
-                float(event[expected_field])
+                float(event[name])
                 for event in evidence
-                if event.get(expected_field) is not None
+                for name in FIELD_ALIASES.get(expected_field, (expected_field,))
+                if event.get(name) is not None
             }
             if expected_field in FIELD_UNITS:
                 values |= _fact_values(evidence, FIELD_UNITS[expected_field])

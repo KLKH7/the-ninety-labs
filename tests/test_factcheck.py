@@ -259,3 +259,14 @@ def test_an_ordinal_minute_must_be_the_cited_minute():
 def test_an_ordinal_count_must_be_in_the_evidence():
     verdict = check(Claim(f"{PASS['player']} plays his 97th pass.", [PASS["id"]]), KNOWN)
     assert verdict.reasons == ["number 97th is not in the cited evidence"]
+
+
+def test_a_cited_stat_keeps_its_bare_value_beside_a_cited_fact():
+    # A window stat (type "stat") states its value bare; a window fact needs its unit. Both rules
+    # hold in one claim: a fact must not be read as a stat, nor a stat as a fact.
+    stat = {"id": "st", "type": "stat", "metric": "pressing_share", "team": "home", "window": 1,
+            "minute_from": 2, "minute_to": 3, "value": 0.6, "unit": "share", "events": 4, "percent": 60}
+    known = {"st": stat, **FACTS}
+    assert check(Claim("Home press 60 of the time while h7 hits 27.3 km/h.", ["st", SPEED["id"]]), known).ok
+    bare_fact = check(Claim("Home press 60 of the time while h7 hits 27.3.", ["st", SPEED["id"]]), known)
+    assert bare_fact.reasons == ["number 27.3 is not in the cited evidence"]

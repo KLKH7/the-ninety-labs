@@ -26,8 +26,9 @@ from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
+from ninety.intel.windows import agent_rows
 from ninety.match import detected, tracking
-from ninety.match.facts import AGENT_TYPES, compact, events_in, select
+from ninety.match.facts import AGENT_TYPES, compact, events_in, match_events, select
 
 MINUTES = 5  # every served match is a five-minute clip, as the slice and the evaluations use
 # Simulator matches: the pre-M1 stand-in, kept for the committed replays and the agent evaluation.
@@ -36,6 +37,9 @@ MATCHES = {"seed7": 7, "seed21": 21, "seed33": 33}  # the demo match and the hel
 DETECTED = {detected.M1_CLIP: detected.m1_path}
 MATCH_DIR = os.environ.get("NINETY_MATCH_DIR", "")
 MAX_EVENTS = 60
+# Each match's window stats are stored under their own folder: the top level holds one file per
+# match id and nothing else.
+STATS_DIR = "stats"
 TOOLS = ("list_events", "match_info")  # the published Analyst may call only these (tests check they exist)
 
 def match_id(seed: int) -> str:
@@ -55,6 +59,20 @@ def events_of(match: str) -> tuple[dict, ...]:
     return tuple(events_in(MATCHES[match], MINUTES, 1, MINUTES + 1))
 
 
+@lru_cache(maxsize=len(MATCHES) + len(DETECTED))
+def stats_of(match: str) -> tuple[dict, ...]:
+    """The match's window stats, computed by code from its full events (positions included, which
+    the compact events leave out): detected events for a detected clip, the simulator's otherwise."""
+    if match in DETECTED:
+        return tuple(agent_rows(detected.load(DETECTED[match]())))
+    if match not in MATCHES:
+        raise ValueError(f"unknown match {match!r}; available: {', '.join([*DETECTED, *MATCHES])}")
+    stored = Path(MATCH_DIR) / STATS_DIR / f"{match}.json" if MATCH_DIR else None
+    if stored and stored.exists():
+        return tuple(json.loads(stored.read_text()))
+    return tuple(agent_rows(match_events(MATCHES[match], MINUTES)))
+
+
 def list_events(match: str, minute_from: int, minute_to: int, event_type: str | None) -> list[dict]:
     """Events of one match between two match minutes (inclusive), oldest first. `match` is the
     match id you were given (for example seed7). Optionally one event_type: pass, shot, goal,
@@ -68,10 +86,13 @@ def list_events(match: str, minute_from: int, minute_to: int, event_type: str | 
 
 
 def match_info(match: str) -> dict:
-    """One match: its id, length in minutes and the event types available."""
+    """One match: its id, length in minutes, event types, and stats computed by code for each
+    team in each 15-minute window (ppda, field_tilt, passes_per_minute, territory_shift). Cite a
+    stat by id; quote its value, percent or minutes as given."""
     events = events_of(match)  # refuses an unknown match
     minutes = max((e["minute"] for e in events), default=0) if match in DETECTED else MINUTES
-    return {"match": match, "minutes": minutes, "event_types": list(AGENT_TYPES)}
+    return {"match": match, "minutes": minutes, "event_types": list(AGENT_TYPES),
+            "stats": list(stats_of(match))}
 
 
 def make_server() -> FastMCP:
@@ -95,8 +116,8 @@ server = make_server()
 
 
 def precompute(out: Path) -> None:
-    """Writes each served match's events, and its frames for the phone companion
-    (ninety/match/tracking.py), from one simulation."""
+    """Writes each served match's events, its window stats, and its frames for the phone companion
+    (ninety/match/tracking.py), all from one simulation."""
     from ninety.sim.engine import simulate  # the pre-M1 stand-in; never on the live path
 
     out.mkdir(parents=True, exist_ok=True)
@@ -105,6 +126,9 @@ def precompute(out: Path) -> None:
         rows = select(run.events, 1, MINUTES + 1)
         (out / f"{match}.json").write_text(json.dumps(rows, separators=(",", ":")))
         tracking.write(out, tracking.from_match(match, run))
+        stats = agent_rows(run.events)  # the same simulation's events as match_events gives
+        (out / STATS_DIR).mkdir(exist_ok=True)
+        (out / STATS_DIR / f"{match}.json").write_text(json.dumps(stats, separators=(",", ":")))
         print(f"{match}: {len(rows)} events, {len(run.frames)} frames")
 
 

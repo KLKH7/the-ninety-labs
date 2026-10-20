@@ -17,7 +17,8 @@ generated it and the output file is committed. Rows marked *planned* have no res
 | Detection precision and recall (players, ball) on the fixed test set, by difficulty, strict and lenient matching | pixel boxes: `uv run python -m ninety.eval.vision_report --test <frozen test clips> --detections <seed<N>.jsonl folder> --out <report.json>`; pitch-level strict and lenient matching planned | `docs/eval/vision-report-v{n}.json`, `docs/eval/vision-report-v1.md`, `docs/eval/vision-report-v2.md` | running for pixel boxes: ours-v3 on the frozen test set, players 0.994 recall at 0.999 precision, ball at least half visible 0.964 at 0.994, ball mostly hidden 0.493 at 0.841 (v2; ours-v2 in v1). Pitch-level matching planned |
 | Event precision, recall and F1 per type; possession accuracy; speed error | events: `uv run python -m ninety.eval.event_score --truth <clip>/events.jsonl --frames <clip>/frames.jsonl --detected <detected.jsonl> --report <report.json>` ([format](#event-report-format)); positions: `uv run python -m ninety.eval.pitch_score` ([event detection from video](#event-detection-from-video)); possession and speed planned | `docs/eval/event-report-v1/` | running on one clip: seed 900001, detected from video (ours-v2, camera from the markings): passes 3 of 4 at strict F1 0.75; the shot read as a pass and one false out of play (the ball's height, planned); ball on the ground placed to a median 0.09 m, players 0.22 m. One 10 s clip is a smoke test, not a rate |
 | Targeted data rounds, before and after | failure clusters from validation clips only: `uv run python -m ninety.vision.failure_clusters <val clips> --detections <file> --round <round> --out docs/eval/<round>/clusters.json`, then `ninety.agents.data_agent` | `docs/eval/round1/` (clusters, audit, plan), `docs/eval/vision-report-v{n}.json` | planned: round 1 clustered and planned ([round1/PLAN.md](eval/round1/PLAN.md)), not rendered |
-| Stats engine facts: hand-computed cases, planted defects, citations, size | `uv run pytest tests/test_stats.py` | test assertions | running |
+| Stats engine facts: hand-computed cases, planted defects, citations, size | `uv run pytest tests/test_stats.py tests/test_windows.py tests/test_window_stats_agents.py` | test assertions | running |
+| Window stats on detected events against the same clip's ground truth (PPDA, field tilt, passes a minute per team-window) | to be built once R3's detected events for seed900001 land | | planned |
 | Late drop in high-intensity running (R7), by the protocol below; distance and top speed by position on the same matches | `uv run python -m ninety.sim.late_drop` | `docs/eval/late-drop.md` | running |
 | Fact-checker rules (numbers, players, evidence ids) | `uv run pytest tests/test_factcheck.py` | test assertions | running |
 | Personalizer rules: the A2A round trip, the fallback within its budget, the re-check of every variant, every persona and language, profile validation ([below](#personalizer)) | `uv run pytest tests/test_personalizer.py` | test assertions | running in process: 38 tests, 18 of 18 mutants of the rules killed; not yet deployed |
@@ -373,6 +374,58 @@ phrasing means were written into `ninety/agents/companion_eval.py` before its fi
 
 A number the phone shows is the cited fact's value by construction (`Answer.value` is read off the
 fact); the injection count checks that the text agrees with it.
+
+## Football sense (FS1 to FS9)
+
+Goals, shots and pass completion sat inside their published bands while the play looked dumb to
+anyone who watched it (lesson 107). The football-sense checker counts the dumb play itself, per
+90 minutes, with the match clock of every case so a person can watch it:
+
+    uv run ninety-sim --seed 7 --minutes 20 --out runs/seed7
+    uv run ninety-football-sense runs/seed7 runs/seed11 runs/seed21 runs/seed42 --json found.json
+
+Each type's definition, thresholds and sources are in [GROUNDING.md](GROUNDING.md#football-sense-it-looks-like-sensible-football-counts).
+The checker reads only `frames.jsonl`, `events.jsonl` and `meta.json` and imports nothing from
+the engine. The ball is dead from a stoppage (out of play, goal, foul, offside) until the restart
+is kicked; which goal a team attacks comes from where its keeper stands. Each type has a scene
+that must be flagged and legal scenes that must not be, mutation-checked
+([`tests/test_football_sense.py`](../tests/test_football_sense.py)).
+
+**Protocol.** Every engine pull request runs the checker on seeds 7, 11, 21 and 42 at 20 minutes
+each, before and after, on the same commit pair, and posts the table with a watched 60-second
+clip. A fix names the type it targets and shows its count fall; the other types are held out, so
+a fix that moves one count by worsening another is visible. No count is a target and no engine
+constant is set by looking at one (lessons 2, 3 and 21). Read with care: 80 minutes resolves a
+type seen a few dozen times; a type seen a handful of times needs more matches before a change
+is read.
+
+**Engine `7ee8720`, 2026-10-19,** seeds 7, 11, 21, 42, 20 minutes each (80 minutes, 1,023 passes):
+
+| Defect | Count | Per 90 | seed 7 | 11 | 21 | 42 |
+|---|---:|---:|---:|---:|---:|---:|
+| FS1 chaser runs away from a loose ball | 24 | 27.0 | 2 | 9 | 4 | 9 |
+| FS2 unpressed pass straight out of play | 21 | 23.6 | 8 | 3 | 5 | 5 |
+| FS3 keeper stays home for a ball he would win | 0 | 0 | 0 | 0 | 0 | 0 |
+| FS5 more than half the outfield within 10 m of the ball | 0 | 0 | 0 | 0 | 0 | 0 |
+| FS6 pass from own box to own box | 180 | 202.5 | 13 | 25 | 73 | 69 |
+| FS6 possession with 3+ own-box passes | 18 | 20.2 | 2 | 5 | 6 | 5 |
+| FS7 square or back pass with a free option ahead | 436 | 490.5 | 79 | 85 | 140 | 132 |
+| FS8 loose ball at rest that nobody goes to | 0 | 0 | 0 | 0 | 0 | 0 |
+| FS9 team on the ball with most outfielders in own box | 56 | 63.0 | 9 | 10 | 6 | 31 |
+
+FS4, outfield players under 0.5 m/s, share of open-play time:
+
+| Still, at least | mean | 1 | 3 | 5 | 8 | 10 |
+|---|---:|---:|---:|---:|---:|---:|
+| team with the ball | 1.4 | 55% | 22% | 9% | 1% | 0% |
+| team without it | 2.9 | 51% | 37% | 32% | 23% | 1% |
+
+What it says: the worst types are teams passing inside their own box (FS6, FS9) while the team
+without the ball stands (FS4: eight or more still for almost a quarter of open play), passes
+played into touch with nobody near the passer (FS2), and chasers who run past or away from a
+loose ball (FS1). FS3, FS5 and FS8 found nothing: the engine rarely plays a through ball a keeper
+could reach first, and players do not clump within 10 m of the ball. A clump in a line, like
+the one in the owner's review clip, is wider than FS5's circle; FS4 and FS9 are where it shows.
 
 ## Personalizer
 

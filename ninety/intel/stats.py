@@ -316,4 +316,7 @@ def calculate_facts(events: Iterable[Mapping], frames: Iterable[Mapping] = ()) -
         kickoffs = [int(e["frame"]) for e in event_list if e.get("type") == "kickoff" and "frame" in e]
         facts += possession_facts(frame_list) + player_movement_facts(frame_list, kickoffs)
     facts += control_vs_chaos(event_list)
+    from ninety.intel.windows import territory_shifts, window_facts  # it builds on this module
+
+    facts += window_facts(event_list) + territory_shifts(event_list)
     return sorted(facts, key=lambda fact: fact.id)
