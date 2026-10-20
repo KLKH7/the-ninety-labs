@@ -42,10 +42,9 @@ from datetime import UTC, datetime
 
 from agent_framework import Executor, WorkflowBuilder, WorkflowContext, handler
 from agent_framework.foundry import FoundryAgent
-from azure.identity import DefaultAzureCredential
 
 from ninety import config
-from ninety.agents import foundry, telemetry
+from ninety.agents import credentials, foundry, telemetry
 from ninety.agents.factcheck import Claim, Verdict, check, confidence_gate
 from ninety.agents.judge import judge
 from ninety.agents.replay import (  # noqa: F401  (re-exported: the slice's names before the move)
@@ -263,12 +262,14 @@ async def run_slice(
         raise ValueError(
             f"the match server serves {', '.join(match_server.MATCHES)} at {match_server.MINUTES} minutes"
         )
-    credential = DefaultAzureCredential()
-    client = foundry.chat_client(credential)
-    if trace_to == "foundry":
-        await telemetry.trace_to_foundry(client, content)
-    turns: list[Turn] = []
-    async with contextlib.AsyncExitStack() as stack:
+    async with credentials.new_credential() as credential, contextlib.AsyncExitStack() as stack:
+        # Signed in before the simulations, which can outlast agents-live's sign-in (credentials.py).
+        await credentials.sign_in(credential)
+        events, stats = match_events(seed, minutes), match_stats(seed, minutes)
+        client = foundry.chat_client(credential)
+        if trace_to == "foundry":
+            await telemetry.trace_to_foundry(client, content)
+        turns: list[Turn] = []
         # The local definitions only identify the pinned versions (and refuse to run if the code
         # drifted from them); the published agents do the work. Foundry calls the match MCP server.
         ran, agents = [], []
@@ -294,10 +295,7 @@ async def run_slice(
             turns.append(Turn("judge", judge_prompt(claim), json.dumps(asdict(verdict))))
             return verdict
 
-        events = match_events(seed, minutes)
-        outcome = await run_workflow(
-            ask, judge_live, minute, plant, seed, minutes, True, events, match_stats(seed, minutes)
-        )
+        outcome = await run_workflow(ask, judge_live, minute, plant, seed, minutes, True, events, stats)
     telemetry.flush()
     return outcome, turns, f"{', '.join(ran)} on {config.MODEL}", events
 

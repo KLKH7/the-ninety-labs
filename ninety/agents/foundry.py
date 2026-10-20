@@ -177,14 +177,11 @@ def build_agents(client: FoundryChatClient) -> list[Agent]:
     return list({a.name: a for a in agents}.values())
 
 
-def chat_client(credential=None) -> FoundryChatClient:
-    from azure.identity import DefaultAzureCredential
-
-    return FoundryChatClient(
-        project_endpoint=config.FOUNDRY_PROJECT,
-        model=config.MODEL,
-        credential=credential or DefaultAzureCredential(),
-    )
+def chat_client(credential) -> FoundryChatClient:
+    """The chat client for `credential`, which the caller owns. No default: a live caller passes its
+    run's signed-in aio credential (ninety/agents/credentials.py), never a fresh sync one, whose token
+    fetch would block the event loop and could come after agents-live's sign-in had expired."""
+    return FoundryChatClient(project_endpoint=config.FOUNDRY_PROJECT, model=config.MODEL, credential=credential)
 
 
 def publish(project, agents: list[Agent], path: Path = REGISTRY) -> dict[str, dict[str, str]]:
