@@ -148,7 +148,11 @@ RESTART_DELAY_S = {"throw_in": (12, 20), "goal_kick": (24, 34), "corner": (24, 3
                    "kick_off_after_goal": (60, 90)}
 # design: how long the scorer's run and his team-mates' gathering round him last; the rest of the
 # minute or more before the kick-off is the walk back (L4)
-CELEBRATION_S = (10.0, 20.0)
+CELEBRATION_S = (15.0, 25.0)
+# L4: after a goal players walk back at least at a normal walking pace: men aged 20 to 29 walk at
+# about 1.36 m/s (Bohannon & Andrews 2011, Physiotherapy 97:182, a meta-analysis of 23,111 adults,
+# as tabulated by the University of Toronto's iWalk guide)
+WALK_MPS = 1.36
 NO_OFFSIDE_FROM = ("throw_in", "goal_kick", "corner")  # Law 11: no offside offence direct from these
 INTERCEPT_SHARE = 0.85  # design: taken before this share of the way to its target, a pass is intercepted
 THROW_BEHIND_M = 0.55  # Law 15: his body stands outside the touchline, feet on or behind it (design)
@@ -1819,9 +1823,10 @@ class Engine:
             return focus.x, focus.y, RECOVER
         kick_off = self.restart or self.set_by
         if kick_off and kick_off.kind == "kick_off" and p.id != kick_off.taker:
-            # Law 8: in his own half until the ball is kicked, walking back in time for it (O8)
+            # Law 8: in his own half until the ball is kicked, walking back (L4), faster if a walk
+            # would not get him there in time for it (O8)
             kx, ky = self.kickoff_spot(p, kick_off.team)
-            return kx, ky, self.in_time(p, kx, ky)
+            return kx, ky, max(WALK_MPS, self.in_time(p, kx, ky))
         if self.restart and p.id == self.restart.taker:
             r = self.restart
             # With the ball at his feet he goes no faster than he can carry it (D1).
