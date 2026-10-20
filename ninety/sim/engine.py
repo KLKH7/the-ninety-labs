@@ -1607,7 +1607,8 @@ class Engine:
         sweep = (fmath.atan2(cover - by, line - bx) - a_near + math.pi) % (2 * math.pi) - math.pi
         mid = a_near + sweep / 2
         d = RESTART_DISTANCE_M["free_kick"] + KEEP_OFF_MARGIN_M
-        width = 2 * d * math.tan(abs(sweep) / 2)
+        half = abs(sweep) / 2  # under a right angle: the goal is in front of the kick
+        width = 2 * d * fmath.sin(half) / fmath.cos(half)
         n = int(width / shape.SHOULDER_BREADTH_M)
         cx, cy = bx + fmath.cos(mid) * d, by + fmath.sin(mid) * d
         ux, uy = -fmath.sin(mid), fmath.cos(mid)  # across the line of the kick
