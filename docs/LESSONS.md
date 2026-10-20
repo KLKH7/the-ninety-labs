@@ -910,7 +910,20 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_event_score.py::test_a_window_cut_from_a_match_is_graded_by_frame_number`
   and `::test_a_window_with_a_missing_frame_is_refused` fail on the old code.
 
-### 100. An argmin over a flat or bimodal objective is a coin toss between its ends
+### 100. A file the code reads at run time must be in the image, and CI must build the image
+- **What happened:** #128 made `ninety/match/detected.py` read `schemas/match_event.schema.json` at
+  import and the MCP server load `tests/fixtures/detected-standin-seed900001.jsonl`. The Dockerfile
+  never copied `schemas/`, and `.dockerignore` drops `tests/`. Every test passed, because tests run
+  from a checkout; the first place the image was built was the deploy after merge, which failed, and
+  `main` could no longer deploy.
+- **Rule:** a change that makes the code read a file outside `ninety/` at run time adds it to the
+  Dockerfile in the same pull request. The image is built and called in CI on every pull request,
+  not first at deploy.
+- **Check:** the CI `image` job builds the Dockerfile, runs it, and calls `/api/health` and an MCP
+  tool on every kind of served match; the Dockerfile itself loads every served match after the
+  precompute. Mutation-checked: removing `COPY schemas` fails the build at the precompute step.
+
+### 103. An argmin over a flat or bimodal objective is a coin toss between its ends
 - **What happened:** the keeper set his depth as the one, of 1 to 6 m, that left the least of the
   goal open. Against a central ball he stood 6 m off his line at 8 and 10 m, 1 m at 12 m, 6 m at
   18 m and 1 m at 20 m; from 14 m wide and 8 m out he stood 10.7 m off the goal's centre, outside
