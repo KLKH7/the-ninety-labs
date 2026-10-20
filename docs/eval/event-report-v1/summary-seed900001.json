@@ -29,8 +29,8 @@
     "out_of_play": 1
   },
   "named": {
-    "player": 4,
+    "player": 3,
     "receiver": 2,
-    "interceptor": 1
+    "interceptor": 0
   }
 }

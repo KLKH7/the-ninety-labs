@@ -79,11 +79,14 @@ SHOT_MAX_M = 35.0
 # beyond is as likely the camera fit as the ball (design).
 OUT_FRAMES = 3
 # Attribution. The holder is within CONTROL_M of the ball by construction; he is named only when no
-# other track is within RIVAL_M of his own distance from it. RIVAL_M is the players' measured
-# position error on the M1 clip, its 90th percentile (1.44 m: docs/eval/event-report-v1/
-# pitch-seed900001.json, players.p90_m): a rival that close may truly be the nearer one. Set from
-# that measurement before attribution was scored against the truth (docs/eval/attribution.md).
-RIVAL_M = 1.44
+# other track is within RIVAL_M of his own distance from it: a rival that close may truly be the
+# nearer one. RIVAL_M is the players' measured pitch-position error, its 90th percentile pooled over
+# ours-v2's validation clips (never test clips), rounded to cm: 1.886 m
+# (docs/eval/attribution-derive.json, players_position_error.p90_m; plan in
+# docs/eval/attribution-plan.md). It includes camera fits that went wrong on two of those clips;
+# the plan fixed the statistic before any was read, so it stands. tests/test_attribution_score.py
+# holds it to the committed measurement.
+RIVAL_M = 1.89
 # One player in two tracks. The tracker drops a player whose position jumps past its gate (a
 # sprint plus the camera fit's jitter) and starts a new track the next frame, so his dribble can
 # read as a pass to himself. Two tracks never seen in the same frame, the second starting within

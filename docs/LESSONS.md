@@ -1398,7 +1398,9 @@ short and actionable. This file is public: no research sources, product names or
 - **Rule:** when a detected event gains a field the agents will repeat (a name, a team, an outcome),
   grade that field on the false events too, and leave it null, or the event out, wherever the
   footage cannot tell. A pass between two tracks never seen together, the second starting within
-  reach of where the first ended, is not recorded.
+  reach of where the first ended, is not recorded. That rule's form was found on a test clip, and
+  its distance first came from one: both were then decided on validation clips only, with the
+  plan committed first (docs/eval/attribution-plan.md). A constant read off a test clip is tuned to it.
 - **Check:** `docs/eval/attribution.md` lists every unmatched detected event with the players its
   names really are; `tests/test_vision_events.py::test_a_dribbler_the_tracker_loses_and_picks_up_again_is_not_a_pass_to_himself`
   fails without the rule.

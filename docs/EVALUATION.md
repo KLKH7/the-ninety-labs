@@ -365,15 +365,28 @@ the true camera. Possession changes and pressure are not detected; who acted is,
 The agents need to know who did what. A detected pass or shot names its `player`, a completed pass
 its `receiver` and a pass the other side took its `interceptor`, as side and track (`h-t12`): the
 ids the phone companion's minimap uses, never a shirt number (`ninety/vision/events.py`,
-`attribute`). The rule was fixed and pushed before it was scored (a58ef3e):
+`attribute`).
 
-- the holder of the spell (at the strike, or at the first frame of the next spell) is named only
-  when no other track, of either side or none, is within **1.44 m** of his own distance from the
-  ball. 1.44 m is the players' measured position error on the M1 clip, its 90th percentile
-  (`docs/eval/event-report-v1/pitch-seed900001.json`): a rival that close may really be nearer;
-- only a track the companion draws (a side, and at least 5 frames) is named;
-- otherwise the name is null and the event keeps its `team` (the holder's kit colour), so the
+- The holder of the spell (at the strike, or at the first frame of the next spell) is named only
+  when no other track, of either side or none, is within **RIVAL_M = 1.89 m** of his own distance
+  from the ball: a rival that close may really be the nearer one. Only a track the companion
+  draws (a side, and at least 5 frames) is named.
+- Otherwise the name is null and the event keeps its `team` (the holder's kit colour), so the
   agents can still say what a side did. Out of play names nobody; nor does the truth.
+- No pass is recorded between two tracks that may be one player the tracker lost and picked up
+  again: never seen in the same frame, the second starting within the tracker's 25 frames and
+  within reach (10 m/s, a player's top-speed capability, GROUNDING P9, plus RIVAL_M) of where the
+  first ended. Otherwise a dribbler reads as passing to himself, named at both ends (lesson 146).
+
+**How the constants were set** ([eval/attribution-plan.md](eval/attribution-plan.md), committed before
+any validation number was read). They come from ours-v2's validation clips, never test clips.
+RIVAL_M is the players' pooled 90th-percentile pitch-position error on 13 of them
+([eval/attribution-derive.md](eval/attribution-derive.md)). It includes two clips where the camera
+fit went wrong, so it is larger than the box error alone and leaves more names null. An earlier
+1.44 m had been measured on test seed 900001 and is replaced. The track-break rule's form was
+chosen on test seed 900004. On validation it was only kept or dropped: it removes 7 self-passes and
+0 passes between two different players, so it is kept. Matched passes fall from 16 to 14: both
+lost matches were self-passes that fell within 1 s of the same player's real pass.
 
 Graded offline by `uv run python -m ninety.eval.attribution_score` (reads the answer key; nothing on
 the live path imports it). A detected event is paired with a true event of the same type within
@@ -381,25 +394,19 @@ the live path imports it). A detected event is paired with a true event of the s
 is what is graded. A named track is the true player whose box its detection overlaps most (IoU at
 least 0.5, the pixel scorer's player rule); a name whose box pairs with nobody counts as wrong.
 
-**Results, frozen test clips** ([eval/attribution.md](eval/attribution.md), every pair and every
-false event with the players its names really are):
+| Measure | Validation (13 clips, development) | Test (scored once, [eval/attribution.md](eval/attribution.md)) |
+|---|---|---|
+| Clips with events | 8 (4 have no trusted camera frame, 1 has only 2) | 3 of 5: seeds 900002 and 900003 have camera cuts the fit does not follow |
+| Passes matched | 14 | 6 |
+| Team right | **10 of 14** | 6 of 6 |
+| Names given, right | 11 of 11 (5 passers, 4 receivers, 2 interceptors) | 10 of 10 (6 passers, 4 receivers) |
+| Names left null where the truth has one | 16 | 2 |
+| False events that name someone | 1 of 3 (its receiver's track is a9) | 0 of 2 |
 
-| Measure | Result |
-|---|---|
-| Clips graded | 900001, 900004, 900005. Seeds 900002 and 900003 have camera cuts the camera fit does not follow: it trusts none of their frames, so they give no events (their 4 passes are missed, not misnamed) |
-| Team, matched passes | 6 of 6 right |
-| Passer named | 6 of 6 matched passes, all 6 the right player |
-| Receiver named | 4 of the 5 completed passes, all 4 right; 1 left null (seed 900005: the receiver's kit was not placed on either side, so the pass also reads as failed) |
-| Interceptor named | 1 of 1, right |
-| Shots | the only true shot (900001) is read as a pass (the ball's height, above); that false pass names the right shooter |
-
-**Read with care.** Eleven names on three ten-second clips: this shows the rule names nobody wrong
-here, not a rate to quote for a match. The demo clip's events are scored the same way once rendered.
-Scoring found one defect, now fixed (lesson 146): a dribbler the tracker lost for a frame and picked
-up as a new track read as a pass to himself, named at both ends. A pass between two tracks never
-seen in the same frame, the second starting within the tracker's 25 frames and within reach (10 m/s
-plus the 1.44 m error) of where the first ended, is no longer recorded. That rule was written after
-seeing seed 900004, so 900004 is not held out for it.
+**Read with care.** Small numbers: 6 matched passes on 3 ten-second test clips. Names are never
+wrong here, but the side is: on validation, 4 of 14 passes carry the wrong team. The cause is the
+kit-colour side naming (`ninety/vision/track.py`), one of the M1 detector's own steps; its
+re-derivation follows. A team-level claim inherits that error, which the fact-checker cannot see.
 
 ## Late drop in high-intensity running (R7)
 

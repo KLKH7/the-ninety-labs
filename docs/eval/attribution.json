@@ -1,9 +1,9 @@
 {
   "command": "uv run python -m ninety.eval.attribution_score --test-dir runs/test-frozen-cca498c/test --observations docs/eval/attribution --observations tests/fixtures --out docs/eval/attribution",
-  "commit": "ba6c296d330bf32d008f4326d44ab9ee8aba430a",
+  "commit": "4e2ca23b9d85e1731d29404c096cfa0ad632d005",
   "date": "2026-10-20",
   "rule": {
-    "rival_m": 1.44,
+    "rival_m": 1.89,
     "control_m": 1.5,
     "min_track_frames": 5,
     "window_s": 1.0,
@@ -32,11 +32,11 @@
       },
       "interceptor": {
         "truth_names": 1,
-        "named": 1,
-        "right": 1,
+        "named": 0,
+        "right": 0,
         "unchecked": 0,
-        "accuracy": 1.0,
-        "left_null": 0
+        "accuracy": null,
+        "left_null": 1
       }
     },
     "shot": {
@@ -58,6 +58,12 @@
       "team_accuracy": null
     }
   },
+  "false_names": {
+    "false_events": 2,
+    "false_events_named": 0,
+    "names": 0,
+    "names_checkable": 0
+  },
   "clips": [
     {
       "seed": 900001,
@@ -73,10 +79,7 @@
         {
           "id": "v00003",
           "type": "pass",
-          "player": "h-t1",
-          "is": {
-            "player": "h10"
-          }
+          "is": {}
         },
         {
           "id": "v00004",
@@ -151,8 +154,8 @@
           },
           "interceptor": {
             "truth": "h10",
-            "detected": "h-t1",
-            "is": "h10"
+            "detected": null,
+            "is": null
           }
         },
         {

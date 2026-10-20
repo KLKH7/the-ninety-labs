@@ -160,3 +160,22 @@ def test_false_events_count_their_names_and_who_those_really_are():
         {"id": "v3", "type": "pass", "player": "h-t4", "is": {"player": None}}]}]
     assert at.false_names(clips) == {"false_events": 3, "false_events_named": 2, "names": 3,
                                      "names_checkable": 2}
+
+
+def test_rival_m_is_the_committed_validation_measurement():
+    from pathlib import Path
+
+    from ninety.vision import events as events_
+    body = json.loads((Path(__file__).resolve().parents[1] / "docs/eval/attribution-derive.json").read_text())
+    assert events_.RIVAL_M == round(body["players_position_error"]["p90_m"], 2)
+    assert not set(body["seeds"]) & set(json.loads(
+        (Path(__file__).resolve().parents[1] / "docs/eval/test-set-frozen.json").read_text())["seeds"])
+
+
+def test_old_truth_without_an_interceptor_field_names_him_as_the_failed_passs_receiver():
+    old = {"type": "pass", "outcome": "fail", "player": "a11", "receiver": "h9"}
+    assert (at.truth_role(old, "receiver"), at.truth_role(old, "interceptor")) == (None, "h9")
+    new = {**old, "receiver": None, "interceptor": "h9"}
+    assert (at.truth_role(new, "receiver"), at.truth_role(new, "interceptor")) == (None, "h9")
+    done = {"type": "pass", "outcome": "success", "player": "a11", "receiver": "a9"}
+    assert (at.truth_role(done, "receiver"), at.truth_role(done, "interceptor")) == ("a9", None)

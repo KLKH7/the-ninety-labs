@@ -75,6 +75,15 @@ def truth_player(t: tr.Track, frame: int, obs: dict[int, dict], truth_frames: di
     return best["id"] if best is not None and _iou(best["bbox"], dets[0]["bbox"]) >= PLAYER_IOU else None
 
 
+def truth_role(event: dict, role: str) -> str | None:
+    """Who the true event names in this role. Ground truth from before the schema had `interceptor`
+    (render run v1's engine) has no such field and puts the opponent who won a failed pass in
+    `receiver`; read that way, he is the interceptor and the failed pass has no receiver."""
+    if "interceptor" not in event and event.get("type") == "pass" and event.get("outcome") == "fail":
+        return {"receiver": None, "interceptor": event.get("receiver")}.get(role, event.get(role))
+    return event.get(role)
+
+
 def role_frame(event: dict, role: str, detected_frames: dict[str, int]) -> int:
     """The frame a role is judged at: the strike for the passer, the next spell's first frame for
     the one who got the ball (written by the detector beside the event)."""
@@ -108,7 +117,7 @@ def clip(seed: int, test_dir: Path, observations: Path | list[Path]) -> dict:
         for role in NAMED[t["type"]]:
             named = d.get(role)
             actual = who(named, role_frame(d, role, got), tracks, obs, frames) if named else None
-            rec[role] = {"truth": t.get(role), "detected": named, "is": actual}
+            rec[role] = {"truth": truth_role(t, role), "detected": named, "is": actual}
         out.append(rec)
     matched = {r["detected_id"] for r in out}
     return {
