@@ -355,7 +355,49 @@ turns this clip's shot (a ball rising to 1.3 m) into a pass whose path misses th
 over the goal line as it reaches the keeper (the false out of play). Fitting its flight needs air
 drag as well as gravity: over its first 0.4 s, drag moves a 30 m/s ball about as far as gravity
 does, and a drag-free fit tilts the flight along the camera's line of sight, wrongly even through
-the true camera. Possession changes, pressure and the player's identity are not detected.
+the true camera. Possession changes and pressure are not detected; who acted is, as a track
+(below), never as a shirt number.
+
+### Who: team and track
+
+The agents need to know who did what. A detected pass or shot names its `player`, a completed pass
+its `receiver` and a pass the other side took its `interceptor`, as side and track (`h-t12`): the
+ids the phone companion's minimap uses, never a shirt number (`ninety/vision/events.py`,
+`attribute`). The rule was fixed and pushed before it was scored (a58ef3e):
+
+- the holder of the spell (at the strike, or at the first frame of the next spell) is named only
+  when no other track, of either side or none, is within **1.44 m** of his own distance from the
+  ball. 1.44 m is the players' measured position error on the M1 clip, its 90th percentile
+  (`docs/eval/event-report-v1/pitch-seed900001.json`): a rival that close may really be nearer;
+- only a track the companion draws (a side, and at least 5 frames) is named;
+- otherwise the name is null and the event keeps its `team` (the holder's kit colour), so the
+  agents can still say what a side did. Out of play names nobody; nor does the truth.
+
+Graded offline by `uv run python -m ninety.eval.attribution_score` (reads the answer key; nothing on
+the live path imports it). A detected event is paired with a true event of the same type within
+1.0 s, one to one, nearest first: the event scorer's rule without its team condition, since the team
+is what is graded. A named track is the true player whose box its detection overlaps most (IoU at
+least 0.5, the pixel scorer's player rule); a name whose box pairs with nobody counts as wrong.
+
+**Results, frozen test clips** ([eval/attribution.md](eval/attribution.md), every pair and every
+false event with the players its names really are):
+
+| Measure | Result |
+|---|---|
+| Clips graded | 900001, 900004, 900005. Seeds 900002 and 900003 have camera cuts the camera fit does not follow: it trusts none of their frames, so they give no events (their 4 passes are missed, not misnamed) |
+| Team, matched passes | 6 of 6 right |
+| Passer named | 6 of 6 matched passes, all 6 the right player |
+| Receiver named | 4 of the 5 completed passes, all 4 right; 1 left null (seed 900005: the receiver's kit was not placed on either side, so the pass also reads as failed) |
+| Interceptor named | 1 of 1, right |
+| Shots | the only true shot (900001) is read as a pass (the ball's height, above); that false pass names the right shooter |
+
+**Read with care.** Eleven names on three ten-second clips: this shows the rule names nobody wrong
+here, not a rate to quote for a match. The demo clip's events are scored the same way once rendered.
+Scoring found one defect, now fixed (lesson 146): a dribbler the tracker lost for a frame and picked
+up as a new track read as a pass to himself, named at both ends. A pass between two tracks never
+seen in the same frame, the second starting within the tracker's 25 frames and within reach (10 m/s
+plus the 1.44 m error) of where the first ended, is no longer recorded. That rule was written after
+seeing seed 900004, so 900004 is not held out for it.
 
 ## Late drop in high-intensity running (R7)
 

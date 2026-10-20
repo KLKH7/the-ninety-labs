@@ -1362,3 +1362,18 @@ short and actionable. This file is public: no research sources, product names or
   figure falls outside it; above 1%, it moves to a many-match check. Goals:
   `NINETY_HELD_OUT=1 uv run pytest tests/test_sim.py -k twelve` runs the funnel's 12 matches (R4);
   `tests/test_funnel.py` pins the range and its arithmetic in every CI run.
+
+### 146. A detector that starts naming players turns its false events into false evidence
+- **What happened:** detected passes began to name their passer and receiver by track (`h-t12`) so
+  the agents could talk about them. Scoring the names against the truth found both of seed 900004's
+  false passes were one player in two tracks: the tracker lost a dribbler for a frame and picked him
+  up as a new track, so his own touch read as "h-t6 finds h-t12". The fact-checker cannot catch that:
+  the claim matches its evidence, and the evidence is wrong. Matched events alone would have shown
+  every name right.
+- **Rule:** when a detected event gains a field the agents will repeat (a name, a team, an outcome),
+  grade that field on the false events too, and leave it null, or the event out, wherever the
+  footage cannot tell. A pass between two tracks never seen together, the second starting within
+  reach of where the first ended, is not recorded.
+- **Check:** `docs/eval/attribution.md` lists every unmatched detected event with the players its
+  names really are; `tests/test_vision_events.py::test_a_dribbler_the_tracker_loses_and_picks_up_again_is_not_a_pass_to_himself`
+  fails without the rule.
