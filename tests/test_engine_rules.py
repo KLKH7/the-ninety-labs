@@ -1734,3 +1734,26 @@ def test_a_thrower_arriving_faster_than_one_frame_of_braking_does_not_take_the_b
     e, taker = thrower_ready_at(sx, sy, vx=limit * 0.95)
     e.tick_restart()
     assert e.restart is None and e.throw_by == taker.id
+
+
+def test_a_carriers_misjudgement_is_kept_until_he_scans_again(monkeypatch):
+    # D4: the engine hands decisions.choose the same tastes while his look at the pitch is the same,
+    # and fresh ones once he has scanned again.
+    from ninety.sim import decisions
+    e = Engine(1)
+    carrier = e.by_id["h6"]
+    e.possessor = carrier.id
+    e.ball = (carrier.x, carrier.y, 0.0, 0.0, 0.0, 0.0)
+    seen = []
+
+    def spy(scene, rng, tastes=None):
+        seen.append(tastes)
+        return decisions.Option("hold", 0.0)
+
+    monkeypatch.setattr(decisions, "choose", spy)
+    e.decide(carrier)
+    e.decide(carrier)
+    assert seen[0] is seen[1] and isinstance(seen[0], dict)
+    e.beliefs[carrier.id].next_scan += 2.0  # he has scanned: a new look
+    e.decide(carrier)
+    assert seen[2] is not seen[0]

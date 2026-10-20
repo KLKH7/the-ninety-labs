@@ -379,6 +379,9 @@ class Engine:
         self.free_since = -99.0
         self.touched_since_kick = False
         self.chase: dict[str, tuple[str, float, float]] = {}  # team -> (player, x, y)
+        # D4: each carrier's misjudgement of his options, held until he next scans: player -> (the
+        # scan it belongs to, as Belief.next_scan, option key -> draw).
+        self.tastes: dict[str, tuple[float, dict]] = {}
         self.restart: Restart | None = None
         self.throw_by: str | None = None  # a throw-in taker holding the ball until he throws it
         self.throw_ready = 0.0
@@ -792,7 +795,11 @@ class Engine:
             else:
                 self.hold_until = self.t + 0.5  # he looks again
             return
-        choice = decisions.choose(scene, self.rng)
+        scan = self.beliefs[carrier.id].next_scan  # D4: a new look at the pitch, a fresh misjudgement
+        held = self.tastes.get(carrier.id)
+        if held is None or held[0] != scan:
+            held = self.tastes[carrier.id] = (scan, {})
+        choice = decisions.choose(scene, self.rng, held[1])
         if choice.kind == "pass" or choice.kind == "clear":
             self.pass_to(carrier, *choice.target, lofted=choice.lofted, pace=choice.pace,
                          receiver=choice.receiver)

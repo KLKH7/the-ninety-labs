@@ -275,31 +275,72 @@ def test_a_worse_passer_is_less_sure_of_a_pass_through_a_narrow_gap():
     assert poor < average < good and good - poor > 0.1
 
 
-def test_takes_players_on_raises_the_dribble_and_leaves_the_pass():
-    def vals(traits, kind):
-        return [o.value for o in D.options(scene(
-            x=70.0, mates=[("h9", 82.0, 34.0, 0.0)], traits=traits)) if o.kind == kind]
-    plain, on = vals((), "dribble"), vals(("takes_players_on",), "dribble")
-    assert plain and len(plain) == len(on)
-    assert all(math.isclose(b - a, D.TAKE_ON) for a, b in zip(plain, on, strict=True))
-    assert vals((), "pass") == vals(("takes_players_on",), "pass")
+def _weights(s):
+    opts = D.options(s)
+    return opts, D.choice_weights(s, opts)
 
 
-def test_plays_short_raises_a_short_pass_and_lowers_a_long_one():
+def test_takes_players_on_pulls_him_toward_a_dribble_and_rates_nothing_differently():
+    # A habit multiplies the odds of its option by e^HABIT_PULL against the rest: a close call, not
+    # a command (it was once +0.01 goals on the dribble, an 85-fold preference at his temperature).
+    base = dict(x=70.0, mates=[("h9", 82.0, 34.0, 0.0)])
+    plain_opts, plain = _weights(scene(**base))
+    on_opts, on = _weights(scene(**base, traits=("takes_players_on",)))
+    assert [o.value for o in plain_opts] == [o.value for o in on_opts]  # nothing re-rated
+    k_drib = next(i for i, o in enumerate(plain_opts) if o.kind == "dribble")
+    k_pass = next(i for i, o in enumerate(plain_opts) if o.kind == "pass")
+    ratio = (on[k_drib] / on[k_pass]) / (plain[k_drib] / plain[k_pass])
+    assert math.isclose(ratio, math.exp(D.HABIT_PULL), rel_tol=1e-9)
+
+
+def test_plays_short_pulls_him_toward_a_short_pass_and_away_from_a_long_one():
     mates = [("near", 80.0, 34.0, 0.0), ("far", 100.0, 34.0, 0.0)]  # 10 m and 30 m
-    def by_receiver(traits):
-        return {o.receiver: o.value for o in D.options(scene(x=70.0, mates=mates, traits=traits))
-                if o.kind == "pass"}
-    plain, short = by_receiver(()), by_receiver(("plays_short",))
-    assert math.isclose(short["near"] - plain["near"], D.SHORT_PASS)
-    assert math.isclose(short["far"] - plain["far"], -D.SHORT_PASS)
+    def odds(traits):
+        opts, w = _weights(scene(x=70.0, mates=mates, traits=traits))
+        near = next(i for i, o in enumerate(opts) if o.receiver == "near")
+        far = next(i for i, o in enumerate(opts) if o.receiver == "far")
+        return w[near] / w[far], [o.value for o in opts]
+    (plain, plain_values), (short, short_values) = odds(()), odds(("plays_short",))
+    assert plain_values == short_values
+    assert math.isclose(short / plain, math.exp(2 * D.HABIT_PULL), rel_tol=1e-9)  # +1 near, -1 far
 
 
-def test_carrying_on_with_a_dribble_is_slightly_preferred_and_holding_gets_no_bonus():
-    def first(kind, s):
-        return next(o for o in D.options(s) if o.kind == kind).value
-    assert math.isclose(first("dribble", scene(current="dribble")) - first("dribble", scene()), D.STICKY)
-    assert math.isclose(first("hold", scene(current="dribble")), first("hold", scene()))  # raw best
+def test_carrying_on_with_a_dribble_is_a_pull_and_holding_gets_none():
+    opts, carry = _weights(scene(current="dribble"))
+    fresh_opts, fresh = _weights(scene())
+    assert [o.value for o in opts] == [o.value for o in fresh_opts]
+    d = next(i for i, o in enumerate(opts) if o.kind == "dribble")
+    h = next(i for i, o in enumerate(opts) if o.kind == "hold")
+    assert math.isclose((carry[d] / carry[h]) / (fresh[d] / fresh[h]), math.exp(D.HABIT_PULL), rel_tol=1e-9)
+
+
+def test_a_misjudgement_is_held_until_he_scans_again(monkeypatch):
+    # D4: asked again about the same options he answers the same way (his misjudgement is kept in
+    # `tastes` until he next scans), so an option he keeps rejecting does not become certain. Three
+    # options well within his noise of each other, so a fresh look is genuinely in doubt.
+    s = scene(x=80.0)
+    close = [D.Option("pass", 0.0100, (90.0, 30.0), "h9"), D.Option("pass", 0.0098, (75.0, 50.0), "h7"),
+             D.Option("dribble", 0.0097, (86.0, 34.0))]
+    monkeypatch.setattr(D, "options", lambda _: close)
+    rng = random.Random(3)
+    tastes = {}
+    first = D.choose(s, rng, tastes)
+    assert all(D.choose(s, rng, tastes) is first for _ in range(20))
+    fresh = {id(D.choose(s, rng, {})) for _ in range(60)}
+    assert len(fresh) == 3  # each new look (new tastes) can change his mind
+
+
+def test_held_misjudgements_choose_as_the_weights_say(monkeypatch):
+    # Gumbel-max: one draw per option chooses each option with the softmax's chance (choice_weights).
+    s = scene(x=80.0, mates=[("h9", 90.0, 30.0, 0.0), ("h7", 75.0, 50.0, 0.0)])
+    opts, w = _weights(s)
+    monkeypatch.setattr(D, "options", lambda _: opts)  # the same options every time, computed once
+    rng = random.Random(11)
+    n = 6000
+    counts = Counter(opts.index(D.choose(s, rng, {})) for _ in range(n))
+    for i, wi in enumerate(w):
+        p = wi / sum(w)
+        assert abs(counts[i] / n - p) < 4 * math.sqrt(p * (1 - p) / n) + 1e-3
 
 
 def test_a_throw_in_is_only_ever_a_throw():
