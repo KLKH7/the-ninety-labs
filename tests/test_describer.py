@@ -3,13 +3,14 @@ fact-checker, SSML that never turns text into markup, a pan that follows the bal
 still airs when speech is down. No Azure: the model and speech are fakes of their contracts."""
 
 import asyncio
+import json
 import xml.etree.ElementTree as ET
 
 import pytest
 from jsonschema import validate
 
 from ninety.agents import describer
-from ninety.agents.contracts import Description
+from ninety.agents.contracts import SCHEMAS, Description
 from ninety.agents.cues import SCHEMA
 from ninety.agents.describer import Describer, code_description, pan_for, percentile, report
 from ninety.agents.factcheck import Claim, check
@@ -184,14 +185,32 @@ def test_every_line_and_cue_carries_the_pan_of_its_event():
 # -- Code lines ----------------------------------------------------------------------------------
 
 
+def _passes(event):
+    line = code_description(event)
+    assert "None" not in line.text, f"a missing field is spoken: {line.text!r}"
+    facts = describer.facts(event)
+    assert check(Claim(line.text, [event["id"]]), {event["id"]: facts}).ok, line.text
+    validate(describer.audio_cue(line, event["t"], [event["id"]], True), SCHEMA)
+
+
+EVENT_SCHEMA = json.loads((SCHEMAS / "match_event.schema.json").read_text())
+EVENT_KINDS = tuple(EVENT_SCHEMA["properties"]["type"]["enum"])
+
+
+@pytest.mark.parametrize("kind", EVENT_KINDS)
+@pytest.mark.parametrize("acted", [True, False])
+def test_every_kind_of_event_gets_a_code_line_the_fact_checker_passes(kind, acted):
+    # Built here, not drawn from a seed (lesson 47): every kind the schema allows, with and without
+    # a known player, as a detected event may leave it out.
+    event = {"id": "e1", "t": 12.0, "type": kind, "team": "away", "x": 40.0, "y": 30.0,
+             "player": "a4" if acted else None, "receiver": "h9" if acted else None,
+             "outcome": None, "ball_speed_kmh": None, "end_x": None, "end_y": None, "source": "truth"}
+    _passes(event)
+
+
 def test_every_event_of_a_match_gets_a_code_line_the_fact_checker_passes():
-    events = list(match_events(7, 5))
-    assert {e["type"] for e in events} >= set(describer.DESCRIBED) - {"offside", "substitution"}
-    for event in events:
-        line = code_description(event)
-        facts = describer.facts(event)
-        assert check(Claim(line.text, [event["id"]]), {event["id"]: facts}).ok, line.text
-        validate(describer.audio_cue(line, event["t"], [event["id"]], True), SCHEMA)
+    for event in match_events(7, 5):
+        _passes(event)
 
 
 @pytest.mark.parametrize(("outcome", "text"), [

@@ -127,12 +127,20 @@ def analyst_agent(client: FoundryChatClient) -> Agent:
     return Agent(client=client, name="analyst", instructions=INSTRUCTIONS, tools=[match_tool()])
 
 
-def build_agents(client: FoundryChatClient) -> list[Agent]:
-    """Every agent we publish, built exactly as the live workflow builds them."""
-    from ninety.agents.describer import describer_agent
+def slice_agents(client: FoundryChatClient) -> list[Agent]:
+    """The slice's agents, in the order it runs them: the Analyst, then the Judge."""
     from ninety.agents.judge import judge_agent
 
-    return [analyst_agent(client), judge_agent(client), describer_agent(client)]
+    return [analyst_agent(client), judge_agent(client)]
+
+
+def build_agents(client: FoundryChatClient) -> list[Agent]:
+    """Every agent we publish, built exactly as the live workflow builds them. The Personalizer
+    runs in its own service (ninety/personalizer/server.py)."""
+    from ninety.agents.describer import describer_agent
+    from ninety.personalizer.core import personalizer_agent
+
+    return [*slice_agents(client), personalizer_agent(client), describer_agent(client)]
 
 
 def chat_client(credential=None) -> FoundryChatClient:

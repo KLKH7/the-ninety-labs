@@ -11,7 +11,7 @@ slow, the line and its cue are still emitted, and the cue says speech is unavail
 can show or read the text instead. Every line logs its time from the event reaching the Describer
 to audio in hand.
 
-    uv run python -m ninety.agents.describer --seed 7 --minutes 5 --out runs/eval/latency-cost.md
+    uv run python -m ninety.agents.describer --seed 7 --minutes 5 --out runs/eval/describer-latency.md
 
 runs the code lines and the model upgrade live on Azure (Foundry and Speech) and writes the
 measured latency and the cost inputs. Cloud sessions run it through .github/workflows/agents-live.yml
@@ -262,7 +262,8 @@ async def run(describer: Describer, events: Sequence[dict], upgrade: Callable[[d
 
 
 def report(records: Sequence[dict], meta: dict, tokens: dict[str, int]) -> str:
-    """The latency and cost-input section, computed only from the records of a measured run."""
+    """The Describer's time to speech and cost inputs, computed only from the records of a measured
+    run. Its numbers feed docs/eval/latency-cost.md (ninety/eval/latency_cost.py), which owns that file."""
     lines = [
         "# Latency and cost: the Describer",
         "",

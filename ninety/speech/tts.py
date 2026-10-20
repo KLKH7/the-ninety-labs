@@ -29,8 +29,16 @@ def ssml(text: str, voice: str = VOICE, lang: str = LANG) -> str:
     )
 
 
-def synthesize_ssml(document: str) -> tuple[bytes, float]:
-    """Returns MP3 bytes for an SSML document and the seconds the request took."""
+def synthesize(text: str, voice: str = VOICE) -> tuple[bytes, float]:
+    """Returns MP3 bytes and the seconds the request took."""
+    return synthesize_ssml(ssml(text, voice))
+
+
+def synthesize_ssml(
+    document: str, output_format: str = "audio-24khz-48kbitrate-mono-mp3"
+) -> tuple[bytes, float]:
+    """Audio for an SSML document (ninety/speech/describe.py writes them), and the seconds the
+    request took."""
     if not config.SPEECH_RESOURCE_ID:
         raise RuntimeError("set NINETY_SPEECH_RESOURCE_ID (see ninety/config.py)")
     token = _credential.get_token("https://cognitiveservices.azure.com/.default").token
@@ -40,7 +48,7 @@ def synthesize_ssml(document: str) -> tuple[bytes, float]:
         headers={
             "Authorization": f"Bearer aad#{config.SPEECH_RESOURCE_ID}#{token}",
             "Content-Type": "application/ssml+xml",
-            "X-Microsoft-OutputFormat": "audio-24khz-48kbitrate-mono-mp3",
+            "X-Microsoft-OutputFormat": output_format,
             "User-Agent": "the-ninety-labs",
         },
         content=document.encode(),
@@ -48,11 +56,6 @@ def synthesize_ssml(document: str) -> tuple[bytes, float]:
     )
     response.raise_for_status()
     return response.content, time.perf_counter() - started
-
-
-def synthesize(text: str, voice: str = VOICE) -> tuple[bytes, float]:
-    """Returns MP3 bytes and the seconds the request took."""
-    return synthesize_ssml(ssml(text, voice))
 
 
 async def speak(document: str) -> bytes:
