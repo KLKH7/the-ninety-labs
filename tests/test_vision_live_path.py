@@ -22,7 +22,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 LIVE = ["ninety/vision/pitch.py", "ninety/vision/observe.py", "ninety/vision/track.py",
-        "ninety/vision/events.py"]
+        "ninety/vision/events.py", "ninety/vision/tracked_frames.py"]
 TRUTH_FILES = ("frames.jsonl", "events.jsonl", "clip.json", "meta.json")
 FORBIDDEN_IMPORTS = ("ninety.sim", "ninety.render", "ninety.eval")
 

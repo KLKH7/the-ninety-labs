@@ -1288,6 +1288,48 @@ short and actionable. This file is public: no research sources, product names or
   `test_published_ask_signs_in_with_the_async_credential_before_anything_else` each fail when
   their rule is removed.
 
+### 132. A WebSocket tested only through the test client is untested in the server a browser reaches
+- **What happened:** the phone relay's tests all passed through Starlette's TestClient, which
+  speaks WebSocket in process. The first time a real browser joined through uvicorn, every
+  connection answered 404: uvicorn upgrades a WebSocket only when a WebSocket library is
+  installed, and none was locked, so the deployed image could never have served the relay. The
+  same run found lesson 128's unreadable refusals.
+- **Rule:** a feature a browser uses over the network is tested once through the real server and a
+  real browser, not only through an in-process client. (A close code the client must read is sent after the accept: lesson 128.)
+- **Check:** `tests/test_phone.py` runs the companion routes in uvicorn and joins from Chromium;
+  CI's `image` job asks the built image for a WebSocket upgrade and needs `101` (it answers 404
+  without `websockets` in `uv.lock`). The phone still reads a close before the accept as "unknown
+  code or unreachable" (`web/phone/src/feed.ts`), for a server that refuses that way.
+
+### 133. Positions from a fit, summed frame to frame, read the fit's jitter as running
+- **What happened:** the phone's speed and distance come from the companion's window facts, which
+  sum each player's frame-to-frame steps. On simulator positions that is exact. On positions
+  tracked from the video, the camera fit moves a foot point by up to about 0.5 m between
+  neighbouring frames, more than a sprinter covers in one (0.34 m). Every tracked player's top
+  speed read 53 to 89 km/h, and a player standing still read 16 km/h. The numbers would have
+  passed the fact-checker, because they were the cited facts.
+- **Rule:** before a stat computed for exact positions reads measured ones, grade it against the
+  ground truth on the measured data (offline), and smooth at the stat's own time scale if the
+  noise demands it. Choose the width from the stat's definition, not from the error it gives.
+- **Check:** `docs/eval/companion-tracked.md` grades speed now, top speed and distance with and
+  without the smoothing (top speed 55.6 against 1.9 km/h median error).
+  `tests/test_tracked_frames.py::test_smoothing_turns_jitter_back_into_standing_and_keeps_running`
+  fails with the smoothing removed, and
+  `test_a_track_ends_at_the_speed_its_player_was_running` fails with a plain average, which lags
+  at a track's end.
+
+### 134. `sum()` of floats is not the same number on every Python
+- **What happened:** the phone's tracked frames file is committed, and a test rebuilds it and needs
+  the same bytes. It passed on Python 3.12 and failed on 3.11. Python 3.12 made `sum()` of floats
+  use compensated addition, so a smoothed position's last digit moved, and a rounding at 0.01 m
+  went the other way.
+- **Rule:** code whose output is committed and compared byte for byte adds floats with
+  `math.fsum` (one exact rounding, the same everywhere), or rounds well away from the noise.
+  This is lesson 46's rule for the engine, applied to every committed output.
+- **Check:** CI's pytest matrix runs 3.11 and 3.12. `tests/test_tracked_frames.py` rebuilds
+  `tests/fixtures/tracked-seed900001.json` on both; with `sum` in `tracked_frames.smooth` it
+  fails on 3.11.
+
 ### 137. A random choice scaled by the spread of all options loosens when a bad option is added
 - **What happened:** the carrier's softmax took its randomness as a share of the spread of all his
   options' values, so a choice between close options would be loose and one between clearly
