@@ -10,7 +10,7 @@ This pull request changes no engine or renderer code.
 
 | | |
 |---|---|
-| Engine | `origin/main` at `7ee8720` |
+| Engine | `origin/main` at `7ee8720`. Since then, #141 changed only the keeper's starting depth (`offball.keeper_spot`), which no verified row depends on |
 | Matches | 30 seeds (3, 5, 7, 11, 13, 17, 21, 23, 29, 31, 37, 42, 43, 53, 61, 71, 83, 97, 101, 113, 127, 131, 149, 163, 181, 199, 211, 233, 257, 293), 10 minutes each: 300 match minutes, all first halves, styles and strengths drawn by seed |
 | Tactical view | every second of every match drawn top-down (dots, 1 s trails, pass and shot arrows), 16 s per sheet: 1,110 sheets |
 | Broadcast view | 20 random 15 s windows rendered with the broadcast camera (`ninety-render`, software GL), one frame every 0.5 s: 100 sheets of 6 frames, full-resolution frames opened where needed |
