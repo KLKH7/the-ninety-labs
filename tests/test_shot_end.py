@@ -1,5 +1,6 @@
 """A pass or shot ends where the ball is when the next thing happens to it (data contract C7)."""
 
+import math
 from collections import defaultdict
 
 from ninety.sim.engine import FPS, Engine
@@ -13,9 +14,13 @@ def c7(m):
 
 
 def test_a_blocked_shot_poked_loose_ends_where_the_tackle_met_the_ball():
-    # Seed 21, the demo window: a10's shot at 4:37 is blocked, he gets back to the ball, and h4 pokes
-    # it loose at 4:39. The shot once stayed open until h8 controlled the ball at 4:41, so its end
-    # point lay beyond the tackle, where C7 says the ball never reached it.
+    # Seed 21, the demo window. Once its shot at 4:37 was blocked, the shooter got back to the ball and
+    # a defender poked it loose at 4:39; the shot stayed open until someone controlled the ball, so its end
+    # point lay beyond the tackle, where C7 says the ball never reached it. The off-ball movement of #179
+    # changed how seed 21 plays, and a tackle on a kick still open is rare (none in about 480 minutes of
+    # play on that engine), so the case is made at seed 21's own moment: at 4:37 a shot by the player on
+    # the ball is still open, as if blocked back to him, and his nearest opponent pokes the ball; then the
+    # match plays on.
     e = Engine(21)
     open_at_strike = []
     for name in ("shoot", "pass_to"):
@@ -27,11 +32,32 @@ def test_a_blocked_shot_poked_loose_ends_where_the_tackle_met_the_ball():
             return _strike(*args, **kwargs)
 
         setattr(e, name, checked)
-    m = e.run(4.75)
-    # The case is in the match (lesson 41): a shot whose next event on the ball is a tackle.
+    e.kickoff("home", setup=True)
+    for _ in range(int(4.62 * 60 * FPS)):
+        e.step()
+    holder = e.by_id[e.possessor] if e.possessor else min(
+        (q for q in e.players if q.role != "GK"), key=lambda q: math.hypot(q.x - e.ball[0], q.y - e.ball[1]))
+    tackler = min((q for q in e.players if q.team != holder.team and q.role != "GK"),
+                  key=lambda q: math.hypot(q.x - holder.x, q.y - holder.y))
+    shot = e.kicked = e.emit("shot", holder.team, e.ball[0], e.ball[1], player=holder.id, ball_speed_kmh=58.8)
+    e.shot_touched_by, e.shot_was_on_target = "defender", False
+    e.possessor, e.dribbler = None, holder.id
+    poked = []
+    poke = e.poke
+
+    def watched(p, held, _poke=poke):
+        poked.append(e.kicked is not None)
+        return _poke(p, held)
+
+    e.poke = watched
+    e.poke(tackler, holder)
+    for _ in range(int(0.5 * 60 * FPS)):
+        e.step()
+    m = e.match
+    assert poked[0] and shot["end_x"] is not None  # the case is in the match (lesson 41): met open
     on_ball = [ev for ev in m.events if ev["type"] in ON_BALL]
-    pairs = zip(on_ball, on_ball[1:], strict=False)
-    assert any(a["type"] == "shot" and b["type"] == "tackle" for a, b in pairs)
+    nxt = on_ball[on_ball.index(shot) + 1]
+    assert nxt["type"] == "tackle" and nxt["player"] == tackler.id  # nothing recorded between
     assert c7(m) == []
     # Every kick ends at a touch, a tackle, a whistle or the ball going out before the next strike.
     assert open_at_strike == []
