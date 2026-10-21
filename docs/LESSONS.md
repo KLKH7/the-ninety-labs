@@ -1692,3 +1692,18 @@ short and actionable. This file is public: no research sources, product names or
     `test_play_near_a_corner_flag_is_framed_with_the_pitch_filling_the_picture`, each of which fails
     on the 0.5.3 camera;
   - `_match` simulates SIM_MARGIN_S past the window.
+
+### 177. A metric's bar does not make a rule right where the geometry cannot meet it
+- **What happened:** after #198, #179's seed 3 still missed the camera's 85% framing bar.
+  - The blind critic showed the misses: a corner wait shot centred on the flag, three-quarters
+    run-off, and a lens that pumped in and out after a short corner.
+  - A corner rule, framed from the taker inward and holding its shot, fixed what the critic saw:
+    near corners went from 26% to 34% pitch, far corners to 79%.
+  - It did not move seed 3's score. Its misses are live play within a few metres of the near flag,
+    where no shot from the gantry has both the ball central and the pitch filling the picture.
+- **Rule:**
+  - Fix what the viewer sees and test it in situations built on purpose.
+  - Report a held-out score that geometry caps, rather than bending the camera toward the metric.
+  - The critic's judgement of the picture outranks a proxy metric where the two disagree.
+- **Check:** `tests/test_render_camera.py::test_a_corner_is_framed_from_the_taker_inward` and
+  `::test_a_short_corner_does_not_pump_the_lens` fail on 0.5.5.

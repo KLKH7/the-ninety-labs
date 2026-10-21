@@ -156,6 +156,12 @@ OPEN_EASE_S = 2.0
 # The restart is taken once the ball moves faster than this (a ball set for a restart is still): the
 # close-up ends there and the ease out begins, whatever is left of CUT_HOLD_S (*design*, lesson 175).
 PLAYED_MPS = 2.0
+# A corner (Law 17): the ball is placed inside the corner arc, 1 m in radius (Law 1). The broadcast
+# convention for a corner is the main camera framed from the taker inward, the taker near the side of
+# the picture and the penalty area filling the rest, so the viewer sees where the ball is going and
+# not the run-off beyond the flag (*design*, after broadcast practice; lesson 177).
+CORNER_ARC_M = 1.0
+CORNER_TAKER_MARGIN = 0.1  # the taker this far in from the picture's edges, a share of each (design)
 NET_SETTLE_S = 2.6  # the mesh is back to rest by here; the angle itself holds CUT_HOLD_S
 
 
@@ -269,6 +275,8 @@ class Director:
         self._box = False  # the box's closer lens is in (BOX_LEAVE_M)
         self._open_until = -1.0  # the restart's closed-up shot after an edit cut (open_on_restart)
         self._ease_end = -1.0  # the ease out of it ends here, at the wide shot
+        self._corner_flag: tuple[float, float] | None = None  # the corner being taken, and until when
+        self._corner_until = -1.0
         self.half_width = params.half_width_m
         self.prev_ball: tuple[float, float] | None = None
         self.shake_phase = (self.rng.uniform(0, 6.28), self.rng.uniform(0, 6.28))
@@ -310,6 +318,9 @@ class Director:
 
     def _goal(self, bx: float, by: float, vx: float, vy: float) -> tuple[float, float, float]:
         self._goal_z = 0.0
+        corner = self._corner(bx, by)
+        if corner is not None:
+            return corner
         if self.t < self._open_until:  # closed up on the restart: the ball where it is set
             return min(max(bx, 0.0), 105.0), min(max(by, 0.0), 68.0), TIGHT_HALF_M
         px, py = self._play(bx, by)
@@ -350,6 +361,58 @@ class Director:
         ax, ay = wide
         self._goal_z = self._lofted(bx, by, ax, ay, hw)
         return ax, ay, hw
+
+    def _corner(self, bx: float, by: float) -> tuple[float, float, float] | None:
+        """The corner framing, from the ball's arrival in a corner arc until CUT_HOLD_S after it has
+        left it: the camera's own minimum shot holds this decision, so a short corner played near
+        the flag does not pump the lens in and out (lesson 177). None when no corner is on."""
+        for fx in (0.0, 105.0):
+            for fy in (0.0, 68.0):
+                if math.hypot(bx - fx, by - fy) <= CORNER_ARC_M + 0.11:  # the ball's radius
+                    self._corner_flag = (fx, fy)
+                    self._corner_until = self.t + CUT_HOLD_S
+        if self._corner_flag is None or self.t >= self._corner_until:
+            self._corner_flag = None
+            return None
+        fx, fy = self._corner_flag
+        cache = self.__dict__.setdefault("_corner_shots", {})
+        if (fx, fy) not in cache:
+            cache[(fx, fy)] = self._corner_shot(fx, fy)
+        best = cache[(fx, fy)]
+        if best is None:
+            return None
+        ax, ay, hw = best
+        m = CORNER_TAKER_MARGIN  # the ball itself is never lost, nor pulled back to the centre
+        ax, ay = self._ball_in_centre(bx, by, 0.0, 0.0, ax, ay, hw, (m, 1 - m, m, 1 - m))
+        return ax, ay, hw
+
+    def _corner_shot(self, fx: float, fy: float) -> tuple[float, float, float] | None:
+        """The shot of a corner from the flag at (fx, fy): of the aims over that corner's quarter of
+        the pitch and the lenses from TIGHT_HALF_M to the gantry's own width, the one with the most
+        pitch in the picture that keeps the taker (the flag) in the picture, CORNER_TAKER_MARGIN in
+        from its edges, and the penalty mark, where the corner is played to, in it too (Law 1, 17).
+        A near corner puts the taker at the side of the picture, as a broadcast does: centring him
+        would fill the picture with the run-off beside the flag."""
+        spot = (11.0 if fx == 0.0 else 94.0, 34.0)
+        wide = min(self.p.half_width_m, GANTRY_HALF_M)
+        best = None
+        for i in range(8):
+            x = fx + (spot[0] - fx) * i / 7
+            for j in range(12):
+                y = fy + (34.0 - fy) * j / 11
+                for hw in (TIGHT_HALF_M, 7.0, 9.0, 11.0, 13.0, 15.0, wide):
+                    shot = self._shot((x, y, 0.0), hw)
+                    flag, mark = shot.project((fx, fy, 0.11)), shot.project((*spot, 0.0))
+                    if flag is None or mark is None:
+                        continue
+                    m = CORNER_TAKER_MARGIN
+                    taker = (m * self.width <= flag[0] <= (1 - m) * self.width
+                             and m * self.height <= flag[1] <= (1 - m) * self.height)
+                    if taker and 0 <= mark[0] <= self.width and 0 <= mark[1] <= self.height:
+                        share = pitch_share(shot, step=80)
+                        if best is None or share > best[0]:
+                            best = (share, x, y, hw)
+        return None if best is None else best[1:]
 
     def _lofted(self, bx: float, by: float, ax: float, ay: float, hw: float) -> float:
         """How high to aim for a lofted ball: the least height, up to the ball's own, that keeps it
@@ -414,15 +477,15 @@ class Director:
         return bx + PLAY_PULL * (sx / sw - bx), by + PLAY_PULL * (sy / sw - by)
 
     def _ball_in_centre(self, bx: float, by: float, vx: float, vy: float, ax: float, ay: float,
-                        hw: float) -> tuple[float, float]:
+                        hw: float, box: tuple | None = None) -> tuple[float, float]:
         """The aim, moved toward the ball only as far as keeps the ball inside the CENTRAL box of the
         picture (well_framed's box, shrunk by CENTRE_MARGIN). The pulls, leads, clamps and holds above
         place the play; none of them may leave the ball itself at the edge or out of the picture
         (lesson 175). The main camera follows the ball to the byline (*design*). The ball where it
         will be when the pan has caught up (pan_lag_s ahead, inside the pitch) must fit as well, so a
         ball running to a line is not left behind by the pan's own lag."""
-        left, right, top, bottom = CENTRAL
-        m = CENTRE_MARGIN
+        left, right, top, bottom = box or CENTRAL
+        m = 0.0 if box else CENTRE_MARGIN
         lag = self.p.pan_lag_s
         z = getattr(self, "ball_z", 0.0) + 0.11
         balls = [(bx, by, z),

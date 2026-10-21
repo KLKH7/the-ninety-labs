@@ -517,3 +517,38 @@ def test_a_ball_on_a_corner_flag_keeps_the_wide_shot():
     assert d.half_width >= 0.8 * wide, (d.half_width, wide)
     uv = cam.project((0.5, 0.5, 0.11))
     assert uv is not None and 0.1 * 1280 <= uv[0] <= 0.9 * 1280
+
+
+def _corner_wait(flag, frames=150):
+    d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=True)
+    _held(d, 20.0, 20.0, 50)
+    return d, _held(d, *flag, frames)
+
+
+def test_a_corner_is_framed_from_the_taker_inward():
+    """Old (0.5.5): a corner was shot like any ball, centred, so a near corner was three-quarters
+    run-off and stands (the blind critic: pitch 25% of the picture for a 22 s wait). The corner is
+    framed from the taker inward (Law 17: the ball in the corner arc): the taker in the picture and
+    the penalty mark too, with as much pitch as any such shot has."""
+    for flag in ((0.5, 0.5), (104.5, 0.5), (0.5, 67.5), (104.5, 67.5)):
+        d, cam = _corner_wait(flag)
+        taker, mark = cam.project((*flag, 0.11)), cam.project((11.0 if flag[0] < 50 else 94.0, 34.0, 0.0))
+        assert 0 <= taker[0] <= 1280 and 0 <= taker[1] <= 720, (flag, taker)
+        assert 0 <= mark[0] <= 1280 and 0 <= mark[1] <= 720, (flag, mark)
+        assert pitch_share(cam) >= (0.3 if flag[1] < 34 else 0.6), (flag, pitch_share(cam))
+
+
+def test_a_short_corner_does_not_pump_the_lens():
+    """Old: a corner played short near the flag closed the lens in, then out again within a few
+    seconds (the blind critic: 18.5 to 10.3 to 12.7 degrees in 6 s). The corner's shot holds
+    CUT_HOLD_S after the ball leaves the arc, so the lens does not reverse inside that time."""
+    d, _ = _corner_wait((0.5, 67.5))
+    widths = []
+    x, y = 0.5, 67.5
+    for i in range(int(25 * CUT_HOLD_S)):  # played short along the goal line, then back out
+        x, y = (min(x + 0.1, 4.0), max(y - 0.3, 58.0)) if i < 40 else (x + 0.05, y)
+        d.step(x, y, [])
+        widths.append(d.half_width)
+    steps = [b - a for a, b in zip(widths, widths[1:], strict=False) if abs(b - a) > 1e-3]
+    reversals = sum(1 for a, b in zip(steps, steps[1:], strict=False) if a * b < 0)
+    assert reversals == 0, reversals
