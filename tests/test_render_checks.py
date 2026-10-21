@@ -77,3 +77,49 @@ def test_player_height_counts_only_whole_players_and_splits_by_angle():
     h = occlusion([f, cut])["player_height_px"]
     assert h["n"] == 33 and h["p05"] == 60
     assert h["by_angle"]["main"]["n"] == 22 and h["by_angle"]["tight"]["n"] == 11
+
+
+def _lying(box_from_feet, fall=85.0):
+    """Player 0 drawn lying: his box placed by `box_from_feet` (dx0, dy0, dx1, dy1) about his
+    projected ground point, and his frame row carrying `fall` degrees (None: no field)."""
+    f = frame()
+    p = f["players"][0]
+    fu, fv = p["foot_px"]
+    p["bbox"] = [fu + box_from_feet[0], fv + box_from_feet[1], fu + box_from_feet[2], fv + box_from_feet[3]]
+    if fall is not None:
+        p["fall"] = fall
+    return f
+
+
+# Boxes of a body lying about 1.7 m along the grass, seen from this camera (lesson 173).
+TOWARD_CAMERA = (-10, -1, 10, 25)  # feet at the top of the box, the body down the image toward us
+AWAY = (-10, -12, 10, 1)  # feet at the bottom, the body up the image away from us
+SIDEWAYS = (-2, -6, 60, 2)  # feet at the left end, the body along the touchline
+
+
+def test_an_upright_player_is_checked_as_before():
+    """No `fall` field (every clip before 0.5.10, every standing player): the ground point must be
+    at the bottom of the box, so a box whose top is at the feet fails exactly as it always did."""
+    assert projection_errors([_lying(TOWARD_CAMERA, fall=None)])["player_foot_outside_box"] == 1
+    assert projection_errors([_lying(TOWARD_CAMERA, fall=0.0)])["player_foot_outside_box"] == 1
+    assert projection_errors([frame()])["player_foot_outside_box"] == 0
+
+
+def test_a_fallen_player_toward_the_camera_has_his_feet_in_his_box():
+    assert projection_errors([_lying(TOWARD_CAMERA)])["player_foot_outside_box"] == 0
+
+
+def test_a_fallen_player_away_from_the_camera_has_his_feet_in_his_box():
+    assert projection_errors([_lying(AWAY)])["player_foot_outside_box"] == 0
+
+
+def test_a_fallen_player_sideways_has_his_feet_in_his_box():
+    assert projection_errors([_lying(SIDEWAYS)])["player_foot_outside_box"] == 0
+
+
+def test_a_fallen_players_box_away_from_his_feet_still_fails():
+    """Lying down excuses where in the box the feet are, never a box that misses them."""
+    shifted = tuple(d + 80 for d in TOWARD_CAMERA)
+    assert projection_errors([_lying(shifted)])["player_foot_outside_box"] == 1
+    beside = (25, -6, 85, 2)  # a lying body's box 25 px clear of his feet
+    assert projection_errors([_lying(beside)])["player_foot_outside_box"] == 1
