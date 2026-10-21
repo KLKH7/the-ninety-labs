@@ -16,7 +16,7 @@ computed from as one range (lesson 31).
 Values are rounded for the screen, so the number a viewer reads is the cited value exactly: speeds
 to 0.1 km/h and distances to the metre. Frames store positions to 1 mm, so the rounding is coarser
 than the positions; it is chosen for the screen (design), and both steps are finer than a tracker's
-error on the M1 clip (top speed within 1.9 km/h of the truth, #162's offline grading).
+error on the M1 clip (top speed within 1.5 km/h of the truth, docs/eval/companion-tracked.md).
 """
 
 from __future__ import annotations
