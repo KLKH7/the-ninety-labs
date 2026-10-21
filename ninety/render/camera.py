@@ -771,11 +771,13 @@ def corner_waits(events: list[dict]) -> dict[int, tuple[float, float]]:
     """Every frame a corner waits to be taken, with its flag: from the engine's set piece at a corner
     flag (within the corner arc) after the ball went out over a goal line (Law 17: a corner, not a
     throw-in or a free kick near the flag), to the frame before the next touch, the kick."""
+    from ninety.render.edit import STOPS  # edit.py imports this module: imported here, not copied
+
     order = sorted(events, key=lambda e: e["frame"])
     out: dict[int, tuple[float, float]] = {}
     stop = None
     for i, e in enumerate(order):
-        if e["type"] in ("out_of_play", "foul", "offside", "goal"):
+        if e["type"] in STOPS:
             stop = e
         if e["type"] != "set_piece":
             continue

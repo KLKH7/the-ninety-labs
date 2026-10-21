@@ -633,3 +633,30 @@ def test_corner_waits_runs_from_a_corner_s_set_piece_to_the_kick_and_only_for_a_
     assert corner_waits(throw) == {}
     open_play = [{"frame": f, "type": "pass", "x": 0.5, "y": 0.5 + f / 10} for f in range(0, 50, 10)]
     assert corner_waits(open_play) == {}
+    # Cases that pass the goal-line check, so they test the rest of the rule (the Reviewer's R8, R8b):
+    # A goal kick from the goal area's near corner (Law 16: anywhere in the goal area), 26.6 m from
+    # the flag: out over the goal line, but no corner.
+    goal_kick = [{"frame": 10, "type": "out_of_play", "x": 0.0, "y": 20.0},
+                 {"frame": 20, "type": "set_piece", "x": 5.5, "y": 26.0},
+                 {"frame": 50, "type": "pass", "x": 5.5, "y": 26.0}]
+    assert corner_waits(goal_kick) == {}
+    then_foul = corner + [{"frame": 70, "type": "foul", "x": 0.6, "y": 0.4},
+                          {"frame": 80, "type": "set_piece", "x": 0.6, "y": 0.4},
+                          {"frame": 110, "type": "pass", "x": 0.6, "y": 0.4}]
+    # The foul's free kick by the flag is no corner: only the first corner waits.
+    assert corner_waits(then_foul) == {f: (0.0, 0.0) for f in range(20, 50)}
+
+
+def test_open_play_through_the_corner_arc_is_framed_as_with_no_corner_rule(monkeypatch):
+    """The Reviewer's R4: a ball run along the goal line through the corner arc in open play (no
+    corner given) is framed exactly as by a director with no corner rule at all."""
+    path = _line((12.0, 10.0), (0.3, 0.6), 30) + _line((0.3, 0.6), (8.0, 1.0), 30)
+
+    def run():
+        d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=True)
+        _held(d, 20.0, 20.0, 50)
+        return [d.step(*p, []).P for p in path]
+
+    with_rule = run()
+    monkeypatch.setattr(Director, "_corner", lambda self, bx, by: None)
+    assert with_rule == run()
