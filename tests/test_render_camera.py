@@ -245,6 +245,7 @@ def test_director_is_deterministic():
 # so they stay for continuity only; 41 and 43 were added before anyone rendered or scored them for
 # the camera (committed ahead of #198's re-score), and are the held-out check.
 HELD_OUT = (3, 5, 41, 43)
+FRESH_HELD_OUT = (41, 43)
 
 
 @cache
@@ -288,18 +289,44 @@ def _broadcast(seed):
     return m, rows
 
 
+def _dead_frames(events: list[dict]) -> set[int]:
+    """Every frame the ball is out of play: from each stoppage to the restart's first touch. The
+    engine's restart event (a set piece, a kick-off) marks the ball set for it, not taken: the ball
+    is in play only once it is kicked and moves (Law 17 for a corner, the same for each restart),
+    so the wait between the two is still a dead ball (lesson 175, the same class as lesson 140)."""
+    order = sorted(events, key=lambda e: e["frame"])
+    dead: set[int] = set()
+    for stop, restart, _ in edit.dead_balls(events):
+        taken = next((e["frame"] for e in order if e["frame"] > restart and e["type"] not in edit.RESTARTS),
+                     restart)
+        dead.update(range(stop, taken))
+    return dead
+
+
+def test_a_restart_waiting_to_be_taken_is_a_dead_ball():
+    """The harness's own labelling: a corner set at frame 30 and kicked at frame 60 is dead from the
+    stoppage to the kick, and live from the kick (seed 3 on #179's engine counted its corner waits
+    as live play)."""
+    events = [{"frame": 10, "type": "out_of_play"}, {"frame": 30, "type": "set_piece"},
+              {"frame": 60, "type": "pass"}, {"frame": 90, "type": "pass"}]
+    dead = _dead_frames(events)
+    assert set(range(10, 60)) <= dead and 60 not in dead and 90 not in dead
+
+
 def test_the_gantry_frames_the_play_with_the_pitch_filling_the_picture():
     """Old (0.5.0 and before): the gantry aimed 4.5 m above the play to keep the stand behind it, so
     the stands filled 40 to 75% of the picture and the players were small at the bottom (well
     framed in 13 to 47% of live frames on seeds 7, 21 and 42). A broadcast keeps the play near the
     middle with the pitch filling most of the picture: in live play, at least 85% of frames have
     the pitch over PITCH_SHARE_MIN of the picture and the ball in the CENTRAL box (camera.py), and
-    the median frame has 8 to 15 players in shot (docs/guides/broadcast-render.md)."""
+    the median frame has 8 to 15 players in shot (docs/guides/broadcast-render.md).
+
+    The 85% bar is asserted on FRESH_HELD_OUT only: seeds 3 and 5 were studied while fixing #198
+    (lesson 175), so they are no longer held out. They are printed with both rates for continuity,
+    as the Coordinator set before they were re-scored."""
     for seed in HELD_OUT:
         m, rows = _broadcast(seed)
-        dead = set()
-        for stop, restart, _ in edit.dead_balls(m.events):
-            dead.update(range(stop, restart + 1))
+        dead = _dead_frames(m.events)
         live = [(fi, cam) for fi, cam, _, _ in rows[::5] if fi not in dead]
         live = [(fi, cam) for fi, cam in live if 0 <= m.frames[fi]["ball"]["x"] <= 105
                 and 0 <= m.frames[fi]["ball"]["y"] <= 68]
@@ -324,7 +351,8 @@ def test_the_gantry_frames_the_play_with_the_pitch_filling_the_picture():
         raw, rate = ok / len(live), ok / (len(live) - unframeable)
         print(f"seed {seed}: well framed {rate:.3f} of frameable live frames, raw {raw:.3f}, "
               f"{unframeable} of {len(live)} unframeable")
-        assert rate >= 0.85, (seed, f"frameable {rate:.3f}", f"raw {raw:.3f}", unframeable, len(live))
+        if seed in FRESH_HELD_OUT:
+            assert rate >= 0.85, (seed, f"frameable {rate:.3f}", f"raw {raw:.3f}", unframeable, len(live))
         assert 8 <= sorted(in_shot)[len(in_shot) // 2] <= 15, (seed, sorted(in_shot))
 
 
