@@ -1,7 +1,24 @@
 import math
+from functools import cache
 
-from ninety.render.camera import CUT_HOLD_S, Camera, Director, blur_vector, net_push, project_with
-from ninety.render.params import CameraParams
+from ninety.render import edit
+from ninety.render.camera import (
+    CUT_HOLD_S,
+    HOLD_SHARE,
+    MAX_PAN_MPS,
+    PAN_ACCEL_MPS2,
+    ZOOM_ACCEL_MPS2,
+    Camera,
+    Director,
+    blur_vector,
+    net_push,
+    pitch_share,
+    project_with,
+    well_framed,
+)
+from ninety.render.clip import _plan
+from ninety.render.params import CameraParams, sample_params
+from ninety.render.scene import drawn_ball
 from ninety.sim.engine import simulate
 
 
@@ -88,55 +105,27 @@ def test_blur_follows_the_pan():
     assert blur_vector(a, b, 0.0) == (0.0, 0.0)
 
 
-def test_goal_cut_sits_behind_the_goal_and_centres_the_ball():
-    d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=1, cuts=True)
-    saw = False
-    prev = None
-    for _ in range(25 * 40):
-        c = d.step(12.0, 34.0)  # inside the left penalty area
-        if d.angle == "goal":
-            saw = True
-            assert c.position[0] < 0 and c.position[2] > 8
-            u, v = c.project((12.0, 34.0, 0.2))
-            assert abs(u - 640) < 40 and abs(v - 360) < 50
-            if prev is not None and math.dist(prev.position, c.position) > 1:
-                assert blur_vector(prev, c, 0.5) == (0.0, 0.0)
-        prev = c
-    assert saw
-
-
-def test_reverse_cut_is_the_far_stand_and_holds_the_ball():
-    d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=2, cuts=True)
-    saw = False
-    for _ in range(25 * 5):
-        c = d.step(52.5, 54.0)  # far side, where that stand is closer and still a wide shot
-        if d.angle == "reverse":
-            saw = True
-            assert 80 < c.position[1] < 96 and 11 < c.position[2] < 14
-            u, v = c.project((52.5, 54.0, 0.2))
-            assert 48 <= u < 1280 - 48 and 48 <= v < 720 - 48
-            # Opposite bowl is the backdrop. A deck above the frame is the sparse overview.
-            deck = c.project((52.5, -68.0, 14.0))
-            lip = c.project((52.5, -46.0, 2.0))
-            feet, head = c.project((52.5, 54.0, 0.0)), c.project((52.5, 54.0, 1.8))
-            assert deck is not None and lip is not None and feet is not None and head is not None
-            assert 80 <= deck[0] < 1280 - 80 and 0 <= deck[1] < 160 and deck[1] < lip[1] < 420
-            assert 55 <= feet[1] - head[1] <= 110
-        assert d.angle != "goal"
-    assert saw
-
-
-def test_open_play_stays_on_the_gantry():
-    d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=2, cuts=True)
-    for _ in range(25 * 20):
-        d.step(52.5, 34.0)
-        assert d.angle == "main"
-    # The far touchline is closer to the far stand, but that shot loses the stand and
-    # pushes the ball off the bottom, so it is not the better angle.
-    d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=2, cuts=True)
-    for _ in range(25 * 5):
-        d.step(52.5, 66.0)
-        assert d.angle == "main"
+def test_live_play_stays_on_the_gantrys_side_of_the_pitch():
+    """Old (0.5.0 and before): the director cut to the far stand when play was on the far side, high
+    behind a goal while the ball was in that box, and low beside the net for a shot arriving, so the
+    viewpoint jumped about between opposite sides of the ground. Live play now keeps the gantry:
+    every camera it uses stands on the gantry's side, so left and right stay where the viewer has
+    them (the 180-degree rule)."""
+    paths = {
+        "midfield": [(52.5, 34.0)] * 125,
+        "far touchline": [(52.5, 66.0)] * 125,
+        "in a box": [(12.0, 34.0)] * 125,
+        "a shot arriving": [(40.0 - 0.6 * i, 34.0) for i in range(40)],
+    }
+    for what, path in paths.items():
+        d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=2, cuts=True)
+        first = None
+        for x, y in path:
+            c = d.step(x, y)
+            first = first or c.position
+            assert d.angle == "main", what
+            assert c.position == first, what  # one camera: it pans and zooms, it does not move
+            assert c.position[1] < 0.0, what
 
 
 def test_a_cut_holds_long_enough_that_it_cannot_flicker():
@@ -144,9 +133,10 @@ def test_a_cut_holds_long_enough_that_it_cannot_flicker():
     switches = []
     prev_angle, prev = "main", None
     for i in range(25 * 12):
-        # A short chance, then open play, then another chance inside the return hold.
-        x, y = (12.0, 34.0) if 40 <= i < 55 or 200 <= i < 230 else (52.5, 34.0)
-        c = d.step(x, y)
+        # A short throw, then open play, then another throw inside the return hold.
+        throw = 40 <= i < 55 or 200 <= i < 230
+        actors = [(52.5, -0.2, "throw")] if throw else [(52.5, 30.0, "run")]
+        c = d.step(52.5, 0.4 if throw else 30.0, actors)
         if d.angle != prev_angle:
             if prev is not None and math.dist(prev.position, c.position) > 1:
                 assert blur_vector(prev, c, 0.5) == (0.0, 0.0)
@@ -155,7 +145,7 @@ def test_a_cut_holds_long_enough_that_it_cannot_flicker():
             switches.append((d.t, d.angle))
             prev_angle = d.angle
         prev = c
-    assert [a for _, a in switches] == ["goal", "main"]
+    assert [a for _, a in switches] == ["tight", "main"]
 
 
 def test_cuts_are_deterministic():
@@ -206,24 +196,11 @@ def test_the_net_gives_behind_the_line_and_then_settles():
     assert 2.0 - hard > 1.0
 
 
-def test_a_shot_into_the_box_is_the_low_angle_and_a_dribble_stays_high():
-    d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=True)
-    d.step(16.8, 34.0)
-    c = d.step(16.2, 34.0)  # 15 m/s toward the left goal, just inside the box
-    assert d.angle == "net"
-    u, v = c.project((16.2, 34.0, 0.4))
-    assert u is not None and 36 <= u < 1280 - 36 and 36 <= v < 720 - 36
-    slow = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=True)
-    slow.step(12.0, 34.0)
-    slow.step(12.1, 34.0)
-    assert slow.angle == "goal"
-
-
 def test_a_goal_cuts_low_beside_the_net_and_returns_to_the_gantry():
     d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=True)
     for _ in range(10):
         d.step(12.0, 34.0)
-    assert d.angle == "goal"
+    assert d.angle == "main"
     prev = d.step(12.0, 34.0)
     c = d.step(52.5, 34.0, goal=("L", 33.2, 1.05, 22.0))
     assert d.angle == "net"
@@ -251,34 +228,6 @@ def test_a_goal_cuts_low_beside_the_net_and_returns_to_the_gantry():
     assert d.net_view() is None
 
 
-def test_the_gantry_holds_the_stand_behind_the_play():
-    # A wide sampled lens aimed at the grass puts the bowl above the frame. The filmed
-    # gantry is longer and looks up, so the seats are the backdrop and a player still has a body.
-    stored = CameraParams(half_width_m=20, height_m=20, back_m=35, shake_m=0, pan_lag_s=0.05)
-    assert stored.half_width_m == 20
-    d = Director(stored, 1280, 720, 25, seed=1)
-    cam = None
-    for _ in range(80):
-        cam = d.step(52.5, 34)
-    assert d.angle == "main"
-    assert abs(d.half_width - 14.5) < 0.05
-    feet, head = cam.project((52.5, 34, 0)), cam.project((52.5, 34, 1.8))
-    assert 55 <= head[1] and feet[1] - head[1] <= 110
-    assert 55 <= feet[1] - head[1]
-    ball = cam.project((52.5, 34, 0.2))
-    assert ball is not None and 400 < ball[1] < 680
-    seat = cam.project((52.5, 86, 8))
-    assert seat is not None and 0 <= seat[1] < 200
-    # Play on either touchline stays inside the picture.
-    for y in (10.0, 54.0):
-        d2 = Director(stored, 1280, 720, 25, seed=1)
-        shot = None
-        for _ in range(80):
-            shot = d2.step(52.5, y)
-        uv = shot.project((52.5, y, 0.2))
-        assert uv is not None and 40 <= uv[0] < 1240 and 40 <= uv[1] < 700
-
-
 def test_director_is_deterministic():
     m = simulate(2, 0.3)
     runs = []
@@ -286,3 +235,177 @@ def test_director_is_deterministic():
         d = Director(CameraParams(shake_m=0.1), 1280, 720, 25, seed=2)
         runs.append([d.step(f["ball"]["x"], f["ball"]["y"]).P for f in m.frames])
     assert runs[0] == runs[1]
+
+
+# Seeds the director's design was not tuned on (the lens, STANDS_MAX and the follow were chosen on
+# seeds 7, 21 and 42).
+HELD_OUT = (3, 5)
+
+
+@cache
+def _match(seed):
+    return simulate(seed, 2.0)
+
+
+def _broadcast(seed):
+    """Every drawn frame of a 100 s clip of `seed` from 0:02, as the render points the camera:
+    the edit's cuts, the warm-up before each segment, the restart's shot after a cut and the time
+    to the next cut (clip.py). Second angles are on, whatever the seed draws. Returns
+    (frame, camera, angle, cut before it) per drawn frame."""
+    m = _match(seed)
+    p = sample_params(seed)
+    d = Director(p.camera, 1280, 720, 25, seed, cuts=True)
+    show, _ = edit.plan(2 * 25, 100 * 25, edit.cuts(m.events, 25), len(m.frames))
+    goals = {e["frame"]: e for e in m.events if e["type"] == "goal"}
+    rows, reopen, after_cut = [], False, False
+    for fi, draw, left in _plan(edit.segments(show)):
+        if fi is None:
+            d.cut()
+            reopen = after_cut = True
+            continue
+        if draw and reopen:
+            d.open_on_restart()
+            reopen = False
+        fr = m.frames[fi]
+        ball = drawn_ball(fr)
+        actors = [(q["x"], q["y"], q.get("action", "")) for q in fr["players"]]
+        goal = None
+        if fi in goals:
+            b = m.frames[fi - 1]["ball"]
+            goal = ("L" if goals[fi]["x"] < 52.5 else "R", goals[fi]["y"], 1.0, math.hypot(b["vx"], b["vy"]))
+        cam = d.step(ball[0], ball[1], actors, goal, None if left is None else left / 25)
+        if draw:
+            rows.append((fi, cam, d.angle, after_cut))
+            after_cut = False
+    return m, rows
+
+
+def test_the_gantry_frames_the_play_with_the_pitch_filling_the_picture():
+    """Old (0.5.0 and before): the gantry aimed 4.5 m above the play to keep the stand behind it, so
+    the stands filled 40 to 75% of the picture and the players were small at the bottom (well
+    framed in 13 to 47% of live frames on seeds 7, 21 and 42). A broadcast keeps the play near the
+    middle with the pitch filling most of the picture: in live play, at least 85% of frames have
+    the pitch over PITCH_SHARE_MIN of the picture and the ball in the CENTRAL box (camera.py), and
+    the median frame has 8 to 15 players in shot (docs/guides/broadcast-render.md)."""
+    for seed in HELD_OUT:
+        m, rows = _broadcast(seed)
+        dead = set()
+        for stop, restart, _ in edit.dead_balls(m.events):
+            dead.update(range(stop, restart + 1))
+        live = [(fi, cam) for fi, cam, _, _ in rows[::5] if fi not in dead]
+        live = [(fi, cam) for fi, cam in live if 0 <= m.frames[fi]["ball"]["x"] <= 105
+                and 0 <= m.frames[fi]["ball"]["y"] <= 68]
+        assert len(live) >= 200, (seed, len(live))  # never vacuous: 40 s of live play
+        ok, in_shot = 0, []
+        for fi, cam in live:
+            b = m.frames[fi]["ball"]
+            ok += well_framed(cam, (b["x"], b["y"], b["z"] + 0.11))
+            seen = 0
+            for q in m.frames[fi]["players"]:
+                # In shot: his feet inside the picture's width and above its bottom, his head below its top.
+                feet, head = cam.project((q["x"], q["y"], 0.0)), cam.project((q["x"], q["y"], 1.8))
+                if feet is not None and head is not None:
+                    seen += 0 <= feet[0] < 1280 and feet[1] < 720 and head[1] >= 0
+            in_shot.append(seen)
+        assert ok / len(live) >= 0.85, (seed, ok, len(live))
+        assert 8 <= sorted(in_shot)[len(in_shot) // 2] <= 15, (seed, sorted(in_shot))
+
+
+def test_the_viewpoint_changes_no_faster_than_a_broadcast_and_never_flickers():
+    """Old (0.5.0 and before): side-on, then the far stand, then high behind a goal, and back,
+    within seconds. A shot is now the run of frames between two changes of picture, an edit cut or
+    a camera that moves. None is shorter than CUT_HOLD_S (the first and last are cut by the clip),
+    the picture changes no more often than a broadcast does (SoccerNet-v2: one change of shot every
+    9 s on average, replays included), and every camera stands on the gantry's side."""
+    for seed in HELD_OUT:
+        _, rows = _broadcast(seed)
+        starts = [0] + [i for i in range(1, len(rows))
+                        if rows[i][3] or math.dist(rows[i - 1][1].position, rows[i][1].position) > 1.0]
+        lengths = [b - a for a, b in zip(starts, starts[1:] + [len(rows)], strict=True)]
+        assert all(n >= CUT_HOLD_S * 25 for n in lengths[1:-1]), (seed, lengths)
+        minutes = len(rows) / 25 / 60
+        assert (len(lengths) - 1) / minutes <= 60 / 9, (seed, len(lengths), minutes)
+        assert all(cam.position[1] < 34.0 for _, cam, _, _ in rows), seed
+
+
+def test_play_on_the_far_side_keeps_the_stands_a_band_across_the_top():
+    """The far side is foreshortened: from a low gantry (13 m up, 31 m back, a sampled seed's) the
+    lens aimed at a ball on the far touchline shows more stand than pitch. The gantry tilts down
+    along its line of sight instead, so the far edge of the pitch stays in the top STANDS_MAX of
+    the picture and the ball stays in the middle of it across."""
+    low = CameraParams(height_m=13.2, back_m=31.1, offset_x_m=-1.6, half_width_m=21.0, shake_m=0.0)
+    for spot in [(52.5, 64.0), (30.0, 60.0), (10.8, 65.1)]:  # last: seed 42's far corner
+        d = Director(low, 1280, 720, 25, seed=1)
+        for _ in range(125):
+            cam = d.step(*spot)
+        u, v = cam.project((*spot, 0.11))
+        assert pitch_share(cam) >= 0.6, spot
+        assert 0.2 * 1280 <= u <= 0.8 * 1280 and 0.15 * 720 <= v <= 0.85 * 720, (spot, u, v)
+
+
+def test_the_gantry_holds_still_while_the_ball_moves_about_one_area():
+    """Old (0.5.1's first clips): the aim was locked to the ball, so every short pass was a pan and
+    the picture swung left and right. The operator frames the play: passes inside one area leave
+    the gantry where it is."""
+    d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=1)
+    for _ in range(50):
+        d.step(50.0, 34.0)
+    start = tuple(d.aim)
+    travel = 0.0
+    for i in range(200):  # short passes, 3 m either way, a second each way
+        prev = tuple(d.aim)
+        d.step(50.0 + 3.0 * math.sin(2 * math.pi * i / 50), 34.0)
+        travel += math.dist(prev, d.aim)
+    assert travel < 1.0 and math.dist(start, d.aim) < 0.5, travel
+
+
+def test_the_zoom_never_pumps_or_turns_round_in_a_frame():
+    """Old: the box's closer lens came in as the ball entered a penalty area and went straight back
+    out as it left, the zoom's pace flipping from in to out in one frame. Now the lens stays in
+    until the ball is BOX_LEAVE_M clear of the box, and the zoom gathers pace at most
+    ZOOM_ACCEL_MPS2."""
+    d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=1)
+    widths = []
+    for i in range(400):  # in and out of the box's edge every second, then away up the pitch
+        x = 15.0 + 3.0 * math.sin(2 * math.pi * i / 25) if i < 250 else 15.0 + 0.3 * (i - 250)
+        d.step(x, 34.0)
+        widths.append(d.half_width)
+    rates = [(b - a) * 25 for a, b in zip(widths, widths[1:], strict=False)]
+    assert max(abs(b - a) * 25 for a, b in zip(rates, rates[1:], strict=False)) <= ZOOM_ACCEL_MPS2 + 1e-6
+    held = widths[60:250]
+    assert max(held) - min(held) < 0.2  # the box lens stays in while the ball is about its edge
+    assert widths[-1] > max(held) + 2.0  # and goes back out once play has left
+
+
+def test_a_header_or_a_catch_in_live_play_stays_on_the_gantry():
+    """Old: an aerial touch or a keeper's catch cut to the tighter lens in the middle of an attack.
+    The director stays on the wide shot through attacks; a throw-in still cuts closer."""
+    for action in ("head", "chest", "thigh", "hands"):
+        d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=True)
+        for _ in range(25 * 3):
+            d.step(30.0, 34.0, [(30.0, 34.2, action)])
+            assert d.angle == "main", action
+    d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=True)
+    d.step(52.5, 0.4, [(52.5, -0.2, "throw")])
+    assert d.angle == "tight"
+
+
+def test_a_pan_eases_in_and_out():
+    """Old: the aim jumped from still to full pace in one frame when a long ball was struck and
+    stopped dead, as no operator pans. It now gathers and loses speed at most PAN_ACCEL_MPS2, and
+    never pans faster than MAX_PAN_MPS."""
+    d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=1)
+    path = [(30.0, 34.0)] * 50 + [(30.0 + 0.8 * i, 34.0) for i in range(1, 60)] + [(77.2, 34.0)] * 75
+    aims = []
+    for x, y in path:
+        cam = d.step(x, y)
+        aims.append(tuple(d.aim))
+    speeds = [math.dist(a, b) * 25 for a, b in zip(aims, aims[1:], strict=False)]
+    assert max(speeds) <= MAX_PAN_MPS + 1e-6
+    changes = [abs(b - a) * 25 for a, b in zip(speeds, speeds[1:], strict=False)]
+    assert max(changes) <= PAN_ACCEL_MPS2 + 1e-6, max(changes)
+    # The long ball's first frame moves the aim's lead 7.8 m on; the aim gains one frame's speed.
+    assert speeds[49] <= PAN_ACCEL_MPS2 / 25 + 1e-6, speeds[48:52]
+    # Settled with the play inside the hold either side of the centre (HOLD_SHARE of the half-width).
+    u, v = cam.project((77.2, 34.0, 0.0))
+    assert speeds[-1] < 0.1 and abs(u - 640) <= HOLD_SHARE * 640 + 8 and abs(v - 360) < 72, (u, v)

@@ -52,6 +52,9 @@ export interface Manifest {
   width: number;
   height: number;
   t_start: number;
+  /** Runs of consecutive match frames: image `index` shows match frame `frame`. More than one when
+   * the broadcast cut from a dead ball to its restart (ninety/match/timeline.py). */
+  segments?: { index: number; frame: number; frames: number }[];
   footage: { kind: "video" | "frames"; src: string; pattern?: string; frames: number };
   detector: string | null;
   detections: { source: string; frames: number };

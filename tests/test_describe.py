@@ -229,3 +229,21 @@ def run_e2e(tmp_path: Path, *extra: str) -> tuple[Path, dict]:
 
 def cues(out: Path) -> list[dict]:
     return [json.loads(line) for line in (out / "cues.jsonl").read_text().splitlines()]
+
+
+def test_webvtt_follows_the_clips_timeline_across_a_cut():
+    """A clip whose picture cuts from a dead ball to its restart (ninety/match/timeline.py): a line
+    is placed where the video shows its match time, not at its time since the clip's start."""
+    from ninety.match.timeline import Timeline
+
+    # 2 s shown from 60.0 s, then the cut, then 4 s from 90.0 s.
+    tl = Timeline([{"index": 0, "frame": 1500, "frames": 50},
+                   {"index": 50, "frame": 2250, "frames": 100}], 25)
+    said = [d.Said(id=f"a{i}", event=f"e{i}", t_event=t, t_in=t, t_out=t + 1.5, lag_s=0.0, pan=0.0, text="x",
+                   spoken="x", ssml="<speak/>", short=False, source="template", evidence=[], duration_s=1.5,
+                   duration_source="estimated") for i, t in enumerate((60.5, 91.0))]
+    vtt = d.webvtt(d.Track(said=said), 60.0, tl)
+    stamps = re.findall(r"(\d\d):(\d\d):(\d\d)\.(\d{3}) --> (\d\d):(\d\d):(\d\d)\.(\d{3})", vtt)
+    secs = [[int(h) * 3600 + int(m) * 60 + int(s) + int(ms) / 1000 for h, m, s, ms in (st[:4], st[4:])]
+            for st in stamps]
+    assert secs == [pytest.approx([0.5, 2.0], abs=1e-3), pytest.approx([3.0, 4.5], abs=1e-3)]
