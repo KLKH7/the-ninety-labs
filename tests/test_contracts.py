@@ -254,8 +254,20 @@ def test_new_agents_follow_the_slices_rules(role):
 
 
 def test_the_clock_rule_is_imported_not_copied():
-    # One clock for viewers and agents (lesson 33): the text lives once, in slice.py.
-    assert "never combine minute and second" not in inspect.getsource(contracts)
+    # One clock for viewers and agents (lesson 33): the text lives once, in contracts.py (it moved
+    # from slice.py so the declarations import no SDK, lesson 153); every writer uses that object.
+    from pathlib import Path
+
+    from ninety.agents import slice as sl
+    from ninety.agents import workflow
+
+    root = Path(contracts.__file__).resolve().parents[1]
+    copies = [p.relative_to(root.parent).as_posix() for p in sorted(root.rglob("*.py"))
+              if "never combine minute and second" in p.read_text()]
+    assert copies == ["ninety/agents/contracts.py"]
+    assert sl.CLOCK_RULE is contracts.CLOCK_RULE and workflow.CLOCK_RULE is contracts.CLOCK_RULE
+    assert contracts.CLOCK_RULE in sl.INSTRUCTIONS
+    assert contracts.CLOCK_RULE in contracts.TACTICIAN_INSTRUCTIONS
 
 
 def test_the_challenger_can_only_agree_or_offer_a_reading():

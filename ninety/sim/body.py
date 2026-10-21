@@ -177,6 +177,11 @@ def stopping_speed(d: float) -> float:
     return math.sqrt(2 * BRAKE_MAX * 0.8 * max(0.0, d))
 
 
+def stopping_distance(v: float) -> float:
+    """How far he runs before he stops from v m/s, braking as stopping_speed has him (P2)."""
+    return v * v / (2 * BRAKE_MAX * 0.8)
+
+
 def move(x: float, y: float, vx: float, vy: float, tx: float, ty: float, want_speed: float,
          body: Body, dt: float) -> tuple[float, float, float, float]:
     """One step toward a target. The velocity change is limited by grip (BRAKE_MAX, shared by
