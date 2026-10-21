@@ -108,6 +108,10 @@ STEP_CATCH_UP = 2.5
 # of a swing at walking pace, before it carries on low to where it stands (design).
 LAND_FRAMES = 3
 SETTLE = 0.5  # standing still, a foot that far (as a share of the step limits) squares up
+# Below this pace the feet step after the body as when standing (design): drifting at 0.4 to 0.6 m/s
+# the engine's pose flickers between walk and stand every frame, and a stride restarted each time
+# never landed: both feet hovered 10 to 20 cm up for seconds.
+STRIDE_FROM_MPS = 0.7
 # Where a standing foot sits under the hips: the asset's rest pose (foot marker, object metres
 # in the asset's own metres): lateral, forward.
 FOOT_HOME = (0.219, 0.127)
@@ -735,7 +739,7 @@ def _feet(g: Gait, x: float, y: float, k: float) -> None:
     g.supporting = support
     if (g.action not in PLANT_ACTIONS and not support) or g.lift > 0.02:
         g.feet = {}
-    elif g.action != "stand" and g.speed >= 0.45 and not support:
+    elif g.action != "stand" and g.speed >= STRIDE_FROM_MPS and not support:
         _stride_feet(g, x, y, k, pel)
     else:
         for side, sign in (("l", 1.0), ("r", -1.0)):
@@ -957,8 +961,16 @@ def _stride_feet(g: Gait, x: float, y: float, k: float, pel: float) -> None:
         if not foot.get("air"):
             f, _ = rel(foot["x"], foot["y"])
             past = half <= off and off < half + air  # its stance is over
-            if past or f < -STANCE_BEHIND_MAX * k:
-                e = max(0.0, (off - half) / air) if past else 0.0
+            other = g.feet.get("r" if side == "l" else "l")
+            other_down = other is None or not other.get("air")
+            # Beyond the leg's reach it lifts early, but only while the other foot is on the grass:
+            # setting off from standing, both feet were behind the reach at once and lifted together.
+            if past or (f < -STANCE_BEHIND_MAX * k and other_down):
+                # Its count starts where the stride's phase has it, before zero when the leg's reach
+                # lifts it early, so it lands when its stance comes round again and the two feet stay
+                # half a stride apart (counted from zero, an early lift landed late: both feet were
+                # high at once, a hop).
+                e = (off - half) / air if past else -((half - off) % (2 * math.pi)) / air
                 if e <= LATE_LIFT:
                     foot = lift_off(foot, e)
             if not foot.get("air"):

@@ -938,3 +938,37 @@ def test_a_player_stopping_does_not_stand_with_his_legs_crossed():
         run = run + 1 if left < right and math.hypot(pl["vx"], pl["vy"]) < 1.0 else 0
         worst = max(worst, run)
     assert worst <= STEP_FRAMES // 2, worst
+
+
+def _both_up_runs(drawn, height=0.14):
+    """Longest run of frames with both feet above `height` (a blind critic's measure: 14 cm)."""
+    run = worst = 0
+    for _, m, _, _ in drawn:
+        run = run + 1 if min(m["foot_l"][2], m["foot_r"][2]) > height else 0
+        worst = max(worst, run)
+    return worst
+
+
+def test_a_player_drifting_while_the_pose_flickers_keeps_his_feet_down():
+    """Found by the blind critic of the first 0.5.4 draft: drifting at 0.4 to 0.6 m/s, the engine's
+    pose flickers between walk and stand every frame (seed 21, a8 at 6:08), and a stride restarted
+    each frame never landed: both feet hovered 10 to 20 cm up for 40 frames, a crouched shuffle.
+    Below STRIDE_FROM_MPS  the feet step after the body as when standing."""
+    frames, x = [], 30.0
+    for i in range(60):
+        v, action = (0.55, "walk") if i % 3 else (0.4, "stand")
+        x += v / FPS
+        frames.append({"ball": {"x": 80.0, "y": 50.0, "z": 0.0, "vx": 0.0, "vy": 0.0}, "possessor": None,
+                       "players": [{"id": "h1", "x": x, "y": 30.0, "vx": v, "vy": 0.0, "heading": 0.0,
+                                    "action": action, "dive": 0.0}]})
+    assert _both_up_runs(_draw(frames)["h1"], 0.05) <= STEP_FRAMES // 2
+
+
+def test_setting_off_from_standing_lifts_one_foot_at_a_time():
+    """Found by the same critic: setting off, both standing feet were behind the leg's reach at once
+    and lifted together, a tuck-jump (seed 21, a5 and h9). One foot lifts early at a time; a run's
+    flight with both feet high lasts no more than a frame."""
+    profile = [0.0] * 20 + [min(3.2, 0.15 * i) for i in range(1, 30)] + [3.2] * 20
+    for start in range(0, 8, 2):  # different stance phases at the start
+        drawn = _draw(_run_frames([0.0] * start + profile))["h1"]
+        assert _both_up_runs(drawn) <= 1, start
