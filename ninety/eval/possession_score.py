@@ -36,6 +36,12 @@ from ninety.vision import track as tr
 COMMAND = "uv run python -m ninety.eval.possession_score"
 SHOW_TARGET = 0.75  # design (GROUNDING): below it, the phone shows nothing
 SURE_TARGET = 0.90  # design (GROUNDING): below it, the phone says "likely"
+ATTACKING_TARGET = 0.75  # design (GROUNDING): "attacking" needs its own agreement, on its own samples
+# The evidence floor, pre-registered before the official calibration (GROUNDING S6): a bar opens
+# only when the lower Wilson 95 % bound of its agreement over possession spells is at least this,
+# from at least MIN_CLIPS clips. At the 75 % target that takes 41 spells; at 90 %, 11.
+EVIDENCE_LOWER = 0.60
+MIN_CLIPS = 3
 Z = 1.96  # 95 %
 BOOTSTRAP = 2000
 SEED = 7  # the bootstrap's random draws, fixed so the report is byte for byte
@@ -94,10 +100,37 @@ def agreement(rows: list[dict]) -> float | None:
     return sum(s["team"] == s["truth"]["team"] for s in rows) / len(rows) if rows else None
 
 
+def opens(rows: list[dict], target: float, right) -> bool:
+    """Whether a bar opens on these samples: agreement at least `target`, and the evidence floor
+    (the lower Wilson bound over spells at least EVIDENCE_LOWER, from at least MIN_CLIPS clips)."""
+    if not rows:
+        return False
+    k, n = by_spell(rows, right)
+    share = sum(right(s) for s in rows) / len(rows)
+    return (share >= target and wilson(k, n)[0] >= EVIDENCE_LOWER
+            and len({s["seed"] for s in rows}) >= MIN_CLIPS)
+
+
 def lowest_cut(samples: list[dict], target: float) -> float | None:
-    """The lowest confidence at which what would be drawn agrees on the team at least `target`."""
+    """The lowest confidence at which what would be drawn opens the bar on the team."""
     cuts = sorted({s["confidence"] for s in samples if s["team"] is not None and s["confidence"] > 0})
-    return next((c for c in cuts if (a := agreement(drawn(samples, c))) is not None and a >= target), None)
+    return next((c for c in cuts if opens(drawn(samples, c), target, team_right)), None)
+
+
+def attacking_rows(samples: list[dict], sure: float | None) -> list[dict]:
+    """The samples the phone would call "attacking" if that label were open: sure, and the ball
+    plainly in the final third."""
+    if sure is None:
+        return []
+    return [s for s in drawn(samples, sure) if s["third"] == "final" and s["plainly"]]
+
+
+def attacking_right(s: dict) -> bool:
+    return third_right(s) and s["truth"]["third"] == "final"
+
+
+def attacking_opens(samples: list[dict], sure: float | None) -> bool:
+    return opens(attacking_rows(samples, sure), ATTACKING_TARGET, attacking_right)
 
 
 def wilson(k: float, n: int) -> list[float] | None:
@@ -156,7 +189,7 @@ def grade(samples: list[dict], show: float | None, sure: float | None) -> dict:
     shown = drawn(samples, show) if show is not None else []
     sure_rows = [s for s in shown if sure is not None and s["confidence"] >= sure]
     likely = [s for s in shown if s not in sure_rows]
-    attacking = [s for s in sure_rows if s["third"] == "final" and s["plainly"]]
+    attacking = attacking_rows(samples, sure) if show is not None else []
     return {
         "graded_samples": len(graded),
         "shown": len(shown),
@@ -164,8 +197,8 @@ def grade(samples: list[dict], show: float | None, sure: float | None) -> dict:
         "team": {"all shown": measure(shown, team_right), "sure": measure(sure_rows, team_right),
                  "likely": measure(likely, team_right)},
         "third": {"all shown": measure(shown, third_right), "sure": measure(sure_rows, third_right)},
-        "attacking": {"shown": len(attacking),
-                      "right": sum(third_right(s) and s["truth"]["third"] == "final" for s in attacking)},
+        "attacking": {"would_show": len(attacking), "right": sum(attacking_right(s) for s in attacking),
+                      **measure(attacking, attacking_right)},
         "per_clip": [{"seed": seed, "graded": sum(1 for s in graded if s["seed"] == seed),
                       "shown": sum(1 for s in shown if s["seed"] == seed),
                       "team_right": sum(team_right(s) for s in shown if s["seed"] == seed)}
@@ -228,6 +261,12 @@ def calibration_md(body: dict) -> str:
         f"- SHOW, the lowest cut-off where team agreement reaches {body['show_target']:.0%}:",
         f"  {gate(body['show'])}",
         f"- SURE, where it reaches {body['sure_target']:.0%}: {gate(body['sure'])}",
+        f"- \"Attacking\", its own {body['attacking_target']:.0%} on the samples it would be shown on: "
+        f"**{'open' if body['attacking'] else 'closed'}** (until it opens, only possession is shown)",
+        "",
+        "A bar opens only on enough evidence, pre-registered before the official calibration: the lower",
+        f"Wilson 95 % bound of its agreement over possession spells at least {body['evidence_lower']},",
+        f"from at least {body['min_clips']} clips (at a 75 % agreement that takes 41 spells; at 90 %, 11).",
         "",
         "| Cut-off | Samples drawn | Team agreement |",
         "|---|---|---|",
@@ -296,8 +335,9 @@ def report_md(body: dict) -> str:
     a = g["attacking"]
     lines += [
         "",
-        f"\"Attacking\" (sure, and the ball plainly in the final third): shown on {a['shown']} samples, "
-        f"right on {a['right']}.",
+        f"\"Attacking\" (sure, and the ball plainly in the final third): would show on {a['would_show']} "
+        f"samples, right on {a['right']}; shown only if its own bar opened on validation "
+        f"({'open' if cal.get('attacking') else 'closed'}).",
         "",
         "Per clip:",
         "",
@@ -334,7 +374,10 @@ def main(argv: list[str] | None = None) -> None:
              "observations_sha256": digests(seeds, args.observations)}
     if args.step == "calibrate":
         show, sure = lowest_cut(samples, SHOW_TARGET), lowest_cut(samples, SURE_TARGET)
-        body = {**stamp, "show_target": SHOW_TARGET, "sure_target": SURE_TARGET, "show": show, "sure": sure,
+        body = {**stamp, "show_target": SHOW_TARGET, "sure_target": SURE_TARGET,
+                "attacking_target": ATTACKING_TARGET, "evidence_lower": EVIDENCE_LOWER,
+                "min_clips": MIN_CLIPS,
+                "show": show, "sure": sure, "attacking": show is not None and attacking_opens(samples, sure),
                 "curve": curve(samples), "per_clip": per_clip(samples),
                 "validation": grade(samples, show, sure)}
         args.out.with_suffix(".json").write_text(json.dumps(body, indent=1, allow_nan=False) + "\n")

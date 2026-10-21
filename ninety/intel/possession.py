@@ -87,20 +87,21 @@ def timeline(rows: list[dict]) -> list[Phase]:
     return out
 
 
-def gates(path: Path = CALIBRATION) -> tuple[float | None, float | None]:
-    """SHOW and SURE as measured on the validation clips (ninety/eval/possession_score.py); None
-    when no cut-off reached its target, which never shows (SHOW) or never says sure (SURE)."""
+def gates(path: Path = CALIBRATION) -> tuple[float | None, float | None, bool]:
+    """SHOW, SURE and whether "attacking" may be said, as measured on the validation clips
+    (ninety/eval/possession_score.py): None when no cut-off reached its target and its evidence
+    floor, which never shows (SHOW) or never says sure (SURE); "attacking" only if its own bar opened."""
     body = json.loads(path.read_text())
-    return body["show"], body["sure"]
+    return body["show"], body["sure"], bool(body["attacking"])
 
 
-def on_screen(p: Phase, show: float | None, sure: float | None) -> dict:
+def on_screen(p: Phase, show: float | None, sure: float | None, attacking_open: bool = False) -> dict:
     """What the phone may draw for a phase: nothing below SHOW; "likely" below SURE; "attacking"
-    only when sure and the ball is plainly in the final third."""
+    only when its own bar opened, the phase is sure and the ball plainly in the final third."""
     if p.team is None or show is None or p.confidence < show:
         return {"t": p.t, "team": None, "third": None, "label": "unknown", "sure": False}
     is_sure = sure is not None and p.confidence >= sure
-    attacking = is_sure and p.third == "final" and p.plainly
+    attacking = attacking_open and is_sure and p.third == "final" and p.plainly
     return {"t": p.t, "team": p.team, "third": p.third, "label": "attacking" if attacking else "possession",
             "sure": is_sure}
 
