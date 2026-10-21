@@ -153,6 +153,9 @@ TIGHT_HALF_M = 5.0
 # After an edit cut the gantry comes back closed up on the restart (TIGHT_HALF_M) for CUT_HOLD_S,
 # then eases out to the wide shot over this long, before the kick (edit.SHOW_BEFORE_RESTART_S).
 OPEN_EASE_S = 2.0
+# The restart is taken once the ball moves faster than this (a ball set for a restart is still): the
+# close-up ends there and the ease out begins, whatever is left of CUT_HOLD_S (*design*, lesson 175).
+PLAYED_MPS = 2.0
 NET_SETTLE_S = 2.6  # the mesh is back to rest by here; the angle itself holds CUT_HOLD_S
 
 
@@ -163,6 +166,9 @@ NET_SETTLE_S = 2.6  # the mesh is back to rest by here; the angle itself holds C
 # and height: left, right, top, bottom).
 PITCH_SHARE_MIN = 0.60
 CENTRAL = (0.2, 0.8, 0.15, 0.85)
+PITCH_MARGIN = 0.05  # the director keeps the pitch this much over PITCH_SHARE_MIN, for the zoom's lag
+#                      (design)
+CENTRE_MARGIN = 0.05  # the director aims the ball this far inside the box, so the pan's lag has room (design)
 
 
 def pitch_share(cam: Camera, step: int = 40) -> float:
@@ -262,6 +268,7 @@ class Director:
         self.zoom_v = 0.0  # how fast the half-width is changing (m/s)
         self._box = False  # the box's closer lens is in (BOX_LEAVE_M)
         self._open_until = -1.0  # the restart's closed-up shot after an edit cut (open_on_restart)
+        self._ease_end = -1.0  # the ease out of it ends here, at the wide shot
         self.half_width = params.half_width_m
         self.prev_ball: tuple[float, float] | None = None
         self.shake_phase = (self.rng.uniform(0, 6.28), self.rng.uniform(0, 6.28))
@@ -293,8 +300,9 @@ class Director:
         over the OPEN_EASE_S before the restart is taken (edit.SHOW_BEFORE_RESTART_S): one shot from
         the gantry, no snap back after the kick. No second angle comes up while it does."""
         self._open_until = self.t + self.dt + CUT_HOLD_S  # from the restart's first frame
+        self._ease_end = self._open_until + OPEN_EASE_S
         self._cut_kind = ""
-        self._cut_until = self._open_until + OPEN_EASE_S
+        self._cut_until = self._ease_end
         # A cut, not a zoom: the warm-up before the restart framed the play wide; the shot opens
         # closed up on the restart at once.
         self.aim = None
@@ -307,8 +315,10 @@ class Director:
         ax = px + vx * self.p.lead_s
         ay = py + vy * self.p.lead_s
         ay = 34 + (ay - 34) * 0.75  # broadcasters rarely aim right at a touchline
-        ax = min(max(ax, 8.0), 97.0)
-        ay = min(max(ay, 12.0), 60.0)
+        # Broadcasters rarely aim at a goal line or a touchline, but never short of the ball: when
+        # the ball is past these the aim follows it to the line (lesson 175).
+        ax = min(max(ax, min(8.0, bx)), max(97.0, bx))
+        ay = min(max(ay, min(12.0, by)), max(60.0, by))
         if in_box(bx, by):
             self._box = True
         elif not in_box(bx, by, BOX_LEAVE_M):
@@ -320,7 +330,33 @@ class Director:
             zone = HOLD_SHARE * hw
             ax = min(max(self.aim[0], ax - zone), ax + zone)
         ax, ay = self._below_stands(ax, ay, hw)
+        # The ball in the centre and the pitch filling the picture, solved together: closing in moves
+        # the ball across the picture, so they alternate, and the ball has the last word where both
+        # cannot hold (a ball on a corner flag): it is never lost to the pitch (lesson 175).
+        on_pitch = 0.0 <= bx <= 105.0 and 0.0 <= by <= 68.0  # a ball over a line is play stopped
+        for _ in range(2 if on_pitch else 0):
+            ax, ay = self._ball_in_centre(bx, by, vx, vy, ax, ay, hw)
+            hw = self._pitch_fills(ax, ay, hw)
+        ax, ay = self._ball_in_centre(bx, by, vx, vy, ax, ay, hw)
         return ax, ay, hw
+
+    def _pitch_fills(self, ax: float, ay: float, hw: float) -> float:
+        """The half-width, closed in only as far as keeps the pitch over PITCH_SHARE_MIN of the
+        picture (plus PITCH_MARGIN), never tighter than TIGHT_HALF_M. Aimed into a corner, a wide
+        shot is mostly run-off and stands; the operator closes in on the play there (lesson 175)."""
+        want = PITCH_SHARE_MIN + PITCH_MARGIN
+        if pitch_share(self._shot((ax, ay, 0.0), hw), step=80) >= want:
+            return hw
+        lo, hi = TIGHT_HALF_M, hw
+        if pitch_share(self._shot((ax, ay, 0.0), lo), step=80) < want:
+            return lo
+        for _ in range(8):
+            mid = (lo + hi) / 2
+            if pitch_share(self._shot((ax, ay, 0.0), mid), step=80) >= want:
+                lo = mid
+            else:
+                hi = mid
+        return lo
 
     def _play(self, bx: float, by: float) -> tuple[float, float]:
         """Where the play is: the ball, pulled PLAY_PULL of the way toward the players around it,
@@ -333,6 +369,41 @@ class Director:
         if sw <= 0.0:
             return bx, by
         return bx + PLAY_PULL * (sx / sw - bx), by + PLAY_PULL * (sy / sw - by)
+
+    def _ball_in_centre(self, bx: float, by: float, vx: float, vy: float, ax: float, ay: float,
+                        hw: float) -> tuple[float, float]:
+        """The aim, moved toward the ball only as far as keeps the ball inside the CENTRAL box of the
+        picture (well_framed's box, shrunk by CENTRE_MARGIN). The pulls, leads, clamps and holds above
+        place the play; none of them may leave the ball itself at the edge or out of the picture
+        (lesson 175). The main camera follows the ball to the byline (*design*). The ball where it
+        will be when the pan has caught up (pan_lag_s ahead, inside the pitch) must fit as well, so a
+        ball running to a line is not left behind by the pan's own lag."""
+        left, right, top, bottom = CENTRAL
+        m = CENTRE_MARGIN
+        lag = self.p.pan_lag_s
+        z = getattr(self, "ball_z", 0.0) + 0.11
+        balls = [(bx, by, z),
+                 (min(max(bx + vx * lag, 0.0), 105.0), min(max(by + vy * lag, 0.0), 68.0), z)]
+
+        def inside(t: float) -> bool:
+            shot = self._shot((ax + t * (bx - ax), ay + t * (by - ay), 0.0), hw)
+            for ball in balls:
+                uv = shot.project(ball)
+                if not (uv is not None and (left + m) * self.width <= uv[0] <= (right - m) * self.width
+                        and (top + m) * self.height <= uv[1] <= (bottom - m) * self.height):
+                    return False
+            return True
+
+        if inside(0.0):
+            return ax, ay
+        lo, hi = 0.0, 1.0  # at t = 1 the ball is at the centre of the picture
+        for _ in range(14):
+            mid = (lo + hi) / 2
+            if inside(mid):
+                hi = mid
+            else:
+                lo = mid
+        return ax + hi * (bx - ax), ay + hi * (by - ay)
 
     def _below_stands(self, ax: float, ay: float, hw: float) -> tuple[float, float]:
         """The aim on the line of sight to (ax, ay), there or nearer the gantry, that keeps the far
@@ -371,10 +442,13 @@ class Director:
         players: list | None = None,
         goal: tuple | None = None,
         cut_in: float | None = None,
+        ball_z: float = 0.0,
     ) -> Camera:
         """The camera for the next frame. `cut_in` is how long until the edit's next cut, in seconds
         (None when no cut follows): no angle starts or ends that close to one, because the cut is
-        itself the change of shot."""
+        itself the change of shot. `ball_z` is the ball's height, so a lofted ball is kept in the
+        picture too (lesson 175)."""
+        self.ball_z = ball_z
         self.players = [(p[0], p[1], p[2]) for p in players] if players else []
         if self.prev_ball is None:
             vx = vy = 0.0
@@ -382,6 +456,12 @@ class Director:
             vx = (ball_x - self.prev_ball[0]) / self.dt
             vy = (ball_y - self.prev_ball[1]) / self.dt
         self.prev_ball = (ball_x, ball_y)
+        if self.t < self._open_until and math.hypot(vx, vy) > PLAYED_MPS:
+            # The restart is taken before the close-up's time is up: the ease out starts now, so
+            # the play is not watched through the close-up (lesson 175).
+            self._open_until = self.t
+            self._ease_end = self.t + OPEN_EASE_S
+            self._cut_until = min(self._cut_until, self._ease_end)
         gx, gy, ghw = self._goal(ball_x, ball_y, vx, vy)
         if self.aim is None:
             self.aim = [gx, gy]
@@ -389,13 +469,22 @@ class Director:
             self.half_width = ghw
         else:
             self._ease(self.aim, self.aim_v, gx, gy)
-            # The zoom is a spring too, slower than the pan, so it gathers and loses pace and never
-            # turns round in a frame.
-            w = 2.0 / (self.p.pan_lag_s * 2.5)
-            acc = w * w * (ghw - self.half_width) - 2 * w * self.zoom_v
-            acc = min(max(acc, -ZOOM_ACCEL_MPS2), ZOOM_ACCEL_MPS2)
-            self.zoom_v += acc * self.dt
-            self.half_width += self.zoom_v * self.dt
+            if self._open_until <= self.t < self._ease_end:
+                # The ease out of the restart's close-up reaches the wide shot in OPEN_EASE_S, as
+                # the edit plans (the restart is taken by then): eased in and out, not left to the
+                # zoom spring, whose acceleration limit took 3 s and more (lesson 175).
+                u = (self.t + self.dt - self._open_until) / OPEN_EASE_S
+                u = min(max(u, 0.0), 1.0)
+                self.half_width = TIGHT_HALF_M + (ghw - TIGHT_HALF_M) * u * u * (3 - 2 * u)
+                self.zoom_v = 0.0
+            else:
+                # The zoom is a spring too, slower than the pan, so it gathers and loses pace and
+                # never turns round in a frame.
+                w = 2.0 / (self.p.pan_lag_s * 2.5)
+                acc = w * w * (ghw - self.half_width) - 2 * w * self.zoom_v
+                acc = min(max(acc, -ZOOM_ACCEL_MPS2), ZOOM_ACCEL_MPS2)
+                self.zoom_v += acc * self.dt
+                self.half_width += self.zoom_v * self.dt
         self.t += self.dt
         fresh_goal = False
         if goal:

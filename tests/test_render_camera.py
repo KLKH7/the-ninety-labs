@@ -4,8 +4,10 @@ from functools import cache
 from ninety.render import edit
 from ninety.render.camera import (
     CUT_HOLD_S,
+    GANTRY_HALF_M,
     HOLD_SHARE,
     MAX_PAN_MPS,
+    OPEN_EASE_S,
     PAN_ACCEL_MPS2,
     ZOOM_ACCEL_MPS2,
     Camera,
@@ -16,7 +18,7 @@ from ninety.render.camera import (
     project_with,
     well_framed,
 )
-from ninety.render.clip import _plan
+from ninety.render.clip import SIM_MARGIN_S, _plan
 from ninety.render.params import CameraParams, sample_params
 from ninety.render.scene import drawn_ball
 from ninety.sim.engine import simulate
@@ -244,7 +246,10 @@ HELD_OUT = (3, 5)
 
 @cache
 def _match(seed):
-    return simulate(seed, 2.0)
+    """The match the 100 s window below draws from, simulated SIM_MARGIN_S past the window as a render
+    simulates past its clip (clip.py, lesson 140), so a dead ball near the window's end has its
+    restart in the events: without it the edit sees no dead ball and its frames count as live play."""
+    return simulate(seed, (2 + 100 + SIM_MARGIN_S) / 60)
 
 
 def _broadcast(seed):
@@ -273,7 +278,7 @@ def _broadcast(seed):
         if fi in goals:
             b = m.frames[fi - 1]["ball"]
             goal = ("L" if goals[fi]["x"] < 52.5 else "R", goals[fi]["y"], 1.0, math.hypot(b["vx"], b["vy"]))
-        cam = d.step(ball[0], ball[1], actors, goal, None if left is None else left / 25)
+        cam = d.step(ball[0], ball[1], actors, goal, None if left is None else left / 25, ball_z=ball[2])
         if draw:
             rows.append((fi, cam, d.angle, after_cut))
             after_cut = False
@@ -409,3 +414,52 @@ def test_a_pan_eases_in_and_out():
     # Settled with the play inside the hold either side of the centre (HOLD_SHARE of the half-width).
     u, v = cam.project((77.2, 34.0, 0.0))
     assert speeds[-1] < 0.1 and abs(u - 640) <= HOLD_SHARE * 640 + 8 and abs(v - 360) < 72, (u, v)
+
+
+def _held(d, x, y, frames, actors=None):
+    cam = None
+    for _ in range(frames):
+        cam = d.step(x, y, actors or [])
+    return cam
+
+
+def test_a_restart_taken_during_the_close_up_is_watched_on_the_wide_shot():
+    """Old (0.5.2 to 0.5.3): after an edit cut the gantry came back closed up on the restart and the
+    zoom spring took 3 s and more to get back out, so a corner taken early was played through the
+    close-up (seed 3 on #179's engine: the pitch 28-46% of the picture). Once the ball is played the
+    ease out starts, and within OPEN_EASE_S the lens is back at the gantry's own width (lesson 175)."""
+    d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=True)
+    _held(d, 30.0, 34.0, 50)
+    wide = d.half_width
+    d.cut()
+    d.open_on_restart()
+    _held(d, 30.5, 0.5, 25)  # one second of the close-up on a ball set for a throw-in
+    assert d.half_width < 0.5 * wide
+    x, y = 30.5, 0.5
+    for _ in range(int(25 * OPEN_EASE_S) + 1):  # the throw is taken: the ball comes infield
+        y += 8.0 / 25
+        d.step(x, y, [])
+    assert d.half_width >= 0.9 * min(d.p.half_width_m, GANTRY_HALF_M), d.half_width
+
+
+def test_a_ball_run_to_the_byline_stays_in_the_middle_of_the_picture():
+    """Old: the aim stopped 8 m short of each goal line, so a ball run to the byline was left at the
+    edge of the picture or out of it (seed 3 on #179's engine). The aim follows the ball to the line,
+    and the ball, and where it will be when the pan catches up, stay inside the CENTRAL box."""
+    d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=True)
+    x, y = 30.0, 20.0
+    _held(d, x, y, 50)
+    bad = 0
+    for i in range(100):  # 4 s toward the byline at 7.5 m/s, then held there
+        x = max(x - 0.3, 0.6)
+        cam = d.step(x, y, [])
+        bad += i >= 25 and not well_framed(cam, (x, y, 0.11))
+    assert bad == 0, bad
+
+
+def test_play_near_a_corner_flag_is_framed_with_the_pitch_filling_the_picture():
+    """Old: aimed into a corner, the wide shot was mostly run-off and stands. The lens closes in
+    there until the pitch fills the picture again, with the ball still in the middle."""
+    d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=True)
+    cam = _held(d, 3.0, 8.0, 150)
+    assert well_framed(cam, (3.0, 8.0, 0.11)), pitch_share(cam)
