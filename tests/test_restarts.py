@@ -1403,6 +1403,14 @@ def corner_wait(seed: int = 3) -> Engine:
     return e
 
 
+def place(e: Engine, p) -> tuple[float, float, float]:
+    """His place and his own pace to it, as move_players has them before lesson 174's walking floor:
+    his shape target, kept off the restart."""
+    tx, ty, top = e.shape_target(p)
+    kx, ky = e.keep_off(p, tx, ty)
+    return (kx, ky, max(top, e.in_time(p, kx, ky))) if (kx, ky) != (tx, ty) else (tx, ty, top)
+
+
 def test_players_walk_to_their_places_at_a_restart_rather_than_creep():
     """Defect (lesson 174): at a corner the players went to their places just in time for the
     kick, half a minute off, so they crept in below a walk through the whole wait (72% of their
@@ -1414,30 +1422,39 @@ def test_players_walk_to_their_places_at_a_restart_rather_than_creep():
     from ninety.sim.engine import SETTLE_M, WALK_MPS
     e = corner_wait()
     r = e.restart
-    going = [p for p in e.players if p.id != r.fetcher and math.dist(e.shape_target(p)[:2], (p.x, p.y)) > 5.0]
-    assert len(going) >= 5 and any(e._shape_target(p)[2] < WALK_MPS for p in going)  # premise: they crept
-    assert all(e.shape_target(p)[2] >= WALK_MPS for p in going)
+    going = [(p, at) for p in e.players if p.id != r.fetcher
+             for at in [place(e, p)] if math.dist(at[:2], (p.x, p.y)) > 5.0]
+    assert len(going) >= 5 and any(at[2] < WALK_MPS for _, at in going)  # premise: they crept
+    assert all(e.restart_pace(p, *at) >= WALK_MPS for p, at in going)
     for _ in range(int(1.0 / DT)):  # a second on: his side's brain has the restart as its possession
         e.step()
+    speeds = sorted(math.hypot(p.vx, p.vy) for p, _ in going)
+    assert speeds[len(speeds) // 2] >= WALK_MPS - 0.01  # and they do walk, frame by frame
     keeper = next(p for p in e.players if p.role == "GK" and p.team == "home")  # at the far end
-    kx, ky, _ = e._shape_target(keeper)
+    kx, ky, _ = place(e, keeper)
     keeper.x, keeper.y, keeper.vx, keeper.vy = kx + 10.0, ky, 0.0, 0.0  # 10 m off his place
-    assert e._shape_target(keeper)[2] < WALK_MPS  # premise: he would creep
-    assert e.shape_target(keeper)[2] >= WALK_MPS
+    at = place(e, keeper)
+    assert at[2] < WALK_MPS  # premise: he would creep
+    assert e.restart_pace(keeper, *at) >= WALK_MPS
     # Standing half a stride from his place he settles to it at his own pace; walking in, he walks.
-    q = next(p for p in going if p.role != "GK")
-    tx, ty, _ = e._shape_target(q)
+    q = next(p for p, _ in going if p.role != "GK" and p.team == r.team)
+    tx, ty, _ = place(e, q)
     d = math.dist((tx, ty), (q.x, q.y))
     q.x, q.y = tx + (q.x - tx) / d * SETTLE_M / 2, ty + (q.y - ty) / d * SETTLE_M / 2
     q.vx = q.vy = 0.0
-    assert e.shape_target(q) == e._shape_target(q)
-    q.vx, q.vy = (tx - q.x) / (SETTLE_M / 2) * 1.2, (ty - q.y) / (SETTLE_M / 2) * 1.2
-    assert e.shape_target(q)[2] >= WALK_MPS
+    at = place(e, q)
+    assert 0.0 < math.dist(at[:2], (q.x, q.y)) <= SETTLE_M and e.restart_pace(q, *at) == at[2]
+    q.vx, q.vy = (at[0] - q.x) / (SETTLE_M / 2) * 1.2, (at[1] - q.y) / (SETTLE_M / 2) * 1.2
+    assert e.restart_pace(q, *place(e, q)) >= WALK_MPS
+    two = 2.0 / (SETTLE_M / 2)  # from half a stride off to two metres off
+    q.x, q.y, q.vx, q.vy = tx + (q.x - tx) * two, ty + (q.y - ty) * two, 0.0, 0.0
+    at = place(e, q)
+    assert math.dist(at[:2], (q.x, q.y)) > 1.9 and e.restart_pace(q, *at) >= WALK_MPS  # 2 m off: a walk
     # Not in play, nor once the restart is taken (set_by: the kick is a moment away).
     e.set_by, e.restart = r, None
-    assert all(e.shape_target(p) == e._shape_target(p) for p in e.players)
+    assert all(e.restart_pace(p, *at) == at[2] for p in e.players for at in [place(e, p)])
     e.set_by, e.restart = None, None
-    assert all(e.shape_target(p) == e._shape_target(p) for p in e.players)
+    assert all(e.restart_pace(p, *at) == at[2] for p in e.players for at in [place(e, p)])
 
 
 def test_the_player_fetching_a_dead_ball_keeps_his_own_pace_by_the_boards():
@@ -1451,5 +1468,61 @@ def test_the_player_fetching_a_dead_ball_keeps_his_own_pace_by_the_boards():
     assert r.fetcher is not None  # premise
     f = e.by_id[r.fetcher]
     f.x, f.y, f.vx, f.vy = PITCH_X + BOARDS_M - 0.1, 1.0, 0.5, 0.0  # 10 cm from the boards, going at them
-    assert e._shape_target(f)[2] < WALK_MPS  # premise: by the boards he goes slower than a walk
-    assert e.shape_target(f) == e._shape_target(f)
+    at = place(e, f)
+    assert at[2] < WALK_MPS  # premise: by the boards he goes slower than a walk
+    assert e.restart_pace(f, *at) == at[2]
+
+
+def test_one_a_hair_inside_the_keep_off_circle_goes_straight_to_his_place_on_its_edge():
+    """Defect (lesson 174): an opponent who had stopped a hair short of his place on the keep-off
+    circle's edge, still clear of the Laws' 9.15 m, was sent KEEP_OFF_MARGIN_M out past it, came
+    back in to the same place and stopped short again: out and back every half second through the
+    wait. Inside the circle, a straight way that keeps the Laws' distance is taken straight; from
+    inside the Laws' distance, or where the straight way would cut it, he still steps out first."""
+    e = Engine(3)
+    free_kick(e, "home", 60.0, 34.0)
+    d = e.by_id["a7"]
+    clear = 9.15 + KEEP_OFF_MARGIN_M
+    edge = (60.0 - clear, 34.0)  # his place, goal-side: where a target 9.15 m off is moved to
+    d.x, d.y = 60.0 - clear + 0.01, 34.0  # a hair short of it
+    assert e.keep_off(d, 60.0 - 9.15, 34.0) == pytest.approx(edge)
+    out = (60.0 - clear - KEEP_OFF_MARGIN_M, 34.0)
+    assert e.keep_off(d, 60.0 + 9.15, 34.0) == pytest.approx(out)  # his place across the circle: out first
+    d.x, d.y = 60.0 - 8.0, 34.0  # inside the Laws' distance: out first
+    assert e.keep_off(d, 60.0 - 9.15, 34.0) == pytest.approx(out)
+
+
+def test_kept_off_a_free_kick_he_stands_at_his_place_rather_than_walking_out_and_back(monkeypatch):
+    """Lesson 174, frame by frame (move_players): an opponent whose own target is inside the Laws'
+    distance stands at his place on the keep-off circle's edge. From a hair short of it he does not
+    go out and back; and a shift of his place along the edge smaller than SETTLE_M is made at his
+    own pace, not walked: the walking floor is judged on the place he can stand, not on his target
+    inside the circle."""
+    from ninety.sim.engine import SETTLE_M, WALK_MPS
+    e = Engine(3)
+    still(e)
+    free_kick(e, "home", 60.0, 34.0)
+    d = e.by_id["a7"]
+    for i, q in enumerate(q for q in e.players if q is not d):
+        q.x, q.y = 95.0, 4.0 + 3.0 * i  # out of his way, at the far end
+    inside = (55.0, 34.0)  # his own target, 5 m from the ball
+    real = e.shape_target
+    monkeypatch.setattr(e, "shape_target", lambda q: (*inside, 0.0) if q is d else real(q))
+    clear = 9.15 + KEEP_OFF_MARGIN_M
+
+    def walked(at: tuple[float, float], seconds: float) -> float:
+        d.x, d.y, d.vx, d.vy = *at, 0.0, 0.0
+        path = 0.0
+        for _ in range(int(seconds / DT)):
+            was = (d.x, d.y)
+            e.move_players()
+            path += math.dist(was, (d.x, d.y))
+        return path
+
+    assert walked((60.0 - clear + 0.01, 34.0), 2.0) < 0.05  # a hair short of his place
+    a = math.asin(0.6 / clear)  # 0.6 m round the edge from his place
+    at = (60.0 - clear * math.cos(a), 34.0 + clear * math.sin(a))
+    d.x, d.y = at
+    assert 0.5 < math.dist(e.keep_off(d, *inside), at) < SETTLE_M  # premise: a small shift along the edge
+    assert e.restart_pace(d, *inside, 0.0) >= WALK_MPS  # premise: judged on his target, he would walk
+    assert walked(at, 0.5) < 0.1

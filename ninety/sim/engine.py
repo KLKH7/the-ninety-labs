@@ -2021,22 +2021,7 @@ class Engine:
         return math.hypot(tx - p.x, ty - p.y) / max(self.ball_eta(tx, ty), DT)
 
     def shape_target(self, p: Player) -> tuple[float, float, float]:
-        """Where a player off the ball wants to be, and how fast they go there. While a restart waits
-        to be taken, a player whose place is more than SETTLE_M off, or who is still walking in,
-        goes there at no less than a normal walking pace (L4) and stands there, rather than
-        creeping in over the whole wait (R1's); one standing at his place settles to a small shift
-        of it at his own pace, so it is not walked to and back. The one fetching the ball keeps his
-        own pace: near the boards it is what he can stop in (lesson 174)."""
-        tx, ty, top = self._shape_target(p)
-        r = self.restart
-        if r is not None and p.id != r.fetcher:
-            off = math.hypot(tx - p.x, ty - p.y)
-            if off > SETTLE_M or (off > 0.0 and math.hypot(p.vx, p.vy) > THROW_SETTLED_MPS):
-                top = max(top, WALK_MPS)
-        return tx, ty, top
-
-    def _shape_target(self, p: Player) -> tuple[float, float, float]:
-        """Where a player off the ball wants to be, and how fast they go there (shape_target)."""
+        """Where a player off the ball wants to be, and how fast they go there."""
         chase = self.chase.get(p.team)
         if p.id in self.lunges:  # committed: straight at the ball, at what winning it is worth to him (P17)
             bx, by = self.ball[0], self.ball[1]
@@ -2430,6 +2415,7 @@ class Engine:
             kx, ky = self.keep_off(p, tx, ty)
             if (kx, ky) != (tx, ty):
                 tx, ty, top = kx, ky, max(top, self.in_time(p, kx, ky))
+            top = self.restart_pace(p, tx, ty, top)
             dist = math.hypot(tx - p.x, ty - p.y)
             if dist > 1e-6:  # bend the running direction away from anyone about to be in the way
                 ax, ay = self.avoid(p)
@@ -2440,6 +2426,22 @@ class Engine:
             p.heading = turn_toward(p.heading, perception.facing(p.heading, p.vx, p.vy, p.x, p.y,
                                                                  *self.looks_at(p)))
         self.separate()
+
+    def restart_pace(self, p: Player, tx: float, ty: float, top: float) -> float:
+        """How fast a player goes to (tx, ty), his place as kept off the restart (keep_off), while a
+        restart waits to be taken: if it is more than SETTLE_M off, or he is still walking in, at no
+        less than a normal walking pace (L4), so he gets there and stands there rather than creeping
+        in over the whole wait (R1's); standing at it, he settles to a small shift of it at his own
+        pace, so it is not walked to and back. Judged on where he can stand, not on a place inside
+        the Laws' distance that keep_off holds him off. The one fetching the ball keeps his own
+        pace: near the boards it is what he can stop in (lesson 174)."""
+        r = self.restart
+        if r is None or p.id == r.fetcher:
+            return top
+        off = math.hypot(tx - p.x, ty - p.y)
+        if off > SETTLE_M or (off > 0.0 and math.hypot(p.vx, p.vy) > THROW_SETTLED_MPS):
+            return max(top, WALK_MPS)
+        return top
 
     def keep_off(self, p: Player, tx: float, ty: float) -> tuple[float, float]:
         """Until a restart's ball is in play an opponent keeps the Laws' distance from it: 2 m at a
@@ -2488,12 +2490,17 @@ class Engine:
         # And he goes round the circle, not across it. Inside it, he first steps straight out, to
         # KEEP_OFF_MARGIN_M past it (aimed at its edge, he would stop on the edge, still inside);
         # while the straight way to his target would cut inside, he aims along the circle, at most
-        # KEEP_OFF_STEP_DEG round from where he is.
+        # KEEP_OFF_STEP_DEG round from where he is. But one inside it whose straight way keeps the
+        # Laws' distance, as when he has stopped a hair short of his place on its edge, goes straight
+        # there: sent out past it, he would come back in to the same place and stop short again, out
+        # and back over and over (lesson 174).
         mx, my = p.x - bx, p.y - by
         m = math.hypot(mx, my)
         out = clear + KEEP_OFF_MARGIN_M
         out_x, out_y = (bx + mx / m * out, by + my / m * out) if m > 1e-6 else (tx, ty)
-        if 1e-6 < m < clear and 0.5 <= out_x <= PITCH_X - 0.5 and 0.5 <= out_y <= PITCH_Y - 0.5:
+        if 1e-6 < m < clear and segment_distance(bx, by, p.x, p.y, tx, ty) >= clear - KEEP_OFF_MARGIN_M:
+            pass
+        elif 1e-6 < m < clear and 0.5 <= out_x <= PITCH_X - 0.5 and 0.5 <= out_y <= PITCH_Y - 0.5:
             tx, ty = out_x, out_y
         elif m > 1e-6 and (m < clear or segment_distance(bx, by, p.x, p.y, tx, ty) < clear - ON_CIRCLE_M):
             here, there = fmath.atan2(my, mx), fmath.atan2(ty - by, tx - bx)
