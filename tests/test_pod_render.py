@@ -89,3 +89,30 @@ def test_verify_finds_a_file_that_changed_after_the_manifest(tmp_path):
     assert pod.verify(tmp_path) == []
     (d / "frames.jsonl").write_text("frames.jsonX")  # same size, different bytes
     assert pod.verify(tmp_path) == ["train/seed3/frames.jsonl"]
+
+
+@pytest.mark.parametrize("renderer, hardware", [
+    ("ANGLE (NVIDIA, Vulkan 1.3.277 (NVIDIA GeForce RTX 4090 (0x00002684)), NVIDIA-550.54.15)", True),
+    ("ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 4090/PCIe/SSE2, OpenGL ES 3.2)", True),
+    ("ANGLE (Apple, ANGLE Metal Renderer: Apple M3 Pro, Unspecified Version)", True),
+    ("ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)", False),
+    ("ANGLE (Mesa, llvmpipe (LLVM 15.0.7, 256 bits), OpenGL 4.5)", False),
+    ("Google SwiftShader", False),
+    ("", False),
+])
+def test_the_gpu_path_refuses_a_software_renderer(renderer, hardware):
+    """A pod run that asked for the GPU must be on it: SwiftShader or llvmpipe (software GL) is
+    refused, never silently used, and an empty renderer string counts as unknown, not hardware."""
+    assert pod.is_hardware(renderer) is hardware
+
+
+def test_determinism_names_every_file_that_differs(tmp_path):
+    a, b = tmp_path / "a", tmp_path / "b"
+    for d in (a, b):
+        (d / "images").mkdir(parents=True)
+        (d / "frames.jsonl").write_text('{"frame": 0}\n')
+        (d / "images" / "00000.jpg").write_bytes(b"\xff\xd8same")
+    assert pod.differences(a, b) == []
+    (b / "images" / "00000.jpg").write_bytes(b"\xff\xd8diff")
+    (b / "events.jsonl").write_text("")
+    assert pod.differences(a, b) == ["events.jsonl", "images/00000.jpg"]
