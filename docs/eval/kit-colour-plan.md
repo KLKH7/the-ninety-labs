@@ -95,3 +95,28 @@ phone's possession gate stays closed.
   - `event_report`.
 - Update EVALUATION, CHALLENGE_MAP, W6's note and the agents' limit (lifted only if predictive).
 - Lesson 179.
+
+## Step 1's diagnosis, and an amendment (before any candidate is scored)
+
+The read kit against the true shirt colour, per track, with crops looked at for seeds 120 and 2043:
+- **(b) a pattern's second colour is the main cause.**
+  - The renderer draws hoops, stripes, a sash or halves in the kit's second colour: the shorts
+    colour, or white when the shorts match the shirt (`web/render/render.js`, kitMaterial).
+  - It also draws a yoke of it above about 1.46 m, which lies in the patch `kit_rgb` samples.
+  - 120: the blue home kit with white hoops reads near-white.
+  - 2043: the white away kit (halves with black) and the dark-green home kit (stripes with black)
+    both read near-black.
+- **(e) 120's "white read as cyan" is not a misreading.** Those tracks are the away goalkeeper,
+  whose kit is cyan; the colour is read correctly.
+- **(d) light:** some shirts read darker in shade. Secondary here.
+- **(a) grass:** no case found where grass-like shirt pixels were dropped.
+
+R2 (the larger of two colours) cannot fix a half-and-half shirt or a yoked hooped one, where the
+second colour can be the larger. So one candidate is added, before any is scored:
+
+| Name | Rule |
+|---|---|
+| R4 two-colour signature | the shirt patch's pixels, after R1's grass drop, split into two colours (2-means in RGB). The kit is both, ordered by brightness, as one point (the darker's then the lighter's channels). Kits are compared as pairs in the feature track.py chooses (chromaticity or brightness, per colour). A solid shirt gives two close colours |
+
+**R4's colour error:** the distance in chromaticity from the true shirt colour to whichever of its
+two colours is nearer. The rule of adoption is unchanged.
