@@ -137,3 +137,13 @@ def test_a_new_possession_forgets_every_offset():
     e.open_at[mate.id] = (2.5, 0.0)
     e.give("a6")  # the other team wins it
     assert e.open_at == {}
+
+
+def test_he_never_comes_nearer_the_carrier_to_be_open():
+    # Spots nearer the ball are always safer to pass to, so a search that allowed them would draw the
+    # whole team toward the carrier and shorten the passing (it did: 13.6 to 12.7 m on average).
+    import itertools
+    pts = [(x, y) for x, y in itertools.product((48.0, 52.0, 56.0, 62.0), (28.0, 33.0, 38.0))]
+    for crowd in (pts[:3], pts[3:7], pts[6:], [(52.5, 34.3)], pts):
+        dx, dy = D.open_spot(SLOT, (0.0, 0.0), PASSER, crowd, 80.0, 105.0)
+        assert math.dist((SLOT[0] + dx, SLOT[1] + dy), PASSER) >= math.dist(SLOT, PASSER) - 1e-9, crowd

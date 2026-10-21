@@ -853,17 +853,24 @@ def open_spot(slot: tuple[float, float], offset: tuple[float, float], passer: tu
     that a pass to him is worth most, valued as the carrier values one (pass_option): the chance it
     reaches him there (his lane raced, lane_margin, on D1's sigmoid) times what the ball is worth
     there (D9, with pass_option's room to play), less the chance it is cut out times what losing it
-    costs. Open space that is worth something (Fernandez and Bornn 2018). Returned as an offset
-    from his place. He keeps the offset he has unless another is worth more by CHOICE_NOISE_GOALS:
-    options closer than that are a coin-flip to the carrier (D4), so moving would change nothing.
-    Never offside as he sees it (L10), never off the pitch, never out of passing range (MAX_PASS_M)."""
+    costs. Open space that is worth something (Fernandez and Bornn 2018), found across his lane or
+    further from the carrier, never nearer. Returned as an offset from his place. He keeps the
+    offset he has unless another is worth more by CHOICE_NOISE_GOALS: options closer than that are a
+    coin-flip to the carrier (D4), so moving would change nothing. Never offside as he sees it
+    (L10), never off the pitch, never out of passing range (MAX_PASS_M)."""
     sx, sy = slot
     px, py = passer
     if math.hypot(sx - px, sy - py) > MAX_PASS_M:
         return (0.0, 0.0)  # out of passing range: not an option to be open for
     fwd = attack(goal_x)
-    rings = [(0.0, 0.0)] + [(r * fmath.cos(a * math.pi / 4), r * fmath.sin(a * math.pi / 4))
-                            for r in (OPEN_RADIUS_M / 2, OPEN_RADIUS_M) for a in range(8)]
+    # Across the carrier's line to him (out of a defender's cover shadow), or further along it (more
+    # room behind), never toward the carrier: coming short is the shape's job (O3's nearest two, O6),
+    # and spots nearer the ball are always safer, so they would draw the whole team in.
+    r0 = math.hypot(sx - px, sy - py) or 1.0
+    ux, uy = (sx - px) / r0, (sy - py) / r0
+    half = OPEN_RADIUS_M / 2
+    rings = [(a * -uy + b * ux, a * ux + b * uy) for a in (-2 * half, -half, 0.0, half, 2 * half)
+             for b in (0.0, half, 2 * half) if math.hypot(a, b) <= OPEN_RADIUS_M + 1e-9]
 
     def legal(dx: float, dy: float) -> bool:
         x, y = sx + dx, sy + dy
