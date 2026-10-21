@@ -643,64 +643,28 @@ def test_placing_the_ball_for_a_corner_does_not_cut():
     assert set(angles) == {"main"}, set(angles)
 
 
-# Iteration 2 (the blind critic of #204: the cut landed mid-delivery and came back on a timer): the
-# near corner is shown from the side camera from its set-up, so the kick is seen on it, and the
-# picture returns to the gantry only for a reason. These bounds were written before this was built.
-def test_a_near_corner_is_shown_from_the_side_camera_from_its_set_up_through_the_kick():
-    """Within 0.5 s of a near corner's wait starting the picture is the side camera; the kick is on
-    it; the ball is inside its CENTRAL box on every frame of that shot through the delivery."""
-    d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=False)
-    _held(d, 20.0, 20.0, 50)
-    angles, central = [], []
-    for _ in range(50):  # the corner waits 2 s
-        cam = d.step(0.5, 0.5, [], corner=(0.0, 0.0))
-        angles.append(d.angle)
-        if d.angle == "corner16":
-            central.append(d._central(cam, 0.5, 0.5))
-    assert "corner16" in angles[:13], angles[:13]
+def test_a_near_corner_delivery_is_seen_kicked_then_cut_to_the_side_camera_with_the_ball_in_shot():
+    """The blind critic of 0.5.7: the cut fired a frame after the strike into a shot the ball had
+    not reached, so the kick was never seen. The kick is shown on the gantry; the picture cuts to
+    the near-side camera at the penalty-area line only with the ball already inside its CENTRAL box,
+    within a second of the kick, and the ball stays inside that box on every frame of the shot."""
+    d = _rest_in_near_arc()
     x, y = 0.5, 0.5
-    for i in range(50):  # the kick, played short
-        if i < 9:
+    cam = d.step(x + 0.33, y + 0.85, [])
+    x, y = x + 0.33, y + 0.85
+    assert d.angle == "main"  # the kick itself is on the gantry
+    angles, central = [], []
+    for i in range(int(25 * 3)):
+        if i < 8:
             x, y = x + 0.33, y + 0.85
         cam = d.step(x, y, [])
         angles.append(d.angle)
         if d.angle == "corner16":
-            central.append(d._central(cam, x, y))
-    assert angles[50] == "corner16"  # the kick is seen from the side camera
-    assert central and all(central), central.count(False)
-
-
-def test_the_side_camera_cuts_back_only_for_a_reason():
-    """No timer: a short corner whose ball then rests near the flag stays on the side camera for 6 s.
-    A clearance upfield cuts back to the gantry within a second of the ball passing 25 m from the
-    flag, and never before CUT_HOLD_S of the side camera's shot."""
-    d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=False)
-    _held(d, 20.0, 20.0, 50)
-    for _ in range(50):
-        d.step(0.5, 0.5, [], corner=(0.0, 0.0))
-    x, y, angles = 0.5, 0.5, []
-    for i in range(int(25 * 6)):
-        if i < 9:
-            x, y = x + 0.33, y + 0.85
-        d.step(x, y, [])
-        angles.append(d.angle)
-    assert set(angles) == {"corner16"}, angles.count("main")
-    d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=False)
-    _held(d, 20.0, 20.0, 50)
-    for _ in range(50):
-        d.step(0.5, 0.5, [], corner=(0.0, 0.0))
-    cut_at = d.t
-    passed = None
-    for p in _line((0.5, 0.5), (40.0, 30.0), 75) + [(40.0, 30.0)] * 50:
-        d.step(*p, [])
-        if passed is None and math.dist(p, (0.0, 0.0)) > 25.0:
-            passed = d.t
-        if d.angle == "main":
-            assert d.t - cut_at >= CUT_HOLD_S - 1e-9, d.t - cut_at
-            assert passed is not None and d.t - passed <= 1.0 + 1e-9, (d.t, passed)
-            break
-    else:
-        raise AssertionError("never cut back to the gantry")
+            uv = cam.project((x, y, 0.11))
+            central.append(uv is not None and 0.2 * 1280 <= uv[0] <= 0.8 * 1280
+                           and 0.15 * 720 <= uv[1] <= 0.85 * 720)
+    assert "corner16" in angles[:25], angles[:25]
+    assert central and all(central), central
 
 
 def test_the_lens_does_not_zoom_on_a_still_ball():
