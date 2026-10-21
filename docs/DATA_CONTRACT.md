@@ -36,7 +36,7 @@ render parameters) and `images/`, and is checked the same way: `uv run ninety-va
 player row in `frames.jsonl` carries `fall`, the degrees his body is over (0 to 90); a standing
 player's row has no `fall`. The field is optional and additive: positions, ball and events are
 unchanged, clips rendered before 0.5.10 have none and stay valid, and the render check judges a
-row with `fall` by its ground point inside the box rather than at its bottom (GROUNDING V5).
+row with `fall` by its ground point inside the box rather than at its bottom (GROUNDING V6).
 
 **A window.** A rendered clip is a few seconds cut from a simulated match, so its `meta.json`
 carries `window: {"first_frame", "last_frame"}`, the match frames it covers, which must be its

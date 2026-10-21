@@ -70,7 +70,9 @@ EXTRA = {
     "thigh_top_r": ("thigh_r", (-0.14, 0.64, 0.10)),
 }
 
-_CONTACT = {"strike", "foot", "thigh", "chest", "head", "hands", "throw", "dive", "shield"}
+# A throw-in is drawn from the standing pose: its hands are on the ball wherever the engine has it
+# (scene.throw_at, a hold), so the stored throw pose, arms over the head, is not used.
+_CONTACT = {"strike", "foot", "thigh", "chest", "head", "hands", "dive", "shield"}
 _FEET = ("strike", "foot", "thigh")  # touches taken in stride: the stored pose gives only the arms
 # Holding the ball: the trunk bends over it (scene.py decides how far; this splits it down the
 # spine, the neck taking some back so the eyes stay on the ball) and a hand goes either side of it,

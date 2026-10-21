@@ -46,6 +46,8 @@ from ninety.render.scene import (
     project_keypoints,
     reach_sign,
     sample_looks,
+    throw_at,
+    throws,
     touch_at,
 )
 from ninety.render.splits import split_of
@@ -278,6 +280,7 @@ def render_clip(
         touches = contacts(frames, match.events)
         falls = fouls.schedule(match.events, frames, FPS)  # a fouled player down and up (lesson 173)
         held = holds(frames)
+        thrown = throws(frames, FPS)
         prev_xy: dict[str, tuple[float, float]] = {}
         prev_cam: Camera | None = None
         spin_angle = 0.0
@@ -305,6 +308,7 @@ def render_clip(
                 g, h = gaits[pl["id"]], by_id[pl["id"]].height_m
                 touch_at(g, touches.get(pl["id"], []), fi, h, FPS, pl["x"], pl["y"])
                 hold_at(g, held.get(pl["id"], []), fi, ball, h, FPS)
+                throw_at(g, thrown.get(pl["id"], []), fi, h, FPS, pl["x"], pl["y"])
                 down = falls.get(pl["id"], {}).get(fr["frame"])
                 g.fall, g.fall_dir = (down["angle"], down["dir"]) if down else (0.0, 0.0)
             actors = [(pl["x"], pl["y"], pl.get("action", "")) for pl in fr["players"]]

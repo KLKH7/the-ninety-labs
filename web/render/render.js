@@ -637,7 +637,8 @@ function idMaterial(id) {
 // The match body. Python sends the pose; these angles are the same ones meshpose.py builds.
 // Object space is Y-up metres, +X his left, +Z the way he faces. Positive bone X swings a limb back.
 // A third angle, Y, twists a bone about its length (Root: the hips; spine: the chest; thigh: the foot).
-const MESH_CONTACT = new Set(['strike', 'foot', 'thigh', 'chest', 'head', 'hands', 'throw', 'dive', 'shield']);
+// A throw-in is drawn from the standing pose, its hands on the ball as a hold (meshpose._CONTACT).
+const MESH_CONTACT = new Set(['strike', 'foot', 'thigh', 'chest', 'head', 'hands', 'dive', 'shield']);
 // Touches taken in stride: the stored pose gives only the arms (meshpose._FEET).
 const MESH_FEET = new Set(['strike', 'foot', 'thigh']);
 const ARMS = ['upperarm_l', 'lowerarm_l', 'upperarm_r', 'lowerarm_r'];
