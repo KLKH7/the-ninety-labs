@@ -1548,6 +1548,38 @@ short and actionable. This file is public: no research sources, product names or
   `test_every_check_the_validator_reports_has_a_planted_defect`;
   `tests/test_render_params.py::test_only_a_broadcast_clip_cuts_through_dead_balls`.
 
+### 153. A light module imports only light modules
+- **What happened:** the live API scales to zero, and its cold start was about 50 s, about 33 s of
+  it Python start-up on a fractional vCPU. `import ninety.api.app` loaded the agent framework, the
+  Foundry project client, the OpenAI client and the blob storage SDK. The cause was that
+  `ninety.agents.contracts`, which only declares types, imported three short names from
+  `ninety.agents.slice`, a live entry point that loads them all at its top. Locally the import
+  took 3.28 s (median of five fresh interpreters), against 1.00 s once they load on first use.
+- **Rule:** a module that only declares (contracts, rules, types) imports nothing that talks to a
+  service. A name two layers share lives in the lower one, and the entry point re-exports it. An
+  SDK that only a live call needs is imported inside that call.
+- **Check:** `tests/test_api_startup.py::test_importing_the_api_loads_no_model_sdk` reads
+  `sys.modules` in a fresh interpreter (lesson 104); `::test_the_check_sees_an_sdk_when_one_is_imported`
+  shows the check can go red.
+
+### 157. Measure an asset before scaling by it, and drive feet by place, not by pose
+- **What happened:** two defects in how the skinned players were drawn, both since the mesh
+  (a3d228e), both invisible to every test because each test measured the code against itself.
+  The body asset is 1.684 m to the top of its skull, but every scale treated it as 1.84 m, so each
+  player was drawn at 91.5% of his height: short and stocky next to the goal and the capsules he
+  replaced. And the stride swung each leg between two stored poses, which moves a foot back and
+  forth along one path: there is no low stance and high swing, so a walking foot skimmed along the
+  grass and a landing foot was blended onto its plant: a quarter of the frames a foot was on the
+  grass it slid more than 2 cm, up to 23 cm.
+- **Rule:** a constant taken from an asset is measured from the asset and tested against it. A
+  drawn body is checked against the world, not against its own constants: as tall as the player,
+  joints where a man's are (a cited table). Feet are placed: fixed where they land, carried on an
+  arc to where they will land, and judged frame by frame on the skinned markers.
+- **Check:** `tests/test_render_mesh.py::test_a_player_is_drawn_as_tall_as_he_is` and
+  `tests/test_render_motion.py::test_a_foot_on_the_grass_does_not_slide_from_a_standstill_to_a_sprint_and_back`
+  fail on the code before; `test_the_body_has_a_mans_proportions_and_its_stature_is_the_scale` holds
+  the scale to the asset and its joints to the table.
+
 ### 142. A figure keeps the case it was measured for
 - **What happened:** GROUNDING R1 cited Opta's guide to time-wasting for "a goal's celebration,
   about 72 s", and the restart work planned the kick-off after every goal around it. Read again,

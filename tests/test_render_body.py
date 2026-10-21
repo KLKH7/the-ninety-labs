@@ -15,8 +15,9 @@ import pytest
 
 from ninety.render.camera import Camera
 from ninety.render.clip import RenderUnavailable, _appearance, browser_page
+from ninety.render.meshpose import ASSET_STATURE_M
 from ninety.render.params import sample_params
-from ninety.render.scene import Gait, Look, body_parts, parts_box
+from ninety.render.scene import HEAD_Z, Gait, Look, body_parts, parts_box
 
 W, H = 1280, 720
 GANTRY = (52.5, -32.4, 13.7)  # where seed 900002's main camera stood
@@ -71,8 +72,8 @@ def test_a_player_cut_by_the_bottom_edge_is_drawn_down_to_it(page, stature):
     params = {**p.to_dict(), "width": W, "height": H}
     cfg = {"seed": 900002, "params": params, "objects": [_appearance(look, p)]}
     page.evaluate("cfg => window.ninety.init(cfg)", cfg)
-    k = stature / 1.84
-    chin = 1.64 * k - 0.105 * k  # the bottom of the head sphere (body_parts)
+    k = stature / ASSET_STATURE_M
+    chin = HEAD_Z * k - 0.105 * k  # the bottom of the head sphere (body_parts)
     gaps = []
     for heading in (0.0, math.pi / 2):  # side-on to the camera, and facing away from it
         for cm in range(20, int(chin * 100) - 2, 2):
