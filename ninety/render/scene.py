@@ -146,10 +146,11 @@ LATE_LIFT = 0.5  # past this share of its swing a foot still on the grass waits 
 # outside that range.
 RUN_KNEE_DEG = ((2.5, 93.5), (3.5, 108.7), (4.5, 119.1))
 RUN_THIGH_DEG = ((2.5, 43.8), (3.5, 52.8), (4.5, 60.5))  # what the drawn thigh peaks under
-SWING_HIGH = 0.4  # how far through its swing a running foot is highest (design: behind him)
+SWING_HIGH = 0.35  # how far through its swing a running foot is highest (design: behind him)
 SWING_THIGH_AT_HIGH = 10.0  # degrees forward of vertical, the thigh as the knee is most folded (design)
 RUN_CLEAR_M = 0.05  # a running foot coming through clears the grass by at least this (design)
 RUN_MIX_RATE = 0.2  # the most a swing's mix of walk and run changes in a frame (_stride_feet)
+LAND_CLEAR_M = 0.1  # a running foot on its way down, still moving with him, clears the grass by this (design)
 REACH_CLEAR_M = 0.15  # reaching, a foot clears the grass by this times the share of the way left (design)
 FRAME_S = 0.04  # one frame at the engine's 25 fps (ninety.sim.engine.FPS)
 MESH_ARM_ACTIONS = ("strike", "foot", "thigh", "chest", "head", "hands", "shield", "throw")
@@ -971,8 +972,9 @@ def _stride_feet(g: Gait, x: float, y: float, k: float, pel: float) -> None:
         sx, sy, syaw, sz = foot["from"]
         e0 = foot["e0"]
         p = min(max((e - e0) / max(1.0 - e0, 1e-6), 0.0), 1.0)
-        # Where the body will be when this foot lands, and that far ahead of the hips.
-        on = stride * (1.0 - e) * air / (2 * math.pi) + ahead
+        # Where the body will be when this foot lands, and that far ahead of the hips: from its count
+        # unclamped, so on the frame it lands past its count the plant stays where it was going.
+        on = stride * (1.0 - foot["e"]) * air / (2 * math.pi) + ahead
         tx, ty = x + hx * on + lx * lat, y + hy * on + ly * lat
         ee = _ease(p)
         wx, wy = sx + (tx - sx) * ee, sy + (ty - sy) * ee
@@ -998,13 +1000,15 @@ def _stride_feet(g: Gait, x: float, y: float, k: float, pel: float) -> None:
             if p <= SWING_HIGH:
                 up = math.sin(0.5 * math.pi * p / SWING_HIGH)
             else:
-                up = math.cos(0.5 * math.pi * (p - SWING_HIGH) / (1.0 - SWING_HIGH))
+                up = math.cos(0.5 * math.pi * (p - SWING_HIGH) / (1.0 - SWING_HIGH)) ** 2.5
             rx, ry = x + hx * fwd + lx * side_m, y + hy * fwd + ly * side_m
             rz = sz * (1.0 - p) + zh * k * up
             # No higher than lets the thigh stay under the runner's peak (RUN_THIGH_DEG), but clear of
             # the grass until it is nearly down.
             cap = _foot_height_below(fwd / k, math.radians(_table(RUN_THIGH_DEG, g.speed))) * k
             rz = min(rz, max(cap, RUN_CLEAR_M * k * min(1.0, 4.0 * (1.0 - p))))
+            if p > SWING_HIGH:  # and while it still moves with him it is off the grass: down onto its plant
+                rz = max(rz, min(LAND_CLEAR_M * k * (1.0 - b), zh * k * up))
             r = foot["run"]
             wx, wy, wz = wx + (rx - wx) * r, wy + (ry - wy) * r, wz + (rz - wz) * r
         foot["x"], foot["y"] = wx, wy
