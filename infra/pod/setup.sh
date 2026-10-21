@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Set up a rented Ubuntu 24.04 CPU machine to render a dataset at one exact commit, then smoke-test
-# it: one 60 s clip, ninety-validate and ninety-render-check (with the determinism re-render).
+# it: one 60 s clip with ninety-validate and ninety-render-check, and a 10 s determinism re-render.
 #
 #   bash setup.sh <render commit sha> [driver ref]
 #
@@ -43,10 +43,14 @@ PY
 uv sync --locked --group render-job --quiet
 uv run --no-sync playwright install --with-deps chromium >/dev/null
 
-# Smoke: seed 7 from 0:00 for 60 s, as the look-freeze review rendered it (software GL here).
+# Smoke: seed 7 from 0:00 for 60 s, as the look-freeze review rendered it (software GL here), then
+# the determinism re-render on a 10 s clip, the dataset's length: re-rendering the 60 s clip would
+# double the smoke (a 10 s clip took 130 s on the maintainer's Mac with software GL).
 rm -rf ~/smoke && mkdir -p ~/smoke
-uv run --no-sync ninety-render --seed 7 --start 0 --seconds 60 --out ~/smoke/seed7 | tail -12
+time uv run --no-sync ninety-render --seed 7 --start 0 --seconds 60 --out ~/smoke/seed7 | tail -12
 uv run --no-sync ninety-validate ~/smoke/seed7
-uv run --no-sync ninety-render-check ~/smoke/seed7 --determinism --report ~/smoke/check.json | tail -20
+uv run --no-sync ninety-render-check ~/smoke/seed7 --report ~/smoke/check.json | tail -12
+uv run --no-sync ninety-render --seed 3 --seconds 10 --out ~/smoke/seed3 | tail -3
+uv run --no-sync ninety-render-check ~/smoke/seed3 --determinism --report ~/smoke/determinism.json | tail -8
 nproc; free -g | head -2
 echo "setup done: render $(git rev-parse --short HEAD), driver $(git -C ~/driver rev-parse --short HEAD)"
