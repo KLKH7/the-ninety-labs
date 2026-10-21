@@ -46,15 +46,18 @@ def test_a_blocked_shot_poked_loose_ends_where_the_tackle_met_the_ball():
     poke = e.poke
 
     def watched(p, held, _poke=poke):
-        poked.append(e.kicked is not None)
-        return _poke(p, held)
+        at = (round(e.ball[0], 2), round(e.ball[1], 2))  # where the tackle meets the ball
+        poked.append((e.kicked is not None, at))
+        _poke(p, held)
+        poked.append((shot.get("end_x"), shot.get("end_y")))  # the shot as the tackle left it
 
     e.poke = watched
     e.poke(tackler, holder)
     for _ in range(int(0.5 * 60 * FPS)):
         e.step()
     m = e.match
-    assert poked[0] and shot["end_x"] is not None  # the case is in the match (lesson 41): met open
+    assert poked[0][0]  # the case is in the match (lesson 41): the tackle met the shot still open
+    assert poked[1] == poked[0][1]  # and ended it there, at the tackle, not at a later touch
     on_ball = [ev for ev in m.events if ev["type"] in ON_BALL]
     nxt = on_ball[on_ball.index(shot) + 1]
     assert nxt["type"] == "tackle" and nxt["player"] == tackler.id  # nothing recorded between
