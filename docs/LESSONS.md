@@ -1579,3 +1579,24 @@ short and actionable. This file is public: no research sources, product names or
   `tests/test_render_motion.py::test_a_foot_on_the_grass_does_not_slide_from_a_standstill_to_a_sprint_and_back`
   fail on the code before; `test_the_body_has_a_mans_proportions_and_its_stature_is_the_scale` holds
   the scale to the asset and its joints to the table.
+
+### 164. A pose keyed to an action ignores the truth it stands for; a limit marked "measured" is re-measured where the defect shows
+- **What happened:** a blind critic of 0.5.3 found four body defects. A throw-in drew its stored
+  pose, arms over the head, from the frame the engine named the thrower, while the engine's ball
+  was still at his feet; the ball then rose into empty hands and left with no throw. The jog was
+  a march: the stride's stance share was a guess, and the swing peaked under the hips. A
+  stride's swing read its progress straight off the shared phase, so a change of pace moved a
+  foot in a frame. And the push-off toe slid up to 17 cm a frame because the stance was allowed
+  0.45 m behind the hips, a limit commented "measured" that the asset's leg reaches only to 0.30.
+  Two old tests also held design as truth ("walking at 3 m/s, a foot is always on the grass").
+- **Rule:** a drawn action follows the truth it shows, frame by frame: hands go where the
+  engine's ball is, from before it moves until after it leaves. A gait's numbers come from a
+  cited source, and a swing keeps its own progress so a change elsewhere changes where it lands,
+  never where it is. A constant marked measured carries the measurement (what, how, the number)
+  and is re-measured when a defect points at it; a test's premise that a source contradicts is
+  rewritten to what it was protecting.
+- **Check:** `tests/test_render_motion.py`: `test_a_throw_in_keeps_both_hands_on_the_ball_from_the_grass_to_the_throw`,
+  `test_a_throw_in_moves_no_limb_in_a_jump`, `test_a_jog_folds_the_knee_behind_him_as_runners_do`,
+  `test_the_push_off_toe_does_not_slide_before_it_lifts` and
+  `test_a_player_stopping_does_not_stand_with_his_legs_crossed` each fail on 0.5.3 (mutation runs
+  with main's stride and throw restored).

@@ -47,6 +47,7 @@ _MOVES2 = tuple((a, b) for a in (-1, 0, 1) for b in (-1, 0, 1) if (a, b) != (0, 
 PLANT_FOOT = 0.12  # the foot flat on the grass
 STRIKE_FOOT = 0.4  # the instep: toes pointed, as the stored strike pose has them
 PLANT_GIVE_UP = 0.45
+HEEL_Z = 0.02  # m: a plant this high or lower is on the grass, where a foot may roll onto its toes
 FLOOR_SLACK = 0.02
 # Between these speeds (m/s) the stand pose and the stride are blended (design): the engine's stand
 # and walk meet at 0.5 m/s, and a switch there made the legs jump.
@@ -336,7 +337,8 @@ def _clamp(v: float, lo: float, hi: float) -> float:
 
 
 def _leg(angles: dict, side: str, target, foot: float, twist: float, point: str,
-         ground: bool, calf_fixed: float | None = None, floor: float | None = None) -> tuple[dict, float]:
+         ground: bool, calf_fixed: float | None = None, floor: float | None = None,
+         heel_up: bool = True) -> tuple[dict, float]:
     """Thigh and calf angles that put `point` on `target` (object space). Grid, then halving steps.
 
     On the grass (`ground`) the sole stays level however the knee bends: thigh, calf and foot all
@@ -360,7 +362,7 @@ def _leg(angles: dict, side: str, target, foot: float, twist: float, point: str,
 
     best = None
     calves = (calf_fixed,) if calf_fixed is not None else CALF_CAND
-    heels = HEEL_CAND if ground else (0.0,)
+    heels = HEEL_CAND if ground and heel_up else (0.0,)
     for thigh in THIGH_CAND:
         for tz in THIGH_Z:
             for calf in calves:
@@ -370,7 +372,7 @@ def _leg(angles: dict, side: str, target, foot: float, twist: float, point: str,
                         best = (err, t, [thigh, tz, calf, heel])
     steps = list(LEG_STEP)
     moves = list(_MOVES2 if calf_fixed is not None else _MOVES3)
-    if ground:
+    if ground and heel_up:
         moves += [(0, 0, 0, 1), (0, 0, 0, -1)]
     for _ in range(REFINE):
         centre = best[2]
@@ -500,7 +502,10 @@ def pose_angles(pose: dict, heading: float, height_m: float) -> dict:
             twist = TWIST_SIGN * _wrap(plant[2] - heading - lead)
         pz = plant[3] if len(plant) > 3 else 0.0
         target = _to_object(x, y, heading, height_m, plant[0], plant[1], pz, lift)
-        planted, err = _leg(angles, side, target, PLANT_FOOT, twist, f"foot_{side}", True)
+        # Only a foot on the grass rolls onto its toes; one in the air is carried flat: a heel lifted
+        # in the air swung the thigh up past a runner's (HEEL_Z).
+        planted, err = _leg(angles, side, target, PLANT_FOOT, twist, f"foot_{side}", True,
+                            heel_up=pz <= HEEL_Z)
         if err > PLANT_GIVE_UP and lift < 0.0:
             # Lowered, a foot the leg cannot reach is not left to the pose, which would put it through
             # the grass: the leg reaches toward its plant and stays above the grass.

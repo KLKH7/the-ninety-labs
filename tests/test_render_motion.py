@@ -19,11 +19,13 @@ from ninety.render.scene import (
     LEAD_AHEAD_FRAMES,
     LEAD_MAX,
     PLANT_AHEAD_MAX,
+    STEP_FRAMES,
     STEP_LIFT,
     THROW_FOLLOW_S,
     Gait,
     Look,
     _step_m,
+    advance_gaits,
     body_parts,
     contacts,
     hold_at,
@@ -126,7 +128,7 @@ def test_a_run_lands_its_foot_where_the_leg_reaches():
         g = Gait(action="run", speed=speed)
         x = 0.0
         landed = 0
-        for _ in range(40):
+        for _ in range(60):  # 2.4 s: at 2.5 m/s two strides hold only four landings
             g.phase = (g.phase + 2 * math.pi * speed / FPS / (2 * _step_m(speed))) % (2 * math.pi)
             x += speed / FPS
             before = (g.down_l, g.down_r)
@@ -137,7 +139,8 @@ def test_a_run_lands_its_foot_where_the_leg_reaches():
             for s, was, now, plant in sides:
                 if now and not was:
                     landed += 1
-                    assert plant[0] - x <= PLANT_AHEAD_MAX * k + 1e-9, (speed, s, plant[0] - x)
+                    # within the plant's rounding (0.1 mm, scene._feet)
+                    assert plant[0] - x <= PLANT_AHEAD_MAX * k + 5e-5, (speed, s, plant[0] - x)
                     assert math.dist(feet[f"foot_{s}"][:2], plant[:2]) < 0.03, (speed, s)
         assert landed > 4
 
@@ -498,9 +501,10 @@ def test_a_foot_on_the_grass_does_not_slide_from_a_standstill_to_a_sprint_and_ba
 
 def test_the_stride_lengthens_and_the_swing_lifts_with_speed():
     """The same foot lands a stride (two steps, scene._step_m: Debaere 2013) further on each time,
-    and is carried higher through its swing the faster he runs."""
+    and is carried higher through its swing the faster he runs, over the speeds the swing's source
+    covers (RUN_KNEE_DEG: to 4.5 m/s; above it the swing is held, so only the stride is checked)."""
     lifts = []
-    for speed in (1.5, 3.0, 5.0, 7.0):
+    for speed in (1.5, 3.0, 4.5, 7.0):
         drawn = _draw(_run_frames([speed] * 150))["h1"]
         landings, top = [], 0.0
         for (pa, _, _, _), (pb, mb, _, _) in zip(drawn, drawn[1:], strict=False):
@@ -513,7 +517,7 @@ def test_the_stride_lengthens_and_the_swing_lifts_with_speed():
         for s in strides:
             assert abs(s / (2 * _step_m(speed)) - 1.0) < 0.1, (speed, s, 2 * _step_m(speed))
         lifts.append(top)
-    assert lifts == sorted(lifts) and lifts[0] > 0.05 and lifts[-1] > 0.3, lifts
+    assert lifts[:3] == sorted(lifts[:3]) and lifts[0] > 0.05 and min(lifts[2:]) > 0.3, lifts
 
 
 # A low step after the body (scene.STEP_LIFT) with 4 cm for the foot marker above its sole, both
@@ -593,9 +597,12 @@ def test_a_first_touch_then_a_strike_on_the_move_keeps_a_foot_on_the_grass(gap):
     assert any(p["touch"] and p["touch"]["part"] == "foot" and p["touch"]["side"] == "l" for p, *_ in drawn)
     assert any(p["touch"] and p["touch"]["part"] == "strike" and p["touch"]["side"] == "r" for p, *_ in drawn)
     for i, (pose, m, _, _) in enumerate(drawn):
-        # Walking, a foot is always on the grass, or on a low step after the body (STEP_LIFT).
+        # While a touch is drawn, a foot is on the grass or on a low step after the body (STEP_LIFT).
+        # Between touches the stride's own flight phase is a run's (3.1 m/s, _duty).
         low = min(m["foot_l"][2], m["foot_r"][2])
-        assert -0.03 < low < LOW_STEP_M, (i, pose["touch"], m["foot_l"], m["foot_r"])
+        assert low > -0.03, (i, m["foot_l"], m["foot_r"])
+        if pose["touch"]:
+            assert low < LOW_STEP_M, (i, pose["touch"], m["foot_l"], m["foot_r"])
 
 
 def test_a_thigh_touch_on_the_move_keeps_a_foot_on_the_grass():
@@ -617,8 +624,11 @@ def test_a_thigh_touch_on_the_move_keeps_a_foot_on_the_grass():
     drawn = _draw(frames)["h1"]
     assert any(p["touch"] and p["touch"]["part"] == "thigh" for p, *_ in drawn)
     for i, (pose, m, _, _) in enumerate(drawn):
+        # While the touch is drawn; between touches a 3 m/s stride has a run's flight phase (_duty).
         low = min(m["foot_l"][2], m["foot_r"][2])
-        assert -0.03 < low < LOW_STEP_M, (i, pose["touch"], m["foot_l"], m["foot_r"])
+        assert low > -0.03, (i, m["foot_l"], m["foot_r"])
+        if pose["touch"]:
+            assert low < LOW_STEP_M, (i, pose["touch"], m["foot_l"], m["foot_r"])
 
 
 @pytest.mark.parametrize("wind_up", range(20, 34, 2))
@@ -761,3 +771,170 @@ def test_a_throw_in_moves_no_limb_in_a_jump():
                 limit = 0.3
             mv = math.dist(drawn[i - 1][2][k], drawn[i][2][k])
             assert mv <= limit, (i, k, round(mv, 3), round(limit, 3))
+
+
+def _leg_angles(m_joints, s, heading):
+    """Thigh forward of vertical and knee flexion (degrees) from posed joint positions."""
+    hip, knee, ankle = m_joints[f"thigh_{s}"], m_joints[f"calf_{s}"], m_joints[f"foot_{s}"]
+    fx, fy = math.cos(heading), math.sin(heading)
+    fwd = (knee[0] - hip[0]) * fx + (knee[1] - hip[1]) * fy
+    thigh = math.degrees(math.atan2(fwd, hip[2] - knee[2]))
+    a = [knee[i] - hip[i] for i in range(3)]
+    b = [ankle[i] - knee[i] for i in range(3)]
+    c = sum(p * q for p, q in zip(a, b, strict=True)) / (math.dist(hip, knee) * math.dist(knee, ankle))
+    return thigh, math.degrees(math.acos(max(-1.0, min(1.0, c))))
+
+
+def _joints(pose, heading, height):
+    from ninety.render import meshpose
+
+    angles = meshpose.pose_angles(pose, heading, height)
+    heads, _ = meshpose._fk(angles)
+    i = meshpose._bone_index()
+    return {n: meshpose.to_world(pose["x"], pose["y"], heading, height, heads[i[n]], pose.get("lift") or 0.0)
+            for n in ("thigh_l", "calf_l", "foot_l", "thigh_r", "calf_r", "foot_r")}
+
+
+@pytest.mark.parametrize("speed,knee,thigh", [(2.5, 93.5, 43.8), (3.5, 108.7, 52.8), (4.5, 119.1, 60.5)])
+def test_a_jog_folds_the_knee_behind_him_as_runners_do(speed, knee, thigh):
+    """Old (0.5.3): at 3 to 4 m/s the swinging foot was carried highest under the hips, so the thigh
+    came up near horizontal while the knee folded to only about 93 degrees: a high-knee march. Now,
+    as in Fukuchi et al. 2017 (Table 4, 28 runners), the knee folds to the runners' peak (within one
+    of their standard deviations, about 10 degrees), the thigh comes up no higher than their hip does
+    (plus one deviation, 6 degrees), and the foot is highest behind the hips: the heel comes up first."""
+    drawn = _draw(_run_frames([speed] * 100))["h1"]
+    knees, thighs, high = [], [], []
+    for pose, m, _, _ in drawn[40:]:
+        j = _joints(pose, 0.0, 1.84)
+        for s in "lr":
+            t, kn = _leg_angles(j, s, 0.0)
+            if m[f"foot_{s}"][2] > 0.05:  # in the air
+                knees.append(kn)
+                thighs.append(t)
+                high.append((m[f"foot_{s}"][2], m[f"foot_{s}"][0] - pose["x"]))
+    assert abs(max(knees) - knee) < 10.5, (speed, max(knees), knee)
+    assert max(thighs) < thigh + 6.0, (speed, max(thighs), thigh)
+    top = max(high)
+    assert top[1] < -0.05, (speed, top)  # the highest the foot goes is behind him
+
+
+def test_a_run_has_a_flight_phase_and_a_walk_does_not():
+    """Above the walk-to-run switch (1.96 m/s, Neptune and Sasaki 2005) both feet leave the grass
+    between steps; below it there are frames with both feet down. Old (0.5.3): at 3 to 4 m/s the
+    stride dragged a foot on its toes behind him while the other landed."""
+    for speed, flight in ((1.3, False), (3.5, True), (6.0, True)):
+        drawn = _draw(_run_frames([speed] * 100))["h1"][40:]
+        both_up = sum(1 for _, m, _, _ in drawn if min(m["foot_l"][2], m["foot_r"][2]) > 0.03)
+        both_down = sum(1 for _, m, _, _ in drawn if max(m["foot_l"][2], m["foot_r"][2]) < 0.03)
+        assert (both_up > 0) == flight and (both_down > 0) != flight, (speed, both_up, both_down)
+
+
+def test_a_change_of_pace_in_mid_swing_moves_no_foot_in_a_jump():
+    """Old (0.5.3): the swing's progress was read straight off the stride's phase, so when braking
+    from a run changed the stance's share mid-swing the swinging foot jumped, from knee-up to planted
+    far ahead in one frame (seed 21, h2 at 5:43.8). Braking at 7 m/s (the engine's) from 5 m/s
+    through the walk-run switch and speeding up again, no foot moves relative to the body faster
+    than the limb cap."""
+    profile = [5.0] * 30 + [max(1.0, 5.0 - 0.28 * i) for i in range(1, 16)] + [1.0] * 10
+    profile += [min(5.0, 1.0 + 0.25 * i) for i in range(1, 17)] + [5.0] * 20
+    for start in range(0, 12, 3):  # different phases of the stride at the change
+        drawn = _draw(_run_frames([5.0] * start + profile))["h1"]
+        over = [(i, round(mv, 3), round(cap, 3)) for i, (mv, cap) in enumerate(_jumps(drawn)) if mv > cap]
+        assert not over, (start, over)
+
+
+def test_the_push_off_toe_does_not_slide_before_it_lifts():
+    """Old (0.5.3): a foot was kept on the grass behind him further back than the leg reaches
+    (STANCE_BEHIND_MAX 0.45, measured 0.30), so in its last frames before lifting the leg dragged
+    it along on its toes at the same height, up to 17 cm a frame (seed 21, h9 at 5:55). Now in the
+    frame after a foot was planted it either stays within 3 cm or has left the grass (risen 2 cm,
+    the slide test's height for on the grass), at every pace from a walk to a sprint."""
+    for speed in (1.5, 2.5, 3.5, 5.0, 7.0):
+        drawn = _draw(_run_frames([speed] * 80))["h1"][20:]
+        for (pa, a, _, _), (_, b, _, _) in zip(drawn, drawn[1:], strict=False):
+            for s in "lr":
+                planted = pa[f"plant_{s}"] is not None and pa[f"plant_{s}"][3] == 0.0
+                if planted:
+                    mv = math.dist(a[f"foot_{s}"][:2], b[f"foot_{s}"][:2])
+                    rise = b[f"foot_{s}"][2] - a[f"foot_{s}"][2]
+                    assert mv <= 0.03 or rise >= 0.02, (speed, s, round(mv, 3), round(rise, 3))
+
+
+# Seed 21, h2 from 5:49.6 (engine frames 8740-8829): he slows from a jog, turns on the spot and the
+# engine's pose flickers between walk and stand: (x, y, vx, vy, heading, action).
+H2_STOP = [
+    (45.943, 3.851, 4.057, -5.313, -0.919, "run"), (46.106, 3.638, 4.092, -5.343, -0.917, "run"),
+    (46.268, 3.426, 4.046, -5.282, -0.917, "run"), (46.425, 3.222, 3.907, -5.101, -0.917, "run"),
+    (46.576, 3.026, 3.786, -4.915, -0.914, "run"), (46.722, 2.836, 3.647, -4.734, -0.914, "run"),
+    (46.862, 2.654, 3.508, -4.553, -0.914, "run"), (46.997, 2.479, 3.368, -4.372, -0.914, "run"),
+    (47.125, 2.313, 3.199, -4.149, -0.914, "run"), (47.246, 2.156, 3.03, -3.926, -0.913, "run"),
+    (47.361, 2.008, 2.861, -3.703, -0.913, "run"), (47.468, 1.869, 2.691, -3.48, -0.913, "run"),
+    (47.569, 1.739, 2.521, -3.257, -0.912, "run"), (47.663, 1.617, 2.352, -3.034, -0.911, "walk"),
+    (47.75, 1.505, 2.182, -2.811, -0.911, "walk"), (47.831, 1.402, 2.014, -2.588, -0.91, "walk"),
+    (47.905, 1.307, 1.845, -2.364, -0.908, "walk"), (47.972, 1.221, 1.677, -2.141, -0.906, "walk"),
+    (48.032, 1.145, 1.509, -1.916, -0.904, "walk"), (48.086, 1.077, 1.342, -1.692, -0.9, "walk"),
+    (48.134, 1.019, 1.203, -1.448, -0.877, "walk"), (48.177, 0.971, 1.069, -1.203, -0.845, "walk"),
+    (48.214, 0.933, 0.937, -0.956, -0.795, "walk"), (48.247, 0.904, 0.81, -0.706, -0.717, "walk"),
+    (48.274, 0.886, 0.688, -0.454, -0.584, "walk"), (48.297, 0.878, 0.57, -0.2, -0.34, "walk"),
+    (48.315, 0.88, 0.457, 0.056, -0.584, "stand"), (48.329, 0.893, 0.348, 0.314, -0.828, "stand"),
+    (48.339, 0.916, 0.245, 0.574, -0.584, "walk"), (48.344, 0.947, 0.135, 0.771, -0.34, "walk"),
+    (48.346, 0.984, 0.039, 0.938, -0.095, "walk"), (48.344, 1.028, -0.043, 1.091, 0.149, "walk"),
+    (48.34, 1.077, -0.112, 1.236, 0.393, "walk"), (48.333, 1.133, -0.173, 1.378, 0.638, "walk"),
+    (48.324, 1.193, -0.226, 1.516, 0.882, "walk"), (48.313, 1.259, -0.274, 1.652, 1.127, "walk"),
+    (48.3, 1.331, -0.317, 1.785, 1.371, "walk"), (48.286, 1.407, -0.357, 1.917, 1.615, "walk"),
+    (48.27, 1.489, -0.394, 2.046, 1.761, "walk"), (48.253, 1.576, -0.429, 2.173, 1.766, "walk"),
+    (48.234, 1.668, -0.462, 2.298, 1.769, "walk"), (48.215, 1.765, -0.493, 2.421, 1.772, "walk"),
+    (48.194, 1.867, -0.524, 2.541, 1.774, "walk"), (48.173, 1.968, -0.522, 2.526, 1.774, "walk"),
+    (48.154, 2.059, -0.474, 2.296, 1.774, "walk"), (48.137, 2.142, -0.427, 2.065, 1.774, "walk"),
+    (48.122, 2.215, -0.379, 1.833, 1.774, "walk"), (48.108, 2.279, -0.33, 1.599, 1.774, "walk"),
+    (48.097, 2.334, -0.281, 1.362, 1.774, "walk"), (48.088, 2.379, -0.232, 1.121, 1.774, "walk"),
+    (48.081, 2.414, -0.181, 0.875, 1.774, "walk"), (48.075, 2.438, -0.128, 0.617, 1.774, "walk"),
+    (48.073, 2.452, -0.071, 0.343, 2.019, "stand"), (48.06, 2.46, -0.309, 0.196, 2.263, "stand"),
+    (48.039, 2.462, -0.528, 0.047, 2.507, "walk"), (48.012, 2.458, -0.684, -0.092, 2.752, "walk"),
+    (47.979, 2.449, -0.82, -0.215, 2.996, "walk"), (47.941, 2.436, -0.947, -0.328, -3.043, "walk"),
+    (47.898, 2.419, -1.068, -0.436, -2.798, "walk"), (47.851, 2.397, -1.184, -0.542, -2.712, "walk"),
+    (47.799, 2.371, -1.296, -0.647, -2.678, "walk"), (47.757, 2.352, -1.065, -0.489, -2.711, "walk"),
+    (47.723, 2.339, -0.847, -0.313, -2.788, "walk"), (47.697, 2.334, -0.631, -0.134, -2.932, "walk"),
+    (47.682, 2.335, -0.398, 0.02, -2.688, "stand"), (47.66, 2.329, -0.543, -0.143, -2.884, "walk"),
+    (47.633, 2.318, -0.663, -0.283, -2.738, "walk"), (47.602, 2.301, -0.775, -0.411, -2.654, "walk"),
+    (47.581, 2.29, -0.534, -0.269, -2.674, "walk"), (47.568, 2.287, -0.317, -0.092, -2.43, "stand"),
+    (47.551, 2.278, -0.438, -0.229, -2.186, "stand"), (47.542, 2.276, -0.224, -0.049, -1.941, "stand"),
+    (47.528, 2.268, -0.348, -0.187, -1.697, "stand"), (47.523, 2.267, -0.116, -0.03, -1.452, "stand"),
+    (47.514, 2.261, -0.241, -0.157, -1.358, "stand"), (47.511, 2.263, -0.065, 0.061, -1.358, "stand"),
+    (47.502, 2.259, -0.235, -0.107, -1.356, "stand"), (47.487, 2.249, -0.354, -0.233, -1.354, "stand"),
+    (47.469, 2.235, -0.469, -0.351, -1.598, "walk"), (47.456, 2.231, -0.31, -0.121, -1.354, "stand"),
+    (47.451, 2.234, -0.131, 0.095, -1.348, "stand"), (47.438, 2.231, -0.315, -0.095, -1.346, "stand"),
+    (47.421, 2.221, -0.429, -0.243, -1.343, "stand"), (47.4, 2.206, -0.537, -0.374, -1.587, "walk"),
+    (47.374, 2.186, -0.641, -0.499, -1.831, "walk"), (47.355, 2.175, -0.468, -0.279, -2.076, "walk"),
+    (47.343, 2.173, -0.3, -0.055, -1.831, "stand"), (47.341, 2.175, -0.048, 0.067, -1.587, "stand"),
+    (47.333, 2.17, -0.221, -0.121, -1.343, "stand"), (47.319, 2.16, -0.33, -0.256, -1.325, "stand"),
+]
+
+
+def test_a_player_stopping_does_not_stand_with_his_legs_crossed():
+    """Old (0.5.3): slowing and turning on the spot while the engine's pose flickered between walk and
+    stand, h2's left foot ended up to the right of his right foot and stayed there for 7 frames
+    (seed 21 at 5:51), as each flicker restarted the step that would have uncrossed them. Now feet
+    crossed for the way he faces step apart at once, and a foot stepping across passes the other
+    within half a step (STEP_FRAMES // 2). Drawn as clip.py draws him, from the engine's frames
+    (H2_STOP), the gait starting fresh on the first."""
+    frames = [{"ball": {"x": 80.0, "y": 50.0, "z": 0.0, "vx": 0.0, "vy": 0.0}, "possessor": None,
+               "players": [{"id": "h1", "x": x, "y": y, "vx": vx, "vy": vy, "heading": h, "action": a,
+                            "dive": 0.0}]} for x, y, vx, vy, h, a in H2_STOP]
+    frames += [frames[-1]] * 20  # then he stands
+    h2 = Look("h1", "home", "RB", 1.81, 1.11, "#4a2e1d", "#3b2516")  # as seed 21 draws h2
+    g, prev, run, worst = Gait(), {}, 0, 0
+    for i, fr in enumerate(frames):
+        advance_gaits({"h1": g}, prev, fr, 1 / FPS, frames[min(i + LEAD_AHEAD_FRAMES, len(frames) - 1)])
+        pl = fr["players"][0]
+        body_parts(pl["x"], pl["y"], h2, g)
+        pose = mesh_pose(g, pl["x"], pl["y"], 0.0)
+        m = pose_markers(pose, g.heading, h2.height_m)
+        lx, ly = -math.sin(pl["heading"]), math.cos(pl["heading"])  # his left
+        left = (m["foot_l"][0] - pl["x"]) * lx + (m["foot_l"][1] - pl["y"]) * ly
+        right = (m["foot_r"][0] - pl["x"]) * lx + (m["foot_r"][1] - pl["y"]) * ly
+        # Stopping: slower than a walk's stride (1.25 m/s, Swinnen et al. 2026's slowest; design). A
+        # stride turning fast crosses over, as a turning walker's does; that is not a stance.
+        run = run + 1 if left < right and math.hypot(pl["vx"], pl["vy"]) < 1.0 else 0
+        worst = max(worst, run)
+    assert worst <= STEP_FRAMES // 2, worst

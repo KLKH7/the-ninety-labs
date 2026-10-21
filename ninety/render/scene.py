@@ -11,10 +11,12 @@ P11).
 
 from __future__ import annotations
 
+import functools
 import math
 import random
 from dataclasses import dataclass, field
 
+from ninety.render import meshpose
 from ninety.render.camera import Camera
 from ninety.render.meshpose import ASSET_STATURE_M, BROW_Y, arm_points, gait_foot
 from ninety.sim import shape
@@ -38,10 +40,38 @@ def _stride(speed: float) -> float:
     return 2.0 * _step_m(speed)
 
 
+# The share of the stride a foot is on the grass (duty factor), walking and running, by speed (m/s):
+# Swinnen et al. 2026 (J Exp Biol, jeb.252161, treadmill: walking 0.628 at 1.25, 0.605 at 2.0;
+# running 0.397 at 2.0, 0.358 at 2.5, 0.324 at 3.33, 0.303 at 4.17) and Martinez-Sobrino et al. 2023
+# (J Sports Sci Med 22:790, track: 0.290 at 5.07, 0.256 at 7.32). People change from a walk to a
+# run at about 1.96 m/s (Neptune and Sasaki 2005, J Exp Biol 208:799); the drawn gait goes from the
+# one to the other across GAIT_SWITCH_MPS (design: a band, so a player hovering at the switch speed
+# does not flicker between the two). Below 1.25 m/s the walk's share is held (no source).
+WALK_DUTY = ((1.25, 0.628), (2.0, 0.605))
+RUN_DUTY = ((2.0, 0.397), (2.5, 0.358), (3.33, 0.324), (4.17, 0.303), (5.07, 0.290), (7.32, 0.256))
+GAIT_SWITCH_MPS = (1.76, 2.16)
+
+
+def _table(points: tuple, v: float) -> float:
+    """Piecewise linear through (speed, value) points, held flat beyond the ends."""
+    if v <= points[0][0]:
+        return points[0][1]
+    for (a, fa), (b, fb) in zip(points, points[1:], strict=False):
+        if v <= b:
+            return fa + (fb - fa) * (v - a) / (b - a)
+    return points[-1][1]
+
+
+def _running(speed: float) -> float:
+    """How much of the drawn gait is a run (0 walking, 1 running), across GAIT_SWITCH_MPS."""
+    lo, hi = GAIT_SWITCH_MPS
+    return min(max((speed - lo) / (hi - lo), 0.0), 1.0)
+
+
 def _duty(speed: float) -> float:
-    """Share of the cycle a foot is down. A walk overlaps. A sprint has a flight phase."""
-    t = min(max((speed - 1.6) / 5.4, 0.0), 1.0)
-    return 0.62 - 0.24 * t
+    """Share of the cycle a foot is down: a walk overlaps (both feet down), a run has a flight phase."""
+    r = _running(speed)
+    return _table(WALK_DUTY, speed) * (1.0 - r) + _table(RUN_DUTY, speed) * r
 
 
 def turn_toward(heading: float, target: float, dt: float, rate: float = 5.0) -> float:
@@ -95,14 +125,32 @@ PLANT_ACTIONS = ("stand", "walk", "run", "chest", "head", "strike", "foot", "thi
 # after 2 pi). The leg takes and gives back the plant over PLANT_EASE_FRAMES.
 STANCE_CENTRE = {"l": 1.75 * math.pi, "r": 0.75 * math.pi}
 PLANT_EASE_FRAMES = 3
-# The furthest behind the hips a foot on the grass stays in a stride (asset metres, measured: the
-# leg still reaches it with the heel up), how far either side of his line of running a foot lands
-# (design: a runner's feet land close to the line), and how high a swinging foot is carried, at a
-# walk and at a sprint (design, _swing_lift).
-STANCE_BEHIND_MAX = 0.45
+# The furthest behind the hips a foot on the grass stays in a stride (asset metres, measured: at
+# 0.30 the leg holds the foot within 1 mm of its plant; at 0.32 it lifts it 2 cm and drags it, and the
+# 0.45 once used here dragged the push-off toe up to 17 cm a frame), how far either side of his line
+# of running a foot lands (design: a runner's feet land close to the line), and how high a swinging
+# foot is carried, at a walk and at a sprint (design, _swing_lift).
+STANCE_BEHIND_MAX = 0.30
 RUN_HALF_WIDTH_M = 0.11
 SWING_LIFT_M = (0.10, 0.40)
 LATE_LIFT = 0.5  # past this share of its swing a foot still on the grass waits for the next one
+# A running swing (renderer only), from Fukuchi et al. 2017 (PeerJ 5:e3298, 28 runners on a treadmill,
+# Table 4): the knee folds most in the swing, 93.5, 108.7 and 119.1 degrees at 2.5, 3.5 and 4.5 m/s,
+# and the hip flexes most, 43.8, 52.8 and 60.5 degrees; read off their Fig. 3, the knee is most folded
+# at about 69% of the stride and the hip most flexed at about 83%, with the foot leaving the grass at
+# about a third: 0.54 and 0.75 of the way through the swing. So the heel comes up behind first and
+# the thigh comes through after. The hip angles are the thigh's on a pelvis that tips forward, which
+# the drawn one does not, so the drawn thigh takes the source's swing above where the foot lands:
+# it comes through to its peak by the hip's peak less its angle at foot strike (Fig. 3A, read: about
+# 33, 37 and 41 degrees), and swings back that much to land. Held at the 2.5 and 4.5 m/s values
+# outside that range.
+RUN_KNEE_DEG = ((2.5, 93.5), (3.5, 108.7), (4.5, 119.1))
+RUN_THIGH_DEG = ((2.5, 43.8), (3.5, 52.8), (4.5, 60.5))  # what the drawn thigh peaks under
+SWING_HIGH = 0.4  # how far through its swing a running foot is highest (design: behind him)
+SWING_THIGH_AT_HIGH = 10.0  # degrees forward of vertical, the thigh as the knee is most folded (design)
+RUN_CLEAR_M = 0.05  # a running foot coming through clears the grass by at least this (design)
+RUN_MIX_RATE = 0.2  # the most a swing's mix of walk and run changes in a frame (_stride_feet)
+REACH_CLEAR_M = 0.15  # reaching, a foot clears the grass by this times the share of the way left (design)
 FRAME_S = 0.04  # one frame at the engine's 25 fps (ninety.sim.engine.FPS)
 MESH_ARM_ACTIONS = ("strike", "foot", "thigh", "chest", "head", "hands", "shield", "throw")
 HIP_PIVOT_Z = 0.99  # the mesh's spine_01 joint, where a bend over the ball starts (asset rest pose)
@@ -798,16 +846,64 @@ def _swing_lift(speed: float) -> float:
     return SWING_LIFT_M[0] + (SWING_LIFT_M[1] - SWING_LIFT_M[0]) * min(max((speed - 1.5) / 5.5, 0.0), 1.0)
 
 
+@functools.lru_cache(maxsize=1)
+def _leg_geometry() -> tuple[float, float, float, float, float]:
+    """The asset's leg in its own metres, in the plane it swings in: thigh and shin lengths, the hip's
+    height, and where the foot marker (the ball of the foot) sits from the ankle with the sole flat
+    (meshpose.PLANT_FOOT), forward and up."""
+    bones = {b["name"]: b["head"] for b in meshpose.asset()["bones"]}
+    hip, knee, ankle = bones["thigh_l"], bones["calf_l"], bones["foot_l"]
+    angles = {"foot_l": meshpose.PLANT_FOOT}
+    heads, _ = meshpose._fk(angles)
+    a = heads[meshpose._bone_index()["foot_l"]]
+    m = meshpose._point(angles, "foot_l")
+    return math.dist(hip, knee), math.dist(knee, ankle), hip[1], m[2] - a[2], m[1] - a[1]
+
+
+def _leg_fk(thigh: float, knee: float) -> tuple[float, float]:
+    """Where a flat foot's marker is (forward of the hip, height above the grass, asset metres) with
+    the thigh `thigh` radians forward of vertical and the knee folded `knee` radians."""
+    l1, l2, hip_y, mf, mz = _leg_geometry()
+    shin = thigh - knee
+    return (l1 * math.sin(thigh) + l2 * math.sin(shin) + mf,
+            hip_y - l1 * math.cos(thigh) - l2 * math.cos(shin) + mz)
+
+
+def _foot_height_below(f: float, thigh: float) -> float:
+    """The highest a flat foot's marker can be `f` forward of the hip (asset metres) with the thigh no
+    further forward than `thigh`: the knee folds under it."""
+    l1, l2, hip_y, mf, mz = _leg_geometry()
+    sn = (f - mf - l1 * math.sin(thigh)) / l2
+    if sn <= -1.0:
+        return math.inf  # behind the knee: the thigh does not hold it down
+    if sn >= 1.0:
+        return 0.0
+    return hip_y - l1 * math.cos(thigh) - l2 * math.sqrt(1.0 - sn * sn) + mz
+
+
+def _run_high(speed: float) -> tuple[float, float]:
+    """Where a running foot is at the top of its swing (asset metres, forward of the hip and above the
+    grass): where the knee folded to its sourced peak (RUN_KNEE_DEG) puts it, with the thigh
+    SWING_THIGH_AT_HIGH forward: the heel up behind him."""
+    return _leg_fk(math.radians(SWING_THIGH_AT_HIGH), math.radians(_table(RUN_KNEE_DEG, speed)))
+
+
 def _stride_feet(g: Gait, x: float, y: float, k: float, pel: float) -> None:
     """Walking and running, each foot is on the grass for its stance and carried through the air for
     its swing, every frame at a place, never a pose: the gait's two stored poses swing a foot back
     and forth along one path, so a foot left to them drags along the grass (lesson 157).
 
-    The stride's phase says which: a foot's stance is centred on STANCE_CENTRE, as long as the
-    duty share of the stride (_duty) but no longer than the leg reaches under the hips, from
-    PLANT_AHEAD_MAX ahead to STANCE_BEHIND_MAX behind. On the grass the foot stays where it landed.
-    In the air it travels from where it lifted to where the body will be when it lands, that much
-    ahead of the hips, at most PLANT_AHEAD_MAX, lifted on an arc up to _swing_lift."""
+    The stride's phase says when a foot lands and lifts: a stance centred on STANCE_CENTRE, the duty
+    share of the stride (_duty) but no longer than the leg reaches under the hips, from
+    PLANT_AHEAD_MAX ahead to STANCE_BEHIND_MAX behind. On the grass the foot stays where it landed,
+    and lifts once its stance is over or the hips have gone on past where the leg reaches it. In
+    the air it keeps its own count of how far through the swing it is, advanced by the stride's
+    phase over the swing's share of it, and lands when the count is done: a change of speed changes
+    how fast the count runs and where the foot will land, never where the foot is now (a swing read
+    straight off the phase jumped when the stance's share changed under it). Walking, it is carried
+    from where it lifted to where the body will be when it lands, that much ahead of the hips, on an
+    arc up to _swing_lift; running, on the path the sourced knee and thigh angles give (_run_swing);
+    in between, a mix by _running."""
     stride = _stride(g.speed)
     reach = (PLANT_AHEAD_MAX + STANCE_BEHIND_MAX) * k
     half = min(_duty(g.speed) * math.pi, math.pi * reach / stride)
@@ -818,51 +914,105 @@ def _stride_feet(g: Gait, x: float, y: float, k: float, pel: float) -> None:
     hx, hy = math.cos(g.heading), math.sin(g.heading)
     lx, ly = -hy, hx
     lift = _swing_lift(g.speed) * k
+    run = _running(g.speed)
+    per_frame = 2 * math.pi * g.speed * FRAME_S / stride  # the phase's advance in a frame
+
+    def rel(fx: float, fy: float) -> tuple[float, float]:  # forward and to the left of him
+        return (fx - x) * hx + (fy - y) * hy, (fx - x) * lx + (fy - y) * ly
+
+    def lift_off(foot: dict, e: float) -> dict:
+        start = (foot["x"], foot["y"], foot["yaw"], foot.get("z", 0.0))
+        return {**foot, "air": True, "e": e, "e0": e, "ph": ph, "from": start,
+                "rel0": rel(foot["x"], foot["y"]), "run": run}
+
     for side, sign in (("l", 1.0), ("r", -1.0)):
         off = _wrap(ph - STANCE_CENTRE[side])
         lat = RUN_HALF_WIDTH_M * k * sign
         foot = g.feet.get(side)
         if foot is not None and isinstance(foot.get("swing"), tuple):
-            # In the middle of a step from standing: it goes on from where it is.
-            foot = {"x": foot["x"], "y": foot["y"], "yaw": foot["yaw"], "z": foot["z"], "swing": None,
-                    "air": foot["z"] > 0.0, "from": (foot["x"], foot["y"], foot["yaw"], foot["z"], 0.0)}
-        if abs(off) < half:
-            if foot is None:
+            # In the middle of a step from standing: it carries on as a swing from where it is, landing
+            # within LAND_FRAMES if its stance has already begun.
+            if abs(off) < half:
+                e = 1.0 - LAND_FRAMES * per_frame / air
+            else:
+                e = ((off - half) % (2 * math.pi)) / air
+            step = {"x": foot["x"], "y": foot["y"], "yaw": foot["yaw"], "z": foot["z"]}
+            foot = lift_off(step, min(max(e, 0.0), 0.95))
+        if foot is None:
+            if abs(off) < half:
                 # Starting the stride on this foot: it is where the stance has it by now.
-                rel = ahead - travel * (off + half) / (2 * half)
-                foot = {"x": x + hx * rel + lx * lat, "y": y + hy * rel + ly * lat, "yaw": pel, "z": 0.0}
-            elif foot.get("air"):
-                # The swing is over: it comes down where it has been carried.
-                foot = {"x": foot["x"], "y": foot["y"], "yaw": foot["yaw"], "z": 0.0}
-            foot["swing"], foot["w"] = None, 1.0
+                r = ahead - travel * (off + half) / (2 * half)
+                foot = {"x": x + hx * r + lx * lat, "y": y + hy * r + ly * lat, "yaw": pel, "z": 0.0,
+                        "swing": None, "w": 1.0}
+                g.feet[side] = foot
+                continue
+            # A foot with no place yet is where its swing has it by now: it lifted behind the
+            # hips, where the body was when the swing began.
+            e = ((off - half) % (2 * math.pi)) / air
+            back = ahead - travel - stride * e * air / (2 * math.pi)
+            foot = lift_off({"x": x + hx * back + lx * lat, "y": y + hy * back + ly * lat, "yaw": pel,
+                             "z": 0.0}, 0.0)
+            foot["e"] = e
+        if not foot.get("air"):
+            f, _ = rel(foot["x"], foot["y"])
+            past = half <= off and off < half + air  # its stance is over
+            if past or f < -STANCE_BEHIND_MAX * k:
+                e = max(0.0, (off - half) / air) if past else 0.0
+                if e <= LATE_LIFT:
+                    foot = lift_off(foot, e)
+            if not foot.get("air"):
+                foot["swing"], foot["w"] = None, 1.0
+                g.feet[side] = foot
+                continue
         else:
-            u = ((off - half) % (2 * math.pi)) / air  # 0 at lift-off, 1 at landing
-            if foot is None:
-                # A foot with no place yet is where its swing has it by now: it lifted behind the
-                # hips, where the body was when the swing began.
-                done = stride * u * air / (2 * math.pi)
-                back = ahead - travel - done
-                bx, by = x + hx * back + lx * lat, y + hy * back + ly * lat
-                foot = {"x": bx, "y": by, "yaw": pel, "z": 0.0, "air": True, "from": (bx, by, pel, 0.0, 0.0)}
-            elif not foot.get("air"):
-                if u > LATE_LIFT:
-                    # Too late in this swing to make it to the next landing at a stride's pace: it
-                    # stays down and lifts on the next one.
-                    foot["swing"], foot["w"] = None, 1.0
-                    g.feet[side] = foot
-                    continue
-                start = (foot["x"], foot["y"], foot["yaw"], foot.get("z", 0.0), u)
-                foot = {**foot, "air": True, "from": start}
-            sx, sy, syaw, sz, u0 = foot["from"]
-            # Where the body will be when this foot lands, and that far ahead of the hips.
-            on = stride * (1.0 - u) * air / (2 * math.pi) + ahead
-            tx, ty = x + hx * on + lx * lat, y + hy * on + ly * lat
-            e = min(max((u - u0) / max(1.0 - u0, 1e-6), 0.0), 1.0)
-            ee = _ease(e)
-            foot["x"], foot["y"] = sx + (tx - sx) * ee, sy + (ty - sy) * ee
-            foot["yaw"] = syaw + _wrap(pel - syaw) * ee
-            foot["z"] = sz * (1.0 - e) + lift * math.sin(math.pi * e)
-            foot["swing"], foot["w"] = "stride", 1.0
+            foot["e"] += ((ph - foot["ph"]) % (2 * math.pi)) / air
+            foot["ph"] = ph
+        e = min(foot["e"], 1.0)  # on the frame the swing is done the foot is where it ends: on the grass
+        sx, sy, syaw, sz = foot["from"]
+        e0 = foot["e0"]
+        p = min(max((e - e0) / max(1.0 - e0, 1e-6), 0.0), 1.0)
+        # Where the body will be when this foot lands, and that far ahead of the hips.
+        on = stride * (1.0 - e) * air / (2 * math.pi) + ahead
+        tx, ty = x + hx * on + lx * lat, y + hy * on + ly * lat
+        ee = _ease(p)
+        wx, wy = sx + (tx - sx) * ee, sy + (ty - sy) * ee
+        wz = sz * (1.0 - p) + lift * math.sin(math.pi * p)
+        # A swing's mix of walk and run follows his pace no faster than RUN_MIX_RATE a frame: braking
+        # through the switch, the mix changed under a foot in the air in a frame and moved it from one
+        # path to the other (design).
+        foot["run"] = foot["run"] + min(max(run - foot["run"], -RUN_MIX_RATE), RUN_MIX_RATE)
+        if foot["run"] > 0.0:
+            # Running: it rises behind him first, the knee folding (the heel comes up toward the
+            # seat), to the top of its swing (_run_high) by SWING_HIGH, then comes through to where it
+            # lands ahead of the hips; late in the swing it is more and more where its plant is
+            # (`on` ahead now), so it comes to rest on the pitch as it lands.
+            f0, _ = foot["rel0"]
+            fh, zh = _run_high(g.speed)
+            if p <= SWING_HIGH:
+                fb = f0 + (fh * k - f0) * _ease(p / SWING_HIGH)
+            else:
+                fb = fh * k + (ahead - fh * k) * _ease((p - SWING_HIGH) / (1.0 - SWING_HIGH))
+            b = _ease(min(max((p - 0.75) / 0.25, 0.0), 1.0))
+            fwd = fb * (1.0 - b) + on * b
+            side_m = rel(wx, wy)[1]  # across, the walk's path on the pitch: he may have turned since
+            if p <= SWING_HIGH:
+                up = math.sin(0.5 * math.pi * p / SWING_HIGH)
+            else:
+                up = math.cos(0.5 * math.pi * (p - SWING_HIGH) / (1.0 - SWING_HIGH))
+            rx, ry = x + hx * fwd + lx * side_m, y + hy * fwd + ly * side_m
+            rz = sz * (1.0 - p) + zh * k * up
+            # No higher than lets the thigh stay under the runner's peak (RUN_THIGH_DEG), but clear of
+            # the grass until it is nearly down.
+            cap = _foot_height_below(fwd / k, math.radians(_table(RUN_THIGH_DEG, g.speed))) * k
+            rz = min(rz, max(cap, RUN_CLEAR_M * k * min(1.0, 4.0 * (1.0 - p))))
+            r = foot["run"]
+            wx, wy, wz = wx + (rx - wx) * r, wy + (ry - wy) * r, wz + (rz - wz) * r
+        foot["x"], foot["y"] = wx, wy
+        foot["yaw"] = syaw + _wrap(pel - syaw) * ee
+        foot["z"] = wz
+        foot["swing"], foot["w"] = "stride", 1.0
+        if e >= 1.0:
+            foot = {"x": wx, "y": wy, "yaw": foot["yaw"], "z": 0.0, "swing": None, "w": 1.0}
         g.feet[side] = foot
 
 
