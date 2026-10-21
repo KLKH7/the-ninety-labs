@@ -15,6 +15,7 @@ that the world is then arranged to match. Every limit cites its source in docs/G
 
 from __future__ import annotations
 
+import itertools
 import math
 from dataclasses import asdict, dataclass, field
 
@@ -1639,11 +1640,13 @@ class Engine:
     def wall_spots(self, r: Restart) -> list[tuple[float, float]]:
         """Law 13, Bray (2014): where a wall stands for a direct free kick within shooting range (the
         distance from the goal's centre, straight-line, inside which the shot is an option,
-        offball.SHOT_RANGE_M, measured as decisions measures it: lesson 138). It hides the goal from
-        the near post to WALL_COVER_PAST_CENTRE_M past the centre, seen from the ball, on a line across
-        the kick at the restart's distance (and KEEP_OFF_MARGIN_M); its width over a shoulder's
-        breadth (P11) is how many stand in it, shoulder to shoulder (Bray divides by 0.45 m and
-        finds four at 22 m straight on, as this does). Spots off the pitch are left out."""
+        offball.SHOT_RANGE_M, measured as decisions measures it: lesson 138). Seen from the ball it
+        hides the goal from one post to WALL_COVER_PAST_CENTRE_M past the centre (Bray: p + q of a
+        2p goal, q = p / 3, two thirds of it), on a line across the kick at the restart's distance
+        (and KEEP_OFF_MARGIN_M). The post is the near one (design). Its width over a shoulder's
+        breadth (P11), rounded down, is how many stand in it, shoulder to shoulder, the outermost
+        covering the near post; what rounding leaves short is on the keeper's side (Bray's keeper
+        sets four at 22 m straight on, "half-a-defender light"). Spots off the pitch are left out."""
         line = goal_x(r.team)  # the goal the kick is at
         bx, by = self.restart_ball_spot(r)
         if math.hypot(line - bx, PITCH_Y / 2 - by) >= offball.SHOT_RANGE_M:
@@ -1660,8 +1663,10 @@ class Engine:
         n = int(width / shape.SHOULDER_BREADTH_M)
         cx, cy = bx + fmath.cos(mid) * d, by + fmath.sin(mid) * d
         ux, uy = -fmath.sin(mid), fmath.cos(mid)  # across the line of the kick
-        spots = [(cx + ux * (i - (n - 1) / 2) * shape.SHOULDER_BREADTH_M,
-                  cy + uy * (i - (n - 1) / 2) * shape.SHOULDER_BREADTH_M) for i in range(n)]
+        toward = 1.0 if sweep > 0 else -1.0  # along it, from the near post's line to the cover edge
+        start = -toward * width / 2  # where the near post's line crosses it
+        along = [start + toward * (k + 0.5) * shape.SHOULDER_BREADTH_M for k in range(n)]
+        spots = [(cx + ux * a, cy + uy * a) for a in along]
         return [(x, y) for x, y in spots if 0.5 <= x <= PITCH_X - 0.5 and 0.5 <= y <= PITCH_Y - 0.5]
 
     def way_into_wall(self, r: Restart, p: Player) -> tuple[float, float]:
@@ -1681,17 +1686,26 @@ class Engine:
 
     def form_wall(self, r: Restart) -> dict[str, tuple[float, float]]:
         """The defending side's outfielders nearest the wall's spots stand in it, the nearest pair of
-        player and spot first."""
+        player and spot first. They then share the places out so that their walks there add up to
+        the least: two walks that crossed could be swapped for a shorter pair, so no two runs to the
+        wall cross (lesson 141)."""
         spots = self.wall_spots(r)
         free = [p for p in self.players if p.team != r.team and p.role != "GK"]
-        wall: dict[str, tuple[float, float]] = {}
+        chosen: list[Player] = []
+        places: list[tuple[float, float]] = []
         while spots and free:
             p, spot = min(((q, s) for q in free for s in spots),
                           key=lambda ps: math.hypot(ps[0].x - ps[1][0], ps[0].y - ps[1][1]))
-            wall[p.id] = spot
+            chosen.append(p)
+            places.append(spot)
             free.remove(p)
             spots.remove(spot)
-        return wall
+
+        def walks(order: tuple[tuple[float, float], ...]) -> float:
+            return math.fsum(math.hypot(p.x - s[0], p.y - s[1]) for p, s in zip(chosen, order, strict=True))
+
+        best = min(itertools.permutations(places), key=walks)
+        return {p.id: s for p, s in zip(chosen, best, strict=True)}
 
     def restart_ball_spot(self, r: Restart) -> tuple[float, float]:
         """Where the ball goes for this restart: the mark for a penalty (Law 14), else where the
@@ -2364,7 +2378,8 @@ class Engine:
         r = self.restart or self.set_by
         if r is not None and p.team == r.team and p.id != r.taker and len(r.wall) >= 3:
             # Law 13: with three or more defenders in a wall, attackers keep 1 m from it
-            clear = WALL_ATTACKER_GAP_M + KEEP_OFF_MARGIN_M
+            # between bodies: a shoulder's breadth covers the two half-bodies side on (P11)
+            clear = WALL_ATTACKER_GAP_M + shape.SHOULDER_BREADTH_M + KEEP_OFF_MARGIN_M
             for wx, wy in r.wall.values():
                 d = math.hypot(tx - wx, ty - wy)
                 if d < clear:

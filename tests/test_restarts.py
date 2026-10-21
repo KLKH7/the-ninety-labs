@@ -717,20 +717,47 @@ def test_an_own_goal_is_celebrated_round_the_scoring_sides_nearest_player():
 
 
 def test_a_wall_is_sized_from_the_goal_it_must_hide():
-    """Bray (2014): the wall hides the goal from the near post to a third of the half-goal past its
-    centre, at the restart's distance; its width over a shoulder's breadth is how many stand in it.
-    His worked example: four at 22 m straight on. Closer and more central, more; further, fewer;
-    outside shooting range, none (Link et al. 2016: centrality and proximity increase the wall)."""
+    """Bray (2014): the wall hides the goal from a post to a third of the half-goal past its centre,
+    at the restart's distance; its width over a shoulder's breadth, rounded down, is how many stand
+    in it: four at 22 m straight on (his keeper's, "half-a-defender light"), five at 17 m, two at
+    35 m. Closer and more central, more; further or at a sharper angle, fewer; outside shooting
+    range, none (Link et al. 2016: centrality and proximity increase the wall). The same at either
+    end of the pitch."""
     e = Engine(3)
 
-    def size(x: float, y: float) -> int:
-        return len(e.wall_spots(Restart("free_kick", "home", x, y, "h9", e.t + 5)))
+    def size(team: str, out: float, y: float) -> int:
+        x = PITCH_X - out if team == "home" else out  # `out` metres up the pitch from the goal line
+        taker = "h9" if team == "home" else "a9"
+        return len(e.wall_spots(Restart("free_kick", team, x, y, taker, e.t + 5)))
 
-    assert size(PITCH_X - 22.0, 34.0) == 4
-    assert size(PITCH_X - 17.0, 34.0) > size(PITCH_X - 22.0, 34.0) > size(PITCH_X - 35.0, 34.0) > 0
-    assert size(PITCH_X - 22.0, 34.0) > size(PITCH_X - 20.0, 60.0)  # the same distance, a sharper angle
-    assert size(PITCH_X - 45.0, 34.0) == 0
-    assert size(PITCH_X - 30.0, 6.0) == 0  # 30 m up the pitch but 41 m from the goal's centre (lesson 138)
+    for team in ("home", "away"):
+        assert [size(team, out, 34.0) for out in (17.0, 22.0, 35.0)] == [5, 4, 2], team
+        assert size(team, 22.0, 34.0) > size(team, 20.0, 60.0) > 0, team  # the same distance, a sharper angle
+        assert size(team, 45.0, 34.0) == 0, team
+        assert size(team, 30.0, 6.0) == 0, team  # 30 m up the pitch, 41 m from the goal's centre (lesson 138)
+
+
+def test_the_wall_covers_the_near_post():
+    """The outermost of the wall stands where the line from the ball to the near post crosses the
+    wall's line: his body covers that post (design: the near post; Bray's p + q from a post)."""
+    from ninety.sim.engine import GOAL_HALF_WIDTH
+    e = Engine(3)
+    for team, (bx, by) in (("home", (PITCH_X - 22.0, 30.0)), ("home", (PITCH_X - 25.0, 45.0)),
+                           ("away", (22.0, 30.0)), ("away", (25.0, 45.0))):
+        spots = e.wall_spots(Restart("free_kick", team, bx, by, "x", e.t + 5))
+        gx = PITCH_X if team == "home" else 0.0
+        ny = PITCH_Y / 2 + (-GOAL_HALF_WIDTH if by < PITCH_Y / 2 else GOAL_HALF_WIDTH)  # the near post
+        line = (bx, by, gx - bx, ny - by, math.hypot(gx - bx, ny - by))
+
+        def off_line(s: tuple[float, float], line=line) -> float:  # from the ball-to-near-post line
+            x0, y0, dx, dy, n = line
+            return abs((s[0] - x0) * dy - (s[1] - y0) * dx) / n
+
+        outer = min(spots, key=off_line)
+        assert off_line(outer) <= shape.SHOULDER_BREADTH_M / 2 + 1e-9, (team, bx, by)
+        # and the wall runs from there toward the goal's centre, not outside the post
+        widest = abs(outer[1] - PITCH_Y / 2) + 1e-9
+        assert all(abs(s[1] - PITCH_Y / 2) <= widest for s in spots), (team, bx, by)
 
 
 def test_a_direct_free_kick_22_m_out_is_taken_with_a_wall_in_place():
@@ -770,15 +797,40 @@ def test_an_indirect_free_kick_has_no_wall():
 
 
 def test_attackers_keep_1_m_from_a_wall_of_three_or_more():
-    """Law 13: with three or more defenders in a wall, attackers stay at least 1 m from it."""
+    """Law 13: with three or more defenders in a wall, attackers stay at least 1 m from it, between
+    bodies (a shoulder's breadth between centres covers the two half-bodies side on); from a wall
+    of two they need not."""
     e = Engine(3)
     e.possessor = None
     e.stop("free_kick", "home", (PITCH_X - 22.0, 34.0), taker="h9")
     assert len(e.restart.wall) >= 3
     wx, wy = next(iter(e.restart.wall.values()))
     tx, ty = e.keep_off(e.by_id["h10"], wx + 0.3, wy)
-    assert math.hypot(tx - wx, ty - wy) >= 1.0
+    assert math.hypot(tx - wx, ty - wy) >= 1.0 + shape.SHOULDER_BREADTH_M
     assert e.keep_off(e.by_id["h10"], 60.0, 20.0) == (60.0, 20.0)  # away from the wall: untouched
+    e.stop("free_kick", "home", (PITCH_X - 35.0, 34.0), taker="h9")
+    assert len(e.restart.wall) == 2
+    wx, wy = next(iter(e.restart.wall.values()))
+    assert e.keep_off(e.by_id["h10"], wx + 0.3, wy) == (wx + 0.3, wy)
+
+
+def test_no_two_runs_to_the_wall_cross():
+    """Lesson 141: the wall's players share its places so that their walks there add up to the
+    least, so no two runs cross (a pair that crossed could be swapped for a shorter one)."""
+
+    def cross(a, b, c, d) -> bool:
+        def side(p, q, r):
+            return (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
+        return side(a, b, c) * side(a, b, d) < 0 and side(c, d, a) * side(c, d, b) < 0
+
+    crossings = 0
+    for seed in (2, 3, 5, 7):
+        for at in ((PITCH_X - 22.0, 34.0), (PITCH_X - 18.0, 24.0)):
+            e = wall_kick(seed, at)
+            runs = [((e.by_id[pid].x, e.by_id[pid].y), place) for pid, place in e.restart.wall.items()]
+            crossings += sum(cross(*runs[i], *runs[k])
+                             for i in range(len(runs)) for k in range(i + 1, len(runs)))
+    assert crossings == 0
 
 
 def test_the_wall_breaks_up_once_the_ball_is_in_play():
@@ -880,19 +932,19 @@ def test_a_place_on_the_edge_of_the_circle_is_walked_to_straight_in():
     """Defect: a wall player whose place was on the 9.65 m circle's edge, straight in from where he
     stood, was sent round the circle by a rounding error, at his own distance from the ball: he
     stood 7 m from the wall all through the stoppage. A target on the edge, reached straight in,
-    does not cut across the circle."""
+    does not cut across the circle (lesson 142)."""
     e = wall_kick(5, (PITCH_X - 27.0, 44.0))
     r = e.restart
     bx, by = r.x, r.y
-    wx, wy = min(r.wall.values(), key=lambda s: math.hypot(s[0] - bx, s[1] - by))
-    d = math.hypot(wx - bx, wy - by)
-    assert d == pytest.approx(9.15 + KEEP_OFF_MARGIN_M)  # premise: on the circle's edge
+    clear = 9.15 + KEEP_OFF_MARGIN_M
     p = next(q for q in e.players if q.team == "away" and q.role != "GK" and q.id not in r.wall)
-    p.x, p.y = bx + (wx - bx) / d * 17.0, by + (wy - by) / d * 17.0  # 7 m further out, straight behind it
+    # a bearing whose point on the edge rounds to a hair inside it, as the wall's places could
+    a = next(k / 100 for k in range(-150, 150)
+             if math.hypot(math.cos(k / 100) * clear, math.sin(k / 100) * clear) < clear)
+    wx, wy = bx + math.cos(a) * clear, by + math.sin(a) * clear
+    p.x, p.y = bx + math.cos(a) * 17.0, by + math.sin(a) * 17.0  # 7 m further out, straight behind it
     tx, ty = e.keep_off(p, wx, wy)
     assert math.hypot(tx - bx, ty - by) < 17.0 - 1.0  # he heads in toward it, not round at his distance
-
-
 def test_a_wall_player_paces_the_whole_way_in_to_be_in_place_for_the_kick():
     """Defect: a wall player's pace was set to reach the point behind the line just as the ball
     could, so he was still stepping up into his place, 0.4 m short, when the kick was struck. He
