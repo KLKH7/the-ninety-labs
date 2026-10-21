@@ -1514,7 +1514,7 @@ def test_one_a_hair_inside_the_keep_off_circle_goes_straight_to_his_place_on_its
     def round_out(a: float) -> tuple[float, float]:  # past the margin, at bearing a from the ball
         return 60.0 + math.cos(a) * reach, 34.0 + math.sin(a) * reach
 
-    step = math.acos(math.dist((d.x, d.y), (60.0, 34.0)) / reach)  # as far round as heads him out
+    step = math.acos(math.dist((d.x, d.y), (60.0, 34.0)) / reach) / 2  # heading out as well as round
     assert e.keep_off(d, 60.0 + 9.15, 34.0) == pytest.approx(round_out(math.pi - step))  # place across
     d.x, d.y = 60.0 - 8.0, 34.0  # inside the Laws' distance: out first
     assert e.keep_off(d, 60.0 - 9.15, 34.0) == pytest.approx(out)
@@ -1535,7 +1535,8 @@ def test_one_a_hair_inside_the_keep_off_circle_goes_straight_to_his_place_on_its
     a = math.radians(160.0)
     place = (60.0 + math.cos(a) * clear, 34.0 + math.sin(a) * clear)  # 20 degrees round, 3.3 m off
     assert segment_distance(60.0, 34.0, d.x, d.y, *place) > 9.15  # premise: the straight way keeps it
-    assert e.keep_off(d, *place) == pytest.approx(round_out(a))
+    step = math.acos(9.4 / reach) / 2  # 11 degrees: no further round than heads him out
+    assert e.keep_off(d, *place) == pytest.approx(round_out(math.pi - step))
 
 
 def test_kept_off_a_free_kick_he_stands_at_his_place_rather_than_walking_out_and_back(monkeypatch):
@@ -1712,13 +1713,14 @@ def test_once_at_his_place_with_the_ball_set_he_settles(monkeypatch):
     assert e.restart_pace(d, *at, 0.0) >= WALK_MPS and d.id not in r.settled
     d.vx = 0.0  # standing there
     assert e.restart_pace(d, *at, 0.0) == 0.0 and d.id in r.settled
-    at[0] += 2.0  # a shift within SHUFFLE_M: at his own pace, here none, so he stands
-    assert e.restart_pace(d, *at, 0.0) == 0.0
+    assert 3.5 < SHUFFLE_M < 5.0  # premise
+    at[0] = d.x + 3.5  # his place 3.5 m off, the most it jumped with noisy sightings: at his own pace,
+    assert e.restart_pace(d, *at, 0.0) == 0.0  # here none, so he stands
     was = (d.x, d.y)
     for _ in range(int(1.0 / DT)):
         e.move_players()
     assert math.dist((d.x, d.y), was) < 0.05
-    at[0] += SHUFFLE_M  # a shift beyond it: he walks to his place again, and settles there
+    at[0] = d.x + 5.0  # 5 m off: he walks to his place again, and settles there
     assert e.restart_pace(d, *at, 0.0) >= WALK_MPS and d.id not in r.settled
     for _ in range(int(8.0 / DT)):
         e.move_players()
@@ -1731,37 +1733,42 @@ def test_going_round_the_keep_off_circle_he_walks_and_settles_only_at_his_place(
     sent him first, KEEP_OFF_MARGIN_M straight out past its edge, and settled there, 18 m from his
     place, which he then crept to. And going round at the circle's edge, every step that dipped into
     the margin sent him straight out again, stopping short every few strides: he went round at about
-    1.1 m/s, below a walk. Settling is judged on his place; while his way goes round or out of the
-    circle he walks; and from the margin he aims past it, round, no further round than heads him
-    out, so he never comes nearer the ball than a step round the edge dips (KEEP_OFF_STEP_DEG)."""
-    from ninety.sim.engine import KEEP_OFF_STEP_DEG, SETTLE_M, WALK_MPS
-    e = Engine(3)
-    still(e)
-    free_kick(e, "home", 60.0, 34.0)
-    e.ball = (60.0, 34.0, 0.0, 0.0, 0.0, 0.0)  # set on its spot
-    d = e.by_id["a7"]
-    for i, q in enumerate(q for q in e.players if q is not d):
-        q.x, q.y = 95.0, 4.0 + 3.0 * i  # out of his way
+    1.1 m/s, below a walk. Then, aimed round from the margin along his own distance, one at the Laws'
+    distance itself was sent out and round by turns, frame by frame, and stood there at 0.24 m/s
+    (740 such grazes of 9.15 m in 20 matches). Settling is judged on his place; while his way goes
+    round or out of the circle he walks; and from the margin he heads out as well as round, so he
+    leaves it, never comes nearer the ball than a step round the edge dips (KEEP_OFF_STEP_DEG), and
+    gets there."""
+    from ninety.sim.engine import KEEP_OFF_STEP_DEG, SETTLE_M
     target = (60.0 + 9.15, 34.0)  # across the circle: his place is there, on its edge
-    d.x, d.y, d.vx, d.vy = 60.0 - 9.4, 34.0, 0.0, 0.0  # in its margin
-    at = e.stand_off(d, *target)[0]
-    assert math.dist(at, (d.x, d.y)) > 18.0  # premise
-    real = e.shape_target
-    monkeypatch.setattr(e, "shape_target", lambda q: (*target, 0.0) if q is d else real(q))
-    clear = 9.15 + KEEP_OFF_MARGIN_M
-    speeds, closest = [], math.inf
-    while math.dist((d.x, d.y), at) > SETTLE_M and len(speeds) < int(40.0 / DT):
-        e.move_players()
-        assert d.id not in e.restart.settled
-        speeds.append(math.hypot(d.vx, d.vy))
-        closest = min(closest, math.dist((d.x, d.y), (60.0, 34.0)))
-    assert math.dist((d.x, d.y), at) <= SETTLE_M  # he gets there
-    assert closest > clear * math.cos(math.radians(KEEP_OFF_STEP_DEG / 2))
-    going = sorted(speeds[int(1.0 / DT):])
-    assert going[len(going) // 2] >= WALK_MPS - 0.01  # at a walk, past the first second
-    for _ in range(int(2.0 / DT)):
-        e.move_players()
-    assert d.id in e.restart.settled
+    for start in (9.14, 9.16, 9.4):  # just inside the Laws' distance, just outside it, in the margin
+        e = Engine(3)
+        still(e)
+        free_kick(e, "home", 60.0, 34.0)
+        e.ball = (60.0, 34.0, 0.0, 0.0, 0.0, 0.0)  # set on its spot
+        d = e.by_id["a7"]
+        for i, q in enumerate(q for q in e.players if q is not d):
+            q.x, q.y = 95.0, 4.0 + 3.0 * i  # out of his way
+        d.x, d.y, d.vx, d.vy = 60.0 - start, 34.0, 0.0, 0.0
+        at = e.stand_off(d, *target)[0]
+        assert math.dist(at, (d.x, d.y)) > 18.0  # premise
+        real = e.shape_target
+        monkeypatch.setattr(e, "shape_target", lambda q, d=d, real=real: (*target, 0) if q is d else real(q))
+        clear = 9.15 + KEEP_OFF_MARGIN_M
+        speeds, closest = [], math.inf
+        while math.dist((d.x, d.y), at) > SETTLE_M and len(speeds) < int(40.0 / DT):
+            e.move_players()
+            assert d.id not in e.restart.settled
+            speeds.append(math.hypot(d.vx, d.vy))
+            if len(speeds) > int(1.0 / DT):
+                closest = min(closest, math.dist((d.x, d.y), (60.0, 34.0)))
+        assert math.dist((d.x, d.y), at) <= SETTLE_M  # he gets there
+        assert closest > clear * math.cos(math.radians(KEEP_OFF_STEP_DEG / 2))  # past the first second
+        going = sorted(speeds[int(1.0 / DT):])  # past the first second, faster than a creep at the
+        assert going[len(going) // 4] > 1.2  # quartile (restart_moves.py: 1.2 m/s), round the circle
+        for _ in range(int(2.0 / DT)):
+            e.move_players()
+        assert d.id in e.restart.settled
 
 def test_with_a_wall_up_nobody_else_is_named_to_press_until_the_ball_is_in_play():
     """Defect (lesson 174): at a direct free kick with a wall the stored presser's place, goal-side at
@@ -1858,3 +1865,65 @@ def test_round_a_circle_by_a_line_the_short_way_is_open_only_within_the_lines():
     e, d = near_line_kick("home", (8.0, 8.0), "a7", (1.0, 1.0), (8.0, 25.0))  # behind it by the flag
     assert math.dist((d.x, d.y), (8.0, 8.0)) > 9.15 + KEEP_OFF_MARGIN_M  # premise: outside the circle
     assert e.keep_off(d, 8.0, 25.0) == pytest.approx((1.0, 1.0))
+
+
+def test_through_a_restart_wait_each_marker_keeps_his_man():
+    """Defect (lesson 174, its third audit): at a dead ball the defending side's brain picked up the
+    attackers near its goal again at every look, each by the nearest free defender, from noisy
+    sightings and from where the markers' own walks had taken them: men changed markers at every
+    look, and three defenders walked out and back up to 19 times through one free kick's wait (seed
+    7). Until the ball is in play each marker keeps his man, wherever he goes; men who come near
+    are picked up by the nearest free defender; the taker is faced by the wall or the presser, not
+    marked, and those in the wall mark nobody. In play the side picks up afresh at every look (the
+    pairs are the restart's)."""
+    from ninety.sim import offball
+    from ninety.sim.engine import other
+    e = corner_wait(5)  # a corner to home, its kick 30 s off: away defends
+    r, brain = e.restart, e.brains["away"]
+    for _ in range(int(6.0 / DT)):  # attackers come near and are picked up
+        e.step()
+    assert len(r.marks) >= 2 and brain.markers.keys() == r.marks.keys()  # premise
+    assert r.taker not in r.marks.values()
+    kept = dict(r.marks)
+    did, aid = next(iter(kept.items()))
+    d, a = e.by_id[did], e.by_id[aid]
+    mate = next(q for q in e.players if q.team == "away" and q.role != "GK" and q.id not in kept
+                and q.id not in brain.pressers)
+    mate.x, mate.y, mate.vx, mate.vy = a.x + 0.3, a.y, 0.0, 0.0  # another defender right by his man
+    d.x, d.y, d.vx, d.vy = 30.0, 34.0, 0.0, 0.0  # and he far from him
+    free = {q.id: (q.x, q.y) for q in e.players
+            if q.team == "away" and q.role != "GK" and q.id not in brain.pressers}
+    seen = {pid: at for pid, at in e.shared_view("away", other("away")).items() if pid != r.taker}
+    assert offball.pick_up(free, seen, 0.0).get(did) != aid  # premise: picked up afresh, another
+    for _ in range(int(1.0 / DT)):
+        e.step()
+    assert e.restart is r and r.marks.get(did) == aid
+    w = wall_kick(5)  # and at a free kick with a wall
+    for _ in range(int(1.0 / DT)):
+        w.step()
+    wr = w.restart
+    free = {q.id: (q.x, q.y) for q in w.players if q.team == "away" and q.role != "GK"}
+    fresh = offball.pick_up(free, w.shared_view("away", "home"), 105.0)
+    assert set(fresh) & set(wr.wall) and wr.taker in fresh.values()  # premise: as in play, they would
+    assert wr.marks and not set(wr.wall) & set(wr.marks) and wr.taker not in wr.marks.values()
+
+
+def test_a_kept_man_stays_marked_wherever_he_goes_and_new_men_are_picked_up():
+    """O2 with lesson 174's kept pairs: a defender keeps the man he marks even beyond DANGER_RANGE_M
+    (kept only while near, a man seen at its edge was dropped and picked up again from one look to
+    the next); one no longer free (pressing, in the wall) drops him; a man newly near is picked up by
+    the nearest free defender."""
+    from ninety.sim import offball
+    goal = 0.0
+    defenders = {"d1": (10.0, 30.0), "d2": (12.0, 40.0), "d3": (30.0, 34.0)}
+    attackers = {"x1": (26.0, 34.0), "x2": (11.0, 41.0)}  # x1 26 m out, beyond the range
+    assert math.hypot(26.0 - goal, 0.0) > offball.DANGER_RANGE_M  # premise
+    assert offball.pick_up(defenders, attackers, goal) == {"d2": "x2"}  # x1 not near: not picked up
+    assert offball.pick_up(defenders, attackers, goal, keep={"d1": "x1"}) == {"d1": "x1", "d2": "x2"}
+    gone = {k: v for k, v in defenders.items() if k != "d1"}  # d1 now presses
+    assert offball.pick_up(gone, attackers, goal, keep={"d1": "x1"}) == {"d2": "x2"}
+    attackers["x3"] = (8.0, 30.0)  # a man newly near our goal
+    assert offball.pick_up(defenders, attackers, goal, keep={"d2": "x2"}) == {"d2": "x2", "d1": "x3"}
+    pairs = offball.pick_up(defenders, attackers, goal)
+    assert offball.marking(defenders, attackers, goal) == {  # without kept pairs, as before
+        did: offball.goal_side(attackers[aid], goal) for did, aid in pairs.items()}

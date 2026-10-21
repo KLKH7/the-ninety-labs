@@ -234,6 +234,7 @@ class Restart:
     wall: dict[str, tuple[float, float]] = field(default_factory=dict)  # defender -> his spot in it
     pressers: list[str] | None = None  # the other side's presser and cover, set once (lesson 174)
     settled: set[str] = field(default_factory=set)  # at their places with the ball set (lesson 174)
+    marks: dict[str, str] | None = None  # the other side's markers and their men (lesson 174)
 
 
 @dataclass
@@ -2331,9 +2332,21 @@ class Engine:
                     for p in self.players
                     if p.team == team and p.role != "GK" and p.id not in brain.pressers
                 }
-                brain.markers = offball.marking(
-                    free, self.shared_view(team, other(team)), PITCH_X - goal_x(team)
-                )
+                seen, own_goal = self.shared_view(team, other(team)), PITCH_X - goal_x(team)
+                if given is None:
+                    brain.markers = offball.marking(free, seen, own_goal)
+                else:
+                    # Until a restart's ball is in play each marker keeps his man (design). Picked up
+                    # again at every look, from noisy sightings and from where the markers' own walks
+                    # had taken them, men changed markers at every look, and the markers walked out
+                    # and back through the wait. Those in the wall stand in it, and the taker is faced
+                    # by the wall or the presser: marked goal-side, his marker's place was the wall's
+                    # own (lesson 174).
+                    free = {pid: at for pid, at in free.items() if pid not in given.wall}
+                    seen = {pid: at for pid, at in seen.items() if pid != given.taker}
+                    given.marks = offball.pick_up(free, seen, own_goal, keep=given.marks)
+                    brain.markers = {did: offball.goal_side(seen[aid], own_goal)
+                                     for did, aid in given.marks.items()}
             else:
                 brain.markers = {}
 
@@ -2626,8 +2639,9 @@ class Engine:
             if way is None:
                 tx, ty = p.x, p.y
             else:
-                # From inside the margin, round and out past it: no further round than heads him out.
-                step = math.radians(KEEP_OFF_STEP_DEG) if m >= clear else math.acos(m / out)
+                # From inside the margin, round and out past it: half as far round as a chord that
+                # would leave his own distance along it (design), so he heads out as well as round.
+                step = math.radians(KEEP_OFF_STEP_DEG) if m >= clear else math.acos(m / out) / 2
                 a = here + clamp(way, -step, step)
                 reach = round_reach(bx, by, clear, a, m if m >= clear else out)
                 tx, ty = bx + fmath.cos(a) * reach, by + fmath.sin(a) * reach
