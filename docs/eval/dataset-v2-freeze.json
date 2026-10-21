@@ -70,5 +70,10 @@
   "machine": "rendered first, on the same pod and GL as the training clips; cross-machine identity is not required (every clip renders on the one pod)"
  },
  "upload": "no credential goes to the render machine: the outputs are copied back over SSH, every sha256 checked against the manifest here, and uploaded from the maintainer's machine with its az login (infra/pod/render.py upload --account)",
- "qa": "before upload, infra/pod/qa.py: contact sheets (8 frames each) of 20 passing training clips drawn with random seed 20261021, fixed now, plus every training clip the checks flagged, for the Coordinator to look at; and a summary: excluded clips, render-check totals per split, the manifest verified. Test clips are never drawn or shown"
+ "qa": "before upload, infra/pod/qa.py: contact sheets (8 frames each) of 20 passing training clips drawn with random seed 20261021, fixed now, plus every training clip the checks flagged, for the Coordinator to look at; and a summary: excluded clips, render-check totals per split, the manifest verified. Test clips are never drawn or shown",
+ "run_log": {
+  "render": "GPU pod (RTX 4090), driver 4fc8f4d, render aea01f4; GL check: ANGLE Vulkan on the RTX 4090, not SwiftShader; determinism smoke (seed 3, two fresh browsers): byte-identical; test set 30 of 30 passed at 8 workers (282 clips an hour)",
+  "infrastructure_failure": "training at 16 workers filled the GPU's 24 GB with Chromium GPU processes (23.9 GB); three clips, seeds 105, 111 and 120, rendered entirely black (VRAM exhaustion, GPU processes respawned) and failed check_clip. A scan of every image of every clip by file size (a black JPEG is under 20 kB, a frame about 250 kB) found no other black frame. The run went back to 8 workers (the same throughput); the unfinished clips were removed and resumed. The same three seeds are re-rendered once at the end at 3 workers (Coordinator's decision: the failure is the machine's, independent of content, and GPU rendering is deterministic); their crashed reports are kept in reports/train-crashed-vram/. If one fails again it is excluded",
+  "excluded_engine": "seed 2014: data contract C7 ('e00054 shot: ball never reaches (36.79, 53.5)'), an engine defect; excluded and passed to the engine"
+ }
 }
