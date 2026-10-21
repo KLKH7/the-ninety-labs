@@ -637,7 +637,8 @@ function idMaterial(id) {
 // The match body. Python sends the pose; these angles are the same ones meshpose.py builds.
 // Object space is Y-up metres, +X his left, +Z the way he faces. Positive bone X swings a limb back.
 // A third angle, Y, twists a bone about its length (Root: the hips; spine: the chest; thigh: the foot).
-const MESH_CONTACT = new Set(['strike', 'foot', 'thigh', 'chest', 'head', 'hands', 'throw', 'dive', 'shield']);
+// A throw-in is drawn from the standing pose, its hands on the ball as a hold (meshpose._CONTACT).
+const MESH_CONTACT = new Set(['strike', 'foot', 'thigh', 'chest', 'head', 'hands', 'dive', 'shield']);
 // Touches taken in stride: the stored pose gives only the arms (meshpose._FEET).
 const MESH_FEET = new Set(['strike', 'foot', 'thigh']);
 const ARMS = ['upperarm_l', 'lowerarm_l', 'upperarm_r', 'lowerarm_r'];
@@ -678,8 +679,12 @@ const LEAN_STEP = [0.1, 0.1];
 const LEAN_LIMIT = [[-0.9, 0.9], [-0.6, 0.6]];
 const LEAN_SHARE = [['spine_01', 0.35], ['spine_02', 0.35], ['neck_01', 0.3]];
 const TWIST_SIGN = -1.0;
+// The asset's stature (meshpose.ASSET_STATURE_M): a player height_m tall is the asset scaled by
+// height_m / ASSET_STATURE_M. And the forehead a header meets the ball with (meshpose.BROW_Y).
+const ASSET_STATURE_M = 1.684;
+const BROW_Y = 1.63;
 const EXTRA = {
-  brow: ['head', [0.0, 1.70, 0.13]],
+  brow: ['head', [0.0, BROW_Y, 0.13]],
   chest: ['spine_03', [0.0, 1.28, 0.14]],
   thigh_top_l: ['thigh_l', [0.14, 0.64, 0.10]],
   thigh_top_r: ['thigh_r', [-0.14, 0.64, 0.10]],
@@ -860,14 +865,14 @@ function pointOf(angles, name, player) {
 }
 
 function toObject(x, y, heading, height, wx, wy, wz = 0, lift = 0) {
-  const k = height / 1.84;
+  const k = height / ASSET_STATURE_M;
   const hx = Math.cos(heading), hy = Math.sin(heading);
   const dx = (wx - x) / k, dy = (wy - y) / k;
   return [-hy * dx + hx * dy, (wz - lift) / k, hx * dx + hy * dy];
 }
 
 function toWorld(x, y, heading, height, p, lift = 0) {
-  const k = height / 1.84;
+  const k = height / ASSET_STATURE_M;
   const hx = Math.cos(heading), hy = Math.sin(heading);
   return [
     x + k * (-hy * p[0] + hx * p[2]),
@@ -1035,7 +1040,7 @@ function anglesFor(player, pose, heading, height) {
     let [planted, err] = searchLeg(angles, side, target, PLANT_FOOT, twist, 'foot_' + side, true, player);
     if (err > PLANT_GIVE_UP && lift < 0) {
       // Lowered, an unreachable foot reaches toward its plant above the grass (meshpose.pose_angles).
-      planted = searchLeg(angles, side, target, PLANT_FOOT, twist, 'foot_' + side, false, player, null, -lift / (height / 1.84))[0];
+      planted = searchLeg(angles, side, target, PLANT_FOOT, twist, 'foot_' + side, false, player, null, -lift / (height / ASSET_STATURE_M))[0];
       err = 0;
     }
     // A stride's plant comes and goes with a weight (scene.PLANT_EASE_FRAMES).
@@ -1048,7 +1053,7 @@ function anglesFor(player, pose, heading, height) {
     let reached;
     if (touch.part === 'foot' || touch.part === 'strike') {
       const foot = touch.part === 'strike' ? STRIKE_FOOT : PLANT_FOOT;
-      const floor = -lift / (height / 1.84);
+      const floor = -lift / (height / ASSET_STATURE_M);
       reached = searchLeg(angles, side, target, foot, 0, 'foot_' + side, false, player, null, floor)[0];
       angles = blendPose(angles, reached, touch.w);
       // A blend that dips the foot under the grass puts it back on it (meshpose.pose_angles).
@@ -1071,7 +1076,7 @@ function holdPose(player, angles, pose, hold, heading, height) {
   const bend = hold.bend || 0;
   for (const [bone, share] of HOLD_BEND) addAngle(out, bone, bend * share, 0, 0);
   const centre = toObject(pose.x, pose.y, heading, height, hold.at[0], hold.at[1], hold.at[2], pose.lift || 0);
-  const k = height / 1.84;
+  const k = height / ASSET_STATURE_M;
   const idx = player.boneIndex;
   const girdle = poseBones(out, player.bones, Math.max(idx.clavicle_l, idx.clavicle_r));
   for (const [side, sign] of [['l', 1], ['r', -1]]) {
@@ -1393,7 +1398,7 @@ class Body {
         sock.uLeft.value.copy(this.kit.uLeft.value);
       }
     }
-    const k = this.heightM / 1.84;
+    const k = this.heightM / ASSET_STATURE_M;
     this.group.position.set(x, y, pose.lift || 0);
     this.group.scale.set(k, k, k);
     this.group.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(
