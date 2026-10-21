@@ -934,6 +934,8 @@ const LEAN_STEP = [0.1, 0.1];
 const LEAN_LIMIT = [[-0.9, 0.9], [-0.6, 0.6]];
 const LEAN_SHARE = [['spine_01', 0.35], ['spine_02', 0.35], ['neck_01', 0.3]];
 const TWIST_SIGN = -1.0;
+// The trunk's lean on top of the stride's, split as the stored run splits its own (meshpose.TRUNK_SHARE).
+const TRUNK_SHARE = [['spine_01', 0.14 / 0.22], ['spine_02', 0.08 / 0.22]];
 // The asset's stature (meshpose.ASSET_STATURE_M): a player height_m tall is the asset scaled by
 // height_m / ASSET_STATURE_M. And the forehead a header meets the ball with (meshpose.BROW_Y).
 const ASSET_STATURE_M = 1.684;
@@ -1036,7 +1038,7 @@ function copyPose(raw) {
 
 // The arms swing opposite the legs: from the stored walk (elbows nearly straight) to the stored
 // run (elbows near a right angle) as armT goes from 0 to 1 (meshpose.gait).
-function gaitPose(s, run, walk, armT) {
+function gaitPose(s, run, walk, armT, pump = 1) {
   const left = (s + 1) / 2, right = (1 - s) / 2;
   const out = {};
   for (const base of ['thigh', 'calf', 'foot']) {
@@ -1046,8 +1048,14 @@ function gaitPose(s, run, walk, armT) {
   }
   const arms = walk ? blendXZ(walk, run, armT) : run;
   for (const base of ['upperarm', 'lowerarm']) {
-    const [lx, lz] = xzy(arms[base + '_l']);
-    const [rx, rz] = xzy(arms[base + '_r']);
+    let [lx, lz] = xzy(arms[base + '_l']);
+    let [rx, rz] = xzy(arms[base + '_r']);
+    if (base === 'upperarm' && pump !== 1) {
+      // The upper arms' swing widens about its middle with speed (meshpose.gait, scene.PUMP).
+      const mid = (lx + rx) / 2;
+      lx = mid + (lx - mid) * pump;
+      rx = mid + (rx - mid) * pump;
+    }
     out[base + '_l'] = [lx * left + rx * right, lz * left - rz * right];
     out[base + '_r'] = [rx * left + lx * right, rz * left - lz * right];
   }
@@ -1246,7 +1254,7 @@ function upperAngles(player, pose, heading, height) {
     // A strike or a touch with the foot or thigh is taken in stride.
     const full = player.fullStrideSpeed;
     const armT = action === 'run' ? 1 : Math.min(Math.max((speed - full) / (player.armRunSpeed - full), 0), 1);
-    angles = gaitPose(Math.sin(pose.phase || 0), poses.run, poses.walk, armT);
+    angles = gaitPose(Math.sin(pose.phase || 0), poses.run, poses.walk, armT, pose.pump || 1);
     if (action !== 'run' && speed < STRIDE_GROW[1]) {
       // A walk's short stride grows into the full one through a jog (meshpose.STRIDE_GROW).
       const t = Math.min(Math.max((speed - STRIDE_GROW[0]) / (STRIDE_GROW[1] - STRIDE_GROW[0]), 0), 1);
@@ -1258,6 +1266,11 @@ function upperAngles(player, pose, heading, height) {
     if (action !== 'run' && speed < STAND_BLEND[1]) {
       angles = blendPose(copyPose(poses.stand), angles, (speed - STAND_BLEND[0]) / (STAND_BLEND[1] - STAND_BLEND[0]));
     }
+  }
+  const lean = pose.lean || 0;
+  if (lean && !(poses[action] && MESH_CONTACT.has(action) && !MESH_FEET.has(action))) {
+    // Speeding up the trunk leans into it, slowing it comes up (scene.pace).
+    for (const [bone, share] of TRUNK_SHARE) addAngle(angles, bone, lean * share, 0, 0);
   }
   if (lead) {
     // The hips lead a turn and the chest follows: Root turns the hips and legs, the lower spine

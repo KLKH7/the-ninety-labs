@@ -59,4 +59,8 @@ docs/decisions/0001-synthetic-data.md.
 # closed with varied made-up adverts, walls and LED ribbons under the stands, grass behind the boards,
 # softer mowing. A plain stadium renders the same pixels as 0.5.10; the crowd is never labelled and
 # hides only what is behind it, as the picture does.
-RENDERER_VERSION = "0.5.11"
+# 0.5.11: the runner's hips bob (sourced by speed: highest over the standing leg walking, lowest at
+# mid-stance and in free fall in the air running), the swinging knee folds to a runner's, the trunk
+# leans into a change of pace by atan(a / g) and with speed, the arms swing wider toward a sprint,
+# and a sprinter's foot leaves the grass between frames, so his flight is seen over 3 frames.
+RENDERER_VERSION = "0.5.12"
