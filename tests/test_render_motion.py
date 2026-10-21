@@ -927,7 +927,7 @@ def _both_up_runs(drawn, height=0.14):
 
 
 def test_a_player_drifting_while_the_pose_flickers_keeps_his_feet_down():
-    """Found by the blind critic of the first 0.5.4 draft: drifting at 0.4 to 0.6 m/s, the engine's
+    """Found by the blind critic of this change's first draft: drifting at 0.4 to 0.6 m/s, the engine's
     pose flickers between walk and stand every frame (seed 21, a8 at 6:08), and a stride restarted
     each frame never landed: both feet hovered 10 to 20 cm up for 40 frames, a crouched shuffle.
     Below STRIDE_FROM_MPS  the feet step after the body as when standing."""
@@ -1096,7 +1096,7 @@ H10_SET_OFF = [
 
 
 def test_setting_off_the_feet_do_not_leave_the_grass_together():
-    """Found by the blind critic of the second 0.5.4 draft: h10 setting off from standing (seed 7 at
+    """Found by the blind critic of this change's second draft: h10 setting off from standing (seed 7 at
     1:43) lifted his right foot, which hovered low while his pace grew, then his left on its phase:
     both rose together, a hop. A foot whose stance is over waits for the other to be past the middle
     of its swing (unless the leg can no longer reach it). Both feet are high for less than a whole
