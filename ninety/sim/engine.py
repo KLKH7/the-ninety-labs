@@ -33,6 +33,7 @@ from ninety.sim.body import (
     Body,
     can_get_to,
     relative_speed,
+    stopping_distance,
     stopping_speed,
 )
 from ninety.sim.body import move as move_body
@@ -50,7 +51,7 @@ DT = 1.0 / FPS
 # the ball could get there (in_time, O8), no faster; a few jobs are flat out. What he can reach is
 # limited by his own body (ninety/sim/body.py): acceleration, top speed, energy.
 SPRINT = 99.0  # as fast as their body allows (a keeper's dash, P17 does not price his)
-RECOVER = 6.0  # a restart taker or the keeper getting into position (design)
+RECOVER = 6.0  # a restart taker or the keeper getting into position, a goal's celebration runs (design)
 SHAPE = 3.0  # getting up after being beaten (design)
 DRIBBLE = 2.5
 DECIDE_EVERY = 6  # frames between the ball carrier's decisions (about 4 a second)
@@ -131,13 +132,30 @@ BOARDS_M = 4.0  # verify: advertising boards behind the lines stop a ball (and p
 # R1: seconds from the ball going out to the restart. Means from Opta timing of the Premier League
 # (The Analyst): throw-ins about 16 s (2022-23; 17.9 in 2025-26), goal kicks 29 to 30 s, free kicks
 # 31.3 to 40.9 s by team (2022-23; mean taken as the middle), corners about half a minute (only a
-# combined figure is published). The spread around each mean is design. Kickoff: design, long
-# enough to see (a goal's celebration, about 72 s in the same data, is not modelled).
+# combined figure is published). The spread around each mean is design. The kick-off that starts the
+# match: design, long enough to see. After a goal (L4): FIFA's referees' chief, on added time at the
+# 2022 World Cup, put a goal's celebration at "one, one and a half minutes" (Collina, November 2022);
+# Opta's guide gives 72 s for the celebration after a penalty goal (The Analyst, May 2023).
 RESTART_DELAY_S = {"throw_in": (12, 20), "goal_kick": (24, 34), "corner": (24, 36),
                    "free_kick": (29, 41),
                    # about two minutes from the foul to the spot kick (same source, 2022-23)
                    "penalty_kick": (100, 140),
-                   "kick_off": (1, 2)}
+                   "kick_off": (1, 2),
+                   "kick_off_after_goal": (60, 90)}
+# design: how long each of the scorer's team-mates celebrates with him (the run to him, the huddle);
+# the scorer stays until the last has gone; the rest of the minute or more before the kick-off is
+# the walk back (L4)
+CELEBRATION_S = (15.0, 25.0)
+# design: team-mates round a scorer stand a shoulder's breadth apart (P11) with a little to spare
+HUDDLE_SPACING_M = 0.55
+# design: from where a team-mate running at RECOVER must start braking for his place (stopping as
+# body.stopping_speed has him, with P2's grip), he is joining the others, and stands as close to
+# them as bodies allow; the switch at that distance is design, about 3.2 m
+GATHER_REACH_M = stopping_distance(RECOVER)
+# L4: after a goal players walk back at least at a normal walking pace: men aged 20 to 29 walk at
+# about 1.36 m/s (Bohannon & Andrews 2011, Physiotherapy 97:182, a meta-analysis of 23,111 adults,
+# as tabulated by the University of Toronto's iWalk guide)
+WALK_MPS = 1.36
 NO_OFFSIDE_FROM = ("throw_in", "goal_kick", "corner")  # Law 11: no offside offence direct from these
 INTERCEPT_SHARE = 0.85  # design: taken before this share of the way to its target, a pass is intercepted
 THROW_BEHIND_M = 0.55  # Law 15: his body stands outside the touchline, feet on or behind it (design)
@@ -190,6 +208,17 @@ class Restart:
     carried_by: str | None = None  # who has the dead ball at his feet (or in his hands)
     passed_by: str | None = None  # who knocked it on toward the spot, while it is still rolling
     gathered_at: float = 0.0  # when the one who has it took it
+
+
+@dataclass
+class Celebration:
+    team: str  # the side that scored
+    focus: str  # the scorer (or, for an own goal, the scoring side's player nearest the ball)
+    spot: tuple[float, float]  # where he goes: the corner flag nearest him at that end, a keeper stays
+    until: float  # when the last of them stops celebrating
+    ring: list[str] = field(default_factory=list)  # the team-mates who run to him
+    leave: dict[str, float] = field(default_factory=dict)  # when each, the focus too, stops celebrating
+    places: dict[str, tuple[float, float]] = field(default_factory=dict)  # this frame's places round him
 
 
 @dataclass
@@ -310,6 +339,8 @@ class Engine:
         # Perception draws from its own stream, so a change to what players see does not
         # reshuffle every other random draw in the match.
         self.sight_rng = fmath.Random(f"{seed}-perception")
+        # So does a goal's celebration: how long each celebrates moves no other draw (lesson 90).
+        self.celebration_rng = fmath.Random(f"{seed}-celebration")
         self.match = Match(seed=seed)
         self.players: list[Player] = []
         # A strength not given is drawn, home first: with none given the match is the same as before.
@@ -411,6 +442,8 @@ class Engine:
         self.restart: Restart | None = None
         # Laws 13, 15 to 17: a restart that has been set but not yet kicked; the opponents keep off
         self.set_by: Restart | None = None
+        self.celebration: Celebration | None = None  # a goal just scored: the scorers celebrate (L4)
+        self.side_by_side: set[str] = set()  # this frame, who stands as close to team-mates as bodies allow
         # Laws 8, 13 to 17: who took the last restart, until another player has touched the ball
         self.restart_kicker: str | None = None
         self.throw_by: str | None = None  # a throw-in taker holding the ball until he throws it
@@ -573,8 +606,9 @@ class Engine:
     def kickoff(self, team: str, setup: bool = False) -> None:
         """Law 8. At the start of the match (`setup`) the teams walk out to their kick-off spots
         before the first frame. After a goal nobody is moved: they make their own way back to their
-        spots, the ball is fetched to the centre mark (tick_restart), and the kick is taken once
-        everyone stands where Law 8 puts them, after a short pause rather than at once."""
+        spots after the celebration (celebrate), the ball is fetched to the centre mark
+        (tick_restart), and the kick is taken once everyone stands where Law 8 puts them and the
+        stoppage has run its time (L4: a minute or more after a goal, 1 to 2 s at the start)."""
         taker = next(p for p in self.players if p.team == team and p.role == "ST")
         if setup:
             for p in self.players:
@@ -586,7 +620,8 @@ class Engine:
         self.poss_team = team
         self.kicked = None
         self.new_phase()
-        self.stop("kick_off", team, (PITCH_X / 2, PITCH_Y / 2), taker.id)
+        self.stop("kick_off", team, (PITCH_X / 2, PITCH_Y / 2), taker.id,
+                  delay="kick_off" if setup else "kick_off_after_goal")
 
     def lined_up_for_kickoff(self, r: Restart) -> bool:
         """Law 8: everyone but the kicker in his own half, and the opponents outside the centre
@@ -1486,12 +1521,103 @@ class Engine:
                     kicked.update(receiver=None if own else scorer, end_x=touch["x"], end_y=touch["y"],
                                   outcome="fail" if own else "success")
         self.emit("goal", team, x, y, player=scorer)
+        self.celebrate(team, scorer)
         self.kickoff(other(team))
 
-    def stop(self, kind: str, team: str, spot: tuple[float, float], taker: str | None = None) -> None:
+    def celebrate(self, team: str, scorer: str | None) -> None:
+        """L4 (design): the scorer runs off toward the corner flag nearest him at the end he scored at,
+        and his outfield team-mates run to him; after CELEBRATION_S they walk back for the kick-off.
+        An own goal has no scorer: the side's outfielder nearest the ball is the one they run to. A
+        keeper who scores celebrates where he is. The team-mates gather on the side they come from
+        (huddle_spot), each at his own place, never on the same spot: bodies do not pass through each
+        other (P11)."""
+        side = [p for p in self.players if p.team == team and p.role != "GK"]
+        focus = self.by_id[scorer] if scorer else min(
+            side, key=lambda p: math.hypot(p.x - self.ball[0], p.y - self.ball[1]))
+        if focus.role == "GK":
+            spot = (focus.x, focus.y)
+        else:
+            flag_y = 0.5 if focus.y < PITCH_Y / 2 else PITCH_Y - 0.5
+            spot = (clamp(goal_x(team), 0.5, PITCH_X - 0.5), flag_y)
+        mates = [q.id for q in side if q is not focus]
+        # each team-mate stops at his own moment, so they leave him one by one, not as one body;
+        # the one they celebrate goes last
+        leave = {pid: self.t + self.celebration_rng.uniform(*CELEBRATION_S) for pid in mates}
+        leave[focus.id] = max(leave.values())
+        self.celebration = Celebration(team, focus.id, spot, leave[focus.id], mates, leave)
+
+    def celebrating(self, p: Player) -> bool:
+        c = self.celebration
+        return c is not None and self.t < c.leave.get(p.id, 0.0)
+
+    def huddle_places(self, c: Celebration) -> dict[str, tuple[float, float]]:
+        """The places round the focus of the team-mates still celebrating, worked out for all of
+        them from where they all are now: on an arc facing the side they come from (their mean
+        bearing from him), HUDDLE_SPACING_M apart, in the order of their bearings, so no two runs
+        to them cross; at most a half-circle, far enough out to hold them all and clear of his body.
+        As they leave, those still there close up round him."""
+        f = self.by_id[c.focus]
+        mates = [self.by_id[pid] for pid in c.ring if self.t < c.leave[pid]]
+        if not mates:
+            return {}
+        bear = {q.id: fmath.atan2(q.y - f.y, q.x - f.x) for q in mates}
+        # math.fsum: one exact rounding, the same on every Python (lesson 134)
+        mean = fmath.atan2(math.fsum(fmath.sin(a) for a in bear.values()),
+                           math.fsum(fmath.cos(a) for a in bear.values()))
+        order = sorted(bear, key=lambda pid: (bear[pid] - mean + math.pi) % (2 * math.pi))
+        n = len(order)
+        radius = max(n * HUDDLE_SPACING_M / math.pi, shape.SHOULDER_BREADTH_M)
+        step = HUDDLE_SPACING_M / radius
+        places = {}
+        for k, pid in enumerate(order):
+            a = mean + (k - (n - 1) / 2) * step
+            places[pid] = (f.x + fmath.cos(a) * radius, f.y + fmath.sin(a) * radius)
+        return places
+
+    def huddle_spot(self, c: Celebration, p: Player) -> tuple[float, float]:
+        """His place round the focus this frame (huddle_places, worked out once a frame in gather)."""
+        if p.id not in c.places:
+            c.places = self.huddle_places(c)
+        return c.places[p.id]
+
+    def gather(self) -> None:
+        """Once a frame, before anyone moves: the places round the one they celebrate, and who is
+        joining the others. A team-mate within GATHER_REACH_M of his place (the focus of the spot he
+        runs to) stands as close to them as bodies allow (together)."""
+        self.side_by_side = set()
+        c = self.celebration
+        if c is None:
+            return
+        c.places = self.huddle_places(c)
+        for pid, (x, y) in [(c.focus, c.spot), *c.places.items()]:
+            p = self.by_id[pid]
+            if self.celebrating(p) and math.hypot(p.x - x, p.y - y) < GATHER_REACH_M:
+                self.side_by_side.add(pid)
+
+    def together(self, p: Player, q: Player) -> bool:
+        """Team-mates who mean to stand side by side keep only clear of each other's bodies, not the
+        usual personal space; on the way there they keep it as ever (gather)."""
+        return p.team == q.team and p.id in self.side_by_side and q.id in self.side_by_side
+
+    def looks_at(self, p: Player) -> tuple[float, float]:
+        """What a still player turns to: the ball; round a scorer, the scorer, and the scorer to
+        his team-mates round him."""
+        c = self.celebration
+        if c is not None and p.id in self.side_by_side:
+            if p.id != c.focus:
+                f = self.by_id[c.focus]
+                return f.x, f.y
+            around = [self.by_id[pid] for pid in c.places if pid in self.side_by_side]
+            if around:
+                n = len(around)
+                return math.fsum(q.x for q in around) / n, math.fsum(q.y for q in around) / n
+        return self.ball[0], self.ball[1]
+
+    def stop(self, kind: str, team: str, spot: tuple[float, float], taker: str | None = None,
+             delay: str | None = None) -> None:
         if taker is None:
             taker = self.nearest(spot[0], spot[1], team).id
-        lo, hi = RESTART_DELAY_S[kind]
+        lo, hi = RESTART_DELAY_S[delay or kind]
         self.dribbler = self.dribble_to = None  # the ball is dead: nobody is running onto a touch
         self.restart_kicker = None  # a new stoppage ends the last restart's bar
         self.restart = Restart(kind, team, spot[0], spot[1], taker, self.t + self.rng.uniform(lo, hi))
@@ -1647,6 +1773,7 @@ class Engine:
             spot = self.restart_ball_spot(r)
             self.ball = (*spot, 0.0, 0.0, 0.0, 0.0)
         self.restart = None
+        self.celebration = None  # play restarts: any celebration is over
         self.set_by = r if r.kind not in ("throw_in", "penalty_kick") else None
         self.emit("kickoff" if r.kind == "kick_off" else "set_piece", r.team, *spot, player=taker.id,
                   **({} if r.kind == "kick_off" else {"outcome": None}))
@@ -1802,9 +1929,17 @@ class Engine:
             return p.x + (sx - p.x) / d * CONTROL_M, p.y + (sy - p.y) / d * CONTROL_M, DRIBBLE
         if self.restart and self.restart.kind == "penalty_kick" and p.id != self.restart.taker:
             return *self.penalty_wait_spot(p), SHAPE  # Law 14: until the ball is kicked
+        c = self.celebration
+        if c and self.celebrating(p):
+            if p.id == c.focus:  # the scorer runs off to celebrate
+                return *c.spot, RECOVER
+            return *self.huddle_spot(c, p), RECOVER  # his team-mates run to their places by him
         kick_off = self.restart or self.set_by
         if kick_off and kick_off.kind == "kick_off" and p.id != kick_off.taker:
-            return *self.kickoff_spot(p, kick_off.team), SHAPE  # Law 8: until the ball is kicked
+            # Law 8: in his own half until the ball is kicked, walking back (L4), faster if a walk
+            # would not get him there in time for it (O8)
+            kx, ky = self.kickoff_spot(p, kick_off.team)
+            return kx, ky, max(WALK_MPS, self.in_time(p, kx, ky))
         if self.restart and p.id == self.restart.taker:
             r = self.restart
             # With the ball at his feet he goes no faster than he can carry it (D1).
@@ -2138,7 +2273,7 @@ class Engine:
                 tx, ty = p.x + ux / u * dist, p.y + uy / u * dist
             steer(p, tx, ty, top)
             p.heading = turn_toward(p.heading, perception.facing(p.heading, p.vx, p.vy, p.x, p.y,
-                                                                 self.ball[0], self.ball[1]))
+                                                                 *self.looks_at(p)))
         self.separate()
 
     def keep_off(self, p: Player, tx: float, ty: float) -> tuple[float, float]:
@@ -2216,8 +2351,9 @@ class Engine:
                 continue
             dx, dy = px - (q.x + q.vx * ANTICIPATE_S), py - (q.y + q.vy * ANTICIPATE_S)
             d = math.hypot(dx, dy)
-            if 1e-6 < d < PERSONAL_SPACE_M:
-                closeness = (PERSONAL_SPACE_M - d) / PERSONAL_SPACE_M  # 0 at the edge, 1 at contact
+            space = shape.SHOULDER_BREADTH_M if self.together(p, q) else PERSONAL_SPACE_M
+            if 1e-6 < d < space:
+                closeness = (space - d) / space  # 0 at the edge, 1 at contact
                 w = 4 * closeness * closeness / d  # urgency grows sharply as contact nears
                 nx, ny = nx + dx * w, ny + dy * w
         return nx, ny
@@ -2780,6 +2916,7 @@ class Engine:
         if r and (self.possessor != r.taker
                   or math.dist(self.ball[:3], (*self.restart_ball_spot(r), 0.0)) > 1e-6):
             self.set_by = None  # it has moved (a touch on, turning it onto his foot): in play
+        self.gather()
         self.move_players()
         self.snapshot()
         self.t += DT

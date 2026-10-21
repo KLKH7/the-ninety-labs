@@ -33,9 +33,9 @@ columns are two samples, compared by their standard errors over matches.
 | Stoppages never restarted (over 200 s) | 0 | 0 |
 | Matches meeting the data contract (`ninety-validate`) | 16 of 16 | 16 of 16 |
 
-Real football has no single-frame ball jumps and no player resets. The real time from a goal to
-the kick-off is about 72 s with the celebration (GROUNDING R1), which is still not modelled. On
-main the `kickoff` event is written in the goal's frame; now it is the kick itself.
+Real football has no single-frame ball jumps and no player resets. A goal stops a real match for a
+minute or more (GROUNDING L4); this change left it at 14 to 19 s, and the celebration (below) makes
+it 61 to 83 s. On main the `kickoff` event is written in the goal's frame; now it is the kick itself.
 
 ## Held-out outcomes
 
@@ -69,7 +69,8 @@ his goal kick, the ball rolled back to the centre after the goal rather than rea
 teams in their own halves at the kick-off, no opponent within 2 m at the throw-in. Its top football
 complaint, in this area but not caused by this change: players stand still through the 25 to 35 s
 stoppages, with no wall, no jostling and no organisation, and the kick-off comes about 17 s after a
-goal against about 72 s in real matches (R1). Those are the next restart work.
+goal against a minute or more in real matches (L4; the 72 s it was compared with then is a penalty
+goal's, lesson 142). The celebration below answers the second.
 
 ### On earlier bases
 
@@ -89,6 +90,64 @@ goals 1.4 ± 0.5 to 2.4 ± 0.6, most of the extra shots within 10 s of a side's 
 64), with the first pass after a throw-in failing 15% to 4%. On today's base that shot rise does
 not appear (above). Which base's restart behaviour is realistic is open: real restart-retention
 rates are not yet sourced.
+
+## After a goal (the celebration)
+
+Measured on the same 16 seeds, 20 minutes each, against `main` at `8b426b5` (with #156, this
+report's first change, and since then #160, #163, #164 and #166 from the engine-decisions work), the
+celebration branch merged onto it at `8c7bb1b`; raw output in
+[restarts/main-8b426b5.json](restarts/main-8b426b5.json) and
+[restarts/celebration-branch.json](restarts/celebration-branch.json):
+
+| | Before | After |
+|---|---:|---:|
+| Seconds from a goal to the kick-off | 15.6 to 19.2 (10 goals) | 61.4 to 83.0 (9 kick-offs) |
+| Ball in play, share of the 20 minutes | 61.9% | 60.7% |
+| Shots a team per 90 | 15.9 ± 1.6 | 15.2 ± 1.9 |
+| Goals a team per 90 | 1.4 ± 0.4 | 1.4 ± 0.4 |
+| Pass completion | 84.8% | 84.5% |
+| Restart defects (jumps, encroachment, carried set balls, stuck restarts) | 0 | 0 |
+| Matches meeting the data contract (`ninety-validate`) | 15 of 16 | 15 of 16 |
+
+A goal's celebration "may last one, one and a half minutes" (Collina, FIFA, 2022): the kick-off now
+comes 60 to 90 s after the goal (GROUNDING L4). Ball in play is about 55.8% of a Premier League
+match's total time, added time included (Opta via The Analyst, 2023); these 20-minute matches have
+no added time. Shots, goals and completion are unchanged within noise; the matches part after their
+first goal (lesson 90). Football-sense, per 90: FS1 17.2 to 19.4, FS2 7.6 to 7.9, FS6 27.8 to 23.9,
+FS7 296 to 298, FS9 1.7 to 1.1. Up to a match's first goal nothing changes: seed 21, which has no
+goal in its 20 minutes, is frame for frame the same on both. It is also the one match failing the
+contract, on both: its shot at 4:37 is blocked, touched again by the shooter, tackled and only then
+collected, and the shot's end point is written where it was collected (C7). That is open-play event
+logic, outside this change.
+
+### The huddle
+
+The first version sent every team-mate to the scorer's own centre: in 32 to 63% of celebration
+frames two bodies were more than 5 cm into each other (the first audit's count, three planted
+goals). Now each runs to his own place on an arc round the scorer, a shoulder's breadth apart, on
+the side he comes from and in the order of the team-mates' bearings. The places are worked out for
+all of them once a frame. Within reach of his place (GROUNDING L4, *design*: where one running at
+`RECOVER` must start braking for it, about 3.2 m) team-mates stand closer than the usual personal
+space. Each team-mate leaves at his own moment, and the scorer goes last.
+
+Counted by [`scripts/defect_sweep/huddle.py`](../../scripts/defect_sweep/huddle.py) over the whole
+celebration of a planted goal (h9 scores from 100, 30) on 12 seeds not used while designing it (1,
+4, 6, 8 to 10, 12 to 17):
+
+| | Now |
+|---|---:|
+| Frames with two bodies more than 5 cm into each other, mean over seeds | 0.9% |
+| worst seed | 3.2% |
+| longest a goal | 0.8 s |
+| Frames once all stand at their places, settled, until the first leaves | 0 of 193 |
+| The same count over a minute of open play from the same seeds | 0.35% |
+
+What remains comes from the last few arriving at a run beside a team-mate already in place: a
+shoulder's breadth between places leaves 5 cm to spare, and the engine's steering bends a run round
+a team-mate but does not slow it. The third audit measured the version before this one at 2.1% of
+frames on the same seeds (an adapted copy of the script), a keeper's goal at 3.2% (up to 8.4%), and
+goals from the far post or long range at 1.6 to 1.8%; and that wider places, or a longer reach, would
+cut overlaps further. Those values were set before and were not changed after seeing that.
 
 ## Reproduce
 
