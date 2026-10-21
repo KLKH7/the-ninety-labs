@@ -123,3 +123,5 @@ def test_a_fallen_players_box_away_from_his_feet_still_fails():
     assert projection_errors([_lying(shifted)])["player_foot_outside_box"] == 1
     beside = (25, -6, 85, 2)  # a lying body's box 25 px clear of his feet
     assert projection_errors([_lying(beside)])["player_foot_outside_box"] == 1
+    above = (-10, -40, 10, -15)  # a lying body's box 15 px above his feet (added after a mutant survived)
+    assert projection_errors([_lying(above)])["player_foot_outside_box"] == 1

@@ -95,3 +95,27 @@ def test_the_foulers_foot_goes_to_the_fouled_players_legs():
     assert at_foul, mine
     bx, by, bz = at_foul[0]["ball"]
     assert math.hypot(bx - 40.0, by - 30.0) <= 0.5 and bz <= 0.5, at_foul[0]["ball"]
+
+
+def test_the_frame_row_says_how_far_a_player_is_down():
+    """The label row carries `fall` in degrees while he is down (render-check judges a lying body by
+    it), and nothing at all while he stands, so upright rows are exactly as before; the truth fields
+    are copied unchanged."""
+    import json
+    from pathlib import Path
+
+    from jsonschema import ValidationError, validate
+
+    schema = json.loads((Path(__file__).resolve().parent.parent / "schemas/frame.schema.json").read_text())
+    pl = _frames(1)[0]["players"][1]
+    assert fouls.row(pl, 0.0) == pl and "fall" not in fouls.row(pl, 0.0)
+    down = fouls.row(pl, math.radians(85))
+    assert abs(down["fall"] - 85.0) < 0.05 and {k: down[k] for k in pl} == pl
+    frame = {"frame": 0, "t": 0.0, "ball": {"x": 1.0, "y": 1.0, "z": 0.0}, "players": [down]}
+    validate(frame, schema)
+    frame["players"][0] = {**pl, "fall": -5.0}
+    try:
+        validate(frame, schema)
+        raise AssertionError("a negative fall passed the schema")
+    except ValidationError:
+        pass
