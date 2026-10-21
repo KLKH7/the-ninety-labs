@@ -27,7 +27,7 @@ from pathlib import Path
 
 from ninety.match.clock import match_clock
 from ninety.render import RENDERER_VERSION, edit
-from ninety.render.camera import Camera, Director, blur_vector
+from ninety.render.camera import Camera, Director, blur_vector, corner_waits
 from ninety.render.params import RenderParams, sample_params
 from ninety.render.scene import (
     LEAD_AHEAD_FRAMES,
@@ -242,6 +242,7 @@ def render_clip(
 
     goals = [e for e in match.events if e["type"] == "goal"]
     goal_at = {e["frame"]: e for e in goals}
+    corners = corner_waits(match.events)  # a corner waiting to be taken, framed for it (camera.py)
     t0, t1 = frames[show[0]]["t"], frames[show[-1]]["t"]
     clip = {
         "clip_id": f"seed{seed}",
@@ -319,7 +320,8 @@ def render_clip(
                 speed = math.hypot(prevb["vx"], prevb["vy"], prevb.get("vz", 0.0))
                 goal_arg = (side, ev["y"], z, speed)
             cut_in = None if left is None else left / FPS
-            cam = director.step(ball[0], ball[1], actors, goal_arg, cut_in, ball_z=ball[2])
+            cam = director.step(ball[0], ball[1], actors, goal_arg, cut_in, ball_z=ball[2],
+                                corner=corners.get(fr["frame"]))
             blur = blur_vector(prev_cam, cam, p.motion_blur)
             prev_cam = cam
             bvx, bvy = fr["ball"].get("vx", 0.0), fr["ball"].get("vy", 0.0)

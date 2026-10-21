@@ -1725,3 +1725,25 @@ short and actionable. This file is public: no research sources, product names or
     `test_play_near_a_corner_flag_is_framed_with_the_pitch_filling_the_picture`, each of which fails
     on the 0.5.3 camera;
   - `_match` simulates SIM_MARGIN_S past the window.
+
+### 177. A coarse search proves a case unframeable only where it searched
+- **What happened:** after #198, #179's seed 3 still missed the camera's 85% framing bar.
+  - A corner rule (framed from the taker inward, its shot held against pumping) fixed what the blind
+    critic saw: near corners went from 26% to 34% pitch, far corners to 79%.
+  - It did not move seed 3's score. I reported its misses as live play near the near flag that no
+    gantry shot could frame. That claim rested on a coarse search (3 m aims, a few lenses) that had
+    shown only the corner flag itself to be unframeable; I extended it to points it never covered.
+  - The oracle the Reviewer asked for (the gantry camera itself, 1 m aims, every lens in 1-degree
+    steps) found 1 of seed 3's 201 live frames unframeable. The rest were the director's misses.
+- **Rule:**
+  - A claim that something cannot be done is checked by a search at the resolution of the claim,
+    on the system's own model, before it is reported.
+  - An exclusion that excludes almost nothing buys nothing: the bar stays raw (the fine oracle,
+    tried and dropped, excluded 1 of 201 frames).
+  - The Reviewer then found the corner rule's own hold made the delivery worse than no rule (a
+    long cross 0 of 88 frames well framed against 41) and its ball-position trigger caught open
+    play on the goal line. The rule now runs only from the engine's corner set piece to the kick.
+- **Check:** `tests/test_render_camera.py::test_after_the_kick_the_corner_rule_frames_no_worse_than_no_rule`
+  (red on af7e439), `::test_a_corner_is_framed_from_the_taker_inward`,
+  `::test_each_corner_has_its_own_shot_and_the_ball_stays_in_it` and
+  `::test_the_corner_shot_holds_until_the_kick`; the framing bar is raw.
