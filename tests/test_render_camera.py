@@ -660,3 +660,38 @@ def test_open_play_through_the_corner_arc_is_framed_as_with_no_corner_rule(monke
     with_rule = run()
     monkeypatch.setattr(Director, "_corner", lambda self, bx, by: None)
     assert with_rule == run()
+
+
+# Delivery-aware corner framing (lesson 177): these bounds were written and committed before the
+# rule was built or measured, and are not moved.
+def _delivery(target, frames_to_target, rest_frames, kick_to=True):
+    """A near corner waits 2 s, is kicked to `target` (arriving after frames_to_target), and play then
+    stays at the target for rest_frames: (camera, ball) for every frame from the kick."""
+    d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=True)
+    _held(d, 20.0, 20.0, 50)
+    for _ in range(50):
+        d.step(0.5, 0.5, [], corner=(0.0, 0.0))
+    rows = []
+    path = _line((0.5, 0.5), target, frames_to_target) + [target] * rest_frames
+    for i, p in enumerate(path):
+        cam = d.step(*p, [], kick_to=target if (kick_to and i == 0) else None)
+        rows.append((cam, (*p, 0.11)))
+    return rows
+
+
+def test_a_short_corner_is_framed_for_where_it_is_played():
+    """#179's seed 3: a near corner played short to a team-mate 8 m away was watched on the wide shot,
+    the pitch a quarter of the picture. Told at the kick where the delivery goes (the engine's pass to
+    its end point), the camera frames the receiving area: from 1 s after the kick, while play stays
+    there, at least 90% of frames are well framed."""
+    rows = _delivery((2.8, 8.2), 15, 60)
+    late = rows[25:]
+    assert sum(well_framed(cam, ball) for cam, ball in late) >= 0.9 * len(late)
+
+
+def test_a_long_corner_cross_is_framed_for_where_it_goes():
+    """A near corner crossed to the penalty spot: from 1 s after the kick, at least 90% of frames are
+    well framed (no rule: the wide shot follows the cross)."""
+    rows = _delivery((11.0, 34.0), 38, 50)
+    late = rows[25:]
+    assert sum(well_framed(cam, ball) for cam, ball in late) >= 0.9 * len(late)
