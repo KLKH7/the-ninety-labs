@@ -1410,46 +1410,6 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_engine_rules.py::test_the_team_mate_a_pass_is_played_to_goes_to_meet_it` and
   `::test_nobody_is_sent_to_chase_a_ball_beyond_the_touchline`.
 
-### 140. A figure keeps the case it was measured for
-- **What happened:** GROUNDING R1 cited Opta's guide to time-wasting for "a goal's celebration,
-  about 72 s", and the restart work planned the kick-off after every goal around it. Read again,
-  the article gives 72 s for the celebration after a penalty goal, in its paragraph on penalties;
-  it gives no figure for goals in general. A general figure was then found in a different source
-  (FIFA's referees' chief: a celebration "may last one, one and a half minutes").
-- **Rule:** when a number moves from a source into GROUNDING, the row names the case it was
-  measured for (which restart, which competition, which seasons) and quotes the sentence it
-  comes from; a number used for a wider case needs a source for that case.
-- **Check:** every row of GROUNDING that cites a time or a rate names its case; R1 and L4 now cite
-  the penalty figure as a penalty figure and the goal figure from its own source.
-
-### 141. Players sent to one point end up inside each other: give each his own place
-- **What happened:** the goal celebration sent every team-mate to the scorer's own position. Steering
-  bends a run round another player but does not slow it, and bodies in contact brace only with the
-  grip steering leaves, so ten players arriving at one point at a sprint ended up in each other: in
-  32 to 63% of celebration frames two bodies overlapped by more than 5 cm. The tests counted players
-  within 3 m of the scorer, a distance between centres, and passed.
-- **Rule:** when several players head for the same spot (a huddle, a wall, a queue), each gets a
-  place of his own, at least a shoulder's breadth from the next (P11), chosen so that no two runs
-  to them cross. A test of a crowd measures the clearance between bodies (`shape.between`), not
-  the distance between centres.
-- **Check:** `uv run pytest tests/test_restarts.py -k "overlap or side_they_come_from or once_a_frame"`;
-  with every team-mate sent to the scorer's centre the overlap test fails (none ever stands at a
-  place of his own), and with places worked out one player at a time, in the order they move, the
-  once-a-frame test fails. `scripts/defect_sweep/huddle.py` counts the frames with bodies in each
-  other over a whole celebration (`docs/eval/restarts.md`, "The huddle").
-
-### 142. A point one rule puts exactly on a boundary is on it for every other rule
-- **What happened:** the keep-off rule moves an opponent's target to the edge of the 9.65 m circle,
-  and the wall stands on that edge. A second rule sends a player round the circle while his
-  straight way "comes closer than 9.65 m". For a place on the edge, straight in from further out,
-  the closest point of that way is the place itself, and rounding put it a hair inside: the player
-  was sent round the circle at his own distance, which is where he already stood. He stood 7 m
-  from the wall through the whole stoppage. No test placed a target exactly on the edge.
-- **Rule:** where one rule produces points on a boundary that another rule tests, the test allows
-  for rounding (a named tolerance), and a test puts a point exactly on the boundary.
-- **Check:** `uv run pytest tests/test_restarts.py -k edge_of_the_circle`; it fails with the
-  tolerance set to 0.
-
 ### 146. A detector that starts naming players turns its false events into false evidence
 - **What happened:** detected passes began to name their passer and receiver by track (`h-t12`) so
   the agents could talk about them. Scoring the names against the truth found both of seed 900004's
@@ -1490,3 +1450,81 @@ short and actionable. This file is public: no research sources, product names or
   `::test_a_slow_model_is_answered_by_the_server_with_its_reasons_not_cut_off_by_the_client`,
   `::test_a_request_cut_off_at_the_deadline_is_awaited_on_close` and
   `::test_the_evaluation_leaves_no_request_running_when_the_client_gives_up`.
+
+### 151. A new check of what a model writes starts from the reader we already have
+- **What happened:** the Vision Auditor's rationale check (#140) read numbers as digit runs only,
+  written fresh beside the fact-checker's reader, which lesson 129 had already widened to number
+  words and glued units. "Ninety of these were missed", "sixty percent", "one in three" and "-38"
+  all passed a check the docs called "number-checked". The reviewer's audit found it.
+- **Rule:** a check on what a model may write reuses the fact-checker's reader
+  (`factcheck.spelled_as_digits`) and adds only what its own text needs (here: digits glued to
+  words, a sign, thousands commas, and refusing words for a share or a multiple). Its tests plant
+  every written form, and a true number in each form must still stand.
+- **Check:** `tests/test_vision_auditor.py::test_a_planted_number_in_any_written_form_is_refused`
+  and `::test_the_cluster_s_own_numbers_in_any_form_stand`.
+
+### 152. A handoff checked only by its writer is not a contract
+- **What happened:** the Auditor validated its own `clusters.json` against the schema, but the Data
+  agent read the file without checking it. A hand-edited file with test seed 900001 in its sources,
+  a shifted seed range or another render setting was planned as if typed. Removing the writer's
+  check turned no test red, because the writer never produces a bad file. Two writers also made two
+  shapes under one file name: the committed round-1 file failed the new schema with 83 errors.
+- **Rule:** the agent that acts on a handoff validates it on receipt (schema, then each rule it
+  relies on) and is tested with tampered input. One file name has one writer and one shape.
+- **Check:** `tests/test_vision_auditor.py::test_the_data_agent_checks_a_typed_handoff_on_receipt`,
+  `::test_the_committed_clusters_json_is_the_auditor_s_code_output_and_the_data_agent_takes_it`.
+
+### 155. A test of a library's message shape goes through the library's own parser
+- **What happened:** #182 made a published agent's call to the match tools fail the call, keyed on
+  the content type `mcp_server_tool_call` in its reply. The tests built that content by hand with
+  `Content.from_mcp_server_tool_call`. Had a framework upgrade renamed the type, or stopped turning
+  Foundry's `mcp_call` output item into it, the guard would pass every call and the tests would
+  stay green. The review caught it. Separately, a tool call made a minute air nothing, but only the
+  ablation's JSON counted such minutes.
+- **Rule:** when code keys on the shape a third-party library produces, at least one test feeds the
+  library the service's raw payload (here a Responses API reply as Foundry returns it) and lets the
+  installed parser build the shape. A failure that costs one arm output is counted in the report a
+  reader sees, not only in the data.
+- **Check:** `tests/test_workflow.py::test_inline_only_reads_a_foundry_reply_as_foundry_sends_it`;
+  `tests/test_agent_ablation.py::test_a_live_arm_that_calls_the_match_tools_fails_that_call` reads
+  the "Minutes lost to a tool call" column.
+
+### 142. A figure keeps the case it was measured for
+- **What happened:** GROUNDING R1 cited Opta's guide to time-wasting for "a goal's celebration,
+  about 72 s", and the restart work planned the kick-off after every goal around it. Read again,
+  the article gives 72 s for the celebration after a penalty goal, in its paragraph on penalties;
+  it gives no figure for goals in general. A general figure was then found in a different source
+  (FIFA's referees' chief: a celebration "may last one, one and a half minutes").
+- **Rule:** when a number moves from a source into GROUNDING, the row names the case it was
+  measured for (which restart, which competition, which seasons) and quotes the sentence it
+  comes from; a number used for a wider case needs a source for that case.
+- **Check:** every row of GROUNDING that cites a time or a rate names its case; R1 and L4 now cite
+  the penalty figure as a penalty figure and the goal figure from its own source.
+
+### 143. Players sent to one point end up inside each other: give each his own place
+- **What happened:** the goal celebration sent every team-mate to the scorer's own position. Steering
+  bends a run round another player but does not slow it, and bodies in contact brace only with the
+  grip steering leaves, so ten players arriving at one point at a sprint ended up in each other: in
+  32 to 63% of celebration frames two bodies overlapped by more than 5 cm. The tests counted players
+  within 3 m of the scorer, a distance between centres, and passed.
+- **Rule:** when several players head for the same spot (a huddle, a wall, a queue), each gets a
+  place of his own, at least a shoulder's breadth from the next (P11), chosen so that no two runs
+  to them cross. A test of a crowd measures the clearance between bodies (`shape.between`), not
+  the distance between centres.
+- **Check:** `uv run pytest tests/test_restarts.py -k "overlap or side_they_come_from or once_a_frame"`;
+  with every team-mate sent to the scorer's centre the overlap test fails (none ever stands at a
+  place of his own), and with places worked out one player at a time, in the order they move, the
+  once-a-frame test fails. `scripts/defect_sweep/huddle.py` counts the frames with bodies in each
+  other over a whole celebration (`docs/eval/restarts.md`, "The huddle").
+
+### 158. A point one rule puts exactly on a boundary is on it for every other rule
+- **What happened:** the keep-off rule moves an opponent's target to the edge of the 9.65 m circle,
+  and the wall stands on that edge. A second rule sends a player round the circle while his
+  straight way "comes closer than 9.65 m". For a place on the edge, straight in from further out,
+  the closest point of that way is the place itself, and rounding put it a hair inside: the player
+  was sent round the circle at his own distance, which is where he already stood. He stood 7 m
+  from the wall through the whole stoppage. No test placed a target exactly on the edge.
+- **Rule:** where one rule produces points on a boundary that another rule tests, the test allows
+  for rounding (a named tolerance), and a test puts a point exactly on the boundary.
+- **Check:** `uv run pytest tests/test_restarts.py -k edge_of_the_circle`; it fails with the
+  tolerance set to 0.

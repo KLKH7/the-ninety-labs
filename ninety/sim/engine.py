@@ -1688,7 +1688,7 @@ class Engine:
         """The defending side's outfielders nearest the wall's spots stand in it, the nearest pair of
         player and spot first. They then share the places out so that their walks there add up to
         the least: two walks that crossed could be swapped for a shorter pair, so no two runs to the
-        wall cross (lesson 141)."""
+        wall cross (lesson 143)."""
         spots = self.wall_spots(r)
         free = [p for p in self.players if p.team != r.team and p.role != "GK"]
         chosen: list[Player] = []

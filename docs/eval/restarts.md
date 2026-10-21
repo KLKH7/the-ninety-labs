@@ -70,7 +70,7 @@ teams in their own halves at the kick-off, no opponent within 2 m at the throw-i
 complaint, in this area but not caused by this change: players stand still through the 25 to 35 s
 stoppages, with no wall, no jostling and no organisation, and the kick-off comes about 17 s after a
 goal against a minute or more in real matches (L4; the 72 s it was compared with then is a penalty
-goal's, lesson 140). The celebration below answers the second.
+goal's, lesson 142). The celebration below answers the second.
 
 ### On earlier bases
 
@@ -172,7 +172,7 @@ first version ran on the engine of its time, so the minute of play before each k
 
 In the first version one wall player stood 7 m from his place through the whole stoppage: his
 place was on the edge of the 9.65 m keep-off circle (9.15 m and the margin), straight in from him,
-and rounding sent him round the circle at his own distance (lesson 142).
+and rounding sent him round the circle at his own distance (lesson 158).
 
 The same 16 matches as above, the wall branch at `321ea57` against the celebration branch (no wall);
 raw output in [restarts/wall-branch.json](restarts/wall-branch.json). 21 direct free kicks fell

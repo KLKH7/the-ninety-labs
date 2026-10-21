@@ -820,7 +820,7 @@ def test_attackers_keep_1_m_from_a_wall_of_three_or_more():
 
 
 def test_no_two_runs_to_the_wall_cross():
-    """Lesson 141: the wall's players share its places so that their walks there add up to the
+    """Lesson 143: the wall's players share its places so that their walks there add up to the
     least, so no two runs cross (a pair that crossed could be swapped for a shorter one)."""
 
     def cross(a, b, c, d) -> bool:
@@ -937,7 +937,7 @@ def test_a_place_on_the_edge_of_the_circle_is_walked_to_straight_in():
     """Defect: a wall player whose place was on the 9.65 m circle's edge, straight in from where he
     stood, was sent round the circle by a rounding error, at his own distance from the ball: he
     stood 7 m from the wall all through the stoppage. A target on the edge, reached straight in,
-    does not cut across the circle (lesson 142)."""
+    does not cut across the circle (lesson 158)."""
     e = wall_kick(5, (PITCH_X - 27.0, 44.0))
     r = e.restart
     bx, by = r.x, r.y
