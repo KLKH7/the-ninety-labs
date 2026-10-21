@@ -1473,3 +1473,17 @@ short and actionable. This file is public: no research sources, product names or
   relies on) and is tested with tampered input. One file name has one writer and one shape.
 - **Check:** `tests/test_vision_auditor.py::test_the_data_agent_checks_a_typed_handoff_on_receipt`,
   `::test_the_committed_clusters_json_is_the_auditor_s_code_output_and_the_data_agent_takes_it`.
+
+### 158. A pass or shot ends at the next thing that happens to the ball, however long it stays open
+- **What happened:** the engine keeps a shot open after a block, so a deflected shot can still count
+  as the shooter's goal, and closed it only when someone controlled the ball, at a foul, an offside,
+  or when it went out. On seed 21, the demo window, a10's shot at 4:37 was blocked; he got back to
+  the ball and h4 poked it loose at 4:39 (a tackle). The shot stayed open until h8 controlled the
+  ball at 4:41 and its end point was written there, after the tackle, so the data contract's C7
+  (the ball reaches the end point before anything else happens to it) failed. A new kick likewise
+  replaced a pass or shot still open without closing it.
+- **Rule:** keeping an event open for one purpose (crediting a goal) never lets it outlive the next
+  on-ball event. Every place that emits one (a tackle, a kick) first ends the kick in flight where
+  the ball is (`Engine.end_kick`).
+- **Check:** `tests/test_shot_end.py` (seed 21, a tackle and a new strike, each failing before the
+  fix); run `uv run ninety-validate` on a match after adding any new on-ball event.

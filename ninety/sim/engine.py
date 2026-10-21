@@ -755,6 +755,7 @@ class Engine:
         self.read = None if read is None else (keeper.id, read)
         vx, vy, vz = self.execute(carrier, *self.aim(bx, by, gx, ty, ground, up), "finishing")
         speed = math.sqrt(vx * vx + vy * vy + vz * vz)
+        self.end_kick(bx, by)  # a pass or shot still open ends here: this strike is the next thing (C7)
         # Outcome and end point are observed: set when the ball is touched, goes out or goes in.
         self.shot_touched_by = self.shot_was_on_target = None
         self.kicked = self.emit("shot", team, bx, by, player=carrier.id, ball_speed_kmh=round(speed * 3.6, 1))
@@ -777,6 +778,7 @@ class Engine:
             ground, up = decisions.launch_speed(dist, pace), 0.0
         skill = decisions.pass_skill(bx, tx, ty, lofted or throw, goal_x(carrier.team))
         vx, vy, vz = self.execute(carrier, *self.aim(bx, by, tx, ty, ground, up), skill, hands=throw)
+        self.end_kick(bx, by)  # a pass or shot still open ends here: this strike is the next thing (C7)
         # Receiver, interceptor or deflector, end point and outcome are filled in when someone takes
         # the ball or it goes out; only the intended team-mate is known at the kick.
         self.pass_target = (tx, ty)
@@ -1327,6 +1329,19 @@ class Engine:
         if controls:
             self.close_shot(kicked, x, y)
         # A deflection (block, parry, a team-mate's touch) leaves the shot in flight: it may still go in.
+
+    def end_kick(self, x: float, y: float) -> None:
+        """The pass or shot in flight ends where the ball is when the next thing happens to it (a tackle
+        on it, or another kick): its end point is then a point of its path (data contract C7). A pass
+        nobody received has failed; a shot is closed as its touches since say (close_shot)."""
+        kicked = self.kicked
+        if kicked is None:
+            return
+        if kicked["type"] == "pass":
+            kicked.update(end_x=round(x, 2), end_y=round(y, 2), outcome="fail")
+        else:
+            self.close_shot(kicked, x, y)
+        self.kicked = None
 
     def close_shot(self, kicked: dict, x: float, y: float) -> None:
         """A shot ends without a goal: blocked if a defender got to it, saved or tipped if only the
@@ -2537,6 +2552,7 @@ class Engine:
             holder.vy * 0.3 + POKE_MPS * fmath.sin(angle),
             0.0,
         )
+        self.end_kick(self.ball[0], self.ball[1])  # a pass or shot still open ends at the tackle (C7)
         self.tackle = self.emit(
             "tackle", p.team, self.ball[0], self.ball[1], player=p.id, receiver=holder.id, outcome=None
         )
