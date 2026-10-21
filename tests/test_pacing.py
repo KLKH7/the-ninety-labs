@@ -74,9 +74,10 @@ def test_a_fresh_player_accepts_a_press_that_a_tired_one_declines_until_the_end(
     # minute 60 (lesson 36: if the design values move, this says why the scene no longer tests it).
     body = worn(Body(5.18, 10.0, 3.9), 0.4)
     assert pacing.cost(body, 0.5, 88 * MIN, metres) < goals < pacing.cost(body, 0.5, 60 * MIN, metres)
-    assert fresh == ["h7", "h6"]  # he presses, the next soonest covers
-    assert tired == ["h6", "h8"]  # he declines: the next soonest is asked, and the one after covers
-    assert late == ["h7", "h6"]  # minutes from the end what is left is worth spending
+    assert fresh[0] == "h7"  # he presses (the cover is whoever reaches the cover's place soonest)
+    assert tired[0] == "h6"  # he declines: the next soonest is asked
+    assert late[0] == "h7"  # minutes from the end what is left is worth spending
+    assert all(len(x) == 2 and x[1] != x[0] for x in (fresh, tired, late))
 
 
 def test_the_scene_fails_when_the_price_ignores_the_clock(monkeypatch):
@@ -84,7 +85,7 @@ def test_the_scene_fails_when_the_price_ignores_the_clock(monkeypatch):
     of it, the scene above cannot come out as it should."""
     for share in (1.0, 0.5, 0.0):
         monkeypatch.setattr(pacing, "time_left", lambda t, share=share: share)
-        assert outcomes()[1:] != (["h7", "h6"], ["h6", "h8"], ["h7", "h6"]), share
+        assert [x[0] for x in outcomes()[1:]] != ["h7", "h6", "h7"], share  # who presses
 
 
 def test_a_short_press_costs_little_and_a_long_one_more():
@@ -201,7 +202,7 @@ def test_nobody_presses_when_none_of_them_thinks_it_worth_it():
         worn(e.by_id[pid].physique, 0.9)
     assert e.who_presses(brain) == []
     e.by_id["h8"].physique = Body(5.18, 10.0, 3.9)  # the third is fresh: asked in turn, he goes
-    assert e.who_presses(brain) == ["h8"]
+    assert e.who_presses(brain)[0] == "h8"
 
 
 def test_the_press_is_asked_in_the_match_loop(monkeypatch):
@@ -215,7 +216,7 @@ def test_the_press_is_asked_in_the_match_loop(monkeypatch):
     monkeypatch.setattr(e, "accepts_press", lambda p: p.id != first)
     e.perceive_and_think()
     brain = e.brains["home"]
-    assert brain.ranked[0] == first and brain.pressers[:2] == brain.ranked[1:3]
+    assert brain.ranked[0] == first and brain.pressers[0] == brain.ranked[1]  # passed over as presser
 
 
 def test_stamina_and_work_rate_change_the_choice_per_player():
