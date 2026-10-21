@@ -844,23 +844,23 @@ def test_attackers_keep_1_m_from_a_wall_of_three_or_more():
     assert e.keep_off(e.by_id["h10"], wx + 0.3, wy) == (wx + 0.3, wy)
 
 
-def test_no_two_runs_to_the_wall_cross():
-    """Lesson 143: the wall's players share its places so that their walks there add up to the
-    least, so no two runs cross (a pair that crossed could be swapped for a shorter one)."""
-
-    def cross(a, b, c, d) -> bool:
-        def side(p, q, r):
-            return (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
-        return side(a, b, c) * side(a, b, d) < 0 and side(c, d, a) * side(c, d, b) < 0
-
-    crossings = 0
-    for seed in (2, 3, 5, 7):
-        for at in ((PITCH_X - 22.0, 34.0), (PITCH_X - 18.0, 24.0)):
-            e = wall_kick(seed, at)
-            runs = [((e.by_id[pid].x, e.by_id[pid].y), place) for pid, place in e.restart.wall.items()]
-            crossings += sum(cross(*runs[i], *runs[k])
-                             for i in range(len(runs)) for k in range(i + 1, len(runs)))
-    assert crossings == 0
+def test_the_walls_players_share_its_places_for_the_shortest_walks():
+    """Lesson 143: the wall's players share its places so that their walks there, the way they go
+    (round the keep-off circle, in behind the line, up into it), add up to the least: no two of them
+    could swap places for a shorter pair of walks. Shared out by straight lines, they could (lesson
+    161); as walked, two coming round the same side may still pass each other behind the wall
+    (docs/eval/restarts.md)."""
+    for seed, at in ((1, (87.0, 24.0)), (4, (88.0, 30.0)), (2, (PITCH_X - 22.0, 34.0)),
+                     (5, (PITCH_X - 18.0, 24.0))):
+        e = wall_kick(seed, at)
+        r = e.restart
+        start = {pid: (e.by_id[pid].x, e.by_id[pid].y) for pid in r.wall}
+        ids = list(r.wall)
+        for i, a in enumerate(ids):
+            for b in ids[i + 1:]:
+                mine = e.walk_to_wall(r, start[a], r.wall[a]) + e.walk_to_wall(r, start[b], r.wall[b])
+                swapped = e.walk_to_wall(r, start[a], r.wall[b]) + e.walk_to_wall(r, start[b], r.wall[a])
+                assert mine <= swapped + 1e-9, (seed, at, a, b)
 
 
 def test_the_wall_breaks_up_once_the_ball_is_in_play():
@@ -923,9 +923,14 @@ def test_the_wall_walks_to_its_places_at_least_at_a_walking_pace():
     """The wall forms well before the kick, not just in time for it: its members walk to their
     places at least at a normal walking pace, 1.36 m/s (L4), faster only if a walk would be late."""
     e = wall_kick()
-    pid, (wx, wy) = next(iter(e.restart.wall.items()))
+    r = e.restart
+    pid, (wx, wy) = next(iter(r.wall.items()))
     p = e.by_id[pid]
-    p.x, p.y = wx - 15.0, wy  # 15 m away with the kick 20 s off: in time at well under a walk
+    d = math.hypot(wx - r.x, wy - r.y)
+    # 15 m straight behind his place, seen from the ball, with the kick 20 s off: in time at well
+    # under a walk
+    p.x, p.y = wx + (wx - r.x) / d * 15.0, wy + (wy - r.y) / d * 15.0
+    assert e.walk_to_wall(r, (p.x, p.y), (wx, wy)) == pytest.approx(15.0)  # premise
     e.restart.ready_at = e.t + 20.0
     assert e.shape_target(p)[2] == pytest.approx(1.36)
     e.restart.ready_at = e.t + 2.0  # a walk would be late
@@ -975,11 +980,14 @@ def test_a_place_on_the_edge_of_the_circle_is_walked_to_straight_in():
     p.x, p.y = bx + math.cos(a) * 17.0, by + math.sin(a) * 17.0  # 7 m further out, straight behind it
     tx, ty = e.keep_off(p, wx, wy)
     assert math.hypot(tx - bx, ty - by) < 17.0 - 1.0  # he heads in toward it, not round at his distance
+
+
 def test_a_wall_player_paces_the_whole_way_in_to_be_in_place_for_the_kick():
     """Defect: a wall player's pace was set to reach the point behind the line just as the ball
     could, so he was still stepping up into his place, 0.4 m short, when the kick was struck. He
     paces the whole way in, by behind the line, to stand in his place by the time the kick may be
-    taken (R1's wait), and walks at least (L4)."""
+    taken (R1's wait), and walks at least (L4). Defect: from the ball's side of the wall the pace
+    counted the straight way, not the way round the keep-off circle he walks, and he came late."""
     e = wall_kick()
     r = e.restart
     pid, (wx, wy) = next(iter(r.wall.items()))
@@ -991,6 +999,47 @@ def test_a_wall_player_paces_the_whole_way_in_to_be_in_place_for_the_kick():
     kx, ky = e.way_into_wall(r, p)
     way = math.hypot(kx - p.x, ky - p.y) + math.hypot(wx - kx, wy - ky)
     assert e.shape_target(p)[2] == pytest.approx(way / 5.0)
+    # 12 m behind the ball, seen from his place: his way round the circle to behind his place is
+    # longer than the straight way there, through the circle.
+    p.x, p.y = r.x - ux * 12.0, r.y - uy * 12.0
+    kx, ky = e.way_into_wall(r, p)
+    straight = math.hypot(kx - p.x, ky - p.y) + math.hypot(wx - kx, wy - ky)
+    walked = e.walk_to_wall(r, (p.x, p.y), (wx, wy))
+    assert walked > straight + 1.0  # premise: he has to go round
+    assert e.shape_target(p)[2] == pytest.approx(walked / 5.0)
+
+
+def test_the_wall_is_made_of_those_with_the_shortest_walks_to_it():
+    """Who stands in the wall goes by how far each would walk to it, the way he goes: a defender
+    just behind the ball, the nearest in a straight line, has to go round the keep-off circle, so
+    two standing 12 m behind the wall get there first and form it."""
+    e = wall_kick(3, (PITCH_X - 35.0, 34.0))  # 35 m out: a wall of two
+    r = e.restart
+    away = [p for p in e.players if p.team == "away" and p.role != "GK"]
+    for i, q in enumerate(away):  # everyone else well upfield
+        q.x, q.y, q.vx, q.vy = 20.0, 4.0 + 6.0 * i, 0.0, 0.0
+    near, back1, back2 = away[:3]
+    near.x, near.y = r.x - 1.0, r.y  # just behind the ball, upfield of it
+    back1.x, back1.y = r.x + 9.65 + 12.0, r.y - 1.0  # 12 m behind the wall
+    back2.x, back2.y = r.x + 9.65 + 12.0, r.y + 1.0
+    spots = e.wall_spots(r)
+    assert len(spots) == 2  # premise
+    assert min(math.hypot(near.x - s[0], near.y - s[1]) for s in spots) < 11.0  # premise: nearest straight
+    assert set(e.form_wall(r)) == {back1.id, back2.id}
+
+
+def test_the_way_round_a_keep_off_circle_is_measured_as_it_is_walked():
+    """keep_off sends a player round a restart's circle at his own distance from the ball until the
+    straight way on just touches it, then straight on; walk_to_wall measures that way."""
+    from ninety.sim.engine import round_the_circle
+    radius, m = 9.65, 12.0
+    assert round_the_circle(0.0, 0.0, radius, 12.0, 15.0, -12.0, 15.0) == pytest.approx(24.0)  # clear of it
+    touch = math.acos(radius / m)
+    across = m * (math.pi - 2 * touch) + 2 * math.sqrt(m * m - radius * radius)
+    assert round_the_circle(0.0, 0.0, radius, m, 0.0, -m, 0.0) == pytest.approx(across)  # round, opposite
+    out = radius + KEEP_OFF_MARGIN_M  # from inside: straight out past the edge first, then round
+    round_out = out * (math.pi - 2 * math.acos(radius / out)) + 2 * math.sqrt(out * out - radius * radius)
+    assert round_the_circle(0.0, 0.0, radius, 5.0, 0.0, -out, 0.0) == pytest.approx(out - 5.0 + round_out)
 
 
 def test_wall_members_stand_close_only_near_their_places():

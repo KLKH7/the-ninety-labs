@@ -318,6 +318,43 @@ def segment_distance(px: float, py: float, ax: float, ay: float, bx: float, by: 
     return math.hypot(ax + s * dx - px, ay + s * dy - py)
 
 
+def round_the_circle(cx: float, cy: float, radius: float, px: float, py: float, qx: float,
+                     qy: float) -> float:
+    """How far a player walks from (px, py) to (qx, qy) keeping off the circle of `radius` round
+    (cx, cy), the way keep_off has him: straight on if the straight way stays outside it; otherwise
+    round it at his own distance from its centre (stepping straight out past its edge first, if he
+    is inside) until the straight way on just touches it, then straight on."""
+    mx, my = px - cx, py - cy
+    m = math.hypot(mx, my)
+    out = 0.0
+    if m < radius:  # inside: straight out first, KEEP_OFF_MARGIN_M past the edge
+        reach = radius + KEEP_OFF_MARGIN_M
+        mx, my = (mx / m * reach, my / m * reach) if m > 1e-6 else (reach, 0.0)
+        out, m, px, py = reach - m, reach, cx + mx, cy + my
+    if segment_distance(cx, cy, px, py, qx, qy) >= radius - ON_CIRCLE_M:
+        return out + math.hypot(qx - px, qy - py)
+    q = max(math.hypot(qx - cx, qy - cy), radius)
+    turn = abs((fmath.atan2(qy - cy, qx - cx) - fmath.atan2(my, mx) + math.pi) % (2 * math.pi) - math.pi)
+
+    def touch(d: float) -> float:  # at the centre, from d away to where a line from there touches it
+        return fmath.atan2(math.sqrt(d * d - radius * radius), radius)
+
+    arc = max(0.0, turn - touch(m) - touch(q))
+    return out + m * arc + math.sqrt(m * m - radius * radius) + math.sqrt(q * q - radius * radius)
+
+
+def way_in(bx: float, by: float, place: tuple[float, float], at: tuple[float, float]) -> tuple[float, float]:
+    """Engine.way_into_wall for a player at `at` and his place in a wall across a kick from (bx, by)."""
+    wx, wy = place
+    d = math.hypot(wx - bx, wy - by)
+    ux, uy = (wx - bx) / d, (wy - by) / d  # from the ball through his place
+    across = abs((at[0] - wx) * -uy + (at[1] - wy) * ux)
+    if across <= WALL_LANE_M:
+        return wx, wy
+    behind = max(shape.SHOULDER_BREADTH_M, (at[0] - wx) * ux + (at[1] - wy) * uy)
+    return wx + ux * behind, wy + uy * behind
+
+
 def clamp(v: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, v))
 
@@ -1644,9 +1681,10 @@ class Engine:
         hides the goal from one post to WALL_COVER_PAST_CENTRE_M past the centre (Bray: p + q of a
         2p goal, q = p / 3, two thirds of it), on a line across the kick at the restart's distance
         (and KEEP_OFF_MARGIN_M). The post is the near one (design). Its width over a shoulder's
-        breadth (P11), rounded down, is how many stand in it, shoulder to shoulder, the outermost
-        covering the near post; what rounding leaves short is on the keeper's side (Bray's keeper
-        sets four at 22 m straight on, "half-a-defender light"). Spots off the pitch are left out."""
+        breadth (P11), rounded down (design: a wall of whole players), is how many stand in it,
+        shoulder to shoulder, the outermost covering the near post; what rounding leaves short is on
+        the keeper's side (Bray's model asks about 4.5 at 22 m straight on; his keeper's four is
+        "half-a-defender light" of it). Spots off the pitch are left out."""
         line = goal_x(r.team)  # the goal the kick is at
         bx, by = self.restart_ball_spot(r)
         if math.hypot(line - bx, PITCH_Y / 2 - by) >= offball.SHOT_RANGE_M:
@@ -1674,35 +1712,38 @@ class Engine:
         from the ball, then, once there to within WALL_LANE_M across the line, forward into it. He
         comes in behind the others and steps up between them, never walking along the line through
         them (P11; design)."""
-        wx, wy = r.wall[p.id]
+        return way_in(*self.restart_ball_spot(r), r.wall[p.id], (p.x, p.y))
+
+    def walk_to_wall(self, r: Restart, at: tuple[float, float], place: tuple[float, float]) -> float:
+        """How far he walks from `at` to a place in the wall, the way he goes there: round the
+        restart's keep-off circle as keep_off has him, to where he comes in behind the line
+        (way_into_wall), then up into it."""
         bx, by = self.restart_ball_spot(r)
-        d = math.hypot(wx - bx, wy - by)
-        ux, uy = (wx - bx) / d, (wy - by) / d  # from the ball through his place
-        across = abs((p.x - wx) * -uy + (p.y - wy) * ux)
-        if across <= WALL_LANE_M:
-            return wx, wy
-        behind = max(shape.SHOULDER_BREADTH_M, (p.x - wx) * ux + (p.y - wy) * uy)
-        return wx + ux * behind, wy + uy * behind
+        wx, wy = way_in(bx, by, place, at)
+        clear = RESTART_DISTANCE_M[r.kind] + KEEP_OFF_MARGIN_M
+        return round_the_circle(bx, by, clear, *at, wx, wy) + math.hypot(place[0] - wx, place[1] - wy)
 
     def form_wall(self, r: Restart) -> dict[str, tuple[float, float]]:
-        """The defending side's outfielders nearest the wall's spots stand in it, the nearest pair of
-        player and spot first. They then share the places out so that their walks there add up to
-        the least: two walks that crossed could be swapped for a shorter pair, so no two runs to the
-        wall cross (lesson 143)."""
+        """The defending side's outfielders with the shortest walks to the wall's spots stand in it,
+        the nearest pair of player and spot first, each walk measured the way he would go there
+        (walk_to_wall: round the keep-off circle, in behind the line, up into it). They then share
+        the places out so that their walks add up to the least, so no two of them could swap places
+        for a shorter pair of walks (lesson 143). As walked, two coming round the same side can
+        still pass each other behind the wall (lesson 161; docs/eval/restarts.md)."""
         spots = self.wall_spots(r)
         free = [p for p in self.players if p.team != r.team and p.role != "GK"]
         chosen: list[Player] = []
         places: list[tuple[float, float]] = []
         while spots and free:
             p, spot = min(((q, s) for q in free for s in spots),
-                          key=lambda ps: math.hypot(ps[0].x - ps[1][0], ps[0].y - ps[1][1]))
+                          key=lambda ps: self.walk_to_wall(r, (ps[0].x, ps[0].y), ps[1]))
             chosen.append(p)
             places.append(spot)
             free.remove(p)
             spots.remove(spot)
 
         def walks(order: tuple[tuple[float, float], ...]) -> float:
-            return math.fsum(math.hypot(p.x - s[0], p.y - s[1]) for p, s in zip(chosen, order, strict=True))
+            return math.fsum(self.walk_to_wall(r, (p.x, p.y), s) for p, s in zip(chosen, order, strict=True))
 
         best = min(itertools.permutations(places), key=walks)
         return {p.id: s for p, s in zip(chosen, best, strict=True)}
@@ -2040,10 +2081,9 @@ class Engine:
         wall = self.restart or self.set_by
         if wall and p.id in wall.wall:  # Law 13: in the wall until the ball is kicked
             wx, wy = self.way_into_wall(wall, p)
-            # At least a walk (L4); faster if the whole way in, by behind the line, would not get
-            # him to his place by the time the kick may be taken (R1's wait).
-            px, py = wall.wall[p.id]
-            way = math.hypot(wx - p.x, wy - p.y) + math.hypot(px - wx, py - wy)
+            # At least a walk (L4); faster if the whole way in, round the circle and by behind the
+            # line, would not get him to his place by the time the kick may be taken (R1's wait).
+            way = self.walk_to_wall(wall, (p.x, p.y), wall.wall[p.id])
             return wx, wy, max(WALK_MPS, way / max(wall.ready_at - self.t, DT))
         bx, by = self.play_point(p)  # O8: where the ball is going, once a pass is struck
         poss_team = self.team_of(self.possessor) if self.possessor else None
