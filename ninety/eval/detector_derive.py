@@ -276,6 +276,7 @@ def main(argv: list[str] | None = None) -> None:
                                for s, v in side.items()}},
         "gates": gates([(s, got[s][0], got[s][1]) for s in placed]),
         "grid": grid([(got[s][0], [got[s][1][f] for f in sorted(got[s][1])], got[s][2]) for s in placed]),
+        "bound": bound([(s, got[s][0], got[s][1]) for s in placed]),
     }
     write_or_check(a.out, body, report_md, a.check)
     print(json.dumps({"sides": {k: body["sides"][k] for k in ("accuracy", "coverage")},
@@ -326,8 +327,83 @@ def report_md(body: dict) -> str:
         "",
         f"With the chosen values: {body['grid']['final']['tp']} true and {body['grid']['final']['fp']} "
         "false positives.",
+        "",
+        "## The camera trust bound ([camera-bound-plan.md](camera-bound-plan.md))",
+        "",
+        f"MAX_TRUSTED_M {body['bound']['max_trusted_m']} m; a candidate must keep "
+        f"{body['bound']['keep_good']:.0%} of the good frames the height test keeps. "
+        f"Adopted: **{body['bound']['adopted']}**.",
+        "",
+        "| Check | Worst trusted (m) | Good frames kept (share of height's) | Bad trusted "
+        "| Bad trusted by seed | Qualifies |",
+        "|---|---|---|---|---|---|",
+        *[f"| {k} | {v['worst_m']} | {v['good_kept']} ({v['good_kept_share_of_height']}) "
+          f"| {v['bad_trusted']} | {v['bad_trusted_by_seed']} | {v['qualifies']} |"
+          for k, v in body["bound"]["candidates"].items()],
     ]
     return "\n".join(lines) + "\n"
+
+
+
+# The camera trust bound (docs/eval/camera-bound-plan.md): candidates on top of the height test.
+MAX_TRUSTED_M = 8.5  # seed 108's worst height-trusted frame, rounded up to 0.5 m (the plan's Outcome)
+KEEP_GOOD = 0.95
+
+
+def on_pitch(row: dict, margin: float = 5.0) -> bool:
+    """C1: the median of the frame's player foot points, through its camera, inside the pitch
+    widened by `margin` on every side."""
+    from ninety.vision.observe import _ground
+    P = np.array(row["camera"]["P"])
+    pts = [g for d in row["players"] if d["score"] >= SCORE_MIN
+           and (g := _ground(P, ((d["bbox"][0] + d["bbox"][2]) / 2, d["bbox"][3]))) is not None]
+    if not pts:
+        return False
+    mx, my = float(np.median([p[0] for p in pts])), float(np.median([p[1] for p in pts]))
+    return -margin <= mx <= 105.0 + margin and -margin <= my <= 68.0 + margin
+
+
+def agrees(rows: list[dict]) -> set[int]:
+    """C2: the live path's own neighbour check (ninety/vision/observe.py, `agree`), on a copy."""
+    import copy
+
+    from ninety.vision.observe import agree
+    return {r["frame"] for r in agree(copy.deepcopy(rows)) if r["camera"]["ok"]}
+
+
+def bound(clips: list[tuple[int, list[dict], dict[int, dict]]]) -> dict:
+    """Each candidate's trusted frames on validation, against the truth: worst error, good frames
+    kept against the height test's, bad frames trusted per clip; and which is adopted."""
+    recs = {}
+    per_clip_trust = {"height": {}, "C1": {}, "C2": {}, "C3": {}, "C4": {}}
+    for seed, rows, frames in clips:
+        errs = {e["frame"]: e["error_m"] for e in camera_errors(rows, frames)}
+        height = {r["frame"] for r in rows if r["camera"].get("heights_ok", r["camera"]["ok"])}
+        c1 = {r["frame"] for r in rows if r["frame"] in height and on_pitch(r)}
+        c2 = agrees(rows)
+        c3 = {r["frame"] for r in rows
+              if r["frame"] in height and (r["camera"].get("median_px") or math.inf) <= 5.0}
+        for name, s in (("height", height), ("C1", c1), ("C2", c2), ("C3", c3), ("C4", c1 & c2)):
+            per_clip_trust[name][seed] = s
+        recs[seed] = errs
+    table = {}
+    good_height = sum(1 for s, fs in per_clip_trust["height"].items() for f in fs
+                      if recs[s].get(f) is not None and recs[s][f] <= GOOD_M)
+    for name, by_seed in per_clip_trust.items():
+        trusted = [(s, f, recs[s].get(f)) for s, fs in by_seed.items() for f in fs
+                   if recs[s].get(f) is not None]
+        good = sum(1 for _, _, e in trusted if e <= GOOD_M)
+        bad = Counter(s for s, _, e in trusted if e > GOOD_M)
+        worst = max((e for _, _, e in trusted), default=0.0)
+        table[name] = {"worst_m": round(worst, 3), "good_kept": good,
+                       "good_kept_share_of_height": round(good / good_height, 4),
+                       "bad_trusted": sum(bad.values()), "bad_trusted_by_seed": dict(sorted(bad.items())),
+                       "qualifies": name != "height" and worst <= MAX_TRUSTED_M
+                       and good >= KEEP_GOOD * good_height}
+    qualifying = [n for n in ("C1", "C2", "C3", "C4") if table[n]["qualifies"]]
+    order = ("C1", "C2", "C3", "C4")
+    adopted = max(qualifying, key=lambda n: (table[n]["good_kept"], -order.index(n)), default=None)
+    return {"max_trusted_m": MAX_TRUSTED_M, "keep_good": KEEP_GOOD, "candidates": table, "adopted": adopted}
 
 
 if __name__ == "__main__":

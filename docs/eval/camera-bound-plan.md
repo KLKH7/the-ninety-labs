@@ -94,3 +94,21 @@ rule with the adopted check in place. Nothing else about it changes.
 
 Seed 108: 143 frames trusted by the height test, the worst 8.303 m wrong, so **MAX_TRUSTED_M =
 8.5 m**.
+
+### Candidates (validation; `uv run python -m ninety.eval.detector_derive`, "The camera trust bound")
+
+| Check, each on top of the height test | Worst trusted | Good frames kept | Bad frames trusted |
+|---|---|---|---|
+| height alone (#187) | 55.3 m | 1,712 | 175 (108: 143, 114: 6, 122: 8, 3041: 14, 3042: 4) |
+| C1 on the pitch | 55.3 m | 1,712 | 173 |
+| **C2 agrees with its neighbours (adopted)** | **8.2 m** | 1,712 (100%) | 143 (108: 139, 114: 2, 3041: 2) |
+| C3 markings within 5 px | 55.3 m | 1,648 (96.3%) | 142 |
+| C4 C1 and C2 | 8.2 m | 1,712 (100%) | 143 |
+
+C2 and C4 qualify: worst trusted at most 8.5 m, with at least 95% of good frames kept. They keep
+the same number, and the tie goes to the earlier in the plan's table, so **C2 is adopted**.
+
+What is left is seed 108's whole-clip offset (139 frames, 2 to 8 m) plus 2 frames each on 114 and
+3041, all within the bound.
+
+**RIVAL_M** (the amendment): the pooled p90 with C2 in place is 1.256 m, so **1.26 m** (was 1.59 m).

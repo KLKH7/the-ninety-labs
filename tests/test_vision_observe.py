@@ -70,24 +70,60 @@ def test_the_band_is_the_committed_validation_measurement():
     assert list(observe.HEIGHT_BAND) == body["gates"]["band"]
 
 
-def wrong_place_row():
-    """The scene through VIEW, but the frame's camera 10 m along the touchline from where it is:
-    players come out the right height (the same camera, moved), placed 10 m wrong."""
+def view_at(dx: float) -> pitch.View:
+    return pitch.View(VIEW.cx + dx, VIEW.cy, VIEW.cz, VIEW.pan, VIEW.tilt, VIEW.focal,
+                      VIEW.width, VIEW.height)
+
+
+def wrong_place_row(dx: float = 10.0, frame: int = 0):
+    """The scene through VIEW, but the frame's camera dx metres along the touchline from where it
+    is: players come out the right height (the same camera, moved), placed dx metres wrong."""
     r = row()
-    wrong = pitch.View(VIEW.cx + 10.0, VIEW.cy, VIEW.cz, VIEW.pan, VIEW.tilt, VIEW.focal,
-                       VIEW.width, VIEW.height)
-    r["camera"]["P"] = wrong.P().tolist()
+    r["frame"] = frame
+    r["camera"]["P"] = view_at(dx).P().tolist()
     return r
 
 
+def clip(offsets: dict[int, float], frames: int = 11) -> list[dict]:
+    """A clip of frames through VIEW, each frame's camera moved by offsets.get(frame, 0) metres."""
+    return [observe.place(wrong_place_row(offsets.get(f, 0.0), f)) for f in range(frames)]
+
+
 def test_a_camera_in_the_wrong_place_still_makes_players_the_right_height():
-    # Why the height test cannot see it (validation seed 108; lesson 149).
+    # Why the height test alone cannot see it (lesson 149).
     r = observe.place(wrong_place_row())
     assert abs(r["camera"]["height_ratio"] - 1.0) < 1e-6
     assert abs(r["players"][0]["x"] - (SPOTS[0][0] + 10.0)) < 0.01
 
 
-@pytest.mark.xfail(strict=True, reason="the trust test does not yet bound how wrong a trusted camera "
-                   "can be (lesson 149; follow-up): a camera in the wrong place, players the right height")
-def test_a_camera_in_the_wrong_place_is_not_trusted():
-    assert not observe.place(wrong_place_row())["camera"]["ok"]
+def test_a_frame_whose_camera_disagrees_with_its_neighbours_is_not_trusted():
+    # One frame 10 m wrong among right ones (more than the plan's 8.5 m bound): the heights pass
+    # it, its neighbours do not. Frames away from it stay trusted.
+    rows = observe.agree(clip({5: 10.0}))
+    ok = {r["frame"]: r["camera"]["ok"] for r in rows}
+    assert ok[5] is False and all(d["x"] is None for d in rows[5]["players"])
+    assert all(ok[f] for f in (0, 1, 2, 3, 7, 8, 9, 10))
+    assert rows[5]["camera"]["heights_ok"] is True  # the heights' verdict, kept for the record
+
+
+def test_a_trusted_frame_with_no_trusted_neighbour_near_it_is_not_trusted():
+    far = observe.place(wrong_place_row(0.0, observe.NEIGHBOUR_FRAMES + 1))
+    rows = observe.agree(clip({}, frames=1) + [far])
+    assert [r["camera"]["ok"] for r in rows] == [False, False]
+    together = observe.agree(clip({}, frames=2))
+    assert [r["camera"]["ok"] for r in together] == [True, True]
+
+
+@pytest.mark.xfail(strict=True, reason="no check of one frame against another can see a whole clip offset "
+                   "the same way (validation seed 108); within the plan's bound, by design")
+def test_a_whole_clip_in_the_wrong_place_is_not_trusted():
+    rows = observe.agree(clip({f: 5.0 for f in range(11)}))
+    assert not any(r["camera"]["ok"] for r in rows)
+
+
+def test_regate_judges_each_frame_against_its_neighbours(tmp_path):
+    src, out = tmp_path / "in.jsonl", tmp_path / "out.jsonl"
+    src.write_text("".join(json.dumps(r) + "\n" for r in clip({5: 10.0})))
+    observe.main(["--regate", str(src), "--out", str(out)])
+    ok = [json.loads(x)["camera"]["ok"] for x in out.read_text().splitlines()]
+    assert ok[5] is False and ok[0] and ok[10]
