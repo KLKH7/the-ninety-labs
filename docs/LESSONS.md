@@ -1548,6 +1548,20 @@ short and actionable. This file is public: no research sources, product names or
   `test_every_check_the_validator_reports_has_a_planted_defect`;
   `tests/test_render_params.py::test_only_a_broadcast_clip_cuts_through_dead_balls`.
 
+### 153. A light module imports only light modules
+- **What happened:** the live API scales to zero, and its cold start was about 50 s, about 33 s of
+  it Python start-up on a fractional vCPU. `import ninety.api.app` loaded the agent framework, the
+  Foundry project client, the OpenAI client and the blob storage SDK. The cause was that
+  `ninety.agents.contracts`, which only declares types, imported three short names from
+  `ninety.agents.slice`, a live entry point that loads them all at its top. Locally the import
+  took 3.28 s (median of five fresh interpreters), against 1.00 s once they load on first use.
+- **Rule:** a module that only declares (contracts, rules, types) imports nothing that talks to a
+  service. A name two layers share lives in the lower one, and the entry point re-exports it. An
+  SDK that only a live call needs is imported inside that call.
+- **Check:** `tests/test_api_startup.py::test_importing_the_api_loads_no_model_sdk` reads
+  `sys.modules` in a fresh interpreter (lesson 104); `::test_the_check_sees_an_sdk_when_one_is_imported`
+  shows the check can go red.
+
 ### 154. A check that measures a defect also stops it where it airs
 - **What happened:** #182 taught the failure table to fail a baseline whose Spanish profile read as
   English, but the on-air gate (`personalizer/cues.verify`) still held only text byte-identical to
