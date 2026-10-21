@@ -81,3 +81,10 @@ plants a single frame 10 m wrong. It is replaced by what the adopted check does 
   `docs/eval/companion-tracked.json` is re-graded.
 - EVALUATION, CHALLENGE_MAP and lesson 149's "Not yet met here" are updated, and lesson 159 added.
 - READY goes to the Coordinator with the before/after table of bad frames trusted per clip.
+
+## Outcome
+
+### MAX_TRUSTED_M (measured first, before any candidate was scored)
+
+Seed 108: 143 frames trusted by the height test, the worst 8.303 m wrong, so **MAX_TRUSTED_M =
+8.5 m**.
