@@ -121,6 +121,23 @@ from the 900001-only figures and why.
     and drops it. This was checked by building the prompt from the fixture.
 - Lessons 148 and 149.
 
+## Amendment (after step B's measurements, before running anything below)
+
+Step B's gate trusts more frames. With it, the side vote flips seed 2043: side accuracy falls from
+0.83 to 0.22, all from the naming, because 249 frames are trusted instead of 115.
+
+The vote ("whose deepest outfield player stands nearer x = 105, frame by frame") assumes the
+picture shows both defensive lines, and a broadcast view of one half does not.
+
+**A.3:** per frame, the side whose visible outfield players have the larger mean x defends x = 105
+(away). Grounding: out of possession a team's block stays goal-side of the ball (GROUNDING T2), and
+in possession its back line stays behind the ball (O6). So in either phase the side defending
+x = 105 stands, on average, nearer it. Keepers are still named by their half.
+
+Adopted only by step A's rule, measured on the observations step B's gate makes: side accuracy
+rises and teams right on matched passes do not fall. The side vote's margin keeps its role in
+team_confidence. Nothing else changes, and the test clips are still not scored.
+
 ## Outcome
 
 ### Step A: side naming (validation)
