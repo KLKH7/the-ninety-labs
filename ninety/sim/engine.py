@@ -2255,11 +2255,14 @@ class Engine:
                 lead_x = carrier.vx * JOCKEY_LOOKAHEAD_S if carrier else 0.0
                 lead_y = carrier.vy * JOCKEY_LOOKAHEAD_S if carrier else 0.0
                 px, py = on_pitch(bx + lead_x + gx * gap, by + lead_y + gy * gap)
-                # Until a restart's ball is in play there is nobody to press: he goes to where he
-                # stands off it in time for the kick, as the cover does, not at his pressing pace;
-                # at it, knocked a few centimetres off his place by a team-mate's bending round
-                # him, he sprang back and forth twice a second (lesson 174).
-                return px, py, self.in_time(p, px, py) if given else work
+                # Until a restart's ball is in play there is nobody to press: standing where the Laws
+                # let him (stand_off), he goes to where he stands off it in time for the kick, as the
+                # cover does, not at his pressing pace; at it, knocked a few centimetres off his
+                # place by a team-mate's bending round him, he sprang back and forth twice a second.
+                # From inside the distance he must keep he still leaves at it: in time is for the
+                # ball reaching his place, and the Laws want him out by the kick (lesson 174).
+                legal = self.stand_off(p, p.x, p.y)[0] == (p.x, p.y)
+                return px, py, self.in_time(p, px, py) if given and legal else work
             if engaged and brain.pressers[1:2] == [p.id]:  # cover: behind the presser, goal-side
                 behind = max(COVER_BEHIND_M, gap + 2)
                 cx, cy = on_pitch(bx + gx * behind, by + gy * behind)

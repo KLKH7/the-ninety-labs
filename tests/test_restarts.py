@@ -1968,8 +1968,9 @@ def test_at_a_dead_ball_the_presser_goes_in_time_and_does_not_spring_about_his_p
     presser, settled at his place off the area, had a team-mate standing 0.55 m from it; bent off it
     by a few centimetres (avoid), he went back at his pressing pace, 5.8 m/s, overshot, and sprang
     back and forth twice a second, 28 times through one wait (seed 114, the goal kick at 0:58). Until
-    the ball is in play there is nobody to press: he goes to his place in time for the kick, as the
-    cover does."""
+    the ball is in play there is nobody to press: standing where the Laws let him, he goes to his
+    place in time for the kick, as the cover does (from inside the distance he must keep, he still
+    leaves at his pressing pace: test_opponents_keep_out_of_the_penalty_area_at_a_goal_kick_...)."""
     e = Engine(114)
     e.kickoff("home", setup=True)
     while e.t < 74.0:
