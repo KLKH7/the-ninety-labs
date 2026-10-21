@@ -68,6 +68,11 @@ class RenderParams:
     sun_elevation_deg: float = 40.0
     weather: str = "clear"
     camera_cut: bool = False
+    # A broadcast clip cuts from a stoppage to its restart instead of showing the whole wait (edit.py).
+    # Off here: datasets, the Azure job, training rounds and the test sets show every frame, since a
+    # cut would thin the crowded and keeper windows unevenly and change what a test set measures.
+    # `ninety-render` (viewer and demo clips) turns it on for every seed outside the test set.
+    dead_ball_cut: bool = False
     kit_contrast: str = "normal"
     home_kit: Kit = Kit("#c8102e", "#ffffff", "#c8102e")
     away_kit: Kit = Kit("#1d4ed8", "#1d4ed8", "#ffffff")
@@ -245,8 +250,9 @@ def validate(p: RenderParams) -> None:
     for name in ("home_pattern", "away_pattern"):
         if getattr(p, name) not in PATTERNS:
             raise ValueError(f"{name} must be one of {PATTERNS}, got {getattr(p, name)!r}")
-    if not isinstance(p.camera_cut, bool):
-        raise ValueError("camera_cut must be true or false")
+    for name in ("camera_cut", "dead_ball_cut"):
+        if not isinstance(getattr(p, name), bool):
+            raise ValueError(f"{name} must be true or false")
     for name, ok in PLANNED.items():
         if getattr(p, name) not in ok:
             raise NotImplementedError(f"render parameter {name}={getattr(p, name)!r} is planned, not built")
