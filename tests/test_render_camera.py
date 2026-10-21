@@ -4,19 +4,22 @@ from functools import cache
 from ninety.render import edit
 from ninety.render.camera import (
     CUT_HOLD_S,
+    GANTRY_HALF_M,
     HOLD_SHARE,
     MAX_PAN_MPS,
+    OPEN_EASE_S,
     PAN_ACCEL_MPS2,
     ZOOM_ACCEL_MPS2,
     Camera,
     Director,
     blur_vector,
+    corner_waits,
     net_push,
     pitch_share,
     project_with,
     well_framed,
 )
-from ninety.render.clip import _plan
+from ninety.render.clip import SIM_MARGIN_S, _plan
 from ninety.render.params import CameraParams, sample_params
 from ninety.render.scene import drawn_ball
 from ninety.sim.engine import simulate
@@ -239,12 +242,20 @@ def test_director_is_deterministic():
 
 # Seeds the director's design was not tuned on (the lens, STANDS_MAX and the follow were chosen on
 # seeds 7, 21 and 42).
-HELD_OUT = (3, 5)
+# Seeds the camera rules were not designed on. 3 and 5 were studied while fixing #198 (lesson 175),
+# so they stay for continuity only; 41 and 43 were added before anyone rendered or scored them for
+# the camera (committed ahead of #198's re-score), and are the held-out check.
+HELD_OUT = (3, 5, 41, 43, 47, 53)
+# 47 and 53: a second fresh pair, added at the Reviewer's request before anyone rendered or scored
+# them for the camera.
 
 
 @cache
 def _match(seed):
-    return simulate(seed, 2.0)
+    """The match the 100 s window below draws from, simulated SIM_MARGIN_S past the window as a render
+    simulates past its clip (clip.py, lesson 140), so a dead ball near the window's end has its
+    restart in the events: without it the edit sees no dead ball and its frames count as live play."""
+    return simulate(seed, (2 + 100 + SIM_MARGIN_S) / 60)
 
 
 def _broadcast(seed):
@@ -257,6 +268,7 @@ def _broadcast(seed):
     d = Director(p.camera, 1280, 720, 25, seed, cuts=True)
     show, _ = edit.plan(2 * 25, 100 * 25, edit.cuts(m.events, 25), len(m.frames))
     goals = {e["frame"]: e for e in m.events if e["type"] == "goal"}
+    corners = corner_waits(m.events)
     rows, reopen, after_cut = [], False, False
     for fi, draw, left in _plan(edit.segments(show)):
         if fi is None:
@@ -273,11 +285,36 @@ def _broadcast(seed):
         if fi in goals:
             b = m.frames[fi - 1]["ball"]
             goal = ("L" if goals[fi]["x"] < 52.5 else "R", goals[fi]["y"], 1.0, math.hypot(b["vx"], b["vy"]))
-        cam = d.step(ball[0], ball[1], actors, goal, None if left is None else left / 25)
+        cam = d.step(ball[0], ball[1], actors, goal, None if left is None else left / 25, ball_z=ball[2],
+                     corner=corners.get(fi))
         if draw:
             rows.append((fi, cam, d.angle, after_cut))
             after_cut = False
     return m, rows
+
+
+def _dead_frames(events: list[dict]) -> set[int]:
+    """Every frame the ball is out of play: from each stoppage to the restart's first touch. The
+    engine's restart event (a set piece, a kick-off) marks the ball set for it, not taken: the ball
+    is in play only once it is kicked and moves (Law 17 for a corner, the same for each restart),
+    so the wait between the two is still a dead ball (lesson 175, the same class as lesson 140)."""
+    order = sorted(events, key=lambda e: e["frame"])
+    dead: set[int] = set()
+    for stop, restart, _ in edit.dead_balls(events):
+        taken = next((e["frame"] for e in order if e["frame"] > restart and e["type"] not in edit.RESTARTS),
+                     restart)
+        dead.update(range(stop, taken))
+    return dead
+
+
+def test_a_restart_waiting_to_be_taken_is_a_dead_ball():
+    """The harness's own labelling: a corner set at frame 30 and kicked at frame 60 is dead from the
+    stoppage to the kick, and live from the kick (seed 3 on #179's engine counted its corner waits
+    as live play)."""
+    events = [{"frame": 10, "type": "out_of_play"}, {"frame": 30, "type": "set_piece"},
+              {"frame": 60, "type": "pass"}, {"frame": 90, "type": "pass"}]
+    dead = _dead_frames(events)
+    assert set(range(10, 60)) <= dead and 60 not in dead and 90 not in dead
 
 
 def test_the_gantry_frames_the_play_with_the_pitch_filling_the_picture():
@@ -286,12 +323,11 @@ def test_the_gantry_frames_the_play_with_the_pitch_filling_the_picture():
     framed in 13 to 47% of live frames on seeds 7, 21 and 42). A broadcast keeps the play near the
     middle with the pitch filling most of the picture: in live play, at least 85% of frames have
     the pitch over PITCH_SHARE_MIN of the picture and the ball in the CENTRAL box (camera.py), and
-    the median frame has 8 to 15 players in shot (docs/guides/broadcast-render.md)."""
+    the median frame has 8 to 15 players in shot (docs/guides/broadcast-render.md). The bar holds
+    on every held-out seed, over every live frame (lesson 175)."""
     for seed in HELD_OUT:
         m, rows = _broadcast(seed)
-        dead = set()
-        for stop, restart, _ in edit.dead_balls(m.events):
-            dead.update(range(stop, restart + 1))
+        dead = _dead_frames(m.events)
         live = [(fi, cam) for fi, cam, _, _ in rows[::5] if fi not in dead]
         live = [(fi, cam) for fi, cam in live if 0 <= m.frames[fi]["ball"]["x"] <= 105
                 and 0 <= m.frames[fi]["ball"]["y"] <= 68]
@@ -307,6 +343,7 @@ def test_the_gantry_frames_the_play_with_the_pitch_filling_the_picture():
                 if feet is not None and head is not None:
                     seen += 0 <= feet[0] < 1280 and feet[1] < 720 and head[1] >= 0
             in_shot.append(seen)
+        print(f"seed {seed}: well framed {ok / len(live):.3f} of {len(live)} live frames")
         assert ok / len(live) >= 0.85, (seed, ok, len(live))
         assert 8 <= sorted(in_shot)[len(in_shot) // 2] <= 15, (seed, sorted(in_shot))
 
@@ -409,3 +446,217 @@ def test_a_pan_eases_in_and_out():
     # Settled with the play inside the hold either side of the centre (HOLD_SHARE of the half-width).
     u, v = cam.project((77.2, 34.0, 0.0))
     assert speeds[-1] < 0.1 and abs(u - 640) <= HOLD_SHARE * 640 + 8 and abs(v - 360) < 72, (u, v)
+
+
+def _held(d, x, y, frames, actors=None):
+    cam = None
+    for _ in range(frames):
+        cam = d.step(x, y, actors or [])
+    return cam
+
+
+def test_a_restart_taken_during_the_close_up_is_watched_on_the_wide_shot():
+    """Old (0.5.2 to 0.5.3): after an edit cut the gantry came back closed up on the restart and the
+    zoom spring took 3 s and more to get back out, so a corner taken early was played through the
+    close-up (seed 3 on #179's engine: the pitch 28-46% of the picture). Once the ball is played the
+    ease out starts, and within OPEN_EASE_S the lens is back at the gantry's own width (lesson 175)."""
+    d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=True)
+    _held(d, 30.0, 34.0, 50)
+    wide = d.half_width
+    d.cut()
+    d.open_on_restart()
+    _held(d, 30.5, 0.5, 25)  # one second of the close-up on a ball set for a throw-in
+    assert d.half_width < 0.5 * wide
+    x, y = 30.5, 0.5
+    for _ in range(int(25 * OPEN_EASE_S) + 1):  # the throw is taken: the ball comes infield
+        y += 8.0 / 25
+        d.step(x, y, [])
+    assert d.half_width >= 0.9 * min(d.p.half_width_m, GANTRY_HALF_M), d.half_width
+
+
+def test_a_ball_run_to_the_byline_stays_in_the_middle_of_the_picture():
+    """Old: the aim stopped 8 m short of each goal line, so a ball run to the byline was left at the
+    edge of the picture or out of it (seed 3 on #179's engine). The aim follows the ball to the line,
+    and the ball, and where it will be when the pan catches up, stay inside the CENTRAL box."""
+    d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=True)
+    x, y = 30.0, 20.0
+    _held(d, x, y, 50)
+    bad = 0
+    for i in range(100):  # 4 s toward the byline at 7.5 m/s, then held there
+        x = max(x - 0.3, 0.6)
+        cam = d.step(x, y, [])
+        bad += i >= 25 and not well_framed(cam, (x, y, 0.11))
+    assert bad == 0, bad
+
+
+def test_play_near_a_corner_flag_is_framed_with_the_pitch_filling_the_picture():
+    """Old: aimed into a corner, the wide shot was mostly run-off and stands. The lens closes in
+    there until the pitch fills the picture again, with the ball still in the middle."""
+    d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=True)
+    cam = _held(d, 3.0, 8.0, 150)
+    assert well_framed(cam, (3.0, 8.0, 0.11)), pitch_share(cam)
+
+
+def test_a_lofted_ball_is_kept_in_the_picture():
+    """Old: the director aimed at the grass whatever the ball's height, so a lofted ball 5 to 7 m up
+    left the top of the picture (seed 3 on #179's engine). It tilts up with a high ball, only as far
+    as keeps it inside the CENTRAL box, and eases the tilt like the pan."""
+    d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=True)
+    for _ in range(75):
+        cam = d.step(30.0, 40.0, [], ball_z=0.0)
+    for _ in range(50):
+        cam = d.step(30.0, 40.0, [], ball_z=7.0)
+    assert well_framed(cam, (30.0, 40.0, 7.11))
+
+
+def test_a_ball_on_a_corner_flag_keeps_the_wide_shot():
+    """Where no lens fills the picture with pitch (the ball on the corner flag, set for a corner),
+    the director does not close in: a close-up there is all run-off, and a corner kicked from it is
+    lost in a whip pan (the blind critic of 0.5.5's first cut)."""
+    d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=True)
+    _held(d, 20.0, 20.0, 75)
+    wide = d.half_width
+    cam = _held(d, 0.5, 0.5, 250)
+    assert d.half_width >= 0.8 * wide, (d.half_width, wide)
+    uv = cam.project((0.5, 0.5, 0.11))
+    assert uv is not None and 0.1 * 1280 <= uv[0] <= 0.9 * 1280
+
+
+def _corner_wait(flag, frames=150, d=None, corner=True):
+    d = d or Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=True)
+    _held(d, 20.0, 20.0, 50)
+    cam = None
+    for _ in range(frames):
+        cam = d.step(*flag, [], corner=(round(flag[0] / 105) * 105.0, round(flag[1] / 68) * 68.0)
+                     if corner else None)
+    return d, cam
+
+
+def test_a_corner_is_framed_from_the_taker_inward():
+    """Old (0.5.5): a corner waiting to be taken was shot like any ball, centred, so a near corner
+    was three-quarters run-off and stands. While a corner waits (the engine's set piece at a flag),
+    the taker, the ball and the penalty mark are in the picture, and the picture has more pitch than
+    the same wait shot without the rule (the rule's purpose, not a number taken from a measurement)."""
+    for flag in ((0.5, 0.5), (104.5, 0.5), (0.5, 67.5), (104.5, 67.5)):
+        _, cam = _corner_wait(flag)
+        _, plain = _corner_wait(flag, corner=False)
+        taker, mark = cam.project((*flag, 0.11)), cam.project((11.0 if flag[0] < 50 else 94.0, 34.0, 0.0))
+        assert 0.1 * 1280 <= taker[0] <= 0.9 * 1280 and 0.1 * 720 <= taker[1] <= 0.9 * 720, (flag, taker)
+        assert 0 <= mark[0] <= 1280 and 0 <= mark[1] <= 720, (flag, mark)
+        assert pitch_share(cam) > pitch_share(plain), (flag, pitch_share(cam), pitch_share(plain))
+
+
+def test_each_corner_has_its_own_shot_and_the_ball_stays_in_it():
+    """One director, corners at both ends in turn, the ball set anywhere in the arc: each corner gets
+    its own shot, and the ball where it is set stays in the picture (the Reviewer's mutants N10 and
+    N12: one shot reused for every corner, an aim that does not keep the ball)."""
+    d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=True)
+    for ball in ((0.9, 0.3), (104.2, 0.8), (0.4, 67.1), (104.6, 67.9)):
+        _, cam = _corner_wait(ball, d=d)
+        uv = cam.project((*ball, 0.11))
+        assert 0.1 * 1280 <= uv[0] <= 0.9 * 1280 and 0.1 * 720 <= uv[1] <= 0.9 * 720, (ball, uv)
+
+
+def test_the_corner_shot_holds_until_the_kick():
+    """The corner's shot is held for the whole wait, however long, from the set piece to the kick:
+    the lens and aim settle and stay, rather than giving up part way (a mutant that ends the corner
+    framing early is caught)."""
+    d, _ = _corner_wait((0.5, 0.5), frames=100)
+    held = (d.half_width, tuple(d.aim))
+    _corner_wait((0.5, 0.5), frames=300, d=d)
+    assert abs(d.half_width - held[0]) < 0.05, (held, d.half_width)
+    assert math.dist(d.aim, held[1]) < 0.05, (held, d.aim)
+
+
+def _after_kick(flag, path, corner=True):
+    """A corner waits 2 s at `flag`, is kicked along `path` (positions a frame apart), and the ball then
+    rests at the path's end for 2 s: the cameras of the frames after the kick, with the ball."""
+    d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=True)
+    _held(d, 20.0, 20.0, 50)
+    key = (round(flag[0] / 105) * 105.0, round(flag[1] / 68) * 68.0)
+    for _ in range(50):
+        d.step(*flag, [], corner=key if corner else None)
+    out = []
+    for p in list(path) + [path[-1]] * 50:
+        out.append((d.step(*p, []), (*p, 0.11)))
+    return out
+
+
+def _line(a, b, frames):
+    return [(a[0] + (b[0] - a[0]) * i / frames, a[1] + (b[1] - a[1]) * i / frames)
+            for i in range(1, frames + 1)]
+
+
+def test_after_the_kick_the_corner_rule_frames_no_worse_than_no_rule():
+    """The Reviewer of #201: holding the corner's shot past the kick framed the delivery worse than
+    no rule at all (a near-corner long cross 0/88 well framed against 41/88; a far-corner clearance
+    out of the picture about 3.6 s). After the kick the rule is gone: each case frames at least as
+    well as the same play without the corner's wait framed for it."""
+    cases = {
+        "near-corner long cross": ((0.5, 0.5), _line((0.5, 0.5), (10.0, 34.0), 38), "framed"),
+        "far-corner clearance": ((0.5, 67.5), _line((0.5, 67.5), (40.0, 30.0), 78), "seen"),
+        "near-corner clearance": ((0.5, 0.5), _line((0.5, 0.5), (35.0, 40.0), 78), "seen"),
+        "right near-corner long cross": ((104.5, 0.5), _line((104.5, 0.5), (95.0, 34.0), 38), "framed"),
+        "right far-corner clearance": ((104.5, 67.5), _line((104.5, 67.5), (65.0, 30.0), 78), "seen"),
+        "right near-corner clearance": ((104.5, 0.5), _line((104.5, 0.5), (70.0, 40.0), 78), "seen"),
+    }
+    # Tolerance, set before the right-corner cases were measured: the camera reframes from the
+    # corner's shot over one pan lag, so up to that many frames (ceil(pan_lag_s x fps)) may differ.
+    tolerance = math.ceil(CameraParams(shake_m=0.0).pan_lag_s * 25)
+    def score(rows, measure):
+        if measure == "framed":
+            return sum(well_framed(cam, ball) for cam, ball in rows)
+        return sum((uv := cam.project(ball)) is not None and 0 <= uv[0] <= 1280 and 0 <= uv[1] <= 720
+                   for cam, ball in rows)
+
+    for what, (flag, path, measure) in cases.items():
+        with_rule = score(_after_kick(flag, path), measure)
+        without = score(_after_kick(flag, path, corner=False), measure)
+        assert with_rule >= without - tolerance, (what, with_rule, without, tolerance)
+
+
+def test_corner_waits_runs_from_a_corner_s_set_piece_to_the_kick_and_only_for_a_corner():
+    """corner_waits (the Reviewer's mutants R7 and R8): the wait ends the frame before the kick, not
+    after it; a set piece near a flag after a foul, or a throw-in out over the touchline by the flag,
+    is no corner; open play along the goal line has no wait."""
+    corner = [{"frame": 10, "type": "out_of_play", "x": 0.0, "y": 8.7},
+              {"frame": 20, "type": "set_piece", "x": 0.5, "y": 0.5},
+              {"frame": 50, "type": "pass", "x": 0.5, "y": 0.5}]
+    assert corner_waits(corner) == {f: (0.0, 0.0) for f in range(20, 50)}
+    foul = [{"frame": 10, "type": "foul", "x": 0.6, "y": 0.4},
+            {"frame": 20, "type": "set_piece", "x": 0.6, "y": 0.4},
+            {"frame": 50, "type": "pass", "x": 0.6, "y": 0.4}]
+    assert corner_waits(foul) == {}
+    throw = [{"frame": 10, "type": "out_of_play", "x": 0.8, "y": 0.0},
+             {"frame": 20, "type": "set_piece", "x": 0.8, "y": 0.0},
+             {"frame": 50, "type": "pass", "x": 0.8, "y": 0.0}]
+    assert corner_waits(throw) == {}
+    open_play = [{"frame": f, "type": "pass", "x": 0.5, "y": 0.5 + f / 10} for f in range(0, 50, 10)]
+    assert corner_waits(open_play) == {}
+    # Cases that pass the goal-line check, so they test the rest of the rule (the Reviewer's R8, R8b):
+    # A goal kick from the goal area's near corner (Law 16: anywhere in the goal area), 26.6 m from
+    # the flag: out over the goal line, but no corner.
+    goal_kick = [{"frame": 10, "type": "out_of_play", "x": 0.0, "y": 20.0},
+                 {"frame": 20, "type": "set_piece", "x": 5.5, "y": 26.0},
+                 {"frame": 50, "type": "pass", "x": 5.5, "y": 26.0}]
+    assert corner_waits(goal_kick) == {}
+    then_foul = corner + [{"frame": 70, "type": "foul", "x": 0.6, "y": 0.4},
+                          {"frame": 80, "type": "set_piece", "x": 0.6, "y": 0.4},
+                          {"frame": 110, "type": "pass", "x": 0.6, "y": 0.4}]
+    # The foul's free kick by the flag is no corner: only the first corner waits.
+    assert corner_waits(then_foul) == {f: (0.0, 0.0) for f in range(20, 50)}
+
+
+def test_open_play_through_the_corner_arc_is_framed_as_with_no_corner_rule(monkeypatch):
+    """The Reviewer's R4: a ball run along the goal line through the corner arc in open play (no
+    corner given) is framed exactly as by a director with no corner rule at all."""
+    path = _line((12.0, 10.0), (0.3, 0.6), 30) + _line((0.3, 0.6), (8.0, 1.0), 30)
+
+    def run():
+        d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=True)
+        _held(d, 20.0, 20.0, 50)
+        return [d.step(*p, []).P for p in path]
+
+    with_rule = run()
+    monkeypatch.setattr(Director, "_corner", lambda self, bx, by: None)
+    assert with_rule == run()

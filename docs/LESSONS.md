@@ -1669,6 +1669,85 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `uv run pytest tests/test_restarts.py -k past_the_end_of_the_touchline`; on the engine
   before it, the ball runs on to 127 m and jumps 18 m in a frame.
 
+### 164. A pose keyed to an action ignores the truth it stands for; a limit marked "measured" is re-measured where the defect shows
+- **What happened:** a blind critic of 0.5.3 found four body defects. A throw-in drew its stored
+  pose, arms over the head, from the frame the engine named the thrower, while the engine's ball
+  was still at his feet; the ball then rose into empty hands and left with no throw. The jog was
+  a march: the stride's stance share was a guess, and the swing peaked under the hips. A
+  stride's swing read its progress straight off the shared phase, so a change of pace moved a
+  foot in a frame. And the push-off toe slid up to 17 cm a frame because the stance was allowed
+  0.45 m behind the hips, a limit commented "measured" that the asset's leg reaches only to 0.30.
+  Two old tests also held design as truth ("walking at 3 m/s, a foot is always on the grass").
+  The first fix passed every steady-speed test, and a blind critic still preferred 0.5.3: speeding
+  up, slowing and drifting, its players hopped with both feet tucked, because a foot lifted early
+  for reach started its swing count from zero, both feet left the grass together setting off, and
+  a pose flickering between walk and stand restarted a stride that never landed. The next draft
+  drew the runners' knee fold whole (to 109 degrees at 3.5 m/s, Fukuchi 2017): true to the
+  source, and a third blind critic still preferred 0.5.3 on the jog clip, because at broadcast
+  size a heel at the seat with a level pelvis and no bob reads as prancing. Only the timing went
+  in (highest a third of the way through the swing, behind him); the height stayed 0.5.3's.
+- **Rule:** a drawn action follows the truth it shows, frame by frame: hands go where the
+  engine's ball is, from before it moves until after it leaves. A gait's numbers come from a
+  cited source, and a swing keeps its own progress so a change elsewhere changes where it lands,
+  never where it is. A constant marked measured carries the measurement (what, how, the number)
+  and is re-measured when a defect points at it; a test's premise that a source contradicts is
+  rewritten to what it was protecting. A gait change is judged blind on clips where players
+  change pace, not only on steady-speed tests, and a sourced angle is drawn only as far as the
+  rest of the body (pelvis, bob) can carry it.
+- **Check:** `tests/test_render_motion.py`: `test_a_throw_in_keeps_both_hands_on_the_ball_from_the_grass_to_the_throw`,
+  `test_a_throw_in_moves_no_limb_in_a_jump`, `test_a_running_foot_is_highest_early_in_its_swing`,
+  `test_the_push_off_toe_does_not_slide_before_it_lifts` and
+  `test_a_player_stopping_does_not_stand_with_his_legs_crossed` each fail on 0.5.3 (mutation runs
+  with main's stride and throw restored); `test_a_player_drifting_while_the_pose_flickers_keeps_his_feet_down`,
+  `test_setting_off_from_standing_lifts_one_foot_at_a_time` and
+  `test_setting_off_the_feet_do_not_leave_the_grass_together` fail with each hop's cause put back.
+
+### 175. A held-out seed that passes may hold none of the cases the rule gets wrong
+- **What happened:** the broadcast camera (#180) passed its framing test on held-out seeds 3 and 5
+  at 98%. With #179's engine, seed 3's window held three corners and two balls run to the byline,
+  and it fell to 58%. Two causes:
+  - The test simulated only 2 minutes, so a dead ball at the window's end counted as live (lesson
+    140, applied to the clip but not to the test).
+  - The camera had real misses that main's seed 3 never showed:
+    - the restart's close-up zoomed out on a spring that took 3 s and more, so a corner was played
+      through the close-up;
+    - the aim stopped 8 m short of each goal line;
+    - nothing kept the pitch filling the picture when aimed into a corner.
+- **Rule:**
+  - A camera rule gets a test for each situation it must handle, built on purpose (a restart taken
+    early, a ball run to the byline, play at a corner flag), not left to whatever a held-out seed
+    happens to contain.
+  - A test's simulation runs past its window as the render's does.
+  - The held-out number is reported, never tuned toward.
+- **Check:** `tests/test_render_camera.py`:
+  - `test_a_restart_taken_during_the_close_up_is_watched_on_the_wide_shot`,
+    `test_a_ball_run_to_the_byline_stays_in_the_middle_of_the_picture` and
+    `test_play_near_a_corner_flag_is_framed_with_the_pitch_filling_the_picture`, each of which fails
+    on the 0.5.3 camera;
+  - `_match` simulates SIM_MARGIN_S past the window.
+
+### 177. A coarse search proves a case unframeable only where it searched
+- **What happened:** after #198, #179's seed 3 still missed the camera's 85% framing bar.
+  - A corner rule (framed from the taker inward, its shot held against pumping) fixed what the blind
+    critic saw: near corners went from 26% to 34% pitch, far corners to 79%.
+  - It did not move seed 3's score. I reported its misses as live play near the near flag that no
+    gantry shot could frame. That claim rested on a coarse search (3 m aims, a few lenses) that had
+    shown only the corner flag itself to be unframeable; I extended it to points it never covered.
+  - The oracle the Reviewer asked for (the gantry camera itself, 1 m aims, every lens in 1-degree
+    steps) found 1 of seed 3's 201 live frames unframeable. The rest were the director's misses.
+- **Rule:**
+  - A claim that something cannot be done is checked by a search at the resolution of the claim,
+    on the system's own model, before it is reported.
+  - An exclusion that excludes almost nothing buys nothing: the bar stays raw (the fine oracle,
+    tried and dropped, excluded 1 of 201 frames).
+  - The Reviewer then found the corner rule's own hold made the delivery worse than no rule (a
+    long cross 0 of 88 frames well framed against 41) and its ball-position trigger caught open
+    play on the goal line. The rule now runs only from the engine's corner set piece to the kick.
+- **Check:** `tests/test_render_camera.py::test_after_the_kick_the_corner_rule_frames_no_worse_than_no_rule`
+  (red on af7e439), `::test_a_corner_is_framed_from_the_taker_inward`,
+  `::test_each_corner_has_its_own_shot_and_the_ball_stays_in_it` and
+  `::test_the_corner_shot_holds_until_the_kick`; the framing bar is raw.
+
 ### 162. A player off the ball answers the players around him, not only the ball
 - **What happened:** fans and clip critics saw the team without the ball stand between actions. On
   seed 21 most standing spells of 3 s or more were block defenders whose place did not move while

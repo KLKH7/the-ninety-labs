@@ -42,4 +42,13 @@ docs/decisions/0001-synthetic-data.md.
 # player was 91.5% of his height), with proportions measured against Drillis and Contini; walking
 # and running, a foot is planted for its stance and carried on an arc through its swing, never
 # dragged along the grass; the stride lengthens and the swing lifts with speed.
-RENDERER_VERSION = "0.5.3"
+# 0.5.5: the broadcast camera watches restarts wide, follows a ball run to the byline and closes in
+# at a corner (#198); 0.5.6 to 0.5.8: a corner framed from the taker inward, held against
+# pumping (#201, #206).
+# 0.5.9: a throw-in taker bends to the ball, holds it in both hands as the engine lifts it over his
+# head and follows through after it leaves them (no pose switches in a frame); a run has a sourced
+# stance share with a flight phase above the walk-to-run speed, and a running foot is highest early
+# in its swing, behind him, coming through low to land; a swing keeps its own progress, so a
+# change of pace never moves a foot in a jump; a foot lifts before the leg runs out of reach behind
+# it, so the push-off toe no longer slides.
+RENDERER_VERSION = "0.5.9"
