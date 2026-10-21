@@ -687,3 +687,19 @@ def test_a_server_that_cannot_sign_in_still_serves_the_verified_text(monkeypatch
     variants, dropped = run(call())
     assert [v.text for v in variants] == [CLAIM.text]
     assert dropped == {0: "server: model failed: AgentFrameworkException"}
+
+
+def test_the_instructions_keep_the_claim_s_clock_for_every_persona():
+    # The live evaluation (agents-live 39514003721) aired casual in 12 of 20 claims: the model
+    # wrote "At 3 seconds" for the claim's 00:03, which the re-check rightly drops (its numbers are
+    # the clock's). Unpublished, the same model with these instructions dropped 0 of 24 variants of
+    # three such claims against 6 of 24 without them (2026-10-21). The re-check is unchanged.
+    casual = next(line for line in core.INSTRUCTIONS.splitlines() if line.startswith("- casual:"))
+    assert "plain words" in casual and "never in place of them" in core.INSTRUCTIONS
+    assert "a clock stays as the claim writes it (00:03)" in core.INSTRUCTIONS
+    assert "A clock (00:03) is numbers too: keep it written exactly so" in core.INSTRUCTIONS
+    claim = Claim("h10 plays a pass at 00:03.", ["e2"])
+    evidence = [{"id": "e2", "type": "pass", "team": "home", "player": "h10", "minute": 1, "second": 3,
+                 "clock": "00:03"}]
+    assert problem(claim, evidence, "At 3 seconds, h10 passes the ball.").startswith("numbers lost")
+    assert problem(claim, evidence, "At 00:03, h10 passes the ball.") is None
