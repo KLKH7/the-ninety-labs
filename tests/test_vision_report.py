@@ -145,3 +145,17 @@ def test_a_detections_file_that_skips_frames_is_refused(tmp_path):
     write_dets(dets, 1, [PLAYER])  # frame 0 only
     with pytest.raises(ValueError, match="did not run on 1 of 2 frames"):
         vision_report.build(test, dets, freeze_of(test, [1]))
+
+
+def test_a_validation_stride_scores_only_its_frames_and_still_refuses_a_gap(tmp_path):
+    test, dets = tmp_path / "test", tmp_path / "dets"
+    d = write_clip(test, 1)
+    labels = d / "frames.jsonl"
+    first = json.loads(labels.read_text())
+    labels.write_text(labels.read_text() + json.dumps({**first, "frame": 1}) + "\n")
+    write_dets(dets, 1, [PLAYER])  # frame 0: the only frame of stride 2
+    report = vision_report.build(test, dets, freeze_of(test, [1]), stride=2)
+    assert report["stride"] == 2 and report["frames_scored"] == 1
+    labels.write_text(json.dumps({**first, "frame": 7}) + "\n" + json.dumps(first) + "\n")
+    with pytest.raises(ValueError, match="did not run on 1 of 1 frames"):
+        vision_report.build(test, dets, freeze_of(test, [1]), stride=2)

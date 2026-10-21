@@ -1,0 +1,1931 @@
+{
+ "frozen": "2026-10-21",
+ "tag": "v2freeze-validation",
+ "commit": "aea01f4e5d168b0ff3e8e44143cd4baaaf9a3f60",
+ "render_manifest_sha256": "1570bed2eaaf3a11f88d817ce0d15a72911aee186f06013cf11794745359ce1b",
+ "note": "dataset v2's validation clips as rendered on the GPU pod (run v2freeze); every file checked against the render manifest's sha256 before these digests were taken",
+ "seeds": [
+  108,
+  109,
+  110,
+  112,
+  113,
+  114,
+  115,
+  116,
+  117,
+  118,
+  119,
+  120,
+  121,
+  122,
+  2041,
+  2042,
+  2043,
+  2044,
+  2045,
+  3041,
+  3042,
+  3043,
+  3044,
+  3045
+ ],
+ "clips": [
+  {
+   "seed": 108,
+   "params": {
+    "width": 1280,
+    "height": 720,
+    "fps": 25,
+    "camera": {
+     "height_m": 17.62,
+     "back_m": 38.76,
+     "offset_x_m": -3.85,
+     "half_width_m": 19.99,
+     "box_half_width_m": 12.02,
+     "pan_lag_s": 0.78,
+     "lead_s": 0.4,
+     "shake_m": 0.027
+    },
+    "lighting": "day",
+    "sun_azimuth_deg": 23.1,
+    "sun_elevation_deg": 35.1,
+    "weather": "clear",
+    "camera_cut": false,
+    "dead_ball_cut": false,
+    "kit_contrast": "low",
+    "home_kit": {
+     "shirt": "#1a1a1a",
+     "shorts": "#111111",
+     "socks": "#1a1a1a"
+    },
+    "away_kit": {
+     "shirt": "#1c0943",
+     "shorts": "#1c0943",
+     "socks": "#1c0943"
+    },
+    "home_gk": {
+     "shirt": "#f2f2f2",
+     "shorts": "#111111",
+     "socks": "#111111"
+    },
+    "away_gk": {
+     "shirt": "#cd6435",
+     "shorts": "#ffffff",
+     "socks": "#ffffff"
+    },
+    "home_pattern": "halves",
+    "away_pattern": "stripes",
+    "grass_hue": 0.28,
+    "stripe_width_m": 5.0,
+    "wear": 0.42,
+    "stand_color": "#4e5540",
+    "crowd_density": 0.91,
+    "motion_blur": 0.67,
+    "noise": 0.0142,
+    "jpeg_quality": 0.88,
+    "occlusion": "natural",
+    "home_code": "ELM",
+    "away_code": "QRY",
+    "boards": [
+     "VANTIRO",
+     "QELMORA",
+     "BRISKEL",
+     "OSTRAVEN",
+     "PALMIRU",
+     "ZENTHA",
+     "THE NINETY LABS"
+    ]
+   },
+   "renderer": {
+    "version": "0.5.9",
+    "three": "0.170.0",
+    "gl": "gpu",
+    "chromium": "141.0.7390.37"
+   },
+   "digest": {
+    "frames_jsonl": "600454d063ce222cac538f195969509b26d159d1852bc8fc839af0869fb622b9",
+    "events_jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "images": "cc540ce8a00a251a57e620d85e9ecb56796979cf6db2525175445e33d8eeaa5c",
+    "image_count": 250
+   }
+  },
+  {
+   "seed": 109,
+   "params": {
+    "width": 1280,
+    "height": 720,
+    "fps": 25,
+    "camera": {
+     "height_m": 24.55,
+     "back_m": 32.9,
+     "offset_x_m": -3.37,
+     "half_width_m": 20.65,
+     "box_half_width_m": 14.67,
+     "pan_lag_s": 0.77,
+     "lead_s": 0.43,
+     "shake_m": 0.125
+    },
+    "lighting": "day",
+    "sun_azimuth_deg": 190.1,
+    "sun_elevation_deg": 55.7,
+    "weather": "clear",
+    "camera_cut": false,
+    "dead_ball_cut": false,
+    "kit_contrast": "low",
+    "home_kit": {
+     "shirt": "#b3684a",
+     "shorts": "#ffffff",
+     "socks": "#b3684a"
+    },
+    "away_kit": {
+     "shirt": "#898434",
+     "shorts": "#ffffff",
+     "socks": "#898434"
+    },
+    "home_gk": {
+     "shirt": "#f2f2f2",
+     "shorts": "#111111",
+     "socks": "#f2f2f2"
+    },
+    "away_gk": {
+     "shirt": "#65eede",
+     "shorts": "#65eede",
+     "socks": "#65eede"
+    },
+    "home_pattern": "stripes",
+    "away_pattern": "halves",
+    "grass_hue": 0.262,
+    "stripe_width_m": 5.0,
+    "wear": 0.31,
+    "stand_color": "#1e3a29",
+    "crowd_density": 0.84,
+    "motion_blur": 0.69,
+    "noise": 0.0061,
+    "jpeg_quality": 0.88,
+    "occlusion": "natural",
+    "home_code": "CRW",
+    "away_code": "MRL",
+    "boards": [
+     "VANTIRO",
+     "QELMORA",
+     "BRISKEL",
+     "OSTRAVEN",
+     "PALMIRU",
+     "ZENTHA",
+     "THE NINETY LABS"
+    ]
+   },
+   "renderer": {
+    "version": "0.5.9",
+    "three": "0.170.0",
+    "gl": "gpu",
+    "chromium": "141.0.7390.37"
+   },
+   "digest": {
+    "frames_jsonl": "69d6d91a171c00e3a5f18f694e5d045464db33745c854d2b457946200b73abc5",
+    "events_jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "images": "8113d81cabe611a2beea93f8f0019fd00919b113aa575702cf699efdbbd38bef",
+    "image_count": 250
+   }
+  },
+  {
+   "seed": 110,
+   "params": {
+    "width": 1280,
+    "height": 720,
+    "fps": 25,
+    "camera": {
+     "height_m": 22.95,
+     "back_m": 30.37,
+     "offset_x_m": 2.93,
+     "half_width_m": 23.0,
+     "box_half_width_m": 13.07,
+     "pan_lag_s": 0.83,
+     "lead_s": 0.29,
+     "shake_m": 0.057
+    },
+    "lighting": "day",
+    "sun_azimuth_deg": 248.4,
+    "sun_elevation_deg": 57.0,
+    "weather": "clear",
+    "camera_cut": true,
+    "dead_ball_cut": false,
+    "kit_contrast": "normal",
+    "home_kit": {
+     "shirt": "#868d08",
+     "shorts": "#ffffff",
+     "socks": "#ffffff"
+    },
+    "away_kit": {
+     "shirt": "#1a1a1a",
+     "shorts": "#ffffff",
+     "socks": "#ffffff"
+    },
+    "home_gk": {
+     "shirt": "#9d1787",
+     "shorts": "#ffffff",
+     "socks": "#ffffff"
+    },
+    "away_gk": {
+     "shirt": "#f2f2f2",
+     "shorts": "#111111",
+     "socks": "#f2f2f2"
+    },
+    "home_pattern": "halves",
+    "away_pattern": "sash",
+    "grass_hue": 0.302,
+    "stripe_width_m": 4.0,
+    "wear": 0.61,
+    "stand_color": "#1c302d",
+    "crowd_density": 0.53,
+    "motion_blur": 0.46,
+    "noise": 0.0171,
+    "jpeg_quality": 0.88,
+    "occlusion": "crowded",
+    "home_code": "GRV",
+    "away_code": "FEN",
+    "boards": [
+     "VANTIRO",
+     "QELMORA",
+     "BRISKEL",
+     "OSTRAVEN",
+     "PALMIRU",
+     "ZENTHA",
+     "THE NINETY LABS"
+    ]
+   },
+   "renderer": {
+    "version": "0.5.9",
+    "three": "0.170.0",
+    "gl": "gpu",
+    "chromium": "141.0.7390.37"
+   },
+   "digest": {
+    "frames_jsonl": "b764fa634a1d7fb74d3ff4f6e91a4b3b7a91e44f47a693c8d7453bae4711585c",
+    "events_jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "images": "aabef71870d9624129c99684606114025c543fc3007fa1ce57420413d04b7085",
+    "image_count": 250
+   }
+  },
+  {
+   "seed": 112,
+   "params": {
+    "width": 1280,
+    "height": 720,
+    "fps": 25,
+    "camera": {
+     "height_m": 18.12,
+     "back_m": 38.92,
+     "offset_x_m": -1.56,
+     "half_width_m": 23.94,
+     "box_half_width_m": 12.77,
+     "pan_lag_s": 0.89,
+     "lead_s": 0.32,
+     "shake_m": 0.138
+    },
+    "lighting": "day",
+    "sun_azimuth_deg": 54.0,
+    "sun_elevation_deg": 35.3,
+    "weather": "clear",
+    "camera_cut": true,
+    "dead_ball_cut": false,
+    "kit_contrast": "normal",
+    "home_kit": {
+     "shirt": "#1a1a1a",
+     "shorts": "#ffffff",
+     "socks": "#1a1a1a"
+    },
+    "away_kit": {
+     "shirt": "#f2f2f2",
+     "shorts": "#111111",
+     "socks": "#111111"
+    },
+    "home_gk": {
+     "shirt": "#b02699",
+     "shorts": "#b02699",
+     "socks": "#b02699"
+    },
+    "away_gk": {
+     "shirt": "#b72219",
+     "shorts": "#111111",
+     "socks": "#111111"
+    },
+    "home_pattern": "halves",
+    "away_pattern": "hoops",
+    "grass_hue": 0.24,
+    "stripe_width_m": 6.0,
+    "wear": 0.45,
+    "stand_color": "#444852",
+    "crowd_density": 0.53,
+    "motion_blur": 0.6,
+    "noise": 0.0152,
+    "jpeg_quality": 0.88,
+    "occlusion": "natural",
+    "home_code": "ELM",
+    "away_code": "GRV",
+    "boards": [
+     "VANTIRO",
+     "QELMORA",
+     "BRISKEL",
+     "OSTRAVEN",
+     "PALMIRU",
+     "ZENTHA",
+     "THE NINETY LABS"
+    ]
+   },
+   "renderer": {
+    "version": "0.5.9",
+    "three": "0.170.0",
+    "gl": "gpu",
+    "chromium": "141.0.7390.37"
+   },
+   "digest": {
+    "frames_jsonl": "574b34a9ba0a2d1e27d5d19808fa5ebe0923f4d809b5b0923847ea865db340f4",
+    "events_jsonl": "640d3a849fa0858de4732cd00f908deeab1dfd2f896a11320ef8c50543e209df",
+    "images": "9a4febe7965767a13d75475aaf1835d091f7662c003c50c499c75a740b08b6fa",
+    "image_count": 250
+   }
+  },
+  {
+   "seed": 113,
+   "params": {
+    "width": 1280,
+    "height": 720,
+    "fps": 25,
+    "camera": {
+     "height_m": 16.99,
+     "back_m": 36.91,
+     "offset_x_m": -4.71,
+     "half_width_m": 20.64,
+     "box_half_width_m": 13.86,
+     "pan_lag_s": 0.42,
+     "lead_s": 0.28,
+     "shake_m": 0.02
+    },
+    "lighting": "day",
+    "sun_azimuth_deg": 81.6,
+    "sun_elevation_deg": 48.2,
+    "weather": "clear",
+    "camera_cut": true,
+    "dead_ball_cut": false,
+    "kit_contrast": "low",
+    "home_kit": {
+     "shirt": "#14312e",
+     "shorts": "#111111",
+     "socks": "#111111"
+    },
+    "away_kit": {
+     "shirt": "#551b53",
+     "shorts": "#111111",
+     "socks": "#551b53"
+    },
+    "home_gk": {
+     "shirt": "#f2f2f2",
+     "shorts": "#111111",
+     "socks": "#111111"
+    },
+    "away_gk": {
+     "shirt": "#db51f1",
+     "shorts": "#ffffff",
+     "socks": "#db51f1"
+    },
+    "home_pattern": "hoops",
+    "away_pattern": "solid",
+    "grass_hue": 0.305,
+    "stripe_width_m": 6.0,
+    "wear": 0.29,
+    "stand_color": "#2f2a49",
+    "crowd_density": 0.57,
+    "motion_blur": 0.65,
+    "noise": 0.0071,
+    "jpeg_quality": 0.88,
+    "occlusion": "natural",
+    "home_code": "ASH",
+    "away_code": "KST",
+    "boards": [
+     "VANTIRO",
+     "QELMORA",
+     "BRISKEL",
+     "OSTRAVEN",
+     "PALMIRU",
+     "ZENTHA",
+     "THE NINETY LABS"
+    ]
+   },
+   "renderer": {
+    "version": "0.5.9",
+    "three": "0.170.0",
+    "gl": "gpu",
+    "chromium": "141.0.7390.37"
+   },
+   "digest": {
+    "frames_jsonl": "0384fbe72da68a96d6372a531d5305a74978a64ae7498da7dc775b5afcec585b",
+    "events_jsonl": "eca444968dee183c0d26ca20a258781ce4ae2e48bd19842764d30d413ba4abbc",
+    "images": "963f7815862b150311bf0a558262ee2f30c23d71343310a73485588b6e039754",
+    "image_count": 250
+   }
+  },
+  {
+   "seed": 114,
+   "params": {
+    "width": 1280,
+    "height": 720,
+    "fps": 25,
+    "camera": {
+     "height_m": 18.78,
+     "back_m": 33.94,
+     "offset_x_m": -2.66,
+     "half_width_m": 17.74,
+     "box_half_width_m": 14.65,
+     "pan_lag_s": 0.54,
+     "lead_s": 0.36,
+     "shake_m": 0.052
+    },
+    "lighting": "day",
+    "sun_azimuth_deg": 23.7,
+    "sun_elevation_deg": 36.1,
+    "weather": "clear",
+    "camera_cut": false,
+    "dead_ball_cut": false,
+    "kit_contrast": "normal",
+    "home_kit": {
+     "shirt": "#f2f2f2",
+     "shorts": "#ffffff",
+     "socks": "#f2f2f2"
+    },
+    "away_kit": {
+     "shirt": "#1a1a1a",
+     "shorts": "#111111",
+     "socks": "#111111"
+    },
+    "home_gk": {
+     "shirt": "#ad205e",
+     "shorts": "#ffffff",
+     "socks": "#ad205e"
+    },
+    "away_gk": {
+     "shirt": "#5910c9",
+     "shorts": "#ffffff",
+     "socks": "#5910c9"
+    },
+    "home_pattern": "sash",
+    "away_pattern": "solid",
+    "grass_hue": 0.3,
+    "stripe_width_m": 6.0,
+    "wear": 0.54,
+    "stand_color": "#2f3018",
+    "crowd_density": 0.52,
+    "motion_blur": 0.5,
+    "noise": 0.0186,
+    "jpeg_quality": 0.88,
+    "occlusion": "natural",
+    "home_code": "MRL",
+    "away_code": "OAK",
+    "boards": [
+     "VANTIRO",
+     "QELMORA",
+     "BRISKEL",
+     "OSTRAVEN",
+     "PALMIRU",
+     "ZENTHA",
+     "THE NINETY LABS"
+    ]
+   },
+   "renderer": {
+    "version": "0.5.9",
+    "three": "0.170.0",
+    "gl": "gpu",
+    "chromium": "141.0.7390.37"
+   },
+   "digest": {
+    "frames_jsonl": "e20d94dc48b3bfa6c5ba9f500b00b0cad55cd9da2211887a8186a8e4d130162b",
+    "events_jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "images": "31c0e524ad3a16b527376d50e05184e207796289bb305d4bbe08e96b6b7a1fef",
+    "image_count": 250
+   }
+  },
+  {
+   "seed": 115,
+   "params": {
+    "width": 1280,
+    "height": 720,
+    "fps": 25,
+    "camera": {
+     "height_m": 23.72,
+     "back_m": 38.16,
+     "offset_x_m": -5.98,
+     "half_width_m": 17.44,
+     "box_half_width_m": 12.39,
+     "pan_lag_s": 0.72,
+     "lead_s": 0.25,
+     "shake_m": 0.139
+    },
+    "lighting": "day",
+    "sun_azimuth_deg": 67.7,
+    "sun_elevation_deg": 46.9,
+    "weather": "clear",
+    "camera_cut": true,
+    "dead_ball_cut": false,
+    "kit_contrast": "low",
+    "home_kit": {
+     "shirt": "#330861",
+     "shorts": "#ffffff",
+     "socks": "#ffffff"
+    },
+    "away_kit": {
+     "shirt": "#6e077f",
+     "shorts": "#ffffff",
+     "socks": "#ffffff"
+    },
+    "home_gk": {
+     "shirt": "#f2f2f2",
+     "shorts": "#f2f2f2",
+     "socks": "#f2f2f2"
+    },
+    "away_gk": {
+     "shirt": "#ca3fde",
+     "shorts": "#ffffff",
+     "socks": "#ffffff"
+    },
+    "home_pattern": "hoops",
+    "away_pattern": "solid",
+    "grass_hue": 0.274,
+    "stripe_width_m": 6.0,
+    "wear": 0.58,
+    "stand_color": "#5e5d5f",
+    "crowd_density": 0.98,
+    "motion_blur": 0.51,
+    "noise": 0.0134,
+    "jpeg_quality": 0.88,
+    "occlusion": "natural",
+    "home_code": "QRY",
+    "away_code": "ASH",
+    "boards": [
+     "VANTIRO",
+     "QELMORA",
+     "BRISKEL",
+     "OSTRAVEN",
+     "PALMIRU",
+     "ZENTHA",
+     "THE NINETY LABS"
+    ]
+   },
+   "renderer": {
+    "version": "0.5.9",
+    "three": "0.170.0",
+    "gl": "gpu",
+    "chromium": "141.0.7390.37"
+   },
+   "digest": {
+    "frames_jsonl": "040f471984ce73db03cf7cefd509b40f066fb3429511b189b48424d0914f4832",
+    "events_jsonl": "822b766083f170d213d81477904b5c220e123a2a44b740b8d7a7392121b7a241",
+    "images": "8007b5f3c35efd4b36728522aa81213560e63da2f58c88798e74cb219bb5502c",
+    "image_count": 250
+   }
+  },
+  {
+   "seed": 116,
+   "params": {
+    "width": 1280,
+    "height": 720,
+    "fps": 25,
+    "camera": {
+     "height_m": 17.61,
+     "back_m": 35.85,
+     "offset_x_m": 0.08,
+     "half_width_m": 22.49,
+     "box_half_width_m": 12.9,
+     "pan_lag_s": 0.58,
+     "lead_s": 0.23,
+     "shake_m": 0.098
+    },
+    "lighting": "day",
+    "sun_azimuth_deg": 159.5,
+    "sun_elevation_deg": 31.6,
+    "weather": "clear",
+    "camera_cut": false,
+    "dead_ball_cut": false,
+    "kit_contrast": "normal",
+    "home_kit": {
+     "shirt": "#f2f2f2",
+     "shorts": "#111111",
+     "socks": "#f2f2f2"
+    },
+    "away_kit": {
+     "shirt": "#94307e",
+     "shorts": "#111111",
+     "socks": "#111111"
+    },
+    "home_gk": {
+     "shirt": "#4bd6a9",
+     "shorts": "#ffffff",
+     "socks": "#4bd6a9"
+    },
+    "away_gk": {
+     "shirt": "#080d7f",
+     "shorts": "#080d7f",
+     "socks": "#080d7f"
+    },
+    "home_pattern": "sash",
+    "away_pattern": "sash",
+    "grass_hue": 0.256,
+    "stripe_width_m": 6.0,
+    "wear": 0.16,
+    "stand_color": "#5d5c5c",
+    "crowd_density": 0.88,
+    "motion_blur": 0.41,
+    "noise": 0.0118,
+    "jpeg_quality": 0.88,
+    "occlusion": "natural",
+    "home_code": "OAK",
+    "away_code": "KST",
+    "boards": [
+     "VANTIRO",
+     "QELMORA",
+     "BRISKEL",
+     "OSTRAVEN",
+     "PALMIRU",
+     "ZENTHA",
+     "THE NINETY LABS"
+    ]
+   },
+   "renderer": {
+    "version": "0.5.9",
+    "three": "0.170.0",
+    "gl": "gpu",
+    "chromium": "141.0.7390.37"
+   },
+   "digest": {
+    "frames_jsonl": "57cbb70c8c717cf564134085fe987b8a29cebf8bd3b3a472eb9417fd4c9b3202",
+    "events_jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "images": "3bf7a12df86cf0de7b6f9c2f14944ac647581e00de4d7dab4d3686981b6ab14e",
+    "image_count": 250
+   }
+  },
+  {
+   "seed": 117,
+   "params": {
+    "width": 1280,
+    "height": 720,
+    "fps": 25,
+    "camera": {
+     "height_m": 16.81,
+     "back_m": 38.71,
+     "offset_x_m": -3.04,
+     "half_width_m": 19.83,
+     "box_half_width_m": 12.75,
+     "pan_lag_s": 0.43,
+     "lead_s": 0.29,
+     "shake_m": 0.043
+    },
+    "lighting": "day",
+    "sun_azimuth_deg": 235.7,
+    "sun_elevation_deg": 54.8,
+    "weather": "clear",
+    "camera_cut": true,
+    "dead_ball_cut": false,
+    "kit_contrast": "normal",
+    "home_kit": {
+     "shirt": "#70d453",
+     "shorts": "#111111",
+     "socks": "#111111"
+    },
+    "away_kit": {
+     "shirt": "#6d233d",
+     "shorts": "#ffffff",
+     "socks": "#6d233d"
+    },
+    "home_gk": {
+     "shirt": "#f2f2f2",
+     "shorts": "#111111",
+     "socks": "#f2f2f2"
+    },
+    "away_gk": {
+     "shirt": "#7444eb",
+     "shorts": "#7444eb",
+     "socks": "#7444eb"
+    },
+    "home_pattern": "sash",
+    "away_pattern": "stripes",
+    "grass_hue": 0.247,
+    "stripe_width_m": 5.0,
+    "wear": 0.89,
+    "stand_color": "#515151",
+    "crowd_density": 0.52,
+    "motion_blur": 0.63,
+    "noise": 0.0091,
+    "jpeg_quality": 0.88,
+    "occlusion": "natural",
+    "home_code": "DUN",
+    "away_code": "FEN",
+    "boards": [
+     "VANTIRO",
+     "QELMORA",
+     "BRISKEL",
+     "OSTRAVEN",
+     "PALMIRU",
+     "ZENTHA",
+     "THE NINETY LABS"
+    ]
+   },
+   "renderer": {
+    "version": "0.5.9",
+    "three": "0.170.0",
+    "gl": "gpu",
+    "chromium": "141.0.7390.37"
+   },
+   "digest": {
+    "frames_jsonl": "17db14acd1923af73c741f5f87faa9f239baba403fff1939524d351e45461cf8",
+    "events_jsonl": "b7db41597e18afdf71b4e857ec67799f4704078c6838bd7035b513c8e177da17",
+    "images": "24f2d6608e2c9130d4d47683e679de3dd9ad77131c1179586da16d331510e483",
+    "image_count": 250
+   }
+  },
+  {
+   "seed": 118,
+   "params": {
+    "width": 1280,
+    "height": 720,
+    "fps": 25,
+    "camera": {
+     "height_m": 22.72,
+     "back_m": 39.98,
+     "offset_x_m": 1.29,
+     "half_width_m": 18.79,
+     "box_half_width_m": 14.6,
+     "pan_lag_s": 0.43,
+     "lead_s": 0.38,
+     "shake_m": 0.127
+    },
+    "lighting": "day",
+    "sun_azimuth_deg": 127.1,
+    "sun_elevation_deg": 56.1,
+    "weather": "clear",
+    "camera_cut": true,
+    "dead_ball_cut": false,
+    "kit_contrast": "normal",
+    "home_kit": {
+     "shirt": "#f2f2f2",
+     "shorts": "#ffffff",
+     "socks": "#ffffff"
+    },
+    "away_kit": {
+     "shirt": "#311072",
+     "shorts": "#311072",
+     "socks": "#311072"
+    },
+    "home_gk": {
+     "shirt": "#6699e5",
+     "shorts": "#ffffff",
+     "socks": "#6699e5"
+    },
+    "away_gk": {
+     "shirt": "#e13ec0",
+     "shorts": "#ffffff",
+     "socks": "#ffffff"
+    },
+    "home_pattern": "hoops",
+    "away_pattern": "sash",
+    "grass_hue": 0.245,
+    "stripe_width_m": 6.0,
+    "wear": 0.46,
+    "stand_color": "#333426",
+    "crowd_density": 0.71,
+    "motion_blur": 0.33,
+    "noise": 0.0124,
+    "jpeg_quality": 0.88,
+    "occlusion": "natural",
+    "home_code": "HLT",
+    "away_code": "KST",
+    "boards": [
+     "VANTIRO",
+     "QELMORA",
+     "BRISKEL",
+     "OSTRAVEN",
+     "PALMIRU",
+     "ZENTHA",
+     "THE NINETY LABS"
+    ]
+   },
+   "renderer": {
+    "version": "0.5.9",
+    "three": "0.170.0",
+    "gl": "gpu",
+    "chromium": "141.0.7390.37"
+   },
+   "digest": {
+    "frames_jsonl": "7fc44e930273df7375200f3fb9fd1d065ef46169676be9a96ea1ea693239eb9c",
+    "events_jsonl": "bf407f2887c7a4d3d43f3fad750b686ce85f3a7f5bed918007b86d61b551f602",
+    "images": "77d2368b152c817b21985d8300469c700f82c95573311455391b534d34b28140",
+    "image_count": 250
+   }
+  },
+  {
+   "seed": 119,
+   "params": {
+    "width": 1280,
+    "height": 720,
+    "fps": 25,
+    "camera": {
+     "height_m": 17.41,
+     "back_m": 35.26,
+     "offset_x_m": -3.19,
+     "half_width_m": 17.94,
+     "box_half_width_m": 11.06,
+     "pan_lag_s": 0.74,
+     "lead_s": 0.34,
+     "shake_m": 0.073
+    },
+    "lighting": "day",
+    "sun_azimuth_deg": 27.7,
+    "sun_elevation_deg": 42.8,
+    "weather": "clear",
+    "camera_cut": true,
+    "dead_ball_cut": false,
+    "kit_contrast": "normal",
+    "home_kit": {
+     "shirt": "#f2f2f2",
+     "shorts": "#ffffff",
+     "socks": "#ffffff"
+    },
+    "away_kit": {
+     "shirt": "#46902e",
+     "shorts": "#111111",
+     "socks": "#46902e"
+    },
+    "home_gk": {
+     "shirt": "#f03e9f",
+     "shorts": "#ffffff",
+     "socks": "#ffffff"
+    },
+    "away_gk": {
+     "shirt": "#29459c",
+     "shorts": "#29459c",
+     "socks": "#29459c"
+    },
+    "home_pattern": "hoops",
+    "away_pattern": "halves",
+    "grass_hue": 0.246,
+    "stripe_width_m": 5.25,
+    "wear": 0.31,
+    "stand_color": "#403a3c",
+    "crowd_density": 0.75,
+    "motion_blur": 0.54,
+    "noise": 0.0127,
+    "jpeg_quality": 0.88,
+    "occlusion": "natural",
+    "home_code": "DUN",
+    "away_code": "ASH",
+    "boards": [
+     "VANTIRO",
+     "QELMORA",
+     "BRISKEL",
+     "OSTRAVEN",
+     "PALMIRU",
+     "ZENTHA",
+     "THE NINETY LABS"
+    ]
+   },
+   "renderer": {
+    "version": "0.5.9",
+    "three": "0.170.0",
+    "gl": "gpu",
+    "chromium": "141.0.7390.37"
+   },
+   "digest": {
+    "frames_jsonl": "59fdd1db70eccd47f2a06c875bf86e1fe4f218332cd23744b73177baf8cf4258",
+    "events_jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "images": "cf1230986690f64b7bfa589443792e5a05c234e2d8c1307bbb63db10a0c1a6f0",
+    "image_count": 250
+   }
+  },
+  {
+   "seed": 120,
+   "params": {
+    "width": 1280,
+    "height": 720,
+    "fps": 25,
+    "camera": {
+     "height_m": 20.79,
+     "back_m": 30.01,
+     "offset_x_m": 0.23,
+     "half_width_m": 17.83,
+     "box_half_width_m": 14.84,
+     "pan_lag_s": 0.42,
+     "lead_s": 0.45,
+     "shake_m": 0.072
+    },
+    "lighting": "day",
+    "sun_azimuth_deg": 280.6,
+    "sun_elevation_deg": 30.0,
+    "weather": "clear",
+    "camera_cut": false,
+    "dead_ball_cut": false,
+    "kit_contrast": "normal",
+    "home_kit": {
+     "shirt": "#202ea2",
+     "shorts": "#ffffff",
+     "socks": "#202ea2"
+    },
+    "away_kit": {
+     "shirt": "#f2f2f2",
+     "shorts": "#ffffff",
+     "socks": "#ffffff"
+    },
+    "home_gk": {
+     "shirt": "#ad2812",
+     "shorts": "#ffffff",
+     "socks": "#ad2812"
+    },
+    "away_gk": {
+     "shirt": "#21e5d0",
+     "shorts": "#21e5d0",
+     "socks": "#21e5d0"
+    },
+    "home_pattern": "hoops",
+    "away_pattern": "hoops",
+    "grass_hue": 0.297,
+    "stripe_width_m": 4.0,
+    "wear": 0.63,
+    "stand_color": "#27473f",
+    "crowd_density": 0.76,
+    "motion_blur": 0.62,
+    "noise": 0.0076,
+    "jpeg_quality": 0.88,
+    "occlusion": "crowded",
+    "home_code": "KST",
+    "away_code": "GRV",
+    "boards": [
+     "VANTIRO",
+     "QELMORA",
+     "BRISKEL",
+     "OSTRAVEN",
+     "PALMIRU",
+     "ZENTHA",
+     "THE NINETY LABS"
+    ]
+   },
+   "renderer": {
+    "version": "0.5.9",
+    "three": "0.170.0",
+    "gl": "gpu",
+    "chromium": "141.0.7390.37"
+   },
+   "digest": {
+    "frames_jsonl": "ea23a444b6267a0952fa2c52d2d74a16b08757cd35c2672c2995bca16dedf2a7",
+    "events_jsonl": "ecf628e7e1db9c81800c3b38ad2f1d4a20d4f1088bc2124d1afdb04a02cc1162",
+    "images": "3e33df96f3283e576949971d9da91b24e6183dc1ca961e2af15f5648978999cf",
+    "image_count": 250
+   }
+  },
+  {
+   "seed": 121,
+   "params": {
+    "width": 1280,
+    "height": 720,
+    "fps": 25,
+    "camera": {
+     "height_m": 24.75,
+     "back_m": 31.49,
+     "offset_x_m": 3.3,
+     "half_width_m": 18.25,
+     "box_half_width_m": 13.2,
+     "pan_lag_s": 0.42,
+     "lead_s": 0.42,
+     "shake_m": 0.074
+    },
+    "lighting": "day",
+    "sun_azimuth_deg": 150.0,
+    "sun_elevation_deg": 49.6,
+    "weather": "clear",
+    "camera_cut": false,
+    "dead_ball_cut": false,
+    "kit_contrast": "low",
+    "home_kit": {
+     "shirt": "#172f4d",
+     "shorts": "#111111",
+     "socks": "#111111"
+    },
+    "away_kit": {
+     "shirt": "#144908",
+     "shorts": "#111111",
+     "socks": "#144908"
+    },
+    "home_gk": {
+     "shirt": "#3278c7",
+     "shorts": "#3278c7",
+     "socks": "#3278c7"
+    },
+    "away_gk": {
+     "shirt": "#f2f2f2",
+     "shorts": "#f2f2f2",
+     "socks": "#f2f2f2"
+    },
+    "home_pattern": "hoops",
+    "away_pattern": "solid",
+    "grass_hue": 0.262,
+    "stripe_width_m": 5.0,
+    "wear": 0.83,
+    "stand_color": "#404d45",
+    "crowd_density": 0.61,
+    "motion_blur": 0.62,
+    "noise": 0.0183,
+    "jpeg_quality": 0.88,
+    "occlusion": "natural",
+    "home_code": "DUN",
+    "away_code": "QRY",
+    "boards": [
+     "VANTIRO",
+     "QELMORA",
+     "BRISKEL",
+     "OSTRAVEN",
+     "PALMIRU",
+     "ZENTHA",
+     "THE NINETY LABS"
+    ]
+   },
+   "renderer": {
+    "version": "0.5.9",
+    "three": "0.170.0",
+    "gl": "gpu",
+    "chromium": "141.0.7390.37"
+   },
+   "digest": {
+    "frames_jsonl": "be2d0011d73bec5a8bafa3d5f70e5838a292624eb0252c331657a1ef205ec949",
+    "events_jsonl": "206a57fc166c734484e14d981053c3783ba9bdddf8254a15624ed929298fefe1",
+    "images": "56a859dc97494d877de8831b088776f14de7a07e7954e1e1a163f5797b6394f9",
+    "image_count": 250
+   }
+  },
+  {
+   "seed": 122,
+   "params": {
+    "width": 1280,
+    "height": 720,
+    "fps": 25,
+    "camera": {
+     "height_m": 23.46,
+     "back_m": 34.16,
+     "offset_x_m": 0.25,
+     "half_width_m": 17.64,
+     "box_half_width_m": 11.36,
+     "pan_lag_s": 0.84,
+     "lead_s": 0.43,
+     "shake_m": 0.128
+    },
+    "lighting": "day",
+    "sun_azimuth_deg": 263.1,
+    "sun_elevation_deg": 51.7,
+    "weather": "clear",
+    "camera_cut": false,
+    "dead_ball_cut": false,
+    "kit_contrast": "normal",
+    "home_kit": {
+     "shirt": "#f2f2f2",
+     "shorts": "#111111",
+     "socks": "#111111"
+    },
+    "away_kit": {
+     "shirt": "#132436",
+     "shorts": "#ffffff",
+     "socks": "#ffffff"
+    },
+    "home_gk": {
+     "shirt": "#585adf",
+     "shorts": "#111111",
+     "socks": "#585adf"
+    },
+    "away_gk": {
+     "shirt": "#3edfb2",
+     "shorts": "#3edfb2",
+     "socks": "#3edfb2"
+    },
+    "home_pattern": "stripes",
+    "away_pattern": "stripes",
+    "grass_hue": 0.302,
+    "stripe_width_m": 6.0,
+    "wear": 0.64,
+    "stand_color": "#43493b",
+    "crowd_density": 0.99,
+    "motion_blur": 0.66,
+    "noise": 0.0112,
+    "jpeg_quality": 0.88,
+    "occlusion": "natural",
+    "home_code": "CRW",
+    "away_code": "ELM",
+    "boards": [
+     "VANTIRO",
+     "QELMORA",
+     "BRISKEL",
+     "OSTRAVEN",
+     "PALMIRU",
+     "ZENTHA",
+     "THE NINETY LABS"
+    ]
+   },
+   "renderer": {
+    "version": "0.5.9",
+    "three": "0.170.0",
+    "gl": "gpu",
+    "chromium": "141.0.7390.37"
+   },
+   "digest": {
+    "frames_jsonl": "b0ba6a46251f3eadde9d6414c14f5f1eba27ab9365c239029af880ec3b3dd6e8",
+    "events_jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "images": "e6943c4d70422234f12159ceb1094f48d7259dd10555da246988ded3813d9cec",
+    "image_count": 250
+   }
+  },
+  {
+   "seed": 2041,
+   "params": {
+    "width": 1280,
+    "height": 720,
+    "fps": 25,
+    "camera": {
+     "height_m": 15.96,
+     "back_m": 31.5,
+     "offset_x_m": -4.3,
+     "half_width_m": 18.54,
+     "box_half_width_m": 12.15,
+     "pan_lag_s": 0.41,
+     "lead_s": 0.35,
+     "shake_m": 0.015
+    },
+    "lighting": "day",
+    "sun_azimuth_deg": 332.3,
+    "sun_elevation_deg": 34.0,
+    "weather": "clear",
+    "camera_cut": false,
+    "dead_ball_cut": false,
+    "kit_contrast": "normal",
+    "home_kit": {
+     "shirt": "#b3ba3a",
+     "shorts": "#111111",
+     "socks": "#111111"
+    },
+    "away_kit": {
+     "shirt": "#1a1a1a",
+     "shorts": "#111111",
+     "socks": "#1a1a1a"
+    },
+    "home_gk": {
+     "shirt": "#580da2",
+     "shorts": "#580da2",
+     "socks": "#580da2"
+    },
+    "away_gk": {
+     "shirt": "#f2f2f2",
+     "shorts": "#f2f2f2",
+     "socks": "#f2f2f2"
+    },
+    "home_pattern": "sash",
+    "away_pattern": "solid",
+    "grass_hue": 0.264,
+    "stripe_width_m": 4.0,
+    "wear": 0.45,
+    "stand_color": "#303939",
+    "crowd_density": 0.74,
+    "motion_blur": 0.33,
+    "noise": 0.0088,
+    "jpeg_quality": 0.88,
+    "occlusion": "crowded",
+    "home_code": "OAK",
+    "away_code": "QRY",
+    "boards": [
+     "VANTIRO",
+     "QELMORA",
+     "BRISKEL",
+     "OSTRAVEN",
+     "PALMIRU",
+     "ZENTHA",
+     "THE NINETY LABS"
+    ]
+   },
+   "renderer": {
+    "version": "0.5.9",
+    "three": "0.170.0",
+    "gl": "gpu",
+    "chromium": "141.0.7390.37"
+   },
+   "digest": {
+    "frames_jsonl": "609669df09a99fc863bbb999f1cc55c8bbcbf21c1b558a56550e7d5997af99a3",
+    "events_jsonl": "da199078232bed04e1471760b6ffe2e8026e345708bce6df041970468bed33aa",
+    "images": "c1d6c030de3d9176efa7b1f81f68e255640c8d2dca08084dc19d49449573bc51",
+    "image_count": 250
+   }
+  },
+  {
+   "seed": 2042,
+   "params": {
+    "width": 1280,
+    "height": 720,
+    "fps": 25,
+    "camera": {
+     "height_m": 16.73,
+     "back_m": 31.39,
+     "offset_x_m": 4.16,
+     "half_width_m": 20.96,
+     "box_half_width_m": 12.51,
+     "pan_lag_s": 0.78,
+     "lead_s": 0.34,
+     "shake_m": 0.099
+    },
+    "lighting": "day",
+    "sun_azimuth_deg": 116.0,
+    "sun_elevation_deg": 42.8,
+    "weather": "clear",
+    "camera_cut": false,
+    "dead_ball_cut": false,
+    "kit_contrast": "normal",
+    "home_kit": {
+     "shirt": "#810eb8",
+     "shorts": "#111111",
+     "socks": "#111111"
+    },
+    "away_kit": {
+     "shirt": "#22b861",
+     "shorts": "#22b861",
+     "socks": "#22b861"
+    },
+    "home_gk": {
+     "shirt": "#e55bd5",
+     "shorts": "#111111",
+     "socks": "#111111"
+    },
+    "away_gk": {
+     "shirt": "#f2f2f2",
+     "shorts": "#111111",
+     "socks": "#111111"
+    },
+    "home_pattern": "sash",
+    "away_pattern": "stripes",
+    "grass_hue": 0.319,
+    "stripe_width_m": 5.25,
+    "wear": 0.2,
+    "stand_color": "#363734",
+    "crowd_density": 0.52,
+    "motion_blur": 0.5,
+    "noise": 0.0089,
+    "jpeg_quality": 0.88,
+    "occlusion": "crowded",
+    "home_code": "HLT",
+    "away_code": "GRV",
+    "boards": [
+     "VANTIRO",
+     "QELMORA",
+     "BRISKEL",
+     "OSTRAVEN",
+     "PALMIRU",
+     "ZENTHA",
+     "THE NINETY LABS"
+    ]
+   },
+   "renderer": {
+    "version": "0.5.9",
+    "three": "0.170.0",
+    "gl": "gpu",
+    "chromium": "141.0.7390.37"
+   },
+   "digest": {
+    "frames_jsonl": "f1bf0ff6d1b81bc05822147bf866f9587e239fbc40f0d035811e1c0563812d42",
+    "events_jsonl": "e12bef3c4f460254f84c16036160e51e8c291e546b7bb0ef7c1fcd346aec8514",
+    "images": "1417cfe124d39a0f2580e875e9111ca95cb8b0a93ae69496a148e6c0b42a7eb8",
+    "image_count": 250
+   }
+  },
+  {
+   "seed": 2043,
+   "params": {
+    "width": 1280,
+    "height": 720,
+    "fps": 25,
+    "camera": {
+     "height_m": 16.65,
+     "back_m": 33.29,
+     "offset_x_m": -2.34,
+     "half_width_m": 21.23,
+     "box_half_width_m": 14.33,
+     "pan_lag_s": 0.63,
+     "lead_s": 0.5,
+     "shake_m": 0.115
+    },
+    "lighting": "day",
+    "sun_azimuth_deg": 316.5,
+    "sun_elevation_deg": 49.4,
+    "weather": "clear",
+    "camera_cut": false,
+    "dead_ball_cut": false,
+    "kit_contrast": "low",
+    "home_kit": {
+     "shirt": "#2f1a06",
+     "shorts": "#ffffff",
+     "socks": "#ffffff"
+    },
+    "away_kit": {
+     "shirt": "#6f1e16",
+     "shorts": "#111111",
+     "socks": "#111111"
+    },
+    "home_gk": {
+     "shirt": "#3857a5",
+     "shorts": "#3857a5",
+     "socks": "#3857a5"
+    },
+    "away_gk": {
+     "shirt": "#f2f2f2",
+     "shorts": "#f2f2f2",
+     "socks": "#f2f2f2"
+    },
+    "home_pattern": "halves",
+    "away_pattern": "halves",
+    "grass_hue": 0.263,
+    "stripe_width_m": 4.0,
+    "wear": 0.37,
+    "stand_color": "#292e29",
+    "crowd_density": 0.84,
+    "motion_blur": 0.51,
+    "noise": 0.0073,
+    "jpeg_quality": 0.88,
+    "occlusion": "crowded",
+    "home_code": "ELM",
+    "away_code": "OAK",
+    "boards": [
+     "VANTIRO",
+     "QELMORA",
+     "BRISKEL",
+     "OSTRAVEN",
+     "PALMIRU",
+     "ZENTHA",
+     "THE NINETY LABS"
+    ]
+   },
+   "renderer": {
+    "version": "0.5.9",
+    "three": "0.170.0",
+    "gl": "gpu",
+    "chromium": "141.0.7390.37"
+   },
+   "digest": {
+    "frames_jsonl": "8f7a54ac4aac47bdb07f69975ca03854e59a2abc0a340e599e76a6184de333a3",
+    "events_jsonl": "6995795bd0fb3c096059c289c2b75f913898a835457b4a538021aaf9c8ba7c35",
+    "images": "4649dddcd8a2de64e381466f092ce709c850630f7fe09d3751f396b869d38e4c",
+    "image_count": 250
+   }
+  },
+  {
+   "seed": 2044,
+   "params": {
+    "width": 1280,
+    "height": 720,
+    "fps": 25,
+    "camera": {
+     "height_m": 15.5,
+     "back_m": 32.05,
+     "offset_x_m": 5.92,
+     "half_width_m": 21.19,
+     "box_half_width_m": 14.33,
+     "pan_lag_s": 0.42,
+     "lead_s": 0.45,
+     "shake_m": 0.025
+    },
+    "lighting": "day",
+    "sun_azimuth_deg": 42.4,
+    "sun_elevation_deg": 33.5,
+    "weather": "clear",
+    "camera_cut": true,
+    "dead_ball_cut": false,
+    "kit_contrast": "normal",
+    "home_kit": {
+     "shirt": "#9d9527",
+     "shorts": "#ffffff",
+     "socks": "#ffffff"
+    },
+    "away_kit": {
+     "shirt": "#1a1a1a",
+     "shorts": "#ffffff",
+     "socks": "#ffffff"
+    },
+    "home_gk": {
+     "shirt": "#f2f2f2",
+     "shorts": "#111111",
+     "socks": "#111111"
+    },
+    "away_gk": {
+     "shirt": "#854dad",
+     "shorts": "#ffffff",
+     "socks": "#854dad"
+    },
+    "home_pattern": "solid",
+    "away_pattern": "halves",
+    "grass_hue": 0.316,
+    "stripe_width_m": 5.0,
+    "wear": 0.74,
+    "stand_color": "#403f3e",
+    "crowd_density": 0.68,
+    "motion_blur": 0.39,
+    "noise": 0.0136,
+    "jpeg_quality": 0.88,
+    "occlusion": "crowded",
+    "home_code": "MRL",
+    "away_code": "ASH",
+    "boards": [
+     "VANTIRO",
+     "QELMORA",
+     "BRISKEL",
+     "OSTRAVEN",
+     "PALMIRU",
+     "ZENTHA",
+     "THE NINETY LABS"
+    ]
+   },
+   "renderer": {
+    "version": "0.5.9",
+    "three": "0.170.0",
+    "gl": "gpu",
+    "chromium": "141.0.7390.37"
+   },
+   "digest": {
+    "frames_jsonl": "ba42fe0ba225315b1b27c4d5209643b7564e8ea00f209f8cc97f71446d1b7df0",
+    "events_jsonl": "23d4141a35dae07dfca4817d378886a2fd595568e33aeb2b250e88895587f92c",
+    "images": "6f8bf60790f40f1b9d38de4bcc58e480c0b352330add220bddeb35a71574ab83",
+    "image_count": 250
+   }
+  },
+  {
+   "seed": 2045,
+   "params": {
+    "width": 1280,
+    "height": 720,
+    "fps": 25,
+    "camera": {
+     "height_m": 18.57,
+     "back_m": 38.57,
+     "offset_x_m": 3.03,
+     "half_width_m": 18.48,
+     "box_half_width_m": 14.57,
+     "pan_lag_s": 0.42,
+     "lead_s": 0.45,
+     "shake_m": 0.055
+    },
+    "lighting": "day",
+    "sun_azimuth_deg": 256.9,
+    "sun_elevation_deg": 38.6,
+    "weather": "clear",
+    "camera_cut": false,
+    "dead_ball_cut": false,
+    "kit_contrast": "normal",
+    "home_kit": {
+     "shirt": "#1a1a1a",
+     "shorts": "#1a1a1a",
+     "socks": "#1a1a1a"
+    },
+    "away_kit": {
+     "shirt": "#f2f2f2",
+     "shorts": "#f2f2f2",
+     "socks": "#f2f2f2"
+    },
+    "home_gk": {
+     "shirt": "#d344b4",
+     "shorts": "#ffffff",
+     "socks": "#d344b4"
+    },
+    "away_gk": {
+     "shirt": "#dc652d",
+     "shorts": "#111111",
+     "socks": "#111111"
+    },
+    "home_pattern": "stripes",
+    "away_pattern": "sash",
+    "grass_hue": 0.254,
+    "stripe_width_m": 5.25,
+    "wear": 0.19,
+    "stand_color": "#422a44",
+    "crowd_density": 0.7,
+    "motion_blur": 0.5,
+    "noise": 0.0085,
+    "jpeg_quality": 0.88,
+    "occlusion": "crowded",
+    "home_code": "KST",
+    "away_code": "ASH",
+    "boards": [
+     "VANTIRO",
+     "QELMORA",
+     "BRISKEL",
+     "OSTRAVEN",
+     "PALMIRU",
+     "ZENTHA",
+     "THE NINETY LABS"
+    ]
+   },
+   "renderer": {
+    "version": "0.5.9",
+    "three": "0.170.0",
+    "gl": "gpu",
+    "chromium": "141.0.7390.37"
+   },
+   "digest": {
+    "frames_jsonl": "e6459a18e1ccc5ee4d137e95fbb391569f7438a067409fc2685a2924f1754c6f",
+    "events_jsonl": "7e55002983004b1b101285736c36ee26140671aec9a6dea92d03f5fc6e117342",
+    "images": "39d3d7468897d81088dc0929efd8d03c7918291d7c9e82fb6d942c1243d23351",
+    "image_count": 250
+   }
+  },
+  {
+   "seed": 3041,
+   "params": {
+    "width": 1280,
+    "height": 720,
+    "fps": 25,
+    "camera": {
+     "height_m": 20.69,
+     "back_m": 36.9,
+     "offset_x_m": -1.77,
+     "half_width_m": 22.24,
+     "box_half_width_m": 13.33,
+     "pan_lag_s": 0.41,
+     "lead_s": 0.23,
+     "shake_m": 0.087
+    },
+    "lighting": "day",
+    "sun_azimuth_deg": 215.9,
+    "sun_elevation_deg": 48.7,
+    "weather": "clear",
+    "camera_cut": false,
+    "dead_ball_cut": false,
+    "kit_contrast": "low",
+    "home_kit": {
+     "shirt": "#1a1a1a",
+     "shorts": "#1a1a1a",
+     "socks": "#1a1a1a"
+    },
+    "away_kit": {
+     "shirt": "#180e59",
+     "shorts": "#111111",
+     "socks": "#111111"
+    },
+    "home_gk": {
+     "shirt": "#f2f2f2",
+     "shorts": "#111111",
+     "socks": "#111111"
+    },
+    "away_gk": {
+     "shirt": "#3e36de",
+     "shorts": "#111111",
+     "socks": "#111111"
+    },
+    "home_pattern": "hoops",
+    "away_pattern": "sash",
+    "grass_hue": 0.271,
+    "stripe_width_m": 5.0,
+    "wear": 0.67,
+    "stand_color": "#3b2d1e",
+    "crowd_density": 0.98,
+    "motion_blur": 0.57,
+    "noise": 0.0196,
+    "jpeg_quality": 0.88,
+    "occlusion": "natural",
+    "home_code": "GRV",
+    "away_code": "ELM",
+    "boards": [
+     "VANTIRO",
+     "QELMORA",
+     "BRISKEL",
+     "OSTRAVEN",
+     "PALMIRU",
+     "ZENTHA",
+     "THE NINETY LABS"
+    ]
+   },
+   "renderer": {
+    "version": "0.5.9",
+    "three": "0.170.0",
+    "gl": "gpu",
+    "chromium": "141.0.7390.37"
+   },
+   "digest": {
+    "frames_jsonl": "983c26a98f804b64b9f4dfda073c53ff7bdcacd9618cf0691b40d36eba9e7645",
+    "events_jsonl": "9ba7c750c1978ed0cfb64b85d7a3ac39f7a8c551e465629bd8a6008b2846c969",
+    "images": "edc7173562214ac09dc594d94d70eba43a8916199f2f2029b7be8cc43de1d70a",
+    "image_count": 250
+   }
+  },
+  {
+   "seed": 3042,
+   "params": {
+    "width": 1280,
+    "height": 720,
+    "fps": 25,
+    "camera": {
+     "height_m": 17.85,
+     "back_m": 38.94,
+     "offset_x_m": -4.34,
+     "half_width_m": 18.28,
+     "box_half_width_m": 11.04,
+     "pan_lag_s": 0.62,
+     "lead_s": 0.21,
+     "shake_m": 0.011
+    },
+    "lighting": "day",
+    "sun_azimuth_deg": 321.1,
+    "sun_elevation_deg": 43.8,
+    "weather": "clear",
+    "camera_cut": false,
+    "dead_ball_cut": false,
+    "kit_contrast": "low",
+    "home_kit": {
+     "shirt": "#ad1445",
+     "shorts": "#ffffff",
+     "socks": "#ffffff"
+    },
+    "away_kit": {
+     "shirt": "#64362b",
+     "shorts": "#111111",
+     "socks": "#111111"
+    },
+    "home_gk": {
+     "shirt": "#6509b7",
+     "shorts": "#ffffff",
+     "socks": "#6509b7"
+    },
+    "away_gk": {
+     "shirt": "#f2f2f2",
+     "shorts": "#111111",
+     "socks": "#f2f2f2"
+    },
+    "home_pattern": "solid",
+    "away_pattern": "stripes",
+    "grass_hue": 0.294,
+    "stripe_width_m": 6.0,
+    "wear": 0.22,
+    "stand_color": "#5a4452",
+    "crowd_density": 0.92,
+    "motion_blur": 0.63,
+    "noise": 0.0108,
+    "jpeg_quality": 0.88,
+    "occlusion": "natural",
+    "home_code": "CRW",
+    "away_code": "ASH",
+    "boards": [
+     "VANTIRO",
+     "QELMORA",
+     "BRISKEL",
+     "OSTRAVEN",
+     "PALMIRU",
+     "ZENTHA",
+     "THE NINETY LABS"
+    ]
+   },
+   "renderer": {
+    "version": "0.5.9",
+    "three": "0.170.0",
+    "gl": "gpu",
+    "chromium": "141.0.7390.37"
+   },
+   "digest": {
+    "frames_jsonl": "ebde5cefc6e0bce64191dbf3a0be2e6ad7b93ecbd82accb95ed7d6fcfa0e06df",
+    "events_jsonl": "59277a85c502b5688ff65ceb4c2d09102bce9757cc1f87e5b6b78e8427e95098",
+    "images": "778c51eae7e1bb5b6d02e7e18ff2e67af4baaef017e9945cd0508d796eef713c",
+    "image_count": 250
+   }
+  },
+  {
+   "seed": 3043,
+   "params": {
+    "width": 1280,
+    "height": 720,
+    "fps": 25,
+    "camera": {
+     "height_m": 16.11,
+     "back_m": 36.98,
+     "offset_x_m": -3.99,
+     "half_width_m": 21.07,
+     "box_half_width_m": 14.89,
+     "pan_lag_s": 0.47,
+     "lead_s": 0.41,
+     "shake_m": 0.108
+    },
+    "lighting": "day",
+    "sun_azimuth_deg": 346.8,
+    "sun_elevation_deg": 57.2,
+    "weather": "clear",
+    "camera_cut": true,
+    "dead_ball_cut": false,
+    "kit_contrast": "low",
+    "home_kit": {
+     "shirt": "#1a1a1a",
+     "shorts": "#1a1a1a",
+     "socks": "#1a1a1a"
+    },
+    "away_kit": {
+     "shirt": "#380e30",
+     "shorts": "#ffffff",
+     "socks": "#ffffff"
+    },
+    "home_gk": {
+     "shirt": "#f2f2f2",
+     "shorts": "#111111",
+     "socks": "#f2f2f2"
+    },
+    "away_gk": {
+     "shirt": "#4c9ab5",
+     "shorts": "#4c9ab5",
+     "socks": "#4c9ab5"
+    },
+    "home_pattern": "stripes",
+    "away_pattern": "halves",
+    "grass_hue": 0.3,
+    "stripe_width_m": 6.0,
+    "wear": 0.4,
+    "stand_color": "#433f40",
+    "crowd_density": 0.74,
+    "motion_blur": 0.38,
+    "noise": 0.0153,
+    "jpeg_quality": 0.88,
+    "occlusion": "natural",
+    "home_code": "GRV",
+    "away_code": "IVY",
+    "boards": [
+     "VANTIRO",
+     "QELMORA",
+     "BRISKEL",
+     "OSTRAVEN",
+     "PALMIRU",
+     "ZENTHA",
+     "THE NINETY LABS"
+    ]
+   },
+   "renderer": {
+    "version": "0.5.9",
+    "three": "0.170.0",
+    "gl": "gpu",
+    "chromium": "141.0.7390.37"
+   },
+   "digest": {
+    "frames_jsonl": "8d01aeb7c91d4d9fc9c68b348d85b06936eab3adb2b93c9b67bd661395dac824",
+    "events_jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "images": "61cfbd3cfe59488e8b1be5511ae6b3185c1a8c3f1bb5bccae1b5c57d89c93426",
+    "image_count": 250
+   }
+  },
+  {
+   "seed": 3044,
+   "params": {
+    "width": 1280,
+    "height": 720,
+    "fps": 25,
+    "camera": {
+     "height_m": 21.48,
+     "back_m": 34.6,
+     "offset_x_m": 4.02,
+     "half_width_m": 21.61,
+     "box_half_width_m": 14.93,
+     "pan_lag_s": 0.74,
+     "lead_s": 0.22,
+     "shake_m": 0.113
+    },
+    "lighting": "day",
+    "sun_azimuth_deg": 253.0,
+    "sun_elevation_deg": 36.5,
+    "weather": "clear",
+    "camera_cut": true,
+    "dead_ball_cut": false,
+    "kit_contrast": "low",
+    "home_kit": {
+     "shirt": "#1a1a1a",
+     "shorts": "#1a1a1a",
+     "socks": "#1a1a1a"
+    },
+    "away_kit": {
+     "shirt": "#101554",
+     "shorts": "#101554",
+     "socks": "#101554"
+    },
+    "home_gk": {
+     "shirt": "#f2f2f2",
+     "shorts": "#ffffff",
+     "socks": "#ffffff"
+    },
+    "away_gk": {
+     "shirt": "#db32d5",
+     "shorts": "#111111",
+     "socks": "#111111"
+    },
+    "home_pattern": "hoops",
+    "away_pattern": "solid",
+    "grass_hue": 0.284,
+    "stripe_width_m": 6.0,
+    "wear": 0.67,
+    "stand_color": "#555a52",
+    "crowd_density": 0.61,
+    "motion_blur": 0.59,
+    "noise": 0.0189,
+    "jpeg_quality": 0.88,
+    "occlusion": "natural",
+    "home_code": "ELM",
+    "away_code": "GRV",
+    "boards": [
+     "VANTIRO",
+     "QELMORA",
+     "BRISKEL",
+     "OSTRAVEN",
+     "PALMIRU",
+     "ZENTHA",
+     "THE NINETY LABS"
+    ]
+   },
+   "renderer": {
+    "version": "0.5.9",
+    "three": "0.170.0",
+    "gl": "gpu",
+    "chromium": "141.0.7390.37"
+   },
+   "digest": {
+    "frames_jsonl": "94cd48a4c6f9a1243710149d8a654d3cf438ea3b0ac647c8b674b0ac19d417a2",
+    "events_jsonl": "bd5199968e6d79eb9478afe116f58b4bcbb12281b09d0eb51556fda66904c287",
+    "images": "b414bed8dfaac8cb3c55819dd86473b19638a350fe61ec9cba4a42ca9143500c",
+    "image_count": 250
+   }
+  },
+  {
+   "seed": 3045,
+   "params": {
+    "width": 1280,
+    "height": 720,
+    "fps": 25,
+    "camera": {
+     "height_m": 21.65,
+     "back_m": 36.08,
+     "offset_x_m": -5.28,
+     "half_width_m": 23.13,
+     "box_half_width_m": 14.73,
+     "pan_lag_s": 0.84,
+     "lead_s": 0.31,
+     "shake_m": 0.116
+    },
+    "lighting": "day",
+    "sun_azimuth_deg": 178.2,
+    "sun_elevation_deg": 39.1,
+    "weather": "clear",
+    "camera_cut": false,
+    "dead_ball_cut": false,
+    "kit_contrast": "low",
+    "home_kit": {
+     "shirt": "#3d2915",
+     "shorts": "#ffffff",
+     "socks": "#3d2915"
+    },
+    "away_kit": {
+     "shirt": "#1a1a1a",
+     "shorts": "#111111",
+     "socks": "#1a1a1a"
+    },
+    "home_gk": {
+     "shirt": "#f2f2f2",
+     "shorts": "#f2f2f2",
+     "socks": "#f2f2f2"
+    },
+    "away_gk": {
+     "shirt": "#c12f12",
+     "shorts": "#111111",
+     "socks": "#c12f12"
+    },
+    "home_pattern": "stripes",
+    "away_pattern": "stripes",
+    "grass_hue": 0.31,
+    "stripe_width_m": 6.0,
+    "wear": 0.45,
+    "stand_color": "#464545",
+    "crowd_density": 1.0,
+    "motion_blur": 0.52,
+    "noise": 0.0171,
+    "jpeg_quality": 0.88,
+    "occlusion": "natural",
+    "home_code": "HLT",
+    "away_code": "ELM",
+    "boards": [
+     "VANTIRO",
+     "QELMORA",
+     "BRISKEL",
+     "OSTRAVEN",
+     "PALMIRU",
+     "ZENTHA",
+     "THE NINETY LABS"
+    ]
+   },
+   "renderer": {
+    "version": "0.5.9",
+    "three": "0.170.0",
+    "gl": "gpu",
+    "chromium": "141.0.7390.37"
+   },
+   "digest": {
+    "frames_jsonl": "f4dc269117e97fef02d46347584525aedb4aeb1b57bb7e21be36cfea2808f34b",
+    "events_jsonl": "f123d04ee0094b95ff9def791d31b8c669adcd2bfd988f84fb07d94ea01801c5",
+    "images": "9756c0f02dd01b0bddd0dff40375b3472ca5bda30d099d4d815966fab5978624",
+    "image_count": 250
+   }
+  }
+ ]
+}
