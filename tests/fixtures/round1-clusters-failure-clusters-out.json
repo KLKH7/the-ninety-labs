@@ -1,0 +1,50 @@
+{
+  "round": "round1",
+  "clusters": [
+    {
+      "name": "ball mostly hidden, behind a player",
+      "misses": 38,
+      "render": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "name": "ball mostly hidden, behind the keeper",
+      "misses": 9,
+      "render": {
+        "occlusion": "keeper"
+      }
+    },
+    {
+      "name": "ball mostly hidden, behind a player in a crowd",
+      "misses": 3,
+      "render": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "name": "player mostly hidden, behind a player",
+      "misses": 11,
+      "render": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "name": "player mostly hidden, behind a player in a crowd",
+      "misses": 4,
+      "render": {
+        "occlusion": "crowded"
+      }
+    }
+  ],
+  "unmapped": [
+    {
+      "name": "ball mostly hidden, no occluder found",
+      "misses": 6
+    },
+    {
+      "name": "player mostly hidden, no occluder found",
+      "misses": 3
+    }
+  ]
+}
