@@ -160,3 +160,22 @@ Side accuracy by track-frames over the three clips with tracks: 0.889 (95% 0.88 
 
 Same pattern as validation: the naming is right where the clusters are sound, and the errors are
 cluster errors.
+
+### Corrections after review (#200), recorded here rather than edited above
+
+- **"Naming is right where clusters are sound" is true; "no naming error left" was not.** Clip 120
+  is unsound by definition (both clusters mostly away; home in 93 of 1,575 outfield track-frames).
+  Its away-majority cluster is named home, and it holds 1,402 of the 2,812 wrong validation frames.
+  N2 (carries) names it right, 0.11 to 0.89, but loses more elsewhere (pooled 0.69). The rule was
+  fair; the earlier wording above hid 120.
+- **Intervals (lesson 89).** The ordering 0.62 has a 95% interval of 0.31 to 0.93 (Hanley and McNeil
+  1982; 5 wrong, 11 right): "not shown to predict", not "does not predict". One of the 5 wrong is a
+  wrong holder on a clip named right. Test: 40 of 49 tracks (95% 0.69 to 0.90); without 900001, the
+  clip the naming was developed on, 0.83.
+- **The sound-cluster rule** is one function (`side_decision.clusters`), tested: a pure case, the
+  0.80 edge, equal majorities and an even split.
+- **N3** voted on the strike ending each possession spell, not only on detected shots, as the table
+  above said. It abstained everywhere, so nothing changes.
+- **d24e370** was called the frozen code; 9fe07f2 edited it afterwards (the report's text only).
+  Reports now record whether the tree was clean (`dirty`).
+- **The cause "kit colour read wrongly"** is shown per clip only for 120 and 2043 (#202's crops).

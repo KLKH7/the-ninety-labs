@@ -1,6 +1,7 @@
 {
   "command": "uv run python -m ninety.eval.side_decision --clips runs/test-frozen-cca498c/test --test-dir runs/test-frozen-cca498c/test --observations docs/eval/attribution --more-observations tests/fixtures --seeds 900001,900002,900003,900004,900005 --out docs/eval/side-decision-test",
-  "commit": "9fe07f224327d5b26195691897b9f64321078ab2",
+  "commit": "38889abf5557eba133909a2f6964979ecc5764e1",
+  "dirty": false,
   "date": "2026-10-21",
   "clips": [
     {
@@ -86,5 +87,16 @@
   "accuracy_95": [
     0.88,
     0.9
+  ],
+  "tracks_right": 40,
+  "tracks": 49,
+  "tracks_95": [
+    0.69,
+    0.9
+  ],
+  "accuracy_without_900001": 0.8325,
+  "accuracy_without_900001_95": [
+    0.82,
+    0.85
   ]
 }
