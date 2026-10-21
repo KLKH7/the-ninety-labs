@@ -1669,6 +1669,39 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `uv run pytest tests/test_restarts.py -k past_the_end_of_the_touchline`; on the engine
   before it, the ball runs on to 127 m and jumps 18 m in a frame.
 
+### 164. A pose keyed to an action ignores the truth it stands for; a limit marked "measured" is re-measured where the defect shows
+- **What happened:** a blind critic of 0.5.3 found four body defects. A throw-in drew its stored
+  pose, arms over the head, from the frame the engine named the thrower, while the engine's ball
+  was still at his feet; the ball then rose into empty hands and left with no throw. The jog was
+  a march: the stride's stance share was a guess, and the swing peaked under the hips. A
+  stride's swing read its progress straight off the shared phase, so a change of pace moved a
+  foot in a frame. And the push-off toe slid up to 17 cm a frame because the stance was allowed
+  0.45 m behind the hips, a limit commented "measured" that the asset's leg reaches only to 0.30.
+  Two old tests also held design as truth ("walking at 3 m/s, a foot is always on the grass").
+  The first fix passed every steady-speed test, and a blind critic still preferred 0.5.3: speeding
+  up, slowing and drifting, its players hopped with both feet tucked, because a foot lifted early
+  for reach started its swing count from zero, both feet left the grass together setting off, and
+  a pose flickering between walk and stand restarted a stride that never landed. The next draft
+  drew the runners' knee fold whole (to 109 degrees at 3.5 m/s, Fukuchi 2017): true to the
+  source, and a third blind critic still preferred 0.5.3 on the jog clip, because at broadcast
+  size a heel at the seat with a level pelvis and no bob reads as prancing. Only the timing went
+  in (highest a third of the way through the swing, behind him); the height stayed 0.5.3's.
+- **Rule:** a drawn action follows the truth it shows, frame by frame: hands go where the
+  engine's ball is, from before it moves until after it leaves. A gait's numbers come from a
+  cited source, and a swing keeps its own progress so a change elsewhere changes where it lands,
+  never where it is. A constant marked measured carries the measurement (what, how, the number)
+  and is re-measured when a defect points at it; a test's premise that a source contradicts is
+  rewritten to what it was protecting. A gait change is judged blind on clips where players
+  change pace, not only on steady-speed tests, and a sourced angle is drawn only as far as the
+  rest of the body (pelvis, bob) can carry it.
+- **Check:** `tests/test_render_motion.py`: `test_a_throw_in_keeps_both_hands_on_the_ball_from_the_grass_to_the_throw`,
+  `test_a_throw_in_moves_no_limb_in_a_jump`, `test_a_running_foot_is_highest_early_in_its_swing`,
+  `test_the_push_off_toe_does_not_slide_before_it_lifts` and
+  `test_a_player_stopping_does_not_stand_with_his_legs_crossed` each fail on 0.5.3 (mutation runs
+  with main's stride and throw restored); `test_a_player_drifting_while_the_pose_flickers_keeps_his_feet_down`,
+  `test_setting_off_from_standing_lifts_one_foot_at_a_time` and
+  `test_setting_off_the_feet_do_not_leave_the_grass_together` fail with each hop's cause put back.
+
 ### 174. A player with time to spare walks there and waits, rather than creeping in just in time
 - **What happened:** at restarts the engine paced every player to reach his place just as the
   kick could come. At a corner that is about half a minute off (R1: Opta's mean is about 30 s), so
