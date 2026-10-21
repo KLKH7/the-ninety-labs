@@ -51,4 +51,8 @@ docs/decisions/0001-synthetic-data.md.
 # in its swing, behind him, coming through low to land; a swing keeps its own progress, so a
 # change of pace never moves a foot in a jump; a foot lifts before the leg runs out of reach behind
 # it, so the push-off toe no longer slides.
-RENDERER_VERSION = "0.5.9"
+# 0.5.11 (demo v2's camera and edit, demo v1's critic): the picture comes back 2 s before a restart
+# on the wide shot, with no frozen close-up and no pull-out; a goal is held 8 s, the scorer's
+# celebration followed by a second camera; a stinger graphic covers each cut; the GOAL tag's word
+# comes up once its panel is open.
+RENDERER_VERSION = "0.5.11"
