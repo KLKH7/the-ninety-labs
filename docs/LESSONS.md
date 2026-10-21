@@ -1762,8 +1762,9 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `uv run pytest tests/test_restarts.py -k "walk_to_their_places or fetching_a_dead_ball_keeps
   or hair_inside or stands_at_his_place or does_not_circle or keeps_its_presser or stand_off_it
   or he_settles or settles_only_at or nobody_else_is_named or never_cuts_inside or by_a_line
-  or short_way_is_open or keeps_his_man or kept_man_stays"`; each fails on the engine before its
-  fix.
+  or short_way_is_open or keeps_his_man or kept_man_stays or does_not_settle_while"`; each fails
+  on the engine before its fix (`brought_onto_it` is a guard).
+  `scripts/defect_sweep/creep_spells.py` counts creep spells through the waits.
   `scripts/defect_sweep/restart_moves.py` reports speeds, reversals and to-and-fro per
   outfielder-minute through every restart wait, `scripts/defect_sweep/corners.py` the corners, and
   `scripts/defect_sweep/restarts.py` the Laws' distance at the kick (nobody inside, as on main).
@@ -1800,11 +1801,14 @@ short and actionable. This file is public: no research sources, product names or
   the 0.22 m extra was bending round others who stood in his way (avoid), which the estimate never
   modelled: without his own bending he walked 15.02 m. Measured, as it should have been first, over
   60 walks in 15 scenarios with that bending left out: on main all 60 were within the estimate, the
-  closest by 2 cm; on lesson 174's branch, at its head, 58, and two over it, by up to 0.18 m in 15.4 m. The walks over it are ones
-  main's engine walks the same from the same start: a walker still moving at the whistle, whose
-  stopping distance the estimate has no term for, or one going round the keep-off circle who steps
-  out past it and spirals back in, which its spiral leaves out. The estimate is within about 1% of
-  the walk, not a strict bound.
+  closest by 2 cm; on lesson 174's branch at `b090877`, 58, and two over it, by up to 0.18 m in
+  15.4 m. Those two are walks main's engine walks the same from the same start: a walker still
+  moving at the whistle, whose stopping distance the estimate has no term for, and one going round
+  the keep-off circle who stepped out past it and spiralled back in, which its spiral leaves out.
+  At `00d5c41`, where going round from the circle's margin heads out as well as round, 59 are
+  within it and one over, by 1.04 m in 28.3 m: a walker running at 3.2 m/s at the whistle, who
+  spent his first second turning (1.5 m walked, 0.5 m gained). Without such a start the estimate
+  is within about 1% of the walk, not a strict bound.
 - **Rule:** a bound measured on a few scenarios is reported with its margin and with what it
   covers, and a check that passes by a hair in a chaotic scenario is measured over more scenarios
   before it is called a bound. When a check fails because its claim was too broad, the claim is

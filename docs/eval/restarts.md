@@ -234,108 +234,135 @@ after the last. Every player went to his place just in time for the kick, half a
 after the fetch the outfielders spent 72% of their time creeping at 0.2 to 1.2 m/s, slower than a
 walk (L4's 1.36 m/s).
 
-Now, while a restart waits, a player more than about a stride from his place, or closing on it,
-goes there at no less than a walking pace; once he has reached it with the ball set on its spot he
-has settled, and makes later shifts of his place at his own pace (GROUNDING L4, lesson 174). Getting
-there took more than the floor. The first floor (`e3e66d1`) made players shuffle instead of creep.
-The creep had hidden loops between two rules, each fixed where they meet (lesson 174; GROUNDING L4,
-L14 and T3):
-- every small shift of a moving place walked to and back (the stride's dead band; then the settling);
+Now, while a restart waits, a player more than about a stride from his place, or closing on it, or
+on his way round or out of the keep-off circle, goes there at no less than a walking pace. Once he
+stands at his place with the ball set (still on its spot, at nobody's feet but the taker's) he has
+settled: a shift of his place within a few strides he makes at his own pace, a bigger one he walks
+again (GROUNDING L4, lesson 174). Getting there took more than the floor. The creep had hidden loops
+between two rules, each fixed where they meet (lesson 174; GROUNDING L4, L14 and T3):
+- every small shift of a moving place walked to and back (the stride's dead band; then settling);
 - keep_off sending a player who had stopped a hair short of his place on the circle's edge back out
   past it (a straight way to a place within a stride);
 - a player circling another who stood on his place (walking in is closing on it);
 - the defending side's presser and cover swapped at every look (named once, until the ball is in
-  play);
-- and, at a wall, a presser named to the wall's own place (no presser while a wall stands).
-Some of those fixes in turn put opponents inside 9.15 m at the kick, and so did a cut through the
-circle near a line that the floor walked more often than main's creep did; the head has none.
+  play), and at a wall a presser named to the wall's own place (no presser while a wall stands);
+- markers swapping men at every look, and the taker's marker placed where the wall stands (each
+  marker keeps his man until the ball is in play; nobody marks the taker; the wall marks nobody);
+- going round the circle, each step's dip into its margin sending him straight out, so he stopped
+  short every few strides and went round below a walk (from the margin he heads out and round).
+
+Some fixes broke something else, found by the audits and fixed in turn. Settling with the ball only
+near its spot (at the whistle, still rolling) and following any later shift at his own pace brought
+the creep back: in 41 of 144 free kicks a player crept more than 10 m in one go (42 by the third
+audit's own count; now: settled only
+with the ball set; walks again beyond a few strides; judged on his place, not his way). Near a line,
+going round the circle was aimed off the pitch and kept on it inside the circle (an opponent inside
+9.15 m at the kick); holding instead stranded players 20 to 52 m from their places, and one inside
+the circle all wait (now: the long way round, or out by the way to his place). Nobody is inside the
+Laws' distance at the kick.
 
 Every restart wait in 20 matches, each outfielder but the taker, from the stoppage to the kick, by
 [`scripts/defect_sweep/restart_moves.py`](../../scripts/defect_sweep/restart_moves.py):
 
-| Per outfielder-minute of restart waits | Main (`807bde2`) | First floor (`e3e66d1`) | This branch (`b090877`) |
-|---|---:|---:|---:|
-| Creeping (0.2 to 1.2 m/s) | 46.5% | 13.5% | 5.5% |
-| Walking or faster | 16.1% | 42.6% | 35.7% |
-| Standing (under 0.2 m/s) | 37.4% | 43.9% | 58.8% |
-| Direction reversals | 0.70 | 10.39 | 0.86 |
-| Metres walked to and fro | 1.30 | 7.11 | 1.52 |
-| Waits in which a player reversed 3 times or more | 2.4% | 28.0% | 1.7% |
+| Per outfielder-minute of restart waits | Main (`807bde2`) | First floor (`e3e66d1`) | Third audit (`b090877`) | This branch (`00d5c41`) |
+|---|---:|---:|---:|---:|
+| Creeping (0.2 to 1.2 m/s) | 46.5% | 13.5% | 5.5% | 3.1% |
+| Walking or faster | 16.1% | 42.6% | 35.7% | 36.8% |
+| Standing (under 0.2 m/s) | 37.4% | 43.9% | 58.8% | 60.1% |
+| Direction reversals | 0.70 | 10.39 | 0.86 | 0.88 |
+| Metres walked to and fro | 1.30 | 7.11 | 1.52 | 1.45 |
+| Waits in which a player reversed 3 times or more | 2.4% | 28.0% | 1.7% | 1.8% |
+| Creep spells over 5 m (over 10 m), all matches | 3,136 (2,011) | | 125 (64) | 0 (0) |
+| Free kicks with a creep spell over 10 m | 122 of 146 | | 41 of 144 | 0 of 173 |
+
+A creep spell is one outfielder moving at 0.2 to 1.2 m/s from frame to frame, its length the path
+walked in it (the third audit's measure, [`scripts/defect_sweep/creep_spells.py`](../../scripts/defect_sweep/creep_spells.py),
+from the stoppage to the take). Per match, reversals are 0.88 ± 0.05 on this branch
+against main's 0.70 ± 0.03 (t = +3.0), and waits with 3 or more reversals 1.8% ± 0.3% against
+2.4% ± 0.2% (t = −2.2): a few more single turns than main, fewer players going out and back.
 
 By restart and side (reversals per outfielder-minute of the wait):
 
-| | Main | This branch |
-|---|---:|---:|
-| Free kick, kicking side | 0.11 | 0.71 |
-| Free kick, defending side | 0.97 | 0.66 |
-| Throw-in, kicking side | 0.55 | 1.07 |
-| Throw-in, defending side | 0.89 | 0.91 |
-| Corner, kicking side | 0.35 | 0.63 |
-| Corner, defending side | 1.04 | 1.85 |
-| Goal kick, kicking side | 0.11 | 0.59 |
-| Goal kick, defending side | 1.26 | 2.08 |
+| | Main | Third audit (`b090877`) | This branch |
+|---|---:|---:|---:|
+| Free kick, kicking side | 0.11 | 0.71 | 0.73 |
+| Free kick, defending side | 0.97 | 0.66 | 0.68 |
+| Throw-in, kicking side | 0.55 | 1.07 | 1.60 |
+| Throw-in, defending side | 0.89 | 0.91 | 1.11 |
+| Corner, kicking side | 0.35 | 0.63 | 0.40 |
+| Corner, defending side | 1.04 | 1.85 | 0.59 |
+| Goal kick, kicking side | 0.11 | 0.59 | 0.61 |
+| Goal kick, defending side | 1.26 | 2.08 | 2.31 |
 
 Split by whether the restart had a wall (a direct free kick within shot range):
 
 | Player-waits with | Main, no wall | This branch, no wall | Main, wall | This branch, wall |
 |---|---:|---:|---:|---:|
-| 3 or more reversals | 2.1% | 1.6% | 7.2% | 3.1% |
-| 10 or more reversals | 0.28% | 0.14% | 2.9% | 0.24% |
+| 3 or more reversals | 2.1% | 1.7% | 7.2% | 3.0% |
+| 10 or more reversals | 0.28% | 0.14% | 2.9% | 0% |
 
-Walls now jiggle less than on main: 1 of 22 wall restarts had someone reverse 10 times or more,
-against 8 of 22. Most of main's was the presser named to the wall's own place, pushed in and out by
-its players. What remains is a few more reversals than main where a walk replaces a creep before a
-player has settled: the defending side at corners and goal kicks (markers whose man moves, and the
-presser standing off the penalty area at a goal kick), and the kicking side, whose places follow
-an onside line read from noisy sightings until the ball is set (O6). These are turns at a walk,
-mostly once or twice in a wait, not players going out and back over and over.
+Walls now jiggle less than on main: no wall restart of 28 had anyone reverse 10 times or more,
+against 8 of 22 on main. What remains is a few more turns than main where a walk replaces a creep:
+most at throw-ins and goal kicks, where the waits are short and the ball is set late (in the
+thrower's hands, on the goal-kick spot after the fetch), so players settle late, and until then
+their places follow the dead ball as it is fetched and the kicking side's onside line read from
+noisy sightings (O6). These are turns at a walk, 3 to 7 in a wait at most, not players going out
+and back every look. Setting places from the restart's spot rather than the dead ball is a
+follow-up.
 
 The same 20 seeds, main against this branch:
 
 | | Main | This branch |
 |---|---:|---:|
-| Corners | 25 | 16 |
-| Outfielders' time after the fetch at corners: creeping | 72% | 5% |
-| walking or faster | 19% | 42% |
-| standing | 9% | 52% |
-| Ball out to the corner kick, median (middle 80%) | 30.8 s (26.2 to 34.9) | 29.2 s (26.5 to 35.2) |
+| Corners | 25 | 14 |
+| Outfielders' time after the fetch at corners: creeping | 72% | 3% |
+| walking or faster | 19% | 55% |
+| standing | 9% | 42% |
+| Ball out to the corner kick, median (middle 80%) | 30.8 s (26.2 to 34.9) | 32.8 s (26.6 to 35.8) |
 | Planted corners (five seeds, both flags): taken after | 30.00 s, all 10 | 30.00 s, all 10 |
 | Restart defects (jumps, encroachment at the kick, carried set balls, second touches, stuck restarts) | 0 | 0 |
-| Free kicks: opponents coming inside 9.15 m at any frame of the wait (in the first 0.5 s / near a line / other) | 15 (8 / 4 / 3) | 10 (7 / 0 / 3) |
+| Free kicks: opponents coming inside 9.15 m at any frame of the wait (in the first 0.5 s / near a line / other) | 15 (8 / 4 / 3) | 10 (6 / 0 / 4) |
 | Matches meeting the data contract | 20 of 20 | 20 of 20 |
-| Possessions a team per 90 (scripts/defect_sweep/possession.py) | 129 | 130 |
-| Shots a team per 90 | 17.8 ± 1.3 | 15.4 ± 1.7 |
-| Goals a team per 90 | 1.8 ± 0.6 | 1.1 ± 0.4 |
-| Corners a team per 90 | 2.8 ± 0.6 | 1.8 ± 0.4 |
-| Pass completion (per-match mean) | 84.8% | 84.8% |
+| Possessions a team per 90 (scripts/defect_sweep/possession.py) | 129 | 128 |
+| Shots a team per 90 | 17.8 ± 1.3 | 14.4 ± 1.2 |
+| Goals a team per 90 | 1.8 ± 0.6 | 1.1 ± 0.3 |
+| Corners a team per 90 | 2.8 ± 0.6 | 1.6 ± 0.4 |
+| Pass completion (per-match mean) | 84.8% | 84.6% |
 
 ± is the standard error over the 20 matches. The matches part at their first restart (lesson 90),
 so the two columns are different matches: a difference under about two standard errors of the
-difference (|t| under 2) is one chance alone would often give. Shots (t = -1.1), goals (-1.0) and
-corners (-1.4) are each within that. But every version of this branch has had fewer shots and
-corners than main (corners t = -0.7 to -2.0 over seven versions), so it may be real. Corners were
-already a held-out miss on main, against about 5 a team in a real match. The kick still comes when
-R1's wait is over.
+difference (|t| under 2) is one chance alone would often give. Goals (t = −1.0) and corners (−1.7)
+are within that; shots (t = −1.9) are at its edge. Every version of this branch has had fewer shots
+and corners than main, so it may be real. Most of the shots missing come in the 10 s after a team's
+own restart (31 against main's 51; at other times 97 against 107), which fits the defending side
+keeping its markers through a set piece, but that is not measured. Corners were already a held-out
+miss on main, against about 5 a team in a real match. Shots and corners are held-out checks, never
+targets. The kick still comes when R1's wait is over.
 
-A fresh critic, shown the seed 200 corner from both engines without being told which was which (2
-frames a second, and top-down trails), preferred this branch's (at `094c4e3`; the head's corner
-plays out the same), slightly. On main the players crept in step "like a slow procession" with the
-area empty for about 25 s and the kick taken while they were still walking in. On this branch they
-walk in, the area is set and marked within about 15 s, and it then stands still for about 16 s
-until the kick, "like waxworks", which the critic called the most artificial thing in either clip.
-Standing players don't shift their weight or jostle, in the engine or on screen: follow-ups for the
-renderer (standing players' small movements) and the corner's set-piece shape (who comes into the
-area, and the jostling there).
+A fresh critic, shown the seed 200 corner from both engines without being told which was which
+(renderer 0.5.9, 2 frames a second, and top-down trails), preferred this branch's set-up, clearly:
+the players walk in at a normal pace and the area is full and marked by about 1:02, where on main
+they creep in at 0.3 to 0.7 m/s for the whole wait and are still arriving when the ball is kicked.
+Over the whole minute it preferred main's, clearly. On this branch the taker played the corner short
+4.8 s after taking it (main: 1.2 s), and a foul at 1:27 then started a free kick's wait to the end
+of the clip: with the dead-ball cut off, about 15 s of players standing still, which read as a game
+that had crashed. Across the 20 matches the time from take to kick is as on main (corners: median
+1.2 s against 1.4 s, none over 3 s); free kicks kicked more than 3 s after the take are 17 of 173,
+against main's 8 of 146 (`b090877`: 14 of 144). The critic's most artificial thing on this branch,
+besides that, was the set area standing like statues for about 20 s before the kick: standing
+players do not shift their weight or jostle, in the engine or on screen (follow-ups for the
+renderer's idle motion and the corner's set-piece shape).
 
 How close walk_to_wall's estimate comes to a wall player's own walk (his bending round others left
 out, since the estimate is of his own way: lesson 176), over 60 walks in 15 scenarios after a minute
 of play, by [`scripts/defect_sweep/wall_walks.py`](../../scripts/defect_sweep/wall_walks.py): on
-main all 60 within it, the closest by 2 cm; on this branch 58, and two over it, by 0.18 m in 15.4 m
-and 0.02 m in 11.1 m. The walks differ between the two engines (the minute of play does), so the
-first was replayed from the same start under main's engine: it walks the same 0.18 m over (going
-round the circle he steps out past it and spirals back in, which the estimate's spiral leaves out).
-The other was still moving at the whistle, a stopping distance the estimate has no term for. The
-estimate is within about 1%, not a strict bound.
+main all 60 within it, the closest by 2 cm; on this branch 59, the closest by 2 cm, and one over it,
+by 1.04 m in 28.3 m: a walker running at 3.2 m/s at the whistle, who spent his first second turning
+(1.5 m walked, 0.5 m gained), a stopping distance the estimate has no term for. At `b090877` two were
+over, by 0.18 m in 15.4 m and 0.02 m in 11.1 m; the first, going round the circle by stepping out
+past it and spiralling back in, is gone now that going round from the margin heads out as well as
+round. The walks differ between the two engines, as the minute of play does. Without a start at
+speed the estimate is within about 1%, not a strict bound.
 
 ## Fouls at the call
 
@@ -371,6 +398,7 @@ uv run python scripts/defect_sweep/wall.py runs/new/seed7 runs/new/seed11
 ```bash
 uv run python scripts/defect_sweep/corners.py runs/new/seed7 runs/new/seed11
 uv run python scripts/defect_sweep/restart_moves.py runs/new/seed7 runs/new/seed11
+uv run python scripts/defect_sweep/creep_spells.py runs/new/seed7 runs/new/seed11
 uv run python scripts/defect_sweep/wall_walks.py
 uv run python scripts/defect_sweep/fouls.py runs/new/seed7 runs/new/seed11
 ```
