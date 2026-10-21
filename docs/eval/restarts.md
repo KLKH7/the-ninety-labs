@@ -312,6 +312,17 @@ out, since the estimate is of his own way: lesson 176), over 60 walks in 15 scen
 of play, by [`scripts/defect_sweep/wall_walks.py`](../../scripts/defect_sweep/wall_walks.py): on
 main all 60 within it, the closest by 2 cm; on this branch 57, and three over it, the furthest by 0.18 m over 15.4 m (1.1%). The walks differ between the two engines (the minute of play does), so that one was replayed from the same start under main's engine: it walks the same 0.18 m over. Going round the circle, a walker dips a hair inside, steps out past it and spirals back in, and the estimate's spiral leaves the steps out. The estimate is within about 1%, not a strict bound (lesson 176).
 
+## Fouls at the call
+
+"The foul doesn't look like a foul" (a viewer, of the same clip). Over 139 fouls in 20 matches on
+main, by [`scripts/defect_sweep/fouls.py`](../../scripts/defect_sweep/fouls.py), the two players'
+centres were 0.85 m apart at the call at the median (0.62 to 1.08 m for the middle 80%, 1.27 m at
+most), close enough for the fouler's leg to reach the other's body (a leg's reach, 1 m, and the
+two half-bodies, P11). The fouler came from behind in 73, from the side in 44 and from in front in
+22; the ball was playable for him (within a foot's reach and below the knee) in 12. So each call
+has a contact in reach, and how a foul is drawn (the challenge, the fall, the referee) is the
+renderer's.
+
 ## Reproduce
 
 ```bash
@@ -336,6 +347,7 @@ uv run python scripts/defect_sweep/wall.py runs/new/seed7 runs/new/seed11
 uv run python scripts/defect_sweep/corners.py runs/new/seed7 runs/new/seed11
 uv run python scripts/defect_sweep/restart_moves.py runs/new/seed7 runs/new/seed11
 uv run python scripts/defect_sweep/wall_walks.py
+uv run python scripts/defect_sweep/fouls.py runs/new/seed7 runs/new/seed11
 ```
 
 ```bash

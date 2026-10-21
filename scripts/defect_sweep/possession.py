@@ -1,4 +1,5 @@
-"""Possession spells, how they end, and how far a dribbler's touches go (docs/eval/possession.md).
+"""Possession spells, how they end, and how far a dribbler's touches go (the possession-churn
+measurement, lesson 170).
 
     uv run python scripts/defect_sweep/possession.py runs/new/seed7 runs/new/seed11 ...
 
