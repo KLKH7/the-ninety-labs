@@ -16,9 +16,11 @@ from ninety.sim.engine import (
     PITCH_X,
     PITCH_Y,
     Engine,
+    Player,
     Restart,
     segment_distance,
     throw_stand,
+    within_lines,
 )
 from ninety.validate import MAX_BALL_MPS, MAX_PLAYER_MPS
 
@@ -1412,8 +1414,9 @@ def corner_wait(seed: int = 3) -> Engine:
 
 
 def place(e: Engine, p) -> tuple[float, float, float]:
-    """His place and his own pace to it, as move_players has them before lesson 174's walking floor:
-    his shape target, kept off the restart."""
+    """His way to his place and his own pace, as move_players has them before lesson 174's walking
+    floor: his shape target, kept off the restart. The way ends at his place (stand_off) unless it
+    goes round or out of the keep-off circle."""
     tx, ty, top = e.shape_target(p)
     kx, ky = e.keep_off(p, tx, ty)
     return (kx, ky, max(top, e.in_time(p, kx, ky))) if (kx, ky) != (tx, ty) else (tx, ty, top)
@@ -1495,8 +1498,8 @@ def test_one_a_hair_inside_the_keep_off_circle_goes_straight_to_his_place_on_its
     circle's edge, still clear of the Laws' 9.15 m, was sent KEEP_OFF_MARGIN_M out past it, came
     back in to the same place and stopped short again: out and back every half second through the
     wait. Inside the circle, a place within a stride by a straight way that keeps the Laws' distance
-    is walked to straight; from inside the Laws' distance, or to a place further off, he still steps
-    out first."""
+    is walked to straight. From inside the Laws' distance he still steps straight out first; from
+    the circle's margin to a place further off, he aims past the margin, round toward his place."""
     from ninety.sim.engine import SETTLE_M
     e = Engine(3)
     free_kick(e, "home", 60.0, 34.0)
@@ -1505,28 +1508,34 @@ def test_one_a_hair_inside_the_keep_off_circle_goes_straight_to_his_place_on_its
     edge = (60.0 - clear, 34.0)  # his place, goal-side: where a target 9.15 m off is moved to
     d.x, d.y = 60.0 - clear + 0.01, 34.0  # a hair short of it
     assert e.keep_off(d, 60.0 - 9.15, 34.0) == pytest.approx(edge)
-    out = (60.0 - clear - KEEP_OFF_MARGIN_M, 34.0)
-    assert e.keep_off(d, 60.0 + 9.15, 34.0) == pytest.approx(out)  # his place across the circle: out first
+    reach = clear + KEEP_OFF_MARGIN_M
+    out = (60.0 - reach, 34.0)
+
+    def round_out(a: float) -> tuple[float, float]:  # past the margin, at bearing a from the ball
+        return 60.0 + math.cos(a) * reach, 34.0 + math.sin(a) * reach
+
+    step = math.acos(math.dist((d.x, d.y), (60.0, 34.0)) / reach)  # as far round as heads him out
+    assert e.keep_off(d, 60.0 + 9.15, 34.0) == pytest.approx(round_out(math.pi - step))  # place across
     d.x, d.y = 60.0 - 8.0, 34.0  # inside the Laws' distance: out first
     assert e.keep_off(d, 60.0 - 9.15, 34.0) == pytest.approx(out)
     d.x, d.y = 60.0 - 9.0, 34.0  # inside it with his place a stride off, straight out: out first too
     assert math.dist((d.x, d.y), edge) < SETTLE_M and e.keep_off(d, 60.0 - 9.15, 34.0) == pytest.approx(out)
     d.x, d.y = 60.0 - 9.3, 34.0  # in the margin, just clear of the Laws' distance: straight out to it
     assert e.keep_off(d, 60.0 - 9.15, 34.0) == pytest.approx(edge)
-    # Within a stride, round the edge: straight there; a metre and a half round: out first.
+    # Within a stride, round the edge: straight there; a metre and a half round: past the margin.
     d.x, d.y = 60.0 - 9.6, 34.0
-    for chord, expect in ((0.7, None), (1.5, out)):
+    for chord, far in ((0.7, False), (1.5, True)):
         a = math.pi - chord / clear
         there = (60.0 + math.cos(a) * clear, 34.0 + math.sin(a) * clear)
         assert segment_distance(60.0, 34.0, d.x, d.y, *there) > 9.15  # premise: the straight way keeps it
-        assert e.keep_off(d, *there) == pytest.approx(expect or there)
-    # Going further than a stride, he keeps out of the margin even where the straight way would keep
+        assert e.keep_off(d, *there) == pytest.approx(round_out(a) if far else there)
+    # Going further than a stride, he aims past the margin even where the straight way would keep
     # the Laws' distance: it takes up a bend round others or a step too far.
     d.x, d.y = 60.0 - 9.4, 34.0
     a = math.radians(160.0)
     place = (60.0 + math.cos(a) * clear, 34.0 + math.sin(a) * clear)  # 20 degrees round, 3.3 m off
     assert segment_distance(60.0, 34.0, d.x, d.y, *place) > 9.15  # premise: the straight way keeps it
-    assert e.keep_off(d, *place) == pytest.approx(out)  # out first, as from anywhere inside
+    assert e.keep_off(d, *place) == pytest.approx(round_out(a))
 
 
 def test_kept_off_a_free_kick_he_stands_at_his_place_rather_than_walking_out_and_back(monkeypatch):
@@ -1664,65 +1673,188 @@ def test_once_at_his_place_with_the_ball_set_he_settles(monkeypatch):
     more than a stride walked every jump. The kicking side's back line, whose places follow an onside
     line read from noisy sightings (O6), stepped 1 to 3.5 m back and forth every 0.4 to 2 s through
     free kicks: 2.28 reversals a minute against main's 0.11. Once he has got to his place with the
-    ball set on its spot, he has settled, and makes later shifts of his place at his own pace. While
-    the ball is still being fetched his place moves with it, and he walks to it."""
-    from ninety.sim.engine import WALK_MPS
+    ball set, still on its spot, he has settled, and makes a later shift of his place within
+    SHUFFLE_M at his own pace. Defect (its third audit): settled with the ball within a foot's reach
+    of its spot but rolling, or still to be fetched, a player followed every later shift of his place
+    at his own pace, however far, and the creep came back: 42 of 144 free kicks had someone creeping
+    more than 10 m. He does not settle while the ball rolls, or is at the feet of any but the taker,
+    nor while he is still walking in; a shift beyond SHUFFLE_M he walks, and settles there."""
+    from ninety.sim.engine import SETTLE_M, SHUFFLE_M, WALK_MPS
     e = Engine(3)
     still(e)
     free_kick(e, "home", 60.0, 34.0)
+    r = e.restart
     d = e.by_id["h4"]  # of the kicking side: nothing keeps him off
     for i, q in enumerate(q for q in e.players if q is not d):
         q.x, q.y = 95.0, 4.0 + 3.0 * i  # out of his way
     at = [40.0, 30.0]
     real = e.shape_target
     monkeypatch.setattr(e, "shape_target", lambda q: (*at, 0.0) if q is d else real(q))
-    e.ball = (60.0, 50.0, 0.0, 0.0, 0.0, 0.0)  # still being fetched, 16 m from its spot
-    d.x, d.y = at
-    e.move_players()
-    assert d.id not in e.restart.settled
+
+    def stand() -> None:
+        d.x, d.y, d.vx, d.vy = *at, 0.0, 0.0
+        e.move_players()
+
+    e.ball = (60.0, 50.0, 0.0, 0.0, 0.0, 0.0)  # still to be fetched, 16 m from its spot
+    stand()
+    assert d.id not in r.settled
     at[0] += 2.0  # his place jumps two metres
     assert e.restart_pace(d, *at, 0.0) >= WALK_MPS
-    e.ball = (60.0, 34.0, 0.0, 0.0, 0.0, 0.0)  # set on its spot
-    d.x, d.y, d.vx, d.vy = *at, 0.0, 0.0
-    e.move_players()
-    assert d.id in e.restart.settled
-    at[0] += 2.0
+    e.ball = (60.3, 34.0, 0.0, 3.0, 0.0, 0.0)  # within a foot's reach of its spot, rolling
+    stand()
+    assert d.id not in r.settled
+    e.ball = (60.0, 34.0, 0.0, 0.0, 0.0, 0.0)  # still on its spot,
+    r.carried_by = "h7"  # at a team-mate's feet, to be knocked on to the taker
+    stand()
+    assert d.id not in r.settled
+    r.carried_by = None  # lying there
+    d.x, d.y, d.vx, d.vy = at[0] + 0.5, at[1], -0.5, 0.0  # half a metre off, walking in to his place
+    assert e.restart_pace(d, *at, 0.0) >= WALK_MPS and d.id not in r.settled
+    d.vx = 0.0  # standing there
+    assert e.restart_pace(d, *at, 0.0) == 0.0 and d.id in r.settled
+    at[0] += 2.0  # a shift within SHUFFLE_M: at his own pace, here none, so he stands
     assert e.restart_pace(d, *at, 0.0) == 0.0
+    was = (d.x, d.y)
     for _ in range(int(1.0 / DT)):
         e.move_players()
-    assert math.dist((d.x, d.y), (at[0] - 2.0, at[1])) < 0.05  # his own pace, here none: he stands
+    assert math.dist((d.x, d.y), was) < 0.05
+    at[0] += SHUFFLE_M  # a shift beyond it: he walks to his place again, and settles there
+    assert e.restart_pace(d, *at, 0.0) >= WALK_MPS and d.id not in r.settled
+    for _ in range(int(8.0 / DT)):
+        e.move_players()
+    assert math.dist((d.x, d.y), at) < SETTLE_M and d.id in r.settled
 
 
+def test_going_round_the_keep_off_circle_he_walks_and_settles_only_at_his_place(monkeypatch):
+    """Defect (lesson 174, its third audit): settling was judged on his way, not on his place. One in
+    the keep-off circle's margin with his place across it stood within a stride of where keep_off
+    sent him first, KEEP_OFF_MARGIN_M straight out past its edge, and settled there, 18 m from his
+    place, which he then crept to. And going round at the circle's edge, every step that dipped into
+    the margin sent him straight out again, stopping short every few strides: he went round at about
+    1.1 m/s, below a walk. Settling is judged on his place; while his way goes round or out of the
+    circle he walks; and from the margin he aims past it, round, no further round than heads him
+    out, so he never comes nearer the ball than a step round the edge dips (KEEP_OFF_STEP_DEG)."""
+    from ninety.sim.engine import KEEP_OFF_STEP_DEG, SETTLE_M, WALK_MPS
+    e = Engine(3)
+    still(e)
+    free_kick(e, "home", 60.0, 34.0)
+    e.ball = (60.0, 34.0, 0.0, 0.0, 0.0, 0.0)  # set on its spot
+    d = e.by_id["a7"]
+    for i, q in enumerate(q for q in e.players if q is not d):
+        q.x, q.y = 95.0, 4.0 + 3.0 * i  # out of his way
+    target = (60.0 + 9.15, 34.0)  # across the circle: his place is there, on its edge
+    d.x, d.y, d.vx, d.vy = 60.0 - 9.4, 34.0, 0.0, 0.0  # in its margin
+    at = e.stand_off(d, *target)[0]
+    assert math.dist(at, (d.x, d.y)) > 18.0  # premise
+    real = e.shape_target
+    monkeypatch.setattr(e, "shape_target", lambda q: (*target, 0.0) if q is d else real(q))
+    clear = 9.15 + KEEP_OFF_MARGIN_M
+    speeds, closest = [], math.inf
+    while math.dist((d.x, d.y), at) > SETTLE_M and len(speeds) < int(40.0 / DT):
+        e.move_players()
+        assert d.id not in e.restart.settled
+        speeds.append(math.hypot(d.vx, d.vy))
+        closest = min(closest, math.dist((d.x, d.y), (60.0, 34.0)))
+    assert math.dist((d.x, d.y), at) <= SETTLE_M  # he gets there
+    assert closest > clear * math.cos(math.radians(KEEP_OFF_STEP_DEG / 2))
+    going = sorted(speeds[int(1.0 / DT):])
+    assert going[len(going) // 2] >= WALK_MPS - 0.01  # at a walk, past the first second
+    for _ in range(int(2.0 / DT)):
+        e.move_players()
+    assert d.id in e.restart.settled
 
 def test_with_a_wall_up_nobody_else_is_named_to_press_until_the_ball_is_in_play():
     """Defect (lesson 174): at a direct free kick with a wall the stored presser's place, goal-side at
     the Laws' distance, was where the wall stood. He was pushed in and out of 9.15 m by the wall's
     players through the wait, and was 6 cm inside it at the kick (seed 7). With a wall up, the wall is
     the side's block: nobody else is named to press until the ball is in play."""
-    e = wall_kick()
-    for _ in range(int(1.0 / DT)):
-        e.step()
-    assert e.restart is not None and e.restart.wall  # premise: a wall, waiting
-    assert e.restart.pressers == [] and e.brains["away"].pressers == []
-    assert e.who_presses(e.brains["away"])  # premise: asked, someone would be named
+    for at, size in (((PITCH_X - 22.0, 34.0), 4), ((PITCH_X - 30.0, 12.0), 2)):  # a wall of two as well
+        e = wall_kick(at=at)
+        for _ in range(int(1.0 / DT)):
+            e.step()
+        assert e.restart is not None and len(e.restart.wall) == size  # premise: a wall, waiting
+        assert e.restart.pressers == [] and e.brains["away"].pressers == []
+        assert e.who_presses(e.brains["away"])  # premise: asked, someone would be named
 
+
+
+def near_line_kick(team: str, at: tuple[float, float], who: str, start: tuple[float, float],
+                   target: tuple[float, float]) -> tuple[Engine, Player]:
+    """A free kick to `team` at `at`, the ball set on its spot and its kick a minute off, with one
+    opponent `who` at `start` whose own target is `target` and everyone else out of his way."""
+    e = Engine(3)
+    still(e)
+    free_kick(e, team, *at)
+    e.ball = (*at, 0.0, 0.0, 0.0, 0.0)
+    e.restart.ready_at = e.t + 60.0
+    d = e.by_id[who]
+    for i, q in enumerate(q for q in e.players if q is not d):
+        q.x, q.y = 95.0 - i % 3, 20.0 + 2.0 * i  # out of his way, at the far end
+    d.x, d.y, d.vx, d.vy = *start, 0.0, 0.0
+    real = e.shape_target
+    e.shape_target = lambda q: (*target, 0.0) if q is d else real(q)
+    return e, d
+
+
+def walk(e: Engine, d: Player, at: tuple[float, float], seconds: float) -> tuple[float, float]:
+    """Moves the players for `seconds`; how close he came to `at`, and how long he was within 9.15 m
+    of it."""
+    closest, inside = math.inf, 0.0
+    for _ in range(int(seconds / DT)):
+        e.move_players()
+        gap = math.dist((d.x, d.y), at)
+        closest, inside = min(closest, gap), inside + DT * (gap < 9.15)
+    return closest, inside
 
 
 def test_near_a_line_going_round_the_circle_never_cuts_inside_it():
     """Defect (lesson 174; pre-existing, made more frequent by the walking floor): at a free kick
     near a line, a marker whose place lay round the keep-off circle the way that leaves the pitch was
     aimed round it off the pitch, and the aim, kept on the pitch, fell inside the circle: he walked
-    to 7.9 m of the ball and was inside 9.15 m at the kick (seed 42). Where going round would leave the
-    pitch, he holds at his own bearing on the circle's edge."""
-    e = Engine(3)
-    free_kick(e, "away", 5.13, 12.31)  # by the corner of the home side's area, 5 m off its goal line
-    d = e.by_id["h2"]
-    bx, by = 5.13, 12.31
-    clear = 9.15 + KEEP_OFF_MARGIN_M
+    to 7.9 m of the ball and was inside 9.15 m at the kick (seed 42). Defect (its third audit): held
+    instead at his own bearing, players stood where they were, 20 to 52 m from their places, for up
+    to 41 s. Where the short way round would leave the pitch he goes the long way, never inside the
+    circle, and gets to his place."""
+    from ninety.sim.engine import SETTLE_M
+    bx, by = 5.13, 12.31  # by the corner of the home side's area, 5 m off its goal line
     a = math.radians(114.0)
-    d.x, d.y = bx + math.cos(a) * 10.0, by + math.sin(a) * 10.0  # outside the circle, by the goal line
-    target = (2.92, 11.05)  # his place by his man, inside the circle, round it beyond the goal line
-    held = (bx + math.cos(a) * 10.0, by + math.sin(a) * 10.0)
+    start = (bx + math.cos(a) * 10.0, by + math.sin(a) * 10.0)  # outside the circle, by the goal line
+    target = (2.92, 11.05)  # by his man, inside the circle
+    e, d = near_line_kick("away", (bx, by), "h2", start, target)
+    clear = 9.15 + KEEP_OFF_MARGIN_M
+    at = e.stand_off(d, *target)[0]
+    assert at[1] < by and math.dist(at, (bx, by)) >= clear - 1e-9  # premise: round beyond the goal line
     tx, ty = e.keep_off(d, *target)
-    assert math.hypot(tx - bx, ty - by) >= clear - 1e-9  # never aimed inside
-    assert (tx, ty) == pytest.approx(held)  # he holds at his own bearing, at his distance
+    assert math.dist((tx, ty), (bx, by)) >= clear - 1e-9  # never aimed inside
+    assert tx > d.x + 1.0  # the long way, round by the pitch
+    closest, _ = walk(e, d, (bx, by), 40.0)
+    assert closest > 9.15 and math.dist((d.x, d.y), at) < SETTLE_M
+
+
+def test_inside_the_circle_by_a_line_he_goes_out_along_it_toward_his_place():
+    """Defect (lesson 174, its third audit): one inside a free kick's circle, between the ball 3 m
+    off the touchline and the line, could not step straight out, off the pitch, and held at his own
+    bearing he stood 2.5 m from the ball through the whole wait. Where straight out would leave the
+    pitch, he goes out by the point past the circle, on the pitch, on the shortest way to his place
+    (here the further way out), and gets there."""
+    from ninety.sim.engine import SETTLE_M
+    target = (60.0, 3.0)
+    e, d = near_line_kick("home", (50.0, 3.0), "a7", (49.5, 1.0), target)
+    tx, ty = e.keep_off(d, *target)
+    assert tx > 59.0 and within_lines(tx, ty)  # out toward his place, on the pitch
+    closest, inside = walk(e, d, (50.0, 3.0), 20.0)
+    assert inside < 9.0 and math.dist((d.x, d.y), target) < SETTLE_M
+
+
+def test_round_a_circle_by_a_line_the_short_way_is_open_only_within_the_lines():
+    """Lesson 174, its third audit: going round the keep-off circle near a line, the short way is
+    taken only if every 5 degrees of it has a point to aim at half a metre or more inside the lines
+    and outside the circle, as targets are kept; otherwise the long way; hemmed in between the circle
+    and the lines both ways, he stays where he is rather than cut inside."""
+    by = 9.15 + KEEP_OFF_MARGIN_M + 0.3  # under the ball the circle comes to 0.3 m off the touchline
+    e, d = near_line_kick("home", (50.0, by), "a7", (40.0, 9.0), (60.0, 9.0))
+    tx, ty = e.keep_off(d, 60.0, 9.0)
+    assert ty > by  # over the top, not along the line under the ball
+    e, d = near_line_kick("home", (8.0, 8.0), "a7", (1.0, 1.0), (8.0, 25.0))  # behind it by the flag
+    assert math.dist((d.x, d.y), (8.0, 8.0)) > 9.15 + KEEP_OFF_MARGIN_M  # premise: outside the circle
+    assert e.keep_off(d, 8.0, 25.0) == pytest.approx((1.0, 1.0))
