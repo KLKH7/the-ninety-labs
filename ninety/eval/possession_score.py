@@ -26,11 +26,11 @@ import datetime
 import hashlib
 import json
 import math
-import random
 from pathlib import Path
 
 from ninety.eval.event_score import git_commit
 from ninety.intel import possession as ps
+from ninety.sim import fmath
 from ninety.vision import track as tr
 
 COMMAND = "uv run python -m ninety.eval.possession_score"
@@ -155,7 +155,7 @@ def bootstrap(rows: list[dict], right) -> list[float] | None:
     seeds = sorted({s["seed"] for s in rows})
     if not seeds:
         return None
-    rng = random.Random(SEED)
+    rng = fmath.Random(SEED)  # the same draws as random.Random, on every machine (lesson 46)
     per = {seed: [right(s) for s in rows if s["seed"] == seed] for seed in seeds}
     stats = []
     for _ in range(BOOTSTRAP):
