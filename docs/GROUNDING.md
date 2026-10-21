@@ -53,7 +53,7 @@ Kind: **hard** fails the clip; **warn** is reported. Columns show what exists to
 | ID | Check | Source | Kind | Validator | Engine |
 |---|---|---|---|---|---|
 | C1 | files present, `fps` positive, every row matches its schema | our schemas | hard | ✅ | ✅ |
-| C2 | frames consecutive, `t = frame / fps` | CDF (event and tracking in sync) | hard | ✅ | ✅ |
+| C2 | frames consecutive, `t = frame / fps`, except across a broadcast cut that `meta.json` records (frame numbers): a cut leaves out match frames only inside a dead ball whose stoppage before it (out of play, a foul, offside or a goal) and restart after it (the set piece or kick-off) are both events of the clip, with no touch of the ball in play and no other restart between them, and never a frame an event is on. How long the picture stays on the stoppage and comes back before the restart is *design*, each at least the camera's shortest shot (`ninety/render/edit.py`, V4) | CDF (event and tracking in sync); Laws 9, 10, 11, 12 (when the ball is out of play) | hard | ✅ | ✅ |
 | C3 | same players throughout, except a substitution: only during a stoppage, at most five a team | Law 3 | hard | ✅ | ❌ no substitutions |
 | C4 | every player in an event is in the frames, on the right team | our schemas | hard | ✅ | ✅ |
 | C5 | each event's frame exists and its time matches | CDF | hard | ✅ | ✅ |
@@ -199,6 +199,7 @@ engine versions on the same seeds, never by a count set as a target. Engine colu
 | V1 | each player and the ball projects to within 1 px of its label | [render guide](guides/broadcast-render.md) | hard | ❌ | planned |
 | V2 | the same seed renders the same frames | render guide | hard | ❌ | planned |
 | V3 | every box has a visibility fraction, so occluded players are not graded as misses | render guide | hard | ❌ | planned |
+| V4 | a broadcast clip is edited as television is: the picture changes shot no more often than once every 9 s on average and never holds a shot under 4 s (*design*: shorter reads as a flicker); live play is shown from one side of the ground; a change of shot is a hard cut; a dead ball is cut where a broadcast would show replays and close-ups instead (replay shots average 6.8 s) | SoccerNet-v2 (Deliège et al., CVPR Workshops 2021, [arXiv 2011.13367](https://arxiv.org/abs/2011.13367)): camera changes annotated in 500 broadcast games, completely in 200 of them: 583 a game, one every 9 s; 86.7% of shots live, 10.9% replays of an action; 71.4% of changes are hard cuts; replay shots 6.8 s on average | warning (renderer) | ❌ | ✅ `tests/test_render_camera.py`, `tests/test_render_edit.py` |
 
 ## Order of work
 
