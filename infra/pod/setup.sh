@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# Set up a rented Ubuntu 24.04 CPU machine to render a dataset at one exact commit, then smoke-test
-# it: one 60 s clip with ninety-validate and ninety-render-check, and a 10 s determinism re-render.
+# Set up a rented Ubuntu machine (a CPU pod, or a Runpod PyTorch GPU pod) to render a dataset at one
+# exact commit, then smoke-test it: the GL check, a 10 s clip rendered twice and compared byte for
+# byte (determinism), and ninety-validate and ninety-render-check on it.
 #
-#   bash setup.sh <render commit sha> [driver ref]
+#   GL=gpu bash setup.sh <render commit sha> [driver ref]     # NVIDIA GPU, refusing software GL
+#   bash setup.sh <render commit sha> [driver ref]            # software GL (SwiftShader)
 #
 # The render commit is checked out in /work/render/repo (its code makes the clips); the driver
 # (infra/pod/render.py and the plan) comes from [driver ref], default main, into /work/render/driver.
@@ -11,13 +13,32 @@
 set -euo pipefail
 SHA=${1:?usage: setup.sh <render commit sha> [driver ref]}
 DRIVER_REF=${2:-main}
+GL=${GL:-software}
 REPO=https://github.com/KLKH7/the-ninety-labs.git
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq git curl ca-certificates python3 python3-pip python3-venv tmux util-linux >/dev/null
+if [ "$GL" = gpu ]; then
+  # Chromium reaches the NVIDIA driver through Vulkan or EGL: the loaders, and the vendor files that
+  # point them at the driver's libraries when the image does not ship them (the libraries come from
+  # the host driver, mounted into the container).
+  apt-get install -y -qq libvulkan1 libegl1 libgles2 >/dev/null
+  nvidia-smi --query-gpu=name,driver_version --format=csv,noheader
+  if [ ! -e /usr/share/vulkan/icd.d/nvidia_icd.json ] && ldconfig -p | grep -q libGLX_nvidia.so.0; then
+    mkdir -p /usr/share/vulkan/icd.d
+    echo '{"file_format_version":"1.0.0","ICD":{"library_path":"libGLX_nvidia.so.0","api_version":"1.3"}}' \
+      > /usr/share/vulkan/icd.d/nvidia_icd.json
+  fi
+  if [ ! -e /usr/share/glvnd/egl_vendor.d/10_nvidia.json ] && ldconfig -p | grep -q libEGL_nvidia.so.0; then
+    mkdir -p /usr/share/glvnd/egl_vendor.d
+    echo '{"file_format_version":"1.0.0","ICD":{"library_path":"libEGL_nvidia.so.0"}}' \
+      > /usr/share/glvnd/egl_vendor.d/10_nvidia.json
+  fi
+fi
 
-pip install --quiet --break-system-packages uv==0.12.23  # the version the Azure render job pins
+# the version the Azure render job pins; older pip has no --break-system-packages
+pip install --quiet uv==0.12.23 2>/dev/null || pip install --quiet --break-system-packages uv==0.12.23
 export UV_NO_DEV=1
 
 W=/work/render
@@ -49,14 +70,15 @@ PY
 uv sync --locked --group render-job --quiet
 uv run --no-sync playwright install --with-deps chromium >/dev/null
 
-# Smoke: seed 7 from 0:00 for 60 s, as the look-freeze review rendered it (software GL here), then
-# the determinism re-render on a 10 s clip, the dataset's length: re-rendering the 60 s clip would
-# double the smoke (a 10 s clip took 130 s on the maintainer's Mac with software GL).
+# Smoke: the GL check fails loudly when --gl gpu finds only software GL; then seed 3, a 10 s
+# training clip, rendered twice in fresh browsers must be byte-identical, and one copy must meet
+# the data contract and the render checks.
 S=$W/smoke; rm -rf "$S" && mkdir -p "$S"
-time uv run --no-sync ninety-render --seed 7 --start 0 --seconds 60 --out $S/seed7 | tail -12
-uv run --no-sync ninety-validate $S/seed7
-uv run --no-sync ninety-render-check $S/seed7 --report $S/check.json | tail -12
-uv run --no-sync ninety-render --seed 3 --seconds 10 --out $S/seed3 | tail -3
-uv run --no-sync ninety-render-check $S/seed3 --determinism --report $S/determinism.json | tail -8
+D="uv run --no-sync python $W/driver/infra/pod/render.py"
+P=$W/driver/docs/eval/dataset-v2-freeze.json
+$D glcheck --repo . --gl "$GL" --out "$S" | tee $S/glcheck.json
+time $D determinism --plan $P --repo . --out "$S" --gl "$GL" --seeds 3 | tee $S/determinism.json
+uv run --no-sync ninety-validate $S/determinism/seed3-a
+uv run --no-sync ninety-render-check $S/determinism/seed3-a --report $S/check.json | tail -12
 nproc; free -g | head -2
-echo "setup done: render $(git rev-parse --short HEAD), driver $(git -C "$W/driver" rev-parse --short HEAD)"
+echo "setup done ($GL GL): render $(git rev-parse --short HEAD), driver $(git -C "$W/driver" rev-parse --short HEAD)"

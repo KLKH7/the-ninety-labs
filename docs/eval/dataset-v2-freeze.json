@@ -43,17 +43,17 @@
  "render": {
   "seconds": 10,
   "window": "the seed's own start (render_clip's default), as v3",
-  "gl": "software (SwiftShader, CHROMIUM_ARGS), as the Azure render job, so pixels do not depend on the machine",
+  "gl": "the pod's GPU (infra/pod/render.py --gl gpu: Chromium on the NVIDIA driver through ANGLE, Vulkan or EGL), used only if WebGL reports the GPU, never SwiftShader or llvmpipe, and two renders of the same 10 s clip are byte-identical on the pod; otherwise software GL (SwiftShader) on the same pod, as the Azure job. Pixels are reproducible on this pod; identity with another machine is not required, since every clip renders here. Each clip's clip.json records gl, and each result line the WebGL renderer string",
   "dead_ball_cut": false,
   "params": "everything else drawn from the seed; only the overrides above are set"
  },
  "checks": {
   "per_clip": "ninety.render.checks.check_clip: ball and keypoint projection under 1 px, every player's feet in his box, labels complete, and ninety-validate (the data contract)",
   "rule": "a clip that fails any check is excluded and listed with its report; it is not re-rendered (same seed, same result) and no other seed replaces it",
-  "determinism": "two seeds (3 and 2001) rendered twice on the render machine: frames.jsonl, events.jsonl and images identical",
+  "determinism": "seed 3 rendered twice on the pod, each in a fresh browser, with the GL the run uses: frames.jsonl, events.jsonl and every image byte-identical (infra/pod/render.py determinism), before the first dataset clip; and seeds 3 and 2001 again after the run",
   "floors": "ninety-data-stats --floors on the passing clips, reported, not used to choose clips"
  },
- "machine": "the maintainer's Mac (Apple silicon, 12 cores, 24 GB, shared with other sessions), with software GL; Kian chose it over a second pod to save spend. Workers are sized to keep at least 8 GB free, under one runs/slot.sh priority slot. Before: a RunPod CPU pod, deleted unused",
+ "machine": "a rented Runpod GPU pod (RTX 4090 class, PyTorch template, 100 GB), deleted after the run and then reused for the detector fine-tune; all 310 clips render on this one pod. Kian's choice over the Mac, which started the test set with software GL at 1 worker (about 20 clips an hour) and is stopped once the pod run is confirmed; its clips are not used, since they are software GL and the pod's are not. Only synthetic renders go to the pod (AGENTS.md, vision models)",
  "storage": "train: renders/<run>/train/seed<N>/ (images, clip.json, meta.json) and truth/<run>/train/seed<N>/ (frames.jsonl, events.jsonl), as ninety/render/job.py uploads; test: truth-test instead of truth; the manifest at renders/<run>/manifest.json",
  "manifest": "every file of every passing clip, both splits, with its sha256 and size, the clip's drawn parameters, and the commits of the render and of the driver (infra/pod/render.py)",
  "test_set": {
@@ -67,7 +67,7 @@
   "render": "the seed's own parameters, no overrides (the test split refuses them), 10 s, software GL, no dead-ball cut",
   "checks": "the same per-clip checks; a failing test clip is listed, never replaced",
   "storage": "renders/<run>/test/seed<N>/ (images, clip.json) and truth-test/<run>/test/seed<N>/ (frames.jsonl, events.jsonl, meta.json: the answer key, as the 91d1e3b test set), never the truth container",
-  "machine": "rendered first, on the same Mac, with software GL; the whole dataset now renders on the maintainer's machine, so the separate Mac re-render of seed 900001 is not needed; determinism is still checked on two seeds"
+  "machine": "rendered first, on the same pod and GL as the training clips; cross-machine identity is not required (every clip renders on the one pod)"
  },
  "upload": "no credential goes to the render machine: the outputs are copied back over SSH, every sha256 checked against the manifest here, and uploaded from the maintainer's machine with its az login (infra/pod/render.py upload --account)",
  "qa": "before upload, infra/pod/qa.py: contact sheets (8 frames each) of 20 passing training clips drawn with random seed 20261021, fixed now, plus every training clip the checks flagged, for the Coordinator to look at; and a summary: excluded clips, render-check totals per split, the manifest verified. Test clips are never drawn or shown"
