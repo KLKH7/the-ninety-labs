@@ -1,6 +1,6 @@
 {
   "command": "uv run python -m ninety.eval.event_report --test-dir runs/test-frozen-cca498c/test --observations docs/eval/attribution --observations tests/fixtures --out docs/eval/event-report-v2",
-  "commit": "746170ed5c00f0716921d6722c7bbef58151a7f4",
+  "commit": "0d790abfbb9daaeee5c62581fcda7e2af16ea816",
   "date": "2026-10-20",
   "pooled": {
     "strict": {

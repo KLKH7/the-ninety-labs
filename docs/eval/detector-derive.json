@@ -1,6 +1,6 @@
 {
   "command": "uv run python -m ninety.eval.detector_derive --clips <render run v1>/train --observations <validation observations, regated> --seeds <the validation seeds> --out docs/eval/detector-derive",
-  "commit": "d43d26706ed6d230ae3e07f5313601d35747e22b",
+  "commit": "0d790abfbb9daaeee5c62581fcda7e2af16ea816",
   "date": "2026-10-20",
   "seeds": [
     108,
