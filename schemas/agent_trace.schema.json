@@ -7,7 +7,7 @@
   "additionalProperties": false,
   "required": ["role", "moment", "action", "ms", "detail"],
   "properties": {
-    "role": { "type": "string", "enum": ["analyst", "tactician", "challenger", "fact_checker", "judge", "producer", "personalizer", "describer", "companion"] },
+    "role": { "type": "string", "enum": ["analyst", "tactician", "challenger", "fact_checker", "judge", "producer", "personalizer", "describer", "companion", "vision_auditor", "data_agent"] },
     "moment": { "type": "string", "description": "Id of the moment the step was for." },
     "action": { "type": "string", "minLength": 1, "description": "What it did, e.g. draft, reject, verify, hold, air, handoff." },
     "ms": { "type": "number", "minimum": 0 },
