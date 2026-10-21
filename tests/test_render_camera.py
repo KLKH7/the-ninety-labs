@@ -295,10 +295,12 @@ def _broadcast(seed):
 # The framing bar (lesson 175, the Coordinator and the Reviewer, set before #179's seed 3 was re-scored):
 # at least FRAMED_MIN of the live frames some gantry shot can frame are well framed; frames no gantry
 # shot can frame are excluded, but never more than EXCLUDED_MAX of a seed's live frames (above that
-# the seed fails outright); and at least RAW_MIN of all live frames are well framed (design).
+# the seed fails outright, design); and at least RAW_MIN of all live frames are well framed. RAW_MIN
+# is not chosen: it is the lowest raw rate the other two allow, FRAMED_MIN of the frames left when
+# EXCLUDED_MAX are excluded, 0.85 x (1 - 0.10) = 0.765.
 FRAMED_MIN = 0.85
 EXCLUDED_MAX = 0.10
-RAW_MIN = 0.75
+RAW_MIN = FRAMED_MIN * (1 - EXCLUDED_MAX)
 
 
 def frameable(position, ball, width=1280, height=720) -> bool:
