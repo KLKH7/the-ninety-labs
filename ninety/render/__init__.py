@@ -42,4 +42,4 @@ docs/decisions/0001-synthetic-data.md.
 # player was 91.5% of his height), with proportions measured against Drillis and Contini; walking
 # and running, a foot is planted for its stance and carried on an arc through its swing, never
 # dragged along the grass; the stride lengthens and the swing lifts with speed.
-RENDERER_VERSION = "0.5.6"
+RENDERER_VERSION = "0.5.7"
