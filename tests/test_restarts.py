@@ -1705,3 +1705,24 @@ def test_with_a_wall_up_nobody_else_is_named_to_press_until_the_ball_is_in_play(
     assert e.restart is not None and e.restart.wall  # premise: a wall, waiting
     assert e.restart.pressers == [] and e.brains["away"].pressers == []
     assert e.who_presses(e.brains["away"])  # premise: asked, someone would be named
+
+
+
+def test_near_a_line_going_round_the_circle_never_cuts_inside_it():
+    """Defect (lesson 174; pre-existing, made more frequent by the walking floor): at a free kick
+    near a line, a marker whose place lay round the keep-off circle the way that leaves the pitch was
+    aimed round it off the pitch, and the aim, kept on the pitch, fell inside the circle: he walked
+    to 7.9 m of the ball and was inside 9.15 m at the kick (seed 42). Where going round would leave the
+    pitch, he holds at his own bearing on the circle's edge."""
+    e = Engine(3)
+    free_kick(e, "away", 5.13, 12.31)  # by the corner of the home side's area, 5 m off its goal line
+    d = e.by_id["h2"]
+    bx, by = 5.13, 12.31
+    clear = 9.15 + KEEP_OFF_MARGIN_M
+    a = math.radians(114.0)
+    d.x, d.y = bx + math.cos(a) * 10.0, by + math.sin(a) * 10.0  # outside the circle, by the goal line
+    target = (2.92, 11.05)  # his place by his man, inside the circle, round it beyond the goal line
+    held = (bx + math.cos(a) * 10.0, by + math.sin(a) * 10.0)
+    tx, ty = e.keep_off(d, *target)
+    assert math.hypot(tx - bx, ty - by) >= clear - 1e-9  # never aimed inside
+    assert (tx, ty) == pytest.approx(held)  # he holds at his own bearing, at his distance

@@ -2540,6 +2540,10 @@ class Engine:
             a = here + clamp(turn, -math.radians(KEEP_OFF_STEP_DEG), math.radians(KEEP_OFF_STEP_DEG))
             reach = max(clear, m)
             tx, ty = bx + fmath.cos(a) * reach, by + fmath.sin(a) * reach
+            if not (0.5 <= tx <= PITCH_X - 0.5 and 0.5 <= ty <= PITCH_Y - 0.5):
+                # Round that way he would leave the pitch, and the aim, kept on it, would fall inside
+                # the circle: near a line he holds at his own bearing on its edge instead (lesson 174).
+                tx, ty = bx + fmath.cos(here) * reach, by + fmath.sin(here) * reach
         return clamp(tx, 0.5, PITCH_X - 0.5), clamp(ty, 0.5, PITCH_Y - 0.5)
 
     def out_of_area(self, team: str, tx: float, ty: float) -> tuple[float, float]:
