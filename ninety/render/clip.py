@@ -163,7 +163,7 @@ def camera_positions(frames: list[dict], p: RenderParams, seed: int) -> list[tup
     for fr in frames:
         ball = drawn_ball(fr)
         actors = [(pl["x"], pl["y"], pl.get("action", "")) for pl in fr["players"]]
-        out.append(tuple(director.step(ball[0], ball[1], actors).position))
+        out.append(tuple(director.step(ball[0], ball[1], actors, ball_z=ball[2]).position))
     return out
 
 
@@ -319,7 +319,7 @@ def render_clip(
                 speed = math.hypot(prevb["vx"], prevb["vy"], prevb.get("vz", 0.0))
                 goal_arg = (side, ev["y"], z, speed)
             cut_in = None if left is None else left / FPS
-            cam = director.step(ball[0], ball[1], actors, goal_arg, cut_in)
+            cam = director.step(ball[0], ball[1], actors, goal_arg, cut_in, ball_z=ball[2])
             blur = blur_vector(prev_cam, cam, p.motion_blur)
             prev_cam = cam
             bvx, bvy = fr["ball"].get("vx", 0.0), fr["ball"].get("vy", 0.0)
