@@ -2,8 +2,8 @@
  "name": "dataset v2 (look freeze): training clips at the look-freeze commit",
  "status": "pre-registered, nothing rendered",
  "run": "v2freeze",
- "commit": "pending: the final freeze commit, after the motion follow-up (renderer 0.5.4), #179, #183, #190 and #167 have merged; the Coordinator gives the SHA, recorded here and on the PR before the first render. A dry run at #188's merge commit (setup, smoke and throughput) measures speed only; none of its clips joins the dataset",
- "renderer": "the freeze commit's (0.5.4 or later)",
+ "commit": "pending: main after #179, #183 and motion A (the throw-in, renderer 0.5.4-A) have merged and main's CI is green; the Coordinator gives the SHA, recorded here and on the PR before the first render. It does not wait for motion B or later football fixes, which gate only the demo clip (docs/eval/demo-clip.md). A dry run at #188's merge commit (setup, smoke and throughput) measures speed only; none of its clips joins the dataset",
+ "renderer": "the render commit's (0.5.4-A or later)",
  "why": "Every training clip in one look and one engine, the look the demo shows. Dataset v1 mixed capsule players (0.3.x) with later mesh clips; the round 2 plan (docs/eval/round2/PLAN.md) needs one render commit for everything.",
  "seeds": {
   "rule": "the seed list and overrides of v3 (docs/eval/dataset-v1.json), so the two datasets differ only in engine and look",
