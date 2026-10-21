@@ -1,0 +1,36 @@
+{
+ "name": "dataset v2 (look freeze): training clips at the look-freeze commit",
+ "status": "pre-registered, nothing rendered",
+ "run": "v2freeze",
+ "commit": "pending: the merge commit of #188 on main (the look freeze), recorded here before the first render",
+ "renderer": "0.5.3",
+ "why": "Every training clip in one look and one engine, the look the demo shows. Dataset v1 mixed capsule players (0.3.x) with later mesh clips; the round 2 plan (docs/eval/round2/PLAN.md) needs one render commit for everything.",
+ "seeds": {
+  "rule": "the seed list and overrides of v3 (docs/eval/dataset-v1.json), so the two datasets differ only in engine and look",
+  "groups": [
+   {"first": 3, "last": 132, "overrides": {}, "note": "hard cases drawn from the seed at HARD_CASE_RATE 0.3 (#87)"},
+   {"first": 2001, "last": 2045, "overrides": {"occlusion": "crowded"}},
+   {"first": 3001, "last": 3045, "overrides": {"kit_contrast": "low"}},
+   {"first": 4001, "last": 4060, "overrides": {"occlusion": "crowded"}}
+  ],
+  "clips": 280,
+  "excluded_in_advance": "none: v1 dropped 82 and 111 for defects of its own engine and renderer; here a seed is excluded only by the checks below",
+  "test_seeds": "none: 900001 and above are reserved and rendered only for a frozen test set, never tuned on"
+ },
+ "render": {
+  "seconds": 10,
+  "window": "the seed's own start (render_clip's default), as v3",
+  "gl": "software (SwiftShader, CHROMIUM_ARGS), as the Azure render job, so pixels do not depend on the machine",
+  "dead_ball_cut": false,
+  "params": "everything else drawn from the seed; only the overrides above are set"
+ },
+ "checks": {
+  "per_clip": "ninety.render.checks.check_clip: ball and keypoint projection under 1 px, every player's feet in his box, labels complete, and ninety-validate (the data contract)",
+  "rule": "a clip that fails any check is excluded and listed with its report; it is not re-rendered (same seed, same result) and no other seed replaces it",
+  "determinism": "two seeds (3 and 2001) rendered twice on the render machine: frames.jsonl, events.jsonl and images identical",
+  "floors": "ninety-data-stats --floors on the passing clips, reported, not used to choose clips"
+ },
+ "machine": "a RunPod CPU pod (32 vCPU, 64 GB, Ubuntu 24.04), deleted after the run; only synthetic renders go to it (AGENTS.md, vision models: training may rent a machine elsewhere)",
+ "storage": "renders/<run>/train/seed<N>/ (images, clip.json, meta.json) and truth/<run>/train/seed<N>/ (frames.jsonl, events.jsonl), as ninety/render/job.py uploads; the manifest at renders/<run>/manifest.json",
+ "manifest": "every file of every passing clip with its sha256 and size, the clip's drawn parameters, and the commits of the render and of the driver (infra/pod/render.py)"
+}

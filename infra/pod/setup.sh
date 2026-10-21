@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# Set up a rented Ubuntu 24.04 CPU machine to render a dataset at one exact commit, then smoke-test
+# it: one 60 s clip, ninety-validate and ninety-render-check (with the determinism re-render).
+#
+#   bash setup.sh <render commit sha> [driver ref]
+#
+# The render commit is checked out in ~/render (its code makes the clips); the driver
+# (infra/pod/render.py and the plan) comes from [driver ref], default main, into ~/driver.
+# No secret is needed here: the repository is public. Upload links are given only to `upload`.
+set -euo pipefail
+SHA=${1:?usage: setup.sh <render commit sha> [driver ref]}
+DRIVER_REF=${2:-main}
+REPO=https://github.com/KLKH7/the-ninety-labs.git
+
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -qq
+apt-get install -y -qq git curl ca-certificates python3 python3-pip python3-venv >/dev/null
+
+pip install --quiet --break-system-packages uv==0.12.23  # the version the Azure render job pins
+export UV_NO_DEV=1
+
+rm -rf ~/render ~/driver
+git clone -q "$REPO" ~/render
+git -C ~/render checkout -q "$SHA"
+test "$(git -C ~/render rev-parse HEAD)" = "$(git -C ~/render rev-parse "$SHA^{commit}")"
+git clone -q --depth 1 --branch "$DRIVER_REF" "$REPO" ~/driver 2>/dev/null \
+  || { git clone -q "$REPO" ~/driver && git -C ~/driver checkout -q "$DRIVER_REF"; }
+
+cd ~/render
+# three.js from web/package-lock.json, integrity checked (as infra/render-job-start.sh does).
+python3 - <<'PY'
+import base64, hashlib, io, json, os, tarfile, urllib.request
+pkg = json.load(open("web/package-lock.json"))["packages"]["node_modules/three"]
+data = urllib.request.urlopen(pkg["resolved"], timeout=120).read()
+algo, want = pkg["integrity"].split("-", 1)
+if base64.b64encode(hashlib.new(algo, data).digest()).decode() != want:
+    raise SystemExit("three.js tarball does not match web/package-lock.json integrity")
+with tarfile.open(fileobj=io.BytesIO(data)) as t:
+    t.extractall("web/node_modules", filter="data")
+os.rename("web/node_modules/package", "web/node_modules/three")
+print("three", pkg["version"], "integrity ok")
+PY
+uv sync --locked --group render-job --quiet
+uv run --no-sync playwright install --with-deps chromium >/dev/null
+
+# Smoke: seed 7 from 0:00 for 60 s, as the look-freeze review rendered it (software GL here).
+rm -rf ~/smoke && mkdir -p ~/smoke
+uv run --no-sync ninety-render --seed 7 --start 0 --seconds 60 --out ~/smoke/seed7 | tail -12
+uv run --no-sync ninety-validate ~/smoke/seed7
+uv run --no-sync ninety-render-check ~/smoke/seed7 --determinism --report ~/smoke/check.json | tail -20
+nproc; free -g | head -2
+echo "setup done: render $(git rev-parse --short HEAD), driver $(git -C ~/driver rev-parse --short HEAD)"
