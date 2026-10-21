@@ -72,6 +72,9 @@ MAX_MESSAGE_BYTES = 1024  # design: a clock or focus message is under 60 bytes
 # escapes), plus its other fields; anything larger is refused before it is read.
 MAX_BODY_BYTES = 2048
 RELAYED = {"clock", "focus"}  # what a laptop may send; answers and cards come from the server
+# The phone's own limit (web/phone/src/clock.ts STALE_S): a laptop silent this long is lost, so a
+# replayed clock is never run on further than the phone itself would run it.
+STALE_S = 4.0
 FPS_CHOICES = (1, 5, 25)  # divisors of the engine's 25 fps, so frames are evenly spaced
 MINIMAP_PLACES = 1  # 0.1 m: finer than a phone's dot, coarser than the tracker's error
 PASSCODE_HEADER = "x-ninety-passcode"
@@ -152,6 +155,16 @@ class Outbox:
     flushing: bool = False
 
 
+def caught_up(message: dict, held_s: float) -> dict:
+    """A stored message as a phone joining now should get it. A playing clock moves on while the
+    relay holds it, so it is sent `held_s` later than the laptop sent it (at most STALE_S): sent as
+    it was, the late phone ran behind the laptop by the time held, up to a second, until the
+    laptop's next message (lesson 165). A paused clock and a focus are sent as they were."""
+    if message.get("type") != "clock" or not message.get("playing"):
+        return message
+    return {**message, "t": round(message["t"] + min(max(held_s, 0.0), STALE_S), 2)}
+
+
 @dataclass
 class Room:
     """One pairing. The API runs on one event loop (one uvicorn worker, one replica), so the steps
@@ -164,6 +177,7 @@ class Room:
     laptop: WebSocket | None = None
     phones: dict[WebSocket, Outbox] = field(default_factory=dict)
     latest: dict[str, dict] = field(default_factory=dict)  # last clock and focus, for late phones
+    latest_at: dict[str, float] = field(default_factory=dict)  # when each was stored (the API's clock)
     sending: set[asyncio.Task] = field(default_factory=set)  # flushes in flight, kept until done
 
 
@@ -357,7 +371,9 @@ class Companion:
         if role == "laptop":
             room.laptop = ws
         else:
-            box = Outbox(ws, deque(room.latest.values()), flushing=True)
+            now = self.clock()
+            owed = deque(caught_up(m, now - room.latest_at.get(k, now)) for k, m in room.latest.items())
+            box = Outbox(ws, owed, flushing=True)
             room.phones[ws] = box
         try:
             await ws.accept()
@@ -380,6 +396,7 @@ class Companion:
                     await ws.close(code=1007)  # not a clock or focus message
                     return
                 room.latest[message["type"]] = message
+                room.latest_at[message["type"]] = self.clock()
                 for phone_box in list(room.phones.values()):
                     phone_box.items.append(message)
                     # Each phone is sent to on its own task, so a stalled phone holds up only itself.

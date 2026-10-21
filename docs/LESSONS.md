@@ -1561,3 +1561,20 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_api_startup.py::test_importing_the_api_loads_no_model_sdk` reads
   `sys.modules` in a fresh interpreter (lesson 104); `::test_the_check_sees_an_sdk_when_one_is_imported`
   shows the check can go red.
+
+### 165. A replayed message is as old as the time it was held
+- **What happened:** the phone's clock test (`tests/test_phone.py`) flaked on CI, with the phone at
+  0.03 s against the laptop's 0.29 s, and it read as wall-clock noise on a shared runner. The cause
+  was a defect. The laptop pressed play before the phone opened. The relay (the mock's, and the
+  API's alike) replays the latest clock to a phone that joins late, and the phone took it as just
+  sent. So it ran behind by the time the relay had held the message: the page's load time in the
+  test, and up to a second in production, until the laptop's next message. Fast machines hid it.
+- **Rule:** a relay that replays state to a late joiner sends it as it stands now. A playing clock
+  is advanced by the time held, on the relay's own clock and capped at the phone's stale limit; a
+  paused clock and a focus go as they were. A timing test runs on an injected clock, so it reads
+  both sides at one instant and a flake cannot hide a defect. Before widening a tolerance, find
+  which side was behind and why.
+- **Check:** `tests/test_api_companion.py::test_a_late_phone_gets_the_clock_where_the_laptop_is_now`
+  (the API's clock injected); `tests/test_phone.py::test_the_phone_clock_stays_within_tolerance_of_the_laptop`
+  on Playwright's fake clock, joining 0.6 s into play. Built with the old relay it fails every run
+  (phone 0.02 against laptop 0.616).
