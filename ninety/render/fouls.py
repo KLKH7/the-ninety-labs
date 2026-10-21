@@ -5,6 +5,7 @@ before the restart. Drawn from the engine's foul event alone; no position, actio
 The timings are a design (no source measured them for us), each with its reason:
 - FALL_S: a standing body toppling over its feet reaches the ground in about half a second (a rigid
   1.8 m body pivoting from a small push falls in roughly 0.5 to 0.6 s).
+  The push starts the fall on the contact frame, so the curve is half steady, half gathering pace.
 - DOWN: how far the body lies over, short of flat so the shoulders and head rest just above the grass.
 - LIE_S: a fouled player stays down a moment, as players do before getting up.
 - RISE_S: getting up takes about a second.
@@ -45,7 +46,10 @@ def schedule(events: list[dict], frames: list[dict], fps: int) -> dict[str, dict
         for k in range(fall + lie + rise):
             if k < fall:
                 u = (k + 1) / fall
-                angle = DOWN * u * u  # toppling gathers pace, as a fall does
+                # the push tips him at once and gravity then speeds the topple: half of the
+                # fall at a steady rate from the contact, half gathering pace (a pure u*u waited
+                # five frames to show, and read as a dive to the blind critic)
+                angle = DOWN * 0.5 * (u + u * u)
             elif k < fall + lie:
                 angle = DOWN
             else:
