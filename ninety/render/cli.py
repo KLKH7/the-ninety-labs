@@ -48,7 +48,7 @@ def render_main(argv: list[str] | None = None) -> None:
         action="append",
         default=[],
         metavar="KEY=VALUE",
-        help="override a render parameter, e.g. kit_contrast=low, occlusion=crowded, "
+        help="override a render parameter, e.g. kit_contrast=low (or broadcast, for footage), occlusion=crowded, "
         "camera.half_width_m=12 (repeatable)",
     )
     _add_render_args(ap)
