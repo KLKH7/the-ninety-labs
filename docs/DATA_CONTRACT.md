@@ -66,7 +66,9 @@ consecutive frames only, never the jump across a cut. `clip.json` also carries `
 of consecutive frames the images show (image `index` is match frame `frame`): whatever maps video
 time to match time (the viewer, the audio description) reads them through `ninety/match/timeline.py`
 instead of adding the clip's start, and a reader that links frames (vision's tracks and passes)
-links nothing across a cut.
+links nothing across a cut. Each cut is covered by a stinger, a graphic that wipes across the picture
+for about half a second either side of it; `clip.json` lists the picture indices it covers as
+`stinger_frames`, and, like the scorebug, it is an occluder that the visibility labels count.
 
 A window that opens at frame 0 starts with the match and is withheld nothing at its start. A
 missing event alone never excuses a judgement, everything whose evidence lies inside the window is
