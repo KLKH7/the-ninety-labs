@@ -2,8 +2,8 @@
  "name": "dataset v2 (look freeze): training clips at the look-freeze commit",
  "status": "pre-registered, nothing rendered",
  "run": "v2freeze",
- "commit": "pending: the merge commit of the motion follow-up (renderer 0.5.4, after #188), so the training set has the final look; recorded here and on the PR before the first render. A dry run at #188's merge commit measures throughput only; none of its clips is part of the dataset",
- "renderer": "0.5.4",
+ "commit": "pending: the final freeze commit, after the motion follow-up (renderer 0.5.4), #179, #183, #190 and #167 have merged; the Coordinator gives the SHA, recorded here and on the PR before the first render. A dry run at #188's merge commit (setup, smoke and throughput) measures speed only; none of its clips joins the dataset",
+ "renderer": "the freeze commit's (0.5.4 or later)",
  "why": "Every training clip in one look and one engine, the look the demo shows. Dataset v1 mixed capsule players (0.3.x) with later mesh clips; the round 2 plan (docs/eval/round2/PLAN.md) needs one render commit for everything.",
  "seeds": {
   "rule": "the seed list and overrides of v3 (docs/eval/dataset-v1.json), so the two datasets differ only in engine and look",
