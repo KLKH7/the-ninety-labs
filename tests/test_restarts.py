@@ -1927,3 +1927,37 @@ def test_a_kept_man_stays_marked_wherever_he_goes_and_new_men_are_picked_up():
     pairs = offball.pick_up(defenders, attackers, goal)
     assert offball.marking(defenders, attackers, goal) == {  # without kept pairs, as before
         did: offball.goal_side(attackers[aid], goal) for did, aid in pairs.items()}
+
+
+def test_he_does_not_settle_while_his_way_leaves_his_place(monkeypatch):
+    """Lesson 174, its third audit: settling is judged on his place, and while his way goes out of
+    or round the keep-off circle, or he is hemmed in by it, he does not settle. One inside the Laws'
+    distance with his place a stride out on its edge is sent past the edge first, and settled there
+    he would leave at his own pace; one hemmed in between the circle and the lines aims at where he
+    stands, so judged on his way he would be at his place, 17 m from it."""
+    from ninety.sim.engine import SETTLE_M, WALK_MPS
+    for ball_at, start, target, near in (((60.0, 34.0), (60.0 - 8.8, 34.0), (60.0 - 9.15, 34.0), "place"),
+                                         ((8.0, 8.0), (1.0, 1.0), (8.0, 25.0), "way")):
+        e, d = near_line_kick("home", ball_at, "a7", start, target)
+        place, way = e.stand_off(d, *target)[0], e.keep_off(d, *target)
+        assert e.ball_set(e.restart) and way != place  # premise: the ball is set, his way is not his place
+        # premise: his place (inside) or his way (hemmed in) is within a stride: on it alone he would settle
+        assert math.dist(place if near == "place" else way, (d.x, d.y)) <= SETTLE_M
+        assert e.restart_pace(d, *way, 0.0, place) >= WALK_MPS and d.id not in e.restart.settled
+        e.move_players()
+        assert d.id not in e.restart.settled
+
+
+def test_a_target_off_the_pitch_is_brought_onto_it_before_it_is_kept_off():
+    """Lesson 174, its third audit (a guard: in play, shape targets are on the pitch): a target off
+    the pitch and outside the keep-off circle, brought onto the pitch only after it was kept off, can
+    land inside the circle (0.2 m inside it here, a free kick 10 m off the touchline), and no way
+    round to it is ever open. It is brought onto the pitch first, then kept off: his place is
+    outside the circle and within the lines, and so is his way there."""
+    clear = 9.15 + KEEP_OFF_MARGIN_M
+    by = clear + 0.3
+    e, d = near_line_kick("home", (50.0, by), "a7", (50.0, 25.0), (50.1, -5.0))
+    assert math.dist((50.1, 0.5), (50.0, by)) < clear  # premise: on the pitch, the target is inside
+    place, way = e.stand_off(d, 50.1, -5.0)[0], e.keep_off(d, 50.1, -5.0)
+    assert math.dist(place, (50.0, by)) >= clear - 1e-9 and within_lines(*place)
+    assert math.dist(way, (50.0, by)) >= clear - 1e-9  # and his way there keeps out of it
