@@ -223,6 +223,46 @@ in one frame in seed 101: a throw-in drifting along the outside of the touchline
 past the end boards and snapped back to them when retaken (lesson 166); `41ce3fba` retakes it once
 it passes the end of the touchline, and the sweep now counts a retaken restart as the same kind.
 
+## Walking to restart positions (corners)
+
+"A long time to take a corner" (a viewer, of seed 200 at 1:21). Over 25 corners in 20 matches of
+20 minutes on main (`807bde2`), by [`scripts/defect_sweep/corners.py`](../../scripts/defect_sweep/corners.py):
+the ball going out to the kick took 30.8 s at the median (26 to 35 s for the middle 80%), which is
+Opta's mean for a corner (GROUNDING R1, about 30 s), so the length was right. Its parts: the ball on
+its spot at the arc after 7.4 s; players still coming into the area until 29.3 s; the kick 1.9 s
+after the last. Every player went to his place just in time for the kick, half a minute off, so
+after the fetch the outfielders spent 72% of their time creeping at 0.2 to 1.2 m/s, slower than a
+walk. Now, while a restart waits, an outfielder walks to his place at no less than a normal walking
+pace (GROUNDING L4) and stands there; the kick still comes when R1's wait is over (planted corners on
+five seeds at both flags: taken after 30.00 s on main and now). The same 20 seeds, main against
+this branch (`e3e66d1`):
+
+| | Main | Walking |
+|---|---:|---:|
+| Outfielders' time after the fetch: creeping (0.2 to 1.2 m/s) | 72% | 10% |
+| walking or faster (1.2 m/s and up) | 19% | 60% |
+| standing (under 0.2 m/s) | 9% | 30% |
+| Corners | 25 | 10 |
+| Ball out to the corner kick, median | 30.8 s | 35.3 s |
+| Restart defects (jumps, encroachment, carried set balls, second touches, stuck restarts) | 0 | 1 |
+| Matches meeting the data contract | 20 of 20 | 20 of 20 |
+| Possessions a team per 90 (scripts/defect_sweep/possession.py) | 129 | 129 |
+| Shots a team per 90 | 17.8 ± 1.3 | 14.4 ± 1.7 |
+| Goals a team per 90 | 1.8 ± 0.6 | 1.1 ± 0.4 |
+| Pass completion | 85.1% | 85.2% |
+
+The matches part at their first restart (lesson 90), so the two columns are different matches. The
+corner times are R1's draws (24 to 36 s), ten of them on this branch; a planted corner is taken at
+the same moment on both. Fewer corners and shots on this branch is more than chance alone would
+often give (z about 2.5 for corners, 1.6 for shots), and fits sides that now stand in their places
+when a restart is taken: shots within 10 s of a side's own restart fell from 51 to 35, others from
+107 to 93. Corners were already a held-out miss (2.8 a team per 90 on main, against about 5 in a
+real match) and are 1.1 here. The one restart defect is a goal kick in seed 7 at 7:10: an attacker
+running to a target that keep_off had moved out of the penalty area cut across the area's corner and
+was 6 cm inside it when the kick was taken. keep_off moves a target out of the area, not the way to
+it; that gap is older than this change (his pace there, 2 to 14 m/s, is his own target's, above
+the walking floor).
+
 ## Reproduce
 
 ```bash
@@ -241,6 +281,10 @@ uv run python scripts/defect_sweep/wall.py --planted 1 4 6 8 9 10 11 12 -- home:
 
 ```bash
 uv run python scripts/defect_sweep/wall.py runs/new/seed7 runs/new/seed11
+```
+
+```bash
+uv run python scripts/defect_sweep/corners.py runs/new/seed7 runs/new/seed11
 ```
 
 ```bash

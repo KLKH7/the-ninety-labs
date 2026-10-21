@@ -1668,3 +1668,17 @@ short and actionable. This file is public: no research sources, product names or
   counts a restart taken again as the same restart.
 - **Check:** `uv run pytest tests/test_restarts.py -k past_the_end_of_the_touchline`; on the engine
   before it, the ball runs on to 127 m and jumps 18 m in a frame.
+
+### 174. A player with time to spare walks there and waits, rather than creeping in just in time
+- **What happened:** at restarts the engine paced every player to reach his place just as the
+  kick could come. At a corner that is about half a minute off (R1: Opta's mean is about 30 s), so
+  the players crept in below a walk for most of the wait: 72% of the outfielders' time after the
+  ball was fetched was at 0.2 to 1.2 m/s, over 25 corners in 20 matches. The corner's length
+  matched Opta's, but twenty players drifting slowly for 20 s read as "a long time to take a
+  corner".
+- **Rule:** "just in time" is a pace for play, where arriving early costs something; with time to
+  spare at a dead ball a player walks to his place (L4's normal walking pace) and stands there. A
+  realism complaint is measured in parts (fetch, arrivals, wait, speeds) before the total is
+  blamed.
+- **Check:** `uv run pytest tests/test_restarts.py -k walk_to_their_places`; it fails on the engine
+  before. `scripts/defect_sweep/corners.py` reports the outfielders' speeds through the wait.
