@@ -274,3 +274,26 @@ Every constant is frozen at the commit that adds this line. The test set is scor
 - **Frames trusted wrongly on clips with camera cuts.** The fit does not follow a cut, and the
   height test passes a few of its frames.
 - **A tied side vote** still names a side. Its team_confidence is 0, which shows it.
+
+### After review (#187), recorded here
+
+- **How v1 was chosen.** Four of the six side-naming variants met A.2's rule on validation: v1, v2,
+  v3 and v5 (v4 lost a pass). Choosing among them was a decision on validation numbers, which the
+  plan did not fix beforehand. v1 was taken because it is the only one whose gain comes from the
+  cause found (white and black kits). The main-axis start (v2 to v5) turned seed 108 from 1.00 to
+  0.11 in three of them, and its gain on 120 came from a tied vote.
+- **The test clips were exposed, but never scored, before step D.** `tests/fixtures/detected-seed900001.jsonl`
+  is the detector's output on test seed 900001, and a test requires it to match the code, so it was
+  regenerated after each change. The test clips' observations (900001 to 900005) were re-judged by
+  the new trust test before step D. Neither reads the answer key, and no change was made on what
+  they showed; the fixture's content was not looked at against the truth.
+- **The validation observations** are on the orphan branch
+  `pr-assets/detector-validation-observations` (commit 7448d3d), each file's sha256 in
+  [detector-derive-observations.sha256](detector-derive-observations.sha256). The clips' ground
+  truth is render run v1's, in the `truth` storage container (its train split).
+- **The trust test does not meet lesson 149's rule.** It trusts frames up to 55 m wrong on
+  validation and 80 m on the test set, all on clips the markings had rejected. That is stated in
+  EVALUATION, the challenge map, observe.py and lesson 149, and a strict expected-failure test
+  plants a camera in the wrong place. A follow-up bounds the error, planned and derived on
+  validation like this one.
+- **PLAN's pass F1 target (0.70) is missed:** 0.67 on all five clips, 0.62 without seed 900001.

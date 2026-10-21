@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from ninety.vision import observe, pitch
 
@@ -67,3 +68,26 @@ def test_with_no_player_to_measure_the_markings_verdict_stands():
 def test_the_band_is_the_committed_validation_measurement():
     body = json.loads((ROOT / "docs/eval/detector-derive.json").read_text())
     assert list(observe.HEIGHT_BAND) == body["gates"]["band"]
+
+
+def wrong_place_row():
+    """The scene through VIEW, but the frame's camera 10 m along the touchline from where it is:
+    players come out the right height (the same camera, moved), placed 10 m wrong."""
+    r = row()
+    wrong = pitch.View(VIEW.cx + 10.0, VIEW.cy, VIEW.cz, VIEW.pan, VIEW.tilt, VIEW.focal,
+                       VIEW.width, VIEW.height)
+    r["camera"]["P"] = wrong.P().tolist()
+    return r
+
+
+def test_a_camera_in_the_wrong_place_still_makes_players_the_right_height():
+    # Why the height test cannot see it (validation seed 108; lesson 149).
+    r = observe.place(wrong_place_row())
+    assert abs(r["camera"]["height_ratio"] - 1.0) < 1e-6
+    assert abs(r["players"][0]["x"] - (SPOTS[0][0] + 10.0)) < 0.01
+
+
+@pytest.mark.xfail(strict=True, reason="the trust test does not yet bound how wrong a trusted camera "
+                   "can be (lesson 149; follow-up): a camera in the wrong place, players the right height")
+def test_a_camera_in_the_wrong_place_is_not_trusted():
+    assert not observe.place(wrong_place_row())["camera"]["ok"]

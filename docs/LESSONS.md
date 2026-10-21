@@ -1475,5 +1475,11 @@ short and actionable. This file is public: no research sources, product names or
 - **Rule:** a detector is developed on validation clips from the start, and the test set is scored
   once, at the end. A rule that adopts a gate or a threshold also bounds the size of the errors it
   lets through (the worst, or a high percentile), not only their number, stated before choosing.
+- **Not yet met here:** the height gate adopted in the same pull request does not meet this rule.
+  It trusts frames up to 55 m wrong on validation and 80 m on the test set (EVALUATION, "Event
+  detection from video"). Bounding it is a follow-up, planned and derived on validation like the
+  rest; until then the limit is stated wherever the gate's numbers are.
 - **Check:** `docs/eval/detector-plan.md` (the plan, its amendment and the outcome, in commit
-  order); `docs/eval/detector-derive.md`, "Worst trusted" for each gate.
+  order); `docs/eval/detector-derive.md`, "Worst trusted" for each gate;
+  `tests/test_vision_observe.py::test_a_camera_in_the_wrong_place_is_not_trusted` (a strict expected
+  failure until the bound exists).

@@ -15,7 +15,7 @@ generated it and the output file is committed. Rows marked *planned* have no res
 | Training data against its floors (clips, frames, player and ball boxes, balls by visibility, ball size at the training input, clips per render knob) | `uv run ninety-data-stats <train clips> --stride 5 --input 640x640 --out docs/eval/dataset-stats.json --floors` | `docs/eval/dataset-stats.json` | running: dataset v1, 308 training clips, all on `engine-v1`'s engine (`docs/eval/dataset-v1.json` lists each clip's run and commit): 248 from v3, 30 from topup1 (`occlusion=crowded`, `kit_contrast=low`), both at `b319f21` with renderer 0.3.1, and 30 at `cca498c` (renderer 0.3.2, #118) replacing the v3 clips whose ball rests behind the boards, labelled visible at 0.3.1 (1,043 of v3's 13,443 ball training labels). 0.3.2 changes labels only, so the two renderers' images mix. Seed 82 is dropped (a blocked shot is touched again after the window's cut, which no clip can show) and seed 111 failed the render checks twice (one foot outside its box). Meets every train floor: 1,579 mostly hidden ball labels of 13,856 (11.4%) against 400 and 5%, low-contrast kits 43.8% and crowded windows 60% against 20%. All 308 meet the data contract (`ninety-render-meta`, then `ninety-validate`'s checks at `0dd5190`, main with #108). The floors were set before any data was counted; the learning curve decides whether they are enough |
 | Off-the-shelf detector recall on renders (guide check 2) | planned | `docs/eval/render-checks.json` | planned |
 | Detection precision and recall (players, ball) on the fixed test set, by difficulty, strict and lenient matching | pixel boxes: `uv run python -m ninety.eval.vision_report --test <frozen test clips> --detections <seed<N>.jsonl folder> --out <report.json>`; pitch-level strict and lenient matching planned | `docs/eval/vision-report-v{n}.json`, `docs/eval/vision-report-v1.md`, `docs/eval/vision-report-v2.md` | running for pixel boxes: ours-v3 on the frozen test set, players 0.994 recall at 0.999 precision, ball at least half visible 0.964 at 0.994, ball mostly hidden 0.493 at 0.841 (v2; ours-v2 in v1). Pitch-level matching planned |
-| Event precision, recall and F1 per type; possession accuracy; speed error | events: `uv run python -m ninety.eval.event_score --truth <clip>/events.jsonl --frames <clip>/frames.jsonl --detected <detected.jsonl> --report <report.json>` ([format](#event-report-format)); positions: `uv run python -m ninety.eval.pitch_score` ([event detection from video](#event-detection-from-video)); possession and speed planned | `docs/eval/event-report-v1/` | running on one clip: seed 900001, detected from video (ours-v2, camera from the markings): passes 3 of 4 at strict F1 0.75; the shot read as a pass and one false out of play (the ball's height, planned); ball on the ground placed to a median 0.09 m, players 0.22 m. One 10 s clip is a smoke test, not a rate |
+| Event precision, recall and F1 per type; possession accuracy; speed error | events: `uv run python -m ninety.eval.event_score --truth <clip>/events.jsonl --frames <clip>/frames.jsonl --detected <detected.jsonl> --report <report.json>` ([format](#event-report-format)); positions: `uv run python -m ninety.eval.pitch_score` ([event detection from video](#event-detection-from-video)); possession and speed planned | `docs/eval/event-report-v2.md` | running on the frozen test set's five clips, scored once (ours-v2; the detector re-derived on validation clips, [detector-plan.md](eval/detector-plan.md)): passes 7 of 13 at strict F1 0.67 (recall 0.54, 95% 0.29 to 0.77), 4 of 9 at F1 0.62 without seed 900001, below PLAN's 0.70; the one shot read as a pass and one false out of play (the ball's height, planned); two clips with camera cuts give no events. 13 passes is too few for a rate |
 | Targeted data rounds, before and after | failure clusters from validation clips only: `uv run python -m ninety.vision.failure_clusters <val clips> --detections <file> --round <round> --out docs/eval/<round>/clusters.json`, then `ninety.agents.data_agent`; scored with `ninety.eval.vision_report --freeze docs/eval/test-set-frozen-91d1e3b.json` | `docs/eval/round1/` (clusters, audit, plan, [result](eval/round1/RESULT.md)), `docs/eval/vision-report-v3-mesh.json`, `docs/eval/vision-report-v3ctrl-mesh.json` | round 1 measured on the frozen mesh test set: synthetic data from our engine lifts mostly hidden ball recall from 0.500 (ours-v3) to about 0.58 and cuts false positives by two thirds (125 to 35 and 41); targeting showed no measurable gain over an untargeted control (ours-v4 0.573, ours-v4-ctrl 0.585, 82 labels). Round 1: no gain over control; round 2 planned |
 | Stats engine facts: hand-computed cases, planted defects, citations, size | `uv run pytest tests/test_stats.py tests/test_windows.py tests/test_window_stats_agents.py` | test assertions | running |
 | Window stats on detected events against the same clip's ground truth (PPDA, field tilt, passes a minute per team-window) | to be built once R3's detected events for seed900001 land | | planned |
@@ -307,10 +307,18 @@ renderer 0.3.2), detected with ours-v2 (vision-report-v1). The live path reads e
 `meta.json` (`tests/test_vision_live_path.py` checks the code and a run). Grading then reads the
 answer key.
 
-Every constant was set on ours-v2's validation clips (render run v1), never on a test clip, and
-frozen before the test set was scored, once ([eval/detector-plan.md](eval/detector-plan.md), with
-the measurements in [eval/detector-derive.md](eval/detector-derive.md)). Before that, the detector
-had been developed on test seed 900001, its only clip, and its numbers were partly tuned to it.
+The detector was first developed on test seed 900001, its only clip, so its first numbers were
+partly tuned to the test set. It was then re-derived on ours-v2's validation clips (render run v1),
+and every constant was frozen before the test set was scored, once
+([eval/detector-plan.md](eval/detector-plan.md); measurements in
+[eval/detector-derive.md](eval/detector-derive.md)):
+- **re-derived on validation:** the side naming, the camera trust test, the side vote and RIVAL_M;
+- **tried on validation and kept:** the event and tracker thresholds (none changed on a grid listed
+  beforehand);
+- **still at the values developed on 900001:** the camera search and its optimiser, the marking
+  pixels, the kit colour sampling (`observe.kit_rgb`) and the kit clustering's settings
+  (MIN_COLOUR_FRAMES, OUTLIER_FACTOR, CHROMA_NOISE).
+So seed 900001 is reported both pooled with the others and left out.
 
 ```bash
 T=runs/test-frozen-cca498c/test   # the frozen test set (docs/eval/test-set-frozen.json)
@@ -341,14 +349,14 @@ scorer's pairing (player IoU 0.5, ball centre 5 px) and the planned "in the air"
 
 | Measure | Result |
 |---|---|
-| Passes (strict: 1.0 s, 1.0 m) | 7 of 13 found, 1 false: precision 0.88, recall 0.54, F1 0.67. Per clip: 900001 0.75 (3 of 4), 900004 1.00 (1 of 1), 900005 0.86 (3 of 4); 900002 and 900003 none (below). Lenient and time-only give the same |
+| Passes (strict: 1.0 s, 1.0 m) | 7 of 13 found, 1 false: precision 0.88 (95% 0.53 to 0.98), recall 0.54 (95% 0.29 to 0.77), F1 0.67. **Without seed 900001:** 4 of 9 found, none false, recall 0.44 (95% 0.19 to 0.73), F1 0.62. **Both are below PLAN's target of 0.70.** Per clip: 900001 0.75 (3 of 4), 900004 1.00 (1 of 1), 900005 0.86 (3 of 4); 900002 and 900003 none (below). Lenient and time-only give the same |
 | Shots | 0 of 1: read as a pass (the ball's height, below) |
 | Out of play | none true, 1 false: the same shot reaching the keeper |
 | Outside M1's scope | 5 possession changes, 2 pressures, a deflection, a tackle and a set piece, counted as misses |
-| Camera trusted | 900001 238 of 250 frames, 900004 194, 900005 248; 900002 1 and 900003 7: these two have camera cuts, which the fit does not follow, and the frames the height test trusts there are 46 to 80 m wrong (they make no event, but the test does not reject them) |
+| Camera trusted | 900001 238 of 250 frames, 900004 194, 900005 248; 900002 1 and 900003 7: these two have camera cuts, which the fit does not follow. **The height test trusts those 8 frames although they are 46 to 80 m wrong**, where the old marking test trusted none; on validation it newly trusts 32 such frames, up to 55 m wrong. They make no event here, but the test does not bound how wrong a trusted camera can be (lesson 149); a camera in the wrong place with players the right height passes it. A follow-up adds that bound |
 | Players on the pitch | median 0.21, 0.23 and 0.14 m on the three clips with a camera, 90% within 1.44, 0.63 and 0.33 m |
 | Ball on the ground | median 0.09, 0.14 and 0.05 m, 90% within 0.26, 0.45 and 0.13 m |
-| Teams | every matched pass has its true team (7 of 7). On validation it is 11 of 16: kit colours are read wrongly on some clips (a blue shirt as near-white, a green one as grey), which the derivation found and did not fix ([eval/detector-plan.md](eval/detector-plan.md), step A) |
+| Teams | every matched pass has its true team (7 of 7, 95% 0.65 to 1.00). On validation it is 11 of 16: kit colours are read wrongly on some clips (a blue shirt as near-white, a green one as grey), which the derivation found and did not fix ([eval/detector-plan.md](eval/detector-plan.md), step A) |
 
 **What changed from the published seed-900001 figures, and why.** Those figures (pass F1 0.75,
 245 of 250 frames trusted) came from constants developed on that clip. Re-derived on validation:

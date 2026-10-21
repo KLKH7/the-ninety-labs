@@ -33,7 +33,7 @@ uv run python -m ninety.eval.tracked_speed tests/fixtures/observations-seed90000
 ## Results
 
 Re-graded once with the camera trust test of `docs/eval/detector-plan.md` (step D): it trusts
-more of this clip's frames, so the tracks and their ids changed.
+238 of this clip's 250 frames, against 245 before, so the tracks and their ids changed.
 
 
 | Smoothing | Speed now, median (p90) | Top speed, median (p90) | Distance, median (p90) |

@@ -20,7 +20,7 @@ from pathlib import Path
 
 import numpy as np
 
-from ninety.eval.attribution_derive import test_seeds
+from ninety.eval.attribution_derive import refused
 from ninety.eval.pitch_score import PLAYER_IOU, SCORE_MIN, _iou
 from ninety.vision import track as tr
 from ninety.vision.tracked_frames import MIN_TRACK_FRAMES
@@ -31,7 +31,7 @@ ROOT = Path(__file__).resolve().parents[2]
 def read(seed: int, clips: Path, observations: Path) -> tuple[list[dict], dict[int, dict], list[dict]] | None:
     """The clip's observations, truth frames by number, and truth events; None when the camera
     could not be placed (no observations)."""
-    if seed in test_seeds():
+    if refused(seed):
         raise SystemExit(f"test seed {seed}: the test clips are for the final score only")
     obs = observations / f"observations-seed{seed}.jsonl"
     if not obs.exists():
@@ -139,36 +139,12 @@ def camera_errors(rows: list[dict], frames: dict[int, dict]) -> list[dict]:
     return out
 
 
-# Step B2: players' heights. A player stands about PLAYER_HEIGHT_M tall (design: the middle of the
-# synthetic squads' 1.66 to 1.89 m, clip.json `looks`), so through a right camera his box is about
-# as tall as an upright 1.80 m segment at his feet projects; a camera at the wrong distance or zoom
-# scales every player the same wrong way.
-PLAYER_HEIGHT_M = 1.80
-
-
 def height_ratio(row: dict) -> float | None:
-    """The frame's median, over player detections, of box height over the projected height of an
-    upright PLAYER_HEIGHT_M at the box's foot point through the frame's camera; None without a
-    camera or players. Live-path data only (the observations line), whether or not the frame is
-    trusted."""
+    """The live path's own measure (ninety/vision/observe.py, `height_ratio`) on an observations
+    line, trusted or not: one definition and one PLAYER_HEIGHT_M."""
+    from ninety.vision.observe import height_ratio as live
     P = row["camera"].get("P")
-    if P is None:
-        return None
-    P = np.array(P)
-    ratios = []
-    for d in row["players"]:
-        if d["score"] < SCORE_MIN:
-            continue
-        x0, _, x1, y1 = d["bbox"]
-        g = _to_ground(P, np.array([[(x0 + x1) / 2, y1]]))[0]  # the foot point, as observe finds it
-        foot = P @ np.array([g[0], g[1], 0.0, 1.0])
-        head = P @ np.array([g[0], g[1], PLAYER_HEIGHT_M, 1.0])
-        if foot[2] <= 0 or head[2] <= 0:
-            continue
-        px = abs(foot[1] / foot[2] - head[1] / head[2])
-        if px > 0:
-            ratios.append((d["bbox"][3] - d["bbox"][1]) / px)
-    return float(np.median(ratios)) if ratios else None
+    return None if P is None else live(row["players"], np.array(P))
 
 
 GOOD_M = 1.0  # a frame is good when its ground mapping error is within the strict radius (EVALUATION)

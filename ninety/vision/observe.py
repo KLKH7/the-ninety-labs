@@ -33,13 +33,17 @@ from ninety.vision.track import SCORE_MIN
 BALL_CENTRE_Z = 0.11  # a ball on the ground has its centre one radius up (Law 2: about 0.11 m)
 # Whether a frame's camera is trusted: its players are as tall as they should be. Through a right
 # camera a player's box is about as tall as an upright PLAYER_HEIGHT_M segment at his feet projects
-# (design: the middle of the synthetic squads' 1.66 to 1.89 m); a camera at the wrong distance or
-# zoom scales every player the same wrong way. The frame's median ratio must lie in HEIGHT_BAND: the
+# (design: about the renderer's mean player, which it draws from N(1.81 m, 0.07 m),
+# ninety/render/scene.py; the band absorbs the spread); a camera at the wrong distance or zoom
+# scales every player the same wrong way. The frame's median ratio must lie in HEIGHT_BAND: the
 # 1st to 99th percentile of that ratio on validation frames whose ground mapping is within 1.0 m
 # (docs/eval/detector-plan.md, step B; docs/eval/detector-derive.json). It replaced the marking test
 # (half the marking pixels within 1.5 px), which trusted 198 badly wrong frames on validation and
 # kept 89% of the good ones, where this keeps 98%. The marking fit's own verdict is still kept as
 # `markings_ok`, and still guides the fit from frame to frame (pitch.fit_clip).
+# Known limit (lesson 149): a camera in the wrong place with the right scale passes, so this does
+# not bound how wrong a trusted camera can be (validation: up to 55 m; test: 80 m, on clips with a
+# camera cut). A follow-up adds that bound.
 PLAYER_HEIGHT_M = 1.80
 HEIGHT_BAND = (0.901, 1.002)
 

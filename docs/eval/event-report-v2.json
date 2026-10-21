@@ -1,6 +1,6 @@
 {
   "command": "uv run python -m ninety.eval.event_report --test-dir runs/test-frozen-cca498c/test --observations docs/eval/attribution --observations tests/fixtures --out docs/eval/event-report-v2",
-  "commit": "2782713c40ed83904b0b8f332a5937715b406007",
+  "commit": "746170ed5c00f0716921d6722c7bbef58151a7f4",
   "date": "2026-10-20",
   "pooled": {
     "strict": {
@@ -12,7 +12,12 @@
         "fn": 1,
         "precision": null,
         "recall": 0.0,
-        "f1": null
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.79
+        ]
       },
       "out_of_play": {
         "true": 0,
@@ -22,7 +27,12 @@
         "fn": 0,
         "precision": 0.0,
         "recall": null,
-        "f1": null
+        "f1": null,
+        "precision_95": [
+          0.0,
+          0.79
+        ],
+        "recall_95": null
       },
       "pass": {
         "true": 13,
@@ -32,7 +42,15 @@
         "fn": 6,
         "precision": 0.875,
         "recall": 0.5384615384615384,
-        "f1": 0.6666666666666667
+        "f1": 0.6666666666666667,
+        "precision_95": [
+          0.53,
+          0.98
+        ],
+        "recall_95": [
+          0.29,
+          0.77
+        ]
       },
       "possession_change": {
         "true": 5,
@@ -42,7 +60,12 @@
         "fn": 5,
         "precision": null,
         "recall": 0.0,
-        "f1": null
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.43
+        ]
       },
       "pressure": {
         "true": 2,
@@ -52,7 +75,12 @@
         "fn": 2,
         "precision": null,
         "recall": 0.0,
-        "f1": null
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.66
+        ]
       },
       "set_piece": {
         "true": 1,
@@ -62,7 +90,12 @@
         "fn": 1,
         "precision": null,
         "recall": 0.0,
-        "f1": null
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.79
+        ]
       },
       "shot": {
         "true": 1,
@@ -72,7 +105,12 @@
         "fn": 1,
         "precision": null,
         "recall": 0.0,
-        "f1": null
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.79
+        ]
       },
       "tackle": {
         "true": 1,
@@ -82,7 +120,12 @@
         "fn": 1,
         "precision": null,
         "recall": 0.0,
-        "f1": null
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.79
+        ]
       }
     },
     "lenient": {
@@ -94,7 +137,12 @@
         "fn": 1,
         "precision": null,
         "recall": 0.0,
-        "f1": null
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.79
+        ]
       },
       "out_of_play": {
         "true": 0,
@@ -104,7 +152,12 @@
         "fn": 0,
         "precision": 0.0,
         "recall": null,
-        "f1": null
+        "f1": null,
+        "precision_95": [
+          0.0,
+          0.79
+        ],
+        "recall_95": null
       },
       "pass": {
         "true": 13,
@@ -114,7 +167,15 @@
         "fn": 6,
         "precision": 0.875,
         "recall": 0.5384615384615384,
-        "f1": 0.6666666666666667
+        "f1": 0.6666666666666667,
+        "precision_95": [
+          0.53,
+          0.98
+        ],
+        "recall_95": [
+          0.29,
+          0.77
+        ]
       },
       "possession_change": {
         "true": 5,
@@ -124,7 +185,12 @@
         "fn": 5,
         "precision": null,
         "recall": 0.0,
-        "f1": null
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.43
+        ]
       },
       "pressure": {
         "true": 2,
@@ -134,7 +200,12 @@
         "fn": 2,
         "precision": null,
         "recall": 0.0,
-        "f1": null
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.66
+        ]
       },
       "set_piece": {
         "true": 1,
@@ -144,7 +215,12 @@
         "fn": 1,
         "precision": null,
         "recall": 0.0,
-        "f1": null
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.79
+        ]
       },
       "shot": {
         "true": 1,
@@ -154,7 +230,12 @@
         "fn": 1,
         "precision": null,
         "recall": 0.0,
-        "f1": null
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.79
+        ]
       },
       "tackle": {
         "true": 1,
@@ -164,7 +245,12 @@
         "fn": 1,
         "precision": null,
         "recall": 0.0,
-        "f1": null
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.79
+        ]
       }
     },
     "time_only": {
@@ -176,7 +262,12 @@
         "fn": 1,
         "precision": null,
         "recall": 0.0,
-        "f1": null
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.79
+        ]
       },
       "out_of_play": {
         "true": 0,
@@ -186,7 +277,12 @@
         "fn": 0,
         "precision": 0.0,
         "recall": null,
-        "f1": null
+        "f1": null,
+        "precision_95": [
+          0.0,
+          0.79
+        ],
+        "recall_95": null
       },
       "pass": {
         "true": 13,
@@ -196,7 +292,15 @@
         "fn": 6,
         "precision": 0.875,
         "recall": 0.5384615384615384,
-        "f1": 0.6666666666666667
+        "f1": 0.6666666666666667,
+        "precision_95": [
+          0.53,
+          0.98
+        ],
+        "recall_95": [
+          0.29,
+          0.77
+        ]
       },
       "possession_change": {
         "true": 5,
@@ -206,7 +310,12 @@
         "fn": 5,
         "precision": null,
         "recall": 0.0,
-        "f1": null
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.43
+        ]
       },
       "pressure": {
         "true": 2,
@@ -216,7 +325,12 @@
         "fn": 2,
         "precision": null,
         "recall": 0.0,
-        "f1": null
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.66
+        ]
       },
       "set_piece": {
         "true": 1,
@@ -226,7 +340,12 @@
         "fn": 1,
         "precision": null,
         "recall": 0.0,
-        "f1": null
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.79
+        ]
       },
       "shot": {
         "true": 1,
@@ -236,7 +355,12 @@
         "fn": 1,
         "precision": null,
         "recall": 0.0,
-        "f1": null
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.79
+        ]
       },
       "tackle": {
         "true": 1,
@@ -246,7 +370,299 @@
         "fn": 1,
         "precision": null,
         "recall": 0.0,
-        "f1": null
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.79
+        ]
+      }
+    }
+  },
+  "pooled_without_developed_on": {
+    "strict": {
+      "deflection": {
+        "true": 1,
+        "detected": 0,
+        "tp": 0,
+        "fp": 0,
+        "fn": 1,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.79
+        ]
+      },
+      "pass": {
+        "true": 9,
+        "detected": 4,
+        "tp": 4,
+        "fp": 0,
+        "fn": 5,
+        "precision": 1.0,
+        "recall": 0.4444444444444444,
+        "f1": 0.6153846153846153,
+        "precision_95": [
+          0.51,
+          1.0
+        ],
+        "recall_95": [
+          0.19,
+          0.73
+        ]
+      },
+      "possession_change": {
+        "true": 3,
+        "detected": 0,
+        "tp": 0,
+        "fp": 0,
+        "fn": 3,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.56
+        ]
+      },
+      "pressure": {
+        "true": 1,
+        "detected": 0,
+        "tp": 0,
+        "fp": 0,
+        "fn": 1,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.79
+        ]
+      },
+      "set_piece": {
+        "true": 1,
+        "detected": 0,
+        "tp": 0,
+        "fp": 0,
+        "fn": 1,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.79
+        ]
+      },
+      "tackle": {
+        "true": 1,
+        "detected": 0,
+        "tp": 0,
+        "fp": 0,
+        "fn": 1,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.79
+        ]
+      }
+    },
+    "lenient": {
+      "deflection": {
+        "true": 1,
+        "detected": 0,
+        "tp": 0,
+        "fp": 0,
+        "fn": 1,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.79
+        ]
+      },
+      "pass": {
+        "true": 9,
+        "detected": 4,
+        "tp": 4,
+        "fp": 0,
+        "fn": 5,
+        "precision": 1.0,
+        "recall": 0.4444444444444444,
+        "f1": 0.6153846153846153,
+        "precision_95": [
+          0.51,
+          1.0
+        ],
+        "recall_95": [
+          0.19,
+          0.73
+        ]
+      },
+      "possession_change": {
+        "true": 3,
+        "detected": 0,
+        "tp": 0,
+        "fp": 0,
+        "fn": 3,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.56
+        ]
+      },
+      "pressure": {
+        "true": 1,
+        "detected": 0,
+        "tp": 0,
+        "fp": 0,
+        "fn": 1,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.79
+        ]
+      },
+      "set_piece": {
+        "true": 1,
+        "detected": 0,
+        "tp": 0,
+        "fp": 0,
+        "fn": 1,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.79
+        ]
+      },
+      "tackle": {
+        "true": 1,
+        "detected": 0,
+        "tp": 0,
+        "fp": 0,
+        "fn": 1,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.79
+        ]
+      }
+    },
+    "time_only": {
+      "deflection": {
+        "true": 1,
+        "detected": 0,
+        "tp": 0,
+        "fp": 0,
+        "fn": 1,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.79
+        ]
+      },
+      "pass": {
+        "true": 9,
+        "detected": 4,
+        "tp": 4,
+        "fp": 0,
+        "fn": 5,
+        "precision": 1.0,
+        "recall": 0.4444444444444444,
+        "f1": 0.6153846153846153,
+        "precision_95": [
+          0.51,
+          1.0
+        ],
+        "recall_95": [
+          0.19,
+          0.73
+        ]
+      },
+      "possession_change": {
+        "true": 3,
+        "detected": 0,
+        "tp": 0,
+        "fp": 0,
+        "fn": 3,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.56
+        ]
+      },
+      "pressure": {
+        "true": 1,
+        "detected": 0,
+        "tp": 0,
+        "fp": 0,
+        "fn": 1,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.79
+        ]
+      },
+      "set_piece": {
+        "true": 1,
+        "detected": 0,
+        "tp": 0,
+        "fp": 0,
+        "fn": 1,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.79
+        ]
+      },
+      "tackle": {
+        "true": 1,
+        "detected": 0,
+        "tp": 0,
+        "fp": 0,
+        "fn": 1,
+        "precision": null,
+        "recall": 0.0,
+        "f1": null,
+        "precision_95": null,
+        "recall_95": [
+          0.0,
+          0.79
+        ]
       }
     }
   },

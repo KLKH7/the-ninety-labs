@@ -350,3 +350,11 @@ def test_a_foul_is_placed_at_the_fouled_player_not_the_one_who_fouled():
              "players": [{"id": "h4", "team": "home", "x": 10.0, "y": 10.0},
                          {"id": "a6", "team": "away", "x": 10.5, "y": 11.4}]}
     assert reference_point("foul", "home", 0.0, [frame], (10.5, 11.4))[:2] == (10.5, 11.4)
+
+
+def test_the_wilson_interval_matches_known_values():
+    from ninety.eval.event_score import wilson
+    assert wilson(7, 13) == [0.29, 0.77]
+    assert wilson(7, 7) == [0.65, 1.0]
+    assert wilson(0, 5) == [0.0, 0.43]
+    assert wilson(0, 0) is None

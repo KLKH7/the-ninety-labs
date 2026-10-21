@@ -58,7 +58,7 @@ def axis_split(trim: bool):
         def spread(g):
             total = sum(w for _, w, _ in g)
             mu = sum(v * w for v, w, _ in g) / total
-            return sum(w * (v - mu) ** 2 for v, w, _ in g)
+            return sum(w * (v - mu) * (v - mu) for v, w, _ in g)
         k = min(range(1, len(proj)), key=lambda k: spread(proj[:k]) + spread(proj[k:]))
         return tr._mean([(c, w) for _, w, c in proj[:k]]), tr._mean([(c, w) for _, w, c in proj[k:]])
     return start
