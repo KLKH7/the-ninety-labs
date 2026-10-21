@@ -51,6 +51,10 @@ class TeamBrain:
     pressers: list[str] = field(default_factory=list)
     markers: dict[str, tuple[float, float]] = field(default_factory=dict)  # defender -> spot
     marked: set[str] = field(default_factory=set)  # O2: the attackers those markers have
+    # T3: whom the press is on (the carrier, or the kick in flight) and the presser and cover named for it,
+    # held while that stays the same.
+    press_on: object = None
+    held_pressers: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         self.block = self.block or self.style.level("line_height")

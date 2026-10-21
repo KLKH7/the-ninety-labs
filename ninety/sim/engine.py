@@ -2535,7 +2535,7 @@ class Engine:
                     given.pressers = [] if given.wall else self.who_presses(brain)
                 brain.pressers = given.pressers
             elif holder != team:
-                brain.pressers = self.who_presses(brain)
+                brain.pressers = self.press_for(brain)
             if holder != team:  # O2: pick up the attackers who threaten our goal
                 free = {
                     p.id: (p.x, p.y)
@@ -2562,12 +2562,29 @@ class Engine:
             else:
                 brain.markers, brain.marked = {}, set()
 
+    def press_for(self, brain: TeamBrain) -> list[str]:
+        """T3: the presser and the cover keep their jobs while the press is on the same thing: the same
+        carrier, or the same kick in flight. The brain names them again when the ball changes feet or is
+        struck, when the presser no longer thinks pressing is worth it (P17), or when either is beaten.
+        Named afresh at every look (twice a second), two players about as near swapped the cover and
+        neither reached his spot (*design*: a job is held while the play it answers lasts)."""
+        kick = ("kick", self.kicked.get("id"), self.kicked.get("t")) if self.kicked else None
+        on = self.possessor or kick
+        held = brain.held_pressers
+        if on is not None and on == brain.press_on and held and self.accepts_press(self.by_id[held[0]]) \
+                and all(self.off_balance.get(pid, -1.0) <= self.t for pid in held):
+            return held
+        brain.press_on, brain.held_pressers = on, self.who_presses(brain)
+        return brain.held_pressers
+
     def who_presses(self, brain: TeamBrain) -> list[str]:
         """T3, P17: the brain asks its players in the order they could reach the ball; the first
-        who thinks pressing now is worth what it costs him goes, the next in that order covers."""
-        for i, pid in enumerate(brain.ranked):
+        who thinks pressing now is worth what it costs him goes, the next in that order covers. A
+        player who is beaten (down, getting up) is out of the play and is not asked."""
+        up = [pid for pid in brain.ranked if self.off_balance.get(pid, -1.0) <= self.t]
+        for i, pid in enumerate(up):
             if self.accepts_press(self.by_id[pid]):
-                return brain.ranked[i:i + 2]
+                return up[i:i + 2]
         return []
 
     def run_target(self, p: Player, carrier: Player, brain: TeamBrain) -> tuple[float, float] | None:
