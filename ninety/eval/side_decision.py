@@ -16,11 +16,13 @@ import argparse
 import contextlib
 import datetime
 import json
+import math
+import subprocess
 from pathlib import Path
 
 from ninety.eval import attribution_score as at
 from ninety.eval import detector_derive as dd
-from ninety.eval.event_score import git_commit, wilson
+from ninety.eval.event_score import Z95, git_commit, wilson
 from ninety.vision import events as ev
 from ninety.vision import track as tr
 
@@ -29,6 +31,63 @@ NAMING = ("N0", "N1", "N2", "N3", "N4")
 COMMAND = ("uv run python -m ninety.eval.side_decision --clips <render run v1>/train "
            "--observations <validation observations> --seeds <the validation seeds> "
            "--out docs/eval/side-decision")
+
+
+def ordering_95(pairs: list[tuple[float, bool]]) -> dict:
+    """The ordering (dd.ordering, an area under the ROC curve) with its 95% interval by Hanley and
+    McNeil's standard error (1982, Radiology 143:29-36), and the counts it rests on (lesson 89)."""
+    a = dd.ordering(pairs)
+    n1, n2 = sum(1 for _, ok in pairs if not ok), sum(1 for _, ok in pairs if ok)
+    if a is None:
+        return {"ordering": None, "ordering_95": None, "wrong": n1, "right": n2}
+    q1, q2 = a / (2 - a), 2 * a * a / (1 + a)
+    se = math.sqrt((a * (1 - a) + (n1 - 1) * (q1 - a * a) + (n2 - 1) * (q2 - a * a)) / (n1 * n2))
+    lo, hi = round(max(0.0, a - Z95 * se), 2), round(min(1.0, a + Z95 * se), 2)
+    return {"ordering": round(a, 4), "ordering_95": [lo, hi], "wrong": n1, "right": n2}
+
+
+def command(argv: list[str] | None) -> str:
+    """The command as run, paths inside the repository written relative to it."""
+    import sys
+    args = sys.argv[1:] if argv is None else argv
+    out = []
+    for x in args:
+        try:
+            x = str(Path(x).resolve().relative_to(dd.ROOT)) if Path(x).exists() else x
+        except ValueError:  # a clip folder in the main checkout's runs/, or elsewhere
+            x = x[x.index("runs/"):] if "runs/" in x else "<outside the repository>"
+        out.append(x)
+    return "uv run python -m ninety.eval.side_decision " + " ".join(out)
+
+
+def dirty() -> bool:
+    """Whether the working tree had uncommitted changes when a report was made: its commit stamp
+    then names the last commit, not the code that ran."""
+    out = subprocess.run(["git", "status", "--porcelain", "--untracked-files=no"], cwd=dd.ROOT,
+                         capture_output=True, text=True)
+    return bool(out.stdout.strip())
+
+
+def clusters(tracks: list[dict]) -> dict:
+    """Whether a clip's two kit clusters are sound (the plan): in each, at least SOUND_SHARE of its
+    matched outfield track-frames belong to one true side, and the two majorities differ. A cluster
+    split evenly has no majority, so its clip is not sound. Today's team labels are the cluster ids.
+    `named_right` (sound clips only): whether the cluster labelled home is home's."""
+    by_cluster = {"home": {"home": 0, "away": 0}, "away": {"home": 0, "away": 0}}
+    for t in tracks:
+        if t["team"] in by_cluster and t["truth"] in ("home", "away") and not t["keeper"]:
+            by_cluster[t["team"]][t["truth"]] += t["frames"]
+    majority, shares = {}, {}
+    for c, counts in by_cluster.items():
+        total = sum(counts.values())
+        top = max(counts.values())
+        winners = [k for k, v in counts.items() if v == top]
+        majority[c] = winners[0] if total and len(winners) == 1 else None
+        shares[c] = top / total if total else 0.0
+    sound = (all(v >= SOUND_SHARE for v in shares.values()) and None not in majority.values()
+             and majority["home"] != majority["away"])
+    return {"sound": sound, "shares": shares, "majority": majority,
+            "named_right": (majority["home"] == "home") if sound else None}
 
 
 @contextlib.contextmanager
@@ -54,7 +113,8 @@ def flipped(flip: bool):
 def evidence(rows: list[dict]) -> dict:
     """Each source's votes on whether today's naming is right (+) or should flip (-), from live data
     only: N0 the mean-position vote, N1 detected passes' direction, N2 carries within spells, N3 the
-    goal each strike heads for."""
+    goal the strike ending each possession spell heads for (not only the strikes the detector calls
+    shots; the plan's table said "detected shots")."""
     tracks = tr.track_players(rows)
     info = tr.assign_teams(tracks)
     path = tr.ball_path(rows)
@@ -106,22 +166,10 @@ def clip(seed: int, clips: Path, observations: Path) -> dict | None:
     rows, frames, _ = got
     e = evidence(rows)
     sides_now = dd.sides(rows, frames)
-    # Sound clusters (plan): each cluster's matched track-frames at least SOUND_SHARE one side, and
-    # the two clusters' majorities differ. Today's team labels are the cluster ids.
-    by_cluster = {"home": {"home": 0, "away": 0}, "away": {"home": 0, "away": 0}}
-    for t in sides_now["tracks"]:
-        if t["team"] in by_cluster and t["truth"] in ("home", "away") and not t["keeper"]:
-            by_cluster[t["team"]][t["truth"]] += t["frames"]
-    majority, shares = {}, {}
-    for c, counts in by_cluster.items():
-        total = sum(counts.values())
-        majority[c] = max(counts, key=counts.get) if total else None
-        shares[c] = counts[majority[c]] / total if total else 0.0
-    sound = all(v >= SOUND_SHARE for v in shares.values()) and majority["home"] != majority["away"]
-    now_right = sound and majority["home"] == "home"
+    cl = clusters(sides_now["tracks"])
+    sound, shares, now_right = cl["sound"], cl["shares"], cl["named_right"]
     decisions = {n: e["margins"][n] >= 0 for n in NAMING}  # True: keep today's naming
-    out = {"seed": seed, "sound": sound, "cluster_shares": shares,
-           "now_right": now_right if sound else None,
+    out = {"seed": seed, "sound": sound, "cluster_shares": shares, "now_right": now_right,
            "margins": {k: round(v, 4) for k, v in e["margins"].items()}, "counts": e["counts"],
            "separation": separation_of(e["tracks"], e["info"]), "candidates": {}}
     for n in NAMING:
@@ -159,17 +207,10 @@ def test_clip(seed: int, test_dir: Path, dirs: list[Path]) -> dict:
     root = test_dir / f"seed{seed}"
     frames = {f["frame"]: f for f in map(json.loads, (root / "frames.jsonl").read_text().splitlines())}
     s = dd.sides(rows, frames)
-    by_cluster = {"home": {"home": 0, "away": 0}, "away": {"home": 0, "away": 0}}
-    for t in s["tracks"]:
-        if t["team"] in by_cluster and t["truth"] in ("home", "away") and not t["keeper"]:
-            by_cluster[t["team"]][t["truth"]] += t["frames"]
-    shares = {c: (max(v.values()) / sum(v.values()) if sum(v.values()) else 0.0)
-              for c, v in by_cluster.items()}
-    majority = {c: max(v, key=v.get) if sum(v.values()) else None for c, v in by_cluster.items()}
-    sound = all(x >= SOUND_SHARE for x in shares.values()) and majority["home"] != majority["away"]
+    cl = clusters(s["tracks"])
     tracks = [t for t in s["tracks"] if t["team"] and t["truth"]]
     right = sum(1 for t in tracks if t["team"] == t["truth"])
-    return {"seed": seed, "sound": sound, "named_right": (majority["home"] == "home") if sound else None,
+    return {"seed": seed, "sound": cl["sound"], "named_right": cl["named_right"],
             "right_frames": s["right_frames"], "frames": s["frames"],
             "accuracy_95": wilson(s["right_frames"], s["frames"]),
             "tracks_right": right, "tracks": len(tracks), "tracks_95": wilson(right, len(tracks)),
@@ -191,13 +232,17 @@ def main(argv: list[str] | None = None) -> None:
     if a.test_dir is not None:
         rows = [test_clip(s, a.test_dir, [a.observations, *a.more_observations]) for s in seeds]
         rf, fr = sum(r["right_frames"] for r in rows), sum(r["frames"] for r in rows)
-        body = {"command": ("uv run python -m ninety.eval.side_decision "
-                            "--clips runs/test-frozen-cca498c/test "
-                            "--test-dir runs/test-frozen-cca498c/test --observations docs/eval/attribution "
-                            "--more-observations tests/fixtures --seeds 900001,900002,900003,900004,900005 "
-                            "--out docs/eval/side-decision-test"),
-                "commit": git_commit(), "date": datetime.date.today().isoformat(), "clips": rows,
+        body = {"command": command(argv),
+                "commit": git_commit(), "dirty": dirty(), "date": datetime.date.today().isoformat(),
+                "clips": rows,
                 "accuracy": round(rf / fr, 4) if fr else None, "accuracy_95": wilson(rf, fr)}
+        tr_, tn = sum(r["tracks_right"] for r in rows), sum(r["tracks"] for r in rows)
+        body["tracks_right"], body["tracks"], body["tracks_95"] = tr_, tn, wilson(tr_, tn)
+        # Seed 900001 is the clip the detector's side naming was first developed on (#143, #187).
+        rest = [r for r in rows if r["seed"] != 900001]
+        rf2, fr2 = sum(r["right_frames"] for r in rest), sum(r["frames"] for r in rest)
+        body["accuracy_without_900001"] = round(rf2 / fr2, 4) if fr2 else None
+        body["accuracy_without_900001_95"] = wilson(rf2, fr2)
         at.write_or_check(a.out, body, test_md, a.check)
         print(json.dumps({k: body[k] for k in ("accuracy", "accuracy_95")}))
         return
@@ -218,7 +263,7 @@ def main(argv: list[str] | None = None) -> None:
                   and (pooled[n]["accuracy"] or 0) >= (base["accuracy"] or 0)]
     best = max(qualifying, key=lambda n: (pooled[n]["accuracy"], -NAMING.index(n)), default=None)
     adopted = best if best and pooled[best]["accuracy"] > base["accuracy"] else "N0"
-    order = {}
+    order, order_95 = {}, {}
     for k in ("K0", "K1", "K2"):
         pairs = []
         for c in clips:
@@ -228,10 +273,12 @@ def main(argv: list[str] | None = None) -> None:
                 if v is not None:
                     pairs.append((v, p["right"]))
         order[k] = dd.ordering(pairs)
+        order_95[k] = ordering_95(pairs)
     chosen = max(order, key=lambda k: (order[k] or -1, -("K0", "K1", "K2").index(k)))
     body = {"command": COMMAND, "commit": git_commit(), "date": datetime.date.today().isoformat(),
             "sound_share": SOUND_SHARE, "pooled": pooled, "adopted_naming": adopted,
-            "confidence_ordering": order, "adopted_confidence": chosen,
+            "confidence_ordering": order, "confidence_ordering_95": order_95, "adopted_confidence": chosen,
+            "dirty": dirty(),
             "predictive": (order[chosen] or 0) >= 0.80,
             "clips": [{**c, "confidence": confidences(c, adopted)} for c in clips]}
     at.write_or_check(a.out, body, report_md, a.check)
@@ -244,7 +291,11 @@ def test_md(body: dict) -> str:
              f"Generated by `{body['command']}` at commit `{body['commit']}`, {body['date']}. "
              "Code frozen on validation ([side-decision-plan.md](side-decision-plan.md)).", "",
              f"Side accuracy by track-frames, all clips: **{body['accuracy']}** "
-             f"(95% {body['accuracy_95']}).", "",
+             f"(95% {body['accuracy_95']}; frames within a track are not independent, so this is "
+             "optimistic). "
+             f"By tracks: {body.get('tracks_right')} of {body.get('tracks')} (95% {body.get('tracks_95')}). "
+             f"Without seed 900001, the clip the side naming was first developed on: "
+             f"{body.get('accuracy_without_900001')} (95% {body.get('accuracy_without_900001_95')}).", "",
              "| Seed | Feature | Clusters sound | Named right | Accuracy, track-frames (95%) "
              "| Tracks right (95%) |",
              "|---|---|---|---|---|---|"]
@@ -272,8 +323,10 @@ def report_md(body: dict) -> str:
         *[f"| {n} | {v['sound_clips_right']} of {v['sound_clips']} {v['sound_clips_95']} | {v['accuracy']} "
           f"{v['accuracy_95']} | {v['passes_right']} of {v['passes']} |" for n, v in body["pooled"].items()],
         "",
-        "Confidence ordering (share of wrong-right pass pairs ordered right; 0.5 is chance): "
-        + ", ".join(f"{k} {v}" for k, v in body["confidence_ordering"].items()) + ".",
+        "Confidence ordering (share of wrong-right pass pairs ordered right; 0.5 is chance), with its "
+        "95% interval (Hanley and McNeil 1982) and the passes it rests on: "
+        + "; ".join(f"{k} {v['ordering']} {v['ordering_95']} ({v['wrong']} wrong, {v['right']} right)"
+                    for k, v in body["confidence_ordering_95"].items()) + ".",
         "",
         "## Per clip",
         "",
