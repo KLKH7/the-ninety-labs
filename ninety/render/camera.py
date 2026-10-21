@@ -165,6 +165,13 @@ BALL_RADIUS_M = 0.11  # Law 2: a circumference of 68 to 70 cm
 # design: the taker kept a tenth of the picture in from each edge, so his run-up and the ball's first
 # metres are in shot as well as the ball (set before the corner rule was measured).
 CORNER_TAKER_MARGIN = 0.1
+# design: a near corner's delivery is cut to a second, genuinely different angle, the near-side camera
+# at the line of the penalty area, low beside the touchline (after the near-side 16 m cameras of a
+# standard broadcast camera plan, *verify*; lesson 177). The gantry, high at halfway, sees mostly
+# run-off at a near corner; this camera sees the play along the goal line.
+SIDE_CAMERA = (16.5, -10.0, 9.0)  # x for the left end (Law 1: the penalty area's 16.5 m), y, height
+KICK_SEEN_S = 0.2  # design: the strike stays on the gantry this long before any cut, so it is seen
+SIDE_HALF_M = 10.0  # design: the side camera's medium shot, this much ground either side of the play
 NET_SETTLE_S = 2.6  # the mesh is back to rest by here; the angle itself holds CUT_HOLD_S
 
 
@@ -279,6 +286,7 @@ class Director:
         self._open_until = -1.0  # the restart's closed-up shot after an edit cut (open_on_restart)
         self._ease_end = -1.0  # the ease out of it ends here, at the wide shot
         self._corner_flag: tuple[float, float] | None = None  # the corner waiting to be taken
+        self._delivery: dict | None = None  # a near corner just kicked, waiting for the cut
         self.half_width = params.half_width_m
         self.prev_ball: tuple[float, float] | None = None
         self.shake_phase = (self.rng.uniform(0, 6.28), self.rng.uniform(0, 6.28))
@@ -303,6 +311,8 @@ class Director:
         self._cut_until = -1.0
         self.net = None
         self._corner_flag = None
+        self._delivery = None
+        self._kicked_from = None
 
     def open_on_restart(self) -> None:
         """The first frame after a cut: the picture comes back on the restart with the gantry closed
@@ -553,6 +563,10 @@ class Director:
         itself the change of shot. `ball_z` is the ball's height, so a lofted ball is kept in the
         picture too (lesson 175)."""
         self.ball_z = ball_z
+        if self._corner_flag is not None and corner is None:
+            self._kicked_from = self._corner_flag  # the corner's wait ends: the kick is being taken
+        if corner is not None:
+            self._kicked_from = None
         self._corner_flag = corner
         self.players = [(p[0], p[1], p[2]) for p in players] if players else []
         if self.prev_ball is None:
@@ -568,6 +582,17 @@ class Director:
             self._ease_end = self.t + OPEN_EASE_S
             self._cut_until = min(self._cut_until, self._ease_end)
         gx, gy, ghw = self._goal(ball_x, ball_y, vx, vy)
+        still = math.hypot(vx, vy) < PLAYED_MPS
+        if still and self.aim is not None and self._corner_flag is None and self.t >= self._ease_end:
+            # The lens holds on a still ball: an operator does not zoom while nothing moves (the
+            # blind critic of 0.5.6: an 8 s zoom-in on a ball at a receiver's feet; lesson 177).
+            ghw = self.half_width
+        kicked = getattr(self, "_kicked_from", None)
+        if kicked is not None and not still:
+            # From the first frame the kicked ball moves, so its lead points where it is going.
+            self._kicked_from = None
+            if kicked[1] == 0.0:  # a near corner
+                self._start_delivery(kicked, ball_x, ball_y, vx, vy)
         if self.aim is None:
             self.aim = [gx, gy]
             self.aim_v = [0.0, 0.0]
@@ -617,6 +642,16 @@ class Director:
         if (fresh_goal and self.cuts) or due:
             self._cut_kind = want
             self._cut_until = self.t + CUT_HOLD_S
+        if self._delivery is not None and self._cut_kind != "corner16" and not steady:
+            # The cut comes only with the ball already inside the side camera's CENTRAL box, so the
+            # kick is seen on the gantry; it lapses if that does not happen within a second.
+            if self.t - self._delivery["t"] > 1.0:
+                self._delivery = None
+            elif self.t - self._delivery["t"] >= KICK_SEEN_S and self._in_side_shot(ball_x, ball_y):
+                self._cut_kind = "corner16"
+                self._cut_until = self.t + CUT_HOLD_S
+        if self._cut_kind == "corner16" and self.t >= self._cut_until - 1e-9:
+            self._cut_kind, self._delivery = "", None
         if self._cut_kind != "tight":
             self.tight_aim = None
         else:
@@ -741,7 +776,55 @@ class Director:
         z = min(max(self.net["z"], 0.4), 2.1)
         return self._framed(self._net_pos(side), (line + outward * 1.0, y, z), 7.0)
 
+    def _start_delivery(self, flag, bx: float, by: float, vx: float, vy: float) -> None:
+        """A near corner kicked (its wait ends: corner_waits): the side camera, on that end, framed on
+        where the delivery is going, pan_lag_s ahead, SIDE_HALF_M of ground either side."""
+        pos = (SIDE_CAMERA[0] if flag[0] == 0.0 else 105.0 - SIDE_CAMERA[0], SIDE_CAMERA[1], SIDE_CAMERA[2])
+        lag = self.p.pan_lag_s
+        ax, ay = min(max(bx + vx * lag, 0.0), 105.0), min(max(by + vy * lag, 0.0), 68.0)
+        dist = math.dist(pos, (ax, ay, 0.8))
+        vfov = math.degrees(2 * math.atan(SIDE_HALF_M / dist * self.height / self.width))
+        self._delivery = {"t": self.t, "pos": pos, "vfov": vfov, "aim": [ax, ay], "v": [0.0, 0.0]}
+
+    def _central(self, cam: Camera, bx: float, by: float) -> bool:
+        left, right, top, bottom = CENTRAL
+        uv = cam.project((bx, by, BALL_RADIUS_M))
+        return (uv is not None and left * self.width <= uv[0] <= right * self.width
+                and top * self.height <= uv[1] <= bottom * self.height)
+
+    def _side_camera(self, bx: float, by: float) -> Camera:
+        """The side camera, its aim eased toward keeping the ball inside the CENTRAL box: it pans and
+        tilts with the ball, as the gantry does."""
+        dv = self._delivery
+        ax, ay = dv["aim"]
+        m = CENTRE_MARGIN
+        left, right, top, bottom = CENTRAL
+
+        def inside(t: float) -> bool:
+            cam = Camera(dv["pos"], (ax + t * (bx - ax), ay + t * (by - ay), 0.8), dv["vfov"],
+                         self.width, self.height)
+            uv = cam.project((bx, by, BALL_RADIUS_M))
+            return (uv is not None and (left + m) * self.width <= uv[0] <= (right - m) * self.width
+                    and (top + m) * self.height <= uv[1] <= (bottom - m) * self.height)
+
+        gx, gy = ax, ay
+        if not inside(0.0):
+            lo, hi = 0.0, 1.0
+            for _ in range(12):
+                mid = (lo + hi) / 2
+                lo, hi = (lo, mid) if inside(mid) else (mid, hi)
+            gx, gy = ax + hi * (bx - ax), ay + hi * (by - ay)
+        self._ease(dv["aim"], dv["v"], gx, gy)
+        return Camera(dv["pos"], (dv["aim"][0], dv["aim"][1], 0.8), dv["vfov"], self.width, self.height)
+
+    def _in_side_shot(self, bx: float, by: float) -> bool:
+        """The side camera's operator follows the play from the kick, before the picture is his."""
+        return self._central(self._side_camera(bx, by), bx, by)
+
     def _second(self) -> Camera:
+        if self._cut_kind == "corner16":
+            self.angle = "corner16"
+            return self._side_camera(*self.prev_ball)
         if self._cut_kind in ("netL", "netR"):
             self.angle = "net"
             return self._net_shot()
