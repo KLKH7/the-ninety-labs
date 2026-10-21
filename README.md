@@ -1,8 +1,9 @@
 Review media for the restart-walk PR (lesson 174, branch engine/restart-walk). Synthetic matches.
 
-The same minute of seed 200, 0:45 to 1:45, from two engines: main at `807bde2` and this branch at
-`094c4e3`. The ball goes out for a corner at 0:47 and the corner is taken at 1:21 on both (R1's wait
-is drawn the same). Rendered by each commit's own renderer with the dead-ball cut off, so the whole
+The same minute of seed 200, 0:45 to 1:45, from two engines: main's (`807bde2`, drawn at main
+`5b40c65`, whose engine is the same) and this branch's (`b090877`). The ball goes out for a corner at
+0:47 and the corner is taken at 1:21 on both (R1's wait is drawn the same). Both drawn by the same
+renderer (main's 0.5.5 camera, merged into this branch) with the dead-ball cut off, so the whole
 stoppage shows; re-encoded at 960x540.
 
 - `seed200-0045-corner-main.mp4`, `seed200-0045-corner-this-branch.mp4`: the minute on broadcast
@@ -16,7 +17,8 @@ stoppage shows; re-encoded at 960x540.
   over the 2 s before it (red home, blue away, orange and cyan the keepers, white the ball). A short
   trail is a creep, a long one a walk, none a player standing.
 
-A fresh critic shown the main and this-branch versions without being told which was which preferred
-this branch's, slightly: the walk-in and the set area read as a corner, while the area then stands
-still for about 16 s until the kick, which looks artificial (docs/eval/restarts.md, "Walking to
-restart positions").
+A fresh critic shown the main and this-branch versions without being told which was which (this
+branch at `094c4e3`, whose corner plays out the same, both drawn by the earlier 0.5.3 camera)
+preferred this branch's, slightly: the walk-in and the set area read as a corner, while the area
+then stands still for about 16 s until the kick, which looks artificial (docs/eval/restarts.md,
+"Walking to restart positions").
