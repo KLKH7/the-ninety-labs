@@ -133,6 +133,9 @@ One container app serves everything a judge opens, from one image ([Dockerfile](
 - **Live mode** (`/api/live/...`, and the companion's `/api/ask`): anything that costs a model call or speech, behind the demo
   passcode (`x-ninety-passcode`, one secret for both), read from Key Vault. Without a configured passcode it refuses
   everyone.
+- **Spanish on air:** the default is the real Personalizer, so nothing to set. If the demo ever runs the
+  mock translator, set `NINETY_TRANSLATOR=mock` on the API container as well as the Personalizer: the
+  on-air gate reads it where cues air, and otherwise holds the `[es]` variants (#186).
 - **Headers:** a same-origin Content Security Policy (the viewer cannot be pointed at another site
   or framed), `nosniff`, no referrer.
 - **Checks:** CI builds the image on every pull request with a fixture bundle, runs it and runs
