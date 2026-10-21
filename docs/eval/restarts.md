@@ -33,9 +33,9 @@ columns are two samples, compared by their standard errors over matches.
 | Stoppages never restarted (over 200 s) | 0 | 0 |
 | Matches meeting the data contract (`ninety-validate`) | 16 of 16 | 16 of 16 |
 
-Real football has no single-frame ball jumps and no player resets. The real time from a goal to
-the kick-off is about 72 s with the celebration (GROUNDING R1), which is still not modelled. On
-main the `kickoff` event is written in the goal's frame; now it is the kick itself.
+Real football has no single-frame ball jumps and no player resets. A goal stops a real match for a
+minute or more (GROUNDING L4); this change left it at 14 to 19 s, and the celebration (below) makes
+it 61 to 83 s. On main the `kickoff` event is written in the goal's frame; now it is the kick itself.
 
 ## Held-out outcomes
 
@@ -69,7 +69,8 @@ his goal kick, the ball rolled back to the centre after the goal rather than rea
 teams in their own halves at the kick-off, no opponent within 2 m at the throw-in. Its top football
 complaint, in this area but not caused by this change: players stand still through the 25 to 35 s
 stoppages, with no wall, no jostling and no organisation, and the kick-off comes about 17 s after a
-goal against about 72 s in real matches (R1). Those are the next restart work.
+goal against a minute or more in real matches (L4; the 72 s it was compared with then is a penalty
+goal's, lesson 142). The celebration below answers the second.
 
 ### On earlier bases
 
@@ -90,6 +91,138 @@ goals 1.4 ± 0.5 to 2.4 ± 0.6, most of the extra shots within 10 s of a side's 
 not appear (above). Which base's restart behaviour is realistic is open: real restart-retention
 rates are not yet sourced.
 
+## After a goal (the celebration)
+
+Measured on the same 16 seeds, 20 minutes each, against `main` at `8b426b5` (with #156, this
+report's first change, and since then #160, #163, #164 and #166 from the engine-decisions work), the
+celebration branch merged onto it at `8c7bb1b`; raw output in
+[restarts/main-8b426b5.json](restarts/main-8b426b5.json) and
+[restarts/celebration-branch.json](restarts/celebration-branch.json):
+
+| | Before | After |
+|---|---:|---:|
+| Seconds from a goal to the kick-off | 15.6 to 19.2 (10 goals) | 61.4 to 83.0 (9 kick-offs) |
+| Ball in play, share of the 20 minutes | 61.9% | 60.7% |
+| Shots a team per 90 | 15.9 ± 1.6 | 15.2 ± 1.9 |
+| Goals a team per 90 | 1.4 ± 0.4 | 1.4 ± 0.4 |
+| Pass completion | 84.8% | 84.5% |
+| Restart defects (jumps, encroachment, carried set balls, stuck restarts) | 0 | 0 |
+| Matches meeting the data contract (`ninety-validate`) | 15 of 16 | 15 of 16 |
+
+A goal's celebration "may last one, one and a half minutes" (Collina, FIFA, 2022): the kick-off now
+comes 60 to 90 s after the goal (GROUNDING L4). Ball in play is about 55.8% of a Premier League
+match's total time, added time included (Opta via The Analyst, 2023); these 20-minute matches have
+no added time. Shots, goals and completion are unchanged within noise; the matches part after their
+first goal (lesson 90). Football-sense, per 90: FS1 17.2 to 19.4, FS2 7.6 to 7.9, FS6 27.8 to 23.9,
+FS7 296 to 298, FS9 1.7 to 1.1. Up to a match's first goal nothing changes: seed 21, which has no
+goal in its 20 minutes, is frame for frame the same on both. It is also the one match failing the
+contract, on both: its shot at 4:37 is blocked, touched again by the shooter, tackled and only then
+collected, and the shot's end point is written where it was collected (C7). That is open-play event
+logic, outside this change.
+
+### The huddle
+
+The first version sent every team-mate to the scorer's own centre: in 32 to 63% of celebration
+frames two bodies were more than 5 cm into each other (the first audit's count, three planted
+goals). Now each runs to his own place on an arc round the scorer, a shoulder's breadth apart, on
+the side he comes from and in the order of the team-mates' bearings. The places are worked out for
+all of them once a frame. Within reach of his place (GROUNDING L4, *design*: where one running at
+`RECOVER` must start braking for it, about 3.2 m) team-mates stand closer than the usual personal
+space. Each team-mate leaves at his own moment, and the scorer goes last.
+
+Counted by [`scripts/defect_sweep/huddle.py`](../../scripts/defect_sweep/huddle.py) over the whole
+celebration of a planted goal (h9 scores from 100, 30) on 12 seeds not used while designing it (1,
+4, 6, 8 to 10, 12 to 17):
+
+| | Now |
+|---|---:|
+| Frames with two bodies more than 5 cm into each other, mean over seeds | 0.9% |
+| worst seed | 3.2% |
+| longest a goal | 0.8 s |
+| Frames once all stand at their places, settled, until the first leaves | 0 of 193 |
+| The same count over a minute of open play from the same seeds | 0.35% |
+
+What remains comes from the last few arriving at a run beside a team-mate already in place: a
+shoulder's breadth between places leaves 5 cm to spare, and the engine's steering bends a run round
+a team-mate but does not slow it. The third audit measured the version before this one at 2.1% of
+frames on the same seeds (an adapted copy of the script), a keeper's goal at 3.2% (up to 8.4%), and
+goals from the far post or long range at 1.6 to 1.8%; and that wider places, or a longer reach, would
+cut overlaps further. Those values were set before and were not changed after seeing that.
+
+## The wall (free kicks)
+
+At a direct free kick within shooting range the defending side builds a wall (GROUNDING L14): as
+many as a shoulder's breadth each fills, rounded down, across the part of the goal Bray's model has
+it hide (from the near post, design, to a third of the half-goal past the centre), at 9.15 m and
+0.5 m; the defenders with the shortest walks to its places, each walk estimated from above the way
+he goes (round the keep-off circle, in behind the line, up into it), share them for the least total walk,
+walk to it at least at a normal walking pace, come in behind the line and step up into their places,
+and stand shoulder to shoulder.
+
+Twelve planted free kicks (seeds 2, 3, 5, 7; 22 m out straight on, 18 m out at y = 24, 27 m out at
+y = 44), by [`scripts/defect_sweep/wall.py`](../../scripts/defect_sweep/wall.py) `--planted`; the
+first version ran on the engine of its time, so the minute of play before each kick differs:
+
+| | First version (`5813294`) | Now (`5183be6`) |
+|---|---:|---:|
+| Walls formed, every player on his place to within a ball's radius | 0 of 12 | 12 of 12 |
+| seconds into the stoppage | none formed | 11 to 33 s (stoppages 30 to 40 s) |
+| Furthest a wall player is from his place when the kick is struck | 0.2 to 1.0 m, and 7.4 m (below) | 0.02 m |
+| Gaps between neighbours' bodies when it is struck | 0.11 to 0.83 m, and 7.2 m (below) | -0.01 to 0.02 m |
+| Frames with two of them more than 5 cm into each other while it forms | 0 of 11,004 | 27 of 11,007 (0.25%) |
+| Kicks where two wall players' walked paths cross, the two there within a second | not measured | 1 of 12 |
+
+In the first version one wall player stood 7 m from his place through the whole stoppage: his
+place was on the edge of the 9.65 m keep-off circle (9.15 m and the margin), straight in from him,
+and rounding sent him round the circle at his own distance (lesson 158).
+
+The focused audit of that version planted 72 more: seeds 1, 4, 6, 8 to 12, free kicks at nine spots
+at both ends (walls of two to five), every wall player followed frame by frame (the command under
+Reproduce). Estimating each walk the way it goes (round the keep-off circle at the walker's distance
+from the ball, in behind the line, up into it), not as a straight line, to choose the wall's players,
+share out its places and pace them:
+
+| | Straight lines (`8e52cb4`) | Walks round the circle (`5183be6`) |
+|---|---:|---:|
+| Kicks where two wall players' walked paths cross, the two there within a second | 22 of 72 (32 pairs) | 21 of 72 (35 pairs) |
+| Kicks where the wall formed after the kick could be taken | 24, by up to 1.1 s | 18, by up to 1.3 s |
+| Least time between the wall forming and the kick | 0.4 s | 0.6 s |
+| Frames with two of them more than 5 cm into each other while it forms | 261 of 66,788 (0.39%) | 106 of 66,940 (0.16%) |
+
+Every wall formed before its kick was struck; when it was struck no wall player stood more than
+0.03 m from his place and neighbours' bodies were -0.02 to 0.03 m apart, in both. The crossings that
+remain are two coming round the same side of the circle: a walk round it at one's own distance from
+the ball is not the shortest way there, so the least total walk does not keep two such walks apart,
+and both then use the way behind the wall (lesson 161). The estimate is from above: `keep_off` aims a
+player at most 30 degrees round from where he is, so he walks a spiral in toward the circle, and over
+15 walks of four planted kicks the walked paths were 0.5% to 19% shorter than the estimate, never
+longer (`tests/test_restarts.py`), so a wall player is paced early rather than late.
+
+The same 16 matches as above, the wall branch at `41ce3fba` against the celebration branch (no wall);
+raw output in [restarts/wall-branch.json](restarts/wall-branch.json). 13 direct free kicks fell
+within shooting range: walls of 4 at the two kicks about 22 m out near the centre, 2 or 3 further out
+or wider, 1 at sharper angles, and none at one 2.6 m from the goal line, too tight an angle for a
+whole player; when each kick was struck every wall player stood on his place, to within a ball's
+radius, in all 13 (`scripts/defect_sweep/wall.py` on the runs). One was shot at directly, and the
+wall blocked it.
+
+| | No wall | Wall |
+|---|---:|---:|
+| Restart defects (jumps, encroachment, carried set balls, second touches, stuck restarts) | 0 | 0 |
+| Matches meeting the data contract | 15 of 16 | 15 of 16 |
+| Shots a team per 90 | 15.2 ± 1.9 | 17.2 ± 1.6 |
+| Goals a team per 90 | 1.4 ± 0.4 | 1.55 ± 0.7 |
+| Pass completion | 84.5% | 85.3% |
+| Ball in play | 60.7% | 59.6% |
+
+The match failing the contract is seed 21 on both, main's C7 (above). Shots (z 0.8) and goals (10
+against 11, z 0.2) are level within chance; the two columns are different matches from the first
+restart on (lesson 90). Football-sense per 90: FS1 19.4 to 17.7, FS2 7.9 to 8.4, FS6 23.9 to 22.8,
+FS7 298 to 285, FS9 1.1 to 2.0. The version before this one (`5183be6`) showed a ball jump of 14.6 m
+in one frame in seed 101: a throw-in drifting along the outside of the touchline was kept in play
+past the end boards and snapped back to them when retaken (lesson 166); `41ce3fba` retakes it once
+it passes the end of the touchline, and the sweep now counts a retaken restart as the same kind.
+
 ## Reproduce
 
 ```bash
@@ -98,6 +231,16 @@ uv run ninety-sim --seed 7 --minutes 20 --out runs/new/seed7
 
 ```bash
 uv run python scripts/defect_sweep/restarts.py runs/new/seed7 runs/new/seed11
+```
+
+```bash
+uv run python scripts/defect_sweep/wall.py --planted
+uv run python scripts/defect_sweep/wall.py --planted 1 4 6 8 9 10 11 12 -- home:83:34 home:87:24 home:78:44 \
+    away:22:34 away:18:44 away:27:24 home:88:30 home:75:20 away:20:50
+```
+
+```bash
+uv run python scripts/defect_sweep/wall.py runs/new/seed7 runs/new/seed11
 ```
 
 ```bash
