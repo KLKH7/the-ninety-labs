@@ -4,8 +4,10 @@ from functools import cache
 from ninety.render import edit
 from ninety.render.camera import (
     CUT_HOLD_S,
+    GANTRY_HALF_M,
     HOLD_SHARE,
     MAX_PAN_MPS,
+    OPEN_EASE_S,
     PAN_ACCEL_MPS2,
     ZOOM_ACCEL_MPS2,
     Camera,
@@ -16,7 +18,7 @@ from ninety.render.camera import (
     project_with,
     well_framed,
 )
-from ninety.render.clip import _plan
+from ninety.render.clip import SIM_MARGIN_S, _plan
 from ninety.render.params import CameraParams, sample_params
 from ninety.render.scene import drawn_ball
 from ninety.sim.engine import simulate
@@ -239,12 +241,20 @@ def test_director_is_deterministic():
 
 # Seeds the director's design was not tuned on (the lens, STANDS_MAX and the follow were chosen on
 # seeds 7, 21 and 42).
-HELD_OUT = (3, 5)
+# Seeds the camera rules were not designed on. 3 and 5 were studied while fixing #198 (lesson 175),
+# so they stay for continuity only; 41 and 43 were added before anyone rendered or scored them for
+# the camera (committed ahead of #198's re-score), and are the held-out check.
+HELD_OUT = (3, 5, 41, 43, 47, 53)
+# 47 and 53: a second fresh pair, added at the Reviewer's request before anyone rendered or scored
+# them for the camera.
 
 
 @cache
 def _match(seed):
-    return simulate(seed, 2.0)
+    """The match the 100 s window below draws from, simulated SIM_MARGIN_S past the window as a render
+    simulates past its clip (clip.py, lesson 140), so a dead ball near the window's end has its
+    restart in the events: without it the edit sees no dead ball and its frames count as live play."""
+    return simulate(seed, (2 + 100 + SIM_MARGIN_S) / 60)
 
 
 def _broadcast(seed):
@@ -273,11 +283,35 @@ def _broadcast(seed):
         if fi in goals:
             b = m.frames[fi - 1]["ball"]
             goal = ("L" if goals[fi]["x"] < 52.5 else "R", goals[fi]["y"], 1.0, math.hypot(b["vx"], b["vy"]))
-        cam = d.step(ball[0], ball[1], actors, goal, None if left is None else left / 25)
+        cam = d.step(ball[0], ball[1], actors, goal, None if left is None else left / 25, ball_z=ball[2])
         if draw:
             rows.append((fi, cam, d.angle, after_cut))
             after_cut = False
     return m, rows
+
+
+def _dead_frames(events: list[dict]) -> set[int]:
+    """Every frame the ball is out of play: from each stoppage to the restart's first touch. The
+    engine's restart event (a set piece, a kick-off) marks the ball set for it, not taken: the ball
+    is in play only once it is kicked and moves (Law 17 for a corner, the same for each restart),
+    so the wait between the two is still a dead ball (lesson 175, the same class as lesson 140)."""
+    order = sorted(events, key=lambda e: e["frame"])
+    dead: set[int] = set()
+    for stop, restart, _ in edit.dead_balls(events):
+        taken = next((e["frame"] for e in order if e["frame"] > restart and e["type"] not in edit.RESTARTS),
+                     restart)
+        dead.update(range(stop, taken))
+    return dead
+
+
+def test_a_restart_waiting_to_be_taken_is_a_dead_ball():
+    """The harness's own labelling: a corner set at frame 30 and kicked at frame 60 is dead from the
+    stoppage to the kick, and live from the kick (seed 3 on #179's engine counted its corner waits
+    as live play)."""
+    events = [{"frame": 10, "type": "out_of_play"}, {"frame": 30, "type": "set_piece"},
+              {"frame": 60, "type": "pass"}, {"frame": 90, "type": "pass"}]
+    dead = _dead_frames(events)
+    assert set(range(10, 60)) <= dead and 60 not in dead and 90 not in dead
 
 
 def test_the_gantry_frames_the_play_with_the_pitch_filling_the_picture():
@@ -286,12 +320,11 @@ def test_the_gantry_frames_the_play_with_the_pitch_filling_the_picture():
     framed in 13 to 47% of live frames on seeds 7, 21 and 42). A broadcast keeps the play near the
     middle with the pitch filling most of the picture: in live play, at least 85% of frames have
     the pitch over PITCH_SHARE_MIN of the picture and the ball in the CENTRAL box (camera.py), and
-    the median frame has 8 to 15 players in shot (docs/guides/broadcast-render.md)."""
+    the median frame has 8 to 15 players in shot (docs/guides/broadcast-render.md). The bar holds
+    on every held-out seed, over every live frame (lesson 175)."""
     for seed in HELD_OUT:
         m, rows = _broadcast(seed)
-        dead = set()
-        for stop, restart, _ in edit.dead_balls(m.events):
-            dead.update(range(stop, restart + 1))
+        dead = _dead_frames(m.events)
         live = [(fi, cam) for fi, cam, _, _ in rows[::5] if fi not in dead]
         live = [(fi, cam) for fi, cam in live if 0 <= m.frames[fi]["ball"]["x"] <= 105
                 and 0 <= m.frames[fi]["ball"]["y"] <= 68]
@@ -307,6 +340,7 @@ def test_the_gantry_frames_the_play_with_the_pitch_filling_the_picture():
                 if feet is not None and head is not None:
                     seen += 0 <= feet[0] < 1280 and feet[1] < 720 and head[1] >= 0
             in_shot.append(seen)
+        print(f"seed {seed}: well framed {ok / len(live):.3f} of {len(live)} live frames")
         assert ok / len(live) >= 0.85, (seed, ok, len(live))
         assert 8 <= sorted(in_shot)[len(in_shot) // 2] <= 15, (seed, sorted(in_shot))
 
@@ -409,3 +443,77 @@ def test_a_pan_eases_in_and_out():
     # Settled with the play inside the hold either side of the centre (HOLD_SHARE of the half-width).
     u, v = cam.project((77.2, 34.0, 0.0))
     assert speeds[-1] < 0.1 and abs(u - 640) <= HOLD_SHARE * 640 + 8 and abs(v - 360) < 72, (u, v)
+
+
+def _held(d, x, y, frames, actors=None):
+    cam = None
+    for _ in range(frames):
+        cam = d.step(x, y, actors or [])
+    return cam
+
+
+def test_a_restart_taken_during_the_close_up_is_watched_on_the_wide_shot():
+    """Old (0.5.2 to 0.5.3): after an edit cut the gantry came back closed up on the restart and the
+    zoom spring took 3 s and more to get back out, so a corner taken early was played through the
+    close-up (seed 3 on #179's engine: the pitch 28-46% of the picture). Once the ball is played the
+    ease out starts, and within OPEN_EASE_S the lens is back at the gantry's own width (lesson 175)."""
+    d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=True)
+    _held(d, 30.0, 34.0, 50)
+    wide = d.half_width
+    d.cut()
+    d.open_on_restart()
+    _held(d, 30.5, 0.5, 25)  # one second of the close-up on a ball set for a throw-in
+    assert d.half_width < 0.5 * wide
+    x, y = 30.5, 0.5
+    for _ in range(int(25 * OPEN_EASE_S) + 1):  # the throw is taken: the ball comes infield
+        y += 8.0 / 25
+        d.step(x, y, [])
+    assert d.half_width >= 0.9 * min(d.p.half_width_m, GANTRY_HALF_M), d.half_width
+
+
+def test_a_ball_run_to_the_byline_stays_in_the_middle_of_the_picture():
+    """Old: the aim stopped 8 m short of each goal line, so a ball run to the byline was left at the
+    edge of the picture or out of it (seed 3 on #179's engine). The aim follows the ball to the line,
+    and the ball, and where it will be when the pan catches up, stay inside the CENTRAL box."""
+    d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=True)
+    x, y = 30.0, 20.0
+    _held(d, x, y, 50)
+    bad = 0
+    for i in range(100):  # 4 s toward the byline at 7.5 m/s, then held there
+        x = max(x - 0.3, 0.6)
+        cam = d.step(x, y, [])
+        bad += i >= 25 and not well_framed(cam, (x, y, 0.11))
+    assert bad == 0, bad
+
+
+def test_play_near_a_corner_flag_is_framed_with_the_pitch_filling_the_picture():
+    """Old: aimed into a corner, the wide shot was mostly run-off and stands. The lens closes in
+    there until the pitch fills the picture again, with the ball still in the middle."""
+    d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=True)
+    cam = _held(d, 3.0, 8.0, 150)
+    assert well_framed(cam, (3.0, 8.0, 0.11)), pitch_share(cam)
+
+
+def test_a_lofted_ball_is_kept_in_the_picture():
+    """Old: the director aimed at the grass whatever the ball's height, so a lofted ball 5 to 7 m up
+    left the top of the picture (seed 3 on #179's engine). It tilts up with a high ball, only as far
+    as keeps it inside the CENTRAL box, and eases the tilt like the pan."""
+    d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=True)
+    for _ in range(75):
+        cam = d.step(30.0, 40.0, [], ball_z=0.0)
+    for _ in range(50):
+        cam = d.step(30.0, 40.0, [], ball_z=7.0)
+    assert well_framed(cam, (30.0, 40.0, 7.11))
+
+
+def test_a_ball_on_a_corner_flag_keeps_the_wide_shot():
+    """Where no lens fills the picture with pitch (the ball on the corner flag, set for a corner),
+    the director does not close in: a close-up there is all run-off, and a corner kicked from it is
+    lost in a whip pan (the blind critic of 0.5.5's first cut)."""
+    d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=True)
+    _held(d, 20.0, 20.0, 75)
+    wide = d.half_width
+    cam = _held(d, 0.5, 0.5, 250)
+    assert d.half_width >= 0.8 * wide, (d.half_width, wide)
+    uv = cam.project((0.5, 0.5, 0.11))
+    assert uv is not None and 0.1 * 1280 <= uv[0] <= 0.9 * 1280
