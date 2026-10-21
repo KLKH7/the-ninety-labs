@@ -363,7 +363,7 @@ def render_clip(
                         "pose": mesh_pose(g, pl["x"], pl["y"], reach),
                     }
                 )
-                row_players.append(pl)
+                row_players.append(fouls.row(pl, g.fall))
             bparts = ball_parts(*ball, spin)
             spec_objects.append({"id": "ball", "parts": bparts, "box": parts_box(cam, bparts)})
             kps = project_keypoints(cam)

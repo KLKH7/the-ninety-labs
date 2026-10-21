@@ -1669,6 +1669,23 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `uv run pytest tests/test_restarts.py -k past_the_end_of_the_touchline`; on the engine
   before it, the ball runs on to 127 m and jumps 18 m in a frame.
 
+### 173. A label check written for one pose fails the first body drawn in another
+- **What happened:** to make fouls legible (the fouled player goes down at the foul, the fouler's
+  foot meets his shins), the renderer tipped the fouled player's body over his feet. Render-check's
+  `player_feet_in_boxes` then failed 49 frames of seed 7's foul, all on the player lying down: it
+  required his ground point at the bottom of his box, with slack scaled by box height over 1.8 m,
+  and a lying body's box is neither 1.8 m tall nor has his feet at its bottom (fallen toward the
+  camera, they are at its top). His feet were inside the box on every one of those frames.
+- **Rule:**
+  - A check on the labels states the pose it assumes. When the picture draws a new pose, the label
+    data says so (`fall` in the frame row, an optional field) and the check judges that pose by
+    what is true of it, with a planted failing case.
+  - It never skips the player or widens the slack for everyone.
+  - Upright players are checked exactly as before.
+- **Check:** `uv run pytest tests/test_render_checks.py tests/test_render_fouls.py`. A fallen player
+  passes toward the camera, away from it and sideways. A box beside or above his feet still fails,
+  and so does a row with no `fall` and a lying player's box.
+
 ### 175. A held-out seed that passes may hold none of the cases the rule gets wrong
 - **What happened:** the broadcast camera (#180) passed its framing test on held-out seeds 3 and 5
   at 98%. With #179's engine, seed 3's window held three corners and two balls run to the byline,

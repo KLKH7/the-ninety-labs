@@ -68,3 +68,9 @@ def tip(point: tuple[float, float, float], x: float, y: float, angle: float, dir
     c, s = math.cos(angle), math.sin(angle)
     along, z = along * c + z * s, -along * s + z * c
     return (x + along * ux - side * uy, y + along * uy + side * ux, z)
+
+
+def row(player: dict, angle: float) -> dict:
+    """The player's frame row with `fall`, the degrees his drawn body is over, while he is down; the
+    row unchanged while he stands (render-check judges a lying body's box by it)."""
+    return {**player, "fall": round(math.degrees(angle), 1)} if angle else player
