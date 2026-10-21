@@ -26,10 +26,18 @@ claims: the clip shows what the system does on footage chosen by a rule, not on 
 ## The render
 
 The broadcast cut is on (the dead-ball cut of #180), and hardware GL is used, since this clip is
-footage, not data:
+footage, not data.
+
+**Kits:** `kit_contrast=broadcast` (#209). A seed's own draw may be the training hard case
+`low`, and demo v1 (seed 8001) drew it: black against navy, which Kian found too similar to follow.
+The demo's kits are drawn from the seed under a stated rule, never picked by eye:
+- the two outfield shirts meet WCAG 2.1's 3:1 contrast floor for graphical objects (SC 1.4.11);
+- unless one shirt is white, black or grey, they are at least 60° apart in hue.
+
+The low-contrast kits stay in training only.
 
 ```bash
-uv run ninety-render --seed <seed> --start <start> --seconds 60 --set dead_ball_cut=true --mp4 --gpu --out runs/demo/seed<seed>
+uv run ninety-render --seed <seed> --start <start> --seconds 60 --set dead_ball_cut=true --set kit_contrast=broadcast --mp4 --gpu --out runs/demo/seed<seed>
 ```
 
 Then `uv run ninety-validate runs/demo/seed<seed>` and `uv run ninety-render-check runs/demo/seed<seed>`.
