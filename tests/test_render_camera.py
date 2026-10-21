@@ -520,3 +520,16 @@ def test_a_lofted_ball_is_kept_in_the_picture():
     for _ in range(50):
         cam = d.step(30.0, 40.0, [], ball_z=7.0)
     assert well_framed(cam, (30.0, 40.0, 7.11))
+
+
+def test_a_ball_on_a_corner_flag_keeps_the_wide_shot():
+    """Where no lens fills the picture with pitch (the ball on the corner flag, set for a corner),
+    the director does not close in: a close-up there is all run-off, and a corner kicked from it is
+    lost in a whip pan (the blind critic of 0.5.5's first cut)."""
+    d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=True)
+    _held(d, 20.0, 20.0, 75)
+    wide = d.half_width
+    cam = _held(d, 0.5, 0.5, 250)
+    assert d.half_width >= 0.8 * wide, (d.half_width, wide)
+    uv = cam.project((0.5, 0.5, 0.11))
+    assert uv is not None and 0.1 * 1280 <= uv[0] <= 0.9 * 1280

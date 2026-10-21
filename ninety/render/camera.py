@@ -335,10 +335,19 @@ class Director:
         # the ball across the picture, so they alternate, and the ball has the last word where both
         # cannot hold (a ball on a corner flag): it is never lost to the pitch (lesson 175).
         on_pitch = 0.0 <= bx <= 105.0 and 0.0 <= by <= 68.0  # a ball over a line is play stopped
-        for _ in range(2 if on_pitch else 0):
-            ax, ay = self._ball_in_centre(bx, by, vx, vy, ax, ay, hw)
-            hw = self._pitch_fills(ax, ay, hw)
-        ax, ay = self._ball_in_centre(bx, by, vx, vy, ax, ay, hw)
+        wide = self._ball_in_centre(bx, by, vx, vy, ax, ay, hw)
+        want = PITCH_SHARE_MIN + PITCH_MARGIN
+        if on_pitch and pitch_share(self._shot((*wide, 0.0), hw), step=80) < want:
+            cx, cy, chw = ax, ay, hw
+            for _ in range(4):  # closing in moves the ball across the picture: settles in 3 or 4
+                cx, cy = self._ball_in_centre(bx, by, vx, vy, cx, cy, chw)
+                chw = self._pitch_fills(cx, cy, chw)
+            cx, cy = self._ball_in_centre(bx, by, vx, vy, cx, cy, chw)
+            # Closed in only if that does fill the picture with pitch, the ball in the middle; where
+            # no shot does (a ball on a corner flag) the wide shot stays.
+            if pitch_share(self._shot((cx, cy, 0.0), chw), step=80) >= PITCH_SHARE_MIN:
+                wide, hw = (cx, cy), chw
+        ax, ay = wide
         self._goal_z = self._lofted(bx, by, ax, ay, hw)
         return ax, ay, hw
 
@@ -372,14 +381,18 @@ class Director:
 
     def _pitch_fills(self, ax: float, ay: float, hw: float) -> float:
         """The half-width, closed in only as far as keeps the pitch over PITCH_SHARE_MIN of the
-        picture (plus PITCH_MARGIN), never tighter than TIGHT_HALF_M. Aimed into a corner, a wide
-        shot is mostly run-off and stands; the operator closes in on the play there (lesson 175)."""
+        picture (plus PITCH_MARGIN), never tighter than TIGHT_HALF_M, and only where closing in does
+        fill it. Aimed into a corner, a wide shot is mostly run-off and stands; the operator closes
+        in on the play there (lesson 175)."""
         want = PITCH_SHARE_MIN + PITCH_MARGIN
         if pitch_share(self._shot((ax, ay, 0.0), hw), step=80) >= want:
             return hw
         lo, hi = TIGHT_HALF_M, hw
         if pitch_share(self._shot((ax, ay, 0.0), lo), step=80) < want:
-            return lo
+            # No lens fills the picture with pitch here (a ball on a corner flag): closing in would
+            # only show more run-off, so the shot stays as it was (the blind critic of 0.5.5's
+            # first cut: a 5-degree close-up held 18 s on a corner, then a whip pan at the kick).
+            return hw
         for _ in range(8):
             mid = (lo + hi) / 2
             if pitch_share(self._shot((ax, ay, 0.0), mid), step=80) >= want:
