@@ -1,6 +1,6 @@
 {
   "command": "uv run python -m ninety.eval.side_decision --clips <render run v1>/train --observations <validation observations> --seeds <the validation seeds> --out docs/eval/side-decision",
-  "commit": "3e64c344bcb7575cba86a71d4cbeefd27e22f755",
+  "commit": "2b099d8a161a5b6cbc54797d6594935c34952431",
   "date": "2026-10-21",
   "sound_share": 0.8,
   "pooled": {
@@ -86,7 +86,37 @@
     "K1": 0.32727272727272727,
     "K2": 0.22727272727272727
   },
+  "confidence_ordering_95": {
+    "K0": {
+      "ordering": 0.6182,
+      "ordering_95": [
+        0.31,
+        0.93
+      ],
+      "wrong": 5,
+      "right": 11
+    },
+    "K1": {
+      "ordering": 0.3273,
+      "ordering_95": [
+        0.05,
+        0.61
+      ],
+      "wrong": 5,
+      "right": 11
+    },
+    "K2": {
+      "ordering": 0.2273,
+      "ordering_95": [
+        0.0,
+        0.46
+      ],
+      "wrong": 5,
+      "right": 11
+    }
+  },
   "adopted_confidence": "K0",
+  "dirty": false,
   "predictive": false,
   "clips": [
     {
