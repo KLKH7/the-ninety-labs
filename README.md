@@ -7,6 +7,10 @@ the ball):
   a direct free kick 22.6 m out; four away defenders walk to the wall and stand in it between the ball
   and the goal from about 7:04; the kick at 7:25 is blocked by the wall, and the taker's shot from the
   rebound at 7:29 is blocked again.
+- seed107-0648-r4-free-kick-wall-of-4.mp4 and seed107-0648-r4-sheet-NN.jpg (2 frames a second, 16 to a
+  sheet): the same minute on broadcast camera, rendered at 4aaab95c (before main's #190 merged in) by
+  main's renderer 0.5.3 with the dead-ball cut off, so the whole stoppage shows: the wall stands
+  together between the ball and the goal from about 7:12 until the kick at 7:25.
 
 Round 3 (32c6505; the matches differ from round 4's from the first free kick in range on):
 Drawn by that commit's renderer, from before main's #180, so the whole stoppage is shown, uncut.
