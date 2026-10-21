@@ -46,7 +46,8 @@ def main() -> None:
         qualifying = [{k: e[k] for k in ("id", "t", "type", "team", "player")} for e in events
                       if t0 <= e["t"] <= t0 + WINDOW_S and e["type"] in ("goal", "set_piece")]
         cmd = (f"uv run ninety-render --seed {seed} --start {t0:g} --seconds {WINDOW_S:g} "
-               f"--set dead_ball_cut=true --set kit_contrast=broadcast --mp4 --gpu --out runs/demo/seed{seed}")
+               "--set dead_ball_cut=true --set kit_contrast=broadcast "
+               f"--mp4 --gpu --out runs/demo/seed{seed}")
         print(json.dumps({"seed": seed, "start_s": t0, "events": qualifying, "command": cmd}, indent=1))
         return
     sys.exit(f"no seed in {FIRST_SEED}-{LAST_SEED} has a qualifying window: widen the range in a new commit")
