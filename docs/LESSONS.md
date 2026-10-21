@@ -1810,8 +1810,8 @@ short and actionable. This file is public: no research sources, product names or
   At `00d5c41`, where going round from the circle's margin heads out as well as round, 59 are
   within it and one over, by 1.04 m in 28.3 m: a walker running at 3.2 m/s at the whistle, who
   spent his first second turning (1.5 m walked, 0.5 m gained). At `304fffe`, 58, and two over by
-  up to 0.27 m in 36.6 m, both moving at the whistle. Without such a start the estimate is within
-  about 1% of the walk, not a strict bound.
+  up to 0.27 m in 36.6 m, both moving at the whistle; at `ba23065`, all 60 within it. Without such
+  a start the estimate is within about 1% of the walk, not a strict bound.
 - **Rule:** a bound measured on a few scenarios is reported with its margin and with what it
   covers, and a check that passes by a hair in a chaotic scenario is measured over more scenarios
   before it is called a bound. When a check fails because its claim was too broad, the claim is

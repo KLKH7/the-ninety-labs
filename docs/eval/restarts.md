@@ -370,13 +370,13 @@ from take to kick is as on main (corners: median 1.5 s against 1.4 s, none over 
 How close walk_to_wall's estimate comes to a wall player's own walk (his bending round others left
 out, since the estimate is of his own way: lesson 176), over 60 walks in 15 scenarios after a minute
 of play, by [`scripts/defect_sweep/wall_walks.py`](../../scripts/defect_sweep/wall_walks.py): on
-main all 60 within it, the closest by 2 cm; on this branch 58, and two over it, by 0.27 m in 36.6 m
-and 3 cm in 11.8 m: both walkers were moving at the whistle (1.8 and 1.5 m/s), a stopping distance
-the estimate has no term for (at `00d5c41` the one over was running at 3.2 m/s, 1.04 m over in
-28.3 m). At `b090877` two were over, by 0.18 m in 15.4 m and 0.02 m in 11.1 m; the first, going round
-the circle by stepping out past it and spiralling back in, is gone now that going round from the
-margin heads out as well as round. The walks differ between engines, as the minute of play does.
-Without a start at speed the estimate is within about 1%, not a strict bound.
+main all 60 within it, the closest by 2 cm; on this branch (`ba23065`) all 60 too, the closest by
+2 cm. At earlier commits walks were over it: at `b090877` two, by 0.18 m in 15.4 m and 0.02 m in
+11.1 m (the first going round the circle by stepping out past it and spiralling back in, gone since
+going round from the margin heads out as well as round); at `00d5c41` and `304fffe`, walkers moving
+at the whistle (by up to 1.04 m in 28.3 m, one running at 3.2 m/s), a stopping distance the estimate
+has no term for. The walks differ between engines, as the minute of play does. Without a start at
+speed the estimate is within about 1%, not a strict bound.
 
 ## Fouls at the call
 
