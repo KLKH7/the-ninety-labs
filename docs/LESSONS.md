@@ -1580,6 +1580,95 @@ short and actionable. This file is public: no research sources, product names or
   fail on the code before; `test_the_body_has_a_mans_proportions_and_its_stature_is_the_scale` holds
   the scale to the asset and its joints to the table.
 
+### 160. A pass or shot ends at the next thing that happens to the ball, however long it stays open
+- **What happened:** the engine keeps a shot open after a block, so a deflected shot can still count
+  as the shooter's goal, and closed it only when someone controlled the ball, at a foul, an offside,
+  or when it went out. On seed 21, the demo window, a10's shot at 4:37 was blocked; he got back to
+  the ball and h4 poked it loose at 4:39 (a tackle). The shot stayed open until h8 controlled the
+  ball at 4:41 and its end point was written there, after the tackle, so the data contract's C7
+  (the ball reaches the end point before anything else happens to it) failed.
+- **Rule:** keeping an event open for one purpose (crediting a goal) never lets it outlive the next
+  on-ball event. A touch ends it (`touched`); every other path that records an on-ball event while a
+  kick may be open ends it first, where the ball is (`Engine.end_kick`: a tackle's poke, a foul, an
+  offside), judged on the ball's own flight before anything changes it.
+- **Check:** `tests/test_shot_end.py`: seed 21's case, asserted to occur (lesson 41), with C7 and
+  "no carrier strikes with a kick still open" checked on the real match; a poke on an open shot; and
+  an untouched shot judged on its own flight, not the tackle's push.
+
+### 142. A figure keeps the case it was measured for
+- **What happened:** GROUNDING R1 cited Opta's guide to time-wasting for "a goal's celebration,
+  about 72 s", and the restart work planned the kick-off after every goal around it. Read again,
+  the article gives 72 s for the celebration after a penalty goal, in its paragraph on penalties;
+  it gives no figure for goals in general. A general figure was then found in a different source
+  (FIFA's referees' chief: a celebration "may last one, one and a half minutes").
+- **Rule:** when a number moves from a source into GROUNDING, the row names the case it was
+  measured for (which restart, which competition, which seasons) and quotes the sentence it
+  comes from; a number used for a wider case needs a source for that case.
+- **Check:** every row of GROUNDING that cites a time or a rate names its case; R1 and L4 now cite
+  the penalty figure as a penalty figure and the goal figure from its own source.
+
+### 143. Players sent to one point end up inside each other: give each his own place
+- **What happened:** the goal celebration sent every team-mate to the scorer's own position. Steering
+  bends a run round another player but does not slow it, and bodies in contact brace only with the
+  grip steering leaves, so ten players arriving at one point at a sprint ended up in each other: in
+  32 to 63% of celebration frames two bodies overlapped by more than 5 cm. The tests counted players
+  within 3 m of the scorer, a distance between centres, and passed.
+- **Rule:** when several players head for the same spot (a huddle, a wall, a queue), each gets a
+  place of his own, at least a shoulder's breadth from the next (P11), chosen so that no two runs
+  to them cross. A test of a crowd measures the clearance between bodies (`shape.between`), not
+  the distance between centres.
+- **Check:** `uv run pytest tests/test_restarts.py -k "overlap or side_they_come_from or once_a_frame"`;
+  with every team-mate sent to the scorer's centre the overlap test fails (none ever stands at a
+  place of his own), and with places worked out one player at a time, in the order they move, the
+  once-a-frame test fails. `scripts/defect_sweep/huddle.py` counts the frames with bodies in each
+  other over a whole celebration (`docs/eval/restarts.md`, "The huddle").
+
+### 158. A point one rule puts exactly on a boundary is on it for every other rule
+- **What happened:** the keep-off rule moves an opponent's target to the edge of the 9.65 m circle,
+  and the wall stands on that edge. A second rule sends a player round the circle while his
+  straight way "comes closer than 9.65 m". For a place on the edge, straight in from further out,
+  the closest point of that way is the place itself, and rounding put it a hair inside: the player
+  was sent round the circle at his own distance, which is where he already stood. He stood 7 m
+  from the wall through the whole stoppage. No test placed a target exactly on the edge.
+- **Rule:** where one rule produces points on a boundary that another rule tests, the test allows
+  for rounding (a named tolerance), and a test puts a point exactly on the boundary.
+- **Check:** `uv run pytest tests/test_restarts.py -k edge_of_the_circle`; it fails with the
+  tolerance set to 0.
+
+### 161. A claim about how players move is checked on the paths they walk
+- **What happened:** the free-kick wall's players shared out its places by the least total of
+  straight lines from where they stood, and GROUNDING, the report and a docstring said that no two
+  runs to the wall cross; the test checked the straight lines. A focused audit followed the runs
+  frame by frame: players go round the 9.65 m keep-off circle at their own distance from the ball
+  and come in behind the wall, and two runs crossed within a second of each other in 22 of 72
+  planted kicks. The fix estimated each walk the way it goes, round the circle at the walker's own
+  distance from the ball: that changed who stands in the wall and how fast they walk there, but not
+  the crossings (that walk is not the shortest way, so the uncrossing argument does not hold for it,
+  and two coming round the same side share the way behind the wall). And it repeated the mistake:
+  its docs said the estimate followed `keep_off`, and a second audit, frame by frame, found the
+  walked paths round the circle 6 to 24% shorter, because `keep_off`'s aiming walks a spiral in
+  toward the circle. It is now stated, and tested, as an estimate from above.
+- **Rule:** a claim about movement (no crossing, no contact, in place in time) is measured on the
+  walked paths, frame by frame, before it is written down; a property of the plan is stated as one.
+- **Check:** `uv run python scripts/defect_sweep/wall.py --planted` reports the walked crossings for
+  each kick; `uv run pytest tests/test_restarts.py -k estimated_from_above` follows the walks frame by
+  frame against their estimate.
+
+### 166. A wait for something to happen ends when it can no longer happen
+- **What happened:** a throw-in released behind the touchline counts as still coming in while it
+  moves toward the field, judged by the sign of its speed across the line alone. In the wall's
+  16-match re-measure (seed 101) a throw drifted along the outside of the touchline, a centimetre a
+  second inward: it stayed in play past the end of the touchline and over the end boards, which only
+  a dead ball meets, rolled on 14 m beyond them, and when it stopped the retake snapped it back to
+  the boards, a 14.6 m jump in one frame. The restart sweep then counted the retakes as free kicks
+  taken from the touchline with opponents inside 9.15 m, and the retaken throw as the taker's second
+  touch.
+- **Rule:** a state that waits for an event (coming in, arriving, landing) also ends when the event
+  can no longer happen where it is allowed to (here, past the end of the touchline); a measurement
+  counts a restart taken again as the same restart.
+- **Check:** `uv run pytest tests/test_restarts.py -k past_the_end_of_the_touchline`; on the engine
+  before it, the ball runs on to 127 m and jumps 18 m in a frame.
+
 ### 164. A pose keyed to an action ignores the truth it stands for; a limit marked "measured" is re-measured where the defect shows
 - **What happened:** a blind critic of 0.5.3 found four body defects. A throw-in drew its stored
   pose, arms over the head, from the frame the engine named the thrower, while the engine's ball
