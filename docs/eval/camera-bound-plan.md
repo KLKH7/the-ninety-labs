@@ -143,3 +143,27 @@ frames that are wrong the same way (lesson 159). They make no event.
 | 3042 | 4 | 0 |
 | Worst trusted | 55.3 m | 8.2 m |
 | Good frames kept | 1,712 | 1,712 |
+
+### Corrections after review (#195), recorded here rather than edited above
+
+- **"Everything else is unchanged" was wrong.** RIVAL_M went from 1.59 m to 1.26 m, so the false
+  pass v00003 on test seed 900001 (the shot read as a pass) now names its shooter `h-t1`, truly h10.
+  The test set's false events naming someone go from 0 of 2 to **1 of 2**, and the demo fixture
+  carries the name. On validation, names are now 22 of 24 right, 9 left null, and 2 of 3 false
+  events name someone.
+- **Is the RIVAL_M re-measure still justified?** RIVAL_M is defined as the position error on the
+  frames the trust test passes, measured on validation (#168). The check changed those frames, so
+  the amendment re-measured it by the same rule, on validation alone. Its effect on one test event
+  is reported here, and is not a reason to change it: that would set a constant from the test set.
+- **The neighbour check bounds nothing.** Its 8.2 m is the worst observed on validation. Frames
+  wrong the same way agree and pass together, and a wrong frame can make its good neighbour fail.
+  The wording is fixed in EVALUATION, the challenge map, observe.py and lessons 149 and 159.
+- **Tie-break,** fixed now with the plan's other values and not tuned: when two neighbours are
+  equally near, the earlier counts. In the 10 m test clip, frame 6 is judged against wrong frame 5
+  and lost with it; the test asserts every frame.
+- **Second look at the test set.** This check was planned because #187's test score showed these
+  frames, so 900002's 1 → 0 is not held-out evidence. EVALUATION says so.
+- **MAX_TRUSTED_M** is now committed data: `candidates.height.worst_by_seed[108]` = 8.303 m in
+  detector-derive.json, and a test holds 8.5 m to it. Trusted frames the truth cannot measure are
+  counted (0 for every candidate).
+- **900003's 4 frames** are frames 5970 to 5976, 4 of those 7, not consecutive.

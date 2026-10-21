@@ -1473,9 +1473,10 @@ short and actionable. This file is public: no research sources, product names or
 - **Rule:** a detector is developed on validation clips from the start, and the test set is scored
   once, at the end. A rule that adopts a gate or a threshold also bounds the size of the errors it
   lets through (the worst, or a high percentile), not only their number, stated before choosing.
-- **Since met on validation:** a neighbour check added afterwards (docs/eval/camera-bound-plan.md,
-  lesson 159) bounds the worst trusted frame at 8.2 m there, against a bound of 8.5 m set before
-  measuring. On the test set, 4 frames about 46 m wrong are still trusted (lesson 159).
+- **Since, on validation:** a neighbour check added afterwards (docs/eval/camera-bound-plan.md,
+  lesson 159) brings the worst trusted frame there to 8.2 m (observed), under 8.5 m set before
+  measuring. It is not a bound (lesson 159), and on the test set 4 frames about 46 m wrong are still
+  trusted.
 - **Check:** `docs/eval/detector-plan.md` (the plan, its amendment and the outcome, in commit
   order); `docs/eval/detector-derive.md`, "Worst trusted" for each gate;
   `tests/test_vision_observe.py::test_a_frame_whose_camera_disagrees_with_its_neighbours_is_not_trusted`.
@@ -1585,7 +1586,9 @@ short and actionable. This file is public: no research sources, product names or
   frames the fit got wrong the same way. Validation's seed 108 is the same failure, milder: a whole
   clip offset 2 to 8 m.
 - **Rule:** before adopting a consistency check, say which errors it can see. Comparing frames
-  catches errors that differ between them, never errors they share. A shared error needs an
+  catches an isolated error, never one that frames share: two adjacent frames wrong the same way
+  pass together, and a wrong frame can make its good neighbour fail. So its worst on validation is
+  an observation, not a bound. A shared error needs an
   absolute reference: the pitch markings, a known landmark, or a source independent of the fit.
   Report what the check leaves, by the size of what it lets through, on the clips it is scored on.
 - **Check:** `tests/test_vision_observe.py`:

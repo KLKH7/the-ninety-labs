@@ -47,7 +47,9 @@ BALL_CENTRE_Z = 0.11  # a ball on the ground has its centre one radius up (Law 2
 # moves little from frame to frame. A frame is kept only if that point lies within NEIGHBOUR_M of
 # the nearest other height-trusted frame's within NEIGHBOUR_FRAMES (design, set before measuring;
 # docs/eval/camera-bound-plan.md). On validation that cut the worst trusted frame from 55 m wrong
-# to 8.2 m, under the plan's bound of 8.5 m, and kept every good frame the heights kept.
+# to 8.2 m (observed, under the plan's 8.5 m) and kept every good frame the heights kept. It sees an
+# isolated wrong frame only: frames wrong the same way agree and pass together. A tie between two
+# neighbours goes to the earlier (fixed with the plan's values, not tuned).
 # Known limit (lesson 159): frames whose wrong cameras agree with each other still pass, since no
 # check of one frame against another can see them: a whole clip offset the same way (validation
 # seed 108, about 2 to 8 m), and a run of 4 frames on test clip 900003, about 46 m wrong.

@@ -353,7 +353,7 @@ scorer's pairing (player IoU 0.5, ball centre 5 px) and the planned "in the air"
 | Shots | 0 of 1: read as a pass (the ball's height, below) |
 | Out of play | none true, 1 false: the same shot reaching the keeper |
 | Outside M1's scope | 5 possession changes, 2 pressures, a deflection, a tackle and a set piece, counted as misses |
-| Camera trusted | 900001 238 of 250 frames, 900004 194, 900005 248; 900002 none and 900003 4: these two have camera cuts, which the fit does not follow. The neighbour check bounds how wrong a trusted camera is on validation (worst 8.2 m, against 55 m with heights alone; bound 8.5 m set beforehand), and on the test set removes 4 of the 8 frames heights alone trusted there. **The 4 left, on 900003, are about 46 m wrong**: a run of consecutive frames whose wrong cameras agree with each other, which no check of one frame against another can see. They make no event here. A whole clip offset the same way (validation seed 108, 2 to 8 m) passes for the same reason (lesson 159) |
+| Camera trusted | 900001 238 of 250 frames, 900004 194, 900005 248; 900002 none and 900003 4: these two have camera cuts, which the fit does not follow. The neighbour check's worst trusted frame on validation is 8.2 m (observed, under the 8.5 m set beforehand), against 55 m with heights alone. **That is not a bound:** frames wrong the same way agree with each other and pass together, and a wrong frame can make its good neighbour fail instead. On the test set it removes 4 of the 8 frames heights alone trusted there; **the 4 left, on 900003, are about 46 m wrong** (frames 5970 to 5976), wrong the same way, and make no event. A whole clip offset the same way (validation seed 108, 2 to 8 m) passes for the same reason (lesson 159). This is a second look at the test set: the check was planned because #187's test score showed these frames, so 900002's 1 to 0 is not held-out evidence |
 | Players on the pitch | median 0.21, 0.23 and 0.14 m on the three clips with a camera, 90% within 1.44, 0.63 and 0.33 m |
 | Ball on the ground | median 0.09, 0.14 and 0.05 m, 90% within 0.26, 0.45 and 0.13 m |
 | Teams | every matched pass has its true team (7 of 7, 95% 0.65 to 1.00). On validation it is 11 of 16: kit colours are read wrongly on some clips (a blue shirt as near-white, a green one as grey), which the derivation found and did not fix ([eval/detector-plan.md](eval/detector-plan.md), step A) |
@@ -427,9 +427,9 @@ least 0.5, the pixel scorer's player rule); a name whose box pairs with nobody c
 | Clips with events | 8 of 13 (109, 114, 122, 3041 and 3042 have no trusted frame, or too few to make one) | 3 of 5: seeds 900002 and 900003 have camera cuts the fit does not follow |
 | Passes matched | 16 | 7 |
 | Team right | **11 of 16** | 7 of 7 |
-| Names given, right | 21 of 23: passers 13 of 13, receivers 6 of 6, interceptors 2 of 4 (the two wrong ones are what a wrong team does: an opponent "taking" his own side's pass) | 14 of 14 (7 passers, 6 receivers, 1 interceptor) |
-| Names left null where the truth has one | 10 | 0 |
-| False events that name someone | 1 of 3 | 0 of 2 |
+| Names given, right | 22 of 24: passers 14 of 14, receivers 6 of 6, interceptors 2 of 4 (the two wrong ones are what a wrong team does: an opponent "taking" his own side's pass) | 14 of 14 (7 passers, 6 receivers, 1 interceptor) |
+| Names left null where the truth has one | 9 | 0 |
+| False events that name someone | 2 of 3 | **1 of 2**: v00003 on 900001, the shot read as a pass, names its shooter `h-t1` (truly h10). With RIVAL_M 1.59 m it named nobody; at 1.26 m no rival is near enough to hold the name back. The demo fixture carries it |
 
 **Read with care.** Small numbers: 7 matched passes on 3 ten-second test clips. On validation the
 side is wrong on 5 of 16 passes, even after the side naming was re-derived ([eval/detector-plan.md](eval/detector-plan.md),
