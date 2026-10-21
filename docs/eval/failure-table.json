@@ -10,9 +10,12 @@
    "unsure": [],
    "injected": "nothing (the baseline)",
    "status": "verified",
+   "statuses": [
+    "verified"
+   ],
    "category": null,
    "reasons": [],
-   "judge_asked": 3,
+   "judge_asked": 8,
    "insights": [
     {
      "text": "Away complete a pass of 8 m at 42 km/h.",
@@ -34,6 +37,41 @@
      "lang": "en",
      "verified": true,
      "passes_check": true
+    },
+    {
+     "text": "Away complete a pass of 8 m at 42 km/h.",
+     "persona": "player_focus",
+     "lang": "en",
+     "verified": true,
+     "passes_check": true
+    },
+    {
+     "text": "Away completa un pase de 8 m a 42 km/h.",
+     "persona": "analyst",
+     "lang": "es",
+     "verified": true,
+     "passes_check": true
+    },
+    {
+     "text": "Away completa un pase de 8 m a 42 km/h.",
+     "persona": "casual",
+     "lang": "es",
+     "verified": true,
+     "passes_check": true
+    },
+    {
+     "text": "Away completa un pase de 8 m a 42 km/h.",
+     "persona": "club",
+     "lang": "es",
+     "verified": true,
+     "passes_check": true
+    },
+    {
+     "text": "Away completa un pase de 8 m a 42 km/h.",
+     "persona": "player_focus",
+     "lang": "es",
+     "verified": true,
+     "passes_check": true
     }
    ],
    "templates": [
@@ -48,18 +86,18 @@
    ],
    "badges": [],
    "trace_fallbacks": [],
-   "fallback": [
-    "fact_checker held: analyst/es: no translation: the verified English text",
-    "fact_checker held: casual/es: no translation: the verified English text",
-    "fact_checker held: club/es: no translation: the verified English text"
-   ],
-   "model_calls": 6,
+   "fallback": [],
+   "variants_refused": [],
+   "variants_english": [],
+   "variants_missing": [],
+   "model_calls": 11,
    "recovered": {
     "templates stay": true,
     "nothing unverified airs": true,
     "claim ends as it must": true,
     "fallback recorded": true,
-    "fallback badge on screen": true
+    "fallback badge on screen": true,
+    "every variant airs without a failure": true
    },
    "recovers": true
   },
@@ -69,6 +107,9 @@
    "unsure": [],
    "injected": "the Judge never answers (every call outlasts its timeout, retried 1 time(s))",
    "status": "held",
+   "statuses": [
+    "held"
+   ],
    "category": "timeout",
    "reasons": [
     "judge timeout; claim held back"
@@ -96,13 +137,17 @@
     "fact_checker hold: tactician's claim: judge timeout; claim held back",
     "producer template: cue-v00001-analyst stays: held"
    ],
+   "variants_refused": [],
+   "variants_english": [],
+   "variants_missing": [],
    "model_calls": 4,
    "recovered": {
     "templates stay": true,
     "nothing unverified airs": true,
     "claim ends as it must": true,
     "fallback recorded": true,
-    "fallback badge on screen": true
+    "fallback badge on screen": true,
+    "every variant airs without a failure": true
    },
    "recovers": true
   },
@@ -112,6 +157,9 @@
    "unsure": [],
    "injected": "the Tactician's Foundry endpoint cannot be reached",
    "status": "held",
+   "statuses": [
+    "held"
+   ],
    "category": "service",
    "reasons": [
     "tactician failed (ServiceRequestError: injected: the Foundry endpoint cannot be reached); claim held back"
@@ -139,13 +187,17 @@
     "tactician fail: ServiceRequestError: injected: the Foundry endpoint cannot be reached; template stays",
     "producer template: cue-v00001-analyst stays: held"
    ],
+   "variants_refused": [],
+   "variants_english": [],
+   "variants_missing": [],
    "model_calls": 2,
    "recovered": {
     "templates stay": true,
     "nothing unverified airs": true,
     "claim ends as it must": true,
     "fallback recorded": true,
-    "fallback badge on screen": true
+    "fallback badge on screen": true,
+    "every variant airs without a failure": true
    },
    "recovers": true
   },
@@ -155,9 +207,12 @@
    "unsure": [],
    "injected": "the Personalizer's service refuses the connection (its container is down)",
    "status": "verified",
+   "statuses": [
+    "verified"
+   ],
    "category": null,
    "reasons": [],
-   "judge_asked": 3,
+   "judge_asked": 4,
    "insights": [
     {
      "text": "Away complete a pass of 8 m at 42 km/h.",
@@ -176,6 +231,13 @@
     {
      "text": "Away complete a pass of 8 m at 42 km/h.",
      "persona": "club",
+     "lang": "en",
+     "verified": true,
+     "passes_check": true
+    },
+    {
+     "text": "Away complete a pass of 8 m at 42 km/h.",
+     "persona": "player_focus",
      "lang": "en",
      "verified": true,
      "passes_check": true
@@ -201,15 +263,25 @@
     "personalizer fallback: fallback: refused",
     "fact_checker held: analyst/es: no translation: the verified English text",
     "fact_checker held: casual/es: no translation: the verified English text",
-    "fact_checker held: club/es: no translation: the verified English text"
+    "fact_checker held: club/es: no translation: the verified English text",
+    "fact_checker held: player_focus/es: no translation: the verified English text"
    ],
-   "model_calls": 6,
+   "variants_refused": [
+    "analyst/es: no translation: the verified English text",
+    "casual/es: no translation: the verified English text",
+    "club/es: no translation: the verified English text",
+    "player_focus/es: no translation: the verified English text"
+   ],
+   "variants_english": [],
+   "variants_missing": [],
+   "model_calls": 7,
    "recovered": {
     "templates stay": true,
     "nothing unverified airs": true,
     "claim ends as it must": true,
     "fallback recorded": true,
-    "fallback badge on screen": true
+    "fallback badge on screen": true,
+    "every variant airs without a failure": true
    },
    "recovers": true
   },
@@ -221,6 +293,9 @@
    ],
    "injected": "the detector reports the event the Tactician cites at confidence 0.3, below 0.5",
    "status": "held",
+   "statuses": [
+    "held"
+   ],
    "category": "low_confidence",
    "reasons": [
     "event v00005 was detected with confidence 0.30, below 0.50: cite a confident detection"
@@ -245,13 +320,17 @@
     "fact_checker hold: tactician's claim: event v00005 was detected with confidence 0.30, below 0.50: cite a confident detection",
     "producer template: cue-v00001-analyst stays: held"
    ],
+   "variants_refused": [],
+   "variants_english": [],
+   "variants_missing": [],
    "model_calls": 3,
    "recovered": {
     "templates stay": true,
     "nothing unverified airs": true,
     "claim ends as it must": true,
     "fallback recorded": true,
-    "fallback badge on screen": true
+    "fallback badge on screen": true,
+    "every variant airs without a failure": true
    },
    "recovers": true
   }

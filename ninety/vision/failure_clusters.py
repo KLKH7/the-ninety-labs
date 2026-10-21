@@ -1,7 +1,8 @@
 """The Vision Auditor's failure clusters: which situations hide what the detector misses.
 
     uv run python -m ninety.vision.failure_clusters <val clips>/seed* --detections detections-ours-v3.jsonl \
-        --round round1 --out runs/round1/clusters.json
+        --audit runs/round1/audit.json
+    uv run python -m ninety.agents.vision_auditor runs/round1/audit.json --round round1 ...  # clusters.json
 
 Reads training-side clips only (validation clips are training seeds held out from fitting): every
 clip must be a training seed, so the fixed test set's per-frame results never steer what is
@@ -26,10 +27,12 @@ Kit contrast is the clip's own knob, reported beside every situation, not a situ
 "Nearer the lens" is the horizontal distance from the camera position recorded in the frame. The
 rules use positions and boxes only, so they need no pixels and give the same answer on any machine.
 
-Writes the Data agent's handoff (ninety/agents/data_agent.py): a cluster per situation with misses
-among mostly hidden labels, and the render settings the renderer has for it. A situation with no
-render setting yet goes under "unmapped", left for a person to decide, so the Data agent never
-spends clips on it as ordinary footage.
+Writes the audit only. The Vision Auditor (ninety/agents/vision_auditor.py) is the one writer of
+the Data agent's handoff, clusters.json (schemas/failure_clusters.schema.json): a cluster per
+situation with misses among mostly hidden labels, and the render settings the renderer has for it.
+`handoff` below is the untyped reference it reproduces. A situation with no render setting yet goes
+under "unmapped", left for a person to decide, so the Data agent never spends clips on it as
+ordinary footage.
 """
 
 from __future__ import annotations
@@ -49,13 +52,13 @@ from ninety.eval.vision_score import (
     match,
     visibility_group,
 )
+from ninety.render.scene import KEEPER_ACTIONS  # one list of the keeper's handling actions
 from ninety.render.splits import split_of
 
 PITCH_X, PITCH_Y = 105.0, 68.0  # ninety/sim/engine.py
 GOAL_HALF_M = 3.66  # half the goal's width, 7.32 m (Law 1)
 GOAL_REACH_M = 2.0  # the frame's depth plus the net behind it (web/render/render.js draws 2 m)
 KEEPER_M = 2.0  # a keeper's reach: arms over the ball, near enough to cover it
-KEEPER_ACTIONS = ("hands", "dive", "throw")
 CROWD = 3  # three or more players within the radius: the definition `occlusion=crowded` ranks by
 CROWD_RADIUS_M = 4.0  # ninety.render.scene.crowding's default radius
 
@@ -228,25 +231,22 @@ def handoff(report: dict, run: str) -> dict:
 
 
 def main(argv: list[str] | None = None) -> None:
-    ap = argparse.ArgumentParser(description="Failure clusters on training-side clips, for the Data agent.")
+    ap = argparse.ArgumentParser(description="Failure audit on training-side clips, for the Vision Auditor.")
     ap.add_argument("clips", nargs="+", type=Path)
     ap.add_argument("--detections", required=True, help="detections file name inside each clip folder")
     ap.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD)
-    ap.add_argument("--round", required=True)
-    ap.add_argument("--out", type=Path, required=True, help="clusters.json (the report goes beside it)")
+    ap.add_argument("--audit", type=Path, required=True, help="audit.json to write")
     a = ap.parse_args(argv)
     report = audit(a.clips, a.detections, a.threshold)
     report["summary"] = {cls: summarize(report["rows"], cls) for cls in ("ball", "player")}
-    a.out.parent.mkdir(parents=True, exist_ok=True)
-    a.out.with_name("audit.json").write_text(json.dumps(report, indent=2) + "\n")
-    h = handoff(report, a.round)
-    a.out.write_text(json.dumps(h, indent=2) + "\n")
+    a.audit.parent.mkdir(parents=True, exist_ok=True)
+    a.audit.write_text(json.dumps(report, indent=2, allow_nan=False) + "\n")
     for cls, rows in report["summary"].items():
         print(f"{cls}, mostly hidden:")
         for r in rows:
             print(f"  {r['missed']:4d} of {r['labels']:4d} missed  recall {r['recall']:.3f}  {r['situation']}"
                   f"  (low contrast {r['missed_low_contrast']})")
-    print(f"{len(h['clusters'])} clusters written to {a.out}")
+    print(f"audit written to {a.audit}; clusters.json comes from ninety.agents.vision_auditor")
 
 
 if __name__ == "__main__":

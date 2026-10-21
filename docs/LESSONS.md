@@ -809,7 +809,15 @@ short and actionable. This file is public: no research sources, product names or
   standard error, and use enough matches that it is smaller than the gap being claimed. Running
   the same seeds still matters, for reproducing a run, not for cancelling noise.
 - **Check:** for a before-and-after on a match rate, report both errors; if the paired one is not
-  clearly smaller, quote the unpaired one.
+  clearly smaller, quote the unpaired one. On the agent side too, one seed is one match only if one
+  engine made it. The deployed match tools serve the matches the deployed image simulated, so in
+  an evaluation graded against this commit's simulation every agent gets the minute's events
+  inline, under a match id no server serves, and an agent that calls the tools anyway fails the
+  call. A prompt alone does not enforce it: the tools are called inside Foundry. The live
+  ablation's one-agent arm once read the tools and aired a goal on seed 33 that had no shot here.
+  `tests/test_agent_ablation.py::test_both_arms_read_the_match_the_grader_grades`,
+  `::test_a_live_arm_that_calls_the_match_tools_fails_that_call` and
+  `tests/test_workflow.py::test_an_agent_given_its_events_inline_that_calls_the_match_tools_fails_its_call`.
 
 ### 91. When the data moves, the code that reads it moves in the same change
 - **What happened:** sealing the ground truth (0fda1f8) moved frames.jsonl and events.jsonl from
@@ -1401,3 +1409,173 @@ short and actionable. This file is public: no research sources, product names or
   judges it, where he makes the choice, and tested over many seeds, not one.
 - **Check:** `tests/test_engine_rules.py::test_the_team_mate_a_pass_is_played_to_goes_to_meet_it` and
   `::test_nobody_is_sent_to_chase_a_ball_beyond_the_touchline`.
+
+### 146. A detector that starts naming players turns its false events into false evidence
+- **What happened:** detected passes began to name their passer and receiver by track (`h-t12`) so
+  the agents could talk about them. Scoring the names against the truth found both of seed 900004's
+  false passes were one player in two tracks: the tracker lost a dribbler for a frame and picked him
+  up as a new track, so his own touch read as "h-t6 finds h-t12". The fact-checker cannot catch that:
+  the claim matches its evidence, and the evidence is wrong. Matched events alone would have shown
+  every name right.
+- **Rule:** when a detected event gains a field the agents will repeat (a name, a team, an outcome),
+  grade that field on the false events too, and leave it null, or the event out, wherever the
+  footage cannot tell. A pass between two tracks never seen together, the second starting within
+  reach of where the first ended, is not recorded. That rule's form was found on a test clip, and
+  its distance first came from one: both were then decided on validation clips only, with the
+  plan committed first (docs/eval/attribution-plan.md). A constant read off a test clip is tuned to it.
+- **Check:** `docs/eval/attribution.md` lists every unmatched detected event with the players its
+  names really are; `tests/test_vision_events.py::test_a_dribbler_the_tracker_loses_and_picks_up_again_is_not_a_pass_to_himself`
+  fails without the rule.
+
+### 147. A budget is set from the call it bounds, measured; and a cancelled request is awaited
+- **What happened:** the live Personalizer evaluation (run 39429424313, at 0689342) answered none of
+  its 20 requests: all 160 variants were "fallback: timeout" at 3002 to 3274 ms. The 3 s budget was a
+  design share of the 8 s target, never measured against the call. Locally, the published
+  `ninety-personalizer:1` on gpt-4.1-mini took 3.2 to 4.7 s (median 4.0 s) for one claim's 8
+  variants, over A2A as well as direct. Two more defects hid behind it. First, the server's model
+  deadline equalled the client's budget, so the client always gave up first and the server's
+  fallback, with its reasons, never got back. Second, the client cancelled a request at the deadline
+  and never awaited it. In process, that cancellation ran on into a2a-sdk 1.2.3's server code, which
+  swallows it (`ActiveTask.subscribe` catches CancelledError) and waits forever for a task a
+  message-only agent never creates. Those tasks were destroyed when the loop closed, and that
+  produced the "Task was destroyed but it is pending" and OpenTelemetry "created in a different
+  Context" errors at exit. Those errors came after every request, so they did not block a response.
+- **Rule:** a latency budget cites a measurement of the call it bounds, and a test holds it above
+  the slowest measured call. A layer's own deadline ends inside its caller's
+  (`SERVER_MARGIN_S`), so the inner fallback answers rather than the outer timeout. A task cancelled
+  at a deadline is kept and awaited before the client closes. An in-process server runs each request
+  in its own task (`server.InProcess`), as uvicorn does, so a client's cancellation never enters the
+  server.
+- **Check:** `tests/test_personalizer.py::test_the_budget_is_over_the_slowest_measured_model_call`,
+  `::test_a_slow_model_is_answered_by_the_server_with_its_reasons_not_cut_off_by_the_client`,
+  `::test_a_request_cut_off_at_the_deadline_is_awaited_on_close` and
+  `::test_the_evaluation_leaves_no_request_running_when_the_client_gives_up`.
+
+### 140. A clip's truth must not depend on how long the match was simulated
+- **What happened:** `ninety-render` simulated the match to the end of the window it chose (240 s
+  plus the clip), but its own determinism check re-rendered the same window with `--start`, which
+  simulated only to the window's end plus a second. The engine settles some outcomes after the fact
+  (a tackle is won or lost when someone next controls the ball), so a tackle near the end of crowded
+  seed 11's window was `fail` in the clip and `null` in its re-render: frames and images identical,
+  `events.jsonl` not. Found while adding the broadcast's dead-ball cuts, which make a clip span more
+  of the match than its length.
+- **Rule:** the simulation's horizon is fixed by the latest frame a clip could need, never by how
+  its start was found: `max(latest start, start) + length + SIM_MARGIN_S` (`ninety/render/clip.py`),
+  long enough for the outcomes and the dead balls after it.
+- **Check:** `ninety-render-check --determinism` on a window with a tackle near its end compares
+  `events_identical`; `tests/test_render_clip.py` renders the same seed twice.
+
+### 141. A camera rule is judged by what the viewer sees over whole matches, not by the shot that prompted it
+- **What happened:** the gantry was aimed 4.5 m above the play after a review found the stand a
+  thin lip under the sky, and second angles were added one at a time (high behind the goal when
+  the ball is in a box, the far stand when play is on the far side, a low angle for a shot
+  arriving). Each fixed the shot it was made for. Nobody measured the whole broadcast: the stands
+  filled 40 to 75% of the picture with the players small at the bottom (the pitch over 60% of the
+  picture with the ball central in 13 to 47% of live frames on seeds 7, 21 and 42), and with second
+  angles on the viewpoint changed 8.8 times a minute, with shots as short as 0.6 s, between
+  opposite sides of the ground. The owner found both by watching clips.
+- **Rule:** a change to how the camera is pointed is measured over whole simulated matches before
+  and after it: the share of live frames that are well framed, the shots per minute against
+  broadcast practice (SoccerNet-v2: one change every 9 s) and the shortest shot, and how fast the
+  pan gathers speed. The numbers go in the pull request.
+- **Check:** `tests/test_render_camera.py` measures all three on seeds the design was not tuned on
+  (`test_the_gantry_frames_the_play_with_the_pitch_filling_the_picture`,
+  `test_the_viewpoint_changes_no_faster_than_a_broadcast_and_never_flickers`,
+  `test_a_pan_eases_in_and_out`); each fails on the 0.5.0 director.
+
+### 150. Build a media branch from an empty tree, and look at what it holds before pushing
+- **What happened:** review clips for the camera pull request went on a new orphan branch made by
+  `git checkout --orphan`, which keeps the whole working tree staged. The `git rm` meant to empty
+  it refused, but the shell line went on past it (`;` after `&&`), so the push carried a copy of
+  every tracked file with the media. It was public code, with no secrets and no untracked files,
+  and the branch was rebuilt within minutes; the clips themselves were left out, ignored by the
+  copied `.gitignore`.
+- **Rule:** start a media branch empty (`git switch --orphan`, or `git rm -rf --cached .`), add the
+  files by name (`git add -f` when `.gitignore` covers them), and list the commit's tree before
+  pushing. A multi-step shell line that changes a repository stops at its first failure.
+- **Check:** `git ls-tree -r --name-only origin/pr-assets/<name>` lists only the media.
+
+### 151. A new check of what a model writes starts from the reader we already have
+- **What happened:** the Vision Auditor's rationale check (#140) read numbers as digit runs only,
+  written fresh beside the fact-checker's reader, which lesson 129 had already widened to number
+  words and glued units. "Ninety of these were missed", "sixty percent", "one in three" and "-38"
+  all passed a check the docs called "number-checked". The reviewer's audit found it.
+- **Rule:** a check on what a model may write reuses the fact-checker's reader
+  (`factcheck.spelled_as_digits`) and adds only what its own text needs (here: digits glued to
+  words, a sign, thousands commas, and refusing words for a share or a multiple). Its tests plant
+  every written form, and a true number in each form must still stand.
+- **Check:** `tests/test_vision_auditor.py::test_a_planted_number_in_any_written_form_is_refused`
+  and `::test_the_cluster_s_own_numbers_in_any_form_stand`.
+
+### 152. A handoff checked only by its writer is not a contract
+- **What happened:** the Auditor validated its own `clusters.json` against the schema, but the Data
+  agent read the file without checking it. A hand-edited file with test seed 900001 in its sources,
+  a shifted seed range or another render setting was planned as if typed. Removing the writer's
+  check turned no test red, because the writer never produces a bad file. Two writers also made two
+  shapes under one file name: the committed round-1 file failed the new schema with 83 errors.
+- **Rule:** the agent that acts on a handoff validates it on receipt (schema, then each rule it
+  relies on) and is tested with tampered input. One file name has one writer and one shape.
+- **Check:** `tests/test_vision_auditor.py::test_the_data_agent_checks_a_typed_handoff_on_receipt`,
+  `::test_the_committed_clusters_json_is_the_auditor_s_code_output_and_the_data_agent_takes_it`.
+
+### 155. A test of a library's message shape goes through the library's own parser
+- **What happened:** #182 made a published agent's call to the match tools fail the call, keyed on
+  the content type `mcp_server_tool_call` in its reply. The tests built that content by hand with
+  `Content.from_mcp_server_tool_call`. Had a framework upgrade renamed the type, or stopped turning
+  Foundry's `mcp_call` output item into it, the guard would pass every call and the tests would
+  stay green. The review caught it. Separately, a tool call made a minute air nothing, but only the
+  ablation's JSON counted such minutes.
+- **Rule:** when code keys on the shape a third-party library produces, at least one test feeds the
+  library the service's raw payload (here a Responses API reply as Foundry returns it) and lets the
+  installed parser build the shape. A failure that costs one arm output is counted in the report a
+  reader sees, not only in the data.
+- **Check:** `tests/test_workflow.py::test_inline_only_reads_a_foundry_reply_as_foundry_sends_it`;
+  `tests/test_agent_ablation.py::test_a_live_arm_that_calls_the_match_tools_fails_that_call` reads
+  the "Minutes lost to a tool call" column.
+
+### 156. An exemption is stated in what the clip shows at both ends, and attacked with planted clips
+- **What happened:** the contract check for a broadcast cut (C2) accepted a gap when the last stoppage
+  or restart before it was a stoppage, or when a window opened on a loose ball, and looked at no
+  other event. An independent review's planted clips found two holes. A pass after the stoppage put
+  the ball back in play unseen by it. A window of open play with a gap and no event at all passed.
+  The renderer only made legal cuts, so no clip was wrong, but the validator would have passed a
+  wrong one. The cut was also on by default, so dataset and test-set renders would have cut too.
+- **Rule:** an exemption in a contract check is stated in what the clip itself shows, here both the
+  stoppage and the restart as events of the clip with nothing live between them. It is tested with
+  planted clips that try to abuse it, written by someone other than its author. A feature that
+  changes what a dataset contains is off by default and turned on where it is wanted.
+- **Check:** `tests/test_validate.py` (the planted cut clips; they fail on `aef43f5`) and
+  `test_every_check_the_validator_reports_has_a_planted_defect`;
+  `tests/test_render_params.py::test_only_a_broadcast_clip_cuts_through_dead_balls`.
+
+### 153. A light module imports only light modules
+- **What happened:** the live API scales to zero, and its cold start was about 50 s, about 33 s of
+  it Python start-up on a fractional vCPU. `import ninety.api.app` loaded the agent framework, the
+  Foundry project client, the OpenAI client and the blob storage SDK. The cause was that
+  `ninety.agents.contracts`, which only declares types, imported three short names from
+  `ninety.agents.slice`, a live entry point that loads them all at its top. Locally the import
+  took 3.28 s (median of five fresh interpreters), against 1.00 s once they load on first use.
+- **Rule:** a module that only declares (contracts, rules, types) imports nothing that talks to a
+  service. A name two layers share lives in the lower one, and the entry point re-exports it. An
+  SDK that only a live call needs is imported inside that call.
+- **Check:** `tests/test_api_startup.py::test_importing_the_api_loads_no_model_sdk` reads
+  `sys.modules` in a fresh interpreter (lesson 104); `::test_the_check_sees_an_sdk_when_one_is_imported`
+  shows the check can go red.
+
+### 157. Measure an asset before scaling by it, and drive feet by place, not by pose
+- **What happened:** two defects in how the skinned players were drawn, both since the mesh
+  (a3d228e), both invisible to every test because each test measured the code against itself.
+  The body asset is 1.684 m to the top of its skull, but every scale treated it as 1.84 m, so each
+  player was drawn at 91.5% of his height: short and stocky next to the goal and the capsules he
+  replaced. And the stride swung each leg between two stored poses, which moves a foot back and
+  forth along one path: there is no low stance and high swing, so a walking foot skimmed along the
+  grass and a landing foot was blended onto its plant: a quarter of the frames a foot was on the
+  grass it slid more than 2 cm, up to 23 cm.
+- **Rule:** a constant taken from an asset is measured from the asset and tested against it. A
+  drawn body is checked against the world, not against its own constants: as tall as the player,
+  joints where a man's are (a cited table). Feet are placed: fixed where they land, carried on an
+  arc to where they will land, and judged frame by frame on the skinned markers.
+- **Check:** `tests/test_render_mesh.py::test_a_player_is_drawn_as_tall_as_he_is` and
+  `tests/test_render_motion.py::test_a_foot_on_the_grass_does_not_slide_from_a_standstill_to_a_sprint_and_back`
+  fail on the code before; `test_the_body_has_a_mans_proportions_and_its_stature_is_the_scale` holds
+  the scale to the asset and its joints to the table.

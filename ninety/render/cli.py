@@ -55,6 +55,11 @@ def render_main(argv: list[str] | None = None) -> None:
     a = ap.parse_args(argv)
     if split_of(a.seed) == "test" and a.set:
         sys.exit("test-set seeds are rendered with their own sampled parameters only; drop --set")
+    overrides = _overrides(a.set)
+    if split_of(a.seed) != "test":
+        # A broadcast clip for the viewer or the demo cuts through long dead balls (edit.py); a
+        # test-set seed is rendered as the test set has it, every frame.
+        overrides.setdefault("dead_ball_cut", True)
     t = time.time()
     try:
         clip = render_clip(
@@ -62,7 +67,7 @@ def render_main(argv: list[str] | None = None) -> None:
             a.out,
             seconds=a.seconds,
             start_s=a.start,
-            overrides=_overrides(a.set),
+            overrides=overrides,
             mp4=a.mp4,
             gpu=a.gpu,
         )

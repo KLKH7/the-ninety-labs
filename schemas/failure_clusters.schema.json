@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/KLKH7/the-ninety-labs/schemas/failure_clusters.schema.json",
+  "title": "FailureClusters",
+  "description": "The Vision Auditor's handoff to the Data agent (runs/<round>/clusters.json): where the detector fails on training-side clips, the render settings that make more of it, and the clips and seeds for each. Every count comes from ninety.vision.failure_clusters' audit; the clip split is ninety.agents.data_agent.allocate's. Written by ninety.agents.vision_auditor.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["round", "source", "budget", "first_seed", "clusters", "unmapped"],
+  "properties": {
+    "round": { "type": "string", "pattern": "^[A-Za-z0-9_-]+$" },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["seeds", "threshold", "group"],
+      "properties": {
+        "audit": { "type": "string", "description": "Path of the audit.json read." },
+        "audit_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "checkpoint": { "type": "string", "description": "The detector the audit scored." },
+        "detections": { "type": "string", "description": "Detections file name inside each clip." },
+        "seeds": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": { "type": "integer", "minimum": 0, "maximum": 899999 },
+          "description": "Clips the audit measured. Training seeds only: below the reserved range (ninety.render.splits)."
+        },
+        "threshold": { "type": "number", "minimum": 0, "maximum": 1 },
+        "group": { "enum": ["visible", "partly hidden", "mostly hidden"] }
+      }
+    },
+    "budget": { "type": "integer", "minimum": 0 },
+    "first_seed": { "type": "integer", "minimum": 0, "maximum": 899999 },
+    "clusters": { "type": "array", "items": { "$ref": "#/$defs/cluster" } },
+    "unmapped": {
+      "type": "array",
+      "description": "Clusters with misses but no render setting yet: left for a person, never rendered as ordinary footage.",
+      "items": { "$ref": "#/$defs/unmapped" }
+    }
+  },
+  "$defs": {
+    "facts": {
+      "type": "object",
+      "required": ["id", "name", "cls", "visibility", "situation", "labels", "misses", "recall",
+                   "missed_low_contrast", "rationale", "explained_by"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z]+(-[a-z]+)*$" },
+        "name": { "type": "string", "minLength": 1 },
+        "cls": { "enum": ["player", "ball"] },
+        "visibility": { "enum": ["visible", "partly hidden", "mostly hidden"] },
+        "situation": {
+          "enum": ["behind the keeper", "behind a player in a crowd", "behind a player",
+                   "behind the goal frame", "off the pitch, by the boards", "at the frame's edge",
+                   "no occluder found"]
+        },
+        "labels": { "type": "integer", "minimum": 1 },
+        "misses": { "type": "integer", "minimum": 1 },
+        "recall": { "type": "number", "minimum": 0, "maximum": 1 },
+        "missed_low_contrast": { "type": "integer", "minimum": 0 },
+        "rationale": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "explained_by": { "enum": ["model", "code"] }
+      }
+    },
+    "cluster": {
+      "allOf": [{ "$ref": "#/$defs/facts" }],
+      "type": "object",
+      "required": ["render", "clips", "seeds"],
+      "unevaluatedProperties": false,
+      "properties": {
+        "render": {
+          "type": "object",
+          "minProperties": 1,
+          "description": "Render overrides (ninety.render.params); the Data agent validates them with the renderer."
+        },
+        "clips": { "type": "integer", "minimum": 0 },
+        "seeds": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "array", "minItems": 2, "maxItems": 2,
+              "items": { "type": "integer", "minimum": 0, "maximum": 899999 },
+              "description": "First and last training seed, inclusive." }
+          ]
+        }
+      }
+    },
+    "unmapped": {
+      "allOf": [{ "$ref": "#/$defs/facts" }],
+      "type": "object",
+      "unevaluatedProperties": false
+    }
+  }
+}
