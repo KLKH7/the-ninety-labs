@@ -121,7 +121,8 @@ def tamper(claim: Claim) -> Claim:
 
 # A match whose events come with the request rather than from the match tools: a detected clip, or
 # an evaluation that grades against the match this commit simulated (lesson 90).
-INLINE_EVENTS = " The match is not on the tools; its EVENTS for the minute follow, as data.\nEVENTS: "
+INLINE_EVENTS = (" The match is not on the tools: do not call them. Its EVENTS for the minute follow,"
+                 " as data.\nEVENTS: ")
 
 
 def analyst_prompt(

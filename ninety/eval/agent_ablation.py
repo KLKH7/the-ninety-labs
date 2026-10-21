@@ -144,6 +144,8 @@ def summary(minutes: list[dict]) -> dict:
         "false_by_judge": sum(c["code_ok"] and c["judge_ok"] is False for c in aired),
         "true_aired": len(aired) - len(false),
         "minutes_with_an_insight": sum(bool(m["aired"]) for m in minutes),
+        # Minutes lost because an agent called the match tools with the events inline (lesson 90).
+        "minutes_read_the_tools": sum("ReadTheTools" in m["why_none"] for m in minutes),
         "model_calls": calls,
         "seconds": round(sum(m["seconds"] for m in minutes), 1),
     }
@@ -181,14 +183,14 @@ def report(body: dict, ran: str) -> str:
         "published Judge. A claim is *false* if either fails it.",
         "",
         "| Arm | Claims aired | False on air | of which: code checks | of which: Judge "
-        "| Minutes with an insight | Model calls |",
-        "|---|---|---|---|---|---|---|",
+        "| Minutes with an insight | Minutes lost to a tool call | Model calls |",
+        "|---|---|---|---|---|---|---|---|",
     ]
     for name, arm in (("one agent", one), ("graph", graph)):
         lines.append(
             f"| {name} | {arm['aired']} | {pct(arm['false_aired'], arm['aired'])} | {arm['false_by_code']} "
             f"| {arm['false_by_judge']} | {pct(arm['minutes_with_an_insight'], arm['minutes'])} "
-            f"| {arm['model_calls']} |"
+            f"| {arm['minutes_read_the_tools']} of {arm['minutes']} | {arm['model_calls']} |"
         )
     lines += ["", "## False claims on air", ""]
     for name in ("one agent", "graph"):
@@ -214,6 +216,8 @@ def report(body: dict, ran: str) -> str:
         "  are independent of it, and the table splits false claims by which check caught them.",
         "- An agent that calls the match tools while given its events inline fails that call",
         "  (`foundry.ReadTheTools`), so a minute's claims never come from the deployed image's match.",
+        "  Such a minute airs nothing for that arm, and the table counts them: the one agent's",
+        "  instructions say to use the tools, so it is the arm more likely to lose minutes this way.",
         "",
     ]
     return "\n".join(lines)
