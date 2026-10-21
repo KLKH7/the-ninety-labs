@@ -154,21 +154,23 @@ cut overlaps further. Those values were set before and were not changed after se
 At a direct free kick within shooting range the defending side builds a wall (GROUNDING L14): as
 many as a shoulder's breadth each fills, rounded down, across the part of the goal Bray's model has
 it hide (from the near post, design, to a third of the half-goal past the centre), at 9.15 m and
-0.5 m; the defenders nearest its places share them so that no two runs cross, walk to it at least at
-a normal walking pace, come in behind the line and step up into their places, and stand shoulder to
-shoulder.
+0.5 m; the defenders with the shortest walks to its places, each walk measured the way he goes
+(round the keep-off circle, in behind the line, up into it), share them for the least total walk,
+walk to it at least at a normal walking pace, come in behind the line and step up into their places,
+and stand shoulder to shoulder.
 
 Twelve planted free kicks (seeds 2, 3, 5, 7; 22 m out straight on, 18 m out at y = 24, 27 m out at
 y = 44), by [`scripts/defect_sweep/wall.py`](../../scripts/defect_sweep/wall.py) `--planted`; the
 first version ran on the engine of its time, so the minute of play before each kick differs:
 
-| | First version (`5813294`) | Now |
+| | First version (`5813294`) | Now (`5183be6`) |
 |---|---:|---:|
 | Walls formed, every player on his place to within a ball's radius | 0 of 12 | 12 of 12 |
-| seconds into the stoppage | none formed | 11 to 40 s (stoppages 30 to 40 s) |
+| seconds into the stoppage | none formed | 11 to 33 s (stoppages 30 to 40 s) |
 | Furthest a wall player is from his place when the kick is struck | 0.2 to 1.0 m, and 7.4 m (below) | 0.02 m |
-| Gaps between neighbours' bodies when it is struck | 0.11 to 0.83 m, and 7.2 m (below) | -0.01 to 0.03 m |
-| Frames with two of them more than 5 cm into each other while it forms | 0 of 11,004 | 45 of 10,993 (0.4%) |
+| Gaps between neighbours' bodies when it is struck | 0.11 to 0.83 m, and 7.2 m (below) | -0.01 to 0.02 m |
+| Frames with two of them more than 5 cm into each other while it forms | 0 of 11,004 | 27 of 11,007 (0.25%) |
+| Kicks where two wall players' walked paths cross, the two there within a second | not measured | 1 of 12 |
 
 In the first version one wall player stood 7 m from his place through the whole stoppage: his
 place was on the edge of the 9.65 m keep-off circle (9.15 m and the margin), straight in from him,

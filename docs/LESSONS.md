@@ -1587,3 +1587,33 @@ short and actionable. This file is public: no research sources, product names or
   for rounding (a named tolerance), and a test puts a point exactly on the boundary.
 - **Check:** `uv run pytest tests/test_restarts.py -k edge_of_the_circle`; it fails with the
   tolerance set to 0.
+
+### 161. A claim about how players move is checked on the paths they walk
+- **What happened:** the free-kick wall's players shared out its places by the least total of
+  straight lines from where they stood, and GROUNDING, the report and a docstring said that no two
+  runs to the wall cross; the test checked the straight lines. A focused audit followed the runs
+  frame by frame: players go round the 9.65 m keep-off circle at their own distance from the ball
+  and come in behind the wall, and two runs crossed within a second of each other in 22 of 72
+  planted kicks. Measuring each walk the way it is walked fixed who stands in the wall and how fast
+  they walk there, but not the crossings: a walk round the circle at one's own distance is not the
+  shortest way, so the uncrossing argument does not hold for it, and two coming round the same side
+  share the way behind the wall.
+- **Rule:** a claim about movement (no crossing, no contact, in place in time) is measured on the
+  walked paths, frame by frame, before it is written down; a property of the plan is stated as one.
+- **Check:** `uv run python scripts/defect_sweep/wall.py --planted` reports the walked crossings for
+  each kick; `docs/eval/restarts.md` ("The wall") publishes them.
+
+### 162. A wait for something to happen ends when it can no longer happen
+- **What happened:** a throw-in released behind the touchline counts as still coming in while it
+  moves toward the field, judged by the sign of its speed across the line alone. In the wall's
+  16-match re-measure (seed 101) a throw drifted along the outside of the touchline, a centimetre a
+  second inward: it stayed in play past the end of the touchline and over the end boards, which only
+  a dead ball meets, rolled on 14 m beyond them, and when it stopped the retake snapped it back to
+  the boards, a 14.6 m jump in one frame. The restart sweep then counted the retakes as free kicks
+  taken from the touchline with opponents inside 9.15 m, and the retaken throw as the taker's second
+  touch.
+- **Rule:** a state that waits for an event (coming in, arriving, landing) also ends when the event
+  can no longer happen where it is allowed to (here, past the end of the touchline); a measurement
+  counts a restart taken again as the same restart.
+- **Check:** `uv run pytest tests/test_restarts.py -k past_the_end_of_the_touchline`; on the engine
+  before it, the ball runs on to 127 m and jumps 18 m in a frame.

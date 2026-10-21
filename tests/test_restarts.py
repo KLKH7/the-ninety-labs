@@ -10,6 +10,7 @@ from ninety.sim import ball, shape
 from ninety.sim.decisions import PENALTY_DEPTH, PENALTY_HALF_WIDTH
 from ninety.sim.engine import (
     BALL_TO_FEET,
+    BOARDS_M,
     DT,
     KEEP_OFF_MARGIN_M,
     PITCH_X,
@@ -1007,6 +1008,39 @@ def test_a_wall_player_paces_the_whole_way_in_to_be_in_place_for_the_kick():
     walked = e.walk_to_wall(r, (p.x, p.y), (wx, wy))
     assert walked > straight + 1.0  # premise: he has to go round
     assert e.shape_target(p)[2] == pytest.approx(walked / 5.0)
+
+
+def drifting_throw(seed: int = 1) -> Engine:
+    """A throw-in from 10 m short of the goal line, released behind the touchline and drifting along
+    it at 15 m/s with a centimetre a second inward."""
+    e = Engine(seed)
+    still(e)
+    thrower = e.by_id["h4"]
+    e.possessor, e.restart, e.set_by, e.throw_by, e.dribbler = None, None, None, None, None
+    e.last_touch, e.into_play, e.throw_from = thrower.id, True, (95.0, 0.0)
+    e.kicked = {"type": "pass", "team": "home", "player": thrower.id, "x": 95.0, "y": 0.0}
+    e.ball = (95.0, -0.25, 1.8, 15.0, 0.01, 0.0)
+    return e
+
+
+def test_a_throw_that_runs_on_past_the_end_of_the_touchline_never_entered_the_field():
+    """Defect (seed 101 in the wall's 16 matches): a throw drifting along the outside of the
+    touchline, a centimetre a second inward, counted as still coming in; it stayed in play past the
+    end of the touchline and over the end boards, rolled on 14 m beyond them, and when it stopped
+    the retake snapped it back to the boards in one frame. Past the end of the touchline, still
+    outside it, it has not entered the field: Law 15, taken again by the same side."""
+    e = drifting_throw()
+    before = (105.0, -0.25, 1.05, 15.0, 0.01, -1.0)
+    e.ball = (105.6, -0.25, 1.0, 15.0, 0.01, -1.0)  # past the corner, still outside the touchline
+    assert e.went_out(before)
+    assert (e.restart.kind, e.restart.team, e.restart.x, e.restart.y) == ("throw_in", "home", 95.0, 0.0)
+    e = drifting_throw()
+    track = [e.ball[:3]]
+    for _ in range(int(10 / DT)):
+        e.step()
+        track.append(e.ball[:3])
+    assert max(math.dist(a, b) for a, b in zip(track, track[1:], strict=False)) <= MAX_STEP_M
+    assert max(x for x, _, _ in track) <= PITCH_X + BOARDS_M  # the boards stop it, as a dead ball
 
 
 def test_the_wall_is_made_of_those_with_the_shortest_walks_to_it():

@@ -1478,8 +1478,10 @@ class Engine:
             r = ball.RADIUS
             inside = -r <= bx <= PITCH_X + r and -r <= by <= PITCH_Y + r
             inward = (by >= 0 or vy > 0) and (by <= PITCH_Y or vy < 0)
-            if not inside and not inward and self.throw_from:
-                # Law 15: it never entered the field, so the same side throws it again from there.
+            beside = -r <= bx <= PITCH_X + r  # still alongside the touchline, short of its ends
+            if not inside and (not inward or not beside) and self.throw_from:
+                # Law 15: it never entered the field (it went away from it, or on past the end of
+                # the touchline), so the same side throws it again from there.
                 self.into_play = False
                 if self.kicked:
                     self.kicked.update(outcome="fail")

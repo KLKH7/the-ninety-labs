@@ -74,7 +74,13 @@ def measure(run: Path) -> dict:
         if kick.get("receiver") not in (None, e["player"]):
             continue  # a team-mate received it: another player has touched it since
         j = events.index(kick)
-        nxt = next((k for k in events[j + 1:] if k["type"] in touches and k.get("player")), None)
+        nxt = None
+        for k in events[j + 1:]:
+            if k["type"] in ("set_piece", "kickoff", "out_of_play", "foul", "offside", "goal"):
+                break  # play stopped first: a restart taken again (Law 15) is not a second touch
+            if k["type"] in touches and k.get("player"):
+                nxt = k
+                break
         if nxt and nxt["player"] == e["player"]:
             out["touched_again"] += 1
     last = None  # (time, team) of the last restart
@@ -97,6 +103,7 @@ def measure(run: Path) -> dict:
                for p in f["players"]):
             out["player_jumps"] += 1
     stopped_by = None
+    last_set = None  # the last set piece: its kind and spot
     for i, e in enumerate(events):
         if e["type"] in ("out_of_play", "foul", "offside"):
             stopped_by = e
@@ -106,7 +113,11 @@ def measure(run: Path) -> dict:
                 out["goal_to_kick_s"].append(round(kick["t"] - e["t"], 1))
         if e["type"] != "set_piece":
             continue
-        kind = kind_of(stopped_by, e)
+        if stopped_by is None and last_set and math.hypot(e["x"] - last_set[1], e["y"] - last_set[2]) < 1.0:
+            kind = last_set[0]  # taken again from the same spot with no new stoppage (Law 15's retake)
+        else:
+            kind = kind_of(stopped_by, e)
+        last_set = (kind, e["x"], e["y"])
         stopped_by = None
         out["set"][kind] = out["set"].get(kind, 0) + 1
         first = next((k for k in events[i + 1:] if k["type"] in ("pass", "shot")), None)
