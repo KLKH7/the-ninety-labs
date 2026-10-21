@@ -1,7 +1,7 @@
 {
   "command": "uv run python -m ninety.eval.attribution_derive --clips <render run v1>/train --observations <dir> --seeds <the validation seeds> --out docs/eval/attribution-derive",
-  "commit": "0d790abfbb9daaeee5c62581fcda7e2af16ea816",
-  "date": "2026-10-20",
+  "commit": "8d85df6948b520aa1ea531aadebeae00c3467f98",
+  "date": "2026-10-21",
   "seeds": [
     108,
     109,
@@ -22,17 +22,17 @@
     3045
   ],
   "players_position_error": {
-    "n": 16249,
-    "median_m": 0.224,
-    "p90_m": 1.592,
-    "max_m": 58.415
+    "n": 16006,
+    "median_m": 0.221,
+    "p90_m": 1.256,
+    "max_m": 12.163
   },
   "players_position_error_per_clip": {
     "108": {
-      "n": 896,
-      "median_m": 2.009,
-      "p90_m": 5.626,
-      "max_m": 12.558
+      "n": 869,
+      "median_m": 1.961,
+      "p90_m": 4.932,
+      "max_m": 12.163
     },
     "109": {
       "n": 0,
@@ -41,9 +41,9 @@
       "max_m": null
     },
     "114": {
-      "n": 52,
-      "median_m": 1.468,
-      "p90_m": 3.635,
+      "n": 18,
+      "median_m": 1.234,
+      "p90_m": 2.109,
       "max_m": 5.639
     },
     "115": {
@@ -71,10 +71,10 @@
       "max_m": 7.552
     },
     "122": {
-      "n": 67,
-      "median_m": 14.998,
-      "p90_m": 41.112,
-      "max_m": 58.415
+      "n": 0,
+      "median_m": null,
+      "p90_m": null,
+      "max_m": null
     },
     "2041": {
       "n": 2365,
@@ -95,16 +95,16 @@
       "max_m": 7.556
     },
     "3041": {
-      "n": 106,
-      "median_m": 2.85,
-      "p90_m": 15.364,
-      "max_m": 19.206
+      "n": 12,
+      "median_m": 1.402,
+      "p90_m": 2.771,
+      "max_m": 4.169
     },
     "3042": {
-      "n": 21,
-      "median_m": 47.376,
-      "p90_m": 55.805,
-      "max_m": 58.368
+      "n": 0,
+      "median_m": null,
+      "p90_m": null,
+      "max_m": null
     }
   },
   "track_break_rule": {
@@ -125,8 +125,8 @@
         "id": "v00003",
         "frame": 3500,
         "tracks": [
-          26,
-          28
+          19,
+          21
         ],
         "players": [
           "a2",
@@ -186,9 +186,9 @@
           0.768,
           0.775,
           0.881,
-          0.887,
-          0.896,
+          0.895,
           0.95,
+          0.97,
           0.985
         ],
         "wrong": [
@@ -201,11 +201,11 @@
       },
       "player": {
         "truth_names": 16,
-        "named": 13,
-        "right": 13,
+        "named": 14,
+        "right": 14,
         "unchecked": 0,
         "accuracy": 1.0,
-        "left_null": 3
+        "left_null": 2
       },
       "receiver": {
         "truth_names": 11,
@@ -256,7 +256,7 @@
   "clips": [
     {
       "seed": 108,
-      "frames_camera_ok": 143,
+      "frames_camera_ok": 139,
       "true_passes": 3,
       "off": {
         "passes": 3,
@@ -268,7 +268,7 @@
             "frame": 3326,
             "tracks": [
               3,
-              24
+              16
             ],
             "players": [
               "a6",
@@ -280,8 +280,8 @@
             "id": "v00002",
             "frame": 3392,
             "tracks": [
-              24,
-              26
+              16,
+              19
             ],
             "players": [
               "a4",
@@ -293,8 +293,8 @@
             "id": "v00003",
             "frame": 3500,
             "tracks": [
-              26,
-              28
+              19,
+              21
             ],
             "players": [
               "a2",
@@ -314,7 +314,7 @@
             "frame": 3326,
             "tracks": [
               3,
-              24
+              16
             ],
             "players": [
               "a6",
@@ -326,8 +326,8 @@
             "id": "v00002",
             "frame": 3392,
             "tracks": [
-              24,
-              26
+              16,
+              19
             ],
             "players": [
               "a4",
@@ -342,8 +342,8 @@
           "id": "v00003",
           "frame": 3500,
           "tracks": [
-            26,
-            28
+            19,
+            21
           ],
           "players": [
             "a2",
@@ -373,7 +373,7 @@
     },
     {
       "seed": 114,
-      "frames_camera_ok": 6,
+      "frames_camera_ok": 2,
       "true_passes": 2,
       "off": {
         "passes": 0,
@@ -601,7 +601,7 @@
     },
     {
       "seed": 122,
-      "frames_camera_ok": 8,
+      "frames_camera_ok": 0,
       "true_passes": 2,
       "off": {
         "passes": 0,
@@ -991,7 +991,7 @@
     },
     {
       "seed": 3041,
-      "frames_camera_ok": 14,
+      "frames_camera_ok": 2,
       "true_passes": 2,
       "off": {
         "passes": 0,
@@ -1009,7 +1009,7 @@
     },
     {
       "seed": 3042,
-      "frames_camera_ok": 4,
+      "frames_camera_ok": 0,
       "true_passes": 1,
       "off": {
         "passes": 0,

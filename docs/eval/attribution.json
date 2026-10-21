@@ -1,9 +1,9 @@
 {
   "command": "uv run python -m ninety.eval.attribution_score --test-dir runs/test-frozen-cca498c/test --observations docs/eval/attribution --observations tests/fixtures --out docs/eval/attribution",
-  "commit": "0d790abfbb9daaeee5c62581fcda7e2af16ea816",
-  "date": "2026-10-20",
+  "commit": "2b0aa155f33df7364789d94c9d74012a9abdd482",
+  "date": "2026-10-21",
   "rule": {
-    "rival_m": 1.59,
+    "rival_m": 1.26,
     "control_m": 1.5,
     "min_track_frames": 5,
     "window_s": 1.0,
@@ -86,9 +86,9 @@
   },
   "false_names": {
     "false_events": 2,
-    "false_events_named": 0,
-    "names": 0,
-    "names_checkable": 0
+    "false_events_named": 1,
+    "names": 1,
+    "names_checkable": 1
   },
   "clips": [
     {
@@ -105,7 +105,10 @@
         {
           "id": "v00003",
           "type": "pass",
-          "is": {}
+          "player": "h-t1",
+          "is": {
+            "player": "h10"
+          }
         },
         {
           "id": "v00004",
@@ -218,7 +221,7 @@
       },
       "detected": {},
       "unmatched_detected": [],
-      "camera_ok": "1 of 250 frames",
+      "camera_ok": "0 of 250 frames",
       "teams": {
         "feature": null,
         "kits": null,
@@ -233,7 +236,7 @@
       },
       "detected": {},
       "unmatched_detected": [],
-      "camera_ok": "7 of 250 frames",
+      "camera_ok": "4 of 250 frames",
       "teams": {
         "feature": null,
         "kits": null,

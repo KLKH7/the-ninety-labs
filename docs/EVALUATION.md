@@ -22,7 +22,7 @@ generated it and the output file is committed. Rows marked *planned* have no res
 | Late drop in high-intensity running (R7), by the protocol below; distance and top speed by position on the same matches | `uv run python -m ninety.sim.late_drop` | `docs/eval/late-drop.md` | running |
 | Fact-checker rules (numbers, players, evidence ids) | `uv run pytest tests/test_factcheck.py` | test assertions | running |
 | Personalizer rules: the A2A round trip, the fallback within its budget, the re-check of every variant, every persona and language, profile validation ([below](#personalizer)) | `uv run pytest tests/test_personalizer.py` | test assertions | running in process: 46 tests; 18 of 18 mutants of the rules killed, and 16 of 17 of the live path and its evaluation (the survivor is equivalent: an unanswered request never airs); not yet deployed |
-| Personalizer variants from the published agent that pass the re-check and air, by persona and language, and time per A2A request | `uv run python -m ninety.personalizer.eval --seeds 21,33` (agents-live task `personalizer`) | `docs/eval/personalizer.md`, `docs/eval/personalizer.json` | running: agents-live 39514003721 at `6ffcd9a` (2026-10-21), `ninety-personalizer:1` on gpt-4.1-mini, seeds 21 and 33. The model answered 19 of 19 requests, p50 3.5 s and p95 4.6 s per request, within the 6 s budget. Variants that air, of 20 per profile: analyst 20 en, 19 es; casual 12 en, 12 es; club 20, 19; player_focus 18, 17. The server's re-check dropped 23, every one for a changed or added number, most of them casual's (being diagnosed). Earlier runs measured nothing: 39346085408 (the sign-in expired first) and 39429424313 (every call outlasted the old 3 s budget, lesson 147) |
+| Personalizer variants from the published agent that pass the re-check and air, by persona and language, and time per A2A request | `uv run python -m ninety.personalizer.eval --seeds 21,33` (agents-live task `personalizer`) | `docs/eval/personalizer.md` | planned: `ninety-personalizer:1` is published. The first live run (agents-live 39346085408, 2026-10-20) measured nothing: its sign-in had expired before the first model call, so all 20 requests fell back to the verified text. The evaluation now signs in before it simulates and refuses to write a report when the model never answered |
 | Ledger versioning, evidence validation, and deterministic cue fixture | `uv run pytest tests/test_ledger.py tests/test_cues.py` | `tests/fixtures/cues-seed7.jsonl` and test assertions | running: 21 tests; 174 cues for seed 7, five minutes (166 for its 83 passes, 15 of them failed and one still in flight at the end, 6 for its 3 shots and 2 for its 1 goal) |
 | Fact-checker on the frozen planted-claim set, offline: catch rate, true claims wrongly stopped, the layer that decided, claims held for low-confidence detections | `uv run python -m ninety.eval.fact_checker_proof` (offline, seconds of CPU; `--check` fails if a committed file is stale, as `tests/test_fact_checker_proof.py` does) | `docs/eval/fact-checker-planted.md`, set `docs/eval/planted-claims-v1.json` | running: 175/175 planted false claims kept off air (127 recorded, 16 on phantom low-confidence detections, all held by the confidence gate, 32 with viewer text spliced in); 7/121 true claims wrongly stopped, all by the recorded Judge. Judge answers are those recorded from `ninety-judge:1` at `9be98bd`; the gate threshold (0.5) is a design value until detector calibration is measured |
 | Fact-checker catch rate on planted false claims, and true claims wrongly rejected, on the published Judge | `uv run python -m ninety.eval.factcheck_eval --seeds 21,33 --foundry`; nightly in `.github/workflows/evals.yml`, recorded in Foundry | `docs/eval/fact-checker.md` | running: held-out seeds 21,33, `ninety-judge:1` at commit `9be98bd`: 136/136 false claims caught (code alone 32/136); 7/105 true claims wrongly rejected excluding service holds (17/115 including them); 19 of 251 Judge calls failed and were held back (fail closed), more than earlier runs, not yet investigated |
@@ -336,7 +336,7 @@ only the trust test and the placing run again.
 
 | Stage | What it does | Code |
 |---|---|---|
-| Camera | white-marking pixels (brighter and bluer than the grass on both sides, detected players and ball masked) fitted to Law 1's markings: one gantry for the clip (found from every 25th frame), pan, tilt and zoom per frame (tracked from the last frame whose markings fit). A frame is trusted when its players are as tall as they should be: the median, over its player boxes, of box height against an upright 1.80 m at the foot point lies in 0.901 to 1.002, the 1st to 99th percentile on validation frames whose ground mapping is within 1.0 m | `ninety/vision/pitch.py`, `ninety/vision/observe.py` |
+| Camera | white-marking pixels (brighter and bluer than the grass on both sides, detected players and ball masked) fitted to Law 1's markings: one gantry for the clip (found from every 25th frame), pan, tilt and zoom per frame (tracked from the last frame whose markings fit). A frame is trusted when its players are as tall as they should be (the median, over its player boxes, of box height against an upright 1.80 m at the foot point lies in 0.901 to 1.002, the 1st to 99th percentile on validation frames whose ground mapping is within 1.0 m) and its camera agrees with a trusted neighbour's (the ground point at the image centre within 2 m of the nearest other such frame's within 5 frames; [camera-bound-plan.md](eval/camera-bound-plan.md)) | `ninety/vision/pitch.py`, `ninety/vision/observe.py` |
 | On the pitch | each box's foot point (players) or centre one radius up (ball) through a trusted frame's camera; shirt colour from the box's upper middle | `ninety/vision/observe.py` |
 | Tracks and teams | players linked in pitch metres; two kits told apart by chromaticity (shadow-proof, lesson 98) or by brightness (white against black), whichever separates them more on the clip; the side defending x = 105 is away (the engine's one convention), and it is the side standing nearer it on average (GROUNDING T2, O6) | `ninety/vision/track.py` |
 | Events | possession: the ball within 1.5 m of a player's feet and moving with him (GROUNDING P6); a pass from one spell to the next, a shot when the strike heads between the posts, out of play when the whole ball is over a line for 3 frames | `ninety/vision/events.py` |
@@ -353,7 +353,7 @@ scorer's pairing (player IoU 0.5, ball centre 5 px) and the planned "in the air"
 | Shots | 0 of 1: read as a pass (the ball's height, below) |
 | Out of play | none true, 1 false: the same shot reaching the keeper |
 | Outside M1's scope | 5 possession changes, 2 pressures, a deflection, a tackle and a set piece, counted as misses |
-| Camera trusted | 900001 238 of 250 frames, 900004 194, 900005 248; 900002 1 and 900003 7: these two have camera cuts, which the fit does not follow. **The height test trusts those 8 frames although they are 46 to 80 m wrong**, where the old marking test trusted none; on validation it newly trusts 32 such frames, up to 55 m wrong. They make no event here, but the test does not bound how wrong a trusted camera can be (lesson 149); a camera in the wrong place with players the right height passes it. A follow-up adds that bound |
+| Camera trusted | 900001 238 of 250 frames, 900004 194, 900005 248; 900002 none and 900003 4: these two have camera cuts, which the fit does not follow. The neighbour check's worst trusted frame on validation is 8.2 m (observed, under the 8.5 m set beforehand), against 55 m with heights alone. **That is not a bound:** frames wrong the same way agree with each other and pass together, and a wrong frame can make its good neighbour fail instead. On the test set it removes 4 of the 8 frames heights alone trusted there; **the 4 left, on 900003, are about 46 m wrong** (frames 5970 to 5976), wrong the same way, and make no event. A whole clip offset the same way (validation seed 108, 2 to 8 m) passes for the same reason (lesson 159). This is a second look at the test set: the check was planned because #187's test score showed these frames, so 900002's 1 to 0 is not held-out evidence |
 | Players on the pitch | median 0.21, 0.23 and 0.14 m on the three clips with a camera, 90% within 1.44, 0.63 and 0.33 m |
 | Ball on the ground | median 0.09, 0.14 and 0.05 m, 90% within 0.26, 0.45 and 0.13 m |
 | Teams | every matched pass has its true team (7 of 7, 95% 0.65 to 1.00). On validation it is 11 of 16: kit colours are read wrongly on some clips (a blue shirt as near-white, a green one as grey), which the derivation found and did not fix ([eval/detector-plan.md](eval/detector-plan.md), step A) |
@@ -387,7 +387,7 @@ ids the phone companion's minimap uses, never a shirt number (`ninety/vision/eve
 `attribute`).
 
 - The holder of the spell (at the strike, or at the first frame of the next spell) is named only
-  when no other track, of either side or none, is within **RIVAL_M = 1.59 m** of his own distance
+  when no other track, of either side or none, is within **RIVAL_M = 1.26 m** of his own distance
   from the ball: a rival that close may really be the nearer one. Only a track the companion
   draws (a side, and at least 5 frames) is named.
 - Otherwise the name is null and the event keeps its `team` (the holder's kit colour), so the
@@ -402,7 +402,8 @@ ids the phone companion's minimap uses, never a shirt number (`ninety/vision/eve
 plans were read). They come from ours-v2's validation clips, never test clips.
 - **RIVAL_M** is the players' pooled 90th-percentile pitch-position error on those clips, on the
   frames the camera trust test passes ([eval/attribution-derive.md](eval/attribution-derive.md)).
-  It was 1.89 m with the old marking test and is 1.59 m with the height test. It still includes
+  It was 1.89 m with the old marking test, 1.59 m with the height test, and is 1.26 m with the
+  height and neighbour checks. It still includes
   validation seed 108, whose camera is about 2 m wrong with players the right height, so it is
   larger than the box error alone and leaves more names null. An earlier 1.44 m had been measured
   on test seed 900001 and is replaced.
@@ -426,9 +427,9 @@ least 0.5, the pixel scorer's player rule); a name whose box pairs with nobody c
 | Clips with events | 8 of 13 (109, 114, 122, 3041 and 3042 have no trusted frame, or too few to make one) | 3 of 5: seeds 900002 and 900003 have camera cuts the fit does not follow |
 | Passes matched | 16 | 7 |
 | Team right | **11 of 16** | 7 of 7 |
-| Names given, right | 21 of 23: passers 13 of 13, receivers 6 of 6, interceptors 2 of 4 (the two wrong ones are what a wrong team does: an opponent "taking" his own side's pass) | 14 of 14 (7 passers, 6 receivers, 1 interceptor) |
-| Names left null where the truth has one | 10 | 0 |
-| False events that name someone | 1 of 3 | 0 of 2 |
+| Names given, right | 22 of 24: passers 14 of 14, receivers 6 of 6, interceptors 2 of 4 (the two wrong ones are what a wrong team does: an opponent "taking" his own side's pass) | 14 of 14 (7 passers, 6 receivers, 1 interceptor) |
+| Names left null where the truth has one | 9 | 0 |
+| False events that name someone | 2 of 3 | **1 of 2**: v00003 on 900001, the shot read as a pass, names its shooter `h-t1` (truly h10). With RIVAL_M 1.59 m it named nobody; at 1.26 m no rival is near enough to hold the name back. The demo fixture carries it |
 
 **Read with care.** Small numbers: 7 matched passes on 3 ten-second test clips. On validation the
 side is wrong on 5 of 16 passes, even after the side naming was re-derived ([eval/detector-plan.md](eval/detector-plan.md),

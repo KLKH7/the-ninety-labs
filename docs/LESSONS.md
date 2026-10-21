@@ -1473,14 +1473,13 @@ short and actionable. This file is public: no research sources, product names or
 - **Rule:** a detector is developed on validation clips from the start, and the test set is scored
   once, at the end. A rule that adopts a gate or a threshold also bounds the size of the errors it
   lets through (the worst, or a high percentile), not only their number, stated before choosing.
-- **Not yet met here:** the height gate adopted in the same pull request does not meet this rule.
-  It trusts frames up to 55 m wrong on validation and 80 m on the test set (EVALUATION, "Event
-  detection from video"). Bounding it is a follow-up, planned and derived on validation like the
-  rest; until then the limit is stated wherever the gate's numbers are.
+- **Since, on validation:** a neighbour check added afterwards (docs/eval/camera-bound-plan.md,
+  lesson 159) brings the worst trusted frame there to 8.2 m (observed), under 8.5 m set before
+  measuring. It is not a bound (lesson 159), and on the test set 4 frames about 46 m wrong are still
+  trusted.
 - **Check:** `docs/eval/detector-plan.md` (the plan, its amendment and the outcome, in commit
   order); `docs/eval/detector-derive.md`, "Worst trusted" for each gate;
-  `tests/test_vision_observe.py::test_a_camera_in_the_wrong_place_is_not_trusted` (a strict expected
-  failure until the bound exists).
+  `tests/test_vision_observe.py::test_a_frame_whose_camera_disagrees_with_its_neighbours_is_not_trusted`.
 ### 140. A clip's truth must not depend on how long the match was simulated
 - **What happened:** `ninety-render` simulated the match to the end of the window it chose (240 s
   plus the clip), but its own determinism check re-rendered the same window with `--start`, which
@@ -1512,6 +1511,34 @@ short and actionable. This file is public: no research sources, product names or
   (`test_the_gantry_frames_the_play_with_the_pitch_filling_the_picture`,
   `test_the_viewpoint_changes_no_faster_than_a_broadcast_and_never_flickers`,
   `test_a_pan_eases_in_and_out`); each fails on the 0.5.0 director.
+
+### 142. A figure keeps the case it was measured for
+- **What happened:** GROUNDING R1 cited Opta's guide to time-wasting for "a goal's celebration,
+  about 72 s", and the restart work planned the kick-off after every goal around it. Read again,
+  the article gives 72 s for the celebration after a penalty goal, in its paragraph on penalties;
+  it gives no figure for goals in general. A general figure was then found in a different source
+  (FIFA's referees' chief: a celebration "may last one, one and a half minutes").
+- **Rule:** when a number moves from a source into GROUNDING, the row names the case it was
+  measured for (which restart, which competition, which seasons) and quotes the sentence it
+  comes from; a number used for a wider case needs a source for that case.
+- **Check:** every row of GROUNDING that cites a time or a rate names its case; R1 and L4 now cite
+  the penalty figure as a penalty figure and the goal figure from its own source.
+
+### 143. Players sent to one point end up inside each other: give each his own place
+- **What happened:** the goal celebration sent every team-mate to the scorer's own position. Steering
+  bends a run round another player but does not slow it, and bodies in contact brace only with the
+  grip steering leaves, so ten players arriving at one point at a sprint ended up in each other: in
+  32 to 63% of celebration frames two bodies overlapped by more than 5 cm. The tests counted players
+  within 3 m of the scorer, a distance between centres, and passed.
+- **Rule:** when several players head for the same spot (a huddle, a wall, a queue), each gets a
+  place of his own, at least a shoulder's breadth from the next (P11), chosen so that no two runs
+  to them cross. A test of a crowd measures the clearance between bodies (`shape.between`), not
+  the distance between centres.
+- **Check:** `uv run pytest tests/test_restarts.py -k "overlap or side_they_come_from or once_a_frame"`;
+  with every team-mate sent to the scorer's centre the overlap test fails (none ever stands at a
+  place of his own), and with places worked out one player at a time, in the order they move, the
+  once-a-frame test fails. `scripts/defect_sweep/huddle.py` counts the frames with bodies in each
+  other over a whole celebration (`docs/eval/restarts.md`, "The huddle").
 
 ### 150. Build a media branch from an empty tree, and look at what it holds before pushing
 - **What happened:** review clips for the camera pull request went on a new orphan branch made by
@@ -1548,6 +1575,20 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_vision_auditor.py::test_the_data_agent_checks_a_typed_handoff_on_receipt`,
   `::test_the_committed_clusters_json_is_the_auditor_s_code_output_and_the_data_agent_takes_it`.
 
+### 153. A light module imports only light modules
+- **What happened:** the live API scales to zero, and its cold start was about 50 s, about 33 s of
+  it Python start-up on a fractional vCPU. `import ninety.api.app` loaded the agent framework, the
+  Foundry project client, the OpenAI client and the blob storage SDK. The cause was that
+  `ninety.agents.contracts`, which only declares types, imported three short names from
+  `ninety.agents.slice`, a live entry point that loads them all at its top. Locally the import
+  took 3.28 s (median of five fresh interpreters), against 1.00 s once they load on first use.
+- **Rule:** a module that only declares (contracts, rules, types) imports nothing that talks to a
+  service. A name two layers share lives in the lower one, and the entry point re-exports it. An
+  SDK that only a live call needs is imported inside that call.
+- **Check:** `tests/test_api_startup.py::test_importing_the_api_loads_no_model_sdk` reads
+  `sys.modules` in a fresh interpreter (lesson 104); `::test_the_check_sees_an_sdk_when_one_is_imported`
+  shows the check can go red.
+
 ### 155. A test of a library's message shape goes through the library's own parser
 - **What happened:** #182 made a published agent's call to the match tools fail the call, keyed on
   the content type `mcp_server_tool_call` in its reply. The tests built that content by hand with
@@ -1578,20 +1619,6 @@ short and actionable. This file is public: no research sources, product names or
   `test_every_check_the_validator_reports_has_a_planted_defect`;
   `tests/test_render_params.py::test_only_a_broadcast_clip_cuts_through_dead_balls`.
 
-### 153. A light module imports only light modules
-- **What happened:** the live API scales to zero, and its cold start was about 50 s, about 33 s of
-  it Python start-up on a fractional vCPU. `import ninety.api.app` loaded the agent framework, the
-  Foundry project client, the OpenAI client and the blob storage SDK. The cause was that
-  `ninety.agents.contracts`, which only declares types, imported three short names from
-  `ninety.agents.slice`, a live entry point that loads them all at its top. Locally the import
-  took 3.28 s (median of five fresh interpreters), against 1.00 s once they load on first use.
-- **Rule:** a module that only declares (contracts, rules, types) imports nothing that talks to a
-  service. A name two layers share lives in the lower one, and the entry point re-exports it. An
-  SDK that only a live call needs is imported inside that call.
-- **Check:** `tests/test_api_startup.py::test_importing_the_api_loads_no_model_sdk` reads
-  `sys.modules` in a fresh interpreter (lesson 104); `::test_the_check_sees_an_sdk_when_one_is_imported`
-  shows the check can go red.
-
 ### 157. Measure an asset before scaling by it, and drive feet by place, not by pose
 - **What happened:** two defects in how the skinned players were drawn, both since the mesh
   (a3d228e), both invisible to every test because each test measured the code against itself.
@@ -1610,6 +1637,37 @@ short and actionable. This file is public: no research sources, product names or
   fail on the code before; `test_the_body_has_a_mans_proportions_and_its_stature_is_the_scale` holds
   the scale to the asset and its joints to the table.
 
+### 158. A point one rule puts exactly on a boundary is on it for every other rule
+- **What happened:** the keep-off rule moves an opponent's target to the edge of the 9.65 m circle,
+  and the wall stands on that edge. A second rule sends a player round the circle while his
+  straight way "comes closer than 9.65 m". For a place on the edge, straight in from further out,
+  the closest point of that way is the place itself, and rounding put it a hair inside: the player
+  was sent round the circle at his own distance, which is where he already stood. He stood 7 m
+  from the wall through the whole stoppage. No test placed a target exactly on the edge.
+- **Rule:** where one rule produces points on a boundary that another rule tests, the test allows
+  for rounding (a named tolerance), and a test puts a point exactly on the boundary.
+- **Check:** `uv run pytest tests/test_restarts.py -k edge_of_the_circle`; it fails with the
+  tolerance set to 0.
+
+### 159. A check of one frame against another cannot see an error the frames share
+- **What happened:** the camera trust test (players' heights) let through frames up to 55 m wrong on
+  validation. A check that each trusted frame's camera agrees with a trusted neighbour's (image
+  centre within 2 m, within 5 frames) brought the worst down to 8.2 m there, under a bound set
+  beforehand. On the test set it removed 4 of the 8 far-wrong frames on the two clips with camera
+  cuts. The other 4, on seed 900003, are about 46 m wrong but agree with each other: a run of
+  frames the fit got wrong the same way. Validation's seed 108 is the same failure, milder: a whole
+  clip offset 2 to 8 m.
+- **Rule:** before adopting a consistency check, say which errors it can see. Comparing frames
+  catches an isolated error, never one that frames share: two adjacent frames wrong the same way
+  pass together, and a wrong frame can make its good neighbour fail. So its worst on validation is
+  an observation, not a bound. A shared error needs an
+  absolute reference: the pitch markings, a known landmark, or a source independent of the fit.
+  Report what the check leaves, by the size of what it lets through, on the clips it is scored on.
+- **Check:** `tests/test_vision_observe.py`:
+  - `::test_a_frame_whose_camera_disagrees_with_its_neighbours_is_not_trusted` passes;
+  - `::test_a_whole_clip_in_the_wrong_place_is_not_trusted` is a strict expected failure, the
+    shared-error case;
+  - `docs/eval/camera-bound-plan.md`, Outcome, has the test set's frames left per clip.
 ### 160. A pass or shot ends at the next thing that happens to the ball, however long it stays open
 - **What happened:** the engine keeps a shot open after a block, so a deflected shot can still count
   as the shooter's goal, and closed it only when someone controlled the ball, at a foul, an offside,
@@ -1624,46 +1682,6 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_shot_end.py`: seed 21's case, asserted to occur (lesson 41), with C7 and
   "no carrier strikes with a kick still open" checked on the real match; a poke on an open shot; and
   an untouched shot judged on its own flight, not the tackle's push.
-
-### 142. A figure keeps the case it was measured for
-- **What happened:** GROUNDING R1 cited Opta's guide to time-wasting for "a goal's celebration,
-  about 72 s", and the restart work planned the kick-off after every goal around it. Read again,
-  the article gives 72 s for the celebration after a penalty goal, in its paragraph on penalties;
-  it gives no figure for goals in general. A general figure was then found in a different source
-  (FIFA's referees' chief: a celebration "may last one, one and a half minutes").
-- **Rule:** when a number moves from a source into GROUNDING, the row names the case it was
-  measured for (which restart, which competition, which seasons) and quotes the sentence it
-  comes from; a number used for a wider case needs a source for that case.
-- **Check:** every row of GROUNDING that cites a time or a rate names its case; R1 and L4 now cite
-  the penalty figure as a penalty figure and the goal figure from its own source.
-
-### 143. Players sent to one point end up inside each other: give each his own place
-- **What happened:** the goal celebration sent every team-mate to the scorer's own position. Steering
-  bends a run round another player but does not slow it, and bodies in contact brace only with the
-  grip steering leaves, so ten players arriving at one point at a sprint ended up in each other: in
-  32 to 63% of celebration frames two bodies overlapped by more than 5 cm. The tests counted players
-  within 3 m of the scorer, a distance between centres, and passed.
-- **Rule:** when several players head for the same spot (a huddle, a wall, a queue), each gets a
-  place of his own, at least a shoulder's breadth from the next (P11), chosen so that no two runs
-  to them cross. A test of a crowd measures the clearance between bodies (`shape.between`), not
-  the distance between centres.
-- **Check:** `uv run pytest tests/test_restarts.py -k "overlap or side_they_come_from or once_a_frame"`;
-  with every team-mate sent to the scorer's centre the overlap test fails (none ever stands at a
-  place of his own), and with places worked out one player at a time, in the order they move, the
-  once-a-frame test fails. `scripts/defect_sweep/huddle.py` counts the frames with bodies in each
-  other over a whole celebration (`docs/eval/restarts.md`, "The huddle").
-
-### 158. A point one rule puts exactly on a boundary is on it for every other rule
-- **What happened:** the keep-off rule moves an opponent's target to the edge of the 9.65 m circle,
-  and the wall stands on that edge. A second rule sends a player round the circle while his
-  straight way "comes closer than 9.65 m". For a place on the edge, straight in from further out,
-  the closest point of that way is the place itself, and rounding put it a hair inside: the player
-  was sent round the circle at his own distance, which is where he already stood. He stood 7 m
-  from the wall through the whole stoppage. No test placed a target exactly on the edge.
-- **Rule:** where one rule produces points on a boundary that another rule tests, the test allows
-  for rounding (a named tolerance), and a test puts a point exactly on the boundary.
-- **Check:** `uv run pytest tests/test_restarts.py -k edge_of_the_circle`; it fails with the
-  tolerance set to 0.
 
 ### 161. A claim about how players move is checked on the paths they walk
 - **What happened:** the free-kick wall's players shared out its places by the least total of
@@ -1683,21 +1701,6 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `uv run python scripts/defect_sweep/wall.py --planted` reports the walked crossings for
   each kick; `uv run pytest tests/test_restarts.py -k estimated_from_above` follows the walks frame by
   frame against their estimate.
-
-### 166. A wait for something to happen ends when it can no longer happen
-- **What happened:** a throw-in released behind the touchline counts as still coming in while it
-  moves toward the field, judged by the sign of its speed across the line alone. In the wall's
-  16-match re-measure (seed 101) a throw drifted along the outside of the touchline, a centimetre a
-  second inward: it stayed in play past the end of the touchline and over the end boards, which only
-  a dead ball meets, rolled on 14 m beyond them, and when it stopped the retake snapped it back to
-  the boards, a 14.6 m jump in one frame. The restart sweep then counted the retakes as free kicks
-  taken from the touchline with opponents inside 9.15 m, and the retaken throw as the taker's second
-  touch.
-- **Rule:** a state that waits for an event (coming in, arriving, landing) also ends when the event
-  can no longer happen where it is allowed to (here, past the end of the touchline); a measurement
-  counts a restart taken again as the same restart.
-- **Check:** `uv run pytest tests/test_restarts.py -k past_the_end_of_the_touchline`; on the engine
-  before it, the ball runs on to 127 m and jumps 18 m in a frame.
 
 ### 164. A pose keyed to an action ignores the truth it stands for; a limit marked "measured" is re-measured where the defect shows
 - **What happened:** a blind critic of 0.5.3 found four body defects. A throw-in drew its stored
@@ -1731,6 +1734,21 @@ short and actionable. This file is public: no research sources, product names or
   with main's stride and throw restored); `test_a_player_drifting_while_the_pose_flickers_keeps_his_feet_down`,
   `test_setting_off_from_standing_lifts_one_foot_at_a_time` and
   `test_setting_off_the_feet_do_not_leave_the_grass_together` fail with each hop's cause put back.
+
+### 166. A wait for something to happen ends when it can no longer happen
+- **What happened:** a throw-in released behind the touchline counts as still coming in while it
+  moves toward the field, judged by the sign of its speed across the line alone. In the wall's
+  16-match re-measure (seed 101) a throw drifted along the outside of the touchline, a centimetre a
+  second inward: it stayed in play past the end of the touchline and over the end boards, which only
+  a dead ball meets, rolled on 14 m beyond them, and when it stopped the retake snapped it back to
+  the boards, a 14.6 m jump in one frame. The restart sweep then counted the retakes as free kicks
+  taken from the touchline with opponents inside 9.15 m, and the retaken throw as the taker's second
+  touch.
+- **Rule:** a state that waits for an event (coming in, arriving, landing) also ends when the event
+  can no longer happen where it is allowed to (here, past the end of the touchline); a measurement
+  counts a restart taken again as the same restart.
+- **Check:** `uv run pytest tests/test_restarts.py -k past_the_end_of_the_touchline`; on the engine
+  before it, the ball runs on to 127 m and jumps 18 m in a frame.
 
 ### 175. A held-out seed that passes may hold none of the cases the rule gets wrong
 - **What happened:** the broadcast camera (#180) passed its framing test on held-out seeds 3 and 5
@@ -1777,3 +1795,4 @@ short and actionable. This file is public: no research sources, product names or
   (red on af7e439), `::test_a_corner_is_framed_from_the_taker_inward`,
   `::test_each_corner_has_its_own_shot_and_the_ball_stays_in_it` and
   `::test_the_corner_shot_holds_until_the_kick`; the framing bar is raw.
+
