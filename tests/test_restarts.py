@@ -758,6 +758,31 @@ def test_the_wall_covers_the_near_post():
         # and the wall runs from there toward the goal's centre, not outside the post
         widest = abs(outer[1] - PITCH_Y / 2) + 1e-9
         assert all(abs(s[1] - PITCH_Y / 2) <= widest for s in spots), (team, bx, by)
+        # His body's outer edge is on that line, neither short of it nor beyond: the line crosses
+        # the wall's half a shoulder's breadth outside his centre, away from the others.
+        ox, oy = outer
+        nxt = min((s for s in spots if s != outer), key=lambda s: math.hypot(s[0] - ox, s[1] - oy))
+        wx, wy = nxt[0] - ox, nxt[1] - oy  # along the wall, inward
+        x0, y0, dx, dy, _ = line
+        k = ((ox - x0) * wy - (oy - y0) * wx) / (dx * wy - dy * wx)
+        ix, iy = x0 + k * dx, y0 + k * dy  # where the near post's line crosses the wall's
+        assert abs(math.hypot(ix - ox, iy - oy) - shape.SHOULDER_BREADTH_M / 2) < 1e-9, (team, bx, by)
+        assert (ix - ox) * wx + (iy - oy) * wy < 0, (team, bx, by)
+
+
+def test_the_wall_stands_as_close_as_the_law_allows():
+    """Law 13: the wall stands 9.15 m from the ball (and the keep-off margin), no further: the line
+    its players stand on passes that far from the ball."""
+    from ninety.sim.engine import KEEP_OFF_MARGIN_M, RESTART_DISTANCE_M
+    e = Engine(3)
+    want = RESTART_DISTANCE_M["free_kick"] + KEEP_OFF_MARGIN_M
+    for team, (bx, by) in (("home", (PITCH_X - 22.0, 34.0)), ("home", (PITCH_X - 20.0, 24.0)),
+                           ("away", (22.0, 34.0)), ("away", (20.0, 44.0))):
+        spots = e.wall_spots(Restart("free_kick", team, bx, by, "x", e.t + 5))
+        assert len(spots) >= 2, (team, bx, by)
+        (x0, y0), (x1, y1) = spots[0], spots[-1]
+        apart = math.hypot(x1 - x0, y1 - y0)
+        assert abs(abs((bx - x0) * (y1 - y0) - (by - y0) * (x1 - x0)) / apart - want) < 1e-9, (team, bx, by)
 
 
 def test_a_direct_free_kick_22_m_out_is_taken_with_a_wall_in_place():
