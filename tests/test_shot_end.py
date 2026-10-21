@@ -59,11 +59,39 @@ def test_a_tackle_on_the_ball_ends_the_shot_still_in_flight_where_the_ball_is():
 
 
 def test_a_shot_ended_by_a_tackle_is_judged_on_its_own_flight_not_the_tackles_push():
-    # An untouched shot going wide, then a poke that may knock the ball goalward: it missed.
+    # An untouched shot going wide 5 m out, then a poke toward the goal: it missed, whatever the push.
     for seed in range(30):
         e, shot, holder, tackler = _open_shot_then_dribbler(seed)
         e.shot_touched_by, e.shot_was_on_target = None, None
-        e.ball = (26.4, 33.5, 0.0, -3.0, 12.0, 0.0)  # toward the touchline, away from the goal at x = 0
-        tackler.x, tackler.y, tackler.vx, tackler.vy = 27.5, 33.5, -6.0, 0.0  # lunging goalward
+        holder.x, holder.y, holder.vx, holder.vy = 5.6, 34.0, 0.0, 0.0
+        e.ball = (5.0, 34.0, 0.0, 0.0, 12.0, 0.0)  # across the face of goal toward the touchline
+        tackler.x, tackler.y, tackler.vx, tackler.vy = 6.5, 34.0, -7.0, 0.0  # lunging at the goal (x = 0)
         e.poke(tackler, holder)
         assert shot["outcome"] == "off_target", seed
+
+
+def _open_pass(e):
+    passer, mate = e.by_id["h6"], e.by_id["h7"]
+    e.kicked = e.emit("pass", "home", 40.0, 30.0, player=passer.id, intended=mate.id, interceptor=None,
+                      deflected_by=None)
+    e.ball = (48.0, 33.0, 0.0, 0.0, 0.0, 0.0)
+    return e.kicked, mate
+
+
+def test_a_tackle_on_a_team_mate_who_only_touched_a_pass_ends_it_failed_where_the_ball_is():
+    e = Engine(21)
+    pas, mate = _open_pass(e)
+    mate.x, mate.y, e.possessor, e.dribbler = 47.6, 33.0, None, mate.id  # his touch did not keep it
+    e.poke(e.by_id["a6"], mate)
+    assert (pas["end_x"], pas["end_y"], pas["outcome"]) == (48.0, 33.0, "fail") and e.kicked is None
+
+
+def test_a_foul_or_an_offside_ends_the_pass_in_flight():
+    e = Engine(21)
+    pas, mate = _open_pass(e)
+    e.foul(e.by_id["a6"], mate)  # the whistle stops a pass that had not arrived
+    assert (pas["end_x"], pas["end_y"], pas["outcome"]) == (48.0, 33.0, "fail") and e.kicked is None
+    e = Engine(21)
+    pas, mate = _open_pass(e)
+    e.offside_offence(mate, 52.0, 31.0)  # he played it from an offside position, there
+    assert (pas["end_x"], pas["end_y"], pas["outcome"]) == (52.0, 31.0, "fail") and e.kicked is None
