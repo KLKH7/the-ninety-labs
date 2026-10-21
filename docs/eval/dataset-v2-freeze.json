@@ -1,8 +1,8 @@
 {
  "name": "dataset v2 (look freeze): training clips at the look-freeze commit",
- "status": "pre-registered, nothing rendered",
+ "status": "rendering at aea01f4 on the maintainer's Mac (Oct 21)",
  "run": "v2freeze",
- "commit": "pending: main after #179, #183 and motion A (the throw-in, renderer 0.5.4-A) have merged and main's CI is green; the Coordinator gives the SHA, recorded here and on the PR before the first render. It does not wait for motion B or later football fixes, which gate only the demo clip (docs/eval/demo-clip.md). A dry run at #188's merge commit (setup, smoke and throughput) measures speed only; none of its clips joins the dataset",
+ "commit": "aea01f4e5d168b0ff3e8e44143cd4baaaf9a3f60: main after #197 (renderer 0.5.9), main's CI green, given by the Coordinator and recorded here before the first render. #179 is excluded, Kian's decision: the football it changes does not affect the detector. The earlier pending condition (after #179, #183 and motion A) is replaced by this decision; #183 and motion A (#197) are in it. A dry run at #188's merge commit measured speed only; none of its clips joins the dataset",
  "renderer": "the render commit's (0.5.4-A or later)",
  "why": "Every training clip in one look and one engine, the look the demo shows. Dataset v1 mixed capsule players (0.3.x) with later mesh clips; the round 2 plan (docs/eval/round2/PLAN.md) needs one render commit for everything.",
  "seeds": {
@@ -53,7 +53,7 @@
   "determinism": "two seeds (3 and 2001) rendered twice on the render machine: frames.jsonl, events.jsonl and images identical",
   "floors": "ninety-data-stats --floors on the passing clips, reported, not used to choose clips"
  },
- "machine": "a RunPod CPU pod (32 vCPU, 64 GB, Ubuntu 24.04), deleted after the run; only synthetic renders go to it (AGENTS.md, vision models: training may rent a machine elsewhere)",
+ "machine": "the maintainer's Mac (Apple silicon, 12 cores, 24 GB, shared with other sessions), with software GL; Kian chose it over a second pod to save spend. Workers are sized to keep at least 8 GB free, under one runs/slot.sh priority slot. Before: a RunPod CPU pod, deleted unused",
  "storage": "train: renders/<run>/train/seed<N>/ (images, clip.json, meta.json) and truth/<run>/train/seed<N>/ (frames.jsonl, events.jsonl), as ninety/render/job.py uploads; test: truth-test instead of truth; the manifest at renders/<run>/manifest.json",
  "manifest": "every file of every passing clip, both splits, with its sha256 and size, the clip's drawn parameters, and the commits of the render and of the driver (infra/pod/render.py)",
  "test_set": {
@@ -67,7 +67,7 @@
   "render": "the seed's own parameters, no overrides (the test split refuses them), 10 s, software GL, no dead-ball cut",
   "checks": "the same per-clip checks; a failing test clip is listed, never replaced",
   "storage": "renders/<run>/test/seed<N>/ (images, clip.json) and truth-test/<run>/test/seed<N>/ (frames.jsonl, events.jsonl, meta.json: the answer key, as the 91d1e3b test set), never the truth container",
-  "machine": "rendered first, on the same pod, with software GL; round 2's plan renders its test set locally so its pixels do not depend on the machine, so seed 900001 is also rendered on the maintainer's Mac with software GL and its images, frames and events must be byte-identical"
+  "machine": "rendered first, on the same Mac, with software GL; the whole dataset now renders on the maintainer's machine, so the separate Mac re-render of seed 900001 is not needed; determinism is still checked on two seeds"
  },
  "upload": "no credential goes to the render machine: the outputs are copied back over SSH, every sha256 checked against the manifest here, and uploaded from the maintainer's machine with its az login (infra/pod/render.py upload --account)",
  "qa": "before upload, infra/pod/qa.py: contact sheets (8 frames each) of 20 passing training clips drawn with random seed 20261021, fixed now, plus every training clip the checks flagged, for the Coordinator to look at; and a summary: excluded clips, render-check totals per split, the manifest verified. Test clips are never drawn or shown"
