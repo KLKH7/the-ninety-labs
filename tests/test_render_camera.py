@@ -13,6 +13,7 @@ from ninety.render.camera import (
     Camera,
     Director,
     blur_vector,
+    corner_kicks,
     corner_waits,
     net_push,
     pitch_share,
@@ -269,6 +270,7 @@ def _broadcast(seed):
     show, _ = edit.plan(2 * 25, 100 * 25, edit.cuts(m.events, 25), len(m.frames))
     goals = {e["frame"]: e for e in m.events if e["type"] == "goal"}
     corners = corner_waits(m.events)
+    kicks = corner_kicks(m.events)
     rows, reopen, after_cut = [], False, False
     for fi, draw, left in _plan(edit.segments(show)):
         if fi is None:
@@ -286,7 +288,7 @@ def _broadcast(seed):
             b = m.frames[fi - 1]["ball"]
             goal = ("L" if goals[fi]["x"] < 52.5 else "R", goals[fi]["y"], 1.0, math.hypot(b["vx"], b["vy"]))
         cam = d.step(ball[0], ball[1], actors, goal, None if left is None else left / 25, ball_z=ball[2],
-                     corner=corners.get(fi))
+                     corner=corners.get(fi), kick_to=kicks.get(fi))
         if draw:
             rows.append((fi, cam, d.angle, after_cut))
             after_cut = False
@@ -669,8 +671,8 @@ def _delivery(target, frames_to_target, rest_frames, kick_to=True):
     stays at the target for rest_frames: (camera, ball) for every frame from the kick."""
     d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=True)
     _held(d, 20.0, 20.0, 50)
-    for _ in range(50):
-        d.step(0.5, 0.5, [], corner=(0.0, 0.0))
+    for _ in range(50):  # the render tells the camera the delivery during the wait (corner_kicks)
+        d.step(0.5, 0.5, [], corner=(0.0, 0.0), kick_to=target if kick_to else None)
     rows = []
     path = _line((0.5, 0.5), target, frames_to_target) + [target] * rest_frames
     for i, p in enumerate(path):

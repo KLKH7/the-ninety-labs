@@ -303,6 +303,8 @@ class Director:
         self._cut_until = -1.0
         self.net = None
         self._corner_flag = None
+        self._delivery_shot = None
+        self._delivery_to = None
 
     def open_on_restart(self) -> None:
         """The first frame after a cut: the picture comes back on the restart with the gantry closed
@@ -321,6 +323,15 @@ class Director:
 
     def _goal(self, bx: float, by: float, vx: float, vy: float) -> tuple[float, float, float]:
         self._goal_z = 0.0
+        held = getattr(self, "_delivery_shot", None)
+        if held is not None:
+            # The delivery's shot, held while the ball is in its picture: released when play leaves
+            # it, never on a timer (lesson 177).
+            ax, ay, hw = held
+            uv = self._shot((ax, ay, 0.0), hw).project((bx, by, BALL_RADIUS_M))
+            if uv is not None and 0.0 <= uv[0] <= self.width and 0.0 <= uv[1] <= self.height:
+                return ax, ay, hw
+            self._delivery_shot = None
         corner = self._corner(bx, by)
         if corner is not None:
             return corner
@@ -382,6 +393,50 @@ class Director:
         # The ball waits inside the arc, a metre from the flag, which the shot keeps CORNER_TAKER_MARGIN
         # in from the picture's edges; after the kick the director frames the play as for any ball.
         return best
+
+    def _central(self, cam: Camera, bx: float, by: float) -> bool:
+        left, right, top, bottom = CENTRAL
+        uv = cam.project((bx, by, BALL_RADIUS_M))
+        return (uv is not None and left * self.width <= uv[0] <= right * self.width
+                and top * self.height <= uv[1] <= bottom * self.height)
+
+    def _receiving_shot(self, start: tuple[float, float], end: tuple[float, float], keep_start: bool = True,
+                        min_hw: float = 0.0):
+        """The shot of a corner's delivery, chosen at the kick (lesson 177): of the aims on a 1 m grid
+        round the delivery and the lenses from 4 m to the gantry's width, the one with the most pitch
+        that keeps the second half of the delivery and the receiving point (the engine's pass end)
+        inside the CENTRAL box, CENTRE_MARGIN in, and the kick point in the picture. None if none."""
+        mid = ((start[0] + end[0]) / 2, (start[1] + end[1]) / 2)
+        path = [(start[0] + (end[0] - start[0]) * i / 4, start[1] + (end[1] - start[1]) * i / 4)
+                for i in range(5)]
+        left, right, top, bottom = CENTRAL
+        m = CENTRE_MARGIN
+        best = None
+        for hw in (4.0, 5.0, 6.0, 7.0, 8.0, 10.0, 12.0, 14.0, 16.0, min(self.p.half_width_m, GANTRY_HALF_M)):
+            if hw < min_hw:
+                continue
+            for dx in range(-10, 11):
+                for dy in range(-10, 11):
+                    aim = (mid[0] + dx, mid[1] + dy, 0.0)
+                    cam = self._shot(aim, hw)
+                    ok = True
+                    for i, (px, py) in enumerate(path):
+                        uv = cam.project((px, py, BALL_RADIUS_M))
+                        # The second half of the delivery and its end in the CENTRAL box; the kick
+                        # point, at the flag, in the picture.
+                        if i < 2 and not keep_start:
+                            continue
+                        lo_x, hi_x, lo_y, hi_y = ((left + m, right - m, top + m, bottom - m) if i >= 2
+                                                  else (0.0, 1.0, 0.0, 1.0))
+                        ok = (uv is not None and lo_x * self.width <= uv[0] <= hi_x * self.width
+                              and lo_y * self.height <= uv[1] <= hi_y * self.height)
+                        if not ok:
+                            break
+                    if ok:
+                        share = pitch_share(cam, step=80)
+                        if best is None or share > best[0]:
+                            best = (share, aim[0], aim[1], hw)
+        return None if best is None else best[1:]
 
     def _corner_shot(self, fx: float, fy: float) -> tuple[float, float, float] | None:
         """The shot of a corner from the flag at (fx, fy): of the aims over that corner's quarter of
@@ -547,6 +602,7 @@ class Director:
         cut_in: float | None = None,
         ball_z: float = 0.0,
         corner: tuple[float, float] | None = None,
+        kick_to: tuple[float, float] | None = None,
     ) -> Camera:
         """The camera for the next frame. `cut_in` is how long until the edit's next cut, in seconds
         (None when no cut follows): no angle starts or ends that close to one, because the cut is
@@ -554,6 +610,23 @@ class Director:
         picture too (lesson 175)."""
         self.ball_z = ball_z
         self._corner_flag = corner
+        if kick_to is not None and getattr(self, "_delivery_to", None) != (kick_to, corner is None):
+            # A corner whose delivery is known (corner_kicks: the render reads the kick ahead, as an
+            # operator frames the box before a corner is taken). While it waits, the shot keeps the
+            # taker in the picture with the receiving area; from the kick, the ball gone from the
+            # flag, it is the receiving area alone, a short move from the waiting shot.
+            self._delivery_to = (kick_to, corner is None)
+            shot = None
+            if corner is None and self.aim is not None:
+                # From the kick, a shot the pan alone can reach first: the zoom is the slow move. If
+                # one at the present lens or wider fills the picture with pitch, it is taken.
+                shot = self._receiving_shot((ball_x, ball_y), kick_to, keep_start=False,
+                                            min_hw=0.9 * self.half_width)
+                if shot is not None and pitch_share(self._shot((shot[0], shot[1], 0.0), shot[2]), step=80) \
+                        < PITCH_SHARE_MIN + PITCH_MARGIN:
+                    shot = None
+            self._delivery_shot = shot or self._receiving_shot((ball_x, ball_y), kick_to,
+                                                               keep_start=corner is not None)
         self.players = [(p[0], p[1], p[2]) for p in players] if players else []
         if self.prev_ball is None:
             vx = vy = 0.0
@@ -792,4 +865,20 @@ def corner_waits(events: list[dict]) -> dict[int, tuple[float, float]]:
         kick = next((n["frame"] for n in order[i + 1:] if n["frame"] > e["frame"]), e["frame"] + 1)
         for f in range(e["frame"], kick):
             out[f] = flag
+    return out
+
+
+def corner_kicks(events: list[dict]) -> dict[int, tuple[float, float]]:
+    """Every frame of each corner's wait and its kick, with where the engine has the delivery go (the
+    kick's end point): the camera is told during the wait, as an operator frames the box before the
+    corner is taken."""
+    waits = corner_waits(events)
+    out: dict[int, tuple[float, float]] = {}
+    for e in sorted(events, key=lambda e: e["frame"]):
+        if e["frame"] - 1 in waits and e["frame"] not in waits and e.get("end_x") is not None:
+            f = e["frame"]
+            while f - 1 in waits:
+                f -= 1
+            for g in range(f, e["frame"] + 1):
+                out[g] = (e["end_x"], e["end_y"])
     return out
