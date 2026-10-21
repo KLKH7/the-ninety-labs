@@ -244,8 +244,10 @@ def test_director_is_deterministic():
 # Seeds the camera rules were not designed on. 3 and 5 were studied while fixing #198 (lesson 175),
 # so they stay for continuity only; 41 and 43 were added before anyone rendered or scored them for
 # the camera (committed ahead of #198's re-score), and are the held-out check.
-HELD_OUT = (3, 5, 41, 43)
+HELD_OUT = (3, 5, 41, 43, 47, 53)
 FRESH_HELD_OUT = (41, 43)
+# 47 and 53: a second fresh pair, added at the Reviewer's request before anyone rendered or scored
+# them for the camera.
 
 
 @cache
