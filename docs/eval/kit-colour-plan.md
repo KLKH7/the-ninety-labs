@@ -146,3 +146,49 @@ follow, both in the plan:
   frozen;
 - only then is the test set scored once and the agents' limit and W6's gate reconsidered.
 Until then, neither is lifted.
+
+## Amendment for dataset v2 (written before any v2 clip exists)
+
+W6's dry calibration on R4 (shared notes, r8-possession-design.md) left one clip wrong while
+confident: 2043, 15 of 45 right at team_confidence 0.011 to 0.213. Diagnosed on validation, with no
+change made:
+- the home kit is dark green with black stripes, so R4's "light" colour is arm skin;
+- away is white/black halves, so an away player seen from his black half reads (black, skin), the
+  home signature;
+- the clusters look tight (soundness 0.79), so the mixing is invisible in kit space.
+
+Two non-colour cues tried on the 8 validation clips with events did not separate 2043 from the sound
+clips:
+- per-frame side balance: sound 108 and 120 are more lopsided;
+- frame-level consistency: 2043 0.83, but sound 2041 is 0.79 and 116 is 0.84.
+
+Fixed now, to be judged on **dataset v2's validation clips only**, with everything frozen:
+
+**R5, skin dropped.** R4, with skin-coloured pixels removed from the shirt patch before the
+two-colour split. A pixel is skin by the published RGB rule of Kovač, Peer and Solina (2003, *Human
+skin colour clustering for face detection*, EUROCON), for daylight:
+- R > 95, G > 40, B > 20;
+- max − min > 15;
+- |R − G| > 15;
+- R > G and R > B.
+If too few pixels are left (under 4), R4's reading stands. R5 replaces R4 only by the plan's rule:
+at least as many sound clips, side accuracy not lower, colour error not higher, on v2's validation
+clips. A kit the rule calls skin (orange, salmon) is the known risk, and the per-clip table shows it.
+
+**C, a consistency term (conditional).** Per clip, the share of tracks' per-frame readings that lie
+nearer their own cluster's centre than the other's. It enters `team_confidence`'s kit term (the
+smaller of soundness and C) **only if, on v2's validation clips, both hold**:
+1. it ranks every unsound clip below sound ones in at least 80% of (unsound, sound) clip pairs;
+2. with it, the pass-level confidence ordering is higher than without it, and at least 0.80.
+Otherwise it is left out, and the outcome says so.
+
+**If neither helps on v2:**
+- W6's gate rule stays as W6 pre-registered, with no SURE or SHOW adjustment after seeing data;
+- EVALUATION names the failure: a dark kit against a halves kit sharing its dark colour, where a
+  player seen from his dark half reads as the other side.
+
+**Order on v2:**
+1. The image stage (detect, observe) on v2's validation clips, as slot jobs once the Coordinator
+   frees them.
+2. R0, R4 and R5 compared; C judged.
+3. Everything frozen; then the test set scored once.
