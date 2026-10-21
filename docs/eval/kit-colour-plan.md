@@ -120,3 +120,29 @@ second colour can be the larger. So one candidate is added, before any is scored
 
 **R4's colour error:** the distance in chromaticity from the true shirt colour to whichever of its
 two colours is nearer. The rule of adoption is unchanged.
+
+## Outcome
+
+### Render run v1's validation clips ([kit-colour.md](kit-colour.md))
+
+| Reader | Sound clips | Side accuracy, track-frames | Pass teams right | Median colour error | Confidence ordering |
+|---|---|---|---|---|---|
+| R0 (today) | 4 | 0.815 | 11 of 16 | 0.113 | 0.55 |
+| R1 measured grass | 4 | 0.744 | 10 of 16 | 0.118 | 0.53 |
+| R2 larger colour | 4 | 0.716 | 10 of 15 | 0.142 | 0.52 |
+| R3 shading-invariant | 4 | 0.797 | 11 of 15 | 0.142 | 0.61 |
+| **R4 two colours (adopted)** | **6** | **0.894** | **12 of 16** | **0.058** | **0.81** |
+
+**R4 is adopted by the rule:** more sound clips, higher side accuracy, lower colour error.
+- Seed 120 goes from 0.11 to 1.00, and 2041 becomes sound.
+- Seeds 115 (0.64, against R0's 0.73) and 2043 (0.76) are still not sound.
+
+R1 to R3 do worse than today, which agrees with the diagnosis: grass was not the cause.
+
+**The cluster-soundness confidence clears the 0.80 bar on this set: 0.81.** But it rests on 4 wrong
+passes against 12 right (48 pairs), so it is predictive by the rule, on a small sample. Two things
+follow, both in the plan:
+- the reader and the confidence are **confirmed on dataset v2's validation clips** with everything
+  frozen;
+- only then is the test set scored once and the agents' limit and W6's gate reconsidered.
+Until then, neither is lifted.

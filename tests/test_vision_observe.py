@@ -180,3 +180,34 @@ def test_the_trust_bound_is_the_committed_measurement():
     assert dd.MAX_TRUSTED_M == math.ceil(worst * 2) / 2 == body["max_trusted_m"]
     assert dd.KEEP_GOOD == body["keep_good"] == 0.95
     assert body["adopted"] == "C2"
+
+
+def hooped(primary, secondary, h=60, w=24, band=6):
+    """A player box of a shirt in horizontal hoops, primary and secondary alternating, on grass."""
+    img = np.zeros((h, w, 3), np.uint8)
+    img[:, :] = (40, 140, 50)  # grass behind
+    for y in range(h):
+        img[y, 4:w - 4] = secondary if (y // band) % 2 else primary
+    return img
+
+
+def test_a_hooped_shirt_reads_as_both_its_colours():
+    blue, white = (32, 46, 162), (242, 242, 242)
+    img = hooped(blue, white)
+    bbox = [0, 0, 24, 60]
+    two = observe.read_kit(img, bbox, "R4")
+    dark, light = np.array(two[:3]), np.array(two[3:])
+    assert np.abs(dark - blue).max() < 3 and np.abs(light - white).max() < 3
+    assert observe.KIT_READER == "R4"
+
+
+def test_the_image_stage_reads_both_colours_of_every_shirt(monkeypatch):
+    from types import SimpleNamespace
+    box = SimpleNamespace(cls="player", bbox=(0, 0, 24, 60), score=0.9)
+    dets = [SimpleNamespace(frame=f, t=f / 25, detections=(box,)) for f in range(3)]
+    monkeypatch.setattr(pitch, "line_points", lambda rgb, boxes: np.zeros((0, 2)))
+    monkeypatch.setattr(pitch, "fit_clip", lambda points, w, h: ((VIEW.cx, VIEW.cy, VIEW.cz),
+                                                                 [pitch.FrameFit(VIEW, 1.0, 200, True)] * 3))
+    shirt = hooped((32, 46, 162), (242, 242, 242))
+    rows = observe.observe([Path(f"{f}.jpg") for f in range(3)], dets, lambda p: shirt)
+    assert all(len(r["players"][0]["rgb"]) == 6 for r in rows)
