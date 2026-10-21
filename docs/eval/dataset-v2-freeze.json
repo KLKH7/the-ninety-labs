@@ -8,14 +8,37 @@
  "seeds": {
   "rule": "the seed list and overrides of v3 (docs/eval/dataset-v1.json), so the two datasets differ only in engine and look",
   "groups": [
-   {"first": 3, "last": 132, "overrides": {}, "note": "hard cases drawn from the seed at HARD_CASE_RATE 0.3 (#87)"},
-   {"first": 2001, "last": 2045, "overrides": {"occlusion": "crowded"}},
-   {"first": 3001, "last": 3045, "overrides": {"kit_contrast": "low"}},
-   {"first": 4001, "last": 4060, "overrides": {"occlusion": "crowded"}}
+   {
+    "first": 3,
+    "last": 132,
+    "overrides": {},
+    "note": "hard cases drawn from the seed at HARD_CASE_RATE 0.3 (#87)"
+   },
+   {
+    "first": 2001,
+    "last": 2045,
+    "overrides": {
+     "occlusion": "crowded"
+    }
+   },
+   {
+    "first": 3001,
+    "last": 3045,
+    "overrides": {
+     "kit_contrast": "low"
+    }
+   },
+   {
+    "first": 4001,
+    "last": 4060,
+    "overrides": {
+     "occlusion": "crowded"
+    }
+   }
   ],
   "clips": 280,
   "excluded_in_advance": "none: v1 dropped 82 and 111 for defects of its own engine and renderer; here a seed is excluded only by the checks below",
-  "test_seeds": "none: 900001 and above are reserved and rendered only for a frozen test set, never tuned on"
+  "test_seeds": "none in the training list; the frozen test set is a separate split (test_set below)"
  },
  "render": {
   "seconds": 10,
@@ -31,6 +54,20 @@
   "floors": "ninety-data-stats --floors on the passing clips, reported, not used to choose clips"
  },
  "machine": "a RunPod CPU pod (32 vCPU, 64 GB, Ubuntu 24.04), deleted after the run; only synthetic renders go to it (AGENTS.md, vision models: training may rent a machine elsewhere)",
- "storage": "renders/<run>/train/seed<N>/ (images, clip.json, meta.json) and truth/<run>/train/seed<N>/ (frames.jsonl, events.jsonl), as ninety/render/job.py uploads; the manifest at renders/<run>/manifest.json",
- "manifest": "every file of every passing clip with its sha256 and size, the clip's drawn parameters, and the commits of the render and of the driver (infra/pod/render.py)"
+ "storage": "train: renders/<run>/train/seed<N>/ (images, clip.json, meta.json) and truth/<run>/train/seed<N>/ (frames.jsonl, events.jsonl), as ninety/render/job.py uploads; test: truth-test instead of truth; the manifest at renders/<run>/manifest.json",
+ "manifest": "every file of every passing clip, both splits, with its sha256 and size, the clip's drawn parameters, and the commits of the render and of the driver (infra/pod/render.py)",
+ "test_set": {
+  "seeds": [
+   900001,
+   900030
+  ],
+  "clips": 30,
+  "why": "train and test share the look; round 2 (docs/eval/round2/PLAN.md) needs its 30-clip test set at the one render commit",
+  "status": "rendered only: never inspected or tuned on, scored only by the frozen step-D protocol",
+  "render": "the seed's own parameters, no overrides (the test split refuses them), 10 s, software GL, no dead-ball cut",
+  "checks": "the same per-clip checks; a failing test clip is listed, never replaced",
+  "storage": "renders/<run>/test/seed<N>/ (images, clip.json) and truth-test/<run>/test/seed<N>/ (frames.jsonl, events.jsonl, meta.json: the answer key, as the 91d1e3b test set), never the truth container",
+  "machine": "rendered first, on the same pod, with software GL; round 2's plan renders its test set locally so its pixels do not depend on the machine, so seed 900001 is also rendered on the maintainer's Mac with software GL and its images, frames and events must be byte-identical"
+ },
+ "upload": "no credential goes to the render machine: the outputs are copied back over SSH, every sha256 checked against the manifest here, and uploaded from the maintainer's machine with its az login (infra/pod/render.py upload --account)"
 }

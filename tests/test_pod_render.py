@@ -39,3 +39,53 @@ def test_a_plan_with_a_test_seed_or_a_wrong_count_is_refused():
 def test_training_clips_show_every_frame():
     assert PLAN["render"]["dead_ball_cut"] is False
     assert PLAN["render"]["seconds"] == 10
+
+
+def test_the_test_set_is_the_thirty_reserved_test_seeds_with_no_overrides():
+    jobs = pod.expand(PLAN, "test")
+    assert [s for s, _ in jobs] == list(range(900001, 900031))
+    assert all(o == {} for _, o in jobs)
+
+
+class FakeContainer:
+    def __init__(self, log, name):
+        self.log, self.name = log, name
+
+    def upload_blob(self, path, data, overwrite):
+        self.log.append((self.name, path))
+
+
+def _clip(tmp_path, split, seed):
+    d = pod.clip_dir(tmp_path, "v2freeze", seed, split)
+    (d / "images").mkdir(parents=True)
+    for name in ("clip.json", "meta.json", "frames.jsonl", "events.jsonl", "images/00000.jpg"):
+        (d / name).write_text(name)
+    return d
+
+
+@pytest.mark.parametrize("split,truth,key", [
+    ("train", "truth", {"frames.jsonl", "events.jsonl"}),
+    ("test", "truth-test", {"frames.jsonl", "events.jsonl", "meta.json"}),
+])
+def test_the_answer_key_goes_only_to_its_sealed_container_and_clip_json_last(tmp_path, split, truth, key):
+    log = []
+    containers = {n: FakeContainer(log, n) for n in ("renders", "truth", "truth-test")}
+    seed = 900001 if split == "test" else 3
+    d = _clip(tmp_path, split, seed)
+    assert pod.upload_clip(containers, "v2freeze", split, seed, d) == 5
+    sealed = {p.rsplit("/", 1)[1] for n, p in log if n == truth}
+    assert sealed == key
+    assert not any(n not in ("renders", truth) for n, _ in log)  # a test key never reaches `truth`
+    assert log[-1] == ("renders", pod.blob_path("v2freeze", split, seed, "clip.json"))
+    assert all(p.startswith(f"v2freeze/{split}/seed") for _, p in log)
+
+
+def test_verify_finds_a_file_that_changed_after_the_manifest(tmp_path):
+    d = _clip(tmp_path, "train", 3)
+    files = {f.relative_to(d).as_posix(): {"sha256": pod.sha256(f), "bytes": f.stat().st_size}
+             for f in d.rglob("*") if f.is_file()}
+    (tmp_path / "manifest.json").write_text(json.dumps(
+        {"run": "v2freeze", "clips_list": [{"split": "train", "seed": 3, "files": files}]}))
+    assert pod.verify(tmp_path) == []
+    (d / "frames.jsonl").write_text("frames.jsonX")  # same size, different bytes
+    assert pod.verify(tmp_path) == ["train/seed3/frames.jsonl"]
