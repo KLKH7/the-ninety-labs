@@ -1758,32 +1758,44 @@ class Engine:
 
     def open_spot(self, p: Player, slot: tuple[float, float], onside: float) -> tuple[float, float]:
         """O3: his place in the shape, moved to where a pass from the carrier is worth most, as he
-        last saw it (decisions.open_spot). He looks again only when he scans (P13), so between scans
-        he keeps his offset and moves with the shape; with nobody on the ball he keeps it too."""
+        last saw it (decisions.open_spot), every opponent he believes is near counted, the keeper
+        too. He looks again only when he scans (P13), so between scans he keeps his offset and moves
+        with the shape; but an offset the play has made illegal (offside as he sees it, off the
+        pitch, out of range, or nearer the carrier as he sees him now: decisions.open_legal) is
+        dropped at once, and he goes back to his place until he next scans."""
         carrier = self.by_id.get(self.possessor) if self.possessor else None
-        if p.id in self.open_due and carrier is not None and carrier.team == p.team:
+        mates = carrier is not None and carrier.team == p.team
+        view = self.beliefs[p.id]
+        at = (view.where(carrier.id, self.t) or (carrier.x, carrier.y)) if mates else None
+        if p.id in self.open_due and mates:
             self.open_due.discard(p.id)
-            view = self.beliefs[p.id]
-            at = view.where(carrier.id, self.t) or (carrier.x, carrier.y)
-            defenders = [w for w in (view.where(q.id, self.t) for q in self.players
-                                     if q.team != p.team and q.role != "GK") if w]
+            defenders = [w for w in (view.where(q.id, self.t) for q in self.players if q.team != p.team) if w]
             self.open_at[p.id] = decisions.open_spot(slot, self.open_at.get(p.id, (0.0, 0.0)), at,
                                                      defenders, onside, goal_x(p.team))
-        dx, dy = self.open_at.get(p.id, (0.0, 0.0))
+        offset = self.open_at.get(p.id, (0.0, 0.0))
+        if offset != (0.0, 0.0) and not decisions.open_legal(slot, offset, at, onside, goal_x(p.team)):
+            offset = self.open_at[p.id] = (0.0, 0.0)
+        dx, dy = offset
         return clamp(slot[0] + dx, 0.5, PITCH_X - 0.5), clamp(slot[1] + dy, 0.5, PITCH_Y - 0.5)
 
     def zone_spot(self, p: Player, slot: tuple[float, float], own_goal_x: float) -> tuple[float, float]:
         """O2 beyond the box: his place in the block, moved goal-side of the attacker he tracks in his
-        zone (offball.zone_spot). He picks whom to track when he scans (P13), never the carrier (the
-        press is the presser's, P17), and follows that man as he sees him until he scans again."""
+        zone (offball.zone_spot). He picks whom to track when he scans (P13), and follows that man as
+        he sees him until he scans again. Never the carrier (the press is the presser's, P17) and
+        never a man a near-goal marker has (O2), when he picks and while he follows: if his man gets
+        the ball or a marker, he goes back to his place."""
         view = self.beliefs[p.id]
+        marked = self.brains[p.team].marked
         if p.id in self.track_due:
             self.track_due.discard(p.id)
             attackers = {q.id: w for q in self.players if q.team != p.team and q.role != "GK"
-                         and q.id != self.possessor and (w := view.where(q.id, self.t))}
+                         and q.id != self.possessor and q.id not in marked
+                         and (w := view.where(q.id, self.t))}
             self.track[p.id] = offball.zone_man(slot, attackers, self.track.get(p.id))
         man = self.track.get(p.id)
-        at = view.where(man, self.t) if man else None
+        if man is None or man == self.possessor or man in marked:
+            return slot
+        at = view.where(man, self.t)
         return offball.zone_spot(slot, at, own_goal_x) if at else slot
 
     def in_time(self, p: Player, tx: float, ty: float) -> float:
@@ -1957,7 +1969,9 @@ class Engine:
                 return cx, cy, self.in_time(p, cx, cy)
             slot = brain.slot(p.role, p.ay, clamp(by, 0, PITCH_Y))
             if slot:
-                tx, ty = self.zone_spot(p, slot, own[0])
+                # O2: the defence and midfield track men in their zones; the forwards wait at their
+                # line of engagement, never past the ball (T3).
+                tx, ty = self.zone_spot(p, slot, own[0]) if ROLE_LINE.get(p.role) != "attack" else slot
         tx, ty = clamp(tx, 0.5, PITCH_X - 0.5), clamp(ty, 0.5, PITCH_Y - 0.5)
         return tx, ty, self.in_time(p, tx, ty)
 
@@ -2017,11 +2031,12 @@ class Engine:
                     for p in self.players
                     if p.team == team and p.role != "GK" and p.id not in brain.pressers
                 }
-                brain.markers = offball.marking(
-                    free, self.shared_view(team, other(team)), PITCH_X - goal_x(team)
-                )
+                seen = self.shared_view(team, other(team))
+                pairs = offball.mark_pairs(free, seen, PITCH_X - goal_x(team))
+                brain.markers = offball.marking(free, seen, PITCH_X - goal_x(team), pairs)
+                brain.marked = set(pairs.values())
             else:
-                brain.markers = {}
+                brain.markers, brain.marked = {}, set()
 
     def who_presses(self, brain: TeamBrain) -> list[str]:
         """T3, P17: the brain asks its players in the order they could reach the ball; the first

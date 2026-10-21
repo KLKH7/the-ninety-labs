@@ -86,3 +86,52 @@ def test_the_carrier_is_left_to_the_presser():
     e.track_due.add(me.id)
     e.shape_target(me)
     assert e.track.get(me.id) != carrier.id
+
+
+def test_a_new_possession_forgets_whom_he_tracks():
+    e, _ = _home_without_the_ball()
+    me, _place = _block_defenders(e)[0]
+    e.track[me.id] = "a9"
+    e.give("h6")  # his team wins the ball
+    assert e.track == {}
+
+
+def test_he_never_tracks_a_man_a_near_goal_marker_has():
+    e, carrier = _home_without_the_ball()
+    me, place = _block_defenders(e)[0]
+    a = next(q for q in e.players if q.team == "away" and q.role != "GK" and q.id != carrier.id)
+    a.x, a.y = place[0] + 3.0, place[1] + 1.0  # in his zone
+    e.beliefs[me.id].seen[a.id] = Sighting(a.x, a.y, 0.0, 0.0, e.t)
+    e.brains["home"].marked = {a.id}  # but a team-mate marks him already (O2, near goal)
+    e.track_due.add(me.id)
+    assert e.shape_target(me)[:2] == place and e.track.get(me.id) is None
+    e.brains["home"].marked = set()
+    e.track[me.id] = a.id  # tracked first, then picked up by a marker: he leaves him to the marker
+    e.brains["home"].marked = {a.id}
+    assert e.shape_target(me)[:2] == place
+
+
+def test_once_his_man_has_the_ball_he_leaves_him_to_the_press():
+    e, carrier = _home_without_the_ball()
+    me, place = _block_defenders(e)[0]
+    a = next(q for q in e.players if q.team == "away" and q.role != "GK" and q.id != carrier.id)
+    a.x, a.y = place[0] + 3.0, place[1] + 1.0
+    e.beliefs[me.id].seen[a.id] = Sighting(a.x, a.y, 0.0, 0.0, e.t)
+    e.track[me.id] = a.id
+    assert e.shape_target(me)[:2] != place  # tracking him
+    e.give(a.id)  # the ball is passed to his man; no scan yet
+    e.brains["home"].in_possession, e.brains["away"].in_possession = False, True
+    e.brains["home"].pressers = []
+    e.track[me.id] = a.id
+    assert e.shape_target(me)[:2] == place  # the press is the presser's (P17), not his
+
+
+def test_the_forwards_wait_at_their_line_and_track_nobody():
+    e, carrier = _home_without_the_ball()
+    st = next(q for q in e.players if q.team == "home" and q.role == "ST")
+    place = e.shape_target(st)[:2]
+    a = next(q for q in e.players if q.team == "away" and q.role != "GK" and q.id != carrier.id)
+    a.x, a.y = place[0] + 2.0, place[1]  # an opponent at his shoulder
+    e.beliefs[st.id].seen[a.id] = Sighting(a.x, a.y, 0.0, 0.0, e.t)
+    e.track_due.add(st.id)
+    assert e.shape_target(st)[:2] == place

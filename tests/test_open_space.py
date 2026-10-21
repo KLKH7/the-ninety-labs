@@ -3,7 +3,7 @@
 import math
 
 from ninety.sim import decisions as D
-from ninety.sim.engine import Engine
+from ninety.sim.engine import PERCEIVE_EVERY, Engine
 from ninety.sim.perception import Sighting
 
 PASSER, SLOT = (45.0, 34.0), (60.0, 34.0)
@@ -95,10 +95,12 @@ def _on_the_shape(e, carrier):
             continue
         e.open_at.pop(q.id, None)
         base = e.shape_target(q)[:2]
-        e.open_at[q.id] = (0.0, -2.5)
+        r = math.dist(base, (carrier.x, carrier.y)) or 1.0
+        step = (2.5 * (base[0] - carrier.x) / r, 2.5 * (base[1] - carrier.y) / r)  # further out: legal
+        e.open_at[q.id] = step
         moved = e.shape_target(q)[:2]
         e.open_at.pop(q.id, None)
-        if math.isclose(moved[0], base[0]) and math.isclose(moved[1], base[1] - 2.5):
+        if math.isclose(moved[0], base[0] + step[0]) and math.isclose(moved[1], base[1] + step[1]):
             out.append((q, base))
     return out
 
@@ -147,3 +149,99 @@ def test_he_never_comes_nearer_the_carrier_to_be_open():
     for crowd in (pts[:3], pts[3:7], pts[6:], [(52.5, 34.3)], pts):
         dx, dy = D.open_spot(SLOT, (0.0, 0.0), PASSER, crowd, 80.0, 105.0)
         assert math.dist((SLOT[0] + dx, SLOT[1] + dy), PASSER) >= math.dist(SLOT, PASSER) - 1e-9, crowd
+
+
+def test_he_never_comes_nearer_even_where_a_nearer_spot_would_be_worth_more():
+    # Found by search: with spots nearer the carrier allowed, he would choose one in these scenes
+    # (a team-mate behind the ball, a defender at his shoulder). He steps across or further out.
+    for slot, carrier, defenders in (((34.2, 4.2), (41.0, 13.7), [(34.5, 2.2)]),
+                                     ((49.9, 22.5), (66.3, 37.7), [(67.1, 29.0), (71.8, 25.8), (49.9, 20.1),
+                                                                   (67.1, 17.1)])):
+        dx, dy = D.open_spot(slot, (0.0, 0.0), carrier, defenders, 100.0, 105.0)
+        assert (dx, dy) != (0.0, 0.0)  # he does move, just not toward the ball
+        assert math.dist((slot[0] + dx, slot[1] + dy), carrier) >= math.dist(slot, carrier) - 1e-9
+
+
+def test_he_takes_the_spot_with_room_to_play():
+    # The same lane both ways; one way leaves him under 4 m from a defender, the other over 5 m.
+    slot, carrier, defenders = (86.0, 15.7), (82.2, 33.3), [(92.4, 29.4), (86.6, 39.1), (87.1, 16.1)]
+    dx, dy = D.open_spot(slot, (0.0, 0.0), carrier, defenders, 100.0, 105.0)
+    assert min(math.dist((slot[0] + dx, slot[1] + dy), o) for o in defenders) >= 5.0
+
+
+def test_near_his_own_goal_he_steps_out_of_a_lane_a_defender_can_cut():
+    # Played back toward his own box, a pass cut out there costs most: he moves out of the lane.
+    slot, carrier, defenders = (16.1, 28.4), (50.6, 24.6), [(32.3, 29.5)]
+    dx, dy = D.open_spot(slot, (0.0, 0.0), carrier, defenders, 100.0, 105.0)
+    assert (dx, dy) != (0.0, 0.0)
+    moved = D.lane_margin(*carrier, slot[0] + dx, slot[1] + dy, defenders)
+    assert moved > D.lane_margin(*carrier, *slot, defenders)
+
+
+def test_he_chooses_from_what_he_believes_not_where_players_really_are():
+    e, carrier, mate = _carrier_and_mate()
+    place, onside = (60.0, 30.0), 80.0
+    a = e.by_id["a4"]
+    a.x, a.y = 52.5, 32.0  # really in the lane to his place
+    e.beliefs[mate.id].seen[a.id] = Sighting(52.5, 12.0, 0.0, 0.0, e.t)  # but he believes him far away
+    for q in e.players:  # and every other opponent too
+        if q.team == "away" and q.id != a.id:
+            e.beliefs[mate.id].seen[q.id] = Sighting(q.x, 66.0, 0.0, 0.0, e.t)
+    e.open_due.add(mate.id)
+    assert e.open_spot(mate, place, onside) == place  # he sees an open lane: no reason to move
+    e.beliefs[mate.id].seen[a.id] = Sighting(a.x, a.y, 0.0, 0.0, e.t)  # now he sees him
+    e.open_due.add(mate.id)
+    assert e.open_spot(mate, place, onside) != place
+
+
+def test_a_held_spot_the_play_has_made_illegal_is_dropped_at_once():
+    e, carrier, mate = _carrier_and_mate()
+    place, onside = (60.0, 30.0), 80.0
+    e.open_due.discard(mate.id)
+    e.open_at[mate.id] = (2.5, 0.0)  # chosen at his last scan: 2.5 m further from the carrier
+    assert e.open_spot(mate, place, onside) == (62.5, 30.0)
+    # The line steps up: 62.5 m is now offside as he sees it. He does not wait for his next scan.
+    assert e.open_spot(mate, place, 61.0) == place and e.open_at[mate.id] == (0.0, 0.0)
+    # The carrier runs on past him: the held spot would now bring him nearer the ball.
+    e.open_at[mate.id] = (2.5, 0.0)
+    carrier.x, carrier.y = 70.0, 30.0
+    e.beliefs[mate.id].seen[carrier.id] = Sighting(70.0, 30.0, 0.0, 0.0, e.t)
+    assert e.open_spot(mate, place, onside) == place and e.open_at[mate.id] == (0.0, 0.0)
+
+
+def test_a_scan_and_only_a_scan_makes_him_look_again():
+    """P13: the engine's own perception step sets both looks (open space, a man in his zone)."""
+    e, _, mate = _carrier_and_mate()
+    other = e.by_id["h9"]
+    e.open_due.clear()
+    e.track_due.clear()
+    i, j = e.players.index(mate), e.players.index(other)
+    e.frame = (-i) % PERCEIVE_EVERY  # mate looks on this frame
+    e.beliefs[mate.id].next_scan = e.t  # and his scan is due
+    if (e.frame + j) % PERCEIVE_EVERY == 0:
+        e.beliefs[other.id].next_scan = e.t + 10.0  # other looks too, without scanning
+    e.perceive_and_think()
+    assert mate.id in e.open_due and mate.id in e.track_due
+    assert other.id not in e.open_due and other.id not in e.track_due
+
+
+def test_a_defender_within_a_foot_of_the_lane_still_has_to_react():
+    """D1: only a body in the way needs no reaction; a foot's reach still needs one."""
+    carrier, spot = (40.0, 34.0), (60.0, 34.0)
+    near = (50.0, 34.0 + 0.8)  # 0.8 m off the lane at its middle: a foot reaches it, his body does not
+    arrive = 20.0 / D.PASS_SPEED_EST_MPS
+    assert math.isclose(D.lane_margin(*carrier, *spot, [near]), D.generic_time(0.0) - 0.5 * arrive)
+    on = (50.0, 34.0 + 0.1)  # his body is on the lane: no reaction needed
+    assert math.isclose(D.lane_margin(*carrier, *spot, [on]), -0.5 * arrive)
+
+
+def test_the_keeper_counts_in_the_lane_like_any_opponent():
+    e, carrier, mate = _carrier_and_mate()
+    place, onside = (60.0, 30.0), 80.0
+    keeper = next(q for q in e.players if q.team == "away" and q.role == "GK")
+    for q in e.players:  # every outfield opponent far from the lane, as he sees it
+        if q.team == "away" and q.role != "GK":
+            e.beliefs[mate.id].seen[q.id] = Sighting(q.x, 66.0, 0.0, 0.0, e.t)
+    e.beliefs[mate.id].seen[keeper.id] = Sighting(52.5, 32.0, 0.0, 0.0, e.t)  # the keeper in his lane
+    e.open_due.add(mate.id)
+    assert e.open_spot(mate, place, onside) != place
