@@ -6,6 +6,7 @@
 #
 #   bash finetune-on-pod.sh prepare                       environment and a CUDA check; reads no clip
 #   bash finetune-on-pod.sh run <render out> <name>       verify, export, train under the cap, record
+#   CRASHED=105,111 bash finetune-on-pod.sh run ...         seeds the render's owner reported crashed
 #
 # The config (with its time cap), the render run and its commit are pre-registered in the plan; only
 # the paths are arguments.
@@ -54,7 +55,7 @@ run)
   exec > >(tee -a "$WORK/finetune-$name.log") 2>&1
   echo "== $(date -u +%FT%TZ) clips of $out (run $RUN at $RENDER_COMMIT), checked against the manifest"
   "$py" -m ninety.vision.pod_clips "$out" --run "$RUN" --commit "$RENDER_COMMIT" --config "$CONFIG" \
-    --work "$WORK/data-$name"
+    --work "$WORK/data-$name" --crashed "${CRASHED:-}"
   echo "== $(date -u +%FT%TZ) export"
   rm -rf "$WORK/coco-$name"
   mapfile -t clips < "$WORK/data-$name/clips.txt"

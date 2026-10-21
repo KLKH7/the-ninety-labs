@@ -7,7 +7,8 @@
 #       code at this commit (pushed) to /work/finetune/ninety, ours-v4 to /work/finetune/init, the
 #       environment and a CUDA check. Reads no clip; may run while the render runs if its owner agrees.
 #   SSH_PORT=<port> scripts/finetune-v2freeze.sh <user@host> start <render out>
-#       in tmux session `finetune` on the pod: verify the clips, export, train under the time cap
+#       in tmux session `finetune` on the pod: verify the clips, export, train under the time cap;
+#       CRASHED=<seeds> names training seeds the render's owner reported crashed with no report
 #   SSH_PORT=<port> scripts/finetune-v2freeze.sh <user@host> status
 #   SSH_PORT=<port> scripts/finetune-v2freeze.sh <user@host> fetch [dest]
 #       the checkpoint, manifest, metrics and log to <dest>/ours-freeze (default runs/train), checked
@@ -42,7 +43,7 @@ prepare)
 start)
   out=${3:?the render out folder on the pod (manifest.json, v2freeze/train/seed<N>/)}
   "${ssh_[@]}" "command -v tmux >/dev/null || (apt-get update -qq && apt-get install -y -qq tmux >/dev/null); \
-    tmux new -d -s finetune 'bash -lc \"bash $work/ninety/scripts/finetune-on-pod.sh run $out $name\"' \
+    tmux new -d -s finetune 'bash -lc \"CRASHED=${CRASHED:-} bash $work/ninety/scripts/finetune-on-pod.sh run $out $name\"' \
     && echo started: tmux attach -t finetune, or $work/finetune-$name.log"
   ;;
 status)

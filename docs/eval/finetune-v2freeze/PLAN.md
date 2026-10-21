@@ -67,4 +67,11 @@ run (AGENTS.md, vision models).
 
 ## Deviations
 
-None yet.
+### Amendment (Oct 21, before the hand-over and before any clip was read)
+
+The renderer reported that seeds 105, 111 and 120 crashed to black and that 2014 failed an engine
+check. A failed clip is listed in the manifest's `failed` and is excluded, as planned. A clip that
+crashed with no report is listed as `missing`, which `pod_clips` reads as an unfinished render.
+Those seeds can now be named at the hand-over (`CRASHED=<seeds>`). Exactly those seeds may be
+missing, and the dataset list records them as `excluded_crashed`. Like every excluded seed, they are
+not replaced. Seed 120 is a validation seed, so it leaves validation by the rule above.

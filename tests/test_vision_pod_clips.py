@@ -85,3 +85,14 @@ def test_the_freeze_config_differs_from_round_2_only_in_its_validation_seeds_and
     assert {k for k in freeze if freeze.get(k) != round2.get(k)} == {"notes", "val_seeds", "time_cap_minutes"}
     assert freeze["val_seeds"] == v1["val_seeds"]  # dataset v1's validation seeds, re-rendered
     assert freeze["time_cap_minutes"] == 110
+
+
+def test_a_seed_with_no_report_is_accepted_only_when_named_as_crashed(tmp_path):
+    out = render(tmp_path, missing=(5,))
+    m = pod_clips.read_manifest(out, "v2freeze", COMMIT, crashed=frozenset({5}))
+    assert m["run"] == "v2freeze"
+    with pytest.raises(ValueError, match=r"\[6\] were named as crashed"):
+        pod_clips.read_manifest(out, "v2freeze", COMMIT, crashed=frozenset({5, 6}))
+    out = render(tmp_path / "b", missing=(5, 7))
+    with pytest.raises(ValueError, match=r"\[7\] have no report"):
+        pod_clips.read_manifest(out, "v2freeze", COMMIT, crashed=frozenset({5}))

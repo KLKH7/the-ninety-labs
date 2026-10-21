@@ -38,15 +38,20 @@ def sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def read_manifest(out: Path, run: str, commit: str) -> dict:
+def read_manifest(out: Path, run: str, commit: str, crashed: frozenset[int] = frozenset()) -> dict:
+    """The render's manifest. A training seed with no report means an unfinished render, unless the
+    render's owner named it as crashed at the hand-over (`crashed`, recorded): exactly those, no others."""
     m = json.loads((out / "manifest.json").read_text())
     if m["run"] != run:
         raise ValueError(f"the render is run {m['run']!r}, not {run!r}")
     if m["render_commit"] != commit:
         raise ValueError(f"the render is at {m['render_commit']}, not the pre-registered {commit}")
-    missing = [c["seed"] for c in m["missing"] if c["split"] == "train"]
-    if missing:
-        raise ValueError(f"the render is not finished: {len(missing)} training seeds have no report")
+    missing = {c["seed"] for c in m["missing"] if c["split"] == "train"}
+    if missing != set(crashed):
+        unnamed, absent = sorted(missing - set(crashed)), sorted(set(crashed) - missing)
+        if unnamed:
+            raise ValueError(f"the render is not finished: training seeds {unnamed} have no report")
+        raise ValueError(f"seeds {absent} were named as crashed but are not missing")
     return m
 
 
@@ -92,8 +97,9 @@ def run_config(cfg: dict, seeds: set[int]) -> tuple[dict, list[int]]:
     return out, removed
 
 
-def prepare(out: Path, run: str, commit: str, cfg: dict, cfg_path: Path, work: Path) -> dict:
-    m = read_manifest(out, run, commit)
+def prepare(out: Path, run: str, commit: str, cfg: dict, cfg_path: Path, work: Path,
+            crashed: frozenset[int] = frozenset()) -> dict:
+    m = read_manifest(out, run, commit, crashed)
     clips = train_clips(out, m)
     bad = differing(clips)
     if bad:
@@ -110,6 +116,7 @@ def prepare(out: Path, run: str, commit: str, cfg: dict, cfg_path: Path, work: P
         "val_seeds": sorted(val),
         "val_seeds_removed": removed,
         "excluded_by_checks": [f for f in m["failed"] if f["split"] == "train"],
+        "excluded_crashed": sorted(crashed),
         "files_checked": sum(len(f) for _, f in clips.values()),
     }
     work.mkdir(parents=True, exist_ok=True)
@@ -126,8 +133,11 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--commit", required=True, help="the pre-registered render commit (full sha)")
     ap.add_argument("--config", type=Path, required=True)
     ap.add_argument("--work", type=Path, required=True)
+    ap.add_argument("--crashed", default="", help="comma-separated training seeds the render's owner "
+                    "reported as crashed with no report; excluded, not replaced")
     a = ap.parse_args(argv)
-    listing = prepare(a.out, a.run, a.commit, json.loads(a.config.read_text()), a.config, a.work)
+    crashed = frozenset(int(x) for x in a.crashed.split(",") if x.strip())
+    listing = prepare(a.out, a.run, a.commit, json.loads(a.config.read_text()), a.config, a.work, crashed)
     print(json.dumps({k: v if not isinstance(v, list) or k.endswith("removed") else len(v)
                       for k, v in listing.items()}, indent=2))
 
