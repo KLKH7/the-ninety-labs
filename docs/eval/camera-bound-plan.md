@@ -82,6 +82,12 @@ plants a single frame 10 m wrong. It is replaced by what the adopted check does 
 - EVALUATION, CHALLENGE_MAP and lesson 149's "Not yet met here" are updated, and lesson 159 added.
 - READY goes to the Coordinator with the before/after table of bad frames trusted per clip.
 
+## Amendment (after the candidates were scored, before anything below them)
+
+RIVAL_M is defined as the players' pooled p90 position error on the frames the camera trust test
+passes (#168, #187). Changing the test changes those frames, so RIVAL_M is re-measured by that same
+rule with the adopted check in place. Nothing else about it changes.
+
 ## Outcome
 
 ### MAX_TRUSTED_M (measured first, before any candidate was scored)
