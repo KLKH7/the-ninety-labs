@@ -615,12 +615,7 @@ class Engine:
 
     def offside_offence(self, p: Player, x: float, y: float) -> None:
         """L10: an indirect free kick to the defending side where the offside player played it."""
-        kicked = self.kicked
-        if kicked and kicked["type"] == "pass":  # not received: the offside event names him
-            kicked.update(end_x=round(x, 2), end_y=round(y, 2), outcome="fail")
-        elif kicked and kicked["type"] == "shot":
-            self.close_shot(kicked, x, y)
-        self.kicked = None
+        self.end_kick(x, y)  # not received: the offside event names him
         self.offside = set()
         self.emit("offside", p.team, x, y, player=p.id)
         self.possessor = None  # the ball is dead and rolls on until the free kick is taken
@@ -755,7 +750,6 @@ class Engine:
         self.read = None if read is None else (keeper.id, read)
         vx, vy, vz = self.execute(carrier, *self.aim(bx, by, gx, ty, ground, up), "finishing")
         speed = math.sqrt(vx * vx + vy * vy + vz * vz)
-        self.end_kick(bx, by)  # a pass or shot still open ends here: this strike is the next thing (C7)
         # Outcome and end point are observed: set when the ball is touched, goes out or goes in.
         self.shot_touched_by = self.shot_was_on_target = None
         self.kicked = self.emit("shot", team, bx, by, player=carrier.id, ball_speed_kmh=round(speed * 3.6, 1))
@@ -778,7 +772,6 @@ class Engine:
             ground, up = decisions.launch_speed(dist, pace), 0.0
         skill = decisions.pass_skill(bx, tx, ty, lofted or throw, goal_x(carrier.team))
         vx, vy, vz = self.execute(carrier, *self.aim(bx, by, tx, ty, ground, up), skill, hands=throw)
-        self.end_kick(bx, by)  # a pass or shot still open ends here: this strike is the next thing (C7)
         # Receiver, interceptor or deflector, end point and outcome are filled in when someone takes
         # the ball or it goes out; only the intended team-mate is known at the kick.
         self.pass_target = (tx, ty)
@@ -1331,9 +1324,10 @@ class Engine:
         # A deflection (block, parry, a team-mate's touch) leaves the shot in flight: it may still go in.
 
     def end_kick(self, x: float, y: float) -> None:
-        """The pass or shot in flight ends where the ball is when the next thing happens to it (a tackle
-        on it, or another kick): its end point is then a point of its path (data contract C7). A pass
-        nobody received has failed; a shot is closed as its touches since say (close_shot)."""
+        """The pass or shot in flight ends where the ball is when the next thing happens to it that is
+        not a touch (a touch ends it in `touched`): a tackle on it, a whistle. Its end point is then a
+        point of its path (data contract C7). A pass nobody received has failed; a shot is closed as
+        the touches since it was struck decide (close_shot)."""
         kicked = self.kicked
         if kicked is None:
             return
@@ -2498,12 +2492,7 @@ class Engine:
         """Law 12: a careless challenge that hits the man: a direct free kick to his side where it
         happened (Law 13); in the offender's own penalty area, a penalty kick (Law 14), taken by
         his side's best finisher."""
-        kicked, (bx, by) = self.kicked, self.ball[:2]
-        if kicked and kicked["type"] == "pass":  # the whistle stops a pass that had not arrived
-            kicked.update(end_x=round(bx, 2), end_y=round(by, 2), outcome="fail")
-        elif kicked and kicked["type"] == "shot":
-            self.close_shot(kicked, bx, by)
-        self.kicked = None
+        self.end_kick(*self.ball[:2])  # the whistle stops a pass or shot that had not arrived
         self.emit("foul", p.team, victim.x, victim.y, player=p.id, receiver=victim.id)
         self.off_balance[p.id] = self.t + OFF_BALANCE_S
         self.lunges.clear(), self.lunge_at.clear(), self.evade_at.clear()
@@ -2538,6 +2527,8 @@ class Engine:
     def poke(self, p: Player, holder: Player) -> None:
         """A tackle that reaches the ball knocks it loose; whoever then controls it decides the
         tackle (won or lost)."""
+        # A pass or shot still open ends at the tackle (C7), judged on its own flight, before the push.
+        self.end_kick(self.ball[0], self.ball[1])
         heading = (
             fmath.atan2(p.vy, p.vx)
             if math.hypot(p.vx, p.vy) > 0.5
@@ -2552,7 +2543,6 @@ class Engine:
             holder.vy * 0.3 + POKE_MPS * fmath.sin(angle),
             0.0,
         )
-        self.end_kick(self.ball[0], self.ball[1])  # a pass or shot still open ends at the tackle (C7)
         self.tackle = self.emit(
             "tackle", p.team, self.ball[0], self.ball[1], player=p.id, receiver=holder.id, outcome=None
         )
