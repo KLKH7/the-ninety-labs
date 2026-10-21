@@ -1796,3 +1796,18 @@ short and actionable. This file is public: no research sources, product names or
   `::test_each_corner_has_its_own_shot_and_the_ball_stays_in_it` and
   `::test_the_corner_shot_holds_until_the_kick`; the framing bar is raw.
 
+### 178. Measure a failure on the code that will ship, and split it by cause before designing a fix
+- **What happened:** the phone's possession gate could not open: the per-clip side was wrong on 3 of
+  8 validation clips, confidently on one (121, at 0.88 to 0.97). That was measured on main. On the
+  branch about to merge (#187, #195), clip 121 was already right (brightness kits).
+  Split by cause, every clip whose kit clusters each held one team was named right. But clip 120,
+  unsound by definition (both clusters mostly away), held half the wrong frames and was named wrong
+  too. A different naming fixed it and lost more elsewhere. No confidence was shown to predict the
+  errors (best 0.62, 95% 0.31 to 0.93, on 16 passes).
+  The first write-up said "no naming error left", which held only because "sound" excluded 120. A
+  definition that sorts the cases can hide the biggest one; report what it leaves out.
+- **Rule:** before designing a fix, measure the failure on the code that will ship, not on main when
+  a fix is in review. Split it by cause with the truth, offline (here: are the clusters sound?), and
+  aim the fix and its confidence at the cause that remains.
+- **Check:** `docs/eval/side-decision.md`: "Sound" per clip, and each naming candidate scored only on
+  the clips with sound clusters.

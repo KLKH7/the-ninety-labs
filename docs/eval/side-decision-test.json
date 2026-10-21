@@ -1,0 +1,102 @@
+{
+  "command": "uv run python -m ninety.eval.side_decision --clips runs/test-frozen-cca498c/test --test-dir runs/test-frozen-cca498c/test --observations docs/eval/attribution --more-observations tests/fixtures --seeds 900001,900002,900003,900004,900005 --out docs/eval/side-decision-test",
+  "commit": "38889abf5557eba133909a2f6964979ecc5764e1",
+  "dirty": false,
+  "date": "2026-10-21",
+  "clips": [
+    {
+      "seed": 900001,
+      "sound": true,
+      "named_right": true,
+      "right_frames": 1618,
+      "frames": 1647,
+      "accuracy_95": [
+        0.97,
+        0.99
+      ],
+      "tracks_right": 14,
+      "tracks": 15,
+      "tracks_95": [
+        0.7,
+        0.99
+      ],
+      "feature": "brightness"
+    },
+    {
+      "seed": 900002,
+      "sound": false,
+      "named_right": null,
+      "right_frames": 0,
+      "frames": 0,
+      "accuracy_95": null,
+      "tracks_right": 0,
+      "tracks": 0,
+      "tracks_95": null,
+      "feature": null
+    },
+    {
+      "seed": 900003,
+      "sound": false,
+      "named_right": null,
+      "right_frames": 0,
+      "frames": 0,
+      "accuracy_95": null,
+      "tracks_right": 0,
+      "tracks": 0,
+      "tracks_95": null,
+      "feature": null
+    },
+    {
+      "seed": 900004,
+      "sound": false,
+      "named_right": null,
+      "right_frames": 970,
+      "frames": 1174,
+      "accuracy_95": [
+        0.8,
+        0.85
+      ],
+      "tracks_right": 13,
+      "tracks": 19,
+      "tracks_95": [
+        0.46,
+        0.85
+      ],
+      "feature": "chromaticity"
+    },
+    {
+      "seed": 900005,
+      "sound": false,
+      "named_right": null,
+      "right_frames": 1321,
+      "frames": 1578,
+      "accuracy_95": [
+        0.82,
+        0.85
+      ],
+      "tracks_right": 13,
+      "tracks": 15,
+      "tracks_95": [
+        0.62,
+        0.96
+      ],
+      "feature": "brightness"
+    }
+  ],
+  "accuracy": 0.8886,
+  "accuracy_95": [
+    0.88,
+    0.9
+  ],
+  "tracks_right": 40,
+  "tracks": 49,
+  "tracks_95": [
+    0.69,
+    0.9
+  ],
+  "accuracy_without_900001": 0.8325,
+  "accuracy_without_900001_95": [
+    0.82,
+    0.85
+  ]
+}
