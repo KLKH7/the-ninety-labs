@@ -1026,7 +1026,7 @@ def test_they_leave_the_huddle_one_by_one_and_face_the_scorer_while_in_it():
         e, _ = scored_engine(seed)
         c = e.celebration
         assert max(c.leave.values()) - min(c.leave.values()) > 1.0
-        assert c.leave[c.focus] == max(c.leave.values())  # he goes last
+        assert c.leave[c.focus] == max(c.leave[pid] for pid in c.ring)  # he goes last, with the last
         # the longest celebration, still one by one: time for all to arrive whatever the first minute
         c.leave = {pid: e.t + CELEBRATION_S[1] + k for k, pid in enumerate(sorted(c.ring, key=c.leave.get))}
         c.leave[c.focus] = max(c.leave.values())
@@ -1079,14 +1079,19 @@ def test_who_is_joining_is_judged_from_each_ones_own_place():
         q.vx = q.vy = 0.0
     e.gather()
     assert c.focus in e.side_by_side
+    for pid in c.ring:  # everyone on his place: moving one outward along his bearing moves no place
+        p = e.by_id[pid]
+        p.x, p.y = c.places[pid]
+    e.gather()
     pid = c.ring[0]
     px, py = c.places[pid]
     d = math.dist((px, py), (f.x, f.y))
-    ux, uy = (px - f.x) / d, (py - f.y) / d  # outward along his own bearing: his place stays put
+    ux, uy = (px - f.x) / d, (py - f.y) / d
     q = e.by_id[pid]
     for out, joining in ((GATHER_REACH_M - 0.5, True), (GATHER_REACH_M + 0.5, False)):
         q.x, q.y = px + ux * out, py + uy * out
         e.gather()
+        assert math.dist(c.places[pid], (px, py)) < 1e-9  # premise: his place has not moved
         assert math.dist((q.x, q.y), (f.x, f.y)) > GATHER_REACH_M  # premise: out of the scorer's reach
         assert (pid in e.side_by_side) is joining, out
     for pid in c.ring:  # all on their places, the ball behind the scorer
@@ -1107,9 +1112,9 @@ def test_a_celebration_draws_from_its_own_random_stream():
     celebration moves no other random draw in the match (lesson 90)."""
     e = Engine(2)
     e.run(1)
-    before = e.rng.getstate()
+    before = e.rng.getstate(), e.sight_rng.getstate()
     e.celebrate("home", "h9")
-    assert e.rng.getstate() == before
+    assert (e.rng.getstate(), e.sight_rng.getstate()) == before
 
 
 def test_after_the_celebration_they_walk_back_at_least_at_a_walking_pace():
@@ -1191,7 +1196,7 @@ def test_team_mates_take_places_on_the_side_they_come_from_in_the_order_they_com
 
 
 def test_team_mates_stand_close_only_once_gathered_round_the_scorer():
-    """L4: within GATHER_REACH_M of his place (P2: where one running at RECOVER brakes for it) a
+    """L4: within GATHER_REACH_M of his place (design: where one running at RECOVER brakes for it) a
     team-mate keeps only clear of the others' bodies, so they stand side by side round the scorer;
     further off, on the way in, he keeps the usual personal space."""
     from ninety.sim.engine import GATHER_REACH_M, HUDDLE_SPACING_M, PERSONAL_SPACE_M
