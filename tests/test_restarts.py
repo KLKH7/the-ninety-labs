@@ -798,16 +798,21 @@ def test_an_indirect_free_kick_has_no_wall():
 
 def test_attackers_keep_1_m_from_a_wall_of_three_or_more():
     """Law 13: with three or more defenders in a wall, attackers stay at least 1 m from it, between
-    bodies (a shoulder's breadth between centres covers the two half-bodies side on); from a wall
-    of two they need not."""
+    bodies (a shoulder's breadth between centres covers the two half-bodies side on), with the usual
+    0.5 m margin; from a wall of two they need not."""
     e = Engine(3)
     e.possessor = None
     e.stop("free_kick", "home", (PITCH_X - 22.0, 34.0), taker="h9")
     assert len(e.restart.wall) >= 3
     wx, wy = next(iter(e.restart.wall.values()))
     tx, ty = e.keep_off(e.by_id["h10"], wx + 0.3, wy)
-    assert math.hypot(tx - wx, ty - wy) >= 1.0 + shape.SHOULDER_BREADTH_M
+    assert math.hypot(tx - wx, ty - wy) >= 1.0 + shape.SHOULDER_BREADTH_M + KEEP_OFF_MARGIN_M - 1e-9
     assert e.keep_off(e.by_id["h10"], 60.0, 20.0) == (60.0, 20.0)  # away from the wall: untouched
+    e.stop("free_kick", "home", (PITCH_X - 27.0, 34.0), taker="h9")
+    assert len(e.restart.wall) == 3  # three: the Law's threshold
+    wx, wy = next(iter(e.restart.wall.values()))
+    tx, ty = e.keep_off(e.by_id["h10"], wx + 0.3, wy)
+    assert math.hypot(tx - wx, ty - wy) >= 1.0 + shape.SHOULDER_BREADTH_M + KEEP_OFF_MARGIN_M - 1e-9
     e.stop("free_kick", "home", (PITCH_X - 35.0, 34.0), taker="h9")
     assert len(e.restart.wall) == 2
     wx, wy = next(iter(e.restart.wall.values()))

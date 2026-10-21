@@ -152,9 +152,11 @@ cut overlaps further. Those values were set before and were not changed after se
 ## The wall (free kicks)
 
 At a direct free kick within shooting range the defending side builds a wall (GROUNDING L14): as
-many as a shoulder's breadth each fills across the part of the goal Bray's model has it hide, at
-9.15 m and 0.5 m; they walk to it at least at a normal walking pace, come in behind the line and
-step up into their places, and stand shoulder to shoulder.
+many as a shoulder's breadth each fills, rounded down, across the part of the goal Bray's model has
+it hide (from the near post, design, to a third of the half-goal past the centre), at 9.15 m and
+0.5 m; the defenders nearest its places share them so that no two runs cross, walk to it at least at
+a normal walking pace, come in behind the line and step up into their places, and stand shoulder to
+shoulder.
 
 Twelve planted free kicks (seeds 2, 3, 5, 7; 22 m out straight on, 18 m out at y = 24, 27 m out at
 y = 44), by [`scripts/defect_sweep/wall.py`](../../scripts/defect_sweep/wall.py) `--planted`; the
@@ -163,14 +165,14 @@ first version ran on the engine of its time, so the minute of play before each k
 | | First version (`5813294`) | Now |
 |---|---:|---:|
 | Walls formed, every player on his place to within a ball's radius | 0 of 12 | 12 of 12 |
-| seconds into the stoppage | none formed | 12 to 40 s (stoppages 30 to 40 s) |
+| seconds into the stoppage | none formed | 11 to 40 s (stoppages 30 to 40 s) |
 | Furthest a wall player is from his place when the kick is struck | 0.2 to 1.0 m, and 7.4 m (below) | 0.02 m |
-| Gaps between neighbours' bodies when it is struck | 0.11 to 0.83 m | -0.01 to 0.03 m |
-| Frames with two of them more than 5 cm into each other while it forms | 0 of 11,004 | 58 of 11,011 (0.5%) |
+| Gaps between neighbours' bodies when it is struck | 0.11 to 0.83 m, and 7.2 m (below) | -0.01 to 0.03 m |
+| Frames with two of them more than 5 cm into each other while it forms | 0 of 11,004 | 45 of 10,993 (0.4%) |
 
 In the first version one wall player stood 7 m from his place through the whole stoppage: his
-place was on the edge of the 9.15 m circle, straight in from him, and rounding sent him round the
-circle at his own distance (lesson 142).
+place was on the edge of the 9.65 m keep-off circle (9.15 m and the margin), straight in from him,
+and rounding sent him round the circle at his own distance (lesson 142).
 
 The same 16 matches as above, the wall branch at `321ea57` against the celebration branch (no wall);
 raw output in [restarts/wall-branch.json](restarts/wall-branch.json). 21 direct free kicks fell
@@ -200,6 +202,14 @@ uv run ninety-sim --seed 7 --minutes 20 --out runs/new/seed7
 
 ```bash
 uv run python scripts/defect_sweep/restarts.py runs/new/seed7 runs/new/seed11
+```
+
+```bash
+uv run python scripts/defect_sweep/wall.py --planted
+```
+
+```bash
+uv run python scripts/defect_sweep/wall.py runs/new/seed7 runs/new/seed11
 ```
 
 ```bash
