@@ -450,6 +450,29 @@ read (inline or over MCP), passes `confidence` and drops `team_confidence`; chec
 Analyst's prompt from the fixture. Whether to show it to them is the agent layer's call, once it
 means something.
 
+### The side decision per clip
+
+Measured on validation clips under a plan committed first ([eval/side-decision-plan.md](eval/side-decision-plan.md),
+[eval/side-decision.md](eval/side-decision.md)), then the test set scored once
+([eval/side-decision-test.md](eval/side-decision-test.md)).
+
+- **Which kit is home is decided right wherever the kits are told apart.** On validation, the 4 clips
+  whose two kit clusters each hold one team (80% of a cluster's track-frames one side) are all named
+  right by today's mean-position vote (95% 0.51 to 1.00). On test, 900001 is the one such clip, also
+  right (0.98 of track-frames).
+- **Every side error left is a kit-cluster error.** Validation 115, 120, 2041 and 2043; test 900004
+  and 900005 (0.83 and 0.84). There the colour read from the shirts puts players of both teams in one
+  cluster, and no rule for naming the clusters can fix that.
+- **Other evidence did not help.** Pass direction, carries and shots give a handful of votes per
+  clip and never beat the mean-position vote.
+- **Test side accuracy:** 0.889 of track-frames over the three clips with tracks (95% 0.88 to 0.90,
+  optimistic, since frames in a track are not independent).
+- **No confidence predicts a wrong side.** The best, today's `team_confidence`, orders a wrong side
+  below a right one in 62% of pass pairs, against 0.80 set in advance. **So team-level claims stay
+  off for the agents, and the phone's possession gate stays closed.** Predicting these errors needs a
+  measure of cluster soundness from the picture, after the kit colour is read correctly: a
+  follow-up with dataset v2.
+
 ## Late drop in high-intensity running (R7)
 
 Fixed on 2026-10-17, before any engine change was measured with it and before the command had

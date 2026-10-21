@@ -1596,3 +1596,17 @@ short and actionable. This file is public: no research sources, product names or
   - `::test_a_whole_clip_in_the_wrong_place_is_not_trusted` is a strict expected failure, the
     shared-error case;
   - `docs/eval/camera-bound-plan.md`, Outcome, has the test set's frames left per clip.
+
+### 178. Measure a failure on the code that will ship, and split it by cause before designing a fix
+- **What happened:** the phone's possession gate could not open: the per-clip side was wrong on 3 of
+  8 validation clips, confidently on one (121, at 0.88 to 0.97). That was measured on main. On the
+  branch about to merge (#187, #195), clip 121 was already right (brightness kits).
+  Split by cause, no naming error was left at all. Every clip whose kit clusters each held one team
+  was named right, and every remaining error was a cluster error, from kit colour read wrongly. New
+  naming evidence (pass direction, carries, shots) could not help, and no confidence built from the
+  naming could predict those errors (best 0.62).
+- **Rule:** before designing a fix, measure the failure on the code that will ship, not on main when
+  a fix is in review. Split it by cause with the truth, offline (here: are the clusters sound?), and
+  aim the fix and its confidence at the cause that remains.
+- **Check:** `docs/eval/side-decision.md`: "Sound" per clip, and each naming candidate scored only on
+  the clips with sound clusters.

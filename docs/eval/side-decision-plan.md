@@ -146,3 +146,17 @@ confidence the same way.
 
 The measurement code and every constant are frozen at the commit that adds this section. Nothing in
 the live path changed (N0 and K0 kept), so the test set gets the new per-clip side report only.
+
+### The test set, scored once (code frozen at d24e370; [side-decision-test.md](side-decision-test.md))
+
+Side accuracy by track-frames over the three clips with tracks: 0.889 (95% 0.88 to 0.90).
+
+| Test clip | Clusters | Named | Accuracy |
+|---|---|---|---|
+| 900001 | sound | right | 0.98 |
+| 900004 | not sound | | 0.83 |
+| 900005 | not sound | | 0.84 |
+| 900002, 900003 | no tracks (camera cuts) | | |
+
+Same pattern as validation: the naming is right where the clusters are sound, and the errors are
+cluster errors.
