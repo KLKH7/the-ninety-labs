@@ -1450,3 +1450,30 @@ short and actionable. This file is public: no research sources, product names or
   `::test_a_slow_model_is_answered_by_the_server_with_its_reasons_not_cut_off_by_the_client`,
   `::test_a_request_cut_off_at_the_deadline_is_awaited_on_close` and
   `::test_the_evaluation_leaves_no_request_running_when_the_client_gives_up`.
+
+### 148. A trust test that checks what the fit minimised trusts a wrong fit
+- **What happened:** the camera fit minimises how far the image's white marking pixels lie from
+  the projected pitch lines, and a frame was trusted when half of them lay within 1.5 px. A fit
+  that settles on the wrong camera also lines its markings up, so the test passed it. On
+  validation it trusted 198 frames whose ground was more than 1 m wrong: seed 109's by about
+  125 m, all of seed 108's by about 2 m. It also rejected 11% of good frames.
+- **Rule:** judge a fit by something it did not optimise. A consequence it must get right is
+  enough, here that players come out the height people are. Measure the test against the truth
+  on validation clips before trusting it.
+- **Check:** `tests/test_vision_observe.py` (players made too tall or too short by the camera are
+  not trusted, whatever the markings say); `docs/eval/detector-derive.md` (each gate's bad frames
+  trusted and good frames kept).
+
+### 149. A rule that counts errors cannot see how large they are, and a detector built on its only clip is tuned to it
+- **What happened:** the M1 event detector was built while test seed 900001 was its only clip, so
+  its published numbers were partly tuned to the test set. Re-deriving it on validation clips, the
+  new camera trust test was chosen by a rule fixed in advance: the most bad frames rejected,
+  keeping 90% of good ones. It won on counts (175 bad frames trusted against 198). But it trusts a
+  few frames on clips the old test rejected entirely, some 47 to 80 m wrong, where the
+  alternative's worst was 6.6 m. On the test set it trusts 1 and 7 such frames on the two clips
+  with camera cuts.
+- **Rule:** a detector is developed on validation clips from the start, and the test set is scored
+  once, at the end. A rule that adopts a gate or a threshold also bounds the size of the errors it
+  lets through (the worst, or a high percentile), not only their number, stated before choosing.
+- **Check:** `docs/eval/detector-plan.md` (the plan, its amendment and the outcome, in commit
+  order); `docs/eval/detector-derive.md`, "Worst trusted" for each gate.

@@ -246,3 +246,31 @@ positives over pass, shot and out of play on the 13 clips.
 ### Frozen for step D
 
 Every constant is frozen at the commit that adds this line. The test set is scored once, after it.
+
+### Step D: the test set, scored once (after cc836af froze every constant)
+
+[event-report-v2.md](event-report-v2.md), [attribution.md](attribution.md),
+[companion-tracked.md](companion-tracked.md).
+
+- **Passes, strict:** 7 of 13 found, 1 false: precision 0.88, recall 0.54, F1 0.67. Per clip:
+  900001 0.75, 900004 1.00, 900005 0.86.
+- **Shot:** the only true shot is read as a pass. **Out of play:** 1 false.
+- **Clips with camera cuts:** 900002 and 900003 make no events. The height test trusts 1 and 7 of
+  their frames, 46 to 80 m wrong (lesson 149).
+- **900001 against its old published figures:** pass F1 0.75 as before; the camera is trusted on
+  238 frames (was 245).
+- **Who:** team right on 7 of 7 matched passes; 14 names, all right; none left null; the 2 false
+  events name nobody.
+- **The phone's numbers on 900001:** speed now within a median 0.6 km/h, top speed 1.5 km/h (was
+  1.9).
+
+### Not fixed here (follow-ups)
+
+- **Kit colours read wrongly from the image** (`observe.kit_rgb`): a blue shirt as near-white,
+  white as cyan, green as grey, because grass-coloured pixels are dropped. The main remaining
+  cause of wrong sides (11 of 16 right on validation). Fixing it re-runs the image stage.
+- **Camera fits with the right scale in the wrong place** (validation seed 108: about 2 m along the
+  line of sight). The height test cannot see them.
+- **Frames trusted wrongly on clips with camera cuts.** The fit does not follow a cut, and the
+  height test passes a few of its frames.
+- **A tied side vote** still names a side. Its team_confidence is 0, which shows it.
