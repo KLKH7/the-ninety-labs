@@ -245,7 +245,6 @@ def test_director_is_deterministic():
 # so they stay for continuity only; 41 and 43 were added before anyone rendered or scored them for
 # the camera (committed ahead of #198's re-score), and are the held-out check.
 HELD_OUT = (3, 5, 41, 43, 47, 53)
-FRESH_HELD_OUT = (41, 43)
 # 47 and 53: a second fresh pair, added at the Reviewer's request before anyone rendered or scored
 # them for the camera.
 
@@ -321,11 +320,8 @@ def test_the_gantry_frames_the_play_with_the_pitch_filling_the_picture():
     framed in 13 to 47% of live frames on seeds 7, 21 and 42). A broadcast keeps the play near the
     middle with the pitch filling most of the picture: in live play, at least 85% of frames have
     the pitch over PITCH_SHARE_MIN of the picture and the ball in the CENTRAL box (camera.py), and
-    the median frame has 8 to 15 players in shot (docs/guides/broadcast-render.md).
-
-    The 85% bar is asserted on FRESH_HELD_OUT only: seeds 3 and 5 were studied while fixing #198
-    (lesson 175), so they are no longer held out. They are printed with both rates for continuity,
-    as the Coordinator set before they were re-scored."""
+    the median frame has 8 to 15 players in shot (docs/guides/broadcast-render.md). The bar holds
+    on every held-out seed, over every live frame (lesson 175)."""
     for seed in HELD_OUT:
         m, rows = _broadcast(seed)
         dead = _dead_frames(m.events)
@@ -333,14 +329,10 @@ def test_the_gantry_frames_the_play_with_the_pitch_filling_the_picture():
         live = [(fi, cam) for fi, cam in live if 0 <= m.frames[fi]["ball"]["x"] <= 105
                 and 0 <= m.frames[fi]["ball"]["y"] <= 68]
         assert len(live) >= 200, (seed, len(live))  # never vacuous: 40 s of live play
-        ok, unframeable, in_shot = 0, 0, []
+        ok, in_shot = 0, []
         for fi, cam in live:
             b = m.frames[fi]["ball"]
-            ball = (b["x"], b["y"], b["z"] + 0.11)
-            if well_framed(cam, ball):
-                ok += 1
-            elif not frameable(cam.position, ball):
-                unframeable += 1  # no shot from the gantry frames it: not the director's miss
+            ok += well_framed(cam, (b["x"], b["y"], b["z"] + 0.11))
             seen = 0
             for q in m.frames[fi]["players"]:
                 # In shot: his feet inside the picture's width and above its bottom, his head below its top.
@@ -348,13 +340,8 @@ def test_the_gantry_frames_the_play_with_the_pitch_filling_the_picture():
                 if feet is not None and head is not None:
                     seen += 0 <= feet[0] < 1280 and feet[1] < 720 and head[1] >= 0
             in_shot.append(seen)
-        # The bar applies to frames some gantry shot can frame (frameable); the raw rate over every
-        # live frame is reported beside it (lesson 175).
-        raw, rate = ok / len(live), ok / (len(live) - unframeable)
-        print(f"seed {seed}: well framed {rate:.3f} of frameable live frames, raw {raw:.3f}, "
-              f"{unframeable} of {len(live)} unframeable")
-        if seed in FRESH_HELD_OUT:
-            assert rate >= 0.85, (seed, f"frameable {rate:.3f}", f"raw {raw:.3f}", unframeable, len(live))
+        print(f"seed {seed}: well framed {ok / len(live):.3f} of {len(live)} live frames")
+        assert ok / len(live) >= 0.85, (seed, ok, len(live))
         assert 8 <= sorted(in_shot)[len(in_shot) // 2] <= 15, (seed, sorted(in_shot))
 
 
@@ -505,39 +492,6 @@ def test_play_near_a_corner_flag_is_framed_with_the_pitch_filling_the_picture():
     d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=True)
     cam = _held(d, 3.0, 8.0, 150)
     assert well_framed(cam, (3.0, 8.0, 0.11)), pitch_share(cam)
-
-
-def frameable(position, ball, width=1280, height=720) -> bool:
-    """Whether ANY shot from the gantry at `position` frames `ball` well (well_framed): every aim on
-    a 3 m grid over the pitch and 6 m round it, aimed at the grass or at the ball's height, through
-    every lens the rig has (2 to 32 degrees high). It is the director's ceiling, written apart
-    from the director's own aiming code: a frame no shot can frame is not a miss of the director
-    (lesson 175)."""
-    import math as _m
-
-    for half_width in (3.0, 4.0, 5.0, 6.5, 8.0, 10.0, 13.0, 16.0, 20.0, 25.0, 30.0):
-        for tz in sorted({0.0, round(ball[2], 2)}):
-            for ax in range(-6, 112, 3):
-                for ay in range(-6, 75, 3):
-                    target = (float(ax), float(ay), tz)
-                    dist = _m.dist(position, target)
-                    hfov = 2 * _m.atan(half_width / dist)
-                    vfov = _m.degrees(2 * _m.atan(_m.tan(hfov / 2) * height / width))
-                    if not 2.0 <= vfov <= 32.0:
-                        continue
-                    if well_framed(Camera(position, target, vfov, width, height), ball):
-                        return True
-    return False
-
-
-def test_the_frameable_oracle_knows_a_ball_on_the_corner_flag_cannot_be_framed():
-    """The oracle's planted cases: on the near corner flag no shot from the gantry has the ball in
-    the CENTRAL box with the pitch over PITCH_SHARE_MIN of the picture; at midfield and a few metres
-    off the flag one does."""
-    gantry = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=True).position
-    assert not frameable(gantry, (0.5, 0.5, 0.11))
-    assert frameable(gantry, (52.5, 34.0, 0.11))
-    assert frameable(gantry, (3.0, 8.0, 0.11))
 
 
 def test_a_lofted_ball_is_kept_in_the_picture():
