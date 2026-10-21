@@ -34,6 +34,10 @@ beside the weights, as ninety/vision/train.py writes it, or `--manifest`): the r
 whose sha256 is not the record's `checkpoint_sha256`, or a record whose `name` is not
 `--checkpoint`, before a model loads. It runs at the record's resolution unless `--resolution`
 says otherwise. The model runs here, in this process: no hosted inference service (AGENTS.md).
+
+On Azure this runs in the Container Apps job of infra/live-job.bicep, from infra/live-job.Dockerfile,
+with `--echo`: the job holds no storage role (infra/check_truth_sealed.py allows none outside the
+render job and the maintainer), so run.json and the detected events go to its log.
 """
 
 from __future__ import annotations
@@ -173,6 +177,8 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--resolution", type=int, default=None, help="default: the trained size")
     ap.add_argument("--batch", type=int, default=8)
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--echo", action="store_true",
+                    help="also print run.json and each detected event, one JSON line each (the job's log)")
     a = ap.parse_args(argv)
     if (a.checkpoint == "coco") != (a.weights is None):
         ap.error("--weights is required for our checkpoints and not allowed for coco")
@@ -198,6 +204,10 @@ def main(argv: list[str] | None = None) -> None:
     }
     report = run(a.clip, a.out, load_detector, about)
     print(json.dumps({k: report[k] for k in ("clip", "frames", "events", "seconds")}))
+    if a.echo:  # the Container Apps job holds no storage role, so its log carries the result
+        print(json.dumps({"run": report}, separators=(",", ":")))
+        for line in (a.out / "detected.jsonl").read_text(encoding="utf-8").splitlines():
+            print(json.dumps({"detected": json.loads(line)}, separators=(",", ":")))
 
 
 if __name__ == "__main__":
