@@ -26,7 +26,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from ninety.match.clock import match_clock
-from ninety.render import RENDERER_VERSION, edit
+from ninety.render import RENDERER_VERSION, edit, fouls
 from ninety.render.camera import Camera, Director, blur_vector
 from ninety.render.params import RenderParams, sample_params
 from ninety.render.scene import (
@@ -275,6 +275,7 @@ def render_clip(
         director = Director(p.camera, p.width, p.height, p.fps, seed, cuts=p.camera_cut)
         gaits = {lk.id: Gait() for lk in looks}
         touches = contacts(frames, match.events)
+        falls = fouls.schedule(match.events, frames, FPS)  # a fouled player down and up (lesson 173)
         held = holds(frames)
         prev_xy: dict[str, tuple[float, float]] = {}
         prev_cam: Camera | None = None
@@ -303,6 +304,8 @@ def render_clip(
                 g, h = gaits[pl["id"]], by_id[pl["id"]].height_m
                 touch_at(g, touches.get(pl["id"], []), fi, h, FPS, pl["x"], pl["y"])
                 hold_at(g, held.get(pl["id"], []), fi, ball, h, FPS)
+                down = falls.get(pl["id"], {}).get(fr["frame"])
+                g.fall, g.fall_dir = (down["angle"], down["dir"]) if down else (0.0, 0.0)
             actors = [(pl["x"], pl["y"], pl.get("action", "")) for pl in fr["players"]]
             # The snapshot of a goal already has the ball on the centre spot. The event
             # carries the mouth it crossed, and the frame before it carries the pace.

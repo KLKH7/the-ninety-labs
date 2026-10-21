@@ -15,7 +15,8 @@ F, R = 100, 100 + 30 * FPS  # the foul's frame, and the free kick taken 30 s lat
 
 
 def _events():
-    return [{"frame": F, "type": "foul", "team": "home", "player": "h5", "receiver": "a7", "x": 40.0, "y": 30.0},
+    return [{"frame": F, "type": "foul", "team": "home", "player": "h5", "receiver": "a7",
+             "x": 40.0, "y": 30.0},
             {"frame": R, "type": "set_piece", "team": "away", "player": "a4", "x": 40.0, "y": 30.0},
             {"frame": R + 40, "type": "pass", "team": "away", "player": "a4", "x": 40.0, "y": 30.0}]
 
@@ -26,8 +27,10 @@ def _frames(n=R + 60):
     for i in range(n):
         hx = min(38.6 + 0.2 * i / FPS, 39.4)
         out.append({"frame": i, "players": [
-            {"id": "h5", "team": "home", "x": hx, "y": 30.0, "vx": 0.0, "vy": 0.0, "heading": 0.0, "action": "run"},
-            {"id": "a7", "team": "away", "x": 40.0, "y": 30.0, "vx": 0.0, "vy": 0.0, "heading": math.pi, "action": "stand"},
+            {"id": "h5", "team": "home", "x": hx, "y": 30.0, "vx": 0.0, "vy": 0.0, "heading": 0.0,
+             "action": "run"},
+            {"id": "a7", "team": "away", "x": 40.0, "y": 30.0, "vx": 0.0, "vy": 0.0, "heading": math.pi,
+             "action": "stand"},
         ], "ball": {"x": 45.0, "y": 30.0, "z": 0.0, "vx": 0.0, "vy": 0.0}})
     return out
 

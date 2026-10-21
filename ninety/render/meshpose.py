@@ -654,7 +654,13 @@ def pose_markers(pose: dict, heading: float, height_m: float) -> dict[str, tuple
     """World position of every marker (and touch surface) for one frame's pose."""
     angles = pose_angles(pose, heading, height_m)
     x, y, lift = pose.get("x", 0.0), pose.get("y", 0.0), pose.get("lift") or 0.0
-    return {name: to_world(x, y, heading, height_m, p, lift) for name, p in _markers(angles).items()}
+    out = {name: to_world(x, y, heading, height_m, p, lift) for name, p in _markers(angles).items()}
+    if pose.get("fall"):
+        # A fouled player down (fouls.py): the body tipped over its feet, as the page tips the mesh.
+        from ninety.render.fouls import tip
+
+        out = {name: tip(p, x, y, pose["fall"], pose.get("fall_dir", 0.0)) for name, p in out.items()}
+    return out
 
 
 def foot_yaw(pose: dict, heading: float, height_m: float, side: str) -> float:
