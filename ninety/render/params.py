@@ -17,7 +17,9 @@ from dataclasses import asdict, dataclass, field, fields, replace
 LIGHTING = ("day", "dusk", "night", "overcast")
 WEATHER = ("clear", "overcast", "rain")
 OCCLUSION = ("natural", "crowded", "keeper")
-KIT_CONTRAST = ("normal", "low")
+# normal and low are drawn for training (low is a hard case); broadcast is set only for footage a
+# viewer watches (the demo clip, docs/eval/demo-clip.md), never drawn from a seed.
+KIT_CONTRAST = ("normal", "low", "broadcast")
 # Shirt graphics. Colours stay fictional; a pattern is not a real club's kit.
 PATTERNS = ("solid", "stripes", "hoops", "sash", "halves")
 
@@ -127,8 +129,35 @@ def _random_color(rng: random.Random) -> str:
     return _hex(colorsys.hsv_to_rgb(h, s, v))
 
 
+def wcag_contrast(a: str, b: str) -> float:
+    """WCAG 2.1 contrast ratio of two colours, 1..21, from their relative luminance (sRGB linearised)."""
+
+    def rel(hex_: str) -> float:
+        lin = [c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4 for c in _rgb(hex_)]
+        return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]
+
+    lo, hi = sorted((rel(a), rel(b)))
+    return (hi + 0.05) / (lo + 0.05)
+
+
+# Broadcast kits: WCAG 2.1 SC 1.4.11 asks 3:1 for graphical objects a viewer must tell apart; and two
+# coloured shirts a third of the hue circle apart (*design*), so a team is not told by brightness alone.
+BROADCAST_CONTRAST = 3.0
+BROADCAST_HUE_DEG = 60.0
+
+
+def _hue_apart(a: str, b: str) -> bool:
+    (ha, sa, _), (hb, sb, _) = colorsys.rgb_to_hsv(*_rgb(a)), colorsys.rgb_to_hsv(*_rgb(b))
+    if sa <= 0.1 or sb <= 0.1:  # white, black or grey: told apart by brightness
+        return True
+    gap = abs(ha - hb) * 360
+    return min(gap, 360 - gap) >= BROADCAST_HUE_DEG
+
+
 def kits_differ(a: str, b: str, contrast: str) -> bool:
     d, dl = color_distance(a, b), abs(luminance(a) - luminance(b))
+    if contrast == "broadcast":
+        return wcag_contrast(a, b) >= BROADCAST_CONTRAST and _hue_apart(a, b)
     if contrast == "low":
         return 0.15 <= d <= 0.35 and dl <= 0.08
     return d >= 0.55 and dl >= 0.12
