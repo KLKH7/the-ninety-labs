@@ -66,3 +66,19 @@ def test_a_presser_who_will_not_press_or_a_player_beaten_is_replaced():
     e.off_balance["h8"] = e.t + 2.0  # the cover is beaten: down, out of the play
     after = _home_look(e)
     assert after[0] == "h7" and "h8" not in after  # the next man up covers
+
+
+def test_the_cover_is_whoever_reaches_the_cover_s_place_soonest():
+    """Fails before the screening fix: the second soonest to the ball covered, here h8 from beyond the
+    ball, while h6 stood almost on the cover's place, between the ball and our goal."""
+    e, _ = _away_on_the_ball()
+    for q in e.players:
+        if q.team == "home" and q.role != "GK":
+            q.x, q.y, q.vx, q.vy = 90.0, 5.0 + 4.0 * int(q.id[1:]), 0.0, 0.0
+    e.by_id["h7"].x, e.by_id["h7"].y = 50.0, 34.0  # nearest the ball: he presses
+    e.by_id["h8"].x, e.by_id["h8"].y = 58.0, 34.0  # beyond the ball, second nearest to it
+    e.by_id["h6"].x, e.by_id["h6"].y = 44.0, 34.0  # goal-side, by the cover's place (8 m behind the ball)
+    pressers = _home_look(e)
+    assert pressers[0] == "h7" and pressers[1] == "h6"
+    cx, cy = e.cover_spot("home", e.ball[0], e.ball[1], e.brains["home"].press_gap_m)
+    assert abs(cx - 44.9) < 0.6 and abs(cy - 34.0) < 0.6  # 8 m from the ball toward our goal
