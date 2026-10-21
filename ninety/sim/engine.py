@@ -235,17 +235,6 @@ class Celebration:
 
 
 @dataclass
-class Celebration:
-    team: str  # the side that scored
-    focus: str  # the scorer (or, for an own goal, the scoring side's player nearest the ball)
-    spot: tuple[float, float]  # where he goes: the corner flag nearest him at that end, a keeper stays
-    until: float  # when the last of them stops celebrating
-    ring: list[str] = field(default_factory=list)  # the team-mates who run to him
-    leave: dict[str, float] = field(default_factory=dict)  # when each, the focus too, stops celebrating
-    places: dict[str, tuple[float, float]] = field(default_factory=dict)  # this frame's places round him
-
-
-@dataclass
 class Match:
     seed: int
     events: list[dict] = field(default_factory=list)
