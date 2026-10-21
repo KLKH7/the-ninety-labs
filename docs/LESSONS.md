@@ -1473,3 +1473,18 @@ short and actionable. This file is public: no research sources, product names or
   relies on) and is tested with tampered input. One file name has one writer and one shape.
 - **Check:** `tests/test_vision_auditor.py::test_the_data_agent_checks_a_typed_handoff_on_receipt`,
   `::test_the_committed_clusters_json_is_the_auditor_s_code_output_and_the_data_agent_takes_it`.
+
+### 156. A live output named like an answer-key file looks like a truth read
+- **What happened:** the first draft of the live detection job (`ninety/vision/live_job.py`) wrote
+  its detected events to `events.jsonl`, the name of the answer key's event file. The live-path
+  checks went red: the static one found the name in the code, and the runtime one saw the job open
+  a file by that name. Nothing read ground truth, but a reader of the output folder, or a later
+  packer, could not tell detected events from true ones. Separately, `detect.frame_rows` falls
+  back to the labelled frame file when a clip has no labels-free index, so a job handed a whole
+  rendered clip would have read it.
+- **Rule:** live outputs never take an answer-key file name (detected events are `detected.jsonl`).
+  A job on the live path takes an allow-list of inputs (the index and the images) and refuses
+  anything else before a model loads, rather than trusting a fallback not to run.
+- **Check:** `tests/test_vision_live_path.py` lists `live_job.py` among the live modules;
+  `tests/test_vision_live_job.py::test_a_clip_folder_holding_anything_else_is_refused_before_the_model_loads`
+  (each answer-key file planted), and `::test_a_clean_clip_runs_the_whole_live_path_and_opens_no_truth`.
