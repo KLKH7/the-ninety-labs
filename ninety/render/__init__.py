@@ -38,4 +38,8 @@ docs/decisions/0001-synthetic-data.md.
 # 0.5.2: a broadcast clip cuts only a dead ball whose stoppage and restart it shows, holds each side
 # of the cut at least 4 s, and comes back on the gantry closed up on the restart, easing out to the
 # wide shot before the kick; cuts are off by default, so datasets and the test sets show every frame.
-RENDERER_VERSION = "0.5.2"
+# 0.5.3: players are drawn at their own height (the body mesh stands 1.684 m, not 1.84 m, so every
+# player was 91.5% of his height), with proportions measured against Drillis and Contini; walking
+# and running, a foot is planted for its stance and carried on an arc through its swing, never
+# dragged along the grass; the stride lengthens and the swing lifts with speed.
+RENDERER_VERSION = "0.5.3"
