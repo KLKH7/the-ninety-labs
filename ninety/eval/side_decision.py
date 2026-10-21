@@ -191,7 +191,11 @@ def main(argv: list[str] | None = None) -> None:
     if a.test_dir is not None:
         rows = [test_clip(s, a.test_dir, [a.observations, *a.more_observations]) for s in seeds]
         rf, fr = sum(r["right_frames"] for r in rows), sum(r["frames"] for r in rows)
-        body = {"command": COMMAND.replace("--clips <render run v1>/train", "--test-dir <frozen test set>"),
+        body = {"command": ("uv run python -m ninety.eval.side_decision "
+                            "--clips runs/test-frozen-cca498c/test "
+                            "--test-dir runs/test-frozen-cca498c/test --observations docs/eval/attribution "
+                            "--more-observations tests/fixtures --seeds 900001,900002,900003,900004,900005 "
+                            "--out docs/eval/side-decision-test"),
                 "commit": git_commit(), "date": datetime.date.today().isoformat(), "clips": rows,
                 "accuracy": round(rf / fr, 4) if fr else None, "accuracy_95": wilson(rf, fr)}
         at.write_or_check(a.out, body, test_md, a.check)
