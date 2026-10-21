@@ -1,0 +1,44 @@
+# Demo clip: pre-registered choice of the match footage
+
+Status: **pre-registered, not yet applied.** The rule is fixed here, before any candidate is rendered
+or watched. It is applied once at the final freeze commit, and its output is recorded below. If the
+footage then has a defect, that is reported and fixed in the renderer; the footage is not swapped
+for a better-looking seed.
+
+**Rubric:** UX and presentation (the 2-minute video's footage, `docs/video-script.md`), and honest
+claims: the clip shows what the system does on footage chosen by a rule, not on the best take.
+
+## The rule (`scripts/demo_clip.py`)
+
+1. **Seeds 8001 to 8050, in order.** No training, validation, targeted-round or test run uses the
+   8000s, so the detector has never seen this footage, and it is not a test seed, which stays
+   uninspected.
+2. **Simulate the first half** (45 minutes) of each seed at the freeze commit.
+3. **The window** is the first 60 s of match time, starting at a multiple of 5 s from kick-off,
+   that holds all of:
+   - a goal at least 15 s into the window, so its build-up is on screen;
+   - a set piece other than a kick-off (a corner, free kick or throw-in);
+   - at least 3 passes.
+4. **The first seed with such a window is the demo clip.** The selection uses the engine's events
+   only. Whether the detector finds the passes is never part of the choice: what it detects on this
+   clip is what the video shows and the evaluation reports.
+
+## The render
+
+The broadcast cut is on (the dead-ball cut of #180), and hardware GL is used, since this clip is
+footage, not data:
+
+```bash
+uv run ninety-render --seed <seed> --start <start> --seconds 60 --set dead_ball_cut=true --mp4 --gpu --out runs/demo/seed<seed>
+```
+
+Then `uv run ninety-validate runs/demo/seed<seed>` and `uv run ninety-render-check runs/demo/seed<seed>`.
+
+## Result
+
+Filled in when the rule is applied at the freeze commit:
+- the commit;
+- the seed and window;
+- the qualifying events;
+- the render checks;
+- what the detector found on it.
