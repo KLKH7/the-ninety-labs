@@ -1595,6 +1595,34 @@ short and actionable. This file is public: no research sources, product names or
   "no carrier strikes with a kick still open" checked on the real match; a poke on an open shot; and
   an untouched shot judged on its own flight, not the tackle's push.
 
+### 142. A figure keeps the case it was measured for
+- **What happened:** GROUNDING R1 cited Opta's guide to time-wasting for "a goal's celebration,
+  about 72 s", and the restart work planned the kick-off after every goal around it. Read again,
+  the article gives 72 s for the celebration after a penalty goal, in its paragraph on penalties;
+  it gives no figure for goals in general. A general figure was then found in a different source
+  (FIFA's referees' chief: a celebration "may last one, one and a half minutes").
+- **Rule:** when a number moves from a source into GROUNDING, the row names the case it was
+  measured for (which restart, which competition, which seasons) and quotes the sentence it
+  comes from; a number used for a wider case needs a source for that case.
+- **Check:** every row of GROUNDING that cites a time or a rate names its case; R1 and L4 now cite
+  the penalty figure as a penalty figure and the goal figure from its own source.
+
+### 143. Players sent to one point end up inside each other: give each his own place
+- **What happened:** the goal celebration sent every team-mate to the scorer's own position. Steering
+  bends a run round another player but does not slow it, and bodies in contact brace only with the
+  grip steering leaves, so ten players arriving at one point at a sprint ended up in each other: in
+  32 to 63% of celebration frames two bodies overlapped by more than 5 cm. The tests counted players
+  within 3 m of the scorer, a distance between centres, and passed.
+- **Rule:** when several players head for the same spot (a huddle, a wall, a queue), each gets a
+  place of his own, at least a shoulder's breadth from the next (P11), chosen so that no two runs
+  to them cross. A test of a crowd measures the clearance between bodies (`shape.between`), not
+  the distance between centres.
+- **Check:** `uv run pytest tests/test_restarts.py -k "overlap or side_they_come_from or once_a_frame"`;
+  with every team-mate sent to the scorer's centre the overlap test fails (none ever stands at a
+  place of his own), and with places worked out one player at a time, in the order they move, the
+  once-a-frame test fails. `scripts/defect_sweep/huddle.py` counts the frames with bodies in each
+  other over a whole celebration (`docs/eval/restarts.md`, "The huddle").
+
 ### 162. A player off the ball answers the players around him, not only the ball
 - **What happened:** fans and clip critics saw the team without the ball stand between actions. On
   seed 21 most standing spells of 3 s or more were block defenders whose place did not move while
