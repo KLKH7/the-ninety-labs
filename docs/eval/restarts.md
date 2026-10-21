@@ -190,12 +190,12 @@ the 14 were shot at directly.
 | Pass completion | 84.5% | 85.5% |
 | Ball in play | 60.7% | 62.1% |
 
-The match failing the contract is seed 21 on both, main's C7 (above). The goals are 10 against 4,
-and not the wall's doing: the two columns are different matches from the first restart on (the
-keep-off rounding fix acts at every restart, and each match parts within its first 11 to 92 s,
-lesson 90); in the no-wall matches only 3 of the 10 goals came within 15 s of a free kick in
-range, and the previous version of the wall, on the same base, had 10 goals. Shots and completion
-are level. Football-sense per 90: FS1 19.4 to 19.1, FS2 7.9 to 9.0, FS6 23.9 to 25.3, FS7 298 to
+The match failing the contract is seed 21 on both, main's C7 (above). Neither shots (z 0.9) nor
+goals (10 against 4, z 1.6) differ by more than chance, and the goals are not the wall's doing: the
+two columns are different matches from the first restart on (the keep-off rounding fix acts at
+every restart, and each match parts within its first 11 to 92 s, lesson 90); in the no-wall
+matches only 3 of the 10 goals came within 15 s of a free kick in range, and the previous version
+of the wall, on the same base, had 10 goals in 106 shots. Football-sense per 90: FS1 19.4 to 19.1, FS2 7.9 to 9.0, FS6 23.9 to 25.3, FS7 298 to
 305, FS9 1.1 to 2.8.
 
 ## Reproduce
