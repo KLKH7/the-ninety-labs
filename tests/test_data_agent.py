@@ -3,7 +3,7 @@ renderer has; only training seeds; one commit per round."""
 
 import pytest
 
-from ninety.agents.data_agent import allocate, plan, render_set
+from ninety.agents.data_agent import allocate, render_set, split
 
 
 def clusters(*misses):
@@ -55,7 +55,7 @@ HANDOFF = {
 
 
 def test_a_plan_covers_the_budget_in_requests_of_bounded_size():
-    p = plan(HANDOFF, 24, 2001, "abc123", per_request=10)
+    p = split(HANDOFF, 24, 2001, "abc123", per_request=10)
     assert [c["clips"] for c in p["clusters"]] == [18, 6]
     assert [(r["first_seed"], r["count"]) for r in p["requests"]] == [(2001, 10), (2011, 8), (2019, 6)]
     assert {r["commit"] for r in p["requests"]} == {"abc123"}
@@ -65,9 +65,9 @@ def test_a_plan_covers_the_budget_in_requests_of_bounded_size():
 
 def test_a_round_never_reaches_the_test_seeds():
     with pytest.raises(ValueError, match="reserved|test"):
-        plan(HANDOFF, 40, 899990, "abc123")
+        split(HANDOFF, 40, 899990, "abc123")
 
 
 def test_a_round_name_cannot_escape_its_folder():
     with pytest.raises(ValueError):
-        plan(HANDOFF | {"round": "../x"}, 4, 2001, "abc123")
+        split(HANDOFF | {"round": "../x"}, 4, 2001, "abc123")
