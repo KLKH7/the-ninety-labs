@@ -69,5 +69,6 @@
   "storage": "renders/<run>/test/seed<N>/ (images, clip.json) and truth-test/<run>/test/seed<N>/ (frames.jsonl, events.jsonl, meta.json: the answer key, as the 91d1e3b test set), never the truth container",
   "machine": "rendered first, on the same pod, with software GL; round 2's plan renders its test set locally so its pixels do not depend on the machine, so seed 900001 is also rendered on the maintainer's Mac with software GL and its images, frames and events must be byte-identical"
  },
- "upload": "no credential goes to the render machine: the outputs are copied back over SSH, every sha256 checked against the manifest here, and uploaded from the maintainer's machine with its az login (infra/pod/render.py upload --account)"
+ "upload": "no credential goes to the render machine: the outputs are copied back over SSH, every sha256 checked against the manifest here, and uploaded from the maintainer's machine with its az login (infra/pod/render.py upload --account)",
+ "qa": "before upload, infra/pod/qa.py: contact sheets (8 frames each) of 20 passing training clips drawn with random seed 20261021, fixed now, plus every training clip the checks flagged, for the Coordinator to look at; and a summary: excluded clips, render-check totals per split, the manifest verified. Test clips are never drawn or shown"
 }
