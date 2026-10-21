@@ -211,3 +211,23 @@ def test_the_image_stage_reads_both_colours_of_every_shirt(monkeypatch):
     shirt = hooped((32, 46, 162), (242, 242, 242))
     rows = observe.observe([Path(f"{f}.jpg") for f in range(3)], dets, lambda p: shirt)
     assert all(len(r["players"][0]["rgb"]) == 6 for r in rows)
+
+
+def test_skin_is_found_by_the_published_rule_and_kits_are_not():
+    px = np.array([[200, 140, 110], [170, 120, 90], [23, 60, 25], [242, 242, 242], [20, 20, 20],
+                   [32, 46, 162]], float)
+    assert observe.skin(px).tolist() == [True, True, False, False, False, False]
+
+
+def test_r5_reads_a_dark_kit_without_the_arms_skin():
+    # A dark-green shirt with black stripes and bare arms across the patch: R4's lighter colour is the
+    # skin; R5 drops the skin first, so its lighter colour is the green.
+    img = np.zeros((60, 24, 3), np.uint8)
+    img[:, :] = (40, 140, 50)
+    for y in range(60):
+        img[y, 4:20] = (23, 60, 25) if (y // 4) % 2 else (12, 12, 12)
+    img[12:30, 4:7] = img[12:30, 17:20] = (200, 140, 110)  # arms
+    bbox = [0, 0, 24, 60]
+    turf = (np.array([40.0, 140.0, 50.0]), 0.02)  # the grass as measured on the pitch (the live path)
+    r4, r5 = observe.read_kit(img, bbox, "R4", turf), observe.read_kit(img, bbox, "R5", turf)
+    assert r4[3] > 150 and abs(r5[3] - 23) < 5 and abs(r5[4] - 60) < 5

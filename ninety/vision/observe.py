@@ -147,10 +147,20 @@ def _two_means(px: np.ndarray, feats: np.ndarray, iters: int = 10) -> tuple[np.n
     return px[~lab], px[lab]
 
 
+def skin(px: np.ndarray) -> np.ndarray:
+    """Which pixels are skin by the published daylight RGB rule (Kovac, Peer and Solina 2003, Human
+    skin colour clustering for face detection): R > 95, G > 40, B > 20, max - min > 15, |R - G| > 15,
+    R > G and R > B (docs/eval/kit-colour-plan.md, R5)."""
+    r, g, b = px[:, 0], px[:, 1], px[:, 2]
+    return ((r > 95) & (g > 40) & (b > 20) & (px.max(axis=1) - px.min(axis=1) > 15)
+            & (np.abs(r - g) > 15) & (r > g) & (r > b))
+
+
 def read_kit(rgb: np.ndarray, bbox, reader: str = "R0", turf=None) -> list[float] | None:
     """The kit as the reader named sees it (docs/eval/kit-colour-plan.md): R0 today's median; R1 with
     the measured grass dropped; R2 the larger of two colours; R3 the same with brightness divided
-    by the patch's; R4 both colours, darker first. None when nothing is left."""
+    by the patch's; R4 both colours, darker first; R5 R4 with skin-coloured pixels dropped first.
+    None when nothing is left."""
     patch = shirt_patch(rgb, bbox)
     if not len(patch):
         return None
@@ -159,6 +169,10 @@ def read_kit(rgb: np.ndarray, bbox, reader: str = "R0", turf=None) -> list[float
     patch = _not_grass(patch, turf)
     if len(patch) < 4:
         return None
+    if reader == "R5":  # R4 without skin; R4's reading stands when too little is left
+        kept = patch[~skin(patch)]
+        patch = kept if len(kept) >= 4 else patch
+        reader = "R4"
     if reader == "R1":
         return [round(float(v), 1) for v in np.median(patch, axis=0)]
     if reader == "R3":

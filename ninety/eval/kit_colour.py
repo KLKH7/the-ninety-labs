@@ -28,7 +28,7 @@ from ninety.eval.event_score import git_commit
 from ninety.vision import observe
 from ninety.vision import track as tr
 
-READERS = ("R0", "R1", "R2", "R3", "R4")
+READERS = ("R0", "R1", "R2", "R3", "R4", "R5")
 COMMAND = ("uv run --group vision python -m ninety.eval.kit_colour --clips <render run v1>/train "
            "--observations <validation observations> --seeds <the validation seeds> --work <scratch> "
            "--out docs/eval/kit-colour")
@@ -74,6 +74,13 @@ def colour_error(rows: list[dict], frames: dict, params: dict, two: bool) -> flo
     return round(float(np.median(out)), 4) if out else None
 
 
+def side_consistency(rows: list[dict]) -> float | None:
+    """The clip's C (track.consistency): measured for the amendment's rule, used only if it holds."""
+    tracks = tr.track_players(rows)
+    info = tr.assign_teams(tracks)
+    return info.get("consistency")
+
+
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--clips", type=Path, required=True)
@@ -105,7 +112,8 @@ def main(argv: list[str] | None = None) -> None:
                         "right_frames": side["right_frames"], "frames": side["frames"],
                         "passes_right": sum(p["team"]["truth"] == p["team"]["detected"] for p in pairs),
                         "passes": len(pairs),
-                        "colour_error": colour_error(rows, frames, params, reader == "R4"),
+                        "colour_error": colour_error(rows, frames, params, reader in ("R4", "R5")),
+                        "consistency": side_consistency(rows),
                         "feature": side["feature"],
                         "confidence": [(p["team"].get("confidence"),
                                         p["team"]["truth"] == p["team"]["detected"]) for p in pairs]})

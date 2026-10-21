@@ -404,3 +404,15 @@ def test_a_ball_seen_going_out_before_a_cut_is_still_a_failed_pass():
     passes = [(e["type"], e["team"], e["outcome"]) for e in events if e["type"] == "pass"]
     assert passes == [("pass", "home", "fail")]
     assert any(e["type"] == "out_of_play" for e in events)
+
+
+def test_consistency_is_the_share_of_frame_readings_nearer_their_own_cluster():
+    # Four red tracks always red; four blue tracks blue but red in 3 of every 10 frames.
+    def scene(f):
+        flip = f % 10 < 3
+        return ([(70 + 3 * k, 60.0, RED) for k in range(4)]
+                + [(30 + 3 * k, 60.0, RED if flip else BLUE) for k in range(4)])
+    tracks = tr.track_players([row(f, scene(f)) for f in range(30)])
+    info = tr.assign_teams(tracks)
+    assert abs(info["consistency"] - (4 * 30 + 4 * 21) / (8 * 30)) < 1e-9
+    assert tr.USE_CONSISTENCY is False  # set only by the amendment's rule on dataset v2

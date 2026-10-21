@@ -160,11 +160,16 @@ def kit(t: Track, feature: str) -> tuple[float, ...] | None:
     med = _median_rgb(t)
     if med is None:
         return None
+    return _point(med, feature)
+
+
+def _point(rgb: tuple[float, ...], feature: str) -> tuple[float, ...]:
+    """One reading (one colour, or a two-colour reading's both) as a point in `feature`'s space."""
     point: list[float] = []
-    for k in range(0, len(med) - len(med) % 3, 3):  # one colour, or each of a two-colour reading's
-        rgb = med[k:k + 3]
-        total = sum(rgb) + 1e-9
-        point += [v / total for v in rgb] if feature == "chromaticity" else [math.log2(total / 3 + 1e-9)]
+    for k in range(0, len(rgb) - len(rgb) % 3, 3):
+        c = rgb[k:k + 3]
+        total = sum(c) + 1e-9
+        point += [v / total for v in c] if feature == "chromaticity" else [math.log2(total / 3 + 1e-9)]
     return tuple(point)
 
 
@@ -245,6 +250,25 @@ def soundness(assigned: list[tuple[Track, tuple]], ca: tuple, cb: tuple, feature
     return min(sep / (1 + sep), near)
 
 
+def consistency(assigned: list[tuple[Track, tuple]], ca: tuple, cb: tuple, feature: str) -> float:
+    """C (docs/eval/kit-colour-plan.md, amendment for dataset v2): the share of the assigned tracks'
+    per-frame kit readings that lie nearer their own cluster's centre than the other's. Measured;
+    it enters team_confidence only if dataset v2's validation clips show it separates (USE_CONSISTENCY)."""
+    agree = total = 0
+    for t, _ in assigned:
+        own_is_a = _dist(kit(t, feature) or ca, ca) <= _dist(kit(t, feature) or ca, cb)
+        for c in t.rgb:
+            if c is None:
+                continue
+            p = _point(c, feature)
+            total += 1
+            agree += (_dist(p, ca) < _dist(p, cb)) == own_is_a
+    return agree / total if total else 0.0
+
+
+USE_CONSISTENCY = False  # set only by the amendment's rule on dataset v2's validation clips
+
+
 def assign_teams(tracks: list[Track]) -> dict:
     """Give each track a team (or None) and say how: the two kit colours, which one is home and
     why, and how many tracks were left unassigned. The decision is recorded, so a wrong side can
@@ -297,7 +321,11 @@ def assign_teams(tracks: list[Track]) -> dict:
     # until #200 found every side error left was a cluster error, which a confident track can sit in
     # (docs/eval/kit-colour-plan.md).
     clip_margin = abs(votes) / voting if voting else 0.0
-    sound = soundness([(t, c) for t, c in meds if side[t.id] is not None], ca, cb, feature)
+    assigned = [(t, c) for t, c in meds if side[t.id] is not None]
+    sound = soundness(assigned, ca, cb, feature)
+    agreeing = consistency(assigned, ca, cb, feature)
+    if USE_CONSISTENCY:
+        sound = min(sound, agreeing)
     for t, _ in meds:
         s = side[t.id]
         if s is not None:
@@ -316,6 +344,7 @@ def assign_teams(tracks: list[Track]) -> dict:
         "reason": reason,
         "frames_voting": voting,
         "soundness": round(sound, 3),
+        "consistency": round(agreeing, 3),
         "vote_margin": votes if away == 0 else -votes,
         "keepers": len(keepers),
         "unassigned": sum(1 for t in tracks if t.team is None),
