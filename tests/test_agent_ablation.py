@@ -188,3 +188,8 @@ def test_a_live_arm_that_calls_the_match_tools_fails_that_call(monkeypatch, tmp_
     first = {arm: minutes[0] for arm, minutes in body["minutes_by_arm"].items()}
     assert first["one agent"]["aired"] == [] and "ReadTheTools" in first["one agent"]["why_none"]
     assert first["graph"]["aired"] == [] and "ReadTheTools" in first["graph"]["why_none"]
+    # Counted per arm, in the data and in the report a reader sees.
+    assert [body["arms"][a]["minutes_read_the_tools"] for a in ("one agent", "graph")] == [1, 1]
+    md = (tmp_path / "ablation-agents.md").read_text()
+    minutes = body["arms"]["one agent"]["minutes"]
+    assert "Minutes lost to a tool call" in md and md.count(f"| 1 of {minutes} |") == 2

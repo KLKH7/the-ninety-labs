@@ -74,7 +74,7 @@ DescriptionSource = Literal["model", "code"]
 AnswerStatus = Literal["verified", "held", "rejected", "unanswerable"]
 Role = Literal[
     "analyst", "tactician", "challenger", "fact_checker", "judge",
-    "producer", "personalizer", "describer", "companion",
+    "producer", "personalizer", "describer", "companion", "vision_auditor", "data_agent",
 ]
 
 
