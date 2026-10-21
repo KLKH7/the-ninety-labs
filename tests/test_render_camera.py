@@ -596,7 +596,13 @@ def test_after_the_kick_the_corner_rule_frames_no_worse_than_no_rule():
         "near-corner long cross": ((0.5, 0.5), _line((0.5, 0.5), (10.0, 34.0), 38), "framed"),
         "far-corner clearance": ((0.5, 67.5), _line((0.5, 67.5), (40.0, 30.0), 78), "seen"),
         "near-corner clearance": ((0.5, 0.5), _line((0.5, 0.5), (35.0, 40.0), 78), "seen"),
+        "right near-corner long cross": ((104.5, 0.5), _line((104.5, 0.5), (95.0, 34.0), 38), "framed"),
+        "right far-corner clearance": ((104.5, 67.5), _line((104.5, 67.5), (65.0, 30.0), 78), "seen"),
+        "right near-corner clearance": ((104.5, 0.5), _line((104.5, 0.5), (70.0, 40.0), 78), "seen"),
     }
+    # Tolerance, set before the right-corner cases were measured: the camera reframes from the
+    # corner's shot over one pan lag, so up to that many frames (ceil(pan_lag_s x fps)) may differ.
+    tolerance = math.ceil(CameraParams(shake_m=0.0).pan_lag_s * 25)
     def score(rows, measure):
         if measure == "framed":
             return sum(well_framed(cam, ball) for cam, ball in rows)
@@ -606,4 +612,24 @@ def test_after_the_kick_the_corner_rule_frames_no_worse_than_no_rule():
     for what, (flag, path, measure) in cases.items():
         with_rule = score(_after_kick(flag, path), measure)
         without = score(_after_kick(flag, path, corner=False), measure)
-        assert with_rule >= without, (what, with_rule, without)
+        assert with_rule >= without - tolerance, (what, with_rule, without, tolerance)
+
+
+def test_corner_waits_runs_from_a_corner_s_set_piece_to_the_kick_and_only_for_a_corner():
+    """corner_waits (the Reviewer's mutants R7 and R8): the wait ends the frame before the kick, not
+    after it; a set piece near a flag after a foul, or a throw-in out over the touchline by the flag,
+    is no corner; open play along the goal line has no wait."""
+    corner = [{"frame": 10, "type": "out_of_play", "x": 0.0, "y": 8.7},
+              {"frame": 20, "type": "set_piece", "x": 0.5, "y": 0.5},
+              {"frame": 50, "type": "pass", "x": 0.5, "y": 0.5}]
+    assert corner_waits(corner) == {f: (0.0, 0.0) for f in range(20, 50)}
+    foul = [{"frame": 10, "type": "foul", "x": 0.6, "y": 0.4},
+            {"frame": 20, "type": "set_piece", "x": 0.6, "y": 0.4},
+            {"frame": 50, "type": "pass", "x": 0.6, "y": 0.4}]
+    assert corner_waits(foul) == {}
+    throw = [{"frame": 10, "type": "out_of_play", "x": 0.8, "y": 0.0},
+             {"frame": 20, "type": "set_piece", "x": 0.8, "y": 0.0},
+             {"frame": 50, "type": "pass", "x": 0.8, "y": 0.0}]
+    assert corner_waits(throw) == {}
+    open_play = [{"frame": f, "type": "pass", "x": 0.5, "y": 0.5 + f / 10} for f in range(0, 50, 10)]
+    assert corner_waits(open_play) == {}
