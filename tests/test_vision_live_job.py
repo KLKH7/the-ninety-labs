@@ -91,6 +91,85 @@ def test_an_index_that_points_outside_the_images_is_refused(tmp_path):
         live_job.run(clip, tmp_path / "out", never_loaded)
 
 
+def checkpoint(tmp_path: Path, name: str = "ours-v4", sha: str | None = None) -> Path:
+    """A stand-in weights file and its training record, as ninety/vision/train.py writes it."""
+    weights = tmp_path / "ckpt" / "checkpoint_best_total.pth"
+    weights.parent.mkdir()
+    weights.write_bytes(b"not really weights")
+    record = {"name": name, "checkpoint_sha256": sha or live_job.sha256(weights),
+              "config": {"resolution": 640}}
+    (weights.parent / "train-manifest.json").write_text(json.dumps(record))
+    return weights
+
+
+def test_weights_matching_their_record_pass(tmp_path):
+    weights = checkpoint(tmp_path)
+    assert live_job.verify_checkpoint(weights, "ours-v4")["config"]["resolution"] == 640
+
+
+def test_weights_whose_sha256_differs_from_their_record_are_refused(tmp_path):
+    weights = checkpoint(tmp_path, sha="0" * 64)
+    with pytest.raises(SystemExit, match="sha256"):
+        live_job.verify_checkpoint(weights, "ours-v4")
+
+
+def test_a_record_of_another_checkpoint_is_refused(tmp_path):
+    weights = checkpoint(tmp_path, name="ours-v4-ctrl")
+    with pytest.raises(SystemExit, match="ours-v4-ctrl"):
+        live_job.verify_checkpoint(weights, "ours-v4")
+
+
+def test_weights_without_their_record_are_refused(tmp_path):
+    weights = checkpoint(tmp_path)
+    (weights.parent / "train-manifest.json").unlink()
+    with pytest.raises(SystemExit, match="training record"):
+        live_job.verify_checkpoint(weights, "ours-v4")
+
+
+def test_a_record_passed_elsewhere_is_the_one_checked(tmp_path):
+    weights = checkpoint(tmp_path)
+    other = tmp_path / "round2-manifest.json"
+    other.write_text(json.dumps({"name": "ours-r2", "checkpoint_sha256": "1" * 64}))
+    with pytest.raises(SystemExit, match="sha256"):
+        live_job.verify_checkpoint(weights, "ours-r2", other)
+
+
+class FakeModel:
+    """Stands in for RF-DETR: finds nothing, so the command runs end to end without rfdetr."""
+    class_names = ["player", "ball"]
+
+    def predict(self, images, **kw):
+        import numpy as np
+
+        empty = type("P", (), {"xyxy": np.zeros((0, 4)), "confidence": np.zeros(0), "class_id": np.zeros(0)})
+        return [empty() for _ in images]
+
+
+def test_the_command_checks_the_checkpoint_then_runs_at_its_recorded_size(tmp_path, monkeypatch):
+    from ninety.vision import pitch
+
+    clip, _ = clean_clip(tmp_path)
+    weights = checkpoint(tmp_path)
+    loaded = {}
+    monkeypatch.setattr(live_job, "load", lambda w, **kw: loaded.update(weights=w, **kw) or FakeModel())
+    monkeypatch.setattr(pitch, "find_gantry", lambda anchors, w, h: (58.0, -37.0, 16.0))
+    live_job.main([str(clip), "--checkpoint", "ours-v4", "--weights", str(weights),
+                   "--out", str(tmp_path / "out")])
+    report = json.loads((tmp_path / "out" / "run.json").read_text())
+    assert loaded == {"weights": str(weights), "resolution": 640}
+    assert report["weights_sha256"] == live_job.sha256(weights) and report["frames"] == 2
+    assert report["model"]["checkpoint"] == "ours-v4"
+
+
+def test_the_command_refuses_mismatched_weights_before_the_model_loads(tmp_path, monkeypatch):
+    clip, _ = clean_clip(tmp_path)
+    weights = checkpoint(tmp_path, sha="0" * 64)
+    monkeypatch.setattr(live_job, "load", lambda *a, **kw: never_loaded())
+    with pytest.raises(SystemExit, match="sha256"):
+        live_job.main([str(clip), "--checkpoint", "ours-v4", "--weights", str(weights),
+                       "--out", str(tmp_path / "out")])
+
+
 def test_the_command_refuses_the_folder_before_reading_the_weights(tmp_path):
     clip, _ = clean_clip(tmp_path)
     (clip / "frames.jsonl").write_text("{}\n")

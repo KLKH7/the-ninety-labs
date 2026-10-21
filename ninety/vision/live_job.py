@@ -27,6 +27,13 @@ Writes to `--out`:
 
 `seconds` in run.json are wall-clock times on the machine that ran it, with its CPU count beside
 them: they say what this machine did, not what another would.
+
+The clip and the checkpoint are both inputs, so a new demo clip or a new checkpoint is a change of
+arguments, not of code. Our checkpoint must come with its training record (`train-manifest.json`
+beside the weights, as ninety/vision/train.py writes it, or `--manifest`): the run refuses weights
+whose sha256 is not the record's `checkpoint_sha256`, or a record whose `name` is not
+`--checkpoint`, before a model loads. It runs at the record's resolution unless `--resolution`
+says otherwise. The model runs here, in this process: no hosted inference service (AGENTS.md).
 """
 
 from __future__ import annotations
@@ -44,7 +51,7 @@ import numpy as np
 
 from ninety.vision import events as ev
 from ninety.vision import observe, track, tracked_frames
-from ninety.vision.detect import detect_rows, frame_rows, labels_for, trained_resolution
+from ninety.vision.detect import FINETUNE_CONFIG, detect_rows, frame_rows, labels_for
 from ninety.vision.detections import FrameDetections, write_detections
 from ninety.vision.frame_index import INDEX
 from ninety.vision.model import load, model
@@ -139,11 +146,30 @@ def sha256(path: Path) -> str:
     return h.hexdigest()
 
 
+def verify_checkpoint(weights: Path, checkpoint: str, manifest: Path | None = None) -> dict:
+    """The training record of `weights`, after checking it is this checkpoint's and these weights':
+    its `name` is `checkpoint` and its `checkpoint_sha256` is the file's. Refuses otherwise."""
+    manifest = manifest or weights.with_name("train-manifest.json")
+    if not manifest.is_file():
+        raise SystemExit(f"{manifest} is missing: our checkpoint must come with its training record")
+    if not weights.is_file():
+        raise SystemExit(f"{weights} is missing")
+    record = json.loads(manifest.read_text())
+    if record.get("name") != checkpoint:
+        raise SystemExit(f"{manifest} records {record.get('name')!r}, not --checkpoint {checkpoint!r}")
+    actual, recorded = sha256(weights), record.get("checkpoint_sha256")
+    if recorded != actual:
+        raise SystemExit(f"{weights} has sha256 {actual}, not the {recorded} in {manifest}")
+    return record
+
+
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description="Run the live path of event detection on one clip, timed.")
     ap.add_argument("clip", type=Path, help=f"a folder holding only {INDEX} and {IMAGES}/")
     ap.add_argument("--checkpoint", required=True, help='our checkpoint name, e.g. ours-v4, or "coco"')
     ap.add_argument("--weights", type=Path, default=None, help="checkpoint file (not for coco)")
+    ap.add_argument("--manifest", type=Path, default=None,
+                    help="its training record (default: train-manifest.json beside the weights)")
     ap.add_argument("--resolution", type=int, default=None, help="default: the trained size")
     ap.add_argument("--batch", type=int, default=8)
     ap.add_argument("--out", type=Path, required=True)
@@ -151,17 +177,23 @@ def main(argv: list[str] | None = None) -> None:
     if (a.checkpoint == "coco") != (a.weights is None):
         ap.error("--weights is required for our checkpoints and not allowed for coco")
     check_input(a.clip)  # before hashing or loading anything
+    if a.weights:
+        record = verify_checkpoint(a.weights, a.checkpoint, a.manifest)
+        resolution = a.resolution or record["config"]["resolution"]
+    else:  # the COCO baseline, at the size we fine-tune at, as detect runs it
+        record, resolution = {}, a.resolution or json.loads(FINETUNE_CONFIG.read_text())["resolution"]
     weights = str(a.weights) if a.weights else None
     field = model(a.checkpoint)
 
     def load_detector() -> Detector:
-        det = load(weights, resolution=a.resolution or trained_resolution(weights))
+        det = load(weights, resolution=resolution)
         label = labels_for(a.checkpoint, det.class_names)
         return lambda rows: detect_rows(det, rows, label, field, a.batch)
 
     about = {
         "model": asdict(field),
-        "weights_sha256": sha256(a.weights) if a.weights else None,
+        "weights_sha256": record.get("checkpoint_sha256"),
+        "resolution": resolution,
         "commit": os.environ.get("NINETY_COMMIT", "unknown"),
     }
     report = run(a.clip, a.out, load_detector, about)
