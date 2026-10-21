@@ -366,13 +366,11 @@ class Director:
         """The corner framing, from the ball's arrival in a corner arc until CUT_HOLD_S after it has
         left it: the camera's own minimum shot holds this decision, so a short corner played near
         the flag does not pump the lens in and out (lesson 177). None when no corner is on."""
-        self._was_in_arc, self._in_arc = getattr(self, "_in_arc", False), False
         for fx in (0.0, 105.0):
             for fy in (0.0, 68.0):
                 if math.hypot(bx - fx, by - fy) <= CORNER_ARC_M + 0.11:  # the ball's radius
                     self._corner_flag = (fx, fy)
                     self._corner_until = self.t + CUT_HOLD_S
-                    self._in_arc = True
         if self._corner_flag is None or self.t >= self._corner_until:
             self._corner_flag = None
             return None
@@ -620,18 +618,6 @@ class Director:
         if (fresh_goal and self.cuts) or due:
             self._cut_kind = want
             self._cut_until = self.t + CUT_HOLD_S
-        if self._was_in_arc and math.hypot(vx, vy) > PLAYED_MPS and not steady:
-            # The corner is delivered: cut to the second camera framed on where the ball is going,
-            # held CUT_HOLD_S, then back to the gantry, which has reframed meanwhile. A broadcast
-            # cuts at a set-piece delivery rather than zooming the waiting shot (*design*, after
-            # broadcast practice; lesson 177). Every render, not only those drawn with camera cuts.
-            self._cut_kind = "corner"
-            self._cut_until = self.t + CUT_HOLD_S
-            # The second camera on the corner's side of the gantry, 8 m along it as the tight lens.
-            side = -8.0 if ball_x < 52.5 else 8.0
-            self.corner_pos = (self.position[0] + side, self.position[1], self.position[2])
-            self.corner_aim, self.corner_v, self.corner_hw = self._delivery_shot(ball_x, ball_y, vx, vy)
-        self._ball_now = (ball_x, ball_y, vx, vy)
         if self._cut_kind != "tight":
             self.tight_aim = None
         else:
@@ -756,58 +742,7 @@ class Director:
         z = min(max(self.net["z"], 0.4), 2.1)
         return self._framed(self._net_pos(side), (line + outward * 1.0, y, z), 7.0)
 
-    def _delivery_shot(self, bx: float, by: float, vx: float, vy: float) -> tuple[list, list, float]:
-        """The second camera's shot of a corner delivery: of the aims on a 1 m grid round where the
-        ball is going (pan_lag_s ahead) and its lenses, the one with the most pitch that has the ball
-        there inside the CENTRAL box: a cut to the receiving area."""
-        pos = self.corner_pos
-        lag = self.p.pan_lag_s
-        ahead = (min(max(bx + vx * lag, 0.0), 105.0), min(max(by + vy * lag, 0.0), 68.0))
-        left, right, top, bottom = CENTRAL
-        best = None
-        for hw in (4.0, TIGHT_HALF_M, 6.0, 7.0, 8.0, 10.0, 12.0):
-            for dx in range(-8, 9):
-                for dy in range(-8, 9):
-                    cam = self._framed(pos, (ahead[0] + dx, ahead[1] + dy, 0.0), hw)
-                    # Where the ball is going in the CENTRAL box: the cut is to the receiving area, the
-                    # ball arriving into it from the flag.
-                    nxt = cam.project((*ahead, 0.11))
-                    ok = (nxt is not None and left * self.width <= nxt[0] <= right * self.width
-                          and top * self.height <= nxt[1] <= bottom * self.height)
-                    if ok:
-                        share = pitch_share(cam, step=80)
-                        if best is None or share > best[0]:
-                            best = (share, ahead[0] + dx, ahead[1] + dy, hw)
-        if best is None:
-            return [ahead[0], ahead[1]], [0.0, 0.0], TIGHT_HALF_M * 1.6
-        return [best[1], best[2]], [0.0, 0.0], best[3]
-
     def _second(self) -> Camera:
-        if self._cut_kind == "corner":
-            # The delivery's camera follows the ball the way the gantry does, eased, keeping the
-            # lens it cut to: the ball kept inside the CENTRAL box from its own position.
-            bx, by, vx, vy = self._ball_now
-            pos = self.corner_pos
-            left, right, top, bottom = CENTRAL
-            m = CENTRE_MARGIN
-            ax, ay = self.corner_aim
-
-            def inside(t: float) -> bool:
-                uv = self._framed(pos, (ax + t * (bx - ax), ay + t * (by - ay), 0.0), self.corner_hw).project(
-                    (bx, by, 0.11))
-                return (uv is not None and (left + m) * self.width <= uv[0] <= (right - m) * self.width
-                        and (top + m) * self.height <= uv[1] <= (bottom - m) * self.height)
-
-            gx, gy = ax, ay
-            if not inside(0.0):
-                lo, hi = 0.0, 1.0
-                for _ in range(12):
-                    mid = (lo + hi) / 2
-                    lo, hi = (lo, mid) if inside(mid) else (mid, hi)
-                gx, gy = ax + hi * (bx - ax), ay + hi * (by - ay)
-            self._ease(self.corner_aim, self.corner_v, gx, gy)
-            self.angle = "corner"
-            return self._framed(pos, (self.corner_aim[0], self.corner_aim[1], 0.0), self.corner_hw)
         if self._cut_kind in ("netL", "netR"):
             self.angle = "net"
             return self._net_shot()

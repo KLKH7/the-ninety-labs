@@ -1707,9 +1707,5 @@ short and actionable. This file is public: no research sources, product names or
     on the system's own model, before it is reported.
   - An exclusion that excludes almost nothing buys nothing: the bar stays raw (the fine oracle,
     tried and dropped, excluded 1 of 201 frames).
-  - The fix was the cause the fine oracle pointed to: at a corner delivery the picture cuts to a
-    second camera framed on the receiving area, as a broadcast cuts at a set piece, instead of
-    zooming the waiting shot. #179's seed 3 went from 0.811 to 0.891.
 - **Check:** `tests/test_render_camera.py::test_a_corner_is_framed_from_the_taker_inward` and
-  `::test_a_short_corner_does_not_pump_the_lens` fail on 0.5.5,
-  `::test_a_corner_delivery_cuts_to_the_receiving_area` on 0.5.6; the framing bar is raw.
+  `::test_a_short_corner_does_not_pump_the_lens` fail on 0.5.5; the framing bar is raw.

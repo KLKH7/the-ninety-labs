@@ -552,25 +552,3 @@ def test_a_short_corner_does_not_pump_the_lens():
     steps = [b - a for a, b in zip(widths, widths[1:], strict=False) if abs(b - a) > 1e-3]
     reversals = sum(1 for a, b in zip(steps, steps[1:], strict=False) if a * b < 0)
     assert reversals == 0, reversals
-
-
-def test_a_corner_delivery_cuts_to_the_receiving_area():
-    """Old (0.5.6): a near corner played short was watched on the waiting shot while the lens
-    closed in on its spring, 2 to 3 s with most of the picture run-off (#179's seed 3). At the
-    delivery the picture cuts to the second camera framed on where the ball is going, as a
-    broadcast cuts at a set-piece delivery: within a second of the kick (the Coordinator's bound
-    for a reframe, set before this was measured), and from then on while the short corner is
-    played, the play is well framed. Measured: the old camera frames none of these 3 s; the cut
-    frames every frame from 0.88 s."""
-    d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=False)
-    _held(d, 20.0, 20.0, 50)
-    _held(d, 0.5, 0.5, 100)  # the corner waits on the near flag
-    x, y, framed = 0.5, 0.5, []
-    for i in range(int(25 * 3)):  # played short: 7 m in a third of a second, then held there
-        if i < 9:
-            x, y = x + 0.33, y + 0.85
-        cam = d.step(x, y, [])
-        if i >= 25:
-            framed.append(well_framed(cam, (x, y, 0.11)))
-    assert d.angle == "corner"
-    assert sum(framed) >= 0.9 * len(framed), sum(framed) / len(framed)
