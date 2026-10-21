@@ -1,0 +1,1 @@
+Validation observations for docs/eval/detector-plan.md (PR #187): ours-v2 detections on render run v1 validation clips, observed and then judged by observe.place (--regate). Their sha256 are in docs/eval/detector-derive-observations.sha256.
