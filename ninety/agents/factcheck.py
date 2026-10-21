@@ -11,6 +11,7 @@ km/h fact), never as a bare number, and a fact scoped to a player (`player:h7...
 
 from __future__ import annotations
 
+import json
 import re
 from collections import Counter
 from collections.abc import Iterable, Mapping
@@ -307,3 +308,12 @@ def confidence_gate(
         if i in known and known[i].get("confidence") is not None and known[i]["confidence"] < min_confidence
     ]
     return Verdict(ok=not reasons, reasons=reasons, category="low_confidence" if reasons else None)
+
+
+def parse_claim(text: str) -> Claim:
+    """A writer's reply, {"text": ..., "evidence": [...]}, as a Claim; the JSON may sit inside prose."""
+    body = re.search(r"\{.*\}", text, re.S)
+    data = json.loads(body.group() if body else text)
+    if not isinstance(data, dict):
+        raise ValueError(f"the Analyst's reply is not a JSON object: {text[:80]!r}")
+    return Claim(text=str(data.get("text", "")), evidence=[str(i) for i in data.get("evidence", [])])
