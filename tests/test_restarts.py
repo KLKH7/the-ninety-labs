@@ -10,6 +10,7 @@ from ninety.sim import ball, shape
 from ninety.sim.decisions import PENALTY_DEPTH, PENALTY_HALF_WIDTH
 from ninety.sim.engine import (
     BALL_TO_FEET,
+    BOARDS_M,
     DT,
     KEEP_OFF_MARGIN_M,
     PITCH_X,
@@ -714,6 +715,432 @@ def test_an_own_goal_is_celebrated_round_the_scoring_sides_nearest_player():
     nearest = min((p for p in e.players if p.team == "home" and p.role != "GK"),
                   key=lambda p: math.hypot(p.x - 106.0, p.y - 33.0))
     assert c.team == "home" and c.focus == nearest.id
+
+
+def test_a_wall_is_sized_from_the_goal_it_must_hide():
+    """Bray (2014): the wall hides the goal from a post to a third of the half-goal past its centre,
+    at the restart's distance; its width over a shoulder's breadth, rounded down, is how many stand
+    in it: four at 22 m straight on (his keeper's, "half-a-defender light"), five at 17 m, two at
+    35 m. Closer and more central, more; further or at a sharper angle, fewer; outside shooting
+    range, none (Link et al. 2016: centrality and proximity increase the wall). The same at either
+    end of the pitch."""
+    e = Engine(3)
+
+    def size(team: str, out: float, y: float) -> int:
+        x = PITCH_X - out if team == "home" else out  # `out` metres up the pitch from the goal line
+        taker = "h9" if team == "home" else "a9"
+        return len(e.wall_spots(Restart("free_kick", team, x, y, taker, e.t + 5)))
+
+    for team in ("home", "away"):
+        assert [size(team, out, 34.0) for out in (17.0, 22.0, 35.0)] == [5, 4, 2], team
+        assert size(team, 22.0, 34.0) > size(team, 20.0, 60.0) > 0, team  # the same distance, a sharper angle
+        assert size(team, 45.0, 34.0) == 0, team
+        assert size(team, 30.0, 6.0) == 0, team  # 30 m up the pitch, 41 m from the goal's centre (lesson 138)
+
+
+def test_the_wall_covers_the_near_post():
+    """The outermost of the wall stands where the line from the ball to the near post crosses the
+    wall's line: his body covers that post (design: the near post; Bray's p + q from a post)."""
+    from ninety.sim.engine import GOAL_HALF_WIDTH
+    e = Engine(3)
+    for team, (bx, by) in (("home", (PITCH_X - 22.0, 30.0)), ("home", (PITCH_X - 25.0, 45.0)),
+                           ("away", (22.0, 30.0)), ("away", (25.0, 45.0))):
+        spots = e.wall_spots(Restart("free_kick", team, bx, by, "x", e.t + 5))
+        gx = PITCH_X if team == "home" else 0.0
+        ny = PITCH_Y / 2 + (-GOAL_HALF_WIDTH if by < PITCH_Y / 2 else GOAL_HALF_WIDTH)  # the near post
+        line = (bx, by, gx - bx, ny - by, math.hypot(gx - bx, ny - by))
+
+        def off_line(s: tuple[float, float], line=line) -> float:  # from the ball-to-near-post line
+            x0, y0, dx, dy, n = line
+            return abs((s[0] - x0) * dy - (s[1] - y0) * dx) / n
+
+        outer = min(spots, key=off_line)
+        assert off_line(outer) <= shape.SHOULDER_BREADTH_M / 2 + 1e-9, (team, bx, by)
+        # and the wall runs from there toward the goal's centre, not outside the post
+        widest = abs(outer[1] - PITCH_Y / 2) + 1e-9
+        assert all(abs(s[1] - PITCH_Y / 2) <= widest for s in spots), (team, bx, by)
+        # His body's outer edge is on that line, neither short of it nor beyond: the line crosses
+        # the wall's half a shoulder's breadth outside his centre, away from the others.
+        ox, oy = outer
+        nxt = min((s for s in spots if s != outer), key=lambda s: math.hypot(s[0] - ox, s[1] - oy))
+        wx, wy = nxt[0] - ox, nxt[1] - oy  # along the wall, inward
+        x0, y0, dx, dy, _ = line
+        k = ((ox - x0) * wy - (oy - y0) * wx) / (dx * wy - dy * wx)
+        ix, iy = x0 + k * dx, y0 + k * dy  # where the near post's line crosses the wall's
+        assert abs(math.hypot(ix - ox, iy - oy) - shape.SHOULDER_BREADTH_M / 2) < 1e-9, (team, bx, by)
+        assert (ix - ox) * wx + (iy - oy) * wy < 0, (team, bx, by)
+
+
+def test_the_wall_stands_as_close_as_the_law_allows():
+    """Law 13: the wall stands 9.15 m from the ball (and the keep-off margin), no further: the line
+    its players stand on passes that far from the ball."""
+    from ninety.sim.engine import KEEP_OFF_MARGIN_M, RESTART_DISTANCE_M
+    e = Engine(3)
+    want = RESTART_DISTANCE_M["free_kick"] + KEEP_OFF_MARGIN_M
+    for team, (bx, by) in (("home", (PITCH_X - 22.0, 34.0)), ("home", (PITCH_X - 20.0, 24.0)),
+                           ("away", (22.0, 34.0)), ("away", (20.0, 44.0))):
+        spots = e.wall_spots(Restart("free_kick", team, bx, by, "x", e.t + 5))
+        assert len(spots) >= 2, (team, bx, by)
+        (x0, y0), (x1, y1) = spots[0], spots[-1]
+        apart = math.hypot(x1 - x0, y1 - y0)
+        assert abs(abs((bx - x0) * (y1 - y0) - (by - y0) * (x1 - x0)) / apart - want) < 1e-9, (team, bx, by)
+
+
+def test_a_direct_free_kick_22_m_out_is_taken_with_a_wall_in_place():
+    """Defect: at free kicks near goal the defenders stood wherever their marking put them, with 0 to
+    3 of them between the ball and the goal. The wall stands across the kick at 9.15 m when it is
+    struck, and nothing else of the defence is scripted."""
+    e = Engine(3)
+    still(e)
+    e.possessor = None
+    taker = e.by_id["h9"]
+    taker.x, taker.y = PITCH_X - 22.0 - 0.47, 34.0
+    e.ball = (PITCH_X - 22.0, 34.0, 0.0, 0.0, 0.0, 0.0)
+    e.stop("free_kick", "home", (PITCH_X - 22.0, 34.0), taker=taker.id)
+    e.restart.carried_by = taker.id
+    e.restart.ready_at = e.t + 15.0
+    wall = dict(e.restart.wall)
+    assert len(wall) == 4 and all(e.by_id[pid].team == "away" and e.by_id[pid].role != "GK" for pid in wall)
+    n = len(e.match.events)
+    for _ in range(int(40 / DT)):
+        e.step()
+        if any(ev["type"] in ("pass", "shot") for ev in e.match.events[n:]):
+            break
+    else:
+        raise AssertionError("the free kick was never struck")
+    for pid, (wx, wy) in wall.items():
+        p = e.by_id[pid]
+        assert math.hypot(p.x - wx, p.y - wy) < 1.0, pid  # in the wall when it is struck
+        assert math.hypot(p.x - (PITCH_X - 22.0), p.y - 34.0) >= 9.15, pid
+
+
+def test_an_indirect_free_kick_has_no_wall():
+    """Offside gives an indirect free kick (Law 11): it cannot be scored from directly."""
+    e = Engine(3)
+    e.possessor = None
+    e.offside_offence(e.by_id["a9"], 20.0, 34.0)  # away offside near the home goal: home's free kick
+    assert e.restart.kind == "free_kick" and not e.restart.direct and e.restart.wall == {}
+
+
+def test_attackers_keep_1_m_from_a_wall_of_three_or_more():
+    """Law 13: with three or more defenders in a wall, attackers stay at least 1 m from it, between
+    bodies (a shoulder's breadth between centres covers the two half-bodies side on), with the usual
+    0.5 m margin; from a wall of two they need not."""
+    e = Engine(3)
+    e.possessor = None
+    e.stop("free_kick", "home", (PITCH_X - 22.0, 34.0), taker="h9")
+    assert len(e.restart.wall) >= 3
+    wx, wy = next(iter(e.restart.wall.values()))
+    tx, ty = e.keep_off(e.by_id["h10"], wx + 0.3, wy)
+    assert math.hypot(tx - wx, ty - wy) >= 1.0 + shape.SHOULDER_BREADTH_M + KEEP_OFF_MARGIN_M - 1e-9
+    assert e.keep_off(e.by_id["h10"], 60.0, 20.0) == (60.0, 20.0)  # away from the wall: untouched
+    e.stop("free_kick", "home", (PITCH_X - 27.0, 34.0), taker="h9")
+    assert len(e.restart.wall) == 3  # three: the Law's threshold
+    wx, wy = next(iter(e.restart.wall.values()))
+    tx, ty = e.keep_off(e.by_id["h10"], wx + 0.3, wy)
+    assert math.hypot(tx - wx, ty - wy) >= 1.0 + shape.SHOULDER_BREADTH_M + KEEP_OFF_MARGIN_M - 1e-9
+    e.stop("free_kick", "home", (PITCH_X - 35.0, 34.0), taker="h9")
+    assert len(e.restart.wall) == 2
+    wx, wy = next(iter(e.restart.wall.values()))
+    assert e.keep_off(e.by_id["h10"], wx + 0.3, wy) == (wx + 0.3, wy)
+
+
+def test_the_walls_players_share_its_places_for_the_shortest_walks():
+    """Lesson 143: the wall's players share its places so that their walks there, the way they go
+    (round the keep-off circle, in behind the line, up into it), add up to the least: no two of them
+    could swap places for a shorter pair of walks. Shared out by straight lines, they could (lesson
+    161); as walked, two coming round the same side may still pass each other behind the wall
+    (docs/eval/restarts.md)."""
+    for seed, at in ((1, (87.0, 24.0)), (4, (88.0, 30.0)), (2, (PITCH_X - 22.0, 34.0)),
+                     (5, (PITCH_X - 18.0, 24.0))):
+        e = wall_kick(seed, at)
+        r = e.restart
+        start = {pid: (e.by_id[pid].x, e.by_id[pid].y) for pid in r.wall}
+        ids = list(r.wall)
+        for i, a in enumerate(ids):
+            for b in ids[i + 1:]:
+                mine = e.walk_to_wall(r, start[a], r.wall[a]) + e.walk_to_wall(r, start[b], r.wall[b])
+                swapped = e.walk_to_wall(r, start[a], r.wall[b]) + e.walk_to_wall(r, start[b], r.wall[a])
+                assert mine <= swapped + 1e-9, (seed, at, a, b)
+
+
+def test_the_wall_breaks_up_once_the_ball_is_in_play():
+    e = Engine(3)
+    e.possessor = None
+    e.stop("free_kick", "home", (PITCH_X - 22.0, 34.0), taker="h9")
+    pid, spot = next(iter(e.restart.wall.items()))
+    p = e.by_id[pid]
+    p.x, p.y = spot  # standing in the wall
+    assert e.shape_target(p)[:2] == spot
+    e.restart = None  # kicked and moving: in play
+    assert e.shape_target(p)[:2] != spot
+
+
+def wall_kick(seed: int = 3, at: tuple[float, float] = (PITCH_X - 22.0, 34.0)) -> Engine:
+    """A minute of play, then a direct free kick to home at `at`, its taker over the ball."""
+    e = Engine(seed)
+    e.run(1)
+    e.possessor, e.restart, e.set_by, e.throw_by, e.dribbler = None, None, None, None, None
+    e.celebration = None
+    # the whistle ends what was in play, as foul() does: the ball in flight, the chase, any lunge
+    e.kicked, e.dribble_to, e.windup, e.chase = None, None, None, {}
+    e.lunges.clear(), e.lunge_at.clear(), e.evade_at.clear()
+    taker = e.by_id["h9"]
+    taker.x, taker.y, taker.vx, taker.vy = at[0] - 0.47, at[1], 0.0, 0.0
+    e.ball = (*at, 0.0, 0.0, 0.0, 0.0)
+    e.stop("free_kick", "home", at, taker=taker.id)
+    e.restart.carried_by = taker.id
+    return e
+
+
+def test_the_wall_stands_shoulder_to_shoulder_with_no_gap_a_ball_could_pass():
+    """Defect: wall members kept the usual personal space from each other, so the wall stood with
+    gaps of 0.6 to 2.2 m between bodies. Law 13's wall stands shoulder to shoulder (Bray: a
+    shoulder's breadth each): when the kick is struck no gap between neighbours is as wide as the
+    ball, and no two bodies are inside each other (P11)."""
+    from itertools import pairwise
+
+    from ninety.sim import shape
+    for seed, at in ((3, (PITCH_X - 22.0, 34.0)), (5, (PITCH_X - 18.0, 24.0))):
+        e = wall_kick(seed, at)
+        wall = dict(e.restart.wall)
+        assert len(wall) >= 3
+        n = len(e.match.events)
+        for _ in range(int(80 / DT)):
+            e.step()
+            if any(ev["type"] in ("pass", "shot") for ev in e.match.events[n:]):
+                break
+        else:
+            raise AssertionError("the free kick was never struck")
+        line = sorted((e.by_id[pid] for pid in wall), key=lambda p: (wall[p.id][1], wall[p.id][0]))
+        for p in line:  # on his place, to within a ball's radius
+            assert math.hypot(p.x - wall[p.id][0], p.y - wall[p.id][1]) < ball.RADIUS, (seed, p.id)
+        for a, b in pairwise(line):
+            gap = shape.between(a.x, a.y, a.heading, b.x, b.y, b.heading)[0] - shape.CHEST_DEPTH_M
+            assert -0.05 <= gap < 2 * ball.RADIUS, (seed, a.id, b.id, gap)
+
+
+def test_the_wall_walks_to_its_places_at_least_at_a_walking_pace():
+    """The wall forms well before the kick, not just in time for it: its members walk to their
+    places at least at a normal walking pace, 1.36 m/s (L4), faster only if a walk would be late."""
+    e = wall_kick()
+    r = e.restart
+    pid, (wx, wy) = next(iter(r.wall.items()))
+    p = e.by_id[pid]
+    d = math.hypot(wx - r.x, wy - r.y)
+    # 15 m straight behind his place, seen from the ball, with the kick 20 s off: in time at well
+    # under a walk
+    p.x, p.y = wx + (wx - r.x) / d * 15.0, wy + (wy - r.y) / d * 15.0
+    assert e.walk_to_wall(r, (p.x, p.y), (wx, wy)) == pytest.approx(15.0)  # premise
+    e.restart.ready_at = e.t + 20.0
+    assert e.shape_target(p)[2] == pytest.approx(1.36)
+    e.restart.ready_at = e.t + 2.0  # a walk would be late
+    assert e.shape_target(p)[2] > 1.36
+
+
+def test_a_wall_player_comes_in_behind_the_line_and_steps_up_into_his_place():
+    """Defect: a wall player walking to his place along the line went through a team-mate already
+    standing in it (bodies 20 cm into each other). He heads first for the point a shoulder's breadth
+    behind his place, at his own depth if he is further back, and steps forward into it only once
+    he is behind it, so his last steps cross nobody's place (P11)."""
+    e = wall_kick()
+    r = e.restart
+    bx, by = r.x, r.y
+    for pid, (wx, wy) in r.wall.items():
+        p = e.by_id[pid]
+        d = math.hypot(wx - bx, wy - by)
+        ux, uy = (wx - bx) / d, (wy - by) / d
+        p.x, p.y = wx - uy * 3.0, wy + ux * 3.0  # on the line, three metres along it
+        tx, ty = e.way_into_wall(r, p)
+        assert (tx - wx) * ux + (ty - wy) * uy == pytest.approx(0.5)  # behind the line, in his lane
+        assert abs((tx - wx) * -uy + (ty - wy) * ux) < 1e-9
+        p.x, p.y = wx + ux * 4.0 - uy * 3.0, wy + uy * 4.0 + ux * 3.0  # four metres back, to the side
+        tx, ty = e.way_into_wall(r, p)
+        assert (tx - wx) * ux + (ty - wy) * uy == pytest.approx(4.0)  # across at his own depth
+        p.x, p.y = wx + ux * 0.5 + uy * 0.5, wy + uy * 0.5 - ux * 0.5  # behind the next place along
+        tx, ty = e.way_into_wall(r, p)
+        assert abs((tx - wx) * -uy + (ty - wy) * ux) < 1e-9 and (tx, ty) != (wx, wy)  # behind his own first
+        p.x, p.y = wx + ux * 0.5 + uy * 0.05, wy + uy * 0.5 - ux * 0.05  # behind it, in his lane
+        assert e.way_into_wall(r, p) == (wx, wy)
+
+
+def test_a_place_on_the_edge_of_the_circle_is_walked_to_straight_in():
+    """Defect: a wall player whose place was on the 9.65 m circle's edge, straight in from where he
+    stood, was sent round the circle by a rounding error, at his own distance from the ball: he
+    stood 7 m from the wall all through the stoppage. A target on the edge, reached straight in,
+    does not cut across the circle (lesson 158)."""
+    e = wall_kick(5, (PITCH_X - 27.0, 44.0))
+    r = e.restart
+    bx, by = r.x, r.y
+    clear = 9.15 + KEEP_OFF_MARGIN_M
+    p = next(q for q in e.players if q.team == "away" and q.role != "GK" and q.id not in r.wall)
+    # a bearing whose point on the edge rounds to a hair inside it, as the wall's places could
+    a = next(k / 100 for k in range(-150, 150)
+             if math.hypot(math.cos(k / 100) * clear, math.sin(k / 100) * clear) < clear)
+    wx, wy = bx + math.cos(a) * clear, by + math.sin(a) * clear
+    p.x, p.y = bx + math.cos(a) * 17.0, by + math.sin(a) * 17.0  # 7 m further out, straight behind it
+    tx, ty = e.keep_off(p, wx, wy)
+    assert math.hypot(tx - bx, ty - by) < 17.0 - 1.0  # he heads in toward it, not round at his distance
+
+
+def test_a_wall_player_paces_the_whole_way_in_to_be_in_place_for_the_kick():
+    """Defect: a wall player's pace was set to reach the point behind the line just as the ball
+    could, so he was still stepping up into his place, 0.4 m short, when the kick was struck. He
+    paces the whole way in, by behind the line, to stand in his place by the time the kick may be
+    taken (R1's wait), and walks at least (L4). Defect: from the ball's side of the wall the pace
+    counted the straight way, not the way round the keep-off circle he walks, and he came late."""
+    e = wall_kick()
+    r = e.restart
+    pid, (wx, wy) = next(iter(r.wall.items()))
+    p = e.by_id[pid]
+    d = math.hypot(wx - r.x, wy - r.y)
+    ux, uy = (wx - r.x) / d, (wy - r.y) / d
+    p.x, p.y = wx + ux * 3.0 - uy * 20.0, wy + uy * 3.0 + ux * 20.0  # 20 m along the line, 3 m behind it
+    r.ready_at = e.t + 5.0
+    kx, ky = e.way_into_wall(r, p)
+    way = math.hypot(kx - p.x, ky - p.y) + math.hypot(wx - kx, wy - ky)
+    assert e.shape_target(p)[2] == pytest.approx(way / 5.0)
+    # 12 m behind the ball, seen from his place: his way round the circle to behind his place is
+    # longer than the straight way there, through the circle.
+    p.x, p.y = r.x - ux * 12.0, r.y - uy * 12.0
+    kx, ky = e.way_into_wall(r, p)
+    straight = math.hypot(kx - p.x, ky - p.y) + math.hypot(wx - kx, wy - ky)
+    walked = e.walk_to_wall(r, (p.x, p.y), (wx, wy))
+    assert walked > straight + 1.0  # premise: he has to go round
+    assert e.shape_target(p)[2] == pytest.approx(walked / 5.0)
+
+
+def drifting_throw(seed: int = 1) -> Engine:
+    """A throw-in from 10 m short of the goal line, released behind the touchline and drifting along
+    it at 15 m/s with a centimetre a second inward."""
+    e = Engine(seed)
+    still(e)
+    thrower = e.by_id["h4"]
+    e.possessor, e.restart, e.set_by, e.throw_by, e.dribbler = None, None, None, None, None
+    e.last_touch, e.into_play, e.throw_from = thrower.id, True, (95.0, 0.0)
+    e.kicked = {"type": "pass", "team": "home", "player": thrower.id, "x": 95.0, "y": 0.0}
+    e.ball = (95.0, -0.25, 1.8, 15.0, 0.01, 0.0)
+    return e
+
+
+def test_a_throw_that_runs_on_past_the_end_of_the_touchline_never_entered_the_field():
+    """Defect (seed 101 in the wall's 16 matches): a throw drifting along the outside of the
+    touchline, a centimetre a second inward, counted as still coming in; it stayed in play past the
+    end of the touchline and over the end boards, rolled on 14 m beyond them, and when it stopped
+    the retake snapped it back to the boards in one frame. Past the end of the touchline, still
+    outside it, it has not entered the field: Law 15, taken again by the same side."""
+    e = drifting_throw()
+    before = (105.0, -0.25, 1.05, 15.0, 0.01, -1.0)
+    e.ball = (105.6, -0.25, 1.0, 15.0, 0.01, -1.0)  # past the corner, still outside the touchline
+    assert e.went_out(before)
+    assert (e.restart.kind, e.restart.team, e.restart.x, e.restart.y) == ("throw_in", "home", 95.0, 0.0)
+    e = drifting_throw()  # the same at the other end of the touchline
+    e.throw_from = (10.0, 0.0)
+    e.ball = (-0.6, -0.25, 1.0, -15.0, 0.01, -1.0)
+    assert e.went_out((0.0, -0.25, 1.05, -15.0, 0.01, -1.0))
+    assert (e.restart.kind, e.restart.x, e.restart.y) == ("throw_in", 10.0, 0.0)
+    e = drifting_throw()
+    track = [e.ball[:3]]
+    for _ in range(int(10 / DT)):
+        e.step()
+        track.append(e.ball[:3])
+    assert max(math.dist(a, b) for a, b in zip(track, track[1:], strict=False)) <= MAX_STEP_M
+    assert max(x for x, _, _ in track) <= PITCH_X + BOARDS_M  # the boards stop it, as a dead ball
+
+
+def test_the_wall_is_made_of_those_with_the_shortest_walks_to_it():
+    """Who stands in the wall goes by how far each would walk to it, the way he goes: a defender
+    just behind the ball, the nearest in a straight line, has to go round the keep-off circle, so
+    two standing 12 m behind the wall get there first and form it."""
+    e = wall_kick(3, (PITCH_X - 35.0, 34.0))  # 35 m out: a wall of two
+    r = e.restart
+    away = [p for p in e.players if p.team == "away" and p.role != "GK"]
+    for i, q in enumerate(away):  # everyone else well upfield
+        q.x, q.y, q.vx, q.vy = 20.0, 4.0 + 6.0 * i, 0.0, 0.0
+    near, back1, back2 = away[:3]
+    near.x, near.y = r.x - 1.0, r.y  # just behind the ball, upfield of it
+    back1.x, back1.y = r.x + 9.65 + 12.0, r.y - 1.0  # 12 m behind the wall
+    back2.x, back2.y = r.x + 9.65 + 12.0, r.y + 1.0
+    spots = e.wall_spots(r)
+    assert len(spots) == 2  # premise
+    assert min(math.hypot(near.x - s[0], near.y - s[1]) for s in spots) < 11.0  # premise: nearest straight
+    assert set(e.form_wall(r)) == {back1.id, back2.id}
+
+
+def test_the_way_round_a_keep_off_circle_is_estimated_at_the_walkers_distance():
+    """walk_to_wall's estimate of a walk round a restart's circle: at the walker's own distance from
+    the ball until the straight way on just touches the circle, then straight on (an estimate from
+    above: test_the_walk_to_the_wall_is_estimated_from_above)."""
+    from ninety.sim.engine import round_the_circle
+    radius, m = 9.65, 12.0
+    assert round_the_circle(0.0, 0.0, radius, 12.0, 15.0, -12.0, 15.0) == pytest.approx(24.0)  # clear of it
+    touch = math.acos(radius / m)
+    across = m * (math.pi - 2 * touch) + 2 * math.sqrt(m * m - radius * radius)
+    assert round_the_circle(0.0, 0.0, radius, m, 0.0, -m, 0.0) == pytest.approx(across)  # round, opposite
+    out = radius + KEEP_OFF_MARGIN_M  # from inside: straight out past the edge first, then round
+    round_out = out * (math.pi - 2 * math.acos(radius / out)) + 2 * math.sqrt(out * out - radius * radius)
+    assert round_the_circle(0.0, 0.0, radius, 5.0, 0.0, -out, 0.0) == pytest.approx(out - 5.0 + round_out)
+    # across the seam where the angle wraps (as the walls at the away end's goal are): 120 degrees round,
+    # not 240
+    a, b = math.radians(120.0), math.radians(-120.0)
+    seam = m * (math.radians(120.0) - 2 * touch) + 2 * math.sqrt(m * m - radius * radius)
+    assert round_the_circle(0.0, 0.0, radius, m * math.cos(a), m * math.sin(a), m * math.cos(b),
+                            m * math.sin(b)) == pytest.approx(seam)
+
+
+def test_the_walk_to_the_wall_is_estimated_from_above():
+    """Lesson 161: a claim about how players move is measured on the paths they walk. walk_to_wall
+    estimates a walk round the keep-off circle at the walker's own distance from the ball; keep_off
+    aims him at most 30 degrees round from where he is, so he walks a spiral in toward the circle.
+    Followed frame by frame, no wall player walks further than the estimate, and some go round."""
+    went_round = 0
+    for seed, at in ((3, (PITCH_X - 22.0, 34.0)), (5, (87.0, 24.0))):
+        e = wall_kick(seed, at)
+        r = e.restart
+        wall = dict(r.wall)
+        at_ = {pid: (e.by_id[pid].x, e.by_id[pid].y) for pid in wall}
+        estimate = {pid: e.walk_to_wall(r, at_[pid], wall[pid]) for pid in wall}
+        walked = dict.fromkeys(wall, 0.0)
+        arrived: set[str] = set()
+        for _ in range(int(45 / DT)):
+            e.step()
+            for pid in set(wall) - arrived:
+                p = e.by_id[pid]
+                walked[pid] += math.dist(at_[pid], (p.x, p.y))
+                at_[pid] = (p.x, p.y)
+                if math.dist((p.x, p.y), wall[pid]) < ball.RADIUS:
+                    arrived.add(pid)
+            if arrived == set(wall):
+                break
+        assert arrived == set(wall), (seed, at)  # premise: each got to his place
+        for pid in wall:
+            assert walked[pid] <= estimate[pid], (seed, at, pid, walked[pid], estimate[pid])
+            went_round += estimate[pid] > walked[pid] + 1.0
+    assert went_round >= 3  # premise: walks round the circle, where the spiral is shorter
+
+
+def test_wall_members_stand_close_only_near_their_places():
+    """In the wall, team-mates within GATHER_REACH_M of their places keep only clear of each other's
+    bodies; walking in from further off they keep the usual personal space."""
+    from ninety.sim.engine import GATHER_REACH_M, PERSONAL_SPACE_M
+    e = wall_kick()
+    (ia, sa), (ib, sb) = list(e.restart.wall.items())[:2]
+    a, b = e.by_id[ia], e.by_id[ib]
+    for i, q in enumerate(p for p in e.players if p not in (a, b)):  # everyone else well away
+        q.x, q.y = 5.0, 2.0 + 3.0 * i
+    for q in e.players:
+        q.vx = q.vy = 0.0
+    gap = (shape.SHOULDER_BREADTH_M + PERSONAL_SPACE_M) / 2  # closer than personal space, clear of bodies
+    a.x, a.y = sa
+    b.x, b.y = sa[0], sa[1] + gap  # side by side at the wall
+    e.gather()
+    assert e.together(a, b)
+    assert e.avoid(a) == (0.0, 0.0)
+    short = 2 * GATHER_REACH_M + 5.0  # the same, well short of it
+    a.x, a.y, b.x, b.y = sa[0] - short, sa[1], sa[0] - short, sa[1] + gap
+    e.gather()
+    assert not e.together(a, b)
+    assert e.avoid(a)[1] < 0.0  # bends away from b
 
 
 def test_gathered_round_the_scorer_no_two_bodies_overlap():
