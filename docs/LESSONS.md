@@ -222,7 +222,7 @@ short and actionable. This file is public: no research sources, product names or
     older than a day.
   - A port's audit names the branches whose lessons it read.
 
-### 95. A pattern that reads numbers must read every way a number is written
+### 130. A pattern that reads numbers must read every way a number is written
 - **What happened:** the fact-checker's number pattern refused a digit followed by a letter, so it
   would not read "h7" as a number. That also skipped every English ordinal: "in the 9th minute"
   passed for an event in minute 2, and "his 97th pass" passed with no such count in the evidence,
@@ -809,7 +809,15 @@ short and actionable. This file is public: no research sources, product names or
   standard error, and use enough matches that it is smaller than the gap being claimed. Running
   the same seeds still matters, for reproducing a run, not for cancelling noise.
 - **Check:** for a before-and-after on a match rate, report both errors; if the paired one is not
-  clearly smaller, quote the unpaired one.
+  clearly smaller, quote the unpaired one. On the agent side too, one seed is one match only if one
+  engine made it. The deployed match tools serve the matches the deployed image simulated, so in
+  an evaluation graded against this commit's simulation every agent gets the minute's events
+  inline, under a match id no server serves, and an agent that calls the tools anyway fails the
+  call. A prompt alone does not enforce it: the tools are called inside Foundry. The live
+  ablation's one-agent arm once read the tools and aired a goal on seed 33 that had no shot here.
+  `tests/test_agent_ablation.py::test_both_arms_read_the_match_the_grader_grades`,
+  `::test_a_live_arm_that_calls_the_match_tools_fails_that_call` and
+  `tests/test_workflow.py::test_an_agent_given_its_events_inline_that_calls_the_match_tools_fails_its_call`.
 
 ### 91. When the data moves, the code that reads it moves in the same change
 - **What happened:** sealing the ground truth (0fda1f8) moved frames.jsonl and events.jsonl from
@@ -883,7 +891,8 @@ short and actionable. This file is public: no research sources, product names or
   as `rejected` (the claim is wrong) instead of `held` (it could not be checked); and an Analyst
   that failed, hung on an MCP call or replied with prose raised out of `live.run`, taking the
   template graphics down with it.
-- **Rule:** every fallback claimed in docs/eval/failure-table.md is a row produced by injecting
+- **Rule:** every fallback claimed in a failure table (docs/eval/failure-table-m1.md, and the
+  multi-agent workflow's docs/eval/failure-table.md) is a row produced by injecting
   that failure into the real path, asserted by a test with the expected outcome written in the
   test. A status is computed by `status_for`, never re-derived.
 - **Check:** `uv run pytest tests/test_failure_table.py`; removing the `live.run` fallback or
@@ -1068,11 +1077,514 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `.github/workflows/agents-live.yml` groups by `inputs.ref`. Dispatch from two
   branches before approving either: both stay `waiting`.
 
-### 111. Text a number is computed from must be the same on every supported Python
+### 111. A shape measured only from the ball collapses onto it; instrument a choice before blaming its value
+- **What happened:** every in-possession spot was metres behind the ball, floored 12 m from goal.
+  With the ball 20 m out, both centre-backs, both full-backs and the holding midfielder shared that
+  floor inside the box, and the team passed around there: 224 own-box passes a 90 (seeds 7, 11, 21,
+  42). The investigation also named the pass value as a separate cause (forward passes never win).
+  Logging every choice showed otherwise: forward options in the own third were 30 m long with a
+  0.68 completion estimate against 16 m and 0.99 for square ones, because the shape left nobody at
+  a reachable forward distance. Bounding the team's length by R8 instead cut own-box passes to 33,
+  own-box camping (FS9) from 70 to 0 and the square-pass count (FS7) from 488 to 224 a 90, with no
+  change to how passes are valued.
+- **Rule:** a positional rule relative to a moving point needs a bound from the team's own measured
+  shape (length, width), not a floor that every role shares. Before changing how an option is
+  valued, log the options at each choice and see which term loses it; fix the upstream cause first
+  and re-measure.
+- **Check:** `tests/test_shape.py::test_the_team_is_never_longer_than_the_published_range_and_the_back_line_never_ahead_of_the_ball`
+  sweeps ball and line positions; on the old rule it fails (48 m long with the ball 35 m out).
+
+### 112. Every kick the decision layer aims is judged by the same Laws as a pass
+- **What happened:** the pass estimate counted a ball leaving the pitch (Law 9), but the clearance,
+  added separately, was aimed at one fixed spot 4 m from the touchline with no such check. With the
+  passer's own kick error, about a third of clearances went straight out with nobody near.
+- **Rule:** an option that sends the ball somewhere is valued over the strikes the kicker's error
+  allows, with the pass estimate's own pieces (`decisions.clear_value` reuses `strike_nodes`,
+  `flight`, `out_of_play`, `reach_time` and the P16 turn); where it simplifies them (a hard race, no
+  body in the way), the row says so (GROUNDING D9). A new kind of kick does not get its own physics.
+- **Check:** `tests/test_decisions.py::test_an_unpressed_clearance_is_not_aimed_where_his_kick_error_puts_it_out`.
+
+### 113. A test over a folder says which files are its own
+- **What happened:** two tests read every file in `replays/` as a slice recording (`*.json`):
+  the committed-replay test and the byte-for-byte round trip. Both passed while the folder held
+  only slice files. The first workflow recording (format 1) turned them red with "format 1 slice
+  recording", though nothing was wrong with either file.
+- **Rule:** a test that loops over a folder selects the files of its own kind by name
+  (`slice-*.json`, `workflow-*.json`), and fails when the folder holds a file no kind claims, so a
+  new file is never skipped in silence.
+- **Check:** `tests/test_replay.py::test_every_committed_recording_round_trips_byte_for_byte`
+  fails with an unclaimed file in `replays/`, and fails when a workflow recording no longer saves
+  byte for byte.
+
+### 120. An exemption in a check is where a defect hides: reach the state, do not place it
+- **What happened:** the engine placed a new ball at the taker's feet at every restart and reset
+  all 22 players at every goal. The validator exempts dead-ball windows from the ball-speed check
+  and kickoff frames from the player-speed check, so nothing failed. The ball jumped more than
+  3 m in one frame about 70 times per 90 minutes (median 7.5 m), and every goal reset the pitch
+  in one frame. Viewers saw it; no test did.
+- **Rule:** a state the match needs (the ball on the restart spot, the teams in kick-off shape)
+  is reached by the engine's own movement: players go there and fetch the ball, within their
+  bodies and the ball's physics (lesson 5). An exemption in a check is allowed only for a real
+  discontinuity in the broadcast (a cut) and is listed as a known gap until the engine no longer
+  needs it.
+- **Check:** `uv run pytest tests/test_restarts.py` records every frame from before the stop to
+  the kick, including the frame the restart is given, and fails on a ball or player step faster
+  than the validator's limits. `scripts/defect_sweep/restarts.py` counts ball jumps over 3 m per
+  90 minutes (0 over 16 matches of 20 minutes, `docs/eval/restarts.md`).
+
+### 121. A Law is all of its clauses: read the whole restart, not the part the defect named
+- **What happened:** the restart fix enforced the distances and "in play when kicked and clearly
+  moves", and took any movement of the set ball as the kick. The taker could then carry the set
+  ball off and pass it, touching it twice before anyone else (55 of 340 restarts). The owner saw it
+  in a clip as "he passed to himself". The same Laws (8, 13 to 17) say the taker may not touch it
+  again until another player has; that clause was never implemented, so no test asked for it.
+- **Rule:** when implementing a Law, list every clause of it in the GROUNDING row and give each a
+  test, including the clauses no defect report mentioned.
+- **Check:** `uv run pytest tests/test_restarts.py -k "dribble or first_touch or again"`; on the
+  engine before the fix the set ball's first movement is not a pass or shot by the taker.
+
+### 122. A rule every kind of case shares is tested on every kind, run to the end
+- **What happened:** moving the restart taker a ball's width behind the ball was tested on a
+  free kick only. At a corner the readiness check still measured from the corner point, the taker
+  stood 1.09 m from it, and the corner was never taken: 7 of 16 measured matches froze for the
+  rest of their 20 minutes. Every unit test passed; only the 16-match measurement showed it.
+- **Rule:** a change to a rule that every restart (or every kind of any case) goes through gets a
+  test that runs each kind to completion. A measurement counts stuck states as a defect, not as
+  quiet time.
+- **Check:** `uv run pytest tests/test_restarts.py -k every_kind`; `scripts/defect_sweep/restarts.py`
+  reports `stuck_restarts`, which must be 0.
+
+### 123. An async client handed a sync credential signs in late and blocks the loop
+- **What happened:** the slice, the fact-checker evaluation and the Analyst evaluation each made
+  a sync `DefaultAzureCredential` and passed it to Foundry's async clients, and
+  `foundry.chat_client` made one by default. A sync credential fetches its token on the event
+  loop's thread, stalling every concurrent call. It fetches it only at the first model call,
+  after the evaluation has simulated its matches, by which time agents-live's five-minute OIDC
+  sign-in can have expired. The fact-checker evaluation lost 19 of 251 Judge calls, most likely to
+  this (not yet confirmed by a rerun). The workflow
+  (W1) had already fixed this for itself; the rest never took the fix.
+- **Rule:** every live run makes one aio credential (`credentials.new_credential`), signs in
+  (`credentials.sign_in`) before anything slow, and passes that object to the chat client and
+  every agent. A client factory takes no default credential.
+- **Check:** `tests/test_credentials.py`. Each site takes the token before it simulates, and
+  hands the same `SignedIn` credential to every client; deleting any `sign_in` turns its test
+  red. An AST check keeps `azure.identity.DefaultAzureCredential` out of the live modules.
+### 124. Judge a drawn motion over the frames around the moment, and watch the clip
+- **What happened:** #146 made the foot reach the ball on the contact frame and its tests measured
+  exactly that, so they passed while the kick lost its swing: the foot was eased in from at most
+  0.4 m behind the ball, and a pass looked like a player standing still with the ball between his
+  feet. A lunge dropped the hips 0.24 m and snapped them back in two frames. Since the skinned
+  mesh (a3d228e) every stored pose bent both elbows about 80 degrees, so the forearms were held out
+  in front whatever the player did; and since Oct 15 the boards behind the goals had their print
+  flipped and read mirrored. No test looked at any of it; the owner found all four by watching
+  review clips. Measuring every limb frame by frame then found a fifth, in every run since #146: the
+  stride planted each foot a quarter of a cycle away from where the gait has it on the grass, so on
+  about one player-frame in five a foot jumped 0.3 to 1 m at a landing or lift-off.
+- **Rule:** a change to how a body moves is tested over the frames around the event, not only on
+  it: the swing before, the follow-through after, the rest pose's joints, and how far anything
+  moves in one frame. Every printed surface has a test that it reads left to right from each camera
+  that sees its print. A before/after clip goes on the pull request and someone watches it before
+  merge.
+- **Check:** `tests/test_render_motion.py` (arms hang and swing, the kick's backswing and
+  follow-through, the lunge's pace, the keeper's hands on the ball) and
+  `tests/test_render_stadium.py` each fail on `e50440c` and pass with the fix, and so do
+  `test_setting_off_running_and_pulling_up_moves_no_limb_in_a_jump` and the tackle test, which cap
+  how far any limb moves relative to the body in one frame.
+
+### 125. A check that fails on a few frames names a class of defect: sweep every frame for it
+- **What happened:** render-check failed `player_feet_in_boxes` at 0.4.2 on 2 foot checks each of
+  seeds 7 and 11. The 0.4.3 fix traced those four frames to three causes and tested each, and the
+  re-render of seed 7 failed 7 checks in two other sequences: a pass cushioned with one foot and
+  struck with the other on the move left the first foot's plant where it stood before the touch,
+  2 m behind by the strike, and the mesh hung both feet in the air. Fixing that sequence (0.4.4)
+  left 1 failure. A sweep of every player-frame of both clips then found 21 frames with both mesh
+  feet above 0.2 m and the body not jumping, in four players and two more causes: a touch that had
+  faded before the next one still let its foot go from the old plant, and a foot the touch caught
+  mid-stride came down over a whole slow step. The frames were instances; the class was a foot
+  the body has left behind.
+- **Rule:** when a picture check fails on a few frames, name the class of defect, measure it over
+  every player-frame of the clips in Python (no render needed: the mesh's markers come from
+  `meshpose`), and fix every sequence that shows it before re-rendering.
+- **Check:** `test_a_first_touch_then_a_strike_on_the_move_keeps_a_foot_on_the_grass` (both
+  cases) and `test_a_thigh_touch_on_the_move_keeps_a_foot_on_the_grass` fail on `0312d60` and
+  pass; removing any one of the three parts of the fix fails one of them or the tackle's limb cap.
+  The sweep at 0.4.5: 0 such player-frames on seeds 7 and 11 (worst 0.18 m), from 21.
+
+### 126. A legal exception in the contract is an exception in every reader of the same data
+- **What happened:** after a goal the kickoff puts every player back in his own half in one frame.
+  The data contract allows it, and the validator's speed check and the late-drop report both skip
+  it. The stats engine did not: `player_movement_facts` counted the reset as running, so seed 7's
+  h7 had a 4,739 km/h peak speed and 52 m of extra distance in the Ledger's facts. No test failed,
+  because the movement tests were built by hand and never contained a kickoff. It came to light
+  when the phone companion first showed the number.
+- **Rule:** when the contract makes an exception (a kickoff reset, a dead ball being replaced),
+  every computation over the same frames applies it in the same place, and one shared function
+  (`stats.player_steps`) decides which steps count as movement.
+- **Check:** `tests/test_stats.py::test_a_kickoff_reset_is_not_movement` puts a reset into a
+  kickoff frame (legal under the contract) and fails on the old code;
+  `test_no_player_outruns_the_contract_over_a_restart_after_a_goal` runs the engine's own restart
+  partway through a match and holds every player's peak speed under the validator's limit. (The
+  engine teleported players at a kickoff until #156; they now walk back, so the engine case is the
+  walk, and the reset is pinned by the hand-built frames.)
+
+### 127. A test that waits for its rule hangs when the rule breaks, and a hang is not a red test
+- **What happened:** two WebSocket tests on the phone relay checked their rule by waiting for a
+  message (a close, the room's latest state). With the rule mutated, the message never came and
+  pytest blocked for about 40 minutes, until the process was killed by hand. A CI job would have waited
+  out its timeout rather than failing on the test that names the rule.
+  The same tests then hung CI's full run with the rule intact: Starlette's TestClient gives each
+  WebSocket its own thread and event loop, so the laptop's relay wrote into another thread's
+  socket, and under load a message was lost. uvicorn never does that; but the same tests, moved
+  onto one loop, showed a real bug: a laptop message relayed while a joining phone was still
+  being sent the latest state could overtake it, leaving the phone on a stale clock.
+- **Rule:** a test that waits for a message sends a sentinel the broken code would deliver first,
+  or tests the rule directly, so a broken rule fails the test at once. Every receive has a
+  deadline. Concurrency is tested the way the server runs it (one event loop for every
+  connection), never through a harness that adds threads the server does not have.
+- **Check:** each mutation of the relay (`ninety/api/companion.py`) fails with pytest's own
+  counts within seconds, never times out. `tests/test_api_companion.py` drives the relay on one
+  loop with a 5 s deadline per receive, and 150 repeats on 4 workers under full CPU load pass;
+  `test_a_newer_clock_never_overtakes_a_phones_catch_up` fails without the single flusher.
+
+### 128. A refusal a browser cannot read is no refusal: close a WebSocket after accepting it
+- **What happened:** the phone relay refused a join (unknown code, room full, laptop taken) by
+  closing the WebSocket before accepting it, and its tests read the close codes 4404, 4409 and 4429
+  from an ASGI harness. A browser never sees a close sent before the handshake completes: uvicorn
+  answers it with a 403 and the page reads 1006, so the phone could not say "unknown code" or
+  "room full". W6 found it by running the phone in a real browser (#162).
+- **Rule:** a WebSocket refusal the client must act on is sent after `accept()`, with its code; a
+  refusal takes no slot, so accepting first changes nothing else. A test of a refusal checks that
+  the accept came first, not only the code.
+- **Check:** `tests/test_api_companion.py`'s `refused()` fails when the server closes before the
+  accept, and every refusal test goes through it; moving `_refuse` back to a bare close turns them red.
+
+
+### 129. A number check that reads one written form lets every other form through
+- **What happened:** the fact-check read a number only when no letter followed it, to skip ids
+  like "e00042". So "50km/h", "50kph" and "9999m" were never read, nor was "fifty km/h": a model
+  following an injected instruction could air a number the evidence does not hold. The phone
+  companion made that reachable from a viewer's text, and its evaluation missed it because the
+  scripted attacker wrote only the spaced form and the leak count used the check's own pattern.
+  The reviewer's audit found it on #145.
+  The first fix then summed any run of number words, so "a one-two" read as 3 and "a one-on-one"
+  as a count of 1, and true commentary from every agent was rejected (the reviewer again).
+- **Rule:** a check on what a writer says reads every form a writer can produce: a unit glued on
+  or spaced, digits or words. It reads words only as English writes one number, and an idiom
+  ("one-two", "one-touch", "no one") is no number. An evaluation of that check plants each form
+  and counts leaks with its own reader, never the check's pattern, and a change to the reader is
+  measured for false rejections too (lesson 11).
+- **Check:** `tests/test_factcheck.py::test_a_planted_number_in_any_written_form_is_rejected`
+  plants each form; `docs/eval/companion.md` plants the glued and spelled forms, and on the old
+  check its count shows 4 of them airing on seed 7.
+  `test_football_idioms_are_words_not_counts` passes each idiom with its passes cited. Measured
+  for false rejections: the 412 recorded claim texts in `replays/`, `docs/eval/` and the fixtures
+  read the same numbers as before, and `fact_checker_proof --check` and both replays pass.
+
+### 131. An evaluation that measured an outage must not publish a number
+- **What happened:** the first live Personalizer evaluation reported "0 of 160 variants air"
+  and a p95 of 11.6 s against a 3 s budget. Neither described the Personalizer. The run simulated
+  matches for twenty minutes before its first model call, and by then GitHub's five-minute sign-in
+  had expired, so every call failed and every profile got the verified text. The fallback worked;
+  the report still looked like a result. The 11.6 s came from the sync Azure credential, which
+  runs `az` on the event loop and so stalls the client's own deadline in the same process; in the
+  deployed server it would stall every other request too.
+- **Rule:** an evaluation of a model counts the requests the model never answered apart from the
+  ones the checks rejected, and writes no report when it answered none. A live caller signs in
+  before its slow work, and async code uses the async credential (`azure.identity.aio`).
+- **Check:** `tests/test_personalizer.py::test_a_run_in_which_the_model_never_answered_writes_no_report`,
+  `test_the_evaluation_signs_in_before_it_simulates_the_claims` and
+  `test_published_ask_signs_in_with_the_async_credential_before_anything_else` each fail when
+  their rule is removed.
+
+### 132. A WebSocket tested only through the test client is untested in the server a browser reaches
+- **What happened:** the phone relay's tests all passed through Starlette's TestClient, which
+  speaks WebSocket in process. The first time a real browser joined through uvicorn, every
+  connection answered 404: uvicorn upgrades a WebSocket only when a WebSocket library is
+  installed, and none was locked, so the deployed image could never have served the relay. The
+  same run found lesson 128's unreadable refusals.
+- **Rule:** a feature a browser uses over the network is tested once through the real server and a
+  real browser, not only through an in-process client. (A close code the client must read is sent after the accept: lesson 128.)
+- **Check:** `tests/test_phone.py` runs the companion routes in uvicorn and joins from Chromium;
+  CI's `image` job asks the built image for a WebSocket upgrade and needs `101` (it answers 404
+  without `websockets` in `uv.lock`). The phone still reads a close before the accept as "unknown
+  code or unreachable" (`web/phone/src/feed.ts`), for a server that refuses that way.
+
+### 133. Positions from a fit, summed frame to frame, read the fit's jitter as running
+- **What happened:** the phone's speed and distance come from the companion's window facts, which
+  sum each player's frame-to-frame steps. On simulator positions that is exact. On positions
+  tracked from the video, the camera fit moves a foot point by up to about 0.5 m between
+  neighbouring frames, more than a sprinter covers in one (0.34 m). Every tracked player's top
+  speed read 53 to 89 km/h, and a player standing still read 16 km/h. The numbers would have
+  passed the fact-checker, because they were the cited facts.
+- **Rule:** before a stat computed for exact positions reads measured ones, grade it against the
+  ground truth on the measured data (offline), and smooth at the stat's own time scale if the
+  noise demands it. Choose the width from the stat's definition, not from the error it gives.
+- **Check:** `docs/eval/companion-tracked.md` grades speed now, top speed and distance with and
+  without the smoothing (top speed 55.6 against 1.9 km/h median error).
+  `tests/test_tracked_frames.py::test_smoothing_turns_jitter_back_into_standing_and_keeps_running`
+  fails with the smoothing removed, and
+  `test_a_track_ends_at_the_speed_its_player_was_running` fails with a plain average, which lags
+  at a track's end.
+
+### 134. `sum()` of floats is not the same number on every Python
+- **What happened:** the phone's tracked frames file is committed, and a test rebuilds it and needs
+  the same bytes. It passed on Python 3.12 and failed on 3.11. Python 3.12 made `sum()` of floats
+  use compensated addition, so a smoothed position's last digit moved, and a rounding at 0.01 m
+  went the other way.
+- **Rule:** code whose output is committed and compared byte for byte adds floats with
+  `math.fsum` (one exact rounding, the same everywhere), or rounds well away from the noise.
+  This is lesson 46's rule for the engine, applied to every committed output.
+- **Check:** CI's pytest matrix runs 3.11 and 3.12. `tests/test_tracked_frames.py` rebuilds
+  `tests/fixtures/tracked-seed900001.json` on both; with `sum` in `tracked_frames.smooth` it
+  fails on 3.11.
+
+### 135. Noise in a belief is a misjudgement that persists, not a fresh draw every look
+- **What happened:** the team chose its chaser for a loose ball from each player's estimate of where
+  the ball was going, with an error redrawn every four frames. Two players about as near swapped the
+  chase back and forth; the one dropped went back to his shape and turned away from the ball, a fan
+  sees a player run away from a loose ball (FS1). The flicker came from the redraw, not from anything
+  either player saw.
+- **Rule:** a perception error is held for as long as what is perceived has not changed (here, one
+  strike or touch of the ball) and shrinks with what he sees (distance), so a decision built on it
+  changes only when the situation does.
+- **Check:** `tests/test_engine_rules.py::test_a_chaser_is_not_swapped_by_a_fresh_guess_while_nothing_changes`
+  fails when the misjudgement is redrawn on every plan.
+
+### 136. One match's goals are a draw: check a rare outcome over many matches
+- **What happened:** CI's full-match test bounded one match's goals at 1 to 6. The chaser's pull
+  request (#160) failed it: seed 11 ended 0-0 with 27 shots and 1,116 passes, where main's engine
+  had won the same seed 3-0, and two engines on the same seed are not a pair (lesson 90). Over 20
+  matches of 20 minutes it scored 1.46 goals a team per 90 against main's 1.91 (difference -0.45,
+  standard error 0.68), and on the base before main 1.57 against 1.12 (+0.45, 0.60): no settled
+  difference either way. A match's goals are close to Poisson around 2.8 (GROUNDING R4), so an
+  engine that scores like the real league failed that bound about one change in twelve, and one
+  scoring half as often still passed it three times in four.
+- **Rule:** a test bounds one match's count only where a realistic engine is almost never outside
+  it (passes, tackles, pressures, counted in tens or hundreds). A rare outcome (goals, penalties,
+  cards) is checked over many matches against the range a real sample of that many matches shows,
+  computed from the source's figures and the outcome's distribution before any engine number is
+  read. When those matches cost too much for every pull request, the check runs on demand, on the
+  same matches as the report that measures the outcome, and the pull request that changes the
+  engine posts its result.
+- **Check:** for each per-match bound in `tests/`, work out how often a league at the source's
+  figure falls outside it; above 1%, it moves to a many-match check. Goals:
+  `NINETY_HELD_OUT=1 uv run pytest tests/test_sim.py -k twelve` runs the funnel's 12 matches (R4);
+  `tests/test_funnel.py` pins the range and its arithmetic in every CI run.
+
+### 137. A random choice scaled by the spread of all options loosens when a bad option is added
+- **What happened:** the carrier's softmax took its randomness as a share of the spread of all his
+  options' values, so a choice between close options would be loose and one between clearly
+  different options would not. The spread included the hopeless options (a 50 m pass into a crowd, a
+  shot from 44 m), so every bad option widened it and made the choice between the good ones looser.
+  Choices logged on seeds 7 and 21 showed him taking his best option in about a third of decisions,
+  against the rule's own "a good decision-maker almost always takes the best option".
+- **Rule:** in a choice rule, the odds between two options depend only on those two and on the
+  chooser; a scale for the randomness is fixed in the options' own units, never taken from the set
+  of options on offer. A habit is a pull in units of that randomness, not a bonus in the options'
+  units, or changing the scale turns it into a command. A choice asked again before anything new is
+  seen is the same choice: hold the random draw, or repeated asking makes a rejected option certain.
+  Check a stated intent ("almost always the best") against logged choices.
+- **Check:** `tests/test_decisions.py::test_a_hopeless_option_does_not_loosen_the_choice_between_two_good_ones`.
+
+### 138. A range named as a distance is measured as one
+- **What happened:** the shot option was offered "inside 40 m of the goal" (`SHOT_RANGE_M`'s own
+  comment), but the code compared only the distance along the pitch. From out wide, players were
+  offered and took shots 40 to 50 m from goal, judged by a rate table that is only an unsourced tail
+  beyond 40 m: 22 of 156 shots in 20 matches (seeds 3 to 112 at 20 minutes) came from beyond 40.5 m,
+  none after the fix.
+- **Rule:** a threshold is applied in the quantity its comment and its source use (here the distance
+  to the goal's centre, as D3's rates are). Search for every use of a constant when its meaning is fixed.
+- **Check:** `tests/test_decisions.py::test_a_shot_is_an_option_only_within_range_of_the_goal_straight_line`.
+
+### 139. Knowing where the ball is going is only useful if you go there
+- **What happened:** O8 said the team-mate a pass is played to "knows where it was meant", and the
+  engine used that only to set his shape: he took up his slot around the target, not the target, and
+  a short pass struck slightly off often ran past him into touch. The chase, which takes over once he
+  reacts, was planned on the ball's predicted path past the touchline, on points up to 20 m off the
+  pitch, while `ball_destination` stopped the same path at the line. The first fix cut the true path,
+  but each player then adds his own misjudgement of it, so his judged points could still fall past
+  the line: an audit found the test passing on only 91 of 100 seeds.
+- **Rule:** when a rule gives a player knowledge, check what he does with it in the movement code, not
+  only in the estimate. A limit on what a player can do (Law 9 here) is applied to the path as he
+  judges it, where he makes the choice, and tested over many seeds, not one.
+- **Check:** `tests/test_engine_rules.py::test_the_team_mate_a_pass_is_played_to_goes_to_meet_it` and
+  `::test_nobody_is_sent_to_chase_a_ball_beyond_the_touchline`.
+
+### 146. A detector that starts naming players turns its false events into false evidence
+- **What happened:** detected passes began to name their passer and receiver by track (`h-t12`) so
+  the agents could talk about them. Scoring the names against the truth found both of seed 900004's
+  false passes were one player in two tracks: the tracker lost a dribbler for a frame and picked him
+  up as a new track, so his own touch read as "h-t6 finds h-t12". The fact-checker cannot catch that:
+  the claim matches its evidence, and the evidence is wrong. Matched events alone would have shown
+  every name right.
+- **Rule:** when a detected event gains a field the agents will repeat (a name, a team, an outcome),
+  grade that field on the false events too, and leave it null, or the event out, wherever the
+  footage cannot tell. A pass between two tracks never seen together, the second starting within
+  reach of where the first ended, is not recorded. That rule's form was found on a test clip, and
+  its distance first came from one: both were then decided on validation clips only, with the
+  plan committed first (docs/eval/attribution-plan.md). A constant read off a test clip is tuned to it.
+- **Check:** `docs/eval/attribution.md` lists every unmatched detected event with the players its
+  names really are; `tests/test_vision_events.py::test_a_dribbler_the_tracker_loses_and_picks_up_again_is_not_a_pass_to_himself`
+  fails without the rule.
+
+### 147. A budget is set from the call it bounds, measured; and a cancelled request is awaited
+- **What happened:** the live Personalizer evaluation (run 39429424313, at 0689342) answered none of
+  its 20 requests: all 160 variants were "fallback: timeout" at 3002 to 3274 ms. The 3 s budget was a
+  design share of the 8 s target, never measured against the call. Locally, the published
+  `ninety-personalizer:1` on gpt-4.1-mini took 3.2 to 4.7 s (median 4.0 s) for one claim's 8
+  variants, over A2A as well as direct. Two more defects hid behind it. First, the server's model
+  deadline equalled the client's budget, so the client always gave up first and the server's
+  fallback, with its reasons, never got back. Second, the client cancelled a request at the deadline
+  and never awaited it. In process, that cancellation ran on into a2a-sdk 1.2.3's server code, which
+  swallows it (`ActiveTask.subscribe` catches CancelledError) and waits forever for a task a
+  message-only agent never creates. Those tasks were destroyed when the loop closed, and that
+  produced the "Task was destroyed but it is pending" and OpenTelemetry "created in a different
+  Context" errors at exit. Those errors came after every request, so they did not block a response.
+- **Rule:** a latency budget cites a measurement of the call it bounds, and a test holds it above
+  the slowest measured call. A layer's own deadline ends inside its caller's
+  (`SERVER_MARGIN_S`), so the inner fallback answers rather than the outer timeout. A task cancelled
+  at a deadline is kept and awaited before the client closes. An in-process server runs each request
+  in its own task (`server.InProcess`), as uvicorn does, so a client's cancellation never enters the
+  server.
+- **Check:** `tests/test_personalizer.py::test_the_budget_is_over_the_slowest_measured_model_call`,
+  `::test_a_slow_model_is_answered_by_the_server_with_its_reasons_not_cut_off_by_the_client`,
+  `::test_a_request_cut_off_at_the_deadline_is_awaited_on_close` and
+  `::test_the_evaluation_leaves_no_request_running_when_the_client_gives_up`.
+
+### 140. A clip's truth must not depend on how long the match was simulated
+- **What happened:** `ninety-render` simulated the match to the end of the window it chose (240 s
+  plus the clip), but its own determinism check re-rendered the same window with `--start`, which
+  simulated only to the window's end plus a second. The engine settles some outcomes after the fact
+  (a tackle is won or lost when someone next controls the ball), so a tackle near the end of crowded
+  seed 11's window was `fail` in the clip and `null` in its re-render: frames and images identical,
+  `events.jsonl` not. Found while adding the broadcast's dead-ball cuts, which make a clip span more
+  of the match than its length.
+- **Rule:** the simulation's horizon is fixed by the latest frame a clip could need, never by how
+  its start was found: `max(latest start, start) + length + SIM_MARGIN_S` (`ninety/render/clip.py`),
+  long enough for the outcomes and the dead balls after it.
+- **Check:** `ninety-render-check --determinism` on a window with a tackle near its end compares
+  `events_identical`; `tests/test_render_clip.py` renders the same seed twice.
+
+### 141. A camera rule is judged by what the viewer sees over whole matches, not by the shot that prompted it
+- **What happened:** the gantry was aimed 4.5 m above the play after a review found the stand a
+  thin lip under the sky, and second angles were added one at a time (high behind the goal when
+  the ball is in a box, the far stand when play is on the far side, a low angle for a shot
+  arriving). Each fixed the shot it was made for. Nobody measured the whole broadcast: the stands
+  filled 40 to 75% of the picture with the players small at the bottom (the pitch over 60% of the
+  picture with the ball central in 13 to 47% of live frames on seeds 7, 21 and 42), and with second
+  angles on the viewpoint changed 8.8 times a minute, with shots as short as 0.6 s, between
+  opposite sides of the ground. The owner found both by watching clips.
+- **Rule:** a change to how the camera is pointed is measured over whole simulated matches before
+  and after it: the share of live frames that are well framed, the shots per minute against
+  broadcast practice (SoccerNet-v2: one change every 9 s) and the shortest shot, and how fast the
+  pan gathers speed. The numbers go in the pull request.
+- **Check:** `tests/test_render_camera.py` measures all three on seeds the design was not tuned on
+  (`test_the_gantry_frames_the_play_with_the_pitch_filling_the_picture`,
+  `test_the_viewpoint_changes_no_faster_than_a_broadcast_and_never_flickers`,
+  `test_a_pan_eases_in_and_out`); each fails on the 0.5.0 director.
+
+### 150. Build a media branch from an empty tree, and look at what it holds before pushing
+- **What happened:** review clips for the camera pull request went on a new orphan branch made by
+  `git checkout --orphan`, which keeps the whole working tree staged. The `git rm` meant to empty
+  it refused, but the shell line went on past it (`;` after `&&`), so the push carried a copy of
+  every tracked file with the media. It was public code, with no secrets and no untracked files,
+  and the branch was rebuilt within minutes; the clips themselves were left out, ignored by the
+  copied `.gitignore`.
+- **Rule:** start a media branch empty (`git switch --orphan`, or `git rm -rf --cached .`), add the
+  files by name (`git add -f` when `.gitignore` covers them), and list the commit's tree before
+  pushing. A multi-step shell line that changes a repository stops at its first failure.
+- **Check:** `git ls-tree -r --name-only origin/pr-assets/<name>` lists only the media.
+
+### 151. A new check of what a model writes starts from the reader we already have
+- **What happened:** the Vision Auditor's rationale check (#140) read numbers as digit runs only,
+  written fresh beside the fact-checker's reader, which lesson 129 had already widened to number
+  words and glued units. "Ninety of these were missed", "sixty percent", "one in three" and "-38"
+  all passed a check the docs called "number-checked". The reviewer's audit found it.
+- **Rule:** a check on what a model may write reuses the fact-checker's reader
+  (`factcheck.spelled_as_digits`) and adds only what its own text needs (here: digits glued to
+  words, a sign, thousands commas, and refusing words for a share or a multiple). Its tests plant
+  every written form, and a true number in each form must still stand.
+- **Check:** `tests/test_vision_auditor.py::test_a_planted_number_in_any_written_form_is_refused`
+  and `::test_the_cluster_s_own_numbers_in_any_form_stand`.
+
+### 152. A handoff checked only by its writer is not a contract
+- **What happened:** the Auditor validated its own `clusters.json` against the schema, but the Data
+  agent read the file without checking it. A hand-edited file with test seed 900001 in its sources,
+  a shifted seed range or another render setting was planned as if typed. Removing the writer's
+  check turned no test red, because the writer never produces a bad file. Two writers also made two
+  shapes under one file name: the committed round-1 file failed the new schema with 83 errors.
+- **Rule:** the agent that acts on a handoff validates it on receipt (schema, then each rule it
+  relies on) and is tested with tampered input. One file name has one writer and one shape.
+- **Check:** `tests/test_vision_auditor.py::test_the_data_agent_checks_a_typed_handoff_on_receipt`,
+  `::test_the_committed_clusters_json_is_the_auditor_s_code_output_and_the_data_agent_takes_it`.
+
+### 155. A test of a library's message shape goes through the library's own parser
+- **What happened:** #182 made a published agent's call to the match tools fail the call, keyed on
+  the content type `mcp_server_tool_call` in its reply. The tests built that content by hand with
+  `Content.from_mcp_server_tool_call`. Had a framework upgrade renamed the type, or stopped turning
+  Foundry's `mcp_call` output item into it, the guard would pass every call and the tests would
+  stay green. The review caught it. Separately, a tool call made a minute air nothing, but only the
+  ablation's JSON counted such minutes.
+- **Rule:** when code keys on the shape a third-party library produces, at least one test feeds the
+  library the service's raw payload (here a Responses API reply as Foundry returns it) and lets the
+  installed parser build the shape. A failure that costs one arm output is counted in the report a
+  reader sees, not only in the data.
+- **Check:** `tests/test_workflow.py::test_inline_only_reads_a_foundry_reply_as_foundry_sends_it`;
+  `tests/test_agent_ablation.py::test_a_live_arm_that_calls_the_match_tools_fails_that_call` reads
+  the "Minutes lost to a tool call" column.
+
+### 156. An exemption is stated in what the clip shows at both ends, and attacked with planted clips
+- **What happened:** the contract check for a broadcast cut (C2) accepted a gap when the last stoppage
+  or restart before it was a stoppage, or when a window opened on a loose ball, and looked at no
+  other event. An independent review's planted clips found two holes. A pass after the stoppage put
+  the ball back in play unseen by it. A window of open play with a gap and no event at all passed.
+  The renderer only made legal cuts, so no clip was wrong, but the validator would have passed a
+  wrong one. The cut was also on by default, so dataset and test-set renders would have cut too.
+- **Rule:** an exemption in a contract check is stated in what the clip itself shows, here both the
+  stoppage and the restart as events of the clip with nothing live between them. It is tested with
+  planted clips that try to abuse it, written by someone other than its author. A feature that
+  changes what a dataset contains is off by default and turned on where it is wanted.
+- **Check:** `tests/test_validate.py` (the planted cut clips; they fail on `aef43f5`) and
+  `test_every_check_the_validator_reports_has_a_planted_defect`;
+  `tests/test_render_params.py::test_only_a_broadcast_clip_cuts_through_dead_balls`.
+
+### 153. A light module imports only light modules
+- **What happened:** the live API scales to zero, and its cold start was about 50 s, about 33 s of
+  it Python start-up on a fractional vCPU. `import ninety.api.app` loaded the agent framework, the
+  Foundry project client, the OpenAI client and the blob storage SDK. The cause was that
+  `ninety.agents.contracts`, which only declares types, imported three short names from
+  `ninety.agents.slice`, a live entry point that loads them all at its top. Locally the import
+  took 3.28 s (median of five fresh interpreters), against 1.00 s once they load on first use.
+- **Rule:** a module that only declares (contracts, rules, types) imports nothing that talks to a
+  service. A name two layers share lives in the lower one, and the entry point re-exports it. An
+  SDK that only a live call needs is imported inside that call.
+- **Check:** `tests/test_api_startup.py::test_importing_the_api_loads_no_model_sdk` reads
+  `sys.modules` in a fresh interpreter (lesson 104); `::test_the_check_sees_an_sdk_when_one_is_imported`
+  shows the check can go red.
+
+### 157. Measure an asset before scaling by it, and drive feet by place, not by pose
+- **What happened:** two defects in how the skinned players were drawn, both since the mesh
+  (a3d228e), both invisible to every test because each test measured the code against itself.
+  The body asset is 1.684 m to the top of its skull, but every scale treated it as 1.84 m, so each
+  player was drawn at 91.5% of his height: short and stocky next to the goal and the capsules he
+  replaced. And the stride swung each leg between two stored poses, which moves a foot back and
+  forth along one path: there is no low stance and high swing, so a walking foot skimmed along the
+  grass and a landing foot was blended onto its plant: a quarter of the frames a foot was on the
+  grass it slid more than 2 cm, up to 23 cm.
+- **Rule:** a constant taken from an asset is measured from the asset and tested against it. A
+  drawn body is checked against the world, not against its own constants: as tall as the player,
+  joints where a man's are (a cited table). Feet are placed: fixed where they land, carried on an
+  arc to where they will land, and judged frame by frame on the skinned markers.
+- **Check:** `tests/test_render_mesh.py::test_a_player_is_drawn_as_tall_as_he_is` and
+  `tests/test_render_motion.py::test_a_foot_on_the_grass_does_not_slide_from_a_standstill_to_a_sprint_and_back`
+  fail on the code before; `test_the_body_has_a_mans_proportions_and_its_stature_is_the_scale` holds
+  the scale to the asset and its joints to the table.
+
+### 158. Text a number is computed from must be the same on every supported Python
 - **What happened:** the latency-cost report counted the Analyst's input tokens from the match MCP
   tools' descriptions, which are docstrings. Python 3.13 dedents docstrings at compile time and
-  3.11 and 3.12 do not, so the first Analyst call counted 513 tokens on 3.13 against the committed
-  508, and `test_the_published_data_matches_the_recording` failed on 3.13 only. CI runs 3.11 and
+  3.11 and 3.12 do not, so each Analyst call counted 7 input tokens fewer on 3.13 than the
+  committed data, and `test_the_published_data_matches_the_recording` failed on 3.13 only. CI runs 3.11 and
   3.12, so it stayed green. `ninety/agents/foundry.py` already cleaned the same docstrings for
   fingerprints; the eval did not.
 - **Rule:** text that feeds a committed number or fingerprint is normalised the same way wherever

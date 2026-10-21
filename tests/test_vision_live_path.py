@@ -22,7 +22,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 LIVE = ["ninety/vision/pitch.py", "ninety/vision/observe.py", "ninety/vision/track.py",
-        "ninety/vision/events.py"]
+        "ninety/vision/events.py", "ninety/vision/tracked_frames.py"]
 TRUTH_FILES = ("frames.jsonl", "events.jsonl", "clip.json", "meta.json")
 FORBIDDEN_IMPORTS = ("ninety.sim", "ninety.render", "ninety.eval")
 
@@ -92,13 +92,15 @@ EVENT_STAGE = """
     from ninety.vision import events, track
     rows = track.read_observations("tests/fixtures/observations-seed900001.jsonl")
     found, _ = events.detect(rows)
-    OUT = {"events": len(found), "types": sorted({e["type"] for e in found})}
+    OUT = {"events": len(found), "types": sorted({e["type"] for e in found}),
+           "named": sum(1 for e in found for k in ("player", "receiver", "interceptor") if e.get(k))}
 """
 
 
 def test_tracks_and_events_from_the_committed_observations_open_no_truth():
     run = run_audited(EVENT_STAGE)
     assert run["out"]["events"] > 0  # it did the work, so the guard is not passing on nothing
+    assert run["out"]["named"] > 0  # and named players (h-t12) from the tracks alone
     assert any(o.endswith("observations-seed900001.jsonl") for o in run["opened"])
     assert truth_reads(run) == []
 

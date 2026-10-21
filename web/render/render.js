@@ -73,18 +73,14 @@ function pitchTexture(p, rand) {
   g.fillRect(0, Y(0), W, H - Y(0));
   g.fillRect(0, 0, X(0), H);
   g.fillRect(X(105), 0, W - X(105), H);
-  // wear: goalmouths and the centre circle
+  // wear: goalmouths and the centre circle, as thin, pale grass. The shader tints it (uWear); the
+  // texture only breaks it up a little, a few pale tufts, never brown blotches across the area.
   const wearSpots = [[5, 34, 7], [100, 34, 7], [11, 34, 5], [94, 34, 5], [52.5, 34, 6]];
   for (const [wx, wy, wr] of wearSpots) {
-    const grad = g.createRadialGradient(X(wx), Y(wy), 0, X(wx), Y(wy), wr * PX_PER_M);
-    grad.addColorStop(0, `rgba(120,100,60,${0.55 * p.wear})`);
-    grad.addColorStop(1, 'rgba(120,100,60,0)');
-    g.fillStyle = grad;
-    g.fillRect(X(wx - wr), Y(wy + wr), 2 * wr * PX_PER_M, 2 * wr * PX_PER_M);
-    for (let k = 0; k < 400 * p.wear; k++) {
+    for (let k = 0; k < 120 * p.wear; k++) {
       const a = rand() * 6.283, r = Math.sqrt(rand()) * wr;
-      g.fillStyle = `rgba(110,90,55,${0.25 + 0.3 * rand()})`;
-      g.fillRect(X(wx + Math.cos(a) * r), Y(wy + Math.sin(a) * r), 4 + 6 * rand(), 3 + 5 * rand());
+      g.fillStyle = `rgba(150,150,90,${0.06 + 0.08 * rand()})`;
+      g.fillRect(X(wx + Math.cos(a) * r), Y(wy + Math.sin(a) * r), 3 + 4 * rand(), 2 + 3 * rand());
     }
   }
   // markings, 12 cm wide
@@ -152,6 +148,7 @@ function decoratePitch(mat, wet, grass, normal, p) {
     shader.uniforms.uStripe = { value: p.stripe_width_m };
     shader.uniforms.uX0 = { value: GROUND.x0 };
     shader.uniforms.uMow = { value: mow };
+    shader.uniforms.uWear = { value: p.wear };
     shader.vertexShader = 'varying vec3 vGrassW;\n' + shader.vertexShader;
     shader.vertexShader = shader.vertexShader.replace(
       '#include <project_vertex>',
@@ -160,6 +157,7 @@ function decoratePitch(mat, wet, grass, normal, p) {
     shader.fragmentShader = `
       varying vec3 vGrassW;
       uniform float uWet;
+      uniform float uWear;
       uniform sampler2D uGrass;
       uniform sampler2D uGrassN;
       uniform float uHasGrass;
@@ -192,7 +190,7 @@ function decoratePitch(mat, wet, grass, normal, p) {
     shader.fragmentShader = shader.fragmentShader.replace('#include <map_fragment>', `
       #include <map_fragment>
       float pale = smoothstep(0.62, 0.86, dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114)));
-      // The painted wear is a thin brown. Hold that brown. The stripe stays in the paint.
+      // The markings (pale) are never worn.
       float worn = 0.0;
       worn = max(worn, 1.0 - smoothstep(3.2, 7.0, length(vGrassW.xy - vec2(5.0, 34.0))));
       worn = max(worn, 1.0 - smoothstep(3.2, 7.0, length(vGrassW.xy - vec2(100.0, 34.0))));
@@ -200,7 +198,11 @@ function decoratePitch(mat, wet, grass, normal, p) {
       worn = max(worn, 1.0 - smoothstep(2.2, 5.0, length(vGrassW.xy - vec2(94.0, 34.0))));
       worn = max(worn, 1.0 - smoothstep(2.6, 6.0, length(vGrassW.xy - vec2(52.5, 34.0))));
       worn *= 1.0 - pale;
-      diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.25, 0.78, 0.50), worn);
+      // Worn turf is thinner, paler, yellower grass, not bare earth, and it follows the mowing:
+      // the stripe that lies toward the camera shows it a little more (design). A clip's wear
+      // (0.1 to 0.9) sets how much, at most 45% of the way to that tint.
+      worn *= uWear * 0.45 * (0.75 + 0.25 * stripeAlt(vGrassW.xy));
+      diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.12, 1.04, 0.78), worn);
       float clump = gnoise(vGrassW.xy * 0.22);
       diffuseColor.rgb *= mix(0.9 + 0.12 * clump, 1.0, pale);
       if (uHasGrass > 0.5) {
@@ -223,9 +225,12 @@ function decoratePitch(mat, wet, grass, normal, p) {
   return mat;
 }
 
-function quad(p0, p1, p2, p3, material, flipU) {
+// u runs from p0 to p1 and v from p0 to p3: a texture reads left to right for a viewer on the side
+// the quad's corners go round anticlockwise. `repeat` tiles a repeating texture that many times.
+function quad(p0, p1, p2, p3, material, repeat = [1, 1]) {
   const geo = new THREE.BufferGeometry();
-  const uv = flipU ? [1, 0, 0, 0, 0, 1, 1, 0, 0, 1, 1, 1] : [0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1];
+  const [ru, rv] = repeat;
+  const uv = [0, 0, ru, 0, ru, rv, 0, 0, ru, rv, 0, rv];
   geo.setAttribute('position', new THREE.Float32BufferAttribute([...p0, ...p1, ...p2, ...p0, ...p2, ...p3], 3));
   geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   geo.computeVertexNormals();
@@ -271,7 +276,9 @@ function crowdTexture(p, rand, w, h) {
   return canvasTexture(c);
 }
 
-function tier(decor, p, rand, corners, aniso) {
+// A tier of seats. The seat texture spans 118 m (a side stand) unless `uSpan` says what share of it
+// this tier shows, so a short or skewed tier has seats of the same size.
+function tier(decor, p, rand, corners, aniso, uSpan = 1) {
   const map = crowdTexture(p, rand, 2048, 384);
   map.anisotropy = aniso;
   const mat = new THREE.MeshStandardMaterial({
@@ -281,8 +288,58 @@ function tier(decor, p, rand, corners, aniso) {
     emissiveIntensity: p.lighting === 'night' ? 0.55 : 0.02,
     side: THREE.DoubleSide,
   });
-  decor.push(quad(...corners, mat));
+  decor.push(quad(...corners, mat, [uSpan, 1]));
 }
+
+// Cladding for the stands' structure: panels in the stand colour, each a little lighter or darker,
+// with seams, a row of concourse openings and weathering toward the ground. One tile is 32 x 8 m.
+function claddingTexture(p, rand) {
+  const c = document.createElement('canvas');
+  c.width = 1024; c.height = 256;
+  const g = c.getContext('2d');
+  const base = new THREE.Color(p.stand_color || '#3a3f4a');
+  const tone = {};
+  base.getHSL(tone);
+  const panel = 64;
+  for (let x = 0; x < c.width; x += panel) {
+    for (let y = 0; y < c.height; y += panel) {
+      g.fillStyle = hsl(tone.h, tone.s * 0.6, Math.min(0.62, tone.l + 0.16 + 0.05 * (rand() - 0.5)));
+      g.fillRect(x, y, panel, panel);
+    }
+  }
+  g.fillStyle = 'rgba(0,0,0,0.35)';
+  for (let x = 0; x < c.width; x += panel) g.fillRect(x, 0, 2, c.height);
+  for (let y = 0; y < c.height; y += panel) g.fillRect(0, y, c.width, 2);
+  // Concourse openings, dark, in a band a third of the way up.
+  g.fillStyle = 'rgba(12,14,18,0.85)';
+  for (let x = 10; x < c.width; x += 128) g.fillRect(x, 150, 92, 34);
+  // Weathering: darker toward the bottom of each tile.
+  const grd = g.createLinearGradient(0, 0, 0, c.height);
+  grd.addColorStop(0, 'rgba(0,0,0,0.0)');
+  grd.addColorStop(1, 'rgba(0,0,0,0.28)');
+  g.fillStyle = grd;
+  g.fillRect(0, 0, c.width, c.height);
+  const tex = canvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
+
+// The underside of a roof: steel trusses across a dark deck. One tile is 24 x 16 m.
+function roofTexture() {
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 256;
+  const g = c.getContext('2d');
+  g.fillStyle = '#2a2e35';
+  g.fillRect(0, 0, c.width, c.height);
+  g.fillStyle = '#4a505a';
+  for (let x = 0; x < c.width; x += 64) g.fillRect(x, 0, 6, c.height);
+  g.fillStyle = '#383d45';
+  for (let y = 0; y < c.height; y += 32) g.fillRect(0, y, c.width, 3);
+  const tex = canvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
+
 
 function boardTexture(p, rand) {
   const c = document.createElement('canvas');
@@ -581,6 +638,22 @@ function idMaterial(id) {
 // Object space is Y-up metres, +X his left, +Z the way he faces. Positive bone X swings a limb back.
 // A third angle, Y, twists a bone about its length (Root: the hips; spine: the chest; thigh: the foot).
 const MESH_CONTACT = new Set(['strike', 'foot', 'thigh', 'chest', 'head', 'hands', 'throw', 'dive', 'shield']);
+// Touches taken in stride: the stored pose gives only the arms (meshpose._FEET).
+const MESH_FEET = new Set(['strike', 'foot', 'thigh']);
+const ARMS = ['upperarm_l', 'lowerarm_l', 'upperarm_r', 'lowerarm_r'];
+// Holding the ball (meshpose.HOLD_*): the bend split down the spine, a hand either side of it.
+const HOLD_BEND = [['spine_01', 0.45], ['spine_02', 0.4], ['spine_03', 0.15], ['neck_01', -0.3]];
+const HOLD_SIDE = 0.14;
+// Arm search (meshpose.ARM_*): upper arm X and Z, lower arm X and Z, Z for the left arm.
+const ARM_UX = [-2.2, -1.4, -0.7, 0.0];
+const ARM_UZ = [-0.4, 0.2, 0.6, 1.0];
+const ARM_LX = [-1.0, -0.4, 0.2];
+const ARM_LZ = [-0.3, 0.2, 0.6];
+const ARM_STEP = [0.3, 0.2, 0.25, 0.2];
+const ARM_LIMIT = [[-2.8, 1.0], [-0.8, 1.3], [-1.6, 0.6], [-0.6, 1.0]];
+const ARM_PULL = 0.004;
+const MOVES4 = [];
+for (const a of [-1, 0, 1]) for (const b of [-1, 0, 1]) for (const c of [-1, 0, 1]) for (const d of [-1, 0, 1]) if (a || b || c || d) MOVES4.push([a, b, c, d]);
 const THIGH_CAND = [-0.9, -0.55, -0.25, 0.05, 0.35, 0.6];
 const THIGH_Z = [-0.6, -0.4, -0.15, 0.0, 0.15, 0.4, 0.6];
 const CALF_CAND = [0.05, 0.35, 0.7, 1.1, 1.5];
@@ -596,14 +669,21 @@ for (const a of [-1, 0, 1]) for (const b of [-1, 0, 1]) if (a || b) MOVES2.push(
 const PLANT_FOOT = 0.12;
 const STRIKE_FOOT = 0.4;
 const PLANT_GIVE_UP = 0.45;
+const FLOOR_SLACK = 0.02;
+const STAND_BLEND = [0.25, 0.9]; // m/s: stand pose blended into the stride (meshpose.STAND_BLEND)
+const STRIDE_GROW = [1.6, 2.8]; // m/s: the walk's stride grows to the full stride (meshpose.STRIDE_GROW)
 const LEAN_X = [-0.6, -0.4, -0.2, 0.0, 0.2, 0.4, 0.6];
 const LEAN_Z = [-0.4, -0.2, 0.0, 0.2, 0.4];
 const LEAN_STEP = [0.1, 0.1];
 const LEAN_LIMIT = [[-0.9, 0.9], [-0.6, 0.6]];
 const LEAN_SHARE = [['spine_01', 0.35], ['spine_02', 0.35], ['neck_01', 0.3]];
 const TWIST_SIGN = -1.0;
+// The asset's stature (meshpose.ASSET_STATURE_M): a player height_m tall is the asset scaled by
+// height_m / ASSET_STATURE_M. And the forehead a header meets the ball with (meshpose.BROW_Y).
+const ASSET_STATURE_M = 1.684;
+const BROW_Y = 1.63;
 const EXTRA = {
-  brow: ['head', [0.0, 1.70, 0.13]],
+  brow: ['head', [0.0, BROW_Y, 0.13]],
   chest: ['spine_03', [0.0, 1.28, 0.14]],
   thigh_top_l: ['thigh_l', [0.14, 0.64, 0.10]],
   thigh_top_r: ['thigh_r', [-0.14, 0.64, 0.10]],
@@ -698,7 +778,9 @@ function copyPose(raw) {
   return out;
 }
 
-function gaitPose(s, run) {
+// The arms swing opposite the legs: from the stored walk (elbows nearly straight) to the stored
+// run (elbows near a right angle) as armT goes from 0 to 1 (meshpose.gait).
+function gaitPose(s, run, walk, armT) {
   const left = (s + 1) / 2, right = (1 - s) / 2;
   const out = {};
   for (const base of ['thigh', 'calf', 'foot']) {
@@ -706,14 +788,25 @@ function gaitPose(s, run) {
     out[base + '_l'] = lv * left + rv * right;
     out[base + '_r'] = rv * left + lv * right;
   }
+  const arms = walk ? blendXZ(walk, run, armT) : run;
   for (const base of ['upperarm', 'lowerarm']) {
-    const [lx, lz] = xzy(run[base + '_l']);
-    const [rx, rz] = xzy(run[base + '_r']);
-    out[base + '_l'] = [lx * left + rx * right, lz];
-    out[base + '_r'] = [rx * left + lx * right, rz];
+    const [lx, lz] = xzy(arms[base + '_l']);
+    const [rx, rz] = xzy(arms[base + '_r']);
+    out[base + '_l'] = [lx * left + rx * right, lz * left - rz * right];
+    out[base + '_r'] = [rx * left + lx * right, rz * left - lz * right];
   }
   if (run.spine_01 != null) out.spine_01 = run.spine_01;
   if (run.spine_02 != null) out.spine_02 = run.spine_02;
+  return out;
+}
+
+function blendXZ(a, b, t) {
+  const out = {};
+  for (const key of ARMS) {
+    const [ax, az] = xzy(a[key]);
+    const [bx, bz] = xzy(b[key]);
+    out[key] = [ax + (bx - ax) * t, az + (bz - az) * t];
+  }
   return out;
 }
 
@@ -771,14 +864,14 @@ function pointOf(angles, name, player) {
 }
 
 function toObject(x, y, heading, height, wx, wy, wz = 0, lift = 0) {
-  const k = height / 1.84;
+  const k = height / ASSET_STATURE_M;
   const hx = Math.cos(heading), hy = Math.sin(heading);
   const dx = (wx - x) / k, dy = (wy - y) / k;
   return [-hy * dx + hx * dy, (wz - lift) / k, hx * dx + hy * dy];
 }
 
 function toWorld(x, y, heading, height, p, lift = 0) {
-  const k = height / 1.84;
+  const k = height / ASSET_STATURE_M;
   const hx = Math.cos(heading), hy = Math.sin(heading);
   return [
     x + k * (-hy * p[0] + hx * p[2]),
@@ -877,28 +970,38 @@ function wrapAngle(a) {
   return (t < 0 ? t + 2 * Math.PI : t) - Math.PI;
 }
 
-function anglesFor(player, pose, heading, height) {
+// The angles before the feet are placed: the action, the turn, the arms and a held ball (meshpose._upper).
+function upperAngles(player, pose, heading, height) {
   const poses = player.poses;
   const action = pose.action || 'stand';
   const speed = pose.speed || 0;
-  const x = pose.x, y = pose.y;
   const lead = pose.lead || 0;
-  const lift = pose.lift || 0;
   let angles;
-  if ((action === 'strike' || action === 'foot' || action === 'thigh') && poses[action]) {
-    angles = pose.reach > 0 ? mirrorPose(poses[action]) : copyPose(poses[action]);
-  } else if (poses[action] && MESH_CONTACT.has(action)) {
+  if (poses[action] && MESH_CONTACT.has(action) && !MESH_FEET.has(action)) {
     angles = copyPose(poses[action]);
     if (action === 'dive') {
       const mag = Math.min(1, Math.abs(pose.dive || 0));
       if ((pose.dive || 0) < 0) angles = mirrorPose(angles);
       angles = scalePose(angles, mag > 0.35 ? mag : 0.35, false);
     }
-  } else if (action === 'stand' || speed < player.standSpeed) {
+  } else if (speed < STAND_BLEND[0] || (action === 'stand' && speed < player.standSpeed)) {
     angles = copyPose(poses.stand);
   } else {
-    angles = gaitPose(Math.sin(pose.phase || 0), poses.run);
-    if (action !== 'run' && speed < player.fullStrideSpeed) angles = scalePose(angles, player.walkScale, true);
+    // A strike or a touch with the foot or thigh is taken in stride.
+    const full = player.fullStrideSpeed;
+    const armT = action === 'run' ? 1 : Math.min(Math.max((speed - full) / (player.armRunSpeed - full), 0), 1);
+    angles = gaitPose(Math.sin(pose.phase || 0), poses.run, poses.walk, armT);
+    if (action !== 'run' && speed < STRIDE_GROW[1]) {
+      // A walk's short stride grows into the full one through a jog (meshpose.STRIDE_GROW).
+      const t = Math.min(Math.max((speed - STRIDE_GROW[0]) / (STRIDE_GROW[1] - STRIDE_GROW[0]), 0), 1);
+      const legs = {};
+      for (const [key, v] of Object.entries(angles)) if (!ARMS.includes(key)) legs[key] = v;
+      Object.assign(angles, scalePose(legs, player.walkScale + (1 - player.walkScale) * t, true));
+    }
+    // Setting off and pulling up, the stride grows out of the stance and back into it.
+    if (action !== 'run' && speed < STAND_BLEND[1]) {
+      angles = blendPose(copyPose(poses.stand), angles, (speed - STAND_BLEND[0]) / (STAND_BLEND[1] - STAND_BLEND[0]));
+    }
   }
   if (lead) {
     // The hips lead a turn and the chest follows: Root turns the hips and legs, the lower spine
@@ -907,6 +1010,25 @@ function anglesFor(player, pose, heading, height) {
     addAngle(angles, 'spine_01', 0, 0, -lead * 0.5);
     addAngle(angles, 'spine_02', 0, 0, -lead * 0.5);
   }
+  const touch = pose.touch;
+  if (touch && touch.w > 0 && MESH_FEET.has(touch.part)) {
+    // The arms balance the kick or the touch (stored for a right-footed touch).
+    let arms = copyPose(poses[touch.part]);
+    if ((touch.side || 'r') === 'l') arms = mirrorPose(arms);
+    const target = Object.assign({}, angles);
+    for (const key of ARMS) target[key] = arms[key];
+    angles = blendPose(angles, target, touch.w);
+  }
+  const hold = pose.hold;
+  if (hold && hold.w > 0) angles = blendPose(angles, holdPose(player, angles, pose, hold, heading, height), hold.w);
+  return angles;
+}
+
+function anglesFor(player, pose, heading, height) {
+  const x = pose.x, y = pose.y;
+  const lead = pose.lead || 0;
+  const lift = pose.lift || 0;
+  let angles = upperAngles(player, pose, heading, height);
   // scene.py plants a foot only when the pose stands on it.
   for (const side of ['l', 'r']) {
     const plant = pose['plant_' + side];
@@ -914,8 +1036,14 @@ function anglesFor(player, pose, heading, height) {
     const twist = plant.length > 2 && plant[2] != null ? TWIST_SIGN * wrapAngle(plant[2] - heading - lead) : 0;
     const pz = plant.length > 3 ? plant[3] : 0;
     const target = toObject(x, y, heading, height, plant[0], plant[1], pz, lift);
-    const [planted, err] = searchLeg(angles, side, target, PLANT_FOOT, twist, 'foot_' + side, true, player);
-    if (err <= PLANT_GIVE_UP) angles = planted;
+    let [planted, err] = searchLeg(angles, side, target, PLANT_FOOT, twist, 'foot_' + side, true, player);
+    if (err > PLANT_GIVE_UP && lift < 0) {
+      // Lowered, an unreachable foot reaches toward its plant above the grass (meshpose.pose_angles).
+      planted = searchLeg(angles, side, target, PLANT_FOOT, twist, 'foot_' + side, false, player, null, -lift / (height / ASSET_STATURE_M))[0];
+      err = 0;
+    }
+    // A stride's plant comes and goes with a weight (scene.PLANT_EASE_FRAMES).
+    if (err <= PLANT_GIVE_UP) angles = blendPose(angles, planted, plant.length > 4 && plant[4] != null ? plant[4] : 1);
   }
   const touch = pose.touch;
   if (touch && touch.w > 0) {
@@ -924,7 +1052,13 @@ function anglesFor(player, pose, heading, height) {
     let reached;
     if (touch.part === 'foot' || touch.part === 'strike') {
       const foot = touch.part === 'strike' ? STRIKE_FOOT : PLANT_FOOT;
-      reached = searchLeg(angles, side, target, foot, 0, 'foot_' + side, false, player, null, -lift / (height / 1.84))[0];
+      const floor = -lift / (height / ASSET_STATURE_M);
+      reached = searchLeg(angles, side, target, foot, 0, 'foot_' + side, false, player, null, floor)[0];
+      angles = blendPose(angles, reached, touch.w);
+      // A blend that dips the foot under the grass puts it back on it (meshpose.pose_angles).
+      const p = pointOf(angles, 'foot_' + side, player);
+      if (p[1] < floor - FLOOR_SLACK) angles = searchLeg(angles, side, [p[0], floor, p[2]], foot, 0, 'foot_' + side, false, player, null, floor)[0];
+      return angles;
     } else if (touch.part === 'thigh') {
       reached = searchLeg(angles, side, target, 0.25, 0, 'thigh_top_' + side, false, player, 1.5)[0];
     } else {
@@ -933,6 +1067,70 @@ function anglesFor(player, pose, heading, height) {
     angles = blendPose(angles, reached, touch.w);
   }
   return angles;
+}
+
+// Bend over a held ball and put a hand either side of it (meshpose._hold).
+function holdPose(player, angles, pose, hold, heading, height) {
+  let out = Object.assign({}, angles);
+  const bend = hold.bend || 0;
+  for (const [bone, share] of HOLD_BEND) addAngle(out, bone, bend * share, 0, 0);
+  const centre = toObject(pose.x, pose.y, heading, height, hold.at[0], hold.at[1], hold.at[2], pose.lift || 0);
+  const k = height / ASSET_STATURE_M;
+  const idx = player.boneIndex;
+  const girdle = poseBones(out, player.bones, Math.max(idx.clavicle_l, idx.clavicle_r));
+  for (const [side, sign] of [['l', 1], ['r', -1]]) {
+    out = searchArm(player, out, side, sign, [centre[0] + sign * HOLD_SIDE / k, centre[1], centre[2]], girdle);
+  }
+  return out;
+}
+
+// The hand marker for these arm angles, from the posed shoulder girdle (meshpose._arm_hand).
+function armHand(player, angles, side, girdle) {
+  const bones = player.bones, idx = player.boneIndex;
+  const heads = girdle.heads.slice(), rots = girdle.rots.slice();
+  for (const name of ['upperarm_' + side, 'lowerarm_' + side, 'hand_' + side]) {
+    const b = idx[name], bone = bones[b], parent = bone.parent;
+    const swing = matmul(rots[parent], transpose9(bones[parent].R));
+    const ph = bones[parent].head;
+    const swung = matvec(swing, bone.head[0] - ph[0], bone.head[1] - ph[1], bone.head[2] - ph[2]);
+    heads[b] = [heads[parent][0] + swung[0], heads[parent][1] + swung[1], heads[parent][2] + swung[2]];
+    rots[b] = matmul(swing, matmul(bone.R, localRot(angles[name] ?? 0)));
+  }
+  const m = player.markers['hand_' + side];
+  return skinOne(m.pos, m.skin, { heads, rots }, bones);
+}
+
+// Upper and lower arm angles that put the hand on `target` (meshpose._arm).
+function searchArm(player, angles, side, sign, target, girdle) {
+  const stand = player.poses.stand;
+  const rest = [...xzy(stand.upperarm_l).slice(0, 2), ...xzy(stand.lowerarm_l).slice(0, 2)];
+  const trial = (params) => {
+    const t = Object.assign({}, angles);
+    t['upperarm_' + side] = [params[0], params[1] * sign];
+    t['lowerarm_' + side] = [params[2], params[3] * sign];
+    const p = armHand(player, t, side, girdle);
+    let err = Math.hypot(p[0] - target[0], p[1] - target[1], p[2] - target[2]);
+    let pull = 0;
+    for (let j = 0; j < 4; j++) pull += Math.abs(params[j] - rest[j]);
+    err += ARM_PULL * pull;
+    return [err, t];
+  };
+  let best = null;
+  for (const ux of ARM_UX) for (const uz of ARM_UZ) for (const lx of ARM_LX) for (const lz of ARM_LZ) {
+    const [err, t] = trial([ux, uz, lx, lz]);
+    if (!best || err < best[0]) best = [err, t, [ux, uz, lx, lz]];
+  }
+  const steps = ARM_STEP.slice();
+  for (let it = 0; it < REFINE; it++) {
+    const centre = best[2];
+    for (const move of MOVES4) {
+      const params = centre.map((c, j) => clampTo(c + move[j] * steps[j], ARM_LIMIT[j]));
+      const [err, t] = trial(params);
+      if (err < best[0]) best = [err, t, params];
+    }
+    for (let j = 0; j < 4; j++) steps[j] /= 2;
+  }
+  return best[1];
 }
 
 function bindPart(part, bones) {
@@ -1199,7 +1397,7 @@ class Body {
         sock.uLeft.value.copy(this.kit.uLeft.value);
       }
     }
-    const k = this.heightM / 1.84;
+    const k = this.heightM / ASSET_STATURE_M;
     this.group.position.set(x, y, pose.lift || 0);
     this.group.scale.set(k, k, k);
     this.group.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(
@@ -1307,14 +1505,20 @@ class BroadcastRenderer {
     sky.frustumCulled = false;
     this.decor = [sky, surround, pitch];
 
-    // Two tiers and a solid back wall. The near stand's front lip stays at y=-46, past the furthest gantry.
-    // Stands, roofs and towers are decor: the id pass ignores them.
-    const shell = new THREE.MeshStandardMaterial({ color: 0x1c2026, roughness: 0.92, side: THREE.DoubleSide });
+    // Two tiers on every side, on clad structure, inside a clad back wall under a roof ring, so the
+    // bowl is closed: no flat black wall and no sky between the stands. The near stand's front lip
+    // stays at y=-46, past the furthest gantry. Stands, roofs and towers are decor: the id pass
+    // ignores them.
+    const cladding = claddingTexture(p, rand);
+    cladding.anisotropy = maxAniso;
+    const shell = new THREE.MeshStandardMaterial({ map: cladding, roughness: 0.9, side: THREE.DoubleSide });
+    const span = (a, b) => Math.max(1, Math.round(Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]) / 32));
+    const clad = (p0, p1, p2, p3) => quad(p0, p1, p2, p3, shell, [span(p0, p1), Math.max(1, Math.round(Math.hypot(p3[0] - p0[0], p3[1] - p0[1], p3[2] - p0[2]) / 8))]);
     this.decor.push(
-      quad([-24, 78, 0.2], [134, 78, 0.2], [134, 114, 18], [-24, 114, 18], shell),
-      quad([134, -48, 0.2], [-24, -48, 0.2], [-24, -80, 18], [134, -80, 18], shell),
-      quad([-16, 72, 0.8], [-16, 2, 0.8], [-40, 2, 14], [-40, 72, 14], shell),
-      quad([121, 2, 0.8], [121, 72, 0.8], [145, 72, 14], [145, 2, 14], shell),
+      clad([-36, 78, 0.2], [141, 78, 0.2], [141, 114, 18], [-36, 114, 18]),
+      clad([141, -48, 0.2], [-36, -48, 0.2], [-36, -80, 18], [141, -80, 18]),
+      clad([-16, 112, 0.8], [-16, -60, 0.8], [-40, -60, 14], [-40, 112, 14]),
+      clad([121, -60, 0.8], [121, 112, 0.8], [145, 112, 14], [145, -60, 14]),
     );
     tier(this.decor, p, rand, [[-4, 74.3, 2.0], [114, 74.3, 2.0], [114, 91, 9.2], [-4, 91, 9.2]], maxAniso);
     tier(this.decor, p, rand, [[-4, 95.5, 10.6], [114, 95.5, 10.6], [114, 112, 19.5], [-4, 112, 19.5]], maxAniso);
@@ -1322,11 +1526,6 @@ class BroadcastRenderer {
     tier(this.decor, p, rand, [[114, -64, 9.6], [-4, -64, 9.6], [-4, -78, 17.5], [114, -78, 17.5]], maxAniso);
     tier(this.decor, p, rand, [[-11, 70, 1.4], [-11, 4, 1.4], [-34, 4, 12], [-34, 70, 12]], maxAniso);
     tier(this.decor, p, rand, [[116, 4, 1.4], [116, 70, 1.4], [139, 70, 12], [139, 4, 12]], maxAniso);
-    const roofMat = new THREE.MeshStandardMaterial({ color: 0x16181d, roughness: 0.62, metalness: 0.28 });
-    const farRoof = new THREE.Mesh(new THREE.BoxGeometry(140, 8, 0.35), roofMat);
-    farRoof.position.set(52.5, 116, 20.2);
-    const nearRoof = new THREE.Mesh(new THREE.BoxGeometry(150, 10, 0.45), roofMat);
-    nearRoof.position.set(52.5, -68, 22);
     const boardTex = boardTexture(p, rand);
     boardTex.anisotropy = maxAniso;
     const boardsLit = p.lighting === 'night' || p.lighting === 'dusk';
@@ -1336,17 +1535,25 @@ class BroadcastRenderer {
       emissive: new THREE.Color(boardsLit ? 0xffffff : 0x444444),
       emissiveMap: boardTex,
       emissiveIntensity: boardsLit ? 0.85 : 0.45,
-      side: THREE.DoubleSide,
+      side: THREE.FrontSide,
     });
-    const nearBoardMat = boardMat.clone();
-    nearBoardMat.side = THREE.FrontSide;
+    // Every board is printed on the side that faces the pitch, so it reads left to right from
+    // anywhere on it, from the gantry and from the reverse angle. Seen from behind, a board is its
+    // plain back, never its print mirrored.
     const boards = [
       quad([-2, 71.5, 0], [107, 71.5, 0], [107, 71.5, 1.8], [-2, 71.5, 1.8], boardMat),
-      // Faces the pitch (+y), so the reverse camera reads the boards and the gantry does not see the back.
-      quad([107, -1.6, 0], [-2, -1.6, 0], [-2, -1.6, 1.8], [107, -1.6, 1.8], nearBoardMat),
-      quad([-4, 2, 0], [-4, 66, 0], [-4, 66, 0.9], [-4, 2, 0.9], boardMat, true),
-      quad([109, 66, 0], [109, 2, 0], [109, 2, 0.9], [109, 66, 0.9], boardMat, true),
+      // The gantry is behind the near boards: they have no back, so it sees through to the pitch.
+      quad([107, -1.6, 0], [-2, -1.6, 0], [-2, -1.6, 1.8], [107, -1.6, 1.8], boardMat),
+      quad([-4, 2, 0], [-4, 66, 0], [-4, 66, 0.9], [-4, 2, 0.9], boardMat),
+      quad([109, 66, 0], [109, 2, 0], [109, 2, 0.9], [109, 66, 0.9], boardMat),
     ];
+    const backMat = new THREE.MeshStandardMaterial({ color: 0x24272d, roughness: 0.8 });
+    const backs = [0, 2, 3].map((i) => {
+      const a = boards[i].geometry.attributes.position.array;
+      const c = (j) => [a[3 * j], a[3 * j + 1], a[3 * j + 2]];
+      // The same corners the other way round: the face turned away from the pitch.
+      return quad(c(1), c(0), c(5), c(2), backMat);
+    });
     // Towers sit with the far stand, behind the play. Like the stands they are decor: the id pass ignores them.
     const towerMat = new THREE.MeshStandardMaterial({ color: 0x2c3138, roughness: 0.62, metalness: 0.35 });
     const lampMat = new THREE.MeshStandardMaterial({
@@ -1378,7 +1585,54 @@ class BroadcastRenderer {
     );
     this.shadows.renderOrder = 2;
     this.shadows.frustumCulled = false;
-    this.decor.push(farRoof, nearRoof, ...boards, ...towers, this.shadows);
+    this.boards = boards;
+    this.decor.push(...boards, ...backs, ...towers, this.shadows);
+    // Built after the boards and the towers, so their seeded draws (and look) are what they were.
+    // The ends get an upper tier like the sides, and each corner a wedge of seats from the end
+    // stand round to the side stand, lower and upper.
+    tier(this.decor, p, rand, [[-36.5, 70, 13.5], [-36.5, 4, 13.5], [-52, 4, 22], [-52, 70, 22]], maxAniso);
+    tier(this.decor, p, rand, [[141.5, 4, 13.5], [141.5, 70, 13.5], [157, 70, 22], [157, 4, 22]], maxAniso);
+    for (const [ex, sx, dir] of [[-11, -4, -1], [116, 114, 1]]) {
+      for (const [ey, sy, out] of [[70, 74.3, 1], [4, -46, -1]]) {
+        const lo = out > 0 ? [[ex, ey, 1.4], [sx, sy, 2.0], [sx, sy + out * 16.7, 9.2], [ex + dir * 23, ey, 12]]
+          : [[ex, ey, 1.4], [sx, sy, 1.6], [sx, sy + out * 14, 8.4], [ex + dir * 23, ey, 12]];
+        const hi = out > 0 ? [[ex + dir * 25.5, ey, 13.5], [sx, sy + out * 21.2, 10.6], [sx, sy + out * 37.7, 19.5], [ex + dir * 41, ey, 22]]
+          : [[ex + dir * 25.5, ey, 13.5], [sx, sy + out * 18, 9.6], [sx, sy + out * 32, 17.5], [ex + dir * 41, ey, 22]];
+        // Corners go round anticlockwise seen from the pitch, so the seats face it.
+        const flip = dir * out > 0;
+        for (const c of [lo, hi]) {
+          const edge = Math.max(Math.hypot(c[1][0] - c[0][0], c[1][1] - c[0][1]), Math.hypot(c[2][0] - c[3][0], c[2][1] - c[3][1]));
+          tier(this.decor, p, rand, flip ? [c[1], c[0], c[3], c[2]] : c, maxAniso, edge / 118);
+        }
+      }
+    }
+    // The back wall all round, then the roof ring over the upper tiers, sloping down to its front edge.
+    const W = { x0: -60, x1: 165, y0: -86, y1: 120, z: 26, eave: 24, depth: 16 };
+    this.decor.push(
+      clad([W.x0, W.y1, 0], [W.x1, W.y1, 0], [W.x1, W.y1, W.z], [W.x0, W.y1, W.z]),
+      clad([W.x1, W.y0, 0], [W.x0, W.y0, 0], [W.x0, W.y0, W.z], [W.x1, W.y0, W.z]),
+      clad([W.x0, W.y0, 0], [W.x0, W.y1, 0], [W.x0, W.y1, W.z], [W.x0, W.y0, W.z]),
+      clad([W.x1, W.y1, 0], [W.x1, W.y0, 0], [W.x1, W.y0, W.z], [W.x1, W.y1, W.z]),
+    );
+    const roofTex = roofTexture();
+    roofTex.anisotropy = maxAniso;
+    const roofMat = new THREE.MeshStandardMaterial({ map: roofTex, roughness: 0.7, metalness: 0.2, side: THREE.DoubleSide });
+    const roof = (p0, p1, p2, p3) => quad(p0, p1, p2, p3, roofMat, [span(p0, p1) * 32 / 24, 1]);
+    const d = W.depth;
+    this.decor.push(
+      roof([W.x0, W.y1 - d, W.eave], [W.x1, W.y1 - d, W.eave], [W.x1, W.y1, W.z], [W.x0, W.y1, W.z]),
+      roof([W.x1, W.y0 + d, W.eave], [W.x0, W.y0 + d, W.eave], [W.x0, W.y0, W.z], [W.x1, W.y0, W.z]),
+      roof([W.x0 + d, W.y0, W.eave], [W.x0 + d, W.y1, W.eave], [W.x0, W.y1, W.z], [W.x0, W.y0, W.z]),
+      roof([W.x1 - d, W.y1, W.eave], [W.x1 - d, W.y0, W.eave], [W.x1, W.y0, W.z], [W.x1, W.y1, W.z]),
+    );
+    // A fascia along each roof's front edge.
+    const fascia = new THREE.MeshStandardMaterial({ color: 0xd9dde2, roughness: 0.5, metalness: 0.3, side: THREE.DoubleSide });
+    this.decor.push(
+      quad([W.x0, W.y1 - d, W.eave - 1.2], [W.x1, W.y1 - d, W.eave - 1.2], [W.x1, W.y1 - d, W.eave], [W.x0, W.y1 - d, W.eave], fascia),
+      quad([W.x1, W.y0 + d, W.eave - 1.2], [W.x0, W.y0 + d, W.eave - 1.2], [W.x0, W.y0 + d, W.eave], [W.x1, W.y0 + d, W.eave], fascia),
+      quad([W.x0 + d, W.y0, W.eave - 1.2], [W.x0 + d, W.y1, W.eave - 1.2], [W.x0 + d, W.y1, W.eave], [W.x0 + d, W.y0, W.eave], fascia),
+      quad([W.x1 - d, W.y1, W.eave - 1.2], [W.x1 - d, W.y0, W.eave - 1.2], [W.x1 - d, W.y0, W.eave], [W.x1 - d, W.y1, W.eave], fascia),
+    );
 
     // goals: posts and crossbar are occluders in the id pass; the net is decor
     this.posts = [];
@@ -1435,14 +1689,21 @@ class BroadcastRenderer {
         uniform sampler2D tex; uniform vec2 blur; uniform vec2 res; uniform float noise; uniform float frame; uniform float rain;
         varying vec2 vUv;
         float hash(vec2 p){ p = fract(p * vec2(443.897, 441.423)); p += dot(p, p.yx + 19.19 + fract(frame * 0.6180339)); return fract((p.x + p.y) * p.x); }
+        // The exposure: the picture smeared along the pan over the shutter.
+        vec3 smear(vec2 uv, vec2 d){
+          vec3 s = vec3(0.0);
+          for (int k = 0; k < 9; k++) s += texture2D(tex, uv + d * (float(k) / 8.0 - 0.5)).rgb;
+          return s / 9.0;
+        }
         void main(){
           vec2 d = vec2(blur.x, -blur.y) / res;
           vec2 px = 1.0 / res;
-          vec3 c = vec3(0.0);
-          for (int k = 0; k < 9; k++) c += texture2D(tex, vUv + d * (float(k) / 8.0 - 0.5)).rgb;
-          c /= 9.0;
-          vec3 nbor = texture2D(tex, vUv + vec2(px.x, 0.0)).rgb + texture2D(tex, vUv - vec2(px.x, 0.0)).rgb
-            + texture2D(tex, vUv + vec2(0.0, px.y)).rgb + texture2D(tex, vUv - vec2(0.0, px.y)).rgb;
+          vec3 c = smear(vUv, d);
+          // The camera sharpens what the sensor recorded, the smear included. Sharpened against the
+          // unsmeared picture, a pan split every edge in two: a dark copy where it is, bright ones at
+          // either end of its smear (the critic of 0.5.1's first clips: "two ghost copies").
+          vec3 nbor = smear(vUv + vec2(px.x, 0.0), d) + smear(vUv - vec2(px.x, 0.0), d)
+            + smear(vUv + vec2(0.0, px.y), d) + smear(vUv - vec2(0.0, px.y), d);
           c += (c - nbor * 0.25) * 0.4;
           if (rain > 0.0) {
             c *= 0.9;
@@ -1752,5 +2013,11 @@ const instance = new BroadcastRenderer();
 window.ninety = {
   init: (cfg) => instance.init(cfg),
   frame: (spec) => instance.frame(spec),
+  // The advertising boards' corners and texture coordinates, for the test that they read the right way round.
+  boards: () => instance.boards.map((m) => ({
+    position: Array.from(m.geometry.attributes.position.array),
+    uv: Array.from(m.geometry.attributes.uv.array),
+    doubleSided: m.material.side === THREE.DoubleSide,
+  })),
   ready: true,
 };

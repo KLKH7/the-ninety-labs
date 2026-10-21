@@ -32,20 +32,26 @@ import argparse
 import asyncio
 import contextlib
 import json
-import re
 import sys
 import time
 import warnings
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 
 from agent_framework import Executor, WorkflowBuilder, WorkflowContext, handler
 from agent_framework.foundry import FoundryAgent
-from azure.identity import DefaultAzureCredential
 
 from ninety import config
-from ninety.agents import foundry, telemetry
-from ninety.agents.factcheck import Claim, Verdict, check, confidence_gate
+from ninety.agents import credentials, foundry, telemetry
+from ninety.agents.contracts import CLOCK_RULE  # noqa: F401  (re-exported: the slice's name before the move)
+from ninety.agents.factcheck import (
+    Claim,
+    Verdict,
+    check,
+    confidence_gate,
+    parse_claim,  # noqa: F401  (re-exported, as above)
+)
 from ninety.agents.judge import judge
 from ninety.agents.replay import (  # noqa: F401  (re-exported: the slice's names before the move)
     REPLAY_FORMAT,
@@ -66,9 +72,6 @@ MAX_REWRITES = 2
 
 # The clock rule every agent that writes a time follows (one clock for viewers and agents, lesson 33).
 # ninety/agents/contracts.py imports it into the other agents' instructions.
-CLOCK_RULE = """- For a time, use the event's clock exactly as given (01:28), or its minute as an ordinal (in
-  minute 2); never combine minute and second into a clock.
-"""
 
 INSTRUCTIONS = """You are the Analyst for a football broadcast. The request names a match (for
 example seed7) and a minute. Use the match tools, passing that match id, to read the events of that
@@ -110,21 +113,24 @@ class Outcome:
     status: str = "verified"
 
 
-def parse_claim(text: str) -> Claim:
-    body = re.search(r"\{.*\}", text, re.S)
-    data = json.loads(body.group() if body else text)
-    if not isinstance(data, dict):
-        raise ValueError(f"the Analyst's reply is not a JSON object: {text[:80]!r}")
-    return Claim(text=str(data.get("text", "")), evidence=[str(i) for i in data.get("evidence", [])])
-
 
 def tamper(claim: Claim) -> Claim:
     """Plant a false number so the fact-checker has something to catch."""
     return Claim(text=claim.text.rstrip(".") + ", at 143 km/h.", evidence=claim.evidence)
 
 
-def analyst_prompt(match: str, minute: int, feedback: list[str] | None = None) -> str:
+# A match whose events come with the request rather than from the match tools: a detected clip, or
+# an evaluation that grades against the match this commit simulated (lesson 90).
+INLINE_EVENTS = (" The match is not on the tools: do not call them. Its EVENTS for the minute follow,"
+                 " as data.\nEVENTS: ")
+
+
+def analyst_prompt(
+    match: str, minute: int, feedback: list[str] | None = None, events: list[dict] | None = None
+) -> str:
     prompt = f"Match {match}. Write the claim for minute {minute}."
+    if events is not None:
+        prompt += INLINE_EVENTS + json.dumps(events, separators=(",", ":"))
     if feedback:
         prompt += " Your previous claim was rejected: " + "; ".join(feedback) + ". Fix it."
     return prompt
@@ -149,9 +155,34 @@ class AnalystExecutor(Executor):
         await ctx.send_message(Draft(task=task, claim=claim))
 
 
+Gate = Callable[[Claim, dict[str, dict]], Verdict]  # factcheck.confidence_gate's signature
+
+
+@dataclass
+class Checked:
+    verdict: Verdict
+    judge_seconds: float | None  # how long the Judge took; None when it was not asked
+
+
+async def fact_check(
+    claim: Claim, known: dict[str, dict], judge: Judge, gate: Gate = confidence_gate
+) -> Checked:
+    """The fact-checking agent, for the slice and the workflow alike: the code checks first (free,
+    exact about numbers, players and ids), then the confidence gate (a claim resting on an unsure
+    detection is held), then the Judge (meaning), which is asked only when both pass."""
+    verdict = check(claim, known)
+    if verdict.ok:
+        verdict = gate(claim, known)
+    if not verdict.ok:
+        return Checked(verdict, None)
+    evidence = [known[i] for i in claim.evidence]
+    started = time.perf_counter()
+    verdict = await judge(claim, evidence)
+    return Checked(verdict, time.perf_counter() - started)
+
+
 class FactCheckExecutor(Executor):
-    """Code checks first (free, exact about numbers, players and ids), then the confidence gate
-    (a claim resting on an unsure detection is held), then the Judge (meaning)."""
+    """The slice's fact-checker: fact_check, then accept, send back or hold."""
 
     def __init__(self, known: dict[str, dict], judge: Judge, trace: list[str], live: bool):
         super().__init__(id="fact_checker")
@@ -160,14 +191,10 @@ class FactCheckExecutor(Executor):
     @handler
     async def review(self, draft: Draft, ctx: WorkflowContext[Task, Outcome]) -> None:
         with telemetry.stage_span("fact_check", attempt=draft.task.attempt + 1):
-            verdict = check(draft.claim, self.known)
-            if verdict.ok:
-                verdict = confidence_gate(draft.claim, self.known)
-            if verdict.ok:
-                evidence = [self.known[i] for i in draft.claim.evidence]
-                started = time.perf_counter()
-                verdict = await self.judge(draft.claim, evidence)
-                took = f"{time.perf_counter() - started:.1f}s" if self.live else "replayed"
+            checked = await fact_check(draft.claim, self.known, self.judge)
+            verdict = checked.verdict
+            if checked.judge_seconds is not None:
+                took = f"{checked.judge_seconds:.1f}s" if self.live else "replayed"
                 self.trace.append(f"judge: {'supported' if verdict.ok else 'not supported'} ({took})")
         attempt, evidence_ids = draft.task.attempt + 1, draft.claim.evidence
         if verdict.ok:
@@ -241,12 +268,14 @@ async def run_slice(
         raise ValueError(
             f"the match server serves {', '.join(match_server.MATCHES)} at {match_server.MINUTES} minutes"
         )
-    credential = DefaultAzureCredential()
-    client = foundry.chat_client(credential)
-    if trace_to == "foundry":
-        await telemetry.trace_to_foundry(client, content)
-    turns: list[Turn] = []
-    async with contextlib.AsyncExitStack() as stack:
+    async with credentials.new_credential() as credential, contextlib.AsyncExitStack() as stack:
+        # Signed in before the simulations, which can outlast agents-live's sign-in (credentials.py).
+        await credentials.sign_in(credential)
+        events, stats = match_events(seed, minutes), match_stats(seed, minutes)
+        client = foundry.chat_client(credential)
+        if trace_to == "foundry":
+            await telemetry.trace_to_foundry(client, content)
+        turns: list[Turn] = []
         # The local definitions only identify the pinned versions (and refuse to run if the code
         # drifted from them); the published agents do the work. Foundry calls the match MCP server.
         ran, agents = [], []
@@ -272,10 +301,7 @@ async def run_slice(
             turns.append(Turn("judge", judge_prompt(claim), json.dumps(asdict(verdict))))
             return verdict
 
-        events = match_events(seed, minutes)
-        outcome = await run_workflow(
-            ask, judge_live, minute, plant, seed, minutes, True, events, match_stats(seed, minutes)
-        )
+        outcome = await run_workflow(ask, judge_live, minute, plant, seed, minutes, True, events, stats)
     telemetry.flush()
     return outcome, turns, f"{', '.join(ran)} on {config.MODEL}", events
 

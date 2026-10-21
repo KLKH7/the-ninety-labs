@@ -1,9 +1,14 @@
 import json
+import os
 from collections import Counter
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
+from statistics import mean
 
+import pytest
 from jsonschema import validate
 
+from ninety.sim import funnel
 from ninety.sim.engine import BOARDS_M, FPS, PITCH_X, PITCH_Y, simulate
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -46,7 +51,9 @@ def test_events_match_schema():
 def test_football_realistic_rates_over_a_full_match():
     m = simulate(11, 90)
     c = Counter(e["type"] for e in m.events)
-    # A Premier League match has roughly 800-1000 passes and 20-30 shots.
+    # A Premier League match has roughly 800-1000 passes and 20-30 shots. Its goals are not read
+    # from one match: they are a draw of a few (8% of Premier League matches end 0-0), checked over
+    # twelve below (lesson 136).
     assert 600 <= c["pass"] <= 1300, c
     assert 10 <= c["shot"] <= 45, c
     assert 20 <= c["tackle"] <= 150, c
@@ -54,7 +61,17 @@ def test_football_realistic_rates_over_a_full_match():
     assert c["tackle"] > 0 and c["interception"] > 0 and c["pressure"] > 0
     completed = sum(1 for e in m.events if e["type"] == "pass" and e["outcome"] == "success")
     assert 0.7 <= completed / c["pass"] <= 0.9
-    assert 1 <= c["goal"] <= 6, c  # a Premier League match averages about 2.8
+
+
+@pytest.mark.skipif(os.environ.get("NINETY_HELD_OUT") != "1",
+                    reason="12 full matches, about 25 minutes on two cores: NINETY_HELD_OUT=1")
+def test_goals_over_twelve_matches_fall_where_a_real_leagues_would():
+    # R4, held out: the range is the Premier League's (funnel.goals_range), fixed before any engine
+    # number was read, and nothing is tuned to it. Two full matches at a time at most.
+    with ProcessPoolExecutor(max_workers=2) as pool:
+        goals = [r["goals"] for r in pool.map(funnel.measure, funnel.SEEDS)]
+    low, high = funnel.goals_range(len(goals))
+    assert low <= mean(goals) <= high, goals
 
 
 def test_a_pass_names_who_it_was_for_who_got_it_and_who_cut_it_out():

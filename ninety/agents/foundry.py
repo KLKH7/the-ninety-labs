@@ -121,10 +121,53 @@ def match_tool():
     )
 
 
+TOOL_CALL = "mcp_server_tool_call"  # the content type of a hosted MCP call in a FoundryAgent reply
+
+
+class ReadTheTools(RuntimeError):
+    """An agent given its minute's events inline called the match tools anyway: what it read there
+    is the deployed image's match, not the one the run simulated and grades (lesson 90)."""
+
+
+def tool_calls(reply) -> list[str]:
+    """The hosted MCP calls a published agent made while answering, as `tool(arguments)`."""
+    return [f"{c.tool_name or c.name}({c.arguments})" for m in getattr(reply, "messages", ())
+            for c in m.contents if c.type == TOOL_CALL]
+
+
+def inline_only(reply) -> str:
+    """The reply's text, or ReadTheTools if the agent called the match tools."""
+    if calls := tool_calls(reply):
+        raise ReadTheTools(f"called the match tools with the events inline: {', '.join(calls)}")
+    return reply.text
+
+
 def analyst_agent(client: FoundryChatClient) -> Agent:
     from ninety.agents.slice import INSTRUCTIONS
 
     return Agent(client=client, name="analyst", instructions=INSTRUCTIONS, tools=[match_tool()])
+
+
+def moment_analyst_agent(client: FoundryChatClient) -> Agent:
+    """The workflow's Analyst: picks the moments of a minute, through the same MCP tools. Its own
+    agent, so the slice's Analyst (and its recorded prompts) stay exactly as they are."""
+    from ninety.agents.workflow import MOMENT_ANALYST_INSTRUCTIONS
+
+    return Agent(
+        client=client, name="moment-analyst", instructions=MOMENT_ANALYST_INSTRUCTIONS, tools=[match_tool()]
+    )
+
+
+def tactician_agent(client: FoundryChatClient) -> Agent:
+    from ninety.agents.contracts import TACTICIAN_INSTRUCTIONS
+
+    return Agent(client=client, name="tactician", instructions=TACTICIAN_INSTRUCTIONS)
+
+
+def challenger_agent(client: FoundryChatClient) -> Agent:
+    from ninety.agents.contracts import CHALLENGER_INSTRUCTIONS
+
+    return Agent(client=client, name="challenger", instructions=CHALLENGER_INSTRUCTIONS)
 
 
 def slice_agents(client: FoundryChatClient) -> list[Agent]:
@@ -134,21 +177,37 @@ def slice_agents(client: FoundryChatClient) -> list[Agent]:
     return [analyst_agent(client), judge_agent(client)]
 
 
+def workflow_agents(client: FoundryChatClient) -> dict[str, Agent]:
+    """The workflow's agents by role (ninety/agents/workflow.py). The Judge is the slice's."""
+    from ninety.agents.judge import judge_agent
+
+    return {
+        "analyst": moment_analyst_agent(client),
+        "tactician": tactician_agent(client),
+        "challenger": challenger_agent(client),
+        "judge": judge_agent(client),
+    }
+
+
 def build_agents(client: FoundryChatClient) -> list[Agent]:
-    """Every agent we publish, built exactly as the live workflow builds them. The Personalizer
-    runs in its own service (ninety/personalizer/server.py)."""
+    """Every agent we publish, once each, built exactly as the live runs build them. The
+    Personalizer runs in its own service (ninety/personalizer/server.py)."""
+    from ninety.agents.companion import companion_agent
     from ninety.personalizer.core import personalizer_agent
 
-    return [*slice_agents(client), personalizer_agent(client)]
+    agents = [
+        *slice_agents(client), *workflow_agents(client).values(), personalizer_agent(client),
+        companion_agent(client),
+    ]
+    return list({a.name: a for a in agents}.values())
 
 
-def chat_client(credential=None) -> FoundryChatClient:
-    from azure.identity import DefaultAzureCredential
-
+def chat_client(credential) -> FoundryChatClient:
+    """The chat client for `credential`, which the caller owns. No default: a live caller passes its
+    run's signed-in aio credential (ninety/agents/credentials.py), never a fresh sync one, whose token
+    fetch would block the event loop and could come after agents-live's sign-in had expired."""
     return FoundryChatClient(
-        project_endpoint=config.FOUNDRY_PROJECT,
-        model=config.MODEL,
-        credential=credential or DefaultAzureCredential(),
+        project_endpoint=config.FOUNDRY_PROJECT, model=config.MODEL, credential=credential
     )
 
 

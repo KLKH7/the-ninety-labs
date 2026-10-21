@@ -1,0 +1,14 @@
+{
+  "run": "ours-v4",
+  "recorded": "2026-10-20T03:56:25Z",
+  "provider": "RunPod",
+  "gpu": "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 1g.24gb",
+  "gpu_memory_gib": 23.6,
+  "compute_capability": "12.0",
+  "nvidia_smi": [
+    "GPU 0: NVIDIA RTX PRO 6000 Blackwell Server Edition (UUID: GPU-753a81b8-728e-2d13-ea85-0f1786e6bd74)",
+    "  MIG 1g.24gb     Device  0: (UUID: MIG-e8b41c86-543f-5196-81bd-05a67c68eaf3)"
+  ],
+  "torch": "2.14.1+cu130",
+  "cuda": "13.0"
+}
