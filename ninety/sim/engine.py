@@ -175,6 +175,9 @@ INTERCEPT_SHARE = 0.85  # design: taken before this share of the way to its targ
 THROW_BEHIND_M = 0.55  # Law 15: his body stands outside the touchline, feet on or behind it (design)
 THROW_SPOT_M = 0.25  # design: within this of his spot he throws from where he stands, still behind the line
 THROW_SETTLED_MPS = BRAKE_MAX * DT  # a taker takes it once one frame of braking would stop him (P2)
+# design: closing on his place faster than one frame of braking would stop him (P2), a player is still
+# walking in to it, and keeps a walking pace (lesson 174)
+CLOSING_MPS = BRAKE_MAX * DT
 THROW_REACH_M = 0.28  # design: both hands reach toward the pitch and still stay short of the line
 THROW_HAND_Z = 1.85  # design: bottom of the ball just over an average head (no stature per player)
 
@@ -225,6 +228,7 @@ class Restart:
     direct: bool = True  # a free kick that may be scored from directly (Law 13); offside's is indirect
     wall: dict[str, tuple[float, float]] = field(default_factory=dict)  # defender -> his spot in it
     pressers: list[str] | None = None  # the other side's presser and cover, set once (lesson 174)
+    settled: set[str] = field(default_factory=set)  # at their places with the ball set (lesson 174)
 
 
 @dataclass
@@ -2448,15 +2452,21 @@ class Engine:
         his own pace, so it is not walked to and back. Judged on where he can stand, not on a place
         inside the Laws' distance that keep_off holds him off. Walking in is closing on it: one
         kept off it by another standing there, going round him, slows to his own pace rather than
-        circling him at a walk. The one fetching the ball keeps his own pace: near the boards it is
-        what he can stop in (lesson 174)."""
+        circling him at a walk. Once he has got there with the ball set on its spot (within a foot's
+        reach, CONTROL_M), he has settled: his place no longer moves with the ball, and he makes any
+        later shift of it at his own pace too, as it moves with what he sees and whom he marks, rather
+        than walking every jump of it out and back. The one fetching the ball keeps his own pace: near
+        the boards it is what he can stop in (lesson 174). Who has settled is kept on the restart."""
         r = self.restart
-        if r is None or p.id == r.fetcher:
+        if r is None or p.id == r.fetcher or p.id in r.settled:
             return top
         off = math.hypot(tx - p.x, ty - p.y)
         closing = ((tx - p.x) * p.vx + (ty - p.y) * p.vy) / off if off > 0.0 else 0.0
-        if off > SETTLE_M or closing > THROW_SETTLED_MPS:
+        if off > SETTLE_M or closing > CLOSING_MPS:
             return max(top, WALK_MPS)
+        sx, sy = self.restart_ball_spot(r)
+        if math.hypot(self.ball[0] - sx, self.ball[1] - sy) <= CONTROL_M:
+            r.settled.add(p.id)
         return top
 
     def keep_off(self, p: Player, tx: float, ty: float) -> tuple[float, float]:
@@ -2510,7 +2520,8 @@ class Engine:
         # (SETTLE_M), by a straight way that keeps the Laws' distance, as when he has stopped a hair
         # short of his place on its edge, goes straight there: sent out past it, he would come back in
         # to the same place and stop short again, out and back over and over. Going anywhere further,
-        # he keeps out of the margin, which takes up a bend round others or a step too far (lesson 174).
+        # he keeps out of the margin, which takes up most of a bend round others or a step too far
+        # (lesson 174).
         mx, my = p.x - bx, p.y - by
         m = math.hypot(mx, my)
         out = clear + KEEP_OFF_MARGIN_M

@@ -1443,20 +1443,27 @@ def test_players_walk_to_their_places_at_a_restart_rather_than_creep():
     at = place(e, keeper)
     assert at[2] < WALK_MPS  # premise: he would creep
     assert e.restart_pace(keeper, *at) >= WALK_MPS
-    # Standing half a stride from his place he settles to it at his own pace; walking in, he walks.
+    # About a stride (SETTLE_M): standing half a metre from his place he settles to it at his own
+    # pace; a metre and a half off, he walks. Closing on it at half a metre a second he is still
+    # walking in (CLOSING_MPS); walking away from it within a stride, he is not.
+    assert 0.5 < SETTLE_M < 1.5  # premise
     q = next(p for p, _ in going if p.role != "GK" and p.team == r.team)
     tx, ty, _ = place(e, q)
     d = math.dist((tx, ty), (q.x, q.y))
-    q.x, q.y = tx + (q.x - tx) / d * SETTLE_M / 2, ty + (q.y - ty) / d * SETTLE_M / 2
-    q.vx = q.vy = 0.0
-    at = place(e, q)
-    assert 0.0 < math.dist(at[:2], (q.x, q.y)) <= SETTLE_M and e.restart_pace(q, *at) == at[2]
-    q.vx, q.vy = (at[0] - q.x) / (SETTLE_M / 2) * 1.2, (at[1] - q.y) / (SETTLE_M / 2) * 1.2
-    assert e.restart_pace(q, *place(e, q)) >= WALK_MPS
-    two = 2.0 / (SETTLE_M / 2)  # from half a stride off to two metres off
-    q.x, q.y, q.vx, q.vy = tx + (q.x - tx) * two, ty + (q.y - ty) * two, 0.0, 0.0
-    at = place(e, q)
-    assert math.dist(at[:2], (q.x, q.y)) > 1.9 and e.restart_pace(q, *at) >= WALK_MPS  # 2 m off: a walk
+    ux, uy = (q.x - tx) / d, (q.y - ty) / d  # from his place out to where he is
+
+    def stand(off: float, closing: float = 0.0) -> tuple[float, float, float]:
+        q.x, q.y, q.vx, q.vy = tx + ux * off, ty + uy * off, -ux * closing, -uy * closing
+        return place(e, q)
+
+    at = stand(0.5)
+    assert abs(math.dist(at[:2], (q.x, q.y)) - 0.5) < 0.1 and e.restart_pace(q, *at) == at[2] < WALK_MPS
+    at = stand(1.5)
+    assert abs(math.dist(at[:2], (q.x, q.y)) - 1.5) < 0.1 and e.restart_pace(q, *at) >= WALK_MPS
+    at = stand(0.5, closing=0.5)
+    assert e.restart_pace(q, *at) >= WALK_MPS
+    at = stand(0.5, closing=-1.0)
+    assert e.restart_pace(q, *at) == at[2]
     # Not in play, nor once the restart is taken (set_by: the kick is a moment away).
     e.set_by, e.restart = r, None
     assert all(e.restart_pace(p, *at) == at[2] for p in e.players for at in [place(e, p)])
@@ -1503,6 +1510,15 @@ def test_one_a_hair_inside_the_keep_off_circle_goes_straight_to_his_place_on_its
     assert e.keep_off(d, 60.0 - 9.15, 34.0) == pytest.approx(out)
     d.x, d.y = 60.0 - 9.0, 34.0  # inside it with his place a stride off, straight out: out first too
     assert math.dist((d.x, d.y), edge) < SETTLE_M and e.keep_off(d, 60.0 - 9.15, 34.0) == pytest.approx(out)
+    d.x, d.y = 60.0 - 9.3, 34.0  # in the margin, just clear of the Laws' distance: straight out to it
+    assert e.keep_off(d, 60.0 - 9.15, 34.0) == pytest.approx(edge)
+    # Within a stride, round the edge: straight there; a metre and a half round: out first.
+    d.x, d.y = 60.0 - 9.6, 34.0
+    for chord, expect in ((0.7, None), (1.5, out)):
+        a = math.pi - chord / clear
+        there = (60.0 + math.cos(a) * clear, 34.0 + math.sin(a) * clear)
+        assert segment_distance(60.0, 34.0, d.x, d.y, *there) > 9.15  # premise: the straight way keeps it
+        assert e.keep_off(d, *there) == pytest.approx(expect or there)
     # Going further than a stride, he keeps out of the margin even where the straight way would keep
     # the Laws' distance: it takes up a bend round others or a step too far.
     d.x, d.y = 60.0 - 9.4, 34.0
@@ -1639,3 +1655,38 @@ def test_until_the_ball_is_in_play_the_presser_and_cover_stand_off_it():
     assert off(presser) == pytest.approx(gap) and off(cover) == pytest.approx(gap + 2.0)  # premise: waiting
     e.set_by, e.restart, e.possessor = r, None, taker.id  # taken: he is over it, not yet kicked
     assert off(presser) == pytest.approx(gap) and off(cover) == pytest.approx(gap + 2.0)
+
+
+
+def test_once_at_his_place_with_the_ball_set_he_settles(monkeypatch):
+    """Defect (lesson 174, its second audit): with the walking floor a player whose place jumped by
+    more than a stride walked every jump. The kicking side's back line, whose places follow an onside
+    line read from noisy sightings (O6), stepped 1 to 3.5 m back and forth every 0.4 to 2 s through
+    free kicks: 2.28 reversals a minute against main's 0.11. Once he has got to his place with the
+    ball set on its spot, he has settled, and makes later shifts of his place at his own pace. While
+    the ball is still being fetched his place moves with it, and he walks to it."""
+    from ninety.sim.engine import WALK_MPS
+    e = Engine(3)
+    still(e)
+    free_kick(e, "home", 60.0, 34.0)
+    d = e.by_id["h4"]  # of the kicking side: nothing keeps him off
+    for i, q in enumerate(q for q in e.players if q is not d):
+        q.x, q.y = 95.0, 4.0 + 3.0 * i  # out of his way
+    at = [40.0, 30.0]
+    real = e.shape_target
+    monkeypatch.setattr(e, "shape_target", lambda q: (*at, 0.0) if q is d else real(q))
+    e.ball = (60.0, 50.0, 0.0, 0.0, 0.0, 0.0)  # still being fetched, 16 m from its spot
+    d.x, d.y = at
+    e.move_players()
+    assert d.id not in e.restart.settled
+    at[0] += 2.0  # his place jumps two metres
+    assert e.restart_pace(d, *at, 0.0) >= WALK_MPS
+    e.ball = (60.0, 34.0, 0.0, 0.0, 0.0, 0.0)  # set on its spot
+    d.x, d.y, d.vx, d.vy = *at, 0.0, 0.0
+    e.move_players()
+    assert d.id in e.restart.settled
+    at[0] += 2.0
+    assert e.restart_pace(d, *at, 0.0) == 0.0
+    for _ in range(int(1.0 / DT)):
+        e.move_players()
+    assert math.dist((d.x, d.y), (at[0] - 2.0, at[1])) < 0.05  # his own pace, here none: he stands
