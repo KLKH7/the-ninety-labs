@@ -176,29 +176,48 @@ In the first version one wall player stood 7 m from his place through the whole 
 place was on the edge of the 9.65 m keep-off circle (9.15 m and the margin), straight in from him,
 and rounding sent him round the circle at his own distance (lesson 158).
 
-The same 16 matches as above, the wall branch at `32c6505` against the celebration branch (no wall);
-raw output in [restarts/wall-branch.json](restarts/wall-branch.json). 14 direct free kicks fell
-within shooting range: walls of 4 at the three kicks about 21 to 23 m out near the centre, 2 or 3
-further out or wider, 1 at the sharpest angles; when each kick was struck every wall player stood on
-his place, to within a ball's radius, in all 14 (`scripts/defect_sweep/wall.py` on the runs). Two of
-the 14 were shot at directly.
+The focused audit of that version planted 72 more: seeds 1, 4, 6, 8 to 12, free kicks at nine spots
+at both ends (walls of two to five), every wall player followed frame by frame (the command under
+Reproduce). Measuring each walk as walked (round the keep-off circle, in behind the line, up into
+it), not as a straight line, to choose the wall's players, share out its places and pace them:
+
+| | Straight lines (`8e52cb4`) | As walked (`5183be6`) |
+|---|---:|---:|
+| Kicks where two wall players' walked paths cross, the two there within a second | 22 of 72 (32 pairs) | 21 of 72 (35 pairs) |
+| Kicks where the wall formed after the kick could be taken | 24, by up to 1.1 s | 18, by up to 1.3 s |
+| Least time between the wall forming and the kick | 0.4 s | 0.6 s |
+| Frames with two of them more than 5 cm into each other while it forms | 261 of 66,788 (0.39%) | 106 of 66,940 (0.16%) |
+
+Every wall formed before its kick was struck; when it was struck no wall player stood more than
+0.03 m from his place and neighbours' bodies were -0.02 to 0.03 m apart, in both. The crossings that
+remain are two coming round the same side of the circle: a walk round it at one's own distance from
+the ball is not the shortest way there, so the least total walk does not keep two such walks apart,
+and both then use the way behind the wall (lesson 161).
+
+The same 16 matches as above, the wall branch at `41ce3fba` against the celebration branch (no wall);
+raw output in [restarts/wall-branch.json](restarts/wall-branch.json). 13 direct free kicks fell
+within shooting range: walls of 4 at the two kicks about 22 m out near the centre, 2 or 3 further out
+or wider, 1 at sharper angles, and none at one 2.6 m from the goal line, too tight an angle for a
+whole player; when each kick was struck every wall player stood on his place, to within a ball's
+radius, in all 13 (`scripts/defect_sweep/wall.py` on the runs). One was shot at directly, and the
+wall blocked it.
 
 | | No wall | Wall |
 |---|---:|---:|
 | Restart defects (jumps, encroachment, carried set balls, second touches, stuck restarts) | 0 | 0 |
 | Matches meeting the data contract | 15 of 16 | 15 of 16 |
-| Shots a team per 90 | 15.2 ± 1.9 | 17.7 ± 2.2 |
-| Goals a team per 90 | 1.4 ± 0.4 | 0.6 ± 0.3 |
-| Pass completion | 84.5% | 85.5% |
-| Ball in play | 60.7% | 62.1% |
+| Shots a team per 90 | 15.2 ± 1.9 | 17.2 ± 1.6 |
+| Goals a team per 90 | 1.4 ± 0.4 | 1.55 ± 0.7 |
+| Pass completion | 84.5% | 85.3% |
+| Ball in play | 60.7% | 59.6% |
 
-The match failing the contract is seed 21 on both, main's C7 (above). Neither shots (z 0.9) nor
-goals (10 against 4, z 1.6) differ by more than chance, and the goals are not the wall's doing: the
-two columns are different matches from the first restart on (the keep-off rounding fix acts at
-every restart, and each match parts within its first 11 to 92 s, lesson 90); in the no-wall
-matches only 3 of the 10 goals came within 15 s of a free kick in range, and the previous version
-of the wall, on the same base, had 10 goals in 106 shots. Football-sense per 90: FS1 19.4 to 19.1, FS2 7.9 to 9.0, FS6 23.9 to 25.3, FS7 298 to
-305, FS9 1.1 to 2.8.
+The match failing the contract is seed 21 on both, main's C7 (above). Shots (z 0.8) and goals (10
+against 11, z 0.2) are level within chance; the two columns are different matches from the first
+restart on (lesson 90). Football-sense per 90: FS1 19.4 to 17.7, FS2 7.9 to 8.4, FS6 23.9 to 22.8,
+FS7 298 to 285, FS9 1.1 to 2.0. The version before this one (`5183be6`) showed a ball jump of 14.6 m
+in one frame in seed 101: a throw-in drifting along the outside of the touchline was kept in play
+past the end boards and snapped back to them when retaken (lesson 162); `41ce3fba` retakes it once
+it passes the end of the touchline, and the sweep now counts a retaken restart as the same kind.
 
 ## Reproduce
 
@@ -212,6 +231,8 @@ uv run python scripts/defect_sweep/restarts.py runs/new/seed7 runs/new/seed11
 
 ```bash
 uv run python scripts/defect_sweep/wall.py --planted
+uv run python scripts/defect_sweep/wall.py --planted 1 4 6 8 9 10 11 12 -- home:83:34 home:87:24 home:78:44 \
+    away:22:34 away:18:44 away:27:24 home:88:30 home:75:20 away:20:50
 ```
 
 ```bash
