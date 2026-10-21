@@ -151,3 +151,39 @@ def test_the_fixed_test_set_holds_each_hard_case():
     test = [sample_params(s) for s in TEST_SEEDS]
     assert any(p.occlusion == "crowded" for p in test)
     assert any(p.kit_contrast == "low" for p in test)
+
+
+def test_only_a_broadcast_clip_cuts_through_dead_balls(monkeypatch, tmp_path):
+    """Coordinator decision (Oct 20): datasets, the Azure job, training rounds and the test sets show
+    every frame; `ninety-render` (viewer and demo clips) cuts through long dead balls, outside the
+    test set (edit.py)."""
+    from contextlib import contextmanager
+
+    from ninety.render import cli
+
+    assert not any(sample_params(s).dead_ball_cut for s in list(range(1, 40)) + list(TEST_SEEDS))
+    calls = []
+
+    def fake_render(seed, out, **kw):
+        calls.append((seed, dict(kw["overrides"])))
+        return {"split": "x", "frames": 1, "params": {"lighting": "day"}, "event_counts": {},
+                "overrides": kw["overrides"]}
+
+    @contextmanager
+    def fake_page(gpu=False):
+        yield None, "stand-in"
+
+    monkeypatch.setattr(cli, "render_clip", fake_render)
+    monkeypatch.setattr(cli, "check_clip", lambda out: {"passed": {}})
+    monkeypatch.setattr(cli, "browser_page", fake_page)
+    cli.render_main(["--seed", "7", "--out", str(tmp_path / "a")])
+    test_seed = sorted(TEST_SEEDS)[0]
+    cli.render_main(["--seed", str(test_seed), "--out", str(tmp_path / "b")])
+    cli.render_main(["--seed", "7", "--out", str(tmp_path / "c"), "--set", "dead_ball_cut=false"])
+    for d in ("d", "e"):
+        (tmp_path / d).mkdir()
+    cli.dataset_main(["--split", "test", "--out", str(tmp_path / "d")])
+    cli.dataset_main(["--split", "train", "--count", "2", "--out", str(tmp_path / "e")])
+    cut = {seed: sample_params(seed, **ov).dead_ball_cut for seed, ov in calls}
+    assert [sample_params(s, **ov).dead_ball_cut for s, ov in calls[:3]] == [True, False, False]
+    assert len(calls) == 3 + len(TEST_SEEDS) + 2 and not any(cut[s] for s, _ in calls[3:])
