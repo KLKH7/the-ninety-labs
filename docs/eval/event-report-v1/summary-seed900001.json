@@ -1,23 +1,23 @@
 {
   "frames": 250,
-  "frames_camera_ok": 245,
-  "ball_frames": 220,
+  "frames_camera_ok": 238,
+  "ball_frames": 214,
   "tracks": 21,
   "teams": {
     "feature": "brightness",
     "kits": {
       "home": [
-        3.321
+        3.365
       ],
       "away": [
-        6.104
+        6.183
       ]
     },
-    "reason": "deepest outfield player toward x = 105: colour 0 in 245 more frames",
-    "frames_voting": 245,
-    "vote_margin": 245,
+    "reason": "side nearer x = 105 on average: colour 0 in 126 more frames",
+    "frames_voting": 238,
+    "vote_margin": 126,
     "keepers": 4,
-    "unassigned": 0
+    "unassigned": 2
   },
   "spells": 5,
   "events": {
@@ -28,6 +28,6 @@
   "named": {
     "player": 3,
     "receiver": 2,
-    "interceptor": 0
+    "interceptor": 1
   }
 }

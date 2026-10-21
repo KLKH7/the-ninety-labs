@@ -137,3 +137,145 @@ def camera_errors(rows: list[dict], frames: dict[int, dict]) -> list[dict]:
         out.append({"frame": r["frame"], "ok": cam["ok"], "median_px": cam.get("median_px"),
                     "points": cam.get("points"), "error_m": None if err is None or math.isnan(err) else err})
     return out
+
+
+# Step B2: players' heights. A player stands about PLAYER_HEIGHT_M tall (design: the middle of the
+# synthetic squads' 1.66 to 1.89 m, clip.json `looks`), so through a right camera his box is about
+# as tall as an upright 1.80 m segment at his feet projects; a camera at the wrong distance or zoom
+# scales every player the same wrong way.
+PLAYER_HEIGHT_M = 1.80
+
+
+def height_ratio(row: dict) -> float | None:
+    """The frame's median, over player detections, of box height over the projected height of an
+    upright PLAYER_HEIGHT_M at the box's foot point through the frame's camera; None without a
+    camera or players. Live-path data only (the observations line), whether or not the frame is
+    trusted."""
+    P = row["camera"].get("P")
+    if P is None:
+        return None
+    P = np.array(P)
+    ratios = []
+    for d in row["players"]:
+        if d["score"] < SCORE_MIN:
+            continue
+        x0, _, x1, y1 = d["bbox"]
+        g = _to_ground(P, np.array([[(x0 + x1) / 2, y1]]))[0]  # the foot point, as observe finds it
+        foot = P @ np.array([g[0], g[1], 0.0, 1.0])
+        head = P @ np.array([g[0], g[1], PLAYER_HEIGHT_M, 1.0])
+        if foot[2] <= 0 or head[2] <= 0:
+            continue
+        px = abs(foot[1] / foot[2] - head[1] / head[2])
+        if px > 0:
+            ratios.append((d["bbox"][3] - d["bbox"][1]) / px)
+    return float(np.median(ratios)) if ratios else None
+
+
+GOOD_M = 1.0  # a frame is good when its ground mapping error is within the strict radius (EVALUATION)
+
+
+def gates(observations: list[tuple[int, list[dict], dict[int, dict]]]) -> dict:
+    """Step B: every frame with an estimated camera, its truth error, its marking verdict (B1) and
+    its height ratio; the band from the good frames (1st to 99th percentile); and each candidate
+    gate's count of bad frames trusted and good frames kept."""
+    recs = []
+    for seed, rows, frames in observations:
+        for r, e in zip(rows, camera_errors(rows, frames), strict=True):
+            if e["error_m"] is not None:
+                recs.append({"seed": seed, "frame": r["frame"], "error_m": e["error_m"],
+                             "markings_ok": r["camera"].get("markings_ok", r["camera"]["ok"]),
+                             "ratio": height_ratio(r)})
+    good = [x["ratio"] for x in recs if x["error_m"] <= GOOD_M and x["ratio"] is not None]
+    band = (round(float(np.percentile(good, 1)), 3), round(float(np.percentile(good, 99)), 3))
+    within = lambda x: x["ratio"] is not None and band[0] <= x["ratio"] <= band[1]  # noqa: E731
+    candidates = {"B1 markings": lambda x: x["markings_ok"], "B2 heights": within,
+                  "B3 both": lambda x: x["markings_ok"] and within(x)}
+    n_good = sum(1 for x in recs if x["error_m"] <= GOOD_M)
+    n_bad = len(recs) - n_good
+    table = {}
+    for name, trust in candidates.items():
+        bad_trusted = [x for x in recs if x["error_m"] > GOOD_M and trust(x)]
+        kept = sum(1 for x in recs if x["error_m"] <= GOOD_M and trust(x))
+        table[name] = {"bad_rejected": n_bad - len(bad_trusted), "bad_trusted": len(bad_trusted),
+                       "good_kept": kept, "good_kept_share": round(kept / n_good, 4),
+                       "bad_trusted_by_seed": dict(Counter(x["seed"] for x in bad_trusted)),
+                       "bad_trusted_worst_m": round(max((x["error_m"] for x in bad_trusted), default=0.0), 3)}
+    return {"frames": len(recs), "good": n_good, "bad": n_bad, "band": band, "candidates": table}
+
+
+def main(argv: list[str] | None = None) -> None:
+    import argparse
+    import datetime
+
+    from ninety.eval.attribution_score import write_or_check
+    from ninety.eval.event_score import git_commit
+
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--clips", type=Path, required=True)
+    ap.add_argument("--observations", type=Path, required=True,
+                    help="validation observations, judged by today's observe.place (--regate)")
+    ap.add_argument("--seeds", required=True)
+    ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--check", action="store_true")
+    a = ap.parse_args(argv)
+    seeds = [int(s) for s in a.seeds.split(",")]
+    got = {s: read(s, a.clips, a.observations) for s in seeds}
+    placed = [s for s in seeds if got[s] is not None]
+    side = {s: sides(got[s][0], got[s][1]) for s in placed}
+    right = sum(v["right_frames"] for v in side.values())
+    frames_ = sum(v["frames"] for v in side.values())
+    every = sum(v["all_frames"] for v in side.values())
+    body = {
+        "command": "uv run python -m ninety.eval.detector_derive --clips <render run v1>/train "
+                   "--observations <validation observations, regated> --seeds <the validation seeds> "
+                   "--out docs/eval/detector-derive",
+        "commit": git_commit(), "date": datetime.date.today().isoformat(),
+        "seeds": placed, "unplaced": [s for s in seeds if got[s] is None],
+        "sides": {"accuracy": round(right / frames_, 4), "coverage": round(frames_ / every, 4),
+                  "per_clip": {s: {"feature": v["naming"].get("feature"),
+                                   "accuracy": None if v["accuracy"] is None else round(v["accuracy"], 4),
+                                   "coverage": None if v["coverage"] is None else round(v["coverage"], 4)}
+                               for s, v in side.items()}},
+        "gates": gates([(s, got[s][0], got[s][1]) for s in placed]),
+    }
+    write_or_check(a.out, body, report_md, a.check)
+    print(json.dumps({"sides": {k: body["sides"][k] for k in ("accuracy", "coverage")},
+                      "band": body["gates"]["band"]}, indent=1))
+
+
+def report_md(body: dict) -> str:
+    g = body["gates"]
+    lines = [
+        "# The event detector, re-derived on validation clips: measurements",
+        "",
+        f"Generated by `{body['command']}` at commit `{body['commit']}`, {body['date']}. Plan and reading:",
+        "[detector-plan.md](detector-plan.md). Seeds " + ", ".join(map(str, body["seeds"]))
+        + "; not placed: " + (", ".join(map(str, body["unplaced"])) or "none") + ".",
+        "",
+        "## Step A: sides (code at this commit)",
+        "",
+        f"Side accuracy per track, by frames: **{body['sides']['accuracy']}**; coverage "
+        f"{body['sides']['coverage']}.",
+        "",
+        "| Seed | Feature | Accuracy | Coverage |",
+        "|---|---|---|---|",
+        *[f"| {s} | {v['feature']} | {v['accuracy']} | {v['coverage']} |"
+          for s, v in body["sides"]["per_clip"].items()],
+        "",
+        "## Step B: the camera trust gate",
+        "",
+        f"{g['frames']} frames with an estimated camera: {g['good']} good (ground mapping within "
+        f"{GOOD_M} m), {g['bad']} bad. Height band from the good frames (1st to 99th percentile): "
+        f"**{g['band'][0]} to {g['band'][1]}**.",
+        "",
+        "| Gate | Bad frames trusted | Worst trusted (m) | Good frames kept | Bad trusted by seed |",
+        "|---|---|---|---|---|",
+        *[f"| {k} | {v['bad_trusted']} | {v['bad_trusted_worst_m']} | {v['good_kept']} "
+          f"({v['good_kept_share']}) "
+          f"| {v['bad_trusted_by_seed']} |" for k, v in g["candidates"].items()],
+    ]
+    return "\n".join(lines) + "\n"
+
+
+if __name__ == "__main__":
+    main()

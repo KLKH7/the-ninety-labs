@@ -190,3 +190,45 @@ Coverage falls from 0.972 to 0.941: more tracks are left without a side. 115 get
 **team_confidence:** unchanged in form; its colour margin is now in the feature chosen. On
 validation it orders a right side above a wrong one in 80% of (wrong, right) pass pairs; on main
 it was 55%.
+
+### Step B: the camera trust gate (validation)
+
+Measured by `uv run python -m ninety.eval.detector_derive` ([detector-derive.md](detector-derive.md)).
+3,044 validation frames have an estimated camera: 1,748 good (ground mapping within 1.0 m) and
+1,296 bad. The height band from the good frames is 0.901 to 1.002.
+
+| Gate | Bad frames trusted | Worst trusted | Good frames kept |
+|---|---|---|---|
+| B1, the markings (main) | 198 (108: 195, 109: 2, 120: 1) | 143 m | 1,558 (89.1%) |
+| **B2, players' heights (adopted)** | 175 (108: 143, 3041: 14, 122: 8, 114: 6, 3042: 4) | 55 m | 1,712 (97.9%) |
+| B3, both | 130 (108: 130) | 6.6 m | 1,523 (87.1%) |
+
+**B2 is adopted, by the rule as written:** the most bad frames rejected among gates that keep at
+least 90% of good frames. B1 (89.1%) and B3 (87.1%) fall under that bar.
+
+- **One reading was considered and not taken.** I first thought of reading the 90% as a share of
+  the good frames B1 trusts. I saw that before deciding, and it would have picked B3. The words
+  say "good frames", so the literal reading stands.
+- **What B2 trades.** It drops seed 109's two frames, 125 m off, and most of 108's. But it lets
+  through 32 frames on clips the markings had rejected entirely (122, 3041, 3042, 114). Some of
+  them are far worse: 3042's are around 47 m off. B3 would have trusted only 108's frames, at most
+  6.6 m off, at the cost of 189 good frames. A rule that counts frames does not weigh how bad a
+  bad frame is; the plan's rule did not, and that is a lesson (149).
+- **Seed 108's error is not a scale error,** so heights cannot see it: its camera sits about 2 m
+  wrong along the line of sight with players the right height (ratio 0.99). It stays trusted.
+- **No player to measure** (1 frame of 3,250 on validation, untrusted either way): the markings'
+  verdict stands. The plan did not cover this case; the fallback changes no validation number.
+
+**RIVAL_M,** re-measured with B2 by #168's rule: 1.592 m pooled p90, so **1.59 m** (it was 1.89 m).
+
+### Amendment A.3, measured (validation, with B2)
+
+The side vote by mean x instead of by the deepest player. Side accuracy 0.713 to **0.816**,
+coverage 0.961, teams right on matched passes 11 of 16 either way. It meets step A's rule and is
+adopted. Seed 2043 is named right again.
+
+**Development attribution with A, A.3 and B in place:**
+- 16 matched passes; team right on 11.
+- Names: passers 13 of 13 right; receivers 6 of 6 right; interceptors 2 of 4 right. The two wrong
+  interceptors are what a wrong team does: an opponent "taking" a pass his own side made.
+- The track-break rule still removes only self-passes (3 of 3).

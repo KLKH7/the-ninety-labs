@@ -249,9 +249,12 @@ def assign_teams(tracks: list[Track]) -> dict:
             t.keeper = mx <= PENALTY_AREA_X or mx >= 105.0 - PENALTY_AREA_X
         else:
             side[t.id] = 0 if _dist(c, ca) <= _dist(c, cb) else 1
-    # Which colour defends the right goal: compare each side's deepest players toward x = 105,
-    # frame by frame, over the frames where both sides are seen. A keeper standing in a penalty
-    # area settles it outright: the keeper at x = 105 is away's (home attacks toward it).
+    # Which colour defends the right goal (away's, since home attacks toward it): frame by frame,
+    # over the frames where both sides are seen, the side whose players stand nearer x = 105 on
+    # average. Out of possession a block stays goal-side of the ball (GROUNDING T2) and in
+    # possession the back line stays behind it (O6), so the side defending x = 105 is the nearer
+    # in either phase. The single deepest player was used before: it needs both defensive lines
+    # in the picture, and a view of one half flipped validation seed 2043 (detector-plan.md, A.3).
     votes = 0
     keepers = [t for t in tracks if t.keeper]
     by_frame: dict[int, list[tuple[float, int]]] = {}
@@ -262,12 +265,12 @@ def assign_teams(tracks: list[Track]) -> dict:
         for f, (x, _) in zip(t.frames, t.xy, strict=True):
             by_frame.setdefault(f, []).append((x, s))
     for obs in by_frame.values():
-        xs0 = sorted((x for x, s in obs if s == 0), reverse=True)
-        xs1 = sorted((x for x, s in obs if s == 1), reverse=True)
+        xs0 = [x for x, s in obs if s == 0]
+        xs1 = [x for x, s in obs if s == 1]
         if xs0 and xs1:
-            votes += 1 if xs0[0] > xs1[0] else -1
+            votes += 1 if sum(xs0) / len(xs0) > sum(xs1) / len(xs1) else -1
     away = 0 if votes > 0 else 1
-    reason = f"deepest outfield player toward x = 105: colour {away} in {abs(votes)} more frames"
+    reason = f"side nearer x = 105 on average: colour {away} in {abs(votes)} more frames"
     names = {away: "away", 1 - away: "home"}
     voting = len([o for o in by_frame.values() if {s for _, s in o} == {0, 1}])
     # An outfield side rests on two decisions, so its confidence is the weaker: how much nearer the

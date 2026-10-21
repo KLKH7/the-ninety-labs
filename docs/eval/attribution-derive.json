@@ -1,6 +1,6 @@
 {
   "command": "uv run python -m ninety.eval.attribution_derive --clips <render run v1>/train --observations <dir> --seeds <the validation seeds> --out docs/eval/attribution-derive",
-  "commit": "2392884a3638ef1bc74efb076842586cdb0a9a8d",
+  "commit": "aa1c5ffdb9037b7862e328837137c3c9655a9586",
   "date": "2026-10-20",
   "seeds": [
     108,
@@ -22,64 +22,64 @@
     3045
   ],
   "players_position_error": {
-    "n": 14456,
-    "median_m": 0.233,
-    "p90_m": 1.886,
-    "max_m": 163.509
+    "n": 16249,
+    "median_m": 0.224,
+    "p90_m": 1.592,
+    "max_m": 58.415
   },
   "players_position_error_per_clip": {
     "108": {
-      "n": 1221,
-      "median_m": 2.011,
-      "p90_m": 4.299,
-      "max_m": 11.13
+      "n": 896,
+      "median_m": 2.009,
+      "p90_m": 5.626,
+      "max_m": 12.558
     },
     "109": {
-      "n": 16,
-      "median_m": 110.651,
-      "p90_m": 146.071,
-      "max_m": 163.509
-    },
-    "114": {
       "n": 0,
       "median_m": null,
       "p90_m": null,
       "max_m": null
     },
+    "114": {
+      "n": 52,
+      "median_m": 1.468,
+      "p90_m": 3.635,
+      "max_m": 5.639
+    },
     "115": {
-      "n": 1634,
-      "median_m": 0.178,
-      "p90_m": 0.361,
+      "n": 1925,
+      "median_m": 0.174,
+      "p90_m": 0.357,
       "max_m": 6.133
     },
     "116": {
-      "n": 2772,
+      "n": 2782,
       "median_m": 0.191,
-      "p90_m": 0.468,
+      "p90_m": 0.469,
       "max_m": 5.48
     },
     "120": {
-      "n": 1754,
-      "median_m": 0.281,
-      "p90_m": 0.93,
-      "max_m": 8.3
+      "n": 1691,
+      "median_m": 0.272,
+      "p90_m": 0.927,
+      "max_m": 8.301
     },
     "121": {
-      "n": 1611,
-      "median_m": 0.254,
-      "p90_m": 0.81,
+      "n": 1516,
+      "median_m": 0.232,
+      "p90_m": 0.714,
       "max_m": 7.552
     },
     "122": {
-      "n": 0,
-      "median_m": null,
-      "p90_m": null,
-      "max_m": null
+      "n": 67,
+      "median_m": 14.998,
+      "p90_m": 41.112,
+      "max_m": 58.415
     },
     "2041": {
-      "n": 2258,
-      "median_m": 0.229,
-      "p90_m": 2.795,
+      "n": 2365,
+      "median_m": 0.23,
+      "p90_m": 3.1,
       "max_m": 7.72
     },
     "2042": {
@@ -89,58 +89,44 @@
       "max_m": 6.323
     },
     "2043": {
-      "n": 1293,
-      "median_m": 0.209,
-      "p90_m": 0.718,
+      "n": 2931,
+      "median_m": 0.203,
+      "p90_m": 0.489,
       "max_m": 7.556
     },
     "3041": {
-      "n": 0,
-      "median_m": null,
-      "p90_m": null,
-      "max_m": null
+      "n": 106,
+      "median_m": 2.85,
+      "p90_m": 15.364,
+      "max_m": 19.206
     },
     "3042": {
-      "n": 0,
-      "median_m": null,
-      "p90_m": null,
-      "max_m": null
+      "n": 21,
+      "median_m": 47.376,
+      "p90_m": 55.805,
+      "max_m": 58.368
     }
   },
   "track_break_rule": {
     "totals": {
       "off": {
-        "passes": 23,
-        "matched": 16,
-        "self": 10
+        "passes": 21,
+        "matched": 18,
+        "self": 5
       },
       "on": {
-        "passes": 16,
-        "matched": 14,
-        "self": 3
+        "passes": 18,
+        "matched": 16,
+        "self": 2
       }
     },
     "removed": [
       {
         "id": "v00003",
-        "frame": 3438,
-        "tracks": [
-          19,
-          20
-        ],
-        "players": [
-          "a2",
-          "a2"
-        ],
-        "self": true,
-        "seed": 108
-      },
-      {
-        "id": "v00004",
         "frame": 3500,
         "tracks": [
-          20,
-          21
+          26,
+          28
         ],
         "players": [
           "a2",
@@ -151,24 +137,10 @@
       },
       {
         "id": "v00002",
-        "frame": 1624,
-        "tracks": [
-          18,
-          19
-        ],
-        "players": [
-          "a7",
-          "a7"
-        ],
-        "self": true,
-        "seed": 120
-      },
-      {
-        "id": "v00003",
         "frame": 1635,
         "tracks": [
-          19,
-          21
+          9,
+          15
         ],
         "players": [
           "a7",
@@ -179,24 +151,10 @@
       },
       {
         "id": "v00002",
-        "frame": 3014,
-        "tracks": [
-          2,
-          18
-        ],
-        "players": [
-          "h7",
-          "h7"
-        ],
-        "self": true,
-        "seed": 121
-      },
-      {
-        "id": "v00003",
         "frame": 3048,
         "tracks": [
-          18,
-          21
+          2,
+          17
         ],
         "players": [
           "h7",
@@ -204,74 +162,62 @@
         ],
         "self": true,
         "seed": 121
-      },
-      {
-        "id": "v00001",
-        "frame": 2619,
-        "tracks": [
-          20,
-          27
-        ],
-        "players": [
-          "h11",
-          "h11"
-        ],
-        "self": true,
-        "seed": 2041
       }
     ],
-    "removed_self": 7,
+    "removed_self": 3,
     "removed_not_self": 0,
     "removed_unknown": 0
   },
   "development_attribution": {
     "pass": {
-      "matched": 14,
-      "team_right": 10,
-      "team_accuracy": 0.7142857142857143,
+      "matched": 16,
+      "team_right": 11,
+      "team_accuracy": 0.6875,
       "team_confidence": {
         "right": [
-          0.261,
-          0.27,
-          0.408,
-          0.408,
-          0.442,
-          0.464,
-          0.464,
-          0.464,
-          0.864,
-          0.939
+          0.447,
+          0.663,
+          0.731,
+          0.731,
+          0.768,
+          0.775,
+          0.881,
+          0.887,
+          0.896,
+          0.95,
+          0.985
         ],
         "wrong": [
-          0.175,
-          0.408,
-          0.445,
-          0.983
+          0.431,
+          0.575,
+          0.775,
+          0.775,
+          0.96
         ]
       },
       "player": {
-        "truth_names": 14,
-        "named": 5,
-        "right": 5,
+        "truth_names": 16,
+        "named": 13,
+        "right": 13,
         "unchecked": 0,
         "accuracy": 1.0,
-        "left_null": 9
+        "left_null": 3
       },
       "receiver": {
-        "truth_names": 10,
-        "named": 4,
-        "right": 4,
+        "truth_names": 11,
+        "named": 6,
+        "right": 6,
         "unchecked": 0,
         "accuracy": 1.0,
-        "left_null": 6
+        "left_null": 5
       },
       "interceptor": {
-        "truth_names": 3,
-        "named": 2,
+        "truth_names": 4,
+        "named": 4,
         "right": 2,
         "unchecked": 0,
-        "accuracy": 1.0,
-        "left_null": 1
+        "accuracy": 0.5,
+        "left_null": 2
       }
     },
     "shot": {
@@ -304,19 +250,19 @@
   "clips": [
     {
       "seed": 108,
-      "frames_camera_ok": 195,
+      "frames_camera_ok": 143,
       "true_passes": 3,
       "off": {
-        "passes": 4,
+        "passes": 3,
         "matched": 3,
-        "self": 2,
+        "self": 1,
         "list": [
           {
             "id": "v00001",
             "frame": 3326,
             "tracks": [
               3,
-              14
+              24
             ],
             "players": [
               "a6",
@@ -328,8 +274,8 @@
             "id": "v00002",
             "frame": 3392,
             "tracks": [
-              14,
-              19
+              24,
+              26
             ],
             "players": [
               "a4",
@@ -339,23 +285,10 @@
           },
           {
             "id": "v00003",
-            "frame": 3438,
-            "tracks": [
-              19,
-              20
-            ],
-            "players": [
-              "a2",
-              "a2"
-            ],
-            "self": true
-          },
-          {
-            "id": "v00004",
             "frame": 3500,
             "tracks": [
-              20,
-              21
+              26,
+              28
             ],
             "players": [
               "a2",
@@ -375,7 +308,7 @@
             "frame": 3326,
             "tracks": [
               3,
-              14
+              24
             ],
             "players": [
               "a6",
@@ -387,8 +320,8 @@
             "id": "v00002",
             "frame": 3392,
             "tracks": [
-              14,
-              19
+              24,
+              26
             ],
             "players": [
               "a4",
@@ -401,23 +334,10 @@
       "removed": [
         {
           "id": "v00003",
-          "frame": 3438,
-          "tracks": [
-            19,
-            20
-          ],
-          "players": [
-            "a2",
-            "a2"
-          ],
-          "self": true
-        },
-        {
-          "id": "v00004",
           "frame": 3500,
           "tracks": [
-            20,
-            21
+            26,
+            28
           ],
           "players": [
             "a2",
@@ -429,7 +349,7 @@
     },
     {
       "seed": 109,
-      "frames_camera_ok": 2,
+      "frames_camera_ok": 0,
       "true_passes": 3,
       "off": {
         "passes": 0,
@@ -447,7 +367,7 @@
     },
     {
       "seed": 114,
-      "frames_camera_ok": 0,
+      "frames_camera_ok": 6,
       "true_passes": 2,
       "off": {
         "passes": 0,
@@ -465,7 +385,7 @@
     },
     {
       "seed": 115,
-      "frames_camera_ok": 211,
+      "frames_camera_ok": 242,
       "true_passes": 1,
       "off": {
         "passes": 1,
@@ -483,7 +403,7 @@
     },
     {
       "seed": 116,
-      "frames_camera_ok": 249,
+      "frames_camera_ok": 250,
       "true_passes": 3,
       "off": {
         "passes": 1,
@@ -495,7 +415,7 @@
             "frame": 1704,
             "tracks": [
               1,
-              21
+              20
             ],
             "players": [
               "a11",
@@ -515,7 +435,7 @@
             "frame": 1704,
             "tracks": [
               1,
-              21
+              20
             ],
             "players": [
               "a11",
@@ -529,19 +449,19 @@
     },
     {
       "seed": 120,
-      "frames_camera_ok": 249,
+      "frames_camera_ok": 240,
       "true_passes": 2,
       "off": {
-        "passes": 3,
+        "passes": 2,
         "matched": 2,
-        "self": 2,
+        "self": 1,
         "list": [
           {
             "id": "v00001",
-            "frame": 1599,
+            "frame": 1601,
             "tracks": [
               2,
-              18
+              9
             ],
             "players": [
               "a4",
@@ -551,23 +471,10 @@
           },
           {
             "id": "v00002",
-            "frame": 1624,
-            "tracks": [
-              18,
-              19
-            ],
-            "players": [
-              "a7",
-              "a7"
-            ],
-            "self": true
-          },
-          {
-            "id": "v00003",
             "frame": 1635,
             "tracks": [
-              19,
-              21
+              9,
+              15
             ],
             "players": [
               "a7",
@@ -584,10 +491,10 @@
         "list": [
           {
             "id": "v00001",
-            "frame": 1599,
+            "frame": 1601,
             "tracks": [
               2,
-              18
+              9
             ],
             "players": [
               "a4",
@@ -600,23 +507,10 @@
       "removed": [
         {
           "id": "v00002",
-          "frame": 1624,
-          "tracks": [
-            18,
-            19
-          ],
-          "players": [
-            "a7",
-            "a7"
-          ],
-          "self": true
-        },
-        {
-          "id": "v00003",
           "frame": 1635,
           "tracks": [
-            19,
-            21
+            9,
+            15
           ],
           "players": [
             "a7",
@@ -628,12 +522,12 @@
     },
     {
       "seed": 121,
-      "frames_camera_ok": 250,
+      "frames_camera_ok": 236,
       "true_passes": 2,
       "off": {
-        "passes": 3,
+        "passes": 2,
         "matched": 1,
-        "self": 2,
+        "self": 1,
         "list": [
           {
             "id": "v00001",
@@ -650,23 +544,10 @@
           },
           {
             "id": "v00002",
-            "frame": 3014,
-            "tracks": [
-              2,
-              18
-            ],
-            "players": [
-              "h7",
-              "h7"
-            ],
-            "self": true
-          },
-          {
-            "id": "v00003",
             "frame": 3048,
             "tracks": [
-              18,
-              21
+              2,
+              17
             ],
             "players": [
               "h7",
@@ -699,23 +580,10 @@
       "removed": [
         {
           "id": "v00002",
-          "frame": 3014,
-          "tracks": [
-            2,
-            18
-          ],
-          "players": [
-            "h7",
-            "h7"
-          ],
-          "self": true
-        },
-        {
-          "id": "v00003",
           "frame": 3048,
           "tracks": [
-            18,
-            21
+            2,
+            17
           ],
           "players": [
             "h7",
@@ -727,7 +595,7 @@
     },
     {
       "seed": 122,
-      "frames_camera_ok": 0,
+      "frames_camera_ok": 8,
       "true_passes": 2,
       "off": {
         "passes": 0,
@@ -745,32 +613,19 @@
     },
     {
       "seed": 2041,
-      "frames_camera_ok": 235,
+      "frames_camera_ok": 245,
       "true_passes": 4,
       "off": {
-        "passes": 5,
+        "passes": 4,
         "matched": 3,
-        "self": 1,
+        "self": 0,
         "list": [
           {
             "id": "v00001",
-            "frame": 2619,
-            "tracks": [
-              20,
-              27
-            ],
-            "players": [
-              "h11",
-              "h11"
-            ],
-            "self": true
-          },
-          {
-            "id": "v00002",
             "frame": 2629,
             "tracks": [
-              27,
-              25
+              25,
+              16
             ],
             "players": [
               "h11",
@@ -779,11 +634,11 @@
             "self": false
           },
           {
-            "id": "v00003",
+            "id": "v00002",
             "frame": 2651,
             "tracks": [
-              25,
-              19
+              16,
+              17
             ],
             "players": [
               "a6",
@@ -792,10 +647,10 @@
             "self": false
           },
           {
-            "id": "v00004",
-            "frame": 2683,
+            "id": "v00003",
+            "frame": 2682,
             "tracks": [
-              19,
+              17,
               2
             ],
             "players": [
@@ -805,11 +660,11 @@
             "self": false
           },
           {
-            "id": "v00005",
+            "id": "v00004",
             "frame": 2730,
             "tracks": [
               2,
-              28
+              26
             ],
             "players": [
               "a10",
@@ -828,8 +683,8 @@
             "id": "v00001",
             "frame": 2629,
             "tracks": [
-              27,
-              25
+              25,
+              16
             ],
             "players": [
               "h11",
@@ -841,8 +696,8 @@
             "id": "v00002",
             "frame": 2651,
             "tracks": [
-              25,
-              19
+              16,
+              17
             ],
             "players": [
               "a6",
@@ -852,9 +707,9 @@
           },
           {
             "id": "v00003",
-            "frame": 2683,
+            "frame": 2682,
             "tracks": [
-              19,
+              17,
               2
             ],
             "players": [
@@ -868,7 +723,7 @@
             "frame": 2730,
             "tracks": [
               2,
-              28
+              26
             ],
             "players": [
               "a10",
@@ -878,21 +733,7 @@
           }
         ]
       },
-      "removed": [
-        {
-          "id": "v00001",
-          "frame": 2619,
-          "tracks": [
-            20,
-            27
-          ],
-          "players": [
-            "h11",
-            "h11"
-          ],
-          "self": true
-        }
-      ]
+      "removed": []
     },
     {
       "seed": 2042,
@@ -1020,71 +861,123 @@
     },
     {
       "seed": 2043,
-      "frames_camera_ok": 115,
+      "frames_camera_ok": 249,
       "true_passes": 4,
       "off": {
-        "passes": 2,
-        "matched": 2,
-        "self": 1,
+        "passes": 4,
+        "matched": 4,
+        "self": 0,
         "list": [
           {
             "id": "v00001",
-            "frame": 4371,
+            "frame": 4332,
             "tracks": [
-              2,
-              39
+              1,
+              2
             ],
             "players": [
-              "a8",
-              "h7"
+              "a11",
+              "a8"
             ],
             "self": false
           },
           {
             "id": "v00002",
-            "frame": 4512,
+            "frame": 4365,
             "tracks": [
-              39,
-              47
+              2,
+              1
+            ],
+            "players": [
+              "a8",
+              "a11"
+            ],
+            "self": false
+          },
+          {
+            "id": "v00003",
+            "frame": 4410,
+            "tracks": [
+              1,
+              28
+            ],
+            "players": [
+              "a11",
+              "h7"
+            ],
+            "self": false
+          },
+          {
+            "id": "v00004",
+            "frame": 4513,
+            "tracks": [
+              28,
+              16
             ],
             "players": [
               "h10",
-              "h10"
+              "h7"
             ],
-            "self": true
+            "self": false
           }
         ]
       },
       "on": {
-        "passes": 2,
-        "matched": 2,
-        "self": 1,
+        "passes": 4,
+        "matched": 4,
+        "self": 0,
         "list": [
           {
             "id": "v00001",
-            "frame": 4371,
+            "frame": 4332,
             "tracks": [
-              2,
-              39
+              1,
+              2
             ],
             "players": [
-              "a8",
-              "h7"
+              "a11",
+              "a8"
             ],
             "self": false
           },
           {
             "id": "v00002",
-            "frame": 4512,
+            "frame": 4365,
             "tracks": [
-              39,
-              47
+              2,
+              1
+            ],
+            "players": [
+              "a8",
+              "a11"
+            ],
+            "self": false
+          },
+          {
+            "id": "v00003",
+            "frame": 4410,
+            "tracks": [
+              1,
+              28
+            ],
+            "players": [
+              "a11",
+              "h7"
+            ],
+            "self": false
+          },
+          {
+            "id": "v00004",
+            "frame": 4513,
+            "tracks": [
+              28,
+              16
             ],
             "players": [
               "h10",
-              "h10"
+              "h7"
             ],
-            "self": true
+            "self": false
           }
         ]
       },
@@ -1092,7 +985,7 @@
     },
     {
       "seed": 3041,
-      "frames_camera_ok": 0,
+      "frames_camera_ok": 14,
       "true_passes": 2,
       "off": {
         "passes": 0,
@@ -1110,7 +1003,7 @@
     },
     {
       "seed": 3042,
-      "frames_camera_ok": 0,
+      "frames_camera_ok": 4,
       "true_passes": 1,
       "off": {
         "passes": 0,
