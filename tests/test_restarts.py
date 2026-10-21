@@ -1558,3 +1558,28 @@ def test_kept_off_his_place_by_one_standing_on_it_he_does_not_circle_him(monkeyp
     for _ in range(int(2.0 / DT)):
         e.move_players()
     assert math.hypot(d.vx, d.vy) < 0.1 < WALK_MPS
+
+
+def test_through_a_restart_wait_the_defending_side_keeps_its_presser_and_cover():
+    """Defect (lesson 174): while a free kick waited, two defenders swapped the cover's role at every
+    look of their side's brain, twice a second: the order by time to the ball moved with the very
+    walks the two roles sent them on, so both walked out and back through the whole wait. The side
+    keeps the presser and cover it named when the restart was given; once the ball is in play it
+    asks again."""
+    e = corner_wait()  # a corner to home, its kick 30 s off: away defends
+    for _ in range(int(1.0 / DT)):
+        e.step()
+    brain = e.brains["away"]
+    named = list(brain.pressers)
+    assert len(named) == 2 and e.restart.pressers == named  # premise: named at the first look
+    cover = e.by_id[named[1]]
+    cover.x, cover.y, cover.vx, cover.vy = 20.0, 34.0, 0.0, 0.0  # far from the corner now
+    for _ in range(int(1.0 / DT)):
+        e.step()
+    assert e.restart is not None  # premise: still waiting
+    assert e.who_presses(brain) != named  # premise: asked again, the order would name another
+    assert brain.pressers == named
+    e.restart = None  # in play
+    for _ in range(int(1.0 / DT)):
+        e.step()
+    assert brain.pressers == e.who_presses(brain) != named

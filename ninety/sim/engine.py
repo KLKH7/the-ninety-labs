@@ -224,6 +224,7 @@ class Restart:
     gathered_at: float = 0.0  # when the one who has it took it
     direct: bool = True  # a free kick that may be scored from directly (Law 13); offside's is indirect
     wall: dict[str, tuple[float, float]] = field(default_factory=dict)  # defender -> his spot in it
+    pressers: list[str] | None = None  # the other side's presser and cover, set once (lesson 174)
 
 
 @dataclass
@@ -2250,7 +2251,15 @@ class Engine:
                 along = (p.vx * dx + p.vy * dy) / (d or 1.0)
                 reach[p.id] = p.physique.time_to_cover(d, along)
             brain.update(self.t, holder == team, bx, reach)
-            if holder != team:
+            if holder != team and self.restart is not None:
+                # While a restart waits, the side keeps the presser and cover it named when it was
+                # given (design). Asked again at every look, the order by time to the ball moved with
+                # the very walks the two roles sent them on, and two players swapped roles at every
+                # look, out and back through the whole wait (lesson 174).
+                if self.restart.pressers is None:
+                    self.restart.pressers = self.who_presses(brain)
+                brain.pressers = self.restart.pressers
+            elif holder != team:
                 brain.pressers = self.who_presses(brain)
             if holder != team:  # O2: pick up the attackers who threaten our goal
                 free = {
