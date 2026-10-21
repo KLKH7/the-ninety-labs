@@ -71,6 +71,9 @@ STEP_DIST = 0.25
 STEP_FRAMES = 7  # 0.28 s at 25 fps
 STEP_LIFT = 0.08
 STEP_PEAK_MPS = 3.0  # the fastest a stepping foot travels (design: a quick step, not a kick)
+# On the move a stepping foot must outpace the body it steps after, as a stride's swinging foot does
+# (it covers a stride while the body covers a step): up to this many times his speed (design).
+STEP_CATCH_UP = 2.5
 # A foot caught in the air by a touch (the stride's swing) is down within this many frames, the rest
 # of a swing at walking pace, before it carries on low to where it stands (design).
 LAND_FRAMES = 3
@@ -517,11 +520,14 @@ def reach_sign(x: float, y: float, g: Gait, ball: tuple[float, ...] | None) -> f
     return 1.0 if lateral >= 0 else -1.0
 
 
-def _step_frames(dist: float) -> int:
+def _step_frames(dist: float, speed: float = 0.0) -> int:
     """How many frames a step of `dist` metres takes: STEP_FRAMES, or longer for a long step, so
-    the foot is never faster than STEP_PEAK_MPS (it covers its way in the middle 70% of the step,
-    smoothstep, whose peak is 1.5 times its mean)."""
-    return max(STEP_FRAMES, math.ceil(1.5 * dist / (0.7 * STEP_PEAK_MPS * FRAME_S)))
+    the foot is never faster than STEP_PEAK_MPS, or STEP_CATCH_UP times the body's `speed` when he
+    is moving faster than a step would follow (it covers its way in the middle 70% of the step,
+    smoothstep, whose peak is 1.5 times its mean). A support foot left behind by a running player
+    stepped at standing pace and never caught him up: the leg hung toward it (seed 7, h6's strike)."""
+    peak = max(STEP_PEAK_MPS, STEP_CATCH_UP * speed)
+    return max(STEP_FRAMES, math.ceil(1.5 * dist / (0.7 * peak * FRAME_S)))
 
 
 def _gait_pose(g: Gait, x: float, y: float) -> dict:
@@ -571,7 +577,7 @@ def _feet(g: Gait, x: float, y: float, k: float) -> None:
             foot = g.feet.get(side)
             if foot is not None and foot.get("air"):
                 # Out of a stride in the air: it comes down as a step from where it is.
-                frames = _step_frames(math.hypot(foot["x"] - hx_, foot["y"] - hy_))
+                frames = _step_frames(math.hypot(foot["x"] - hx_, foot["y"] - hy_), g.speed)
                 foot = {"x": foot["x"], "y": foot["y"], "yaw": foot["yaw"], "z": foot["z"], "w": 1.0,
                         "swing": (foot["x"], foot["y"], foot["yaw"], 0, frames, foot["z"]), "over": False}
             elif foot is not None and foot.get("swing") == "stride":
@@ -585,7 +591,7 @@ def _feet(g: Gait, x: float, y: float, k: float) -> None:
                 taken = 1.0 if side == released else 0.0
                 foot = {"x": fx, "y": fy, "yaw": pel, "z": fz, "swing": None, "w": taken}
                 if fz > 0.02:
-                    frames = _step_frames(math.hypot(fx - hx_, fy - hy_))
+                    frames = _step_frames(math.hypot(fx - hx_, fy - hy_), g.speed)
                     foot["swing"], foot["over"] = (fx, fy, pel, 0, frames, fz), False
             foot["w"] = min(1.0, foot.get("w", 1.0) + 1.0 / PLANT_EASE_FRAMES)
             if foot["swing"] is not None:
@@ -623,7 +629,7 @@ def _feet(g: Gait, x: float, y: float, k: float) -> None:
             gone = math.hypot(foot["x"] - hx_, foot["y"] - hy_)
             held = side == busy  # the touch's own, kept within reach above
             if foot["swing"] is None and not held and gone > OUT_OF_REACH_M * k:
-                start = (foot["x"], foot["y"], foot["yaw"], 0, _step_frames(gone))
+                start = (foot["x"], foot["y"], foot["yaw"], 0, _step_frames(gone, g.speed))
                 foot["swing"], foot["over"] = start, False
         # One foot steps at a time; the foot playing the ball is the touch's, not a step.
         stepping = any(f["swing"] is not None for s, f in g.feet.items() if s != busy)
@@ -648,7 +654,7 @@ def _feet(g: Gait, x: float, y: float, k: float) -> None:
             if worst is not None:
                 foot = g.feet[worst[1]]
                 hx_, hy_ = _home(x, y, pel, k, 1.0 if worst[1] == "l" else -1.0)
-                frames = _step_frames(math.hypot(foot["x"] - hx_, foot["y"] - hy_))
+                frames = _step_frames(math.hypot(foot["x"] - hx_, foot["y"] - hy_), g.speed)
                 foot["swing"], foot["over"] = (foot["x"], foot["y"], foot["yaw"], 0, frames), False
     for foot in g.feet.values():
         if foot["swing"] is None:

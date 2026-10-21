@@ -618,6 +618,33 @@ def test_a_thigh_touch_on_the_move_keeps_a_foot_on_the_grass():
         assert -0.03 < low < LOW_STEP_M, (i, pose["touch"], m["foot_l"], m["foot_r"])
 
 
+@pytest.mark.parametrize("wind_up", range(20, 34, 2))
+def test_a_strike_on_the_run_keeps_a_foot_on_the_grass(wind_up):
+    """Old (0.5.3 before the fix): running at 4.2 m/s into a strike, the support foot could be just
+    lifting off behind him when the strike began; it came down where it was, a metre back, and
+    stepped after him at standing pace (STEP_PEAK_MPS), never catching him up: the leg hung toward
+    it, both feet 0.3 to 0.4 m up through the strike (seed 7, h6 at 9.9 s). A stepping foot now
+    outpaces the body (STEP_CATCH_UP). Across the stride's phases at the strike (`wind_up`)."""
+    frames, x, v = [], 50.0, 4.2
+    for i in range(wind_up + 16):
+        x += v / FPS
+        striking = wind_up <= i < wind_up + 3
+        ball = {"x": x + 0.4, "y": 29.85, "z": 0.0, "vx": v, "vy": 0.0}
+        if i >= wind_up + 3:
+            t = (i - wind_up - 2) / FPS
+            struck = frames[wind_up + 2]["ball"]["x"]
+            ball = {"x": struck + 18.0 * t, "y": 29.85, "z": 0.0, "vx": 18.0, "vy": 0.0}
+        frames.append({"ball": ball, "possessor": "h1" if i < wind_up + 3 else None,
+                       "players": [{"id": "h1", "x": x, "y": 30.0, "vx": v, "vy": 0.0, "heading": 0.0,
+                                    "action": "strike" if striking else _engine_action(v), "dive": 0.0}]})
+    drawn = _draw(frames)["h1"]
+    for i, (pose, m, _, _) in enumerate(drawn):
+        touch = pose["touch"]
+        if touch and touch["part"] == "strike" and touch["w"] >= 0.5:
+            low = min(m["foot_l"][2], m["foot_r"][2])
+            assert -0.03 < low < LOW_STEP_M + 0.05, (wind_up, i, m["foot_l"], m["foot_r"])
+
+
 def test_a_keeper_stooping_on_the_run_keeps_his_feet_on_the_grass():
     """Old (0.4.2): a keeper gathering a ground ball at 3 m/s dropped his hips while a foot stayed
     planted behind him beyond the leg's reach; the leg gave up and the foot was drawn 0.34 m
