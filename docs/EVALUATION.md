@@ -456,22 +456,32 @@ Measured on validation clips under a plan committed first ([eval/side-decision-p
 [eval/side-decision.md](eval/side-decision.md)), then the test set scored once
 ([eval/side-decision-test.md](eval/side-decision-test.md)).
 
-- **Which kit is home is decided right wherever the kits are told apart.** On validation, the 4 clips
-  whose two kit clusters each hold one team (80% of a cluster's track-frames one side) are all named
-  right by today's mean-position vote (95% 0.51 to 1.00). On test, 900001 is the one such clip, also
-  right (0.98 of track-frames).
-- **Every side error left is a kit-cluster error.** Validation 115, 120, 2041 and 2043; test 900004
-  and 900005 (0.83 and 0.84). There the colour read from the shirts puts players of both teams in one
-  cluster, and no rule for naming the clusters can fix that.
-- **Other evidence did not help.** Pass direction, carries and shots give a handful of votes per
-  clip and never beat the mean-position vote.
-- **Test side accuracy:** 0.889 of track-frames over the three clips with tracks (95% 0.88 to 0.90,
-  optimistic, since frames in a track are not independent).
-- **No confidence predicts a wrong side.** The best, today's `team_confidence`, orders a wrong side
-  below a right one in 62% of pass pairs, against 0.80 set in advance. **So team-level claims stay
-  off for the agents, and the phone's possession gate stays closed.** Predicting these errors needs a
-  measure of cluster soundness from the picture, after the kit colour is read correctly: a
-  follow-up with dataset v2.
+- **Where the kits are told apart, the naming is right.** On validation, the 4 clips whose two kit
+  clusters each hold one team (80% of a cluster's track-frames one side) are all named right by
+  today's mean-position vote (95% 0.51 to 1.00). On test, 900001 is the one such clip, and also right
+  (0.98 of track-frames). It is the clip the side naming was first developed on.
+- **Not every error left is a cluster error.**
+  - **Clip 120** is unsound by definition: both of its clusters are mostly away players, with home
+    barely in view (93 of 1,575 outfield track-frames). Its larger cluster, away players, is named home.
+    That is a naming error as much as a cluster error. It holds 1,402 of the 2,812 wrong validation
+    frames, and the carries vote (N2) names it right (0.11 to 0.89), but N2 loses more elsewhere
+    (pooled 0.69 against 0.82), so the rule kept today's vote.
+  - **The other unsound clips** (validation 115, 2041 and 2043; test 900004 and 900005) mix both teams
+    in a cluster. Shirt colour read wrongly is shown to be the cause on 120 and 2043, by the crops
+    in [eval/kit-colour-plan.md](eval/kit-colour-plan.md). 115, 2041, 900004 and 900005 were not
+    diagnosed one by one.
+- **Other evidence did not beat the vote overall.** Pass direction, carries and shots give a handful
+  of votes per clip.
+- **Test side accuracy:**
+  - 0.889 of track-frames over the three clips with tracks (95% 0.88 to 0.90; optimistic, since
+    frames within a track are not independent);
+  - by tracks, 40 of 49 (95% 0.69 to 0.90);
+  - without 900001, 0.83.
+- **No confidence is shown to predict a wrong side.** The best, today's `team_confidence`, orders a
+  wrong side below a right one in 62% of pass pairs. Its 95% interval, 0.31 to 0.93 (Hanley and McNeil
+  1982), takes in both chance and the 0.80 bar, because it rests on 16 passes, 5 of them wrong. One of
+  the 5 is a pass whose holder is the wrong player, on a clip named right. **So team-level claims stay
+  off for the agents, and the phone's possession gate stays closed.**
 
 ## Late drop in high-intensity running (R7)
 

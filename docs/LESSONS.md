@@ -1800,10 +1800,12 @@ short and actionable. This file is public: no research sources, product names or
 - **What happened:** the phone's possession gate could not open: the per-clip side was wrong on 3 of
   8 validation clips, confidently on one (121, at 0.88 to 0.97). That was measured on main. On the
   branch about to merge (#187, #195), clip 121 was already right (brightness kits).
-  Split by cause, no naming error was left at all. Every clip whose kit clusters each held one team
-  was named right, and every remaining error was a cluster error, from kit colour read wrongly. New
-  naming evidence (pass direction, carries, shots) could not help, and no confidence built from the
-  naming could predict those errors (best 0.62).
+  Split by cause, every clip whose kit clusters each held one team was named right. But clip 120,
+  unsound by definition (both clusters mostly away), held half the wrong frames and was named wrong
+  too. A different naming fixed it and lost more elsewhere. No confidence was shown to predict the
+  errors (best 0.62, 95% 0.31 to 0.93, on 16 passes).
+  The first write-up said "no naming error left", which held only because "sound" excluded 120. A
+  definition that sorts the cases can hide the biggest one; report what it leaves out.
 - **Rule:** before designing a fix, measure the failure on the code that will ship, not on main when
   a fix is in review. Split it by cause with the truth, offline (here: are the clusters sound?), and
   aim the fix and its confidence at the cause that remains.
