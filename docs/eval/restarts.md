@@ -35,7 +35,7 @@ columns are two samples, compared by their standard errors over matches.
 
 Real football has no single-frame ball jumps and no player resets. A goal stops a real match for a
 minute or more (GROUNDING L4); this change left it at 14 to 19 s, and the celebration (below) makes
-it 66 to 87 s. On main the `kickoff` event is written in the goal's frame; now it is the kick itself.
+it 61 to 83 s. On main the `kickoff` event is written in the goal's frame; now it is the kick itself.
 
 ## Held-out outcomes
 
