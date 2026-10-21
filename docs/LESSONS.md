@@ -1450,3 +1450,26 @@ short and actionable. This file is public: no research sources, product names or
   `::test_a_slow_model_is_answered_by_the_server_with_its_reasons_not_cut_off_by_the_client`,
   `::test_a_request_cut_off_at_the_deadline_is_awaited_on_close` and
   `::test_the_evaluation_leaves_no_request_running_when_the_client_gives_up`.
+
+### 151. A new check of what a model writes starts from the reader we already have
+- **What happened:** the Vision Auditor's rationale check (#140) read numbers as digit runs only,
+  written fresh beside the fact-checker's reader, which lesson 129 had already widened to number
+  words and glued units. "Ninety of these were missed", "sixty percent", "one in three" and "-38"
+  all passed a check the docs called "number-checked". The reviewer's audit found it.
+- **Rule:** a check on what a model may write reuses the fact-checker's reader
+  (`factcheck.spelled_as_digits`) and adds only what its own text needs (here: digits glued to
+  words, a sign, thousands commas, and refusing words for a share or a multiple). Its tests plant
+  every written form, and a true number in each form must still stand.
+- **Check:** `tests/test_vision_auditor.py::test_a_planted_number_in_any_written_form_is_refused`
+  and `::test_the_cluster_s_own_numbers_in_any_form_stand`.
+
+### 152. A handoff checked only by its writer is not a contract
+- **What happened:** the Auditor validated its own `clusters.json` against the schema, but the Data
+  agent read the file without checking it. A hand-edited file with test seed 900001 in its sources,
+  a shifted seed range or another render setting was planned as if typed. Removing the writer's
+  check turned no test red, because the writer never produces a bad file. Two writers also made two
+  shapes under one file name: the committed round-1 file failed the new schema with 83 errors.
+- **Rule:** the agent that acts on a handoff validates it on receipt (schema, then each rule it
+  relies on) and is tested with tampered input. One file name has one writer and one shape.
+- **Check:** `tests/test_vision_auditor.py::test_the_data_agent_checks_a_typed_handoff_on_receipt`,
+  `::test_the_committed_clusters_json_is_the_auditor_s_code_output_and_the_data_agent_takes_it`.
