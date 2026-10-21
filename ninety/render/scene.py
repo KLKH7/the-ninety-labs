@@ -16,7 +16,7 @@ import random
 from dataclasses import dataclass, field
 
 from ninety.render.camera import Camera
-from ninety.render.meshpose import arm_points, gait_foot
+from ninety.render.meshpose import ASSET_STATURE_M, BROW_Y, arm_points, gait_foot
 from ninety.sim import shape
 
 BALL_RADIUS = 0.11
@@ -71,15 +71,18 @@ STEP_DIST = 0.25
 STEP_FRAMES = 7  # 0.28 s at 25 fps
 STEP_LIFT = 0.08
 STEP_PEAK_MPS = 3.0  # the fastest a stepping foot travels (design: a quick step, not a kick)
+# On the move a stepping foot must outpace the body it steps after, as a stride's swinging foot does
+# (it covers a stride while the body covers a step): up to this many times his speed (design).
+STEP_CATCH_UP = 2.5
 # A foot caught in the air by a touch (the stride's swing) is down within this many frames, the rest
 # of a swing at walking pace, before it carries on low to where it stands (design).
 LAND_FRAMES = 3
 SETTLE = 0.5  # standing still, a foot that far (as a share of the step limits) squares up
 # Where a standing foot sits under the hips: the asset's rest pose (foot marker, object metres
-# for a 1.84 m body): lateral, forward.
+# in the asset's own metres): lateral, forward.
 FOOT_HOME = (0.219, 0.127)
 ANKLE_BACK = 0.11  # the drawn ankle sits this far behind the foot marker (asset rest pose)
-# The furthest ahead of the hips the mesh's leg puts a flat foot on the grass, for a 1.84 m body
+# The furthest ahead of the hips the mesh's leg puts a flat foot on the grass, in the asset's own metres
 # (measured from the asset: 1 cm short of a plant 0.30 m ahead, 3.6 cm at 0.35, 13.5 cm at 0.45).
 # A run lands no further, or the drawn foot lands short and slides forward to its plant.
 PLANT_AHEAD_MAX = 0.30
@@ -92,6 +95,14 @@ PLANT_ACTIONS = ("stand", "walk", "run", "chest", "head", "strike", "foot", "thi
 # after 2 pi). The leg takes and gives back the plant over PLANT_EASE_FRAMES.
 STANCE_CENTRE = {"l": 1.75 * math.pi, "r": 0.75 * math.pi}
 PLANT_EASE_FRAMES = 3
+# The furthest behind the hips a foot on the grass stays in a stride (asset metres, measured: the
+# leg still reaches it with the heel up), how far either side of his line of running a foot lands
+# (design: a runner's feet land close to the line), and how high a swinging foot is carried, at a
+# walk and at a sprint (design, _swing_lift).
+STANCE_BEHIND_MAX = 0.45
+RUN_HALF_WIDTH_M = 0.11
+SWING_LIFT_M = (0.10, 0.40)
+LATE_LIFT = 0.5  # past this share of its swing a foot still on the grass waits for the next one
 FRAME_S = 0.04  # one frame at the engine's 25 fps (ninety.sim.engine.FPS)
 MESH_ARM_ACTIONS = ("strike", "foot", "thigh", "chest", "head", "hands", "shield")
 HIP_PIVOT_Z = 0.99  # the mesh's spine_01 joint, where a bend over the ball starts (asset rest pose)
@@ -125,7 +136,7 @@ KICK_UP_M = (0.30, 0.55)  # its height off the grass
 KICK_FOLLOW_M = (0.25, 0.55)  # how far on past the ball it follows through
 KICK_RISE_M = (0.15, 0.45)  # and how far it rises doing so
 # A keeper holding the ball (the frame names him possessor and his pose is hands) has a hand either
-# side of it (meshpose.HOLD_SIDE). A ball below HOLD_STAND_Z (centre height, a 1.84 m body) is taken
+# side of it (meshpose.HOLD_SIDE). A ball below HOLD_STAND_Z (centre height, asset metres) is taken
 # bent over it: the trunk bends forward by up to HOLD_BEND and the hips drop by up to HOLD_DROP_M,
 # deepest at a ball on the grass (design; a keeper scooping up a ground ball stoops to it). The hands
 # go to the ball over HOLD_EASE_S before he has it and leave it as long after.
@@ -136,9 +147,11 @@ HOLD_EASE_S = 0.16
 HOLD_RUN_MPS = 4.0  # at this speed or faster a keeper takes the ball without dropping his hips (design)
 TOUCH_PARTS = ("foot", "thigh", "chest", "head")
 HEADER_LIFT_MAX = 0.3  # a header above the standing brow is drawn as a jump, at most this high
+HEAD_Z = 1.575  # the centre of the mesh's head (chin about 1.47, skull top 1.684, asset metres)
+REF_STATURE_M = 1.84  # the stature body_parts' capsule radii are given for
 HEADER_AIR_S = 0.24  # half the time in the air
 # A foot reaching a ball beyond a standing leg's reach lunges: the hips drop until the leg (hip to
-# sole LEG_M, for a 1.84 m body, from the asset) reaches it from a hip HIP_SIDE_M to that side,
+# sole LEG_M, in the asset's own metres, from the asset) reaches it from a hip HIP_SIDE_M to that side,
 # by at most LUNGE_MAX (design). The engine's foot reaches 1 m from his centre (P14).
 LEG_M = 0.9
 HIP_SIDE_M = 0.1
@@ -360,7 +373,7 @@ def touch_at(g: Gait, mine: list[dict], fi: int, height_m: float, fps: int,
     if best is None:
         return
     c, u, w = best
-    k = height_m / 1.84
+    k = height_m / ASSET_STATURE_M
     part = c["part"]
     dvx, dvy = c["dv"]
     n = math.hypot(dvx, dvy)
@@ -408,7 +421,7 @@ def touch_at(g: Gait, mine: list[dict], fi: int, height_m: float, fps: int,
             sink = min(_ease((u - lo) / -lo), _ease((TOUCH_RECOVER_S - u) / TOUCH_RECOVER_S))
             g.lift = -round(drop * sink, 4)
     if part == "head":
-        rise_m = min(pz - 1.70 * k, HEADER_LIFT_MAX)
+        rise_m = min(pz - BROW_Y * k, HEADER_LIFT_MAX)
         if rise_m > 0.02:
             g.lift = round(rise_m * max(0.0, 1.0 - (u / HEADER_AIR_S) ** 2), 4)
 
@@ -468,7 +481,7 @@ def hold_at(g: Gait, runs: list[tuple[int, int]], fi: int, ball: tuple[float, fl
             w = max(w, min(_ease((fi - (first - ease)) / ease), _ease((last + ease - fi) / ease)))
     if w <= 0.0:
         return
-    k = height_m / 1.84
+    k = height_m / ASSET_STATURE_M
     z = ball[2] + BALL_RADIUS
     depth = min(max((HOLD_STAND_Z * k - z) / ((HOLD_STAND_Z - BALL_RADIUS) * k), 0.0), 1.0)
     g.hold = {
@@ -507,11 +520,14 @@ def reach_sign(x: float, y: float, g: Gait, ball: tuple[float, ...] | None) -> f
     return 1.0 if lateral >= 0 else -1.0
 
 
-def _step_frames(dist: float) -> int:
+def _step_frames(dist: float, speed: float = 0.0) -> int:
     """How many frames a step of `dist` metres takes: STEP_FRAMES, or longer for a long step, so
-    the foot is never faster than STEP_PEAK_MPS (it covers its way in the middle 70% of the step,
-    smoothstep, whose peak is 1.5 times its mean)."""
-    return max(STEP_FRAMES, math.ceil(1.5 * dist / (0.7 * STEP_PEAK_MPS * FRAME_S)))
+    the foot is never faster than STEP_PEAK_MPS, or STEP_CATCH_UP times the body's `speed` when he
+    is moving faster than a step would follow (it covers its way in the middle 70% of the step,
+    smoothstep, whose peak is 1.5 times its mean). A support foot left behind by a running player
+    stepped at standing pace and never caught him up: the leg hung toward it (seed 7, h6's strike)."""
+    peak = max(STEP_PEAK_MPS, STEP_CATCH_UP * speed)
+    return max(STEP_FRAMES, math.ceil(1.5 * dist / (0.7 * peak * FRAME_S)))
 
 
 def _gait_pose(g: Gait, x: float, y: float) -> dict:
@@ -554,40 +570,18 @@ def _feet(g: Gait, x: float, y: float, k: float) -> None:
     if (g.action not in PLANT_ACTIONS and not support) or g.lift > 0.02:
         g.feet = {}
     elif g.action != "stand" and g.speed >= 0.45 and not support:
-        half = _duty(g.speed) * math.pi
-        per_frame = 2 * math.pi * g.speed * FRAME_S / _stride(g.speed)
-        ph = g.phase % (2 * math.pi)
-        hx, hy = math.cos(g.heading), math.sin(g.heading)
-        for side, sign in (("l", 1.0), ("r", -1.0)):
-            off = _wrap(ph - STANCE_CENTRE[side])
-            on = abs(off) < half
-            foot = g.feet.get(side)
-            if foot is not None and foot["swing"] is not None:
-                foot = None
-            if on and foot is None and not (g.down_l if sign > 0 else g.down_r):
-                # Put down where the stride has the foot now, once that is within the leg's reach.
-                gx, gy = gait_foot(_gait_pose(g, x, y), g.heading, k * 1.84, side)
-                if (gx - x) * hx + (gy - y) * hy <= PLANT_AHEAD_MAX * k:
-                    foot = {"x": gx, "y": gy, "yaw": pel, "z": 0.0, "swing": None}
-            if foot is not None and math.hypot(foot["x"] - x, foot["y"] - y) > 0.72:
-                foot = None
-            if foot is not None:
-                # The leg takes the plant over the first frames on the grass and gives it back to the
-                # stride over the last, instead of jumping onto it and off it; a foot still planted
-                # from standing lets go at the same pace.
-                ease = PLANT_EASE_FRAMES * per_frame
-                want = _ease((half - abs(off)) / ease) if on and ease > 0 else (1.0 if on else 0.0)
-                foot["w"] = max(want, foot.get("w", want) - 1.0 / PLANT_EASE_FRAMES)
-                if foot["w"] <= 0.0:
-                    foot = None
-            if foot is None:
-                g.feet.pop(side, None)
-            else:
-                g.feet[side] = foot
+        _stride_feet(g, x, y, k, pel)
     else:
         for side, sign in (("l", 1.0), ("r", -1.0)):
             hx_, hy_ = _home(x, y, pel, k, sign)
             foot = g.feet.get(side)
+            if foot is not None and foot.get("air"):
+                # Out of a stride in the air: it comes down as a step from where it is.
+                frames = _step_frames(math.hypot(foot["x"] - hx_, foot["y"] - hy_), g.speed)
+                foot = {"x": foot["x"], "y": foot["y"], "yaw": foot["yaw"], "z": foot["z"], "w": 1.0,
+                        "swing": (foot["x"], foot["y"], foot["yaw"], 0, frames, foot["z"]), "over": False}
+            elif foot is not None and foot.get("swing") == "stride":
+                foot["swing"] = None
             if foot is None:
                 # A foot coming out of a stride or a touch starts where it was drawn last: on the
                 # grass it stays there, and in the air it comes down as a step to where it stands.
@@ -597,7 +591,7 @@ def _feet(g: Gait, x: float, y: float, k: float) -> None:
                 taken = 1.0 if side == released else 0.0
                 foot = {"x": fx, "y": fy, "yaw": pel, "z": fz, "swing": None, "w": taken}
                 if fz > 0.02:
-                    frames = _step_frames(math.hypot(fx - hx_, fy - hy_))
+                    frames = _step_frames(math.hypot(fx - hx_, fy - hy_), g.speed)
                     foot["swing"], foot["over"] = (fx, fy, pel, 0, frames, fz), False
             foot["w"] = min(1.0, foot.get("w", 1.0) + 1.0 / PLANT_EASE_FRAMES)
             if foot["swing"] is not None:
@@ -635,7 +629,7 @@ def _feet(g: Gait, x: float, y: float, k: float) -> None:
             gone = math.hypot(foot["x"] - hx_, foot["y"] - hy_)
             held = side == busy  # the touch's own, kept within reach above
             if foot["swing"] is None and not held and gone > OUT_OF_REACH_M * k:
-                start = (foot["x"], foot["y"], foot["yaw"], 0, _step_frames(gone))
+                start = (foot["x"], foot["y"], foot["yaw"], 0, _step_frames(gone, g.speed))
                 foot["swing"], foot["over"] = start, False
         # One foot steps at a time; the foot playing the ball is the touch's, not a step.
         stepping = any(f["swing"] is not None for s, f in g.feet.items() if s != busy)
@@ -660,7 +654,7 @@ def _feet(g: Gait, x: float, y: float, k: float) -> None:
             if worst is not None:
                 foot = g.feet[worst[1]]
                 hx_, hy_ = _home(x, y, pel, k, 1.0 if worst[1] == "l" else -1.0)
-                frames = _step_frames(math.hypot(foot["x"] - hx_, foot["y"] - hy_))
+                frames = _step_frames(math.hypot(foot["x"] - hx_, foot["y"] - hy_), g.speed)
                 foot["swing"], foot["over"] = (foot["x"], foot["y"], foot["yaw"], 0, frames), False
     for foot in g.feet.values():
         if foot["swing"] is None:
@@ -681,11 +675,85 @@ def _feet(g: Gait, x: float, y: float, k: float) -> None:
             g.plant_r, g.down_r = plant, down
 
 
+def _swing_lift(speed: float) -> float:
+    """How high a foot is carried at the top of its swing (asset metres, design): clear of the grass
+    at a walk, and the heel up behind at a sprint."""
+    return SWING_LIFT_M[0] + (SWING_LIFT_M[1] - SWING_LIFT_M[0]) * min(max((speed - 1.5) / 5.5, 0.0), 1.0)
+
+
+def _stride_feet(g: Gait, x: float, y: float, k: float, pel: float) -> None:
+    """Walking and running, each foot is on the grass for its stance and carried through the air for
+    its swing, every frame at a place, never a pose: the gait's two stored poses swing a foot back
+    and forth along one path, so a foot left to them drags along the grass (lesson 157).
+
+    The stride's phase says which: a foot's stance is centred on STANCE_CENTRE, as long as the
+    duty share of the stride (_duty) but no longer than the leg reaches under the hips, from
+    PLANT_AHEAD_MAX ahead to STANCE_BEHIND_MAX behind. On the grass the foot stays where it landed.
+    In the air it travels from where it lifted to where the body will be when it lands, that much
+    ahead of the hips, at most PLANT_AHEAD_MAX, lifted on an arc up to _swing_lift."""
+    stride = _stride(g.speed)
+    reach = (PLANT_AHEAD_MAX + STANCE_BEHIND_MAX) * k
+    half = min(_duty(g.speed) * math.pi, math.pi * reach / stride)
+    travel = stride * half / math.pi  # how far the body moves over one stance
+    ahead = min(travel / 2, PLANT_AHEAD_MAX * k)
+    air = 2 * math.pi - 2 * half  # the swing's share of the stride, in phase
+    ph = g.phase % (2 * math.pi)
+    hx, hy = math.cos(g.heading), math.sin(g.heading)
+    lx, ly = -hy, hx
+    lift = _swing_lift(g.speed) * k
+    for side, sign in (("l", 1.0), ("r", -1.0)):
+        off = _wrap(ph - STANCE_CENTRE[side])
+        lat = RUN_HALF_WIDTH_M * k * sign
+        foot = g.feet.get(side)
+        if foot is not None and isinstance(foot.get("swing"), tuple):
+            # In the middle of a step from standing: it goes on from where it is.
+            foot = {"x": foot["x"], "y": foot["y"], "yaw": foot["yaw"], "z": foot["z"], "swing": None,
+                    "air": foot["z"] > 0.0, "from": (foot["x"], foot["y"], foot["yaw"], foot["z"], 0.0)}
+        if abs(off) < half:
+            if foot is None:
+                # Starting the stride on this foot: it is where the stance has it by now.
+                rel = ahead - travel * (off + half) / (2 * half)
+                foot = {"x": x + hx * rel + lx * lat, "y": y + hy * rel + ly * lat, "yaw": pel, "z": 0.0}
+            elif foot.get("air"):
+                # The swing is over: it comes down where it has been carried.
+                foot = {"x": foot["x"], "y": foot["y"], "yaw": foot["yaw"], "z": 0.0}
+            foot["swing"], foot["w"] = None, 1.0
+        else:
+            u = ((off - half) % (2 * math.pi)) / air  # 0 at lift-off, 1 at landing
+            if foot is None:
+                # A foot with no place yet is where its swing has it by now: it lifted behind the
+                # hips, where the body was when the swing began.
+                done = stride * u * air / (2 * math.pi)
+                back = ahead - travel - done
+                bx, by = x + hx * back + lx * lat, y + hy * back + ly * lat
+                foot = {"x": bx, "y": by, "yaw": pel, "z": 0.0, "air": True, "from": (bx, by, pel, 0.0, 0.0)}
+            elif not foot.get("air"):
+                if u > LATE_LIFT:
+                    # Too late in this swing to make it to the next landing at a stride's pace: it
+                    # stays down and lifts on the next one.
+                    foot["swing"], foot["w"] = None, 1.0
+                    g.feet[side] = foot
+                    continue
+                start = (foot["x"], foot["y"], foot["yaw"], foot.get("z", 0.0), u)
+                foot = {**foot, "air": True, "from": start}
+            sx, sy, syaw, sz, u0 = foot["from"]
+            # Where the body will be when this foot lands, and that far ahead of the hips.
+            on = stride * (1.0 - u) * air / (2 * math.pi) + ahead
+            tx, ty = x + hx * on + lx * lat, y + hy * on + ly * lat
+            e = min(max((u - u0) / max(1.0 - u0, 1e-6), 0.0), 1.0)
+            ee = _ease(e)
+            foot["x"], foot["y"] = sx + (tx - sx) * ee, sy + (ty - sy) * ee
+            foot["yaw"] = syaw + _wrap(pel - syaw) * ee
+            foot["z"] = sz * (1.0 - e) + lift * math.sin(math.pi * e)
+            foot["swing"], foot["w"] = "stride", 1.0
+        g.feet[side] = foot
+
+
 def _reach_leg(hip, knee, ankle, toe, touch: dict, fwd: tuple[float, float], k: float):
     """The touching leg's capsules, eased from the stride toward the ball by the touch's weight.
 
     A foot reaches with its sole (the mesh's foot marker) and its knee folds forward, both thigh
-    and shin 0.42 m for a 1.84 m body; a thigh reaches with its knee and the shin hangs from it.
+    and shin 0.42 m in the asset's own metres; a thigh reaches with its knee and the shin hangs from it.
     """
     w = touch["w"]
     tx, ty, tz = touch["at"]
@@ -748,7 +816,7 @@ def body_parts(
     The heading, speed and action come from the engine. The stride phase is how far these
     feet have already travelled, so a run cycles instead of sliding.
     """
-    k = look.height_m / 1.84
+    k = look.height_m / ASSET_STATURE_M
     w = look.build
     hx, hy = math.cos(g.heading), math.sin(g.heading)  # forward
     lx, ly = -hy, hx  # left
@@ -805,8 +873,11 @@ def body_parts(
 
     strided = {side: gait_foot(_gait_pose(g, x, y), g.heading, look.height_m, side, with_height=True)
                for side in ("l", "r")}
-    sleeve_r = 0.06 * k
-    arm_r = 0.048 * k
+    # Capsule radii are given for a player of REF_STATURE_M and grow with his stature; where they
+    # sit comes from the asset (k), so the label stays the shape P11 measured.
+    kr = look.height_m / REF_STATURE_M
+    sleeve_r = 0.06 * kr
+    arm_r = 0.048 * kr
     # The outer edge of the sleeves is the shoulder breadth over the deltoids (shape.py, P11).
     shoulder_y = shape.SHOULDER_BREADTH_M / 2 - sleeve_r
     parts = []
@@ -849,9 +920,12 @@ def body_parts(
             knee, ankle, toe = _reach_leg(hip, knee, ankle, toe, touch, (hx, hy), k)
             played[side] = (ankle[0] + hx * ANKLE_BACK * k, ankle[1] + hy * ANKLE_BACK * k,
                             max(ankle[2] - 0.08 * k, 0.0))
-        parts.append({"n": f"thigh_{side}", "a": hip, "b": knee, "r": round(0.085 * k * w, 4), "c": "shorts"})
-        parts.append({"n": f"shin_{side}", "a": knee, "b": ankle, "r": round(0.058 * k * w, 4), "c": "socks"})
-        parts.append({"n": f"boot_{side}", "a": ankle, "b": toe, "r": round(0.042 * k, 4), "c": "boots"})
+        # At the hips the thigh is no deeper than the engine's body (P11), however big the player.
+        thigh_r = min(0.085 * kr * w, shape.CHEST_DEPTH_M / 2)
+        parts.append({"n": f"thigh_{side}", "a": hip, "b": knee, "r": round(thigh_r, 4), "c": "shorts"})
+        shin_r = 0.058 * kr * w
+        parts.append({"n": f"shin_{side}", "a": knee, "b": ankle, "r": round(shin_r, 4), "c": "socks"})
+        parts.append({"n": f"boot_{side}", "a": ankle, "b": toe, "r": round(0.042 * kr, 4), "c": "boots"})
         # Opposite arm, elbow kept bent so a run pumps instead of hanging straight. Standing, the
         # sleeve hangs inside the deltoid and the hand inside the shoulder breadth (shape.py, P11).
         pump = -swing * (1.35 if pressing else 0.65)
@@ -902,21 +976,21 @@ def body_parts(
             "n": "neck",
             "a": at(lean, 0.0, 1.44 * k),
             "b": at(lean * 1.1, 0.0, 1.52 * k),
-            "r": round(0.048 * k, 4),
+            "r": round(0.048 * kr, 4),
             "c": "skin",
         }
     )
     if g.action == "head":
-        hf, hs, hz = toward(lean, 0.0, 1.64 * k, 0.18 * k)
+        hf, hs, hz = toward(lean, 0.0, HEAD_Z * k, 0.18 * k)
         head = at(hf, hs, hz)
     else:
-        head = at(lean * 1.15, dive * 0.05 * k, 1.64 * k)
-    parts.append({"n": "head", "a": head, "r": round(0.105 * k, 4), "c": "skin"})
+        head = at(lean * 1.15, dive * 0.05 * k, HEAD_Z * k)
+    parts.append({"n": "head", "a": head, "r": round(0.105 * kr, 4), "c": "skin"})
     parts.append(
         {
             "n": "hair",
             "a": [head[0] - hx * 0.02, head[1] - hy * 0.02, round(head[2] + 0.05 * k, 4)],
-            "r": round(0.09 * k, 4),
+            "r": round(0.09 * kr, 4),
             "c": "hair",
         }
     )
