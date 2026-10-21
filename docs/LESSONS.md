@@ -1669,6 +1669,30 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `uv run pytest tests/test_restarts.py -k past_the_end_of_the_touchline`; on the engine
   before it, the ball runs on to 127 m and jumps 18 m in a frame.
 
+### 175. A held-out seed that passes may hold none of the cases the rule gets wrong
+- **What happened:** the broadcast camera (#180) passed its framing test on held-out seeds 3 and 5
+  at 98%. With #179's engine, seed 3's window held three corners and two balls run to the byline,
+  and it fell to 58%. Two causes:
+  - The test simulated only 2 minutes, so a dead ball at the window's end counted as live (lesson
+    140, applied to the clip but not to the test).
+  - The camera had real misses that main's seed 3 never showed:
+    - the restart's close-up zoomed out on a spring that took 3 s and more, so a corner was played
+      through the close-up;
+    - the aim stopped 8 m short of each goal line;
+    - nothing kept the pitch filling the picture when aimed into a corner.
+- **Rule:**
+  - A camera rule gets a test for each situation it must handle, built on purpose (a restart taken
+    early, a ball run to the byline, play at a corner flag), not left to whatever a held-out seed
+    happens to contain.
+  - A test's simulation runs past its window as the render's does.
+  - The held-out number is reported, never tuned toward.
+- **Check:** `tests/test_render_camera.py`:
+  - `test_a_restart_taken_during_the_close_up_is_watched_on_the_wide_shot`,
+    `test_a_ball_run_to_the_byline_stays_in_the_middle_of_the_picture` and
+    `test_play_near_a_corner_flag_is_framed_with_the_pitch_filling_the_picture`, each of which fails
+    on the 0.5.3 camera;
+  - `_match` simulates SIM_MARGIN_S past the window.
+
 ### 165. A replayed message is as old as the time it was held
 - **What happened:** the phone's clock test (`tests/test_phone.py`) flaked on CI, with the phone at
   0.03 s against the laptop's 0.29 s, and it read as wall-clock noise on a shared runner. The cause
