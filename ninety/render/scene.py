@@ -26,7 +26,7 @@ from ninety.render.meshpose import (
     gait_foot,
 )
 from ninety.sim import shape
-from ninety.sim.body import GRAVITY
+from ninety.sim.body import F0_MEAN, F0_SD, GRAVITY
 
 BALL_RADIUS = 0.11
 STRIDE_M = 1.7  # fallback, used only where a caller has no speed yet
@@ -146,11 +146,12 @@ RUN_HALF_WIDTH_M = 0.11
 # (design). Running, as high as folds the drawn knee to Fukuchi et al. 2017's peak swing knee flexion
 # (Table 4: 93.5 degrees at 2.5 m/s, 108.7 at 3.5, 119.1 at 4.5), measured on the asset with the bob
 # drawn (93.5 at 0.18, 108.7 at 0.335). The drawn leg folds no further than 111 degrees, its foot kept
-# within reach behind the hips (STANCE_BEHIND_MAX), which it reaches at 0.40. Faster, a sprinter
-# carries the foot higher still, the thigh coming through higher (design: 0.45 at 7 m/s, which the
-# drawn leg reaches within 9 cm; at 0.54 it fell 17 cm short). Drawn on a level pelvis, a fold like
-# this read as prancing (lesson 164); the bob carries it.
-SWING_LIFT_M = ((1.5, 0.10), (2.5, 0.18), (3.5, 0.335), (4.5, 0.40), (7.0, 0.45))
+# within reach behind the hips (STANCE_BEHIND_MAX), which it reaches at 0.40, and held there faster
+# (higher, the leg falls short of the foot: 9 cm at 0.45, 17 cm at 0.54, at 7 m/s). Measured: the
+# largest knee angle over 50 frames at a steady speed, which varies by about 2 degrees with where the
+# frames fall in the stride. Drawn on a level pelvis, a fold like this read as prancing (lesson 164);
+# the bob carries it.
+SWING_LIFT_M = ((1.5, 0.10), (2.5, 0.18), (3.5, 0.335), (4.5, 0.40))
 LATE_LIFT = 0.5  # past this share of its swing a foot still on the grass waits for the next one
 # Running, a foot is highest early in its swing, behind the hips, and comes through low to land
 # (Fukuchi et al. 2017, Fig. 3: the knee most folded at about 69% of the stride, a third of the way
@@ -173,19 +174,28 @@ RUN_BOB = ((2.78, 0.087), (3.33, 0.0855), (4.44, 0.0835), (5.56, 0.0755), (6.1, 
 # speed: to 14.3 degrees at a sprinter's top speed (Nagahara et al. 2014: upper trunk at 75.7 degrees
 # from the horizontal, peak speed 10.04 m/s). Speeding up or slowing at a m/s^2 the body leans by
 # atan(a / GRAVITY), so the push of the ground passes through it (Kugler and Janshen 2010: the force's
-# direction follows the body's lean, r = 0.93), drawn in the trunk, the feet following the stride;
-# slowing, the trunk comes back to upright and no further (design: the drawn legs cannot plant ahead
-# of him, which carries the rest of a braking lean). The acceleration is the engine's speed's, eased
-# over a few frames (ACCEL_EASE, design: the engine's steps are a frame long).
+# direction follows the body's lean, r = 0.93), drawn as the trunk tipping at the hips, the feet
+# following the stride; slowing, the trunk comes back to upright and no further (design: the drawn
+# legs cannot plant ahead of him, which carries the rest of a braking lean). The acceleration is the
+# engine's velocity's along the way he faces, from one ACCEL_BOX-frame mean to the next (design: at a
+# steady jog the engine's speed rises and brakes back every 9 frames or so, seed 21's a5 3.2 to 4.0
+# m/s, and eased over 5 frames the trunk nodded every step to a blind critic), and the lean eases
+# toward it by LEAN_EASE a frame (design: no step when a box takes a new frame).
+# Folland's runners ran at 10, 11 and 12 km/h: their lean is taken at 11 km/h, 3.05 m/s. Speeding up,
+# the lean is no more than the hardest push a player of the engine has from standing allows (its
+# acceleration from standing, three spreads above the mean, GROUNDING P2): a velocity the engine
+# changes in a frame (a collision) is no push.
 RUN_LEAN = ((3.05, 0.0), (10.04, math.radians(14.3 - 10.3)))
+ACCEL_MAX = F0_MEAN + 3 * F0_SD
 STRIDE_LEAN = math.radians(10.2)  # the stored stride's own lean (measured on the asset, pelvis to neck)
-ACCEL_EASE = 0.2
+ACCEL_BOX = 8
+LEAN_EASE = 0.2
+TRUNK_M = 0.48  # hips to shoulders (the capsules' 0.92 to 1.40, asset metres): a lean's reach forward
 # The arms swing wider with speed above the stored run's (meshpose.gait's pump), whose shoulder swings
 # through 83 degrees (measured on the asset at 4 m/s and up), to 126.5 at a sprinter's top speed (Mann
 # and Herman 1985, Olympic 200 m final, top-speed phase: 135 and 118 degrees, first and eighth),
 # taken as 10.04 m/s (Nagahara et al. 2014's peak speed; design, the race's speed is not in the source).
-ARM_RUN_MPS = 4.0  # the asset's armRunSpeed: the stored run's arms
-PUMP = ((ARM_RUN_MPS, 1.0), (10.04, 126.5 / 83.0))
+PUMP = ((asset()["armRunSpeed"], 1.0), (10.04, 126.5 / 83.0))
 # The bob comes and goes with the stride over this many frames (design: a touch, a lunge or a jump
 # takes the hips off the stride, and they do not jump back to it).
 BOB_EASE_FRAMES = 3
@@ -346,8 +356,7 @@ class Gait:
     bob_w: float = 0.0  # how much of the stride's bob is drawn (BOB_EASE_FRAMES)
     bob_at: float = 0.0  # the stride's bob when it was last drawn
     flight_s: float = 0.0  # how long both feet have been off the grass in a run (_stride_feet)
-    v: float | None = None  # the engine's speed last frame (pace)
-    accel: float = 0.0  # how fast the engine's speed is changing, eased (m/s^2, pace)
+    vel: list = field(default_factory=list)  # the engine's velocity, the last 2 * ACCEL_BOX frames (pace)
     lean: float = 0.0  # the trunk's lean on top of the stride's (radians, forward +, pace)
 
 
@@ -366,13 +375,22 @@ def update_gait(g: Gait, dx: float, dy: float, dt: float, face: tuple[float, flo
     g.phase = (g.phase + 2 * math.pi * d / _stride(speed)) % (2 * math.pi)
 
 
-def pace(g: Gait, v: float, dt: float) -> None:
-    """Follow the engine's speed `v` (m/s): its acceleration, and the trunk's lean (RUN_LEAN)."""
-    if g.v is not None:
-        g.accel += ((v - g.v) / dt - g.accel) * ACCEL_EASE
-    g.v = v
-    lean = math.atan(g.accel / GRAVITY) + _table(RUN_LEAN, v)
-    g.lean = max(lean, -_stride_lean(v))
+def pace(g: Gait, vx: float, vy: float, heading: float, dt: float) -> None:
+    """Follow the engine's velocity (m/s): his acceleration the way he faces, and the trunk's lean
+    from it and from his speed (RUN_LEAN)."""
+    g.vel.append((vx, vy))
+    del g.vel[:-2 * ACCEL_BOX]
+    n = len(g.vel) // 2
+    a_fwd = 0.0
+    if n:
+        old, new = g.vel[-2 * n:-n], g.vel[-n:]
+        ax = (sum(v[0] for v in new) - sum(v[0] for v in old)) / (n * n * dt)
+        ay = (sum(v[1] for v in new) - sum(v[1] for v in old)) / (n * n * dt)
+        a_fwd = ax * math.cos(heading) + ay * math.sin(heading)
+    v = math.hypot(vx, vy)
+    target = math.atan(min(a_fwd, ACCEL_MAX) / GRAVITY) + _table(RUN_LEAN, v)
+    g.lean += (target - g.lean) * LEAN_EASE
+    g.lean = max(g.lean, -_stride_lean(v))  # slowing, back to upright and no further
 
 
 def _stride_lean(speed: float) -> float:
@@ -404,7 +422,7 @@ def advance_gaits(gaits: dict[str, Gait], prev_xy: dict[str, tuple[float, float]
         g = gaits[pl["id"]]
         px, py = prev_xy.get(pl["id"], (pl["x"], pl["y"]))
         update_gait(g, pl["x"] - px, pl["y"] - py, dt, (bx - pl["x"], by - pl["y"]))
-        pace(g, math.hypot(pl.get("vx", 0.0), pl.get("vy", 0.0)), dt)
+        pace(g, pl.get("vx", 0.0), pl.get("vy", 0.0), g.heading, dt)
         prev_xy[pl["id"]] = (pl["x"], pl["y"])
         face(g, pl)
         nxt = later.get(pl["id"])
@@ -933,7 +951,8 @@ def _bob(speed: float, ph: float, half: float, stride: float, flight: tuple[floa
     the hips, so no higher than standing) and is lowest midway between the stances. Running, it is
     at standing height as a foot lands and leaves and lowest at mid-stance; with both feet off the
     grass (`flight`: seconds since the last foot left it, seconds until the next lands) it falls
-    freely, up and back down."""
+    freely, up and back down. The free fall is physics; the walk's cosine and the stance's
+    quarter cosine are design (smooth, at the sourced heights and times)."""
     off = min(abs(_wrap(ph - c)) for c in STANCE_CENTRE.values())  # 0 at mid-stance, pi/2 midway
     walk = -_table(WALK_BOB, speed) * (1.0 - math.cos(2.0 * off)) / 2.0
     # The rise of a flight as long as the stride's (between its stances) is the part of the bob the
@@ -1177,6 +1196,8 @@ def body_parts(
     s = math.sin(g.phase)
     dive = g.dive if g.action == "dive" else 0.0
     lean = (0.16 if pressing else 0.05) * min(g.speed / 5.0, 1.0) * k
+    if g.action in PLANT_ACTIONS and g.action not in ("chest", "head", "hands", "throw"):
+        lean += math.sin(g.lean) * TRUNK_M * k  # the trunk tipped at the hips (pace)
     if g.action == "chest":
         lean = -0.14 * k  # the chest opens onto a ball he is under
     elif g.action == "head":

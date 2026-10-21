@@ -28,16 +28,12 @@ from ninety.render.scene import (
     LEAD_AHEAD_FRAMES,
     LEAD_MAX,
     PLANT_AHEAD_MAX,
-    PUMP,
-    RUN_BOB,
     STEP_FRAMES,
     STEP_LIFT,
     THROW_FOLLOW_S,
-    WALK_BOB,
     Gait,
     Look,
     _step_m,
-    _table,
     advance_gaits,
     body_parts,
     contacts,
@@ -397,7 +393,7 @@ def _draw(frames, events=None):
             stride = 2 * _step_m(math.hypot(pl["vx"], pl["vy"]))
             g.phase = (g.phase + 2 * math.pi * dist / stride) % (2 * math.pi)
             g.heading, g.action, g.speed = pl["heading"], pl["action"], math.hypot(pl["vx"], pl["vy"])
-            pace(g, g.speed, 1 / FPS)
+            pace(g, pl["vx"], pl["vy"], g.heading, 1 / FPS)
             touch_at(g, mine.get(pl["id"], []), fi, 1.84, FPS, pl["x"], pl["y"])
             hold_at(g, held.get(pl["id"], []), fi, ball, 1.84, FPS)
             body_parts(pl["x"], pl["y"], looks[pl["id"]], g, ball)
@@ -492,12 +488,13 @@ def _run_frames(profile, turn_rate=0.0):
 
 def _slides(drawn):
     """How far each foot moves along the grass between two frames it is on the grass in: drawn
-    within 2 cm of it in both, and not coming down onto it from a swing (a walking swing's last frame
-    can be 1 cm up with 2 cm still to go; with the hips' bob the leg now reaches that low)."""
+    within 2 cm of it in both, and not the frame a swing lands in (a walking swing's last frame can be
+    1 to 2 cm up with 2 cm still to go; with the hips' bob the leg now reaches that low)."""
     out = []
-    for (pa, a, _, _), (_, b, _, _) in zip(drawn, drawn[1:], strict=False):
+    for (pa, a, _, _), (pb, b, _, _) in zip(drawn, drawn[1:], strict=False):
         for s in "lr":
-            landing = pa[f"plant_{s}"] is not None and pa[f"plant_{s}"][3] > 0.0
+            was, now = pa[f"plant_{s}"], pb[f"plant_{s}"]
+            landing = was is not None and was[3] > 0.0 and now is not None and now[3] == 0.0
             if a[f"foot_{s}"][2] < 0.02 and b[f"foot_{s}"][2] < 0.02 and not landing:
                 out.append(math.dist(a[f"foot_{s}"][:2], b[f"foot_{s}"][:2]))
     return out
@@ -519,7 +516,8 @@ def test_a_foot_on_the_grass_does_not_slide_from_a_standstill_to_a_sprint_and_ba
 
 def test_the_stride_lengthens_and_the_swing_lifts_with_speed():
     """The same foot lands a stride (two steps, scene._step_m: Debaere 2013) further on each time,
-    and is carried higher through its swing the faster he runs."""
+    and is carried higher through its swing the faster he runs, up to where the drawn knee folds no
+    further (scene.SWING_LIFT_M, held from 4.5 m/s); beyond it no lower than the leg search's 2 cm."""
     lifts = []
     for speed in (1.5, 3.0, 5.0, 7.0):
         drawn = _draw(_run_frames([speed] * 150))["h1"]
@@ -534,7 +532,8 @@ def test_the_stride_lengthens_and_the_swing_lifts_with_speed():
         for s in strides:
             assert abs(s / (2 * _step_m(speed)) - 1.0) < 0.1, (speed, s, 2 * _step_m(speed))
         lifts.append(top)
-    assert lifts == sorted(lifts) and lifts[0] > 0.05 and lifts[-1] > 0.3, lifts
+    assert lifts[:3] == sorted(lifts[:3]) and lifts[3] >= lifts[2] - 0.02, lifts
+    assert lifts[0] > 0.05 and lifts[-1] > 0.3, lifts
 
 
 # A low step after the body (scene.STEP_LIFT) with 4 cm for the foot marker above its sole, both
@@ -1167,17 +1166,17 @@ def _trunk(pose):
     return math.degrees(math.atan2(n[0] - p[0], n[2] - p[2]))
 
 
-@pytest.mark.parametrize("speed", [3.0, 4.5, 6.0])
-def test_a_runners_hips_are_lowest_on_the_grass_and_rise_in_the_air(speed):
+@pytest.mark.parametrize("speed,bob", [(3.33, 0.0855), (4.44, 0.0835), (5.56, 0.0755)])
+def test_a_runners_hips_are_lowest_on_the_grass_and_rise_in_the_air(speed, bob):
     """Old (0.5.9): the hips were drawn level, a jog at 3 to 4 m/s gliding like a power-walk. Running,
-    the centre of mass rises and falls 7.5 to 8.7 cm a step (scene.RUN_BOB: Fadillioglu 2022, Hanley
-    2022, Gullstrand 2009), lowest at mid-stance (Lee and Farley 1998) and in free fall in the air.
-    The drawn hips bob within 30% of it (set after measuring: the drawn stance is shortened to the
-    leg's reach, which lengthens the drawn flight), and are higher with both feet in the air than
-    with a foot on the grass under them, by at least half of it."""
+    the centre of mass rises and falls 8.55, 8.35 and 7.55 cm a step at these speeds (Hanley et al.
+    2022, Premier League players, Fig. 2), lowest at mid-stance (Lee and Farley 1998) and in free
+    fall in the air. The drawn hips bob within 30% of it (design: measured 0.98 to 1.00 of it; the
+    drawn flight, lengthened by the leg's reach, could change the free fall's share), and are higher
+    with both feet in the air than with a foot on the grass under them, by at least half of it
+    (design: measured 0.61 to 0.77)."""
     drawn = _draw(_run_frames([speed] * 110))["h1"][40:]
     hips = [_joint(p, "pelvis")[2] for p, _, _, _ in drawn]
-    bob = _table(RUN_BOB, speed)
     assert 0.7 * bob <= max(hips) - min(hips) <= 1.3 * bob, (speed, max(hips) - min(hips), bob)
     air = [z for z, (_, m, _, _) in zip(hips, drawn, strict=True)
            if min(m["foot_l"][2], m["foot_r"][2]) > 0.03]
@@ -1187,15 +1186,15 @@ def test_a_runners_hips_are_lowest_on_the_grass_and_rise_in_the_air(speed):
     assert sum(air) / len(air) - sum(under) / len(under) >= 0.5 * bob, (speed, air, under)
 
 
-@pytest.mark.parametrize("speed", [1.0, 1.6])
-def test_a_walkers_hips_are_highest_over_the_standing_leg(speed):
+@pytest.mark.parametrize("speed,bob", [(1.0, 0.0361), (1.6, 0.0483)])
+def test_a_walkers_hips_are_highest_over_the_standing_leg(speed, bob):
     """Old (0.5.9): level hips at a walk. Walking, the body vaults over the standing leg: highest at
-    mid-stance and lowest as the weight passes from one foot to the other, 3.6 cm at 1.0 m/s and
-    4.8 at 1.6 (Orendurff et al. 2004). The drawn hips within 30% (set after measuring), and higher,
-    by at least half of it, with a foot on the grass under them (within 10 cm) than without."""
+    mid-stance and lowest as the weight passes from one foot to the other, 3.61 cm at 1.0 m/s and
+    4.83 at 1.6 (Orendurff et al. 2004). The drawn hips within 30% (design, as running), and higher,
+    by at least half of it, with a foot on the grass under them (within 10 cm) than without
+    (design)."""
     drawn = _draw(_run_frames([speed] * 110))["h1"][40:]
     hips = [_joint(p, "pelvis")[2] for p, _, _, _ in drawn]
-    bob = _table(WALK_BOB, speed)
     assert 0.7 * bob <= max(hips) - min(hips) <= 1.3 * bob, (speed, max(hips) - min(hips), bob)
     over, other = [], []
     for z, (_, m, r, _) in zip(hips, drawn, strict=True):
@@ -1208,8 +1207,10 @@ def test_a_walkers_hips_are_highest_over_the_standing_leg(speed):
 @pytest.mark.parametrize("speed,peak", [(2.5, 93.5), (3.5, 108.7)])
 def test_a_running_knee_folds_as_far_as_a_runners(speed, peak):
     """Old (0.5.9): a swinging knee folded to 77 degrees at 2.5 m/s and 90 at 3.5, the foot carried at
-    a walk's height. Runners fold it to 93.5 and 108.7 degrees (Fukuchi et al. 2017, Table 4): the
-    drawn peak within 5 degrees."""
+    a walk's height. Runners fold it to 93.5 and 108.7 degrees (Fukuchi et al. 2017, Table 4), and
+    the swing's height (scene.SWING_LIFT_M) was measured on the asset to draw that: this holds the
+    calibration, the drawn peak within 5 degrees (design: the peak varies about 2 degrees with where
+    the frames fall in the stride)."""
     drawn = _draw(_run_frames([speed] * 90))["h1"][40:]
     top = max(_knee_fold(p, s) for p, _, _, _ in drawn for s in "lr")
     assert abs(top - peak) <= 5.0, (speed, top, peak)
@@ -1218,28 +1219,39 @@ def test_a_running_knee_folds_as_far_as_a_runners(speed, peak):
 def test_the_trunk_leans_into_a_sprint_start_and_comes_up_braking():
     """Old (0.5.9): the trunk kept the stride's lean whatever the pace did. Speeding up at a m/s^2 the
     body leans atan(a / g) so the ground's push passes through it (Kugler and Janshen 2010); slowing,
-    the trunk comes back up to upright and no further. Setting off at 4 m/s^2, as he passes 3, 4 and
-    5 m/s the drawn trunk leans at least 0.7 of atan(4 / g) beyond its lean at that speed held (it
-    eases in over a few frames); braking at 6 m/s^2 it is upright, within 1 degree behind and 3 ahead
-    of his standing trunk."""
+    the trunk comes back up to upright and no further. Setting off at 4 m/s^2, as he passes 3.5, 4.5
+    and 5.4 m/s the drawn trunk leans at least 0.7 of atan(4 / g) beyond its lean at that speed held
+    (the acceleration is taken over 16 frames and the lean eases in); braking at 6 m/s^2, from 0.4 s
+    in it is upright, within 1 degree behind and 3 ahead of his standing trunk. At a steady jog
+    whose engine speed rises and brakes back every 9 frames (seed 21's a5, 3.2 to 4.0 m/s) the trunk
+    nods no more than 4 degrees (old, eased over 5 frames: it nodded every step). Held at 9 m/s the
+    trunk leans at least 0.7 of the 3.4 degrees more than at 3.05 that Folland 2017 (10.3 degrees
+    at 11 km/h) and Nagahara 2014 (14.3 at 10.04 m/s) give. The 0.7s, the 1 and 3 degrees and the 4
+    are design: easing, and the leg search's precision."""
     up = [0.0] * 10 + [min(6.0, 0.16 * i) for i in range(1, 40)] + [6.0] * 30
     down = [max(1.0, 6.0 - 0.24 * i) for i in range(1, 22)]
     drawn = _draw(_run_frames(up + down))["h1"]
     want = 0.7 * math.degrees(math.atan(4.0 / 9.81))
-    for i in (19, 25, 31):  # 3.04, 4.0 and 4.96 m/s
+    for i in (31, 37, 43):  # 3.5, 4.5 and 5.4 m/s
         v = drawn[i][3]
         held = _trunk(_draw(_run_frames([v] * 50))["h1"][-1][0])
         assert _trunk(drawn[i][0]) - held >= want, (v, _trunk(drawn[i][0]), held, want)
     stand = _trunk(drawn[5][0])
-    for p, _, _, v in drawn[-15:]:  # braking, from 4.6 m/s
+    for p, _, _, v in drawn[-11:]:  # braking, from 3.4 m/s
         assert stand - 1.0 <= _trunk(p) <= stand + 3.0, (v, _trunk(p), stand)
+    saw = [3.21, 3.35, 3.49, 3.62, 3.75, 3.87, 4.0, 3.75, 3.52, 3.29] * 8
+    trunks = [_trunk(p) for p, _, _, _ in _draw(_run_frames(saw))["h1"][30:]]
+    assert max(trunks) - min(trunks) <= 4.0, (min(trunks), max(trunks))
+    slow, fast = (_trunk(_draw(_run_frames([v] * 50))["h1"][-1][0]) for v in (3.05, 9.0))
+    assert fast - slow >= 0.7 * (14.3 - 10.3) * (9.0 - 3.05) / (10.04 - 3.05), (slow, fast)
 
 
 def test_the_arms_swing_wider_toward_a_sprint():
     """Old (0.5.9): from 4 m/s up the arms kept the stored run's swing, the shoulder through 83
     degrees, so a sprinting arm moved no more than a jogging one. A sprinter's shoulder swings
-    through 118 to 135 degrees at top speed (Mann and Herman 1985); the drawn swing widens toward it
-    (scene.PUMP): at 7 m/s within 10% of 83 times the pump, and wider than at 4.5 m/s."""
+    through 118 to 135 degrees at top speed (Mann and Herman 1985); the drawn swing widens toward
+    their mean, 126.5, at 10.04 m/s from 83 at 4 m/s: at 7 m/s within 10% of the way there (design:
+    measured 1.005 of it), and wider than at 4.5 m/s."""
     def swing(speed):
         drawn = _draw(_run_frames([speed] * 70))["h1"][40:]
         angles = []
@@ -1249,7 +1261,8 @@ def test_the_arms_swing_wider_toward_a_sprint():
         return max(angles) - min(angles)
 
     jog, sprint = swing(4.5), swing(7.0)
-    assert abs(sprint / (83.0 * _table(PUMP, 7.0)) - 1.0) <= 0.1, (sprint, 83.0 * _table(PUMP, 7.0))
+    want = 83.0 + (126.5 - 83.0) * (7.0 - 4.0) / (10.04 - 4.0)
+    assert abs(sprint / want - 1.0) <= 0.1, (sprint, want)
     assert sprint > jog * 1.1, (jog, sprint)
 
 
@@ -1257,8 +1270,10 @@ def test_the_arms_swing_wider_toward_a_sprint():
 def test_a_sprints_flight_is_seen_over_two_frames_or_more(speed):
     """Old (0.5.9): sprinting, a foot was drawn on the grass for the frame it lifted, by then 40 to 56
     cm behind the hips, beyond the leg's reach; the leg hung toward it and both feet were seen off
-    the grass together (5 cm up) for one frame a step, a flicker. A sprinter's flight is 0.12 s or
-    so, 3 frames at 25 fps; drawn, both feet are up for at least 2 frames every step."""
+    the grass together (5 cm up) for one frame a step, a flicker. A sprinter's foot is down 0.29 to
+    0.26 of the stride at 5 to 7.3 m/s (scene.RUN_DUTY, Martinez-Sobrino 2023), so both are up 0.21 to
+    0.24 of it, about 2.7 frames a step at these speeds; drawn, both feet are up (5 cm, design: clear
+    of the grass at broadcast size) for at least 2 frames every step."""
     drawn = _draw(_run_frames([speed] * 100))["h1"][40:]
     runs, run = [], 0
     for _, m, _, _ in drawn:

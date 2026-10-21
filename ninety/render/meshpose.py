@@ -60,9 +60,11 @@ LEAN_Z = (-0.4, -0.2, 0.0, 0.2, 0.4)
 LEAN_STEP = (0.1, 0.1)
 LEAN_LIMIT = ((-0.9, 0.9), (-0.6, 0.6))
 LEAN_SHARE = (("spine_01", 0.35), ("spine_02", 0.35), ("neck_01", 0.3))
-# The trunk's lean on top of the stride's (scene.pace), split down the spine as the stored run splits
-# its own (spine_01 0.14, spine_02 0.08).
-TRUNK_SHARE = (("spine_01", 0.14 / 0.22), ("spine_02", 0.08 / 0.22))
+# The trunk's lean on top of the stride's (scene.pace), half tipping it at the hips and half in the
+# lower spine (design: bent down the spine alone it read as a stoop to a blind critic; tipped at the
+# hips alone, a lean of 30 degrees took the thigh past its reach behind him and a swinging leg flipped).
+# The pelvis turns, and the legs are placed after it.
+TRUNK_SHARE = (("pelvis", 0.5), ("spine_01", 0.5))
 # The thigh points down, so a twist of +a about it turns the foot by -a about the vertical.
 TWIST_SIGN = -1.0
 # The surfaces a touch aims, not in the asset: (bone, rest point skinned wholly to it).

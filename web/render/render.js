@@ -934,8 +934,8 @@ const LEAN_STEP = [0.1, 0.1];
 const LEAN_LIMIT = [[-0.9, 0.9], [-0.6, 0.6]];
 const LEAN_SHARE = [['spine_01', 0.35], ['spine_02', 0.35], ['neck_01', 0.3]];
 const TWIST_SIGN = -1.0;
-// The trunk's lean on top of the stride's, split as the stored run splits its own (meshpose.TRUNK_SHARE).
-const TRUNK_SHARE = [['spine_01', 0.14 / 0.22], ['spine_02', 0.08 / 0.22]];
+// The trunk's lean on top of the stride's: half at the hips, half in the lower spine (meshpose.TRUNK_SHARE).
+const TRUNK_SHARE = [['pelvis', 0.5], ['spine_01', 0.5]];
 // The asset's stature (meshpose.ASSET_STATURE_M): a player height_m tall is the asset scaled by
 // height_m / ASSET_STATURE_M. And the forehead a header meets the ball with (meshpose.BROW_Y).
 const ASSET_STATURE_M = 1.684;
