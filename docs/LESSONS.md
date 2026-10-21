@@ -1678,14 +1678,21 @@ short and actionable. This file is public: no research sources, product names or
   foot in a frame. And the push-off toe slid up to 17 cm a frame because the stance was allowed
   0.45 m behind the hips, a limit commented "measured" that the asset's leg reaches only to 0.30.
   Two old tests also held design as truth ("walking at 3 m/s, a foot is always on the grass").
+  The first fix passed every steady-speed test, and a blind critic still preferred 0.5.3: speeding
+  up, slowing and drifting, its players hopped with both feet tucked, because a foot lifted early
+  for reach started its swing count from zero, both feet left the grass together setting off, and
+  a pose flickering between walk and stand restarted a stride that never landed.
 - **Rule:** a drawn action follows the truth it shows, frame by frame: hands go where the
   engine's ball is, from before it moves until after it leaves. A gait's numbers come from a
   cited source, and a swing keeps its own progress so a change elsewhere changes where it lands,
   never where it is. A constant marked measured carries the measurement (what, how, the number)
   and is re-measured when a defect points at it; a test's premise that a source contradicts is
-  rewritten to what it was protecting.
+  rewritten to what it was protecting. A gait change is judged blind on clips where players
+  change pace, not only on steady-speed tests.
 - **Check:** `tests/test_render_motion.py`: `test_a_throw_in_keeps_both_hands_on_the_ball_from_the_grass_to_the_throw`,
   `test_a_throw_in_moves_no_limb_in_a_jump`, `test_a_jog_folds_the_knee_behind_him_as_runners_do`,
   `test_the_push_off_toe_does_not_slide_before_it_lifts` and
   `test_a_player_stopping_does_not_stand_with_his_legs_crossed` each fail on 0.5.3 (mutation runs
-  with main's stride and throw restored).
+  with main's stride and throw restored); `test_a_player_drifting_while_the_pose_flickers_keeps_his_feet_down`,
+  `test_setting_off_from_standing_lifts_one_foot_at_a_time` and
+  `test_setting_off_the_feet_do_not_leave_the_grass_together` fail with each hop's cause put back.
