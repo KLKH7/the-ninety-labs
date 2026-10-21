@@ -114,6 +114,13 @@ def azure(
     return translate
 
 
+def mock_on(env: dict[str, str] | None = None) -> bool:
+    """Whether this run's Spanish is the labelled mock: the only Spanish the on-air gate lets read
+    as English, because its "[es] " label is on screen (ninety/personalizer/cues.verify)."""
+    env = dict(os.environ) if env is None else env
+    return env.get(FLAG, "off") == "mock"
+
+
 def from_env(env: dict[str, str] | None = None) -> Translate | None:
     """The translator the flag asks for, or None when Spanish is off."""
     env = dict(os.environ) if env is None else env

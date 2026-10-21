@@ -1465,3 +1465,21 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_workflow.py::test_inline_only_reads_a_foundry_reply_as_foundry_sends_it`;
   `tests/test_agent_ablation.py::test_a_live_arm_that_calls_the_match_tools_fails_that_call` reads
   the "Minutes lost to a tool call" column.
+
+### 154. A check that measures a defect also stops it where it airs
+- **What happened:** #182 taught the failure table to fail a baseline whose Spanish profile read as
+  English, but the on-air gate (`personalizer/cues.verify`) still held only text byte-identical to
+  the verified English. A live Personalizer writing English with one word changed would have aired,
+  marked verified, to a Spanish viewer, and only the evaluation would have noticed. The
+  first version of the gate also passed the mock translator's English: its `[es]` label counted as
+  the Spanish word "es".
+- **Rule:** when an evaluation learns to catch a defect, the same check guards the live path, and
+  the evaluation keeps measuring independently of the gate. An exemption names both the mode and
+  the mark: the mock airs only in a run that asked for it (`NINETY_TRANSLATOR=mock`) and only with
+  its label on screen, so a model cannot exempt itself by writing the label. Labels and quotes are
+  not words of the text.
+- **Check:** `tests/test_personalizer_live.py::test_english_for_a_spanish_profile_never_airs`,
+  `::test_the_labelled_mock_airs_only_in_mock_mode`,
+  `::test_spanish_with_an_english_name_or_quote_still_airs`; and
+  `tests/test_workflow_failures.py::test_the_baseline_fails_when_a_spanish_profile_reads_english_with_a_word_changed`
+  shows the table still catches it with the gate removed.
