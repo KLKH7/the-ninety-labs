@@ -2429,17 +2429,20 @@ class Engine:
 
     def restart_pace(self, p: Player, tx: float, ty: float, top: float) -> float:
         """How fast a player goes to (tx, ty), his place as kept off the restart (keep_off), while a
-        restart waits to be taken: if it is more than SETTLE_M off, or he is still walking in, at no
-        less than a normal walking pace (L4), so he gets there and stands there rather than creeping
-        in over the whole wait (R1's); standing at it, he settles to a small shift of it at his own
-        pace, so it is not walked to and back. Judged on where he can stand, not on a place inside
-        the Laws' distance that keep_off holds him off. The one fetching the ball keeps his own
-        pace: near the boards it is what he can stop in (lesson 174)."""
+        restart waits to be taken: if it is more than SETTLE_M off, or he is still walking in to it,
+        at no less than a normal walking pace (L4), so he gets there and stands there rather than
+        creeping in over the whole wait (R1's); standing at it, he settles to a small shift of it at
+        his own pace, so it is not walked to and back. Judged on where he can stand, not on a place
+        inside the Laws' distance that keep_off holds him off. Walking in is closing on it: one
+        kept off it by another standing there, going round him, slows to his own pace rather than
+        circling him at a walk. The one fetching the ball keeps his own pace: near the boards it is
+        what he can stop in (lesson 174)."""
         r = self.restart
         if r is None or p.id == r.fetcher:
             return top
         off = math.hypot(tx - p.x, ty - p.y)
-        if off > SETTLE_M or (off > 0.0 and math.hypot(p.vx, p.vy) > THROW_SETTLED_MPS):
+        closing = ((tx - p.x) * p.vx + (ty - p.y) * p.vy) / off if off > 0.0 else 0.0
+        if off > SETTLE_M or closing > THROW_SETTLED_MPS:
             return max(top, WALK_MPS)
         return top
 

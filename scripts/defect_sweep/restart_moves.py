@@ -10,7 +10,9 @@ wait (from the stoppage to the kick, under 200 s), for each outfielder but the t
 - reversals: his running direction turning by more than 120 degrees within 0.4 s, at over 0.5 m/s at
   both ends;
 - the distance walked to and fro: in each second, his path less how far he got; and the share of
-  seconds in which he doubled back (moved 0.3 m or more and ended under half his path from the start).
+  seconds in which he doubled back (moved 0.3 m or more and ended under half his path from the start);
+- the share of his waits in which he reversed three times or more: going out and back over and over,
+  where one turn back to his place after the whistle is a single reversal.
 The shuffling measures are those of the focused audit of lesson 174's change.
 """
 
@@ -26,7 +28,7 @@ STOPS = ("out_of_play", "foul", "offside", "goal")
 
 def main() -> None:
     minutes = starts = reversals = wasted = 0.0
-    seconds = doubled = 0
+    seconds = doubled = player_waits = churning = 0
     speeds = Counter()
     for run in map(Path, sys.argv[1:]):
         events = [json.loads(line) for line in open(run / "events.jsonl")]
@@ -49,7 +51,7 @@ def main() -> None:
                 continue
             ids = [pid for pid, p in frames[a].items() if p["role"] != "GK" and pid != taker]
             for pid in ids:
-                moving, last_turn = False, -999
+                moving, last_turn, turns = False, -999, 0
                 for n in range(a, b + 1):
                     p = frames[n][pid]
                     v = math.hypot(p["vx"], p["vy"])
@@ -62,7 +64,9 @@ def main() -> None:
                         q = frames[n - 10][pid]
                         u = math.hypot(q["vx"], q["vy"])
                         if v > 0.5 and u > 0.5 and (p["vx"] * q["vx"] + p["vy"] * q["vy"]) / (v * u) < -0.5:
-                            reversals, last_turn = reversals + 1, n
+                            reversals, last_turn, turns = reversals + 1, n, turns + 1
+                player_waits += 1
+                churning += turns >= 3
                 for s0 in range(a, b - FPS + 1, FPS):
                     pts = [(frames[k][pid]["x"], frames[k][pid]["y"]) for k in range(s0, s0 + FPS + 1)]
                     path = sum(math.dist(pts[k], pts[k + 1]) for k in range(FPS))
@@ -79,6 +83,7 @@ def main() -> None:
         "reversals_per_min": round(reversals / minutes, 2),
         "to_and_fro_m_per_min": round(wasted / minutes, 2),
         "seconds_doubling_back": round(doubled / seconds, 4),
+        "waits_with_3_or_more_reversals": round(churning / player_waits, 4),
     }, indent=1))
 
 

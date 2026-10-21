@@ -1092,12 +1092,19 @@ def test_the_walk_to_the_wall_is_estimated_from_above():
     """Lesson 161: a claim about how players move is measured on the paths they walk. walk_to_wall
     estimates a walk round the keep-off circle at the walker's own distance from the ball; keep_off
     aims him at most 30 degrees round from where he is, so he walks a spiral in toward the circle.
-    Followed frame by frame, no wall player walks further than the estimate, and some go round."""
+    Followed frame by frame, no wall player walks further than the estimate, and some go round. The
+    estimate is of his own way: going round others who stand in it (avoid) is not in it, so the wall
+    players' own bending is left out here (lesson 176: with it, one walked 15.24 m against 15.11 m,
+    a test that had passed by 7 mm in its one scenario); the pace, re-estimated every frame from
+    where he is, takes that in, and test_a_direct_free_kick_22_m_out_is_taken_with_a_wall_in_place
+    checks the outcome with everyone on the pitch."""
     went_round = 0
     for seed, at in ((3, (PITCH_X - 22.0, 34.0)), (5, (87.0, 24.0))):
         e = wall_kick(seed, at)
         r = e.restart
         wall = dict(r.wall)
+        bend = e.avoid
+        e.avoid = lambda p, bend=bend, wall=wall: (0.0, 0.0) if p.id in wall else bend(p)
         at_ = {pid: (e.by_id[pid].x, e.by_id[pid].y) for pid in wall}
         estimate = {pid: e.walk_to_wall(r, at_[pid], wall[pid]) for pid in wall}
         walked = dict.fromkeys(wall, 0.0)
@@ -1460,15 +1467,17 @@ def test_players_walk_to_their_places_at_a_restart_rather_than_creep():
 def test_the_player_fetching_a_dead_ball_keeps_his_own_pace_by_the_boards():
     """Lesson 174's walking floor is not laid on the player fetching the ball: by the boards his
     pace is what he can stop in before them (L14)."""
-    from ninety.sim.engine import WALK_MPS
+    from ninety.sim.engine import SETTLE_M, WALK_MPS
     e = corner_wait()
     r = e.restart
     e.ball = (PITCH_X + BOARDS_M - 0.15, 0.3, 0.0, 0.0, 0.0, 0.0)  # at rest against the boards
     e.plan_fetch(r)
     assert r.fetcher is not None  # premise
     f = e.by_id[r.fetcher]
-    f.x, f.y, f.vx, f.vy = PITCH_X + BOARDS_M - 0.1, 1.0, 0.5, 0.0  # 10 cm from the boards, going at them
+    # 10 cm from the boards and going at them, 2.7 m along them from the ball
+    f.x, f.y, f.vx, f.vy = PITCH_X + BOARDS_M - 0.1, 3.0, 0.5, 0.0
     at = place(e, f)
+    assert math.dist(at[:2], (f.x, f.y)) > SETTLE_M  # premise: his place is more than a stride off
     assert at[2] < WALK_MPS  # premise: by the boards he goes slower than a walk
     assert e.restart_pace(f, *at) == at[2]
 
@@ -1526,3 +1535,26 @@ def test_kept_off_a_free_kick_he_stands_at_his_place_rather_than_walking_out_and
     assert 0.5 < math.dist(e.keep_off(d, *inside), at) < SETTLE_M  # premise: a small shift along the edge
     assert e.restart_pace(d, *inside, 0.0) >= WALK_MPS  # premise: judged on his target, he would walk
     assert walked(at, 0.5) < 0.1
+
+
+def test_kept_off_his_place_by_one_standing_on_it_he_does_not_circle_him(monkeypatch):
+    """Defect (lesson 174): at a goal kick in seed 7 an opponent stood on a cover's place, and the
+    cover circled him at a walk, 0.2 m off, for half a minute: the walking floor held while he moved
+    at all, and bending away from the one on his place (avoid) turned it into a circle. Walking in
+    is closing on his place; going round the one standing on it, he slows to his own pace."""
+    from ninety.sim.engine import WALK_MPS
+    e = Engine(3)
+    still(e)
+    free_kick(e, "home", 60.0, 34.0)
+    d, o = e.by_id["h7"], e.by_id["a7"]
+    for i, q in enumerate(q for q in e.players if q not in (d, o)):
+        q.x, q.y = 95.0, 4.0 + 3.0 * i  # out of the way, at the far end
+    at = (40.0, 34.0)  # the place of both, 20 m from the kick
+    real = e.shape_target
+    monkeypatch.setattr(e, "shape_target", lambda q: (*at, 0.0) if q in (d, o) else real(q))
+    o.x, o.y = at  # standing on it
+    d.x, d.y, d.vx, d.vy = at[0] - 0.5, at[1], 0.0, 1.0  # half a metre off, going round him
+    assert e.restart_pace(d, *at, 0.0) == 0.0  # not closing on it: his own pace
+    for _ in range(int(2.0 / DT)):
+        e.move_players()
+    assert math.hypot(d.vx, d.vy) < 0.1 < WALK_MPS
