@@ -2181,8 +2181,9 @@ class Engine:
                 return clamp(x, 0.5, PITCH_X - 0.5), clamp(y, 0.5, PITCH_Y - 0.5)
 
             gap = brain.press_gap_m  # how tight the style presses (pressing intensity)
-            if self.restart and self.restart.team != p.team:  # Laws 15 to 17: stand off the restart
-                gap = RESTART_DISTANCE_M[self.restart.kind]
+            given = self.restart or self.set_by
+            if given and given.team != p.team:  # Laws 13 to 17: stand off the restart until it is in play
+                gap = RESTART_DISTANCE_M[given.kind]
             presser = self.by_id[brain.pressers[0]] if brain.pressers else None
             engaged = (
                 presser is not None
@@ -2505,15 +2506,17 @@ class Engine:
         # And he goes round the circle, not across it. Inside it, he first steps straight out, to
         # KEEP_OFF_MARGIN_M past it (aimed at its edge, he would stop on the edge, still inside);
         # while the straight way to his target would cut inside, he aims along the circle, at most
-        # KEEP_OFF_STEP_DEG round from where he is. But one inside it whose straight way keeps the
-        # Laws' distance, as when he has stopped a hair short of his place on its edge, goes straight
-        # there: sent out past it, he would come back in to the same place and stop short again, out
-        # and back over and over (lesson 174).
+        # KEEP_OFF_STEP_DEG round from where he is. But one inside it whose place is within a stride
+        # (SETTLE_M), by a straight way that keeps the Laws' distance, as when he has stopped a hair
+        # short of his place on its edge, goes straight there: sent out past it, he would come back in
+        # to the same place and stop short again, out and back over and over. Going anywhere further,
+        # he keeps out of the margin, which takes up a bend round others or a step too far (lesson 174).
         mx, my = p.x - bx, p.y - by
         m = math.hypot(mx, my)
         out = clear + KEEP_OFF_MARGIN_M
         out_x, out_y = (bx + mx / m * out, by + my / m * out) if m > 1e-6 else (tx, ty)
-        if 1e-6 < m < clear and segment_distance(bx, by, p.x, p.y, tx, ty) >= clear - KEEP_OFF_MARGIN_M:
+        if 1e-6 < m < clear and math.hypot(tx - p.x, ty - p.y) <= SETTLE_M \
+                and segment_distance(bx, by, p.x, p.y, tx, ty) >= clear - KEEP_OFF_MARGIN_M:
             pass
         elif 1e-6 < m < clear and 0.5 <= out_x <= PITCH_X - 0.5 and 0.5 <= out_y <= PITCH_Y - 0.5:
             tx, ty = out_x, out_y

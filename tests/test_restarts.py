@@ -1486,8 +1486,10 @@ def test_one_a_hair_inside_the_keep_off_circle_goes_straight_to_his_place_on_its
     """Defect (lesson 174): an opponent who had stopped a hair short of his place on the keep-off
     circle's edge, still clear of the Laws' 9.15 m, was sent KEEP_OFF_MARGIN_M out past it, came
     back in to the same place and stopped short again: out and back every half second through the
-    wait. Inside the circle, a straight way that keeps the Laws' distance is taken straight; from
-    inside the Laws' distance, or where the straight way would cut it, he still steps out first."""
+    wait. Inside the circle, a place within a stride by a straight way that keeps the Laws' distance
+    is walked to straight; from inside the Laws' distance, or to a place further off, he still steps
+    out first."""
+    from ninety.sim.engine import SETTLE_M
     e = Engine(3)
     free_kick(e, "home", 60.0, 34.0)
     d = e.by_id["a7"]
@@ -1499,6 +1501,15 @@ def test_one_a_hair_inside_the_keep_off_circle_goes_straight_to_his_place_on_its
     assert e.keep_off(d, 60.0 + 9.15, 34.0) == pytest.approx(out)  # his place across the circle: out first
     d.x, d.y = 60.0 - 8.0, 34.0  # inside the Laws' distance: out first
     assert e.keep_off(d, 60.0 - 9.15, 34.0) == pytest.approx(out)
+    d.x, d.y = 60.0 - 9.0, 34.0  # inside it with his place a stride off, straight out: out first too
+    assert math.dist((d.x, d.y), edge) < SETTLE_M and e.keep_off(d, 60.0 - 9.15, 34.0) == pytest.approx(out)
+    # Going further than a stride, he keeps out of the margin even where the straight way would keep
+    # the Laws' distance: it takes up a bend round others or a step too far.
+    d.x, d.y = 60.0 - 9.4, 34.0
+    a = math.radians(160.0)
+    place = (60.0 + math.cos(a) * clear, 34.0 + math.sin(a) * clear)  # 20 degrees round, 3.3 m off
+    assert segment_distance(60.0, 34.0, d.x, d.y, *place) > 9.15  # premise: the straight way keeps it
+    assert e.keep_off(d, *place) == pytest.approx(out)  # out first, as from anywhere inside
 
 
 def test_kept_off_a_free_kick_he_stands_at_his_place_rather_than_walking_out_and_back(monkeypatch):
@@ -1586,12 +1597,45 @@ def test_through_a_restart_wait_the_defending_side_keeps_its_presser_and_cover()
         if e.restart is None:
             break
     assert e.set_by is not None  # premise
-    frames = 0
+    cover.x, cover.y, cover.vx, cover.vy = 20.0, 34.0, 0.0, 0.0  # far off again as it is taken
+    frames, other = 0, False
     while e.set_by is not None:
         e.step()
         frames += 1
+        other = other or e.who_presses(brain) != named
         assert brain.pressers == named
-    assert frames >= BRAIN_EVERY  # premise: the brain looked while it was being taken
+    assert frames >= BRAIN_EVERY and other  # premise: the brain looked, and would have named another
     for _ in range(int(1.0 / DT)):  # in play
         e.step()
     assert brain.pressers == e.who_presses(brain) != named
+
+
+def test_until_the_ball_is_in_play_the_presser_and_cover_stand_off_it():
+    """Defect (lesson 174): as the taker stood over a free kick, taken but not yet kicked, the
+    defending side's cover was placed as if the ball were in play, COVER_BEHIND_M goal-side of it
+    rather than two metres behind the presser at the Laws' distance, and he ran in from 11 m: an
+    opponent was inside 9.15 m at the kick in 9 free kicks over 20 matches. Until the ball is in play
+    the two stand off it as while it waited (Law 13)."""
+    from ninety.sim.engine import RESTART_DISTANCE_M
+    e = Engine(3)
+    still(e)
+    e.possessor = None
+    e.stop("free_kick", "home", (85.0, 34.0), direct=False)  # offside's: no wall
+    r = e.restart
+    taker = e.by_id[r.taker]
+    taker.x, taker.y = 84.7, 34.0
+    e.ball = (85.0, 34.0, 0.0, 0.0, 0.0, 0.0)
+    r.ready_at = e.t + 60.0
+    for _ in range(int(3.0 / DT)):
+        e.step()
+    presser, cover = (e.by_id[pid] for pid in e.brains["away"].pressers)
+    taker.vx = taker.vy = 0.0
+
+    def off(q) -> float:
+        tx, ty, _ = e.shape_target(q)
+        return math.hypot(tx - 85.0, ty - 34.0)
+
+    gap = RESTART_DISTANCE_M["free_kick"]
+    assert off(presser) == pytest.approx(gap) and off(cover) == pytest.approx(gap + 2.0)  # premise: waiting
+    e.set_by, e.restart, e.possessor = r, None, taker.id  # taken: he is over it, not yet kicked
+    assert off(presser) == pytest.approx(gap) and off(cover) == pytest.approx(gap + 2.0)
