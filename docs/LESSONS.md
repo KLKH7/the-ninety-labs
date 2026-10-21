@@ -501,7 +501,6 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_judge.py` fails if an evaluated tone word appears in the instructions,
   or a tone claim is built on an event outside its condition.
 
-
 ### 35. A graphic's words must follow the outcome, not just its numbers
 - **What happened:** the first template graphics wrote "h10 finds h6" for every pass with a
   receiver, including the 10 failed passes in seed 7's first five minutes. The fact-checker's
@@ -1258,7 +1257,6 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_api_companion.py`'s `refused()` fails when the server closes before the
   accept, and every refusal test goes through it; moving `_refuse` back to a bare close turns them red.
 
-
 ### 129. A number check that reads one written form lets every other form through
 - **What happened:** the fact-check read a number only when no letter followed it, to skip ids
   like "e00042". So "50km/h", "50kph" and "9999m" were never read, nor was "fifty km/h": a model
@@ -1451,6 +1449,38 @@ short and actionable. This file is public: no research sources, product names or
   `::test_a_request_cut_off_at_the_deadline_is_awaited_on_close` and
   `::test_the_evaluation_leaves_no_request_running_when_the_client_gives_up`.
 
+### 148. A trust test that checks what the fit minimised trusts a wrong fit
+- **What happened:** the camera fit minimises how far the image's white marking pixels lie from
+  the projected pitch lines, and a frame was trusted when half of them lay within 1.5 px. A fit
+  that settles on the wrong camera also lines its markings up, so the test passed it. On
+  validation it trusted 198 frames whose ground was more than 1 m wrong: seed 109's by about
+  125 m, all of seed 108's by about 2 m. It also rejected 11% of good frames.
+- **Rule:** judge a fit by something it did not optimise. A consequence it must get right is
+  enough, here that players come out the height people are. Measure the test against the truth
+  on validation clips before trusting it.
+- **Check:** `tests/test_vision_observe.py` (players made too tall or too short by the camera are
+  not trusted, whatever the markings say); `docs/eval/detector-derive.md` (each gate's bad frames
+  trusted and good frames kept).
+
+### 149. A rule that counts errors cannot see how large they are, and a detector built on its only clip is tuned to it
+- **What happened:** the M1 event detector was built while test seed 900001 was its only clip, so
+  its published numbers were partly tuned to the test set. Re-deriving it on validation clips, the
+  new camera trust test was chosen by a rule fixed in advance: the most bad frames rejected,
+  keeping 90% of good ones. It won on counts (175 bad frames trusted against 198). But it trusts a
+  few frames on clips the old test rejected entirely, some 47 to 80 m wrong, where the
+  alternative's worst was 6.6 m. On the test set it trusts 1 and 7 such frames on the two clips
+  with camera cuts.
+- **Rule:** a detector is developed on validation clips from the start, and the test set is scored
+  once, at the end. A rule that adopts a gate or a threshold also bounds the size of the errors it
+  lets through (the worst, or a high percentile), not only their number, stated before choosing.
+- **Not yet met here:** the height gate adopted in the same pull request does not meet this rule.
+  It trusts frames up to 55 m wrong on validation and 80 m on the test set (EVALUATION, "Event
+  detection from video"). Bounding it is a follow-up, planned and derived on validation like the
+  rest; until then the limit is stated wherever the gate's numbers are.
+- **Check:** `docs/eval/detector-plan.md` (the plan, its amendment and the outcome, in commit
+  order); `docs/eval/detector-derive.md`, "Worst trusted" for each gate;
+  `tests/test_vision_observe.py::test_a_camera_in_the_wrong_place_is_not_trusted` (a strict expected
+  failure until the bound exists).
 ### 140. A clip's truth must not depend on how long the match was simulated
 - **What happened:** `ninety-render` simulated the match to the end of the window it chose (240 s
   plus the clip), but its own determinism check re-rendered the same window with `--start`, which

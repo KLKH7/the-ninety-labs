@@ -31,6 +31,21 @@ from ninety.vision.detections import read_detections
 from ninety.vision.track import SCORE_MIN
 
 BALL_CENTRE_Z = 0.11  # a ball on the ground has its centre one radius up (Law 2: about 0.11 m)
+# Whether a frame's camera is trusted: its players are as tall as they should be. Through a right
+# camera a player's box is about as tall as an upright PLAYER_HEIGHT_M segment at his feet projects
+# (design: about the renderer's mean player, which it draws from N(1.81 m, 0.07 m),
+# ninety/render/scene.py; the band absorbs the spread); a camera at the wrong distance or zoom
+# scales every player the same wrong way. The frame's median ratio must lie in HEIGHT_BAND: the
+# 1st to 99th percentile of that ratio on validation frames whose ground mapping is within 1.0 m
+# (docs/eval/detector-plan.md, step B; docs/eval/detector-derive.json). It replaced the marking test
+# (half the marking pixels within 1.5 px), which trusted 198 badly wrong frames on validation and
+# kept 89% of the good ones, where this keeps 98%. The marking fit's own verdict is still kept as
+# `markings_ok`, and still guides the fit from frame to frame (pitch.fit_clip).
+# Known limit (lesson 149): a camera in the wrong place with the right scale passes, so this does
+# not bound how wrong a trusted camera can be (validation: up to 55 m; test: 80 m, on clips with a
+# camera cut). A follow-up adds that bound.
+PLAYER_HEIGHT_M = 1.80
+HEIGHT_BAND = (0.901, 1.002)
 
 
 def kit_rgb(rgb: np.ndarray, bbox) -> list[float] | None:
@@ -51,6 +66,60 @@ def kit_rgb(rgb: np.ndarray, bbox) -> list[float] | None:
     return [round(float(v), 1) for v in np.median(patch, axis=0)]
 
 
+def _ground(P: np.ndarray, uv: tuple[float, float], z: float = 0.0) -> tuple[float, float] | None:
+    """The pixel back on the horizontal plane at height z through camera P."""
+    H = np.c_[P[:, 0], P[:, 1], P[:, 2] * z + P[:, 3]]
+    g = np.linalg.solve(H, np.array([uv[0], uv[1], 1.0]))
+    return (float(g[0] / g[2]), float(g[1] / g[2])) if g[2] != 0 else None
+
+
+def height_ratio(players: list[dict], P: np.ndarray) -> float | None:
+    """The median, over the frame's player detections, of box height over the projected height of an
+    upright PLAYER_HEIGHT_M at the box's foot point; None without players in front of the camera."""
+    ratios = []
+    for d in players:
+        if d["score"] < SCORE_MIN:
+            continue
+        x0, _, x1, y1 = d["bbox"]
+        g = _ground(P, ((x0 + x1) / 2, y1))
+        if g is None:
+            continue
+        foot = P @ np.array([g[0], g[1], 0.0, 1.0])
+        head = P @ np.array([g[0], g[1], PLAYER_HEIGHT_M, 1.0])
+        if foot[2] <= 0 or head[2] <= 0:
+            continue
+        px = abs(foot[1] / foot[2] - head[1] / head[2])
+        if px > 0:
+            ratios.append((y1 - d["bbox"][1]) / px)
+    return float(np.median(ratios)) if ratios else None
+
+
+def place(row: dict) -> dict:
+    """Judge the frame's camera by its players' heights and, when it is trusted, place every
+    detection on the pitch through it (players at the foot point, the ball one radius up)."""
+    cam = row["camera"]
+    P = np.array(cam["P"]) if cam.get("P") is not None else None
+    ratio = height_ratio(row["players"], P) if P is not None else None
+    cam["markings_ok"] = cam.get("markings_ok", cam["ok"])
+    # With no player to measure, the heights cannot judge the camera, and the markings' verdict
+    # stands (one frame of 3,250 on validation, untrusted either way).
+    if ratio is not None:
+        ok = HEIGHT_BAND[0] <= ratio <= HEIGHT_BAND[1]
+    else:
+        ok = bool(P is not None and cam["markings_ok"])
+    cam["height_ratio"] = None if ratio is None else round(ratio, 4)
+    cam["ok"] = ok
+    for d in row["players"]:
+        x0, _, x1, y1 = d["bbox"]
+        xy = _ground(P, ((x0 + x1) / 2, y1)) if ok else None
+        d["x"], d["y"] = (_r(xy[0]), _r(xy[1])) if xy else (None, None)
+    for b in row["ball"]:
+        x0, y0, x1, y1 = b["bbox"]
+        xy = _ground(P, ((x0 + x1) / 2, (y0 + y1) / 2), BALL_CENTRE_Z) if ok else None
+        b["x"], b["y"] = (_r(xy[0]), _r(xy[1])) if xy else (None, None)
+    return row
+
+
 def observe(images: list[Path], dets: list, load) -> list[dict]:
     """`load(path) -> (H, W, 3) uint8` reads an image; passed in so tests need no image files."""
     if len(images) != len(dets):
@@ -65,26 +134,20 @@ def observe(images: list[Path], dets: list, load) -> list[dict]:
     gantry, fits = pitch.fit_clip(points, W, H)
     rows = []
     for rgb, fd, fit in zip(rgbs, dets, fits, strict=True):
-        view = fit.view if fit.ok else None
         players, balls = [], []
         for d in fd.detections:
-            x0, y0, x1, y1 = d.bbox
             if d.cls == "player":
-                foot = np.array([[(x0 + x1) / 2, y1]])
-                xy = view.to_ground(foot)[0] if view else (None, None)
-                players.append({"bbox": list(d.bbox), "score": d.score, "x": _r(xy[0]), "y": _r(xy[1]),
+                players.append({"bbox": list(d.bbox), "score": d.score, "x": None, "y": None,
                                 "rgb": kit_rgb(rgb, d.bbox) if d.score >= SCORE_MIN else None})
             else:
-                c = np.array([[(x0 + x1) / 2, (y0 + y1) / 2]])
-                xy = view.to_ground(c, z=BALL_CENTRE_Z)[0] if view else (None, None)
-                balls.append({"bbox": list(d.bbox), "score": d.score, "x": _r(xy[0]), "y": _r(xy[1])})
-        rows.append({
+                balls.append({"bbox": list(d.bbox), "score": d.score, "x": None, "y": None})
+        rows.append(place({
             "frame": fd.frame, "t": fd.t,
             "camera": {"ok": fit.ok, "median_px": fit.median_px, "points": fit.points,
                        "P": ([[round(float(v), 6) for v in row] for row in fit.view.P()]
                              if fit.view else None)},
             "players": players, "ball": balls,
-        })
+        }))
     rows[0]["gantry"] = [round(v, 3) for v in gantry]
     return rows
 
@@ -97,18 +160,27 @@ def main(argv: list[str] | None = None) -> None:
     from PIL import Image
 
     ap = argparse.ArgumentParser(description="Place a clip's detections on the pitch from its images.")
-    ap.add_argument("clip", type=Path)
-    ap.add_argument("--detections", type=Path, required=True)
+    ap.add_argument("clip", type=Path, nargs="?", help="the clip's folder (images/)")
+    ap.add_argument("--detections", type=Path)
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--regate", type=Path, default=None,
+                    help="an observations file to judge again with today's trust test and placing, "
+                         "without the camera fit (its cameras are kept)")
     a = ap.parse_args(argv)
-    images = sorted((a.clip / "images").glob("*.jpg"))
-    dets = read_detections(a.detections)
-    rows = observe(images, dets, lambda p: np.asarray(Image.open(p).convert("RGB")))
+    if a.regate is not None:
+        rows = [place(json.loads(x)) for x in a.regate.read_text().splitlines() if x.strip()]
+    else:
+        if a.clip is None or a.detections is None:
+            ap.error("a clip and --detections, or --regate")
+        images = sorted((a.clip / "images").glob("*.jpg"))
+        dets = read_detections(a.detections)
+        rows = observe(images, dets, lambda p: np.asarray(Image.open(p).convert("RGB")))
     with open(a.out, "w", encoding="utf-8", newline="\n") as f:
         for r in rows:
             f.write(json.dumps(r, separators=(",", ":")) + "\n")
     ok = sum(r["camera"]["ok"] for r in rows)
-    print(json.dumps({"out": str(a.out), "frames": len(rows), "camera_ok": ok, "gantry": rows[0]["gantry"]}))
+    print(json.dumps({"out": str(a.out), "frames": len(rows), "camera_ok": ok,
+                      "gantry": rows[0].get("gantry")}))
 
 
 if __name__ == "__main__":
