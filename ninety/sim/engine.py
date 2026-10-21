@@ -2640,8 +2640,12 @@ class Engine:
                 tx, ty = p.x, p.y
             else:
                 # From inside the margin, round and out past it: half as far round as a chord that
-                # would leave his own distance along it (design), so he heads out as well as round.
-                step = math.radians(KEEP_OFF_STEP_DEG) if m >= clear else math.acos(m / out) / 2
+                # would leave his own distance along it (design), so he heads out as well as round;
+                # that chord's angle is acos(m / out), here by fmath for the same result everywhere.
+                if m >= clear:
+                    step = math.radians(KEEP_OFF_STEP_DEG)
+                else:
+                    step = fmath.atan2(math.sqrt(out * out - m * m), m) / 2
                 a = here + clamp(way, -step, step)
                 reach = round_reach(bx, by, clear, a, m if m >= clear else out)
                 tx, ty = bx + fmath.cos(a) * reach, by + fmath.sin(a) * reach
