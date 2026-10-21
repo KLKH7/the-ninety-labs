@@ -1473,3 +1473,18 @@ short and actionable. This file is public: no research sources, product names or
   relies on) and is tested with tampered input. One file name has one writer and one shape.
 - **Check:** `tests/test_vision_auditor.py::test_the_data_agent_checks_a_typed_handoff_on_receipt`,
   `::test_the_committed_clusters_json_is_the_auditor_s_code_output_and_the_data_agent_takes_it`.
+
+### 155. A test of a library's message shape goes through the library's own parser
+- **What happened:** #182 made a published agent's call to the match tools fail the call, keyed on
+  the content type `mcp_server_tool_call` in its reply. The tests built that content by hand with
+  `Content.from_mcp_server_tool_call`. Had a framework upgrade renamed the type, or stopped turning
+  Foundry's `mcp_call` output item into it, the guard would pass every call and the tests would
+  stay green. The review caught it. Separately, a tool call made a minute air nothing, but only the
+  ablation's JSON counted such minutes.
+- **Rule:** when code keys on the shape a third-party library produces, at least one test feeds the
+  library the service's raw payload (here a Responses API reply as Foundry returns it) and lets the
+  installed parser build the shape. A failure that costs one arm output is counted in the report a
+  reader sees, not only in the data.
+- **Check:** `tests/test_workflow.py::test_inline_only_reads_a_foundry_reply_as_foundry_sends_it`;
+  `tests/test_agent_ablation.py::test_a_live_arm_that_calls_the_match_tools_fails_that_call` reads
+  the "Minutes lost to a tool call" column.
