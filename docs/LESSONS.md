@@ -1635,7 +1635,7 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `uv run python scripts/defect_sweep/wall.py --planted` reports the walked crossings for
   each kick; `docs/eval/restarts.md` ("The wall") publishes them.
 
-### 162. A wait for something to happen ends when it can no longer happen
+### 166. A wait for something to happen ends when it can no longer happen
 - **What happened:** a throw-in released behind the touchline counts as still coming in while it
   moves toward the field, judged by the sign of its speed across the line alone. In the wall's
   16-match re-measure (seed 101) a throw drifted along the outside of the touchline, a centimetre a

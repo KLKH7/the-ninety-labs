@@ -216,7 +216,7 @@ against 11, z 0.2) are level within chance; the two columns are different matche
 restart on (lesson 90). Football-sense per 90: FS1 19.4 to 17.7, FS2 7.9 to 8.4, FS6 23.9 to 22.8,
 FS7 298 to 285, FS9 1.1 to 2.0. The version before this one (`5183be6`) showed a ball jump of 14.6 m
 in one frame in seed 101: a throw-in drifting along the outside of the touchline was kept in play
-past the end boards and snapped back to them when retaken (lesson 162); `41ce3fba` retakes it once
+past the end boards and snapped back to them when retaken (lesson 166); `41ce3fba` retakes it once
 it passes the end of the touchline, and the sweep now counts a retaken restart as the same kind.
 
 ## Reproduce
