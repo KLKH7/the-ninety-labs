@@ -1,0 +1,332 @@
+{
+ "commit": "65ad7bbe347cb8ff53f5d2b27601f8de4c5f966c",
+ "date": "2026-10-21",
+ "seeds": [
+  108,
+  109,
+  114,
+  115,
+  116,
+  120,
+  121,
+  122,
+  2041,
+  2042,
+  2043,
+  3041,
+  3042
+ ],
+ "observations_sha256": {
+  "observations-seed108.jsonl": "42c0ee5dcc39bc104986be5509915671899ccc06e07b0696778b28fdead89c62",
+  "observations-seed109.jsonl": "88520dae6e76a0fb38f38f09f554196a560243e018a5cd96e8e9416991b6880f",
+  "observations-seed114.jsonl": "7a79e6f86b00ae7a0aaf2d713cc921057fbda0eacc88d585a79a269f2c54553d",
+  "observations-seed115.jsonl": "3f5a2684cc8f9d79f21acacb54d02ae592f745d316982083aecb0bbe23cb9976",
+  "observations-seed116.jsonl": "1f492c7a21987fb481c459a00718fc40ce42fe9e2f691ec712e07ffe87ab4571",
+  "observations-seed120.jsonl": "80589cef3eb8183a5c2d0b39c3d21139d27513c3220855fa959fd3d92710f098",
+  "observations-seed121.jsonl": "c9f728e580b8d7d184b712aac9b3038e21626862189a8a94b4cc1f6557fcccf9",
+  "observations-seed122.jsonl": "74740260b96087f59995bf59133e922f603e0e0558d1fe1d72dd8161d1a1abab",
+  "observations-seed2041.jsonl": "a086a43ca6c59a3c928fd4e0ffdeca541a0522dcf940223597fb9f67e3be1b83",
+  "observations-seed2042.jsonl": "fc649e49b70836b354784e6d7124ca689c07c62dfb9e8b468372c93b2435603a",
+  "observations-seed2043.jsonl": "179e1bdef9d105f732259780511ae0a6274b38f734dd5a61d08f3e43af8be344",
+  "observations-seed3041.jsonl": "3feb88abf3691943fbd99eec45e1e75a4eb5a6ef6f391ec3b5083885e47d2cb4",
+  "observations-seed3042.jsonl": "6c92d0e5ad70c43d1a30d990eb6dc5eb9b988021bca0ba541157e220e8ff17d4"
+ },
+ "show_target": 0.75,
+ "sure_target": 0.9,
+ "show": null,
+ "sure": null,
+ "curve": [
+  {
+   "cut": 0.0,
+   "samples": 332,
+   "team_agreement": 0.515
+  },
+  {
+   "cut": 0.1,
+   "samples": 220,
+   "team_agreement": 0.555
+  },
+  {
+   "cut": 0.2,
+   "samples": 166,
+   "team_agreement": 0.651
+  },
+  {
+   "cut": 0.3,
+   "samples": 137,
+   "team_agreement": 0.577
+  },
+  {
+   "cut": 0.4,
+   "samples": 127,
+   "team_agreement": 0.551
+  },
+  {
+   "cut": 0.5,
+   "samples": 89,
+   "team_agreement": 0.404
+  },
+  {
+   "cut": 0.6,
+   "samples": 77,
+   "team_agreement": 0.351
+  },
+  {
+   "cut": 0.7,
+   "samples": 71,
+   "team_agreement": 0.296
+  },
+  {
+   "cut": 0.8,
+   "samples": 64,
+   "team_agreement": 0.219
+  },
+  {
+   "cut": 0.9,
+   "samples": 49,
+   "team_agreement": 0.0
+  }
+ ],
+ "per_clip": [
+  {
+   "seed": 108,
+   "with_a_team": 45,
+   "team_right": 0,
+   "confidence": [
+    0.036,
+    0.072
+   ]
+  },
+  {
+   "seed": 109,
+   "with_a_team": 0,
+   "team_right": 0,
+   "confidence": null
+  },
+  {
+   "seed": 114,
+   "with_a_team": 0,
+   "team_right": 0,
+   "confidence": null
+  },
+  {
+   "seed": 115,
+   "with_a_team": 26,
+   "team_right": 26,
+   "confidence": [
+    0.008,
+    0.266
+   ]
+  },
+  {
+   "seed": 116,
+   "with_a_team": 20,
+   "team_right": 19,
+   "confidence": [
+    0.146,
+    0.256
+   ]
+  },
+  {
+   "seed": 120,
+   "with_a_team": 49,
+   "team_right": 0,
+   "confidence": [
+    0.019,
+    0.175
+   ]
+  },
+  {
+   "seed": 121,
+   "with_a_team": 50,
+   "team_right": 0,
+   "confidence": [
+    0.876,
+    0.969
+   ]
+  },
+  {
+   "seed": 122,
+   "with_a_team": 0,
+   "team_right": 0,
+   "confidence": null
+  },
+  {
+   "seed": 2041,
+   "with_a_team": 42,
+   "team_right": 39,
+   "confidence": [
+    0.405,
+    0.812
+   ]
+  },
+  {
+   "seed": 2042,
+   "with_a_team": 50,
+   "team_right": 45,
+   "confidence": [
+    0.216,
+    0.408
+   ]
+  },
+  {
+   "seed": 2043,
+   "with_a_team": 50,
+   "team_right": 42,
+   "confidence": [
+    0.002,
+    0.044
+   ]
+  },
+  {
+   "seed": 3041,
+   "with_a_team": 0,
+   "team_right": 0,
+   "confidence": null
+  },
+  {
+   "seed": 3042,
+   "with_a_team": 0,
+   "team_right": 0,
+   "confidence": null
+  }
+ ],
+ "validation": {
+  "graded_samples": 600,
+  "shown": 0,
+  "coverage": 0.0,
+  "team": {
+   "all shown": {
+    "samples": 0,
+    "right": 0,
+    "agreement": null,
+    "spells": 0,
+    "by_spell": null,
+    "wilson_95_spells": null,
+    "bootstrap_95_clips": null
+   },
+   "sure": {
+    "samples": 0,
+    "right": 0,
+    "agreement": null,
+    "spells": 0,
+    "by_spell": null,
+    "wilson_95_spells": null,
+    "bootstrap_95_clips": null
+   },
+   "likely": {
+    "samples": 0,
+    "right": 0,
+    "agreement": null,
+    "spells": 0,
+    "by_spell": null,
+    "wilson_95_spells": null,
+    "bootstrap_95_clips": null
+   }
+  },
+  "third": {
+   "all shown": {
+    "samples": 0,
+    "right": 0,
+    "agreement": null,
+    "spells": 0,
+    "by_spell": null,
+    "wilson_95_spells": null,
+    "bootstrap_95_clips": null
+   },
+   "sure": {
+    "samples": 0,
+    "right": 0,
+    "agreement": null,
+    "spells": 0,
+    "by_spell": null,
+    "wilson_95_spells": null,
+    "bootstrap_95_clips": null
+   }
+  },
+  "attacking": {
+   "shown": 0,
+   "right": 0
+  },
+  "per_clip": [
+   {
+    "seed": 108,
+    "graded": 45,
+    "shown": 0,
+    "team_right": 0
+   },
+   {
+    "seed": 109,
+    "graded": 44,
+    "shown": 0,
+    "team_right": 0
+   },
+   {
+    "seed": 114,
+    "graded": 50,
+    "shown": 0,
+    "team_right": 0
+   },
+   {
+    "seed": 115,
+    "graded": 35,
+    "shown": 0,
+    "team_right": 0
+   },
+   {
+    "seed": 116,
+    "graded": 38,
+    "shown": 0,
+    "team_right": 0
+   },
+   {
+    "seed": 120,
+    "graded": 49,
+    "shown": 0,
+    "team_right": 0
+   },
+   {
+    "seed": 121,
+    "graded": 50,
+    "shown": 0,
+    "team_right": 0
+   },
+   {
+    "seed": 122,
+    "graded": 46,
+    "shown": 0,
+    "team_right": 0
+   },
+   {
+    "seed": 2041,
+    "graded": 43,
+    "shown": 0,
+    "team_right": 0
+   },
+   {
+    "seed": 2042,
+    "graded": 50,
+    "shown": 0,
+    "team_right": 0
+   },
+   {
+    "seed": 2043,
+    "graded": 50,
+    "shown": 0,
+    "team_right": 0
+   },
+   {
+    "seed": 3041,
+    "graded": 50,
+    "shown": 0,
+    "team_right": 0
+   },
+   {
+    "seed": 3042,
+    "graded": 50,
+    "shown": 0,
+    "team_right": 0
+   }
+  ]
+ }
+}
