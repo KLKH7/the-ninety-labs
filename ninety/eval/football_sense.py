@@ -282,6 +282,11 @@ def play_mask(m: Match) -> tuple[bytearray, bytearray]:
 
 def load(path: Path) -> Match:
     meta = json.loads((path / "meta.json").read_text()) if (path / "meta.json").exists() else {}
+    # Frames are indexed from the kick-off, one per tick: a whole simulated match. A rendered clip
+    # (a window, maybe with the broadcast's cuts through dead balls) is not one.
+    if meta.get("cuts") or (meta.get("window") or {}).get("first_frame", 0) != 0:
+        raise ValueError(f"{path}: football sense reads a whole simulated match (ninety-sim), "
+                         "not a rendered clip's window or its cuts")
     events = [json.loads(line) for line in open(path / "events.jsonl") if line.strip()]
 
     def frames():

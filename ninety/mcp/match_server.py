@@ -46,6 +46,15 @@ def match_id(seed: int) -> str:
     return f"seed{seed}"
 
 
+def unserved(match: str) -> str:
+    """The id an evaluation gives a match whose events it sends inline. No server serves it, so an
+    agent that calls the match tools anyway gets an error, never the deployed image's match."""
+    alias = f"{match}-inline"
+    if alias in MATCHES or alias in DETECTED:
+        raise ValueError(f"{alias} is served")
+    return alias
+
+
 @lru_cache(maxsize=len(MATCHES) + len(DETECTED))
 def events_of(match: str) -> tuple[dict, ...]:
     if match in DETECTED:

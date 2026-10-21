@@ -83,7 +83,7 @@ the Game, a sports-science measurement or a published match statistic ([GROUNDIN
 | Render labels | each player's and the ball's box, projected through the camera, so labels are exact | `web/render` | running |
 | Vision pipeline | sees pixels only: detection, tracking, camera-to-pitch mapping, event rules | `ninety/vision` | planned |
 | Scoring | compares detected events with the answer key: precision and recall per event type | `ninety/eval` | planned |
-| Vision Auditor, Data agent | find where vision fails and ask the engine for more of exactly those scenes | `ninety/agents` | Data agent and the queue-driven render job running; Vision Auditor planned |
+| Vision Auditor, Data agent | find where vision fails and ask the engine for more of exactly those scenes | `ninety/agents` | Data agent and the queue-driven render job running; Vision Auditor running offline and from a recording (`schemas/failure_clusters.schema.json`), live model call not yet recorded |
 
 The engine and the validator are separate on purpose. The engine encodes *how to make* a
 moment happen; the validator encodes *what must be true* of the result. Written independently
@@ -123,7 +123,7 @@ flowchart LR
 | Producer | code | verified claims | graphic and voice schedule | template graphic only |
 | Personalizer | model, remote (A2A) | verified claim + viewer profile | per-persona text | in-process default persona |
 | Describer | model + Speech | verified events | spoken description | short code-written line |
-| Vision Auditor | model | low-confidence and mismatched events | failure clusters | skipped |
+| Vision Auditor | code + model | per-situation misses on training-side clips (`failure_clusters` audit) | `clusters.json`: render settings and clips per cluster; the model writes only the rationale and order, number-checked | code-written rationale and order |
 | Data agent | code | failure clusters | render parameters for new scenes | skipped |
 
 ## One moment, end to end

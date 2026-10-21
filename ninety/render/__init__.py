@@ -24,4 +24,18 @@ docs/decisions/0001-synthetic-data.md.
 # 0.4.5: a touch keeps its foot's plant within the leg's reach and lets the foot go from where it
 # is drawn; a foot a touch catches in the air lands within three frames. A touch on the move keeps
 # a foot on the grass (render-check feet in boxes, seed 7: 7 checks at 0.4.3, 1 at 0.4.4).
-RENDERER_VERSION = "0.4.5"
+# 0.5.0: the broadcast cuts from a stoppage to its restart instead of showing the whole dead ball
+# (ninety/render/edit.py; meta.json `cuts`, clip.json `segments`), and the match is simulated to a
+# fixed horizon, so a clip's events no longer depend on how its start was found.
+# 0.5.1: the gantry aims at the play on the grass with a wider lens (18 m), so the pitch fills the
+# picture with 8 to 15 players in shot; with play far off it tilts down its line of sight so the
+# stands stay at most a third of the picture; it frames the play rather than the ball and holds
+# still while the ball moves about one area; pans and zooms ease in and out, and the box's lens
+# does not pump; live play keeps to the gantry's side (no far stand, no camera behind a goal) and
+# cuts closer only for a throw-in, as a medium shot; no shot is shorter than 4 s; a pan smears
+# instead of splitting every edge in two (the sharpening read the unsmeared picture); the
+# goalmouth and centre wear is faint, pale turf in the mowing stripes.
+# 0.5.2: a broadcast clip cuts only a dead ball whose stoppage and restart it shows, holds each side
+# of the cut at least 4 s, and comes back on the gantry closed up on the restart, easing out to the
+# wide shot before the kick; cuts are off by default, so datasets and the test sets show every frame.
+RENDERER_VERSION = "0.5.2"

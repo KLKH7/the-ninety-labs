@@ -121,6 +121,27 @@ def match_tool():
     )
 
 
+TOOL_CALL = "mcp_server_tool_call"  # the content type of a hosted MCP call in a FoundryAgent reply
+
+
+class ReadTheTools(RuntimeError):
+    """An agent given its minute's events inline called the match tools anyway: what it read there
+    is the deployed image's match, not the one the run simulated and grades (lesson 90)."""
+
+
+def tool_calls(reply) -> list[str]:
+    """The hosted MCP calls a published agent made while answering, as `tool(arguments)`."""
+    return [f"{c.tool_name or c.name}({c.arguments})" for m in getattr(reply, "messages", ())
+            for c in m.contents if c.type == TOOL_CALL]
+
+
+def inline_only(reply) -> str:
+    """The reply's text, or ReadTheTools if the agent called the match tools."""
+    if calls := tool_calls(reply):
+        raise ReadTheTools(f"called the match tools with the events inline: {', '.join(calls)}")
+    return reply.text
+
+
 def analyst_agent(client: FoundryChatClient) -> Agent:
     from ninety.agents.slice import INSTRUCTIONS
 

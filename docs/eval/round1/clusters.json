@@ -1,50 +1,174 @@
 {
   "round": "round1",
+  "source": {
+    "audit": "docs/eval/round1/audit.json",
+    "audit_sha256": "5d3b19ab443795ade88d84dfd2a2fa5944ed6e8e69bb467488c2a14b9d39ed5d",
+    "checkpoint": "ours-v3",
+    "detections": "detections-ours-v3.jsonl",
+    "seeds": [
+      108,
+      109,
+      110,
+      112,
+      113,
+      114,
+      115,
+      116,
+      117,
+      118,
+      119,
+      120,
+      121,
+      122,
+      2041,
+      2042,
+      2043,
+      2044,
+      2045,
+      3041,
+      3042,
+      3043,
+      3044,
+      3045
+    ],
+    "threshold": 0.5,
+    "group": "mostly hidden"
+  },
+  "budget": 80,
+  "first_seed": 7101,
   "clusters": [
     {
+      "id": "ball-behind-a-player",
       "name": "ball mostly hidden, behind a player",
+      "cls": "ball",
+      "visibility": "mostly hidden",
+      "situation": "behind a player",
+      "labels": 95,
       "misses": 38,
+      "recall": 0.6,
+      "missed_low_contrast": 7,
       "render": {
         "occlusion": "crowded"
-      }
+      },
+      "clips": 47,
+      "seeds": [
+        7101,
+        7147
+      ],
+      "rationale": "38 of 95 ball labels missed behind a player, recall 0.6.",
+      "explained_by": "code"
     },
     {
+      "id": "ball-behind-the-keeper",
       "name": "ball mostly hidden, behind the keeper",
+      "cls": "ball",
+      "visibility": "mostly hidden",
+      "situation": "behind the keeper",
+      "labels": 17,
       "misses": 9,
+      "recall": 0.471,
+      "missed_low_contrast": 2,
       "render": {
         "occlusion": "keeper"
-      }
+      },
+      "clips": 11,
+      "seeds": [
+        7148,
+        7158
+      ],
+      "rationale": "9 of 17 ball labels missed behind the keeper, recall 0.471.",
+      "explained_by": "code"
     },
     {
+      "id": "ball-behind-a-player-in-a-crowd",
       "name": "ball mostly hidden, behind a player in a crowd",
+      "cls": "ball",
+      "visibility": "mostly hidden",
+      "situation": "behind a player in a crowd",
+      "labels": 6,
       "misses": 3,
+      "recall": 0.5,
+      "missed_low_contrast": 1,
       "render": {
         "occlusion": "crowded"
-      }
+      },
+      "clips": 4,
+      "seeds": [
+        7159,
+        7162
+      ],
+      "rationale": "3 of 6 ball labels missed behind a player in a crowd, recall 0.5.",
+      "explained_by": "code"
     },
     {
+      "id": "player-behind-a-player",
       "name": "player mostly hidden, behind a player",
+      "cls": "player",
+      "visibility": "mostly hidden",
+      "situation": "behind a player",
+      "labels": 62,
       "misses": 11,
+      "recall": 0.823,
+      "missed_low_contrast": 5,
       "render": {
         "occlusion": "crowded"
-      }
+      },
+      "clips": 13,
+      "seeds": [
+        7163,
+        7175
+      ],
+      "rationale": "11 of 62 player labels missed behind a player, recall 0.823.",
+      "explained_by": "code"
     },
     {
+      "id": "player-behind-a-player-in-a-crowd",
       "name": "player mostly hidden, behind a player in a crowd",
+      "cls": "player",
+      "visibility": "mostly hidden",
+      "situation": "behind a player in a crowd",
+      "labels": 6,
       "misses": 4,
+      "recall": 0.333,
+      "missed_low_contrast": 4,
       "render": {
         "occlusion": "crowded"
-      }
+      },
+      "clips": 5,
+      "seeds": [
+        7176,
+        7180
+      ],
+      "rationale": "4 of 6 player labels missed behind a player in a crowd, recall 0.333.",
+      "explained_by": "code"
     }
   ],
   "unmapped": [
     {
+      "id": "ball-no-occluder-found",
       "name": "ball mostly hidden, no occluder found",
-      "misses": 6
+      "cls": "ball",
+      "visibility": "mostly hidden",
+      "situation": "no occluder found",
+      "labels": 11,
+      "misses": 6,
+      "recall": 0.455,
+      "missed_low_contrast": 3,
+      "rationale": "6 of 11 ball labels missed no occluder found, recall 0.455.",
+      "explained_by": "code"
     },
     {
+      "id": "player-no-occluder-found",
       "name": "player mostly hidden, no occluder found",
-      "misses": 3
+      "cls": "player",
+      "visibility": "mostly hidden",
+      "situation": "no occluder found",
+      "labels": 8,
+      "misses": 3,
+      "recall": 0.625,
+      "missed_low_contrast": 0,
+      "rationale": "3 of 8 player labels missed no occluder found, recall 0.625.",
+      "explained_by": "code"
     }
   ]
 }

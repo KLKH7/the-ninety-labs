@@ -50,6 +50,7 @@ from ninety.agents.slice import Recording, replayer, tamper
 from ninety.intel.stats import calculate_facts
 from ninety.match import detected
 from ninety.match.facts import AGENT_TYPES, compact, minute_of
+from ninety.match.timeline import Timeline
 from ninety.speech import describe
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -295,7 +296,9 @@ async def run(args: argparse.Namespace) -> dict:
     if voice is not None:
         voice.save(track, out)
     cues = sorted(cues + describe.audio_cues(track), key=lambda c: (c["t_in"], c["id"]))
-    audio = describe.write_track(track, refused, out, clip.meta["t_start"])
+    # The picture may cut from a dead ball to its restart: lines are placed on the clip's timeline.
+    timeline = Timeline.of_clip(clip.meta)
+    audio = describe.write_track(track, refused, out, clip.meta["t_start"], timeline=timeline)
     audio["describer"] = {"mode": args.describer, "calls": model_calls, "tokens": tokens,
                           "unavailable": unavailable}
     footage = write_footage(clip, out, encode=not args.frames)
@@ -312,6 +315,8 @@ async def run(args: argparse.Namespace) -> dict:
         "width": clip.meta["params"]["width"],
         "height": clip.meta["params"]["height"],
         "t_start": clip.meta["t_start"],
+        # Which match frame each image shows, across the broadcast's cuts (ninety/match/timeline.py).
+        "segments": [s.as_dict() for s in timeline.segs],
         "footage": footage,
         "detector": None if model is None else f"{model.name} {model.size} {model.checkpoint}",
         "detections": {"source": "live" if args.detect == "live" else "recorded", "frames": len(detections)},

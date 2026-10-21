@@ -43,6 +43,7 @@ from ninety.agents.contracts import Description
 from ninety.agents.cues import SCHEMA, _pass_text
 from ninety.agents.factcheck import MIN_CONFIDENCE, Claim, check
 from ninety.match.facts import compact
+from ninety.match.timeline import Timeline
 
 PITCH_LENGTH_M = 105.0  # schemas/match_event.schema.json: x 0..105
 PITCH_WIDTH_M = 68.0
@@ -405,21 +406,25 @@ def _vtt_time(seconds: float) -> str:
     return f"{h:02d}:{m:02d}:{s:02d}.{ms:03d}"
 
 
-def webvtt(track: Track, t_start: float) -> str:
+def webvtt(track: Track, t_start: float, timeline: Timeline | None = None) -> str:
     """A WebVTT description track timed on the clip (0 at its first frame). The caption sits
-    across the frame where the sound is."""
+    across the frame where the sound is. A clip whose picture cuts (ninety/match/timeline.py)
+    places each line where the video shows its match time, for as long as it is spoken."""
     blocks = ["WEBVTT\nKind: descriptions\nLanguage: en\n"]
     for s in track.said:
         position = round((s.pan + 1) * 50)
         position = min(90, max(10, position))
+        start = timeline.to_video(s.t_in) if timeline is not None else s.t_in - t_start
+        end = start + (s.t_out - s.t_in)
         blocks.append(
-            f"{s.id}\n{_vtt_time(s.t_in - t_start)} --> {_vtt_time(s.t_out - t_start)} "
+            f"{s.id}\n{_vtt_time(start)} --> {_vtt_time(end)} "
             f"position:{position}% align:center\n{s.spoken}\n"
         )
     return "\n".join(blocks)
 
 
-def write_track(track: Track, refused: list[dict], out: Path, t_start: float, voice: str = VOICE) -> dict:
+def write_track(track: Track, refused: list[dict], out: Path, t_start: float, voice: str = VOICE,
+                timeline: Timeline | None = None) -> dict:
     """audio.json (every line with its timing, pan, SSML and how its length was found) and
     description.vtt in `out`. Returns the summary for the bundle's manifest."""
     lags = sorted(s.lag_s for s in track.said)
@@ -442,7 +447,7 @@ def write_track(track: Track, refused: list[dict], out: Path, t_start: float, vo
     doc = {**summary, "said": [asdict(s) for s in track.said], "dropped_lines": track.dropped,
            "refused_lines": refused}
     (out / "audio.json").write_text(json.dumps(doc, indent=2) + "\n")
-    (out / "description.vtt").write_text(webvtt(track, t_start))
+    (out / "description.vtt").write_text(webvtt(track, t_start, timeline))
     return summary
 
 
