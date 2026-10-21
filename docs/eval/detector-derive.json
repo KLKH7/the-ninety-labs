@@ -1,7 +1,7 @@
 {
   "command": "uv run python -m ninety.eval.detector_derive --clips <render run v1>/train --observations <validation observations, regated> --seeds <the validation seeds> --out docs/eval/detector-derive",
-  "commit": "0d790abfbb9daaeee5c62581fcda7e2af16ea816",
-  "date": "2026-10-20",
+  "commit": "8d85df6948b520aa1ea531aadebeae00c3467f98",
+  "date": "2026-10-21",
   "seeds": [
     108,
     109,
@@ -22,13 +22,13 @@
     3045
   ],
   "sides": {
-    "accuracy": 0.8158,
-    "coverage": 0.9607,
+    "accuracy": 0.8153,
+    "coverage": 0.959,
     "per_clip": {
       "108": {
         "feature": "brightness",
-        "accuracy": 0.9424,
-        "coverage": 1.0
+        "accuracy": 0.9387,
+        "coverage": 0.9641
       },
       "109": {
         "feature": null,
@@ -83,7 +83,7 @@
       "3041": {
         "feature": null,
         "accuracy": null,
-        "coverage": 0.0
+        "coverage": null
       },
       "3042": {
         "feature": null,
@@ -292,5 +292,75 @@
       "tp": 9,
       "fp": 10
     }
+  },
+  "bound": {
+    "max_trusted_m": 8.5,
+    "keep_good": 0.95,
+    "candidates": {
+      "height": {
+        "worst_m": 55.255,
+        "good_kept": 1712,
+        "good_kept_share_of_height": 1.0,
+        "bad_trusted": 175,
+        "bad_trusted_by_seed": {
+          "108": 143,
+          "114": 6,
+          "122": 8,
+          "3041": 14,
+          "3042": 4
+        },
+        "qualifies": false
+      },
+      "C1": {
+        "worst_m": 55.255,
+        "good_kept": 1712,
+        "good_kept_share_of_height": 1.0,
+        "bad_trusted": 173,
+        "bad_trusted_by_seed": {
+          "108": 143,
+          "114": 6,
+          "122": 6,
+          "3041": 14,
+          "3042": 4
+        },
+        "qualifies": false
+      },
+      "C2": {
+        "worst_m": 8.244,
+        "good_kept": 1712,
+        "good_kept_share_of_height": 1.0,
+        "bad_trusted": 143,
+        "bad_trusted_by_seed": {
+          "108": 139,
+          "114": 2,
+          "3041": 2
+        },
+        "qualifies": true
+      },
+      "C3": {
+        "worst_m": 55.255,
+        "good_kept": 1648,
+        "good_kept_share_of_height": 0.9626,
+        "bad_trusted": 142,
+        "bad_trusted_by_seed": {
+          "108": 139,
+          "3042": 3
+        },
+        "qualifies": false
+      },
+      "C4": {
+        "worst_m": 8.244,
+        "good_kept": 1712,
+        "good_kept_share_of_height": 1.0,
+        "bad_trusted": 143,
+        "bad_trusted_by_seed": {
+          "108": 139,
+          "114": 2,
+          "3041": 2
+        },
+        "qualifies": true
+      }
+    },
+    "adopted": "C2"
   }
 }
