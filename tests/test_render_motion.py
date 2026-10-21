@@ -501,10 +501,9 @@ def test_a_foot_on_the_grass_does_not_slide_from_a_standstill_to_a_sprint_and_ba
 
 def test_the_stride_lengthens_and_the_swing_lifts_with_speed():
     """The same foot lands a stride (two steps, scene._step_m: Debaere 2013) further on each time,
-    and is carried higher through its swing the faster he runs, over the speeds the swing's source
-    covers (RUN_KNEE_DEG: to 4.5 m/s; above it the swing is held, so only the stride is checked)."""
+    and is carried higher through its swing the faster he runs."""
     lifts = []
-    for speed in (1.5, 3.0, 4.5, 7.0):
+    for speed in (1.5, 3.0, 5.0, 7.0):
         drawn = _draw(_run_frames([speed] * 150))["h1"]
         landings, top = [], 0.0
         for (pa, _, _, _), (pb, mb, _, _) in zip(drawn, drawn[1:], strict=False):
@@ -517,7 +516,7 @@ def test_the_stride_lengthens_and_the_swing_lifts_with_speed():
         for s in strides:
             assert abs(s / (2 * _step_m(speed)) - 1.0) < 0.1, (speed, s, 2 * _step_m(speed))
         lifts.append(top)
-    assert lifts[:3] == sorted(lifts[:3]) and lifts[0] > 0.05 and min(lifts[2:]) > 0.3, lifts
+    assert lifts == sorted(lifts) and lifts[0] > 0.05 and lifts[-1] > 0.3, lifts
 
 
 # A low step after the body (scene.STEP_LIFT) with 4 cm for the foot marker above its sole, both
@@ -773,49 +772,27 @@ def test_a_throw_in_moves_no_limb_in_a_jump():
             assert mv <= limit, (i, k, round(mv, 3), round(limit, 3))
 
 
-def _leg_angles(m_joints, s, heading):
-    """Thigh forward of vertical and knee flexion (degrees) from posed joint positions."""
-    hip, knee, ankle = m_joints[f"thigh_{s}"], m_joints[f"calf_{s}"], m_joints[f"foot_{s}"]
-    fx, fy = math.cos(heading), math.sin(heading)
-    fwd = (knee[0] - hip[0]) * fx + (knee[1] - hip[1]) * fy
-    thigh = math.degrees(math.atan2(fwd, hip[2] - knee[2]))
-    a = [knee[i] - hip[i] for i in range(3)]
-    b = [ankle[i] - knee[i] for i in range(3)]
-    c = sum(p * q for p, q in zip(a, b, strict=True)) / (math.dist(hip, knee) * math.dist(knee, ankle))
-    return thigh, math.degrees(math.acos(max(-1.0, min(1.0, c))))
-
-
-def _joints(pose, heading, height):
-    from ninety.render import meshpose
-
-    angles = meshpose.pose_angles(pose, heading, height)
-    heads, _ = meshpose._fk(angles)
-    i = meshpose._bone_index()
-    return {n: meshpose.to_world(pose["x"], pose["y"], heading, height, heads[i[n]], pose.get("lift") or 0.0)
-            for n in ("thigh_l", "calf_l", "foot_l", "thigh_r", "calf_r", "foot_r")}
-
-
-@pytest.mark.parametrize("speed,knee,thigh", [(2.5, 93.5, 43.8), (3.5, 108.7, 52.8), (4.5, 119.1, 60.5)])
-def test_a_jog_folds_the_knee_behind_him_as_runners_do(speed, knee, thigh):
-    """Old (0.5.3): at 3 to 4 m/s the swinging foot was carried highest under the hips, so the thigh
-    came up near horizontal while the knee folded to only about 93 degrees: a high-knee march. Now,
-    as in Fukuchi et al. 2017 (Table 4, 28 runners), the knee folds to the runners' peak (within one
-    of their standard deviations, about 10 degrees), the thigh comes up no higher than their hip does
-    (plus one deviation, 6 degrees), and the foot is highest behind the hips: the heel comes up first."""
-    drawn = _draw(_run_frames([speed] * 100))["h1"]
-    knees, thighs, high = [], [], []
-    for pose, m, _, _ in drawn[40:]:
-        j = _joints(pose, 0.0, 1.84)
-        for s in "lr":
-            t, kn = _leg_angles(j, s, 0.0)
-            if m[f"foot_{s}"][2] > 0.05:  # in the air
-                knees.append(kn)
-                thighs.append(t)
-                high.append((m[f"foot_{s}"][2], m[f"foot_{s}"][0] - pose["x"]))
-    assert abs(max(knees) - knee) < 10.5, (speed, max(knees), knee)
-    assert max(thighs) < thigh + 6.0, (speed, max(thighs), thigh)
-    top = max(high)
-    assert top[1] < -0.05, (speed, top)  # the highest the foot goes is behind him
+@pytest.mark.parametrize("speed", [2.5, 3.5, 4.5, 6.0])
+def test_a_running_foot_is_highest_early_in_its_swing(speed):
+    """Old (0.5.3): a running foot was carried highest halfway through its swing, under the hips, as
+    if walking: a high-knee march at 3 to 4 m/s. Running, it is highest about a third of the way
+    through (Fukuchi et al. 2017, Fig. 3: the knee most folded at 69% of the stride, the swing from
+    about 54%), behind him, and comes through low to land: in most swings no later than a third and
+    one frame (a swing is 10 to 13 frames here)."""
+    drawn = _draw(_run_frames([speed] * 120))["h1"][30:]
+    shares = []
+    for s in "lr":
+        swing = []
+        for pose, m, _, _ in drawn:
+            plant = pose[f"plant_{s}"]
+            if plant and plant[3] > 0.0:
+                swing.append(m[f"foot_{s}"][2])
+            elif swing:
+                shares.append((swing.index(max(swing)) + 1) / (len(swing) + 1))
+                swing = []
+    shares = sorted(shares[1:])
+    assert len(shares) > 4
+    assert shares[len(shares) // 2] < 1 / 3 + 1 / 11, (speed, shares)
 
 
 def test_a_run_has_a_flight_phase_and_a_walk_does_not():
@@ -1124,8 +1101,8 @@ def test_setting_off_the_feet_do_not_leave_the_grass_together():
     both rose together, a hop. A foot whose stance is over waits for the other to be past the middle
     of its swing (unless the leg can no longer reach it). Both feet are high for less than a whole
     flight: at 3.3 m/s a flight lasts about 3 frames (half of a 0.72 s stride less a 0.233 s stance,
-    Swinnen et al. 2026); without the rule, 3; with it, 2 (bound set after measuring). Drawn as
-    clip.py draws him."""
+    Swinnen et al. 2026); without the rule, 3; with it, 1 (the bound, 2, was set after measuring an
+    earlier draft). Drawn as clip.py draws him."""
     from ninety.render.scene import advance_gaits as advance
 
     frames = [{"ball": {"x": 80.0, "y": 50.0, "z": 0.0, "vx": 0.0, "vy": 0.0}, "possessor": None,
@@ -1140,3 +1117,11 @@ def test_setting_off_the_feet_do_not_leave_the_grass_together():
         pose = mesh_pose(g, pl["x"], pl["y"], 0.0)
         drawn.append((pose, pose_markers(pose, g.heading, h10.height_m), None, g.speed))
     assert _both_up_runs(drawn) <= 2, _both_up_runs(drawn)
+    # Off the grass, the leg reaches where the stride carries the foot (within 10 cm): a foot left
+    # further behind than the leg reaches as he sped away had the knee fold it up toward the seat,
+    # 26 to 38 cm above its path for three frames.
+    for i, (pose, m, _, _) in enumerate(drawn):
+        for s in "lr":
+            plant = pose[f"plant_{s}"]
+            if plant and plant[3] > 0.05:
+                assert m[f"foot_{s}"][2] - plant[3] < 0.10, (i, s, m[f"foot_{s}"][2], plant[3])

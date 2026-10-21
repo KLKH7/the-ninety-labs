@@ -1681,16 +1681,21 @@ short and actionable. This file is public: no research sources, product names or
   The first fix passed every steady-speed test, and a blind critic still preferred 0.5.3: speeding
   up, slowing and drifting, its players hopped with both feet tucked, because a foot lifted early
   for reach started its swing count from zero, both feet left the grass together setting off, and
-  a pose flickering between walk and stand restarted a stride that never landed.
+  a pose flickering between walk and stand restarted a stride that never landed. The next draft
+  drew the runners' knee fold whole (to 109 degrees at 3.5 m/s, Fukuchi 2017): true to the
+  source, and a third blind critic still preferred 0.5.3 on the jog clip, because at broadcast
+  size a heel at the seat with a level pelvis and no bob reads as prancing. Only the timing went
+  in (highest a third of the way through the swing, behind him); the height stayed 0.5.3's.
 - **Rule:** a drawn action follows the truth it shows, frame by frame: hands go where the
   engine's ball is, from before it moves until after it leaves. A gait's numbers come from a
   cited source, and a swing keeps its own progress so a change elsewhere changes where it lands,
   never where it is. A constant marked measured carries the measurement (what, how, the number)
   and is re-measured when a defect points at it; a test's premise that a source contradicts is
   rewritten to what it was protecting. A gait change is judged blind on clips where players
-  change pace, not only on steady-speed tests.
+  change pace, not only on steady-speed tests, and a sourced angle is drawn only as far as the
+  rest of the body (pelvis, bob) can carry it.
 - **Check:** `tests/test_render_motion.py`: `test_a_throw_in_keeps_both_hands_on_the_ball_from_the_grass_to_the_throw`,
-  `test_a_throw_in_moves_no_limb_in_a_jump`, `test_a_jog_folds_the_knee_behind_him_as_runners_do`,
+  `test_a_throw_in_moves_no_limb_in_a_jump`, `test_a_running_foot_is_highest_early_in_its_swing`,
   `test_the_push_off_toe_does_not_slide_before_it_lifts` and
   `test_a_player_stopping_does_not_stand_with_his_legs_crossed` each fail on 0.5.3 (mutation runs
   with main's stride and throw restored); `test_a_player_drifting_while_the_pose_flickers_keeps_his_feet_down`,
