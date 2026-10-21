@@ -1693,17 +1693,21 @@ short and actionable. This file is public: no research sources, product names or
     on the 0.5.3 camera;
   - `_match` simulates SIM_MARGIN_S past the window.
 
-### 177. A metric's bar does not make a rule right where the geometry cannot meet it
+### 177. A coarse search proves a case unframeable only where it searched
 - **What happened:** after #198, #179's seed 3 still missed the camera's 85% framing bar.
-  - The blind critic showed the misses: a corner wait shot centred on the flag, three-quarters
-    run-off, and a lens that pumped in and out after a short corner.
-  - A corner rule, framed from the taker inward and holding its shot, fixed what the critic saw:
-    near corners went from 26% to 34% pitch, far corners to 79%.
-  - It did not move seed 3's score. Its misses are live play within a few metres of the near flag,
-    where no shot from the gantry has both the ball central and the pitch filling the picture.
+  - A corner rule (framed from the taker inward, its shot held against pumping) fixed what the blind
+    critic saw: near corners went from 26% to 34% pitch, far corners to 79%.
+  - It did not move seed 3's score. I reported its misses as live play near the near flag that no
+    gantry shot could frame. That claim rested on a coarse search (3 m aims, a few lenses) that had
+    shown only the corner flag itself to be unframeable; I extended it to points it never covered.
+  - The oracle the Reviewer asked for (the gantry camera itself, 1 m aims, every lens in 1-degree
+    steps) found 1 of seed 3's 201 live frames unframeable. The rest were the director's misses.
 - **Rule:**
-  - Fix what the viewer sees and test it in situations built on purpose.
-  - Report a held-out score that geometry caps, rather than bending the camera toward the metric.
-  - The critic's judgement of the picture outranks a proxy metric where the two disagree.
-- **Check:** `tests/test_render_camera.py::test_a_corner_is_framed_from_the_taker_inward` and
-  `::test_a_short_corner_does_not_pump_the_lens` fail on 0.5.5.
+  - A claim that something cannot be done is checked by a search at the resolution of the claim,
+    on the system's own model, before it is reported.
+  - An exclusion from a metric is bounded (here EXCLUDED_MAX), and its oracle has planted tests.
+- **Check:** `tests/test_render_camera.py`:
+  - `test_the_framing_bar_counts_a_framable_miss_excludes_an_unframeable_frame_and_caps_exclusions`,
+    which always-true, always-false and no-cap mutants each fail;
+  - `test_a_corner_is_framed_from_the_taker_inward` and `::test_a_short_corner_does_not_pump_the_lens`,
+    which fail on 0.5.5.
