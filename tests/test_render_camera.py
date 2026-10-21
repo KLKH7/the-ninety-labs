@@ -16,7 +16,7 @@ from ninety.render.camera import (
     project_with,
     well_framed,
 )
-from ninety.render.clip import _plan
+from ninety.render.clip import SIM_MARGIN_S, _plan
 from ninety.render.params import CameraParams, sample_params
 from ninety.render.scene import drawn_ball
 from ninety.sim.engine import simulate
@@ -244,7 +244,10 @@ HELD_OUT = (3, 5)
 
 @cache
 def _match(seed):
-    return simulate(seed, 2.0)
+    """The match the 100 s window below draws from, simulated SIM_MARGIN_S past the window as a render
+    simulates past its clip (clip.py, lesson 140), so a dead ball near the window's end has its
+    restart in the events: without it the edit sees no dead ball and its frames count as live play."""
+    return simulate(seed, (2 + 100 + SIM_MARGIN_S) / 60)
 
 
 def _broadcast(seed):
