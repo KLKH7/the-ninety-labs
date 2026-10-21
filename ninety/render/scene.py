@@ -963,9 +963,14 @@ def _stride_feet(g: Gait, x: float, y: float, k: float, pel: float) -> None:
             past = half <= off and off < half + air  # its stance is over
             other = g.feet.get("r" if side == "l" else "l")
             other_down = other is None or not other.get("air")
+            # The other foot is down, or past the middle of its swing and coming down: in a run it is
+            # about two thirds through as this one lifts. Setting off, a foot lifting on its phase
+            # while the other had only just left the grass sent both up together, a hop.
+            other_landing = other_down or (other["e"] - other["e0"]) / max(1.0 - other["e0"], 1e-6) >= 0.5
             # Beyond the leg's reach it lifts early, but only while the other foot is on the grass:
             # setting off from standing, both feet were behind the reach at once and lifted together.
-            if past or (f < -STANCE_BEHIND_MAX * k and other_down):
+            beyond = f < -STANCE_BEHIND_MAX * k  # held longer, the leg would drag it
+            if (past and (other_landing or beyond)) or (beyond and other_down):
                 # Its count starts where the stride's phase has it, before zero when the leg's reach
                 # lifts it early, so it lands when its stance comes round again and the two feet stay
                 # half a stride apart (counted from zero, an early lift landed late: both feet were
