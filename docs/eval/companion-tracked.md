@@ -25,20 +25,24 @@ uv run python -m ninety.eval.tracked_speed tests/fixtures/observations-seed90000
 
 - Ten seconds (frames 1650 to 1899).
 - The broadcast camera sees 0 to 10 players a frame, 7.3 on average.
-- The tracker makes 21 tracks. 16 last a phone frame (0.2 s) or longer and are shown: 4 home and
-  12 away.
+- The tracker makes 21 tracks. 15 last a phone frame (0.2 s) or longer and are shown: 5 home and
+  10 away.
 - The tracker sees no shirt numbers, so each player is his side and his track (`h-t12`), not a
   squad number.
 
 ## Results
 
+Re-graded once with the camera trust test of `docs/eval/detector-plan.md` (step D): it trusts
+238 of this clip's 250 frames, against 245 before, so the tracks and their ids changed.
+
+
 | Smoothing | Speed now, median (p90) | Top speed, median (p90) | Distance, median (p90) |
 |---|---|---|---|
-| none: positions as the camera fit gives them | 4.35 km/h (8.6) | **55.6 km/h** (67.2) | 6 m (11) |
-| shipped: a line through each second (25 frames) | **0.6 km/h** (2.0) | **1.9 km/h** (4.2) | **1 m** (3) |
+| none: positions as the camera fit gives them | 4.4 km/h (8.1) | **52.8 km/h** (67.2) | 6 m (12) |
+| shipped: a line through each second (25 frames) | **0.6 km/h** (2.0) | **1.5 km/h** (4.2) | **1 m** (3) |
 
-Mean signed errors with the shipped smoothing: speed now +0.02 km/h, top speed +0.17 km/h,
-distance +0.12 m. So the smoothing adds no lag: a fit over each second follows a moving player.
+Mean signed errors with the shipped smoothing: speed now +0.09 km/h, top speed +0.73 km/h,
+distance +0.4 m. So the smoothing adds no lag: a fit over each second follows a moving player.
 
 **Why the smoothing is needed.** Without it, the camera fit's frame-to-frame jitter (up to about
 0.5 m) is summed as running: every track's "top speed" reads 53 to 89 km/h. The one-second width
@@ -53,9 +57,9 @@ became a line fit, which equals it inside a track.
   now is meaningful; top speed and distance cover at most ten seconds and say so. A longer
   tracked clip is needed before the heat map means anything.
 - **Some tracks are not one player.**
-  - `h-t3` is on average 11 m from the nearest home player, so it is likely a fragment of someone
+  - `h-t6` is on average 11 m from the nearest home player, so it is likely a fragment of someone
     else (a referee, or a kit misread).
-  - `a-t10` (1.6 m) and `a-t15` (2.6 m) probably switch between players during a crossing.
+  - `a-t10` (1.5 m) and `a-t14` (2.6 m) probably switch between players during a crossing.
   - Several true players are split over two tracks (`h10` over three).
 - **One clip, so the result is not general.**
 - **Kickoffs.** A reset inside a tracked clip would be read as running; the tracker does not
