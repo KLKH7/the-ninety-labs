@@ -66,7 +66,7 @@ def measure(run: Path) -> dict:
         nonlocal spell
         if spell and spell[1] > 0:
             out["spells_broken"].append({"team": spell[0], "s": spell[1] / FPS, "passes": spell[2],
-                                         "end": reason})
+                                         "end": reason, "start": spell[4]})
         spell = None
 
     def close_through() -> None:
@@ -88,7 +88,7 @@ def measure(run: Path) -> dict:
                 owner = e["team"]
                 if through and through[0] != owner:
                     close_through()
-                spell = [owner, 0, 0, f["frame"]]
+                spell = [owner, 0, 0, f["frame"], "restart"]
                 if through is None:
                     through = [owner, 0, 0, f["frame"]]
                 last, open_touch, prev_holder = (e["player"], e["team"], f["frame"]), None, None
@@ -120,17 +120,21 @@ def measure(run: Path) -> dict:
             team = t["team"]
             if open_touch and t["id"] != open_touch[0]:
                 open_touch = None  # someone else got to it
-            if owner is not None and team != owner:
-                cause = end_cause(evs_before(by_frame, f["frame"]), owner, role, last)
-                out["ends"][cause] += 1
-                if was_dribbling:
-                    out["ends_dribbling"][cause] += 1
-                close(cause)
-                close_through()
-                spell = [team, 0, 0, f["frame"]]
-                through = [team, 0, 0, f["frame"]]
-            owner = team
-            last = (t["id"], team, f["frame"])
+            controls = f["possessor"] == t["id"] or any(
+                e["type"] in ("pass", "shot") and e.get("player") == t["id"] for e in evs)
+            # A momentary touch by the other side (a block, a poke) does not make the ball theirs.
+            if controls or team == owner:
+                if owner is not None and team != owner:
+                    cause = end_cause(evs_before(by_frame, f["frame"]), owner, role, last)
+                    out["ends"][cause] += 1
+                    if was_dribbling:
+                        out["ends_dribbling"][cause] += 1
+                    close(cause)
+                    close_through()
+                    spell = [team, 0, 0, f["frame"], "open play"]
+                    through = [team, 0, 0, f["frame"]]
+                owner = team
+                last = (t["id"], team, f["frame"])
         if spell:
             spell[1] += 1
         if through:
@@ -141,6 +145,10 @@ def measure(run: Path) -> dict:
     close_through()
     out["minutes"] = n / FPS / 60
     return out
+
+
+def share(xs: list[float], lo: float, hi: float) -> float:
+    return round(sum(1 for x in xs if lo <= x < hi) / len(xs), 3)
 
 
 def evs_before(by_frame: dict, frame: int, back_s: float = 3.0) -> list[dict]:
@@ -189,6 +197,15 @@ def main() -> None:
             "share_by_passes": {k: round(sum(1 for p in passes if (p == k if k < 3 else p >= 3))
                                          / len(passes), 3) for k in (0, 1, 2, 3)},
         }
+        if key == "spells_broken":
+            open_s = [sp["s"] for sp in spells if sp["start"] == "open play"]
+            report[key]["begun_in_open_play"] = round(len(open_s) / len(spells), 3)
+            report[key]["open_play_s_shares"] = {
+                "0-10": share(open_s, 0, 10), "10-20": share(open_s, 10, 20),
+                "20-30": share(open_s, 20, 30), "30+": share(open_s, 30, 1e9)}
+            all_s = [sp["s"] for sp in spells]
+            report[key]["s_shares"] = {"under 5": share(all_s, 0, 5), "5-12": share(all_s, 5, 12),
+                                       "over 12": share(all_s, 12, 1e9)}
     ends = sum((r["ends"] for r in runs), Counter())
     dribbling = sum((r["ends_dribbling"] for r in runs), Counter())
     total = sum(ends.values())
