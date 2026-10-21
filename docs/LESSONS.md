@@ -1580,6 +1580,21 @@ short and actionable. This file is public: no research sources, product names or
   fail on the code before; `test_the_body_has_a_mans_proportions_and_its_stature_is_the_scale` holds
   the scale to the asset and its joints to the table.
 
+### 160. A pass or shot ends at the next thing that happens to the ball, however long it stays open
+- **What happened:** the engine keeps a shot open after a block, so a deflected shot can still count
+  as the shooter's goal, and closed it only when someone controlled the ball, at a foul, an offside,
+  or when it went out. On seed 21, the demo window, a10's shot at 4:37 was blocked; he got back to
+  the ball and h4 poked it loose at 4:39 (a tackle). The shot stayed open until h8 controlled the
+  ball at 4:41 and its end point was written there, after the tackle, so the data contract's C7
+  (the ball reaches the end point before anything else happens to it) failed.
+- **Rule:** keeping an event open for one purpose (crediting a goal) never lets it outlive the next
+  on-ball event. A touch ends it (`touched`); every other path that records an on-ball event while a
+  kick may be open ends it first, where the ball is (`Engine.end_kick`: a tackle's poke, a foul, an
+  offside), judged on the ball's own flight before anything changes it.
+- **Check:** `tests/test_shot_end.py`: seed 21's case, asserted to occur (lesson 41), with C7 and
+  "no carrier strikes with a kick still open" checked on the real match; a poke on an open shot; and
+  an untouched shot judged on its own flight, not the tackle's push.
+
 ### 162. A player off the ball answers the players around him, not only the ball
 - **What happened:** fans and clip critics saw the team without the ball stand between actions. On
   seed 21 most standing spells of 3 s or more were block defenders whose place did not move while
