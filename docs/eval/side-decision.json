@@ -1,0 +1,1415 @@
+{
+  "command": "uv run python -m ninety.eval.side_decision --clips <render run v1>/train --observations <validation observations> --seeds <the validation seeds> --out docs/eval/side-decision",
+  "commit": "3e64c344bcb7575cba86a71d4cbeefd27e22f755",
+  "date": "2026-10-21",
+  "sound_share": 0.8,
+  "pooled": {
+    "N0": {
+      "sound_clips_right": 4,
+      "sound_clips": 4,
+      "sound_clips_95": [
+        0.51,
+        1.0
+      ],
+      "accuracy": 0.8153,
+      "accuracy_95": [
+        0.81,
+        0.82
+      ],
+      "passes_right": 11,
+      "passes": 16
+    },
+    "N1": {
+      "sound_clips_right": 1,
+      "sound_clips": 4,
+      "sound_clips_95": [
+        0.05,
+        0.7
+      ],
+      "accuracy": 0.4958,
+      "accuracy_95": [
+        0.49,
+        0.5
+      ],
+      "passes_right": 7,
+      "passes": 16
+    },
+    "N2": {
+      "sound_clips_right": 4,
+      "sound_clips": 4,
+      "sound_clips_95": [
+        0.51,
+        1.0
+      ],
+      "accuracy": 0.691,
+      "accuracy_95": [
+        0.68,
+        0.7
+      ],
+      "passes_right": 9,
+      "passes": 16
+    },
+    "N3": {
+      "sound_clips_right": 4,
+      "sound_clips": 4,
+      "sound_clips_95": [
+        0.51,
+        1.0
+      ],
+      "accuracy": 0.8153,
+      "accuracy_95": [
+        0.81,
+        0.82
+      ],
+      "passes_right": 11,
+      "passes": 16
+    },
+    "N4": {
+      "sound_clips_right": 3,
+      "sound_clips": 4,
+      "sound_clips_95": [
+        0.3,
+        0.95
+      ],
+      "accuracy": 0.633,
+      "accuracy_95": [
+        0.63,
+        0.64
+      ],
+      "passes_right": 10,
+      "passes": 16
+    }
+  },
+  "adopted_naming": "N0",
+  "confidence_ordering": {
+    "K0": 0.6181818181818182,
+    "K1": 0.32727272727272727,
+    "K2": 0.22727272727272727
+  },
+  "adopted_confidence": "K0",
+  "predictive": false,
+  "clips": [
+    {
+      "seed": 108,
+      "sound": true,
+      "cluster_shares": {
+        "home": 1.0,
+        "away": 0.9364881693648817
+      },
+      "now_right": true,
+      "margins": {
+        "N0": 1.0,
+        "N1": -1.0,
+        "N2": 0.5,
+        "N3": 0.0,
+        "N4": 0.5
+      },
+      "counts": {
+        "N0": 29,
+        "N1": 2,
+        "N2": 8,
+        "N3": 0
+      },
+      "separation": 7.688225439222414,
+      "candidates": {
+        "N0": {
+          "keep": true,
+          "right": true,
+          "right_frames": 781,
+          "frames": 832,
+          "tracks_right": 14,
+          "tracks": 16,
+          "passes": [
+            {
+              "right": true,
+              "team_confidence": 0.97
+            },
+            {
+              "right": true,
+              "team_confidence": 0.895
+            }
+          ]
+        },
+        "N1": {
+          "keep": false,
+          "right": false,
+          "right_frames": 51,
+          "frames": 832,
+          "tracks_right": 2,
+          "tracks": 16,
+          "passes": [
+            {
+              "right": false,
+              "team_confidence": 0.97
+            },
+            {
+              "right": false,
+              "team_confidence": 0.895
+            }
+          ]
+        },
+        "N2": {
+          "keep": true,
+          "right": true,
+          "right_frames": 781,
+          "frames": 832,
+          "tracks_right": 14,
+          "tracks": 16,
+          "passes": [
+            {
+              "right": true,
+              "team_confidence": 0.97
+            },
+            {
+              "right": true,
+              "team_confidence": 0.895
+            }
+          ]
+        },
+        "N3": {
+          "keep": true,
+          "right": true,
+          "right_frames": 781,
+          "frames": 832,
+          "tracks_right": 14,
+          "tracks": 16,
+          "passes": [
+            {
+              "right": true,
+              "team_confidence": 0.97
+            },
+            {
+              "right": true,
+              "team_confidence": 0.895
+            }
+          ]
+        },
+        "N4": {
+          "keep": true,
+          "right": true,
+          "right_frames": 781,
+          "frames": 832,
+          "tracks_right": 14,
+          "tracks": 16,
+          "passes": [
+            {
+              "right": true,
+              "team_confidence": 0.97
+            },
+            {
+              "right": true,
+              "team_confidence": 0.895
+            }
+          ]
+        }
+      },
+      "confidence": {
+        "K2": 0.6671666666666666,
+        "K1": 0.5903769158327636
+      }
+    },
+    {
+      "seed": 109,
+      "sound": false,
+      "cluster_shares": {
+        "home": 0.0,
+        "away": 0.0
+      },
+      "now_right": null,
+      "margins": {
+        "N0": 0.0,
+        "N1": 0.0,
+        "N2": 0.0,
+        "N3": 0.0,
+        "N4": 0.0
+      },
+      "counts": {
+        "N0": 0,
+        "N1": 0,
+        "N2": 0,
+        "N3": 0
+      },
+      "separation": null,
+      "candidates": {
+        "N0": {
+          "keep": true,
+          "right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "tracks_right": 0,
+          "tracks": 0,
+          "passes": []
+        },
+        "N1": {
+          "keep": true,
+          "right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "tracks_right": 0,
+          "tracks": 0,
+          "passes": []
+        },
+        "N2": {
+          "keep": true,
+          "right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "tracks_right": 0,
+          "tracks": 0,
+          "passes": []
+        },
+        "N3": {
+          "keep": true,
+          "right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "tracks_right": 0,
+          "tracks": 0,
+          "passes": []
+        },
+        "N4": {
+          "keep": true,
+          "right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "tracks_right": 0,
+          "tracks": 0,
+          "passes": []
+        }
+      },
+      "confidence": {
+        "K2": 0.0,
+        "K1": 0.0
+      }
+    },
+    {
+      "seed": 114,
+      "sound": false,
+      "cluster_shares": {
+        "home": 0.0,
+        "away": 0.0
+      },
+      "now_right": null,
+      "margins": {
+        "N0": 0.0,
+        "N1": 0.0,
+        "N2": 0.0,
+        "N3": 0.0,
+        "N4": 0.0
+      },
+      "counts": {
+        "N0": 0,
+        "N1": 0,
+        "N2": 0,
+        "N3": 0
+      },
+      "separation": null,
+      "candidates": {
+        "N0": {
+          "keep": true,
+          "right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "tracks_right": 0,
+          "tracks": 0,
+          "passes": []
+        },
+        "N1": {
+          "keep": true,
+          "right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "tracks_right": 0,
+          "tracks": 0,
+          "passes": []
+        },
+        "N2": {
+          "keep": true,
+          "right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "tracks_right": 0,
+          "tracks": 0,
+          "passes": []
+        },
+        "N3": {
+          "keep": true,
+          "right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "tracks_right": 0,
+          "tracks": 0,
+          "passes": []
+        },
+        "N4": {
+          "keep": true,
+          "right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "tracks_right": 0,
+          "tracks": 0,
+          "passes": []
+        }
+      },
+      "confidence": {
+        "K2": 0.0,
+        "K1": 0.0
+      }
+    },
+    {
+      "seed": 115,
+      "sound": false,
+      "cluster_shares": {
+        "home": 0.8079534432589719,
+        "away": 0.6375
+      },
+      "now_right": null,
+      "margins": {
+        "N0": 0.4312,
+        "N1": 1.0,
+        "N2": 1.0,
+        "N3": 0.0,
+        "N4": 2.4312
+      },
+      "counts": {
+        "N0": 218,
+        "N1": 1,
+        "N2": 1,
+        "N3": 0
+      },
+      "separation": 3.282189537112958,
+      "candidates": {
+        "N0": {
+          "keep": true,
+          "right": null,
+          "right_frames": 1394,
+          "frames": 1911,
+          "tracks_right": 21,
+          "tracks": 28,
+          "passes": [
+            {
+              "right": false,
+              "team_confidence": 0.431
+            }
+          ]
+        },
+        "N1": {
+          "keep": true,
+          "right": null,
+          "right_frames": 1394,
+          "frames": 1911,
+          "tracks_right": 21,
+          "tracks": 28,
+          "passes": [
+            {
+              "right": false,
+              "team_confidence": 0.431
+            }
+          ]
+        },
+        "N2": {
+          "keep": true,
+          "right": null,
+          "right_frames": 1394,
+          "frames": 1911,
+          "tracks_right": 21,
+          "tracks": 28,
+          "passes": [
+            {
+              "right": false,
+              "team_confidence": 0.431
+            }
+          ]
+        },
+        "N3": {
+          "keep": true,
+          "right": null,
+          "right_frames": 1394,
+          "frames": 1911,
+          "tracks_right": 21,
+          "tracks": 28,
+          "passes": [
+            {
+              "right": false,
+              "team_confidence": 0.431
+            }
+          ]
+        },
+        "N4": {
+          "keep": true,
+          "right": null,
+          "right_frames": 1394,
+          "frames": 1911,
+          "tracks_right": 21,
+          "tracks": 28,
+          "passes": [
+            {
+              "right": false,
+              "team_confidence": 0.431
+            }
+          ]
+        }
+      },
+      "confidence": {
+        "K2": 1.001,
+        "K1": 0.767241080334134
+      }
+    },
+    {
+      "seed": 116,
+      "sound": true,
+      "cluster_shares": {
+        "home": 1.0,
+        "away": 1.0
+      },
+      "now_right": true,
+      "margins": {
+        "N0": 0.992,
+        "N1": -1.0,
+        "N2": 0.0,
+        "N3": 0.0,
+        "N4": -0.008
+      },
+      "counts": {
+        "N0": 250,
+        "N1": 1,
+        "N2": 2,
+        "N3": 0
+      },
+      "separation": 4.190311272167772,
+      "candidates": {
+        "N0": {
+          "keep": true,
+          "right": true,
+          "right_frames": 2777,
+          "frames": 2777,
+          "tracks_right": 23,
+          "tracks": 23,
+          "passes": [
+            {
+              "right": true,
+              "team_confidence": 0.663
+            }
+          ]
+        },
+        "N1": {
+          "keep": false,
+          "right": false,
+          "right_frames": 0,
+          "frames": 2777,
+          "tracks_right": 0,
+          "tracks": 23,
+          "passes": [
+            {
+              "right": false,
+              "team_confidence": 0.663
+            }
+          ]
+        },
+        "N2": {
+          "keep": true,
+          "right": true,
+          "right_frames": 2777,
+          "frames": 2777,
+          "tracks_right": 23,
+          "tracks": 23,
+          "passes": [
+            {
+              "right": true,
+              "team_confidence": 0.663
+            }
+          ]
+        },
+        "N3": {
+          "keep": true,
+          "right": true,
+          "right_frames": 2777,
+          "frames": 2777,
+          "tracks_right": 23,
+          "tracks": 23,
+          "passes": [
+            {
+              "right": true,
+              "team_confidence": 0.663
+            }
+          ]
+        },
+        "N4": {
+          "keep": false,
+          "right": false,
+          "right_frames": 0,
+          "frames": 2777,
+          "tracks_right": 0,
+          "tracks": 23,
+          "passes": [
+            {
+              "right": false,
+              "team_confidence": 0.663
+            }
+          ]
+        }
+      },
+      "confidence": {
+        "K2": 0.500008,
+        "K1": 0.4036731226138952
+      }
+    },
+    {
+      "seed": 120,
+      "sound": false,
+      "cluster_shares": {
+        "home": 0.9377926421404682,
+        "away": 1.0
+      },
+      "now_right": null,
+      "margins": {
+        "N0": 1.0,
+        "N1": 1.0,
+        "N2": -1.0,
+        "N3": 0.0,
+        "N4": 1.0
+      },
+      "counts": {
+        "N0": 80,
+        "N1": 1,
+        "N2": 3,
+        "N3": 0
+      },
+      "separation": 9.687943160204487,
+      "candidates": {
+        "N0": {
+          "keep": true,
+          "right": null,
+          "right_frames": 179,
+          "frames": 1581,
+          "tracks_right": 4,
+          "tracks": 17,
+          "passes": [
+            {
+              "right": false,
+              "team_confidence": 0.96
+            }
+          ]
+        },
+        "N1": {
+          "keep": true,
+          "right": null,
+          "right_frames": 179,
+          "frames": 1581,
+          "tracks_right": 4,
+          "tracks": 17,
+          "passes": [
+            {
+              "right": false,
+              "team_confidence": 0.96
+            }
+          ]
+        },
+        "N2": {
+          "keep": false,
+          "right": null,
+          "right_frames": 1408,
+          "frames": 1581,
+          "tracks_right": 14,
+          "tracks": 17,
+          "passes": [
+            {
+              "right": true,
+              "team_confidence": 0.96
+            }
+          ]
+        },
+        "N3": {
+          "keep": true,
+          "right": null,
+          "right_frames": 179,
+          "frames": 1581,
+          "tracks_right": 4,
+          "tracks": 17,
+          "passes": [
+            {
+              "right": false,
+              "team_confidence": 0.96
+            }
+          ]
+        },
+        "N4": {
+          "keep": true,
+          "right": null,
+          "right_frames": 179,
+          "frames": 1581,
+          "tracks_right": 4,
+          "tracks": 17,
+          "passes": [
+            {
+              "right": false,
+              "team_confidence": 0.96
+            }
+          ]
+        }
+      },
+      "confidence": {
+        "K2": 0.6676666666666666,
+        "K1": 0.6051975220745941
+      }
+    },
+    {
+      "seed": 121,
+      "sound": true,
+      "cluster_shares": {
+        "home": 1.0,
+        "away": 1.0
+      },
+      "now_right": true,
+      "margins": {
+        "N0": 1.0,
+        "N1": -1.0,
+        "N2": 1.0,
+        "N3": 0.0,
+        "N4": 1.0
+      },
+      "counts": {
+        "N0": 133,
+        "N1": 1,
+        "N2": 4,
+        "N3": 0
+      },
+      "separation": 21.814202582861032,
+      "candidates": {
+        "N0": {
+          "keep": true,
+          "right": true,
+          "right_frames": 1426,
+          "frames": 1426,
+          "tracks_right": 16,
+          "tracks": 16,
+          "passes": [
+            {
+              "right": true,
+              "team_confidence": 0.985
+            }
+          ]
+        },
+        "N1": {
+          "keep": false,
+          "right": false,
+          "right_frames": 67,
+          "frames": 1426,
+          "tracks_right": 3,
+          "tracks": 16,
+          "passes": [
+            {
+              "right": false,
+              "team_confidence": 0.985
+            }
+          ]
+        },
+        "N2": {
+          "keep": true,
+          "right": true,
+          "right_frames": 1426,
+          "frames": 1426,
+          "tracks_right": 16,
+          "tracks": 16,
+          "passes": [
+            {
+              "right": true,
+              "team_confidence": 0.985
+            }
+          ]
+        },
+        "N3": {
+          "keep": true,
+          "right": true,
+          "right_frames": 1426,
+          "frames": 1426,
+          "tracks_right": 16,
+          "tracks": 16,
+          "passes": [
+            {
+              "right": true,
+              "team_confidence": 0.985
+            }
+          ]
+        },
+        "N4": {
+          "keep": true,
+          "right": true,
+          "right_frames": 1426,
+          "frames": 1426,
+          "tracks_right": 16,
+          "tracks": 16,
+          "passes": [
+            {
+              "right": true,
+              "team_confidence": 0.985
+            }
+          ]
+        }
+      },
+      "confidence": {
+        "K2": 0.6676666666666666,
+        "K1": 0.6384012709447822
+      }
+    },
+    {
+      "seed": 122,
+      "sound": false,
+      "cluster_shares": {
+        "home": 0.0,
+        "away": 0.0
+      },
+      "now_right": null,
+      "margins": {
+        "N0": 0.0,
+        "N1": 0.0,
+        "N2": 0.0,
+        "N3": 0.0,
+        "N4": 0.0
+      },
+      "counts": {
+        "N0": 0,
+        "N1": 0,
+        "N2": 0,
+        "N3": 0
+      },
+      "separation": null,
+      "candidates": {
+        "N0": {
+          "keep": true,
+          "right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "tracks_right": 0,
+          "tracks": 0,
+          "passes": []
+        },
+        "N1": {
+          "keep": true,
+          "right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "tracks_right": 0,
+          "tracks": 0,
+          "passes": []
+        },
+        "N2": {
+          "keep": true,
+          "right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "tracks_right": 0,
+          "tracks": 0,
+          "passes": []
+        },
+        "N3": {
+          "keep": true,
+          "right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "tracks_right": 0,
+          "tracks": 0,
+          "passes": []
+        },
+        "N4": {
+          "keep": true,
+          "right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "tracks_right": 0,
+          "tracks": 0,
+          "passes": []
+        }
+      },
+      "confidence": {
+        "K2": 0.0,
+        "K1": 0.0
+      }
+    },
+    {
+      "seed": 2041,
+      "sound": false,
+      "cluster_shares": {
+        "home": 0.7584158415841584,
+        "away": 1.0
+      },
+      "now_right": null,
+      "margins": {
+        "N0": 0.7306,
+        "N1": 0.5,
+        "N2": -0.3333,
+        "N3": 0.0,
+        "N4": 0.8973
+      },
+      "counts": {
+        "N0": 245,
+        "N1": 4,
+        "N2": 6,
+        "N3": 0
+      },
+      "separation": 5.6635350372779865,
+      "candidates": {
+        "N0": {
+          "keep": true,
+          "right": null,
+          "right_frames": 1804,
+          "frames": 2048,
+          "tracks_right": 26,
+          "tracks": 27,
+          "passes": [
+            {
+              "right": true,
+              "team_confidence": 0.447
+            },
+            {
+              "right": true,
+              "team_confidence": 0.731
+            },
+            {
+              "right": true,
+              "team_confidence": 0.731
+            }
+          ]
+        },
+        "N1": {
+          "keep": true,
+          "right": null,
+          "right_frames": 1804,
+          "frames": 2048,
+          "tracks_right": 26,
+          "tracks": 27,
+          "passes": [
+            {
+              "right": true,
+              "team_confidence": 0.447
+            },
+            {
+              "right": true,
+              "team_confidence": 0.731
+            },
+            {
+              "right": true,
+              "team_confidence": 0.731
+            }
+          ]
+        },
+        "N2": {
+          "keep": false,
+          "right": null,
+          "right_frames": 244,
+          "frames": 2048,
+          "tracks_right": 1,
+          "tracks": 27,
+          "passes": [
+            {
+              "right": false,
+              "team_confidence": 0.447
+            },
+            {
+              "right": false,
+              "team_confidence": 0.731
+            },
+            {
+              "right": false,
+              "team_confidence": 0.731
+            }
+          ]
+        },
+        "N3": {
+          "keep": true,
+          "right": null,
+          "right_frames": 1804,
+          "frames": 2048,
+          "tracks_right": 26,
+          "tracks": 27,
+          "passes": [
+            {
+              "right": true,
+              "team_confidence": 0.447
+            },
+            {
+              "right": true,
+              "team_confidence": 0.731
+            },
+            {
+              "right": true,
+              "team_confidence": 0.731
+            }
+          ]
+        },
+        "N4": {
+          "keep": true,
+          "right": null,
+          "right_frames": 1804,
+          "frames": 2048,
+          "tracks_right": 26,
+          "tracks": 27,
+          "passes": [
+            {
+              "right": true,
+              "team_confidence": 0.447
+            },
+            {
+              "right": true,
+              "team_confidence": 0.731
+            },
+            {
+              "right": true,
+              "team_confidence": 0.731
+            }
+          ]
+        }
+      },
+      "confidence": {
+        "K2": 0.6675639666666666,
+        "K1": 0.567382311894523
+      }
+    },
+    {
+      "seed": 2042,
+      "sound": true,
+      "cluster_shares": {
+        "home": 1.0,
+        "away": 1.0
+      },
+      "now_right": true,
+      "margins": {
+        "N0": 1.0,
+        "N1": 1.0,
+        "N2": 0.2,
+        "N3": 0.0,
+        "N4": 2.2
+      },
+      "counts": {
+        "N0": 250,
+        "N1": 4,
+        "N2": 5,
+        "N3": 0
+      },
+      "separation": 7.395572489816682,
+      "candidates": {
+        "N0": {
+          "keep": true,
+          "right": true,
+          "right_frames": 1894,
+          "frames": 1894,
+          "tracks_right": 22,
+          "tracks": 22,
+          "passes": [
+            {
+              "right": true,
+              "team_confidence": 0.95
+            },
+            {
+              "right": true,
+              "team_confidence": 0.881
+            },
+            {
+              "right": false,
+              "team_confidence": 0.575
+            }
+          ]
+        },
+        "N1": {
+          "keep": true,
+          "right": true,
+          "right_frames": 1894,
+          "frames": 1894,
+          "tracks_right": 22,
+          "tracks": 22,
+          "passes": [
+            {
+              "right": true,
+              "team_confidence": 0.95
+            },
+            {
+              "right": true,
+              "team_confidence": 0.881
+            },
+            {
+              "right": false,
+              "team_confidence": 0.575
+            }
+          ]
+        },
+        "N2": {
+          "keep": true,
+          "right": true,
+          "right_frames": 1894,
+          "frames": 1894,
+          "tracks_right": 22,
+          "tracks": 22,
+          "passes": [
+            {
+              "right": true,
+              "team_confidence": 0.95
+            },
+            {
+              "right": true,
+              "team_confidence": 0.881
+            },
+            {
+              "right": false,
+              "team_confidence": 0.575
+            }
+          ]
+        },
+        "N3": {
+          "keep": true,
+          "right": true,
+          "right_frames": 1894,
+          "frames": 1894,
+          "tracks_right": 22,
+          "tracks": 22,
+          "passes": [
+            {
+              "right": true,
+              "team_confidence": 0.95
+            },
+            {
+              "right": true,
+              "team_confidence": 0.881
+            },
+            {
+              "right": false,
+              "team_confidence": 0.575
+            }
+          ]
+        },
+        "N4": {
+          "keep": true,
+          "right": true,
+          "right_frames": 1894,
+          "frames": 1894,
+          "tracks_right": 22,
+          "tracks": 22,
+          "passes": [
+            {
+              "right": true,
+              "team_confidence": 0.95
+            },
+            {
+              "right": true,
+              "team_confidence": 0.881
+            },
+            {
+              "right": false,
+              "team_confidence": 0.575
+            }
+          ]
+        }
+      },
+      "confidence": {
+        "K2": 1.001,
+        "K1": 0.8817704893008603
+      }
+    },
+    {
+      "seed": 2043,
+      "sound": false,
+      "cluster_shares": {
+        "home": 0.7413868294810292,
+        "away": 0.9892703862660944
+      },
+      "now_right": null,
+      "margins": {
+        "N0": 0.7751,
+        "N1": 0.5,
+        "N2": -0.2,
+        "N3": 0.0,
+        "N4": 1.0751
+      },
+      "counts": {
+        "N0": 249,
+        "N1": 4,
+        "N2": 5,
+        "N3": 0
+      },
+      "separation": 6.564530988551746,
+      "candidates": {
+        "N0": {
+          "keep": true,
+          "right": null,
+          "right_frames": 2161,
+          "frames": 2759,
+          "tracks_right": 28,
+          "tracks": 35,
+          "passes": [
+            {
+              "right": false,
+              "team_confidence": 0.775
+            },
+            {
+              "right": true,
+              "team_confidence": 0.768
+            },
+            {
+              "right": false,
+              "team_confidence": 0.775
+            },
+            {
+              "right": true,
+              "team_confidence": 0.775
+            }
+          ]
+        },
+        "N1": {
+          "keep": true,
+          "right": null,
+          "right_frames": 2161,
+          "frames": 2759,
+          "tracks_right": 28,
+          "tracks": 35,
+          "passes": [
+            {
+              "right": false,
+              "team_confidence": 0.775
+            },
+            {
+              "right": true,
+              "team_confidence": 0.768
+            },
+            {
+              "right": false,
+              "team_confidence": 0.775
+            },
+            {
+              "right": true,
+              "team_confidence": 0.775
+            }
+          ]
+        },
+        "N2": {
+          "keep": false,
+          "right": null,
+          "right_frames": 598,
+          "frames": 2759,
+          "tracks_right": 7,
+          "tracks": 35,
+          "passes": [
+            {
+              "right": true,
+              "team_confidence": 0.775
+            },
+            {
+              "right": false,
+              "team_confidence": 0.768
+            },
+            {
+              "right": true,
+              "team_confidence": 0.775
+            },
+            {
+              "right": false,
+              "team_confidence": 0.775
+            }
+          ]
+        },
+        "N3": {
+          "keep": true,
+          "right": null,
+          "right_frames": 2161,
+          "frames": 2759,
+          "tracks_right": 28,
+          "tracks": 35,
+          "passes": [
+            {
+              "right": false,
+              "team_confidence": 0.775
+            },
+            {
+              "right": true,
+              "team_confidence": 0.768
+            },
+            {
+              "right": false,
+              "team_confidence": 0.775
+            },
+            {
+              "right": true,
+              "team_confidence": 0.775
+            }
+          ]
+        },
+        "N4": {
+          "keep": true,
+          "right": null,
+          "right_frames": 2161,
+          "frames": 2759,
+          "tracks_right": 28,
+          "tracks": 35,
+          "passes": [
+            {
+              "right": false,
+              "team_confidence": 0.775
+            },
+            {
+              "right": true,
+              "team_confidence": 0.768
+            },
+            {
+              "right": false,
+              "team_confidence": 0.775
+            },
+            {
+              "right": true,
+              "team_confidence": 0.775
+            }
+          ]
+        }
+      },
+      "confidence": {
+        "K2": 0.6676666666666666,
+        "K1": 0.5794038691876
+      }
+    },
+    {
+      "seed": 3041,
+      "sound": false,
+      "cluster_shares": {
+        "home": 0.0,
+        "away": 0.0
+      },
+      "now_right": null,
+      "margins": {
+        "N0": 0.0,
+        "N1": 0.0,
+        "N2": 0.0,
+        "N3": 0.0,
+        "N4": 0.0
+      },
+      "counts": {
+        "N0": 0,
+        "N1": 0,
+        "N2": 0,
+        "N3": 0
+      },
+      "separation": null,
+      "candidates": {
+        "N0": {
+          "keep": true,
+          "right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "tracks_right": 0,
+          "tracks": 0,
+          "passes": []
+        },
+        "N1": {
+          "keep": true,
+          "right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "tracks_right": 0,
+          "tracks": 0,
+          "passes": []
+        },
+        "N2": {
+          "keep": true,
+          "right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "tracks_right": 0,
+          "tracks": 0,
+          "passes": []
+        },
+        "N3": {
+          "keep": true,
+          "right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "tracks_right": 0,
+          "tracks": 0,
+          "passes": []
+        },
+        "N4": {
+          "keep": true,
+          "right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "tracks_right": 0,
+          "tracks": 0,
+          "passes": []
+        }
+      },
+      "confidence": {
+        "K2": 0.0,
+        "K1": 0.0
+      }
+    },
+    {
+      "seed": 3042,
+      "sound": false,
+      "cluster_shares": {
+        "home": 0.0,
+        "away": 0.0
+      },
+      "now_right": null,
+      "margins": {
+        "N0": 0.0,
+        "N1": 0.0,
+        "N2": 0.0,
+        "N3": 0.0,
+        "N4": 0.0
+      },
+      "counts": {
+        "N0": 0,
+        "N1": 0,
+        "N2": 0,
+        "N3": 0
+      },
+      "separation": null,
+      "candidates": {
+        "N0": {
+          "keep": true,
+          "right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "tracks_right": 0,
+          "tracks": 0,
+          "passes": []
+        },
+        "N1": {
+          "keep": true,
+          "right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "tracks_right": 0,
+          "tracks": 0,
+          "passes": []
+        },
+        "N2": {
+          "keep": true,
+          "right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "tracks_right": 0,
+          "tracks": 0,
+          "passes": []
+        },
+        "N3": {
+          "keep": true,
+          "right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "tracks_right": 0,
+          "tracks": 0,
+          "passes": []
+        },
+        "N4": {
+          "keep": true,
+          "right": null,
+          "right_frames": 0,
+          "frames": 0,
+          "tracks_right": 0,
+          "tracks": 0,
+          "passes": []
+        }
+      },
+      "confidence": {
+        "K2": 0.0,
+        "K1": 0.0
+      }
+    }
+  ]
+}

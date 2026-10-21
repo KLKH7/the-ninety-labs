@@ -97,3 +97,52 @@ confidence still does not predict, and W6's gate stays closed.
   - lifted only if the confidence is predictive by the rule above;
   - otherwise kept, and said plainly.
 - Lesson 178.
+
+## Outcome
+
+### Validation ([side-decision.md](side-decision.md))
+
+**The naming is already right where the clusters are sound.** On the 4 validation clips whose kit
+clusters are sound (108, 116, 121, 2042), today's mean-position vote (N0) names the sides right on all
+4 (95% 0.51 to 1.00). Every remaining side error is a cluster failure: the two clusters don't each
+hold one team. Those clips are 115 (0.73), 120 (0.11), 2041 (0.88) and 2043 (0.78), by track-frames.
+
+| Naming | Sound clips right | Side accuracy, track-frames | Pass teams right |
+|---|---|---|---|
+| **N0 mean position (kept)** | 4 of 4 | 0.815 | 11 of 16 |
+| N1 pass direction | 1 of 4 | 0.496 | 7 of 16 |
+| N2 carries | 4 of 4 | 0.691 | 9 of 16 |
+| N3 shots | 4 of 4 | 0.815 | 11 of 16 |
+| N4 all | 3 of 4 | 0.633 | 10 of 16 |
+
+- **No candidate beats N0,** so N0 stays.
+- **Too few votes:** passes, carries and shots give 0 to 6 votes per clip, against N0's 29 to 250
+  frames.
+- **N3 abstains everywhere:** no strike on these clips heads for one goal and not the other, so it
+  equals N0.
+
+**Confidence: none predicts being wrong.** The orderings (0.5 is chance):
+
+| Confidence | Ordering |
+|---|---|
+| K0, today's team_confidence | 0.62 |
+| K1, agreement times separation | 0.33 |
+| K2, agreement only | 0.23 |
+
+K0 is the best, but under the 0.80 the plan set. So **W6's possession gate and the agents' "no
+team-level claims" stay**: nothing here makes a team-level claim safe yet.
+
+**Why:** the errors left are cluster errors, and nothing measured here sees them. Today's confidence
+is built from the kit margin and the vote, and a wrong cluster can be confident in both. A
+confidence that predicts these errors would have to measure cluster soundness from the picture: kit
+colour read correctly (`observe.kit_rgb`) and each cluster's spread. That is the follow-up below.
+
+**Follow-up, tied to dataset v2 (after the freeze render):** fix how kit colour is read
+(`observe.kit_rgb` drops a green shirt's pixels as grass, reads blue as near-white and white as cyan
+on some clips), re-run the image stage on the validation clips, then measure a cluster-soundness
+confidence the same way.
+
+### Frozen for the test score
+
+The measurement code and every constant are frozen at the commit that adds this section. Nothing in
+the live path changed (N0 and K0 kept), so the test set gets the new per-clip side report only.
