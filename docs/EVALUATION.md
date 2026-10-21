@@ -487,6 +487,13 @@ once per clip: 3 of the 8 clips with ball spells have it flipped throughout, one
 side confidence of 0.88 to 0.97. The test clips have not been graded and will be only once a
 better side decision lets the gate open on validation.
 
+Pre-registered before the official calibration (GROUNDING S6): a bar opens only when the lower
+Wilson 95% bound of its agreement over possession spells is at least 0.60, from at least 3 clips
+(41 spells at 75% agreement); "attacking" needs its own 75% on the samples it would be shown on,
+with the same floor. A preview on the unmerged side fix (#187, #195, #200) would have passed 75%
+at 0.582 on only 11 spells (Wilson 46% to 92%), with "attacking" wrong on 4 of 4: these criteria
+keep that kind of result shut.
+
 ## Football sense (FS1 to FS9)
 
 Goals, shots and pass completion sat inside their published bands while the play looked dumb to

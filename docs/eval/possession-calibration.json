@@ -1,5 +1,5 @@
 {
- "commit": "65ad7bbe347cb8ff53f5d2b27601f8de4c5f966c",
+ "commit": "7993c636e85c888626877b56d0194f15979cdc73",
  "date": "2026-10-21",
  "seeds": [
   108,
@@ -33,8 +33,12 @@
  },
  "show_target": 0.75,
  "sure_target": 0.9,
+ "attacking_target": 0.75,
+ "evidence_lower": 0.6,
+ "min_clips": 3,
  "show": null,
  "sure": null,
+ "attacking": false,
  "curve": [
   {
    "cut": 0.0,
@@ -245,8 +249,14 @@
    }
   },
   "attacking": {
-   "shown": 0,
-   "right": 0
+   "would_show": 0,
+   "right": 0,
+   "samples": 0,
+   "agreement": null,
+   "spells": 0,
+   "by_spell": null,
+   "wilson_95_spells": null,
+   "bootstrap_95_clips": null
   },
   "per_clip": [
    {

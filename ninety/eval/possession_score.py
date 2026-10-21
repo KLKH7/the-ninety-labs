@@ -246,7 +246,7 @@ def percent(v: float | None) -> str:
 
 
 def calibration_md(body: dict) -> str:
-    unset = "**unset** (no cut-off reached its target: the phone shows nothing)"
+    unset = "**unset** (no cut-off reached its target on enough evidence: the phone shows nothing)"
 
     def gate(v):
         return f"**{v}**" if v is not None else unset

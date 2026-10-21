@@ -74,32 +74,35 @@ def test_the_side_is_let_go_after_hold_s(monkeypatch):
 SURE_PHASE = ps.Phase(71.0, "home", "final", True, 0.95)
 
 
-@pytest.mark.parametrize("show, sure, phase, label, is_sure", [
-    (None, None, SURE_PHASE, "unknown", False),  # no gate measured: nothing at all
-    (0.96, None, SURE_PHASE, "unknown", False),  # below SHOW
-    (0.5, None, SURE_PHASE, "possession", False),  # shown, never sure: "likely"
-    (0.5, 0.96, SURE_PHASE, "possession", False),  # below SURE: "likely"
-    (0.5, 0.9, SURE_PHASE, "attacking", True),  # sure, plainly in the final third
-    (0.5, 0.9, ps.Phase(71.0, "home", "final", False, 0.95), "possession", True),  # near the line
-    (0.5, 0.9, ps.Phase(71.0, "home", "middle", True, 0.95), "possession", True),
-    (0.5, 0.9, ps.Phase(71.0, None, None, False, 0.0), "unknown", False),
+@pytest.mark.parametrize("show, sure, attacking, phase, label, is_sure", [
+    (None, None, True, SURE_PHASE, "unknown", False),  # no gate measured: nothing at all
+    (0.96, None, True, SURE_PHASE, "unknown", False),  # below SHOW
+    (0.5, None, True, SURE_PHASE, "possession", False),  # shown, never sure: "likely"
+    (0.5, 0.96, True, SURE_PHASE, "possession", False),  # below SURE: "likely"
+    (0.5, 0.9, True, SURE_PHASE, "attacking", True),  # its bar open, sure, plainly in the final third
+    (0.5, 0.9, False, SURE_PHASE, "possession", True),  # its own bar closed: never "attacking"
+    (0.5, 0.9, True, ps.Phase(71.0, "home", "final", False, 0.95), "possession", True),  # near the line
+    (0.5, 0.9, True, ps.Phase(71.0, "home", "middle", True, 0.95), "possession", True),
+    (0.5, 0.9, True, ps.Phase(71.0, None, None, False, 0.0), "unknown", False),
 ])
-def test_what_the_phone_may_draw(show, sure, phase, label, is_sure):
-    shown = ps.on_screen(phase, show, sure)
+def test_what_the_phone_may_draw(show, sure, attacking, phase, label, is_sure):
+    shown = ps.on_screen(phase, show, sure, attacking)
     assert shown["label"] == label and shown["sure"] is is_sure
     assert (shown["team"] is None) == (label == "unknown")
 
 
 def test_while_the_gate_is_unset_the_layer_shows_nothing():
     # docs/eval/possession-calibration.json: no cut-off reached its target on validation clips.
-    show, sure = ps.gates()
-    assert (show, sure) == (None, None)
-    assert {ps.on_screen(p, show, sure)["label"] for p in PHASES} == {"unknown"}
+    show, sure, attacking = ps.gates()
+    assert (show, sure, attacking) == (None, None, False)
+    assert {ps.on_screen(p, show, sure, attacking)["label"] for p in PHASES} == {"unknown"}
 
 
 def test_the_committed_calibration_states_its_targets_and_its_evidence():
     body = json.loads(ps.CALIBRATION.read_text())
     assert (body["show_target"], body["sure_target"]) == (score.SHOW_TARGET, score.SURE_TARGET)
+    assert (body["attacking_target"], body["evidence_lower"], body["min_clips"]) == (
+        score.ATTACKING_TARGET, score.EVIDENCE_LOWER, score.MIN_CLIPS)
     assert all(c["team_agreement"] is None or c["team_agreement"] < score.SHOW_TARGET for c in body["curve"])
     assert len(body["observations_sha256"]) == 13 and len(body["commit"]) == 40
     assert ROOT.joinpath("docs/eval/possession-calibration.md").read_text() == score.calibration_md(body)
@@ -112,15 +115,47 @@ def sample(conf, team, truth_team, seed=1, spell=1, third="middle", truth_third=
             "truth": {"team": truth_team, "third": truth_third, "spell": spell}}
 
 
-def test_the_gate_is_the_lowest_cut_off_that_reaches_its_target():
-    rows = [sample(0.1, "home", "away"), sample(0.2, "home", "home"), sample(0.3, "home", "home"),
-            sample(0.4, "home", "home"), sample(0.5, "home", "away")]
-    assert score.lowest_cut(rows, 0.75) == 0.2  # 3 of 4 from 0.2 up
-    assert score.lowest_cut(rows, 0.9) is None  # never 9 in 10
-    assert score.lowest_cut([sample(0.3, "home", "home")], 0.9) == 0.3
-    # The lowest cut that reaches it, not just any: from 0.1 up is 4 of 5, and higher ones are too.
-    mostly = [sample(0.1, "home", "away")] + [sample(c, "home", "home") for c in (0.2, 0.3, 0.4, 0.5)]
-    assert score.lowest_cut(mostly, 0.75) == 0.1
+def spells(right: int, wrong: int, conf: float, clips: int = 3, first: int = 0) -> list[dict]:
+    """One sample per possession spell (numbered from `first`), spread over `clips` clips."""
+    out = []
+    for i in range(right + wrong):
+        truth = "home" if i < right else "away"
+        out.append(sample(conf, "home", truth, seed=i % clips, spell=first + i))
+    return out
+
+
+def test_the_gate_is_the_lowest_cut_off_that_reaches_its_target_on_enough_evidence():
+    # 30 spells at 0.3, all right; 10 more at 0.1, all wrong: from 0.1 up it is 75%, but over 40
+    # spells its lower Wilson bound is 0.598, under 0.60; from 0.3 up it opens.
+    assert score.lowest_cut(spells(30, 0, 0.3) + spells(0, 10, 0.1, first=100), 0.75) == 0.3
+    # The lowest cut that opens, not just any: from 0.2 up is 30 of 39 (bound 0.617), and 0.3 too.
+    assert score.lowest_cut(spells(30, 0, 0.3) + spells(0, 9, 0.2, first=100), 0.75) == 0.2
+
+
+def test_a_bar_needs_the_evidence_floor_as_well_as_its_target():
+    assert score.opens(spells(41, 0, 0.5), 0.75, score.team_right)
+    assert not score.opens(spells(5, 0, 0.5), 0.75, score.team_right)  # 100%, but 5 spells
+    assert not score.opens(spells(60, 0, 0.5, clips=2), 0.75, score.team_right)  # 2 clips
+    assert not score.opens(spells(30, 10, 0.5), 0.75, score.team_right)  # 75% of 40: bound 0.598
+    assert score.opens(spells(31, 10, 0.5), 0.75, score.team_right)  # 76% of 41
+    assert score.lowest_cut(spells(5, 0, 0.5), 0.75) is None  # the preview's kind: right, too little
+    # Many samples in few spells are few spells: one spell of 50 right samples does not open it.
+    one = [sample(0.5, "home", "home", seed=s % 3, spell=0) for s in range(50)]
+    assert not score.opens(one, 0.75, score.team_right)
+
+
+def test_attacking_has_its_own_bar_on_its_own_samples():
+    final = dict(third="final", truth_third="final")
+    good = [sample(0.95, "home", "home", seed=i % 3, spell=i, **final) for i in range(41)]
+    assert score.attacking_opens(good, 0.9)
+    wrong_third = [sample(0.95, "home", "home", seed=i % 3, spell=i, third="final", truth_third="middle")
+                   for i in range(41)]
+    assert not score.attacking_opens(wrong_third, 0.9)  # the team right, the third not: closed
+    assert not score.attacking_opens(good, None)  # never sure: never "attacking"
+    middle = [sample(0.95, "home", "home", seed=i % 3, spell=i) for i in range(41)]
+    assert score.attacking_rows(middle, 0.9) == []  # not in the final third: not its samples
+    unsure = [sample(0.5, "home", "home", seed=i % 3, spell=i, **final) for i in range(41)]
+    assert score.attacking_rows(unsure, 0.9) == []  # below SURE: never called "attacking"
 
 
 def test_samples_count_only_where_the_truth_names_a_team():
