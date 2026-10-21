@@ -48,15 +48,15 @@ def test_a_press_lifts_the_foot_and_a_turn_does_not_snap():
 
 
 def test_running_swings_the_legs():
+    """Over a stride at 7 m/s each foot goes from ahead of the hips to well behind them and back."""
     g = Gait(action="run")  # the engine's pose above 4 m/s; "stand" is drawn standing
-    for _ in range(10):
+    x, ahead = 0.0, []
+    for _ in range(40):
         update_gait(g, 0.28, 0.0, 0.04, None)  # 7 m/s along +x
-    g.phase = math.pi / 2
-    a = body_parts(0, 0, LOOK, g)
-    g.phase = 3 * math.pi / 2
-    b = body_parts(0, 0, LOOK, g)
-    shin = lambda ps: next(p for p in ps if p["n"] == "shin_l")["b"]  # noqa: E731
-    assert math.dist(shin(a), shin(b)) > 0.4  # the foot goes from front to back
+        x += 0.28
+        parts = body_parts(x, 0, LOOK, g)
+        ahead.append(next(p for p in parts if p["n"] == "shin_l")["b"][0] - x)
+    assert max(ahead) - min(ahead) > 0.4  # the foot goes from front to back
     assert abs(g.heading) < 0.05
 
 

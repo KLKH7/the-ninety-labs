@@ -17,6 +17,13 @@ from functools import lru_cache
 from pathlib import Path
 
 ASSET = Path(__file__).resolve().parents[2] / "web" / "render" / "assets" / "player.json"
+# The asset's stature: the top of its skull, in the asset's own metres (the body mesh's highest
+# vertex; its hair reaches 1.70). A player `height_m` tall is the asset scaled by
+# height_m / ASSET_STATURE_M, so he is drawn as tall as he is. It was taken as 1.84 m, which drew
+# every player at 91.5% of his height (lesson 157).
+ASSET_STATURE_M = 1.684
+# The forehead, where a header meets the ball: between the brows (1.59) and the top of the skull.
+BROW_Y = 1.63
 
 # Leg search. The same lists and steps run in render.js. Thigh Z is the sideways reach:
 # a plant beside the hip is not on the line the thigh swings along. The grid finds the
@@ -57,7 +64,7 @@ LEAN_SHARE = (("spine_01", 0.35), ("spine_02", 0.35), ("neck_01", 0.3))
 TWIST_SIGN = -1.0
 # The surfaces a touch aims, not in the asset: (bone, rest point skinned wholly to it).
 EXTRA = {
-    "brow": ("head", (0.0, 1.70, 0.13)),
+    "brow": ("head", (0.0, BROW_Y, 0.13)),
     "chest": ("spine_03", (0.0, 1.28, 0.14)),
     "thigh_top_l": ("thigh_l", (0.14, 0.64, 0.10)),
     "thigh_top_r": ("thigh_r", (-0.14, 0.64, 0.10)),
@@ -316,7 +323,7 @@ def _markers(angles: dict) -> dict[str, tuple[float, float, float]]:
 
 
 def _to_object(x, y, heading, height_m, wx, wy, wz=0.0, lift=0.0) -> tuple[float, float, float]:
-    k = height_m / 1.84
+    k = height_m / ASSET_STATURE_M
     hx, hy = math.cos(heading), math.sin(heading)
     dx, dy = (wx - x) / k, (wy - y) / k
     return (-hy * dx + hx * dy, (wz - lift) / k, hx * dx + hy * dy)
@@ -495,7 +502,7 @@ def pose_angles(pose: dict, heading: float, height_m: float) -> dict:
         if err > PLANT_GIVE_UP and lift < 0.0:
             # Lowered, a foot the leg cannot reach is not left to the pose, which would put it through
             # the grass: the leg reaches toward its plant and stays above the grass.
-            floor = -lift / (height_m / 1.84)
+            floor = -lift / (height_m / ASSET_STATURE_M)
             planted, err = _leg(angles, side, target, PLANT_FOOT, twist, f"foot_{side}", False, floor=floor)
             err = 0.0
         if err <= PLANT_GIVE_UP:
@@ -508,7 +515,7 @@ def pose_angles(pose: dict, heading: float, height_m: float) -> dict:
         target = _to_object(x, y, heading, height_m, at[0], at[1], at[2], lift)
         if part in ("foot", "strike"):
             foot = STRIKE_FOOT if part == "strike" else PLANT_FOOT
-            floor = -lift / (height_m / 1.84)
+            floor = -lift / (height_m / ASSET_STATURE_M)
             reached, _ = _leg(angles, side, target, foot, 0.0, f"foot_{side}", False, floor=floor)
             angles = _blend(angles, reached, float(touch["w"]))
             # Halfway between a planted leg and a swing the knee can pass under the grass when the
@@ -535,7 +542,7 @@ def _hold(angles: dict, pose: dict, hold: dict, heading: float, height_m: float)
     x, y, lift = pose.get("x", 0.0), pose.get("y", 0.0), pose.get("lift") or 0.0
     bx, by, bz = hold["at"]
     centre = _to_object(x, y, heading, height_m, bx, by, bz, lift)
-    k = height_m / 1.84
+    k = height_m / ASSET_STATURE_M
     head, rot = _fk(out, max(_bone_index()["clavicle_l"], _bone_index()["clavicle_r"]))
     for side, sign in (("l", 1.0), ("r", -1.0)):
         target = (centre[0] + sign * HOLD_SIDE / k, centre[1], centre[2])
@@ -633,7 +640,7 @@ def dict_angles(raw: dict) -> dict:
 
 
 def to_world(x, y, heading, height_m, point, lift: float = 0.0) -> tuple[float, float, float]:
-    k = height_m / 1.84
+    k = height_m / ASSET_STATURE_M
     hx, hy = math.cos(heading), math.sin(heading)
     ox, oy, oz = point
     return (
