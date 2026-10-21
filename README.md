@@ -1,0 +1,1 @@
+Validation observations (render run v1, ours-v2), judged by the height and neighbour checks (#195) and with every kit read again by R4, both shirt colours (#202, kit-colour-plan.md). For W6s DRY possession calibration only: not official, no gate change. Made by ninety.eval.kit_colour at 6d91572.
