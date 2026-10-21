@@ -1563,9 +1563,11 @@ def test_kept_off_his_place_by_one_standing_on_it_he_does_not_circle_him(monkeyp
 def test_through_a_restart_wait_the_defending_side_keeps_its_presser_and_cover():
     """Defect (lesson 174): while a free kick waited, two defenders swapped the cover's role at every
     look of their side's brain, twice a second: the order by time to the ball moved with the very
-    walks the two roles sent them on, so both walked out and back through the whole wait. The side
-    keeps the presser and cover it named when the restart was given; once the ball is in play it
-    asks again."""
+    walks the two roles sent them on, so both walked out and back through the whole wait; and, asked
+    again as the taker stood over the ball, the cover was named to press and ran in from 11 m off,
+    inside 9.15 m by the kick. The side keeps the presser and cover it named when the restart was
+    given until the ball is in play; then it asks again."""
+    from ninety.sim.engine import BRAIN_EVERY
     e = corner_wait()  # a corner to home, its kick 30 s off: away defends
     for _ in range(int(1.0 / DT)):
         e.step()
@@ -1579,7 +1581,17 @@ def test_through_a_restart_wait_the_defending_side_keeps_its_presser_and_cover()
     assert e.restart is not None  # premise: still waiting
     assert e.who_presses(brain) != named  # premise: asked again, the order would name another
     assert brain.pressers == named
-    e.restart = None  # in play
-    for _ in range(int(1.0 / DT)):
+    for _ in range(int(40 / DT)):  # until it is taken: the taker over the ball, not yet kicked
+        e.step()
+        if e.restart is None:
+            break
+    assert e.set_by is not None  # premise
+    frames = 0
+    while e.set_by is not None:
+        e.step()
+        frames += 1
+        assert brain.pressers == named
+    assert frames >= BRAIN_EVERY  # premise: the brain looked while it was being taken
+    for _ in range(int(1.0 / DT)):  # in play
         e.step()
     assert brain.pressers == e.who_presses(brain) != named

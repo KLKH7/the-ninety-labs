@@ -2251,14 +2251,17 @@ class Engine:
                 along = (p.vx * dx + p.vy * dy) / (d or 1.0)
                 reach[p.id] = p.physique.time_to_cover(d, along)
             brain.update(self.t, holder == team, bx, reach)
-            if holder != team and self.restart is not None:
-                # While a restart waits, the side keeps the presser and cover it named when it was
-                # given (design). Asked again at every look, the order by time to the ball moved with
-                # the very walks the two roles sent them on, and two players swapped roles at every
-                # look, out and back through the whole wait (lesson 174).
-                if self.restart.pressers is None:
-                    self.restart.pressers = self.who_presses(brain)
-                brain.pressers = self.restart.pressers
+            given = self.restart or self.set_by
+            if holder != team and given is not None:
+                # Until a restart's ball is in play, the side keeps the presser and cover it named when
+                # the restart was given (design). Asked again at every look, the order by time to the
+                # ball moved with the very walks the two roles sent them on, and two players swapped
+                # roles at every look, out and back through the whole wait; asked again as the taker
+                # stood over the ball, the cover was named to press and ran in from his place 11 m off
+                # (lesson 174).
+                if given.pressers is None:
+                    given.pressers = self.who_presses(brain)
+                brain.pressers = given.pressers
             elif holder != team:
                 brain.pressers = self.who_presses(brain)
             if holder != team:  # O2: pick up the attackers who threaten our goal
