@@ -46,26 +46,45 @@ FOULED_PLACED = {"foul"}  # placed where the fouled player was (engine.foul): th
 NOT_PLACED = {"substitution"}
 
 
+def in_a_cut(k: int, cuts: list[dict] | None) -> bool:
+    """Frame k is one the broadcast cut away from (meta.json `cuts`, ninety/render/edit.py)."""
+    return any(c["first_frame"] <= k <= c["last_frame"] for c in cuts or ())
+
+
+def check_frames(frames: list[dict], cuts: list[dict] | None = None) -> None:
+    """A clip's frames are consecutive match frames, except across a cut its meta.json records
+    (docs/DATA_CONTRACT.md). Anything else is refused: a missing frame would be graded as nothing."""
+    for prev, f in zip(frames, frames[1:], strict=False):
+        skipped = range(prev["frame"] + 1, f["frame"])
+        if f["frame"] != prev["frame"] + 1 and not (skipped and all(in_a_cut(k, cuts) for k in skipped)):
+            raise ValueError(f"frames must be consecutive from frame {frames[0]['frame']}, except across "
+                             f"a recorded cut; frame {f['frame']} follows frame {prev['frame']}")
+
+
 def reference_point(kind: str, team: str, t: float, frames: list[dict],
-                    near: tuple[float, float]) -> tuple[float, float, float, float] | None:
+                    near: tuple[float, float], cuts: list[dict] | None = None,
+                    ) -> tuple[float, float, float, float] | None:
     """Where the reference object of an event of this kind was at time t, as (x, y, vx, vy): the
     ball, or for a player-placed kind the player of `team` nearest to the spot `near` (vision's
     tracker cannot be expected to know which shirt it is). None when the kind has no place or t is
-    outside the frames."""
+    outside the frames or in a cut the broadcast made (nothing was shown there)."""
     if kind in NOT_PLACED:
         return None
     k = round(t * FPS)
     if kind == "goal":  # the goal's own frame already shows the kickoff (engine.kickoff): the ball
         k -= 1          # as it crossed is the frame before, as the renderer reads it (clip.py)
     # A clip cut from a match keeps the match's frame numbers (docs/DATA_CONTRACT.md, a window),
-    # so frames are found by number from the first one, not by position from 0.
-    first = frames[0]["frame"] if frames else 0
-    if not 0 <= k - first < len(frames):
+    # so frames are found by number, not by position from 0; a broadcast cut leaves some out.
+    if not frames or not frames[0]["frame"] <= k <= frames[-1]["frame"]:
         return None
-    frame = frames[k - first]
-    if frame["frame"] != k:
-        raise ValueError(f"frames must be consecutive from frame {first}; position {k - first} "
-                         f"holds frame {frame['frame']}")
+    first = frames[0]["frame"]
+    frame = frames[k - first] if k - first < len(frames) and frames[k - first]["frame"] == k else \
+        next((f for f in frames if f["frame"] == k), None)
+    if frame is None:
+        if in_a_cut(k, cuts):
+            return None
+        raise ValueError(f"frames must be consecutive from frame {first}, except across a recorded cut; "
+                         f"frame {k} is missing")
     if kind in PLAYER_PLACED | FOULED_PLACED:
         side = team if kind in PLAYER_PLACED else ("away" if team == "home" else "home")
         players = [p for p in frame["players"] if p["team"] == side]
@@ -77,19 +96,20 @@ def reference_point(kind: str, team: str, t: float, frames: list[dict],
     return b["x"], b["y"], b.get("vx", 0.0), b.get("vy", 0.0)
 
 
-def place_error(event: dict, frames: list[dict]) -> float | None:
+def place_error(event: dict, frames: list[dict], cuts: list[dict] | None = None) -> float | None:
     """How far the event's spot is from its reference object at the event's own time. None for a
     kind with no place; infinity when the time is outside the frames (nothing to be right about)."""
     if event["type"] in NOT_PLACED:
         return None
-    point = reference_point(event["type"], event["team"], event["t"], frames, (event["x"], event["y"]))
+    point = reference_point(event["type"], event["team"], event["t"], frames, (event["x"], event["y"]), cuts)
     if point is None:
         return math.inf
     return math.hypot(point[0] - event["x"], point[1] - event["y"])
 
 
 def match(truth: list[dict], detected: list[dict], window_s: float = WINDOW_S,
-          frames: list[dict] | None = None, radius_m: float | None = None) -> list[dict]:
+          frames: list[dict] | None = None, radius_m: float | None = None,
+          cuts: list[dict] | None = None) -> list[dict]:
     """Pair detections with true events: same type and team, at most window_s apart, each event
     used once, the closest pair in time taken first. With radius_m, a detection must also be within
     radius_m of where its reference object was at the detection's own time."""
@@ -99,7 +119,7 @@ def match(truth: list[dict], detected: list[dict], window_s: float = WINDOW_S,
             if (t["type"], t["team"]) != (d["type"], d["team"]):
                 continue
             if radius_m is not None:
-                err = place_error(d, frames)  # at the time vision gives, d["t"]
+                err = place_error(d, frames, cuts)  # at the time vision gives, d["t"]
                 if err is not None and err > radius_m + EPS:
                     continue
             dt = abs(d["t"] - t["t"])
@@ -114,7 +134,7 @@ def match(truth: list[dict], detected: list[dict], window_s: float = WINDOW_S,
         used_truth.add(i)
         used_detected.add(j)
         t, d = truth[i], detected[j]
-        err = place_error(d, frames) if frames is not None else None
+        err = place_error(d, frames, cuts) if frames is not None else None
         # Infinity stays inside the matching: strict JSON has no Infinity, and the agents read this.
         outside = err is not None and math.isinf(err)
         pairs.append({"truth_id": t["id"], "detected_id": d["id"], "type": t["type"], "team": t["team"],
@@ -156,17 +176,20 @@ def grade(truth: list[dict], detected: list[dict], pairs: list[dict]) -> dict:
 
 
 def score(truth: list[dict], detected: list[dict], frames: list[dict] | None = None,
-          window_s: float = WINDOW_S) -> dict:
+          window_s: float = WINDOW_S, cuts: list[dict] | None = None) -> dict:
     """Grade under time only and, given the truth frames, under the strict and lenient place rules.
-    The headline (pass F1, strict) needs the frames; without them it is None."""
+    The headline (pass F1, strict) needs the frames; without them it is None. `cuts` are the dead
+    balls the broadcast cut away from (the clip's meta.json): no event is in one (C2)."""
+    if frames is not None:
+        check_frames(frames, cuts)
     report = {
         "rules": {"time_window_s": window_s, "strict_m": STRICT_M, "lenient_m": LENIENT_M,
                   "match": "same type and team, one to one, nearest first; spot judged at the detected time"},
-        "time_only": grade(truth, detected, match(truth, detected, window_s, frames)),
+        "time_only": grade(truth, detected, match(truth, detected, window_s, frames, cuts=cuts)),
     }
     if frames is not None:
         for rule, radius in (("strict", STRICT_M), ("lenient", LENIENT_M)):
-            report[rule] = grade(truth, detected, match(truth, detected, window_s, frames, radius))
+            report[rule] = grade(truth, detected, match(truth, detected, window_s, frames, radius, cuts))
     strict = report.get("strict", {}).get("per_type", {})
     report["headline"] = {"rule": "strict", "pass_f1": strict.get(HEADLINE_TYPE, {}).get("f1")}
     return report
@@ -197,7 +220,10 @@ def main(argv: list[str] | None = None) -> None:
     args = ap.parse_args(argv)
 
     frames = [json.loads(line) for line in args.frames.read_text().splitlines() if line.strip()]
-    report = score(load_events(args.truth, "truth"), load_events(args.detected, "vision"), frames)
+    # A rendered clip's meta.json sits beside its frames and records where the broadcast cut.
+    meta = args.frames.parent / "meta.json"
+    cuts = json.loads(meta.read_text()).get("cuts", []) if meta.exists() else []
+    report = score(load_events(args.truth, "truth"), load_events(args.detected, "vision"), frames, cuts=cuts)
     report["inputs"] = {"truth": str(args.truth), "frames": str(args.frames), "detected": str(args.detected),
                         "git_commit": git_commit(), "date": datetime.date.today().isoformat()}
     args.report.parent.mkdir(parents=True, exist_ok=True)
