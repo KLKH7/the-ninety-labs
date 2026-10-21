@@ -466,3 +466,36 @@ def test_play_near_a_corner_flag_is_framed_with_the_pitch_filling_the_picture():
     d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=True)
     cam = _held(d, 3.0, 8.0, 150)
     assert well_framed(cam, (3.0, 8.0, 0.11)), pitch_share(cam)
+
+
+def frameable(position, ball, width=1280, height=720) -> bool:
+    """Whether ANY shot from the gantry at `position` frames `ball` well (well_framed): every aim on
+    a 3 m grid over the pitch and 6 m round it, aimed at the grass or at the ball's height, through
+    every lens the rig has (2 to 32 degrees high). It is the director's ceiling, written apart
+    from the director's own aiming code: a frame no shot can frame is not a miss of the director
+    (lesson 175)."""
+    import math as _m
+
+    for half_width in (3.0, 4.0, 5.0, 6.5, 8.0, 10.0, 13.0, 16.0, 20.0, 25.0, 30.0):
+        for tz in sorted({0.0, round(ball[2], 2)}):
+            for ax in range(-6, 112, 3):
+                for ay in range(-6, 75, 3):
+                    target = (float(ax), float(ay), tz)
+                    dist = _m.dist(position, target)
+                    hfov = 2 * _m.atan(half_width / dist)
+                    vfov = _m.degrees(2 * _m.atan(_m.tan(hfov / 2) * height / width))
+                    if not 2.0 <= vfov <= 32.0:
+                        continue
+                    if well_framed(Camera(position, target, vfov, width, height), ball):
+                        return True
+    return False
+
+
+def test_the_frameable_oracle_knows_a_ball_on_the_corner_flag_cannot_be_framed():
+    """The oracle's planted cases: on the near corner flag no shot from the gantry has the ball in
+    the CENTRAL box with the pitch over PITCH_SHARE_MIN of the picture; at midfield and a few metres
+    off the flag one does."""
+    gantry = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=True).position
+    assert not frameable(gantry, (0.5, 0.5, 0.11))
+    assert frameable(gantry, (52.5, 34.0, 0.11))
+    assert frameable(gantry, (3.0, 8.0, 0.11))
