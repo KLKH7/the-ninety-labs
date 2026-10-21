@@ -12,7 +12,7 @@ import pytest
 
 from ninety.render.camera import Camera
 from ninety.render.clip import RenderUnavailable, _appearance, browser_page
-from ninety.render.meshpose import world_markers
+from ninety.render.meshpose import pose_markers, world_markers
 from ninety.render.params import sample_params
 from ninety.render.scene import PLANT_AHEAD_MAX, Gait, Look, body_parts, parts_box, reach_sign
 
@@ -248,8 +248,12 @@ def test_a_player_is_drawn_as_tall_as_he_is(page):
                 "keypoints": [], "blur": [0.0, 0.0], "score": [0, 0], "clock": "00:00",
                 "goal_age": None, "goal_side": None, "net": None, "want_image": False}
         box = page.evaluate("s => window.ninety.frame(s)", spec)["objects"][look.id]["bbox"]
-        sole, crown = cam.project((40.0, 30.0, 0.0)), cam.project((40.0, 30.0, stature))
-        drawn, real = box[3] - box[1], sole[1] - crown[1]
+        # From the side, the nearer of his planted feet (about 0.2 m either side of him) is the
+        # lowest thing drawn: measure from the grass under it, not under his centre.
+        feet = pose_markers(pose, 0.0, stature)
+        sole = max(cam.project((feet[f][0], feet[f][1], 0.0))[1] for f in ("foot_l", "foot_r"))
+        crown = cam.project((40.0, 30.0, stature))[1]
+        drawn, real = box[3] - box[1], sole - crown
         assert abs(drawn / real - 1.0) < 0.02, (stature, drawn, real)
 
 

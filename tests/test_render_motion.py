@@ -513,6 +513,12 @@ def test_the_stride_lengthens_and_the_swing_lifts_with_speed():
     assert lifts == sorted(lifts) and lifts[0] > 0.05 and lifts[-1] > 0.3, lifts
 
 
+# A low step after the body (scene.STEP_LIFT) with 4 cm for the foot marker above its sole, both
+# lengths of the body: for the 1.84 m player these tests draw, scaled as the scene scales every
+# length, by height / ASSET_STATURE_M.
+LOW_STEP_M = (STEP_LIFT + 0.04) * 1.84 / ASSET_STATURE_M
+
+
 def test_a_kick_straight_after_a_touch_stands_on_its_other_foot():
     """Old (0.4.2): a touch then a strike while walking left the other foot to the stride, which
     lifted it as the kick swung: both feet in the air, the drawn body above the label's foot line
@@ -546,7 +552,7 @@ def test_a_kick_straight_after_a_touch_stands_on_its_other_foot():
         if touch and touch["part"] in ("foot", "strike") and touch["w"] >= 0.9:  # the touch, the kick
             other = "foot_r" if touch["side"] == "l" else "foot_l"
             # It stands, or takes a low step after the body (STEP_LIFT, 8 cm): it is not swung up.
-            assert m[other][2] < STEP_LIFT + 0.04, (i, touch["part"], m[other])
+            assert m[other][2] < LOW_STEP_M, (i, touch["part"], m[other])
 
 
 @pytest.mark.parametrize("gap", [0, 5])
@@ -586,7 +592,7 @@ def test_a_first_touch_then_a_strike_on_the_move_keeps_a_foot_on_the_grass(gap):
     for i, (pose, m, _, _) in enumerate(drawn):
         # Walking, a foot is always on the grass, or on a low step after the body (STEP_LIFT).
         low = min(m["foot_l"][2], m["foot_r"][2])
-        assert -0.03 < low < STEP_LIFT + 0.04, (i, pose["touch"], m["foot_l"], m["foot_r"])
+        assert -0.03 < low < LOW_STEP_M, (i, pose["touch"], m["foot_l"], m["foot_r"])
 
 
 def test_a_thigh_touch_on_the_move_keeps_a_foot_on_the_grass():
@@ -609,7 +615,7 @@ def test_a_thigh_touch_on_the_move_keeps_a_foot_on_the_grass():
     assert any(p["touch"] and p["touch"]["part"] == "thigh" for p, *_ in drawn)
     for i, (pose, m, _, _) in enumerate(drawn):
         low = min(m["foot_l"][2], m["foot_r"][2])
-        assert -0.03 < low < STEP_LIFT + 0.04, (i, pose["touch"], m["foot_l"], m["foot_r"])
+        assert -0.03 < low < LOW_STEP_M, (i, pose["touch"], m["foot_l"], m["foot_r"])
 
 
 def test_a_keeper_stooping_on_the_run_keeps_his_feet_on_the_grass():
