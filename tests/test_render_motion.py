@@ -20,6 +20,7 @@ from ninety.render.scene import (
     LEAD_MAX,
     PLANT_AHEAD_MAX,
     STEP_LIFT,
+    THROW_FOLLOW_S,
     Gait,
     Look,
     _step_m,
@@ -30,6 +31,8 @@ from ninety.render.scene import (
     mesh_pose,
     parts_box,
     reach_sign,
+    throw_at,
+    throws,
     touch_at,
 )
 
@@ -662,3 +665,99 @@ def test_a_keeper_stooping_on_the_run_keeps_his_feet_on_the_grass():
     drawn = _draw(frames)["h1"]
     for i, (pose, m, _, _) in enumerate(drawn):
         assert min(m["foot_l"][2], m["foot_r"][2]) > -0.03, (i, pose["lift"], m["foot_l"], m["foot_r"])
+
+
+def _throw_in(wait=30, hold=5, after=30, way=(-15.6, 5.5, 10.0)):
+    """Engine-shaped frames of a throw-in (engine.throw_hands, tick_carrier): the taker stands behind
+    the touchline facing the pitch with the ball on the grass 0.28 m in front of him; on the frame he
+    is named thrower it is still there, then rises 0.48 m a frame (P6's 12 m/s) to 1.85 m, stays for
+    `hold` frames, and leaves on the first frame after, at `way` m/s; he then walks off."""
+    frames, x, y = [], 50.0, -0.55
+    bx, by = 50.0, -0.27
+    n = wait + 1 + 4 + hold + after
+    rel = wait + 1 + 4 + hold
+    for i in range(n):
+        if i <= wait:
+            action, z = "stand", 0.0
+        elif i < rel:
+            action, z = "throw", min(1.85, 0.48 * (i - wait))
+        else:
+            action = "stand" if i < rel + 3 else "walk"
+        if i < rel:
+            ball = {"x": bx, "y": by, "z": z if i > wait else 0.0, "vx": 0.0, "vy": 0.0}
+        else:
+            t = (i - rel) / FPS
+            ball = {"x": bx + way[0] * t, "y": by + way[1] * t, "z": 1.85 + way[2] * t - 4.9 * t * t,
+                    "vx": way[0], "vy": way[1]}
+        v = 0.0 if i < rel + 3 else min(1.5, 0.1 * (i - rel - 2))
+        y += v / FPS
+        frames.append({"frame": 2000 + i, "ball": ball, "possessor": "h1" if wait <= i < rel else None,
+                       "players": [{"id": "h1", "x": x, "y": y, "vx": 0.0, "vy": v, "heading": math.pi / 2,
+                                    "action": action, "dive": 0.0}]})
+    return frames, wait, rel
+
+
+def _draw_throw(frames, height=1.84):
+    look = Look("h1", "home", "FB", height, 1.0, "#c68642", "#1b1410")
+    thrown = throws(frames, FPS)
+    g, out = Gait(), []
+    for fi, fr in enumerate(frames):
+        pl, b = fr["players"][0], fr["ball"]
+        g.heading, g.action, g.speed = pl["heading"], pl["action"], math.hypot(pl["vx"], pl["vy"])
+        g.phase = (g.phase + 2 * math.pi * g.speed / FPS / (2 * _step_m(g.speed))) % (2 * math.pi)
+        touch_at(g, [], fi, height, FPS, pl["x"], pl["y"])
+        hold_at(g, [], fi, (b["x"], b["y"], b["z"]), height, FPS)
+        throw_at(g, thrown.get("h1", []), fi, height, FPS, pl["x"], pl["y"])
+        body_parts(pl["x"], pl["y"], look, g, None)
+        pose = mesh_pose(g, pl["x"], pl["y"], 0.0)
+        m = pose_markers(pose, g.heading, height)
+        rel = {k: (v[0] - pl["x"], v[1] - pl["y"], v[2]) for k, v in m.items()}
+        out.append((pose, m, rel, g.speed))
+    return out
+
+
+def test_a_throw_in_keeps_both_hands_on_the_ball_from_the_grass_to_the_throw():
+    """Old: on the frame the engine named him thrower the arms snapped over his head with the ball
+    still at his feet, the ball rose into the hands by itself, and on the throw the arms dropped to
+    his sides in one frame (seed 21, a6 at 6:09). Now he bends to the ball beforehand, a hand either
+    side of it (HOLD_SIDE) from the frame it starts to rise until it leaves, and follows through."""
+    frames, start, rel = _throw_in()
+    drawn = _draw_throw(frames)
+    side = HOLD_SIDE * 1.84 / ASSET_STATURE_M
+    for i in range(start, rel + 1):
+        b = frames[i]["ball"]
+        centre = (b["x"], b["y"], b["z"] + BALL_RADIUS)
+        for s in "lr":
+            assert math.dist(drawn[i][1][f"hand_{s}"], centre) < side + 0.04, (i, s, drawn[i][1][f"hand_{s}"])
+    # Bent to it on the grass: the head is below the hips' standing height when the lift starts.
+    assert drawn[start][1]["head"][2] < 1.0, drawn[start][1]["head"]
+    # The follow-through goes the way the ball went (forward along the throw), not straight down.
+    way = (-15.6 / math.hypot(15.6, 5.5), 5.5 / math.hypot(15.6, 5.5))
+    mid = lambda m: [(m["hand_l"][j] + m["hand_r"][j]) / 2 for j in range(3)]  # noqa: E731
+    a, b = mid(drawn[rel][1]), mid(drawn[rel + 4][1])
+    assert (b[0] - a[0]) * way[0] + (b[1] - a[1]) * way[1] > 0.25, (a, b)
+    assert b[2] < a[2] - 0.3, (a, b)
+
+
+def test_a_throw_in_moves_no_limb_in_a_jump():
+    """Old: the arms jumped about a metre on the frame he was named thrower and again on the throw.
+    Now no marker moves relative to the body faster than the limb cap, with two stated exceptions.
+    While the engine lifts the ball at 12 m/s (0.48 m a frame) the hands hold it, so the head moves
+    no further in a frame than the ball and each hand no further than the ball plus the 4 cm either
+    side of its hold at both ends and a frame's turn of the wrist about it (0.15 m). In the
+    follow-through the hands swing on from a ball that left them at about 20 m/s: up to 0.3 m a frame
+    (7.5 m/s, design), still a third of the release."""
+    frames, start, rel = _throw_in()
+    drawn = _draw_throw(frames)
+    for i in range(1, len(drawn)):
+        cap = _limb_cap(max(drawn[i - 1][3], drawn[i][3]))
+        for k in ("head", "hand_l", "hand_r", "foot_l", "foot_r"):
+            limit = cap
+            if start < i <= rel:
+                a, b = frames[i - 1]["ball"], frames[i]["ball"]
+                step = math.dist((a["x"], a["y"], a["z"]), (b["x"], b["y"], b["z"]))
+                limit = max(cap, step + (0.15 if k.startswith("hand") else 0.0))
+            elif rel < i <= rel + round(THROW_FOLLOW_S * FPS) and k.startswith("hand"):
+                limit = 0.3
+            mv = math.dist(drawn[i - 1][2][k], drawn[i][2][k])
+            assert mv <= limit, (i, k, round(mv, 3), round(limit, 3))

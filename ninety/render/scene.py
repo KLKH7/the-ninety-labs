@@ -88,7 +88,7 @@ ANKLE_BACK = 0.11  # the drawn ankle sits this far behind the foot marker (asset
 PLANT_AHEAD_MAX = 0.30
 # The gait plants their feet. A touch with the foot or thigh is taken in stride: the other foot stays
 # planted and the touch takes the one that meets the ball.
-PLANT_ACTIONS = ("stand", "walk", "run", "chest", "head", "strike", "foot", "thigh", "hands")
+PLANT_ACTIONS = ("stand", "walk", "run", "chest", "head", "strike", "foot", "thigh", "hands", "throw")
 # Running, each foot is planted over the part of the stride where the gait (meshpose.gait) has it
 # on the grass: the stored stride swings a foot along one path and it is lowest and going back
 # around these phases (measured on the asset: the left foot is forward at 1.5 pi and lifts behind
@@ -104,7 +104,7 @@ RUN_HALF_WIDTH_M = 0.11
 SWING_LIFT_M = (0.10, 0.40)
 LATE_LIFT = 0.5  # past this share of its swing a foot still on the grass waits for the next one
 FRAME_S = 0.04  # one frame at the engine's 25 fps (ninety.sim.engine.FPS)
-MESH_ARM_ACTIONS = ("strike", "foot", "thigh", "chest", "head", "hands", "shield")
+MESH_ARM_ACTIONS = ("strike", "foot", "thigh", "chest", "head", "hands", "shield", "throw")
 HIP_PIVOT_Z = 0.99  # the mesh's spine_01 joint, where a bend over the ball starts (asset rest pose)
 
 # How a touch is drawn (design). The engine says which part met the ball and the frame says where
@@ -145,6 +145,28 @@ HOLD_BEND = 1.5
 HOLD_DROP_M = 0.33  # as low as the planted legs still reach with flat feet (measured on the asset)
 HOLD_EASE_S = 0.16
 HOLD_RUN_MPS = 4.0  # at this speed or faster a keeper takes the ball without dropping his hips (design)
+# How a throw-in is drawn (design, renderer only). The ball is the engine's and the body follows it,
+# never the reverse: it lies on the grass in front of the taker until the frame the engine names him
+# thrower, rises straight up into his hands over his head from the next frame (engine.throw_hands,
+# at P6's 12 m/s: about four frames), stays there while he sets, and leaves on the first frame after
+# (Law 15, GROUNDING L7 and D5). Drawn, he bends over the ball and has a hand either side of it
+# (meshpose.HOLD_SIDE, as a keeper holds it) by the frame it starts to rise, over THROW_PICK_S; keeps
+# them on it as it rises, the trunk bent over it only as far as its height asks (as a keeper's,
+# hold_at), so he straightens as it comes up; leans into the throw (THROW_LEAN) over the
+# THROW_LOAD_S before he lets it go, so the ball is over his head with the elbows bent; and follows
+# through: his hands go on the way the ball went, THROW_FOLLOW_M, and down THROW_DROP_M over
+# THROW_FOLLOW_S, the trunk bending on to THROW_BEND, and come back to his sides over
+# THROW_RECOVER_S. The engine holds the ball where it lets it go, in front of his head,
+# so the drawn throw has no backswing behind the head: drawing one would move the ball off its truth.
+THROW_PICK_S = 0.7
+HANG_AHEAD_M, HANG_Z = 0.05, 0.75  # between his hands as they hang (asset rest pose, asset metres)
+THROW_LOAD_S = 0.2
+THROW_LEAN = 0.2
+THROW_FOLLOW_S = 0.2
+THROW_FOLLOW_M = 0.35
+THROW_DROP_M = 0.55
+THROW_BEND = 0.45
+THROW_RECOVER_S = 0.5
 TOUCH_PARTS = ("foot", "thigh", "chest", "head")
 HEADER_LIFT_MAX = 0.3  # a header above the standing brow is drawn as a jump, at most this high
 HEAD_Z = 1.575  # the centre of the mesh's head (chin about 1.47, skull top 1.684, asset metres)
@@ -483,7 +505,7 @@ def hold_at(g: Gait, runs: list[tuple[int, int]], fi: int, ball: tuple[float, fl
         return
     k = height_m / ASSET_STATURE_M
     z = ball[2] + BALL_RADIUS
-    depth = min(max((HOLD_STAND_Z * k - z) / ((HOLD_STAND_Z - BALL_RADIUS) * k), 0.0), 1.0)
+    depth = _hold_depth(z, k)
     g.hold = {
         "at": [round(ball[0], 4), round(ball[1], 4), round(z, 4)],
         "w": round(w, 4),
@@ -492,6 +514,101 @@ def hold_at(g: Gait, runs: list[tuple[int, int]], fi: int, ball: tuple[float, fl
     # On the move he stoops less: lowered, the legs could not reach feet the body is running past.
     moving = max(0.0, 1.0 - g.speed / HOLD_RUN_MPS)
     g.lift = min(g.lift, -round(HOLD_DROP_M * depth * k * w * moving, 4))
+
+
+def _hold_depth(z: float, k: float) -> float:
+    """How far over a ball with its centre `z` high a body bends to hold it: 1 on the grass, 0 from
+    HOLD_STAND_Z up (in the player's own scale)."""
+    return min(max((HOLD_STAND_Z * k - z) / ((HOLD_STAND_Z - BALL_RADIUS) * k), 0.0), 1.0)
+
+
+def throws(frames: list[dict], fps: int = 25) -> dict[str, list[dict]]:
+    """Per taker, his throw-ins: the frame the engine names him thrower (the ball still on the grass;
+    it rises from the next frame), the release (the first frame after: the ball still in his hands,
+    moving from the next frame) with where the ball was and the way it went, and the ball's centre
+    from THROW_PICK_S before the start to the release, where his hands go."""
+    out: dict[str, list[dict]] = {}
+    prev: dict[str, str] = {}
+    pick = round(THROW_PICK_S * fps)
+    for i, fr in enumerate(frames):
+        for pl in fr["players"]:
+            a, was = pl.get("action", ""), prev.get(pl["id"], "")
+            prev[pl["id"]] = a
+            if a == "throw" and was != "throw":
+                out.setdefault(pl["id"], []).append({"start": i, "release": None, "way": None,
+                                                     "first": max(0, i - pick)})
+            elif was == "throw" and a != "throw" and out.get(pl["id"]):
+                t = out[pl["id"]][-1]
+                if t["release"] is None:
+                    t["release"] = i
+                    b0 = fr["ball"]
+                    b1 = frames[i + 1]["ball"] if i + 1 < len(frames) else None
+                    dx, dy = (b1["x"] - b0["x"], b1["y"] - b0["y"]) if b1 else (b0.get("vx", 0.0),
+                                                                                   b0.get("vy", 0.0))
+                    n = math.hypot(dx, dy)
+                    h = pl.get("heading", 0.0)
+                    t["way"] = (dx / n, dy / n) if n > 1e-6 else (math.cos(h), math.sin(h))
+                    t["body"] = (pl["x"], pl["y"], h)  # where he stood as he let it go
+    for mine in out.values():
+        for t in mine:
+            last = t["release"] if t["release"] is not None else len(frames) - 1
+            balls = (frames[j]["ball"] for j in range(t["first"], last + 1))
+            t["ball"] = [(b["x"], b["y"], b["z"] + BALL_RADIUS) for b in balls]
+    return out
+
+
+def throw_at(g: Gait, mine: list[dict], fi: int, height_m: float, fps: int, x: float, y: float) -> None:
+    """A throw-in at frame `fi` (throws): both hands on the ball from before it rises until it is
+    thrown, then on through the throw (g.hold), bending over it and dropping the hips while it is low
+    (g.lift). (x, y) is where he is now. Leaves g.hold and g.lift alone when he is not taking one."""
+    pick = round(THROW_PICK_S * fps)
+    for t in mine:
+        start, rel, first = t["start"], t["release"], t["first"]
+        end = math.inf if rel is None else rel + (THROW_FOLLOW_S + THROW_RECOVER_S) * fps
+        if not start - pick < fi < end:
+            continue
+        k = height_m / ASSET_STATURE_M
+        # Reaching down for it, the trunk, the hips and the hands' aim go together, from where his
+        # hands hang to the ball: an arm aimed at the ball from a body not yet bent to it flips
+        # between ways of reaching it.
+        s = _ease((fi - (start - pick)) / pick) if fi < start else 1.0
+        w = min(1.0, 3.0 * s)
+        u = -math.inf if rel is None else (fi - rel) / fps  # seconds since the ball left his hands
+        if u > THROW_FOLLOW_S:
+            w = min(w, 1.0 - _ease((u - THROW_FOLLOW_S) / THROW_RECOVER_S))
+        if u <= 0:
+            at = t["ball"][fi - first]
+            if s < 1.0:
+                hx, hy = math.cos(g.heading), math.sin(g.heading)
+                hang = (x + hx * HANG_AHEAD_M * k, y + hy * HANG_AHEAD_M * k, HANG_Z * k)
+                at = tuple(hang[j] + (at[j] - hang[j]) * s for j in range(3))
+        else:
+            # The hands go on the way the ball went, and down, and come back to his sides from there:
+            # where they are is kept relative to him, as he turns and walks off after the throw.
+            q = math.sin(0.5 * math.pi * min(u / THROW_FOLLOW_S, 1.0))
+            bx, by, bz = t["ball"][rel - first]
+            sx, sy, sh = t["body"]
+            dx, dy = t["way"]
+            fx, fy = bx - sx + dx * THROW_FOLLOW_M * k * q, by - sy + dy * THROW_FOLLOW_M * k * q
+            c, sn = math.cos(g.heading - sh), math.sin(g.heading - sh)
+            at = (x + fx * c - fy * sn, y + fx * sn + fy * c, bz - THROW_DROP_M * k * q)
+        # Bent over the ball while it is low, and straightening as it rises, all the way up to where he
+        # holds it: the trunk comes up over the whole lift, not in its first two frames. It is up most
+        # of the way by the time the ball passes his chest, or his shoulders would be down over the
+        # ball, closer to it than his arms can fold to hold it (measured on the asset).
+        top = max(max(b[2] for b in t["ball"]), HOLD_STAND_Z * k)
+        depth = min(max((top - at[2]) / (top - BALL_RADIUS), 0.0), 1.0) if u <= 0 else 0.0
+        bend = HOLD_BEND * depth ** 1.5 * s
+        if -THROW_LOAD_S < u <= 0:
+            bend += THROW_LEAN * _ease((u + THROW_LOAD_S) / THROW_LOAD_S)
+        elif u > 0:
+            bend += THROW_LEAN + (THROW_BEND - THROW_LEAN) * _ease(u / THROW_FOLLOW_S)
+        g.hold = {"at": [round(at[0], 4), round(at[1], 4), round(at[2], 4)], "w": round(w, 4),
+                  "bend": round(bend, 4)}
+        # The hips come up ahead of the trunk, for the same reason.
+        moving = max(0.0, 1.0 - g.speed / HOLD_RUN_MPS)
+        g.lift = min(g.lift, -round(HOLD_DROP_M * depth * depth * k * s * moving, 4))
+        return
 
 
 def face(g: Gait, player: dict) -> None:
@@ -935,10 +1052,6 @@ def body_parts(
         elif g.action == "dive":
             elbow = at(lean, 0.32 * k * w * sign, 1.20 * k)
             hand = at(lean + dive * 0.10 * k, 0.42 * k * w * sign, 1.15 * k)
-        elif g.action == "throw":
-            # Both hands meet over the head, on the ball. A throw-in is not a kick.
-            elbow = at(0.08, 0.18 * k * sign, 1.72)
-            hand = at(0.28, 0.08 * sign, 1.96)
         else:
             elbow = at(pump * 0.55 + lean, shoulder_y * sign, 1.16 * k)
             hand = at(pump * 0.12 + lean, (shoulder_y + sleeve_r - arm_r) * sign, 0.93 * k)
