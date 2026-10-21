@@ -1518,7 +1518,7 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_vision_auditor.py::test_the_data_agent_checks_a_typed_handoff_on_receipt`,
   `::test_the_committed_clusters_json_is_the_auditor_s_code_output_and_the_data_agent_takes_it`.
 
-### 153. An exemption is stated in what the clip shows at both ends, and attacked with planted clips
+### 156. An exemption is stated in what the clip shows at both ends, and attacked with planted clips
 - **What happened:** the contract check for a broadcast cut (C2) accepted a gap when the last stoppage
   or restart before it was a stoppage, or when a window opened on a loose ball, and looked at no
   other event. An independent review's planted clips found two holes. A pass after the stoppage put
