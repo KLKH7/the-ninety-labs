@@ -2263,9 +2263,12 @@ class Engine:
                 # ball moved with the very walks the two roles sent them on, and two players swapped
                 # roles at every look, out and back through the whole wait; asked again as the taker
                 # stood over the ball, the cover was named to press and ran in from his place 11 m off
-                # (lesson 174).
+                # (lesson 174). With a wall up (Law 13), the wall is the side's block and nobody else is
+                # named to press until the ball is in play (design): a presser's place, goal-side at the
+                # Laws' distance, is where the wall stands, and named to it he was pushed in and out of
+                # the Laws' distance by the wall's players.
                 if given.pressers is None:
-                    given.pressers = self.who_presses(brain)
+                    given.pressers = [] if given.wall else self.who_presses(brain)
                 brain.pressers = given.pressers
             elif holder != team:
                 brain.pressers = self.who_presses(brain)

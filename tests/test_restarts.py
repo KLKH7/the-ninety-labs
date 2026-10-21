@@ -1095,9 +1095,10 @@ def test_the_walk_to_the_wall_is_estimated_from_above():
     Followed frame by frame, no wall player walks further than the estimate, and some go round. The
     estimate is of his own way: going round others who stand in it (avoid) is not in it, so the wall
     players' own bending is left out here (lesson 176: with it, one walked 15.24 m against 15.11 m,
-    a test that had passed by 7 mm in its one scenario); the pace, re-estimated every frame from
-    where he is, takes that in, and test_a_direct_free_kick_22_m_out_is_taken_with_a_wall_in_place
-    checks the outcome with everyone on the pitch."""
+    a test that had passed by 7 mm in its one scenario). These two scenarios pin the estimate's
+    shape; it is not a strict bound. Over 60 walks it comes within about 1% of the walk: a walker
+    still moving at the whistle, or stepping out past the circle as he goes round it, walks a little
+    further (lesson 176, scripts/defect_sweep/wall_walks.py)."""
     went_round = 0
     for seed, at in ((3, (PITCH_X - 22.0, 34.0)), (5, (87.0, 24.0))):
         e = wall_kick(seed, at)
@@ -1690,3 +1691,17 @@ def test_once_at_his_place_with_the_ball_set_he_settles(monkeypatch):
     for _ in range(int(1.0 / DT)):
         e.move_players()
     assert math.dist((d.x, d.y), (at[0] - 2.0, at[1])) < 0.05  # his own pace, here none: he stands
+
+
+
+def test_with_a_wall_up_nobody_else_is_named_to_press_until_the_ball_is_in_play():
+    """Defect (lesson 174): at a direct free kick with a wall the stored presser's place, goal-side at
+    the Laws' distance, was where the wall stood. He was pushed in and out of 9.15 m by the wall's
+    players through the wait, and was 6 cm inside it at the kick (seed 7). With a wall up, the wall is
+    the side's block: nobody else is named to press until the ball is in play."""
+    e = wall_kick()
+    for _ in range(int(1.0 / DT)):
+        e.step()
+    assert e.restart is not None and e.restart.wall  # premise: a wall, waiting
+    assert e.restart.pressers == [] and e.brains["away"].pressers == []
+    assert e.who_presses(e.brains["away"])  # premise: asked, someone would be named
