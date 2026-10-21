@@ -367,3 +367,30 @@ def test_the_side_nearer_x_105_on_average_defends_it_even_when_the_deepest_playe
     tracks = tr.track_players([row(f, scene(f)) for f in range(30)])
     tr.assign_teams(tracks)
     assert {tuple(t.rgb[0]): t.team for t in tracks} == {tuple(RED): "away", tuple(BLUE): "home"}
+
+
+def cut_scene(goes_out: bool):
+    """A blue (home) player holds the ball at (50, 34) for 30 frames; with `goes_out` he then plays
+    it over the near touchline. The broadcast cuts away (frames 30 to 529 are not in the clip:
+    ninety/render/edit.py) and comes back on a blue team-mate at (40, 10) with the ball at his feet."""
+    rows = []
+    for f in range(30):
+        bx, by = (50.3, 34.0) if not goes_out or f < 10 else (50.3, max(34.0 - 2.0 * (f - 9), -2.0))
+        rows.append(row(f, crowd(f) + [(50.0, 34.0, BLUE)], (bx, by)))
+    for f in range(530, 560):
+        rows.append(row(f, crowd(f) + [(40.0, 10.0, BLUE)], (40.3, 10.0)))
+    return rows
+
+
+def test_play_across_a_broadcast_cut_is_not_a_pass():
+    """Old: the spell before the cut and the team-mate's after it made a completed pass, which no
+    one played: the picture had cut from the foul to the free kick."""
+    events, _ = ev.detect(cut_scene(goes_out=False))
+    assert [e for e in events if e["type"] == "pass"] == []
+
+
+def test_a_ball_seen_going_out_before_a_cut_is_still_a_failed_pass():
+    events, _ = ev.detect(cut_scene(goes_out=True))
+    passes = [(e["type"], e["team"], e["outcome"]) for e in events if e["type"] == "pass"]
+    assert passes == [("pass", "home", "fail")]
+    assert any(e["type"] == "out_of_play" for e in events)
