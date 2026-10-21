@@ -852,11 +852,19 @@ def blur_vector(prev: Camera | None, cur: Camera, shutter: float) -> tuple[float
 
 def corner_waits(events: list[dict]) -> dict[int, tuple[float, float]]:
     """Every frame a corner waits to be taken, with its flag: from the engine's set piece at a corner
-    flag (within the corner arc, Law 17) to the frame before the next touch, the kick."""
+    flag (within the corner arc) after the ball went out over a goal line (Law 17: a corner, not a
+    throw-in or a free kick near the flag), to the frame before the next touch, the kick."""
     order = sorted(events, key=lambda e: e["frame"])
     out: dict[int, tuple[float, float]] = {}
+    stop = None
     for i, e in enumerate(order):
+        if e["type"] in ("out_of_play", "foul", "offside", "goal"):
+            stop = e
         if e["type"] != "set_piece":
+            continue
+        over_goal_line = (stop is not None and stop["type"] == "out_of_play"
+                          and (stop["x"] <= 0.0 or stop["x"] >= 105.0))
+        if not over_goal_line:
             continue
         flag = next(((fx, fy) for fx in (0.0, 105.0) for fy in (0.0, 68.0)
                      if math.hypot(e["x"] - fx, e["y"] - fy) <= CORNER_ARC_M + BALL_RADIUS_M), None)
