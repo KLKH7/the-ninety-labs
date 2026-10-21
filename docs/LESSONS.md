@@ -1687,21 +1687,32 @@ short and actionable. This file is public: no research sources, product names or
   kick, in 7 and then 10 restarts of 20 matches against none on main: the roles were kept only while
   the restart waited, and the cover's spot was worked out as in play, so as the taker stood over the
   ball the cover was sent in from 11 m; and the straight way through keep_off's 0.5 m margin let
-  players walk in the margin that takes up a bend or a step too far.
+  players walk in the margin that takes up a bend or a step too far. The second audit still counted
+  twice main's to-and-fro (1.43 reversals a minute against 0.70): the floor walked every jump of a
+  place by more than a stride, and at a dead ball places jump with what players see and whom they
+  mark, so the kicking side's back line, following an onside line read from noisy sightings, stepped
+  1 to 3.5 m back and forth every second or two through free kicks. And kept roles kept a clash that
+  asking again had moved from player to player: at a free kick with a wall, the presser's place is
+  where the wall stands, and the same presser was pushed in and out of 9.15 m by the wall's players
+  for the whole wait, 6 cm inside it at the kick. And near a line, the way round the keep-off circle,
+  aimed off the pitch and kept on it, fell inside the circle: a defect main has at a creep, walked
+  into 9.15 m more often (10 entries near a line in 20 matches, against 4), once at the kick.
 - **Rule:** "just in time" is a pace for play, where arriving early costs something; with time to
-  spare at a dead ball a player walks to his place (L4's normal walking pace) and stands there. A
-  realism complaint is measured in parts (fetch, arrivals, wait, speeds) before the total is
-  blamed. A change that makes players move faster is also measured for to-and-fro (reversals, the
-  distance walked to and fro, waits with three or more reversals): a slow pace hides a target
-  that flips. A loop between two rules is fixed where they meet, not by slowing the player down.
+  spare at a dead ball a player walks to his place (L4's normal walking pace) and stands there; once
+  there with the ball set, he has settled, and what moves his place after that (what he sees, whom
+  he marks) he follows at his own pace. A realism complaint is measured in parts (fetch, arrivals,
+  wait, speeds) before the total is blamed. A change that makes players move faster is also
+  measured for to-and-fro (reversals, the distance walked to and fro, waits with three or more
+  reversals): a slow pace hides a target that flips. A loop between two rules is fixed where they meet, not by slowing the player down.
   And a change to how players move near the ball goes through the restart sweep (the Laws'
   distance at the kick) after every fix, not only the first.
 - **Check:** `uv run pytest tests/test_restarts.py -k "walk_to_their_places or fetching_a_dead_ball_keeps
-  or hair_inside or stands_at_his_place or does_not_circle or keeps_its_presser or stand_off_it"`;
-  each fails on the engine before its fix. `scripts/defect_sweep/restart_moves.py` reports speeds,
-  reversals and to-and-fro per outfielder-minute through every restart wait,
-  `scripts/defect_sweep/corners.py` the corners, and `scripts/defect_sweep/restarts.py` the Laws'
-  distance at the kick (nobody inside, as on main).
+  or hair_inside or stands_at_his_place or does_not_circle or keeps_its_presser or stand_off_it
+  or he_settles or nobody_else_is_named or never_cuts_inside"`; each fails on the engine before its
+  fix.
+  `scripts/defect_sweep/restart_moves.py` reports speeds, reversals and to-and-fro per
+  outfielder-minute through every restart wait, `scripts/defect_sweep/corners.py` the corners, and
+  `scripts/defect_sweep/restarts.py` the Laws' distance at the kick (nobody inside, as on main).
 
 ### 175. A held-out seed that passes may hold none of the cases the rule gets wrong
 - **What happened:** the broadcast camera (#180) passed its framing test on held-out seeds 3 and 5
@@ -1735,16 +1746,18 @@ short and actionable. This file is public: no research sources, product names or
   the 0.22 m extra was bending round others who stood in his way (avoid), which the estimate never
   modelled: without his own bending he walked 15.02 m. Measured, as it should have been first, over
   60 walks in 15 scenarios with that bending left out: on main all 60 were within the estimate, the
-  closest by 2 cm; on lesson 174's branch 57, and three over it, by up to 0.18 m in 15.4 m. Replayed
-  from the same start, main's engine walks that one the same: going round the keep-off circle he
-  steps out past it and spirals back in, which the estimate's spiral leaves out. The estimate is
-  within about 1% of the walk, not a strict bound.
+  closest by 2 cm; on lesson 174's branch, at its head, 58, and two over it, by up to 0.18 m in 15.4 m. The walks over it are ones
+  main's engine walks the same from the same start: a walker still moving at the whistle, whose
+  stopping distance the estimate has no term for, or one going round the keep-off circle who steps
+  out past it and spirals back in, which its spiral leaves out. The estimate is within about 1% of
+  the walk, not a strict bound.
 - **Rule:** a bound measured on a few scenarios is reported with its margin and with what it
   covers, and a check that passes by a hair in a chaotic scenario is measured over more scenarios
   before it is called a bound. When a check fails because its claim was too broad, the claim is
   corrected where it is written and the check narrowed to it, openly; it is never re-seeded or
   loosened until it passes.
-- **Check:** `uv run pytest tests/test_restarts.py -k estimated_from_above` measures the estimate
-  on his own route (the wall players' bending switched off) in its two scenarios; `-k wall_in_place`
-  checks the outcome, the wall in place when the kick is struck, with everyone on the pitch. The
-  60-walk margins are in docs/eval/restarts.md ("Walking to restart positions").
+- **Check:** `uv run pytest tests/test_restarts.py -k estimated_from_above` pins the estimate on
+  his own route (the wall players' bending switched off) in its two scenarios, not a bound;
+  `uv run python scripts/defect_sweep/wall_walks.py` measures the 60-walk margins
+  (docs/eval/restarts.md, "Walking to restart positions"). No test sees a wall player bending round
+  others on his way in: a gap.
