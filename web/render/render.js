@@ -50,9 +50,11 @@ function pitchTexture(p, rand) {
   // Broadcast turf: darker, less electric. Adjacent stripes shift hue the way a real mower does.
   const hue = p.grass_hue;
   const night = p.lighting === 'night';
+  // Broadcast footage mows softer stripes (design: a blind review read the plain ones as a game menu).
+  const [dark, light] = p.stadium === 'broadcast' ? [0.2, 0.225] : [0.19, 0.27];
   for (let x = GROUND.x0, i = 0; x < GROUND.x1; x += p.stripe_width_m, i++) {
     const alt = i % 2;
-    g.fillStyle = hsl(hue + (alt ? 0.018 : -0.006), 0.40, (alt ? 0.19 : 0.27) * (night ? 0.95 : 1));
+    g.fillStyle = hsl(hue + (alt ? 0.018 : -0.006), 0.40, (alt ? dark : light) * (night ? 0.95 : 1));
     g.fillRect(X(x), 0, p.stripe_width_m * PX_PER_M + 1, H);
   }
   // grain
@@ -67,12 +69,15 @@ function pitchTexture(p, rand) {
     g.fillStyle = 'rgba(6, 14, 10, 0.34)';
     g.fillRect(0, 0, W, H);
   }
-  // Run-off around the playing surface, so the pitch reads as a pitch.
-  g.fillStyle = hsl(0.08, 0.1, night ? 0.12 : 0.2);
-  g.fillRect(0, 0, W, Y(68));
-  g.fillRect(0, Y(0), W, H - Y(0));
-  g.fillRect(0, 0, X(0), H);
-  g.fillRect(X(105), 0, W - X(105), H);
+  // Run-off around the playing surface, so the pitch reads as a pitch. A broadcast stadium's grass
+  // runs on to the boards, as a ground's does.
+  if (p.stadium !== 'broadcast') {
+    g.fillStyle = hsl(0.08, 0.1, night ? 0.12 : 0.2);
+    g.fillRect(0, 0, W, Y(68));
+    g.fillRect(0, Y(0), W, H - Y(0));
+    g.fillRect(0, 0, X(0), H);
+    g.fillRect(X(105), 0, W - X(105), H);
+  }
   // wear: goalmouths and the centre circle, as thin, pale grass. The shader tints it (uWear); the
   // texture only breaks it up a little, a few pale tufts, never brown blotches across the area.
   const wearSpots = [[5, 34, 7], [100, 34, 7], [11, 34, 5], [94, 34, 5], [52.5, 34, 6]];
@@ -147,7 +152,8 @@ function decoratePitch(mat, wet, grass, normal, p) {
     shader.uniforms.uSun = { value: sun };
     shader.uniforms.uStripe = { value: p.stripe_width_m };
     shader.uniforms.uX0 = { value: GROUND.x0 };
-    shader.uniforms.uMow = { value: mow };
+    shader.uniforms.uMow = { value: mow * (p.stadium === 'broadcast' ? 0.35 : 1) };
+    shader.uniforms.uTilt = { value: p.stadium === 'broadcast' ? 0.12 : 0.32 };
     shader.uniforms.uWear = { value: p.wear };
     shader.vertexShader = 'varying vec3 vGrassW;\n' + shader.vertexShader;
     shader.vertexShader = shader.vertexShader.replace(
@@ -166,6 +172,7 @@ function decoratePitch(mat, wet, grass, normal, p) {
       uniform float uStripe;
       uniform float uX0;
       uniform float uMow;
+      uniform float uTilt;
       float stripeAlt(vec2 w){ return mod(floor((w.x - uX0) / max(uStripe, 0.5)), 2.0); }
       float ghash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
       float gnoise(vec2 p){
@@ -178,7 +185,7 @@ function decoratePitch(mat, wet, grass, normal, p) {
     shader.fragmentShader = shader.fragmentShader.replace('#include <normal_fragment_maps>', `
       #include <normal_fragment_maps>
       float altN = stripeAlt(vGrassW.xy);
-      vec3 nPert = vec3(0.0, altN > 0.5 ? 0.32 : -0.32, 0.0);
+      vec3 nPert = vec3(0.0, altN > 0.5 ? uTilt : -uTilt, 0.0);
       if (uHasN > 0.5) {
         vec3 tn = texture2D(uGrassN, vGrassW.xy * 0.4).xyz;
         tn.y = 1.0 - tn.y;
@@ -288,7 +295,9 @@ function tier(decor, p, rand, corners, aniso, uSpan = 1) {
     emissiveIntensity: p.lighting === 'night' ? 0.55 : 0.02,
     side: THREE.DoubleSide,
   });
-  decor.push(quad(...corners, mat, [uSpan, 1]));
+  const mesh = quad(...corners, mat, [uSpan, 1]);
+  mesh.userData.tier = { corners, uSpan };  // where a broadcast stadium seats its crowd
+  decor.push(mesh);
 }
 
 // Cladding for the stands' structure: panels in the stand colour, each a little lighter or darker,
@@ -357,6 +366,223 @@ function boardTexture(p, rand) {
     x += 512;
   }
   return canvasTexture(c);
+}
+
+// ---- broadcast stadium dressing (params.stadium = 'broadcast': footage only, never training) --------
+//
+// A plain stadium is every dataset's look and stays exactly as it was. Broadcast footage adds a crowd
+// in the stands, a closed ring of boards, a wall under each stand's front and an LED ribbon under
+// each upper tier, so nothing behind a goal or a touchline is bare ground, and boards that vary.
+// Everything here is decor: the id pass never draws the crowd, so no label changes, and the walls,
+// boards and ribbons are opaque scenery like the boards a plain stadium already has.
+
+// Made-up advertisers (with what they sell, as a board shows it). None is a real brand.
+const BROADCAST_BRANDS = [
+  ['VANTIRO', 'MOBILE'], ['QELMORA', 'BANKING'], ['BRISKEL', 'SPORTS DRINK'], ['OSTRAVEN', 'AIRWAYS'],
+  ['PALMIRU', 'TYRES'], ['ZENTHA', 'ENERGY'], ['THE NINETY LABS', 'MATCH INSIGHTS'], ['QUIVRANT', 'INSURANCE'],
+  ['ZOLBEK', 'BEER'], ['MERIVAX', 'CLOUD'], ['TANDROSE', 'WATCHES'], ['FYNWALD', 'CARS'],
+  ['KESTRIX', 'BETTING-FREE ZONE'], ['OLVENSTA', 'FREIGHT'], ['DRAVELLO', 'COFFEE'], ['BRAXITO', 'BOOTS'],
+];
+// One advert is this many metres of board (design: a pitch-side LED advert is a few metres long).
+const BOARD_AD_M = 8;
+// A seat is SEAT_M wide and a row ROW_M deep (design, a stadium's usual seat pitch); a full stand is
+// CROWD_FILL full (design: Premier League grounds are near capacity), and a figure is a seated
+// spectator, STAND_SHARE of them standing.
+const SEAT_M = 0.5;
+const ROW_M = 0.8;
+const CROWD_FILL = 0.93;
+const STAND_SHARE = 0.08;
+const FAN_SKIN = ['#f5d0b5', '#e8b897', '#d19a74', '#b07850', '#8d5a3b', '#6b4329', '#4a2e1d'];
+const FAN_NEUTRAL = ['#1c1f26', '#2b2f38', '#3d4350', '#e8e6e1', '#5a4a3a', '#24344f', '#8c2a30', '#6b6f76', '#8a7a5c', '#2f5a3a',
+  '#d8c9a8', '#c9a227', '#3a6ea8', '#f2f2f2', '#b5532d'];
+
+function broadcastBoardTexture(rand) {
+  // Eight adverts, each its own layout: a dark board with a white word and a mark, a light board with
+  // a coloured word, a two-tone board with a tagline, a gradient board. Every advert has its name on it.
+  const c = document.createElement('canvas');
+  const ad = 512, n = 8;
+  c.width = ad * n; c.height = 64;
+  const g = c.getContext('2d');
+  g.textBaseline = 'middle';
+  let last = -1;
+  for (let i = 0; i < n; i++) {
+    let b = Math.floor(rand() * BROADCAST_BRANDS.length);
+    if (b === last) b = (b + 1) % BROADCAST_BRANDS.length;
+    last = b;
+    const [name, line] = BROADCAST_BRANDS[b];
+    const x = i * ad, hue = rand(), layout = Math.floor(rand() * 4);
+    const ink = hsl(hue, 0.75, 0.42);
+    if (layout === 0) {
+      g.fillStyle = hsl(hue, 0.35, 0.1); g.fillRect(x, 0, ad, 64);
+      g.fillStyle = hsl(hue, 0.85, 0.55);
+      g.beginPath(); g.arc(x + 40, 32, 20, 0, 6.283); g.fill();
+      g.fillStyle = '#f6f6f2'; g.font = 'bold 38px sans-serif'; g.fillText(name, x + 74, 34, ad - 96);
+    } else if (layout === 1) {
+      g.fillStyle = '#f2f1ec'; g.fillRect(x, 0, ad, 64);
+      g.fillStyle = ink; g.font = 'bold 40px sans-serif'; g.fillText(name, x + 24, 34, ad - 48);
+    } else if (layout === 2) {
+      g.fillStyle = hsl(hue, 0.7, 0.32); g.fillRect(x, 0, ad, 64);
+      g.fillStyle = hsl(hue + 0.5, 0.8, 0.55); g.fillRect(x + ad * 0.68, 0, ad * 0.32, 64);
+      g.fillStyle = '#ffffff'; g.font = 'bold 34px sans-serif'; g.fillText(name, x + 20, 32, ad * 0.62);
+      g.fillStyle = '#101010'; g.font = 'bold 18px sans-serif'; g.fillText(line, x + ad * 0.7, 33, ad * 0.28);
+    } else {
+      const grd = g.createLinearGradient(x, 0, x + ad, 0);
+      grd.addColorStop(0, hsl(hue, 0.8, 0.22)); grd.addColorStop(1, hsl(hue + 0.08, 0.8, 0.45));
+      g.fillStyle = grd; g.fillRect(x, 0, ad, 64);
+      g.fillStyle = '#ffffff'; g.font = 'italic bold 40px sans-serif'; g.fillText(name, x + 24, 30, ad - 48);
+      g.font = '14px sans-serif'; g.fillText(line, x + 26, 54, ad - 52);
+    }
+  }
+  const tex = canvasTexture(c);
+  tex.wrapS = THREE.RepeatWrapping;
+  return tex;
+}
+
+// The wall under a stand's front: dark panels under a pale rail, with a gate every so often.
+function wallTexture() {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 64;
+  const g = c.getContext('2d');
+  g.fillStyle = '#2c3038'; g.fillRect(0, 0, 256, 64);
+  g.fillStyle = 'rgba(0,0,0,0.35)';
+  for (let x = 0; x < 256; x += 64) g.fillRect(x, 0, 2, 64);
+  g.fillStyle = '#1a1d22'; g.fillRect(150, 18, 44, 46);
+  g.fillStyle = '#b9bec6'; g.fillRect(0, 0, 256, 6);
+  const tex = canvasTexture(c);
+  tex.wrapS = THREE.RepeatWrapping;
+  return tex;
+}
+
+// Seated spectators on every tier: two instanced billboards a person (shirt and head), facing the
+// pitch, tinted per person. Home fans wear the home shirt more often than not, and a block at one end
+// the away shirt. They fidget, and the scoring side's fans jump for a goal (spec.goal_age).
+function crowdMeshes(tiers, p, rand) {
+  const seats = [];
+  for (const { corners, uSpan } of tiers) {
+    const [P0, P1, P2, P3] = corners.map((q) => new THREE.Vector3(...q));
+    const lerp = (a, b, t) => a.clone().lerp(b, t);
+    const toward = new THREE.Vector3(52.5, 34, 0);
+    const rows = Math.floor(P0.distanceTo(P3) / ROW_M);
+    for (let r = 0; r < rows; r++) {
+      const v = (r + 0.5) / rows;
+      // The seat texture's gangway (crowdTexture): a band across the tier with nobody in it.
+      if (v > 0.32 && v < 0.39) continue;
+      const a = lerp(P0, P3, v), b = lerp(P1, P2, v);
+      const n = Math.floor(a.distanceTo(b) / SEAT_M);
+      for (let s = 0; s < n; s++) {
+        const u = (s + 0.5) / n;
+        const px = (u * uSpan * 2048) % 220;  // crowdTexture's sections and aisles
+        if (px >= 198) continue;
+        if (rand() > CROWD_FILL) continue;
+        const at = lerp(a, b, u);
+        const d = toward.clone().sub(at);
+        seats.push({ at, face: Math.atan2(d.x, -d.y), away: at.x > 114 && at.y < 34 ? 1 : 0 });
+      }
+    }
+  }
+  const home = p.home_kit || { shirt: '#c8102e', shorts: '#ffffff' };
+  const away = p.away_kit || { shirt: '#1d4ed8', shorts: '#1d4ed8' };
+  const sprite = (w, h, draw) => {
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    draw(c.getContext('2d'));
+    return canvasTexture(c);
+  };
+  const torsoMap = sprite(64, 96, (g) => {
+    g.fillStyle = '#ffffff';
+    g.beginPath(); g.moveTo(6, 96); g.lineTo(6, 26); g.quadraticCurveTo(8, 8, 32, 6);
+    g.quadraticCurveTo(56, 8, 58, 26); g.lineTo(58, 96); g.fill();
+    g.fillStyle = 'rgba(0,0,0,0.28)';  // the arms, a shade darker down each side
+    g.fillRect(6, 30, 10, 66); g.fillRect(48, 30, 10, 66);
+  });
+  const headMap = sprite(32, 32, (g) => {
+    g.fillStyle = '#ffffff'; g.beginPath(); g.arc(16, 17, 14, 0, 6.283); g.fill();
+    g.fillStyle = 'rgba(0,0,0,0.55)'; g.beginPath(); g.arc(16, 15, 14, Math.PI * 1.05, Math.PI * 1.95); g.fill();
+  });
+  const uniforms = { uTime: { value: 0 }, uCheer: { value: new THREE.Vector2(0, 0) } };
+  const material = (map) => {
+    const m = new THREE.MeshLambertMaterial({ map, alphaTest: 0.5, side: THREE.DoubleSide });
+    m.customProgramCacheKey = () => 'crowd';
+    m.onBeforeCompile = (shader) => {
+      Object.assign(shader.uniforms, uniforms);
+      shader.vertexShader = 'uniform float uTime;\nuniform vec2 uCheer;\nattribute float aTeam;\n' + shader.vertexShader;
+      shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', `
+        #include <begin_vertex>
+        float ph = fract(sin(dot(instanceMatrix[3].xy, vec2(12.9898, 78.233))) * 43758.5453);
+        float cheer = aTeam > 0.5 ? uCheer.y : uCheer.x;
+        transformed.z += 0.015 * sin(uTime * (0.8 + ph) + ph * 30.0)
+          + cheer * 0.28 * abs(sin(uTime * 6.0 + ph * 6.283));
+        transformed.x += 0.02 * sin(uTime * 0.6 + ph * 17.0);
+      `);
+    };
+    return m;
+  };
+  const torsoGeo = new THREE.PlaneGeometry(0.58, 0.72).rotateX(Math.PI / 2).translate(0, 0, 0.72);
+  const headGeo = new THREE.PlaneGeometry(0.26, 0.26).rotateX(Math.PI / 2).translate(0, 0, 1.2);
+  const torso = new THREE.InstancedMesh(torsoGeo, material(torsoMap), seats.length);
+  const head = new THREE.InstancedMesh(headGeo, material(headMap), seats.length);
+  const team = new Float32Array(seats.length);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), col = new THREE.Color();
+  seats.forEach((seat, i) => {
+    const s = 0.9 + 0.18 * rand();
+    const lift = rand() < STAND_SHARE ? 0.45 : 0;
+    q.setFromAxisAngle(new THREE.Vector3(0, 0, 1), seat.face);
+    sc.set(s, s, s);
+    m.compose(new THREE.Vector3(seat.at.x, seat.at.y, seat.at.z + lift), q, sc);
+    torso.setMatrixAt(i, m);
+    head.setMatrixAt(i, m);
+    const kit = seat.away ? away : home;
+    const r = rand();
+    col.set(r < 0.5 ? kit.shirt : r < 0.62 ? kit.shorts : FAN_NEUTRAL[Math.floor(rand() * FAN_NEUTRAL.length)]);
+    torso.setColorAt(i, col);
+    head.setColorAt(i, col.set(FAN_SKIN[Math.floor(rand() * FAN_SKIN.length)]));
+    team[i] = seat.away;
+  });
+  for (const mesh of [torso, head]) {
+    mesh.geometry.setAttribute('aTeam', new THREE.InstancedBufferAttribute(team, 1));
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.frustumCulled = false;
+  }
+  return { meshes: [torso, head], uniforms };
+}
+
+// The walls, ribbons and corner boards of a broadcast stadium, from the tiers (their front edges)
+// and the plain stadium's board lines (closing the ring at the corners). Returns the new boards
+// and the rest separately, so the boards can carry backs the way the plain ones do.
+function stadiumRing(tiers, boardMat, backMat) {
+  const wallTex = wallTexture();
+  const wallMat = new THREE.MeshStandardMaterial({ map: wallTex, roughness: 0.85, side: THREE.DoubleSide });
+  const flat = (a, b) => Math.hypot(b[0] - a[0], b[1] - a[1]);
+  const rest = [];
+  for (const { corners } of tiers) {
+    const [P0, P1] = corners;
+    const len = flat(P0, P1);
+    if (Math.max(P0[2], P1[2]) < 2.5) {
+      // A lower tier: the wall from the ground up to its front edge.
+      rest.push(quad([P0[0], P0[1], 0], [P1[0], P1[1], 0], P1, P0, wallMat, [len / 8, 1]));
+    } else {
+      // An upper tier: an LED ribbon hung under its front edge.
+      rest.push(quad([P0[0], P0[1], P0[2] - 1.1], [P1[0], P1[1], P1[2] - 1.1],
+        [P1[0], P1[1], P1[2] - 0.05], [P0[0], P0[1], P0[2] - 0.05], boardMat, [len / BOARD_AD_M / 8, 1]));
+    }
+  }
+  // The board ring's corners (the plain boards stop short of them), each facing the pitch.
+  const pieces = [
+    [[-4, 71.5], [-2, 71.5], 1.8], [[107, 71.5], [109, 71.5], 1.8],
+    [[109, -1.6], [107, -1.6], 1.8], [[-2, -1.6], [-4, -1.6], 1.8],
+    [[-4, -1.6], [-4, 2], 0.9], [[-4, 66], [-4, 71.5], 0.9],
+    [[109, 71.5], [109, 66], 0.9], [[109, 2], [109, -1.6], 0.9],
+  ];
+  const boards = pieces.map(([a, b, h]) => quad([a[0], a[1], 0], [b[0], b[1], 0], [b[0], b[1], h], [a[0], a[1], h],
+    boardMat, [flat(a, b) / BOARD_AD_M / 8, 1]));
+  // Backs for all but the near pieces (the gantry is behind those and sees through them).
+  for (const brd of boards) {
+    const a = brd.geometry.attributes.position.array;
+    if (a[1] < 0) continue;
+    const c = (j) => [a[3 * j], a[3 * j + 1], a[3 * j + 2]];
+    rest.push(quad(c(1), c(0), c(5), c(2), backMat));
+  }
+  return { boards, rest };
 }
 
 // Same curve as ninety.render.camera.net_push. Outward only, and it settles inside 2.6 s.
@@ -1480,11 +1706,23 @@ class BroadcastRenderer {
     // ground: textured pitch over a darker surround. Rain lowers roughness so the sun sheens, and the albedo is darkened in the texture.
     const wet = p.weather === 'rain';
     // Asphalt around the pitch. A warm mid grey reads as a blank wall from the far stand.
+    // A broadcast stadium's grass runs on behind the boards to the stands, unmown (design).
+    const broadcast = p.stadium === 'broadcast';
     const surround = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshStandardMaterial({
-      color: new THREE.Color().setHSL(0.0, 0.0, wet ? 0.02 : 0.025),
+      color: broadcast ? new THREE.Color().setHSL(p.grass_hue + 0.018, 0.4, 0.12) : new THREE.Color().setHSL(0.0, 0.0, wet ? 0.02 : 0.025),
       roughness: 0.96,
     }));
     surround.position.set(52.5, 34, -0.02);
+    if (broadcast && grass) {
+      // The photo turf, tiled every 4 m, so the grass behind the boards is grass, not a flat colour.
+      const turf = grass.clone();
+      turf.wrapS = turf.wrapT = THREE.RepeatWrapping;
+      turf.repeat.set(100, 100);
+      turf.needsUpdate = true;
+      surround.material.map = turf;
+      surround.material.color.setHSL(p.grass_hue + 0.02, 0.3, 0.17);
+      surround.material.needsUpdate = true;
+    }
     surround.receiveShadow = true;
     const pitchTex = pitchTexture(p, rand);
     pitchTex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
@@ -1527,7 +1765,9 @@ class BroadcastRenderer {
     tier(this.decor, p, rand, [[114, -64, 9.6], [-4, -64, 9.6], [-4, -78, 17.5], [114, -78, 17.5]], maxAniso);
     tier(this.decor, p, rand, [[-11, 70, 1.4], [-11, 4, 1.4], [-34, 4, 12], [-34, 70, 12]], maxAniso);
     tier(this.decor, p, rand, [[116, 4, 1.4], [116, 70, 1.4], [139, 70, 12], [139, 4, 12]], maxAniso);
-    const boardTex = boardTexture(p, rand);
+    // Drawn either way, so the seeded draws after it are a plain stadium's.
+    const plainBoards = boardTexture(p, rand);
+    const boardTex = broadcast ? broadcastBoardTexture(rng((cfg.seed ^ 0x5eed) >>> 0)) : plainBoards;
     boardTex.anisotropy = maxAniso;
     const boardsLit = p.lighting === 'night' || p.lighting === 'dusk';
     const boardMat = new THREE.MeshStandardMaterial({
@@ -1541,12 +1781,14 @@ class BroadcastRenderer {
     // Every board is printed on the side that faces the pitch, so it reads left to right from
     // anywhere on it, from the gantry and from the reverse angle. Seen from behind, a board is its
     // plain back, never its print mirrored.
+    // A broadcast board shows adverts BOARD_AD_M long; a plain board stretches its texture along it.
+    const rep = (len) => (broadcast ? [len / BOARD_AD_M / 8, 1] : [1, 1]);
     const boards = [
-      quad([-2, 71.5, 0], [107, 71.5, 0], [107, 71.5, 1.8], [-2, 71.5, 1.8], boardMat),
+      quad([-2, 71.5, 0], [107, 71.5, 0], [107, 71.5, 1.8], [-2, 71.5, 1.8], boardMat, rep(109)),
       // The gantry is behind the near boards: they have no back, so it sees through to the pitch.
-      quad([107, -1.6, 0], [-2, -1.6, 0], [-2, -1.6, 1.8], [107, -1.6, 1.8], boardMat),
-      quad([-4, 2, 0], [-4, 66, 0], [-4, 66, 0.9], [-4, 2, 0.9], boardMat),
-      quad([109, 66, 0], [109, 2, 0], [109, 2, 0.9], [109, 66, 0.9], boardMat),
+      quad([107, -1.6, 0], [-2, -1.6, 0], [-2, -1.6, 1.8], [107, -1.6, 1.8], boardMat, rep(109)),
+      quad([-4, 2, 0], [-4, 66, 0], [-4, 66, 0.9], [-4, 2, 0.9], boardMat, rep(64)),
+      quad([109, 66, 0], [109, 2, 0], [109, 2, 0.9], [109, 66, 0.9], boardMat, rep(64)),
     ];
     const backMat = new THREE.MeshStandardMaterial({ color: 0x24272d, roughness: 0.8 });
     const backs = [0, 2, 3].map((i) => {
@@ -1635,6 +1877,20 @@ class BroadcastRenderer {
       quad([W.x1 - d, W.y1, W.eave - 1.2], [W.x1 - d, W.y0, W.eave - 1.2], [W.x1 - d, W.y0, W.eave], [W.x1 - d, W.y1, W.eave], fascia),
     );
 
+    // A broadcast stadium: walls, ribbons and the board ring's corners (opaque scenery), and the
+    // crowd, which the id pass never draws (notOccluders below), so no label can change.
+    let crowd = [];
+    this.crowd = null;
+    if (broadcast) {
+      const tiers = this.decor.filter((m) => m.userData.tier).map((m) => m.userData.tier);
+      const ring = stadiumRing(tiers, boardMat, backMat);
+      this.boards.push(...ring.boards);
+      this.decor.push(...ring.boards, ...ring.rest);
+      this.crowd = crowdMeshes(tiers, p, rng((cfg.seed ^ 0xc40d) >>> 0));
+      crowd = this.crowd.meshes;
+      this.decor.push(...crowd);
+    }
+
     // goals: posts and crossbar are occluders in the id pass; the net is decor
     this.posts = [];
     const white = new THREE.MeshStandardMaterial({ color: 0xf4f4f4, roughness: 0.4, metalness: 0.08 });
@@ -1662,8 +1918,8 @@ class BroadcastRenderer {
     for (const m of [...this.decor, ...this.posts]) this.scene.add(m);
     // Every opaque piece of scenery hides what is behind it in the full id pass, as it does in the
     // picture: a ball resting behind the boards is not visible. Left out: the sky (always behind),
-    // the ground (nothing labelled is under it), the see-through nets and the shadow decals.
-    const notOccluders = new Set([sky, surround, pitch, this.shadows, ...this.nets]);
+    // the ground (nothing labelled is under it), the see-through nets, the shadow decals and the crowd.
+    const notOccluders = new Set([sky, surround, pitch, this.shadows, ...this.nets, ...crowd]);
     this.scenery = this.decor.filter((m) => m.isMesh && !notOccluders.has(m));
     for (const m of this.scenery) {
       m.userData.mat = m.material;
@@ -1912,6 +2168,15 @@ class BroadcastRenderer {
     }
     this.shadows.instanceMatrix.needsUpdate = true;
     for (const net of this.nets) poseNet(net, spec.net);
+    if (this.crowd) {
+      // By frame, not the wall clock, so a seed renders the same frames. The scoring side's fans
+      // jump for the goal and settle as the goal graphic goes (2.5 s).
+      const u = this.crowd.uniforms;
+      u.uTime.value = spec.index / this.p.fps;
+      const age = spec.goal_age;
+      const cheer = age != null && age >= 0 && age < 2.5 ? 1 - (age / 2.5) ** 2 : 0;
+      u.uCheer.value.set(spec.goal_side === 0 ? cheer : 0, spec.goal_side === 1 ? cheer : 0);
+    }
     this.layoutBug(spec);
     const R = this.renderer;
     const W = this.W, H = this.H;
@@ -2020,5 +2285,7 @@ window.ninety = {
     uv: Array.from(m.geometry.attributes.uv.array),
     doubleSided: m.material.side === THREE.DoubleSide,
   })),
+  // How many spectators a broadcast stadium seats (0 in a plain one), for the test that none is labelled.
+  crowd: () => (instance.crowd ? instance.crowd.meshes[0].count : 0),
   ready: true,
 };

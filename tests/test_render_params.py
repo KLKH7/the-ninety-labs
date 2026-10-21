@@ -187,3 +187,16 @@ def test_only_a_broadcast_clip_cuts_through_dead_balls(monkeypatch, tmp_path):
     cut = {seed: sample_params(seed, **ov).dead_ball_cut for seed, ov in calls}
     assert [sample_params(s, **ov).dead_ball_cut for s, ov in calls[:3]] == [True, False, False]
     assert len(calls) == 3 + len(TEST_SEEDS) + 2 and not any(cut[s] for s, _ in calls[3:])
+
+
+def test_only_footage_asks_for_a_broadcast_stadium():
+    """No seed draws the broadcast stadium (crowd, hoardings, softer mowing): every training,
+    validation and test render is plain, and its clip.json records no stadium key, as before the
+    knob existed. Footage asks for it by name; anything else is refused."""
+    for seed in list(range(1, 60)) + [8001, 900001]:
+        p = sample_params(seed)
+        assert p.stadium == "plain"
+        assert "stadium" not in p.to_dict()
+    assert sample_params(8001, stadium="broadcast").to_dict()["stadium"] == "broadcast"
+    with pytest.raises(ValueError):
+        sample_params(8001, stadium="packed")

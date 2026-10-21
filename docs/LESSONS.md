@@ -1796,3 +1796,21 @@ short and actionable. This file is public: no research sources, product names or
   `::test_each_corner_has_its_own_shot_and_the_ball_stays_in_it` and
   `::test_the_corner_shot_holds_until_the_kick`; the framing bar is raw.
 
+### 185. Footage a viewer watches and data a model learns from are dressed apart, and the dressing is proved label-free
+- **What happened:** the demo clip (seed 8001, v1) was rendered with the training look: seats with no
+  one in them, beige run-off and black ground behind the goals, four repeated boards, stark mowing.
+  The blind critic scored it 2/10 and ranked empty stands and bare ground at severity 4. The look
+  was built for the detector, where a crowd is only clutter that could change what a dataset
+  measures, so nothing ever dressed the footage a person watches.
+- **Rule:**
+  - Dressing for viewers sits behind a knob that no seed draws (`stadium=broadcast`, like
+    `kit_contrast=broadcast`): training, validation and test renders stay byte-identical.
+  - Dressing is decor: a crowd is never drawn in the id pass, so it can neither be labelled nor
+    hide a label. A test proves it with a case where it would matter: a ball in the stands behind
+    fans.
+- **Check:**
+  - `uv run pytest tests/test_render_stadium.py -k crowd`. With the crowd drawn in the id pass it
+    fails: the fans' pixels count as 52,436 visible pixels of one player.
+  - `tests/test_render_params.py::test_only_footage_asks_for_a_broadcast_stadium`.
+  - Plain stills from main and from the change are byte-identical under software GL.
+
