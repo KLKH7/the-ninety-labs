@@ -1579,3 +1579,23 @@ short and actionable. This file is public: no research sources, product names or
   `tests/test_render_motion.py::test_a_foot_on_the_grass_does_not_slide_from_a_standstill_to_a_sprint_and_back`
   fail on the code before; `test_the_body_has_a_mans_proportions_and_its_stature_is_the_scale` holds
   the scale to the asset and its joints to the table.
+
+### 162. A player off the ball answers the players around him, not only the ball
+- **What happened:** fans and clip critics saw the team without the ball stand between actions. On
+  seed 21 most standing spells of 3 s or more were block defenders whose place did not move while
+  they stood. Every place off the ball (block slots, the attacking shape, all but the carrier's
+  nearest two) depended on the ball's position alone, so when the ball paused both teams froze. A
+  walking floor did not fix it (standing 22% to 20%, one seed). The first fix for attackers chose
+  the most open spot, then the one a pass is worth most at, and drew them toward the carrier: a spot
+  nearer the ball is always safer, so passes shortened and square passes with a free option ahead
+  (FS7) rose by about 40%. Holding pass length and FS7 out as checks caught it.
+- **Rule:** a target off the ball reacts to the players he sees. An attacker steps to where a pass
+  from the carrier is worth most, across his lane or further out, never nearer (O3). A block
+  defender tracks the attacker in his zone, goal-side, without leaving it (O2). Each decides again
+  only when he scans and holds his choice between scans. When a value always rises in one
+  direction, limit the candidates by what football allows; never tune its weights to the held-out
+  checks.
+- **Check:** `tests/test_open_space.py::test_a_defender_in_his_lane_moves_an_attacker_once_he_scans`,
+  `::test_he_never_comes_nearer_the_carrier_to_be_open`, and
+  `tests/test_zone_tracking.py::test_a_defender_follows_the_attacker_in_his_zone_once_he_scans`; the
+  held-out measures in the pull request.
