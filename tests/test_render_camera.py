@@ -241,7 +241,10 @@ def test_director_is_deterministic():
 
 # Seeds the director's design was not tuned on (the lens, STANDS_MAX and the follow were chosen on
 # seeds 7, 21 and 42).
-HELD_OUT = (3, 5)
+# Seeds the camera rules were not designed on. 3 and 5 were studied while fixing #198 (lesson 175),
+# so they stay for continuity only; 41 and 43 were added before anyone rendered or scored them for
+# the camera (committed ahead of #198's re-score), and are the held-out check.
+HELD_OUT = (3, 5, 41, 43)
 
 
 @cache
