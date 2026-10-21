@@ -935,7 +935,7 @@ const LEAN_LIMIT = [[-0.9, 0.9], [-0.6, 0.6]];
 const LEAN_SHARE = [['spine_01', 0.35], ['spine_02', 0.35], ['neck_01', 0.3]];
 const TWIST_SIGN = -1.0;
 // The trunk's lean on top of the stride's: half at the hips, half in the lower spine (meshpose.TRUNK_SHARE).
-const TRUNK_SHARE = [['pelvis', 0.5], ['spine_01', 0.5]];
+const TRUNK_SHARE = [['pelvis', 0.5], ['spine_01', 0.5], ['neck_01', -0.5]];
 // The asset's stature (meshpose.ASSET_STATURE_M): a player height_m tall is the asset scaled by
 // height_m / ASSET_STATURE_M. And the forehead a header meets the ball with (meshpose.BROW_Y).
 const ASSET_STATURE_M = 1.684;
@@ -1296,7 +1296,9 @@ function upperAngles(player, pose, heading, height) {
 function anglesFor(player, pose, heading, height) {
   const x = pose.x, y = pose.y;
   const lead = pose.lead || 0;
-  const lift = pose.lift || 0;
+  // lift places the body (a jump, a lunge, the stride's bob); only a touch's own lift lowers him.
+  const lift = (pose.lift || 0) + (pose.bob || 0);
+  const lowered = (pose.lift || 0) < 0;
   let angles = upperAngles(player, pose, heading, height);
   // scene.py plants a foot only when the pose stands on it.
   for (const side of ['l', 'r']) {
@@ -1306,7 +1308,7 @@ function anglesFor(player, pose, heading, height) {
     const pz = plant.length > 3 ? plant[3] : 0;
     const target = toObject(x, y, heading, height, plant[0], plant[1], pz, lift);
     let [planted, err] = searchLeg(angles, side, target, PLANT_FOOT, twist, 'foot_' + side, true, player);
-    if (err > PLANT_GIVE_UP && lift < 0) {
+    if (err > PLANT_GIVE_UP && lowered) {
       // Lowered, an unreachable foot reaches toward its plant above the grass (meshpose.pose_angles).
       planted = searchLeg(angles, side, target, PLANT_FOOT, twist, 'foot_' + side, false, player, null, -lift / (height / ASSET_STATURE_M))[0];
       err = 0;
@@ -1343,7 +1345,7 @@ function holdPose(player, angles, pose, hold, heading, height) {
   let out = Object.assign({}, angles);
   const bend = hold.bend || 0;
   for (const [bone, share] of HOLD_BEND) addAngle(out, bone, bend * share, 0, 0);
-  const centre = toObject(pose.x, pose.y, heading, height, hold.at[0], hold.at[1], hold.at[2], pose.lift || 0);
+  const centre = toObject(pose.x, pose.y, heading, height, hold.at[0], hold.at[1], hold.at[2], (pose.lift || 0) + (pose.bob || 0));
   const k = height / ASSET_STATURE_M;
   const idx = player.boneIndex;
   const girdle = poseBones(out, player.bones, Math.max(idx.clavicle_l, idx.clavicle_r));
@@ -1667,7 +1669,7 @@ class Body {
       }
     }
     const k = this.heightM / ASSET_STATURE_M;
-    this.group.position.set(x, y, pose.lift || 0);
+    this.group.position.set(x, y, (pose.lift || 0) + (pose.bob || 0));
     this.group.scale.set(k, k, k);
     this.group.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(
       new THREE.Vector3(-fy, fx, 0), new THREE.Vector3(0, 0, 1), new THREE.Vector3(fx, fy, 0),
@@ -1701,7 +1703,7 @@ class Body {
     const posed = poseBones(angles, this.player.bones);
     const out = {};
     for (const [name, marker] of Object.entries(this.player.markers)) {
-      out[name] = toWorld(x, y, face, this.heightM, skinOne(marker.pos, marker.skin, posed, this.player.bones), (pose && pose.lift) || 0);
+      out[name] = toWorld(x, y, face, this.heightM, skinOne(marker.pos, marker.skin, posed, this.player.bones), pose ? (pose.lift || 0) + (pose.bob || 0) : 0);
     }
     return out;
   }

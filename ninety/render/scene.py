@@ -174,13 +174,14 @@ RUN_BOB = ((2.78, 0.087), (3.33, 0.0855), (4.44, 0.0835), (5.56, 0.0755), (6.1, 
 # speed: to 14.3 degrees at a sprinter's top speed (Nagahara et al. 2014: upper trunk at 75.7 degrees
 # from the horizontal, peak speed 10.04 m/s). Speeding up or slowing at a m/s^2 the body leans by
 # atan(a / GRAVITY), so the push of the ground passes through it (Kugler and Janshen 2010: the force's
-# direction follows the body's lean, r = 0.93), drawn as the trunk tipping at the hips, the feet
+# direction follows the body's lean, r = 0.93), half of it drawn in the trunk (LEAN_DRAWN), the feet
 # following the stride; slowing, the trunk comes back to upright and no further (design: the drawn
 # legs cannot plant ahead of him, which carries the rest of a braking lean). The acceleration is the
-# engine's velocity's along the way he faces, from one ACCEL_BOX-frame mean to the next (design: at a
-# steady jog the engine's speed rises and brakes back every 9 frames or so, seed 21's a5 3.2 to 4.0
-# m/s, and eased over 5 frames the trunk nodded every step to a blind critic), and the lean eases
-# toward it by LEAN_EASE a frame (design: no step when a box takes a new frame).
+# engine's velocity's along the way he faces, from the mean of the ACCEL_BOX frames before this one
+# to the mean of this one and those after (design: at a steady jog the engine's speed rises and brakes
+# back every 9 frames or so, seed 21's a5 3.2 to 4.0 m/s, and eased over 5 frames the trunk nodded
+# every step to a blind critic; from boxes behind him only, it leaned 5 frames late, forward while
+# braking), and the lean eases toward it by LEAN_EASE a frame (design: no step when a box moves on).
 # Folland's runners ran at 10, 11 and 12 km/h: their lean is taken at 11 km/h, 3.05 m/s. Speeding up,
 # the lean is no more than the hardest push a player of the engine has from standing allows (its
 # acceleration from standing, three spreads above the mean, GROUNDING P2): a velocity the engine
@@ -190,6 +191,10 @@ ACCEL_MAX = F0_MEAN + 3 * F0_SD
 STRIDE_LEAN = math.radians(10.2)  # the stored stride's own lean (measured on the asset, pelvis to neck)
 ACCEL_BOX = 8
 LEAN_EASE = 0.2
+# The trunk takes half the body's lean (design: Kugler and Janshen's lean is the whole body's, from the
+# foot, and the drawn stride does not angle the legs back; drawn whole in the trunk, two blind critics
+# saw a stoop or a lunge at 4 m/s^2).
+LEAN_DRAWN = 0.5
 TRUNK_M = 0.48  # hips to shoulders (the capsules' 0.92 to 1.40, asset metres): a lean's reach forward
 # The arms swing wider with speed above the stored run's (meshpose.gait's pump), whose shoulder swings
 # through 83 degrees (measured on the asset at 4 m/s and up), to 126.5 at a sprinter's top speed (Mann
@@ -356,7 +361,8 @@ class Gait:
     bob_w: float = 0.0  # how much of the stride's bob is drawn (BOB_EASE_FRAMES)
     bob_at: float = 0.0  # the stride's bob when it was last drawn
     flight_s: float = 0.0  # how long both feet have been off the grass in a run (_stride_feet)
-    vel: list = field(default_factory=list)  # the engine's velocity, the last 2 * ACCEL_BOX frames (pace)
+    vel: list = field(default_factory=list)  # the engine's velocity, the last ACCEL_BOX frames (pace)
+    accel: float = 0.0  # his acceleration the way he faces, from the engine's velocity (m/s^2, pace)
     lean: float = 0.0  # the trunk's lean on top of the stride's (radians, forward +, pace)
 
 
@@ -375,20 +381,23 @@ def update_gait(g: Gait, dx: float, dy: float, dt: float, face: tuple[float, flo
     g.phase = (g.phase + 2 * math.pi * d / _stride(speed)) % (2 * math.pi)
 
 
-def pace(g: Gait, vx: float, vy: float, heading: float, dt: float) -> None:
+def pace(g: Gait, vx: float, vy: float, heading: float, dt: float, ahead: list | None = None) -> None:
     """Follow the engine's velocity (m/s): his acceleration the way he faces, and the trunk's lean
-    from it and from his speed (RUN_LEAN)."""
+    from it and from his speed (RUN_LEAN). `ahead` is the engine's velocity over the next frames:
+    the acceleration is the change from the ACCEL_BOX frames before this one to this and the ones
+    after, so the lean comes as the pace changes, not after it."""
+    future = [(vx, vy), *(ahead or [])][:ACCEL_BOX]
+    n = ACCEL_BOX
+    if len(g.vel) == n and len(future) == n:
+        # Until both boxes are full (the clip's first and last frames) he keeps the last one: a
+        # shorter box is the engine's frame-to-frame steps again.
+        ax = (sum(v[0] for v in future) - sum(v[0] for v in g.vel)) / (n * n * dt)
+        ay = (sum(v[1] for v in future) - sum(v[1] for v in g.vel)) / (n * n * dt)
+        g.accel = ax * math.cos(heading) + ay * math.sin(heading)
     g.vel.append((vx, vy))
-    del g.vel[:-2 * ACCEL_BOX]
-    n = len(g.vel) // 2
-    a_fwd = 0.0
-    if n:
-        old, new = g.vel[-2 * n:-n], g.vel[-n:]
-        ax = (sum(v[0] for v in new) - sum(v[0] for v in old)) / (n * n * dt)
-        ay = (sum(v[1] for v in new) - sum(v[1] for v in old)) / (n * n * dt)
-        a_fwd = ax * math.cos(heading) + ay * math.sin(heading)
+    del g.vel[:-ACCEL_BOX]
     v = math.hypot(vx, vy)
-    target = math.atan(min(a_fwd, ACCEL_MAX) / GRAVITY) + _table(RUN_LEAN, v)
+    target = LEAN_DRAWN * math.atan(min(g.accel, ACCEL_MAX) / GRAVITY) + _table(RUN_LEAN, v)
     g.lean += (target - g.lean) * LEAN_EASE
     g.lean = max(g.lean, -_stride_lean(v))  # slowing, back to upright and no further
 
@@ -412,17 +421,22 @@ def _pump(speed: float) -> float:
 
 
 def advance_gaits(gaits: dict[str, Gait], prev_xy: dict[str, tuple[float, float]], frame: dict,
-                  dt: float, ahead: dict | None = None) -> None:
+                  dt: float, ahead: dict | None = None, after: list[dict] | None = None) -> None:
     """One frame of every player's gait: stride from how far he moved, and the way he faces, his
     speed and his pose from the engine (face), so the body is drawn turned as it collides.
-    `ahead` is the engine's frame LEAD_AHEAD_FRAMES on: the hips lead into the turn it holds."""
+    `ahead` is the engine's frame LEAD_AHEAD_FRAMES on: the hips lead into the turn it holds.
+    `after` is the engine's next frames (up to ACCEL_BOX): the trunk leans into a change of pace."""
     bx, by = frame["ball"]["x"], frame["ball"]["y"]
     later = {pl["id"]: pl for pl in ahead["players"]} if ahead else {}
+    coming: dict[str, list] = {}
+    for fr in after or []:
+        for p in fr["players"]:
+            coming.setdefault(p["id"], []).append((p.get("vx", 0.0), p.get("vy", 0.0)))
     for pl in frame["players"]:
         g = gaits[pl["id"]]
         px, py = prev_xy.get(pl["id"], (pl["x"], pl["y"]))
         update_gait(g, pl["x"] - px, pl["y"] - py, dt, (bx - pl["x"], by - pl["y"]))
-        pace(g, pl.get("vx", 0.0), pl.get("vy", 0.0), g.heading, dt)
+        pace(g, pl.get("vx", 0.0), pl.get("vy", 0.0), g.heading, dt, coming.get(pl["id"]))
         prev_xy[pl["id"]] = (pl["x"], pl["y"])
         face(g, pl)
         nxt = later.get(pl["id"])
@@ -1159,7 +1173,8 @@ def mesh_pose(g: Gait, x: float, y: float, reach: float) -> dict:
         "plant_l": [round(v, 4) for v in g.plant_l] if g.plant_l else None,
         "plant_r": [round(v, 4) for v in g.plant_r] if g.plant_r else None,
         "lead": round(g.lead, 4),
-        "lift": round(g.lift + g.bob, 4),
+        "lift": round(g.lift, 4),
+        "bob": round(g.bob, 4),
         "lean": round(g.lean, 4),
         "pump": round(_pump(g.speed), 4),
         "touch": g.touch,

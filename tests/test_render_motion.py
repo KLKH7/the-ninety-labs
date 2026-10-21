@@ -23,6 +23,7 @@ from ninety.render.meshpose import (
     to_world,
 )
 from ninety.render.scene import (
+    ACCEL_BOX,
     BALL_RADIUS,
     KICK_SWING_S,
     LEAD_AHEAD_FRAMES,
@@ -383,6 +384,10 @@ def _draw(frames, events=None):
     mine, held, prev = contacts(frames, events), holds(frames), {}
     out = {pid: [] for pid in looks}
     for fi, fr in enumerate(frames):
+        coming = {}
+        for later in frames[fi + 1:fi + 1 + ACCEL_BOX]:
+            for p in later["players"]:
+                coming.setdefault(p["id"], []).append((p["vx"], p["vy"]))
         b = fr["ball"]
         ball = (b["x"], b["y"], b["z"])
         for pl in fr["players"]:
@@ -393,7 +398,7 @@ def _draw(frames, events=None):
             stride = 2 * _step_m(math.hypot(pl["vx"], pl["vy"]))
             g.phase = (g.phase + 2 * math.pi * dist / stride) % (2 * math.pi)
             g.heading, g.action, g.speed = pl["heading"], pl["action"], math.hypot(pl["vx"], pl["vy"])
-            pace(g, pl["vx"], pl["vy"], g.heading, 1 / FPS)
+            pace(g, pl["vx"], pl["vy"], g.heading, 1 / FPS, coming.get(pl["id"]))
             touch_at(g, mine.get(pl["id"], []), fi, 1.84, FPS, pl["x"], pl["y"])
             hold_at(g, held.get(pl["id"], []), fi, ball, 1.84, FPS)
             body_parts(pl["x"], pl["y"], looks[pl["id"]], g, ball)
@@ -1149,7 +1154,8 @@ def test_setting_off_the_feet_do_not_leave_the_grass_together():
 def _joint(pose, bone, height=1.84):
     """World position of a posed bone's joint for one frame's pose (heading 0, as _run_frames runs)."""
     head, _ = _fk(pose_angles(pose, 0.0, height))
-    return to_world(pose["x"], pose["y"], 0.0, height, head[_bone_index()[bone]], pose.get("lift") or 0.0)
+    lift = (pose.get("lift") or 0.0) + (pose.get("bob") or 0.0)
+    return to_world(pose["x"], pose["y"], 0.0, height, head[_bone_index()[bone]], lift)
 
 
 def _knee_fold(pose, side):
@@ -1218,11 +1224,13 @@ def test_a_running_knee_folds_as_far_as_a_runners(speed, peak):
 
 def test_the_trunk_leans_into_a_sprint_start_and_comes_up_braking():
     """Old (0.5.9): the trunk kept the stride's lean whatever the pace did. Speeding up at a m/s^2 the
-    body leans atan(a / g) so the ground's push passes through it (Kugler and Janshen 2010); slowing,
-    the trunk comes back up to upright and no further. Setting off at 4 m/s^2, as he passes 3.5, 4.5
-    and 5.4 m/s the drawn trunk leans at least 0.7 of atan(4 / g) beyond its lean at that speed held
-    (the acceleration is taken over 16 frames and the lean eases in); braking at 6 m/s^2, from 0.4 s
-    in it is upright, within 1 degree behind and 3 ahead of his standing trunk. At a steady jog
+    body leans atan(a / g) so the ground's push passes through it (Kugler and Janshen 2010), half of it
+    drawn in the trunk (scene.LEAN_DRAWN, design); slowing, the trunk comes back up to upright and no
+    further. Setting off at 4 m/s^2, as he passes 3.5, 4.5 and 5.4 m/s the drawn trunk leans at
+    least 0.7 of half of atan(4 / g) beyond its lean at that speed held (the lean eases in); braking
+    at 6 m/s^2 it is never ahead of its lean held at that speed (old, from boxes behind him: 5
+    frames late, forward while braking), and from 0.4 s in it is upright, within 1 degree behind
+    and 3 ahead of his standing trunk. At a steady jog
     whose engine speed rises and brakes back every 9 frames (seed 21's a5, 3.2 to 4.0 m/s) the trunk
     nods no more than 4 degrees (old, eased over 5 frames: it nodded every step). Held at 9 m/s the
     trunk leans at least 0.7 of the 3.4 degrees more than at 3.05 that Folland 2017 (10.3 degrees
@@ -1231,12 +1239,15 @@ def test_the_trunk_leans_into_a_sprint_start_and_comes_up_braking():
     up = [0.0] * 10 + [min(6.0, 0.16 * i) for i in range(1, 40)] + [6.0] * 30
     down = [max(1.0, 6.0 - 0.24 * i) for i in range(1, 22)]
     drawn = _draw(_run_frames(up + down))["h1"]
-    want = 0.7 * math.degrees(math.atan(4.0 / 9.81))
+    want = 0.7 * 0.5 * math.degrees(math.atan(4.0 / 9.81))
     for i in (31, 37, 43):  # 3.5, 4.5 and 5.4 m/s
         v = drawn[i][3]
         held = _trunk(_draw(_run_frames([v] * 50))["h1"][-1][0])
         assert _trunk(drawn[i][0]) - held >= want, (v, _trunk(drawn[i][0]), held, want)
     stand = _trunk(drawn[5][0])
+    for p, _, _, v in drawn[len(up):len(up) + 6]:  # braking, its first frames
+        held = _trunk(_draw(_run_frames([v] * 50))["h1"][-1][0])
+        assert _trunk(p) <= held + 1.0, (v, _trunk(p), held)
     for p, _, _, v in drawn[-11:]:  # braking, from 3.4 m/s
         assert stand - 1.0 <= _trunk(p) <= stand + 3.0, (v, _trunk(p), stand)
     saw = [3.21, 3.35, 3.49, 3.62, 3.75, 3.87, 4.0, 3.75, 3.52, 3.29] * 8
@@ -1283,3 +1294,45 @@ def test_a_sprints_flight_is_seen_over_two_frames_or_more(speed):
             runs.append(run)
             run = 0
     assert len(runs) >= 6 and min(runs) >= 2, (speed, runs)
+
+
+# Seed 21's a4 slowing from a jog to a stop at 4:04 (engine frames 96 to 135 of the 5:40 clip):
+# x, y, vx, vy, heading, action.
+A4_STOP = [
+    (75.353, 20.178, 0.1, 0.09, -0.49, "stand"), (75.357, 20.181, 0.1, 0.09, -0.734, "stand"),
+    (75.362, 20.186, 0.126, 0.113, -0.979, "stand"), (75.367, 20.19, 0.128, 0.115, -1.223, "stand"),
+    (75.372, 20.195, 0.13, 0.117, -1.467, "stand"), (75.378, 20.2, 0.132, 0.118, -1.712, "stand"),
+    (75.383, 20.205, 0.134, 0.12, -1.956, "stand"), (75.388, 20.209, 0.136, 0.122, -2.088, "stand"),
+    (75.394, 20.214, 0.138, 0.124, -2.084, "stand"), (75.399, 20.219, 0.14, 0.126, -2.081, "stand"),
+    (75.405, 20.225, 0.142, 0.128, -2.078, "stand"), (75.411, 20.23, 0.144, 0.13, -2.075, "stand"),
+    (75.417, 20.235, 0.146, 0.131, -2.072, "stand"), (75.423, 20.24, 0.148, 0.133, -2.07, "stand"),
+    (75.435, 20.251, 0.301, 0.27, -2.067, "stand"), (75.453, 20.267, 0.449, 0.404, -1.823, "walk"),
+    (75.477, 20.289, 0.595, 0.534, -1.579, "walk"), (75.506, 20.315, 0.737, 0.662, -1.334, "walk"),
+    (75.541, 20.347, 0.875, 0.786, -1.09, "walk"), (75.581, 20.383, 1.01, 0.908, -0.845, "walk"),
+    (75.627, 20.424, 1.142, 1.026, -0.601, "walk"), (75.678, 20.47, 1.271, 1.142, -0.357, "walk"),
+    (75.734, 20.52, 1.397, 1.255, -0.112, "walk"), (75.795, 20.574, 1.52, 1.365, 0.132, "walk"),
+    (75.86, 20.633, 1.64, 1.473, 0.376, "walk"), (75.93, 20.696, 1.757, 1.578, 0.621, "walk"),
+    (75.993, 20.752, 1.556, 1.382, 0.726, "walk"), (76.047, 20.799, 1.356, 1.186, 0.718, "walk"),
+    (76.093, 20.839, 1.157, 0.99, 0.708, "walk"), (76.131, 20.87, 0.957, 0.794, 0.693, "walk"),
+    (76.162, 20.894, 0.757, 0.598, 0.668, "walk"), (76.184, 20.91, 0.557, 0.401, 0.624, "walk"),
+    (76.198, 20.919, 0.358, 0.205, 0.38, "stand"), (76.205, 20.919, 0.158, 0.008, 0.136, "stand"),
+    (76.209, 20.917, 0.114, -0.039, -0.109, "stand"), (76.214, 20.916, 0.114, -0.042, -0.353, "stand"),
+    (76.218, 20.914, 0.114, -0.041, -0.597, "stand"), (76.223, 20.912, 0.114, -0.041, -0.842, "stand"),
+    (76.228, 20.902, 0.125, -0.248, -1.086, "stand"), (76.233, 20.893, 0.124, -0.246, -1.33, "stand"),
+]
+
+
+def test_a_player_braking_to_a_stop_keeps_his_planted_feet_on_the_grass():
+    """Old (a 0.5.10 draft): the stride's bob was sent in the body's lift, and a lowered lift is a
+    lunge's, so braking from 2.4 to 0.4 m/s in 7 frames (seed 21's a4) a planted foot beyond the
+    leg's reach was reached for above the grass: the knee folded it 25 to 38 cm up for 8 frames, a
+    freeze a blind critic rated 4 to 5. Every frame a foot is planted (on the grass, fully taken),
+    it is drawn within 10 cm of the grass (design: main draws it within 8.4 cm)."""
+    frames = [{"ball": {"x": 80.0, "y": 50.0, "z": 0.0, "vx": 0.0, "vy": 0.0}, "possessor": None,
+               "players": [{"id": "a4", "x": x, "y": y, "vx": vx, "vy": vy, "heading": h, "action": a,
+                            "dive": 0.0}]} for x, y, vx, vy, h, a in A4_STOP]
+    for i, (pose, m, _, _) in enumerate(_draw(frames)["a4"]):
+        for s in "lr":
+            plant = pose[f"plant_{s}"]
+            if plant and plant[3] == 0.0 and (len(plant) < 5 or plant[4] >= 1.0):
+                assert m[f"foot_{s}"][2] < 0.10, (i, s, m[f"foot_{s}"][2])

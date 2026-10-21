@@ -63,8 +63,9 @@ LEAN_SHARE = (("spine_01", 0.35), ("spine_02", 0.35), ("neck_01", 0.3))
 # The trunk's lean on top of the stride's (scene.pace), half tipping it at the hips and half in the
 # lower spine (design: bent down the spine alone it read as a stoop to a blind critic; tipped at the
 # hips alone, a lean of 30 degrees took the thigh past its reach behind him and a swinging leg flipped).
-# The pelvis turns, and the legs are placed after it.
-TRUNK_SHARE = (("pelvis", 0.5), ("spine_01", 0.5))
+# The pelvis turns, and the legs are placed after it. The neck takes half back, so the eyes stay up
+# the pitch (design: the head tipped down to the feet read as a stoop).
+TRUNK_SHARE = (("pelvis", 0.5), ("spine_01", 0.5), ("neck_01", -0.5))
 # The thigh points down, so a twist of +a about it turns the foot by -a about the vertical.
 TWIST_SIGN = -1.0
 # The surfaces a touch aims, not in the asset: (bone, rest point skinned wholly to it).
@@ -503,7 +504,9 @@ def pose_angles(pose: dict, heading: float, height_m: float) -> dict:
     """The bone angles for one frame's pose. The same steps as anglesFor in render.js."""
     x, y = pose.get("x", 0.0), pose.get("y", 0.0)
     lead = pose.get("lead") or 0.0
-    lift = pose.get("lift") or 0.0
+    # lift places the body (a jump, a lunge, the stride's bob); only a touch's own lift lowers him.
+    lift = (pose.get("lift") or 0.0) + (pose.get("bob") or 0.0)
+    lowered = (pose.get("lift") or 0.0) < 0.0
     angles = _upper(pose, heading, height_m)
     # scene.py plants a foot only when the pose stands on it.
     for side in ("l", "r"):
@@ -516,7 +519,7 @@ def pose_angles(pose: dict, heading: float, height_m: float) -> dict:
         pz = plant[3] if len(plant) > 3 else 0.0
         target = _to_object(x, y, heading, height_m, plant[0], plant[1], pz, lift)
         planted, err = _leg(angles, side, target, PLANT_FOOT, twist, f"foot_{side}", True)
-        if err > PLANT_GIVE_UP and lift < 0.0:
+        if err > PLANT_GIVE_UP and lowered:
             # Lowered, a foot the leg cannot reach is not left to the pose, which would put it through
             # the grass: the leg reaches toward its plant and stays above the grass.
             floor = -lift / (height_m / ASSET_STATURE_M)
@@ -556,7 +559,8 @@ def _hold(angles: dict, pose: dict, hold: dict, heading: float, height_m: float)
     bend = float(hold.get("bend") or 0.0)
     for bone, share in HOLD_BEND:
         _add(out, bone, bend * share)
-    x, y, lift = pose.get("x", 0.0), pose.get("y", 0.0), pose.get("lift") or 0.0
+    x, y = pose.get("x", 0.0), pose.get("y", 0.0)
+    lift = (pose.get("lift") or 0.0) + (pose.get("bob") or 0.0)
     bx, by, bz = hold["at"]
     centre = _to_object(x, y, heading, height_m, bx, by, bz, lift)
     k = height_m / ASSET_STATURE_M
@@ -642,7 +646,8 @@ def arm_points(pose: dict, heading: float, height_m: float) -> dict[str, list[fl
         markers[f"shoulder_{side}"] = head[i[f"upperarm_{side}"]]
         markers[f"elbow_{side}"] = head[i[f"lowerarm_{side}"]]
         markers[f"hand_{side}"] = _point(angles, f"hand_{side}")
-    x, y, lift = pose.get("x", 0.0), pose.get("y", 0.0), pose.get("lift") or 0.0
+    x, y = pose.get("x", 0.0), pose.get("y", 0.0)
+    lift = (pose.get("lift") or 0.0) + (pose.get("bob") or 0.0)
     return {name: list(to_world(x, y, heading, height_m, p, lift)) for name, p in markers.items()}
 
 
@@ -670,7 +675,8 @@ def to_world(x, y, heading, height_m, point, lift: float = 0.0) -> tuple[float, 
 def pose_markers(pose: dict, heading: float, height_m: float) -> dict[str, tuple[float, float, float]]:
     """World position of every marker (and touch surface) for one frame's pose."""
     angles = pose_angles(pose, heading, height_m)
-    x, y, lift = pose.get("x", 0.0), pose.get("y", 0.0), pose.get("lift") or 0.0
+    x, y = pose.get("x", 0.0), pose.get("y", 0.0)
+    lift = (pose.get("lift") or 0.0) + (pose.get("bob") or 0.0)
     return {name: to_world(x, y, heading, height_m, p, lift) for name, p in _markers(angles).items()}
 
 
