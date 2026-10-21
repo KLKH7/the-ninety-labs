@@ -517,8 +517,15 @@ function crowdMeshes(tiers, p, rand) {
     };
     return m;
   };
-  const torsoGeo = new THREE.PlaneGeometry(0.58, 0.72).rotateX(Math.PI / 2).translate(0, 0, 0.72);
-  const headGeo = new THREE.PlaneGeometry(0.26, 0.26).rotateX(Math.PI / 2).translate(0, 0, 1.2);
+  // Their normals lean up as the tier's do, so a stand lit from behind is lit like its seats and its
+  // fans are not black cut-outs (a blind review saw a near-black end stand).
+  const bend = (geo) => {
+    const n = geo.attributes.normal;
+    for (let i = 0; i < n.count; i++) n.setXYZ(i, 0, -0.45, 0.89);
+    return geo;
+  };
+  const torsoGeo = bend(new THREE.PlaneGeometry(0.58, 0.72).rotateX(Math.PI / 2).translate(0, 0, 0.72));
+  const headGeo = bend(new THREE.PlaneGeometry(0.26, 0.26).rotateX(Math.PI / 2).translate(0, 0, 1.2));
   const torso = new THREE.InstancedMesh(torsoGeo, material(torsoMap), seats.length);
   const head = new THREE.InstancedMesh(headGeo, material(headMap), seats.length);
   const team = new Float32Array(seats.length);
@@ -566,15 +573,17 @@ function stadiumRing(tiers, boardMat, backMat) {
         [P1[0], P1[1], P1[2] - 0.05], [P0[0], P0[1], P0[2] - 0.05], boardMat, [len / BOARD_AD_M / 8, 1]));
     }
   }
-  // The board ring's corners (the plain boards stop short of them), each facing the pitch.
+  // The board ring's corners (the plain boards stop short of them), each facing the pitch. On the
+  // goal lines the corner piece steps down from the side boards' 1.8 m to the end boards' 0.9 m,
+  // so no board ends in mid-air (a blind review saw the side boards stop there).
   const pieces = [
-    [[-4, 71.5], [-2, 71.5], 1.8], [[107, 71.5], [109, 71.5], 1.8],
-    [[109, -1.6], [107, -1.6], 1.8], [[-2, -1.6], [-4, -1.6], 1.8],
-    [[-4, -1.6], [-4, 2], 0.9], [[-4, 66], [-4, 71.5], 0.9],
-    [[109, 71.5], [109, 66], 0.9], [[109, 2], [109, -1.6], 0.9],
+    [[-4, 71.5], [-2, 71.5], 1.8, 1.8], [[107, 71.5], [109, 71.5], 1.8, 1.8],
+    [[109, -1.6], [107, -1.6], 1.8, 1.8], [[-2, -1.6], [-4, -1.6], 1.8, 1.8],
+    [[-4, -1.6], [-4, 2], 1.8, 0.9], [[-4, 66], [-4, 71.5], 0.9, 1.8],
+    [[109, 71.5], [109, 66], 1.8, 0.9], [[109, 2], [109, -1.6], 0.9, 1.8],
   ];
-  const boards = pieces.map(([a, b, h]) => quad([a[0], a[1], 0], [b[0], b[1], 0], [b[0], b[1], h], [a[0], a[1], h],
-    boardMat, [flat(a, b) / BOARD_AD_M / 8, 1]));
+  const boards = pieces.map(([a, b, ha, hb]) => quad([a[0], a[1], 0], [b[0], b[1], 0], [b[0], b[1], hb],
+    [a[0], a[1], ha], boardMat, [flat(a, b) / BOARD_AD_M / 8, 1]));
   // Backs for all but the near pieces (the gantry is behind those and sees through them).
   for (const brd of boards) {
     const a = brd.geometry.attributes.position.array;
@@ -1720,7 +1729,7 @@ class BroadcastRenderer {
       turf.repeat.set(100, 100);
       turf.needsUpdate = true;
       surround.material.map = turf;
-      surround.material.color.setHSL(p.grass_hue + 0.02, 0.3, 0.17);
+      surround.material.color.setHSL(p.grass_hue + 0.02, 0.25, 0.11);
       surround.material.needsUpdate = true;
     }
     surround.receiveShadow = true;
