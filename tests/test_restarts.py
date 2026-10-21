@@ -1388,14 +1388,10 @@ def test_team_mates_stand_close_only_once_gathered_round_the_scorer():
     assert ax * dx + ay * dy < 0.0  # bends away from b
 
 
-def test_players_walk_to_their_places_at_a_restart_rather_than_creep():
-    """Defect (lesson 174): at a corner the players went to their places just in time for the
-    kick, half a minute off, so they crept in below a walk through the whole wait (72% of their
-    time at 0.2 to 1.2 m/s over 25 corners in 20 matches). While a restart waits to be taken, an
-    outfielder goes to his place at no less than a normal walking pace (L4) and stands there; the
-    taker, the one fetching the ball and the one carrying it keep their own pace."""
-    from ninety.sim.engine import WALK_MPS
-    e = Engine(3)
+def corner_wait(seed: int = 3) -> Engine:
+    """A minute of play, then a corner to home at the near flag, its kick 30 s off; play is ended as
+    a foul ends it (the ball in flight, the chase, lunges)."""
+    e = Engine(seed)
     e.run(1)
     e.possessor, e.restart, e.set_by, e.throw_by, e.dribbler = None, None, None, None, None
     e.celebration = None
@@ -1403,13 +1399,57 @@ def test_players_walk_to_their_places_at_a_restart_rather_than_creep():
     e.lunges.clear(), e.lunge_at.clear(), e.evade_at.clear()
     e.ball = (PITCH_X + 1.5, 0.3, 0.0, 0.0, 0.0, 0.0)
     e.stop("corner", "home", (PITCH_X, 0.0))
+    e.restart.ready_at = e.t + 30.0
+    return e
+
+
+def test_players_walk_to_their_places_at_a_restart_rather_than_creep():
+    """Defect (lesson 174): at a corner the players went to their places just in time for the
+    kick, half a minute off, so they crept in below a walk through the whole wait (72% of their
+    time at 0.2 to 1.2 m/s over 25 corners in 20 matches). While a restart waits to be taken, a
+    player more than SETTLE_M from his place, or still walking in, goes there at no less than a
+    normal walking pace (L4), keepers too; one standing at his place settles to a small shift of
+    it at his own pace; the one fetching the ball keeps his own pace. Not in play, nor once the
+    restart is taken."""
+    from ninety.sim.engine import SETTLE_M, WALK_MPS
+    e = corner_wait()
     r = e.restart
-    r.ready_at = e.t + 30.0
-    own_pace = (r.taker, r.fetcher, r.carried_by)
-    going = [p for p in e.players if p.role != "GK" and p.id not in own_pace
-             and math.dist(e.shape_target(p)[:2], (p.x, p.y)) > 5.0]
-    assert len(going) >= 5  # premise: most of them have some way to go
+    going = [p for p in e.players if p.id != r.fetcher and math.dist(e.shape_target(p)[:2], (p.x, p.y)) > 5.0]
+    assert len(going) >= 5 and any(e._shape_target(p)[2] < WALK_MPS for p in going)  # premise: they crept
     assert all(e.shape_target(p)[2] >= WALK_MPS for p in going)
-    for pid in own_pace:  # their own pace, with no walking floor laid on it
-        if pid:
-            assert e.shape_target(e.by_id[pid]) == e._shape_target(e.by_id[pid])
+    for _ in range(int(1.0 / DT)):  # a second on: his side's brain has the restart as its possession
+        e.step()
+    keeper = next(p for p in e.players if p.role == "GK" and p.team == "home")  # at the far end
+    kx, ky, _ = e._shape_target(keeper)
+    keeper.x, keeper.y, keeper.vx, keeper.vy = kx + 10.0, ky, 0.0, 0.0  # 10 m off his place
+    assert e._shape_target(keeper)[2] < WALK_MPS  # premise: he would creep
+    assert e.shape_target(keeper)[2] >= WALK_MPS
+    # Standing half a stride from his place he settles to it at his own pace; walking in, he walks.
+    q = next(p for p in going if p.role != "GK")
+    tx, ty, _ = e._shape_target(q)
+    d = math.dist((tx, ty), (q.x, q.y))
+    q.x, q.y = tx + (q.x - tx) / d * SETTLE_M / 2, ty + (q.y - ty) / d * SETTLE_M / 2
+    q.vx = q.vy = 0.0
+    assert e.shape_target(q) == e._shape_target(q)
+    q.vx, q.vy = (tx - q.x) / (SETTLE_M / 2) * 1.2, (ty - q.y) / (SETTLE_M / 2) * 1.2
+    assert e.shape_target(q)[2] >= WALK_MPS
+    # Not in play, nor once the restart is taken (set_by: the kick is a moment away).
+    e.set_by, e.restart = r, None
+    assert all(e.shape_target(p) == e._shape_target(p) for p in e.players)
+    e.set_by, e.restart = None, None
+    assert all(e.shape_target(p) == e._shape_target(p) for p in e.players)
+
+
+def test_the_player_fetching_a_dead_ball_keeps_his_own_pace_by_the_boards():
+    """Lesson 174's walking floor is not laid on the player fetching the ball: by the boards his
+    pace is what he can stop in before them (L14)."""
+    from ninety.sim.engine import WALK_MPS
+    e = corner_wait()
+    r = e.restart
+    e.ball = (PITCH_X + BOARDS_M - 0.15, 0.3, 0.0, 0.0, 0.0, 0.0)  # at rest against the boards
+    e.plan_fetch(r)
+    assert r.fetcher is not None  # premise
+    f = e.by_id[r.fetcher]
+    f.x, f.y, f.vx, f.vy = PITCH_X + BOARDS_M - 0.1, 1.0, 0.5, 0.0  # 10 cm from the boards, going at them
+    assert e._shape_target(f)[2] < WALK_MPS  # premise: by the boards he goes slower than a walk
+    assert e.shape_target(f) == e._shape_target(f)

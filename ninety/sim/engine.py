@@ -167,6 +167,9 @@ GATHER_REACH_M = stopping_distance(RECOVER)
 # about 1.36 m/s (Bohannon & Andrews 2011, Physiotherapy 97:182, a meta-analysis of 23,111 adults,
 # as tabulated by the University of Toronto's iWalk guide)
 WALK_MPS = 1.36
+# design: about a stride. While a restart waits, a player standing at his place settles to a shift
+# of it smaller than this at his own pace, rather than walking to it and back (lesson 174)
+SETTLE_M = 1.0
 NO_OFFSIDE_FROM = ("throw_in", "goal_kick", "corner")  # Law 11: no offside offence direct from these
 INTERCEPT_SHARE = 0.85  # design: taken before this share of the way to its target, a pass is intercepted
 THROW_BEHIND_M = 0.55  # Law 15: his body stands outside the touchline, feet on or behind it (design)
@@ -2019,13 +2022,17 @@ class Engine:
 
     def shape_target(self, p: Player) -> tuple[float, float, float]:
         """Where a player off the ball wants to be, and how fast they go there. While a restart waits
-        to be taken, an outfielder goes to his place at no less than a normal walking pace (L4) and
-        stands there, rather than creeping in over the whole wait (R1's); the taker, the one
-        fetching the ball and the one carrying it keep their own pace (lesson 174)."""
+        to be taken, a player whose place is more than SETTLE_M off, or who is still walking in,
+        goes there at no less than a normal walking pace (L4) and stands there, rather than
+        creeping in over the whole wait (R1's); one standing at his place settles to a small shift
+        of it at his own pace, so it is not walked to and back. The one fetching the ball keeps his
+        own pace: near the boards it is what he can stop in (lesson 174)."""
         tx, ty, top = self._shape_target(p)
-        r = self.restart or self.set_by
-        if r is not None and p.role != "GK" and p.id not in (r.taker, r.fetcher, r.carried_by):
-            top = max(top, WALK_MPS)
+        r = self.restart
+        if r is not None and p.id != r.fetcher:
+            off = math.hypot(tx - p.x, ty - p.y)
+            if off > SETTLE_M or (off > 0.0 and math.hypot(p.vx, p.vy) > THROW_SETTLED_MPS):
+                top = max(top, WALK_MPS)
         return tx, ty, top
 
     def _shape_target(self, p: Player) -> tuple[float, float, float]:
