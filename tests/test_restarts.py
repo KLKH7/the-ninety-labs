@@ -1386,3 +1386,30 @@ def test_team_mates_stand_close_only_once_gathered_round_the_scorer():
     assert not e.together(a, b)
     ax, ay = e.avoid(a)
     assert ax * dx + ay * dy < 0.0  # bends away from b
+
+
+def test_players_walk_to_their_places_at_a_restart_rather_than_creep():
+    """Defect (lesson 174): at a corner the players went to their places just in time for the
+    kick, half a minute off, so they crept in below a walk through the whole wait (72% of their
+    time at 0.2 to 1.2 m/s over 25 corners in 20 matches). While a restart waits to be taken, an
+    outfielder goes to his place at no less than a normal walking pace (L4) and stands there; the
+    taker, the one fetching the ball and the one carrying it keep their own pace."""
+    from ninety.sim.engine import WALK_MPS
+    e = Engine(3)
+    e.run(1)
+    e.possessor, e.restart, e.set_by, e.throw_by, e.dribbler = None, None, None, None, None
+    e.celebration = None
+    e.kicked, e.dribble_to, e.windup, e.chase = None, None, None, {}
+    e.lunges.clear(), e.lunge_at.clear(), e.evade_at.clear()
+    e.ball = (PITCH_X + 1.5, 0.3, 0.0, 0.0, 0.0, 0.0)
+    e.stop("corner", "home", (PITCH_X, 0.0))
+    r = e.restart
+    r.ready_at = e.t + 30.0
+    own_pace = (r.taker, r.fetcher, r.carried_by)
+    going = [p for p in e.players if p.role != "GK" and p.id not in own_pace
+             and math.dist(e.shape_target(p)[:2], (p.x, p.y)) > 5.0]
+    assert len(going) >= 5  # premise: most of them have some way to go
+    assert all(e.shape_target(p)[2] >= WALK_MPS for p in going)
+    for pid in own_pace:  # their own pace, with no walking floor laid on it
+        if pid:
+            assert e.shape_target(e.by_id[pid]) == e._shape_target(e.by_id[pid])

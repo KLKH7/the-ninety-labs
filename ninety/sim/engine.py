@@ -2018,7 +2018,18 @@ class Engine:
         return math.hypot(tx - p.x, ty - p.y) / max(self.ball_eta(tx, ty), DT)
 
     def shape_target(self, p: Player) -> tuple[float, float, float]:
-        """Where a player off the ball wants to be, and how fast they go there."""
+        """Where a player off the ball wants to be, and how fast they go there. While a restart waits
+        to be taken, an outfielder goes to his place at no less than a normal walking pace (L4) and
+        stands there, rather than creeping in over the whole wait (R1's); the taker, the one
+        fetching the ball and the one carrying it keep their own pace (lesson 174)."""
+        tx, ty, top = self._shape_target(p)
+        r = self.restart or self.set_by
+        if r is not None and p.role != "GK" and p.id not in (r.taker, r.fetcher, r.carried_by):
+            top = max(top, WALK_MPS)
+        return tx, ty, top
+
+    def _shape_target(self, p: Player) -> tuple[float, float, float]:
+        """Where a player off the ball wants to be, and how fast they go there (shape_target)."""
         chase = self.chase.get(p.team)
         if p.id in self.lunges:  # committed: straight at the ball, at what winning it is worth to him (P17)
             bx, by = self.ball[0], self.ball[1]

@@ -8,13 +8,16 @@ From each run's frames.jsonl and events.jsonl (simulated matches, ground truth),
 - to the last time a player comes into the penalty area at that end before the kick: everyone in
   place;
 - to the kick (the first pass or shot after the set piece); and the wait between the later of the
-  first two and the kick.
+  first two and the kick. And how the outfielders (not the taker, nor the keepers) move from the
+  fetch to the kick: the share of their frames standing (under 0.2 m/s), creeping (0.2 to 1.2 m/s,
+  slower than a walk, L4's 1.36 m/s) or walking or faster.
 GROUNDING R1: Opta's mean from the ball going out to a corner being taken is about 30 s.
 """
 
 import json
 import math
 import sys
+from collections import Counter
 from pathlib import Path
 
 FPS = 25
@@ -54,6 +57,7 @@ def main() -> None:
         for out, sp, kick in corners:
             cx, cy = (0.0 if sp["x"] < PX / 2 else PX), (0.0 if sp["y"] < PY / 2 else PY)
             placed, moving, inside = None, out["frame"], None
+            speeds = Counter()
             for n in range(out["frame"], kick["frame"] + 1):
                 f = frames.get(n)
                 if not f:
@@ -67,13 +71,22 @@ def main() -> None:
                 if inside is not None and now - inside:
                     moving = n  # someone has just come into the area
                 inside = now
+                if placed is not None:
+                    for p in f["players"]:
+                        if p["id"] != sp["player"] and p["role"] != "GK":
+                            v = math.hypot(p["vx"], p["vy"])
+                            kind = "standing" if v < 0.2 else "creeping" if v < 1.2 else "walking or faster"
+                            speeds[kind] += 1
             total = (kick["frame"] - out["frame"]) / FPS
             fetch = ((placed or kick["frame"]) - out["frame"]) / FPS
             arrive = (moving - out["frame"]) / FPS
             rows.append({"run": run.name, "t": out["t"], "total": total, "fetch": fetch, "in_place": arrive,
-                         "wait_after": total - max(fetch, arrive)})
+                         "wait_after": total - max(fetch, arrive), "speeds": speeds})
     report = {k: quantiles([r[k] for r in rows]) for k in ("total", "fetch", "in_place", "wait_after")}
     report["corners"] = len(rows)
+    speeds = sum((r["speeds"] for r in rows), Counter())
+    frames = sum(speeds.values())
+    report["outfielders_after_the_fetch"] = {k: round(v / frames, 3) for k, v in speeds.most_common()}
     print(json.dumps(report, indent=1))
 
 
