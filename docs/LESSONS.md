@@ -1473,14 +1473,12 @@ short and actionable. This file is public: no research sources, product names or
 - **Rule:** a detector is developed on validation clips from the start, and the test set is scored
   once, at the end. A rule that adopts a gate or a threshold also bounds the size of the errors it
   lets through (the worst, or a high percentile), not only their number, stated before choosing.
-- **Not yet met here:** the height gate adopted in the same pull request does not meet this rule.
-  It trusts frames up to 55 m wrong on validation and 80 m on the test set (EVALUATION, "Event
-  detection from video"). Bounding it is a follow-up, planned and derived on validation like the
-  rest; until then the limit is stated wherever the gate's numbers are.
+- **Since met on validation:** a neighbour check added afterwards (docs/eval/camera-bound-plan.md,
+  lesson 159) bounds the worst trusted frame at 8.2 m there, against a bound of 8.5 m set before
+  measuring. On the test set, 4 frames about 46 m wrong are still trusted (lesson 159).
 - **Check:** `docs/eval/detector-plan.md` (the plan, its amendment and the outcome, in commit
   order); `docs/eval/detector-derive.md`, "Worst trusted" for each gate;
-  `tests/test_vision_observe.py::test_a_camera_in_the_wrong_place_is_not_trusted` (a strict expected
-  failure until the bound exists).
+  `tests/test_vision_observe.py::test_a_frame_whose_camera_disagrees_with_its_neighbours_is_not_trusted`.
 ### 140. A clip's truth must not depend on how long the match was simulated
 - **What happened:** `ninety-render` simulated the match to the end of the window it chose (240 s
   plus the clip), but its own determinism check re-rendered the same window with `--start`, which
@@ -1577,3 +1575,21 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_validate.py` (the planted cut clips; they fail on `aef43f5`) and
   `test_every_check_the_validator_reports_has_a_planted_defect`;
   `tests/test_render_params.py::test_only_a_broadcast_clip_cuts_through_dead_balls`.
+
+### 159. A check of one frame against another cannot see an error the frames share
+- **What happened:** the camera trust test (players' heights) let through frames up to 55 m wrong on
+  validation. A check that each trusted frame's camera agrees with a trusted neighbour's (image
+  centre within 2 m, within 5 frames) brought the worst down to 8.2 m there, under a bound set
+  beforehand. On the test set it removed 4 of the 8 far-wrong frames on the two clips with camera
+  cuts. The other 4, on seed 900003, are about 46 m wrong but agree with each other: a run of
+  frames the fit got wrong the same way. Validation's seed 108 is the same failure, milder: a whole
+  clip offset 2 to 8 m.
+- **Rule:** before adopting a consistency check, say which errors it can see. Comparing frames
+  catches errors that differ between them, never errors they share. A shared error needs an
+  absolute reference: the pitch markings, a known landmark, or a source independent of the fit.
+  Report what the check leaves, by the size of what it lets through, on the clips it is scored on.
+- **Check:** `tests/test_vision_observe.py`:
+  - `::test_a_frame_whose_camera_disagrees_with_its_neighbours_is_not_trusted` passes;
+  - `::test_a_whole_clip_in_the_wrong_place_is_not_trusted` is a strict expected failure, the
+    shared-error case;
+  - `docs/eval/camera-bound-plan.md`, Outcome, has the test set's frames left per clip.

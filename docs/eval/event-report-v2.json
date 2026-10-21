@@ -1,7 +1,7 @@
 {
   "command": "uv run python -m ninety.eval.event_report --test-dir runs/test-frozen-cca498c/test --observations docs/eval/attribution --observations tests/fixtures --out docs/eval/event-report-v2",
-  "commit": "0d790abfbb9daaeee5c62581fcda7e2af16ea816",
-  "date": "2026-10-20",
+  "commit": "2b0aa155f33df7364789d94c9d74012a9abdd482",
+  "date": "2026-10-21",
   "pooled": {
     "strict": {
       "deflection": {
@@ -697,7 +697,7 @@
           "out_of_play": 1
         },
         "named": {
-          "player": 3,
+          "player": 4,
           "receiver": 2,
           "interceptor": 1
         }
@@ -1063,9 +1063,9 @@
       "seed": 900002,
       "summary": {
         "frames": 250,
-        "frames_camera_ok": 1,
-        "ball_frames": 1,
-        "tracks": 10,
+        "frames_camera_ok": 0,
+        "ball_frames": 0,
+        "tracks": 0,
         "teams": {
           "feature": null,
           "kits": null,
@@ -1149,7 +1149,7 @@
       "positions": {
         "frames": {
           "observed": 250,
-          "camera_ok": 1,
+          "camera_ok": 0,
           "camera_not_ok": [
             5250,
             5251,
@@ -1366,6 +1366,7 @@
             5462,
             5463,
             5464,
+            5465,
             5466,
             5467,
             5468,
@@ -1403,16 +1404,16 @@
           ]
         },
         "players": {
-          "n": 10,
-          "median_m": 80.064,
-          "p90_m": 478.935,
-          "max_m": 578.377
+          "n": 0,
+          "median_m": null,
+          "p90_m": null,
+          "max_m": null
         },
         "ball_on_ground": {
-          "n": 1,
-          "median_m": 67.091,
-          "p90_m": 67.091,
-          "max_m": 67.091
+          "n": 0,
+          "median_m": null,
+          "p90_m": null,
+          "max_m": null
         },
         "ball_in_the_air": {
           "n": 0,
@@ -1426,9 +1427,9 @@
       "seed": 900003,
       "summary": {
         "frames": 250,
-        "frames_camera_ok": 7,
-        "ball_frames": 7,
-        "tracks": 10,
+        "frames_camera_ok": 4,
+        "ball_frames": 4,
+        "tracks": 7,
         "teams": {
           "feature": null,
           "kits": null,
@@ -1692,7 +1693,7 @@
       "positions": {
         "frames": {
           "observed": 250,
-          "camera_ok": 7,
+          "camera_ok": 4,
           "camera_not_ok": [
             5801,
             5802,
@@ -1856,6 +1857,7 @@
             5960,
             5961,
             5962,
+            5963,
             5964,
             5965,
             5966,
@@ -1867,11 +1869,13 @@
             5975,
             5977,
             5978,
+            5979,
             5980,
             5981,
             5982,
             5983,
             5984,
+            5985,
             5986,
             5987,
             5988,
@@ -1940,22 +1944,22 @@
           ]
         },
         "players": {
-          "n": 44,
-          "median_m": 45.942,
-          "p90_m": 48.137,
-          "max_m": 49.181
+          "n": 24,
+          "median_m": 45.537,
+          "p90_m": 47.47,
+          "max_m": 48.163
         },
         "ball_on_ground": {
-          "n": 6,
-          "median_m": 46.596,
-          "p90_m": 47.462,
-          "max_m": 48.16
+          "n": 4,
+          "median_m": 46.012,
+          "p90_m": 46.915,
+          "max_m": 47.462
         },
         "ball_in_the_air": {
-          "n": 1,
-          "median_m": 39.413,
-          "p90_m": 39.413,
-          "max_m": 39.413
+          "n": 0,
+          "median_m": null,
+          "p90_m": null,
+          "max_m": null
         }
       }
     },

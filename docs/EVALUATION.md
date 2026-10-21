@@ -336,7 +336,7 @@ only the trust test and the placing run again.
 
 | Stage | What it does | Code |
 |---|---|---|
-| Camera | white-marking pixels (brighter and bluer than the grass on both sides, detected players and ball masked) fitted to Law 1's markings: one gantry for the clip (found from every 25th frame), pan, tilt and zoom per frame (tracked from the last frame whose markings fit). A frame is trusted when its players are as tall as they should be: the median, over its player boxes, of box height against an upright 1.80 m at the foot point lies in 0.901 to 1.002, the 1st to 99th percentile on validation frames whose ground mapping is within 1.0 m | `ninety/vision/pitch.py`, `ninety/vision/observe.py` |
+| Camera | white-marking pixels (brighter and bluer than the grass on both sides, detected players and ball masked) fitted to Law 1's markings: one gantry for the clip (found from every 25th frame), pan, tilt and zoom per frame (tracked from the last frame whose markings fit). A frame is trusted when its players are as tall as they should be (the median, over its player boxes, of box height against an upright 1.80 m at the foot point lies in 0.901 to 1.002, the 1st to 99th percentile on validation frames whose ground mapping is within 1.0 m) and its camera agrees with a trusted neighbour's (the ground point at the image centre within 2 m of the nearest other such frame's within 5 frames; [camera-bound-plan.md](eval/camera-bound-plan.md)) | `ninety/vision/pitch.py`, `ninety/vision/observe.py` |
 | On the pitch | each box's foot point (players) or centre one radius up (ball) through a trusted frame's camera; shirt colour from the box's upper middle | `ninety/vision/observe.py` |
 | Tracks and teams | players linked in pitch metres; two kits told apart by chromaticity (shadow-proof, lesson 98) or by brightness (white against black), whichever separates them more on the clip; the side defending x = 105 is away (the engine's one convention), and it is the side standing nearer it on average (GROUNDING T2, O6) | `ninety/vision/track.py` |
 | Events | possession: the ball within 1.5 m of a player's feet and moving with him (GROUNDING P6); a pass from one spell to the next, a shot when the strike heads between the posts, out of play when the whole ball is over a line for 3 frames | `ninety/vision/events.py` |
@@ -353,7 +353,7 @@ scorer's pairing (player IoU 0.5, ball centre 5 px) and the planned "in the air"
 | Shots | 0 of 1: read as a pass (the ball's height, below) |
 | Out of play | none true, 1 false: the same shot reaching the keeper |
 | Outside M1's scope | 5 possession changes, 2 pressures, a deflection, a tackle and a set piece, counted as misses |
-| Camera trusted | 900001 238 of 250 frames, 900004 194, 900005 248; 900002 1 and 900003 7: these two have camera cuts, which the fit does not follow. **The height test trusts those 8 frames although they are 46 to 80 m wrong**, where the old marking test trusted none; on validation it newly trusts 32 such frames, up to 55 m wrong. They make no event here, but the test does not bound how wrong a trusted camera can be (lesson 149); a camera in the wrong place with players the right height passes it. A follow-up adds that bound |
+| Camera trusted | 900001 238 of 250 frames, 900004 194, 900005 248; 900002 none and 900003 4: these two have camera cuts, which the fit does not follow. The neighbour check bounds how wrong a trusted camera is on validation (worst 8.2 m, against 55 m with heights alone; bound 8.5 m set beforehand), and on the test set removes 4 of the 8 frames heights alone trusted there. **The 4 left, on 900003, are about 46 m wrong**: a run of consecutive frames whose wrong cameras agree with each other, which no check of one frame against another can see. They make no event here. A whole clip offset the same way (validation seed 108, 2 to 8 m) passes for the same reason (lesson 159) |
 | Players on the pitch | median 0.21, 0.23 and 0.14 m on the three clips with a camera, 90% within 1.44, 0.63 and 0.33 m |
 | Ball on the ground | median 0.09, 0.14 and 0.05 m, 90% within 0.26, 0.45 and 0.13 m |
 | Teams | every matched pass has its true team (7 of 7, 95% 0.65 to 1.00). On validation it is 11 of 16: kit colours are read wrongly on some clips (a blue shirt as near-white, a green one as grey), which the derivation found and did not fix ([eval/detector-plan.md](eval/detector-plan.md), step A) |
@@ -387,7 +387,7 @@ ids the phone companion's minimap uses, never a shirt number (`ninety/vision/eve
 `attribute`).
 
 - The holder of the spell (at the strike, or at the first frame of the next spell) is named only
-  when no other track, of either side or none, is within **RIVAL_M = 1.59 m** of his own distance
+  when no other track, of either side or none, is within **RIVAL_M = 1.26 m** of his own distance
   from the ball: a rival that close may really be the nearer one. Only a track the companion
   draws (a side, and at least 5 frames) is named.
 - Otherwise the name is null and the event keeps its `team` (the holder's kit colour), so the
@@ -402,7 +402,8 @@ ids the phone companion's minimap uses, never a shirt number (`ninety/vision/eve
 plans were read). They come from ours-v2's validation clips, never test clips.
 - **RIVAL_M** is the players' pooled 90th-percentile pitch-position error on those clips, on the
   frames the camera trust test passes ([eval/attribution-derive.md](eval/attribution-derive.md)).
-  It was 1.89 m with the old marking test and is 1.59 m with the height test. It still includes
+  It was 1.89 m with the old marking test, 1.59 m with the height test, and is 1.26 m with the
+  height and neighbour checks. It still includes
   validation seed 108, whose camera is about 2 m wrong with players the right height, so it is
   larger than the box error alone and leaves more names null. An earlier 1.44 m had been measured
   on test seed 900001 and is replaced.

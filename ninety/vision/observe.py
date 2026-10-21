@@ -48,8 +48,9 @@ BALL_CENTRE_Z = 0.11  # a ball on the ground has its centre one radius up (Law 2
 # the nearest other height-trusted frame's within NEIGHBOUR_FRAMES (design, set before measuring;
 # docs/eval/camera-bound-plan.md). On validation that cut the worst trusted frame from 55 m wrong
 # to 8.2 m, under the plan's bound of 8.5 m, and kept every good frame the heights kept.
-# Known limit: a whole clip whose camera is offset the same way in every frame (validation seed 108,
-# about 2 to 8 m) still passes; no check of one frame against another can see it.
+# Known limit (lesson 159): frames whose wrong cameras agree with each other still pass, since no
+# check of one frame against another can see them: a whole clip offset the same way (validation
+# seed 108, about 2 to 8 m), and a run of 4 frames on test clip 900003, about 46 m wrong.
 NEIGHBOUR_FRAMES = 5
 NEIGHBOUR_M = 2.0
 PLAYER_HEIGHT_M = 1.80

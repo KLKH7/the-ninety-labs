@@ -112,3 +112,34 @@ What is left is seed 108's whole-clip offset (139 frames, 2 to 8 m) plus 2 frame
 3041, all within the bound.
 
 **RIVAL_M** (the amendment): the pooled p90 with C2 in place is 1.256 m, so **1.26 m** (was 1.59 m).
+
+### The test set, scored once (after 2b0aa15 froze every constant)
+
+Far-wrong frames trusted (ground mapping error over 1.0 m is not measured on test; these are the
+frames the per-clip position report shows tens of metres off), by check:
+
+| Test clip | Heights alone (#187) | Heights and neighbours (this PR) |
+|---|---|---|
+| 900001, 900004, 900005 | none far wrong | none far wrong (238, 194, 248 frames trusted, as before) |
+| 900002 (camera cut) | 1 frame, about 80 m | **0** |
+| 900003 (camera cut) | 7 frames, about 46 m | **4 frames, about 46 m**: a run whose wrong cameras agree with each other |
+
+Everything else is unchanged:
+- passes, strict: 7 of 13, F1 0.67;
+- teams 7 of 7; names 14 of 14;
+- the phone's numbers on 900001 (its tracked frames did not change).
+
+The bound holds on validation (worst 8.2 m against 8.5 m) but not on 900003: the check cannot see
+frames that are wrong the same way (lesson 159). They make no event.
+
+### Validation, before and after (bad frames trusted, ground error over 1.0 m)
+
+| Seed | Heights alone | Heights and neighbours |
+|---|---|---|
+| 108 | 143 | 139 (the whole clip's offset, 2 to 8 m) |
+| 114 | 6 | 2 |
+| 122 | 8 | 0 |
+| 3041 | 14 | 2 |
+| 3042 | 4 | 0 |
+| Worst trusted | 55.3 m | 8.2 m |
+| Good frames kept | 1,712 | 1,712 |
