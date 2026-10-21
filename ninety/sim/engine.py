@@ -321,9 +321,11 @@ def segment_distance(px: float, py: float, ax: float, ay: float, bx: float, by: 
 def round_the_circle(cx: float, cy: float, radius: float, px: float, py: float, qx: float,
                      qy: float) -> float:
     """How far a player walks from (px, py) to (qx, qy) keeping off the circle of `radius` round
-    (cx, cy), the way keep_off has him: straight on if the straight way stays outside it; otherwise
+    (cx, cy), estimated from above: straight on if the straight way stays outside it; otherwise
     round it at his own distance from its centre (stepping straight out past its edge first, if he
-    is inside) until the straight way on just touches it, then straight on."""
+    is inside) until the straight way on just touches it, then straight on. keep_off aims him at
+    most KEEP_OFF_STEP_DEG round from where he is, so he walks a spiral in toward the circle, which
+    is shorter (lesson 161; measured in tests/test_restarts.py)."""
     mx, my = px - cx, py - cy
     m = math.hypot(mx, my)
     out = 0.0
@@ -1717,18 +1719,18 @@ class Engine:
         return way_in(*self.restart_ball_spot(r), r.wall[p.id], (p.x, p.y))
 
     def walk_to_wall(self, r: Restart, at: tuple[float, float], place: tuple[float, float]) -> float:
-        """How far he walks from `at` to a place in the wall, the way he goes there: round the
-        restart's keep-off circle as keep_off has him, to where he comes in behind the line
-        (way_into_wall), then up into it."""
+        """How far he walks from `at` to a place in the wall, the way he goes there, estimated from
+        above (round_the_circle): round the restart's keep-off circle, to where he comes in behind the
+        line (way_into_wall), then up into it."""
         bx, by = self.restart_ball_spot(r)
         wx, wy = way_in(bx, by, place, at)
         clear = RESTART_DISTANCE_M[r.kind] + KEEP_OFF_MARGIN_M
         return round_the_circle(bx, by, clear, *at, wx, wy) + math.hypot(place[0] - wx, place[1] - wy)
 
     def form_wall(self, r: Restart) -> dict[str, tuple[float, float]]:
-        """The defending side's outfielders with the shortest walks to the wall's spots stand in it,
-        the nearest pair of player and spot first, each walk measured the way he would go there
-        (walk_to_wall: round the keep-off circle, in behind the line, up into it). They then share
+        """The defending side's outfielders with the shortest walks to the wall's spots stand in it
+        (design), the nearest pair of player and spot first, each walk estimated the way he would go
+        there (walk_to_wall: round the keep-off circle, in behind the line, up into it). They then share
         the places out so that their walks add up to the least, so no two of them could swap places
         for a shorter pair of walks (lesson 143). As walked, two coming round the same side can
         still pass each other behind the wall (lesson 161; docs/eval/restarts.md)."""
@@ -2084,7 +2086,8 @@ class Engine:
         if wall and p.id in wall.wall:  # Law 13: in the wall until the ball is kicked
             wx, wy = self.way_into_wall(wall, p)
             # At least a walk (L4); faster if the whole way in, round the circle and by behind the
-            # line, would not get him to his place by the time the kick may be taken (R1's wait).
+            # line, would not get him to his place by the time the kick may be taken (R1's wait). The
+            # way is estimated from above (walk_to_wall), so he is early rather than late.
             way = self.walk_to_wall(wall, (p.x, p.y), wall.wall[p.id])
             return wx, wy, max(WALK_MPS, way / max(wall.ready_at - self.t, DT))
         bx, by = self.play_point(p)  # O8: where the ball is going, once a pass is struck

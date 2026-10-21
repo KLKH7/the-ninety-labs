@@ -1626,14 +1626,18 @@ short and actionable. This file is public: no research sources, product names or
   runs to the wall cross; the test checked the straight lines. A focused audit followed the runs
   frame by frame: players go round the 9.65 m keep-off circle at their own distance from the ball
   and come in behind the wall, and two runs crossed within a second of each other in 22 of 72
-  planted kicks. Measuring each walk the way it is walked fixed who stands in the wall and how fast
-  they walk there, but not the crossings: a walk round the circle at one's own distance is not the
-  shortest way, so the uncrossing argument does not hold for it, and two coming round the same side
-  share the way behind the wall.
+  planted kicks. The fix estimated each walk the way it goes, round the circle at the walker's own
+  distance from the ball: that changed who stands in the wall and how fast they walk there, but not
+  the crossings (that walk is not the shortest way, so the uncrossing argument does not hold for it,
+  and two coming round the same side share the way behind the wall). And it repeated the mistake:
+  its docs said the estimate followed `keep_off`, and a second audit, frame by frame, found the
+  walked paths round the circle 6 to 24% shorter, because `keep_off`'s aiming walks a spiral in
+  toward the circle. It is now stated, and tested, as an estimate from above.
 - **Rule:** a claim about movement (no crossing, no contact, in place in time) is measured on the
   walked paths, frame by frame, before it is written down; a property of the plan is stated as one.
 - **Check:** `uv run python scripts/defect_sweep/wall.py --planted` reports the walked crossings for
-  each kick; `docs/eval/restarts.md` ("The wall") publishes them.
+  each kick; `uv run pytest tests/test_restarts.py -k estimated_from_above` follows the walks frame by
+  frame against their estimate.
 
 ### 166. A wait for something to happen ends when it can no longer happen
 - **What happened:** a throw-in released behind the touchline counts as still coming in while it

@@ -154,8 +154,8 @@ cut overlaps further. Those values were set before and were not changed after se
 At a direct free kick within shooting range the defending side builds a wall (GROUNDING L14): as
 many as a shoulder's breadth each fills, rounded down, across the part of the goal Bray's model has
 it hide (from the near post, design, to a third of the half-goal past the centre), at 9.15 m and
-0.5 m; the defenders with the shortest walks to its places, each walk measured the way he goes
-(round the keep-off circle, in behind the line, up into it), share them for the least total walk,
+0.5 m; the defenders with the shortest walks to its places, each walk estimated from above the way
+he goes (round the keep-off circle, in behind the line, up into it), share them for the least total walk,
 walk to it at least at a normal walking pace, come in behind the line and step up into their places,
 and stand shoulder to shoulder.
 
@@ -178,10 +178,11 @@ and rounding sent him round the circle at his own distance (lesson 158).
 
 The focused audit of that version planted 72 more: seeds 1, 4, 6, 8 to 12, free kicks at nine spots
 at both ends (walls of two to five), every wall player followed frame by frame (the command under
-Reproduce). Measuring each walk as walked (round the keep-off circle, in behind the line, up into
-it), not as a straight line, to choose the wall's players, share out its places and pace them:
+Reproduce). Estimating each walk the way it goes (round the keep-off circle at the walker's distance
+from the ball, in behind the line, up into it), not as a straight line, to choose the wall's players,
+share out its places and pace them:
 
-| | Straight lines (`8e52cb4`) | As walked (`5183be6`) |
+| | Straight lines (`8e52cb4`) | Walks round the circle (`5183be6`) |
 |---|---:|---:|
 | Kicks where two wall players' walked paths cross, the two there within a second | 22 of 72 (32 pairs) | 21 of 72 (35 pairs) |
 | Kicks where the wall formed after the kick could be taken | 24, by up to 1.1 s | 18, by up to 1.3 s |
@@ -192,7 +193,10 @@ Every wall formed before its kick was struck; when it was struck no wall player 
 0.03 m from his place and neighbours' bodies were -0.02 to 0.03 m apart, in both. The crossings that
 remain are two coming round the same side of the circle: a walk round it at one's own distance from
 the ball is not the shortest way there, so the least total walk does not keep two such walks apart,
-and both then use the way behind the wall (lesson 161).
+and both then use the way behind the wall (lesson 161). The estimate is from above: `keep_off` aims a
+player at most 30 degrees round from where he is, so he walks a spiral in toward the circle, and over
+15 walks of four planted kicks the walked paths were 0.5% to 19% shorter than the estimate, never
+longer (`tests/test_restarts.py`), so a wall player is paced early rather than late.
 
 The same 16 matches as above, the wall branch at `41ce3fba` against the celebration branch (no wall);
 raw output in [restarts/wall-branch.json](restarts/wall-branch.json). 13 direct free kicks fell

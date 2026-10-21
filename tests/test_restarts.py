@@ -1034,6 +1034,11 @@ def test_a_throw_that_runs_on_past_the_end_of_the_touchline_never_entered_the_fi
     e.ball = (105.6, -0.25, 1.0, 15.0, 0.01, -1.0)  # past the corner, still outside the touchline
     assert e.went_out(before)
     assert (e.restart.kind, e.restart.team, e.restart.x, e.restart.y) == ("throw_in", "home", 95.0, 0.0)
+    e = drifting_throw()  # the same at the other end of the touchline
+    e.throw_from = (10.0, 0.0)
+    e.ball = (-0.6, -0.25, 1.0, -15.0, 0.01, -1.0)
+    assert e.went_out((0.0, -0.25, 1.05, -15.0, 0.01, -1.0))
+    assert (e.restart.kind, e.restart.x, e.restart.y) == ("throw_in", 10.0, 0.0)
     e = drifting_throw()
     track = [e.ball[:3]]
     for _ in range(int(10 / DT)):
@@ -1062,9 +1067,10 @@ def test_the_wall_is_made_of_those_with_the_shortest_walks_to_it():
     assert set(e.form_wall(r)) == {back1.id, back2.id}
 
 
-def test_the_way_round_a_keep_off_circle_is_measured_as_it_is_walked():
-    """keep_off sends a player round a restart's circle at his own distance from the ball until the
-    straight way on just touches it, then straight on; walk_to_wall measures that way."""
+def test_the_way_round_a_keep_off_circle_is_estimated_at_the_walkers_distance():
+    """walk_to_wall's estimate of a walk round a restart's circle: at the walker's own distance from
+    the ball until the straight way on just touches the circle, then straight on (an estimate from
+    above: test_the_walk_to_the_wall_is_estimated_from_above)."""
     from ninety.sim.engine import round_the_circle
     radius, m = 9.65, 12.0
     assert round_the_circle(0.0, 0.0, radius, 12.0, 15.0, -12.0, 15.0) == pytest.approx(24.0)  # clear of it
@@ -1074,6 +1080,43 @@ def test_the_way_round_a_keep_off_circle_is_measured_as_it_is_walked():
     out = radius + KEEP_OFF_MARGIN_M  # from inside: straight out past the edge first, then round
     round_out = out * (math.pi - 2 * math.acos(radius / out)) + 2 * math.sqrt(out * out - radius * radius)
     assert round_the_circle(0.0, 0.0, radius, 5.0, 0.0, -out, 0.0) == pytest.approx(out - 5.0 + round_out)
+    # across the seam where the angle wraps (as the walls at the away end's goal are): 120 degrees round,
+    # not 240
+    a, b = math.radians(120.0), math.radians(-120.0)
+    seam = m * (math.radians(120.0) - 2 * touch) + 2 * math.sqrt(m * m - radius * radius)
+    assert round_the_circle(0.0, 0.0, radius, m * math.cos(a), m * math.sin(a), m * math.cos(b),
+                            m * math.sin(b)) == pytest.approx(seam)
+
+
+def test_the_walk_to_the_wall_is_estimated_from_above():
+    """Lesson 161: a claim about how players move is measured on the paths they walk. walk_to_wall
+    estimates a walk round the keep-off circle at the walker's own distance from the ball; keep_off
+    aims him at most 30 degrees round from where he is, so he walks a spiral in toward the circle.
+    Followed frame by frame, no wall player walks further than the estimate, and some go round."""
+    went_round = 0
+    for seed, at in ((3, (PITCH_X - 22.0, 34.0)), (5, (87.0, 24.0))):
+        e = wall_kick(seed, at)
+        r = e.restart
+        wall = dict(r.wall)
+        at_ = {pid: (e.by_id[pid].x, e.by_id[pid].y) for pid in wall}
+        estimate = {pid: e.walk_to_wall(r, at_[pid], wall[pid]) for pid in wall}
+        walked = dict.fromkeys(wall, 0.0)
+        arrived: set[str] = set()
+        for _ in range(int(45 / DT)):
+            e.step()
+            for pid in set(wall) - arrived:
+                p = e.by_id[pid]
+                walked[pid] += math.dist(at_[pid], (p.x, p.y))
+                at_[pid] = (p.x, p.y)
+                if math.dist((p.x, p.y), wall[pid]) < ball.RADIUS:
+                    arrived.add(pid)
+            if arrived == set(wall):
+                break
+        assert arrived == set(wall), (seed, at)  # premise: each got to his place
+        for pid in wall:
+            assert walked[pid] <= estimate[pid], (seed, at, pid, walked[pid], estimate[pid])
+            went_round += estimate[pid] > walked[pid] + 1.0
+    assert went_round >= 3  # premise: walks round the circle, where the spiral is shorter
 
 
 def test_wall_members_stand_close_only_near_their_places():

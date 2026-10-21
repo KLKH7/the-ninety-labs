@@ -113,8 +113,9 @@ def measure(run: Path) -> dict:
                 out["goal_to_kick_s"].append(round(kick["t"] - e["t"], 1))
         if e["type"] != "set_piece":
             continue
-        if stopped_by is None and last_set and math.hypot(e["x"] - last_set[1], e["y"] - last_set[2]) < 1.0:
-            kind = last_set[0]  # taken again from the same spot with no new stoppage (Law 15's retake)
+        if stopped_by is None and last_set and math.hypot(e["x"] - last_set[1], e["y"] - last_set[2]) <= 0.05:
+            # taken again from the same spot (to the files' rounding) with no new stoppage: Law 15's retake
+            kind = last_set[0]
         else:
             kind = kind_of(stopped_by, e)
         last_set = (kind, e["x"], e["y"])
