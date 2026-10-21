@@ -412,6 +412,10 @@ class Engine:
         # chosen when he last scanned and held until he next does; and who has scanned since.
         self.open_at: dict[str, tuple[float, float]] = {}
         self.open_due: set[str] = set()
+        # O2 beyond the box: the attacker each defender in the block tracks in his zone, chosen when he
+        # last scanned; and who has scanned since.
+        self.track: dict[str, str | None] = {}
+        self.track_due: set[str] = set()
         self.restart: Restart | None = None
         # Laws 13, 15 to 17: a restart that has been set but not yet kicked; the opponents keep off
         self.set_by: Restart | None = None
@@ -519,6 +523,7 @@ class Engine:
             self.pressed.clear()
             self.poss_team = self.team_of(pid)
             self.open_at.clear()  # O3: a new possession: each attacker finds his space afresh
+            self.track.clear()  # O2: and each defender looks afresh for a man in his zone
         self.possessor = pid
         self.last_touch = pid
         self.tastes.pop(pid, None)  # D4: a new possession is a new look at his options
@@ -1758,6 +1763,20 @@ class Engine:
         dx, dy = self.open_at.get(p.id, (0.0, 0.0))
         return clamp(slot[0] + dx, 0.5, PITCH_X - 0.5), clamp(slot[1] + dy, 0.5, PITCH_Y - 0.5)
 
+    def zone_spot(self, p: Player, slot: tuple[float, float], own_goal_x: float) -> tuple[float, float]:
+        """O2 beyond the box: his place in the block, moved goal-side of the attacker he tracks in his
+        zone (offball.zone_spot). He picks whom to track when he scans (P13), never the carrier (the
+        press is the presser's, P17), and follows that man as he sees him until he scans again."""
+        view = self.beliefs[p.id]
+        if p.id in self.track_due:
+            self.track_due.discard(p.id)
+            attackers = {q.id: w for q in self.players if q.team != p.team and q.role != "GK"
+                         and q.id != self.possessor and (w := view.where(q.id, self.t))}
+            self.track[p.id] = offball.zone_man(slot, attackers, self.track.get(p.id))
+        man = self.track.get(p.id)
+        at = view.where(man, self.t) if man else None
+        return offball.zone_spot(slot, at, own_goal_x) if at else slot
+
     def in_time(self, p: Player, tx: float, ty: float) -> float:
         """O8: the speed he chooses to get to (tx, ty): just enough to be there before the ball could
         be, so far from the ball he walks and near it he bursts; his body caps it."""
@@ -1929,7 +1948,7 @@ class Engine:
                 return cx, cy, self.in_time(p, cx, cy)
             slot = brain.slot(p.role, p.ay, clamp(by, 0, PITCH_Y))
             if slot:
-                tx, ty = slot
+                tx, ty = self.zone_spot(p, slot, own[0])
         tx, ty = clamp(tx, 0.5, PITCH_X - 0.5), clamp(ty, 0.5, PITCH_Y - 0.5)
         return tx, ty, self.in_time(p, tx, ty)
 
@@ -1966,6 +1985,7 @@ class Engine:
                 )
                 if scanned:
                     self.open_due.add(p.id)  # O3: he may look again for space to be open in
+                    self.track_due.add(p.id)  # O2: and for a man in his zone
         holder = self.restart.team if self.restart else self.poss_team
         for k, (team, brain) in enumerate(self.brains.items()):
             if (self.frame + k * BRAIN_EVERY // 2) % BRAIN_EVERY:
