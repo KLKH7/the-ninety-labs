@@ -607,3 +607,66 @@ def test_after_the_kick_the_corner_rule_frames_no_worse_than_no_rule():
         with_rule = score(_after_kick(flag, path), measure)
         without = score(_after_kick(flag, path, corner=False), measure)
         assert with_rule >= without, (what, with_rule, without)
+# Option (b) for a corner delivery (lesson 177): these bounds were written and committed before
+# the camera rule was implemented or measured, and are not moved.
+def _rest_in_near_arc(seconds=2.0):
+    d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=False)
+    _held(d, 20.0, 20.0, 50)
+    x, y = 6.0, 6.0
+    for _ in range(25):  # the ball is carried to the flag and placed: a placement, not a delivery
+        x, y = max(x - 0.25, 0.5), max(y - 0.25, 0.5)
+        d.step(x, y, [])
+    for _ in range(int(25 * seconds)):  # the corner waits (the engine's set piece, as the render passes it)
+        d.step(0.5, 0.5, [], corner=(0.0, 0.0))
+    return d
+
+
+def test_placing_the_ball_for_a_corner_does_not_cut():
+    """The blind critic of 0.5.7: a cut fired when the ball was placed in the arc and landed on
+    empty grass. Placing the ball, and the wait, stay on the gantry."""
+    d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=False)
+    _held(d, 20.0, 20.0, 50)
+    x, y, angles = 6.0, 6.0, []
+    for _ in range(25):
+        x, y = max(x - 0.25, 0.5), max(y - 0.25, 0.5)
+        d.step(x, y, [])
+        angles.append(d.angle)
+    for _ in range(50):
+        d.step(0.5, 0.5, [], corner=(0.0, 0.0))
+        angles.append(d.angle)
+    assert set(angles) == {"main"}, set(angles)
+
+
+def test_a_near_corner_delivery_is_seen_kicked_then_cut_to_the_side_camera_with_the_ball_in_shot():
+    """The blind critic of 0.5.7: the cut fired a frame after the strike into a shot the ball had
+    not reached, so the kick was never seen. The kick is shown on the gantry; the picture cuts to
+    the near-side camera at the penalty-area line only with the ball already inside its CENTRAL box,
+    within a second of the kick, and the ball stays inside that box on every frame of the shot."""
+    d = _rest_in_near_arc()
+    x, y = 0.5, 0.5
+    cam = d.step(x + 0.33, y + 0.85, [])
+    x, y = x + 0.33, y + 0.85
+    assert d.angle == "main"  # the kick itself is on the gantry
+    angles, central = [], []
+    for i in range(int(25 * 3)):
+        if i < 8:
+            x, y = x + 0.33, y + 0.85
+        cam = d.step(x, y, [])
+        angles.append(d.angle)
+        if d.angle == "corner16":
+            uv = cam.project((x, y, 0.11))
+            central.append(uv is not None and 0.2 * 1280 <= uv[0] <= 0.8 * 1280
+                           and 0.15 * 720 <= uv[1] <= 0.85 * 720)
+    assert "corner16" in angles[:25], angles[:25]
+    assert central and all(central), central
+
+
+def test_the_lens_does_not_zoom_on_a_still_ball():
+    """The blind critic of 0.5.6: an 8 s zoom-in while the ball sat still at a receiver's feet. With
+    the ball still, the lens holds: less than 0.1 m of half-width change over 5 s."""
+    d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=False)
+    _held(d, 20.0, 20.0, 75)
+    _held(d, 4.0, 9.0, 25)  # the ball comes to rest near a corner
+    before = d.half_width
+    _held(d, 4.0, 9.0, 125)
+    assert abs(d.half_width - before) < 0.1, (before, d.half_width)
