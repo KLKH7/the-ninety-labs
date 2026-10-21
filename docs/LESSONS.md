@@ -1705,9 +1705,7 @@ short and actionable. This file is public: no research sources, product names or
 - **Rule:**
   - A claim that something cannot be done is checked by a search at the resolution of the claim,
     on the system's own model, before it is reported.
-  - An exclusion from a metric is bounded (here EXCLUDED_MAX), and its oracle has planted tests.
-- **Check:** `tests/test_render_camera.py`:
-  - `test_the_framing_bar_counts_a_framable_miss_excludes_an_unframeable_frame_and_caps_exclusions`,
-    which always-true, always-false and no-cap mutants each fail;
-  - `test_a_corner_is_framed_from_the_taker_inward` and `::test_a_short_corner_does_not_pump_the_lens`,
-    which fail on 0.5.5.
+  - An exclusion that excludes almost nothing buys nothing: the bar stays raw (the fine oracle,
+    tried and dropped, excluded 1 of 201 frames).
+- **Check:** `tests/test_render_camera.py::test_a_corner_is_framed_from_the_taker_inward` and
+  `::test_a_short_corner_does_not_pump_the_lens` fail on 0.5.5; the framing bar is raw.
