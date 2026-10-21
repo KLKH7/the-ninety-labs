@@ -1,6 +1,8 @@
 import math
 from functools import cache
 
+import pytest
+
 from ninety.render import edit
 from ninety.render.camera import (
     CUT_HOLD_S,
@@ -290,6 +292,81 @@ def _broadcast(seed):
     return m, rows
 
 
+# The framing bar (lesson 175, the Coordinator and the Reviewer, set before #179's seed 3 was re-scored):
+# at least FRAMED_MIN of the live frames some gantry shot can frame are well framed; frames no gantry
+# shot can frame are excluded, but never more than EXCLUDED_MAX of a seed's live frames (above that
+# the seed fails outright); and at least RAW_MIN of all live frames are well framed (design).
+FRAMED_MIN = 0.85
+EXCLUDED_MAX = 0.10
+RAW_MIN = 0.75
+
+
+def frameable(position, ball, width=1280, height=720) -> bool:
+    return _frameable(tuple(round(v, 3) for v in position), tuple(round(v, 3) for v in ball), width, height)
+
+
+@cache
+def _frameable(position, ball, width, height) -> bool:
+    """Whether any shot of the gantry camera (its position; a Camera aimed anywhere on a 1 m grid
+    round the ball, at the grass or the ball's height, through every lens from 2 to 32 degrees high
+    in 1-degree steps) frames `ball` well. Written apart from the director's aiming code: a frame
+    no such shot frames is beyond the camera, not a miss of the director."""
+    import math as _m
+
+    bx, by, bz = ball
+    for vfov in range(2, 33):
+        dist = _m.dist(position, (bx, by, 0.0))
+        half = dist * _m.tan(_m.radians(vfov) / 2) * width / height  # ground half-width near the ball
+        r = int(half * 1.2) + 2
+        for tz in sorted({0.0, round(bz, 2)}):
+            for dx in range(-r, r + 1):
+                for dy in range(-r, r + 1):
+                    target = (round(bx) + dx, round(by) + dy, tz)
+                    if well_framed(Camera(position, target, float(vfov), width, height), ball):
+                        return True
+    return False
+
+
+def framing_score(rows) -> dict:
+    """The framing bar's numbers for (camera, ball) live frames: well framed, excluded as no gantry
+    shot can frame them, and the rates."""
+    ok = excluded = 0
+    for cam, ball in rows:
+        if well_framed(cam, ball):
+            ok += 1
+        elif not frameable(cam.position, ball):
+            excluded += 1
+    n = len(rows)
+    return {"n": n, "ok": ok, "excluded": excluded, "raw": ok / n,
+            "framed": ok / (n - excluded) if n > excluded else 0.0}
+
+
+def assert_framing(score: dict, seed) -> None:
+    assert score["excluded"] <= EXCLUDED_MAX * score["n"], (seed, "too many unframeable", score)
+    assert score["framed"] >= FRAMED_MIN, (seed, score)
+    assert score["raw"] >= RAW_MIN, (seed, score)
+
+
+def test_the_framing_bar_counts_a_framable_miss_excludes_an_unframeable_frame_and_caps_exclusions():
+    """Planted cases for the bar: a ball the camera simply missed counts against it, a ball on the
+    near corner flag (no gantry shot frames it) is excluded, and a seed with more than EXCLUDED_MAX
+    of its frames excluded fails whatever the rest."""
+    d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=True)
+    away = _held(d, 80.0, 40.0, 50)  # aimed far from the balls below
+    good = _held(d, 52.5, 34.0, 75)
+    midfield, flag = (52.5, 34.0, 0.11), (0.5, 0.5, 0.11)
+    missed = framing_score([(away, (30.0, 20.0, 0.11))])
+    assert missed == {"n": 1, "ok": 0, "excluded": 0, "raw": 0.0, "framed": 0.0}
+    corner = framing_score([(away, flag)])
+    assert corner["excluded"] == 1
+    fine = framing_score([(good, midfield)] * 9 + [(away, flag)])
+    assert fine["excluded"] == 1 and fine["framed"] == 1.0
+    assert_framing(fine, "planted")  # one in ten excluded: within the cap
+    too_many = framing_score([(good, midfield)] * 8 + [(away, flag)] * 2)
+    with pytest.raises(AssertionError):
+        assert_framing(too_many, "planted")  # two in ten: over the cap, fails outright
+
+
 def _dead_frames(events: list[dict]) -> set[int]:
     """Every frame the ball is out of play: from each stoppage to the restart's first touch. The
     engine's restart event (a set piece, a kick-off) marks the ball set for it, not taken: the ball
@@ -321,7 +398,7 @@ def test_the_gantry_frames_the_play_with_the_pitch_filling_the_picture():
     middle with the pitch filling most of the picture: in live play, at least 85% of frames have
     the pitch over PITCH_SHARE_MIN of the picture and the ball in the CENTRAL box (camera.py), and
     the median frame has 8 to 15 players in shot (docs/guides/broadcast-render.md). The bar holds
-    on every held-out seed, over every live frame (lesson 175)."""
+    on every held-out seed, as FRAMED_MIN, EXCLUDED_MAX and RAW_MIN set it (lesson 175)."""
     for seed in HELD_OUT:
         m, rows = _broadcast(seed)
         dead = _dead_frames(m.events)
@@ -329,10 +406,10 @@ def test_the_gantry_frames_the_play_with_the_pitch_filling_the_picture():
         live = [(fi, cam) for fi, cam in live if 0 <= m.frames[fi]["ball"]["x"] <= 105
                 and 0 <= m.frames[fi]["ball"]["y"] <= 68]
         assert len(live) >= 200, (seed, len(live))  # never vacuous: 40 s of live play
-        ok, in_shot = 0, []
+        in_shot = []
+        score = framing_score([(cam, (m.frames[fi]["ball"]["x"], m.frames[fi]["ball"]["y"],
+                                      m.frames[fi]["ball"]["z"] + 0.11)) for fi, cam in live])
         for fi, cam in live:
-            b = m.frames[fi]["ball"]
-            ok += well_framed(cam, (b["x"], b["y"], b["z"] + 0.11))
             seen = 0
             for q in m.frames[fi]["players"]:
                 # In shot: his feet inside the picture's width and above its bottom, his head below its top.
@@ -340,8 +417,9 @@ def test_the_gantry_frames_the_play_with_the_pitch_filling_the_picture():
                 if feet is not None and head is not None:
                     seen += 0 <= feet[0] < 1280 and feet[1] < 720 and head[1] >= 0
             in_shot.append(seen)
-        print(f"seed {seed}: well framed {ok / len(live):.3f} of {len(live)} live frames")
-        assert ok / len(live) >= 0.85, (seed, ok, len(live))
+        print(f"seed {seed}: well framed {score['framed']:.3f} of frameable live frames, raw "
+              f"{score['raw']:.3f}, {score['excluded']} of {score['n']} excluded as unframeable")
+        assert_framing(score, seed)
         assert 8 <= sorted(in_shot)[len(in_shot) // 2] <= 15, (seed, sorted(in_shot))
 
 
