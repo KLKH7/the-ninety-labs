@@ -40,7 +40,11 @@ def _summary(errs: list[float]) -> dict:
     return {"n": len(s), "median_m": q(0.5), "p90_m": q(0.9), "max_m": round(s[-1], 3)}
 
 
-def score(frames: list[dict], observations: list[dict]) -> dict:
+def errors(
+    frames: list[dict], observations: list[dict]
+) -> tuple[list[float], list[float], list[float], list[int]]:
+    """The raw position errors (players, ball on the ground, ball in the air) and the frames whose
+    camera was not trusted: what `score` summarises, kept apart so several clips can be pooled."""
     truth = {f["frame"]: f for f in frames}
     players, ball_ground, ball_air = [], [], []
     not_ok = []
@@ -68,6 +72,11 @@ def score(frames: list[dict], observations: list[dict]) -> dict:
             continue
         err = math.hypot(b["x"] - tb["x"], b["y"] - tb["y"])
         (ball_ground if tb["z"] < GROUND_Z else ball_air).append(err)
+    return players, ball_ground, ball_air, not_ok
+
+
+def score(frames: list[dict], observations: list[dict]) -> dict:
+    players, ball_ground, ball_air, not_ok = errors(frames, observations)
     return {
         "frames": {"observed": len(observations), "camera_ok": len(observations) - len(not_ok),
                    "camera_not_ok": not_ok},

@@ -6,25 +6,30 @@ is stale, as `tests/test_workflow_failures.py` does). Each row runs the workflow
 fact-checking agent with its confidence gate, Producer) on the M1 clip's detected events
 (`seed900001`, minute 2), with one failure injected at the model boundary.
 The Judge is the real wrapper (its retry, timeout and verdicts) around a stand-in agent; the
-other models are scripted. Data: `docs/eval/failure-table.json`. The M1 live path's own table
+other models are scripted; the Personalizer's Spanish is a wording we wrote for the table
+(`claim_in_spanish`), not a translation by a model or a service.
+Data: `docs/eval/failure-table.json`. The M1 live path's own table
 is `docs/eval/failure-table-m1.md`.
 
 | Injected failure | Claim | Fallbacks and holds in the trace | On screen | Recovers |
 |---|---|---|---|---|
-| nothing (the baseline) | verified | fact_checker held: analyst/es: no translation: the verified English text; fact_checker held: casual/es: no translation: the verified English text; fact_checker held: club/es: no translation: the verified English text | 8 template graphics (as with no failure); verified insight "Away complete a pass of 8 m at 42 km/h." | yes |
+| nothing (the baseline) | verified | none needed | 8 template graphics (as with no failure); verified insight "Away complete a pass of 8 m at 42 km/h." | yes |
 | the Judge never answers (every call outlasts its timeout, retried 1 time(s)) | held (timeout) | judge hold: timeout; fact_checker hold: tactician's claim: judge timeout; claim held back; producer template: cue-v00001-analyst stays: held | 8 template graphics (as with no failure); no insight; badge: FALLBACK (held: timeout) | yes |
 | the Tactician's Foundry endpoint cannot be reached | held (service), Judge not asked | tactician fail: ServiceRequestError: injected: the Foundry endpoint cannot be reached; template stays; producer template: cue-v00001-analyst stays: held | 8 template graphics (as with no failure); no insight; badge: FALLBACK (held: service) | yes |
-| the Personalizer's service refuses the connection (its container is down) | verified | personalizer fallback: fallback: refused; fact_checker held: analyst/es: no translation: the verified English text; fact_checker held: casual/es: no translation: the verified English text; fact_checker held: club/es: no translation: the verified English text | 8 template graphics (as with no failure); verified insight "Away complete a pass of 8 m at 42 km/h."; badge: FALLBACK (personalizer: refused) | yes |
+| the Personalizer's service refuses the connection (its container is down) | verified | personalizer fallback: fallback: refused; fact_checker held: analyst/es: no translation: the verified English text; fact_checker held: casual/es: no translation: the verified English text; fact_checker held: club/es: no translation: the verified English text; fact_checker held: player_focus/es: no translation: the verified English text | 8 template graphics (as with no failure); verified insight "Away complete a pass of 8 m at 42 km/h."; badge: FALLBACK (personalizer: refused) | yes |
 | the detector reports the event the Tactician cites at confidence 0.3, below 0.5 | held (low_confidence), Judge not asked | fact_checker hold: tactician's claim: event v00005 was detected with confidence 0.30, below 0.50: cite a confident detection; producer template: cue-v00001-analyst stays: held | 6 of 8 template graphics (the ones on the unsure detection are not drawn); no insight; badge: FALLBACK (held: low_confidence) | yes |
 
-**Recovered: 4 of 4** injected failures. A row recovers when every template
+**Baseline: passes. Recovered: 4 of 4** injected failures. A row recovers when every template
 graphic stays on air (less those on an unsure detection, which the confidence gate keeps off
-the screen), every aired text passes the code checks again, the claim ends exactly as it must
-(held; verified when only the Personalizer failed, since the insight needs no Personalizer),
-the failure's own fallback is marked in the trace, and a fallback badge is on screen (the
-cue's `fallback`, which the viewer draws); the baseline has neither.
-In 2 of 5 rows the Spanish variants are held: the Personalizer that
-answered gave English text, and a variant airs only in its own language.
+the screen), every aired text passes the code checks again, every moment's claim ends as it
+must (each held; verified when only the Personalizer failed, since the insight needs no
+Personalizer: one aired and none held), the failure's own fallback is marked in the trace, and
+a fallback badge is on screen (the cue's `fallback`, which the viewer draws). The baseline has
+neither, and must air every profile's variant: none refused, none missing, and no Spanish one
+reading as English (more English function words than Spanish, `personalizer/language.py`).
+In 1 of 5 rows the Spanish variants are held, since a variant airs
+only in its own language: in 1 the Personalizer was down and its fallback is the
+English text; in 0 the Personalizer answered and its Spanish did not pass.
 
 ## Budgets
 

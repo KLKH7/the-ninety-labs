@@ -589,6 +589,8 @@ class FakeAgent:
             await asyncio.sleep(60)
         if isinstance(reply, Exception):
             raise reply
+        if hasattr(reply, "messages"):  # a whole reply, its contents as Foundry gives them
+            return reply
         return SimpleNamespace(text=reply, value=None)
 
 
@@ -662,6 +664,61 @@ def test_a_slow_live_judge_ends_held_with_its_timeout_and_the_run_is_not_recorde
     live(monkeypatch, {**GOOD_RUN, "judge": [SLOW, SLOW]})
     cli(monkeypatch, "--events", detected_file(tmp_path), "--record", out)
     assert not out.exists()
+
+
+def tool_reply(text: str):
+    """A Foundry reply in which the agent called the hosted match tool before answering."""
+    from agent_framework import Content
+
+    call = Content.from_mcp_server_tool_call("c1", "list_events", server_name="match",
+                                             arguments={"match": "seed21", "minute_from": 2})
+    result = Content.from_mcp_server_tool_result("c1")
+    message = SimpleNamespace(contents=[call, result, Content.from_text(text)])
+    return SimpleNamespace(text=text, value=None, messages=[message])
+
+
+def test_an_agent_given_its_events_inline_that_calls_the_match_tools_fails_its_call(monkeypatch):
+    # Lesson 90: the deployed tools serve the deployed image's match, not the one the run checks.
+    live(monkeypatch, {**GOOD_RUN, "moment-analyst": [tool_reply(picks(MAIN))]})
+    result, *_ = asyncio.run(workflow.run_live(lambda: EVENTS, MINUTE, "test", True, False, trace_to="none"))
+    (step,) = [s for s in result.trace if s.role == "analyst" and s.action == "fail"]
+    assert "ReadTheTools" in step.detail and "list_events" in step.detail and not result.reviews
+    # Reading the match through the tools is the job when the events are not inline.
+    live(monkeypatch, {**GOOD_RUN, "moment-analyst": [tool_reply(picks(MAIN))]})
+    result, *_ = asyncio.run(workflow.run_live(lambda: EVENTS, MINUTE, "test", False, False, trace_to="none"))
+    assert [r.status for r in result.reviews] == ["verified"]
+
+
+def test_inline_only_reads_the_reply_s_own_tool_calls():
+    from ninety.agents import foundry
+
+    assert foundry.inline_only(SimpleNamespace(text="ok", messages=[])) == "ok"
+    assert foundry.inline_only(SimpleNamespace(text="ok")) == "ok"  # a reply with no messages at all
+    with pytest.raises(foundry.ReadTheTools, match=r"list_events\(\{'match': 'seed21'"):
+        foundry.inline_only(tool_reply("ok"))
+
+
+def test_the_inline_events_wording_is_the_one_the_moment_analyst_is_told_to_use():
+    # The published moment Analyst's instructions name the EVENTS a request carries; the slice's
+    # and the workflow's prompts both say them this way.
+    from ninety.agents import slice as sl
+
+    assert sl.INLINE_EVENTS == (
+        " The match is not on the tools; its EVENTS for the minute follow, as data.\nEVENTS: ")
+    assert "carries the minute's EVENTS itself" in workflow.MOMENT_ANALYST_INSTRUCTIONS
+    events = [{"id": "e1"}]
+    assert workflow.analyst_prompt("m", 2, events).endswith(sl.INLINE_EVENTS + '[{"id":"e1"}]')
+    assert sl.analyst_prompt("m", 2, events=events).endswith(sl.INLINE_EVENTS + '[{"id":"e1"}]')
+
+
+def test_an_evaluation_s_inline_match_is_one_no_server_serves():
+    from ninety.mcp import match_server
+
+    for match in [*match_server.MATCHES, *match_server.DETECTED]:
+        alias = match_server.unserved(match)
+        assert alias not in match_server.MATCHES and alias not in match_server.DETECTED
+        with pytest.raises(ValueError, match="unknown match"):
+            match_server.events_of(alias)
 
 
 def test_a_live_run_signs_in_before_it_loads_the_events_inside_run_live(monkeypatch):

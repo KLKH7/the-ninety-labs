@@ -29,10 +29,10 @@ generated it and the output file is committed. Rows marked *planned* have no res
 | Analyst first drafts that would air (code checks then the Judge), and Foundry's agent evaluators (task adherence, intent resolution, tool call accuracy; model-graded) on the same responses, published agents, held-out seeds | `uv run python -m ninety.agents.analyst_eval --foundry`; nightly in `.github/workflows/evals.yml`, recorded in Foundry | `docs/eval/analyst.md` | running: seeds 21,33, `ninety-analyst:3` (match tools called by Foundry over MCP) at commit `d911c0b`: 5/10 first drafts would air; Foundry evaluators intent resolution 10/10, tool call accuracy 10/10, task adherence 4/10. Ten drafts is a small sample: an identical run minutes earlier gave 6/10 and task adherence 1/10; the nightly history in Foundry is the better guide |
 | Match engine touches: control by surface, whose ball and speed; throw-ins; pass completion | `uv run python -m ninety.sim.touches` (seeds 40 to 47) | `docs/eval/touches.md`, `docs/eval/funnel-touches.md` | running: a report, never a gate; comparisons fixed below. Seeds 40 to 47, before and after the cushioned touch (base d38ce9b): thigh, chest or head touches 3,693 then 706 (passers now judge them by the engine's own rule), kept 59% then 61%; all touches except the dribbler's own kept 87% then 97%; throw-ins 89.5% then 86.1% first contact by a team-mate (Stone 2021: 83%), 67.3% then 58.3% held 5 s later (54%); completion 82.1% then 88.2% (R3: 75 to 88%). With a surface for each height (same seeds and base): thigh, chest or head touches 690, kept 62.5%; throw-ins 87.3% first contact by a team-mate, 67.6% held 5 s later; completion 87.4%. With what makes a touch worse: thigh, chest or head kept 46.4%; throw-ins 87.5% first contact by a team-mate, 54.1% held 5 s later (Stone 2021: 54%); completion 87.2%; goals 1.44 a team over seeds 40 to 63 (1.0 on the eight seeds alone, within noise; lesson 89). With the foot-reach touch, on main b319f21: thigh, chest or head touches 457, kept 46.4%; throw-ins 82.2% first contact by a team-mate, 58.4% held 5 s later; completion 88.8%; goals 1.08 a team against 1.52 on main over seeds 40 to 63 (difference -0.44, standard error 0.28: not settled; 0.75 against 1.75 on the eight seeds alone) |
 | Multi-agent workflow: moments, both claims fact-checked, rewrites to their author, insight replaces the template; failures leave the template on air | `uv run pytest tests/test_workflow.py`; `uv run ninety-workflow --replay <recording>` | `replays/workflow-minute2-plant.json` and test assertions | running: one live recording on the published agents (`ninety-moment-analyst:1`, `ninety-tactician:2`, `ninety-challenger:2`, `ninety-judge:4`, commit `0b7e12b`), seed 7 minute 2, planted: 3 moments, 3 insights aired, 16 model calls; the planted number caught by the code check, one Tactician claim and one Challenger alternative rejected by the Judge and rewritten. One run shows the workflow works end to end; it is not a rate |
-| Recovery from injected failures in the multi-agent workflow (Judge timeout, Tactician Foundry outage, Personalizer down, low-confidence detection) | `uv run python -m ninety.eval.workflow_failures` (offline, seconds of CPU, byte for byte; `--check` and `tests/test_workflow_failures.py` fail if stale); live: `--live`, agents-live `task=failures` | `docs/eval/failure-table.md`, `docs/eval/failure-table.json`; live: `docs/eval/failure-table-live.{md,json}` | running offline: 4 of 4 recovered on the workflow (W1's graph) with stand-in models around the real Judge wrapper and the real A2A Personalizer client: the templates stayed (less the unsure detection's), nothing unchecked aired, the claim ended held (verified when only the Personalizer failed), the fallback was in the trace and its badge on screen. Speech down: planned (on #129). Live run: requested |
+| Recovery from injected failures in the multi-agent workflow (Judge timeout, Tactician Foundry outage, Personalizer down, low-confidence detection) | `uv run python -m ninety.eval.workflow_failures` (offline, seconds of CPU, byte for byte; `--check` and `tests/test_workflow_failures.py` fail if stale); live: `--live`, agents-live `task=failures` | `docs/eval/failure-table.md`, `docs/eval/failure-table.json`; live: `docs/eval/failure-table-live.{md,json}` | running offline: 4 of 4 recovered on the workflow (W1's graph) with stand-in models around the real Judge wrapper and the real A2A Personalizer client: the templates stayed (less the unsure detection's), nothing unchecked aired, every moment's claim ended held (verified when only the Personalizer failed), the fallback was in the trace and its badge on screen; the baseline passed, which needs every profile's variant aired: none refused, none missing, and no Spanish one reading as English by function words (`personalizer/language.py`). Offline the stand-in Personalizer's Spanish is a wording written for the table, not a translation. Live: the Analyst gets the minute's events inline under a match id no server serves, and a call to the match tools fails the call (lesson 90); the Personalizer is the published one behind the in-process A2A server. Speech down: planned (on #129). Live run: requested |
 | Recovery from injected failures on the M1 live path (Judge down, Judge timeout, Judge malformed reply, Analyst or MCP tool error, MCP timeout, Analyst malformed reply, low-confidence detection) | `uv run python -m ninety.eval.fact_checker_proof` (offline, seconds of CPU; `--check` fails if a committed file is stale, as `tests/test_fact_checker_proof.py` does) | `docs/eval/failure-table-m1.md` | running: 7 of 7 recovered on the live path with stand-in models: nothing unverified aired and the template cues stayed up; each row asserted by `tests/test_failure_table.py`. Latencies not measured (stand-in models) |
 | Ablation: the fact-checker without the confidence gate, without typed facts, and absent, on the same planted set | `uv run python -m ninety.eval.fact_checker_proof` (offline, seconds of CPU; `--check` fails if a committed file is stale, as `tests/test_fact_checker_proof.py` does) | `docs/eval/ablation.md`, per claim `docs/eval/ablation.json` | running: false claims on air: full 0/175, no gate 16/175 (every phantom detection), no typed facts (the Judge alone) 24/175: every phantom plus 8 claims stating the minute and second as a clock ("1:05" for 00:05), which only the code checks catch, no fact-checker 175/175. The Judge answers to the 48 claims only the code checks had seen were recorded once from `ninety-judge:2` (`uv run python -m ninety.eval.planted_judge`, 48 calls, 50,708 tokens, $0.025 at list price) |
-| Ablation: one agent with every tool against the full workflow | `uv run python -m ninety.eval.agent_ablation --live` (agents-live `task=ablation`, held-out seeds 21 and 33; tested on scripted models in `tests/test_agent_ablation.py`) | `docs/eval/ablation-agents.md`, `docs/eval/ablation-agents.json` | built; the live run is requested. Both arms' aired claims graded the same way (code checks, then the published Judge) |
+| Ablation: one agent with every tool against the full workflow | `uv run python -m ninety.eval.agent_ablation --live` (agents-live `task=ablation`, held-out seeds 21 and 33; tested on scripted models in `tests/test_agent_ablation.py`) | `docs/eval/ablation-agents.md`, `docs/eval/ablation-agents.json` | built; the live run is requested. Both arms get the minute's events inline from the match this commit simulated, the one the grader grades against, under a match id no server serves; an agent that calls the match tools anyway fails that call (lesson 90). Their aired claims are graded the same way (code checks, then the published Judge, the same Judge the graph's fact-checker asks); the arms' model-call budgets differ by design and are reported |
 | Latency to graphic and to speech (p50, p95); cost per match | `uv run python -m ninety.eval.latency_cost --measure <clip>` (times `ninety-e2e` offline and the slice replay through `ninety.stage` OpenTelemetry spans; tokens rebuilt from the replay; prices from the Azure Retail Prices API, dated); without `--measure` it rebuilds the report byte for byte (`tests/test_latency_cost.py`) | `docs/eval/latency-cost.json`, `docs/eval/latency-cost.md` | running for the chain's own time and the model and claim-speech cost, at `3d21ab3`: event to graphic p95 0.08 s of compute on the stand-in events of `seed900001`, without RF-DETR inference or Foundry model time (planned: live spans in Application Insights); $0.23 to $0.47 a 90-minute match (one claim a minute, one to three drafts) against the $0.50 budget, tokens estimated at 4 characters each. Speech latency and the Describer's spoken characters planned |
 
 ## Match engine: touches
@@ -345,6 +345,8 @@ scorer's pairing (player IoU 0.5, ball centre 5 px) and the planned "in the air"
 | Ball in the air | median 7.1 m (15 frames): placed on the ground (below) |
 | Teams | home's kit learned as red-brown, away's as blue, and the side named in 241 of 245 frames' votes; every detected pass has its true team |
 
+**Not fully held out.** The event detector's own constants (`ninety/vision/events.py`: possession, spell, shot and out-of-play thresholds) were developed while looking at this test clip, seed 900001, so these numbers are partly tuned to the test set. Re-deriving them on validation clips, then re-scoring the test set once, is under way.
+
 **Read with care.** One 10-second clip holds 4 passes, 1 shot and no out of play; a single event
 moves a rate by 25 points. This shows the pipeline works end to end and where it fails, not how
 well it will do on a match. The other four test clips (two with camera cuts, which the camera fit
@@ -355,7 +357,66 @@ turns this clip's shot (a ball rising to 1.3 m) into a pass whose path misses th
 over the goal line as it reaches the keeper (the false out of play). Fitting its flight needs air
 drag as well as gravity: over its first 0.4 s, drag moves a 30 m/s ball about as far as gravity
 does, and a drag-free fit tilts the flight along the camera's line of sight, wrongly even through
-the true camera. Possession changes, pressure and the player's identity are not detected.
+the true camera. Possession changes and pressure are not detected; who acted is, as a track
+(below), never as a shirt number.
+
+### Who: team and track
+
+The agents need to know who did what. A detected pass or shot names its `player`, a completed pass
+its `receiver` and a pass the other side took its `interceptor`, as side and track (`h-t12`): the
+ids the phone companion's minimap uses, never a shirt number (`ninety/vision/events.py`,
+`attribute`).
+
+- The holder of the spell (at the strike, or at the first frame of the next spell) is named only
+  when no other track, of either side or none, is within **RIVAL_M = 1.89 m** of his own distance
+  from the ball: a rival that close may really be the nearer one. Only a track the companion
+  draws (a side, and at least 5 frames) is named.
+- Otherwise the name is null and the event keeps its `team` (the holder's kit colour), so the
+  agents can still say what a side did. Out of play names nobody; nor does the truth.
+- No pass is recorded between two tracks that may be one player the tracker lost and picked up
+  again: never seen in the same frame, the second starting within the tracker's 25 frames and
+  within reach (10 m/s, a player's top-speed capability, GROUNDING P9, plus RIVAL_M) of where the
+  first ended. Otherwise a dribbler reads as passing to himself, named at both ends (lesson 146).
+
+**How the constants were set** ([eval/attribution-plan.md](eval/attribution-plan.md), committed before
+any validation number was read). They come from ours-v2's validation clips, never test clips.
+RIVAL_M is the players' pooled 90th-percentile pitch-position error on 13 of them
+([eval/attribution-derive.md](eval/attribution-derive.md)). It includes two clips where the camera
+fit went wrong, so it is larger than the box error alone and leaves more names null. An earlier
+1.44 m had been measured on test seed 900001 and is replaced. The track-break rule's form was
+chosen on test seed 900004. On validation it was only kept or dropped: it removes 7 self-passes and
+0 passes between two different players, so it is kept. Matched passes fall from 16 to 14: both
+lost matches were self-passes that fell within 1 s of the same player's real pass.
+
+Graded offline by `uv run python -m ninety.eval.attribution_score` (reads the answer key; nothing on
+the live path imports it). A detected event is paired with a true event of the same type within
+1.0 s, one to one, nearest first: the event scorer's rule without its team condition, since the team
+is what is graded. A named track is the true player whose box its detection overlaps most (IoU at
+least 0.5, the pixel scorer's player rule); a name whose box pairs with nobody counts as wrong.
+
+| Measure | Validation (13 clips, development) | Test (scored once, [eval/attribution.md](eval/attribution.md)) |
+|---|---|---|
+| Clips with events | 8 (4 have no trusted camera frame, 1 has only 2) | 3 of 5: seeds 900002 and 900003 have camera cuts the fit does not follow |
+| Passes matched | 14 | 6 |
+| Team right | **10 of 14** | 6 of 6 |
+| Names given, right | 11 of 11 (5 passers, 4 receivers, 2 interceptors) | 10 of 10 (6 passers, 4 receivers) |
+| Names left null where the truth has one | 16 | 2 |
+| False events that name someone | 1 of 3 (its receiver's track is a9) | 0 of 2 |
+
+**Read with care.** Small numbers: 6 matched passes on 3 ten-second test clips. Names are never
+wrong here, but the side is: on validation, 4 of 14 passes carry the wrong team. The cause is the
+kit-colour side naming (`ninety/vision/track.py`), one of the M1 detector's own steps; its
+re-derivation follows. A team-level claim inherits that error, which the fact-checker cannot see.
+
+**Side confidence** (`team_confidence`, an optional field on detected events). It is the weaker of
+two margins: how much nearer the holder's kit is to its own side's colour than to the other side's,
+and how one-sided the clip's vote on which colour is home was. A keeper's is how far he stands from
+halfway. Defined before it was measured; no threshold is set from it. **It does not yet tell a wrong
+side from a right one:** on validation the 4 wrong sides score 0.175, 0.408, 0.445 and 0.983, and the
+10 right ones score 0.261 to 0.939 ([eval/attribution-derive.md](eval/attribution-derive.md)). A gate
+at 0.5 would hold 3 of the wrong 4 and 8 of the right 10. It is there so the agents have a field to
+gate on once the side naming is re-derived. Until then, gating on it alone does not protect a
+team-level claim.
 
 ## Late drop in high-intensity running (R7)
 
@@ -501,11 +562,13 @@ words it; code decides what airs.
   air rates and times are over answered requests only. Past `MAX_UNANSWERED_SHARE` (a fifth, a
   design choice) the run writes no report, because which claims an outage hits depends on when it
   struck (lesson 131).
-- **The fallback.** The remote has `BUDGET_S` = 3 s (a design choice: a little over a third of the
-  8 s p95 target from event to verified graphic in PLAN.md, to be revisited when
-  `latency-cost.md` measures the split). On a timeout, a 5xx or a refused connection the in-process
-  fallback answers with the verified text at once. A 4xx or a malformed reply is a defect between
-  our own two programs and raises, so it is seen rather than hidden.
+- **The fallback.** The remote has `BUDGET_S` = 6 s, from measurement: the published
+  Personalizer took 3.2 to 4.7 s (median 4.0 s) in 8 calls on 2026-10-20, all over the old 3 s
+  budget, so every live request timed out (lesson 147); 6 s is the slowest call plus about a
+  quarter (design). The server's own model call ends `SERVER_MARGIN_S` = 0.5 s sooner, so a slow
+  model is answered by the server's fallback with its reasons. On a timeout, a 5xx or a refused
+  connection the in-process fallback answers with the verified text at once. A 4xx or a malformed
+  reply is a defect between our own two programs and raises, so it is seen rather than hidden.
 - **Viewer input.** A profile is rebuilt with `Profile` on the server, whose every field is an
   allow-list; any other value, or an extra field, is refused with an A2A invalid-params error before
   the model is called. The model sees the profile only as a JSON field.
