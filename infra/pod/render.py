@@ -32,7 +32,7 @@ from pathlib import Path
 # Hardware GL on a Linux NVIDIA pod: Chromium flag sets tried in order, the first whose WebGL renderer
 # is a real GPU wins. The last, no flags, is Chromium's own choice (Metal on a Mac). Software GL is the
 # render commit's own browser_page (SwiftShader), unchanged.
-GPU_ARGS = [
+GPU_ARGS = [  # Chrome's guidance for headless Linux NVIDIA first (--headless=new is the chromium channel)
     ["--use-angle=vulkan", "--enable-features=Vulkan", "--disable-vulkan-surface", "--ignore-gpu-blocklist",
      "--enable-gpu"],
     ["--use-gl=angle", "--use-angle=gl-egl", "--ignore-gpu-blocklist", "--enable-gpu"],
@@ -68,7 +68,7 @@ def open_page(gl: str):
 
     tried = []
     with _serve(WEB) as base, sync_playwright() as pw:
-        for channel in (None, "chromium"):
+        for channel in ("chromium", None):  # new headless first, then the headless shell
             for args in GPU_ARGS:
                 try:
                     browser = pw.chromium.launch(args=args, channel=channel)

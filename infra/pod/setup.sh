@@ -23,8 +23,14 @@ if [ "$GL" = gpu ]; then
   # Chromium reaches the NVIDIA driver through Vulkan or EGL: the loaders, and the vendor files that
   # point them at the driver's libraries when the image does not ship them (the libraries come from
   # the host driver, mounted into the container).
-  apt-get install -y -qq libvulkan1 libegl1 libgles2 >/dev/null
+  # Without the NVIDIA GL/Vulkan userspace matched to the host driver, Chromium silently falls back to
+  # SwiftShader (developer.chrome.com/blog/supercharge-web-ai-testing).
   nvidia-smi --query-gpu=name,driver_version --format=csv,noheader
+  DRIVER=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -1)
+  apt-get install -y -qq libvulkan1 libegl1 libgles2 vulkan-tools >/dev/null
+  apt-get install -y -qq "libnvidia-gl-${DRIVER%%.*}=${DRIVER}*" >/dev/null 2>&1 \
+    || apt-get install -y -qq "libnvidia-gl-${DRIVER%%.*}" >/dev/null \
+    || echo "WARN: no libnvidia-gl-${DRIVER%%.*} package; relying on the driver's mounted libraries"
   if [ ! -e /usr/share/vulkan/icd.d/nvidia_icd.json ] && ldconfig -p | grep -q libGLX_nvidia.so.0; then
     mkdir -p /usr/share/vulkan/icd.d
     echo '{"file_format_version":"1.0.0","ICD":{"library_path":"libGLX_nvidia.so.0","api_version":"1.3"}}' \
@@ -35,6 +41,7 @@ if [ "$GL" = gpu ]; then
     echo '{"file_format_version":"1.0.0","ICD":{"library_path":"libEGL_nvidia.so.0"}}' \
       > /usr/share/glvnd/egl_vendor.d/10_nvidia.json
   fi
+  vulkaninfo --summary 2>&1 | grep -E "deviceName|driverName|apiVersion" | head -6 || true
 fi
 
 # the version the Azure render job pins; older pip has no --break-system-packages
