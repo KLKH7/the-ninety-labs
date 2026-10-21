@@ -1707,5 +1707,10 @@ short and actionable. This file is public: no research sources, product names or
     on the system's own model, before it is reported.
   - An exclusion that excludes almost nothing buys nothing: the bar stays raw (the fine oracle,
     tried and dropped, excluded 1 of 201 frames).
-- **Check:** `tests/test_render_camera.py::test_a_corner_is_framed_from_the_taker_inward` and
-  `::test_a_short_corner_does_not_pump_the_lens` fail on 0.5.5; the framing bar is raw.
+  - The Reviewer then found the corner rule's own hold made the delivery worse than no rule (a
+    long cross 0 of 88 frames well framed against 41) and its ball-position trigger caught open
+    play on the goal line. The rule now runs only from the engine's corner set piece to the kick.
+- **Check:** `tests/test_render_camera.py::test_after_the_kick_the_corner_rule_frames_no_worse_than_no_rule`
+  (red on af7e439), `::test_a_corner_is_framed_from_the_taker_inward`,
+  `::test_each_corner_has_its_own_shot_and_the_ball_stays_in_it` and
+  `::test_the_corner_shot_holds_until_the_kick`; the framing bar is raw.

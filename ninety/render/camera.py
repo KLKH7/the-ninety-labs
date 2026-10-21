@@ -156,12 +156,15 @@ OPEN_EASE_S = 2.0
 # The restart is taken once the ball moves faster than this (a ball set for a restart is still): the
 # close-up ends there and the ease out begins, whatever is left of CUT_HOLD_S (*design*, lesson 175).
 PLAYED_MPS = 2.0
-# A corner (Law 17): the ball is placed inside the corner arc, 1 m in radius (Law 1). The broadcast
-# convention for a corner is the main camera framed from the taker inward, the taker near the side of
-# the picture and the penalty area filling the rest, so the viewer sees where the ball is going and
-# not the run-off beyond the flag (*design*, after broadcast practice; lesson 177).
+# A corner (Law 17): the ball is placed inside the corner arc, 1 m in radius (Law 1). design: while it
+# waits, the main camera frames it from the taker inward, the taker near the side of the picture and
+# the penalty area filling the rest, so the viewer sees where the ball will go rather than the run-off
+# beyond the flag (no source found: a design choice, lesson 177).
 CORNER_ARC_M = 1.0
-CORNER_TAKER_MARGIN = 0.1  # the taker this far in from the picture's edges, a share of each (design)
+BALL_RADIUS_M = 0.11  # Law 2: a circumference of 68 to 70 cm
+# design: the taker kept a tenth of the picture in from each edge, so his run-up and the ball's first
+# metres are in shot as well as the ball (set before the corner rule was measured).
+CORNER_TAKER_MARGIN = 0.1
 NET_SETTLE_S = 2.6  # the mesh is back to rest by here; the angle itself holds CUT_HOLD_S
 
 
@@ -275,8 +278,7 @@ class Director:
         self._box = False  # the box's closer lens is in (BOX_LEAVE_M)
         self._open_until = -1.0  # the restart's closed-up shot after an edit cut (open_on_restart)
         self._ease_end = -1.0  # the ease out of it ends here, at the wide shot
-        self._corner_flag: tuple[float, float] | None = None  # the corner being taken, and until when
-        self._corner_until = -1.0
+        self._corner_flag: tuple[float, float] | None = None  # the corner waiting to be taken
         self.half_width = params.half_width_m
         self.prev_ball: tuple[float, float] | None = None
         self.shake_phase = (self.rng.uniform(0, 6.28), self.rng.uniform(0, 6.28))
@@ -300,6 +302,7 @@ class Director:
         self._cut_kind = ""
         self._cut_until = -1.0
         self.net = None
+        self._corner_flag = None
 
     def open_on_restart(self) -> None:
         """The first frame after a cut: the picture comes back on the restart with the gantry closed
@@ -363,28 +366,22 @@ class Director:
         return ax, ay, hw
 
     def _corner(self, bx: float, by: float) -> tuple[float, float, float] | None:
-        """The corner framing, from the ball's arrival in a corner arc until CUT_HOLD_S after it has
-        left it: the camera's own minimum shot holds this decision, so a short corner played near
-        the flag does not pump the lens in and out (lesson 177). None when no corner is on."""
-        for fx in (0.0, 105.0):
-            for fy in (0.0, 68.0):
-                if math.hypot(bx - fx, by - fy) <= CORNER_ARC_M + 0.11:  # the ball's radius
-                    self._corner_flag = (fx, fy)
-                    self._corner_until = self.t + CUT_HOLD_S
-        if self._corner_flag is None or self.t >= self._corner_until:
-            self._corner_flag = None
+        """The corner framing, while a corner is awarded and waiting to be taken (`step`'s
+        `corner`, from the engine's set piece at a flag to the kick: corner_waits). After the kick
+        the director frames the play as for any ball (the Reviewer of #201: a hold past the kick
+        framed the delivery worse). None when no corner waits."""
+        if self._corner_flag is None:
             return None
         fx, fy = self._corner_flag
-        cache = self.__dict__.setdefault("_corner_shots", {})
+        cache = self.__dict__.setdefault("_corner_shots", {})  # each corner's own shot
         if (fx, fy) not in cache:
             cache[(fx, fy)] = self._corner_shot(fx, fy)
         best = cache[(fx, fy)]
         if best is None:
             return None
-        ax, ay, hw = best
-        m = CORNER_TAKER_MARGIN  # the ball itself is never lost, nor pulled back to the centre
-        ax, ay = self._ball_in_centre(bx, by, 0.0, 0.0, ax, ay, hw, (m, 1 - m, m, 1 - m))
-        return ax, ay, hw
+        # The ball waits inside the arc, a metre from the flag, which the shot keeps CORNER_TAKER_MARGIN
+        # in from the picture's edges; after the kick the director frames the play as for any ball.
+        return best
 
     def _corner_shot(self, fx: float, fy: float) -> tuple[float, float, float] | None:
         """The shot of a corner from the flag at (fx, fy): of the aims over that corner's quarter of
@@ -402,7 +399,7 @@ class Director:
                 y = fy + (34.0 - fy) * j / 11
                 for hw in (TIGHT_HALF_M, 7.0, 9.0, 11.0, 13.0, 15.0, wide):
                     shot = self._shot((x, y, 0.0), hw)
-                    flag, mark = shot.project((fx, fy, 0.11)), shot.project((*spot, 0.0))
+                    flag, mark = shot.project((fx, fy, BALL_RADIUS_M)), shot.project((*spot, 0.0))
                     if flag is None or mark is None:
                         continue
                     m = CORNER_TAKER_MARGIN
@@ -477,15 +474,15 @@ class Director:
         return bx + PLAY_PULL * (sx / sw - bx), by + PLAY_PULL * (sy / sw - by)
 
     def _ball_in_centre(self, bx: float, by: float, vx: float, vy: float, ax: float, ay: float,
-                        hw: float, box: tuple | None = None) -> tuple[float, float]:
+                        hw: float) -> tuple[float, float]:
         """The aim, moved toward the ball only as far as keeps the ball inside the CENTRAL box of the
         picture (well_framed's box, shrunk by CENTRE_MARGIN). The pulls, leads, clamps and holds above
         place the play; none of them may leave the ball itself at the edge or out of the picture
         (lesson 175). The main camera follows the ball to the byline (*design*). The ball where it
         will be when the pan has caught up (pan_lag_s ahead, inside the pitch) must fit as well, so a
         ball running to a line is not left behind by the pan's own lag."""
-        left, right, top, bottom = box or CENTRAL
-        m = 0.0 if box else CENTRE_MARGIN
+        left, right, top, bottom = CENTRAL
+        m = CENTRE_MARGIN
         lag = self.p.pan_lag_s
         z = getattr(self, "ball_z", 0.0) + 0.11
         balls = [(bx, by, z),
@@ -549,12 +546,14 @@ class Director:
         goal: tuple | None = None,
         cut_in: float | None = None,
         ball_z: float = 0.0,
+        corner: tuple[float, float] | None = None,
     ) -> Camera:
         """The camera for the next frame. `cut_in` is how long until the edit's next cut, in seconds
         (None when no cut follows): no angle starts or ends that close to one, because the cut is
         itself the change of shot. `ball_z` is the ball's height, so a lofted ball is kept in the
         picture too (lesson 175)."""
         self.ball_z = ball_z
+        self._corner_flag = corner
         self.players = [(p[0], p[1], p[2]) for p in players] if players else []
         if self.prev_ball is None:
             vx = vy = 0.0
@@ -766,3 +765,21 @@ def blur_vector(prev: Camera | None, cur: Camera, shutter: float) -> tuple[float
         return (0.0, 0.0)
     dx, dy = cur.width / 2 - p[0], cur.height / 2 - p[1]
     return (round(dx * shutter, 3), round(dy * shutter, 3))
+
+
+def corner_waits(events: list[dict]) -> dict[int, tuple[float, float]]:
+    """Every frame a corner waits to be taken, with its flag: from the engine's set piece at a corner
+    flag (within the corner arc, Law 17) to the frame before the next touch, the kick."""
+    order = sorted(events, key=lambda e: e["frame"])
+    out: dict[int, tuple[float, float]] = {}
+    for i, e in enumerate(order):
+        if e["type"] != "set_piece":
+            continue
+        flag = next(((fx, fy) for fx in (0.0, 105.0) for fy in (0.0, 68.0)
+                     if math.hypot(e["x"] - fx, e["y"] - fy) <= CORNER_ARC_M + BALL_RADIUS_M), None)
+        if flag is None:
+            continue
+        kick = next((n["frame"] for n in order[i + 1:] if n["frame"] > e["frame"]), e["frame"] + 1)
+        for f in range(e["frame"], kick):
+            out[f] = flag
+    return out
