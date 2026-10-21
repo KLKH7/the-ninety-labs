@@ -4,6 +4,7 @@ players are as tall as they should be, and only then are detections placed on th
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 
 import numpy as np
@@ -97,13 +98,56 @@ def test_a_camera_in_the_wrong_place_still_makes_players_the_right_height():
 
 
 def test_a_frame_whose_camera_disagrees_with_its_neighbours_is_not_trusted():
-    # One frame 10 m wrong among right ones (more than the plan's 8.5 m bound): the heights pass
-    # it, its neighbours do not. Frames away from it stay trusted.
+    # One frame 10 m wrong among right ones: the heights pass it, its neighbours do not. A tie goes
+    # to the earlier neighbour (fixed in the plan, not tuned), so frame 4 is judged against 3 and
+    # kept, and frame 6 against 5 and lost with it: one wrong frame costs one good one after it.
     rows = observe.agree(clip({5: 10.0}))
-    ok = {r["frame"]: r["camera"]["ok"] for r in rows}
-    assert ok[5] is False and all(d["x"] is None for d in rows[5]["players"])
-    assert all(ok[f] for f in (0, 1, 2, 3, 7, 8, 9, 10))
+    assert [r["camera"]["ok"] for r in rows] == [True] * 5 + [False, False] + [True] * 4
+    assert all(d["x"] is None for d in rows[5]["players"]) and rows[5]["ball"][0]["x"] is None
     assert rows[5]["camera"]["heights_ok"] is True  # the heights' verdict, kept for the record
+
+
+def test_neighbours_agree_within_two_metres_and_not_beyond():
+    assert all(r["camera"]["ok"] for r in observe.agree(clip({5: observe.NEIGHBOUR_M - 0.1})))
+    assert not observe.agree(clip({5: observe.NEIGHBOUR_M + 0.1}))[5]["camera"]["ok"]
+
+
+def test_a_neighbour_exactly_the_window_away_still_counts():
+    far = observe.place(wrong_place_row(0.0, observe.NEIGHBOUR_FRAMES))
+    assert [r["camera"]["ok"] for r in observe.agree(clip({}, frames=1) + [far])] == [True, True]
+
+
+def test_a_frame_too_tall_for_its_camera_stays_untrusted_however_well_it_agrees():
+    # Its camera is the same as its neighbours', so it agrees; the heights still reject it.
+    rows = [observe.place(dict(row(1.3 if f == 5 else 1.0), frame=f)) for f in range(11)]
+    rows = observe.agree(rows)
+    assert rows[5]["camera"]["heights_ok"] is False and rows[5]["camera"]["ok"] is False
+    assert rows[4]["camera"]["ok"] and rows[6]["camera"]["ok"]
+
+
+def test_the_principal_point_is_the_image_centre_on_a_panned_and_tilted_camera():
+    v = pitch.View(40.0, -35.0, 16.0, pan=0.35, tilt=0.22, focal=1800.0, width=1280, height=720)
+    P = v.P()
+    g = observe.principal_ground(P)
+    want = observe._ground(P, (640.0, 360.0))
+    assert abs(g[0] - want[0]) < 1e-6 and abs(g[1] - want[1]) < 1e-6
+    assert abs(g[0] - observe._ground(P, (0.0, 0.0))[0]) > 1.0  # not just any pixel
+
+
+def test_observe_judges_each_frame_against_its_neighbours(monkeypatch):
+    # The whole image stage with the camera fit stubbed: frame 5's camera is 10 m wrong.
+    from types import SimpleNamespace
+    P = VIEW.P()
+    dets = []
+    for f in range(11):
+        boxes = [SimpleNamespace(cls="player", bbox=tuple(d["bbox"]), score=0.9) for d in row()["players"]]
+        dets.append(SimpleNamespace(frame=f, t=f / 25, detections=tuple(boxes)))
+    fits = [pitch.FrameFit(view_at(10.0 if f == 5 else 0.0), 1.0, 200, True) for f in range(11)]
+    monkeypatch.setattr(pitch, "line_points", lambda rgb, boxes: np.zeros((0, 2)))
+    monkeypatch.setattr(pitch, "fit_clip", lambda points, w, h: ((VIEW.cx, VIEW.cy, VIEW.cz), fits))
+    rows = observe.observe([Path(f"{f}.jpg") for f in range(11)], dets,
+                           lambda path: np.zeros((720, 1280, 3), np.uint8))
+    assert P is not None and [r["camera"]["ok"] for r in rows][4:7] == [True, False, False]
 
 
 def test_a_trusted_frame_with_no_trusted_neighbour_near_it_is_not_trusted():
@@ -127,3 +171,12 @@ def test_regate_judges_each_frame_against_its_neighbours(tmp_path):
     observe.main(["--regate", str(src), "--out", str(out)])
     ok = [json.loads(x)["camera"]["ok"] for x in out.read_text().splitlines()]
     assert ok[5] is False and ok[0] and ok[10]
+
+
+def test_the_trust_bound_is_the_committed_measurement():
+    from ninety.eval import detector_derive as dd
+    body = json.loads((ROOT / "docs/eval/detector-derive.json").read_text())["bound"]
+    worst = body["candidates"]["height"]["worst_by_seed"][str(dd.BOUND_SEED)]
+    assert dd.MAX_TRUSTED_M == math.ceil(worst * 2) / 2 == body["max_trusted_m"]
+    assert dd.KEEP_GOOD == body["keep_good"] == 0.95
+    assert body["adopted"] == "C2"

@@ -335,18 +335,25 @@ def report_md(body: dict) -> str:
         f"Adopted: **{body['bound']['adopted']}**.",
         "",
         "| Check | Worst trusted (m) | Good frames kept (share of height's) | Bad trusted "
-        "| Bad trusted by seed | Qualifies |",
-        "|---|---|---|---|---|---|",
+        "| Bad trusted by seed | Trusted, not measurable | Qualifies |",
+        "|---|---|---|---|---|---|---|",
         *[f"| {k} | {v['worst_m']} | {v['good_kept']} ({v['good_kept_share_of_height']}) "
-          f"| {v['bad_trusted']} | {v['bad_trusted_by_seed']} | {v['qualifies']} |"
+          f"| {v['bad_trusted']} | {v['bad_trusted_by_seed']} | {v['unmeasured']} | {v['qualifies']} |"
           for k, v in body["bound"]["candidates"].items()],
+        "",
+        f"MAX_TRUSTED_M comes from seed {body['bound']['bound_seed']}'s worst height-trusted frame: "
+        f"{body['bound']['candidates']['height']['worst_by_seed'].get(body['bound']['bound_seed'])} m, "
+        "rounded up to 0.5 m.",
     ]
     return "\n".join(lines) + "\n"
 
 
 
 # The camera trust bound (docs/eval/camera-bound-plan.md): candidates on top of the height test.
-MAX_TRUSTED_M = 8.5  # seed 108's worst height-trusted frame, rounded up to 0.5 m (the plan's Outcome)
+# Seed 108's worst height-trusted frame, rounded up to 0.5 m (the plan; the measurement is
+# candidates.height.worst_by_seed[108] in docs/eval/detector-derive.json, and a test holds the two equal).
+BOUND_SEED = 108
+MAX_TRUSTED_M = 8.5
 KEEP_GOOD = 0.95
 
 
@@ -395,7 +402,13 @@ def bound(clips: list[tuple[int, list[dict], dict[int, dict]]]) -> dict:
         good = sum(1 for _, _, e in trusted if e <= GOOD_M)
         bad = Counter(s for s, _, e in trusted if e > GOOD_M)
         worst = max((e for _, _, e in trusted), default=0.0)
-        table[name] = {"worst_m": round(worst, 3), "good_kept": good,
+        # Trusted frames whose error cannot be measured (no grid point in the true picture) are not
+        # in the counts above; they are counted here, not dropped silently (lesson 48).
+        unmeasured = sum(1 for s, fs in by_seed.items() for f in fs if recs[s].get(f) is None)
+        worst_by_seed = {s: round(max((recs[s][f] for f in fs if recs[s].get(f) is not None), default=0.0), 3)
+                         for s, fs in sorted(by_seed.items())}
+        table[name] = {"worst_m": round(worst, 3), "worst_by_seed": worst_by_seed, "unmeasured": unmeasured,
+                       "good_kept": good,
                        "good_kept_share_of_height": round(good / good_height, 4),
                        "bad_trusted": sum(bad.values()), "bad_trusted_by_seed": dict(sorted(bad.items())),
                        "qualifies": name != "height" and worst <= MAX_TRUSTED_M
@@ -403,7 +416,8 @@ def bound(clips: list[tuple[int, list[dict], dict[int, dict]]]) -> dict:
     qualifying = [n for n in ("C1", "C2", "C3", "C4") if table[n]["qualifies"]]
     order = ("C1", "C2", "C3", "C4")
     adopted = max(qualifying, key=lambda n: (table[n]["good_kept"], -order.index(n)), default=None)
-    return {"max_trusted_m": MAX_TRUSTED_M, "keep_good": KEEP_GOOD, "candidates": table, "adopted": adopted}
+    return {"max_trusted_m": MAX_TRUSTED_M, "keep_good": KEEP_GOOD, "bound_seed": BOUND_SEED,
+            "candidates": table, "adopted": adopted}
 
 
 if __name__ == "__main__":
