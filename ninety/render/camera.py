@@ -309,6 +309,7 @@ class Director:
         self.zoom_v = 0.0
 
     def _goal(self, bx: float, by: float, vx: float, vy: float) -> tuple[float, float, float]:
+        self._goal_z = 0.0
         if self.t < self._open_until:  # closed up on the restart: the ball where it is set
             return min(max(bx, 0.0), 105.0), min(max(by, 0.0), 68.0), TIGHT_HALF_M
         px, py = self._play(bx, by)
@@ -338,7 +339,36 @@ class Director:
             ax, ay = self._ball_in_centre(bx, by, vx, vy, ax, ay, hw)
             hw = self._pitch_fills(ax, ay, hw)
         ax, ay = self._ball_in_centre(bx, by, vx, vy, ax, ay, hw)
+        self._goal_z = self._lofted(bx, by, ax, ay, hw)
         return ax, ay, hw
+
+    def _lofted(self, bx: float, by: float, ax: float, ay: float, hw: float) -> float:
+        """How high to aim for a lofted ball: the least height, up to the ball's own, that keeps it
+        inside the CENTRAL box (an operator tilts up with a high ball rather than letting it leave
+        the top of the picture; lesson 175). Zero for a ball on or near the grass."""
+        bz = getattr(self, "ball_z", 0.0)
+        if bz < 1.0:
+            return 0.0
+        left, right, top, bottom = CENTRAL
+        m = CENTRE_MARGIN
+        ball = (bx, by, bz + 0.11)
+
+        def inside(z: float) -> bool:
+            uv = self._shot((ax, ay, z), hw).project(ball)
+            return uv is not None and (top + m) * self.height <= uv[1] <= (bottom - m) * self.height
+
+        if inside(0.0):
+            return 0.0
+        lo, hi = 0.0, bz
+        if not inside(hi):
+            return hi
+        for _ in range(12):
+            mid = (lo + hi) / 2
+            if inside(mid):
+                hi = mid
+            else:
+                lo = mid
+        return hi
 
     def _pitch_fills(self, ax: float, ay: float, hw: float) -> float:
         """The half-width, closed in only as far as keeps the pitch over PITCH_SHARE_MIN of the
@@ -466,9 +496,11 @@ class Director:
         if self.aim is None:
             self.aim = [gx, gy]
             self.aim_v = [0.0, 0.0]
+            self.aim_z, self.aim_zv = [self._goal_z, 0.0], [0.0, 0.0]
             self.half_width = ghw
         else:
             self._ease(self.aim, self.aim_v, gx, gy)
+            self._ease(self.aim_z, self.aim_zv, self._goal_z, 0.0)  # the tilt eases like the pan
             if self._open_until <= self.t < self._ease_end:
                 # The ease out of the restart's close-up reaches the wide shot in OPEN_EASE_S, as
                 # the edit plans (the restart is taken by then): eased in and out, not left to the
@@ -499,7 +531,7 @@ class Director:
             fresh_goal = True
         sx = self.p.shake_m * math.sin(2 * math.pi * 1.3 * self.t + self.shake_phase[0])
         sy = self.p.shake_m * math.sin(2 * math.pi * 0.9 * self.t + self.shake_phase[1])
-        target = (self.aim[0] + sx, self.aim[1] + sy, 0.0)
+        target = (self.aim[0] + sx, self.aim[1] + sy, self.aim_z[0])
         self.angle = "main"
         want = self._better(ball_x, ball_y) if self.cuts else ""
         # The hold covers every angle, including the return to the gantry, so an action on the

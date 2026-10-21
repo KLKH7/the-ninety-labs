@@ -304,10 +304,14 @@ def test_the_gantry_frames_the_play_with_the_pitch_filling_the_picture():
         live = [(fi, cam) for fi, cam in live if 0 <= m.frames[fi]["ball"]["x"] <= 105
                 and 0 <= m.frames[fi]["ball"]["y"] <= 68]
         assert len(live) >= 200, (seed, len(live))  # never vacuous: 40 s of live play
-        ok, in_shot = 0, []
+        ok, unframeable, in_shot = 0, 0, []
         for fi, cam in live:
             b = m.frames[fi]["ball"]
-            ok += well_framed(cam, (b["x"], b["y"], b["z"] + 0.11))
+            ball = (b["x"], b["y"], b["z"] + 0.11)
+            if well_framed(cam, ball):
+                ok += 1
+            elif not frameable(cam.position, ball):
+                unframeable += 1  # no shot from the gantry frames it: not the director's miss
             seen = 0
             for q in m.frames[fi]["players"]:
                 # In shot: his feet inside the picture's width and above its bottom, his head below its top.
@@ -315,7 +319,12 @@ def test_the_gantry_frames_the_play_with_the_pitch_filling_the_picture():
                 if feet is not None and head is not None:
                     seen += 0 <= feet[0] < 1280 and feet[1] < 720 and head[1] >= 0
             in_shot.append(seen)
-        assert ok / len(live) >= 0.85, (seed, ok, len(live))
+        # The bar applies to frames some gantry shot can frame (frameable); the raw rate over every
+        # live frame is reported beside it (lesson 175).
+        raw, rate = ok / len(live), ok / (len(live) - unframeable)
+        print(f"seed {seed}: well framed {rate:.3f} of frameable live frames, raw {raw:.3f}, "
+              f"{unframeable} of {len(live)} unframeable")
+        assert rate >= 0.85, (seed, f"frameable {rate:.3f}", f"raw {raw:.3f}", unframeable, len(live))
         assert 8 <= sorted(in_shot)[len(in_shot) // 2] <= 15, (seed, sorted(in_shot))
 
 
@@ -499,3 +508,15 @@ def test_the_frameable_oracle_knows_a_ball_on_the_corner_flag_cannot_be_framed()
     assert not frameable(gantry, (0.5, 0.5, 0.11))
     assert frameable(gantry, (52.5, 34.0, 0.11))
     assert frameable(gantry, (3.0, 8.0, 0.11))
+
+
+def test_a_lofted_ball_is_kept_in_the_picture():
+    """Old: the director aimed at the grass whatever the ball's height, so a lofted ball 5 to 7 m up
+    left the top of the picture (seed 3 on #179's engine). It tilts up with a high ball, only as far
+    as keeps it inside the CENTRAL box, and eases the tilt like the pan."""
+    d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=True)
+    for _ in range(75):
+        cam = d.step(30.0, 40.0, [], ball_z=0.0)
+    for _ in range(50):
+        cam = d.step(30.0, 40.0, [], ball_z=7.0)
+    assert well_framed(cam, (30.0, 40.0, 7.11))
