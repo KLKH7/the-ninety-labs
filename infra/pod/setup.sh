@@ -4,8 +4,9 @@
 #
 #   bash setup.sh <render commit sha> [driver ref]
 #
-# The render commit is checked out in ~/render (its code makes the clips); the driver
-# (infra/pod/render.py and the plan) comes from [driver ref], default main, into ~/driver.
+# The render commit is checked out in /work/render/repo (its code makes the clips); the driver
+# (infra/pod/render.py and the plan) comes from [driver ref], default main, into /work/render/driver.
+# It also lays out /work for the other sessions that share the pod (/work/README, /work/bin/reserve).
 # No secret is needed here: the repository is public. Upload links are given only to `upload`.
 set -euo pipefail
 SHA=${1:?usage: setup.sh <render commit sha> [driver ref]}
@@ -14,19 +15,24 @@ REPO=https://github.com/KLKH7/the-ninety-labs.git
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq git curl ca-certificates python3 python3-pip python3-venv >/dev/null
+apt-get install -y -qq git curl ca-certificates python3 python3-pip python3-venv tmux util-linux >/dev/null
 
 pip install --quiet --break-system-packages uv==0.12.23  # the version the Azure render job pins
 export UV_NO_DEV=1
 
-rm -rf ~/render ~/driver
-git clone -q "$REPO" ~/render
-git -C ~/render checkout -q "$SHA"
-test "$(git -C ~/render rev-parse HEAD)" = "$(git -C ~/render rev-parse "$SHA^{commit}")"
-git clone -q --depth 1 --branch "$DRIVER_REF" "$REPO" ~/driver 2>/dev/null \
-  || { git clone -q "$REPO" ~/driver && git -C ~/driver checkout -q "$DRIVER_REF"; }
+W=/work/render
+mkdir -p "$W" /work/bin /work/cores
+rm -rf "$W/repo" "$W/driver"
+git clone -q "$REPO" "$W/repo"
+git -C "$W/repo" checkout -q "$SHA"
+test "$(git -C "$W/repo" rev-parse HEAD)" = "$(git -C "$W/repo" rev-parse "$SHA^{commit}")"
+git clone -q --depth 1 --branch "$DRIVER_REF" "$REPO" "$W/driver" 2>/dev/null \
+  || { git clone -q "$REPO" "$W/driver" && git -C "$W/driver" checkout -q "$DRIVER_REF"; }
+install -m 755 "$W/driver/infra/pod/reserve.sh" /work/bin/reserve
+install -m 755 "$W/driver/infra/pod/cores.sh" /work/bin/cores
+install -m 644 "$W/driver/infra/pod/README-work.md" /work/README
 
-cd ~/render
+cd "$W/repo"
 # three.js from web/package-lock.json, integrity checked (as infra/render-job-start.sh does).
 python3 - <<'PY'
 import base64, hashlib, io, json, os, tarfile, urllib.request
@@ -46,11 +52,11 @@ uv run --no-sync playwright install --with-deps chromium >/dev/null
 # Smoke: seed 7 from 0:00 for 60 s, as the look-freeze review rendered it (software GL here), then
 # the determinism re-render on a 10 s clip, the dataset's length: re-rendering the 60 s clip would
 # double the smoke (a 10 s clip took 130 s on the maintainer's Mac with software GL).
-rm -rf ~/smoke && mkdir -p ~/smoke
-time uv run --no-sync ninety-render --seed 7 --start 0 --seconds 60 --out ~/smoke/seed7 | tail -12
-uv run --no-sync ninety-validate ~/smoke/seed7
-uv run --no-sync ninety-render-check ~/smoke/seed7 --report ~/smoke/check.json | tail -12
-uv run --no-sync ninety-render --seed 3 --seconds 10 --out ~/smoke/seed3 | tail -3
-uv run --no-sync ninety-render-check ~/smoke/seed3 --determinism --report ~/smoke/determinism.json | tail -8
+S=$W/smoke; rm -rf "$S" && mkdir -p "$S"
+time uv run --no-sync ninety-render --seed 7 --start 0 --seconds 60 --out $S/seed7 | tail -12
+uv run --no-sync ninety-validate $S/seed7
+uv run --no-sync ninety-render-check $S/seed7 --report $S/check.json | tail -12
+uv run --no-sync ninety-render --seed 3 --seconds 10 --out $S/seed3 | tail -3
+uv run --no-sync ninety-render-check $S/seed3 --determinism --report $S/determinism.json | tail -8
 nproc; free -g | head -2
-echo "setup done: render $(git rev-parse --short HEAD), driver $(git -C ~/driver rev-parse --short HEAD)"
+echo "setup done: render $(git rev-parse --short HEAD), driver $(git -C "$W/driver" rev-parse --short HEAD)"
