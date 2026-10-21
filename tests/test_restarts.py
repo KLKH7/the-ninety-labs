@@ -1961,3 +1961,33 @@ def test_a_target_off_the_pitch_is_brought_onto_it_before_it_is_kept_off():
     place, way = e.stand_off(d, 50.1, -5.0)[0], e.keep_off(d, 50.1, -5.0)
     assert math.dist(place, (50.0, by)) >= clear - 1e-9 and within_lines(*place)
     assert math.dist(way, (50.0, by)) >= clear - 1e-9  # and his way there keeps out of it
+
+
+def test_at_a_dead_ball_the_presser_goes_in_time_and_does_not_spring_about_his_place():
+    """Defect (lesson 174, found walking the big shifts): at a goal kick the defending side's
+    presser, settled at his place off the area, had a team-mate standing 0.55 m from it; bent off it
+    by a few centimetres (avoid), he went back at his pressing pace, 5.8 m/s, overshot, and sprang
+    back and forth twice a second, 28 times through one wait (seed 114, the goal kick at 0:58). Until
+    the ball is in play there is nobody to press: he goes to his place in time for the kick, as the
+    cover does."""
+    e = Engine(114)
+    e.kickoff("home", setup=True)
+    while e.t < 74.0:
+        e.step()
+    r, brain = e.restart, e.brains["home"]
+    assert r is not None and r.kind == "goal_kick" and brain.pressers  # premise: the goal kick waits
+    p = e.by_id[brain.pressers[0]]
+    tx, ty, top = e.shape_target(p)
+    assert top == pytest.approx(e.in_time(p, tx, ty)) and top < e.press_pace(p)
+    crowd = [q for q in e.players
+             if q.team == p.team and q is not p and math.dist((q.x, q.y), (tx, ty)) < 0.7]
+    assert crowd  # premise: a team-mate stands a hair from his place
+    turns, history = 0, []
+    while e.t < 80.0 and e.restart is r:
+        e.step()
+        history.append((p.vx, p.vy))
+        if len(history) > 10:
+            (vx, vy), (ux, uy) = history[-1], history[-11]
+            v, u = math.hypot(vx, vy), math.hypot(ux, uy)
+            turns += v > 0.5 and u > 0.5 and (vx * ux + vy * uy) / (v * u) < -0.5
+    assert len(history) > int(5.0 / DT) and turns == 0
