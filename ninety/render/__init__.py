@@ -47,5 +47,5 @@ docs/decisions/0001-synthetic-data.md.
 # stance share with a flight phase above the walk-to-run speed, the heel comes up behind before the
 # leg comes through, knee and thigh peaking at runners' angles; a swing keeps its own progress, so a
 # change of pace never moves a foot in a jump; a foot lifts before the leg runs out of reach behind
-# it, so the push-off toe no longer slides; a foot in the air is carried flat.
+# it, so the push-off toe no longer slides.
 RENDERER_VERSION = "0.5.4"

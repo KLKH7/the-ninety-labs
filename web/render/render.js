@@ -670,7 +670,6 @@ for (const a of [-1, 0, 1]) for (const b of [-1, 0, 1]) if (a || b) MOVES2.push(
 const PLANT_FOOT = 0.12;
 const STRIKE_FOOT = 0.4;
 const PLANT_GIVE_UP = 0.45;
-const HEEL_Z = 0.02; // m: a plant this high or lower is on the grass (meshpose.HEEL_Z)
 const FLOOR_SLACK = 0.02;
 const STAND_BLEND = [0.25, 0.9]; // m/s: stand pose blended into the stride (meshpose.STAND_BLEND)
 const STRIDE_GROW = [1.6, 2.8]; // m/s: the walk's stride grows to the full stride (meshpose.STRIDE_GROW)
@@ -886,7 +885,7 @@ function clampTo(v, lim) { return v < lim[0] ? lim[0] : v > lim[1] ? lim[1] : v;
 
 // Thigh and calf angles that put `point` on `target`: a grid finds the basin, halving steps close in.
 // On the grass the sole stays level, or rolls onto its toes when left behind (meshpose._leg).
-function searchLeg(angles, side, target, foot, twist, point, ground, player, calfFixed, floor, heelUp = true) {
+function searchLeg(angles, side, target, foot, twist, point, ground, player, calfFixed, floor) {
   const trial = (params) => {
     const t = Object.assign({}, angles);
     t['thigh_' + side] = [params[0], params[1], twist];
@@ -900,7 +899,7 @@ function searchLeg(angles, side, target, foot, twist, point, ground, player, cal
   };
   let best = null;
   const calves = calfFixed != null ? [calfFixed] : CALF_CAND;
-  const heels = ground && heelUp ? HEEL_CAND : [0.0];
+  const heels = ground ? HEEL_CAND : [0.0];
   for (const thigh of THIGH_CAND) {
     for (const tz of THIGH_Z) {
       for (const calf of calves) {
@@ -913,7 +912,7 @@ function searchLeg(angles, side, target, foot, twist, point, ground, player, cal
   }
   const steps = LEG_STEP.slice();
   const moves = (calfFixed != null ? MOVES2 : MOVES3).slice();
-  if (ground && heelUp) moves.push([0, 0, 0, 1], [0, 0, 0, -1]);
+  if (ground) moves.push([0, 0, 0, 1], [0, 0, 0, -1]);
   for (let it = 0; it < REFINE; it++) {
     const centre = best[2];
     for (const move of moves) {
@@ -1038,8 +1037,7 @@ function anglesFor(player, pose, heading, height) {
     const twist = plant.length > 2 && plant[2] != null ? TWIST_SIGN * wrapAngle(plant[2] - heading - lead) : 0;
     const pz = plant.length > 3 ? plant[3] : 0;
     const target = toObject(x, y, heading, height, plant[0], plant[1], pz, lift);
-    // Only a foot on the grass rolls onto its toes; one in the air is carried flat (meshpose.HEEL_Z).
-    let [planted, err] = searchLeg(angles, side, target, PLANT_FOOT, twist, 'foot_' + side, true, player, null, null, pz <= HEEL_Z);
+    let [planted, err] = searchLeg(angles, side, target, PLANT_FOOT, twist, 'foot_' + side, true, player);
     if (err > PLANT_GIVE_UP && lift < 0) {
       // Lowered, an unreachable foot reaches toward its plant above the grass (meshpose.pose_angles).
       planted = searchLeg(angles, side, target, PLANT_FOOT, twist, 'foot_' + side, false, player, null, -lift / (height / ASSET_STATURE_M))[0];
