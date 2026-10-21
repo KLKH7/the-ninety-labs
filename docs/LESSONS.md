@@ -1810,6 +1810,13 @@ short and actionable. This file is public: no research sources, product names or
   - The bob's dip let a walking leg reach its swing target. A foot 1 cm up in its landing frame
     then counted as "on the grass" in the slide test, which had been passing only because the
     stretched leg held it higher.
+  - The lean with acceleration took the engine's speed, eased over 5 frames. At a steady jog the
+    engine's speed rises and brakes back every 9 frames (seed 21's a5, 3.2 to 4.0 m/s), so the
+    blind critic saw the trunk nod every step, plus a stoop and a sideways topple turning on the
+    spot. The lean now takes the change between two 8-frame mean velocities, along the way he faces.
+  - The independent audit found a sprint swing height (0.45 at 7 m/s) with no source that only
+    kept an old test green, and tests that read their bounds from the code's own tables: with the
+    tables zeroed they passed, 0 within 0.
 - **Rule:**
   - A body motion keyed to a clock (the stride's phase) rises or falls only where the drawn
     contacts allow it: the free fall runs from the frame both drawn feet are off the grass to the
@@ -1820,6 +1827,9 @@ short and actionable. This file is public: no research sources, product names or
     119).
   - A test's selection that a better drawing newly meets (a landing foot inside the slide test's
     2 cm) is narrowed to what it protects, with the reason in its docstring, and the bound stays.
+  - A renderer reading the engine's motion reads its trend over a stride, not its per-frame
+    controller steps.
+  - A test's expected value is the source's number written in the test, never the code's table.
 - **Check:** `tests/test_render_motion.py`. Each of these fails on 0.5.9 (main's drawing, with
   the new names shimmed in):
   - `test_a_runners_hips_are_lowest_on_the_grass_and_rise_in_the_air`;
