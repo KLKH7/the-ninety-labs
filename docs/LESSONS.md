@@ -1696,19 +1696,40 @@ short and actionable. This file is public: no research sources, product names or
   where the wall stands, and the same presser was pushed in and out of 9.15 m by the wall's players
   for the whole wait, 6 cm inside it at the kick. And near a line, the way round the keep-off circle,
   aimed off the pitch and kept on it, fell inside the circle: a defect main has at a creep, walked
-  into 9.15 m more often (10 entries near a line in 20 matches, against 4), once at the kick.
+  into 9.15 m more often (10 entries near a line in 20 matches, against 4), once at the kick. The
+  third audit found settling had brought the creep back: 42 of 144 free kicks had a player creeping
+  more than 10 m in one spell (the version before settling had none). "The ball set" was checked as
+  the ball within a foot's reach of its spot, true at the whistle with the ball still rolling and
+  before the fetch; a settled player then followed every later shift of his place at his own pace,
+  however far (up to 42 m, as the restart's shape formed); and settling was judged on keep_off's
+  first step out of the circle, not on his place, so one settled 18 m from it. The hold near a line
+  that fixed the cut-through stranded players 20 to 52 m from their places for up to 41 s, and one
+  between the ball and the line inside the circle for the whole wait. And going round the circle,
+  each chord's dip into the 0.5 m margin sent the player straight out, so he stopped short every
+  few strides and went round at about 1.1 m/s: below a walk, on every version since the margin.
+  Walking a big shift again then showed one more loop the creep had hidden: the defending side
+  picked up the attackers near its goal afresh at every look, so men changed markers from look to
+  look, and three defenders walked out and back up to 19 times through one free kick's wait; the
+  taker's marker was placed where the wall stands.
 - **Rule:** "just in time" is a pace for play, where arriving early costs something; with time to
   spare at a dead ball a player walks to his place (L4's normal walking pace) and stands there; once
-  there with the ball set, he has settled, and what moves his place after that (what he sees, whom
-  he marks) he follows at his own pace. A realism complaint is measured in parts (fetch, arrivals,
+  there with the ball still on its spot, he has settled, and he follows a small shift of his place
+  (what he sees, whom he marks) at his own pace, but walks a big one. A state that turns a rule off
+  ("settled") names the condition that ends it as well as the one that starts it, and each is
+  checked as the code checks it ("set" is still, on the spot, at nobody's feet but the taker's).
+  A rule about where a player stands is judged on where he stands, not on a waypoint on the way.
+  A realism complaint is measured in parts (fetch, arrivals,
   wait, speeds) before the total is blamed. A change that makes players move faster is also
   measured for to-and-fro (reversals, the distance walked to and fro, waits with three or more
-  reversals): a slow pace hides a target that flips. A loop between two rules is fixed where they meet, not by slowing the player down.
+  reversals) and for creep spells (a player at 0.2 to 1.2 m/s for more than 5 or 10 m in one
+  go): a slow pace hides a target that flips, and a rule that turns the floor off can bring the
+  creep back. A loop between two rules is fixed where they meet, not by slowing the player down.
   And a change to how players move near the ball goes through the restart sweep (the Laws'
   distance at the kick) after every fix, not only the first.
 - **Check:** `uv run pytest tests/test_restarts.py -k "walk_to_their_places or fetching_a_dead_ball_keeps
   or hair_inside or stands_at_his_place or does_not_circle or keeps_its_presser or stand_off_it
-  or he_settles or nobody_else_is_named or never_cuts_inside"`; each fails on the engine before its
+  or he_settles or settles_only_at or nobody_else_is_named or never_cuts_inside or by_a_line
+  or short_way_is_open or keeps_his_man or kept_man_stays"`; each fails on the engine before its
   fix.
   `scripts/defect_sweep/restart_moves.py` reports speeds, reversals and to-and-fro per
   outfielder-minute through every restart wait, `scripts/defect_sweep/corners.py` the corners, and
