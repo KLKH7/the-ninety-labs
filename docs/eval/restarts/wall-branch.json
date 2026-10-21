@@ -5,50 +5,45 @@
  "ball_jump_median_m": null,
  "frames_with_a_player_over_speed_limit_per90": 0.0,
  "goal_to_kickoff_s": [
-  63.7,
-  63.4,
-  67.8,
-  81.2,
   79.6,
-  74.8,
   63.9,
-  79.3,
-  78.5
+  81.7,
+  63.1
  ],
  "restarts_kicked_by_taker": {
-  "throw_in": 106,
-  "corner": 14,
-  "free_kick": 109,
-  "goal_kick": 23
+  "throw_in": 104,
+  "corner": 13,
+  "free_kick": 114,
+  "goal_kick": 26
  },
  "encroached_at_the_kick": {},
  "stuck_restarts": 0,
  "taker_carried_the_set_ball": 0,
- "taker_touched_it_again_first": 1,
+ "taker_touched_it_again_first": 0,
  "examples": [],
  "held_out": {
   "shots_per_team_90_mean_se": [
-   14.91,
-   1.31
+   17.72,
+   2.17
   ],
   "goals_per_team_90_mean_se": [
-   1.41,
-   0.5
+   0.56,
+   0.25
   ],
-  "completion": 0.857,
-  "shots_within_10s_of_own_restart": 30,
-  "shots_otherwise": 76,
+  "completion": 0.855,
+  "shots_within_10s_of_own_restart": 33,
+  "shots_otherwise": 93,
   "first_pass_failed_share": {
-   "throw_in": 0.11,
-   "free_kick": 0.03,
+   "throw_in": 0.12,
+   "free_kick": 0.04,
    "goal_kick": 0.0,
-   "corner": 0.21
+   "corner": 0.23
   },
   "ball_lost_within_5s_share": {
-   "throw_in": 0.31,
-   "free_kick": 0.06,
+   "throw_in": 0.36,
+   "free_kick": 0.1,
    "goal_kick": 0.0,
-   "corner": 0.36
+   "corner": 0.46
   }
  }
 }

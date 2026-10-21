@@ -174,25 +174,29 @@ In the first version one wall player stood 7 m from his place through the whole 
 place was on the edge of the 9.65 m keep-off circle (9.15 m and the margin), straight in from him,
 and rounding sent him round the circle at his own distance (lesson 158).
 
-The same 16 matches as above, the wall branch at `321ea57` against the celebration branch (no wall);
-raw output in [restarts/wall-branch.json](restarts/wall-branch.json). 21 direct free kicks fell
-within shooting range: walls of 4 at the four kicks about 21 to 22 m out near the centre, 2 or 3
-further out or wider, 1 or none at the sharpest angles (by the goal line), and when each kick was
-struck every wall player stood on his place, to within a ball's radius, in all 21
-(`scripts/defect_sweep/wall.py` on the runs). Six of the 21 were shot at directly.
+The same 16 matches as above, the wall branch at `32c6505` against the celebration branch (no wall);
+raw output in [restarts/wall-branch.json](restarts/wall-branch.json). 14 direct free kicks fell
+within shooting range: walls of 4 at the three kicks about 21 to 23 m out near the centre, 2 or 3
+further out or wider, 1 at the sharpest angles; when each kick was struck every wall player stood on
+his place, to within a ball's radius, in all 14 (`scripts/defect_sweep/wall.py` on the runs). Two of
+the 14 were shot at directly.
 
 | | No wall | Wall |
 |---|---:|---:|
 | Restart defects (jumps, encroachment, carried set balls, second touches, stuck restarts) | 0 | 0 |
 | Matches meeting the data contract | 15 of 16 | 15 of 16 |
-| Shots a team per 90 | 15.2 ± 1.9 | 14.9 ± 1.3 |
-| Goals a team per 90 | 1.4 ± 0.4 | 1.4 ± 0.5 |
-| Pass completion | 84.5% | 85.7% |
-| Ball in play | 60.7% | 61.0% |
+| Shots a team per 90 | 15.2 ± 1.9 | 17.7 ± 2.2 |
+| Goals a team per 90 | 1.4 ± 0.4 | 0.6 ± 0.3 |
+| Pass completion | 84.5% | 85.5% |
+| Ball in play | 60.7% | 62.1% |
 
-The match failing the contract is seed 21 on both, main's C7 (above). Shots, goals and completion
-are unchanged within noise; football-sense per 90: FS1 19.4 to 16.6, FS2 7.9 to 8.2, FS6 23.9 to
-21.9, FS7 298 to 291, FS9 1.1 to 2.5.
+The match failing the contract is seed 21 on both, main's C7 (above). The goals are 10 against 4,
+and not the wall's doing: the two columns are different matches from the first restart on (the
+keep-off rounding fix acts at every restart, and each match parts within its first 11 to 92 s,
+lesson 90); in the no-wall matches only 3 of the 10 goals came within 15 s of a free kick in
+range, and the previous version of the wall, on the same base, had 10 goals. Shots and completion
+are level. Football-sense per 90: FS1 19.4 to 19.1, FS2 7.9 to 9.0, FS6 23.9 to 25.3, FS7 298 to
+305, FS9 1.1 to 2.8.
 
 ## Reproduce
 
