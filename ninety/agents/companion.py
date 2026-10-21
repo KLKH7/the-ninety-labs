@@ -23,14 +23,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Literal
 
-from agent_framework import Agent
-from agent_framework.exceptions import AgentFrameworkException
-from azure.core.exceptions import AzureError
-from pydantic import BaseModel
-
 from ninety.agents.contracts import COMPANION_INSTRUCTIONS, Answer, Ask, Judge, Question, status_for
-from ninety.agents.factcheck import Claim, Verdict, check, spelled_as_digits
-from ninety.agents.slice import parse_claim
+from ninety.agents.factcheck import Claim, Verdict, check, parse_claim, spelled_as_digits
 from ninety.intel.stats import Fact
 from ninety.intel.window import PlayerWindow
 
@@ -66,20 +60,33 @@ class Result:
     reasons: tuple[str, ...] = field(default_factory=tuple)
 
 
-class Reply(BaseModel):
-    """One sentence and the ids of the facts it cites."""
+def companion_agent(client):
+    # The agent framework and pydantic load here, on first use: the API imports this module, and
+    # its start-up should not pay for SDKs only a live answer needs.
+    from agent_framework import Agent
+    from pydantic import BaseModel
 
-    text: str
-    evidence: list[str]
+    class Reply(BaseModel):
+        """One sentence and the ids of the facts it cites."""
 
+        text: str
+        evidence: list[str]
 
-def companion_agent(client) -> Agent:
     return Agent(
         client=client,
         name="companion",
         instructions=COMPANION_INSTRUCTIONS,
         default_options={"response_format": Reply, "temperature": 0},
     )
+
+
+def service_errors() -> tuple[type[BaseException], ...]:
+    """A model service's own failures. Evaluated only when an exception reaches the handler, by
+    when the SDK that raised it is loaded."""
+    from agent_framework.exceptions import AgentFrameworkException
+    from azure.core.exceptions import AzureError
+
+    return AgentFrameworkException, AzureError
 
 
 def pick_metric(text: str) -> str | None:
@@ -184,7 +191,7 @@ async def answer(
         claim, verdict = await asyncio.wait_for(_drafted(question, window, ask, judge), timeout)
     except TimeoutError:
         return Result(code_answer(question, window, metric), "code", ("model timeout",))
-    except (AgentFrameworkException, AzureError):
+    except service_errors():
         return Result(code_answer(question, window, metric), "code", ("model service error",))
     except _NotTheFormat:
         return Result(code_answer(question, window, metric), "code", ("model reply is not the reply format",))
