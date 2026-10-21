@@ -46,6 +46,8 @@ from ninety.render.scene import (
     project_keypoints,
     reach_sign,
     sample_looks,
+    throw_at,
+    throws,
     touch_at,
 )
 from ninety.render.splits import split_of
@@ -277,6 +279,7 @@ def render_clip(
         gaits = {lk.id: Gait() for lk in looks}
         touches = contacts(frames, match.events)
         held = holds(frames)
+        thrown = throws(frames, FPS)
         prev_xy: dict[str, tuple[float, float]] = {}
         prev_cam: Camera | None = None
         spin_angle = 0.0
@@ -304,6 +307,7 @@ def render_clip(
                 g, h = gaits[pl["id"]], by_id[pl["id"]].height_m
                 touch_at(g, touches.get(pl["id"], []), fi, h, FPS, pl["x"], pl["y"])
                 hold_at(g, held.get(pl["id"], []), fi, ball, h, FPS)
+                throw_at(g, thrown.get(pl["id"], []), fi, h, FPS, pl["x"], pl["y"])
             actors = [(pl["x"], pl["y"], pl.get("action", "")) for pl in fr["players"]]
             # The snapshot of a goal already has the ball on the centre spot. The event
             # carries the mouth it crossed, and the frame before it carries the pace.
