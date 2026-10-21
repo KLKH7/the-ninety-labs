@@ -1,6 +1,6 @@
 {
   "command": "uv run python -m ninety.eval.detector_derive --clips <render run v1>/train --observations <validation observations, regated> --seeds <the validation seeds> --out docs/eval/detector-derive",
-  "commit": "aa1c5ffdb9037b7862e328837137c3c9655a9586",
+  "commit": "d43d26706ed6d230ae3e07f5313601d35747e22b",
   "date": "2026-10-20",
   "seeds": [
     108,
@@ -137,6 +137,160 @@
         },
         "bad_trusted_worst_m": 6.595
       }
+    }
+  },
+  "grid": {
+    "trials": [
+      {
+        "constant": "events.CARRY_MPS",
+        "was": 4.0,
+        "chosen": 4.0,
+        "scores": {
+          "4.0": {
+            "tp": 9,
+            "fp": 10
+          },
+          "3.0": {
+            "tp": 8,
+            "fp": 10
+          },
+          "5.0": {
+            "tp": 9,
+            "fp": 11
+          },
+          "6.0": {
+            "tp": 9,
+            "fp": 12
+          }
+        }
+      },
+      {
+        "constant": "events.MIN_SPELL_FRAMES",
+        "was": 2,
+        "chosen": 2,
+        "scores": {
+          "2": {
+            "tp": 9,
+            "fp": 10
+          },
+          "1": {
+            "tp": 9,
+            "fp": 14
+          },
+          "3": {
+            "tp": 7,
+            "fp": 9
+          }
+        }
+      },
+      {
+        "constant": "events.SPELL_GAP_FRAMES",
+        "was": 6,
+        "chosen": 6,
+        "scores": {
+          "6": {
+            "tp": 9,
+            "fp": 10
+          },
+          "3": {
+            "tp": 9,
+            "fp": 10
+          },
+          "12": {
+            "tp": 9,
+            "fp": 11
+          }
+        }
+      },
+      {
+        "constant": "events.SHOT_MARGIN_M",
+        "was": 1.0,
+        "chosen": 1.0,
+        "scores": {
+          "1.0": {
+            "tp": 9,
+            "fp": 10
+          },
+          "0.5": {
+            "tp": 9,
+            "fp": 10
+          },
+          "2.0": {
+            "tp": 9,
+            "fp": 10
+          }
+        }
+      },
+      {
+        "constant": "events.SHOT_MAX_M",
+        "was": 35.0,
+        "chosen": 35.0,
+        "scores": {
+          "35.0": {
+            "tp": 9,
+            "fp": 10
+          },
+          "30.0": {
+            "tp": 9,
+            "fp": 10
+          },
+          "40.0": {
+            "tp": 9,
+            "fp": 10
+          }
+        }
+      },
+      {
+        "constant": "events.OUT_FRAMES",
+        "was": 3,
+        "chosen": 3,
+        "scores": {
+          "3": {
+            "tp": 9,
+            "fp": 10
+          },
+          "2": {
+            "tp": 9,
+            "fp": 10
+          },
+          "5": {
+            "tp": 9,
+            "fp": 8
+          }
+        }
+      },
+      {
+        "constant": "track.GATE_M",
+        "was": 1.0,
+        "chosen": 1.0,
+        "scores": {
+          "1.0": {
+            "tp": 9,
+            "fp": 10
+          },
+          "1.5": {
+            "tp": 9,
+            "fp": 8
+          },
+          "2.0": {
+            "tp": 9,
+            "fp": 8
+          }
+        }
+      }
+    ],
+    "chosen": {
+      "events.CARRY_MPS": 4.0,
+      "events.MIN_SPELL_FRAMES": 2,
+      "events.SPELL_GAP_FRAMES": 6,
+      "events.SHOT_MARGIN_M": 1.0,
+      "events.SHOT_MAX_M": 35.0,
+      "events.OUT_FRAMES": 3,
+      "track.GATE_M": 1.0
+    },
+    "final": {
+      "tp": 9,
+      "fp": 10
     }
   }
 }

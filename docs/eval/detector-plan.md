@@ -232,3 +232,17 @@ adopted. Seed 2043 is named right again.
 - Names: passers 13 of 13 right; receivers 6 of 6 right; interceptors 2 of 4 right. The two wrong
   interceptors are what a wrong team does: an opponent "taking" a pass his own side made.
 - The track-break rule still removes only self-passes (3 of 3).
+
+### Step C: the event and tracker constants (validation)
+
+No constant changes: no alternative in the grid gives 2 more strict true positives
+([detector-derive.md](detector-derive.md), step C). With every value as it was: 9 true and 10 false
+positives over pass, shot and out of play on the 13 clips.
+- Two alternatives cut 2 false positives with no true positive gained: OUT_FRAMES 5, and GATE_M
+  1.5 or 2.0. The rule fixed beforehand asks for true positives, so they are not taken.
+- The strict rule needs the right team and a spot within 1.0 m. Matched by type and time alone,
+  the same detections hold 18 passes.
+
+### Frozen for step D
+
+Every constant is frozen at the commit that adds this line. The test set is scored once, after it.

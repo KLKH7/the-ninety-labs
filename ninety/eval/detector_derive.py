@@ -203,6 +203,68 @@ def gates(observations: list[tuple[int, list[dict], dict[int, dict]]]) -> dict:
     return {"frames": len(recs), "good": n_good, "bad": n_bad, "band": band, "candidates": table}
 
 
+# Step C: the grid, in the plan's order, the current value first (docs/eval/detector-plan.md).
+GRID = [
+    ("events", "CARRY_MPS", (4.0, 3.0, 5.0, 6.0)),
+    ("events", "MIN_SPELL_FRAMES", (2, 1, 3)),
+    ("events", "SPELL_GAP_FRAMES", (6, 3, 12)),
+    ("events", "SHOT_MARGIN_M", (1.0, 0.5, 2.0)),
+    ("events", "SHOT_MAX_M", (35.0, 30.0, 40.0)),
+    ("events", "OUT_FRAMES", (3, 2, 5)),
+    ("track", "GATE_M", (1.0, 1.5, 2.0)),
+]
+SCORED = ("pass", "shot", "out_of_play")
+
+
+def event_counts(clips: list[tuple[list[dict], list[dict], list[dict]]]) -> tuple[int, int]:
+    """Strict true and false positives (event_score's rule: type and team within 1.0 s, the spot
+    within 1.0 m of the ball at the detected time), summed over pass, shot and out of play."""
+    from ninety.eval import event_score
+    from ninety.vision import events as ev
+
+    tp = fp = 0
+    for rows, frame_list, truth in clips:
+        detected = [e for e in ev.detect(rows)[0] if e["type"] in SCORED]
+        pairs = event_score.match([e for e in truth if e["type"] in SCORED], detected,
+                                  frames=frame_list, radius_m=event_score.STRICT_M)
+        tp += len(pairs)
+        fp += len(detected) - len(pairs)
+    return tp, fp
+
+
+def grid(clips: list[tuple[list[dict], list[dict], list[dict]]]) -> dict:
+    """Step C: each constant over its grid, one at a time, the earlier changes kept. A value changes
+    only if an alternative gives at least 2 more true positives with no more false positives; the
+    best such (most TP, then fewest FP) is taken. Restores every constant it touches."""
+    import importlib
+
+    modules = {"events": importlib.import_module("ninety.vision.events"), "track": tr}
+    original = {(m, name): getattr(modules[m], name) for m, name, _ in GRID}
+    trials = []
+    try:
+        for m, name, values in GRID:
+            mod = modules[m]
+            current = getattr(mod, name)
+            base = event_counts(clips)
+            scores = {}
+            for v in values:
+                setattr(mod, name, v)
+                scores[v] = event_counts(clips)
+            setattr(mod, name, current)
+            better = [(tp, -fp, v) for v, (tp, fp) in scores.items()
+                      if v != current and tp >= base[0] + 2 and fp <= base[1]]
+            chosen = max(better)[2] if better else current
+            setattr(mod, name, chosen)
+            trials.append({"constant": f"{m}.{name}", "was": current, "chosen": chosen,
+                           "scores": {str(v): {"tp": tp, "fp": fp} for v, (tp, fp) in scores.items()}})
+        final = event_counts(clips)
+        chosen = {f"{m}.{name}": getattr(modules[m], name) for m, name, _ in GRID}
+    finally:
+        for (m, name), v in original.items():
+            setattr(modules[m], name, v)
+    return {"trials": trials, "chosen": chosen, "final": {"tp": final[0], "fp": final[1]}}
+
+
 def main(argv: list[str] | None = None) -> None:
     import argparse
     import datetime
@@ -237,6 +299,7 @@ def main(argv: list[str] | None = None) -> None:
                                    "coverage": None if v["coverage"] is None else round(v["coverage"], 4)}
                                for s, v in side.items()}},
         "gates": gates([(s, got[s][0], got[s][1]) for s in placed]),
+        "grid": grid([(got[s][0], [got[s][1][f] for f in sorted(got[s][1])], got[s][2]) for s in placed]),
     }
     write_or_check(a.out, body, report_md, a.check)
     print(json.dumps({"sides": {k: body["sides"][k] for k in ("accuracy", "coverage")},
@@ -273,6 +336,20 @@ def report_md(body: dict) -> str:
         *[f"| {k} | {v['bad_trusted']} | {v['bad_trusted_worst_m']} | {v['good_kept']} "
           f"({v['good_kept_share']}) "
           f"| {v['bad_trusted_by_seed']} |" for k, v in g["candidates"].items()],
+        "",
+        "## Step C: the event and tracker constants",
+        "",
+        "Strict true / false positives over pass, shot and out of play, each value with the earlier "
+        "choices kept.",
+        "",
+        "| Constant | Was | Chosen | Each value: TP / FP |",
+        "|---|---|---|---|",
+        *[f"| {t['constant']} | {t['was']} | {t['chosen']} | "
+          + "; ".join(f"{v}: {c['tp']} / {c['fp']}" for v, c in t["scores"].items()) + " |"
+          for t in body["grid"]["trials"]],
+        "",
+        f"With the chosen values: {body['grid']['final']['tp']} true and {body['grid']['final']['fp']} "
+        "false positives.",
     ]
     return "\n".join(lines) + "\n"
 
