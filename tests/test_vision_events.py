@@ -252,7 +252,8 @@ def test_the_ball_over_a_line_for_out_frames_is_out_of_play_and_one_frame_is_not
         for f in range(40):
             y = 66.0 if f < 20 else (68.0 + 1.0 if f < 20 + out_for else 66.0)
             holder = (50.0, 66.2 if f < 12 else 60.0, BLUE)
-            rows.append(row(f, crowd(f)[:4] + [holder], (50.2 if f < 12 else 50.0, y)))
+            # Both kits on the pitch, so which side is home is decided (blue: crowd's docstring).
+            rows.append(row(f, crowd(f) + [holder], (50.2 if f < 12 else 50.0, y)))
         return rows
     long_ = [e for e in ev.detect(scene(ev.OUT_FRAMES))[0] if e["type"] == "out_of_play"]
     short = [e for e in ev.detect(scene(1))[0] if e["type"] == "out_of_play"]
@@ -333,6 +334,39 @@ def test_one_kit_in_sun_and_in_shadow_is_one_side():
     teams = {tuple(t.rgb[0]): t.team for t in tracks}
     assert teams[tuple(home_sun)] == teams[tuple(home_shade)] == "home"
     assert teams[tuple(away_sun)] == teams[tuple(away_shade)] == "away"
+
+
+def kit_scene(home_kits, away_kits, frames=30):
+    """Home players at x 30 to 45, away players deeper toward x = 105 (so away), one kit colour
+    each, standing still; each list holds one rgb per player."""
+    def scene(f):
+        return ([(30 + 4 * k, 10.0 + 5 * k, c) for k, c in enumerate(home_kits)]
+                + [(70 + 4 * k, 12.0 + 5 * k, c) for k, c in enumerate(away_kits)])
+    tracks = tr.track_players([row(f, scene(f)) for f in range(frames)])
+    info = tr.assign_teams(tracks)
+    return {tuple(t.rgb[0]): t.team for t in tracks}, info
+
+
+def test_a_white_kit_and_a_black_kit_are_told_apart_by_brightness():
+    # Both grey by chromaticity; one is in shadow, so brightness varies within each kit too.
+    white, white_shade, black, black_sun = [235.0, 235.0, 232.0], [120.0, 120.0, 118.0], \
+        [22.0, 22.0, 24.0], [40.0, 40.0, 42.0]
+    teams, info = kit_scene([white, white_shade, white, white_shade], [black, black_sun, black, black_sun])
+    assert info["feature"] == "brightness"
+    assert teams[tuple(white)] == teams[tuple(white_shade)] == "home"
+    assert teams[tuple(black)] == teams[tuple(black_sun)] == "away"
+
+
+def test_the_side_nearer_x_105_on_average_defends_it_even_when_the_deepest_player_is_the_other_sides():
+    # Away (red) defends x = 105 and stands around x = 65; home (blue) is mostly at 30 to 40 but one
+    # home forward has run on to x = 95. The deepest player toward 105 is home's, which named home as
+    # the side defending it; each side's mean x does not (GROUNDING T2, O6).
+    def scene(f):
+        return ([(60.0 + 3 * k, 20.0 + 6 * k, RED) for k in range(4)]
+                + [(30.0 + 3 * k, 25.0 + 6 * k, BLUE) for k in range(3)] + [(95.0, 40.0, BLUE)])
+    tracks = tr.track_players([row(f, scene(f)) for f in range(30)])
+    tr.assign_teams(tracks)
+    assert {tuple(t.rgb[0]): t.team for t in tracks} == {tuple(RED): "away", tuple(BLUE): "home"}
 
 
 def cut_scene(goes_out: bool):

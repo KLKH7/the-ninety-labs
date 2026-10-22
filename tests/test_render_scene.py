@@ -76,13 +76,20 @@ def test_the_ball_is_drawn_where_the_engine_has_it_even_at_a_carriers_feet():
     assert drawn_ball(fr) == (50.0, 30.0, 0.0)
 
 
-def test_a_throw_lifts_both_hands_over_the_head():
-    parts = body_parts(0, 0, LOOK, Gait(action="throw", heading=math.pi / 2))
+def test_a_throw_labels_the_hands_where_the_mesh_holds_the_ball_over_his_head():
+    """A throw's arms are the hold's (scene.throw_at): the labelled hands are the mesh's, on the ball.
+    Old: a fixed capsule pose over the head, wherever the engine had the ball."""
+    from ninety.render.meshpose import pose_markers
+
+    g = Gait(action="throw", heading=math.pi / 2)
+    g.hold = {"at": [0.0, 0.28, 1.96], "w": 1.0, "bend": 0.1}
+    parts = body_parts(0, 0, LOOK, g)
     head = next(p for p in parts if p["n"] == "head")["a"][2]
-    hands = [p["b"] for p in parts if p["n"].startswith("forearm")]
-    assert len(hands) == 2
-    assert all(h[2] > head + 0.15 for h in hands)
-    assert all(h[1] > 0.15 for h in hands)  # toward the pitch
+    hands = {p["n"][-1]: p["b"] for p in parts if p["n"].startswith("forearm")}
+    drawn = pose_markers({"action": "throw", "x": 0.0, "y": 0.0, "hold": g.hold}, g.heading, LOOK.height_m)
+    for s in "lr":
+        assert hands[s][2] > head + 0.15
+        assert math.dist(hands[s], drawn[f"hand_{s}"]) < 0.02, (s, hands[s], drawn[f"hand_{s}"])
 
 
 def test_a_strike_raises_the_labelled_foot_where_the_touch_aims_it():

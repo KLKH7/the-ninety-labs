@@ -7,7 +7,6 @@ from ninety.render.camera import (
     GANTRY_HALF_M,
     HOLD_SHARE,
     MAX_PAN_MPS,
-    OPEN_EASE_S,
     PAN_ACCEL_MPS2,
     ZOOM_ACCEL_MPS2,
     Camera,
@@ -455,23 +454,71 @@ def _held(d, x, y, frames, actors=None):
     return cam
 
 
-def test_a_restart_taken_during_the_close_up_is_watched_on_the_wide_shot():
-    """Old (0.5.2 to 0.5.3): after an edit cut the gantry came back closed up on the restart and the
-    zoom spring took 3 s and more to get back out, so a corner taken early was played through the
-    close-up (seed 3 on #179's engine: the pitch 28-46% of the picture). Once the ball is played the
-    ease out starts, and within OPEN_EASE_S the lens is back at the gantry's own width (lesson 175)."""
+def test_after_a_cut_the_restart_opens_on_the_wide_shot_and_holds_it():
+    """Old (0.5.2 to 0.5.9): after an edit cut the gantry came back closed up on the restart, held a
+    frozen taker alone for 4 s, then pulled out (demo v1's critic, #4 and #15; lesson 175 before it).
+    The picture now comes back on the gantry's own wide shot, with no pull-out, and holds that shot
+    CUT_HOLD_S even when a throw-in would bring up the tight lens (bounds written before the change)."""
     d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=True)
     _held(d, 30.0, 34.0, 50)
-    wide = d.half_width
     d.cut()
     d.open_on_restart()
-    _held(d, 30.5, 0.5, 25)  # one second of the close-up on a ball set for a throw-in
-    assert d.half_width < 0.5 * wide
-    x, y = 30.5, 0.5
-    for _ in range(int(25 * OPEN_EASE_S) + 1):  # the throw is taken: the ball comes infield
-        y += 8.0 / 25
-        d.step(x, y, [])
-    assert d.half_width >= 0.9 * min(d.p.half_width_m, GANTRY_HALF_M), d.half_width
+    thrower = [(30.4, -0.3, "throw")]
+    widths, angles = [], []
+    for _ in range(round(25 * CUT_HOLD_S)):  # a throw-in set on the touchline
+        d.step(30.5, 0.2, thrower)
+        widths.append(d.half_width)
+        angles.append(d.angle)
+    assert widths[0] >= 0.8 * min(d.p.half_width_m, GANTRY_HALF_M), widths[0]
+    assert max(widths) <= 1.25 * widths[0] and min(widths) >= 0.8 * widths[0], (min(widths), max(widths))
+    assert set(angles) == {"main"}, set(angles)
+
+
+def test_a_cut_reframes_on_the_restart_however_far_the_stoppage_was_framed():
+    """The edit's cut is a new framing, not the stoppage's held over: built so the property must
+    hold (the stoppage framed at the left of the pitch, the restart set far to the right), the
+    restart's spot jumps more than a fifth of the picture's width across the cut and comes up in its
+    middle half. Moved here from test_render_clip, where it rested on whatever seed 11's play put
+    either side of the cut (lesson 187)."""
+    d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=True)
+    before = _held(d, 30.0, 34.0, 50)
+    d.cut()
+    d.open_on_restart()
+    after = d.step(80.0, 12.0, [])
+    spot = (80.0, 12.0, 0.0)
+    now, then = after.project(spot), before.project(spot)
+    assert now is not None and abs(now[0] - 640) < 0.25 * 1280, now
+    assert then is None or math.dist(now, then) > 0.2 * 1280, (now, then)
+
+
+def test_after_a_goal_the_scorer_and_his_celebration_are_followed():
+    """Demo v1's critic (#8): after the goal a fixed low shot beside the net showed the keeper and
+    never the scorer. Told who scored, the camera stays on the gantry for the goal itself, then a
+    second camera follows the scorer to the corner flag: from 2.5 s after the goal to the end of the
+    hold he is in the middle half of the picture, at least a sixth of its height tall (bounds written
+    before the change). Without a scorer the low angle beside the net is unchanged (test above)."""
+    d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=True)
+    _held(d, 100.0, 34.0, 25)
+    x, y = 104.0, 34.5
+    d.step(105.6, 34.0, [], goal=("R", 34.0, 1.0, 20.0), scorer=(x, y))
+    assert d.angle == "main"
+    bad = []
+    for i in range(1, 25 * 8):
+        if y > 4.0:  # he runs to the corner flag at 6 m/s, then stays there with his team-mates
+            y -= 6.0 / 25
+            x = max(x - 0.4 / 25, 102.0)
+        c = d.step(105.6, 34.0, [], scorer=(x, y), cut_in=(25 * 8 - i) / 25 + 0.5)
+        t = i / 25
+        if t < 2.0:
+            assert d.angle == "main", (t, d.angle)
+        if t >= 2.5:
+            chest, feet, head = c.project((x, y, 1.0)), c.project((x, y, 0.0)), c.project((x, y, 1.8))
+            ok = (d.angle == "scorer" and chest is not None and 320 <= chest[0] <= 960
+                  and 180 <= chest[1] <= 540 and feet is not None and head is not None
+                  and feet[1] - head[1] >= 720 / 6)
+            if not ok:
+                bad.append((round(t, 2), d.angle, chest))
+    assert not bad, bad[:5]
 
 
 def test_a_ball_run_to_the_byline_stays_in_the_middle_of_the_picture():

@@ -1,5 +1,8 @@
 """Fouls (Law 12): a lunge that arrives with the ball gone and sweeps through the man he went for."""
 
+import math
+
+from ninety.sim import fmath
 from ninety.sim.engine import Engine
 
 
@@ -172,6 +175,121 @@ def test_he_foresees_the_man_running_on_into_his_lunge():
     assert e.foul_line(dfd, att, 95.87, 34.0) == 0.0  # standing still: no risk
     att.vx = 5.0  # running on toward goal with it: by the time his foot arrives, the man is there
     assert e.foul_line(dfd, att, 95.87, 34.0) > 0.0
+
+
+def test_the_pose_lies_at_eighty_five_and_ends_with_the_span():
+    """The numbers are the design arithmetic, not the constants: half a second to go down, a
+    second and a half at 85°, a second to get up. Reading the constants back stays green when
+    they change (lesson 190)."""
+    from ninety.sim.engine import foul_fall_deg
+
+    assert foul_fall_deg(0.0, 3.0) == 0.0
+    assert foul_fall_deg(3.0, 3.0) == 0.0
+    # One frame past the span, and a span with no time in it. The ease is already 0 at the
+    # endpoint, so only these two fail when that guard is removed.
+    assert foul_fall_deg(3.0 + 1.0 / 25, 3.0) == 0.0
+    assert foul_fall_deg(1.0 / 25, 0.0) == 0.0
+    assert foul_fall_deg(0.25, 3.0) == 31.875  # u = 0.5: 85 * 0.5 * (u + u*u)
+    assert foul_fall_deg(1.25, 3.0) == 85.0  # lying: after 0.5 s, before the get-up at 2.0 s
+    assert foul_fall_deg(2.25, 3.0) == 71.71875  # get-up u = 0.25, the ease, not 1 - u
+    assert foul_fall_deg(0.2, 0.5) == 82.62  # shorter than 1.5 s: topple and get-up scale, no lie
+    assert foul_fall_deg(0.55, 1.5) == 84.38375  # exactly 1.5 s: no lie, and it does not scale
+    e, _, _ = lunge_scene(34.0)
+    e.restart = None  # nothing is due, so the whole 3 s, not a span of 0
+    assert e._fall_span(0.0) == 3.0
+
+
+def test_a_foul_puts_him_down_the_way_he_was_hit_and_leaves_his_feet():
+    e, dfd, att = lunge_scene(34.0)
+    att.y = 35.0
+    feet = (att.x, att.y)
+    e.foul(dfd, att)
+    e.snapshot()
+    row = next(p for p in e.match.frames[-1]["players"] if p["id"] == att.id)
+    assert row["action"] == "down"
+    # One frame in (1/25 s): 85 * 0.5 * (0.08 + 0.08**2) = 3.672, written to a tenth.
+    assert row["fall"] == 3.7
+    assert row["fall_dir"] == round(fmath.atan2(att.y - dfd.y, att.x - dfd.x), 4)
+    assert (row["x"], row["y"]) == (round(feet[0], 3), round(feet[1], 3))
+    assert (att.x, att.y) == feet
+    att.x, att.y = dfd.x, dfd.y  # one place has no direction: the fallback, not atan2 of nothing
+    e._go_down(dfd, att)
+    e.snapshot()
+    row = next(p for p in e.match.frames[-1]["players"] if p["id"] == att.id)
+    assert row["fall_dir"] == 0.0
+
+
+def test_a_fouled_player_goes_down_and_is_up_before_the_restart():
+    from ninety.sim.engine import DT
+    from ninety.validate import MAX_PLAYER_MPS
+
+    e, dfd, att = lunge_scene(34.0)
+    e.possessor = None
+    e.ball = (63.0, 34.0, 0.11, 0.0, 0.0, 0.0)
+    e.lunges[dfd.id] = e.t
+    e.lunge_at[dfd.id] = att.id
+    e.duels()
+    contact, upright, _ = e.fallen[att.id]
+    assert upright == contact + 3.0  # 0.5 + 1.5 + 1.0; the lie's length is this total
+    assert upright <= e.restart.ready_at - 1.5
+    seen = lay = False
+    prev = (att.x, att.y)
+    while e.t < contact + 50 and not any(ev["type"] == "set_piece" for ev in e.match.events):
+        e.step()
+        row = next(p for p in e.match.frames[-1]["players"] if p["id"] == att.id)
+        # The fall does not write a point of its own: the row is his feet, and a frame of
+        # the first second stays inside P1's 10.5 m/s. A 0.4 m shove on his step is over it.
+        assert (row["x"], row["y"]) == (round(att.x, 3), round(att.y, 3))
+        moved = math.hypot(row["x"] - prev[0], row["y"] - prev[1])
+        if e.match.frames[-1]["t"] < contact + 1.0:
+            assert moved / DT <= MAX_PLAYER_MPS
+        prev = (row["x"], row["y"])
+        if contact + 1.0 <= e.match.frames[-1]["t"] <= contact + 1.2:
+            assert row["fall"] == 85.0 and row["action"] == "down"
+            lay = True
+        if row.get("fall", 0) > 0:
+            seen = True
+            assert row["action"] == "down" and "fall_dir" in row
+    restart = next(ev for ev in e.match.events if ev["type"] == "set_piece")
+    assert seen and lay
+    for fr in e.match.frames:
+        if fr["t"] <= restart["t"] - 1.0:
+            continue
+        row = next(p for p in fr["players"] if p["id"] == att.id)
+        assert not row.get("fall")
+        assert row["action"] != "down"
+
+
+def test_a_restart_due_in_two_seconds_has_him_up_before_it():
+    """The whole pose is 3 s, so only a restart due sooner than that plus the margin uses the
+    margin. A free kick's usual 29 s does not. Due in 2 s he is down for 0.5 s, scaled."""
+    from ninety.sim.engine import RESTART_DELAY_S
+
+    saved = RESTART_DELAY_S["free_kick"]
+    RESTART_DELAY_S["free_kick"] = (2.0, 2.0)
+    try:
+        e, dfd, att = lunge_scene(34.0)
+        e.possessor = None
+        e.ball = (63.0, 34.0, 0.11, 0.0, 0.0, 0.0)
+        e.lunges[dfd.id] = e.t
+        e.lunge_at[dfd.id] = att.id
+        e.duels()
+        t0, upright, _ = e.fallen[att.id]
+        assert e.restart.ready_at == t0 + 2.0
+        assert upright == t0 + 0.5  # 2 s minus the 1.5 s margin; a margin of 3 s leaves him none
+        assert upright <= e.restart.ready_at - 1.5
+        e.snapshot()  # the contact frame, one frame into the scaled topple: 12.648, written 12.6
+        row = next(p for p in e.match.frames[-1]["players"] if p["id"] == att.id)
+        assert row["fall"] == 12.6 and row["action"] == "down"
+        while e.t < e.restart.ready_at:
+            e.step()
+        posed = [p for fr in e.match.frames
+                 for p in fr["players"] if p["id"] == att.id and p.get("fall") == 82.6]
+        assert posed  # the scaled topple does reach 82.6; a span of 0 never writes a fall
+        row = next(p for p in e.match.frames[-1]["players"] if p["id"] == att.id)
+        assert not row.get("fall") and row["action"] != "down"
+    finally:
+        RESTART_DELAY_S["free_kick"] = saved
 
 
 def test_at_a_penalty_the_keeper_guesses_the_side_about_as_often_as_keepers_do():

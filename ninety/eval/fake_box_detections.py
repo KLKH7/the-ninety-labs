@@ -17,6 +17,14 @@ own label as the nearest one, so the scorer's group convention (an unmatched box
 nearest label's visibility group) puts it in that label's group. When damage cannot be planted
 cleanly it is refused, never forced.
 
+Pitch-level damage (``fake_pitch_detections``) is planted the same way, in metres on the pitch
+through each frame's saved camera (ninety/eval/vision_pitch_score.py): a copy's point (a player's foot,
+the ball's centre) moves a known distance, inside the strict radius (shift_in), between the strict
+and the lenient one (shift_mid: a miss and a false alarm under strict only), or past the lenient
+one (shift_out); a false box lands further than the lenient radius from every label. A damaged
+label, and the point its copy moves to, are further than the lenient radius from every other
+label of its class in the frame, so nothing else can match them.
+
     uv run python -m ninety.eval.fake_box_detections runs/dataset/test/seed*
 """
 
@@ -29,6 +37,16 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+from ninety.eval.vision_pitch_score import (
+    BALL_CENTRE_Z,
+    HEIGHT_GROUPS,
+    IN_AIR_Z,
+    RADIUS_M,
+    RULES,
+    has_cameras,
+    place,
+    score_pitch,
+)
 from ninety.eval.vision_score import (
     BALL_DISTANCE_PX,
     CLASSES,
@@ -235,6 +253,181 @@ def disagreements(expected: dict, report: dict) -> list[str]:
             for name, want, got in rows for k in want if want[k] != got[k]]
 
 
+PITCH_DAMAGES = ("drop", "shift_in", "shift_mid", "shift_out", "add")
+
+
+def pitch_shift_m(cls: str) -> dict[str, float]:
+    """How far each shift moves a copy's point on the pitch, from the radii alone: half the strict
+    radius; halfway between strict and lenient; twice the lenient radius."""
+    strict, lenient = RADIUS_M["strict"][cls], RADIUS_M["lenient"][cls]
+    return {"shift_in": strict / 2, "shift_mid": (strict + lenient) / 2, "shift_out": 2 * lenient}
+
+
+# What each damage does to a label's counts under each rule: (tp, fp, fn) changes.
+PITCH_EFFECT = {
+    "drop": {"strict": (-1, 0, 1), "lenient": (-1, 0, 1)},
+    "shift_in": {"strict": (0, 0, 0), "lenient": (0, 0, 0)},
+    "shift_mid": {"strict": (-1, 1, 1), "lenient": (0, 0, 0)},
+    "shift_out": {"strict": (-1, 1, 1), "lenient": (-1, 1, 1)},
+    "add": {"strict": (0, 1, 0), "lenient": (0, 1, 0)},
+}
+
+
+def _project(P, x: float, y: float, z: float) -> tuple[float, float] | None:
+    """The pixel the saved matrix puts a pitch point at, as ninety.render.camera.project_with."""
+    h = [P[i][0] * x + P[i][1] * y + P[i][2] * z + P[i][3] for i in range(3)]
+    return None if h[2] <= 1e-9 else (h[0] / h[2], h[1] / h[2])
+
+
+def _box_at(label: dict, uv: tuple[float, float]) -> list[float]:
+    """The label's box translated so its point (bottom middle, or centre for the ball) is at uv."""
+    x0, y0, x1, y1 = label["bbox"]
+    du = uv[0] - (x0 + x1) / 2
+    dv = uv[1] - (y1 if label["cls"] == "player" else (y0 + y1) / 2)
+    return [x0 + du, y0 + dv, x1 + du, y1 + dv]
+
+
+def _far(point, others: list, reach: float) -> bool:
+    return all(o is None or math.dist(point, o) > reach + TIE_PX for o in others)
+
+
+def fake_pitch_detections(frames: list[dict], seed: int, per_damage: int = 2) -> tuple[list[dict], dict]:
+    """Return (detections, expected): per_damage of each of PITCH_DAMAGES for each class, moved in
+    metres on the pitch, and what the pitch-level scorer must report under each rule, from the
+    damage log alone (`expected_pitch_counts`)."""
+    rng = fmath.Random(seed)
+    labels = ground_truth(frames)
+    cameras = {int(row["frame"]): row["camera"] for row in frames}
+    heights = {int(row["frame"]): row["ball"]["z"] for row in frames}
+    points = [place(lab["cls"], lab["bbox"], cameras[lab["frame"]]["P"]) for lab in labels]
+    for lab in labels:
+        lab["height"] = height_of(heights[lab["frame"]]) if lab["cls"] == "ball" else None
+    by_frame_cls: dict[tuple[int, str], list[int]] = {}
+    for i, label in enumerate(labels):
+        by_frame_cls.setdefault((label["frame"], label["cls"]), []).append(i)
+    detections = {i: {"frame": lab["frame"], "cls": lab["cls"], "bbox": list(lab["bbox"]), "score": 1.0}
+                  for i, lab in enumerate(labels)}
+    damaged: set[int] = set()
+    added: list[dict] = []
+    log: list[dict] = []
+
+    for cls in CLASSES:
+        reach = RADIUS_M["lenient"][cls]
+        z = 0.0 if cls == "player" else BALL_CENTRE_Z
+        victims = [i for i, lab in enumerate(labels) if lab["cls"] == cls and points[i] is not None]
+        rng.shuffle(victims)
+        for damage in PITCH_DAMAGES:
+            for _ in range(per_damage):
+                if damage == "add":
+                    source = rng.choice([lab for lab in labels if lab["cls"] == cls])
+                    camera = cameras[source["frame"]]
+                    same = [labels[j] for j in by_frame_cls[(source["frame"], cls)]]
+                    near_points = [points[j] for j in by_frame_cls[(source["frame"], cls)]]
+                    w, h = source["bbox"][2] - source["bbox"][0], source["bbox"][3] - source["bbox"][1]
+                    for _ in range(200):
+                        x, y = rng.uniform(0, camera["width"] - w), rng.uniform(0, camera["height"] - h)
+                        box = [x, y, x + w, y + h]
+                        spot = place(cls, box, camera["P"])
+                        if spot is not None and _far(spot, near_points, reach) and (
+                                not same or _nearest(box, same) is not None):
+                            break
+                    else:
+                        raise ValueError(f"no room for a false {cls} box in frame {source['frame']}")
+                    near = _nearest(box, same)
+                    added.append({"frame": source["frame"], "cls": cls, "bbox": box, "score": 1.0})
+                    log.append({"damage": damage, "cls": cls, "frame": source["frame"], "shift_m": None,
+                                "bbox": box, "group": visibility_group(near["visibility"]) if near else None,
+                                "height": near["height"] if near else None})
+                    continue
+                for i in victims:
+                    if i in damaged:
+                        continue
+                    label, here = labels[i], points[i]
+                    camera = cameras[label["frame"]]
+                    others = [points[j] for j in by_frame_cls[(label["frame"], cls)] if j != i]
+                    if not _far(here, others, reach):
+                        continue
+                    if damage == "drop":
+                        box, moved = label["bbox"], None
+                        break
+                    moved = pitch_shift_m(cls)[damage]
+                    a = rng.uniform(0, 2 * math.pi)
+                    spot = (here[0] + moved * fmath.cos(a), here[1] + moved * fmath.sin(a))
+                    uv = _project(camera["P"], *spot, z)
+                    if uv is None:
+                        continue
+                    box = _box_at(label, uv)
+                    if not _in_image(box, camera) or not _far(spot, others, reach):
+                        continue
+                    if damage != "shift_in" and _nearest(
+                            box, [labels[j] for j in by_frame_cls[(label["frame"], cls)]]) is not label:
+                        continue
+                    break
+                else:
+                    raise ValueError(f"not enough isolated {cls} labels to plant {damage} cleanly")
+                damaged.add(i)
+                if damage == "drop":
+                    del detections[i]
+                else:
+                    detections[i]["bbox"] = box
+                log.append({"damage": damage, "cls": cls, "frame": label["frame"], "shift_m": moved,
+                            "group": visibility_group(label["visibility"]), "height": label["height"]})
+
+    out = [detections[i] for i in sorted(detections)] + added
+    out.sort(key=lambda d: d["frame"])
+    return out, expected_pitch_counts(labels, log)
+
+
+def height_of(z: float) -> str:
+    """EVALUATION.md's height groups, read here from the clip's ball height."""
+    return HEIGHT_GROUPS[1] if z > IN_AIR_Z else HEIGHT_GROUPS[0]
+
+
+def expected_pitch_counts(labels: list[dict], log: list[dict]) -> dict:
+    """What the pitch-level scorer must report under each rule, from the labels and the damage
+    log alone: overall, by class, by visibility group within each class, and the ball by height."""
+    out = {}
+    for rule in RULES:
+        counts = {k: Counter() for k in ("tp", "fp", "fn")}
+        for label in labels:
+            counts["tp"][label["cls"], visibility_group(label["visibility"]), label["height"]] += 1
+        for entry in log:
+            key = entry["cls"], entry["group"], entry["height"]
+            for name, change in zip(("tp", "fp", "fn"), PITCH_EFFECT[entry["damage"]][rule], strict=True):
+                counts[name][key] += change
+
+        def total(name, cls=None, group=None, height=None, c=counts):
+            return sum(n for (k_cls, k_group, k_height), n in c[name].items()
+                       if (cls is None or k_cls == cls) and (group is None or k_group == group)
+                       and (height is None or k_height == height))
+
+        def row(**where):
+            return _metrics(*(total(name, **where) for name in ("tp", "fp", "fn")))
+
+        out[rule] = {
+            "overall": row(),
+            "by_class": {cls: row(cls=cls) for cls in CLASSES},
+            "visibility": {cls: {g: row(cls=cls, group=g) for g in VISIBILITY_GROUPS} for cls in CLASSES},
+            "height": {"ball": {g: row(cls="ball", height=g) for g in HEIGHT_GROUPS}},
+        }
+    out["damage"] = log
+    return out
+
+
+def pitch_disagreements(expected: dict, report: dict) -> list[str]:
+    """Every count or rate where the pitch-level report differs from what was planted."""
+    rows = []
+    for rule in RULES:
+        want, got = expected[rule], report[rule]
+        rows.append((f"{rule}.overall", want["overall"], got["overall"]))
+        rows += [(f"{rule}.by_class.{c}", want["by_class"][c], got["by_class"][c]) for c in CLASSES]
+        rows += [(f"{rule}.visibility.{c}.{g}", want["visibility"][c][g], got["visibility"][c][g])
+                 for c in CLASSES for g in VISIBILITY_GROUPS]
+        rows += [(f"{rule}.height.ball.{g}", want["height"]["ball"][g], got["height"]["ball"][g])
+                 for g in HEIGHT_GROUPS]
+    return [f"{name}.{k}: planted {w[k]}, scored {g[k]}" for name, w, g in rows for k in w if w[k] != g[k]]
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Plant known damage in copied labels and check the "
                                      "vision scorer reports exactly what was planted.")
@@ -255,6 +448,14 @@ def main(argv: list[str] | None = None) -> None:
                             for c in CLASSES},
                "agrees": not problems, "problems": problems}
         print(json.dumps(row))
+        if not has_cameras(frames):  # frames built without saved cameras have no pitch to check
+            continue
+        detections, expected = fake_pitch_detections(frames, args.seed, args.per_damage)
+        problems = pitch_disagreements(expected, score_pitch(frames, detections))
+        failed |= bool(problems)
+        print(json.dumps({"clip": clip.name, "pitch": True, "detections": len(detections),
+                          "damages": dict(Counter(f"{e['cls']}.{e['damage']}" for e in expected["damage"])),
+                          "agrees": not problems, "problems": problems}))
     sys.exit(1 if failed else 0)
 
 

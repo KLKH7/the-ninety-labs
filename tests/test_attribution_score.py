@@ -4,6 +4,7 @@ grades, names checked through the boxes, and a name nobody can check never count
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from ninety.eval import attribution_score as at
 from tests.test_vision_events import BLUE, RED, pass_scene
@@ -179,3 +180,14 @@ def test_old_truth_without_an_interceptor_field_names_him_as_the_failed_passs_re
     assert (at.truth_role(new, "receiver"), at.truth_role(new, "interceptor")) == (None, "h9")
     done = {"type": "pass", "outcome": "success", "player": "a11", "receiver": "a9"}
     assert (at.truth_role(done, "receiver"), at.truth_role(done, "interceptor")) == ("a9", None)
+
+
+def test_every_test_or_reserved_seed_is_refused_for_deriving_and_validation_seeds_are_not():
+    import pytest
+
+    from ninety.eval import attribution_derive as de
+    from ninety.eval import detector_derive as dd
+    assert all(de.refused(s) for s in (900001, 900005, 900006, 900030, 900031, 950000))
+    assert not any(de.refused(s) for s in (108, 2041, 3045))
+    with pytest.raises(SystemExit, match="test seed"):
+        dd.read(900017, Path("."), Path("."))
