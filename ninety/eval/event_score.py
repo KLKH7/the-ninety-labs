@@ -145,6 +145,19 @@ def match(truth: list[dict], detected: list[dict], window_s: float = WINDOW_S,
     return pairs
 
 
+Z95 = 1.959964  # two-sided 95%
+
+
+def wilson(k: int, n: int) -> list[float] | None:
+    """The 95% Wilson score interval for k successes in n (lessons 48, 89); None for n = 0."""
+    if n == 0:
+        return None
+    p, z2 = k / n, Z95 * Z95  # no ** in evaluation code: it is C's pow (tests/test_fmath.py)
+    centre = (p + z2 / (2 * n)) / (1 + z2 / n)
+    half = Z95 * math.sqrt(p * (1 - p) / n + z2 / (4 * n * n)) / (1 + z2 / n)
+    return [round(max(0.0, centre - half), 2), round(min(1.0, centre + half), 2)]
+
+
 def ratio(num: int, den: int) -> float | None:
     """None when the denominator is zero: undefined, never a made-up 0 or 1."""
     return num / den if den else None

@@ -1,0 +1,447 @@
+{
+  "command": "uv run python -m ninety.eval.detector_derive --clips <render run v1>/train --observations <validation observations, regated> --seeds <the validation seeds> --out docs/eval/detector-derive",
+  "commit": "071b74da058b59faed2b119f28460bece5208768",
+  "date": "2026-10-21",
+  "seeds": [
+    108,
+    109,
+    114,
+    115,
+    116,
+    120,
+    121,
+    122,
+    2041,
+    2042,
+    2043,
+    3041,
+    3042
+  ],
+  "unplaced": [
+    2045,
+    3045
+  ],
+  "sides": {
+    "accuracy": 0.8153,
+    "coverage": 0.959,
+    "per_clip": {
+      "108": {
+        "feature": "brightness",
+        "accuracy": 0.9387,
+        "coverage": 0.9641
+      },
+      "109": {
+        "feature": null,
+        "accuracy": null,
+        "coverage": null
+      },
+      "114": {
+        "feature": null,
+        "accuracy": null,
+        "coverage": null
+      },
+      "115": {
+        "feature": "brightness",
+        "accuracy": 0.7295,
+        "coverage": 1.0
+      },
+      "116": {
+        "feature": "chromaticity",
+        "accuracy": 1.0,
+        "coverage": 1.0
+      },
+      "120": {
+        "feature": "chromaticity",
+        "accuracy": 0.1132,
+        "coverage": 0.9388
+      },
+      "121": {
+        "feature": "brightness",
+        "accuracy": 1.0,
+        "coverage": 0.9551
+      },
+      "122": {
+        "feature": null,
+        "accuracy": null,
+        "coverage": null
+      },
+      "2041": {
+        "feature": "brightness",
+        "accuracy": 0.8809,
+        "coverage": 0.876
+      },
+      "2042": {
+        "feature": "chromaticity",
+        "accuracy": 1.0,
+        "coverage": 1.0
+      },
+      "2043": {
+        "feature": "brightness",
+        "accuracy": 0.7833,
+        "coverage": 0.9452
+      },
+      "3041": {
+        "feature": null,
+        "accuracy": null,
+        "coverage": null
+      },
+      "3042": {
+        "feature": null,
+        "accuracy": null,
+        "coverage": null
+      }
+    }
+  },
+  "gates": {
+    "frames": 3044,
+    "good": 1748,
+    "bad": 1296,
+    "band": [
+      0.901,
+      1.002
+    ],
+    "candidates": {
+      "B1 markings": {
+        "bad_rejected": 1098,
+        "bad_trusted": 198,
+        "good_kept": 1558,
+        "good_kept_share": 0.8913,
+        "bad_trusted_by_seed": {
+          "108": 195,
+          "109": 2,
+          "120": 1
+        },
+        "bad_trusted_worst_m": 143.104
+      },
+      "B2 heights": {
+        "bad_rejected": 1121,
+        "bad_trusted": 175,
+        "good_kept": 1712,
+        "good_kept_share": 0.9794,
+        "bad_trusted_by_seed": {
+          "108": 143,
+          "114": 6,
+          "122": 8,
+          "3041": 14,
+          "3042": 4
+        },
+        "bad_trusted_worst_m": 55.255
+      },
+      "B3 both": {
+        "bad_rejected": 1166,
+        "bad_trusted": 130,
+        "good_kept": 1523,
+        "good_kept_share": 0.8713,
+        "bad_trusted_by_seed": {
+          "108": 130
+        },
+        "bad_trusted_worst_m": 6.595
+      }
+    }
+  },
+  "grid": {
+    "trials": [
+      {
+        "constant": "events.CARRY_MPS",
+        "was": 4.0,
+        "chosen": 4.0,
+        "scores": {
+          "4.0": {
+            "tp": 9,
+            "fp": 10
+          },
+          "3.0": {
+            "tp": 8,
+            "fp": 10
+          },
+          "5.0": {
+            "tp": 9,
+            "fp": 11
+          },
+          "6.0": {
+            "tp": 9,
+            "fp": 12
+          }
+        }
+      },
+      {
+        "constant": "events.MIN_SPELL_FRAMES",
+        "was": 2,
+        "chosen": 2,
+        "scores": {
+          "2": {
+            "tp": 9,
+            "fp": 10
+          },
+          "1": {
+            "tp": 9,
+            "fp": 14
+          },
+          "3": {
+            "tp": 7,
+            "fp": 9
+          }
+        }
+      },
+      {
+        "constant": "events.SPELL_GAP_FRAMES",
+        "was": 6,
+        "chosen": 6,
+        "scores": {
+          "6": {
+            "tp": 9,
+            "fp": 10
+          },
+          "3": {
+            "tp": 9,
+            "fp": 10
+          },
+          "12": {
+            "tp": 9,
+            "fp": 11
+          }
+        }
+      },
+      {
+        "constant": "events.SHOT_MARGIN_M",
+        "was": 1.0,
+        "chosen": 1.0,
+        "scores": {
+          "1.0": {
+            "tp": 9,
+            "fp": 10
+          },
+          "0.5": {
+            "tp": 9,
+            "fp": 10
+          },
+          "2.0": {
+            "tp": 9,
+            "fp": 10
+          }
+        }
+      },
+      {
+        "constant": "events.SHOT_MAX_M",
+        "was": 35.0,
+        "chosen": 35.0,
+        "scores": {
+          "35.0": {
+            "tp": 9,
+            "fp": 10
+          },
+          "30.0": {
+            "tp": 9,
+            "fp": 10
+          },
+          "40.0": {
+            "tp": 9,
+            "fp": 10
+          }
+        }
+      },
+      {
+        "constant": "events.OUT_FRAMES",
+        "was": 3,
+        "chosen": 3,
+        "scores": {
+          "3": {
+            "tp": 9,
+            "fp": 10
+          },
+          "2": {
+            "tp": 9,
+            "fp": 10
+          },
+          "5": {
+            "tp": 9,
+            "fp": 8
+          }
+        }
+      },
+      {
+        "constant": "track.GATE_M",
+        "was": 1.0,
+        "chosen": 1.0,
+        "scores": {
+          "1.0": {
+            "tp": 9,
+            "fp": 10
+          },
+          "1.5": {
+            "tp": 9,
+            "fp": 8
+          },
+          "2.0": {
+            "tp": 9,
+            "fp": 8
+          }
+        }
+      }
+    ],
+    "chosen": {
+      "events.CARRY_MPS": 4.0,
+      "events.MIN_SPELL_FRAMES": 2,
+      "events.SPELL_GAP_FRAMES": 6,
+      "events.SHOT_MARGIN_M": 1.0,
+      "events.SHOT_MAX_M": 35.0,
+      "events.OUT_FRAMES": 3,
+      "track.GATE_M": 1.0
+    },
+    "final": {
+      "tp": 9,
+      "fp": 10
+    }
+  },
+  "bound": {
+    "max_trusted_m": 8.5,
+    "keep_good": 0.95,
+    "bound_seed": 108,
+    "candidates": {
+      "height": {
+        "worst_m": 55.255,
+        "worst_by_seed": {
+          "108": 8.303,
+          "109": 0.0,
+          "114": 3.102,
+          "115": 0.253,
+          "116": 0.417,
+          "120": 0.902,
+          "121": 0.788,
+          "122": 53.55,
+          "2041": 0.218,
+          "2042": 0.414,
+          "2043": 0.986,
+          "3041": 17.519,
+          "3042": 55.255
+        },
+        "unmeasured": 0,
+        "good_kept": 1712,
+        "good_kept_share_of_height": 1.0,
+        "bad_trusted": 175,
+        "bad_trusted_by_seed": {
+          "108": 143,
+          "114": 6,
+          "122": 8,
+          "3041": 14,
+          "3042": 4
+        },
+        "qualifies": false
+      },
+      "C1": {
+        "worst_m": 55.255,
+        "worst_by_seed": {
+          "108": 8.303,
+          "109": 0.0,
+          "114": 3.102,
+          "115": 0.253,
+          "116": 0.417,
+          "120": 0.902,
+          "121": 0.788,
+          "122": 19.18,
+          "2041": 0.218,
+          "2042": 0.414,
+          "2043": 0.986,
+          "3041": 17.519,
+          "3042": 55.255
+        },
+        "unmeasured": 0,
+        "good_kept": 1712,
+        "good_kept_share_of_height": 1.0,
+        "bad_trusted": 173,
+        "bad_trusted_by_seed": {
+          "108": 143,
+          "114": 6,
+          "122": 6,
+          "3041": 14,
+          "3042": 4
+        },
+        "qualifies": false
+      },
+      "C2": {
+        "worst_m": 8.244,
+        "worst_by_seed": {
+          "108": 8.244,
+          "109": 0.0,
+          "114": 1.625,
+          "115": 0.253,
+          "116": 0.417,
+          "120": 0.902,
+          "121": 0.788,
+          "122": 0.0,
+          "2041": 0.218,
+          "2042": 0.414,
+          "2043": 0.986,
+          "3041": 2.935,
+          "3042": 0.0
+        },
+        "unmeasured": 0,
+        "good_kept": 1712,
+        "good_kept_share_of_height": 1.0,
+        "bad_trusted": 143,
+        "bad_trusted_by_seed": {
+          "108": 139,
+          "114": 2,
+          "3041": 2
+        },
+        "qualifies": true
+      },
+      "C3": {
+        "worst_m": 55.255,
+        "worst_by_seed": {
+          "108": 7.404,
+          "109": 0.0,
+          "114": 0.0,
+          "115": 0.253,
+          "116": 0.417,
+          "120": 0.902,
+          "121": 0.788,
+          "122": 0.0,
+          "2041": 0.218,
+          "2042": 0.414,
+          "2043": 0.176,
+          "3041": 0.0,
+          "3042": 55.255
+        },
+        "unmeasured": 0,
+        "good_kept": 1648,
+        "good_kept_share_of_height": 0.9626,
+        "bad_trusted": 142,
+        "bad_trusted_by_seed": {
+          "108": 139,
+          "3042": 3
+        },
+        "qualifies": false
+      },
+      "C4": {
+        "worst_m": 8.244,
+        "worst_by_seed": {
+          "108": 8.244,
+          "109": 0.0,
+          "114": 1.625,
+          "115": 0.253,
+          "116": 0.417,
+          "120": 0.902,
+          "121": 0.788,
+          "122": 0.0,
+          "2041": 0.218,
+          "2042": 0.414,
+          "2043": 0.986,
+          "3041": 2.935,
+          "3042": 0.0
+        },
+        "unmeasured": 0,
+        "good_kept": 1712,
+        "good_kept_share_of_height": 1.0,
+        "bad_trusted": 143,
+        "bad_trusted_by_seed": {
+          "108": 139,
+          "114": 2,
+          "3041": 2
+        },
+        "qualifies": true
+      }
+    },
+    "adopted": "C2"
+  }
+}
