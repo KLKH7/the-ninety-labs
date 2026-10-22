@@ -1750,6 +1750,79 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `uv run pytest tests/test_restarts.py -k past_the_end_of_the_touchline`; on the engine
   before it, the ball runs on to 127 m and jumps 18 m in a frame.
 
+### 174. A player with time to spare walks there and waits, rather than creeping in just in time
+- **What happened:** at restarts the engine paced every player to reach his place just as the
+  kick could come. At a corner that is about half a minute off (R1: Opta's mean is about 30 s), so
+  the players crept in below a walk for most of the wait: 72% of the outfielders' time after the
+  ball was fetched was at 0.2 to 1.2 m/s, over 25 corners in 20 matches. The corner's length
+  matched Opta's, but twenty players drifting slowly for 20 s read as "a long time to take a
+  corner". The first fix, a walking floor on every move through the wait, made them shuffle
+  instead: the audit counted 10.4 direction reversals per outfielder-minute against main's 0.7.
+  The creep had hidden four loops, each between two rules: every small shift of a place that
+  moves (a man marked, a slot) walked to and back; keep_off sending a player who had stopped a
+  hair short of his place on the keep-off circle's edge back out past it, every half second; the
+  floor holding a player going round another who stood on his place, so he circled him at a walk,
+  0.2 m off, for half a minute; and the defending side's brain naming its presser and cover again
+  at every look, by an order that the two roles' own walks changed, so two players swapped roles
+  twice a second through the whole wait. Two of those fixes then put opponents inside 9.15 m at the
+  kick, in 7 and then 10 restarts of 20 matches against none on main: the roles were kept only while
+  the restart waited, and the cover's spot was worked out as in play, so as the taker stood over the
+  ball the cover was sent in from 11 m; and the straight way through keep_off's 0.5 m margin let
+  players walk in the margin that takes up a bend or a step too far. The second audit still counted
+  twice main's to-and-fro (1.43 reversals a minute against 0.70): the floor walked every jump of a
+  place by more than a stride, and at a dead ball places jump with what players see and whom they
+  mark, so the kicking side's back line, following an onside line read from noisy sightings, stepped
+  1 to 3.5 m back and forth every second or two through free kicks. And kept roles kept a clash that
+  asking again had moved from player to player: at a free kick with a wall, the presser's place is
+  where the wall stands, and the same presser was pushed in and out of 9.15 m by the wall's players
+  for the whole wait, 6 cm inside it at the kick. And near a line, the way round the keep-off circle,
+  aimed off the pitch and kept on it, fell inside the circle: a defect main has at a creep, walked
+  into 9.15 m more often (10 entries near a line in 20 matches, against 4), once at the kick. The
+  third audit found settling had brought the creep back: 42 of 144 free kicks had a player creeping
+  more than 10 m in one spell (the version before settling had none). "The ball set" was checked as
+  the ball within a foot's reach of its spot, true at the whistle with the ball still rolling and
+  before the fetch; a settled player then followed every later shift of his place at his own pace,
+  however far (up to 42 m, as the restart's shape formed); and settling was judged on keep_off's
+  first step out of the circle, not on his place, so one settled 18 m from it. The hold near a line
+  that fixed the cut-through stranded players 20 to 52 m from their places for up to 41 s, and one
+  between the ball and the line inside the circle for the whole wait. And going round the circle,
+  each chord's dip into the 0.5 m margin sent the player straight out, so he stopped short every
+  few strides and went round at about 1.1 m/s: below a walk, on every version since the margin.
+  Walking a big shift again then showed one more loop the creep had hidden: the defending side
+  picked up the attackers near its goal afresh at every look, so men changed markers from look to
+  look, and three defenders walked out and back up to 19 times through one free kick's wait; the
+  taker's marker was placed where the wall stands. And a settled presser at a goal kick, bent off
+  his place by a team-mate beside it, went back at his pressing pace and sprang back and forth,
+  28 times in one wait.
+- **Rule:** "just in time" is a pace for play, where arriving early costs something; with time to
+  spare at a dead ball a player walks to his place (L4's normal walking pace) and stands there; once
+  there with the ball still on its spot, he has settled, and he follows a small shift of his place
+  (what he sees, whom he marks) at his own pace, but walks a big one. A state that turns a rule off
+  ("settled") names the condition that ends it as well as the one that starts it, and each is
+  checked as the code checks it ("set" is still, on the spot, at nobody's feet but the taker's).
+  A rule about where a player stands is judged on where he stands, not on a waypoint on the way.
+  A head is measured, rendered and published only once `uv run pytest` passes on it: two heads
+  here were measured before it did (one called the C library's acos, one let a presser leave the
+  area late at a goal kick), and their numbers had to be measured again.
+  A realism complaint is measured in parts (fetch, arrivals,
+  wait, speeds) before the total is blamed. A change that makes players move faster is also
+  measured for to-and-fro (reversals, the distance walked to and fro, waits with three or more
+  reversals) and for creep spells (a player at 0.2 to 1.2 m/s for more than 5 or 10 m in one
+  go): a slow pace hides a target that flips, and a rule that turns the floor off can bring the
+  creep back. A loop between two rules is fixed where they meet, not by slowing the player down.
+  And a change to how players move near the ball goes through the restart sweep (the Laws'
+  distance at the kick) after every fix, not only the first.
+- **Check:** `uv run pytest tests/test_restarts.py -k "walk_to_their_places or fetching_a_dead_ball_keeps
+  or hair_inside or stands_at_his_place or does_not_circle or keeps_its_presser or stand_off_it
+  or he_settles or settles_only_at or nobody_else_is_named or never_cuts_inside or by_a_line
+  or short_way_is_open or keeps_his_man or kept_man_stays or does_not_settle_while
+  or spring_about or judged_on_his_place_not or aim_is_off_the_pitch"`; each fails on the engine
+  before its fix (`brought_onto_it` is a guard).
+  `scripts/defect_sweep/creep_spells.py` counts creep spells through the waits.
+  `scripts/defect_sweep/restart_moves.py` reports speeds, reversals and to-and-fro per
+  outfielder-minute through every restart wait, `scripts/defect_sweep/corners.py` the corners, and
+  `scripts/defect_sweep/restarts.py` the Laws' distance at the kick (nobody inside, as on main).
+
 ### 175. A held-out seed that passes may hold none of the cases the rule gets wrong
 - **What happened:** the broadcast camera (#180) passed its framing test on held-out seeds 3 and 5
   at 98%. With #179's engine, seed 3's window held three corners and two balls run to the byline,
@@ -1774,6 +1847,34 @@ short and actionable. This file is public: no research sources, product names or
     on the 0.5.3 camera;
   - `_match` simulates SIM_MARGIN_S past the window.
 
+### 176. A bound that held by 7 mm in one scenario is not a bound
+- **What happened:** a test from #183 claimed that no wall player walks further than
+  walk_to_wall's estimate of his walk, followed frame by frame in two scenarios that come out of a
+  minute of play. It held by 7 mm in one of them. Lesson 174's change altered that minute (lesson
+  90), and in the new scenario a wall player walked 15.24 m against an estimate of 15.11 m. All of
+  the 0.22 m extra was bending round others who stood in his way (avoid), which the estimate never
+  modelled: without his own bending he walked 15.02 m. Measured, as it should have been first, over
+  60 walks in 15 scenarios with that bending left out: on main all 60 were within the estimate, the
+  closest by 2 cm; on lesson 174's branch at `b090877`, 58, and two over it, by up to 0.18 m in
+  15.4 m. Those two are walks main's engine walks the same from the same start: a walker still
+  moving at the whistle, whose stopping distance the estimate has no term for, and one going round
+  the keep-off circle who stepped out past it and spiralled back in, which its spiral leaves out.
+  At `00d5c41`, where going round from the circle's margin heads out as well as round, 59 are
+  within it and one over, by 1.04 m in 28.3 m: a walker running at 3.2 m/s at the whistle, who
+  spent his first second turning (1.5 m walked, 0.5 m gained). At `304fffe`, 58, and two over by
+  up to 0.27 m in 36.6 m, both moving at the whistle; at `ba23065`, all 60 within it. Without such
+  a start the estimate is within about 1% of the walk, not a strict bound.
+- **Rule:** a bound measured on a few scenarios is reported with its margin and with what it
+  covers, and a check that passes by a hair in a chaotic scenario is measured over more scenarios
+  before it is called a bound. When a check fails because its claim was too broad, the claim is
+  corrected where it is written and the check narrowed to it, openly; it is never re-seeded or
+  loosened until it passes.
+- **Check:** `uv run pytest tests/test_restarts.py -k estimated_from_above` pins the estimate on
+  his own route (the wall players' bending switched off) in its two scenarios, not a bound;
+  `uv run python scripts/defect_sweep/wall_walks.py` measures the 60-walk margins
+  (docs/eval/restarts.md, "Walking to restart positions"). No test sees a wall player bending round
+  others on his way in: a gap.
+
 ### 177. A coarse search proves a case unframeable only where it searched
 - **What happened:** after #198, #179's seed 3 still missed the camera's 85% framing bar.
   - A corner rule (framed from the taker inward, its shot held against pumping) fixed what the blind
@@ -1796,6 +1897,60 @@ short and actionable. This file is public: no research sources, product names or
   `::test_each_corner_has_its_own_shot_and_the_ball_stays_in_it` and
   `::test_the_corner_shot_holds_until_the_kick`; the framing bar is raw.
 
+### 180. A motion keyed to the stride's clock is checked against the contacts it is drawn over
+- **What happened:** #197 left the runner's hips level, so a jog read as a power-walk. The bob
+  went in from a sourced table by speed, keyed to the stride's phase.
+  - Three existing tests failed, and each failure was a real defect the phase hid.
+  - Where the phase said flight, the drawn push-off foot was still on the grass: the hips rose,
+    the leg could not reach it, and the toe hung 3 cm up and slid.
+  - The flight's free fall counted from a swing's first frame, which still draws the foot on the
+    grass, so the hips jumped 4 cm across the push-off at 2.5 m/s.
+  - That first frame was itself the sprint's flicker a blind critic saw (round 4): drawn where it
+    lifted, a sprinter's foot hung 40 to 56 cm behind the hips, beyond the leg, for a frame. Both
+    feet were seen off the grass in one frame a step.
+  - The bob's dip let a walking leg reach its swing target. A foot 1 cm up in its landing frame
+    then counted as "on the grass" in the slide test, which had been passing only because the
+    stretched leg held it higher.
+  - The lean with acceleration took the engine's speed, eased over 5 frames. At a steady jog the
+    engine's speed rises and brakes back every 9 frames (seed 21's a5, 3.2 to 4.0 m/s), so the
+    blind critic saw the trunk nod every step, plus a stoop and a sideways topple turning on the
+    spot. The lean now takes the change between two 8-frame mean velocities, along the way he faces.
+  - Blind critic round 2 found the bob, sent in the body's lift, tripped the lunge's rule (a
+    lowered body reaches for an out-of-reach plant above the grass): braking to a stop, a planted
+    foot was drawn 25 to 38 cm up for 8 frames, a freeze. The round 1 critic had missed it in the
+    same code. The bob is its own pose field now. The lean from boxes behind him came 5 frames
+    late, pitched forward while braking; it now looks 8 frames ahead, as the hips' lead already did.
+  - The independent audit found a sprint swing height (0.45 at 7 m/s) with no source that only
+    kept an old test green, and tests that read their bounds from the code's own tables: with the
+    tables zeroed they passed, 0 within 0.
+- **Rule:**
+  - A body motion keyed to a clock (the stride's phase) rises or falls only where the drawn
+    contacts allow it: the free fall runs from the frame both drawn feet are off the grass to the
+    frame the swing's own count lands one.
+  - A foot that leaves the grass between two frames is drawn a frame into its swing.
+  - A sourced angle (Fukuchi's knee fold) goes in only with the rest of the body that carries it
+    (the bob), measured on the drawn mesh, and as far as the drawn leg reaches (111 degrees, not
+    119).
+  - A test's selection that a better drawing newly meets (a landing foot inside the slide test's
+    2 cm) is narrowed to what it protects, with the reason in its docstring, and the bound stays.
+  - A renderer reading the engine's motion reads its trend over a stride, not its per-frame
+    controller steps, and centred on the frame it draws, never only behind it.
+  - A new quantity is sent in its own field, never folded into one whose value already means
+    something to a rule (a negative lift means a lunge).
+  - A test's expected value is the source's number written in the test, never the code's table.
+- **Check:** `tests/test_render_motion.py`. Each of these fails on 0.5.9 (main's drawing, with
+  the new names shimmed in):
+  - `test_a_runners_hips_are_lowest_on_the_grass_and_rise_in_the_air`;
+  - `test_a_walkers_hips_are_highest_over_the_standing_leg`;
+  - `test_a_running_knee_folds_as_far_as_a_runners`;
+  - `test_the_trunk_leans_into_a_sprint_start_and_comes_up_braking`;
+  - `test_the_arms_swing_wider_toward_a_sprint`;
+  - `test_a_sprints_flight_is_seen_over_two_frames_or_more`.
+  - `test_the_push_off_toe_does_not_slide_before_it_lifts` fails with the free fall keyed to the
+    phase; `test_a_player_braking_to_a_stop_keeps_his_planted_feet_on_the_grass` (seed 21's a4)
+    fails with the bob sent in the lift, and the trunk test with the lean from boxes behind only.
+  - Each mechanism was put back to 0.5.9 alone (bob tables zeroed, swing height, the frame-ahead
+    swing, the lean, the speed lean, the arm pump), and its test fails.
 
 ### 184. What the picture draws as solid, the engine treats as solid
 - **What happened:** the renderer drew a net behind each goal, but the engine had none. After a
@@ -1813,6 +1968,27 @@ short and actionable. This file is public: no research sources, product names or
     through; that is the next step.
 - **Check:** `uv run pytest tests/test_goal_net.py`. On main the ball goes 4 m deep, through the
   roof and through the side netting, and the keeper walks through the net.
+
+### 185. Footage a viewer watches and data a model learns from are dressed apart, and the dressing is proved label-free
+- **What happened:** the demo clip (seed 8001, v1) was rendered with the training look: seats with no
+  one in them, beige run-off and black ground behind the goals, four repeated boards, stark mowing.
+  The blind critic scored it 2/10 and ranked empty stands and bare ground at severity 4. The look
+  was built for the detector, where a crowd is only clutter that could change what a dataset
+  measures, so nothing ever dressed the footage a person watches.
+- **Rule:**
+  - Dressing for viewers sits behind a knob that no seed draws (`stadium=broadcast`, like
+    `kit_contrast=broadcast`): training, validation and test renders stay byte-identical.
+  - Dressing is scenery: never labelled, and in the id pass it hides what is behind it exactly as
+    the picture does. The fans are drawn there with the same billboards, cut-outs and motion code.
+    A first version left the crowd out of the id pass, which labelled a ball among the fans as
+    visible while the picture hid it (lesson 84; the Reviewer caught it).
+  - A test proves both sides with a case where they matter: a ball in the stands behind fans.
+- **Check:**
+  - `uv run pytest tests/test_render_stadium.py -k crowd`. It fails with the fans left out of the
+    id pass (the ball among them stays visible). It also fails with their picture colours drawn
+    into it, where the fans' pixels counted as 52,436 visible pixels of one player.
+  - `tests/test_render_params.py::test_only_footage_asks_for_a_broadcast_stadium`.
+  - Plain stills from main and from the change are byte-identical under software GL.
 
 ### 187. A shot built to pass a framing metric can still be dead air to a viewer
 - **What happened:** the restart close-up (#198, lesson 175) passed every framing test: the ball
