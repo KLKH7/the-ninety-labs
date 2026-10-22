@@ -2643,19 +2643,28 @@ class Engine:
             here, there = fmath.atan2(my, mx), fmath.atan2(ty - by, tx - bx)
             turn = (there - here + math.pi) % (2 * math.pi) - math.pi
             ways = (turn, turn - math.copysign(2 * math.pi, turn))  # the short way round, then the long
-            way = next((w for w in ways if way_round_within_lines(bx, by, clear, here, w, m)), None)
-            if way is None:
+            # From inside the margin, round and out past it: half as far round as a chord that would
+            # leave his own distance along it (design), so he heads out as well as round; that chord's
+            # angle is acos(m / out), here by fmath for the same result everywhere.
+            if m >= clear:
+                step = math.radians(KEEP_OFF_STEP_DEG)
+            else:
+                step = fmath.atan2(math.sqrt(out * out - m * m), m) / 2
+            found = None
+            for way in ways:
+                if not way_round_within_lines(bx, by, clear, here, way, m):
+                    continue
+                a = here + clamp(way, -step, step)
+                # The aim itself must be open too: from the margin it can fall between the 5-degree
+                # checks, in an arc off the pitch narrower than them (lesson 174).
+                reach = round_reach(bx, by, clear, a, m if m >= clear else out)
+                if reach is not None:
+                    found = a, reach
+                    break
+            if found is None:
                 tx, ty = p.x, p.y
             else:
-                # From inside the margin, round and out past it: half as far round as a chord that
-                # would leave his own distance along it (design), so he heads out as well as round;
-                # that chord's angle is acos(m / out), here by fmath for the same result everywhere.
-                if m >= clear:
-                    step = math.radians(KEEP_OFF_STEP_DEG)
-                else:
-                    step = fmath.atan2(math.sqrt(out * out - m * m), m) / 2
-                a = here + clamp(way, -step, step)
-                reach = round_reach(bx, by, clear, a, m if m >= clear else out)
+                a, reach = found
                 tx, ty = bx + fmath.cos(a) * reach, by + fmath.sin(a) * reach
         return clamp(tx, 0.5, PITCH_X - 0.5), clamp(ty, 0.5, PITCH_Y - 0.5)
 

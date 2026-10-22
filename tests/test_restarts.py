@@ -1713,6 +1713,10 @@ def test_once_at_his_place_with_the_ball_set_he_settles(monkeypatch):
     assert e.restart_pace(d, *at, 0.0) >= WALK_MPS and d.id not in r.settled
     d.vx = 0.0  # standing there
     assert e.restart_pace(d, *at, 0.0) == 0.0 and d.id in r.settled
+    r.settled.clear()  # as in matches: the taker has it at his feet on its spot, and 0.8 m off is a stride
+    r.carried_by = r.taker
+    d.x = at[0] + 0.8
+    assert e.ball_set(r) and e.restart_pace(d, *at, 0.0) == 0.0 and d.id in r.settled
     assert 3.5 < SHUFFLE_M < 5.0  # premise
     at[0] = d.x + 3.5  # his place 3.5 m off, the most it jumped with noisy sightings: at his own pace,
     assert e.restart_pace(d, *at, 0.0) == 0.0  # here none, so he stands
@@ -1898,6 +1902,15 @@ def test_through_a_restart_wait_each_marker_keeps_his_man():
     for _ in range(int(1.0 / DT)):
         e.step()
     assert e.restart is r and r.marks.get(did) == aid
+    presser = e.by_id[brain.pressers[0]]  # the presser and cover stand off; they mark nobody
+    new = next(q for q in e.players if q.team == "home" and q.role != "GK" and q.id != r.taker
+               and q.id not in r.marks.values())
+    presser.x, presser.y, presser.vx, presser.vy = 99.0, 14.0, 0.0, 0.0
+    new.x, new.y, new.vx, new.vy = 99.5, 14.0, 0.0, 0.0  # a man near our goal, right by the presser
+    assert math.hypot(new.x - 105.0, new.y - 34.0) < offball.DANGER_RANGE_M  # premise: one to pick up
+    for _ in range(int(1.0 / DT)):
+        e.step()
+    assert new.id in r.marks.values() and not set(brain.pressers) & set(r.marks)
     w = wall_kick(5)  # and at a free kick with a wall
     for _ in range(int(1.0 / DT)):
         w.step()
@@ -1924,6 +1937,8 @@ def test_a_kept_man_stays_marked_wherever_he_goes_and_new_men_are_picked_up():
     assert offball.pick_up(gone, attackers, goal, keep={"d1": "x1"}) == {"d2": "x2"}
     attackers["x3"] = (8.0, 30.0)  # a man newly near our goal
     assert offball.pick_up(defenders, attackers, goal, keep={"d2": "x2"}) == {"d2": "x2", "d1": "x3"}
+    attackers["x4"] = (12.3, 40.2)  # another, nearest the kept marker d2: he keeps his own man
+    assert offball.pick_up(defenders, attackers, goal, keep={"d2": "x2", "d1": "x3"})["d2"] == "x2"
     pairs = offball.pick_up(defenders, attackers, goal)
     assert offball.marking(defenders, attackers, goal) == {  # without kept pairs, as before
         did: offball.goal_side(attackers[aid], goal) for did, aid in pairs.items()}
@@ -1992,3 +2007,30 @@ def test_at_a_dead_ball_the_presser_goes_in_time_and_does_not_spring_about_his_p
             v, u = math.hypot(vx, vy), math.hypot(ux, uy)
             turns += v > 0.5 and u > 0.5 and (vx * ux + vy * uy) / (v * u) < -0.5
     assert len(history) > int(5.0 / DT) and turns == 0
+
+
+def test_a_settled_player_is_judged_on_his_place_not_on_his_way_round():
+    """Lesson 174, its fourth audit (M12): a settled player's shift is judged on his place, not on
+    his way there. Settled in the keep-off circle's margin, his place moved 6 m round its edge, beyond
+    SHUFFLE_M: he walks to it again, though his way round aims under 2 m off."""
+    from ninety.sim.engine import SHUFFLE_M, WALK_MPS
+    e, d = near_line_kick("home", (60.0, 34.0), "a7", (60.0 - 9.6, 34.0), (60.0 - 9.15, 34.0))
+    a = math.pi - 6.0 / (9.15 + KEEP_OFF_MARGIN_M)
+    target = (60.0 + math.cos(a) * 9.15, 34.0 + math.sin(a) * 9.15)  # inside: his place is 6 m round
+    place, way = e.stand_off(d, *target)[0], e.keep_off(d, *target)
+    assert math.dist(way, (d.x, d.y)) < 2.0 < SHUFFLE_M < math.dist(place, (d.x, d.y))  # premise
+    e.restart.settled.add(d.id)
+    assert e.restart_pace(d, *way, 0.0, place) >= WALK_MPS and d.id not in e.restart.settled
+
+
+def test_near_a_line_a_way_round_whose_aim_is_off_the_pitch_is_closed():
+    """Lesson 174, its fourth audit (S1): from the circle's margin the aim falls between the 5-degree
+    checks of the way round, and where the arc off the pitch was narrower than them it had no point
+    to aim at: keep_off raised TypeError and the match ended (a free kick 10.141 to 10.149 m off a
+    line). A way whose aim has no point within the lines and outside the circle is closed."""
+    e = Engine(3)
+    e.restart = Restart("free_kick", "home", 50.0, 10.145, "h9", e.t + 60)
+    d = e.by_id["a7"]
+    d.x, d.y = 47.915, 1.184  # in the margin, below the ball near the touchline
+    tx, ty = e.keep_off(d, 56.824, 3.321)  # his place round the circle across the arc off the pitch
+    assert math.dist((tx, ty), (50.0, 10.145)) >= 9.15 + KEEP_OFF_MARGIN_M - 1e-9 and within_lines(tx, ty)
