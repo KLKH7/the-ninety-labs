@@ -57,6 +57,15 @@ def projection_errors(frames: list[dict]) -> dict:
                 foot_checked += 1
                 u, v = project_with(P, (pl["x"], pl["y"], 0.0))
                 x0, y0, x1, y1 = pl["bbox"]
+                if pl.get("fall"):
+                    # a body lying over its feet (lesson 173) is not 1.8 m tall and its feet may be
+                    # at any edge of the box, so the ground point must be inside the box, with the
+                    # same 0.45 m slack taken from the camera's scale at the feet
+                    top = project_with(P, (pl["x"], pl["y"], 1.0))
+                    slack = 0.45 * math.dist((u, v), top)
+                    if not (x0 - slack <= u <= x1 + slack and y0 - slack <= v <= y1 + slack):
+                        foot_outside += 1
+                    continue
                 # feet swing about 0.4 m either side of the tracked point, and the bottom of the
                 # box is the sole of the lowest foot, so allow that much slack in metres-as-pixels
                 slack = 0.45 * (y1 - y0) / 1.8
