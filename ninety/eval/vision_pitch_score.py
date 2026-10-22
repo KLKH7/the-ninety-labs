@@ -37,7 +37,8 @@ from ninety.eval.vision_score import (
 # ninety.vision.observe.BALL_CENTRE_Z; copied, not imported, because observe needs numpy, which
 # the scorer's environment does not have. tests/test_vision_pitch_score.py checks they agree.
 BALL_CENTRE_Z = 0.11
-# The lenient player radius of docs/EVALUATION.md's pitch-level table; the strict radius and the
+# The lenient player radius of docs/EVALUATION.md's pitch-level table (design, GROUNDING.md
+# Vision scoring S4; strict is S3); the strict radius and the
 # ball's lenient radius are the event scorer's own (STRICT_M, LENIENT_M), so they cannot drift.
 PLAYER_LENIENT_M = 1.5
 RADIUS_M = {
