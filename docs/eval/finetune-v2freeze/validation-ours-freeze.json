@@ -1,0 +1,800 @@
+{
+  "checkpoint": "ours-freeze",
+  "test_set": {
+    "tag": "v2freeze-validation",
+    "commit": "aea01f4e5d168b0ff3e8e44143cd4baaaf9a3f60",
+    "seeds": [
+      108,
+      109,
+      110,
+      112,
+      113,
+      114,
+      115,
+      116,
+      117,
+      118,
+      119,
+      120,
+      121,
+      122,
+      2041,
+      2042,
+      2043,
+      2044,
+      2045,
+      3041,
+      3042,
+      3043,
+      3044,
+      3045
+    ]
+  },
+  "threshold": 0.5,
+  "stride": 5,
+  "frames_scored": 1200,
+  "overall": {
+    "tp": 14714,
+    "fp": 44,
+    "fn": 203,
+    "precision": 0.9970185662013823,
+    "recall": 0.986391365556077,
+    "f1": 0.9916764953664702
+  },
+  "by_class": {
+    "player": {
+      "tp": 13641,
+      "fp": 31,
+      "fn": 80,
+      "precision": 0.9977325921591574,
+      "recall": 0.9941695211719263,
+      "f1": 0.9959478698937685
+    },
+    "ball": {
+      "tp": 1073,
+      "fp": 13,
+      "fn": 123,
+      "precision": 0.9880294659300184,
+      "recall": 0.8971571906354515,
+      "f1": 0.9404031551270815
+    }
+  },
+  "visibility": {
+    "player": {
+      "visible": {
+        "tp": 13193,
+        "fp": 26,
+        "fn": 56,
+        "precision": 0.998033134125123,
+        "recall": 0.9957732659068609,
+        "f1": 0.9969019192987759
+      },
+      "partly hidden": {
+        "tp": 389,
+        "fp": 4,
+        "fn": 6,
+        "precision": 0.989821882951654,
+        "recall": 0.9848101265822785,
+        "f1": 0.9873096446700508
+      },
+      "mostly hidden": {
+        "tp": 59,
+        "fp": 1,
+        "fn": 18,
+        "precision": 0.9833333333333333,
+        "recall": 0.7662337662337663,
+        "f1": 0.8613138686131387
+      }
+    },
+    "ball": {
+      "visible": {
+        "tp": 954,
+        "fp": 7,
+        "fn": 52,
+        "precision": 0.9927159209157128,
+        "recall": 0.94831013916501,
+        "f1": 0.9700050838840875
+      },
+      "partly hidden": {
+        "tp": 99,
+        "fp": 3,
+        "fn": 33,
+        "precision": 0.9705882352941176,
+        "recall": 0.75,
+        "f1": 0.846153846153846
+      },
+      "mostly hidden": {
+        "tp": 20,
+        "fp": 3,
+        "fn": 38,
+        "precision": 0.8695652173913043,
+        "recall": 0.3448275862068966,
+        "f1": 0.49382716049382713
+      }
+    }
+  },
+  "image_boundary": {
+    "player": {
+      "edge-touching": {
+        "tp": 444,
+        "fp": 14,
+        "fn": 37,
+        "precision": 0.9694323144104804,
+        "recall": 0.9230769230769231,
+        "f1": 0.9456869009584665
+      },
+      "interior": {
+        "tp": 13197,
+        "fp": 17,
+        "fn": 43,
+        "precision": 0.998713485696988,
+        "recall": 0.9967522658610272,
+        "f1": 0.9977319119981856
+      }
+    },
+    "ball": {
+      "edge-touching": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 0,
+        "precision": null,
+        "recall": null,
+        "f1": null
+      },
+      "interior": {
+        "tp": 1073,
+        "fp": 13,
+        "fn": 123,
+        "precision": 0.9880294659300184,
+        "recall": 0.8971571906354515,
+        "f1": 0.9404031551270815
+      }
+    }
+  },
+  "ball_at_least_half_visible": {
+    "tp": 1053,
+    "fp": 10,
+    "fn": 85,
+    "precision": 0.9905926622765757,
+    "recall": 0.9253075571177505,
+    "f1": 0.9568378009995457
+  },
+  "by_knob": {
+    "occlusion": {
+      "natural": {
+        "player": {
+          "tp": 9668,
+          "fp": 23,
+          "fn": 57,
+          "precision": 0.9976266639149727,
+          "recall": 0.9941388174807197,
+          "f1": 0.995879686856201
+        },
+        "ball": {
+          "tp": 780,
+          "fp": 7,
+          "fn": 68,
+          "precision": 0.9911054637865311,
+          "recall": 0.9198113207547169,
+          "f1": 0.9541284403669724
+        }
+      },
+      "crowded": {
+        "player": {
+          "tp": 3973,
+          "fp": 8,
+          "fn": 23,
+          "precision": 0.9979904546596332,
+          "recall": 0.9942442442442443,
+          "f1": 0.9961138272533534
+        },
+        "ball": {
+          "tp": 293,
+          "fp": 6,
+          "fn": 55,
+          "precision": 0.979933110367893,
+          "recall": 0.8419540229885057,
+          "f1": 0.9057187017001546
+        }
+      }
+    },
+    "kit_contrast": {
+      "low": {
+        "player": {
+          "tp": 5990,
+          "fp": 15,
+          "fn": 45,
+          "precision": 0.9975020815986678,
+          "recall": 0.9925434962717481,
+          "f1": 0.9950166112956811
+        },
+        "ball": {
+          "tp": 506,
+          "fp": 4,
+          "fn": 41,
+          "precision": 0.9921568627450981,
+          "recall": 0.9250457038391224,
+          "f1": 0.9574266792809839
+        }
+      },
+      "normal": {
+        "player": {
+          "tp": 7651,
+          "fp": 16,
+          "fn": 35,
+          "precision": 0.997913134211556,
+          "recall": 0.9954462659380692,
+          "f1": 0.9966781736468442
+        },
+        "ball": {
+          "tp": 567,
+          "fp": 9,
+          "fn": 82,
+          "precision": 0.984375,
+          "recall": 0.8736517719568567,
+          "f1": 0.9257142857142856
+        }
+      }
+    }
+  },
+  "by_clip": [
+    {
+      "seed": 108,
+      "occlusion": "natural",
+      "kit_contrast": "low",
+      "by_class": {
+        "player": {
+          "tp": 869,
+          "fp": 7,
+          "fn": 28,
+          "precision": 0.9920091324200914,
+          "recall": 0.9687848383500557,
+          "f1": 0.9802594472645233
+        },
+        "ball": {
+          "tp": 49,
+          "fp": 0,
+          "fn": 1,
+          "precision": 1.0,
+          "recall": 0.98,
+          "f1": 0.98989898989899
+        }
+      }
+    },
+    {
+      "seed": 109,
+      "occlusion": "natural",
+      "kit_contrast": "low",
+      "by_class": {
+        "player": {
+          "tp": 350,
+          "fp": 0,
+          "fn": 0,
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0
+        },
+        "ball": {
+          "tp": 50,
+          "fp": 0,
+          "fn": 0,
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0
+        }
+      }
+    },
+    {
+      "seed": 110,
+      "occlusion": "crowded",
+      "kit_contrast": "normal",
+      "by_class": {
+        "player": {
+          "tp": 573,
+          "fp": 3,
+          "fn": 8,
+          "precision": 0.9947916666666666,
+          "recall": 0.9862306368330465,
+          "f1": 0.9904926534140016
+        },
+        "ball": {
+          "tp": 45,
+          "fp": 0,
+          "fn": 5,
+          "precision": 1.0,
+          "recall": 0.9,
+          "f1": 0.9473684210526316
+        }
+      }
+    },
+    {
+      "seed": 112,
+      "occlusion": "natural",
+      "kit_contrast": "normal",
+      "by_class": {
+        "player": {
+          "tp": 498,
+          "fp": 2,
+          "fn": 0,
+          "precision": 0.996,
+          "recall": 1.0,
+          "f1": 0.9979959919839679
+        },
+        "ball": {
+          "tp": 44,
+          "fp": 0,
+          "fn": 6,
+          "precision": 1.0,
+          "recall": 0.88,
+          "f1": 0.9361702127659575
+        }
+      }
+    },
+    {
+      "seed": 113,
+      "occlusion": "natural",
+      "kit_contrast": "low",
+      "by_class": {
+        "player": {
+          "tp": 671,
+          "fp": 1,
+          "fn": 3,
+          "precision": 0.9985119047619048,
+          "recall": 0.9955489614243324,
+          "f1": 0.9970282317979198
+        },
+        "ball": {
+          "tp": 45,
+          "fp": 2,
+          "fn": 5,
+          "precision": 0.9574468085106383,
+          "recall": 0.9,
+          "f1": 0.9278350515463918
+        }
+      }
+    },
+    {
+      "seed": 114,
+      "occlusion": "natural",
+      "kit_contrast": "normal",
+      "by_class": {
+        "player": {
+          "tp": 950,
+          "fp": 0,
+          "fn": 0,
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0
+        },
+        "ball": {
+          "tp": 50,
+          "fp": 0,
+          "fn": 0,
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0
+        }
+      }
+    },
+    {
+      "seed": 115,
+      "occlusion": "natural",
+      "kit_contrast": "low",
+      "by_class": {
+        "player": {
+          "tp": 674,
+          "fp": 2,
+          "fn": 5,
+          "precision": 0.9970414201183432,
+          "recall": 0.9926362297496318,
+          "f1": 0.9948339483394835
+        },
+        "ball": {
+          "tp": 44,
+          "fp": 1,
+          "fn": 5,
+          "precision": 0.9777777777777777,
+          "recall": 0.8979591836734694,
+          "f1": 0.9361702127659575
+        }
+      }
+    },
+    {
+      "seed": 116,
+      "occlusion": "natural",
+      "kit_contrast": "normal",
+      "by_class": {
+        "player": {
+          "tp": 559,
+          "fp": 3,
+          "fn": 5,
+          "precision": 0.994661921708185,
+          "recall": 0.9911347517730497,
+          "f1": 0.9928952042628775
+        },
+        "ball": {
+          "tp": 37,
+          "fp": 3,
+          "fn": 13,
+          "precision": 0.925,
+          "recall": 0.74,
+          "f1": 0.8222222222222222
+        }
+      }
+    },
+    {
+      "seed": 117,
+      "occlusion": "natural",
+      "kit_contrast": "normal",
+      "by_class": {
+        "player": {
+          "tp": 403,
+          "fp": 0,
+          "fn": 1,
+          "precision": 1.0,
+          "recall": 0.9975247524752475,
+          "f1": 0.9987608426270136
+        },
+        "ball": {
+          "tp": 43,
+          "fp": 0,
+          "fn": 7,
+          "precision": 1.0,
+          "recall": 0.86,
+          "f1": 0.924731182795699
+        }
+      }
+    },
+    {
+      "seed": 118,
+      "occlusion": "natural",
+      "kit_contrast": "normal",
+      "by_class": {
+        "player": {
+          "tp": 445,
+          "fp": 0,
+          "fn": 1,
+          "precision": 1.0,
+          "recall": 0.9977578475336323,
+          "f1": 0.9988776655443322
+        },
+        "ball": {
+          "tp": 48,
+          "fp": 0,
+          "fn": 2,
+          "precision": 1.0,
+          "recall": 0.96,
+          "f1": 0.9795918367346939
+        }
+      }
+    },
+    {
+      "seed": 119,
+      "occlusion": "natural",
+      "kit_contrast": "normal",
+      "by_class": {
+        "player": {
+          "tp": 630,
+          "fp": 1,
+          "fn": 3,
+          "precision": 0.9984152139461173,
+          "recall": 0.995260663507109,
+          "f1": 0.9968354430379747
+        },
+        "ball": {
+          "tp": 49,
+          "fp": 0,
+          "fn": 1,
+          "precision": 1.0,
+          "recall": 0.98,
+          "f1": 0.98989898989899
+        }
+      }
+    },
+    {
+      "seed": 120,
+      "occlusion": "crowded",
+      "kit_contrast": "normal",
+      "by_class": {
+        "player": {
+          "tp": 606,
+          "fp": 2,
+          "fn": 6,
+          "precision": 0.9967105263157895,
+          "recall": 0.9901960784313726,
+          "f1": 0.9934426229508198
+        },
+        "ball": {
+          "tp": 37,
+          "fp": 0,
+          "fn": 13,
+          "precision": 1.0,
+          "recall": 0.74,
+          "f1": 0.8505747126436781
+        }
+      }
+    },
+    {
+      "seed": 121,
+      "occlusion": "natural",
+      "kit_contrast": "low",
+      "by_class": {
+        "player": {
+          "tp": 477,
+          "fp": 0,
+          "fn": 3,
+          "precision": 1.0,
+          "recall": 0.99375,
+          "f1": 0.9968652037617556
+        },
+        "ball": {
+          "tp": 47,
+          "fp": 0,
+          "fn": 3,
+          "precision": 1.0,
+          "recall": 0.94,
+          "f1": 0.9690721649484536
+        }
+      }
+    },
+    {
+      "seed": 122,
+      "occlusion": "natural",
+      "kit_contrast": "normal",
+      "by_class": {
+        "player": {
+          "tp": 584,
+          "fp": 3,
+          "fn": 3,
+          "precision": 0.9948892674616695,
+          "recall": 0.9948892674616695,
+          "f1": 0.9948892674616695
+        },
+        "ball": {
+          "tp": 50,
+          "fp": 0,
+          "fn": 0,
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0
+        }
+      }
+    },
+    {
+      "seed": 2041,
+      "occlusion": "crowded",
+      "kit_contrast": "normal",
+      "by_class": {
+        "player": {
+          "tp": 894,
+          "fp": 0,
+          "fn": 1,
+          "precision": 1.0,
+          "recall": 0.9988826815642458,
+          "f1": 0.9994410285075461
+        },
+        "ball": {
+          "tp": 44,
+          "fp": 2,
+          "fn": 6,
+          "precision": 0.9565217391304348,
+          "recall": 0.88,
+          "f1": 0.9166666666666666
+        }
+      }
+    },
+    {
+      "seed": 2042,
+      "occlusion": "crowded",
+      "kit_contrast": "normal",
+      "by_class": {
+        "player": {
+          "tp": 568,
+          "fp": 2,
+          "fn": 6,
+          "precision": 0.9964912280701754,
+          "recall": 0.9895470383275261,
+          "f1": 0.993006993006993
+        },
+        "ball": {
+          "tp": 35,
+          "fp": 3,
+          "fn": 15,
+          "precision": 0.9210526315789473,
+          "recall": 0.7,
+          "f1": 0.7954545454545453
+        }
+      }
+    },
+    {
+      "seed": 2043,
+      "occlusion": "crowded",
+      "kit_contrast": "low",
+      "by_class": {
+        "player": {
+          "tp": 391,
+          "fp": 1,
+          "fn": 1,
+          "precision": 0.9974489795918368,
+          "recall": 0.9974489795918368,
+          "f1": 0.9974489795918368
+        },
+        "ball": {
+          "tp": 47,
+          "fp": 0,
+          "fn": 2,
+          "precision": 1.0,
+          "recall": 0.9591836734693877,
+          "f1": 0.9791666666666666
+        }
+      }
+    },
+    {
+      "seed": 2044,
+      "occlusion": "crowded",
+      "kit_contrast": "normal",
+      "by_class": {
+        "player": {
+          "tp": 514,
+          "fp": 0,
+          "fn": 1,
+          "precision": 1.0,
+          "recall": 0.9980582524271845,
+          "f1": 0.9990281827016522
+        },
+        "ball": {
+          "tp": 43,
+          "fp": 1,
+          "fn": 6,
+          "precision": 0.9772727272727273,
+          "recall": 0.8775510204081632,
+          "f1": 0.9247311827956989
+        }
+      }
+    },
+    {
+      "seed": 2045,
+      "occlusion": "crowded",
+      "kit_contrast": "normal",
+      "by_class": {
+        "player": {
+          "tp": 427,
+          "fp": 0,
+          "fn": 0,
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0
+        },
+        "ball": {
+          "tp": 42,
+          "fp": 0,
+          "fn": 8,
+          "precision": 1.0,
+          "recall": 0.84,
+          "f1": 0.9130434782608696
+        }
+      }
+    },
+    {
+      "seed": 3041,
+      "occlusion": "natural",
+      "kit_contrast": "low",
+      "by_class": {
+        "player": {
+          "tp": 589,
+          "fp": 0,
+          "fn": 1,
+          "precision": 1.0,
+          "recall": 0.9983050847457627,
+          "f1": 0.9991518235793045
+        },
+        "ball": {
+          "tp": 46,
+          "fp": 0,
+          "fn": 4,
+          "precision": 1.0,
+          "recall": 0.92,
+          "f1": 0.9583333333333334
+        }
+      }
+    },
+    {
+      "seed": 3042,
+      "occlusion": "natural",
+      "kit_contrast": "low",
+      "by_class": {
+        "player": {
+          "tp": 654,
+          "fp": 2,
+          "fn": 3,
+          "precision": 0.9969512195121951,
+          "recall": 0.9954337899543378,
+          "f1": 0.9961919268849961
+        },
+        "ball": {
+          "tp": 44,
+          "fp": 0,
+          "fn": 5,
+          "precision": 1.0,
+          "recall": 0.8979591836734694,
+          "f1": 0.9462365591397849
+        }
+      }
+    },
+    {
+      "seed": 3043,
+      "occlusion": "natural",
+      "kit_contrast": "low",
+      "by_class": {
+        "player": {
+          "tp": 300,
+          "fp": 1,
+          "fn": 0,
+          "precision": 0.9966777408637874,
+          "recall": 1.0,
+          "f1": 0.9983361064891847
+        },
+        "ball": {
+          "tp": 44,
+          "fp": 0,
+          "fn": 6,
+          "precision": 1.0,
+          "recall": 0.88,
+          "f1": 0.9361702127659575
+        }
+      }
+    },
+    {
+      "seed": 3044,
+      "occlusion": "natural",
+      "kit_contrast": "low",
+      "by_class": {
+        "player": {
+          "tp": 165,
+          "fp": 0,
+          "fn": 1,
+          "precision": 1.0,
+          "recall": 0.9939759036144579,
+          "f1": 0.9969788519637462
+        },
+        "ball": {
+          "tp": 49,
+          "fp": 0,
+          "fn": 1,
+          "precision": 1.0,
+          "recall": 0.98,
+          "f1": 0.98989898989899
+        }
+      }
+    },
+    {
+      "seed": 3045,
+      "occlusion": "natural",
+      "kit_contrast": "low",
+      "by_class": {
+        "player": {
+          "tp": 850,
+          "fp": 1,
+          "fn": 0,
+          "precision": 0.9988249118683902,
+          "recall": 1.0,
+          "f1": 0.9994121105232218
+        },
+        "ball": {
+          "tp": 41,
+          "fp": 1,
+          "fn": 9,
+          "precision": 0.9761904761904762,
+          "recall": 0.82,
+          "f1": 0.8913043478260869
+        }
+      }
+    }
+  ],
+  "hidden_ball_frames": {
+    "hidden_balls": 4,
+    "with_a_ball_detection": 0,
+    "on_the_hidden_ball": 0,
+    "median_distance_px": null
+  }
+}

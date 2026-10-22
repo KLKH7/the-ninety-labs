@@ -30,7 +30,7 @@ The phone's real data is the video's own: `tests/fixtures/tracked-seed900001.jso
 the M1 clip's observations by `ninety/vision/tracked_frames.py` (tracks, teams, a one-second line
 fit against the camera fit's jitter), with no answer key. Graded offline in
 [companion-tracked.md](../../docs/eval/companion-tracked.md): speed now within 0.6 km/h (median),
-top speed within 1.9 km/h. The tracker reads no shirt numbers, so tracked players are `h-t12`,
+top speed within 1.5 km/h. The tracker reads no shirt numbers, so tracked players are `h-t12`,
 shown as "Home player · track 12". The API serves this file once #145 accepts those ids.
 
 ## Run it

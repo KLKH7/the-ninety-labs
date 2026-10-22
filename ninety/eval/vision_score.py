@@ -312,6 +312,11 @@ def main(argv: list[str] | None = None) -> None:
     detections, run, clips = read_run(args.detected)
     check_clip(frames, clips)
     report = score(frames, detections, args.threshold, run=run)
+    from ninety.eval.vision_pitch_score import has_cameras, score_pitch  # it imports this module
+
+    # Beside the pixel numbers when frames.jsonl has the saved cameras (every rendered clip does).
+    report["pitch"] = (score_pitch(frames, detections, args.threshold, run=run)
+                       if has_cameras(frames) else None)
     text = json.dumps(report, indent=2) + "\n"
     if args.report:
         args.report.write_text(text)

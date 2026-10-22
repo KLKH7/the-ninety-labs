@@ -378,6 +378,38 @@ def test_a_rebound_off_the_crossbar_is_not_judged_as_free_flight(tmp_path):
     assert "P5 ball flight" not in problems
 
 
+# Where a jolt in flight happens, relative to the goal at x = 105 (its net as the renderer draws
+# it: 2 m deep, its back 2 m high, the roof sloping down to it from the 2.44 m crossbar), and
+# whether the net can be what stopped the ball there. The engine holds a ball against the net with
+# its centre a radius (0.11 m) from the back or a side, or its top at the roof.
+NET_CASES = [
+    ("in the middle of the goal", 105.9, 34.0, None, False),
+    ("against the back of the net", 106.89, 34.0, None, True),
+    ("against the side netting", 105.9, 37.55, None, True),
+    ("against the net's roof", 106.0, 34.0, 2.0, True),  # roof 2.22 m there, less the ball's 0.22
+    ("a few centimetres off the back of the net", 106.85, 34.0, None, False),
+    ("just behind the back of the net, outside it", 107.11, 34.0, None, False),
+    ("just outside the side netting", 105.9, 37.77, None, False),
+    ("above the roof", 106.0, 34.0, 2.5, False),
+    ("4 m above the back of the net", 106.89, 34.0, 4.8, False),
+]
+
+
+@pytest.mark.parametrize(("where", "x", "y", "z", "contact"), NET_CASES)
+def test_a_ball_the_net_stops_is_not_judged_as_free_flight(tmp_path, where, x, y, z, contact):
+    """Lesson 184: inside a goal, a ball touching its net meets a contact, as at the woodwork. The
+    same jolt anywhere the net cannot be touching the ball is a defect. The ball flies in the middle
+    of the goal; on the jolt's frame it is where the case puts it."""
+    clip = clean_clip()
+    lofted(clip)
+    for n in range(PASS_AT, PASS_AT + 26):
+        clip["frames"][n]["ball"]["x"], clip["frames"][n]["ball"]["y"] = 105.9, 34.0
+    jolt = clip["frames"][PASS_AT + 10]["ball"]
+    jolt["x"], jolt["y"] = x, y
+    jolt["z"] = z if z is not None else jolt["z"] - 0.4
+    assert ("P5 ball flight" in run(tmp_path, clip)) is not contact, where
+
+
 def test_a_ball_within_reach_can_be_touched_whichever_way_it_moves(tmp_path):
     clip = clean_clip()
     for f in clip["frames"]:
@@ -875,3 +907,259 @@ def test_a_pass_struck_on_the_last_frame_of_a_whole_clip_is_still_judged(tmp_pat
     clip = cut(struck_away_from_its_end_point(60), 0, 60)
     del clip["meta"]["window"]
     assert fails(run(tmp_path, clip), "C7 ball path", "ball never reaches")
+
+
+# --- a broadcast cut through a dead ball (ninety/render/edit.py) --------------------------------
+
+
+def restart_clip() -> dict:
+    """h2 lets the ball run out at frame 40 and it lies dead; a1 walks 15 m to take the restart,
+    and at frame 130 the set piece is his (the ball placed at his spot). The picture may cut from
+    frame 60 to frame 120: a1 is somewhere else after the cut, and that is not running."""
+    clip = clean_clip()
+    for f in clip["frames"]:
+        n = f["frame"]
+        if n >= 40:
+            f["possessor"] = "a1" if n >= 130 else None
+        # a1 sets off at frame 41 and is at his spot by frame 129 (smoothstep: up to 6.4 m/s and
+        # 7.3 m/s², inside P1 and P2); most of the walk is inside the cut.
+        u = min(max((n - 41) / 88, 0.0), 1.0)
+        f["players"][2].update(x=75.0 - 15.0 * u * u * (3 - 2 * u), y=40.0)
+        if n >= 130:
+            f["ball"].update(x=60.0, y=40.0)
+    clip["events"] += [event("e2", 40, "out_of_play", "home", x=50.0),
+                       event("e3", 130, "set_piece", "away", "a1", x=60.0, y=40.0)]
+    return clip
+
+
+def cut_away(clip: dict, first: int, last: int, record: bool = True) -> dict:
+    """Leave out frames first..last as the broadcast does, and record it in meta.json."""
+    clip["frames"] = [f for f in clip["frames"] if not first <= f["frame"] <= last]
+    if record:
+        clip["meta"]["cuts"] = [{"first_frame": first, "last_frame": last}]
+    return clip
+
+
+def test_a_dead_ball_clip_without_a_cut_passes(tmp_path):
+    assert run(tmp_path, restart_clip()) == {}
+
+
+def test_a_recorded_cut_through_a_dead_ball_passes(tmp_path):
+    """The players are elsewhere after the cut; that is the edit, not a 15 m jump in a frame."""
+    assert run(tmp_path, cut_away(restart_clip(), 60, 120)) == {}
+
+
+def test_a_gap_in_the_frames_that_no_cut_records_fails(tmp_path):
+    problems = run(tmp_path, cut_away(restart_clip(), 60, 120, record=False))
+    assert fails(problems, "C2 frame order", "frame 121 at position 60, after frame 59")
+
+
+def test_a_recorded_cut_that_is_not_a_gap_in_the_frames_fails(tmp_path):
+    clip = restart_clip()
+    clip["meta"]["cuts"] = [{"first_frame": 60, "last_frame": 120}]
+    assert fails(run(tmp_path, clip), "C2 frame order", "is not a gap between two frames")
+
+
+def test_a_recorded_cut_of_other_frames_than_the_gap_fails(tmp_path):
+    clip = cut_away(restart_clip(), 60, 120)
+    clip["meta"]["cuts"] = [{"first_frame": 60, "last_frame": 119}]
+    problems = run(tmp_path, clip)
+    assert fails(problems, "C2 frame order", "frame 121 at position 60")
+    assert fails(problems, "C2 frame order", "is not a gap between two frames")
+
+
+def test_a_cut_through_play_fails(tmp_path):
+    """The pass from frame 5 is in flight until frame 30, before any stoppage: cutting there hides play."""
+    problems = run(tmp_path, cut_away(restart_clip(), 10, 20))
+    assert fails(problems, "C2 frame order", "no stoppage before it or no restart after it")
+
+
+def test_a_cut_after_the_restart_fails(tmp_path):
+    problems = run(tmp_path, cut_away(restart_clip(), 132, 140))
+    assert fails(problems, "C2 frame order", "no stoppage before it or no restart after it")
+
+
+def test_a_cut_over_an_event_fails(tmp_path):
+    """Nothing that happened is cut: the event would be on no frame of the clip."""
+    clip = restart_clip()
+    clip["events"].append(event("e4", 90, "pressure", "away", "a1", x=67.5, y=40.0))
+    assert fails(run(tmp_path, cut_away(clip, 60, 120)), "C2 frame order", "hides e4 pressure")
+
+
+def test_a_cut_that_hides_the_restart_fails(tmp_path):
+    """The set piece at 130 is inside the cut: no restart is shown after it."""
+    problems = run(tmp_path, cut_away(restart_clip(), 60, 135))
+    assert fails(problems, "C2 frame order", "no stoppage before it or no restart after it")
+
+
+def test_a_cut_in_a_window_opened_on_a_dead_ball_fails(tmp_path):
+    """Coordinator decision (Oct 20): a cut shows the ball dead at both ends, its stoppage and its
+    restart both in the clip. A window opened after the stoppage shows only the restart: before, C2
+    took a loose ball from the window's first frame for a dead one, and a window of open play with
+    a gap and no event at all passed (the independent review's planted clips)."""
+    problems = run(tmp_path, cut_away(cut(restart_clip(), 45, 149), 60, 120))
+    assert fails(problems, "C2 frame order", "no stoppage before it or no restart after it")
+    clip = cut(restart_clip(), 45, 149)
+    clip["events"] = [e for e in clip["events"] if e["frame"] < 45]  # a window with no event in it
+    problems = run(tmp_path, cut_away(clip, 60, 120))
+    assert fails(problems, "C2 frame order", "no stoppage before it or no restart after it")
+
+
+def test_play_between_the_stoppage_and_the_cut_fails(tmp_path):
+    """The independent review's first planted clip: the stoppage at 40, then a pass at 50 puts the
+    ball back in play before the cut. C2 used to look only at stoppages and restarts before the cut,
+    so the pass was invisible to it and the cut passed."""
+    clip = restart_clip()
+    clip["events"].append(event("e4", 50, "pass", "away", "a1", "a2", x=75.0, y=40.0, end_x=70.0,
+                                end_y=40.0, outcome="success", intended="a2"))
+    problems = run(tmp_path, cut_away(clip, 60, 120))
+    assert fails(problems, "C2 frame order", "the ball was in play (e4 pass)")
+
+
+@pytest.mark.parametrize("stop", ["out_of_play", "foul", "offside"])
+def test_a_cut_from_each_kind_of_stoppage_passes(tmp_path, stop):
+    clip = restart_clip()
+    for e in clip["events"]:
+        if e["id"] == "e2":
+            e["type"] = stop
+    assert run(tmp_path, cut_away(clip, 60, 120)) == {}
+
+
+@pytest.mark.parametrize("record", [
+    {"first_frame": 60.0, "last_frame": 120},
+    {"first_frame": True, "last_frame": 120},
+    {"first_frame": "60", "last_frame": 120},
+    {"first_frame": 60},
+])
+def test_a_cut_record_that_is_not_two_frame_numbers_fails_c1(tmp_path, record):
+    """A cut given as 80.0 used to match the gap (80, ...) and pass (the independent review)."""
+    clip = cut_away(restart_clip(), 60, 120)
+    clip["meta"]["cuts"] = [record]
+    assert fails(run(tmp_path, clip), "C1 files", "meta.json cuts must be a list of")
+
+
+def test_a_ball_is_not_in_flight_across_a_cut():
+    """C8's excuse for an interception or goal whose pass or shot came before a window needs the
+    ball seen moving every frame: across a broadcast cut it is not seen."""
+    from ninety.validate import in_flight_from_the_cut
+
+    frames = [{"frame": n, "possessor": None, "ball": {"x": 30.0 + 0.5 * n, "y": 30.0, "z": 0.0}}
+              for n in list(range(10, 20)) + list(range(60, 70))]
+    assert in_flight_from_the_cut(frames, 19)
+    assert not in_flight_from_the_cut(frames, 65)
+
+
+def test_a_frame_that_breaks_its_schema_fails_c1(tmp_path):
+    """Lesson 8: C1's frame schema had no planted defect (the independent review of #180)."""
+    clip = clean_clip()
+    clip["frames"][3]["ball"]["z"] = "high"
+    assert fails(run(tmp_path, clip), "C1 frame schema", "frame 3:")
+
+
+def test_every_check_the_validator_reports_has_a_planted_defect():
+    """Lesson 8: a check that no planted defect has made fail is not known to fail at all. Every
+    problem the validator can report is named in this file (the independent review of #180)."""
+    import re
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    keys = set(re.findall(r'problems\["([A-Z]\d+ [^"]+)"\]', (root / "ninety/validate.py").read_text()))
+    tests = Path(__file__).read_text()
+    assert keys and not {k for k in keys if f'"{k}"' not in tests}
+
+
+def _down(player, fall=85.0):
+    return {**player, "action": "down", "fall": fall, "fall_dir": 1.0304}
+
+
+def fall_clip(late_at: int | None = None) -> dict:
+    """h9 is fouled at 0.2 s. The free kick is taken at 2.8 s. Down through frame 40 (1.6 s) is
+    1.2 s clear: legal at the 1 s floor, not at 1.5 s. `late_at` is one more frame left down."""
+    players = [
+        {"id": "h9", "team": "home", "x": 60.6, "y": 35.0, "action": "stand"},
+        {"id": "a4", "team": "away", "x": 60.0, "y": 34.0, "action": "stand"},
+        {"id": "h1", "team": "home", "x": 20.0, "y": 20.0, "action": "stand"},
+    ]
+    frames = []
+    for n in range(75):
+        row = [dict(p) for p in players]
+        if 5 <= n <= 40 or n == late_at:
+            row[0] = _down(row[0])
+        frames.append({
+            "frame": n, "t": n / FPS, "ball": {"x": 40.0, "y": 30.0, "z": 0.0},
+            "possessor": None, "players": row,
+        })
+    events = [
+        event("e1", 5, "foul", "away", "a4", "h9", x=60.6, y=35.0),
+        event("e2", 70, "set_piece", "home", "h1", x=60.6, y=35.0),
+    ]
+    return {"events": events, "frames": frames, "meta": {"fps": FPS, "score": {"home": 0, "away": 0}}}
+
+
+def test_a_foul_that_lets_him_up_in_time_passes(tmp_path):
+    assert run(tmp_path, fall_clip()) == {}
+
+
+def test_a_player_still_down_within_a_second_of_the_restart_fails(tmp_path):
+    """Frame 50 is at 2.0 s, 0.8 s before the kick: inside the 1 s floor, outside a 0.5 s floor."""
+    assert fails(run(tmp_path, fall_clip(50)), "P18 foul fall", "still down")
+
+
+def test_a_player_down_four_tenths_before_the_restart_fails(tmp_path):
+    """Frame 60 is at 2.4 s. A deeper miss than the floor, so dropping it is not how the 0.5 s
+    mutant goes red: that one is the 0.8 s plant above."""
+    assert fails(run(tmp_path, fall_clip(60)), "P18 foul fall", "still down")
+
+
+def test_a_fall_of_zero_is_not_a_fall(tmp_path):
+    """The schema allows 0. P18 does not: a fall that is present is above 0."""
+    clip = fall_clip()
+    clip["frames"][10]["players"][0]["fall"] = 0
+    assert fails(run(tmp_path, clip), "P18 foul fall", "not degrees")
+
+
+def test_a_fall_with_no_direction_fails(tmp_path):
+    clip = fall_clip()
+    del clip["frames"][10]["players"][0]["fall_dir"]
+    assert fails(run(tmp_path, clip), "P18 foul fall", "no fall_dir")
+
+
+def test_a_fall_past_flat_fails():
+    """95° is already illegal in the schema, and validate() returns before P18, so the cap is
+    planted on the check itself."""
+    from collections import defaultdict
+
+    from ninety.validate import check_foul_fall
+
+    problems = defaultdict(list)
+    who = _down({"id": "h9", "team": "home", "x": 60.6, "y": 35.0, "action": "stand"}, 95)
+    check_foul_fall([], [{"frame": 10, "t": 0.4, "players": [who]}], problems)
+    assert fails(problems, "P18 foul fall", "not degrees")
+
+
+def test_a_fall_outside_zero_to_ninety_fails_the_schema():
+    import json
+    from pathlib import Path
+
+    from jsonschema import Draft202012Validator
+
+    schema = json.loads(
+        (Path(__file__).resolve().parent.parent / "schemas/frame.schema.json").read_text())
+    check = Draft202012Validator(schema)
+
+    def frame(fall: float) -> dict:
+        return {
+            "frame": 0, "t": 0.0, "ball": {"x": 40.0, "y": 30.0, "z": 0.0},
+            "players": [{"id": "h9", "team": "home", "x": 60.6, "y": 35.0, "fall": fall}],
+        }
+
+    assert list(check.iter_errors(frame(0))) == []  # the schema's minimum is 0; P18 rejects it
+    assert list(check.iter_errors(frame(85))) == []
+    assert list(check.iter_errors(frame(95)))  # maximum 90, not a wider cap
+    assert list(check.iter_errors(frame(-1)))
+
+
+def test_a_fall_without_the_down_action_fails(tmp_path):
+    clip = fall_clip()
+    clip["frames"][10]["players"][0]["action"] = "run"
+    assert fails(run(tmp_path, clip), "P18 foul fall", "action run")

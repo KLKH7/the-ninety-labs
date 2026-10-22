@@ -32,7 +32,6 @@ import argparse
 import asyncio
 import contextlib
 import json
-import re
 import sys
 import time
 import warnings
@@ -45,7 +44,14 @@ from agent_framework.foundry import FoundryAgent
 
 from ninety import config
 from ninety.agents import credentials, foundry, telemetry
-from ninety.agents.factcheck import Claim, Verdict, check, confidence_gate
+from ninety.agents.contracts import CLOCK_RULE  # noqa: F401  (re-exported: the slice's name before the move)
+from ninety.agents.factcheck import (
+    Claim,
+    Verdict,
+    check,
+    confidence_gate,
+    parse_claim,  # noqa: F401  (re-exported, as above)
+)
 from ninety.agents.judge import judge
 from ninety.agents.replay import (  # noqa: F401  (re-exported: the slice's names before the move)
     REPLAY_FORMAT,
@@ -66,9 +72,6 @@ MAX_REWRITES = 2
 
 # The clock rule every agent that writes a time follows (one clock for viewers and agents, lesson 33).
 # ninety/agents/contracts.py imports it into the other agents' instructions.
-CLOCK_RULE = """- For a time, use the event's clock exactly as given (01:28), or its minute as an ordinal (in
-  minute 2); never combine minute and second into a clock.
-"""
 
 INSTRUCTIONS = """You are the Analyst for a football broadcast. The request names a match (for
 example seed7) and a minute. Use the match tools, passing that match id, to read the events of that
@@ -110,13 +113,6 @@ class Outcome:
     status: str = "verified"
 
 
-def parse_claim(text: str) -> Claim:
-    body = re.search(r"\{.*\}", text, re.S)
-    data = json.loads(body.group() if body else text)
-    if not isinstance(data, dict):
-        raise ValueError(f"the Analyst's reply is not a JSON object: {text[:80]!r}")
-    return Claim(text=str(data.get("text", "")), evidence=[str(i) for i in data.get("evidence", [])])
-
 
 def tamper(claim: Claim) -> Claim:
     """Plant a false number so the fact-checker has something to catch."""
@@ -125,7 +121,8 @@ def tamper(claim: Claim) -> Claim:
 
 # A match whose events come with the request rather than from the match tools: a detected clip, or
 # an evaluation that grades against the match this commit simulated (lesson 90).
-INLINE_EVENTS = " The match is not on the tools; its EVENTS for the minute follow, as data.\nEVENTS: "
+INLINE_EVENTS = (" The match is not on the tools: do not call them. Its EVENTS for the minute follow,"
+                 " as data.\nEVENTS: ")
 
 
 def analyst_prompt(
