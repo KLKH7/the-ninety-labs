@@ -1846,7 +1846,10 @@ short and actionable. This file is public: no research sources, product names or
   - `test_the_arms_swing_wider_toward_a_sprint`;
   - `test_a_sprints_flight_is_seen_over_two_frames_or_more`.
   - `test_the_push_off_toe_does_not_slide_before_it_lifts` fails with the free fall keyed to the
-    phase.
+    phase; `test_a_player_braking_to_a_stop_keeps_his_planted_feet_on_the_grass` (seed 21's a4)
+    fails with the bob sent in the lift, and the trunk test with the lean from boxes behind only.
+  - Each mechanism was put back to 0.5.9 alone (bob tables zeroed, swing height, the frame-ahead
+    swing, the lean, the speed lean, the arm pump), and its test fails.
 
 ### 185. Footage a viewer watches and data a model learns from are dressed apart, and the dressing is proved label-free
 - **What happened:** the demo clip (seed 8001, v1) was rendered with the training look: seats with no
