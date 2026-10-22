@@ -20,6 +20,10 @@ OCCLUSION = ("natural", "crowded", "keeper")
 # normal and low are drawn for training (low is a hard case); broadcast is set only for footage a
 # viewer watches (the demo clip, docs/eval/demo-clip.md), never drawn from a seed.
 KIT_CONTRAST = ("normal", "low", "broadcast")
+# The stadium's dressing. plain is every training, validation and test render's look; broadcast (a crowd
+# in the stands, hoardings and a surround all round, more varied boards, softer mowing) is set only for
+# footage a viewer watches (the demo clip), never drawn from a seed, so no dataset changes look.
+STADIUM = ("plain", "broadcast")
 # Shirt graphics. Colours stay fictional; a pattern is not a real club's kit.
 PATTERNS = ("solid", "stripes", "hoops", "sash", "halves")
 
@@ -96,10 +100,14 @@ class RenderParams:
     home_code: str = "ASH"
     away_code: str = "CRW"
     boards: tuple[str, ...] = BOARD_BRANDS
+    stadium: str = "plain"
 
     def to_dict(self) -> dict:
         d = asdict(self)
         d["boards"] = list(self.boards)
+        if self.stadium == "plain":
+            # Absent means plain (web/render reads it so): a training clip's clip.json is what it was.
+            del d["stadium"]
         return d
 
 
@@ -273,6 +281,7 @@ def validate(p: RenderParams) -> None:
         ("weather", WEATHER),
         ("occlusion", OCCLUSION),
         ("kit_contrast", KIT_CONTRAST),
+        ("stadium", STADIUM),
     ):
         if getattr(p, name) not in allowed:
             raise ValueError(f"{name} must be one of {allowed}, got {getattr(p, name)!r}")

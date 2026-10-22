@@ -1797,6 +1797,27 @@ short and actionable. This file is public: no research sources, product names or
   `::test_the_corner_shot_holds_until_the_kick`; the framing bar is raw.
 
 
+### 185. Footage a viewer watches and data a model learns from are dressed apart, and the dressing is proved label-free
+- **What happened:** the demo clip (seed 8001, v1) was rendered with the training look: seats with no
+  one in them, beige run-off and black ground behind the goals, four repeated boards, stark mowing.
+  The blind critic scored it 2/10 and ranked empty stands and bare ground at severity 4. The look
+  was built for the detector, where a crowd is only clutter that could change what a dataset
+  measures, so nothing ever dressed the footage a person watches.
+- **Rule:**
+  - Dressing for viewers sits behind a knob that no seed draws (`stadium=broadcast`, like
+    `kit_contrast=broadcast`): training, validation and test renders stay byte-identical.
+  - Dressing is scenery: never labelled, and in the id pass it hides what is behind it exactly as
+    the picture does. The fans are drawn there with the same billboards, cut-outs and motion code.
+    A first version left the crowd out of the id pass, which labelled a ball among the fans as
+    visible while the picture hid it (lesson 84; the Reviewer caught it).
+  - A test proves both sides with a case where they matter: a ball in the stands behind fans.
+- **Check:**
+  - `uv run pytest tests/test_render_stadium.py -k crowd`. It fails with the fans left out of the
+    id pass (the ball among them stays visible). It also fails with their picture colours drawn
+    into it, where the fans' pixels counted as 52,436 visible pixels of one player.
+  - `tests/test_render_params.py::test_only_footage_asks_for_a_broadcast_stadium`.
+  - Plain stills from main and from the change are byte-identical under software GL.
+
 ### 187. A shot built to pass a framing metric can still be dead air to a viewer
 - **What happened:** the restart close-up (#198, lesson 175) passed every framing test: the ball
   central, the pitch filling the picture after the ease out. On demo v1, a blind critic watching as a
