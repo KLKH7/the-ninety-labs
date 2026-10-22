@@ -1797,6 +1797,21 @@ short and actionable. This file is public: no research sources, product names or
   `::test_the_corner_shot_holds_until_the_kick`; the framing bar is raw.
 
 
+### 184. What the picture draws as solid, the engine treats as solid
+- **What happened:** the renderer drew a net behind each goal, but the engine had none. After a
+  goal the dead ball rolled on through the back of the net to the advertising boards, 4 m behind
+  the goal line, and the keeper walked through the net to fetch it. On demo v2's seed 8001 the
+  ball came to rest at (109.0, 35.7) after the goal at 155.3 s. Over 20 matches it happened after
+  every goal, and keepers stepped through a net 14 times after goals and 18 times at other
+  stoppages, fetching balls that had gone wide.
+- **Rule:**
+  - Every structure the renderer draws that a ball or a player can meet has the same geometry
+    in the engine's physics: the boards, and now the net (L1).
+  - Nothing passes through it that the picture would show passing through.
+  - Where the engine's shape is the drawing's, it cites the drawing.
+- **Check:** `uv run pytest tests/test_goal_net.py`. On main the ball goes 4 m deep, through the
+  roof and through the side netting, and the keeper walks through the net.
+
 ### 187. A shot built to pass a framing metric can still be dead air to a viewer
 - **What happened:** the restart close-up (#198, lesson 175) passed every framing test: the ball
   central, the pitch filling the picture after the ease out. On demo v1, a blind critic watching as a
