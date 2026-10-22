@@ -139,6 +139,14 @@ SET_BALL_CLEAR_M = shape.surface(math.pi / 2, 0.0, pad=2 * ball.RADIUS)
 # points on it dips inside by at most 1 - cos(15°), under 4% of the radius (0.35 m at 9.65 m)
 KEEP_OFF_STEP_DEG = 30.0
 BOARDS_M = 4.0  # verify: advertising boards behind the lines stop a ball (and players) that go out
+# design, verify: a goal's net, as the renderer draws it (web/render/render.js, buildNet): NET_DEPTH_M
+# behind the goal line at the top and the bottom, its back NET_BACK_M high, its roof sloping down to
+# it from the crossbar. Law 1 sets the posts and crossbar, not the net; nets for a full-size goal
+# (7.32 x 2.44 m) are sold 1.8 to 2.6 m deep (UEFA- and Premier-League-grade stadium nets listed at
+# 6 ft, 1.83 m; box nets at 2 m). Players keep NET_CLEAR_M from it going round, a stride (design).
+NET_DEPTH_M = 2.0
+NET_BACK_M = 2.0
+NET_CLEAR_M = 1.0
 # R1: seconds from the ball going out to the restart. Means from Opta timing of the Premier League
 # (The Analyst): throw-ins about 16 s (2022-23; 17.9 in 2025-26), goal kicks 29 to 30 s, free kicks
 # 31.3 to 40.9 s by team (2022-23; mean taken as the middle), corners about half a minute (only a
@@ -318,6 +326,73 @@ def segment_distance(px: float, py: float, ax: float, ay: float, bx: float, by: 
     return math.hypot(ax + s * dx - px, ay + s * dy - py)
 
 
+def crosses(a: tuple[float, float], b: tuple[float, float], c: tuple[float, float],
+            d: tuple[float, float]) -> bool:
+    """Whether the straight way from a to b crosses the segment from c to d (touching it counts)."""
+    def side(p: tuple[float, float], q: tuple[float, float], r: tuple[float, float]) -> float:
+        return (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
+    d1, d2, d3, d4 = side(c, d, a), side(c, d, b), side(a, b, c), side(a, b, d)
+    return d1 * d2 <= 0 and d3 * d4 <= 0 and (d1, d2) != (0.0, 0.0)
+
+
+def goal_net(line: float) -> list[tuple[tuple[float, float], tuple[float, float]]]:
+    """The net of the goal on this goal line, seen from above: its two sides and its back,
+    NET_DEPTH_M behind the line, from post to post (Law 1)."""
+    out = 1.0 if line > 0 else -1.0
+    lo, hi, back = PITCH_Y / 2 - GOAL_HALF_WIDTH, PITCH_Y / 2 + GOAL_HALF_WIDTH, line + out * NET_DEPTH_M
+    return [((line, lo), (back, lo)), ((line, hi), (back, hi)), ((back, lo), (back, hi))]
+
+
+NETS = [side for line in (0.0, PITCH_X) for side in goal_net(line)]
+
+
+def net_stop(px: float, py: float, x: float, y: float, vx: float,
+             vy: float) -> tuple[float, float, float, float]:
+    """A goal's net stops a player as the advertising boards do (steer): the part of his step from
+    (px, py) to (x, y) that would take him through it, along the axis it crosses, is not made."""
+    if 0.0 < min(px, x) and max(px, x) < PITCH_X:  # both ends in front of both goal lines
+        return x, y, vx, vy
+    for _ in range(2):  # a step through a corner of the net meets its side and its back
+        hit = False
+        for c, d in NETS:
+            if crosses((px, py), (x, y), c, d):
+                hit = True
+                if c[0] == d[0]:  # the back of the net
+                    x, vx = px, 0.0
+                else:  # a side of it
+                    y, vy = py, 0.0
+        if not hit:
+            break
+    return x, y, vx, vy
+
+
+def in_the_net(s: ball.State, line: float | None) -> tuple[ball.State, float | None]:
+    """Law 1 and NET_DEPTH_M: a ball that has gone into the goal on this goal line is held by its
+    net. Where it meets the back net, a side net or the roof, its speed into the net is lost
+    (design: a net gives and holds it), and it drops and rolls inside the goal. Returns the ball,
+    and the goal line whose net still holds it: none once it is back on the pitch, out through
+    the goal mouth."""
+    if line is None:
+        return s, None
+    bx, by, bz, vx, vy, vz = s
+    out = 1.0 if line > 0 else -1.0  # from the goal line into the goal
+    if (bx - line) * out <= 0:
+        return s, None
+    back = line + out * (NET_DEPTH_M - ball.RADIUS)
+    if (bx - back) * out > 0:
+        bx = back
+        vx = 0.0 if vx * out > 0 else vx
+    side = GOAL_HALF_WIDTH - ball.RADIUS
+    if abs(by - PITCH_Y / 2) > side:
+        by = PITCH_Y / 2 + math.copysign(side, by - PITCH_Y / 2)
+        vy = 0.0 if vy * (by - PITCH_Y / 2) > 0 else vy
+    behind = min((bx - line) * out, NET_DEPTH_M)  # the roof slopes down from the crossbar to the back
+    roof = CROSSBAR + (NET_BACK_M - CROSSBAR) * behind / NET_DEPTH_M - 2 * ball.RADIUS
+    if bz > roof:
+        bz, vz = roof, min(vz, 0.0)
+    return (bx, by, bz, vx, vy, vz), line
+
+
 def round_the_circle(cx: float, cy: float, radius: float, px: float, py: float, qx: float,
                      qy: float) -> float:
     """How far a player walks from (px, py) to (qx, qy) keeping off the circle of `radius` round
@@ -375,13 +450,13 @@ def steer(p: Player, tx: float, ty: float, want_speed: float) -> None:
     a shared grip limit for braking and turning, and energy (ninety/sim/body.py)."""
     x, y, p.vx, p.vy = move_body(p.x, p.y, p.vx, p.vy, tx, ty, want_speed, p.physique, DT)
     # No wall at the lines: players may run past them, as in real matches. Targets stay on the
-    # pitch, so they slow down and come back; only the advertising boards stop them, and then
-    # the boards also stop the part of the run that goes into them.
+    # pitch, so they slow down and come back; only the advertising boards and the goals' nets stop
+    # them, and then they also stop the part of the run that goes into them.
     if not -BOARDS_M <= x <= PITCH_X + BOARDS_M:
         x, p.vx = clamp(x, -BOARDS_M, PITCH_X + BOARDS_M), 0.0
     if not -BOARDS_M <= y <= PITCH_Y + BOARDS_M:
         y, p.vy = clamp(y, -BOARDS_M, PITCH_Y + BOARDS_M), 0.0
-    p.x, p.y = x, y
+    p.x, p.y, p.vx, p.vy = net_stop(p.x, p.y, x, y, p.vx, p.vy)
 
 
 class Engine:
@@ -502,6 +577,7 @@ class Engine:
         self.throw_ready = 0.0
         self.into_play = False  # released from behind the line; not a new out until it enters or falls away
         self.throw_from: tuple[float, float] | None = None  # where the last throw-in was taken
+        self.netted: float | None = None  # the goal line whose net holds the dead ball after a goal
         self.touch_show: dict[str, tuple[str, float]] = {}  # player -> (part, until)
         self.dive_show: dict[str, tuple[float, float]] = {}  # keeper -> (until, side)
         self.dribble_to: tuple[float, float] | None = None  # the carrier's chosen carry, if any
@@ -1576,6 +1652,7 @@ class Engine:
                     kicked.update(receiver=None if own else scorer, end_x=touch["x"], end_y=touch["y"],
                                   outcome="fail" if own else "success")
         self.emit("goal", team, x, y, player=scorer)
+        self.netted = PITCH_X if x > PITCH_X / 2 else 0.0  # in the goal: its net holds it (in_the_net)
         self.celebrate(team, scorer)
         self.kickoff(other(team))
 
@@ -1799,7 +1876,14 @@ class Engine:
 
     def dead_ball_rest(self) -> tuple[float, float]:
         """Where the dead ball will come to rest: along its own flight, or where the advertising
-        boards stop it (tick_restart)."""
+        boards stop it, or inside the goal its net holds it in (tick_restart)."""
+        if self.netted is not None:
+            s, line = self.ball, self.netted
+            for _ in range(int(ball.FLIGHT_BOUND_S / DT)):
+                s, line = in_the_net(ball.step(s, DT), line)
+                if math.hypot(s[3], s[4]) == 0.0 and s[2] == 0.0:
+                    break
+            return s[0], s[1]
         for s in ball.predict(self.ball, DT, ball.FLIGHT_BOUND_S):
             if not (-BOARDS_M <= s[0] <= PITCH_X + BOARDS_M and -BOARDS_M <= s[1] <= PITCH_Y + BOARDS_M):
                 return clamp(s[0], -BOARDS_M, PITCH_X + BOARDS_M), clamp(s[1], -BOARDS_M, PITCH_Y + BOARDS_M)
@@ -1840,9 +1924,11 @@ class Engine:
         carrier = self.by_id[r.carried_by] if r.carried_by else None
         if carrier:
             self.carry_dead_ball(r, carrier)
+            self.ball, self.netted = in_the_net(self.ball, self.netted)  # carried out of the goal, it is free
         else:
-            # The dead ball rolls on until it stops or reaches the advertising boards.
-            bx, by, bz, vx, vy, vz = ball.step(self.ball, DT)
+            # The dead ball rolls on until it stops or reaches the advertising boards, or, in a
+            # goal, its net holds it.
+            (bx, by, bz, vx, vy, vz), self.netted = in_the_net(ball.step(self.ball, DT), self.netted)
             if not (-BOARDS_M <= bx <= PITCH_X + BOARDS_M and -BOARDS_M <= by <= PITCH_Y + BOARDS_M):
                 bx, by = clamp(bx, -BOARDS_M, PITCH_X + BOARDS_M), clamp(by, -BOARDS_M, PITCH_Y + BOARDS_M)
                 vx = vy = 0.0
@@ -2388,11 +2474,11 @@ class Engine:
         grip = math.sqrt(max(BRAKE_MAX * BRAKE_MAX - pushing * pushing, 0.0))
         brake = min(abs(p.vx), grip * DT)
         p.vx -= math.copysign(brake, p.vx)
-        p.x += p.vx * DT
-        p.vy = (y - p.y) / DT
-        p.y = y
+        # a goal's net stops a dive as it stops a run (net_stop)
+        x, stop_y, p.vx, p.vy = net_stop(p.x, p.y, p.x + p.vx * DT, y, p.vx, (y - p.y) / DT)
+        p.x, p.y = x, stop_y
         if landing:
-            p.vy = carried
+            p.vy = carried if stop_y == y else 0.0
             self.landed = (p.id, self.dive[4])
             self.dive = None
             self.off_balance[p.id] = self.t + offball.KEEPER_DOWN_S  # on the ground: getting up
@@ -2412,6 +2498,7 @@ class Engine:
             kx, ky = self.keep_off(p, tx, ty)
             if (kx, ky) != (tx, ty):
                 tx, ty, top = kx, ky, max(top, self.in_time(p, kx, ky))
+            tx, ty = self.round_the_net(p, tx, ty)
             dist = math.hypot(tx - p.x, ty - p.y)
             if dist > 1e-6:  # bend the running direction away from anyone about to be in the way
                 ax, ay = self.avoid(p)
@@ -2422,6 +2509,40 @@ class Engine:
             p.heading = turn_toward(p.heading, perception.facing(p.heading, p.vx, p.vy, p.x, p.y,
                                                                  *self.looks_at(p)))
         self.separate()
+
+    def round_the_net(self, p: Player, tx: float, ty: float) -> tuple[float, float]:
+        """Nobody walks through a goal's net (Law 1, NET_DEPTH_M): where his straight way would cross
+        it, he heads for the first point of the shortest way that does not, by the goal mouth, in
+        front of it NET_CLEAR_M, or round the goal, NET_CLEAR_M clear of its posts and back corners
+        (design). The keeper fetching the ball from his net walks in through the mouth."""
+        if 0.0 < min(p.x, tx) and max(p.x, tx) < PITCH_X:  # a way in front of both goal lines
+            return tx, ty
+        at, target = (p.x, p.y), (tx, ty)
+        for line in (0.0, PITCH_X):
+            net = goal_net(line)
+            if not any(crosses(at, target, c, d) for c, d in net):
+                continue
+            out, mid, m = (1.0 if line > 0 else -1.0), PITCH_Y / 2, NET_CLEAR_M
+            lo, hi = mid - GOAL_HALF_WIDTH + m, mid + GOAL_HALF_WIDTH - m
+            behind = line + out * (NET_DEPTH_M + m)
+            nodes = [at, (line - out * m, clamp(p.y, lo, hi)), (line - out * m, clamp(ty, lo, hi)),
+                     (line, lo - 2 * m), (line, hi + 2 * m), (behind, lo - 2 * m), (behind, hi + 2 * m),
+                     target]
+            # shortest way from him (0) to his target (last) over ways that cross no net
+            best, first, todo = {0: 0.0}, {}, {0}
+            while todo:
+                i = min(todo, key=best.get)
+                todo.discard(i)
+                for j in range(1, len(nodes)):
+                    if j == i or any(crosses(nodes[i], nodes[j], c, d) for c, d in net):
+                        continue
+                    cost = best[i] + math.dist(nodes[i], nodes[j])
+                    if cost < best.get(j, math.inf):
+                        best[j], first[j] = cost, first.get(i, j)
+                        todo.add(j)
+            if len(nodes) - 1 in first:
+                return nodes[first[len(nodes) - 1]]
+        return tx, ty
 
     def keep_off(self, p: Player, tx: float, ty: float) -> tuple[float, float]:
         """Until a restart's ball is in play an opponent keeps the Laws' distance from it: 2 m at a
