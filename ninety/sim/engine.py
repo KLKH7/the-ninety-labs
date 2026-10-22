@@ -3238,7 +3238,7 @@ class Engine:
     def _go_down(self, fouler: Player, victim: Player) -> None:
         """P18: from the fouler toward the man he hit, the way the head goes. His feet stay."""
         dx, dy = victim.x - fouler.x, victim.y - fouler.y
-        direction = math.atan2(dy, dx) if dx or dy else 0.0  # *design*: one place has no way
+        direction = fmath.atan2(dy, dx) if dx or dy else 0.0  # *design*: one place has no way
         self.fallen[victim.id] = (self.t, self.t + self._fall_span(self.t), direction)
 
     def player_fall(self, p: Player) -> tuple[float, float] | None:

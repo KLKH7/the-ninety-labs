@@ -2,6 +2,7 @@
 
 import math
 
+from ninety.sim import fmath
 from ninety.sim.engine import Engine
 
 
@@ -197,7 +198,7 @@ def test_a_foul_puts_him_down_the_way_he_was_hit_and_leaves_his_feet():
     row = next(p for p in e.match.frames[-1]["players"] if p["id"] == att.id)
     assert row["action"] == "down"
     assert 0 < row["fall"] < 20
-    assert row["fall_dir"] == round(math.atan2(att.y - dfd.y, att.x - dfd.x), 4)
+    assert row["fall_dir"] == round(fmath.atan2(att.y - dfd.y, att.x - dfd.x), 4)
     assert (row["x"], row["y"]) == (round(feet[0], 3), round(feet[1], 3))
     assert (att.x, att.y) == feet
 
