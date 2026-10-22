@@ -226,8 +226,10 @@ it passes the end of the touchline, and the sweep now counts a retaken restart a
 ## The goal net (lesson 184)
 
 Measured on the same 20 seeds (7, 11, 21, 42, 101 to 116), 20 minutes each, `main` at `e96ecb1`
-against the goal-net branch at `95c33cf`, with `scripts/defect_sweep/nets.py` (the net as the
-renderer draws it: 2 m deep, its back 2 m high, the roof sloping down to it from the crossbar):
+against the goal-net branch at `2b545c0` (its 20 matches byte for byte those of `95c33cf`: the
+rule that nobody takes the dead ball through a net never had to act), with
+`scripts/defect_sweep/nets.py` (the net as the renderer draws it: 2 m deep, its back 2 m high, the
+roof sloping down to it from the crossbar):
 
 | | Main | Goal net |
 |---|---:|---:|
