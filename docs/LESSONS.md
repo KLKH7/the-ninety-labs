@@ -1937,6 +1937,10 @@ short and actionable. This file is public: no research sources, product names or
     controller steps, and centred on the frame it draws, never only behind it.
   - A new quantity is sent in its own field, never folded into one whose value already means
     something to a rule (a negative lift means a lunge).
+  - The same held for a keeper's dive (demo v1, Kian: "keeps diving"): drawn as the engine's
+    per-frame pose, a dive the engine turned on the grass spun and dived again to the other side,
+    and one that began at full stretch popped in and out. A one-off action is drawn once, from
+    its start to its end, its side and facing held, and fades into what follows.
   - A test's expected value is the source's number written in the test, never the code's table.
 - **Check:** `tests/test_render_motion.py`. Each of these fails on 0.5.9 (main's drawing, with
   the new names shimmed in):
@@ -1949,6 +1953,8 @@ short and actionable. This file is public: no research sources, product names or
   - `test_the_push_off_toe_does_not_slide_before_it_lifts` fails with the free fall keyed to the
     phase; `test_a_player_braking_to_a_stop_keeps_his_planted_feet_on_the_grass` (seed 21's a4)
     fails with the bob sent in the lift, and the trunk test with the lean from boxes behind only.
+  - `test_a_keepers_dive_is_drawn_once_to_one_side` and
+    `test_a_dive_that_starts_at_full_stretch_grows_and_gets_up` (demo v1's keeper) fail on 0.5.12.
   - Each mechanism was put back to 0.5.9 alone (bob tables zeroed, swing height, the frame-ahead
     swing, the lean, the speed lean, the arm pump), and its test fails.
 
@@ -2007,3 +2013,23 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `uv run pytest tests/test_render_edit.py tests/test_render_camera.py -k "imminent or
   celebration or stinger or opens_on_the_wide or scorer"`. Each test fails on 0.5.9, the version
   before demo v2.
+
+### 162. A player off the ball answers the players around him, not only the ball
+- **What happened:** fans and clip critics saw the team without the ball stand between actions. On
+  seed 21 most standing spells of 3 s or more were block defenders whose place did not move while
+  they stood. Every place off the ball (block slots, the attacking shape, all but the carrier's
+  nearest two) depended on the ball's position alone, so when the ball paused both teams froze. A
+  walking floor did not fix it (standing 22% to 20%, one seed). The first fix for attackers chose
+  the most open spot, then the one a pass is worth most at, and drew them toward the carrier: a spot
+  nearer the ball is always safer, so passes shortened and square passes with a free option ahead
+  (FS7) rose by about 40%. Holding pass length and FS7 out as checks caught it.
+- **Rule:** a target off the ball reacts to the players he sees. An attacker steps to where a pass
+  from the carrier is worth most, across his lane or further out, never nearer (O3). A block
+  defender tracks the attacker in his zone, goal-side, without leaving it (O2). Each decides again
+  only when he scans and holds his choice between scans. When a value always rises in one
+  direction, limit the candidates by what football allows; never tune its weights to the held-out
+  checks.
+- **Check:** `tests/test_open_space.py::test_a_defender_in_his_lane_moves_an_attacker_once_he_scans`,
+  `::test_he_never_comes_nearer_the_carrier_to_be_open`, and
+  `tests/test_zone_tracking.py::test_a_defender_follows_the_attacker_in_his_zone_once_he_scans`; the
+  held-out measures in the pull request.

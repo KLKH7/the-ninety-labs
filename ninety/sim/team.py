@@ -50,6 +50,7 @@ class TeamBrain:
     ranked: list[str] = field(default_factory=list)  # out of possession: soonest to the ball first
     pressers: list[str] = field(default_factory=list)
     markers: dict[str, tuple[float, float]] = field(default_factory=dict)  # defender -> spot
+    marked: set[str] = field(default_factory=set)  # O2: the attackers those markers have
 
     def __post_init__(self) -> None:
         self.block = self.block or self.style.level("line_height")
