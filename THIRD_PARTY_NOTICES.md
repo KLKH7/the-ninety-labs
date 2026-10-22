@@ -53,6 +53,12 @@ download PyTorch. rfdetr is pinned to one exact version; we use only RF-DETR Sma
 are Apache-2.0. The PML-1.0 sizes (Atto, Femto, Pico, XL, 2XL) live in `rfdetr_plus`, which we
 never install (it comes only with the `rfdetr[plus]` extra).
 
+The live detection image (`infra/live-job.Dockerfile`) installs this group as locked, except
+torch and torchvision, which it takes as PyTorch's CPU builds of the same versions (BSD-3-Clause,
+from download.pytorch.org, pinned by sha256). On Linux the locked torch also pulls NVIDIA's CUDA
+libraries (`nvidia-*`, `cuda-toolkit`), which are under NVIDIA's own licence, not one on our list;
+the image leaves every one of them out, and a test fails if the lock gains one it does not.
+
 | Package | Used for | Licence |
 |---|---|---|
 | rfdetr 1.11.2 (with its `train` extra), RF-DETR Small weights | object detection and fine-tuning | Apache-2.0 |
