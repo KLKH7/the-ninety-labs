@@ -22,9 +22,8 @@ from pathlib import Path
 # The pixel scorer's rule, imported so the two cannot drift apart.
 from ninety.eval.vision_score import BALL_DISTANCE_PX as BALL_PX
 from ninety.eval.vision_score import DEFAULT_THRESHOLD as SCORE_MIN
+from ninety.eval.vision_score import IN_AIR_Z as GROUND_Z  # the one 0.5 m cut-off
 from ninety.eval.vision_score import PLAYER_IOU
-
-GROUND_Z = 0.5
 
 
 def _iou(a, b) -> float:
