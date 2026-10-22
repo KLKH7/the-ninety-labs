@@ -75,3 +75,62 @@ crashed with no report is listed as `missing`, which `pod_clips` reads as an unf
 Those seeds can now be named at the hand-over (`CRASHED=<seeds>`). Exactly those seeds may be
 missing, and the dataset list records them as `excluded_crashed`. Like every excluded seed, they are
 not replaced. Seed 120 is a validation seed, so it leaves validation by the rule above.
+
+### The hand-over (Oct 21)
+
+Eight training seeds had no report: 4017, 4025, 4033, 4041, 4045, 4049, 4053 and 4057 (two render
+workers died on "Error creating WebGL context"). The render was done and no render process was
+left, so they were passed as `CRASHED` and excluded, not replaced. The renderer confirmed this list
+afterwards. Seeds 2014 and 4054 (data contract C7) and 4037 (black frames) failed the checks. 105,
+111 and 120 were re-rendered and passed. All 24 validation seeds passed.
+
+## Outcome
+
+### Training (the checkpoint and its train-manifest.json stay out of git, with the maintainer)
+
+- **Run:** ours-freeze trained on the RTX 4090 pod from 22:16 to 22:46 UTC, at commit 68f0523.
+  - It ran all 8 epochs; the time cap was not reached.
+  - Data: 245 training clips (12,250 images), validated on 1,200 images.
+- **Checkpoint:** sha256 `0fafe959ec2e08279e5741261ac4e639f2b87f0c11384a2d0e976dda6ef5d5e5`.
+  - Copied back to the Mac, and every file was checked against the pod's `SHA256SUMS`.
+  - Initialised from ours-v4 (`95d36154…`).
+  - The render manifest it read has sha256 `1570bed2…`.
+- **Validation mAP 50:95 during training:** 0.712 after epoch 1, 0.731 after epoch 8.
+
+### Scored (code and both sets frozen at 0561656 before any detection; one run each, on the Mac)
+
+Recall and precision use the scorer's rule (`vision_score.match`, threshold 0.5). Brackets give
+the Wilson 95% interval, with k/n. Frames within a clip are not independent, so these intervals are
+narrower than the truth.
+
+**Validation:** 24 clips, every 5th frame. [ours-v4](validation-ours-v4.json),
+[ours-freeze](validation-ours-freeze.json).
+
+| Model | Ball recall | Player recall | Mostly hidden ball recall | Ball precision | Player precision |
+|---|---|---|---|---|---|
+| ours-v4 | 0.649 (0.621–0.675; 776/1196) | 0.991 (0.989–0.992) | 0.069 (0.027–0.164; 4/58) | 0.980 | 0.995 |
+| ours-freeze | **0.897** (0.879–0.913; 1073/1196) | **0.994** (0.993–0.995) | 0.345 (0.236–0.473; 20/58) | 0.988 | 0.998 |
+
+- **ours-freeze becomes the demo's detector.** By the rule set above, its ball and player recall are
+  each at least ours-v4's.
+- Its checkpoint was chosen on these same clips (early stopping), which favours it slightly. The
+  test set is the fair comparison.
+
+**Test set, scored once:** 30 clips, 900001–900030, every frame (7,500 frames).
+[ours-v4](test-ours-v4.json), [ours-freeze](test-ours-freeze.json).
+
+| Model | Ball recall | Player recall | Mostly hidden ball recall | Ball precision | Player precision |
+|---|---|---|---|---|---|
+| ours-v4 | 0.687 (0.676–0.697; 5109/7437) | 0.995 (0.995–0.996) | 0.265 (0.230–0.304; 143/539) | 0.975 | 0.994 |
+| ours-freeze | **0.884** (0.877–0.891; 6575/7437) | **0.997** (0.996–0.997) | **0.425** (0.384–0.467; 229/539) | **0.989** | **0.998** |
+
+- **Ball recall rises by 0.20 on the held-out test set,** and the intervals are far apart.
+- **Mostly hidden balls rise from 0.27 to 0.43.** Precision rises as well, so the model is not
+  buying recall with false positives.
+- **Why:** ours-v4 had never seen the look-freeze renders, and its ball recall falls on them (0.69
+  here). Training in the demo's look recovers it.
+
+The detections are kept on `pr-assets/finetune-v2freeze-detections` (42b2a07), as
+`finetune-v2freeze-detections.tar.gz`, sha256 `1b0e3ac69a7df9fd62c07f1cceef6d2af7f4db858b00ed85183cd57e5b4fc1e0`.
+`vision_report --freeze docs/eval/finetune-v2freeze/<set>-set.json [--stride 5]` rebuilds each
+report from them.
