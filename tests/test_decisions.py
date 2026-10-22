@@ -215,11 +215,26 @@ def test_the_receivers_first_touch_decides_a_hard_pass_when_a_defender_can_take_
         s = scene(x=60.0, absorb={"h9": absorb}, opponents=opponents)
         return D.pass_confidence(s, 90.0, 34.0, 90.0, 34.0, 0.0, False, 14.0, "h9")
     # It arrives at about 14 m/s. D6: a heavy touch leaves the ball free until he is back on it
-    # (TOUCH_GAP_S), so it is lost only when an opponent can be there sooner; with nobody near he
-    # still has it. Until October 2026 the estimate counted every heavy touch as a lost ball.
+    # (TOUCH_GAP_S), so it is lost only when an opponent can get to it sooner; with nobody near he
+    # still has it. Until October 2026 the estimate counted every heavy touch as a lost ball. One
+    # far too fast for him to steer at all rebounds (firsttouch.beaten): lost.
     behind = [(93.0, 38.0)]
-    assert conf(8.0, []) > 0.95
-    assert conf(8.0, behind) + 0.2 < conf(24.0, behind)
+    assert conf(11.0, []) > 0.95  # heavy (it needs about 12.3 m/s killed), but steered
+    assert conf(6.0, []) < 0.2  # beaten: more than twice what his foot kills
+    assert conf(11.0, behind) + 0.2 < conf(24.0, behind)
+
+
+def test_a_heavy_touch_runs_on_toward_the_goal_he_attacks_and_is_lost_to_a_man_there():
+    # D6, A4 (engine.touch_aim): the touch the receiver cannot kill sends the ball on toward the goal
+    # he attacks; free until he is back on it, it is lost to an opponent who can get to where it has
+    # run. A square pass, the defender 7 m from him, beyond the pressing zone behind or level with
+    # it ahead: the same race for the pass itself, by symmetry. Once the ball was taken to stay
+    # where he met it, which made a hard back-pass to a keeper with a striker in front look safe.
+    def conf(side):
+        s = scene(x=50.0, y=10.0, heading=math.pi / 2, absorb={"h9": 8.0}, mates=[("h9", 50.0, 34.0, 0.0)],
+                  opponents=[(50.0 + side * 7.0, 34.0)])
+        return D.pass_confidence(s, 50.0, 34.0, 50.0, 34.0, 0.0, False, 14.0, "h9")
+    assert conf(+1) + 0.2 < conf(-1)
 
 
 def test_an_opponent_who_gets_there_with_a_heavy_touch_can_give_the_ball_back(monkeypatch):

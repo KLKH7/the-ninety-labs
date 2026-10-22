@@ -457,6 +457,16 @@ def flight(ground: float, up: float) -> Flight:
     return hit
 
 
+def rolled(speed: float, t: float) -> float:
+    """How far a ball sent along the ground at `speed` has run after `t` seconds, by the engine's
+    ball physics (`flight`), between its sampled points."""
+    points, _ = flight(speed, 0.0)
+    for (t0, a0, *_), (t1, a1, *_) in zip(points, points[1:], strict=False):
+        if t1 >= t:
+            return a0 + (a1 - a0) * (t - t0) / (t1 - t0)
+    return points[-1][1]
+
+
 def strike_nodes(scene: Scene, tx: float, ty: float, lofted: bool, pace: float
                  ) -> list[tuple[float, float, float, float]]:
     """The strikes the passer expects when he plays it to (tx, ty) this way: (weight, direction
@@ -759,21 +769,38 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
         # bin from 0.0 to 0.7, as a cautious estimate should be).
         rel = relative_speed(g * ux, g * uy, vz, taker[2], taker[3])
         tx_, ty_ = sx + ux * a, sy + uy * a
-        felt = max((perception.pressure_from(tx_, ty_, ox, oy, attack(scene.goal_x))
-                    for ox, oy in scene.opponents), default=0.0)
+        felt, worst, away = 0.0, 0.0, (0.0, 0.0)  # the most pressing opponent he sees, and from where
+        for ox, oy in scene.opponents:
+            f = perception.pressure_from(tx_, ty_, ox, oy, attack(scene.goal_x))
+            felt, d = max(felt, f), math.hypot(tx_ - ox, ty_ - oy)
+            if f > worst and d > 1e-6:
+                worst, away = f, ((tx_ - ox) / d, (ty_ - oy) / d)
         worse = firsttouch.quality(0.0, felt, AVERAGE, 1.0, rel, taker[5])
-        p = firsttouch.kept_estimate(rel, firsttouch.surface_absorb(taker[5], z) / worse, CONTROL_MARGIN_MPS)
-        # A heavy touch is not a lost ball: the engine leaves it free where he met it until he is back
-        # on it after TOUCH_GAP_S (D6), and whoever reaches it first has it. So it is his unless an
-        # opponent can be there sooner, raced as the pass is (until October 2026 a heavy touch counted
-        # as lost: forced forward passes estimated at 0.1 to 0.3 were received about half the time).
+        absorb = firsttouch.surface_absorb(taker[5], z) / worse
+        p = firsttouch.kept_estimate(rel, absorb, CONTROL_MARGIN_MPS)
+        # A heavy touch is not a lost ball (D6, A4): the engine sends it on at the speed the touch did
+        # not kill, toward the goal he attacks and away from the man pressing him (engine.touch_aim),
+        # and it is free until he is back on it after TOUCH_GAP_S; whoever reaches it first has it. So
+        # it is his unless an opponent can be where it has run to sooner. A ball too fast for the
+        # surface to steer at all (firsttouch.beaten) rebounds, and is counted as lost. Until October
+        # 2026 every heavy touch counted as lost (forced forward passes estimated at 0.1 to 0.3 were
+        # received about half the time); for a while after, a heavy touch was taken to stay where he
+        # met it, which made a hard back-pass to a keeper with a striker closing look safe.
+        steered = sigmoid((absorb + taker[5] - rel) / CONTROL_MARGIN_MPS)  # not beaten
+        fx, fy = scene.goal_x - tx_, PITCH_Y / 2 - ty_
+        n = math.hypot(fx, fy) or 1.0
+        aim = fmath.atan2(fy / n + 2 * worst * away[1], fx / n + 2 * worst * away[0])
+        run = rolled(max(rel - absorb, firsttouch.KEEP_MPS), firsttouch.TOUCH_GAP_S)
+        lx, ly = tx_ + fmath.cos(aim) * run, ty_ + fmath.sin(aim) * run
         back = take + firsttouch.TOUCH_GAP_S
         kept_loose = 1.0
-        hands = in_box(tx_, ty_, scene.goal_x)  # a keeper in his box may dive on it (Law 12)
+        hands = in_box(lx, ly, scene.goal_x)  # a keeper in his box may dive on it (Law 12)
         for ox, oy, ovx, ovy, keeper, *_ in rivals:
-            near = math.hypot(ox - tx_, oy - ty_) - (arm_max if keeper and hands else CONTROL_M)
-            kept_loose *= sigmoid((react + _soonest(near, math.hypot(ovx, ovy)) - back) / LANE_MARGIN_S)
-        p += (1 - p) * kept_loose
+            near = math.hypot(ox - lx, oy - ly) - (arm_max if keeper and hands else CONTROL_M)
+            there = react + _soonest(near, math.hypot(ovx, ovy))
+            if there <= back + OPPONENT_LATE_S:  # as in the race: later than that, not counted
+                kept_loose *= sigmoid((there - back) / LANE_MARGIN_S)
+        p += max(0.0, steered - p) * kept_loose
         horizon = take + OPPONENT_LATE_S
         # Where the ball has got to by then, along this strike: nobody further from that stretch of
         # its path than he can run by then matters (a shortcut, like `lb`).

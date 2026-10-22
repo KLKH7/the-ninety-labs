@@ -1777,13 +1777,20 @@ short and actionable. This file is public: no research sources, product names or
   estimate by factor found the first touch: every heavy touch was counted as a lost ball, though in
   the engine (D6) the ball stays free until he is back on it and is lost only if an opponent gets
   there first. The opponent's own touch was ignored the same way: an interception was final even
-  when he could not control it.
-- **Rule:** an estimate mirrors the engine's whole sequence, not its first step. A heavy touch is
-  lost only to an opponent who can be where it was met within `firsttouch.TOUCH_GAP_S`; an opponent
-  who gets there first keeps it only with a touch that holds or if the team-mate is not back on it.
+  when he could not control it. The first fix left the loose ball where the touch met it. The
+  held-out matches caught it at once: 15 goals in six 20-minute matches against 2. In 12 of them, a
+  defender played a hard back-pass to his keeper, the keeper's touch ran on toward the striker, and
+  the striker scored. In the engine a heavy touch runs on toward the goal he attacks (`touch_aim`).
+- **Rule:** an estimate mirrors the engine's whole sequence, not its first step, and where the
+  ball goes in it. A heavy touch is lost to an opponent who can get to where it runs within
+  `firsttouch.TOUCH_GAP_S`, and a touch that beats him is lost. An opponent who gets there first
+  keeps it only with a touch that holds, or if the team-mate is not back on it. Run the held-out
+  matches before calling an estimate change done: a unit test passes on the scenes it was written
+  for.
   Calibrate the estimate against the engine's outcomes; report the build-up counts as held-out
   checks, never tune to them.
 - **Check:** `tests/test_decisions.py::test_the_receivers_first_touch_decides_a_hard_pass_when_a_defender_can_take_it_off_him`
-  and `::test_an_opponent_who_gets_there_with_a_heavy_touch_can_give_the_ball_back` (both red
-  before the fix), `tests/test_pass_race_reference.py` (the naive reference race implements both
+  `::test_a_heavy_touch_runs_on_toward_the_goal_he_attacks_and_is_lost_to_a_man_there` and
+  `::test_an_opponent_who_gets_there_with_a_heavy_touch_can_give_the_ball_back` (red before the fix;
+  the roll's also red on the first fix, 77f124b), `tests/test_pass_race_reference.py` (the naive reference race implements both
   rules independently); calibration in the pull request.

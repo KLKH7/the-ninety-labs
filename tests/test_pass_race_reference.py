@@ -88,21 +88,40 @@ def reference(scene, tx, ty, mx, my, age, lofted, pace, receiver):
         # Made worse by what the passer can know (firsttouch.quality): the team-mate facing it,
         # fresh, of average composure, the nearest opponent he sees to where it is taken (D2).
         bx, by = sx + ux * points[at][1], sy + uy * points[at][1]
-        felt = max((perception.pressure_from(bx, by, ox, oy, D.attack(scene.goal_x))
-                    for ox, oy in scene.opponents), default=0.0)
+        pressing = [(perception.pressure_from(bx, by, ox, oy, D.attack(scene.goal_x)), ox, oy)
+                    for ox, oy in scene.opponents]
+        felt = max((f for f, _, _ in pressing), default=0.0)
         absorb = taker[5] * CUSHION[part] / quality(0.0, felt, 0.5, 1.0, rel, taker[5])
         p = D.sigmoid((absorb + KEEP_MPS - rel) / D.CONTROL_MARGIN_MPS)
-        # A heavy touch leaves the ball free where he met it until he is back on it after TOUCH_GAP_S:
-        # his unless an opponent can be there sooner (the soonest he could, at top speed, straight).
+        # A heavy touch sends the ball on at what the touch did not kill, toward the goal he attacks
+        # and away from the man pressing him hardest (the first such, as the engine's touch_aim), free
+        # until he is back on it after TOUCH_GAP_S: his unless an opponent can be where it has run to
+        # sooner (the soonest he could, at top speed, straight). Beaten, it rebounds: lost.
+        steered = D.sigmoid((absorb + taker[5] - rel) / D.CONTROL_MARGIN_MPS)
+        worst, ax, ay = 0.0, 0.0, 0.0
+        for f, ox, oy in pressing:
+            d = math.hypot(bx - ox, by - oy)
+            if f > worst and d > 1e-6:
+                worst, ax, ay = f, (bx - ox) / d, (by - oy) / d
+        gx, gy = scene.goal_x - bx, 34.0 - by
+        g = math.hypot(gx, gy) or 1.0
+        aim = math.atan2(gy / g + 2 * worst * ay, gx / g + 2 * worst * ax)
+        roll, _ = ref_flight(max(rel - absorb, KEEP_MPS), 0.0)
+        k = next((j for j in range(1, len(roll)) if roll[j][0] >= TOUCH_GAP_S), None)
+        run = (roll[-1][1] if k is None else roll[k - 1][1] + (roll[k][1] - roll[k - 1][1])
+               * (TOUCH_GAP_S - roll[k - 1][0]) / (roll[k][0] - roll[k - 1][0]))
+        lx, ly = bx + math.cos(aim) * run, by + math.sin(aim) * run
         arms = offball.KEEPER_STAND_REACH_M + offball.KEEPER_DIVE_EXTRA_M
-        hands = D.in_box(bx, by, scene.goal_x)  # a keeper's hands, in his box only (Law 12)
+        hands = D.in_box(lx, ly, scene.goal_x)  # a keeper's hands, in his box only (Law 12)
         back = take + TOUCH_GAP_S
         kept_loose = 1.0
         for ox0, oy0, ovx, ovy, keeper in scene.moving:
             ox, oy = ox0 + ovx * wait, oy0 + ovy * wait
-            near = math.hypot(ox - bx, oy - by) - (arms if keeper and hands else CONTROL_M)
-            kept_loose *= D.sigmoid((react + D._soonest(near, math.hypot(ovx, ovy)) - back) / D.LANE_MARGIN_S)
-        p += (1 - p) * kept_loose
+            near = math.hypot(ox - lx, oy - ly) - (arms if keeper and hands else CONTROL_M)
+            there = react + D._soonest(near, math.hypot(ovx, ovy))
+            if there <= back + D.OPPONENT_LATE_S:  # the race's own horizon
+                kept_loose *= D.sigmoid((there - back) / D.LANE_MARGIN_S)
+        p += max(0.0, steered - p) * kept_loose
         horizon = take + D.OPPONENT_LATE_S
         for ox0, oy0, ovx, ovy, keeper in scene.moving:
             ox, oy = ox0 + ovx * wait, oy0 + ovy * wait
