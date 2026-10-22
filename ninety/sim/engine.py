@@ -553,6 +553,14 @@ class Engine:
         # D4: each carrier's misjudgement of his options, held until he next scans: player -> (the
         # scan it belongs to, as Belief.next_scan, option key -> draw).
         self.tastes: dict[str, tuple[float, dict]] = {}
+        # O3: each attacker off the ball's offset from his place in the shape, to be open to a pass,
+        # chosen when he last scanned and held until he next does; and who has scanned since.
+        self.open_at: dict[str, tuple[float, float]] = {}
+        self.open_due: set[str] = set()
+        # O2 beyond the box: the attacker each defender in the block tracks in his zone, chosen when he
+        # last scanned; and who has scanned since.
+        self.track: dict[str, str | None] = {}
+        self.track_due: set[str] = set()
         self.restart: Restart | None = None
         # Laws 13, 15 to 17: a restart that has been set but not yet kicked; the opponents keep off
         self.set_by: Restart | None = None
@@ -661,6 +669,8 @@ class Engine:
         if self.team_of(pid) != self.poss_team:
             self.pressed.clear()
             self.poss_team = self.team_of(pid)
+            self.open_at.clear()  # O3: a new possession: each attacker finds his space afresh
+            self.track.clear()  # O2: and each defender looks afresh for a man in his zone
         self.possessor = pid
         self.last_touch = pid
         self.tastes.pop(pid, None)  # D4: a new possession is a new look at his options
@@ -2074,6 +2084,48 @@ class Engine:
             wait = settle_s(AVERAGE)
         return wait + math.hypot(x - bx, y - by) / decisions.PASS_SPEED_EST_MPS
 
+    def open_spot(self, p: Player, slot: tuple[float, float], onside: float) -> tuple[float, float]:
+        """O3: his place in the shape, moved to where a pass from the carrier is worth most, as he
+        last saw it (decisions.open_spot), every opponent he believes is near counted, the keeper
+        too. He looks again only when he scans (P13), so between scans he keeps his offset and moves
+        with the shape; but an offset the play has made illegal (offside as he sees it, off the
+        pitch, out of range, or nearer the carrier as he sees him now: decisions.open_legal) is
+        dropped at once, and he goes back to his place until he next scans."""
+        carrier = self.by_id.get(self.possessor) if self.possessor else None
+        mates = carrier is not None and carrier.team == p.team
+        view = self.beliefs[p.id]
+        at = (view.where(carrier.id, self.t) or (carrier.x, carrier.y)) if mates else None
+        if p.id in self.open_due and mates:
+            self.open_due.discard(p.id)
+            defenders = [w for w in (view.where(q.id, self.t) for q in self.players if q.team != p.team) if w]
+            self.open_at[p.id] = decisions.open_spot(slot, self.open_at.get(p.id, (0.0, 0.0)), at,
+                                                     defenders, onside, goal_x(p.team))
+        offset = self.open_at.get(p.id, (0.0, 0.0))
+        if offset != (0.0, 0.0) and not decisions.open_legal(slot, offset, at, onside, goal_x(p.team)):
+            offset = self.open_at[p.id] = (0.0, 0.0)
+        dx, dy = offset
+        return clamp(slot[0] + dx, 0.5, PITCH_X - 0.5), clamp(slot[1] + dy, 0.5, PITCH_Y - 0.5)
+
+    def zone_spot(self, p: Player, slot: tuple[float, float], own_goal_x: float) -> tuple[float, float]:
+        """O2 beyond the box: his place in the block, moved goal-side of the attacker he tracks in his
+        zone (offball.zone_spot). He picks whom to track when he scans (P13), and follows that man as
+        he sees him until he scans again. Never the carrier (the press is the presser's, P17) and
+        never a man a near-goal marker has (O2), when he picks and while he follows: if his man gets
+        the ball or a marker, he goes back to his place."""
+        view = self.beliefs[p.id]
+        marked = self.brains[p.team].marked
+        if p.id in self.track_due:
+            self.track_due.discard(p.id)
+            attackers = {q.id: w for q in self.players if q.team != p.team and q.role != "GK"
+                         and q.id != self.possessor and q.id not in marked
+                         and (w := view.where(q.id, self.t))}
+            self.track[p.id] = offball.zone_man(slot, attackers, self.track.get(p.id))
+        man = self.track.get(p.id)
+        if man is None or man == self.possessor or man in marked:
+            return slot
+        at = view.where(man, self.t)
+        return offball.zone_spot(slot, at, own_goal_x) if at else slot
+
     def in_time(self, p: Player, tx: float, ty: float) -> float:
         """O8: the speed he chooses to get to (tx, ty): just enough to be there before the ball could
         be, so far from the ball he walks and near it he bursts; his body caps it."""
@@ -2229,6 +2281,7 @@ class Engine:
             spot = offball.attacking_slot(p.role, PITCH_X - goal_x(p.team), clamp(bx, 0, PITCH_X),
                                           clamp(by, 0, PITCH_Y), onside, wide)
             if spot:
+                spot = self.open_spot(p, spot, onside)
                 return *spot, self.in_time(p, *spot)
         if not brain.in_possession and p.role != "GK":
             own = PITCH_X - goal_x(p.team), PITCH_Y / 2
@@ -2269,7 +2322,9 @@ class Engine:
                 return cx, cy, self.in_time(p, cx, cy)
             slot = brain.slot(p.role, p.ay, clamp(by, 0, PITCH_Y))
             if slot:
-                tx, ty = slot
+                # O2: the defence and midfield track men in their zones; the forwards wait at their
+                # line of engagement, never past the ball (T3).
+                tx, ty = self.zone_spot(p, slot, own[0]) if ROLE_LINE.get(p.role) != "attack" else slot
         tx, ty = clamp(tx, 0.5, PITCH_X - 0.5), clamp(ty, 0.5, PITCH_Y - 0.5)
         return tx, ty, self.in_time(p, tx, ty)
 
@@ -2295,7 +2350,7 @@ class Engine:
         for i, p in enumerate(self.players):
             if (self.frame + i) % PERCEIVE_EVERY == 0:
                 others = [st for st in states if st[0] != p.id]
-                perception.observe(
+                scanned = perception.observe(
                     self.beliefs[p.id],
                     (p.x, p.y, p.heading),
                     others,
@@ -2304,6 +2359,9 @@ class Engine:
                     p.profile.view_half_angle(),
                     p.profile.scan_interval(),
                 )
+                if scanned:
+                    self.open_due.add(p.id)  # O3: he may look again for space to be open in
+                    self.track_due.add(p.id)  # O2: and for a man in his zone
         holder = self.restart.team if self.restart else self.poss_team
         for k, (team, brain) in enumerate(self.brains.items()):
             if (self.frame + k * BRAIN_EVERY // 2) % BRAIN_EVERY:
@@ -2342,7 +2400,8 @@ class Engine:
                 }
                 seen, own_goal = self.shared_view(team, other(team)), PITCH_X - goal_x(team)
                 if given is None:
-                    brain.markers = offball.marking(free, seen, own_goal)
+                    pairs = offball.pick_up(free, seen, own_goal)
+                    brain.markers = offball.marking(free, seen, own_goal, pairs)
                 else:
                     # Until a restart's ball is in play each marker keeps his man (design). Picked up
                     # again at every look, from noisy sightings and from where the markers' own walks
@@ -2352,11 +2411,12 @@ class Engine:
                     # own (lesson 174).
                     free = {pid: at for pid, at in free.items() if pid not in given.wall}
                     seen = {pid: at for pid, at in seen.items() if pid != given.taker}
-                    given.marks = offball.pick_up(free, seen, own_goal, keep=given.marks)
+                    pairs = given.marks = offball.pick_up(free, seen, own_goal, keep=given.marks)
                     brain.markers = {did: offball.goal_side(seen[aid], own_goal)
                                      for did, aid in given.marks.items()}
+                brain.marked = set(pairs.values())
             else:
-                brain.markers = {}
+                brain.markers, brain.marked = {}, set()
 
     def who_presses(self, brain: TeamBrain) -> list[str]:
         """T3, P17: the brain asks its players in the order they could reach the ball; the first
