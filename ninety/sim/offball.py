@@ -141,24 +141,44 @@ def close_down_spot(carrier: tuple[float, float], own_goal_x: float) -> tuple[fl
     return cx + (gx - cx) / d * CLOSE_DOWN_M, cy + (gy - cy) / d * CLOSE_DOWN_M
 
 
-def marking(defenders: dict[str, tuple[float, float]], attackers: dict[str, tuple[float, float]],
-            own_goal_x: float) -> dict[str, tuple[float, float]]:
-    """O2: each attacker near our goal is picked up by the nearest free defender, who stands
-    goal-side of him. Returns defender id -> spot."""
+def pick_up(defenders: dict[str, tuple[float, float]], attackers: dict[str, tuple[float, float]],
+            own_goal_x: float, keep: dict[str, str] | None = None) -> dict[str, str]:
+    """O2: each attacker near our goal, nearest the goal first, is picked up by the nearest free
+    defender. With `keep` (defender id -> attacker id), a defender still free first keeps the man he
+    marks, wherever that man goes: kept only while near, a man seen just at the edge of DANGER_RANGE_M
+    was dropped and picked up again from one look to the next. Returns defender id -> attacker id."""
     threats = sorted((a for a in attackers.items()
                       if math.hypot(a[1][0] - own_goal_x, a[1][1] - PITCH_Y / 2) < DANGER_RANGE_M),
                      key=lambda a: math.hypot(a[1][0] - own_goal_x, a[1][1] - PITCH_Y / 2))
     free = dict(defenders)
-    spots = {}
-    for _, (ax, ay) in threats:
+    pairs = {did: aid for did, aid in (keep or {}).items() if did in free and aid in attackers}
+    for did in pairs:
+        free.pop(did)
+    for aid, (ax, ay) in threats:
+        if aid in pairs.values():
+            continue
         if not free:
             break
-        pid = min(free, key=lambda k: math.hypot(free[k][0] - ax, free[k][1] - ay))
-        free.pop(pid)
-        gx, gy = own_goal_x, PITCH_Y / 2
-        d = math.hypot(gx - ax, gy - ay) or 1.0
-        spots[pid] = (ax + (gx - ax) / d * MARK_GOAL_SIDE_M, ay + (gy - ay) / d * MARK_GOAL_SIDE_M)
-    return spots
+        did = min(free, key=lambda k: math.hypot(free[k][0] - ax, free[k][1] - ay))
+        free.pop(did)
+        pairs[did] = aid
+    return pairs
+
+
+def goal_side(man: tuple[float, float], own_goal_x: float) -> tuple[float, float]:
+    """O2: where his marker stands, MARK_GOAL_SIDE_M from him toward the centre of our goal."""
+    ax, ay = man
+    gx, gy = own_goal_x, PITCH_Y / 2
+    d = math.hypot(gx - ax, gy - ay) or 1.0
+    return ax + (gx - ax) / d * MARK_GOAL_SIDE_M, ay + (gy - ay) / d * MARK_GOAL_SIDE_M
+
+
+def marking(defenders: dict[str, tuple[float, float]], attackers: dict[str, tuple[float, float]],
+            own_goal_x: float) -> dict[str, tuple[float, float]]:
+    """O2: each attacker near our goal is picked up by the nearest free defender, who stands
+    goal-side of him. Returns defender id -> spot."""
+    return {did: goal_side(attackers[aid], own_goal_x)
+            for did, aid in pick_up(defenders, attackers, own_goal_x).items()}
 
 
 def support_spot(player: tuple[float, float], ball: tuple[float, float], goal_x: float,
