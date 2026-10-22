@@ -1066,3 +1066,45 @@ def test_every_check_the_validator_reports_has_a_planted_defect():
     keys = set(re.findall(r'problems\["([A-Z]\d+ [^"]+)"\]', (root / "ninety/validate.py").read_text()))
     tests = Path(__file__).read_text()
     assert keys and not {k for k in keys if f'"{k}"' not in tests}
+
+
+def _down(player, fall=85.0):
+    return {**player, "action": "down", "fall": fall, "fall_dir": 1.0304}
+
+
+def fall_clip(late: bool) -> dict:
+    """h9 is fouled at 0.2 s. The free kick is taken at 2.8 s. Down through 1.2 s is more than a
+    second clear of it; down at 2.4 s is not."""
+    players = [
+        {"id": "h9", "team": "home", "x": 60.6, "y": 35.0, "action": "stand"},
+        {"id": "a4", "team": "away", "x": 60.0, "y": 34.0, "action": "stand"},
+        {"id": "h1", "team": "home", "x": 20.0, "y": 20.0, "action": "stand"},
+    ]
+    frames = []
+    for n in range(75):
+        row = [dict(p) for p in players]
+        if 5 <= n <= 30 or (late and n == 60):
+            row[0] = _down(row[0])
+        frames.append({
+            "frame": n, "t": n / FPS, "ball": {"x": 40.0, "y": 30.0, "z": 0.0},
+            "possessor": None, "players": row,
+        })
+    events = [
+        event("e1", 5, "foul", "away", "a4", "h9", x=60.6, y=35.0),
+        event("e2", 70, "set_piece", "home", "h1", x=60.6, y=35.0),
+    ]
+    return {"events": events, "frames": frames, "meta": {"fps": FPS, "score": {"home": 0, "away": 0}}}
+
+
+def test_a_foul_that_lets_him_up_in_time_passes(tmp_path):
+    assert run(tmp_path, fall_clip(False)) == {}
+
+
+def test_a_player_still_down_within_a_second_of_the_restart_fails(tmp_path):
+    assert fails(run(tmp_path, fall_clip(True)), "P18 foul fall", "still down")
+
+
+def test_a_fall_without_the_down_action_fails(tmp_path):
+    clip = fall_clip(False)
+    clip["frames"][10]["players"][0]["action"] = "run"
+    assert fails(run(tmp_path, clip), "P18 foul fall", "action run")

@@ -1,5 +1,7 @@
 """Fouls (Law 12): a lunge that arrives with the ball gone and sweeps through the man he went for."""
 
+import math
+
 from ninety.sim.engine import Engine
 
 
@@ -172,6 +174,88 @@ def test_he_foresees_the_man_running_on_into_his_lunge():
     assert e.foul_line(dfd, att, 95.87, 34.0) == 0.0  # standing still: no risk
     att.vx = 5.0  # running on toward goal with it: by the time his foot arrives, the man is there
     assert e.foul_line(dfd, att, 95.87, 34.0) > 0.0
+
+
+def test_the_pose_lies_at_eighty_five_and_ends_with_the_span():
+    from ninety.sim.engine import FALL_DOWN_DEG, FALL_LIE_S, FALL_RISE_S, FALL_S, foul_fall_deg
+
+    span = FALL_S + FALL_LIE_S + FALL_RISE_S
+    assert foul_fall_deg(0.0, span) == 0.0
+    assert foul_fall_deg(span, span) == 0.0
+    assert foul_fall_deg(FALL_S + FALL_LIE_S / 2, span) == FALL_DOWN_DEG
+    assert 0 < foul_fall_deg(FALL_S / 2, span) < FALL_DOWN_DEG
+    short = FALL_S + FALL_RISE_S  # no time to lie: he is already getting up
+    assert foul_fall_deg(FALL_S + 0.05, short) < FALL_DOWN_DEG
+
+
+def test_a_foul_puts_him_down_the_way_he_was_hit_and_leaves_his_feet():
+    e, dfd, att = lunge_scene(34.0)
+    att.y = 35.0
+    feet = (att.x, att.y)
+    e.foul(dfd, att)
+    e.snapshot()
+    row = next(p for p in e.match.frames[-1]["players"] if p["id"] == att.id)
+    assert row["action"] == "down"
+    assert 0 < row["fall"] < 20
+    assert row["fall_dir"] == round(math.atan2(att.y - dfd.y, att.x - dfd.x), 4)
+    assert (row["x"], row["y"]) == (round(feet[0], 3), round(feet[1], 3))
+    assert (att.x, att.y) == feet
+
+
+def test_a_fouled_player_goes_down_and_is_up_before_the_restart():
+    e, dfd, att = lunge_scene(34.0)
+    e.possessor = None
+    e.ball = (63.0, 34.0, 0.11, 0.0, 0.0, 0.0)
+    e.lunges[dfd.id] = e.t
+    e.lunge_at[dfd.id] = att.id
+    e.duels()
+    contact, upright, _ = e.fallen[att.id]
+    assert upright <= e.restart.ready_at - 1.5
+    seen, peak = False, 0.0
+    prev = (att.x, att.y)
+    while e.t < contact + 50 and not any(ev["type"] == "set_piece" for ev in e.match.events):
+        e.step()
+        row = next(p for p in e.match.frames[-1]["players"] if p["id"] == att.id)
+        if e.match.frames[-1]["t"] < contact + 1.0:
+            assert math.hypot(row["x"] - prev[0], row["y"] - prev[1]) < 0.5
+        prev = (row["x"], row["y"])
+        peak = max(peak, row.get("fall", 0.0))
+        if row.get("fall", 0) > 0:
+            seen = True
+            assert row["action"] == "down" and "fall_dir" in row
+    restart = next(ev for ev in e.match.events if ev["type"] == "set_piece")
+    assert seen and peak >= 80
+    for fr in e.match.frames:
+        if fr["t"] <= restart["t"] - 1.0:
+            continue
+        row = next(p for p in fr["players"] if p["id"] == att.id)
+        assert not row.get("fall")
+        assert row["action"] != "down"
+
+
+def test_a_restart_due_in_two_seconds_has_him_up_before_it():
+    """The whole pose is 3 s, so only a restart due sooner than that plus the margin uses the
+    margin. A free kick's usual 29 s does not."""
+    from ninety.sim.engine import RESTART_DELAY_S
+
+    saved = RESTART_DELAY_S["free_kick"]
+    RESTART_DELAY_S["free_kick"] = (2.0, 2.0)
+    try:
+        e, dfd, att = lunge_scene(34.0)
+        e.possessor = None
+        e.ball = (63.0, 34.0, 0.11, 0.0, 0.0, 0.0)
+        e.lunges[dfd.id] = e.t
+        e.lunge_at[dfd.id] = att.id
+        e.duels()
+        t0, upright, _ = e.fallen[att.id]
+        assert e.restart.ready_at == t0 + 2.0
+        assert upright <= e.restart.ready_at - 1.5
+        while e.t < e.restart.ready_at:
+            e.step()
+        row = next(p for p in e.match.frames[-1]["players"] if p["id"] == att.id)
+        assert not row.get("fall") and row["action"] != "down"
+    finally:
+        RESTART_DELAY_S["free_kick"] = saved
 
 
 def test_at_a_penalty_the_keeper_guesses_the_side_about_as_often_as_keepers_do():

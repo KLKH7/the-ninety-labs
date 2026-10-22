@@ -160,6 +160,38 @@ RESTART_DELAY_S = {"throw_in": (12, 20), "goal_kick": (24, 34), "corner": (24, 3
                    "penalty_kick": (100, 140),
                    "kick_off": (1, 2),
                    "kick_off_after_goal": (60, 90)}
+# design: a fouled player goes down and gets up. A standing body topples over its feet in about
+# half a second; he lies short of flat, so his head stays off the grass, stays there a moment,
+# and gets up in about a second. He is upright this long before the restart is due. The lie
+# shortens first when the restart is sooner than the whole pose; the topple and the get-up then
+# scale together. The validator's floor is 1 s (ninety/validate.py, P18).
+FALL_S = 0.5
+FALL_LIE_S = 1.5
+FALL_RISE_S = 1.0
+FALL_DOWN_DEG = 85.0
+FALL_UP_BEFORE_S = 1.5
+
+
+def foul_fall_deg(elapsed: float, span: float) -> float:
+    """Degrees the body is over. 0 at the contact and once `span` has run. Design: half the
+    topple at a steady rate and half gathering pace; the get-up eases in and out; the lie is
+    whatever the span leaves after the topple and the get-up."""
+    if span <= 0.0 or elapsed <= 0.0 or elapsed >= span:
+        return 0.0
+    fall_s, rise_s = FALL_S, FALL_RISE_S
+    if span < fall_s + rise_s:
+        scale = span / (fall_s + rise_s)
+        fall_s, rise_s = fall_s * scale, rise_s * scale
+        lie_s = 0.0
+    else:
+        lie_s = span - fall_s - rise_s
+    if elapsed < fall_s:
+        u = elapsed / fall_s
+        return FALL_DOWN_DEG * 0.5 * (u + u * u)  # *design*: half steady, half gathering pace
+    if elapsed < fall_s + lie_s:
+        return FALL_DOWN_DEG
+    u = (elapsed - fall_s - lie_s) / rise_s
+    return FALL_DOWN_DEG * (1.0 - u * u * (3.0 - 2.0 * u))  # *design*: the get-up eases in and out
 # design: how long each of the scorer's team-mates celebrates with him (the run to him, the huddle);
 # the scorer stays until the last has gone; the rest of the minute or more before the kick-off is
 # the walk back (L4)
@@ -672,6 +704,8 @@ class Engine:
         self.netted: float | None = None  # the goal line whose net holds the dead ball after a goal
         self.touch_show: dict[str, tuple[str, float]] = {}  # player -> (part, until)
         self.dive_show: dict[str, tuple[float, float]] = {}  # keeper -> (until, side)
+        # P18: a fouled player -> (contact t, upright t, the way his head goes, radians)
+        self.fallen: dict[str, tuple[float, float, float]] = {}
         self.dribble_to: tuple[float, float] | None = None  # the carrier's chosen carry, if any
         self.intended: str | None = None  # the team-mate a pass was played to: he expects it
         self.runs: dict[str, tuple[float, float, float]] = {}  # runner -> (x, y, started at)
@@ -3188,9 +3222,36 @@ class Engine:
                         key=lambda q: q.profile["finishing"])  # the side's designated taker (design)
             self.stop("penalty_kick", victim.team, (gx - attack_dir(victim.team) * PENALTY_MARK_M,
                                                     PITCH_Y / 2), taker.id)
-            return
-        self.stop("free_kick", victim.team, (clamp(victim.x, 0.5, PITCH_X - 0.5),
-                                             clamp(victim.y, 0.5, PITCH_Y - 0.5)))
+        else:
+            self.stop("free_kick", victim.team, (clamp(victim.x, 0.5, PITCH_X - 0.5),
+                                                 clamp(victim.y, 0.5, PITCH_Y - 0.5)))
+        self._go_down(p, victim)
+
+    def _fall_span(self, t0: float) -> float:
+        """How long he is down. The whole pose, or less so he is upright FALL_UP_BEFORE_S before
+        the restart is due. The kick itself can be later, which only adds time on his feet."""
+        total = FALL_S + FALL_LIE_S + FALL_RISE_S
+        if self.restart is None:
+            return total
+        return max(0.0, min(total, self.restart.ready_at - FALL_UP_BEFORE_S - t0))
+
+    def _go_down(self, fouler: Player, victim: Player) -> None:
+        """P18: from the fouler toward the man he hit, the way the head goes. His feet stay."""
+        dx, dy = victim.x - fouler.x, victim.y - fouler.y
+        direction = math.atan2(dy, dx) if dx or dy else 0.0  # *design*: one place has no way
+        self.fallen[victim.id] = (self.t, self.t + self._fall_span(self.t), direction)
+
+    def player_fall(self, p: Player) -> tuple[float, float] | None:
+        """(degrees over, direction in radians) while he is down, else nothing. The snapshot is
+        this frame's t and the contact has happened, so the contact frame shows one frame of it."""
+        rec = self.fallen.get(p.id)
+        if rec is None:
+            return None
+        t0, t_end, direction = rec
+        deg = foul_fall_deg((self.t - t0) + DT, t_end - t0)
+        if round(deg, 1) <= 0.0:
+            return None
+        return deg, direction
 
     def evade(self, carrier: Player, defender: Player) -> None:
         """The carrier, having reacted to a lunge, pushes the ball away from the defender's foot,
@@ -3406,6 +3467,8 @@ class Engine:
     def pose(self, p: Player) -> tuple[str, float]:
         """How this body should be drawn. Read off the match: a strike is a wind-up already
         chosen, a dive is the keeper's own dive, and a touch names the part that met the ball."""
+        if self.player_fall(p) is not None:  # P18: down while the foul's fall is over 0
+            return "down", 0.0
         if self.throw_by == p.id:
             return "throw", 0.0
         if self.possessor == p.id and self.windup:
@@ -3436,9 +3499,15 @@ class Engine:
         players = []
         for p in self.players:
             action, dive = self.pose(p)  # what the renderer draws (scene.py), read off the match
-            players.append({"id": p.id, "team": p.team, "role": p.role, "x": round(p.x, 3),
-                            "y": round(p.y, 3), "vx": round(p.vx, 3), "vy": round(p.vy, 3),
-                            "heading": round(p.heading, 4), "action": action, "dive": dive})
+            row = {"id": p.id, "team": p.team, "role": p.role, "x": round(p.x, 3),
+                   "y": round(p.y, 3), "vx": round(p.vx, 3), "vy": round(p.vy, 3),
+                   "heading": round(p.heading, 4), "action": action, "dive": dive}
+            fall = self.player_fall(p)  # x, y stay his feet; the tip is fall and fall_dir
+            if fall is not None:
+                deg, direction = fall
+                row["fall"] = round(deg, 1)
+                row["fall_dir"] = round(direction, 4)
+            players.append(row)
         self.match.frames.append({
             "frame": self.frame,
             "t": round(self.t, 3),
