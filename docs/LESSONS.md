@@ -1937,6 +1937,10 @@ short and actionable. This file is public: no research sources, product names or
     controller steps, and centred on the frame it draws, never only behind it.
   - A new quantity is sent in its own field, never folded into one whose value already means
     something to a rule (a negative lift means a lunge).
+  - The same held for a keeper's dive (demo v1, Kian: "keeps diving"): drawn as the engine's
+    per-frame pose, a dive the engine turned on the grass spun and dived again to the other side,
+    and one that began at full stretch popped in and out. A one-off action is drawn once, from
+    its start to its end, its side and facing held, and fades into what follows.
   - A test's expected value is the source's number written in the test, never the code's table.
 - **Check:** `tests/test_render_motion.py`. Each of these fails on 0.5.9 (main's drawing, with
   the new names shimmed in):
@@ -1949,6 +1953,8 @@ short and actionable. This file is public: no research sources, product names or
   - `test_the_push_off_toe_does_not_slide_before_it_lifts` fails with the free fall keyed to the
     phase; `test_a_player_braking_to_a_stop_keeps_his_planted_feet_on_the_grass` (seed 21's a4)
     fails with the bob sent in the lift, and the trunk test with the lean from boxes behind only.
+  - `test_a_keepers_dive_is_drawn_once_to_one_side` and
+    `test_a_dive_that_starts_at_full_stretch_grows_and_gets_up` (demo v1's keeper) fail on 0.5.12.
   - Each mechanism was put back to 0.5.9 alone (bob tables zeroed, swing height, the frame-ahead
     swing, the lean, the speed lean, the arm pump), and its test fails.
 

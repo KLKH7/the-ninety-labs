@@ -454,7 +454,9 @@ def _upper(pose: dict, heading: float, height_m: float) -> dict:
             dive = pose.get("dive") or 0.0
             mag = min(1.0, abs(dive))
             base = mirror(base) if dive < 0 else base
-            angles = scale(base, mag if mag > 0.35 else 0.35)
+            # From standing to full stretch and back, so the dive grows and he gets up from it
+            # (scene.keeper_dive) without a pose snapping in a frame.
+            angles = _blend(dict_angles(poses["stand"]), base, mag)
         else:
             angles = base
     elif speed < STAND_BLEND[0] or (action == "stand" and speed < data["standSpeed"]):
@@ -476,6 +478,12 @@ def _upper(pose: dict, heading: float, height_m: float) -> dict:
             # Setting off and pulling up, the stride grows out of the stance and back into it.
             t = (speed - STAND_BLEND[0]) / (STAND_BLEND[1] - STAND_BLEND[0])
             angles = _blend(dict_angles(poses["stand"]), angles, t)
+    up = pose.get("dive_up") or 0.0
+    if up:
+        # Getting up from a dive, what he does next is drawn with the dive fading out of it.
+        full = dict_angles(poses["dive"])
+        full = mirror(full) if up < 0 else full
+        angles = _blend(angles, {**angles, **full}, min(1.0, abs(up)))
     lean = pose.get("lean") or 0.0
     if lean and not (action in poses and action in _CONTACT and action not in _FEET):
         # Speeding up the trunk leans into it, slowing it comes up (scene.pace).
