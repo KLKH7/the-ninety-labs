@@ -19,9 +19,11 @@ import json
 import math
 from pathlib import Path
 
-SCORE_MIN = 0.5
-PLAYER_IOU = 0.5
-BALL_PX = 5.0
+# The pixel scorer's rule, imported so the two cannot drift apart.
+from ninety.eval.vision_score import BALL_DISTANCE_PX as BALL_PX
+from ninety.eval.vision_score import DEFAULT_THRESHOLD as SCORE_MIN
+from ninety.eval.vision_score import PLAYER_IOU
+
 GROUND_Z = 0.5
 
 

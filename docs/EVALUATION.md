@@ -13,8 +13,8 @@ generated it and the output file is committed. Rows marked *planned* have no res
 | Ground-truth data meets the data contract (consistency and physics) | `uv run ninety-validate <clip>` | command output | running: the engine meets the contract on full matches (seeds 7, 11, 21); CI runs it on the smoke clip |
 | Render checks (projection error, label completeness, determinism, ball occlusion share) | `uv run ninety-render-check <clips> --determinism --report docs/eval/render-checks.json`; CI `render` job on every push | `docs/eval/render-checks.json`, CI log | running |
 | Training data against its floors (clips, frames, player and ball boxes, balls by visibility, ball size at the training input, clips per render knob) | `uv run ninety-data-stats <train clips> --stride 5 --input 640x640 --out docs/eval/dataset-stats.json --floors` | `docs/eval/dataset-stats.json` | running: dataset v1, 308 training clips, all on `engine-v1`'s engine (`docs/eval/dataset-v1.json` lists each clip's run and commit): 248 from v3, 30 from topup1 (`occlusion=crowded`, `kit_contrast=low`), both at `b319f21` with renderer 0.3.1, and 30 at `cca498c` (renderer 0.3.2, #118) replacing the v3 clips whose ball rests behind the boards, labelled visible at 0.3.1 (1,043 of v3's 13,443 ball training labels). 0.3.2 changes labels only, so the two renderers' images mix. Seed 82 is dropped (a blocked shot is touched again after the window's cut, which no clip can show) and seed 111 failed the render checks twice (one foot outside its box). Meets every train floor: 1,579 mostly hidden ball labels of 13,856 (11.4%) against 400 and 5%, low-contrast kits 43.8% and crowded windows 60% against 20%. All 308 meet the data contract (`ninety-render-meta`, then `ninety-validate`'s checks at `0dd5190`, main with #108). The floors were set before any data was counted; the learning curve decides whether they are enough |
-| Off-the-shelf detector recall on renders (guide check 2) | planned | `docs/eval/render-checks.json` | planned |
-| Detection precision and recall (players, ball) on the fixed test set, by difficulty, strict and lenient matching | pixel boxes: `uv run python -m ninety.eval.vision_report --test <frozen test clips> --detections <seed<N>.jsonl folder> --out <report.json>`; pitch-level strict and lenient matching planned | `docs/eval/vision-report-v{n}.json`, `docs/eval/vision-report-v1.md`, `docs/eval/vision-report-v2.md` | running for pixel boxes: ours-v3 on the frozen test set, players 0.994 recall at 0.999 precision, ball at least half visible 0.964 at 0.994, ball mostly hidden 0.493 at 0.841 (v2; ours-v2 in v1). Pitch-level matching planned |
+| Off-the-shelf detector recall on renders (guide check 2); published off-the-shelf figures for scale: [GROUNDING.md](GROUNDING.md#vision-scoring-how-detections-are-graded) S6 (players) and S7 (ball) | planned | `docs/eval/render-checks.json` | planned |
+| Detection precision and recall (players, ball) on the fixed test set, by difficulty, strict and lenient matching | pixel boxes: `uv run python -m ninety.eval.vision_report --test <frozen test clips> --detections <seed<N>.jsonl folder> --out <report.json>`; pitch-level strict and lenient: the same report's `pitch` block, totalled across clips ([below](#pitch-level-matching)); per clip, `uv run python -m ninety.eval.vision_score` | `docs/eval/vision-report-v{n}.json`, `docs/eval/vision-report-v1.md`, `docs/eval/vision-report-v2.md` | running for pixel boxes: ours-v3 on the frozen test set, players 0.994 recall at 0.999 precision, ball at least half visible 0.964 at 0.994, ball mostly hidden 0.493 at 0.841 (v2; ours-v2 in v1). Pitch-level matching built, totalled across clips and checked against planted damage; not measured yet on the frozen test set |
 | Event precision, recall and F1 per type; possession accuracy; speed error | events: `uv run python -m ninety.eval.event_score --truth <clip>/events.jsonl --frames <clip>/frames.jsonl --detected <detected.jsonl> --report <report.json>` ([format](#event-report-format)); positions: `uv run python -m ninety.eval.pitch_score` ([event detection from video](#event-detection-from-video)); possession and speed planned | `docs/eval/event-report-v2.md` | running on the frozen test set's five clips, scored once (ours-v2; the detector re-derived on validation clips, [detector-plan.md](eval/detector-plan.md)): passes 7 of 13 at strict F1 0.67 (recall 0.54, 95% 0.29 to 0.77), 4 of 9 at F1 0.62 without seed 900001, below PLAN's 0.70; the one shot read as a pass and one false out of play (the ball's height, planned); two clips with camera cuts give no events. 13 passes is too few for a rate |
 | Targeted data rounds, before and after | failure clusters from validation clips only: `uv run python -m ninety.vision.failure_clusters <val clips> --detections <file> --audit docs/eval/<round>/audit.json`, then `ninety.agents.vision_auditor` (writes `clusters.json`; without a model the clusters and split are the code's), then `ninety.agents.data_agent`; scored with `ninety.eval.vision_report --freeze docs/eval/test-set-frozen-91d1e3b.json` | `docs/eval/round1/` (clusters, audit, plan, [result](eval/round1/RESULT.md)), `docs/eval/vision-report-v3-mesh.json`, `docs/eval/vision-report-v3ctrl-mesh.json` | round 1 measured on the frozen mesh test set: synthetic data from our engine lifts mostly hidden ball recall from 0.500 (ours-v3) to about 0.58 and cuts false positives by two thirds (125 to 35 and 41); targeting showed no measurable gain over an untargeted control (ours-v4 0.573, ours-v4-ctrl 0.585, 82 labels). Round 1: no gain over control; round 2 planned |
 | Stats engine facts: hand-computed cases, planted defects, citations, size | `uv run pytest tests/test_stats.py tests/test_windows.py tests/test_window_stats_agents.py` | test assertions | running |
@@ -163,16 +163,48 @@ uv run python -m ninety.eval.vision_score --frames runs/seed7/frames.jsonl \
   --detected detections.jsonl --report vision-report.json
 ```
 
-### Later follow-up: pitch-level matching
+### Pitch-level matching
 
-Pitch-level matching is a separate future evaluation. It will map detections onto the pitch
-through the camera and match them one to one, nearest first, to true positions in the same
-frame. It is not part of the pixel-box score above and must not be used to interpret that score.
+Pitch-level matching judges a box by where it puts its object on the pitch, as event detection
+does, not by how its pixels overlap. It is reported beside the pixel score, in the `pitch`
+block of `vision_score`'s report (one clip) and of `vision_report`'s (counts summed across clips, as
+for pixels, with the at-least-half-visible ball under each rule), and is not used to interpret
+that score. Built in
+[`ninety/eval/vision_pitch_score.py`](../ninety/eval/vision_pitch_score.py).
 
-| Planned comparison rule | Ball | Player | Why |
+Every true and every detected box goes to the pitch through that frame's saved camera matrix
+(`camera.P`), the way [`ninety/vision/observe.py`](../ninety/vision/observe.py) places a box: a
+player at the bottom middle of the box, on the ground; the ball at the box centre, on the ground
+with its centre one radius (0.11 m) up. Truth and detection are placed the same way, so the score
+measures the detector's boxes, not the camera fit or the ball's height. Within each frame and
+class, eligible detections (score ≥ 0.5) are paired one to one with true boxes, nearest on the
+pitch first, within the radius below (the edge counts). A label with no match is a false negative,
+a detection with no match a false positive, and the difficulty groups follow the pixel scorer's
+convention below. A box whose point is not on the ground in front of the camera (above the
+horizon) has no place: a label is then a miss and a detection a false alarm, counted under
+`unplaced`. Precision and recall are given overall, by class, for each visibility group, and for
+the ball on the ground and in the air.
+
+| Rule | Ball | Player | Why |
 |---|---|---|---|
-| Strict | within 1.0 m | within 1.0 m | possession assigns the ball to the nearest player; two players are often about 2 m apart |
-| Lenient | within 2.0 m | within 1.5 m | a looser comparison radius |
+| Strict | within 1.0 m | within 1.0 m | possession assigns the ball to the nearest player; two players are often about 2 m apart ([GROUNDING.md](GROUNDING.md#vision-scoring-how-detections-are-graded) S3) |
+| Lenient | within 2.0 m | within 1.5 m | a looser comparison radius, reported beside strict, never as the headline ([GROUNDING.md](GROUNDING.md#vision-scoring-how-detections-are-graded) S4) |
+
+The strict radius and the ball's lenient radius are the event scorer's own (`STRICT_M`,
+`LENIENT_M` in `ninety/eval/event_score.py`), imported, so the two cannot drift.
+
+**The scorer is checked against planted damage.** `fake_pitch_detections` in
+`ninety/eval/fake_box_detections.py` copies every label, then drops some, moves some on the pitch
+by half the strict radius (a match under both rules), halfway between the strict and the lenient
+radius (a miss and a false alarm under strict only) or twice the lenient radius (both rules), and
+adds false boxes further than the lenient radius from every label. A damaged label, and the point
+its copy moves to, are further than the lenient radius from every other label of its class, or
+the damage is refused. The counts the scorer must report come from the damage log alone; the same
+command as above checks both:
+
+```bash
+uv run python -m ninety.eval.fake_box_detections runs/dataset/test/seed*
+```
 
 **Difficulty groups.** Every true ball and player is put in groups using the renderer's
 labels. TP, FP, FN, precision, recall and F1 are reported for each visibility group
@@ -187,7 +219,7 @@ each image-boundary group (`image_boundary.player.edge-touching` and
 | mostly hidden | 0 < visibility < 0.5 |
 | edge-touching | saved bbox reaches any image boundary: x0 ≤ 0, y0 ≤ 0, x1 ≥ camera.width or y1 ≥ camera.height |
 | interior | saved bbox reaches none of those boundaries |
-| in the air (ball; planned) | height above 0.5 m, about knee height |
+| in the air (ball; pitch-level only) | height above 0.5 m, about knee height; the rest is on the ground |
 | blurred (planned) | camera blur streak longer than 3 px, about half the width of a ball at broadcast distance |
 
 The boundary rule uses each frame's saved camera width and height, with no margin; labelled
