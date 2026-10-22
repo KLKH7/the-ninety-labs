@@ -6,10 +6,10 @@
 Grading, so it reads the answer key. Each player detection at or above the 0.5 score threshold on
 a frame whose camera fit is trusted is paired with the true player whose box overlaps it most
 (IoU at least 0.5, the pixel scorer's player rule, docs/EVALUATION.md); its pitch position is
-compared with that player's. The ball is compared on frames where it is on the ground (centre
-under 0.5 m, about knee height, the planned "in the air" group), detected within 5 px of its
-true centre (the pixel scorer's ball rule): an airborne ball is placed on the ground by design
-(ninety/vision/observe.py) and is reported apart.
+compared with that player's. The ball is compared on frames where it is on the ground (centre at
+or under 0.5 m, about knee height: EVALUATION.md's "in the air" group is above it), detected within
+5 px of its true centre (the pixel scorer's ball rule): an airborne ball is placed on the ground by
+design (ninety/vision/observe.py) and is reported apart.
 """
 
 from __future__ import annotations
@@ -72,7 +72,8 @@ def errors(
         if math.hypot(cx - tb["center_px"][0], cy - tb["center_px"][1]) > BALL_PX:
             continue
         err = math.hypot(b["x"] - tb["x"], b["y"] - tb["y"])
-        (ball_ground if tb["z"] < GROUND_Z else ball_air).append(err)
+        # The vision scorers' boundary: strictly above the cut-off is in the air (EVALUATION.md).
+        (ball_air if tb["z"] > GROUND_Z else ball_ground).append(err)
     return players, ball_ground, ball_air, not_ok
 
 

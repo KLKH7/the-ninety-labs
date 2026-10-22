@@ -2016,3 +2016,15 @@ short and actionable. This file is public: no research sources, product names or
   `::test_he_never_comes_nearer_the_carrier_to_be_open`, and
   `tests/test_zone_tracking.py::test_a_defender_follows_the_attacker_in_his_zone_once_he_scans`; the
   held-out measures in the pull request.
+
+### 188. Two scorers of one group share one cut-off and one comparison
+- **What happened:** EVALUATION.md puts a ball in the air when its centre is above 0.5 m. The
+  pitch-level vision scorer used `z > 0.5`, but the position scorer (`pitch_score.py`) used
+  `z < 0.5` for the ground, so a ball at exactly 0.5 m was on the ground in one report and in the
+  air in the other. Both had the same constant; nothing checked the comparison, and no test put a
+  ball exactly on the cut-off in the position scorer.
+- **Rule:** a difficulty group's cut-off and its comparison are defined once (`IN_AIR_Z`,
+  `height_group`, `BLUR_PX`, `blur_group` in `ninety/eval/vision_score.py`) and imported
+  everywhere; each scorer has a test with a value exactly on the cut-off (lesson 158).
+- **Check:** `uv run pytest tests/test_pitch_score.py tests/test_vision_score.py
+  tests/test_fake_box_detections.py -k "cut_off"`; the pitch_score test fails with `z < 0.5` put back.
