@@ -1801,14 +1801,16 @@ short and actionable. This file is public: no research sources, product names or
 - **What happened:** the renderer drew a net behind each goal, but the engine had none. After a
   goal the dead ball rolled on through the back of the net to the advertising boards, 4 m behind
   the goal line, and the keeper walked through the net to fetch it. On demo v2's seed 8001 the
-  ball came to rest at (109.0, 35.7) after the goal at 155.3 s. Over 20 matches it happened after
-  every goal, and keepers stepped through a net 14 times after goals and 18 times at other
-  stoppages, fetching balls that had gone wide.
+  ball came to rest at (109.0, 35.7) after the goal at 155.3 s. Over 20 matches on main it
+  happened after all 16 goals. Players walked through a net 66 times, 61 of them keepers, all while
+  the ball was dead: 27 after goals and 39 at other stoppages.
 - **Rule:**
   - Every structure the renderer draws that a ball or a player can meet has the same geometry
-    in the engine's physics: the boards, and now the net (L1).
-  - Nothing passes through it that the picture would show passing through.
-  - Where the engine's shape is the drawing's, it cites the drawing.
+    in the engine's physics, citing the drawing where it takes its shape from it: the boards,
+    and now the net (L1).
+  - For the net that now means no player passes through it, and a ball that goes in stays in the
+    goal. A ball meeting it from outside (wide of a post, or dropping over the bar) still passes
+    through; that is the next step.
 - **Check:** `uv run pytest tests/test_goal_net.py`. On main the ball goes 4 m deep, through the
   roof and through the side netting, and the keeper walks through the net.
 
