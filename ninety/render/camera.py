@@ -145,17 +145,16 @@ HOLD_SHARE = 0.3
 # second, a second), so the lens never pumps in and out or reverses in a frame.
 BOX_LEAVE_M = 6.0
 ZOOM_ACCEL_MPS2 = 6.0
-# Live play stays on the gantry through every attack; the tighter lens comes up for a throw-in, a
-# set piece, and for the restart after an edit cut: a medium shot, the taker about a third of the
-# picture high (TIGHT_HALF_M either side of him).
+# Live play stays on the gantry through every attack; the tighter lens comes up for a throw-in: a
+# medium shot, the taker about a third of the picture high (TIGHT_HALF_M either side of him).
 TIGHT_ACTIONS = ("throw",)
 TIGHT_HALF_M = 5.0
-# After an edit cut the gantry comes back closed up on the restart (TIGHT_HALF_M) for CUT_HOLD_S,
-# then eases out to the wide shot over this long, before the kick (edit.SHOW_BEFORE_RESTART_S).
-OPEN_EASE_S = 2.0
-# The restart is taken once the ball moves faster than this (a ball set for a restart is still): the
-# close-up ends there and the ease out begins, whatever is left of CUT_HOLD_S (*design*, lesson 175).
-PLAYED_MPS = 2.0
+# After a goal the gantry shows the goal itself this long, then a second camera beside it follows
+# the scorer's celebration, a medium shot SCORER_HALF_M either side of him, until the edit cuts to
+# the kick-off (design, after demo v1's critic: a fixed low shot beside the net showed the keeper
+# and never the scorer). Used when the render says who scored; otherwise the low angle at the net.
+GOAL_WIDE_S = 2.0
+SCORER_HALF_M = 6.0
 # A corner (Law 17): the ball is placed inside the corner arc, 1 m in radius (Law 1). design: while it
 # waits, the main camera frames it from the taker inward, the taker near the side of the picture and
 # the penalty area filling the rest, so the viewer sees where the ball will go rather than the run-off
@@ -276,7 +275,10 @@ class Director:
         self.tight_v = [0.0, 0.0]
         self.zoom_v = 0.0  # how fast the half-width is changing (m/s)
         self._box = False  # the box's closer lens is in (BOX_LEAVE_M)
-        self._open_until = -1.0  # the restart's closed-up shot after an edit cut (open_on_restart)
+        self._scorer: tuple[float, float] | None = None  # who scored, while he celebrates (step)
+        self._celebrate_from: float | None = None  # when the second camera picks him up
+        self.scorer_aim: list[float] | None = None
+        self.scorer_v = [0.0, 0.0]
         self._ease_end = -1.0  # the ease out of it ends here, at the wide shot
         self._corner_flag: tuple[float, float] | None = None  # the corner waiting to be taken
         self.half_width = params.half_width_m
@@ -297,25 +299,24 @@ class Director:
         self.tight_aim = None
         self.zoom_v = 0.0
         self._box = False
-        self._open_until = -1.0
         self.prev_ball = None
+        self._scorer = None
+        self._celebrate_from = None
+        self.scorer_aim = None
         self._cut_kind = ""
         self._cut_until = -1.0
         self.net = None
         self._corner_flag = None
 
     def open_on_restart(self) -> None:
-        """The first frame after a cut: the picture comes back on the restart with the gantry closed
-        up on it (TIGHT_HALF_M), so the edit reads as a cut to another shot rather than the players
-        jumping about the same one. It holds that CUT_HOLD_S, then eases back out to the wide shot
-        over the OPEN_EASE_S before the restart is taken (edit.SHOW_BEFORE_RESTART_S): one shot from
-        the gantry, no snap back after the kick. No second angle comes up while it does."""
-        self._open_until = self.t + self.dt + CUT_HOLD_S  # from the restart's first frame
-        self._ease_end = self._open_until + OPEN_EASE_S
+        """The first frame after a cut: the picture comes back on the gantry's own wide shot of the
+        restart, framed afresh where the ball is set, and holds it CUT_HOLD_S with no second angle,
+        so the edit reads as one cut into the play. The edit brings it back as the restart is
+        imminent (edit.SHOW_BEFORE_RESTART_S), so nobody stands still on screen for long.
+        Old (0.5.2 to 0.5.9): it came back closed up on the taker alone for CUT_HOLD_S, then pulled
+        out (demo v1's critic, #4 and #15)."""
         self._cut_kind = ""
-        self._cut_until = self._ease_end
-        # A cut, not a zoom: the warm-up before the restart framed the play wide; the shot opens
-        # closed up on the restart at once.
+        self._cut_until = self.t + self.dt + CUT_HOLD_S  # from the restart's first frame
         self.aim = None
         self.zoom_v = 0.0
 
@@ -324,8 +325,6 @@ class Director:
         corner = self._corner(bx, by)
         if corner is not None:
             return corner
-        if self.t < self._open_until:  # closed up on the restart: the ball where it is set
-            return min(max(bx, 0.0), 105.0), min(max(by, 0.0), 68.0), TIGHT_HALF_M
         px, py = self._play(bx, by)
         ax = px + vx * self.p.lead_s
         ay = py + vy * self.p.lead_s
@@ -547,11 +546,13 @@ class Director:
         cut_in: float | None = None,
         ball_z: float = 0.0,
         corner: tuple[float, float] | None = None,
+        scorer: tuple[float, float] | None = None,
     ) -> Camera:
         """The camera for the next frame. `cut_in` is how long until the edit's next cut, in seconds
         (None when no cut follows): no angle starts or ends that close to one, because the cut is
         itself the change of shot. `ball_z` is the ball's height, so a lofted ball is kept in the
-        picture too (lesson 175)."""
+        picture too (lesson 175). `scorer` is where the player who scored is, from the goal until
+        the restart (the render passes it): the camera follows his celebration (GOAL_WIDE_S)."""
         self.ball_z = ball_z
         self._corner_flag = corner
         self.players = [(p[0], p[1], p[2]) for p in players] if players else []
@@ -561,12 +562,6 @@ class Director:
             vx = (ball_x - self.prev_ball[0]) / self.dt
             vy = (ball_y - self.prev_ball[1]) / self.dt
         self.prev_ball = (ball_x, ball_y)
-        if self.t < self._open_until and math.hypot(vx, vy) > PLAYED_MPS:
-            # The restart is taken before the close-up's time is up: the ease out starts now, so
-            # the play is not watched through the close-up (lesson 175).
-            self._open_until = self.t
-            self._ease_end = self.t + OPEN_EASE_S
-            self._cut_until = min(self._cut_until, self._ease_end)
         gx, gy, ghw = self._goal(ball_x, ball_y, vx, vy)
         if self.aim is None:
             self.aim = [gx, gy]
@@ -576,22 +571,13 @@ class Director:
         else:
             self._ease(self.aim, self.aim_v, gx, gy)
             self._ease(self.aim_z, self.aim_zv, self._goal_z, 0.0)  # the tilt eases like the pan
-            if self._open_until <= self.t < self._ease_end:
-                # The ease out of the restart's close-up reaches the wide shot in OPEN_EASE_S, as
-                # the edit plans (the restart is taken by then): eased in and out, not left to the
-                # zoom spring, whose acceleration limit took 3 s and more (lesson 175).
-                u = (self.t + self.dt - self._open_until) / OPEN_EASE_S
-                u = min(max(u, 0.0), 1.0)
-                self.half_width = TIGHT_HALF_M + (ghw - TIGHT_HALF_M) * u * u * (3 - 2 * u)
-                self.zoom_v = 0.0
-            else:
-                # The zoom is a spring too, slower than the pan, so it gathers and loses pace and
-                # never turns round in a frame.
-                w = 2.0 / (self.p.pan_lag_s * 2.5)
-                acc = w * w * (ghw - self.half_width) - 2 * w * self.zoom_v
-                acc = min(max(acc, -ZOOM_ACCEL_MPS2), ZOOM_ACCEL_MPS2)
-                self.zoom_v += acc * self.dt
-                self.half_width += self.zoom_v * self.dt
+            # The zoom is a spring too, slower than the pan, so it gathers and loses pace and never
+            # turns round in a frame.
+            w = 2.0 / (self.p.pan_lag_s * 2.5)
+            acc = w * w * (ghw - self.half_width) - 2 * w * self.zoom_v
+            acc = min(max(acc, -ZOOM_ACCEL_MPS2), ZOOM_ACCEL_MPS2)
+            self.zoom_v += acc * self.dt
+            self.half_width += self.zoom_v * self.dt
         self.t += self.dt
         fresh_goal = False
         if goal:
@@ -604,6 +590,11 @@ class Director:
                 "t0": self.t,
             }
             fresh_goal = True
+            if scorer is not None:
+                self._celebrate_from = self.t + GOAL_WIDE_S
+        if scorer is None:  # the restart: the celebration is over
+            self._celebrate_from = None
+        self._scorer = scorer if self._celebrate_from is not None else None
         sx = self.p.shake_m * math.sin(2 * math.pi * 1.3 * self.t + self.shake_phase[0])
         sy = self.p.shake_m * math.sin(2 * math.pi * 0.9 * self.t + self.shake_phase[1])
         target = (self.aim[0] + sx, self.aim[1] + sy, self.aim_z[0])
@@ -614,9 +605,17 @@ class Director:
         # once, even over a hold. Near the edit's next cut nothing changes: the cut is the change.
         steady = cut_in is not None and cut_in < CUT_HOLD_S
         due = self.t >= self._cut_until - 1e-9 and want != self._cut_kind and not steady
-        if (fresh_goal and self.cuts) or due:
+        if (fresh_goal and self.cuts and self._scorer is None) or due:
             self._cut_kind = want
             self._cut_until = self.t + CUT_HOLD_S
+        if self._cut_kind == "scorer":
+            spot = self._scorer or (ball_x, ball_y)  # held until the next shot, if he is gone
+            if self.scorer_aim is None:
+                self.scorer_aim, self.scorer_v = list(spot), [0.0, 0.0]
+            else:
+                self._ease(self.scorer_aim, self.scorer_v, *spot)
+        else:
+            self.scorer_aim = None
         if self._cut_kind != "tight":
             self.tight_aim = None
         else:
@@ -678,6 +677,8 @@ class Director:
 
     def _better(self, bx: float, by: float) -> str:
         """The angle that frames this moment better than the gantry, or '' to stay on the gantry."""
+        if self._scorer is not None:  # the goal on the gantry, then the scorer's celebration
+            return "scorer" if self.t >= self._celebrate_from - 1e-9 else ""
         if self._net_due():
             return "net" + self.net["side"]
         if self._tight(bx, by):
@@ -745,6 +746,10 @@ class Director:
         if self._cut_kind in ("netL", "netR"):
             self.angle = "net"
             return self._net_shot()
+        if self._cut_kind == "scorer":
+            self.angle = "scorer"
+            aim = (self.scorer_aim[0], self.scorer_aim[1], 1.0)
+            return self._framed(self._tight_pos(), aim, SCORER_HALF_M)
         self.angle = "tight"
         return self._framed(self._tight_pos(), (self.tight_aim[0], self.tight_aim[1], 0.8), TIGHT_HALF_M)
 

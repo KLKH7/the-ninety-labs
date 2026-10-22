@@ -15,7 +15,7 @@ import pytest
 from jsonschema import validate
 
 from ninety.render import edit
-from ninety.render.camera import CUT_HOLD_S
+from ninety.render.camera import CUT_HOLD_S, project_with
 from ninety.render.checks import check_clip, digest, load_clip
 from ninety.render.cli import meta_main
 from ninety.render.clip import SIM_MARGIN_S, RenderUnavailable, browser_page, render_clip
@@ -167,15 +167,23 @@ def test_a_clip_cuts_from_the_stoppage_to_the_restart_and_still_meets_the_contra
     assert [f["image"] for f in frames] == [f"images/{i:05d}.jpg" for i in range(len(frames))]
     assert all(e["frame"] in numbers for e in events)
     # The picture after the cut is a new shot, not a pan from the last one: unstreaked, and the
-    # gantry closed up on the restart; it eases back out to the wide shot before the kick.
+    # gantry's own wide shot framed afresh on where the restart is set (0.5.10; before it, a
+    # close-up of the taker alone that pulled out, demo v1's critic and lesson 187). The cut shows:
+    # the stinger covers it. That the framing jumps across a cut is checked where the scene is built
+    # for it (test_render_camera), not on whatever this seed's play puts either side.
     fov = [f["camera"]["fov_v_deg"] for f in frames]
     restart_at = numbers.index(first.restart)
     assert frames[k]["blur_px"] == [0.0, 0.0]
     assert frames[k]["camera"]["position"] == frames[k - 1]["camera"]["position"]
+    b = frames[k]["ball"]
+    spot = (b["x"], b["y"], b["z"])
+    w = frames[k]["camera"]["width"]
+    now = project_with(frames[k]["camera"]["P"], spot)
+    assert abs(now[0] - w / 2) < 0.25 * w  # framed on the restart
+    assert {k - 1, k} <= set(clip["stinger_frames"])  # the cut is marked on screen by the stinger
     hold = round(CUT_HOLD_S * 25)
-    assert fov[k] < 0.6 * fov[k - 1]  # a cut to a closer shot, not the same framing
-    assert max(fov[k:k + hold]) < 1.2 * fov[k]  # held closed up for the shortest shot
-    assert fov[restart_at] > 2 * fov[k]  # and eased back out by the kick ...
+    assert max(fov[k:k + hold]) < 1.25 * fov[k] and min(fov[k:k + hold]) > 0.8 * fov[k]  # wide, no pull-out
+    assert fov[restart_at] > 0.8 * fov[k]  # still the wide shot at the kick ...
     assert max(abs(b - a) for a, b in zip(fov[k:], fov[k + 1:], strict=False)) < 0.5  # ... never snapped
     assert validate_clip(out) == {}
     assert check_clip(out)["passed"]["data_contract"]

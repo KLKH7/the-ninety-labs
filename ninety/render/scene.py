@@ -16,8 +16,17 @@ import random
 from dataclasses import dataclass, field
 
 from ninety.render.camera import Camera
-from ninety.render.meshpose import ASSET_STATURE_M, BROW_Y, arm_points, gait_foot
+from ninety.render.meshpose import (
+    ASSET_STATURE_M,
+    BROW_Y,
+    STAND_BLEND,
+    STRIDE_GROW,
+    arm_points,
+    asset,
+    gait_foot,
+)
 from ninety.sim import shape
+from ninety.sim.body import F0_MEAN, F0_SD, GRAVITY
 
 BALL_RADIUS = 0.11
 STRIDE_M = 1.7  # fallback, used only where a caller has no speed yet
@@ -38,10 +47,38 @@ def _stride(speed: float) -> float:
     return 2.0 * _step_m(speed)
 
 
+# The share of the stride a foot is on the grass (duty factor), walking and running, by speed (m/s):
+# Swinnen et al. 2026 (J Exp Biol, jeb.252161, treadmill: walking 0.628 at 1.25, 0.605 at 2.0;
+# running 0.397 at 2.0, 0.358 at 2.5, 0.324 at 3.33, 0.303 at 4.17) and Martinez-Sobrino et al. 2023
+# (J Sports Sci Med 22:790, track: 0.290 at 5.07, 0.256 at 7.32). People change from a walk to a
+# run at about 1.96 m/s (Neptune and Sasaki 2005, J Exp Biol 208:799); the drawn gait goes from the
+# one to the other across GAIT_SWITCH_MPS (design: a band, so a player hovering at the switch speed
+# does not flicker between the two). Below 1.25 m/s the walk's share is held (no source).
+WALK_DUTY = ((1.25, 0.628), (2.0, 0.605))
+RUN_DUTY = ((2.0, 0.397), (2.5, 0.358), (3.33, 0.324), (4.17, 0.303), (5.07, 0.290), (7.32, 0.256))
+GAIT_SWITCH_MPS = (1.76, 2.16)
+
+
+def _table(points: tuple, v: float) -> float:
+    """Piecewise linear through (speed, value) points, held flat beyond the ends."""
+    if v <= points[0][0]:
+        return points[0][1]
+    for (a, fa), (b, fb) in zip(points, points[1:], strict=False):
+        if v <= b:
+            return fa + (fb - fa) * (v - a) / (b - a)
+    return points[-1][1]
+
+
+def _running(speed: float) -> float:
+    """How much of the drawn gait is a run (0 walking, 1 running), across GAIT_SWITCH_MPS."""
+    lo, hi = GAIT_SWITCH_MPS
+    return min(max((speed - lo) / (hi - lo), 0.0), 1.0)
+
+
 def _duty(speed: float) -> float:
-    """Share of the cycle a foot is down. A walk overlaps. A sprint has a flight phase."""
-    t = min(max((speed - 1.6) / 5.4, 0.0), 1.0)
-    return 0.62 - 0.24 * t
+    """Share of the cycle a foot is down: a walk overlaps (both feet down), a run has a flight phase."""
+    r = _running(speed)
+    return _table(WALK_DUTY, speed) * (1.0 - r) + _table(RUN_DUTY, speed) * r
 
 
 def turn_toward(heading: float, target: float, dt: float, rate: float = 5.0) -> float:
@@ -78,6 +115,10 @@ STEP_CATCH_UP = 2.5
 # of a swing at walking pace, before it carries on low to where it stands (design).
 LAND_FRAMES = 3
 SETTLE = 0.5  # standing still, a foot that far (as a share of the step limits) squares up
+# Below this pace the feet step after the body as when standing (design): drifting at 0.4 to 0.6 m/s
+# the engine's pose flickers between walk and stand every frame, and a stride restarted each time
+# never landed: both feet hovered 10 to 20 cm up for seconds.
+STRIDE_FROM_MPS = 0.7
 # Where a standing foot sits under the hips: the asset's rest pose (foot marker, object metres
 # in the asset's own metres): lateral, forward.
 FOOT_HOME = (0.219, 0.127)
@@ -88,24 +129,97 @@ ANKLE_BACK = 0.11  # the drawn ankle sits this far behind the foot marker (asset
 PLANT_AHEAD_MAX = 0.30
 # The gait plants their feet. A touch with the foot or thigh is taken in stride: the other foot stays
 # planted and the touch takes the one that meets the ball.
-PLANT_ACTIONS = ("stand", "walk", "run", "chest", "head", "strike", "foot", "thigh", "hands")
+PLANT_ACTIONS = ("stand", "walk", "run", "chest", "head", "strike", "foot", "thigh", "hands", "throw", "dive")
 # Running, each foot is planted over the part of the stride where the gait (meshpose.gait) has it
 # on the grass: the stored stride swings a foot along one path and it is lowest and going back
 # around these phases (measured on the asset: the left foot is forward at 1.5 pi and lifts behind
 # after 2 pi). The leg takes and gives back the plant over PLANT_EASE_FRAMES.
 STANCE_CENTRE = {"l": 1.75 * math.pi, "r": 0.75 * math.pi}
 PLANT_EASE_FRAMES = 3
-# The furthest behind the hips a foot on the grass stays in a stride (asset metres, measured: the
-# leg still reaches it with the heel up), how far either side of his line of running a foot lands
-# (design: a runner's feet land close to the line), and how high a swinging foot is carried, at a
-# walk and at a sprint (design, _swing_lift).
-STANCE_BEHIND_MAX = 0.45
+# The furthest behind the hips a foot on the grass stays in a stride (asset metres, measured: at
+# 0.30 the leg holds the foot within 1 mm of its plant; at 0.32 it lifts it 2 cm and drags it, and the
+# 0.45 once used here dragged the push-off toe up to 17 cm a frame), how far either side of his line
+# of running a foot lands (design: a runner's feet land close to the line).
+STANCE_BEHIND_MAX = 0.30
 RUN_HALF_WIDTH_M = 0.11
-SWING_LIFT_M = (0.10, 0.40)
+# How high a swinging foot is carried (asset metres) by speed (m/s). Walking, clear of the grass
+# (design). Running, as high as folds the drawn knee to Fukuchi et al. 2017's peak swing knee flexion
+# (Table 4: 93.5 degrees at 2.5 m/s, 108.7 at 3.5, 119.1 at 4.5), measured on the asset with the bob
+# drawn (93.5 at 0.18, 108.7 at 0.335). The drawn leg folds no further than 111 degrees, its foot kept
+# within reach behind the hips (STANCE_BEHIND_MAX), which it reaches at 0.40, and held there faster
+# (higher, the leg falls short of the foot: 9 cm at 0.45, 17 cm at 0.54, at 7 m/s). Measured: the
+# largest knee angle over 50 frames at a steady speed, which varies by about 2 degrees with where the
+# frames fall in the stride. Drawn on a level pelvis, a fold like this read as prancing (lesson 164);
+# the bob carries it.
+SWING_LIFT_M = ((1.5, 0.10), (2.5, 0.18), (3.5, 0.335), (4.5, 0.40))
 LATE_LIFT = 0.5  # past this share of its swing a foot still on the grass waits for the next one
+# Running, a foot is highest early in its swing, behind the hips, and comes through low to land
+# (Fukuchi et al. 2017, Fig. 3: the knee most folded at about 69% of the stride, a third of the way
+# through a swing that starts at about 54%); walking, highest midway.
+RUN_SWING_PEAK = 0.35
+# The hips rise and fall twice a stride (the bob), peak to peak in metres by speed (m/s). Walking they
+# are highest over the foot at mid-stance and lowest as the weight passes from one foot to the other
+# (Orendurff et al. 2004, the table: 2.74 cm at 0.7 m/s, 3.61 at 1.0, 4.06 at 1.2, 4.83 at 1.6).
+# Running they are lowest at mid-stance (Lee and Farley 1998) and fall freely in the air, so the rise
+# over a flight of t seconds is GRAVITY * t^2 / 8 and the rest of the bob is the dip over the stance.
+# The running bob by speed: Fadillioglu et al. 2022 (8.7 cm at 2.78 m/s, the mean of their experts'
+# 9.14 and novices' 8.23); Hanley et al. 2022 (Premier League players on a treadmill, Fig. 2, the
+# mean of the low and high duty factor groups: 8.55 cm at 3.33 m/s, 8.35 at 4.44, 7.55 at 5.56);
+# Gullstrand et al. 2009 (about 7.5 cm at 6.1 m/s); Coh et al. 2018 (a sprinter at 12 m/s: 4.5 cm in
+# their Table 3, 4.9 in their text; 4.7 taken).
+WALK_BOB = ((0.7, 0.0274), (1.0, 0.0361), (1.2, 0.0406), (1.6, 0.0483))
+RUN_BOB = ((2.78, 0.087), (3.33, 0.0855), (4.44, 0.0835), (5.56, 0.0755), (6.1, 0.075), (12.0, 0.047))
+# The trunk's lean (radians, forward +) on top of the stored stride's own, which draws 10.2 degrees
+# from a jog up, as runners lean at 10 to 12 km/h (Folland et al. 2017, Table 2: 10.3 degrees). By
+# speed: to 14.3 degrees at a sprinter's top speed (Nagahara et al. 2014: upper trunk at 75.7 degrees
+# from the horizontal, peak speed 10.04 m/s). Speeding up or slowing at a m/s^2 the body leans by
+# atan(a / GRAVITY), so the push of the ground passes through it (Kugler and Janshen 2010: the force's
+# direction follows the body's lean, r = 0.93), half of it drawn in the trunk (LEAN_DRAWN), the feet
+# following the stride; slowing, the trunk comes back to upright and no further (design: the drawn
+# legs cannot plant ahead of him, which carries the rest of a braking lean). The acceleration is the
+# engine's velocity's along the way he faces, from the mean of the ACCEL_BOX frames before this one
+# to the mean of this one and those after (design: at a steady jog the engine's speed rises and brakes
+# back every 9 frames or so, seed 21's a5 3.2 to 4.0 m/s, and eased over 5 frames the trunk nodded
+# every step to a blind critic; from boxes behind him only, it leaned 5 frames late, forward while
+# braking), and the lean eases toward it by LEAN_EASE a frame (design: no step when a box moves on).
+# Folland's runners ran at 10, 11 and 12 km/h: their lean is taken at 11 km/h, 3.05 m/s. Speeding up,
+# the lean is no more than the hardest push a player of the engine has from standing allows (its
+# acceleration from standing, three spreads above the mean, GROUNDING P2): a velocity the engine
+# changes in a frame (a collision) is no push.
+RUN_LEAN = ((3.05, 0.0), (10.04, math.radians(14.3 - 10.3)))
+ACCEL_MAX = F0_MEAN + 3 * F0_SD
+STRIDE_LEAN = math.radians(10.2)  # the stored stride's own lean (measured on the asset, pelvis to neck)
+ACCEL_BOX = 8
+LEAN_EASE = 0.2
+# The trunk takes half the body's lean (design: Kugler and Janshen's lean is the whole body's, from the
+# foot, and the drawn stride does not angle the legs back; drawn whole in the trunk, two blind critics
+# saw a stoop or a lunge at 4 m/s^2).
+LEAN_DRAWN = 0.5
+TRUNK_M = 0.48  # hips to shoulders (the capsules' 0.92 to 1.40, asset metres): a lean's reach forward
+# The arms swing wider with speed above the stored run's (meshpose.gait's pump), whose shoulder swings
+# through 83 degrees (measured on the asset at 4 m/s and up), to 126.5 at a sprinter's top speed (Mann
+# and Herman 1985, Olympic 200 m final, top-speed phase: 135 and 118 degrees, first and eighth),
+# taken as 10.04 m/s (Nagahara et al. 2014's peak speed; design, the race's speed is not in the source).
+PUMP = ((asset()["armRunSpeed"], 1.0), (10.04, 126.5 / 83.0))
+# The bob comes and goes with the stride over this many frames (design: a touch, a lunge or a jump
+# takes the hips off the stride, and they do not jump back to it).
+BOB_EASE_FRAMES = 3
+RUN_MIX_RATE = 0.2  # the most a swing's walk-to-run timing changes in a frame (design)
+REACH_CLEAR_M = 0.15  # reaching, a foot clears the grass by this times the share of the way left (design)
 FRAME_S = 0.04  # one frame at the engine's 25 fps (ninety.sim.engine.FPS)
-MESH_ARM_ACTIONS = ("strike", "foot", "thigh", "chest", "head", "hands", "shield")
+MESH_ARM_ACTIONS = ("strike", "foot", "thigh", "chest", "head", "hands", "shield", "throw")
 HIP_PIVOT_Z = 0.99  # the mesh's spine_01 joint, where a bend over the ball starts (asset rest pose)
+
+# A keeper's dive is drawn once, from the engine's dive (its action "dive", how far along it he is).
+# It grows no faster than the engine's own dives do (DIVE_IN_FRAMES: 0.105 a frame, measured on seed
+# 8001's a1), so one the engine starts at full stretch (its "down after a dive") still grows. It keeps
+# the side and the way he faced when it began until he is up (the engine turns a keeper on the grass
+# toward the ball, and drawn as it turned, the stretched body spun and dived again the other way),
+# never shrinks while the engine holds it, and fades over DIVE_UP_FRAMES into whatever he does next
+# (the catch, standing, running: dive_up), his body turning to the engine's facing over the same
+# frames (design: 1 s, as a keeper takes to get up; a snap in a frame read as a second dive).
+DIVE_IN_FRAMES = 10
+DIVE_UP_FRAMES = 25
 
 # How a touch is drawn (design). The engine says which part met the ball and the frame says where
 # the ball was. The touching part reaches that point on the contact frame, along the way the touch
@@ -145,6 +259,28 @@ HOLD_BEND = 1.5
 HOLD_DROP_M = 0.33  # as low as the planted legs still reach with flat feet (measured on the asset)
 HOLD_EASE_S = 0.16
 HOLD_RUN_MPS = 4.0  # at this speed or faster a keeper takes the ball without dropping his hips (design)
+# How a throw-in is drawn (design, renderer only). The ball is the engine's and the body follows it,
+# never the reverse: it lies on the grass in front of the taker until the frame the engine names him
+# thrower, rises straight up into his hands over his head from the next frame (engine.throw_hands,
+# at P6's 12 m/s: about four frames), stays there while he sets, and leaves on the first frame after
+# (Law 15, GROUNDING L7 and D5). Drawn, he bends over the ball and has a hand either side of it
+# (meshpose.HOLD_SIDE, as a keeper holds it) by the frame it starts to rise, over THROW_PICK_S; keeps
+# them on it as it rises, the trunk bent over it only as far as its height asks (as a keeper's,
+# hold_at), so he straightens as it comes up; leans into the throw (THROW_LEAN) over the
+# THROW_LOAD_S before he lets it go, so the ball is over his head with the elbows bent; and follows
+# through: his hands go on the way the ball went, THROW_FOLLOW_M, and down THROW_DROP_M over
+# THROW_FOLLOW_S, the trunk bending on to THROW_BEND, and come back to his sides over
+# THROW_RECOVER_S. The engine holds the ball where it lets it go, in front of his head,
+# so the drawn throw has no backswing behind the head: drawing one would move the ball off its truth.
+THROW_PICK_S = 0.7
+HANG_AHEAD_M, HANG_Z = 0.05, 0.75  # between his hands as they hang (asset rest pose, asset metres)
+THROW_LOAD_S = 0.2
+THROW_LEAN = 0.2
+THROW_FOLLOW_S = 0.2
+THROW_FOLLOW_M = 0.35
+THROW_DROP_M = 0.55
+THROW_BEND = 0.45
+THROW_RECOVER_S = 0.5
 TOUCH_PARTS = ("foot", "thigh", "chest", "head")
 HEADER_LIFT_MAX = 0.3  # a header above the standing brow is drawn as a jump, at most this high
 HEAD_Z = 1.575  # the centre of the mesh's head (chin about 1.47, skull top 1.684, asset metres)
@@ -225,6 +361,13 @@ class Gait:
     down_l: bool = False
     down_r: bool = False
     lead: float = 0.0  # how far the hips are ahead of the chest in a turn (radians)
+    dive_n: int = -1  # frames into the dive being drawn, -1 when none (keeper_dive)
+    up_n: int = -1  # frames into getting up after it, -1 when none
+    dive_side: float = 1.0  # the side he dived to, as it was when the dive began
+    dive_heading: float = 0.0  # the way he faced when it began
+    dive_drawn: float = 0.0  # how far along the drawn dive is (0..1)
+    dive_from: float = 0.0  # where a dive taken up again in mid get-up starts from
+    dive_up: float = 0.0  # getting up: how much of the dive (signed by side) is still drawn over the pose
     feet: dict = field(default_factory=dict)  # side -> foot on the grass or stepping (_stance)
     ankle: dict = field(default_factory=dict)  # side -> last drawn sole (x, y, height): where a step starts
     touch: dict | None = None  # the part meeting the ball now: part, side, at (world), w
@@ -232,6 +375,13 @@ class Gait:
     supporting: bool = False  # the feet stand and step for a touch or a lunge (_feet)
     played: str | None = None  # the foot that played the ball last frame (_feet)
     lift: float = 0.0  # metres the body is raised (a header's jump) or lowered (a lunge, a stoop)
+    bob: float = 0.0  # metres the stride raises or lowers the hips this frame (_bob), drawn with lift
+    bob_w: float = 0.0  # how much of the stride's bob is drawn (BOB_EASE_FRAMES)
+    bob_at: float = 0.0  # the stride's bob when it was last drawn
+    flight_s: float = 0.0  # how long both feet have been off the grass in a run (_stride_feet)
+    vel: list = field(default_factory=list)  # the engine's velocity, the last ACCEL_BOX frames (pace)
+    accel: float = 0.0  # his acceleration the way he faces, from the engine's velocity (m/s^2, pace)
+    lean: float = 0.0  # the trunk's lean on top of the stride's (radians, forward +, pace)
 
 
 def update_gait(g: Gait, dx: float, dy: float, dt: float, face: tuple[float, float] | None) -> None:
@@ -249,19 +399,65 @@ def update_gait(g: Gait, dx: float, dy: float, dt: float, face: tuple[float, flo
     g.phase = (g.phase + 2 * math.pi * d / _stride(speed)) % (2 * math.pi)
 
 
+def pace(g: Gait, vx: float, vy: float, heading: float, dt: float, ahead: list | None = None) -> None:
+    """Follow the engine's velocity (m/s): his acceleration the way he faces, and the trunk's lean
+    from it and from his speed (RUN_LEAN). `ahead` is the engine's velocity over the next frames:
+    the acceleration is the change from the ACCEL_BOX frames before this one to this and the ones
+    after, so the lean comes as the pace changes, not after it."""
+    future = [(vx, vy), *(ahead or [])][:ACCEL_BOX]
+    n = ACCEL_BOX
+    if len(g.vel) == n and len(future) == n:
+        # Until both boxes are full (the clip's first and last frames) he keeps the last one: a
+        # shorter box is the engine's frame-to-frame steps again.
+        ax = (sum(v[0] for v in future) - sum(v[0] for v in g.vel)) / (n * n * dt)
+        ay = (sum(v[1] for v in future) - sum(v[1] for v in g.vel)) / (n * n * dt)
+        g.accel = ax * math.cos(heading) + ay * math.sin(heading)
+    g.vel.append((vx, vy))
+    del g.vel[:-ACCEL_BOX]
+    v = math.hypot(vx, vy)
+    target = LEAN_DRAWN * math.atan(min(g.accel, ACCEL_MAX) / GRAVITY) + _table(RUN_LEAN, v)
+    g.lean += (target - g.lean) * LEAN_EASE
+    g.lean = max(g.lean, -_stride_lean(v))  # slowing, back to upright and no further
+
+
+def _stride_lean(speed: float) -> float:
+    """The stored stride's own lean as meshpose draws it at this speed: grown with the stride
+    (STRIDE_GROW, from the asset's walkScale) and out of the stance (STAND_BLEND)."""
+    if speed < STAND_BLEND[0]:
+        return 0.0
+    walk = asset()["walkScale"]
+    t = min(max((speed - STRIDE_GROW[0]) / (STRIDE_GROW[1] - STRIDE_GROW[0]), 0.0), 1.0)
+    share = walk + (1.0 - walk) * t
+    if speed < STAND_BLEND[1]:
+        share *= (speed - STAND_BLEND[0]) / (STAND_BLEND[1] - STAND_BLEND[0])
+    return STRIDE_LEAN * share
+
+
+def _pump(speed: float) -> float:
+    """How much wider than the stored run's the arms swing at this speed (PUMP)."""
+    return _table(PUMP, speed)
+
+
 def advance_gaits(gaits: dict[str, Gait], prev_xy: dict[str, tuple[float, float]], frame: dict,
-                  dt: float, ahead: dict | None = None) -> None:
+                  dt: float, ahead: dict | None = None, after: list[dict] | None = None) -> None:
     """One frame of every player's gait: stride from how far he moved, and the way he faces, his
     speed and his pose from the engine (face), so the body is drawn turned as it collides.
-    `ahead` is the engine's frame LEAD_AHEAD_FRAMES on: the hips lead into the turn it holds."""
+    `ahead` is the engine's frame LEAD_AHEAD_FRAMES on: the hips lead into the turn it holds.
+    `after` is the engine's next frames (up to ACCEL_BOX): the trunk leans into a change of pace."""
     bx, by = frame["ball"]["x"], frame["ball"]["y"]
     later = {pl["id"]: pl for pl in ahead["players"]} if ahead else {}
+    coming: dict[str, list] = {}
+    for fr in after or []:
+        for p in fr["players"]:
+            coming.setdefault(p["id"], []).append((p.get("vx", 0.0), p.get("vy", 0.0)))
     for pl in frame["players"]:
         g = gaits[pl["id"]]
         px, py = prev_xy.get(pl["id"], (pl["x"], pl["y"]))
         update_gait(g, pl["x"] - px, pl["y"] - py, dt, (bx - pl["x"], by - pl["y"]))
+        pace(g, pl.get("vx", 0.0), pl.get("vy", 0.0), g.heading, dt, coming.get(pl["id"]))
         prev_xy[pl["id"]] = (pl["x"], pl["y"])
         face(g, pl)
+        keeper_dive(g)
         nxt = later.get(pl["id"])
         g.lead = 0.0
         if nxt is not None and "heading" in nxt and "heading" in pl and g.action not in ("dive", "throw"):
@@ -483,7 +679,7 @@ def hold_at(g: Gait, runs: list[tuple[int, int]], fi: int, ball: tuple[float, fl
         return
     k = height_m / ASSET_STATURE_M
     z = ball[2] + BALL_RADIUS
-    depth = min(max((HOLD_STAND_Z * k - z) / ((HOLD_STAND_Z - BALL_RADIUS) * k), 0.0), 1.0)
+    depth = _hold_depth(z, k)
     g.hold = {
         "at": [round(ball[0], 4), round(ball[1], 4), round(z, 4)],
         "w": round(w, 4),
@@ -492,6 +688,101 @@ def hold_at(g: Gait, runs: list[tuple[int, int]], fi: int, ball: tuple[float, fl
     # On the move he stoops less: lowered, the legs could not reach feet the body is running past.
     moving = max(0.0, 1.0 - g.speed / HOLD_RUN_MPS)
     g.lift = min(g.lift, -round(HOLD_DROP_M * depth * k * w * moving, 4))
+
+
+def _hold_depth(z: float, k: float) -> float:
+    """How far over a ball with its centre `z` high a body bends to hold it: 1 on the grass, 0 from
+    HOLD_STAND_Z up (in the player's own scale)."""
+    return min(max((HOLD_STAND_Z * k - z) / ((HOLD_STAND_Z - BALL_RADIUS) * k), 0.0), 1.0)
+
+
+def throws(frames: list[dict], fps: int = 25) -> dict[str, list[dict]]:
+    """Per taker, his throw-ins: the frame the engine names him thrower (the ball still on the grass;
+    it rises from the next frame), the release (the first frame after: the ball still in his hands,
+    moving from the next frame) with where the ball was and the way it went, and the ball's centre
+    from THROW_PICK_S before the start to the release, where his hands go."""
+    out: dict[str, list[dict]] = {}
+    prev: dict[str, str] = {}
+    pick = round(THROW_PICK_S * fps)
+    for i, fr in enumerate(frames):
+        for pl in fr["players"]:
+            a, was = pl.get("action", ""), prev.get(pl["id"], "")
+            prev[pl["id"]] = a
+            if a == "throw" and was != "throw":
+                out.setdefault(pl["id"], []).append({"start": i, "release": None, "way": None,
+                                                     "first": max(0, i - pick)})
+            elif was == "throw" and a != "throw" and out.get(pl["id"]):
+                t = out[pl["id"]][-1]
+                if t["release"] is None:
+                    t["release"] = i
+                    b0 = fr["ball"]
+                    b1 = frames[i + 1]["ball"] if i + 1 < len(frames) else None
+                    dx, dy = (b1["x"] - b0["x"], b1["y"] - b0["y"]) if b1 else (b0.get("vx", 0.0),
+                                                                                   b0.get("vy", 0.0))
+                    n = math.hypot(dx, dy)
+                    h = pl.get("heading", 0.0)
+                    t["way"] = (dx / n, dy / n) if n > 1e-6 else (math.cos(h), math.sin(h))
+                    t["body"] = (pl["x"], pl["y"], h)  # where he stood as he let it go
+    for mine in out.values():
+        for t in mine:
+            last = t["release"] if t["release"] is not None else len(frames) - 1
+            balls = (frames[j]["ball"] for j in range(t["first"], last + 1))
+            t["ball"] = [(b["x"], b["y"], b["z"] + BALL_RADIUS) for b in balls]
+    return out
+
+
+def throw_at(g: Gait, mine: list[dict], fi: int, height_m: float, fps: int, x: float, y: float) -> None:
+    """A throw-in at frame `fi` (throws): both hands on the ball from before it rises until it is
+    thrown, then on through the throw (g.hold), bending over it and dropping the hips while it is low
+    (g.lift). (x, y) is where he is now. Leaves g.hold and g.lift alone when he is not taking one."""
+    pick = round(THROW_PICK_S * fps)
+    for t in mine:
+        start, rel, first = t["start"], t["release"], t["first"]
+        end = math.inf if rel is None else rel + (THROW_FOLLOW_S + THROW_RECOVER_S) * fps
+        if not start - pick < fi < end:
+            continue
+        k = height_m / ASSET_STATURE_M
+        # Reaching down for it, the trunk, the hips and the hands' aim go together, from where his
+        # hands hang to the ball: an arm aimed at the ball from a body not yet bent to it flips
+        # between ways of reaching it.
+        s = _ease((fi - (start - pick)) / pick) if fi < start else 1.0
+        w = min(1.0, 3.0 * s)
+        u = -math.inf if rel is None else (fi - rel) / fps  # seconds since the ball left his hands
+        if u > THROW_FOLLOW_S:
+            w = min(w, 1.0 - _ease((u - THROW_FOLLOW_S) / THROW_RECOVER_S))
+        if u <= 0:
+            at = t["ball"][fi - first]
+            if s < 1.0:
+                hx, hy = math.cos(g.heading), math.sin(g.heading)
+                hang = (x + hx * HANG_AHEAD_M * k, y + hy * HANG_AHEAD_M * k, HANG_Z * k)
+                at = tuple(hang[j] + (at[j] - hang[j]) * s for j in range(3))
+        else:
+            # The hands go on the way the ball went, and down, and come back to his sides from there:
+            # where they are is kept relative to him, as he turns and walks off after the throw.
+            q = math.sin(0.5 * math.pi * min(u / THROW_FOLLOW_S, 1.0))
+            bx, by, bz = t["ball"][rel - first]
+            sx, sy, sh = t["body"]
+            dx, dy = t["way"]
+            fx, fy = bx - sx + dx * THROW_FOLLOW_M * k * q, by - sy + dy * THROW_FOLLOW_M * k * q
+            c, sn = math.cos(g.heading - sh), math.sin(g.heading - sh)
+            at = (x + fx * c - fy * sn, y + fx * sn + fy * c, bz - THROW_DROP_M * k * q)
+        # Bent over the ball while it is low, and straightening as it rises, all the way up to where he
+        # holds it: the trunk comes up over the whole lift, not in its first two frames. It is up most
+        # of the way by the time the ball passes his chest, or his shoulders would be down over the
+        # ball, closer to it than his arms can fold to hold it (measured on the asset).
+        top = max(max(b[2] for b in t["ball"]), HOLD_STAND_Z * k)
+        depth = min(max((top - at[2]) / (top - BALL_RADIUS), 0.0), 1.0) if u <= 0 else 0.0
+        bend = HOLD_BEND * depth ** 1.5 * s
+        if -THROW_LOAD_S < u <= 0:
+            bend += THROW_LEAN * _ease((u + THROW_LOAD_S) / THROW_LOAD_S)
+        elif u > 0:
+            bend += THROW_LEAN + (THROW_BEND - THROW_LEAN) * _ease(u / THROW_FOLLOW_S)
+        g.hold = {"at": [round(at[0], 4), round(at[1], 4), round(at[2], 4)], "w": round(w, 4),
+                  "bend": round(bend, 4)}
+        # The hips come up ahead of the trunk, for the same reason.
+        moving = max(0.0, 1.0 - g.speed / HOLD_RUN_MPS)
+        g.lift = min(g.lift, -round(HOLD_DROP_M * depth * depth * k * s * moving, 4))
+        return
 
 
 def face(g: Gait, player: dict) -> None:
@@ -505,6 +796,39 @@ def face(g: Gait, player: dict) -> None:
     if "action" in player:
         g.action = player["action"]
         g.dive = player.get("dive", 0.0)
+
+
+def keeper_dive(g: Gait) -> None:
+    """Draw the engine's dive once (DIVE_IN_FRAMES, DIVE_UP_FRAMES): after face(), set the drawn
+    dive (g.dive), the dive still drawn while he gets up (g.dive_up) and the drawn facing (g.heading)
+    for this frame."""
+    g.dive_up = 0.0
+    if g.action == "dive":
+        if g.dive_n < 0:
+            g.dive_from = g.dive_drawn if g.up_n >= 0 else 0.0
+            if g.up_n < 0:
+                g.dive_side = 1.0 if g.dive >= 0.0 else -1.0
+                g.dive_heading = g.heading
+        g.dive_n += 1
+        g.up_n = -1
+        ramp = g.dive_from + (1.0 - g.dive_from) * min(1.0, (g.dive_n + 1) / DIVE_IN_FRAMES)
+        g.dive_drawn = max(g.dive_drawn if g.dive_n > 0 else 0.0, min(abs(g.dive), ramp))
+        g.dive, g.heading = g.dive_side * g.dive_drawn, g.dive_heading
+        return
+    if g.dive_n < 0 and g.up_n < 0:
+        return
+    if g.dive_n >= 0:
+        g.dive_n, g.up_n = -1, 0
+        g.dive_from = g.dive_drawn
+    else:
+        g.up_n += 1
+    if g.up_n >= DIVE_UP_FRAMES:
+        g.up_n, g.dive_drawn = -1, 0.0
+        return
+    t = _ease((g.up_n + 1) / DIVE_UP_FRAMES)
+    g.heading = g.dive_heading + _wrap(g.heading - g.dive_heading) * t
+    g.dive_drawn = g.dive_from * (1.0 - t)
+    g.dive_up = g.dive_side * g.dive_drawn
 
 
 def reach_sign(x: float, y: float, g: Gait, ball: tuple[float, ...] | None) -> float:
@@ -567,10 +891,12 @@ def _feet(g: Gait, x: float, y: float, k: float) -> None:
     stepping_now = any(f.get("swing") is not None for f in g.feet.values())
     support = lunge or busy is not None or (g.supporting and stepping_now)
     g.supporting = support
+    striding = False
     if (g.action not in PLANT_ACTIONS and not support) or g.lift > 0.02:
         g.feet = {}
-    elif g.action != "stand" and g.speed >= 0.45 and not support:
-        _stride_feet(g, x, y, k, pel)
+    elif g.action != "stand" and g.speed >= STRIDE_FROM_MPS and not support:
+        g.bob_at = _stride_feet(g, x, y, k, pel)
+        striding = True
     else:
         for side, sign in (("l", 1.0), ("r", -1.0)):
             hx_, hy_ = _home(x, y, pel, k, sign)
@@ -656,6 +982,9 @@ def _feet(g: Gait, x: float, y: float, k: float) -> None:
                 hx_, hy_ = _home(x, y, pel, k, 1.0 if worst[1] == "l" else -1.0)
                 frames = _step_frames(math.hypot(foot["x"] - hx_, foot["y"] - hy_), g.speed)
                 foot["swing"], foot["over"] = (foot["x"], foot["y"], foot["yaw"], 0, frames), False
+    step = 1.0 / BOB_EASE_FRAMES
+    g.bob_w = min(1.0, g.bob_w + step) if striding else max(0.0, g.bob_w - step)
+    g.bob = round(g.bob_w * g.bob_at, 4)
     for foot in g.feet.values():
         if foot["swing"] is None:
             # The hips turn over a planted foot until the hip will turn no further; then it pivots.
@@ -676,21 +1005,48 @@ def _feet(g: Gait, x: float, y: float, k: float) -> None:
 
 
 def _swing_lift(speed: float) -> float:
-    """How high a foot is carried at the top of its swing (asset metres, design): clear of the grass
-    at a walk, and the heel up behind at a sprint."""
-    return SWING_LIFT_M[0] + (SWING_LIFT_M[1] - SWING_LIFT_M[0]) * min(max((speed - 1.5) / 5.5, 0.0), 1.0)
+    """How high a foot is carried at the top of its swing (asset metres, SWING_LIFT_M)."""
+    return _table(SWING_LIFT_M, speed)
 
 
-def _stride_feet(g: Gait, x: float, y: float, k: float, pel: float) -> None:
+def _bob(speed: float, ph: float, half: float, stride: float, flight: tuple[float, float] | None) -> float:
+    """How far the stride has the hips above (+) or below (-) where they stand, in metres, at phase
+    `ph`, with each foot's stance `half` either side of its STANCE_CENTRE (WALK_BOB, RUN_BOB).
+
+    Walking, the body vaults over the leg (highest at mid-stance, where the leg is straight under
+    the hips, so no higher than standing) and is lowest midway between the stances. Running, it is
+    at standing height as a foot lands and leaves and lowest at mid-stance; with both feet off the
+    grass (`flight`: seconds since the last foot left it, seconds until the next lands) it falls
+    freely, up and back down. The free fall is physics; the walk's cosine and the stance's
+    quarter cosine are design (smooth, at the sourced heights and times)."""
+    off = min(abs(_wrap(ph - c)) for c in STANCE_CENTRE.values())  # 0 at mid-stance, pi/2 midway
+    walk = -_table(WALK_BOB, speed) * (1.0 - math.cos(2.0 * off)) / 2.0
+    # The rise of a flight as long as the stride's (between its stances) is the part of the bob the
+    # stance does not take.
+    flight_s = max(math.pi - 2.0 * half, 0.0) / math.pi * stride / (2.0 * speed)
+    dip = max(_table(RUN_BOB, speed) - GRAVITY * flight_s * flight_s / 8.0, 0.0)
+    run = -dip * math.cos(0.5 * math.pi * off / half) if off < half else 0.0
+    if flight is not None:
+        run += GRAVITY * flight[0] * flight[1] / 2.0
+    r = _running(speed)
+    return walk * (1.0 - r) + run * r
+
+
+def _stride_feet(g: Gait, x: float, y: float, k: float, pel: float) -> float:
     """Walking and running, each foot is on the grass for its stance and carried through the air for
     its swing, every frame at a place, never a pose: the gait's two stored poses swing a foot back
     and forth along one path, so a foot left to them drags along the grass (lesson 157).
 
-    The stride's phase says which: a foot's stance is centred on STANCE_CENTRE, as long as the
-    duty share of the stride (_duty) but no longer than the leg reaches under the hips, from
-    PLANT_AHEAD_MAX ahead to STANCE_BEHIND_MAX behind. On the grass the foot stays where it landed.
-    In the air it travels from where it lifted to where the body will be when it lands, that much
-    ahead of the hips, at most PLANT_AHEAD_MAX, lifted on an arc up to _swing_lift."""
+    The stride's phase says when a foot lands and lifts: a stance centred on STANCE_CENTRE, the duty
+    share of the stride (_duty) but no longer than the leg reaches under the hips, from
+    PLANT_AHEAD_MAX ahead to STANCE_BEHIND_MAX behind. On the grass the foot stays where it landed,
+    and lifts once its stance is over or the hips have gone on past where the leg reaches it. In
+    the air it keeps its own count of how far through the swing it is, advanced by the stride's
+    phase over the swing's share of it, and lands when the count is done: a change of speed changes
+    how fast the count runs and where the foot will land, never where the foot is now (a swing read
+    straight off the phase jumped when the stance's share changed under it). It is carried
+    from where it lifted to where the body will be when it lands, that much ahead of the hips, on an
+    arc up to _swing_lift. Returns the stride's bob (_bob) for this frame."""
     stride = _stride(g.speed)
     reach = (PLANT_AHEAD_MAX + STANCE_BEHIND_MAX) * k
     half = min(_duty(g.speed) * math.pi, math.pi * reach / stride)
@@ -701,52 +1057,121 @@ def _stride_feet(g: Gait, x: float, y: float, k: float, pel: float) -> None:
     hx, hy = math.cos(g.heading), math.sin(g.heading)
     lx, ly = -hy, hx
     lift = _swing_lift(g.speed) * k
+    run = _running(g.speed)  # how much of a run's timing a swing taken now has, for all of it
+    per_frame = 2 * math.pi * g.speed * FRAME_S / stride  # the phase's advance in a frame
+
+    def rel(fx: float, fy: float) -> tuple[float, float]:  # forward and to the left of him
+        return (fx - x) * hx + (fy - y) * hy, (fx - x) * lx + (fy - y) * ly
+
+    def lift_off(foot: dict, e: float) -> dict:
+        # It left the grass between the last frame and this one, so it is drawn a frame into its
+        # swing (p0): drawn where it lifted, a sprinter's foot hung a frame on the grass beyond the
+        # leg's reach, and both feet were seen off the grass together in one frame only.
+        start = (foot["x"], foot["y"], foot["yaw"], foot.get("z", 0.0))
+        p0 = e - per_frame / air if air > 0.0 else e
+        return {**foot, "air": True, "e": e, "e0": e, "p0": p0, "ph": ph, "from": start, "run": run}
+
     for side, sign in (("l", 1.0), ("r", -1.0)):
         off = _wrap(ph - STANCE_CENTRE[side])
         lat = RUN_HALF_WIDTH_M * k * sign
         foot = g.feet.get(side)
         if foot is not None and isinstance(foot.get("swing"), tuple):
-            # In the middle of a step from standing: it goes on from where it is.
-            foot = {"x": foot["x"], "y": foot["y"], "yaw": foot["yaw"], "z": foot["z"], "swing": None,
-                    "air": foot["z"] > 0.0, "from": (foot["x"], foot["y"], foot["yaw"], foot["z"], 0.0)}
-        if abs(off) < half:
-            if foot is None:
+            # In the middle of a step from standing: it carries on as a swing from where it is, landing
+            # within LAND_FRAMES if its stance has already begun.
+            if abs(off) < half:
+                e = 1.0 - LAND_FRAMES * per_frame / air
+            else:
+                e = ((off - half) % (2 * math.pi)) / air
+            step = {"x": foot["x"], "y": foot["y"], "yaw": foot["yaw"], "z": foot["z"]}
+            foot = lift_off(step, min(max(e, 0.0), 0.95))
+        if foot is None:
+            if abs(off) < half:
                 # Starting the stride on this foot: it is where the stance has it by now.
-                rel = ahead - travel * (off + half) / (2 * half)
-                foot = {"x": x + hx * rel + lx * lat, "y": y + hy * rel + ly * lat, "yaw": pel, "z": 0.0}
-            elif foot.get("air"):
-                # The swing is over: it comes down where it has been carried.
-                foot = {"x": foot["x"], "y": foot["y"], "yaw": foot["yaw"], "z": 0.0}
-            foot["swing"], foot["w"] = None, 1.0
+                r = ahead - travel * (off + half) / (2 * half)
+                foot = {"x": x + hx * r + lx * lat, "y": y + hy * r + ly * lat, "yaw": pel, "z": 0.0,
+                        "swing": None, "w": 1.0}
+                g.feet[side] = foot
+                continue
+            # A foot with no place yet is where its swing has it by now: it lifted behind the
+            # hips, where the body was when the swing began.
+            e = ((off - half) % (2 * math.pi)) / air
+            back = ahead - travel - stride * e * air / (2 * math.pi)
+            foot = lift_off({"x": x + hx * back + lx * lat, "y": y + hy * back + ly * lat, "yaw": pel,
+                             "z": 0.0}, 0.0)
+            foot["e"] = e
+        if not foot.get("air"):
+            f, _ = rel(foot["x"], foot["y"])
+            past = half <= off and off < half + air  # its stance is over
+            other = g.feet.get("r" if side == "l" else "l")
+            other_down = other is None or not other.get("air")
+            # The other foot is down, or past the middle of its swing and coming down: in a run it is
+            # about two thirds through as this one lifts. Setting off, a foot lifting on its phase
+            # while the other had only just left the grass sent both up together, a hop.
+            other_landing = other_down or (other["e"] - other["e0"]) / max(1.0 - other["e0"], 1e-6) >= 0.5
+            # Beyond the leg's reach it lifts early, but only while the other foot is on the grass:
+            # setting off from standing, both feet were behind the reach at once and lifted together.
+            beyond = f < -STANCE_BEHIND_MAX * k  # held longer, the leg would drag it
+            if (past and (other_landing or beyond)) or (beyond and other_down):
+                # Its count starts where the stride's phase has it, before zero when the leg's reach
+                # lifts it early, so it lands when its stance comes round again and the two feet stay
+                # half a stride apart (counted from zero, an early lift landed late: both feet were
+                # high at once, a hop).
+                e = (off - half) / air if past else -((half - off) % (2 * math.pi)) / air
+                if e <= LATE_LIFT:
+                    foot = lift_off(foot, e)
+            if not foot.get("air"):
+                foot["swing"], foot["w"] = None, 1.0
+                g.feet[side] = foot
+                continue
         else:
-            u = ((off - half) % (2 * math.pi)) / air  # 0 at lift-off, 1 at landing
-            if foot is None:
-                # A foot with no place yet is where its swing has it by now: it lifted behind the
-                # hips, where the body was when the swing began.
-                done = stride * u * air / (2 * math.pi)
-                back = ahead - travel - done
-                bx, by = x + hx * back + lx * lat, y + hy * back + ly * lat
-                foot = {"x": bx, "y": by, "yaw": pel, "z": 0.0, "air": True, "from": (bx, by, pel, 0.0, 0.0)}
-            elif not foot.get("air"):
-                if u > LATE_LIFT:
-                    # Too late in this swing to make it to the next landing at a stride's pace: it
-                    # stays down and lifts on the next one.
-                    foot["swing"], foot["w"] = None, 1.0
-                    g.feet[side] = foot
-                    continue
-                start = (foot["x"], foot["y"], foot["yaw"], foot.get("z", 0.0), u)
-                foot = {**foot, "air": True, "from": start}
-            sx, sy, syaw, sz, u0 = foot["from"]
-            # Where the body will be when this foot lands, and that far ahead of the hips.
-            on = stride * (1.0 - u) * air / (2 * math.pi) + ahead
-            tx, ty = x + hx * on + lx * lat, y + hy * on + ly * lat
-            e = min(max((u - u0) / max(1.0 - u0, 1e-6), 0.0), 1.0)
-            ee = _ease(e)
-            foot["x"], foot["y"] = sx + (tx - sx) * ee, sy + (ty - sy) * ee
-            foot["yaw"] = syaw + _wrap(pel - syaw) * ee
-            foot["z"] = sz * (1.0 - e) + lift * math.sin(math.pi * e)
-            foot["swing"], foot["w"] = "stride", 1.0
+            foot["e"] += ((ph - foot["ph"]) % (2 * math.pi)) / air
+            foot["ph"] = ph
+        e = min(foot["e"], 1.0)  # on the frame the swing is done the foot is where it ends: on the grass
+        sx, sy, syaw, sz = foot["from"]
+        p0 = foot["p0"]
+        p = min(max((e - p0) / max(1.0 - p0, 1e-6), 0.0), 1.0)
+        # Where the body will be when this foot lands, and that far ahead of the hips: from its count
+        # unclamped, so on the frame it lands past its count the plant stays where it was going.
+        on = stride * (1.0 - foot["e"]) * air / (2 * math.pi) + ahead
+        tx, ty = x + hx * on + lx * lat, y + hy * on + ly * lat
+        # A swing's timing follows his pace no faster than RUN_MIX_RATE a frame, so it never jumps.
+        foot["run"] = r = foot["run"] + min(max(run - foot["run"], -RUN_MIX_RATE), RUN_MIX_RATE)
+        ee = _ease(p)
+        wx, wy = sx + (tx - sx) * ee, sy + (ty - sy) * ee
+        # How high: up to _swing_lift, highest midway walking and early running (RUN_SWING_PEAK), so
+        # a running foot comes through low to land and is down before the other is high.
+        if p <= RUN_SWING_PEAK:
+            up_run = math.sin(0.5 * math.pi * p / RUN_SWING_PEAK)
+        else:
+            up_run = math.cos(0.5 * math.pi * (p - RUN_SWING_PEAK) / (1.0 - RUN_SWING_PEAK)) ** 2
+        up = math.sin(math.pi * p) * (1.0 - r) + up_run * r
+        wz = sz * (1.0 - p) + lift * up
+        # Running, off the grass it is no further behind the hips than the leg reaches
+        # (STANCE_BEHIND_MAX): the hips going away from it, left there, the leg search folded the knee
+        # to come near it, the heel up at the seat. Only as it leaves the grass (by STEP_LIFT up), so a
+        # foot still down is never dragged; walking, the hips do not outrun it.
+        f, _ = rel(wx, wy)
+        if f < -STANCE_BEHIND_MAX * k:
+            d = (-STANCE_BEHIND_MAX * k - f) * r * min(max(wz - sz * (1.0 - p), 0.0) / (STEP_LIFT * k), 1.0)
+            wx, wy = wx + hx * d, wy + hy * d
+        foot["x"], foot["y"] = wx, wy
+        foot["yaw"] = syaw + _wrap(pel - syaw) * ee
+        foot["z"] = wz
+        foot["swing"], foot["w"] = "stride", 1.0
+        if e >= 1.0:
+            foot = {"x": wx, "y": wy, "yaw": foot["yaw"], "z": 0.0, "swing": None, "w": 1.0}
         g.feet[side] = foot
+    # In the air the body is in free fall from the frame both feet are off the grass (a swing's first
+    # frame still has its foot on it) to the frame the swinging foot's count lands it.
+    up = [f for f in g.feet.values() if f.get("air") and f["z"] > 0.0]
+    flight = None
+    if len(up) == 2 and per_frame > 0.0:
+        left = min(max(1.0 - f["e"], 0.0) for f in up) * air / per_frame * FRAME_S
+        flight = (g.flight_s, left)
+        g.flight_s += FRAME_S
+    else:
+        g.flight_s = 0.0
+    return _bob(g.speed, ph, half, stride, flight)
 
 
 def _reach_leg(hip, knee, ankle, toe, touch: dict, fwd: tuple[float, float], k: float):
@@ -797,10 +1222,14 @@ def mesh_pose(g: Gait, x: float, y: float, reach: float) -> dict:
         "speed": round(g.speed, 3),
         "reach": reach,
         "dive": round(g.dive, 3),
+        "dive_up": round(g.dive_up, 3),
         "plant_l": [round(v, 4) for v in g.plant_l] if g.plant_l else None,
         "plant_r": [round(v, 4) for v in g.plant_r] if g.plant_r else None,
         "lead": round(g.lead, 4),
         "lift": round(g.lift, 4),
+        "bob": round(g.bob, 4),
+        "lean": round(g.lean, 4),
+        "pump": round(_pump(g.speed), 4),
         "touch": g.touch,
         "hold": g.hold,
         "x": round(x, 4),
@@ -835,6 +1264,8 @@ def body_parts(
     s = math.sin(g.phase)
     dive = g.dive if g.action == "dive" else 0.0
     lean = (0.16 if pressing else 0.05) * min(g.speed / 5.0, 1.0) * k
+    if g.action in PLANT_ACTIONS and g.action not in ("chest", "head", "hands", "throw"):
+        lean += math.sin(g.lean) * TRUNK_M * k  # the trunk tipped at the hips (pace)
     if g.action == "chest":
         lean = -0.14 * k  # the chest opens onto a ball he is under
     elif g.action == "head":
@@ -842,7 +1273,7 @@ def body_parts(
     _feet(g, x, y, k)
     touch = g.touch if g.touch is not None and g.touch["w"] > 0 else None
     hold = g.hold if g.hold is not None and g.hold["w"] > 0 else None
-    lift = g.lift
+    lift = g.lift + g.bob
     # Away from the gait the arms are labelled where the mesh draws them: balancing a kick, spread
     # for a chest control, reaching for a held ball (meshpose.arm_points). The gait's own capsule
     # arms stay: standing they fill the engine's body outline (P11).
@@ -935,10 +1366,6 @@ def body_parts(
         elif g.action == "dive":
             elbow = at(lean, 0.32 * k * w * sign, 1.20 * k)
             hand = at(lean + dive * 0.10 * k, 0.42 * k * w * sign, 1.15 * k)
-        elif g.action == "throw":
-            # Both hands meet over the head, on the ball. A throw-in is not a kick.
-            elbow = at(0.08, 0.18 * k * sign, 1.72)
-            hand = at(0.28, 0.08 * sign, 1.96)
         else:
             elbow = at(pump * 0.55 + lean, shoulder_y * sign, 1.16 * k)
             hand = at(pump * 0.12 + lean, (shoulder_y + sleeve_r - arm_r) * sign, 0.93 * k)

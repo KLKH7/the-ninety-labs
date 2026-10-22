@@ -56,6 +56,7 @@ RUSH_RANGE_M = 18.0  # O1: design: an attacker this close and through on goal dr
 CLOSE_DOWN_M = 2.0  # O1: design: how close the keeper gets to narrow the angle
 DANGER_RANGE_M = 25.0  # O2: design: attackers this near our goal are marked man to man
 MARK_GOAL_SIDE_M = 1.5  # O2: design: a marker stands this far goal-side of his man
+ZONE_RADIUS_M = 5.0  # O2: design: a block defender's zone around his place, about half the block's spacing
 SUPPORT_RANGE_M = (8.0, 14.0)  # O3: a diagonal option about 5 to 15 m from the ball
 RUN_BEYOND_M = 10.0  # O4: design: a run in behind aims this far beyond the defensive line
 
@@ -141,24 +142,68 @@ def close_down_spot(carrier: tuple[float, float], own_goal_x: float) -> tuple[fl
     return cx + (gx - cx) / d * CLOSE_DOWN_M, cy + (gy - cy) / d * CLOSE_DOWN_M
 
 
-def marking(defenders: dict[str, tuple[float, float]], attackers: dict[str, tuple[float, float]],
-            own_goal_x: float) -> dict[str, tuple[float, float]]:
-    """O2: each attacker near our goal is picked up by the nearest free defender, who stands
-    goal-side of him. Returns defender id -> spot."""
+def pick_up(defenders: dict[str, tuple[float, float]], attackers: dict[str, tuple[float, float]],
+            own_goal_x: float, keep: dict[str, str] | None = None) -> dict[str, str]:
+    """O2: each attacker near our goal, nearest the goal first, is picked up by the nearest free
+    defender. With `keep` (defender id -> attacker id), a defender still free first keeps the man he
+    marks, wherever that man goes: kept only while near, a man seen just at the edge of DANGER_RANGE_M
+    was dropped and picked up again from one look to the next. Returns defender id -> attacker id."""
     threats = sorted((a for a in attackers.items()
                       if math.hypot(a[1][0] - own_goal_x, a[1][1] - PITCH_Y / 2) < DANGER_RANGE_M),
                      key=lambda a: math.hypot(a[1][0] - own_goal_x, a[1][1] - PITCH_Y / 2))
     free = dict(defenders)
-    spots = {}
-    for _, (ax, ay) in threats:
+    pairs = {did: aid for did, aid in (keep or {}).items() if did in free and aid in attackers}
+    for did in pairs:
+        free.pop(did)
+    for aid, (ax, ay) in threats:
+        if aid in pairs.values():
+            continue
         if not free:
             break
-        pid = min(free, key=lambda k: math.hypot(free[k][0] - ax, free[k][1] - ay))
-        free.pop(pid)
-        gx, gy = own_goal_x, PITCH_Y / 2
-        d = math.hypot(gx - ax, gy - ay) or 1.0
-        spots[pid] = (ax + (gx - ax) / d * MARK_GOAL_SIDE_M, ay + (gy - ay) / d * MARK_GOAL_SIDE_M)
-    return spots
+        did = min(free, key=lambda k: math.hypot(free[k][0] - ax, free[k][1] - ay))
+        free.pop(did)
+        pairs[did] = aid
+    return pairs
+
+
+def goal_side(man: tuple[float, float], own_goal_x: float) -> tuple[float, float]:
+    """O2: where his marker stands, MARK_GOAL_SIDE_M from him toward the centre of our goal."""
+    ax, ay = man
+    gx, gy = own_goal_x, PITCH_Y / 2
+    d = math.hypot(gx - ax, gy - ay) or 1.0
+    return ax + (gx - ax) / d * MARK_GOAL_SIDE_M, ay + (gy - ay) / d * MARK_GOAL_SIDE_M
+
+
+def marking(defenders: dict[str, tuple[float, float]], attackers: dict[str, tuple[float, float]],
+            own_goal_x: float, pairs: dict[str, str] | None = None) -> dict[str, tuple[float, float]]:
+    """O2: each attacker near our goal is picked up by the nearest free defender (pick_up), who
+    stands goal-side of him. Returns defender id -> spot."""
+    pairs = pick_up(defenders, attackers, own_goal_x) if pairs is None else pairs
+    return {pid: goal_side(attackers[aid], own_goal_x) for pid, aid in pairs.items()}
+
+
+def zone_man(slot: tuple[float, float], attackers: dict[str, tuple[float, float]],
+             current: str | None = None) -> str | None:
+    """O2 beyond the box: whom a defender in the block tracks: the attacker nearest his place in the
+    block, if one is inside his zone (ZONE_RADIUS_M); the one he tracks already, while still inside."""
+    inside = {k: v for k, v in attackers.items()
+              if math.hypot(v[0] - slot[0], v[1] - slot[1]) <= ZONE_RADIUS_M}
+    if current in inside:
+        return current
+    return min(inside, key=lambda k: math.hypot(inside[k][0] - slot[0], inside[k][1] - slot[1]), default=None)
+
+
+def zone_spot(slot: tuple[float, float], man: tuple[float, float], own_goal_x: float) -> tuple[float, float]:
+    """O2 beyond the box: a defender in the block with an attacker in his zone stands goal-side of him,
+    as a marker does (MARK_GOAL_SIDE_M), but never further than ZONE_RADIUS_M from his place, so the
+    block keeps its shape (R8). Tracking runners is a large part of what defenders do out of possession
+    (Ade, Fitzpatrick and Bradley 2016, *J Sports Sci* 34: 2205-2214)."""
+    x, y = goal_side(man, own_goal_x)
+    sx, sy = slot
+    off = math.hypot(x - sx, y - sy)
+    if off > ZONE_RADIUS_M:
+        x, y = sx + (x - sx) * ZONE_RADIUS_M / off, sy + (y - sy) * ZONE_RADIUS_M / off
+    return x, y
 
 
 def support_spot(player: tuple[float, float], ball: tuple[float, float], goal_x: float,
