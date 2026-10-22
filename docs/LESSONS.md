@@ -1950,7 +1950,12 @@ short and actionable. This file is public: no research sources, product names or
   against a published count, never a target. Leaving the put-down out made him kick from his
   hands 10.6 times a match against the 0.66 published: when a held-out number is far off, look for
   an option the Laws allow that the engine lacks.
-- **Check:** `tests/test_keeper_hands.py`. Three of its six tests go red when a catch does not put
+- **Check:** `tests/test_keeper_hands.py`. Three of its tests go red when a catch does not put
   the ball in his hands. Two more are red on the first version: there a lunge already on its way
   knocked the ball out of his hands, and a drop kick took the ball from his chest to the grass in
-  one frame. The held-out counts are in the pull request.
+  one frame. The held-out counts then showed the decisions: no throws, holds of about 0.7 s, and
+  kicks from the hands far above the published count. The throw had only the throw-in's lofted
+  way, and he released on the first look. `test_he_waits_out_the_window_while_the_team_sets` is
+  red if he decides before `KEEPER_RELEASE_S`. `test_a_keepers_throw_may_roll_and_a_throw_in_stays_in_the_air`
+  is red if his throw cannot roll or a throw-in can. The 5 s window and the 30 m split are the
+  constants written before that measurement. The kick count stays a check, never a target.

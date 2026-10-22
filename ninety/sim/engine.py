@@ -187,8 +187,8 @@ CLOSING_MPS = BRAKE_MAX * DT
 THROW_REACH_M = 0.28  # design: both hands reach toward the pitch and still stay short of the line
 THROW_HAND_Z = 1.85  # design: bottom of the ball just over an average head (no stature per player)
 # Law 12: a keeper who has the ball in his hands releases it within six seconds, and nobody may
-# challenge him for it while he holds it. He holds it at his chest (design) and lets it go by
-# KEEPER_RELEASE_S, a second inside the limit (design).
+# challenge him for it while he holds it. He holds it at his chest (design) and lets it go at
+# KEEPER_RELEASE_S, a second inside the limit (design), not on the first look (L15).
 KEEPER_HOLD_S = 6.0
 KEEPER_RELEASE_S = KEEPER_HOLD_S - 1.0
 KEEPER_HOLD_Z = 1.1  # design: the ball at an average chest
@@ -927,14 +927,17 @@ class Engine:
         throw from his hands (Law 12)."""
         if not self.can_strike(carrier, tx, ty):
             self.turn_to(carrier, tx, ty,
-                         lambda: self.pass_to(carrier, tx, ty, lofted, throw, pace, receiver, hands))
+                         lambda: self.pass_to(carrier, tx, ty, lofted, throw, pace=pace,
+                                              receiver=receiver, hands=hands))
             return
         if self.held_by == carrier.id and not hands and self.ball[2] > 0.0:
             # A kick from his hands: he lets it fall (tick_carrier, under gravity) and strikes it as it
             # meets the ground (a drop kick), so it leaves from the grass as the passer's estimate
-            # flies it (decisions.fly).
+            # flies it (decisions.fly). `hands` goes by keyword: a listener's pass_to (touches.Watch)
+            # must not see it as a ninth positional argument.
             self.windup = (tx, ty,
-                           lambda: self.pass_to(carrier, tx, ty, lofted, throw, pace, receiver, hands))
+                           lambda: self.pass_to(carrier, tx, ty, lofted, throw, pace=pace,
+                                                receiver=receiver, hands=hands))
             return
         bx, by = self.ball[0], self.ball[1]
         dist = math.hypot(tx - bx, ty - by)
@@ -956,13 +959,13 @@ class Engine:
         self.intended = receiver  # he expects it
 
     def release(self, carrier: Player, scene: decisions.Scene) -> None:
-        """A keeper lets the ball go from his hands (Law 12): thrown to a team-mate within
-        KEEPER_THROW_M, kicked from his hands, or put down to play with his feet, whichever the
-        passer's own estimate values most (D1; put down, it is worth the best he could do from his
-        feet). A throw or a kick is struck at once, as a throw-in is (no turn:
-        decisions.Scene.from_hands). With no option at all he looks again, until KEEPER_RELEASE_S:
-        then he kicks it long up the middle."""
-        thrown = dataclasses.replace(scene, throw=True, mates=[
+        """A keeper lets the ball go from his hands (Law 12). tick_carrier calls this at
+        KEEPER_RELEASE_S, once the window he holds for has run (L15). Thrown to a team-mate within
+        KEEPER_THROW_M (rolled or lofted, whichever the passer's estimate values, D1), kicked from
+        his hands beyond that, or put down to play with his feet, whichever that estimate values
+        most (put down, the best he could do from his feet). A throw leaves his hands; a kick falls
+        and is struck as it meets the ground. With no option at all he kicks it long up the middle."""
+        thrown = dataclasses.replace(scene, throw=True, from_hands=True, mates=[
             m for m in scene.mates if math.hypot(m[1] - scene.x, m[2] - scene.y) <= KEEPER_THROW_M])
         kicked = dataclasses.replace(scene, from_hands=True, mates=[
             m for m in scene.mates if math.hypot(m[1] - scene.x, m[2] - scene.y) > KEEPER_THROW_M])
@@ -979,7 +982,8 @@ class Engine:
             return
         if best:
             o, throw = best
-            self.pass_to(carrier, *o.target, lofted=True, pace=o.pace, receiver=o.receiver, hands=throw)
+            self.pass_to(carrier, *o.target, lofted=o.lofted, pace=o.pace, receiver=o.receiver,
+                         hands=throw)
         elif self.t - self.held_since >= KEEPER_RELEASE_S:
             self.pass_to(carrier, PITCH_X / 2 + attack_dir(carrier.team) * 10.0, PITCH_Y / 2, lofted=True)
         else:
@@ -2817,10 +2821,11 @@ class Engine:
             k = 1.0 if d <= BALL_TO_FEET * DT else BALL_TO_FEET * DT / d
             nx, ny, nz = bx + (hx - bx) * k, by + (hy - by) * k, bz + (KEEPER_HOLD_Z - bz) * k
             self.ball = (nx, ny, nz, (nx - bx) / DT, (ny - by) / DT, (nz - bz) / DT)
-            facing = fmath.cos(carrier.heading - up) >= fmath.cos(STRIKE_FACING)
-            late = self.t - self.held_since >= KEEPER_RELEASE_S
-            if (self.t >= self.hold_until and k == 1.0 and (facing or late)
-                    and (late or (self.frame + int(carrier.id[1:])) % DECIDE_EVERY == 0)):
+            # L15: he waits out KEEPER_RELEASE_S. The pass estimate cannot see a run developing
+            # during the hold, and the published mean sits on the law's own limit, so he does not
+            # throw or kick on the first look.
+            if (self.t >= self.hold_until and k == 1.0
+                    and self.t - self.held_since >= KEEPER_RELEASE_S):
                 self.decide(carrier, hands=True)
             return
         if self.throw_by == carrier.id:  # Law 15: held behind the line and thrown, not dribbled

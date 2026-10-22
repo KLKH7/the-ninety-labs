@@ -190,8 +190,9 @@ class Scene:
     absorb: dict[str, float]  # team-mates' first touch (A4), by id
     passer: Profile  # who he is, for his own kick error (A3)
     throw: bool = False  # Law 15: a throw-in, so every pass is thrown (lofted) and nothing else
-    # Law 12: a keeper with the ball in his hands drops it and kicks it at once, at whatever angle
-    # (engine.release, can_strike), as a throw-in leaves the hands: no turn first.
+    # Law 12: the ball is in the keeper's hands, so he releases it without turning to a kicking
+    # side (engine.release, can_strike). With throw as well, it is his throw and may roll (L15).
+    # Alone, it is a drop kick.
     from_hands: bool = False
     set_piece: bool = False  # Laws 8, 13, 16, 17: a set ball, played away, never carried off
     # The team's style (T4): how much ground gained from here is worth, and how much losing the
@@ -810,10 +811,18 @@ def pass_option(scene: Scene, mate: tuple[str, float, float, float]) -> Option |
     mx_, my_ = (scene.x + tx) / 2, (scene.y + ty) / 2
     lost = max(our_loss(scene, mx_, my_), our_loss(scene, tx, ty))
     # D1: how to play it is his choice: along the ground at a pace the lane needs, or, from
-    # LOFT_FROM_M, over the top. A throw-in always goes through the air.
-    ways = [(True, ARRIVE_MPS)] if scene.throw else [(False, pace) for pace in PASS_PACES]
-    if not scene.throw and dist >= LOFT_FROM_M:
+    # LOFT_FROM_M, over the top. A throw-in always goes through the air (Law 15). A keeper's
+    # throw (throw and from_hands, L15) may roll or go through the air, on the paces a pass
+    # already has. No new distance.
+    if scene.throw and not scene.from_hands:
+        ways = [(True, ARRIVE_MPS)]
+    elif scene.throw and scene.from_hands:
+        ways = [(False, pace) for pace in PASS_PACES]
         ways.append((True, ARRIVE_MPS))
+    else:
+        ways = [(False, pace) for pace in PASS_PACES]
+        if dist >= LOFT_FROM_M:
+            ways.append((True, ARRIVE_MPS))
     best = None
     for lofted, pace in ways:
         confidence = pass_confidence(scene, tx, ty, mx, my, age, lofted, pace, mid)
