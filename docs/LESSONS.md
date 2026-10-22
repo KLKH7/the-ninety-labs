@@ -1975,6 +1975,23 @@ short and actionable. This file is public: no research sources, product names or
   - Each mechanism was put back to 0.5.9 alone (bob tables zeroed, swing height, the frame-ahead
     swing, the lean, the speed lean, the arm pump), and its test fails.
 
+### 184. What the picture draws as solid, the engine treats as solid
+- **What happened:** the renderer drew a net behind each goal, but the engine had none. After a
+  goal the dead ball rolled on through the back of the net to the advertising boards, 4 m behind
+  the goal line, and the keeper walked through the net to fetch it. On demo v2's seed 8001 the
+  ball came to rest at (109.0, 35.7) after the goal at 155.3 s. Over 20 matches on main it
+  happened after all 16 goals. Players walked through a net 66 times, 61 of them keepers, all while
+  the ball was dead: 27 after goals and 39 at other stoppages.
+- **Rule:**
+  - Every structure the renderer draws that a ball or a player can meet has the same geometry
+    in the engine's physics, citing the drawing where it takes its shape from it: the boards,
+    and now the net (L1).
+  - For the net that now means no player passes through it, and a ball that goes in stays in the
+    goal. A ball meeting it from outside (wide of a post, or dropping over the bar) still passes
+    through; that is the next step.
+- **Check:** `uv run pytest tests/test_goal_net.py`. On main the ball goes 4 m deep, through the
+  roof and through the side netting, and the keeper walks through the net.
+
 ### 185. Footage a viewer watches and data a model learns from are dressed apart, and the dressing is proved label-free
 - **What happened:** the demo clip (seed 8001, v1) was rendered with the training look: seats with no
   one in them, beige run-off and black ground behind the goals, four repeated boards, stark mowing.
@@ -2013,3 +2030,35 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `uv run pytest tests/test_render_edit.py tests/test_render_camera.py -k "imminent or
   celebration or stinger or opens_on_the_wide or scorer"`. Each test fails on 0.5.9, the version
   before demo v2.
+
+### 162. A player off the ball answers the players around him, not only the ball
+- **What happened:** fans and clip critics saw the team without the ball stand between actions. On
+  seed 21 most standing spells of 3 s or more were block defenders whose place did not move while
+  they stood. Every place off the ball (block slots, the attacking shape, all but the carrier's
+  nearest two) depended on the ball's position alone, so when the ball paused both teams froze. A
+  walking floor did not fix it (standing 22% to 20%, one seed). The first fix for attackers chose
+  the most open spot, then the one a pass is worth most at, and drew them toward the carrier: a spot
+  nearer the ball is always safer, so passes shortened and square passes with a free option ahead
+  (FS7) rose by about 40%. Holding pass length and FS7 out as checks caught it.
+- **Rule:** a target off the ball reacts to the players he sees. An attacker steps to where a pass
+  from the carrier is worth most, across his lane or further out, never nearer (O3). A block
+  defender tracks the attacker in his zone, goal-side, without leaving it (O2). Each decides again
+  only when he scans and holds his choice between scans. When a value always rises in one
+  direction, limit the candidates by what football allows; never tune its weights to the held-out
+  checks.
+- **Check:** `tests/test_open_space.py::test_a_defender_in_his_lane_moves_an_attacker_once_he_scans`,
+  `::test_he_never_comes_nearer_the_carrier_to_be_open`, and
+  `tests/test_zone_tracking.py::test_a_defender_follows_the_attacker_in_his_zone_once_he_scans`; the
+  held-out measures in the pull request.
+
+### 190. A test that reads its constant back cannot pin it
+- **What happened:** the foul pose asserted `foul_fall_deg(...) == FALL_DOWN_DEG` and `peak >= 80`.
+  A lie of 80° left both green, and so did rewriting the pose times, because the test added those
+  constants up and compared the curve to them. The planted clips sat 0.4 s and 1.6 s from the
+  restart, so a floor of 0.5 s and a floor of 1.5 s both passed.
+- **Rule:** an expected output that pins a design value is the number that design produces, written
+  out. A test that reads the constant moves with the bug. Lesson 36 is the other half: an input
+  that has to sit beside a threshold is derived from that threshold. A bound is planted on a case
+  the looser value lets through, and the tighter value does not.
+- **Check:** `tests/test_fouls.py` and the P18 tests in `tests/test_validate.py`. A lie of 80°, a
+  pose time rewritten, and a floor of 0.5 s each fail one of them.

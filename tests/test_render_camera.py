@@ -474,6 +474,23 @@ def test_after_a_cut_the_restart_opens_on_the_wide_shot_and_holds_it():
     assert set(angles) == {"main"}, set(angles)
 
 
+def test_a_cut_reframes_on_the_restart_however_far_the_stoppage_was_framed():
+    """The edit's cut is a new framing, not the stoppage's held over: built so the property must
+    hold (the stoppage framed at the left of the pitch, the restart set far to the right), the
+    restart's spot jumps more than a fifth of the picture's width across the cut and comes up in its
+    middle half. Moved here from test_render_clip, where it rested on whatever seed 11's play put
+    either side of the cut (lesson 187)."""
+    d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=True)
+    before = _held(d, 30.0, 34.0, 50)
+    d.cut()
+    d.open_on_restart()
+    after = d.step(80.0, 12.0, [])
+    spot = (80.0, 12.0, 0.0)
+    now, then = after.project(spot), before.project(spot)
+    assert now is not None and abs(now[0] - 640) < 0.25 * 1280, now
+    assert then is None or math.dist(now, then) > 0.2 * 1280, (now, then)
+
+
 def test_after_a_goal_the_scorer_and_his_celebration_are_followed():
     """Demo v1's critic (#8): after the goal a fixed low shot beside the net showed the keeper and
     never the scorer. Told who scored, the camera stays on the gantry for the goal itself, then a
