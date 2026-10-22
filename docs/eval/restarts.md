@@ -237,7 +237,7 @@ renderer draws it: 2 m deep, its back 2 m high, the roof sloping down to it from
 | Players stepping through a net: after goals / at other stoppages | 27 / 39 | 0 / 0 |
 | The ball going into or out of a goal other than by its mouth: after goals / at other times | 28 / 24 | 0 / 0 |
 | Seconds from a goal to the kick-off | 63.9 to 90.0 | 61.4 to 87.2 |
-| Matches meeting the data contract (`ninety-validate`) | 20 of 20 | CONTRACT of 20 |
+| Matches meeting the data contract (`ninety-validate`) | 20 of 20 | 20 of 20 |
 | Shots a team per 90 | 17.8 ± 1.3 | 17.5 ± 1.4 |
 | Goals a team per 90 | 1.8 ± 0.6 | 1.6 ± 0.4 |
 | Corners a team per 90 | 2.8 ± 0.6 | 2.3 ± 0.6 |
@@ -249,6 +249,10 @@ is the same as main's until a ball or a player first meets a net, or a dead ball
 does (18 of 20; the other two are the same for all 20 minutes). Where that came after a goal, the
 goal itself is the same (4 matches). Shots (t = −0.1), goals (−0.3), corners (−0.7) and completion
 (+0.1) are within chance; the matches part from there (lesson 90). Held-out checks, never targets.
+
+The validator's P5 (a ball in flight falls under gravity) now counts a ball within 0.6 m of a net
+inside a goal as meeting a contact, as it already did at the woodwork: before that, seed 109 failed
+it once, its rising shot pushed down by the sloping roof (66 m/s² up for a frame).
 
 What is left: a ball meeting a net from outside (wide of a post into the side netting, or dropping
 over the bar onto the roof) still passes through it. None did in these 20 matches.
