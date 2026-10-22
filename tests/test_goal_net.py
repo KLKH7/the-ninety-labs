@@ -5,6 +5,8 @@ there the ball rolled on through the back of the net to the advertising boards, 
 walked through the net after it."""
 
 import math
+import re
+from pathlib import Path
 
 import pytest
 
@@ -21,6 +23,7 @@ from ninety.sim.engine import (
     PITCH_Y,
     Engine,
     net_stop,
+    steer,
 )
 
 R = ball.RADIUS
@@ -81,17 +84,18 @@ def frame(e: Engine) -> dict:
             "restart": r.kind if r else None}
 
 
-def shot_at_goal(shot: tuple[float, ...]) -> Engine:
-    """A minute into a match, a shot by h9 flies at the away side's goal with nobody near enough
-    to touch it."""
+def shot_at_goal(shot: tuple[float, ...], shooter: str = "h9") -> Engine:
+    """A minute into a match, a shot by `shooter` flies at the other side's goal (the home side
+    attacks x = PITCH_X) with nobody near enough to touch it."""
     e = Engine(2)
     e.run(1)
+    home = shooter.startswith("h")
     for p in e.players:
-        p.x, p.vx, p.vy = min(p.x, 80.0), 0.0, 0.0
+        p.x, p.vx, p.vy = (min(p.x, 80.0) if home else max(p.x, PITCH_X - 80.0)), 0.0, 0.0
     e.possessor, e.restart, e.throw_by, e.set_by = None, None, None, None
     e.ball = shot
-    e.last_touch = "h9"
-    e.kicked = e.emit("shot", "home", shot[0], shot[1], player="h9")
+    e.last_touch = shooter
+    e.kicked = e.emit("shot", "home" if home else "away", shot[0], shot[1], player=shooter)
     e.shot_touched_by = e.shot_was_on_target = None
     return e
 
@@ -106,10 +110,11 @@ def play_on(e: Engine, done, seconds: float) -> list[dict]:
     raise AssertionError("never happened")
 
 
-def goal_then_kickoff(shot: tuple[float, ...]) -> tuple[Engine, list[dict], list[dict], tuple[float, float]]:
+def goal_then_kickoff(shot: tuple[float, ...], shooter: str = "h9") -> tuple[Engine, list[dict], list[dict],
+                                                                         tuple[float, float]]:
     """The shot until the goal, then on until the kick-off is taken; and where the engine, at the
     goal, said the ball would come to rest."""
-    e = shot_at_goal(shot)
+    e = shot_at_goal(shot, shooter)
     before = play_on(e, lambda e: any(ev["type"] == "goal" for ev in e.match.events), 3)
     netted = e.netted
     rest = e.dead_ball_rest()
@@ -162,6 +167,7 @@ def test_the_side_that_conceded_fetches_it_out_through_the_goal_mouth(name):
     out = next(b for a, b in zip(after, after[1:], strict=False) if a["ball"][0] > PITCH_X >= b["ball"][0])
     assert abs(out["ball"][1] - MID) < GOAL_HALF_WIDTH  # out over the goal line, between the posts
     assert e.match.events[-1]["type"] == "kickoff"
+    assert e.netted is None  # out of the goal, the net lets it go
 
 
 @pytest.mark.parametrize("name", SHOTS)
@@ -228,6 +234,8 @@ def test_going_round_the_net_keeps_a_stride_clear_of_it():
     (((104.0, 34.0), (105.5, 34.5)), (105.5, 34.5)),  # in through the goal mouth: free
     (((106.0, 38.0), (106.5, 38.3)), (106.5, 38.3)),  # beside the goal, outside it: free
     (((-1.0, 30.5), (-1.0, 30.0)), (-1.0, 30.5)),  # the other goal's side net
+    (((106.95, 37.6), (107.2, 37.8)), (106.95, 37.6)),  # through the corner, the back met first
+    (((106.0, 37.5), (106.0, 37.66)), (106.0, 37.5)),  # onto the side netting's line: touching it
 ])
 def test_a_net_stops_a_player_as_the_boards_do(step, kept):
     (px, py), (x, y) = step
@@ -264,3 +272,93 @@ def test_the_goal_itself_is_unchanged():
     goal = netted.match.events[-1]
     shot_event = next(ev for ev in netted.match.events if ev["type"] == "shot" and ev["player"] == "h9")
     assert goal["type"] == "goal" and shot_event["outcome"] == "goal" and goal["player"] == "h9"
+
+
+def test_the_engines_net_is_the_net_the_renderer_draws():
+    """L1: the net's shape is the one drawn (web/render/render.js, buildNet), so the ball stops at
+    the net the viewer sees."""
+    src = (Path(__file__).parents[1] / "web" / "render" / "render.js").read_text()
+    drawn = re.search(r"const y0 = ([\d.]+), y1 = ([\d.]+), depth = ([\d.]+), backZ = ([\d.]+);", src)
+    y0, y1, depth, back = map(float, drawn.groups())
+    assert (y0, y1) == pytest.approx((MID - GOAL_HALF_WIDTH, MID + GOAL_HALF_WIDTH))
+    assert (depth, back) == (NET_DEPTH_M, NET_BACK_M)
+
+
+def test_nobody_takes_the_dead_ball_through_the_net():
+    """A player of the side that conceded, standing outside the side netting within a foot's
+    reach of the ball at rest inside it, does not take it through the net (the audit's probe B):
+    whoever takes it has no net between him and it."""
+    e = shot_at_goal(SHOTS["across"][0])
+    play_on(e, lambda e: any(ev["type"] == "goal" for ev in e.match.events), 3)
+    play_on(e, lambda e: math.hypot(*e.ball[3:]) == 0.0, 5)
+    bx, by = e.ball[:2]
+    assert by >= MID + GOAL_HALF_WIDTH - R - EPS  # at rest against the side netting
+    near = e.by_id["a2"]
+    near.x, near.y, near.vx, near.vy = bx, MID + GOAL_HALF_WIDTH + 0.45, 0.0, 0.0
+    assert math.dist((near.x, near.y), (bx, by)) < 1.0  # within a foot's reach (CONTROL_M)
+    track = play_on(e, lambda e: e.restart.carried_by is not None, 60)
+    taker = track[-1]["players"][e.restart.carried_by]
+    assert not any(through(taker, track[-2]["ball"][:2], c, d) for c, d in nets())
+
+
+def test_a_player_running_at_a_net_is_stopped_by_it():
+    """steer: the net stops the part of a run that goes into it, as the boards do."""
+    p = Engine(2).keeper("away")
+    p.x, p.y, p.vx, p.vy = PITCH_X + 1.0, MID + GOAL_HALF_WIDTH - 0.6, 0.0, 4.0  # in the goal, at its side
+    for _ in range(25):
+        steer(p, p.x, MID + GOAL_HALF_WIDTH + 3.0, 7.0)
+        assert p.y < MID + GOAL_HALF_WIDTH
+    assert p.vy == 0.0
+
+
+def test_a_keeper_diving_at_his_net_is_stopped_by_it():
+    """keeper_dive: a dive from inside the goal toward the side netting stops at it, and he lands
+    with no speed into it."""
+    e = Engine(2)
+    k = e.keeper("away")
+    k.x, k.y, k.vx, k.vy = PITCH_X + 0.8, MID + GOAL_HALF_WIDTH - 1.0, 0.0, 0.0
+    e.dive = (k.id, e.t, k.y, 2.5, e.t, 0.0)  # 2.5 m sideways, through where the side netting is
+    stopped = False
+    while e.keeper_dive(k):
+        assert k.y < MID + GOAL_HALF_WIDTH
+        stopped = stopped or k.vy == 0.0
+        e.t += DT
+    assert stopped and k.vy == 0.0
+
+
+def test_the_net_of_the_goal_at_the_other_end_holds_the_ball_too():
+    """The away side scores at x = 0: the home side's net holds the ball, nobody walks through a
+    net, and it is fetched out through the mouth; going round that goal's net, a player leaves
+    through its mouth."""
+    e, before, after, _ = goal_then_kickoff((5.0, 34.5, 0.2, -26.0, 0.5, 1.0), "a9")
+    assert next(ev for ev in e.match.events if ev["type"] == "goal")["team"] == "away"
+    held = [f for f in after if f["ball"][0] < 0]
+    assert held and all(-f["ball"][0] <= NET_DEPTH_M - R + EPS for f in held)
+    assert all(abs(f["ball"][1] - MID) <= GOAL_HALF_WIDTH - R + EPS for f in held)
+    out = next(b for a, b in zip(after, after[1:], strict=False) if a["ball"][0] < 0 <= b["ball"][0])
+    assert abs(out["ball"][1] - MID) < GOAL_HALF_WIDTH
+    assert walked_through(before + after) == []
+    p = e.keeper("home")
+    p.x, p.y = -1.0, MID
+    assert e.round_the_net(p, -3.5, MID) == (NET_CLEAR_M, MID)
+
+
+@pytest.mark.parametrize("ball_state", [
+    (100.0, MID + GOAL_HALF_WIDTH + 1.0, 0.3, 20.0, 0.0, 0.5),  # wide of the post
+    (100.0, MID, 2.4, 20.0, 0.0, 3.0),  # over the bar
+], ids=["wide of the post", "over the bar"])
+def test_a_ball_played_on_after_the_whistle_wide_or_over_is_not_pulled_into_the_goal(ball_state):
+    """Only a ball that goes in over the goal line between the posts and under the bar is held: one
+    played on after the whistle wide of a post or over the bar flies on as it would anyway."""
+    e = Engine(2)
+    e.run(1)
+    for p in e.players:
+        p.x, p.vx, p.vy = min(p.x, 80.0), 0.0, 0.0
+    e.possessor, e.throw_by, e.set_by = None, None, None
+    e.stop("free_kick", "away", (60.0, MID))
+    e.ball = ball_state
+    free = ball.predict(e.ball, DT, 1.0)
+    track = play_on(e, lambda e: e.ball[0] > PITCH_X + NET_DEPTH_M + 0.5, 2)
+    assert e.netted is None and len(track) <= len(free)
+    for f, s in zip(track, free, strict=False):
+        assert f["ball"] == s

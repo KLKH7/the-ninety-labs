@@ -378,22 +378,35 @@ def test_a_rebound_off_the_crossbar_is_not_judged_as_free_flight(tmp_path):
     assert "P5 ball flight" not in problems
 
 
-@pytest.mark.parametrize(("where", "x", "y", "lift", "contact"), [
-    ("in the middle of the goal", 105.9, 34.0, 0.0, False),
-    ("by the back of the net", 106.8, 34.0, 0.0, True),
-    ("by the side netting", 105.9, 37.3, 0.0, True),
-    ("under the net's roof", 106.0, 34.0, 0.4, True),
-])
-def test_a_ball_the_net_stops_is_not_judged_as_free_flight(tmp_path, where, x, y, lift, contact):
-    """Lesson 184: inside a goal its net, as the renderer draws it, is a contact as the woodwork
-    is. In the middle of the goal, more than WOODWORK_NEAR_M from the net, the same jolt is a
-    defect."""
+# Where a jolt in flight happens, relative to the goal at x = 105 (its net as the renderer draws
+# it: 2 m deep, its back 2 m high, the roof sloping down to it from the 2.44 m crossbar), and
+# whether the net can be what stopped the ball there. The engine holds a ball against the net with
+# its centre a radius (0.11 m) from the back or a side, or its top at the roof.
+NET_CASES = [
+    ("in the middle of the goal", 105.9, 34.0, None, False),
+    ("against the back of the net", 106.89, 34.0, None, True),
+    ("against the side netting", 105.9, 37.55, None, True),
+    ("against the net's roof", 106.0, 34.0, 2.0, True),  # roof 2.22 m there, less the ball's 0.22
+    ("a few centimetres off the back of the net", 106.85, 34.0, None, False),
+    ("just behind the back of the net, outside it", 107.11, 34.0, None, False),
+    ("just outside the side netting", 105.9, 37.77, None, False),
+    ("above the roof", 106.0, 34.0, 2.5, False),
+    ("4 m above the back of the net", 106.89, 34.0, 4.8, False),
+]
+
+
+@pytest.mark.parametrize(("where", "x", "y", "z", "contact"), NET_CASES)
+def test_a_ball_the_net_stops_is_not_judged_as_free_flight(tmp_path, where, x, y, z, contact):
+    """Lesson 184: inside a goal, a ball touching its net meets a contact, as at the woodwork. The
+    same jolt anywhere the net cannot be touching the ball is a defect. The ball flies in the middle
+    of the goal; on the jolt's frame it is where the case puts it."""
     clip = clean_clip()
     lofted(clip)
     for n in range(PASS_AT, PASS_AT + 26):
-        b = clip["frames"][n]["ball"]
-        b["x"], b["y"], b["z"] = x, y, round(b["z"] + lift, 4)
-    clip["frames"][PASS_AT + 10]["ball"]["z"] -= 0.4
+        clip["frames"][n]["ball"]["x"], clip["frames"][n]["ball"]["y"] = 105.9, 34.0
+    jolt = clip["frames"][PASS_AT + 10]["ball"]
+    jolt["x"], jolt["y"] = x, y
+    jolt["z"] = z if z is not None else jolt["z"] - 0.4
     assert ("P5 ball flight" in run(tmp_path, clip)) is not contact, where
 
 

@@ -250,9 +250,10 @@ does (18 of 20; the other two are the same for all 20 minutes). Where that came 
 goal itself is the same (4 matches). Shots (t = −0.1), goals (−0.3), corners (−0.7) and completion
 (+0.1) are within chance; the matches part from there (lesson 90). Held-out checks, never targets.
 
-The validator's P5 (a ball in flight falls under gravity) now counts a ball within 0.6 m of a net
-inside a goal as meeting a contact, as it already did at the woodwork: before that, seed 109 failed
-it once, its rising shot pushed down by the sloping roof (66 m/s² up for a frame).
+The validator's P5 (a ball in flight falls under gravity) now counts a ball inside a goal touching
+its net as meeting a contact, as it already did near the woodwork: its centre a radius from the back
+or a side, or its top at the roof, to within two roundings of a written position. Before that,
+seed 109 failed it once, its rising shot pushed down by the sloping roof (66 m/s² up for a frame).
 
 What is left: a ball meeting a net from outside (wide of a post into the side netting, or dropping
 over the bar onto the roof) still passes through it. None did in these 20 matches.

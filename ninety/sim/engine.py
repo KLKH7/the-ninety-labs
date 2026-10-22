@@ -409,7 +409,9 @@ def goal_entered(before: ball.State, after: ball.State) -> float | None:
 
 def net_step(before: ball.State, after: ball.State, line: float | None) -> tuple[ball.State, float | None]:
     """A dead ball's move from `before` to `after`, held by the net of the goal it is in (`line`),
-    or has just gone into (goal_entered): a goal, or a ball played on after the whistle."""
+    or has just gone into (goal_entered): a goal, or a ball played on after the whistle. A ball
+    outside the goal meets no net (design, as specified for lesson 184: the net's outside, met by a
+    ball wide of a post or dropping over the bar, is not modelled yet)."""
     return in_the_net(after, goal_entered(before, after) if line is None else line)
 
 
@@ -1956,14 +1958,16 @@ class Engine:
             if math.hypot(vx, vy) == 0.0:
                 r.passed_by = None  # it has stopped: anyone may go for it again
             # One of his side within a foot's reach of it takes it (the taker first), once it is
-            # on the ground: a dead ball still dropping is left to land.
+            # on the ground: a dead ball still dropping is left to land. Nobody reaches it through
+            # a goal's net (L1).
             bx, by, bz = self.ball[0], self.ball[1], self.ball[2]
             # His foot kills no more speed than a first touch does (A4); a faster ball runs on.
             if bz == 0.0 and self.ball[5] <= 0.0:
                 near = [p for p in self.players if p.team == r.team and p.id != r.passed_by
                         and math.hypot(p.x - bx, p.y - by) <= CONTROL_M
                         and math.hypot(self.ball[3] - p.vx, self.ball[4] - p.vy)
-                        <= p.profile.absorb_mps(False)]
+                        <= p.profile.absorb_mps(False)
+                        and not any(crosses((p.x, p.y), (bx, by), c, d) for c, d in NETS)]  # not through nets
                 if near:
                     carrier = next((p for p in near if p.id == r.taker), near[0])
                     r.carried_by, r.passed_by, r.fetcher = carrier.id, None, None
