@@ -373,8 +373,9 @@ function boardTexture(p, rand) {
 // A plain stadium is every dataset's look and stays exactly as it was. Broadcast footage adds a crowd
 // in the stands, a closed ring of boards, a wall under each stand's front and an LED ribbon under
 // each upper tier, so nothing behind a goal or a touchline is bare ground, and boards that vary.
-// Everything here is decor: the id pass never draws the crowd, so no label changes, and the walls,
-// boards and ribbons are opaque scenery like the boards a plain stadium already has.
+// Everything here is scenery, as the boards a plain stadium already has: the id pass draws it to hide
+// what is behind it and never labels it. The fans are drawn there as the picture draws them (the same
+// billboards, cut-outs and motion), so a ball among them is hidden where the picture hides it.
 
 // Made-up advertisers (with what they sell, as a board shows it). None is a real brand.
 const BROADCAST_BRANDS = [
@@ -456,6 +457,16 @@ function wallTexture() {
 // Seated spectators on every tier: two instanced billboards a person (shirt and head), facing the
 // pitch, tinted per person. Home fans wear the home shirt more often than not, and a block at one end
 // the away shirt. They fidget, and the scoring side's fans jump for a goal (spec.goal_age).
+// How a fan moves, in the picture and in the id pass alike: a fidget, and the scoring side's jump.
+const CROWD_VERTEX_HEAD = 'uniform float uTime;\nuniform vec2 uCheer;\nattribute float aTeam;\n';
+const CROWD_MOTION = `
+  float ph = fract(sin(dot(instanceMatrix[3].xy, vec2(12.9898, 78.233))) * 43758.5453);
+  float cheer = aTeam > 0.5 ? uCheer.y : uCheer.x;
+  transformed.z += 0.015 * sin(uTime * (0.8 + ph) + ph * 30.0)
+    + cheer * 0.28 * abs(sin(uTime * 6.0 + ph * 6.283));
+  transformed.x += 0.02 * sin(uTime * 0.6 + ph * 17.0);
+`;
+
 function crowdMeshes(tiers, p, rand) {
   const seats = [];
   for (const { corners, uSpan } of tiers) {
@@ -505,16 +516,25 @@ function crowdMeshes(tiers, p, rand) {
     m.customProgramCacheKey = () => 'crowd';
     m.onBeforeCompile = (shader) => {
       Object.assign(shader.uniforms, uniforms);
-      shader.vertexShader = 'uniform float uTime;\nuniform vec2 uCheer;\nattribute float aTeam;\n' + shader.vertexShader;
-      shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', `
-        #include <begin_vertex>
-        float ph = fract(sin(dot(instanceMatrix[3].xy, vec2(12.9898, 78.233))) * 43758.5453);
-        float cheer = aTeam > 0.5 ? uCheer.y : uCheer.x;
-        transformed.z += 0.015 * sin(uTime * (0.8 + ph) + ph * 30.0)
-          + cheer * 0.28 * abs(sin(uTime * 6.0 + ph * 6.283));
-        transformed.x += 0.02 * sin(uTime * 0.6 + ph * 17.0);
-      `);
+      shader.vertexShader = CROWD_VERTEX_HEAD + shader.vertexShader;
+      shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>',
+        '#include <begin_vertex>\n' + CROWD_MOTION);
     };
+    // In the id pass the same fan, moved the same way and cut out by the same sprite, in scenery's id.
+    m.userData.idMat = new THREE.ShaderMaterial({
+      uniforms: { ...uniforms, map: { value: map }, idc: { value: new THREE.Vector3(SCENERY_ID / 255, 0, 0) } },
+      vertexShader: CROWD_VERTEX_HEAD + `varying vec2 vUv;
+        void main() {
+          vec3 transformed = position;
+          ${CROWD_MOTION}
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(transformed, 1.0);
+        }`,
+      fragmentShader: `uniform sampler2D map; uniform vec3 idc; varying vec2 vUv;
+        void main() { if (texture2D(map, vUv).a < 0.5) discard; gl_FragColor = vec4(idc, 1.0); }`,
+      blending: THREE.NoBlending,
+      side: THREE.DoubleSide,
+    });
     return m;
   };
   // Their normals lean up as the tier's do, so a stand lit from behind is lit like its seats and its
@@ -1887,7 +1907,7 @@ class BroadcastRenderer {
     );
 
     // A broadcast stadium: walls, ribbons and the board ring's corners (opaque scenery), and the
-    // crowd, which the id pass never draws (notOccluders below), so no label can change.
+    // crowd, scenery in the id pass too: it hides what is behind it and is never labelled.
     let crowd = [];
     this.crowd = null;
     if (broadcast) {
@@ -1927,12 +1947,13 @@ class BroadcastRenderer {
     for (const m of [...this.decor, ...this.posts]) this.scene.add(m);
     // Every opaque piece of scenery hides what is behind it in the full id pass, as it does in the
     // picture: a ball resting behind the boards is not visible. Left out: the sky (always behind),
-    // the ground (nothing labelled is under it), the see-through nets, the shadow decals and the crowd.
-    const notOccluders = new Set([sky, surround, pitch, this.shadows, ...this.nets, ...crowd]);
+    // the ground (nothing labelled is under it), the see-through nets and the shadow decals. The fans
+    // are cut out of their billboards in the id pass as in the picture (crowdMeshes).
+    const notOccluders = new Set([sky, surround, pitch, this.shadows, ...this.nets]);
     this.scenery = this.decor.filter((m) => m.isMesh && !notOccluders.has(m));
     for (const m of this.scenery) {
       m.userData.mat = m.material;
-      m.userData.idMat = idMaterial(SCENERY_ID);
+      m.userData.idMat = m.material.userData.idMat || idMaterial(SCENERY_ID);
       m.userData.idMat.side = m.material.side; // the near boards face the pitch: no back face for the gantry
     }
 

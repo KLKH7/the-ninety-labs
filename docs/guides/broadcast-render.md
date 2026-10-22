@@ -66,8 +66,8 @@ datasets and beating them on motion blur).
   watches (the demo clip): a seated crowd in every stand in the teams' colours that jumps for a goal,
   the board ring closed at the corners with varied made-up adverts, a wall under each stand and an
   LED ribbon under each upper tier, grass on to the stands, and softer mowing. No seed draws it, so
-  no dataset changes look; the crowd is never drawn in the id pass, so no label changes
-  (`tests/test_render_stadium.py`)
+  no dataset changes look. The crowd is scenery in the id pass: never labelled, and it hides
+  a ball among the fans exactly where the picture does (`tests/test_render_stadium.py`)
 
 Log every choice in the frame metadata. Never randomize something you cannot label.
 

@@ -137,17 +137,25 @@ def _labels(page, stadium):
     return out
 
 
-def test_the_crowd_is_never_labelled_and_no_label_changes(page):
-    """stadium=broadcast puts tens of thousands of spectators in the stands; none of them is a
-    labelled object, and every player's, the ball's and the keypoints' labels are the plain
-    stadium's, pixel for pixel, whichever way the camera looks at the crowd. The fans are decor the
-    id pass never draws, so a ball in the stands is labelled as seen through them (footage only:
-    no dataset has a crowd)."""
+def test_the_crowd_is_never_labelled_and_hides_only_what_is_behind_it(page):
+    """stadium=broadcast puts tens of thousands of spectators in the stands. None of them is a
+    labelled object, and in front of play they change no label: from the gantry and the reverse
+    angle every player's, the ball's and the keypoints' labels are the plain stadium's, pixel for
+    pixel. A ball kicked into the stands is hidden by the fans in front of it, as the picture hides
+    it (lesson 84): fewer visible pixels, the same solo silhouette and box."""
     plain = _labels(page, "plain")
     broadcast = _labels(page, "broadcast")
     assert page.evaluate("() => window.ninety.crowd()") > 20000
-    assert broadcast == plain
-    # The frame does see the players and the ball, so the comparison is not of empty labels.
+    assert broadcast[:2] == plain[:2]
+    # The frames do see the players and the ball, so the comparison is not of empty labels.
     for objects, _ in plain[:2]:
         assert all(objects[k]["visible"] > 0 for k in ("h1", "a4", "ball")), objects
-    assert plain[2][0]["ball"]["visible"] > 20, plain[2][0]["ball"]
+    (p_obj, p_kps), (b_obj, b_kps) = plain[2], broadcast[2]
+    assert b_kps == p_kps
+    assert p_obj["ball"]["visible"] > 20, p_obj["ball"]
+    assert b_obj["ball"]["visible"] < 0.8 * p_obj["ball"]["visible"], (b_obj["ball"], p_obj["ball"])
+    for k in ("h1", "a4", "ball"):
+        assert {f: b_obj[k][f] for f in ("full", "bbox", "centroid")} == \
+            {f: p_obj[k][f] for f in ("full", "bbox", "centroid")}, k
+        if k != "ball":
+            assert b_obj[k] == p_obj[k], k

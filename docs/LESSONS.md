@@ -1806,12 +1806,15 @@ short and actionable. This file is public: no research sources, product names or
 - **Rule:**
   - Dressing for viewers sits behind a knob that no seed draws (`stadium=broadcast`, like
     `kit_contrast=broadcast`): training, validation and test renders stay byte-identical.
-  - Dressing is decor: a crowd is never drawn in the id pass, so it can neither be labelled nor
-    hide a label. A test proves it with a case where it would matter: a ball in the stands behind
-    fans.
+  - Dressing is scenery: never labelled, and in the id pass it hides what is behind it exactly as
+    the picture does. The fans are drawn there with the same billboards, cut-outs and motion code.
+    A first version left the crowd out of the id pass, which labelled a ball among the fans as
+    visible while the picture hid it (lesson 84; the Reviewer caught it).
+  - A test proves both sides with a case where they matter: a ball in the stands behind fans.
 - **Check:**
-  - `uv run pytest tests/test_render_stadium.py -k crowd`. With the crowd drawn in the id pass it
-    fails: the fans' pixels count as 52,436 visible pixels of one player.
+  - `uv run pytest tests/test_render_stadium.py -k crowd`. It fails with the fans left out of the
+    id pass (the ball among them stays visible). It also fails with their picture colours drawn
+    into it, where the fans' pixels counted as 52,436 visible pixels of one player.
   - `tests/test_render_params.py::test_only_footage_asks_for_a_broadcast_stadium`.
   - Plain stills from main and from the change are byte-identical under software GL.
 
