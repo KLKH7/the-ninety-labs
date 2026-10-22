@@ -172,6 +172,16 @@ def clamp(v: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, v))
 
 
+def stopping_speed(d: float) -> float:
+    """The fastest he can go and still stop within d metres, braking at 80% of his grip (P2)."""
+    return math.sqrt(2 * BRAKE_MAX * 0.8 * max(0.0, d))
+
+
+def stopping_distance(v: float) -> float:
+    """How far he runs before he stops from v m/s, braking as stopping_speed has him (P2)."""
+    return v * v / (2 * BRAKE_MAX * 0.8)
+
+
 def move(x: float, y: float, vx: float, vy: float, tx: float, ty: float, want_speed: float,
          body: Body, dt: float) -> tuple[float, float, float, float]:
     """One step toward a target. The velocity change is limited by grip (BRAKE_MAX, shared by
@@ -181,7 +191,7 @@ def move(x: float, y: float, vx: float, vy: float, tx: float, ty: float, want_sp
     dx, dy = tx - x, ty - y
     d = math.hypot(dx, dy)
     speed = math.hypot(vx, vy)
-    want = min(want_speed, body.top_speed(), math.sqrt(2 * BRAKE_MAX * 0.8 * d))
+    want = min(want_speed, body.top_speed(), stopping_speed(d))
     wx, wy = (dx / d * want, dy / d * want) if d > 1e-6 else (0.0, 0.0)
     cx, cy = wx - vx, wy - vy
     change = math.hypot(cx, cy)

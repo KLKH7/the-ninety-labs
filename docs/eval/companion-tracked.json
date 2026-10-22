@@ -1,0 +1,479 @@
+{
+ "clip": "seed900001",
+ "observations": "tests/fixtures/observations-seed900001.jsonl",
+ "truth": "/Users/kianlakhani/the-ninety-labs/runs/test-frozen-cca498c/test/seed900001/frames.jsonl",
+ "by_smoothing": {
+  "1": {
+   "speed_now_kmh": {
+    "n": 51,
+    "median": 4.4,
+    "p90": 8.1,
+    "max": 10.8,
+    "mean_signed": 4.69
+   },
+   "peak_kmh": {
+    "n": 15,
+    "median": 52.8,
+    "p90": 67.2,
+    "max": 72.8,
+    "mean_signed": 54.95
+   },
+   "distance_m": {
+    "n": 15,
+    "median": 6.0,
+    "p90": 12.0,
+    "max": 14.0,
+    "mean_signed": 6.33
+   },
+   "tracks": [
+    {
+     "track": "a-t10",
+     "player": "a8",
+     "frames": 184,
+     "mean_offset_m": 1.44,
+     "peak_kmh": [
+      66.3,
+      15.7
+     ],
+     "distance_m": [
+      23.0,
+      12.0
+     ]
+    },
+    {
+     "track": "a-t13",
+     "player": "a4",
+     "frames": 109,
+     "mean_offset_m": 0.22,
+     "peak_kmh": [
+      80.8,
+      13.6
+     ],
+     "distance_m": [
+      16.0,
+      8.0
+     ]
+    },
+    {
+     "track": "a-t14",
+     "player": "a5",
+     "frames": 106,
+     "mean_offset_m": 2.62,
+     "peak_kmh": [
+      53.1,
+      9.3
+     ],
+     "distance_m": [
+      13.0,
+      5.0
+     ]
+    },
+    {
+     "track": "a-t15",
+     "player": "a1",
+     "frames": 40,
+     "mean_offset_m": 0.24,
+     "peak_kmh": [
+      72.9,
+      13.3
+     ],
+     "distance_m": [
+      8.0,
+      2.0
+     ]
+    },
+    {
+     "track": "a-t16",
+     "player": "a1",
+     "frames": 56,
+     "mean_offset_m": 0.28,
+     "peak_kmh": [
+      80.3,
+      14.9
+     ],
+     "distance_m": [
+      10.0,
+      5.0
+     ]
+    },
+    {
+     "track": "a-t19",
+     "player": "a7",
+     "frames": 18,
+     "mean_offset_m": 0.31,
+     "peak_kmh": [
+      89.2,
+      16.4
+     ],
+     "distance_m": [
+      3.0,
+      3.0
+     ]
+    },
+    {
+     "track": "a-t3",
+     "player": "a7",
+     "frames": 220,
+     "mean_offset_m": 0.25,
+     "peak_kmh": [
+      70.7,
+      22.4
+     ],
+     "distance_m": [
+      34.0,
+      23.0
+     ]
+    },
+    {
+     "track": "a-t4",
+     "player": "a6",
+     "frames": 117,
+     "mean_offset_m": 0.22,
+     "peak_kmh": [
+      71.0,
+      20.5
+     ],
+     "distance_m": [
+      25.0,
+      19.0
+     ]
+    },
+    {
+     "track": "a-t5",
+     "player": "a2",
+     "frames": 238,
+     "mean_offset_m": 0.17,
+     "peak_kmh": [
+      57.7,
+      12.8
+     ],
+     "distance_m": [
+      27.0,
+      13.0
+     ]
+    },
+    {
+     "track": "a-t7",
+     "player": "a3",
+     "frames": 238,
+     "mean_offset_m": 0.2,
+     "peak_kmh": [
+      76.5,
+      18.6
+     ],
+     "distance_m": [
+      34.0,
+      22.0
+     ]
+    },
+    {
+     "track": "h-t1",
+     "player": "h10",
+     "frames": 218,
+     "mean_offset_m": 0.22,
+     "peak_kmh": [
+      85.8,
+      22.9
+     ],
+     "distance_m": [
+      48.0,
+      39.0
+     ]
+    },
+    {
+     "track": "h-t18",
+     "player": "h10",
+     "frames": 20,
+     "mean_offset_m": 0.29,
+     "peak_kmh": [
+      78.1,
+      22.0
+     ],
+     "distance_m": [
+      5.0,
+      4.0
+     ]
+    },
+    {
+     "track": "h-t2",
+     "player": "h11",
+     "frames": 7,
+     "mean_offset_m": 0.36,
+     "peak_kmh": [
+      66.6,
+      16.0
+     ],
+     "distance_m": [
+      1.0,
+      1.0
+     ]
+    },
+    {
+     "track": "h-t6",
+     "player": "h10",
+     "frames": 29,
+     "mean_offset_m": 11.02,
+     "peak_kmh": [
+      75.7,
+      22.9
+     ],
+     "distance_m": [
+      8.0,
+      7.0
+     ]
+    },
+    {
+     "track": "h-t9",
+     "player": "h11",
+     "frames": 47,
+     "mean_offset_m": 0.29,
+     "peak_kmh": [
+      55.6,
+      14.8
+     ],
+     "distance_m": [
+      8.0,
+      5.0
+     ]
+    }
+   ]
+  },
+  "25": {
+   "speed_now_kmh": {
+    "n": 51,
+    "median": 0.6,
+    "p90": 2.0,
+    "max": 9.7,
+    "mean_signed": 0.09
+   },
+   "peak_kmh": {
+    "n": 15,
+    "median": 1.5,
+    "p90": 4.2,
+    "max": 7.7,
+    "mean_signed": 0.73
+   },
+   "distance_m": {
+    "n": 15,
+    "median": 1.0,
+    "p90": 3.0,
+    "max": 5.0,
+    "mean_signed": 0.4
+   },
+   "tracks": [
+    {
+     "track": "a-t10",
+     "player": "a8",
+     "frames": 184,
+     "mean_offset_m": 1.46,
+     "peak_kmh": [
+      17.1,
+      15.7
+     ],
+     "distance_m": [
+      17.0,
+      12.0
+     ]
+    },
+    {
+     "track": "a-t13",
+     "player": "a4",
+     "frames": 109,
+     "mean_offset_m": 0.14,
+     "peak_kmh": [
+      12.0,
+      13.6
+     ],
+     "distance_m": [
+      8.0,
+      8.0
+     ]
+    },
+    {
+     "track": "a-t14",
+     "player": "a5",
+     "frames": 106,
+     "mean_offset_m": 2.61,
+     "peak_kmh": [
+      13.4,
+      9.3
+     ],
+     "distance_m": [
+      8.0,
+      5.0
+     ]
+    },
+    {
+     "track": "a-t15",
+     "player": "a1",
+     "frames": 40,
+     "mean_offset_m": 0.2,
+     "peak_kmh": [
+      14.2,
+      13.3
+     ],
+     "distance_m": [
+      3.0,
+      2.0
+     ]
+    },
+    {
+     "track": "a-t16",
+     "player": "a1",
+     "frames": 56,
+     "mean_offset_m": 0.21,
+     "peak_kmh": [
+      13.1,
+      14.9
+     ],
+     "distance_m": [
+      5.0,
+      5.0
+     ]
+    },
+    {
+     "track": "a-t19",
+     "player": "a7",
+     "frames": 18,
+     "mean_offset_m": 0.2,
+     "peak_kmh": [
+      17.0,
+      16.4
+     ],
+     "distance_m": [
+      3.0,
+      3.0
+     ]
+    },
+    {
+     "track": "a-t3",
+     "player": "a7",
+     "frames": 220,
+     "mean_offset_m": 0.24,
+     "peak_kmh": [
+      20.1,
+      22.4
+     ],
+     "distance_m": [
+      22.0,
+      23.0
+     ]
+    },
+    {
+     "track": "a-t4",
+     "player": "a6",
+     "frames": 117,
+     "mean_offset_m": 0.21,
+     "peak_kmh": [
+      19.0,
+      20.5
+     ],
+     "distance_m": [
+      18.0,
+      19.0
+     ]
+    },
+    {
+     "track": "a-t5",
+     "player": "a2",
+     "frames": 238,
+     "mean_offset_m": 0.16,
+     "peak_kmh": [
+      12.2,
+      12.8
+     ],
+     "distance_m": [
+      12.0,
+      13.0
+     ]
+    },
+    {
+     "track": "a-t7",
+     "player": "a3",
+     "frames": 238,
+     "mean_offset_m": 0.16,
+     "peak_kmh": [
+      19.4,
+      18.6
+     ],
+     "distance_m": [
+      22.0,
+      22.0
+     ]
+    },
+    {
+     "track": "h-t1",
+     "player": "h10",
+     "frames": 218,
+     "mean_offset_m": 0.22,
+     "peak_kmh": [
+      23.8,
+      22.9
+     ],
+     "distance_m": [
+      38.0,
+      39.0
+     ]
+    },
+    {
+     "track": "h-t18",
+     "player": "h10",
+     "frames": 20,
+     "mean_offset_m": 0.16,
+     "peak_kmh": [
+      26.2,
+      22.0
+     ],
+     "distance_m": [
+      5.0,
+      4.0
+     ]
+    },
+    {
+     "track": "h-t2",
+     "player": "h11",
+     "frames": 7,
+     "mean_offset_m": 0.29,
+     "peak_kmh": [
+      16.8,
+      16.0
+     ],
+     "distance_m": [
+      1.0,
+      1.0
+     ]
+    },
+    {
+     "track": "h-t6",
+     "player": "h10",
+     "frames": 29,
+     "mean_offset_m": 11.06,
+     "peak_kmh": [
+      30.6,
+      22.9
+     ],
+     "distance_m": [
+      7.0,
+      7.0
+     ]
+    },
+    {
+     "track": "h-t9",
+     "player": "h11",
+     "frames": 47,
+     "mean_offset_m": 0.3,
+     "peak_kmh": [
+      12.2,
+      14.8
+     ],
+     "distance_m": [
+      5.0,
+      5.0
+     ]
+    }
+   ]
+  }
+ },
+ "shipped_smoothing": 25,
+ "graded_sha256": "0393530005dac5b24664b53deb1fa79afbd6d5f5a884717241e35e61ff2922f6"
+}

@@ -105,7 +105,11 @@ def _median(values: list[float]) -> float | None:
     return v[mid] if len(v) % 2 else round((v[mid - 1] + v[mid]) / 2, 1)
 
 
-def build(test_dir: Path, det_dir: Path, freeze: dict, threshold: float = DEFAULT_THRESHOLD) -> dict:
+def build(
+    test_dir: Path, det_dir: Path, freeze: dict, threshold: float = DEFAULT_THRESHOLD, stride: int = 1
+) -> dict:
+    """`stride` > 1 only for a validation set run on every Nth frame (as training validates); a test
+    set report scores every frame."""
     totals: dict = {}
     hidden = {"hidden_balls": 0, "with_a_ball_detection": 0, "on_the_hidden_ball": 0, "distances_px": []}
     frames_scored = 0
@@ -119,11 +123,12 @@ def build(test_dir: Path, det_dir: Path, freeze: dict, threshold: float = DEFAUL
         rows = load_jsonl(det_dir / f"seed{seed}.jsonl")
         checkpoints |= {r["model"]["checkpoint"] for r in rows}
         run = frames_run(rows)
-        missing = {int(r["frame"]) for r in frames} - run
+        wanted = {int(r["frame"]) for r in frames[::stride]}
+        missing = wanted - run
         if missing:
             raise ValueError(
-                f"seed{seed}: the detector did not run on {len(missing)} of {len(frames)} frames "
-                f"(first {min(missing)}); a test-set report scores every frame"
+                f"seed{seed}: the detector did not run on {len(missing)} of {len(wanted)} frames "
+                f"(first {min(missing)}); a report scores every frame of its stride ({stride})"
             )
         dets = flatten(rows)
         report = score(frames, dets, threshold, run=run)
@@ -148,6 +153,7 @@ def build(test_dir: Path, det_dir: Path, freeze: dict, threshold: float = DEFAUL
             "seeds": [c["seed"] for c in freeze["clips"]],
         },
         "threshold": threshold,
+        "stride": stride,
         "frames_scored": frames_scored,
         **_finish(totals),
         "ball_at_least_half_visible": _metrics(*(half[c] for c in COUNTS)),
@@ -166,8 +172,9 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--detections", type=Path, required=True, help="folder of seed<N>.jsonl detections")
     ap.add_argument("--freeze", type=Path, default=FREEZE)
     ap.add_argument("--out", type=Path)
+    ap.add_argument("--stride", type=int, default=1, help="every Nth frame: a validation set only")
     a = ap.parse_args(argv)
-    report = build(a.test, a.detections, json.loads(a.freeze.read_text()))
+    report = build(a.test, a.detections, json.loads(a.freeze.read_text()), stride=a.stride)
     text = json.dumps(report, indent=2) + "\n"
     if a.out:
         a.out.write_text(text)

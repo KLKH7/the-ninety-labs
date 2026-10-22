@@ -350,3 +350,27 @@ def test_a_foul_is_placed_at_the_fouled_player_not_the_one_who_fouled():
              "players": [{"id": "h4", "team": "home", "x": 10.0, "y": 10.0},
                          {"id": "a6", "team": "away", "x": 10.5, "y": 11.4}]}
     assert reference_point("foul", "home", 0.0, [frame], (10.5, 11.4))[:2] == (10.5, 11.4)
+
+
+def test_the_wilson_interval_matches_known_values():
+    from ninety.eval.event_score import wilson
+    assert wilson(7, 13) == [0.29, 0.77]
+    assert wilson(7, 7) == [0.65, 1.0]
+    assert wilson(0, 5) == [0.0, 0.43]
+    assert wilson(0, 0) is None
+
+
+def test_a_clip_the_broadcast_cut_is_graded_across_its_recorded_cut():
+    """A rendered clip leaves out a dead ball (meta.json cuts, ninety/render/edit.py). It is graded
+    on the frames it shows; a detection timed inside the cut has nowhere to be right, and a gap the
+    clip does not record is still refused (lesson 99)."""
+    cut = {"first_frame": 60, "last_frame": 69}
+    clip = [f for f in frames(5.0) if f["frame"] >= 50 and not 60 <= f["frame"] <= 69]
+    truth = [ev("t1", 3.0, x=ball_x(3.0))]
+    assert counts(score(truth, [det("d1", 3.0, x=ball_x(3.0))], clip, cuts=[cut]), rule="strict") == (1, 0, 0)
+    inside = score([ev("t2", 2.6, x=ball_x(2.6))], [det("d2", 2.6, x=ball_x(2.6))], clip, cuts=[cut])
+    assert counts(inside, rule="time_only") == (1, 0, 0) and counts(inside, rule="lenient") == (0, 1, 1)
+    with pytest.raises(ValueError, match="consecutive"):
+        score(truth, [det("d1", 3.0, x=ball_x(3.0))], clip, cuts=[{"first_frame": 60, "last_frame": 68}])
+    with pytest.raises(ValueError, match="consecutive"):
+        score(truth, [det("d1", 3.0, x=ball_x(3.0))], clip)

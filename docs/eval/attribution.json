@@ -1,0 +1,414 @@
+{
+  "command": "uv run python -m ninety.eval.attribution_score --test-dir runs/test-frozen-cca498c/test --observations docs/eval/attribution --observations tests/fixtures --out docs/eval/attribution",
+  "commit": "2b0aa155f33df7364789d94c9d74012a9abdd482",
+  "date": "2026-10-21",
+  "rule": {
+    "rival_m": 1.26,
+    "control_m": 1.5,
+    "min_track_frames": 5,
+    "window_s": 1.0,
+    "player_iou": 0.5
+  },
+  "grade": {
+    "pass": {
+      "matched": 7,
+      "team_right": 7,
+      "team_accuracy": 1.0,
+      "team_accuracy_95": [
+        0.65,
+        1.0
+      ],
+      "team_confidence": {
+        "right": [
+          0.021,
+          0.529,
+          0.529,
+          0.54,
+          0.54,
+          0.54,
+          0.964
+        ],
+        "wrong": []
+      },
+      "player": {
+        "truth_names": 7,
+        "named": 7,
+        "right": 7,
+        "unchecked": 0,
+        "accuracy": 1.0,
+        "left_null": 0
+      },
+      "receiver": {
+        "truth_names": 6,
+        "named": 6,
+        "right": 6,
+        "unchecked": 0,
+        "accuracy": 1.0,
+        "left_null": 0
+      },
+      "interceptor": {
+        "truth_names": 1,
+        "named": 1,
+        "right": 1,
+        "unchecked": 0,
+        "accuracy": 1.0,
+        "left_null": 0
+      }
+    },
+    "shot": {
+      "matched": 0,
+      "team_right": 0,
+      "team_accuracy": null,
+      "team_accuracy_95": null,
+      "team_confidence": {
+        "right": [],
+        "wrong": []
+      },
+      "player": {
+        "truth_names": 0,
+        "named": 0,
+        "right": 0,
+        "unchecked": 0,
+        "accuracy": null,
+        "left_null": 0
+      }
+    },
+    "out_of_play": {
+      "matched": 0,
+      "team_right": 0,
+      "team_accuracy": null,
+      "team_accuracy_95": null,
+      "team_confidence": {
+        "right": [],
+        "wrong": []
+      }
+    }
+  },
+  "false_names": {
+    "false_events": 2,
+    "false_events_named": 1,
+    "names": 1,
+    "names_checkable": 1
+  },
+  "clips": [
+    {
+      "seed": 900001,
+      "truth": {
+        "pass": 4,
+        "shot": 1
+      },
+      "detected": {
+        "pass": 4,
+        "out_of_play": 1
+      },
+      "unmatched_detected": [
+        {
+          "id": "v00003",
+          "type": "pass",
+          "player": "h-t1",
+          "is": {
+            "player": "h10"
+          }
+        },
+        {
+          "id": "v00004",
+          "type": "out_of_play",
+          "is": {}
+        }
+      ],
+      "camera_ok": "238 of 250 frames",
+      "teams": {
+        "feature": "brightness",
+        "kits": {
+          "home": [
+            3.365
+          ],
+          "away": [
+            6.183
+          ]
+        },
+        "reason": "side nearer x = 105 on average: colour 0 in 126 more frames",
+        "frames_voting": 238,
+        "vote_margin": 126,
+        "keepers": 4,
+        "unassigned": 2
+      },
+      "pairs": [
+        {
+          "type": "pass",
+          "truth_id": "e00049",
+          "detected_id": "v00001",
+          "dt_s": -0.08,
+          "team": {
+            "truth": "away",
+            "detected": "away",
+            "confidence": 0.529
+          },
+          "player": {
+            "truth": "a6",
+            "detected": "a-t4",
+            "is": "a6"
+          },
+          "receiver": {
+            "truth": "a2",
+            "detected": "a-t5",
+            "is": "a2"
+          },
+          "interceptor": {
+            "truth": null,
+            "detected": null,
+            "is": null
+          }
+        },
+        {
+          "type": "pass",
+          "truth_id": "e00050",
+          "detected_id": "v00002",
+          "dt_s": 0.04,
+          "team": {
+            "truth": "away",
+            "detected": "away",
+            "confidence": 0.529
+          },
+          "player": {
+            "truth": "a2",
+            "detected": "a-t5",
+            "is": "a2"
+          },
+          "receiver": {
+            "truth": null,
+            "detected": null,
+            "is": null
+          },
+          "interceptor": {
+            "truth": "h10",
+            "detected": "h-t1",
+            "is": "h10"
+          }
+        },
+        {
+          "type": "pass",
+          "truth_id": "e00055",
+          "detected_id": "v00005",
+          "dt_s": 0.0,
+          "team": {
+            "truth": "away",
+            "detected": "away",
+            "confidence": 0.964
+          },
+          "player": {
+            "truth": "a1",
+            "detected": "a-t16",
+            "is": "a1"
+          },
+          "receiver": {
+            "truth": "a4",
+            "detected": "a-t13",
+            "is": "a4"
+          },
+          "interceptor": {
+            "truth": null,
+            "detected": null,
+            "is": null
+          }
+        }
+      ]
+    },
+    {
+      "seed": 900002,
+      "truth": {
+        "pass": 3
+      },
+      "detected": {},
+      "unmatched_detected": [],
+      "camera_ok": "0 of 250 frames",
+      "teams": {
+        "feature": null,
+        "kits": null,
+        "reason": "fewer than two tracks long enough to learn kits"
+      },
+      "pairs": []
+    },
+    {
+      "seed": 900003,
+      "truth": {
+        "pass": 1
+      },
+      "detected": {},
+      "unmatched_detected": [],
+      "camera_ok": "4 of 250 frames",
+      "teams": {
+        "feature": null,
+        "kits": null,
+        "reason": "fewer than two tracks long enough to learn kits"
+      },
+      "pairs": []
+    },
+    {
+      "seed": 900004,
+      "truth": {
+        "pass": 1
+      },
+      "detected": {
+        "pass": 1
+      },
+      "unmatched_detected": [],
+      "camera_ok": "194 of 250 frames",
+      "teams": {
+        "feature": "chromaticity",
+        "kits": {
+          "home": [
+            0.323,
+            0.358,
+            0.32
+          ],
+          "away": [
+            0.364,
+            0.369,
+            0.267
+          ]
+        },
+        "reason": "side nearer x = 105 on average: colour 1 in 4 more frames",
+        "frames_voting": 194,
+        "vote_margin": 4,
+        "keepers": 0,
+        "unassigned": 2
+      },
+      "pairs": [
+        {
+          "type": "pass",
+          "truth_id": "e00090",
+          "detected_id": "v00001",
+          "dt_s": 0.0,
+          "team": {
+            "truth": "home",
+            "detected": "home",
+            "confidence": 0.021
+          },
+          "player": {
+            "truth": "h3",
+            "detected": "h-t12",
+            "is": "h3"
+          },
+          "receiver": {
+            "truth": "h8",
+            "detected": "h-t18",
+            "is": "h8"
+          },
+          "interceptor": {
+            "truth": null,
+            "detected": null,
+            "is": null
+          }
+        }
+      ]
+    },
+    {
+      "seed": 900005,
+      "truth": {
+        "pass": 4
+      },
+      "detected": {
+        "pass": 3
+      },
+      "unmatched_detected": [],
+      "camera_ok": "248 of 250 frames",
+      "teams": {
+        "feature": "brightness",
+        "kits": {
+          "home": [
+            6.092
+          ],
+          "away": [
+            3.799
+          ]
+        },
+        "reason": "side nearer x = 105 on average: colour 0 in 134 more frames",
+        "frames_voting": 248,
+        "vote_margin": 134,
+        "keepers": 0,
+        "unassigned": 0
+      },
+      "pairs": [
+        {
+          "type": "pass",
+          "truth_id": "e00058",
+          "detected_id": "v00001",
+          "dt_s": 0.0,
+          "team": {
+            "truth": "away",
+            "detected": "away",
+            "confidence": 0.54
+          },
+          "player": {
+            "truth": "a8",
+            "detected": "a-t4",
+            "is": "a8"
+          },
+          "receiver": {
+            "truth": "a7",
+            "detected": "a-t3",
+            "is": "a7"
+          },
+          "interceptor": {
+            "truth": null,
+            "detected": null,
+            "is": null
+          }
+        },
+        {
+          "type": "pass",
+          "truth_id": "e00059",
+          "detected_id": "v00002",
+          "dt_s": -0.08,
+          "team": {
+            "truth": "away",
+            "detected": "away",
+            "confidence": 0.54
+          },
+          "player": {
+            "truth": "a7",
+            "detected": "a-t11",
+            "is": "a7"
+          },
+          "receiver": {
+            "truth": "a8",
+            "detected": "a-t4",
+            "is": "a8"
+          },
+          "interceptor": {
+            "truth": null,
+            "detected": null,
+            "is": null
+          }
+        },
+        {
+          "type": "pass",
+          "truth_id": "e00060",
+          "detected_id": "v00003",
+          "dt_s": 0.0,
+          "team": {
+            "truth": "away",
+            "detected": "away",
+            "confidence": 0.54
+          },
+          "player": {
+            "truth": "a8",
+            "detected": "a-t4",
+            "is": "a8"
+          },
+          "receiver": {
+            "truth": "a5",
+            "detected": "a-t17",
+            "is": "a5"
+          },
+          "interceptor": {
+            "truth": null,
+            "detected": null,
+            "is": null
+          }
+        }
+      ]
+    }
+  ]
+}

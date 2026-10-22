@@ -12,7 +12,7 @@ import pytest
 
 from ninety.render.camera import Camera
 from ninety.render.clip import RenderUnavailable, _appearance, browser_page
-from ninety.render.meshpose import world_markers
+from ninety.render.meshpose import pose_markers, world_markers
 from ninety.render.params import sample_params
 from ninety.render.scene import PLANT_AHEAD_MAX, Gait, Look, body_parts, parts_box, reach_sign
 
@@ -189,6 +189,29 @@ def test_the_page_turns_steps_and_touches_like_the_python_pose(page):
          "touch": {"part": "chest", "side": "r", "at": [40.3, 30.0, 1.25], "w": 1.0}},
         {**base, "action": "head", "lift": 0.2,
          "touch": {"part": "head", "side": "r", "at": [40.2, 30.0, 1.95], "w": 1.0}},
+        # The arms: a walk and a jog between the stored walk and run, a kick's balance half-way in
+        # (a stooped body whose blended foot is put back on the grass), and a keeper's hands on a
+        # ball at his feet and at his chest.
+        {**base, "action": "walk", "phase": 2.1, "speed": 1.4},
+        {**base, "action": "walk", "phase": 4.0, "speed": 3.1},
+        {**base, "action": "strike", "speed": 1.0, "lift": -0.3,
+         "plant_l": [40.1, 30.25, 0.4, 0.0], "plant_r": [39.95, 29.85, 0.4, 0.0],
+         "touch": {"part": "strike", "side": "r", "at": [39.7, 29.8, 0.4], "w": 0.35}},
+        {**base, "action": "hands", "lift": -0.3,
+         "plant_l": [40.05, 30.22, 0.4, 0.0], "plant_r": [39.95, 29.83, 0.4, 0.0],
+         "hold": {"at": [40.25, 30.1, 0.11], "w": 1.0, "bend": 1.4}},
+        {**base, "action": "hands", "hold": {"at": [40.3, 30.12, 1.2], "w": 0.6, "bend": 0.0}},
+        # A stride's plant half taken (its weight), and speeds where the stand pose and the walk's
+        # short stride blend into the stride.
+        {**base, "action": "walk", "phase": 5.3, "speed": 2.0, "plant_l": [40.12, 30.2, 0.4, 0.0, 0.4]},
+        {**base, "action": "walk", "phase": 1.0, "speed": 0.6},
+        {**base, "action": "stand", "phase": 2.0, "speed": 0.4},
+        # The runner's bob (in lift), a trunk leaning into a sprint start or coming up braking, and
+        # the sprint's wider arm swing (scene.pace, scene.PUMP).
+        {**base, "action": "run", "phase": 0.9, "speed": 6.5, "lift": -0.025, "lean": 0.31, "pump": 1.2,
+         "plant_r": [40.05, 29.9, 0.4, 0.0]},
+        {**base, "action": "walk", "phase": 3.6, "speed": 3.4, "lift": 0.02, "lean": -0.12, "pump": 1.0},
+        {**base, "action": "stand", "speed": 0.1, "lean": 0.4},
     ]
     for i, pose in enumerate(poses):
         heading = 0.4
@@ -204,5 +227,54 @@ def test_the_page_turns_steps_and_touches_like_the_python_pose(page):
         }
         js = page.evaluate("s => window.ninety.frame(s)", spec)["markers"][LOOK.id]
         py = pose_markers(pose, heading, LOOK.height_m)
-        for name in ("head", "foot_l", "foot_r", "brow", "chest", "thigh_top_l"):
-            assert math.dist(py[name], js[name]) < 0.015, (pose["action"], name, py[name], js[name])
+        for name in ("head", "foot_l", "foot_r", "hand_l", "hand_r", "brow", "chest", "thigh_top_l"):
+            assert math.dist(py[name], js[name]) < 0.015, (i, pose["action"], name, py[name], js[name])
+
+
+def test_a_player_is_drawn_as_tall_as_he_is(page):
+    """The mesh's skull top is ASSET_STATURE_M in its own metres; scaled as a 1.84 m body it drew
+    every player at 91.5% of his height (lesson 157). A standing, bald player seen from the side at
+    eye level is now drawn from the grass to his height, within 2%, at every drawn stature."""
+    p = sample_params(5)
+    params = {**p.to_dict(), "width": 1280, "height": 720}
+    cam = Camera((40.0, 22.0, 0.95), (40.0, 30.0, 0.95), 20.0, 1280, 720)
+    for i, stature in enumerate((1.65, 1.84, 1.98)):
+        look = Look(f"h{i + 1}", "home", "CM", stature, 1.0, LOOK.skin, LOOK.hair, hair_style="bald")
+        page.evaluate("cfg => window.ninety.init(cfg)",
+                      {"seed": 5, "params": params, "objects": [_appearance(look, p)]})
+        g = Gait(action="stand", heading=0.0)
+        parts = body_parts(40.0, 30.0, look, g, None)
+        pose = {"action": "stand", "phase": 0.0, "speed": 0.0, "reach": 0, "dive": 0, "x": 40.0, "y": 30.0,
+                "plant_l": list(g.plant_l) if g.plant_l else None,
+                "plant_r": list(g.plant_r) if g.plant_r else None, "hair_style": "bald"}
+        camera = {"position": list(cam.position), "R": cam.R, "fov_v_deg": cam.fov_v_deg}
+        spec = {"index": 40 + i, "camera": camera,
+                "objects": [{"id": look.id, "parts": parts, "box": parts_box(cam, parts), "heading": 0.0,
+                             "pose": pose}],
+                "keypoints": [], "blur": [0.0, 0.0], "score": [0, 0], "clock": "00:00",
+                "goal_age": None, "goal_side": None, "net": None, "want_image": False}
+        box = page.evaluate("s => window.ninety.frame(s)", spec)["objects"][look.id]["bbox"]
+        # From the side, the nearer of his planted feet (about 0.2 m either side of him) is the
+        # lowest thing drawn: measure from the grass under it, not under his centre.
+        feet = pose_markers(pose, 0.0, stature)
+        sole = max(cam.project((feet[f][0], feet[f][1], 0.0))[1] for f in ("foot_l", "foot_r"))
+        crown = cam.project((40.0, 30.0, stature))[1]
+        drawn, real = box[3] - box[1], sole - crown
+        assert abs(drawn / real - 1.0) < 0.02, (stature, drawn, real)
+
+
+def test_the_body_has_a_mans_proportions_and_its_stature_is_the_scale():
+    """The drawn body is the asset scaled to the player's height, so its joints must sit where a
+    man's do, as fractions of stature (Drillis and Contini 1966, as tabulated in Winter,
+    Biomechanics and Motor Control of Human Movement, fig. 4.1): knee 0.285, hip 0.530, shoulder
+    0.818, chin 0.870. The asset is a standing A-pose, so elbow and wrist are not compared. Within
+    0.03 of stature (about 5 cm): where a joint centre sits inside a skinned mesh is not known more
+    closely than that. And ASSET_STATURE_M is the top of the body mesh's skull."""
+    from ninety.render.meshpose import ASSET_STATURE_M, asset
+
+    data = asset()
+    body = data["parts"]["body"]["pos"]
+    assert abs(max(body[1::3]) - ASSET_STATURE_M) < 1e-3
+    head = {b["name"]: b["head"] for b in data["bones"]}
+    for bone, ratio in (("calf_l", 0.285), ("thigh_l", 0.530), ("upperarm_l", 0.818), ("neck_01", 0.870)):
+        assert abs(head[bone][1] / ASSET_STATURE_M - ratio) < 0.03, (bone, head[bone][1] / ASSET_STATURE_M)

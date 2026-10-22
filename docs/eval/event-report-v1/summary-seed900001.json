@@ -1,31 +1,33 @@
 {
   "frames": 250,
-  "frames_camera_ok": 245,
-  "ball_frames": 220,
+  "frames_camera_ok": 238,
+  "ball_frames": 214,
   "tracks": 21,
   "teams": {
-    "chromaticity": {
+    "feature": "brightness",
+    "kits": {
       "home": [
-        0.533,
-        0.323,
-        0.144
+        3.365
       ],
       "away": [
-        0.281,
-        0.303,
-        0.416
+        6.183
       ]
     },
-    "reason": "deepest outfield player toward x = 105: colour 1 in 241 more frames",
-    "frames_voting": 245,
-    "vote_margin": 241,
-    "keepers": 0,
-    "unassigned": 0
+    "reason": "side nearer x = 105 on average: colour 0 in 126 more frames",
+    "frames_voting": 238,
+    "vote_margin": 126,
+    "keepers": 4,
+    "unassigned": 2
   },
   "spells": 5,
   "events": {
     "pass": 4,
     "shot": 0,
     "out_of_play": 1
+  },
+  "named": {
+    "player": 4,
+    "receiver": 2,
+    "interceptor": 1
   }
 }

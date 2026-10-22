@@ -10,3 +10,5 @@ node_modules/
 *.mp4
 .azure/
 web/viewer/dist/
+web/phone/dist/
+web/phone/dist-mock/

@@ -19,8 +19,10 @@ Personalize, so tests run the same server with no Azure.
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import asdict
 
+import httpx
 from a2a.helpers.proto_helpers import get_data_parts, new_data_message
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import EventQueue
@@ -130,30 +132,58 @@ def create_app(personalize: Personalize, url: str = "http://localhost:8001/", li
     return Starlette(routes=routes, lifespan=lifespan)
 
 
+class InProcess(httpx.ASGITransport):
+    """The server in this process, for tests and the evaluation: each request runs in a task of its
+    own, as it does behind uvicorn, so a client that gives up at its deadline cancels only its own
+    wait. With the plain ASGITransport the client's cancellation runs on into the server's code,
+    where a2a-sdk 1.2.3 swallows it (`ActiveTask.subscribe` catches CancelledError) and then waits
+    forever for a task this message-only agent never creates (lesson 147). `aclose` waits for the
+    requests still running, each bounded by the server's own model deadline."""
+
+    def __init__(self, app):
+        self.running: set[asyncio.Task] = set()
+
+        async def detached(scope, receive, send):
+            task = asyncio.ensure_future(app(scope, receive, send))
+            self.running.add(task)
+            task.add_done_callback(self.running.discard)
+            await asyncio.shield(task)
+
+        super().__init__(app=detached)
+
+    async def aclose(self) -> None:
+        if self.running:
+            await asyncio.gather(*self.running, return_exceptions=True)
+        await super().aclose()
+
+
 def live_app() -> Starlette:
     """The deployed server: the published Foundry agent behind the re-check."""
     import contextlib
     import os
 
-    from agent_framework.foundry import FoundryAgent
-    from azure.identity import DefaultAzureCredential
+    from agent_framework.exceptions import AgentFrameworkException
+    from azure.core.exceptions import AzureError
 
-    from ninety import config
-    from ninety.agents import foundry
-    from ninety.personalizer.core import model_personalizer, personalizer_agent
+    from ninety.agents.foundry import RegistryDrift
+    from ninety.personalizer.core import log, model_personalizer, published_ask
 
-    credential = DefaultAzureCredential()
-    name, version = foundry.pinned(personalizer_agent(foundry.chat_client(credential)))
-    published = FoundryAgent(
-        project_endpoint=config.FOUNDRY_PROJECT, agent_name=name, agent_version=version, credential=credential
-    )
+    published = {}  # the Ask, once the lifespan has signed in
 
     async def ask(text: str) -> str:
-        return (await published.run(text)).text
+        if "ask" not in published:  # sign-in failed at startup: the verified text, per request
+            raise AgentFrameworkException("the Personalizer is not signed in to Foundry")
+        return await published["ask"](text)
 
     @contextlib.asynccontextmanager
     async def lifespan(app):
-        async with published:
+        # A failed sign-in must not stop the server: every request then gets the verified text
+        # (model_personalizer catches the exception above), as for any other model outage.
+        async with contextlib.AsyncExitStack() as stack:
+            try:
+                published["ask"], _ = await stack.enter_async_context(published_ask())
+            except (AzureError, AgentFrameworkException, RegistryDrift) as e:
+                log.error("personalizer could not sign in (%s); serving the verified text", type(e).__name__)
             yield
 
     from ninety.personalizer import translate

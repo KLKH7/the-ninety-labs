@@ -1,0 +1,1029 @@
+{
+  "command": "uv run python -m ninety.eval.attribution_derive --clips <render run v1>/train --observations <dir> --seeds <the validation seeds> --out docs/eval/attribution-derive",
+  "commit": "8d85df6948b520aa1ea531aadebeae00c3467f98",
+  "date": "2026-10-21",
+  "seeds": [
+    108,
+    109,
+    114,
+    115,
+    116,
+    120,
+    121,
+    122,
+    2041,
+    2042,
+    2043,
+    3041,
+    3042
+  ],
+  "unplaced": [
+    2045,
+    3045
+  ],
+  "players_position_error": {
+    "n": 16006,
+    "median_m": 0.221,
+    "p90_m": 1.256,
+    "max_m": 12.163
+  },
+  "players_position_error_per_clip": {
+    "108": {
+      "n": 869,
+      "median_m": 1.961,
+      "p90_m": 4.932,
+      "max_m": 12.163
+    },
+    "109": {
+      "n": 0,
+      "median_m": null,
+      "p90_m": null,
+      "max_m": null
+    },
+    "114": {
+      "n": 18,
+      "median_m": 1.234,
+      "p90_m": 2.109,
+      "max_m": 5.639
+    },
+    "115": {
+      "n": 1925,
+      "median_m": 0.174,
+      "p90_m": 0.357,
+      "max_m": 6.133
+    },
+    "116": {
+      "n": 2782,
+      "median_m": 0.191,
+      "p90_m": 0.469,
+      "max_m": 5.48
+    },
+    "120": {
+      "n": 1691,
+      "median_m": 0.272,
+      "p90_m": 0.927,
+      "max_m": 8.301
+    },
+    "121": {
+      "n": 1516,
+      "median_m": 0.232,
+      "p90_m": 0.714,
+      "max_m": 7.552
+    },
+    "122": {
+      "n": 0,
+      "median_m": null,
+      "p90_m": null,
+      "max_m": null
+    },
+    "2041": {
+      "n": 2365,
+      "median_m": 0.23,
+      "p90_m": 3.1,
+      "max_m": 7.72
+    },
+    "2042": {
+      "n": 1897,
+      "median_m": 0.209,
+      "p90_m": 0.509,
+      "max_m": 6.323
+    },
+    "2043": {
+      "n": 2931,
+      "median_m": 0.203,
+      "p90_m": 0.489,
+      "max_m": 7.556
+    },
+    "3041": {
+      "n": 12,
+      "median_m": 1.402,
+      "p90_m": 2.771,
+      "max_m": 4.169
+    },
+    "3042": {
+      "n": 0,
+      "median_m": null,
+      "p90_m": null,
+      "max_m": null
+    }
+  },
+  "track_break_rule": {
+    "totals": {
+      "off": {
+        "passes": 21,
+        "matched": 18,
+        "self": 5
+      },
+      "on": {
+        "passes": 18,
+        "matched": 16,
+        "self": 2
+      }
+    },
+    "removed": [
+      {
+        "id": "v00003",
+        "frame": 3500,
+        "tracks": [
+          19,
+          21
+        ],
+        "players": [
+          "a2",
+          "a2"
+        ],
+        "self": true,
+        "seed": 108
+      },
+      {
+        "id": "v00002",
+        "frame": 1635,
+        "tracks": [
+          9,
+          15
+        ],
+        "players": [
+          "a7",
+          "a7"
+        ],
+        "self": true,
+        "seed": 120
+      },
+      {
+        "id": "v00002",
+        "frame": 3048,
+        "tracks": [
+          2,
+          17
+        ],
+        "players": [
+          "h7",
+          "h7"
+        ],
+        "self": true,
+        "seed": 121
+      }
+    ],
+    "removed_self": 3,
+    "removed_not_self": 0,
+    "removed_unknown": 0
+  },
+  "development_attribution": {
+    "pass": {
+      "matched": 16,
+      "team_right": 11,
+      "team_accuracy": 0.6875,
+      "team_accuracy_95": [
+        0.44,
+        0.86
+      ],
+      "team_confidence": {
+        "right": [
+          0.447,
+          0.663,
+          0.731,
+          0.731,
+          0.768,
+          0.775,
+          0.881,
+          0.895,
+          0.95,
+          0.97,
+          0.985
+        ],
+        "wrong": [
+          0.431,
+          0.575,
+          0.775,
+          0.775,
+          0.96
+        ]
+      },
+      "player": {
+        "truth_names": 16,
+        "named": 14,
+        "right": 14,
+        "unchecked": 0,
+        "accuracy": 1.0,
+        "left_null": 2
+      },
+      "receiver": {
+        "truth_names": 11,
+        "named": 6,
+        "right": 6,
+        "unchecked": 0,
+        "accuracy": 1.0,
+        "left_null": 5
+      },
+      "interceptor": {
+        "truth_names": 4,
+        "named": 4,
+        "right": 2,
+        "unchecked": 0,
+        "accuracy": 0.5,
+        "left_null": 2
+      }
+    },
+    "shot": {
+      "matched": 0,
+      "team_right": 0,
+      "team_accuracy": null,
+      "team_accuracy_95": null,
+      "team_confidence": {
+        "right": [],
+        "wrong": []
+      },
+      "player": {
+        "truth_names": 0,
+        "named": 0,
+        "right": 0,
+        "unchecked": 0,
+        "accuracy": null,
+        "left_null": 0
+      }
+    },
+    "out_of_play": {
+      "matched": 0,
+      "team_right": 0,
+      "team_accuracy": null,
+      "team_accuracy_95": null,
+      "team_confidence": {
+        "right": [],
+        "wrong": []
+      }
+    }
+  },
+  "clips": [
+    {
+      "seed": 108,
+      "frames_camera_ok": 139,
+      "true_passes": 3,
+      "off": {
+        "passes": 3,
+        "matched": 3,
+        "self": 1,
+        "list": [
+          {
+            "id": "v00001",
+            "frame": 3326,
+            "tracks": [
+              3,
+              16
+            ],
+            "players": [
+              "a6",
+              "a4"
+            ],
+            "self": false
+          },
+          {
+            "id": "v00002",
+            "frame": 3392,
+            "tracks": [
+              16,
+              19
+            ],
+            "players": [
+              "a4",
+              "a2"
+            ],
+            "self": false
+          },
+          {
+            "id": "v00003",
+            "frame": 3500,
+            "tracks": [
+              19,
+              21
+            ],
+            "players": [
+              "a2",
+              "a2"
+            ],
+            "self": true
+          }
+        ]
+      },
+      "on": {
+        "passes": 2,
+        "matched": 2,
+        "self": 0,
+        "list": [
+          {
+            "id": "v00001",
+            "frame": 3326,
+            "tracks": [
+              3,
+              16
+            ],
+            "players": [
+              "a6",
+              "a4"
+            ],
+            "self": false
+          },
+          {
+            "id": "v00002",
+            "frame": 3392,
+            "tracks": [
+              16,
+              19
+            ],
+            "players": [
+              "a4",
+              "a2"
+            ],
+            "self": false
+          }
+        ]
+      },
+      "removed": [
+        {
+          "id": "v00003",
+          "frame": 3500,
+          "tracks": [
+            19,
+            21
+          ],
+          "players": [
+            "a2",
+            "a2"
+          ],
+          "self": true
+        }
+      ]
+    },
+    {
+      "seed": 109,
+      "frames_camera_ok": 0,
+      "true_passes": 3,
+      "off": {
+        "passes": 0,
+        "matched": 0,
+        "self": 0,
+        "list": []
+      },
+      "on": {
+        "passes": 0,
+        "matched": 0,
+        "self": 0,
+        "list": []
+      },
+      "removed": []
+    },
+    {
+      "seed": 114,
+      "frames_camera_ok": 2,
+      "true_passes": 2,
+      "off": {
+        "passes": 0,
+        "matched": 0,
+        "self": 0,
+        "list": []
+      },
+      "on": {
+        "passes": 0,
+        "matched": 0,
+        "self": 0,
+        "list": []
+      },
+      "removed": []
+    },
+    {
+      "seed": 115,
+      "frames_camera_ok": 242,
+      "true_passes": 1,
+      "off": {
+        "passes": 1,
+        "matched": 1,
+        "self": 0,
+        "list": []
+      },
+      "on": {
+        "passes": 1,
+        "matched": 1,
+        "self": 0,
+        "list": []
+      },
+      "removed": []
+    },
+    {
+      "seed": 116,
+      "frames_camera_ok": 250,
+      "true_passes": 3,
+      "off": {
+        "passes": 1,
+        "matched": 1,
+        "self": 0,
+        "list": [
+          {
+            "id": "v00001",
+            "frame": 1704,
+            "tracks": [
+              1,
+              20
+            ],
+            "players": [
+              "a11",
+              "h9"
+            ],
+            "self": false
+          }
+        ]
+      },
+      "on": {
+        "passes": 1,
+        "matched": 1,
+        "self": 0,
+        "list": [
+          {
+            "id": "v00001",
+            "frame": 1704,
+            "tracks": [
+              1,
+              20
+            ],
+            "players": [
+              "a11",
+              "h9"
+            ],
+            "self": false
+          }
+        ]
+      },
+      "removed": []
+    },
+    {
+      "seed": 120,
+      "frames_camera_ok": 240,
+      "true_passes": 2,
+      "off": {
+        "passes": 2,
+        "matched": 2,
+        "self": 1,
+        "list": [
+          {
+            "id": "v00001",
+            "frame": 1601,
+            "tracks": [
+              2,
+              9
+            ],
+            "players": [
+              "a4",
+              "a7"
+            ],
+            "self": false
+          },
+          {
+            "id": "v00002",
+            "frame": 1635,
+            "tracks": [
+              9,
+              15
+            ],
+            "players": [
+              "a7",
+              "a7"
+            ],
+            "self": true
+          }
+        ]
+      },
+      "on": {
+        "passes": 1,
+        "matched": 1,
+        "self": 0,
+        "list": [
+          {
+            "id": "v00001",
+            "frame": 1601,
+            "tracks": [
+              2,
+              9
+            ],
+            "players": [
+              "a4",
+              "a7"
+            ],
+            "self": false
+          }
+        ]
+      },
+      "removed": [
+        {
+          "id": "v00002",
+          "frame": 1635,
+          "tracks": [
+            9,
+            15
+          ],
+          "players": [
+            "a7",
+            "a7"
+          ],
+          "self": true
+        }
+      ]
+    },
+    {
+      "seed": 121,
+      "frames_camera_ok": 236,
+      "true_passes": 2,
+      "off": {
+        "passes": 2,
+        "matched": 1,
+        "self": 1,
+        "list": [
+          {
+            "id": "v00001",
+            "frame": 2915,
+            "tracks": [
+              1,
+              2
+            ],
+            "players": [
+              "h6",
+              "h7"
+            ],
+            "self": false
+          },
+          {
+            "id": "v00002",
+            "frame": 3048,
+            "tracks": [
+              2,
+              17
+            ],
+            "players": [
+              "h7",
+              "h7"
+            ],
+            "self": true
+          }
+        ]
+      },
+      "on": {
+        "passes": 1,
+        "matched": 1,
+        "self": 0,
+        "list": [
+          {
+            "id": "v00001",
+            "frame": 2915,
+            "tracks": [
+              1,
+              2
+            ],
+            "players": [
+              "h6",
+              "h7"
+            ],
+            "self": false
+          }
+        ]
+      },
+      "removed": [
+        {
+          "id": "v00002",
+          "frame": 3048,
+          "tracks": [
+            2,
+            17
+          ],
+          "players": [
+            "h7",
+            "h7"
+          ],
+          "self": true
+        }
+      ]
+    },
+    {
+      "seed": 122,
+      "frames_camera_ok": 0,
+      "true_passes": 2,
+      "off": {
+        "passes": 0,
+        "matched": 0,
+        "self": 0,
+        "list": []
+      },
+      "on": {
+        "passes": 0,
+        "matched": 0,
+        "self": 0,
+        "list": []
+      },
+      "removed": []
+    },
+    {
+      "seed": 2041,
+      "frames_camera_ok": 245,
+      "true_passes": 4,
+      "off": {
+        "passes": 4,
+        "matched": 3,
+        "self": 0,
+        "list": [
+          {
+            "id": "v00001",
+            "frame": 2629,
+            "tracks": [
+              25,
+              16
+            ],
+            "players": [
+              "h11",
+              "a9"
+            ],
+            "self": false
+          },
+          {
+            "id": "v00002",
+            "frame": 2651,
+            "tracks": [
+              16,
+              17
+            ],
+            "players": [
+              "a6",
+              "a9"
+            ],
+            "self": false
+          },
+          {
+            "id": "v00003",
+            "frame": 2682,
+            "tracks": [
+              17,
+              2
+            ],
+            "players": [
+              "a6",
+              "a10"
+            ],
+            "self": false
+          },
+          {
+            "id": "v00004",
+            "frame": 2730,
+            "tracks": [
+              2,
+              26
+            ],
+            "players": [
+              "a10",
+              "h9"
+            ],
+            "self": false
+          }
+        ]
+      },
+      "on": {
+        "passes": 4,
+        "matched": 3,
+        "self": 0,
+        "list": [
+          {
+            "id": "v00001",
+            "frame": 2629,
+            "tracks": [
+              25,
+              16
+            ],
+            "players": [
+              "h11",
+              "a9"
+            ],
+            "self": false
+          },
+          {
+            "id": "v00002",
+            "frame": 2651,
+            "tracks": [
+              16,
+              17
+            ],
+            "players": [
+              "a6",
+              "a9"
+            ],
+            "self": false
+          },
+          {
+            "id": "v00003",
+            "frame": 2682,
+            "tracks": [
+              17,
+              2
+            ],
+            "players": [
+              "a6",
+              "a10"
+            ],
+            "self": false
+          },
+          {
+            "id": "v00004",
+            "frame": 2730,
+            "tracks": [
+              2,
+              26
+            ],
+            "players": [
+              "a10",
+              "h9"
+            ],
+            "self": false
+          }
+        ]
+      },
+      "removed": []
+    },
+    {
+      "seed": 2042,
+      "frames_camera_ok": 250,
+      "true_passes": 3,
+      "off": {
+        "passes": 4,
+        "matched": 3,
+        "self": 2,
+        "list": [
+          {
+            "id": "v00001",
+            "frame": 873,
+            "tracks": [
+              6,
+              13
+            ],
+            "players": [
+              "h6",
+              "h8"
+            ],
+            "self": false
+          },
+          {
+            "id": "v00002",
+            "frame": 995,
+            "tracks": [
+              13,
+              16
+            ],
+            "players": [
+              "h8",
+              "h8"
+            ],
+            "self": true
+          },
+          {
+            "id": "v00003",
+            "frame": 1047,
+            "tracks": [
+              16,
+              24
+            ],
+            "players": [
+              "h8",
+              "h7"
+            ],
+            "self": false
+          },
+          {
+            "id": "v00004",
+            "frame": 1077,
+            "tracks": [
+              24,
+              17
+            ],
+            "players": [
+              "h7",
+              "h7"
+            ],
+            "self": true
+          }
+        ]
+      },
+      "on": {
+        "passes": 4,
+        "matched": 3,
+        "self": 2,
+        "list": [
+          {
+            "id": "v00001",
+            "frame": 873,
+            "tracks": [
+              6,
+              13
+            ],
+            "players": [
+              "h6",
+              "h8"
+            ],
+            "self": false
+          },
+          {
+            "id": "v00002",
+            "frame": 995,
+            "tracks": [
+              13,
+              16
+            ],
+            "players": [
+              "h8",
+              "h8"
+            ],
+            "self": true
+          },
+          {
+            "id": "v00003",
+            "frame": 1047,
+            "tracks": [
+              16,
+              24
+            ],
+            "players": [
+              "h8",
+              "h7"
+            ],
+            "self": false
+          },
+          {
+            "id": "v00004",
+            "frame": 1077,
+            "tracks": [
+              24,
+              17
+            ],
+            "players": [
+              "h7",
+              "h7"
+            ],
+            "self": true
+          }
+        ]
+      },
+      "removed": []
+    },
+    {
+      "seed": 2043,
+      "frames_camera_ok": 249,
+      "true_passes": 4,
+      "off": {
+        "passes": 4,
+        "matched": 4,
+        "self": 0,
+        "list": [
+          {
+            "id": "v00001",
+            "frame": 4332,
+            "tracks": [
+              1,
+              2
+            ],
+            "players": [
+              "a11",
+              "a8"
+            ],
+            "self": false
+          },
+          {
+            "id": "v00002",
+            "frame": 4365,
+            "tracks": [
+              2,
+              1
+            ],
+            "players": [
+              "a8",
+              "a11"
+            ],
+            "self": false
+          },
+          {
+            "id": "v00003",
+            "frame": 4410,
+            "tracks": [
+              1,
+              28
+            ],
+            "players": [
+              "a11",
+              "h7"
+            ],
+            "self": false
+          },
+          {
+            "id": "v00004",
+            "frame": 4513,
+            "tracks": [
+              28,
+              16
+            ],
+            "players": [
+              "h10",
+              "h7"
+            ],
+            "self": false
+          }
+        ]
+      },
+      "on": {
+        "passes": 4,
+        "matched": 4,
+        "self": 0,
+        "list": [
+          {
+            "id": "v00001",
+            "frame": 4332,
+            "tracks": [
+              1,
+              2
+            ],
+            "players": [
+              "a11",
+              "a8"
+            ],
+            "self": false
+          },
+          {
+            "id": "v00002",
+            "frame": 4365,
+            "tracks": [
+              2,
+              1
+            ],
+            "players": [
+              "a8",
+              "a11"
+            ],
+            "self": false
+          },
+          {
+            "id": "v00003",
+            "frame": 4410,
+            "tracks": [
+              1,
+              28
+            ],
+            "players": [
+              "a11",
+              "h7"
+            ],
+            "self": false
+          },
+          {
+            "id": "v00004",
+            "frame": 4513,
+            "tracks": [
+              28,
+              16
+            ],
+            "players": [
+              "h10",
+              "h7"
+            ],
+            "self": false
+          }
+        ]
+      },
+      "removed": []
+    },
+    {
+      "seed": 3041,
+      "frames_camera_ok": 2,
+      "true_passes": 2,
+      "off": {
+        "passes": 0,
+        "matched": 0,
+        "self": 0,
+        "list": []
+      },
+      "on": {
+        "passes": 0,
+        "matched": 0,
+        "self": 0,
+        "list": []
+      },
+      "removed": []
+    },
+    {
+      "seed": 3042,
+      "frames_camera_ok": 0,
+      "true_passes": 1,
+      "off": {
+        "passes": 0,
+        "matched": 0,
+        "self": 0,
+        "list": []
+      },
+      "on": {
+        "passes": 0,
+        "matched": 0,
+        "self": 0,
+        "list": []
+      },
+      "removed": []
+    }
+  ]
+}

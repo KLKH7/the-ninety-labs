@@ -1,0 +1,441 @@
+{
+  "frozen": "2026-10-20",
+  "tag": "untagged: main at 91d1e3b (no engine or render tag names this commit)",
+  "commit": "91d1e3b1cea97ed9bbef75c628d98486a2af3124",
+  "commit_note": "main with #136 (targeted round 1: occlusion=keeper, crowded counts only a live ball) and #146 (turns on planted feet, touches reach the ball). Renderer 0.4.0: players on the skinned kit mesh (a3d228e), not the capsules of test-set-frozen.json. The engine is main's at this commit, not engine-v1: it includes #58 (kick error) and #90 (foot reach).",
+  "supersedes": "nothing: test-set-frozen.json (cca498c, capsules, engine-v1) stays frozen and reported, so vision-report-v1 and v2 keep their meaning. This set is the benchmark for the mesh look the demo shows, and the one targeted round 1 (seeds 7101-7180) and its control (7201-7280) are scored on, both rendered from the same commit.",
+  "rendered_by": "uv run ninety-dataset --split test --seconds 10 --out runs/test-frozen-91d1e3b, once, locally, software GL (swiftshader), from a clean checkout of the commit",
+  "render_checks": "docs/eval/test-render-checks-91d1e3b.json (all passed; determinism identical on seed900001: frames, events and 250 images)",
+  "contract_check": "uv run ninety-render-meta, then uv run ninety-validate at the commit: 5 of 5 meet the data contract",
+  "storage": {
+    "images_and_clip_json": "renders/test-frozen-91d1e3b/test/seed<N>/",
+    "frames_events_meta": "truth-test/test-frozen-91d1e3b/test/seed<N>/",
+    "uploaded": "2026-10-20: uploaded by a maintainer (Entra login, temporary role, removed after); renders holds 1255 blobs (1250 images, 5 clip.json), truth-test 15 (frames, events, meta), truth 0",
+    "verified": "2026-10-20: re-downloaded from storage, every clip's frames, events and images digest and meta.json sha256 match the digests below",
+    "truth_test": "a container of its own (#123): training links reach truth, never truth-test"
+  },
+  "seeds": [
+    900001,
+    900002,
+    900003,
+    900004,
+    900005
+  ],
+  "ball_in_shot": 1250,
+  "ball_visibility_lt_0_5": 83,
+  "ball_visibility_lt_0_5_share": 0.0664,
+  "floor": 0.05,
+  "meets_floor": true,
+  "ball_visibility_0": 1,
+  "ball_visibility_between_0_and_0_5": 82,
+  "player_labels": 11759,
+  "player_visibility_between_0_and_0_5": 32,
+  "clips": [
+    {
+      "seed": 900001,
+      "params": {
+        "width": 1280,
+        "height": 720,
+        "fps": 25,
+        "camera": {
+          "height_m": 21.63,
+          "back_m": 37.69,
+          "offset_x_m": 5.87,
+          "half_width_m": 22.25,
+          "box_half_width_m": 12.8,
+          "pan_lag_s": 0.48,
+          "lead_s": 0.49,
+          "shake_m": 0.069
+        },
+        "lighting": "day",
+        "sun_azimuth_deg": 160.3,
+        "sun_elevation_deg": 33.4,
+        "weather": "clear",
+        "camera_cut": false,
+        "kit_contrast": "normal",
+        "home_kit": {
+          "shirt": "#3d1a1e",
+          "shorts": "#111111",
+          "socks": "#3d1a1e"
+        },
+        "away_kit": {
+          "shirt": "#44529f",
+          "shorts": "#ffffff",
+          "socks": "#44529f"
+        },
+        "home_gk": {
+          "shirt": "#4bdfaf",
+          "shorts": "#ffffff",
+          "socks": "#4bdfaf"
+        },
+        "away_gk": {
+          "shirt": "#f2f2f2",
+          "shorts": "#ffffff",
+          "socks": "#ffffff"
+        },
+        "home_pattern": "sash",
+        "away_pattern": "halves",
+        "grass_hue": 0.316,
+        "stripe_width_m": 4.0,
+        "wear": 0.74,
+        "stand_color": "#4a3832",
+        "crowd_density": 0.91,
+        "motion_blur": 0.37,
+        "noise": 0.0082,
+        "jpeg_quality": 0.88,
+        "occlusion": "crowded",
+        "home_code": "FEN",
+        "away_code": "OAK",
+        "boards": [
+          "VANTIRO",
+          "QELMORA",
+          "BRISKEL",
+          "OSTRAVEN",
+          "PALMIRU",
+          "ZENTHA",
+          "THE NINETY LABS"
+        ]
+      },
+      "renderer": {
+        "version": "0.4.0",
+        "three": "0.170.0",
+        "gl": "swiftshader",
+        "chromium": "141.0.7390.37"
+      },
+      "ball_in_shot": 250,
+      "ball_visibility_lt_0_5": 21,
+      "digest": {
+        "frames_jsonl": "59ad8487a4521143dd216f074d6aa648e8a1eb69cf45086f3bfa06ca26f5f8b0",
+        "events_jsonl": "2d2ab5164ddade8457870d3780a3e4e40003b718ed58a3e7249199cc24f278c9",
+        "images": "b3494af60722c77032cd22fa79f9d9edb2ee8634f65faa3a1855b74b0f3e7bc2",
+        "image_count": 250
+      },
+      "meta_json_sha256": "1a98e89c6ffa47c7630f8a514aef00f4c68cc16b17dfaf377f28018819c018a9"
+    },
+    {
+      "seed": 900002,
+      "params": {
+        "width": 1280,
+        "height": 720,
+        "fps": 25,
+        "camera": {
+          "height_m": 15.01,
+          "back_m": 32.39,
+          "offset_x_m": 3.93,
+          "half_width_m": 17.11,
+          "box_half_width_m": 11.1,
+          "pan_lag_s": 0.57,
+          "lead_s": 0.25,
+          "shake_m": 0.115
+        },
+        "lighting": "day",
+        "sun_azimuth_deg": 226.7,
+        "sun_elevation_deg": 54.5,
+        "weather": "clear",
+        "camera_cut": true,
+        "kit_contrast": "normal",
+        "home_kit": {
+          "shirt": "#f2f2f2",
+          "shorts": "#111111",
+          "socks": "#111111"
+        },
+        "away_kit": {
+          "shirt": "#1a1a1a",
+          "shorts": "#111111",
+          "socks": "#1a1a1a"
+        },
+        "home_gk": {
+          "shirt": "#53ec92",
+          "shorts": "#ffffff",
+          "socks": "#ffffff"
+        },
+        "away_gk": {
+          "shirt": "#bb5486",
+          "shorts": "#bb5486",
+          "socks": "#bb5486"
+        },
+        "home_pattern": "solid",
+        "away_pattern": "halves",
+        "grass_hue": 0.293,
+        "stripe_width_m": 5.25,
+        "wear": 0.84,
+        "stand_color": "#636162",
+        "crowd_density": 0.54,
+        "motion_blur": 0.6,
+        "noise": 0.0156,
+        "jpeg_quality": 0.88,
+        "occlusion": "crowded",
+        "home_code": "ASH",
+        "away_code": "ELM",
+        "boards": [
+          "VANTIRO",
+          "QELMORA",
+          "BRISKEL",
+          "OSTRAVEN",
+          "PALMIRU",
+          "ZENTHA",
+          "THE NINETY LABS"
+        ]
+      },
+      "renderer": {
+        "version": "0.4.0",
+        "three": "0.170.0",
+        "gl": "swiftshader",
+        "chromium": "141.0.7390.37"
+      },
+      "ball_in_shot": 250,
+      "ball_visibility_lt_0_5": 27,
+      "digest": {
+        "frames_jsonl": "23b6b7dbc96fd302393264cccbfaacd4b4fdb4c45872bf6e3b84cf0ebce46a53",
+        "events_jsonl": "88fdea3dacc00b477325ab190549f185a1e5cd757f0fbcfda0583fd13048473f",
+        "images": "b3c5b9322b06bc5ae339b54ae82d7db60a8ef348425b0a0d74635ad9e18229eb",
+        "image_count": 250
+      },
+      "meta_json_sha256": "1a67ebb7011b76d3f2ee49a3ad3b9e66049407a304c4e0cbc70a2329cb9b98d3"
+    },
+    {
+      "seed": 900003,
+      "params": {
+        "width": 1280,
+        "height": 720,
+        "fps": 25,
+        "camera": {
+          "height_m": 20.16,
+          "back_m": 35.46,
+          "offset_x_m": 0.59,
+          "half_width_m": 18.31,
+          "box_half_width_m": 13.49,
+          "pan_lag_s": 0.72,
+          "lead_s": 0.25,
+          "shake_m": 0.042
+        },
+        "lighting": "day",
+        "sun_azimuth_deg": 228.3,
+        "sun_elevation_deg": 39.0,
+        "weather": "clear",
+        "camera_cut": true,
+        "kit_contrast": "normal",
+        "home_kit": {
+          "shirt": "#1a1a1a",
+          "shorts": "#ffffff",
+          "socks": "#1a1a1a"
+        },
+        "away_kit": {
+          "shirt": "#20ea68",
+          "shorts": "#20ea68",
+          "socks": "#20ea68"
+        },
+        "home_gk": {
+          "shirt": "#f2f2f2",
+          "shorts": "#f2f2f2",
+          "socks": "#f2f2f2"
+        },
+        "away_gk": {
+          "shirt": "#4e69af",
+          "shorts": "#4e69af",
+          "socks": "#4e69af"
+        },
+        "home_pattern": "halves",
+        "away_pattern": "sash",
+        "grass_hue": 0.295,
+        "stripe_width_m": 4.0,
+        "wear": 0.35,
+        "stand_color": "#3b2341",
+        "crowd_density": 0.65,
+        "motion_blur": 0.62,
+        "noise": 0.0101,
+        "jpeg_quality": 0.88,
+        "occlusion": "natural",
+        "home_code": "MRL",
+        "away_code": "KST",
+        "boards": [
+          "VANTIRO",
+          "QELMORA",
+          "BRISKEL",
+          "OSTRAVEN",
+          "PALMIRU",
+          "ZENTHA",
+          "THE NINETY LABS"
+        ]
+      },
+      "renderer": {
+        "version": "0.4.0",
+        "three": "0.170.0",
+        "gl": "swiftshader",
+        "chromium": "141.0.7390.37"
+      },
+      "ball_in_shot": 250,
+      "ball_visibility_lt_0_5": 8,
+      "digest": {
+        "frames_jsonl": "8da3bbbeadea09b7d0ca4f97be360300187c67329aa1df6ad0208f1d1548e0d2",
+        "events_jsonl": "17bcc65027182c2b2da9ec294e2394d2374b392b22a37ae51a390af564e3f325",
+        "images": "f25a61a8017ebf8cd736795c3cbdc5219ccec14f5ac891370f72c292ce352b44",
+        "image_count": 250
+      },
+      "meta_json_sha256": "be05c513002a115ef0883d2fa1e91b6f8d697f6588c92eb2540804ee857c02b3"
+    },
+    {
+      "seed": 900004,
+      "params": {
+        "width": 1280,
+        "height": 720,
+        "fps": 25,
+        "camera": {
+          "height_m": 19.21,
+          "back_m": 34.45,
+          "offset_x_m": 1.47,
+          "half_width_m": 17.18,
+          "box_half_width_m": 11.81,
+          "pan_lag_s": 0.65,
+          "lead_s": 0.31,
+          "shake_m": 0.07
+        },
+        "lighting": "day",
+        "sun_azimuth_deg": 66.3,
+        "sun_elevation_deg": 45.6,
+        "weather": "clear",
+        "camera_cut": false,
+        "kit_contrast": "low",
+        "home_kit": {
+          "shirt": "#04352d",
+          "shorts": "#04352d",
+          "socks": "#04352d"
+        },
+        "away_kit": {
+          "shirt": "#1a1a1a",
+          "shorts": "#ffffff",
+          "socks": "#ffffff"
+        },
+        "home_gk": {
+          "shirt": "#f2f2f2",
+          "shorts": "#111111",
+          "socks": "#111111"
+        },
+        "away_gk": {
+          "shirt": "#ea1d21",
+          "shorts": "#ffffff",
+          "socks": "#ea1d21"
+        },
+        "home_pattern": "stripes",
+        "away_pattern": "sash",
+        "grass_hue": 0.262,
+        "stripe_width_m": 5.25,
+        "wear": 0.6,
+        "stand_color": "#323533",
+        "crowd_density": 0.68,
+        "motion_blur": 0.51,
+        "noise": 0.0133,
+        "jpeg_quality": 0.88,
+        "occlusion": "crowded",
+        "home_code": "MRL",
+        "away_code": "HLT",
+        "boards": [
+          "VANTIRO",
+          "QELMORA",
+          "BRISKEL",
+          "OSTRAVEN",
+          "PALMIRU",
+          "ZENTHA",
+          "THE NINETY LABS"
+        ]
+      },
+      "renderer": {
+        "version": "0.4.0",
+        "three": "0.170.0",
+        "gl": "swiftshader",
+        "chromium": "141.0.7390.37"
+      },
+      "ball_in_shot": 250,
+      "ball_visibility_lt_0_5": 21,
+      "digest": {
+        "frames_jsonl": "e286cab94a9768c722e4b574394e7f1f2ee3249c96574f12ecd87d6937ac56c3",
+        "events_jsonl": "616da4e596df93714e4aa3dbb29b599d90c7cd7cb394265423536a0835a5367e",
+        "images": "e9dc0bd165e39ab7e05532a418b5cb17c62091d555d49f55ca4e1e21bee3f262",
+        "image_count": 250
+      },
+      "meta_json_sha256": "a2d7b894af93c8b0322ff80f13b189c8f85217a375f343ca681c66d544c9b56f"
+    },
+    {
+      "seed": 900005,
+      "params": {
+        "width": 1280,
+        "height": 720,
+        "fps": 25,
+        "camera": {
+          "height_m": 18.8,
+          "back_m": 36.81,
+          "offset_x_m": -0.72,
+          "half_width_m": 20.02,
+          "box_half_width_m": 13.26,
+          "pan_lag_s": 0.45,
+          "lead_s": 0.36,
+          "shake_m": 0.149
+        },
+        "lighting": "day",
+        "sun_azimuth_deg": 318.8,
+        "sun_elevation_deg": 35.6,
+        "weather": "clear",
+        "camera_cut": false,
+        "kit_contrast": "normal",
+        "home_kit": {
+          "shirt": "#f2f2f2",
+          "shorts": "#111111",
+          "socks": "#f2f2f2"
+        },
+        "away_kit": {
+          "shirt": "#1a1a1a",
+          "shorts": "#111111",
+          "socks": "#1a1a1a"
+        },
+        "home_gk": {
+          "shirt": "#12f224",
+          "shorts": "#ffffff",
+          "socks": "#12f224"
+        },
+        "away_gk": {
+          "shirt": "#6a2397",
+          "shorts": "#111111",
+          "socks": "#111111"
+        },
+        "home_pattern": "stripes",
+        "away_pattern": "halves",
+        "grass_hue": 0.243,
+        "stripe_width_m": 6.0,
+        "wear": 0.68,
+        "stand_color": "#41413e",
+        "crowd_density": 0.66,
+        "motion_blur": 0.6,
+        "noise": 0.0167,
+        "jpeg_quality": 0.88,
+        "occlusion": "natural",
+        "home_code": "QRY",
+        "away_code": "GRV",
+        "boards": [
+          "VANTIRO",
+          "QELMORA",
+          "BRISKEL",
+          "OSTRAVEN",
+          "PALMIRU",
+          "ZENTHA",
+          "THE NINETY LABS"
+        ]
+      },
+      "renderer": {
+        "version": "0.4.0",
+        "three": "0.170.0",
+        "gl": "swiftshader",
+        "chromium": "141.0.7390.37"
+      },
+      "ball_in_shot": 250,
+      "ball_visibility_lt_0_5": 6,
+      "digest": {
+        "frames_jsonl": "6ea7890a9ff2d6c82e8cbe5827cc7a40a1e6220035d7d00c095f9ae8139bfd8d",
+        "events_jsonl": "6f13b02115946ed403c795381f3a7684207a0ed29a4ffb333bc1b0ac9dbc3a44",
+        "images": "9dbd1dcacabe7c44daa059e29f2fae1ba41d2dfdeeb946ebec908de2d4a2377d",
+        "image_count": 250
+      },
+      "meta_json_sha256": "46c5f7eddcf3ffb1a6d7e6c789a54632fc90cdd0f666186bf5c0476f20d581a0"
+    }
+  ],
+  "history": []
+}

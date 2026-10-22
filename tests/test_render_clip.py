@@ -4,17 +4,23 @@ Skipped when three.js or Chromium is not installed, unless NINETY_REQUIRE_RENDER
 job sets it, so the checks can never silently stop running there).
 """
 
+import base64
 import json
+import math
 import os
 import shutil
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from jsonschema import validate
 
+from ninety.render import edit
+from ninety.render.camera import CUT_HOLD_S, project_with
 from ninety.render.checks import check_clip, digest, load_clip
 from ninety.render.cli import meta_main
-from ninety.render.clip import RenderUnavailable, browser_page, render_clip
+from ninety.render.clip import SIM_MARGIN_S, RenderUnavailable, browser_page, render_clip
+from ninety.sim.engine import simulate
 from ninety.validate import validate as validate_clip
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -111,3 +117,75 @@ def test_images_are_720p_jpeg(clips):
     i = first.index(b"\xff\xc0")
     h, w = int.from_bytes(first[i + 5 : i + 7], "big"), int.from_bytes(first[i + 7 : i + 9], "big")
     assert (w, h) == (1280, 720)
+
+
+class StandInPage:
+    """render_clip's page without a browser: every truth row is Python's own, the picture is not
+    drawn (no boxes, no pixels). Enough to check what a cut does to the truth."""
+
+    context = SimpleNamespace(browser=SimpleNamespace(version="stand-in"))
+
+    def evaluate(self, js, arg):
+        if "init" in js:
+            return {"bugRect": [0, 0, 1, 1]}
+        return {"objects": {o["id"]: {"full": 0, "visible": 0, "bbox": None, "centroid": None}
+                            for o in arg["objects"]},
+                "keypoints": [False] * len(arg["keypoints"]),
+                "image": "data:image/jpeg;base64," + base64.b64encode(b"x").decode()}
+
+
+@pytest.fixture(scope="module")
+def cut_clip(tmp_path_factory):
+    """A broadcast clip from a second before the stoppage of seed 11's first long dead ball to a
+    second past its restart. The cut is found from the match, as render_clip finds it, so a change
+    to the engine moves the clip with it (lesson 78)."""
+    first = None
+    match = simulate(11, (240.0 + 30.0 + SIM_MARGIN_S) / 60)
+    first = next(c for c in edit.cuts(match.events, 25) if c.stop >= 25)
+    start = first.stop - 25
+    seconds = (first.first_frame - start + first.restart + 25 - first.last_frame) / 25
+    out = tmp_path_factory.mktemp("cut") / "c"
+    render_clip(11, out, seconds=seconds, start_s=start / 25, overrides={"dead_ball_cut": True},
+                page=StandInPage())
+    return out, first, start
+
+
+def test_a_clip_cuts_from_the_stoppage_to_the_restart_and_still_meets_the_contract(cut_clip):
+    """The clip shows the stoppage, then cuts, then comes back for the restart. Every shown row is
+    the engine's own frame of that number (render_clip draws from them), every event is on a shown
+    frame, and the clip meets the data contract (C2 accepts the recorded cut)."""
+    out, first, start = cut_clip
+    clip, frames, events = load_clip(out)
+    numbers = [f["frame"] for f in frames]
+    k = first.first_frame - start
+    assert numbers[:k] == list(range(start, first.first_frame))
+    assert numbers[k] == first.last_frame + 1 and numbers[k:] == list(range(numbers[k], numbers[-1] + 1))
+    assert first.stop in numbers and first.restart in numbers
+    assert clip["cuts"] == [first.as_dict()]
+    assert clip["segments"] == [{"index": 0, "frame": numbers[0], "frames": k},
+                                {"index": k, "frame": numbers[k], "frames": len(frames) - k}]
+    assert json.loads((out / "meta.json").read_text())["cuts"] == [first.as_dict()]
+    assert [f["image"] for f in frames] == [f"images/{i:05d}.jpg" for i in range(len(frames))]
+    assert all(e["frame"] in numbers for e in events)
+    # The picture after the cut is a new shot, not a pan from the last one: unstreaked, and the
+    # gantry's own wide shot framed afresh on where the restart is set (0.5.10; before it, a
+    # close-up of the taker alone that pulled out, demo v1's critic and lesson 187). The cut shows:
+    # the restart's spot jumps across the picture between the last frame before it and the first
+    # after, so the clip did not keep the stoppage's framing.
+    fov = [f["camera"]["fov_v_deg"] for f in frames]
+    restart_at = numbers.index(first.restart)
+    assert frames[k]["blur_px"] == [0.0, 0.0]
+    assert frames[k]["camera"]["position"] == frames[k - 1]["camera"]["position"]
+    b = frames[k]["ball"]
+    spot = (b["x"], b["y"], b["z"])
+    w = frames[k]["camera"]["width"]
+    now = project_with(frames[k]["camera"]["P"], spot)
+    before = project_with(frames[k - 1]["camera"]["P"], spot)
+    assert abs(now[0] - w / 2) < 0.25 * w  # framed on the restart
+    assert math.dist(now, before) > 0.2 * w  # a new framing, not the stoppage's
+    hold = round(CUT_HOLD_S * 25)
+    assert max(fov[k:k + hold]) < 1.25 * fov[k] and min(fov[k:k + hold]) > 0.8 * fov[k]  # wide, no pull-out
+    assert fov[restart_at] > 0.8 * fov[k]  # still the wide shot at the kick ...
+    assert max(abs(b - a) for a, b in zip(fov[k:], fov[k + 1:], strict=False)) < 0.5  # ... never snapped
+    assert validate_clip(out) == {}
+    assert check_clip(out)["passed"]["data_contract"]

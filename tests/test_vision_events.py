@@ -100,6 +100,124 @@ def test_a_pass_won_by_an_opponent_fails():
     assert [(e["type"], e["team"], e["outcome"]) for e in events] == [("pass", "home", "fail")]
 
 
+def test_a_completed_pass_names_its_passer_and_receiver_by_side_and_track():
+    events, summary = ev.detect(pass_scene(BLUE))
+    p = next(e for e in events if e["type"] == "pass")
+    # Tracks are numbered as they start: the crowd's eight, then the passer, then the receiver.
+    assert (p["player"], p["receiver"], p["interceptor"]) == ("h-t9", "h-t10", None)
+    assert summary["named"] == {"player": 1, "receiver": 1, "interceptor": 0}
+
+
+def test_a_pass_the_other_side_takes_names_the_interceptor_not_a_receiver():
+    events, _ = ev.detect(pass_scene(RED))
+    p = next(e for e in events if e["type"] == "pass")
+    assert (p["player"], p["receiver"], p["interceptor"]) == ("h-t9", None, "a-t10")
+
+
+def rival_scene(gap):
+    """pass_scene(BLUE) with an away player standing still at the strike spot's side, `gap` metres
+    farther from the ball (at 50.3, 34) than the passer (0.3 m from it) is."""
+    rows = pass_scene(BLUE)
+    for r in rows:
+        r["players"].append({"bbox": [400, 0, 410, 30], "score": 0.9, "x": 50.3, "y": 34.0 + 0.3 + gap,
+                             "rgb": RED})
+    return rows
+
+
+def test_a_rival_within_the_position_error_leaves_the_passer_unnamed_and_keeps_the_side():
+    events, _ = ev.detect(rival_scene(ev.RIVAL_M - 0.05))
+    p = next(e for e in events if e["type"] == "pass")
+    assert p["player"] is None and p["team"] == "home" and p["outcome"] == "success"
+    assert p["receiver"] == "h-t10"  # nobody near the receiver: he is still named
+
+
+def test_a_rival_beyond_the_position_error_does_not():
+    events, _ = ev.detect(rival_scene(ev.RIVAL_M + 0.05))
+    assert next(e for e in events if e["type"] == "pass")["player"] == "h-t9"
+
+
+def test_a_track_the_companion_does_not_draw_is_never_named():
+    ball = tr.BallPoint(2, 10.0, 10.0, 0.9)
+
+    def track(id_, n, team="home"):
+        return tr.Track(id_, frames=list(range(n)), xy=[(10.2, 10.0)] * n, team=team)
+
+    assert ev.attribute(track(1, ev.MIN_TRACK_FRAMES), ball, []) == "h-t1"
+    assert ev.attribute(track(1, ev.MIN_TRACK_FRAMES - 1), ball, []) is None  # a fragment
+    assert ev.attribute(track(1, ev.MIN_TRACK_FRAMES, team=None), ball, []) is None  # no side
+    assert ev.attribute(track(1, 3), tr.BallPoint(9, 10.0, 10.0, 0.9), []) is None  # not seen then
+
+
+def test_a_dribbler_the_tracker_loses_and_picks_up_again_is_not_a_pass_to_himself():
+    # A blue player runs with the ball at 5 m/s; on frame 30 his detection jumps 1.5 m sideways
+    # (past the tracker's gate), so the tracker ends his track and starts another: two spells, one
+    # player. Without the rule this reads as a completed pass from him to himself.
+    rows = []
+    for f in range(60):
+        x, y = 40.0 + 5.0 * f / FPS, 34.0 + (1.5 if f >= 30 else 0.0)
+        rows.append(row(f, crowd(f) + [(x, y, BLUE)], (x + 0.3, y)))
+    tracks = tr.track_players(rows)
+    assert len([t for t in tracks if t.xy[0][1] < 50]) == 2  # the scene does split him
+    events, _ = ev.detect(rows)
+    assert [e for e in events if e["type"] == "pass"] == []
+
+
+def test_a_new_track_may_continue_an_old_one_only_when_never_seen_together_and_within_reach():
+    def track(first, last, x):
+        n = last - first + 1
+        return tr.Track(1, frames=list(range(first, last + 1)), xy=[(x, 0.0)] * n, team="home")
+    a = track(0, 10, 0.0)
+    reach_1 = ev.REACH_MPS / FPS + ev.RIVAL_M  # one frame later
+    assert ev.may_continue(a, track(11, 20, reach_1 - 0.01))
+    assert not ev.may_continue(a, track(11, 20, reach_1 + 0.01))
+    assert not ev.may_continue(a, track(10, 20, 0.0))  # seen in the same frame: two players
+    assert not ev.may_continue(a, track(11 + tr.MAX_GAP_FRAMES, 40, 0.0))  # lost too long
+    # Five frames on, 10 m away: farther than a player runs in 0.2 s at any speed (P9), however
+    # large the position error is taken to be within reason.
+    assert not ev.may_continue(a, track(15, 20, 10.0))
+
+
+def test_side_confidence_is_the_weaker_of_the_kit_and_the_side_vote():
+    # Identical shirts: each kit sits on its own colour (margin 1). Red is deeper toward x = 105 in
+    # 20 frames; in the last 6 the sides swap places (new tracks), so the vote is 14 of 26.
+    def swapped(f):
+        return [(x, y, RED if c is BLUE else BLUE) for x, y, c in crowd(f)]
+    rows = [row(f, crowd(f) if f < 20 else swapped(f)) for f in range(26)]
+    for r in rows[20:]:  # keep each colour on its own y, so the swap is of ends, not of rows
+        for d in r["players"]:
+            d["y"] = 60.0 if d["rgb"] is BLUE else 62.0
+    tracks = tr.track_players(rows)
+    info = tr.assign_teams(tracks)
+    assert info["frames_voting"] == 26 and abs(info["vote_margin"]) == 14
+    assert {t.side_confidence for t in tracks if t.team} == {round(14 / 26, 3)}
+
+
+def test_a_kit_nearer_the_other_side_is_less_sure_and_a_keeper_is_as_sure_as_he_is_deep():
+    off_blue = [45.0, 60.0, 185.0]  # near the blue kit, a little toward red: still blue, less surely
+    rows = [row(f, crowd(f) + [(60.0, 50.0, off_blue), (101.0, 34.0, GREEN_KEEPER)]) for f in range(30)]
+    tracks = tr.track_players(rows)
+    tr.assign_teams(tracks)
+    by_colour = {tuple(t.rgb[0]): t for t in tracks}
+    assert 0 < by_colour[tuple(off_blue)].side_confidence < by_colour[tuple(BLUE)].side_confidence
+    assert by_colour[tuple(off_blue)].team == "home"
+    assert by_colour[tuple(GREEN_KEEPER)].side_confidence == round((101.0 - 52.5) / 52.5, 3)
+
+
+def test_a_detected_event_carries_its_holders_side_confidence():
+    events, _ = ev.detect(pass_scene(BLUE))
+    tracks = tr.track_players(pass_scene(BLUE))
+    tr.assign_teams(tracks)
+    passer = next(t for t in tracks if t.xy[0] == (50.0, 34.0))
+    assert [e["team_confidence"] for e in events if e["type"] == "pass"] == [passer.side_confidence]
+
+
+def test_out_of_play_names_nobody():
+    events, _ = ev.detect(pass_scene(BLUE, speed=30.0)[:21] + [
+        row(f, crowd(f) + [(50.0, 34.0, BLUE)], (106.0, 34.0)) for f in range(21, 30)])
+    outs = [e for e in events if e["type"] == "out_of_play"]
+    assert outs and all(e["player"] is None for e in outs)
+
+
 def test_a_ball_rolling_past_a_player_is_not_his():
     # The ball runs at 12 m/s straight past a red player standing on its line: without the
     # relative-speed test he would have a spell, and the pass would be cut in two.
@@ -134,7 +252,8 @@ def test_the_ball_over_a_line_for_out_frames_is_out_of_play_and_one_frame_is_not
         for f in range(40):
             y = 66.0 if f < 20 else (68.0 + 1.0 if f < 20 + out_for else 66.0)
             holder = (50.0, 66.2 if f < 12 else 60.0, BLUE)
-            rows.append(row(f, crowd(f)[:4] + [holder], (50.2 if f < 12 else 50.0, y)))
+            # Both kits on the pitch, so which side is home is decided (blue: crowd's docstring).
+            rows.append(row(f, crowd(f) + [holder], (50.2 if f < 12 else 50.0, y)))
         return rows
     long_ = [e for e in ev.detect(scene(ev.OUT_FRAMES))[0] if e["type"] == "out_of_play"]
     short = [e for e in ev.detect(scene(1))[0] if e["type"] == "out_of_play"]
@@ -215,3 +334,63 @@ def test_one_kit_in_sun_and_in_shadow_is_one_side():
     teams = {tuple(t.rgb[0]): t.team for t in tracks}
     assert teams[tuple(home_sun)] == teams[tuple(home_shade)] == "home"
     assert teams[tuple(away_sun)] == teams[tuple(away_shade)] == "away"
+
+
+def kit_scene(home_kits, away_kits, frames=30):
+    """Home players at x 30 to 45, away players deeper toward x = 105 (so away), one kit colour
+    each, standing still; each list holds one rgb per player."""
+    def scene(f):
+        return ([(30 + 4 * k, 10.0 + 5 * k, c) for k, c in enumerate(home_kits)]
+                + [(70 + 4 * k, 12.0 + 5 * k, c) for k, c in enumerate(away_kits)])
+    tracks = tr.track_players([row(f, scene(f)) for f in range(frames)])
+    info = tr.assign_teams(tracks)
+    return {tuple(t.rgb[0]): t.team for t in tracks}, info
+
+
+def test_a_white_kit_and_a_black_kit_are_told_apart_by_brightness():
+    # Both grey by chromaticity; one is in shadow, so brightness varies within each kit too.
+    white, white_shade, black, black_sun = [235.0, 235.0, 232.0], [120.0, 120.0, 118.0], \
+        [22.0, 22.0, 24.0], [40.0, 40.0, 42.0]
+    teams, info = kit_scene([white, white_shade, white, white_shade], [black, black_sun, black, black_sun])
+    assert info["feature"] == "brightness"
+    assert teams[tuple(white)] == teams[tuple(white_shade)] == "home"
+    assert teams[tuple(black)] == teams[tuple(black_sun)] == "away"
+
+
+def test_the_side_nearer_x_105_on_average_defends_it_even_when_the_deepest_player_is_the_other_sides():
+    # Away (red) defends x = 105 and stands around x = 65; home (blue) is mostly at 30 to 40 but one
+    # home forward has run on to x = 95. The deepest player toward 105 is home's, which named home as
+    # the side defending it; each side's mean x does not (GROUNDING T2, O6).
+    def scene(f):
+        return ([(60.0 + 3 * k, 20.0 + 6 * k, RED) for k in range(4)]
+                + [(30.0 + 3 * k, 25.0 + 6 * k, BLUE) for k in range(3)] + [(95.0, 40.0, BLUE)])
+    tracks = tr.track_players([row(f, scene(f)) for f in range(30)])
+    tr.assign_teams(tracks)
+    assert {tuple(t.rgb[0]): t.team for t in tracks} == {tuple(RED): "away", tuple(BLUE): "home"}
+
+
+def cut_scene(goes_out: bool):
+    """A blue (home) player holds the ball at (50, 34) for 30 frames; with `goes_out` he then plays
+    it over the near touchline. The broadcast cuts away (frames 30 to 529 are not in the clip:
+    ninety/render/edit.py) and comes back on a blue team-mate at (40, 10) with the ball at his feet."""
+    rows = []
+    for f in range(30):
+        bx, by = (50.3, 34.0) if not goes_out or f < 10 else (50.3, max(34.0 - 2.0 * (f - 9), -2.0))
+        rows.append(row(f, crowd(f) + [(50.0, 34.0, BLUE)], (bx, by)))
+    for f in range(530, 560):
+        rows.append(row(f, crowd(f) + [(40.0, 10.0, BLUE)], (40.3, 10.0)))
+    return rows
+
+
+def test_play_across_a_broadcast_cut_is_not_a_pass():
+    """Old: the spell before the cut and the team-mate's after it made a completed pass, which no
+    one played: the picture had cut from the foul to the free kick."""
+    events, _ = ev.detect(cut_scene(goes_out=False))
+    assert [e for e in events if e["type"] == "pass"] == []
+
+
+def test_a_ball_seen_going_out_before_a_cut_is_still_a_failed_pass():
+    events, _ = ev.detect(cut_scene(goes_out=True))
+    passes = [(e["type"], e["team"], e["outcome"]) for e in events if e["type"] == "pass"]
+    assert passes == [("pass", "home", "fail")]
+    assert any(e["type"] == "out_of_play" for e in events)
