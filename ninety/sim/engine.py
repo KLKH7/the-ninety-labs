@@ -3232,7 +3232,8 @@ class Engine:
         the restart is due. The kick itself can be later, which only adds time on his feet."""
         total = FALL_S + FALL_LIE_S + FALL_RISE_S
         if self.restart is None:
-            return total
+            return total  # *design*: nothing is due, so the whole pose
+        # *design*: a restart already inside the margin leaves no time down
         return max(0.0, min(total, self.restart.ready_at - FALL_UP_BEFORE_S - t0))
 
     def _go_down(self, fouler: Player, victim: Player) -> None:
@@ -3248,8 +3249,9 @@ class Engine:
         if rec is None:
             return None
         t0, t_end, direction = rec
+        # *design*: the contact frame is already one frame into the fall
         deg = foul_fall_deg((self.t - t0) + DT, t_end - t0)
-        if round(deg, 1) <= 0.0:
+        if round(deg, 1) <= 0.0:  # *design*: a tenth of a degree; 0 is standing
             return None
         return deg, direction
 
@@ -3505,8 +3507,8 @@ class Engine:
             fall = self.player_fall(p)  # x, y stay his feet; the tip is fall and fall_dir
             if fall is not None:
                 deg, direction = fall
-                row["fall"] = round(deg, 1)
-                row["fall_dir"] = round(direction, 4)
+                row["fall"] = round(deg, 1)  # *design*: a tenth of a degree
+                row["fall_dir"] = round(direction, 4)  # *design*: four decimals, as heading
             players.append(row)
         self.match.frames.append({
             "frame": self.frame,

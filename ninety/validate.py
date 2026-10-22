@@ -359,15 +359,18 @@ def check_contacts(events: list[dict], frames: list[dict], keepers: set[str], pr
 
 
 def check_foul_fall(events: list[dict], frames: list[dict], problems: Problems) -> None:
-    """P18: while a fouled player is down, fall is degrees over his feet, fall_dir is the way his
-    head goes, and action is down. He is upright for at least FOUL_UP_BEFORE_S before the restart."""
+    """P18: while a fouled player is down, fall is degrees over his feet (above 0 and at most 90,
+    *design*), fall_dir is the way his head goes, and action is down. He is upright for at least
+    FOUL_UP_BEFORE_S before the restart. A frame exactly on that instant may still be down
+    (*design*, one frame). A foul with no receiver, or with no set piece or kick-off after it,
+    is not held to that window (*design*: the clip does not show the restart)."""
     restarts = [e for e in events if e.get("type") in ("set_piece", "kickoff")]
     for f in frames:
         for p in f.get("players", []):
             fall, direction = p.get("fall"), p.get("fall_dir")
             if fall is None and direction is None:
                 continue
-            if type(fall) not in (int, float) or not 0 < fall <= 90:
+            if type(fall) not in (int, float) or not 0 < fall <= 90:  # *design*: above 0, at most flat
                 problems["P18 foul fall"].append(
                     f"frame {f.get('frame')}: {p.get('id')} fall {fall} is not degrees over his feet")
                 continue
@@ -387,7 +390,7 @@ def check_foul_fall(events: list[dict], frames: list[dict], problems: Problems) 
         for f in frames:
             if not foul.get("t", 0) <= f.get("t", 0) <= nxt.get("t", 0):
                 continue
-            if f["t"] <= nxt["t"] - FOUL_UP_BEFORE_S:
+            if f["t"] <= nxt["t"] - FOUL_UP_BEFORE_S:  # *design*: the frame on the floor may be down
                 continue
             row = next((p for p in f.get("players", []) if p.get("id") == who), None)
             if row and row.get("fall"):
