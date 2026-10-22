@@ -75,9 +75,14 @@ def test_a_throw_leaves_his_hands_and_a_kick_from_them_leaves_the_ground(monkeyp
         monkeypatch.setattr(e, "execute", lambda *a, **kw: used.append((kw.get("hands"), e.ball[2]))
                             or original(*a, **kw))
         e.release(k, e.scene_for(k))
-        return used
-    assert struck(True) == [(True, KEEPER_HOLD_Z)]  # thrown from his hands
-    assert struck(False) == [(False, 0.0)]  # dropped, and kicked as it meets the ground
+        start = e.t
+        while not used and e.t - start < 2.0:
+            e.step()
+        return used, e.t - start
+    assert struck(True) == ([(True, KEEPER_HOLD_Z)], 0.0)  # thrown from his hands, at once
+    # dropped, it falls under gravity and is kicked as it meets the ground: from 1.1 m, about 0.47 s
+    kicked, fell = struck(False)
+    assert kicked == [(False, 0.0)] and abs(fell - math.sqrt(2 * KEEPER_HOLD_Z / 9.81)) <= 2 * DT
 
 
 def test_with_nothing_to_choose_he_still_lets_it_go_inside_the_limit(monkeypatch):
@@ -100,3 +105,18 @@ def test_put_down_it_is_at_his_feet_and_his_hands_may_not_take_it_again(monkeypa
     e.release(k, e.scene_for(k))
     assert e.held_by is None and e.possessor == k.id and e.released_by == k.id
     assert not e.hands(k, k.x, k.y)
+
+
+def test_a_lunge_already_on_its_way_cannot_take_it_from_his_hands():
+    # Law 12: nobody may challenge a keeper for the ball he holds; a lunge struck before the catch
+    # that arrives after it finds nothing (once it knocked the ball out of his hands).
+    e, k = caught()
+    for _ in range(10):
+        e.step()
+    assert e.held_by == k.id
+    attacker = next(q for q in e.players if q.team == "away" and q.role != "GK")
+    attacker.x, attacker.y, attacker.vx, attacker.vy = e.ball[0] + 0.3, e.ball[1], 0.0, 0.0
+    e.lunges[attacker.id] = e.t  # arriving now
+    e.duels()
+    assert e.held_by == k.id and e.possessor == k.id and e.ball[2] > 1.0
+    assert not [x for x in e.match.events if x["type"] == "tackle"]

@@ -1886,7 +1886,7 @@ def test_through_a_restart_wait_each_marker_keeps_his_man():
     pairs are the restart's)."""
     from ninety.sim import offball
     from ninety.sim.engine import other
-    e = corner_wait(5)  # a corner to home, its kick 30 s off: away defends
+    e = corner_wait(6)  # a corner to home, its kick 30 s off: away defends (a seed with men near goal)
     r, brain = e.restart, e.brains["away"]
     for _ in range(int(6.0 / DT)):  # attackers come near and are picked up
         e.step()
@@ -1915,7 +1915,7 @@ def test_through_a_restart_wait_each_marker_keeps_his_man():
     for _ in range(int(1.0 / DT)):
         e.step()
     assert new.id in r.marks.values() and not set(brain.pressers) & set(r.marks)
-    w = wall_kick(5)  # and at a free kick with a wall
+    w = wall_kick(6)  # and at a free kick with a wall (a seed whose wait has men to mark)
     for _ in range(int(1.0 / DT)):
         w.step()
     wr = w.restart
@@ -1990,13 +1990,14 @@ def test_at_a_dead_ball_the_presser_goes_in_time_and_does_not_spring_about_his_p
     the ball is in play there is nobody to press: standing where the Laws let him, he goes to his
     place in time for the kick, as the cover does (from inside the distance he must keep, he still
     leaves at his pressing pace: test_opponents_keep_out_of_the_penalty_area_at_a_goal_kick_...).
-    The scene is found by its premises alone (lesson 188: once keepers held what they caught, seed
-    114's play no longer came to that goal kick; seed 101's goal kick at 0:56 has them)."""
-    e = Engine(101)
+    Once keepers held what they caught (lesson 188), seed 114's play no longer came to that goal
+    kick. The scene was found again by its premises, then checked to go red with the fix reverted
+    (the presser back at his pressing pace: 42 turns here): seed 124's goal kick at 0:21."""
+    e = Engine(124)
     e.kickoff("home", setup=True)
-    while e.t < 56.28 - 1e-9:
+    while e.t < 20.92 - 1e-9:
         e.step()
-    r, brain = e.restart, e.brains["away"]  # home's goal kick: away presses
+    r, brain = e.restart, e.brains["home"]  # away's goal kick: home presses
     assert r is not None and r.kind == "goal_kick" and brain.pressers  # premise: the goal kick waits
     p = e.by_id[brain.pressers[0]]
     tx, ty, top = e.shape_target(p)
@@ -2005,7 +2006,7 @@ def test_at_a_dead_ball_the_presser_goes_in_time_and_does_not_spring_about_his_p
              if q.team == p.team and q is not p and math.dist((q.x, q.y), (tx, ty)) < 0.7]
     assert crowd  # premise: a team-mate stands a hair from his place
     turns, history = 0, []
-    while e.t < 62.28 and e.restart is r:
+    while e.t < 26.92 and e.restart is r:
         e.step()
         history.append((p.vx, p.vy))
         if len(history) > 10:

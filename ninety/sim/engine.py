@@ -929,10 +929,13 @@ class Engine:
             self.turn_to(carrier, tx, ty,
                          lambda: self.pass_to(carrier, tx, ty, lofted, throw, pace, receiver, hands))
             return
-        if self.held_by == carrier.id and not hands:
-            # A kick from his hands: he drops it and strikes it as it meets the ground (a drop kick),
-            # so it leaves from the grass as the passer's estimate flies it (decisions.fly).
-            self.ball = (self.ball[0], self.ball[1], 0.0, 0.0, 0.0, 0.0)
+        if self.held_by == carrier.id and not hands and self.ball[2] > 0.0:
+            # A kick from his hands: he lets it fall (tick_carrier, under gravity) and strikes it as it
+            # meets the ground (a drop kick), so it leaves from the grass as the passer's estimate
+            # flies it (decisions.fly).
+            self.windup = (tx, ty,
+                           lambda: self.pass_to(carrier, tx, ty, lofted, throw, pace, receiver, hands))
+            return
         bx, by = self.ball[0], self.ball[1]
         dist = math.hypot(tx - bx, ty - by)
         # Struck as the decision estimated it (decisions.py); execution error is added on top.
@@ -2790,6 +2793,17 @@ class Engine:
     def tick_carrier(self) -> None:
         carrier = self.by_id[self.possessor]
         self.moved = carrier.id
+        if self.held_by == carrier.id and self.windup:  # a drop kick: the ball falls from his hands
+            steer(carrier, carrier.x, carrier.y, 0.0)
+            bx, by, bz, _, _, bvz = self.ball
+            bvz -= ball.GRAVITY * DT
+            bz = max(0.0, bz + bvz * DT)
+            self.ball = (bx + carrier.vx * DT, by + carrier.vy * DT, bz, carrier.vx, carrier.vy, bvz)
+            if bz == 0.0:
+                strike, self.windup = self.windup[2], None
+                self.ball = (*self.ball[:2], 0.0, 0.0, 0.0, 0.0)
+                strike()
+            return
         if self.held_by == carrier.id:  # Law 12: in his hands until he throws or kicks it
             steer(carrier, carrier.x, carrier.y, 0.0)  # he stops, braking within his body (P2)
             up = 0.0 if attack_dir(carrier.team) > 0 else math.pi
@@ -2950,8 +2964,10 @@ class Engine:
             holder = self.by_id.get(self.possessor) if self.possessor else self.by_id.get(self.dribbler or "")
             bx, by = self.ball[0], self.ball[1]
             victim = self.by_id.get(self.lunge_at.pop(pid, ""))
-            # Law 15: a ball held for a throw-in is not in play, so a lunge that arrives then finds nothing.
-            held = holder is not None and (self.throw_by == holder.id or self.set_by is not None)
+            # Law 15: a ball held for a throw-in is not in play, so a lunge that arrives then finds nothing;
+            # Law 12: nor may anyone challenge a keeper for the ball in his hands, a lunge on its way too.
+            held = holder is not None and (self.throw_by == holder.id or self.held_by == holder.id
+                                           or self.set_by is not None)
             if holder and holder.team != p.team and not held and math.hypot(p.x - bx, p.y - by) <= CONTROL_M:
                 self.poke(p, holder)
                 holder = None
@@ -3080,6 +3096,7 @@ class Engine:
     def poke(self, p: Player, holder: Player) -> None:
         """A tackle that reaches the ball knocks it loose; whoever then controls it decides the
         tackle (won or lost)."""
+        self.held_by = None  # a ball knocked loose is in nobody's hands
         # A pass or shot still open ends at the tackle (C7), judged on its own flight, before the push.
         self.end_kick(self.ball[0], self.ball[1])
         heading = (

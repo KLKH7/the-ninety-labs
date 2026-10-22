@@ -1950,5 +1950,7 @@ short and actionable. This file is public: no research sources, product names or
   against a published count, never a target. Leaving the put-down out made him kick from his
   hands 10.6 times a match against the 0.66 published: when a held-out number is far off, look for
   an option the Laws allow that the engine lacks.
-- **Check:** `tests/test_keeper_hands.py`. Three of its four tests go red when a catch does not
-  put the ball in his hands; the held-out counts are in the pull request.
+- **Check:** `tests/test_keeper_hands.py`. Three of its six tests go red when a catch does not put
+  the ball in his hands. Two more are red on the first version: there a lunge already on its way
+  knocked the ball out of his hands, and a drop kick took the ball from his chest to the grass in
+  one frame. The held-out counts are in the pull request.
