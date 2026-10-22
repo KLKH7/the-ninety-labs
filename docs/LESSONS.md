@@ -1750,6 +1750,23 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `uv run pytest tests/test_restarts.py -k past_the_end_of_the_touchline`; on the engine
   before it, the ball runs on to 127 m and jumps 18 m in a frame.
 
+### 173. A label check written for one pose fails the first body drawn in another
+- **What happened:** to make fouls legible (the fouled player goes down at the foul, the fouler's
+  foot meets his shins), the renderer tipped the fouled player's body over his feet. Render-check's
+  `player_feet_in_boxes` then failed 49 frames of seed 7's foul, all on the player lying down: it
+  required his ground point at the bottom of his box, with slack scaled by box height over 1.8 m,
+  and a lying body's box is neither 1.8 m tall nor has his feet at its bottom (fallen toward the
+  camera, they are at its top). His feet were inside the box on every one of those frames.
+- **Rule:**
+  - A check on the labels states the pose it assumes. When the picture draws a new pose, the label
+    data says so (`fall` in the frame row, an optional field) and the check judges that pose by
+    what is true of it, with a planted failing case.
+  - It never skips the player or widens the slack for everyone.
+  - Upright players are checked exactly as before.
+- **Check:** `uv run pytest tests/test_render_checks.py tests/test_render_fouls.py`. A fallen player
+  passes toward the camera, away from it and sideways. A box beside or above his feet still fails,
+  and so does a row with no `fall` and a lying player's box.
+
 ### 174. A player with time to spare walks there and waits, rather than creeping in just in time
 - **What happened:** at restarts the engine paced every player to reach his place just as the
   kick could come. At a corner that is about half a minute off (R1: Opta's mean is about 30 s), so
@@ -1958,6 +1975,23 @@ short and actionable. This file is public: no research sources, product names or
   - Each mechanism was put back to 0.5.9 alone (bob tables zeroed, swing height, the frame-ahead
     swing, the lean, the speed lean, the arm pump), and its test fails.
 
+### 184. What the picture draws as solid, the engine treats as solid
+- **What happened:** the renderer drew a net behind each goal, but the engine had none. After a
+  goal the dead ball rolled on through the back of the net to the advertising boards, 4 m behind
+  the goal line, and the keeper walked through the net to fetch it. On demo v2's seed 8001 the
+  ball came to rest at (109.0, 35.7) after the goal at 155.3 s. Over 20 matches on main it
+  happened after all 16 goals. Players walked through a net 66 times, 61 of them keepers, all while
+  the ball was dead: 27 after goals and 39 at other stoppages.
+- **Rule:**
+  - Every structure the renderer draws that a ball or a player can meet has the same geometry
+    in the engine's physics, citing the drawing where it takes its shape from it: the boards,
+    and now the net (L1).
+  - For the net that now means no player passes through it, and a ball that goes in stays in the
+    goal. A ball meeting it from outside (wide of a post, or dropping over the bar) still passes
+    through; that is the next step.
+- **Check:** `uv run pytest tests/test_goal_net.py`. On main the ball goes 4 m deep, through the
+  roof and through the side netting, and the keeper walks through the net.
+
 ### 185. Footage a viewer watches and data a model learns from are dressed apart, and the dressing is proved label-free
 - **What happened:** the demo clip (seed 8001, v1) was rendered with the training look: seats with no
   one in them, beige run-off and black ground behind the goals, four repeated boards, stark mowing.
@@ -2028,3 +2062,15 @@ short and actionable. This file is public: no research sources, product names or
   everywhere; each scorer has a test with a value exactly on the cut-off (lesson 158).
 - **Check:** `uv run pytest tests/test_pitch_score.py tests/test_vision_score.py
   tests/test_fake_box_detections.py -k "cut_off"`; the pitch_score test fails with `z < 0.5` put back.
+
+### 190. A test that reads its constant back cannot pin it
+- **What happened:** the foul pose asserted `foul_fall_deg(...) == FALL_DOWN_DEG` and `peak >= 80`.
+  A lie of 80° left both green, and so did rewriting the pose times, because the test added those
+  constants up and compared the curve to them. The planted clips sat 0.4 s and 1.6 s from the
+  restart, so a floor of 0.5 s and a floor of 1.5 s both passed.
+- **Rule:** an expected output that pins a design value is the number that design produces, written
+  out. A test that reads the constant moves with the bug. Lesson 36 is the other half: an input
+  that has to sit beside a threshold is derived from that threshold. A bound is planted on a case
+  the looser value lets through, and the tighter value does not.
+- **Check:** `tests/test_fouls.py` and the P18 tests in `tests/test_validate.py`. A lie of 80°, a
+  pose time rewritten, and a floor of 0.5 s each fail one of them.

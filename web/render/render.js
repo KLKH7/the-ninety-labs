@@ -1682,6 +1682,12 @@ class Body {
     this.group.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(
       new THREE.Vector3(-fy, fx, 0), new THREE.Vector3(0, 0, 1), new THREE.Vector3(fx, fy, 0),
     ));
+    if (pose.fall) {
+      // A fouled player down (fouls.py, tip): the whole body tipped over its feet toward fall_dir.
+      const d = pose.fall_dir || 0;
+      const axis = new THREE.Vector3(-Math.sin(d), Math.cos(d), 0);
+      this.group.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(axis, pose.fall));
+    }
     const placed = Object.assign({}, pose, { x, y });
     const angles = anglesFor(this.player, placed, face, this.heightM);
     const posed = poseBones(angles, this.player.bones);
