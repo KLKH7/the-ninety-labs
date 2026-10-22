@@ -1355,3 +1355,181 @@ def test_a_player_braking_to_a_stop_keeps_his_planted_feet_on_the_grass():
             plant = pose[f"plant_{s}"]
             if plant and plant[3] == 0.0 and (len(plant) < 5 or plant[4] >= 1.0):
                 assert m[f"foot_{s}"][2] < 0.10, (i, s, m[f"foot_{s}"][2])
+
+
+# Demo v1's keeper a1 (seed 8001 from 100 s, renderer 0.5.9, engine frames 436 to 499 and 640 to
+# 679): x, y, vx, vy, heading, action, dive. In the first the engine turns him from 1.08 to -3.0
+# rad while he is down, so its dive's side flips from 1.0 to -1.0; the second (the goal) starts at
+# full stretch, from its "down after a dive".
+A1_LOB_DIVE = [
+    (100.761, 33.572, 2.245, 2.126, 0.7582, "walk", 0.0),
+    (100.851, 33.666, 2.242, 2.338, 0.8062, "walk", 0.0),
+    (100.94, 33.768, 2.233, 2.542, 0.8501, "walk", 0.0),
+    (101.029, 33.877, 2.21, 2.746, 0.8932, "walk", 0.0),
+    (101.116, 33.995, 2.18, 2.943, 0.9332, "walk", 0.0),
+    (101.202, 34.12, 2.145, 3.134, 0.9707, "walk", 0.0),
+    (101.286, 34.253, 2.103, 3.32, 1.0061, "walk", 0.0),
+    (101.367, 34.394, 2.045, 3.506, 1.0428, "run", 0.0),
+    (101.447, 34.541, 1.978, 3.687, 1.0783, "run", 0.0),
+    (101.515, 34.692, 1.714, 3.78, 1.0783, "dive", 0.104),
+    (101.573, 34.844, 1.435, 3.8, 1.0783, "dive", 0.209),
+    (101.619, 34.996, 1.155, 3.8, 1.0783, "dive", 0.314),
+    (101.654, 35.148, 0.875, 3.8, 1.0783, "dive", 0.419),
+    (101.678, 35.3, 0.595, 3.8, 1.0783, "dive", 0.524),
+    (101.69, 35.452, 0.315, 3.8, 1.0783, "dive", 0.628),
+    (101.692, 35.604, 0.035, 3.8, 1.0783, "dive", 0.733),
+    (101.692, 35.756, 0.0, 3.8, 1.0783, "dive", 0.838),
+    (101.692, 35.908, 0.0, 3.8, 1.0783, "dive", 0.943),
+    (101.692, 36.06, 0.0, 3.8, 1.0783, "dive", 1.0),
+    (101.692, 36.201, 0.0, 3.52, 1.3227, "dive", 1.0),
+    (101.692, 36.331, 0.0, 3.24, 1.567, "dive", 1.0),
+    (101.692, 36.449, 0.0, 2.96, 1.5708, "dive", 1.0),
+    (101.692, 36.556, 0.0, 2.68, 1.5708, "dive", 1.0),
+    (101.692, 36.652, 0.0, 2.4, 1.5708, "dive", 1.0),
+    (101.692, 36.737, 0.0, 2.12, 1.5708, "dive", 1.0),
+    (101.692, 36.811, 0.0, 1.84, 1.5708, "dive", 1.0),
+    (101.692, 36.873, 0.0, 1.56, 1.5708, "dive", 1.0),
+    (101.692, 36.924, 0.0, 1.28, 1.5708, "dive", 1.0),
+    (101.692, 36.964, 0.0, 1.0, 1.5708, "dive", 1.0),
+    (101.692, 36.993, 0.0, 0.72, 1.5708, "dive", 1.0),
+    (101.692, 37.011, 0.0, 0.44, 1.8151, "dive", -1.0),
+    (101.692, 37.017, 0.0, 0.16, 2.0595, "dive", -1.0),
+    (101.692, 37.017, 0.0, 0.0, 2.3038, "dive", -1.0),
+    (101.692, 37.017, 0.0, 0.0, 2.5482, "dive", -1.0),
+    (101.692, 37.017, 0.0, 0.0, 2.7925, "dive", -1.0),
+    (101.692, 37.017, 0.0, 0.0, 3.0369, "dive", -1.0),
+    (101.692, 37.017, 0.0, 0.0, -3.002, "dive", -1.0),
+    (101.692, 37.017, 0.0, 0.0, -3.002, "dive", -1.0),
+    (101.692, 37.017, 0.0, 0.0, -3.002, "dive", -1.0),
+    (101.692, 37.017, 0.0, 0.0, -3.002, "hands", 0.0),
+    (101.692, 37.017, 0.0, 0.0, -3.002, "hands", 0.0),
+    (101.692, 37.017, 0.0, 0.0, -3.002, "hands", 0.0),
+    (101.692, 37.017, 0.0, 0.0, -3.002, "hands", 0.0),
+    (101.692, 37.017, 0.0, 0.0, -3.002, "hands", 0.0),
+    (101.692, 37.017, 0.0, 0.0, -3.002, "hands", 0.0),
+    (101.692, 37.017, 0.0, 0.0, -3.002, "hands", 0.0),
+    (101.692, 37.017, 0.0, 0.0, -3.002, "stand", 0.0),
+    (101.692, 37.017, 0.0, 0.0, -3.002, "stand", 0.0),
+    (101.692, 37.017, 0.0, 0.0, -3.002, "stand", 0.0),
+    (101.692, 37.017, 0.0, 0.0, -3.002, "stand", 0.0),
+    (101.692, 37.017, 0.0, 0.0, -3.002, "stand", 0.0),
+    (101.692, 37.017, 0.0, 0.0, -3.002, "stand", 0.0),
+    (101.692, 37.017, 0.0, 0.0, -3.002, "stand", 0.0),
+    (101.683, 37.017, -0.216, -0.007, -3.002, "stand", 0.0),
+    (101.666, 37.016, -0.427, -0.009, -3.002, "stand", 0.0),
+    (101.64, 37.016, -0.634, -0.012, -3.1227, "walk", 0.0),
+    (101.607, 37.015, -0.836, -0.015, -3.1242, "walk", 0.0),
+    (101.566, 37.015, -1.033, -0.017, -3.1251, "walk", 0.0),
+    (101.517, 37.014, -1.226, -0.02, -3.1256, "walk", 0.0),
+    (101.46, 37.013, -1.415, -0.022, -3.126, "walk", 0.0),
+    (101.396, 37.012, -1.6, -0.025, -3.1262, "walk", 0.0),
+    (101.325, 37.011, -1.78, -0.027, -3.1264, "walk", 0.0),
+    (101.247, 37.01, -1.957, -0.029, -3.1266, "walk", 0.0),
+    (101.161, 37.008, -2.129, -0.032, -3.1267, "walk", 0.0),
+]
+A1_GOAL_DIVE = [
+    (101.998, 32.668, -0.007, -0.971, -2.126, "walk", 0.0),
+    (101.998, 32.622, -0.006, -1.166, -1.8817, "walk", 0.0),
+    (101.998, 32.567, -0.004, -1.356, -1.6373, "walk", 0.0),
+    (101.997, 32.506, -0.003, -1.541, -1.5727, "walk", 0.0),
+    (101.997, 32.437, -0.002, -1.723, -1.5717, "walk", 0.0),
+    (101.997, 32.361, -0.0, -1.901, -1.5709, "walk", 0.0),
+    (101.997, 32.288, 0.0, -1.814, -1.5708, "walk", 0.0),
+    (102.005, 32.224, 0.188, -1.607, -1.4542, "walk", 0.0),
+    (102.02, 32.168, 0.374, -1.397, -1.3095, "walk", 0.0),
+    (102.042, 32.121, 0.556, -1.184, -1.132, "walk", 0.0),
+    (102.055, 32.079, 0.313, -1.044, -1.132, "dive", 1.0),
+    (102.067, 32.048, 0.313, -0.764, -1.132, "dive", 1.0),
+    (102.08, 32.029, 0.313, -0.484, -1.132, "dive", 1.0),
+    (102.092, 32.021, 0.313, -0.204, -1.132, "dive", 1.0),
+    (102.105, 32.024, 0.313, 0.087, -1.132, "dive", 1.0),
+    (102.117, 32.04, 0.313, 0.402, -1.132, "dive", 1.0),
+    (102.13, 32.069, 0.313, 0.719, -1.132, "dive", 1.0),
+    (102.142, 32.111, 0.313, 1.036, -1.132, "dive", 0.26),
+    (102.144, 32.15, 0.036, 0.997, -0.8877, "walk", 0.0),
+    (102.156, 32.194, 0.297, 1.097, -0.6433, "walk", 0.0),
+    (102.178, 32.242, 0.559, 1.196, -0.399, "walk", 0.0),
+    (102.21, 32.293, 0.808, 1.272, -0.1546, "walk", 0.0),
+    (102.252, 32.346, 1.041, 1.331, 0.0897, "walk", 0.0),
+    (102.302, 32.401, 1.259, 1.38, 0.334, "walk", 0.0),
+    (102.361, 32.458, 1.465, 1.423, 0.5784, "walk", 0.0),
+    (102.427, 32.517, 1.661, 1.462, 0.722, "walk", 0.0),
+    (102.501, 32.577, 1.847, 1.5, 0.6823, "walk", 0.0),
+    (102.582, 32.638, 2.025, 1.538, 0.6495, "walk", 0.0),
+    (102.67, 32.701, 2.196, 1.575, 0.6221, "walk", 0.0),
+    (102.764, 32.766, 2.36, 1.612, 0.5991, "walk", 0.0),
+    (102.865, 32.832, 2.519, 1.649, 0.5796, "walk", 0.0),
+    (102.972, 32.899, 2.672, 1.686, 0.563, "walk", 0.0),
+    (103.085, 32.968, 2.819, 1.724, 0.5489, "walk", 0.0),
+    (103.203, 33.039, 2.963, 1.763, 0.5367, "walk", 0.0),
+    (103.327, 33.111, 3.101, 1.801, 0.5262, "walk", 0.0),
+    (103.457, 33.184, 3.236, 1.84, 0.5171, "walk", 0.0),
+    (103.592, 33.26, 3.366, 1.88, 0.5093, "walk", 0.0),
+    (103.731, 33.336, 3.493, 1.92, 0.5026, "walk", 0.0),
+    (103.876, 33.415, 3.615, 1.96, 0.4967, "run", 0.0),
+    (104.025, 33.495, 3.735, 2.0, 0.4917, "run", 0.0),
+]
+
+
+def _dive_jumps(rows, drawn):
+    """Frames where a limb moves faster than the cap, leaving out a frame where the engine changes his
+    pose between two poses that are not a dive (a catch to standing): 0.5.12 snaps those whatever the
+    dive (a shared gap, not this one)."""
+    out = []
+    for i, (mv, cap) in enumerate(_jumps(drawn)):
+        a, b = rows[i][5], rows[i + 1][5]
+        if a != b and "dive" not in (a, b):
+            continue
+        if mv > cap:
+            out.append((i, a, b, round(mv, 3), round(cap, 3)))
+    return out
+
+
+def _draw_keeper(rows):
+    """a1 drawn through the clip's own path (advance_gaits, body_parts, mesh_pose): his poses, the
+    skinned markers and the drawn facing, frame by frame."""
+    from ninety.render.scene import advance_gaits as advance
+
+    frames = [{"ball": {"x": 80.0, "y": 50.0, "z": 0.0, "vx": 0.0, "vy": 0.0}, "possessor": None,
+               "players": [{"id": "a1", "x": x, "y": y, "vx": vx, "vy": vy, "heading": h, "action": a,
+                            "dive": d}]} for x, y, vx, vy, h, a, d in rows]
+    keeper = Look("a1", "away", "GK", 1.88, 1.0, "#c68642", "#1b1410")
+    g, prev, drawn = Gait(), {}, []
+    for i, fr in enumerate(frames):
+        advance({"a1": g}, prev, fr, 1 / FPS, frames[min(i + LEAD_AHEAD_FRAMES, len(frames) - 1)])
+        pl = fr["players"][0]
+        body_parts(pl["x"], pl["y"], keeper, g)
+        pose = mesh_pose(g, pl["x"], pl["y"], 0.0)
+        m = pose_markers(pose, g.heading, keeper.height_m)
+        drawn.append((pose, m, {k: (v[0] - pl["x"], v[1] - pl["y"], v[2]) for k, v in m.items()}, g.speed))
+    return drawn
+
+
+def test_a_keepers_dive_is_drawn_once_to_one_side():
+    """Old (0.5.12 and before): the dive was drawn as the engine's pose each frame, and the engine
+    turns a keeper toward the ball while he is down. Drawn turned, the stretched body spun on the
+    spot and dived again to the other side (demo v1, Kian: "keeps diving"). Now the dive keeps the
+    side and the facing it began with until he is up: his head stays on the side he dived to, and
+    no limb moves faster than the limb cap through the dive and his getting up (_dive_jumps)."""
+    drawn = _draw_keeper(A1_LOB_DIVE)
+    diving = [i for i, (pose, _, _, _) in enumerate(drawn) if pose["action"] == "dive"]
+    assert len(diving) >= 25, len(diving)
+    start = drawn[diving[0]][0]
+    side = 1.0 if start["dive"] >= 0 else -1.0
+    for i in diving:
+        assert drawn[i][0]["dive"] * side >= 0.0, (i, drawn[i][0]["dive"])
+    over = _dive_jumps(A1_LOB_DIVE, drawn)
+    assert not over, over
+
+
+def test_a_dive_that_starts_at_full_stretch_grows_and_gets_up():
+    """Old: the engine's goal dive arrived at full stretch, so the keeper snapped into it in a frame
+    and out of it 8 frames later. Now it grows over DIVE_IN_FRAMES and fades out after: no limb moves
+    faster than the limb cap (_dive_jumps), and it is still drawn after the engine has him up."""
+    drawn = _draw_keeper(A1_GOAL_DIVE)
+    over = _dive_jumps(A1_GOAL_DIVE, drawn)
+    assert not over, over
+    engine = [i for i, r in enumerate(A1_GOAL_DIVE) if r[5] == "dive"]
+    drawn_dive = [i for i, (pose, _, _, _) in enumerate(drawn)
+                  if pose["action"] == "dive" or pose.get("dive_up")]
+    assert drawn_dive and drawn_dive[-1] > engine[-1] + 5, (engine, drawn_dive)
