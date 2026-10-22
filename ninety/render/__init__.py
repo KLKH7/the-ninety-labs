@@ -66,4 +66,6 @@ docs/decisions/0001-synthetic-data.md.
 # 0.5.13: a keeper's dive is drawn once: it grows at the engine's own rate, keeps its side and his
 # facing until he is up (no spin on the grass, no second dive the other way), and fades into what he
 # does next over a second; his feet stay planted through it.
-RENDERER_VERSION = "0.5.13"
+# 0.5.14: a fouled player is drawn from the engine's fall (degrees over his feet) and fall_dir;
+# the fouler's foot meets his shins (lesson 173). The renderer does not time the fall.
+RENDERER_VERSION = "0.5.14"
