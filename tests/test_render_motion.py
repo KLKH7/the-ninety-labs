@@ -1342,7 +1342,7 @@ A4_STOP = [
 
 
 def test_a_player_braking_to_a_stop_keeps_his_planted_feet_on_the_grass():
-    """Old (a draft of 0.5.11): the stride's bob was sent in the body's lift, and a lowered lift is a
+    """Old (a draft of 0.5.12): the stride's bob was sent in the body's lift, and a lowered lift is a
     lunge's, so braking from 2.4 to 0.4 m/s in 7 frames (seed 21's a4) a planted foot beyond the
     leg's reach was reached for above the grass: the knee folded it 25 to 38 cm up for 8 frames, a
     freeze a blind critic rated 4 to 5. Every frame a foot is planted (on the grass, fully taken),
