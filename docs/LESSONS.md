@@ -1897,6 +1897,60 @@ short and actionable. This file is public: no research sources, product names or
   `::test_each_corner_has_its_own_shot_and_the_ball_stays_in_it` and
   `::test_the_corner_shot_holds_until_the_kick`; the framing bar is raw.
 
+### 180. A motion keyed to the stride's clock is checked against the contacts it is drawn over
+- **What happened:** #197 left the runner's hips level, so a jog read as a power-walk. The bob
+  went in from a sourced table by speed, keyed to the stride's phase.
+  - Three existing tests failed, and each failure was a real defect the phase hid.
+  - Where the phase said flight, the drawn push-off foot was still on the grass: the hips rose,
+    the leg could not reach it, and the toe hung 3 cm up and slid.
+  - The flight's free fall counted from a swing's first frame, which still draws the foot on the
+    grass, so the hips jumped 4 cm across the push-off at 2.5 m/s.
+  - That first frame was itself the sprint's flicker a blind critic saw (round 4): drawn where it
+    lifted, a sprinter's foot hung 40 to 56 cm behind the hips, beyond the leg, for a frame. Both
+    feet were seen off the grass in one frame a step.
+  - The bob's dip let a walking leg reach its swing target. A foot 1 cm up in its landing frame
+    then counted as "on the grass" in the slide test, which had been passing only because the
+    stretched leg held it higher.
+  - The lean with acceleration took the engine's speed, eased over 5 frames. At a steady jog the
+    engine's speed rises and brakes back every 9 frames (seed 21's a5, 3.2 to 4.0 m/s), so the
+    blind critic saw the trunk nod every step, plus a stoop and a sideways topple turning on the
+    spot. The lean now takes the change between two 8-frame mean velocities, along the way he faces.
+  - Blind critic round 2 found the bob, sent in the body's lift, tripped the lunge's rule (a
+    lowered body reaches for an out-of-reach plant above the grass): braking to a stop, a planted
+    foot was drawn 25 to 38 cm up for 8 frames, a freeze. The round 1 critic had missed it in the
+    same code. The bob is its own pose field now. The lean from boxes behind him came 5 frames
+    late, pitched forward while braking; it now looks 8 frames ahead, as the hips' lead already did.
+  - The independent audit found a sprint swing height (0.45 at 7 m/s) with no source that only
+    kept an old test green, and tests that read their bounds from the code's own tables: with the
+    tables zeroed they passed, 0 within 0.
+- **Rule:**
+  - A body motion keyed to a clock (the stride's phase) rises or falls only where the drawn
+    contacts allow it: the free fall runs from the frame both drawn feet are off the grass to the
+    frame the swing's own count lands one.
+  - A foot that leaves the grass between two frames is drawn a frame into its swing.
+  - A sourced angle (Fukuchi's knee fold) goes in only with the rest of the body that carries it
+    (the bob), measured on the drawn mesh, and as far as the drawn leg reaches (111 degrees, not
+    119).
+  - A test's selection that a better drawing newly meets (a landing foot inside the slide test's
+    2 cm) is narrowed to what it protects, with the reason in its docstring, and the bound stays.
+  - A renderer reading the engine's motion reads its trend over a stride, not its per-frame
+    controller steps, and centred on the frame it draws, never only behind it.
+  - A new quantity is sent in its own field, never folded into one whose value already means
+    something to a rule (a negative lift means a lunge).
+  - A test's expected value is the source's number written in the test, never the code's table.
+- **Check:** `tests/test_render_motion.py`. Each of these fails on 0.5.9 (main's drawing, with
+  the new names shimmed in):
+  - `test_a_runners_hips_are_lowest_on_the_grass_and_rise_in_the_air`;
+  - `test_a_walkers_hips_are_highest_over_the_standing_leg`;
+  - `test_a_running_knee_folds_as_far_as_a_runners`;
+  - `test_the_trunk_leans_into_a_sprint_start_and_comes_up_braking`;
+  - `test_the_arms_swing_wider_toward_a_sprint`;
+  - `test_a_sprints_flight_is_seen_over_two_frames_or_more`.
+  - `test_the_push_off_toe_does_not_slide_before_it_lifts` fails with the free fall keyed to the
+    phase; `test_a_player_braking_to_a_stop_keeps_his_planted_feet_on_the_grass` (seed 21's a4)
+    fails with the bob sent in the lift, and the trunk test with the lean from boxes behind only.
+  - Each mechanism was put back to 0.5.9 alone (bob tables zeroed, swing height, the frame-ahead
+    swing, the lean, the speed lean, the arm pump), and its test fails.
 
 ### 185. Footage a viewer watches and data a model learns from are dressed apart, and the dressing is proved label-free
 - **What happened:** the demo clip (seed 8001, v1) was rendered with the training look: seats with no
