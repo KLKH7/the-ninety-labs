@@ -63,8 +63,10 @@ WOODWORK_NEAR_M = 0.6
 # nets without shaping them): its back 2 m behind the goal line and 2 m high, its sides, and its
 # roof sloping down to the back from the crossbar. A ball inside the goal touching it (lesson 184):
 # its centre a radius from the back or a side (Law 2: 0.11 m), or its top (its lowest point z plus
-# its diameter) at the roof; to within two roundings of a written position (measurement precision).
+# its diameter) at the roof.
 NET_DEPTH_M, NET_BACK_M, BALL_RADIUS_M = 2.0, 2.0, 0.11
+# measurement precision (lesson 10): each of two written positions is off by up to
+# POSITION_PRECISION_M, so a contact is within two of those roundings.
 NET_TOUCH_SLACK_M = 2 * POSITION_PRECISION_M
 APPROACH_TOLERANCE_M = 0.04  # P14: per frame; a ball at 1 m/s relative to him can still be met
 EXAMPLES = 5

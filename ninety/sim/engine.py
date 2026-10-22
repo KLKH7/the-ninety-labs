@@ -366,7 +366,7 @@ def net_stop(px: float, py: float, x: float, y: float, vx: float,
     (px, py) to (x, y) that would take him through it, along the axis it crosses, is not made."""
     if 0.0 < min(px, x) and max(px, x) < PITCH_X:  # both ends in front of both goal lines
         return x, y, vx, vy
-    for _ in range(2):  # a step through a corner of the net meets its side and its back
+    for _ in range(2):  # design: a corner is two segments, so one step meets the side and the back
         hit = False
         for c, d in NETS:
             if crosses((px, py), (x, y), c, d):
