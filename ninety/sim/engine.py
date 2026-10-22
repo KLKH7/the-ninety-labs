@@ -393,6 +393,26 @@ def in_the_net(s: ball.State, line: float | None) -> tuple[ball.State, float | N
     return (bx, by, bz, vx, vy, vz), line
 
 
+def goal_entered(before: ball.State, after: ball.State) -> float | None:
+    """The goal line the ball went into the goal over, from `before` to `after`: its centre over
+    the line, the whole ball between the posts and under the bar where it crossed (as for a goal,
+    Law 10, Engine.in_goal). None if it did not go in."""
+    for line in (0.0, PITCH_X):
+        out = 1.0 if line > 0 else -1.0
+        a, b = (before[0] - line) * out, (after[0] - line) * out
+        if a <= 0 < b:
+            k = a / (a - b)  # how far through the move it crosses the line
+            if Engine.in_goal(before[1] + k * (after[1] - before[1]), before[2] + k * (after[2] - before[2])):
+                return line
+    return None
+
+
+def net_step(before: ball.State, after: ball.State, line: float | None) -> tuple[ball.State, float | None]:
+    """A dead ball's move from `before` to `after`, held by the net of the goal it is in (`line`),
+    or has just gone into (goal_entered): a goal, or a ball played on after the whistle."""
+    return in_the_net(after, goal_entered(before, after) if line is None else line)
+
+
 def round_the_circle(cx: float, cy: float, radius: float, px: float, py: float, qx: float,
                      qy: float) -> float:
     """How far a player walks from (px, py) to (qx, qy) keeping off the circle of `radius` round
@@ -1652,7 +1672,8 @@ class Engine:
                     kicked.update(receiver=None if own else scorer, end_x=touch["x"], end_y=touch["y"],
                                   outcome="fail" if own else "success")
         self.emit("goal", team, x, y, player=scorer)
-        self.netted = PITCH_X if x > PITCH_X / 2 else 0.0  # in the goal: its net holds it (in_the_net)
+        self.netted = PITCH_X if x > PITCH_X / 2 else 0.0  # in the goal: its net holds it (in_the_net),
+        self.ball, self.netted = in_the_net(self.ball, self.netted)  # from this frame on
         self.celebrate(team, scorer)
         self.kickoff(other(team))
 
@@ -1875,18 +1896,16 @@ class Engine:
         return max(0.0, reach)
 
     def dead_ball_rest(self) -> tuple[float, float]:
-        """Where the dead ball will come to rest: along its own flight, or where the advertising
-        boards stop it, or inside the goal its net holds it in (tick_restart)."""
-        if self.netted is not None:
-            s, line = self.ball, self.netted
-            for _ in range(int(ball.FLIGHT_BOUND_S / DT)):
-                s, line = in_the_net(ball.step(s, DT), line)
-                if math.hypot(s[3], s[4]) == 0.0 and s[2] == 0.0:
-                    break
-            return s[0], s[1]
-        for s in ball.predict(self.ball, DT, ball.FLIGHT_BOUND_S):
+        """Where the dead ball will come to rest: along its own flight (ball.predict's), or where
+        the advertising boards stop it, or in a goal, where its net holds it (tick_restart)."""
+        s, line = self.ball, self.netted
+        for i in range(int(ball.FLIGHT_BOUND_S / DT) + 1):
+            if i:
+                s, line = net_step(s, ball.step(s, DT), line)
             if not (-BOARDS_M <= s[0] <= PITCH_X + BOARDS_M and -BOARDS_M <= s[1] <= PITCH_Y + BOARDS_M):
                 return clamp(s[0], -BOARDS_M, PITCH_X + BOARDS_M), clamp(s[1], -BOARDS_M, PITCH_Y + BOARDS_M)
+            if i and s[2] == 0 and s[5] == 0 and s[3] == 0 and s[4] == 0:
+                break
         return s[0], s[1]
 
     def carry_dead_ball(self, r: Restart, carrier: Player) -> None:
@@ -1923,12 +1942,13 @@ class Engine:
         r = self.restart
         carrier = self.by_id[r.carried_by] if r.carried_by else None
         if carrier:
+            before = self.ball
             self.carry_dead_ball(r, carrier)
-            self.ball, self.netted = in_the_net(self.ball, self.netted)  # carried out of the goal, it is free
+            self.ball, self.netted = net_step(before, self.ball, self.netted)  # out of a goal, it is free
         else:
             # The dead ball rolls on until it stops or reaches the advertising boards, or, in a
             # goal, its net holds it.
-            (bx, by, bz, vx, vy, vz), self.netted = in_the_net(ball.step(self.ball, DT), self.netted)
+            (bx, by, bz, vx, vy, vz), self.netted = net_step(self.ball, ball.step(self.ball, DT), self.netted)
             if not (-BOARDS_M <= bx <= PITCH_X + BOARDS_M and -BOARDS_M <= by <= PITCH_Y + BOARDS_M):
                 bx, by = clamp(bx, -BOARDS_M, PITCH_X + BOARDS_M), clamp(by, -BOARDS_M, PITCH_Y + BOARDS_M)
                 vx = vy = 0.0

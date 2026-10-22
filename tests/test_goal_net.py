@@ -26,12 +26,14 @@ from ninety.sim.engine import (
 R = ball.RADIUS
 MID = PITCH_Y / 2
 EPS = 1e-9
-# Shots at the away side's goal (x = PITCH_X) from close in, each into a different part of the net:
-# low and hard into the back, rising into the roof, across into the side netting.
+# Shots at the away side's goal (x = PITCH_X) from close in, and the part of the net each meets: low
+# and hard into the back, rising into the roof, across into the side netting, and across so fast,
+# just inside the post, that in the frame it goes in it is already past the side netting's line.
 SHOTS = {
-    "back": (100.0, 34.5, 0.2, 26.0, 0.5, 1.0),
-    "roof": (101.0, 34.0, 1.2, 20.0, 0.0, 5.0),
-    "side": (103.0, 34.0, 0.2, 8.0, 8.0, 0.0),
+    "low and hard": ((100.0, 34.5, 0.2, 26.0, 0.5, 1.0), "back"),
+    "rising": ((101.0, 34.0, 1.2, 20.0, 0.0, 5.0), "roof"),
+    "across": ((103.0, 34.0, 0.2, 8.0, 8.0, 0.0), "side"),
+    "just inside the post": ((101.0, 34.1, 0.4, 22.0, 17.0, 0.0), "side"),
 }
 
 
@@ -116,10 +118,12 @@ def goal_then_kickoff(shot: tuple[float, ...]) -> tuple[Engine, list[dict], list
     return e, before, after, rest
 
 
-@pytest.mark.parametrize("part", SHOTS)
-def test_a_shot_into_the_goal_stays_in_the_goal_held_by_its_net(part):
-    """Defect: the ball rolled on through the net to the advertising boards, 4 m behind the line."""
-    e, _, after, rest = goal_then_kickoff(SHOTS[part])
+@pytest.mark.parametrize("name", SHOTS)
+def test_a_shot_into_the_goal_stays_in_the_goal_held_by_its_net(name):
+    """Defect: the ball rolled on through the net to the advertising boards, 4 m behind the line.
+    It is held from the frame the goal is given (the first of `after`)."""
+    shot, part = SHOTS[name]
+    e, _, after, rest = goal_then_kickoff(shot)
     goal = next(ev for ev in e.match.events if ev["type"] == "goal")
     assert (goal["team"], goal["player"]) == ("home", "h9")
     met = set()
@@ -150,9 +154,9 @@ def test_a_shot_into_the_goal_stays_in_the_goal_held_by_its_net(part):
     assert math.dist(still["ball"][:2], rest) <= EPS
 
 
-@pytest.mark.parametrize("part", SHOTS)
-def test_the_side_that_conceded_fetches_it_out_through_the_goal_mouth(part):
-    e, _, after, _ = goal_then_kickoff(SHOTS[part])
+@pytest.mark.parametrize("name", SHOTS)
+def test_the_side_that_conceded_fetches_it_out_through_the_goal_mouth(name):
+    e, _, after, _ = goal_then_kickoff(SHOTS[name][0])
     first = next(f for f in after if f["carried_by"] or f["passed_by"])
     assert (first["carried_by"] or first["passed_by"]).startswith("a")  # the away side conceded
     out = next(b for a, b in zip(after, after[1:], strict=False) if a["ball"][0] > PITCH_X >= b["ball"][0])
@@ -160,11 +164,33 @@ def test_the_side_that_conceded_fetches_it_out_through_the_goal_mouth(part):
     assert e.match.events[-1]["type"] == "kickoff"
 
 
-@pytest.mark.parametrize("part", SHOTS)
-def test_nobody_walks_through_the_net_after_a_goal(part):
+@pytest.mark.parametrize("name", SHOTS)
+def test_nobody_walks_through_the_net_after_a_goal(name):
     """Defect: the keeper walked through the net to the ball behind the goal."""
-    _, before, after, _ = goal_then_kickoff(SHOTS[part])
+    _, before, after, _ = goal_then_kickoff(SHOTS[name][0])
     assert walked_through(before + after) == []
+
+
+def test_a_ball_played_on_after_the_whistle_into_the_goal_is_held_by_its_net():
+    """Defect: a shot struck as the whistle went for a foul flew on into the goal and out through
+    the back of its net to the boards (seed 112 at 17:17). Any ball that goes in over the goal
+    line between the posts and under the bar is held, not only a goal."""
+    e = Engine(2)
+    e.run(1)
+    for p in e.players:
+        p.x, p.vx, p.vy = min(p.x, 80.0), 0.0, 0.0
+    e.possessor, e.throw_by, e.set_by = None, None, None
+    goals = sum(ev["type"] == "goal" for ev in e.match.events)
+    e.stop("free_kick", "away", (60.0, MID))  # the whistle: the ball is dead
+    e.ball = (100.0, 34.5, 0.4, 20.0, 0.5, 1.0)
+    track = play_on(e, lambda e: math.hypot(*e.ball[3:]) == 0.0, 10)
+    assert sum(ev["type"] == "goal" for ev in e.match.events) == goals  # dead: no goal
+    for f in track:
+        bx, by, bz = f["ball"][:3]
+        if bx > PITCH_X:
+            assert bx - PITCH_X <= NET_DEPTH_M - R + EPS, f["t"]
+            assert abs(by - MID) <= GOAL_HALF_WIDTH - R + EPS, f["t"]
+    assert track[-1]["ball"][0] > PITCH_X  # at rest in the goal
 
 
 @pytest.mark.parametrize("start", [(106.0, 34.0), (100.0, 34.0), (106.0, 40.0), (108.5, 30.0)])
@@ -227,7 +253,7 @@ def test_a_wide_shot_hits_no_net():
 def test_the_goal_itself_is_unchanged():
     """C8: the net holds the ball only once the goal is given, so the goal is credited to the
     shot at the frame the ball crosses the line, as it was before there was a net."""
-    shot = SHOTS["back"]
+    shot = SHOTS["low and hard"][0]
     netted = shot_at_goal(shot)
     play_on(netted, lambda e: any(ev["type"] == "goal" for ev in e.match.events), 3)
     no_net = shot_at_goal(shot)
