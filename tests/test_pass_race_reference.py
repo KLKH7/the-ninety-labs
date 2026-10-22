@@ -9,9 +9,9 @@ import random
 
 from ninety.sim import decisions as D
 from ninety.sim import offball, perception
-from ninety.sim.body import can_get_to, relative_speed
+from ninety.sim.body import CONTROL_M, can_get_to, relative_speed
 from ninety.sim.engine import Engine
-from ninety.sim.firsttouch import CUSHION, KEEP_MPS, SURFACES, quality
+from ninety.sim.firsttouch import CUSHION, KEEP_MPS, SURFACES, TOUCH_GAP_S, quality
 from ninety.sim.profiles import Profile
 
 
@@ -92,16 +92,37 @@ def reference(scene, tx, ty, mx, my, age, lofted, pace, receiver):
                     for ox, oy in scene.opponents), default=0.0)
         absorb = taker[5] * CUSHION[part] / quality(0.0, felt, 0.5, 1.0, rel, taker[5])
         p = D.sigmoid((absorb + KEEP_MPS - rel) / D.CONTROL_MARGIN_MPS)
+        # A heavy touch leaves the ball free where he met it until he is back on it after TOUCH_GAP_S:
+        # his unless an opponent can be there sooner (the soonest he could, at top speed, straight).
+        arms = offball.KEEPER_STAND_REACH_M + offball.KEEPER_DIVE_EXTRA_M
+        hands = D.in_box(bx, by, scene.goal_x)  # a keeper's hands, in his box only (Law 12)
+        back = take + TOUCH_GAP_S
+        kept_loose = 1.0
+        for ox0, oy0, ovx, ovy, keeper in scene.moving:
+            ox, oy = ox0 + ovx * wait, oy0 + ovy * wait
+            near = math.hypot(ox - bx, oy - by) - (arms if keeper and hands else CONTROL_M)
+            kept_loose *= D.sigmoid((react + D._soonest(near, math.hypot(ovx, ovy)) - back) / D.LANE_MARGIN_S)
+        p += (1 - p) * kept_loose
         horizon = take + D.OPPONENT_LATE_S
         for ox0, oy0, ovx, ovy, keeper in scene.moving:
             ox, oy = ox0 + ovx * wait, oy0 + ovy * wait
             d = math.hypot(ox - cx, oy - cy)
             p *= 1 - D.body_hit(points, take, sx, sy, ux, uy, ox, oy, ovx, ovy, react,
                                 perception.POSITION_ERROR_PER_M * d, perception.VELOCITY_ERROR_PER_M * d)
-            t, _ = ref_reach(points, rests, t_end, sx, sy, ux, uy, ox, oy, ovx, ovy, react, horizon,
+            t, i = ref_reach(points, rests, t_end, sx, sy, ux, uy, ox, oy, ovx, ovy, react, horizon,
                              scene.goal_x if keeper else None, True)
             if t <= horizon:
-                p *= D.sigmoid((t - take) / D.LANE_MARGIN_S)
+                first = 1 - D.sigmoid((t - take) / D.LANE_MARGIN_S)
+                _, oa, oz, og, ovz = points[max(0, min(i, len(points) - 1))]
+                if keeper and D.in_box(sx + ux * oa, sy + uy * oa, scene.goal_x):
+                    holds = 1.0  # his hands
+                else:  # his own first touch, as the team-mate's, with an average cushion
+                    orel = relative_speed(og * ux, og * uy, ovz, ovx, ovy)
+                    opart = next(name for name, top in SURFACES if oz <= top)
+                    cushion = D.CONTROL_EST_MPS * CUSHION[opart]
+                    holds = D.sigmoid((cushion + KEEP_MPS - orel) / D.CONTROL_MARGIN_MPS)
+                ours = D.sigmoid((t + TOUCH_GAP_S - take) / D.LANE_MARGIN_S)
+                p *= 1 - first * (holds + (1 - holds) * (1 - ours))
         total += w * p
     return total * (0.8 if age > D.STALE_S else 1.0)
 

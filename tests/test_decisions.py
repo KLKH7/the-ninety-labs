@@ -210,11 +210,27 @@ def test_a_body_in_the_lane_stops_a_ball_before_he_can_react_but_a_foot_needs_a_
     assert conf([(63.0, 35.0)]) > 0.9 * conf([])  # 1 m off it: in foot reach, but it is past before he reacts
 
 
-def test_the_receivers_first_touch_decides_a_hard_pass():
-    def conf(absorb):
-        s = scene(x=60.0, absorb={"h9": absorb})
+def test_the_receivers_first_touch_decides_a_hard_pass_when_a_defender_can_take_it_off_him():
+    def conf(absorb, opponents):
+        s = scene(x=60.0, absorb={"h9": absorb}, opponents=opponents)
         return D.pass_confidence(s, 90.0, 34.0, 90.0, 34.0, 0.0, False, 14.0, "h9")
-    assert conf(24.0) > 0.9 > 0.1 > conf(8.0)  # it arrives at about 14 m/s
+    # It arrives at about 14 m/s. D6: a heavy touch leaves the ball free until he is back on it
+    # (TOUCH_GAP_S), so it is lost only when an opponent can be there sooner; with nobody near he
+    # still has it. Until October 2026 the estimate counted every heavy touch as a lost ball.
+    behind = [(93.0, 38.0)]
+    assert conf(8.0, []) > 0.95
+    assert conf(8.0, behind) + 0.2 < conf(24.0, behind)
+
+
+def test_an_opponent_who_gets_there_with_a_heavy_touch_can_give_the_ball_back(monkeypatch):
+    # A4 applied to him: his touch, with an average cushion (CONTROL_EST_MPS); a heavy one leaves the
+    # ball free, and the receiver may be back on it first.
+    def conf():
+        s = scene(x=60.0, absorb={"h9": 24.0}, opponents=[(90.0, 37.0)])
+        return D.pass_confidence(s, 90.0, 34.0, 90.0, 34.0, 0.0, False, 14.0, "h9")
+    clean = conf()
+    monkeypatch.setattr(D, "CONTROL_EST_MPS", 2.0)
+    assert conf() > clean + 0.2
 
 
 def test_a_pass_that_leaves_the_pitch_first_is_lost():
@@ -377,8 +393,8 @@ def test_the_first_touch_is_judged_on_the_speed_a_lofted_ball_comes_down_at():
     landing, launch = math.hypot(down[3], down[4]), math.hypot(*D.loft_launch(30.0))
     assert landing < 0.8 * launch  # drag slows it in the air
 
-    def conf(absorb):
-        s = scene(x=60.0, absorb={"h9": absorb})
+    def conf(absorb):  # a defender close behind him, so a heavy touch can lose it (D6)
+        s = scene(x=60.0, absorb={"h9": absorb}, opponents=[(93.0, 38.0)])
         return D.pass_confidence(s, 90.0, 34.0, 90.0, 34.0, 0.0, True, D.ARRIVE_MPS, "h9")
     # The landing speed, not the launch, on the surface it meets where it first comes within his
     # reach (firsttouch.surface_absorb, as the engine takes it); kept when what that touch cannot
@@ -402,7 +418,7 @@ def test_the_estimate_takes_a_lofted_ball_on_the_thigh_with_the_thighs_own_cushi
 
     def conf(share):
         monkeypatch.setitem(firsttouch.CUSHION, "thigh", share)
-        s = scene(x=60.0, absorb={"h9": skill})
+        s = scene(x=60.0, absorb={"h9": skill}, opponents=[(93.0, 38.0)])  # someone to lose it to
         return D.pass_confidence(s, 90.0, 34.0, 90.0, 34.0, 0.0, True, D.ARRIVE_MPS, "h9")
     assert conf(0.25) + 0.1 < conf(0.5) < conf(1.0) - 0.1
 
@@ -887,8 +903,9 @@ def test_the_passer_expects_a_dropping_ball_into_his_man_to_meet_the_thigh():
     # his reach above BODY_TOUCH_Z on the thigh or chest, whether he stands on its line now or just
     # beside it: a cautious bound where the engine finds him beside it, with a foot.
     mid = FOOT_ABSORB_MPS[0] + FOOT_ABSORB_MPS[1] / 2
-    on = scene(x=60.0, absorb={"h9": mid}, mates=[("h9", 84.0, 34.0, 0.0)])
-    beside = scene(x=60.0, absorb={"h9": mid}, mates=[("h9", 84.0, 34.6, 0.0)])
+    behind = [(87.0, 38.0)]  # a defender close behind him, so a heavy touch can lose it (D6)
+    on = scene(x=60.0, absorb={"h9": mid}, mates=[("h9", 84.0, 34.0, 0.0)], opponents=behind)
+    beside = scene(x=60.0, absorb={"h9": mid}, mates=[("h9", 84.0, 34.6, 0.0)], opponents=behind)
     into = D.pass_confidence(on, 84.0, 34.0, 84.0, 34.0, 0.0, True, 18.0, "h9")
     near = D.pass_confidence(beside, 84.0, 34.0, 84.0, 34.6, 0.0, True, 18.0, "h9")
     assert near == pytest.approx(into, abs=0.02)

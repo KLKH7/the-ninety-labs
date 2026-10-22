@@ -1767,3 +1767,23 @@ short and actionable. This file is public: no research sources, product names or
   `::test_he_never_comes_nearer_the_carrier_to_be_open`, and
   `tests/test_zone_tracking.py::test_a_defender_follows_the_attacker_in_his_zone_once_he_scans`; the
   held-out measures in the pull request.
+
+### 183. An estimate that counts a recoverable failure as final is pessimistic everywhere it matters
+- **What happened:** the team built up through midfield far less than the published 76 to 95
+  attacking-third passes a match. A forward pass in midfield was chosen 13% of the time: the
+  passer judged it 0.62 likely to work against 0.94 for a square pass, and forced-pass calibration
+  against the engine's own outcomes found the estimate pessimistic (Brier 0.27 to 0.28). Lane margin,
+  perception error, reaction time and the press were each ruled out by ablation; splitting the
+  estimate by factor found the first touch: every heavy touch was counted as a lost ball, though in
+  the engine (D6) the ball stays free until he is back on it and is lost only if an opponent gets
+  there first. The opponent's own touch was ignored the same way: an interception was final even
+  when he could not control it.
+- **Rule:** an estimate mirrors the engine's whole sequence, not its first step. A heavy touch is
+  lost only to an opponent who can be where it was met within `firsttouch.TOUCH_GAP_S`; an opponent
+  who gets there first keeps it only with a touch that holds or if the team-mate is not back on it.
+  Calibrate the estimate against the engine's outcomes; report the build-up counts as held-out
+  checks, never tune to them.
+- **Check:** `tests/test_decisions.py::test_the_receivers_first_touch_decides_a_hard_pass_when_a_defender_can_take_it_off_him`
+  and `::test_an_opponent_who_gets_there_with_a_heavy_touch_can_give_the_ball_back` (both red
+  before the fix), `tests/test_pass_race_reference.py` (the naive reference race implements both
+  rules independently); calibration in the pull request.

@@ -763,6 +763,17 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
                     for ox, oy in scene.opponents), default=0.0)
         worse = firsttouch.quality(0.0, felt, AVERAGE, 1.0, rel, taker[5])
         p = firsttouch.kept_estimate(rel, firsttouch.surface_absorb(taker[5], z) / worse, CONTROL_MARGIN_MPS)
+        # A heavy touch is not a lost ball: the engine leaves it free where he met it until he is back
+        # on it after TOUCH_GAP_S (D6), and whoever reaches it first has it. So it is his unless an
+        # opponent can be there sooner, raced as the pass is (until October 2026 a heavy touch counted
+        # as lost: forced forward passes estimated at 0.1 to 0.3 were received about half the time).
+        back = take + firsttouch.TOUCH_GAP_S
+        kept_loose = 1.0
+        hands = in_box(tx_, ty_, scene.goal_x)  # a keeper in his box may dive on it (Law 12)
+        for ox, oy, ovx, ovy, keeper, *_ in rivals:
+            near = math.hypot(ox - tx_, oy - ty_) - (arm_max if keeper and hands else CONTROL_M)
+            kept_loose *= sigmoid((react + _soonest(near, math.hypot(ovx, ovy)) - back) / LANE_MARGIN_S)
+        p += (1 - p) * kept_loose
         horizon = take + OPPONENT_LATE_S
         # Where the ball has got to by then, along this strike: nobody further from that stretch of
         # its path than he can run by then matters (a shortcut, like `lb`).
@@ -778,10 +789,24 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
                 continue
             # When he could be there, or how late he would be if he cannot make it: an opponent
             # just short of the lane is nearly as much a risk as one who just reaches it.
-            t, _ = reach_time(points, t_end, rests, sx, sy, ux, uy, ox, oy, ovx, ovy, react,
+            t, i = reach_time(points, t_end, rests, sx, sy, ux, uy, ox, oy, ovx, ovy, react,
                               horizon, scene.goal_x if keeper else None, late=True)
             if t <= horizon:
-                p *= sigmoid((t - take) / LANE_MARGIN_S)
+                first = 1 - sigmoid((t - take) / LANE_MARGIN_S)  # the chance he is there first
+                # There first, he has it only if his own first touch keeps it (A4, the same rule as
+                # for the team-mate, an average player's cushion; a keeper in his box has his hands).
+                # A heavy touch leaves it free until he is back on it after TOUCH_GAP_S (D6): it is
+                # ours if the team-mate can be on it sooner. Until October 2026 an opponent who got
+                # there first always won it.
+                _, oa, oz, og, ovz = points[max(0, min(i, len(points) - 1))]
+                if keeper and in_box(sx + ux * oa, sy + uy * oa, scene.goal_x):
+                    holds = 1.0
+                else:
+                    rel_o = relative_speed(og * ux, og * uy, ovz, ovx, ovy)
+                    holds = firsttouch.kept_estimate(rel_o, firsttouch.surface_absorb(CONTROL_EST_MPS, oz),
+                                                     CONTROL_MARGIN_MPS)
+                ours_loose = sigmoid((t + firsttouch.TOUCH_GAP_S - take) / LANE_MARGIN_S)
+                p *= 1 - first * (holds + (1 - holds) * (1 - ours_loose))
         total += w * p
     return total * (0.8 if age > STALE_S else 1.0)
 
