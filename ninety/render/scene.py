@@ -130,7 +130,7 @@ ANKLE_BACK = 0.11  # the drawn ankle sits this far behind the foot marker (asset
 PLANT_AHEAD_MAX = 0.30
 # The gait plants their feet. A touch with the foot or thigh is taken in stride: the other foot stays
 # planted and the touch takes the one that meets the ball.
-PLANT_ACTIONS = ("stand", "walk", "run", "chest", "head", "strike", "foot", "thigh", "hands", "throw")
+PLANT_ACTIONS = ("stand", "walk", "run", "chest", "head", "strike", "foot", "thigh", "hands", "throw", "dive")
 # Running, each foot is planted over the part of the stride where the gait (meshpose.gait) has it
 # on the grass: the stored stride swings a foot along one path and it is lowest and going back
 # around these phases (measured on the asset: the left foot is forward at 1.5 pi and lifts behind
@@ -210,6 +210,17 @@ REACH_CLEAR_M = 0.15  # reaching, a foot clears the grass by this times the shar
 FRAME_S = 0.04  # one frame at the engine's 25 fps (ninety.sim.engine.FPS)
 MESH_ARM_ACTIONS = ("strike", "foot", "thigh", "chest", "head", "hands", "shield", "throw")
 HIP_PIVOT_Z = 0.99  # the mesh's spine_01 joint, where a bend over the ball starts (asset rest pose)
+
+# A keeper's dive is drawn once, from the engine's dive (its action "dive", how far along it he is).
+# It grows no faster than the engine's own dives do (DIVE_IN_FRAMES: 0.105 a frame, measured on seed
+# 8001's a1), so one the engine starts at full stretch (its "down after a dive") still grows. It keeps
+# the side and the way he faced when it began until he is up (the engine turns a keeper on the grass
+# toward the ball, and drawn as it turned, the stretched body spun and dived again the other way),
+# never shrinks while the engine holds it, and fades over DIVE_UP_FRAMES into whatever he does next
+# (the catch, standing, running: dive_up), his body turning to the engine's facing over the same
+# frames (design: 1 s, as a keeper takes to get up; a snap in a frame read as a second dive).
+DIVE_IN_FRAMES = 10
+DIVE_UP_FRAMES = 25
 
 # How a touch is drawn (design). The engine says which part met the ball and the frame says where
 # the ball was. The touching part reaches that point on the contact frame, along the way the touch
@@ -355,6 +366,13 @@ class Gait:
     down_l: bool = False
     down_r: bool = False
     lead: float = 0.0  # how far the hips are ahead of the chest in a turn (radians)
+    dive_n: int = -1  # frames into the dive being drawn, -1 when none (keeper_dive)
+    up_n: int = -1  # frames into getting up after it, -1 when none
+    dive_side: float = 1.0  # the side he dived to, as it was when the dive began
+    dive_heading: float = 0.0  # the way he faced when it began
+    dive_drawn: float = 0.0  # how far along the drawn dive is (0..1)
+    dive_from: float = 0.0  # where a dive taken up again in mid get-up starts from
+    dive_up: float = 0.0  # getting up: how much of the dive (signed by side) is still drawn over the pose
     feet: dict = field(default_factory=dict)  # side -> foot on the grass or stepping (_stance)
     ankle: dict = field(default_factory=dict)  # side -> last drawn sole (x, y, height): where a step starts
     touch: dict | None = None  # the part meeting the ball now: part, side, at (world), w
@@ -446,6 +464,7 @@ def advance_gaits(gaits: dict[str, Gait], prev_xy: dict[str, tuple[float, float]
         pace(g, pl.get("vx", 0.0), pl.get("vy", 0.0), g.heading, dt, coming.get(pl["id"]))
         prev_xy[pl["id"]] = (pl["x"], pl["y"])
         face(g, pl)
+        keeper_dive(g)
         nxt = later.get(pl["id"])
         g.lead = 0.0
         if nxt is not None and "heading" in nxt and "heading" in pl and g.action not in ("dive", "throw"):
@@ -799,6 +818,39 @@ def face(g: Gait, player: dict) -> None:
     if "action" in player:
         g.action = player["action"]
         g.dive = player.get("dive", 0.0)
+
+
+def keeper_dive(g: Gait) -> None:
+    """Draw the engine's dive once (DIVE_IN_FRAMES, DIVE_UP_FRAMES): after face(), set the drawn
+    dive (g.dive), the dive still drawn while he gets up (g.dive_up) and the drawn facing (g.heading)
+    for this frame."""
+    g.dive_up = 0.0
+    if g.action == "dive":
+        if g.dive_n < 0:
+            g.dive_from = g.dive_drawn if g.up_n >= 0 else 0.0
+            if g.up_n < 0:
+                g.dive_side = 1.0 if g.dive >= 0.0 else -1.0
+                g.dive_heading = g.heading
+        g.dive_n += 1
+        g.up_n = -1
+        ramp = g.dive_from + (1.0 - g.dive_from) * min(1.0, (g.dive_n + 1) / DIVE_IN_FRAMES)
+        g.dive_drawn = max(g.dive_drawn if g.dive_n > 0 else 0.0, min(abs(g.dive), ramp))
+        g.dive, g.heading = g.dive_side * g.dive_drawn, g.dive_heading
+        return
+    if g.dive_n < 0 and g.up_n < 0:
+        return
+    if g.dive_n >= 0:
+        g.dive_n, g.up_n = -1, 0
+        g.dive_from = g.dive_drawn
+    else:
+        g.up_n += 1
+    if g.up_n >= DIVE_UP_FRAMES:
+        g.up_n, g.dive_drawn = -1, 0.0
+        return
+    t = _ease((g.up_n + 1) / DIVE_UP_FRAMES)
+    g.heading = g.dive_heading + _wrap(g.heading - g.dive_heading) * t
+    g.dive_drawn = g.dive_from * (1.0 - t)
+    g.dive_up = g.dive_side * g.dive_drawn
 
 
 def reach_sign(x: float, y: float, g: Gait, ball: tuple[float, ...] | None) -> float:
@@ -1192,6 +1244,7 @@ def mesh_pose(g: Gait, x: float, y: float, reach: float) -> dict:
         "speed": round(g.speed, 3),
         "reach": reach,
         "dive": round(g.dive, 3),
+        "dive_up": round(g.dive_up, 3),
         "plant_l": [round(v, 4) for v in g.plant_l] if g.plant_l else None,
         "plant_r": [round(v, 4) for v in g.plant_r] if g.plant_r else None,
         "lead": round(g.lead, 4),
