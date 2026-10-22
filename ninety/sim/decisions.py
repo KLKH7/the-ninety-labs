@@ -790,6 +790,12 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
     return total * (0.8 if age > STALE_S else 1.0)
 
 
+def room_to_play(space: float) -> float:
+    """How much of the ball's worth a receiver this far from the nearest opponent can use: a
+    receiver with space can do more with it (*design*: 70% when pressed, all of it from 5 m)."""
+    return 0.7 + 0.3 * min(1.0, space / 5.0)
+
+
 def pass_option(scene: Scene, mate: tuple[str, float, float, float]) -> Option | None:
     mid, mx, my, age, *moving = mate
     # O7: into the space he is running into, by the velocity the passer has seen; a team-mate
@@ -806,7 +812,7 @@ def pass_option(scene: Scene, mate: tuple[str, float, float, float]) -> Option |
         return None
     gain = our_value(scene, tx, ty)
     space = min((math.hypot(ox - tx, oy - ty) for ox, oy in scene.opponents), default=10.0)
-    gain *= 0.7 + 0.3 * min(1.0, space / 5.0)  # a receiver with space can do more with it
+    gain *= room_to_play(space)
     # A pass that fails is lost along the lane or runs on to where it was aimed: the worse of the two.
     mx_, my_ = (scene.x + tx) / 2, (scene.y + ty) / 2
     lost = max(our_loss(scene, mx_, my_), our_loss(scene, tx, ty))
@@ -830,6 +836,86 @@ def pass_option(scene: Scene, mate: tuple[str, float, float, float]) -> Option |
         if best is None or ev > best.value:
             best = Option("pass", ev, (tx, ty), mid, lofted, pace)
     return best
+
+
+OPEN_RADIUS_M = 5.0  # O3: design: how far from his place in the shape an attacker moves to be open
+OPEN_GRID_M = OPEN_RADIUS_M / 2  # O3: design: the spots he weighs lie on a grid this fine
+
+
+def lane_margin(px: float, py: float, sx: float, sy: float,
+                defenders: list[tuple[float, float]]) -> float:
+    """O3: how late the best-placed defender would be to a ground pass from (px, py) to (sx, sy):
+    his time to get a foot to his own nearest point of the lane, or to the spot itself, less the
+    ball's there at PASS_SPEED_EST_MPS. Positive, the lane is open; the larger, the more open. A
+    pitch-control race (Spearman 2018), simpler than the carrier's own (pass_confidence): one pace,
+    defenders from standing, as D1 times a generic player: one whose body is on the lane needs no
+    reaction (D1's contact); anyone else reacts (generic_time), then gets within a foot's reach of
+    it (*design*: a simplification of D1, not its race)."""
+    d = math.hypot(sx - px, sy - py)
+    arrive = d / PASS_SPEED_EST_MPS
+
+    def gets_there(gap: float) -> float:  # D1: a body in the way needs no reaction; a foot does
+        return 0.0 if gap <= BODY_RADIUS + ball.RADIUS else generic_time(max(0.0, gap - _FOOT[0]))
+
+    worst = math.inf
+    for ox, oy in defenders:
+        off, share = closest_on_segment(ox, oy, px, py, sx, sy)  # where he would cut it out
+        worst = min(worst, gets_there(off) - share * arrive,
+                    gets_there(math.hypot(sx - ox, sy - oy)) - arrive)
+    return worst
+
+
+def open_legal(slot: tuple[float, float], offset: tuple[float, float], passer: tuple[float, float] | None,
+               onside_x: float, goal_x: float) -> bool:
+    """O3: may he stand at his place plus this offset? On the pitch, never offside as he sees it
+    (L10), within OPEN_RADIUS_M of his place, and, with a carrier, within passing range (MAX_PASS_M)
+    and never nearer the carrier than his place is (coming short is the shape's job: O3's nearest
+    two, O6; spots nearer the ball are always safer, so they would draw the whole team in)."""
+    x, y = slot[0] + offset[0], slot[1] + offset[1]
+    if not (0.5 <= x <= PITCH_X - 0.5 and 0.5 <= y <= PITCH_Y - 0.5) or attack(goal_x) * (x - onside_x) > 0:
+        return False
+    if math.hypot(*offset) > OPEN_RADIUS_M + 1e-9:
+        return False
+    if passer is None:
+        return True
+    px, py = passer
+    here = math.hypot(x - px, y - py)
+    return here <= MAX_PASS_M and here >= math.hypot(slot[0] - px, slot[1] - py) - 1e-9
+
+
+def open_spot(slot: tuple[float, float], offset: tuple[float, float], passer: tuple[float, float],
+              defenders: list[tuple[float, float]], onside_x: float, goal_x: float) -> tuple[float, float]:
+    """O3: where, within OPEN_RADIUS_M of his place in the shape, an attacker off the ball stands so
+    that a pass to him is worth most, in the carrier's terms (pass_option): the chance it reaches him
+    there (his lane raced, lane_margin, on D1's sigmoid) times what the ball is worth there (D9, with
+    the same room to play, room_to_play), less the chance it is cut out times what losing it costs;
+    at the neutral style (T4's weights are the carrier's, not his). Open space that is worth
+    something (Fernandez and Bornn 2018). He weighs the spots of a grid (OPEN_GRID_M) across the
+    carrier's line to him (out of a defender's cover shadow) or further along it (more room behind),
+    never toward the carrier, and only those open_legal allows. Returned as an offset from his place.
+    He keeps the offset he has unless another is worth more by CHOICE_NOISE_GOALS: options closer
+    than that are a coin-flip to the carrier (D4), so moving would change nothing."""
+    sx, sy = slot
+    px, py = passer
+    if math.hypot(sx - px, sy - py) > MAX_PASS_M:
+        return (0.0, 0.0)  # out of passing range: not an option to be open for
+    r0 = math.hypot(sx - px, sy - py) or 1.0
+    ux, uy = (sx - px) / r0, (sy - py) / r0
+    g = OPEN_GRID_M
+    rings = [(a * -uy + b * ux, a * ux + b * uy) for a in (-2 * g, -g, 0.0, g, 2 * g)
+             for b in (0.0, g, 2 * g) if math.hypot(a, b) <= OPEN_RADIUS_M + 1e-9]
+
+    def worth(o: tuple[float, float]) -> float:
+        x, y = sx + o[0], sy + o[1]
+        reaches = sigmoid(lane_margin(px, py, x, y, defenders) / LANE_MARGIN_S)
+        space = min((math.hypot(ox - x, oy - y) for ox, oy in defenders), default=10.0)
+        gain = value(x, y, goal_x) * room_to_play(space)
+        lost = max(loss_cost((px + x) / 2, (py + y) / 2, goal_x), loss_cost(x, y, goal_x))
+        return reaches * gain - (1 - reaches) * lost
+
+    held = offset if open_legal(slot, offset, passer, onside_x, goal_x) else (0.0, 0.0)
+    best = max((o for o in rings if open_legal(slot, o, passer, onside_x, goal_x)), key=worth, default=held)
+    return best if worth(best) > worth(held) + CHOICE_NOISE_GOALS else held
 
 
 def short_pass_lean(dist: float) -> float:

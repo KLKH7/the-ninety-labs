@@ -59,6 +59,13 @@ FOOT_REACH_M, KEEPER_REACH_M, FRAME_SLACK_M = 1.0, 1.48, 0.6
 # P5: the goal frame (Law 1: posts 7.32 m apart, bar 2.44 m high) is a contact too; a ball
 # within this distance of it may rebound without an event.
 WOODWORK_NEAR_M = 0.6
+# P5: so is a goal's net, as the renderer draws it (web/render/render.js, buildNet; Law 1 allows
+# nets without shaping them): its back 2 m behind the goal line and 2 m high, its sides, and its
+# roof sloping down to the back from the crossbar. A ball inside the goal touching it (lesson 184):
+# its centre a radius from the back or a side (Law 2: 0.11 m), or its top (its lowest point z plus
+# its diameter) at the roof; to within two roundings of a written position (measurement precision).
+NET_DEPTH_M, NET_BACK_M, BALL_RADIUS_M = 2.0, 2.0, 0.11
+NET_TOUCH_SLACK_M = 2 * POSITION_PRECISION_M
 APPROACH_TOLERANCE_M = 0.04  # P14: per frame; a ball at 1 m/s relative to him can still be met
 EXAMPLES = 5
 
@@ -261,7 +268,7 @@ def check_physics(events: list[dict], frames: list[dict], fps: float, roster: li
             continue
         if not (consecutive(f0, f1) and consecutive(f1, f2)):
             continue
-        if any(near_woodwork(f["ball"]) for f in (f0, f1, f2)):
+        if any(near_woodwork(f["ball"]) or near_net(f["ball"]) for f in (f0, f1, f2)):
             continue
         z = (f0["ball"]["z"], f1["ball"]["z"], f2["ball"]["z"])
         if min(z) <= AIRBORNE_M:
@@ -298,6 +305,21 @@ def near_woodwork(b: dict) -> bool:
     on_line = min(abs(b["x"]), abs(105 - b["x"])) <= WOODWORK_NEAR_M
     in_frame = abs(b["y"] - 34) <= 3.66 + WOODWORK_NEAR_M and b["z"] <= 2.44 + WOODWORK_NEAR_M
     return on_line and in_frame
+
+
+def near_net(b: dict) -> bool:
+    """P5: inside a goal and touching its net's back, a side or its roof, where the net stops the
+    ball."""
+    for line, out in ((0.0, -1.0), (105.0, 1.0)):
+        depth, off = (b["x"] - line) * out, abs(b["y"] - 34)
+        roof = 2.44 + (NET_BACK_M - 2.44) * min(depth, NET_DEPTH_M) / NET_DEPTH_M
+        below = roof - (b["z"] + 2 * BALL_RADIUS_M)  # from the ball's top up to the roof
+        if not (0 < depth <= NET_DEPTH_M and off <= 3.66 and below >= -NET_TOUCH_SLACK_M):
+            continue  # not inside this goal
+        reach = BALL_RADIUS_M + NET_TOUCH_SLACK_M
+        if NET_DEPTH_M - depth <= reach or 3.66 - off <= reach or below <= NET_TOUCH_SLACK_M:
+            return True
+    return False
 
 
 def check_contacts(events: list[dict], frames: list[dict], keepers: set[str], problems: Problems) -> None:

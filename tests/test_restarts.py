@@ -1100,9 +1100,9 @@ def test_the_walk_to_the_wall_is_estimated_from_above():
     a test that had passed by 7 mm in its one scenario). These two scenarios pin the estimate's
     shape; it is not a strict bound. Over 60 walks it comes within about 1% of the walk: a walker
     still moving at the whistle, or stepping out past the circle as he goes round it, walks a little
-    further (lesson 176, scripts/defect_sweep/wall_walks.py), so here they start standing (lesson
-    188: once the minute of play before it changed, a wall player still walking at 1.7 m/s at the
-    whistle walked 20.26 m against 19.98 m)."""
+    further (lesson 176, scripts/defect_sweep/wall_walks.py), so here they start standing (once the
+    minute of play before it changed, a wall player still walking at the whistle walked further than
+    the estimate)."""
     went_round = 0
     for seed, at in ((3, (PITCH_X - 22.0, 34.0)), (5, (87.0, 24.0))):
         e = wall_kick(seed, at)
@@ -1886,7 +1886,7 @@ def test_through_a_restart_wait_each_marker_keeps_his_man():
     pairs are the restart's)."""
     from ninety.sim import offball
     from ninety.sim.engine import other
-    e = corner_wait(6)  # a corner to home, its kick 30 s off: away defends (a seed with men near goal)
+    e = corner_wait(13)  # a corner to home, its kick 30 s off: away defends (a seed with men near goal)
     r, brain = e.restart, e.brains["away"]
     for _ in range(int(6.0 / DT)):  # attackers come near and are picked up
         e.step()
@@ -1915,7 +1915,7 @@ def test_through_a_restart_wait_each_marker_keeps_his_man():
     for _ in range(int(1.0 / DT)):
         e.step()
     assert new.id in r.marks.values() and not set(brain.pressers) & set(r.marks)
-    w = wall_kick(6)  # and at a free kick with a wall (a seed whose wait has men to mark)
+    w = wall_kick(13)  # and at a free kick with a wall (a seed whose wait has men to mark)
     for _ in range(int(1.0 / DT)):
         w.step()
     wr = w.restart
@@ -1990,12 +1990,12 @@ def test_at_a_dead_ball_the_presser_goes_in_time_and_does_not_spring_about_his_p
     the ball is in play there is nobody to press: standing where the Laws let him, he goes to his
     place in time for the kick, as the cover does (from inside the distance he must keep, he still
     leaves at his pressing pace: test_opponents_keep_out_of_the_penalty_area_at_a_goal_kick_...).
-    Once keepers held what they caught (lesson 188), seed 114's play no longer came to that goal
-    kick. The scene was found again by its premises, then checked to go red with the fix reverted
-    (the presser back at his pressing pace: 42 turns here): seed 124's goal kick at 0:21."""
-    e = Engine(124)
+    Once off-ball movement changed play, seed 114 no longer came to that goal kick. The scene was
+    found again by its premises, then checked to go red with the fix reverted (the presser back at
+    his pressing pace: 8 turns here): seed 134's goal kick at 1:05."""
+    e = Engine(134)
     e.kickoff("home", setup=True)
-    while e.t < 20.92 - 1e-9:
+    while e.t < 65.44 - 1e-9:
         e.step()
     r, brain = e.restart, e.brains["home"]  # away's goal kick: home presses
     assert r is not None and r.kind == "goal_kick" and brain.pressers  # premise: the goal kick waits
@@ -2006,7 +2006,7 @@ def test_at_a_dead_ball_the_presser_goes_in_time_and_does_not_spring_about_his_p
              if q.team == p.team and q is not p and math.dist((q.x, q.y), (tx, ty)) < 0.7]
     assert crowd  # premise: a team-mate stands a hair from his place
     turns, history = 0, []
-    while e.t < 26.92 and e.restart is r:
+    while e.t < 71.44 and e.restart is r:
         e.step()
         history.append((p.vx, p.vy))
         if len(history) > 10:

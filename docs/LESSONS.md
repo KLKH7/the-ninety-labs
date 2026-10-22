@@ -1897,6 +1897,83 @@ short and actionable. This file is public: no research sources, product names or
   `::test_each_corner_has_its_own_shot_and_the_ball_stays_in_it` and
   `::test_the_corner_shot_holds_until_the_kick`; the framing bar is raw.
 
+### 180. A motion keyed to the stride's clock is checked against the contacts it is drawn over
+- **What happened:** #197 left the runner's hips level, so a jog read as a power-walk. The bob
+  went in from a sourced table by speed, keyed to the stride's phase.
+  - Three existing tests failed, and each failure was a real defect the phase hid.
+  - Where the phase said flight, the drawn push-off foot was still on the grass: the hips rose,
+    the leg could not reach it, and the toe hung 3 cm up and slid.
+  - The flight's free fall counted from a swing's first frame, which still draws the foot on the
+    grass, so the hips jumped 4 cm across the push-off at 2.5 m/s.
+  - That first frame was itself the sprint's flicker a blind critic saw (round 4): drawn where it
+    lifted, a sprinter's foot hung 40 to 56 cm behind the hips, beyond the leg, for a frame. Both
+    feet were seen off the grass in one frame a step.
+  - The bob's dip let a walking leg reach its swing target. A foot 1 cm up in its landing frame
+    then counted as "on the grass" in the slide test, which had been passing only because the
+    stretched leg held it higher.
+  - The lean with acceleration took the engine's speed, eased over 5 frames. At a steady jog the
+    engine's speed rises and brakes back every 9 frames (seed 21's a5, 3.2 to 4.0 m/s), so the
+    blind critic saw the trunk nod every step, plus a stoop and a sideways topple turning on the
+    spot. The lean now takes the change between two 8-frame mean velocities, along the way he faces.
+  - Blind critic round 2 found the bob, sent in the body's lift, tripped the lunge's rule (a
+    lowered body reaches for an out-of-reach plant above the grass): braking to a stop, a planted
+    foot was drawn 25 to 38 cm up for 8 frames, a freeze. The round 1 critic had missed it in the
+    same code. The bob is its own pose field now. The lean from boxes behind him came 5 frames
+    late, pitched forward while braking; it now looks 8 frames ahead, as the hips' lead already did.
+  - The independent audit found a sprint swing height (0.45 at 7 m/s) with no source that only
+    kept an old test green, and tests that read their bounds from the code's own tables: with the
+    tables zeroed they passed, 0 within 0.
+- **Rule:**
+  - A body motion keyed to a clock (the stride's phase) rises or falls only where the drawn
+    contacts allow it: the free fall runs from the frame both drawn feet are off the grass to the
+    frame the swing's own count lands one.
+  - A foot that leaves the grass between two frames is drawn a frame into its swing.
+  - A sourced angle (Fukuchi's knee fold) goes in only with the rest of the body that carries it
+    (the bob), measured on the drawn mesh, and as far as the drawn leg reaches (111 degrees, not
+    119).
+  - A test's selection that a better drawing newly meets (a landing foot inside the slide test's
+    2 cm) is narrowed to what it protects, with the reason in its docstring, and the bound stays.
+  - A renderer reading the engine's motion reads its trend over a stride, not its per-frame
+    controller steps, and centred on the frame it draws, never only behind it.
+  - A new quantity is sent in its own field, never folded into one whose value already means
+    something to a rule (a negative lift means a lunge).
+  - The same held for a keeper's dive (demo v1, Kian: "keeps diving"): drawn as the engine's
+    per-frame pose, a dive the engine turned on the grass spun and dived again to the other side,
+    and one that began at full stretch popped in and out. A one-off action is drawn once, from
+    its start to its end, its side and facing held, and fades into what follows.
+  - A test's expected value is the source's number written in the test, never the code's table.
+- **Check:** `tests/test_render_motion.py`. Each of these fails on 0.5.9 (main's drawing, with
+  the new names shimmed in):
+  - `test_a_runners_hips_are_lowest_on_the_grass_and_rise_in_the_air`;
+  - `test_a_walkers_hips_are_highest_over_the_standing_leg`;
+  - `test_a_running_knee_folds_as_far_as_a_runners`;
+  - `test_the_trunk_leans_into_a_sprint_start_and_comes_up_braking`;
+  - `test_the_arms_swing_wider_toward_a_sprint`;
+  - `test_a_sprints_flight_is_seen_over_two_frames_or_more`.
+  - `test_the_push_off_toe_does_not_slide_before_it_lifts` fails with the free fall keyed to the
+    phase; `test_a_player_braking_to_a_stop_keeps_his_planted_feet_on_the_grass` (seed 21's a4)
+    fails with the bob sent in the lift, and the trunk test with the lean from boxes behind only.
+  - `test_a_keepers_dive_is_drawn_once_to_one_side` and
+    `test_a_dive_that_starts_at_full_stretch_grows_and_gets_up` (demo v1's keeper) fail on 0.5.12.
+  - Each mechanism was put back to 0.5.9 alone (bob tables zeroed, swing height, the frame-ahead
+    swing, the lean, the speed lean, the arm pump), and its test fails.
+
+### 184. What the picture draws as solid, the engine treats as solid
+- **What happened:** the renderer drew a net behind each goal, but the engine had none. After a
+  goal the dead ball rolled on through the back of the net to the advertising boards, 4 m behind
+  the goal line, and the keeper walked through the net to fetch it. On demo v2's seed 8001 the
+  ball came to rest at (109.0, 35.7) after the goal at 155.3 s. Over 20 matches on main it
+  happened after all 16 goals. Players walked through a net 66 times, 61 of them keepers, all while
+  the ball was dead: 27 after goals and 39 at other stoppages.
+- **Rule:**
+  - Every structure the renderer draws that a ball or a player can meet has the same geometry
+    in the engine's physics, citing the drawing where it takes its shape from it: the boards,
+    and now the net (L1).
+  - For the net that now means no player passes through it, and a ball that goes in stays in the
+    goal. A ball meeting it from outside (wide of a post, or dropping over the bar) still passes
+    through; that is the next step.
+- **Check:** `uv run pytest tests/test_goal_net.py`. On main the ball goes 4 m deep, through the
+  roof and through the side netting, and the keeper walks through the net.
 
 ### 185. Footage a viewer watches and data a model learns from are dressed apart, and the dressing is proved label-free
 - **What happened:** the demo clip (seed 8001, v1) was rendered with the training look: seats with no
@@ -1936,6 +2013,26 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `uv run pytest tests/test_render_edit.py tests/test_render_camera.py -k "imminent or
   celebration or stinger or opens_on_the_wide or scorer"`. Each test fails on 0.5.9, the version
   before demo v2.
+
+### 162. A player off the ball answers the players around him, not only the ball
+- **What happened:** fans and clip critics saw the team without the ball stand between actions. On
+  seed 21 most standing spells of 3 s or more were block defenders whose place did not move while
+  they stood. Every place off the ball (block slots, the attacking shape, all but the carrier's
+  nearest two) depended on the ball's position alone, so when the ball paused both teams froze. A
+  walking floor did not fix it (standing 22% to 20%, one seed). The first fix for attackers chose
+  the most open spot, then the one a pass is worth most at, and drew them toward the carrier: a spot
+  nearer the ball is always safer, so passes shortened and square passes with a free option ahead
+  (FS7) rose by about 40%. Holding pass length and FS7 out as checks caught it.
+- **Rule:** a target off the ball reacts to the players he sees. An attacker steps to where a pass
+  from the carrier is worth most, across his lane or further out, never nearer (O3). A block
+  defender tracks the attacker in his zone, goal-side, without leaving it (O2). Each decides again
+  only when he scans and holds his choice between scans. When a value always rises in one
+  direction, limit the candidates by what football allows; never tune its weights to the held-out
+  checks.
+- **Check:** `tests/test_open_space.py::test_a_defender_in_his_lane_moves_an_attacker_once_he_scans`,
+  `::test_he_never_comes_nearer_the_carrier_to_be_open`, and
+  `tests/test_zone_tracking.py::test_a_defender_follows_the_attacker_in_his_zone_once_he_scans`; the
+  held-out measures in the pull request.
 
 ### 188. A rule the renderer has to draw must be in the truth first
 - **What happened:** Kian saw that a keeper never seemed to hold the ball and throw or kick it.

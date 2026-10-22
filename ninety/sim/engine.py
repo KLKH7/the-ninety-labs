@@ -140,6 +140,14 @@ SET_BALL_CLEAR_M = shape.surface(math.pi / 2, 0.0, pad=2 * ball.RADIUS)
 # points on it dips inside by at most 1 - cos(15°), under 4% of the radius (0.35 m at 9.65 m)
 KEEP_OFF_STEP_DEG = 30.0
 BOARDS_M = 4.0  # verify: advertising boards behind the lines stop a ball (and players) that go out
+# design, verify: a goal's net, as the renderer draws it (web/render/render.js, buildNet): NET_DEPTH_M
+# behind the goal line at the top and the bottom, its back NET_BACK_M high, its roof sloping down to
+# it from the crossbar. Law 1 sets the posts and crossbar, not the net; nets for a full-size goal
+# (7.32 x 2.44 m) are sold 1.8 to 2.6 m deep (UEFA- and Premier-League-grade stadium nets listed at
+# 6 ft, 1.83 m; box nets at 2 m). Players keep NET_CLEAR_M from it going round, a stride (design).
+NET_DEPTH_M = 2.0
+NET_BACK_M = 2.0
+NET_CLEAR_M = 1.0
 # R1: seconds from the ball going out to the restart. Means from Opta timing of the Premier League
 # (The Analyst): throw-ins about 16 s (2022-23; 17.9 in 2025-26), goal kicks 29 to 30 s, free kicks
 # 31.3 to 40.9 s by team (2022-23; mean taken as the middle), corners about half a minute (only a
@@ -341,6 +349,95 @@ def segment_distance(px: float, py: float, ax: float, ay: float, bx: float, by: 
     return math.hypot(ax + s * dx - px, ay + s * dy - py)
 
 
+def crosses(a: tuple[float, float], b: tuple[float, float], c: tuple[float, float],
+            d: tuple[float, float]) -> bool:
+    """Whether the straight way from a to b crosses the segment from c to d (touching it counts)."""
+    def side(p: tuple[float, float], q: tuple[float, float], r: tuple[float, float]) -> float:
+        return (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
+    d1, d2, d3, d4 = side(c, d, a), side(c, d, b), side(a, b, c), side(a, b, d)
+    return d1 * d2 <= 0 and d3 * d4 <= 0 and (d1, d2) != (0.0, 0.0)
+
+
+def goal_net(line: float) -> list[tuple[tuple[float, float], tuple[float, float]]]:
+    """The net of the goal on this goal line, seen from above: its two sides and its back,
+    NET_DEPTH_M behind the line, from post to post (Law 1)."""
+    out = 1.0 if line > 0 else -1.0
+    lo, hi, back = PITCH_Y / 2 - GOAL_HALF_WIDTH, PITCH_Y / 2 + GOAL_HALF_WIDTH, line + out * NET_DEPTH_M
+    return [((line, lo), (back, lo)), ((line, hi), (back, hi)), ((back, lo), (back, hi))]
+
+
+NETS = [side for line in (0.0, PITCH_X) for side in goal_net(line)]
+
+
+def net_stop(px: float, py: float, x: float, y: float, vx: float,
+             vy: float) -> tuple[float, float, float, float]:
+    """A goal's net stops a player as the advertising boards do (steer): the part of his step from
+    (px, py) to (x, y) that would take him through it, along the axis it crosses, is not made."""
+    if 0.0 < min(px, x) and max(px, x) < PITCH_X:  # both ends in front of both goal lines
+        return x, y, vx, vy
+    for _ in range(2):  # a step through a corner of the net meets its side and its back
+        hit = False
+        for c, d in NETS:
+            if crosses((px, py), (x, y), c, d):
+                hit = True
+                if c[0] == d[0]:  # the back of the net
+                    x, vx = px, 0.0
+                else:  # a side of it
+                    y, vy = py, 0.0
+        if not hit:
+            break
+    return x, y, vx, vy
+
+
+def in_the_net(s: ball.State, line: float | None) -> tuple[ball.State, float | None]:
+    """Law 1 and NET_DEPTH_M: a ball that has gone into the goal on this goal line is held by its
+    net. Where it meets the back net, a side net or the roof, its speed into the net is lost
+    (design: a net gives and holds it), and it drops and rolls inside the goal. Returns the ball,
+    and the goal line whose net still holds it: none once it is back on the pitch, out through
+    the goal mouth."""
+    if line is None:
+        return s, None
+    bx, by, bz, vx, vy, vz = s
+    out = 1.0 if line > 0 else -1.0  # from the goal line into the goal
+    if (bx - line) * out <= 0:
+        return s, None
+    back = line + out * (NET_DEPTH_M - ball.RADIUS)
+    if (bx - back) * out > 0:
+        bx = back
+        vx = 0.0 if vx * out > 0 else vx
+    side = GOAL_HALF_WIDTH - ball.RADIUS
+    if abs(by - PITCH_Y / 2) > side:
+        by = PITCH_Y / 2 + math.copysign(side, by - PITCH_Y / 2)
+        vy = 0.0 if vy * (by - PITCH_Y / 2) > 0 else vy
+    behind = min((bx - line) * out, NET_DEPTH_M)  # the roof slopes down from the crossbar to the back
+    roof = CROSSBAR + (NET_BACK_M - CROSSBAR) * behind / NET_DEPTH_M - 2 * ball.RADIUS
+    if bz > roof:
+        bz, vz = roof, min(vz, 0.0)
+    return (bx, by, bz, vx, vy, vz), line
+
+
+def goal_entered(before: ball.State, after: ball.State) -> float | None:
+    """The goal line the ball went into the goal over, from `before` to `after`: its centre over
+    the line, the whole ball between the posts and under the bar where it crossed (as for a goal,
+    Law 10, Engine.in_goal). None if it did not go in."""
+    for line in (0.0, PITCH_X):
+        out = 1.0 if line > 0 else -1.0
+        a, b = (before[0] - line) * out, (after[0] - line) * out
+        if a <= 0 < b:
+            k = a / (a - b)  # how far through the move it crosses the line
+            if Engine.in_goal(before[1] + k * (after[1] - before[1]), before[2] + k * (after[2] - before[2])):
+                return line
+    return None
+
+
+def net_step(before: ball.State, after: ball.State, line: float | None) -> tuple[ball.State, float | None]:
+    """A dead ball's move from `before` to `after`, held by the net of the goal it is in (`line`),
+    or has just gone into (goal_entered): a goal, or a ball played on after the whistle. A ball
+    outside the goal meets no net (design, as specified for lesson 184: the net's outside, met by a
+    ball wide of a post or dropping over the bar, is not modelled yet)."""
+    return in_the_net(after, goal_entered(before, after) if line is None else line)
+
+
 def within_lines(x: float, y: float) -> bool:
     """Half a metre or more inside the lines, as players' targets are kept: they brake for a line
     rather than stop dead at it."""
@@ -446,13 +543,13 @@ def steer(p: Player, tx: float, ty: float, want_speed: float) -> None:
     a shared grip limit for braking and turning, and energy (ninety/sim/body.py)."""
     x, y, p.vx, p.vy = move_body(p.x, p.y, p.vx, p.vy, tx, ty, want_speed, p.physique, DT)
     # No wall at the lines: players may run past them, as in real matches. Targets stay on the
-    # pitch, so they slow down and come back; only the advertising boards stop them, and then
-    # the boards also stop the part of the run that goes into them.
+    # pitch, so they slow down and come back; only the advertising boards and the goals' nets stop
+    # them, and then they also stop the part of the run that goes into them.
     if not -BOARDS_M <= x <= PITCH_X + BOARDS_M:
         x, p.vx = clamp(x, -BOARDS_M, PITCH_X + BOARDS_M), 0.0
     if not -BOARDS_M <= y <= PITCH_Y + BOARDS_M:
         y, p.vy = clamp(y, -BOARDS_M, PITCH_Y + BOARDS_M), 0.0
-    p.x, p.y = x, y
+    p.x, p.y, p.vx, p.vy = net_stop(p.x, p.y, x, y, p.vx, p.vy)
 
 
 class Engine:
@@ -562,6 +659,14 @@ class Engine:
         # D4: each carrier's misjudgement of his options, held until he next scans: player -> (the
         # scan it belongs to, as Belief.next_scan, option key -> draw).
         self.tastes: dict[str, tuple[float, dict]] = {}
+        # O3: each attacker off the ball's offset from his place in the shape, to be open to a pass,
+        # chosen when he last scanned and held until he next does; and who has scanned since.
+        self.open_at: dict[str, tuple[float, float]] = {}
+        self.open_due: set[str] = set()
+        # O2 beyond the box: the attacker each defender in the block tracks in his zone, chosen when he
+        # last scanned; and who has scanned since.
+        self.track: dict[str, str | None] = {}
+        self.track_due: set[str] = set()
         self.restart: Restart | None = None
         # Laws 13, 15 to 17: a restart that has been set but not yet kicked; the opponents keep off
         self.set_by: Restart | None = None
@@ -575,6 +680,7 @@ class Engine:
         self.throw_ready = 0.0
         self.into_play = False  # released from behind the line; not a new out until it enters or falls away
         self.throw_from: tuple[float, float] | None = None  # where the last throw-in was taken
+        self.netted: float | None = None  # the goal line whose net holds the dead ball after a goal
         self.touch_show: dict[str, tuple[str, float]] = {}  # player -> (part, until)
         self.dive_show: dict[str, tuple[float, float]] = {}  # keeper -> (until, side)
         self.dribble_to: tuple[float, float] | None = None  # the carrier's chosen carry, if any
@@ -674,6 +780,8 @@ class Engine:
         if self.team_of(pid) != self.poss_team:
             self.pressed.clear()
             self.poss_team = self.team_of(pid)
+            self.open_at.clear()  # O3: a new possession: each attacker finds his space afresh
+            self.track.clear()  # O2: and each defender looks afresh for a man in his zone
         self.possessor = pid
         self.last_touch = pid
         self.tastes.pop(pid, None)  # D4: a new possession is a new look at his options
@@ -1700,6 +1808,8 @@ class Engine:
                     kicked.update(receiver=None if own else scorer, end_x=touch["x"], end_y=touch["y"],
                                   outcome="fail" if own else "success")
         self.emit("goal", team, x, y, player=scorer)
+        self.netted = PITCH_X if x > PITCH_X / 2 else 0.0  # in the goal: its net holds it (in_the_net),
+        self.ball, self.netted = in_the_net(self.ball, self.netted)  # from this frame on
         self.celebrate(team, scorer)
         self.kickoff(other(team))
 
@@ -1922,11 +2032,16 @@ class Engine:
         return max(0.0, reach)
 
     def dead_ball_rest(self) -> tuple[float, float]:
-        """Where the dead ball will come to rest: along its own flight, or where the advertising
-        boards stop it (tick_restart)."""
-        for s in ball.predict(self.ball, DT, ball.FLIGHT_BOUND_S):
+        """Where the dead ball will come to rest: along its own flight (ball.predict's), or where
+        the advertising boards stop it, or in a goal, where its net holds it (tick_restart)."""
+        s, line = self.ball, self.netted
+        for i in range(int(ball.FLIGHT_BOUND_S / DT) + 1):
+            if i:
+                s, line = net_step(s, ball.step(s, DT), line)
             if not (-BOARDS_M <= s[0] <= PITCH_X + BOARDS_M and -BOARDS_M <= s[1] <= PITCH_Y + BOARDS_M):
                 return clamp(s[0], -BOARDS_M, PITCH_X + BOARDS_M), clamp(s[1], -BOARDS_M, PITCH_Y + BOARDS_M)
+            if i and s[2] == 0 and s[5] == 0 and s[3] == 0 and s[4] == 0:
+                break
         return s[0], s[1]
 
     def carry_dead_ball(self, r: Restart, carrier: Player) -> None:
@@ -1963,10 +2078,13 @@ class Engine:
         r = self.restart
         carrier = self.by_id[r.carried_by] if r.carried_by else None
         if carrier:
+            before = self.ball
             self.carry_dead_ball(r, carrier)
+            self.ball, self.netted = net_step(before, self.ball, self.netted)  # out of a goal, it is free
         else:
-            # The dead ball rolls on until it stops or reaches the advertising boards.
-            bx, by, bz, vx, vy, vz = ball.step(self.ball, DT)
+            # The dead ball rolls on until it stops or reaches the advertising boards, or, in a
+            # goal, its net holds it.
+            (bx, by, bz, vx, vy, vz), self.netted = net_step(self.ball, ball.step(self.ball, DT), self.netted)
             if not (-BOARDS_M <= bx <= PITCH_X + BOARDS_M and -BOARDS_M <= by <= PITCH_Y + BOARDS_M):
                 bx, by = clamp(bx, -BOARDS_M, PITCH_X + BOARDS_M), clamp(by, -BOARDS_M, PITCH_Y + BOARDS_M)
                 vx = vy = 0.0
@@ -1974,14 +2092,16 @@ class Engine:
             if math.hypot(vx, vy) == 0.0:
                 r.passed_by = None  # it has stopped: anyone may go for it again
             # One of his side within a foot's reach of it takes it (the taker first), once it is
-            # on the ground: a dead ball still dropping is left to land.
+            # on the ground: a dead ball still dropping is left to land. Nobody reaches it through
+            # a goal's net (L1).
             bx, by, bz = self.ball[0], self.ball[1], self.ball[2]
             # His foot kills no more speed than a first touch does (A4); a faster ball runs on.
             if bz == 0.0 and self.ball[5] <= 0.0:
                 near = [p for p in self.players if p.team == r.team and p.id != r.passed_by
                         and math.hypot(p.x - bx, p.y - by) <= CONTROL_M
                         and math.hypot(self.ball[3] - p.vx, self.ball[4] - p.vy)
-                        <= p.profile.absorb_mps(False)]
+                        <= p.profile.absorb_mps(False)
+                        and not any(crosses((p.x, p.y), (bx, by), c, d) for c, d in NETS)]  # not through nets
                 if near:
                     carrier = next((p for p in near if p.id == r.taker), near[0])
                     r.carried_by, r.passed_by, r.fetcher = carrier.id, None, None
@@ -2136,6 +2256,48 @@ class Engine:
         else:  # loose: whoever gets to it first has to settle it before he can play it
             wait = settle_s(AVERAGE)
         return wait + math.hypot(x - bx, y - by) / decisions.PASS_SPEED_EST_MPS
+
+    def open_spot(self, p: Player, slot: tuple[float, float], onside: float) -> tuple[float, float]:
+        """O3: his place in the shape, moved to where a pass from the carrier is worth most, as he
+        last saw it (decisions.open_spot), every opponent he believes is near counted, the keeper
+        too. He looks again only when he scans (P13), so between scans he keeps his offset and moves
+        with the shape; but an offset the play has made illegal (offside as he sees it, off the
+        pitch, out of range, or nearer the carrier as he sees him now: decisions.open_legal) is
+        dropped at once, and he goes back to his place until he next scans."""
+        carrier = self.by_id.get(self.possessor) if self.possessor else None
+        mates = carrier is not None and carrier.team == p.team
+        view = self.beliefs[p.id]
+        at = (view.where(carrier.id, self.t) or (carrier.x, carrier.y)) if mates else None
+        if p.id in self.open_due and mates:
+            self.open_due.discard(p.id)
+            defenders = [w for w in (view.where(q.id, self.t) for q in self.players if q.team != p.team) if w]
+            self.open_at[p.id] = decisions.open_spot(slot, self.open_at.get(p.id, (0.0, 0.0)), at,
+                                                     defenders, onside, goal_x(p.team))
+        offset = self.open_at.get(p.id, (0.0, 0.0))
+        if offset != (0.0, 0.0) and not decisions.open_legal(slot, offset, at, onside, goal_x(p.team)):
+            offset = self.open_at[p.id] = (0.0, 0.0)
+        dx, dy = offset
+        return clamp(slot[0] + dx, 0.5, PITCH_X - 0.5), clamp(slot[1] + dy, 0.5, PITCH_Y - 0.5)
+
+    def zone_spot(self, p: Player, slot: tuple[float, float], own_goal_x: float) -> tuple[float, float]:
+        """O2 beyond the box: his place in the block, moved goal-side of the attacker he tracks in his
+        zone (offball.zone_spot). He picks whom to track when he scans (P13), and follows that man as
+        he sees him until he scans again. Never the carrier (the press is the presser's, P17) and
+        never a man a near-goal marker has (O2), when he picks and while he follows: if his man gets
+        the ball or a marker, he goes back to his place."""
+        view = self.beliefs[p.id]
+        marked = self.brains[p.team].marked
+        if p.id in self.track_due:
+            self.track_due.discard(p.id)
+            attackers = {q.id: w for q in self.players if q.team != p.team and q.role != "GK"
+                         and q.id != self.possessor and q.id not in marked
+                         and (w := view.where(q.id, self.t))}
+            self.track[p.id] = offball.zone_man(slot, attackers, self.track.get(p.id))
+        man = self.track.get(p.id)
+        if man is None or man == self.possessor or man in marked:
+            return slot
+        at = view.where(man, self.t)
+        return offball.zone_spot(slot, at, own_goal_x) if at else slot
 
     def in_time(self, p: Player, tx: float, ty: float) -> float:
         """O8: the speed he chooses to get to (tx, ty): just enough to be there before the ball could
@@ -2292,6 +2454,7 @@ class Engine:
             spot = offball.attacking_slot(p.role, PITCH_X - goal_x(p.team), clamp(bx, 0, PITCH_X),
                                           clamp(by, 0, PITCH_Y), onside, wide)
             if spot:
+                spot = self.open_spot(p, spot, onside)
                 return *spot, self.in_time(p, *spot)
         if not brain.in_possession and p.role != "GK":
             own = PITCH_X - goal_x(p.team), PITCH_Y / 2
@@ -2332,7 +2495,9 @@ class Engine:
                 return cx, cy, self.in_time(p, cx, cy)
             slot = brain.slot(p.role, p.ay, clamp(by, 0, PITCH_Y))
             if slot:
-                tx, ty = slot
+                # O2: the defence and midfield track men in their zones; the forwards wait at their
+                # line of engagement, never past the ball (T3).
+                tx, ty = self.zone_spot(p, slot, own[0]) if ROLE_LINE.get(p.role) != "attack" else slot
         tx, ty = clamp(tx, 0.5, PITCH_X - 0.5), clamp(ty, 0.5, PITCH_Y - 0.5)
         return tx, ty, self.in_time(p, tx, ty)
 
@@ -2358,7 +2523,7 @@ class Engine:
         for i, p in enumerate(self.players):
             if (self.frame + i) % PERCEIVE_EVERY == 0:
                 others = [st for st in states if st[0] != p.id]
-                perception.observe(
+                scanned = perception.observe(
                     self.beliefs[p.id],
                     (p.x, p.y, p.heading),
                     others,
@@ -2367,6 +2532,9 @@ class Engine:
                     p.profile.view_half_angle(),
                     p.profile.scan_interval(),
                 )
+                if scanned:
+                    self.open_due.add(p.id)  # O3: he may look again for space to be open in
+                    self.track_due.add(p.id)  # O2: and for a man in his zone
         holder = self.restart.team if self.restart else self.poss_team
         for k, (team, brain) in enumerate(self.brains.items()):
             if (self.frame + k * BRAIN_EVERY // 2) % BRAIN_EVERY:
@@ -2405,7 +2573,8 @@ class Engine:
                 }
                 seen, own_goal = self.shared_view(team, other(team)), PITCH_X - goal_x(team)
                 if given is None:
-                    brain.markers = offball.marking(free, seen, own_goal)
+                    pairs = offball.pick_up(free, seen, own_goal)
+                    brain.markers = offball.marking(free, seen, own_goal, pairs)
                 else:
                     # Until a restart's ball is in play each marker keeps his man (design). Picked up
                     # again at every look, from noisy sightings and from where the markers' own walks
@@ -2415,11 +2584,12 @@ class Engine:
                     # own (lesson 174).
                     free = {pid: at for pid, at in free.items() if pid not in given.wall}
                     seen = {pid: at for pid, at in seen.items() if pid != given.taker}
-                    given.marks = offball.pick_up(free, seen, own_goal, keep=given.marks)
+                    pairs = given.marks = offball.pick_up(free, seen, own_goal, keep=given.marks)
                     brain.markers = {did: offball.goal_side(seen[aid], own_goal)
                                      for did, aid in given.marks.items()}
+                brain.marked = set(pairs.values())
             else:
-                brain.markers = {}
+                brain.markers, brain.marked = {}, set()
 
     def who_presses(self, brain: TeamBrain) -> list[str]:
         """T3, P17: the brain asks its players in the order they could reach the ball; the first
@@ -2548,11 +2718,11 @@ class Engine:
         grip = math.sqrt(max(BRAKE_MAX * BRAKE_MAX - pushing * pushing, 0.0))
         brake = min(abs(p.vx), grip * DT)
         p.vx -= math.copysign(brake, p.vx)
-        p.x += p.vx * DT
-        p.vy = (y - p.y) / DT
-        p.y = y
+        # a goal's net stops a dive as it stops a run (net_stop)
+        x, stop_y, p.vx, p.vy = net_stop(p.x, p.y, p.x + p.vx * DT, y, p.vx, (y - p.y) / DT)
+        p.x, p.y = x, stop_y
         if landing:
-            p.vy = carried
+            p.vy = carried if stop_y == y else 0.0
             self.landed = (p.id, self.dive[4])
             self.dive = None
             self.off_balance[p.id] = self.t + offball.KEEPER_DOWN_S  # on the ground: getting up
@@ -2573,6 +2743,7 @@ class Engine:
             kx, ky = self.keep_off(p, tx, ty)
             if (kx, ky) != (tx, ty):
                 tx, ty, top = kx, ky, max(top, self.in_time(p, kx, ky))
+            tx, ty = self.round_the_net(p, tx, ty)
             top = self.restart_pace(p, tx, ty, top, place)
             dist = math.hypot(tx - p.x, ty - p.y)
             if dist > 1e-6:  # bend the running direction away from anyone about to be in the way
@@ -2584,6 +2755,40 @@ class Engine:
             p.heading = turn_toward(p.heading, perception.facing(p.heading, p.vx, p.vy, p.x, p.y,
                                                                  *self.looks_at(p)))
         self.separate()
+
+    def round_the_net(self, p: Player, tx: float, ty: float) -> tuple[float, float]:
+        """Nobody walks through a goal's net (Law 1, NET_DEPTH_M): where his straight way would cross
+        it, he heads for the first point of the shortest way that does not, by the goal mouth, in
+        front of it NET_CLEAR_M, or round the goal, NET_CLEAR_M clear of its posts and back corners
+        (design). The keeper fetching the ball from his net walks in through the mouth."""
+        if 0.0 < min(p.x, tx) and max(p.x, tx) < PITCH_X:  # a way in front of both goal lines
+            return tx, ty
+        at, target = (p.x, p.y), (tx, ty)
+        for line in (0.0, PITCH_X):
+            net = goal_net(line)
+            if not any(crosses(at, target, c, d) for c, d in net):
+                continue
+            out, mid, m = (1.0 if line > 0 else -1.0), PITCH_Y / 2, NET_CLEAR_M
+            lo, hi = mid - GOAL_HALF_WIDTH + m, mid + GOAL_HALF_WIDTH - m
+            behind = line + out * (NET_DEPTH_M + m)
+            nodes = [at, (line - out * m, clamp(p.y, lo, hi)), (line - out * m, clamp(ty, lo, hi)),
+                     (line, lo - 2 * m), (line, hi + 2 * m), (behind, lo - 2 * m), (behind, hi + 2 * m),
+                     target]
+            # shortest way from him (0) to his target (last) over ways that cross no net
+            best, first, todo = {0: 0.0}, {}, {0}
+            while todo:
+                i = min(todo, key=best.get)
+                todo.discard(i)
+                for j in range(1, len(nodes)):
+                    if j == i or any(crosses(nodes[i], nodes[j], c, d) for c, d in net):
+                        continue
+                    cost = best[i] + math.dist(nodes[i], nodes[j])
+                    if cost < best.get(j, math.inf):
+                        best[j], first[j] = cost, first.get(i, j)
+                        todo.add(j)
+            if len(nodes) - 1 in first:
+                return nodes[first[len(nodes) - 1]]
+        return tx, ty
 
     def restart_pace(self, p: Player, tx: float, ty: float, top: float,
                      place: tuple[float, float] | None = None) -> float:
