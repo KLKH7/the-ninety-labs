@@ -1753,6 +1753,9 @@ short and actionable. This file is public: no research sources, product names or
   ("settled") names the condition that ends it as well as the one that starts it, and each is
   checked as the code checks it ("set" is still, on the spot, at nobody's feet but the taker's).
   A rule about where a player stands is judged on where he stands, not on a waypoint on the way.
+  A head is measured, rendered and published only once `uv run pytest` passes on it: two heads
+  here were measured before it did (one called the C library's acos, one let a presser leave the
+  area late at a goal kick), and their numbers had to be measured again.
   A realism complaint is measured in parts (fetch, arrivals,
   wait, speeds) before the total is blamed. A change that makes players move faster is also
   measured for to-and-fro (reversals, the distance walked to and fro, waits with three or more
@@ -1765,7 +1768,8 @@ short and actionable. This file is public: no research sources, product names or
   or hair_inside or stands_at_his_place or does_not_circle or keeps_its_presser or stand_off_it
   or he_settles or settles_only_at or nobody_else_is_named or never_cuts_inside or by_a_line
   or short_way_is_open or keeps_his_man or kept_man_stays or does_not_settle_while
-  or spring_about"`; each fails on the engine before its fix (`brought_onto_it` is a guard).
+  or spring_about or judged_on_his_place_not or aim_is_off_the_pitch"`; each fails on the engine
+  before its fix (`brought_onto_it` is a guard).
   `scripts/defect_sweep/creep_spells.py` counts creep spells through the waits.
   `scripts/defect_sweep/restart_moves.py` reports speeds, reversals and to-and-fro per
   outfielder-minute through every restart wait, `scripts/defect_sweep/corners.py` the corners, and

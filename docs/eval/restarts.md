@@ -309,10 +309,11 @@ Split by whether the restart had a wall (a direct free kick within shot range):
 
 Walls now jiggle less than on main: 1 wall restart of 26 had someone reverse 10 times or more,
 against 8 of 22 on main. What remains is a few more turns than main where a walk replaces a creep,
-most at throw-ins (the kicking side) and goal kicks (the defending side). At those the ball is set
-late (in the thrower's hands, on the goal-kick spot after the fetch), so players settle late, and
-until then their places follow the dead ball as it is fetched and the kicking side's onside line
-read from noisy sightings (O6): turns at a walk, 3 to 7 in a wait. Setting places from the
+most at throw-ins (the kicking side) and goal kicks (the defending side). At a throw-in nobody
+settles: the ball is set only in the thrower's hands, at the throw (none of 4,427 settles in 20
+matches, by the fourth audit's instrumented runs). At a goal kick players settle only after the
+fetch. Until then their places follow the dead ball as it is fetched and the kicking side's onside
+line read from noisy sightings (O6): turns at a walk, 3 to 7 in a wait. Setting places from the
 restart's spot rather than the dead ball is a follow-up. Four player-waits in 20 matches still
 turn 8 times or more (main: 39), three of them forwards at goal kicks (8 to 27 times). In each a
 forward whose target was the ball, inside the area, was kept off it to a place beside the
@@ -338,6 +339,7 @@ The same 20 seeds, main against this branch:
 | Goals a team per 90 | 1.8 ± 0.6 | 1.0 ± 0.4 |
 | Corners a team per 90 | 2.8 ± 0.6 | 1.2 ± 0.3 |
 | Pass completion (per-match mean) | 84.8% | 85.2% |
+| Offsides a team per 90 | 1.4 ± 0.5 (12) | 2.3 ± 0.6 (20) |
 
 ± is the standard error over the 20 matches. The matches part at their first restart (lesson 90),
 so the two columns are different matches: a difference under about two standard errors of the
@@ -345,8 +347,9 @@ difference (|t| under 2) is one chance alone would often give. Shots (t = −1.7
 are within that; corners (−2.3) are not. Every version of this branch has had fewer shots and
 corners than main, so it may be real, though from version to version the corners moved between
 1.1 and 2.4 a team per 90 (10 to 21 corners in 20 matches). Shots in the 10 s after a team's own
-restart are 39 against main's 51, at other times 88 against 107. Corners were already a held-out
-miss on main, against about 5 a team in a real match. Shots and corners are held-out checks, never
+restart are 39 against main's 51, at other times 88 against 107. Offsides (t = +1.2) are up on
+every version of this branch, 20 to 25 in 20 matches against main's 12 (the fourth audit), each
+within chance. Corners were already a held-out miss on main, against about 5 a team in a real match. Shots and corners are held-out checks, never
 targets. The kick still comes when R1's wait is over.
 
 A fresh critic, shown the seed 200 corner from both engines without being told which was which
