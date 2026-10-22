@@ -378,6 +378,25 @@ def test_a_rebound_off_the_crossbar_is_not_judged_as_free_flight(tmp_path):
     assert "P5 ball flight" not in problems
 
 
+@pytest.mark.parametrize(("where", "x", "y", "lift", "contact"), [
+    ("in the middle of the goal", 105.9, 34.0, 0.0, False),
+    ("by the back of the net", 106.8, 34.0, 0.0, True),
+    ("by the side netting", 105.9, 37.3, 0.0, True),
+    ("under the net's roof", 106.0, 34.0, 0.4, True),
+])
+def test_a_ball_the_net_stops_is_not_judged_as_free_flight(tmp_path, where, x, y, lift, contact):
+    """Lesson 184: inside a goal its net, as the renderer draws it, is a contact as the woodwork
+    is. In the middle of the goal, more than WOODWORK_NEAR_M from the net, the same jolt is a
+    defect."""
+    clip = clean_clip()
+    lofted(clip)
+    for n in range(PASS_AT, PASS_AT + 26):
+        b = clip["frames"][n]["ball"]
+        b["x"], b["y"], b["z"] = x, y, round(b["z"] + lift, 4)
+    clip["frames"][PASS_AT + 10]["ball"]["z"] -= 0.4
+    assert ("P5 ball flight" in run(tmp_path, clip)) is not contact, where
+
+
 def test_a_ball_within_reach_can_be_touched_whichever_way_it_moves(tmp_path):
     clip = clean_clip()
     for f in clip["frames"]:

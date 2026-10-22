@@ -223,6 +223,36 @@ in one frame in seed 101: a throw-in drifting along the outside of the touchline
 past the end boards and snapped back to them when retaken (lesson 166); `41ce3fba` retakes it once
 it passes the end of the touchline, and the sweep now counts a retaken restart as the same kind.
 
+## The goal net (lesson 184)
+
+Measured on the same 20 seeds (7, 11, 21, 42, 101 to 116), 20 minutes each, `main` at `e96ecb1`
+against the goal-net branch at `95c33cf`, with `scripts/defect_sweep/nets.py` (the net as the
+renderer draws it: 2 m deep, its back 2 m high, the roof sloping down to it from the crossbar):
+
+| | Main | Goal net |
+|---|---:|---:|
+| Goals | 16 | 14 |
+| After a goal, deepest the ball goes behind the goal line | 4.0 m, at the boards, after every goal | 1.89 m, in the net |
+| After a goal, the ball comes back over the goal line between the posts | 12 of 16 | 14 of 14 |
+| Players stepping through a net: after goals / at other stoppages | 27 / 39 | 0 / 0 |
+| The ball going into or out of a goal other than by its mouth: after goals / at other times | 28 / 24 | 0 / 0 |
+| Seconds from a goal to the kick-off | 63.9 to 90.0 | 61.4 to 87.2 |
+| Matches meeting the data contract (`ninety-validate`) | 20 of 20 | CONTRACT of 20 |
+| Shots a team per 90 | 17.8 ± 1.3 | 17.5 ± 1.4 |
+| Goals a team per 90 | 1.8 ± 0.6 | 1.6 ± 0.4 |
+| Corners a team per 90 | 2.8 ± 0.6 | 2.3 ± 0.6 |
+| Pass completion | 84.8% | 84.9% |
+
+On main, 61 of the 66 steps through a net were keepers', all with the ball dead: fetching it from
+the boards behind the goal after a goal, or a ball gone wide that had rolled behind it. Each match
+is the same as main's until a ball or a player first meets a net, or a dead ball's predicted path
+does (18 of 20; the other two are the same for all 20 minutes). Where that came after a goal, the
+goal itself is the same (4 matches). Shots (t = −0.1), goals (−0.3), corners (−0.7) and completion
+(+0.1) are within chance; the matches part from there (lesson 90). Held-out checks, never targets.
+
+What is left: a ball meeting a net from outside (wide of a post into the side netting, or dropping
+over the bar onto the roof) still passes through it. None did in these 20 matches.
+
 ## Reproduce
 
 ```bash
@@ -244,5 +274,9 @@ uv run python scripts/defect_sweep/wall.py runs/new/seed7 runs/new/seed11
 ```
 
 ```bash
-uv run pytest -q tests/test_restarts.py
+uv run python scripts/defect_sweep/nets.py runs/new/seed7 runs/new/seed11
+```
+
+```bash
+uv run pytest -q tests/test_restarts.py tests/test_goal_net.py
 ```

@@ -59,6 +59,11 @@ FOOT_REACH_M, KEEPER_REACH_M, FRAME_SLACK_M = 1.0, 1.48, 0.6
 # P5: the goal frame (Law 1: posts 7.32 m apart, bar 2.44 m high) is a contact too; a ball
 # within this distance of it may rebound without an event.
 WOODWORK_NEAR_M = 0.6
+# P5: so is a goal's net, as the renderer draws it (web/render/render.js, buildNet; Law 1 allows
+# nets without shaping them): its back 2 m behind the goal line and 2 m high, its sides, and its
+# roof sloping down to the back from the crossbar. Within WOODWORK_NEAR_M of it, inside the goal,
+# the net may stop the ball (lesson 184). The ball's lowest point is z; its top is z + 0.22 m.
+NET_DEPTH_M, NET_BACK_M, BALL_DIAMETER_M = 2.0, 2.0, 0.22
 APPROACH_TOLERANCE_M = 0.04  # P14: per frame; a ball at 1 m/s relative to him can still be met
 EXAMPLES = 5
 
@@ -261,7 +266,7 @@ def check_physics(events: list[dict], frames: list[dict], fps: float, roster: li
             continue
         if not (consecutive(f0, f1) and consecutive(f1, f2)):
             continue
-        if any(near_woodwork(f["ball"]) for f in (f0, f1, f2)):
+        if any(near_woodwork(f["ball"]) or near_net(f["ball"]) for f in (f0, f1, f2)):
             continue
         z = (f0["ball"]["z"], f1["ball"]["z"], f2["ball"]["z"])
         if min(z) <= AIRBORNE_M:
@@ -298,6 +303,20 @@ def near_woodwork(b: dict) -> bool:
     on_line = min(abs(b["x"]), abs(105 - b["x"])) <= WOODWORK_NEAR_M
     in_frame = abs(b["y"] - 34) <= 3.66 + WOODWORK_NEAR_M and b["z"] <= 2.44 + WOODWORK_NEAR_M
     return on_line and in_frame
+
+
+def near_net(b: dict) -> bool:
+    """P5: inside a goal, within reach of its net's back, a side or its roof, where the net may
+    stop the ball."""
+    for line, out in ((0.0, -1.0), (105.0, 1.0)):
+        depth, off = (b["x"] - line) * out, abs(b["y"] - 34)
+        if not (0 < depth <= NET_DEPTH_M + WOODWORK_NEAR_M and off <= 3.66 + WOODWORK_NEAR_M):
+            continue
+        roof = 2.44 + (NET_BACK_M - 2.44) * min(depth, NET_DEPTH_M) / NET_DEPTH_M
+        if (abs(NET_DEPTH_M - depth) <= WOODWORK_NEAR_M or abs(3.66 - off) <= WOODWORK_NEAR_M
+                or abs(roof - (b["z"] + BALL_DIAMETER_M)) <= WOODWORK_NEAR_M):
+            return True
+    return False
 
 
 def check_contacts(events: list[dict], frames: list[dict], keepers: set[str], problems: Problems) -> None:
