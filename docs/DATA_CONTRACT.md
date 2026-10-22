@@ -34,7 +34,8 @@ render parameters) and `images/`, and is checked the same way: `uv run ninety-va
 
 **A player down (renderer 0.5.10 on).** While a fouled player is drawn lying over his feet, his
 player row in `frames.jsonl` carries `fall`, the degrees his body is over (0 to 90); a standing
-player's row has no `fall`. The field is optional and additive: positions, ball and events are
+player's row has no `fall`. Those degrees are the engine's `fall`: the renderer draws that
+angle and does not time the fall. The field is optional and additive: positions, ball and events are
 unchanged, clips rendered before 0.5.10 have none and stay valid, and the render check judges a
 row with `fall` by its ground point inside the box rather than at its bottom (GROUNDING V6).
 

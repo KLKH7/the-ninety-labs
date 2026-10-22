@@ -38,7 +38,8 @@
           "bbox": { "$ref": "#/$defs/bbox" },
           "visibility": { "$ref": "#/$defs/visibility" },
           "pixels": { "type": "integer", "minimum": 0 },
-          "fall": { "type": "number", "minimum": 0, "maximum": 90, "description": "Rendered frames, optional (renderer 0.5.10 on): degrees the drawn body lies over its feet while a fouled player is down; absent when he stands. render-check then needs his ground point inside his box rather than at its bottom." },
+          "fall": { "type": "number", "minimum": 0, "maximum": 90, "description": "Degrees the body is over its feet while a fouled player is down. The engine writes it; the rendered row copies it. Absent when he stands. x and y stay his feet. render-check then needs his ground point inside his box rather than at its bottom." },
+          "fall_dir": { "type": "number", "description": "Radians, the same convention as heading: the way his head goes, from the fouler to him at the contact. Present while fall is." },
           "foot_px": { "$ref": "#/$defs/point_or_null", "description": "(x, y, 0) projected through the camera." }
         }
       }

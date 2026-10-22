@@ -1,6 +1,6 @@
-"""A foul made legible on screen (lesson 173): the fouled player goes down and gets up before the
-restart, and the fouler's leg goes out at the contact. Drawn from the engine's foul event only: no
-position, action or event changes. The bounds below were written before the animation was built.
+"""A foul made legible on screen (lesson 173): the body lies at the engine's fall and fall_dir, and
+the fouler's leg goes out at the contact. The renderer does not time the fall. The bounds below
+were written before the animation was built.
 """
 
 import copy
@@ -35,28 +35,22 @@ def _frames(n=R + 60):
     return out
 
 
-def test_the_fouled_player_goes_down_and_is_up_before_the_restart():
-    """Down past 70 degrees within 0.6 s of the foul, falling without ever rising on the way down,
-    and standing again at least 1 s before the free kick; no fall outside that."""
-    events, frames = _events(), _frames()
-    sched = fouls.schedule(events, frames, FPS)
-    a7 = sched["a7"]
-    angle = {f: v["angle"] for f, v in a7.items()}
-    assert angle.get(F - 1, 0.0) == 0.0
-    assert max(angle.get(f, 0.0) for f in range(F, F + int(0.6 * FPS) + 1)) >= math.radians(70)
-    down = [angle.get(f, 0.0) for f in range(F, F + int(0.6 * FPS) + 1)]
-    peak = down.index(max(down))
-    assert all(b >= a - 1e-9 for a, b in zip(down[:peak], down[1:peak + 1], strict=False))
-    assert all(angle.get(f, 0.0) == 0.0 for f in range(R - FPS, R + 60))
-    assert "h5" not in sched  # the fouler does not fall
-
-
-def test_the_fall_is_drawn_from_the_events_without_touching_them():
-    """The schedule reads the engine's foul and restart; frames and events are left as they were."""
-    events, frames = _events(), _frames()
-    before = (copy.deepcopy(events), copy.deepcopy(frames))
-    fouls.schedule(events, frames, FPS)
-    assert (events, frames) == before
+def test_the_picture_uses_the_engines_fall_and_invents_none():
+    """Down by the degrees and the direction on the frame. A frame with no fall, or a fall of 0,
+    is standing, and reading it does not change the player."""
+    player = {"id": "a7", "x": 40.0, "y": 30.0, "action": "stand"}
+    before = copy.deepcopy(player)
+    assert fouls.drawn_fall(player) == (0.0, 0.0)
+    assert player == before
+    angle, direction = fouls.drawn_fall({**player, "fall": 85.0, "fall_dir": 0.4})
+    assert angle == math.radians(85.0)
+    assert direction == 0.4
+    assert fouls.drawn_fall({**player, "fall": 0.0, "fall_dir": 0.4}) == (0.0, 0.0)
+    g = Gait()
+    fouls.apply_fall(g, {**player, "fall": 85.0, "fall_dir": 0.4})
+    assert g.fall == math.radians(85.0) and g.fall_dir == 0.4
+    fouls.apply_fall(g, player)
+    assert g.fall == 0.0 and g.fall_dir == 0.0
 
 
 def _lying_gait(angle, direction):
@@ -70,7 +64,8 @@ def test_a_fallen_players_body_lies_on_the_grass():
     """At the full fall the label capsules lie down: every capsule point below 0.7 m, and the body
     stretched at least 1.2 m along the fall's direction from his feet."""
     look = Look(id="a7", team="away", role="CM", height_m=1.84, build=1.0, skin="#a0785a", hair="#2b1d14")
-    g = _lying_gait(math.radians(85), 0.0)  # pushed east
+    angle, direction = fouls.drawn_fall({"id": "a7", "fall": 85.0, "fall_dir": 0.0})
+    g = _lying_gait(angle, direction)  # pushed east, the engine's 85 degrees
     parts = body_parts(40.0, 30.0, look, g)
     pts = [p for part in parts for p in ([part["a"], part["b"]] if "b" in part else [part["a"]])]
     assert max(p[2] for p in pts) < 0.7, max(p[2] for p in pts)
@@ -79,8 +74,9 @@ def test_a_fallen_players_body_lies_on_the_grass():
 
 def test_the_page_twin_lies_down_with_the_labels():
     """The mesh twin (meshpose) puts the head on the grass with the labels: head marker below 0.6 m."""
+    angle, direction = fouls.drawn_fall({"fall": 85.0, "fall_dir": 0.0})
     pose = {"action": "stand", "phase": 0.0, "speed": 0.0, "reach": 0.0, "dive": 0.0, "x": 40.0, "y": 30.0,
-            "fall": math.radians(85), "fall_dir": 0.0}
+            "fall": angle, "fall_dir": direction}
     head = pose_markers(pose, math.pi, 1.84)["head"]
     assert head[2] < 0.6, head
     assert head[0] - 40.0 > 1.0, head  # fallen toward the east, the way he was pushed

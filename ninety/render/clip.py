@@ -291,7 +291,6 @@ def render_clip(
         director = Director(p.camera, p.width, p.height, p.fps, seed, cuts=p.camera_cut)
         gaits = {lk.id: Gait() for lk in looks}
         touches = contacts(frames, match.events)
-        falls = fouls.schedule(match.events, frames, FPS)  # a fouled player down and up (lesson 173)
         held = holds(frames)
         thrown = throws(frames, FPS)
         prev_xy: dict[str, tuple[float, float]] = {}
@@ -323,8 +322,7 @@ def render_clip(
                 touch_at(g, touches.get(pl["id"], []), fi, h, FPS, pl["x"], pl["y"])
                 hold_at(g, held.get(pl["id"], []), fi, ball, h, FPS)
                 throw_at(g, thrown.get(pl["id"], []), fi, h, FPS, pl["x"], pl["y"])
-                down = falls.get(pl["id"], {}).get(fr["frame"])
-                g.fall, g.fall_dir = (down["angle"], down["dir"]) if down else (0.0, 0.0)
+                fouls.apply_fall(g, pl)  # the engine's fall and fall_dir (lesson 173)
             actors = [(pl["x"], pl["y"], pl.get("action", "")) for pl in fr["players"]]
             # The snapshot of a goal already has the ball on the centre spot. The event
             # carries the mouth it crossed, and the frame before it carries the pace.
