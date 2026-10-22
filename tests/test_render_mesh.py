@@ -212,6 +212,9 @@ def test_the_page_turns_steps_and_touches_like_the_python_pose(page):
          "plant_r": [40.05, 29.9, 0.4, 0.0]},
         {**base, "action": "walk", "phase": 3.6, "speed": 3.4, "lift": 0.02, "lean": -0.12, "pump": 1.0},
         {**base, "action": "stand", "speed": 0.1, "lean": 0.4},
+        # A keeper's dive part way (from standing), and getting up from one into a walk (dive_up).
+        {**base, "action": "dive", "dive": -0.4},
+        {**base, "action": "walk", "phase": 2.6, "speed": 1.2, "dive_up": 0.55},
     ]
     for i, pose in enumerate(poses):
         heading = 0.4
