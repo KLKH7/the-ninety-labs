@@ -1,8 +1,11 @@
 """The pitch-position scorer (ninety/eval/pitch_score.py) on frames built here."""
 
+import math
+
 import pytest
 
 from ninety.eval.pitch_score import score
+from ninety.eval.vision_score import IN_AIR_Z
 
 
 def truth(frame, px, py, bx, bz=0.1):
@@ -43,3 +46,12 @@ def test_a_ball_in_the_air_is_reported_apart():
 def test_an_observed_frame_missing_from_the_truth_is_refused():
     with pytest.raises(ValueError, match="not in the truth"):
         score([truth(0, 50.0, 20.0, 60.0)], [obs(5)])
+
+
+@pytest.mark.parametrize(("z", "group"), [(IN_AIR_Z, "ball_on_ground"),
+                                          (math.nextafter(IN_AIR_Z, math.inf), "ball_in_the_air")])
+def test_the_ball_is_in_the_air_only_strictly_above_the_shared_cut_off(z, group):
+    # The vision scorers' boundary (EVALUATION.md, lesson 188): exactly the cut-off is on the ground.
+    r = score([truth(0, 50.0, 20.0, 60.0, bz=z)], [obs(0)])
+    other = "ball_in_the_air" if group == "ball_on_ground" else "ball_on_ground"
+    assert r[group]["n"] == 1 and r[other]["n"] == 0
