@@ -1813,3 +1813,21 @@ short and actionable. This file is public: no research sources, product names or
   `::test_each_corner_has_its_own_shot_and_the_ball_stays_in_it` and
   `::test_the_corner_shot_holds_until_the_kick`; the framing bar is raw.
 
+
+### 187. A shot built to pass a framing metric can still be dead air to a viewer
+- **What happened:** the restart close-up (#198, lesson 175) passed every framing test: the ball
+  central, the pitch filling the picture after the ease out. On demo v1, a blind critic watching as a
+  viewer found it the worst part of the edit. For 4.4 s before each restart, one player stood still
+  beside the ball, then the camera pulled out. After the goal, a fixed low shot beside the net showed
+  the keeper fetching the ball, never the scorer. The clock also jumped at every cut with nothing on
+  screen to explain it. Each shot met its rule, and the sequence was dead air.
+- **Rule:** an edit or camera rule is judged on what a viewer sees across the cut, not only on the
+  framing of each frame:
+  - who is in the shot (the scorer, not the keeper);
+  - whether anything moves;
+  - whether a jump in time is marked (a stinger).
+
+  A rule's bounds come from the critic's complaint and are written as tests before the change.
+- **Check:** `uv run pytest tests/test_render_edit.py tests/test_render_camera.py -k "imminent or
+  celebration or stinger or opens_on_the_wide or scorer"`. Each test fails on 0.5.9, the version
+  before demo v2.

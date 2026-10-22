@@ -242,6 +242,15 @@ def render_clip(
 
     goals = [e for e in match.events if e["type"] == "goal"]
     goal_at = {e["frame"]: e for e in goals}
+    # Who scored, from each goal to the restart after it: the camera follows his celebration.
+    restarts = sorted(e["frame"] for e in match.events if e["type"] in edit.RESTARTS)
+    celebrating: dict[int, str] = {}
+    for g in goals:
+        if g.get("player"):
+            until = next((f for f in restarts if f > g["frame"]), len(frames))
+            celebrating.update(dict.fromkeys(range(g["frame"], until), g["player"]))
+    # The stinger over each edit cut: picture index -> its progress (edit.stingers).
+    stinger_at = edit.stingers(show, FPS) if made else {}
     corners = corner_waits(match.events)  # a corner waiting to be taken, framed for it (camera.py)
     t0, t1 = frames[show[0]]["t"], frames[show[-1]]["t"]
     clip = {
@@ -257,6 +266,9 @@ def render_clip(
         # a segment is match frame `frame` + (i - `index`) (edit.py, docs/DATA_CONTRACT.md).
         "cuts": [c.as_dict() for c in made],
         "segments": [s.as_dict() for s in edit.segments(show)],
+        # Picture indices a stinger graphic covers (in part), as the scorebug, an occluder that the
+        # visibility labels count (web/render).
+        "stinger_frames": sorted(stinger_at),
         "renderer": {
             "version": RENDERER_VERSION,
             "three": _three_version(),
@@ -323,8 +335,10 @@ def render_clip(
                 speed = math.hypot(prevb["vx"], prevb["vy"], prevb.get("vz", 0.0))
                 goal_arg = (side, ev["y"], z, speed)
             cut_in = None if left is None else left / FPS
+            who = celebrating.get(fr["frame"])
+            scorer = next(((q["x"], q["y"]) for q in fr["players"] if q["id"] == who), None)
             cam = director.step(ball[0], ball[1], actors, goal_arg, cut_in, ball_z=ball[2],
-                                corner=corners.get(fr["frame"]))
+                                corner=corners.get(fr["frame"]), scorer=scorer)
             blur = blur_vector(prev_cam, cam, p.motion_blur)
             prev_cam = cam
             bvx, bvy = fr["ball"].get("vx", 0.0), fr["ball"].get("vy", 0.0)
@@ -392,6 +406,7 @@ def render_clip(
                     "goal_age": round(fr["t"] - last["t"], 3) if last else None,
                     "goal_side": 0 if last and last["team"] == "home" else (1 if last else None),
                     "net": director.net_view(),
+                    "stinger": stinger_at.get(index),
                     "want_image": write_images,
                 },
             )
