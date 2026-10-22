@@ -266,7 +266,9 @@ the circle all wait (now: the long way round, or out by the way to his place). N
 Laws' distance at the kick.
 
 Every restart wait in 20 matches, each outfielder but the taker, from the stoppage to the kick, by
-[`scripts/defect_sweep/restart_moves.py`](../../scripts/defect_sweep/restart_moves.py):
+[`scripts/defect_sweep/restart_moves.py`](../../scripts/defect_sweep/restart_moves.py). This branch's
+matches are `ba23065`'s; the head adds only `971de55`'s guard against a crash near a line, and
+replays them unchanged (seeds 7 and 112, byte for byte):
 
 | Per outfielder-minute of restart waits | Main (`807bde2`) | First floor (`e3e66d1`) | Third audit (`b090877`) | This branch (`ba23065`) |
 |---|---:|---:|---:|---:|
