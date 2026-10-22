@@ -30,6 +30,7 @@ from ninety.render import RENDERER_VERSION, edit, fouls
 from ninety.render.camera import Camera, Director, blur_vector, corner_waits
 from ninety.render.params import RenderParams, sample_params
 from ninety.render.scene import (
+    ACCEL_BOX,
     LEAD_AHEAD_FRAMES,
     Gait,
     advance_gaits,
@@ -314,7 +315,8 @@ def render_clip(
                 prev_cam = None  # a new shot: nothing streaks across the cut
                 reopen = False
             fr = frames[fi]
-            advance_gaits(gaits, prev_xy, fr, 1 / FPS, frames[min(fi + LEAD_AHEAD_FRAMES, len(frames) - 1)])
+            advance_gaits(gaits, prev_xy, fr, 1 / FPS, frames[min(fi + LEAD_AHEAD_FRAMES, len(frames) - 1)],
+                          frames[fi + 1:fi + 1 + ACCEL_BOX])
             ball = drawn_ball(fr)
             for pl in fr["players"]:
                 g, h = gaits[pl["id"]], by_id[pl["id"]].height_m
