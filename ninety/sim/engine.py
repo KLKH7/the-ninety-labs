@@ -15,6 +15,7 @@ that the world is then arranged to match. Every limit cites its source in docs/G
 
 from __future__ import annotations
 
+import dataclasses
 import itertools
 import math
 from dataclasses import asdict, dataclass, field
@@ -185,6 +186,14 @@ THROW_SETTLED_MPS = BRAKE_MAX * DT  # a taker takes it once one frame of braking
 CLOSING_MPS = BRAKE_MAX * DT
 THROW_REACH_M = 0.28  # design: both hands reach toward the pitch and still stay short of the line
 THROW_HAND_Z = 1.85  # design: bottom of the ball just over an average head (no stature per player)
+# Law 12: a keeper who has the ball in his hands releases it within six seconds, and nobody may
+# challenge him for it while he holds it. He holds it at his chest (design) and lets it go by
+# KEEPER_RELEASE_S, a second inside the limit (design).
+KEEPER_HOLD_S = 6.0
+KEEPER_RELEASE_S = KEEPER_HOLD_S - 1.0
+KEEPER_HOLD_Z = 1.1  # design: the ball at an average chest
+KEEPER_HOLD_AHEAD_M = 0.3  # design: held out in front of his body
+KEEPER_THROW_M = 30.0  # design, verify: the furthest a keeper throws; beyond it he kicks from his hands
 
 # 4-3-3 anchors for a team attacking toward x=105, as (x, y) fractions of the pitch.
 FORMATION = [
@@ -561,6 +570,8 @@ class Engine:
         # Laws 8, 13 to 17: who took the last restart, until another player has touched the ball
         self.restart_kicker: str | None = None
         self.throw_by: str | None = None  # a throw-in taker holding the ball until he throws it
+        self.held_by: str | None = None  # Law 12: a keeper with the ball in his hands
+        self.held_since = 0.0
         self.throw_ready = 0.0
         self.into_play = False  # released from behind the line; not a new out until it enters or falls away
         self.throw_from: tuple[float, float] | None = None  # where the last throw-in was taken
@@ -656,6 +667,8 @@ class Engine:
         return offball.reach_for(True, at - start, z, at - self.rise_from(p))
 
     def give(self, pid: str) -> None:
+        if pid != self.held_by:
+            self.held_by = None
         if pid != self.restart_kicker:
             self.restart_kicker = None
         if self.team_of(pid) != self.poss_team:
@@ -795,7 +808,7 @@ class Engine:
     def can_strike(self, carrier: Player, tx: float, ty: float) -> bool:
         """P16: can he strike it toward (tx, ty) now? The rule the passer's estimate uses too
         (decisions.can_strike)."""
-        if self.throw_by == carrier.id:  # Law 15: in his hands over his head, thrown at once
+        if carrier.id in (self.throw_by, self.held_by):  # in his hands, thrown or dropped at once
             return True
         bx, by = self.ball[0], self.ball[1]
         if not decisions.can_strike(bx - carrier.x, by - carrier.y, carrier.heading, tx - bx, ty - by):
@@ -828,6 +841,7 @@ class Engine:
         self.set_by = None  # Laws 13, 16, 17: in play once it is kicked and clearly moves
         self.offside = set() if exempt else self.offside_positions(carrier)
         self.throw_by = None  # a throw-in ends when the ball is thrown
+        self.held_by = None  # and a keeper's hold when he lets it go
         self.dribbler = None
         self.possessor = None
         self.last_touch = carrier.id
@@ -906,13 +920,19 @@ class Engine:
         self.kick(carrier, vx, vy, vz)
 
     def pass_to(self, carrier: Player, tx: float, ty: float, lofted: bool, throw: bool = False,
-                pace: float = decisions.ARRIVE_MPS, receiver: str | None = None) -> None:
+                pace: float = decisions.ARRIVE_MPS, receiver: str | None = None,
+                hands: bool = False) -> None:
         """Kick toward a point the carrier chose (where he believes a team-mate will be, or space),
-        meant for `receiver` if he chose one."""
+        meant for `receiver` if he chose one. `throw` is a throw-in (Law 15); `hands` a keeper's
+        throw from his hands (Law 12)."""
         if not self.can_strike(carrier, tx, ty):
             self.turn_to(carrier, tx, ty,
-                         lambda: self.pass_to(carrier, tx, ty, lofted, throw, pace, receiver))
+                         lambda: self.pass_to(carrier, tx, ty, lofted, throw, pace, receiver, hands))
             return
+        if self.held_by == carrier.id and not hands:
+            # A kick from his hands: he drops it and strikes it as it meets the ground (a drop kick),
+            # so it leaves from the grass as the passer's estimate flies it (decisions.fly).
+            self.ball = (self.ball[0], self.ball[1], 0.0, 0.0, 0.0, 0.0)
         bx, by = self.ball[0], self.ball[1]
         dist = math.hypot(tx - bx, ty - by)
         # Struck as the decision estimated it (decisions.py); execution error is added on top.
@@ -921,7 +941,7 @@ class Engine:
         else:
             ground, up = decisions.launch_speed(dist, pace), 0.0
         skill = decisions.pass_skill(bx, tx, ty, lofted or throw, goal_x(carrier.team))
-        vx, vy, vz = self.execute(carrier, *self.aim(bx, by, tx, ty, ground, up), skill, hands=throw)
+        vx, vy, vz = self.execute(carrier, *self.aim(bx, by, tx, ty, ground, up), skill, hands=throw or hands)
         # Receiver, interceptor or deflector, end point and outcome are filled in when someone takes
         # the ball or it goes out; only the intended team-mate is known at the kick.
         self.pass_target = (tx, ty)
@@ -931,6 +951,36 @@ class Engine:
         self.kick(carrier, vx, vy, vz)
         self.into_play = throw  # released from behind the line: not a new out while it comes in
         self.intended = receiver  # he expects it
+
+    def release(self, carrier: Player, scene: decisions.Scene) -> None:
+        """A keeper lets the ball go from his hands (Law 12): thrown to a team-mate within
+        KEEPER_THROW_M, kicked from his hands, or put down to play with his feet, whichever the
+        passer's own estimate values most (D1; put down, it is worth the best he could do from his
+        feet). A throw or a kick is struck at once, as a throw-in is (no turn:
+        decisions.Scene.from_hands). With no option at all he looks again, until KEEPER_RELEASE_S:
+        then he kicks it long up the middle."""
+        thrown = dataclasses.replace(scene, throw=True, mates=[
+            m for m in scene.mates if math.hypot(m[1] - scene.x, m[2] - scene.y) <= KEEPER_THROW_M])
+        kicked = dataclasses.replace(scene, from_hands=True, mates=[
+            m for m in scene.mates if math.hypot(m[1] - scene.x, m[2] - scene.y) > KEEPER_THROW_M])
+        options = [(o, True) for o in decisions.options(thrown) if o.kind == "pass"]
+        options += [(o, False) for o in decisions.options(kicked) if o.kind in ("pass", "clear") and o.lofted]
+        best = max(options, key=lambda c: c[0].value, default=None)
+        feet = max(decisions.options(scene), key=lambda o: o.value, default=None)
+        if feet and (best is None or feet.value > best[0].value):
+            # Put down, it is in play at his feet: released, he may not handle it again until
+            # another player has touched it (Law 12, L13), and it settles to his feet (P6).
+            self.held_by = None
+            self.released_by = carrier.id
+            self.hold_until = self.t + settle_s(carrier.profile["first_touch"])
+            return
+        if best:
+            o, throw = best
+            self.pass_to(carrier, *o.target, lofted=True, pace=o.pace, receiver=o.receiver, hands=throw)
+        elif self.t - self.held_since >= KEEPER_RELEASE_S:
+            self.pass_to(carrier, PITCH_X / 2 + attack_dir(carrier.team) * 10.0, PITCH_Y / 2, lofted=True)
+        else:
+            self.hold_until = self.t + 0.5  # he looks again
 
     def scene_for(self, carrier: Player) -> decisions.Scene:
         """The carrier's picture of the game, built only from what he believes."""
@@ -978,9 +1028,12 @@ class Engine:
                                 loss_weight=style.loss_weight())
         return scene
 
-    def decide(self, carrier: Player, throw: bool = False) -> None:
+    def decide(self, carrier: Player, throw: bool = False, hands: bool = False) -> None:
         """The carrier chooses from what he believes (ninety/sim/decisions.py)."""
         scene = self.scene_for(carrier)
+        if hands:  # Law 12: from his hands he throws it or kicks it, never dribbles or holds past six seconds
+            self.release(carrier, scene)
+            return
         if throw:  # Law 15: a throw goes to a team-mate, not at goal, and is never dribbled
             scene.throw = True
             scene.mates = [m for m in scene.mates if math.hypot(m[1] - scene.x, m[2] - scene.y) <= 25]
@@ -1259,6 +1312,8 @@ class Engine:
             if p.team != self.poss_team:
                 self.emit("possession_change", p.team, cx, cy, player=p.id)
             self.give(p.id)
+            if kind == "touch" and hands and self.held_by != p.id:  # Law 12: caught, in his hands
+                self.held_by, self.held_since = p.id, self.t
             return
         left = (1.0 - s) * dt
         if sent is not None:  # a heavy touch: free until he is back on it (D6), the race decides
@@ -1980,6 +2035,7 @@ class Engine:
                   **({} if r.kind == "kick_off" else {"outcome": None}))
         if r.team != self.poss_team:
             self.emit("possession_change", r.team, taker.x, taker.y, player=taker.id)
+        self.held_by = None  # a restart is taken as its Law says, never from a keeper's hold
         self.give(taker.id)
         # With the ball in his hands he sets and throws (design: a longer hold reads as a freeze).
         pause = (0.2, 0.45) if r.kind == "throw_in" else (0.5, 1.5)
@@ -2734,6 +2790,25 @@ class Engine:
     def tick_carrier(self) -> None:
         carrier = self.by_id[self.possessor]
         self.moved = carrier.id
+        if self.held_by == carrier.id:  # Law 12: in his hands until he throws or kicks it
+            steer(carrier, carrier.x, carrier.y, 0.0)  # he stops, braking within his body (P2)
+            up = 0.0 if attack_dir(carrier.team) > 0 else math.pi
+            carrier.heading = turn_toward(carrier.heading, up)  # to face up the pitch (P16: no jump)
+            # The ball comes up into his hands at his chest, in front of him, no faster than a carried
+            # ball settles (P6), and moves with him.
+            bx, by, bz = self.ball[:3]
+            hx = carrier.x + fmath.cos(carrier.heading) * KEEPER_HOLD_AHEAD_M
+            hy = carrier.y + fmath.sin(carrier.heading) * KEEPER_HOLD_AHEAD_M
+            d = math.dist((bx, by, bz), (hx, hy, KEEPER_HOLD_Z))
+            k = 1.0 if d <= BALL_TO_FEET * DT else BALL_TO_FEET * DT / d
+            nx, ny, nz = bx + (hx - bx) * k, by + (hy - by) * k, bz + (KEEPER_HOLD_Z - bz) * k
+            self.ball = (nx, ny, nz, (nx - bx) / DT, (ny - by) / DT, (nz - bz) / DT)
+            facing = fmath.cos(carrier.heading - up) >= fmath.cos(STRIKE_FACING)
+            late = self.t - self.held_since >= KEEPER_RELEASE_S
+            if (self.t >= self.hold_until and k == 1.0 and (facing or late)
+                    and (late or (self.frame + int(carrier.id[1:])) % DECIDE_EVERY == 0)):
+                self.decide(carrier, hands=True)
+            return
         if self.throw_by == carrier.id:  # Law 15: held behind the line and thrown, not dribbled
             steer(carrier, carrier.x, carrier.y, 0.0)  # standing still, braking within his body
             inward = 1.0 if carrier.y < PITCH_Y / 2 else -1.0

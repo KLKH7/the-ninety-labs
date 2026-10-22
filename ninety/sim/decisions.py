@@ -190,6 +190,9 @@ class Scene:
     absorb: dict[str, float]  # team-mates' first touch (A4), by id
     passer: Profile  # who he is, for his own kick error (A3)
     throw: bool = False  # Law 15: a throw-in, so every pass is thrown (lofted) and nothing else
+    # Law 12: a keeper with the ball in his hands drops it and kicks it at once, at whatever angle
+    # (engine.release, can_strike), as a throw-in leaves the hands: no turn first.
+    from_hands: bool = False
     set_piece: bool = False  # Laws 8, 13, 16, 17: a set ball, played away, never carried off
     # The team's style (T4): how much ground gained from here is worth, and how much losing the
     # ball costs, against the defaults. Both 1 for a mid style.
@@ -469,7 +472,7 @@ def strike_nodes(scene: Scene, tx: float, ty: float, lofted: bool, pace: float
     ground, up = loft_launch(dist) if lofted else (launch_speed(dist, pace), 0.0)
     speed = math.hypot(ground, up)
     dx, dy = tx - scene.x, ty - scene.y
-    turn, _ = strike_turn(scene.heading, dx, dy, scene.throw)
+    turn, _ = strike_turn(scene.heading, dx, dy, scene.throw or scene.from_hands)
     turn = 0.0 if scene.throw else turn  # thrown with both hands: no kicking side (engine.execute)
     cx, cy = scene.x - scene.ball_offset[0], scene.y - scene.ball_offset[1]
     nearest = min((math.hypot(o[0] - cx, o[1] - cy) for o in scene.moving), default=math.inf)
@@ -689,7 +692,7 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
     cx, cy = sx - scene.ball_offset[0], sy - scene.ball_offset[1]
     # P16: if he must turn before he can strike it, everyone else moves on meanwhile, each as the
     # passer believes him to be going (he holds the ball where it is while he turns).
-    _, wait = strike_turn(scene.heading, tx - sx, ty - sy, scene.throw)
+    _, wait = strike_turn(scene.heading, tx - sx, ty - sy, scene.throw or scene.from_hands)
     # Team-mates, the one it is meant for first, from where the passer sees him and expecting it:
     # (x, y, vx, vy, reaction, first touch).
     seen = {m[0]: m for m in scene.mates}
@@ -841,7 +844,7 @@ def clear_value(scene: Scene, tx: float, ty: float, contest: float) -> float:
     way and no error in where he sees them (*design*)."""
     sx, sy = scene.x, scene.y
     direction = fmath.atan2(ty - sy, tx - sx)
-    _, wait = strike_turn(scene.heading, tx - sx, ty - sy, scene.throw)
+    _, wait = strike_turn(scene.heading, tx - sx, ty - sy, scene.throw or scene.from_hands)
     react = perception.CHOICE_REACTION_S
     players = []
     for m in scene.mates:

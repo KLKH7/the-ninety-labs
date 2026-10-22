@@ -1936,3 +1936,19 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `uv run pytest tests/test_render_edit.py tests/test_render_camera.py -k "imminent or
   celebration or stinger or opens_on_the_wide or scorer"`. Each test fails on 0.5.9, the version
   before demo v2.
+
+### 188. A rule the renderer has to draw must be in the truth first
+- **What happened:** Kian saw that a keeper never seemed to hold the ball and throw or kick it.
+  The engine settled every caught ball to the keeper's feet, and he played it from there like an
+  outfielder, by a ground pass or a dribble. The renderer could only draw what the truth said: a
+  ball on the grass. Law 12 (six seconds in his hands, no challenge) was only half in the engine:
+  nobody challenged him, but nothing held the ball in his hands.
+- **Rule:** when footage looks wrong, check the engine's truth before the renderer. A caught ball
+  stays at the keeper's chest (L15). He lets it go within Law 12's six seconds: by a throw to a
+  team-mate in range, by a kick from his hands, or by putting it down to play with his feet. He
+  chooses by the same estimate as any pass. The rate of kicks from his hands is a held-out check
+  against a published count, never a target. Leaving the put-down out made him kick from his
+  hands 10.6 times a match against the 0.66 published: when a held-out number is far off, look for
+  an option the Laws allow that the engine lacks.
+- **Check:** `tests/test_keeper_hands.py`. Three of its four tests go red when a catch does not
+  put the ball in his hands; the held-out counts are in the pull request.

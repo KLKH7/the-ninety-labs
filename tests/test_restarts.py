@@ -1100,12 +1100,16 @@ def test_the_walk_to_the_wall_is_estimated_from_above():
     a test that had passed by 7 mm in its one scenario). These two scenarios pin the estimate's
     shape; it is not a strict bound. Over 60 walks it comes within about 1% of the walk: a walker
     still moving at the whistle, or stepping out past the circle as he goes round it, walks a little
-    further (lesson 176, scripts/defect_sweep/wall_walks.py)."""
+    further (lesson 176, scripts/defect_sweep/wall_walks.py), so here they start standing (lesson
+    188: once the minute of play before it changed, a wall player still walking at 1.7 m/s at the
+    whistle walked 20.26 m against 19.98 m)."""
     went_round = 0
     for seed, at in ((3, (PITCH_X - 22.0, 34.0)), (5, (87.0, 24.0))):
         e = wall_kick(seed, at)
         r = e.restart
         wall = dict(r.wall)
+        for pid in wall:  # the estimate is of a walk from standing: one still moving walks further
+            e.by_id[pid].vx = e.by_id[pid].vy = 0.0
         bend = e.avoid
         e.avoid = lambda p, bend=bend, wall=wall: (0.0, 0.0) if p.id in wall else bend(p)
         at_ = {pid: (e.by_id[pid].x, e.by_id[pid].y) for pid in wall}
@@ -1985,12 +1989,14 @@ def test_at_a_dead_ball_the_presser_goes_in_time_and_does_not_spring_about_his_p
     back and forth twice a second, 28 times through one wait (seed 114, the goal kick at 0:58). Until
     the ball is in play there is nobody to press: standing where the Laws let him, he goes to his
     place in time for the kick, as the cover does (from inside the distance he must keep, he still
-    leaves at his pressing pace: test_opponents_keep_out_of_the_penalty_area_at_a_goal_kick_...)."""
-    e = Engine(114)
+    leaves at his pressing pace: test_opponents_keep_out_of_the_penalty_area_at_a_goal_kick_...).
+    The scene is found by its premises alone (lesson 188: once keepers held what they caught, seed
+    114's play no longer came to that goal kick; seed 101's goal kick at 0:56 has them)."""
+    e = Engine(101)
     e.kickoff("home", setup=True)
-    while e.t < 74.0:
+    while e.t < 56.28 - 1e-9:
         e.step()
-    r, brain = e.restart, e.brains["home"]
+    r, brain = e.restart, e.brains["away"]  # home's goal kick: away presses
     assert r is not None and r.kind == "goal_kick" and brain.pressers  # premise: the goal kick waits
     p = e.by_id[brain.pressers[0]]
     tx, ty, top = e.shape_target(p)
@@ -1999,7 +2005,7 @@ def test_at_a_dead_ball_the_presser_goes_in_time_and_does_not_spring_about_his_p
              if q.team == p.team and q is not p and math.dist((q.x, q.y), (tx, ty)) < 0.7]
     assert crowd  # premise: a team-mate stands a hair from his place
     turns, history = 0, []
-    while e.t < 80.0 and e.restart is r:
+    while e.t < 62.28 and e.restart is r:
         e.step()
         history.append((p.vx, p.vy))
         if len(history) > 10:
