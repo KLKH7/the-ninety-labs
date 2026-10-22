@@ -260,3 +260,55 @@ def test_the_frame_index_holds_no_labels_and_detection_reads_only_it(tmp_path):
         (d / name).unlink()
     assert detect.frame_rows(d) == want
     assert detect.frame_rows(d, stride=2) == want[::2]
+
+
+class FakeModel:
+    """Stands in for rfdetr: writes a best checkpoint, then finishes or is stopped from outside."""
+
+    def __init__(self, stopped=False):
+        self.stopped = stopped
+
+    def train(self, output_dir, **kwargs):
+        (Path(output_dir) / train.BEST).write_bytes(b"best so far")
+        if self.stopped:
+            raise SystemExit(1)  # what pytorch_lightning does on SIGINT, after a graceful shutdown
+
+
+def run_training(tmp_path, monkeypatch, model):
+    coco_export.export([write_clip(tmp_path, s) for s in (1, 2)], tmp_path / "coco", val_seeds={2}, stride=1)
+    monkeypatch.setattr(train, "load", lambda init=None: model)
+    monkeypatch.setattr(train.importlib.metadata, "version", lambda name: "1.11.2")
+    out = tmp_path / "run"
+    train.main(["--data", str(tmp_path / "coco"), "--out", str(out), "--name", "ours-test"])
+    return out
+
+
+def test_a_finished_run_records_its_best_checkpoint(tmp_path, monkeypatch):
+    out = run_training(tmp_path, monkeypatch, FakeModel())
+    m = json.loads((out / "train-manifest.json").read_text())
+    assert m["finished"] and m["stopped"] is None
+    assert m["checkpoint_sha256"] == train.sha256(out / train.BEST)
+    with pytest.raises(ValueError, match="already complete"):
+        train.record_only(out, "time cap")
+
+
+def test_a_run_stopped_at_its_time_cap_is_recorded_with_the_reason(tmp_path, monkeypatch):
+    with pytest.raises(SystemExit):
+        run_training(tmp_path, monkeypatch, FakeModel(stopped=True))
+    out = tmp_path / "run"
+    m = json.loads((out / "train-manifest.json").read_text())
+    assert m["started"] and m["finished"] is None and m["checkpoint_sha256"] is None
+    with pytest.raises(ValueError, match="does not match"):  # an unrecorded run cannot seed another
+        train.init_from(out / train.BEST)
+    train.main(["--out", str(out), "--record-only", "time cap of 110 minutes"])
+    m = json.loads((out / "train-manifest.json").read_text())
+    assert m["stopped"] == "time cap of 110 minutes" and m["finished"]
+    assert m["checkpoint_sha256"] == train.sha256(out / train.BEST) and m["name"] == "ours-test"
+
+
+def test_record_only_needs_a_started_run_and_a_reason(tmp_path):
+    with pytest.raises(FileNotFoundError, match="never started"):
+        train.record_only(tmp_path, "time cap")
+    (tmp_path / "train-manifest.json").write_text(json.dumps({"name": "x", "finished": None}))
+    with pytest.raises(ValueError, match="reason"):
+        train.record_only(tmp_path, " ")

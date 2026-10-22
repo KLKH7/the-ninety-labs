@@ -230,3 +230,16 @@ def test_training_kit_draws_are_unchanged_by_the_broadcast_rule():
             p = sample_params(s) if c is None else sample_params(s, kit_contrast=c)
             h.update(json.dumps(p.to_dict(), sort_keys=True).encode())
     assert h.hexdigest() == "bc22123420fa763810b6a80c7135234538b9c2692e9157e2ebd4510a4d9fdd8c"
+
+
+def test_only_footage_asks_for_a_broadcast_stadium():
+    """No seed draws the broadcast stadium (crowd, hoardings, softer mowing): every training,
+    validation and test render is plain, and its clip.json records no stadium key, as before the
+    knob existed. Footage asks for it by name; anything else is refused."""
+    for seed in list(range(1, 60)) + [8001, 900001]:
+        p = sample_params(seed)
+        assert p.stadium == "plain"
+        assert "stadium" not in p.to_dict()
+    assert sample_params(8001, stadium="broadcast").to_dict()["stadium"] == "broadcast"
+    with pytest.raises(ValueError):
+        sample_params(8001, stadium="packed")
