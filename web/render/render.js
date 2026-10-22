@@ -1748,6 +1748,7 @@ class BroadcastRenderer {
     this.bug = new THREE.Mesh(new THREE.PlaneGeometry(maxW, maxH), new THREE.MeshBasicMaterial({ map: this.bugTex, transparent: true }));
     this.bug.position.set(x0 + maxW / 2, -(y0 + maxH / 2), 0);
     this.overlayScene.add(this.bug);
+    this.makeStinger();
     return { bugRect: this.bugRect, maxAnisotropy: this.renderer.capabilities.getMaxAnisotropy(), gl: this.renderer.getContext().getParameter(this.renderer.getContext().VERSION) };
   }
 
@@ -1787,6 +1788,58 @@ class BroadcastRenderer {
     }
   }
 
+  // The stinger: the broadcast's graphic over each edit cut (ninety/render/edit.py stingers), a slanted
+  // band that wipes left to right across the picture with the cut under it, as a broadcast covers the
+  // cut into and out of a replay. Like the scorebug it is an occluder for the labels.
+  makeStinger() {
+    const W = this.W, H = this.H;
+    this.stSlant = 0.35; // pixels across per pixel down
+    this.stHalf = Math.ceil(W / 2 + this.stSlant * H / 2) + 8; // covers the picture when centred
+    this.stAccent = Math.round(0.03 * W);
+    const band = (x0, x1) => {
+      const sh = new THREE.Shape();
+      const t = this.stSlant * H / 2;
+      sh.moveTo(x0 - t, 0); sh.lineTo(x1 - t, 0); sh.lineTo(x1 + t, -H); sh.lineTo(x0 + t, -H); sh.closePath();
+      return new THREE.ShapeGeometry(sh);
+    };
+    const flat = (c) => new THREE.MeshBasicMaterial({ color: c, depthTest: false });
+    this.stinger = new THREE.Group();
+    this.stinger.add(new THREE.Mesh(band(-this.stHalf, this.stHalf), flat(0x0d1b3e)));
+    this.stinger.add(new THREE.Mesh(band(this.stHalf, this.stHalf + this.stAccent), flat(0xe8ff3a)));
+    const cv = document.createElement('canvas');
+    cv.width = 1024; cv.height = 160;
+    const g = cv.getContext('2d');
+    g.fillStyle = '#ffffff';
+    g.font = '800 104px sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText('THE NINETY', 512, 84);
+    const mark = new THREE.Mesh(new THREE.PlaneGeometry(0.42 * W, 0.42 * W * 160 / 1024),
+      new THREE.MeshBasicMaterial({ map: canvasTexture(cv), transparent: true, depthTest: false }));
+    mark.position.set(0, -H / 2, 0);
+    this.stinger.add(mark);
+    this.stinger.visible = false;
+    this.overlayScene.add(this.stinger);
+  }
+
+  // Where the stinger is for progress p (-1 coming on, 0 over the cut, 1 gone), and the pixels it
+  // covers as a test (i, j) => bool, or null when there is none.
+  layoutStinger(p) {
+    if (p == null) {
+      this.stinger.visible = false;
+      return null;
+    }
+    const W = this.W, H = this.H;
+    const c = W / 2 + p * (W / 2 + this.stHalf + this.stAccent + this.stSlant * H / 2);
+    this.stinger.visible = true;
+    this.stinger.position.set(c, 0, 0);
+    const lo = -this.stHalf, hi = this.stHalf + this.stAccent, k = this.stSlant;
+    return (i, j) => {
+      const u = i + 0.5 - c - k * (j + 0.5 - H / 2);
+      return u >= lo && u <= hi;
+    };
+  }
+
   goalOpen(age) {
     if (age == null || age < 0) return 0;
     const ease = (t) => 1 - (1 - Math.min(1, Math.max(0, t))) ** 3;
@@ -1823,11 +1876,12 @@ class BroadcastRenderer {
       g.beginPath();
       g.rect(0, 0, goalW, 40);
       g.clip();
-      g.globalAlpha = Math.min(1, open * 1.4);
+      // The word comes up once its panel is open, never half under the score (demo v1's critic, #19).
+      g.globalAlpha = Math.min(1, Math.max(0, (open - 0.85) / 0.15));
       g.fillStyle = '#161616';
       g.font = '700 15px sans-serif';
       g.textBaseline = 'middle';
-      g.fillText('GOAL', 16 + (1 - open) * 18, 20);
+      g.fillText('GOAL', 16, 20);
       g.restore();
     }
     const plateX = goalW;
@@ -1916,7 +1970,9 @@ class BroadcastRenderer {
     const R = this.renderer;
     const W = this.W, H = this.H;
     const [bx0, by0, bx1, by1] = this.bugRect;
-    const underBug = (i, j) => i >= bx0 && i < bx1 && j >= by0 && j < by1;
+    const onBug = (i, j) => i >= bx0 && i < bx1 && j >= by0 && j < by1;
+    const onStinger = this.layoutStinger(spec.stinger);
+    const underBug = onStinger ? (i, j) => onBug(i, j) || onStinger(i, j) : onBug;
 
     // 1. solo passes: the full in-image silhouette of each labelled object
     const objects = {};
