@@ -2751,11 +2751,14 @@ class Engine:
         if d < SET_BALL_CLEAR_M:  # his place is on it: moved out to the edge, as a stand-off place is
             # (held there, a centre-back whose place was by a free kick near his box crept onto it)
             ux, uy = ((tx - bx) / d, (ty - by) / d) if d > 1e-6 else ((p.x - bx), (p.y - by))
-            u = math.hypot(ux, uy) or 1.0
-            tx, ty = bx + ux / u * out, by + uy / u * out
+            u = math.hypot(ux, uy)
+            ux, uy = (ux / u, uy / u) if u > 1e-9 else (-attack_dir(p.team), 0.0)  # on it, standing on it
+            tx, ty = bx + ux * out, by + uy * out
         if segment_distance(bx, by, p.x, p.y, tx, ty) >= SET_BALL_CLEAR_M:
             return tx, ty
         d = math.hypot(tx - p.x, ty - p.y)
+        if d < 1e-9:
+            return tx, ty
         nx, ny = -(ty - p.y) / d, (tx - p.x) / d  # across his way
         side = (bx - p.x) * nx + (by - p.y) * ny  # where the ball lies across it
         k = -out * (1.0 if side >= 0.0 else -1.0)

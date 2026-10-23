@@ -2123,6 +2123,15 @@ def test_the_way_round_a_set_ball_is_a_stride_beyond_the_takers_clearance_and_on
     p = e.by_id["h7"]
     p.x, p.y = walker.x, walker.y
     assert e.round_the_ball(p, *target) == target  # the fetcher
+    e.restart.fetcher, e.restart.carried_by = None, "h8"
+    p = e.by_id["h8"]
+    p.x, p.y = walker.x, walker.y
+    assert e.round_the_ball(p, *target) == target  # the one carrying it
+    e.restart.carried_by, e.restart.passed_by = None, "h8"
+    assert e.round_the_ball(p, *target) == target  # the one who knocked it on to the spot
+    e.restart.passed_by = None
+    walker.x, walker.y = spot  # standing on it, his place on it: out the way his side defends
+    assert math.dist(e.round_the_ball(walker, *spot), spot) == pytest.approx(0.97, abs=0.005)
     walker.x, walker.y = spot[0] + 3.0, spot[1]
     on_it = e.round_the_ball(walker, spot[0] + 0.3, spot[1])  # his place is on the ball
     assert on_it == pytest.approx((spot[0] + 0.97, spot[1]))  # moved out to the same edge
