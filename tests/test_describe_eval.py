@@ -16,15 +16,20 @@ def test_coverage_counts_only_confident_graphic_events_and_never_exceeds_them():
         assert m["spoken_s"] <= m["span_s"]
 
 
-def test_an_unsure_event_is_not_counted_as_one_to_cover(tmp_path, monkeypatch):
+def test_an_unsure_event_is_not_counted_as_one_to_cover(tmp_path):
     import json
 
-    from ninety.match import detected
-
-    rows = [json.loads(line) for line in describe_eval.CLIPS["seed900001 (hand-written stand-in)"]
+    rows = [json.loads(line) for line in describe_eval.CLIPS["seed900001 (hand-written stand-in, whole file)"]
             .read_text().splitlines()]
     path = tmp_path / "detected-standin-seed900001.jsonl"
     path.write_text("".join(json.dumps({**r, "confidence": 0.1}) + "\n" for r in rows))
-    monkeypatch.setattr(detected, "FIXTURES", tmp_path)
     m = describe_eval.measure(path)
     assert m["confident"] == 0 and m["covered"] == 0
+
+
+def test_on_the_pixel_clip_a_verified_insight_covers_its_event_and_false_detections_are_told_apart():
+    m = describe_eval.measure(describe_eval.CLIPS["seed900001 (detected from the pixels)"])
+    real = describe_eval.real_detections()
+    assert real == {"v00001", "v00002", "v00005"}  # the event report's matches on 900001
+    assert "v00003" in m["covered_ids"]  # the insight's event, said inside the verified claim
+    assert "v00003" not in real  # and it is the shot read as a pass: a false detection

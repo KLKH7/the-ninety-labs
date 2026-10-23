@@ -23,12 +23,14 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import math
 import sys
 import warnings
 from collections import Counter
 from pathlib import Path
 
+from ninety.agents.cues import TEMPLATE_TYPES as GRAPHIC_TYPES
 from ninety.agents.factcheck import MIN_CONFIDENCE
 from ninety.match import detected
 from ninety.speech import describe
@@ -39,9 +41,13 @@ REPORT = ROOT / "docs" / "eval" / "describe.md"
 # stand-in for the same clip (named as one).
 CLIPS = {
     "seed900001 (detected from the pixels)": detected.FIXTURES / "detected-seed900001.jsonl",
-    "seed900001 (hand-written stand-in)": detected.FIXTURES / "detected-standin-seed900001.jsonl",
+    # The whole stand-in file (0 to 101.5 s), not windowed to the clip as ninety-e2e would.
+    "seed900001 (hand-written stand-in, whole file)": detected.FIXTURES / "detected-standin-seed900001.jsonl",
 }
-GRAPHIC_TYPES = ("pass", "shot", "goal")
+# Which detected events on the M1 clip are real: those the committed event report matched to the
+# answer key (grading is its allowed use). The others are false detections (v00003, the shot read as
+# a pass; v00004, an out of play), and a line about one describes something that did not happen.
+EVENT_REPORT = ROOT / "docs" / "eval" / "event-report-v2.json"
 MIN_FOR_P95 = 20  # nearest rank: below 20 values a p95 is the maximum
 
 
@@ -56,6 +62,14 @@ async def _cues(events: list[dict], clip: str) -> list[dict]:
         warnings.simplefilter("ignore")
         cues, _, _ = await e2e.explain_and_render(events, clip, False, None)
     return cues
+
+
+def real_detections(seed: int = 900001) -> set[str] | None:
+    """The detected event ids the committed event report matched to a true event, or None when the
+    report has no such clip."""
+    report = json.loads(EVENT_REPORT.read_text())
+    clip = next((c for c in report["clips"] if c["seed"] == seed), None)
+    return None if clip is None else {p["detected_id"] for p in clip["events"]["time_only"]["pairs"]}
 
 
 def measure(path: Path) -> dict:
@@ -75,6 +89,8 @@ def measure(path: Path) -> dict:
         "events": len(events),
         "confident": len(confident),
         "covered": sum(e["id"] in covered for e in confident),
+        "covered_ids": sorted(e["id"] for e in confident if e["id"] in covered),
+        "confident_ids": sorted(e["id"] for e in confident),
         "lines": len(track.said),
         "short": sum(s.short for s in track.said),
         "dropped": len(track.dropped),
@@ -98,9 +114,9 @@ def report() -> str:
         "is the seconds spoken over the time from the first event to the end of the last event or line. "
         "Small numbers: each clip is one fixture.",
         "",
-        "| Clip | Confident graphic events covered | Lines said (short form) | Dropped | Refused "
-        "| Lag p50 / p95 / max (s) | Talk share |",
-        "|---|---|---|---|---|---|---|",
+        "| Clip | Confident graphic events covered | of them real (event report) | Lines said (short form) "
+        "| Dropped | Refused | Lag p50 / p95 / max (s) | Talk share |",
+        "|---|---|---|---|---|---|---|---|",
     ]
     notes = []
     for name, path in CLIPS.items():
@@ -112,12 +128,19 @@ def report() -> str:
         else:
             lag = "no lines"
         share = f"{m['spoken_s']} s of {m['span_s']} s" if m["span_s"] else "-"
-        lines.append(f"| {name} | {m['covered']} of {m['confident']} | {m['lines']} ({m['short']}) | "
-                     f"{m['dropped']} | {m['refused']} | {lag} | {share} |")
+        real = real_detections() if "pixels" in name else None
+        graded = ("-" if real is None else
+                  f"{len(set(m['covered_ids']) & real)} of {len(set(m['confident_ids']) & real)} real")
+        lines.append(f"| {name} | {m['covered']} of {m['confident']} | {graded} | "
+                     f"{m['lines']} ({m['short']}) | {m['dropped']} | {m['refused']} | {lag} | {share} |")
         why = ", ".join(f"{n} x {r}" for r, n in sorted(m["dropped_why"].items())) or "none"
         said = ", ".join(f"{n} {s}" for s, n in sorted(m["sources"].items())) or "none"
         notes.append(f"- {name}: {m['events']} events; lines by source: {said}; dropped: {why}.")
-    lines += ["", f"Every line must start within {describe.MAX_LAG_S} s of its event (the brief's limit); "
+    lines += ["", "Coverage counts *detected* events, false ones included: on the pixel clip a line about a "
+              "false detection describes something that did not happen. The real column grades them against "
+              "the answer key through the committed event report (`docs/eval/event-report-v2.json`, "
+              "time-only matches); the stand-in has none.", "",
+              f"Every line must start within {describe.MAX_LAG_S} s of its event (the brief's limit); "
               "a line that cannot is shortened, then dropped, never said late.", "", *notes]
     return "\n".join(lines) + "\n"
 
