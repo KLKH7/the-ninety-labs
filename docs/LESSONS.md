@@ -2201,6 +2201,8 @@ short and actionable. This file is public: no research sources, product names or
     - a box moved sideways;
     - a chest or thigh touch;
     - rows far from the touch, or after an edit cut.
-  - Eight mutations each turn a test red. An independent review (cited in the PR) found the first
-    draft's ground disc excused floating and sideways boxes and spilled across cuts; the rule now
-    allows only the line toward the ball the foot is drawn at.
+  - Fourteen mutations each turn a test red; one more is equivalent.
+  - Two independent reviews, both cited in the PR, found holes in the earlier drafts:
+    - the first draft's ground disc excused floating and sideways boxes and spilled across cuts;
+    - the second still let a body rise on a touch away from the camera.
+    The rule now only extends the bottom down the picture, toward the foot drawn at the ball.

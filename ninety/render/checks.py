@@ -37,17 +37,18 @@ def _inside(b: list[int], w: int, h: int) -> bool:
 
 
 def _reaching(frames: list[dict], events: list[dict] | None, heights: dict[str, float]
-              ) -> dict[tuple[int, str], tuple[float, float]]:
+              ) -> dict[tuple[int, str], list[tuple[float, float]]]:
     """(row, player) -> the ground offset (dx, dy) from his tracked point to where his foot is drawn
     at the ball he touches with it: the renderer's own touches with a foot (scene.contacts; a chest,
     thigh or head puts no foot there), over the frames it draws each (scene._touch_window, in match
     frames, never across an edit cut), as far as his leg reaches ((LEG_M + HIP_SIDE_M) at his scale,
-    as touch_at scales them). Rows outside such a touch are absent."""
+    as touch_at scales them). A row in two touches' windows holds both: touch_at draws one of them.
+    Rows outside such a touch are absent."""
     from ninety.render.meshpose import ASSET_STATURE_M
     from ninety.render.scene import HIP_SIDE_M, LEG_M, _touch_window, contacts
     from ninety.sim.engine import FPS
 
-    out: dict[tuple[int, str], tuple[float, float]] = {}
+    out: dict[tuple[int, str], list[tuple[float, float]]] = {}
     nums = [fr.get("frame", i) for i, fr in enumerate(frames)]
     for pid, mine in contacts(frames, events).items():
         reach = (LEG_M + HIP_SIDE_M) * heights.get(pid, ASSET_STATURE_M) / ASSET_STATURE_M
@@ -57,7 +58,7 @@ def _reaching(frames: list[dict], events: list[dict] | None, heights: dict[str, 
             # A saved row has no ball velocity, which tells a kick's longer window from a touch's,
             # so the wider of the two is taken (*design*): still only the frames round this touch.
             kick, touch = _touch_window({**c, "part": "strike"}), _touch_window({**c, "part": "chest"})
-            lo, hi = min(kick[0], touch[0]) * FPS, max(kick[1], touch[1]) * FPS
+            lo, hi = min(kick[0], touch[0]), max(kick[1], touch[1])
             dx, dy = c["ball"][0] - c["at"][0], c["ball"][1] - c["at"][1]
             d = math.hypot(dx, dy)
             if d < 1e-9:
@@ -66,9 +67,27 @@ def _reaching(frames: list[dict], events: list[dict] | None, heights: dict[str, 
             at = c["frame"]
             for i in range(len(frames)):
                 # the same shot: as many match frames from the touch as rows (no cut between)
-                if lo < nums[i] - nums[at] < hi and nums[i] - nums[at] == i - at:
-                    out[(i, pid)] = (dx * f, dy * f)
+                # in seconds, as touch_at compares them
+                if lo < (nums[i] - nums[at]) / FPS < hi and nums[i] - nums[at] == i - at:
+                    out.setdefault((i, pid), []).append((dx * f, dy * f))
     return out
+
+
+def _reaches(P: list[list[float]], pl: dict, offs: list[tuple[float, float]], y1: float) -> bool:
+    """Whether the box's bottom `y1` is where the drawn feet can put it on a touch, as the saved
+    matrix projects them: no higher than his own sole lifted V6_M (the standing foot is under him, so
+    a reach never raises the bottom), and no lower than the touching foot, out along the ground
+    toward the ball, or V6_M beyond it (V6's tolerance at the drawn foot, *design*)."""
+    top = project_with(P, (pl["x"], pl["y"], V6_M))
+    if top is None or y1 < top[1]:
+        return False
+    for dx, dy in offs:
+        n = math.hypot(dx, dy)
+        far = (n + V6_M) / n
+        ends = [project_with(P, (pl["x"] + dx * t, pl["y"] + dy * t, 0.0)) for t in (0.0, 1.0, far)]
+        if all(e is not None for e in ends) and y1 <= max(e[1] for e in ends):
+            return True
+    return False
 
 
 def projection_errors(frames: list[dict], events: list[dict] | None = None,
@@ -115,21 +134,9 @@ def projection_errors(frames: list[dict], events: list[dict] | None = None,
                 slack = 0.45 * (y1 - y0) / 1.8
                 if x0 - slack <= u <= x1 + slack and y1 - slack <= v <= y1 + slack:
                     continue
-                off = reaching.get((i, pl["id"]))
-                if off and x0 - slack <= u <= x1 + slack:
-                    # His foot is drawn at the ball, out along the ground toward it: the lowest sole,
-                    # the box's bottom, lies on that line, V6's 0.45 m beyond the foot at most, or a
-                    # sole lifted 0.45 m above it, each as the saved matrix projects it (not by a
-                    # side-on scale, which grows with the reach itself). Across, the tracked point
-                    # stays inside the box.
-                    n = math.hypot(*off)
-                    far = (n + V6_M) / n
-                    ends = [project_with(P, (pl["x"] + off[0] * t, pl["y"] + off[1] * t, z))
-                            for t, z in ((0.0, V6_M), (1.0, V6_M), (far, 0.0), (0.0, 0.0))]
-                    if all(e is not None for e in ends):
-                        vs = [e[1] for e in ends]
-                        if min(vs) <= y1 <= max(vs):
-                            continue
+                offs = reaching.get((i, pl["id"]), [])
+                if offs and x0 - slack <= u <= x1 + slack and _reaches(P, pl, offs, y1):
+                    continue
                 foot_outside += 1
         for k in fr["keypoints"]:
             uv = project_with(P, (*kp_xy[k["name"]], 0.0))

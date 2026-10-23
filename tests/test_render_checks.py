@@ -231,3 +231,55 @@ def test_a_chest_or_thigh_touch_puts_no_foot_at_the_ball():
     for part in ("chest", "thigh"):
         frames, events = _reach_clip(1.0, touch=True, part=part)
         assert _outside(frames, events) == len(frames), part
+
+
+def test_a_reach_away_from_the_camera_never_raises_the_bottom():
+    """The standing foot is under him, so a ball away from the lens leaves the lowest sole at his
+    ground point: a body lifted 0.5 m on such a touch fails (the second review's floating case)."""
+    frames, events = _reach_clip(-1.0, touch=True, foot_off=0.0, lift=0.5)
+    assert _outside(frames, events) == len(frames)
+
+
+def test_the_bounds_are_tight_at_the_foot_and_at_the_lift():
+    """The bottom may be V6's 0.45 m beyond the drawn foot and no further, and his sole lifted 0.45 m
+    and no higher (both measured through the matrix, no other slack)."""
+    ok, _ = _reach_clip(0.6, touch=True, foot_off=0.95)
+    past, _ = _reach_clip(0.6, touch=True, foot_off=1.2)
+    assert _outside(ok) == 0 and _outside(past) == len(past)
+    low, _ = _reach_clip(0.3, touch=True, foot_off=0.0, lift=0.35)
+    high, _ = _reach_clip(0.3, touch=True, foot_off=0.0, lift=0.6)
+    assert _outside(low) == 0 and _outside(high) == len(high)
+
+
+def test_the_allowance_covers_exactly_the_frames_the_touch_is_drawn_on():
+    """scene._touch_window: from a kick's start before the contact to a touch's end after it, compared
+    in seconds as touch_at compares them; every row inside passes and every row outside fails."""
+    from ninety.render.scene import _touch_window
+
+    frames, events = _reach_clip(1.0, touch=True, n=30, at=10)
+    lo = min(_touch_window({"part": "strike", "out": 0.0})[0], _touch_window({"part": "chest"})[0])
+    hi = max(_touch_window({"part": "strike", "out": 0.0})[1], _touch_window({"part": "chest"})[1])
+    drawn = [i for i in range(30) if lo < (i - 10) / 25 < hi]
+    assert 15 <= len(drawn) <= 21  # about 0.8 s
+    assert _outside(frames, events) == 30 - len(drawn)
+
+
+def test_a_tall_players_leg_reaches_further():
+    """The reach is scaled by his own height, as touch_at scales the leg: a ball 1.15 m out with the
+    box 1.55 m out passes for a 2.0 m player and fails at the asset's 1.684 m."""
+    frames, events = _reach_clip(1.15, touch=True, foot_off=1.55)
+    assert projection_errors(frames, events, {"h7": 2.0})["player_foot_outside_box"] == 0
+    assert projection_errors(frames, events, {"h7": 1.684})["player_foot_outside_box"] == len(frames)
+
+
+def test_rows_shared_by_two_touches_keep_either_touchs_reach():
+    """touch_at draws one of two overlapping touches (the one further into its swing), so a row in
+    both windows may show either: a foot drawn to the first ball still passes while the second
+    touch, away from the camera, is in its window too; past the first's window it fails."""
+    frames, events = _reach_clip(1.0, touch=True, n=26, at=6)
+    for i, fr in enumerate(frames):
+        if i >= 11:
+            fr["ball"]["y"] = 6.5  # the second ball, 1.5 m behind him, there before he touches it
+        if i == 12:
+            fr["players"][0]["action"] = "foot"
+    assert _outside(frames, events) == 26 - 19  # rows 0 to 18 by the first touch; 19 to 25 fail
