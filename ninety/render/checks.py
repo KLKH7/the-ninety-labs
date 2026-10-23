@@ -201,7 +201,8 @@ def streams_agree(clip_dir: Path) -> list[str]:
     events), from one fixed lens. Empty means they agree; a clip without views has nothing to agree."""
     d = Path(clip_dir)
     clip, frames, _ = load_clip(d)
-    want = ("tac-l", "tac-r") if clip["params"].get("views") == "tactical" else ()
+    # A view is a stream of its clip, not a clip with streams of its own, whatever params it copied.
+    want = ("tac-l", "tac-r") if clip["params"].get("views") == "tactical" and "view" not in clip else ()
     have = [v.name for v in view_dirs(d)]
     problems = [f"view {n}: missing" for n in want if n not in have]
     problems += [f"view {n}: not asked for (params.views is {clip['params'].get('views', 'none')!r})"
@@ -226,6 +227,23 @@ def streams_agree(clip_dir: Path) -> list[str]:
     return problems
 
 
+def ball_unseen(clip_dir: Path) -> list[int]:
+    """Frames where the ball is on the pitch, no higher than a lens is built to hold
+    (camera.TACTICAL_HEAD_M), and in neither view's picture: the views together must cover the pitch."""
+    from ninety.render.camera import TACTICAL_HEAD_M, TACTICAL_PITCH
+
+    _, frames, _ = load_clip(clip_dir)
+    seen: dict[int, bool] = {}
+    for v in view_dirs(clip_dir):
+        for row in load_clip(v)[1]:
+            seen[row["frame"]] = seen.get(row["frame"], False) or bool(row["ball"]["bbox"])
+    return [
+        fr["frame"] for fr in frames
+        if 0 <= fr["ball"]["x"] <= TACTICAL_PITCH[0] and 0 <= fr["ball"]["y"] <= TACTICAL_PITCH[1]
+        and fr["ball"]["z"] <= TACTICAL_HEAD_M and not seen.get(fr["frame"], False)
+    ]
+
+
 def check_clip(clip_dir: Path) -> dict:
     clip, frames, _ = load_clip(clip_dir)
     proj = projection_errors(frames)
@@ -233,8 +251,10 @@ def check_clip(clip_dir: Path) -> dict:
     occ = occlusion(frames)
     contract = validate(clip_dir)  # docs/DATA_CONTRACT.md: every clip passes `ninety-validate`
     passed = {
-        "projection_ball_lt_1px": proj["ball_px"]["max"] is not None
-        and proj["ball_px"]["max"] < PROJECTION_TOL_PX,
+        # A broadcast always has the ball to measure. A fixed lens holds half the pitch, so play can
+        # stay out of its picture all clip; the views together must see it (`views_see_the_ball`).
+        "projection_ball_lt_1px": (proj["ball_px"]["max"] is None and "view" in clip)
+        or (proj["ball_px"]["max"] is not None and proj["ball_px"]["max"] < PROJECTION_TOL_PX),
         "projection_keypoints_lt_1px": proj["keypoint_px"]["max"] is None
         or proj["keypoint_px"]["max"] < PROJECTION_TOL_PX,
         "player_feet_in_boxes": proj["player_foot_outside_box"] == 0,
@@ -242,13 +262,15 @@ def check_clip(clip_dir: Path) -> dict:
         "data_contract": not contract,
     }
     extra = {}
-    if clip["params"].get("views", "none") != "none" or view_dirs(clip_dir):
+    if "view" not in clip and (clip["params"].get("views", "none") != "none" or view_dirs(clip_dir)):
         # Each view is a clip of its own and passes every check a clip does; together they film one world.
         views = {v.name: check_clip(v) for v in view_dirs(clip_dir)}
         agree = streams_agree(clip_dir)
         passed["views_pass"] = all(all(r["passed"].values()) for r in views.values())
         passed["streams_agree"] = not agree
-        extra = {"views": views, "streams_agree": agree}
+        unseen = ball_unseen(clip_dir) if not agree else []
+        passed["views_see_the_ball"] = not agree and not unseen
+        extra = {"views": views, "streams_agree": agree, "ball_unseen_frames": unseen}
     return {
         **extra,
         "clip": clip["clip_id"],

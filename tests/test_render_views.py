@@ -167,6 +167,45 @@ def test_each_kind_of_mismatch_is_caught(tmp_path, plant, says):
     assert found and any(says in f for f in found), found
 
 
+def test_a_view_checked_on_its_own_has_no_views_to_agree(tmp_path):
+    # It copies the clip's params (views=tactical), but a view holds no views of its own.
+    view = _plant(tmp_path) / "views" / "tac-l"
+    assert streams_agree(view) == []
+
+
+def _ball_in(clip, name, frames):
+    def put(rows):
+        for r in rows:
+            r["ball"]["bbox"] = [1, 2, 3, 4] if r["frame"] in frames else None
+
+    _edit_rows(clip / "views" / name / "frames.jsonl", put)
+
+
+def test_the_ball_in_one_half_all_clip_is_seen_by_that_view_alone(tmp_path):
+    from ninety.render.checks import ball_unseen
+
+    clip = _plant(tmp_path)
+    _ball_in(clip, "tac-l", {0, 1, 2})
+    _ball_in(clip, "tac-r", set())
+    assert ball_unseen(clip) == []
+
+
+def test_a_frame_where_neither_view_sees_the_ball_on_the_pitch_is_caught(tmp_path):
+    from ninety.render.checks import ball_unseen
+
+    clip = _plant(tmp_path)
+    _ball_in(clip, "tac-l", {0})
+    _ball_in(clip, "tac-r", {2})
+    assert ball_unseen(clip) == [1]
+    # off the pitch, or above what a lens is built to hold, nobody need see it
+    for change, frame in ((dict(x=-1.0), 1), (dict(z=2.5), 1)):
+        for d in (clip, clip / "views/tac-l", clip / "views/tac-r"):
+            _edit_rows(d / "frames.jsonl", lambda r, c=change, f=frame: r[f]["ball"].update(c))
+        assert ball_unseen(clip) == []
+        for d in (clip, clip / "views/tac-l", clip / "views/tac-r"):
+            _edit_rows(d / "frames.jsonl", lambda r, f=frame: r[f]["ball"].update(x=50.0, z=0.0))
+
+
 def test_a_view_nobody_asked_for_is_caught(tmp_path):
     clip = _plant(tmp_path)
     meta = json.loads((clip / "clip.json").read_text())
@@ -209,6 +248,8 @@ def test_each_view_is_a_whole_clip_that_passes_every_check_and_films_the_broadca
     for name in TACTICAL_VIEWS:
         d = views / "views" / name
         assert validate_clip(d) == []
+        alone = check_clip(d)["passed"]
+        assert all(alone.values()) and "streams_agree" not in alone, alone
         clip = json.loads((d / "clip.json").read_text())
         assert clip["view"]["name"] == name and clip["scorebug_px"] is None and clip["stinger_frames"] == []
         frames = [json.loads(line) for line in (d / "frames.jsonl").read_text().splitlines()]
