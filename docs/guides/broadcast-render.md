@@ -27,6 +27,17 @@ Every frame writes, next to the image:
 A render without this is not usable for scoring. Store it per clip as `frames.jsonl` with one row
 per frame; keep the format compact (it was 180 MB for a 90-minute match as plain JSON lines).
 
+**Tactical views.** `--views tactical` also films the clip from two fixed lenses side by side on the
+main gantry at halfway (`camera.tactical_views`: one point, nominally 28 m up and 32 m back, each
+1920x1080 covering one half of the pitch plus 2.5 m past halfway, the lens solved so the half fits
+with a 1% margin; GROUNDING V7). They are vision's input for whole-pitch context; the broadcast stays
+the viewer's feed. Each view is written as a complete clip under `views/tac-l/` and `views/tac-r/`
+from the same scene and frame spec as the broadcast, in a browser page of its own, with no
+graphics and no motion blur (the lens never moves). Asking for views never changes the broadcast:
+its images and labels stay byte-identical, and the mount is drawn for every seed after all its
+other draws. `ninety-render-check` fails a clip unless every view films the broadcast's world frame
+for frame (`checks.streams_agree`).
+
 ## 2. Look like television, not a video game
 
 Real broadcast footage has properties detectors depend on. Match them:

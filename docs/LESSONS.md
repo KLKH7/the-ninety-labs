@@ -2137,6 +2137,23 @@ short and actionable. This file is public: no research sources, product names or
   `tests/test_vision_live_job.py::test_a_clip_folder_holding_anything_else_is_refused_before_the_model_loads`
   (each answer-key file planted), and `::test_a_clean_clip_runs_the_whole_live_path_and_opens_no_truth`.
 
+### 192. A seal that matches a file by where it sits misses the same file one folder down
+- **What happened:** the render job sealed the answer key by name and place: `frames.jsonl` and
+  `events.jsonl` went to the private `truth` container only when they sat at the top of the clip
+  folder (`f.parent == clip_dir` in `ninety/render/job.py`). The tactical views write a complete
+  clip under `views/tac-l/` and `views/tac-r/`, answer key included, so the first Azure render
+  with views would have put true positions, boxes and events in the readable `renders` container,
+  next to the images vision reads. The plan for the views caught it before any render ran.
+  The same review found the job's failure reports going to `renders` too: a report's contract
+  messages quote true events and positions.
+- **Rule:** a file is answer key by what it is, wherever it sits: the seal matches the name at any
+  depth, and anything built from the key (a check report) is sealed with it. A change that adds a
+  folder to a clip plants that folder's answer key in the seal's tests.
+- **Check:** `tests/test_render_job.py::test_a_views_answer_key_is_sealed_with_the_clips` (fails
+  on the old seal), and `infra/check_truth_sealed.py` (CI), which runs the job's own `upload_dir`
+  on a planted clip with views and fails if a `frames.jsonl` or `events.jsonl` reaches `renders`
+  (`tests/test_truth_sealed.py::test_a_seal_that_matches_only_the_clips_top_level_is_caught`).
+
 ### 194. An allow-list of a folder's top level lets anything through one level down
 - **What happened:** the live detection job refused an input folder holding anything but
   `index.jsonl` and `images/`, but it checked only the folder's own entries, and inside `images/`
