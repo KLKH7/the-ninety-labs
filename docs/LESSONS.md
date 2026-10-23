@@ -2120,3 +2120,30 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** the CI `image` job's step "The Dockerfile's pinned Replay bundle exists and matches its
   hash"; `tests/test_api_site.py::test_a_websocket_behind_the_gate_needs_the_key_too` fails with the
   WebSocket branch of `RequireKey` removed.
+
+### 198. An action that commits the body is weighed against the cheaper one, at the moment it must start, and tested on a ball that moves
+- **What happened:** Kian saw the keeper "dive at the completely wrong time". The engine dived as soon
+  as he had reacted to any shot crossing beyond his hands: at balls a few centimetres out that a step
+  would have reached (3 of 11 measured dives travelled 9 cm or less, then he lay down for 0.8 s), and
+  at long shots still up to 1.7 s away, so he landed before the ball arrived. Watching the first clip of
+  the fix then showed a third cause nobody had listed: he dived at a shot heading 12 m wide, because
+  nothing asked whether the ball was going in. The dive tests froze the
+  ball and moved only the clock, so a launch "on reacting" was the only one they could see, and one
+  of them (a high ball needs a longer dive) held only because the frozen ball made his arms look
+  fully stretched at an arrival that, in flight, comes 0.35 s earlier.
+- **Rule:** an action that puts a player on the ground (a dive, a slide) is chosen only when the
+  cheaper movement cannot do the job in the time left, judged by the engine's own reach test
+  (`body.can_get_to`), and it starts no sooner than it must, judged again every frame. A test of when
+  something starts lets the ball fly by its own physics, frame by frame; a test that moves the clock
+  alone measures a ball that never arrives.
+- **Check:** `uv run pytest tests/test_keeper_dive.py`. A ball 0.55 m beyond his hands that his legs
+  get him to, and one 5.4 m wide with two seconds to run, are taken standing; main dived at both, and
+  a keeper who only waits for the last moment, without asking whether his legs will do, dives at the
+  first. A 1.2 m dive with time to spare is launched after he reacts and lands as the ball arrives;
+  main launched it as he reacted. Removing the step test turns the first red, removing the launch
+  timing turns the long-shot and run-up tests red, and removing both turns all four red;
+  `test_he_does_not_dive_at_a_shot_going_wide` is red without the on-target condition, and
+  `test_he_does_not_dive_at_a_shot_going_over_the_bar_within_his_reach` with a check of the posts
+  alone; every shot in these tests that he should dive at, or take standing, is asserted to be going in. A clip of the
+  change is watched before it is called done (lesson 107). The
+  dive tests in `tests/test_engine_rules.py` fly the shot (`_until_he_dives`).
