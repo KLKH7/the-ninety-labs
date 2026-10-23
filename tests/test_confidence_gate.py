@@ -177,11 +177,12 @@ def test_a_template_graphic_names_a_side_only_when_it_was_told_firmly(side, name
     assert texts and all(("away" in t) == named for t in texts), texts
 
 
+@pytest.mark.parametrize("kind", ["pass", "shot", "interception"])
 @pytest.mark.parametrize(("side", "named"), [(0.529, False), (0.97, True)])
-def test_the_describer_s_own_line_names_a_side_only_when_it_was_told_firmly(side, named):
+def test_the_describer_s_own_line_names_a_side_only_when_it_was_told_firmly(side, named, kind):
     from ninety.speech import describe
 
-    versions = describe.event_versions(nameless_pass(side))
+    versions = describe.event_versions(nameless_pass(side) | {"type": kind})
     assert versions and all(("away" in v) == named for v in versions), versions
 
 
