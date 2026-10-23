@@ -213,6 +213,7 @@ def _match_answer(text: str, cited: list[dict], insights=None) -> Answer:
         t_to,
         visual,
         names=names,
+        spoken=text,  # code's and the model's sentences carry no visual reference (insight_check)
     )
 
 
@@ -296,12 +297,11 @@ def code_texts(fact: dict) -> list[str]:
         ]
     if metric == "open_teammates_ahead":
         if fact.get("outcome") == "fail" and fact["value"] == 0:
-            return [f"{span.capitalize()}, {who} lost a pass with no open teammate further forward."]
+            return [f"{span.capitalize()}, {who} lost the ball with no teammate free further up the pitch."]
         if fact.get("outcome") == "fail" and fact.get("target_open") is False and fact["value"] > 0:
             return [
-                f"{span.capitalize()}, {who} had {_plural(fact['value'], 'open teammate')} ahead "
-                f"but lost the pass "
-                f"elsewhere."
+                f"{span.capitalize()}, {who} had {_plural(fact['value'], 'teammate')} free further up "
+                "the pitch, but the pass went elsewhere and was lost."
             ]
         return []
     if metric == "passes_with_no_open_teammate_ahead":

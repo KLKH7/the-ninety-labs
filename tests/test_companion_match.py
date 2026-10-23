@@ -282,7 +282,8 @@ def test_cards_become_spoken_lines_placed_where_the_play_was():
     lines = scout.spoken(cards)
     assert len(lines) == len(cards)
     t, d = lines[0]
-    assert t == cards[0]["t"] and d.text == cards[0]["text"] and d.ssml.startswith("<speak>")
+    assert t == cards[0]["t"] and d.text == cards[0]["spoken"] and d.ssml.startswith("<speak>")
+    assert d.text.startswith(cards[0]["text"]) and " It was " in d.text
     assert -1.0 <= d.pan <= 1.0
 
 
@@ -352,3 +353,24 @@ def test_answers_name_the_players_they_show():
     q = Question("s1", None, "Which pass cut through?", Q.t)
     r = asyncio.run(companion.answer_match(q, insights()))
     assert r.answer.status == "verified" and r.answer.names == {"h-t5": LB.name}
+
+
+def test_answers_and_cards_have_a_spoken_form():
+    q = Question("s1", None, "Which pass cut through?", Q.t)
+    assert asyncio.run(companion.answer_match(q, insights())).answer.spoken.startswith("In minute 23")
+    for c in asyncio.run(scout.scout(insights())):
+        assert c["spoken"].startswith(c["text"]) and "It was " in c["spoken"]
+
+
+def test_a_sentence_that_needs_the_picture_is_rejected():
+    from ninety.agents.factcheck import Claim
+    from ninety.agents.insight_check import verify
+
+    mi = insights()
+    known = {f["id"]: f for f in mi.facts["line_break"]}
+    v = verify(
+        Claim("See the arrow: Oakfield took 4 Fenwick players out of the game.", ["lb:v1"]),
+        known,
+        mi.fixture.clubs,
+    )
+    assert not v.ok and "spoken" in v.reasons[0]

@@ -18,7 +18,8 @@
     "source",
     "evidence",
     "visual",
-    "why"
+    "why",
+    "spoken"
   ],
   "properties": {
     "id": {
@@ -150,6 +151,11 @@
         "type": "string"
       },
       "description": "How to label each player the visual shows, by track id: a gated team-sheet name or a role, never an id."
+    },
+    "spoken": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The card as spoken to a screen-reader user and by the Describer: the text plus where it happened in words, fact-checked, with no visual reference."
     }
   },
   "$defs": {

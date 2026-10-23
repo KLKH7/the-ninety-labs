@@ -38,10 +38,10 @@ MIN_SO_FAR = (
 GOAL_QUIET_S = 30.0  # design: no card in the half minute after a goal
 DEFER_SLOTS = 1  # design: a candidate kept out by the cap may still go in the next slot, then it is stale
 HEADLINES = {
-    "line_break": "{club} cut through",
-    "overload": "{club} outnumber them",
+    "line_break": "{club} slice through",
+    "overload": "{club} have the extra man",
     "counter_press": "{club} win it straight back",
-    "pass_options": "An option missed",
+    "pass_options": "A pass not taken",
 }
 WHY = {
     "line_break": "Why does a pass like that matter?",
@@ -52,14 +52,45 @@ WHY = {
 # What the "why?" answer adds to the card's fact: the definition, in code's words. Each is checked
 # like any sentence, so it may state only the fact's own numbers with their units.
 WHY_TEXT = {
-    "line_break": "Every opponent a pass takes out of the game no longer stands between the ball and goal: "
-    "this pass took out {value} {unit}.",
+    "line_break": "Analysts call it packing: every opponent a pass gets past no longer stands between the "
+    "ball and goal, and this pass took out {value} {unit}.",
     "overload": "With {own} against {other} around the ball, {club} had a spare player there.",
     "counter_press": "Winning the ball back within 5 seconds of losing it stops the other side "
     "from breaking, "
     "and {club} had {value} {unit} near the ball.",
     "pass_options": "At the moment of that pass {club} had {value} open teammates further forward.",
 }
+
+
+def where_spoken(fact: Mapping, clubs: Mapping[str, str]) -> str:
+    """Where it happened, in words for a fan who cannot see it: which end (whose goal: home defends
+    x = 0) and which side (y = 0 is the near touchline, under the camera). Code reads it off the fact's
+    drawing, so it is as true as the drawing."""
+    g = fact.get("visual") or {}
+    x = _where_x({"visual": {"geometry": {k: v for k, v in g.items() if k != "kind"}}})
+    if x is None:
+        return ""
+    y = None
+    for key in ("from", "ball", "passer"):
+        if g.get(key):
+            y = float(g[key][1])
+            break
+    if y is None and g.get("zone"):
+        y = (float(g["zone"]["y0"]) + float(g["zone"]["y1"])) / 2
+    home, away = clubs["home"], clubs["away"]
+    end = (
+        f"close to {home}'s goal"
+        if x < 16.5
+        else f"in {home}'s third"
+        if x < 35
+        else f"close to {away}'s goal"
+        if x > 88.5
+        else f"in {away}'s third"
+        if x > 70
+        else "in midfield"
+    )
+    side = "" if y is None or 15 <= y <= 53 else (" on the near side" if y < 15 else " on the far side")
+    return f"It was {end}{side}."
 
 
 def notability(f: Mapping) -> tuple:
@@ -152,6 +183,11 @@ async def card_for(
             Claim(why, [fact["id"]]), known, clubs, insights.people, insights.sheet_names()
         ).ok
         visual = companion.visual_of([fact])
+        spoken = f"{text} {where_spoken(fact, clubs)}".strip()
+        if not insight_check.verify(
+            Claim(spoken, [fact["id"]]), known, clubs, insights.people, insights.sheet_names()
+        ).ok:
+            spoken = text
         return {
             "id": f"card-{n:04d}",
             "t": fact["t"],
@@ -165,6 +201,7 @@ async def card_for(
             "source": source,
             "evidence": [fact["id"]],
             "visual": visual,
+            "spoken": spoken,
             "names": companion.names_of([fact], visual, insights),
             "why": {
                 "question": WHY[fact["kind"]],
@@ -295,7 +332,7 @@ def spoken(cards: Sequence[Mapping]) -> list[tuple[float, Description]]:
             continue
         x = _where_x(c)
         pan = 0.0 if x is None else max(-1.0, min(1.0, x / 52.5 - 1.0))
-        text = str(c["text"])
+        text = str(c.get("spoken") or c["text"])  # the text and where it was, in words
         out.append(
             (
                 float(c["t"]),

@@ -97,6 +97,13 @@ KIND_WORDS = {
         r"|passing options?|nobody (?:was )?open"
     ),
 }
+# Every answer and card is also spoken (screen readers, the Describer): a sentence that leans on the
+# drawing ("see the arrow") says nothing to a fan who cannot see it.
+VISUAL_WORD = re.compile(
+    r"\b(?:see|look at|as shown|shown (?:here|above|below)|highlighted|on (?:the )?screen"
+    r"|the (?:arrow|circle|dot|dots|box|shading|map)|in (?:red|blue|yellow|green))\b",
+    re.I,
+)
 TEAM_WORD = re.compile(
     r"\b(?:home|away)\s+(?:team|side|club|players?|defen\w+|keeper)\b|\b(?:home|away)'s\b|^\s*(?:home|away)\b",
     re.I,
@@ -156,6 +163,10 @@ def check(
     # Team words and ids: a fan hears clubs and names.
     if TEAM_WORD.search(claim.text):
         reasons.append("name the club, never home or away")
+    if VISUAL_WORD.search(claim.text):
+        reasons.append(
+            f"'{VISUAL_WORD.search(claim.text).group()}' needs the picture: say it in words, it is spoken"
+        )
     for tid in sorted(set(PLAYER.findall(claim.text))):
         reasons.append(f"{tid} is an id: name the player or his position")
 
