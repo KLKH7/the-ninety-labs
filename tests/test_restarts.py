@@ -1608,9 +1608,13 @@ def test_through_a_restart_wait_the_defending_side_keeps_its_presser_and_cover()
     walks the two roles sent them on, so both walked out and back through the whole wait; and, asked
     again as the taker stood over the ball, the cover was named to press and ran in from 11 m off,
     inside 9.15 m by the kick. The side keeps the presser and cover it named when the restart was
-    given until the ball is in play; then it asks again."""
+    given until the ball is in play; then it asks again. Planted at an indirect free kick in
+    midfield (no wall; the taker stands over it before he kicks): at a corner there is no cover and
+    the kick comes off the run-up (lesson 202)."""
     from ninety.sim.engine import BRAIN_EVERY
-    e = corner_wait()  # a corner to home, its kick 30 s off: away defends
+    e = corner_wait()  # a minute of play ended as a foul ends it
+    e.stop("free_kick", "home", (70.0, 30.0), direct=False)  # offside's: away defends
+    e.restart.ready_at = e.t + 30.0
     for _ in range(int(1.0 / DT)):
         e.step()
     brain = e.brains["away"]
@@ -1890,17 +1894,17 @@ def test_through_a_restart_wait_each_marker_keeps_his_man():
     r, brain = e.restart, e.brains["away"]
     for _ in range(int(6.0 / DT)):  # attackers come near and are picked up
         e.step()
-    assert len(r.marks) >= 2 and brain.markers.keys() == r.marks.keys()  # premise
+    assert len(r.marks) >= 2 and brain.markers.keys() == r.marks.keys() | {r.guard}  # premise (lesson 202)
     assert r.taker not in r.marks.values()
     kept = dict(r.marks)
     did, aid = next(iter(kept.items()))
     d, a = e.by_id[did], e.by_id[aid]
     mate = next(q for q in e.players if q.team == "away" and q.role != "GK" and q.id not in kept
-                and q.id not in brain.pressers)
+                and q.id not in brain.pressers and q.id != r.guard)
     mate.x, mate.y, mate.vx, mate.vy = a.x + 0.3, a.y, 0.0, 0.0  # another defender right by his man
     d.x, d.y, d.vx, d.vy = 30.0, 34.0, 0.0, 0.0  # and he far from him
     free = {q.id: (q.x, q.y) for q in e.players
-            if q.team == "away" and q.role != "GK" and q.id not in brain.pressers}
+            if q.team == "away" and q.role != "GK" and q.id not in brain.pressers and q.id != r.guard}
     seen = {pid: at for pid, at in e.shared_view("away", other("away")).items() if pid != r.taker}
     assert offball.pick_up(free, seen, 0.0).get(did) != aid  # premise: picked up afresh, another
     for _ in range(int(1.0 / DT)):
@@ -1915,6 +1919,7 @@ def test_through_a_restart_wait_each_marker_keeps_his_man():
     for _ in range(int(1.0 / DT)):
         e.step()
     assert new.id in r.marks.values() and not set(brain.pressers) & set(r.marks)
+    assert r.guard not in r.marks  # the near-post guard marks nobody (lesson 202)
     w = wall_kick(13)  # and at a free kick with a wall (a seed whose wait has men to mark)
     for _ in range(int(1.0 / DT)):
         w.step()

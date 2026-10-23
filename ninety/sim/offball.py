@@ -262,10 +262,16 @@ STAYS_WIDE_M = 4.0  # design: stays_wide, further toward the touchline his role 
 BALL_SIDE_IN_POSSESSION = 0.15  # the shape leans this share toward the ball's side
 FINAL_THIRD_M = 70.0  # ball this far from his own goal: the box is attacked
 BOX_RUNS = {"ST": (99.0, 4.0), "far_winger": (98.0, -7.0), "RCM": (88.0, 0.0)}  # near post, far post, edge
+# Lesson 202: at a corner the box runners wait no nearer goal than the penalty mark (Law 1: 11 m from
+# the goal line; design: where they start) and make their runs as the taker runs up. A dynamic attack
+# went with more shots from corners than a static one (Casal et al. 2015, Int J Perf Anal Sport
+# 15:430-451, 1,139 corners in elite football; verify: read from the abstract).
+BOX_RUN_START_M = 11.0
 
 
 def attacking_slot(role: str, own_goal_x: float, ball_x: float, ball_y: float,
-                   last_line_x: float, wide_m: float = 0.0) -> tuple[float, float] | None:
+                   last_line_x: float, wide_m: float = 0.0,
+                   waiting: bool = False) -> tuple[float, float] | None:
     # `last_line_x`: the furthest a player of this side may stand and be onside, as he sees it.
     """O6: where this role stands while his team has the ball. Heights follow the ball; attackers
     stand on the opponents' last line (onside); with the ball wide in the final third, the striker,
@@ -273,7 +279,9 @@ def attacking_slot(role: str, own_goal_x: float, ball_x: float, ball_y: float,
     The team is at most LENGTH_MAX_M long (R8): when the ball is so deep that the roles behind it
     would stand further than that behind the forwards, those roles move up together, keeping their
     spacing, until the back line is LENGTH_MAX_M behind the forwards or level with the ball; the
-    forwards then hold no more than LENGTH_MAX_M ahead of the back line."""
+    forwards then hold no more than LENGTH_MAX_M ahead of the back line. `waiting`: a corner not yet
+    being run up to, so every role whose spot is nearer the goal waits at BOX_RUN_START_M from it and
+    makes his run as the taker runs up (lesson 202)."""
     shape = SHAPE_IN_POSSESSION.get(role)
     if shape is None:
         return None
@@ -289,6 +297,8 @@ def attacking_slot(role: str, own_goal_x: float, ball_x: float, ball_y: float,
         if key in BOX_RUNS:
             u, side = BOX_RUNS[key]
             u = min(u, max(last_u, ball_u))  # L10: he waits onside for the delivery
+            if waiting:
+                u = min(u, PITCH_X - BOX_RUN_START_M)
             return own_goal_x + fwd * u, PITCH_Y / 2 + ball_side * side
     behind, width = shape
     deepest = max(b for b, _ in SHAPE_IN_POSSESSION.values() if b is not None)
@@ -301,6 +311,8 @@ def attacking_slot(role: str, own_goal_x: float, ball_x: float, ball_y: float,
     else:
         u = ball_u - behind + up
     u = min(PITCH_X - 3.0, max(DEEPEST_M, u))
+    if waiting:  # lesson 202: everyone the box is attacked by starts his run from the penalty mark
+        u = min(u, PITCH_X - BOX_RUN_START_M)
     y = PITCH_Y / 2 + across * width + (ball_y - PITCH_Y / 2) * BALL_SIDE_IN_POSSESSION
     if wide_m and width:
         y += math.copysign(wide_m, across * width)  # his side of the pitch, further out
