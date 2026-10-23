@@ -185,6 +185,14 @@ jobs:
       - uses: astral-sh/setup-uv@v7
       - run: uv sync --locked
       - run: uv run playwright install --with-deps chromium
+      - name: The Dockerfile's pinned Replay bundle exists and matches its hash
+        # The build below swaps in a fixture, so without this a pin to an unpublished or replaced
+        # asset stays green here and fails only at deploy (docs/LESSONS.md, lesson 203).
+        run: |
+          url=$(sed -n 's/^ARG REPLAY_URL=//p' Dockerfile)
+          sha=$(sed -n 's/^ARG REPLAY_SHA256=//p' Dockerfile)
+          curl -fsSL --max-time 120 "$url" -o pinned.tar.gz
+          python3 infra/replay.py unpack pinned.tar.gz runs/pinned "$sha"
       - name: Pack a fixture Replay bundle and serve it to the build
         id: replay
         run: |
