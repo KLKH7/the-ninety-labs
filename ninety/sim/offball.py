@@ -280,7 +280,8 @@ def attacking_slot(role: str, own_goal_x: float, ball_x: float, ball_y: float,
     would stand further than that behind the forwards, those roles move up together, keeping their
     spacing, until the back line is LENGTH_MAX_M behind the forwards or level with the ball; the
     forwards then hold no more than LENGTH_MAX_M ahead of the back line. `waiting`: a corner not yet
-    being run up to, so the box runners wait at BOX_RUN_START_M from goal (lesson 202)."""
+    being run up to, so every role whose spot is nearer the goal waits at BOX_RUN_START_M from it and
+    makes his run as the taker runs up (lesson 202)."""
     shape = SHAPE_IN_POSSESSION.get(role)
     if shape is None:
         return None
@@ -310,6 +311,8 @@ def attacking_slot(role: str, own_goal_x: float, ball_x: float, ball_y: float,
     else:
         u = ball_u - behind + up
     u = min(PITCH_X - 3.0, max(DEEPEST_M, u))
+    if waiting:  # lesson 202: everyone the box is attacked by starts his run from the penalty mark
+        u = min(u, PITCH_X - BOX_RUN_START_M)
     y = PITCH_Y / 2 + across * width + (ball_y - PITCH_Y / 2) * BALL_SIDE_IN_POSSESSION
     if wide_m and width:
         y += math.copysign(wide_m, across * width)  # his side of the pitch, further out
