@@ -2391,7 +2391,7 @@ class Engine:
             # from wherever the ball is now.
             kx, ky = clamp(self.ball[0], 0, PITCH_X), clamp(self.ball[1], 0, PITCH_Y)
             # O1: with their wall up at a direct free kick, he covers the part of the goal it leaves
-            # open (Bray: the wall hides the rest), not the whole goal from behind it.
+            # open (design: Bray's wall hides the rest), not the whole goal from behind it.
             cover = None
             if wall and wall.team != p.team and wall.wall:
                 near, edge = self.wall_cover(wall)
