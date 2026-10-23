@@ -5,9 +5,78 @@
 // phone only draws it, on the same pitch as the radar (pitch.ts), and never makes a number up.
 
 import { COLORS, type View, drawPitch, zoneFor } from "./pitch";
-import { PITCH_X, PITCH_Y, type Team, type Visual, type VisualKind, type VisualPlayer, clock, playerName, teams } from "./types";
+import {
+  PITCH_X,
+  PITCH_Y,
+  type Point,
+  type ScoutPoint,
+  type ScoutVisual,
+  type Team,
+  type Visual,
+  type VisualKind,
+  type VisualPlayer,
+  type VisualRole,
+  clock,
+  playerName,
+  teams,
+} from "./types";
 
-export const KINDS: VisualKind[] = ["overload", "line_break", "pass_options", "shape", "wind"];
+export const KINDS: VisualKind[] = ["overload", "line_break", "pass_options", "counter_press", "shape", "wind"];
+
+const other = (side: Team): Team => (side === "home" ? "away" : "home");
+
+/** The agents' picture (schemas/insight_card.schema.json, $defs/visual) as the phone draws it, or
+ * null when it lacks what its kind needs: the phone draws nothing rather than fill a gap. `t` is the
+ * answer's or card's time when the visual carries none. Counts are the fact's own (geometry `for`
+ * and `against`) where it gives them, otherwise the number of points it lists. */
+export function fromScout(v: ScoutVisual | null | undefined, t: number | null = null): Visual | null {
+  if (!v || !v.geometry || (v.team !== "home" && v.team !== "away")) return null;
+  const side = v.team;
+  const g = v.geometry;
+  const at = v.t ?? t;
+  if (at === null || !Number.isFinite(at)) return null;
+  const pt = (p: ScoutPoint | null | undefined): Point | null => (Array.isArray(p) && p.length >= 2 ? { x: p[0], y: p[1] } : null);
+  const player = (p: ScoutPoint, team: Team, role?: VisualRole): VisualPlayer => ({ x: p[0], y: p[1], id: (p[2] as string | null | undefined) ?? null, team, role });
+  const many = (ps: ScoutPoint[] | undefined, team: Team, role?: VisualRole) => (Array.isArray(ps) ? ps.map((p) => player(p, team, role)) : []);
+  const base = { t: at, team: side };
+  switch (v.kind) {
+    case "line_break": {
+      const from = pt(g.from);
+      const to = pt(g.to);
+      if (!from || !to || !Array.isArray(g.bypassed)) return null;
+      const players = [player(g.from!, side, "passer"), player(g.to!, side, "receiver"), ...many(g.bypassed, other(side), "bypassed"), ...many(g.players, side)];
+      return { ...base, kind: "line_break", players, pass: { from, to }, bypassed: g.bypassed.length };
+    }
+    case "overload": {
+      if (!g.zone || !Array.isArray(g.home) || !Array.isArray(g.away)) return null;
+      const own = side === "home" ? g.home : g.away;
+      const theirs = side === "home" ? g.away : g.home;
+      const players = [...many(own, side, "attacker"), ...many(theirs, other(side), "defender")];
+      const count = { for: g.for ?? own.length, against: g.against ?? theirs.length };
+      return { ...base, kind: "overload", players, zone: g.zone, count };
+    }
+    case "pass_options": {
+      if (!pt(g.passer)) return null;
+      const players = [player(g.passer!, side, "carrier"), ...many(g.open, side, "open"), ...many(g.marked, side, "marked")];
+      if (g.target) players.push(player(g.target, side, "receiver"));
+      return { ...base, kind: "pass_options", players, radius_m: g.radius_m ?? null };
+    }
+    case "counter_press": {
+      const ball = pt(g.ball);
+      if (!ball || !Array.isArray(g.pressers) || !(typeof g.radius_m === "number")) return null;
+      return { ...base, kind: "counter_press", players: many(g.pressers, side, "presser"), ball, radius_m: g.radius_m };
+    }
+    case "shape": {
+      // v1 sends only the minute; the picture needs the lines the fact holds (PR B adds them).
+      if (!Array.isArray(g.lines) || !g.lines.length) return null;
+      const lines = g.lines.map((l) => l.map((p) => ({ x: p[0], y: p[1] })));
+      return { ...base, kind: "shape", players: many(g.players, side), lines };
+    }
+    case "wind_map":
+      return { ...base, kind: "wind", players: [], t_from: g.t_from ?? null, t_to: g.t_to ?? null };
+  }
+  return null;
+}
 
 const finite = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n);
 // design: a few metres off the pitch is a player by the line or a throw-in taker; past that, a bad fit.
@@ -27,6 +96,8 @@ export function drawable(v: Visual | null | undefined): v is Visual {
       return !!v.pass && onPitch(v.pass.from) && onPitch(v.pass.to) && finite(v.bypassed);
     case "pass_options":
       return v.players.some((p) => p.role === "carrier");
+    case "counter_press":
+      return onPitch(v.ball) && finite(v.radius_m) && v.radius_m! > 0;
     case "shape":
       return Array.isArray(v.lines) && v.lines.length > 0 && v.lines.every((l) => l.length >= 2 && l.every(onPitch));
     case "wind":
@@ -39,6 +110,7 @@ export function headline(v: Visual): string {
   if (v.kind === "overload" && v.count) return `${v.count.for}v${v.count.against}`;
   if (v.kind === "line_break" && finite(v.bypassed)) return `${v.bypassed} bypassed`;
   if (v.kind === "pass_options") return `${v.players.filter((p) => p.role === "open").length} open`;
+  if (v.kind === "counter_press") return `${v.players.filter((p) => p.role === "presser").length} pressing`;
   return "";
 }
 
@@ -174,6 +246,24 @@ export function drawVisual(view: View, v: Visual) {
       pill(view, headline(v), mid.x, mid.y - 22, own);
       break;
     }
+    case "counter_press": {
+      const b = v.ball!;
+      ctx.globalAlpha = 0.22;
+      ctx.fillStyle = own;
+      ctx.beginPath();
+      ctx.arc(X(b.x), Y(b.y), v.radius_m! * view.s, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.setLineDash([5, 4]);
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = own;
+      ctx.stroke();
+      ctx.setLineDash([]);
+      for (const p of role("presser")) dot(view, p);
+      ball(v, view);
+      pill(view, headline(v), X(b.x), Y(b.y) - v.radius_m! * view.s - 16, own);
+      break;
+    }
     case "pass_options": {
       const carrier = role("carrier")[0];
       for (const p of rest("carrier", "open")) dot(view, p, { dim: p.role !== "marked" });
@@ -205,7 +295,7 @@ export function drawVisual(view: View, v: Visual) {
 /** The picture in words, for a screen reader, from the same data the drawing uses. */
 export function describeVisual(v: Visual, names?: Record<string, string>): string {
   const club = teams[v.team];
-  const who = (p: VisualPlayer) => playerName(p.id, names);
+  const who = (p: VisualPlayer) => (p.id ? playerName(p.id, names) : `a ${teams[p.team]} player`);
   const at = `at ${clock(v.t)}`;
   switch (v.kind) {
     case "overload": {
@@ -225,6 +315,10 @@ export function describeVisual(v: Visual, names?: Record<string, string>): strin
       return open.length
         ? `Picture ${at}: ${who(carrier)} on the ball, with ${open.length} open teammate${open.length === 1 ? "" : "s"} ringed: ${open.map(who).join(", ")}.`
         : `Picture ${at}: ${who(carrier)} on the ball, with no teammate open.`;
+    }
+    case "counter_press": {
+      const n = v.players.filter((p) => p.role === "presser").length;
+      return `Picture ${at}: ${n} ${club} player${n === 1 ? "" : "s"} within ${v.radius_m} m of the ball, in a shaded circle.`;
     }
     case "shape":
       return `Picture ${at}: ${club}'s shape, ${v.lines!.length} line${v.lines!.length === 1 ? "" : "s"} drawn through their players.`;

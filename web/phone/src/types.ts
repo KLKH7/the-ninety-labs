@@ -68,16 +68,50 @@ export interface Question {
   t: number;
 }
 
-/** What an answer's or a card's picture shows (schemas/viewer_answer.schema.json, `visual`). Every
- * position and number in it comes from the tool the agent cited; the phone only draws it. */
-export type VisualKind = "overload" | "line_break" | "pass_options" | "shape" | "wind";
-export type VisualRole = "attacker" | "defender" | "passer" | "receiver" | "bypassed" | "open" | "marked" | "carrier";
+/** A picture as the agents send it (schemas/insight_card.schema.json, $defs/visual): pitch metres,
+ * home attacking x = 105, a point as [x, y] or [x, y, player id or null]. Every position and count
+ * comes from the cited fact; `visual.ts` turns it into the `Visual` the phone draws, or nothing. */
+export type ScoutKind = "line_break" | "overload" | "pass_options" | "counter_press" | "shape" | "wind_map";
+export type ScoutPoint = [number, number] | [number, number, string | null];
+export interface ScoutVisual {
+  kind: ScoutKind;
+  fact: string;
+  t: number | null;
+  team: Team | null;
+  club: string | null;
+  geometry: {
+    from?: ScoutPoint;
+    to?: ScoutPoint;
+    bypassed?: ScoutPoint[];
+    zone?: { x0: number; x1: number; y0: number; y1: number };
+    home?: ScoutPoint[];
+    away?: ScoutPoint[];
+    for?: number;
+    against?: number;
+    passer?: ScoutPoint;
+    target?: ScoutPoint | null;
+    open?: ScoutPoint[];
+    marked?: ScoutPoint[];
+    radius_m?: number;
+    ball?: ScoutPoint;
+    pressers?: ScoutPoint[];
+    minute?: number;
+    lines?: ScoutPoint[][];
+    players?: ScoutPoint[];
+    t_from?: number;
+    t_to?: number;
+  };
+}
+
+/** What the phone draws (visual.ts), made from a ScoutVisual. */
+export type VisualKind = "overload" | "line_break" | "pass_options" | "counter_press" | "shape" | "wind";
+export type VisualRole = "attacker" | "defender" | "passer" | "receiver" | "bypassed" | "open" | "marked" | "carrier" | "presser";
 export interface Point {
   x: number;
   y: number;
 }
 export interface VisualPlayer extends Point {
-  id: string;
+  id: string | null;
   team: Team;
   role?: VisualRole;
 }
@@ -91,28 +125,32 @@ export interface Visual {
   count?: { for: number; against: number } | null;
   pass?: { from: Point; to: Point } | null;
   bypassed?: number | null;
+  radius_m?: number | null;
   lines?: Point[][] | null;
   t_from?: number | null;
   t_to?: number | null;
 }
 
-/** A pushed "hidden stat" (schemas/companion_message.schema.json, `insight_card`). */
+/** A pushed "hidden stat" (schemas/insight_card.schema.json): cards.json beside the bundle, oldest
+ * first. Only verified cards are written; `why.answer` is precomputed and fact-checked. */
 export interface InsightCard {
-  type: "insight_card";
   id: string;
   t: number;
+  minute: number;
   team: Team;
-  title: string;
+  club: string;
+  kind: string;
+  headline: string;
   text: string;
-  metric: string | null;
-  value: number | null;
-  unit: string | null;
+  status: "verified";
+  source: "code" | "model";
   evidence: string[];
-  visual: Visual | null;
-  /** What "Why?" asks the Companion. */
-  question: string;
+  visual: ScoutVisual | null;
+  why: { question: string; answer: { status: "verified"; text: string; evidence: string[]; visual: ScoutVisual | null } } | null;
   names?: Record<string, string>;
-  source: Source;
+  /** A plain sentence for screen readers and the Describer, with no reference to the picture. */
+  spoken?: string;
+  follow_ups?: string[];
 }
 
 export interface ViewerAnswer {
@@ -129,7 +167,9 @@ export interface ViewerAnswer {
   t_from: number | null;
   t_to: number | null;
   /** The picture the answer's tool data draws, when it has one. */
-  visual?: Visual | null;
+  visual?: ScoutVisual | null;
+  spoken?: string;
+  follow_ups?: string[];
   /** A label for a player only where the names tool gave one: a name, or a role. */
   names?: Record<string, string>;
   teams?: TeamNames;

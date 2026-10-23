@@ -22,6 +22,8 @@ import {
   type RelayMessage,
   type Team,
   type ViewerAnswer,
+  type ScoutPoint,
+  type ScoutVisual,
   type Visual,
   type VisualKind,
   type VisualPlayer,
@@ -62,7 +64,7 @@ const INSIGHT_AT: [number, VisualKind, Team][] = [
   [18, "overload", "home"],
   [41, "line_break", "home"],
   [63, "pass_options", "away"],
-  [86, "shape", "away"],
+  [86, "line_break", "away"], // cards carry no shape kind (schemas/insight_card.schema.json)
   [104, "overload", "away"],
 ];
 
@@ -88,7 +90,7 @@ export function mockVisual(m: Minimap, kind: VisualKind, side: Team, t: number):
   }
   if (kind === "line_break") {
     const from = nearest(mine, bx, by);
-    const to = mine.reduce((a, b) => (sign * b.x > sign * a.x ? b : a));
+    const to = mine.filter((p) => p.id !== from.id).reduce((a, b) => (sign * b.x > sign * a.x ? b : a)); // a pass goes to someone else
     const lo = Math.min(from.x, to.x);
     const hi = Math.max(from.x, to.x);
     const passed = new Set(theirs.filter((p) => p.x > lo && p.x < hi).map((p) => p.id));
@@ -114,12 +116,51 @@ export function mockVisual(m: Minimap, kind: VisualKind, side: Team, t: number):
   return { ...base, kind, players: [], t_from: Math.max(0, f.t - 30), t_to: f.t };
 }
 
+/** The mock's picture in the agents' shape as committed (schemas/insight_card.schema.json,
+ * $defs/visual: points are [x, y]; a shape carries its minute only), so the phone reads the mock
+ * exactly as it reads the Scout. Counts are the lengths of the lists. */
+export function toScout(v: Visual): ScoutVisual {
+  const pt = (p: { x: number; y: number }): ScoutPoint => [p.x, p.y];
+  const of = (role: string) => v.players.filter((p) => p.role === role).map(pt);
+  const base = { fact: `mock:${v.kind}:${v.t.toFixed(1)}`, t: v.t, team: v.team, club: teams[v.team] };
+  switch (v.kind) {
+    case "overload": {
+      const mine = of("attacker");
+      const theirs = of("defender");
+      return { ...base, kind: "overload", geometry: { zone: v.zone!, home: v.team === "home" ? mine : theirs, away: v.team === "home" ? theirs : mine } };
+    }
+    case "line_break":
+      return { ...base, kind: "line_break", geometry: { from: of("passer")[0], to: of("receiver")[0], bypassed: of("bypassed") } };
+    case "pass_options":
+      return { ...base, kind: "pass_options", geometry: { passer: of("carrier")[0], target: null, open: of("open"), marked: of("marked"), radius_m: OPEN_M } };
+    case "shape":
+      return { ...base, kind: "shape", geometry: { minute: Math.floor(v.t / 60) + 1 } };
+    default:
+      return { ...base, kind: "wind_map", geometry: { t_from: v.t_from!, t_to: v.t_to! } };
+  }
+}
+
+/** Why a mock picture matters, from its own numbers: the precomputed "why?" a card carries. */
+function mockWhy(v: Visual): string {
+  const club = teams[v.team];
+  switch (v.kind) {
+    case "overload":
+      return `With ${v.count!.for} against ${v.count!.against} round the ball, ${club} always had a spare player to pass to.`;
+    case "line_break":
+      return `A pass that goes past ${v.bypassed} defender${v.bypassed === 1 ? "" : "s"} leaves them behind the ball, so ${club} attack fewer players.`;
+    case "pass_options":
+      return `${v.players.filter((p) => p.role === "open").length} teammates had no one within ${OPEN_M} m, so the pass was on.`;
+    default:
+      return `It shows how ${club} were set up at that moment.`;
+  }
+}
+
 /** What a mock picture says, in a sentence built from its own numbers. */
 function mockText(v: Visual, names?: Record<string, string>): { title: string; text: string; value: number | null; unit: string | null } {
   const club = teams[v.team];
   const who = (role: string) => {
     const p = v.players.find((q) => q.role === role);
-    return p ? playerName(p.id, names) : "";
+    return p?.id ? playerName(p.id, names) : `a ${club} player`;
   };
   switch (v.kind) {
     case "overload":
@@ -132,6 +173,8 @@ function mockText(v: Visual, names?: Record<string, string>): { title: string; t
     }
     case "shape":
       return { title: `${club}'s shape`, text: `${club} lined up in ${v.lines!.map((l) => l.length).join("-")} at ${clock(v.t)}.`, value: null, unit: null };
+    case "counter_press":
+      return { title: `${club} press`, text: `${club} pressed the ball.`, value: null, unit: null };
     case "wind":
       return { title: "How the teams moved", text: `Both teams' movement from ${clock(v.t_from!)} to ${clock(v.t_to!)}.`, value: null, unit: null };
   }
@@ -230,20 +273,22 @@ export class MockFeed implements Feed {
     return INSIGHT_AT.filter(([t]) => t <= tTo).map(([t, kind, side], i) => {
       const visual = mockVisual(m, kind, side, t);
       const said = mockText(visual);
+      const scout = toScout(visual);
+      const evidence = [`${kind}:mock_${t}`];
       return {
-        type: "insight_card",
         id: `mock-insight-${i + 1}`,
         t,
+        minute: Math.floor(t / 60) + 1,
         team: side,
-        title: said.title,
+        club: teams[side],
+        kind,
+        headline: said.title.slice(0, 40),
         text: said.text,
-        metric: kind,
-        value: said.value,
-        unit: said.unit,
-        evidence: [`${kind}:mock_${t}`],
-        visual,
-        question: `Why did ${said.title.charAt(0).toLowerCase()}${said.title.slice(1)} happen at ${clock(t)}?`,
-        source: "mock",
+        status: "verified",
+        source: "code",
+        evidence,
+        visual: scout,
+        why: { question: `Why does that matter at ${clock(t)}?`, answer: { status: "verified", text: mockWhy(visual), evidence, visual: scout } },
       };
     });
   }
@@ -268,7 +313,8 @@ export class MockFeed implements Feed {
           evidence: [`${kind}:mock_${visual.t.toFixed(1)}`],
           t_from: visual.t_from ?? visual.t,
           t_to: visual.t_to ?? visual.t,
-          visual,
+          // follow_ups and spoken arrive with the Scout's next schema (PR B); the phone reads them already.
+          visual: toScout(visual),
         },
       };
     }

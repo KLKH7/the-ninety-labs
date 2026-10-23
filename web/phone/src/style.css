@@ -222,3 +222,10 @@ details[open] > summary::before { transform: rotate(90deg); }
 @media (min-width: 700px) {
   .roster-row { grid-template-columns: repeat(11, minmax(0, 1fr)); }
 }
+
+/* "Why?" on a card: the Scout's precomputed, fact-checked answer, opened in place */
+.why[aria-expanded="true"] { background: var(--panel-2); }
+.why-answer { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: var(--bg); }
+.why-answer .asked { margin: 0 0 4px; }
+.why-answer p { margin: 0; }
+.chips.follow { margin-top: 10px; }

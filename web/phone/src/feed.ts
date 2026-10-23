@@ -74,7 +74,9 @@ export function guarded(feed: Feed, seen: (payload: unknown) => void = () => {})
     // An answer carries no source of its own: the UI asks only once the clip's minimap passed the
     // guard (main.ts), and the API refuses questions about ground-truth clips when deployed (503).
     ask: async (q) => record(await feed.ask(q)),
-    insights: async (clip, tTo) => (await feed.insights(clip, tTo)).map((c) => onlyTracked("An insight card", record(c))),
+    // A card carries no positions' source of its own (its `source` is its author, code or model):
+    // the Scout builds cards only from tracked facts, and the fact-checker passed each one.
+    insights: async (clip, tTo) => (await feed.insights(clip, tTo)).map((c) => record(c)),
   };
 }
 

@@ -22,6 +22,7 @@ import {
   type PlayerCard,
   type RelayMessage,
   type ViewerAnswer,
+  type ScoutVisual,
   type Visual,
   clock,
   isTrack,
@@ -30,7 +31,7 @@ import {
   team,
   teams,
 } from "./types";
-import { describeVisual, drawVisual, drawable, headline } from "./visual";
+import { describeVisual, drawVisual, drawable, fromScout, headline } from "./visual";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
@@ -108,7 +109,11 @@ function screenOf(x: number, y: number): [number, number] {
   radarAt: (t: number) => state.radar?.at(t, false) ?? null,
   screenOf,
   name: playerName,
-  drawable,
+  // An agents' visual (schemas/insight_card.schema.json) the phone would draw, or not.
+  drawable: (sv: ScoutVisual, t: number | null = null) => {
+    const v = fromScout(sv, t);
+    return !!v && drawable(v);
+  },
 };
 
 const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)");
@@ -282,9 +287,11 @@ interface BundleManifest {
   teams?: unknown;
   radar?: unknown;
   match?: unknown;
+  cards?: unknown;
 }
 
 let bundleFps = 25;
+let bundleCards: InsightCard[] | null = null;
 let bundleRadar: { data: import("../../viewer/src/radar").RadarData; fps: number; segmentOf: (k: number) => [number, number] } | null = null;
 
 /** The bundle the big screen plays, named by its QR code: a path on this origin, never another site. */
@@ -312,7 +319,12 @@ async function loadBundle() {
     const cuts = timeline(m);
     laptop.cuts = cuts;
     bundleFps = m.fps;
-    const [radar, match] = await Promise.all([m.radar ? get("radar.json") : null, m.match ? get("match.json") : null]);
+    const [radar, match, cards] = await Promise.all([
+      m.radar ? get("radar.json") : null,
+      m.match ? get("match.json") : null,
+      m.cards ? get("cards.json") : null,
+    ]);
+    if (Array.isArray(cards)) bundleCards = (cards as InsightCard[]).filter((c) => c.status === "verified");
     if (radar) bundleRadar = { data: radar, fps: m.fps, segmentOf: cuts.segmentOf };
     state.match = match as MatchData | null;
     $("match-card").hidden = !state.match;
@@ -738,8 +750,10 @@ function renderAnswer(question: string, at: number, a: ViewerAnswer | null, fail
   }
   if (a && a.status === "verified") {
     // Only a checked answer draws its picture: the picture carries the same numbers as the text.
-    if (a.visual) li.append(picture(a.visual, a.names));
+    if (a.visual) li.append(picture(a.visual, a.t_to, a.names));
+    if (a.follow_ups?.length) li.append(followUps(a.follow_ups));
     li.append(...evidence(a));
+    if (a.spoken) li.setAttribute("aria-label", a.spoken); // a sentence that needs no picture
   }
   return li;
 }
@@ -754,12 +768,25 @@ const sized = new ResizeObserver((entries) => {
   for (const e of entries) pictures.get(e.target as HTMLCanvasElement)?.();
 });
 
-/** The answer's or card's picture, with its headline and its words for a screen reader. */
-function picture(v: Visual, names?: Record<string, string>): HTMLElement {
+/** The suggested next questions an answer carries, as one-tap chips. */
+function followUps(qs: string[]): HTMLElement {
+  const box = document.createElement("div");
+  box.className = "chips follow";
+  box.setAttribute("role", "group");
+  box.setAttribute("aria-label", "Ask next");
+  box.append(...qs.slice(0, 3).map((q) => chip(q, null)));
+  return box;
+}
+
+/** The answer's or card's picture, with its headline and its words for a screen reader: the agents'
+ * visual (schemas/insight_card.schema.json) made drawable by `fromScout`, or a line saying there
+ * is none. */
+function picture(sv: ScoutVisual, at: number | null, names?: Record<string, string>): HTMLElement {
   const fig = document.createElement("figure");
   fig.className = "picture";
-  fig.dataset.kind = v.kind;
-  if (!drawable(v)) {
+  const v = fromScout(sv, at);
+  fig.dataset.kind = v?.kind ?? "none";
+  if (!v || !drawable(v)) {
     // Missing data draws nothing rather than a guess.
     fig.dataset.kind = "none";
     fig.textContent = "No picture: the answer's data was incomplete.";
@@ -880,7 +907,8 @@ async function refreshInsights(force = false) {
   insightsAt = performance.now();
   const t = laptop.time();
   try {
-    const cards = await feed.insights(state.clip, t);
+    // The bundle's cards.json (the Insight Scout's, precomputed for the replay), else the feed's.
+    const cards = bundleCards ?? (await feed.insights(state.clip, t));
     // A replay must not show what is still to come: only cards up to the big screen's clock.
     const shown = cards.filter((c) => c.t <= t + 1e-6).sort((a, b) => b.t - a.t);
     const known = new Set(state.insights.map((c) => c.id));
@@ -892,7 +920,7 @@ async function refreshInsights(force = false) {
       if (fresh.length && !rewound && insightsShownTo >= 0) {
         if (state.tab !== "insights") unread += fresh.length;
         showUnread();
-        announce(`New insight: ${fresh[0].title}.`);
+        announce(`New insight: ${fresh[0].spoken ?? named(fresh[0].text, fresh[0].names)}`);
       }
     }
     insightsShownTo = t;
@@ -922,25 +950,42 @@ function renderInsights() {
       const head = document.createElement("div");
       head.className = "insight-head";
       const title = document.createElement("h3");
-      title.textContent = named(c.title, c.names);
+      title.textContent = named(c.headline, c.names);
       const when = document.createElement("span");
       when.className = "when";
-      when.textContent = `${teams[c.team]} · ${clock(c.t)}`;
+      when.textContent = `${teams[c.team]} · ${c.minute}′`;
       head.append(title, when);
       const text = document.createElement("p");
       text.textContent = named(c.text, c.names);
       li.append(head, text);
-      if (c.visual) li.append(picture(c.visual, c.names));
+      if (c.spoken) li.setAttribute("aria-label", `${c.minute}th minute. ${c.spoken}`);
+      if (c.visual) li.append(picture(c.visual, c.t, c.names));
+      if (!c.why) return li;
+      // "Why?" opens the answer the Scout precomputed and the fact-checker passed: no model call.
       const why = document.createElement("button");
       why.type = "button";
       why.className = "why";
       why.textContent = "Why?";
-      why.setAttribute("aria-label", `Why? Ask the Companion: ${c.question}`);
+      why.setAttribute("aria-expanded", "false");
+      const panel = document.createElement("div");
+      panel.className = "why-answer";
+      panel.id = `why-${c.id}`;
+      panel.hidden = true;
+      why.setAttribute("aria-controls", panel.id);
+      const q = document.createElement("p");
+      q.className = "asked";
+      q.textContent = c.why.question;
+      const said = document.createElement("p");
+      said.textContent = named(c.why.answer.text, c.names);
+      panel.append(q, said);
+      if (c.why.answer.visual) panel.append(picture(c.why.answer.visual, c.t, c.names));
       why.addEventListener("click", () => {
-        showTab("ask");
-        void ask(c.question);
+        const open = why.getAttribute("aria-expanded") !== "true";
+        why.setAttribute("aria-expanded", String(open));
+        panel.hidden = !open;
+        if (open) requestAnimationFrame(redrawPictures);
       });
-      li.append(why);
+      li.append(why, panel);
       return li;
     }),
   );

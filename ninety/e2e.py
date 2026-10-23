@@ -33,6 +33,10 @@ Match mode, for a condensed match (one clip cut from passage to passage): `--mat
 (ninety/condensed.py): a chapter per segment named from the detected events, the scoreline from
 detected goals, and each team's stats from the footage shown.
 
+Hidden-stat cards for the phone: `--cards FILE` copies the Insight Scout's cards
+(`python -m ninety.agents.scout`, schemas/insight_card.schema.json) into the bundle as cards.json.
+Every card must be verified and match the schema, or the bundle is not written.
+
 The bundle (manifest.json, cues.jsonl, trace.json, events.jsonl, facts.json, detections.jsonl,
 radar.json and match.json when asked for, and the footage as video.webm or frames/) is all the
 viewer reads. This module never opens the clip's events.jsonl or frames.jsonl: they are the answer
@@ -54,6 +58,7 @@ from pathlib import Path
 
 from ninety import condensed, radar
 from ninety.agents import live, telemetry
+from ninety.agents.contracts import schema_validator
 from ninety.agents.cues import _text
 from ninety.agents.factcheck import Claim, Verdict
 from ninety.agents.slice import Recording, replayer, tamper
@@ -85,6 +90,18 @@ class Clip:
     def images(self) -> list[Path]:
         return sorted((self.dir / "images").glob("*.jpg"))
 
+
+
+def read_cards(path: Path) -> list[dict]:
+    """The Scout's cards, oldest first, each checked against schemas/insight_card.schema.json. Only
+    verified cards reach a fan (the schema says so too); anything else stops the bundle."""
+    cards = json.loads(path.read_text())
+    if not isinstance(cards, list):
+        raise SystemExit(f"{path}: cards.json is a list of cards")
+    validate = schema_validator("insight_card")
+    for card in cards:
+        validate.validate(card)
+    return sorted(cards, key=lambda c: c["t"])
 
 
 def teams_of(meta: dict) -> dict | None:
@@ -333,6 +350,11 @@ async def run(args: argparse.Namespace) -> dict:
         (out / "match.json").write_text(json.dumps(body, indent=1) + "\n")
         match_info = {"chapters": len(body["chapters"]), "goals": len(body["goals"]),
                       "min_confidence": body["min_confidence"]}
+    cards_info = None
+    if args.cards:
+        cards = read_cards(args.cards)
+        (out / "cards.json").write_text(json.dumps(cards, indent=1) + "\n")
+        cards_info = {"count": len(cards)}
     write_jsonl(out / "cues.jsonl", cues)
     (out / "facts.json").write_text(json.dumps(facts, indent=2) + "\n")
     (out / "trace.json").write_text(json.dumps({"claims": claims}, indent=2) + "\n")
@@ -361,9 +383,11 @@ async def run(args: argparse.Namespace) -> dict:
         "audio": audio,
         "radar": radar_info,
         "match": match_info,
+        "cards": cards_info,
         "files": ["detections.jsonl", "events.jsonl", "facts.json", "trace.json", "cues.jsonl", "audio.json",
                   "description.vtt"] + (["radar.json"] if radar_info else [])
-                 + (["match.json"] if match_info else []),
+                 + (["match.json"] if match_info else [])
+                 + (["cards.json"] if cards_info else []),
     }
     (out / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     return manifest
@@ -393,6 +417,8 @@ def parser() -> argparse.ArgumentParser:
                     help="vision's observations.jsonl for the clip: the radar's camera footprint")
     ap.add_argument("--match", action="store_true",
                     help="match mode: chapters, scoreline and team stats for a condensed match (match.json)")
+    ap.add_argument("--cards", type=Path, default=None,
+                    help="the Insight Scout's cards.json for the clip: the phone's hidden stats (cards.json)")
     ap.add_argument("--frames", action="store_true", help="ship JPEG frames instead of encoding video.webm")
     return ap
 

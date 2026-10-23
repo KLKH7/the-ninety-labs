@@ -15,8 +15,11 @@ code; everything else is here. The phone pairs with the big screen, then has thr
   `visual` draws its picture (`src/visual.ts`): an overload, a line-breaking pass, pass options,
   a team's shape or the wind map, from the visual's own positions and numbers, or nothing when one
   is missing;
-- **Insights**: hidden-stat cards (`GET /api/insights/{clip}?t_to=`) up to the big screen's clock,
-  newest first, each with its picture and "Why?", which asks the Companion.
+- **Insights**: the Insight Scout's hidden-stat cards (`cards.json` in the bundle, written by
+  `ninety-e2e --cards`; schemas/insight_card.schema.json) up to the big screen's clock, newest first,
+  each with its picture. "Why?" opens the card's precomputed, fact-checked answer in place: no
+  model call. Pictures arrive in the agents' shape (`$defs/visual`) and `visual.ts`'s `fromScout`
+  turns them into what the phone draws; anything missing draws nothing.
 
 Clubs are named from the codes on the clip's scorebug (`web/viewer/src/teams.ts`); a player by the
 name or role an answer carries, otherwise by club and shirt or track ("Fenwick player 12").
