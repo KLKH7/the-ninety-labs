@@ -2122,11 +2122,14 @@ class Engine:
         sx, sy = self.restart_ball_spot(r)
         bx, by = self.ball[0], self.ball[1]
         settled = carrier is not None and self.t - r.gathered_at >= settle_s(carrier.profile["first_touch"])
-        if (settled and carrier.id != r.taker
+        clear_way = not any(crosses((bx, by), (sx, sy), c, d) for c, d in NETS)
+        if (settled and carrier.id != r.taker and clear_way
                 and decisions.can_strike(bx - carrier.x, by - carrier.y, carrier.heading, sx - bx, sy - by)):
             # Once he has settled it (A4) and faces the spot (P16) he knocks it along the ground
             # there, to arrive at the softest pace a pass is struck to arrive at (D1), with his own
-            # error (A3), and leaves it to the taker.
+            # error (A3), and leaves it to the taker. With a goal's net in the way (behind the goal)
+            # he carries it round first: knocked into the net, it stopped there and was fetched and
+            # knocked into it again (lesson 200).
             dist = math.hypot(sx - bx, sy - by)
             ground = ball.ground_pass(max(dist, 0.5), decisions.ARRIVE_MPS, DT)
             skill = decisions.pass_skill(bx, sx, sy, False, goal_x(carrier.team))

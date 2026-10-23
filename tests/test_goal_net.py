@@ -450,3 +450,32 @@ def test_a_shot_wide_of_the_post_meets_the_side_netting_in_the_frame_it_crosses(
     assert abs(e.ball[1] - MID) >= GOAL_HALF_WIDTH + R - EPS
     assert e.ball[4] == 0.0
     assert e.restart is not None and e.restart.kind == "goal_kick"
+
+
+def test_a_ball_behind_the_goal_is_carried_round_the_net_not_knocked_into_it():
+    """Lesson 200: the dead ball at rest behind the goal (seed 102 on main at 5:17: it was knocked
+    from there to the goal-kick spot straight through the back of the net and the goal). Fetched by
+    an outfielder while the keeper takes the kick, it is never knocked on with a net across its way:
+    he carries it round first. With the net solid from outside, each knock into it stopped there and
+    was fetched and knocked into it again."""
+    e = Engine(2)
+    e.run(1)
+    e.possessor, e.throw_by, e.set_by = None, None, None
+    e.ball = (109.0, 33.06, 0.0, 0.0, 0.0, 0.0)
+    gk, fetcher = e.keeper("away"), e.by_id["a3"]
+    gk.x, gk.y, gk.vx, gk.vy = 95.0, MID, 0.0, 0.0
+    fetcher.x, fetcher.y, fetcher.vx, fetcher.vy = 110.0, 32.0, 0.0, 0.0
+    e.stop("goal_kick", "away", (PITCH_X - GOAL_AREA_X, MID), gk.id)
+    knocks, track = [], [frame(e)]
+    for _ in range(int(90 / DT)):
+        passed = e.restart.passed_by
+        e.step()
+        track.append(frame(e))
+        if e.restart is None:
+            break
+        if e.restart.passed_by and not passed:  # knocked on toward the spot this frame
+            knocks.append((track[-1]["ball"][:2], (PITCH_X - GOAL_AREA_X, MID)))  # struck from there
+    assert e.restart is None  # taken
+    assert knocks  # it was knocked on to the spot at some point
+    assert not any(through(a, b, c, d) for a, b in knocks for c, d in nets())
+    assert not any(in_the_goal(f["ball"]) for f in track)
