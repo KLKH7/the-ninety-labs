@@ -1,4 +1,5 @@
 import json
+import math
 
 import pytest
 
@@ -378,3 +379,86 @@ def test_the_boxes_path_skips_only_visibility_zero(visibility, misses):
     report = score(frames, [], run={0})
     assert report["by_class"]["player"]["fn"] == misses
     assert report["by_class"]["ball"]["fn"] == misses
+
+
+# --- the ball's height and the camera's blur (EVALUATION.md difficulty groups) -----------------
+
+
+def test_the_height_and_blur_cut_offs_are_evaluation_md_s():
+    # "in the air: height above 0.5 m"; "blurred: camera blur streak longer than 3 px"
+    assert vision_score.IN_AIR_Z == 0.5
+    assert vision_score.BLUR_PX == 3.0
+
+
+@pytest.mark.parametrize(("z", "group"), [
+    (vision_score.IN_AIR_Z, "on the ground"),  # exactly the cut-off is not above it
+    (math.nextafter(vision_score.IN_AIR_Z, math.inf), "in the air"),
+    (0.0, "on the ground"), (2.0, "in the air"),
+])
+def test_the_ball_is_in_the_air_only_strictly_above_the_cut_off(z, group):
+    assert vision_score.height_group(z) == group
+
+
+@pytest.mark.parametrize(("blur", "group"), [
+    ([vision_score.BLUR_PX, 0.0], "not blurred"),  # exactly the cut-off is not longer than it
+    ([0.0, -vision_score.BLUR_PX], "not blurred"),
+    ([math.nextafter(vision_score.BLUR_PX, math.inf), 0.0], "blurred"),
+    ([-2.5, 2.5], "blurred"),  # each part under 3 px, the streak's length 3.54 px
+    ([0.0, 0.0], "not blurred"),
+])
+def test_a_frame_is_blurred_only_when_its_streak_is_longer_than_the_cut_off(blur, group):
+    assert vision_score.blur_group(blur) == group
+
+
+def axis_frames():
+    """Frame 0: ball on the ground at exactly the cut-off, streak exactly the cut-off. Frame 1: ball
+    in the air, streak longer. Both frames: one player and the ball."""
+    rows = []
+    for f, z, blur in ((0, vision_score.IN_AIR_Z, [vision_score.BLUR_PX, 0.0]), (1, 1.2, [2.5, 2.5])):
+        rows.append({"frame": f, "camera": {"width": 1280, "height": 720}, "blur_px": blur,
+                     "players": [{"bbox": [10, 10, 30, 50], "visibility": 1.0}],
+                     "ball": {"bbox": [40, 40, 50, 50], "visibility": 1.0, "z": z}})
+    return rows
+
+
+def test_height_and_blur_groups_count_each_label_once():
+    # Frame 0 copied exactly; frame 1: the player and the ball dropped, and a false ball far away.
+    found = [{"frame": 0, "cls": "player", "bbox": [10, 10, 30, 50], "score": 1.0},
+             {"frame": 0, "cls": "ball", "bbox": [40, 40, 50, 50], "score": 1.0},
+             {"frame": 1, "cls": "ball", "bbox": [400, 400, 410, 410], "score": 1.0}]
+    report = score(axis_frames(), found)
+    counts = lambda row: (row["tp"], row["fp"], row["fn"])  # noqa: E731
+    assert set(report["height"]) == {"ball"}  # the player has no height group
+    assert counts(report["height"]["ball"]["on the ground"]) == (1, 0, 0)
+    assert counts(report["height"]["ball"]["in the air"]) == (0, 1, 1)
+    assert counts(report["blur"]["ball"]["not blurred"]) == (1, 0, 0)
+    assert counts(report["blur"]["ball"]["blurred"]) == (0, 1, 1)
+    assert counts(report["blur"]["player"]["not blurred"]) == (1, 0, 0)
+    assert counts(report["blur"]["player"]["blurred"]) == (0, 0, 1)
+    assert report["blur"]["ball"]["blurred"]["recall"] == 0.0
+    assert report["blur"]["ball"]["not blurred"]["precision"] == 1.0
+    assert report["rules"]["in_the_air_above_m"] == 0.5 and report["rules"]["blurred_above_px"] == 3.0
+
+
+def test_only_the_run_frames_decide_the_groups():
+    rows = axis_frames()
+    report = score(rows, [], run={1})
+    assert report["height"]["ball"]["on the ground"]["fn"] == 0
+    assert report["height"]["ball"]["in the air"]["fn"] == 1
+
+
+def test_frames_that_do_not_record_height_or_blur_report_no_such_group():
+    report = score(frames(), detections())
+    assert report["height"] is None and report["blur"] is None
+
+
+@pytest.mark.parametrize("field", ["z", "blur_px"])
+def test_frames_with_and_without_the_field_are_refused(field):
+    rows = axis_frames()
+    if field == "z":
+        del rows[1]["ball"]["z"]
+    else:
+        del rows[1]["blur_px"]
+    with pytest.raises(ValueError, match="some frames have"):
+        score(rows, [])
+    score(rows, [], run={0})  # the frame without it is not scored, so nothing is missing

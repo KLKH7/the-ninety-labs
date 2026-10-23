@@ -1750,6 +1750,23 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `uv run pytest tests/test_restarts.py -k past_the_end_of_the_touchline`; on the engine
   before it, the ball runs on to 127 m and jumps 18 m in a frame.
 
+### 173. A label check written for one pose fails the first body drawn in another
+- **What happened:** to make fouls legible (the fouled player goes down at the foul, the fouler's
+  foot meets his shins), the renderer tipped the fouled player's body over his feet. Render-check's
+  `player_feet_in_boxes` then failed 49 frames of seed 7's foul, all on the player lying down: it
+  required his ground point at the bottom of his box, with slack scaled by box height over 1.8 m,
+  and a lying body's box is neither 1.8 m tall nor has his feet at its bottom (fallen toward the
+  camera, they are at its top). His feet were inside the box on every one of those frames.
+- **Rule:**
+  - A check on the labels states the pose it assumes. When the picture draws a new pose, the label
+    data says so (`fall` in the frame row, an optional field) and the check judges that pose by
+    what is true of it, with a planted failing case.
+  - It never skips the player or widens the slack for everyone.
+  - Upright players are checked exactly as before.
+- **Check:** `uv run pytest tests/test_render_checks.py tests/test_render_fouls.py`. A fallen player
+  passes toward the camera, away from it and sideways. A box beside or above his feet still fails,
+  and so does a row with no `fall` and a lying player's box.
+
 ### 174. A player with time to spare walks there and waits, rather than creeping in just in time
 - **What happened:** at restarts the engine paced every player to reach his place just as the
   kick could come. At a corner that is about half a minute off (R1: Opta's mean is about 30 s), so
@@ -2034,7 +2051,46 @@ short and actionable. This file is public: no research sources, product names or
   `tests/test_zone_tracking.py::test_a_defender_follows_the_attacker_in_his_zone_once_he_scans`; the
   held-out measures in the pull request.
 
-### 188. A rule the renderer has to draw must be in the truth first
+### 188. Two scorers of one group share one cut-off and one comparison
+- **What happened:** EVALUATION.md puts a ball in the air when its centre is above 0.5 m. The
+  pitch-level vision scorer used `z > 0.5`, but the position scorer (`pitch_score.py`) used
+  `z < 0.5` for the ground, so a ball at exactly 0.5 m was on the ground in one report and in the
+  air in the other. Both had the same constant; nothing checked the comparison, and no test put a
+  ball exactly on the cut-off in the position scorer.
+- **Rule:** a difficulty group's cut-off and its comparison are defined once (`IN_AIR_Z`,
+  `height_group`, `BLUR_PX`, `blur_group` in `ninety/eval/vision_score.py`) and imported
+  everywhere; each scorer has a test with a value exactly on the cut-off (lesson 158).
+- **Check:** `uv run pytest tests/test_pitch_score.py tests/test_vision_score.py
+  tests/test_fake_box_detections.py -k "cut_off"`; the pitch_score test fails with `z < 0.5` put back.
+
+### 190. A test that reads its constant back cannot pin it
+- **What happened:** the foul pose asserted `foul_fall_deg(...) == FALL_DOWN_DEG` and `peak >= 80`.
+  A lie of 80° left both green, and so did rewriting the pose times, because the test added those
+  constants up and compared the curve to them. The planted clips sat 0.4 s and 1.6 s from the
+  restart, so a floor of 0.5 s and a floor of 1.5 s both passed.
+- **Rule:** an expected output that pins a design value is the number that design produces, written
+  out. A test that reads the constant moves with the bug. Lesson 36 is the other half: an input
+  that has to sit beside a threshold is derived from that threshold. A bound is planted on a case
+  the looser value lets through, and the tighter value does not.
+- **Check:** `tests/test_fouls.py` and the P18 tests in `tests/test_validate.py`. A lie of 80°, a
+  pose time rewritten, and a floor of 0.5 s each fail one of them.
+
+### 191. A live output named like an answer-key file looks like a truth read
+- **What happened:** the first draft of the live detection job (`ninety/vision/live_job.py`) wrote
+  its detected events to `events.jsonl`, the name of the answer key's event file. The live-path
+  checks went red: the static one found the name in the code, and the runtime one saw the job open
+  a file by that name. Nothing read ground truth, but a reader of the output folder, or a later
+  packer, could not tell detected events from true ones. Separately, `detect.frame_rows` falls
+  back to the labelled frame file when a clip has no labels-free index, so a job handed a whole
+  rendered clip would have read it.
+- **Rule:** live outputs never take an answer-key file name (detected events are `detected.jsonl`).
+  A job on the live path takes an allow-list of inputs (the index and the images) and refuses
+  anything else before a model loads, rather than trusting a fallback not to run.
+- **Check:** `tests/test_vision_live_path.py` lists `live_job.py` among the live modules;
+  `tests/test_vision_live_job.py::test_a_clip_folder_holding_anything_else_is_refused_before_the_model_loads`
+  (each answer-key file planted), and `::test_a_clean_clip_runs_the_whole_live_path_and_opens_no_truth`.
+
+### 197. A rule the renderer has to draw must be in the truth first
 - **What happened:** Kian saw that a keeper never seemed to hold the ball and throw or kick it.
   The engine settled every caught ball to the keeper's feet, and he played it from there like an
   outfielder, by a ground pass or a dribble. The renderer could only draw what the truth said: a
