@@ -295,3 +295,54 @@ def test_the_director_logs_every_decision_and_a_goal_jumps_the_cap():
     pushed = [e for e in log if e["decision"] == "pushed"]
     assert len(pushed) == len(cards) and {e["why"] for e in pushed} >= {"goal jump: the build-up to a goal"}
     assert all(e["decision"] in {"pushed", "deferred", "dropped", "refused"} for e in log)
+
+
+def with_shape() -> MatchInsights:
+    mi = insights()
+    mi.facts["shape"] = [
+        {
+            "id": "shape:line_height:home:m27",
+            "type": "shape",
+            "metric": "line_height",
+            "team": "home",
+            "club": "Oakfield",
+            "minute": 27,
+            "value": 12,
+            "unit": "m",
+            "change": -9,
+            "tracked": 11,
+            "of": 11,
+            "need": 11,
+            "frames": 1500,
+            "confident": True,
+            "also": [[9, "m"]],
+        },
+    ]
+    return mi
+
+
+def test_shape_questions_use_the_shape_facts():
+    q = Question("s1", None, "Are Oakfield sitting deep with a low block?", 27 * 60.0 + 30)
+    assert companion.route(q.text)[0] == "team_shape"
+    r = asyncio.run(companion.answer_match(q, with_shape()))
+    assert r.answer.status == "verified" and r.answer.evidence == ("shape:line_height:home:m27",)
+    assert (
+        r.answer.text == "In minute 27, Oakfield's back line dropped back 9 m, to 12 m from their own goal."
+    )
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "In minute 27, Oakfield played a high line, 12 m from their own goal.",  # degree against the value
+        "In minute 27, Oakfield's back line pushed up 9 m.",  # direction against the change
+        "In minute 27, Fenwick's back line was 12 m from their own goal.",  # the other club
+    ],
+)
+def test_shape_claims_keep_the_shape_checks(text):
+    from ninety.agents.factcheck import Claim
+    from ninety.agents.insight_check import verify
+
+    mi = with_shape()
+    known = {f["id"]: f for f in mi.facts["shape"]}
+    assert not verify(Claim(text, ["shape:line_height:home:m27"]), known, mi.fixture.clubs).ok

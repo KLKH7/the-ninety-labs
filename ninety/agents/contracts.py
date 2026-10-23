@@ -428,6 +428,8 @@ Rules:
 - Name each team by its club name exactly as given (Oakfield). Never write home, away, a colour or
   an id. Name a player only as the fact's passer_is or receiver_is gives him.
 - A fact whose confident is false cannot be stated: leave it out.
+- Words about a team's shape (back line, high line, width, compact, behind or ahead of the ball)
+  need a shape fact; for pass options say "further forward".
 - If the facts do not answer the question, reply {"text": "", "evidence": []}.
 - Reply with JSON only: {"text": "<sentence>", "evidence": ["<fact id>", ...]}"""
 

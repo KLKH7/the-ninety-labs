@@ -20,7 +20,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from ninety.intel import counter_press, line_breaks, overloads, pass_options, roles
+from ninety.intel import counter_press, line_breaks, overloads, pass_options, roles, shape
 from ninety.intel.scene import TEAMS, Frames
 from ninety.intel.teamsheet import Fixture
 
@@ -58,6 +58,17 @@ class MatchInsights:
             "overload": overloads.overloads(f),
             "counter_press": counter_press.counter_press(events, f),
             "pass_options": pass_options.pass_options(events, f),
+            # The team-shape facts of #228 (ninety/intel/shape.py), as its team_shape tool serves them.
+            "shape": [
+                {
+                    **r,
+                    "kind": "shape",
+                    "t": 60.0 * r["minute"] - 1,  # the minute's last second: a shape is known once it is over
+                    "also": [[abs(r["change"]), r["unit"]]] if r.get("change") else [],
+                    "visual": {"kind": "shape", "minute": r["minute"]},
+                }
+                for r in shape.shape_rows(f.frames)
+            ],
         }
         clubs = fixture.clubs
         for rows in facts.values():
@@ -151,6 +162,12 @@ class MatchInsights:
                 }
             )
         return {"facts": top, "summary": summary}
+
+    def team_shape(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+        rows = self._rows("shape", minute_from, minute_to, club)
+        # The confident facts of the latest minutes first: a fan asks about now.
+        top = sorted(rows, key=lambda r: (not r["confident"], -r["minute"], r["metric"]))[: MAX_FACTS * 2]
+        return {"facts": top, "summary": []}
 
     def lineup(self, club: str | None = None) -> dict:
         """The team sheets, and who of the tracked players may be named and how."""

@@ -58,7 +58,7 @@ WHY_TEXT = {
     "counter_press": "Winning the ball back within 5 seconds of losing it stops the other side "
     "from breaking, "
     "and {club} had {value} {unit} near the ball.",
-    "pass_options": "At the moment of that pass {club} had {value} open teammates ahead of the ball.",
+    "pass_options": "At the moment of that pass {club} had {value} open teammates further forward.",
 }
 
 
@@ -85,6 +85,8 @@ def candidates(insights, t_to: float) -> list[dict]:
     """Every confident fact up to t_to that ranks notable among its kind so far, oldest first."""
     out = []
     for kind, rows in insights.facts.items():
+        if kind not in HEADLINES:  # shape facts answer questions; the Scout does not push them
+            continue
         seen = []
         for f in rows:
             if f["t"] > t_to:
@@ -197,7 +199,7 @@ async def scout(
     - logged: each candidate's fate (pushed, deferred, dropped, refused by the fact-check), with why.
     """
     log = [] if log is None else log
-    pools = await asyncio.gather(*(spot(k, insights, float("inf")) for k in insights.facts))
+    pools = await asyncio.gather(*(spot(k, insights, float("inf")) for k in insights.facts if k in HEADLINES))
     pool = sorted((f for rows in pools for f in rows), key=lambda f: (f["t"], f["id"]))
     so_far = {k: rows for k, rows in insights.facts.items()}
 

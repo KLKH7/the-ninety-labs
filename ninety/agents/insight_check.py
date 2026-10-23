@@ -37,6 +37,7 @@ from ninety.agents.factcheck import (
     Claim,
     Verdict,
     _normalize_clock,
+    shape_reasons,
     spelled_as_digits,
 )
 from ninety.intel.teamsheet import LABEL
@@ -236,6 +237,12 @@ def check(
             held.append(f"{label} is said below the position gate")
         else:
             reasons.append(f"no cited player is the {label}")
+
+    # Team shape: the shape fact-checker's own rules (#228), with the clubs read as its team words.
+    shape_text = text
+    for team, name in clubs.items():
+        shape_text = re.sub(rf"\b{re.escape(name)}\b", team, shape_text)
+    reasons += shape_reasons(shape_text, list(cited))
 
     # Kind words.
     kinds = {f.get("kind") for f in cited}

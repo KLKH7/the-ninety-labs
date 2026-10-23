@@ -21,7 +21,7 @@ from ninety.agents.companion import TIMEOUT_S, Source, _NotTheFormat, _number, s
 from ninety.agents.contracts import Answer, Ask, Judge, Question, status_for
 from ninety.agents.factcheck import Claim, Verdict, parse_claim
 
-MATCH_TOOLS = ("counter_press", "overloads", "line_breaks", "pass_options", "lineup")
+MATCH_TOOLS = ("counter_press", "overloads", "line_breaks", "pass_options", "team_shape", "lineup")
 TOOL_HELP = {
     "counter_press": (
         "turnovers in open play, how many players pressed the ball in the 5 s after, "
@@ -30,6 +30,7 @@ TOOL_HELP = {
     "overloads": "moments one club had 2 or more extra players in a zone of the pitch",
     "line_breaks": "passes that took opponents out of the game (packing)",
     "pass_options": "open teammates ahead at each pass, and whether the pass used one",
+    "team_shape": "each club's shape a minute: width, length, back-line height, area, gaps between the lines",
     "lineup": "the team sheets, and which tracked player may be named",
 }
 # Code's routing, first match wins, at most MAX_TOOLS. The word lists are design: the plain words a
@@ -52,6 +53,11 @@ TOOL_WORDS = (
     (
         "pass_options",
         r"\b(?:options?|open|free|unmarked|decision\w*|choice\w*|should(?:'ve| have)|who to pass|passing)\b",
+    ),
+    (
+        "team_shape",
+        r"\b(?:shape|compact\w*|narrow\w*|stretched|high line|deep|block|back line|defensive line"
+        r"|width|spread out)\b",
     ),
     (
         "lineup",
@@ -260,7 +266,7 @@ def code_texts(fact: dict) -> list[str]:
         ]
     if metric == "open_teammates_ahead":
         if fact.get("outcome") == "fail" and fact["value"] == 0:
-            return [f"{span.capitalize()}, {who} lost a pass with no open teammate ahead of the ball."]
+            return [f"{span.capitalize()}, {who} lost a pass with no open teammate further forward."]
         if fact.get("outcome") == "fail" and fact.get("target_open") is False and fact["value"] > 0:
             return [
                 f"{span.capitalize()}, {who} had {_plural(fact['value'], 'open teammate')} ahead "
@@ -271,10 +277,30 @@ def code_texts(fact: dict) -> list[str]:
     if metric == "passes_with_no_open_teammate_ahead":
         if not fact["value"]:
             return []
-        return [f"{club} made {fact['value']} passes with no open teammate ahead {span}."]
+        return [f"{club} made {fact['value']} passes with no open teammate further forward {span}."]
+    if fact.get("type") == "shape":
+        return _shape_texts(fact, club or "", span)
     if kind == "sheet":
         return [f"{fact['name']} plays {fact['position']} for {club}, by the team sheet."]
     return []
+
+
+SHAPE_CHANGE_M = 3  # the least change said, as the audio description (ninety/speech/describe.py)
+
+
+def _shape_texts(fact: dict, club: str, span: str) -> list[str]:
+    v, c, m = _num(fact["value"]), fact.get("change"), fact["metric"]
+    out = []
+    if m == "line_height" and c is not None and abs(c) >= SHAPE_CHANGE_M:
+        move = "pushed up" if c > 0 else "dropped back"  # the shape check reads the change right after it
+        out.append(
+            f"{span.capitalize()}, {club}'s back line {move} {_num(abs(c))} m, to {v} m from their own goal."
+        )
+    if m == "line_height":
+        out.append(f"{span.capitalize()}, {club}'s back line was {v} m from their own goal.")
+    if m == "width":
+        out.append(f"{span.capitalize()}, {club}'s width was {v} m.")
+    return out
 
 
 def code_match_answer(
