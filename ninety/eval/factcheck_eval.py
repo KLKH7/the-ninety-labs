@@ -59,6 +59,9 @@ def cases(seed: int, minutes: float) -> list[dict]:
                     and "distance_m" in e and "intended" in e]
     meant_other = [e for e in done if e.get("intended") and e["intended"] != e.get("receiver")]
     tackles = [e for e in events if e["type"] == "tackle"]
+    # "Wins the ball" is true only of a tackle that won it (audit 4a: four failed tackles were labelled
+    # true under these words, and the Judge rejecting them was counted as its error).
+    tackles_won = [e for e in tackles if e.get("outcome") == "success"]
     shots = [e for e in events if e["type"] == "shot" and e.get("outcome") != "goal"]
     # Long-range and fast shots are rare in 30 minutes, so the shot tone kinds read the full match,
     # as goals do.
@@ -71,7 +74,8 @@ def cases(seed: int, minutes: float) -> list[dict]:
     fast_shots = [e for e in all_shots if (e.get("ball_speed_kmh") or 0) >= FAST_SHOT_KMH]
     interceptions = [e for e in events if e["type"] == "interception"]
     pressure = [e for e in events if e["type"] == "pressure"]
-    goals = [e for e in extended if e["type"] == "goal"]
+    # A goal names its scorer; one that names nobody gave the claim "None scores." (audit 4a).
+    goals = [e for e in extended if e["type"] == "goal" and e.get("player")]
     other = {"home": "away", "away": "home"}
 
     def teammate(e):
@@ -89,14 +93,15 @@ def cases(seed: int, minutes: float) -> list[dict]:
             True, done, "{player} plays a pass at {clock}."
         ),
         "true: tackle": (
-            True, tackles, "{player} wins the ball from {receiver} with a tackle."
+            True, tackles_won, "{player} wins the ball from {receiver} with a tackle."
         ),
         "true: shot": (
             True, shots, "{player} shoots at {ball_speed_kmh} km/h."
         ),
         # true claims with interpretation: a commentator's reading of supported facts
         "true: interpreted tackle": (
-            True, tackles, "{player} wins the ball back from {receiver}, a crucial defensive intervention."
+            True, tackles_won,
+            "{player} wins the ball back from {receiver}, a crucial defensive intervention."
         ),
         "true: interpreted pass": (
             True, done, "{player} picks out {receiver} with a {distance_m} m pass, a confident ball forward."
