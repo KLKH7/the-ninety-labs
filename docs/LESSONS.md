@@ -1768,6 +1768,21 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `uv run pytest tests/test_restarts.py -k past_the_end_of_the_touchline`; on the engine
   before it, the ball runs on to 127 m and jumps 18 m in a frame.
 
+### 172. A score called a confidence is measured before a gate is built on it
+- **What happened:** the phone's possession layer was designed to show a team only above a
+  confidence: the detector's side confidence times an age factor. Measured on 13 validation clips
+  before any UI was built, team agreement fell as the cut-off rose (65 % at 0.2, 30 % at 0.7, 0 %
+  at 0.9), because the side is decided once per clip, and a flipped clip is wrong throughout, one
+  of them at 0.88 to 0.97. `Track.side_confidence` says it is "a score, not a probability"; the
+  design treated it as one.
+- **Rule:** before a confidence gates what a viewer sees, measure agreement against it on
+  validation data: the curve by cut-off, and per clip, since errors that share a cause share a
+  clip. If no cut-off reaches the target, the gate stays shut and the feature stays off; never
+  move the target to open it. Build the screen only after the gate can open.
+- **Check:** `tests/test_possession.py::test_while_the_gate_is_unset_the_layer_shows_nothing` and
+  `::test_the_committed_calibration_states_its_targets_and_its_evidence`;
+  docs/eval/possession-calibration.md.
+
 ### 173. A label check written for one pose fails the first body drawn in another
 - **What happened:** to make fouls legible (the fouled player goes down at the foul, the fouler's
   foot meets his shins), the renderer tipped the fouled player's body over his feet. Render-check's

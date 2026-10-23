@@ -590,6 +590,28 @@ from tracked positions against the ground truth, offline, with and without the s
 for speed now and 1.5 km/h for top speed, against 52.8 km/h for top speed without smoothing
 (re-graded with the camera trust test of [detector-plan.md](eval/detector-plan.md)).
 
+### Possession now (the wind map's layer)
+
+`uv run python -m ninety.eval.possession_score calibrate` sets the gate on validation clips, and
+only then does `grade` score the test clips with it (GROUNDING S6). The unit is a phone frame
+(0.2 s). The truth is the answer key's latest possessor's side, and the true ball's third along
+that side's attacking direction. Intervals count true possession spells, not frames (Wilson),
+with a bootstrap over clips beside them.
+
+On the 13 validation clips ([possession-calibration.md](eval/possession-calibration.md)), team
+agreement peaks at 65% (cut-off 0.2) and falls as the cut-off rises: 30% at 0.7, 0% at 0.9. No cut-off
+reaches the 75% target, so SHOW is unset and the layer is off. The cause is the side, decided
+once per clip: 3 of the 8 clips with ball spells have it flipped throughout, one of them at a
+side confidence of 0.88 to 0.97. The test clips have not been graded and will be only once a
+better side decision lets the gate open on validation.
+
+Pre-registered before the official calibration (GROUNDING S6): a bar opens only when the lower
+Wilson 95% bound of its agreement over possession spells is at least 0.60, from at least 3 clips
+(41 spells at 75% agreement); "attacking" needs its own 75% on the samples it would be shown on,
+with the same floor. A preview on the unmerged side fix (#187, #195, #200) would have passed 75%
+at 0.582 on only 11 spells (Wilson 46% to 92%), with "attacking" wrong on 4 of 4: these criteria
+keep that kind of result shut.
+
 ## Football sense (FS1 to FS9)
 
 Goals, shots and pass completion sat inside their published bands while the play looked dumb to
