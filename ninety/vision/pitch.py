@@ -9,6 +9,7 @@ is) and each frame 3 more (pan, tilt, focal length).
 
     line_points(rgb, boxes)        white-marking pixels, with players and the ball masked out
     fit_clip(points_by_frame, ...) the gantry and every frame's pan, tilt and focal length
+    fit_fixed(static, points, ...) a fixed lens (the tactical camera): one camera for the clip
 
 Each frame is fitted by Gauss-Newton on the pixel distance from every marking pixel to the nearest
 projected marking, with a Cauchy loss so stray pixels (a white boot, a shadow edge) count little.
@@ -173,7 +174,12 @@ def line_mask(rgb: np.ndarray, boxes=()) -> np.ndarray:
 
 def line_points(rgb: np.ndarray, boxes=(), max_points: int = 800) -> np.ndarray:
     """(N, 2) pixel centres of marking pixels, thinned evenly to at most max_points."""
-    ys, xs = np.nonzero(line_mask(rgb, boxes))
+    return mask_points(line_mask(rgb, boxes), max_points)
+
+
+def mask_points(mask: np.ndarray, max_points: int = 800) -> np.ndarray:
+    """(N, 2) pixel centres of a mask's set pixels, thinned evenly to at most max_points."""
+    ys, xs = np.nonzero(mask)
     pts = np.stack([xs + 0.5, ys + 0.5], axis=1)
     if len(pts) > max_points:
         pts = pts[np.linspace(0, len(pts) - 1, max_points).astype(int)]
@@ -406,32 +412,39 @@ def search(pts: np.ndarray, width: int, height: int, gantry: tuple[float, float,
     """Coarse grid of aim points and lenses (and gantries, unless given), best `keep` by cost,
     each refined. A coarse view is scored on a subsample to keep the grid affordable."""
     sample = _sample(pts, SEARCH_POINTS)
-    sub = _sample(pts, SEARCH_COARSE_POINTS)
     gantries = [gantry] if gantry else [
         (x, -back, back * math.tan(math.radians(dn))) for x in GANTRY_X for back in GANTRY_BACK
         for dn in GANTRY_DOWN_DEG]
     focals = [width / 2 / math.tan(math.radians(h) / 2) for h in HFOV_DEG]
     V = np.array([(cx, cy, cz, pan, tilt, f) for cx, cy, cz in gantries
                   for pan in PANS for tilt in TILTS for f in focals])
+    aimed = _aimed(V, pts, sample, width, height, keep * 4, iters)
+    if gantry:
+        return aimed[:keep]
+    out = [refine(v, sample, free=(0, 1, 2, 3, 4, 5)) for v in aimed[:keep]]
+    return sorted(out, key=lambda v: cost(v, sample))
+
+
+def _aimed(V: np.ndarray, pts: np.ndarray, sample: np.ndarray, width: int, height: int, n: int,
+           iters: int) -> list[View]:
+    """The grid views V ranked, the best n each refined in aim and lens, best first."""
+    sub = _sample(pts, SEARCH_COARSE_POINTS)
     # Rank the whole grid by the cheap chamfer, then the best COARSE_KEEP by the exact cost, both
     # at COARSE_PX: a grid view is tens of pixels from the truth, where the fine loss is flat.
     dmap = distance_map(pts, width, height)
     order = np.argsort(chamfer_many(V, dmap, width, height, scale=COARSE_PX), kind="stable")[:COARSE_KEEP]
     exact = costs_many(V[order], sub, width, height, scale=COARSE_PX)
-    best = np.argsort(exact, kind="stable")[:keep * 4]
+    best = np.argsort(exact, kind="stable")[:n]
     starts = [View.from_vector(V[order[k]], width, height) for k in best]
-    # Aim and lens first with the gantry where the grid put it (freeing all six at once from a
-    # coarse start lets the gantry slide into a wrong basin), coarse to fine (graduated loss).
+    # Aim and lens first with the camera where the grid put it (freeing all six at once from a
+    # coarse start lets the camera slide into a wrong basin), coarse to fine (graduated loss).
     aimed = []
     for v in starts:
         for sc in REFINE_SCALES_PX:
             v = refine(v, sample, free=(3, 4, 5), iters=iters, scale=sc)
         aimed.append(v)
     aimed.sort(key=lambda v: cost(v, sample))
-    if gantry:
-        return aimed[:keep]
-    out = [refine(v, sample, free=(0, 1, 2, 3, 4, 5)) for v in aimed[:keep]]
-    return sorted(out, key=lambda v: cost(v, sample))
+    return aimed
 
 
 # ---------------------------------------------------------------------------------------------
@@ -612,3 +625,80 @@ def fit_clip(points: list[np.ndarray], width: int, height: int,
         if fit.ok:
             last = fit.view
     return g, fits
+
+
+# ---------------------------------------------------------------------------------------------
+# A fixed camera: one view for the whole clip
+
+# The tactical camera is two fixed lenses high behind the near touchline at halfway, each showing
+# one half of the pitch. It never moves, so the clip has one camera (six unknowns), fitted once
+# from every frame's markings and used for every frame: no frame-to-frame jitter. The grid is a
+# wide prior on that rig (design): within 6 m of halfway, 26 to 40 m back, 22 to 34 m up, aimed
+# 0.3 to 0.8 rad down, lenses 45 to 76 degrees across. A pan step moves a 60-degree picture about
+# 50 px and a tilt step 33 px, inside COARSE_PX's reach, as the gantry grid's steps are.
+FIXED_X = (46.5, 52.5, 58.5)
+FIXED_BACK = (26.0, 33.0, 40.0)
+FIXED_HEIGHT = (22.0, 28.0, 34.0)
+FIXED_PAN_STEP = 0.03
+FIXED_PAN_MAX = 0.8
+FIXED_TILTS = tuple(np.arange(0.3, 0.8001, 0.02))
+FIXED_HFOV_DEG = (45.0, 52.0, 60.0, 68.0, 76.0)
+FIXED_KEEP = 4  # aimed grid views freed in all six parameters (design)
+FIXED_SCALES_PX = (12.0, 6.0, CAUCHY_PX)  # the six-parameter fit's schedule, as the joint fit's (design)
+# Markings do not move under a fixed camera; players, the ball and their shadows do. A pixel is a
+# marking for the fit when it is one in at least STATIC_SHARE of the clip's frames, so a white
+# kit a detector missed, which is somewhere else a few frames later, drops out (design, set
+# before measuring; a marking a crowd stands on for more than half the clip is lost, and the
+# rest of the line still pins the camera).
+STATIC_SHARE = 0.5
+FIXED_POINTS = 2000  # static marking pixels the final fit is measured on (design)
+SIDES = ("left", "right")
+
+
+def static_points(counts: np.ndarray, frames: int, share: float = STATIC_SHARE,
+                  max_points: int = FIXED_POINTS) -> np.ndarray:
+    """(N, 2) pixel centres that were marking pixels in at least `share` of `frames` frames;
+    `counts` is the per-pixel sum of the frames' line masks."""
+    return mask_points(counts >= share * frames, max_points)
+
+
+def fixed_grid(width: int, side: str) -> np.ndarray:
+    """(B, 6) the tactical grid's views for the lens on `side`. The markings are symmetric about
+    the halfway line, so a lens and its mirror (the other side of halfway, panned the other way)
+    see the same picture; which half a lens shows is known from the rig, not from the pixels, and
+    is passed in. A right lens pans toward +x (pan >= 0), a left lens toward -x."""
+    if side not in SIDES:
+        raise ValueError(f"side is one of {SIDES}, not {side!r}")
+    pans = np.arange(0.0, FIXED_PAN_MAX + 1e-9, FIXED_PAN_STEP)
+    pans = pans if side == "right" else -pans
+    focals = [width / 2 / math.tan(math.radians(h) / 2) for h in FIXED_HFOV_DEG]
+    return np.array([(x, -back, z, pan, tilt, f) for x in FIXED_X for back in FIXED_BACK
+                     for z in FIXED_HEIGHT for pan in pans for tilt in FIXED_TILTS for f in focals])
+
+
+def fit_fixed(static: np.ndarray, points: list[np.ndarray], width: int, height: int,
+              side: str) -> tuple[View, list[FrameFit]]:
+    """One camera for a fixed lens's clip, from its static marking pixels (static_points), and
+    each frame's own markings judged against it. The grid's best views are aimed (pan, tilt,
+    focal) and then freed in all six parameters, coarse to fine; the one the markings fit best is
+    the clip's camera. A frame is `ok` when the clip's camera fits and the frame's own markings,
+    if it has enough, agree with it (a lens knocked mid-clip shows there)."""
+    if len(static) < MIN_POINTS:
+        raise ValueError("the clip shows too few static pitch markings to place the camera")
+    sample = _sample(static, SEARCH_POINTS)
+    aimed = _aimed(fixed_grid(width, side), static, sample, width, height, FIXED_KEEP * 4, 15)
+    out = []
+    for v in aimed[:FIXED_KEEP]:
+        for sc in FIXED_SCALES_PX:
+            v = refine(v, sample, free=(0, 1, 2, 3, 4, 5), scale=sc)
+        out.append(refine(v, static, free=(0, 1, 2, 3, 4, 5)))
+    view = min(out, key=lambda v: cost(v, static))
+    clip_ok = _median(view, static) <= MAX_MEDIAN_PX
+    fits = []
+    for pts in points:
+        if len(pts) < MIN_POINTS:
+            fits.append(FrameFit(view, None, len(pts), clip_ok))
+            continue
+        f = _judge(view, pts)
+        fits.append(FrameFit(view, f.median_px, f.points, clip_ok and f.ok))
+    return view, fits
