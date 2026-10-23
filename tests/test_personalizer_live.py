@@ -32,6 +32,13 @@ SPANISH = translate.translated(verified_text, translate.mock)
 ALL = {(p, lang) for p in ("analyst", "casual", "club", "player_focus") for lang in ("en", "es")}
 
 
+@pytest.fixture
+def mock_mode(monkeypatch):
+    """A run that asked for the mock translator (NINETY_TRANSLATOR=mock): its "[es] "-labelled
+    text is the only Spanish the on-air gate lets read as English (lesson 154)."""
+    monkeypatch.setenv(translate.FLAG, "mock")
+
+
 async def ask(prompt: str) -> str:
     return json.dumps({"text": CLAIM.text, "evidence": CLAIM.evidence})
 
@@ -131,7 +138,7 @@ def test_profiles_cover_every_written_persona_in_both_languages_but_the_claim_it
     assert not any(p.persona == "player_focus" for p in personal.profiles_for({**SURE, "player": None}))
 
 
-def test_every_verified_variant_airs_as_a_schema_valid_cue():
+def test_every_verified_variant_airs_as_a_schema_valid_cue(mock_mode):
     result = run_live(SPANISH)
     shown = insights(result)
     assert set(shown) == ALL
@@ -151,7 +158,7 @@ def test_without_a_translation_spanish_does_not_air_as_english():
     assert {status for *_, status, _ in result.refused_variants} == {"held"}
 
 
-def test_the_fact_checker_rechecks_every_variant_before_it_airs():
+def test_the_fact_checker_rechecks_every_variant_before_it_airs(mock_mode):
     async def judge_spanish(claim, evidence):
         if claim.text.startswith(translate.MOCK_PREFIX):
             return Verdict(ok=False, reasons=["judge service error"], category="service")
@@ -219,7 +226,7 @@ def _refused(request):
     raise httpx.ConnectError("connection refused", request=request)
 
 
-def test_with_the_service_down_the_fallback_variants_still_air():
+def test_with_the_service_down_the_fallback_variants_still_air(mock_mode):
     client = remote(None, transport=httpx.MockTransport(_refused))
     client.fallback = SPANISH
     result = run_live(client)
@@ -227,7 +234,7 @@ def test_with_the_service_down_the_fallback_variants_still_air():
     assert any(s.role == "personalizer" and s.action == "fallback" for s in result.trace)
 
 
-def test_over_a2a_the_variants_air_and_the_route_is_traced():
+def test_over_a2a_the_variants_air_and_the_route_is_traced(mock_mode):
     result = run_live(remote(SPANISH))
     assert set(insights(result)) == ALL
     assert [s.action for s in result.trace if s.role == "personalizer"] == ["remote"]
@@ -279,3 +286,53 @@ def test_a_variant_the_personalizer_s_re_check_replaced_is_held_with_its_reason(
         (reason,) = reasons
         assert reason.startswith("replaced by the Personalizer's re-check (server: numbers lost or changed: ")
     assert any("re-check (server: numbers lost" in s.detail for s in result.trace if s.role == "fact_checker")
+
+# --- the on-air language gate (lesson 154) ------------------------------------------------------
+
+def writing(spanish):
+    """A Personalizer: the English profiles get the claim, the Spanish ones `spanish(claim)`."""
+    async def personalize(claim, evidence, profiles):
+        return [Variant(p.persona, p.lang, claim.text if p.lang == "en" else spanish(claim.text),
+                        tuple(claim.evidence)) for p in profiles]
+
+    return personalize
+
+
+ENGLISH_FOR_SPANISH = {
+    "reworded": lambda text: text.replace(" finds ", " picks out "),
+    "one word changed": lambda text: text.replace(" finds ", " found "),
+    "the mock's label, outside mock mode": lambda text: translate.MOCK_PREFIX + text,
+}
+
+
+@pytest.mark.parametrize("spanish", ENGLISH_FOR_SPANISH.values(), ids=ENGLISH_FOR_SPANISH)
+def test_english_for_a_spanish_profile_never_airs(spanish):
+    result = run_live(writing(spanish))
+    assert {lang for _, lang in insights(result)} == {"en"}
+    held = {(p, lang): reasons for p, lang, status, reasons in result.refused_variants if status == "held"}
+    assert set(held) == {k for k in ALL if k[1] == "es"}
+    assert all("reads as English" in " ".join(r) for r in held.values())
+
+
+def test_the_labelled_mock_airs_only_in_mock_mode(mock_mode):
+    result = run_live(writing(lambda text: translate.MOCK_PREFIX + text))
+    assert set(insights(result)) == ALL
+    # Mock mode exempts the label, not English: an unlabelled English variant is still held.
+    result = run_live(writing(lambda text: text.replace(" finds ", " found ")))
+    assert {lang for _, lang in insights(result)} == {"en"}
+
+
+SPANISH_WITH_ENGLISH = {
+    "an English club name": lambda text: (
+        f"{ROW['player']} encuentra a {ROW['receiver']} a {ROW['ball_speed_kmh']} km/h"
+        " ante The Northbridge Rovers."),
+    "an English quote": lambda text: (
+        f'{ROW["player"]} encuentra a {ROW["receiver"]} a {ROW["ball_speed_kmh"]} km/h, y el comentarista '
+        'dice "what a pass that is from the back".'),
+}
+
+
+@pytest.mark.parametrize("spanish", SPANISH_WITH_ENGLISH.values(), ids=SPANISH_WITH_ENGLISH)
+def test_spanish_with_an_english_name_or_quote_still_airs(spanish):
+    result = run_live(writing(spanish))
+    assert set(insights(result)) == ALL, result.refused_variants

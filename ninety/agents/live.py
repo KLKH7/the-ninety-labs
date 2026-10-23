@@ -186,7 +186,9 @@ async def _personalized(
         if (v.persona, v.lang) in asked and (v.persona, v.lang) not in seen:
             seen.add((v.persona, v.lang))
             kept.append(v)
-    checked = await personal.verify(claim, kept, known, judge)
+    from ninety.personalizer import translate
+
+    checked = await personal.verify(claim, kept, known, judge, labelled_mock=translate.mock_on())
     # A variant the Personalizer's own re-check replaced comes back as the verified English; the
     # hold then reads "no translation", which hides why. Its reason, for the trace only.
     replaced = {(profiles[i].persona, profiles[i].lang): why

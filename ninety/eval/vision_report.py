@@ -20,6 +20,16 @@ land on the hidden ball (centre within the ball distance), and the median distan
 ball to the nearest such detection. Every ball detection in such a frame is a false positive; the
 distance says whether the model sees through the occluder or reports a ball somewhere else.
 
+`height` (the ball in the air or on the ground) and `blur` (each class on frames whose camera blur
+streak is longer than 3 px, or not) are summed the same way as the visibility groups. Each is null
+when the clips' frames do not record it (`ball.z`, `blur_px`); clips with and without are refused.
+
+`pitch` adds up vision_score's pitch-level matching the same way: each clip scored on its own,
+the strict and lenient counts (overall, by class, by visibility group, the ball by height, each
+class by blur) summed, and recall and precision taken from the sums, with the at-least-half-visible
+ball under each rule.
+It is null when the clips have no saved camera matrices, and clips with and without are refused.
+
 `by_clip` gives each clip's by-class counts with the render knobs it was drawn with, and `by_knob`
 sums them by `occlusion` and `kit_contrast` (the hard-case knobs the test seeds were drawn with,
 from the freeze file), so a weakness such as crowded scenes shows on the test set itself.
@@ -31,6 +41,7 @@ import argparse
 import json
 from pathlib import Path
 
+from ninety.eval.vision_pitch_score import RULES, has_cameras, score_pitch
 from ninety.eval.vision_score import (
     BALL_DISTANCE_PX,
     DEFAULT_THRESHOLD,
@@ -46,6 +57,8 @@ from ninety.render.checks import digest
 KNOBS = ("occlusion", "kit_contrast")
 FREEZE = Path(__file__).resolve().parents[2] / "docs" / "eval" / "test-set-frozen.json"
 COUNTS = ("tp", "fp", "fn")
+# vision_score's ball height and camera blur axes: null in a clip whose frames do not record them.
+FRAME_AXES = ("height", "blur")
 
 
 def check_frozen(clip_dir: Path, expected: dict) -> None:
@@ -105,12 +118,21 @@ def _median(values: list[float]) -> float | None:
     return v[mid] if len(v) % 2 else round((v[mid - 1] + v[mid]) / 2, 1)
 
 
-def build(test_dir: Path, det_dir: Path, freeze: dict, threshold: float = DEFAULT_THRESHOLD) -> dict:
+def build(
+    test_dir: Path, det_dir: Path, freeze: dict, threshold: float = DEFAULT_THRESHOLD, stride: int = 1
+) -> dict:
+    """`stride` > 1 only for a validation set run on every Nth frame (as training validates); a test
+    set report scores every frame."""
     totals: dict = {}
+    by_frame: dict = {}  # the height and blur axes, kept apart so the existing totals are unchanged
     hidden = {"hidden_balls": 0, "with_a_ball_detection": 0, "on_the_hidden_ball": 0, "distances_px": []}
     frames_scored = 0
     checkpoints = set()
     by_clip, by_knob = [], {}
+    pitch: dict = {}
+    unplaced = {"labels": 0, "detections": 0}
+    cameras = set()
+    measured: dict[str, set[bool]] = {axis: set() for axis in FRAME_AXES}
     for clip in freeze["clips"]:
         seed = clip["seed"]
         clip_dir = test_dir / f"seed{seed}"
@@ -119,20 +141,37 @@ def build(test_dir: Path, det_dir: Path, freeze: dict, threshold: float = DEFAUL
         rows = load_jsonl(det_dir / f"seed{seed}.jsonl")
         checkpoints |= {r["model"]["checkpoint"] for r in rows}
         run = frames_run(rows)
-        missing = {int(r["frame"]) for r in frames} - run
+        wanted = {int(r["frame"]) for r in frames[::stride]}
+        missing = wanted - run
         if missing:
             raise ValueError(
-                f"seed{seed}: the detector did not run on {len(missing)} of {len(frames)} frames "
-                f"(first {min(missing)}); a test-set report scores every frame"
+                f"seed{seed}: the detector did not run on {len(missing)} of {len(wanted)} frames "
+                f"(first {min(missing)}); a report scores every frame of its stride ({stride})"
             )
         dets = flatten(rows)
         report = score(frames, dets, threshold, run=run)
         frames_scored += report["frames"]["scored"]
         _add(totals, {k: report[k] for k in ("overall", "by_class", "visibility", "image_boundary")})
+        for axis in FRAME_AXES:
+            measured[axis].add(report[axis] is not None)
+            if len(measured[axis]) > 1:
+                raise ValueError(f"seed{seed}: some clips record the {axis} groups and some do not")
+        _add(by_frame, {axis: report[axis] for axis in FRAME_AXES if report[axis] is not None})
         knobs = {k: clip.get("params", {}).get(k) for k in KNOBS}
         by_clip.append({"seed": seed, **knobs, "by_class": report["by_class"]})
         for k, v in knobs.items():
             _add(by_knob.setdefault(k, {}), {str(v): report["by_class"]})
+        cameras.add(has_cameras(frames))
+        if len(cameras) > 1:
+            raise ValueError(f"seed{seed}: some clips have saved camera matrices and some do not")
+        if cameras == {True}:
+            on_pitch = score_pitch(frames, dets, threshold, run=run)
+            _add(pitch, {rule: {k: on_pitch[rule][k]
+                                for k in ("overall", "by_class", "visibility", "height", "blur")}
+                         for rule in RULES})
+            for k in unplaced:
+                unplaced[k] += on_pitch["unplaced"][k]
+            pitch_rules = on_pitch["rules"]
         h = hidden_ball_frames(frames, dets, run, threshold)
         for k in hidden:
             hidden[k] += h[k]
@@ -140,6 +179,17 @@ def build(test_dir: Path, det_dir: Path, freeze: dict, threshold: float = DEFAUL
         raise ValueError(f"detections come from {sorted(checkpoints)}, not one checkpoint")
     ball = totals["visibility"]["ball"]
     half = {c: ball["visible"][c] + ball["partly hidden"][c] for c in COUNTS}
+    pitch_block = None
+    if pitch:
+        pitch_block = {"rules": pitch_rules, "unplaced": unplaced}
+        for rule in RULES:
+            groups = pitch[rule]["visibility"]["ball"]
+            pitch_block[rule] = {
+                **_finish(pitch[rule]),
+                "blur": _finish(pitch[rule]["blur"]) if "blur" in pitch[rule] else None,
+                "ball_at_least_half_visible": _metrics(
+                    *(groups["visible"][c] + groups["partly hidden"][c] for c in COUNTS)),
+            }
     return {
         "checkpoint": checkpoints.pop(),
         "test_set": {
@@ -148,9 +198,12 @@ def build(test_dir: Path, det_dir: Path, freeze: dict, threshold: float = DEFAUL
             "seeds": [c["seed"] for c in freeze["clips"]],
         },
         "threshold": threshold,
+        "stride": stride,
         "frames_scored": frames_scored,
         **_finish(totals),
+        **{axis: _finish(by_frame[axis]) if axis in by_frame else None for axis in FRAME_AXES},
         "ball_at_least_half_visible": _metrics(*(half[c] for c in COUNTS)),
+        "pitch": pitch_block,
         "by_knob": _finish(by_knob),
         "by_clip": by_clip,
         "hidden_ball_frames": {
@@ -166,8 +219,9 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--detections", type=Path, required=True, help="folder of seed<N>.jsonl detections")
     ap.add_argument("--freeze", type=Path, default=FREEZE)
     ap.add_argument("--out", type=Path)
+    ap.add_argument("--stride", type=int, default=1, help="every Nth frame: a validation set only")
     a = ap.parse_args(argv)
-    report = build(a.test, a.detections, json.loads(a.freeze.read_text()))
+    report = build(a.test, a.detections, json.loads(a.freeze.read_text()), stride=a.stride)
     text = json.dumps(report, indent=2) + "\n"
     if a.out:
         a.out.write_text(text)

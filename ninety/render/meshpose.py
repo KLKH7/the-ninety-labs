@@ -60,6 +60,12 @@ LEAN_Z = (-0.4, -0.2, 0.0, 0.2, 0.4)
 LEAN_STEP = (0.1, 0.1)
 LEAN_LIMIT = ((-0.9, 0.9), (-0.6, 0.6))
 LEAN_SHARE = (("spine_01", 0.35), ("spine_02", 0.35), ("neck_01", 0.3))
+# The trunk's lean on top of the stride's (scene.pace), half tipping it at the hips and half in the
+# lower spine (design: bent down the spine alone it read as a stoop to a blind critic; tipped at the
+# hips alone, a lean of 30 degrees took the thigh past its reach behind him and a swinging leg flipped).
+# The pelvis turns, and the legs are placed after it. The neck takes half back, so the eyes stay up
+# the pitch (design: the head tipped down to the feet read as a stoop).
+TRUNK_SHARE = (("pelvis", 0.5), ("spine_01", 0.5), ("neck_01", -0.5))
 # The thigh points down, so a twist of +a about it turns the foot by -a about the vertical.
 TWIST_SIGN = -1.0
 # The surfaces a touch aims, not in the asset: (bone, rest point skinned wholly to it).
@@ -70,7 +76,9 @@ EXTRA = {
     "thigh_top_r": ("thigh_r", (-0.14, 0.64, 0.10)),
 }
 
-_CONTACT = {"strike", "foot", "thigh", "chest", "head", "hands", "throw", "dive", "shield"}
+# A throw-in is drawn from the standing pose: its hands are on the ball wherever the engine has it
+# (scene.throw_at, a hold), so the stored throw pose, arms over the head, is not used.
+_CONTACT = {"strike", "foot", "thigh", "chest", "head", "hands", "dive", "shield"}
 _FEET = ("strike", "foot", "thigh")  # touches taken in stride: the stored pose gives only the arms
 # Holding the ball: the trunk bends over it (scene.py decides how far; this splits it down the
 # spine, the neck taking some back so the eyes stay on the ball) and a hand goes either side of it,
@@ -192,12 +200,13 @@ def scale(angles: dict, factor: float, keep_z: bool = False) -> dict:
     return out
 
 
-def gait(s: float, run: dict, walk: dict | None = None, arm_t: float = 1.0) -> dict:
+def gait(s: float, run: dict, walk: dict | None = None, arm_t: float = 1.0, pump: float = 1.0) -> dict:
     """s = sin(phase). +1 is the stored run (right foot forward). -1 is its mirror.
 
     The arms swing opposite the legs. Walking they swing from the shoulder with the elbows
     nearly straight (the stored walk); running the elbows bend to about a right angle, more in
-    front than behind (the stored run). `arm_t` goes from the one to the other.
+    front than behind (the stored run). `arm_t` goes from the one to the other, and `pump` widens
+    the upper arms' swing about its middle (scene.PUMP).
     """
     left, right = (s + 1.0) / 2.0, (1.0 - s) / 2.0
     out = {}
@@ -209,6 +218,9 @@ def gait(s: float, run: dict, walk: dict | None = None, arm_t: float = 1.0) -> d
     for base in ("upperarm", "lowerarm"):
         lx, lz = _xz(arms[f"{base}_l"])
         rx, rz = _xz(arms[f"{base}_r"])
+        if base == "upperarm" and pump != 1.0:
+            mid = (lx + rx) / 2.0
+            lx, rx = mid + (lx - mid) * pump, mid + (rx - mid) * pump
         # The right arm's Z is the mirror of the left's: an arm in the other's place takes its Z negated.
         out[f"{base}_l"] = (lx * left + rx * right, lz * left - rz * right)
         out[f"{base}_r"] = (rx * left + lx * right, rz * left - lz * right)
@@ -442,7 +454,9 @@ def _upper(pose: dict, heading: float, height_m: float) -> dict:
             dive = pose.get("dive") or 0.0
             mag = min(1.0, abs(dive))
             base = mirror(base) if dive < 0 else base
-            angles = scale(base, mag if mag > 0.35 else 0.35)
+            # From standing to full stretch and back, so the dive grows and he gets up from it
+            # (scene.keeper_dive) without a pose snapping in a frame.
+            angles = _blend(dict_angles(poses["stand"]), base, mag)
         else:
             angles = base
     elif speed < STAND_BLEND[0] or (action == "stand" and speed < data["standSpeed"]):
@@ -452,7 +466,8 @@ def _upper(pose: dict, heading: float, height_m: float) -> dict:
         # and the touch (below) takes the one that meets the ball.
         full = data["fullStrideSpeed"]
         arm_t = 1.0 if action == "run" else _clamp((speed - full) / (data["armRunSpeed"] - full), 0.0, 1.0)
-        angles = gait(math.sin(pose.get("phase") or 0.0), poses["run"], poses["walk"], arm_t)
+        pump = pose.get("pump") or 1.0
+        angles = gait(math.sin(pose.get("phase") or 0.0), poses["run"], poses["walk"], arm_t, pump)
         if action != "run" and speed < STRIDE_GROW[1]:
             # A walk's short stride grows into the full one through a jog (STRIDE_GROW), not at once.
             t = _clamp((speed - STRIDE_GROW[0]) / (STRIDE_GROW[1] - STRIDE_GROW[0]), 0.0, 1.0)
@@ -463,6 +478,17 @@ def _upper(pose: dict, heading: float, height_m: float) -> dict:
             # Setting off and pulling up, the stride grows out of the stance and back into it.
             t = (speed - STAND_BLEND[0]) / (STAND_BLEND[1] - STAND_BLEND[0])
             angles = _blend(dict_angles(poses["stand"]), angles, t)
+    up = pose.get("dive_up") or 0.0
+    if up:
+        # Getting up from a dive, what he does next is drawn with the dive fading out of it.
+        full = dict_angles(poses["dive"])
+        full = mirror(full) if up < 0 else full
+        angles = _blend(angles, {**angles, **full}, min(1.0, abs(up)))
+    lean = pose.get("lean") or 0.0
+    if lean and not (action in poses and action in _CONTACT and action not in _FEET):
+        # Speeding up the trunk leans into it, slowing it comes up (scene.pace).
+        for bone, share in TRUNK_SHARE:
+            _add(angles, bone, lean * share)
     if lead:
         # The hips lead a turn and the chest follows: Root turns the hips and legs, the lower
         # spine turns the chest back to where the engine has it face.
@@ -486,7 +512,9 @@ def pose_angles(pose: dict, heading: float, height_m: float) -> dict:
     """The bone angles for one frame's pose. The same steps as anglesFor in render.js."""
     x, y = pose.get("x", 0.0), pose.get("y", 0.0)
     lead = pose.get("lead") or 0.0
-    lift = pose.get("lift") or 0.0
+    # lift places the body (a jump, a lunge, the stride's bob); only a touch's own lift lowers him.
+    lift = (pose.get("lift") or 0.0) + (pose.get("bob") or 0.0)
+    lowered = (pose.get("lift") or 0.0) < 0.0
     angles = _upper(pose, heading, height_m)
     # scene.py plants a foot only when the pose stands on it.
     for side in ("l", "r"):
@@ -499,7 +527,7 @@ def pose_angles(pose: dict, heading: float, height_m: float) -> dict:
         pz = plant[3] if len(plant) > 3 else 0.0
         target = _to_object(x, y, heading, height_m, plant[0], plant[1], pz, lift)
         planted, err = _leg(angles, side, target, PLANT_FOOT, twist, f"foot_{side}", True)
-        if err > PLANT_GIVE_UP and lift < 0.0:
+        if err > PLANT_GIVE_UP and lowered:
             # Lowered, a foot the leg cannot reach is not left to the pose, which would put it through
             # the grass: the leg reaches toward its plant and stays above the grass.
             floor = -lift / (height_m / ASSET_STATURE_M)
@@ -539,7 +567,8 @@ def _hold(angles: dict, pose: dict, hold: dict, heading: float, height_m: float)
     bend = float(hold.get("bend") or 0.0)
     for bone, share in HOLD_BEND:
         _add(out, bone, bend * share)
-    x, y, lift = pose.get("x", 0.0), pose.get("y", 0.0), pose.get("lift") or 0.0
+    x, y = pose.get("x", 0.0), pose.get("y", 0.0)
+    lift = (pose.get("lift") or 0.0) + (pose.get("bob") or 0.0)
     bx, by, bz = hold["at"]
     centre = _to_object(x, y, heading, height_m, bx, by, bz, lift)
     k = height_m / ASSET_STATURE_M
@@ -625,7 +654,8 @@ def arm_points(pose: dict, heading: float, height_m: float) -> dict[str, list[fl
         markers[f"shoulder_{side}"] = head[i[f"upperarm_{side}"]]
         markers[f"elbow_{side}"] = head[i[f"lowerarm_{side}"]]
         markers[f"hand_{side}"] = _point(angles, f"hand_{side}")
-    x, y, lift = pose.get("x", 0.0), pose.get("y", 0.0), pose.get("lift") or 0.0
+    x, y = pose.get("x", 0.0), pose.get("y", 0.0)
+    lift = (pose.get("lift") or 0.0) + (pose.get("bob") or 0.0)
     return {name: list(to_world(x, y, heading, height_m, p, lift)) for name, p in markers.items()}
 
 
@@ -653,8 +683,15 @@ def to_world(x, y, heading, height_m, point, lift: float = 0.0) -> tuple[float, 
 def pose_markers(pose: dict, heading: float, height_m: float) -> dict[str, tuple[float, float, float]]:
     """World position of every marker (and touch surface) for one frame's pose."""
     angles = pose_angles(pose, heading, height_m)
-    x, y, lift = pose.get("x", 0.0), pose.get("y", 0.0), pose.get("lift") or 0.0
-    return {name: to_world(x, y, heading, height_m, p, lift) for name, p in _markers(angles).items()}
+    x, y = pose.get("x", 0.0), pose.get("y", 0.0)
+    lift = (pose.get("lift") or 0.0) + (pose.get("bob") or 0.0)
+    out = {name: to_world(x, y, heading, height_m, p, lift) for name, p in _markers(angles).items()}
+    if pose.get("fall"):
+        # A fouled player down (fouls.py): the body tipped over its feet, as the page tips the mesh.
+        from ninety.render.fouls import tip
+
+        out = {name: tip(p, x, y, pose["fall"], pose.get("fall_dir", 0.0)) for name, p in out.items()}
+    return out
 
 
 def foot_yaw(pose: dict, heading: float, height_m: float, side: str) -> float:

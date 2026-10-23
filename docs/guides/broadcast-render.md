@@ -62,7 +62,12 @@ datasets and beating them on motion blur).
   for the same reason
 - grass hue and stripe width; pitch wear
 - camera: height, distance, FOV, pan lag, shake; occasional cut to the tighter lens beside the gantry
-- stadium: stand colour, crowd density, board colours
+- stadium: stand colour, crowd density, board colours. `stadium=broadcast` dresses footage a viewer
+  watches (the demo clip): a seated crowd in every stand in the teams' colours that jumps for a goal,
+  the board ring closed at the corners with varied made-up adverts, a wall under each stand and an
+  LED ribbon under each upper tier, grass on to the stands, and softer mowing. No seed draws it, so
+  no dataset changes look. The crowd is scenery in the id pass: never labelled, and it hides
+  a ball among the fans exactly where the picture does (`tests/test_render_stadium.py`)
 
 Log every choice in the frame metadata. Never randomize something you cannot label.
 

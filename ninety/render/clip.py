@@ -26,10 +26,11 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from ninety.match.clock import match_clock
-from ninety.render import RENDERER_VERSION, edit
+from ninety.render import RENDERER_VERSION, edit, fouls
 from ninety.render.camera import Camera, Director, blur_vector, corner_waits
 from ninety.render.params import RenderParams, sample_params
 from ninety.render.scene import (
+    ACCEL_BOX,
     LEAD_AHEAD_FRAMES,
     Gait,
     advance_gaits,
@@ -46,6 +47,8 @@ from ninety.render.scene import (
     project_keypoints,
     reach_sign,
     sample_looks,
+    throw_at,
+    throws,
     touch_at,
 )
 from ninety.render.splits import split_of
@@ -240,6 +243,15 @@ def render_clip(
 
     goals = [e for e in match.events if e["type"] == "goal"]
     goal_at = {e["frame"]: e for e in goals}
+    # Who scored, from each goal to the restart after it: the camera follows his celebration.
+    restarts = sorted(e["frame"] for e in match.events if e["type"] in edit.RESTARTS)
+    celebrating: dict[int, str] = {}
+    for g in goals:
+        if g.get("player"):
+            until = next((f for f in restarts if f > g["frame"]), len(frames))
+            celebrating.update(dict.fromkeys(range(g["frame"], until), g["player"]))
+    # The stinger over each edit cut: picture index -> its progress (edit.stingers).
+    stinger_at = edit.stingers(show, FPS) if made else {}
     corners = corner_waits(match.events)  # a corner waiting to be taken, framed for it (camera.py)
     t0, t1 = frames[show[0]]["t"], frames[show[-1]]["t"]
     clip = {
@@ -255,6 +267,9 @@ def render_clip(
         # a segment is match frame `frame` + (i - `index`) (edit.py, docs/DATA_CONTRACT.md).
         "cuts": [c.as_dict() for c in made],
         "segments": [s.as_dict() for s in edit.segments(show)],
+        # Picture indices a stinger graphic covers (in part), as the scorebug, an occluder that the
+        # visibility labels count (web/render).
+        "stinger_frames": sorted(stinger_at),
         "renderer": {
             "version": RENDERER_VERSION,
             "three": _three_version(),
@@ -277,6 +292,7 @@ def render_clip(
         gaits = {lk.id: Gait() for lk in looks}
         touches = contacts(frames, match.events)
         held = holds(frames)
+        thrown = throws(frames, FPS)
         prev_xy: dict[str, tuple[float, float]] = {}
         prev_cam: Camera | None = None
         spin_angle = 0.0
@@ -298,12 +314,15 @@ def render_clip(
                 prev_cam = None  # a new shot: nothing streaks across the cut
                 reopen = False
             fr = frames[fi]
-            advance_gaits(gaits, prev_xy, fr, 1 / FPS, frames[min(fi + LEAD_AHEAD_FRAMES, len(frames) - 1)])
+            advance_gaits(gaits, prev_xy, fr, 1 / FPS, frames[min(fi + LEAD_AHEAD_FRAMES, len(frames) - 1)],
+                          frames[fi + 1:fi + 1 + ACCEL_BOX])
             ball = drawn_ball(fr)
             for pl in fr["players"]:
                 g, h = gaits[pl["id"]], by_id[pl["id"]].height_m
                 touch_at(g, touches.get(pl["id"], []), fi, h, FPS, pl["x"], pl["y"])
                 hold_at(g, held.get(pl["id"], []), fi, ball, h, FPS)
+                throw_at(g, thrown.get(pl["id"], []), fi, h, FPS, pl["x"], pl["y"])
+                fouls.apply_fall(g, pl)  # the engine's fall and fall_dir (lesson 173)
             actors = [(pl["x"], pl["y"], pl.get("action", "")) for pl in fr["players"]]
             # The snapshot of a goal already has the ball on the centre spot. The event
             # carries the mouth it crossed, and the frame before it carries the pace.
@@ -316,8 +335,10 @@ def render_clip(
                 speed = math.hypot(prevb["vx"], prevb["vy"], prevb.get("vz", 0.0))
                 goal_arg = (side, ev["y"], z, speed)
             cut_in = None if left is None else left / FPS
+            who = celebrating.get(fr["frame"])
+            scorer = next(((q["x"], q["y"]) for q in fr["players"] if q["id"] == who), None)
             cam = director.step(ball[0], ball[1], actors, goal_arg, cut_in, ball_z=ball[2],
-                                corner=corners.get(fr["frame"]))
+                                corner=corners.get(fr["frame"]), scorer=scorer)
             blur = blur_vector(prev_cam, cam, p.motion_blur)
             prev_cam = cam
             bvx, bvy = fr["ball"].get("vx", 0.0), fr["ball"].get("vy", 0.0)
@@ -362,7 +383,7 @@ def render_clip(
                         "pose": mesh_pose(g, pl["x"], pl["y"], reach),
                     }
                 )
-                row_players.append(pl)
+                row_players.append(fouls.row(pl, g.fall))
             bparts = ball_parts(*ball, spin)
             spec_objects.append({"id": "ball", "parts": bparts, "box": parts_box(cam, bparts)})
             kps = project_keypoints(cam)
@@ -385,6 +406,7 @@ def render_clip(
                     "goal_age": round(fr["t"] - last["t"], 3) if last else None,
                     "goal_side": 0 if last and last["team"] == "home" else (1 if last else None),
                     "net": director.net_view(),
+                    "stinger": stinger_at.get(index),
                     "want_image": write_images,
                 },
             )
