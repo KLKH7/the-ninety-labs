@@ -38,11 +38,12 @@ generated it and the output file is committed. Rows marked *planned* have no res
 
 ## Agent prompts: held-out seeds (pre-registered Oct 23, 2026)
 
-Any change to an agent's instructions (an Analyst v6, a Judge v5) is developed on seeds 7, 21 and 33
-and confirmed once on **seeds 920001 and 920002**, which no prompt has been tuned on and none will
-be: written here before any such change. They are not the vision test seeds (900001 to 900030). A
-result on them is reported with its n, and a change that only helps on the development seeds is
-reported as that.
+Seeds 21 and 33 are the agent evaluations' held-out seeds (the rows above, the nightly run). Several
+prompt versions have been compared on them, so for a further change to an agent's instructions (an
+Analyst v6, a Judge v5) they no longer count as unseen. Any such change is confirmed once on **seeds
+920001 and 920002**, written here before it is made: no prompt has been tuned on them, and none will
+be. They are not the vision test seeds (900001 to 900030). A result on them is reported with its n,
+and a change that helps only on 21 and 33 is reported as that.
 
 ## Match engine: touches
 

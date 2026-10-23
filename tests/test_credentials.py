@@ -9,6 +9,7 @@ import ast
 import asyncio
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -234,14 +235,19 @@ def test_the_analyst_evaluation_grades_the_events_it_sends_inline(monkeypatch):
     known = {"e1": {"id": "e1", "minute": 1, "second": 3, "clock": "00:03", "type": "pass", "team": "home",
                     "player": "h7"},
              "e2": {"id": "e2", "minute": 2, "second": 5, "clock": "01:05", "type": "pass", "team": "home",
-                    "player": "h8"}}
+                    "player": "h8"},
+             "e3": {"id": "e3", "minute": 3, "second": 5, "clock": "02:05", "type": "pass", "team": "home",
+                    "player": "h9"}}
     prompts = []
 
     class Reply:
-        response_id, messages = "r", ()
+        response_id = "r"
 
-        def __init__(self, text):
+        def __init__(self, text, tool_call=False):
             self.text = text
+            call = SimpleNamespace(type=ae.foundry.TOOL_CALL, tool_name="list_events", name=None,
+                                   arguments="{}")
+            self.messages = [SimpleNamespace(contents=[call])] if tool_call else []
 
     class Agent:
         def __init__(self, **kw):
@@ -255,12 +261,14 @@ def test_the_analyst_evaluation_grades_the_events_it_sends_inline(monkeypatch):
 
         async def run(self, prompt):
             prompts.append(prompt)
+            if len(prompts) == 3:  # minute 3 calls the match tools anyway
+                return Reply('{"text": "h9 plays a pass.", "evidence": ["e3"]}', tool_call=True)
             return Reply('{"text": "h7 plays a pass.", "evidence": ["e1"]}')
 
     async def judge(agent, claim, evidence):
         return Verdict(ok=True)
 
-    monkeypatch.setattr(ae, "MINUTES", 2)
+    monkeypatch.setattr(ae, "MINUTES", 3)
     monkeypatch.setattr(ae, "FoundryAgent", Agent)
     monkeypatch.setattr(ae, "judge", judge)
     monkeypatch.setattr(ae.foundry, "chat_client", lambda credential: object())
@@ -268,5 +276,9 @@ def test_the_analyst_evaluation_grades_the_events_it_sends_inline(monkeypatch):
     monkeypatch.setattr(ae.foundry, "pinned", lambda local: (f"ninety-{local}", "1"))
     rows, _ = asyncio.run(ae._drafts(None, [7], {7: known}))
     assert "seed7-inline" in prompts[0] and '"e1"' in prompts[0] and '"e2"' not in prompts[0]
-    assert '"e2"' in prompts[1]
-    assert [r["minute"] for r in rows] == [1, 2] and all(r["verdict"] == "accept" for r in rows)
+    assert '"e2"' in prompts[1] and '"e1"' not in prompts[1]  # each minute's own events only
+    verdicts = [r["verdict"] for r in rows]
+    # Minute 1 cites what it was shown; minute 2 cites minute 1's event, which it never saw; minute 3
+    # called the tools, so what it read is not graded.
+    assert verdicts == ["accept", "reject", "reject"]
+    assert "called the match tools" in rows[2]["reasons"][0]

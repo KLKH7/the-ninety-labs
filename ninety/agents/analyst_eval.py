@@ -5,12 +5,16 @@ rate the same responses.
     uv run python -m ninety.agents.analyst_eval --foundry    # also records both in Foundry
 
 The published Analyst (the version pinned in foundry_agents.json) writes one claim per match
-minute, reading the match only through the MCP server, which Foundry calls. Our fact-checker (code
-checks, then the published Judge) decides whether that first draft would reach the screen: the
-number that matters on air, decided in code and by the Judge, not by an evaluator model.
-Foundry's built-in evaluators (task adherence, intent resolution, tool call accuracy) then score
-the stored responses by id; they are model-graded opinions, reported beside our verdicts, never in
-place of them.
+minute from that minute's events, sent inline from this commit's simulation under a match id no
+server serves (lesson 90: before, it read the deployed image's match over MCP while the grade used
+this commit's events). A reply that calls the match tools anyway is graded a reject: what it read is
+not what is graded. This measures inline drafting; the live slice still reads over MCP. Our
+fact-checker (code checks, then the published Judge) decides, against only the events the Analyst
+was shown, whether that first draft would reach the screen: the number that matters on air, decided
+in code and by the Judge, not by an evaluator model. Foundry's built-in evaluators (task adherence,
+intent resolution) then score the stored responses by id; they are model-graded opinions, reported
+beside our verdicts, never in place of them. Tool call accuracy is not asked: the Analyst is told
+not to call tools here.
 """
 
 from __future__ import annotations
@@ -34,7 +38,7 @@ from ninety.mcp import match_server
 
 ROOT = Path(__file__).resolve().parents[2]
 FOUNDRY_EVAL = "ninety-analyst-first-draft"
-EVALUATORS = ["task_adherence", "intent_resolution", "tool_call_accuracy"]
+EVALUATORS = ["task_adherence", "intent_resolution"]  # no tool_call_accuracy: no tools are meant to be called
 MINUTES = match_server.MINUTES  # one claim per minute of a served match
 
 
@@ -92,9 +96,10 @@ async def _drafts(credential, seeds: list[int], known_by_seed: dict[int, dict]) 
                         {**row, "claim": "", "verdict": "reject", "reasons": [f"unparseable reply: {e}"]}
                     )
                     continue
-                verdict = check(claim, known)
+                shown = {e["id"]: e for e in inline}  # graded on what it was shown, nothing more
+                verdict = check(claim, shown)
                 if verdict.ok:
-                    verdict = await judge(judge_agent, claim, [known[i] for i in claim.evidence])
+                    verdict = await judge(judge_agent, claim, [shown[i] for i in claim.evidence])
                 rows.append(
                     {
                         **row,
