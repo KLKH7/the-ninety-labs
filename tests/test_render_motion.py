@@ -38,6 +38,7 @@ from ninety.render.scene import (
     advance_gaits,
     body_parts,
     contacts,
+    face,
     hold_at,
     holds,
     mesh_pose,
@@ -1533,3 +1534,46 @@ def test_a_dive_that_starts_at_full_stretch_grows_and_gets_up():
     drawn_dive = [i for i, (pose, _, _, _) in enumerate(drawn)
                   if pose["action"] == "dive" or pose.get("dive_up")]
     assert drawn_dive and drawn_dive[-1] > engine[-1] + 5, (engine, drawn_dive)
+
+
+def _bowled():
+    """#216's keeper (seed 122): he holds the ball at his chest (hands), then bowls it, the engine
+    bringing it down in his hands to the grass (bowl, BALL_TO_FEET a frame) and rolling it from
+    there. The engine names the wind-up bowl; before lesson 204 it read strike."""
+    frames = []
+    zs = [1.1] * 8 + [1.1, 0.62, 0.14] + [0.0] * 6
+    for i, z in enumerate(zs):
+        bowl = 8 <= i <= 10
+        x = 5.25 + max(0, i - 11) * 0.4  # released along the grass after the last bowl frame
+        frames.append({
+            "possessor": "h1" if i <= 10 else None,
+            "ball": {"x": x, "y": 34.0, "z": z, "vx": 10.0 if i > 11 else 0.0, "vy": 0.0},
+            "players": [{"id": "h1", "x": 5.0, "y": 34.0, "vx": 0.0, "vy": 0.0, "heading": 0.0,
+                         "action": "bowl" if bowl else ("hands" if i < 8 else "stand"), "dive": 0.0}],
+        })
+    return frames
+
+
+def test_a_bowled_ball_is_brought_down_in_both_hands_with_no_kick():
+    """Old: the bowl's wind-up read strike, so the renderer drew a kicking leg winding up and the
+    ball met his boot on the grass. A bowl is the engine's own wind-up (lesson 204): his hands stay
+    on the ball as it comes down to the grass, no leg kicks it."""
+    frames = _bowled()
+    assert "h1" not in contacts(frames)  # no strike, no foot: nothing kicks it
+    runs = holds(frames)["h1"]
+    assert runs == [(0, 10)]  # the hold runs through the bowl to the grass
+    look = Look("h1", "home", "GK", 1.90, 1.0, "#c68642", "#1b1410")
+    g = Gait()
+    for fi, fr in enumerate(frames):
+        pl, b = fr["players"][0], fr["ball"]
+        face(g, pl)
+        g.speed = 0.0
+        assert g.action != "strike"
+        hold_at(g, runs, fi, (b["x"], b["y"], b["z"]), look.height_m, FPS)
+        if 8 <= fi <= 10:
+            pose = mesh_pose(g, pl["x"], pl["y"], 0.0)
+            m = pose_markers(pose, g.heading, look.height_m)
+            centre = (b["x"], b["y"], b["z"] + BALL_RADIUS)
+            for s in "lr":
+                side = HOLD_SIDE * look.height_m / ASSET_STATURE_M
+                assert math.dist(m[f"hand_{s}"], centre) < side + 0.06, (fi, s, m[f"hand_{s}"])

@@ -68,4 +68,7 @@ docs/decisions/0001-synthetic-data.md.
 # does next over a second; his feet stay planted through it.
 # 0.5.14: a fouled player is drawn from the engine's fall (degrees over his feet) and fall_dir;
 # the fouler's foot meets his shins (lesson 173). The renderer does not time the fall.
-RENDERER_VERSION = "0.5.14"
+# 0.5.17 (after #231's 0.5.15 and #235's 0.5.16): a keeper's bowl (the engine's own wind-up, action
+# "bowl") is drawn as the hold it is, both hands bringing the ball down to the grass, never a kicking
+# leg. No engine before #216 names one, so every earlier clip renders byte-identical (lesson 204).
+RENDERER_VERSION = "0.5.17"
