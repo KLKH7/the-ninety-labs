@@ -12,14 +12,21 @@ The frozen test set's answer key lives apart, in `truth-test`: training machines
 `truth-test` container, if any role is scoped to that container itself, or if a training file
 (scripts/, ninety/vision/) names it, which is how a link to it would be made.
 
+The render job decides which files go to `truth`: this also runs its upload (`upload_dir` in
+ninety/render/job.py, read from the source so this needs nothing installed) on a planted clip with
+the answer key at the top and under views/<name>/, and fails if any answer-key file lands in
+`renders`, where the live path reads (lesson 192).
+
     az bicep build --file infra/main.bicep --stdout > arm.json
     python3 infra/check_truth_sealed.py arm.json
 """
 
 from __future__ import annotations
 
+import ast
 import json
 import sys
+import tempfile
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -91,16 +98,60 @@ def violations(template: dict) -> list[str]:
     return found
 
 
+UPLOAD = Path("ninety/render/job.py")
+# Where a clip's answer key sits: its own, and each view's (ninety/render/clip.py views/<name>/).
+PLANTED = ("frames.jsonl", "events.jsonl", "views/tac-l/frames.jsonl", "views/tac-l/events.jsonl",
+           "views/tac-r/frames.jsonl", "views/tac-r/events.jsonl", "images/00000.jpg",
+           "views/tac-l/images/00000.jpg", "clip.json")
+
+
+class _Container:
+    def __init__(self):
+        self.names: list[str] = []
+
+    def upload_blob(self, name, data, overwrite=False):
+        self.names.append(name)
+
+
+def upload_violations(root: Path) -> list[str]:
+    """Run the render job's upload on a planted clip; list every answer-key file it sends to `renders`."""
+    tree = ast.parse((root / UPLOAD).read_text())
+    keep = [
+        n for n in tree.body
+        if (isinstance(n, ast.FunctionDef) and n.name in ("upload_dir", "blob_name"))
+        or (isinstance(n, ast.Assign) and any(getattr(t, "id", "") == "TRUTH_FILES" for t in n.targets))
+    ]
+    if len(keep) != 3:
+        return [f"{UPLOAD}: no TRUTH_FILES, blob_name and upload_dir to check"]
+    namespace: dict = {"Path": Path}
+    exec(compile(ast.Module(body=keep, type_ignores=[]), str(UPLOAD), "exec"), namespace)  # noqa: S102
+    renders, truth = _Container(), _Container()
+    with tempfile.TemporaryDirectory() as tmp:
+        clip = Path(tmp) / "seed1"
+        for rel in PLANTED:
+            (clip / rel).parent.mkdir(parents=True, exist_ok=True)
+            (clip / rel).write_text("{}")
+        namespace["upload_dir"](renders, truth, "check", 1, clip)
+    key = tuple(namespace["TRUTH_FILES"])
+    found = [f"{UPLOAD} uploads the answer key {n} to renders" for n in renders.names if n.endswith(key)]
+    sealed = [rel for rel in PLANTED if rel.endswith(key)]
+    missing = [rel for rel in sealed if not any(n.endswith(rel) for n in truth.names)]
+    found += [f"{UPLOAD} does not seal {rel}" for rel in missing]
+    return found
+
+
 def main() -> None:
     template = json.load(open(sys.argv[1]) if len(sys.argv) > 1 else sys.stdin)
-    bad = violations(template) + test_truth_violations(template, Path(__file__).resolve().parents[1])
+    root = Path(__file__).resolve().parents[1]
+    bad = violations(template) + test_truth_violations(template, root) + upload_violations(root)
     for line in bad:
         print(f"truth not sealed: {line}")
     if bad:
         sys.exit(1)
     n = sum(STORAGE in str(a.get("scope", "")) for a in role_assignments(template))
     print(f"truth sealed: {n} storage role assignment(s), all to the render job or the maintainer reader; "
-          f"'{TEST_TRUTH}' private, with no role of its own and no training link")
+          f"'{TEST_TRUTH}' private, with no role of its own and no training link; "
+          f"the render job seals every answer-key file of a clip and its views")
 
 
 if __name__ == "__main__":

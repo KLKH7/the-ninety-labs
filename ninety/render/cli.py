@@ -18,7 +18,7 @@ from pathlib import Path
 
 from ninety.render.checks import check_clip, digest
 from ninety.render.clip import ROOT, RenderUnavailable, browser_page, render_clip, write_meta
-from ninety.render.params import parse_override
+from ninety.render.params import VIEWS, parse_override
 from ninety.render.splits import TEST_SEEDS, check_seed, split_of, train_seeds
 
 
@@ -32,6 +32,12 @@ def _add_render_args(ap: argparse.ArgumentParser) -> None:
         "--gpu", action="store_true", help="hardware GL: faster, but pixels are not bit-reproducible"
     )
     ap.add_argument("--mp4", action="store_true", help="also encode clip.mp4 (needs ffmpeg on PATH)")
+    ap.add_argument(
+        "--views",
+        choices=VIEWS,
+        default=None,
+        help="tactical: also write the two fixed whole-pitch lenses under views/ (broadcast unchanged)",
+    )
 
 
 def render_main(argv: list[str] | None = None) -> None:
@@ -70,6 +76,7 @@ def render_main(argv: list[str] | None = None) -> None:
             overrides=overrides,
             mp4=a.mp4,
             gpu=a.gpu,
+            views=a.views,
         )
     except RenderUnavailable as e:
         sys.exit(str(e))
@@ -121,7 +128,8 @@ def dataset_main(argv: list[str] | None = None) -> None:
                 check_seed(s, a.split)
                 t = time.time()
                 d = root / f"seed{s}"
-                clip = render_clip(s, d, seconds=a.seconds, overrides=_overrides(a.set), mp4=a.mp4, page=page)
+                clip = render_clip(s, d, seconds=a.seconds, overrides=_overrides(a.set), mp4=a.mp4, page=page,
+                                   views=a.views)
                 entry = {
                     "split": a.split,
                     "seed": s,
@@ -201,6 +209,7 @@ def check_main(argv: list[str] | None = None) -> None:
                 seconds=clip["frames"] / clip["fps"],
                 start_s=clip["t_start"],
                 overrides=clip["overrides"],
+                views=clip["params"].get("views"),
             )
             da, db = digest(first), digest(again)
         summary["determinism"] = {

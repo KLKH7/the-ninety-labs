@@ -13,10 +13,10 @@ ranges to render in parallel (infra/render-job.sh). Configuration comes from the
     AZURE_STORAGE_TRUTH_CONTAINER  container for the ground truth                     (default truth)
     AZURE_CLIENT_ID     the job's user-assigned managed identity (set by the job definition)
 
-Ground truth is sealed: events.jsonl and frames.jsonl (true events, positions, camera, boxes) go to
-the `truth` container, which only the render job, training and scoring may read; images and
-clip.json go to `renders`. Nothing on the live path is granted the truth container
-(infra/main.bicep, checked by infra/check_truth_sealed.py).
+Ground truth is sealed: events.jsonl and frames.jsonl (true events, positions, camera, boxes), the
+clip's own and every view's under views/<name>/, go to the `truth` container, which only the render
+job, training and scoring may read; images and clip.json go to `renders`. Nothing on the live path
+is granted the truth container (infra/main.bicep, checked by infra/check_truth_sealed.py).
 
 Queue mode (the event-driven job): with NINETY_QUEUE set, the execution takes one render request
 from that Storage Queue instead of reading the seed range from the environment. A request is JSON
@@ -88,7 +88,8 @@ def upload_dir(container, truth, run: str, seed: int, clip_dir: Path, last: str 
     """Upload a clip: ground truth to the sealed `truth` container first, then images, and `last`
     after everything else, so its presence means the whole clip, truth included, arrived."""
     files = [f for f in sorted(clip_dir.rglob("*")) if f.is_file() and f.name != last]
-    truth_files = [f for f in files if f.name in TRUTH_FILES and f.parent == clip_dir]
+    # At any depth: a clip's views (views/<name>/, clip.py) carry their own answer key (lesson 192).
+    truth_files = [f for f in files if f.name in TRUTH_FILES]
     media = [f for f in files if f not in truth_files]
     n = 0
     for target, group in ((truth, truth_files), (container, [*media, clip_dir / last])):

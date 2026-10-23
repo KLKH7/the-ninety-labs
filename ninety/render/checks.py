@@ -172,6 +172,60 @@ def digest(clip_dir: Path, images: int | None = None) -> dict:
     }
 
 
+# A frame row's fields that depend on the lens; everything else is the world, which every stream of a
+# clip films and so must share exactly.
+LENS_FIELDS = {
+    "players": {"bbox", "visibility", "pixels", "foot_px"},
+    "ball": {"bbox", "visibility", "pixels", "center_px", "centroid_px"},
+    "row": {"clip", "image", "camera", "blur_px", "keypoints"},
+}
+
+
+def view_dirs(clip_dir: Path) -> list[Path]:
+    """The clip's extra streams (clip.py views/<name>/), by name."""
+    views = Path(clip_dir) / "views"
+    return sorted(d for d in views.iterdir() if d.is_dir()) if views.is_dir() else []
+
+
+def _world(row: dict) -> dict:
+    out = {k: v for k, v in row.items() if k not in LENS_FIELDS["row"]}
+    out["ball"] = {k: v for k, v in row["ball"].items() if k not in LENS_FIELDS["ball"]}
+    lens = LENS_FIELDS["players"]
+    out["players"] = [{k: v for k, v in pl.items() if k not in lens} for pl in row["players"]]
+    return out
+
+
+def streams_agree(clip_dir: Path) -> list[str]:
+    """Problems, if any, between the broadcast and each view it wrote: every view must film the same
+    world frame for frame (the same frames, ball and players where the broadcast has them, the same
+    events), from one fixed lens. Empty means they agree; a clip without views has nothing to agree."""
+    d = Path(clip_dir)
+    clip, frames, _ = load_clip(d)
+    want = ("tac-l", "tac-r") if clip["params"].get("views") == "tactical" else ()
+    have = [v.name for v in view_dirs(d)]
+    problems = [f"view {n}: missing" for n in want if n not in have]
+    problems += [f"view {n}: not asked for (params.views is {clip['params'].get('views', 'none')!r})"
+                 for n in have if n not in want]
+    events = (d / "events.jsonl").read_bytes()
+    for v in view_dirs(d):
+        vclip, vframes, _ = load_clip(v)
+        name = v.name
+        if (v / "events.jsonl").read_bytes() != events:
+            problems.append(f"view {name}: events.jsonl differs from the broadcast's")
+        if vclip.get("view", {}).get("name") != name:
+            problems.append(f"view {name}: clip.json names view {vclip.get('view', {}).get('name')!r}")
+        if len(vframes) != len(frames):
+            problems.append(f"view {name}: {len(vframes)} frames, the broadcast has {len(frames)}")
+        lens = vclip.get("view", {}).get("camera", {}).get("P")
+        for a, b in zip(frames, vframes, strict=False):
+            if _world(a) != _world(b):
+                problems.append(f"view {name}: frame {a['frame']}: the world differs from the broadcast's "
+                                f"(view frame {b['frame']})")
+            if b["camera"]["P"] != lens:
+                problems.append(f"view {name}: frame {b['frame']}: the lens moved")
+    return problems
+
+
 def check_clip(clip_dir: Path) -> dict:
     clip, frames, _ = load_clip(clip_dir)
     proj = projection_errors(frames)
@@ -187,7 +241,16 @@ def check_clip(clip_dir: Path) -> dict:
         "labels_complete": comp["ok"],
         "data_contract": not contract,
     }
+    extra = {}
+    if clip["params"].get("views", "none") != "none" or view_dirs(clip_dir):
+        # Each view is a clip of its own and passes every check a clip does; together they film one world.
+        views = {v.name: check_clip(v) for v in view_dirs(clip_dir)}
+        agree = streams_agree(clip_dir)
+        passed["views_pass"] = all(all(r["passed"].values()) for r in views.values())
+        passed["streams_agree"] = not agree
+        extra = {"views": views, "streams_agree": agree}
     return {
+        **extra,
         "clip": clip["clip_id"],
         "seed": clip["seed"],
         "split": clip["split"],
