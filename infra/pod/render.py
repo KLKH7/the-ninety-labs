@@ -15,6 +15,10 @@ are that commit's own code, so the clips are what the commit makes; this file on
 No credential goes to the render machine. Copy `--out` back over SSH, then on the maintainer's
 machine run `verify` (every sha256 against the manifest) and `upload --account <name>`, which uses
 the local az login. The test split's answer key goes to `truth-test`, never `truth`.
+
+A plan's `render.views` (`tactical`: the two fixed whole-pitch lenses, ninety/render/clip.py) is
+passed to every clip of both splits, the determinism check included. It is not an override: a test
+seed keeps none, and its broadcast is byte-identical with or without the views.
 """
 
 from __future__ import annotations
@@ -138,8 +142,14 @@ def report_path(out: Path, split: str, seed: int) -> Path:
     return out / "reports" / split / f"seed{seed}.json"
 
 
+def judge(clip: dict, report: dict) -> dict:
+    """The render checks' verdicts plus the dataset's own: a training clip shows every frame (no
+    dead-ball cut, docs/DATA_CONTRACT.md, lesson 156)."""
+    return {**report["passed"], "no_cuts": not clip.get("cuts") and not clip["params"].get("dead_ball_cut")}
+
+
 def _worker(index: int, jobs: list[tuple[int, dict]], out: str, run: str, seconds: float, split: str,
-            gl: str = "software") -> None:
+            gl: str = "software", views: str | None = None) -> None:
     from ninety.render.checks import check_clip
     from ninety.render.clip import render_clip
 
@@ -152,10 +162,10 @@ def _worker(index: int, jobs: list[tuple[int, dict]], out: str, run: str, second
                 continue  # finished in an earlier run: resume
             d = clip_dir(out_p, run, seed, split)
             t = time.time()
-            clip = render_clip(seed, d, seconds=seconds, overrides=overrides, gpu=gl == "gpu", page=page)
+            clip = render_clip(seed, d, seconds=seconds, overrides=overrides, gpu=gl == "gpu", page=page,
+                               views=views)
             report = check_clip(d)
-            # A training clip shows every frame: no dead-ball cut (docs/DATA_CONTRACT.md, lesson 156).
-            report["passed"]["no_cuts"] = not clip.get("cuts") and not clip["params"].get("dead_ball_cut")
+            report["passed"] = judge(clip, report)
             rp.write_text(json.dumps(report))
             line = {"seed": seed, "passed": all(report["passed"].values()), "frames": clip["frames"],
                     "seconds_taken": round(time.time() - t, 1), "worker": index,
@@ -173,7 +183,8 @@ def render(plan: dict, out: Path, workers: int, only: set[int] | None, split: st
     t = time.time()
     ctx = mp.get_context("spawn")
     seconds = plan["render"]["seconds"]
-    procs = [ctx.Process(target=_worker, args=(i, c, str(out), plan["run"], seconds, split, gl))
+    views = plan["render"].get("views")
+    procs = [ctx.Process(target=_worker, args=(i, c, str(out), plan["run"], seconds, split, gl, views))
              for i, c in enumerate(chunks) if c]
     for p in procs:
         p.start()
@@ -195,7 +206,7 @@ def determinism(plan: dict, out: Path, seed: int, gl: str) -> list[str]:
     for d in dirs:
         with open_page(gl) as (page, _, _renderer):
             render_clip(seed, d, seconds=plan["render"]["seconds"], overrides=overrides, gpu=gl == "gpu",
-                        page=page)
+                        page=page, views=plan["render"].get("views"))
     return differences(*dirs)
 
 
@@ -238,7 +249,8 @@ def manifest(plan: dict, repo: Path, out: Path) -> dict:
                           "params": {k: clip["params"].get(k) for k in KNOBS}, "files": files})
     m = {"name": plan["name"], "run": plan["run"], "render_commit": git_head(repo),
          "renderer": RENDERER_VERSION, "plan_commit": plan.get("commit"),
-         "driver": "infra/pod/render.py", "clips": len(clips),
+         "driver": "infra/pod/render.py", "driver_commit": git_head(Path(__file__).resolve().parents[2]),
+         "clips": len(clips),
          "bytes": sum(f["bytes"] for c in clips for f in c["files"].values()),
          "failed": failed, "missing": missing, "clips_list": clips}
     (out / "manifest.json").write_text(json.dumps(m, indent=1))
@@ -274,7 +286,8 @@ def blob_path(run: str, split: str, seed: int, rel: str) -> str:
 def upload_clip(containers: dict, run: str, split: str, seed: int, d: Path) -> int:
     """The answer key first, then the media, clip.json last, so its presence means the whole clip."""
     files = sorted(f for f in d.rglob("*") if f.is_file() and f.name != "clip.json")
-    truth = [f for f in files if f.parent == d and f.name in TRUTH[split]]
+    # At any depth: a clip's views (views/<name>/) carry their own answer key (lesson 192).
+    truth = [f for f in files if f.name in TRUTH[split]]
     media = [f for f in files if f not in truth] + [d / "clip.json"]
     n = 0
     for name, group in ((TRUTH_CONTAINER[split], truth), ("renders", media)):
@@ -284,6 +297,16 @@ def upload_clip(containers: dict, run: str, split: str, seed: int, d: Path) -> i
                                              data, overwrite=True)
             n += 1
     return n
+
+
+def upload_failed(containers: dict, run: str, failed: list[dict], out: Path) -> int:
+    """Each failed clip's check report, to its split's sealed container: its contract messages quote
+    the answer key (a true event, where it was), and a test seed's must never be inspected (lesson 192)."""
+    for f in failed:
+        rp = report_path(out, f["split"], f["seed"])
+        name = f"{run}/failed/{f['split']}/seed{f['seed']}.json"
+        containers[TRUTH_CONTAINER[f["split"]]].upload_blob(name, rp.read_bytes(), overwrite=True)
+    return len(failed)
 
 
 def upload(out: Path, account: str) -> dict:
@@ -306,10 +329,7 @@ def upload(out: Path, account: str) -> dict:
             continue
         done["files"] += upload_clip(containers, run, split, s, clip_dir(out, run, s, split))
         done["uploaded"] += 1
-    for f in m["failed"]:
-        rp = report_path(out, f["split"], f["seed"])
-        name = f"{run}/failed/{f['split']}/seed{f['seed']}.json"
-        containers["renders"].upload_blob(name, rp.read_bytes(), overwrite=True)
+    upload_failed(containers, run, m["failed"], out)
     manifest_bytes = (out / "manifest.json").read_bytes()
     containers["renders"].upload_blob(f"{run}/manifest.json", manifest_bytes, overwrite=True)
     print(json.dumps(done), flush=True)

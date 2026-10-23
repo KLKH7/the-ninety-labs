@@ -116,3 +116,73 @@ def test_determinism_names_every_file_that_differs(tmp_path):
     (b / "images" / "00000.jpg").write_bytes(b"\xff\xd8diff")
     (b / "events.jsonl").write_text("")
     assert pod.differences(a, b) == ["events.jsonl", "images/00000.jpg"]
+
+
+def test_a_views_answer_key_is_sealed_with_the_clips(tmp_path):
+    # A clip rendered with views holds frames.jsonl and events.jsonl under views/<name>/ too: the
+    # answer key as much as the clip's own (lesson 192). Fails on a seal of the top level only.
+    for split, truth in (("train", "truth"), ("test", "truth-test")):
+        log = []
+        containers = {n: FakeContainer(log, n) for n in ("renders", "truth", "truth-test")}
+        seed = 900001 if split == "test" else 3
+        d = _clip(tmp_path / split, split, seed)
+        for name in ("tac-l", "tac-r"):
+            (d / "views" / name / "images").mkdir(parents=True)
+            for f in ("clip.json", "meta.json", "frames.jsonl", "events.jsonl", "images/00000.jpg"):
+                (d / "views" / name / f).write_text(f)
+        pod.upload_clip(containers, "run", split, seed, d)
+        leaked = [p for n, p in log if n == "renders" and p.endswith(("frames.jsonl", "events.jsonl"))]
+        assert leaked == []
+        assert ("truth" if split == "train" else "truth-test", pod.blob_path(
+            "run", split, seed, "views/tac-l/frames.jsonl")) in log
+        assert (truth, pod.blob_path("run", split, seed, "views/tac-r/events.jsonl")) in log
+
+
+def test_a_failed_clips_report_is_sealed_with_its_splits_answer_key(tmp_path):
+    # A report's contract messages quote true events and positions; a test seed's goes to
+    # truth-test, never to renders, where the detector and trainers read (lesson 192).
+    log = []
+    containers = {n: FakeContainer(log, n) for n in ("renders", "truth", "truth-test")}
+    failed = [{"split": "test", "seed": 900002}, {"split": "train", "seed": 7}]
+    for f in failed:
+        rp = pod.report_path(tmp_path, f["split"], f["seed"])
+        rp.parent.mkdir(parents=True, exist_ok=True)
+        rp.write_text('{"data_contract": ["e00054 shot: ball never reaches (36.79, 53.5)"]}')
+    assert pod.upload_failed(containers, "run", failed, tmp_path) == 2
+    assert log == [("truth-test", "run/failed/test/seed900002.json"),
+                   ("truth", "run/failed/train/seed7.json")]
+
+
+def test_a_clip_with_a_cut_or_cuts_switched_on_fails_the_dataset(tmp_path):
+    ok = {"passed": {"data_contract": True}}
+    assert pod.judge({"cuts": [], "params": {"dead_ball_cut": False}}, ok)["no_cuts"] is True
+    assert pod.judge({"cuts": [{"from": 1}], "params": {}}, ok)["no_cuts"] is False
+    assert pod.judge({"cuts": [], "params": {"dead_ball_cut": True}}, ok)["no_cuts"] is False
+
+
+def test_the_worker_passes_the_plans_views_and_judges_every_clip(tmp_path, monkeypatch):
+    import contextlib
+
+    import ninety.render.checks as checks
+    import ninety.render.clip as clip
+
+    calls = []
+
+    def fake_render(seed, d, seconds, overrides, gpu, page, views=None):
+        calls.append((seed, overrides, views))
+        Path(d).mkdir(parents=True)
+        return {"cuts": [{"from": 1}] if seed == 4 else [], "params": {}, "frames": 250}
+
+    @contextlib.contextmanager
+    def fake_page(gl):
+        yield "page", "v", "renderer"
+
+    monkeypatch.setattr(clip, "render_clip", fake_render)
+    monkeypatch.setattr(checks, "check_clip", lambda d: {"passed": {"data_contract": True}})
+    monkeypatch.setattr(pod, "open_page", fake_page)
+    (tmp_path / "reports" / "train").mkdir(parents=True)  # render() makes it before the workers start
+    pod._worker(0, [(3, {}), (4, {"occlusion": "crowded"})], str(tmp_path), "run", 10.0, "train",
+                views="tactical")
+    assert calls == [(3, {}, "tactical"), (4, {"occlusion": "crowded"}, "tactical")]
+    reports = {s: json.loads(pod.report_path(tmp_path, "train", s).read_text())["passed"] for s in (3, 4)}
+    assert reports[3]["no_cuts"] is True and reports[4]["no_cuts"] is False
