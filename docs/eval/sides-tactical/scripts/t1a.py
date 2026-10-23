@@ -1,15 +1,21 @@
-"""T1 of docs/eval/sides-tactical/PLAN.md: each lens's saved observations, judged with the fixed band,
+"""Run on PR #202 merged into this branch (observe.recolour, R4), not on this branch alone.
+
+T1 of docs/eval/sides-tactical/PLAN.md: each lens's saved observations, judged with the fixed band,
 kits re-read by #202's R4 (observe.recolour) from that lens's images, fused; then sides scored."""
-import json, sys
+import json
+import sys
 from pathlib import Path
+
 import numpy as np
 from PIL import Image
+
 from ninety.vision import fuse, observe
 from ninety.vision.track import read_observations
 
 raw, out, val = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3])
 seeds = [int(s) for s in sys.argv[4:]]
-load = lambda p: np.asarray(Image.open(p).convert("RGB"))
+def load(p):
+    return np.asarray(Image.open(p).convert("RGB"))
 (out).mkdir(parents=True, exist_ok=True)
 for s in seeds:
     placed = {}
