@@ -466,7 +466,11 @@ def off_the_net(before: ball.State, after: ball.State) -> ball.State:
     roof, its lowest point on it), and its speed into the net is lost (design, as inside). On the
     roof it rolls down the slope toward the back, as a ball rolls down any incline (g sin a cos a
     across the ground, the roof's own slope a; design: the net's give and any friction on it are
-    not modelled), so a ball dropped onto it does not stay up there."""
+    not modelled), so a ball dropped onto it does not stay up there. Only for a step that does not
+    go into the goal over its line (goal_entered): a goal is never turned away by the net's outside
+    (the lesson 21 audit: a ball crossing between the posts from wide of one, or dropping in under the
+    bar, was stopped at the outside of a side or the roof and the goal lost). Known gap: a ball
+    already inside the net's way (released from a player against it) is not stopped (design)."""
     bx, by, bz, vx, vy, vz = after
     r, mid = ball.RADIUS, PITCH_Y / 2
     for line in (0.0, PITCH_X):
@@ -1720,7 +1724,8 @@ class Engine:
                 self.bumped = None
                 self.chase = {}
                 return
-        self.ball = off_the_net(before, self.ball)  # beside a post or over the bar: the net's outside
+        if goal_entered(before, self.ball) is None:  # into the goal, the net's outside is not in its way
+            self.ball = off_the_net(before, self.ball)  # beside a post or over the bar: the net's outside
 
     def went_out(self, before: ball.State) -> bool:
         """Law 9: out once the whole ball has crossed a goal line or touchline. Where and how high

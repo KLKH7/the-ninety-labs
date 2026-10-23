@@ -479,3 +479,33 @@ def test_a_ball_behind_the_goal_is_carried_round_the_net_not_knocked_into_it():
     assert knocks  # it was knocked on to the spot at some point
     assert not any(through(a, b, c, d) for a, b in knocks for c, d in nets())
     assert not any(in_the_goal(f["ball"]) for f in track)
+
+
+@pytest.mark.parametrize("shot", [
+    (104.7, MID + GOAL_HALF_WIDTH + 0.14, 0.1, 15.0, -25.0, 0.0),  # from wide of the post, across
+    (104.6, MID - GOAL_HALF_WIDTH - 0.19, 0.0, 14.1, 14.1, 0.0),  # the same from the other side
+    (104.9, MID, 2.45, 5.0, 0.0, -20.0),  # dropping steeply in under the bar
+], ids=["across from wide", "across from the other side", "dropping under the bar"])
+def test_the_nets_outside_never_turns_away_a_goal(shot):
+    """Lesson 200 (its audit): a ball that crosses the goal line between the posts and under the bar
+    is a goal, though it started wide of a post or above the roof's line; the net's outside is not in
+    its way. With the outside applied to every step, each was stopped outside a side or on the roof
+    and the goal lost."""
+    e = shot_at_goal(shot)
+    play_on(e, lambda e: any(ev["type"] == "goal" for ev in e.match.events), 1)
+
+
+def test_after_the_goal_the_ball_flies_on_freely_until_it_meets_the_net():
+    """The net holds the ball where it meets it: from the shot to the back of the net the ball's
+    path is its own free flight, frame for frame (lesson 200's audit: a ball moved to the back of the
+    net as it went in kept every per-frame bound)."""
+    shot = SHOTS["low and hard"][0]
+    e = shot_at_goal(shot)
+    free = ball.predict(e.ball, DT, 1.0)
+    back = PITCH_X + NET_DEPTH_M - R
+    track = play_on(e, lambda e: e.ball[0] >= back - EPS, 1)
+    flown = [s for s in free if s[0] < back]
+    assert any(ev["type"] == "goal" for ev in e.match.events)
+    for f, s in zip(track, flown, strict=False):
+        assert f["ball"] == s
+    assert len(track) >= len(flown)
