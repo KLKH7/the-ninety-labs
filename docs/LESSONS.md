@@ -1589,6 +1589,24 @@ short and actionable. This file is public: no research sources, product names or
   `sys.modules` in a fresh interpreter (lesson 104); `::test_the_check_sees_an_sdk_when_one_is_imported`
   shows the check can go red.
 
+### 154. A check that measures a defect also stops it where it airs
+- **What happened:** #182 taught the failure table to fail a baseline whose Spanish profile read as
+  English, but the on-air gate (`personalizer/cues.verify`) still held only text byte-identical to
+  the verified English. A live Personalizer writing English with one word changed would have aired,
+  marked verified, to a Spanish viewer, and only the evaluation would have noticed. The
+  first version of the gate also passed the mock translator's English: its `[es]` label counted as
+  the Spanish word "es".
+- **Rule:** when an evaluation learns to catch a defect, the same check guards the live path, and
+  the evaluation keeps measuring independently of the gate. An exemption names both the mode and
+  the mark: the mock airs only in a run that asked for it (`NINETY_TRANSLATOR=mock`) and only with
+  its label on screen, so a model cannot exempt itself by writing the label. Labels and quotes are
+  not words of the text.
+- **Check:** `tests/test_personalizer_live.py::test_english_for_a_spanish_profile_never_airs`,
+  `::test_the_labelled_mock_airs_only_in_mock_mode`,
+  `::test_spanish_with_an_english_name_or_quote_still_airs`; and
+  `tests/test_workflow_failures.py::test_the_baseline_fails_when_a_spanish_profile_reads_english_with_a_word_changed`
+  shows the table still catches it with the gate removed.
+
 ### 155. A test of a library's message shape goes through the library's own parser
 - **What happened:** #182 made a published agent's call to the match tools fail the call, keyed on
   the content type `mcp_server_tool_call` in its reply. The tests built that content by hand with
@@ -1749,6 +1767,38 @@ short and actionable. This file is public: no research sources, product names or
   counts a restart taken again as the same restart.
 - **Check:** `uv run pytest tests/test_restarts.py -k past_the_end_of_the_touchline`; on the engine
   before it, the ball runs on to 127 m and jumps 18 m in a frame.
+
+### 172. A score called a confidence is measured before a gate is built on it
+- **What happened:** the phone's possession layer was designed to show a team only above a
+  confidence: the detector's side confidence times an age factor. Measured on 13 validation clips
+  before any UI was built, team agreement fell as the cut-off rose (65 % at 0.2, 30 % at 0.7, 0 %
+  at 0.9), because the side is decided once per clip, and a flipped clip is wrong throughout, one
+  of them at 0.88 to 0.97. `Track.side_confidence` says it is "a score, not a probability"; the
+  design treated it as one.
+- **Rule:** before a confidence gates what a viewer sees, measure agreement against it on
+  validation data: the curve by cut-off, and per clip, since errors that share a cause share a
+  clip. If no cut-off reaches the target, the gate stays shut and the feature stays off; never
+  move the target to open it. Build the screen only after the gate can open.
+- **Check:** `tests/test_possession.py::test_while_the_gate_is_unset_the_layer_shows_nothing` and
+  `::test_the_committed_calibration_states_its_targets_and_its_evidence`;
+  docs/eval/possession-calibration.md.
+
+### 173. A label check written for one pose fails the first body drawn in another
+- **What happened:** to make fouls legible (the fouled player goes down at the foul, the fouler's
+  foot meets his shins), the renderer tipped the fouled player's body over his feet. Render-check's
+  `player_feet_in_boxes` then failed 49 frames of seed 7's foul, all on the player lying down: it
+  required his ground point at the bottom of his box, with slack scaled by box height over 1.8 m,
+  and a lying body's box is neither 1.8 m tall nor has his feet at its bottom (fallen toward the
+  camera, they are at its top). His feet were inside the box on every one of those frames.
+- **Rule:**
+  - A check on the labels states the pose it assumes. When the picture draws a new pose, the label
+    data says so (`fall` in the frame row, an optional field) and the check judges that pose by
+    what is true of it, with a planted failing case.
+  - It never skips the player or widens the slack for everyone.
+  - Upright players are checked exactly as before.
+- **Check:** `uv run pytest tests/test_render_checks.py tests/test_render_fouls.py`. A fallen player
+  passes toward the camera, away from it and sideways. A box beside or above his feet still fails,
+  and so does a row with no `fall` and a lying player's box.
 
 ### 174. A player with time to spare walks there and waits, rather than creeping in just in time
 - **What happened:** at restarts the engine paced every player to reach his place just as the
@@ -2047,3 +2097,55 @@ short and actionable. This file is public: no research sources, product names or
   the number is neither. The audit runs before the merge.
 - **Check:** the audit's neither list. A constant on it is marked in a follow-up that does not
   change the value.
+
+### 188. Two scorers of one group share one cut-off and one comparison
+- **What happened:** EVALUATION.md puts a ball in the air when its centre is above 0.5 m. The
+  pitch-level vision scorer used `z > 0.5`, but the position scorer (`pitch_score.py`) used
+  `z < 0.5` for the ground, so a ball at exactly 0.5 m was on the ground in one report and in the
+  air in the other. Both had the same constant; nothing checked the comparison, and no test put a
+  ball exactly on the cut-off in the position scorer.
+- **Rule:** a difficulty group's cut-off and its comparison are defined once (`IN_AIR_Z`,
+  `height_group`, `BLUR_PX`, `blur_group` in `ninety/eval/vision_score.py`) and imported
+  everywhere; each scorer has a test with a value exactly on the cut-off (lesson 158).
+- **Check:** `uv run pytest tests/test_pitch_score.py tests/test_vision_score.py
+  tests/test_fake_box_detections.py -k "cut_off"`; the pitch_score test fails with `z < 0.5` put back.
+
+### 190. A test that reads its constant back cannot pin it
+- **What happened:** the foul pose asserted `foul_fall_deg(...) == FALL_DOWN_DEG` and `peak >= 80`.
+  A lie of 80° left both green, and so did rewriting the pose times, because the test added those
+  constants up and compared the curve to them. The planted clips sat 0.4 s and 1.6 s from the
+  restart, so a floor of 0.5 s and a floor of 1.5 s both passed.
+- **Rule:** an expected output that pins a design value is the number that design produces, written
+  out. A test that reads the constant moves with the bug. Lesson 36 is the other half: an input
+  that has to sit beside a threshold is derived from that threshold. A bound is planted on a case
+  the looser value lets through, and the tighter value does not.
+- **Check:** `tests/test_fouls.py` and the P18 tests in `tests/test_validate.py`. A lie of 80°, a
+  pose time rewritten, and a floor of 0.5 s each fail one of them.
+
+### 191. A live output named like an answer-key file looks like a truth read
+- **What happened:** the first draft of the live detection job (`ninety/vision/live_job.py`) wrote
+  its detected events to `events.jsonl`, the name of the answer key's event file. The live-path
+  checks went red: the static one found the name in the code, and the runtime one saw the job open
+  a file by that name. Nothing read ground truth, but a reader of the output folder, or a later
+  packer, could not tell detected events from true ones. Separately, `detect.frame_rows` falls
+  back to the labelled frame file when a clip has no labels-free index, so a job handed a whole
+  rendered clip would have read it.
+- **Rule:** live outputs never take an answer-key file name (detected events are `detected.jsonl`).
+  A job on the live path takes an allow-list of inputs (the index and the images) and refuses
+  anything else before a model loads, rather than trusting a fallback not to run.
+- **Check:** `tests/test_vision_live_path.py` lists `live_job.py` among the live modules;
+  `tests/test_vision_live_job.py::test_a_clip_folder_holding_anything_else_is_refused_before_the_model_loads`
+  (each answer-key file planted), and `::test_a_clean_clip_runs_the_whole_live_path_and_opens_no_truth`.
+
+### 203. CI built the image with a stand-in, so the real pin was never tried
+- **What happened:** the demo image downloads its Replay bundle from a release asset pinned by URL
+  and SHA-256 in the Dockerfile. CI's image job builds with a fixture bundle instead, so it stayed
+  green while the Dockerfile still pinned a bundle that had been superseded and never published.
+  Merging would have started a deploy whose build fails on a 404. The same review found the
+  passcode gate checked HTTP requests only: a WebSocket handshake behind it went through unchecked.
+- **Rule:** when CI substitutes an input for speed or isolation, it still checks the real one
+  exists and is what the pin says. A gate covers every kind of connection that can reach what it
+  guards, and its test tries each kind.
+- **Check:** the CI `image` job's step "The Dockerfile's pinned Replay bundle exists and matches its
+  hash"; `tests/test_api_site.py::test_a_websocket_behind_the_gate_needs_the_key_too` fails with the
+  WebSocket branch of `RequireKey` removed.

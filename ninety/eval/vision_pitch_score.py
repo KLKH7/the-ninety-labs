@@ -9,7 +9,8 @@ eligible detections (the pixel scorer's score threshold) are paired one to one w
 nearest first, within the strict radius (1.0 m for both) or the lenient one (1.5 m for players,
 2.0 m for the ball). Truth and detection are placed the same way, so the score measures the
 detector's boxes, not the camera fit or a ball's height; the in-air ball (EVALUATION.md's
-difficulty group, height above 0.5 m) is reported as its own group, never left out.
+difficulty group, height above 0.5 m) is reported as its own group, never left out, and so are
+boxes on frames whose camera blur streak is longer than 3 px (the "blurred" group).
 
 Only frames the detector ran on are scored, as in the pixel scorer (``vision_score``). A box whose
 point is not on the ground in front of the camera (above the horizon) has no place: a label is
@@ -22,14 +23,19 @@ import math
 from collections.abc import Iterable, Mapping
 
 from ninety.eval.event_score import LENIENT_M, STRICT_M
-from ninety.eval.pitch_score import GROUND_Z
 from ninety.eval.vision_score import (
+    BLUR_GROUPS,
+    BLUR_PX,
     CLASSES,
     DEFAULT_THRESHOLD,
+    HEIGHT_GROUPS,
+    IN_AIR_Z,
     VISIBILITY_GROUPS,
     _metrics,
+    blur_group,
     center_distance,
     ground_truth,
+    height_group,
     visibility_group,
 )
 
@@ -46,10 +52,8 @@ RADIUS_M = {
     "lenient": {"player": PLAYER_LENIENT_M, "ball": LENIENT_M},
 }
 RULES = tuple(RADIUS_M)
-# EVALUATION.md's "in the air" group: a ball whose height is above 0.5 m (the same cut-off the
-# position scorer uses, pitch_score.GROUND_Z; never a new one).
-IN_AIR_Z = GROUND_Z
-HEIGHT_GROUPS = ("on the ground", "in the air")
+# EVALUATION.md's "in the air" (IN_AIR_Z, HEIGHT_GROUPS, height_group) and "blurred" groups
+# (BLUR_PX, BLUR_GROUPS, blur_group) are the pixel scorer's, imported, never a second cut-off.
 
 
 def to_ground(P: list[list[float]], u: float, v: float, z: float) -> tuple[float, float] | None:
@@ -77,10 +81,6 @@ def place(cls: str, box: Iterable[float], P: list[list[float]]) -> tuple[float, 
     return to_ground(P, (x0 + x1) / 2, (y0 + y1) / 2, BALL_CENTRE_Z)
 
 
-def height_group(z: float) -> str:
-    return "in the air" if z > IN_AIR_Z else "on the ground"
-
-
 def _ball_heights(frames: Iterable[Mapping]) -> dict[int, float]:
     heights = {}
     for row in frames:
@@ -88,6 +88,16 @@ def _ball_heights(frames: Iterable[Mapping]) -> dict[int, float]:
         if z is not None:
             heights[int(row["frame"])] = float(z)
     return heights
+
+
+def _blurs(frames: Iterable[Mapping], run: set[int]) -> dict[int, str] | None:
+    """Each run frame's blur group; None when no run frame has ``blur_px``, refused when some do."""
+    present = {row.get("blur_px") is not None for row in frames if int(row["frame"]) in run}
+    if len(present) > 1:
+        raise ValueError("some frames have blur_px and some do not")
+    if present != {True}:
+        return None
+    return {int(row["frame"]): blur_group(row["blur_px"]) for row in frames if int(row["frame"]) in run}
 
 
 def has_cameras(frames: Iterable[Mapping]) -> bool:
@@ -153,7 +163,8 @@ def score_pitch(
     run: Iterable[int] | None = None,
 ) -> dict:
     """Strict and lenient pitch-level metrics: overall, by class, by visibility group within each
-    class, and the ball by height. ``run`` is as in ``vision_score.score``."""
+    class, the ball by height, and each class by camera blur (null when the frames have no
+    ``blur_px``). ``run`` is as in ``vision_score.score``."""
     frames = list(frames)
     known = {int(row["frame"]) for row in frames}
     run = known if run is None else {int(f) for f in run}
@@ -163,6 +174,7 @@ def score_pitch(
     if missing := sorted(f for f in run if not cameras[f]):
         raise ValueError(f"pitch-level matching needs each frame's saved camera matrix: {missing[:5]}")
     heights = _ball_heights(frames)
+    blurs = _blurs(frames, run)
     labels = []
     for label in ground_truth(frames):
         if label["frame"] not in run:
@@ -172,7 +184,8 @@ def score_pitch(
             raise ValueError(f"frame {frame}: a ball label with no height, so its height group is unknown")
         labels.append({**label, "xy": place(cls, label["bbox"], cameras[frame]),
                        "visibility_group": visibility_group(label["visibility"]),
-                       "height_group": height_group(heights[frame]) if cls == "ball" else None})
+                       "height_group": height_group(heights[frame]) if cls == "ball" else None,
+                       "blur_group": blurs[frame] if blurs is not None else None})
     eligible = []
     for d in detections:
         if float(d.get("score", 0.0)) < threshold:
@@ -189,6 +202,7 @@ def score_pitch(
             "player_point": "bottom middle of the box, on the ground",
             "ball_point": f"centre of the box, {BALL_CENTRE_Z} m up (on the ground)",
             "in_the_air_above_m": IN_AIR_Z,
+            "blurred_above_px": BLUR_PX,
             "match": "same frame/class, one-to-one, nearest on the pitch first",
         },
         "frames": {"scored": len(run)},
@@ -208,6 +222,8 @@ def score_pitch(
             "visibility": {cls: _groups(labels, eligible, pairs, cls, "visibility_group", VISIBILITY_GROUPS)
                            for cls in CLASSES},
             "height": {"ball": _groups(labels, eligible, pairs, "ball", "height_group", HEIGHT_GROUPS)},
+            "blur": None if blurs is None else {
+                cls: _groups(labels, eligible, pairs, cls, "blur_group", BLUR_GROUPS) for cls in CLASSES},
             "distance_m": _distances([d for _, _, d in pairs]),
         }
     return report

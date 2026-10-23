@@ -101,6 +101,15 @@ def test_the_position_scorer_uses_the_pixel_scorer_s_rule():
     assert pitch_score.GROUND_Z is IN_AIR_Z
 
 
+def test_the_height_and_blur_cut_offs_are_the_pixel_scorer_s():
+    import ninety.eval.vision_pitch_score as pitch
+
+    assert IN_AIR_Z is vision_score.IN_AIR_Z
+    assert pitch.BLUR_PX is vision_score.BLUR_PX
+    assert pitch.height_group is vision_score.height_group
+    assert pitch.blur_group is vision_score.blur_group
+
+
 @pytest.mark.parametrize(("x", "y", "z"), [(53.0, 45.0, 0.0), (40.2, 61.7, 0.0), (60.0, 38.0, 1.3)])
 def test_a_point_goes_back_to_where_the_camera_drew_it(x, y, z):
     u, v = project(CAMERA, x, y, z)
@@ -330,3 +339,88 @@ def test_a_false_box_lands_further_than_the_lenient_radius_from_every_label(seed
         truth = [p["bbox"] for p in row["players"]] if cls == "player" else [row["ball"]["bbox"]]
         spot = place(cls, entry["bbox"], CAMERA)
         assert all(math.dist(spot, place(cls, t, CAMERA)) > RADIUS_M["lenient"][cls] for t in truth)
+
+
+# --- camera blur, and damage planted in one height or blur group --------------------------------
+
+BLUR_CYCLE = ([vision_score.BLUR_PX, 0.0], [2.5, 2.5], [0.0, -6.0])  # (f // 2) % 3: exactly 3 px, then longer
+
+
+def blur_frames(n=24):
+    rows = frames(n)
+    for row in rows:
+        row["blur_px"] = BLUR_CYCLE[(row["frame"] // 2) % 3]
+    return rows
+
+
+@pytest.mark.parametrize(("blur", "group"), [([vision_score.BLUR_PX, 0.0], "not blurred"),
+                                             ([2.5, 2.5], "blurred")])
+@pytest.mark.parametrize("cls", ["player", "ball"])
+def test_a_box_on_a_blurred_frame_is_in_the_blurred_group(blur, group, cls):
+    box = [600.0, 300.0, 610.0, 310.0]
+    row = {"frame": 0, "clip": "seed1", "camera": {"width": W, "height": H, "P": TOP_DOWN}, "blur_px": blur,
+           "players": [{"bbox": box, "visibility": 1.0}] if cls == "player" else [],
+           "ball": ({"bbox": box, "visibility": 1.0, "z": 0.0} if cls == "ball"
+                    else {"bbox": None, "visibility": 0.0, "z": 0.0})}
+    report = score_pitch([row], [{"frame": 0, "cls": cls, "bbox": shifted(box, 1.2), "score": 1.0}])
+    for rule, want in (("strict", (0, 1, 1)), ("lenient", (1, 0, 0))):
+        groups = report[rule]["blur"][cls]
+        assert (groups[group]["tp"], groups[group]["fp"], groups[group]["fn"]) == want
+        assert sum(g["tp"] + g["fp"] + g["fn"] for g in groups.values()) == sum(want)
+
+
+def test_frames_without_blur_report_no_blur_group_and_a_mix_is_refused():
+    assert score_pitch(frames(2), [])["strict"]["blur"] is None
+    rows = blur_frames(2)
+    del rows[1]["blur_px"]
+    with pytest.raises(ValueError, match="some frames have blur_px"):
+        score_pitch(rows, [])
+    assert score_pitch(rows, [], run={0})["strict"]["blur"] is not None
+
+
+def labels_in(rows, cls, axis, group):
+    """How many labels of a class are in a group, counted from the frames built above."""
+    if axis == "height":
+        ids = [r for r in rows if (r["ball"]["z"] > 0.5) == (group == "in the air")]
+    else:
+        ids = [r for r in rows if (math.hypot(*r["blur_px"]) > 3) == (group == "blurred")]
+    return sum(len(r["players"]) if cls == "player" else 1 for r in ids)
+
+
+@pytest.mark.parametrize("seed", range(3))
+@pytest.mark.parametrize(("axis", "group", "other", "classes"), [
+    ("height", "in the air", "on the ground", ("ball",)),
+    ("blur", "blurred", "not blurred", ("player", "ball")),
+    ("blur", "not blurred", "blurred", ("player", "ball")),
+])
+def test_pitch_damage_planted_in_one_group_is_scored_in_that_group(seed, axis, group, other, classes):
+    rows, per = blur_frames(), 1
+    detections, expected = fake_pitch_detections(rows, seed=seed, per_damage=per, only={axis: group})
+    report = score_pitch(rows, detections)
+    for cls in classes:
+        assert {e[axis] for e in expected["damage"] if e["cls"] == cls} == {group}
+        n, rest = labels_in(rows, cls, axis, group), labels_in(rows, cls, axis, other)
+        # From the damage alone: strict misses drop, shift_mid and shift_out; lenient drop and shift_out.
+        for rule, missed in (("strict", 3 * per), ("lenient", 2 * per)):
+            want = {"tp": n - missed, "fp": missed, "fn": missed,
+                    "recall": (n - missed) / n, "precision": (n - missed) / n}
+            got = report[rule][axis][cls][group]
+            assert {k: got[k] for k in want} == pytest.approx(want)
+            assert {k: report[rule][axis][cls][other][k] for k in want} == {
+                "tp": rest, "fp": 0, "fn": 0, "recall": 1.0, "precision": 1.0}
+    assert pitch_disagreements(expected, report) == []
+
+
+@pytest.mark.parametrize("seed", range(4))
+def test_pitch_damage_anywhere_is_scored_in_the_right_blur_groups(seed):
+    rows = blur_frames()
+    detections, expected = fake_pitch_detections(rows, seed=seed, per_damage=2)
+    assert expected["strict"]["blur"] is not None
+    assert pitch_disagreements(expected, score_pitch(rows, detections)) == []
+
+
+def test_a_pitch_scorer_with_a_different_blur_cut_off_disagrees(monkeypatch):
+    rows = blur_frames()
+    detections, expected = fake_pitch_detections(rows, seed=1, per_damage=2)
+    monkeypatch.setattr(vision_score, "BLUR_PX", 5.0)
+    assert pitch_disagreements(expected, score_pitch(rows, detections))

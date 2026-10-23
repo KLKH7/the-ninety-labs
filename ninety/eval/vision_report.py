@@ -20,9 +20,14 @@ land on the hidden ball (centre within the ball distance), and the median distan
 ball to the nearest such detection. Every ball detection in such a frame is a false positive; the
 distance says whether the model sees through the occluder or reports a ball somewhere else.
 
+`height` (the ball in the air or on the ground) and `blur` (each class on frames whose camera blur
+streak is longer than 3 px, or not) are summed the same way as the visibility groups. Each is null
+when the clips' frames do not record it (`ball.z`, `blur_px`); clips with and without are refused.
+
 `pitch` adds up vision_score's pitch-level matching the same way: each clip scored on its own,
-the strict and lenient counts (overall, by class, by visibility group, the ball by height) summed,
-and recall and precision taken from the sums, with the at-least-half-visible ball under each rule.
+the strict and lenient counts (overall, by class, by visibility group, the ball by height, each
+class by blur) summed, and recall and precision taken from the sums, with the at-least-half-visible
+ball under each rule.
 It is null when the clips have no saved camera matrices, and clips with and without are refused.
 
 `by_clip` gives each clip's by-class counts with the render knobs it was drawn with, and `by_knob`
@@ -52,6 +57,8 @@ from ninety.render.checks import digest
 KNOBS = ("occlusion", "kit_contrast")
 FREEZE = Path(__file__).resolve().parents[2] / "docs" / "eval" / "test-set-frozen.json"
 COUNTS = ("tp", "fp", "fn")
+# vision_score's ball height and camera blur axes: null in a clip whose frames do not record them.
+FRAME_AXES = ("height", "blur")
 
 
 def check_frozen(clip_dir: Path, expected: dict) -> None:
@@ -117,6 +124,7 @@ def build(
     """`stride` > 1 only for a validation set run on every Nth frame (as training validates); a test
     set report scores every frame."""
     totals: dict = {}
+    by_frame: dict = {}  # the height and blur axes, kept apart so the existing totals are unchanged
     hidden = {"hidden_balls": 0, "with_a_ball_detection": 0, "on_the_hidden_ball": 0, "distances_px": []}
     frames_scored = 0
     checkpoints = set()
@@ -124,6 +132,7 @@ def build(
     pitch: dict = {}
     unplaced = {"labels": 0, "detections": 0}
     cameras = set()
+    measured: dict[str, set[bool]] = {axis: set() for axis in FRAME_AXES}
     for clip in freeze["clips"]:
         seed = clip["seed"]
         clip_dir = test_dir / f"seed{seed}"
@@ -143,6 +152,11 @@ def build(
         report = score(frames, dets, threshold, run=run)
         frames_scored += report["frames"]["scored"]
         _add(totals, {k: report[k] for k in ("overall", "by_class", "visibility", "image_boundary")})
+        for axis in FRAME_AXES:
+            measured[axis].add(report[axis] is not None)
+            if len(measured[axis]) > 1:
+                raise ValueError(f"seed{seed}: some clips record the {axis} groups and some do not")
+        _add(by_frame, {axis: report[axis] for axis in FRAME_AXES if report[axis] is not None})
         knobs = {k: clip.get("params", {}).get(k) for k in KNOBS}
         by_clip.append({"seed": seed, **knobs, "by_class": report["by_class"]})
         for k, v in knobs.items():
@@ -152,7 +166,8 @@ def build(
             raise ValueError(f"seed{seed}: some clips have saved camera matrices and some do not")
         if cameras == {True}:
             on_pitch = score_pitch(frames, dets, threshold, run=run)
-            _add(pitch, {rule: {k: on_pitch[rule][k] for k in ("overall", "by_class", "visibility", "height")}
+            _add(pitch, {rule: {k: on_pitch[rule][k]
+                                for k in ("overall", "by_class", "visibility", "height", "blur")}
                          for rule in RULES})
             for k in unplaced:
                 unplaced[k] += on_pitch["unplaced"][k]
@@ -171,6 +186,7 @@ def build(
             groups = pitch[rule]["visibility"]["ball"]
             pitch_block[rule] = {
                 **_finish(pitch[rule]),
+                "blur": _finish(pitch[rule]["blur"]) if "blur" in pitch[rule] else None,
                 "ball_at_least_half_visible": _metrics(
                     *(groups["visible"][c] + groups["partly hidden"][c] for c in COUNTS)),
             }
@@ -185,6 +201,7 @@ def build(
         "stride": stride,
         "frames_scored": frames_scored,
         **_finish(totals),
+        **{axis: _finish(by_frame[axis]) if axis in by_frame else None for axis in FRAME_AXES},
         "ball_at_least_half_visible": _metrics(*(half[c] for c in COUNTS)),
         "pitch": pitch_block,
         "by_knob": _finish(by_knob),

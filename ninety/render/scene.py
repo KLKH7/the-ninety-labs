@@ -16,6 +16,7 @@ import random
 from dataclasses import dataclass, field
 
 from ninety.render.camera import Camera
+from ninety.render.fouls import tip
 from ninety.render.meshpose import (
     ASSET_STATURE_M,
     BROW_Y,
@@ -229,6 +230,10 @@ DIVE_UP_FRAMES = 25
 TOUCH_WIND_S = 0.2
 TOUCH_FOLLOW_S = 0.2
 TOUCH_SET_S = 0.04  # a touch's part is on its path this long before the contact frame
+# A foul's contact (lesson 173, design): the fouler's foot meets the fouled player's legs this far in
+# from his centre on the fouler's side, at this height (the shins; a challenge that hits the man).
+FOUL_REACH_M = 0.25
+FOUL_SHIN_M = 0.25
 # After the follow-through the part comes back to the stride, and the hips back up out of a lunge,
 # over TOUCH_RECOVER_S: a body does not snap back upright in two frames.
 TOUCH_RECOVER_S = 0.28
@@ -382,6 +387,8 @@ class Gait:
     vel: list = field(default_factory=list)  # the engine's velocity, the last ACCEL_BOX frames (pace)
     accel: float = 0.0  # his acceleration the way he faces, from the engine's velocity (m/s^2, pace)
     lean: float = 0.0  # the trunk's lean on top of the stride's (radians, forward +, pace)
+    fall: float = 0.0  # radians the body is tipped over its feet: a fouled player going down (fouls.py)
+    fall_dir: float = 0.0  # the way he falls, pitch radians
 
 
 def update_gait(g: Gait, dx: float, dy: float, dt: float, face: tuple[float, float] | None) -> None:
@@ -486,10 +493,23 @@ def contacts(frames: list[dict], events: list[dict] | None = None) -> dict[str, 
                 found.append((pl["id"], i - 1, "strike", i - 1, i))
     index = {fr.get("frame", i): i for i, fr in enumerate(frames)}
     seen = {(who, at) for who, at, *_ in found}
+    aimed: dict[tuple[str, int], dict] = {}  # a contact aimed at a body, not the ball
     for ev in events or ():
         i = index.get(ev.get("frame"))
         if ev.get("type") == "tackle" and ev.get("player") and i and (ev["player"], i) not in seen:
             found.append((ev["player"], i, "foot", i - 1, i))
+        foul = ev.get("type") == "foul" and ev.get("player") and ev.get("receiver")
+        if foul and i and (ev["player"], i) not in seen:
+            # The foul is the fouler's leg into the other man (Law 12; lesson 173): his foot goes to
+            # the fouled player's legs, shin high, on the side facing him, as a tackle's goes to the ball.
+            pos = {p["id"]: p for p in frames[i]["players"]}
+            them, him = pos.get(ev["receiver"]), pos.get(ev["player"])
+            if them and him:
+                dx, dy = him["x"] - them["x"], him["y"] - them["y"]
+                d = math.hypot(dx, dy) or 1.0
+                aimed[(ev["player"], i)] = {"x": them["x"] + dx / d * FOUL_REACH_M,
+                                            "y": them["y"] + dy / d * FOUL_REACH_M, "z": FOUL_SHIN_M}
+                found.append((ev["player"], i, "foot", i - 1, i))
     out: dict[str, list[dict]] = {}
     for pid, at, part, v_in, v_out in sorted(found, key=lambda f: (f[1], f[0])):
         who = next((p for p in frames[at]["players"] if p["id"] == pid), None)
@@ -497,7 +517,9 @@ def contacts(frames: list[dict], events: list[dict] | None = None) -> dict[str, 
             continue
         bi, bo = frames[v_in]["ball"], frames[v_out]["ball"]
         b = frames[at]["ball"]
-        if part != "strike":
+        if (pid, at) in aimed:
+            b, bi, bo = aimed[(pid, at)], {"vx": 0.0, "vy": 0.0}, {"vx": 0.0, "vy": 0.0}
+        elif part != "strike":
             # The part met the ball inside the tick, where its path from the frame before
             # passed closest to him; by this frame the ball has flown on from there.
             b = _closest(bi, bo, who["x"], who["y"])
@@ -1234,6 +1256,8 @@ def mesh_pose(g: Gait, x: float, y: float, reach: float) -> dict:
         "hold": g.hold,
         "x": round(x, 4),
         "y": round(y, 4),
+        "fall": round(g.fall, 4),
+        "fall_dir": round(g.fall_dir, 4),
     }
 
 
@@ -1425,6 +1449,12 @@ def body_parts(
         _lean_to(parts, touch, head, (hx, hy), k, at(lean, 0.0, 1.28 * k))
     if hold is not None and hold["bend"] > 0:
         _bend_over(parts, hold["bend"] * hold["w"], at(0.0, 0.0, HIP_PIVOT_Z * k), (hx, hy))
+    if g.fall:
+        # A fouled player down: the whole body tipped over his feet, as the page tips the mesh.
+        for part in parts:
+            for key in ("a", "b"):
+                if key in part:
+                    part[key] = [round(v, 4) for v in tip(part[key], x, y, g.fall, g.fall_dir)]
     return parts
 
 

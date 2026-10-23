@@ -1066,3 +1066,100 @@ def test_every_check_the_validator_reports_has_a_planted_defect():
     keys = set(re.findall(r'problems\["([A-Z]\d+ [^"]+)"\]', (root / "ninety/validate.py").read_text()))
     tests = Path(__file__).read_text()
     assert keys and not {k for k in keys if f'"{k}"' not in tests}
+
+
+def _down(player, fall=85.0):
+    return {**player, "action": "down", "fall": fall, "fall_dir": 1.0304}
+
+
+def fall_clip(late_at: int | None = None) -> dict:
+    """h9 is fouled at 0.2 s. The free kick is taken at 2.8 s. Down through frame 40 (1.6 s) is
+    1.2 s clear: legal at the 1 s floor, not at 1.5 s. `late_at` is one more frame left down."""
+    players = [
+        {"id": "h9", "team": "home", "x": 60.6, "y": 35.0, "action": "stand"},
+        {"id": "a4", "team": "away", "x": 60.0, "y": 34.0, "action": "stand"},
+        {"id": "h1", "team": "home", "x": 20.0, "y": 20.0, "action": "stand"},
+    ]
+    frames = []
+    for n in range(75):
+        row = [dict(p) for p in players]
+        if 5 <= n <= 40 or n == late_at:
+            row[0] = _down(row[0])
+        frames.append({
+            "frame": n, "t": n / FPS, "ball": {"x": 40.0, "y": 30.0, "z": 0.0},
+            "possessor": None, "players": row,
+        })
+    events = [
+        event("e1", 5, "foul", "away", "a4", "h9", x=60.6, y=35.0),
+        event("e2", 70, "set_piece", "home", "h1", x=60.6, y=35.0),
+    ]
+    return {"events": events, "frames": frames, "meta": {"fps": FPS, "score": {"home": 0, "away": 0}}}
+
+
+def test_a_foul_that_lets_him_up_in_time_passes(tmp_path):
+    assert run(tmp_path, fall_clip()) == {}
+
+
+def test_a_player_still_down_within_a_second_of_the_restart_fails(tmp_path):
+    """Frame 50 is at 2.0 s, 0.8 s before the kick: inside the 1 s floor, outside a 0.5 s floor."""
+    assert fails(run(tmp_path, fall_clip(50)), "P18 foul fall", "still down")
+
+
+def test_a_player_down_four_tenths_before_the_restart_fails(tmp_path):
+    """Frame 60 is at 2.4 s. A deeper miss than the floor, so dropping it is not how the 0.5 s
+    mutant goes red: that one is the 0.8 s plant above."""
+    assert fails(run(tmp_path, fall_clip(60)), "P18 foul fall", "still down")
+
+
+def test_a_fall_of_zero_is_not_a_fall(tmp_path):
+    """The schema allows 0. P18 does not: a fall that is present is above 0."""
+    clip = fall_clip()
+    clip["frames"][10]["players"][0]["fall"] = 0
+    assert fails(run(tmp_path, clip), "P18 foul fall", "not degrees")
+
+
+def test_a_fall_with_no_direction_fails(tmp_path):
+    clip = fall_clip()
+    del clip["frames"][10]["players"][0]["fall_dir"]
+    assert fails(run(tmp_path, clip), "P18 foul fall", "no fall_dir")
+
+
+def test_a_fall_past_flat_fails():
+    """95° is already illegal in the schema, and validate() returns before P18, so the cap is
+    planted on the check itself."""
+    from collections import defaultdict
+
+    from ninety.validate import check_foul_fall
+
+    problems = defaultdict(list)
+    who = _down({"id": "h9", "team": "home", "x": 60.6, "y": 35.0, "action": "stand"}, 95)
+    check_foul_fall([], [{"frame": 10, "t": 0.4, "players": [who]}], problems)
+    assert fails(problems, "P18 foul fall", "not degrees")
+
+
+def test_a_fall_outside_zero_to_ninety_fails_the_schema():
+    import json
+    from pathlib import Path
+
+    from jsonschema import Draft202012Validator
+
+    schema = json.loads(
+        (Path(__file__).resolve().parent.parent / "schemas/frame.schema.json").read_text())
+    check = Draft202012Validator(schema)
+
+    def frame(fall: float) -> dict:
+        return {
+            "frame": 0, "t": 0.0, "ball": {"x": 40.0, "y": 30.0, "z": 0.0},
+            "players": [{"id": "h9", "team": "home", "x": 60.6, "y": 35.0, "fall": fall}],
+        }
+
+    assert list(check.iter_errors(frame(0))) == []  # the schema's minimum is 0; P18 rejects it
+    assert list(check.iter_errors(frame(85))) == []
+    assert list(check.iter_errors(frame(95)))  # maximum 90, not a wider cap
+    assert list(check.iter_errors(frame(-1)))
+
+
+def test_a_fall_without_the_down_action_fails(tmp_path):
+    clip = fall_clip()
+    clip["frames"][10]["players"][0]["action"] = "run"
+    assert fails(run(tmp_path, clip), "P18 foul fall", "action run")

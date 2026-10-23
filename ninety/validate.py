@@ -68,6 +68,9 @@ NET_DEPTH_M, NET_BACK_M, BALL_RADIUS_M = 2.0, 2.0, 0.11
 # measurement precision (lesson 10): each of two written positions is off by up to
 # POSITION_PRECISION_M, so a contact is within two of those roundings.
 NET_TOUCH_SLACK_M = 2 * POSITION_PRECISION_M
+# P18, design: a fouled player is on his feet at least this long before the restart is taken.
+# The engine aims at 1.5 s (FALL_UP_BEFORE_S). This floor is the requirement.
+FOUL_UP_BEFORE_S = 1.0
 APPROACH_TOLERANCE_M = 0.04  # P14: per frame; a ball at 1 m/s relative to him can still be met
 EXAMPLES = 5
 
@@ -357,6 +360,47 @@ def check_contacts(events: list[dict], frames: list[dict], keepers: set[str], pr
                         f"{e['id']}: {e['type']} by {e['player']}, but the ball was moving away from him")
 
 
+def check_foul_fall(events: list[dict], frames: list[dict], problems: Problems) -> None:
+    """P18: while a fouled player is down, fall is degrees over his feet (above 0 and at most 90,
+    *design*), fall_dir is the way his head goes, and action is down. He is upright for at least
+    FOUL_UP_BEFORE_S before the restart. A frame exactly on that instant may still be down
+    (*design*, one frame). A foul with no receiver, or with no set piece or kick-off after it,
+    is not held to that window (*design*: the clip does not show the restart)."""
+    restarts = [e for e in events if e.get("type") in ("set_piece", "kickoff")]
+    for f in frames:
+        for p in f.get("players", []):
+            fall, direction = p.get("fall"), p.get("fall_dir")
+            if fall is None and direction is None:
+                continue
+            if type(fall) not in (int, float) or not 0 < fall <= 90:  # *design*: above 0, at most flat
+                problems["P18 foul fall"].append(
+                    f"frame {f.get('frame')}: {p.get('id')} fall {fall} is not degrees over his feet")
+                continue
+            if p.get("action") != "down":
+                problems["P18 foul fall"].append(
+                    f"frame {f.get('frame')}: {p.get('id')} is at {fall}° with action {p.get('action')}")
+            if type(direction) not in (int, float):
+                problems["P18 foul fall"].append(
+                    f"frame {f.get('frame')}: {p.get('id')} is down with no fall_dir")
+    for foul in events:
+        if foul.get("type") != "foul" or not foul.get("receiver"):
+            continue
+        nxt = next((e for e in restarts if e.get("t", 0) >= foul.get("t", 0)), None)
+        if nxt is None:
+            continue
+        who = foul["receiver"]
+        for f in frames:
+            if not foul.get("t", 0) <= f.get("t", 0) <= nxt.get("t", 0):
+                continue
+            if f["t"] <= nxt["t"] - FOUL_UP_BEFORE_S:  # *design*: the frame on the floor may be down
+                continue
+            row = next((p for p in f.get("players", []) if p.get("id") == who), None)
+            if row and row.get("fall"):
+                problems["P18 foul fall"].append(
+                    f"frame {f.get('frame')}: {who} is still down "
+                    f"{nxt['t'] - f['t']:.2f} s before the restart")
+
+
 def check_events(events: list[dict], frames: list[dict], fps: float, meta: dict, problems: Problems,
                  cut: bool = False) -> None:
     """C4 to C9: events agree with frames, come in an order that makes sense, and add up.
@@ -508,6 +552,7 @@ def validate(clip: Path) -> Problems:
         return dict(problems)
     check_physics(events, frames, fps, meta.get("roster", []), problems, cut)
     check_events(events, frames, fps, meta, problems, cut)
+    check_foul_fall(events, frames, problems)
     return dict(problems)
 
 

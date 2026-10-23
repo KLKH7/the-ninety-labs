@@ -170,12 +170,12 @@ PLAYER_BOX = [632, 320, 648, 360]  # feet at pitch (0, 0)
 BALL_BOX = [835, 155, 845, 165]  # centre at pitch (2, -2)
 
 
-def write_pitch_clip(root, seed, ball_vis, ball_z, camera=True):
+def write_pitch_clip(root, seed, ball_vis, ball_z, camera=True, blur=None):
     d = root / f"seed{seed}"
     (d / "images").mkdir(parents=True)
     (d / "images" / "00000.jpg").write_bytes(b"jpg")
     cam = {"width": 1280, "height": 720, **({"P": TOP_DOWN} if camera else {})}
-    frame = {"frame": 0, "camera": cam,
+    frame = {"frame": 0, "camera": cam, **({"blur_px": blur} if blur is not None else {}),
              "players": [{"id": "h1", "bbox": PLAYER_BOX, "visibility": 1.0}],
              "ball": {"bbox": BALL_BOX, "visibility": ball_vis, "z": ball_z}}
     (d / "frames.jsonl").write_text(json.dumps(frame) + "\n")
@@ -186,13 +186,14 @@ def moved(box, metres):
     return [box[0] + metres * SCALE, box[1], box[2] + metres * SCALE, box[3]]
 
 
-def planted(root, camera=True):
+def planted(root, camera=True, blur=(None, None)):
     """Two clips, both on frame 0. Seed 1: the player copied exactly, the ball moved 1.5 m (a strict
     miss and false alarm, a lenient match), a false player 5 m away. Seed 2 (the ball partly hidden
-    and in the air): the player moved 1.2 m (strict miss and false alarm, lenient match), no ball."""
+    and in the air): the player moved 1.2 m (strict miss and false alarm, lenient match), no ball.
+    `blur` is each clip's camera blur streak, or None for none recorded."""
     test, dets = root / "test", root / "dets"
-    write_pitch_clip(test, 1, ball_vis=1.0, ball_z=0.0, camera=camera)
-    write_pitch_clip(test, 2, ball_vis=0.7, ball_z=1.0, camera=camera)
+    write_pitch_clip(test, 1, ball_vis=1.0, ball_z=0.0, camera=camera, blur=blur[0])
+    write_pitch_clip(test, 2, ball_vis=0.7, ball_z=1.0, camera=camera, blur=blur[1])
     write_dets(dets, 1, [{"cls": "player", "bbox": PLAYER_BOX, "score": 0.9},
                          {"cls": "ball", "bbox": moved(BALL_BOX, 1.5), "score": 0.9},
                          {"cls": "player", "bbox": moved(PLAYER_BOX, -5.0), "score": 0.9}])
@@ -258,3 +259,62 @@ def test_pitch_counts_only_the_frames_a_validation_stride_ran(tmp_path):
     pitch = vision_report.build(test, dets, freeze_of(test, [1]), stride=2)["pitch"]
     for rule in ("strict", "lenient"):
         assert counts(pitch[rule]["overall"]) == (2, 0, 0)
+
+
+# --- the ball's height and the camera's blur, totalled across clips ------------------------------
+
+BLURRED, SHARP = [4.0, 0.0], [3.0, 0.0]  # longer than 3 px; exactly 3 px, which is not blurred
+
+
+def test_height_and_blur_counts_are_summed_across_clips(tmp_path):
+    r = planted(tmp_path, blur=(BLURRED, SHARP))
+    # In pixels every moved box misses its label (100 px a metre), so from the plant, clip by clip:
+    # seed 1 (blurred, ball on the ground): player found plus a false player; ball missed plus a false ball.
+    # seed 2 (not blurred, ball in the air): player missed plus a false player; ball missed.
+    assert counts(r["height"]["ball"]["on the ground"]) == (0, 1, 1)
+    assert counts(r["height"]["ball"]["in the air"]) == (0, 0, 1)
+    assert counts(r["blur"]["player"]["blurred"]) == (1, 1, 0)
+    assert counts(r["blur"]["player"]["not blurred"]) == (0, 1, 1)
+    assert counts(r["blur"]["ball"]["blurred"]) == (0, 1, 1)
+    assert counts(r["blur"]["ball"]["not blurred"]) == (0, 0, 1)
+    assert r["blur"]["player"]["blurred"]["precision"] == 0.5
+    assert r["blur"]["player"]["blurred"]["recall"] == 1.0
+    strict, lenient = r["pitch"]["strict"]["blur"], r["pitch"]["lenient"]["blur"]
+    assert counts(strict["player"]["blurred"]) == (1, 1, 0)
+    assert counts(strict["player"]["not blurred"]) == (0, 1, 1)
+    assert counts(lenient["player"]["not blurred"]) == (1, 0, 0)
+    assert counts(strict["ball"]["blurred"]) == (0, 1, 1)
+    assert counts(lenient["ball"]["blurred"]) == (1, 0, 0)
+    assert counts(lenient["ball"]["not blurred"]) == (0, 0, 1)
+
+
+def test_the_new_groups_leave_the_existing_totals_unchanged(tmp_path):
+    with_blur = planted(tmp_path / "a", blur=(BLURRED, SHARP))
+    without = planted(tmp_path / "b")
+    assert without["blur"] is None
+    assert without["pitch"]["strict"]["blur"] is None and without["pitch"]["lenient"]["blur"] is None
+    assert without["height"] == with_blur["height"]  # both clips record the ball's height
+    for key in ("overall", "by_class", "visibility", "image_boundary", "ball_at_least_half_visible",
+                "by_knob", "by_clip", "hidden_ball_frames", "frames_scored"):
+        assert with_blur[key] == without[key]
+    for rule in ("strict", "lenient"):
+        assert ({k: v for k, v in with_blur["pitch"][rule].items() if k != "blur"}
+                == {k: v for k, v in without["pitch"][rule].items() if k != "blur"})
+
+
+def test_clips_without_a_ball_height_report_no_height_group(tmp_path):
+    test, dets = tmp_path / "test", tmp_path / "dets"
+    write_clip(test, 1)
+    write_dets(dets, 1, [PLAYER, BALL_ON])
+    r = vision_report.build(test, dets, freeze_of(test, [1]))
+    assert r["height"] is None and r["blur"] is None
+
+
+def test_clips_with_and_without_blur_are_refused(tmp_path):
+    test, dets = tmp_path / "test", tmp_path / "dets"
+    write_pitch_clip(test, 1, 1.0, 0.0, blur=BLURRED)
+    write_pitch_clip(test, 2, 1.0, 0.0)
+    write_dets(dets, 1, [])
+    write_dets(dets, 2, [])
+    with pytest.raises(ValueError, match="record the blur groups"):
+        vision_report.build(test, dets, freeze_of(test, [1, 2]))
