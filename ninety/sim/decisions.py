@@ -478,7 +478,7 @@ def strike_nodes(scene: Scene, tx: float, ty: float, lofted: bool, pace: float
     ground, up = loft_launch(dist) if lofted else (launch_speed(dist, pace), 0.0)
     speed = math.hypot(ground, up)
     dx, dy = tx - scene.x, ty - scene.y
-    turn, _ = strike_turn(scene.heading, dx, dy, scene.throw or scene.from_hands)
+    turn, _ = strike_turn(scene.heading, dx, dy, scene.throw)
     turn = 0.0 if scene.throw else turn  # thrown with both hands: no kicking side (engine.execute)
     cx, cy = scene.x - scene.ball_offset[0], scene.y - scene.ball_offset[1]
     nearest = min((math.hypot(o[0] - cx, o[1] - cy) for o in scene.moving), default=math.inf)
@@ -698,7 +698,7 @@ def pass_confidence(scene: Scene, tx: float, ty: float, mx: float, my: float, ag
     cx, cy = sx - scene.ball_offset[0], sy - scene.ball_offset[1]
     # P16: if he must turn before he can strike it, everyone else moves on meanwhile, each as the
     # passer believes him to be going (he holds the ball where it is while he turns).
-    _, wait = strike_turn(scene.heading, tx - sx, ty - sy, scene.throw or scene.from_hands)
+    _, wait = strike_turn(scene.heading, tx - sx, ty - sy, scene.throw)
     # Team-mates, the one it is meant for first, from where the passer sees him and expecting it:
     # (x, y, vx, vy, reaction, first touch).
     seen = {m[0]: m for m in scene.mates}
@@ -948,7 +948,7 @@ def clear_value(scene: Scene, tx: float, ty: float, contest: float) -> float:
     way and no error in where he sees them (*design*)."""
     sx, sy = scene.x, scene.y
     direction = fmath.atan2(ty - sy, tx - sx)
-    _, wait = strike_turn(scene.heading, tx - sx, ty - sy, scene.throw or scene.from_hands)
+    _, wait = strike_turn(scene.heading, tx - sx, ty - sy, scene.throw)
     react = perception.CHOICE_REACTION_S
     players = []
     for m in scene.mates:

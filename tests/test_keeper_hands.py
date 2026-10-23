@@ -143,23 +143,37 @@ def test_a_keepers_throw_may_roll_and_a_throw_in_stays_in_the_air(monkeypatch):
     assert all(o.lofted for o in throw_in if o.kind == "pass")
 
 
-def test_a_rolled_throw_leaves_his_hands_along_the_ground(monkeypatch):
+def test_a_rolled_throw_is_bowled_from_the_grass_as_the_estimate_flies_it(monkeypatch):
+    # L15, lessons 23 and 69: the estimate flies a rolled throw from the ground at launch_speed. He
+    # brings the ball down in his hands to the grass, no faster than it came up (P6), and lets it go
+    # from there at that speed. Released from his chest, it dropped, bounced and arrived at a third
+    # of the speed the estimate gave it.
+    from ninety.sim.engine import BALL_TO_FEET
     e, k = caught()
     e.ball = (k.x + 0.3, k.y, KEEPER_HOLD_Z, 0.0, 0.0, 0.0)
     mate = next(iter(e.scene_for(k).mates))
-    option = decisions.Option("pass", 1.0, (mate[1], mate[2]), receiver=mate[0], lofted=False)
+    pace = decisions.PASS_PACES[0]
+    option = decisions.Option("pass", 1.0, (mate[1], mate[2]), receiver=mate[0], lofted=False, pace=pace)
     monkeypatch.setattr(decisions, "options", lambda scene: [option] if scene.throw else [])
-    aimed = []
+    aimed, heights = [], []
     original = e.execute
 
     def execute(*args, **kwargs):
-        aimed.append((args[3], kwargs.get("hands"), e.ball[2]))
+        aimed.append((math.hypot(args[1], args[2]), args[3], kwargs.get("hands"), e.ball[2]))
         return original(*args, **kwargs)
 
     monkeypatch.setattr(e, "execute", execute)
     e.release(k, e.scene_for(k))
-    assert aimed == [(0.0, True, KEEPER_HOLD_Z)]  # no upward speed, from his hands, at his chest
-
+    start = e.t
+    while not aimed and e.t - start < 2.0:
+        heights.append(e.ball[2])
+        e.step()
+    want = decisions.launch_speed(math.hypot(mate[1] - e.ball[0], mate[2] - e.ball[1]), pace)
+    # along the ground, from his hands, from the grass
+    assert len(aimed) == 1 and aimed[0][1:] == (0.0, True, 0.0)
+    assert abs(aimed[0][0] - want) < 1e-9
+    drops = [a - b for a, b in zip(heights, heights[1:], strict=False)]
+    assert drops and max(drops) <= BALL_TO_FEET * DT + 1e-9  # brought down, not dropped in one frame
 
 def test_a_lunge_already_on_its_way_cannot_take_it_from_his_hands():
     # Law 12: nobody may challenge a keeper for the ball he holds; a lunge struck before the catch
@@ -195,3 +209,104 @@ def test_he_waits_out_the_window_while_the_team_sets():
     while e.held_by == k.id and e.t - start < KEEPER_HOLD_S + 1.0:
         e.step()
     assert KEEPER_RELEASE_S <= e.t - start < KEEPER_HOLD_S
+
+
+def test_he_lets_it_go_the_way_his_estimate_values_most(monkeypatch):
+    # L15: thrown, kicked from his hands, or put down: whichever is worth most (D1).
+    def released(values):
+        e, k = caught()
+        mate = next(iter(e.scene_for(k).mates))
+        throw, kick, feet = (decisions.Option("pass", v, (mate[1], mate[2]), receiver=mate[0], lofted=lofted)
+                             for v, lofted in zip(values, (False, True, False), strict=True))
+        monkeypatch.setattr(e, "release_options", lambda scene: (throw, kick, feet))
+        e.release(k, e.scene_for(k))
+        if e.held_by is None:
+            return "put down"
+        return "kick" if e.windup and e.windup[3] == "drop" else "throw"
+    assert released((0.003, 0.002, 0.001)) == "throw"
+    assert released((0.001, 0.003, 0.002)) == "kick"
+    assert released((0.001, 0.002, 0.003)) == "put down"
+
+
+def test_holding_it_he_stops_and_turns_to_face_up_the_pitch():
+    # L15: he stops, braking within his body (P2), and turns up the pitch no faster than a body
+    # turns (P16), carrying the ball at his chest.
+    from ninety.sim.body import BRAKE_MAX, TURN_RATE
+    e, k = caught()
+    k.vx, k.vy, k.heading = 0.0, 3.0, math.pi / 2  # running across his box as he caught it
+    speeds, headings = [], []
+    for _ in range(50):
+        e.step()
+        speeds.append(math.hypot(k.vx, k.vy))
+        headings.append(k.heading)
+    assert e.held_by == k.id
+    slowed = [a - b for a, b in zip([3.0] + speeds, speeds, strict=False)]
+    assert speeds[-1] < 0.05 and max(slowed) <= BRAKE_MAX * DT + 1e-9
+    assert abs(headings[-1]) < 1e-6  # facing up the pitch (home attacks +x)
+    turns = [abs(b - a) for a, b in zip([math.pi / 2] + headings, headings, strict=False)]
+    assert max(turns) <= TURN_RATE * DT + 1e-9
+
+
+def test_the_ball_comes_up_into_his_hands_no_faster_than_a_carried_ball_settles():
+    from ninety.sim.engine import BALL_TO_FEET
+    e, k = caught()
+    e.ball = (k.x + 0.3, k.y, 0.2, 0.0, 0.0, 0.0)  # taken low
+    path = [e.ball[:3]]
+    for _ in range(30):
+        e.step()
+        path.append(e.ball[:3])
+    steps = [math.dist(a, b) - math.hypot(k.vx, k.vy) * DT for a, b in zip(path, path[1:], strict=False)]
+    assert max(steps) <= BALL_TO_FEET * DT + 1e-6 and abs(path[-1][2] - KEEPER_HOLD_Z) < 1e-9
+
+
+def test_let_go_it_is_no_longer_in_his_hands(monkeypatch):
+    # Thrown, or kicked from his hands, the ball is in nobody's hands once it has left him.
+    for lofted, throw in ((False, True), (True, False)):
+        e, k = caught()
+        mate = next(iter(e.scene_for(k).mates))
+        o = decisions.Option("pass", 1.0, (mate[1], mate[2]), receiver=mate[0], lofted=lofted)
+        none = decisions.Option("pass", -1.0, (mate[1], mate[2]), receiver=mate[0], lofted=True)
+        monkeypatch.setattr(e, "release_options",
+                            lambda scene, o=o, n=none, t=throw: (o, n, None) if t else (n, o, None))
+        e.release(k, e.scene_for(k))
+        start = e.t
+        while e.possessor == k.id and e.t - start < 2.0:
+            e.step()
+        assert e.possessor is None and e.held_by is None
+
+
+def test_he_throws_at_any_angle_but_turns_to_kick_it_from_his_hands(monkeypatch):
+    # L15, P16: thrown with both hands, he needs no kicking side, so the way he faces changes
+    # neither what the estimate expects nor when the engine throws. A kick from his hands is a kick:
+    # he faces it first (STRIKE_FACING), in the estimate (strike_turn's wait) and on the pitch.
+    e, k = caught()
+    scene = e.scene_for(k)
+    behind = dataclasses.replace(scene, mates=[("h2", k.x + 3.0, k.y + 20.0, 0.0)], opponents=[], moving=[])
+
+    def values(throw):
+        return [{(o.kind, round(o.value, 12)) for o in decisions.options(
+            dataclasses.replace(behind, throw=throw, from_hands=True, heading=h))} for h in (0.0, math.pi)]
+
+    assert values(True)[0] == values(True)[1]  # thrown: his facing does not matter
+    assert values(False)[0] != values(False)[1]  # kicked: turning round first costs him
+    for lofted, thrown in ((False, True), (True, False)):
+        e, k = caught()
+        for _ in range(10):
+            e.step()
+        k.heading = math.pi  # facing his own goal
+        o = decisions.Option("pass", 1.0, (k.x + 3.0, k.y + 20.0), receiver="h2", lofted=lofted)
+        n = decisions.Option("pass", -1.0, (k.x + 3.0, k.y + 20.0), receiver="h2", lofted=True)
+        monkeypatch.setattr(e, "release_options",
+                            lambda scene, o=o, n=n, t=thrown: (o, n, None) if t else (n, o, None))
+        e.release(k, e.scene_for(k))
+        if thrown:  # bowled from the grass at once, not turned first
+            assert e.windup and e.windup[3] == "bowl"
+        else:
+            assert e.windup and e.windup[3] == "turn"
+            frames = 0
+            while e.windup and e.windup[3] == "turn" and frames < 50:
+                e.step()
+                frames += 1
+            assert e.windup and e.windup[3] == "drop"  # let fall only once he faces it
+            off = decisions.turn_deg(math.atan2(20.0, 3.0), k.heading)
+            assert abs(off) <= math.degrees(decisions.STRIKE_FACING)
