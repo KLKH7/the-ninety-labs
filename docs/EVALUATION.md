@@ -13,10 +13,10 @@ generated it and the output file is committed. Rows marked *planned* have no res
 | Ground-truth data meets the data contract (consistency and physics) | `uv run ninety-validate <clip>` | command output | running: the engine meets the contract on full matches (seeds 7, 11, 21); CI runs it on the smoke clip |
 | Render checks (projection error, label completeness, determinism, ball occlusion share) | `uv run ninety-render-check <clips> --determinism --report docs/eval/render-checks.json`; CI `render` job on every push | `docs/eval/render-checks.json`, CI log | running |
 | Training data against its floors (clips, frames, player and ball boxes, balls by visibility, ball size at the training input, clips per render knob) | `uv run ninety-data-stats <train clips> --stride 5 --input 640x640 --out docs/eval/dataset-stats.json --floors` | `docs/eval/dataset-stats.json` | running: dataset v1, 308 training clips, all on `engine-v1`'s engine (`docs/eval/dataset-v1.json` lists each clip's run and commit): 248 from v3, 30 from topup1 (`occlusion=crowded`, `kit_contrast=low`), both at `b319f21` with renderer 0.3.1, and 30 at `cca498c` (renderer 0.3.2, #118) replacing the v3 clips whose ball rests behind the boards, labelled visible at 0.3.1 (1,043 of v3's 13,443 ball training labels). 0.3.2 changes labels only, so the two renderers' images mix. Seed 82 is dropped (a blocked shot is touched again after the window's cut, which no clip can show) and seed 111 failed the render checks twice (one foot outside its box). Meets every train floor: 1,579 mostly hidden ball labels of 13,856 (11.4%) against 400 and 5%, low-contrast kits 43.8% and crowded windows 60% against 20%. All 308 meet the data contract (`ninety-render-meta`, then `ninety-validate`'s checks at `0dd5190`, main with #108). The floors were set before any data was counted; the learning curve decides whether they are enough |
-| Off-the-shelf detector recall on renders (guide check 2) | planned | `docs/eval/render-checks.json` | planned |
-| Detection precision and recall (players, ball) on the fixed test set, by difficulty, strict and lenient matching | pixel boxes: `uv run python -m ninety.eval.vision_report --test <frozen test clips> --detections <seed<N>.jsonl folder> --out <report.json>`; pitch-level strict and lenient matching planned | `docs/eval/vision-report-v{n}.json`, `docs/eval/vision-report-v1.md`, `docs/eval/vision-report-v2.md` | running for pixel boxes: ours-v3 on the frozen test set, players 0.994 recall at 0.999 precision, ball at least half visible 0.964 at 0.994, ball mostly hidden 0.493 at 0.841 (v2; ours-v2 in v1). Pitch-level matching planned |
-| Event precision, recall and F1 per type; possession accuracy; speed error | events: `uv run python -m ninety.eval.event_score --truth <clip>/events.jsonl --frames <clip>/frames.jsonl --detected <detected.jsonl> --report <report.json>` ([format](#event-report-format)); positions: `uv run python -m ninety.eval.pitch_score` ([event detection from video](#event-detection-from-video)); possession and speed planned | `docs/eval/event-report-v1/` | running on one clip: seed 900001, detected from video (ours-v2, camera from the markings): passes 3 of 4 at strict F1 0.75; the shot read as a pass and one false out of play (the ball's height, planned); ball on the ground placed to a median 0.09 m, players 0.22 m. One 10 s clip is a smoke test, not a rate |
-| Targeted data rounds, before and after | failure clusters from validation clips only: `uv run python -m ninety.vision.failure_clusters <val clips> --detections <file> --round <round> --out docs/eval/<round>/clusters.json`, then `ninety.agents.data_agent`; scored with `ninety.eval.vision_report --freeze docs/eval/test-set-frozen-91d1e3b.json` | `docs/eval/round1/` (clusters, audit, plan, [result](eval/round1/RESULT.md)), `docs/eval/vision-report-v3-mesh.json`, `docs/eval/vision-report-v3ctrl-mesh.json` | round 1 measured on the frozen mesh test set: synthetic data from our engine lifts mostly hidden ball recall from 0.500 (ours-v3) to about 0.58 and cuts false positives by two thirds (125 to 35 and 41); targeting showed no measurable gain over an untargeted control (ours-v4 0.573, ours-v4-ctrl 0.585, 82 labels). Round 1: no gain over control; round 2 planned |
+| Off-the-shelf detector recall on renders (guide check 2); published off-the-shelf figures for scale: [GROUNDING.md](GROUNDING.md#vision-scoring-how-detections-are-graded) S6 (players) and S7 (ball) | planned | `docs/eval/render-checks.json` | planned |
+| Detection precision and recall (players, ball) on the fixed test set, by difficulty, strict and lenient matching | pixel boxes: `uv run python -m ninety.eval.vision_report --test <frozen test clips> --detections <seed<N>.jsonl folder> --out <report.json>`; pitch-level strict and lenient: the same report's `pitch` block, totalled across clips ([below](#pitch-level-matching)); per clip, `uv run python -m ninety.eval.vision_score` | `docs/eval/vision-report-v{n}.json`, `docs/eval/vision-report-v1.md`, `docs/eval/vision-report-v2.md` | running for pixel boxes: ours-v3 on the frozen test set, players 0.994 recall at 0.999 precision, ball at least half visible 0.964 at 0.994, ball mostly hidden 0.493 at 0.841 (v2; ours-v2 in v1). Pitch-level matching built, totalled across clips and checked against planted damage; not measured yet on the frozen test set. The in-the-air and blurred groups (pixel and pitch-level) built, totalled across clips and checked against planted damage; not measured yet on the frozen test set |
+| Event precision, recall and F1 per type; possession accuracy; speed error | events: `uv run python -m ninety.eval.event_score --truth <clip>/events.jsonl --frames <clip>/frames.jsonl --detected <detected.jsonl> --report <report.json>` ([format](#event-report-format)); positions: `uv run python -m ninety.eval.pitch_score` ([event detection from video](#event-detection-from-video)); possession and speed planned | `docs/eval/event-report-v2.md` | running on the frozen test set's five clips, scored once (ours-v2; the detector re-derived on validation clips, [detector-plan.md](eval/detector-plan.md)): passes 7 of 13 at strict F1 0.67 (recall 0.54, 95% 0.29 to 0.77), 4 of 9 at F1 0.62 without seed 900001, below PLAN's 0.70; the one shot read as a pass and one false out of play (the ball's height, planned); two clips with camera cuts give no events. 13 passes is too few for a rate |
+| Targeted data rounds, before and after | failure clusters from validation clips only: `uv run python -m ninety.vision.failure_clusters <val clips> --detections <file> --audit docs/eval/<round>/audit.json`, then `ninety.agents.vision_auditor` (writes `clusters.json`; without a model the clusters and split are the code's), then `ninety.agents.data_agent`; scored with `ninety.eval.vision_report --freeze docs/eval/test-set-frozen-91d1e3b.json` | `docs/eval/round1/` (clusters, audit, plan, [result](eval/round1/RESULT.md)), `docs/eval/vision-report-v3-mesh.json`, `docs/eval/vision-report-v3ctrl-mesh.json` | round 1 measured on the frozen mesh test set: synthetic data from our engine lifts mostly hidden ball recall from 0.500 (ours-v3) to about 0.58 and cuts false positives by two thirds (125 to 35 and 41); targeting showed no measurable gain over an untargeted control (ours-v4 0.573, ours-v4-ctrl 0.585, 82 labels). Round 1: no gain over control; round 2 planned |
 | Stats engine facts: hand-computed cases, planted defects, citations, size | `uv run pytest tests/test_stats.py tests/test_windows.py tests/test_window_stats_agents.py` | test assertions | running |
 | Window stats on detected events against the same clip's ground truth (PPDA, field tilt, passes a minute per team-window) | to be built once R3's detected events for seed900001 land | | planned |
 | Late drop in high-intensity running (R7), by the protocol below; distance and top speed by position on the same matches | `uv run python -m ninety.sim.late_drop` | `docs/eval/late-drop.md` | running |
@@ -163,22 +163,59 @@ uv run python -m ninety.eval.vision_score --frames runs/seed7/frames.jsonl \
   --detected detections.jsonl --report vision-report.json
 ```
 
-### Later follow-up: pitch-level matching
+### Pitch-level matching
 
-Pitch-level matching is a separate future evaluation. It will map detections onto the pitch
-through the camera and match them one to one, nearest first, to true positions in the same
-frame. It is not part of the pixel-box score above and must not be used to interpret that score.
+Pitch-level matching judges a box by where it puts its object on the pitch, as event detection
+does, not by how its pixels overlap. It is reported beside the pixel score, in the `pitch`
+block of `vision_score`'s report (one clip) and of `vision_report`'s (counts summed across clips, as
+for pixels, with the at-least-half-visible ball under each rule), and is not used to interpret
+that score. Built in
+[`ninety/eval/vision_pitch_score.py`](../ninety/eval/vision_pitch_score.py).
 
-| Planned comparison rule | Ball | Player | Why |
+Every true and every detected box goes to the pitch through that frame's saved camera matrix
+(`camera.P`), the way [`ninety/vision/observe.py`](../ninety/vision/observe.py) places a box: a
+player at the bottom middle of the box, on the ground; the ball at the box centre, on the ground
+with its centre one radius (0.11 m) up. Truth and detection are placed the same way, so the score
+measures the detector's boxes, not the camera fit or the ball's height. Within each frame and
+class, eligible detections (score ≥ 0.5) are paired one to one with true boxes, nearest on the
+pitch first, within the radius below (the edge counts). A label with no match is a false negative,
+a detection with no match a false positive, and the difficulty groups follow the pixel scorer's
+convention below. A box whose point is not on the ground in front of the camera (above the
+horizon) has no place: a label is then a miss and a detection a false alarm, counted under
+`unplaced`. Precision and recall are given overall, by class, for each visibility group, for
+the ball on the ground and in the air, and for each class on blurred and other frames.
+
+| Rule | Ball | Player | Why |
 |---|---|---|---|
-| Strict | within 1.0 m | within 1.0 m | possession assigns the ball to the nearest player; two players are often about 2 m apart |
-| Lenient | within 2.0 m | within 1.5 m | a looser comparison radius |
+| Strict | within 1.0 m | within 1.0 m | possession assigns the ball to the nearest player; two players are often about 2 m apart ([GROUNDING.md](GROUNDING.md#vision-scoring-how-detections-are-graded) S3) |
+| Lenient | within 2.0 m | within 1.5 m | a looser comparison radius, reported beside strict, never as the headline ([GROUNDING.md](GROUNDING.md#vision-scoring-how-detections-are-graded) S4) |
+
+The strict radius and the ball's lenient radius are the event scorer's own (`STRICT_M`,
+`LENIENT_M` in `ninety/eval/event_score.py`), imported, so the two cannot drift.
+
+**The scorer is checked against planted damage.** `fake_pitch_detections` in
+`ninety/eval/fake_box_detections.py` copies every label, then drops some, moves some on the pitch
+by half the strict radius (a match under both rules), halfway between the strict and the lenient
+radius (a miss and a false alarm under strict only) or twice the lenient radius (both rules), and
+adds false boxes further than the lenient radius from every label. A damaged label, and the point
+its copy moves to, are further than the lenient radius from every other label of its class, or
+the damage is refused. The counts the scorer must report come from the damage log alone; the same
+command as above checks both. Each damage also logs its ball height and camera blur group, read
+from the clip, and `only={"blur": "blurred"}` (or a height group) plants all of it in one group,
+so the per-group counts are checked too, exactly 0.5 m and exactly 3 px among the planted frames:
+
+```bash
+uv run python -m ninety.eval.fake_box_detections runs/dataset/test/seed*
+```
 
 **Difficulty groups.** Every true ball and player is put in groups using the renderer's
 labels. TP, FP, FN, precision, recall and F1 are reported for each visibility group
 nested under its class (`visibility.player.visible`, for example), and independently for
 each image-boundary group (`image_boundary.player.edge-touching` and
-`image_boundary.player.interior`; likewise for `ball`), as well as overall:
+`image_boundary.player.interior`; likewise for `ball`), for the ball's height
+(`height.ball.in the air`, `height.ball.on the ground`) and for the camera's blur
+(`blur.player.blurred`, `blur.player.not blurred`; likewise for `ball`), as well as overall.
+The same groups are reported at pitch level under each rule:
 
 | Group | Rule (from `frames.jsonl`) |
 |---|---|
@@ -187,8 +224,15 @@ each image-boundary group (`image_boundary.player.edge-touching` and
 | mostly hidden | 0 < visibility < 0.5 |
 | edge-touching | saved bbox reaches any image boundary: x0 ≤ 0, y0 ≤ 0, x1 ≥ camera.width or y1 ≥ camera.height |
 | interior | saved bbox reaches none of those boundaries |
-| in the air (ball; planned) | height above 0.5 m, about knee height |
-| blurred (planned) | camera blur streak longer than 3 px, about half the width of a ball at broadcast distance |
+| in the air (ball) | true ball centre height (`ball.z`) above 0.5 m, about knee height; the rest, exactly 0.5 m included, is on the ground |
+| blurred | camera blur streak (the length of `blur_px`) longer than 3 px, about half the width of a ball at broadcast distance; the rest, exactly 3 px included, is not blurred |
+
+Height and blur are read per frame: every label in a frame with a blurred camera is blurred,
+and the ball's height group is its frame's. One cut-off each (`IN_AIR_Z` and `BLUR_PX` in
+`ninety/eval/vision_score.py`), imported by the pitch-level scorer and by `pitch_score`. Neither
+cites a source yet: each has only the reason in the table, and changing one needs a GROUNDING.md
+row first. When no scored frame records the field (`ball.z`, `blur_px`) the group is `null`, and
+frames or clips with and without it are refused, so no label drops out unseen.
 
 The boundary rule uses each frame's saved camera width and height, with no margin; labelled
 frames missing those dimensions fail rather than guessing a resolution. It does not measure
@@ -301,56 +345,75 @@ after the scenery-occlusion fix, #118): 15.0% (188 of 1,250), of which 6.0% (75)
 
 ## Event detection from video
 
-The first events made from the picture alone, for M1: one frozen test clip, seed 900001 (10 s,
-250 frames, `engine-v1`, renderer 0.3.2), detected with ours-v2 (vision-report-v1). The live path
-reads the clip's `images/` and the detections, nothing else: no `frames.jsonl`, `events.jsonl`,
-`clip.json` or `meta.json` (`tests/test_vision_live_path.py` checks the code and a run). Grading
-then reads the answer key.
+Events made from the picture alone, on the frozen test set's five clips (10 s each, `engine-v1`,
+renderer 0.3.2), detected with ours-v2 (vision-report-v1). The live path reads each clip's
+`images/` and the detections, nothing else: no `frames.jsonl`, `events.jsonl`, `clip.json` or
+`meta.json` (`tests/test_vision_live_path.py` checks the code and a run). Grading then reads the
+answer key.
+
+The detector was first developed on test seed 900001, its only clip, so its first numbers were
+partly tuned to the test set. It was then re-derived on ours-v2's validation clips (render run v1),
+and every constant was frozen before the test set was scored, once
+([eval/detector-plan.md](eval/detector-plan.md); measurements in
+[eval/detector-derive.md](eval/detector-derive.md)):
+- **re-derived on validation:** the side naming, the camera trust test, the side vote and RIVAL_M;
+- **tried on validation and kept:** the event and tracker thresholds (none changed on a grid listed
+  beforehand);
+- **still at the values developed on 900001:** the camera search and its optimiser, the marking
+  pixels, the kit colour sampling (`observe.kit_rgb`) and the kit clustering's settings
+  (MIN_COLOUR_FRAMES, OUTLIER_FACTOR, CHROMA_NOISE).
+So seed 900001 is reported both pooled with the others and left out.
 
 ```bash
-T=runs/test-frozen-cca498c/test/seed900001   # the frozen test clip (docs/eval/test-set-frozen.json)
-uv run --group vision python -m ninety.vision.observe $T \
-  --detections docs/eval/vision-report-v1/detections/seed900001.jsonl \
-  --out tests/fixtures/observations-seed900001.jsonl
-uv run python -m ninety.vision.events tests/fixtures/observations-seed900001.jsonl \
-  --out tests/fixtures/detected-seed900001.jsonl --summary docs/eval/event-report-v1/summary-seed900001.json
-uv run python -m ninety.eval.event_score --truth $T/events.jsonl --frames $T/frames.jsonl \
-  --detected tests/fixtures/detected-seed900001.jsonl --report docs/eval/event-report-v1/events-seed900001.json
-uv run python -m ninety.eval.pitch_score --frames $T/frames.jsonl \
-  --observations tests/fixtures/observations-seed900001.jsonl --report docs/eval/event-report-v1/pitch-seed900001.json
+T=runs/test-frozen-cca498c/test   # the frozen test set (docs/eval/test-set-frozen.json)
+for s in 900002 900003 900004 900005; do        # 900001's are tests/fixtures/observations-seed900001.jsonl
+  runs/slot.sh uv run --group vision python -m ninety.vision.observe $T/seed$s \
+    --detections docs/eval/vision-report-v1/detections/seed$s.jsonl --out docs/eval/attribution/observations-seed$s.jsonl
+done
+uv run python -m ninety.eval.event_report --test-dir $T --observations docs/eval/attribution \
+  --observations tests/fixtures --out docs/eval/event-report-v2
 ```
+
+Observations made before the trust test changed were re-judged with
+`uv run python -m ninety.vision.observe --regate <file> --out <file>`: the camera fit is kept and
+only the trust test and the placing run again.
 
 | Stage | What it does | Code |
 |---|---|---|
-| Camera | white-marking pixels (brighter and bluer than the grass on both sides, detected players and ball masked) fitted to Law 1's markings: one gantry for the clip (found from every 25th frame), pan, tilt and zoom per frame (tracked from the last good frame). A frame is trusted when half its marking pixels lie within 1.5 px of a projected marking | `ninety/vision/pitch.py` |
-| On the pitch | each box's foot point (players) or centre one radius up (ball) through that frame's camera; shirt colour from the box's upper middle | `ninety/vision/observe.py` |
-| Tracks and teams | players linked in pitch metres; two kits by chromaticity (shadow-proof, lesson 98); the side defending x = 105 is away (the engine's one convention) | `ninety/vision/track.py` |
+| Camera | white-marking pixels (brighter and bluer than the grass on both sides, detected players and ball masked) fitted to Law 1's markings: one gantry for the clip (found from every 25th frame), pan, tilt and zoom per frame (tracked from the last frame whose markings fit). A frame is trusted when its players are as tall as they should be (the median, over its player boxes, of box height against an upright 1.80 m at the foot point lies in 0.901 to 1.002, the 1st to 99th percentile on validation frames whose ground mapping is within 1.0 m) and its camera agrees with a trusted neighbour's (the ground point at the image centre within 2 m of the nearest other such frame's within 5 frames; [camera-bound-plan.md](eval/camera-bound-plan.md)) | `ninety/vision/pitch.py`, `ninety/vision/observe.py` |
+| On the pitch | each box's foot point (players) or centre one radius up (ball) through a trusted frame's camera; shirt colour from the box's upper middle | `ninety/vision/observe.py` |
+| Tracks and teams | players linked in pitch metres; two kits told apart by chromaticity (shadow-proof, lesson 98) or by brightness (white against black), whichever separates them more on the clip; the side defending x = 105 is away (the engine's one convention), and it is the side standing nearer it on average (GROUNDING T2, O6) | `ninety/vision/track.py` |
 | Events | possession: the ball within 1.5 m of a player's feet and moving with him (GROUNDING P6); a pass from one spell to the next, a shot when the strike heads between the posts, out of play when the whole ball is over a line for 3 frames | `ninety/vision/events.py` |
 
 Events are graded by the rules above (Vision scoring), unchanged: same type and team within 1.0 s,
 spot within 1.0 m (strict) of the ball at the detected time. Pitch positions use the pixel
 scorer's pairing (player IoU 0.5, ball centre 5 px) and the planned "in the air" height (0.5 m).
 
-**Results, seed 900001** (`docs/eval/event-report-v1/`):
+**Results, the five test clips, scored once** ([eval/event-report-v2.md](eval/event-report-v2.md)):
 
 | Measure | Result |
 |---|---|
-| Passes (strict: 1.0 s, 1.0 m) | 3 of 4 found, 1 false: precision, recall and F1 0.75; time error at most 0.08 s, place error at most 0.09 m. The miss was struck 0.08 s before the clip ends, with nobody receiving it inside the clip; the false pass is the shot |
+| Passes (strict: 1.0 s, 1.0 m) | 7 of 13 found, 1 false: precision 0.88 (95% 0.53 to 0.98), recall 0.54 (95% 0.29 to 0.77), F1 0.67. **Without seed 900001:** 4 of 9 found, none false, recall 0.44 (95% 0.19 to 0.73), F1 0.62. **Both are below PLAN's target of 0.70.** Per clip: 900001 0.75 (3 of 4), 900004 1.00 (1 of 1), 900005 0.86 (3 of 4); 900002 and 900003 none (below). Lenient and time-only give the same |
 | Shots | 0 of 1: read as a pass (the ball's height, below) |
 | Out of play | none true, 1 false: the same shot reaching the keeper |
-| Outside M1's scope | 2 possession changes and 1 pressure, counted as misses |
-| Camera | 245 of 250 frames trusted (median marking error per frame 1.2 px, at most 1.499 px against the 1.5 px set beforehand: several frames pass narrowly); the 5 rejected (1791 to 1796) are the fast pan after the shot. The gantry lands 1.85 m from the true one, along the line of sight. That is the fit's limit: away from the markings it moves the ground by a median 2.6 px (90% within 14.7 px, near the horizon at most 40.5 px) against the true camera; on perfect synthetic markings, by 3.4 to 4.0 px at most |
-| Players on the pitch | median 0.22 m, 90% within 1.44 m (1,817 detections) |
-| Ball on the ground | median 0.09 m, 90% within 0.26 m (181 frames) |
-| Ball in the air | median 7.1 m (15 frames): placed on the ground (below) |
-| Teams | home's kit learned as red-brown, away's as blue, and the side named in 241 of 245 frames' votes; every detected pass has its true team |
+| Outside M1's scope | 5 possession changes, 2 pressures, a deflection, a tackle and a set piece, counted as misses |
+| Camera trusted | 900001 238 of 250 frames, 900004 194, 900005 248; 900002 none and 900003 4: these two have camera cuts, which the fit does not follow. The neighbour check's worst trusted frame on validation is 8.2 m (observed, under the 8.5 m set beforehand), against 55 m with heights alone. **That is not a bound:** frames wrong the same way agree with each other and pass together, and a wrong frame can make its good neighbour fail instead. On the test set it removes 4 of the 8 frames heights alone trusted there; **the 4 left, on 900003, are about 46 m wrong** (frames 5970 to 5976), wrong the same way, and make no event. A whole clip offset the same way (validation seed 108, 2 to 8 m) passes for the same reason (lesson 159). This is a second look at the test set: the check was planned because #187's test score showed these frames, so 900002's 1 to 0 is not held-out evidence |
+| Players on the pitch | median 0.21, 0.23 and 0.14 m on the three clips with a camera, 90% within 1.44, 0.63 and 0.33 m |
+| Ball on the ground | median 0.09, 0.14 and 0.05 m, 90% within 0.26, 0.45 and 0.13 m |
+| Teams | every matched pass has its true team (7 of 7, 95% 0.65 to 1.00). On validation it is 11 of 16: kit colours are read wrongly on some clips (a blue shirt as near-white, a green one as grey), which the derivation found and did not fix ([eval/detector-plan.md](eval/detector-plan.md), step A) |
 
-**Not fully held out.** The event detector's own constants (`ninety/vision/events.py`: possession, spell, shot and out-of-play thresholds) were developed while looking at this test clip, seed 900001, so these numbers are partly tuned to the test set. Re-deriving them on validation clips, then re-scoring the test set once, is under way.
+**What changed from the published seed-900001 figures, and why.** Those figures (pass F1 0.75,
+245 of 250 frames trusted) came from constants developed on that clip. Re-derived on validation:
+- the camera trust test is now the players' heights, not the marking error;
+- teams can be told apart by brightness as well as by colour;
+- the side vote uses each side's mean position, not its deepest player.
+The event and tracker thresholds were tried on a grid and none changed. On seed 900001 the pass F1
+is the same, 0.75; the camera is trusted on 238 frames instead of 245. The set-wide figure (F1 0.67
+on 13 passes) replaces it as the headline.
 
-**Read with care.** One 10-second clip holds 4 passes, 1 shot and no out of play; a single event
-moves a rate by 25 points. This shows the pipeline works end to end and where it fails, not how
-well it will do on a match. The other four test clips (two with camera cuts, which the camera fit
-does not yet follow) are next.
+**Read with care.** Five ten-second clips hold 13 passes and one shot, and two of the clips give no
+events at all. A single pass moves the recall by 8 points. This shows the pipeline works end to end
+and where it fails, not how well it does on a match.
 
 **Not yet:** the ball's height. A lofted ball is placed on the ground beyond where it is, which
 turns this clip's shot (a ball rising to 1.3 m) into a pass whose path misses the posts, and puts it
@@ -368,7 +431,7 @@ ids the phone companion's minimap uses, never a shirt number (`ninety/vision/eve
 `attribute`).
 
 - The holder of the spell (at the strike, or at the first frame of the next spell) is named only
-  when no other track, of either side or none, is within **RIVAL_M = 1.89 m** of his own distance
+  when no other track, of either side or none, is within **RIVAL_M = 1.26 m** of his own distance
   from the ball: a rival that close may really be the nearer one. Only a track the companion
   draws (a side, and at least 5 frames) is named.
 - Otherwise the name is null and the event keeps its `team` (the holder's kit colour), so the
@@ -378,15 +441,24 @@ ids the phone companion's minimap uses, never a shirt number (`ninety/vision/eve
   within reach (10 m/s, a player's top-speed capability, GROUNDING P9, plus RIVAL_M) of where the
   first ended. Otherwise a dribbler reads as passing to himself, named at both ends (lesson 146).
 
-**How the constants were set** ([eval/attribution-plan.md](eval/attribution-plan.md), committed before
-any validation number was read). They come from ours-v2's validation clips, never test clips.
-RIVAL_M is the players' pooled 90th-percentile pitch-position error on 13 of them
-([eval/attribution-derive.md](eval/attribution-derive.md)). It includes two clips where the camera
-fit went wrong, so it is larger than the box error alone and leaves more names null. An earlier
-1.44 m had been measured on test seed 900001 and is replaced. The track-break rule's form was
-chosen on test seed 900004. On validation it was only kept or dropped: it removes 7 self-passes and
-0 passes between two different players, so it is kept. Matched passes fall from 16 to 14: both
-lost matches were self-passes that fell within 1 s of the same player's real pass.
+**How the constants were set** ([eval/attribution-plan.md](eval/attribution-plan.md), then
+[eval/detector-plan.md](eval/detector-plan.md); each committed before the validation numbers it
+plans were read). They come from ours-v2's validation clips, never test clips.
+- **RIVAL_M** is the players' pooled 90th-percentile pitch-position error on those clips, on the
+  frames the camera trust test passes ([eval/attribution-derive.md](eval/attribution-derive.md)).
+  It was 1.89 m with the old marking test, 1.59 m with the height test, and is 1.26 m with the
+  height and neighbour checks. It still includes
+  validation seed 108, whose camera is about 2 m wrong with players the right height, so it is
+  larger than the box error alone and leaves more names null. An earlier 1.44 m had been measured
+  on test seed 900001 and is replaced.
+- **The track-break rule's form** was chosen on test seed 900004. On validation it was only kept
+  or dropped: it removes only self-passes (3 with the height test, 7 with the old one) and never a
+  pass between two different players, so it is kept. Each time, matched passes fall by 2. Both lost
+  matches are the same two self-passes, which fell within 1 s of the same player's real pass.
+- **`attribution_score.truth_role`** was added after the validation run, when it showed that
+  render run v1's older ground truth names an interceptor in `receiver`. It changes development
+  numbers only: without it, the first validation run's 11 of 11 names reads 9 of 11. The test
+  truth has the `interceptor` field, so test numbers are unaffected.
 
 Graded offline by `uv run python -m ninety.eval.attribution_score` (reads the answer key; nothing on
 the live path imports it). A detected event is paired with a true event of the same type within
@@ -396,27 +468,31 @@ least 0.5, the pixel scorer's player rule); a name whose box pairs with nobody c
 
 | Measure | Validation (13 clips, development) | Test (scored once, [eval/attribution.md](eval/attribution.md)) |
 |---|---|---|
-| Clips with events | 8 (4 have no trusted camera frame, 1 has only 2) | 3 of 5: seeds 900002 and 900003 have camera cuts the fit does not follow |
-| Passes matched | 14 | 6 |
-| Team right | **10 of 14** | 6 of 6 |
-| Names given, right | 11 of 11 (5 passers, 4 receivers, 2 interceptors) | 10 of 10 (6 passers, 4 receivers) |
-| Names left null where the truth has one | 16 | 2 |
-| False events that name someone | 1 of 3 (its receiver's track is a9) | 0 of 2 |
+| Clips with events | 8 of 13 (109, 114, 122, 3041 and 3042 have no trusted frame, or too few to make one) | 3 of 5: seeds 900002 and 900003 have camera cuts the fit does not follow |
+| Passes matched | 16 | 7 |
+| Team right | **11 of 16** | 7 of 7 |
+| Names given, right | 22 of 24: passers 14 of 14, receivers 6 of 6, interceptors 2 of 4 (the two wrong ones are what a wrong team does: an opponent "taking" his own side's pass) | 14 of 14 (7 passers, 6 receivers, 1 interceptor) |
+| Names left null where the truth has one | 9 | 0 |
+| False events that name someone | 2 of 3 | **1 of 2**: v00003 on 900001, the shot read as a pass, names its shooter `h-t1` (truly h10). With RIVAL_M 1.59 m it named nobody; at 1.26 m no rival is near enough to hold the name back. The demo fixture carries it |
 
-**Read with care.** Small numbers: 6 matched passes on 3 ten-second test clips. Names are never
-wrong here, but the side is: on validation, 4 of 14 passes carry the wrong team. The cause is the
-kit-colour side naming (`ninety/vision/track.py`), one of the M1 detector's own steps; its
-re-derivation follows. A team-level claim inherits that error, which the fact-checker cannot see.
+**Read with care.** Small numbers: 7 matched passes on 3 ten-second test clips. On validation the
+side is wrong on 5 of 16 passes, even after the side naming was re-derived ([eval/detector-plan.md](eval/detector-plan.md),
+step A). The remaining cause is how the kit's colour is read from the image (`observe.kit_rgb`).
+A team-level claim inherits that error, which the fact-checker cannot see.
 
 **Side confidence** (`team_confidence`, an optional field on detected events). It is the weaker of
 two margins: how much nearer the holder's kit is to its own side's colour than to the other side's,
 and how one-sided the clip's vote on which colour is home was. A keeper's is how far he stands from
-halfway. Defined before it was measured; no threshold is set from it. **It does not yet tell a wrong
-side from a right one:** on validation the 4 wrong sides score 0.175, 0.408, 0.445 and 0.983, and the
-10 right ones score 0.261 to 0.939 ([eval/attribution-derive.md](eval/attribution-derive.md)). A gate
-at 0.5 would hold 3 of the wrong 4 and 8 of the right 10. It is there so the agents have a field to
-gate on once the side naming is re-derived. Until then, gating on it alone does not protect a
-team-level claim.
+halfway. Defined before it was measured; no threshold is set from it. **It does not tell a wrong
+side from a right one well:** on validation the 5 wrong sides score 0.431 to 0.96, and the 11 right
+ones score 0.447 to 0.985. It ranks a right side above a wrong one in 60% of (wrong, right) pairs,
+where 50% is chance ([eval/attribution-derive.md](eval/attribution-derive.md)). Gating on it alone
+does not protect a team-level claim.
+
+**The agents do not see it.** `ninety/match/facts.compact`, which shapes every event the agents
+read (inline or over MCP), passes `confidence` and drops `team_confidence`; checked by building the
+Analyst's prompt from the fixture. Whether to show it to them is the agent layer's call, once it
+means something.
 
 ## Late drop in high-intensity running (R7)
 
@@ -470,7 +546,8 @@ fact); the injection count checks that the text agrees with it.
 `uv run python -m ninety.eval.tracked_speed` grades the phone's speed now, top speed and distance
 from tracked positions against the ground truth, offline, with and without the shipped smoothing
 ([companion-tracked.md](eval/companion-tracked.md)): on the M1 clip, a median error of 0.6 km/h
-for speed now and 1.9 km/h for top speed, against 55.6 km/h for top speed without smoothing.
+for speed now and 1.5 km/h for top speed, against 52.8 km/h for top speed without smoothing
+(re-graded with the camera trust test of [detector-plan.md](eval/detector-plan.md)).
 
 ## Football sense (FS1 to FS9)
 

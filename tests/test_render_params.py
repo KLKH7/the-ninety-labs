@@ -151,3 +151,95 @@ def test_the_fixed_test_set_holds_each_hard_case():
     test = [sample_params(s) for s in TEST_SEEDS]
     assert any(p.occlusion == "crowded" for p in test)
     assert any(p.kit_contrast == "low" for p in test)
+
+
+def test_only_a_broadcast_clip_cuts_through_dead_balls(monkeypatch, tmp_path):
+    """Coordinator decision (Oct 20): datasets, the Azure job, training rounds and the test sets show
+    every frame; `ninety-render` (viewer and demo clips) cuts through long dead balls, outside the
+    test set (edit.py)."""
+    from contextlib import contextmanager
+
+    from ninety.render import cli
+
+    assert not any(sample_params(s).dead_ball_cut for s in list(range(1, 40)) + list(TEST_SEEDS))
+    calls = []
+
+    def fake_render(seed, out, **kw):
+        calls.append((seed, dict(kw["overrides"])))
+        return {"split": "x", "frames": 1, "params": {"lighting": "day"}, "event_counts": {},
+                "overrides": kw["overrides"]}
+
+    @contextmanager
+    def fake_page(gpu=False):
+        yield None, "stand-in"
+
+    monkeypatch.setattr(cli, "render_clip", fake_render)
+    monkeypatch.setattr(cli, "check_clip", lambda out: {"passed": {}})
+    monkeypatch.setattr(cli, "browser_page", fake_page)
+    cli.render_main(["--seed", "7", "--out", str(tmp_path / "a")])
+    test_seed = sorted(TEST_SEEDS)[0]
+    cli.render_main(["--seed", str(test_seed), "--out", str(tmp_path / "b")])
+    cli.render_main(["--seed", "7", "--out", str(tmp_path / "c"), "--set", "dead_ball_cut=false"])
+    for d in ("d", "e"):
+        (tmp_path / d).mkdir()
+    cli.dataset_main(["--split", "test", "--out", str(tmp_path / "d")])
+    cli.dataset_main(["--split", "train", "--count", "2", "--out", str(tmp_path / "e")])
+    cut = {seed: sample_params(seed, **ov).dead_ball_cut for seed, ov in calls}
+    assert [sample_params(s, **ov).dead_ball_cut for s, ov in calls[:3]] == [True, False, False]
+    assert len(calls) == 3 + len(TEST_SEEDS) + 2 and not any(cut[s] for s, _ in calls[3:])
+
+
+def _wcag_luminance(hex_):
+    """WCAG 2.1 relative luminance (sRGB channels linearised)."""
+    def lin(c):
+        return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+    r, g, b = (int(hex_.lstrip("#")[i:i + 2], 16) / 255 for i in (0, 2, 4))
+    return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
+
+
+def _hue_saturation(hex_):
+    import colorsys
+    r, g, b = (int(hex_.lstrip("#")[i:i + 2], 16) / 255 for i in (0, 2, 4))
+    h, s, _ = colorsys.rgb_to_hsv(r, g, b)
+    return h * 360, s
+
+
+def test_a_broadcast_kit_pair_is_clearly_told_apart():
+    """kit_contrast=broadcast (the demo clip's footage, never training): the two outfield shirts meet
+    WCAG 2.1's 3:1 contrast floor for graphical objects (SC 1.4.11) and, unless one is white, black or
+    grey, sit at least 60 degrees apart in hue. Bounds written before the rule was built."""
+    for seed in range(1, 201):
+        p = sample_params(seed, kit_contrast="broadcast")
+        a, b = p.home_kit.shirt, p.away_kit.shirt
+        la, lb = sorted((_wcag_luminance(a), _wcag_luminance(b)))
+        assert (lb + 0.05) / (la + 0.05) >= 3.0, (seed, a, b)
+        (ha, sa), (hb, sb) = _hue_saturation(a), _hue_saturation(b)
+        if sa > 0.1 and sb > 0.1:
+            assert min(abs(ha - hb), 360 - abs(ha - hb)) >= 60, (seed, a, b)
+
+
+def test_training_kit_draws_are_unchanged_by_the_broadcast_rule():
+    """normal and low (and each seed's own draw) are what they were before broadcast existed: a digest
+    of 125 seeds' parameters taken on main before the change."""
+    import hashlib
+    import json
+
+    h = hashlib.sha256()
+    for s in list(range(1, 121)) + [2001, 3001, 4001, 8001, 900001]:
+        for c in ("normal", "low", None):
+            p = sample_params(s) if c is None else sample_params(s, kit_contrast=c)
+            h.update(json.dumps(p.to_dict(), sort_keys=True).encode())
+    assert h.hexdigest() == "bc22123420fa763810b6a80c7135234538b9c2692e9157e2ebd4510a4d9fdd8c"
+
+
+def test_only_footage_asks_for_a_broadcast_stadium():
+    """No seed draws the broadcast stadium (crowd, hoardings, softer mowing): every training,
+    validation and test render is plain, and its clip.json records no stadium key, as before the
+    knob existed. Footage asks for it by name; anything else is refused."""
+    for seed in list(range(1, 60)) + [8001, 900001]:
+        p = sample_params(seed)
+        assert p.stadium == "plain"
+        assert "stadium" not in p.to_dict()
+    assert sample_params(8001, stadium="broadcast").to_dict()["stadium"] == "broadcast"
+    with pytest.raises(ValueError):
+        sample_params(8001, stadium="packed")

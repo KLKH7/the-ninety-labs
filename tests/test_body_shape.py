@@ -5,6 +5,7 @@ same shape."""
 import math
 import random
 
+from ninety.render.meshpose import ASSET_STATURE_M
 from ninety.render.scene import Gait, Look, advance_gaits, body_parts, face
 from ninety.sim import ball, body, engine, firsttouch, profiles, shape
 from ninety.sim.engine import BODY_RESTITUTION, DT, Engine
@@ -318,8 +319,8 @@ def test_at_chest_height_the_drawn_body_stays_inside_the_outline_and_fills_most_
                                     (1.98, 0.9, 2.2)):
         look = Look("h1", "home", "CM", stature, build, "#d19a74", "#1b1410")
         parts = body_parts(0.0, 0.0, look, Gait(heading=heading))  # standing: no lean, no swing
-        k = stature / 1.84
-        for f in (0.92, 1.0, 1.1, 1.2, 1.3):  # his own hips up to his shoulders (fractions of 1.84 m)
+        k = stature / ASSET_STATURE_M
+        for f in (0.92, 1.0, 1.1, 1.2, 1.3):  # his own hips up to his shoulders (asset metres)
             z = f * k
             discs = discs_at(parts, z)
             hx, hy, lx, ly = math.cos(heading), math.sin(heading), -math.sin(heading), math.cos(heading)

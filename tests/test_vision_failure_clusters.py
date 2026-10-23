@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from ninety.agents.data_agent import plan
+from ninety.agents.data_agent import split
 from ninety.vision.failure_clusters import audit, handoff, situation
 
 # A gantry camera on the near touchline, looking across the pitch (+y is away from the lens).
@@ -104,7 +104,7 @@ def test_the_audit_counts_misses_per_situation_and_hands_off_only_renderable_clu
                               "render": {"occlusion": "crowded"}}]
     assert h["unmapped"] == []
     # The Data agent takes the handoff as it is.
-    p = plan(h, budget=3, first_seed=7001, commit="abc")
+    p = split(h, budget=3, first_seed=7001, commit="abc")
     assert p["clusters"][0]["set"] == "occlusion=crowded" and p["clusters"][0]["clips"] == 3
 
 

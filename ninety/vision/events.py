@@ -20,6 +20,10 @@ Events, from one spell to the next:
 - the ball's centre goes beyond a line by more than its radius (Law 9: the whole ball over the
   line): out of play, for the team that had it last; a pass that went out first is `fail`.
 
+A broadcast cuts away from a long dead ball to its restart (ninety/render/edit.py): the frame
+numbers jump there. Nothing seen before a cut is linked to anything after it: a spell before it and
+one after it are not a pass, unless the ball was seen going out before the cut.
+
 Who. The detector sees shirts, not names, so a player is his side and his track, `h-t12`, the id the
 phone companion's minimap shows (ninety/vision/tracked_frames.py). A pass or shot names its
 `player`, the spell's holder at the strike; a completed pass its `receiver` and a pass the other side
@@ -81,12 +85,13 @@ OUT_FRAMES = 3
 # Attribution. The holder is within CONTROL_M of the ball by construction; he is named only when no
 # other track is within RIVAL_M of his own distance from it: a rival that close may truly be the
 # nearer one. RIVAL_M is the players' measured pitch-position error, its 90th percentile pooled over
-# ours-v2's validation clips (never test clips), rounded to cm: 1.886 m
-# (docs/eval/attribution-derive.json, players_position_error.p90_m; plan in
-# docs/eval/attribution-plan.md). It includes camera fits that went wrong on two of those clips;
-# the plan fixed the statistic before any was read, so it stands. tests/test_attribution_score.py
-# holds it to the committed measurement.
-RIVAL_M = 1.89
+# ours-v2's validation clips (never test clips), rounded to cm: 1.256 m on the frames the camera
+# trust test passes (docs/eval/attribution-derive.json, players_position_error.p90_m). It is
+# re-measured whenever that test changes: 1.89 m with the marking test (docs/eval/attribution-plan.md),
+# 1.59 m with players' heights (docs/eval/detector-plan.md), 1.26 m with heights and neighbours
+# (docs/eval/camera-bound-plan.md). It still includes validation seed 108, whose whole clip is a
+# few metres off. tests/test_attribution_score.py holds it to the committed measurement.
+RIVAL_M = 1.26
 # One player in two tracks. The tracker drops a player whose position jumps past its gate (a
 # sprint plus the camera fit's jitter) and starts a new track the next frame, so his dribble can
 # read as a pass to himself. Two tracks never seen in the same frame, the second starting within
@@ -274,6 +279,8 @@ def detect(rows: list[dict], join_breaks: bool = True) -> tuple[list[dict], dict
         events.append(e)
 
     out_frames = [path[i].frame for i in outs]
+    # The last frame before each cut: where the frame numbers jump.
+    cut_at = [p["frame"] for p, q in zip(rows, rows[1:], strict=False) if q["frame"] != p["frame"] + 1]
     for a, b in zip(sp, sp[1:] + [None] if sp else [], strict=True):
         team = a.track.team
         if team is None:
@@ -282,6 +289,9 @@ def detect(rows: list[dict], join_breaks: bool = True) -> tuple[list[dict], dict
         gone = next((f for f in out_frames if a.last < f and (b is None or f < b.first)), None)
         if b is None and gone is None:
             continue  # the clip ends with the ball still in play after him: nothing to judge yet
+        cut = next((c for c in cut_at if a.last <= c and (b is None or c < b.first)), None)
+        if cut is not None and (gone is None or gone > cut):
+            continue  # the picture cut away before anything showed where his ball went
         if b is not None and b.track is a.track:
             continue  # he got it back himself: a touch, not a pass
         if join_breaks and b is not None and may_continue(a.track, b.track):

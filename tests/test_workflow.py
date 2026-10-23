@@ -689,6 +689,49 @@ def test_an_agent_given_its_events_inline_that_calls_the_match_tools_fails_its_c
     assert [r.status for r in result.reviews] == ["verified"]
 
 
+def foundry_reply(output: list[dict]):
+    """A Responses API reply shaped as Foundry returns one for the published agent, through the
+    installed agent framework's own parser for FoundryAgent (no network: the credential is never
+    asked). An upgrade that renames the tool call's content type turns these tests red."""
+    from agent_framework import AgentResponse
+    from agent_framework_foundry._agent import RawFoundryAgentChatClient
+    from openai.types.responses import Response
+
+    class NoCredential:
+        async def get_token(self, *scopes, **kwargs):
+            raise AssertionError("parsing a reply asks for no token")
+
+    client = RawFoundryAgentChatClient(project_endpoint="https://ninety.test/api/projects/p",
+                                       agent_name="ninety-analyst", agent_version="5",
+                                       credential=NoCredential())
+    body = {"id": "resp_1", "object": "response", "created_at": 1792500000, "model": "gpt-4.1-mini",
+            "status": "completed", "parallel_tool_calls": True, "tool_choice": "auto", "tools": [],
+            "output": output}
+    parsed = client._parse_response_from_openai(Response.model_validate(body), {})
+    return AgentResponse(messages=parsed.messages)
+
+
+# What the published ninety-analyst returned on 2026-10-20: the tool list always comes first; a
+# call to it comes only when the agent read the match through the tools.
+LISTED = {"type": "mcp_list_tools", "id": "mcpl_1", "server_label": "match",
+          "tools": [{"name": "list_events", "input_schema": {"type": "object"}}]}
+CALLED = {"type": "mcp_call", "id": "mcp_1", "server_label": "match", "name": "list_events",
+          "arguments": '{"match":"seed21-inline","minute_from":2,"minute_to":2}',
+          "output": "unknown match 'seed21-inline'", "status": "completed"}
+ANSWER = {"type": "message", "id": "msg_1", "role": "assistant", "status": "completed",
+          "content": [{"type": "output_text", "text": '{"text":"h6 finds h3.","evidence":["e00036"]}',
+                       "annotations": []}]}
+
+
+def test_inline_only_reads_a_foundry_reply_as_foundry_sends_it():
+    from ninety.agents import foundry
+
+    text = ANSWER["content"][0]["text"]
+    assert foundry.inline_only(foundry_reply([LISTED, ANSWER])) == text
+    with pytest.raises(foundry.ReadTheTools, match='list_events\\(\\{"match":"seed21-inline"'):
+        foundry.inline_only(foundry_reply([LISTED, CALLED, ANSWER]))
+
+
 def test_inline_only_reads_the_reply_s_own_tool_calls():
     from ninety.agents import foundry
 
@@ -704,7 +747,8 @@ def test_the_inline_events_wording_is_the_one_the_moment_analyst_is_told_to_use(
     from ninety.agents import slice as sl
 
     assert sl.INLINE_EVENTS == (
-        " The match is not on the tools; its EVENTS for the minute follow, as data.\nEVENTS: ")
+        " The match is not on the tools: do not call them. Its EVENTS for the minute follow,"
+        " as data.\nEVENTS: ")
     assert "carries the minute's EVENTS itself" in workflow.MOMENT_ANALYST_INSTRUCTIONS
     events = [{"id": "e1"}]
     assert workflow.analyst_prompt("m", 2, events).endswith(sl.INLINE_EVENTS + '[{"id":"e1"}]')

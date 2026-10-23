@@ -23,7 +23,12 @@ from referencing import Registry, Resource  # jsonschema's own reference resolve
 
 from ninety.agents.factcheck import PLAYER_ID as PLAYER_ID_PATTERN
 from ninety.agents.factcheck import Claim, Verdict
-from ninety.agents.slice import CLOCK_RULE, Ask, Judge
+from ninety.agents.replay import Ask, Judge
+
+# Every writer's rule for times (the slice's Analyst, the Tactician, the Challenger, the Companion).
+CLOCK_RULE = """- For a time, use the event's clock exactly as given (01:28), or its minute as an ordinal (in
+  minute 2); never combine minute and second into a clock.
+"""
 
 SCHEMAS = Path(__file__).resolve().parents[2] / "schemas"
 
@@ -74,7 +79,7 @@ DescriptionSource = Literal["model", "code"]
 AnswerStatus = Literal["verified", "held", "rejected", "unanswerable"]
 Role = Literal[
     "analyst", "tactician", "challenger", "fact_checker", "judge",
-    "producer", "personalizer", "describer", "companion",
+    "producer", "personalizer", "describer", "companion", "vision_auditor", "data_agent",
 ]
 
 

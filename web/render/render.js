@@ -50,9 +50,11 @@ function pitchTexture(p, rand) {
   // Broadcast turf: darker, less electric. Adjacent stripes shift hue the way a real mower does.
   const hue = p.grass_hue;
   const night = p.lighting === 'night';
+  // Broadcast footage mows softer stripes (design: a blind review read the plain ones as a game menu).
+  const [dark, light] = p.stadium === 'broadcast' ? [0.2, 0.225] : [0.19, 0.27];
   for (let x = GROUND.x0, i = 0; x < GROUND.x1; x += p.stripe_width_m, i++) {
     const alt = i % 2;
-    g.fillStyle = hsl(hue + (alt ? 0.018 : -0.006), 0.40, (alt ? 0.19 : 0.27) * (night ? 0.95 : 1));
+    g.fillStyle = hsl(hue + (alt ? 0.018 : -0.006), 0.40, (alt ? dark : light) * (night ? 0.95 : 1));
     g.fillRect(X(x), 0, p.stripe_width_m * PX_PER_M + 1, H);
   }
   // grain
@@ -67,24 +69,23 @@ function pitchTexture(p, rand) {
     g.fillStyle = 'rgba(6, 14, 10, 0.34)';
     g.fillRect(0, 0, W, H);
   }
-  // Run-off around the playing surface, so the pitch reads as a pitch.
-  g.fillStyle = hsl(0.08, 0.1, night ? 0.12 : 0.2);
-  g.fillRect(0, 0, W, Y(68));
-  g.fillRect(0, Y(0), W, H - Y(0));
-  g.fillRect(0, 0, X(0), H);
-  g.fillRect(X(105), 0, W - X(105), H);
-  // wear: goalmouths and the centre circle
+  // Run-off around the playing surface, so the pitch reads as a pitch. A broadcast stadium's grass
+  // runs on to the boards, as a ground's does.
+  if (p.stadium !== 'broadcast') {
+    g.fillStyle = hsl(0.08, 0.1, night ? 0.12 : 0.2);
+    g.fillRect(0, 0, W, Y(68));
+    g.fillRect(0, Y(0), W, H - Y(0));
+    g.fillRect(0, 0, X(0), H);
+    g.fillRect(X(105), 0, W - X(105), H);
+  }
+  // wear: goalmouths and the centre circle, as thin, pale grass. The shader tints it (uWear); the
+  // texture only breaks it up a little, a few pale tufts, never brown blotches across the area.
   const wearSpots = [[5, 34, 7], [100, 34, 7], [11, 34, 5], [94, 34, 5], [52.5, 34, 6]];
   for (const [wx, wy, wr] of wearSpots) {
-    const grad = g.createRadialGradient(X(wx), Y(wy), 0, X(wx), Y(wy), wr * PX_PER_M);
-    grad.addColorStop(0, `rgba(120,100,60,${0.55 * p.wear})`);
-    grad.addColorStop(1, 'rgba(120,100,60,0)');
-    g.fillStyle = grad;
-    g.fillRect(X(wx - wr), Y(wy + wr), 2 * wr * PX_PER_M, 2 * wr * PX_PER_M);
-    for (let k = 0; k < 400 * p.wear; k++) {
+    for (let k = 0; k < 120 * p.wear; k++) {
       const a = rand() * 6.283, r = Math.sqrt(rand()) * wr;
-      g.fillStyle = `rgba(110,90,55,${0.25 + 0.3 * rand()})`;
-      g.fillRect(X(wx + Math.cos(a) * r), Y(wy + Math.sin(a) * r), 4 + 6 * rand(), 3 + 5 * rand());
+      g.fillStyle = `rgba(150,150,90,${0.06 + 0.08 * rand()})`;
+      g.fillRect(X(wx + Math.cos(a) * r), Y(wy + Math.sin(a) * r), 3 + 4 * rand(), 2 + 3 * rand());
     }
   }
   // markings, 12 cm wide
@@ -151,7 +152,9 @@ function decoratePitch(mat, wet, grass, normal, p) {
     shader.uniforms.uSun = { value: sun };
     shader.uniforms.uStripe = { value: p.stripe_width_m };
     shader.uniforms.uX0 = { value: GROUND.x0 };
-    shader.uniforms.uMow = { value: mow };
+    shader.uniforms.uMow = { value: mow * (p.stadium === 'broadcast' ? 0.35 : 1) };
+    shader.uniforms.uTilt = { value: p.stadium === 'broadcast' ? 0.12 : 0.32 };
+    shader.uniforms.uWear = { value: p.wear };
     shader.vertexShader = 'varying vec3 vGrassW;\n' + shader.vertexShader;
     shader.vertexShader = shader.vertexShader.replace(
       '#include <project_vertex>',
@@ -160,6 +163,7 @@ function decoratePitch(mat, wet, grass, normal, p) {
     shader.fragmentShader = `
       varying vec3 vGrassW;
       uniform float uWet;
+      uniform float uWear;
       uniform sampler2D uGrass;
       uniform sampler2D uGrassN;
       uniform float uHasGrass;
@@ -168,6 +172,7 @@ function decoratePitch(mat, wet, grass, normal, p) {
       uniform float uStripe;
       uniform float uX0;
       uniform float uMow;
+      uniform float uTilt;
       float stripeAlt(vec2 w){ return mod(floor((w.x - uX0) / max(uStripe, 0.5)), 2.0); }
       float ghash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
       float gnoise(vec2 p){
@@ -180,7 +185,7 @@ function decoratePitch(mat, wet, grass, normal, p) {
     shader.fragmentShader = shader.fragmentShader.replace('#include <normal_fragment_maps>', `
       #include <normal_fragment_maps>
       float altN = stripeAlt(vGrassW.xy);
-      vec3 nPert = vec3(0.0, altN > 0.5 ? 0.32 : -0.32, 0.0);
+      vec3 nPert = vec3(0.0, altN > 0.5 ? uTilt : -uTilt, 0.0);
       if (uHasN > 0.5) {
         vec3 tn = texture2D(uGrassN, vGrassW.xy * 0.4).xyz;
         tn.y = 1.0 - tn.y;
@@ -192,7 +197,7 @@ function decoratePitch(mat, wet, grass, normal, p) {
     shader.fragmentShader = shader.fragmentShader.replace('#include <map_fragment>', `
       #include <map_fragment>
       float pale = smoothstep(0.62, 0.86, dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114)));
-      // The painted wear is a thin brown. Hold that brown. The stripe stays in the paint.
+      // The markings (pale) are never worn.
       float worn = 0.0;
       worn = max(worn, 1.0 - smoothstep(3.2, 7.0, length(vGrassW.xy - vec2(5.0, 34.0))));
       worn = max(worn, 1.0 - smoothstep(3.2, 7.0, length(vGrassW.xy - vec2(100.0, 34.0))));
@@ -200,7 +205,11 @@ function decoratePitch(mat, wet, grass, normal, p) {
       worn = max(worn, 1.0 - smoothstep(2.2, 5.0, length(vGrassW.xy - vec2(94.0, 34.0))));
       worn = max(worn, 1.0 - smoothstep(2.6, 6.0, length(vGrassW.xy - vec2(52.5, 34.0))));
       worn *= 1.0 - pale;
-      diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.25, 0.78, 0.50), worn);
+      // Worn turf is thinner, paler, yellower grass, not bare earth, and it follows the mowing:
+      // the stripe that lies toward the camera shows it a little more (design). A clip's wear
+      // (0.1 to 0.9) sets how much, at most 45% of the way to that tint.
+      worn *= uWear * 0.45 * (0.75 + 0.25 * stripeAlt(vGrassW.xy));
+      diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.12, 1.04, 0.78), worn);
       float clump = gnoise(vGrassW.xy * 0.22);
       diffuseColor.rgb *= mix(0.9 + 0.12 * clump, 1.0, pale);
       if (uHasGrass > 0.5) {
@@ -286,7 +295,9 @@ function tier(decor, p, rand, corners, aniso, uSpan = 1) {
     emissiveIntensity: p.lighting === 'night' ? 0.55 : 0.02,
     side: THREE.DoubleSide,
   });
-  decor.push(quad(...corners, mat, [uSpan, 1]));
+  const mesh = quad(...corners, mat, [uSpan, 1]);
+  mesh.userData.tier = { corners, uSpan };  // where a broadcast stadium seats its crowd
+  decor.push(mesh);
 }
 
 // Cladding for the stands' structure: panels in the stand colour, each a little lighter or darker,
@@ -355,6 +366,252 @@ function boardTexture(p, rand) {
     x += 512;
   }
   return canvasTexture(c);
+}
+
+// ---- broadcast stadium dressing (params.stadium = 'broadcast': footage only, never training) --------
+//
+// A plain stadium is every dataset's look and stays exactly as it was. Broadcast footage adds a crowd
+// in the stands, a closed ring of boards, a wall under each stand's front and an LED ribbon under
+// each upper tier, so nothing behind a goal or a touchline is bare ground, and boards that vary.
+// Everything here is scenery, as the boards a plain stadium already has: the id pass draws it to hide
+// what is behind it and never labels it. The fans are drawn there as the picture draws them (the same
+// billboards, cut-outs and motion), so a ball among them is hidden where the picture hides it.
+
+// Made-up advertisers (with what they sell, as a board shows it). None is a real brand.
+const BROADCAST_BRANDS = [
+  ['VANTIRO', 'MOBILE'], ['QELMORA', 'BANKING'], ['BRISKEL', 'SPORTS DRINK'], ['OSTRAVEN', 'AIRWAYS'],
+  ['PALMIRU', 'TYRES'], ['ZENTHA', 'ENERGY'], ['THE NINETY LABS', 'MATCH INSIGHTS'], ['QUIVRANT', 'INSURANCE'],
+  ['ZOLBEK', 'BEER'], ['MERIVAX', 'CLOUD'], ['TANDROSE', 'WATCHES'], ['FYNWALD', 'CARS'],
+  ['KESTRIX', 'BETTING-FREE ZONE'], ['OLVENSTA', 'FREIGHT'], ['DRAVELLO', 'COFFEE'], ['BRAXITO', 'BOOTS'],
+];
+// One advert is this many metres of board (design: a pitch-side LED advert is a few metres long).
+const BOARD_AD_M = 8;
+// A seat is SEAT_M wide and a row ROW_M deep (design, a stadium's usual seat pitch); a full stand is
+// CROWD_FILL full (design: Premier League grounds are near capacity), and a figure is a seated
+// spectator, STAND_SHARE of them standing.
+const SEAT_M = 0.5;
+const ROW_M = 0.8;
+const CROWD_FILL = 0.93;
+const STAND_SHARE = 0.08;
+const FAN_SKIN = ['#f5d0b5', '#e8b897', '#d19a74', '#b07850', '#8d5a3b', '#6b4329', '#4a2e1d'];
+const FAN_NEUTRAL = ['#1c1f26', '#2b2f38', '#3d4350', '#e8e6e1', '#5a4a3a', '#24344f', '#8c2a30', '#6b6f76', '#8a7a5c', '#2f5a3a',
+  '#d8c9a8', '#c9a227', '#3a6ea8', '#f2f2f2', '#b5532d'];
+
+function broadcastBoardTexture(rand) {
+  // Eight adverts, each its own layout: a dark board with a white word and a mark, a light board with
+  // a coloured word, a two-tone board with a tagline, a gradient board. Every advert has its name on it.
+  const c = document.createElement('canvas');
+  const ad = 512, n = 8;
+  c.width = ad * n; c.height = 64;
+  const g = c.getContext('2d');
+  g.textBaseline = 'middle';
+  let last = -1;
+  for (let i = 0; i < n; i++) {
+    let b = Math.floor(rand() * BROADCAST_BRANDS.length);
+    if (b === last) b = (b + 1) % BROADCAST_BRANDS.length;
+    last = b;
+    const [name, line] = BROADCAST_BRANDS[b];
+    const x = i * ad, hue = rand(), layout = Math.floor(rand() * 4);
+    const ink = hsl(hue, 0.75, 0.42);
+    if (layout === 0) {
+      g.fillStyle = hsl(hue, 0.35, 0.1); g.fillRect(x, 0, ad, 64);
+      g.fillStyle = hsl(hue, 0.85, 0.55);
+      g.beginPath(); g.arc(x + 40, 32, 20, 0, 6.283); g.fill();
+      g.fillStyle = '#f6f6f2'; g.font = 'bold 38px sans-serif'; g.fillText(name, x + 74, 34, ad - 96);
+    } else if (layout === 1) {
+      g.fillStyle = '#f2f1ec'; g.fillRect(x, 0, ad, 64);
+      g.fillStyle = ink; g.font = 'bold 40px sans-serif'; g.fillText(name, x + 24, 34, ad - 48);
+    } else if (layout === 2) {
+      g.fillStyle = hsl(hue, 0.7, 0.32); g.fillRect(x, 0, ad, 64);
+      g.fillStyle = hsl(hue + 0.5, 0.8, 0.55); g.fillRect(x + ad * 0.68, 0, ad * 0.32, 64);
+      g.fillStyle = '#ffffff'; g.font = 'bold 34px sans-serif'; g.fillText(name, x + 20, 32, ad * 0.62);
+      g.fillStyle = '#101010'; g.font = 'bold 18px sans-serif'; g.fillText(line, x + ad * 0.7, 33, ad * 0.28);
+    } else {
+      const grd = g.createLinearGradient(x, 0, x + ad, 0);
+      grd.addColorStop(0, hsl(hue, 0.8, 0.22)); grd.addColorStop(1, hsl(hue + 0.08, 0.8, 0.45));
+      g.fillStyle = grd; g.fillRect(x, 0, ad, 64);
+      g.fillStyle = '#ffffff'; g.font = 'italic bold 40px sans-serif'; g.fillText(name, x + 24, 30, ad - 48);
+      g.font = '14px sans-serif'; g.fillText(line, x + 26, 54, ad - 52);
+    }
+  }
+  const tex = canvasTexture(c);
+  tex.wrapS = THREE.RepeatWrapping;
+  return tex;
+}
+
+// The wall under a stand's front: dark panels under a pale rail, with a gate every so often.
+function wallTexture() {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 64;
+  const g = c.getContext('2d');
+  g.fillStyle = '#2c3038'; g.fillRect(0, 0, 256, 64);
+  g.fillStyle = 'rgba(0,0,0,0.35)';
+  for (let x = 0; x < 256; x += 64) g.fillRect(x, 0, 2, 64);
+  g.fillStyle = '#1a1d22'; g.fillRect(150, 18, 44, 46);
+  g.fillStyle = '#b9bec6'; g.fillRect(0, 0, 256, 6);
+  const tex = canvasTexture(c);
+  tex.wrapS = THREE.RepeatWrapping;
+  return tex;
+}
+
+// Seated spectators on every tier: two instanced billboards a person (shirt and head), facing the
+// pitch, tinted per person. Home fans wear the home shirt more often than not, and a block at one end
+// the away shirt. They fidget, and the scoring side's fans jump for a goal (spec.goal_age).
+// How a fan moves, in the picture and in the id pass alike: a fidget, and the scoring side's jump.
+const CROWD_VERTEX_HEAD = 'uniform float uTime;\nuniform vec2 uCheer;\nattribute float aTeam;\n';
+const CROWD_MOTION = `
+  float ph = fract(sin(dot(instanceMatrix[3].xy, vec2(12.9898, 78.233))) * 43758.5453);
+  float cheer = aTeam > 0.5 ? uCheer.y : uCheer.x;
+  transformed.z += 0.015 * sin(uTime * (0.8 + ph) + ph * 30.0)
+    + cheer * 0.28 * abs(sin(uTime * 6.0 + ph * 6.283));
+  transformed.x += 0.02 * sin(uTime * 0.6 + ph * 17.0);
+`;
+
+function crowdMeshes(tiers, p, rand) {
+  const seats = [];
+  for (const { corners, uSpan } of tiers) {
+    const [P0, P1, P2, P3] = corners.map((q) => new THREE.Vector3(...q));
+    const lerp = (a, b, t) => a.clone().lerp(b, t);
+    const toward = new THREE.Vector3(52.5, 34, 0);
+    const rows = Math.floor(P0.distanceTo(P3) / ROW_M);
+    for (let r = 0; r < rows; r++) {
+      const v = (r + 0.5) / rows;
+      // The seat texture's gangway (crowdTexture): a band across the tier with nobody in it.
+      if (v > 0.32 && v < 0.39) continue;
+      const a = lerp(P0, P3, v), b = lerp(P1, P2, v);
+      const n = Math.floor(a.distanceTo(b) / SEAT_M);
+      for (let s = 0; s < n; s++) {
+        const u = (s + 0.5) / n;
+        const px = (u * uSpan * 2048) % 220;  // crowdTexture's sections and aisles
+        if (px >= 198) continue;
+        if (rand() > CROWD_FILL) continue;
+        const at = lerp(a, b, u);
+        const d = toward.clone().sub(at);
+        seats.push({ at, face: Math.atan2(d.x, -d.y), away: at.x > 114 && at.y < 34 ? 1 : 0 });
+      }
+    }
+  }
+  const home = p.home_kit || { shirt: '#c8102e', shorts: '#ffffff' };
+  const away = p.away_kit || { shirt: '#1d4ed8', shorts: '#1d4ed8' };
+  const sprite = (w, h, draw) => {
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    draw(c.getContext('2d'));
+    return canvasTexture(c);
+  };
+  const torsoMap = sprite(64, 96, (g) => {
+    g.fillStyle = '#ffffff';
+    g.beginPath(); g.moveTo(6, 96); g.lineTo(6, 26); g.quadraticCurveTo(8, 8, 32, 6);
+    g.quadraticCurveTo(56, 8, 58, 26); g.lineTo(58, 96); g.fill();
+    g.fillStyle = 'rgba(0,0,0,0.28)';  // the arms, a shade darker down each side
+    g.fillRect(6, 30, 10, 66); g.fillRect(48, 30, 10, 66);
+  });
+  const headMap = sprite(32, 32, (g) => {
+    g.fillStyle = '#ffffff'; g.beginPath(); g.arc(16, 17, 14, 0, 6.283); g.fill();
+    g.fillStyle = 'rgba(0,0,0,0.55)'; g.beginPath(); g.arc(16, 15, 14, Math.PI * 1.05, Math.PI * 1.95); g.fill();
+  });
+  const uniforms = { uTime: { value: 0 }, uCheer: { value: new THREE.Vector2(0, 0) } };
+  const material = (map) => {
+    const m = new THREE.MeshLambertMaterial({ map, alphaTest: 0.5, side: THREE.DoubleSide });
+    m.customProgramCacheKey = () => 'crowd';
+    m.onBeforeCompile = (shader) => {
+      Object.assign(shader.uniforms, uniforms);
+      shader.vertexShader = CROWD_VERTEX_HEAD + shader.vertexShader;
+      shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>',
+        '#include <begin_vertex>\n' + CROWD_MOTION);
+    };
+    // In the id pass the same fan, moved the same way and cut out by the same sprite, in scenery's id.
+    m.userData.idMat = new THREE.ShaderMaterial({
+      uniforms: { ...uniforms, map: { value: map }, idc: { value: new THREE.Vector3(SCENERY_ID / 255, 0, 0) } },
+      vertexShader: CROWD_VERTEX_HEAD + `varying vec2 vUv;
+        void main() {
+          vec3 transformed = position;
+          ${CROWD_MOTION}
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(transformed, 1.0);
+        }`,
+      fragmentShader: `uniform sampler2D map; uniform vec3 idc; varying vec2 vUv;
+        void main() { if (texture2D(map, vUv).a < 0.5) discard; gl_FragColor = vec4(idc, 1.0); }`,
+      blending: THREE.NoBlending,
+      side: THREE.DoubleSide,
+    });
+    return m;
+  };
+  // Their normals lean up as the tier's do, so a stand lit from behind is lit like its seats and its
+  // fans are not black cut-outs (a blind review saw a near-black end stand).
+  const bend = (geo) => {
+    const n = geo.attributes.normal;
+    for (let i = 0; i < n.count; i++) n.setXYZ(i, 0, -0.45, 0.89);
+    return geo;
+  };
+  const torsoGeo = bend(new THREE.PlaneGeometry(0.58, 0.72).rotateX(Math.PI / 2).translate(0, 0, 0.72));
+  const headGeo = bend(new THREE.PlaneGeometry(0.26, 0.26).rotateX(Math.PI / 2).translate(0, 0, 1.2));
+  const torso = new THREE.InstancedMesh(torsoGeo, material(torsoMap), seats.length);
+  const head = new THREE.InstancedMesh(headGeo, material(headMap), seats.length);
+  const team = new Float32Array(seats.length);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), col = new THREE.Color();
+  seats.forEach((seat, i) => {
+    const s = 0.9 + 0.18 * rand();
+    const lift = rand() < STAND_SHARE ? 0.45 : 0;
+    q.setFromAxisAngle(new THREE.Vector3(0, 0, 1), seat.face);
+    sc.set(s, s, s);
+    m.compose(new THREE.Vector3(seat.at.x, seat.at.y, seat.at.z + lift), q, sc);
+    torso.setMatrixAt(i, m);
+    head.setMatrixAt(i, m);
+    const kit = seat.away ? away : home;
+    const r = rand();
+    col.set(r < 0.5 ? kit.shirt : r < 0.62 ? kit.shorts : FAN_NEUTRAL[Math.floor(rand() * FAN_NEUTRAL.length)]);
+    torso.setColorAt(i, col);
+    head.setColorAt(i, col.set(FAN_SKIN[Math.floor(rand() * FAN_SKIN.length)]));
+    team[i] = seat.away;
+  });
+  for (const mesh of [torso, head]) {
+    mesh.geometry.setAttribute('aTeam', new THREE.InstancedBufferAttribute(team, 1));
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.frustumCulled = false;
+  }
+  return { meshes: [torso, head], uniforms };
+}
+
+// The walls, ribbons and corner boards of a broadcast stadium, from the tiers (their front edges)
+// and the plain stadium's board lines (closing the ring at the corners). Returns the new boards
+// and the rest separately, so the boards can carry backs the way the plain ones do.
+function stadiumRing(tiers, boardMat, backMat) {
+  const wallTex = wallTexture();
+  const wallMat = new THREE.MeshStandardMaterial({ map: wallTex, roughness: 0.85, side: THREE.DoubleSide });
+  const flat = (a, b) => Math.hypot(b[0] - a[0], b[1] - a[1]);
+  const rest = [];
+  for (const { corners } of tiers) {
+    const [P0, P1] = corners;
+    const len = flat(P0, P1);
+    if (Math.max(P0[2], P1[2]) < 2.5) {
+      // A lower tier: the wall from the ground up to its front edge.
+      rest.push(quad([P0[0], P0[1], 0], [P1[0], P1[1], 0], P1, P0, wallMat, [len / 8, 1]));
+    } else {
+      // An upper tier: an LED ribbon hung under its front edge.
+      rest.push(quad([P0[0], P0[1], P0[2] - 1.1], [P1[0], P1[1], P1[2] - 1.1],
+        [P1[0], P1[1], P1[2] - 0.05], [P0[0], P0[1], P0[2] - 0.05], boardMat, [len / BOARD_AD_M / 8, 1]));
+    }
+  }
+  // The board ring's corners (the plain boards stop short of them), each facing the pitch. On the
+  // goal lines the corner piece steps down from the side boards' 1.8 m to the end boards' 0.9 m,
+  // so no board ends in mid-air (a blind review saw the side boards stop there).
+  const pieces = [
+    [[-4, 71.5], [-2, 71.5], 1.8, 1.8], [[107, 71.5], [109, 71.5], 1.8, 1.8],
+    [[109, -1.6], [107, -1.6], 1.8, 1.8], [[-2, -1.6], [-4, -1.6], 1.8, 1.8],
+    [[-4, -1.6], [-4, 2], 1.8, 0.9], [[-4, 66], [-4, 71.5], 0.9, 1.8],
+    [[109, 71.5], [109, 66], 1.8, 0.9], [[109, 2], [109, -1.6], 0.9, 1.8],
+  ];
+  const boards = pieces.map(([a, b, ha, hb]) => quad([a[0], a[1], 0], [b[0], b[1], 0], [b[0], b[1], hb],
+    [a[0], a[1], ha], boardMat, [flat(a, b) / BOARD_AD_M / 8, 1]));
+  // Backs for all but the near pieces (the gantry is behind those and sees through them).
+  for (const brd of boards) {
+    const a = brd.geometry.attributes.position.array;
+    if (a[1] < 0) continue;
+    const c = (j) => [a[3 * j], a[3 * j + 1], a[3 * j + 2]];
+    rest.push(quad(c(1), c(0), c(5), c(2), backMat));
+  }
+  return { boards, rest };
 }
 
 // Same curve as ninety.render.camera.net_push. Outward only, and it settles inside 2.6 s.
@@ -635,7 +892,8 @@ function idMaterial(id) {
 // The match body. Python sends the pose; these angles are the same ones meshpose.py builds.
 // Object space is Y-up metres, +X his left, +Z the way he faces. Positive bone X swings a limb back.
 // A third angle, Y, twists a bone about its length (Root: the hips; spine: the chest; thigh: the foot).
-const MESH_CONTACT = new Set(['strike', 'foot', 'thigh', 'chest', 'head', 'hands', 'throw', 'dive', 'shield']);
+// A throw-in is drawn from the standing pose, its hands on the ball as a hold (meshpose._CONTACT).
+const MESH_CONTACT = new Set(['strike', 'foot', 'thigh', 'chest', 'head', 'hands', 'dive', 'shield']);
 // Touches taken in stride: the stored pose gives only the arms (meshpose._FEET).
 const MESH_FEET = new Set(['strike', 'foot', 'thigh']);
 const ARMS = ['upperarm_l', 'lowerarm_l', 'upperarm_r', 'lowerarm_r'];
@@ -676,8 +934,14 @@ const LEAN_STEP = [0.1, 0.1];
 const LEAN_LIMIT = [[-0.9, 0.9], [-0.6, 0.6]];
 const LEAN_SHARE = [['spine_01', 0.35], ['spine_02', 0.35], ['neck_01', 0.3]];
 const TWIST_SIGN = -1.0;
+// The trunk's lean on top of the stride's: half at the hips, half in the lower spine (meshpose.TRUNK_SHARE).
+const TRUNK_SHARE = [['pelvis', 0.5], ['spine_01', 0.5], ['neck_01', -0.5]];
+// The asset's stature (meshpose.ASSET_STATURE_M): a player height_m tall is the asset scaled by
+// height_m / ASSET_STATURE_M. And the forehead a header meets the ball with (meshpose.BROW_Y).
+const ASSET_STATURE_M = 1.684;
+const BROW_Y = 1.63;
 const EXTRA = {
-  brow: ['head', [0.0, 1.70, 0.13]],
+  brow: ['head', [0.0, BROW_Y, 0.13]],
   chest: ['spine_03', [0.0, 1.28, 0.14]],
   thigh_top_l: ['thigh_l', [0.14, 0.64, 0.10]],
   thigh_top_r: ['thigh_r', [-0.14, 0.64, 0.10]],
@@ -774,7 +1038,7 @@ function copyPose(raw) {
 
 // The arms swing opposite the legs: from the stored walk (elbows nearly straight) to the stored
 // run (elbows near a right angle) as armT goes from 0 to 1 (meshpose.gait).
-function gaitPose(s, run, walk, armT) {
+function gaitPose(s, run, walk, armT, pump = 1) {
   const left = (s + 1) / 2, right = (1 - s) / 2;
   const out = {};
   for (const base of ['thigh', 'calf', 'foot']) {
@@ -784,8 +1048,14 @@ function gaitPose(s, run, walk, armT) {
   }
   const arms = walk ? blendXZ(walk, run, armT) : run;
   for (const base of ['upperarm', 'lowerarm']) {
-    const [lx, lz] = xzy(arms[base + '_l']);
-    const [rx, rz] = xzy(arms[base + '_r']);
+    let [lx, lz] = xzy(arms[base + '_l']);
+    let [rx, rz] = xzy(arms[base + '_r']);
+    if (base === 'upperarm' && pump !== 1) {
+      // The upper arms' swing widens about its middle with speed (meshpose.gait, scene.PUMP).
+      const mid = (lx + rx) / 2;
+      lx = mid + (lx - mid) * pump;
+      rx = mid + (rx - mid) * pump;
+    }
     out[base + '_l'] = [lx * left + rx * right, lz * left - rz * right];
     out[base + '_r'] = [rx * left + lx * right, rz * left - lz * right];
   }
@@ -858,14 +1128,14 @@ function pointOf(angles, name, player) {
 }
 
 function toObject(x, y, heading, height, wx, wy, wz = 0, lift = 0) {
-  const k = height / 1.84;
+  const k = height / ASSET_STATURE_M;
   const hx = Math.cos(heading), hy = Math.sin(heading);
   const dx = (wx - x) / k, dy = (wy - y) / k;
   return [-hy * dx + hx * dy, (wz - lift) / k, hx * dx + hy * dy];
 }
 
 function toWorld(x, y, heading, height, p, lift = 0) {
-  const k = height / 1.84;
+  const k = height / ASSET_STATURE_M;
   const hx = Math.cos(heading), hy = Math.sin(heading);
   return [
     x + k * (-hy * p[0] + hx * p[2]),
@@ -976,7 +1246,8 @@ function upperAngles(player, pose, heading, height) {
     if (action === 'dive') {
       const mag = Math.min(1, Math.abs(pose.dive || 0));
       if ((pose.dive || 0) < 0) angles = mirrorPose(angles);
-      angles = scalePose(angles, mag > 0.35 ? mag : 0.35, false);
+      // From standing to full stretch and back (meshpose._upper, scene.keeper_dive).
+      angles = blendPose(copyPose(poses.stand), angles, mag);
     }
   } else if (speed < STAND_BLEND[0] || (action === 'stand' && speed < player.standSpeed)) {
     angles = copyPose(poses.stand);
@@ -984,7 +1255,7 @@ function upperAngles(player, pose, heading, height) {
     // A strike or a touch with the foot or thigh is taken in stride.
     const full = player.fullStrideSpeed;
     const armT = action === 'run' ? 1 : Math.min(Math.max((speed - full) / (player.armRunSpeed - full), 0), 1);
-    angles = gaitPose(Math.sin(pose.phase || 0), poses.run, poses.walk, armT);
+    angles = gaitPose(Math.sin(pose.phase || 0), poses.run, poses.walk, armT, pose.pump || 1);
     if (action !== 'run' && speed < STRIDE_GROW[1]) {
       // A walk's short stride grows into the full one through a jog (meshpose.STRIDE_GROW).
       const t = Math.min(Math.max((speed - STRIDE_GROW[0]) / (STRIDE_GROW[1] - STRIDE_GROW[0]), 0), 1);
@@ -996,6 +1267,18 @@ function upperAngles(player, pose, heading, height) {
     if (action !== 'run' && speed < STAND_BLEND[1]) {
       angles = blendPose(copyPose(poses.stand), angles, (speed - STAND_BLEND[0]) / (STAND_BLEND[1] - STAND_BLEND[0]));
     }
+  }
+  const up = pose.dive_up || 0;
+  if (up) {
+    // Getting up from a dive, what he does next is drawn with the dive fading out of it (meshpose._upper).
+    let full = copyPose(poses.dive);
+    if (up < 0) full = mirrorPose(full);
+    angles = blendPose(angles, Object.assign({}, angles, full), Math.min(1, Math.abs(up)));
+  }
+  const lean = pose.lean || 0;
+  if (lean && !(poses[action] && MESH_CONTACT.has(action) && !MESH_FEET.has(action))) {
+    // Speeding up the trunk leans into it, slowing it comes up (scene.pace).
+    for (const [bone, share] of TRUNK_SHARE) addAngle(angles, bone, lean * share, 0, 0);
   }
   if (lead) {
     // The hips lead a turn and the chest follows: Root turns the hips and legs, the lower spine
@@ -1021,7 +1304,9 @@ function upperAngles(player, pose, heading, height) {
 function anglesFor(player, pose, heading, height) {
   const x = pose.x, y = pose.y;
   const lead = pose.lead || 0;
-  const lift = pose.lift || 0;
+  // lift places the body (a jump, a lunge, the stride's bob); only a touch's own lift lowers him.
+  const lift = (pose.lift || 0) + (pose.bob || 0);
+  const lowered = (pose.lift || 0) < 0;
   let angles = upperAngles(player, pose, heading, height);
   // scene.py plants a foot only when the pose stands on it.
   for (const side of ['l', 'r']) {
@@ -1031,9 +1316,9 @@ function anglesFor(player, pose, heading, height) {
     const pz = plant.length > 3 ? plant[3] : 0;
     const target = toObject(x, y, heading, height, plant[0], plant[1], pz, lift);
     let [planted, err] = searchLeg(angles, side, target, PLANT_FOOT, twist, 'foot_' + side, true, player);
-    if (err > PLANT_GIVE_UP && lift < 0) {
+    if (err > PLANT_GIVE_UP && lowered) {
       // Lowered, an unreachable foot reaches toward its plant above the grass (meshpose.pose_angles).
-      planted = searchLeg(angles, side, target, PLANT_FOOT, twist, 'foot_' + side, false, player, null, -lift / (height / 1.84))[0];
+      planted = searchLeg(angles, side, target, PLANT_FOOT, twist, 'foot_' + side, false, player, null, -lift / (height / ASSET_STATURE_M))[0];
       err = 0;
     }
     // A stride's plant comes and goes with a weight (scene.PLANT_EASE_FRAMES).
@@ -1046,7 +1331,7 @@ function anglesFor(player, pose, heading, height) {
     let reached;
     if (touch.part === 'foot' || touch.part === 'strike') {
       const foot = touch.part === 'strike' ? STRIKE_FOOT : PLANT_FOOT;
-      const floor = -lift / (height / 1.84);
+      const floor = -lift / (height / ASSET_STATURE_M);
       reached = searchLeg(angles, side, target, foot, 0, 'foot_' + side, false, player, null, floor)[0];
       angles = blendPose(angles, reached, touch.w);
       // A blend that dips the foot under the grass puts it back on it (meshpose.pose_angles).
@@ -1068,8 +1353,8 @@ function holdPose(player, angles, pose, hold, heading, height) {
   let out = Object.assign({}, angles);
   const bend = hold.bend || 0;
   for (const [bone, share] of HOLD_BEND) addAngle(out, bone, bend * share, 0, 0);
-  const centre = toObject(pose.x, pose.y, heading, height, hold.at[0], hold.at[1], hold.at[2], pose.lift || 0);
-  const k = height / 1.84;
+  const centre = toObject(pose.x, pose.y, heading, height, hold.at[0], hold.at[1], hold.at[2], (pose.lift || 0) + (pose.bob || 0));
+  const k = height / ASSET_STATURE_M;
   const idx = player.boneIndex;
   const girdle = poseBones(out, player.bones, Math.max(idx.clavicle_l, idx.clavicle_r));
   for (const [side, sign] of [['l', 1], ['r', -1]]) {
@@ -1391,12 +1676,18 @@ class Body {
         sock.uLeft.value.copy(this.kit.uLeft.value);
       }
     }
-    const k = this.heightM / 1.84;
-    this.group.position.set(x, y, pose.lift || 0);
+    const k = this.heightM / ASSET_STATURE_M;
+    this.group.position.set(x, y, (pose.lift || 0) + (pose.bob || 0));
     this.group.scale.set(k, k, k);
     this.group.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(
       new THREE.Vector3(-fy, fx, 0), new THREE.Vector3(0, 0, 1), new THREE.Vector3(fx, fy, 0),
     ));
+    if (pose.fall) {
+      // A fouled player down (fouls.py, tip): the whole body tipped over its feet toward fall_dir.
+      const d = pose.fall_dir || 0;
+      const axis = new THREE.Vector3(-Math.sin(d), Math.cos(d), 0);
+      this.group.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(axis, pose.fall));
+    }
     const placed = Object.assign({}, pose, { x, y });
     const angles = anglesFor(this.player, placed, face, this.heightM);
     const posed = poseBones(angles, this.player.bones);
@@ -1426,7 +1717,7 @@ class Body {
     const posed = poseBones(angles, this.player.bones);
     const out = {};
     for (const [name, marker] of Object.entries(this.player.markers)) {
-      out[name] = toWorld(x, y, face, this.heightM, skinOne(marker.pos, marker.skin, posed, this.player.bones), (pose && pose.lift) || 0);
+      out[name] = toWorld(x, y, face, this.heightM, skinOne(marker.pos, marker.skin, posed, this.player.bones), pose ? (pose.lift || 0) + (pose.bob || 0) : 0);
     }
     return out;
   }
@@ -1473,11 +1764,23 @@ class BroadcastRenderer {
     // ground: textured pitch over a darker surround. Rain lowers roughness so the sun sheens, and the albedo is darkened in the texture.
     const wet = p.weather === 'rain';
     // Asphalt around the pitch. A warm mid grey reads as a blank wall from the far stand.
+    // A broadcast stadium's grass runs on behind the boards to the stands, unmown (design).
+    const broadcast = p.stadium === 'broadcast';
     const surround = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshStandardMaterial({
-      color: new THREE.Color().setHSL(0.0, 0.0, wet ? 0.02 : 0.025),
+      color: broadcast ? new THREE.Color().setHSL(p.grass_hue + 0.018, 0.4, 0.12) : new THREE.Color().setHSL(0.0, 0.0, wet ? 0.02 : 0.025),
       roughness: 0.96,
     }));
     surround.position.set(52.5, 34, -0.02);
+    if (broadcast && grass) {
+      // The photo turf, tiled every 4 m, so the grass behind the boards is grass, not a flat colour.
+      const turf = grass.clone();
+      turf.wrapS = turf.wrapT = THREE.RepeatWrapping;
+      turf.repeat.set(100, 100);
+      turf.needsUpdate = true;
+      surround.material.map = turf;
+      surround.material.color.setHSL(p.grass_hue + 0.02, 0.25, 0.11);
+      surround.material.needsUpdate = true;
+    }
     surround.receiveShadow = true;
     const pitchTex = pitchTexture(p, rand);
     pitchTex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
@@ -1520,7 +1823,9 @@ class BroadcastRenderer {
     tier(this.decor, p, rand, [[114, -64, 9.6], [-4, -64, 9.6], [-4, -78, 17.5], [114, -78, 17.5]], maxAniso);
     tier(this.decor, p, rand, [[-11, 70, 1.4], [-11, 4, 1.4], [-34, 4, 12], [-34, 70, 12]], maxAniso);
     tier(this.decor, p, rand, [[116, 4, 1.4], [116, 70, 1.4], [139, 70, 12], [139, 4, 12]], maxAniso);
-    const boardTex = boardTexture(p, rand);
+    // Drawn either way, so the seeded draws after it are a plain stadium's.
+    const plainBoards = boardTexture(p, rand);
+    const boardTex = broadcast ? broadcastBoardTexture(rng((cfg.seed ^ 0x5eed) >>> 0)) : plainBoards;
     boardTex.anisotropy = maxAniso;
     const boardsLit = p.lighting === 'night' || p.lighting === 'dusk';
     const boardMat = new THREE.MeshStandardMaterial({
@@ -1534,12 +1839,14 @@ class BroadcastRenderer {
     // Every board is printed on the side that faces the pitch, so it reads left to right from
     // anywhere on it, from the gantry and from the reverse angle. Seen from behind, a board is its
     // plain back, never its print mirrored.
+    // A broadcast board shows adverts BOARD_AD_M long; a plain board stretches its texture along it.
+    const rep = (len) => (broadcast ? [len / BOARD_AD_M / 8, 1] : [1, 1]);
     const boards = [
-      quad([-2, 71.5, 0], [107, 71.5, 0], [107, 71.5, 1.8], [-2, 71.5, 1.8], boardMat),
+      quad([-2, 71.5, 0], [107, 71.5, 0], [107, 71.5, 1.8], [-2, 71.5, 1.8], boardMat, rep(109)),
       // The gantry is behind the near boards: they have no back, so it sees through to the pitch.
-      quad([107, -1.6, 0], [-2, -1.6, 0], [-2, -1.6, 1.8], [107, -1.6, 1.8], boardMat),
-      quad([-4, 2, 0], [-4, 66, 0], [-4, 66, 0.9], [-4, 2, 0.9], boardMat),
-      quad([109, 66, 0], [109, 2, 0], [109, 2, 0.9], [109, 66, 0.9], boardMat),
+      quad([107, -1.6, 0], [-2, -1.6, 0], [-2, -1.6, 1.8], [107, -1.6, 1.8], boardMat, rep(109)),
+      quad([-4, 2, 0], [-4, 66, 0], [-4, 66, 0.9], [-4, 2, 0.9], boardMat, rep(64)),
+      quad([109, 66, 0], [109, 2, 0], [109, 2, 0.9], [109, 66, 0.9], boardMat, rep(64)),
     ];
     const backMat = new THREE.MeshStandardMaterial({ color: 0x24272d, roughness: 0.8 });
     const backs = [0, 2, 3].map((i) => {
@@ -1628,6 +1935,20 @@ class BroadcastRenderer {
       quad([W.x1 - d, W.y1, W.eave - 1.2], [W.x1 - d, W.y0, W.eave - 1.2], [W.x1 - d, W.y0, W.eave], [W.x1 - d, W.y1, W.eave], fascia),
     );
 
+    // A broadcast stadium: walls, ribbons and the board ring's corners (opaque scenery), and the
+    // crowd, scenery in the id pass too: it hides what is behind it and is never labelled.
+    let crowd = [];
+    this.crowd = null;
+    if (broadcast) {
+      const tiers = this.decor.filter((m) => m.userData.tier).map((m) => m.userData.tier);
+      const ring = stadiumRing(tiers, boardMat, backMat);
+      this.boards.push(...ring.boards);
+      this.decor.push(...ring.boards, ...ring.rest);
+      this.crowd = crowdMeshes(tiers, p, rng((cfg.seed ^ 0xc40d) >>> 0));
+      crowd = this.crowd.meshes;
+      this.decor.push(...crowd);
+    }
+
     // goals: posts and crossbar are occluders in the id pass; the net is decor
     this.posts = [];
     const white = new THREE.MeshStandardMaterial({ color: 0xf4f4f4, roughness: 0.4, metalness: 0.08 });
@@ -1655,12 +1976,13 @@ class BroadcastRenderer {
     for (const m of [...this.decor, ...this.posts]) this.scene.add(m);
     // Every opaque piece of scenery hides what is behind it in the full id pass, as it does in the
     // picture: a ball resting behind the boards is not visible. Left out: the sky (always behind),
-    // the ground (nothing labelled is under it), the see-through nets and the shadow decals.
+    // the ground (nothing labelled is under it), the see-through nets and the shadow decals. The fans
+    // are cut out of their billboards in the id pass as in the picture (crowdMeshes).
     const notOccluders = new Set([sky, surround, pitch, this.shadows, ...this.nets]);
     this.scenery = this.decor.filter((m) => m.isMesh && !notOccluders.has(m));
     for (const m of this.scenery) {
       m.userData.mat = m.material;
-      m.userData.idMat = idMaterial(SCENERY_ID);
+      m.userData.idMat = m.material.userData.idMat || idMaterial(SCENERY_ID);
       m.userData.idMat.side = m.material.side; // the near boards face the pitch: no back face for the gantry
     }
 
@@ -1683,14 +2005,21 @@ class BroadcastRenderer {
         uniform sampler2D tex; uniform vec2 blur; uniform vec2 res; uniform float noise; uniform float frame; uniform float rain;
         varying vec2 vUv;
         float hash(vec2 p){ p = fract(p * vec2(443.897, 441.423)); p += dot(p, p.yx + 19.19 + fract(frame * 0.6180339)); return fract((p.x + p.y) * p.x); }
+        // The exposure: the picture smeared along the pan over the shutter.
+        vec3 smear(vec2 uv, vec2 d){
+          vec3 s = vec3(0.0);
+          for (int k = 0; k < 9; k++) s += texture2D(tex, uv + d * (float(k) / 8.0 - 0.5)).rgb;
+          return s / 9.0;
+        }
         void main(){
           vec2 d = vec2(blur.x, -blur.y) / res;
           vec2 px = 1.0 / res;
-          vec3 c = vec3(0.0);
-          for (int k = 0; k < 9; k++) c += texture2D(tex, vUv + d * (float(k) / 8.0 - 0.5)).rgb;
-          c /= 9.0;
-          vec3 nbor = texture2D(tex, vUv + vec2(px.x, 0.0)).rgb + texture2D(tex, vUv - vec2(px.x, 0.0)).rgb
-            + texture2D(tex, vUv + vec2(0.0, px.y)).rgb + texture2D(tex, vUv - vec2(0.0, px.y)).rgb;
+          vec3 c = smear(vUv, d);
+          // The camera sharpens what the sensor recorded, the smear included. Sharpened against the
+          // unsmeared picture, a pan split every edge in two: a dark copy where it is, bright ones at
+          // either end of its smear (the critic of 0.5.1's first clips: "two ghost copies").
+          vec3 nbor = smear(vUv + vec2(px.x, 0.0), d) + smear(vUv - vec2(px.x, 0.0), d)
+            + smear(vUv + vec2(0.0, px.y), d) + smear(vUv - vec2(0.0, px.y), d);
           c += (c - nbor * 0.25) * 0.4;
           if (rain > 0.0) {
             c *= 0.9;
@@ -1734,6 +2063,7 @@ class BroadcastRenderer {
     this.bug = new THREE.Mesh(new THREE.PlaneGeometry(maxW, maxH), new THREE.MeshBasicMaterial({ map: this.bugTex, transparent: true }));
     this.bug.position.set(x0 + maxW / 2, -(y0 + maxH / 2), 0);
     this.overlayScene.add(this.bug);
+    this.makeStinger();
     return { bugRect: this.bugRect, maxAnisotropy: this.renderer.capabilities.getMaxAnisotropy(), gl: this.renderer.getContext().getParameter(this.renderer.getContext().VERSION) };
   }
 
@@ -1773,6 +2103,58 @@ class BroadcastRenderer {
     }
   }
 
+  // The stinger: the broadcast's graphic over each edit cut (ninety/render/edit.py stingers), a slanted
+  // band that wipes left to right across the picture with the cut under it, as a broadcast covers the
+  // cut into and out of a replay. Like the scorebug it is an occluder for the labels.
+  makeStinger() {
+    const W = this.W, H = this.H;
+    this.stSlant = 0.35; // pixels across per pixel down
+    this.stHalf = Math.ceil(W / 2 + this.stSlant * H / 2) + 8; // covers the picture when centred
+    this.stAccent = Math.round(0.03 * W);
+    const band = (x0, x1) => {
+      const sh = new THREE.Shape();
+      const t = this.stSlant * H / 2;
+      sh.moveTo(x0 - t, 0); sh.lineTo(x1 - t, 0); sh.lineTo(x1 + t, -H); sh.lineTo(x0 + t, -H); sh.closePath();
+      return new THREE.ShapeGeometry(sh);
+    };
+    const flat = (c) => new THREE.MeshBasicMaterial({ color: c, depthTest: false });
+    this.stinger = new THREE.Group();
+    this.stinger.add(new THREE.Mesh(band(-this.stHalf, this.stHalf), flat(0x0d1b3e)));
+    this.stinger.add(new THREE.Mesh(band(this.stHalf, this.stHalf + this.stAccent), flat(0xe8ff3a)));
+    const cv = document.createElement('canvas');
+    cv.width = 1024; cv.height = 160;
+    const g = cv.getContext('2d');
+    g.fillStyle = '#ffffff';
+    g.font = '800 104px sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText('THE NINETY', 512, 84);
+    const mark = new THREE.Mesh(new THREE.PlaneGeometry(0.42 * W, 0.42 * W * 160 / 1024),
+      new THREE.MeshBasicMaterial({ map: canvasTexture(cv), transparent: true, depthTest: false }));
+    mark.position.set(0, -H / 2, 0);
+    this.stinger.add(mark);
+    this.stinger.visible = false;
+    this.overlayScene.add(this.stinger);
+  }
+
+  // Where the stinger is for progress p (-1 coming on, 0 over the cut, 1 gone), and the pixels it
+  // covers as a test (i, j) => bool, or null when there is none.
+  layoutStinger(p) {
+    if (p == null) {
+      this.stinger.visible = false;
+      return null;
+    }
+    const W = this.W, H = this.H;
+    const c = W / 2 + p * (W / 2 + this.stHalf + this.stAccent + this.stSlant * H / 2);
+    this.stinger.visible = true;
+    this.stinger.position.set(c, 0, 0);
+    const lo = -this.stHalf, hi = this.stHalf + this.stAccent, k = this.stSlant;
+    return (i, j) => {
+      const u = i + 0.5 - c - k * (j + 0.5 - H / 2);
+      return u >= lo && u <= hi;
+    };
+  }
+
   goalOpen(age) {
     if (age == null || age < 0) return 0;
     const ease = (t) => 1 - (1 - Math.min(1, Math.max(0, t))) ** 3;
@@ -1809,11 +2191,12 @@ class BroadcastRenderer {
       g.beginPath();
       g.rect(0, 0, goalW, 40);
       g.clip();
-      g.globalAlpha = Math.min(1, open * 1.4);
+      // The word comes up once its panel is open, never half under the score (demo v1's critic, #19).
+      g.globalAlpha = Math.min(1, Math.max(0, (open - 0.85) / 0.15));
       g.fillStyle = '#161616';
       g.font = '700 15px sans-serif';
       g.textBaseline = 'middle';
-      g.fillText('GOAL', 16 + (1 - open) * 18, 20);
+      g.fillText('GOAL', 16, 20);
       g.restore();
     }
     const plateX = goalW;
@@ -1898,11 +2281,22 @@ class BroadcastRenderer {
     }
     this.shadows.instanceMatrix.needsUpdate = true;
     for (const net of this.nets) poseNet(net, spec.net);
+    if (this.crowd) {
+      // By frame, not the wall clock, so a seed renders the same frames. The scoring side's fans
+      // jump for the goal and settle as the goal graphic goes (2.5 s).
+      const u = this.crowd.uniforms;
+      u.uTime.value = spec.index / this.p.fps;
+      const age = spec.goal_age;
+      const cheer = age != null && age >= 0 && age < 2.5 ? 1 - (age / 2.5) ** 2 : 0;
+      u.uCheer.value.set(spec.goal_side === 0 ? cheer : 0, spec.goal_side === 1 ? cheer : 0);
+    }
     this.layoutBug(spec);
     const R = this.renderer;
     const W = this.W, H = this.H;
     const [bx0, by0, bx1, by1] = this.bugRect;
-    const underBug = (i, j) => i >= bx0 && i < bx1 && j >= by0 && j < by1;
+    const onBug = (i, j) => i >= bx0 && i < bx1 && j >= by0 && j < by1;
+    const onStinger = this.layoutStinger(spec.stinger);
+    const underBug = onStinger ? (i, j) => onBug(i, j) || onStinger(i, j) : onBug;
 
     // 1. solo passes: the full in-image silhouette of each labelled object
     const objects = {};
@@ -2006,5 +2400,7 @@ window.ninety = {
     uv: Array.from(m.geometry.attributes.uv.array),
     doubleSided: m.material.side === THREE.DoubleSide,
   })),
+  // How many spectators a broadcast stadium seats (0 in a plain one), for the test that none is labelled.
+  crowd: () => (instance.crowd ? instance.crowd.meshes[0].count : 0),
   ready: true,
 };
