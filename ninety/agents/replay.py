@@ -53,6 +53,9 @@ class Recording:
     recorded_at: str
     turns: list[Turn]
     events: list[dict]  # what the fact-checker checked claims against in the live run
+    # Each published agent's version and definition fingerprint (ninety/agents/evidence.py); None in
+    # recordings made before they were recorded.
+    agent_definitions: dict | None = None
 
     def save(self, path: str | Path) -> None:
         path = Path(path)
@@ -85,6 +88,7 @@ class WorkflowRecording:
     inputs: dict
     recorded_at: str
     turns: list[Turn] = field(default_factory=list)
+    agent_definitions: dict | None = None  # as Recording's
 
     def save(self, path: str | Path) -> None:
         path = Path(path)

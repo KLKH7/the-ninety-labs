@@ -25,7 +25,7 @@ from pathlib import Path
 from agent_framework.foundry import FoundryAgent
 
 from ninety import config
-from ninety.agents import credentials, foundry, foundry_evals
+from ninety.agents import credentials, evidence, foundry, foundry_evals
 from ninety.agents.factcheck import check
 from ninety.agents.judge import judge
 from ninety.agents.slice import analyst_prompt, parse_claim
@@ -40,7 +40,8 @@ MINUTES = match_server.MINUTES  # one claim per minute of a served match
 
 async def drafts(seeds: list[int]) -> tuple[list[dict], str]:
     """One first draft per minute per seed, each with its response id and the fact-checker's
-    verdict. Returns the rows and which agent versions ran."""
+    verdict. Returns the rows, which agent versions ran, and their definitions
+    (ninety/agents/evidence.py)."""
     async with credentials.new_credential() as credential:
         # Signed in before the simulations, which can outlast agents-live's sign-in (credentials.py).
         await credentials.sign_in(credential)
@@ -48,13 +49,17 @@ async def drafts(seeds: list[int]) -> tuple[list[dict], str]:
         return await _drafts(credential, seeds, known_by_seed)
 
 
-async def _drafts(credential, seeds: list[int], known_by_seed: dict[int, dict]) -> tuple[list[dict], str]:
-    rows, ran = [], ""
+async def _drafts(
+    credential, seeds: list[int], known_by_seed: dict[int, dict]
+) -> tuple[list[dict], str, dict]:
+    rows, ran, defs = [], "", {}
     for seed in seeds:
         known = known_by_seed[seed]
         async with contextlib.AsyncExitStack() as stack:
             agents, labels = [], []
-            for local in foundry.slice_agents(foundry.chat_client(credential)):
+            locals_ = foundry.slice_agents(foundry.chat_client(credential))
+            defs = evidence.record(locals_)
+            for local in locals_:
                 name, version = foundry.pinned(local)
                 labels.append(f"{name}:{version}")
                 published = FoundryAgent(
@@ -92,7 +97,7 @@ async def _drafts(credential, seeds: list[int], known_by_seed: dict[int, dict]) 
                         "reasons": verdict.reasons,
                     }
                 )
-    return rows, ran
+    return rows, ran, defs
 
 
 async def foundry_scores(response_ids: list[str]) -> dict:
@@ -115,7 +120,10 @@ async def foundry_scores(response_ids: list[str]) -> dict:
     }
 
 
-def report(rows: list[dict], seeds: str, ran: str, recorded: dict | None, scored: dict | None) -> str:
+def report(
+    rows: list[dict], seeds: str, ran: str, recorded: dict | None, scored: dict | None,
+    defs: dict | None = None,
+) -> str:
     sha = subprocess.run(
         ["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True, text=True
     ).stdout.strip()
@@ -127,6 +135,8 @@ def report(rows: list[dict], seeds: str, ran: str, recorded: dict | None, scored
         f"`{sha}`, simulator seeds {seeds}, minutes 1 to {MINUTES}, agents {ran} on `{config.MODEL}`. The "
         "Analyst writes one claim per minute; the fact-checker (code checks, then the Judge) decides "
         "whether that first draft would air.",
+        "",
+        evidence.md_line(defs or {}),
         "",
         f"**First drafts that would air:** {aired}/{len(rows)}.",
         "",
@@ -164,7 +174,7 @@ def main() -> None:
     ap.add_argument("--out", type=Path, default=ROOT / "docs/eval/analyst.md")
     ap.add_argument("--foundry", action="store_true", help="record in Foundry and run its agent evaluators")
     args = ap.parse_args()
-    rows, ran = asyncio.run(drafts([int(s) for s in args.seeds.split(",")]))
+    rows, ran, defs = asyncio.run(drafts([int(s) for s in args.seeds.split(",")]))
     recorded = scored = None
     if args.foundry:
         recorded = foundry_evals.record(
@@ -185,7 +195,7 @@ def main() -> None:
         )
         scored = asyncio.run(foundry_scores([r["response_id"] for r in rows if r["response_id"]]))
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(report(rows, args.seeds, ran, recorded, scored))
+    args.out.write_text(report(rows, args.seeds, ran, recorded, scored, defs))
     print(args.out.read_text())
 
 

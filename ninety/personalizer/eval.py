@@ -81,7 +81,11 @@ def answered(row: dict) -> bool:
     return row["route"] == "remote" and not (row["dropped"] or "").startswith("server: model failed")
 
 
-def report(rows: list[dict], label: str, seeds: str, budget_s: float = core.BUDGET_S) -> str:
+def report(
+    rows: list[dict], label: str, seeds: str, budget_s: float = core.BUDGET_S, defs: dict | None = None
+) -> str:
+    from ninety.agents.evidence import md_line
+
     sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True, text=True)
     requests = {(r["seed"], r["claim"]): r for r in rows}
     answered_requests = [r for r in requests.values() if answered(r)]
@@ -94,6 +98,8 @@ def report(rows: list[dict], label: str, seeds: str, budget_s: float = core.BUDG
         f"claims, each sent once over A2A for {len(PROFILES)} profiles; the model answered "
         f"{len(answered_requests)} of them. A variant *airs* when it passes the re-check; otherwise the "
         "profile gets the verified English text. Air rates and times count answered requests only.",
+        "",
+        md_line(defs or {}),
         "",
         "| Persona | Language | Variants | Model answered | Airs |",
         "|---|---|---|---|---|",
@@ -145,7 +151,16 @@ async def _main(args, published=core.published_ask) -> str:
             f"the model did not answer {unanswered} of {len(requests)} requests "
             f"(over {MAX_UNANSWERED_SHARE:.0%}); see {raw}"
         )
-    return report(rows, label, args.seeds, args.budget)
+    defs = definitions() if published is core.published_ask else {}  # a test's stand-in is no agent
+    return report(rows, label, args.seeds, args.budget, defs)
+
+
+def definitions() -> dict:
+    """The published Personalizer's definition (ninety/agents/evidence.py), as `core.published_ask`
+    pins it."""
+    from ninety.agents import evidence
+
+    return evidence.of_code(lambda client: [core.personalizer_agent(client)])
 
 
 def main() -> None:
