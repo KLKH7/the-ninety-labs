@@ -5,22 +5,93 @@
  "commit": "the head of render/tactical-views (PR for work package A) given in the render manifest's render_commit; after the merge, `git diff <render_commit> <merge commit> -- ninety/render web/render` must be empty, or the clips are re-rendered",
  "why": "The broadcast follows the ball, so vision cannot see players off its screen. The two fixed tactical lenses (renderer 0.5.15, `--views tactical`, docs/GROUNDING.md V7) hold the whole pitch; the detector is fine-tuned on them (docs/eval/finetune-tactical/PLAN.md).",
  "seeds": {
-  "rule": "dataset v2's mix in a smaller set: natural seeds, crowded windows and low-contrast kits in about the shares v2 drew them (v2: 130, 90 and 45 of 280), and v2's 24 validation seeds unchanged, so validation is the same matches as ours-freeze's",
+  "rule": "the Coordinator's choice (Oct 22): training = the first 120 seeds of dataset v2's training list (docs/eval/dataset-v2-freeze.json on #194, groups in listed order, less v2's 24 validation seeds, and less 2014 and 4054, excluded there for engine defects, C7; neither is reached), so the tactical set lines up with the broadcast set by seed; validation = v2freeze's 24 validation seeds exactly (docs/eval/finetune-v2freeze/validation-set.json); each seed keeps its v2 overrides",
   "groups": [
-   {"first": 3, "last": 92, "overrides": {}, "note": "hard cases drawn from the seed at HARD_CASE_RATE 0.3"},
-   {"first": 108, "last": 110, "overrides": {}, "note": "validation"},
-   {"first": 112, "last": 122, "overrides": {}, "note": "validation"},
-   {"first": 2001, "last": 2015, "overrides": {"occlusion": "crowded"}},
-   {"first": 2041, "last": 2045, "overrides": {"occlusion": "crowded"}, "note": "validation"},
-   {"first": 3001, "last": 3015, "overrides": {"kit_contrast": "low"}},
-   {"first": 3041, "last": 3045, "overrides": {"kit_contrast": "low"}, "note": "validation"}
+   {
+    "first": 3,
+    "last": 107,
+    "overrides": {}
+   },
+   {
+    "first": 108,
+    "last": 110,
+    "overrides": {},
+    "note": "validation"
+   },
+   {
+    "first": 111,
+    "last": 111,
+    "overrides": {}
+   },
+   {
+    "first": 112,
+    "last": 122,
+    "overrides": {},
+    "note": "validation"
+   },
+   {
+    "first": 123,
+    "last": 132,
+    "overrides": {}
+   },
+   {
+    "first": 2001,
+    "last": 2004,
+    "overrides": {
+     "occlusion": "crowded"
+    }
+   },
+   {
+    "first": 2041,
+    "last": 2045,
+    "overrides": {
+     "occlusion": "crowded"
+    },
+    "note": "validation"
+   },
+   {
+    "first": 3041,
+    "last": 3045,
+    "overrides": {
+     "kit_contrast": "low"
+    },
+    "note": "validation"
+   }
   ],
   "clips": 144,
-  "validation": [108, 109, 110, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 2041, 2042, 2043, 2044, 2045, 3041, 3042, 3043, 3044, 3045],
-  "training": "the other 120"
+  "validation": [
+   108,
+   109,
+   110,
+   112,
+   113,
+   114,
+   115,
+   116,
+   117,
+   118,
+   119,
+   120,
+   121,
+   122,
+   2041,
+   2042,
+   2043,
+   2044,
+   2045,
+   3041,
+   3042,
+   3043,
+   3044,
+   3045
+  ],
+  "training": "3-107, 111, 123-132, 2001-2004 (120)"
  },
  "test_set": {
-  "seeds": [900001, 900030],
+  "seeds": [
+   900001,
+   900030
+  ],
   "clips": 30,
   "rule": "the reserved test seeds with their own drawn parameters, no overrides (ninety/render/splits.py); views are not an override and leave the broadcast byte-identical"
  },
