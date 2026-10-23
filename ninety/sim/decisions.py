@@ -191,6 +191,7 @@ class Scene:
     passer: Profile  # who he is, for his own kick error (A3)
     throw: bool = False  # Law 15: a throw-in, so every pass is thrown (lofted) and nothing else
     set_piece: bool = False  # Laws 8, 13, 16, 17: a set ball, played away, never carried off
+    committed: bool = False  # lesson 202: off his run-up he plays it; holding is no option (design)
     # The team's style (T4): how much ground gained from here is worth, and how much losing the
     # ball costs, against the defaults. Both 1 for a mid style.
     progress_weight: float = 1.0
@@ -1034,7 +1035,8 @@ def options(scene: Scene) -> list[Option]:
     best = max((o.value for o in out), default=0.0)
     later = best * (1 - HOLD_DECAY) if best >= 0 else best * (1 + HOLD_DECAY)
     lose = 0.5 * p
-    out.append(Option("hold", (1 - lose) * later - lose * our_loss(scene, scene.x, scene.y)))
+    if not scene.committed:
+        out.append(Option("hold", (1 - lose) * later - lose * our_loss(scene, scene.x, scene.y)))
     return out
 
 
