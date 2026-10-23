@@ -6,6 +6,8 @@ watched, and the engine was fixed on it.) It is applied once at the final freeze
 footage then has a defect, that is reported and fixed in the renderer; the footage is not swapped
 for a better-looking seed.
 
+The live demo's condensed full match is chosen and cut by its own rule: [demo-match.md](demo-match.md).
+
 **Rubric:** UX and presentation (the 2-minute video's footage, `docs/video-script.md`), and honest
 claims: the clip shows what the system does on footage chosen by a rule, not on the best take.
 
