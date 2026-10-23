@@ -2102,3 +2102,16 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_vision_live_job.py::test_an_answer_key_file_anywhere_in_a_views_clip_is_refused_before_the_model_loads`
   (each answer-key file planted at the clip, in `views/`, in a view, in its `images/` and in a
   folder under it) and `::test_a_planted_frame_file_in_a_single_clip_s_images_is_refused`.
+
+### 203. CI built the image with a stand-in, so the real pin was never tried
+- **What happened:** the demo image downloads its Replay bundle from a release asset pinned by URL
+  and SHA-256 in the Dockerfile. CI's image job builds with a fixture bundle instead, so it stayed
+  green while the Dockerfile still pinned a bundle that had been superseded and never published.
+  Merging would have started a deploy whose build fails on a 404. The same review found the
+  passcode gate checked HTTP requests only: a WebSocket handshake behind it went through unchecked.
+- **Rule:** when CI substitutes an input for speed or isolation, it still checks the real one
+  exists and is what the pin says. A gate covers every kind of connection that can reach what it
+  guards, and its test tries each kind.
+- **Check:** the CI `image` job's step "The Dockerfile's pinned Replay bundle exists and matches its
+  hash"; `tests/test_api_site.py::test_a_websocket_behind_the_gate_needs_the_key_too` fails with the
+  WebSocket branch of `RequireKey` removed.
