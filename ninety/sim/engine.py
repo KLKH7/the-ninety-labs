@@ -2738,21 +2738,27 @@ class Engine:
         restart's ball is set (ball_set), anyone but the taker and whoever has or fetches it whose
         straight way passes within SET_BALL_CLEAR_M of it (the taker's own clearance: a shoulder's
         reach and a ball's width, P11) heads first for the point beside it KEEP_OFF_MARGIN_M further
-        out, on the side his way already passes. Walking back for a kick-off after a goal, and a
+        out, on the side his way already passes; a place within that clearance is moved out to the
+        same distance. Walking back for a kick-off after a goal, and a
         team-mate of a free kick's taker on his way to his place, each walked over it (20 matches on
         main: 2 such walks with the ball on its spot)."""
         r = self.restart
         if r is None or p.id in (r.taker, r.fetcher, r.carried_by, r.passed_by) or not self.ball_set(r):
             return tx, ty
         bx, by = self.ball[0], self.ball[1]
-        if math.hypot(tx - bx, ty - by) < SET_BALL_CLEAR_M:  # his place is by it: nothing to go round
-            return tx, ty
+        out = SET_BALL_CLEAR_M + KEEP_OFF_MARGIN_M
+        d = math.hypot(tx - bx, ty - by)
+        if d < SET_BALL_CLEAR_M:  # his place is on it: moved out to the edge, as a stand-off place is
+            # (held there, a centre-back whose place was by a free kick near his box crept onto it)
+            ux, uy = ((tx - bx) / d, (ty - by) / d) if d > 1e-6 else ((p.x - bx), (p.y - by))
+            u = math.hypot(ux, uy) or 1.0
+            tx, ty = bx + ux / u * out, by + uy / u * out
         if segment_distance(bx, by, p.x, p.y, tx, ty) >= SET_BALL_CLEAR_M:
             return tx, ty
         d = math.hypot(tx - p.x, ty - p.y)
         nx, ny = -(ty - p.y) / d, (tx - p.x) / d  # across his way
         side = (bx - p.x) * nx + (by - p.y) * ny  # where the ball lies across it
-        k = -(SET_BALL_CLEAR_M + KEEP_OFF_MARGIN_M) * (1.0 if side >= 0.0 else -1.0)
+        k = -out * (1.0 if side >= 0.0 else -1.0)
         return bx + nx * k, by + ny * k
 
     def round_the_net(self, p: Player, tx: float, ty: float) -> tuple[float, float]:

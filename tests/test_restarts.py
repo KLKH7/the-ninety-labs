@@ -2102,8 +2102,8 @@ def test_while_a_restart_waits_places_are_set_from_its_spot_not_the_dead_ball(ki
 def test_the_way_round_a_set_ball_is_a_stride_beyond_the_takers_clearance_and_only_for_others():
     """Lesson 207: the point he heads for is SET_BALL_CLEAR_M (0.47 m) and a stride (0.5 m) from the
     ball, written out (lesson 190), on the side his way passes; the taker, the fetcher and the one
-    carrying it go straight on, as does anyone whose place is by the ball, and nobody goes round a
-    ball that is not set (still rolling)."""
+    carrying it go straight on; a place on the ball is moved out to the same edge; and nobody goes
+    round a ball that is not set (still rolling)."""
     from ninety.sim.engine import Restart
     e = Engine(3)
     spot = (60.0, 30.0)
@@ -2123,8 +2123,10 @@ def test_the_way_round_a_set_ball_is_a_stride_beyond_the_takers_clearance_and_on
     p = e.by_id["h7"]
     p.x, p.y = walker.x, walker.y
     assert e.round_the_ball(p, *target) == target  # the fetcher
-    by_it = (spot[0] + 0.3, spot[1])
-    assert e.round_the_ball(walker, *by_it) == by_it  # his place is by the ball
+    walker.x, walker.y = spot[0] + 3.0, spot[1]
+    on_it = e.round_the_ball(walker, spot[0] + 0.3, spot[1])  # his place is on the ball
+    assert on_it == pytest.approx((spot[0] + 0.97, spot[1]))  # moved out to the same edge
+    walker.x, walker.y = spot[0] - 6.0, spot[1] + 0.1
     e.ball = (*spot, 0.0, 2.0, 0.0, 0.0)  # rolling: not set
     assert e.round_the_ball(walker, *target) == target
 
