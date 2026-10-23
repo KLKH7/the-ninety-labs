@@ -175,6 +175,10 @@ function mockText(v: Visual, names?: Record<string, string>): { title: string; t
       return { title: `${club}'s shape`, text: `${club} lined up in ${v.lines!.map((l) => l.length).join("-")} at ${clock(v.t)}.`, value: null, unit: null };
     case "counter_press":
       return { title: `${club} press`, text: `${club} pressed the ball.`, value: null, unit: null };
+    case "channels":
+    case "offside":
+    case "counter":
+      return { title: club, text: `${club} at ${clock(v.t)}.`, value: null, unit: null }; // the mock makes none of these
     case "wind":
       return { title: "How the teams moved", text: `Both teams' movement from ${clock(v.t_from!)} to ${clock(v.t_to!)}.`, value: null, unit: null };
   }

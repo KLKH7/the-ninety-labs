@@ -114,6 +114,13 @@ function screenOf(x: number, y: number): [number, number] {
     const v = fromScout(sv, t);
     return !!v && drawable(v);
   },
+  // A picture built as an answer's would be, for previews and screenshots.
+  picture: (sv: ScoutVisual, t: number | null = null) => picture(sv, t),
+  // What a drawable visual's headline and words say, from its own data.
+  preview: (sv: ScoutVisual, t: number | null = null) => {
+    const v = fromScout(sv, t);
+    return v && drawable(v) ? { headline: headline(v), words: describeVisual(v) } : null;
+  },
 };
 
 const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)");

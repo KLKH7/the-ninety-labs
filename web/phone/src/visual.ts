@@ -21,7 +21,7 @@ import {
   teams,
 } from "./types";
 
-export const KINDS: VisualKind[] = ["overload", "line_break", "pass_options", "counter_press", "shape", "wind"];
+export const KINDS: VisualKind[] = ["overload", "line_break", "pass_options", "counter_press", "shape", "wind", "channels", "offside", "counter"];
 
 const other = (side: Team): Team => (side === "home" ? "away" : "home");
 
@@ -74,6 +74,21 @@ export function fromScout(v: ScoutVisual | null | undefined, t: number | null = 
     }
     case "wind_map":
       return { ...base, kind: "wind", players: [], t_from: g.t_from ?? null, t_to: g.t_to ?? null };
+    case "channels":
+      if (!Array.isArray(g.bands) || g.bands.length !== 3) return null;
+      return { ...base, kind: "channels", players: [], bands: g.bands };
+    case "offside": {
+      if (typeof g.line_x !== "number" || !pt(g.receiver) || !g.verdict) return null;
+      const players = [...many(g.attackers, side, "attacker"), ...many(g.defenders, other(side), "defender"), player(g.receiver!, side, "receiver")];
+      if (g.second_last) players.push(player(g.second_last, other(side), "second_last"));
+      return { ...base, kind: "offside", players, ball: pt(g.ball), line_x: g.line_x, verdict: g.verdict, margin_m: g.margin_m ?? null };
+    }
+    case "counter": {
+      const from = pt(g.from);
+      const to = pt(g.to);
+      if (!from || !to || typeof g.seconds !== "number") return null;
+      return { ...base, kind: "counter", players: [], pass: { from, to }, seconds: g.seconds };
+    }
   }
   return null;
 }
@@ -98,6 +113,12 @@ export function drawable(v: Visual | null | undefined): v is Visual {
       return v.players.some((p) => p.role === "carrier");
     case "counter_press":
       return onPitch(v.ball) && finite(v.radius_m) && v.radius_m! > 0;
+    case "channels":
+      return Array.isArray(v.bands) && v.bands.length === 3 && v.bands.every((b) => finite(b.y0) && finite(b.y1) && finite(b.share) && b.share >= 0 && b.share <= 100);
+    case "offside":
+      return finite(v.line_x) && v.line_x! >= 0 && v.line_x! <= PITCH_X && ["onside", "offside", "too_close"].includes(v.verdict ?? "") && (v.verdict === "too_close" || finite(v.margin_m));
+    case "counter":
+      return !!v.pass && onPitch(v.pass.from) && onPitch(v.pass.to) && finite(v.seconds) && v.seconds! > 0;
     case "shape":
       return Array.isArray(v.lines) && v.lines.length > 0 && v.lines.every((l) => l.length >= 2 && l.every(onPitch));
     case "wind":
@@ -111,6 +132,13 @@ export function headline(v: Visual): string {
   if (v.kind === "line_break" && finite(v.bypassed)) return `${v.bypassed} bypassed`;
   if (v.kind === "pass_options") return `${v.players.filter((p) => p.role === "open").length} open`;
   if (v.kind === "counter_press") return `${v.players.filter((p) => p.role === "presser").length} pressing`;
+  if (v.kind === "channels") {
+    const top = [...v.bands!].sort((a, b) => b.share - a.share)[0];
+    return `${Math.round(top.share)}% ${top.channel === "centre" ? "through the middle" : `down the ${top.channel}`}`;
+  }
+  // "too_close" is within the tracking error: say so, and never call it either way.
+  if (v.kind === "offside") return v.verdict === "too_close" ? "Too close to call" : `${v.verdict === "offside" ? "Offside" : "Onside"} by ${v.margin_m!.toFixed(1)} m`;
+  if (v.kind === "counter") return `${v.seconds!.toFixed(0)} s, regain to shot`;
   return "";
 }
 
@@ -264,6 +292,47 @@ export function drawVisual(view: View, v: Visual) {
       pill(view, headline(v), X(b.x), Y(b.y) - v.radius_m! * view.s - 16, own);
       break;
     }
+    case "channels": {
+      // Each lane shaded by its share of the team's passes; its share written at the end it attacks.
+      const attackRight = v.team === "home";
+      const busiest = Math.max(...v.bands!.map((b) => b.share), 1e-9);
+      for (const b of v.bands!) {
+        const top = Y(Math.max(b.y0, b.y1));
+        const h = Math.abs(Y(b.y1) - Y(b.y0));
+        ctx.globalAlpha = 0.06 + 0.5 * (b.share / busiest); // the busiest lane strongest
+        ctx.fillStyle = own;
+        ctx.fillRect(X(0), top, PITCH_X * view.s, h);
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = "rgba(255,255,255,0.5)";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(X(0), top, PITCH_X * view.s, h);
+        pill(view, `${Math.round(b.share)}%`, attackRight ? X(PITCH_X) - 34 : X(0) + 34, top + h / 2, own);
+      }
+      arrow(view, { x: attackRight ? 40 : 65, y: 34 }, { x: attackRight ? 65 : 40, y: 34 }, "rgba(255,255,255,0.8)", 2);
+      break;
+    }
+    case "offside": {
+      // The line across the pitch: solid when called, dashed and labelled when too close to call.
+      const sure = v.verdict !== "too_close";
+      ctx.setLineDash(sure ? [] : [6, 5]);
+      ctx.strokeStyle = sure ? "#fff" : "rgba(255,255,255,0.75)";
+      ctx.lineWidth = sure ? 2.5 : 2;
+      ctx.beginPath();
+      ctx.moveTo(X(v.line_x!), Y(PITCH_Y));
+      ctx.lineTo(X(v.line_x!), Y(0));
+      ctx.stroke();
+      ctx.setLineDash([]);
+      for (const p of v.players.filter((q) => q.role === "attacker" || q.role === "defender")) dot(view, p, { dim: true });
+      for (const p of v.players.filter((q) => q.role === "second_last" || q.role === "receiver")) dot(view, p, { ring: "#fff" });
+      ball(v, view);
+      pill(view, headline(v), X(v.line_x!), Y(PITCH_Y) + 14, own);
+      break;
+    }
+    case "counter": {
+      arrow(view, v.pass!.from, v.pass!.to, "#fff", 3.5);
+      pill(view, headline(v), (X(v.pass!.from.x) + X(v.pass!.to.x)) / 2, (Y(v.pass!.from.y) + Y(v.pass!.to.y)) / 2 - 22, own);
+      break;
+    }
     case "pass_options": {
       const carrier = role("carrier")[0];
       for (const p of rest("carrier", "open")) dot(view, p, { dim: p.role !== "marked" });
@@ -316,6 +385,15 @@ export function describeVisual(v: Visual, names?: Record<string, string>): strin
         ? `Picture ${at}: ${who(carrier)} on the ball, with ${open.length} open teammate${open.length === 1 ? "" : "s"} ringed: ${open.map(who).join(", ")}.`
         : `Picture ${at}: ${who(carrier)} on the ball, with no teammate open.`;
     }
+    case "channels":
+      return `Picture ${at}: ${club}'s passes by lane as they attack: ${v.bands!.map((b) => `${b.channel} ${Math.round(b.share)}%`).join(", ")}.`;
+    case "offside": {
+      const r = v.players.find((p) => p.role === "receiver")!;
+      const call = v.verdict === "too_close" ? "too close to call: within what the tracking can measure" : `${v.verdict} by ${v.margin_m!.toFixed(1)} metres`;
+      return `Picture ${at}: a line across the pitch at the second-last defender; ${who(r)} is ${call}.`;
+    }
+    case "counter":
+      return `Picture ${at}: an arrow from where ${club} won the ball to their shot, ${v.seconds!.toFixed(0)} seconds later.`;
     case "counter_press": {
       const n = v.players.filter((p) => p.role === "presser").length;
       return `Picture ${at}: ${n} ${club} player${n === 1 ? "" : "s"} within ${v.radius_m} m of the ball, in a shaded circle.`;

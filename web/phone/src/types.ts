@@ -71,7 +71,7 @@ export interface Question {
 /** A picture as the agents send it (schemas/insight_card.schema.json, $defs/visual): pitch metres,
  * home attacking x = 105, a point as [x, y] or [x, y, player id or null]. Every position and count
  * comes from the cited fact; `visual.ts` turns it into the `Visual` the phone draws, or nothing. */
-export type ScoutKind = "line_break" | "overload" | "pass_options" | "counter_press" | "shape" | "wind_map";
+export type ScoutKind = "line_break" | "overload" | "pass_options" | "counter_press" | "shape" | "wind_map" | "channels" | "offside" | "counter";
 export type ScoutPoint = [number, number] | [number, number, string | null];
 export interface ScoutVisual {
   kind: ScoutKind;
@@ -100,12 +100,26 @@ export interface ScoutVisual {
     players?: ScoutPoint[];
     t_from?: number;
     t_to?: number;
+    // channels: three lanes along the team's attack, each lane's share of its passes
+    bands?: { channel: "left" | "centre" | "right"; y0: number; y1: number; share: number }[];
+    minute_from?: number;
+    minute_to?: number;
+    // offside: a line across the pitch at the second-last defender
+    line_x?: number;
+    receiver?: ScoutPoint;
+    second_last?: ScoutPoint;
+    attackers?: ScoutPoint[];
+    defenders?: ScoutPoint[];
+    verdict?: "onside" | "offside" | "too_close";
+    margin_m?: number;
+    // counter: from the regain to the shot
+    seconds?: number;
   };
 }
 
 /** What the phone draws (visual.ts), made from a ScoutVisual. */
-export type VisualKind = "overload" | "line_break" | "pass_options" | "counter_press" | "shape" | "wind";
-export type VisualRole = "attacker" | "defender" | "passer" | "receiver" | "bypassed" | "open" | "marked" | "carrier" | "presser";
+export type VisualKind = "overload" | "line_break" | "pass_options" | "counter_press" | "shape" | "wind" | "channels" | "offside" | "counter";
+export type VisualRole = "attacker" | "defender" | "passer" | "receiver" | "bypassed" | "open" | "marked" | "carrier" | "presser" | "second_last";
 export interface Point {
   x: number;
   y: number;
@@ -127,6 +141,11 @@ export interface Visual {
   bypassed?: number | null;
   radius_m?: number | null;
   lines?: Point[][] | null;
+  bands?: { channel: "left" | "centre" | "right"; y0: number; y1: number; share: number }[] | null;
+  line_x?: number | null;
+  verdict?: "onside" | "offside" | "too_close" | null;
+  margin_m?: number | null;
+  seconds?: number | null;
   t_from?: number | null;
   t_to?: number | null;
 }

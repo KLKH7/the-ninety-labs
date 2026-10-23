@@ -209,6 +209,35 @@ def test_an_answer_draws_the_picture_its_visual_names_with_its_numbers(browser, 
     assert not errors
 
 
+BANDS = [
+    {"channel": "left", "y0": 45.3, "y1": 68, "share": 41},
+    {"channel": "centre", "y0": 22.7, "y1": 45.3, "share": 33},
+    {"channel": "right", "y0": 0, "y1": 22.7, "share": 26},
+]
+OFFSIDE = {"line_x": 88.4, "receiver": [88.9, 30, "h-t9"], "second_last": [88.4, 36, "a-t4"],
+           "ball": [70, 40, None], "attackers": [[80, 20, "h-t7"]], "defenders": [[90, 25, "a-t2"]]}
+
+
+def test_an_offside_too_close_to_call_is_never_called_and_headlines_are_the_facts(browser, site):  # noqa: F811
+    laptop, page, errors = phone(browser, site, bundle=False)
+    base = {"fact": "f1", "t": 60.0, "team": "home", "club": "Oakfield"}
+
+    def preview(kind: str, geometry: dict) -> dict:
+        visual = {**base, "kind": kind, "geometry": geometry}
+        return page.evaluate("v => window.ninetyPhone.preview(v)", visual)
+
+    close = preview("offside", {**OFFSIDE, "verdict": "too_close", "margin_m": 0.05})
+    assert close["headline"] == "Too close to call"
+    assert "too close to call" in close["words"]
+    assert "onside" not in close["words"] and "offside by" not in close["words"]  # never called either way
+    called = preview("offside", {**OFFSIDE, "verdict": "offside", "margin_m": 0.6})
+    assert called["headline"] == "Offside by 0.6 m"
+    assert preview("channels", {"bands": BANDS})["headline"] == "41% down the left"
+    counter = preview("counter", {"from": [30, 30], "to": [95, 34], "seconds": 9.4})
+    assert counter["headline"] == "9 s, regain to shot"
+    assert not errors
+
+
 def test_a_visual_missing_its_numbers_draws_no_picture(browser, site):  # noqa: F811
     """The phone never fills in a number: an agents' visual (schemas/insight_card.schema.json) without
     the data its kind needs is not drawn."""
@@ -237,6 +266,14 @@ def test_a_visual_missing_its_numbers_draws_no_picture(browser, site):  # noqa: 
         ({**base, "team": None, "kind": "wind_map", "geometry": {"t_from": 30.0, "t_to": 60.0}},
          False),  # no team
         ({**base, "kind": "heatmap", "geometry": {}}, False),  # a kind the phone does not know
+        ({**base, "kind": "channels", "geometry": {"bands": BANDS}}, True),
+        ({**base, "kind": "channels", "geometry": {"bands": BANDS[:2]}}, False),  # three lanes or none
+        ({**base, "kind": "offside", "geometry": {**OFFSIDE, "verdict": "offside", "margin_m": 0.6}}, True),
+        ({**base, "kind": "offside", "geometry": {**OFFSIDE, "verdict": "offside"}},
+         False),  # a call needs its margin
+        ({**base, "kind": "offside", "geometry": {**OFFSIDE, "verdict": "too_close"}}, True),
+        ({**base, "kind": "counter", "geometry": {"from": [30, 30], "to": [95, 34], "seconds": 9.4}}, True),
+        ({**base, "kind": "counter", "geometry": {"from": [30, 30], "to": [95, 34]}}, False),  # no time
     ]
     for visual, ok in cases:
         assert page.evaluate("v => window.ninetyPhone.drawable(v)", visual) is ok, visual
