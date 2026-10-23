@@ -85,8 +85,9 @@ def answered(row: dict) -> bool:
 
 def requests_of(rows: list[dict]) -> dict:
     """One row per request sent, keyed by its index: two claims with the same words are two requests
-    (audit row 9: keyed by seed and text they were one). Rows written before the index keep that key."""
-    return {r.get("request", (r["seed"], r["claim"])): r for r in rows}
+    (audit row 9: keyed by seed and text they were one). Rows written before the index had one row
+    per profile, in order, request after request, so their index is the row's position over that."""
+    return {r.get("request", i // len(PROFILES)): r for i, r in enumerate(rows)}
 
 
 # A 95th percentile is distinct from the maximum only from 20 values (nearest rank: the 19th of 20);

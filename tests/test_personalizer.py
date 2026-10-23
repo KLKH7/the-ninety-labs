@@ -722,3 +722,25 @@ def test_a_p95_is_shown_only_when_it_is_not_the_maximum():
     twenty = [float(ms) for ms in range(1, 21)]
     assert "p95 19 ms" in personalizer_eval.timing(twenty) and "max 20 ms" in personalizer_eval.timing(twenty)
     assert "p95 not shown (19 requests" in personalizer_eval.timing(twenty[:19])
+
+
+def test_rows_written_before_the_index_still_count_each_request():
+    # The committed run's rows have no index: 20 requests in order, one row per profile each.
+    import json as _json
+
+    from ninety.personalizer import eval as personalizer_eval
+
+    rows = _json.loads((personalizer_eval.ROOT / "docs" / "eval" / "personalizer.json").read_text())
+    assert len(rows) % len(personalizer_eval.PROFILES) == 0
+    assert len(personalizer_eval.requests_of(rows)) == len(rows) // len(personalizer_eval.PROFILES) == 20
+
+
+def test_the_outage_guard_counts_requests_by_index():
+    # Two claims with the same words, the second unanswered: two requests, one of them unanswered.
+    from ninety.personalizer import eval as personalizer_eval
+
+    rows = [{"request": i, "seed": 21, "claim": CLAIM.text, "persona": p.persona, "lang": p.lang,
+             "route": "remote" if i == 0 else "fallback: timeout", "dropped": None, "ms": 5.0}
+            for i in (0, 1) for p in personalizer_eval.PROFILES]
+    requests = personalizer_eval.requests_of(rows)
+    assert len(requests) == 2 and sum(not personalizer_eval.answered(r) for r in requests.values()) == 1
