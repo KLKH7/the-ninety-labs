@@ -36,6 +36,14 @@ generated it and the output file is committed. Rows marked *planned* have no res
 | Describer model upgrade and speech outage (W4, PR #129): on a verified moment the Describer model's line is said only if it passes the whole fact-checking agent (the code checks, then the Judge, which refuses a goal said of a saved shot or a player put on the wrong team; a Judge failure or timeout keeps the code line) and is at most 20 words, else the claim's code line stays and the refusal says why; the model writes words only (SSML, pan and timing are code); a failed speech request keeps the line on the schedule and its cue says `speech: unavailable`; SSML escapes both quotes | `uv run pytest tests/test_describer.py` | test assertions | in progress: runs with stand-in models and speech; each rule's test fails when the rule is mutated (see PR #129). The live run (`ninety-e2e --describer foundry`, the published `ninety-describer`) has not run, so no model latency or tokens yet |
 | Latency to graphic and to speech (p50, p95); cost per match | `uv run python -m ninety.eval.latency_cost --measure <clip>` (times `ninety-e2e` offline and the slice replay through `ninety.stage` OpenTelemetry spans; tokens rebuilt from the replay; prices from the Azure Retail Prices API, dated); without `--measure` it rebuilds the report byte for byte (`tests/test_latency_cost.py`) | `docs/eval/latency-cost.json`, `docs/eval/latency-cost.md` | running for the chain's own time and the model and claim-speech cost, at `3d21ab3`: event to graphic p95 0.08 s of compute on the stand-in events of `seed900001`, without RF-DETR inference or Foundry model time (planned: live spans in Application Insights); $0.23 to $0.47 a 90-minute match (one claim a minute, one to three drafts) against the $0.50 budget, tokens estimated at 4 characters each. Speech latency and the Describer's spoken characters planned |
 
+## Agent prompts: held-out seeds (pre-registered Oct 23, 2026)
+
+Any change to an agent's instructions (an Analyst v6, a Judge v5) is developed on seeds 7, 21 and 33
+and confirmed once on **seeds 920001 and 920002**, which no prompt has been tuned on and none will
+be: written here before any such change. They are not the vision test seeds (900001 to 900030). A
+result on them is reported with its n, and a change that only helps on the development seeds is
+reported as that.
+
 ## Match engine: touches
 
 How a player meets the ball is about to change (a cushioned first touch, a surface for each height,
