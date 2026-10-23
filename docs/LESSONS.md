@@ -2354,3 +2354,18 @@ short and actionable. This file is public: no research sources, product names or
   `test_he_throws_no_faster_than_a_ball_can_be_thrown_and_may_kick_to_anyone` is red without the
   throw's speed limit, or if a kick from his hands can roll. The 5 s window is the design value
   written before the measurement; the 30 m split is gone. The kick count stays a check, never a target.
+
+### 206. When two parts split a job, both read the split from one definition
+- **What happened:** the free-kick wall was built to hide the goal from the near post to a third
+  past its centre, its comment saying "the keeper covers the rest". The keeper never read the
+  wall: he set himself on the bisector of the whole goal, as at any other moment, so he stood
+  behind the middle of his own wall and left the open part to nobody. Each half was tested on its
+  own, so nothing failed.
+- **Rule:** when a rule hands part of a job to another (the wall and the keeper, a presser and his
+  cover), the split is one function both call (`Engine.wall_cover`), and a test sets up the shared
+  case and checks the second part takes what the first leaves. A comment that assigns work to
+  another part names the code that does it.
+- **Check:** `uv run pytest tests/test_keeper_setpiece.py`: with the wall up he stands on the
+  bisector of the open part (red on main); his spots at three kicks are written out, so a change
+  to the wall's cover moves them; he keeps the cover while the set ball waits and drops it after
+  the kick; at his own side's free kick nothing changes.
