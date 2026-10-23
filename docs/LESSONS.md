@@ -1750,6 +1750,23 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `uv run pytest tests/test_restarts.py -k past_the_end_of_the_touchline`; on the engine
   before it, the ball runs on to 127 m and jumps 18 m in a frame.
 
+### 173. A label check written for one pose fails the first body drawn in another
+- **What happened:** to make fouls legible (the fouled player goes down at the foul, the fouler's
+  foot meets his shins), the renderer tipped the fouled player's body over his feet. Render-check's
+  `player_feet_in_boxes` then failed 49 frames of seed 7's foul, all on the player lying down: it
+  required his ground point at the bottom of his box, with slack scaled by box height over 1.8 m,
+  and a lying body's box is neither 1.8 m tall nor has his feet at its bottom (fallen toward the
+  camera, they are at its top). His feet were inside the box on every one of those frames.
+- **Rule:**
+  - A check on the labels states the pose it assumes. When the picture draws a new pose, the label
+    data says so (`fall` in the frame row, an optional field) and the check judges that pose by
+    what is true of it, with a planted failing case.
+  - It never skips the player or widens the slack for everyone.
+  - Upright players are checked exactly as before.
+- **Check:** `uv run pytest tests/test_render_checks.py tests/test_render_fouls.py`. A fallen player
+  passes toward the camera, away from it and sideways. A box beside or above his feet still fails,
+  and so does a row with no `fall` and a lying player's box.
+
 ### 174. A player with time to spare walks there and waits, rather than creeping in just in time
 - **What happened:** at restarts the engine paced every player to reach his place just as the
   kick could come. At a corner that is about half a minute off (R1: Opta's mean is about 30 s), so
@@ -1937,6 +1954,10 @@ short and actionable. This file is public: no research sources, product names or
     controller steps, and centred on the frame it draws, never only behind it.
   - A new quantity is sent in its own field, never folded into one whose value already means
     something to a rule (a negative lift means a lunge).
+  - The same held for a keeper's dive (demo v1, Kian: "keeps diving"): drawn as the engine's
+    per-frame pose, a dive the engine turned on the grass spun and dived again to the other side,
+    and one that began at full stretch popped in and out. A one-off action is drawn once, from
+    its start to its end, its side and facing held, and fades into what follows.
   - A test's expected value is the source's number written in the test, never the code's table.
 - **Check:** `tests/test_render_motion.py`. Each of these fails on 0.5.9 (main's drawing, with
   the new names shimmed in):
@@ -1949,8 +1970,27 @@ short and actionable. This file is public: no research sources, product names or
   - `test_the_push_off_toe_does_not_slide_before_it_lifts` fails with the free fall keyed to the
     phase; `test_a_player_braking_to_a_stop_keeps_his_planted_feet_on_the_grass` (seed 21's a4)
     fails with the bob sent in the lift, and the trunk test with the lean from boxes behind only.
+  - `test_a_keepers_dive_is_drawn_once_to_one_side` and
+    `test_a_dive_that_starts_at_full_stretch_grows_and_gets_up` (demo v1's keeper) fail on 0.5.12.
   - Each mechanism was put back to 0.5.9 alone (bob tables zeroed, swing height, the frame-ahead
     swing, the lean, the speed lean, the arm pump), and its test fails.
+
+### 184. What the picture draws as solid, the engine treats as solid
+- **What happened:** the renderer drew a net behind each goal, but the engine had none. After a
+  goal the dead ball rolled on through the back of the net to the advertising boards, 4 m behind
+  the goal line, and the keeper walked through the net to fetch it. On demo v2's seed 8001 the
+  ball came to rest at (109.0, 35.7) after the goal at 155.3 s. Over 20 matches on main it
+  happened after all 16 goals. Players walked through a net 66 times, 61 of them keepers, all while
+  the ball was dead: 27 after goals and 39 at other stoppages.
+- **Rule:**
+  - Every structure the renderer draws that a ball or a player can meet has the same geometry
+    in the engine's physics, citing the drawing where it takes its shape from it: the boards,
+    and now the net (L1).
+  - For the net that now means no player passes through it, and a ball that goes in stays in the
+    goal. A ball meeting it from outside (wide of a post, or dropping over the bar) still passes
+    through; that is the next step.
+- **Check:** `uv run pytest tests/test_goal_net.py`. On main the ball goes 4 m deep, through the
+  roof and through the side netting, and the keeper walks through the net.
 
 ### 185. Footage a viewer watches and data a model learns from are dressed apart, and the dressing is proved label-free
 - **What happened:** the demo clip (seed 8001, v1) was rendered with the training look: seats with no
@@ -1990,3 +2030,62 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `uv run pytest tests/test_render_edit.py tests/test_render_camera.py -k "imminent or
   celebration or stinger or opens_on_the_wide or scorer"`. Each test fails on 0.5.9, the version
   before demo v2.
+
+### 162. A player off the ball answers the players around him, not only the ball
+- **What happened:** fans and clip critics saw the team without the ball stand between actions. On
+  seed 21 most standing spells of 3 s or more were block defenders whose place did not move while
+  they stood. Every place off the ball (block slots, the attacking shape, all but the carrier's
+  nearest two) depended on the ball's position alone, so when the ball paused both teams froze. A
+  walking floor did not fix it (standing 22% to 20%, one seed). The first fix for attackers chose
+  the most open spot, then the one a pass is worth most at, and drew them toward the carrier: a spot
+  nearer the ball is always safer, so passes shortened and square passes with a free option ahead
+  (FS7) rose by about 40%. Holding pass length and FS7 out as checks caught it.
+- **Rule:** a target off the ball reacts to the players he sees. An attacker steps to where a pass
+  from the carrier is worth most, across his lane or further out, never nearer (O3). A block
+  defender tracks the attacker in his zone, goal-side, without leaving it (O2). Each decides again
+  only when he scans and holds his choice between scans. When a value always rises in one
+  direction, limit the candidates by what football allows; never tune its weights to the held-out
+  checks.
+- **Check:** `tests/test_open_space.py::test_a_defender_in_his_lane_moves_an_attacker_once_he_scans`,
+  `::test_he_never_comes_nearer_the_carrier_to_be_open`, and
+  `tests/test_zone_tracking.py::test_a_defender_follows_the_attacker_in_his_zone_once_he_scans`; the
+  held-out measures in the pull request.
+
+### 188. Two scorers of one group share one cut-off and one comparison
+- **What happened:** EVALUATION.md puts a ball in the air when its centre is above 0.5 m. The
+  pitch-level vision scorer used `z > 0.5`, but the position scorer (`pitch_score.py`) used
+  `z < 0.5` for the ground, so a ball at exactly 0.5 m was on the ground in one report and in the
+  air in the other. Both had the same constant; nothing checked the comparison, and no test put a
+  ball exactly on the cut-off in the position scorer.
+- **Rule:** a difficulty group's cut-off and its comparison are defined once (`IN_AIR_Z`,
+  `height_group`, `BLUR_PX`, `blur_group` in `ninety/eval/vision_score.py`) and imported
+  everywhere; each scorer has a test with a value exactly on the cut-off (lesson 158).
+- **Check:** `uv run pytest tests/test_pitch_score.py tests/test_vision_score.py
+  tests/test_fake_box_detections.py -k "cut_off"`; the pitch_score test fails with `z < 0.5` put back.
+
+### 190. A test that reads its constant back cannot pin it
+- **What happened:** the foul pose asserted `foul_fall_deg(...) == FALL_DOWN_DEG` and `peak >= 80`.
+  A lie of 80° left both green, and so did rewriting the pose times, because the test added those
+  constants up and compared the curve to them. The planted clips sat 0.4 s and 1.6 s from the
+  restart, so a floor of 0.5 s and a floor of 1.5 s both passed.
+- **Rule:** an expected output that pins a design value is the number that design produces, written
+  out. A test that reads the constant moves with the bug. Lesson 36 is the other half: an input
+  that has to sit beside a threshold is derived from that threshold. A bound is planted on a case
+  the looser value lets through, and the tighter value does not.
+- **Check:** `tests/test_fouls.py` and the P18 tests in `tests/test_validate.py`. A lie of 80°, a
+  pose time rewritten, and a floor of 0.5 s each fail one of them.
+
+### 191. A live output named like an answer-key file looks like a truth read
+- **What happened:** the first draft of the live detection job (`ninety/vision/live_job.py`) wrote
+  its detected events to `events.jsonl`, the name of the answer key's event file. The live-path
+  checks went red: the static one found the name in the code, and the runtime one saw the job open
+  a file by that name. Nothing read ground truth, but a reader of the output folder, or a later
+  packer, could not tell detected events from true ones. Separately, `detect.frame_rows` falls
+  back to the labelled frame file when a clip has no labels-free index, so a job handed a whole
+  rendered clip would have read it.
+- **Rule:** live outputs never take an answer-key file name (detected events are `detected.jsonl`).
+  A job on the live path takes an allow-list of inputs (the index and the images) and refuses
+  anything else before a model loads, rather than trusting a fallback not to run.
+- **Check:** `tests/test_vision_live_path.py` lists `live_job.py` among the live modules;
+  `tests/test_vision_live_job.py::test_a_clip_folder_holding_anything_else_is_refused_before_the_model_loads`
+  (each answer-key file planted), and `::test_a_clean_clip_runs_the_whole_live_path_and_opens_no_truth`.

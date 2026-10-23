@@ -1246,7 +1246,8 @@ function upperAngles(player, pose, heading, height) {
     if (action === 'dive') {
       const mag = Math.min(1, Math.abs(pose.dive || 0));
       if ((pose.dive || 0) < 0) angles = mirrorPose(angles);
-      angles = scalePose(angles, mag > 0.35 ? mag : 0.35, false);
+      // From standing to full stretch and back (meshpose._upper, scene.keeper_dive).
+      angles = blendPose(copyPose(poses.stand), angles, mag);
     }
   } else if (speed < STAND_BLEND[0] || (action === 'stand' && speed < player.standSpeed)) {
     angles = copyPose(poses.stand);
@@ -1266,6 +1267,13 @@ function upperAngles(player, pose, heading, height) {
     if (action !== 'run' && speed < STAND_BLEND[1]) {
       angles = blendPose(copyPose(poses.stand), angles, (speed - STAND_BLEND[0]) / (STAND_BLEND[1] - STAND_BLEND[0]));
     }
+  }
+  const up = pose.dive_up || 0;
+  if (up) {
+    // Getting up from a dive, what he does next is drawn with the dive fading out of it (meshpose._upper).
+    let full = copyPose(poses.dive);
+    if (up < 0) full = mirrorPose(full);
+    angles = blendPose(angles, Object.assign({}, angles, full), Math.min(1, Math.abs(up)));
   }
   const lean = pose.lean || 0;
   if (lean && !(poses[action] && MESH_CONTACT.has(action) && !MESH_FEET.has(action))) {
@@ -1674,6 +1682,12 @@ class Body {
     this.group.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(
       new THREE.Vector3(-fy, fx, 0), new THREE.Vector3(0, 0, 1), new THREE.Vector3(fx, fy, 0),
     ));
+    if (pose.fall) {
+      // A fouled player down (fouls.py, tip): the whole body tipped over its feet toward fall_dir.
+      const d = pose.fall_dir || 0;
+      const axis = new THREE.Vector3(-Math.sin(d), Math.cos(d), 0);
+      this.group.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(axis, pose.fall));
+    }
     const placed = Object.assign({}, pose, { x, y });
     const angles = anglesFor(this.player, placed, face, this.heightM);
     const posed = poseBones(angles, this.player.bones);

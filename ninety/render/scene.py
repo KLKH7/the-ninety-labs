@@ -16,6 +16,7 @@ import random
 from dataclasses import dataclass, field
 
 from ninety.render.camera import Camera
+from ninety.render.fouls import tip
 from ninety.render.meshpose import (
     ASSET_STATURE_M,
     BROW_Y,
@@ -129,7 +130,7 @@ ANKLE_BACK = 0.11  # the drawn ankle sits this far behind the foot marker (asset
 PLANT_AHEAD_MAX = 0.30
 # The gait plants their feet. A touch with the foot or thigh is taken in stride: the other foot stays
 # planted and the touch takes the one that meets the ball.
-PLANT_ACTIONS = ("stand", "walk", "run", "chest", "head", "strike", "foot", "thigh", "hands", "throw")
+PLANT_ACTIONS = ("stand", "walk", "run", "chest", "head", "strike", "foot", "thigh", "hands", "throw", "dive")
 # Running, each foot is planted over the part of the stride where the gait (meshpose.gait) has it
 # on the grass: the stored stride swings a foot along one path and it is lowest and going back
 # around these phases (measured on the asset: the left foot is forward at 1.5 pi and lifts behind
@@ -210,6 +211,17 @@ FRAME_S = 0.04  # one frame at the engine's 25 fps (ninety.sim.engine.FPS)
 MESH_ARM_ACTIONS = ("strike", "foot", "thigh", "chest", "head", "hands", "shield", "throw")
 HIP_PIVOT_Z = 0.99  # the mesh's spine_01 joint, where a bend over the ball starts (asset rest pose)
 
+# A keeper's dive is drawn once, from the engine's dive (its action "dive", how far along it he is).
+# It grows no faster than the engine's own dives do (DIVE_IN_FRAMES: 0.105 a frame, measured on seed
+# 8001's a1), so one the engine starts at full stretch (its "down after a dive") still grows. It keeps
+# the side and the way he faced when it began until he is up (the engine turns a keeper on the grass
+# toward the ball, and drawn as it turned, the stretched body spun and dived again the other way),
+# never shrinks while the engine holds it, and fades over DIVE_UP_FRAMES into whatever he does next
+# (the catch, standing, running: dive_up), his body turning to the engine's facing over the same
+# frames (design: 1 s, as a keeper takes to get up; a snap in a frame read as a second dive).
+DIVE_IN_FRAMES = 10
+DIVE_UP_FRAMES = 25
+
 # How a touch is drawn (design). The engine says which part met the ball and the frame says where
 # the ball was. The touching part reaches that point on the contact frame, along the way the touch
 # pushed the ball (its change of velocity): drawn back over TOUCH_WIND_S, through the ball, on
@@ -218,6 +230,10 @@ HIP_PIVOT_Z = 0.99  # the mesh's spine_01 joint, where a bend over the ball star
 TOUCH_WIND_S = 0.2
 TOUCH_FOLLOW_S = 0.2
 TOUCH_SET_S = 0.04  # a touch's part is on its path this long before the contact frame
+# A foul's contact (lesson 173, design): the fouler's foot meets the fouled player's legs this far in
+# from his centre on the fouler's side, at this height (the shins; a challenge that hits the man).
+FOUL_REACH_M = 0.25
+FOUL_SHIN_M = 0.25
 # After the follow-through the part comes back to the stride, and the hips back up out of a lunge,
 # over TOUCH_RECOVER_S: a body does not snap back upright in two frames.
 TOUCH_RECOVER_S = 0.28
@@ -350,6 +366,13 @@ class Gait:
     down_l: bool = False
     down_r: bool = False
     lead: float = 0.0  # how far the hips are ahead of the chest in a turn (radians)
+    dive_n: int = -1  # frames into the dive being drawn, -1 when none (keeper_dive)
+    up_n: int = -1  # frames into getting up after it, -1 when none
+    dive_side: float = 1.0  # the side he dived to, as it was when the dive began
+    dive_heading: float = 0.0  # the way he faced when it began
+    dive_drawn: float = 0.0  # how far along the drawn dive is (0..1)
+    dive_from: float = 0.0  # where a dive taken up again in mid get-up starts from
+    dive_up: float = 0.0  # getting up: how much of the dive (signed by side) is still drawn over the pose
     feet: dict = field(default_factory=dict)  # side -> foot on the grass or stepping (_stance)
     ankle: dict = field(default_factory=dict)  # side -> last drawn sole (x, y, height): where a step starts
     touch: dict | None = None  # the part meeting the ball now: part, side, at (world), w
@@ -364,6 +387,8 @@ class Gait:
     vel: list = field(default_factory=list)  # the engine's velocity, the last ACCEL_BOX frames (pace)
     accel: float = 0.0  # his acceleration the way he faces, from the engine's velocity (m/s^2, pace)
     lean: float = 0.0  # the trunk's lean on top of the stride's (radians, forward +, pace)
+    fall: float = 0.0  # radians the body is tipped over its feet: a fouled player going down (fouls.py)
+    fall_dir: float = 0.0  # the way he falls, pitch radians
 
 
 def update_gait(g: Gait, dx: float, dy: float, dt: float, face: tuple[float, float] | None) -> None:
@@ -439,6 +464,7 @@ def advance_gaits(gaits: dict[str, Gait], prev_xy: dict[str, tuple[float, float]
         pace(g, pl.get("vx", 0.0), pl.get("vy", 0.0), g.heading, dt, coming.get(pl["id"]))
         prev_xy[pl["id"]] = (pl["x"], pl["y"])
         face(g, pl)
+        keeper_dive(g)
         nxt = later.get(pl["id"])
         g.lead = 0.0
         if nxt is not None and "heading" in nxt and "heading" in pl and g.action not in ("dive", "throw"):
@@ -467,10 +493,23 @@ def contacts(frames: list[dict], events: list[dict] | None = None) -> dict[str, 
                 found.append((pl["id"], i - 1, "strike", i - 1, i))
     index = {fr.get("frame", i): i for i, fr in enumerate(frames)}
     seen = {(who, at) for who, at, *_ in found}
+    aimed: dict[tuple[str, int], dict] = {}  # a contact aimed at a body, not the ball
     for ev in events or ():
         i = index.get(ev.get("frame"))
         if ev.get("type") == "tackle" and ev.get("player") and i and (ev["player"], i) not in seen:
             found.append((ev["player"], i, "foot", i - 1, i))
+        foul = ev.get("type") == "foul" and ev.get("player") and ev.get("receiver")
+        if foul and i and (ev["player"], i) not in seen:
+            # The foul is the fouler's leg into the other man (Law 12; lesson 173): his foot goes to
+            # the fouled player's legs, shin high, on the side facing him, as a tackle's goes to the ball.
+            pos = {p["id"]: p for p in frames[i]["players"]}
+            them, him = pos.get(ev["receiver"]), pos.get(ev["player"])
+            if them and him:
+                dx, dy = him["x"] - them["x"], him["y"] - them["y"]
+                d = math.hypot(dx, dy) or 1.0
+                aimed[(ev["player"], i)] = {"x": them["x"] + dx / d * FOUL_REACH_M,
+                                            "y": them["y"] + dy / d * FOUL_REACH_M, "z": FOUL_SHIN_M}
+                found.append((ev["player"], i, "foot", i - 1, i))
     out: dict[str, list[dict]] = {}
     for pid, at, part, v_in, v_out in sorted(found, key=lambda f: (f[1], f[0])):
         who = next((p for p in frames[at]["players"] if p["id"] == pid), None)
@@ -478,7 +517,9 @@ def contacts(frames: list[dict], events: list[dict] | None = None) -> dict[str, 
             continue
         bi, bo = frames[v_in]["ball"], frames[v_out]["ball"]
         b = frames[at]["ball"]
-        if part != "strike":
+        if (pid, at) in aimed:
+            b, bi, bo = aimed[(pid, at)], {"vx": 0.0, "vy": 0.0}, {"vx": 0.0, "vy": 0.0}
+        elif part != "strike":
             # The part met the ball inside the tick, where its path from the frame before
             # passed closest to him; by this frame the ball has flown on from there.
             b = _closest(bi, bo, who["x"], who["y"])
@@ -777,6 +818,39 @@ def face(g: Gait, player: dict) -> None:
     if "action" in player:
         g.action = player["action"]
         g.dive = player.get("dive", 0.0)
+
+
+def keeper_dive(g: Gait) -> None:
+    """Draw the engine's dive once (DIVE_IN_FRAMES, DIVE_UP_FRAMES): after face(), set the drawn
+    dive (g.dive), the dive still drawn while he gets up (g.dive_up) and the drawn facing (g.heading)
+    for this frame."""
+    g.dive_up = 0.0
+    if g.action == "dive":
+        if g.dive_n < 0:
+            g.dive_from = g.dive_drawn if g.up_n >= 0 else 0.0
+            if g.up_n < 0:
+                g.dive_side = 1.0 if g.dive >= 0.0 else -1.0
+                g.dive_heading = g.heading
+        g.dive_n += 1
+        g.up_n = -1
+        ramp = g.dive_from + (1.0 - g.dive_from) * min(1.0, (g.dive_n + 1) / DIVE_IN_FRAMES)
+        g.dive_drawn = max(g.dive_drawn if g.dive_n > 0 else 0.0, min(abs(g.dive), ramp))
+        g.dive, g.heading = g.dive_side * g.dive_drawn, g.dive_heading
+        return
+    if g.dive_n < 0 and g.up_n < 0:
+        return
+    if g.dive_n >= 0:
+        g.dive_n, g.up_n = -1, 0
+        g.dive_from = g.dive_drawn
+    else:
+        g.up_n += 1
+    if g.up_n >= DIVE_UP_FRAMES:
+        g.up_n, g.dive_drawn = -1, 0.0
+        return
+    t = _ease((g.up_n + 1) / DIVE_UP_FRAMES)
+    g.heading = g.dive_heading + _wrap(g.heading - g.dive_heading) * t
+    g.dive_drawn = g.dive_from * (1.0 - t)
+    g.dive_up = g.dive_side * g.dive_drawn
 
 
 def reach_sign(x: float, y: float, g: Gait, ball: tuple[float, ...] | None) -> float:
@@ -1170,6 +1244,7 @@ def mesh_pose(g: Gait, x: float, y: float, reach: float) -> dict:
         "speed": round(g.speed, 3),
         "reach": reach,
         "dive": round(g.dive, 3),
+        "dive_up": round(g.dive_up, 3),
         "plant_l": [round(v, 4) for v in g.plant_l] if g.plant_l else None,
         "plant_r": [round(v, 4) for v in g.plant_r] if g.plant_r else None,
         "lead": round(g.lead, 4),
@@ -1181,6 +1256,8 @@ def mesh_pose(g: Gait, x: float, y: float, reach: float) -> dict:
         "hold": g.hold,
         "x": round(x, 4),
         "y": round(y, 4),
+        "fall": round(g.fall, 4),
+        "fall_dir": round(g.fall_dir, 4),
     }
 
 
@@ -1372,6 +1449,12 @@ def body_parts(
         _lean_to(parts, touch, head, (hx, hy), k, at(lean, 0.0, 1.28 * k))
     if hold is not None and hold["bend"] > 0:
         _bend_over(parts, hold["bend"] * hold["w"], at(0.0, 0.0, HIP_PIVOT_Z * k), (hx, hy))
+    if g.fall:
+        # A fouled player down: the whole body tipped over his feet, as the page tips the mesh.
+        for part in parts:
+            for key in ("a", "b"):
+                if key in part:
+                    part[key] = [round(v, 4) for v in tip(part[key], x, y, g.fall, g.fall_dir)]
     return parts
 
 

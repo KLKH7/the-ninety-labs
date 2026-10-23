@@ -394,6 +394,43 @@ two half-bodies, P11). The fouler came from behind in 73, from the side in 44 an
 has a contact in reach, and how a foul is drawn (the challenge, the fall, the referee) is the
 renderer's.
 
+## The goal net (lesson 184)
+
+Measured on the same 20 seeds (7, 11, 21, 42, 101 to 116), 20 minutes each, `main` at `e96ecb1`
+against the goal-net branch at `2b545c0` (its 20 matches byte for byte those of `95c33cf`: the
+rule that nobody takes the dead ball through a net never had to act), with
+`scripts/defect_sweep/nets.py` (the net as the renderer draws it: 2 m deep, its back 2 m high, the
+roof sloping down to it from the crossbar):
+
+| | Main | Goal net |
+|---|---:|---:|
+| Goals | 16 | 14 |
+| After a goal, deepest the ball goes behind the goal line | 4.0 m, at the boards, after every goal | 1.89 m, in the net |
+| After a goal, the ball comes back over the goal line between the posts | 12 of 16 | 14 of 14 |
+| Players stepping through a net: after goals / at other stoppages | 27 / 39 | 0 / 0 |
+| The ball going into or out of a goal other than by its mouth: after goals / at other times | 28 / 24 | 0 / 0 |
+| Seconds from a goal to the kick-off | 63.9 to 90.0 | 61.4 to 87.2 |
+| Matches meeting the data contract (`ninety-validate`) | 20 of 20 | 20 of 20 |
+| Shots a team per 90 | 17.8 ± 1.3 | 17.5 ± 1.4 |
+| Goals a team per 90 | 1.8 ± 0.6 | 1.6 ± 0.4 |
+| Corners a team per 90 | 2.8 ± 0.6 | 2.3 ± 0.6 |
+| Pass completion | 84.8% | 84.9% |
+
+On main, 61 of the 66 steps through a net were keepers', all with the ball dead: fetching it from
+the boards behind the goal after a goal, or a ball gone wide that had rolled behind it. Each match
+is the same as main's until a ball or a player first meets a net, or a dead ball's predicted path
+does (18 of 20; the other two are the same for all 20 minutes). Where that came after a goal, the
+goal itself is the same (4 matches). Shots (t = −0.1), goals (−0.3), corners (−0.7) and completion
+(+0.1) are within chance; the matches part from there (lesson 90). Held-out checks, never targets.
+
+The validator's P5 (a ball in flight falls under gravity) now counts a ball inside a goal touching
+its net as meeting a contact, as it already did near the woodwork: its centre a radius from the back
+or a side, or its top at the roof, to within two roundings of a written position. Before that,
+seed 109 failed it once, its rising shot pushed down by the sloping roof (66 m/s² up for a frame).
+
+What is left: a ball meeting a net from outside (wide of a post into the side netting, or dropping
+over the bar onto the roof) still passes through it. None did in these 20 matches.
+
 ## Reproduce
 
 ```bash
@@ -420,8 +457,9 @@ uv run python scripts/defect_sweep/restart_moves.py runs/new/seed7 runs/new/seed
 uv run python scripts/defect_sweep/creep_spells.py runs/new/seed7 runs/new/seed11
 uv run python scripts/defect_sweep/wall_walks.py
 uv run python scripts/defect_sweep/fouls.py runs/new/seed7 runs/new/seed11
+uv run python scripts/defect_sweep/nets.py runs/new/seed7 runs/new/seed11
 ```
 
 ```bash
-uv run pytest -q tests/test_restarts.py
+uv run pytest -q tests/test_restarts.py tests/test_goal_net.py
 ```

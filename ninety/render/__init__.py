@@ -63,4 +63,9 @@ docs/decisions/0001-synthetic-data.md.
 # mid-stance and in free fall in the air running), the swinging knee folds to a runner's, the trunk
 # leans into a change of pace by atan(a / g) and with speed, the arms swing wider toward a sprint,
 # and a sprinter's foot leaves the grass between frames, so his flight is seen over 3 frames.
-RENDERER_VERSION = "0.5.12"
+# 0.5.13: a keeper's dive is drawn once: it grows at the engine's own rate, keeps its side and his
+# facing until he is up (no spin on the grass, no second dive the other way), and fades into what he
+# does next over a second; his feet stay planted through it.
+# 0.5.14: a fouled player is drawn from the engine's fall (degrees over his feet) and fall_dir;
+# the fouler's foot meets his shins (lesson 173). The renderer does not time the fall.
+RENDERER_VERSION = "0.5.14"

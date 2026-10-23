@@ -1,3 +1,5 @@
+import math
+
 import pytest
 
 from ninety.eval import vision_score
@@ -5,11 +7,13 @@ from ninety.eval.fake_box_detections import (
     BALL_SHIFT_PX,
     DAMAGES,
     PLAYER_SHIFT,
+    blur_of,
     disagreements,
     fake_box_detections,
+    height_of,
     main,
 )
-from ninety.eval.vision_score import BALL_DISTANCE_PX, PLAYER_IOU, iou, score
+from ninety.eval.vision_score import BALL_DISTANCE_PX, BLUR_PX, IN_AIR_Z, PLAYER_IOU, iou, score
 
 W, H = 1280, 720
 VISIBILITIES = (1.0, 0.7, 0.3)  # one in each group: visible, partly hidden, mostly hidden
@@ -176,3 +180,130 @@ def test_a_box_with_visibility_zero_is_neither_copied_nor_counted():
     assert expected["by_class"]["player"]["tp"] + expected["by_class"]["player"]["fn"] == labels_of("player")
     assert expected["by_class"]["ball"]["tp"] + expected["by_class"]["ball"]["fn"] == labels_of("ball") - 1
     assert disagreements(expected, score(rows, detections)) == []
+
+
+# --- damage planted by ball height and camera blur ---------------------------------------------
+
+# f % 4: on the ground twice (once exactly at the cut-off), then in the air twice
+Z_CYCLE = (0.0, IN_AIR_Z, 1.0, 2.0)
+# (f // 2) % 3: exactly the cut-off, then longer twice
+BLUR_CYCLE = ([BLUR_PX, 0.0], [2.5, 2.5], [0.0, -6.0])
+
+
+def axis_frames(n=24):
+    """frames() with a ball height and a camera blur streak on every frame, set directly, the
+    boundary values among them: 12 of 24 balls in the air, 16 of 24 frames blurred."""
+    rows = frames(n)
+    for row in rows:
+        f = row["frame"]
+        row["ball"]["z"] = Z_CYCLE[f % 4]
+        row["blur_px"] = BLUR_CYCLE[(f // 2) % 3]
+    return rows
+
+
+def in_group(rows, cls, axis, group):
+    """How many labels of a class are in a group, counted from the frames built above."""
+    if axis == "height":
+        ids = [r["frame"] for r in rows if (r["ball"]["z"] > 0.5) == (group == "in the air")]
+    else:
+        ids = [r["frame"] for r in rows if (math.hypot(*r["blur_px"]) > 3) == (group == "blurred")]
+    per_frame = len(rows[0]["players"]) if cls == "player" else 1
+    return per_frame * len(ids)
+
+
+def test_the_axis_frames_have_both_groups_and_the_boundaries():
+    rows = axis_frames()
+    assert in_group(rows, "ball", "height", "in the air") == 12
+    assert in_group(rows, "ball", "blur", "blurred") == 16
+    assert any(r["ball"]["z"] == IN_AIR_Z for r in rows)
+    assert any(r["blur_px"] == [BLUR_PX, 0.0] for r in rows)
+
+
+@pytest.mark.parametrize("seed", range(4))
+@pytest.mark.parametrize(("axis", "group", "other", "classes"), [
+    ("height", "in the air", "on the ground", ("ball",)),
+    ("height", "on the ground", "in the air", ("ball",)),
+    ("blur", "blurred", "not blurred", ("player", "ball")),
+    ("blur", "not blurred", "blurred", ("player", "ball")),
+])
+def test_damage_planted_in_one_group_is_scored_in_that_group(seed, axis, group, other, classes):
+    rows, per = axis_frames(), 2
+    detections, expected = fake_box_detections(rows, seed=seed, per_damage=per, only={axis: group})
+    report = score(rows, detections)
+    for cls in classes:
+        assert {e[axis] for e in expected["damage"] if e["cls"] == cls} == {group}
+        n = in_group(rows, cls, axis, group)
+        # From the damage alone: drop and shift_out miss, shift_out and add are false alarms.
+        want = {"tp": n - 2 * per, "fp": 2 * per, "fn": 2 * per,
+                "recall": (n - 2 * per) / n, "precision": (n - 2 * per) / n}
+        got = report[axis][cls][group]
+        assert {k: got[k] for k in want} == pytest.approx(want)
+        rest = in_group(rows, cls, axis, other)
+        assert {k: report[axis][cls][other][k] for k in want} == {
+            "tp": rest, "fp": 0, "fn": 0, "recall": 1.0, "precision": 1.0}
+    assert disagreements(expected, report) == []
+
+
+@pytest.mark.parametrize("seed", range(6))
+def test_damage_anywhere_is_scored_in_the_right_height_and_blur_groups(seed):
+    rows = axis_frames()
+    detections, expected = fake_box_detections(rows, seed=seed, per_damage=3)
+    assert expected["height"] is not None and expected["blur"] is not None
+    assert disagreements(expected, score(rows, detections)) == []
+
+
+def test_a_height_restriction_leaves_the_players_damage_where_it_falls():
+    detections, expected = fake_box_detections(axis_frames(), seed=0, per_damage=2,
+                                               only={"height": "in the air"})
+    players = [e for e in expected["damage"] if e["cls"] == "player"]
+    assert len(players) == 2 * len(DAMAGES) and {e["height"] for e in players} == {None}
+
+
+def test_an_unknown_axis_or_an_empty_group_is_refused():
+    with pytest.raises(ValueError, match="no such axis"):
+        fake_box_detections(axis_frames(), seed=0, per_damage=1, only={"weather": "rain"})
+    with pytest.raises(ValueError, match="isolated|no ball label"):
+        fake_box_detections(frames(), seed=0, per_damage=1, only={"height": "in the air"})
+
+
+@pytest.mark.parametrize(("name", "value"), [("IN_AIR_Z", 1.5), ("IN_AIR_Z", 0.0),
+                                             ("BLUR_PX", 5.0), ("BLUR_PX", 0.0)])
+def test_a_scorer_with_a_different_cut_off_disagrees(monkeypatch, name, value):
+    # The check can fail (LESSONS 8): the planted groups come from the clip, not from the scorer,
+    # so a scorer that moved either cut-off puts some labels in the other group.
+    rows = axis_frames()
+    detections, expected = fake_box_detections(rows, seed=1, per_damage=2)
+    monkeypatch.setattr(vision_score, name, value)
+    assert disagreements(expected, score(rows, detections))
+
+
+@pytest.mark.parametrize(("name", "rule"), [
+    ("height_group", lambda z: "in the air" if z >= IN_AIR_Z else "on the ground"),
+    ("blur_group", lambda b: "blurred" if math.hypot(*b) >= BLUR_PX else "not blurred"),
+    ("blur_group", lambda b: "blurred" if max(abs(v) for v in b) > BLUR_PX else "not blurred"),
+])
+def test_a_scorer_that_moved_a_boundary_disagrees(monkeypatch, name, rule):
+    # At the boundary values the frames contain: exactly 0.5 m, exactly 3 px, and a streak whose
+    # parts are each under 3 px but whose length is over.
+    rows = axis_frames()
+    detections, expected = fake_box_detections(rows, seed=1, per_damage=2)
+    monkeypatch.setattr(vision_score, name, rule)
+    assert disagreements(expected, score(rows, detections))
+
+
+@pytest.mark.parametrize("value", [IN_AIR_Z, math.nextafter(IN_AIR_Z, math.inf), 0.0, 1.3])
+def test_the_planted_height_follows_the_scorer_s_cut_off(value):
+    assert height_of(value) == vision_score.height_group(value) == (
+        "in the air" if value > 0.5 else "on the ground")
+
+
+@pytest.mark.parametrize("blur", [[BLUR_PX, 0.0], [0.0, -BLUR_PX], [math.nextafter(BLUR_PX, math.inf), 0.0],
+                                  [-2.5, 2.5], [0.0, 0.0]])
+def test_the_planted_blur_follows_the_scorer_s_cut_off(blur):
+    assert blur_of(blur) == vision_score.blur_group(blur) == (
+        "blurred" if math.hypot(*blur) > 3 else "not blurred")
+
+
+def test_frames_without_height_or_blur_expect_no_such_group():
+    _, expected = fake_box_detections(frames(), seed=0, per_damage=1)
+    assert expected["height"] is None and expected["blur"] is None

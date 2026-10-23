@@ -26,7 +26,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from ninety.match.clock import match_clock
-from ninety.render import RENDERER_VERSION, edit
+from ninety.render import RENDERER_VERSION, edit, fouls
 from ninety.render.camera import Camera, Director, blur_vector, corner_waits
 from ninety.render.params import RenderParams, sample_params
 from ninety.render.scene import (
@@ -322,6 +322,7 @@ def render_clip(
                 touch_at(g, touches.get(pl["id"], []), fi, h, FPS, pl["x"], pl["y"])
                 hold_at(g, held.get(pl["id"], []), fi, ball, h, FPS)
                 throw_at(g, thrown.get(pl["id"], []), fi, h, FPS, pl["x"], pl["y"])
+                fouls.apply_fall(g, pl)  # the engine's fall and fall_dir (lesson 173)
             actors = [(pl["x"], pl["y"], pl.get("action", "")) for pl in fr["players"]]
             # The snapshot of a goal already has the ball on the centre spot. The event
             # carries the mouth it crossed, and the frame before it carries the pace.
@@ -382,7 +383,7 @@ def render_clip(
                         "pose": mesh_pose(g, pl["x"], pl["y"], reach),
                     }
                 )
-                row_players.append(pl)
+                row_players.append(fouls.row(pl, g.fall))
             bparts = ball_parts(*ball, spin)
             spec_objects.append({"id": "ball", "parts": bparts, "box": parts_box(cam, bparts)})
             kps = project_keypoints(cam)
