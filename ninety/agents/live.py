@@ -187,14 +187,24 @@ async def _personalized(
         if (v.persona, v.lang) in asked and (v.persona, v.lang) not in seen:
             seen.add((v.persona, v.lang))
             kept.append(v)
-    checked = await personal.verify(claim, kept, known, judge)
+    from ninety.personalizer import translate
+
+    checked = await personal.verify(claim, kept, known, judge, labelled_mock=translate.mock_on())
+    # A variant the Personalizer's own re-check replaced comes back as the verified English; the
+    # hold then reads "no translation", which hides why. Its reason, for the trace only.
+    replaced = {(profiles[i].persona, profiles[i].lang): why
+                for i, why in getattr(personalize, "last_dropped", {}).items() if i < len(profiles)}
+    refused = []
     for variant, status, reasons in checked.refused:
+        if (why := replaced.get((variant.persona, variant.lang))) and variant.text == claim.text:
+            reasons = [f"replaced by the Personalizer's re-check ({why}): the verified English text"]
+        refused.append((variant.persona, variant.lang, status, reasons))
         detail = f"{variant.persona}/{variant.lang}: " + "; ".join(reasons)
         trace.append(TraceStep("fact_checker", moment, status, 0.0, detail))
     t_in = max(times[i] for i in claim.evidence)
     shown = [personal.variant_cue(v, t_in) for v in checked.shown]
     trace.append(TraceStep("producer", moment, "air", 0.0, f"{len(shown)} of {len(kept)} variants"))
-    return shown, [(v.persona, v.lang, status, reasons) for v, status, reasons in checked.refused]
+    return shown, refused
 
 
 def _ms(started: float) -> float:

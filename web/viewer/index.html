@@ -30,19 +30,36 @@
           <input type="range" id="scrub" min="0" max="1" step="0.04" value="0" aria-label="Position in the clip" />
           <output id="clock" aria-live="off">00:00</output>
           <label class="toggle"><input type="checkbox" id="show-boxes" checked /> Detections <kbd>D</kbd></label>
+          <label class="toggle"><input type="checkbox" id="show-radar" checked /> Radar <kbd>M</kbd></label>
           <label class="toggle" id="voice-toggle" hidden><input type="checkbox" id="voice" checked /> Voice <kbd>V</kbd></label>
         </div>
         <p class="sr-only" id="on-air" aria-live="polite"></p>
         <p class="keys">
           <kbd>Space</kbd> play or pause · <kbd>←</kbd> <kbd>→</kbd> 1 s · <kbd>,</kbd> <kbd>.</kbd> one frame ·
-          <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> persona · <kbd>D</kbd> detections
+          <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> persona · <kbd>D</kbd> detections · <kbd>M</kbd> radar
           <span id="audio-keys" hidden>· <kbd>V</kbd> voice on or off · <kbd>R</kbd> repeat the last description</span>
         </p>
         <p class="audio-note" id="audio-note" hidden></p>
-        <dl class="pipeline" id="pipeline"></dl>
       </section>
+      <dl class="pipeline" id="pipeline" aria-label="What ran"></dl>
 
       <div class="side">
+      <section class="radar-panel" aria-labelledby="radar-title">
+        <div class="radar-head">
+          <h2 id="radar-title">Radar</h2>
+          <span class="radar-source">from the video's tracking</span>
+        </div>
+        <div id="radar-panel">
+          <canvas id="radar" tabindex="0" role="img" aria-label="Radar"></canvas>
+          <ul class="radar-legend" id="radar-legend">
+            <li><span class="key home"></span>Home <span class="dir">attacks →</span></li>
+            <li><span class="key away"></span>Away</li>
+            <li><span class="key guess"></span>Estimated</li>
+            <li><span class="key view"></span>TV camera</li>
+          </ul>
+        </div>
+        <p class="radar-note" id="radar-note"></p>
+      </section>
       <section class="phone-panel" id="phone-panel" aria-labelledby="phone-title">
         <h2 id="phone-title">Connect your phone</h2>
         <p class="hint">A minimap in step with this video, each player's speed and heat map, and fact-checked answers to your questions.</p>
