@@ -2422,8 +2422,10 @@ class Engine:
                                 if q.team != p.team) if w]
             onside = self.onside_limit(p.team, seen, bx)  # L10: as far as he sees he may go
             wide = offball.STAYS_WIDE_M if "stays_wide" in p.profile.traits else 0.0
+            given = self.restart or self.set_by
+            free_kick = given is not None and given.kind == "free_kick" and given.team == p.team
             spot = offball.attacking_slot(p.role, PITCH_X - goal_x(p.team), clamp(bx, 0, PITCH_X),
-                                          clamp(by, 0, PITCH_Y), onside, wide)
+                                          clamp(by, 0, PITCH_Y), onside, wide, set_piece=free_kick)
             if spot:
                 spot = self.open_spot(p, spot, onside)
                 return *spot, self.in_time(p, *spot)
