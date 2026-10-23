@@ -56,6 +56,7 @@ FRAMES = 12
 STEP_M = 3.0  # how far a player moves between the sampled frames (about half a second apart)
 NEAR_Y, FAR_Y, CORNER_M = 17.0, 51.0, 15.0
 ZONES = ("near", "centre", "far", "near_corner", "far_corner")
+SIDES = ("left", "right")
 
 
 def camera(side: str, x: float, back: float, height: float, hfov_deg: float, tilt: float,
@@ -73,7 +74,7 @@ def sample_cameras(n: int, seed: int) -> list[tuple[str, Camera]]:
     rng = np.random.default_rng(seed)
     out = []
     for k in range(n):
-        side = pitch.SIDES[k % 2]
+        side = SIDES[k % 2]
         args = [rng.uniform(*r) for r in (TACTICAL_X, TACTICAL_BACK, TACTICAL_HEIGHT, TACTICAL_HFOV_DEG,
                                            TACTICAL_TILT, TACTICAL_PAN)]
         out.append((side, camera(side, *args)))
@@ -253,7 +254,7 @@ def measure(n: int, seed: int, fit: bool = True) -> dict:
                "fov_v_deg": round(cam.fov_v_deg, 3)}
         if fit:
             static, points = clip(side, cam, seed * 1000 + k)
-            view, fits = pitch.fit_fixed(static, points, W, H, side)
+            view, fits = pitch.fit_fixed(static, points, W, H)
             m, px = errors(cam, view, pts)
             row.update({"static_points": int(len(static)), "frames_ok": sum(f.ok for f in fits),
                         "median_px": round(pitch._median(view, static), 3),

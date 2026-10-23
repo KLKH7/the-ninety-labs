@@ -652,7 +652,6 @@ FIXED_SCALES_PX = (12.0, 6.0, CAUCHY_PX)  # the six-parameter fit's schedule, as
 # rest of the line still pins the camera).
 STATIC_SHARE = 0.5
 FIXED_POINTS = 2000  # static marking pixels the final fit is measured on (design)
-SIDES = ("left", "right")
 
 
 def static_points(counts: np.ndarray, frames: int, share: float = STATIC_SHARE,
@@ -662,37 +661,44 @@ def static_points(counts: np.ndarray, frames: int, share: float = STATIC_SHARE,
     return mask_points(counts >= share * frames, max_points)
 
 
-def fixed_grid(width: int, side: str) -> np.ndarray:
-    """(B, 6) the tactical grid's views for the lens on `side`. The markings are symmetric about
-    the halfway line, so a lens and its mirror (the other side of halfway, panned the other way)
-    see the same picture; which half a lens shows is known from the rig, not from the pixels, and
-    is passed in. A right lens pans toward +x (pan >= 0), a left lens toward -x."""
-    if side not in SIDES:
-        raise ValueError(f"side is one of {SIDES}, not {side!r}")
-    pans = np.arange(0.0, FIXED_PAN_MAX + 1e-9, FIXED_PAN_STEP)
-    pans = pans if side == "right" else -pans
+def fixed_grid(width: int) -> np.ndarray:
+    """(B, 6) the tactical grid's views, panned either way: which half a lens shows comes from its
+    pixels. The markings are symmetric about halfway, but a lens's mirror there sees the picture
+    flipped left to right, which no camera without the flip draws, so the two do not tie."""
+    half = np.arange(FIXED_PAN_STEP, FIXED_PAN_MAX + 1e-9, FIXED_PAN_STEP)
+    pans = np.concatenate([-half[::-1], [0.0], half])
     focals = [width / 2 / math.tan(math.radians(h) / 2) for h in FIXED_HFOV_DEG]
     return np.array([(x, -back, z, pan, tilt, f) for x in FIXED_X for back in FIXED_BACK
                      for z in FIXED_HEIGHT for pan in pans for tilt in FIXED_TILTS for f in focals])
 
 
-def fit_fixed(static: np.ndarray, points: list[np.ndarray], width: int, height: int,
-              side: str) -> tuple[View, list[FrameFit]]:
+def settle(view: View, static: np.ndarray) -> View:
+    """The last of a fixed lens's fit. The six-parameter step stalls on the floor's roughness
+    (pixels changing their nearest marking), on a drawn scene a metre from the camera at 2.6 times
+    its cost; a compass search on the position, the aim and lens refitted at each trial, walks on,
+    as for the gantry (polish_gantry), and a free step finishes."""
+    _, (view,) = polish_gantry(view.vector()[:3], [view], [static])
+    return refine(view, static, free=(0, 1, 2, 3, 4, 5))
+
+
+def fit_fixed(static: np.ndarray, points: list[np.ndarray], width: int,
+              height: int) -> tuple[View, list[FrameFit]]:
     """One camera for a fixed lens's clip, from its static marking pixels (static_points), and
     each frame's own markings judged against it. The grid's best views are aimed (pan, tilt,
     focal) and then freed in all six parameters, coarse to fine; the one the markings fit best is
-    the clip's camera. A frame is `ok` when the clip's camera fits and the frame's own markings,
-    if it has enough, agree with it (a lens knocked mid-clip shows there)."""
+    polished (position by compass search) and is the clip's camera. A frame is `ok` when the
+    clip's camera fits and the frame's own markings, if it has enough, agree with it (a lens
+    knocked mid-clip shows there)."""
     if len(static) < MIN_POINTS:
         raise ValueError("the clip shows too few static pitch markings to place the camera")
     sample = _sample(static, SEARCH_POINTS)
-    aimed = _aimed(fixed_grid(width, side), static, sample, width, height, FIXED_KEEP * 4, 15)
+    aimed = _aimed(fixed_grid(width), static, sample, width, height, FIXED_KEEP * 4, 15)
     out = []
     for v in aimed[:FIXED_KEEP]:
         for sc in FIXED_SCALES_PX:
             v = refine(v, sample, free=(0, 1, 2, 3, 4, 5), scale=sc)
         out.append(refine(v, static, free=(0, 1, 2, 3, 4, 5)))
-    view = min(out, key=lambda v: cost(v, static))
+    view = settle(min(out, key=lambda v: cost(v, static)), static)
     clip_ok = _median(view, static) <= MAX_MEDIAN_PX
     fits = []
     for pts in points:

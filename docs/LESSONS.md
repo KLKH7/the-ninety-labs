@@ -2089,3 +2089,20 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_vision_live_path.py` lists `live_job.py` among the live modules;
   `tests/test_vision_live_job.py::test_a_clip_folder_holding_anything_else_is_refused_before_the_model_loads`
   (each answer-key file planted), and `::test_a_clean_clip_runs_the_whole_live_path_and_opens_no_truth`.
+
+### 193. Score a claimed tie at the answer before adding an input to break it
+- **What happened:** building the fixed-camera fit, I reasoned that the pitch markings are
+  symmetric about halfway, so a lens and its mirror across halfway would see the same picture, and
+  made the lens's side a required input to break the tie. The test written to prove the tie
+  failed: the mirror lens sees the picture flipped left to right, which no camera without that
+  flip draws, so the two fit 0.0 px and 68 px apart. The input would have been a needless
+  dependency every caller had to get right. The same fit, freed in all six parameters, stalled a
+  metre from the true camera at 2.6 times its cost; the objective was right (lesson 97), the step
+  was not.
+- **Rule:** a claimed ambiguity is checked by scoring both candidates at the answer, as an
+  objective is (lesson 97), before any interface is built around it. A reflection is not a camera
+  move.
+- **Check:** `tests/test_vision_pitch_fixed.py::test_a_lens_and_its_mirror_across_halfway_do_not_tie`
+  (the true lens fits, its mirror does not, the flipped picture does);
+  `::test_the_compass_search_walks_on_where_the_free_step_stalls` fails with the compass search
+  removed from `pitch.settle` (a half-size scene did not stall, so the stalled view is a fixture).
