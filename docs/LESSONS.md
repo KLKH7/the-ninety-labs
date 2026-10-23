@@ -2081,6 +2081,26 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `uv run pytest tests/test_pitch_score.py tests/test_vision_score.py
   tests/test_fake_box_detections.py -k "cut_off"`; the pitch_score test fails with `z < 0.5` put back.
 
+### 202. A set piece is a moment players build up to, not a pose held until a timer runs out
+- **What happened:** at a corner the taker stood over the ball and struck it from a standstill
+  (0.27 m covered in the 2 s before the kick, 18 corners over 20 matches on main `0f101db`); the box
+  stood still for the wait and the delivery, the post runners already at the posts; and the defending
+  side matched rather than outnumbered the attackers in its area at 4 of 18 kicks. The causes were in
+  the set-up, not the totals: the presser's cover was sent to the corner flag (goal-side of a presser
+  held 9.15 m off the arc is the goal line by the flag), two free defenders held block slots just
+  outside the area, and the kick was taken at R1's drawn time while team-mates heading "in time" for a
+  pass after it were still walking up, so their markers were named late and sprinted in. Fixing the
+  run-up first left the taker standing over the ball for 3 s after it: holding was still an option.
+- **Rule:** a set piece is set up by the players' own reasons: the taker places, steps back and runs
+  up when his team is in position (never past a bound, so nothing can hang); the attack starts its
+  runs with the run-up; the defence sets up where the delivery comes (a near-post guard, the area
+  defended, no cover where a cover has nothing to cover). A rate (corners, shots from corners, how
+  long a corner takes) is reported as a held-out check, never tuned. A test planted at one kind of
+  restart for a rule shared with others names the kind its premise needs.
+- **Check:** `uv run pytest tests/test_set_pieces.py` (each fails on main);
+  `scripts/defect_sweep/setpieces.py` reports defenders minus attackers in the area, box speeds
+  in the second before and after the kick, and the taker's run-up, over a sweep.
+
 ### 190. A test that reads its constant back cannot pin it
 - **What happened:** the foul pose asserted `foul_fall_deg(...) == FALL_DOWN_DEG` and `peak >= 80`.
   A lie of 80° left both green, and so did rewriting the pose times, because the test added those

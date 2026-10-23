@@ -138,6 +138,24 @@ SET_BALL_CLEAR_M = shape.surface(math.pi / 2, 0.0, pad=2 * ball.RADIUS)
 # design: going round a restart's circle he aims this far round at a time; the chord between two
 # points on it dips inside by at most 1 - cos(15°), under 4% of the radius (0.35 m at 9.65 m)
 KEEP_OFF_STEP_DEG = 30.0
+# Lesson 202: a corner's taker puts the ball on its spot, steps back and runs up to it. Self-selected
+# run-ups are 3 to 5 strides, and approach angles of 30, 45 and 60 degrees to the kick's line change
+# neither the ball's speed nor accuracy (Scurr & Hall 2009, J Sports Sci Med 8:230-234; penalty kicks
+# by recreational players). He stands RUNUP_M back (design: the low end, 3 strides of about a metre at
+# that pace), RUNUP_ANGLE_DEG off the line from the ball to the goal's centre (design: the middle of
+# the angles tested; the goal's centre is the general line of a delivery before he has chosen one,
+# design), on the side nearer the middle of the pitch (design), and runs in at RUNUP_MPS
+# (self-selected approaches 3.34 +- 0.43 m/s, semi-professional players; verify: read from a summary
+# of Augustus et al.). He strikes it as he gets there, with no pause over it.
+RUNUP_M = 3.0
+RUNUP_ANGLE_DEG = 45.0
+RUNUP_MPS = 3.34
+RUNUP_KINDS = ("corner",)
+# Lesson 202: at a corner the defending side puts a player in the near-post area: all but 6 of 750
+# Premier League corners (99.2%) had a guard there (Pulling & Newton 2017, Int J Perf Anal Sport
+# 17:283-292; verify: read from the abstract, which does not define the area). He marks nobody and
+# stands GUARD_M off the goal line and GUARD_M inside the near post (design: a stride each way).
+GUARD_M = 1.0
 BOARDS_M = 4.0  # verify: advertising boards behind the lines stop a ball (and players) that go out
 # design, verify: a goal's net, as the renderer draws it (web/render/render.js, buildNet): NET_DEPTH_M
 # behind the goal line at the top and the bottom, its back NET_BACK_M high, its roof sloping down to
@@ -275,6 +293,10 @@ class Restart:
     pressers: list[str] | None = None  # the other side's presser and cover, set once (lesson 174)
     settled: set[str] = field(default_factory=set)  # at their places with the ball set (lesson 174)
     marks: dict[str, str] | None = None  # the other side's markers and their men (lesson 174)
+    placed: bool = False  # on its spot and left there by the taker, who steps back to run up (lesson 202)
+    run_in_at: float | None = None  # when the taker began his run-up (lesson 202)
+    guard: str | None = None  # at a corner, the defender in the near-post area, named once (lesson 202)
+    given_at: float = 0.0  # when the restart was given
 
 
 @dataclass
@@ -1142,6 +1164,7 @@ class Engine:
                 self.hold_until = self.t + 0.5  # he looks again
             return
         scene.set_piece = self.set_by is not None  # the set ball is played away, never carried
+        scene.committed = self.set_by is not None and self.set_by.run_in_at is not None  # lesson 202
         scan = self.beliefs[carrier.id].next_scan  # D4: a new look at the pitch, a fresh misjudgement
         held = self.tastes.get(carrier.id)
         if held is None or held[0] != scan:
@@ -1890,6 +1913,7 @@ class Engine:
         self.restart_kicker = None  # a new stoppage ends the last restart's bar
         self.restart = Restart(kind, team, spot[0], spot[1], taker, self.t + self.rng.uniform(lo, hi),
                                direct=direct)
+        self.restart.given_at = self.t
         if kind == "free_kick" and direct:
             self.restart.wall = self.form_wall(self.restart)
 
@@ -1979,7 +2003,7 @@ class Engine:
         the Laws leave it open; the Premier League's ball-kids and spare balls are not modelled).
         Whoever is nearest where it will come to rest goes, re-planned as the chase is; the one who
         just knocked it on waits for it to arrive."""
-        if r.carried_by:
+        if r.carried_by or r.placed:
             r.fetcher = None
             return
         rx, ry = self.dead_ball_rest()
@@ -2046,6 +2070,63 @@ class Engine:
         nx, ny, nz = bx + (tx - bx) * k, by + (ty - by) * k, bz + (tz - bz) * k
         self.ball = (nx, ny, nz, (nx - bx) / DT, (ny - by) / DT, (nz - bz) / DT)
 
+    def near_post(self, r: Restart) -> tuple[float, float]:
+        """Lesson 202: where the defending side's near-post guard stands at a corner: GUARD_M off the
+        goal line and GUARD_M inside the post nearer the corner."""
+        line = goal_x(r.team)
+        out = 1.0 if line > 0 else -1.0
+        side = 1.0 if r.y > PITCH_Y / 2 else -1.0
+        return line - out * GUARD_M, PITCH_Y / 2 + side * (GOAL_HALF_WIDTH - GUARD_M)
+
+    def runup_line(self, r: Restart) -> tuple[float, float]:
+        """Lesson 202: the way a run-up comes in to the set ball (a unit vector toward it): RUNUP_ANGLE_DEG
+        off the line from the ball to the goal's centre, on the side whose run-up spot is nearer the
+        middle of the pitch."""
+        sx, sy = self.restart_ball_spot(r)
+        a = fmath.atan2(PITCH_Y / 2 - sy, goal_x(r.team) - sx)
+        ways = [(fmath.cos(a + k), fmath.sin(a + k)) for k in (math.radians(RUNUP_ANGLE_DEG),
+                                                              -math.radians(RUNUP_ANGLE_DEG))]
+        return min(ways, key=lambda u: math.hypot(sx - u[0] * RUNUP_M - PITCH_X / 2,
+                                                  sy - u[1] * RUNUP_M - PITCH_Y / 2))
+
+    def runup_spot(self, r: Restart) -> tuple[float, float]:
+        """Where the taker stands to run up: RUNUP_M back from the set ball along runup_line."""
+        (sx, sy), (ux, uy) = self.restart_ball_spot(r), self.runup_line(r)
+        return sx - ux * RUNUP_M, sy - uy * RUNUP_M
+
+    def strike_spot(self, r: Restart) -> tuple[float, float]:
+        """Where his run-up ends: SET_BALL_CLEAR_M short of the ball along runup_line, so it is clear of
+        him as he strikes it (Law 13: stationary until kicked)."""
+        (sx, sy), (ux, uy) = self.restart_ball_spot(r), self.runup_line(r)
+        return sx - ux * SET_BALL_CLEAR_M, sy - uy * SET_BALL_CLEAR_M
+
+    def run_up(self, r: Restart, taker: Player) -> bool:
+        """Lesson 202: whether a run-up restart is taken now. He brings the ball to its spot and leaves
+        it there (it stays: nobody fetches or takes it again); he walks back to his run-up spot; once
+        the kick may be taken (R1's wait) and he stands there stopped, he runs in; it is taken as he
+        stops at the end of his run-up (within WALL_LANE_M of it and one frame of braking, P2)."""
+        sx, sy = self.restart_ball_spot(r)
+        if not r.placed:
+            if r.carried_by == taker.id and math.dist(self.ball[:3], (sx, sy, 0.0)) <= 1e-6:
+                r.placed, r.carried_by = True, None
+                self.ball = (sx, sy, 0.0, 0.0, 0.0, 0.0)  # set down on it, still (Law 17)
+            return False
+        stopped = math.hypot(taker.vx, taker.vy) <= THROW_SETTLED_MPS
+        if r.run_in_at is None:
+            rx, ry = self.runup_spot(r)
+            # He waits for his team-mates to be at their places (ENGINE.md: a restart takes as long as
+            # players need to get there, not a timer): going "in time" for a pass after the kick, the
+            # far ones were still walking up at it and their markers came late. Never past twice R1's
+            # wait (design), so a place that never settles cannot hold the corner for ever.
+            mates = [q.id for q in self.players if q.team == r.team and q.role != "GK" and q.id != taker.id]
+            ready = all(q in r.settled for q in mates) or self.t >= 2 * r.ready_at - r.given_at
+            if (self.t >= r.ready_at and ready and stopped
+                    and math.hypot(taker.x - rx, taker.y - ry) <= WALL_LANE_M):
+                r.run_in_at = self.t
+            return False
+        kx, ky = self.strike_spot(r)
+        return stopped and math.hypot(taker.x - kx, taker.y - ky) <= WALL_LANE_M
+
     def tick_restart(self) -> None:
         r = self.restart
         carrier = self.by_id[r.carried_by] if r.carried_by else None
@@ -2068,7 +2149,7 @@ class Engine:
             # a goal's net (L1).
             bx, by, bz = self.ball[0], self.ball[1], self.ball[2]
             # His foot kills no more speed than a first touch does (A4); a faster ball runs on.
-            if bz == 0.0 and self.ball[5] <= 0.0:
+            if bz == 0.0 and self.ball[5] <= 0.0 and not r.placed:  # a placed ball waits for the kick
                 near = [p for p in self.players if p.team == r.team and p.id != r.passed_by
                         and math.hypot(p.x - bx, p.y - by) <= CONTROL_M
                         and math.hypot(self.ball[3] - p.vx, self.ball[4] - p.vy)
@@ -2102,9 +2183,11 @@ class Engine:
         # anyone else is close enough when the ball is on the spot at his feet. Nobody and no ball
         # is moved there: he fetches it and runs (lesson 5).
         near = THROW_SPOT_M if r.kind == "throw_in" else CONTROL_M
+        if r.kind in RUNUP_KINDS and not self.run_up(r, taker):
+            return
         if self.t < r.ready_at or math.hypot(taker.x - spot[0], taker.y - spot[1]) > near:
             return
-        if r.carried_by != taker.id:
+        if r.carried_by != taker.id and not r.placed:
             return
         if r.kind == "throw_in":
             placed = math.dist(self.ball[:3], (*throw_hands(taker.x, taker.y)[:2], 0.0)) <= 1e-6
@@ -2138,6 +2221,8 @@ class Engine:
         # With the ball in his hands he sets and throws (design: a longer hold reads as a freeze).
         pause = (0.2, 0.45) if r.kind == "throw_in" else (0.5, 1.5)
         self.hold_until = self.t + self.rng.uniform(*pause)
+        if r.kind in RUNUP_KINDS:
+            self.hold_until = self.t  # off his run-up he strikes it as he gets there (lesson 202)
         self.throw_by = taker.id if r.kind == "throw_in" else None
         self.throw_ready = self.t
         self.from_restart = r.kind
@@ -2343,6 +2428,11 @@ class Engine:
             pace = decisions.dribble_speed(p.profile["dribbling"]) if r.carried_by == p.id else RECOVER
             if r.kind == "throw_in":
                 return *throw_stand(r.x, r.y), pace
+            if r.kind in RUNUP_KINDS and r.placed:  # back to his run-up spot, then in to the ball
+                if r.run_in_at is None:
+                    rx, ry = self.runup_spot(r)
+                    return rx, ry, max(WALK_MPS, self.in_time(p, rx, ry))
+                return *self.strike_spot(r), RUNUP_MPS
             # Behind the ball on its spot as he faces up the pitch, clear of it (SET_BALL_CLEAR_M),
             # so the set ball stays where it was put until he kicks it (Law 13: stationary; Law 14:
             # on the mark).
@@ -2422,8 +2512,11 @@ class Engine:
                                 if q.team != p.team) if w]
             onside = self.onside_limit(p.team, seen, bx)  # L10: as far as he sees he may go
             wide = offball.STAYS_WIDE_M if "stays_wide" in p.profile.traits else 0.0
+            given = self.restart or self.set_by
+            waiting = (given is not None and given.kind == "corner" and given.team == p.team
+                       and given.run_in_at is None)  # lesson 202: the runs start with the run-up
             spot = offball.attacking_slot(p.role, PITCH_X - goal_x(p.team), clamp(bx, 0, PITCH_X),
-                                          clamp(by, 0, PITCH_Y), onside, wide)
+                                          clamp(by, 0, PITCH_Y), onside, wide, waiting)
             if spot:
                 spot = self.open_spot(p, spot, onside)
                 return *spot, self.in_time(p, *spot)
@@ -2469,6 +2562,15 @@ class Engine:
                 # O2: the defence and midfield track men in their zones; the forwards wait at their
                 # line of engagement, never past the ball (T3).
                 tx, ty = self.zone_spot(p, slot, own[0]) if ROLE_LINE.get(p.role) != "attack" else slot
+                if given and given.kind == "corner" and ROLE_LINE.get(p.role) != "attack":
+                    # Lesson 202: at a corner against them the defence and midfield defend from inside
+                    # their penalty area (design: zonal places mixed with man-marking, as Premier
+                    # League sides set up; Pulling, Robins & Rixon 2013), their zones pulled in to
+                    # a metre inside it. Held at their block's slots, two stood just outside it.
+                    depth = clamp(abs(tx - own[0]), 0.0, PENALTY_DEPTH - 1.0)
+                    tx = own[0] + depth * (1.0 if own[0] < PITCH_X / 2 else -1.0)
+                    half = PENALTY_HALF_WIDTH - 1.0
+                    ty = clamp(ty, PITCH_Y / 2 - half, PITCH_Y / 2 + half)
         tx, ty = clamp(tx, 0.5, PITCH_X - 0.5), clamp(ty, 0.5, PITCH_Y - 0.5)
         return tx, ty, self.in_time(p, tx, ty)
 
@@ -2533,6 +2635,11 @@ class Engine:
                 # the Laws' distance by the wall's players.
                 if given.pressers is None:
                     given.pressers = [] if given.wall else self.who_presses(brain)
+                    if given.kind == "corner":
+                        # Lesson 202: no cover at a corner. Goal-side of a presser held 9.15 m off the
+                        # arc is the goal line by the flag: the cover stood there, 1 m off the line and
+                        # 22 m from goal, out of the play, and the side had one fewer in its box.
+                        given.pressers = given.pressers[:1]
                 brain.pressers = given.pressers
             elif holder != team:
                 brain.pressers = self.who_presses(brain)
@@ -2555,9 +2662,16 @@ class Engine:
                     # own (lesson 174).
                     free = {pid: at for pid, at in free.items() if pid not in given.wall}
                     seen = {pid: at for pid, at in seen.items() if pid != given.taker}
+                    guard = self.near_post(given) if given.kind == "corner" else None
+                    if guard and given.guard is None and free:  # lesson 202: named once, the nearest
+                        given.guard = min(free, key=lambda k: math.dist(free[k], guard))
+                        given.marks = {d: a for d, a in (given.marks or {}).items() if d != given.guard}
+                    free.pop(given.guard, None)
                     pairs = given.marks = offball.pick_up(free, seen, own_goal, keep=given.marks)
                     brain.markers = {did: offball.goal_side(seen[aid], own_goal)
                                      for did, aid in given.marks.items()}
+                    if guard and given.guard:
+                        brain.markers[given.guard] = guard
                 brain.marked = set(pairs.values())
             else:
                 brain.markers, brain.marked = {}, set()
