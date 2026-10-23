@@ -707,3 +707,47 @@ def test_open_play_through_the_corner_arc_is_framed_as_with_no_corner_rule(monke
     with_rule = run()
     monkeypatch.setattr(Director, "_corner", lambda self, bx, by: None)
     assert with_rule == run()
+
+
+def test_a_long_ball_stays_in_the_picture_across_it():
+    """A long ball (lesson 205; seed 43 on #220's engine): the ball still in midfield, then kicked
+    at 20 m/s along the pitch, slowing as it flies. The aim trails a moving target by the pan's lag
+    (_ease), so a target on the ball itself left the picture that lag behind it: at pan_lag_s 0.83
+    and 17 m/s about 14 m, and the ball ran out of the side of the shot. Across the picture it must
+    stay inside the CENTRAL box all the way (its height is the tilt's business, not tested here)."""
+    left, right, _, _ = (0.2, 0.8, 0.15, 0.85)
+    d = Director(CameraParams(shake_m=0.0, pan_lag_s=0.83, lead_s=0.45), 1280, 720, 25, seed=3)
+    x, y, v = 80.0, 52.0, 0.0
+    for _ in range(50):
+        d.step(x, y)
+    worst = 0.5
+    for k in range(60):
+        v = 20.0 - 0.15 * k  # 20 m/s off the boot, about 11 m/s 2.4 s later
+        x -= v / 25
+        c = d.step(x, y)
+        u = c.project((x, y, 0.11))[0] / 1280
+        worst = min(worst, u) if u < 0.5 else max(worst, u)
+        assert left <= u <= right, (k, round(x, 1), round(u, 3))
+    assert worst != 0.5
+
+
+def test_a_goal_soon_after_the_restart_waits_for_the_edits_hold():
+    """Seed 53 on #220's engine: the edit brings the picture back for a free kick that scores 0.44 s
+    after it is taken. The goal used to start the low angle at once, over the hold the edit cut had
+    just set, so the restart's shot lasted 2.4 s. The edit cut is a change of shot: the gantry
+    holds CUT_HOLD_S from it, and the low angle comes up after that, while the goal is fresh."""
+    d = Director(CameraParams(shake_m=0.0), 1280, 720, 25, seed=3, cuts=True)
+    for _ in range(50):
+        d.step(30.0, 34.0)
+    d.cut()
+    d.open_on_restart()
+    angles = [(d.step(20.0, 34.0), d.angle)[1] for _ in range(25)]  # the free kick set, then taken
+    d.step(52.5, 34.0, goal=("L", 33.2, 1.05, 24.0))
+    angles.append(d.angle)
+    for _ in range(25 * 6):
+        d.step(52.5, 34.0)
+        angles.append(d.angle)
+    first_net = angles.index("net")
+    assert all(a == "main" for a in angles[:first_net])
+    assert first_net >= CUT_HOLD_S * 25 - 1  # the restart's shot is held its full CUT_HOLD_S
+    assert first_net <= CUT_HOLD_S * 25 + 1  # and the low angle comes up as soon as it may

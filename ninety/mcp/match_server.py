@@ -26,6 +26,7 @@ from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
+from ninety.intel import shape
 from ninety.intel.windows import agent_rows
 from ninety.match import detected, tracking
 from ninety.match.facts import AGENT_TYPES, compact, events_in, match_events, select
@@ -41,6 +42,10 @@ MAX_EVENTS = 60
 # match id and nothing else.
 STATS_DIR = "stats"
 TOOLS = ("list_events", "match_info")  # the published Analyst may call only these (tests check they exist)
+# Every tool the server serves. team_shape is served but not yet in the published Analyst's allowed
+# tools: adding it changes that agent's definition, which takes an `agents-live` publish run. Until
+# then the workflow hands the minute's shape facts to the writers as evidence (ninety/agents/workflow.py).
+SERVED = (*TOOLS, "team_shape")
 
 def match_id(seed: int) -> str:
     return f"seed{seed}"
@@ -104,6 +109,35 @@ def match_info(match: str) -> dict:
             "stats": list(stats_of(match))}
 
 
+@lru_cache(maxsize=len(tracking.TRACKED_CLIPS))
+def shape_of(match: str) -> tuple[dict, ...]:
+    """The match's team-shape facts, from tracked positions only (`tracking.tracked`, which refuses
+    any frame not `source: tracked`). A match with no tracked frames has none: the simulator's
+    positions are the answer key, never served as shape."""
+    if match not in DETECTED and match not in MATCHES:
+        raise ValueError(f"unknown match {match!r}; available: {', '.join([*DETECTED, *MATCHES])}")
+    if match not in tracking.TRACKED_CLIPS:
+        return ()
+    try:
+        return tuple(shape.shape_rows(tracking.tracked(match).frames))
+    except tracking.NotTracked:
+        return ()
+
+
+def team_shape(match: str, minute_from: int, minute_to: int) -> dict:
+    """Each team's shape, computed by code from tracked player positions, for each match minute
+    from minute_from to minute_to (inclusive). `match` is the match id you were given. Each fact has
+    id, metric (width, length, line_height: the deepest outfield player's distance from his own goal
+    line, area: the outfield players' convex hull, back_to_mid and mid_to_front: the gaps between
+    the lines, behind_ball and ahead_of_ball: players goal-side of the ball and beyond it), team,
+    minute, value, unit, change (from the minute before, or null), tracked (players of 11 seen),
+    need and confident. A fact that is not confident rests on too few tracked players: claims
+    citing it are held. Cite a fact by id; quote its value or change as given, with its unit."""
+    rows = [r for r in shape_of(match) if minute_from <= r["minute"] <= minute_to]
+    return {"match": match, "tracked": match in tracking.TRACKED_CLIPS and bool(shape_of(match)),
+            "need": shape.MIN_TRACKED, "facts": rows[:MAX_EVENTS * 2]}
+
+
 def make_server() -> FastMCP:
     """A server with the match tools. Stateless with JSON responses: what Foundry's MCP tool needs
     (one request, one answer, no session). The API builds its own, since an HTTP server's session
@@ -116,7 +150,7 @@ def make_server() -> FastMCP:
         # Host headers; ours is public and answers only with the key, so the Host check is off.
         transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
     )
-    for tool in (list_events, match_info):
+    for tool in (list_events, match_info, team_shape):
         server.add_tool(tool)
     return server
 
