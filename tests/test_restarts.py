@@ -1998,14 +1998,15 @@ def test_at_a_dead_ball_the_presser_goes_in_time_and_does_not_spring_about_his_p
     Once off-ball movement changed play, seed 114 no longer came to that goal kick. The scene was
     found again by its premises, then checked to go red with the fix reverted (the presser back at
     his pressing pace: 8 turns here): seed 134's goal kick at 1:05, found below by its premises."""
-    e = Engine(134)
+    e = Engine(141)
     e.kickoff("home", setup=True)
-    # The scene is found by its premises, not at a fixed time: in seed 134's goal kick at about 1:05
-    # (65.44 s at first; the frame moves when the match parts earlier, lesson 78).
-    while e.t < 75.0:
+    # The scene is found by its premises, not at a fixed time (lesson 78): since lesson 207 set places
+    # from the restart spot, seed 134's goal kick no longer crowds its presser; seed 141's at about 3:00 does
+    # (the presser at his pressing pace there turns 3 times; lesson 207).
+    while e.t < 185.0:
         e.step()
         r, brain = e.restart, e.brains["home"]
-        if e.t < 60.0 or r is None or r.kind != "goal_kick" or not brain.pressers:
+        if e.t < 170.0 or r is None or r.kind != "goal_kick" or not brain.pressers:
             continue
         p = e.by_id[brain.pressers[0]]
         tx, ty, top = e.shape_target(p)
@@ -2052,3 +2053,118 @@ def test_near_a_line_a_way_round_whose_aim_is_off_the_pitch_is_closed():
     d.x, d.y = 47.915, 1.184  # in the margin, below the ball near the touchline
     tx, ty = e.keep_off(d, 56.824, 3.321)  # his place round the circle across the arc off the pitch
     assert math.dist((tx, ty), (50.0, 10.145)) >= 9.15 + KEEP_OFF_MARGIN_M - 1e-9 and within_lines(tx, ty)
+
+
+@pytest.mark.parametrize(("kind", "team"),
+                         [("free_kick", "home"), ("kick_off", "home"), ("kick_off", "away")])
+def test_nobody_walks_over_a_set_ball(kind, team):
+    """Lesson 207: with a restart's ball set on its spot, a player whose way to his place crosses it
+    (a team-mate of the taker at a free kick; anyone walking back for a kick-off, seed 107 on main
+    at 4:42) goes round it, never within the taker's own clearance of it (SET_BALL_CLEAR_M), and
+    gets to where he was going."""
+    from ninety.sim.engine import SET_BALL_CLEAR_M, WALK_MPS, Restart, steer
+    e = Engine(3)
+    spot = (60.0, 30.0) if kind == "free_kick" else (PITCH_X / 2, PITCH_Y / 2)
+    taker = "h9" if team == "home" else "a9"
+    e.restart = Restart(kind, team, *spot, taker, e.t + 30.0)
+    e.ball = (*spot, 0.0, 0.0, 0.0, 0.0)
+    assert e.ball_set(e.restart)  # premise
+    walker = e.by_id["h5"]
+    for side in (-0.3, 0.0, 0.3):  # his straight way through the ball, a little either side of it
+        walker.x, walker.y, walker.vx, walker.vy = spot[0] - 6.0, spot[1] + side, 0.0, 0.0
+        target = (spot[0] + 6.0, spot[1] - side)
+        closest = math.inf
+        for _ in range(int(12.0 / DT)):
+            tx, ty = e.round_the_ball(walker, *target)
+            steer(walker, tx, ty, WALK_MPS)
+            closest = min(closest, math.hypot(walker.x - spot[0], walker.y - spot[1]))
+        assert closest >= SET_BALL_CLEAR_M - 0.05, (side, closest)  # within a frame's steering
+        assert math.dist((walker.x, walker.y), target) < 0.1  # and he got there
+
+
+@pytest.mark.parametrize("kind", ["throw_in", "free_kick", "corner", "goal_kick"])
+def test_while_a_restart_waits_places_are_set_from_its_spot_not_the_dead_ball(kind):
+    """Lesson 207: set from the dead ball, every place moved with its roll to the boards and its
+    fetch, and was walked to and back. While a restart waits, players' places are the same wherever
+    the dead ball is: play is where it will be taken from."""
+    e = Engine(3)
+    e.run(1)
+    e.possessor, e.set_by, e.throw_by, e.dribbler, e.kicked = None, None, None, None, None
+    spot = {"throw_in": (60.0, 0.0), "free_kick": (60.0, 30.0), "corner": (PITCH_X, 0.0),
+            "goal_kick": (PITCH_X - 5.5, 34.0)}[kind]
+    e.stop(kind, "home" if kind != "goal_kick" else "away", spot)
+    r = e.restart
+    skip = {r.taker, r.fetcher}
+    places = []
+    dead = ((spot[0], max(spot[1], 0.5), 0.0), (spot[0] + 3.0, -3.5, 0.0), (spot[0] - 8.0, 20.0, 0.0))
+    for at in dead:  # on its spot, rolled off behind the line, being carried back
+        e.ball = (*at, 0.0, 0.0, 0.0)
+        places.append({p.id: e.shape_target(p)[:2] for p in e.players
+                       if p.id not in skip and p.role != "GK"})
+    assert places[0] == places[1] == places[2]
+
+
+def test_the_way_round_a_set_ball_is_a_stride_beyond_the_takers_clearance_and_only_for_others():
+    """Lesson 207: the point he heads for is SET_BALL_CLEAR_M (0.47 m) and a stride (0.5 m) from the
+    ball, written out (lesson 190), on the side his way passes; the taker, the fetcher and the one
+    carrying it go straight on; a place on the ball is moved out to the same edge; and nobody goes
+    round a ball that is not set (still rolling)."""
+    from ninety.sim.engine import Restart
+    e = Engine(3)
+    spot = (60.0, 30.0)
+    e.restart = Restart("free_kick", "home", *spot, "h9", e.t + 30.0)
+    e.ball = (*spot, 0.0, 0.0, 0.0, 0.0)
+    walker = e.by_id["h5"]
+    walker.x, walker.y = spot[0] - 6.0, spot[1] + 0.1
+    target = (spot[0] + 6.0, spot[1] + 0.1)
+    wx, wy = e.round_the_ball(walker, *target)
+    assert math.dist((wx, wy), spot) == pytest.approx(0.97, abs=0.005)
+    assert wy > spot[1]  # on the side his way passes
+    for pid in ("h9",):  # the taker
+        p = e.by_id[pid]
+        p.x, p.y = walker.x, walker.y
+        assert e.round_the_ball(p, *target) == target
+    e.restart.fetcher, e.restart.carried_by = "h7", None
+    p = e.by_id["h7"]
+    p.x, p.y = walker.x, walker.y
+    assert e.round_the_ball(p, *target) == target  # the fetcher
+    e.restart.fetcher, e.restart.carried_by = None, "h8"
+    p = e.by_id["h8"]
+    p.x, p.y = walker.x, walker.y
+    assert e.round_the_ball(p, *target) == target  # the one carrying it
+    e.restart.carried_by, e.restart.passed_by = None, "h8"
+    assert e.round_the_ball(p, *target) == target  # the one who knocked it on to the spot
+    e.restart.passed_by = None
+    walker.x, walker.y = spot  # standing on it, his place on it: out the way his side defends
+    assert math.dist(e.round_the_ball(walker, *spot), spot) == pytest.approx(0.97, abs=0.005)
+    walker.x, walker.y = spot[0] + 3.0, spot[1]
+    on_it = e.round_the_ball(walker, spot[0] + 0.3, spot[1])  # his place is on the ball
+    assert on_it == pytest.approx((spot[0] + 0.97, spot[1]))  # moved out to the same edge
+    walker.x, walker.y = spot[0] - 6.0, spot[1] + 0.1
+    e.ball = (*spot, 0.0, 2.0, 0.0, 0.0)  # rolling: not set
+    assert e.round_the_ball(walker, *target) == target
+
+
+def test_team_mates_on_the_far_side_of_a_set_ball_walk_round_it():
+    """Lesson 207, through the whole engine (move_players): four team-mates of a free kick's taker,
+    put on the far side of the set ball from their places, never come within SET_BALL_CLEAR_M of it
+    on their way (with it off, 0.23 m)."""
+    from ninety.sim.engine import SET_BALL_CLEAR_M
+    e = wall_kick(7, (60.0, 30.0))
+    for _ in range(int(12.0 / DT)):  # the ball is put on its spot and set
+        e.step()
+    r = e.restart
+    assert r is not None and e.ball_set(r)  # premise
+    mates = [p for p in e.players if p.team == "home" and p.role != "GK" and p.id != r.taker][:4]
+    for p in mates:
+        tx, ty, _ = e.shape_target(p)
+        d = math.hypot(tx - 60.0, ty - 30.0) or 1.0
+        p.x, p.y = 60.0 - (tx - 60.0) / d * 3.0, 30.0 - (ty - 30.0) / d * 3.0  # 3 m beyond it
+        p.vx = p.vy = 0.0
+    closest = math.inf
+    for _ in range(int(6.0 / DT)):
+        e.step()
+        if e.restart is not r:
+            break
+        closest = min(closest, *(math.hypot(p.x - 60.0, p.y - 30.0) for p in mates))
+    assert closest >= SET_BALL_CLEAR_M - 0.05
