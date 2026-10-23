@@ -2089,3 +2089,16 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_vision_live_path.py` lists `live_job.py` among the live modules;
   `tests/test_vision_live_job.py::test_a_clip_folder_holding_anything_else_is_refused_before_the_model_loads`
   (each answer-key file planted), and `::test_a_clean_clip_runs_the_whole_live_path_and_opens_no_truth`.
+
+### 194. An allow-list of a folder's top level lets anything through one level down
+- **What happened:** the live detection job refused an input folder holding anything but
+  `index.jsonl` and `images/`, but it checked only the folder's own entries, and inside `images/`
+  it looked only at `*.jpg`. A `frames.jsonl` placed in `images/` passed the check, and so would a
+  whole rendered clip nested there. Found while adding the tactical camera's `views/<name>/`
+  layout, which made the job look one level deeper and asked what else could sit there.
+- **Rule:** an allow-list of inputs is checked over the whole tree, every file and folder at every
+  depth: what is not named is refused. A new level of layout (views, tiles) gets its own planted
+  answer-key files at each depth it adds.
+- **Check:** `tests/test_vision_live_job.py::test_an_answer_key_file_anywhere_in_a_views_clip_is_refused_before_the_model_loads`
+  (each answer-key file planted at the clip, in `views/`, in a view, in its `images/` and in a
+  folder under it) and `::test_a_planted_frame_file_in_a_single_clip_s_images_is_refused`.
