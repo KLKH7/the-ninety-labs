@@ -2064,6 +2064,13 @@ class BroadcastRenderer {
     this.bug.position.set(x0 + maxW / 2, -(y0 + maxH / 2), 0);
     this.overlayScene.add(this.bug);
     this.makeStinger();
+    // graphics: false (a fixed tactical view, ninety/render/camera.py tactical_views) has no score bug
+    // and no stinger: nothing is laid over the picture, so nothing occludes the labels.
+    this.graphics = cfg.graphics !== false;
+    if (!this.graphics) {
+      this.bugRect = [0, 0, 0, 0];
+      this.bug.visible = false;
+    }
     return { bugRect: this.bugRect, maxAnisotropy: this.renderer.capabilities.getMaxAnisotropy(), gl: this.renderer.getContext().getParameter(this.renderer.getContext().VERSION) };
   }
 
@@ -2290,12 +2297,12 @@ class BroadcastRenderer {
       const cheer = age != null && age >= 0 && age < 2.5 ? 1 - (age / 2.5) ** 2 : 0;
       u.uCheer.value.set(spec.goal_side === 0 ? cheer : 0, spec.goal_side === 1 ? cheer : 0);
     }
-    this.layoutBug(spec);
+    if (this.graphics) this.layoutBug(spec);
     const R = this.renderer;
     const W = this.W, H = this.H;
     const [bx0, by0, bx1, by1] = this.bugRect;
     const onBug = (i, j) => i >= bx0 && i < bx1 && j >= by0 && j < by1;
-    const onStinger = this.layoutStinger(spec.stinger);
+    const onStinger = this.layoutStinger(this.graphics ? spec.stinger : null);
     const underBug = onStinger ? (i, j) => onBug(i, j) || onStinger(i, j) : onBug;
 
     // 1. solo passes: the full in-image silhouette of each labelled object
@@ -2368,7 +2375,7 @@ class BroadcastRenderer {
     this.post.uniforms.frame.value = spec.index;
     R.setRenderTarget(null);
     R.render(this.postScene, this.postCam);
-    this.drawBug(spec);
+    if (this.graphics) this.drawBug(spec);
     R.autoClear = false;
     R.render(this.overlayScene, this.overlayCam);
     R.autoClear = true;

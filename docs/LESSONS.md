@@ -2137,6 +2137,23 @@ short and actionable. This file is public: no research sources, product names or
   `tests/test_vision_live_job.py::test_a_clip_folder_holding_anything_else_is_refused_before_the_model_loads`
   (each answer-key file planted), and `::test_a_clean_clip_runs_the_whole_live_path_and_opens_no_truth`.
 
+### 192. A seal that matches a file by where it sits misses the same file one folder down
+- **What happened:** the render job sealed the answer key by name and place: `frames.jsonl` and
+  `events.jsonl` went to the private `truth` container only when they sat at the top of the clip
+  folder (`f.parent == clip_dir` in `ninety/render/job.py`). The tactical views write a complete
+  clip under `views/tac-l/` and `views/tac-r/`, answer key included, so the first Azure render
+  with views would have put true positions, boxes and events in the readable `renders` container,
+  next to the images vision reads. The plan for the views caught it before any render ran.
+  The same review found the job's failure reports going to `renders` too: a report's contract
+  messages quote true events and positions.
+- **Rule:** a file is answer key by what it is, wherever it sits: the seal matches the name at any
+  depth, and anything built from the key (a check report) is sealed with it. A change that adds a
+  folder to a clip plants that folder's answer key in the seal's tests.
+- **Check:** `tests/test_render_job.py::test_a_views_answer_key_is_sealed_with_the_clips` (fails
+  on the old seal), and `infra/check_truth_sealed.py` (CI), which runs the job's own `upload_dir`
+  on a planted clip with views and fails if a `frames.jsonl` or `events.jsonl` reaches `renders`
+  (`tests/test_truth_sealed.py::test_a_seal_that_matches_only_the_clips_top_level_is_caught`).
+
 ### 194. An allow-list of a folder's top level lets anything through one level down
 - **What happened:** the live detection job refused an input folder holding anything but
   `index.jsonl` and `images/`, but it checked only the folder's own entries, and inside `images/`
@@ -2150,6 +2167,19 @@ short and actionable. This file is public: no research sources, product names or
   (each answer-key file planted at the clip, in `views/`, in a view, in its `images/` and in a
   folder under it) and `::test_a_planted_frame_file_in_a_single_clip_s_images_is_refused`.
 
+### 196. A new file is written only to a path nothing holds yet
+- **What happened:** the team-shape tests were written to `tests/test_shape.py`, a name that sounded
+  free. It held the engine's attacking-shape tests (O6, O7), 129 lines, and the write replaced them
+  without a warning: the editor said "updated", not "created". The suite still passed, because a
+  deleted test cannot fail. It was caught only because `git status` showed the file as modified
+  (`M`) where a new one shows `??`.
+- **Rule:** before writing a file meant to be new, check that its path is not tracked
+  (`git ls-files <path>` prints nothing). Name a module's tests after the module's own words
+  (`test_team_shape.py` for `ninety/intel/shape.py`, whose subject is the team's shape), and read
+  `git status --short` before every commit: a file you meant to create must show `??`.
+- **Check:** `git diff --stat origin/main -- tests/test_shape.py` is empty on this branch; the shape
+  tests are in `tests/test_team_shape.py`.
+
 ### 203. CI built the image with a stand-in, so the real pin was never tried
 - **What happened:** the demo image downloads its Replay bundle from a release asset pinned by URL
   and SHA-256 in the Dockerfile. CI's image job builds with a fixture bundle instead, so it stayed
@@ -2162,6 +2192,22 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** the CI `image` job's step "The Dockerfile's pinned Replay bundle exists and matches its
   hash"; `tests/test_api_site.py::test_a_websocket_behind_the_gate_needs_the_key_too` fails with the
   WebSocket branch of `RequireKey` removed.
+
+### 205. A spring that trails its target is fed where the target will be, not where it is
+- **What happened:** #220 changed how keepers play, and two broadcast camera tests failed on
+  held-out seeds the new play reached. On seed 43 a long ball (17 to 20 m/s, 7 m up) left the side
+  of the picture: the gantry's aim is a spring that trails a target moving at the ball's pace by
+  `pan_lag_s`, about 14 m at 0.83 s. When the ball and where it would be a lag on did not fit one
+  shot, the director aimed at the ball itself, so the picture ran a lag behind it. On seed 53 a free
+  kick scored 0.44 s after it was taken; the goal started the low angle at once, over the hold the
+  edit cut had just set, so the restart's shot lasted 2.4 s.
+- **Rule:** a follow with a known lag is aimed at where the followed thing will be after that lag.
+  An edit cut is a change of shot: no rule, a goal included, starts another within `CUT_HOLD_S`
+  of it.
+- **Check:** `tests/test_render_camera.py::test_a_long_ball_stays_in_the_picture_across_it` and
+  `::test_a_goal_soon_after_the_restart_waits_for_the_edits_hold` both fail on the old camera. The
+  held-out framing (`test_the_gantry_frames_the_play_with_the_pitch_filling_the_picture`) holds
+  on main and with #220 merged.
 
 ### 163. A rule every writer follows goes into every writer's instructions
 - **What happened:** the live Personalizer evaluation (agents-live 39514003721) aired its casual
@@ -2179,6 +2225,34 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_personalizer.py::test_the_instructions_keep_the_claim_s_clock_for_every_persona`;
   `tests/test_personalizer_live.py::test_a_variant_the_personalizer_s_re_check_replaced_is_held_with_its_reason`.
 
+### 212. A tolerance converted to pixels for one camera is wrong for the next
+- **What happened:** the feet-in-box check (GROUNDING V6) allows 0.45 m between a player's tracked
+  ground point and the bottom of his box. It converted that to pixels as box height / 1.8, a
+  scale that holds for a camera looking across the pitch. On a touch, the renderer draws the foot
+  at the ball, up to about 0.9 m out. From the broadcast gantry, about 25 degrees down, a reach
+  toward the lens moved the box bottom only about 0.42 m in that scale, so the check never failed.
+  From the tactical lens, 35 to 40 degrees down, the same reach is about 0.65 to 0.75 m. Dataset
+  tactical lost training clips 70 and 79, and possibly test clip 900004, to frames whose drawing
+  was right.
+- **Rule:** a tolerance stated in metres is measured in metres, through the frame's own camera
+  matrix, never with a pixel scale fitted to one camera. An allowance for a real motion is bounded
+  by the drawing's own limit (here the leg's reach), so it cannot excuse a drawing beyond it.
+- **Check:** the V6 high-lens tests in `tests/test_render_checks.py`.
+  - A 1.0 m reach to a touched ball passes, though the side-on slack alone fails it.
+  - These all fail:
+    - the same foot with no touch;
+    - a 2.5 m "reach";
+    - a 0.3 m touch with a 1.0 m box;
+    - a floating body;
+    - a box moved sideways;
+    - a chest or thigh touch;
+    - rows far from the touch, or after an edit cut.
+  - Fourteen mutations each turn a test red; one more is equivalent.
+  - Two independent reviews, both cited in the PR, found holes in the earlier drafts:
+    - the first draft's ground disc excused floating and sideways boxes and spilled across cuts;
+    - the second still let a body rise on a touch away from the camera.
+    The rule now only extends the bottom down the picture, toward the foot drawn at the ball.
+
 ### 208. A script inside YAML is code: parse it before a run is approved
 - **What happened:** resolving a merge conflict in `agents-live.yml`, two new `case` branches were
   joined and the `;;` closing one was lost. The YAML still loaded and the merge was checked only
@@ -2188,6 +2262,23 @@ short and actionable. This file is public: no research sources, product names or
   An approval for a live run is spent only on a script that parses.
 - **Check:** `tests/test_workflows.py` runs `bash -n` on every bash `run:` step of every workflow;
   it fails on the shipped `agents-live.yml` (`7e76d15`) and passes on the fixed one.
+
+### 193. Score a claimed tie at the answer before adding an input to break it
+- **What happened:** building the fixed-camera fit, I reasoned that the pitch markings are
+  symmetric about halfway, so a lens and its mirror across halfway would see the same picture, and
+  made the lens's side a required input to break the tie. The test written to prove the tie
+  failed: the mirror lens sees the picture flipped left to right, which no camera without that
+  flip draws, so the two fit 0.0 px and 68 px apart. The input would have been a needless
+  dependency every caller had to get right. The same fit, freed in all six parameters, stalled a
+  metre from the true camera at 2.6 times its cost; the objective was right (lesson 97), the step
+  was not.
+- **Rule:** a claimed ambiguity is checked by scoring both candidates at the answer, as an
+  objective is (lesson 97), before any interface is built around it. A reflection is not a camera
+  move.
+- **Check:** `tests/test_vision_pitch_fixed.py::test_a_lens_and_its_mirror_across_halfway_do_not_tie`
+  (the true lens fits, its mirror does not, the flipped picture does);
+  `::test_the_compass_search_walks_on_where_the_free_step_stalls` fails with the compass search
+  removed from `pitch.settle` (a half-size scene did not stall, so the stalled view is a fixture).
 
 ### 219. A number reader must read every language and every unit our writers produce, and bind a number to its player
 - **What happened:** an audit of the fact-checker's code half found four forms it still let

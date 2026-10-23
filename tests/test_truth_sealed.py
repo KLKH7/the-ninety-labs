@@ -88,3 +88,19 @@ def test_a_training_file_naming_the_test_truth_fails(tmp_path):
 def test_this_repo_has_no_training_link_to_the_test_truth():
     root = Path(__file__).parents[1]
     assert [v for v in check.test_truth_violations(template(TEST_TRUTH), root) if "names" in v] == []
+
+
+def test_the_render_job_seals_the_answer_key_of_a_clip_and_of_its_views():
+    assert check.upload_violations(Path(__file__).parents[1]) == []
+
+
+def test_a_seal_that_matches_only_the_clips_top_level_is_caught(tmp_path):
+    # The seal before lesson 192: a view's frames.jsonl and events.jsonl went to renders.
+    job = (Path(__file__).parents[1] / check.UPLOAD).read_text()
+    old = job.replace("if f.name in TRUTH_FILES]", "if f.name in TRUTH_FILES and f.parent == clip_dir]")
+    assert old != job
+    (tmp_path / check.UPLOAD).parent.mkdir(parents=True)
+    (tmp_path / check.UPLOAD).write_text(old)
+    found = check.upload_violations(tmp_path)
+    assert any("views/tac-l/frames.jsonl to renders" in f for f in found)
+    assert any("does not seal views/tac-r/events.jsonl" in f for f in found)
