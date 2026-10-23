@@ -1,6 +1,6 @@
 # Team sides from the tactical views: pre-registered plan
 
-Status: **pre-registered.** Written Oct 23, 19:40 ET. The tactical lenses' observations of the
+Status: **pre-registered.** Written Oct 23, 19:34 ET (the commit time). The tactical lenses' observations of the
 validation clips exist (they were made to derive the fixed lens's height band), but no track, side
 or confidence has been computed from them. A change after this commit goes under "Deviations",
 dated, before any result is read.
@@ -61,7 +61,7 @@ plan leaves that to the gate's owner.
 
 ## Deviations
 
-### Oct 23, 20:10 ET, after T0 was read and before any T1 number was read
+### Oct 23, 19:38 ET (the commit time), after T0 was read and before any T1 number was read
 
 T0 was read (docs/eval/sides-tactical/T0-validation.json): outfield accuracy 0.614. The diagnosis
 is in the data: the kit is misread on the tactical lenses, which render dark (frame mean RGB about
