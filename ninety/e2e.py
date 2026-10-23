@@ -64,7 +64,7 @@ from ninety import condensed, radar
 from ninety.agents import live, telemetry
 from ninety.agents.contracts import Models, Review
 from ninety.agents.cues import TEMPLATE_TYPES, _text
-from ninety.agents.factcheck import Claim, Verdict
+from ninety.agents.factcheck import MIN_CONFIDENCE, Claim, Verdict
 from ninety.agents.slice import Recording, replayer, tamper
 from ninety.intel.stats import calculate_facts
 from ninety.match import detected
@@ -224,7 +224,8 @@ async def explain_and_render(
             ask, judge = offline_analyst(agent_events, plant), judge_not_run
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            result = await live.run(events, clip, ask, judge, minute if ask else None)
+            result = await live.run(events, clip, ask, judge, minute if ask else None,
+                                    inline_events=models is not None)
         cues.update({c["id"]: c for c in result.cues})
         held.update(result.held_detections)
         outcome = result.outcome
@@ -240,7 +241,7 @@ async def explain_and_render(
                 "status": "accepted" if outcome.accepted else "held_back",
                 "verdict": outcome.status,
                 "drafts": outcome.attempts,
-                "planted": plant and recording is None,
+                "planted": plant and recording is None and models is None,
                 "mode": "replay" if recording is not None else "live" if models is not None else "offline",
                 "text": outcome.claim.text,
                 "evidence": outcome.claim.evidence,
@@ -251,6 +252,12 @@ async def explain_and_render(
 
 
 # ---------------------------------------------------------------- the multi-agent graph
+
+
+def on_air(events: list[dict]) -> list[dict]:
+    """The events confident enough to have a graphic on air (the confidence gate's line): the only
+    ones the workflow lets a moment be about."""
+    return [e for e in events if e.get("confidence") is None or e["confidence"] >= MIN_CONFIDENCE]
 
 
 def offline_models(events: list[dict]) -> Models:
@@ -265,7 +272,8 @@ def offline_models(events: list[dict]) -> Models:
 
     async def analyst(prompt: str) -> str:
         minute = int(prompt.split("minute ")[1].split(".")[0])
-        event = most_interesting([e for e in by_minute.get(minute, []) if e["type"] in TEMPLATE_TYPES])
+        graphics = [e for e in by_minute.get(minute, []) if e["type"] in TEMPLATE_TYPES]
+        event = most_interesting(on_air(graphics))
         picks = [] if event is None else [{"main_event": event["id"], "evidence": [event["id"]]}]
         return json.dumps({"moments": picks})
 
@@ -313,10 +321,11 @@ async def explain_with_graph(
     run_minute: Callable[[int, bool], Awaitable] | None = None,
     single: Callable[[int, bool], Awaitable[tuple[list[dict], list[dict]]]] | None = None,
     mode: str = "graph offline",
-) -> tuple[list[dict], list[dict], list[str], list[dict]]:
+) -> tuple[list[dict], list[dict], list[str], list[dict], list[dict]]:
     """The graph once per minute with a pass, shot or goal to explain. Returns the cues (templates,
     each minute's insights and the templates it badged), the claim traces, the detections too
-    unsure to air, and each minute the graph failed on. A failed minute runs `single` instead: the
+    unsure to air, each minute the graph failed on, and each minute whose Analyst picked nothing that
+    stood (with why). A failed minute runs `single` instead: the
     single Analyst -> Fact-checker path (offline by default), and its trace says so.
 
     `run_minute(minute, plant)` runs the graph for one minute (default: offline writers);
@@ -342,14 +351,16 @@ async def explain_with_graph(
     run_minute, single = run_minute or offline_minute, single or offline_single
     claims: list[dict] = []
     fallbacks: list[dict] = []
-    busy = [m for m in sorted({minute_of(e) for e in events}) if most_interesting(
-        [e for e in agent_events if e["minute"] == m and e["type"] in TEMPLATE_TYPES]) is not None]
+    minute_notes: list[dict] = []
+    busy = [m for m in sorted({minute_of(e) for e in events}) if most_interesting(on_air(
+        [e for e in agent_events if e["minute"] == m and e["type"] in TEMPLATE_TYPES])) is not None]
     for minute in busy:
         planted = plant and minute == busy[0]
         try:
-            result = await run_minute(minute, planted)
+            with telemetry.stage_span("agents", minute=minute, path="graph"):
+                result = await run_minute(minute, planted)
         except Exception as e:  # noqa: BLE001  the graph failed: this minute runs the single Analyst
-            why = f"{type(e).__name__}: {e}"[:200]
+            why = type(e).__name__  # the type only: no endpoint, token or service text on screen
             fallbacks.append({"minute": minute, "error": why})
             new, traced = await single(minute, planted)
             cues.update({c["id"]: c for c in new if c.get("kind") == "insight"})
@@ -358,15 +369,22 @@ async def explain_with_graph(
         for cue in result.cues:  # its insights, and the templates it badged (held, rejected)
             if cue.get("kind") == "insight" or cue != templates.get(cue["id"]):
                 cues[cue["id"]] = cue
-        claims += [review_trace(r, result, minute, times, planted, mode) for r in result.reviews]
+        tampered = any(s.action == "tamper" for s in result.trace)
+        claims += [review_trace(r, result, minute, times, tampered, mode) for r in result.reviews]
+        # What the Analyst did that belongs to no moment (a pick it dropped, a failed call).
+        notes = [f"{s.role} {s.action}: {s.detail}" for s in result.trace if s.moment == "-"
+                 and s.role == "analyst"]
+        if notes or not result.reviews:
+            minute_notes.append({"minute": minute, "moments": len(result.reviews), "notes": notes})
     ordered = sorted(cues.values(), key=lambda c: (c["t_in"], c["id"]))
-    return ordered, claims, sorted(base.held_detections), fallbacks
+    return ordered, claims, sorted(base.held_detections), fallbacks, minute_notes
 
 
 @contextlib.asynccontextmanager
-async def published_single(credential):
+async def published_single(credential, turns: list[dict], pins: dict[str, str]):
     """The published single Analyst and Judge (the slice's agents), as live.run's ask and judge:
-    the graph's fallback with --agents live. Events go inline; a call to the match tools fails."""
+    the graph's fallback with --agents live. The minute's events go in the prompt; a call to the
+    match tools fails the call. Their answers go to `turns`, their versions to `pins`."""
     from agent_framework.foundry import FoundryAgent
 
     from ninety import config
@@ -378,16 +396,22 @@ async def published_single(credential):
         agents = []
         for local in foundry.slice_agents(client):
             name, version = foundry.pinned(local)  # refuses a definition that drifted from its pin
+            pins[name] = version
             agents.append(await stack.enter_async_context(FoundryAgent(
                 project_endpoint=config.FOUNDRY_PROJECT, agent_name=name, agent_version=version,
                 credential=credential)))
         analyst, judge_agent = agents
 
         async def ask(prompt: str) -> str:
-            return foundry.inline_only(await analyst.run(prompt))
+            response = foundry.inline_only(await analyst.run(prompt))
+            turns.append({"minute": None, "role": "analyst", "prompt": prompt, "response": response})
+            return response
 
         async def judge(claim: Claim, evidence: list[dict]) -> Verdict:
-            return await judge_call(judge_agent, claim, evidence)
+            verdict = await judge_call(judge_agent, claim, evidence)
+            turns.append({"minute": None, "role": "judge", "prompt": claim.text,
+                          "response": json.dumps(asdict(verdict))})
+            return verdict
 
         yield ask, judge
 
@@ -395,37 +419,44 @@ async def published_single(credential):
 async def explain_live(events: list[dict], clip: str, plant: bool, log: dict):
     """The graph on the published Foundry agents (a live, billed call), one sign-in for the whole
     clip; the published single Analyst for any minute the graph fails on. `log` gets the versions
-    that ran and every model answer, for the bundle."""
+    that ran, every model answer, and the minutes in which a model call failed (the graph then holds
+    that minute's claims and the templates stay; it does not raise)."""
     from ninety.agents import workflow
     from ninety.agents.credentials import new_credential, sign_in
+    from ninety.mcp import match_server
 
     turns: list[dict] = []
     pins: dict[str, str] = {}
+    failed: list[int] = []
+    # An id no server serves (lesson 90): a stray tool call can never read another match's events.
+    match = match_server.unserved(clip)
     async with new_credential() as credential:
         await sign_in(credential)
 
         async def run_minute(minute: int, planted: bool):
-            result, said, ran, _, _ = await workflow.run_live(
-                lambda: events, minute, clip, True, planted, trace_to="none", credential=credential)
+            result, said, ran, model_failed, _ = await workflow.run_live(
+                lambda: events, minute, match, True, planted, trace_to="none", credential=credential)
             turns.extend({"minute": minute, **asdict(t)} for t in said)
             pins.update(ran)
+            if model_failed:
+                failed.append(minute)
             return result
 
-        async with published_single(credential) as models:
+        async with published_single(credential, turns, pins) as models:
             async def single(minute: int, planted: bool):
                 try:
-                    new, traced, _ = await explain_and_render(events, clip, planted, None, [minute], models)
+                    new, traced, _ = await explain_and_render(events, clip, False, None, [minute], models)
                 except Exception as e:  # noqa: BLE001  both paths failed: the templates stay
                     return [], [{"id": f"claim-m{minute}", "minute": minute, "t": None,
                                  "status": "held_back", "verdict": "held", "drafts": 0,
-                                 "planted": planted, "mode": "live", "text": "", "evidence": [],
+                                 "planted": False, "mode": "live", "text": "", "evidence": [],
                                  "steps": [{"role": "analyst", "moment": f"claim-m{minute}",
                                             "action": "fail", "ms": 0.0,
                                             "detail": f"{type(e).__name__}; templates stay"}]}]
                 return new, traced
 
             out = await explain_with_graph(events, clip, plant, run_minute, single, mode="graph live")
-    log.update({"pins": pins, "model_answers": len(turns)})
+    log.update({"pins": pins, "model_answers": len(turns), "model_failures": failed})
     log["turns"] = turns
     return out
 
@@ -481,17 +512,18 @@ async def run(args: argparse.Namespace) -> dict:
         facts = [f.as_dict() for f in calculate_facts(events)]
     recording = Recording.load(args.replay) if args.replay else None
     fallbacks: list[dict] = []
+    notes: list[dict] = []
     agents_log: dict = {}
     if recording is not None or args.single_analyst:
         cues, claims, held = await explain_and_render(events, clip.id, args.plant, recording)
         agents_mode = "replay" if recording else "single analyst offline"
     elif args.agents == "live":
-        cues, claims, held, fallbacks = await explain_live(events, clip.id, args.plant, agents_log)
+        cues, claims, held, fallbacks, notes = await explain_live(events, clip.id, args.plant, agents_log)
         agents_mode = "graph live"
         # Every model answer, for audit: what the published agents said, minute by minute.
         (out / "agents.json").write_text(json.dumps(agents_log.pop("turns"), indent=2) + "\n")
     else:
-        cues, claims, held, fallbacks = await explain_with_graph(events, clip.id, args.plant)
+        cues, claims, held, fallbacks, notes = await explain_with_graph(events, clip.id, args.plant)
         agents_mode = "graph offline"
     upgrades, model_calls, tokens, unavailable = None, [], {}, None
     if args.describer == "foundry":
@@ -549,9 +581,10 @@ async def run(args: argparse.Namespace) -> dict:
         "events": {"source": events_source, "count": len(events), "standin": "stand-in" in events_source,
                    "held": held},
         "facts": len(facts),
-        "agents": {"mode": agents_mode, "planted": args.plant and not recording,
+        "agents": {"mode": agents_mode,
+                   "planted": any(c["planted"] for c in claims) if not recording else False,
                    "claims": len(claims), "accepted": sum(c["status"] == "accepted" for c in claims),
-                   "fallbacks": fallbacks, **agents_log},
+                   "fallbacks": fallbacks, "minutes_without_a_moment": notes, **agents_log},
         "cues": len(cues),
         "audio": audio,
         "radar": radar_info,
@@ -605,6 +638,9 @@ def main(argv: list[str] | None = None) -> None:
     args = ap.parse_args(argv)
     if (args.tracked is None) != (args.observations is None):
         ap.error("the radar needs both --tracked and --observations")
+    if args.agents == "live" and (args.replay or args.single_analyst):
+        ap.error("--agents live runs the graph on the published agents: "
+                 "not with --replay or --single-analyst")
     manifest = asyncio.run(run(args))
     a = manifest["agents"]
     print(

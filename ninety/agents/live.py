@@ -107,6 +107,7 @@ async def run(
     timeout_seconds: float = AGENTS_TIMEOUT_SECONDS,
     personalize: Personalize | None = None,
     profiles: list[Profile] | None = None,
+    inline_events: bool = False,
 ) -> LiveResult:
     events = detected.check([dict(e) for e in events], clip)
     ledger = InMemoryLedger()
@@ -130,7 +131,8 @@ async def run(
         try:
             outcome = await asyncio.wait_for(
                 run_workflow(
-                    ask, judge, minute, False, int(clip.removeprefix("seed")), 0, False, rows, stats
+                    ask, judge, minute, False, int(clip.removeprefix("seed")), 0, False, rows, stats,
+                    inline=inline_events,
                 ),
                 timeout=timeout_seconds,
             )

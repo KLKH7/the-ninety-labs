@@ -653,6 +653,8 @@ def test_record_saves_the_live_replies_and_the_cli_prints_the_model_call_count(
     out, cues = tmp_path / "w.json", tmp_path / "cues.jsonl"
     cli(monkeypatch, "--events", detected_file(tmp_path), "--record", out, "--cues-out", cues)
     recording = WorkflowRecording.load(out)
+    # A new recording says which rule it was made under, so its replay checks as it ran.
+    assert recording.inputs["alternative_checked_after_verified"] is False
     assert [(t.role, t.response) for t in recording.turns] == [
         ("analyst", picks(MAIN)), ("tactician", reply(true_claim(MAIN))), ("challenger", '{"agree": true}'),
         ("judge", json.dumps({"ok": True, "reasons": [], "category": None})),

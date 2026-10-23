@@ -16,10 +16,12 @@ The graph (Agent Framework `WorkflowBuilder`), as docs/ARCHITECTURE.md draws it:
    claim is held and the template stays on air.
 4. The Challenger (model) agrees, or offers another reading of the same evidence. If it fails,
    it is skipped.
-5. The fact-checker checks both claims with the slice's `fact_check`: the code checks, then the
-   confidence gate, then the Judge. A claim may cite only its moment's evidence. A rejected
-   claim goes back to its author with the reasons, at most MAX_REWRITES times. A held claim (the
-   check could not be done, or it rests on an unsure detection) is not rewritten.
+5. The fact-checker checks the Tactician's claim with the slice's `fact_check`: the code checks,
+   then the confidence gate, then the Judge; the Challenger's reading only while the Tactician's
+   is not verified (once it is, the reading cannot air, so it is not checked or rewritten). A
+   claim may cite only its moment's evidence. A rejected claim goes back to its author with the
+   reasons, at most MAX_REWRITES times. A held claim (the check could not be done, or it rests on
+   an unsure detection) is not rewritten.
 6. Producer.air (code) airs the Tactician's claim if it is verified, else the Challenger's if
    that is, else the template stays. The insight replaces the template in its slot.
 7. With `personalize`, the Personalizer (A2A to its own service, ninety/personalizer/client.py, or
@@ -513,7 +515,8 @@ class Challenger(Executor):
 
 
 class FactChecker(Executor):
-    """Both claims, the Tactician's first; each through the slice's fact_check."""
+    """The Tactician's claim, then the Challenger's reading unless the Tactician's is verified; each
+    through the slice's fact_check."""
 
     def __init__(self, run: Run):
         super().__init__(id="fact_checker")

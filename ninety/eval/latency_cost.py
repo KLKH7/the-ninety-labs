@@ -194,7 +194,9 @@ def measure_latency(clip: Path, runs: int) -> dict:
     recording = Recording.load(RECORDING)
     scenarios: dict[str, list[dict[str, float]]] = {"e2e": [], "replay": []}
     with _Spans() as spans, tempfile.TemporaryDirectory() as tmp:
-        args = e2e.parser().parse_args([str(clip), "--out", str(Path(tmp) / "bundle"), "--frames"])
+        # The single Analyst path: the committed timings and "What runs" describe it, not the graph.
+        args = e2e.parser().parse_args([str(clip), "--out", str(Path(tmp) / "bundle"), "--frames",
+                                        "--single-analyst"])
         for n in range(runs + 1):  # the first run warms imports and caches, and is not counted
             _quiet(lambda: asyncio.run(e2e.run(args)))
             stages = spans.take()
@@ -216,7 +218,8 @@ def describe_clip(clip: Path) -> dict:
     from ninety import e2e
 
     with tempfile.TemporaryDirectory() as tmp:
-        args = e2e.parser().parse_args([str(clip), "--out", str(Path(tmp) / "b"), "--frames"])
+        args = e2e.parser().parse_args([str(clip), "--out", str(Path(tmp) / "b"), "--frames",
+                                        "--single-analyst"])
         manifest = _quiet(lambda: asyncio.run(e2e.run(args)))
     return {"frames": manifest["detections"]["frames"], "events": manifest["events"]["count"],
             "events_source": manifest["events"]["source"], "facts": manifest["facts"],

@@ -2,6 +2,7 @@
 Its claims come from the multi-agent graph (ninety/agents/workflow.py), with the single Analyst path
 (ninety/agents/live.py) as the fallback; these tests pin what e2e adds around them."""
 
+import asyncio
 import builtins
 import io
 import json
@@ -157,9 +158,9 @@ def test_a_minute_the_graph_fails_on_falls_back_to_the_single_analyst(tmp_path, 
     monkeypatch.setattr(workflow, "run_workflow", broken)
     out, manifest = run(tmp_path)
     (fell,) = manifest["agents"]["fallbacks"]
-    assert fell["minute"] == 2 and "graph down" in fell["error"]
+    assert fell == {"minute": 2, "error": "RuntimeError"}  # the type only: no service text on screen
     claim = only_claim(out)
-    assert claim["mode"].startswith("fallback: single analyst (RuntimeError: graph down")
+    assert claim["mode"] == "fallback: single analyst (RuntimeError)"
     assert claim["status"] == "accepted" and claim["text"] == "h8 shot, on target, 101 km/h."
     assert [c for c in cues(out) if c["kind"] == "insight"]
 
@@ -183,6 +184,7 @@ def test_live_agents_run_the_graph_on_the_published_agents_with_one_sign_in(tmp_
 
     async def run_live(load, minute, match, inline, plant, trace_to, credential):
         assert inline and trace_to == "none" and credential == "cred"
+        assert match == "seed42-inline"  # an id no server serves (lesson 90)
         minutes.append(minute)
         events = load()
         agent_events = [e2e.compact(e) for e in events if e["type"] in e2e.AGENT_TYPES]
@@ -191,7 +193,8 @@ def test_live_agents_run_the_graph_on_the_published_agents_with_one_sign_in(tmp_
         return result, [Turn("tactician", "p", "a")], {"ninety-tactician": "2"}, False, events
 
     @asynccontextmanager
-    async def single(cred):
+    async def single(cred, turns, pins):
+        pins["ninety-analyst"] = "5"
         yield None, None
 
     monkeypatch.setattr(credentials, "new_credential", credential)
@@ -201,7 +204,8 @@ def test_live_agents_run_the_graph_on_the_published_agents_with_one_sign_in(tmp_
     out, manifest = run(tmp_path, "--agents", "live")
     assert signed == ["cred"] and minutes == [2]
     assert manifest["agents"]["mode"] == "graph live"
-    assert manifest["agents"]["pins"] == {"ninety-tactician": "2"}
+    assert manifest["agents"]["pins"] == {"ninety-tactician": "2", "ninety-analyst": "5"}
+    assert manifest["agents"]["model_failures"] == []
     assert json.loads((out / "agents.json").read_text()) == [
         {"minute": 2, "role": "tactician", "prompt": "p", "response": "a"}]
     assert only_claim(out)["mode"] == "graph live"
@@ -255,3 +259,66 @@ def test_most_interesting_prefers_a_shot_then_the_faster_ball():
     assert e2e.most_interesting(passes)["id"] == "p2"
     assert e2e.most_interesting([*passes, shot])["id"] == "s1"
     assert e2e.most_interesting([]) is None
+
+
+# Several minutes, through explain_with_graph directly (the test clip spans one) ----------------------
+
+STANDIN = detected.load(detected.FIXTURES / "detected-standin-seed900001.jsonl")
+
+
+def graph(plant=False, run_minute=None):
+    return asyncio.run(e2e.explain_with_graph(STANDIN, "seed900001", plant, run_minute))
+
+
+def test_the_offline_analyst_picks_only_what_has_a_graphic_on_air():
+    # Minute 2's most interesting event is the shot at 0.32 (standin-e015); it has no graphic, so
+    # the moment is the confident shot standin-e012 (0.94), not a minute lost from the trace.
+    cues_, claims, _, _, notes = graph()
+    assert [c["evidence"] for c in claims if c["minute"] == 2] == [["standin-e012"]]
+    assert notes == []
+
+
+def test_a_plant_lands_only_on_the_first_minute_explained_and_says_so():
+    cues_, claims, _, _, _ = graph(plant=True)
+    by_minute = {c["minute"]: c for c in claims}
+    assert by_minute[1]["planted"] and not by_minute[2]["planted"]
+    assert any(s["action"] == "tamper" for s in by_minute[1]["steps"])
+    assert not any(s["action"] == "tamper" for s in by_minute[2]["steps"])
+
+
+def test_a_template_badged_in_one_minute_stays_badged_after_the_next():
+    from ninety.agents import workflow
+
+    agent_events = [e2e.compact(e) for e in STANDIN if e["type"] in e2e.AGENT_TYPES]
+
+    async def run_minute(minute, planted):
+        models = e2e.offline_models(agent_events)
+        if minute == 1:  # minute 1's Tactician is always wrong: its template stays, badged
+            async def wrong(prompt):
+                main = json.loads(prompt)["moment"]["main_event"]
+                return json.dumps({"text": "A pass at 999 km/h.", "evidence": [main]})
+
+            models = replace(models, tactician=wrong)
+        return await workflow.run_workflow(models, STANDIN, minute, "seed900001", plant=planted,
+                                           inline_events=True)
+
+    cues_, claims, _, _, _ = graph(run_minute=run_minute)
+    (m1,) = [c for c in claims if c["minute"] == 1]
+    template = next(c for c in cues_ if c["id"] == f"cue-{m1['evidence'][0]}-analyst")
+    assert template.get("fallback") == "rejected"  # minute 2's run re-emits it unbadged; it stays badged
+    assert [c for c in cues_ if c["kind"] == "insight" and c["evidence"] == ["standin-e012"]]
+
+
+def test_the_live_fallback_s_single_analyst_gets_the_minute_s_events_in_its_prompt():
+    prompts = []
+
+    async def ask(prompt):
+        prompts.append(prompt)
+        return json.dumps({"text": "", "evidence": []})
+
+    async def judge(claim, evidence):
+        return e2e.Verdict(ok=True)
+
+    asyncio.run(e2e.explain_and_render(STANDIN, "seed900001", False, None, [2], (ask, judge)))
+    assert prompts and "EVENTS" in prompts[0] and "standin-e012" in prompts[0]
+    assert "standin-e002" not in prompts[0]  # only the minute's own events
