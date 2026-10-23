@@ -71,4 +71,7 @@ docs/decisions/0001-synthetic-data.md.
 # 0.5.15: `views=tactical` also writes two fixed whole-pitch tactical lenses (camera.tactical_views)
 # under views/tac-l and views/tac-r, 1920x1080 without graphics, from the same scene frame for frame.
 # The broadcast's images and labels are byte-identical to 0.5.14's for every seed.
-RENDERER_VERSION = "0.5.15"
+# 0.5.16 (after #231's 0.5.15): a long ball the gantry cannot frame together with where it will be a
+# lag on is aimed at the latter, so the trailing pan lands on the ball rather than a lag behind it;
+# a goal soon after an edit cut waits for the restart's hold before the low angle (lesson 205).
+RENDERER_VERSION = "0.5.16"

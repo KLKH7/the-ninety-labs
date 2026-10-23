@@ -289,6 +289,7 @@ class Director:
         self.cuts = cuts
         self.angle = "main"
         self._cut_until = -1.0
+        self._edit_hold_until = -1.0  # the restart's wide shot after an edit cut holds until here
         self._cut_kind = ""  # "", "netL", "netR" or "tight". Empty is the gantry.
         self.net: dict | None = None  # the goal the mesh and the low angle are still showing
 
@@ -318,6 +319,7 @@ class Director:
         out (demo v1's critic, #4 and #15)."""
         self._cut_kind = ""
         self._cut_until = self.t + self.dt + CUT_HOLD_S  # from the restart's first frame
+        self._edit_hold_until = self._cut_until
         self.aim = None
         self.zoom_v = 0.0
 
@@ -499,6 +501,12 @@ class Director:
 
         if inside(0.0):
             return ax, ay
+        if not inside(1.0):
+            # The ball and where it will be a lag on are too far apart for one shot (a long ball).
+            # The aim trails a target moving at the ball's pace by that lag (_ease), so aiming at
+            # the ball itself leaves the picture a lag behind it and the ball runs out of shot.
+            # Aimed where the ball will be, the trailing aim is on the ball (lesson 205).
+            return balls[1][0], balls[1][1]
         lo, hi = 0.0, 1.0  # at t = 1 the ball is at the centre of the picture
         for _ in range(14):
             mid = (lo + hi) / 2
@@ -603,10 +611,14 @@ class Director:
         want = self._better(ball_x, ball_y) if self.cuts else ""
         # The hold covers every angle, including the return to the gantry, so an action on the
         # edge of the rule cannot bounce the camera back and forth. A goal starts the low angle at
-        # once, even over a hold. Near the edit's next cut nothing changes: the cut is the change.
+        # once, even over a hold, except the hold after an edit cut: that cut was itself a change of
+        # shot, so a goal soon after the restart is seen on the gantry and the low angle comes up
+        # once the hold ends, while the goal is still fresh (_net_due; lesson 205). Near the edit's
+        # next cut nothing changes: the cut is the change.
         steady = cut_in is not None and cut_in < CUT_HOLD_S
         due = self.t >= self._cut_until - 1e-9 and want != self._cut_kind and not steady
-        if (fresh_goal and self.cuts and self._scorer is None) or due:
+        after_edit = self.t < self._edit_hold_until - 1e-9
+        if (fresh_goal and self.cuts and self._scorer is None and not after_edit) or due:
             self._cut_kind = want
             self._cut_until = self.t + CUT_HOLD_S
         if self._cut_kind == "scorer":
