@@ -11,8 +11,9 @@ API's identity holds no role on the storage account that keeps the answer key
     python3 infra/replay.py pack runs/replay runs/replay.tar.gz   # prints the sha256 to pin
     python3 infra/replay.py unpack runs/replay.tar.gz <dir> <sha256>   # what the Dockerfile runs
 
-`pack` refuses a bundle that holds a file the viewer does not read, so the answer key of a clip
-(frames.jsonl, clip.json, meta.json) can never ride along into the public image.
+`pack` refuses a bundle that holds a file the viewer does not read, or an events.jsonl that is not
+detected events, so the answer key of a clip (frames.jsonl, clip.json, meta.json, its events.jsonl)
+can never ride along into the public image; `unpack`, which the Dockerfile runs, checks the same.
 """
 
 from __future__ import annotations
@@ -41,6 +42,14 @@ def members(bundle: Path) -> list[Path]:
                        for folder, suffix in FOLDERS.items())]
     if bad:
         raise SystemExit(f"not a viewer file, refusing to publish: {', '.join(bad)}")
+    # events.jsonl is a name the answer key also uses: in a bundle it must be the detected events
+    # (ninety/match/detected.py, source "vision"), so a clip's ground truth copied in is refused.
+    events = bundle / "events.jsonl"
+    if events.is_file():
+        for n, line in enumerate(events.read_text().splitlines(), 1):
+            if line.strip() and json.loads(line).get("source") != "vision":
+                raise SystemExit(f"events.jsonl line {n} is not a detected event (source vision), "
+                                 "refusing to publish")
     manifest = json.loads((bundle / "manifest.json").read_text())
     if manifest.get("format") != 1:
         raise SystemExit(f"bundle format {manifest.get('format')}, expected 1")

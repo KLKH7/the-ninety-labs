@@ -21,6 +21,8 @@ def site(tmp_path):
     phone = tmp_path / "phone"
     phone.mkdir()
     (phone / "index.html").write_text("<!doctype html><title>phone</title>")
+    (phone / "assets").mkdir()
+    (phone / "assets" / "index-def.js").write_text("console.log(2)")
     (tmp_path / "secret.txt").write_text("outside the bundle")
     return TestClient(api.build("k" * 64, passcode="p" * 24, viewer=viewer, replay=replay, phone=phone))
 
@@ -39,6 +41,7 @@ def test_the_phone_companion_is_served_beside_the_viewer(site):
         assert r.status_code == 200 and "<title>phone</title>" in r.text, path
     assert "frame-ancestors 'none'" in site.get("/phone/").headers["content-security-policy"]
     assert site.get("/phone/../secret.txt").status_code == 404
+    assert "immutable" in site.get("/phone/assets/index-def.js").headers["cache-control"]
 
 
 def test_the_replay_bundle_is_served_with_byte_ranges(site):
@@ -70,6 +73,30 @@ def test_live_mode_needs_the_passcode(site):
     assert site.get("/api/live/status").status_code == 401
     assert site.get("/api/live/status", headers={"x-ninety-passcode": "wrong"}).status_code == 401
     assert site.get("/api/live/status", headers={"x-ninety-passcode": "p" * 24}).json() == {"live": "ok"}
+
+
+def test_a_websocket_behind_the_gate_needs_the_key_too():
+    # The gate checks WebSocket handshakes as it checks HTTP, so a Live route that upgrades never
+    # opens without the passcode, and never at all when none is configured.
+    async def echo(websocket):
+        await websocket.accept()
+        await websocket.send_text("open")
+        await websocket.close()
+
+    from starlette.applications import Starlette
+    from starlette.routing import WebSocketRoute
+    from starlette.websockets import WebSocketDisconnect
+
+    inner = Starlette(routes=[WebSocketRoute("/ws", echo)])
+    for configured, sent in (("p" * 24, None), ("p" * 24, "wrong"), ("", "")):
+        gated = TestClient(api.RequireKey(inner, configured, api.PASSCODE_HEADER))
+        headers = {} if sent is None else {"x-ninety-passcode": sent}
+        with pytest.raises(WebSocketDisconnect):
+            with gated.websocket_connect("/ws", headers=headers) as ws:
+                ws.receive_text()
+    gated = TestClient(api.RequireKey(inner, "p" * 24, api.PASSCODE_HEADER))
+    with gated.websocket_connect("/ws", headers={"x-ninety-passcode": "p" * 24}) as ws:
+        assert ws.receive_text() == "open"
 
 
 def test_live_mode_without_a_configured_passcode_refuses_everyone(tmp_path):

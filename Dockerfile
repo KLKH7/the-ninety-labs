@@ -57,15 +57,15 @@ assert all((pathlib.Path(m.MATCH_DIR) / 'frames' / f'{k}.json').exists() for k i
 # Replay mode: one clip already through the whole chain (ninety-e2e), packed by infra/replay.py and
 # published as a release asset. Refused unless its bytes match the pinned hash, so a changed or
 # replaced asset fails the build instead of reaching the demo. A new bundle changes both lines.
-ARG REPLAY_URL=https://github.com/KLKH7/the-ninety-labs/releases/download/replay-seed900001-v1/replay.tar.gz
-ARG REPLAY_SHA256=8f5cdd22ea21fbd9ac916338a70df9894391446eef2eb1a71bc6bdc1c63288b5
+ARG REPLAY_URL=https://github.com/KLKH7/the-ninety-labs/releases/download/replay-seed900001-0f101db/replay.tar.gz
+ARG REPLAY_SHA256=a5591d2666949076e5e81ccae616ca478c299067824dd46417a208d61e4fa9b9
 ENV NINETY_REPLAY_DIR=/app/replay NINETY_VIEWER_DIR=/app/viewer NINETY_PHONE_DIR=/app/phone
-RUN python -c "import hashlib,io,sys,tarfile,urllib.request as u; \
-d=u.urlopen(sys.argv[1], timeout=120).read(); h=hashlib.sha256(d).hexdigest(); \
-h == sys.argv[2] or sys.exit(f'replay bundle sha256 {h}, expected {sys.argv[2]}'); \
-tarfile.open(fileobj=io.BytesIO(d)).extractall(sys.argv[3], filter='data')" \
-    "$REPLAY_URL" "$REPLAY_SHA256" /app/replay \
-    && test -f /app/replay/manifest.json
+# infra/replay.py unpack checks the hash, then the same allow-list pack applied (no answer-key file).
+COPY infra/replay.py /tmp/replay.py
+RUN python -c "import sys,urllib.request as u; open(sys.argv[2], 'wb').write(u.urlopen(sys.argv[1], timeout=120).read())" \
+    "$REPLAY_URL" /tmp/replay.tar.gz \
+    && python /tmp/replay.py unpack /tmp/replay.tar.gz /app/replay "$REPLAY_SHA256" \
+    && test -f /app/replay/manifest.json && rm /tmp/replay.tar.gz /tmp/replay.py
 COPY --from=viewer /viewer/dist /app/viewer
 COPY --from=phone /phone/dist /app/phone
 

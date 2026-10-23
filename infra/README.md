@@ -25,7 +25,9 @@ The Foundry resource (`ninety-labs-ai`) and its project were created by hand ear
 references them to add the connection and the policy, but does not manage them. Also not managed
 here yet: Speech (`ninety-labs-speech`). Cosmos DB and the
 Personalizer app are added with the code that uses them
-([ARCHITECTURE.md](../docs/ARCHITECTURE.md#deployment-on-azure)).
+([ARCHITECTURE.md](../docs/ARCHITECTURE.md#deployment-on-azure)). The live detection job
+([live-job.bicep](live-job.bicep), [live-job.sh](live-job.sh)) is deployed on its own into this
+environment and registry, by hand, never by `azd provision` or deploy.yml; it is not deployed yet.
 
 The agents themselves are published from code, not Bicep: `uv run ninety-agents publish`
 (ninety/agents/foundry.py) creates a new Foundry version of any agent whose definition changed.
@@ -178,12 +180,17 @@ NINETY_LIVE_URL="$(azd env get-value API_URL)" uv run pytest -q tests/test_live_
 Tasks), and [preprovision.sh](preprovision.sh) stops it early if a Key Vault secret or the budget
 address is missing. Set `RENDER_COMMIT` too if the render queue job should keep its commit.
 
+The pinned bundle (`replay-seed900001-0f101db`): the frozen test clip seed900001, R3's detected
+events, the offline Analyst with one false number planted on purpose, so the trace shows the
+fact-checking agent rejecting it and the verified rewrite (the viewer says so); made with
+`uv run ninety-e2e runs/test-frozen-cca498c/test/seed900001 --out runs/replay --demo --plant` at 0f101db.
+
 A new Replay bundle (a better clip, the detector's events, a Foundry recording):
 
 ```bash
-uv run ninety-e2e <clip> --out runs/replay [--replay <recording>]
+uv run ninety-e2e <clip> --out runs/replay --demo [--replay <recording>]
 python3 infra/replay.py pack runs/replay runs/replay.tar.gz      # prints the sha256
-gh release create replay-<clip>-v<N> runs/replay.tar.gz --latest=false --title "Replay bundle <clip> v<N>" \
+gh release create replay-<clip>-<sha7> runs/replay.tar.gz --latest=false --title "Replay bundle <clip> at <sha7>" \
   --notes "Synthetic demo bundle for the deployed viewer (infra/README.md)"
 # then set REPLAY_URL and REPLAY_SHA256 in the Dockerfile, in a pull request
 ```

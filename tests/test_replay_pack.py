@@ -16,9 +16,10 @@ spec.loader.exec_module(replay)
 def bundle(root: Path) -> Path:
     root.mkdir()
     (root / "manifest.json").write_text(json.dumps({"format": 1}))
-    for name in ("cues.jsonl", "trace.json", "detections.jsonl", "events.jsonl", "facts.json", "audio.json",
+    for name in ("cues.jsonl", "trace.json", "detections.jsonl", "facts.json", "audio.json",
                  "description.vtt"):
         (root / name).write_text("{}\n")
+    (root / "events.jsonl").write_text(json.dumps({"id": "v00001", "source": "vision"}) + "\n")
     (root / "audio").mkdir()
     (root / "audio" / "a1.wav").write_bytes(b"RIFF")
     (root / "frames").mkdir()
@@ -53,3 +54,13 @@ def test_unpack_refuses_bytes_that_do_not_match_the_pin(tmp_path):
         replay.unpack(tmp_path / "r.tar.gz", tmp_path / "out", "0" * 64)
     replay.unpack(tmp_path / "r.tar.gz", tmp_path / "out", digest)
     assert json.loads((tmp_path / "out" / "manifest.json").read_text()) == {"format": 1}
+
+
+@pytest.mark.parametrize("event", [{"id": "e1", "source": "truth"}, {"id": "e1"}])
+def test_pack_refuses_events_that_are_not_detected(tmp_path, event):
+    # A clip's ground-truth events.jsonl has the bundle's file name; only vision's events may ship.
+    b = bundle(tmp_path / "b")
+    detected = json.dumps({"id": "v00001", "source": "vision"})
+    (b / "events.jsonl").write_text(detected + "\n" + json.dumps(event) + "\n")
+    with pytest.raises(SystemExit, match="not a detected event"):
+        replay.pack(b, tmp_path / "out.tar.gz")

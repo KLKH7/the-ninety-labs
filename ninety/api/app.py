@@ -32,6 +32,7 @@ from starlette.responses import JSONResponse, RedirectResponse
 from starlette.routing import Match, Mount, Route
 from starlette.staticfiles import StaticFiles
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
+from starlette.websockets import WebSocketClose
 
 from ninety.api import companion as companion_api
 from ninety.api.companion import Companion
@@ -86,7 +87,14 @@ class RequireKey:
         self.key = key if key is not None else os.environ.get(env, "")
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] == "http":
+        if scope["type"] == "websocket":
+            # Checked like HTTP, refused with a close before the handshake is accepted: a WebSocket
+            # route mounted behind this gate must not open it.
+            sent = dict(scope["headers"]).get(self.header, b"")
+            if not self.key or not hmac.compare_digest(sent, self.key.encode()):
+                await WebSocketClose(code=1008)(scope, receive, send)
+                return
+        elif scope["type"] == "http":
             sent = dict(scope["headers"]).get(self.header, b"")
             if not self.key:
                 await JSONResponse({"error": f"{self.what} is not configured"}, status_code=503)(
@@ -112,7 +120,7 @@ class SecurityHeaders:
             await self.app(scope, receive, send)
             return
         path = scope["path"]
-        if path.startswith("/assets/"):
+        if path.startswith(("/assets/", "/phone/assets/")):
             cache = b"public, max-age=31536000, immutable"  # Vite names them by content hash
         elif path.startswith("/bundle/"):
             cache = b"public, max-age=3600"
