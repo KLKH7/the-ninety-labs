@@ -56,4 +56,49 @@ higher score. The scorer's rule is `vision_score.match` at threshold 0.5.
 
 ## Deviations
 
-None yet.
+### Amendment (Oct 23, before any clip of run tactical1 was read)
+
+**Where the clips render.** RunPod had no 48 GB card with 32 or more vCPU. Kian took an RTX PRO 6000 (96 GB VRAM, 13.6
+CPUs by the pod's cgroup quota), which is too few CPUs to render the test set in software GL
+alongside the GPU renders. So:
+
+- **Training (120) and validation (24)** render on the L40 at GL=gpu, 10 workers (each clip took under one CPU; 45 clips an hour at 2 workers, about 220 at 10). Before
+  the first dataset clip, the pod checks that it renders on the GPU and is deterministic: seed 3
+  rendered twice in fresh browsers, every file of the clip and its views byte-identical. Every
+  image folder is scanned for black frames (an image under a fifth of its folder's median size).
+  A clip lost that way is rendered once more, as the plan's checks allow.
+- **Test (30)** renders on the maintainer's Mac in software GL (SwiftShader), one clip at a time,
+  at the same commit `6ea8e37` with the same driver (sha256 `2ad87ead…`), as every test set so far.
+
+**Reproducibility.** GPU-rendered pixels are reproducible on that pod, not bit-for-bit on another
+GPU or driver. Positions, events, the camera matrices and the keypoints are the engine's and the
+renderer's arithmetic, so they are exact anywhere. The boxes, visibility and pixel counts are
+measured from the same GPU's id pass, so they match that clip's own pixels, which is what a
+detector trains on. They are not claimed to match a re-render on other hardware. The test set,
+which every number is scored on, stays in software GL and is reproducible on any machine.
+
+**What comes back to the Mac.** The pod keeps the 144 clips and fine-tunes in place, as v2freeze
+did. Back to the Mac come:
+- the checkpoint and its training manifest, metrics, config, machine record and log;
+- the render manifest, with every file's sha256 and size, so the set is reproducible from
+  `6ea8e37` plus the seeds, up to the GPU note above;
+- the 24 validation clips, for scoring;
+- 3 training clips, for contact sheets and the README.
+
+Each file is checked against the pod's `SHA256SUMS`. No credential goes to the pod.
+
+**Clips the checks excluded (the plan's rule: excluded, not replaced).**
+- Training seeds 70 and 79, and validation seed 118, all failed `player_feet_in_boxes` in one
+  tactical view.
+- The cause was the check, not the drawing (lesson 212, PR #244). On a foot touch the foot is drawn
+  at the ball, 0.85 to 0.9 m out. From the high lens that falls past a pixel slack sized for a
+  side-on camera.
+- They stay excluded: the fine-tune started without them (Coordinator). Validation therefore has
+  23 seeds.
+- Test clip 900004 failed the same check. It is re-checked with #244's check once that merges,
+  before any test score is read, and stays excluded if it still fails.
+
+**The tile export.** `scripts/finetune-tactical-on-pod.sh` ran #230's `coco_export --tiles` from
+the render commit's folder. `python -m` puts the working directory first on the path, so it loaded
+the render commit's own `coco_export`, which has no `--tiles`, and stopped before training. On the
+pod, and here, it now runs from `$WORK/tiles`. Nothing was trained before the fix.
