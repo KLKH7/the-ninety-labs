@@ -11,7 +11,6 @@ from ninety.sim.engine import (
     KEEPER_HOLD_S,
     KEEPER_HOLD_Z,
     KEEPER_RELEASE_S,
-    KEEPER_THROW_M,
     Engine,
 )
 from ninety.sim.firsttouch import CUSHION
@@ -55,19 +54,22 @@ def test_a_caught_ball_is_held_at_his_chest_and_let_go_within_six_seconds():
     assert passed or (e.possessor == k.id and e.released_by == k.id)
 
 
-def test_he_throws_only_to_team_mates_in_range_and_kicks_from_his_hands_beyond_it(monkeypatch):
+def test_he_throws_no_faster_than_a_ball_can_be_thrown_and_may_kick_to_anyone():
+    # L15: how far he throws is limited by how fast a ball can be thrown (KEEPER_THROW_MPS), not by a
+    # set distance; any team-mate may be kicked to from his hands.
     e, k = caught()
-    asked = []
-    original = decisions.options
-    monkeypatch.setattr(decisions, "options", lambda scene: asked.append(scene) or original(scene))
-    e.release(k, e.scene_for(k))
-    # A throw is in his hands (from_hands) as well as thrown. A kick is from_hands and not a throw.
-    thrown = next(s for s in asked if s.throw)
-    kicked = next(s for s in asked if s.from_hands and not s.throw)
-    far = lambda m: math.hypot(m[1] - k.x, m[2] - k.y) > KEEPER_THROW_M  # noqa: E731
-    assert thrown.mates and not any(far(m) for m in thrown.mates)
-    assert kicked.mates and all(far(m) for m in kicked.mates)
-
+    scene = e.scene_for(k)
+    thrown = dataclasses.replace(scene, throw=True, from_hands=True)
+    for o in decisions.options(thrown):
+        d = math.hypot(o.target[0] - scene.x, o.target[1] - scene.y)
+        speed = math.hypot(*decisions.loft_launch(d)) if o.lofted else decisions.launch_speed(d, o.pace)
+        assert speed <= 21.5  # van den Tillaar and Ettema 2004: 21.5 m/s
+    far = dataclasses.replace(scene, mates=[("h9", 40.0, 34.0, 0.0)], opponents=[], moving=[])
+    assert not [o for o in decisions.options(dataclasses.replace(far, throw=True, from_hands=True))
+                if o.lofted]  # 37 m through the air is beyond a throw
+    kicked = [o for o in decisions.options(dataclasses.replace(far, from_hands=True)) if o.kind == "pass"]
+    assert kicked and kicked[0].receiver == "h9"
+    assert all(o.lofted for o in kicked)  # dropped from his hands and struck, it goes through the air
 
 def test_a_throw_leaves_his_hands_and_a_kick_from_them_leaves_the_ground(monkeypatch):
     def struck(throw):
@@ -91,15 +93,6 @@ def test_a_throw_leaves_his_hands_and_a_kick_from_them_leaves_the_ground(monkeyp
     assert kicked == [(False, 0.0)] and abs(fell - math.sqrt(2 * KEEPER_HOLD_Z / 9.81)) <= 2 * DT
 
 
-def test_with_nothing_to_choose_he_still_lets_it_go_inside_the_limit(monkeypatch):
-    e, k = caught()
-    monkeypatch.setattr(decisions, "options", lambda scene: [])
-    start = e.t
-    while e.possessor == k.id and e.t - start < KEEPER_HOLD_S + 1.0:
-        e.step()
-    assert KEEPER_RELEASE_S <= e.t - start < KEEPER_HOLD_S
-
-
 def test_put_down_it_is_at_his_feet_and_his_hands_may_not_take_it_again(monkeypatch):
     # Law 12: he may put it down and play it with his feet; released, he may not handle it again
     # until another player touches it (L13), so it is in play and may be challenged.
@@ -113,18 +106,6 @@ def test_put_down_it_is_at_his_feet_and_his_hands_may_not_take_it_again(monkeypa
     assert not e.hands(k, k.x, k.y)
 
 
-def test_he_waits_out_the_window_while_the_team_sets():
-    # L15: a throw being available does not end the hold. He lets it go at KEEPER_RELEASE_S.
-    e, k = caught()
-    start = e.t
-    while e.t - start < 2.0:
-        e.step()
-    assert e.held_by == k.id
-    while e.held_by == k.id and e.t - start < KEEPER_HOLD_S + 1.0:
-        e.step()
-    assert KEEPER_RELEASE_S <= e.t - start < KEEPER_HOLD_S
-
-
 def test_a_keepers_throw_may_roll_and_a_throw_in_stays_in_the_air(monkeypatch):
     # L15: his throw uses the passer's ground paces. A throw-in (Law 15) stays through the air.
     e, k = caught()
@@ -136,7 +117,7 @@ def test_a_keepers_throw_may_roll_and_a_throw_in_stays_in_the_air(monkeypatch):
         return 0.0 if lofted else original(*args, **kwargs)
 
     monkeypatch.setattr(decisions, "pass_confidence", prefer_ground)
-    near = [m for m in scene.mates if math.hypot(m[1] - scene.x, m[2] - scene.y) <= KEEPER_THROW_M]
+    near = scene.mates
     keeper_throw = decisions.options(dataclasses.replace(
         scene, throw=True, from_hands=True, mates=near))
     throw_in = decisions.options(dataclasses.replace(
@@ -178,3 +159,24 @@ def test_a_lunge_already_on_its_way_cannot_take_it_from_his_hands():
     e.duels()
     assert e.held_by == k.id and e.possessor == k.id and e.ball[2] > 1.0
     assert not [x for x in e.match.events if x["type"] == "tackle"]
+
+
+def test_with_nothing_to_choose_he_still_lets_it_go_inside_the_limit(monkeypatch):
+    e, k = caught()
+    monkeypatch.setattr(decisions, "options", lambda scene: [])
+    start = e.t
+    while e.possessor == k.id and e.t - start < KEEPER_HOLD_S + 1.0:
+        e.step()
+    assert KEEPER_RELEASE_S <= e.t - start < KEEPER_HOLD_S
+
+
+def test_he_waits_out_the_window_while_the_team_sets():
+    # L15: a throw being available does not end the hold. He lets it go at KEEPER_RELEASE_S.
+    e, k = caught()
+    start = e.t
+    while e.t - start < 2.0:
+        e.step()
+    assert e.held_by == k.id
+    while e.held_by == k.id and e.t - start < KEEPER_HOLD_S + 1.0:
+        e.step()
+    assert KEEPER_RELEASE_S <= e.t - start < KEEPER_HOLD_S

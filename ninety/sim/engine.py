@@ -233,7 +233,6 @@ KEEPER_HOLD_S = 6.0
 KEEPER_RELEASE_S = KEEPER_HOLD_S - 1.0
 KEEPER_HOLD_Z = 1.1  # design: the ball at an average chest
 KEEPER_HOLD_AHEAD_M = 0.3  # design: held out in front of his body
-KEEPER_THROW_M = 30.0  # design, verify: the furthest a keeper throws; beyond it he kicks from his hands
 
 # 4-3-3 anchors for a team attacking toward x=105, as (x, y) fractions of the pitch.
 FORMATION = [
@@ -1100,21 +1099,29 @@ class Engine:
         self.into_play = throw  # released from behind the line: not a new out while it comes in
         self.intended = receiver  # he expects it
 
-    def release(self, carrier: Player, scene: decisions.Scene) -> None:
-        """A keeper lets the ball go from his hands (Law 12). tick_carrier calls this at
-        KEEPER_RELEASE_S, once the window he holds for has run (L15). Thrown to a team-mate within
-        KEEPER_THROW_M (rolled or lofted, whichever the passer's estimate values, D1), kicked from
-        his hands beyond that, or put down to play with his feet, whichever that estimate values
-        most (put down, the best he could do from his feet). A throw leaves his hands; a kick falls
-        and is struck as it meets the ground. With no option at all he kicks it long up the middle."""
-        thrown = dataclasses.replace(scene, throw=True, from_hands=True, mates=[
-            m for m in scene.mates if math.hypot(m[1] - scene.x, m[2] - scene.y) <= KEEPER_THROW_M])
-        kicked = dataclasses.replace(scene, from_hands=True, mates=[
-            m for m in scene.mates if math.hypot(m[1] - scene.x, m[2] - scene.y) > KEEPER_THROW_M])
-        options = [(o, True) for o in decisions.options(thrown) if o.kind == "pass"]
-        options += [(o, False) for o in decisions.options(kicked) if o.kind in ("pass", "clear") and o.lofted]
-        best = max(options, key=lambda c: c[0].value, default=None)
+    def release_options(self, scene: decisions.Scene):
+        """L15: what a keeper with the ball in his hands can do with it, each as the passer's
+        estimate values it (D1): thrown to any team-mate (rolled or lofted; how far is limited by how
+        fast a ball can be thrown, decisions.KEEPER_THROW_MPS), kicked from his hands (a lofted pass
+        to any team-mate, or long and away), or put down to play with his feet (the best he could do
+        from them). (throw option, kick option, feet option), each None if there is none."""
+        thrown = dataclasses.replace(scene, throw=True, from_hands=True)
+        kicked = dataclasses.replace(scene, from_hands=True)
+        throw = max((o for o in decisions.options(thrown) if o.kind == "pass"),
+                    key=lambda o: o.value, default=None)
+        kick = max((o for o in decisions.options(kicked) if o.kind in ("pass", "clear") and o.lofted),
+                   key=lambda o: o.value, default=None)
         feet = max(decisions.options(scene), key=lambda o: o.value, default=None)
+        return throw, kick, feet
+
+    def release(self, carrier: Player, scene: decisions.Scene) -> None:
+        """A keeper lets the ball go from his hands (Law 12), by whichever of release_options the
+        estimate values most: a throw leaves his hands; a kick falls and is struck as it meets the
+        ground; put down, it is in play at his feet. With no option at all he kicks it long up the
+        middle. tick_carrier decides when (L15)."""
+        throw, kick, feet = self.release_options(scene)
+        best = max(((o, t) for o, t in ((throw, True), (kick, False)) if o),
+                   key=lambda c: c[0].value, default=None)
         if feet and (best is None or feet.value > best[0].value):
             # Put down, it is in play at his feet: released, he may not handle it again until
             # another player has touched it (Law 12, L13), and it settles to his feet (P6).
@@ -1123,13 +1130,11 @@ class Engine:
             self.hold_until = self.t + settle_s(carrier.profile["first_touch"])
             return
         if best:
-            o, throw = best
+            o, thrown = best
             self.pass_to(carrier, *o.target, lofted=o.lofted, pace=o.pace, receiver=o.receiver,
-                         hands=throw)
-        elif self.t - self.held_since >= KEEPER_RELEASE_S:
-            self.pass_to(carrier, PITCH_X / 2 + attack_dir(carrier.team) * 10.0, PITCH_Y / 2, lofted=True)
+                         hands=thrown)
         else:
-            self.hold_until = self.t + 0.5  # he looks again
+            self.pass_to(carrier, PITCH_X / 2 + attack_dir(carrier.team) * 10.0, PITCH_Y / 2, lofted=True)
 
     def scene_for(self, carrier: Player) -> decisions.Scene:
         """The carrier's picture of the game, built only from what he believes."""
@@ -3060,9 +3065,10 @@ class Engine:
             k = 1.0 if d <= BALL_TO_FEET * DT else BALL_TO_FEET * DT / d
             nx, ny, nz = bx + (hx - bx) * k, by + (hy - by) * k, bz + (KEEPER_HOLD_Z - bz) * k
             self.ball = (nx, ny, nz, (nx - bx) / DT, (ny - by) / DT, (nz - bz) / DT)
-            # L15: he waits out KEEPER_RELEASE_S. The pass estimate cannot see a run developing
-            # during the hold, and the published mean sits on the law's own limit, so he does not
-            # throw or kick on the first look.
+            # L15: he waits out KEEPER_RELEASE_S. The pass estimate has no term for his team taking
+            # up its places while he holds (tried: valued with his team-mates at their targets,
+            # waiting never paid, and he let go within a second), and the published mean sits on
+            # the law's own limit, so he does not throw or kick on the first look.
             if (self.t >= self.hold_until and k == 1.0
                     and self.t - self.held_since >= KEEPER_RELEASE_S):
                 self.decide(carrier, hands=True)

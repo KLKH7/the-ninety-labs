@@ -80,6 +80,11 @@ PASS_SPEED_EST_MPS = 14.0  # design: a passer's rough guess of a pass's average 
 LEAD_MAX_S = 2.0  # design: and he leads him by at most this long
 LOFT_FROM_M = 15.0  # design: shorter than this, a pass is played along the ground
 LOFT_DEG = 30.0  # design: the launch angle of a lofted pass or a throw, as estimated and as struck
+# L15: the fastest a keeper throws the ball. A standing overarm throw of a 0.409 kg ball (a football
+# weighs about 0.43 kg) by experienced handball players: 21.5 m/s (van den Tillaar and Ettema 2004,
+# J Sports Sci Med 3:211). *verify*: a football is too big to grip in one hand, so a keeper's throw is
+# taken as no faster.
+KEEPER_THROW_MPS = 21.5
 # A4: the passer's guess of what a first touch can kill: an average player's (one definition, profiles).
 CONTROL_EST_MPS = FOOT_ABSORB_MPS[0] + FOOT_ABSORB_MPS[1] * 0.5
 CONTROL_MARGIN_MPS = 2.0  # design: how sharply that guess falls off
@@ -823,8 +828,12 @@ def pass_option(scene: Scene, mate: tuple[str, float, float, float]) -> Option |
     if scene.throw and not scene.from_hands:
         ways = [(True, ARRIVE_MPS)]
     elif scene.throw and scene.from_hands:
-        ways = [(False, pace) for pace in PASS_PACES]
-        ways.append((True, ARRIVE_MPS))
+        # As far as he can throw it (KEEPER_THROW_MPS): beyond that he kicks it or puts it down.
+        ways = [(False, pace) for pace in PASS_PACES if launch_speed(dist, pace) <= KEEPER_THROW_MPS]
+        if math.hypot(*loft_launch(dist)) <= KEEPER_THROW_MPS:
+            ways.append((True, ARRIVE_MPS))
+    elif scene.from_hands:  # a kick from his hands (L15): dropped and struck, it goes through the air
+        ways = [(True, ARRIVE_MPS)]
     else:
         ways = [(False, pace) for pace in PASS_PACES]
         if dist >= LOFT_FROM_M:
