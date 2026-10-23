@@ -30,16 +30,20 @@ kbd { font: 600 0.75em ui-monospace, monospace; border: 1px solid var(--line); b
 .persona button[aria-checked="true"] kbd { color: var(--bg); border-color: var(--bg); }
 .toggle { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); cursor: pointer; }
 
-.layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; padding: 16px; max-width: 1600px; margin: 0 auto; }
-@media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+/* The radar sits beside the video; on a narrow screen straight under it, before the pipeline. */
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; grid-template-rows: auto 1fr; grid-template-areas: "player side" "pipe side"; gap: 16px; padding: 16px; max-width: 1600px; margin: 0 auto; }
+.player { grid-area: player; min-width: 0; }
+.side { grid-area: side; }
+.layout > .pipeline { grid-area: pipe; align-self: start; margin: 0; }
+@media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-template-areas: "player" "side" "pipe"; } }
 
 .stage { position: relative; aspect-ratio: var(--aspect); background: #000; border-radius: 8px; overflow: hidden; }
 .stage video, .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 .stage canvas[hidden], .stage video[hidden] { display: none; }
 
-.controls { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 10px; }
 .controls button { background: var(--ink); color: var(--bg); border: 0; border-radius: 6px; font: inherit; font-weight: 700; padding: 8px 18px; min-width: 88px; cursor: pointer; }
-.controls input[type="range"] { flex: 1; accent-color: var(--accent); }
+.controls input[type="range"] { flex: 1 1 120px; min-width: 0; accent-color: var(--accent); }
 .controls output { font: 600 1rem ui-monospace, monospace; min-width: 5ch; }
 .keys { color: var(--muted); font-size: 0.85rem; margin: 8px 0; }
 .audio-note { margin: 0 0 8px; padding: 8px 12px; border-left: 4px solid var(--accent); background: var(--panel); border-radius: 4px; }
@@ -52,6 +56,22 @@ kbd { font: 600 0.75em ui-monospace, monospace; border: 1px solid var(--line); b
 .pipeline dd.warn::before { content: "⚠ "; }
 
 .side { display: grid; gap: 16px; align-content: start; }
+.radar-panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px 10px; }
+.radar-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+.radar-head h2 { margin: 0; font-size: 1.05rem; }
+.radar-source { color: var(--muted); font-size: 0.8rem; }
+#radar { display: block; width: 100%; border-radius: 6px; background: #123d2b; }
+#radar[hidden], #radar-panel[hidden], .radar-legend[hidden] { display: none; }
+.radar-legend { list-style: none; display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 8px 0 0; padding: 0; font-size: 0.8rem; color: var(--muted); }
+.radar-legend li { display: inline-flex; align-items: center; gap: 6px; }
+.radar-legend .dir { color: var(--muted); opacity: 0.8; }
+.radar-legend .key { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+.radar-legend .home { background: #4ea1ff; }
+.radar-legend .away { background: #ffb02e; box-shadow: inset 0 0 0 2px #2a1800; }
+.radar-legend .guess { border: 2px solid var(--ink); opacity: 0.75; }
+.radar-legend .view { border-radius: 2px; width: 16px; background: rgba(255,255,255,0.12); border: 1.5px solid rgba(255,255,255,0.7); }
+.radar-note { margin: 6px 0 0; font-size: 0.85rem; color: var(--tag); }
+.radar-note:empty { display: none; }
 .phone-panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; }
 .phone-panel h2 { margin: 0 0 4px; font-size: 1.05rem; }
 .phone-panel .hint { color: var(--muted); font-size: 0.85rem; margin: 0 0 12px; }

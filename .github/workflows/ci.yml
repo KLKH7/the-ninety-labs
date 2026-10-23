@@ -105,7 +105,8 @@ jobs:
 
   viewer:
     # Type-checks and builds the viewer, then drives it in headless Chromium on a bundle ninety-e2e
-    # writes: trace, persona switch, keyboard alone, reduced motion (tests/test_viewer.py).
+    # writes: trace, persona switch, keyboard alone, reduced motion (tests/test_viewer.py), and the
+    # radar across a cut (tests/test_radar.py).
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -119,7 +120,7 @@ jobs:
       - run: npm run build --prefix web/viewer
       - run: uv sync --locked
       - run: uv run playwright install --with-deps chromium
-      - run: uv run pytest -q tests/test_viewer.py tests/test_e2e.py
+      - run: uv run pytest -q tests/test_viewer.py tests/test_e2e.py tests/test_radar.py
         env:
           NINETY_REQUIRE_VIEWER: "1"
 
