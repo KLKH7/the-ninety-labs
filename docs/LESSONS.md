@@ -2188,3 +2188,27 @@ short and actionable. This file is public: no research sources, product names or
   An approval for a live run is spent only on a script that parses.
 - **Check:** `tests/test_workflows.py` runs `bash -n` on every bash `run:` step of every workflow;
   it fails on the shipped `agents-live.yml` (`7e76d15`) and passes on the fixed one.
+
+### 219. A number reader must read every language and every unit our writers produce, and bind a number to its player
+- **What happened:** an audit of the fact-checker's code half found four forms it still let
+  through, each re-verified on main with a planted claim. Spanish, which the Personalizer writes and
+  `check` re-checks, was not read at all: "cincuenta km/h" and "treinta y uno" were no numbers, and
+  "50 kilómetros por hora" or "minuto 50" read as a bare 50, which any cited distance let through.
+  Ordinals in words ("his seventh pass", "the ninth minute") were missed although lesson 130 fixed
+  "7th". A number in a unit we never publish passed when its digits matched a field ("50 yards" for
+  a 50 m pass, "31 mph" for 31 km/h), and so did "a 2-metre pass" (read bare, passed by the minute).
+  And a number only had to be in some cited event: "h7's 30 m pass" passed when h7's was 12 m and
+  30 m was h4's.
+- **Rule:** the reader reads every language a writer is told to use (number words, ordinals and
+  units), refuses a unit no fact of ours is in rather than converting it, and checks a distance or
+  speed the sentence gives to one player against that player's own cited events. Words that are no
+  number stay words ("first time", "the final third", "el once inicial", "uno contra uno", English
+  "once"). The binding covers named forms only and says which; any other wording falls back to the
+  check against all cited events.
+- **Check:** `tests/test_factcheck.py::test_a_planted_spanish_number_is_rejected`,
+  `::test_an_ordinal_in_words_must_be_in_the_evidence`,
+  `::test_a_number_in_a_unit_we_do_not_publish_is_rejected`,
+  `::test_a_number_bound_to_a_player_must_be_from_his_cited_event` fail on the old check, and each
+  has a true-form twin that passes; `tests/test_personalizer.py` drops each form from a Spanish
+  variant. Measured for false rejections: the verdicts on every recorded claim with its evidence in
+  `replays/`, `docs/eval/` and the fixtures are unchanged.
