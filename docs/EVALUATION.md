@@ -32,7 +32,8 @@ generated it and the output file is committed. Rows marked *planned* have no res
 | Recovery from injected failures in the multi-agent workflow (Judge timeout, Tactician Foundry outage, Personalizer down, low-confidence detection) | `uv run python -m ninety.eval.workflow_failures` (offline, seconds of CPU, byte for byte; `--check` and `tests/test_workflow_failures.py` fail if stale); live: `--live`, agents-live `task=failures` | `docs/eval/failure-table.md`, `docs/eval/failure-table.json`; live: `docs/eval/failure-table-live.{md,json}` | running offline: 4 of 4 recovered on the workflow (W1's graph) with stand-in models around the real Judge wrapper and the real A2A Personalizer client: the templates stayed (less the unsure detection's), nothing unchecked aired, every moment's claim ended held (verified when only the Personalizer failed), the fallback was in the trace and its badge on screen; the baseline passed, which needs every profile's variant aired: none refused, none missing, and no Spanish one reading as English by function words (`personalizer/language.py`). Offline the stand-in Personalizer's Spanish is a wording written for the table, not a translation. Live: the Analyst gets the minute's events inline under a match id no server serves, and a call to the match tools fails the call (lesson 90); the Personalizer is the published one behind the in-process A2A server. Speech down: planned (on #129). Live run: requested |
 | Recovery from injected failures on the M1 live path (Judge down, Judge timeout, Judge malformed reply, Analyst or MCP tool error, MCP timeout, Analyst malformed reply, low-confidence detection) | `uv run python -m ninety.eval.fact_checker_proof` (offline, seconds of CPU; `--check` fails if a committed file is stale, as `tests/test_fact_checker_proof.py` does) | `docs/eval/failure-table-m1.md` | running: 7 of 7 recovered on the live path with stand-in models: nothing unverified aired and the template cues stayed up; each row asserted by `tests/test_failure_table.py`. Latencies not measured (stand-in models) |
 | Ablation: the fact-checker without the confidence gate, without typed facts, and absent, on the same planted set | `uv run python -m ninety.eval.fact_checker_proof` (offline, seconds of CPU; `--check` fails if a committed file is stale, as `tests/test_fact_checker_proof.py` does) | `docs/eval/ablation.md`, per claim `docs/eval/ablation.json` | running: false claims on air: full 0/175, no gate 16/175 (every phantom detection), no typed facts (the Judge alone) 24/175: every phantom plus 8 claims stating the minute and second as a clock ("1:05" for 00:05), which only the code checks catch, no fact-checker 175/175. The Judge answers to the 48 claims only the code checks had seen were recorded once from `ninety-judge:2` (`uv run python -m ninety.eval.planted_judge`, 48 calls, 50,708 tokens, $0.025 at list price) |
-| Ablation: one agent with every tool against the full workflow | `uv run python -m ninety.eval.agent_ablation --live` (agents-live `task=ablation`, held-out seeds 21 and 33; tested on scripted models in `tests/test_agent_ablation.py`) | `docs/eval/ablation-agents.md`, `docs/eval/ablation-agents.json` | built; the live run is requested. Both arms get the minute's events inline from the match this commit simulated, the one the grader grades against, under a match id no server serves; an agent that calls the match tools anyway fails that call (lesson 90). Their aired claims are graded the same way (code checks, then the published Judge, the same Judge the graph's fact-checker asks); the arms' model-call budgets differ by design and are reported |
+| Ablation: one agent with every tool against the full workflow | `uv run python -m ninety.eval.agent_ablation --live` (agents-live `task=ablation`, held-out seeds 21 and 33; tested on scripted models in `tests/test_agent_ablation.py`) | `docs/eval/ablation-agents.md`, `docs/eval/ablation-agents.json` | running: agents-live 39521924730 at `58d7a6e` (2026-10-21), seeds 21 and 33, 10 minutes each arm. False claims on air: one agent 7 of 10 (70%: 3 caught by the code checks, 4 by the Judge), the graph 1 of 24 (4%, by the Judge), at 10 against 120 model calls; both arms had an insight in 10 of 10 minutes, and neither lost a minute to a tool call. Both arms get the minute's events inline from the match this commit simulated, the one the grader grades against, under a match id no server serves; an agent that calls the match tools anyway fails that call (lesson 90). Their aired claims are graded the same way (code checks, then the published Judge, the same Judge the graph's fact-checker asks); the arms' model-call budgets differ by design and are reported |
+| Describer model upgrade and speech outage (W4, PR #129): on a verified moment the Describer model's line is said only if it passes the whole fact-checking agent (the code checks, then the Judge, which refuses a goal said of a saved shot or a player put on the wrong team; a Judge failure or timeout keeps the code line) and is at most 20 words, else the claim's code line stays and the refusal says why; the model writes words only (SSML, pan and timing are code); a failed speech request keeps the line on the schedule and its cue says `speech: unavailable`; SSML escapes both quotes | `uv run pytest tests/test_describer.py` | test assertions | in progress: runs with stand-in models and speech; each rule's test fails when the rule is mutated (see PR #129). The live run (`ninety-e2e --describer foundry`, the published `ninety-describer`) has not run, so no model latency or tokens yet |
 | Latency to graphic and to speech (p50, p95); cost per match | `uv run python -m ninety.eval.latency_cost --measure <clip>` (times `ninety-e2e` offline and the slice replay through `ninety.stage` OpenTelemetry spans; tokens rebuilt from the replay; prices from the Azure Retail Prices API, dated); without `--measure` it rebuilds the report byte for byte (`tests/test_latency_cost.py`) | `docs/eval/latency-cost.json`, `docs/eval/latency-cost.md` | running for the chain's own time and the model and claim-speech cost, at `3d21ab3`: event to graphic p95 0.08 s of compute on the stand-in events of `seed900001`, without RF-DETR inference or Foundry model time (planned: live spans in Application Insights); $0.23 to $0.47 a 90-minute match (one claim a minute, one to three drafts) against the $0.50 budget, tokens estimated at 4 characters each. Speech latency and the Describer's spoken characters planned |
 
 ## Match engine: touches
@@ -234,6 +235,17 @@ cites a source yet: each has only the reason in the table, and changing one need
 row first. When no scored frame records the field (`ball.z`, `blur_px`) the group is `null`, and
 frames or clips with and without it are refused, so no label drops out unseen.
 
+**A known limit of the 0.5 m cut-off, kept as set.** A ball's pitch position is found by
+assuming it lies on the grass (`ninety/vision/observe.py`), so a raised ball is placed beyond its
+true spot, along the camera's line of sight. On the local renders' saved cameras, a ball at
+exactly 0.5 m is placed 0.83 to 2.45 m from its true spot (median 1.57 m), past the 1.0 m strict
+radius. The pitch-level box scorer is not affected: it places the true ball and the detected one
+the same way, so the error cancels. `pitch_score` and the events from video compare against the
+ball's true position, so their "ball on the ground" errors include balls up to 0.5 m and can
+exceed 1.0 m from height alone. The cut-off stays at 0.5 m because it was fixed before any
+detector ran. A lower one, derived from the camera's geometry, needs a GROUNDING.md row and a
+re-run of every report that uses it.
+
 The boundary rule uses each frame's saved camera width and height, with no margin; labelled
 frames missing those dimensions fail rather than guessing a resolution. It does not measure
 a truncation percentage: saved boxes do not say how much of an object lies outside the image.
@@ -382,6 +394,7 @@ only the trust test and the placing run again.
 |---|---|---|
 | Camera | white-marking pixels (brighter and bluer than the grass on both sides, detected players and ball masked) fitted to Law 1's markings: one gantry for the clip (found from every 25th frame), pan, tilt and zoom per frame (tracked from the last frame whose markings fit). A frame is trusted when its players are as tall as they should be (the median, over its player boxes, of box height against an upright 1.80 m at the foot point lies in 0.901 to 1.002, the 1st to 99th percentile on validation frames whose ground mapping is within 1.0 m) and its camera agrees with a trusted neighbour's (the ground point at the image centre within 2 m of the nearest other such frame's within 5 frames; [camera-bound-plan.md](eval/camera-bound-plan.md)) | `ninety/vision/pitch.py`, `ninety/vision/observe.py` |
 | On the pitch | each box's foot point (players) or centre one radius up (ball) through a trusted frame's camera; shirt colour from the box's upper middle | `ninety/vision/observe.py` |
+| Two views (tactical camera, planned for the demo) | each lens detected on its own (optionally as a 2 x 2 grid of overlapping tiles, boxes merged back) and placed on the pitch; a player or ball seen by both lenses merged when the two places differ by less than both measurements can miss by (each box's 99th-percentile ground-point error, measured on validation, carried to the pitch through its view's camera; [fuse-gate.md](eval/fuse-gate.md)) | `ninety/vision/tiles.py`, `ninety/vision/fuse.py` |
 | Tracks and teams | players linked in pitch metres; two kits told apart by chromaticity (shadow-proof, lesson 98) or by brightness (white against black), whichever separates them more on the clip; the side defending x = 105 is away (the engine's one convention), and it is the side standing nearer it on average (GROUNDING T2, O6) | `ninety/vision/track.py` |
 | Events | possession: the ball within 1.5 m of a player's feet and moving with him (GROUNDING P6); a pass from one spell to the next, a shot when the strike heads between the posts, out of play when the whole ball is over a line for 3 frames | `ninety/vision/events.py` |
 
@@ -494,6 +507,36 @@ read (inline or over MCP), passes `confidence` and drops `team_confidence`; chec
 Analyst's prompt from the fixture. Whether to show it to them is the agent layer's call, once it
 means something.
 
+## Broadcast framing: a known limit of the metric at set-piece deliveries
+
+**The metric.** `tests/test_render_camera.py` counts a live frame as well framed when the ball is in
+the picture's CENTRAL box and the pitch fills at least `PITCH_SHARE_MIN` of the picture. It asserts
+85% of live frames on six held-out seeds.
+
+**The finding.** Two corner-camera designs reached the bar on #179's engine, and three blind critics
+preferred the camera that missed it. Both designs are parked, unmerged:
+- `claude/camera-corner-cut` (#204): a cut to a side camera at the delivery.
+- `claude/camera-corner-delivery`: zooming to the receiving area.
+
+The critic reports are not committed; the numbers below are in each branch's commit message.
+
+| Design | Seed 3 (#179's engine), raw | Critic's verdict |
+|---|---|---|
+| #201: corner framing until the kick | 0.811 | preferred |
+| Delivery-aware zoom | 0.905 | worse in both pairs |
+| Cut at the delivery | 0.886 | split |
+
+What the critics reported against the designs that scored higher:
+- The lens closed in on the taker's group before the kick, so the goal and box were out of the picture for about 4 s across the delivery.
+- The camera whip-panned at the strike.
+- A cut landed while the ball was in flight.
+
+What they asked for: keep the taker, the penalty area and the goal in the picture until the ball has arrived. Then frame the play.
+
+**What it means.** At a set-piece delivery, "the ball central with 60% pitch" rewards the tight shot viewers dislike, near a near-side corner especially. Lesson 177 has the history.
+
+**Planned, not done.** A revision of the metric for set-piece deliveries, for example the goal and box in the picture from the kick until the ball arrives. It will be set before measuring and reviewed. The test is unchanged until then.
+
 ## Late drop in high-intensity running (R7)
 
 Fixed on 2026-10-17, before any engine change was measured with it and before the command had
@@ -548,6 +591,28 @@ from tracked positions against the ground truth, offline, with and without the s
 ([companion-tracked.md](eval/companion-tracked.md)): on the M1 clip, a median error of 0.6 km/h
 for speed now and 1.5 km/h for top speed, against 52.8 km/h for top speed without smoothing
 (re-graded with the camera trust test of [detector-plan.md](eval/detector-plan.md)).
+
+### Possession now (the wind map's layer)
+
+`uv run python -m ninety.eval.possession_score calibrate` sets the gate on validation clips, and
+only then does `grade` score the test clips with it (GROUNDING S6). The unit is a phone frame
+(0.2 s). The truth is the answer key's latest possessor's side, and the true ball's third along
+that side's attacking direction. Intervals count true possession spells, not frames (Wilson),
+with a bootstrap over clips beside them.
+
+On the 13 validation clips ([possession-calibration.md](eval/possession-calibration.md)), team
+agreement peaks at 65% (cut-off 0.2) and falls as the cut-off rises: 30% at 0.7, 0% at 0.9. No cut-off
+reaches the 75% target, so SHOW is unset and the layer is off. The cause is the side, decided
+once per clip: 3 of the 8 clips with ball spells have it flipped throughout, one of them at a
+side confidence of 0.88 to 0.97. The test clips have not been graded and will be only once a
+better side decision lets the gate open on validation.
+
+Pre-registered before the official calibration (GROUNDING S6): a bar opens only when the lower
+Wilson 95% bound of its agreement over possession spells is at least 0.60, from at least 3 clips
+(41 spells at 75% agreement); "attacking" needs its own 75% on the samples it would be shown on,
+with the same floor. A preview on the unmerged side fix (#187, #195, #200) would have passed 75%
+at 0.582 on only 11 spells (Wilson 46% to 92%), with "attacking" wrong on 4 of 4: these criteria
+keep that kind of result shut.
 
 ## Football sense (FS1 to FS9)
 

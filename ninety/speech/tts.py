@@ -16,7 +16,9 @@ _credential = DefaultAzureCredential()
 
 def synthesize(text: str, voice: str = "en-GB-RyanNeural") -> tuple[bytes, float]:
     """Returns MP3 bytes and the seconds the request took."""
-    ssml = f'<speak version="1.0" xml:lang="en-GB"><voice name="{voice}">{escape(text)}</voice></speak>'
+    # Quotes too (as ninety/speech/describe.py): an escaped quote can never close an attribute.
+    body = escape(text, {'"': "&quot;", "'": "&apos;"})
+    ssml = f'<speak version="1.0" xml:lang="en-GB"><voice name="{voice}">{body}</voice></speak>'
     return synthesize_ssml(ssml)
 
 
