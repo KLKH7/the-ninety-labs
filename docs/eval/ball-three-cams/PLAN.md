@@ -113,3 +113,23 @@ saved observations are re-judged with `observe --regate`.
 **Ball height later.** PR #226 (`ninety.vision.flight.heights`) re-places balls in the air from
 their flight. It takes and returns observe's lines, so the same scorer can score its output as a
 second row once #226 lands. That row is not part of this plan's result.
+
+### Oct 23, 17:40 ET, before any test clip was detected
+
+**Detection and camera fits on test start before the band is frozen; nothing on test is judged or
+read until it is.** Measured on a training clip (seed 3), one clip through every stage takes 867 s
+on the Mac. The broadcast's per-frame camera fit alone takes 444 s; the tactical tiles and their
+fixed fit take 400 s. Done in sequence after validation, 54 clips do not finish before the deadline.
+So:
+
+- **Frozen now, at this commit:** detection (ours-freeze, whole frame), the broadcast camera fit
+  and placing (`observe`, `pitch.fit_clip`), and the driver (`scripts/ball_three_cams.py raw
+  --skip-tactical`). The test clips' detections and fits are made with this code as they render.
+  The band does not enter detection or the fit. It only judges each frame afterwards
+  (`ball_three_cams.py rejudge`, `observe.place` and `agree`).
+- The band is derived on validation only (`band_derive`), set in `observe.py`, and committed.
+  Then the test observations are re-judged and scored once, at that commit. No test file
+  (observations, detections, scores) is opened for reading before that commit exists.
+- **On test, the broadcast only:** the ball comes from the broadcast. The tactical lenses (for
+  players, and the fixed band) run on validation only.
+
