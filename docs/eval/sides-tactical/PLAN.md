@@ -61,4 +61,31 @@ plan leaves that to the gate's owner.
 
 ## Deviations
 
-None yet.
+### Oct 23, 20:10 ET, after T0 was read and before any T1 number was read
+
+T0 was read (docs/eval/sides-tactical/T0-validation.json): outfield accuracy 0.614. The diagnosis
+is in the data: the kit is misread on the tactical lenses, which render dark (frame mean RGB about
+44–78, against 53–105 on the broadcast of the same clip). A purple shirt reads near-black, and 2-means
+splits off one odd track. The renders stay as they are (the Coordinator's decision: ours-tactical
+trained on them, and real fixed cameras differ in exposure). The fix is on the vision side. T1
+becomes three steps, each scored by the plan's measures and decision rule:
+
+- **T1a:** #202's two-colour reader (R4), re-read from each lens's images (`observe.recolour`),
+  today's tracker. Already running when this was written; nothing of it read.
+- **T1b:** T1a, with each lens's colours normalised first. Each lens's gain and white balance are
+  estimated from that lens's own pixels, with no truth: the grass (the measured pitch colour, #202's
+  `grass`) and the white pitch markings (the line pixels the camera fit found). Shirt colour is then
+  read in the normalised space. How the normalisation maps colours is written down before T1b is
+  run, in the code's docstring and the commit message.
+- **Per-track side vote:** a track's side is already decided once per track, from its median kit
+  over all its frames (`track.assign_teams`), never per frame. This is checked and kept. If T1b
+  still leaves tracks that change identity mid-way (a track whose paired true team is split), that
+  is reported, not tuned.
+
+**Fallback (fixed now):** if the best T1 step is still below B, the broadcast's own side accuracy on
+the same clips, by Sat Oct 24 12:00 ET, sides come from the broadcast. Each tactical track is
+associated with broadcast detections where they overlap on the pitch (the same 1.0 m pairing) and
+inherits the side of the broadcast track it overlaps most; positions stay the tactical views'. That
+variant is **TB**, scored by the same measures.
+
+The final calibration table goes to the 0.96 gate's owner (the shape-agents session).
