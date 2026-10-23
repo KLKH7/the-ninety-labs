@@ -1,0 +1,40 @@
+{
+ "name": "dataset tactical: the fixed whole-pitch views for vision, training, validation and test",
+ "status": "pre-registered Oct 22, before any clip of this run was rendered",
+ "run": "tactical1",
+ "commit": "the head of render/tactical-views (PR for work package A) given in the render manifest's render_commit; after the merge, `git diff <render_commit> <merge commit> -- ninety/render web/render` must be empty, or the clips are re-rendered",
+ "why": "The broadcast follows the ball, so vision cannot see players off its screen. The two fixed tactical lenses (renderer 0.5.15, `--views tactical`, docs/GROUNDING.md V7) hold the whole pitch; the detector is fine-tuned on them (docs/eval/finetune-tactical/PLAN.md).",
+ "seeds": {
+  "rule": "dataset v2's mix in a smaller set: natural seeds, crowded windows and low-contrast kits in about the shares v2 drew them (v2: 130, 90 and 45 of 280), and v2's 24 validation seeds unchanged, so validation is the same matches as ours-freeze's",
+  "groups": [
+   {"first": 3, "last": 92, "overrides": {}, "note": "hard cases drawn from the seed at HARD_CASE_RATE 0.3"},
+   {"first": 108, "last": 110, "overrides": {}, "note": "validation"},
+   {"first": 112, "last": 122, "overrides": {}, "note": "validation"},
+   {"first": 2001, "last": 2015, "overrides": {"occlusion": "crowded"}},
+   {"first": 2041, "last": 2045, "overrides": {"occlusion": "crowded"}, "note": "validation"},
+   {"first": 3001, "last": 3015, "overrides": {"kit_contrast": "low"}},
+   {"first": 3041, "last": 3045, "overrides": {"kit_contrast": "low"}, "note": "validation"}
+  ],
+  "clips": 144,
+  "validation": [108, 109, 110, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 2041, 2042, 2043, 2044, 2045, 3041, 3042, 3043, 3044, 3045],
+  "training": "the other 120"
+ },
+ "test_set": {
+  "seeds": [900001, 900030],
+  "clips": 30,
+  "rule": "the reserved test seeds with their own drawn parameters, no overrides (ninety/render/splits.py); views are not an override and leave the broadcast byte-identical"
+ },
+ "render": {
+  "seconds": 10,
+  "window": "the seed's own start (render_clip's default)",
+  "dead_ball_cut": false,
+  "views": "tactical",
+  "gl": "training and validation: the pod's GPU (Chromium on the NVIDIA driver, refusing software GL), after a determinism check on the pod (one seed rendered twice in fresh browsers, every file of the clip and its views byte-identical); test: software GL (SwiftShader) on the same pod's CPUs, as every test set so far",
+  "driver": "infra/pod/render.py from PR #194 with the views pass-through and the sealed failure reports, copied to the pod; its sha256 goes in the manifest"
+ },
+ "checks": {
+  "per_clip": "ninety.render.checks.check_clip on the clip: the broadcast's checks, every view's own checks (contract, projection, feet in boxes, labels), streams_agree and views_see_the_ball; and no dead-ball cut",
+  "rule": "a clip that fails any check is excluded and listed with its report; it is not re-rendered and no other seed replaces it, except a clip lost to the machine (a crashed worker, a black frame from GPU memory), which is rendered once more"
+ },
+ "machine": "one rented RunPod pod, a 48 GB GPU (RTX A6000, L40S or RTX 6000 Ada) with 32 or more vCPU, deleted after the outputs are back on the Mac and checked against the manifest. Only synthetic renders go to it (AGENTS.md, vision models)"
+}
