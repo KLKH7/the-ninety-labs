@@ -2097,8 +2097,11 @@ short and actionable. This file is public: no research sources, product names or
   clip under `views/tac-l/` and `views/tac-r/`, answer key included, so the first Azure render
   with views would have put true positions, boxes and events in the readable `renders` container,
   next to the images vision reads. The plan for the views caught it before any render ran.
+  The same review found the job's failure reports going to `renders` too: a report's contract
+  messages quote true events and positions.
 - **Rule:** a file is answer key by what it is, wherever it sits: the seal matches the name at any
-  depth. A change that adds a folder to a clip plants that folder's answer key in the seal's tests.
+  depth, and anything built from the key (a check report) is sealed with it. A change that adds a
+  folder to a clip plants that folder's answer key in the seal's tests.
 - **Check:** `tests/test_render_job.py::test_a_views_answer_key_is_sealed_with_the_clips` (fails
   on the old seal), and `infra/check_truth_sealed.py` (CI), which runs the job's own `upload_dir`
   on a planted clip with views and fails if a `frames.jsonl` or `events.jsonl` reaches `renders`

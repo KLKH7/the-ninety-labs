@@ -152,7 +152,9 @@ def test_a_clip_that_fails_its_checks_is_reported_not_uploaded(tmp_path, monkeyp
     c, truth, _ = containers()
     done = job.run_job(job.job_config(ENV), c, fake_render, fake_browser, tmp_path, truth)
     assert done["failed"] == [2]
-    assert "v1/failed/seed2.json" in c.store
+    # A check report quotes the answer key (contract messages name true events and positions), so it
+    # is sealed with it (lesson 192); in renders it would sit beside vision's input.
+    assert "v1/failed/seed2.json" in truth.store and not any("failed" in n for n in c.store)
     assert not any(n.startswith("v1/train/seed2/") for n in c.store)
 
 

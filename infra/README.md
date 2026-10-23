@@ -135,9 +135,9 @@ fetches this repo at the commit `start` passes, and runs
 [render-job-start.sh](render-job-start.sh). This subscription does not allow ACR Tasks, and an
 emulated amd64 build of Chromium ran a laptop out of memory. Each execution renders its clips
 with software GL, runs the render checks, uploads passing clips to `renders/<run>/train/seed<N>/`
-and their ground truth to `truth/<run>/train/seed<N>/` (`clip.json` last, so a retried execution
-skips finished seeds) and reports failing ones in
-`renders/<run>/failed/`. Test-set seeds are refused: the fixed test set is rendered once,
+and their ground truth to `truth/<run>/train/seed<N>/`, a view's (`views/<name>/`) included
+(`clip.json` last, so a retried execution skips finished seeds), and reports failing ones in
+`truth/<run>/failed/`, since a check report quotes the answer key (lesson 192). Test-set seeds are refused: the fixed test set is rendered once,
 locally, so its pixels never depend on the machine that drew them.
 
 ```bash

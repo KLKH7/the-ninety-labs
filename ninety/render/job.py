@@ -27,7 +27,8 @@ once, then moved to NINETY_QUEUE + "-failed" with the error.
 
 Only training seeds: the fixed test set is rendered once, locally, with software GL, so its pixels
 never depend on which machine drew them. Each clip runs the render checks before upload. A clip
-that fails them is not uploaded as data; its check report goes to <run>/failed/ so it is counted,
+that fails them is not uploaded as data; its check report goes to <run>/failed/ in `truth` (its
+contract messages quote true events and positions, lesson 192) so it is counted,
 never silently dropped. A seed whose clip.json is already in the container is skipped, so a
 retried execution resumes instead of redoing finished clips.
 """
@@ -131,7 +132,9 @@ def run_job(cfg: dict, container, render_clip, browser_page, work: Path, truth) 
                 files = upload_dir(container, truth, cfg["run"], s, d)
                 done["uploaded"].append(s)
             else:
-                container.upload_blob(
+                # The report quotes the answer key (a contract message names a true event and where
+                # it was), so it is sealed with it, never beside vision's input (lesson 192).
+                truth.upload_blob(
                     f"{cfg['run']}/failed/seed{s}.json", json.dumps(report).encode(), overwrite=True
                 )
                 files = 0
