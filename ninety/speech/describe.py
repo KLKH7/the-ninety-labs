@@ -58,6 +58,13 @@ LEAD_IN_S = 0.15  # design: the voice's silence before the first word
 VOICE = "en-GB-RyanNeural"
 LANG = "en-GB"
 SLOT = "audio"
+# design: the Describer model's own limit (ninety/agents/describer.py, INSTRUCTIONS), held by code.
+# One short sentence a fan can take in between plays; at WORDS_PER_SECOND it is about 8 s of voice.
+# A longer line is refused rather than trusted to the schedule, which shortens only for a line
+# behind it, so a long model line with nothing after it would otherwise be read in full.
+MODEL_MAX_WORDS = 20
+# Quotes too: an escaped quote can never close an attribute, wherever the builder puts the text.
+QUOTES = {'"': "&quot;", "'": "&apos;"}
 
 # Lower is more important: what keeps its place when there is no time for everything.
 PRIORITY = {"goal": 0, "shot": 1, "insight": 2, "interception": 3, "tackle": 3, "pass": 4, "kickoff": 4}
@@ -78,7 +85,7 @@ class Line:
     pan: float
     evidence: list[str]
     versions: list[str]  # checked text (player ids, units as written), full form first
-    source: str  # "event" (written here) or "insight" (a verified claim)
+    source: str  # "event" (written here), "insight" (a verified claim) or "model" (its model line)
 
 
 @dataclass
@@ -100,6 +107,7 @@ class Said:
     duration_source: str  # "estimated" or "measured"
     file: str | None = None
     synth_s: float | None = None
+    speech: str | None = None  # with real synthesis: "spoken", or "unavailable" when it failed
 
 
 @dataclass
@@ -109,6 +117,7 @@ class Track:
     mode: str = "estimated"
     synth_requests: int = 0  # every line version synthesised, said or not
     synth_chars: int = 0  # their SSML length: an upper bound on the characters billed
+    synth_failed: int = 0  # requests that failed: their lines were shown, not spoken
 
 
 # ---------------------------------------------------------------- where the play is
@@ -173,7 +182,7 @@ def spoken(text: str) -> str:
 
 def ssml(text: str, priority: int, voice: str = VOICE) -> str:
     """SSML for Azure AI Speech. A goal or shot is said a little higher and quicker."""
-    body = escape(text)
+    body = escape(text, QUOTES)
     if priority <= PRIORITY["shot"]:
         body = f'<prosody rate="+10%" pitch="+8%">{body}</prosody>'
     return (
@@ -189,8 +198,14 @@ def estimated_seconds(text: str) -> float:
 # ---------------------------------------------------------------- the script
 
 
-def candidates(events: list[dict], cues: list[dict]) -> tuple[list[Line], list[dict]]:
-    """Every line the Describer may say, each checked, and what it refused to say and why."""
+def candidates(events: list[dict], cues: list[dict], upgrades: dict[str, str] | None = None
+               ) -> tuple[list[Line], list[dict]]:
+    """Every line the Describer may say, each checked, and what it refused to say and why.
+
+    `upgrades` maps a verified insight cue's id to a line the Describer model wrote for that moment
+    (ninety/agents/describer.py). It is checked here like every other line, against the claim's
+    evidence; if it passes it is said first, with the code line as its shorter fallback, and if it
+    fails the code line stays and the refusal says why."""
     known = {e["id"]: compact(e) for e in events}
     by_id = {e["id"]: e for e in events}
     refused: list[dict] = []
@@ -219,9 +234,20 @@ def candidates(events: list[dict], cues: list[dict]) -> tuple[list[Line], list[d
             continue
         last = max(cited, key=lambda e: (e["t"], e["id"]))
         versions = checked([f"Fact-checked: {cue['text']}"], list(cue["evidence"]))
+        source = "insight"
+        if versions and (upgrades or {}).get(cue["id"]):
+            text = upgrades[cue["id"]]
+            if len(text.split()) > MODEL_MAX_WORDS:
+                refused.append({"evidence": list(cue["evidence"]), "text": text,
+                                "reason": f"model line over {MODEL_MAX_WORDS} words"})
+                model = []
+            else:
+                model = checked([text], list(cue["evidence"]))
+            if model:
+                versions, source = model + versions, "model"
         if versions:
             insights[last["id"]] = Line(cue["id"], cue["t_in"], PRIORITY["insight"], pan_for(last["x"]),
-                                        list(cue["evidence"]), versions, "insight")
+                                        list(cue["evidence"]), versions, source)
 
     lines: list[Line] = []
     for event in events:
@@ -278,20 +304,24 @@ def schedule(lines: list[Line], duration: Duration) -> Track:
             continue
         n, text, words, seconds, how = chosen
         end = round(start + seconds, 2)
-        description = Description(line.key, words, ssml(words, line.priority), line.pan, "code")
+        # A model line that did not fit falls back to the claim's own (code) line.
+        source = "insight" if line.source == "model" and n > 0 else line.source
+        description = Description(line.key, words, ssml(words, line.priority), line.pan,
+                                  "model" if source == "model" else "code")
         said.append(Said(
             id=f"ad-{line.key}", event=line.key, t_event=line.t, t_in=round(start, 2), t_out=end,
             lag_s=round(start - line.t, 2), pan=description.pan, text=text, spoken=description.text,
-            ssml=description.ssml, short=n > 0, source=line.source, evidence=line.evidence,
+            ssml=description.ssml, short=n > 0, source=source, evidence=line.evidence,
             duration_s=seconds, duration_source=how,
         ))
         free_at = end + GAP_S
     return Track(said, dropped)
 
 
-def describe(events: list[dict], cues: list[dict], duration: Duration = estimate) -> tuple[Track, list[dict]]:
+def describe(events: list[dict], cues: list[dict], duration: Duration = estimate,
+             upgrades: dict[str, str] | None = None) -> tuple[Track, list[dict]]:
     """The spoken track for detected `events` and the live path's `cues`, and the refusals."""
-    lines, refused = candidates(events, cues)
+    lines, refused = candidates(events, cues, upgrades)
     return schedule(lines, duration), refused
 
 
@@ -317,23 +347,36 @@ class Voice:
             synth = tts.synthesize_ssml
         self.synth = synth
         self.audio: dict[str, tuple[bytes, float]] = {}
+        self.failed: dict[str, str] = {}  # SSML -> why synthesis failed
 
-    def __call__(self, _words: str, markup: str) -> tuple[float, str]:
-        if markup not in self.audio:
-            self.audio[markup] = self.synth(markup, WAV_FORMAT)
+    def __call__(self, words: str, markup: str) -> tuple[float, str]:
+        """Measured length, or on a failed request (an outage, a refused sign-in) the estimate:
+        the line is still scheduled and shown, and its cue says speech is unavailable."""
+        if markup not in self.audio and markup not in self.failed:
+            try:
+                self.audio[markup] = self.synth(markup, WAV_FORMAT)
+            except Exception as e:  # noqa: BLE001  an outage must never silence the line; recorded
+                self.failed[markup] = f"{type(e).__name__}: {e}"
+        if markup in self.failed:
+            return estimated_seconds(words), "estimated"
         return wav_seconds(self.audio[markup][0]), "measured"
 
     def save(self, track: Track, out: Path) -> None:
         """Each said line's audio as audio/<id>.wav, with how long its request took."""
         (out / "audio").mkdir(exist_ok=True)
         for s in track.said:
+            if s.ssml in self.failed:
+                s.speech = "unavailable"
+                continue
             audio, took = self.audio[s.ssml]
+            s.speech = "spoken"
             s.file = f"audio/{s.id}.wav"
             s.synth_s = round(took, 3)
             (out / s.file).write_bytes(audio)
         track.mode = "azure"
-        track.synth_requests = len(self.audio)
+        track.synth_requests = len(self.audio) + len(self.failed)
         track.synth_chars = sum(len(markup) for markup in self.audio)
+        track.synth_failed = len(self.failed)
 
 
 # ---------------------------------------------------------------- outputs
@@ -346,8 +389,10 @@ def audio_cues(track: Track) -> list[dict]:
         cue = {
             "id": s.id, "t_in": s.t_in, "t_out": s.t_out, "kind": "audio_description", "slot": SLOT,
             "anchor": None, "persona": "audio", "lang": "en", "text": s.spoken, "pan": s.pan,
-            "replaces": None, "verified": s.source == "insight", "evidence": s.evidence,
+            "replaces": None, "verified": s.source in ("insight", "model"), "evidence": s.evidence,
         }
+        if s.speech is not None:
+            cue["speech"] = s.speech
         validate(cue, SCHEMA)
         out.append(cue)
     return out
@@ -396,6 +441,7 @@ def write_track(track: Track, refused: list[dict], out: Path, t_start: float, vo
         "synth_p95_s": _quantile(synth, 0.95),
         "synth_requests": track.synth_requests,
         "synth_chars": track.synth_chars,
+        "synth_failed": track.synth_failed,
         "vtt": "description.vtt",
     }
     doc = {**summary, "said": [asdict(s) for s in track.said], "dropped_lines": track.dropped,

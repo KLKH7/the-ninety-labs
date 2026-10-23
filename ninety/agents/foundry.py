@@ -193,11 +193,12 @@ def build_agents(client: FoundryChatClient) -> list[Agent]:
     """Every agent we publish, once each, built exactly as the live runs build them. The
     Personalizer runs in its own service (ninety/personalizer/server.py)."""
     from ninety.agents.companion import companion_agent
+    from ninety.agents.describer import describer_agent
     from ninety.personalizer.core import personalizer_agent
 
     agents = [
         *slice_agents(client), *workflow_agents(client).values(), personalizer_agent(client),
-        companion_agent(client),
+        companion_agent(client), describer_agent(client),
     ]
     return list({a.name: a for a in agents}.values())
 
