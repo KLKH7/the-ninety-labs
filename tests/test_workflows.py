@@ -1,4 +1,4 @@
-"""Every shell script in our GitHub workflows parses (lesson 157).
+"""Every shell script in our GitHub workflows parses (lesson 208).
 
 A workflow's `run:` block is a shell script inside YAML: the YAML can load while the script is not
 valid shell. The `agents-live` publish run for the Describer was approved, signed in to Azure,
