@@ -50,3 +50,17 @@ def test_recall_and_precision_by_zone_and_radius(tmp_path):
     # Coverage: a ball placed at all on frames with the true ball on the pitch (2 of 3).
     assert r["all"]["coverage"]["k"] == 2 and r["all"]["coverage"]["n"] == 3
     assert r["far"]["coverage"]["k"] == 0
+
+
+def test_the_band_is_derived_per_lens_folder_and_never_on_a_test_seed(tmp_path):
+    import pytest
+
+    from ninety.eval import band_derive
+
+    clip = tmp_path / "seed108"
+    for v in ("tac-l", "tac-r"):
+        (clip / "views" / v).mkdir(parents=True)
+    assert band_derive._view("view-tac-l-ours-freeze", clip) == "tac-l"
+    assert band_derive._view("view-tac-r-ours-tactical", clip) == "tac-r"
+    with pytest.raises(SystemExit, match="validation"):
+        band_derive.derive(tmp_path, tmp_path, [900001])
