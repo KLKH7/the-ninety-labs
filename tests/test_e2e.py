@@ -173,7 +173,7 @@ def test_live_agents_run_the_graph_on_the_published_agents_with_one_sign_in(tmp_
     from ninety.agents import credentials, workflow
     from ninety.agents.replay import Turn
 
-    signed, minutes = [], []
+    signed, minutes, failing = [], [], set()
 
     @asynccontextmanager
     async def credential():
@@ -190,7 +190,7 @@ def test_live_agents_run_the_graph_on_the_published_agents_with_one_sign_in(tmp_
         agent_events = [e2e.compact(e) for e in events if e["type"] in e2e.AGENT_TYPES]
         result = await workflow.run_workflow(e2e.offline_models(agent_events), events, minute, match,
                                              plant=plant, inline_events=True)
-        return result, [Turn("tactician", "p", "a")], {"ninety-tactician": "2"}, False, events
+        return result, [Turn("tactician", "p", "a")], {"ninety-tactician": "2"}, minute in failing, events
 
     @asynccontextmanager
     async def single(cred, turns, pins):
@@ -206,6 +206,10 @@ def test_live_agents_run_the_graph_on_the_published_agents_with_one_sign_in(tmp_
     assert manifest["agents"]["mode"] == "graph live"
     assert manifest["agents"]["pins"] == {"ninety-tactician": "2", "ninety-analyst": "5"}
     assert manifest["agents"]["model_failures"] == []
+    # A minute in which a model call failed is named: the graph held its claims and did not raise.
+    failing.add(2)
+    _, failed = run(tmp_path / "again", "--agents", "live")
+    assert failed["agents"]["model_failures"] == [2]
     assert json.loads((out / "agents.json").read_text()) == [
         {"minute": 2, "role": "tactician", "prompt": "p", "response": "a"}]
     assert only_claim(out)["mode"] == "graph live"
@@ -322,3 +326,11 @@ def test_the_live_fallback_s_single_analyst_gets_the_minute_s_events_in_its_prom
     asyncio.run(e2e.explain_and_render(STANDIN, "seed900001", False, None, [2], (ask, judge)))
     assert prompts and "EVENTS" in prompts[0] and "standin-e012" in prompts[0]
     assert "standin-e002" not in prompts[0]  # only the minute's own events
+
+
+@pytest.mark.parametrize("other", [["--single-analyst"], ["--replay", "x.json"]])
+def test_live_agents_refuse_another_explain_mode(tmp_path, other):
+    clip, detections, events_file = write_clip(tmp_path)
+    with pytest.raises(SystemExit):
+        e2e.main([str(clip), "--out", str(tmp_path / "b"), "--detections", str(detections), "--frames",
+                  "--events-file", str(events_file), "--agents", "live", *other])

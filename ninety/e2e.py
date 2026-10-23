@@ -444,6 +444,7 @@ async def explain_live(events: list[dict], clip: str, plant: bool, log: dict):
 
         async with published_single(credential, turns, pins) as models:
             async def single(minute: int, planted: bool):
+                before = len(turns)
                 try:
                     new, traced, _ = await explain_and_render(events, clip, False, None, [minute], models)
                 except Exception as e:  # noqa: BLE001  both paths failed: the templates stay
@@ -453,6 +454,9 @@ async def explain_live(events: list[dict], clip: str, plant: bool, log: dict):
                                  "steps": [{"role": "analyst", "moment": f"claim-m{minute}",
                                             "action": "fail", "ms": 0.0,
                                             "detail": f"{type(e).__name__}; templates stay"}]}]
+                finally:
+                    for turn in turns[before:]:  # the fallback's answers belong to this minute
+                        turn["minute"] = minute
                 return new, traced
 
             out = await explain_with_graph(events, clip, plant, run_minute, single, mode="graph live")
