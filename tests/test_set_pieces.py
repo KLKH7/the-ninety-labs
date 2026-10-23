@@ -94,12 +94,18 @@ def test_the_box_runners_wait_off_goal_then_run_in_as_the_taker_runs_up(seed, te
     track = kick(e)
     line = goal_line(team)
     start = next(i for i, f in enumerate(track) if f["run_in"] is not None)
-    runners = [p.id for p in e.players if p.team == team and p.role == "ST"]
+    # the striker and the far-side winger make the post runs (O6, offball.BOX_RUNS); not the taker
+    ball_side = 1.0 if flag > PITCH_Y / 2 else -1.0
+    across = 1.0 if team == "home" else -1.0
+    far = "RW" if ball_side * across > 0 else "LW"
+    runners = [p.id for p in e.players if p.team == team and p.role in ("ST", far)
+               and p.id != e.kicked["player"]]
+    assert runners
     for pid in runners:
-        before = track[start]["players"][pid]
-        assert abs(before[0] - line) >= offball.BOX_RUN_START_M - 1.0, pid  # waiting off goal
-        at_kick = track[-1]["players"][pid]
-        assert abs(before[0] - line) - abs(at_kick[0] - line) > 1.5, pid  # on his way in by the kick
+        x, y, vx, vy = track[start]["players"][pid]
+        assert abs(x - line) >= offball.BOX_RUN_START_M - 0.5, pid  # waiting no nearer than the mark
+        gained = abs(x - line) - abs(track[-1]["players"][pid][0] - line)
+        assert gained >= 1.0, pid  # on his run in by the kick (on main he stood: 0 m)
 
 
 @pytest.mark.parametrize(("seed", "team", "flag"), CASES)

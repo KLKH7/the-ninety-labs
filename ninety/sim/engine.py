@@ -296,6 +296,7 @@ class Restart:
     placed: bool = False  # on its spot and left there by the taker, who steps back to run up (lesson 202)
     run_in_at: float | None = None  # when the taker began his run-up (lesson 202)
     guard: str | None = None  # at a corner, the defender in the near-post area, named once (lesson 202)
+    given_at: float = 0.0  # when the restart was given
 
 
 @dataclass
@@ -1912,6 +1913,7 @@ class Engine:
         self.restart_kicker = None  # a new stoppage ends the last restart's bar
         self.restart = Restart(kind, team, spot[0], spot[1], taker, self.t + self.rng.uniform(lo, hi),
                                direct=direct)
+        self.restart.given_at = self.t
         if kind == "free_kick" and direct:
             self.restart.wall = self.form_wall(self.restart)
 
@@ -2112,7 +2114,14 @@ class Engine:
         stopped = math.hypot(taker.vx, taker.vy) <= THROW_SETTLED_MPS
         if r.run_in_at is None:
             rx, ry = self.runup_spot(r)
-            if self.t >= r.ready_at and stopped and math.hypot(taker.x - rx, taker.y - ry) <= WALL_LANE_M:
+            # He waits for his team-mates to be at their places (ENGINE.md: a restart takes as long as
+            # players need to get there, not a timer): going "in time" for a pass after the kick, the
+            # far ones were still walking up at it and their markers came late. Never past twice R1's
+            # wait (design), so a place that never settles cannot hold the corner for ever.
+            mates = [q.id for q in self.players if q.team == r.team and q.role != "GK" and q.id != taker.id]
+            ready = all(q in r.settled for q in mates) or self.t >= 2 * r.ready_at - r.given_at
+            if (self.t >= r.ready_at and ready and stopped
+                    and math.hypot(taker.x - rx, taker.y - ry) <= WALL_LANE_M):
                 r.run_in_at = self.t
             return False
         kx, ky = self.strike_spot(r)
@@ -2553,6 +2562,15 @@ class Engine:
                 # O2: the defence and midfield track men in their zones; the forwards wait at their
                 # line of engagement, never past the ball (T3).
                 tx, ty = self.zone_spot(p, slot, own[0]) if ROLE_LINE.get(p.role) != "attack" else slot
+                if given and given.kind == "corner" and ROLE_LINE.get(p.role) != "attack":
+                    # Lesson 202: at a corner against them the defence and midfield defend from inside
+                    # their penalty area (design: zonal places mixed with man-marking, as Premier
+                    # League sides set up; Pulling, Robins & Rixon 2013), their zones pulled in to
+                    # a metre inside it. Held at their block's slots, two stood just outside it.
+                    depth = clamp(abs(tx - own[0]), 0.0, PENALTY_DEPTH - 1.0)
+                    tx = own[0] + depth * (1.0 if own[0] < PITCH_X / 2 else -1.0)
+                    half = PENALTY_HALF_WIDTH - 1.0
+                    ty = clamp(ty, PITCH_Y / 2 - half, PITCH_Y / 2 + half)
         tx, ty = clamp(tx, 0.5, PITCH_X - 0.5), clamp(ty, 0.5, PITCH_Y - 0.5)
         return tx, ty, self.in_time(p, tx, ty)
 
@@ -2617,6 +2635,11 @@ class Engine:
                 # the Laws' distance by the wall's players.
                 if given.pressers is None:
                     given.pressers = [] if given.wall else self.who_presses(brain)
+                    if given.kind == "corner":
+                        # Lesson 202: no cover at a corner. Goal-side of a presser held 9.15 m off the
+                        # arc is the goal line by the flag: the cover stood there, 1 m off the line and
+                        # 22 m from goal, out of the play, and the side had one fewer in its box.
+                        given.pressers = given.pressers[:1]
                 brain.pressers = given.pressers
             elif holder != team:
                 brain.pressers = self.who_presses(brain)
