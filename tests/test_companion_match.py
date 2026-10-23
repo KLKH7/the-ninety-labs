@@ -346,3 +346,9 @@ def test_shape_claims_keep_the_shape_checks(text):
     mi = with_shape()
     known = {f["id"]: f for f in mi.facts["shape"]}
     assert not verify(Claim(text, ["shape:line_height:home:m27"]), known, mi.fixture.clubs).ok
+
+
+def test_answers_name_the_players_they_show():
+    q = Question("s1", None, "Which pass cut through?", Q.t)
+    r = asyncio.run(companion.answer_match(q, insights()))
+    assert r.answer.status == "verified" and r.answer.names == {"h-t5": LB.name}

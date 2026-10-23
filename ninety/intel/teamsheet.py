@@ -19,20 +19,12 @@ from __future__ import annotations
 import random
 from dataclasses import asdict, dataclass
 
-# One fictional club per renderer code (ninety/render/params.TEAM_CODES; tests hold the two equal).
+# One fictional club per renderer code (ninety/render/params.TEAM_CODES), the names every screen
+# shows (web/viewer/src/teams.ts CLUBS): tests hold all three equal.
 CLUBS = {
-    "ASH": "Ashvale",
-    "CRW": "Corrowick",
-    "DUN": "Dunmarrow",
-    "ELM": "Elmhollow",
-    "FEN": "Fenwick",
-    "GRV": "Grevanton",
-    "HLT": "Holtbury",
-    "IVY": "Ivyreach",
-    "KST": "Kestrow",
-    "MRL": "Marlowen",
-    "OAK": "Oakfield",
-    "QRY": "Quarrington",
+    "ASH": "Ashvale", "CRW": "Crowmere", "DUN": "Dunhollow", "ELM": "Elmwick", "FEN": "Fenwick",
+    "GRV": "Grovely", "HLT": "Holtmoor", "IVY": "Ivydale", "KST": "Kestwood", "MRL": "Merlton",
+    "OAK": "Oakfield", "QRY": "Quarrydale",
 }
 # The 4-3-3 the engine plays (ninety/sim/engine.FORMATION, the same role codes; tests hold them
 # equal): role code, shirt number (the common squad numbering of a 4-3-3, *design*), what a fan calls

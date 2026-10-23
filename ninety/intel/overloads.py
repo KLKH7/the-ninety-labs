@@ -117,6 +117,8 @@ def overloads(frames: Frames) -> list[dict]:
                     "zone": {k: round(v, 2) for k, v in box.items()},
                     "home": in_box["home"],
                     "away": in_box["away"],
+                    "for": counts[team].value,  # the "4v2" label: the counts at the moment
+                    "against": counts[other(team)].value,
                 },
                 confident=peak.lo >= OVERLOAD_MIN,
                 third=third,

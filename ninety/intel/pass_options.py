@@ -81,7 +81,7 @@ def pass_options(events: Iterable[Mapping], frames: Frames) -> list[dict]:
             continue
         n, open_at, marked_at, target = options(e, frame)
         visual = {
-            "passer": [round(float(e["x"]), 1), round(float(e["y"]), 1)],
+            "passer": [round(float(e["x"]), 1), round(float(e["y"]), 1), e.get("player")],
             "target": xy(target) if target else None,
             "open": open_at,
             "marked": marked_at,

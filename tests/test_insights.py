@@ -234,7 +234,7 @@ def test_open_teammates_ahead():
     e = pass_event(player="h-t1", end=(70.0, 20.0), outcome="fail")
     [po] = pass_options.pass_options([e], Frames([frame(100, home, away)]))
     assert (po["value"], po["lo"], po["hi"], po["confident"]) == (1, 1, 1, True)
-    assert po["target_open"] is True and po["visual"]["marked"] == [[70.0, 50.0]]
+    assert po["target_open"] is True and po["visual"]["marked"] == [[70.0, 50.0, "h-t3"]]
 
 
 def test_an_untracked_opponent_leaves_no_one_surely_open():
@@ -348,3 +348,14 @@ def test_the_measured_gates_ship_in_the_package():
     assert roles.CALIBRATION.is_relative_to(roles.Path(roles.__file__).parent)
     gates = roles.gates()
     assert all(gates[k] is not None for k in ("name", "role", "line")), gates
+
+
+def test_club_names_are_the_screens():
+    import re
+    from pathlib import Path
+
+    ts = Path(__file__).resolve().parents[1] / "web" / "viewer" / "src" / "teams.ts"
+    if not ts.exists():
+        pytest.skip("the viewer's club map is not on this branch yet")
+    block = ts.read_text().split("export const CLUBS", 1)[1].split("};", 1)[0]
+    assert dict(re.findall(r"(\w{3}): \"([^\"]+)\"", block)) == teamsheet.CLUBS

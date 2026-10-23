@@ -16,7 +16,7 @@
   },
   "wrong": [
    {
-    "text": "Is Kestrow's gegenpress working?",
+    "text": "Is Kestwood's gegenpress working?",
     "label": "counter_press",
     "chose": []
    },
@@ -33,17 +33,17 @@
     ]
    },
    {
-    "text": "Should Quarrington have played it forward there?",
+    "text": "Should Quarrydale have played it forward there?",
     "label": "pass_options",
     "chose": []
    },
    {
-    "text": "Who plays on the right wing for Quarrington?",
+    "text": "Who plays on the right wing for Quarrydale?",
     "label": "lineup",
     "chose": []
    },
    {
-    "text": "Which Kestrow player is the holding midfielder?",
+    "text": "Which Kestwood player is the holding midfielder?",
     "label": "lineup",
     "chose": []
    }

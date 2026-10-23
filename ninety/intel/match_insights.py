@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ninety.intel import counter_press, line_breaks, overloads, pass_options, roles, shape
-from ninety.intel.scene import TEAMS, Frames
+from ninety.intel.scene import TEAMS, Frames, xy
 from ninety.intel.teamsheet import Fixture
 
 MAX_FACTS = 12  # design: the most facts a tool returns, the strongest first, so a prompt stays short
@@ -53,6 +53,7 @@ class MatchInsights:
             assigned = roles.assign(f.frames, team)
             for track in {p["id"] for fr in f.frames for p in fr["players"] if p["team"] == team}:
                 people[track] = roles.who(track, team, assigned, fixture, gate)
+        shapes = shape_drawings(f.frames)
         facts = {
             "line_break": line_breaks.line_breaks(events, f),
             "overload": overloads.overloads(f),
@@ -65,7 +66,11 @@ class MatchInsights:
                     "kind": "shape",
                     "t": 60.0 * r["minute"] - 1,  # the minute's last second: a shape is known once it is over
                     "also": [[abs(r["change"]), r["unit"]]] if r.get("change") else [],
-                    "visual": {"kind": "shape", "minute": r["minute"]},
+                    "visual": {
+                        "kind": "shape",
+                        "minute": r["minute"],
+                        **shapes.get((r["team"], r["minute"]), {}),
+                    },
                 }
                 for r in shape.shape_rows(f.frames)
             ],
@@ -216,6 +221,42 @@ class MatchInsights:
             int(body["minutes"]),
             dict(body.get("gates") or {}),
         )
+
+
+def shape_drawings(frames: Sequence[Mapping]) -> dict[tuple[str, int], dict]:
+    """What the phone draws for a team's shape in a minute: its players in the frame of that minute
+    with most of them tracked (the latest, on a tie), and its outfield players split into back, middle
+    and front lines at the two largest gaps in depth, as the shape facts split them (shape.lines), each
+    line ordered across the pitch. The keeper is left out as the shape facts leave him out."""
+    best: dict[tuple[str, int], Mapping] = {}
+    for fr in frames:
+        for team in TEAMS:
+            key = (team, shape.minute_of(fr["t"]))
+            n = sum(p["team"] == team for p in fr["players"])
+            old = best.get(key)
+            if old is None or n >= sum(p["team"] == team for p in old["players"]):
+                best[key] = fr
+    out = {}
+    for (team, minute), fr in best.items():
+        own = [p for p in fr["players"] if p["team"] == team]
+        if len(own) < 4:
+            continue
+        ranked = sorted(own, key=lambda p: shape.depth(team, p["x"]))
+        if shape.in_own_penalty_area(shape.depth(team, ranked[0]["x"]), ranked[0]["y"]):
+            ranked = ranked[1:]
+        depths = [shape.depth(team, p["x"]) for p in ranked]
+        gaps = sorted(range(1, len(depths)), key=lambda i: (depths[i] - depths[i - 1], -i), reverse=True)[:2]
+        a, b = sorted(gaps)
+        lines = [
+            sorted(ranked[:a], key=lambda p: p["y"]),
+            sorted(ranked[a:b], key=lambda p: p["y"]),
+            sorted(ranked[b:], key=lambda p: p["y"]),
+        ]
+        out[(team, minute)] = {
+            "lines": [[xy(p) for p in line] for line in lines],
+            "players": [xy(p) for p in own],
+        }
+    return out
 
 
 def load_fixture(path: Path) -> Fixture:

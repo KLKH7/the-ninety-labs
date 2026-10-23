@@ -165,6 +165,7 @@ async def card_for(
             "source": source,
             "evidence": [fact["id"]],
             "visual": visual,
+            "names": companion.names_of([fact], visual, insights),
             "why": {
                 "question": WHY[fact["kind"]],
                 "answer": {"status": "verified", "text": why, "evidence": [fact["id"]], "visual": visual},

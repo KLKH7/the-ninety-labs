@@ -59,8 +59,8 @@ def line_breaks(events: Iterable[Mapping], frames: Frames) -> list[dict]:
                 "opponents",
                 frame,
                 {
-                    "from": [round(start[0], 1), round(start[1], 1)],
-                    "to": [round(end[0], 1), round(end[1], 1)],
+                    "from": [round(start[0], 1), round(start[1], 1), e.get("player")],
+                    "to": [round(end[0], 1), round(end[1], 1), e.get("receiver")],
                     "bypassed": where,
                 },
                 event=e,

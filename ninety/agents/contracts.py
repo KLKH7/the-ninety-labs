@@ -254,6 +254,8 @@ class Answer:
     # What the phone draws beside the answer (schemas/viewer_answer.schema.json `visual`): taken by
     # code from the first cited insight fact that has one, never from a model. None draws nothing.
     visual: dict | None = None
+    # How the phone labels the players the visual or text shows ({track id: "Oakfield's left-back"}).
+    names: dict | None = None
 
     def __post_init__(self) -> None:
         _require(self.status in get_args(AnswerStatus), f"unknown answer status {self.status!r}")

@@ -170,6 +170,25 @@ def visual_of(cited: list[dict]) -> dict | None:
     return None
 
 
+def _point_ids(node) -> set[str]:
+    """Every track id in a geometry: the third item of each [x, y, id] point, however nested."""
+    if isinstance(node, list):
+        if len(node) == 3 and all(isinstance(v, (int, float)) for v in node[:2]) and isinstance(node[2], str):
+            return {node[2]}
+        return set().union(*(_point_ids(v) for v in node)) if node else set()
+    if isinstance(node, dict):
+        return set().union(*(_point_ids(v) for v in node.values())) if node else set()
+    return set()
+
+
+def names_of(cited: list[dict], visual: dict | None, insights) -> dict | None:
+    """How the phone labels each player its drawing or text shows: the gated name or role, never an id."""
+    ids = {f.get(k) for f in cited for k in ("passer", "receiver", "player")}
+    ids |= _point_ids((visual or {}).get("geometry"))
+    out = {i: insights.people[i]["say"] for i in sorted(i for i in ids if i) if i in insights.people}
+    return out or None
+
+
 def _span(cited: list[dict]) -> tuple[float | None, float | None]:
     ts = [float(f["t"]) for f in cited if f.get("t") is not None]
     ts += [60.0 * (f["minute_from"] - 1) for f in cited if f.get("minute_from")]
@@ -177,12 +196,23 @@ def _span(cited: list[dict]) -> tuple[float | None, float | None]:
     return (min(ts), max(ts)) if ts else (None, None)
 
 
-def _match_answer(text: str, cited: list[dict]) -> Answer:
+def _match_answer(text: str, cited: list[dict], insights=None) -> Answer:
     t_from, t_to = _span(cited)
     lead = next((f for f in cited if f.get("value") is not None and f.get("unit")), None)
     metric, value, unit = (lead["metric"], float(lead["value"]), lead["unit"]) if lead else (None, None, None)
+    visual = visual_of(cited)
+    names = names_of(cited, visual, insights) if insights is not None else None
     return Answer(
-        "verified", text, metric, value, unit, tuple(f["id"] for f in cited), t_from, t_to, visual_of(cited)
+        "verified",
+        text,
+        metric,
+        value,
+        unit,
+        tuple(f["id"] for f in cited),
+        t_from,
+        t_to,
+        visual,
+        names=names,
     )
 
 
@@ -319,12 +349,15 @@ def code_match_answer(
     facts = run_tools(insights, calls)
     known = {f["id"]: f for f in facts}
     clubs = insights.fixture.clubs
+    if re.search(r"\b(?:which|who|whose)\b", question.text, re.I):
+        # "Which pass…?", "Who…?": a moment with a player in it, before a club's total.
+        facts = sorted(facts, key=lambda f: f.get("t") is None)
     for f in facts:
         f.setdefault("clubs", clubs)
         for text in code_texts(f):
             claim = Claim(text, [f["id"]])
             if _verify(claim, known, insights).ok:
-                return _match_answer(text, [f]), calls
+                return _match_answer(text, [f], insights), calls
     names = ", ".join(n.replace("_", " ") for n in MATCH_TOOLS[:4])
     why = (
         "I have no tracked positions for this match yet."
@@ -394,4 +427,4 @@ async def answer_match(
         return fallback(tuple(verdict.reasons), calls)
     known = {f["id"]: f for f in facts}
     cited = [known[i] for i in claim.evidence]
-    return MatchResult(_match_answer(claim.text, cited), "model", tuple(calls))
+    return MatchResult(_match_answer(claim.text, cited, insights), "model", tuple(calls))

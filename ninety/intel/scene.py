@@ -148,8 +148,9 @@ def minute_of(t: float) -> int:
     return int(t // 60) + 1
 
 
-def xy(p: Mapping) -> list[float]:
-    return [round(float(p["x"]), 1), round(float(p["y"]), 1)]
+def xy(p: Mapping) -> list:
+    """A player's point as the phone draws it: [x, y, track id]."""
+    return [round(float(p["x"]), 1), round(float(p["y"]), 1), p.get("id")]
 
 
 __all__ = [
