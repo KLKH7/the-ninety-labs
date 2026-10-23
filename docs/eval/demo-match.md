@@ -130,7 +130,7 @@ camera's render), which is not on main as this rule merges; #231 merges before t
 
 ```bash
 # at most two at once (the Mac crashed on more), each through the machine's slot limit
-runs/slot.sh uv run python scripts/demo_match.py measure <seed>   # for each seed 8002 to 8041
+runs/slot.sh uv run python scripts/demo_match.py measure <seed>   # for each seed 8051 to 8090
 uv run python scripts/demo_match.py select > runs/demo-match/result.json
 ```
 

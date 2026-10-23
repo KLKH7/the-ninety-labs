@@ -187,7 +187,8 @@ def test_too_long_drops_moves_then_set_pieces_then_off_target_shots_and_never_a_
         events += [ev(t, "shot", outcome="off_target")]
     for t in range(80, 5300, 200):
         events += [*save(t)]
-    events += [*goal(2000), *corner(3000), *passes(4100, 9)]
+    events += [*goal(2000), *corner(3000), *passes(4100, 9),
+               ev(3480, "foul", "away", x=80.0), ev(3500, "set_piece", "home", x=80.0, y=30.0)]
     events.sort(key=lambda e: e["t"])
     edit = dm.condense(events, END)
     assert edit["total_s"] <= dm.TARGET_S[1]
@@ -196,6 +197,7 @@ def test_too_long_drops_moves_then_set_pieces_then_off_target_shots_and_never_a_
     dropped = [a.split()[1] for a in edit["adjust"]]
     assert dropped[0] == "move" and "corner" in dropped
     assert dropped.index("corner") < dropped.index("shot")
+    assert dropped.index("free_kick") < dropped.index("shot")
     assert all(d not in ("goal", "save") for d in dropped)
 
 
@@ -366,3 +368,12 @@ def test_the_doc_states_the_scripts_numbers():
     missing = [w for w in want if w not in doc]
     assert not missing
     assert "stadium=broadcast" in dm.RENDER_FLAGS and "views=tactical" in dm.RENDER_FLAGS
+
+
+def test_the_final_third_is_the_35_m_nearest_the_goal_a_side_attacks():
+    def fk(team, x):
+        return [ev(100, "foul", "away" if team == "home" else "home", x=x),
+                ev(120, "set_piece", team, x=x, y=30.0)]
+
+    assert [len(dm.moments(fk("home", x))) for x in (70.1, 69.9)] == [1, 0]
+    assert [len(dm.moments(fk("away", x))) for x in (34.9, 35.1)] == [1, 0]
