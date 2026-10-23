@@ -131,26 +131,37 @@ def test_a_fallen_players_box_away_from_his_feet_still_fails():
 HIGH = Camera((52.5, -32.0, 28.0), (30.0, 34.0, 0.0), 34.6, 1920, 1080)
 
 
-def _reach_clip(ball_off: float, touch: bool, n: int = 12, at: int = 6) -> tuple[list[dict], list[dict]]:
+def _reach_clip(ball_off: float, touch: bool, n: int = 12, at: int = 6, foot_off: float | None = None,
+                lift: float = 0.0, side: float = 0.0, cut_after: int | None = None, jump: int = 500,
+                part: str = "foot") -> tuple[list[dict], list]:
     """One player at (30, 5), near the touchline, lunging: his box from his head over the tracked
-    point (1.6 m up, the hips down in the reach) to his foot at a ball `ball_off` metres toward the
-    camera; on frame `at` he touches it (action foot) when `touch`."""
+    point (1.6 m up, the hips down in the reach) to his foot `foot_off` metres toward the camera
+    (default: at the ball, `ball_off` out); on row `at` he touches the ball (action foot) when
+    `touch`. `lift` raises the whole drawn body, `side` moves it along the touchline, and
+    `cut_after` puts an edit cut after that row (the match frames jump `jump`); `part` is the touch's."""
     frames = []
     bx, by = 30.0, 5.0 - ball_off
+    fo = ball_off if foot_off is None else foot_off
     for i in range(n):
-        head = HIGH.project((30.0, 5.0, 1.6))
-        sole = HIGH.project((bx, by, 0.0))
-        foot = HIGH.project((30.0, 5.0, 0.0))
-        box = [min(head[0], sole[0], foot[0]) - 6, head[1], max(head[0], sole[0], foot[0]) + 6, sole[1]]
+        head = HIGH.project((30.0 + side, 5.0, 1.6 + lift))
+        sole = HIGH.project((30.0 + side, 5.0 - fo, lift))
+        foot = HIGH.project((30.0 + side, 5.0, lift))
+        box = [min(head[0], sole[0], foot[0]) - 6, head[1], max(head[0], sole[0], foot[0]) + 6,
+               max(sole[1], foot[1])]
+        num = 100 + i + (jump if cut_after is not None and i > cut_after else 0)
         frames.append({
-            "frame": 100 + i, "t": (100 + i) / 25, "camera": HIGH.to_dict(), "keypoints": [],
+            "frame": num, "t": num / 25, "camera": HIGH.to_dict(), "keypoints": [],
             "ball": {"x": bx, "y": by, "z": 0.0, "bbox": None, "pixels": 0, "visibility": 0.0,
                      "centroid_px": None},
             "players": [{"id": "h7", "team": "home", "x": 30.0, "y": 5.0, "vx": 1.0, "vy": 0.0,
-                         "heading": -1.5708, "action": "foot" if touch and i == at else "walk",
+                         "heading": -1.5708, "action": part if touch and i == at else "walk",
                          "bbox": box, "visibility": 1.0, "pixels": 400}],
         })
     return frames, []
+
+
+def _outside(frames, events=()):
+    return projection_errors(frames, list(events), {"h7": 1.84})["player_foot_outside_box"]
 
 
 def test_a_foot_drawn_to_the_ball_it_touches_is_inside_its_box_from_a_high_lens():
@@ -159,16 +170,64 @@ def test_a_foot_drawn_to_the_ball_it_touches_is_inside_its_box_from_a_high_lens(
     right, and the check now measures the reach on the ground through the saved matrix."""
     frames, events = _reach_clip(1.0, touch=True)
     assert projection_errors(frames)["player_foot_outside_box"] > 0  # the side-on slack alone fails it
-    assert projection_errors(frames, events, {"h7": 1.84})["player_foot_outside_box"] == 0
+    assert _outside(frames, events) == 0
 
 
 def test_a_foot_that_far_out_with_no_touch_is_still_caught():
     frames, events = _reach_clip(1.0, touch=False)
-    assert projection_errors(frames, events, {"h7": 1.84})["player_foot_outside_box"] == len(frames)
+    assert _outside(frames, events) == len(frames)
 
 
 def test_a_foot_beyond_the_leg_is_caught_even_on_a_touch():
     """The reach is the leg's ((LEG_M + HIP_SIDE_M) at his scale, about 1.1 m at 1.84 m tall), not
     wherever the ball is: a box reaching 2.5 m to a ball fails on the touch frames too."""
     frames, events = _reach_clip(2.5, touch=True)
-    assert projection_errors(frames, events, {"h7": 1.84})["player_foot_outside_box"] == len(frames)
+    assert _outside(frames, events) == len(frames)
+
+
+def test_a_short_touch_does_not_excuse_a_long_reach():
+    """The allowance is where the foot is drawn (at the ball), not the leg's whole reach: a ball 0.3 m
+    out does not let the box reach 1.0 m."""
+    frames, events = _reach_clip(0.3, touch=True, foot_off=1.0)
+    assert _outside(frames, events) == len(frames)
+
+
+def test_a_body_drawn_above_his_ground_point_is_caught_on_a_touch():
+    """A reach toward the camera moves the box's bottom down the picture, never up: a body floating
+    0.8 m above the grass on a short touch fails on the touch frames as on any other. (A float that a
+    long reach toward the lens offsets exactly cannot be told from a box alone.)"""
+    frames, events = _reach_clip(0.3, touch=True, lift=0.8)
+    assert _outside(frames, events) == len(frames)
+
+
+def test_a_box_beside_him_is_caught_on_a_touch():
+    """Across the picture the tracked point stays inside the box, touch or not: the same box moved
+    60 px sideways (its bottom where it was) fails, and so does a body drawn 1.5 m along the line."""
+    frames, events = _reach_clip(1.0, touch=True)
+    for fr in frames:
+        b = fr["players"][0]["bbox"]
+        fr["players"][0]["bbox"] = [b[0] + 60, b[1], b[2] + 60, b[3]]
+    assert _outside(frames, events) == len(frames)
+    frames, events = _reach_clip(1.0, touch=True, side=1.5)
+    assert _outside(frames, events) == len(frames)
+
+
+def test_the_reach_is_allowed_only_round_the_touch_and_never_across_a_cut():
+    """Rows far after the touch get no allowance (the renderer's window is under a second), and a row
+    after an edit cut is another shot, however near in rows."""
+    frames, events = _reach_clip(1.0, touch=True, n=60)
+    out = _outside(frames, events)
+    assert 0 < out < len(frames) and out >= len(frames) - 6 - 25
+    frames, events = _reach_clip(1.0, touch=True, cut_after=7)
+    assert _outside(frames, events) == len(frames) - 8  # rows 0 to 7 round the touch pass; none after the cut
+    # however few match frames the cut skips, the rows after it are another shot
+    frames, events = _reach_clip(1.0, touch=True, cut_after=7, jump=2)
+    assert _outside(frames, events) == len(frames) - 8
+
+
+def test_a_chest_or_thigh_touch_puts_no_foot_at_the_ball():
+    """Only a foot is drawn at the ball (touch_at): a chest touch with the box reaching 1.0 m along
+    the grass gets no allowance."""
+    for part in ("chest", "thigh"):
+        frames, events = _reach_clip(1.0, touch=True, part=part)
+        assert _outside(frames, events) == len(frames), part

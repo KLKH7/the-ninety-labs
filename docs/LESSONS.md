@@ -2191,9 +2191,16 @@ short and actionable. This file is public: no research sources, product names or
 - **Rule:** a tolerance stated in metres is measured in metres, through the frame's own camera
   matrix, never with a pixel scale fitted to one camera. An allowance for a real motion is bounded
   by the drawing's own limit (here the leg's reach), so it cannot excuse a drawing beyond it.
-- **Check:** in `tests/test_render_checks.py`, the three V6 high-lens tests:
-  - a 1.0 m reach to a touched ball passes, though the side-on slack alone fails it;
-  - the same foot with no touch fails;
-  - a 2.5 m "reach" fails even on a touch.
-  Each turns red under its own mutation: the cap removed, the touch condition removed, the fix
-  removed.
+- **Check:** the V6 high-lens tests in `tests/test_render_checks.py`.
+  - A 1.0 m reach to a touched ball passes, though the side-on slack alone fails it.
+  - These all fail:
+    - the same foot with no touch;
+    - a 2.5 m "reach";
+    - a 0.3 m touch with a 1.0 m box;
+    - a floating body;
+    - a box moved sideways;
+    - a chest or thigh touch;
+    - rows far from the touch, or after an edit cut.
+  - Eight mutations each turn a test red. An independent review (cited in the PR) found the first
+    draft's ground disc excused floating and sideways boxes and spilled across cuts; the rule now
+    allows only the line toward the ball the foot is drawn at.

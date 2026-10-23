@@ -15,6 +15,7 @@ from ninety.render.camera import project_with
 from ninety.validate import validate
 
 PROJECTION_TOL_PX = 1.0  # guide: ground truth projects onto its pixels within 1 px
+V6_M = 0.45  # GROUNDING V6: a sole within this of the tracked point (feet swing about 0.4 m)
 EDGE_MARGIN_PX = 2  # objects cut by the image border have a shifted centroid; skip them
 
 
@@ -36,39 +37,38 @@ def _inside(b: list[int], w: int, h: int) -> bool:
 
 
 def _reaching(frames: list[dict], events: list[dict] | None, heights: dict[str, float]
-              ) -> dict[tuple[int, str], float]:
-    """(frame index, player) -> how far from his tracked point, on the ground, his foot is drawn to
-    the ball he touches: the renderer's own touches (scene.contacts) over the frames it draws each
-    (scene._touch_window), the distance from where he stood to the ball he met, never more than his
-    leg reaches ((LEG_M + HIP_SIDE_M) at his scale, scene.py). Frames outside a touch are absent."""
+              ) -> dict[tuple[int, str], tuple[float, float]]:
+    """(row, player) -> the ground offset (dx, dy) from his tracked point to where his foot is drawn
+    at the ball he touches with it: the renderer's own touches with a foot (scene.contacts; a chest,
+    thigh or head puts no foot there), over the frames it draws each (scene._touch_window, in match
+    frames, never across an edit cut), as far as his leg reaches ((LEG_M + HIP_SIDE_M) at his scale,
+    as touch_at scales them). Rows outside such a touch are absent."""
     from ninety.render.meshpose import ASSET_STATURE_M
     from ninety.render.scene import HIP_SIDE_M, LEG_M, _touch_window, contacts
     from ninety.sim.engine import FPS
 
-    out: dict[tuple[int, str], float] = {}
+    out: dict[tuple[int, str], tuple[float, float]] = {}
+    nums = [fr.get("frame", i) for i, fr in enumerate(frames)]
     for pid, mine in contacts(frames, events).items():
         reach = (LEG_M + HIP_SIDE_M) * heights.get(pid, ASSET_STATURE_M) / ASSET_STATURE_M
         for c in mine:
+            if c["part"] not in ("foot", "strike"):
+                continue
             # A saved row has no ball velocity, which tells a kick's longer window from a touch's,
-            # so the wider of the two is taken: still only the frames round this touch.
+            # so the wider of the two is taken (*design*): still only the frames round this touch.
             kick, touch = _touch_window({**c, "part": "strike"}), _touch_window({**c, "part": "chest"})
-            lo, hi = min(kick[0], touch[0]), max(kick[1], touch[1])
-            d = min(math.dist(c["at"], c["ball"][:2]), reach)
-            first = max(0, c["frame"] + math.floor(lo * FPS))
-            for i in range(first, min(len(frames), c["frame"] + math.ceil(hi * FPS) + 1)):
-                out[(i, pid)] = max(out.get((i, pid), 0.0), d)
+            lo, hi = min(kick[0], touch[0]) * FPS, max(kick[1], touch[1]) * FPS
+            dx, dy = c["ball"][0] - c["at"][0], c["ball"][1] - c["at"][1]
+            d = math.hypot(dx, dy)
+            if d < 1e-9:
+                continue
+            f = min(d, reach) / d
+            at = c["frame"]
+            for i in range(len(frames)):
+                # the same shot: as many match frames from the touch as rows (no cut between)
+                if lo < nums[i] - nums[at] < hi and nums[i] - nums[at] == i - at:
+                    out[(i, pid)] = (dx * f, dy * f)
     return out
-
-
-def _ground_span(P: list[list[float]], x: float, y: float, r: float
-                 ) -> tuple[float, float, float, float] | None:
-    """The picture's span (u0, v0, u1, v1) of the ground disc of radius r round (x, y), from its rim."""
-    pts = [project_with(P, (x + r * math.cos(a), y + r * math.sin(a), 0.0))
-           for a in (k * math.pi / 8 for k in range(16))]
-    if any(p is None for p in pts):
-        return None
-    us, vs = [p[0] for p in pts], [p[1] for p in pts]
-    return min(us), min(vs), max(us), max(vs)
 
 
 def projection_errors(frames: list[dict], events: list[dict] | None = None,
@@ -79,10 +79,10 @@ def projection_errors(frames: list[dict], events: list[dict] | None = None,
     keypoint pixels must equal the saved-matrix projection of the pitch points they name.
 
     The box's bottom is the sole of his lowest foot, within V6's 0.45 m of the tracked point. While
-    he touches the ball the foot is drawn at the ball (scene.touch_at), as far out as his leg reaches,
-    so on those frames the bottom may lie anywhere over that stretch of ground as the saved matrix
-    projects it: from a high lens a reach toward the camera is a long way down the picture, which a
-    side-on scale did not allow for (lesson 212).
+    he touches the ball with a foot, that foot is drawn at the ball (scene.touch_at), as far out as
+    his leg reaches, so on those frames the bottom may also lie between the tracked point and that
+    foot as the saved matrix projects them: from a high lens a reach toward the camera is a long way
+    down the picture, which a side-on scale did not allow for (lesson 212).
     """
     from ninety.render.scene import KEYPOINTS
 
@@ -115,14 +115,21 @@ def projection_errors(frames: list[dict], events: list[dict] | None = None,
                 slack = 0.45 * (y1 - y0) / 1.8
                 if x0 - slack <= u <= x1 + slack and y1 - slack <= v <= y1 + slack:
                     continue
-                r = reaching.get((i, pl["id"]))
-                span = _ground_span(P, pl["x"], pl["y"], r) if r else None
-                if span is not None:
-                    u0, v0, u1, v1 = span
-                    # the box spans from his tracked point to the foot at the ball: the two overlap
-                    # across, and its bottom is on that stretch of ground, the same slack either side
-                    if x0 - slack <= u1 and u0 <= x1 + slack and v0 - slack <= y1 <= v1 + slack:
-                        continue
+                off = reaching.get((i, pl["id"]))
+                if off and x0 - slack <= u <= x1 + slack:
+                    # His foot is drawn at the ball, out along the ground toward it: the lowest sole,
+                    # the box's bottom, lies on that line, V6's 0.45 m beyond the foot at most, or a
+                    # sole lifted 0.45 m above it, each as the saved matrix projects it (not by a
+                    # side-on scale, which grows with the reach itself). Across, the tracked point
+                    # stays inside the box.
+                    n = math.hypot(*off)
+                    far = (n + V6_M) / n
+                    ends = [project_with(P, (pl["x"] + off[0] * t, pl["y"] + off[1] * t, z))
+                            for t, z in ((0.0, V6_M), (1.0, V6_M), (far, 0.0), (0.0, 0.0))]
+                    if all(e is not None for e in ends):
+                        vs = [e[1] for e in ends]
+                        if min(vs) <= y1 <= max(vs):
+                            continue
                 foot_outside += 1
         for k in fr["keypoints"]:
             uv = project_with(P, (*kp_xy[k["name"]], 0.0))
