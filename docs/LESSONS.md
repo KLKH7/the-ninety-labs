@@ -2107,5 +2107,6 @@ short and actionable. This file is public: no research sources, product names or
   get him to, and one 5.4 m wide with two seconds to run, are taken standing; main dived at both, and
   a keeper who only waits for the last moment, without asking whether his legs will do, dives at the
   first. A 1.2 m dive with time to spare is launched after he reacts and lands as the ball arrives;
-  main launched it as he reacted. Each of the three conditions removed turns one of them red. The
+  main launched it as he reacted. Removing the step test turns the first red, removing the launch
+  timing turns the long-shot and run-up tests red, and removing both turns all four red. The
   dive tests in `tests/test_engine_rules.py` fly the shot (`_until_he_dives`).

@@ -1044,12 +1044,25 @@ def test_a_short_dive_is_the_same_push_over_sooner_and_travel_counts_the_arms_re
 
 
 def test_the_keeper_dives_at_a_dipping_shot_that_comes_in_under_the_bar():
+    # A shot from 31 m that rises steeply and drops to under a metre by his line. Even from the frame
+    # he reacts, a straight line on from the ball says it goes metres over his reach; its own flight
+    # (drag and gravity) says it comes in low, and he dives at it as soon as he must.
     e = Engine(1)
-    k = _shot_at_keeper(e, (80.0, 34.0, 0.3, 19.0, 3.0, 4.5))  # rises, then drops under the bar
+    k = _shot_at_keeper(e, (74.0, 34.0, 0.3, 20.0, 4.0, 8.0))
     when, _, z = e.ball_at_x(k.x)
-    assert z < 2.44  # it does come in under the bar, though a straight line says over
-    k.vy = -6.0  # running the wrong way (a misread): he cannot step back across in time
+    assert z < 1.0  # it does come in under the bar
+    while e.t - e.kicked_at < e.reaction(k):  # it flies until he has reacted
+        e.ball = ball.step(e.ball, 1 / 25)
+        e.t += 1 / 25
+    bx, _, bz, bvx, _, bvz = e.ball
+    straight = bz + bvz * (k.x - bx) / bvx
+    assert straight > offball.reach_for(True, 9.0, 0.0, 9.0)[1] + 1.0  # a straight line says over
+    k.vy = -6.0  # running the wrong way (a misread): his legs cannot bring him back across in time
+    reacted = e.t
     assert _until_he_dives(e, k)
+    # Braking that run first, the dive cannot get there in time: he launches at once, on the frame he
+    # has reacted, not once a straight line would drop under his reach.
+    assert e.t - 1 / 25 <= reacted + 1e-9  # _until_he_dives spends the launch frame
 
 
 def test_ball_at_x_interpolates_the_crossing_between_frames():

@@ -71,30 +71,70 @@ def test_a_ball_wide_of_him_with_time_to_run_there_is_taken_on_his_feet():
     assert not dived and e.shot_touched_by == "keeper"
 
 
+def fly_until_he_dives(e: Engine, k, seconds: float = 2.0) -> float | None:
+    """The shot flies by its own flight and the keeper carries on at the velocity he has, a frame at a
+    time, until he launches (keeper_dive alone decides when). The time he launched, or None."""
+    for _ in range(int(seconds / DT)):
+        if e.keeper_dive(k):
+            return e.t
+        e.ball = ball.step(e.ball, DT)
+        k.x, k.y = k.x + k.vx * DT, k.y + k.vy * DT
+        e.t += DT
+    return None
+
+
+def in_the_air_until(e: Engine, k) -> float:
+    """Flies the dive already launched, a frame at a time: the time of the last frame it still moved him."""
+    last = e.t
+    while e.dive is not None:
+        e.t += DT
+        if e.keeper_dive(k):
+            last = e.t
+    return last
+
+
 def test_at_a_long_shot_he_launches_no_sooner_than_he_must_and_is_in_the_air_as_it_arrives():
-    # A ground shot from 15 m that crosses 1.2 m beyond his hands, further than his legs take him in the time
-    # left (body.can_get_to), so only a dive gets there, and with time to spare: as he reacts there is
-    # more time left than that dive takes. He waits on his feet and launches when the dive just gets
-    # there: it ends as the ball arrives, not before (main launched on reacting, landing early).
+    # A ground shot from 15 m that crosses 1.2 m beyond his hands, further than his legs take him in
+    # the time left (body.can_get_to), so only a dive gets there, and with time to spare: as he
+    # reacts there is more time left than that dive takes. He waits on his feet and launches when the
+    # dive just gets there: it ends as the ball arrives, not before, and not after it (one frame
+    # later would be late). Main launched on reacting and landed 0.1 s early.
+    from ninety.sim.body import can_get_to
     e = Engine(1)
     b = (90.0, 34.0, 0.3, 18.0, 3.5, 0.0)
     k = shot_at_keeper(e, b)
     need = beyond_his_hands(e, k, b)
     react = e.kicked_at + e.reaction(k)
-    arrives = e.kicked_at + e.ball_at_x(k.x)[0]
-    assert 0.0 < need < offball.KEEPER_DIVE_TRAVEL_M  # the premise: a dive reaches it
-    assert arrives - react > offball.dive_time_to(need) + 2 * DT  # and time to spare as he reacts
-    launched = None
-    for _ in range(int(2.0 / DT)):
-        if e.keeper_dive(k):
-            launched = e.t
-            break
-        e.ball = ball.step(e.ball, DT)
-        e.t += DT
+    when, cross, _ = e.ball_at_x(k.x)
+    arrives = e.kicked_at + when
+    assert 0.0 < need < offball.KEEPER_DIVE_TRAVEL_M  # the premise: a dive reaches it,
+    assert not can_get_to(k.physique, 0.0, cross - k.y, abs(cross - k.y) - need, 0.0, 0.0,
+                          arrives - react)[0]  # his legs do not, standing as he reacts,
+    assert arrives - react > offball.dive_time_to(need) + 2 * DT  # and there is time to spare
+    launched = fly_until_he_dives(e, k)
     assert launched is not None and launched > react + DT  # not on reacting
-    travel, v0 = e.dive[3], e.dive[5]
-    lands = launched + offball.dive_time_to(abs(travel), v0)
-    assert arrives - DT <= lands <= arrives + DT  # in the air until the ball gets there
+    lands = launched + offball.dive_time_to(abs(e.dive[3]), e.dive[5])  # the dive's own model
+    assert arrives - DT < lands <= arrives + 1e-9  # he lands as the ball gets there, never after
+    assert in_the_air_until(e, k) >= arrives - DT  # flown frame by frame, still moving then
+
+
+def test_a_run_toward_it_lets_him_launch_later_and_still_land_as_it_arrives():
+    # P15: the push starts from the sideways run he is making toward it (dive_motion's v0), so with a
+    # run the same dive takes less time and he launches later; he still lands as the ball arrives.
+    def dive(vy: float) -> tuple[float, float, float]:
+        e = Engine(1)
+        b = (90.0, 34.0, 0.3, 18.0, 3.5, 0.0)
+        k = shot_at_keeper(e, b)
+        k.vy = vy
+        arrives = e.kicked_at + e.ball_at_x(k.x)[0]
+        launched = fly_until_he_dives(e, k)
+        assert launched is not None
+        assert e.dive[5] == vy  # the run he launched from
+        return launched, launched + offball.dive_time_to(abs(e.dive[3]), e.dive[5]), arrives
+    still, running = dive(0.0), dive(0.5)
+    assert running[0] > still[0]  # with a run toward it, later
+    for _, lands, arrives in (still, running):
+        assert arrives - DT < lands <= arrives + 1e-9
 
 
 def test_a_dive_launched_late_goes_as_far_as_the_one_launched_at_once():
@@ -104,8 +144,6 @@ def test_a_dive_launched_late_goes_as_far_as_the_one_launched_at_once():
     b = (90.0, 34.0, 0.3, 18.0, 3.5, 0.0)
     k = shot_at_keeper(e, b)
     need = beyond_his_hands(e, k, b)
-    while not e.keeper_dive(k):
-        e.ball = ball.step(e.ball, DT)
-        e.t += DT
-    assert abs(abs(e.dive[3]) - min(need, offball.KEEPER_DIVE_TRAVEL_M)) < 0.05
+    assert fly_until_he_dives(e, k) is not None
+    assert abs(abs(e.dive[3]) - min(need, offball.KEEPER_DIVE_TRAVEL_M)) < 1e-9  # standing still: the same
     assert math.copysign(1.0, e.dive[3]) == 1.0  # toward the ball

@@ -2661,7 +2661,7 @@ class Engine:
                 need = abs(cross - p.y) - arms
                 # P2, P15: he dives only when moving across, on his feet, cannot bring his hands to it
                 # before it gets there; a ball he can step to needs no dive, and he is not put on the
-                # ground by one (lesson 186: dives of a few centimetres at balls nearly at his hands).
+                # ground by one (lesson 198: dives of a few centimetres at balls nearly at his hands).
                 steps = can_get_to(p.physique, 0.0, cross - p.y, arms, p.vx, p.vy, when)[0]
                 travel = math.copysign(min(max(need, 0.0), KEEPER_DIVE_TRAVEL_M), cross - p.y)
                 v0 = math.copysign(1.0, travel) * p.vy  # his sideways run toward it
