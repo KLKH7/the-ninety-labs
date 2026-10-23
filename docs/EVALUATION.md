@@ -505,12 +505,18 @@ does not protect a team-level claim.
 
 **The agents see it, and a team claim waits for a sure side** (audit Q3). `ninety/match/facts.compact`
 passes `team_confidence` to the agents, and the fact-checker's confidence gate holds any claim that
-names a team ("home", "away") unless every detected event it cites had its side told above 0.96
-(`factcheck.MIN_TEAM_CONFIDENCE`): the highest score any wrong side reached on validation above, so
-no measured wrong side clears it. n is 16, and the score separates right from wrong only a little,
-so this holds 9 of the 11 right sides as well, and every team claim on the M1 clip (all its sides
-were told at 0.529). That is the intended effect until the side is told reliably (#200, #202);
-re-measure then. Held, not rejected: the claim may be right, and the template graphic stays.
+names a side ("home", "away", "the hosts", "the visitors", "local", "visitantes") unless every
+detected event it cites had its side told above 0.96 (`factcheck.MIN_TEAM_CONFIDENCE`): the highest
+score any wrong side reached on validation above. **That is no guarantee.** It is the largest of 5
+wrong-side scores, so a new wrong side would exceed it about 1 time in 6, and all 16 were passes,
+yet it applies to every event. It holds 9 of the 11 right sides as well, and every team claim on the
+M1 clip (its sides were all told at 0.529). That is the intended effect until the side is told
+reliably (#200, #202); re-measure then. Held, not rejected: the claim may be right. Every other
+writer that names a side asks the same rule (`factcheck.side_known`): a template graphic or the
+Describer's own line about an event whose player is unknown says "a player", not the team; the
+Describer model's line goes through the same gate; the Personalizer asks for no club's-side variant,
+and holds one written anyway. **Known residual:** a track id (`a-t9`) encodes the side by its
+letter, from the same decision; it is not held, as naming the track is how the agents say who.
 
 ## Broadcast framing: a known limit of the metric at set-piece deliveries
 

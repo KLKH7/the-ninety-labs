@@ -158,3 +158,49 @@ def test_the_m1_clip_s_team_claims_are_all_held_today():
         side = "Away" if e["team"] == "away" else "Home"
         verdict = confidence_gate(Claim(f"{side} on the ball.", [i]), known)
         assert (not verdict.ok) == (e["team_confidence"] <= 0.96), i
+
+
+def nameless_pass(side: float | None) -> dict:
+    e = {"id": "v9", "t": 61.0, "frame": 1525, "type": "pass", "team": "away", "player": None,
+         "confidence": 0.9, "x": 40.0, "y": 30.0, "end_x": 52.0, "end_y": 30.0, "ball_speed_kmh": 40.0,
+         "outcome": "success", "source": "vision"}
+    return e | ({} if side is None else {"team_confidence": side})
+
+
+@pytest.mark.parametrize(("side", "named"), [(0.529, False), (None, False), (0.97, True)])
+def test_a_template_graphic_names_a_side_only_when_it_was_told_firmly(side, named):
+    # Review of #249: a template airs without the gate; when the detector named nobody it fell back
+    # to the team, so "away plays a pass" aired at 0.529.
+    ledger = InMemoryLedger()
+    asyncio.run(load_match(ledger, [nameless_pass(side)], ()))
+    texts = [c["text"] for c in asyncio.run(template_cues(ledger))]
+    assert texts and all(("away" in t) == named for t in texts), texts
+
+
+@pytest.mark.parametrize(("side", "named"), [(0.529, False), (0.97, True)])
+def test_the_describer_s_own_line_names_a_side_only_when_it_was_told_firmly(side, named):
+    from ninety.speech import describe
+
+    versions = describe.event_versions(nameless_pass(side))
+    assert versions and all(("away" in v) == named for v in versions), versions
+
+
+@pytest.mark.parametrize("text", ["Los visitantes completan un pase de 12 m.", "El equipo local juega.",
+                                  "The visitors complete a pass of 12 m.", "The hosts complete a pass."])
+def test_a_side_named_in_other_words_is_held_too(text):
+    gated = confidence_gate(Claim(text, ["v1"]), {"v1": pass_on_side(0.529)})
+    assert not gated.ok and gated.category == "low_confidence"
+
+
+def test_a_club_s_view_is_a_team_claim_whatever_its_words():
+    claim = Claim("Our side keep the ball moving.", ["v1"])
+    known = {"v1": pass_on_side(0.529)}
+    assert confidence_gate(claim, known).ok
+    assert not confidence_gate(claim, known, team_view=True).ok
+
+
+def test_no_club_variant_is_asked_for_when_the_side_is_unsure():
+    from ninety.personalizer.cues import profiles_for
+
+    assert not [p for p in profiles_for(nameless_pass(0.529)) if p.persona == "club"]
+    assert [p for p in profiles_for(nameless_pass(0.97)) if p.persona == "club"]

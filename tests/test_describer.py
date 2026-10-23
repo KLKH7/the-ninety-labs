@@ -31,7 +31,8 @@ SSML_NS = "{http://www.w3.org/2001/10/synthesis}"
 
 def event(i: int, t: float, kind: str = "pass", x: float = 50.0, **extra) -> dict:
     base = {"id": f"e{i}", "t": t, "frame": int(t * 25), "type": kind, "team": "home", "player": "h4",
-            "x": x, "y": 30.0, "source": "vision", "confidence": 0.9}
+            "x": x, "y": 30.0, "source": "vision", "confidence": 0.9,
+            "team_confidence": 0.99}  # a side told firmly: a line naming a team reaches the Judge
     if kind == "pass":
         base |= {"receiver": "h8", "intended": "h8", "end_x": x + 10, "end_y": 30.0, "outcome": "success",
                  "ball_speed_kmh": 50.0}
@@ -429,3 +430,14 @@ def test_a_speech_outage_through_the_whole_run_still_writes_every_line(tmp_path,
     assert audio["said"] and audio["synth_failed"] == audio["synth_requests"] > 0
     assert spoken and all(c["speech"] == "unavailable" for c in spoken)
     assert SECRET not in (out / "audio.json").read_text() + (out / "manifest.json").read_text()
+
+
+@pytest.mark.parametrize("line", ["h8 scores for home", "the away side wins it", "h8 shoots, visitors"])
+def test_a_model_line_naming_a_team_on_an_unsure_side_is_held_before_the_judge(line):
+    # Audit Q3: the Describer's model is told to name teams as home or away; on a side told at 0.529
+    # (the M1 clip's) its line is held by the same confidence gate as every claim, the code line stays.
+    unsure = [e | {"team_confidence": 0.529} for e in EVENTS]
+    seen = []
+    texts, calls = asyncio.run(describer.upgrades(unsure, [CLAIM], model_answering(line),
+                                                  judge_refusing(seen=seen)))
+    assert seen == [] and texts == {} and calls[0]["problem"].startswith("confidence gate:")

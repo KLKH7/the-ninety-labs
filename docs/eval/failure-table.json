@@ -15,7 +15,7 @@
    ],
    "category": null,
    "reasons": [],
-   "judge_asked": 8,
+   "judge_asked": 6,
    "insights": [
     {
      "text": "A completed pass of 8 m at 42 km/h.",
@@ -27,13 +27,6 @@
     {
      "text": "A completed pass of 8 m at 42 km/h.",
      "persona": "casual",
-     "lang": "en",
-     "verified": true,
-     "passes_check": true
-    },
-    {
-     "text": "A completed pass of 8 m at 42 km/h.",
-     "persona": "club",
      "lang": "en",
      "verified": true,
      "passes_check": true
@@ -55,13 +48,6 @@
     {
      "text": "Un pase completado de 8 m a 42 km/h.",
      "persona": "casual",
-     "lang": "es",
-     "verified": true,
-     "passes_check": true
-    },
-    {
-     "text": "Un pase completado de 8 m a 42 km/h.",
-     "persona": "club",
      "lang": "es",
      "verified": true,
      "passes_check": true
@@ -90,7 +76,7 @@
    "variants_refused": [],
    "variants_english": [],
    "variants_missing": [],
-   "model_calls": 11,
+   "model_calls": 9,
    "recovered": {
     "templates stay": true,
     "nothing unverified airs": true,
@@ -212,7 +198,7 @@
    ],
    "category": null,
    "reasons": [],
-   "judge_asked": 4,
+   "judge_asked": 3,
    "insights": [
     {
      "text": "A completed pass of 8 m at 42 km/h.",
@@ -224,13 +210,6 @@
     {
      "text": "A completed pass of 8 m at 42 km/h.",
      "persona": "casual",
-     "lang": "en",
-     "verified": true,
-     "passes_check": true
-    },
-    {
-     "text": "A completed pass of 8 m at 42 km/h.",
-     "persona": "club",
      "lang": "en",
      "verified": true,
      "passes_check": true
@@ -263,18 +242,16 @@
     "personalizer fallback: fallback: refused",
     "fact_checker held: analyst/es: no translation: the verified English text",
     "fact_checker held: casual/es: no translation: the verified English text",
-    "fact_checker held: club/es: no translation: the verified English text",
     "fact_checker held: player_focus/es: no translation: the verified English text"
    ],
    "variants_refused": [
     "analyst/es: no translation: the verified English text",
     "casual/es: no translation: the verified English text",
-    "club/es: no translation: the verified English text",
     "player_focus/es: no translation: the verified English text"
    ],
    "variants_english": [],
    "variants_missing": [],
-   "model_calls": 7,
+   "model_calls": 6,
    "recovered": {
     "templates stay": true,
     "nothing unverified airs": true,
