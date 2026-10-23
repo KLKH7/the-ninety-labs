@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 from pathlib import Path
 
 import pytest
@@ -128,3 +129,39 @@ def test_echo_puts_the_run_and_each_detected_event_in_the_log(tmp_path, monkeypa
     runs = [x["run"] for x in lines if "run" in x]
     assert len(runs) == 1 and runs[0]["weights_sha256"] == live_job.sha256(weights)
     assert sum("detected" in x for x in lines) == len((out / "detected.jsonl").read_text().splitlines())
+
+
+def rendered_views_clip(tmp_path: Path, frames: int = 10) -> Path:
+    """A rendered tactical clip: clip.json at the top, each lens's frames.jsonl and images under
+    views/<name>/, with the answer key in each view."""
+    clip = rendered_clip(tmp_path, frames)
+    for name in ("tac-l", "tac-r"):
+        view = clip / "views" / name
+        shutil.copytree(clip / "images", view / "images")
+        shutil.copy2(clip / "frames.jsonl", view / "frames.jsonl")
+    shutil.rmtree(clip / "images")
+    (clip / "frames.jsonl").unlink()
+    return clip
+
+
+def test_staging_a_views_clip_stages_each_view_and_the_job_takes_it(tmp_path):
+    out = tmp_path / "live-input" / "clip"
+    assert stage_live.stage_clip(rendered_views_clip(tmp_path), 1.0, 2.5, out) == 4
+    assert sorted(str(p.relative_to(out)) for p in out.rglob("*") if p.suffix != ".jpg") == [
+        "views", "views/tac-l", "views/tac-l/images", "views/tac-l/index.jsonl",
+        "views/tac-r", "views/tac-r/images", "views/tac-r/index.jsonl"]
+    rows = [json.loads(line) for line in (out / "views/tac-r/index.jsonl").read_text().splitlines()]
+    assert [r["frame"] for r in rows] == [2, 3, 4, 5] and {r["clip"] for r in rows} == {"seed8001"}
+    assert set(live_job.check_views(out)) == {"tac-l", "tac-r"}
+
+
+def test_each_view_gets_its_labels_free_index_with_the_clip_s_id(tmp_path):
+    from ninety.vision import frame_index
+
+    clip = rendered_views_clip(tmp_path)
+    written = frame_index.write_indexes(clip, stride=5)
+    assert [p.relative_to(clip).as_posix() for p in written] == [
+        "views/tac-l/index.jsonl", "views/tac-r/index.jsonl"]
+    rows = [json.loads(line) for line in written[0].read_text().splitlines()]
+    assert [r["frame"] for r in rows] == [0, 5]
+    assert all(set(r) == {"clip", "frame", "t", "image"} and r["clip"] == "seed8001" for r in rows)

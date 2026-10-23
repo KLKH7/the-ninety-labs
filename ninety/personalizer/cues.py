@@ -7,8 +7,10 @@ rule again (whichever process wrote it), the confidence gate, then the Judge. On
 them pass becomes an `insight` cue, in the insight's own slot, for its persona and language.
 
 A variant in another language whose text is still the verified English (the Personalizer's
-replacement for one it dropped) is not a translation, so it does not air under that language: that
-viewer keeps the English template cue.
+replacement for one it dropped), or that reads as English (ninety/personalizer/language.py), is not
+a translation, so it does not air under that language: that viewer keeps the English template cue.
+The one exception is the mock translator's text in a run that asked for it (NINETY_TRANSLATOR=mock):
+it says it is a mock, with its "[es] " label on screen (lesson 154).
 """
 
 from __future__ import annotations
@@ -23,6 +25,8 @@ from ninety.agents.contracts import Judge, Profile, Variant
 from ninety.agents.cues import DISPLAY_SECONDS, SCHEMA
 from ninety.agents.factcheck import Claim, Verdict, check, confidence_gate
 from ninety.personalizer.core import SOURCE_LANG, WRITTEN, problem
+from ninety.personalizer.language import reads_english
+from ninety.personalizer.translate import MOCK_PREFIX
 
 SLOT = "top_right"  # the insight's slot (ninety/agents/live.INSIGHT_SLOT)
 
@@ -50,14 +54,20 @@ class Checked:
 
 
 async def verify(
-    claim: Claim, variants: Sequence[Variant], known: dict[str, dict], judge: Judge | None = None
+    claim: Claim, variants: Sequence[Variant], known: dict[str, dict], judge: Judge | None = None,
+    labelled_mock: bool = False,
 ) -> Checked:
-    """The fact-checker on every variant; status from contracts.status_for, the one mapping."""
+    """The fact-checker on every variant; status from contracts.status_for, the one mapping. With
+    `labelled_mock` (the run asked for the mock translator), its "[es] "-labelled text may air."""
     checked = Checked()
     evidence = [known[i] for i in claim.evidence if i in known]
     for variant in variants:
         if variant.lang != SOURCE_LANG and variant.text == claim.text:
             checked.refused.append((variant, "held", ["no translation: the verified English text"]))
+            continue
+        mock = labelled_mock and variant.text.startswith(MOCK_PREFIX)
+        if variant.lang != SOURCE_LANG and not mock and reads_english(variant.text):
+            checked.refused.append((variant, "held", [f"not in {variant.lang}: the text reads as English"]))
             continue
         if variant.evidence != tuple(claim.evidence):
             verdict = Verdict(ok=False, reasons=["evidence changed"], category="unsupported_claim")
