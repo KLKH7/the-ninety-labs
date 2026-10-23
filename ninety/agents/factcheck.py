@@ -99,6 +99,15 @@ FIELD_ALIASES = {"minute": ("minute", "minute_from", "minute_to")}
 # than not, so nothing built on it airs. To be replaced by the value measured from the event
 # report's precision at each confidence once detected events are scored (docs/EVALUATION.md).
 MIN_CONFIDENCE = 0.5
+# Measured: on ours-v2's 16 matched validation passes (docs/eval/attribution-derive.md, side
+# confidence) the 5 whose side was wrong scored 0.431 to 0.96 on `team_confidence`, and the 11 right
+# ones 0.447 to 0.985. No measured wrong side scored above 0.96, so a claim that names a team is held
+# unless every detected event it cites had its side told above that. n is small (16): this holds
+# most team claims on today's vision (9 of the 11 right sides too), which is the point until the
+# side is told reliably (#200, #202). Re-measure when the side decision changes.
+MIN_TEAM_CONFIDENCE = 0.96
+# A claim that names a side: "home", "away", "the home side", "Away's".
+TEAM_NAMED = re.compile(r"\b(?:home|away)\b", re.I)
 
 
 @dataclass
@@ -297,9 +306,11 @@ def confidence_gate(
     """Holds back a claim that cites a detected event the detector is not sure of.
 
     Only detected events carry a confidence (ninety/match/facts.compact); ground-truth events in
-    the pre-M1 recordings have none and pass. The verdict's category, `low_confidence`, makes the
-    claim held, not rejected (ninety/agents/contracts.status_for): the claim may be right, but
-    nothing airs until a confident detection supports it.
+    the pre-M1 recordings have none and pass. A claim that names a team ("home", "away") is held
+    too unless every detected event it cites had its side told with `team_confidence` above
+    MIN_TEAM_CONFIDENCE; an unknown side counts as unsure. The verdict's category,
+    `low_confidence`, makes the claim held, not rejected (ninety/agents/contracts.status_for): the
+    claim may be right, but nothing airs until a confident detection supports it.
     """
     reasons = [
         f"event {i} was detected with confidence {known[i]['confidence']:.2f}, "
@@ -307,6 +318,15 @@ def confidence_gate(
         for i in claim.evidence
         if i in known and known[i].get("confidence") is not None and known[i]["confidence"] < min_confidence
     ]
+    if TEAM_NAMED.search(claim.text):
+        for i in claim.evidence:
+            event = known.get(i, {})
+            side = event.get("team_confidence")
+            # A detected event (it has a confidence) whose side is unknown counts as unsure.
+            if event.get("confidence") is not None and not (side or 0.0) > MIN_TEAM_CONFIDENCE:
+                told = "unknown" if side is None else f"{side:.2f}"
+                reasons.append(f"event {i}'s side was told with confidence {told}, not above "
+                               f"{MIN_TEAM_CONFIDENCE:.2f}: a claim naming a team waits for a surer side")
     return Verdict(ok=not reasons, reasons=reasons, category="low_confidence" if reasons else None)
 
 

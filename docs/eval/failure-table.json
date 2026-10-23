@@ -18,56 +18,56 @@
    "judge_asked": 8,
    "insights": [
     {
-     "text": "Away complete a pass of 8 m at 42 km/h.",
+     "text": "A completed pass of 8 m at 42 km/h.",
      "persona": "analyst",
      "lang": "en",
      "verified": true,
      "passes_check": true
     },
     {
-     "text": "Away complete a pass of 8 m at 42 km/h.",
+     "text": "A completed pass of 8 m at 42 km/h.",
      "persona": "casual",
      "lang": "en",
      "verified": true,
      "passes_check": true
     },
     {
-     "text": "Away complete a pass of 8 m at 42 km/h.",
+     "text": "A completed pass of 8 m at 42 km/h.",
      "persona": "club",
      "lang": "en",
      "verified": true,
      "passes_check": true
     },
     {
-     "text": "Away complete a pass of 8 m at 42 km/h.",
+     "text": "A completed pass of 8 m at 42 km/h.",
      "persona": "player_focus",
      "lang": "en",
      "verified": true,
      "passes_check": true
     },
     {
-     "text": "Away completa un pase de 8 m a 42 km/h.",
+     "text": "Un pase completado de 8 m a 42 km/h.",
      "persona": "analyst",
      "lang": "es",
      "verified": true,
      "passes_check": true
     },
     {
-     "text": "Away completa un pase de 8 m a 42 km/h.",
+     "text": "Un pase completado de 8 m a 42 km/h.",
      "persona": "casual",
      "lang": "es",
      "verified": true,
      "passes_check": true
     },
     {
-     "text": "Away completa un pase de 8 m a 42 km/h.",
+     "text": "Un pase completado de 8 m a 42 km/h.",
      "persona": "club",
      "lang": "es",
      "verified": true,
      "passes_check": true
     },
     {
-     "text": "Away completa un pase de 8 m a 42 km/h.",
+     "text": "Un pase completado de 8 m a 42 km/h.",
      "persona": "player_focus",
      "lang": "es",
      "verified": true,
@@ -215,28 +215,28 @@
    "judge_asked": 4,
    "insights": [
     {
-     "text": "Away complete a pass of 8 m at 42 km/h.",
+     "text": "A completed pass of 8 m at 42 km/h.",
      "persona": "analyst",
      "lang": "en",
      "verified": true,
      "passes_check": true
     },
     {
-     "text": "Away complete a pass of 8 m at 42 km/h.",
+     "text": "A completed pass of 8 m at 42 km/h.",
      "persona": "casual",
      "lang": "en",
      "verified": true,
      "passes_check": true
     },
     {
-     "text": "Away complete a pass of 8 m at 42 km/h.",
+     "text": "A completed pass of 8 m at 42 km/h.",
      "persona": "club",
      "lang": "en",
      "verified": true,
      "passes_check": true
     },
     {
-     "text": "Away complete a pass of 8 m at 42 km/h.",
+     "text": "A completed pass of 8 m at 42 km/h.",
      "persona": "player_focus",
      "lang": "en",
      "verified": true,

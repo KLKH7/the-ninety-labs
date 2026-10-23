@@ -396,7 +396,7 @@ def test_the_live_run_injects_each_failure_around_the_published_agents(monkeypat
     personalizer_asked: list[str] = []
 
     def spanish(text: str) -> str:  # the claims here are wf.claim_on's, worded as claim_in_spanish's
-        return text.replace("complete a pass of", "completa un pase de").replace(" at ", " a ")
+        return text.replace("A completed pass of", "Un pase completado de").replace(" at ", " a ")
 
     @contextlib.asynccontextmanager
     async def published_ask(credential=None):

@@ -503,10 +503,14 @@ ones score 0.447 to 0.985. It ranks a right side above a wrong one in 60% of (wr
 where 50% is chance ([eval/attribution-derive.md](eval/attribution-derive.md)). Gating on it alone
 does not protect a team-level claim.
 
-**The agents do not see it.** `ninety/match/facts.compact`, which shapes every event the agents
-read (inline or over MCP), passes `confidence` and drops `team_confidence`; checked by building the
-Analyst's prompt from the fixture. Whether to show it to them is the agent layer's call, once it
-means something.
+**The agents see it, and a team claim waits for a sure side** (audit Q3). `ninety/match/facts.compact`
+passes `team_confidence` to the agents, and the fact-checker's confidence gate holds any claim that
+names a team ("home", "away") unless every detected event it cites had its side told above 0.96
+(`factcheck.MIN_TEAM_CONFIDENCE`): the highest score any wrong side reached on validation above, so
+no measured wrong side clears it. n is 16, and the score separates right from wrong only a little,
+so this holds 9 of the 11 right sides as well, and every team claim on the M1 clip (all its sides
+were told at 0.529). That is the intended effect until the side is told reliably (#200, #202);
+re-measure then. Held, not rejected: the claim may be right, and the template graphic stays.
 
 ## Broadcast framing: a known limit of the metric at set-piece deliveries
 
