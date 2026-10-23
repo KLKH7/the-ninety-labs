@@ -2,7 +2,7 @@
 # job of infra/live-job.bicep. Built from the repo root (infra/live-job.sh build):
 #
 #   docker buildx build --platform linux/amd64 -f infra/live-job.Dockerfile \
-#     --build-arg CHECKPOINT=ours-v4 --build-arg NINETY_COMMIT=$(git rev-parse HEAD) -t <tag> .
+#     --build-arg CHECKPOINT=<name in its train-manifest.json> --build-arg NINETY_COMMIT=$(git rev-parse HEAD) -t <tag> .
 #
 # The clip and the checkpoint are inputs, staged by infra/live-job.sh stage in runs/live-input/
 # (gitignored): the clip as `clip/` (index.jsonl and images/ only) and the checkpoint as
@@ -12,8 +12,9 @@
 #
 # Dependencies are the vision group of uv.lock, hash-checked, except torch and torchvision, which
 # come as PyTorch's CPU builds at the locked versions, pinned by sha256. The locked Linux builds
-# pull NVIDIA's CUDA libraries, which a CPU job does not use and whose licence is not on our list
-# (AGENTS.md: MIT, Apache-2.0 or BSD); none of them is installed here. rfdetr is the pinned version,
+# pull NVIDIA's CUDA libraries (allowed in the vision group, AGENTS.md), which a CPU job never uses
+# and which would make the image several GB larger; none of them is installed here. rfdetr is the
+# pinned version,
 # and only RF-DETR Small is loaded (ninety/vision/model.py).
 # Container Apps runs linux/amd64 only; the platform is pinned as in the API's Dockerfile.
 FROM --platform=linux/amd64 ghcr.io/astral-sh/uv:0.12.23 AS uv

@@ -165,3 +165,23 @@ def test_each_view_gets_its_labels_free_index_with_the_clip_s_id(tmp_path):
     rows = [json.loads(line) for line in written[0].read_text().splitlines()]
     assert [r["frame"] for r in rows] == [0, 5]
     assert all(set(r) == {"clip", "frame", "t", "image"} and r["clip"] == "seed8001" for r in rows)
+
+
+def test_the_job_s_time_limit_and_size_are_settings_not_constants():
+    """A whole condensed match runs far longer than a 60 s window: the limit and the vCPUs are
+    deployment parameters (infra/live-job.sh deploy passes them), memory follows the vCPUs."""
+    code = _code(BICEP)
+    assert "replicaTimeout: replicaTimeoutSeconds" in code
+    assert "cpu: json(cpu)" in code and "memory: '${int(cpu) * 2}Gi'" in code
+    script = (ROOT / "infra" / "live-job.sh").read_text()
+    assert 'replicaTimeoutSeconds="${LIVE_TIMEOUT_S:-3600}"' in script and 'cpu="${LIVE_CPU:-2}"' in script
+
+
+def test_no_demo_clip_window_or_checkpoint_is_fixed_in_the_job():
+    """The demo clip, its window and the checkpoint are arguments (the clip changed from seed 8001's
+    60 s window to a condensed match; the checkpoint from ours-v4 to ours-freeze)."""
+    files = ["infra/live-job.sh", "infra/live-job.bicep", "infra/live-job.Dockerfile",
+             "ninety/vision/live_job.py", "ninety/vision/stage_live.py"]
+    for f in files:
+        text = (ROOT / f).read_text()
+        assert not re.search(r"seed ?8001|\b100 160\b|ours-v4|ours-freeze", text), f
