@@ -34,6 +34,7 @@ from pathlib import Path
 from ninety.intel import roles
 from ninety.intel.scene import POSITION_ERROR_M
 from ninety.intel.teamsheet import LINE
+from ninety.sim import fmath
 
 # Design, fixed before any run was graded: the targets a name, a position and a line must reach.
 # A name is the strongest claim a fan hears, so it asks the most of the share.
@@ -41,7 +42,7 @@ TARGETS = {"name": 0.95, "role": 0.90, "line": 0.95}
 MIN_TRACKS = 50  # design: a gate opens only on at least this many tracks at or above it
 FRAGMENT_S = (30.0, 10.0, 120.0)  # design: the first sets the gates; the others are reported
 MISSING = 0.05  # design: one player in twenty unseen in a frame
-SIGMA_M = POSITION_ERROR_M / math.sqrt(2 * math.log(10))  # 2-D error whose 90th percentile is 1.26 m
+SIGMA_M = POSITION_ERROR_M / math.sqrt(2 * fmath.log(10))  # 2-D error whose 90th percentile is 1.26 m
 PULL = 0.02  # design: the error's pull back to zero per sampled frame (a few seconds' memory)
 # Design: two team-mates within this of each other may be confused by the tracker (about the
 # strict match radius, docs/GROUNDING.md S3), and are, at that moment, with this chance.
@@ -77,7 +78,7 @@ def load(run: Path, step: int = STEP) -> tuple[list[dict], dict[str, str]]:
 
 def spoil(frames: list[dict], seed: int, fragment_s: float) -> tuple[list[dict], dict[str, str]]:
     """Tracked-like frames, and which true player each track is."""
-    rng = random.Random(seed)
+    rng = fmath.Random(seed)  # portable draws: the report is the same on every machine (lesson 46)
     state: dict[str, dict] = {}
     seen: dict[str, Counter] = defaultdict(Counter)
     close: set[frozenset] = set()
@@ -87,7 +88,7 @@ def spoil(frames: list[dict], seed: int, fragment_s: float) -> tuple[list[dict],
     for f in frames:
         dt = max(f["t"] - prev_t, 0.0)
         prev_t = f["t"]
-        pull = 1 - (1 - PULL) ** (dt / (STEP / 25)) if dt else 0.0  # PULL is per 0.2 s
+        pull = 1 - fmath.exp(dt / (STEP / 25) * fmath.log(1 - PULL)) if dt else 0.0  # PULL is per 0.2 s
         k = math.sqrt(pull * (2 - pull))  # keeps the walk's spread at SIGMA_M per axis
         players = []
         _swap(f["players"], state, close, rng)
@@ -97,7 +98,7 @@ def spoil(frames: list[dict], seed: int, fragment_s: float) -> tuple[list[dict],
                 n += 1
                 s = {
                     "track": f"{p['team'][0]}-t{n}",
-                    "left": rng.expovariate(1 / fragment_s),
+                    "left": -fragment_s * fmath.log(1.0 - rng.random()),  # exponential, mean fragment_s
                     "ex": rng.gauss(0, SIGMA_M),
                     "ey": rng.gauss(0, SIGMA_M),
                 }
