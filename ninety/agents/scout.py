@@ -25,6 +25,8 @@ from collections.abc import Mapping, Sequence
 from html import escape
 from pathlib import Path
 
+from agent_framework import Executor, WorkflowBuilder, WorkflowContext, handler
+
 from ninety.agents import companion_match as companion
 from ninety.agents import insight_check
 from ninety.agents.contracts import Ask, Description, Judge, status_for
@@ -38,12 +40,14 @@ MIN_SO_FAR = (
 GOAL_QUIET_S = 30.0  # design: no card in the half minute after a goal
 DEFER_SLOTS = 1  # design: a candidate kept out by the cap may still go in the next slot, then it is stale
 HEADLINES = {
+    "shape": "{club}'s back line moves",
     "line_break": "{club} slice through",
     "overload": "{club} have the extra man",
     "counter_press": "{club} win it straight back",
     "pass_options": "A pass not taken",
 }
 WHY = {
+    "shape": "Why does the back line matter?",
     "line_break": "Why does a pass like that matter?",
     "overload": "Why does an overload matter?",
     "counter_press": "Why win it back so fast?",
@@ -52,6 +56,8 @@ WHY = {
 # What the "why?" answer adds to the card's fact: the definition, in code's words. Each is checked
 # like any sentence, so it may state only the fact's own numbers with their units.
 WHY_TEXT = {
+    "shape": "A back line further from its own goal squeezes the space in midfield; one closer to it "
+    "protects the space behind: in minute {minute} {club}'s was {value} {unit} from their own goal.",
     "line_break": "Analysts call it packing: every opponent a pass gets past no longer stands between the "
     "ball and goal, and this pass took out {value} {unit}.",
     "overload": "With {own} against {other} around the ball, {club} had a spare player there.",
@@ -60,6 +66,16 @@ WHY_TEXT = {
     "and {club} had {value} {unit} near the ball.",
     "pass_options": "At the moment of that pass {club} had {value} open teammates further forward.",
 }
+
+
+TOOL_OF = {
+    "line_break": "line_breaks",
+    "overload": "overloads",
+    "counter_press": "counter_press",
+    "pass_options": "pass_options",
+    "shape": "team_shape",
+}
+SHAPE_CHANGE_M = companion.SHAPE_CHANGE_M
 
 
 def where_spoken(fact: Mapping, clubs: Mapping[str, str]) -> str:
@@ -93,14 +109,6 @@ def where_spoken(fact: Mapping, clubs: Mapping[str, str]) -> str:
     return f"It was {end}{side}."
 
 
-TOOL_OF = {
-    "line_break": "line_breaks",
-    "overload": "overloads",
-    "counter_press": "counter_press",
-    "pass_options": "pass_options",
-}
-
-
 def notability(f: Mapping) -> tuple:
     """Higher is more notable, within one kind."""
     kind = f["kind"]
@@ -112,6 +120,8 @@ def notability(f: Mapping) -> tuple:
         return (bool(f.get("regained")), f["value"], -(f.get("regain_s") or 99.0))
     if kind == "pass_options":
         return (f.get("outcome") == "fail" and f.get("target_open") is False, f["value"])
+    if kind == "shape":
+        return (abs(f.get("change") or 0),)
     return ()
 
 
@@ -124,7 +134,7 @@ def candidates(insights, t_to: float) -> list[dict]:
     """Every confident fact up to t_to that ranks notable among its kind so far, oldest first."""
     out = []
     for kind, rows in insights.facts.items():
-        if kind not in HEADLINES:  # shape facts answer questions; the Scout does not push them
+        if kind not in HEADLINES:
             continue
         seen = []
         for f in rows:
@@ -133,6 +143,10 @@ def candidates(insights, t_to: float) -> list[dict]:
             seen.append(f)
             if kind == "overload" and f.get("third") == "own":
                 continue  # design: an overload in a team's own third is its build-up, not news
+            if kind == "shape" and (
+                f.get("metric") != "line_height" or abs(f.get("change") or 0) < SHAPE_CHANGE_M
+            ):
+                continue  # the shape spotter tells only of the back line moving, by a change it vouches for
             if (
                 len(seen) >= MIN_SO_FAR
                 and f["confident"]
@@ -181,6 +195,7 @@ async def card_for(
         ).ok:
             continue
         why = WHY_TEXT[fact["kind"]].format(
+            minute=fact["minute"],
             value=fact["value"],
             unit=fact["unit"],
             club=fact["club"],
@@ -210,8 +225,8 @@ async def card_for(
             "evidence": [fact["id"]],
             "visual": visual,
             "spoken": spoken,
-            "follow_ups": list(companion.follow_ups([{"name": TOOL_OF[fact["kind"]]}], [fact], insights)),
             "names": companion.names_of([fact], visual, insights),
+            "follow_ups": list(companion.follow_ups([{"name": TOOL_OF[fact["kind"]]}], [fact], insights)),
             "why": {
                 "question": WHY[fact["kind"]],
                 "answer": {"status": "verified", "text": why, "evidence": [fact["id"]], "visual": visual},
@@ -222,9 +237,89 @@ async def card_for(
     return None
 
 
-async def spot(kind: str, insights, t_to: float) -> list[dict]:
-    """One spotter: the notable confident facts of its kind up to t_to (see `candidates`)."""
-    return [f for f in candidates(insights, t_to) if f["kind"] == kind]
+# Spotters: specialists that each watch their own insight kinds and propose candidates. The pressing
+# spotter reads counter-presses and overloads; the space spotter line breaks and pass options; the
+# shape spotter the back line's moves (#228's facts).
+SPOTTERS = {
+    "pressing": ("counter_press", "overload"),
+    "space": ("line_break", "pass_options"),
+    "shape": ("shape",),
+}
+
+
+def proposals(spotter: str, insights) -> list[dict]:
+    """One spotter's proposals: each notable confident fact of its kinds, with its rank among its
+    kind so far as the spotter's confidence that it is worth a card."""
+    kinds = SPOTTERS[spotter]
+    out = []
+    for f in candidates(insights, float("inf")):
+        if f["kind"] in kinds:
+            so_far = [g for g in insights.facts[f["kind"]] if g["t"] <= f["t"]]
+            out.append({"spotter": spotter, "fact": f, "confidence": round(_rank(f, so_far), 3)})
+    return out
+
+
+class _Start:
+    """The match the spotters fan out over."""
+
+    def __init__(self, insights):
+        self.insights = insights
+
+
+class _Begin(Executor):
+    @handler
+    async def go(self, match: _Start, ctx: WorkflowContext[_Start]) -> None:
+        await ctx.send_message(match)
+
+
+class _Spotter(Executor):
+    def __init__(self, name: str):
+        super().__init__(id=f"spotter_{name}")
+        self.name = name
+
+    @handler
+    async def spot(self, match: _Start, ctx: WorkflowContext[list]) -> None:
+        await ctx.send_message(proposals(self.name, match.insights))
+
+
+class _Directing(Executor):
+    def __init__(self, decide):
+        super().__init__(id="director")
+        self.decide = decide
+
+    @handler
+    async def take(self, batches: list[list], ctx: WorkflowContext[list, list]) -> None:
+        await ctx.yield_output(await self.decide([p for batch in batches for p in batch]))
+
+
+def _workflow(director):
+    """Start -> the spotters in parallel (fan-out) -> the Director (fan-in), as Agent Framework edges."""
+    start = _Begin(id="scout_start")
+    spotters = [_Spotter(name) for name in SPOTTERS]
+    return (
+        WorkflowBuilder(name="ninety-scout", start_executor=start)
+        .add_fan_out_edges(start, spotters)
+        .add_fan_in_edges(spotters, _Directing(director))
+        .build()
+    )
+
+
+def _rank_prompt(slot: list[dict]) -> str:
+    return json.dumps(
+        {
+            "step": "rank",
+            "candidates": [
+                {
+                    "id": p["fact"]["id"],
+                    "spotter": p["spotter"],
+                    "confidence": p["confidence"],
+                    "text": p["text"],
+                }
+                for p in slot
+            ],
+        },
+        separators=(",", ":"),
+    )
 
 
 async def scout(
@@ -233,91 +328,199 @@ async def scout(
     ask: Ask | None = None,
     judge: Judge | None = None,
     log: list | None = None,
+    rank: Ask | None = None,
+    ledger=None,
 ) -> list[dict]:
-    """The match's cards, oldest first, and (into `log`) every decision the Director made.
+    """The match's cards, oldest first, and (into `log`, and the Ledger when given) every decision.
 
-    One spotter per kind proposes in parallel (`spot`); the Director decides, slot by slot of
-    CARD_GAP_MIN match minutes:
+    The spotters propose in parallel; the Director decides, slot by slot of CARD_GAP_MIN minutes. A
+    Director model (`rank`), when given, orders a slot's proposals; code's rules always hold:
     - cap: at most one card a slot;
-    - no repeats: a candidate of the last card's kind, or about the last card's player, goes last;
+    - no repeats: a fact is pushed once, and one of the last card's kind or players goes last;
     - goal jump: after a goal, the most notable fact of the minute before it is pushed at the end
-      of the quiet, whatever the cap (a goal is when a fan wants the why);
-    - deferral: a candidate the cap kept out waits in a queue for DEFER_SLOTS slots, then is dropped;
-    - logged: each candidate's fate (pushed, deferred, dropped, refused by the fact-check), with why.
+      of the quiet, whatever the cap;
+    - deferral: a proposal the cap kept out waits DEFER_SLOTS slots for a quiet one, then is dropped;
+    - logged: each proposal's fate (pushed, deferred, dropped, refused by the fact-check), with why.
     """
     log = [] if log is None else log
-    pools = await asyncio.gather(*(spot(k, insights, float("inf")) for k in insights.facts if k in HEADLINES))
-    pool = sorted((f for rows in pools for f in rows), key=lambda f: (f["t"], f["id"]))
-    so_far = {k: rows for k, rows in insights.facts.items()}
-
-    def rank(f):
-        return _rank(f, [g for g in so_far[f["kind"]] if g["t"] <= f["t"]])
-
-    cards: list[dict] = []
-    used: set[str] = set()
-    queue: list[tuple[int, dict]] = []  # (slot it arrived in, fact)
-    jumps = sorted(goals)
-    by_slot: dict[int, list[dict]] = {}
-    for f in pool:
-        if any(0 <= f["t"] - g <= GOAL_QUIET_S for g in goals):
-            log.append({"fact": f["id"], "decision": "dropped", "why": "in the quiet after a goal"})
-            continue
-        by_slot.setdefault((f["minute"] - 1) // CARD_GAP_MIN, []).append(f)
-    last_slot = max([*by_slot, *(int(g // 60) // CARD_GAP_MIN for g in jumps)], default=-1)
-
-    async def push(f, why):
-        card = await card_for(f, insights, len(cards) + 1, ask, judge)
-        if card is None:
-            log.append({"fact": f["id"], "decision": "refused", "why": "no sentence passed the fact-check"})
-            return False
-        card["t"] = max(card["t"], cards[-1]["t"] if cards else 0.0)
-        cards.append(card)
-        used.add(f["id"])
-        log.append({"fact": f["id"], "decision": "pushed", "why": why, "card": card["id"]})
-        return True
-
-    for slot in range(last_slot + 1):
-        # A goal in this slot: its build-up jumps the cap.
-        for g in [g for g in jumps if int(g // 60) // CARD_GAP_MIN == slot]:
-            build_up = [f for f in pool if g - 60.0 <= f["t"] <= g and f["id"] not in used]
-            for f in sorted(build_up, key=lambda f: -rank(f)):
-                if await push({**f, "t": g + GOAL_QUIET_S}, "goal jump: the build-up to a goal"):
-                    break
-        fresh = [(slot, f) for f in by_slot.get(slot, [])]
-        queue = [(s0, f) for s0, f in queue if slot - s0 <= DEFER_SLOTS] + fresh
-        if not queue:
-            continue
-        last = cards[-1] if cards else None
-
-        def order(item, last=last):
-            _, f = item
-            repeat = last is not None and (
-                f["kind"] == last["kind"]
-                or (f.get("passer") and f.get("passer") in (last.get("players") or ()))
-            )
-            return (repeat, -rank(f), f["t"])
-
-        pushed = False
-        for s0, f in sorted(queue, key=order):
-            if f["id"] in used:
-                continue
-            if not pushed and await push(
-                f, "most notable in its slot" if s0 == slot else "deferred, then pushed"
-            ):
-                pushed = True
-                if cards:
-                    cards[-1]["players"] = [p for p in (f.get("passer"), f.get("receiver")) if p]
-                continue
-            if s0 == slot:
-                log.append({"fact": f["id"], "decision": "deferred", "why": "the slot already had a card"})
-        queue = [(s0, f) for s0, f in queue if f["id"] not in used]
-    dropped = {e["fact"] for e in log if e["decision"] in ("pushed", "dropped", "refused")}
-    for _, f in queue:
-        if f["id"] not in dropped:
-            log.append({"fact": f["id"], "decision": "dropped", "why": "deferred too long"})
-    for c in cards:
-        c.pop("players", None)
+    director = Director(insights, goals, ask, judge, log, rank)
+    (cards,) = (await _workflow(director.run).run(_Start(insights))).get_outputs()
+    if ledger is not None:
+        await director.record(ledger, cards)
     return cards
+
+
+class Director:
+    def __init__(self, insights, goals, ask, judge, log, rank):
+        self.insights, self.goals, self.ask, self.judge, self.log, self.rank = (
+            insights,
+            goals,
+            ask,
+            judge,
+            log,
+            rank,
+        )
+
+    def rank_of(self, f) -> float:
+        return _rank(f, [g for g in self.insights.facts[f["kind"]] if g["t"] <= f["t"]])
+
+    async def order(self, slot: list[dict], last: dict | None) -> list[dict]:
+        """Code's order (a repeat last, then the spotter's confidence), or the Director model's when
+        it names exactly these proposals; code's repeat rule still puts repeats last."""
+
+        def repeat(p):
+            f = p["fact"]
+            return last is not None and (
+                f["kind"] == last["kind"]
+                or bool({f.get("passer"), f.get("receiver")} - {None} & set(last.get("_players", ())))
+            )
+
+        ordered = sorted(slot, key=lambda p: (repeat(p), -p["confidence"], p["fact"]["t"]))
+        if self.rank is not None and len(slot) > 1:
+            for p in slot:
+                p["text"] = (
+                    companion.code_texts({**p["fact"], "clubs": self.insights.fixture.clubs}) or [""]
+                )[0]
+            try:
+                reply = await self.rank(_rank_prompt(slot))
+                ids = json.loads(reply[reply.index("{") : reply.rindex("}") + 1])["order"]
+                by = {p["fact"]["id"]: p for p in slot}
+                if sorted(ids) == sorted(by):
+                    ordered = sorted((by[i] for i in ids), key=lambda p: repeat(p))
+            except Exception:  # noqa: BLE001  a ranking the Director model could not give: code's order
+                self.log.append(
+                    {"fact": None, "decision": "ranked by code", "why": "the Director model failed"}
+                )
+        return ordered
+
+    async def run(self, pool: list[dict]) -> list[dict]:
+        insights, log = self.insights, self.log
+        pool = sorted(pool, key=lambda p: (p["fact"]["t"], p["fact"]["id"]))
+        cards: list[dict] = []
+        used: set[str] = set()
+        queue: list[tuple[int, dict]] = []
+        by_slot: dict[int, list[dict]] = {}
+        for p in pool:
+            f = p["fact"]
+            if any(0 <= f["t"] - g <= GOAL_QUIET_S for g in self.goals):
+                log.append(
+                    {
+                        "fact": f["id"],
+                        "spotter": p["spotter"],
+                        "decision": "dropped",
+                        "why": "in the quiet after a goal",
+                    }
+                )
+                continue
+            by_slot.setdefault((f["minute"] - 1) // CARD_GAP_MIN, []).append(p)
+        last_slot = max([*by_slot, *(int(g // 60) // CARD_GAP_MIN for g in self.goals)], default=-1)
+
+        async def push(p, why, t=None):
+            f = p["fact"] if t is None else {**p["fact"], "t": t}
+            card = await card_for(f, insights, len(cards) + 1, self.ask, self.judge)
+            if card is None:
+                log.append(
+                    {
+                        "fact": f["id"],
+                        "spotter": p["spotter"],
+                        "decision": "refused",
+                        "why": "no sentence passed the fact-check",
+                    }
+                )
+                return False
+            card["t"] = max(card["t"], cards[-1]["t"] if cards else 0.0)
+            card["_players"] = [x for x in (f.get("passer"), f.get("receiver")) if x]
+            cards.append(card)
+            used.add(f["id"])
+            log.append(
+                {
+                    "fact": f["id"],
+                    "spotter": p["spotter"],
+                    "decision": "pushed",
+                    "why": why,
+                    "card": card["id"],
+                }
+            )
+            return True
+
+        for slot in range(last_slot + 1):
+            for g in [g for g in self.goals if int(g // 60) // CARD_GAP_MIN == slot]:
+                build_up = [
+                    p for p in pool if g - 60.0 <= p["fact"]["t"] <= g and p["fact"]["id"] not in used
+                ]
+                for p in sorted(build_up, key=lambda p: -p["confidence"]):
+                    if await push(p, "goal jump: the build-up to a goal", g + GOAL_QUIET_S):
+                        break
+            queue = [(s0, p) for s0, p in queue if slot - s0 <= DEFER_SLOTS] + [
+                (slot, p) for p in by_slot.get(slot, [])
+            ]
+            queue = [(s0, p) for s0, p in queue if p["fact"]["id"] not in used]
+            if not queue:
+                continue
+            ordered = await self.order([p for _, p in queue], cards[-1] if cards else None)
+            arrived = {p["fact"]["id"]: s0 for s0, p in queue}
+            pushed = False
+            for p in ordered:
+                s0 = arrived[p["fact"]["id"]]
+                if not pushed and await push(
+                    p, "most notable in its slot" if s0 == slot else "deferred, then pushed"
+                ):
+                    pushed = True
+                elif s0 == slot and p["fact"]["id"] not in used:
+                    log.append(
+                        {
+                            "fact": p["fact"]["id"],
+                            "spotter": p["spotter"],
+                            "decision": "deferred",
+                            "why": "the slot already had a card",
+                        }
+                    )
+            queue = [(s0, p) for s0, p in queue if p["fact"]["id"] not in used]
+        decided = {e["fact"] for e in log if e["decision"] in ("pushed", "dropped", "refused")}
+        for _, p in queue:
+            if p["fact"]["id"] not in decided:
+                log.append(
+                    {
+                        "fact": p["fact"]["id"],
+                        "spotter": p["spotter"],
+                        "decision": "dropped",
+                        "why": "deferred too long",
+                    }
+                )
+        for c in cards:
+            c.pop("_players", None)
+        return cards
+
+    async def record(self, ledger, cards: list[dict]) -> None:
+        """The cards and every decision on the Ledger, each citing the fact it is about."""
+        from ninety.agents.ledger import Record
+
+        facts = {f["id"]: f for rows in self.insights.facts.values() for f in rows}
+        cited = {e["fact"] for e in self.log if e.get("fact")} | {i for c in cards for i in c["evidence"]}
+        for fid in sorted(cited):
+            if fid in facts and await ledger.get(fid) is None:
+                f = facts[fid]
+                await ledger.append(
+                    Record(fid, 1, "fact", float(f.get("t") or 0.0), "insights", None, (), dict(f))
+                )
+        for c in cards:
+            await ledger.append(
+                Record(
+                    c["id"],
+                    1,
+                    "claim",
+                    float(c["t"]),
+                    "scout",
+                    None,
+                    tuple(c["evidence"]),
+                    {**c, "status": "verified"},
+                )
+            )
+        for n, e in enumerate(self.log, 1):
+            evidence = (e["fact"],) if e.get("fact") in facts else ()
+            await ledger.append(
+                Record(f"decision:{n:05d}", 1, "decision", 0.0, "director", None, evidence, dict(e))
+            )
 
 
 def _where_x(card: Mapping) -> float | None:
