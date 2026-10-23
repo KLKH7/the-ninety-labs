@@ -2175,7 +2175,12 @@ class Engine:
         team-mate he played it to know where he meant it; everyone else must first react to the
         struck ball (until then play is where it was struck), then goes by where they see it going
         (its own path). A team brain (`team`) of the passing side knows where it was meant; the
-        other side's reacts like an average player."""
+        other side's reacts like an average player. While a restart waits, play is where it will be
+        taken from (restart_ball_spot), not wherever the dead ball has rolled or is being carried:
+        set from the dead ball, every place moved with its roll to the boards and its fetch, and was
+        walked to and back (lesson 207)."""
+        if self.restart:
+            return self.restart_ball_spot(self.restart)
         bx, by = self.ball[0], self.ball[1]
         if self.passing_to_target():
             sx, sy = self.kicked["x"], self.kicked["y"]
@@ -2714,6 +2719,7 @@ class Engine:
             kx, ky = self.keep_off(p, tx, ty)
             if (kx, ky) != (tx, ty):
                 tx, ty, top = kx, ky, max(top, self.in_time(p, kx, ky))
+            tx, ty = self.round_the_ball(p, tx, ty)
             tx, ty = self.round_the_net(p, tx, ty)
             top = self.restart_pace(p, tx, ty, top, place)
             dist = math.hypot(tx - p.x, ty - p.y)
@@ -2726,6 +2732,28 @@ class Engine:
             p.heading = turn_toward(p.heading, perception.facing(p.heading, p.vx, p.vy, p.x, p.y,
                                                                  *self.looks_at(p)))
         self.separate()
+
+    def round_the_ball(self, p: Player, tx: float, ty: float) -> tuple[float, float]:
+        """Lesson 207: nobody walks over a set ball (Law 13: stationary until kicked). While a
+        restart's ball is set (ball_set), anyone but the taker and whoever has or fetches it whose
+        straight way passes within SET_BALL_CLEAR_M of it (the taker's own clearance: a shoulder's
+        reach and a ball's width, P11) heads first for the point beside it KEEP_OFF_MARGIN_M further
+        out, on the side his way already passes. Walking back for a kick-off after a goal, and a
+        team-mate of a free kick's taker on his way to his place, each walked over it (20 matches on
+        main: 2 such walks with the ball on its spot)."""
+        r = self.restart
+        if r is None or p.id in (r.taker, r.fetcher, r.carried_by, r.passed_by) or not self.ball_set(r):
+            return tx, ty
+        bx, by = self.ball[0], self.ball[1]
+        if math.hypot(tx - bx, ty - by) < SET_BALL_CLEAR_M:  # his place is by it: nothing to go round
+            return tx, ty
+        if segment_distance(bx, by, p.x, p.y, tx, ty) >= SET_BALL_CLEAR_M:
+            return tx, ty
+        d = math.hypot(tx - p.x, ty - p.y)
+        nx, ny = -(ty - p.y) / d, (tx - p.x) / d  # across his way
+        side = (bx - p.x) * nx + (by - p.y) * ny  # where the ball lies across it
+        k = -(SET_BALL_CLEAR_M + KEEP_OFF_MARGIN_M) * (1.0 if side >= 0.0 else -1.0)
+        return bx + nx * k, by + ny * k
 
     def round_the_net(self, p: Player, tx: float, ty: float) -> tuple[float, float]:
         """Nobody walks through a goal's net (Law 1, NET_DEPTH_M): where his straight way would cross

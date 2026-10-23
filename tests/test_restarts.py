@@ -1992,21 +1992,28 @@ def test_at_a_dead_ball_the_presser_goes_in_time_and_does_not_spring_about_his_p
     leaves at his pressing pace: test_opponents_keep_out_of_the_penalty_area_at_a_goal_kick_...).
     Once off-ball movement changed play, seed 114 no longer came to that goal kick. The scene was
     found again by its premises, then checked to go red with the fix reverted (the presser back at
-    his pressing pace: 8 turns here): seed 134's goal kick at 1:05."""
-    e = Engine(134)
+    his pressing pace: 8 turns here): seed 134's goal kick at 1:05, found below by its premises."""
+    e = Engine(141)
     e.kickoff("home", setup=True)
-    while e.t < 65.44 - 1e-9:
+    # The scene is found by its premises, not at a fixed time (lesson 78): since lesson 207 set places
+    # from the restart spot, seed 134's goal kick no longer crowds its presser; seed 141's at about 3:00 does
+    # (the presser at his pressing pace there turns 3 times; lesson 207).
+    while e.t < 185.0:
         e.step()
-    r, brain = e.restart, e.brains["home"]
-    assert r is not None and r.kind == "goal_kick" and brain.pressers  # premise: the goal kick waits
-    p = e.by_id[brain.pressers[0]]
-    tx, ty, top = e.shape_target(p)
-    assert top == pytest.approx(e.in_time(p, tx, ty)) and top < e.press_pace(p)
-    crowd = [q for q in e.players
-             if q.team == p.team and q is not p and math.dist((q.x, q.y), (tx, ty)) < 0.7]
-    assert crowd  # premise: a team-mate stands a hair from his place
+        r, brain = e.restart, e.brains["home"]
+        if e.t < 170.0 or r is None or r.kind != "goal_kick" or not brain.pressers:
+            continue
+        p = e.by_id[brain.pressers[0]]
+        tx, ty, top = e.shape_target(p)
+        crowd = [q for q in e.players
+                 if q.team == p.team and q is not p and math.dist((q.x, q.y), (tx, ty)) < 0.7]
+        if top == pytest.approx(e.in_time(p, tx, ty)) and top < e.press_pace(p) and crowd:
+            break  # premise: he walks in time, and a team-mate stands a hair from his place
+    else:
+        raise AssertionError("premise: the goal kick with its crowded presser never came")
     turns, history = 0, []
-    while e.t < 71.44 and e.restart is r:
+    end = e.t + 6.0
+    while e.t < end and e.restart is r:
         e.step()
         history.append((p.vx, p.vy))
         if len(history) > 10:
@@ -2041,3 +2048,52 @@ def test_near_a_line_a_way_round_whose_aim_is_off_the_pitch_is_closed():
     d.x, d.y = 47.915, 1.184  # in the margin, below the ball near the touchline
     tx, ty = e.keep_off(d, 56.824, 3.321)  # his place round the circle across the arc off the pitch
     assert math.dist((tx, ty), (50.0, 10.145)) >= 9.15 + KEEP_OFF_MARGIN_M - 1e-9 and within_lines(tx, ty)
+
+
+@pytest.mark.parametrize(("kind", "team"),
+                         [("free_kick", "home"), ("kick_off", "home"), ("kick_off", "away")])
+def test_nobody_walks_over_a_set_ball(kind, team):
+    """Lesson 207: with a restart's ball set on its spot, a player whose way to his place crosses it
+    (a team-mate of the taker at a free kick; anyone walking back for a kick-off, seed 107 on main
+    at 4:42) goes round it, never within the taker's own clearance of it (SET_BALL_CLEAR_M), and
+    gets to where he was going."""
+    from ninety.sim.engine import SET_BALL_CLEAR_M, Restart, steer
+    e = Engine(3)
+    spot = (60.0, 30.0) if kind == "free_kick" else (PITCH_X / 2, PITCH_Y / 2)
+    taker = "h9" if team == "home" else "a9"
+    e.restart = Restart(kind, team, *spot, taker, e.t + 30.0)
+    e.ball = (*spot, 0.0, 0.0, 0.0, 0.0)
+    assert e.ball_set(e.restart)  # premise
+    walker = e.by_id["h5"]
+    for side in (-0.3, 0.0, 0.3):  # his straight way through the ball, a little either side of it
+        walker.x, walker.y, walker.vx, walker.vy = spot[0] - 6.0, spot[1] + side, 0.0, 0.0
+        target = (spot[0] + 6.0, spot[1] - side)
+        closest = math.inf
+        for _ in range(int(12.0 / DT)):
+            tx, ty = e.round_the_ball(walker, *target)
+            steer(walker, tx, ty, 1.36)
+            closest = min(closest, math.hypot(walker.x - spot[0], walker.y - spot[1]))
+        assert closest >= SET_BALL_CLEAR_M - 0.05, (side, closest)  # within a frame's steering
+        assert math.dist((walker.x, walker.y), target) < 0.1  # and he got there
+
+
+@pytest.mark.parametrize("kind", ["throw_in", "free_kick", "corner", "goal_kick"])
+def test_while_a_restart_waits_places_are_set_from_its_spot_not_the_dead_ball(kind):
+    """Lesson 207: set from the dead ball, every place moved with its roll to the boards and its
+    fetch, and was walked to and back. While a restart waits, players' places are the same wherever
+    the dead ball is: play is where it will be taken from."""
+    e = Engine(3)
+    e.run(1)
+    e.possessor, e.set_by, e.throw_by, e.dribbler, e.kicked = None, None, None, None, None
+    spot = {"throw_in": (60.0, 0.0), "free_kick": (60.0, 30.0), "corner": (PITCH_X, 0.0),
+            "goal_kick": (PITCH_X - 5.5, 34.0)}[kind]
+    e.stop(kind, "home" if kind != "goal_kick" else "away", spot)
+    r = e.restart
+    skip = {r.taker, r.fetcher}
+    places = []
+    dead = ((spot[0], max(spot[1], 0.5), 0.0), (spot[0] + 3.0, -3.5, 0.0), (spot[0] - 8.0, 20.0, 0.0))
+    for at in dead:  # on its spot, rolled off behind the line, being carried back
+        e.ball = (*at, 0.0, 0.0, 0.0)
+        places.append({p.id: e.shape_target(p)[:2] for p in e.players
+                       if p.id not in skip and p.role != "GK"})
+    assert places[0] == places[1] == places[2]
