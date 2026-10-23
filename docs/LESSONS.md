@@ -2149,3 +2149,19 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** the CI `image` job's step "The Dockerfile's pinned Replay bundle exists and matches its
   hash"; `tests/test_api_site.py::test_a_websocket_behind_the_gate_needs_the_key_too` fails with the
   WebSocket branch of `RequireKey` removed.
+
+### 163. A rule every writer follows goes into every writer's instructions
+- **What happened:** the live Personalizer evaluation (agents-live 39514003721) aired its casual
+  persona in only 12 of 20 claims. For a claim at 00:03 the model wrote "At 3 seconds" (in Spanish
+  "A los 3 segundos"), turning the clock into plain words as "no jargon" seemed to ask. The re-check
+  dropped every one, as it should, since the claim's clock is a number to keep. The Analyst,
+  Tactician and Challenger all carry the one-clock rule (lesson 33); the Personalizer's
+  instructions never did. On the live path each drop then read "no translation", which pointed at
+  the translator rather than the model.
+- **Rule:** a rule the code checks on every writer's text is stated in every writer's instructions,
+  including a persona's style line ("plain words go around the claim's facts, never in place of
+  them"). A fix to model behaviour is measured on the model before publishing: here, unpublished,
+  6 of 24 variants dropped with the old wording and 0 of 24 with the new. A hold says which check
+  made it.
+- **Check:** `tests/test_personalizer.py::test_the_instructions_keep_the_claim_s_clock_for_every_persona`;
+  `tests/test_personalizer_live.py::test_a_variant_the_personalizer_s_re_check_replaced_is_held_with_its_reason`.

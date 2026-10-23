@@ -269,6 +269,24 @@ def test_the_model_rewriter_feeds_the_same_path():
     assert insights(result)[("casual", "en")]["text"] == "Look: " + CLAIM.text
 
 
+def test_a_variant_the_personalizer_s_re_check_replaced_is_held_with_its_reason():
+    # The server replaces a dropped variant with the verified English; on the live path that read
+    # "no translation", which looked like a missing translation. The hold now gives the reason.
+    async def model(prompt: str) -> str:
+        body = json.loads(prompt)
+        return json.dumps({"variants": [
+            {"i": p["i"], "text": body["claim"] if p["lang"] == "en"
+             else f"{ROW['player']} encuentra a {ROW['receiver']}."}  # the speed dropped
+            for p in body["profiles"]]})
+
+    result = run_live(remote(model_personalizer(model)))
+    held = {(p, lang): reasons for p, lang, status, reasons in result.refused_variants if status == "held"}
+    assert set(held) == {k for k in ALL if k[1] == "es"}
+    for reasons in held.values():
+        (reason,) = reasons
+        assert reason.startswith("replaced by the Personalizer's re-check (server: numbers lost or changed: ")
+    assert any("re-check (server: numbers lost" in s.detail for s in result.trace if s.role == "fact_checker")
+
 # --- the on-air language gate (lesson 154) ------------------------------------------------------
 
 def writing(spanish):
