@@ -15,6 +15,17 @@ The validation split is chosen by seed, never by frame: neighbouring frames of o
 copies, so splitting frames would leak training images into validation. Only training seeds are
 accepted; the fixed test set never enters these folders.
 
+A clip of the fixed tactical camera holds each lens's frames under `views/<name>/`; every view is
+exported, its images named with the view.
+
+`--tiles` exports each kept frame as the 2 x 2 grid of overlapping tiles the live detector runs on
+(ninety/vision/tiles.py), so training sees objects at the size detection will: each label clipped
+to the tile, kept when any of it is inside (as a box cut by the image edge is kept). Most tiles
+with no label (the stands, empty grass) are dropped: `--empty-tiles S` keeps a share S of them,
+chosen by a hash of the clip, view, frame and tile, so the choice is fixed; the share and the
+counts kept and dropped go in export.json. Tiles are written as JPEG at quality 95 without chroma
+subsampling, so a 3 px ball keeps its colour.
+
 `--train-clips N` keeps the first N training clips in a fixed order (by a hash of the seed), so the
 subsets for the learning curve are nested: the 50-clip set is inside the 100-clip set.
 """
@@ -29,6 +40,8 @@ import shutil
 from pathlib import Path
 
 from ninety.render.splits import split_of
+from ninety.vision.frame_index import views
+from ninety.vision.tiles import COLS, OVERLAP, ROWS, grid
 
 CATEGORIES = [
     {"id": 1, "name": "player", "supercategory": "object"},
@@ -36,6 +49,8 @@ CATEGORIES = [
 ]
 CATEGORY_ID = {c["name"]: c["id"] for c in CATEGORIES}
 ANNOTATIONS = "_annotations.coco.json"
+EMPTY_TILES = 0.1  # the default share of label-free tiles kept (design; recorded in export.json)
+TILE_JPEG = {"quality": 95, "subsampling": 0}
 
 
 def clip_order(seed: int) -> str:
@@ -91,36 +106,69 @@ def _place(src: Path, dst: Path) -> None:
         shutil.copyfile(src, dst)
 
 
-def write_split(clips: list[tuple[int, Path]], out: Path, stride: int) -> dict:
+def keep_empty(seed: int, view: str, frame: int, tile: int, share: float) -> bool:
+    """Whether a label-free tile is kept: a fixed draw from its identity, below `share`."""
+    h = hashlib.sha256(f"ninety-empty-tile-{seed}-{view}-{frame}-{tile}".encode()).digest()
+    return int.from_bytes(h[:8], "big") / 2**64 < share
+
+
+def _clipped(a: dict, t) -> dict | None:
+    """A label (COCO, [x, y, w, h] in image pixels) as it lies in tile t, or None if none of it does."""
+    x, y, w, h = a["bbox"]
+    x0, y0 = max(x, t.x0), max(y, t.y0)
+    x1, y1 = min(x + w, t.x1), min(y + h, t.y1)
+    if x1 <= x0 or y1 <= y0:
+        return None
+    return a | {"bbox": [x0 - t.x0, y0 - t.y0, x1 - x0, y1 - y0], "area": (x1 - x0) * (y1 - y0)}
+
+
+def write_split(clips: list[tuple[int, Path]], out: Path, stride: int, tiles: float | None = None) -> dict:
+    """The split's COCO folder. With `tiles` (the share of label-free tiles kept), each frame is
+    written as its tiles (module docstring)."""
+    from PIL import Image
+
     out.mkdir(parents=True, exist_ok=True)
     images, annotations = [], []
+    empty = {"kept": 0, "dropped": 0}
     for seed, d in clips:
-        with open(d / "frames.jsonl") as f:
-            for i, line in enumerate(f):
-                if i % stride:
-                    continue
-                fr = json.loads(line)
-                image_id = len(images) + 1
-                name = f"seed{seed}_{fr['frame']:06d}.jpg"
-                dst = out / name
-                if not dst.exists():
-                    _place((d / fr["image"]).resolve(), dst)
-                cam = fr["camera"]
-                images.append(
-                    {
-                        "id": image_id,
-                        "file_name": name,
-                        "width": cam["width"],
-                        "height": cam["height"],
-                        "seed": seed,
-                        "frame": fr["frame"],
-                    }
-                )
-                objs = [("player", p) for p in fr["players"]] + [("ball", fr["ball"])]
-                for cls, obj in objs:
-                    a = _box(cls, obj)
-                    if a:
-                        annotations.append({"id": len(annotations) + 1, "image_id": image_id, **a})
+        for view, folder in views(d).items():
+            tag = f"seed{seed}_{view}_" if view else f"seed{seed}_"
+            with open(folder / "frames.jsonl") as f:
+                for i, line in enumerate(f):
+                    if i % stride:
+                        continue
+                    fr = json.loads(line)
+                    cam = fr["camera"]
+                    objs = [("player", p) for p in fr["players"]] + [("ball", fr["ball"])]
+                    labels = [a for a in (_box(cls, obj) for cls, obj in objs) if a]
+                    src = (folder / fr["image"]).resolve()
+                    if tiles is None:
+                        name = f"{tag}{fr['frame']:06d}.jpg"
+                        if not (out / name).exists():
+                            _place(src, out / name)
+                        parts = [(name, cam["width"], cam["height"], labels, None)]
+                    else:
+                        parts = []
+                        for k, t in enumerate(grid(cam["width"], cam["height"])):
+                            inside = [c for c in (_clipped(a, t) for a in labels) if c]
+                            if not inside and not keep_empty(seed, view, fr["frame"], k, tiles):
+                                empty["dropped"] += 1
+                                continue
+                            empty["kept"] += not inside
+                            parts.append((f"{tag}{fr['frame']:06d}_t{k}.jpg", *t.size, inside, t))
+                        if parts:
+                            with Image.open(src) as im:
+                                im = im.convert("RGB")
+                                for name, _, _, _, t in parts:
+                                    im.crop((t.x0, t.y0, t.x1, t.y1)).save(out / name, **TILE_JPEG)
+                    for name, w, h, inside, t in parts:
+                        image_id = len(images) + 1
+                        images.append({"id": image_id, "file_name": name, "width": w, "height": h,
+                                       "seed": seed, "frame": fr["frame"]}
+                                      | ({"view": view} if view else {})
+                                      | ({"tile": [t.x0, t.y0, t.x1, t.y1]} if t else {}))
+                        for a in inside:
+                            annotations.append({"id": len(annotations) + 1, "image_id": image_id, **a})
     coco = {"images": images, "annotations": annotations, "categories": CATEGORIES}
     (out / ANNOTATIONS).write_text(json.dumps(coco))
     return {
@@ -128,14 +176,18 @@ def write_split(clips: list[tuple[int, Path]], out: Path, stride: int) -> dict:
         "images": len(images),
         "annotations": len(annotations),
         "seeds": [s for s, _ in clips],
-    }
+    } | ({"empty_tiles": empty} if tiles is not None else {})
 
 
 def export(
-    clip_dirs: list[Path], out: Path, val_seeds: set[int], stride: int = 5, train_clips: int | None = None
+    clip_dirs: list[Path], out: Path, val_seeds: set[int], stride: int = 5, train_clips: int | None = None,
+    tiles: float | None = None,
 ) -> dict:
+    """`tiles`: export tiles, keeping this share of the label-free ones; None for whole frames."""
     if stride < 1:
         raise ValueError(f"stride must be at least 1, got {stride}")
+    if tiles is not None and not 0 <= tiles <= 1:
+        raise ValueError(f"the share of empty tiles kept must be from 0 to 1, got {tiles}")
     splits = _split_clips([Path(d) for d in clip_dirs], val_seeds)
     if train_clips is not None:
         if not 0 < train_clips <= len(splits["train"]):
@@ -143,9 +195,11 @@ def export(
         splits["train"] = splits["train"][:train_clips]
     if not splits["train"] or not splits["valid"]:
         raise ValueError("both the train and the valid split need at least one clip")
-    summary = {k: write_split(v, out / k, stride) for k, v in splits.items()}
+    summary = {k: write_split(v, out / k, stride, tiles) for k, v in splits.items()}
+    tiling = None if tiles is None else {"cols": COLS, "rows": ROWS, "overlap": OVERLAP,
+                                         "empty_share": tiles, "jpeg": TILE_JPEG}
     (out / "export.json").write_text(
-        json.dumps({"stride": stride, "train_clips": train_clips, **summary}, indent=2)
+        json.dumps({"stride": stride, "train_clips": train_clips, "tiles": tiling, **summary}, indent=2)
     )
     return summary
 
@@ -159,9 +213,13 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument(
         "--train-clips", type=int, default=None, help="first N training clips, for the learning curve"
     )
+    ap.add_argument("--tiles", action="store_true", help="export each frame as the live detector's tiles")
+    ap.add_argument("--empty-tiles", type=float, default=EMPTY_TILES,
+                    help=f"with --tiles, the share of label-free tiles kept (default {EMPTY_TILES})")
     a = ap.parse_args(argv)
     cfg = json.loads(a.config.read_text())
-    summary = export(a.clips, a.out, set(cfg["val_seeds"]), a.stride or cfg["stride"], a.train_clips)
+    summary = export(a.clips, a.out, set(cfg["val_seeds"]), a.stride or cfg["stride"], a.train_clips,
+                     a.empty_tiles if a.tiles else None)
     print(
         json.dumps(
             {k: {kk: vv for kk, vv in v.items() if kk != "seeds"} for k, v in summary.items()}, indent=2

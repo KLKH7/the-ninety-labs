@@ -12,6 +12,9 @@ ninety.vision.frame_index does, and writes what the job may read and nothing els
     <out>/clip/images/*.jpg         those frames' images
     <out>/checkpoint/               the weights and their training record, copied
 
+For a clip of the fixed tactical camera (`views/<name>/` with each lens's frame file and images),
+each view is staged as `<out>/clip/views/<name>/{index.jsonl, images/}`, the same window of each.
+
 The window is [from, to] seconds on the clip's own clock; frames keep their numbers and times, so
 detected events line up with the clip. The demo clip is an argument, never a constant here.
 """
@@ -23,19 +26,28 @@ import json
 import shutil
 from pathlib import Path
 
-from ninety.vision.frame_index import FIELDS, INDEX
+from ninety.vision.frame_index import FIELDS, INDEX, VIEWS, clip_id, views
 
 WEIGHTS = "checkpoint_best_total.pth"
 RECORD = "train-manifest.json"
 
 
 def stage_clip(clip_dir: Path, t0: float, t1: float, out: Path) -> int:
-    """Copy the frames with t0 <= t <= t1 and write their labels-free index; returns how many."""
+    """Copy the frames with t0 <= t <= t1 and write their labels-free index, for the clip or for
+    each of its views; returns how many frames (each view's, which must agree)."""
     if t1 <= t0:
         raise SystemExit(f"--to {t1} must be after --from {t0}")
     if out.exists():
         raise SystemExit(f"{out} exists: stage into a fresh folder")
-    clip_id = json.loads((clip_dir / "clip.json").read_text())["clip_id"]
+    found = views(clip_dir)
+    counts = {n: _stage_folder(d, t0, t1, out / VIEWS / n if n else out) for n, d in found.items()}
+    if len(set(counts.values())) != 1:
+        raise SystemExit(f"{clip_dir}: the views hold different frames in the window: {counts}")
+    return next(iter(counts.values()))
+
+
+def _stage_folder(clip_dir: Path, t0: float, t1: float, out: Path) -> int:
+    clip = clip_id(clip_dir)
     (out / "images").mkdir(parents=True)
     rows = []
     with open(clip_dir / "frames.jsonl") as src:
@@ -44,7 +56,7 @@ def stage_clip(clip_dir: Path, t0: float, t1: float, out: Path) -> int:
             if t0 <= fr["t"] <= t1:
                 image = Path(fr["image"])
                 shutil.copy2(clip_dir / image, out / "images" / image.name)
-                row = {"clip": clip_id, "frame": fr["frame"], "t": fr["t"], "image": f"images/{image.name}"}
+                row = {"clip": clip, "frame": fr["frame"], "t": fr["t"], "image": f"images/{image.name}"}
                 rows.append({k: row[k] for k in FIELDS})
     if not rows:
         raise SystemExit(f"{clip_dir}: no frame between {t0} and {t1} s")
