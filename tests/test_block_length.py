@@ -54,3 +54,13 @@ def test_the_midfield_recovers_level_with_a_ball_inside_the_block():
         assert line == pytest.approx(25.0) and mid == pytest.approx(30.0)  # level with the ball
         brain.update(0.0, False, abs(own - 60.0), {})  # ball in front of the block: the usual gap
         assert abs(brain.slot("CM", 34.0, 34.0)[0] - brain.line_x) == pytest.approx(LINE_GAPS_M["midfield"])
+
+
+def test_the_midfield_is_never_behind_its_own_line():
+    """A ball in our goal area pulls the line to its floor (Law 1, the goal area): the midfield
+    stands level with the line, never behind it."""
+    for team, own in (("home", 0.0), ("away", 105.0)):
+        brain = TeamBrain(team, Style(LOW, MID))
+        brain.update(0.0, False, abs(own - 3.0), {})
+        line = abs(brain.line_x - own)
+        assert abs(brain.slot("CM", 34.0, 34.0)[0] - own) == pytest.approx(line)

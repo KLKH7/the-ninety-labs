@@ -2520,6 +2520,8 @@ class Engine:
                 reach[p.id] = p.physique.time_to_cover(d, along)
             brain.update(self.t, holder == team, bx, reach)
             given = self.restart or self.set_by
+            if holder == team or given is not None:
+                brain.press_on, brain.held_pressers = None, []  # T3: the play the jobs answered is over
             if holder != team and given is not None:
                 # Until a restart's ball is in play, the side keeps the presser and cover it named when
                 # the restart was given (design). Asked again at every look, the order by time to the
@@ -2597,8 +2599,8 @@ class Engine:
         if presser is None:
             return []
         bx, by = self.play_point(team=brain.team)
-        gap = RESTART_DISTANCE_M[self.restart.kind] if self.restart and self.restart.team != brain.team \
-            else brain.press_gap_m
+        given = self.restart or self.set_by
+        gap = RESTART_DISTANCE_M[given.kind] if given and given.team != brain.team else brain.press_gap_m
         cx, cy = self.cover_spot(brain.team, bx, by, gap)
 
         def reach(pid: str) -> float:
