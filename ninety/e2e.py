@@ -289,14 +289,28 @@ async def run(args: argparse.Namespace) -> dict:
         facts = [f.as_dict() for f in calculate_facts(events)]
     recording = Recording.load(args.replay) if args.replay else None
     cues, claims, held = await explain_and_render(events, clip.id, args.plant, recording)
+    upgrades, model_calls, tokens, unavailable = None, [], {}, None
+    if args.describer == "foundry":
+        from ninety.agents import describer  # Foundry and the agent framework: only behind the flag
+        from ninety.agents.foundry import RegistryDrift
+
+        try:
+            async with describer.foundry_model(tokens) as (model, judge):
+                upgrades, model_calls = await describer.upgrades(events, cues, model, judge)
+        except RegistryDrift:
+            raise  # a changed prompt must never run under an old version's name
+        except Exception as e:  # noqa: BLE001  sign-in or outage: the code lines still air
+            upgrades, unavailable = None, type(e).__name__  # the type only: no endpoint or token
     voice = describe.Voice() if args.speech == "azure" else None
-    track, refused = describe.describe(events, cues, voice or describe.estimate)
+    track, refused = describe.describe(events, cues, voice or describe.estimate, upgrades)
     if voice is not None:
         voice.save(track, out)
     cues = sorted(cues + describe.audio_cues(track), key=lambda c: (c["t_in"], c["id"]))
     # The picture may cut from a dead ball to its restart: lines are placed on the clip's timeline.
     timeline = Timeline.of_clip(clip.meta)
     audio = describe.write_track(track, refused, out, clip.meta["t_start"], timeline=timeline)
+    audio["describer"] = {"mode": args.describer, "calls": model_calls, "tokens": tokens,
+                          "unavailable": unavailable}
     footage = write_footage(clip, out, encode=not args.frames)
     width, height = clip.meta["params"]["width"], clip.meta["params"]["height"]
     radar_info = None
@@ -360,6 +374,9 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--speech", choices=("none", "azure"), default="none",
                     help="audio description voice: none (estimated timing, the viewer's browser voice) or "
                          "azure (synthesise every line through Azure AI Speech: a live call)")
+    ap.add_argument("--describer", choices=("code", "foundry"), default="code",
+                    help="audio description lines: code only, or foundry (the published Describer "
+                         "agent words each verified moment, checked like any line: a live call)")
     ap.add_argument("--tracked", type=Path, default=None,
                     help="vision's tracked.json for the clip: adds the radar (needs --observations)")
     ap.add_argument("--observations", type=Path, default=None,
