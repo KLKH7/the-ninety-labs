@@ -88,7 +88,8 @@ def blob_name(run: str, seed: int, rel: Path) -> str:
 def upload_dir(container, truth, run: str, seed: int, clip_dir: Path, last: str = "clip.json") -> int:
     """Upload a clip: ground truth to the sealed `truth` container first, then images, and `last`
     after everything else, so its presence means the whole clip, truth included, arrived."""
-    files = [f for f in sorted(clip_dir.rglob("*")) if f.is_file() and f.name != last]
+    # only the clip's own `last` waits: a view's clip.json (views/<name>/) is an ordinary file
+    files = [f for f in sorted(clip_dir.rglob("*")) if f.is_file() and f != clip_dir / last]
     # At any depth: a clip's views (views/<name>/, clip.py) carry their own answer key (lesson 192).
     truth_files = [f for f in files if f.name in TRUTH_FILES]
     media = [f for f in files if f not in truth_files]

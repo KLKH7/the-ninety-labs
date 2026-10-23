@@ -137,6 +137,10 @@ def test_a_views_answer_key_is_sealed_with_the_clips(tmp_path, monkeypatch):
     assert not [n for n in c.store if n.endswith(job.TRUTH_FILES)]
     assert "truth:v1/train/seed1/views/tac-l/frames.jsonl" in log.order
     assert "renders:v1/train/seed1/views/tac-r/images/00000.jpg" in log.order
+    # each view's own clip.json goes too, before the clip's, which marks the whole clip arrived
+    seed1 = [n for n in log.order if "/seed1/" in n]
+    assert "renders:v1/train/seed1/views/tac-l/clip.json" in seed1
+    assert seed1[-1] == "renders:v1/train/seed1/clip.json"
     assert len(truth.store) == 3 * 3 * len(job.TRUTH_FILES)  # the clip and its two views, three seeds
 
 

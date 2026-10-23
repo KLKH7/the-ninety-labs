@@ -298,3 +298,16 @@ def test_a_page_without_graphics_draws_no_score_bug_and_no_stinger(graphics):
         assert info["bugRect"][2] > 0 and plain != dressed and plain != wiped
     else:
         assert info["bugRect"] == [0, 0, 0, 0] and plain == dressed == wiped
+
+
+def test_only_a_view_may_have_no_ball_to_measure():
+    """projection_ball_lt_1px: a broadcast always frames the ball, so a broadcast clip with no ball
+    to measure fails; a fixed half-pitch lens may hold none all clip (views_see_the_ball judges the
+    pair), so the same rows pass in a view. A measured error is judged the same in both."""
+    from ninety.render.checks import ball_projection_ok
+
+    assert ball_projection_ok(None, is_view=False) is False
+    assert ball_projection_ok(None, is_view=True) is True
+    for is_view in (False, True):
+        assert ball_projection_ok(0.4, is_view) is True
+        assert ball_projection_ok(1.2, is_view) is False

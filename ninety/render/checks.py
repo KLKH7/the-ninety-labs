@@ -244,6 +244,15 @@ def ball_unseen(clip_dir: Path) -> list[int]:
     ]
 
 
+def ball_projection_ok(ball_max_px: float | None, is_view: bool) -> bool:
+    """The ball's projection error is under PROJECTION_TOL_PX. A broadcast always has the ball to
+    measure, so none fails it. A fixed lens holds half the pitch, so play can stay out of its picture
+    all clip; the views together must see it (`views_see_the_ball`)."""
+    if ball_max_px is None:
+        return is_view
+    return ball_max_px < PROJECTION_TOL_PX
+
+
 def check_clip(clip_dir: Path) -> dict:
     clip, frames, _ = load_clip(clip_dir)
     proj = projection_errors(frames)
@@ -251,10 +260,7 @@ def check_clip(clip_dir: Path) -> dict:
     occ = occlusion(frames)
     contract = validate(clip_dir)  # docs/DATA_CONTRACT.md: every clip passes `ninety-validate`
     passed = {
-        # A broadcast always has the ball to measure. A fixed lens holds half the pitch, so play can
-        # stay out of its picture all clip; the views together must see it (`views_see_the_ball`).
-        "projection_ball_lt_1px": (proj["ball_px"]["max"] is None and "view" in clip)
-        or (proj["ball_px"]["max"] is not None and proj["ball_px"]["max"] < PROJECTION_TOL_PX),
+        "projection_ball_lt_1px": ball_projection_ok(proj["ball_px"]["max"], "view" in clip),
         "projection_keypoints_lt_1px": proj["keypoint_px"]["max"] is None
         or proj["keypoint_px"]["max"] < PROJECTION_TOL_PX,
         "player_feet_in_boxes": proj["player_foot_outside_box"] == 0,
