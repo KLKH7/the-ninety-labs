@@ -309,6 +309,7 @@ def test_he_throws_at_any_angle_but_turns_to_kick_it_from_his_hands(monkeypatch)
             assert e.windup and e.windup[3] == "turn"
             frames = 0
             while e.windup and e.windup[3] == "turn" and frames < 50:
+                assert e.pose(k)[0] == "hands"  # turning with the ball still in his hands
                 e.step()
                 frames += 1
             assert e.windup and e.windup[3] == "drop"  # let fall only once he faces it
@@ -399,3 +400,34 @@ def test_while_he_holds_it_he_is_drawn_with_it_in_his_hands():
         drawn.append(e.pose(k)[0])
         e.step()
     assert len(drawn) > 100 and set(drawn) == {"hands"}
+
+
+def test_once_he_lets_it_go_he_is_no_longer_drawn_with_it_in_his_hands(monkeypatch):
+    # Put down, the frame after it leaves his hands is not "hands" (past the catch's own touch pose).
+    e, k = caught()
+    for _ in range(25):  # a second of the hold: the catch's touch pose is over, the hold's goes on
+        e.step()
+    assert e.pose(k)[0] == "hands"
+    mate = next(iter(e.scene_for(k).mates))
+    o = decisions.Option("pass", 1.0, (mate[1], mate[2]), receiver=mate[0])
+    monkeypatch.setattr(e, "release_options", lambda scene: (None, None, o))  # put down
+    e.release(k, e.scene_for(k))
+    e.step()
+    assert e.held_by is None and e.pose(k)[0] != "hands"
+
+
+def test_a_ball_caught_in_a_dive_ends_the_dive():
+    # Caught mid-dive, the dive is over: he does not drop back into it once he has let the ball go.
+    # A guard (new_phase already ends it when the catch changes possession): an audit feared the dive
+    # was left running, frozen while he held it, to resume after the throw.
+    e, k = caught()
+    e.held_by = e.possessor = None
+    k.x, k.y = 5.0, 34.0
+    e.dive = (k.id, e.t, k.y, 1.0, e.t, 0.0)  # launched to his left
+    e.dived_at = e.kicked_at
+    hold = k.profile.absorb_mps(True)
+    fast = hold * (1 + CUSHION["chest"]) / 2
+    e.ball = (k.x + 0.4 + fast * DT, k.y, 1.2, -fast, 0.0, 0.0)
+    e.contact((k.x + 0.4, k.y, 1.2, -fast, 0.0, 0.0))
+    assert e.held_by == k.id  # the premise: caught
+    assert e.dive is None
