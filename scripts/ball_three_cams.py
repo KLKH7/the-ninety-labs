@@ -15,7 +15,8 @@ order. Detection reads each picture's labels-free index (ninety.vision.frame_ind
 first), never a frame file. `raw` writes, per tactical detector name T:
 
     <out>/broadcast/seed<N>.jsonl         observe's broadcast lines
-    <out>/tactical-<T>/seed<N>.jsonl      the fused views' lines (fuse.fuse of observe --fixed)
+    <out>/view-<V>-<T>/seed<N>.jsonl      each lens's own lines (observe --fixed)
+    <out>/tactical-<T>/seed<N>.jsonl      the fused views' lines (fuse.fuse of those)
 
 and `variants` writes, per T, `broadcast-<T>/`, `tactical-<T>/` (as is) and `fused-<T>/`, the lines
 events would read for plan sources (a), (b) and (c).
@@ -44,6 +45,13 @@ def _write(path: Path, rows: list[dict]) -> None:
             f.write(json.dumps(r, separators=(",", ":")) + "\n")
 
 
+def _dets(path: Path, rows) -> None:
+    from ninety.vision.detections import write_detections
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    write_detections(path, rows)
+
+
 def _seed(clip: Path) -> int:
     return json.loads((clip / "clip.json").read_text())["seed"]
 
@@ -51,7 +59,6 @@ def _seed(clip: Path) -> int:
 def raw(clips: list[Path], out: Path, detectors: dict[str, tuple[str, str]], broadcast_name: str) -> None:
     from ninety.vision import frame_index, fuse, observe
     from ninety.vision.detect import detect_rows, frame_rows, labels_for, trained_resolution
-    from ninety.vision.detections import write_detections
     from ninety.vision.model import load, model
 
     loaded = {}
@@ -60,23 +67,37 @@ def raw(clips: list[Path], out: Path, detectors: dict[str, tuple[str, str]], bro
         loaded[name] = (det, labels_for(checkpoint, det.class_names), model(checkpoint))
     for clip in clips:
         seed, t0 = _seed(clip), time.perf_counter()
+        laps: dict[str, float] = {}
+        since = [t0]
+
+        def lap(stage: str, laps: dict = laps, since: list = since) -> None:
+            now = time.perf_counter()
+            laps[stage] = round(laps.get(stage, 0.0) + now - since[0], 1)
+            since[0] = now
+
         frame_index.write_index(clip)
         frame_index.write_indexes(clip)
         det, label, field = loaded[broadcast_name]
         rows = frame_rows(clip)
         dets = detect_rows(det, rows, label, field)
-        write_detections(out / "detections" / "broadcast" / f"seed{seed}.jsonl", dets)
+        lap("detect broadcast")
+        _dets(out / "detections" / "broadcast" / f"seed{seed}.jsonl", dets)
         _write(out / "broadcast" / f"seed{seed}.jsonl",
                observe.observe([r["image"] for r in rows], dets, _rgb))
+        lap("observe broadcast")
         for name, (det, label, field) in loaded.items():
             placed = {}
             for view, folder in frame_index.views(clip).items():
                 rows = frame_rows(folder)
                 dets = detect_rows(det, rows, label, field, tiles=True)
-                write_detections(out / "detections" / f"{view}-{name}" / f"seed{seed}.jsonl", dets)
+                lap(f"detect {name} tiles")
+                _dets(out / "detections" / f"{view}-{name}" / f"seed{seed}.jsonl", dets)
                 placed[view] = observe.observe([r["image"] for r in rows], dets, _rgb, fixed=True)
+                _write(out / f"view-{view}-{name}" / f"seed{seed}.jsonl", placed[view])
+                lap("observe fixed")
             _write(out / f"tactical-{name}" / f"seed{seed}.jsonl", fuse.fuse(placed))
-        print(json.dumps({"seed": seed, "seconds": round(time.perf_counter() - t0, 1)}), flush=True)
+        print(json.dumps({"seed": seed, "seconds": round(time.perf_counter() - t0, 1), "stages": laps}),
+              flush=True)
 
 
 def variants(out: Path, precision: Path) -> None:
