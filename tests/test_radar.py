@@ -334,7 +334,9 @@ def test_the_radar_toggles_from_the_keyboard_and_says_what_it_shows(browser, sit
     page, errors = open_viewer(browser, site[0])
     page.wait_for_function("document.querySelector('#radar').getAttribute('aria-label').startsWith('Radar:')")
     label = page.get_attribute("#radar", "aria-label")
-    assert "home" in label and "away" in label and "broadcast camera" in label
+    # The clubs by the names of the codes the clip was rendered with (CRW, DUN), never home and away.
+    assert "Crowmere" in label and "Dunhollow" in label and "broadcast camera" in label
+    assert "home" not in label.lower() and "away" not in label.lower()
     assert page.is_visible("#radar")
     page.keyboard.press("m")
     assert not page.is_visible("#radar")

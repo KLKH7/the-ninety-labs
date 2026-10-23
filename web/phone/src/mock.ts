@@ -12,6 +12,7 @@ import { joinMock } from "./mockrelay";
 import {
   type AnswerMessage,
   type Flow,
+  type InsightCard,
   type Minimap,
   type MinimapFrame,
   PITCH_X,
@@ -21,6 +22,12 @@ import {
   type RelayMessage,
   type Team,
   type ViewerAnswer,
+  type Visual,
+  type VisualKind,
+  type VisualPlayer,
+  clock,
+  playerName,
+  teams,
 } from "./types";
 
 const NX = 12;
@@ -40,8 +47,95 @@ const CODE_TEXT: Record<string, (p: string, v: string) => string> = {
 };
 const ASKABLE = "their speed now, their top speed or how far they have run";
 
+// The mock's stand-ins for the insight tools (the real ones are the agents' MCP tools): each picture
+// is computed here from the mock positions at one frame, so its numbers agree with the mock radar.
+const VISUAL_WORDS: [VisualKind, RegExp][] = [
+  ["overload", /\b(?:overload\w*|outnumber\w*|\d+ ?v ?\d+)\b/],
+  ["line_break", /\b(?:line[- ]?break\w*|bypass\w*)\b|\b(?:break|breaks|breaking|broke)\b.*\blines?\b/],
+  ["pass_options", /\b(?:pass(?:ing)? options?|options?|open|free man)\b/],
+  ["shape", /\b(?:shape|formation|set up|lines?)\b/],
+  ["wind", /\b(?:moving|movement|wind|flow|pushing|dropping)\b/],
+];
+const ZONE_M = 12; // design: half the side of the overload box round the ball (24 m, about a third of the width)
+const OPEN_M = 5; // design: a teammate with no opponent within 5 m is "open" in the mock
+const INSIGHT_AT: [number, VisualKind, Team][] = [
+  [18, "overload", "home"],
+  [41, "line_break", "home"],
+  [63, "pass_options", "away"],
+  [86, "shape", "away"],
+  [104, "overload", "away"],
+];
+
 const round = (v: number, places: number) => Math.round(v * 10 ** places) / 10 ** places;
 const cell = (v: number, length: number, n: number) => Math.min(n - 1, Math.max(0, Math.floor((v / length) * n)));
+
+/** The mock's pictures, from the mock frame nearest `t`. */
+export function mockVisual(m: Minimap, kind: VisualKind, side: Team, t: number): Visual {
+  const f = m.frames.reduce((a, b) => (Math.abs(b.t - t) < Math.abs(a.t - t) ? b : a));
+  const sign = side === "home" ? 1 : -1; // home attacks toward x = 105 (pitch.ts, attacksRight)
+  const all: VisualPlayer[] = f.players.map(([id, x, y]) => ({ id, team: id.startsWith("h") ? "home" : "away", x, y }));
+  const mine = all.filter((p) => p.team === side);
+  const theirs = all.filter((p) => p.team !== side);
+  const [bx, by] = f.ball;
+  const ball = { x: bx, y: by };
+  const nearest = (ps: VisualPlayer[], x: number, y: number) => ps.reduce((a, b) => (Math.hypot(b.x - x, b.y - y) < Math.hypot(a.x - x, a.y - y) ? b : a));
+  const base = { t: f.t, team: side, ball };
+  if (kind === "overload") {
+    const zone = { x0: bx - ZONE_M, x1: bx + ZONE_M, y0: Math.max(0, by - ZONE_M), y1: Math.min(PITCH_Y, by + ZONE_M) };
+    const inside = (p: VisualPlayer) => p.x >= zone.x0 && p.x <= zone.x1 && p.y >= zone.y0 && p.y <= zone.y1;
+    const players = all.map((p) => (inside(p) ? { ...p, role: p.team === side ? ("attacker" as const) : ("defender" as const) } : p));
+    return { ...base, kind, players, zone, count: { for: mine.filter(inside).length, against: theirs.filter(inside).length } };
+  }
+  if (kind === "line_break") {
+    const from = nearest(mine, bx, by);
+    const to = mine.reduce((a, b) => (sign * b.x > sign * a.x ? b : a));
+    const lo = Math.min(from.x, to.x);
+    const hi = Math.max(from.x, to.x);
+    const passed = new Set(theirs.filter((p) => p.x > lo && p.x < hi).map((p) => p.id));
+    const players = all.map((p) => (p.id === from.id ? { ...p, role: "passer" as const } : p.id === to.id ? { ...p, role: "receiver" as const } : passed.has(p.id) ? { ...p, role: "bypassed" as const } : p));
+    return { ...base, kind, players, pass: { from: { x: from.x, y: from.y }, to: { x: to.x, y: to.y } }, bypassed: passed.size };
+  }
+  if (kind === "pass_options") {
+    const carrier = nearest(mine, bx, by);
+    const players = all.map((p): VisualPlayer => {
+      if (p.id === carrier.id) return { ...p, role: "carrier" };
+      if (p.team !== side) return p;
+      const marker = nearest(theirs, p.x, p.y);
+      return { ...p, role: Math.hypot(marker.x - p.x, marker.y - p.y) > OPEN_M ? "open" : "marked" };
+    });
+    return { ...base, kind, players };
+  }
+  if (kind === "shape") {
+    // The mock's 4-3-3 by depth: the deepest player is the keeper, then four, three and three.
+    const byDepth = [...mine].sort((a, b) => sign * a.x - sign * b.x).slice(1);
+    const lines = [byDepth.slice(0, 4), byDepth.slice(4, 7), byDepth.slice(7)].map((l) => [...l].sort((a, b) => a.y - b.y).map(({ x, y }) => ({ x, y })));
+    return { ...base, kind, players: all, lines };
+  }
+  return { ...base, kind, players: [], t_from: Math.max(0, f.t - 30), t_to: f.t };
+}
+
+/** What a mock picture says, in a sentence built from its own numbers. */
+function mockText(v: Visual, names?: Record<string, string>): { title: string; text: string; value: number | null; unit: string | null } {
+  const club = teams[v.team];
+  const who = (role: string) => {
+    const p = v.players.find((q) => q.role === role);
+    return p ? playerName(p.id, names) : "";
+  };
+  switch (v.kind) {
+    case "overload":
+      return { title: `${club} overload`, text: `${club} had ${v.count!.for} players against ${v.count!.against} round the ball at ${clock(v.t)}.`, value: v.count!.for, unit: "players" };
+    case "line_break":
+      return { title: `${club} break the lines`, text: `${who("passer")}'s pass to ${who("receiver")} went past ${v.bypassed} defender${v.bypassed === 1 ? "" : "s"}.`, value: v.bypassed!, unit: "bypassed" };
+    case "pass_options": {
+      const open = v.players.filter((p) => p.role === "open").length;
+      return { title: `${who("carrier")}'s options`, text: `${who("carrier")} had ${open} teammates with no opponent within ${OPEN_M} m.`, value: open, unit: "open" };
+    }
+    case "shape":
+      return { title: `${club}'s shape`, text: `${club} lined up in ${v.lines!.map((l) => l.length).join("-")} at ${clock(v.t)}.`, value: null, unit: null };
+    case "wind":
+      return { title: "How the teams moved", text: `Both teams' movement from ${clock(v.t_from!)} to ${clock(v.t_to!)}.`, value: null, unit: null };
+  }
+}
 
 export class MockFeed implements Feed {
   readonly mock = true;
@@ -130,8 +224,54 @@ export class MockFeed implements Feed {
     };
   }
 
+  async insights(clip: string, tTo: number): Promise<InsightCard[]> {
+    void clip;
+    const m = await this.load();
+    return INSIGHT_AT.filter(([t]) => t <= tTo).map(([t, kind, side], i) => {
+      const visual = mockVisual(m, kind, side, t);
+      const said = mockText(visual);
+      return {
+        type: "insight_card",
+        id: `mock-insight-${i + 1}`,
+        t,
+        team: side,
+        title: said.title,
+        text: said.text,
+        metric: kind,
+        value: said.value,
+        unit: said.unit,
+        evidence: [`${kind}:mock_${t}`],
+        visual,
+        question: `Why did ${said.title.charAt(0).toLowerCase()}${said.title.slice(1)} happen at ${clock(t)}?`,
+        source: "mock",
+      };
+    });
+  }
+
   async ask(q: Question): Promise<AnswerMessage> {
     const lowered = q.text.toLowerCase();
+    const kind = VISUAL_WORDS.find(([, words]) => words.test(lowered))?.[0];
+    if (kind) {
+      const m = await this.load();
+      const side: Team = new RegExp(`\\b${teams.away.toLowerCase()}\\b`).test(lowered) ? "away" : q.player?.startsWith("a") ? "away" : "home";
+      const visual = mockVisual(m, kind, side, q.t);
+      const said = mockText(visual);
+      return {
+        type: "answer",
+        source: "code",
+        answer: {
+          status: "verified",
+          text: said.text,
+          metric: kind,
+          value: said.value,
+          unit: said.unit,
+          evidence: [`${kind}:mock_${visual.t.toFixed(1)}`],
+          t_from: visual.t_from ?? visual.t,
+          t_to: visual.t_to ?? visual.t,
+          visual,
+        },
+      };
+    }
     const metric = METRIC_WORDS.find(([, words]) => words.test(lowered))?.[0] ?? null;
     const none = (text: string, from: number | null = null, to: number | null = null): ViewerAnswer => ({
       status: "unanswerable", text, metric: null, value: null, unit: null, evidence: [], t_from: from, t_to: to,

@@ -1,26 +1,36 @@
-// The phone companion: pairs with the laptop's broadcast by code, then shows a minimap in step with
-// the laptop's clock, a player card (speed and heat map) for the player tapped, and answers to the
-// viewer's questions with their evidence one tap away.
+// The phone companion: pairs with the big screen by code, then has three tabs. Radar: every tracked
+// player and the ball in step with the big screen's clock, across its cuts, drawn by the viewer's
+// own radar (viewer/src/radar.ts), with a player card for the player tapped. Ask: questions to the
+// Companion agent, each answer with the picture its tool data draws. Insights: the hidden-stat
+// cards pushed so far, each with "Why?", which asks the Companion.
 //
-// ?code=ABC234&clip=seed7 joins straight away (the laptop's QR code); ?mock=1 reads the mock feed.
+// ?code=ABC234&clip=seed7&bundle=/bundle/ joins straight away (the big screen's QR code); ?mock=1
+// reads the mock feed.
 
+import { RadarModel, type RadarState, describe as describeRadar, drawRadar, projection, timeline, within } from "../../viewer/src/radar";
+import { type MatchData, chapterAt, chapterLabel, scoreAt, statsAt } from "../../viewer/src/match";
+import { nameIds, teamNames } from "../../viewer/src/teams";
 import { LaptopClock } from "./clock";
 import { ApiError, type Closed, type Feed, GroundTruth, HttpFeed, type Link, guarded } from "./feed";
 import { CODE_ALPHABET, CODE_LENGTH } from "./mockrelay";
-import { COLORS, type Positions, type View, describeHeat, describePlay, drawHeat, drawPitch, drawPlayers, fit, positionsAt, within } from "./pitch";
+import { COLORS, type Positions, aspect, describeHeat, describePlay, drawHeat, drawPitch, fit, radarFromMinimap } from "./pitch";
 import {
   type AnswerMessage,
+  type InsightCard,
   MAX_QUESTION,
   type Minimap,
   type PlayerCard,
   type RelayMessage,
   type ViewerAnswer,
+  type Visual,
   clock,
   isTrack,
   playerName,
   shirt,
   team,
+  teams,
 } from "./types";
+import { describeVisual, drawVisual, drawable, headline } from "./visual";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
@@ -29,6 +39,10 @@ const CARD_EVERY_MS = 1000; // speed now is a one-second mean (ninety/intel/wind
 // design: a 30 s field moves little in 5 s, and two flows every 5 s stay far under the API's 120
 // reads a minute (ninety/api/companion.py, LIMITS) beside the card's one a second.
 const FLOW_EVERY_MS = 5000;
+// design: a card pushed in the last few seconds shows within one poll; 12 reads a minute is a tenth
+// of the API's read limit.
+const INSIGHTS_EVERY_MS = 5000;
+const TRAIL = 10; // the ball's last frames drawn behind it, as on the viewer's radar
 
 /** Every payload the phone received, for tests/test_phone.py to check against the schemas. */
 const seen: unknown[] = [];
@@ -41,22 +55,61 @@ if (__PHONE_MOCK__) {
 const feed: Feed = guarded(source, (p) => seen.push(p));
 const laptop = new LaptopClock();
 
+type Tab = "radar" | "ask" | "insights";
 interface State {
   code: string;
   clip: string;
   minimap: Minimap | null;
+  radar: RadarModel | null;
+  /** Where the radar's positions come from: the bundle's radar.json (vision's tracked output at
+   * the video's frame rate) or the companion's minimap feed. */
+  radarFrom: "bundle" | "minimap" | null;
+  match: MatchData | null;
   refused: string | null; // why the positions are not shown
   selected: string | null;
   following: boolean; // the selection came from the laptop's focus
   card: PlayerCard | null;
   wind: boolean;
+  tab: Tab;
+  insights: InsightCard[];
 }
-const state: State = { code: "", clip: "", minimap: null, refused: null, selected: null, following: false, card: null, wind: false };
+const state: State = {
+  code: "",
+  clip: "",
+  minimap: null,
+  radar: null,
+  radarFrom: null,
+  match: null,
+  refused: null,
+  selected: null,
+  following: false,
+  card: null,
+  wind: false,
+  tab: "radar",
+  insights: [],
+};
 let link: Link | null = null;
+let lastState: RadarState | null = null;
 let lastPositions: Positions | null = null;
 
+/** Where pitch metres (x, y) are drawn on the radar, in CSS pixels from its top left. */
+function screenOf(x: number, y: number): [number, number] {
+  const p = projection(mapCanvas.clientWidth);
+  return [p.X(x), p.Y(y)];
+}
+
 // Read by tests/test_phone.py.
-(window as unknown as { ninetyPhone: object }).ninetyPhone = { seen, state, laptop, positions: () => lastPositions };
+(window as unknown as { ninetyPhone: object }).ninetyPhone = {
+  seen,
+  state,
+  laptop,
+  positions: () => lastPositions,
+  radar: () => lastState,
+  radarAt: (t: number) => state.radar?.at(t, false) ?? null,
+  screenOf,
+  name: playerName,
+  drawable,
+};
 
 const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)");
 
@@ -74,12 +127,12 @@ function validCode(code: string): boolean {
 }
 
 const CLOSED_WORDS: Record<Closed, string> = {
-  "unknown-code": "No laptop is showing that code. Check the code on the laptop and try again.",
-  "room-full": "Eight phones are already following this laptop.",
-  expired: "That code has expired. Ask the laptop for a new one.",
-  refused: "The laptop's connection refused this phone.",
-  lost: "Lost the connection to the laptop.",
-  "not-joined": "Could not join: no laptop is showing that code, or the server cannot be reached. Check the code and try again.",
+  "unknown-code": "No screen is showing that code. Check the code on the big screen and try again.",
+  "room-full": "Eight phones are already following this screen.",
+  expired: "That code has expired. The big screen shows a new one when it pairs again.",
+  refused: "The big screen's connection refused this phone.",
+  lost: "Lost the connection to the big screen.",
+  "not-joined": "Could not join: no screen is showing that code, or the server cannot be reached. Check the code and try again.",
 };
 
 function setStatus(kind: "off" | "synced" | "paused" | "waiting" | "lost", text: string) {
@@ -112,7 +165,7 @@ async function connect(code: string) {
       clip = await feed.clipOf(code);
     } catch {
       link.close();
-      pairError.textContent = "This server needs the laptop's QR code to connect: scan it with your camera.";
+      pairError.textContent = "This server needs the big screen's QR code to connect: scan it with your camera.";
       button.disabled = false;
       button.textContent = "Connect";
       return;
@@ -124,12 +177,14 @@ async function connect(code: string) {
   button.textContent = "Connect";
   history.replaceState(null, "", `?${new URLSearchParams({ ...Object.fromEntries(params), code, clip })}`);
   showLive();
-  await loadMinimap();
+  await Promise.all([loadMinimap(), loadBundle()]);
+  buildRadar();
+  void refreshInsights(true);
 }
 
 function onRelay(m: RelayMessage) {
   if (m.type === "clock") laptop.update(m);
-  else if (m.type === "focus" && m.player !== null && state.minimap?.roster.includes(m.player)) {
+  else if (m.type === "focus" && m.player !== null && rosterIds().includes(m.player)) {
     select(m.player, true);
   }
 }
@@ -155,6 +210,8 @@ function backToPairing(why: Closed) {
   link = null;
   document.body.dataset.state = "pair";
   $("live").hidden = true;
+  $("tabs").hidden = true;
+  $("scoreline").hidden = true;
   $("pair").hidden = false;
   setStatus("off", "Not connected");
   pairError.textContent = CLOSED_WORDS[why];
@@ -164,6 +221,7 @@ function showLive() {
   document.body.dataset.state = "live";
   $("pair").hidden = true;
   $("live").hidden = false;
+  $("tabs").hidden = false;
   $("mockbar").hidden = !feed.mock;
   setStatus("waiting", "Waiting");
 }
@@ -177,10 +235,105 @@ codeInput.addEventListener("input", () => {
   if (v !== codeInput.value) codeInput.value = v;
 });
 
-// --- the minimap -----------------------------------------------------------------------------
+// --- tabs (WAI-ARIA tabs pattern: arrow keys move between them, Home and End to the ends) ------
+
+const TABS: Tab[] = ["radar", "ask", "insights"];
+
+function showTab(tab: Tab, focus = false) {
+  state.tab = tab;
+  for (const t of TABS) {
+    const button = $(`tab-${t}`);
+    const on = t === tab;
+    button.setAttribute("aria-selected", String(on));
+    button.tabIndex = on ? 0 : -1;
+    $(`panel-${t}`).hidden = !on;
+    if (on && focus) button.focus();
+  }
+  document.body.dataset.tab = tab;
+  if (tab === "insights") {
+    unread = 0;
+    showUnread();
+  }
+  if (tab === "ask") requestAnimationFrame(redrawPictures); // canvases sized while hidden draw now
+}
+
+for (const t of TABS) {
+  const button = $(`tab-${t}`);
+  button.addEventListener("click", () => showTab(t));
+  button.addEventListener("keydown", (e) => {
+    const i = TABS.indexOf(state.tab);
+    const to =
+      e.key === "ArrowRight" ? TABS[(i + 1) % TABS.length] : e.key === "ArrowLeft" ? TABS[(i + TABS.length - 1) % TABS.length] : e.key === "Home" ? TABS[0] : e.key === "End" ? TABS[TABS.length - 1] : null;
+    if (!to) return;
+    e.preventDefault();
+    showTab(to, true);
+  });
+}
+
+// --- the bundle: the big screen's cuts, its tracked positions and its match --------------------
+
+interface BundleManifest {
+  format: number;
+  clip: string;
+  fps: number;
+  t_start: number;
+  segments?: { index: number; frame: number; frames: number }[];
+  footage: { frames: number };
+  teams?: unknown;
+  radar?: unknown;
+  match?: unknown;
+}
+
+let bundleFps = 25;
+let bundleRadar: { data: import("../../viewer/src/radar").RadarData; fps: number; segmentOf: (k: number) => [number, number] } | null = null;
+
+/** The bundle the big screen plays, named by its QR code: a path on this origin, never another site. */
+function bundleBase(): URL | null {
+  const path = params.get("bundle");
+  if (!path) return null;
+  const u = new URL(path.endsWith("/") ? path : `${path}/`, location.href);
+  return u.origin === location.origin ? u : null;
+}
+
+async function loadBundle() {
+  const base = bundleBase();
+  if (!base) return;
+  try {
+    const get = async (file: string) => {
+      const r = await fetch(new URL(file, base));
+      if (!r.ok) throw new Error(`${file}: ${r.status}`);
+      return r.json();
+    };
+    const m = (await get("manifest.json")) as BundleManifest;
+    // The mock plays its own clip against any bundle; otherwise only the paired clip's bundle.
+    if (m.format !== 1 || (m.clip !== state.clip && !feed.mock)) return;
+    Object.assign(teams, teamNames(m.teams));
+    showTeams();
+    const cuts = timeline(m);
+    laptop.cuts = cuts;
+    bundleFps = m.fps;
+    const [radar, match] = await Promise.all([m.radar ? get("radar.json") : null, m.match ? get("match.json") : null]);
+    if (radar) bundleRadar = { data: radar, fps: m.fps, segmentOf: cuts.segmentOf };
+    state.match = match as MatchData | null;
+    $("match-card").hidden = !state.match;
+  } catch {
+    // The minimap feed still draws the radar; only the cuts and the match are missing.
+  }
+}
+
+function showTeams() {
+  $("legend-home").textContent = `${teams.home} →`;
+  $("legend-away").textContent = `← ${teams.away}`;
+  $("map-sides").textContent = `${teams.home} attack to the right of the radar, ${teams.away} to the left.`;
+}
+showTeams();
+
+// --- the radar ---------------------------------------------------------------------------------
 
 const mapCanvas = $<HTMLCanvasElement>("map");
 const windCanvas = $<HTMLCanvasElement>("wind");
+$("map-box").style.aspectRatio = String(aspect());
+$<HTMLCanvasElement>("heat").style.aspectRatio = String(aspect());
 
 async function loadMinimap() {
   try {
@@ -190,26 +343,54 @@ async function loadMinimap() {
     state.minimap = null;
     state.refused =
       e instanceof GroundTruth || (e instanceof ApiError && e.status === 503)
-        ? "Live player positions aren't available for this match yet, so there is no minimap, player card " +
+        ? "Live player positions aren't available for this match yet, so there is no radar, player card " +
           "or question to show. They turn on once positions are tracked from the video itself. " +
-          "The match clock above still follows the laptop."
-        : `Could not load the minimap: ${(e as Error).message}`;
+          "The match clock above still follows the big screen."
+        : `Could not load the radar: ${(e as Error).message}`;
   }
+}
+
+/** The radar from the bundle's tracked positions when the big screen's bundle has them, otherwise
+ * from the minimap feed; the same drawing either way. */
+function buildRadar() {
+  state.radar = null;
+  state.radarFrom = null;
+  if (state.minimap || bundleRadar) {
+    try {
+      if (bundleRadar) {
+        state.radar = new RadarModel(bundleRadar.data, bundleRadar.fps, bundleRadar.segmentOf);
+        state.radarFrom = "bundle";
+      } else {
+        const m = state.minimap!;
+        state.radar = new RadarModel(radarFromMinimap(m), m.fps, () => [-Infinity, Infinity], feed.mock ? "mock" : "tracked");
+        state.radarFrom = "minimap";
+      }
+    } catch (e) {
+      state.refused = `The radar is not drawn: ${(e as Error).message}.`;
+    }
+  }
+  const on = state.radar !== null;
   const refused = $("refused");
-  refused.hidden = state.refused === null;
-  refused.textContent = state.refused ?? "";
-  mapCanvas.dataset.source = state.minimap ? state.minimap.source : "refused";
-  $("map-box").hidden = state.minimap === null;
-  for (const id of ["pick-hint", "ask", "roster-box", "now-box"]) $(id).hidden = state.minimap === null;
-  document.querySelector<HTMLElement>(".legend")!.hidden = state.minimap === null;
-  if (state.minimap) {
-    renderRoster(state.minimap.roster);
-    $("wind-toggle").hidden = false;
-    const tracked = state.minimap.roster.some(isTrack);
+  refused.hidden = state.refused === null || on;
+  refused.textContent = on ? "" : state.refused ?? "";
+  mapCanvas.dataset.source = on ? (state.radarFrom === "bundle" ? "tracked" : state.minimap!.source) : "refused";
+  mapCanvas.dataset.from = state.radarFrom ?? "";
+  $("map-box").hidden = !on;
+  for (const id of ["pick-hint", "roster-box", "now-box", "legend"]) $(id).hidden = !on;
+  $("legend-view").hidden = state.radarFrom !== "bundle";
+  $("wind-toggle").hidden = !state.minimap;
+  if (on) {
+    renderRoster(rosterIds());
+    const tracked = rosterIds().some(isTrack);
     $("seen-note").hidden = !tracked;
-    $("roster-summary").textContent = tracked ? "Choose a player the camera has seen" : "Choose a player from a list";
+    $("roster-summary").textContent = tracked ? "Choose a player the cameras have seen" : "Choose a player from a list";
   }
   renderChips();
+}
+
+function rosterIds(): string[] {
+  if (state.radarFrom === "bundle" && state.radar) return state.radar.ids().map((p) => p.id);
+  return state.minimap?.roster ?? [];
 }
 
 function renderRoster(roster: string[]) {
@@ -232,7 +413,7 @@ function renderRoster(roster: string[]) {
       const ids = roster.filter((id) => team(id) === side).sort((a, b) => Number(shirt(a)) - Number(shirt(b)));
       const label = document.createElement("p");
       label.className = "roster-team";
-      label.textContent = side === "home" ? "Home" : "Away";
+      label.textContent = teams[side];
       label.setAttribute("aria-hidden", "true"); // each button already says its team
       const row = document.createElement("div");
       row.className = "roster-row";
@@ -243,9 +424,9 @@ function renderRoster(roster: string[]) {
 }
 
 mapCanvas.addEventListener("click", (e) => {
-  if (!lastPositions) return;
+  if (!lastState) return;
   const r = mapCanvas.getBoundingClientRect();
-  const ids = within(fit(mapCanvas), lastPositions, e.clientX - r.left, e.clientY - r.top);
+  const ids = within(lastState, mapCanvas.clientWidth, e.clientX - r.left, e.clientY - r.top);
   if (ids.length === 1) select(ids[0]);
   else if (ids.length > 1) choose(ids); // dots on top of each other: ask rather than guess
 });
@@ -275,17 +456,18 @@ function choose(ids: string[]) {
 }
 
 let summaryAt = -1;
-function describeMap(t: number, pos: Positions) {
+function describeMap(t: number, s: RadarState, pos: Positions) {
   // The canvas's label, refreshed every few seconds of match time, not every frame.
   if (Math.abs(t - summaryAt) < 5) return;
   summaryAt = t;
   const who = state.selected ? ` ${playerName(state.selected)} is circled.` : "";
-  mapCanvas.setAttribute("aria-label", `Minimap at ${clock(t)}. ${describePlay(pos, playerName)}${who}`);
+  const play = pos.players.length ? ` ${describePlay(pos)}` : "";
+  mapCanvas.setAttribute("aria-label", `Radar at ${clock(t)}. ${describeRadar(s, teams)}${play}${who}`);
 }
 
-// For a fan who cannot see the laptop: one sentence on demand, or, with "Describe as it happens"
-// on, a sentence whenever the play changes (the ball changes half, or the nearest player changes
-// side), at most one every LIVE_GAP_S of match time. The live region reads each one.
+// For a fan who cannot see the big screen: one sentence on demand, or, with "Describe as it
+// happens" on, a sentence whenever the play changes (the ball changes half, or the nearest player
+// changes side), at most one every LIVE_GAP_S of match time. The live region reads each one.
 const LIVE_GAP_S = 8; // design: about one sentence between two passes, so the reader can keep up
 let saidAt = -Infinity;
 let saidKey = "";
@@ -293,7 +475,7 @@ let saidKey = "";
 function sayNow(t: number) {
   if (!lastPositions) return;
   const said = $("now-said");
-  const sentence = `At ${clock(t)}: ${describePlay(lastPositions, playerName)}`;
+  const sentence = `At ${clock(t)}: ${describePlay(lastPositions)}`;
   said.textContent = "";
   saidAt = t;
   requestAnimationFrame(() => (said.textContent = sentence)); // a fresh change, so it is read again
@@ -320,6 +502,26 @@ function announce(text: string) {
   $("announce").textContent = text;
 }
 
+const trail: { frame: number; x: number; y: number }[] = [];
+function drawMap(t: number) {
+  const v = fit(mapCanvas);
+  const s = state.radar!.at(t, !reduceMotion.matches);
+  // The ball's last few tenths of a second, as long as it stays on the same run of frames.
+  if (s.ball) {
+    const last = trail[trail.length - 1];
+    if (last && (s.frame < last.frame || s.frame - last.frame > 2)) trail.length = 0;
+    if (!last || last.frame !== s.frame) trail.push({ frame: s.frame, x: s.ball.x, y: s.ball.y });
+    while (trail.length > TRAIL) trail.shift();
+  } else trail.length = 0;
+  drawRadar(v.ctx, v.w, v.h, s, {
+    reduceMotion: reduceMotion.matches,
+    trail: [...trail, ...(s.ball ? [s.ball] : [])],
+    selected: state.selected,
+  });
+  lastState = s;
+  return s;
+}
+
 // --- the player card -------------------------------------------------------------------------
 
 function select(id: string | null, fromLaptop = false) {
@@ -330,15 +532,15 @@ function select(id: string | null, fromLaptop = false) {
     b.setAttribute("aria-pressed", String(b.dataset.player === id));
   }
   $("player").hidden = id === null;
-  $("pick-hint").hidden = id !== null || state.minimap === null;
+  $("pick-hint").hidden = id !== null || state.radar === null;
   if (id) {
-    $("player-title").textContent = fromLaptop ? `${playerName(id)} · followed from the laptop` : playerName(id);
+    $("player-title").textContent = fromLaptop ? `${playerName(id)} · followed from the big screen` : playerName(id);
     $("player").dataset.team = team(id);
     for (const s of ["speed", "peak", "distance"]) $(s).textContent = "–";
     cardAsked = -1;
     void refreshCard(true);
-    if (fromLaptop) announce(`The laptop is following ${playerName(id)}.`);
-    else {
+    if (fromLaptop) announce(`The big screen is following ${playerName(id)}.`);
+    else if (state.tab === "radar") {
       // Focus moves to the card, so a screen reader lands on it; the page scrolls just enough to show it.
       requestAnimationFrame(() => {
         $("player-title").focus({ preventScroll: true });
@@ -346,7 +548,7 @@ function select(id: string | null, fromLaptop = false) {
       });
     }
   }
-  $("ask-who").textContent = id ? playerName(id) : "a player";
+  $("ask-who").textContent = id ? playerName(id) : "the match";
   renderChips();
 }
 
@@ -410,28 +612,39 @@ function showCard(c: PlayerCard) {
 
 // --- questions -------------------------------------------------------------------------------
 
-function suggestions(id: string | null): string[] {
-  if (!id) return [];
+function playerQuestions(id: string): string[] {
   const n = playerName(id);
   return [`How fast is ${n} running now?`, `What is ${n}'s top speed?`, `How far has ${n} run?`];
 }
 
-function renderChips() {
-  const chips = suggestions(state.selected).map((q) => {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "chip";
-    b.textContent = q;
-    b.addEventListener("click", () => void ask(q));
-    return b;
+/** The match questions the Companion's tools answer with a picture. */
+function matchQuestions(): string[] {
+  return [
+    `Where are ${teams.home} overloading?`,
+    `Which pass broke ${teams.away}'s lines?`,
+    `What are ${teams.home}'s passing options?`,
+    `How are ${teams.away} set up?`,
+    "How are the teams moving?",
+  ];
+}
+
+function chip(q: string, onTab: Tab | null) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "chip";
+  b.textContent = q;
+  b.addEventListener("click", () => {
+    if (onTab) showTab(onTab);
+    void ask(q);
   });
-  if (!chips.length) {
-    const p = document.createElement("p");
-    p.className = "fine";
-    p.textContent = "Pick a player to see suggested questions.";
-    chips.push(p as unknown as HTMLButtonElement);
-  }
-  $("chips").replaceChildren(...chips);
+  return b;
+}
+
+function renderChips() {
+  const own = state.selected ? playerQuestions(state.selected).map((q) => chip(q, "ask")) : [];
+  $("chips").replaceChildren(...own);
+  const all = [...(state.selected ? playerQuestions(state.selected) : []), ...matchQuestions()];
+  $("ask-chips").replaceChildren(...all.map((q) => chip(q, null)));
 }
 
 const STATUS_WORDS: Record<ViewerAnswer["status"], string> = {
@@ -453,11 +666,15 @@ const METRIC_WORDS: Record<string, string> = {
   speed_now: "speed now",
   peak_speed: "top speed",
   distance_run: "distance run",
+  overload: "players in the overload",
+  line_break: "defenders bypassed",
+  pass_options: "open teammates",
 };
 
-/** The API names players by id (a7); fans read "Away 7". Only the names change, never a number. */
-function named(text: string): string {
-  return text.replace(/\b[ha](?:-t\d+|[1-9]|1[01])\b/g, (id) => playerName(id));
+/** The API names players by id (a7); fans read "Fenwick 7", or the name the answer carries. Only
+ * the names change, never a number. */
+function named(text: string, names?: Record<string, string>): string {
+  return nameIds(text, teams, names);
 }
 
 let answerSeq = 0;
@@ -508,10 +725,10 @@ function renderAnswer(question: string, at: number, a: ViewerAnswer | null, fail
   const body = document.createElement("p");
   body.className = "said";
   if (!a) body.textContent = failed;
-  else if (a.status === "verified") body.textContent = named(a.text);
+  else if (a.status === "verified") body.textContent = named(a.text, a.names);
   else if (a.status === "held") body.textContent = "The fact-checking agent has not finished checking this answer, so it is not shown yet.";
   else if (a.status === "rejected") body.textContent = "The fact-checking agent rejected the drafted answer, so nothing is shown.";
-  else body.textContent = named(a.text) || "That is not something the phone can answer. Ask about a player's speed, top speed or distance run.";
+  else body.textContent = named(a.text, a.names) || "That is not something the phone can answer. Ask about a player's speed, an overload or a team's shape.";
   li.append(asked, badge, body);
   if (a && a.status === "verified" && a.value !== null) {
     const big = document.createElement("p");
@@ -519,8 +736,72 @@ function renderAnswer(question: string, at: number, a: ViewerAnswer | null, fail
     big.textContent = `${a.value} ${a.unit ?? ""}`.trim();
     li.insertBefore(big, body);
   }
-  if (a && a.status === "verified") li.append(...evidence(a));
+  if (a && a.status === "verified") {
+    // Only a checked answer draws its picture: the picture carries the same numbers as the text.
+    if (a.visual) li.append(picture(a.visual, a.names));
+    li.append(...evidence(a));
+  }
   return li;
+}
+
+// --- pictures (visual.ts): drawn once the canvas has a size, and again when it changes ---------
+
+const pictures = new Map<HTMLCanvasElement, () => void>();
+function redrawPictures() {
+  for (const [canvas, draw] of pictures) if (canvas.isConnected && canvas.clientWidth) draw();
+}
+const sized = new ResizeObserver((entries) => {
+  for (const e of entries) pictures.get(e.target as HTMLCanvasElement)?.();
+});
+
+/** The answer's or card's picture, with its headline and its words for a screen reader. */
+function picture(v: Visual, names?: Record<string, string>): HTMLElement {
+  const fig = document.createElement("figure");
+  fig.className = "picture";
+  fig.dataset.kind = v.kind;
+  if (!drawable(v)) {
+    // Missing data draws nothing rather than a guess.
+    fig.dataset.kind = "none";
+    fig.textContent = "No picture: the answer's data was incomplete.";
+    return fig;
+  }
+  const canvas = document.createElement("canvas");
+  canvas.setAttribute("role", "img");
+  canvas.setAttribute("aria-label", describeVisual(v, names));
+  canvas.style.aspectRatio = String(aspect());
+  const cap = document.createElement("figcaption");
+  const head = headline(v);
+  cap.textContent = `${head ? `${head} · ` : ""}at ${clock(v.t)}`;
+  fig.dataset.headline = head;
+  fig.append(canvas, cap);
+  const draw = () => {
+    if (!canvas.clientWidth) return;
+    const view = fit(canvas);
+    drawVisual(view, v);
+    if (v.kind === "wind") void windPicture(canvas, v);
+    canvas.dataset.drawn = "1";
+  };
+  pictures.set(canvas, draw);
+  sized.observe(canvas);
+  return fig;
+}
+
+/** The wind picture: both teams' flow over the visual's window, as still arrows (wind.ts). */
+async function windPicture(canvas: HTMLCanvasElement, v: Visual) {
+  if (canvas.dataset.wind === "1") return;
+  canvas.dataset.wind = "1";
+  try {
+    const mod = await import("./wind");
+    const map = new mod.WindMap(() => fit(canvas));
+    const flows = await Promise.all((["home", "away"] as const).map((side) => feed.flow(state.clip, side, v.t_from!, v.t_to!)));
+    for (const f of flows) map.set(f);
+    drawPitch(fit(canvas));
+    map.still(false);
+    canvas.setAttribute("aria-label", `${describeVisual(v)} ${flows.map((f) => mod.describe(f)).join(" ")}`);
+  } catch (e) {
+    canvas.dataset.wind = "";
+    canvas.setAttribute("aria-label", `No picture: ${(e as Error).message}`);
+  }
 }
 
 /** The answer's evidence behind one button: what was measured, over which stretch, from which facts. */
@@ -537,9 +818,9 @@ function evidence(a: ViewerAnswer): HTMLElement[] {
   const who = a.evidence.map((id) => /player_([ha](?:-t\d+|[1-9]|1[01]))_/.exec(id)?.[1]).find(Boolean);
   const what = a.metric ? METRIC_WORDS[a.metric] ?? a.metric.replace(/_/g, " ") : "";
   const rows: [string, string][] = [
-    ["What", `${who ? `${playerName(who)}'s ` : ""}${what}${a.value !== null ? `: ${a.value} ${a.unit ?? ""}`.trimEnd() : ""}`],
+    ["What", `${who ? `${playerName(who, a.names)}'s ` : ""}${what}${a.value !== null ? `: ${a.value} ${a.unit ?? ""}`.trimEnd() : ""}`],
   ];
-  if (a.t_from !== null && a.t_to !== null) rows.push(["Over", `${clock(a.t_from)} to ${clock(a.t_to)} of the match`]);
+  if (a.t_from !== null && a.t_to !== null) rows.push(["Over", a.t_from === a.t_to ? `${clock(a.t_from)} of the match` : `${clock(a.t_from)} to ${clock(a.t_to)} of the match`]);
   rows.push(["Computed by", `code, from ${feed.mock ? "the mock positions" : "positions tracked from the video"}`]);
   rows.push(
     a.source === "model"
@@ -580,7 +861,132 @@ $("ask-form").addEventListener("submit", (e) => {
   void ask($<HTMLInputElement>("question").value);
 });
 
-// --- the wind map (first in the cut order: wind.ts loads only when turned on) ----------------
+// --- insights: the hidden-stat cards pushed so far -----------------------------------------------
+
+let unread = 0;
+let insightsAt = 0;
+let insightsBusy = false;
+let insightsShownTo = -1;
+
+function showUnread() {
+  const badge = $("insights-new");
+  badge.hidden = unread === 0;
+  badge.textContent = unread ? `${unread} new` : "";
+}
+
+async function refreshInsights(force = false) {
+  if (!state.code || insightsBusy || (!force && performance.now() - insightsAt < INSIGHTS_EVERY_MS)) return;
+  insightsBusy = true;
+  insightsAt = performance.now();
+  const t = laptop.time();
+  try {
+    const cards = await feed.insights(state.clip, t);
+    // A replay must not show what is still to come: only cards up to the big screen's clock.
+    const shown = cards.filter((c) => c.t <= t + 1e-6).sort((a, b) => b.t - a.t);
+    const known = new Set(state.insights.map((c) => c.id));
+    const fresh = shown.filter((c) => !known.has(c.id));
+    const rewound = shown.length < state.insights.length; // the big screen went back in the match
+    if (fresh.length || rewound) {
+      state.insights = shown;
+      renderInsights();
+      if (fresh.length && !rewound && insightsShownTo >= 0) {
+        if (state.tab !== "insights") unread += fresh.length;
+        showUnread();
+        announce(`New insight: ${fresh[0].title}.`);
+      }
+    }
+    insightsShownTo = t;
+    $("insights-note").textContent = "What the broadcast can't show, computed by code from the tracked positions, newest first.";
+  } catch (e) {
+    $("insights-note").textContent =
+      e instanceof ApiError && e.status === 404 ? "No hidden stats for this match yet." : e instanceof GroundTruth ? e.message : `Could not load the hidden stats: ${(e as Error).message}`;
+  } finally {
+    insightsBusy = false;
+  }
+}
+
+function renderInsights() {
+  const list = $("insights");
+  if (!state.insights.length) {
+    const li = document.createElement("li");
+    li.className = "fine";
+    li.textContent = "Nothing yet: hidden stats appear here as the match goes on.";
+    list.replaceChildren(li);
+    return;
+  }
+  list.replaceChildren(
+    ...state.insights.map((c) => {
+      const li = document.createElement("li");
+      li.className = `insight ${c.team}`;
+      li.dataset.id = c.id;
+      const head = document.createElement("div");
+      head.className = "insight-head";
+      const title = document.createElement("h3");
+      title.textContent = named(c.title, c.names);
+      const when = document.createElement("span");
+      when.className = "when";
+      when.textContent = `${teams[c.team]} · ${clock(c.t)}`;
+      head.append(title, when);
+      const text = document.createElement("p");
+      text.textContent = named(c.text, c.names);
+      li.append(head, text);
+      if (c.visual) li.append(picture(c.visual, c.names));
+      const why = document.createElement("button");
+      why.type = "button";
+      why.className = "why";
+      why.textContent = "Why?";
+      why.setAttribute("aria-label", `Why? Ask the Companion: ${c.question}`);
+      why.addEventListener("click", () => {
+        showTab("ask");
+        void ask(c.question);
+      });
+      li.append(why);
+      return li;
+    }),
+  );
+}
+
+// --- team stats and the score, from the bundle's match.json (match mode) -----------------------
+
+let statsKey = "";
+function showMatch(t: number) {
+  const m = state.match;
+  if (!m) return;
+  const s = scoreAt(m, t);
+  const v = laptop.cuts ? laptop.cuts.videoTime(t) : t;
+  const c = chapterAt(m.chapters, bundleFps, v);
+  const line = $("scoreline");
+  line.hidden = false;
+  const text = `${teams.home} ${s.home} – ${s.away} ${teams.away}${c ? ` · ${chapterLabel(c, teams)}` : ""}`;
+  if (line.textContent !== text) line.textContent = text;
+  const st = statsAt(m, t);
+  const key = JSON.stringify(st);
+  if (key === statsKey) return;
+  statsKey = key;
+  const cell = (tag: "td" | "th", text: string, scope?: string) => {
+    const el = document.createElement(tag);
+    el.textContent = text;
+    if (scope) el.setAttribute("scope", scope);
+    return el;
+  };
+  const head = document.createElement("tr");
+  head.append(cell("th", ""), cell("th", teams.home, "col"), cell("th", teams.away, "col"));
+  const rows: [string, (x: typeof st.home) => string][] = [
+    ["Goals", (x) => String(x.goals)],
+    ["Shots (on target)", (x) => `${x.shots} (${x.shots_on_target})`],
+    ["Passes completed", (x) => `${x.passes_completed} of ${x.passes_attempted}`],
+  ];
+  $("team-stats").replaceChildren(
+    head,
+    ...rows.map(([name, f]) => {
+      const tr = document.createElement("tr");
+      tr.append(cell("th", name, "row"), cell("td", f(st.home)), cell("td", f(st.away)));
+      return tr;
+    }),
+  );
+}
+
+// --- the wind map on the radar (first in the cut order: wind.ts loads only when turned on) -----
 
 type Wind = import("./wind").WindMap;
 let wind: Wind | null = null;
@@ -613,10 +1019,7 @@ async function refreshFlow() {
     for (const f of flows) wind.set(f);
     const words = $("wind-words");
     words.replaceChildren(
-      ...[
-        `Team movement over the last ${WINDOW_S} seconds.`,
-        ...flows.map((f) => windWords!(f)),
-      ].map((s) => {
+      ...[`Team movement over the last ${WINDOW_S} seconds.`, ...flows.map((f) => windWords!(f))].map((s) => {
         const p = document.createElement("p");
         p.textContent = s;
         return p;
@@ -637,23 +1040,24 @@ function frame(now: number) {
   $("clock").textContent = link ? clock(t) : "–:––";
   if (link) {
     if (!laptop.heard) setStatus("waiting", "Waiting");
-    else if (laptop.stale()) setStatus("waiting", "Laptop lost");
-    else if (state.refused !== null) setStatus("paused", "Clock only");
+    else if (laptop.stale()) setStatus("waiting", "Screen lost");
+    else if (state.radar === null && state.refused !== null) setStatus("paused", "Clock only");
     else if (laptop.isPlaying()) setStatus("synced", "Synced");
     else setStatus("paused", "Paused");
+    showMatch(t);
+    void refreshInsights();
   }
-  if (state.minimap && !$("live").hidden) {
-    const v: View = fit(mapCanvas);
-    const pos = positionsAt(state.minimap, t);
-    drawPitch(v);
-    if (pos) {
-      drawPlayers(v, pos, state.selected);
-      lastPositions = pos;
-      describeMap(t, pos);
-      liveDescription(t, pos);
+  if (state.radar && !$("live").hidden) {
+    if (state.tab === "radar") {
+      const s = drawMap(t);
+      const pos: Positions = { ball: s.ball ? [s.ball.x, s.ball.y] : [52.5, 34], players: s.players.map((p) => [p.id, p.x, p.y]) };
+      lastPositions = s.ball ? pos : null;
+      describeMap(t, s, pos);
+      if (lastPositions) liveDescription(t, lastPositions);
+      mapCanvas.dataset.frame = String(s.frame);
+      mapCanvas.dataset.dots = String(s.players.length);
     }
     mapCanvas.dataset.t = t.toFixed(2);
-    mapCanvas.dataset.dots = String(pos?.players.length ?? 0);
     void refreshCard();
     void refreshFlow();
     if (state.wind && wind) {
@@ -672,6 +1076,7 @@ $("mockbar").hidden = !feed.mock;
 const header = document.querySelector<HTMLElement>(".sticky")!;
 new ResizeObserver(() => document.documentElement.style.setProperty("--header-h", `${header.offsetHeight + 8}px`)).observe(header);
 renderChips();
+renderInsights();
 requestAnimationFrame(frame);
 const start = params.get("code");
 if (start) {

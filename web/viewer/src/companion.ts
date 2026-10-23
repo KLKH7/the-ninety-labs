@@ -1,7 +1,9 @@
 // "Connect your phone": pairs this viewer with the phone companion (web/phone) through the API's
 // rooms (ninety/api/companion.py). The laptop asks for a 6-character code, shows it with a QR code
 // of the phone's address, and sends its clock to the room: about once a second while it plays, and
-// at once on every play, pause and seek, so the phones stay in step with the video.
+// at once on every play, pause and seek, so the phones stay in step with the video. The clock is
+// match time; the QR code also names the bundle, so the phone reads the same cuts (segments) and
+// tracked positions and runs its clock across a cut the way the video does.
 
 import qrcode from "qrcode-generator";
 
@@ -25,11 +27,16 @@ export class PhonePanel {
   private sentPlaying = false;
   private code = "";
 
+  /** `bundle` is the bundle's path on this origin; `auto` pairs at once (the big screen shows its
+   * QR code without a click). */
   constructor(
     private readonly clip: string,
     private readonly playback: Playback,
+    private readonly bundle: string,
+    auto = false,
   ) {
     $("phone-pair").addEventListener("click", () => void this.pair());
+    if (auto) void this.pair();
   }
 
   private say(state: string, error = "") {
@@ -73,7 +80,7 @@ export class PhonePanel {
   }
 
   private show(code: string) {
-    const url = new URL(`phone/?${new URLSearchParams({ code, clip: this.clip })}`, location.href).toString();
+    const url = new URL(`phone/?${new URLSearchParams({ code, clip: this.clip, bundle: this.bundle })}`, location.href).toString();
     const qr = qrcode(0, "M");
     qr.addData(url);
     qr.make();

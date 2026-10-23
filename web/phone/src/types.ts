@@ -1,3 +1,5 @@
+import { DEFAULT_TEAMS, type TeamNames, playerLabel } from "../../viewer/src/teams";
+
 // The shapes the phone reads, mirroring schemas/companion_message.schema.json,
 // schemas/minimap.schema.json, schemas/viewer_question.schema.json and viewer_answer.schema.json.
 // tests/test_phone.py validates every payload the phone received against those schemas.
@@ -66,6 +68,53 @@ export interface Question {
   t: number;
 }
 
+/** What an answer's or a card's picture shows (schemas/viewer_answer.schema.json, `visual`). Every
+ * position and number in it comes from the tool the agent cited; the phone only draws it. */
+export type VisualKind = "overload" | "line_break" | "pass_options" | "shape" | "wind";
+export type VisualRole = "attacker" | "defender" | "passer" | "receiver" | "bypassed" | "open" | "marked" | "carrier";
+export interface Point {
+  x: number;
+  y: number;
+}
+export interface VisualPlayer extends Point {
+  id: string;
+  team: Team;
+  role?: VisualRole;
+}
+export interface Visual {
+  kind: VisualKind;
+  t: number;
+  team: Team;
+  players: VisualPlayer[];
+  ball?: Point | null;
+  zone?: { x0: number; x1: number; y0: number; y1: number } | null;
+  count?: { for: number; against: number } | null;
+  pass?: { from: Point; to: Point } | null;
+  bypassed?: number | null;
+  lines?: Point[][] | null;
+  t_from?: number | null;
+  t_to?: number | null;
+}
+
+/** A pushed "hidden stat" (schemas/companion_message.schema.json, `insight_card`). */
+export interface InsightCard {
+  type: "insight_card";
+  id: string;
+  t: number;
+  team: Team;
+  title: string;
+  text: string;
+  metric: string | null;
+  value: number | null;
+  unit: string | null;
+  evidence: string[];
+  visual: Visual | null;
+  /** What "Why?" asks the Companion. */
+  question: string;
+  names?: Record<string, string>;
+  source: Source;
+}
+
 export interface ViewerAnswer {
   status: "verified" | "held" | "rejected" | "unanswerable";
   /** Who wrote the text, copied from the answer message's `source` (main.ts): "model" (the
@@ -79,6 +128,11 @@ export interface ViewerAnswer {
   evidence: string[];
   t_from: number | null;
   t_to: number | null;
+  /** The picture the answer's tool data draws, when it has one. */
+  visual?: Visual | null;
+  /** A label for a player only where the names tool gave one: a name, or a role. */
+  names?: Record<string, string>;
+  teams?: TeamNames;
 }
 
 export interface AnswerMessage {
@@ -106,10 +160,13 @@ export function shirt(player: string): string {
   return isTrack(player) ? player.slice(3) : player.slice(1);
 }
 
-/** "Home 7" for h7, "Away player · track 12" for the tracked a-t12: never an invented shirt number. */
-export function playerName(player: string): string {
-  const side = team(player) === "home" ? "Home" : "Away";
-  return isTrack(player) ? `${side} player · track ${shirt(player)}` : `${side} ${shirt(player)}`;
+/** The clubs on this phone's screen: the bundle's, or the default (viewer/src/teams.ts). */
+export const teams: TeamNames = { ...DEFAULT_TEAMS };
+
+/** How a fan reads a player (viewer/src/teams.ts, `playerLabel`): the name or role a payload
+ * gives, else the club and shirt, or the club and the tracker's number. */
+export function playerName(player: string, names?: Record<string, string>): string {
+  return playerLabel(player, teams, names);
 }
 
 /** Match time as m:ss. */

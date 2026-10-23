@@ -39,8 +39,8 @@
           <button type="button" id="play" aria-label="Play">Play</button>
           <input type="range" id="scrub" min="0" max="1" step="0.04" value="0" aria-label="Position in the clip" />
           <output id="clock" aria-live="off">00:00</output>
-          <label class="toggle"><input type="checkbox" id="show-boxes" checked /> Detections <kbd>D</kbd></label>
-          <label class="toggle"><input type="checkbox" id="show-radar" checked /> Radar <kbd>M</kbd></label>
+          <label class="toggle dev-only"><input type="checkbox" id="show-boxes" checked /> Detections <kbd>D</kbd></label>
+          <label class="toggle dev-only"><input type="checkbox" id="show-radar" checked /> Radar <kbd>M</kbd></label>
           <label class="toggle" id="voice-toggle" hidden><input type="checkbox" id="voice" checked /> Voice <kbd>V</kbd></label>
         </div>
         <nav class="chapter-bar" aria-label="Chapters">
@@ -50,7 +50,7 @@
         <p class="sr-only" id="on-air" aria-live="polite"></p>
         <p class="keys">
           <kbd>Space</kbd> play or pause · <kbd>←</kbd> <kbd>→</kbd> 1 s · <kbd>,</kbd> <kbd>.</kbd> one frame ·
-          <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> persona · <kbd>D</kbd> detections · <kbd>M</kbd> radar
+          <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> persona<span class="dev-only"> · <kbd>D</kbd> detections · <kbd>M</kbd> radar</span>
           <span class="match-keys">· <kbd>[</kbd> <kbd>]</kbd> chapter</span>
           <span id="audio-keys" hidden>· <kbd>V</kbd> voice on or off · <kbd>R</kbd> repeat the last description</span>
         </p>
@@ -59,7 +59,7 @@
       <dl class="pipeline" id="pipeline" aria-label="What ran"></dl>
 
       <div class="side">
-      <section class="radar-panel" aria-labelledby="radar-title">
+      <section class="radar-panel" id="radar-section" aria-labelledby="radar-title">
         <div class="radar-head">
           <h2 id="radar-title">Radar</h2>
           <span class="radar-source">from the video's tracking</span>
@@ -67,8 +67,8 @@
         <div id="radar-panel">
           <canvas id="radar" tabindex="0" role="img" aria-label="Radar"></canvas>
           <ul class="radar-legend" id="radar-legend">
-            <li><span class="key home"></span>Home <span class="dir">attacks →</span></li>
-            <li><span class="key away"></span>Away</li>
+            <li><span class="key home"></span><span id="radar-home">Oakfield</span> <span class="dir">attacks →</span></li>
+            <li><span class="key away"></span><span id="radar-away">Fenwick</span></li>
             <li><span class="key guess"></span>Estimated</li>
             <li><span class="key view"></span>TV camera</li>
           </ul>
@@ -83,8 +83,8 @@
         <table class="stats" id="stats-table"></table>
       </section>
       <section class="phone-panel" id="phone-panel" aria-labelledby="phone-title">
-        <h2 id="phone-title">Connect your phone</h2>
-        <p class="hint">A minimap in step with this video, each player's speed and heat map, and fact-checked answers to your questions.</p>
+        <h2 id="phone-title">Follow on your phone</h2>
+        <p class="hint">A live radar of all 22 players in step with this video, the hidden stats, and fact-checked answers to your questions.</p>
         <button type="button" id="phone-pair">Show a pairing code</button>
         <div id="phone-pairing" hidden>
           <div class="phone-qr" id="phone-qr" role="img" aria-label="QR code that opens the phone companion with this code"></div>

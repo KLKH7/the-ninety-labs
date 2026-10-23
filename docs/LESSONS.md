@@ -2250,3 +2250,31 @@ short and actionable. This file is public: no research sources, product names or
   (the true lens fits, its mirror does not, the flipped picture does);
   `::test_the_compass_search_walks_on_where_the_free_step_stalls` fails with the compass search
   removed from `pitch.settle` (a half-size scene did not stall, so the stalled view is a fixture).
+
+### 224. Every picture of the pitch goes through one projection, and its words follow the engine
+- **What happened:** the phone's minimap drew pitch metres with its own projection, y = 0 at the
+  top, while the TV picture and the viewer's radar put the y = 0 touchline at the bottom, where the
+  broadcast camera stands. The phone showed the match upside down beside the screen it follows,
+  and its heat map and wind map with it. Its "left" and "right" flank words had been written to
+  match that drawing, so they were wrong too: the engine starts a home left-back at 0.85 of the
+  width, which the phone called the right. Its tests tapped dots with the same y-down formula, so
+  they agreed with the bug.
+- **Rule:** every drawing of the pitch on any screen (radar, heat map, wind map, answer pictures)
+  goes through `web/viewer/src/radar.ts`'s `projection`, and taps are hit-tested through it. Words
+  for a place on the pitch are grounded in the engine's own coordinates, not in a drawing. A test
+  that finds a dot asks the page where it drew it, and checks which way up that is.
+- **Check:** `tests/test_phone_companion.py::test_the_radar_is_drawn_the_way_up_the_tv_shows_it_and_a_tap_finds_the_dot`
+  (a player 20 m from the near touchline is below halfway); `tests/test_phone.py`'s tap test asks
+  `ninetyPhone.screenOf` and asserts the same.
+
+### 225. A second screen runs on the first screen's clock, cuts included
+- **What happened:** the viewer sent the phone `t_start` plus the video's time, which is the match
+  time only while the clip has no cut; a condensed match is all cuts. Between messages the phone
+  ran its clock on in match time, so even with the right message it slid into the stretch of the
+  match the broadcast skipped, drawing the radar where the video never was for up to a second.
+- **Rule:** one clock for every screen (lesson 33): the big screen sends match time from the same
+  function the graphics use, and the phone reads the bundle's cuts and runs on in video time
+  between messages, as the video does.
+- **Check:** `tests/test_match_mode.py::test_the_big_screen_pairs_at_once_and_sends_the_phone_match_time_across_the_cut`
+  fails with `t_start + video time`; `tests/test_phone_companion.py::test_the_phone_clock_jumps_the_cut_with_the_video_and_never_shows_the_gap`
+  fails with the cuts dropped from `LaptopClock.time`.

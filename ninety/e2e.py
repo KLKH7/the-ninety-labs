@@ -86,6 +86,13 @@ class Clip:
         return sorted((self.dir / "images").glob("*.jpg"))
 
 
+
+def teams_of(meta: dict) -> dict | None:
+    """The home and away codes the clip was rendered with, or None for a clip without them."""
+    params = meta.get("params", {})
+    home, away = params.get("home_code"), params.get("away_code")
+    return {"home": home, "away": away} if home and away else None
+
 def load_clip(clip_dir: Path) -> Clip:
     meta = json.loads((clip_dir / "clip.json").read_text())
     return Clip(clip_dir, meta)
@@ -339,6 +346,9 @@ async def run(args: argparse.Namespace) -> dict:
         "t_start": clip.meta["t_start"],
         # Which match frame each image shows, across the broadcast's cuts (ninety/match/timeline.py).
         "segments": [s.as_dict() for s in timeline.segs],
+        # The clubs' fictional codes the scorebug draws (ninety/render/params.py, TEAM_CODES); the
+        # viewer and the phone name the clubs from them (web/viewer/src/teams.ts).
+        "teams": teams_of(clip.meta),
         "footage": footage,
         "detector": None if model is None else f"{model.name} {model.size} {model.checkpoint}",
         "detections": {"source": "live" if args.detect == "live" else "recorded", "frames": len(detections)},

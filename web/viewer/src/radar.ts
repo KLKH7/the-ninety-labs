@@ -7,6 +7,7 @@
 // side of a cut.
 
 import type { Manifest } from "./bundle";
+import { type TeamNames, DEFAULT_TEAMS } from "./teams";
 
 /** One tracked frame: schemas/frame.schema.json with `source: tracked` (ninety/vision/tracked_frames.py). */
 export interface TrackedFrame {
@@ -123,7 +124,7 @@ function place(s: Sighting[], f: number, lo: number, hi: number, smooth: boolean
 
 /** Video time against match time across the broadcast's cuts (ninety/match/timeline.py): a bundle
  * without segments is one run of frames from its start. */
-export function timeline(m: Pick<Manifest, "segments" | "t_start" | "fps" | "footage">) {
+export function timeline(m: Pick<Manifest, "segments" | "t_start" | "fps"> & { footage: { frames: number } }) {
   const segs: Segment[] = m.segments?.length
     ? m.segments
     : [{ index: 0, frame: Math.round(m.t_start * m.fps), frames: m.footage.frames }];
@@ -157,12 +158,15 @@ export class RadarModel {
   private views = new Map<number, View>();
   private viewFrames: Sighting[] = []; // frames with a footprint, for the nearest one
 
+  /** `allowed` is the one source of positions this radar draws: "tracked" (vision's output), or
+   * "mock" for the phone's own made-up feed (web/phone/src/mock.ts), which says so on screen. */
   constructor(
     data: RadarData,
     private fps: number,
     private segmentOf: (k: number) => [number, number],
+    allowed: "tracked" | "mock" = "tracked",
   ) {
-    if (data.source !== "tracked" || data.frames.some((f) => f.source !== "tracked")) {
+    if (data.source !== allowed || data.frames.some((f) => f.source !== allowed)) {
       // The answer key never reaches the screen (AGENTS.md); ninety/radar.py refuses it too.
       throw new Error("radar.json holds positions that are not vision's tracked output");
     }
@@ -180,6 +184,11 @@ export class RadarModel {
       if (v.footprint) this.viewFrames.push({ frame: v.frame, x: 0, y: 0 });
     }
     this.viewFrames.sort((a, b) => a.frame - b.frame);
+  }
+
+  /** Every player the radar holds a track for. */
+  ids(): { id: string; team: "home" | "away" }[] {
+    return [...this.players].map(([id, t]) => ({ id, team: t.team }));
   }
 
   /** What the radar shows at match time `t`. `smooth` glides between frames; without it (reduced
@@ -286,6 +295,8 @@ function drawPitch(ctx: CanvasRenderingContext2D, p: Projection, w: number, h: n
 export interface DrawOptions {
   reduceMotion: boolean;
   trail: { x: number; y: number }[]; // the ball's last places, oldest first
+  /** The player the phone has picked: ringed in white and drawn on top. */
+  selected?: string | null;
 }
 
 /** Marks never shrink below these, so a dot reads at phone width (CSS pixels). */
@@ -323,7 +334,8 @@ export function drawRadar(ctx: CanvasRenderingContext2D, w: number, h: number, s
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   // Seen players over estimated ones, so a hollow ring never hides a filled dot.
-  const order = [...state.players].sort((a, b) => Number(b.estimated) - Number(a.estimated));
+  const rank = (pl: RadarPlayer) => (pl.id === o.selected ? 2 : pl.estimated ? 0 : 1);
+  const order = [...state.players].sort((a, b) => rank(a) - rank(b));
   for (const pl of order) {
     const st = markStyle(pl.estimated);
     const home = pl.team === "home";
@@ -346,6 +358,14 @@ export function drawRadar(ctx: CanvasRenderingContext2D, w: number, h: number, s
     } else {
       ctx.lineWidth = 2;
       ctx.strokeStyle = fill;
+      ctx.stroke();
+    }
+    if (pl.id === o.selected) {
+      ctx.globalAlpha = 1;
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = "#fff";
+      ctx.beginPath();
+      ctx.arc(X(pl.x), Y(pl.y), r + 3.5, 0, Math.PI * 2);
       ctx.stroke();
     }
   }
@@ -388,14 +408,28 @@ export function drawRadar(ctx: CanvasRenderingContext2D, w: number, h: number, s
   }
 }
 
+/** The players whose marks are within `reach` CSS pixels of (x, y) on a canvas `w` wide, nearest
+ * first: a tap's 44 px target (WCAG 2.5.5) is a 22 px reach. Uses the same projection as the
+ * drawing, so a tap lands on the dot the eye sees. */
+export function within(state: RadarState | null, w: number, x: number, y: number, reach = 22): string[] {
+  if (!state) return [];
+  const p = projection(w);
+  return state.players
+    .map((pl) => [pl.id, Math.hypot(p.X(pl.x) - x, p.Y(pl.y) - y)] as const)
+    .filter(([, d]) => d < reach)
+    .sort((a, b) => a[1] - b[1])
+    .map(([id]) => id);
+}
+
 /** Words for a screen reader: what the radar shows, in the pitch's thirds. */
-export function describe(state: RadarState | null): string {
+export function describe(state: RadarState | null, teams: TeamNames = DEFAULT_TEAMS): string {
   if (!state || (!state.players.length && !state.ball)) return "Radar: no tracked positions at this moment.";
   const home = state.players.filter((p) => p.team === "home").length;
   const away = state.players.length - home;
   const guessed = state.players.filter((p) => p.estimated).length;
-  const third = (x: number) => (x < PITCH_X / 3 ? "home's defensive third" : x < (2 * PITCH_X) / 3 ? "the middle third" : "home's attacking third");
-  const parts = [`Radar: ${home} home and ${away} away players tracked${guessed ? `, ${guessed} placed between sightings` : ""}`];
+  const third = (x: number) =>
+    x < PITCH_X / 3 ? `${teams.home}'s defensive third` : x < (2 * PITCH_X) / 3 ? "the middle third" : `${teams.home}'s attacking third`;
+  const parts = [`Radar: ${home} ${teams.home} and ${away} ${teams.away} players tracked${guessed ? `, ${guessed} placed between sightings` : ""}`];
   if (state.ball) parts.push(`the ball in ${third(state.ball.x)}${state.ball.estimated ? ", estimated" : ""}`);
   if (state.footprint) {
     const xs = state.footprint.points.map(([x]) => Math.min(PITCH_X, Math.max(0, x)));

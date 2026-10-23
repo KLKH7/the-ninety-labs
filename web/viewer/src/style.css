@@ -148,3 +148,20 @@ body:not([data-mode="match"]) .chapter-bar, body:not([data-mode="match"]) .match
 .stats tr:first-child th { border-top: 0; color: var(--muted); font-weight: 600; font-size: 0.8rem; }
 .stats th[scope="row"] { text-align: left; color: var(--muted); font-weight: 500; }
 .stats td { font-weight: 700; }
+
+/* The big screen (main.ts, bigScreen): the broadcast, its graphics, score and clock, the chapters
+   and the QR code; everything else is on the phone. ?dev=1 shows it all. */
+body[data-screen="big"] .dev-only,
+body[data-screen="big"] .skip,
+body[data-screen="big"] #radar-section,
+body[data-screen="big"] .stats-panel,
+body[data-screen="big"] .trace,
+body[data-screen="big"] .layout > .pipeline,
+body[data-screen="big"] .match-honest:not(.warn) { display: none !important; }
+body[data-screen="big"] .layout { grid-template-columns: minmax(0, 1fr) 240px; grid-template-areas: "player side"; grid-template-rows: auto; }
+body[data-screen="big"] .phone-panel { position: sticky; top: 16px; text-align: center; }
+body[data-screen="big"] .phone-panel .hint { font-size: 0.8rem; }
+body[data-screen="big"] .phone-qr { width: 100%; max-width: 208px; margin: 10px auto 6px; }
+body[data-screen="big"] #phone-pair { display: none; }
+body[data-screen="big"] #phone-pairing .phone-code { font-size: 1.5rem; }
+@media (max-width: 900px) { body[data-screen="big"] .layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "player" "side"; } }

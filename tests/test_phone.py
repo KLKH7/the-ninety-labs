@@ -185,7 +185,7 @@ def test_pairing_by_code_refuses_a_wrong_code_then_shows_the_minimap(browser, mo
     assert "6 letters and digits" in phone.inner_text("#pair-error")
     phone.fill("#code", "zzzzzz")  # well formed, but no laptop shows it
     phone.click("#connect")
-    phone.wait_for_function("document.querySelector('#pair-error').textContent.includes('No laptop')")
+    phone.wait_for_function("document.querySelector('#pair-error').textContent.includes('No screen')")
     assert phone.get_attribute("body", "data-state") == "pair"
 
     phone.fill("#code", MOCK_CODE.lower())  # typed in lower case on a phone keyboard
@@ -223,22 +223,25 @@ def test_tapping_a_player_shows_their_speed_and_heat_map(browser, mock_site):
     phone.wait_for_function("document.querySelector('#status').textContent === 'Paused'")
     box = phone.locator("#map").bounding_box()
     player, x, y = phone.evaluate("window.ninetyPhone.positions().players.find(p => p[0] === 'a7')")
-    phone.touchscreen.tap(box["x"] + x / 105 * box["width"], box["y"] + y / 68 * box["height"])
+    # Where the radar draws a7, through its own projection: y = 0 at the bottom, as on the TV.
+    sx, sy = phone.evaluate(f"window.ninetyPhone.screenOf({x}, {y})")
+    assert sy > box["height"] / 2 if y < 34 else sy < box["height"] / 2
+    phone.touchscreen.tap(box["x"] + sx, box["y"] + sy)
     if phone.is_visible("#which"):  # another dot under the thumb: the phone asks which
-        phone.locator("#which").get_by_role("button", name="Away 7").click()
+        phone.locator("#which").get_by_role("button", name="Fenwick 7").click()
     phone.wait_for_selector("#player:not([hidden])")
     # A screen reader lands on the card.
     phone.wait_for_function("document.activeElement.id === 'player-title'")
-    assert phone.inner_text("#player-title") == "Away 7"
+    assert phone.inner_text("#player-title") == "Fenwick 7"
     phone.wait_for_function("document.querySelector('#speed').textContent !== '–'")
     assert float(phone.inner_text("#speed")) >= 0
     assert float(phone.inner_text("#peak")) >= float(phone.inner_text("#speed"))
-    assert "Heat map of Away 7: Most often in his" in phone.get_attribute("#heat", "aria-label")
+    assert "Heat map of Fenwick 7: Most often in his" in phone.get_attribute("#heat", "aria-label")
     assert phone.inner_text("#heat-span").startswith("Covering ")
     # The same choice without the map, for a screen reader: the roster's buttons.
     phone.click("#roster-box summary")
-    phone.get_by_role("button", name="Home 4", exact=True).click()
-    assert phone.inner_text("#player-title") == "Home 4"
+    phone.get_by_role("button", name="Oakfield 4", exact=True).click()
+    assert phone.inner_text("#player-title") == "Oakfield 4"
     assert phone.get_attribute("#roster [data-player=h4]", "aria-pressed") == "true"
     assert not errors
 
@@ -246,8 +249,9 @@ def test_tapping_a_player_shows_their_speed_and_heat_map(browser, mock_site):
 def test_answers_show_their_evidence_one_tap_away(browser, mock_site):
     laptop, phone, errors, _ = mock_pair(browser, mock_site)
     phone.click("#roster-box summary")
-    phone.get_by_role("button", name="Away 7", exact=True).click()
-    phone.get_by_role("button", name="What is Away 7's top speed?").click()
+    phone.get_by_role("button", name="Fenwick 7", exact=True).click()
+    phone.get_by_role("button", name="What is Fenwick 7's top speed?").click()  # on the player card
+    assert phone.get_attribute("#tab-ask", "aria-selected") == "true"  # the answer is on the Ask tab
     answer = phone.locator("#answers .answer").first
     answer.wait_for()
     assert answer.get_attribute("data-status") == "verified"
@@ -259,17 +263,18 @@ def test_answers_show_their_evidence_one_tap_away(browser, mock_site):
     toggle.click()  # one tap
     assert toggle.get_attribute("aria-expanded") == "true" and toggle.text_content() == "Hide the evidence"
     assert evidence.is_visible()
-    assert "Away 7's top speed" in evidence.inner_text() and "no AI wrote it" in evidence.inner_text()
+    assert "Fenwick 7's top speed" in evidence.inner_text() and "no AI wrote it" in evidence.inner_text()
     answer.get_by_text("Technical detail").click()
     assert re.search(r"peak_speed:player_a7_window_0\.00-\d+\.\d\d", evidence.inner_text())
-    assert "Away 7's top speed so far" in answer.locator(".said").inner_text()  # names, not ids
+    assert "Fenwick 7's top speed so far" in answer.locator(".said").inner_text()  # names, not ids
     assert not errors
 
 
 def test_an_injected_question_is_refused_and_shown_only_as_text(browser, mock_site):
     laptop, phone, errors, _ = mock_pair(browser, mock_site)
     phone.click("#roster-box summary")
-    phone.get_by_role("button", name="Away 7", exact=True).click()
+    phone.get_by_role("button", name="Fenwick 7", exact=True).click()
+    phone.click("#tab-ask")
     phone.fill("#question", INJECTION)
     phone.click("#ask-button")
     answer = phone.locator("#answers .answer").first
@@ -290,7 +295,8 @@ def test_a_screen_reader_hears_the_play_described_and_never_an_old_sentence_as_n
     assert said.get_attribute("aria-live") == "polite"
     phone.check("#now-live")  # describe as it happens
     phone.wait_for_function("document.querySelector('#now-said').textContent.startsWith('At ')")
-    assert re.search(r"The ball is .+\. (Home|Away) \d+ is nearest it, in (Home|Away)'s", said.inner_text())
+    club = "(Oakfield|Fenwick)"
+    assert re.search(rf"The ball is .+\. {club} \d+ is nearest it, in {club}'s", said.inner_text())
     phone.wait_for_function("document.querySelector('#now-age').textContent.includes('s ago')")
     assert not errors
 
@@ -298,9 +304,10 @@ def test_a_screen_reader_hears_the_play_described_and_never_an_old_sentence_as_n
 def test_every_payload_the_phone_receives_matches_its_schema(browser, mock_site):
     laptop, phone, errors, _ = mock_pair(browser, mock_site)
     laptop.select_option("#focus", "h9")  # the laptop's focus: the phone follows it
-    phone.wait_for_function("document.querySelector('#player-title').textContent.startsWith('Home 9')")
-    phone.get_by_role("button", name="How far has Home 9 run?").click()
+    phone.wait_for_function("document.querySelector('#player-title').textContent.startsWith('Oakfield 9')")
+    phone.get_by_role("button", name="How far has Oakfield 9 run?").click()
     phone.locator("#answers .answer").first.wait_for()
+    phone.click("#tab-radar")
     phone.click("#wind-toggle")
     phone.wait_for_function("document.querySelector('#wind').dataset.t")
     payloads = seen(phone)
@@ -319,7 +326,7 @@ def test_the_wind_map_loads_only_when_turned_on_and_describes_both_teams(browser
     phone.wait_for_function("document.querySelector('#wind').dataset.t")
     assert [u for u in requests if "/wind-" in u]
     words = phone.inner_text("#wind-words")
-    assert "Home:" in words and "Away:" in words
+    assert "Oakfield:" in words and "Fenwick:" in words
     assert not errors
 
 
@@ -522,7 +529,7 @@ def test_an_unknown_code_is_refused_by_the_api(browser, api_site):
     page.goto(f"{url}phone/?clip=seed7")
     page.fill("#code", "QQQQQQ")
     page.click("#connect")
-    page.wait_for_function("/no laptop/i.test(document.querySelector('#pair-error').textContent)")
+    page.wait_for_function("/no screen/i.test(document.querySelector('#pair-error').textContent)")
     assert page.get_attribute("body", "data-state") == "pair"
     assert not errors
 
@@ -582,7 +589,7 @@ def test_the_phone_shows_the_tracked_m1_clip_through_the_api(browser, tracked_ap
         page.click("#roster-box summary")
         page.locator("#roster .who").first.click()
         page.wait_for_function("document.querySelector('#speed').textContent !== '–'")
-        assert re.fullmatch(r"(Home|Away) player · track \d+", page.inner_text("#player-title"))
+        assert re.fullmatch(r"(Oakfield|Fenwick) player \d+", page.inner_text("#player-title"))
         assert re.fullmatch(r"Covering \d+ s of play: .*", page.inner_text("#heat-span"))
         validate_seen(seen(page))
         assert not errors
@@ -647,7 +654,7 @@ FLOW = {"type": "flow", "team": "home", "t_from": 0.0, "t_to": 30.0, "nx": 2, "n
 def test_a_ground_truth_player_card_is_never_shown(browser, prod_site):
     page, errors, requests = fake_api(browser, prod_site, card=CARD)
     page.click("#roster-box summary")
-    page.get_by_role("button", name="Away 7", exact=True).click()
+    page.get_by_role("button", name="Fenwick 7", exact=True).click()
     page.wait_for_function("performance.getEntriesByType('resource').some(e => e.name.includes('api/card/'))")
     page.wait_for_timeout(500)
     assert page.locator("#player").is_hidden()
@@ -665,7 +672,8 @@ def test_a_ground_truth_flow_field_is_never_drawn(browser, prod_site):
 
 def answered(page, text: str):
     page.click("#roster-box summary")
-    page.get_by_role("button", name="Away 7", exact=True).click()
+    page.get_by_role("button", name="Fenwick 7", exact=True).click()
+    page.click("#tab-ask")
     page.fill("#question", text)
     page.click("#ask-button")
     answer = page.locator("#answers .answer:not(.pending)").first
