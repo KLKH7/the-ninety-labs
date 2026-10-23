@@ -2110,6 +2110,21 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `uv run pytest tests/test_pitch_score.py tests/test_vision_score.py
   tests/test_fake_box_detections.py -k "cut_off"`; the pitch_score test fails with `z < 0.5` put back.
 
+### 207. A restart is played from its spot: set the shape there, and keep everyone off the set ball
+- **What happened:** two leftovers of lesson 174's walking. While a restart waited, every player's
+  place was set from wherever the dead ball was, so as it rolled on to the boards and was carried
+  back, the places moved with it and were walked to and back. And once the ball was set on its spot,
+  only opponents kept off it (the Laws' distance): a team-mate of a free kick's taker walked over it
+  to his place, and a player walking back for a kick-off after a goal walked over the ball on the
+  centre spot (2 walks over the set ball in 20 matches on main `0f101db`, counted after the first
+  second of each stoppage, which is the fouler's own momentum). Setting places from the spot also
+  removed the scene a lesson 174 test was planted in, so its premise search moved to another seed.
+- **Rule:** while a restart waits, play is at its spot; anything a player does "relative to the ball"
+  at a restart is relative to where it will be taken. A set ball is solid for everyone but its taker:
+  a way past it keeps the taker's own clearance.
+- **Check:** `uv run pytest tests/test_restarts.py -k "walks_over_a_set_ball or places_are_set_from"`
+  (each fails on main); `scripts/defect_sweep/crossball.py` counts walks over the set ball over a sweep.
+
 ### 190. A test that reads its constant back cannot pin it
 - **What happened:** the foul pose asserted `foul_fall_deg(...) == FALL_DOWN_DEG` and `peak >= 80`.
   A lie of 80° left both green, and so did rewriting the pose times, because the test added those
