@@ -24,6 +24,11 @@ The graph (Agent Framework `WorkflowBuilder`), as docs/ARCHITECTURE.md draws it:
    an unsure detection) is not rewritten.
 6. Producer.air (code) airs the Tactician's claim if it is verified, else the Challenger's if
    that is, else the template stays. The insight replaces the template in its slot.
+   With `shape` (team-shape facts from tracked positions, ninety/intel/shape.py), code adds the
+   minute's confident shape facts to every moment's evidence, so the writers can say how a team's
+   shape answered the moment ("the back line pushed up 8 m"); the fact-checker holds their words to
+   those facts (factcheck.shape_reasons). Without tracked positions there are none, and the prompts
+   are the ones the committed replays pin.
 7. With `personalize`, the Personalizer (A2A to its own service, ninety/personalizer/client.py, or
    in process) rewrites an aired insight for each other persona and language; every variant is
    fact-checked again before it airs, and the route it took (remote, or the in-process fallback
@@ -318,6 +323,7 @@ class Run:
     reviews: list[Review] = field(default_factory=list)
     cues: list[dict] = field(default_factory=list)
     t: dict[str, float] = field(default_factory=dict)  # event id -> seconds, for Ledger records
+    shape: dict[int, tuple[str, ...]] = field(default_factory=dict)  # minute -> its confident shape fact ids
     # Recordings made before the fact-checker stopped checking a Challenger's reading once the
     # Tactician's claim was verified replay under the rule they were recorded with.
     check_alternative_after_verified: bool = False
@@ -405,7 +411,7 @@ class Analyst(Executor):
     @handler
     async def pick(self, pick: Pick, ctx: WorkflowContext[ToTactician | ToProducer]) -> None:
         run, started = self.run, time.perf_counter()
-        window = {i: e for i, e in run.known.items() if e["minute"] == pick.minute}
+        window = {i: e for i, e in run.known.items() if e["minute"] == pick.minute and e["type"] != "shape"}
         inline = list(window.values()) if run.inline_events else None
         reply, error, _ = await _call(run.models.analyst, analyst_prompt(run.match, pick.minute, inline))
         moments: list[Moment] = []
@@ -418,6 +424,9 @@ class Analyst(Executor):
             else:
                 for reason in dropped:
                     run.step("analyst", "-", "drop", started, reason)
+                # Code, not the Analyst, adds the minute's shape facts: every moment gets them all.
+                moments = [replace(m, evidence=(*m.evidence, *run.shape.get(pick.minute, ())))
+                           for m in moments]
         if error:
             run.step("analyst", "-", "fail", started, f"{error}; templates stay")
         for moment in moments:
@@ -709,16 +718,28 @@ async def run_workflow(
     ledger: Ledger | None = None,
     gate: Gate = confidence_gate,
     personalize: bool = False,
+    shape: list[dict] | None = None,
     check_alternative_after_verified: bool = False,
 ) -> Result:
     """One minute through the workflow. `events` are full match events (simulated or detected);
-    the agents see them compacted, and claims are checked against those."""
+    the agents see them compacted, and claims are checked against those. `shape` is the match's
+    team-shape facts (ninety/intel/shape.shape_rows over tracked frames), when it has any."""
     ledger = InMemoryLedger() if ledger is None else ledger
     events = agent_events(events)
     await load_match(ledger, events, ())
     counted, calls = _counted(models)
-    run = Run(counted, ledger, {e["id"]: compact(e) for e in events}, match, inline_events, plant, live, gate,
-              personalize, events, t={e["id"]: float(e["t"]) for e in events},
+    shape = list(shape or ())
+    known = {e["id"]: compact(e) for e in events} | {r["id"]: r for r in shape}
+    times = {e["id"]: float(e["t"]) for e in events} | {r["id"]: 60.0 * (r["minute"] - 1) for r in shape}
+    for r in shape:  # in the Ledger as computed facts, so a moment or claim may cite them
+        await ledger.append(Record(id=r["id"], version=1, kind="fact", t=times[r["id"]], source="tracked",
+                                   confidence=None, evidence=(), payload=r))
+    by_minute: dict[int, tuple[str, ...]] = {}
+    for r in shape:
+        if r["confident"]:  # an unsure fact would only be held: the writers are not given it
+            by_minute[r["minute"]] = (*by_minute.get(r["minute"], ()), r["id"])
+    run = Run(counted, ledger, known, match, inline_events, plant, live, gate,
+              personalize, events, t=times, shape=by_minute,
               check_alternative_after_verified=check_alternative_after_verified)
     start, analyst, tactician = ProducerStart(run), Analyst(run), Tactician(run)
     challenger, checker, producer = Challenger(run), FactChecker(run), Producer(run)
@@ -777,7 +798,7 @@ async def run_live(
     load_events: Callable[[], list[dict]], minute: int, match: str, inline_events: bool, plant: bool,
     trace_to: str = "foundry", content: bool = False, personalize: bool = False,
     inject: Callable[[Models], Models] | None = None, credential: SignedIn | None = None,
-    personalizer: Personalize | None = None,
+    personalizer: Personalize | None = None, shape: list[dict] | None = None,
 ) -> tuple[Result, list[Turn], dict[str, str], bool, list[dict]]:
     """Live on Foundry, calling the published versions pinned in foundry_agents.json. Signs in,
     then loads the events. Returns the result, every model answer, the versions that ran, whether
@@ -792,11 +813,11 @@ async def run_live(
         if credential is None:
             credential = await owned.enter_async_context(new_credential())
         return await _run_live(credential, load_events, minute, match, inline_events, plant, trace_to,
-                               content, personalize, inject, personalizer)
+                               content, personalize, inject, personalizer, shape)
 
 
 async def _run_live(credential, load_events, minute, match, inline_events, plant, trace_to, content,
-                    personalize, inject, given_personalizer):
+                    personalize, inject, given_personalizer, shape=None):
     from ninety import config
     from ninety.agents import foundry
 
@@ -854,7 +875,7 @@ async def _run_live(credential, load_events, minute, match, inline_events, plant
         if inject is not None:
             models = inject(models)
         result = await run_workflow(models, events, minute, match, plant, True, inline_events,
-                                    personalize=personalize)
+                                    personalize=personalize, shape=shape)
     telemetry.flush()
     return result, turns, pins, failed[0], events
 
@@ -934,7 +955,11 @@ def main() -> None:
     ap.add_argument("--trace-content", action="store_true", help="include prompts and replies in the traces")
     ap.add_argument("--personalize", action="store_true",
                     help="send aired insights to the Personalizer (NINETY_PERSONALIZER_URL, else in process)")
+    ap.add_argument("--shape", action="store_true",
+                    help="give the writers the match's team-shape facts (tracked clips only)")
     args = ap.parse_args()
+    if args.shape and (args.record or args.replay):
+        ap.error("--shape cannot be recorded or replayed yet")  # a recording's inputs hold no shape facts
     if args.replay and (args.record or args.events or args.plant):
         ap.error("--replay takes its events, minute and --plant from the recording; it cannot --record")
     if args.personalize and (args.record or args.replay):
@@ -968,6 +993,7 @@ def main() -> None:
                 args.minute, match, inline, args.plant,
                 trace_to="none" if args.no_trace else "foundry", content=args.trace_content,
                 personalize=args.personalize,
+                shape=list(match_server.shape_of(match)) if args.shape else None,
             ))
         except RegistryDrift as e:
             sys.exit(f"not run: {e}")

@@ -103,7 +103,8 @@ def percentile(values: list[float], q: float) -> float:
 async def _tool_definitions() -> str:
     from ninety.mcp import match_server
 
-    tools = await match_server.server.list_tools()
+    # Only the tools the published Analyst may call reach its context (Foundry's allowed_tools).
+    tools = [t for t in await match_server.server.list_tools() if t.name in match_server.TOOLS]
     return json.dumps([{"name": t.name, "description": t.description, "parameters": t.inputSchema}
                        for t in tools])
 
