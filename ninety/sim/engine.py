@@ -1908,9 +1908,7 @@ class Engine:
         bx, by = self.restart_ball_spot(r)
         if math.hypot(line - bx, PITCH_Y / 2 - by) >= offball.SHOT_RANGE_M:
             return []
-        mid_y = PITCH_Y / 2
-        near = mid_y - GOAL_HALF_WIDTH if by < mid_y else mid_y + GOAL_HALF_WIDTH
-        cover = mid_y + (WALL_COVER_PAST_CENTRE_M if near < mid_y else -WALL_COVER_PAST_CENTRE_M)
+        near, cover = self.wall_cover(r)
         a_near = fmath.atan2(near - by, line - bx)
         sweep = (fmath.atan2(cover - by, line - bx) - a_near + math.pi) % (2 * math.pi) - math.pi
         mid = a_near + sweep / 2
@@ -1925,6 +1923,15 @@ class Engine:
         along = [start + toward * (k + 0.5) * shape.SHOULDER_BREADTH_M for k in range(n)]
         spots = [(cx + ux * a, cy + uy * a) for a in along]
         return [(x, y) for x, y in spots if 0.5 <= x <= PITCH_X - 0.5 and 0.5 <= y <= PITCH_Y - 0.5]
+
+    def wall_cover(self, r: Restart) -> tuple[float, float]:
+        """Law 13, Bray (2014): the stretch of the goal line (y at each end) a free kick's wall hides
+        from the ball: from the near post (design) to WALL_COVER_PAST_CENTRE_M past the centre. The
+        keeper covers the rest (O1). One definition for the wall and the keeper."""
+        _, by = self.restart_ball_spot(r)
+        mid_y = PITCH_Y / 2
+        near = mid_y - GOAL_HALF_WIDTH if by < mid_y else mid_y + GOAL_HALF_WIDTH
+        return near, mid_y + (WALL_COVER_PAST_CENTRE_M if near < mid_y else -WALL_COVER_PAST_CENTRE_M)
 
     def way_into_wall(self, r: Restart, p: Player) -> tuple[float, float]:
         """Where he heads for his place in the wall: first a shoulder's breadth behind it, seen
@@ -2383,7 +2390,13 @@ class Engine:
             # He sets himself from where the ball is, not where a pass is going: a shot can come
             # from wherever the ball is now.
             kx, ky = clamp(self.ball[0], 0, PITCH_X), clamp(self.ball[1], 0, PITCH_Y)
-            return *offball.keeper_spot(kx, ky, own_goal), RECOVER
+            # O1: with their wall up at a direct free kick, he covers the part of the goal it leaves
+            # open (Bray: the wall hides the rest), not the whole goal from behind it.
+            cover = None
+            if wall and wall.team != p.team and wall.wall:
+                near, edge = self.wall_cover(wall)
+                cover = (edge, PITCH_Y - near)  # from the wall's edge to the other post
+            return *offball.keeper_spot(kx, ky, own_goal, cover), RECOVER
         if not brain.in_possession and p.id in brain.markers:
             mx, my = brain.markers[p.id]
             mx, my = clamp(mx, 0.5, PITCH_X - 0.5), clamp(my, 0.5, PITCH_Y - 0.5)

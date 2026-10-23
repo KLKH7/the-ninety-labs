@@ -71,15 +71,18 @@ def keeper_depth_m(distance: float) -> float:
     return lo + (hi - lo) * min(1.0, max(0.0, distance) / SHOT_RANGE_M)
 
 
-def keeper_spot(ball_x: float, ball_y: float, own_goal_x: float) -> tuple[float, float]:
+def keeper_spot(ball_x: float, ball_y: float, own_goal_x: float,
+                cover: tuple[float, float] | None = None) -> tuple[float, float]:
     """O1: on the line that bisects the angle between the posts as seen from the ball, keeper_depth_m
     off his line, and never outside the posts: on a tight angle, where the bisector leaves the goal
     mouth, he comes back along it until he stands within them (*design*). Never nearer the ball than
     when he rushes out to close it down; with the ball almost on his line he stays on it, between
-    the posts."""
+    the posts. `cover`: the part of his goal line he covers (y at each end), the posts unless a wall
+    covers the rest (O1: at a direct free kick, the part the wall leaves open)."""
     gy = PITCH_Y / 2
-    a1 = fmath.atan2(gy - GOAL_HALF_WIDTH - ball_y, own_goal_x - ball_x)
-    a2 = fmath.atan2(gy + GOAL_HALF_WIDTH - ball_y, own_goal_x - ball_x)
+    lo, hi = cover if cover is not None else (gy - GOAL_HALF_WIDTH, gy + GOAL_HALF_WIDTH)
+    a1 = fmath.atan2(lo - ball_y, own_goal_x - ball_x)
+    a2 = fmath.atan2(hi - ball_y, own_goal_x - ball_x)
     mid = fmath.atan2(fmath.sin(a1) + fmath.sin(a2), fmath.cos(a1) + fmath.cos(a2))
     ux, uy = fmath.cos(mid), fmath.sin(mid)  # from the ball toward the goal, between the posts
     if abs(ux) < 1e-6:
