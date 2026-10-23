@@ -388,3 +388,14 @@ def test_a_bowled_throw_is_drawn_as_a_bowl_and_a_kick_from_his_hands_as_a_strike
             drawn.append(e.pose(k)[0])
             e.step()
         assert drawn and set(drawn) == {want}
+
+
+def test_while_he_holds_it_he_is_drawn_with_it_in_his_hands():
+    # The exported truth (Engine.pose, the frame's `action`): through the hold he is "hands", the
+    # ball in them at his chest, not "stand" (the renderer could not draw the hold from it).
+    e, k = caught()
+    drawn = []
+    while e.held_by == k.id and e.windup is None and len(drawn) < 200:
+        drawn.append(e.pose(k)[0])
+        e.step()
+    assert len(drawn) > 100 and set(drawn) == {"hands"}
