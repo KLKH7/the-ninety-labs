@@ -54,19 +54,34 @@ def test_a_caught_ball_is_held_at_his_chest_and_let_go_within_six_seconds():
     assert passed or (e.possessor == k.id and e.released_by == k.id)
 
 
-def test_he_throws_no_faster_than_a_ball_can_be_thrown_and_may_kick_to_anyone():
-    # L15: how far he throws is limited by how fast a ball can be thrown (KEEPER_THROW_MPS), not by a
-    # set distance; any team-mate may be kicked to from his hands.
+def test_he_throws_no_faster_than_a_ball_can_be_thrown_and_may_kick_to_anyone(monkeypatch):
+    # L15: how far he throws is limited by how fast a ball can be thrown (21.5 m/s: van den Tillaar
+    # and Ettema 2004), not by a set distance; any team-mate may be kicked to from his hands, and a
+    # kick from his hands goes through the air.
     e, k = caught()
     scene = e.scene_for(k)
-    thrown = dataclasses.replace(scene, throw=True, from_hands=True)
-    for o in decisions.options(thrown):
-        d = math.hypot(o.target[0] - scene.x, o.target[1] - scene.y)
-        speed = math.hypot(*decisions.loft_launch(d)) if o.lofted else decisions.launch_speed(d, o.pace)
-        assert speed <= 21.5  # van den Tillaar and Ettema 2004: 21.5 m/s
+    original = decisions.pass_confidence
+    want = {}
+
+    def only(*args, **kwargs):  # every way fails but the one under test, so only the limit can stop it
+        lofted = kwargs["lofted"] if "lofted" in kwargs else args[6]
+        pace = kwargs["pace"] if "pace" in kwargs else args[7]
+        return original(*args, **kwargs) if (lofted, pace) == want["way"] else 0.0
+
+    monkeypatch.setattr(decisions, "pass_confidence", only)
+    for d, lofted, pace, throwable in [
+        (25.0, True, decisions.ARRIVE_MPS, True),  # 25 m through the air: 19 m/s
+        (38.0, True, decisions.ARRIVE_MPS, False),  # 38 m through the air: about 25 m/s
+        (38.0, False, decisions.PASS_PACES[0], True),  # rolled softly: 17 m/s
+        (38.0, False, decisions.PASS_PACES[-1], False),  # rolled hard: about 26 m/s
+    ]:
+        want["way"] = (lofted, pace)
+        alone = dataclasses.replace(scene, mates=[("h9", k.x + d - 1.5, k.y, 0.0)], opponents=[], moving=[],
+                                    throw=True, from_hands=True)
+        ways = {(o.lofted, o.pace) for o in decisions.options(alone) if o.kind == "pass"}
+        assert ((lofted, pace) in ways) == throwable, (d, lofted, pace, ways)
     far = dataclasses.replace(scene, mates=[("h9", 40.0, 34.0, 0.0)], opponents=[], moving=[])
-    assert not [o for o in decisions.options(dataclasses.replace(far, throw=True, from_hands=True))
-                if o.lofted]  # 37 m through the air is beyond a throw
+    monkeypatch.setattr(decisions, "pass_confidence", original)
     kicked = [o for o in decisions.options(dataclasses.replace(far, from_hands=True)) if o.kind == "pass"]
     assert kicked and kicked[0].receiver == "h9"
     assert all(o.lofted for o in kicked)  # dropped from his hands and struck, it goes through the air
