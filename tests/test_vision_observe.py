@@ -180,3 +180,19 @@ def test_the_trust_bound_is_the_committed_measurement():
     assert dd.MAX_TRUSTED_M == math.ceil(worst * 2) / 2 == body["max_trusted_m"]
     assert dd.KEEP_GOOD == body["keep_good"] == 0.95
     assert body["adopted"] == "C2"
+
+
+def test_a_frame_is_judged_by_the_band_it_is_given():
+    assert not observe.place(row(1.10), band=(0.9, 1.0))["camera"]["ok"]
+    assert observe.place(row(1.10), band=(1.05, 1.15))["camera"]["ok"]
+
+
+def test_regate_judges_a_fixed_lens_by_the_fixed_band_and_the_broadcast_by_its_own(tmp_path, monkeypatch):
+    monkeypatch.setattr(observe, "FIXED_HEIGHT_BAND", (1.05, 1.15))
+    rows = [row(1.10) | {"frame": k, "t": k / 25} for k in range(3)]
+    src, out = tmp_path / "in.jsonl", tmp_path / "out.jsonl"
+    for fixed, expect in ((True, True), (False, False)):
+        first = rows[0] | ({"fixed": True} if fixed else {})
+        src.write_text("".join(json.dumps(r) + "\n" for r in [first, *rows[1:]]))
+        observe.main(["--regate", str(src), "--out", str(out)])
+        assert [json.loads(x)["camera"]["heights_ok"] for x in out.read_text().splitlines()] == [expect] * 3
