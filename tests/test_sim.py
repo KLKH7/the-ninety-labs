@@ -32,7 +32,7 @@ def test_frames_cover_the_clock_and_stay_on_the_pitch():
         for p in fr["players"]:
             assert -BOARDS_M <= p["x"] <= PITCH_X + BOARDS_M and -BOARDS_M <= p["y"] <= PITCH_Y + BOARDS_M
             assert "heading" in p and "vx" in p and p["action"] in (
-                "stand", "walk", "run", "strike", "dive", "throw", "down",
+                "stand", "walk", "run", "strike", "bowl", "dive", "throw", "down",
                 "foot", "thigh", "chest", "head", "hands",
             )
         assert "vx" in fr["ball"]

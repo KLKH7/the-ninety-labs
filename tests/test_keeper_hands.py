@@ -370,3 +370,21 @@ def test_his_error_never_throws_it_faster_than_an_arm_can_and_a_kick_is_not_held
             assert speed <= decisions.KEEPER_THROW_MPS + 1e-6
         else:
             assert speed > 25.0
+
+
+def test_a_bowled_throw_is_drawn_as_a_bowl_and_a_kick_from_his_hands_as_a_strike(monkeypatch):
+    # The exported truth names what he does (Engine.pose, the frame's `action`): bringing the ball
+    # down to bowl it is "bowl", never "strike" (the renderer drew it with a kicking leg).
+    for lofted, thrown, want in ((False, True, "bowl"), (True, False, "strike")):
+        e, k = caught()
+        mate = next(iter(e.scene_for(k).mates))
+        o = decisions.Option("pass", 1.0, (mate[1], mate[2]), receiver=mate[0], lofted=lofted)
+        n = decisions.Option("pass", -1.0, (mate[1], mate[2]), receiver=mate[0], lofted=True)
+        monkeypatch.setattr(e, "release_options",
+                            lambda scene, o=o, n=n, t=thrown: (o, n, None) if t else (n, o, None))
+        e.release(k, e.scene_for(k))
+        drawn = []
+        while e.windup and len(drawn) < 50:
+            drawn.append(e.pose(k)[0])
+            e.step()
+        assert drawn and set(drawn) == {want}

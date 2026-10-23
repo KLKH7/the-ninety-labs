@@ -3619,7 +3619,8 @@ class Engine:
         if self.throw_by == p.id:
             return "throw", 0.0
         if self.possessor == p.id and self.windup:
-            return "strike", 0.0
+            # a keeper bowling the ball from his hands (L15) is no kick: drawn as its own action
+            return ("bowl" if self.windup[3] == "bowl" else "strike"), 0.0
         # A dive is drawn from the engine's own dive (keeper_dive): how far along it he is and
         # which way; down after it, at full stretch until he is up.
         gone = side = None
