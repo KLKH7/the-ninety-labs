@@ -2777,7 +2777,10 @@ class Engine:
         """Nobody walks through a goal's net (Law 1, NET_DEPTH_M): where his straight way would cross
         it, he heads for the first point of the shortest way that does not, by the goal mouth, in
         front of it NET_CLEAR_M, or round the goal, NET_CLEAR_M clear of its posts and back corners
-        (design). The keeper fetching the ball from his net walks in through the mouth."""
+        (design), the posts a stride clear in front of the line as well as beside them: aimed at a point
+        on the line beside the post, a keeper running there was carried over the line into the side
+        netting and stopped dead by it (seed 116 on main, lesson 200). The keeper fetching the ball from
+        his net walks in through the mouth."""
         if 0.0 < min(p.x, tx) and max(p.x, tx) < PITCH_X:  # a way in front of both goal lines
             return tx, ty
         at, target = (p.x, p.y), (tx, ty)
@@ -2789,7 +2792,8 @@ class Engine:
             lo, hi = mid - GOAL_HALF_WIDTH + m, mid + GOAL_HALF_WIDTH - m
             behind = line + out * (NET_DEPTH_M + m)
             nodes = [at, (line - out * m, clamp(p.y, lo, hi)), (line - out * m, clamp(ty, lo, hi)),
-                     (line, lo - 2 * m), (line, hi + 2 * m), (behind, lo - 2 * m), (behind, hi + 2 * m),
+                     (line - out * m, lo - 2 * m), (line - out * m, hi + 2 * m),
+                     (behind, lo - 2 * m), (behind, hi + 2 * m),
                      target]
             # shortest way from him (0) to his target (last) over ways that cross no net
             best, first, todo = {0: 0.0}, {}, {0}

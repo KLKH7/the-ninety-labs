@@ -225,14 +225,20 @@ def test_a_ball_behind_the_goal_is_fetched_round_the_net_not_through_it(start):
 
 
 def test_going_round_the_net_keeps_a_stride_clear_of_it():
-    """From inside the goal to a place behind it, his first step is out of the goal mouth,
-    NET_CLEAR_M in front of the line; from beside the goal, round its post NET_CLEAR_M clear."""
+    """From inside the goal to a place behind it, his first step is out through the goal mouth to
+    NET_CLEAR_M in front of the line; from beside the goal, round its post NET_CLEAR_M clear of it,
+    in front of the line as well as beside it (lesson 200: aimed at the line itself he was carried
+    over it into the side netting)."""
     e = Engine(2)
     p = e.keeper("away")
     p.x, p.y = PITCH_X + 1.0, MID
-    assert e.round_the_net(p, PITCH_X + 3.5, MID) == (PITCH_X - NET_CLEAR_M, MID)
+    wx, wy = e.round_the_net(p, PITCH_X + 3.5, MID)
+    assert wx == PITCH_X - NET_CLEAR_M  # in front of the line
+    k = (p.x - PITCH_X) / (p.x - wx)  # where his way crosses the line: in the mouth, a stride off a post
+    assert abs(p.y + k * (wy - p.y) - MID) <= GOAL_HALF_WIDTH - NET_CLEAR_M
     p.x, p.y = PITCH_X + 1.0, MID + GOAL_HALF_WIDTH + 0.5  # beside the goal, outside its side net
-    assert e.round_the_net(p, PITCH_X + 1.0, MID) == (PITCH_X, MID + GOAL_HALF_WIDTH + NET_CLEAR_M)
+    assert e.round_the_net(p, PITCH_X + 1.0, MID) == (PITCH_X - NET_CLEAR_M,
+                                                      MID + GOAL_HALF_WIDTH + NET_CLEAR_M)
     p.x, p.y = 90.0, 20.0
     assert e.round_the_net(p, 95.0, 25.0) == (95.0, 25.0)  # on the pitch the nets are nowhere near
 
@@ -509,3 +515,28 @@ def test_after_the_goal_the_ball_flies_on_freely_until_it_meets_the_net():
     for f, s in zip(track, flown, strict=False):
         assert f["ball"] == s
     assert len(track) >= len(flown)
+
+
+def test_going_round_the_net_he_never_runs_into_it():
+    """Seed 116 on main at 18:37: the keeper ran from in front of his goal toward the point on the
+    goal line a stride outside the post, on his way round to the dead ball behind the goal; carried
+    over the line by his run, he met the side netting and it stopped him dead, 2.2 m/s in one frame
+    (P2 failed). Going round, he keeps a stride clear of the post in front of the line too, so he
+    never meets the net and brakes only as a body brakes."""
+    from ninety.sim.body import BRAKE_MAX
+    e = Engine(2)
+    e.run(1)
+    e.possessor, e.throw_by, e.set_by = None, None, None
+    e.ball = (109.0, 31.87, 0.0, 0.0, 0.0, 0.0)
+    gk = e.keeper("away")
+    gk.x, gk.y, gk.vx, gk.vy = 104.78, 32.77, 2.07, -4.12
+    e.stop("goal_kick", "away", (PITCH_X - GOAL_AREA_X, MID), gk.id)
+    e.restart.fetcher = gk.id
+    track = play_on(e, lambda e: e.restart is None or e.restart.carried_by is not None, 30)
+    assert walked_through(track) == []
+    speeds = []
+    for a, b in zip(track, track[1:], strict=False):
+        (ax, ay), (bx, by) = a["players"][gk.id], b["players"][gk.id]
+        speeds.append((bx - ax, by - ay))
+    for (ux, uy), (vx, vy) in zip(speeds, speeds[1:], strict=False):
+        assert math.hypot(vx - ux, vy - uy) / DT / DT <= BRAKE_MAX + 1e-6  # within his grip, frame to frame
