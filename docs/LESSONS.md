@@ -2089,3 +2089,16 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_vision_live_path.py` lists `live_job.py` among the live modules;
   `tests/test_vision_live_job.py::test_a_clip_folder_holding_anything_else_is_refused_before_the_model_loads`
   (each answer-key file planted), and `::test_a_clean_clip_runs_the_whole_live_path_and_opens_no_truth`.
+
+### 196. A new file is written only to a path nothing holds yet
+- **What happened:** the team-shape tests were written to `tests/test_shape.py`, a name that sounded
+  free. It held the engine's attacking-shape tests (O6, O7), 129 lines, and the write replaced them
+  without a warning: the editor said "updated", not "created". The suite still passed, because a
+  deleted test cannot fail. It was caught only because `git status` showed the file as modified
+  (`M`) where a new one shows `??`.
+- **Rule:** before writing a file meant to be new, check that its path is not tracked
+  (`git ls-files <path>` prints nothing). Name a module's tests after the module's own words
+  (`test_team_shape.py` for `ninety/intel/shape.py`, whose subject is the team's shape), and read
+  `git status --short` before every commit: a file you meant to create must show `??`.
+- **Check:** `git diff --stat origin/main -- tests/test_shape.py` is empty on this branch; the shape
+  tests are in `tests/test_team_shape.py`.

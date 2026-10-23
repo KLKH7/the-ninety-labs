@@ -170,7 +170,8 @@ async def _personalized(
     """The verified claim for every other profile, each variant checked again before it airs."""
     moment = "-".join(claim.evidence)
     if profiles is None:
-        profiles = personal.profiles_for(next(e for e in events if e["id"] == claim.evidence[0]))
+        by_id = {e["id"]: e for e in events}  # the first cited event (a shape fact is no event)
+        profiles = personal.profiles_for(next(by_id[i] for i in claim.evidence if i in by_id))
     known = {r["id"]: r for r in rows}
     started = time.perf_counter()
     try:

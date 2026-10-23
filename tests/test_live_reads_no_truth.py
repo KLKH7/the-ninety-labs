@@ -65,6 +65,7 @@ assert personalize.last_route == "remote"
 assert {c["lang"] for c in result.cues if c["kind"] == "insight"} == {"en", "es"}
 assert match_server.list_events(detected.M1_CLIP, 1, 99, None)
 match_server.match_info(detected.M1_CLIP)
+assert match_server.team_shape(detected.M1_CLIP, 1, 99)["tracked"]  # shape from tracked positions only
 
 # The phone companion as deployed (NINETY_COMPANION unset is `on`): the M1 clip from tracked
 # positions only, and every stand-in, whose positions are the simulator's, refused before any is read.
