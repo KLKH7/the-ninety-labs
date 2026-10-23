@@ -186,3 +186,13 @@ def test_the_worker_passes_the_plans_views_and_judges_every_clip(tmp_path, monke
     assert calls == [(3, {}, "tactical"), (4, {"occlusion": "crowded"}, "tactical")]
     reports = {s: json.loads(pod.report_path(tmp_path, "train", s).read_text())["passed"] for s in (3, 4)}
     assert reports[3]["no_cuts"] is True and reports[4]["no_cuts"] is False
+
+
+def test_a_driver_copied_outside_a_checkout_is_recorded_by_its_hash(tmp_path, monkeypatch):
+    # On the pod the driver is a plain copy (no repository round it): git fails there, so the
+    # manifest records the file's sha256 instead of failing (found rendering dataset tactical).
+    def no_git(repo):
+        raise pod.subprocess.CalledProcessError(128, ["git"])
+
+    monkeypatch.setattr(pod, "git_head", no_git)
+    assert pod.driver_id() == {"driver_sha256": pod.sha256(Path(pod.__file__))}

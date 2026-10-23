@@ -223,6 +223,15 @@ def git_head(repo: Path) -> str:
                           text=True, check=True).stdout.strip()
 
 
+def driver_id() -> dict:
+    """This driver as the manifest records it: its commit when it runs from a checkout, else (a copy
+    on a rented machine, outside any repository) its sha256."""
+    try:
+        return {"driver_commit": git_head(Path(__file__).resolve().parents[2])}
+    except (OSError, subprocess.CalledProcessError):
+        return {"driver_sha256": sha256(Path(__file__))}
+
+
 KNOBS = ("lighting", "kit_contrast", "occlusion", "weather")
 
 
@@ -249,7 +258,7 @@ def manifest(plan: dict, repo: Path, out: Path) -> dict:
                           "params": {k: clip["params"].get(k) for k in KNOBS}, "files": files})
     m = {"name": plan["name"], "run": plan["run"], "render_commit": git_head(repo),
          "renderer": RENDERER_VERSION, "plan_commit": plan.get("commit"),
-         "driver": "infra/pod/render.py", "driver_commit": git_head(Path(__file__).resolve().parents[2]),
+         "driver": "infra/pod/render.py", **driver_id(),
          "clips": len(clips),
          "bytes": sum(f["bytes"] for c in clips for f in c["files"].values()),
          "failed": failed, "missing": missing, "clips_list": clips}
