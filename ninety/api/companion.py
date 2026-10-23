@@ -596,6 +596,7 @@ def answer_json(answer: Answer) -> dict:
         "evidence": list(answer.evidence),
         "t_from": answer.t_from,
         "t_to": answer.t_to,
+        "visual": answer.visual,
     }
 
 

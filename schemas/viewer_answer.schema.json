@@ -14,6 +14,7 @@
     "unit": { "type": ["string", "null"], "description": "e.g. m, km/h, passes." },
     "evidence": { "type": "array", "items": { "type": "string" }, "description": "Event and fact ids behind the answer." },
     "t_from": { "type": ["number", "null"], "minimum": 0, "description": "Start of the stretch of match the answer covers, in seconds." },
-    "t_to": { "type": ["number", "null"], "minimum": 0 }
+    "t_to": { "type": ["number", "null"], "minimum": 0 },
+    "visual": { "anyOf": [{ "type": "null" }, { "$ref": "insight_card.schema.json#/$defs/visual" }], "description": "Optional: what the phone draws beside the answer, taken by code from the first cited insight fact that has one; null or absent draws nothing." }
   }
 }

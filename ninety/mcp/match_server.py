@@ -26,6 +26,7 @@ from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
+from ninety.intel.match_insights import MatchInsights, load_fixture
 from ninety.intel.windows import agent_rows
 from ninety.match import detected, tracking
 from ninety.match.facts import AGENT_TYPES, compact, events_in, match_events, select
@@ -41,6 +42,10 @@ MAX_EVENTS = 60
 # match id and nothing else.
 STATS_DIR = "stats"
 TOOLS = ("list_events", "match_info")  # the published Analyst may call only these (tests check they exist)
+# The insight tools the Companion chooses from (ninety/agents/companion.py). Served here too, read
+# only, but not in the published Analyst's allowed tools: adding them changes that agent's definition.
+INSIGHT_TOOLS = ("line_breaks", "overloads", "counter_press", "pass_options", "lineup")
+INSIGHTS_DIR = "insights"  # inside NINETY_MATCH_DIR: a match's precomputed MatchInsights, one file each
 
 def match_id(seed: int) -> str:
     return f"seed{seed}"
@@ -104,6 +109,86 @@ def match_info(match: str) -> dict:
             "stats": list(stats_of(match))}
 
 
+def fixture_path(clip: str) -> Path:
+    return tracking.FIXTURES / f"fixture-{clip}.json"  # its seed and club codes, from its clip.json
+
+
+@lru_cache(maxsize=4)
+def insights_of(match: str) -> MatchInsights | None:
+    """A match's insight facts: precomputed in NINETY_MATCH_DIR/insights when the image has them,
+    else computed from a tracked clip's frames and detected events. None for a match with no
+    tracked frames: the simulator's positions are the answer key, never served as insight."""
+    stored = Path(MATCH_DIR) / INSIGHTS_DIR / f"{match}.json" if MATCH_DIR else None
+    if stored and stored.exists():
+        return MatchInsights.from_dict(json.loads(stored.read_text()))
+    if match not in DETECTED and match not in MATCHES:
+        raise ValueError(f"unknown match {match!r}; available: {', '.join([*DETECTED, *MATCHES])}")
+    if match not in tracking.TRACKED_CLIPS or match not in DETECTED or not fixture_path(match).exists():
+        return None
+    try:
+        frames = tracking.tracked(match).frames
+    except tracking.NotTracked:
+        return None
+    events = detected.load(DETECTED[match]())
+    return MatchInsights.build(match, frames, events, load_fixture(fixture_path(match)))
+
+
+def _insight(match: str, tool: str, *args) -> dict:
+    mi = insights_of(match)
+    if mi is None:
+        return {"match": match, "tracked": False, "facts": [], "summary": []}
+    return {"match": match, "tracked": True, "clubs": mi.fixture.clubs, **getattr(mi, tool)(*args)}
+
+
+def line_breaks(match: str, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+    """Line breaks (packing): for each completed pass between two match minutes (inclusive), how
+    many opponents it took out of the game, counted by code from tracked positions: opponents nearer
+    the goal than the ball where the pass was played, and no longer nearer than where it ended. club:
+    one club's name, or null for both. Facts are the passes that bypassed most, strongest first;
+    summary has each club's total. Each fact has id, club, minute, value with unit, lo and hi
+    (bounds from untracked players and tracking error), confident, passer_is and receiver_is (how to
+    name them) and visual. Cite facts by id; quote value or an `also` number with its unit."""
+    return _insight(match, "line_breaks", minute_from, minute_to, club)
+
+
+def overloads(match: str, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+    """Overloads: moments between two match minutes when one club had at least 2 more players
+    than the other in one of nine zones (own, middle or final third, by left, centre or right
+    channel, as that club attacks), counted by code from tracked positions. club: one club's name,
+    or null for both. Each fact has id, club, third, channel, value (extra players) with unit,
+    own_players and other_players, duration_s, confident and visual; summary counts each club's
+    confident overloads by zone. Cite by id; quote numbers with their units."""
+    return _insight(match, "overloads", minute_from, minute_to, club)
+
+
+def counter_press(match: str, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+    """Counter-pressing: for each open-play turnover between two match minutes, the club that
+    lost the ball, the most of its players within five yards of the ball in the 5 s after (value,
+    players), the time it took to win it back (regain_s, seconds, null if a dead ball came first)
+    and whether that was within 5 s (regained). club: the club that lost it, or null for both.
+    summary: each club's turnovers and regains within 5 s. Cite by id; quote numbers with units."""
+    return _insight(match, "counter_press", minute_from, minute_to, club)
+
+
+def pass_options(match: str, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+    """Pass options (decision quality): for each pass between two match minutes, the passer's
+    teammates ahead of the ball with no opponent within five yards (value, teammates), whether the
+    pass went to one of them (target_open) and its outcome. club: the passing club, or null for
+    both. Lost passes come first. summary: per club, passes with no open teammate ahead. Cite by
+    id; quote numbers with their units."""
+    return _insight(match, "pass_options", minute_from, minute_to, club)
+
+
+def lineup(match: str, club: str | None = None) -> dict:
+    """The fictional clubs' team sheets (name, number, position) and, for each tracked player,
+    the position vision inferred from his place in the team's shape, with its share and how a
+    sentence may name him (say): by name only when that share passed its measured gate."""
+    mi = insights_of(match)
+    if mi is None:
+        return {"match": match, "tracked": False}
+    return {"match": match, "tracked": True, **mi.lineup(club)}
+
+
 def make_server() -> FastMCP:
     """A server with the match tools. Stateless with JSON responses: what Foundry's MCP tool needs
     (one request, one answer, no session). The API builds its own, since an HTTP server's session
@@ -116,7 +201,7 @@ def make_server() -> FastMCP:
         # Host headers; ours is public and answers only with the key, so the Host check is off.
         transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
     )
-    for tool in (list_events, match_info):
+    for tool in (list_events, match_info, line_breaks, overloads, counter_press, pass_options, lineup):
         server.add_tool(tool)
     return server
 
