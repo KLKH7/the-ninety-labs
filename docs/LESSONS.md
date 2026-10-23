@@ -2137,6 +2137,23 @@ short and actionable. This file is public: no research sources, product names or
   `tests/test_vision_live_job.py::test_a_clip_folder_holding_anything_else_is_refused_before_the_model_loads`
   (each answer-key file planted), and `::test_a_clean_clip_runs_the_whole_live_path_and_opens_no_truth`.
 
+### 192. A seal that matches a file by where it sits misses the same file one folder down
+- **What happened:** the render job sealed the answer key by name and place: `frames.jsonl` and
+  `events.jsonl` went to the private `truth` container only when they sat at the top of the clip
+  folder (`f.parent == clip_dir` in `ninety/render/job.py`). The tactical views write a complete
+  clip under `views/tac-l/` and `views/tac-r/`, answer key included, so the first Azure render
+  with views would have put true positions, boxes and events in the readable `renders` container,
+  next to the images vision reads. The plan for the views caught it before any render ran.
+  The same review found the job's failure reports going to `renders` too: a report's contract
+  messages quote true events and positions.
+- **Rule:** a file is answer key by what it is, wherever it sits: the seal matches the name at any
+  depth, and anything built from the key (a check report) is sealed with it. A change that adds a
+  folder to a clip plants that folder's answer key in the seal's tests.
+- **Check:** `tests/test_render_job.py::test_a_views_answer_key_is_sealed_with_the_clips` (fails
+  on the old seal), and `infra/check_truth_sealed.py` (CI), which runs the job's own `upload_dir`
+  on a planted clip with views and fails if a `frames.jsonl` or `events.jsonl` reaches `renders`
+  (`tests/test_truth_sealed.py::test_a_seal_that_matches_only_the_clips_top_level_is_caught`).
+
 ### 194. An allow-list of a folder's top level lets anything through one level down
 - **What happened:** the live detection job refused an input folder holding anything but
   `index.jsonl` and `images/`, but it checked only the folder's own entries, and inside `images/`
@@ -2150,6 +2167,19 @@ short and actionable. This file is public: no research sources, product names or
   (each answer-key file planted at the clip, in `views/`, in a view, in its `images/` and in a
   folder under it) and `::test_a_planted_frame_file_in_a_single_clip_s_images_is_refused`.
 
+### 196. A new file is written only to a path nothing holds yet
+- **What happened:** the team-shape tests were written to `tests/test_shape.py`, a name that sounded
+  free. It held the engine's attacking-shape tests (O6, O7), 129 lines, and the write replaced them
+  without a warning: the editor said "updated", not "created". The suite still passed, because a
+  deleted test cannot fail. It was caught only because `git status` showed the file as modified
+  (`M`) where a new one shows `??`.
+- **Rule:** before writing a file meant to be new, check that its path is not tracked
+  (`git ls-files <path>` prints nothing). Name a module's tests after the module's own words
+  (`test_team_shape.py` for `ninety/intel/shape.py`, whose subject is the team's shape), and read
+  `git status --short` before every commit: a file you meant to create must show `??`.
+- **Check:** `git diff --stat origin/main -- tests/test_shape.py` is empty on this branch; the shape
+  tests are in `tests/test_team_shape.py`.
+
 ### 203. CI built the image with a stand-in, so the real pin was never tried
 - **What happened:** the demo image downloads its Replay bundle from a release asset pinned by URL
   and SHA-256 in the Dockerfile. CI's image job builds with a fixture bundle instead, so it stayed
@@ -2162,6 +2192,22 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** the CI `image` job's step "The Dockerfile's pinned Replay bundle exists and matches its
   hash"; `tests/test_api_site.py::test_a_websocket_behind_the_gate_needs_the_key_too` fails with the
   WebSocket branch of `RequireKey` removed.
+
+### 205. A spring that trails its target is fed where the target will be, not where it is
+- **What happened:** #220 changed how keepers play, and two broadcast camera tests failed on
+  held-out seeds the new play reached. On seed 43 a long ball (17 to 20 m/s, 7 m up) left the side
+  of the picture: the gantry's aim is a spring that trails a target moving at the ball's pace by
+  `pan_lag_s`, about 14 m at 0.83 s. When the ball and where it would be a lag on did not fit one
+  shot, the director aimed at the ball itself, so the picture ran a lag behind it. On seed 53 a free
+  kick scored 0.44 s after it was taken; the goal started the low angle at once, over the hold the
+  edit cut had just set, so the restart's shot lasted 2.4 s.
+- **Rule:** a follow with a known lag is aimed at where the followed thing will be after that lag.
+  An edit cut is a change of shot: no rule, a goal included, starts another within `CUT_HOLD_S`
+  of it.
+- **Check:** `tests/test_render_camera.py::test_a_long_ball_stays_in_the_picture_across_it` and
+  `::test_a_goal_soon_after_the_restart_waits_for_the_edits_hold` both fail on the old camera. The
+  held-out framing (`test_the_gantry_frames_the_play_with_the_pitch_filling_the_picture`) holds
+  on main and with #220 merged.
 
 ### 163. A rule every writer follows goes into every writer's instructions
 - **What happened:** the live Personalizer evaluation (agents-live 39514003721) aired its casual
@@ -2233,6 +2279,18 @@ short and actionable. This file is public: no research sources, product names or
   (the true lens fits, its mirror does not, the flipped picture does);
   `::test_the_compass_search_walks_on_where_the_free_step_stalls` fails with the compass search
   removed from `pitch.settle` (a half-size scene did not stall, so the stalled view is a fixture).
+
+### 204. A pose that names the action's mechanics, not its kind, draws one action as another
+- **What happened:** #216 gave keepers a throw from the hands: a roll is bowled, the ball brought
+  down in his hands to the grass and released from there. The engine named every wind-up `strike`,
+  so the renderer drew a kicking leg winding up and the ball meeting his boot. Through the 4.7 s
+  he held the ball before it his pose read `stand`, so nothing put his hands on it either. The
+  engine knew both (`windup[3] == "bowl"`, `held_by`) and exported neither.
+- **Rule:** the pose the engine exports names what the body does with the ball, from the engine's
+  own state; the renderer draws that name and never guesses it from where the ball goes next.
+- **Check:** `tests/test_render_motion.py::test_a_bowled_ball_is_brought_down_in_both_hands_with_no_kick`
+  fails on the old renderer (the hold ends before the bowl). A clip of an engine that names no bowl
+  renders byte-identical (seed 122 at main, frames, events, meta and images).
 
 ### 215. A detector tuned on one look is re-checked on the look the renderer draws now
 - **What happened:** the camera fit's marking detector (`ninety/vision/pitch.py`, `line_mask`) was
