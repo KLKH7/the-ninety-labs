@@ -2057,7 +2057,7 @@ def test_nobody_walks_over_a_set_ball(kind, team):
     (a team-mate of the taker at a free kick; anyone walking back for a kick-off, seed 107 on main
     at 4:42) goes round it, never within the taker's own clearance of it (SET_BALL_CLEAR_M), and
     gets to where he was going."""
-    from ninety.sim.engine import SET_BALL_CLEAR_M, Restart, steer
+    from ninety.sim.engine import SET_BALL_CLEAR_M, WALK_MPS, Restart, steer
     e = Engine(3)
     spot = (60.0, 30.0) if kind == "free_kick" else (PITCH_X / 2, PITCH_Y / 2)
     taker = "h9" if team == "home" else "a9"
@@ -2071,7 +2071,7 @@ def test_nobody_walks_over_a_set_ball(kind, team):
         closest = math.inf
         for _ in range(int(12.0 / DT)):
             tx, ty = e.round_the_ball(walker, *target)
-            steer(walker, tx, ty, 1.36)
+            steer(walker, tx, ty, WALK_MPS)
             closest = min(closest, math.hypot(walker.x - spot[0], walker.y - spot[1]))
         assert closest >= SET_BALL_CLEAR_M - 0.05, (side, closest)  # within a frame's steering
         assert math.dist((walker.x, walker.y), target) < 0.1  # and he got there
@@ -2097,3 +2097,58 @@ def test_while_a_restart_waits_places_are_set_from_its_spot_not_the_dead_ball(ki
         places.append({p.id: e.shape_target(p)[:2] for p in e.players
                        if p.id not in skip and p.role != "GK"})
     assert places[0] == places[1] == places[2]
+
+
+def test_the_way_round_a_set_ball_is_a_stride_beyond_the_takers_clearance_and_only_for_others():
+    """Lesson 207: the point he heads for is SET_BALL_CLEAR_M (0.47 m) and a stride (0.5 m) from the
+    ball, written out (lesson 190), on the side his way passes; the taker, the fetcher and the one
+    carrying it go straight on, as does anyone whose place is by the ball, and nobody goes round a
+    ball that is not set (still rolling)."""
+    from ninety.sim.engine import Restart
+    e = Engine(3)
+    spot = (60.0, 30.0)
+    e.restart = Restart("free_kick", "home", *spot, "h9", e.t + 30.0)
+    e.ball = (*spot, 0.0, 0.0, 0.0, 0.0)
+    walker = e.by_id["h5"]
+    walker.x, walker.y = spot[0] - 6.0, spot[1] + 0.1
+    target = (spot[0] + 6.0, spot[1] + 0.1)
+    wx, wy = e.round_the_ball(walker, *target)
+    assert math.dist((wx, wy), spot) == pytest.approx(0.97, abs=0.005)
+    assert wy > spot[1]  # on the side his way passes
+    for pid in ("h9",):  # the taker
+        p = e.by_id[pid]
+        p.x, p.y = walker.x, walker.y
+        assert e.round_the_ball(p, *target) == target
+    e.restart.fetcher, e.restart.carried_by = "h7", None
+    p = e.by_id["h7"]
+    p.x, p.y = walker.x, walker.y
+    assert e.round_the_ball(p, *target) == target  # the fetcher
+    by_it = (spot[0] + 0.3, spot[1])
+    assert e.round_the_ball(walker, *by_it) == by_it  # his place is by the ball
+    e.ball = (*spot, 0.0, 2.0, 0.0, 0.0)  # rolling: not set
+    assert e.round_the_ball(walker, *target) == target
+
+
+def test_team_mates_on_the_far_side_of_a_set_ball_walk_round_it():
+    """Lesson 207, through the whole engine (move_players): four team-mates of a free kick's taker,
+    put on the far side of the set ball from their places, never come within SET_BALL_CLEAR_M of it
+    on their way (with it off, 0.23 m)."""
+    from ninety.sim.engine import SET_BALL_CLEAR_M
+    e = wall_kick(7, (60.0, 30.0))
+    for _ in range(int(12.0 / DT)):  # the ball is put on its spot and set
+        e.step()
+    r = e.restart
+    assert r is not None and e.ball_set(r)  # premise
+    mates = [p for p in e.players if p.team == "home" and p.role != "GK" and p.id != r.taker][:4]
+    for p in mates:
+        tx, ty, _ = e.shape_target(p)
+        d = math.hypot(tx - 60.0, ty - 30.0) or 1.0
+        p.x, p.y = 60.0 - (tx - 60.0) / d * 3.0, 30.0 - (ty - 30.0) / d * 3.0  # 3 m beyond it
+        p.vx = p.vy = 0.0
+    closest = math.inf
+    for _ in range(int(6.0 / DT)):
+        e.step()
+        if e.restart is not r:
+            break
+        closest = min(closest, *(math.hypot(p.x - 60.0, p.y - 30.0) for p in mates))
+    assert closest >= SET_BALL_CLEAR_M - 0.05
