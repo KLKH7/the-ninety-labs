@@ -25,9 +25,14 @@ Stages (the brief's names), each writing one file in the bundle:
    `--speech azure` synthesises each line through Azure AI Speech instead (off by default: a live
    Azure call, so run it only when agreed).
 
-The bundle (manifest.json, cues.jsonl, trace.json, events.jsonl, facts.json, detections.jsonl and
-the footage as video.webm or frames/) is all the viewer reads. This module never opens the clip's
-events.jsonl or frames.jsonl: they are the answer key (tests/test_e2e.py checks).
+The radar beside the video: `--tracked FILE --observations FILE` (vision's tracked.json and
+observations.jsonl for the clip, as ninety/vision/live_job.py writes them) add radar.json
+(ninety/radar.py): every tracked player, the ball and the broadcast camera's footprint, from above.
+
+The bundle (manifest.json, cues.jsonl, trace.json, events.jsonl, facts.json, detections.jsonl,
+radar.json when asked for, and the footage as video.webm or frames/) is all the viewer reads. This
+module never opens the clip's events.jsonl or frames.jsonl: they are the answer key
+(tests/test_e2e.py checks).
 """
 
 from __future__ import annotations
@@ -43,6 +48,7 @@ import warnings
 from dataclasses import dataclass
 from pathlib import Path
 
+from ninety import radar
 from ninety.agents import live, telemetry
 from ninety.agents.cues import _text
 from ninety.agents.factcheck import Claim, Verdict
@@ -302,6 +308,12 @@ async def run(args: argparse.Namespace) -> dict:
     audio["describer"] = {"mode": args.describer, "calls": model_calls, "tokens": tokens,
                           "unavailable": unavailable}
     footage = write_footage(clip, out, encode=not args.frames)
+    width, height = clip.meta["params"]["width"], clip.meta["params"]["height"]
+    radar_info = None
+    if args.tracked:
+        body = radar.write(args.tracked, args.observations, width, height, out / "radar.json")
+        radar_info = {"source": body["source"], "frames": len(body["frames"]),
+                      "footprints": sum(v["footprint"] is not None for v in body["views"])}
 
     write_jsonl(out / "events.jsonl", events)
     write_jsonl(out / "cues.jsonl", cues)
@@ -312,8 +324,8 @@ async def run(args: argparse.Namespace) -> dict:
         "format": BUNDLE_FORMAT,
         "clip": clip.id,
         "fps": clip.meta["fps"],
-        "width": clip.meta["params"]["width"],
-        "height": clip.meta["params"]["height"],
+        "width": width,
+        "height": height,
         "t_start": clip.meta["t_start"],
         # Which match frame each image shows, across the broadcast's cuts (ninety/match/timeline.py).
         "segments": [s.as_dict() for s in timeline.segs],
@@ -327,8 +339,9 @@ async def run(args: argparse.Namespace) -> dict:
                    "claims": len(claims), "accepted": sum(c["status"] == "accepted" for c in claims)},
         "cues": len(cues),
         "audio": audio,
+        "radar": radar_info,
         "files": ["detections.jsonl", "events.jsonl", "facts.json", "trace.json", "cues.jsonl", "audio.json",
-                  "description.vtt"],
+                  "description.vtt"] + (["radar.json"] if radar_info else []),
     }
     (out / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     return manifest
@@ -352,12 +365,19 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--describer", choices=("code", "foundry"), default="code",
                     help="audio description lines: code only, or foundry (the published Describer "
                          "agent words each verified moment, checked like any line: a live call)")
+    ap.add_argument("--tracked", type=Path, default=None,
+                    help="vision's tracked.json for the clip: adds the radar (needs --observations)")
+    ap.add_argument("--observations", type=Path, default=None,
+                    help="vision's observations.jsonl for the clip: the radar's camera footprint")
     ap.add_argument("--frames", action="store_true", help="ship JPEG frames instead of encoding video.webm")
     return ap
 
 
 def main(argv: list[str] | None = None) -> None:
-    args = parser().parse_args(argv)
+    ap = parser()
+    args = ap.parse_args(argv)
+    if (args.tracked is None) != (args.observations is None):
+        ap.error("the radar needs both --tracked and --observations")
     manifest = asyncio.run(run(args))
     a = manifest["agents"]
     print(

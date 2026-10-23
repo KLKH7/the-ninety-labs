@@ -2084,6 +2084,20 @@ short and actionable. This file is public: no research sources, product names or
   `tests/test_zone_tracking.py::test_a_defender_follows_the_attacker_in_his_zone_once_he_scans`; the
   held-out measures in the pull request.
 
+### 189. A sentence beside a number is not its mark
+- **What happened:** the goal-net change merged while its review check was skipped, so the
+  hard-coding audit (lesson 21) ran after the merge. Two new factors had a sentence beside them
+  and were still neither. The net-touch slack is two roundings of a written millimetre, and the
+  comment said "measurement precision", but the grounding row's source cell said only "physics".
+  A step through a corner of the net meets the side and the back, and the comment said so, with
+  no *design* on the count of two.
+- **Rule:** the mark sits on the constant. A margin from how positions are written names
+  measurement precision in the grounding source cell, with the derivation beside the value
+  (lesson 10). A choice carries the word *design* on its own line. A sentence that only describes
+  the number is neither. The audit runs before the merge.
+- **Check:** the audit's neither list. A constant on it is marked in a follow-up that does not
+  change the value.
+
 ### 188. Two scorers of one group share one cut-off and one comparison
 - **What happened:** EVALUATION.md puts a ball in the air when its centre is above 0.5 m. The
   pitch-level vision scorer used `z > 0.5`, but the position scorer (`pitch_score.py`) used
@@ -2123,6 +2137,19 @@ short and actionable. This file is public: no research sources, product names or
   `tests/test_vision_live_job.py::test_a_clip_folder_holding_anything_else_is_refused_before_the_model_loads`
   (each answer-key file planted), and `::test_a_clean_clip_runs_the_whole_live_path_and_opens_no_truth`.
 
+### 194. An allow-list of a folder's top level lets anything through one level down
+- **What happened:** the live detection job refused an input folder holding anything but
+  `index.jsonl` and `images/`, but it checked only the folder's own entries, and inside `images/`
+  it looked only at `*.jpg`. A `frames.jsonl` placed in `images/` passed the check, and so would a
+  whole rendered clip nested there. Found while adding the tactical camera's `views/<name>/`
+  layout, which made the job look one level deeper and asked what else could sit there.
+- **Rule:** an allow-list of inputs is checked over the whole tree, every file and folder at every
+  depth: what is not named is refused. A new level of layout (views, tiles) gets its own planted
+  answer-key files at each depth it adds.
+- **Check:** `tests/test_vision_live_job.py::test_an_answer_key_file_anywhere_in_a_views_clip_is_refused_before_the_model_loads`
+  (each answer-key file planted at the clip, in `views/`, in a view, in its `images/` and in a
+  folder under it) and `::test_a_planted_frame_file_in_a_single_clip_s_images_is_refused`.
+
 ### 203. CI built the image with a stand-in, so the real pin was never tried
 - **What happened:** the demo image downloads its Replay bundle from a release asset pinned by URL
   and SHA-256 in the Dockerfile. CI's image job builds with a fixture bundle instead, so it stayed
@@ -2135,6 +2162,22 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** the CI `image` job's step "The Dockerfile's pinned Replay bundle exists and matches its
   hash"; `tests/test_api_site.py::test_a_websocket_behind_the_gate_needs_the_key_too` fails with the
   WebSocket branch of `RequireKey` removed.
+
+### 163. A rule every writer follows goes into every writer's instructions
+- **What happened:** the live Personalizer evaluation (agents-live 39514003721) aired its casual
+  persona in only 12 of 20 claims. For a claim at 00:03 the model wrote "At 3 seconds" (in Spanish
+  "A los 3 segundos"), turning the clock into plain words as "no jargon" seemed to ask. The re-check
+  dropped every one, as it should, since the claim's clock is a number to keep. The Analyst,
+  Tactician and Challenger all carry the one-clock rule (lesson 33); the Personalizer's
+  instructions never did. On the live path each drop then read "no translation", which pointed at
+  the translator rather than the model.
+- **Rule:** a rule the code checks on every writer's text is stated in every writer's instructions,
+  including a persona's style line ("plain words go around the claim's facts, never in place of
+  them"). A fix to model behaviour is measured on the model before publishing: here, unpublished,
+  6 of 24 variants dropped with the old wording and 0 of 24 with the new. A hold says which check
+  made it.
+- **Check:** `tests/test_personalizer.py::test_the_instructions_keep_the_claim_s_clock_for_every_persona`;
+  `tests/test_personalizer_live.py::test_a_variant_the_personalizer_s_re_check_replaced_is_held_with_its_reason`.
 
 ### 208. A script inside YAML is code: parse it before a run is approved
 - **What happened:** resolving a merge conflict in `agents-live.yml`, two new `case` branches were
