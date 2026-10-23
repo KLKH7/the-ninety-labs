@@ -125,3 +125,50 @@ def test_a_fallen_players_box_away_from_his_feet_still_fails():
     assert projection_errors([_lying(beside)])["player_foot_outside_box"] == 1
     above = (-10, -40, 10, -15)  # a lying body's box 15 px above his feet (added after a mutant survived)
     assert projection_errors([_lying(above)])["player_foot_outside_box"] == 1
+
+
+# V6 from a high lens (lesson 212): a foot drawn reaching to the ball it touches.
+HIGH = Camera((52.5, -32.0, 28.0), (30.0, 34.0, 0.0), 34.6, 1920, 1080)
+
+
+def _reach_clip(ball_off: float, touch: bool, n: int = 12, at: int = 6) -> tuple[list[dict], list[dict]]:
+    """One player at (30, 5), near the touchline, lunging: his box from his head over the tracked
+    point (1.6 m up, the hips down in the reach) to his foot at a ball `ball_off` metres toward the
+    camera; on frame `at` he touches it (action foot) when `touch`."""
+    frames = []
+    bx, by = 30.0, 5.0 - ball_off
+    for i in range(n):
+        head = HIGH.project((30.0, 5.0, 1.6))
+        sole = HIGH.project((bx, by, 0.0))
+        foot = HIGH.project((30.0, 5.0, 0.0))
+        box = [min(head[0], sole[0], foot[0]) - 6, head[1], max(head[0], sole[0], foot[0]) + 6, sole[1]]
+        frames.append({
+            "frame": 100 + i, "t": (100 + i) / 25, "camera": HIGH.to_dict(), "keypoints": [],
+            "ball": {"x": bx, "y": by, "z": 0.0, "bbox": None, "pixels": 0, "visibility": 0.0,
+                     "centroid_px": None},
+            "players": [{"id": "h7", "team": "home", "x": 30.0, "y": 5.0, "vx": 1.0, "vy": 0.0,
+                         "heading": -1.5708, "action": "foot" if touch and i == at else "walk",
+                         "bbox": box, "visibility": 1.0, "pixels": 400}],
+        })
+    return frames, []
+
+
+def test_a_foot_drawn_to_the_ball_it_touches_is_inside_its_box_from_a_high_lens():
+    """Seeds 70 and 79 of dataset tactical: on a touch the foot is drawn at the ball, 0.85 to 0.9 m
+    out. From a high lens that is far down the picture, past the side-on slack of 0.45 m; the box is
+    right, and the check now measures the reach on the ground through the saved matrix."""
+    frames, events = _reach_clip(1.0, touch=True)
+    assert projection_errors(frames)["player_foot_outside_box"] > 0  # the side-on slack alone fails it
+    assert projection_errors(frames, events, {"h7": 1.84})["player_foot_outside_box"] == 0
+
+
+def test_a_foot_that_far_out_with_no_touch_is_still_caught():
+    frames, events = _reach_clip(1.0, touch=False)
+    assert projection_errors(frames, events, {"h7": 1.84})["player_foot_outside_box"] == len(frames)
+
+
+def test_a_foot_beyond_the_leg_is_caught_even_on_a_touch():
+    """The reach is the leg's ((LEG_M + HIP_SIDE_M) at his scale, about 1.1 m at 1.84 m tall), not
+    wherever the ball is: a box reaching 2.5 m to a ball fails on the touch frames too."""
+    frames, events = _reach_clip(2.5, touch=True)
+    assert projection_errors(frames, events, {"h7": 1.84})["player_foot_outside_box"] == len(frames)
