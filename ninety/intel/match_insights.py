@@ -21,9 +21,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ninety.intel import counter_press, line_breaks, overloads, pass_options, roles, shape
-from ninety.intel.scene import TEAMS, Frames
+from ninety.intel.scene import TEAMS, Frames, xy
 from ninety.intel.teamsheet import Fixture
 
+BUILD_UP_S = 60.0  # design: a goal's build-up is the minute before it
 MAX_FACTS = 12  # design: the most facts a tool returns, the strongest first, so a prompt stays short
 KIND_FACTS = ("line_break", "overload", "counter_press", "pass_options")
 
@@ -53,6 +54,7 @@ class MatchInsights:
             assigned = roles.assign(f.frames, team)
             for track in {p["id"] for fr in f.frames for p in fr["players"] if p["team"] == team}:
                 people[track] = roles.who(track, team, assigned, fixture, gate)
+        shapes = shape_drawings(f.frames)
         facts = {
             "line_break": line_breaks.line_breaks(events, f),
             "overload": overloads.overloads(f),
@@ -65,12 +67,33 @@ class MatchInsights:
                     "kind": "shape",
                     "t": 60.0 * r["minute"] - 1,  # the minute's last second: a shape is known once it is over
                     "also": [[abs(r["change"]), r["unit"]]] if r.get("change") else [],
-                    "visual": {"kind": "shape", "minute": r["minute"]},
+                    "visual": {
+                        "kind": "shape",
+                        "minute": r["minute"],
+                        **shapes.get((r["team"], r["minute"]), {}),
+                    },
                 }
                 for r in shape.shape_rows(f.frames)
             ],
         }
         clubs = fixture.clubs
+        # Goals as vision detected them: what "why did that goal happen?" is asked about.
+        facts["goal"] = [
+            {
+                "id": f"goal:{e['id']}",
+                "kind": "goal",
+                "team": e["team"],
+                "minute": int(float(e["t"]) // 60) + 1,
+                "t": round(float(e["t"]), 2),
+                "event": e["id"],
+                "event_confidence": e.get("confidence"),
+                "team_confidence": e.get("team_confidence"),
+                "player": e.get("player"),
+                "confident": True,
+            }
+            for e in events
+            if e.get("type") == "goal"
+        ]
         for rows in facts.values():
             for r in rows:
                 r["club"] = clubs[r["team"]]
@@ -169,6 +192,70 @@ class MatchInsights:
         top = sorted(rows, key=lambda r: (not r["confident"], -r["minute"], r["metric"]))[: MAX_FACTS * 2]
         return {"facts": top, "summary": []}
 
+    def goal_build_up(self, minute: int, club: str | None = None) -> dict:
+        """The goal at or before `minute` (the latest, or one club's), and the insight facts of the
+        BUILD_UP_S before it: what led to it, strongest first."""
+        team = self.team(club)
+        goals = [
+            g
+            for g in self.facts.get("goal", ())
+            if g["minute"] <= minute and (team is None or g["team"] == team)
+        ]
+        if not goals:
+            return {"facts": [], "summary": []}
+        goal = goals[-1]
+        before = [
+            f
+            for kind in ("line_break", "overload", "counter_press", "pass_options")
+            for f in self.facts.get(kind, ())
+            if goal["t"] - BUILD_UP_S <= f["t"] <= goal["t"]
+        ]
+        before.sort(key=lambda f: (not f["confident"], f["team"] != goal["team"], -f["value"], -f["t"]))
+        return {"facts": [goal, *before[:MAX_FACTS]], "summary": []}
+
+    def players(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+        """Players ranked by the opponents their completed passes took out of the game, each as one
+        fact. A player's total is confident when its bounds agree; the leader's fact is confident only
+        when, in addition, his lowest possible total beats every other player's highest, so "the most"
+        holds whatever the untracked players were doing."""
+        team = self.team(club)
+        by: dict[str, list[dict]] = {}
+        for f in self._rows("line_break", minute_from, minute_to, club):
+            if f.get("passer") and f["hi"] > 0:
+                by.setdefault(f["passer"], []).append(f)
+        ranked = sorted(by.items(), key=lambda kv: (-sum(f["value"] for f in kv[1]), kv[0]))
+        out = []
+        for k, (track, rows) in enumerate(ranked[:5], 1):
+            who = self.people.get(track, {})
+            out.append(
+                {
+                    "id": f"top:{track}:m{minute_from}-{minute_to}",
+                    "kind": "players",
+                    "metric": "opponents_bypassed_by_player",
+                    "team": who.get("team", rows[0]["team"]),
+                    "club": self.fixture.clubs[rows[0]["team"]],
+                    "minute_from": minute_from,
+                    "minute_to": minute_to,
+                    "player": track,
+                    "player_is": who.get("say"),
+                    "rank": k,
+                    "value": sum(f["value"] for f in rows),
+                    "unit": "opponents",
+                    "lo": sum(f["lo"] for f in rows),
+                    "hi": sum(f["hi"] for f in rows),
+                    "confident": sum(f["lo"] for f in rows) == sum(f["hi"] for f in rows),
+                    "also": [[len(rows), "passes"]],
+                }
+            )
+        # "The most" needs the leader's least to beat everyone else's most.
+        if out:
+            others_hi = max((sum(f["hi"] for f in rows) for _, rows in ranked[1:]), default=-1)
+            out[0]["leads"] = out[0]["lo"] > others_hi
+            out[0]["confident"] = out[0]["confident"] and out[0]["leads"]
+        if team is not None:
+            out = [r for r in out if r["team"] == team]
+        return {"facts": out, "summary": []}
+
     def lineup(self, club: str | None = None) -> dict:
         """The team sheets, and who of the tracked players may be named and how."""
         team = self.team(club)
@@ -216,6 +303,42 @@ class MatchInsights:
             int(body["minutes"]),
             dict(body.get("gates") or {}),
         )
+
+
+def shape_drawings(frames: Sequence[Mapping]) -> dict[tuple[str, int], dict]:
+    """What the phone draws for a team's shape in a minute: its players in the frame of that minute
+    with most of them tracked (the latest, on a tie), and its outfield players split into back, middle
+    and front lines at the two largest gaps in depth, as the shape facts split them (shape.lines), each
+    line ordered across the pitch. The keeper is left out as the shape facts leave him out."""
+    best: dict[tuple[str, int], Mapping] = {}
+    for fr in frames:
+        for team in TEAMS:
+            key = (team, shape.minute_of(fr["t"]))
+            n = sum(p["team"] == team for p in fr["players"])
+            old = best.get(key)
+            if old is None or n >= sum(p["team"] == team for p in old["players"]):
+                best[key] = fr
+    out = {}
+    for (team, minute), fr in best.items():
+        own = [p for p in fr["players"] if p["team"] == team]
+        if len(own) < 4:
+            continue
+        ranked = sorted(own, key=lambda p: shape.depth(team, p["x"]))
+        if shape.in_own_penalty_area(shape.depth(team, ranked[0]["x"]), ranked[0]["y"]):
+            ranked = ranked[1:]
+        depths = [shape.depth(team, p["x"]) for p in ranked]
+        gaps = sorted(range(1, len(depths)), key=lambda i: (depths[i] - depths[i - 1], -i), reverse=True)[:2]
+        a, b = sorted(gaps)
+        lines = [
+            sorted(ranked[:a], key=lambda p: p["y"]),
+            sorted(ranked[a:b], key=lambda p: p["y"]),
+            sorted(ranked[b:], key=lambda p: p["y"]),
+        ]
+        out[(team, minute)] = {
+            "lines": [[xy(p) for p in line] for line in lines],
+            "players": [xy(p) for p in own],
+        }
+    return out
 
 
 def load_fixture(path: Path) -> Fixture:

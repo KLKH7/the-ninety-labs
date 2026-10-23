@@ -165,6 +165,9 @@ class Room:
     phones: dict[WebSocket, Outbox] = field(default_factory=dict)
     latest: dict[str, dict] = field(default_factory=dict)  # last clock and focus, for late phones
     sending: set[asyncio.Task] = field(default_factory=set)  # flushes in flight, kept until done
+    # The match conversation: each phone question and its answer, so a follow-up has its context
+    # (ninety/agents/companion_match.py). Capped; it lives and dies with the pairing.
+    turns: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -551,12 +554,14 @@ class Companion:
         if question.player is None:
             insights = _insights(room.clip)
             if insights is not None:
-                # A match question: the Companion's insight tools. Code answers; the model path
-                # needs the match Companion published (ninety/agents/companion_match.py).
-                result = await companion_match.answer_match(question, insights)
-                return JSONResponse(_send(
-                    {"type": "answer", "answer": answer_json(result.answer), "source": result.source}
-                ))
+                # A match question: the Companion's insight tools, with the pairing's earlier turns.
+                # Code answers; the model path needs the match Companion published.
+                result = await companion_match.answer_match(question, insights, history=room.turns)
+                turn = {"question": question.text, "answer": result.answer.text, "calls": list(result.tools)}
+                room.turns = [*room.turns, turn][-MAX_TURNS:]
+                return JSONResponse(
+                    _send({"type": "answer", "answer": answer_json(result.answer), "source": result.source})
+                )
         window = None
         if question.player is not None:
             _, window = self._window(track, question.player, 0.0, question.t)
@@ -595,6 +600,9 @@ class Companion:
         ]
 
 
+MAX_TURNS = 6  # design: a pairing remembers its last six exchanges, more than the model is shown
+
+
 def _insights(clip: str):
     """The clip's insight facts, or None when it has no tracked frames or is not served."""
     from ninety.mcp import match_server
@@ -616,6 +624,9 @@ def answer_json(answer: Answer) -> dict:
         "t_from": answer.t_from,
         "t_to": answer.t_to,
         "visual": answer.visual,
+        "names": answer.names,
+        "spoken": answer.spoken,
+        "follow_ups": list(answer.follow_ups),
     }
 
 
