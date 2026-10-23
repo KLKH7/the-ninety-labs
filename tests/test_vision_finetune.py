@@ -312,3 +312,73 @@ def test_record_only_needs_a_started_run_and_a_reason(tmp_path):
     (tmp_path / "train-manifest.json").write_text(json.dumps({"name": "x", "finished": None}))
     with pytest.raises(ValueError, match="reason"):
         train.record_only(tmp_path, " ")
+
+
+def write_tactical_clip(root, seed, views=("tac-l", "tac-r"), n=2):
+    """A tactical clip: each view's real 1920 x 1080 frames, one player on the vertical seam of
+    the tile grid (whole in both top tiles), one ball in the top-left tile only."""
+    from PIL import Image
+
+    d = root / f"seed{seed}"
+    (d).mkdir(parents=True)
+    (d / "clip.json").write_text(json.dumps({"seed": seed, "split": "train", "clip_id": f"seed{seed}"}))
+    for v in views:
+        (d / "views" / v / "images").mkdir(parents=True)
+        rows = []
+        for i in range(n):
+            Image.new("RGB", (1920, 1080), (40, 120, 40)).save(d / "views" / v / "images" / f"{i:05d}.jpg")
+            rows.append({"frame": 10 + i, "t": i / 25, "image": f"images/{i:05d}.jpg",
+                         "camera": {"width": 1920, "height": 1080},
+                         "players": [{"bbox": [950, 200, 980, 270], "visibility": 1.0}],
+                         "ball": {"bbox": [100, 100, 104, 104], "visibility": 1.0}})
+        (d / "views" / v / "frames.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+    return d
+
+
+def test_tiled_export_writes_the_live_grid_with_labels_clipped_into_each_tile(tmp_path):
+    from PIL import Image
+
+    dirs = [write_tactical_clip(tmp_path, s) for s in (1, 2)]
+    out = tmp_path / "coco"
+    coco_export.export(dirs, out, val_seeds={2}, stride=1, tiles=0.0)
+    coco = load_split(out, "train")
+    # Per frame and view: the top-left tile (player and ball), the top-right (player); the two
+    # bottom tiles hold nothing and are dropped at share 0.
+    names = sorted(i["file_name"] for i in coco["images"])
+    assert names == sorted(f"seed1_{v}_{f:06d}_t{k}.jpg"
+                           for v in ("tac-l", "tac-r") for f in (10, 11) for k in (0, 1))
+    assert all(Image.open(out / "train" / n).size == (1056, 594) for n in names)
+    by_image = {}
+    for a in coco["annotations"]:
+        by_image.setdefault(a["image_id"], []).append((a["category_id"], a["bbox"]))
+    for img in coco["images"]:
+        got = sorted(by_image[img["id"]])
+        if img["file_name"].endswith("_t0.jpg"):
+            assert got == [(1, [950, 200, 30, 70]), (2, [100, 100, 4, 4])]
+        else:  # the top-right tile starts at x = 864
+            assert got == [(1, [86, 200, 30, 70])] and img["tile"] == [864, 0, 1920, 594]
+    manifest = json.loads((out / "export.json").read_text())
+    assert manifest["tiles"]["empty_share"] == 0.0
+    assert manifest["train"]["empty_tiles"] == {"kept": 0, "dropped": 8}
+
+
+def test_a_label_cut_by_a_tile_edge_is_clipped_to_the_part_inside():
+    from ninety.vision.tiles import grid
+
+    tl = grid(1920, 1080)[0]
+    a = {"category_id": 1, "bbox": [1040, 100, 30, 60], "area": 1800}
+    assert coco_export._clipped(a, tl)["bbox"] == [1040, 100, 16, 60]
+    assert coco_export._clipped(a | {"bbox": [1100, 100, 30, 60]}, tl) is None
+
+
+def test_the_share_of_empty_tiles_kept_is_the_one_asked_and_the_choice_is_fixed():
+    draws = [coco_export.keep_empty(7, "tac-l", f, k, 0.1) for f in range(2000) for k in range(4)]
+    assert 0.08 < sum(draws) / len(draws) < 0.12
+    assert draws == [coco_export.keep_empty(7, "tac-l", f, k, 0.1) for f in range(2000) for k in range(4)]
+    assert not any(coco_export.keep_empty(7, "tac-l", f, 0, 0.0) for f in range(200))
+    assert all(coco_export.keep_empty(7, "tac-l", f, 0, 1.0) for f in range(200))
+
+
+def test_tiled_export_refuses_a_share_outside_0_to_1(tmp_path):
+    with pytest.raises(ValueError, match="share"):
+        coco_export.export([write_tactical_clip(tmp_path, 1)], tmp_path / "c", {1}, tiles=1.5)
