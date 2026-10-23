@@ -22,7 +22,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import random
 from collections import Counter
 from pathlib import Path
 
@@ -39,6 +38,7 @@ from ninety.agents.factcheck import (
     spelled_as_digits,
 )
 from ninety.intel import shape
+from ninety.sim import fmath
 
 ROOT = Path(__file__).resolve().parents[2]
 ROWS = ROOT / "docs" / "eval" / "shape-claims-rows.json"
@@ -54,7 +54,7 @@ def simulated_rows() -> dict:
     from ninety.match.tracking import slim
     from ninety.sim.engine import simulate
 
-    rng = random.Random(RNG_SEED)
+    rng = fmath.Random(RNG_SEED)
     out = {}
     for seed in SEEDS:
         run = simulate(seed, MINUTES)

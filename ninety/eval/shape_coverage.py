@@ -12,10 +12,10 @@ from __future__ import annotations
 import argparse
 import json
 import math
-import random
 from pathlib import Path
 
 from ninety.intel import shape
+from ninety.sim import fmath
 
 SEEDS = (7, 11)  # docs/eval/shape-coverage-plan.md: S4's seeds, never a test seed
 MINUTES = 10
@@ -38,7 +38,7 @@ def _keep(frames: list[dict], team: str, ids: set[str]) -> list[dict]:
 
 
 def errors(
-    windows: list[tuple[str, list[dict]]], scheme: str, k: int, rng: random.Random
+    windows: list[tuple[str, list[dict]]], scheme: str, k: int, rng: fmath.Random
 ) -> dict[str, list[float]]:
     """Each geometry metric's error at k tracked, as a share of its tolerance (1 is the tolerance)."""
     out: dict[str, list[float]] = {m: [] for m in GEOMETRY}
@@ -80,7 +80,7 @@ def measure() -> dict:
             for team in ("home", "away"):
                 if sum(p["team"] == team for p in frames[0]["players"]) == shape.TEAM_SIZE:
                     windows.append((team, frames))
-    rng = random.Random(RNG_SEED)
+    rng = fmath.Random(RNG_SEED)
     table: dict[str, dict[int, dict[str, float]]] = {}
     passing: dict[str, int] = {}
     for scheme in ("random", "far_from_ball"):
