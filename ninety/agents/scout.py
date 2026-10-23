@@ -10,7 +10,8 @@ or from a model that rewrites it, and goes through the insight fact-check (and t
 there is one); only a verified card is pushed. Each card has a "why?" follow-up, answered ahead of
 time by the Companion over the same facts, so the phone shows it without a model call.
 
-Nothing is pushed within GOAL_QUIET_S after a detected goal: the screen belongs to the goal.
+Nothing is pushed within GOAL_QUIET_S after a detected goal: the screen belongs to the goal. Then
+the goal's build-up jumps the queue (`scout`: spotters per kind, a light Director).
 
     uv run python -m ninety.agents.scout INSIGHTS.json --out cards.json
 """
@@ -21,11 +22,12 @@ import argparse
 import asyncio
 import json
 from collections.abc import Mapping, Sequence
+from html import escape
 from pathlib import Path
 
 from ninety.agents import companion_match as companion
 from ninety.agents import insight_check
-from ninety.agents.contracts import Ask, Judge, status_for
+from ninety.agents.contracts import Ask, Description, Judge, status_for
 from ninety.agents.factcheck import Claim, parse_claim
 
 CARD_GAP_MIN = 3  # design: at most one card every three match minutes, so a card is news, not noise
@@ -34,6 +36,7 @@ MIN_SO_FAR = (
     10  # the top tenth needs ten facts of a kind to rank among (with fewer, NOTABLE cannot be reached)
 )
 GOAL_QUIET_S = 30.0  # design: no card in the half minute after a goal
+DEFER_SLOTS = 1  # design: a candidate kept out by the cap may still go in the next slot, then it is stale
 HEADLINES = {
     "line_break": "{club} cut through",
     "overload": "{club} outnumber them",
@@ -170,37 +173,133 @@ async def card_for(
     return None
 
 
+async def spot(kind: str, insights, t_to: float) -> list[dict]:
+    """One spotter: the notable confident facts of its kind up to t_to (see `candidates`)."""
+    return [f for f in candidates(insights, t_to) if f["kind"] == kind]
+
+
 async def scout(
-    insights, goals: Sequence[float] = (), ask: Ask | None = None, judge: Judge | None = None
+    insights,
+    goals: Sequence[float] = (),
+    ask: Ask | None = None,
+    judge: Judge | None = None,
+    log: list | None = None,
 ) -> list[dict]:
-    """The match's cards, oldest first: per CARD_GAP_MIN of play, the most notable verified one."""
-    pool = candidates(insights, float("inf"))
+    """The match's cards, oldest first, and (into `log`) every decision the Director made.
+
+    One spotter per kind proposes in parallel (`spot`); the Director decides, slot by slot of
+    CARD_GAP_MIN match minutes:
+    - cap: at most one card a slot;
+    - no repeats: a candidate of the last card's kind, or about the last card's player, goes last;
+    - goal jump: after a goal, the most notable fact of the minute before it is pushed at the end
+      of the quiet, whatever the cap (a goal is when a fan wants the why);
+    - deferral: a candidate the cap kept out waits in a queue for DEFER_SLOTS slots, then is dropped;
+    - logged: each candidate's fate (pushed, deferred, dropped, refused by the fact-check), with why.
+    """
+    log = [] if log is None else log
+    pools = await asyncio.gather(*(spot(k, insights, float("inf")) for k in insights.facts))
+    pool = sorted((f for rows in pools for f in rows), key=lambda f: (f["t"], f["id"]))
+    so_far = {k: rows for k, rows in insights.facts.items()}
+
+    def rank(f):
+        return _rank(f, [g for g in so_far[f["kind"]] if g["t"] <= f["t"]])
+
     cards: list[dict] = []
-    last_min = -CARD_GAP_MIN
-    slots: dict[int, list[dict]] = {}
+    used: set[str] = set()
+    queue: list[tuple[int, dict]] = []  # (slot it arrived in, fact)
+    jumps = sorted(goals)
+    by_slot: dict[int, list[dict]] = {}
     for f in pool:
         if any(0 <= f["t"] - g <= GOAL_QUIET_S for g in goals):
+            log.append({"fact": f["id"], "decision": "dropped", "why": "in the quiet after a goal"})
             continue
-        slots.setdefault((f["minute"] - 1) // CARD_GAP_MIN, []).append(f)
-    for slot in sorted(slots):
-        if slot * CARD_GAP_MIN < last_min + CARD_GAP_MIN:
+        by_slot.setdefault((f["minute"] - 1) // CARD_GAP_MIN, []).append(f)
+    last_slot = max([*by_slot, *(int(g // 60) // CARD_GAP_MIN for g in jumps)], default=-1)
+
+    async def push(f, why):
+        card = await card_for(f, insights, len(cards) + 1, ask, judge)
+        if card is None:
+            log.append({"fact": f["id"], "decision": "refused", "why": "no sentence passed the fact-check"})
+            return False
+        card["t"] = max(card["t"], cards[-1]["t"] if cards else 0.0)
+        cards.append(card)
+        used.add(f["id"])
+        log.append({"fact": f["id"], "decision": "pushed", "why": why, "card": card["id"]})
+        return True
+
+    for slot in range(last_slot + 1):
+        # A goal in this slot: its build-up jumps the cap.
+        for g in [g for g in jumps if int(g // 60) // CARD_GAP_MIN == slot]:
+            build_up = [f for f in pool if g - 60.0 <= f["t"] <= g and f["id"] not in used]
+            for f in sorted(build_up, key=lambda f: -rank(f)):
+                if await push({**f, "t": g + GOAL_QUIET_S}, "goal jump: the build-up to a goal"):
+                    break
+        fresh = [(slot, f) for f in by_slot.get(slot, [])]
+        queue = [(s0, f) for s0, f in queue if slot - s0 <= DEFER_SLOTS] + fresh
+        if not queue:
             continue
-        last_kind = cards[-1]["kind"] if cards else None
-        ranked = sorted(
-            slots[slot],
-            key=lambda f: (
-                f["kind"] == last_kind,  # a different kind first: variety
-                -_rank(f, [g for g in insights.facts[f["kind"]] if g["t"] <= f["t"]]),
-                f["t"],
-            ),
-        )
-        for f in ranked:
-            card = await card_for(f, insights, len(cards) + 1, ask, judge)
-            if card:
-                cards.append(card)
-                last_min = slot * CARD_GAP_MIN
-                break
+        last = cards[-1] if cards else None
+
+        def order(item, last=last):
+            _, f = item
+            repeat = last is not None and (
+                f["kind"] == last["kind"]
+                or (f.get("passer") and f.get("passer") in (last.get("players") or ()))
+            )
+            return (repeat, -rank(f), f["t"])
+
+        pushed = False
+        for s0, f in sorted(queue, key=order):
+            if f["id"] in used:
+                continue
+            if not pushed and await push(
+                f, "most notable in its slot" if s0 == slot else "deferred, then pushed"
+            ):
+                pushed = True
+                if cards:
+                    cards[-1]["players"] = [p for p in (f.get("passer"), f.get("receiver")) if p]
+                continue
+            if s0 == slot:
+                log.append({"fact": f["id"], "decision": "deferred", "why": "the slot already had a card"})
+        queue = [(s0, f) for s0, f in queue if f["id"] not in used]
+    dropped = {e["fact"] for e in log if e["decision"] in ("pushed", "dropped", "refused")}
+    for _, f in queue:
+        if f["id"] not in dropped:
+            log.append({"fact": f["id"], "decision": "dropped", "why": "deferred too long"})
+    for c in cards:
+        c.pop("players", None)
     return cards
+
+
+def _where_x(card: Mapping) -> float | None:
+    g = (card.get("visual") or {}).get("geometry") or {}
+    for key in ("from", "ball", "passer"):
+        if g.get(key):
+            return float(g[key][0])
+    if g.get("zone"):
+        return (float(g["zone"]["x0"]) + float(g["zone"]["x1"])) / 2
+    return None
+
+
+def spoken(cards: Sequence[Mapping]) -> list[tuple[float, Description]]:
+    """The audio description's insight lines: each pushed card's verified sentence, said once at
+    its moment, placed in stereo where the play was (-1 the left touchline as the camera sees it,
+    x = 0, to 1 at x = 105). The cards are already spaced by CARD_GAP_MIN, so the track says at
+    most one insight sentence every three minutes, beside the event lines (ninety/speech/describe.py)."""
+    out = []
+    for c in cards:
+        if c.get("status") != "verified":
+            continue
+        x = _where_x(c)
+        pan = 0.0 if x is None else max(-1.0, min(1.0, x / 52.5 - 1.0))
+        text = str(c["text"])
+        out.append(
+            (
+                float(c["t"]),
+                Description(c["id"], text, f"<speak>{escape(text)}</speak>", round(pan, 2), "code"),
+            )
+        )
+    return out
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -219,9 +318,11 @@ def main(argv: list[str] | None = None) -> None:
         from ninety.match import detected
 
         goals = [float(e["t"]) for e in detected.load(args.goals) if e["type"] == "goal"]
-    cards = asyncio.run(scout(mi, goals))
+    log: list = []
+    cards = asyncio.run(scout(mi, goals, log=log))
     args.out.write_text(json.dumps(cards, indent=1) + "\n")
-    print(f"{args.out}: {len(cards)} cards")
+    args.out.with_suffix(".log.json").write_text(json.dumps(log, indent=1) + "\n")
+    print(f"{args.out}: {len(cards)} cards, {len(log)} decisions logged")
 
 
 if __name__ == "__main__":

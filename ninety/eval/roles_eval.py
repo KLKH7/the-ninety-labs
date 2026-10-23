@@ -9,7 +9,10 @@ tracker spoils it, then given to `ninety.intel.roles.assign` exactly as the live
 - each track's position is off by an error that persists, a random walk pulled back to zero,
   scaled so its 90th-percentile size is the tracker's measured 1.26 m (ninety/intel/scene.
   POSITION_ERROR_M): a misjudgement held, not a fresh draw each frame (docs/LESSONS.md, lesson 135);
-- in each frame each player is missing with probability MISSING (occluded, out of shot).
+- in each frame each player is missing with probability MISSING (occluded, out of shot);
+- when two team-mates come within SWAP_M of each other, their tracks swap with probability SWAP_P
+  (the tracker's identity switch), so a track can follow one player and then another. A track is
+  graded against the player it followed most.
 
 Each track's assigned role is graded against its player's roster role, and its line (goalkeeper,
 defender, midfielder, forward) against his line. The gates are the least share at which the
@@ -25,7 +28,7 @@ import argparse
 import json
 import math
 import random
-from collections import Counter
+from collections import Counter, defaultdict
 from pathlib import Path
 
 from ninety.intel import roles
@@ -40,13 +43,22 @@ FRAGMENT_S = (30.0, 10.0, 120.0)  # design: the first sets the gates; the others
 MISSING = 0.05  # design: one player in twenty unseen in a frame
 SIGMA_M = POSITION_ERROR_M / math.sqrt(2 * math.log(10))  # 2-D error whose 90th percentile is 1.26 m
 PULL = 0.02  # design: the error's pull back to zero per sampled frame (a few seconds' memory)
+# Design: two team-mates within this of each other may be confused by the tracker (about the
+# strict match radius, docs/GROUNDING.md S3), and are, at that moment, with this chance.
+SWAP_M = 1.5
+SWAP_P = 0.5
 WINDOW_MIN = 15  # design: roles are assigned over each 15-minute window, the stats' window (S4)
 STEP = roles.STEP_FRAMES
 
 
 def load(run: Path, step: int = STEP) -> tuple[list[dict], dict[str, str]]:
     meta = json.loads((run / "meta.json").read_text())
-    role = {r["id"]: r["role"] for r in meta["roster"]}
+    if "roster" in meta:
+        role = {r["id"]: r["role"] for r in meta["roster"]}
+    else:  # an older run's meta has no roster: ids follow the engine's formation order (h1 is its GK)
+        from ninety.sim.engine import FORMATION
+
+        role = {f"{t}{i}": r for t in "ha" for i, (r, _, _) in enumerate(FORMATION, 1)}
     frames = []
     with (run / "frames.jsonl").open() as fh:
         for line in fh:
@@ -67,7 +79,8 @@ def spoil(frames: list[dict], seed: int, fragment_s: float) -> tuple[list[dict],
     """Tracked-like frames, and which true player each track is."""
     rng = random.Random(seed)
     state: dict[str, dict] = {}
-    owner: dict[str, str] = {}
+    seen: dict[str, Counter] = defaultdict(Counter)
+    close: set[frozenset] = set()
     n = 0
     out = []
     prev_t = frames[0]["t"] if frames else 0.0
@@ -77,6 +90,7 @@ def spoil(frames: list[dict], seed: int, fragment_s: float) -> tuple[list[dict],
         pull = 1 - (1 - PULL) ** (dt / (STEP / 25)) if dt else 0.0  # PULL is per 0.2 s
         k = math.sqrt(pull * (2 - pull))  # keeps the walk's spread at SIGMA_M per axis
         players = []
+        _swap(f["players"], state, close, rng)
         for p in f["players"]:
             s = state.get(p["id"])
             if s is None or s["left"] <= 0:
@@ -88,7 +102,7 @@ def spoil(frames: list[dict], seed: int, fragment_s: float) -> tuple[list[dict],
                     "ey": rng.gauss(0, SIGMA_M),
                 }
                 state[p["id"]] = s
-                owner[s["track"]] = p["id"]
+            seen[s["track"]][p["id"]] += 1  # the track's owner is whom it followed most
             s["left"] -= dt
             s["ex"] = (1 - pull) * s["ex"] + k * rng.gauss(0, SIGMA_M)
             s["ey"] = (1 - pull) * s["ey"] + k * rng.gauss(0, SIGMA_M)
@@ -103,7 +117,23 @@ def spoil(frames: list[dict], seed: int, fragment_s: float) -> tuple[list[dict],
                 }
             )
         out.append({**f, "players": players})
+    owner = {track: c.most_common(1)[0][0] for track, c in seen.items()}
     return out, owner
+
+
+def _swap(players: list[dict], state: dict, close: set, rng: random.Random) -> None:
+    """The tracker's identity switch: when two team-mates come within SWAP_M, at the moment they do,
+    their tracks swap with probability SWAP_P, each track going on with the other player."""
+    now = set()
+    for i, a in enumerate(players):
+        for b in players[i + 1 :]:
+            if a["team"] == b["team"] and math.hypot(a["x"] - b["x"], a["y"] - b["y"]) < SWAP_M:
+                pair = frozenset((a["id"], b["id"]))
+                now.add(pair)
+                if pair not in close and a["id"] in state and b["id"] in state and rng.random() < SWAP_P:
+                    state[a["id"]], state[b["id"]] = state[b["id"]], state[a["id"]]
+    close.clear()
+    close.update(now)
 
 
 def graded(frames: list[dict], truth_role: dict[str, str], seed: int, fragment_s: float) -> list[dict]:
@@ -190,7 +220,54 @@ def main(argv: list[str] | None = None) -> None:
     args.calibration.write_text(
         json.dumps({**gates, "fragment_s": FRAGMENT_S[0], "source": str(args.out)}, indent=1) + "\n"
     )
+    args.out.with_suffix(".md").write_text(markdown(report))
     print("gates", gates)
+
+
+MD_HEAD = """# Who a tracked player is: role assignment graded on simulated matches
+
+Generated by `uv run python -m ninety.eval.roles_eval --dev runs/u7 runs/seed11 --held-out runs/c21`
+(seeds 7 and 11 set the gates, 21 is held out). The engine's frames are spoiled as the tracker spoils
+them: tracks broken after an exponential time, a persistent position error ({sigma} m a side), {missing}
+of players missing a frame, and team-mates within 1.5 m swapping tracks half the time. Roles are
+assigned over each {window}-minute window. Targets, fixed before the run: name {t_name}, position
+{t_role}, line {t_line}, over at least {min_tracks} tracks.
+
+Gates (the share at or above which each may be said): {gates}.
+
+| Fragment mean | Split | Tracks | Role right | Line right | Named (precision) | Confusions |
+|---|---|---|---|---|---|---|
+"""
+MD_TAIL = """
+Reading: on the engine's football almost every track is given its right role, so the gates sit at
+the lowest share seen. That says the engine's players hold their formation places (they rarely swap
+or cross), not that role inference is this good on football with fluid positions. Before the demo,
+the same grading runs on the demo match's own tracked output against its ground truth.
+"""
+
+
+def markdown(r: dict) -> str:
+    rows = []
+    for fs, both in r["by_fragment"].items():
+        for split in ("dev", "held_out"):
+            m = both[split]
+            confusions = ", ".join(f"{a} {n}" for a, n in m["confusions"])
+            named = f"{m['name']['said']} ({m['name']['precision']})"
+            rows.append(
+                f"| {float(fs):g} s | {split} | {m['tracks']} | {m['role_ok']} | {m['line_ok']} | {named} "
+                f"| {confusions} |"
+            )
+    head = MD_HEAD.format(
+        sigma=r["sigma_m"],
+        missing=f"{r['missing']:.0%}",
+        window=r["window_min"],
+        t_name=r["targets"]["name"],
+        t_role=r["targets"]["role"],
+        t_line=r["targets"]["line"],
+        min_tracks=r["min_tracks"],
+        gates=r["gates"],
+    )
+    return head + "\n".join(rows) + "\n" + MD_TAIL
 
 
 if __name__ == "__main__":

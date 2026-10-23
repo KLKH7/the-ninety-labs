@@ -54,7 +54,7 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route, WebSocketRoute
 from starlette.websockets import WebSocket, WebSocketDisconnect, WebSocketState
 
-from ninety.agents import companion
+from ninety.agents import companion, companion_match
 from ninety.agents.contracts import Answer, Ask, Judge, Question, schema_validator
 from ninety.intel.window import player_window, team_flow
 from ninety.match import tracking
@@ -548,6 +548,15 @@ class Companion:
             return track
         if question.player is not None and question.player not in track.roster:
             return _error(422, f"{question.player!r} is not on the roster of {room.clip}")
+        if question.player is None:
+            insights = _insights(room.clip)
+            if insights is not None:
+                # A match question: the Companion's insight tools. Code answers; the model path
+                # needs the match Companion published (ninety/agents/companion_match.py).
+                result = await companion_match.answer_match(question, insights)
+                return JSONResponse(_send(
+                    {"type": "answer", "answer": answer_json(result.answer), "source": result.source}
+                ))
         window = None
         if question.player is not None:
             _, window = self._window(track, question.player, 0.0, question.t)
@@ -584,6 +593,16 @@ class Companion:
             Route("/api/flow/{clip}/{team}", self.flow, methods=["GET"]),
             Route("/api/ask", self.ask, methods=["POST"]),
         ]
+
+
+def _insights(clip: str):
+    """The clip's insight facts, or None when it has no tracked frames or is not served."""
+    from ninety.mcp import match_server
+
+    try:
+        return match_server.insights_of(clip)
+    except ValueError:
+        return None
 
 
 def answer_json(answer: Answer) -> dict:

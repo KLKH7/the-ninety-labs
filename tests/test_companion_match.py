@@ -246,3 +246,52 @@ def test_no_card_right_after_a_goal():
     mi = insights()
     cards = asyncio.run(scout.scout(mi, goals=[1330.0 - 5]))
     assert all(c["evidence"] != ["lb:v1"] for c in cards)
+
+
+def test_the_phone_route_answers_a_match_question(monkeypatch):
+    from starlette.testclient import TestClient
+
+    from ninety.api import app as api
+    from ninety.api import companion as comp
+    from ninety.match.tracking import Track
+
+    frame = {
+        "frame": 0,
+        "t": 0.0,
+        "source": "truth",
+        "ball": {"x": 52.5, "y": 34.0},
+        "players": [{"id": "h7", "team": "home", "x": 10.0, "y": 30.0}],
+    }
+    monkeypatch.setattr(
+        comp, "_track", lambda clip: Track("seed7", (frame, {**frame, "frame": 1, "t": 0.04}), (0,))
+    )
+    monkeypatch.setattr(comp, "_insights", lambda clip: insights())
+    app = comp.Companion(passcode="", live=None, allow_truth=True)
+    client = TestClient(api.build("k" * 64, app))
+    code = client.post("/api/pair", json={"clip": "seed7"}).json()["code"]
+    r = client.post("/api/ask", json={"session": code, "player": None, "text": Q.text, "t": Q.t})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    schema_validator("companion_message").validate(body)
+    assert body["answer"]["status"] == "verified" and body["source"] == "code"
+    assert "Oakfield" in body["answer"]["text"]
+
+
+def test_cards_become_spoken_lines_placed_where_the_play_was():
+    cards = asyncio.run(scout.scout(insights()))
+    lines = scout.spoken(cards)
+    assert len(lines) == len(cards)
+    t, d = lines[0]
+    assert t == cards[0]["t"] and d.text == cards[0]["text"] and d.ssml.startswith("<speak>")
+    assert -1.0 <= d.pan <= 1.0
+
+
+def test_the_director_logs_every_decision_and_a_goal_jumps_the_cap():
+    mi = insights()
+    log: list = []
+    cards = asyncio.run(scout.scout(mi, goals=[1330.0 + 10], log=log))
+    jump = [c for c in cards if c["t"] == 1340.0 + scout.GOAL_QUIET_S]
+    assert jump and jump[0]["evidence"] == ["lb:v1"]  # the build-up's most notable fact
+    pushed = [e for e in log if e["decision"] == "pushed"]
+    assert len(pushed) == len(cards) and {e["why"] for e in pushed} >= {"goal jump: the build-up to a goal"}
+    assert all(e["decision"] in {"pushed", "deferred", "dropped", "refused"} for e in log)

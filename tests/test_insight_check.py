@@ -5,6 +5,7 @@ import pytest
 from ninety.agents.contracts import status_for
 from ninety.agents.factcheck import Claim
 from ninety.agents.insight_check import verify
+from ninety.intel.counter_press import WITHIN
 from ninety.intel.teamsheet import Fixture
 
 FX = Fixture(7, "OAK", "FEN")
@@ -49,10 +50,15 @@ COUNTER = {
     "event_confidence": 0.8,
     "regain_s": 2.4,
     "regained": True,
-    "also": [[5.0, "s"], [2.4, "s"]],
+    "also": [[5.0, "s", WITHIN], [2.4, "s"]],
     "visual": {"kind": "counter_press"},
 }
-KNOWN = {f["id"]: f for f in (LINE_BREAK, COUNTER)}
+OVERLOAD = {
+    "id": "ov:v3", "kind": "overload", "metric": "extra_players", "team": "home", "club": "Oakfield",
+    "minute": 12, "t": 700.0, "value": 3, "unit": "extra players", "lo": 3, "hi": 3, "confident": True,
+    "own_players": 4, "other_players": 1, "also": [[4, "players"], [1, "players", r"\bagainst\s+$"]],
+}
+KNOWN = {f["id"]: f for f in (LINE_BREAK, COUNTER, OVERLOAD)}
 NAMED = {
     "h-t5": {
         "track": "h-t5",
@@ -83,6 +89,8 @@ def run(text, evidence=("lb:v1",), known=KNOWN, people=NAMED):
         ("Oakfield's left-back cut through 4 Fenwick players with one pass.", ("lb:v1",)),
         ("Fenwick won it back 2.4 seconds after losing it, with 3 players around the ball.", ("cp:v7",)),
         ("Fenwick won the ball back within five seconds, with three players pressing.", ("cp:v7",)),
+    ("In minute 12, Oakfield had 4 players against 1 player around the ball.", ("ov:v3",)),
+    ("Oakfield had 3 extra players around the ball in minute 12.", ("ov:v3",)),
     ],
 )
 def test_true_claims_pass(text, evidence):
@@ -108,6 +116,10 @@ def test_true_claims_pass(text, evidence):
         ("Oakfield bypassed 4 opponents.", (), "cite"),
         ("Oakfield bypassed 4 opponents.", ("lb:v99",), "unknown"),
         ("Fenwick won it back 3 seconds after losing it.", ("cp:v7",), "number"),
+    ("Fenwick won it back 5 seconds after losing it.", ("cp:v7",), "number"),  # the window, not the regain
+    ("Fenwick had 3 players near the ball in the next 2.4 seconds.", ("cp:v7",), "number"),
+    ("Oakfield had 3 players against 4 players around the ball.", ("ov:v3",), "number"),
+    ("Oakfield had 4 players against 3 players around the ball.", ("ov:v3",), "number"),  # 3 is the extra
     ],
 )
 def test_planted_false_claims_are_rejected(text, evidence, why):

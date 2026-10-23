@@ -45,6 +45,17 @@ from ninety.intel.teamsheet import LABEL
 UNIT_WORDS = {
     "opponents": ("opponents", "opponent", "players", "player", "men", "man"),
     "players": ("players", "player", "men", "man"),
+    "extra players": (
+        "extra players",
+        "extra player",
+        "more players",
+        "more player",
+        "extra men",
+        "extra man",
+        "players more",
+        "spare players",
+        "spare player",
+    ),
     "teammates": tuple(
         f"{a}{w}"
         for a in ("", "open ")
@@ -95,14 +106,20 @@ def _num(x: float) -> str:
     return str(int(x)) if float(x).is_integer() else str(x)
 
 
-def _pairs(facts: Iterable[Mapping]) -> set[tuple[float, str]]:
+def _pairs(facts: Iterable[Mapping]) -> set[tuple[float, str, str | None]]:
+    """Each number a fact states: (value, unit, context). A context is a pattern the words just
+    before the number must match ("against " for the other side's players, "within " for the
+    counter-press window): a number written in a context may stand only for a number of that context,
+    and a number of a context only where it is written in it, so "5 seconds" cannot be the window
+    when the sentence says it was the regain."""
     out = set()
     for f in facts:
         if f.get("value") is not None and f.get("unit"):
-            out.add((float(f["value"]), f["unit"]))
-        for n, unit in f.get("also") or ():
+            out.add((float(f["value"]), f["unit"], None))
+        for item in f.get("also") or ():
+            n, unit, context = (*item, None)[:3]
             if n is not None:
-                out.add((float(n), unit))
+                out.add((float(n), unit, context))
     return out
 
 
@@ -182,10 +199,11 @@ def check(
             if value not in minutes:
                 reasons.append(f"minute {m.group('n')} is not a cited minute")
             continue
-        after = text[m.end() :]
+        after, before = text[m.end() :], text[: m.start()]
+        contexts = {c for _, _, c in pairs if c and re.search(c, before, re.I)}
         ok = False
-        for v, unit in pairs:
-            if v != value:
+        for v, unit, context in pairs:
+            if v != value or (context in contexts if contexts else context is None) is False:
                 continue
             words = "|".join(re.escape(w) for w in UNIT_WORDS.get(unit, (unit,)))
             if re.match(rf"\s*(?:(?:{clubs_re})\s+)?(?:{words})(?!\w)", after, re.I):

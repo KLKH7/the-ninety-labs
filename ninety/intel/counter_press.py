@@ -29,6 +29,9 @@ from ninety.intel.scene import FPS, TEAMS, Count, Frames, count, missing, other,
 # pressure is an opponent within five yards of the player on the ball (docs/GROUNDING.md I4).
 COUNTER_S = 5.0
 PRESS_RADIUS_M = 4.572  # five yards
+# The window is the number written after "within", "next" or "first" ("within 5 seconds"): a
+# sentence may state it only there, never as the time a regain took (insight_check `_pairs`).
+WITHIN = r"\b(?:within|next|first)\s+$"
 DEAD_BALL = frozenset({"out_of_play", "goal", "kickoff", "set_piece", "foul", "offside"})
 
 
@@ -118,7 +121,10 @@ def counter_press(events: Iterable[Mapping], frames: Frames) -> list[dict]:
                 regain_s=row["regain_s"],
                 regained=regained,
                 won_by=other(team),
-                also=[[COUNTER_S, "s"], *([[row["regain_s"], "s"]] if row["regain_s"] is not None else [])],
+                also=[
+                    [COUNTER_S, "s", WITHIN],
+                    *([[row["regain_s"], "s"]] if row["regain_s"] is not None else []),
+                ],
             )
         )
     return out
@@ -144,7 +150,7 @@ def team_summary(facts, minute_from: int, minute_to: int) -> list[dict]:
                 "hi": back,
                 "confident": True,
                 "turnovers": len(rows),
-                "also": [[len(rows), "turnovers"], [COUNTER_S, "s"]],
+                "also": [[len(rows), "turnovers"], [COUNTER_S, "s", WITHIN]],
             }
         )
     return out

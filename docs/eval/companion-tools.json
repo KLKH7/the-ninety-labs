@@ -1,0 +1,59 @@
+{
+ "questions_file": "companion-tools-questions.json",
+ "code": {
+  "questions": 32,
+  "answered": 32,
+  "unanswered": 0,
+  "right": 26,
+  "accuracy": 0.812,
+  "by_tool": {
+   "None": "4/4",
+   "counter_press": "5/6",
+   "line_breaks": "5/6",
+   "lineup": "2/4",
+   "overloads": "5/6",
+   "pass_options": "5/6"
+  },
+  "wrong": [
+   {
+    "text": "Is Kestrow's gegenpress working?",
+    "label": "counter_press",
+    "chose": []
+   },
+   {
+    "text": "Do Ashvale have more men on the left wing?",
+    "label": "overloads",
+    "chose": []
+   },
+   {
+    "text": "Is Ashvale's passing getting them up the pitch?",
+    "label": "line_breaks",
+    "chose": [
+     "pass_options"
+    ]
+   },
+   {
+    "text": "Should Quarrington have played it forward there?",
+    "label": "pass_options",
+    "chose": []
+   },
+   {
+    "text": "Who plays on the right wing for Quarrington?",
+    "label": "lineup",
+    "chose": []
+   },
+   {
+    "text": "Which Kestrow player is the holding midfielder?",
+    "label": "lineup",
+    "chose": []
+   }
+  ],
+  "chosen": {
+   "counter_press": 6,
+   "overloads": 6,
+   "lineup": 3,
+   "line_breaks": 5,
+   "pass_options": 7
+  }
+ }
+}

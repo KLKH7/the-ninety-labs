@@ -13,7 +13,7 @@ A track's role is the one it was assigned most often, and its `share` is how oft
 assigned left-back in 90% of its frames is surer than one at 50%. The share is a score, not a
 probability; what it is worth is measured on simulated matches with fragmented, noisy tracks
 (ninety/eval/roles_eval.py, docs/eval/roles.md), which sets the shares at which a name, a role
-and a line may be said (docs/eval/roles-calibration.json). With no calibration nothing is named.
+and a line may be said (ninety/intel/roles_calibration.json). With no calibration nothing is named.
 """
 
 from __future__ import annotations
@@ -47,7 +47,8 @@ ROUNDS = (
 )
 STEP_FRAMES = 5  # design: a sampled frame every 0.2 s, as the overloads (ninety/intel/overloads.py)
 MIN_FRAMES = 25  # design: a track seen in under 5 s of sampled frames (25 at 0.2 s) is given no role
-CALIBRATION = Path(__file__).resolve().parents[2] / "docs" / "eval" / "roles-calibration.json"
+# In the package, not docs/: the image copies ninety/ only (Dockerfile; docs/LESSONS.md, lesson 100).
+CALIBRATION = Path(__file__).resolve().parent / "roles_calibration.json"
 
 
 def hungarian(cost: Sequence[Sequence[float]]) -> list[int]:

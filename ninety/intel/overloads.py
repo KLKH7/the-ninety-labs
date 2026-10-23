@@ -48,6 +48,9 @@ OVERLOAD_MIN = 2  # the task's definition, "two or more players more" (docs/GROU
 # and a moment lasts at least a second, so a player crossing a zone's edge for a frame is no overload.
 STEP_FRAMES = round(0.2 * FPS)
 MIN_S = 1.0
+# The other side's count is the number written after "against" ("5 players against 2 players"):
+# a sentence may state it only there (ninety/agents/insight_check.py `_pairs`).
+AGAINST = r"\bagainst\s+$"
 
 
 def zone_box(i: int, j: int) -> dict:
@@ -108,7 +111,7 @@ def overloads(frames: Frames) -> list[dict]:
                 team,
                 peak_frame["t"],
                 peak,
-                "players",
+                "extra players",
                 peak_frame,
                 {
                     "zone": {k: round(v, 2) for k, v in box.items()},
@@ -125,7 +128,7 @@ def overloads(frames: Frames) -> list[dict]:
                 other_players=counts[other(team)].value,
                 also=[
                     [counts[team].value, "players"],
-                    [counts[other(team)].value, "players"],
+                    [counts[other(team)].value, "players", AGAINST],
                     [round(run[-1][0]["t"] - run[0][0]["t"], 1), "s"],
                 ],
             )

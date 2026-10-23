@@ -2250,3 +2250,39 @@ short and actionable. This file is public: no research sources, product names or
   (the true lens fits, its mirror does not, the flipped picture does);
   `::test_the_compass_search_walks_on_where_the_free_step_stalls` fails with the compass search
   removed from `pitch.settle` (a half-size scene did not stall, so the stalled view is a fixture).
+
+### 221. A number matched by value and unit alone passes in the wrong role
+- **What happened:** the insight fact-check let a sentence state any number a cited fact held,
+  written with that number's unit. A planted claim "6 players against 1 player" passed when the
+  true count was 5 against 1, because the fact's other number, 5 extra players, was also in
+  players; "won it back 5 seconds after losing it" passed because the fact also held the 5-second
+  counter-press window. Both numbers were on the fact; neither was the number the sentence said.
+- **Rule:** a fact's numbers carry their role: a distinct unit where they measure different things
+  (`extra players`), and a context where one unit serves two (the other side's count after
+  "against", the window after "within" or "next"). A number written in a context may stand only
+  for a number of that context, and a number of a context only where it is written in it.
+- **Check:** `uv run python -m ninety.eval.insight_claims` (the `number` and `spelled` plants on
+  overloads and counter-presses are caught); `tests/test_insight_check.py` (the window said as
+  the regain, the extra players said as the own count, both rejected).
+
+### 222. A floor on how many there are can make a share impossible to reach
+- **What happened:** the Insight Scout pushed a fact only when it ranked above 90% of its kind so
+  far, among at least 5. Among 5, the best rank is 4 of 5, 80%, so no fact could ever be pushed
+  until there were 10: the floor and the share were each sensible, and together they made the
+  first cards of every match impossible. A test that expected a card found none.
+- **Rule:** when a gate combines a least count and a share, check that the count can reach the
+  share (a share s needs at least 1 / (1 - s) items), and set the floor from the share.
+- **Check:** `ninety/agents/scout.py` `MIN_SO_FAR` is 10 for `NOTABLE` 0.9;
+  `tests/test_companion_match.py::test_scout_cards_are_verified_and_spaced` plants a notable fact
+  and requires its card.
+
+### 223. A rule about who acted, tested on sentences that start with the club, rejects the ones that start with the player
+- **What happened:** the insight fact-check took the first club a sentence named as the side that
+  acted. Every test sentence began with the club. On the stand-in match, every true line break said
+  by name, "Ben Raimble played a pass that took 6 Fenwick players out of the game", was rejected:
+  the first club named was the opponents, who were counted, not acting.
+- **Rule:** a rule that reads roles out of a sentence is tested on every sentence shape the writers
+  produce (lesson 130): a club written straight after a number is what was counted, and the side
+  is the first club named otherwise; for a line break, the counted club must be the other side.
+- **Check:** `tests/test_insight_check.py` (a named passer with the counted opponents passes; the
+  counted club being the passing side is rejected); `insight_claims` reports no true claim stopped.

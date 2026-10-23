@@ -1,0 +1,269 @@
+{
+ "targets": {
+  "name": 0.95,
+  "role": 0.9,
+  "line": 0.95
+ },
+ "min_tracks": 50,
+ "missing": 0.05,
+ "sigma_m": 0.587,
+ "window_min": 15,
+ "dev": [
+  "/Users/kianlakhani/the-ninety-labs/runs/u7",
+  "/Users/kianlakhani/the-ninety-labs/runs/seed11"
+ ],
+ "held_out": [
+  "/Users/kianlakhani/the-ninety-labs/runs/c21"
+ ],
+ "by_fragment": {
+  "30.0": {
+   "dev": {
+    "tracks": 6895,
+    "role_ok": 6785,
+    "line_ok": 6800,
+    "name": {
+     "gate": 0.337,
+     "said": 6895,
+     "right": 6785,
+     "precision": 0.984
+    },
+    "role": {
+     "gate": 0.337,
+     "said": 6895,
+     "right": 6785,
+     "precision": 0.984
+    },
+    "line": {
+     "gate": 0.337,
+     "said": 6895,
+     "right": 6800,
+     "precision": 0.986
+    },
+    "confusions": [
+     [
+      "GK->LCB",
+      17
+     ],
+     [
+      "GK->RCB",
+      12
+     ],
+     [
+      "LCB->GK",
+      11
+     ],
+     [
+      "RCB->GK",
+      7
+     ],
+     [
+      "LCM->ST",
+      6
+     ],
+     [
+      "ST->CM",
+      5
+     ]
+    ]
+   },
+   "held_out": {
+    "tracks": 3455,
+    "role_ok": 3454,
+    "line_ok": 3454,
+    "name": {
+     "gate": 0.337,
+     "said": 3455,
+     "right": 3454,
+     "precision": 1.0
+    },
+    "role": {
+     "gate": 0.337,
+     "said": 3455,
+     "right": 3454,
+     "precision": 1.0
+    },
+    "line": {
+     "gate": 0.337,
+     "said": 3455,
+     "right": 3454,
+     "precision": 1.0
+    },
+    "confusions": [
+     [
+      "RB->RCM",
+      1
+     ]
+    ]
+   }
+  },
+  "10.0": {
+   "dev": {
+    "tracks": 14293,
+    "role_ok": 14033,
+    "line_ok": 14074,
+    "name": {
+     "gate": 0.337,
+     "said": 14291,
+     "right": 14032,
+     "precision": 0.982
+    },
+    "role": {
+     "gate": 0.337,
+     "said": 14291,
+     "right": 14032,
+     "precision": 0.982
+    },
+    "line": {
+     "gate": 0.337,
+     "said": 14291,
+     "right": 14072,
+     "precision": 0.985
+    },
+    "confusions": [
+     [
+      "GK->RCB",
+      39
+     ],
+     [
+      "GK->LCB",
+      38
+     ],
+     [
+      "RCB->GK",
+      25
+     ],
+     [
+      "LCB->GK",
+      20
+     ],
+     [
+      "LCM->ST",
+      18
+     ],
+     [
+      "ST->LCM",
+      13
+     ]
+    ]
+   },
+   "held_out": {
+    "tracks": 7139,
+    "role_ok": 7133,
+    "line_ok": 7133,
+    "name": {
+     "gate": 0.337,
+     "said": 7139,
+     "right": 7133,
+     "precision": 0.999
+    },
+    "role": {
+     "gate": 0.337,
+     "said": 7139,
+     "right": 7133,
+     "precision": 0.999
+    },
+    "line": {
+     "gate": 0.337,
+     "said": 7139,
+     "right": 7133,
+     "precision": 0.999
+    },
+    "confusions": [
+     [
+      "RB->RCM",
+      5
+     ],
+     [
+      "RCM->RB",
+      1
+     ]
+    ]
+   }
+  },
+  "120.0": {
+   "dev": {
+    "tracks": 2159,
+    "role_ok": 2130,
+    "line_ok": 2136,
+    "name": {
+     "gate": 0.337,
+     "said": 2158,
+     "right": 2129,
+     "precision": 0.987
+    },
+    "role": {
+     "gate": 0.337,
+     "said": 2158,
+     "right": 2129,
+     "precision": 0.987
+    },
+    "line": {
+     "gate": 0.337,
+     "said": 2158,
+     "right": 2135,
+     "precision": 0.989
+    },
+    "confusions": [
+     [
+      "LW->LCM",
+      4
+     ],
+     [
+      "GK->RCB",
+      3
+     ],
+     [
+      "GK->LCB",
+      3
+     ],
+     [
+      "RCM->CM",
+      2
+     ],
+     [
+      "CM->ST",
+      2
+     ],
+     [
+      "RCM->RW",
+      2
+     ]
+    ]
+   },
+   "held_out": {
+    "tracks": 1005,
+    "role_ok": 1004,
+    "line_ok": 1004,
+    "name": {
+     "gate": 0.337,
+     "said": 1005,
+     "right": 1004,
+     "precision": 0.999
+    },
+    "role": {
+     "gate": 0.337,
+     "said": 1005,
+     "right": 1004,
+     "precision": 0.999
+    },
+    "line": {
+     "gate": 0.337,
+     "said": 1005,
+     "right": 1004,
+     "precision": 0.999
+    },
+    "confusions": [
+     [
+      "RB->RCM",
+      1
+     ]
+    ]
+   }
+  }
+ },
+ "gates": {
+  "name": 0.337,
+  "role": 0.337,
+  "line": 0.337
+ }
+}

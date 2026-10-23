@@ -55,8 +55,10 @@ def test_the_analyst_reads_the_match_only_through_our_mcp_server():
 
 
 def test_the_allowed_tools_are_the_servers_tools():
+    # The server also serves the Companion's insight tools; the Analyst is allowed only its own.
     served = asyncio.run(match_server.server.list_tools())
-    assert sorted(t.name for t in served) == sorted(match_server.TOOLS)
+    assert sorted(t.name for t in served) == sorted([*match_server.TOOLS, *match_server.INSIGHT_TOOLS])
+    assert not set(match_server.TOOLS) & set(match_server.INSIGHT_TOOLS)
 
 
 def test_the_judge_has_no_tools():

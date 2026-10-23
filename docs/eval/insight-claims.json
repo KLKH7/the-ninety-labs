@@ -1,0 +1,68 @@
+{
+ "run": "u7",
+ "seed": 7,
+ "minutes": 30.0,
+ "by_missing": {
+  "0.0": {
+   "facts": 975,
+   "true_claims": 328,
+   "true_wrongly_stopped": 0,
+   "unsure_claims": 308,
+   "unsure_held": 308,
+   "unsure_passed": 0,
+   "planted": 3114,
+   "planted_caught": 3114,
+   "caught_by_kind": {
+    "number": 1043,
+    "spelled": 420,
+    "club": 242,
+    "id": 97,
+    "name": 96,
+    "kind": 328,
+    "minute": 328,
+    "uncited": 328,
+    "team word": 232
+   },
+   "missed_by_kind": {},
+   "escapes": [],
+   "wrongly_stopped": [],
+   "check_ms": {
+    "p50": 0.105,
+    "p95": 0.144
+   }
+  },
+  "0.05": {
+   "facts": 974,
+   "true_claims": 99,
+   "true_wrongly_stopped": 0,
+   "unsure_claims": 532,
+   "unsure_held": 532,
+   "unsure_passed": 0,
+   "planted": 901,
+   "planted_caught": 901,
+   "caught_by_kind": {
+    "number": 266,
+    "spelled": 134,
+    "club": 66,
+    "id": 39,
+    "name": 38,
+    "kind": 99,
+    "minute": 99,
+    "uncited": 99,
+    "team word": 61
+   },
+   "missed_by_kind": {},
+   "escapes": [],
+   "wrongly_stopped": [],
+   "check_ms": {
+    "p50": 0.108,
+    "p95": 0.132
+   }
+  }
+ },
+ "gates": {
+  "name": 0.337,
+  "role": 0.337,
+  "line": 0.337
+ }
+}

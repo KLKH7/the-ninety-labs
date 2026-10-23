@@ -215,7 +215,7 @@ def test_pressers_near_the_ball_after_the_turnover():
     frames = Frames([frame(n, near, parked("away"), ball=(50.0, 34.0)) for n in range(110, 140, 5)])
     [cp] = counter_press.counter_press(events, frames)
     assert cp["team"] == "home" and (cp["value"], cp["lo"], cp["hi"]) == (3, 3, 3) and cp["confident"]
-    assert cp["regained"] and cp["regain_s"] == 1.6 and [5.0, "s"] in cp["also"]
+    assert cp["regained"] and cp["regain_s"] == 1.6 and [5.0, "s", counter_press.WITHIN] in cp["also"]
 
 
 def test_a_presser_on_the_radius_is_unsure():
@@ -341,3 +341,10 @@ def test_team_sheet_is_fictional_and_deterministic():
         "Ipswich",
     }
     assert not premier & set(teamsheet.CLUBS.values())
+
+
+def test_the_measured_gates_ship_in_the_package():
+    # The image copies ninety/ but not docs/ (Dockerfile): a gate file outside it would name nobody.
+    assert roles.CALIBRATION.is_relative_to(roles.Path(roles.__file__).parent)
+    gates = roles.gates()
+    assert all(gates[k] is not None for k in ("name", "role", "line")), gates
