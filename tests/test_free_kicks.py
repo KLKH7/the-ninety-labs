@@ -61,6 +61,33 @@ def test_at_a_free_kick_near_goal_the_forwards_attack_the_box(seed, at):
         assert in_box(p), p.id
 
 
+@pytest.mark.parametrize("kind", ["free_kick", "corner", "throw_in", "goal_kick", "kick_off", "penalty_kick"])
+def test_only_their_own_free_kick_sends_the_forwards_into_the_box(kind):
+    """The rule is a free kick's, and the side's own: not the other side's, nor any other restart."""
+    from ninety.sim.engine import Restart
+    e = Engine(3)
+    for given_to in ("home", "away"):
+        e.restart, e.set_by = Restart(kind, given_to, 80.0, 30.0, "h9", e.t + 5.0), None
+        assert e.own_free_kick("home") is (kind == "free_kick" and given_to == "home")
+        e.restart, e.set_by = None, Restart(kind, given_to, 80.0, 30.0, "h9", e.t)  # taken, not kicked
+        assert e.own_free_kick("home") is (kind == "free_kick" and given_to == "home")
+    e.restart = e.set_by = None
+    assert not e.own_free_kick("home")  # in play
+
+
+def test_the_forwards_box_is_the_goal_area_width_and_only_theirs():
+    """SET_PIECE_HALF_WIDTH_M is the goal area's half-width (Law 1: 3.66 m to a post, 5.5 m beyond),
+    written out (lesson 190); both wingers are brought in to it, and a midfielder keeps his spot."""
+    assert offball.SET_PIECE_HALF_WIDTH_M == pytest.approx(9.16)
+    own_goal, line = 0.0, 95.0
+    lw = offball.attacking_slot("LW", own_goal, 85.0, 34.0, line, set_piece=True)
+    rw = offball.attacking_slot("RW", own_goal, 85.0, 34.0, line, set_piece=True)
+    assert lw[1] == pytest.approx(34.0 + 9.16) and rw[1] == pytest.approx(34.0 - 9.16)
+    for role in ("RCM", "CM", "LCM", "RB", "LB", "RCB", "LCB"):
+        assert (offball.attacking_slot(role, own_goal, 85.0, 34.0, line, set_piece=True)
+                == offball.attacking_slot(role, own_goal, 85.0, 34.0, line))
+
+
 def test_the_box_is_attacked_only_at_their_own_free_kick_in_the_final_third():
     """The rule is the free kick's: in open play, at the other side's free kick, or short of the
     final third, a forward keeps his width."""

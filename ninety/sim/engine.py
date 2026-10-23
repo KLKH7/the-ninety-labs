@@ -2422,10 +2422,9 @@ class Engine:
                                 if q.team != p.team) if w]
             onside = self.onside_limit(p.team, seen, bx)  # L10: as far as he sees he may go
             wide = offball.STAYS_WIDE_M if "stays_wide" in p.profile.traits else 0.0
-            given = self.restart or self.set_by
-            free_kick = given is not None and given.kind == "free_kick" and given.team == p.team
             spot = offball.attacking_slot(p.role, PITCH_X - goal_x(p.team), clamp(bx, 0, PITCH_X),
-                                          clamp(by, 0, PITCH_Y), onside, wide, set_piece=free_kick)
+                                          clamp(by, 0, PITCH_Y), onside, wide,
+                                          set_piece=self.own_free_kick(p.team))
             if spot:
                 spot = self.open_spot(p, spot, onside)
                 return *spot, self.in_time(p, *spot)
@@ -2473,6 +2472,12 @@ class Engine:
                 tx, ty = self.zone_spot(p, slot, own[0]) if ROLE_LINE.get(p.role) != "attack" else slot
         tx, ty = clamp(tx, 0.5, PITCH_X - 0.5), clamp(ty, 0.5, PITCH_Y - 0.5)
         return tx, ty, self.in_time(p, tx, ty)
+
+    def own_free_kick(self, team: str) -> bool:
+        """A free kick to `team` waits to be taken or is taken and not yet kicked (lesson 202: its
+        forwards attack the box, offball.attacking_slot); not the other side's, nor any other restart."""
+        given = self.restart or self.set_by
+        return given is not None and given.kind == "free_kick" and given.team == team
 
     def shared_view(self, team: str, of_team: str) -> dict[str, tuple[float, float]]:
         """What a team's players know between them about another team's positions: for each
