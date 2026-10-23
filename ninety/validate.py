@@ -43,12 +43,14 @@ PENALTY_DEPTH, PENALTY_HALF_WIDTH = 16.5, 20.16  # Law 1
 NEAR_M = 2.5  # C6, C7: how close the ball must be to where an event says it happened
 ON_BALL = {"pass", "shot", "tackle", "interception", "out_of_play", "goal", "set_piece", "kickoff"}
 MAX_SUBSTITUTIONS = 5  # C3: Law 3, top-level competitions
-STOPPAGES = {"out_of_play", "goal", "substitution", "offside", "foul"}  # C3: play has stopped after these
-DEAD_FROM = {"out_of_play", "offside", "foul"}  # dead from these until the restart (Laws 9, 11, 12)
+# C3: play has stopped after these
+STOPPAGES = {"out_of_play", "goal", "substitution", "offside", "foul", "half_time"}
+DEAD_FROM = {"out_of_play", "offside", "foul", "half_time"}  # dead until the restart (Laws 7, 9, 11, 12)
 RESTARTS = {"set_piece", "kickoff"}  # P3: events that put the ball back in play
 # C2: a broadcast cuts away from a dead ball only between a stoppage and its restart (Laws 9, 10, 11,
-# 12: the ball is out of play from these until the restart).
-CUT_FROM = {"out_of_play", "offside", "foul", "goal"}
+# 12: the ball is out of play from these until the restart; Law 7: from the end of a half to the
+# kick-off that starts the next).
+CUT_FROM = {"out_of_play", "offside", "foul", "goal", "half_time"}
 TOUCHES = {"pass", "shot", "deflection", "interception", "tackle", "possession_change"}  # P5
 # P14: a touch by someone other than the carrier must be physically possible: the player within
 # reach of the ball, which was not moving away from him. Reach is a foot (1 m) or a diving

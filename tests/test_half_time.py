@@ -69,3 +69,16 @@ def test_a_match_shorter_than_a_half_is_unchanged(monkeypatch):
     f.kickoff("home", setup=True)
     play(f, 30.0)
     assert e.match.events == f.match.events and e.frame == f.frame
+
+
+def test_the_end_of_the_half_is_in_the_truth(short_half):
+    """Lesson 213: the whistle is a half_time event at its frame, the team that kicks off the
+    second half its team, and it meets the event schema."""
+    from ninety.agents.contracts import schema_validator
+    e = Engine(7)
+    e.kickoff("home", setup=True)
+    play(e, HALF + 1.0)
+    ends = [ev for ev in e.match.events if ev["type"] == "half_time"]
+    assert len(ends) == 1 and ends[0]["team"] == "away"
+    assert ends[0]["t"] == pytest.approx(e.half_time_at, abs=0.01)
+    schema_validator("match_event").validate(ends[0])

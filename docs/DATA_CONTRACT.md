@@ -25,7 +25,7 @@ A clip is one directory:
 
 | File | Contents | Checked against |
 |---|---|---|
-| `events.jsonl` | one event per line | [`schemas/match_event.schema.json`](../schemas/match_event.schema.json) |
+| `events.jsonl` | one event per line; a `half_time` event marks the end of the first half (Law 7: the ball is out of play from it to the kick-off that starts the second half; lesson 213) | [`schemas/match_event.schema.json`](../schemas/match_event.schema.json) |
 | `frames.jsonl` | one frame per line, every frame | [`schemas/frame.schema.json`](../schemas/frame.schema.json) |
 | `meta.json` | `fps`; `roster` (each player's `id`, `team` and `role`, so the validator knows the goalkeepers); `seed` or scenario name; `score` (the goals in this clip's `events.jsonl`); `window`, for a clip cut from a longer match; `cuts`, the dead balls the broadcast cut away from | `fps` positive; goalkeepers from `roster`; `score` against the goal events (C9); `window` against the frames; `cuts` against the frames and the events (C2) |
 

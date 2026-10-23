@@ -1163,3 +1163,15 @@ def test_a_fall_without_the_down_action_fails(tmp_path):
     clip = fall_clip()
     clip["frames"][10]["players"][0]["action"] = "run"
     assert fails(run(tmp_path, clip), "P18 foul fall", "action run")
+
+
+def test_a_cut_from_the_end_of_a_half_to_the_kick_off_passes(tmp_path):
+    """Law 7, lesson 213: the ball is out of play from the end of a half to the kick-off that starts
+    the next, so a broadcast may cut away there (to a half-time card) as from any stoppage."""
+    clip = restart_clip()
+    for e in clip["events"]:
+        if e["type"] == "out_of_play":
+            e["type"] = "half_time"
+        if e["type"] == "set_piece":
+            e["type"] = "kickoff"
+    assert run(tmp_path, cut_away(clip, 60, 120)) == {}
