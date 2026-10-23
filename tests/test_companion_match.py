@@ -452,3 +452,58 @@ def test_a_sentence_that_needs_the_picture_is_rejected():
         mi.fixture.clubs,
     )
     assert not v.ok and "spoken" in v.reasons[0]
+
+
+def test_spotters_fan_out_and_the_director_logs_to_the_ledger():
+    from ninety.agents.ledger import InMemoryLedger
+
+    mi = with_shape()
+    mi.facts["shape"][0]["t"] = 27 * 60.0 - 1
+    mi.facts["shape"][0]["kind"] = "shape"
+    mi.facts["shape"][0]["visual"] = {"kind": "shape", "minute": 27}
+    ledger, log = InMemoryLedger(), []
+    cards = asyncio.run(scout.scout(mi, log=log, ledger=ledger))
+    spotters = {e["spotter"] for e in log if e.get("spotter")}
+    assert spotters <= set(scout.SPOTTERS) and "space" in spotters
+    decisions = asyncio.run(ledger.query(kind="decision"))
+    assert len(decisions) == len(log) and asyncio.run(ledger.query(kind="claim"))
+    for c in cards:
+        assert c["spoken"].startswith(c["text"]) and "It was " in c["spoken"]
+
+
+def test_the_director_model_orders_a_slot_but_code_rules_hold():
+    mi = insights()
+    lb = mi.facts["line_break"][-1]
+    cp = mi.facts["counter_press"][0]
+    slot = [
+        {"spotter": "space", "fact": lb, "confidence": 0.95},
+        {"spotter": "pressing", "fact": cp, "confidence": 0.9},
+    ]
+    seen = []
+
+    async def rank(prompt):
+        body = json.loads(prompt)
+        seen.append(body)
+        return json.dumps({"order": [cp["id"], lb["id"]]})
+
+    d = scout.Director(mi, (), None, None, [], rank)
+    assert [p["fact"]["id"] for p in asyncio.run(d.order(slot, None))] == [cp["id"], lb["id"]]
+    assert seen[0]["step"] == "rank" and {c["id"] for c in seen[0]["candidates"]} == {lb["id"], cp["id"]}
+    # The last card was a counter-press: the model's first choice repeats its kind, so code puts it last.
+    last = {"kind": "counter_press", "_players": []}
+    assert [p["fact"]["id"] for p in asyncio.run(d.order(slot, last))] == [lb["id"], cp["id"]]
+
+    async def wrong(prompt):
+        return json.dumps({"order": ["lb:v404"]})
+
+    d = scout.Director(mi, (), None, None, [], wrong)
+    assert [p["fact"]["id"] for p in asyncio.run(d.order(slot, None))] == [lb["id"], cp["id"]]
+
+
+def test_a_failing_director_model_leaves_code_order():
+    async def rank(prompt):
+        raise RuntimeError("down")
+
+    log: list = []
+    cards = asyncio.run(scout.scout(insights(), rank=rank, log=log))
+    assert cards == asyncio.run(scout.scout(insights()))

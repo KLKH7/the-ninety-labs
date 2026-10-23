@@ -18,7 +18,8 @@
     "source",
     "evidence",
     "visual",
-    "why"
+    "why",
+    "spoken"
   ],
   "properties": {
     "id": {
@@ -48,7 +49,8 @@
         "line_break",
         "overload",
         "counter_press",
-        "pass_options"
+        "pass_options",
+        "shape"
       ]
     },
     "headline": {
@@ -140,16 +142,51 @@
           }
         }
       ]
+    },
+    "spoken": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The card as spoken to a screen-reader user and by the Describer: the text plus where it happened in words, fact-checked, with no visual reference."
+    },
+    "names": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "How to label each player the visual shows, by track id: a gated team-sheet name or a role, never an id."
+    },
+    "follow_ups": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 3,
+      "description": "Suggested next questions for /api/ask."
     }
   },
   "$defs": {
     "point": {
       "type": "array",
-      "items": {
-        "type": "number"
-      },
       "minItems": 2,
-      "maxItems": 2
+      "maxItems": 3,
+      "prefixItems": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      ],
+      "description": "[x, y] or [x, y, track id]."
     },
     "points": {
       "type": "array",
@@ -203,7 +240,7 @@
         },
         "geometry": {
           "type": "object",
-          "description": "line_break: from, to, bypassed. overload: zone {x0,x1,y0,y1}, home, away. pass_options: passer, target, open, marked, radius_m. counter_press: ball, pressers, radius_m. shape: minute. wind_map: t_from, t_to.",
+          "description": "line_break: from, to, bypassed. overload: zone {x0,x1,y0,y1}, home, away, for, against. pass_options: passer, target, open, marked, radius_m. counter_press: ball, pressers, radius_m. shape: minute, lines (back, middle, front, each across the pitch), players. wind_map: t_from, t_to. Points are [x, y, track id].",
           "properties": {
             "from": {
               "$ref": "#/$defs/point"
@@ -279,6 +316,23 @@
             },
             "t_to": {
               "type": "number"
+            },
+            "for": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "against": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "lines": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/points"
+              }
+            },
+            "players": {
+              "$ref": "#/$defs/points"
             }
           }
         }

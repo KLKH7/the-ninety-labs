@@ -4,7 +4,7 @@
  "minutes": 30.0,
  "by_missing": {
   "0.0": {
-   "facts": 1471,
+   "facts": 1481,
    "true_claims": 481,
    "true_wrongly_stopped": 0,
    "unsure_claims": 312,
@@ -27,12 +27,12 @@
    "escapes": [],
    "wrongly_stopped": [],
    "check_ms": {
-    "p50": 0.136,
-    "p95": 0.19
+    "p50": 0.116,
+    "p95": 0.276
    }
   },
   "0.05": {
-   "facts": 1470,
+   "facts": 1480,
    "true_claims": 251,
    "true_wrongly_stopped": 0,
    "unsure_claims": 536,
@@ -55,8 +55,8 @@
    "escapes": [],
    "wrongly_stopped": [],
    "check_ms": {
-    "p50": 0.135,
-    "p95": 0.18
+    "p50": 0.112,
+    "p95": 0.143
    }
   }
  },
