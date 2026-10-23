@@ -1,0 +1,13 @@
+# Build context of infra/live-job.Dockerfile (BuildKit reads <Dockerfile>.dockerignore beside it,
+# in place of the root .dockerignore): the lock, the code and the staged clip and checkpoint, nothing
+# else. The repo's other clips, runs and answer keys never reach the build.
+*
+!pyproject.toml
+!uv.lock
+!README.md
+!ninety/**
+!runs/live-input/clip/index.jsonl
+!runs/live-input/clip/images/*.jpg
+!runs/live-input/checkpoint/checkpoint_best_total.pth
+!runs/live-input/checkpoint/train-manifest.json
+**/__pycache__
