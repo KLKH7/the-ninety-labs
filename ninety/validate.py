@@ -63,7 +63,9 @@ WOODWORK_NEAR_M = 0.6
 # nets without shaping them): its back 2 m behind the goal line and 2 m high, its sides, and its
 # roof sloping down to the back from the crossbar. A ball inside the goal touching it (lesson 184):
 # its centre a radius from the back or a side (Law 2: 0.11 m), or its top (its lowest point z plus
-# its diameter) at the roof; to within two roundings of a written position (measurement precision).
+# its diameter) at the roof.
+# measurement precision (lesson 10): each of two written positions is off by up to
+# POSITION_PRECISION_M, so a contact is within two of those roundings.
 NET_DEPTH_M, NET_BACK_M, BALL_RADIUS_M = 2.0, 2.0, 0.11
 NET_TOUCH_SLACK_M = 2 * POSITION_PRECISION_M
 # P18, design: a fouled player is on his feet at least this long before the restart is taken.
@@ -311,16 +313,24 @@ def near_woodwork(b: dict) -> bool:
 
 
 def near_net(b: dict) -> bool:
-    """P5: inside a goal and touching its net's back, a side or its roof, where the net stops the
-    ball."""
+    """P5: touching a goal's net, where the net stops the ball: inside the goal against its back, a
+    side or its roof, or outside it against a side, the back or lying on the roof."""
     for line, out in ((0.0, -1.0), (105.0, 1.0)):
         depth, off = (b["x"] - line) * out, abs(b["y"] - 34)
         roof = 2.44 + (NET_BACK_M - 2.44) * min(depth, NET_DEPTH_M) / NET_DEPTH_M
         below = roof - (b["z"] + 2 * BALL_RADIUS_M)  # from the ball's top up to the roof
-        if not (0 < depth <= NET_DEPTH_M and off <= 3.66 and below >= -NET_TOUCH_SLACK_M):
-            continue  # not inside this goal
         reach = BALL_RADIUS_M + NET_TOUCH_SLACK_M
-        if NET_DEPTH_M - depth <= reach or 3.66 - off <= reach or below <= NET_TOUCH_SLACK_M:
+        if 0 < depth <= NET_DEPTH_M and off <= 3.66 and below >= -NET_TOUCH_SLACK_M:  # inside this goal
+            if NET_DEPTH_M - depth <= reach or 3.66 - off <= reach or below <= NET_TOUCH_SLACK_M:
+                return True
+            continue
+        # Outside it (lesson 200): against a side or the back from beside or behind, below the net's
+        # top there, or lying on the roof (the ball's lowest point on it).
+        top = roof - b["z"]  # from the ball's lowest point up to the net's top edge above it
+        beside = 0 < depth <= NET_DEPTH_M and 0 <= off - 3.66 <= reach and top > -NET_TOUCH_SLACK_M
+        behind = off <= 3.66 + reach and 0 <= depth - NET_DEPTH_M <= reach and top > -NET_TOUCH_SLACK_M
+        on_roof = 0 < depth <= NET_DEPTH_M and off <= 3.66 and abs(top) <= NET_TOUCH_SLACK_M
+        if beside or behind or on_roof:
             return True
     return False
 
