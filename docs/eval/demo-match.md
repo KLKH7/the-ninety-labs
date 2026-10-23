@@ -13,32 +13,34 @@ cut under the existing stinger, and chapter markers let a viewer jump to each mo
 **Rubric:** UX and presentation (the demo feels like watching a match), and honest claims: the
 match and the edit are chosen by a rule written before the matches existed, not by browsing.
 
-**Relation to the demo clip** ([demo-clip.md](demo-clip.md)): that rule picks the 60 s of footage in
-the 2-minute video; this one picks the match the live demo plays. They are separate choices with
-separate rules. Both start after seed 8001, which was watched.
+**Supersedes the demo clip** ([demo-clip.md](demo-clip.md)): on Oct 23 Kian decided the demo plays
+this condensed match instead of a 60 s clip. That rule is marked superseded and its script exits
+without choosing; a test pins both, so the two rules can never both pick footage.
 
 ## The pool
 
-**Seeds 8002 to 8041**, 90 minutes each, simulated only (no render), on the final engine SHA. Seed
-8001 was the demo seed for v1 and v2 and was watched; no training, validation, targeted or test run
-uses this range. If no seed passes every gate, the pool extends to 8042 to 8081 under the same rule,
-in a new commit that says so; nothing else changes.
+**Seeds 8051 to 8090**, 90 minutes each, simulated only (no render), on the final engine SHA. None
+of them has been rendered or watched: seed 8001 was the demo seed for v1 and v2, and 8002 to 8050
+belonged to the superseded demo-clip rule. No training, validation, targeted or test run uses this
+range. If no seed passes every gate, the pool extends to 8091 to 8130 under the same rule, in a new
+commit that says so; nothing else changes.
 
 ## Gates (all must pass)
 
 | Gate | Passes when | Source |
 |---|---|---|
 | G1 contract | `uv run ninety-validate` exits 0 on the 90-minute run | [DATA_CONTRACT.md](../DATA_CONTRACT.md) |
-| G2 pass completion | both sides' passes together complete 75% to 88% | GROUNDING R3 |
+| G2 pass completion | both sides' passes together complete 75% to 88% | GROUNDING R3 (marked *verify* there: competition reports, not yet read from a primary source) |
 | G3 football sense | the seed's mean rank across the gated football-sense types is at or below the pool's median mean rank | GROUNDING FS1 to FS9 |
-| G4 goals | 1 to 6 goals in the match | the brief: a condensed match without a goal is not a demo; 6 is the top of a usual match |
+| G4 goals | 1 to 6 goals in the match | *design*: a condensed match without a goal is not a demo; the top keeps a freak score out |
 
-- **G3 in detail.** The gated types are the ones with a pass line in GROUNDING: FS1, FS2, FS3, FS5,
-  FS6 (own-box passes), FS8 and FS9, each per 90 minutes from `ninety.eval.football_sense`. FS4 and
-  FS7 are report only and are not gated. Each type ranks the pool, fewest defects first, tied seeds
+- **G3 in detail.** The gated types are the ones GROUNDING does not mark report only: FS1, FS2, FS3,
+  FS5, FS6 (own-box passes), FS8 and FS9, each per 90 minutes from `ninety.eval.football_sense`. FS4
+  and FS7 are report only and are not gated. Most gated types have no published real rate (their
+  thresholds are the task's definitions or *design*), so G3 compares the pool with itself. Each type ranks the pool, fewest defects first, tied seeds
   sharing the mean of their places; a seed's G3 number is the mean of its ranks. Ranks, not a sum,
   because the types differ in scale by a hundred times (FS6 against FS3), and a sum would be FS6
-  alone. No published bar exists for a single match, so the bar is the pool's own median: the
+  alone. With no published bar for a single match, the bar is the pool's own median: the
   cleaner half of the pool passes.
 - **Possession losses are not gated.** GROUNDING cites no real range for them, and a range is not
   remembered (AGENTS.md: football is grounded). The count of possession changes is reported in the
@@ -80,7 +82,8 @@ Every moment gets a window of A seconds before it and B after it:
 |---|---:|---:|
 | goal | 25 | 20 |
 | shot or save | 12 | 6 |
-| corner, direct free kick in the final third | 2 | 12 |
+| corner | 2 | 12 |
+| direct free kick in the final third | 2 | 12 |
 | each of the 8 longest passing moves (N = 8; most passes, a tie the earlier), from its first pass to its last | 2 | 4 |
 
 Always in: the kick-off (the first 20 s), 45:00 (10 s either side) and the last 20 s. The engine has
@@ -119,7 +122,9 @@ uv run ninety-render --seed <seed> --start <start_s> --seconds <end_s - start_s>
 Each segment is rendered as its own clip, so each is a window the data contract already covers and
 passes `uv run ninety-validate` and `uv run ninety-render-check` on its own; the player joins them in
 order with the stinger at each join. Stadium `broadcast` (lesson 185), broadcast kits, and the two
-tactical lenses beside the broadcast (`views=tactical`, the tactical camera's render).
+tactical lenses beside the broadcast (`views=tactical`). **`views=tactical` comes from #231 (the tactical
+camera's render), which is not on main as this rule merges; #231 merges before the sweep, and
+`select` refuses to print render commands until `ninety.render.params` knows the knob.**
 
 ## The sweep
 

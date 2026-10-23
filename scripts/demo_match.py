@@ -4,7 +4,7 @@ The rule was fixed and merged before any match in its pool was simulated on the 
 Every function below except `measure_seed` and `main` is pure: events and numbers in, a choice out.
 
     # one seed at a time, at most two at once, each through the machine's slot limit:
-    runs/slot.sh uv run python scripts/demo_match.py measure 8002
+    runs/slot.sh uv run python scripts/demo_match.py measure 8051
     # once all 40 have a measure.json:
     uv run python scripts/demo_match.py select > runs/demo-match/manifest.json
 """
@@ -17,8 +17,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-FIRST_SEED, LAST_SEED = 8002, 8041  # 8001 was the demo seed for v1 and v2: watched, and fixed on
-EXTRA_SEEDS = (8042, 8081)  # the pool's extension, only if no seed in it passes every gate
+# Never simulated for viewing, rendered or watched: 8001 was the watched demo seed, and 8002 to 8050
+# belonged to the superseded demo-clip rule (docs/eval/demo-clip.md).
+FIRST_SEED, LAST_SEED = 8051, 8090
+EXTRA_SEEDS = (8091, 8130)  # the pool's extension, only if no seed in it passes every gate
 MINUTES = 90.0
 OUT = Path("runs/demo-match")
 
@@ -64,11 +66,10 @@ RENDER_FLAGS = ("--set dead_ball_cut=true --set kit_contrast=broadcast --set sta
 
 def restart_kind(stopped_by: dict | None, sp: dict) -> str:
     """The kind of a set piece, from the event that stopped play (Laws 13 to 17), as
-    scripts/defect_sweep/restarts.py reads it; offside gives an indirect free kick (Law 11)."""
-    x, y = sp["x"], sp["y"]
+    scripts/defect_sweep/restarts.py reads it; offside gives an indirect free kick (Law 11). A penalty
+    is a direct free kick here (Law 14), so it needs no kind of its own."""
+    x = sp["x"]
     if stopped_by is None or stopped_by["type"] in ("foul", "offside"):
-        if abs(y - PITCH_Y / 2) < 0.5 and min(abs(x - 11), abs(x - (PITCH_X - 11))) < 0.5:  # the penalty mark
-            return "penalty_kick"
         if stopped_by is not None and stopped_by["type"] == "offside":
             return "indirect_free_kick"
         return "free_kick"
@@ -96,7 +97,7 @@ def moments(events: list[dict]) -> list[dict]:
             out.append({"kind": kind, "t": e["t"], "team": e["team"]})
         elif k == "set_piece":
             kind = restart_kind(stopped_by, e)
-            direct = kind in ("free_kick", "penalty_kick") and in_final_third(e["team"], e["x"])
+            direct = kind == "free_kick" and in_final_third(e["team"], e["x"])
             if kind == "corner" or direct:
                 out.append({"kind": "free_kick" if direct else "corner", "t": e["t"],
                             "team": e["team"]})
@@ -256,13 +257,11 @@ def condense(events: list[dict], end_s: float) -> dict:
     """The edit: windows round every moment, merged, then adjusted into TARGET_S by the stated
     steps. Returns {segments, chapters, total_s, adjust}."""
     its, adjust = items(events, end_s), []
-    if total(merge(its)) < TARGET_S[0]:  # too short: the next-longest moves, one at a time
-        all_moves = move_items(events, 10 ** 6)
-        for m in all_moves[TOP_MOVES:]:
-            if total(merge(its)) >= TARGET_S[0]:
-                break
-            its.append(m)
-            adjust.append(f"added move of {m['passes']} at {clock(m['t'])}")
+    for m in move_items(events, 10 ** 6)[TOP_MOVES:]:  # too short: the next-longest moves, one at a time
+        if total(merge(its)) >= TARGET_S[0]:
+            break
+        its.append(m)
+        adjust.append(f"added move of {m['passes']} at {clock(m['t'])}")
     while total(merge(its)) > TARGET_S[1]:  # too long: drop from the highest tier down
         tier = max(TIER[it["kind"]] for it in its)
         if tier == 0:
@@ -337,6 +336,10 @@ def main() -> None:
     missing = sorted(set(range(FIRST_SEED, LAST_SEED + 1)) - seeds)
     if missing:
         sys.exit(f"not measured yet: {missing}")
+    from ninety.render import params
+
+    if "tactical" not in getattr(params, "VIEWS", ()):
+        sys.exit("views=tactical is not in this renderer: merge #231 before the sweep")
     rows = gate_table(pool)
     best = choose(rows)
     if best is None:

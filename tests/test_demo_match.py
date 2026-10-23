@@ -216,13 +216,6 @@ def test_the_rule_is_pure_and_deterministic():
     assert events == before
 
 
-def test_the_doc_states_the_scripts_numbers_and_command():
-    doc = (Path(__file__).resolve().parents[1] / "docs/eval/demo-match.md").read_text()
-    assert f"Seeds {dm.FIRST_SEED} to {dm.LAST_SEED}" in doc
-    assert dm.RENDER_FLAGS in doc
-    assert "stadium=broadcast" in dm.RENDER_FLAGS and "views=tactical" in dm.RENDER_FLAGS
-
-
 def ten_moves():
     """Moves of 5 to 14 passes, one a minute from 10:00, each ended by an interception."""
     events = []
@@ -242,3 +235,134 @@ def test_a_long_edit_drops_the_move_with_fewest_passes_first():
     events.sort(key=lambda e: e["t"])
     first = dm.condense(events, END)["adjust"][0]
     assert first == "dropped move at 12:00"  # the 7-pass move, which starts at 600 + 2 * 60 s
+
+
+# ---- the pool, and the rule it supersedes ----
+
+def load(name):
+    path = Path(__file__).resolve().parents[1] / f"scripts/{name}.py"
+    sp = importlib.util.spec_from_file_location(name, path)
+    mod = importlib.util.module_from_spec(sp)
+    sp.loader.exec_module(mod)
+    return mod
+
+
+def test_the_pool_is_8051_to_8090_and_never_overlaps_the_watched_or_superseded_seeds():
+    assert (dm.FIRST_SEED, dm.LAST_SEED, dm.EXTRA_SEEDS) == (8051, 8090, (8091, 8130))
+    clip = load("demo_clip")
+    assert clip.LAST_SEED < dm.FIRST_SEED
+
+
+def test_the_demo_clip_rule_is_superseded_and_never_chooses():
+    clip = load("demo_clip")
+    with pytest.raises(SystemExit) as stop:
+        clip.main()
+    assert "superseded by docs/eval/demo-match.md" in str(stop.value)
+    doc = (Path(__file__).resolve().parents[1] / "docs/eval/demo-clip.md").read_text()
+    assert doc.startswith("# Demo clip") and "Status: **superseded, never applied.**" in doc
+
+
+# ---- every bound, at its edge ----
+
+def gated(completion=0.85, goals=1):
+    r = row(8051, [e for t in range(600, 600 + 600 * goals, 600) for e in goal(t)])
+    r["counts"]["completion"] = completion
+    return dm.gate_table([r])[0]
+
+
+def test_completion_passes_from_75_to_88_percent_inclusive():
+    assert [gated(c)["gates"]["G2_completion"] for c in (0.7499, 0.75, 0.88, 0.8801)] == \
+        [False, True, True, False]
+
+
+def test_goals_pass_from_one_to_six_inclusive():
+    assert [gated(goals=n)["gates"]["G4_goals"] for n in (0, 1, 6, 7)] == [False, True, True, False]
+
+
+def test_the_gated_football_sense_types_are_the_seven_with_a_pass_line_and_each_one_counts():
+    from ninety.eval.football_sense import TYPES
+
+    assert dm.FS_GATED == ("chaser_moves_away", "pass_out_unpressed", "keeper_stays_home", "bunching",
+                           "own_box_pass", "loose_ball_ignored", "camped_in_own_box")
+    assert set(dm.FS_GATED) <= set(TYPES)
+    for k in dm.FS_GATED:  # two seeds alike but for one type: the worse one ranks lower
+        a, b = row(8051, goal(600)), row(8052, goal(600))
+        b["fs_per90"][k] = 2.0
+        ra, rb = dm.gate_table([a, b])
+        assert ra["fs_mean_rank"] < rb["fs_mean_rank"], k
+
+
+def spans(events):
+    return [(s["start_s"], s["end_s"]) for s in dm.condense(events, END)["segments"]]
+
+
+def test_each_kind_of_moment_keeps_its_stated_window():
+    assert (998.0, 1012.0) in spans(corner(1000))
+    fk = [ev(970, "foul", "away", x=80.0), ev(1000, "set_piece", "home", x=80.0, y=30.0)]
+    assert (998.0, 1012.0) in spans(fk)
+    assert (998.0, 1012.0) in spans([*passes(1000, 5), ev(1030, "interception", "away")])  # 1000 to 1008
+    assert (988.0, 1006.0) in spans(save(1000))
+    assert spans([])[0] == (0.0, 20.0) and spans([])[-1] == (5380.0, 5400.0)
+    assert (2690.0, 2710.0) in spans([])
+
+
+def test_windows_exactly_five_seconds_apart_stay_apart_and_closer_ones_merge():
+    assert (988.0, 1006.0) in spans([*save(1000), *save(1023)])  # 1006 to 1011: 5 s
+    assert (988.0, 1028.95) in spans([*save(1000), *save(1022.95)])  # 4.95 s
+
+
+def shots_then(k, last_gap, extra=()):
+    """k shots off target 30 s apart (18 s windows, never merging), the last last_gap after the one
+    before it, a goal at 4000, and extra events: 60 s of kick-off, 45:00 and the end, 45 s of goal."""
+    ts = [100 + 30 * i for i in range(k - 1)]
+    ts.append(ts[-1] + last_gap)
+    events = [ev(t, "shot", outcome="off_target") for t in ts] + goal(4000) + list(extra)
+    return sorted(events, key=lambda e: e["t"])
+
+
+def test_an_edit_of_exactly_twenty_minutes_is_kept_and_one_second_more_drops_a_moment():
+    at = dm.condense(shots_then(61, 15), END)  # 60 + 45 + 61 x 18 - 3 s of overlap = 1200 s
+    assert at["total_s"] == 1200.0 and at["adjust"] == []
+    over = dm.condense(shots_then(61, 16), END)  # 1201 s
+    assert len(over["adjust"]) == 1 and over["total_s"] == 1183.0
+
+
+def nine_moves():
+    out = []
+    for j in range(9):  # 5 passes, 10 s windows, 40 s apart
+        out += [*passes(3000 + 40 * j, 5, step=1.0), ev(3000 + 40 * j + 10, "interception", "away")]
+    return out
+
+
+def test_an_edit_of_exactly_fifteen_minutes_is_kept_and_one_second_less_adds_a_move():
+    # 60 + 45 + 8 moves x 10 + 40 shots x 18 - 5 s of overlap = 900 s
+    at = dm.condense(shots_then(40, 13, nine_moves()), END)
+    assert at["total_s"] == 900.0 and at["adjust"] == []
+    under = dm.condense(shots_then(40, 12, nine_moves()), END)  # 899 s
+    assert under["adjust"] == ["added move of 5 at 55:20"] and under["total_s"] == 909.0
+
+
+def test_the_doc_states_the_scripts_numbers():
+    doc = (Path(__file__).resolve().parents[1] / "docs/eval/demo-match.md").read_text()
+    g = "{:g}".format
+    want = [f"**Seeds {dm.FIRST_SEED} to {dm.LAST_SEED}**",
+            f"extends to {dm.EXTRA_SEEDS[0]} to {dm.EXTRA_SEEDS[1]}",
+            f"complete {g(dm.COMPLETION[0] * 100)}% to {g(dm.COMPLETION[1] * 100)}%",
+            f"| {dm.GOALS[0]} to {dm.GOALS[1]} goals in the match |",
+            f"| each goal | {g(dm.W_GOAL)} |", f"| {g(dm.W_CONTESTED)} |\n| each keeper save",
+            f"not scored) | {g(dm.W_SAVE)} |", f"(goals included) | {g(dm.W_ON_TARGET)} |",
+            f"(a penalty counts here) | {g(dm.W_SET_PIECE)} |",
+            f"at least {dm.MOVE_PASSES} completed passes by one side | {g(dm.W_MOVE)} |",
+            f"| goal | {g(dm.WINDOWS['goal'][0])} | {g(dm.WINDOWS['goal'][1])} |",
+            f"| shot or save | {g(dm.WINDOWS['shot'][0])} | {g(dm.WINDOWS['shot'][1])} |",
+            f"| corner | {g(dm.WINDOWS['corner'][0])} | {g(dm.WINDOWS['corner'][1])} |",
+            f"in the final third | {g(dm.WINDOWS['free_kick'][0])} | {g(dm.WINDOWS['free_kick'][1])} |",
+            f"(N = {dm.TOP_MOVES};",
+            f"to its last | {g(dm.WINDOWS['move'][0])} | {g(dm.WINDOWS['move'][1])} |",
+            f"the first {g(dm.OPEN_S)} s", f"({g(dm.HALF_S)} s either side)", f"the last {g(dm.CLOSE_S)} s",
+            f"less than {g(dm.MERGE_GAP_S)} s apart",
+            f"misses {g(dm.TARGET_S[0] / 60)} to {g(dm.TARGET_S[1] / 60)} minutes",
+            "FS1, FS2, FS3,\n  FS5, FS6 (own-box passes), FS8 and FS9", dm.RENDER_FLAGS]
+    missing = [w for w in want if w not in doc]
+    assert not missing
+    assert "stadium=broadcast" in dm.RENDER_FLAGS and "views=tactical" in dm.RENDER_FLAGS
