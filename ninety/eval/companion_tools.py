@@ -8,7 +8,8 @@ apart, never pooled (deterministic and model-graded results stay apart):
 - code: the keyword router (`companion_match.route`), free, always run;
 - model: the Companion's plan step, only with --live, which calls the published model and costs
   money (tell the Coordinator first). A request the model never answered is counted apart from
-  a wrong plan (lesson 131).
+  a wrong plan (lesson 131). With --live the model's answers are also run over the stand-in match
+  (docs/eval/standin-insights-seed7.json), fact-checked and judged, and timed end to end.
 
     uv run python -m ninety.eval.companion_tools --out docs/eval/companion-tools.json
 """
@@ -16,10 +17,11 @@ apart, never pooled (deterministic and model-graded results stay apart):
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
-import statistics
 import time
 from collections import Counter
+from decimal import Decimal
 from pathlib import Path
 
 from ninety.agents import companion_match as cm
@@ -102,9 +104,7 @@ def main(argv: list[str] | None = None) -> None:
     }
     report["code"]["chosen"] = dict(Counter(t for _, c in code for t in c))
     if args.live:
-        raise SystemExit(
-            "--live: run from the agents-live job with the Coordinator's go (it builds the models)"
-        )
+        report["model"] = asyncio.run(live(questions))
     args.out.write_text(json.dumps(report, indent=1) + "\n")
     c = report["code"]
     md = [
@@ -123,17 +123,113 @@ def main(argv: list[str] | None = None) -> None:
         "",
         *[f'- "{w["text"]}": labelled {w["label"]}, chose {w["chose"] or "none"}' for w in c["wrong"]],
     ]
+    if "model" in report:
+        m = report["model"]
+        p = m["plans"]
+        md += [
+            "",
+            "## The published match Companion (live)",
+            "",
+            f"- Tool choice: **{p['right']}/{p['answered']}** right ({p['accuracy']}); "
+            f"{p['unanswered']} not answered by the service (counted apart, lesson 131).",
+            "- By tool: " + ", ".join(f"{k} {v}" for k, v in p["by_tool"].items()),
+            f"- Plan latency: {m['plan_latency']}; answer end to end (plan, tools, answer, check, Judge): "
+            f"{m['answer_latency']}.",
+            f"- How answers ended on the stand-in match: {m['answers']} (code: the model's draft was "
+            "refused or failed, and code's checked answer was shown).",
+            f"- The agents, as pinned: {m['agents']}.",
+            f"- Cost (estimated): {m['cost']}.",
+        ]
     args.out.with_suffix(".md").write_text("\n".join(md) + "\n")
     print(json.dumps({k: v for k, v in report["code"].items() if k != "wrong"}))
     for w in report["code"]["wrong"]:
         print("wrong:", w)
 
 
+STANDIN = QUESTIONS.parent / "standin-insights-seed7.json"  # ninety/eval/insight_standin.py, 20 minutes
+
+
+# Estimates for the Judge's calls, whose prompt the judge function builds: its instructions
+# (ninety/agents/judge.py INSTRUCTIONS, 3,316 characters) and a reply of a few statements.
+JUDGE_PROMPT_TOKENS = 830
+JUDGE_REPLY_TOKENS = 150
+
+
+async def live(questions: list[dict]) -> dict:
+    """The published match Companion and Judge: their plans scored like code's, then their answers
+    over the stand-in match (each question asked of its clubs' places in it), with how each ended,
+    the agents' pinned definitions, and what it cost (tokens estimated, priced as committed)."""
+    from ninety.agents import foundry
+    from ninety.api.companion import foundry_models
+    from ninety.eval import latency_cost as lc
+    from ninety.intel.match_insights import MatchInsights
+
+    models = await foundry_models()
+    used = {"in": 0, "out": 0, "calls": 0}
+
+    async def ask(prompt):
+        reply = await models.match_ask(prompt)
+        used["in"] += lc.tokens(prompt)
+        used["out"] += lc.tokens(reply)
+        used["calls"] += 1
+        return reply
+
+    async def judge(claim, evidence):
+        used["in"] += lc.tokens(json.dumps({"claim": claim.text, "evidence": evidence})) + JUDGE_PROMPT_TOKENS
+        used["out"] += JUDGE_REPLY_TOKENS
+        used["calls"] += 1
+        return await models.judge(claim, evidence)
+
+    plans, plan_ms = await model_plans(questions, ask)
+    mi = MatchInsights.from_dict(json.loads(STANDIN.read_text()))
+    ends, ms, rows = Counter(), [], []
+    for q in questions:
+        a, b = SEEDS[str(q["seed"])]
+        text = q["text"].replace(a, mi.fixture.clubs["home"]).replace(b, mi.fixture.clubs["away"])
+        question = Question("eval", None, text, 60.0 * min(q["minute"], mi.minutes) - 1)
+        t0 = time.perf_counter()
+        r = await cm.answer_match(question, mi, ask, judge, timeout=30.0)
+        ms.append((time.perf_counter() - t0) * 1000)
+        end = f"{r.source}:{r.answer.status}"
+        ends[end] += 1
+        rows.append(
+            {
+                "question": text,
+                "end": end,
+                "text": r.answer.text,
+                "tools": [c["name"] for c in r.tools],
+                "reasons": list(r.reasons),
+            }
+        )
+    usd = lc.price(lc.INPUT) * used["in"] + lc.price(lc.OUTPUT) * used["out"]
+    registry = foundry.load_registry()
+    return {
+        "plans": score(plans),
+        "plan_latency": latency(plan_ms),
+        "answers": dict(ends),
+        "answer_latency": latency(ms),
+        "rows": rows,
+        "agents": {name: registry.get(name) for name in ("ninety-companion-match", "ninety-judge")},
+        "cost": {
+            "model": lc.PRICES["model"],
+            "prices_read": lc.PRICES["read"],
+            "calls": used["calls"],
+            "input_tokens": used["in"],
+            "output_tokens": used["out"],
+            "usd_estimate": str(usd.quantize(Decimal("0.0001"))),
+            "how": "tokens at 4 characters a token (latency_cost.tokens); each Judge call adds its "
+            "instructions and a reply at the sizes in companion_tools",
+        },
+    }
+
+
 def latency(ms: list[float]) -> dict:
+    """p50 and p95 by nearest rank, as the latency report reads them (ninety/eval/latency_cost.py)."""
+    from ninety.eval.latency_cost import percentile
+
     if not ms:
         return {}
-    qs = statistics.quantiles(ms, n=20) if len(ms) > 1 else [ms[0]] * 19
-    return {"p50_ms": round(statistics.median(ms), 1), "p95_ms": round(qs[18], 1), "n": len(ms)}
+    return {"p50_ms": round(percentile(ms, 0.5), 1), "p95_ms": round(percentile(ms, 0.95), 1), "n": len(ms)}
 
 
 if __name__ == "__main__":

@@ -21,6 +21,23 @@ from ninety.agents.companion import TIMEOUT_S, Source, _NotTheFormat, _number, s
 from ninety.agents.contracts import Answer, Ask, Judge, Question, status_for
 from ninety.agents.factcheck import Claim, Verdict, parse_claim
 
+
+def companion_match_agent(client):
+    """The match Companion, published on Foundry as `ninety-companion-match`: one prompt agent for
+    both steps (plan, then answer), told apart by the message's `step`. No tools of its own: code runs
+    the tools it names, so every fact it sees is one the fact-checker checks against."""
+    from agent_framework import Agent
+
+    from ninety.agents.contracts import COMPANION_MATCH_INSTRUCTIONS
+
+    return Agent(
+        client=client,
+        name="companion-match",
+        instructions=COMPANION_MATCH_INSTRUCTIONS,
+        default_options={"temperature": 0},
+    )
+
+
 MATCH_TOOLS = (
     "goal_build_up",
     "players",
