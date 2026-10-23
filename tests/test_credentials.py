@@ -223,3 +223,50 @@ def test_foundry_scores_signs_in_before_it_evaluates(monkeypatch, order):
     monkeypatch.setattr(ae.foundry, "chat_client", lambda credential: object())
     assert asyncio.run(ae.foundry_scores(["r1"]))["status"] == "ok"
     assert order[:2] == ["token", "evaluate"]
+
+
+def test_the_analyst_evaluation_grades_the_events_it_sends_inline(monkeypatch):
+    # Lesson 90 (audit row 1): the Analyst read the deployed match over MCP while the grade used this
+    # commit's events. Now each prompt carries the minute's events, under an id no server serves.
+    from ninety.agents import analyst_eval as ae
+    from ninety.agents.factcheck import Verdict
+
+    known = {"e1": {"id": "e1", "minute": 1, "second": 3, "clock": "00:03", "type": "pass", "team": "home",
+                    "player": "h7"},
+             "e2": {"id": "e2", "minute": 2, "second": 5, "clock": "01:05", "type": "pass", "team": "home",
+                    "player": "h8"}}
+    prompts = []
+
+    class Reply:
+        response_id, messages = "r", ()
+
+        def __init__(self, text):
+            self.text = text
+
+    class Agent:
+        def __init__(self, **kw):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def run(self, prompt):
+            prompts.append(prompt)
+            return Reply('{"text": "h7 plays a pass.", "evidence": ["e1"]}')
+
+    async def judge(agent, claim, evidence):
+        return Verdict(ok=True)
+
+    monkeypatch.setattr(ae, "MINUTES", 2)
+    monkeypatch.setattr(ae, "FoundryAgent", Agent)
+    monkeypatch.setattr(ae, "judge", judge)
+    monkeypatch.setattr(ae.foundry, "chat_client", lambda credential: object())
+    monkeypatch.setattr(ae.foundry, "slice_agents", lambda client: ["analyst", "judge"])
+    monkeypatch.setattr(ae.foundry, "pinned", lambda local: (f"ninety-{local}", "1"))
+    rows, _ = asyncio.run(ae._drafts(None, [7], {7: known}))
+    assert "seed7-inline" in prompts[0] and '"e1"' in prompts[0] and '"e2"' not in prompts[0]
+    assert '"e2"' in prompts[1]
+    assert [r["minute"] for r in rows] == [1, 2] and all(r["verdict"] == "accept" for r in rows)

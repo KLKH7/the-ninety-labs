@@ -66,8 +66,13 @@ async def _drafts(credential, seeds: list[int], known_by_seed: dict[int, dict]) 
                 agents.append(await stack.enter_async_context(published))
             analyst, judge_agent = agents
             ran = ", ".join(labels)
+            # The Analyst gets the minute's events from this commit's simulation, inline, under an id
+            # no server serves: graded against the same events it read (lesson 90). Before, it read
+            # the deployed image's match over MCP while the grade used this commit's events.
+            match = match_server.unserved(match_server.match_id(seed))
             for minute in range(1, MINUTES + 1):
-                response = await analyst.run(analyst_prompt(match_server.match_id(seed), minute))
+                inline = [e for e in known.values() if e["minute"] == minute]
+                response = await analyst.run(analyst_prompt(match, minute, events=inline))
                 row = {
                     "seed": seed,
                     "minute": minute,
@@ -75,7 +80,13 @@ async def _drafts(credential, seeds: list[int], known_by_seed: dict[int, dict]) 
                     "text": response.text,
                 }
                 try:
-                    claim = parse_claim(response.text)
+                    text = foundry.inline_only(response)
+                except foundry.ReadTheTools as e:  # it called the tools anyway: what it read is not graded
+                    rows.append({**row, "claim": "", "verdict": "reject",
+                                 "reasons": [f"called the match tools: {e}"]})
+                    continue
+                try:
+                    claim = parse_claim(text)
                 except (ValueError, AttributeError) as e:  # not the JSON the instructions ask for
                     rows.append(
                         {**row, "claim": "", "verdict": "reject", "reasons": [f"unparseable reply: {e}"]}
