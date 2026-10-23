@@ -2663,10 +2663,15 @@ class Engine:
                 # before it gets there; a ball he can step to needs no dive, and he is not put on the
                 # ground by one (lesson 186: dives of a few centimetres at balls nearly at his hands).
                 steps = can_get_to(p.physique, 0.0, cross - p.y, arms, p.vx, p.vy, when)[0]
-                if height <= top and need > 0 and not steps:
-                    travel = math.copysign(min(need, KEEPER_DIVE_TRAVEL_M), cross - p.y)
-                    self.dive = (p.id, self.t, p.y, travel, self.kicked_at + self.reaction(p),
-                                 math.copysign(1.0, travel) * p.vy)  # his sideways run toward it
+                travel = math.copysign(min(max(need, 0.0), KEEPER_DIVE_TRAVEL_M), cross - p.y)
+                v0 = math.copysign(1.0, travel) * p.vy  # his sideways run toward it
+                # P15: and no sooner than he must (design): launched sooner, the dive lands before the
+                # ball arrives and leaves him on the ground as it does. Until then he stays on his
+                # feet and goes on toward it, and is judged again next frame (DT: one frame later the
+                # dive would be too late).
+                last = when < offball.dive_time_to(abs(travel), v0) + DT
+                if height <= top and need > 0 and not steps and last:
+                    self.dive = (p.id, self.t, p.y, travel, self.kicked_at + self.reaction(p), v0)
                     self.dived_at = self.kicked_at
         if not self.dive or self.dive[0] != p.id:
             return False
