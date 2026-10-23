@@ -316,6 +316,9 @@ class Run:
     reviews: list[Review] = field(default_factory=list)
     cues: list[dict] = field(default_factory=list)
     t: dict[str, float] = field(default_factory=dict)  # event id -> seconds, for Ledger records
+    # Recordings made before the fact-checker stopped checking a Challenger's reading once the
+    # Tactician's claim was verified replay under the rule they were recorded with.
+    check_alternative_after_verified: bool = False
 
     def step(self, role: str, moment: str, action: str, started: float, detail: str = "",
              fallback: str = "") -> None:
@@ -527,6 +530,13 @@ class FactChecker(Executor):
         for draft in (case.tactician, case.challenger):
             if draft is None or draft.status != "draft":
                 continue
+            if (draft is case.challenger and case.tactician.status == "verified"
+                    and not run.check_alternative_after_verified):
+                # The Tactician's claim airs whatever the alternative says: checking (and rewriting)
+                # the alternative would spend Judge and writer calls on a claim that cannot air.
+                run.step("fact_checker", case.moment.id, "skip", time.perf_counter(),
+                         "the tactician's claim is verified: the challenger's reading is not checked")
+                continue
             started = time.perf_counter()
             with telemetry.stage_span("fact_check", attempt=draft.attempt):
                 checked = await fact_check(draft.claim, scope, guarded(run.models.judge), run.gate)
@@ -569,7 +579,10 @@ class Producer(Executor):
             primary = case.tactician.verdict
             status = "verified" if aired else status_for(primary)
             claim = aired.claim if aired else None
-            run.reviews.append(Review(case.moment.id, primary, alternative, claim, status))
+            writers = (case.tactician, case.challenger)
+            attempts = tuple((d.author, d.attempt) for d in writers if d is not None)
+            run.reviews.append(Review(case.moment.id, primary, alternative, claim, status,
+                                      aired.author if aired else None, attempts, case.tactician.claim))
             template = f"cue-{case.moment.main_event}-{INSIGHT_PERSONA}"
             if aired:
                 cue = await self.insight(case.moment, aired.claim, template)
@@ -693,6 +706,7 @@ async def run_workflow(
     ledger: Ledger | None = None,
     gate: Gate = confidence_gate,
     personalize: bool = False,
+    check_alternative_after_verified: bool = False,
 ) -> Result:
     """One minute through the workflow. `events` are full match events (simulated or detected);
     the agents see them compacted, and claims are checked against those."""
@@ -701,7 +715,8 @@ async def run_workflow(
     await load_match(ledger, events, ())
     counted, calls = _counted(models)
     run = Run(counted, ledger, {e["id"]: compact(e) for e in events}, match, inline_events, plant, live, gate,
-              personalize, events, t={e["id"]: float(e["t"]) for e in events})
+              personalize, events, t={e["id"]: float(e["t"]) for e in events},
+              check_alternative_after_verified=check_alternative_after_verified)
     start, analyst, tactician = ProducerStart(run), Analyst(run), Tactician(run)
     challenger, checker, producer = Challenger(run), FactChecker(run), Producer(run)
     personalizer = Personalizer(run)
@@ -868,6 +883,7 @@ async def replay_workflow(recording: WorkflowRecording) -> Result:
     result = await run_workflow(
         replay_models(replayer), inputs["events"], inputs["minute"], inputs["match"], inputs["plant"],
         False, inputs["inline_events"],
+        check_alternative_after_verified=inputs.get("alternative_checked_after_verified", True),
     )
     if replayer.remaining:
         raise ReplayMismatch(f"the run ended with {replayer.remaining} recorded answer(s) never asked for")
@@ -960,7 +976,8 @@ def main() -> None:
         elif args.record:
             inputs = {"match": match, "seed": seed, "minutes": args.minutes, "minute": args.minute,
                       "plant": args.plant, "inline_events": inline, "events": events,
-                      "moments": [m.id for m in result.moments]}
+                      "moments": [m.id for m in result.moments],
+                      "alternative_checked_after_verified": False}
             stamp = datetime.now(UTC).isoformat(timespec="seconds")
             WorkflowRecording(WORKFLOW, _commit(), pins, inputs, stamp, turns).save(args.record)
             print(f"recorded {len(turns)} model answer(s) to {args.record}")
