@@ -80,10 +80,10 @@ PASS_SPEED_EST_MPS = 14.0  # design: a passer's rough guess of a pass's average 
 LEAD_MAX_S = 2.0  # design: and he leads him by at most this long
 LOFT_FROM_M = 15.0  # design: shorter than this, a pass is played along the ground
 LOFT_DEG = 30.0  # design: the launch angle of a lofted pass or a throw, as estimated and as struck
-# L15: the fastest a keeper throws the ball. A standing overarm throw of a 0.409 kg ball (a football
-# weighs about 0.43 kg) by experienced handball players: 21.5 m/s (van den Tillaar and Ettema 2004,
-# J Sports Sci Med 3:211). *verify*: a football is too big to grip in one hand, so a keeper's throw is
-# taken as no faster.
+# L15: the fastest a keeper throws the ball. Experienced handball players' overarm throw, as fast as
+# they could, of a 0.409 kg ball 0.3 m round (a football weighs about 0.43 kg): 21.5 m/s (van den
+# Tillaar and Ettema 2004, J Sports Sci Med 3:211-219). *verify*: a football does not fit a hand, so a
+# keeper's throw is taken as no faster; no keeper-specific figure was found.
 KEEPER_THROW_MPS = 21.5
 # A4: the passer's guess of what a first touch can kill: an average player's (one definition, profiles).
 CONTROL_EST_MPS = FOOT_ABSORB_MPS[0] + FOOT_ABSORB_MPS[1] * 0.5
