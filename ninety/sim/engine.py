@@ -160,6 +160,13 @@ RESTART_DELAY_S = {"throw_in": (12, 20), "goal_kick": (24, 34), "corner": (24, 3
                    "penalty_kick": (100, 140),
                    "kick_off": (1, 2),
                    "kick_off_after_goal": (60, 90)}
+# Laws 7 and 8, lesson 213: the first half ends after 45 minutes and the second half starts with a
+# kick-off by the team that did not take the first. No time is added for stoppages (the referee's
+# allowance is not modelled) and the interval is not played out: the clock runs on while the teams
+# walk back to their kick-off spots, and the kick waits as any kick-off does (lined up, then 1 to 2 s).
+# The teams do not change ends (GROUNDING L3: every direction in the engine and its readers is still
+# fixed by team).
+HALF_S = 45 * 60.0
 # design: a fouled player goes down and gets up. A standing body topples over its feet in about
 # half a second; he lies short of flat, so his head stays off the grass, stays there a moment,
 # and gets up in about a second. He is upright this long before the restart is due. The lie
@@ -654,6 +661,9 @@ class Engine:
         self.lunges: dict[str, float] = {}  # defender -> when his lunge reaches the ball
         self.lunge_at: dict[str, str] = {}  # defender -> the man he lunged at
         self.penalties = 0  # penalty kicks awarded (Law 14)
+        self.first_kick_off: str | None = None  # who took the match's first kick-off (Law 8)
+        self.half_time_at: float | None = None  # when the referee ended the first half (Law 7)
+        self.penalty_shot: dict | None = None  # the shot struck from the last penalty kick
         self.evade_at: dict[str, float] = {}  # defender -> when the carrier reacts to his lunge
         self.off_balance: dict[str, float] = {}  # defender -> when he has recovered from a miss
         self.tackle: dict | None = None  # the tackle event whose outcome the next control decides
@@ -859,13 +869,15 @@ class Engine:
             x, y = half + (x - half) * scale, PITCH_Y / 2 + (y - PITCH_Y / 2) * scale
         return x, y
 
-    def kickoff(self, team: str, setup: bool = False) -> None:
+    def kickoff(self, team: str, setup: bool = False, second_half: bool = False) -> None:
         """Law 8. At the start of the match (`setup`) the teams walk out to their kick-off spots
         before the first frame. After a goal nobody is moved: they make their own way back to their
         spots after the celebration (celebrate), the ball is fetched to the centre mark
         (tick_restart), and the kick is taken once everyone stands where Law 8 puts them and the
         stoppage has run its time (L4: a minute or more after a goal, 1 to 2 s at the start)."""
         taker = next(p for p in self.players if p.team == team and p.role == "ST")
+        if self.first_kick_off is None:
+            self.first_kick_off = team
         if setup:
             for p in self.players:
                 p.x, p.y = self.kickoff_spot(p, team)
@@ -877,7 +889,40 @@ class Engine:
         self.kicked = None
         self.new_phase()
         self.stop("kick_off", team, (PITCH_X / 2, PITCH_Y / 2), taker.id,
-                  delay="kick_off" if setup else "kick_off_after_goal")
+                  delay="kick_off" if setup or second_half else "kick_off_after_goal")
+
+    def penalty_in_progress(self) -> bool:
+        """Law 7: a half is extended for a penalty kick to be taken and completed: awarded and not
+        yet taken, or struck and its ball still live, untouched by any player but the keeper it was
+        struck at (design: completed once it is out of play, a goal, at rest, or played by another;
+        the engine's own record, kicked, is the shot until someone else plays it)."""
+        if self.restart is not None:
+            return self.restart.kind == "penalty_kick"
+        if self.from_restart == "penalty_kick":
+            return True  # taken, and the taker turning to strike it
+        shot = self.penalty_shot
+        if shot is None or self.kicked is not shot or self.possessor is not None:
+            return False
+        return math.hypot(*self.ball[3:6]) > 0.0
+
+    def half_time(self) -> None:
+        """Law 7: the referee ends the first half at HALF_S (no added time is modelled): whatever was
+        in play stops as at any whistle (a pass or shot on its way ends where the ball is, as at a
+        foul, end_kick), a restart waiting to be taken is not taken, and the second half starts with a
+        kick-off by the team that did not take the first (Law 8), by the same path as after a goal:
+        the dead ball is fetched to the centre mark, the teams walk back to their Law 8 spots, and the
+        kick is taken once they are lined up."""
+        self.half_time_at = self.t
+        self.end_kick(*self.ball[:2])
+        self.lunges.clear(), self.lunge_at.clear(), self.evade_at.clear()
+        self.possessor = self.dribbler = self.dribble_to = self.windup = None
+        self.chase = {}
+        self.set_by = None
+        self.throw_by = None
+        self.into_play = False
+        self.from_restart = None
+        self.penalty_shot = None
+        self.kickoff(other(self.first_kick_off or "home"), second_half=True)
 
     def lined_up_for_kickoff(self, r: Restart) -> bool:
         """Law 8: everyone but the kicker in his own half, and the opponents outside the centre
@@ -1045,6 +1090,8 @@ class Engine:
         # Outcome and end point are observed: set when the ball is touched, goes out or goes in.
         self.shot_touched_by = self.shot_was_on_target = None
         self.kicked = self.emit("shot", team, bx, by, player=carrier.id, ball_speed_kmh=round(speed * 3.6, 1))
+        if self.from_restart == "penalty_kick":
+            self.penalty_shot = self.kicked  # Law 7: a half waits for it to be completed
         self.kick(carrier, vx, vy, vz)
 
     def pass_to(self, carrier: Player, tx: float, ty: float, lofted: bool, throw: bool = False,
@@ -3521,6 +3568,8 @@ class Engine:
 
     def step(self) -> None:
         """One frame: everyone perceives and decides, the ball is played, everyone moves."""
+        if self.half_time_at is None and self.t >= HALF_S - 1e-9 and not self.penalty_in_progress():
+            self.half_time()  # Law 7: the first half is over
         self.moved = None
         self.perceive_and_think()
         self.duels()
