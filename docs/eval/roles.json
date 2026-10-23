@@ -9,169 +9,89 @@
  "sigma_m": 0.587,
  "window_min": 15,
  "dev": [
-  "/Users/kianlakhani/the-ninety-labs/runs/u7",
-  "/Users/kianlakhani/the-ninety-labs/runs/seed11"
+  "runs/u7",
+  "runs/seed11"
  ],
  "held_out": [
-  "/Users/kianlakhani/the-ninety-labs/runs/c21"
+  "runs/c21"
  ],
  "by_fragment": {
   "30.0": {
    "dev": {
-    "tracks": 6895,
-    "role_ok": 6785,
-    "line_ok": 6800,
+    "tracks": 6843,
+    "role_ok": 6731,
+    "line_ok": 6751,
     "name": {
-     "gate": 0.337,
-     "said": 6895,
-     "right": 6785,
+     "gate": 0.335,
+     "said": 6843,
+     "right": 6731,
      "precision": 0.984
     },
     "role": {
-     "gate": 0.337,
-     "said": 6895,
-     "right": 6785,
+     "gate": 0.335,
+     "said": 6843,
+     "right": 6731,
      "precision": 0.984
     },
     "line": {
-     "gate": 0.337,
-     "said": 6895,
-     "right": 6800,
-     "precision": 0.986
+     "gate": 0.335,
+     "said": 6843,
+     "right": 6751,
+     "precision": 0.987
     },
     "confusions": [
      [
       "GK->LCB",
-      17
+      18
      ],
      [
       "GK->RCB",
-      12
+      10
      ],
      [
       "LCB->GK",
-      11
-     ],
-     [
-      "RCB->GK",
-      7
+      10
      ],
      [
       "LCM->ST",
+      7
+     ],
+     [
+      "ST->RW",
       6
      ],
      [
-      "ST->CM",
+      "ST->LCM",
       5
      ]
     ]
    },
    "held_out": {
-    "tracks": 3455,
-    "role_ok": 3454,
-    "line_ok": 3454,
+    "tracks": 3406,
+    "role_ok": 3404,
+    "line_ok": 3404,
     "name": {
-     "gate": 0.337,
-     "said": 3455,
-     "right": 3454,
-     "precision": 1.0
+     "gate": 0.335,
+     "said": 3406,
+     "right": 3404,
+     "precision": 0.999
     },
     "role": {
-     "gate": 0.337,
-     "said": 3455,
-     "right": 3454,
-     "precision": 1.0
+     "gate": 0.335,
+     "said": 3406,
+     "right": 3404,
+     "precision": 0.999
     },
     "line": {
-     "gate": 0.337,
-     "said": 3455,
-     "right": 3454,
-     "precision": 1.0
+     "gate": 0.335,
+     "said": 3406,
+     "right": 3404,
+     "precision": 0.999
     },
     "confusions": [
      [
       "RB->RCM",
       1
-     ]
-    ]
-   }
-  },
-  "10.0": {
-   "dev": {
-    "tracks": 14293,
-    "role_ok": 14033,
-    "line_ok": 14074,
-    "name": {
-     "gate": 0.337,
-     "said": 14291,
-     "right": 14032,
-     "precision": 0.982
-    },
-    "role": {
-     "gate": 0.337,
-     "said": 14291,
-     "right": 14032,
-     "precision": 0.982
-    },
-    "line": {
-     "gate": 0.337,
-     "said": 14291,
-     "right": 14072,
-     "precision": 0.985
-    },
-    "confusions": [
-     [
-      "GK->RCB",
-      39
-     ],
-     [
-      "GK->LCB",
-      38
-     ],
-     [
-      "RCB->GK",
-      25
-     ],
-     [
-      "LCB->GK",
-      20
-     ],
-     [
-      "LCM->ST",
-      18
-     ],
-     [
-      "ST->LCM",
-      13
-     ]
-    ]
-   },
-   "held_out": {
-    "tracks": 7139,
-    "role_ok": 7133,
-    "line_ok": 7133,
-    "name": {
-     "gate": 0.337,
-     "said": 7139,
-     "right": 7133,
-     "precision": 0.999
-    },
-    "role": {
-     "gate": 0.337,
-     "said": 7139,
-     "right": 7133,
-     "precision": 0.999
-    },
-    "line": {
-     "gate": 0.337,
-     "said": 7139,
-     "right": 7133,
-     "precision": 0.999
-    },
-    "confusions": [
-     [
-      "RB->RCM",
-      5
      ],
      [
       "RCM->RB",
@@ -180,90 +100,169 @@
     ]
    }
   },
-  "120.0": {
+  "10.0": {
    "dev": {
-    "tracks": 2159,
-    "role_ok": 2130,
-    "line_ok": 2136,
+    "tracks": 14401,
+    "role_ok": 14126,
+    "line_ok": 14169,
     "name": {
-     "gate": 0.337,
-     "said": 2158,
-     "right": 2129,
-     "precision": 0.987
+     "gate": 0.335,
+     "said": 14398,
+     "right": 14126,
+     "precision": 0.981
     },
     "role": {
-     "gate": 0.337,
-     "said": 2158,
-     "right": 2129,
-     "precision": 0.987
+     "gate": 0.335,
+     "said": 14398,
+     "right": 14126,
+     "precision": 0.981
     },
     "line": {
-     "gate": 0.337,
-     "said": 2158,
-     "right": 2135,
-     "precision": 0.989
+     "gate": 0.335,
+     "said": 14398,
+     "right": 14168,
+     "precision": 0.984
     },
     "confusions": [
      [
-      "LW->LCM",
-      4
-     ],
-     [
       "GK->RCB",
-      3
+      42
      ],
      [
       "GK->LCB",
-      3
+      39
      ],
      [
-      "RCM->CM",
-      2
+      "RCB->GK",
+      23
+     ],
+     [
+      "LCB->GK",
+      21
+     ],
+     [
+      "LCM->ST",
+      15
      ],
      [
       "CM->ST",
-      2
-     ],
-     [
-      "RCM->RW",
-      2
+      11
      ]
     ]
    },
    "held_out": {
-    "tracks": 1005,
-    "role_ok": 1004,
-    "line_ok": 1004,
+    "tracks": 7112,
+    "role_ok": 7107,
+    "line_ok": 7107,
     "name": {
-     "gate": 0.337,
-     "said": 1005,
-     "right": 1004,
+     "gate": 0.335,
+     "said": 7112,
+     "right": 7107,
      "precision": 0.999
     },
     "role": {
-     "gate": 0.337,
-     "said": 1005,
-     "right": 1004,
+     "gate": 0.335,
+     "said": 7112,
+     "right": 7107,
      "precision": 0.999
     },
     "line": {
-     "gate": 0.337,
-     "said": 1005,
-     "right": 1004,
+     "gate": 0.335,
+     "said": 7112,
+     "right": 7107,
      "precision": 0.999
     },
     "confusions": [
      [
       "RB->RCM",
+      3
+     ],
+     [
+      "RCM->RB",
+      2
+     ]
+    ]
+   }
+  },
+  "120.0": {
+   "dev": {
+    "tracks": 2176,
+    "role_ok": 2151,
+    "line_ok": 2156,
+    "name": {
+     "gate": 0.335,
+     "said": 2176,
+     "right": 2151,
+     "precision": 0.989
+    },
+    "role": {
+     "gate": 0.335,
+     "said": 2176,
+     "right": 2151,
+     "precision": 0.989
+    },
+    "line": {
+     "gate": 0.335,
+     "said": 2176,
+     "right": 2156,
+     "precision": 0.991
+    },
+    "confusions": [
+     [
+      "RW->RCM",
+      3
+     ],
+     [
+      "LW->LCM",
+      3
+     ],
+     [
+      "LCM->CM",
+      2
+     ],
+     [
+      "LB->LCM",
+      2
+     ],
+     [
+      "LCM->LW",
+      2
+     ],
+     [
+      "RCM->RCB",
       1
      ]
     ]
+   },
+   "held_out": {
+    "tracks": 1079,
+    "role_ok": 1079,
+    "line_ok": 1079,
+    "name": {
+     "gate": 0.335,
+     "said": 1079,
+     "right": 1079,
+     "precision": 1.0
+    },
+    "role": {
+     "gate": 0.335,
+     "said": 1079,
+     "right": 1079,
+     "precision": 1.0
+    },
+    "line": {
+     "gate": 0.335,
+     "said": 1079,
+     "right": 1079,
+     "precision": 1.0
+    },
+    "confusions": []
    }
   }
  },
  "gates": {
-  "name": 0.337,
-  "role": 0.337,
-  "line": 0.337
+  "name": 0.335,
+  "role": 0.335,
+  "line": 0.335
  }
 }
