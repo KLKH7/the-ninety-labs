@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from ninety.sim.offball import LENGTH_MAX_M
 from ninety.sim.style import COUNTER_PRESS_ENGAGE_M, ENGAGE_M, PRESS_GAP_M, Style
 
 PITCH_X, PITCH_Y = 105.0, 68.0
@@ -75,11 +76,17 @@ class TeamBrain:
         # The block holds while the ball is in front of it; a ball inside it pulls the line back
         # toward the box, so the defence stays between the ball and the goal.
         depth = min(depth, max(LINE_FLOOR_M, ball_from_goal - GOAL_SIDE_OF_BALL_M))
-        self.line_x = own_goal_x(self.team) + forward(self.team) * depth
         # T3: the forwards wait at the team's line of engagement, so that when the ball comes
         # inside it the first presser is already close; never past the ball, and never closer
         # to their own goal than the front of the block.
         front = max(depth + LINE_GAPS_M["attack"], min(ball_from_goal, self.engage_from_goal_m))
+        # R8: without the ball the team is more compact than with it, so it is no longer than the
+        # cap it keeps in possession (O6): when the forwards wait high, as a high press does up to a
+        # goal kick, the line steps up behind them. The forwards wait at most at the ball, so the
+        # line stays well goal-side of it. Until October 2026 only the team on the ball was capped,
+        # and a high press stood 49 m long (77 m with a low line), its back line in its own half.
+        depth = max(depth, front - LENGTH_MAX_M)
+        self.line_x = own_goal_x(self.team) + forward(self.team) * depth
         self.front_x = own_goal_x(self.team) + forward(self.team) * front
         self.ranked = [] if has_ball else sorted(time_to_ball, key=time_to_ball.get)
         # The suggestion: first presser, then cover. Each named player still decides (P17).
