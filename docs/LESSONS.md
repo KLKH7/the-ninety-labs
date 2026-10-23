@@ -2094,7 +2094,9 @@ short and actionable. This file is public: no research sources, product names or
 - **What happened:** Kian saw the keeper "dive at the completely wrong time". The engine dived as soon
   as he had reacted to any shot crossing beyond his hands: at balls a few centimetres out that a step
   would have reached (3 of 11 measured dives travelled 9 cm or less, then he lay down for 0.8 s), and
-  at long shots still up to 1.7 s away, so he landed before the ball arrived. The dive tests froze the
+  at long shots still up to 1.7 s away, so he landed before the ball arrived. Watching the first clip of
+  the fix then showed a third cause nobody had listed: he dived at a shot heading 12 m wide, because
+  nothing asked whether the ball was going in. The dive tests froze the
   ball and moved only the clock, so a launch "on reacting" was the only one they could see, and one
   of them (a high ball needs a longer dive) held only because the frozen ball made his arms look
   fully stretched at an arrival that, in flight, comes 0.35 s earlier.
@@ -2108,5 +2110,7 @@ short and actionable. This file is public: no research sources, product names or
   a keeper who only waits for the last moment, without asking whether his legs will do, dives at the
   first. A 1.2 m dive with time to spare is launched after he reacts and lands as the ball arrives;
   main launched it as he reacted. Removing the step test turns the first red, removing the launch
-  timing turns the long-shot and run-up tests red, and removing both turns all four red. The
+  timing turns the long-shot and run-up tests red, and removing both turns all four red;
+  `test_he_does_not_dive_at_a_shot_going_wide` is red without the on-target condition. A clip of the
+  change is watched before it is called done (lesson 107). The
   dive tests in `tests/test_engine_rules.py` fly the shot (`_until_he_dives`).

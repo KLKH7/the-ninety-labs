@@ -495,7 +495,7 @@ def test_a_touch_names_the_part_and_a_carry_does_not():
 
 def test_a_dive_is_drawn_as_far_as_he_has_gone_and_until_he_is_up():
     e = Engine(1)
-    k = _shot_at_keeper(e, (90.0, 34.0, 0.5, 25.0, 6.0, 0.0))  # heading for his left
+    k = _shot_at_keeper(e, (90.0, 34.0, 0.5, 25.0, 5.2, 0.0))  # heading for his left
     assert e.pose(k)[0] != "dive"  # he has not reacted yet
     assert _until_he_dives(e, k)
     gone = [abs(e.pose(k)[1])]
@@ -908,7 +908,7 @@ def test_the_keeper_dives_toward_the_shot_after_reacting_then_is_down():
     k.x, k.y, k.vx, k.vy = 104.0, 34.0, 0.0, 0.0
     e.possessor = None
     e.kicked = {"type": "shot", "team": "home"}
-    e.ball = (90.0, 34.0, 0.5, 25.0, 6.0, 0.0)  # heading for about 3.4 m to his left
+    e.ball = (90.0, 34.0, 0.5, 25.0, 5.2, 0.0)  # heading for about 2.9 m to his left, inside the post
     e.kicked_at = e.free_since = e.t
     assert not e.keeper_dive(k)  # he has not reacted yet
     y0 = k.y
@@ -951,7 +951,7 @@ def _until_he_dives(e, k, seconds: float = 4.0) -> bool:
 
 def test_the_dive_runs_in_the_match_loop_and_waits_for_the_keepers_reaction():
     e = Engine(1)
-    k = _shot_at_keeper(e, (90.0, 34.0, 0.5, 25.0, 6.0, 0.0))
+    k = _shot_at_keeper(e, (90.0, 34.0, 0.5, 25.0, 5.2, 0.0))
     y0 = k.y
     e.move_players()
     assert k.y == y0 or abs(k.y - y0) < 0.05  # nothing yet: he has not reacted
@@ -965,7 +965,7 @@ def test_the_dive_runs_in_the_match_loop_and_waits_for_the_keepers_reaction():
 
 def test_a_deflection_restarts_the_keepers_reaction_before_he_dives():
     e = Engine(1)
-    k = _shot_at_keeper(e, (90.0, 34.0, 0.5, 25.0, 6.0, 0.0))
+    k = _shot_at_keeper(e, (90.0, 34.0, 0.5, 25.0, 5.2, 0.0))
     e.t += e.reaction(k)
     e.kicked_at = e.t  # just deflected on its way
     assert not e.keeper_dive(k)
@@ -978,7 +978,7 @@ def test_the_keeper_dives_once_per_touch_and_a_deflection_lets_him_dive_again():
     # touch, to give the cause a life longer than the dive (lesson 75).
     from ninety.sim.offball import DIVE_TIME_S, KEEPER_DOWN_S
     e = Engine(1)
-    shot = (90.0, 34.0, 0.5, 25.0, 6.0, 0.0)  # beyond what stepping across reaches in time
+    shot = (90.0, 34.0, 0.5, 25.0, 5.2, 0.0)  # beyond what stepping across reaches in time
     k = _shot_at_keeper(e, shot)
     assert _until_he_dives(e, k)
     for _ in range(int((DIVE_TIME_S + KEEPER_DOWN_S) * 25) + 3):  # the dive, then down, then up
@@ -1048,9 +1048,9 @@ def test_the_keeper_dives_at_a_dipping_shot_that_comes_in_under_the_bar():
     # he reacts, a straight line on from the ball says it goes metres over his reach; its own flight
     # (drag and gravity) says it comes in low, and he dives at it as soon as he must.
     e = Engine(1)
-    k = _shot_at_keeper(e, (74.0, 34.0, 0.3, 20.0, 4.0, 8.0))
+    k = _shot_at_keeper(e, (74.0, 34.0, 0.3, 20.0, 2.0, 8.0))
     when, _, z = e.ball_at_x(k.x)
-    assert z < 1.0  # it does come in under the bar
+    assert z < 1.0 and e.heading_on_target("home")  # it does come in under the bar, inside the post
     while e.t - e.kicked_at < e.reaction(k):  # it flies until he has reacted
         e.ball = ball.step(e.ball, 1 / 25)
         e.t += 1 / 25
@@ -1097,7 +1097,7 @@ def test_before_he_reacts_the_keeper_has_only_his_standing_reach_then_it_grows()
 
 def test_a_deflection_does_not_unstretch_a_dive_already_under_way():
     e = Engine(1)
-    k = _shot_at_keeper(e, (90.0, 34.0, 0.5, 25.0, 6.0, 0.0))
+    k = _shot_at_keeper(e, (90.0, 34.0, 0.5, 25.0, 5.2, 0.0))
     assert _until_he_dives(e, k)
     e.t += 0.3
     stretched = e.reach(k, 104.0, 34.0, offball.KEEPER_COM_Z)[0]
@@ -1128,7 +1128,7 @@ def test_the_keeper_follows_a_slow_shot_however_long_it_takes_to_arrive():
 
 def test_a_keeper_down_after_a_dive_keeps_his_stretch_until_he_is_up():
     e = Engine(1)
-    k = _shot_at_keeper(e, (90.0, 34.0, 0.5, 25.0, 6.0, 0.0))
+    k = _shot_at_keeper(e, (90.0, 34.0, 0.5, 25.0, 5.2, 0.0))
     assert _until_he_dives(e, k)
     for _ in range(int(offball.DIVE_TIME_S * 25) + 2):
         e.keeper_dive(k)
@@ -1508,7 +1508,7 @@ def test_a_keeper_dives_once_at_a_touch_and_again_only_after_a_new_one():
 def test_a_deflection_does_not_pull_a_diving_keeper_out_of_his_jump():
     # GROUNDING P15: his rise counts from the touch he dived at, not from a deflection mid-dive.
     e = Engine(1)
-    k = _shot_at_keeper(e, (90.0, 34.0, 0.5, 25.0, 6.0, 0.0))
+    k = _shot_at_keeper(e, (90.0, 34.0, 0.5, 25.0, 5.2, 0.0))
     assert _until_he_dives(e, k)
     e.t += 0.3
     before = e.reach(k, 104.0, 34.0, 2.8)

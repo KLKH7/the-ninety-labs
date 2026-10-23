@@ -2670,7 +2670,11 @@ class Engine:
                 # feet and goes on toward it, and is judged again next frame (DT: one frame later the
                 # dive would be too late).
                 last = when < offball.dive_time_to(abs(travel), v0) + DT
-                if height <= top and need > 0 and not steps and last:
+                # Law 10: and only at a ball that is going in (its own flight crosses his goal line
+                # between the posts and under the bar, as heading_on_target judges a shot); one going
+                # wide or over he lets go (once he dived 1.45 m at a shot heading 12 m wide).
+                if (height <= top and need > 0 and not steps and last
+                        and self.heading_on_target(k["team"])):
                     self.dive = (p.id, self.t, p.y, travel, self.kicked_at + self.reaction(p), v0)
                     self.dived_at = self.kicked_at
         if not self.dive or self.dive[0] != p.id:

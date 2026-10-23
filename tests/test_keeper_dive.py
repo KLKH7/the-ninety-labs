@@ -147,3 +147,20 @@ def test_a_dive_launched_late_goes_as_far_as_the_one_launched_at_once():
     assert fly_until_he_dives(e, k) is not None
     assert abs(abs(e.dive[3]) - min(need, offball.KEEPER_DIVE_TRAVEL_M)) < 1e-9  # standing still: the same
     assert math.copysign(1.0, e.dive[3]) == 1.0  # toward the ball
+
+
+def test_he_does_not_dive_at_a_shot_going_wide():
+    # Law 10: a shot whose own flight crosses his goal line outside the posts is not going in, and he
+    # lets it go however far it is beyond his hands. On seed 8001 he once dived 1.45 m at a shot that
+    # went 12 m wide. The same shot 1.5 m/s less across, heading inside the post, he dives at.
+    e = Engine(1)
+    wide = (90.0, 34.0, 0.3, 18.0, 5.0, 0.0)
+    k = shot_at_keeper(e, wide)
+    assert not e.heading_on_target("home") and beyond_his_hands(e, k, wide) > 1.0  # the premise
+    e.ball = wide
+    assert fly_until_he_dives(e, k) is None
+    e = Engine(1)
+    inside = (90.0, 34.0, 0.3, 18.0, 3.5, 0.0)
+    k = shot_at_keeper(e, inside)
+    assert e.heading_on_target("home")
+    assert fly_until_he_dives(e, k) is not None
