@@ -9,7 +9,8 @@ name: evals
 #
 # Every report records the agent definitions it ran with (ninety/agents/evidence.py). After a
 # successful run, the `commit` job copies the reports unedited to docs/eval/nightly/<date>/
-# (ninety/eval/nightly.py) and opens a pull request with them; it never pushes to main. That job
+# (ninety/eval/nightly.py; known-invalid reports are skipped) and opens a pull request with them;
+# it never pushes to main. A night already archived stops before any model call. The `commit` job
 # has no Azure sign-in, only a token to push its own `nightly/evals-<date>` branch and open the
 # PR. The repository must allow GitHub Actions to create pull requests (Settings > Actions >
 # General); a PR opened with this token does not start CI by itself, so close and reopen it to
@@ -32,8 +33,19 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    outputs:
+      night: ${{ steps.night.outputs.night }}
     steps:
       - uses: actions/checkout@v7
+      - name: Name the night, and refuse a second run of it before any model call
+        id: night
+        run: |
+          night=$(date -u +%F)
+          if git ls-remote --exit-code --heads origin "nightly/evals-$night" > /dev/null; then
+            echo "::error::nightly/evals-$night exists: tonight's evaluation was already archived; delete that branch to re-run"
+            exit 1
+          fi
+          echo "night=$night" >> "$GITHUB_OUTPUT"
       - uses: astral-sh/setup-uv@v7
       - run: uv sync --locked
       - uses: azure/login@v2
@@ -67,6 +79,8 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+    env:
+      NIGHT: ${{ needs.evals.outputs.night }}
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
@@ -77,9 +91,7 @@ jobs:
           path: runs/eval
       - name: Archive the reports
         run: |
-          night=$(date -u +%F)
-          echo "NIGHT=$night" >> "$GITHUB_ENV"
-          uv run python -m ninety.eval.nightly runs/eval --date "$night" --body runs/nightly-body.md \
+          uv run python -m ninety.eval.nightly runs/eval --date "$NIGHT" --body runs/nightly-body.md \
             --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
       - name: Open a pull request
         env:

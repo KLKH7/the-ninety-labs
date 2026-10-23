@@ -2275,12 +2275,16 @@ short and actionable. This file is public: no research sources, product names or
   run wrote it, and CI compares them with the code: a mismatch fails unless the file is listed as
   stale with why and the run that replaces it, and the list fails when an entry is fresh again.
   A file from before fingerprints is read through the registry's history, never given an invented
-  fingerprint. A hold the service caused is counted apart from a rejection a check made. A nightly
-  lands as a pull request of dated, unedited reports.
+  fingerprint, and an agent a file names without a definition is unknown, never fresh. A hold the
+  service caused is counted apart from a rejection a check made, and a run the model mostly did
+  not answer writes no report. A nightly lands as a pull request of dated, unedited reports.
 - **Check:** `tests/test_evidence_fresh.py` (a planted fingerprint in a copied report, replay or
   Markdown line fails; an unknown version fails; a listing without a reason, or for a fresh file,
-  fails); `tests/test_nightly.py` (a report without fingerprints is not archived; the workflow's
-  writing job has no Azure sign-in and opens a PR against main).
+  fails, a listing whose stale agents differ fails); `tests/test_live_eval_outage.py` (an
+  all-service-error run writes nothing); `tests/test_nightly.py` (a report without fingerprints
+  is not archived; the workflow's writing job has no Azure sign-in and opens a PR against main).
+  The first version passed a report with an empty definitions line as fresh; review caught it, and
+  23 mutants of the rules are now each killed by a test.
 
 ### 193. Score a claimed tie at the answer before adding an input to break it
 - **What happened:** building the fixed-camera fit, I reasoned that the pitch markings are

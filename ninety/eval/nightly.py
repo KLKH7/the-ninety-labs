@@ -23,8 +23,9 @@ from ninety.agents import evidence
 ROOT = Path(__file__).resolve().parents[2]
 NIGHTLY = ROOT / evidence.NIGHTLY
 KINDS = (".md", ".json")
-# Reports the nightly still writes whose method is known to be wrong: archived as history, and
-# named in the PR so nobody promotes them. Remove an entry in the change that fixes the method.
+# Reports the nightly still writes whose method is known to be wrong: never archived, only named
+# in the PR as skipped, so no invalid number lands as evidence. Remove an entry in the change that
+# fixes the method (the Analyst's: #252, row 1 of the agents audit).
 INVALID = {
     "analyst.md": "the Analyst reads the deployed match through the tools while grading uses this "
     "commit's events (ninety/agents/analyst_eval.py, lesson 90); not a valid number until fixed",
@@ -36,7 +37,12 @@ class NotEvidence(RuntimeError):
 
 
 def reports(src: Path) -> list[Path]:
-    return sorted(p for p in src.iterdir() if p.is_file() and p.suffix in KINDS)
+    """The reports to archive: every .md and .json but the known-invalid ones (`INVALID`)."""
+    return sorted(p for p in src.iterdir() if p.is_file() and p.suffix in KINDS and p.name not in INVALID)
+
+
+def skipped(src: Path) -> list[str]:
+    return sorted(p.name for p in src.iterdir() if p.is_file() and p.name in INVALID)
 
 
 def check(src: Path) -> list[str]:
@@ -66,8 +72,8 @@ def archive(src: Path, date: str, dest_root: Path = NIGHTLY) -> list[Path]:
     return [Path(shutil.copy2(p, dest / p.name)) for p in reports(src)]
 
 
-def body(copied: list[Path], date: str, run_url: str = "") -> str:
-    """A pull request body: each report's header, up to its first section."""
+def body(copied: list[Path], date: str, run_url: str = "", skipped: list[str] = ()) -> str:
+    """A pull request body: each report's header, up to its first section, and what was skipped."""
     lines = [
         f"Nightly agent evaluation of {date}, committed unedited from the `evals` workflow"
         + (f" ([run]({run_url}))" if run_url else "")
@@ -78,10 +84,9 @@ def body(copied: list[Path], date: str, run_url: str = "") -> str:
         if path.suffix != ".md":
             continue
         head = path.read_text().split("\n## ", 1)[0].strip()
-        lines += [f"### `{path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name}`", ""]
-        if path.name in INVALID:
-            lines += [f"**Invalid, do not promote:** {INVALID[path.name]}.", ""]
-        lines += [head, ""]
+        lines += [f"### `{path.relative_to(ROOT) if path.is_relative_to(ROOT) else path.name}`", "", head, ""]
+    for name in skipped:
+        lines += [f"Not archived: `{name}`, invalid: {INVALID[name]}.", ""]
     lines += [
         "The top-level reports in `docs/eval/` are not replaced here: promoting a nightly to the",
         "published number is a reviewed change of its own (`tests/test_evidence_fresh.py`,",
@@ -105,7 +110,7 @@ def main(argv: list[str] | None = None) -> None:
     for p in copied:
         print(f"archived {p.relative_to(ROOT) if p.is_relative_to(ROOT) else p}")
     if args.body:
-        args.body.write_text(body(copied, args.date, args.run_url))
+        args.body.write_text(body(copied, args.date, args.run_url, skipped(args.src)))
 
 
 if __name__ == "__main__":

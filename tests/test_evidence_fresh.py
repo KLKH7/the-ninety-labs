@@ -121,12 +121,10 @@ def test_a_listed_stale_file_passes_but_a_listing_without_a_reason_or_a_fresh_li
     root = copy_of(tmp_path, "docs/eval/fact-checker.md")
     survey = evidence.survey(root, NOW)
     assert len(evidence.problems(survey, stale={})) == 1  # judge:1 is not the Judge now
-    listed = {"docs/eval/fact-checker.md": {"why": "x", "rerun": "y"}}
+    listed = {"docs/eval/fact-checker.md": {"agents": ["ninety-judge:1"], "why": "x", "rerun": "y"}}
     assert evidence.problems(survey, stale=listed) == []
-    assert (
-        "without both a reason"
-        in evidence.problems(survey, stale={"docs/eval/fact-checker.md": {"why": "x"}})[0]
-    )
+    no_rerun = {"docs/eval/fact-checker.md": {"agents": ["ninety-judge:1"], "why": "x"}}
+    assert "without both a reason" in evidence.problems(survey, stale=no_rerun)[0]
     # Once re-run on the current Judge, the listing must go.
     now_judge_1 = {**NOW, "ninety-judge": "3eea4db1096b7a49"}
     assert "fresh now: remove it" in evidence.problems(evidence.survey(root, now_judge_1), stale=listed)[0]
@@ -140,6 +138,83 @@ def test_a_nightly_archive_is_history_but_must_record_its_definitions(tmp_path):
     path.write_text("agents ninety-analyst:5, ninety-judge:4 on gpt-4.1-mini\n")  # labels only
     (problem,) = evidence.problems(evidence.survey(tmp_path, NOW), stale={})
     assert "must record its agent definitions" in problem
+
+
+def test_a_nightly_report_that_names_no_agent_or_a_null_fingerprint_fails(tmp_path):
+    night = tmp_path / "docs/eval/nightly/2026-10-24"
+    night.mkdir(parents=True)
+    (night / "analyst.md").write_text("# Analyst evaluation\n\nNo agent named at all.\n")
+    (problem,) = evidence.problems(evidence.survey(tmp_path, NOW), stale={})
+    assert problem.startswith("docs/eval/nightly/2026-10-24/analyst.md: a nightly report must record")
+    (night / "analyst.md").unlink()
+    body = {evidence.KEY: {"ninety-judge": {"version": "4", "definition_sha": None}}}
+    (night / "fact-checker.json").write_text(json.dumps(body))
+    (problem,) = evidence.problems(evidence.survey(tmp_path, NOW), stale={})
+    assert "recorded no fingerprint for ninety-judge:4" in problem
+
+
+# A report cannot pass as fresh by recording nothing (review of #248).
+
+
+def test_a_report_that_records_no_definitions_but_names_an_agent_is_unknown(tmp_path):
+    path = tmp_path / "docs/eval/fact-checker.md"
+    path.parent.mkdir(parents=True)
+    from ninety.agents.factcheck import Claim
+    from ninety.eval import factcheck_eval
+
+    rows = [
+        {
+            "kind": "k",
+            "true": False,
+            "claim": Claim("h7 passes.", ["e1"]),
+            "code_ok": True,
+            "judge_ok": False,
+            "reasons": [],
+            "category": "unsupported_claim",
+            "seed": 21,
+        }
+    ]
+    path.write_text(factcheck_eval.report(rows, "21", "`ninety-judge:4` on `gpt-4.1-mini`", defs={}))
+    (ev,) = evidence.survey(tmp_path, NOW)
+    assert not ev.fresh and ev.unknown == [evidence.Ran("ninety-judge", "4", None)]
+    assert "no known fingerprint: ninety-judge:4" in evidence.problems([ev], stale={})[0]
+
+
+def test_an_unparseable_definitions_line_is_unknown(tmp_path):
+    path = tmp_path / "docs/eval/r.md"
+    path.parent.mkdir(parents=True)
+    path.write_text(f"# R\n\n{evidence.LINE} the judge, version four.\n")
+    (ev,) = evidence.survey(tmp_path, NOW)
+    assert not ev.fresh and len(evidence.problems([ev], stale={})) == 1
+
+
+def test_an_agent_in_the_pins_but_not_in_the_definitions_is_unknown(tmp_path):
+    body = {
+        "pins": {"ninety-judge": "4", "ninety-tactician": "2"},
+        evidence.KEY: {"ninety-judge": {"version": "4", "definition_sha": NOW["ninety-judge"]}},
+    }
+    (tmp_path / "replays/nested").mkdir(parents=True)  # replays/**: a replay in a subfolder is read too
+    (tmp_path / "replays/nested/w.json").write_text(json.dumps(body))
+    (ev,) = evidence.survey(tmp_path, NOW)
+    assert ev.path == "replays/nested/w.json" and ev.unknown == [evidence.Ran("ninety-tactician", "2", None)]
+
+
+def test_an_agent_the_code_no_longer_defines_is_stale(tmp_path):
+    recorded_report(tmp_path, "docs/eval/new.json", NOW["ninety-judge"])
+    gone = {n: s for n, s in NOW.items() if n != "ninety-judge"}  # the Judge was removed
+    (ev,) = evidence.survey(tmp_path, gone)
+    assert ev.stale == [evidence.Ran("ninety-judge", "4", NOW["ninety-judge"])]
+
+
+def test_a_stale_listing_names_its_agents_and_fails_when_another_one_changes(tmp_path):
+    root = copy_of(tmp_path, "docs/eval/analyst.md")  # analyst:3 (fresh) and judge:1 (stale)
+    listed = {"docs/eval/analyst.md": {"agents": ["ninety-judge:1"], "why": "x", "rerun": "y"}}
+    assert evidence.problems(evidence.survey(root, NOW), stale=listed) == []
+    analyst_changed = {**NOW, "ninety-analyst": "0000000000000000"}
+    (problem,) = evidence.problems(evidence.survey(root, analyst_changed), stale=listed)
+    assert "its stale agents are ['ninety-analyst:3', 'ninety-judge:1']" in problem
+    unlisted = {"docs/eval/analyst.md": {"why": "x", "rerun": "y"}}
+    assert "its stale agents are" in evidence.problems(evidence.survey(root, NOW), stale=unlisted)[0]
 
 
 def test_the_md_line_and_the_reader_agree_for_local_and_empty_definitions(tmp_path):

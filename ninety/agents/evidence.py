@@ -34,7 +34,26 @@ ROOT = Path(__file__).resolve().parents[2]
 KEY = "agent_definitions"
 LINE = "Agent definitions:"
 NIGHTLY = "docs/eval/nightly"
-SCANNED = ("docs/eval/**/*.json", "docs/eval/**/*.md", "replays/*.json")
+SCANNED = ("docs/eval/**/*.json", "docs/eval/**/*.md", "replays/**/*.json")
+# design: a run reports only when the model answered at least four requests in five. Which
+# requests an outage hits depends on when it struck, not on what was asked, so past that the
+# answered set no longer stands for the cases the report names; such a run is re-run, never
+# reported (lesson 131). Shared by every live evaluation that writes a report.
+MAX_UNANSWERED_SHARE = 0.2
+
+
+class NothingMeasured(RuntimeError):
+    """Too few requests were answered for the run to measure the model, not an outage."""
+
+
+def refuse_outage(unanswered: int, asked: int, what: str) -> None:
+    """Raise NothingMeasured when the model left more than MAX_UNANSWERED_SHARE of `asked`
+    unanswered (service errors, timeouts): such a run measured the service, so it writes no report."""
+    if asked == 0 or unanswered > MAX_UNANSWERED_SHARE * asked:
+        raise NothingMeasured(
+            f"the model did not answer {unanswered} of {asked} {what} (over {MAX_UNANSWERED_SHARE:.0%})"
+        )
+
 
 # Every (Foundry name, version) pinned in ninety/agents/foundry_agents.json on any branch, from
 # `git log --all -- ninety/agents/foundry_agents.json` (Oct 17 to Oct 23, 2026), with the
@@ -62,48 +81,58 @@ HISTORY: dict[tuple[str, str], str] = {
 }
 
 _RERUN_EVAL = "the agents-live `eval` task at main (it runs factcheck_eval, analyst_eval and companion_eval)"
-# Evidence whose agents changed since it ran, kept on purpose. Each says why it is still committed
-# and which run replaces it; the test fails when an entry is no longer stale, so the list cannot rot.
-STALE: dict[str, dict[str, str]] = {
+# Evidence whose agents changed since it ran, kept on purpose. Each names the agents expected stale
+# or unknown (name:version), why it is still committed and which run replaces it; the test fails
+# when the file's stale agents differ from that list, so it cannot rot or hide a new change.
+STALE: dict[str, dict] = {
     "docs/eval/fact-checker.md": {
+        "agents": ["ninety-judge:1"],
         "why": "ninety-judge:1 (3eea4db1); the Judge is now ninety-judge:4 (2b04c8ad). The nightly "
         "on judge:4 has run but its reports were never committed (the nightly wrote only runs/eval/).",
         "rerun": _RERUN_EVAL + ", or the first committed nightly (docs/eval/nightly/)",
     },
     "docs/eval/fact-checker.json": {
+        "agents": ["ninety-judge:1"],
         "why": "the data of docs/eval/fact-checker.md, same run",
         "rerun": "as docs/eval/fact-checker.md",
     },
     "docs/eval/analyst.md": {
+        "agents": ["ninety-judge:1"],
         "why": "graded with ninety-judge:1; also invalid on its own terms: the Analyst read the deployed "
         "match through the tools while grading used this commit's events (lesson 90)",
         "rerun": "fix ninety/agents/analyst_eval.py to give the events inline (separate package), then "
         + _RERUN_EVAL,
     },
     "docs/eval/personalizer.md": {
+        "agents": ["ninety-personalizer:1"],
         "why": "ninety-personalizer:1 (6ea7cb9f); v2 (14cda338, the casual persona keeps the clock, #191) "
         "is published and has not been measured live",
         "rerun": "the agents-live `personalizer` task at main",
     },
     "docs/eval/personalizer.json": {
+        "agents": ["ninety-personalizer:1"],
         "why": "the data of docs/eval/personalizer.md, same run",
         "rerun": "as docs/eval/personalizer.md",
     },
     "docs/eval/planted-claims-v1.json": {
+        "agents": ["ninety-judge:1"],
         "why": "frozen planted-claim set v1: its recorded Judge answers are ninety-judge:1's, from the "
         "Oct 17 fact-checker run; its sha256 is cited by the reports built from it, so it is never edited",
         "rerun": "a planted set v2 with the current Judge's answers recorded "
         "(ninety/eval/planted_judge.py over every claim, live), then fact_checker_proof",
     },
     "docs/eval/fact-checker-planted.md": {
+        "agents": ["ninety-judge:1"],
         "why": "built offline from planted-claims-v1.json, so its Judge answers are ninety-judge:1's",
         "rerun": "as docs/eval/planted-claims-v1.json",
     },
     "docs/eval/ablation.md": {
+        "agents": ["ninety-judge:1"],
         "why": "built offline from planted-claims-v1.json, so its Judge answers are ninety-judge:1's",
         "rerun": "as docs/eval/planted-claims-v1.json",
     },
     "docs/eval/ablation.json": {
+        "agents": ["ninety-judge:1"],
         "why": "the data of docs/eval/ablation.md, same build",
         "rerun": "as docs/eval/planted-claims-v1.json",
     },
@@ -178,7 +207,10 @@ def local(agents) -> dict[str, dict[str, str | None]]:
 
 
 def md_line(defs: dict[str, dict]) -> str:
-    """The Markdown line a report states its definitions in (parsed back by `read`)."""
+    """The Markdown line a report states its definitions in (parsed back by `read`). `{}` says no
+    published agent ran (scripted models); None is refused, so a live writer cannot forget them."""
+    if defs is None:
+        raise ValueError("a report must say which agent definitions it ran with: pass {} if none ran")
     if not defs:
         return f"{LINE} none (no published agent ran)."
     parts = [
@@ -201,16 +233,24 @@ def _derived(labels) -> list[Ran]:
     return [Ran(n, v, HISTORY.get((n, v))) for n, v in sorted(set(labels))]
 
 
+def _with_named(ran: list[Ran], labels) -> list[Ran]:
+    """`ran`, plus every agent the file names elsewhere (a `ninety-judge:4` label, a `pins` entry)
+    but records no definition for, as unknown: a recorded line cannot hide an agent that ran."""
+    recorded = {r.name for r in ran}
+    missing = sorted({(n, v) for n, v in labels if n not in recorded})
+    return ran + [Ran(n, v, None) for n, v in missing]
+
+
 def read(path: Path, root: Path = ROOT) -> tuple[list[Ran], str] | None:
     """What a file says it ran with, and how we know; None when it names no published agent."""
     text = path.read_text()
+    labels = _LABEL.findall(text)
     if path.suffix == ".json":
         data = json.loads(text)
-        if isinstance(data, dict) and data.get(KEY) is not None:  # null: a recording made before
-            return _from_defs(data[KEY]), "recorded"
-        labels = _LABEL.findall(text)
         if isinstance(data, dict) and isinstance(data.get("pins"), dict):  # a workflow recording
             labels += [(n, str(v)) for n, v in data["pins"].items()]
+        if isinstance(data, dict) and data.get(KEY) is not None:  # null: a recording made before
+            return _with_named(_from_defs(data[KEY]), labels), "recorded"
         if labels:
             return _derived(labels), "derived"
         sibling = path.with_suffix(".md")  # a list-shaped report's data: its .md says what ran
@@ -219,10 +259,10 @@ def read(path: Path, root: Path = ROOT) -> tuple[list[Ran], str] | None:
         return None
     for line in text.splitlines():
         if line.startswith(LINE):
-            if "none (no published agent ran)" in line:
-                return [], "recorded"
-            return [Ran(n, None if v == "local" else v, s) for n, v, s in _MD.findall(line)], "recorded"
-    labels = _LABEL.findall(text)
+            ran = [Ran(n, None if v == "local" else v, s) for n, v, s in _MD.findall(line)]
+            if not ran and "none (no published agent ran)" not in line:
+                ran = [Ran("unparsed line", None, None)]  # an `Agent definitions:` line read as nothing
+            return _with_named(ran, labels), "recorded"
     return (_derived(labels), "derived") if labels else None
 
 
@@ -247,23 +287,31 @@ def survey(root: Path = ROOT, now: dict[str, str] | None = None) -> list[Evidenc
     out = []
     for path in files(root):
         found = read(path, root)
+        rel = str(path.relative_to(root))
         if found is None:
+            if rel.startswith(NIGHTLY + "/"):  # every archived file must say what it measured
+                out.append(Evidence(rel, [], "none"))
             continue
         ran, source = found
-        ev = Evidence(str(path.relative_to(root)), ran, source)
+        ev = Evidence(rel, ran, source)
         for r in ran:
             if r.sha is None:
                 ev.unknown.append(r)
-            elif now.get(r.name) != r.sha:
+            elif now.get(r.name) != r.sha:  # changed, or no longer defined in the code
                 ev.stale.append(r)
         out.append(ev)
     return out
 
 
-def problems(evidence: list[Evidence], stale: dict[str, dict[str, str]] = STALE) -> list[str]:
-    """What fails CI: stale or unknown evidence not listed in `stale`, a listed file that is not
-    stale (or no longer exists), a listing with no reason or no re-run, and a nightly archive that
-    does not record its own fingerprints."""
+def label(r: Ran) -> str:
+    return f"{r.name}:{r.version or 'local'}"
+
+
+def problems(evidence: list[Evidence], stale: dict[str, dict] = STALE) -> list[str]:
+    """What fails CI: stale or unknown evidence not listed in `stale`; a listed file whose stale or
+    unknown agents are not exactly the listed ones (fresh again, missing, or another agent changed
+    too); a listing with no reason or no re-run; and a nightly archive that does not record its own
+    fingerprints."""
     out = []
     seen = {e.path: e for e in evidence}
     for e in evidence:
@@ -291,6 +339,13 @@ def problems(evidence: list[Evidence], stale: dict[str, dict[str, str]] = STALE)
             )
         elif seen[path].fresh:
             out.append(f"evidence.STALE lists {path}, which is fresh now: remove it from the list")
+        elif (actual := sorted({label(r) for r in seen[path].stale + seen[path].unknown})) != sorted(
+            entry.get("agents") or []
+        ):
+            out.append(
+                f"evidence.STALE lists {path} as stale for {sorted(entry.get('agents') or [])}, "
+                f"but its stale agents are {actual}: re-run it, or list them with why"
+            )
         if not entry.get("why") or not entry.get("rerun"):
             out.append(f"evidence.STALE lists {path} without both a reason and the run that fixes it")
     return out

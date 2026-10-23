@@ -38,7 +38,7 @@ EVALUATORS = ["task_adherence", "intent_resolution", "tool_call_accuracy"]
 MINUTES = match_server.MINUTES  # one claim per minute of a served match
 
 
-async def drafts(seeds: list[int]) -> tuple[list[dict], str]:
+async def drafts(seeds: list[int]) -> tuple[list[dict], str, dict]:
     """One first draft per minute per seed, each with its response id and the fact-checker's
     verdict. Returns the rows, which agent versions ran, and their definitions
     (ninety/agents/evidence.py)."""
@@ -95,6 +95,7 @@ async def _drafts(
                         "claim": claim.text,
                         "verdict": "accept" if verdict.ok else "reject",
                         "reasons": verdict.reasons,
+                        "category": verdict.category,
                     }
                 )
     return rows, ran, defs
@@ -121,8 +122,7 @@ async def foundry_scores(response_ids: list[str]) -> dict:
 
 
 def report(
-    rows: list[dict], seeds: str, ran: str, recorded: dict | None, scored: dict | None,
-    defs: dict | None = None,
+    rows: list[dict], seeds: str, ran: str, recorded: dict | None, scored: dict | None, *, defs: dict,
 ) -> str:
     sha = subprocess.run(
         ["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True, text=True
@@ -136,7 +136,7 @@ def report(
         "Analyst writes one claim per minute; the fact-checker (code checks, then the Judge) decides "
         "whether that first draft would air.",
         "",
-        evidence.md_line(defs or {}),
+        evidence.md_line(defs),
         "",
         f"**First drafts that would air:** {aired}/{len(rows)}.",
         "",
@@ -168,6 +168,13 @@ def report(
     return "\n".join(lines) + "\n"
 
 
+def refuse_outage(rows: list[dict]) -> None:
+    """NothingMeasured when too many minutes got no answer: an empty Analyst reply, or a Judge
+    service error or timeout on its draft. That run measured an outage, not the Analyst (lesson 131)."""
+    unanswered = sum(not r["text"] or r.get("category") in {"service", "timeout"} for r in rows)
+    evidence.refuse_outage(unanswered, len(rows), "minutes")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--seeds", default="21,33", help="comma-separated simulator seeds (held out)")
@@ -175,6 +182,7 @@ def main() -> None:
     ap.add_argument("--foundry", action="store_true", help="record in Foundry and run its agent evaluators")
     args = ap.parse_args()
     rows, ran, defs = asyncio.run(drafts([int(s) for s in args.seeds.split(",")]))
+    refuse_outage(rows)  # before anything is recorded in Foundry or written
     recorded = scored = None
     if args.foundry:
         recorded = foundry_evals.record(
@@ -195,7 +203,7 @@ def main() -> None:
         )
         scored = asyncio.run(foundry_scores([r["response_id"] for r in rows if r["response_id"]]))
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(report(rows, args.seeds, ran, recorded, scored, defs))
+    args.out.write_text(report(rows, args.seeds, ran, recorded, scored, defs=defs))
     print(args.out.read_text())
 
 

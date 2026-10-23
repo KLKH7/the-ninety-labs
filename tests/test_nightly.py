@@ -19,33 +19,49 @@ def nightly_output(tmp_path, defs=DEFS):
         f"# Fact-checker evaluation\n\n{evidence.md_line(defs)}\n\n## Every miss\n"
     )
     (src / "fact-checker.json").write_text(json.dumps([{"kind": "x"}]))  # list-shaped: its .md says
-    (src / "analyst.md").write_text(f"# Analyst evaluation\n\n{evidence.md_line(defs)}\n")
+    (src / "companion.md").write_text(f"# Companion evaluation\n\n{evidence.md_line(defs)}\n")
+    (src / "analyst.md").write_text(f"# Analyst evaluation\n\n{evidence.md_line(defs)}\n")  # INVALID
     return src
 
 
-def test_reports_are_copied_unedited_to_a_dated_folder(tmp_path):
+def test_reports_are_copied_unedited_to_a_dated_folder_and_the_invalid_one_is_not(tmp_path):
     src = nightly_output(tmp_path)
     copied = nightly.archive(src, "2026-10-24", tmp_path / "nightly")
-    assert sorted(p.name for p in copied) == ["analyst.md", "fact-checker.json", "fact-checker.md"]
+    assert sorted(p.name for p in copied) == ["companion.md", "fact-checker.json", "fact-checker.md"]
     for p in copied:
-        assert (
-            p.parent == tmp_path / "nightly" / "2026-10-24" and p.read_bytes() == (src / p.name).read_bytes()
-        )
+        assert p.parent == tmp_path / "nightly" / "2026-10-24"
+        assert p.read_bytes() == (src / p.name).read_bytes()
+    assert not (tmp_path / "nightly" / "2026-10-24" / "analyst.md").exists()  # lesson 90, until #252
+    assert nightly.skipped(src) == ["analyst.md"]
     with pytest.raises(FileExistsError):  # one archive a night, never overwritten
         nightly.archive(src, "2026-10-24", tmp_path / "nightly")
 
 
 def test_a_report_without_fingerprints_is_not_archived(tmp_path):
     src = nightly_output(tmp_path)
-    (src / "analyst.md").write_text(
-        "agents ninety-analyst:5, ninety-judge:4 on gpt-4.1-mini\n"
-    )  # labels only
-    with pytest.raises(nightly.NotEvidence, match="analyst.md: names agent versions but no definition"):
+    (src / "companion.md").write_text("agents ninety-companion:1, ninety-judge:4 on gpt-4.1-mini\n")
+    with pytest.raises(nightly.NotEvidence, match="companion.md: names agent versions but no definition"):
         nightly.archive(src, "2026-10-24", tmp_path / "nightly")
-    (src / "analyst.md").write_text("# no agents named\n")
-    with pytest.raises(nightly.NotEvidence, match="analyst.md: names no agent definition"):
+    (src / "companion.md").write_text("# no agents named\n")
+    with pytest.raises(nightly.NotEvidence, match="companion.md: names no agent definition"):
         nightly.archive(src, "2026-10-24", tmp_path / "nightly")
     assert not (tmp_path / "nightly").exists()  # nothing half-copied
+
+
+def test_a_report_with_a_null_fingerprint_is_not_archived(tmp_path):
+    src = nightly_output(tmp_path)
+    (src / "companion.json").write_text(
+        json.dumps({evidence.KEY: {"ninety-companion": {"version": "1", "definition_sha": None}}})
+    )
+    with pytest.raises(nightly.NotEvidence, match="companion.json: an agent without a fingerprint"):
+        nightly.archive(src, "2026-10-24", tmp_path / "nightly")
+
+
+def test_a_report_whose_line_omits_an_agent_it_names_is_not_archived(tmp_path):
+    src = nightly_output(tmp_path)
+    (src / "companion.md").write_text(f"# Companion, judged by `ninety-judge:4`\n\n{evidence.md_line({})}\n")
+    with pytest.raises(nightly.NotEvidence, match="companion.md: an agent without a fingerprint"):
+        nightly.archive(src, "2026-10-24", tmp_path / "nightly")
 
 
 def test_an_empty_run_is_not_archived(tmp_path):
@@ -54,11 +70,13 @@ def test_an_empty_run_is_not_archived(tmp_path):
         nightly.archive(tmp_path / "empty", "2026-10-24", tmp_path / "nightly")
 
 
-def test_the_pr_body_quotes_each_header_and_flags_an_invalid_report(tmp_path):
-    copied = nightly.archive(nightly_output(tmp_path), "2026-10-24", tmp_path / "nightly")
-    text = nightly.body(copied, "2026-10-24", "https://github.com/x/actions/runs/1")
+def test_the_pr_body_quotes_each_header_and_names_the_skipped_report(tmp_path):
+    src = nightly_output(tmp_path)
+    copied = nightly.archive(src, "2026-10-24", tmp_path / "nightly")
+    text = nightly.body(copied, "2026-10-24", "https://github.com/x/actions/runs/1", nightly.skipped(src))
     assert "# Fact-checker evaluation" in text and "Every miss" not in text
-    assert "**Invalid, do not promote:**" in text and "lesson 90" in text
+    assert "Not archived: `analyst.md`, invalid:" in text and "lesson 90" in text
+    assert "# Analyst evaluation" not in text
     assert "([run](https://github.com/x/actions/runs/1))" in text
 
 
@@ -83,3 +101,18 @@ def test_the_workflow_commits_through_a_pull_request_never_to_main():
     assert "azure/login" not in json.dumps(commit)
     assert 'git push origin "$branch"' in script and "gh pr create --base main" in script
     assert "push origin main" not in script and "HEAD:main" not in script
+
+
+def test_a_night_already_archived_stops_before_any_model_call():
+    # A re-run the same night would fail at `git push` after spending on the models (review of #248).
+    flow = yaml.safe_load((nightly.ROOT / ".github/workflows/evals.yml").read_text())
+    steps = flow["jobs"]["evals"]["steps"]
+    first_model = next(i for i, s in enumerate(steps) if "azure/login" in s.get("uses", ""))
+    guard = next(
+        i for i, s in enumerate(steps) if "git ls-remote --exit-code --heads origin" in s.get("run", "")
+    )
+    assert guard < first_model and '"nightly/evals-$night"' in steps[guard]["run"]
+    assert "exit 1" in steps[guard]["run"]
+    # The commit job archives under the night the guard checked, not a date of its own.
+    assert flow["jobs"]["commit"]["env"]["NIGHT"] == "${{ needs.evals.outputs.night }}"
+    assert flow["jobs"]["evals"]["outputs"]["night"] == "${{ steps.night.outputs.night }}"

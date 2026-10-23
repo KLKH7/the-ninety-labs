@@ -114,7 +114,7 @@ def test_a_failed_or_unreadable_single_agent_reply_airs_nothing():
 def test_the_report_is_strict_json_and_names_the_false_claims():
     text = ab.results(BODY)
     json.loads(text)  # strict: allow_nan=False would have raised on NaN
-    md = ab.report(BODY, "scripted models")
+    md = ab.report({**BODY, "agent_definitions": {}}, "scripted models")
     assert "| one agent | 2 | 1/2 (50%)" in md and "| graph | 1 | 0/1 (0%)" in md
     assert "199 km/h" in md
 

@@ -171,7 +171,7 @@ def report(body: dict, ran: str) -> str:
         "(the engine that simulated the seeds). Committed as the run wrote it; live models vary from run",
         "to run. Data: `docs/eval/ablation-agents.json`.",
         "",
-        evidence.md_line(body.get(evidence.KEY, {})),
+        evidence.md_line(body[evidence.KEY]),
         "",
         "- **one agent**: the slice's Analyst, one published agent, writes the minute's claim, and it airs",
         "  as written.",

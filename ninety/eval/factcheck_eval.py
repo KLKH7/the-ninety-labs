@@ -321,7 +321,7 @@ def passed(row: dict) -> bool:
 
 def report(
     rows: list[dict], seed: str, judge_label: str = f"`{config.MODEL}`", foundry_run: dict | None = None,
-    defs: dict | None = None,
+    *, defs: dict,
 ) -> str:
     git = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True, text=True)
     sha = git.stdout.strip()
@@ -335,7 +335,7 @@ def report(
         "service error or timeout) is held back: it counts as caught or wrongly rejected, and is "
         "also counted apart.",
         "",
-        evidence.md_line(defs or {}),
+        evidence.md_line(defs),
         "",
         "| Kind | Claims | Code alone | Code + judge |",
         "|---|---|---|---|",
@@ -399,6 +399,14 @@ def report(
     return "\n".join(lines) + "\n"
 
 
+def refuse_outage(rows: list[dict]) -> None:
+    """NothingMeasured when the Judge left too many of the claims it was sent unanswered (a service
+    error or timeout): that run measured an outage, and writes no report (lesson 131)."""
+    asked = [r for r in rows if r["code_ok"]]
+    unanswered = sum(r.get("category") in {"service", "timeout"} for r in asked)
+    evidence.refuse_outage(unanswered, len(asked), "claims sent to the Judge")
+
+
 FOUNDRY_EVAL = "ninety-fact-checker"
 
 
@@ -436,6 +444,7 @@ def main() -> None:
     args = ap.parse_args()
     seeds = [int(seed) for seed in args.seeds.split(",")]
     rows, label, defs = asyncio.run(run(seeds, args.minutes, args.concurrency, args.local_judge))
+    refuse_outage(rows)  # before anything is recorded in Foundry or written
     foundry_run = None
     if args.foundry:
         foundry_run = foundry_evals.record(
@@ -443,7 +452,7 @@ def main() -> None:
             [foundry_item(r) for r in rows], FOUNDRY_CRITERIA,
         )
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(report(rows, args.seeds, label, foundry_run, defs))
+    args.out.write_text(report(rows, args.seeds, label, foundry_run, defs=defs))
     print(args.out.read_text())
     (args.out.with_suffix(".json")).write_text(
         json.dumps([{**r, "claim": r["claim"].text, "evidence": r["evidence"]} for r in rows], indent=1)

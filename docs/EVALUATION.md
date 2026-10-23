@@ -743,12 +743,17 @@ The length-cap mutant survived the first run; its test was added after.
   `definition_sha` (`ninety/agents/evidence.py`; JSON under `agent_definitions`, Markdown on an
   `Agent definitions:` line, replays as a field). `tests/test_evidence_fresh.py` fails CI when a
   committed report or replay ran with a definition the code no longer has, unless
-  `evidence.STALE` lists it with why and the run that replaces it. Reports written before
-  fingerprints are read from their version labels through the registry's git history.
+  `evidence.STALE` lists it with the stale agents, why, and the run that replaces it. Reports
+  written before fingerprints are read from their version labels through the registry's git
+  history; an agent a report names but records no definition for is unknown, and fails.
+- **A live evaluation that measured an outage writes no report:** the fact-checker's, the
+  Analyst's and the Personalizer's refuse a run in which the model left more than one request in
+  five unanswered (service errors, timeouts; `evidence.refuse_outage`, lesson 131).
 - **Nightly reports are committed as dated history:** after a successful night,
   `.github/workflows/evals.yml` copies the reports unedited to `docs/eval/nightly/<date>/`
-  (`ninety/eval/nightly.py`, which refuses a report without its definitions) and opens a pull
-  request; it never pushes to main. A dated archive is never stale; replacing a top-level report
+  (`ninety/eval/nightly.py`, which refuses a report without its definitions and skips the
+  known-invalid `analyst.md`) and opens a pull request; it never pushes to main, and a night
+  already archived stops before any model call. A dated archive is never stale; replacing a top-level report
   with a nightly is a reviewed change.
 - **Results are reproducible:** each command runs from a clean clone after `uv sync`, and gives the
   same numbers on any operating system (lesson 46).
