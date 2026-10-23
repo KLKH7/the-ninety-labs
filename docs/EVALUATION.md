@@ -234,6 +234,17 @@ cites a source yet: each has only the reason in the table, and changing one need
 row first. When no scored frame records the field (`ball.z`, `blur_px`) the group is `null`, and
 frames or clips with and without it are refused, so no label drops out unseen.
 
+**A known limit of the 0.5 m cut-off, kept as set.** A ball's pitch position is found by
+assuming it lies on the grass (`ninety/vision/observe.py`), so a raised ball is placed beyond its
+true spot, along the camera's line of sight. On the local renders' saved cameras, a ball at
+exactly 0.5 m is placed 0.83 to 2.45 m from its true spot (median 1.57 m), past the 1.0 m strict
+radius. The pitch-level box scorer is not affected: it places the true ball and the detected one
+the same way, so the error cancels. `pitch_score` and the events from video compare against the
+ball's true position, so their "ball on the ground" errors include balls up to 0.5 m and can
+exceed 1.0 m from height alone. The cut-off stays at 0.5 m because it was fixed before any
+detector ran. A lower one, derived from the camera's geometry, needs a GROUNDING.md row and a
+re-run of every report that uses it.
+
 The boundary rule uses each frame's saved camera width and height, with no margin; labelled
 frames missing those dimensions fail rather than guessing a resolution. It does not measure
 a truncation percentage: saved boxes do not say how much of an object lies outside the image.
@@ -494,6 +505,36 @@ read (inline or over MCP), passes `confidence` and drops `team_confidence`; chec
 Analyst's prompt from the fixture. Whether to show it to them is the agent layer's call, once it
 means something.
 
+## Broadcast framing: a known limit of the metric at set-piece deliveries
+
+**The metric.** `tests/test_render_camera.py` counts a live frame as well framed when the ball is in
+the picture's CENTRAL box and the pitch fills at least `PITCH_SHARE_MIN` of the picture. It asserts
+85% of live frames on six held-out seeds.
+
+**The finding.** Two corner-camera designs reached the bar on #179's engine, and three blind critics
+preferred the camera that missed it. Both designs are parked, unmerged:
+- `claude/camera-corner-cut` (#204): a cut to a side camera at the delivery.
+- `claude/camera-corner-delivery`: zooming to the receiving area.
+
+The critic reports are not committed; the numbers below are in each branch's commit message.
+
+| Design | Seed 3 (#179's engine), raw | Critic's verdict |
+|---|---|---|
+| #201: corner framing until the kick | 0.811 | preferred |
+| Delivery-aware zoom | 0.905 | worse in both pairs |
+| Cut at the delivery | 0.886 | split |
+
+What the critics reported against the designs that scored higher:
+- The lens closed in on the taker's group before the kick, so the goal and box were out of the picture for about 4 s across the delivery.
+- The camera whip-panned at the strike.
+- A cut landed while the ball was in flight.
+
+What they asked for: keep the taker, the penalty area and the goal in the picture until the ball has arrived. Then frame the play.
+
+**What it means.** At a set-piece delivery, "the ball central with 60% pitch" rewards the tight shot viewers dislike, near a near-side corner especially. Lesson 177 has the history.
+
+**Planned, not done.** A revision of the metric for set-piece deliveries, for example the goal and box in the picture from the kick until the ball arrives. It will be set before measuring and reviewed. The test is unchanged until then.
+
 ## Late drop in high-intensity running (R7)
 
 Fixed on 2026-10-17, before any engine change was measured with it and before the command had
@@ -548,6 +589,28 @@ from tracked positions against the ground truth, offline, with and without the s
 ([companion-tracked.md](eval/companion-tracked.md)): on the M1 clip, a median error of 0.6 km/h
 for speed now and 1.5 km/h for top speed, against 52.8 km/h for top speed without smoothing
 (re-graded with the camera trust test of [detector-plan.md](eval/detector-plan.md)).
+
+### Possession now (the wind map's layer)
+
+`uv run python -m ninety.eval.possession_score calibrate` sets the gate on validation clips, and
+only then does `grade` score the test clips with it (GROUNDING S6). The unit is a phone frame
+(0.2 s). The truth is the answer key's latest possessor's side, and the true ball's third along
+that side's attacking direction. Intervals count true possession spells, not frames (Wilson),
+with a bootstrap over clips beside them.
+
+On the 13 validation clips ([possession-calibration.md](eval/possession-calibration.md)), team
+agreement peaks at 65% (cut-off 0.2) and falls as the cut-off rises: 30% at 0.7, 0% at 0.9. No cut-off
+reaches the 75% target, so SHOW is unset and the layer is off. The cause is the side, decided
+once per clip: 3 of the 8 clips with ball spells have it flipped throughout, one of them at a
+side confidence of 0.88 to 0.97. The test clips have not been graded and will be only once a
+better side decision lets the gate open on validation.
+
+Pre-registered before the official calibration (GROUNDING S6): a bar opens only when the lower
+Wilson 95% bound of its agreement over possession spells is at least 0.60, from at least 3 clips
+(41 spells at 75% agreement); "attacking" needs its own 75% on the samples it would be shown on,
+with the same floor. A preview on the unmerged side fix (#187, #195, #200) would have passed 75%
+at 0.582 on only 11 spells (Wilson 46% to 92%), with "attacking" wrong on 4 of 4: these criteria
+keep that kind of result shut.
 
 ## Football sense (FS1 to FS9)
 
