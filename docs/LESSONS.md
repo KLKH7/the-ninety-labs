@@ -2233,3 +2233,17 @@ short and actionable. This file is public: no research sources, product names or
   (the true lens fits, its mirror does not, the flipped picture does);
   `::test_the_compass_search_walks_on_where_the_free_step_stalls` fails with the compass search
   removed from `pitch.settle` (a half-size scene did not stall, so the stalled view is a fixture).
+
+### 215. A detector tuned on one look is re-checked on the look the renderer draws now
+- **What happened:** the camera fit's marking detector (`ninety/vision/pitch.py`, `line_mask`) was
+  set on renders without sensor grain. The renderer later added grain (`params.noise`). On dataset
+  v2's validation clips only 0.39 of the marked pixels then lay on a marking, the fitted gantry
+  sat on its search grid's corners 10 to 20 m away, and no frame passed the markings test.
+  Nothing placed anything, and it read at first as a stale height band. No check ran the fit on a
+  current render: its tests draw clean scenes, and the scored observations were older looks'.
+- **Rule:** when the renderer's look changes, every vision stage tuned on pixels is re-measured on
+  a clip of the new look against its true camera before any number from it is read. A stage's
+  tests plant the look's own noise, at the renderer's own amplitude, not a clean image.
+- **Check:** `tests/test_vision_pitch.py::test_sensor_grain_is_not_a_marking_and_a_far_line_with_a_gap_still_is`
+  (grain at params.noise's top, 0.02) fails with the blur removed; the before and after on
+  validation clips are in `docs/eval/shot-outcomes.json`.
