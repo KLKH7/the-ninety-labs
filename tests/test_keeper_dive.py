@@ -55,12 +55,13 @@ def test_a_ball_beyond_his_hands_that_his_legs_get_him_to_is_taken_on_his_feet()
 
 
 def test_a_ball_wide_of_him_with_time_to_run_there_is_taken_on_his_feet():
-    # 5.4 m wide and nearly two seconds away: beyond any dive from where he stands, but not beyond
-    # his legs. He runs across and takes it standing.
+    # A shot inside his post, 1.6 m beyond his hands (further than any dive takes him from where he
+    # stands) and 1.3 s away: not beyond his legs. He runs across and takes it standing.
     e = Engine(1)
-    b = (80.0, 34.0, 0.3, 20.0, 4.5, 0.0)
+    b = (80.0, 34.0, 0.3, 20.0, 2.6, 0.0)
     k = shot_at_keeper(e, b)
-    assert beyond_his_hands(e, k, b) > offball.KEEPER_DIVE_TRAVEL_M  # the premise
+    assert e.heading_on_target("home")  # the premise: it is going in,
+    assert beyond_his_hands(e, k, b) > offball.KEEPER_DIVE_TRAVEL_M  # and beyond a dive from here
     e.ball = b
     dived = False
     for _ in range(int(3.0 / DT)):
@@ -162,5 +163,24 @@ def test_he_does_not_dive_at_a_shot_going_wide():
     e = Engine(1)
     inside = (90.0, 34.0, 0.3, 18.0, 3.5, 0.0)
     k = shot_at_keeper(e, inside)
+    assert e.heading_on_target("home")
+    assert fly_until_he_dives(e, k) is not None
+
+
+def test_he_does_not_dive_at_a_shot_going_over_the_bar_within_his_reach():
+    # Law 10: a shot crossing his line within his hands' reach in height but dropping onto the goal
+    # line above the bar (the whole ball) is not going in either. The same shot struck a little
+    # lower, under the bar, he dives at.
+    e = Engine(1)
+    over = (90.0, 34.0, 0.3, 18.0, 3.0, 7.5)
+    k = shot_at_keeper(e, over)
+    _, _, z = e.ball_at_x(k.x)
+    assert z < offball.reach_for(True, 9.0, 0.0, 9.0)[1] and beyond_his_hands(e, k, over) > 1.0  # premise
+    e.ball = over
+    assert not e.heading_on_target("home")
+    assert fly_until_he_dives(e, k) is None
+    e = Engine(1)
+    under = (90.0, 34.0, 0.3, 18.0, 3.0, 7.0)
+    k = shot_at_keeper(e, under)
     assert e.heading_on_target("home")
     assert fly_until_he_dives(e, k) is not None

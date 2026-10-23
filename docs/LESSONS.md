@@ -2111,6 +2111,8 @@ short and actionable. This file is public: no research sources, product names or
   first. A 1.2 m dive with time to spare is launched after he reacts and lands as the ball arrives;
   main launched it as he reacted. Removing the step test turns the first red, removing the launch
   timing turns the long-shot and run-up tests red, and removing both turns all four red;
-  `test_he_does_not_dive_at_a_shot_going_wide` is red without the on-target condition. A clip of the
+  `test_he_does_not_dive_at_a_shot_going_wide` is red without the on-target condition, and
+  `test_he_does_not_dive_at_a_shot_going_over_the_bar_within_his_reach` with a check of the posts
+  alone; every shot in these tests that he should dive at, or take standing, is asserted to be going in. A clip of the
   change is watched before it is called done (lesson 107). The
   dive tests in `tests/test_engine_rules.py` fly the shot (`_until_he_dives`).

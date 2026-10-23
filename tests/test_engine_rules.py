@@ -964,12 +964,21 @@ def test_the_dive_runs_in_the_match_loop_and_waits_for_the_keepers_reaction():
 
 
 def test_a_deflection_restarts_the_keepers_reaction_before_he_dives():
+    # The frame he would launch at this shot, it is deflected: he must react to the new touch first.
+    # (Found by an audit: judged with the ball held still, the old test passed even with no reaction
+    # rule, because a ball that never arrives is never dived at.)
+    shot = (90.0, 34.0, 0.5, 25.0, 5.2, 0.0)
     e = Engine(1)
-    k = _shot_at_keeper(e, (90.0, 34.0, 0.5, 25.0, 5.2, 0.0))
-    e.t += e.reaction(k)
+    k = _shot_at_keeper(e, shot)
+    assert _until_he_dives(e, k)
+    launch = e.t - 1 / 25  # _until_he_dives spends the launch frame
+    e = Engine(1)
+    k = _shot_at_keeper(e, shot)
+    while e.t < launch - 1e-9:  # the same flight, up to that frame
+        e.ball = ball.step(e.ball, 1 / 25)
+        e.t += 1 / 25
     e.kicked_at = e.t  # just deflected on its way
     assert not e.keeper_dive(k)
-
 
 def test_the_keeper_dives_once_per_touch_and_a_deflection_lets_him_dive_again():
     # P15: the same touch still coming at him after he has dived, landed and got up does not set off
