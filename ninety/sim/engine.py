@@ -603,7 +603,8 @@ def settle_s(first_touch: float) -> float:
 
 
 # Beyond this from a goal line no net is within a stop at the fastest a body can run (P9's top-speed
-# capability, four standard deviations up, braked as body.stopping_distance has him), less his body's edge
+# capability, four standard deviations up: design, beyond any drawn player; braked as
+# body.stopping_distance has him), less his body's edge
 NET_ROOM_REACH_M = NET_DEPTH_M + stopping_distance(V0_MEAN + 4 * V0_SD) + shape.SHOULDER_BREADTH_M / 2
 
 

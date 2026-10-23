@@ -589,3 +589,12 @@ def test_a_run_at_the_goal_mouth_is_not_slowed_by_the_net_behind_it():
         assert net_room(out, MID + 2.0, -8.0, -1.0) is None  # the other goal, a little across
     assert net_room(PITCH_X + 3.5, MID, -3.0, 0.0) == pytest.approx(1.5)  # behind it, at the back
     assert net_room(PITCH_X + 1.0, MID + GOAL_HALF_WIDTH + 1.0, 0.0, -3.0) == pytest.approx(1.0)  # beside
+
+
+def test_a_net_is_seen_from_as_far_as_the_fastest_runner_needs_to_stop():
+    """NET_ROOM_REACH_M: 12 m out in front of the goal, running at the side netting from beside the
+    post, the net is in his way (beyond that reach nobody needs to slow for it)."""
+    from ninety.sim.engine import NET_ROOM_REACH_M, net_room
+    assert 12.0 < NET_ROOM_REACH_M
+    room = net_room(PITCH_X - 12.0, MID + GOAL_HALF_WIDTH + 7.5, 12.0, -6.6)
+    assert room is not None and room > 12.0
