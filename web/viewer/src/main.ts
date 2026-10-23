@@ -2,6 +2,7 @@ import { PhonePanel } from "./companion";
 import { type Bundle, type ClaimTrace, type Cue, PERSONAS, type Persona, clock, loadBundle, onAir } from "./bundle";
 import { drawCues, drawDetections } from "./draw";
 import { Narrator } from "./narrator";
+import { RadarModel, type RadarState, aspect, describe, drawRadar, projection, timeline } from "./radar";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -15,6 +16,8 @@ const showBoxes = $<HTMLInputElement>("show-boxes");
 const reduceMotionBox = $<HTMLInputElement>("reduce-motion");
 const onAirText = $<HTMLParagraphElement>("on-air");
 const voiceBox = $<HTMLInputElement>("voice");
+const radarCanvas = $<HTMLCanvasElement>("radar");
+const showRadar = $<HTMLInputElement>("show-radar");
 
 /** Per-viewer conveniences only: storage can be missing or throw, and the page works without it. */
 const store = {
@@ -131,6 +134,13 @@ function renderPipeline(b: Bundle) {
         : "no audio description in this bundle",
       !m.audio,
     ],
+    [
+      "Radar",
+      m.radar
+        ? `${m.radar.frames} frames of vision's tracked positions, the camera's view from its own fit in ${m.radar.footprints}`
+        : "no tracked positions in this bundle",
+      !m.radar,
+    ],
   ];
   $("pipeline").replaceChildren(
     ...rows.flatMap(([k, v, warn]) => {
@@ -196,28 +206,6 @@ function renderTrace(b: Bundle, seekTo: (matchT: number) => void) {
   );
 }
 
-/** Video time against match time across the broadcast's cuts (ninety/match/timeline.py): a bundle
- * without segments is one run of frames from its start. */
-function timeline(m: Bundle["manifest"]) {
-  const segs = m.segments?.length ? m.segments : [{ index: 0, frame: Math.round(m.t_start * m.fps), frames: m.footage.frames }];
-  const matchTime = (v: number) => {
-    const i = Math.max(0, Math.floor(v * m.fps));
-    let seg = segs[0];
-    for (const s of segs) if (s.index <= i) seg = s;
-    return (seg.frame + (v * m.fps - seg.index)) / m.fps;
-  };
-  const videoTime = (t: number) => {
-    const f = t * m.fps;
-    for (const s of segs) {
-      if (f < s.frame) return s.index / m.fps; // inside a cut: shown where the cut is
-      if (f < s.frame + s.frames) return (s.index + f - s.frame) / m.fps;
-    }
-    const last = segs[segs.length - 1];
-    return (last.index + last.frames) / m.fps;
-  };
-  return { matchTime, videoTime };
-}
-
 async function start() {
   const base = new URLSearchParams(location.search).get("bundle") ?? "bundle/";
   let b: Bundle;
@@ -233,7 +221,7 @@ async function start() {
   overlay.height = m.height;
   document.documentElement.style.setProperty("--aspect", `${m.width} / ${m.height}`);
   const footage = m.footage.kind === "video" ? videoFootage(b) : frameFootage(b);
-  const { matchTime, videoTime } = timeline(m);
+  const { matchTime, videoTime, segmentOf } = timeline(m);
   scrub.max = String(footage.duration);
   scrub.step = String(1 / m.fps);
   const detections = new Map(b.detections.map((f) => [Math.round(f.t * m.fps), f]));
@@ -316,6 +304,7 @@ async function start() {
   scrub.addEventListener("input", () => footage.seek(Number(scrub.value)));
   renderPipeline(b);
   renderTrace(b, seekMatch);
+  const radar = setupRadar(b, segmentOf, matchTime);
   const phone = new PhonePanel(m.clip, { time: () => m.t_start + footage.time(), playing: () => !footage.paused() });
 
   document.addEventListener("keydown", (e) => {
@@ -354,6 +343,11 @@ async function start() {
       case "d":
         showBoxes.checked = !showBoxes.checked;
         break;
+      case "m":
+        if (!b.radar) return;
+        showRadar.checked = !showRadar.checked;
+        showRadar.dispatchEvent(new Event("change"));
+        break;
       case "v":
         if (persona !== "audio") return;
         voiceBox.checked = !voiceBox.checked;
@@ -375,6 +369,7 @@ async function start() {
     drawCues(ctx, aired, { t, reduceMotion: reduceMotionBox.checked });
     narrator.update(t, !footage.paused(), persona === "audio" && voiceBox.checked);
     phone.tick();
+    radar.tick(v);
 
     const ids = aired.map((c) => c.id).sort().join(" ");
     overlay.dataset.onAir = ids;
@@ -407,6 +402,82 @@ async function start() {
   setPersona(persona);
   document.body.dataset.state = "ready";
   requestAnimationFrame(frame);
+}
+
+/** The radar panel: drawn each frame from the bundle's radar.json, or a note saying it has none. */
+function setupRadar(b: Bundle, segmentOf: (k: number) => [number, number], matchTime: (v: number) => number) {
+  const panel = $("radar-panel");
+  const note = $("radar-note");
+  let model: RadarModel | null = null;
+  let why = "This bundle has no tracked positions: run ninety-e2e with --tracked and --observations.";
+  try {
+    model = b.radar ? new RadarModel(b.radar, b.manifest.fps, segmentOf) : null;
+  } catch (e) {
+    why = `Radar not drawn: ${(e as Error).message}.`;
+  }
+  if (!model) {
+    note.textContent = why;
+    showRadar.disabled = true;
+    radarCanvas.hidden = true;
+    $("radar-legend").hidden = true;
+  }
+  const remembered = store.get("radar");
+  showRadar.checked = remembered !== "0";
+  const apply = () => {
+    panel.hidden = !showRadar.checked;
+    store.set("radar", showRadar.checked ? "1" : "0");
+  };
+  showRadar.addEventListener("change", apply);
+  apply();
+  radarCanvas.style.aspectRatio = String(aspect());
+
+  const trail: { frame: number; x: number; y: number }[] = [];
+  let spoken = "";
+  let spokenAt = -Infinity;
+  const stateAt = (v: number): RadarState | null =>
+    model ? model.at(matchTime(v), !reduceMotionBox.checked) : null;
+  const draw = (v: number) => {
+    const dpr = Math.min(3, window.devicePixelRatio || 1);
+    const w = radarCanvas.clientWidth;
+    const h = radarCanvas.clientHeight;
+    if (!w || !h) return null;
+    if (radarCanvas.width !== Math.round(w * dpr) || radarCanvas.height !== Math.round(h * dpr)) {
+      radarCanvas.width = Math.round(w * dpr);
+      radarCanvas.height = Math.round(h * dpr);
+    }
+    const ctx = radarCanvas.getContext("2d")!;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const state = stateAt(v);
+    // The ball's last few tenths of a second, as long as it stays on the same run of frames.
+    if (state?.ball) {
+      const last = trail[trail.length - 1];
+      if (last && (state.frame < last.frame || state.frame - last.frame > 2)) trail.length = 0;
+      if (!last || last.frame !== state.frame) trail.push({ frame: state.frame, x: state.ball.x, y: state.ball.y });
+      while (trail.length > 10) trail.shift();
+    } else trail.length = 0;
+    drawRadar(ctx, w, h, state, { reduceMotion: reduceMotionBox.checked, trail: [...trail, ...(state?.ball ? [state.ball] : [])] });
+    radarCanvas.dataset.frame = state ? String(state.frame) : "";
+    // The description changes at most once a second, so a screen reader is not flooded.
+    const now = performance.now();
+    const said = describe(state);
+    if (said !== spoken && now - spokenAt > 1000) {
+      spoken = said;
+      spokenAt = now;
+      radarCanvas.setAttribute("aria-label", said);
+    }
+    return state;
+  };
+  // Read by tests/test_radar.py: the state at a video time, and a drawn pixel at pitch metres.
+  (window as unknown as { ninetyRadar: unknown }).ninetyRadar = {
+    at: (v: number) => stateAt(v),
+    drawAt: (v: number) => draw(v),
+    pixel: (x: number, y: number, dx = 0) => {
+      const p = projection(radarCanvas.width); // device pixels; dx in CSS pixels to the right
+      const at = [Math.round(p.X(x) + dx * (radarCanvas.width / radarCanvas.clientWidth)), Math.round(p.Y(y))];
+      return [...radarCanvas.getContext("2d")!.getImageData(at[0], at[1], 1, 1).data];
+    },
+  };
+  return { tick: (v: number) => (model && showRadar.checked ? draw(v) : null) };
 }
 
 void start();

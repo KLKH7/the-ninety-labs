@@ -473,8 +473,8 @@ def table_lines(table: list[dict]) -> list[str]:
         "a fallback badge is on screen (the cue's `fallback`, which the viewer draws). The baseline has",
         "neither, and must air every profile's variant: none refused, none missing, and no Spanish one",
         "reading as English (more English function words than Spanish, `personalizer/language.py`).",
-        "That test is a heuristic: English padded with Spanish function words reads as Spanish, and",
-        "Spanish carrying English names or quotes can read as English.",
+        "That test is a heuristic: it does not count quoted words or capitalised names, and English",
+        "padded with Spanish function words reads as Spanish. The on-air gate holds the same.",
     ]
     held_es = [r for r in table if any("/es:" in step for step in r["fallback"])]
     if held_es:

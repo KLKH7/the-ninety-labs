@@ -130,10 +130,20 @@ def baseline_with(personalize) -> dict:
     return wf.run(scenario)
 
 
-def test_the_baseline_fails_when_a_spanish_profile_reads_english_with_a_word_changed():
-    # The byte-for-byte check alone let this air: English for a Spanish viewer, one word changed.
-    row = baseline_with(personalizer_writing(lambda text: text.replace("complete", "completes")))
-    assert row["variants_refused"] == [] and len(row["variants_english"]) == 4  # with player_focus
+def test_the_baseline_fails_when_a_spanish_profile_reads_english_with_a_word_changed(monkeypatch):
+    # English for a Spanish viewer, one word changed: the on-air gate holds it (lesson 154), so it
+    # is refused, and the baseline fails.
+    near_english = personalizer_writing(lambda text: text.replace("complete", "completes"))
+    row = baseline_with(near_english)
+    assert len(row["variants_refused"]) == 4 and row["variants_english"] == []  # with player_focus
+    assert all("reads as English" in r for r in row["variants_refused"])
+    assert not wf.recovered(row, row)["every variant airs without a failure"]
+    # The table measures what aired on its own: with the gate gone, the English airs and is caught.
+    from ninety.personalizer import cues
+
+    monkeypatch.setattr(cues, "reads_english", lambda text: False)
+    row = baseline_with(near_english)
+    assert row["variants_refused"] == [] and len(row["variants_english"]) == 4
     assert not wf.recovered(row, row)["every variant airs without a failure"]
 
 
