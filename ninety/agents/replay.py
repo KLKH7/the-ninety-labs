@@ -32,6 +32,15 @@ Ask = Callable[[str], Awaitable[str]]
 Judge = Callable[[Claim, list[dict]], Awaitable[Verdict]]
 
 
+def _body(recording) -> dict:
+    """The recording as saved. A recording made before agent definitions were recorded has none,
+    and is saved without the field, so it round-trips byte for byte."""
+    body = asdict(recording)
+    if body.get("agent_definitions") is None:
+        body.pop("agent_definitions", None)
+    return body
+
+
 @dataclass
 class Turn:
     """One model answer: the Analyst's raw reply, or the Judge's verdict as JSON."""
@@ -60,7 +69,7 @@ class Recording:
     def save(self, path: str | Path) -> None:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps({"format": REPLAY_FORMAT, **asdict(self)}, indent=2) + "\n")
+        path.write_text(json.dumps({"format": REPLAY_FORMAT, **_body(self)}, indent=2) + "\n")
 
     @classmethod
     def load(cls, path: str | Path) -> Recording:
@@ -93,7 +102,7 @@ class WorkflowRecording:
     def save(self, path: str | Path) -> None:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps({"format": WORKFLOW_REPLAY_FORMAT, **asdict(self)}, indent=2) + "\n")
+        path.write_text(json.dumps({"format": WORKFLOW_REPLAY_FORMAT, **_body(self)}, indent=2) + "\n")
 
     @classmethod
     def load(cls, path: str | Path) -> WorkflowRecording:
