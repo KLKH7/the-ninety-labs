@@ -234,6 +234,17 @@ cites a source yet: each has only the reason in the table, and changing one need
 row first. When no scored frame records the field (`ball.z`, `blur_px`) the group is `null`, and
 frames or clips with and without it are refused, so no label drops out unseen.
 
+**A known limit of the 0.5 m cut-off, kept as set.** A ball's pitch position is found by
+assuming it lies on the grass (`ninety/vision/observe.py`), so a raised ball is placed beyond its
+true spot, along the camera's line of sight. On the local renders' saved cameras, a ball at
+exactly 0.5 m is placed 0.83 to 2.45 m from its true spot (median 1.57 m), past the 1.0 m strict
+radius. The pitch-level box scorer is not affected: it places the true ball and the detected one
+the same way, so the error cancels. `pitch_score` and the events from video compare against the
+ball's true position, so their "ball on the ground" errors include balls up to 0.5 m and can
+exceed 1.0 m from height alone. The cut-off stays at 0.5 m because it was fixed before any
+detector ran. A lower one, derived from the camera's geometry, needs a GROUNDING.md row and a
+re-run of every report that uses it.
+
 The boundary rule uses each frame's saved camera width and height, with no margin; labelled
 frames missing those dimensions fail rather than guessing a resolution. It does not measure
 a truncation percentage: saved boxes do not say how much of an object lies outside the image.
