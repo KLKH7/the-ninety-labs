@@ -31,6 +31,7 @@ from ninety.sim.body import (
     STRIKE_FACING,
     TURN_RATE,
     V0_MEAN,
+    V0_SD,
     Body,
     can_get_to,
     relative_speed,
@@ -453,11 +454,51 @@ def goal_entered(before: ball.State, after: ball.State) -> float | None:
     return None
 
 
+def net_top(behind: float) -> float:
+    """How high the net is this far behind the goal line: its roof slopes from the crossbar down to
+    the top of its back (NET_DEPTH_M, NET_BACK_M)."""
+    return CROSSBAR + (NET_BACK_M - CROSSBAR) * clamp(behind, 0.0, NET_DEPTH_M) / NET_DEPTH_M
+
+
+def off_the_net(before: ball.State, after: ball.State) -> ball.State:
+    """L1, lesson 200: a ball outside a goal meets its net from outside as it does from inside
+    (in_the_net): beside a post into the side netting, from behind into the back, or dropping onto
+    the roof. Where its step would take it into the net it stays a ball's radius outside (on the
+    roof, its lowest point on it), and its speed into the net is lost (design, as inside). On the
+    roof it rolls down the slope toward the back, as a ball rolls down any incline (g sin a cos a
+    across the ground, the roof's own slope a; design: the net's give and any friction on it are
+    not modelled), so a ball dropped onto it does not stay up there. Only for a step that does not
+    go into the goal over its line (goal_entered): a goal is never turned away by the net's outside
+    (the lesson 21 audit: a ball crossing between the posts from wide of one, or dropping in under the
+    bar, was stopped at the outside of a side or the roof and the goal lost). Known gap: a ball
+    already inside the net's way (released from a player against it) is not stopped (design)."""
+    bx, by, bz, vx, vy, vz = after
+    r, mid = ball.RADIUS, PITCH_Y / 2
+    for line in (0.0, PITCH_X):
+        out = 1.0 if line > 0 else -1.0
+        behind, off = (bx - line) * out, abs(by - mid)
+        if not (0.0 < behind < NET_DEPTH_M + r and off < GOAL_HALF_WIDTH + r and bz < net_top(behind)):
+            continue  # not in the net's way
+        was, was_off, was_z = (before[0] - line) * out, abs(before[1] - mid), before[2]
+        if was >= NET_DEPTH_M + r:  # from behind the goal: the back
+            bx, vx = line + out * (NET_DEPTH_M + r), (0.0 if vx * out < 0 else vx)
+        elif was_z >= net_top(was):  # from above it: the roof
+            slope = (CROSSBAR - NET_BACK_M) / NET_DEPTH_M
+            bz, vz = net_top(behind), max(vz, 0.0)
+            vx += out * ball.GRAVITY * slope / (1.0 + slope * slope) * DT  # sin a cos a = s / (1 + s^2)
+        elif was_off >= GOAL_HALF_WIDTH + r:  # from beside the goal: a side
+            side = math.copysign(GOAL_HALF_WIDTH + r, by - mid)
+            by, vy = mid + side, (0.0 if vy * side < 0 else vy)
+        return bx, by, bz, vx, vy, vz
+    return after
+
+
 def net_step(before: ball.State, after: ball.State, line: float | None) -> tuple[ball.State, float | None]:
     """A dead ball's move from `before` to `after`, held by the net of the goal it is in (`line`),
     or has just gone into (goal_entered): a goal, or a ball played on after the whistle. A ball
-    outside the goal meets no net (design, as specified for lesson 184: the net's outside, met by a
-    ball wide of a post or dropping over the bar, is not modelled yet)."""
+    outside the goal meets the net's outside (off_the_net)."""
+    if line is None and goal_entered(before, after) is None:
+        return off_the_net(before, after), None
     return in_the_net(after, goal_entered(before, after) if line is None else line)
 
 
@@ -561,9 +602,50 @@ def settle_s(first_touch: float) -> float:
     return 0.3 + 0.3 * (1 - first_touch)
 
 
+# Beyond this from a goal line no net is within a stop at the fastest a body can run (P9's top-speed
+# capability, four standard deviations up: design, beyond any drawn player; braked as
+# body.stopping_distance has him), less his body's edge
+NET_ROOM_REACH_M = NET_DEPTH_M + stopping_distance(V0_MEAN + 4 * V0_SD) + shape.SHOULDER_BREADTH_M / 2
+
+
+def net_room(x: float, y: float, vx: float, vy: float) -> float | None:
+    """How far he runs the way (vx, vy) points before his centre meets a goal's net (NETS) from
+    outside the goal: a net he would reach through the goal mouth, over the line between the posts, is
+    not counted (a run into the goal is play, and the nets inside it were never met going round it;
+    lesson 200's audit: counted, every run at the goal was slowed to 4.4 m/s at the line). None if he
+    meets none, or is nowhere near a goal."""
+    speed = math.hypot(vx, vy)
+    if speed < 1e-9 or NET_ROOM_REACH_M < min(x, PITCH_X - x):
+        return None
+    far = (x + vx / speed * 100.0, y + vy / speed * 100.0)
+    rx, ry = far[0] - x, far[1] - y
+    best = None
+    for (cx, cy), (dx, dy) in NETS:
+        qx, qy = dx - cx, dy - cy
+        den = rx * qy - ry * qx
+        if abs(den) < 1e-12:
+            continue
+        s = ((cx - x) * qy - (cy - y) * qx) / den
+        u = ((cx - x) * ry - (cy - y) * rx) / den
+        if not (0.0 <= s <= 1.0 and 0.0 <= u <= 1.0):
+            continue
+        line = PITCH_X if max(cx, dx) > PITCH_X / 2 else 0.0  # the goal line of this net
+        if rx and 0.0 <= (line - x) / rx < s:  # over that line first: in the mouth, between the posts?
+            if abs(y + ry * (line - x) / rx - PITCH_Y / 2) < GOAL_HALF_WIDTH:
+                continue
+        best = s * 100.0 if best is None else min(best, s * 100.0)
+    return best
+
+
 def steer(p: Player, tx: float, ty: float, want_speed: float) -> None:
     """Move toward a target within the player's own body: force-velocity acceleration, braking,
-    a shared grip limit for braking and turning, and energy (ninety/sim/body.py)."""
+    a shared grip limit for braking and turning, and energy (ninety/sim/body.py). Near a goal's net
+    he runs toward it no faster than he could stop before it, as the fetcher does before the boards
+    (L14, body.stopping_speed): going round a goal, a way that flipped between a post and a back
+    corner, or grazed a post, met the net and it stopped him dead (lesson 200)."""
+    room = net_room(p.x, p.y, p.vx, p.vy)  # the way he is running
+    if room is not None:  # to his body's edge, not his centre: half a shoulder, its widest (P11)
+        want_speed = min(want_speed, stopping_speed(room - shape.SHOULDER_BREADTH_M / 2))
     x, y, p.vx, p.vy = move_body(p.x, p.y, p.vx, p.vy, tx, ty, want_speed, p.physique, DT)
     # No wall at the lines: players may run past them, as in real matches. Targets stay on the
     # pitch, so they slow down and come back; only the advertising boards and the goals' nets stop
@@ -1660,7 +1742,8 @@ class Engine:
         return False
 
     def woodwork(self, before: ball.State) -> None:
-        """Law 1: the ball rebounds off a post or the crossbar where it meets the goal line."""
+        """Law 1: the ball rebounds off a post or the crossbar where it meets the goal line, and a
+        ball going on past it outside the goal meets the net's outside (off_the_net)."""
         for line in (0.0, PITCH_X):
             x0, x1 = before[0], self.ball[0]
             if (x0 - line) * (x1 - line) > 0 or x0 == x1:
@@ -1683,6 +1766,8 @@ class Engine:
                 self.bumped = None
                 self.chase = {}
                 return
+        if goal_entered(before, self.ball) is None:  # into the goal, the net's outside is not in its way
+            self.ball = off_the_net(before, self.ball)  # beside a post or over the bar: the net's outside
 
     def went_out(self, before: ball.State) -> bool:
         """Law 9: out once the whole ball has crossed a goal line or touchline. Where and how high
@@ -2084,11 +2169,14 @@ class Engine:
         sx, sy = self.restart_ball_spot(r)
         bx, by = self.ball[0], self.ball[1]
         settled = carrier is not None and self.t - r.gathered_at >= settle_s(carrier.profile["first_touch"])
-        if (settled and carrier.id != r.taker
+        clear_way = not any(crosses((bx, by), (sx, sy), c, d) for c, d in NETS)
+        if (settled and carrier.id != r.taker and clear_way
                 and decisions.can_strike(bx - carrier.x, by - carrier.y, carrier.heading, sx - bx, sy - by)):
             # Once he has settled it (A4) and faces the spot (P16) he knocks it along the ground
             # there, to arrive at the softest pace a pass is struck to arrive at (D1), with his own
-            # error (A3), and leaves it to the taker.
+            # error (A3), and leaves it to the taker. With a goal's net in the way (behind the goal)
+            # he carries it round first: knocked into the net, it stopped there and was fetched and
+            # knocked into it again (lesson 200).
             dist = math.hypot(sx - bx, sy - by)
             ground = ball.ground_pass(max(dist, 0.5), decisions.ARRIVE_MPS, DT)
             skill = decisions.pass_skill(bx, sx, sy, False, goal_x(carrier.team))
@@ -2731,7 +2819,10 @@ class Engine:
         """Nobody walks through a goal's net (Law 1, NET_DEPTH_M): where his straight way would cross
         it, he heads for the first point of the shortest way that does not, by the goal mouth, in
         front of it NET_CLEAR_M, or round the goal, NET_CLEAR_M clear of its posts and back corners
-        (design). The keeper fetching the ball from his net walks in through the mouth."""
+        (design), the posts a stride clear in front of the line as well as beside them: aimed at a point
+        on the line beside the post, a keeper running there was carried over the line into the side
+        netting and stopped dead by it (seed 116 on main, lesson 200). The keeper fetching the ball from
+        his net walks in through the mouth."""
         if 0.0 < min(p.x, tx) and max(p.x, tx) < PITCH_X:  # a way in front of both goal lines
             return tx, ty
         at, target = (p.x, p.y), (tx, ty)
@@ -2743,7 +2834,8 @@ class Engine:
             lo, hi = mid - GOAL_HALF_WIDTH + m, mid + GOAL_HALF_WIDTH - m
             behind = line + out * (NET_DEPTH_M + m)
             nodes = [at, (line - out * m, clamp(p.y, lo, hi)), (line - out * m, clamp(ty, lo, hi)),
-                     (line, lo - 2 * m), (line, hi + 2 * m), (behind, lo - 2 * m), (behind, hi + 2 * m),
+                     (line - out * m, lo - 2 * m), (line - out * m, hi + 2 * m),
+                     (behind, lo - 2 * m), (behind, hi + 2 * m),
                      target]
             # shortest way from him (0) to his target (last) over ways that cross no net
             best, first, todo = {0: 0.0}, {}, {0}

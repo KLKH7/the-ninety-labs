@@ -2110,6 +2110,51 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `uv run pytest tests/test_pitch_score.py tests/test_vision_score.py
   tests/test_fake_box_detections.py -k "cut_off"`; the pitch_score test fails with `z < 0.5` put back.
 
+### 189. A sentence beside a number is not its mark
+- **What happened:** the goal-net change merged while its review check was skipped, so the
+  hard-coding audit (lesson 21) ran after the merge. Two new factors had a sentence beside them
+  and were still neither. The net-touch slack is two roundings of a written millimetre, and the
+  comment said "measurement precision", but the grounding row's source cell said only "physics".
+  A step through a corner of the net meets the side and the back, and the comment said so, with
+  no *design* on the count of two.
+- **Rule:** the mark sits on the constant. A margin from how positions are written names
+  measurement precision in the grounding source cell, with the derivation beside the value
+  (lesson 10). A choice carries the word *design* on its own line. A sentence that only describes
+  the number is neither. The audit runs before the merge.
+- **Check:** the audit's neither list. A constant on it is marked in a follow-up that does not
+  change the value.
+
+### 200. A surface is solid from both sides, and only where the ball is not going through its opening
+- **What happened:** the goal-net change (lesson 184) gave the net an inside only. Over 20 matches
+  of 20 minutes on main (`0f101db`) the ball went into a goal through its net twice: a high shot
+  over the bar dropped through the roof and out through the side netting (seed 115 at 15:51), and a
+  dead ball behind the goal was knocked to the goal-kick spot straight through the back of the net
+  and the goal (seed 102 at 5:17). Two of the net tests could not fail: nobody's way to the ball
+  after the planted goals crossed a net, and the goal test stopped on the goal event before the net
+  acted. The first fix stopped every step at the net's outside, and the independent audit found it
+  erased goals: a ball crossing the line between the posts from wide of one, or dropping in under the
+  bar, was held at the outside of the side netting or the roof. Once the net was solid from outside,
+  a ball knocked from behind the goal toward the spot stopped against it and was fetched and knocked
+  into it again. And main's seed 116 failed P2: a keeper going round his goal to the ball behind it
+  aimed at a point on the goal line beside the post, was carried over the line by his run and met the
+  side netting, which stopped him dead (2.2 m/s in a frame). Moving that point in front of the line
+  fixed the case but not the class: the third audit still found 6 of 100 starts behind or beside a
+  goal stopped dead, where a way flipped between a post and a back corner or grazed one.
+- **Rule:** a structure that stops the ball from one side stops it from every side it can be met
+  from, in the engine and in the validator's list of contacts, and never where the ball is going
+  through the structure's opening (a goal is judged first). Whatever plays the ball near the
+  structure (a knock-on, a pass) checks that its way is clear of it. A wall that stops a body is
+  approached no faster than the body can stop before it (the boards' rule, now the nets'), so the stop
+  is never a teleport of velocity (lesson 5). A test of "nobody does X" plants a case whose straight
+  way does X and asserts that it would; a test whose scene is a moment of a seeded match finds that
+  moment by its premises, since any earlier change moves it (lesson 78).
+- **Check:** `uv run pytest tests/test_goal_net.py`: the outside, roof, wide-of-the-post,
+  carried-round and never-turns-away tests fail with `off_the_net` returning its step unchanged,
+  with the goal guard in `Engine.woodwork` removed, or with the knock-on's clear way forced;
+  `flies_on_freely` fails with the ball moved to the back of the net as it goes in;
+  `stopped_dead` and `never_runs_into` fail with the net speed cap in `steer` removed.
+  `scripts/defect_sweep/nets.py` counts balls through a net over a sweep.
+
 ### 190. A test that reads its constant back cannot pin it
 - **What happened:** the foul pose asserted `foul_fall_deg(...) == FALL_DOWN_DEG` and `peak >= 80`.
   A lie of 80° left both green, and so did rewriting the pose times, because the test added those

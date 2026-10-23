@@ -1992,21 +1992,27 @@ def test_at_a_dead_ball_the_presser_goes_in_time_and_does_not_spring_about_his_p
     leaves at his pressing pace: test_opponents_keep_out_of_the_penalty_area_at_a_goal_kick_...).
     Once off-ball movement changed play, seed 114 no longer came to that goal kick. The scene was
     found again by its premises, then checked to go red with the fix reverted (the presser back at
-    his pressing pace: 8 turns here): seed 134's goal kick at 1:05."""
+    his pressing pace: 8 turns here): seed 134's goal kick at 1:05, found below by its premises."""
     e = Engine(134)
     e.kickoff("home", setup=True)
-    while e.t < 65.44 - 1e-9:
+    # The scene is found by its premises, not at a fixed time: in seed 134's goal kick at about 1:05
+    # (65.44 s at first; the frame moves when the match parts earlier, lesson 78).
+    while e.t < 75.0:
         e.step()
-    r, brain = e.restart, e.brains["home"]
-    assert r is not None and r.kind == "goal_kick" and brain.pressers  # premise: the goal kick waits
-    p = e.by_id[brain.pressers[0]]
-    tx, ty, top = e.shape_target(p)
-    assert top == pytest.approx(e.in_time(p, tx, ty)) and top < e.press_pace(p)
-    crowd = [q for q in e.players
-             if q.team == p.team and q is not p and math.dist((q.x, q.y), (tx, ty)) < 0.7]
-    assert crowd  # premise: a team-mate stands a hair from his place
+        r, brain = e.restart, e.brains["home"]
+        if e.t < 60.0 or r is None or r.kind != "goal_kick" or not brain.pressers:
+            continue
+        p = e.by_id[brain.pressers[0]]
+        tx, ty, top = e.shape_target(p)
+        crowd = [q for q in e.players
+                 if q.team == p.team and q is not p and math.dist((q.x, q.y), (tx, ty)) < 0.7]
+        if top == pytest.approx(e.in_time(p, tx, ty)) and top < e.press_pace(p) and crowd:
+            break  # premise: he walks in time, and a team-mate stands a hair from his place
+    else:
+        raise AssertionError("premise: the goal kick with its crowded presser never came")
     turns, history = 0, []
-    while e.t < 71.44 and e.restart is r:
+    end = e.t + 6.0
+    while e.t < end and e.restart is r:
         e.step()
         history.append((p.vx, p.vy))
         if len(history) > 10:
