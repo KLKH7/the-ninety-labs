@@ -30,5 +30,16 @@ def test_a_goal_too_early_in_the_window_or_a_kickoff_alone_does_not_qualify():
     assert demo.first_window([*early[:-1], ev(16, "goal")]) == 0.0
 
 
-def test_the_seed_range_is_clear_of_every_other_run():
-    assert 8000 < demo.FIRST_SEED <= demo.LAST_SEED < 9000
+def test_two_passes_is_not_enough():
+    two = [ev(100, "set_piece"), ev(102, "pass"), ev(108, "pass"), ev(130, "goal")]
+    assert demo.first_window(two) is None
+    assert demo.first_window([ev(100, "set_piece"), *PASSES[:1], ev(130, "goal")]) is None
+
+
+def test_the_range_starts_after_the_watched_demo_seed_and_the_doc_gives_the_same_command():
+    assert 8001 < demo.FIRST_SEED <= demo.LAST_SEED < 9000
+    doc = (Path(__file__).resolve().parents[1] / "docs/eval/demo-clip.md").read_text()
+    assert f"Seeds {demo.FIRST_SEED} to {demo.LAST_SEED}" in doc
+    cmd = demo.render_command(8002, 70)
+    assert "stadium=broadcast" in cmd
+    assert demo.RENDER_FLAGS in doc  # the doc's command and the script's flags cannot drift apart

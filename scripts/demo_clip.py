@@ -10,13 +10,20 @@ from __future__ import annotations
 import json
 import sys
 
-FIRST_SEED = 8001  # 8000-8999: no training, validation, round or test run uses them
+FIRST_SEED = 8002  # 8001 was the demo seed for v1 and v2: watched, and the engine was fixed on it
 LAST_SEED = 8050
 MINUTES = 45  # the first half: enough for most seeds to hold a goal
 WINDOW_S = 60.0
 STEP_S = 5.0
 BUILD_UP_S = 15.0  # the goal is at least this far into the window, so its build-up is on screen
 MIN_PASSES = 3
+# Viewer footage needs the broadcast stadium (lesson 185); the default plain stands scored 2/10.
+RENDER_FLAGS = "--set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast"
+
+
+def render_command(seed: int, start: float) -> str:
+    return (f"uv run ninety-render --seed {seed} --start {start:g} --seconds {WINDOW_S:g} "
+            f"{RENDER_FLAGS} --mp4 --gpu --out runs/demo/seed{seed}")
 
 
 def first_window(events: list[dict], minutes: float = MINUTES) -> float | None:
@@ -45,9 +52,7 @@ def main() -> None:
             continue
         qualifying = [{k: e[k] for k in ("id", "t", "type", "team", "player")} for e in events
                       if t0 <= e["t"] <= t0 + WINDOW_S and e["type"] in ("goal", "set_piece")]
-        cmd = (f"uv run ninety-render --seed {seed} --start {t0:g} --seconds {WINDOW_S:g} "
-               "--set dead_ball_cut=true --set kit_contrast=broadcast "
-               f"--mp4 --gpu --out runs/demo/seed{seed}")
+        cmd = render_command(seed, t0)
         print(json.dumps({"seed": seed, "start_s": t0, "events": qualifying, "command": cmd}, indent=1))
         return
     sys.exit(f"no seed in {FIRST_SEED}-{LAST_SEED} has a qualifying window: widen the range in a new commit")
