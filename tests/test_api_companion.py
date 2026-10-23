@@ -5,6 +5,8 @@ The match is a small synthetic track (h7 running, a7 standing), so no test waits
 
 import asyncio
 import json
+import re
+from pathlib import Path
 
 import pytest
 from starlette.testclient import TestClient
@@ -290,6 +292,34 @@ def test_a_late_phone_gets_the_latest_clock_and_focus_first_then_the_rest_in_ord
                        {"type": "clock", "t": 3.0, "playing": True}]
 
     asyncio.run(run())
+
+
+@pytest.mark.parametrize("message, held_s, sent_t", [
+    ({"type": "clock", "t": 10.0, "playing": True}, 0.7, 10.7),  # it played on while the relay held it
+    ({"type": "clock", "t": 10.0, "playing": True}, 9.0, 14.0),  # never further than the phone's STALE_S
+    ({"type": "clock", "t": 10.0, "playing": False}, 0.7, 10.0),  # paused: where it was
+])
+def test_a_late_phone_gets_the_clock_where_the_laptop_is_now(setup, message, held_s, sent_t):
+    # Lesson 165: the latest clock was replayed as sent, so a phone joining mid-play ran behind by
+    # the time the relay had held it, up to a second, until the laptop's next message. The API's
+    # clock is the test's, so the time held is exact.
+    client, app, clock = setup
+    code = pair(client)
+
+    async def run():
+        async with Socket(client.app, f"/api/pair/{code}?role=laptop") as laptop:
+            await laptop.send(message)
+            async with asyncio.timeout(RECEIVE_S):
+                while "clock" not in app.rooms[code].latest:
+                    await asyncio.sleep(0)
+            clock.now += held_s
+            async with Socket(client.app, f"/api/pair/{code}?role=phone") as phone:
+                return await phone.receive()
+
+    assert asyncio.run(run()) == {**message, "t": sent_t}
+    # The relay's cap is the phone's own limit, read from the phone's code.
+    phone_clock = (Path(__file__).resolve().parents[1] / "web/phone/src/clock.ts").read_text()
+    assert comp.STALE_S == float(re.search(r"export const STALE_S = ([\d.]+);", phone_clock).group(1))
 
 
 def test_a_message_sent_during_a_phones_catch_up_still_reaches_it(setup):

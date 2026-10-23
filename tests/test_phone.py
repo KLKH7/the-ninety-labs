@@ -197,21 +197,51 @@ def test_pairing_by_code_refuses_a_wrong_code_then_shows_the_minimap(browser, mo
     assert not errors
 
 
+FRAME_MS = 16  # one animation frame of the fake clock
+
+
+def step_until(ctx, page, condition: str, most: int = 120):
+    """Run the fake clock a frame at a time until `condition` holds on `page`: as many frames as
+    it takes in the pages' time, never a wait on the runner's scheduling."""
+    for _ in range(most):
+        if page.evaluate(condition):
+            return
+        ctx.clock.run_for(FRAME_MS)
+    raise AssertionError(f"not after {most} frames: {condition}")
+
+
 def test_the_phone_clock_stays_within_tolerance_of_the_laptop(browser, mock_site):
-    laptop, phone, errors, _ = mock_pair(browser, mock_site)
+    # Both pages run on Playwright's fake clock (performance.now, timers, animation frames), so
+    # the laptop and the phone are read at the same instant of their time: the check is exact,
+    # whatever the runner's load (lesson 165). It flaked on CI as the phone, opened after the
+    # laptop pressed play, took the relay's replayed clock as fresh and ran behind by its load time.
+    ctx = browser.new_context(viewport=PHONE_SIZE, has_touch=True)
+    ctx.clock.install(time=0)
+    ctx.clock.pause_at(1000)
+    laptop = ctx.new_page()
+    errors = watch(laptop)
+    laptop.goto(f"{mock_site}mock-laptop.html?code={MOCK_CODE}")
+    laptop.wait_for_function("window.ninetyLaptop")
     lap = lambda: laptop.evaluate("window.ninetyLaptop.time()")  # noqa: E731
-    phone.wait_for_function("document.querySelector('#status').textContent === 'Synced'")
+    laptop.click("#play")
+    ctx.clock.run_for(600)  # the phone opens 0.6 s into play, before the laptop's next message
+    phone = ctx.new_page()
+    errors += watch(phone)
+    phone.goto(f"{mock_site}?mock=1&code={MOCK_CODE}&clip=mock")
+    phone.wait_for_selector("body[data-state=live]")
+    step_until(ctx, phone, "document.querySelector('#status').textContent === 'Synced'")
+    assert_in_step(lap, phone)  # at once: the replayed clock is where the laptop is now
     for _ in range(4):  # across several of the laptop's once-a-second messages
+        ctx.clock.run_for(700)
         assert_in_step(lap, phone)
-        phone.wait_for_timeout(700)
     laptop.click("#play")  # pause
-    phone.wait_for_function("document.querySelector('#status').textContent === 'Paused'")
+    step_until(ctx, phone, "document.querySelector('#status').textContent === 'Paused'")
     held = phone_t(phone)
-    phone.wait_for_timeout(500)
+    ctx.clock.run_for(500)
     assert phone_t(phone) == held
     assert abs(held - lap()) <= TOLERANCE_S
     laptop.fill("#seek", "90")  # a seek on the laptop
-    phone.wait_for_function("Number(document.querySelector('#map').dataset.t) > 89")
+    step_until(ctx, phone, "Number(document.querySelector('#map').dataset.t) > 89")
     assert_in_step(lap, phone)
     assert not errors
 
