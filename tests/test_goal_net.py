@@ -577,3 +577,15 @@ def test_nobody_is_stopped_dead_by_a_net_going_round_it():
                     hits.append(((sx, sy), round(change, 1)))
                     break
     assert hits == []
+
+
+def test_a_run_at_the_goal_mouth_is_not_slowed_by_the_net_behind_it():
+    """Lesson 200's audit: counting the back net reached through the goal mouth slowed every run at
+    the goal in open play, to 4.4 m/s at the line. Only a net met from outside the goal counts; going
+    round the goal behind or beside it, the net still slows him."""
+    from ninety.sim.engine import net_room
+    for out in (0.0, 1.0, 3.0, 5.0):
+        assert net_room(PITCH_X - out, MID, 8.0, 0.0) is None  # straight at the centre of the goal
+        assert net_room(out, MID + 2.0, -8.0, -1.0) is None  # the other goal, a little across
+    assert net_room(PITCH_X + 3.5, MID, -3.0, 0.0) == pytest.approx(1.5)  # behind it, at the back
+    assert net_room(PITCH_X + 1.0, MID + GOAL_HALF_WIDTH + 1.0, 0.0, -3.0) == pytest.approx(1.0)  # beside

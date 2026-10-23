@@ -31,6 +31,7 @@ from ninety.sim.body import (
     STRIKE_FACING,
     TURN_RATE,
     V0_MEAN,
+    V0_SD,
     Body,
     can_get_to,
     relative_speed,
@@ -601,11 +602,19 @@ def settle_s(first_touch: float) -> float:
     return 0.3 + 0.3 * (1 - first_touch)
 
 
+# Beyond this from a goal line no net is within a stop at the fastest a body can run (P9's top-speed
+# capability, four standard deviations up, braked as body.stopping_distance has him), less his body's edge
+NET_ROOM_REACH_M = NET_DEPTH_M + stopping_distance(V0_MEAN + 4 * V0_SD) + shape.SHOULDER_BREADTH_M / 2
+
+
 def net_room(x: float, y: float, vx: float, vy: float) -> float | None:
-    """How far he runs the way (vx, vy) points before his centre meets a goal's net (NETS); None if
-    he never does, or is nowhere near a goal."""
+    """How far he runs the way (vx, vy) points before his centre meets a goal's net (NETS) from
+    outside the goal: a net he would reach through the goal mouth, over the line between the posts, is
+    not counted (a run into the goal is play, and the nets inside it were never met going round it;
+    lesson 200's audit: counted, every run at the goal was slowed to 4.4 m/s at the line). None if he
+    meets none, or is nowhere near a goal."""
     speed = math.hypot(vx, vy)
-    if speed < 1e-9 or NET_DEPTH_M + 6.0 < min(x, PITCH_X - x):  # design: 6 m, beyond any stop
+    if speed < 1e-9 or NET_ROOM_REACH_M < min(x, PITCH_X - x):
         return None
     far = (x + vx / speed * 100.0, y + vy / speed * 100.0)
     rx, ry = far[0] - x, far[1] - y
@@ -617,8 +626,13 @@ def net_room(x: float, y: float, vx: float, vy: float) -> float | None:
             continue
         s = ((cx - x) * qy - (cy - y) * qx) / den
         u = ((cx - x) * ry - (cy - y) * rx) / den
-        if 0.0 <= s <= 1.0 and 0.0 <= u <= 1.0:
-            best = s * 100.0 if best is None else min(best, s * 100.0)
+        if not (0.0 <= s <= 1.0 and 0.0 <= u <= 1.0):
+            continue
+        line = PITCH_X if max(cx, dx) > PITCH_X / 2 else 0.0  # the goal line of this net
+        if rx and 0.0 <= (line - x) / rx < s:  # over that line first: in the mouth, between the posts?
+            if abs(y + ry * (line - x) / rx - PITCH_Y / 2) < GOAL_HALF_WIDTH:
+                continue
+        best = s * 100.0 if best is None else min(best, s * 100.0)
     return best
 
 
@@ -628,11 +642,9 @@ def steer(p: Player, tx: float, ty: float, want_speed: float) -> None:
     he runs toward it no faster than he could stop before it, as the fetcher does before the boards
     (L14, body.stopping_speed): going round a goal, a way that flipped between a post and a back
     corner, or grazed a post, met the net and it stopped him dead (lesson 200)."""
-    ways = (net_room(p.x, p.y, p.vx, p.vy), net_room(p.x, p.y, tx - p.x, ty - p.y))
-    rooms = [r for r in ways if r is not None]
-    if rooms:  # the way he is running or means to run, whichever meets a net first (L14)
-        # to his body's edge, not his centre: half a shoulder, the outline at its widest (P11)
-        want_speed = min(want_speed, stopping_speed(min(rooms) - shape.SHOULDER_BREADTH_M / 2))
+    room = net_room(p.x, p.y, p.vx, p.vy)  # the way he is running
+    if room is not None:  # to his body's edge, not his centre: half a shoulder, its widest (P11)
+        want_speed = min(want_speed, stopping_speed(room - shape.SHOULDER_BREADTH_M / 2))
     x, y, p.vx, p.vy = move_body(p.x, p.y, p.vx, p.vy, tx, ty, want_speed, p.physique, DT)
     # No wall at the lines: players may run past them, as in real matches. Targets stay on the
     # pitch, so they slow down and come back; only the advertising boards and the goals' nets stop
