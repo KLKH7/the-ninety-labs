@@ -505,6 +505,36 @@ read (inline or over MCP), passes `confidence` and drops `team_confidence`; chec
 Analyst's prompt from the fixture. Whether to show it to them is the agent layer's call, once it
 means something.
 
+## Broadcast framing: a known limit of the metric at set-piece deliveries
+
+**The metric.** `tests/test_render_camera.py` counts a live frame as well framed when the ball is in
+the picture's CENTRAL box and the pitch fills at least `PITCH_SHARE_MIN` of the picture. It asserts
+85% of live frames on six held-out seeds.
+
+**The finding.** Two corner-camera designs reached the bar on #179's engine, and three blind critics
+preferred the camera that missed it. Both designs are parked, unmerged:
+- `claude/camera-corner-cut` (#204): a cut to a side camera at the delivery.
+- `claude/camera-corner-delivery`: zooming to the receiving area.
+
+The critic reports are not committed; the numbers below are in each branch's commit message.
+
+| Design | Seed 3 (#179's engine), raw | Critic's verdict |
+|---|---|---|
+| #201: corner framing until the kick | 0.811 | preferred |
+| Delivery-aware zoom | 0.905 | worse in both pairs |
+| Cut at the delivery | 0.886 | split |
+
+What the critics reported against the designs that scored higher:
+- The lens closed in on the taker's group before the kick, so the goal and box were out of the picture for about 4 s across the delivery.
+- The camera whip-panned at the strike.
+- A cut landed while the ball was in flight.
+
+What they asked for: keep the taker, the penalty area and the goal in the picture until the ball has arrived. Then frame the play.
+
+**What it means.** At a set-piece delivery, "the ball central with 60% pitch" rewards the tight shot viewers dislike, near a near-side corner especially. Lesson 177 has the history.
+
+**Planned, not done.** A revision of the metric for set-piece deliveries, for example the goal and box in the picture from the kick until the ball arrives. It will be set before measuring and reviewed. The test is unchanged until then.
+
 ## Late drop in high-intensity running (R7)
 
 Fixed on 2026-10-17, before any engine change was measured with it and before the command had
