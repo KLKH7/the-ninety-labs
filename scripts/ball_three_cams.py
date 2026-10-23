@@ -54,7 +54,7 @@ def _seed(clip: Path) -> int:
 
 
 def raw(clips: list[Path], out: Path, detectors: dict[str, tuple[str, str]], broadcast_name: str,
-        tactical: bool = True) -> None:
+        tactical: bool = True, broadcast: bool = True) -> None:
     from ninety.vision import frame_index, fuse, observe
     from ninety.vision.detect import detect_rows, frame_rows, labels_for, trained_resolution
     from ninety.vision.model import load, model
@@ -75,14 +75,15 @@ def raw(clips: list[Path], out: Path, detectors: dict[str, tuple[str, str]], bro
 
         frame_index.write_index(clip)
         frame_index.write_indexes(clip)
-        det, label, field = loaded[broadcast_name]
-        rows = frame_rows(clip)
-        dets = detect_rows(det, rows, label, field)
-        lap("detect broadcast")
-        _dets(out / "detections" / "broadcast" / f"seed{seed}.jsonl", dets)
-        _write(out / "broadcast" / f"seed{seed}.jsonl",
-               observe.observe([r["image"] for r in rows], dets, _rgb))
-        lap("observe broadcast")
+        if broadcast:
+            det, label, field = loaded[broadcast_name]
+            rows = frame_rows(clip)
+            dets = detect_rows(det, rows, label, field)
+            lap("detect broadcast")
+            _dets(out / "detections" / "broadcast" / f"seed{seed}.jsonl", dets)
+            _write(out / "broadcast" / f"seed{seed}.jsonl",
+                   observe.observe([r["image"] for r in rows], dets, _rgb))
+            lap("observe broadcast")
         for name, (det, label, field) in loaded.items() if tactical else ():
             placed = {}
             for view, folder in frame_index.views(clip).items():
@@ -134,6 +135,7 @@ def main(argv: list[str] | None = None) -> None:
                     help="a second tactical detector, e.g. ours-tactical")
     ap.add_argument("--tactical-weights", default=None)
     ap.add_argument("--skip-tactical", action="store_true", help="the broadcast only")
+    ap.add_argument("--skip-broadcast", action="store_true", help="the tactical lenses only")
     ap.add_argument("--src", type=Path, help="rejudge: the raw run's folder")
     ap.add_argument("--out", type=Path, required=True)
     a = ap.parse_args(argv)
@@ -143,7 +145,7 @@ def main(argv: list[str] | None = None) -> None:
     dets = {a.checkpoint: (a.checkpoint, a.weights)}
     if a.tactical_checkpoint:
         dets[a.tactical_checkpoint] = (a.tactical_checkpoint, a.tactical_weights)
-    raw(a.clips, a.out, dets, a.checkpoint, not a.skip_tactical)
+    raw(a.clips, a.out, dets, a.checkpoint, not a.skip_tactical, not a.skip_broadcast)
 
 
 if __name__ == "__main__":
