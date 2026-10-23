@@ -953,8 +953,7 @@ class Engine:
             return True
         bx, by = self.ball[0], self.ball[1]
         if carrier.id == self.held_by:  # in a keeper's hands: to kick it he faces it, no side needed
-            return abs(decisions.turn_deg(fmath.atan2(ty - by, tx - bx), carrier.heading)) <= math.degrees(
-                decisions.STRIKE_FACING)
+            return decisions.faces(carrier.heading, tx - bx, ty - by)
         if not decisions.can_strike(bx - carrier.x, by - carrier.y, carrier.heading, tx - bx, ty - by):
             return False
         if self.set_by:

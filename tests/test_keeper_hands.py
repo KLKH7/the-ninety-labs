@@ -174,6 +174,10 @@ def test_a_rolled_throw_is_bowled_from_the_grass_as_the_estimate_flies_it(monkey
     assert abs(aimed[0][0] - want) < 1e-9
     drops = [a - b for a, b in zip(heights, heights[1:], strict=False)]
     assert drops and max(drops) <= BALL_TO_FEET * DT + 1e-9  # brought down, not dropped in one frame
+    down = [d for d in drops if d > 0]  # and at that rate: as fast as it came up (P6), no slower
+    # the last part goes in the frame it is let go
+    assert len(down) == int(KEEPER_HOLD_Z / (BALL_TO_FEET * DT))
+    assert all(abs(d - BALL_TO_FEET * DT) < 1e-9 for d in down)
 
 def test_a_lunge_already_on_its_way_cannot_take_it_from_his_hands():
     # Law 12: nobody may challenge a keeper for the ball he holds; a lunge struck before the catch
@@ -310,3 +314,59 @@ def test_he_throws_at_any_angle_but_turns_to_kick_it_from_his_hands(monkeypatch)
             assert e.windup and e.windup[3] == "drop"  # let fall only once he faces it
             off = decisions.turn_deg(math.atan2(20.0, 3.0), k.heading)
             assert abs(off) <= math.degrees(decisions.STRIKE_FACING)
+
+
+def test_a_kick_to_a_team_mate_behind_him_still_leaves_inside_six_seconds(monkeypatch):
+    # Law 12, the worst case: at KEEPER_RELEASE_S he chooses a kick from his hands to a team-mate
+    # behind him; he turns to face it (P16), lets it fall and strikes it, all before six seconds.
+    e, k = caught()
+    start = e.t
+    target = (k.x - 0.5, k.y + 15.0)  # behind his facing up the pitch, by more than STRIKE_FACING
+    n = decisions.Option("pass", -1.0, target, receiver="h2", lofted=True)
+    o = decisions.Option("pass", 1.0, target, receiver="h2", lofted=True)
+    monkeypatch.setattr(e, "release_options", lambda scene: (n, o, None))
+    struck = None
+    while e.t - start < KEEPER_HOLD_S + 1.0:
+        e.step()
+        if e.held_by != k.id:
+            struck = e.t - start
+            break
+    assert struck is not None and struck < KEEPER_HOLD_S
+    assert e.kicked and e.kicked["type"] == "pass" and e.kicked["player"] == k.id
+
+
+def test_a_lunge_he_would_evade_does_not_push_the_ball_out_of_his_hands():
+    # Law 12: nobody may challenge him, and he has no dribble to push away from a lunge on its way.
+    e, k = caught()
+    for _ in range(10):
+        e.step()
+    attacker = next(q for q in e.players if q.team == "away" and q.role != "GK")
+    attacker.x, attacker.y = e.ball[0] + 1.5, e.ball[1]
+    e.lunges[attacker.id] = e.t + 0.3  # still on its way,
+    e.evade_at[attacker.id] = e.t  # and he would have reacted to it by now
+    e.duels()
+    assert e.held_by == k.id and e.possessor == k.id and e.dribbler is None
+    assert abs(e.ball[2] - KEEPER_HOLD_Z) < 1e-9
+
+
+def test_his_error_never_throws_it_faster_than_an_arm_can_and_a_kick_is_not_held_to_that(monkeypatch):
+    # L15: the executed throw, with his error, stays under KEEPER_THROW_MPS; a drop kick does not.
+    for lofted, throw in ((True, True), (True, False)):
+        e, k = caught()
+        mate = next(iter(e.scene_for(k).mates))
+        o = decisions.Option("pass", 1.0, (mate[1], mate[2]), receiver=mate[0], lofted=lofted)
+        n = decisions.Option("pass", -1.0, (mate[1], mate[2]), receiver=mate[0], lofted=True)
+        monkeypatch.setattr(e, "release_options",
+                            lambda scene, o=o, n=n, t=throw: (o, n, None) if t else (n, o, None))
+        original = e.execute
+        monkeypatch.setattr(e, "execute", lambda *a, original=original, **kw: tuple(
+            30.0 * v / max(math.hypot(*original(*a, **kw)), 1e-9) for v in original(*a, **kw)))  # 30 m/s
+        e.release(k, e.scene_for(k))
+        start = e.t
+        while e.possessor == k.id and e.t - start < 2.0:
+            e.step()
+        speed = math.hypot(*e.ball[3:])
+        if throw:
+            assert speed <= decisions.KEEPER_THROW_MPS + 1e-6
+        else:
+            assert speed > 25.0

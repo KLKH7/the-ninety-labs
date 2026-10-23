@@ -340,13 +340,19 @@ def turn_deg(direction: float, heading: float) -> float:
     return math.degrees((direction - heading + math.pi) % (2 * math.pi) - math.pi)
 
 
+def faces(heading: float, dx: float, dy: float) -> bool:
+    """P16: does he face within STRIKE_FACING of the way (dx, dy)? One rule for every kick, from his
+    feet (can_strike) or from a keeper's hands (engine.can_strike)."""
+    return abs(turn_deg(fmath.atan2(dy, dx), heading)) <= math.degrees(STRIKE_FACING)
+
+
 def can_strike(ox: float, oy: float, heading: float, dx: float, dy: float) -> bool:
     """P16, the engine's own rule: with the ball at (ox, oy) from his body's centre and facing
     `heading`, can he strike it toward (dx, dy) now? Only once he faces within STRIKE_FACING of it
     (the widest run-up angle tested with no loss of speed or accuracy) with the ball on the side
     of his body toward it, so its way out leaves his surface (shape.py) rather than passing
     through him. A throw-in is the engine's own case (engine.can_strike: in his hands)."""
-    if abs(turn_deg(fmath.atan2(dy, dx), heading)) > math.degrees(STRIKE_FACING):
+    if not faces(heading, dx, dy):
         return False
     sx, sy = shape.nearest_on_spine(ox, oy, 0.0, 0.0, heading)
     return (ox - sx) * dx + (oy - sy) * dy >= 0
@@ -496,6 +502,8 @@ def strike_nodes(scene: Scene, tx: float, ty: float, lofted: bool, pace: float
     nodes = []
     for w, (d_deg, s_err, l_deg) in errors:
         v = struck_speed(speed, s_err, foot)
+        if scene.throw and scene.from_hands:  # L15: as the engine throws it, never faster than an arm can
+            v = min(v, KEEPER_THROW_MPS)
         loft = loft0 + math.radians(l_deg)
         nodes.append((w, math.radians(d_deg), v * fmath.cos(loft), v * fmath.sin(loft)))
     return nodes
