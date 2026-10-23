@@ -1992,10 +1992,12 @@ def test_at_a_dead_ball_the_presser_goes_in_time_and_does_not_spring_about_his_p
     leaves at his pressing pace: test_opponents_keep_out_of_the_penalty_area_at_a_goal_kick_...).
     Once off-ball movement changed play, seed 114 no longer came to that goal kick. The scene was
     found again by its premises, then checked to go red with the fix reverted (the presser back at
-    his pressing pace: 8 turns here): seed 134's goal kick at 1:05."""
-    e = Engine(134)
+    his pressing pace: 8 turns here): seed 134's goal kick at 1:05. The keeper's dive rules (lesson
+    198) changed that match too (a goal at 0:59); found again the same way: seed 124's goal kick at
+    2:56.64, 0 turns, and 8 with the presser's pace reverted from that moment."""
+    e = Engine(124)
     e.kickoff("home", setup=True)
-    while e.t < 65.44 - 1e-9:
+    while e.t < 176.64 - 1e-9:
         e.step()
     r, brain = e.restart, e.brains["home"]
     assert r is not None and r.kind == "goal_kick" and brain.pressers  # premise: the goal kick waits
@@ -2006,7 +2008,7 @@ def test_at_a_dead_ball_the_presser_goes_in_time_and_does_not_spring_about_his_p
              if q.team == p.team and q is not p and math.dist((q.x, q.y), (tx, ty)) < 0.7]
     assert crowd  # premise: a team-mate stands a hair from his place
     turns, history = 0, []
-    while e.t < 71.44 and e.restart is r:
+    while e.t < 182.64 and e.restart is r:
         e.step()
         history.append((p.vx, p.vy))
         if len(history) > 10:
