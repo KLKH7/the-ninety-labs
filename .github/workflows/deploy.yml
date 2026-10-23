@@ -3,8 +3,8 @@ name: deploy
 # Runs after CI passes on main. Signs in to Azure with OIDC: GitHub issues a short-lived token
 # that Azure trusts only for this repo's main branch, so no Azure secret is stored anywhere.
 #
-# This job only deploys code (`azd deploy api`): it builds the image, pushes it and rolls a new
-# revision. Infrastructure changes are applied by `azd provision` from a maintainer's machine,
+# This job only deploys code (`azd deploy api`): it builds the image (API, MCP server, viewer and
+# the pinned Replay bundle), pushes it, rolls a new revision and runs the live smoke test on it. Infrastructure changes are applied by `azd provision` from a maintainer's machine,
 # because the deploy identity is Contributor and cannot create role assignments (infra/README.md).
 on:
   workflow_run:
@@ -73,13 +73,15 @@ jobs:
           azd env set NINETY_COMMIT "$DEPLOY_SHA"
       - run: azd deploy api --no-prompt
         if: github.event_name == 'workflow_dispatch' || steps.freshness.outputs.current == 'true'
-      - name: Smoke test the live revision
+      - name: Wait for the live revision
         # Passes only when the public URL answers with the commit just deployed, so an old
         # revision still serving traffic is a failure, not a pass.
+        id: live
         if: github.event_name == 'workflow_dispatch' || steps.freshness.outputs.current == 'true'
         run: |
           fqdn=$(az containerapp list -g "$AZURE_RESOURCE_GROUP" \
             --query "[?tags.\"azd-service-name\"=='api' && tags.\"azd-env-name\"=='$AZURE_ENV_NAME'].properties.configuration.ingress.fqdn | [0]" -o tsv)
+          echo "url=https://$fqdn" >> "$GITHUB_OUTPUT"
           for attempt in $(seq 1 20); do
             body=$(curl -fsS --max-time 30 "https://$fqdn/api/health" || true)
             echo "attempt $attempt: $body"
@@ -88,3 +90,18 @@ jobs:
           done
           echo "https://$fqdn/api/health never reported commit $DEPLOY_SHA"
           exit 1
+      - uses: astral-sh/setup-uv@v7
+        if: steps.live.outcome == 'success'
+      - name: Live smoke test
+        # The deployed demo in headless Chromium: the viewer plays the Replay bundle with its
+        # graphics, the keyed routes are configured and closed, no answer key is served
+        # (tests/test_live_smoke.py). NINETY_REQUIRE_LIVE makes a missing URL a failure, not a skip.
+        if: steps.live.outcome == 'success'
+        env:
+          NINETY_LIVE_URL: ${{ steps.live.outputs.url }}
+          NINETY_EXPECT_COMMIT: ${{ env.DEPLOY_SHA }}
+          NINETY_REQUIRE_LIVE: "1"
+        run: |
+          uv sync --locked
+          uv run playwright install --with-deps chromium
+          uv run pytest -q tests/test_live_smoke.py

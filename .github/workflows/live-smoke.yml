@@ -1,0 +1,27 @@
+name: live-smoke
+
+# The deployed demo, checked twice a day until judging ends (Nov 10): the same smoke test the deploy
+# runs (tests/test_live_smoke.py), against the public URL in the repo variable NINETY_LIVE_URL. No
+# Azure sign-in: it only reads the public site, as a judge would. A red run is an outage to fix.
+on:
+  schedule:
+    - cron: "17 7,19 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    if: vars.NINETY_LIVE_URL != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - run: uv sync --locked
+      - run: uv run playwright install --with-deps chromium
+      - run: uv run pytest -q tests/test_live_smoke.py
+        env:
+          NINETY_LIVE_URL: ${{ vars.NINETY_LIVE_URL }}
+          NINETY_REQUIRE_LIVE: "1"
