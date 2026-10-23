@@ -2246,4 +2246,4 @@ short and actionable. This file is public: no research sources, product names or
   tests plant the look's own noise, at the renderer's own amplitude, not a clean image.
 - **Check:** `tests/test_vision_pitch.py::test_sensor_grain_is_not_a_marking_and_a_far_line_with_a_gap_still_is`
   (grain at params.noise's top, 0.02) fails with the blur removed; the before and after on
-  validation clips are in `docs/eval/shot-outcomes.json`.
+  validation clips are in `docs/eval/marking-grain.md`.
