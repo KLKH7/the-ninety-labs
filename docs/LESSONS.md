@@ -2179,6 +2179,34 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_personalizer.py::test_the_instructions_keep_the_claim_s_clock_for_every_persona`;
   `tests/test_personalizer_live.py::test_a_variant_the_personalizer_s_re_check_replaced_is_held_with_its_reason`.
 
+### 212. A tolerance converted to pixels for one camera is wrong for the next
+- **What happened:** the feet-in-box check (GROUNDING V6) allows 0.45 m between a player's tracked
+  ground point and the bottom of his box. It converted that to pixels as box height / 1.8, a
+  scale that holds for a camera looking across the pitch. On a touch, the renderer draws the foot
+  at the ball, up to about 0.9 m out. From the broadcast gantry, about 25 degrees down, a reach
+  toward the lens moved the box bottom only about 0.42 m in that scale, so the check never failed.
+  From the tactical lens, 35 to 40 degrees down, the same reach is about 0.65 to 0.75 m. Dataset
+  tactical lost training clips 70 and 79, and possibly test clip 900004, to frames whose drawing
+  was right.
+- **Rule:** a tolerance stated in metres is measured in metres, through the frame's own camera
+  matrix, never with a pixel scale fitted to one camera. An allowance for a real motion is bounded
+  by the drawing's own limit (here the leg's reach), so it cannot excuse a drawing beyond it.
+- **Check:** the V6 high-lens tests in `tests/test_render_checks.py`.
+  - A 1.0 m reach to a touched ball passes, though the side-on slack alone fails it.
+  - These all fail:
+    - the same foot with no touch;
+    - a 2.5 m "reach";
+    - a 0.3 m touch with a 1.0 m box;
+    - a floating body;
+    - a box moved sideways;
+    - a chest or thigh touch;
+    - rows far from the touch, or after an edit cut.
+  - Fourteen mutations each turn a test red; one more is equivalent.
+  - Two independent reviews, both cited in the PR, found holes in the earlier drafts:
+    - the first draft's ground disc excused floating and sideways boxes and spilled across cuts;
+    - the second still let a body rise on a touch away from the camera.
+    The rule now only extends the bottom down the picture, toward the foot drawn at the ball.
+
 ### 208. A script inside YAML is code: parse it before a run is approved
 - **What happened:** resolving a merge conflict in `agents-live.yml`, two new `case` branches were
   joined and the `;;` closing one was lost. The YAML still loaded and the merge was checked only
