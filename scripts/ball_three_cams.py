@@ -53,7 +53,8 @@ def _seed(clip: Path) -> int:
     return json.loads((clip / "clip.json").read_text())["seed"]
 
 
-def raw(clips: list[Path], out: Path, detectors: dict[str, tuple[str, str]], broadcast_name: str) -> None:
+def raw(clips: list[Path], out: Path, detectors: dict[str, tuple[str, str]], broadcast_name: str,
+        tactical: bool = True) -> None:
     from ninety.vision import frame_index, fuse, observe
     from ninety.vision.detect import detect_rows, frame_rows, labels_for, trained_resolution
     from ninety.vision.model import load, model
@@ -82,7 +83,7 @@ def raw(clips: list[Path], out: Path, detectors: dict[str, tuple[str, str]], bro
         _write(out / "broadcast" / f"seed{seed}.jsonl",
                observe.observe([r["image"] for r in rows], dets, _rgb))
         lap("observe broadcast")
-        for name, (det, label, field) in loaded.items():
+        for name, (det, label, field) in loaded.items() if tactical else ():
             placed = {}
             for view, folder in frame_index.views(clip).items():
                 rows = frame_rows(folder)
@@ -97,21 +98,52 @@ def raw(clips: list[Path], out: Path, detectors: dict[str, tuple[str, str]], bro
               flush=True)
 
 
+def rejudge(src: Path, out: Path) -> None:
+    """Every saved observations file under `src` judged again by today's trust test (observe.place
+    with its camera kind's band, then observe.agree), cameras kept; the views fused again. No
+    detection and no fit runs."""
+    from ninety.vision import fuse, observe
+    from ninety.vision.track import read_observations
+
+    def judged(path: Path) -> list[dict]:
+        rows = read_observations(path)
+        band = observe.FIXED_HEIGHT_BAND if rows and rows[0].get("fixed") else observe.HEIGHT_BAND
+        return observe.agree([observe.place(r, band) for r in rows])
+
+    for f in sorted((src / "broadcast").glob("seed*.jsonl")):
+        _write(out / "broadcast" / f.name, judged(f))
+    for tac in sorted(src.glob("tactical-*")):
+        name = tac.name.removeprefix("tactical-")
+        for f in sorted(tac.glob("seed*.jsonl")):
+            placed = {}
+            for d in sorted(src.glob(f"view-*-{name}")):
+                view = d.name.removeprefix("view-").removesuffix(f"-{name}")
+                placed[view] = judged(d / f.name)
+                _write(out / d.name / f.name, placed[view])
+            if placed:  # a run from before each lens's lines were kept has none to fuse
+                _write(out / tac.name / f.name, fuse.fuse(placed))
+
+
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description="The ball from three cameras, run offline on rendered clips.")
-    ap.add_argument("stage", choices=["raw"])
+    ap.add_argument("stage", choices=["raw", "rejudge"])
     ap.add_argument("clips", nargs="*", type=Path)
     ap.add_argument("--checkpoint", default="ours-freeze")
     ap.add_argument("--weights")
     ap.add_argument("--tactical-checkpoint", default=None,
                     help="a second tactical detector, e.g. ours-tactical")
     ap.add_argument("--tactical-weights", default=None)
+    ap.add_argument("--skip-tactical", action="store_true", help="the broadcast only")
+    ap.add_argument("--src", type=Path, help="rejudge: the raw run's folder")
     ap.add_argument("--out", type=Path, required=True)
     a = ap.parse_args(argv)
+    if a.stage == "rejudge":
+        rejudge(a.src, a.out)
+        return
     dets = {a.checkpoint: (a.checkpoint, a.weights)}
     if a.tactical_checkpoint:
         dets[a.tactical_checkpoint] = (a.tactical_checkpoint, a.tactical_weights)
-    raw(a.clips, a.out, dets, a.checkpoint)
+    raw(a.clips, a.out, dets, a.checkpoint, not a.skip_tactical)
 
 
 if __name__ == "__main__":
