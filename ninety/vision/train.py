@@ -9,6 +9,13 @@ exported dataset and the commit. The run writes `train-manifest.json` next to th
 config, dataset summary, rfdetr version, commit, and the sha256 of the best checkpoint. The
 checkpoint stays out of git; `--name` is the `checkpoint` field written to detections.jsonl.
 
+The manifest is written when training starts (`finished` empty) and completed when it ends. A run
+stopped from outside, at a time cap, ends without completing it; then
+
+    uv run python -m ninety.vision.train --out runs/train/v1 --record-only "time cap of 110 minutes"
+
+records the best checkpoint it has, with the reason in `stopped`.
+
 Runs on whatever rfdetr finds (CUDA, Apple MPS or CPU). Use our own Azure GPU if we have quota,
 never a hosted third-party service: the renders do not leave our resources.
 """
@@ -82,6 +89,37 @@ def train_kwargs(cfg: dict, data: Path, out: Path, resume: Path | None = None) -
     }
 
 
+def _now() -> str:
+    return dt.datetime.now(dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def record(out: Path, manifest: dict, stopped: str | None = None) -> dict:
+    """Complete the run's manifest with its best checkpoint; `stopped` says why a run ended early."""
+    best = out / BEST
+    manifest = {
+        **manifest,
+        "finished": _now(),
+        "stopped": stopped,
+        "checkpoint": BEST if best.exists() else None,
+        "checkpoint_sha256": sha256(best) if best.exists() else None,
+    }
+    (out / "train-manifest.json").write_text(json.dumps(manifest, indent=2))
+    return manifest
+
+
+def record_only(out: Path, why: str) -> dict:
+    """Record a run that was stopped before it could complete its own manifest, never a finished one."""
+    path = out / "train-manifest.json"
+    if not path.exists():
+        raise FileNotFoundError(f"{path} is missing: the run never started")
+    manifest = json.loads(path.read_text())
+    if manifest.get("finished"):
+        raise ValueError(f"{path} is already complete: the run finished on {manifest['finished']}")
+    if not why.strip():
+        raise ValueError("--record-only needs the reason the run stopped")
+    return record(out, manifest, stopped=why)
+
+
 def _git_commit() -> str | None:
     """The commit being trained: from git, or NINETY_COMMIT when the code was copied without .git."""
     if os.environ.get("NINETY_COMMIT"):
@@ -96,10 +134,10 @@ def _git_commit() -> str | None:
 
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description="Fine-tune RF-DETR Small on our renders.")
-    ap.add_argument("--data", type=Path, required=True, help="exported COCO dataset (train/, valid/)")
+    ap.add_argument("--data", type=Path, help="exported COCO dataset (train/, valid/)")
     ap.add_argument("--out", type=Path, required=True, help="output directory for checkpoints")
     ap.add_argument("--config", type=Path, default=Path(__file__).with_name("finetune.json"))
-    ap.add_argument("--name", required=True, help="checkpoint name for detections.jsonl, e.g. ours-v1")
+    ap.add_argument("--name", help="checkpoint name for detections.jsonl, e.g. ours-v1")
     ap.add_argument("--epochs", type=int, default=None, help="override for a smoke run only")
     ap.add_argument(
         "--init",
@@ -118,22 +156,31 @@ def main(argv: list[str] | None = None) -> None:
         action="store_true",
         help="continue a killed run from <out>/last.ckpt, same config and data",
     )
+    ap.add_argument(
+        "--record-only",
+        metavar="WHY",
+        default=None,
+        help="do not train: complete the manifest of a run in --out that was stopped, with the reason",
+    )
     a = ap.parse_args(argv)
+    if a.record_only is not None:
+        m = record_only(a.out, a.record_only)
+        print(json.dumps({k: m[k] for k in ("name", "stopped", "checkpoint", "checkpoint_sha256")}, indent=2))
+        return
+    if a.data is None or a.name is None:
+        ap.error("--data and --name are required to train")
     cfg = json.loads(a.config.read_text())
     if a.epochs is not None:
         cfg["train"]["epochs"] = a.epochs
     dataset = check_dataset(a.data)
     a.out.mkdir(parents=True, exist_ok=True)
     resume = resume_from(a.out) if a.resume else None
-    started = dt.datetime.now(dt.UTC)
+    started = _now()
     init = init_from(a.init) if a.init else None
-    model = load(str(a.init) if a.init else None)
-    model.train(**train_kwargs(cfg, a.data, a.out, resume))
-    best = a.out / BEST
     manifest = {
         "name": a.name,
-        "started": started.strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "finished": dt.datetime.now(dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "started": started,
+        "finished": None,
         "commit": _git_commit(),
         "rfdetr": importlib.metadata.version("rfdetr"),
         "config": cfg,
@@ -145,10 +192,14 @@ def main(argv: list[str] | None = None) -> None:
             k: {kk: vv for kk, vv in v.items() if kk != "seeds"} if isinstance(v, dict) else v
             for k, v in dataset.items()
         },
-        "checkpoint": BEST if best.exists() else None,
-        "checkpoint_sha256": sha256(best) if best.exists() else None,
+        "stopped": None,
+        "checkpoint": None,
+        "checkpoint_sha256": None,
     }
     (a.out / "train-manifest.json").write_text(json.dumps(manifest, indent=2))
+    model = load(str(a.init) if a.init else None)
+    model.train(**train_kwargs(cfg, a.data, a.out, resume))
+    manifest = record(a.out, manifest)
     print(json.dumps({k: manifest[k] for k in ("name", "checkpoint", "checkpoint_sha256")}, indent=2))
 
 

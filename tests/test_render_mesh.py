@@ -206,6 +206,15 @@ def test_the_page_turns_steps_and_touches_like_the_python_pose(page):
         {**base, "action": "walk", "phase": 5.3, "speed": 2.0, "plant_l": [40.12, 30.2, 0.4, 0.0, 0.4]},
         {**base, "action": "walk", "phase": 1.0, "speed": 0.6},
         {**base, "action": "stand", "phase": 2.0, "speed": 0.4},
+        # The runner's bob (in lift), a trunk leaning into a sprint start or coming up braking, and
+        # the sprint's wider arm swing (scene.pace, scene.PUMP).
+        {**base, "action": "run", "phase": 0.9, "speed": 6.5, "lift": -0.025, "lean": 0.31, "pump": 1.2,
+         "plant_r": [40.05, 29.9, 0.4, 0.0]},
+        {**base, "action": "walk", "phase": 3.6, "speed": 3.4, "lift": 0.02, "lean": -0.12, "pump": 1.0},
+        {**base, "action": "stand", "speed": 0.1, "lean": 0.4},
+        # A keeper's dive part way (from standing), and getting up from one into a walk (dive_up).
+        {**base, "action": "dive", "dive": -0.4},
+        {**base, "action": "walk", "phase": 2.6, "speed": 1.2, "dive_up": 0.55},
     ]
     for i, pose in enumerate(poses):
         heading = 0.4

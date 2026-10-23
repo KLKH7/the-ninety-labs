@@ -59,6 +59,16 @@ FOOT_REACH_M, KEEPER_REACH_M, FRAME_SLACK_M = 1.0, 1.48, 0.6
 # P5: the goal frame (Law 1: posts 7.32 m apart, bar 2.44 m high) is a contact too; a ball
 # within this distance of it may rebound without an event.
 WOODWORK_NEAR_M = 0.6
+# P5: so is a goal's net, as the renderer draws it (web/render/render.js, buildNet; Law 1 allows
+# nets without shaping them): its back 2 m behind the goal line and 2 m high, its sides, and its
+# roof sloping down to the back from the crossbar. A ball inside the goal touching it (lesson 184):
+# its centre a radius from the back or a side (Law 2: 0.11 m), or its top (its lowest point z plus
+# its diameter) at the roof; to within two roundings of a written position (measurement precision).
+NET_DEPTH_M, NET_BACK_M, BALL_RADIUS_M = 2.0, 2.0, 0.11
+NET_TOUCH_SLACK_M = 2 * POSITION_PRECISION_M
+# P18, design: a fouled player is on his feet at least this long before the restart is taken.
+# The engine aims at 1.5 s (FALL_UP_BEFORE_S). This floor is the requirement.
+FOUL_UP_BEFORE_S = 1.0
 APPROACH_TOLERANCE_M = 0.04  # P14: per frame; a ball at 1 m/s relative to him can still be met
 EXAMPLES = 5
 
@@ -261,7 +271,7 @@ def check_physics(events: list[dict], frames: list[dict], fps: float, roster: li
             continue
         if not (consecutive(f0, f1) and consecutive(f1, f2)):
             continue
-        if any(near_woodwork(f["ball"]) for f in (f0, f1, f2)):
+        if any(near_woodwork(f["ball"]) or near_net(f["ball"]) for f in (f0, f1, f2)):
             continue
         z = (f0["ball"]["z"], f1["ball"]["z"], f2["ball"]["z"])
         if min(z) <= AIRBORNE_M:
@@ -300,6 +310,21 @@ def near_woodwork(b: dict) -> bool:
     return on_line and in_frame
 
 
+def near_net(b: dict) -> bool:
+    """P5: inside a goal and touching its net's back, a side or its roof, where the net stops the
+    ball."""
+    for line, out in ((0.0, -1.0), (105.0, 1.0)):
+        depth, off = (b["x"] - line) * out, abs(b["y"] - 34)
+        roof = 2.44 + (NET_BACK_M - 2.44) * min(depth, NET_DEPTH_M) / NET_DEPTH_M
+        below = roof - (b["z"] + 2 * BALL_RADIUS_M)  # from the ball's top up to the roof
+        if not (0 < depth <= NET_DEPTH_M and off <= 3.66 and below >= -NET_TOUCH_SLACK_M):
+            continue  # not inside this goal
+        reach = BALL_RADIUS_M + NET_TOUCH_SLACK_M
+        if NET_DEPTH_M - depth <= reach or 3.66 - off <= reach or below <= NET_TOUCH_SLACK_M:
+            return True
+    return False
+
+
 def check_contacts(events: list[dict], frames: list[dict], keepers: set[str], problems: Problems) -> None:
     """P14: a deflection or interception names a player who could have touched the ball."""
     by_frame = {f["frame"]: f for f in frames}
@@ -331,6 +356,47 @@ def check_contacts(events: list[dict], frames: list[dict], keepers: set[str], pr
                 if d1 > reach and d1 - d2 > APPROACH_TOLERANCE_M:
                     problems["P14 touch possible"].append(
                         f"{e['id']}: {e['type']} by {e['player']}, but the ball was moving away from him")
+
+
+def check_foul_fall(events: list[dict], frames: list[dict], problems: Problems) -> None:
+    """P18: while a fouled player is down, fall is degrees over his feet (above 0 and at most 90,
+    *design*), fall_dir is the way his head goes, and action is down. He is upright for at least
+    FOUL_UP_BEFORE_S before the restart. A frame exactly on that instant may still be down
+    (*design*, one frame). A foul with no receiver, or with no set piece or kick-off after it,
+    is not held to that window (*design*: the clip does not show the restart)."""
+    restarts = [e for e in events if e.get("type") in ("set_piece", "kickoff")]
+    for f in frames:
+        for p in f.get("players", []):
+            fall, direction = p.get("fall"), p.get("fall_dir")
+            if fall is None and direction is None:
+                continue
+            if type(fall) not in (int, float) or not 0 < fall <= 90:  # *design*: above 0, at most flat
+                problems["P18 foul fall"].append(
+                    f"frame {f.get('frame')}: {p.get('id')} fall {fall} is not degrees over his feet")
+                continue
+            if p.get("action") != "down":
+                problems["P18 foul fall"].append(
+                    f"frame {f.get('frame')}: {p.get('id')} is at {fall}° with action {p.get('action')}")
+            if type(direction) not in (int, float):
+                problems["P18 foul fall"].append(
+                    f"frame {f.get('frame')}: {p.get('id')} is down with no fall_dir")
+    for foul in events:
+        if foul.get("type") != "foul" or not foul.get("receiver"):
+            continue
+        nxt = next((e for e in restarts if e.get("t", 0) >= foul.get("t", 0)), None)
+        if nxt is None:
+            continue
+        who = foul["receiver"]
+        for f in frames:
+            if not foul.get("t", 0) <= f.get("t", 0) <= nxt.get("t", 0):
+                continue
+            if f["t"] <= nxt["t"] - FOUL_UP_BEFORE_S:  # *design*: the frame on the floor may be down
+                continue
+            row = next((p for p in f.get("players", []) if p.get("id") == who), None)
+            if row and row.get("fall"):
+                problems["P18 foul fall"].append(
+                    f"frame {f.get('frame')}: {who} is still down "
+                    f"{nxt['t'] - f['t']:.2f} s before the restart")
 
 
 def check_events(events: list[dict], frames: list[dict], fps: float, meta: dict, problems: Problems,
@@ -484,6 +550,7 @@ def validate(clip: Path) -> Problems:
         return dict(problems)
     check_physics(events, frames, fps, meta.get("roster", []), problems, cut)
     check_events(events, frames, fps, meta, problems, cut)
+    check_foul_fall(events, frames, problems)
     return dict(problems)
 
 

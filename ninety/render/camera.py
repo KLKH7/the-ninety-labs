@@ -145,14 +145,25 @@ HOLD_SHARE = 0.3
 # second, a second), so the lens never pumps in and out or reverses in a frame.
 BOX_LEAVE_M = 6.0
 ZOOM_ACCEL_MPS2 = 6.0
-# Live play stays on the gantry through every attack; the tighter lens comes up for a throw-in, a
-# set piece, and for the restart after an edit cut: a medium shot, the taker about a third of the
-# picture high (TIGHT_HALF_M either side of him).
+# Live play stays on the gantry through every attack; the tighter lens comes up for a throw-in: a
+# medium shot, the taker about a third of the picture high (TIGHT_HALF_M either side of him).
 TIGHT_ACTIONS = ("throw",)
 TIGHT_HALF_M = 5.0
-# After an edit cut the gantry comes back closed up on the restart (TIGHT_HALF_M) for CUT_HOLD_S,
-# then eases out to the wide shot over this long, before the kick (edit.SHOW_BEFORE_RESTART_S).
-OPEN_EASE_S = 2.0
+# After a goal the gantry shows the goal itself this long, then a second camera beside it follows
+# the scorer's celebration, a medium shot SCORER_HALF_M either side of him, until the edit cuts to
+# the kick-off (design, after demo v1's critic: a fixed low shot beside the net showed the keeper
+# and never the scorer). Used when the render says who scored; otherwise the low angle at the net.
+GOAL_WIDE_S = 2.0
+SCORER_HALF_M = 6.0
+# A corner (Law 17): the ball is placed inside the corner arc, 1 m in radius (Law 1). design: while it
+# waits, the main camera frames it from the taker inward, the taker near the side of the picture and
+# the penalty area filling the rest, so the viewer sees where the ball will go rather than the run-off
+# beyond the flag (no source found: a design choice, lesson 177).
+CORNER_ARC_M = 1.0
+BALL_RADIUS_M = 0.11  # Law 2: a circumference of 68 to 70 cm
+# design: the taker kept a tenth of the picture in from each edge, so his run-up and the ball's first
+# metres are in shot as well as the ball (set before the corner rule was measured).
+CORNER_TAKER_MARGIN = 0.1
 NET_SETTLE_S = 2.6  # the mesh is back to rest by here; the angle itself holds CUT_HOLD_S
 
 
@@ -163,6 +174,9 @@ NET_SETTLE_S = 2.6  # the mesh is back to rest by here; the angle itself holds C
 # and height: left, right, top, bottom).
 PITCH_SHARE_MIN = 0.60
 CENTRAL = (0.2, 0.8, 0.15, 0.85)
+PITCH_MARGIN = 0.05  # the director keeps the pitch this much over PITCH_SHARE_MIN, for the zoom's lag
+#                      (design)
+CENTRE_MARGIN = 0.05  # the director aims the ball this far inside the box, so the pan's lag has room (design)
 
 
 def pitch_share(cam: Camera, step: int = 40) -> float:
@@ -261,7 +275,12 @@ class Director:
         self.tight_v = [0.0, 0.0]
         self.zoom_v = 0.0  # how fast the half-width is changing (m/s)
         self._box = False  # the box's closer lens is in (BOX_LEAVE_M)
-        self._open_until = -1.0  # the restart's closed-up shot after an edit cut (open_on_restart)
+        self._scorer: tuple[float, float] | None = None  # who scored, while he celebrates (step)
+        self._celebrate_from: float | None = None  # when the second camera picks him up
+        self.scorer_aim: list[float] | None = None
+        self.scorer_v = [0.0, 0.0]
+        self._ease_end = -1.0  # the ease out of it ends here, at the wide shot
+        self._corner_flag: tuple[float, float] | None = None  # the corner waiting to be taken
         self.half_width = params.half_width_m
         self.prev_ball: tuple[float, float] | None = None
         self.shake_phase = (self.rng.uniform(0, 6.28), self.rng.uniform(0, 6.28))
@@ -280,35 +299,40 @@ class Director:
         self.tight_aim = None
         self.zoom_v = 0.0
         self._box = False
-        self._open_until = -1.0
         self.prev_ball = None
+        self._scorer = None
+        self._celebrate_from = None
+        self.scorer_aim = None
         self._cut_kind = ""
         self._cut_until = -1.0
         self.net = None
+        self._corner_flag = None
 
     def open_on_restart(self) -> None:
-        """The first frame after a cut: the picture comes back on the restart with the gantry closed
-        up on it (TIGHT_HALF_M), so the edit reads as a cut to another shot rather than the players
-        jumping about the same one. It holds that CUT_HOLD_S, then eases back out to the wide shot
-        over the OPEN_EASE_S before the restart is taken (edit.SHOW_BEFORE_RESTART_S): one shot from
-        the gantry, no snap back after the kick. No second angle comes up while it does."""
-        self._open_until = self.t + self.dt + CUT_HOLD_S  # from the restart's first frame
+        """The first frame after a cut: the picture comes back on the gantry's own wide shot of the
+        restart, framed afresh where the ball is set, and holds it CUT_HOLD_S with no second angle,
+        so the edit reads as one cut into the play. The edit brings it back as the restart is
+        imminent (edit.SHOW_BEFORE_RESTART_S), so nobody stands still on screen for long.
+        Old (0.5.2 to 0.5.9): it came back closed up on the taker alone for CUT_HOLD_S, then pulled
+        out (demo v1's critic, #4 and #15)."""
         self._cut_kind = ""
-        self._cut_until = self._open_until + OPEN_EASE_S
-        # A cut, not a zoom: the warm-up before the restart framed the play wide; the shot opens
-        # closed up on the restart at once.
+        self._cut_until = self.t + self.dt + CUT_HOLD_S  # from the restart's first frame
         self.aim = None
         self.zoom_v = 0.0
 
     def _goal(self, bx: float, by: float, vx: float, vy: float) -> tuple[float, float, float]:
-        if self.t < self._open_until:  # closed up on the restart: the ball where it is set
-            return min(max(bx, 0.0), 105.0), min(max(by, 0.0), 68.0), TIGHT_HALF_M
+        self._goal_z = 0.0
+        corner = self._corner(bx, by)
+        if corner is not None:
+            return corner
         px, py = self._play(bx, by)
         ax = px + vx * self.p.lead_s
         ay = py + vy * self.p.lead_s
         ay = 34 + (ay - 34) * 0.75  # broadcasters rarely aim right at a touchline
-        ax = min(max(ax, 8.0), 97.0)
-        ay = min(max(ay, 12.0), 60.0)
+        # Broadcasters rarely aim at a goal line or a touchline, but never short of the ball: when
+        # the ball is past these the aim follows it to the line (lesson 175).
+        ax = min(max(ax, min(8.0, bx)), max(97.0, bx))
+        ay = min(max(ay, min(12.0, by)), max(60.0, by))
         if in_box(bx, by):
             self._box = True
         elif not in_box(bx, by, BOX_LEAVE_M):
@@ -320,7 +344,121 @@ class Director:
             zone = HOLD_SHARE * hw
             ax = min(max(self.aim[0], ax - zone), ax + zone)
         ax, ay = self._below_stands(ax, ay, hw)
+        # The ball in the centre and the pitch filling the picture, solved together: closing in moves
+        # the ball across the picture, so they alternate, and the ball has the last word where both
+        # cannot hold (a ball on a corner flag): it is never lost to the pitch (lesson 175).
+        on_pitch = 0.0 <= bx <= 105.0 and 0.0 <= by <= 68.0  # a ball over a line is play stopped
+        wide = self._ball_in_centre(bx, by, vx, vy, ax, ay, hw)
+        want = PITCH_SHARE_MIN + PITCH_MARGIN
+        if on_pitch and pitch_share(self._shot((*wide, 0.0), hw), step=80) < want:
+            cx, cy, chw = ax, ay, hw
+            for _ in range(4):  # closing in moves the ball across the picture: settles in 3 or 4
+                cx, cy = self._ball_in_centre(bx, by, vx, vy, cx, cy, chw)
+                chw = self._pitch_fills(cx, cy, chw)
+            cx, cy = self._ball_in_centre(bx, by, vx, vy, cx, cy, chw)
+            # Closed in only if that does fill the picture with pitch, the ball in the middle; where
+            # no shot does (a ball on a corner flag) the wide shot stays.
+            if pitch_share(self._shot((cx, cy, 0.0), chw), step=80) >= PITCH_SHARE_MIN:
+                wide, hw = (cx, cy), chw
+        ax, ay = wide
+        self._goal_z = self._lofted(bx, by, ax, ay, hw)
         return ax, ay, hw
+
+    def _corner(self, bx: float, by: float) -> tuple[float, float, float] | None:
+        """The corner framing, while a corner is awarded and waiting to be taken (`step`'s
+        `corner`, from the engine's set piece at a flag to the kick: corner_waits). After the kick
+        the director frames the play as for any ball (the Reviewer of #201: a hold past the kick
+        framed the delivery worse). None when no corner waits."""
+        if self._corner_flag is None:
+            return None
+        fx, fy = self._corner_flag
+        cache = self.__dict__.setdefault("_corner_shots", {})  # each corner's own shot
+        if (fx, fy) not in cache:
+            cache[(fx, fy)] = self._corner_shot(fx, fy)
+        best = cache[(fx, fy)]
+        if best is None:
+            return None
+        # The ball waits inside the arc, a metre from the flag, which the shot keeps CORNER_TAKER_MARGIN
+        # in from the picture's edges; after the kick the director frames the play as for any ball.
+        return best
+
+    def _corner_shot(self, fx: float, fy: float) -> tuple[float, float, float] | None:
+        """The shot of a corner from the flag at (fx, fy): of the aims over that corner's quarter of
+        the pitch and the lenses from TIGHT_HALF_M to the gantry's own width, the one with the most
+        pitch in the picture that keeps the taker (the flag) in the picture, CORNER_TAKER_MARGIN in
+        from its edges, and the penalty mark, where the corner is played to, in it too (Law 1, 17).
+        A near corner puts the taker at the side of the picture, as a broadcast does: centring him
+        would fill the picture with the run-off beside the flag."""
+        spot = (11.0 if fx == 0.0 else 94.0, 34.0)
+        wide = min(self.p.half_width_m, GANTRY_HALF_M)
+        best = None
+        for i in range(8):
+            x = fx + (spot[0] - fx) * i / 7
+            for j in range(12):
+                y = fy + (34.0 - fy) * j / 11
+                for hw in (TIGHT_HALF_M, 7.0, 9.0, 11.0, 13.0, 15.0, wide):
+                    shot = self._shot((x, y, 0.0), hw)
+                    flag, mark = shot.project((fx, fy, BALL_RADIUS_M)), shot.project((*spot, 0.0))
+                    if flag is None or mark is None:
+                        continue
+                    m = CORNER_TAKER_MARGIN
+                    taker = (m * self.width <= flag[0] <= (1 - m) * self.width
+                             and m * self.height <= flag[1] <= (1 - m) * self.height)
+                    if taker and 0 <= mark[0] <= self.width and 0 <= mark[1] <= self.height:
+                        share = pitch_share(shot, step=80)
+                        if best is None or share > best[0]:
+                            best = (share, x, y, hw)
+        return None if best is None else best[1:]
+
+    def _lofted(self, bx: float, by: float, ax: float, ay: float, hw: float) -> float:
+        """How high to aim for a lofted ball: the least height, up to the ball's own, that keeps it
+        inside the CENTRAL box (an operator tilts up with a high ball rather than letting it leave
+        the top of the picture; lesson 175). Zero for a ball on or near the grass."""
+        bz = getattr(self, "ball_z", 0.0)
+        if bz < 1.0:
+            return 0.0
+        left, right, top, bottom = CENTRAL
+        m = CENTRE_MARGIN
+        ball = (bx, by, bz + 0.11)
+
+        def inside(z: float) -> bool:
+            uv = self._shot((ax, ay, z), hw).project(ball)
+            return uv is not None and (top + m) * self.height <= uv[1] <= (bottom - m) * self.height
+
+        if inside(0.0):
+            return 0.0
+        lo, hi = 0.0, bz
+        if not inside(hi):
+            return hi
+        for _ in range(12):
+            mid = (lo + hi) / 2
+            if inside(mid):
+                hi = mid
+            else:
+                lo = mid
+        return hi
+
+    def _pitch_fills(self, ax: float, ay: float, hw: float) -> float:
+        """The half-width, closed in only as far as keeps the pitch over PITCH_SHARE_MIN of the
+        picture (plus PITCH_MARGIN), never tighter than TIGHT_HALF_M, and only where closing in does
+        fill it. Aimed into a corner, a wide shot is mostly run-off and stands; the operator closes
+        in on the play there (lesson 175)."""
+        want = PITCH_SHARE_MIN + PITCH_MARGIN
+        if pitch_share(self._shot((ax, ay, 0.0), hw), step=80) >= want:
+            return hw
+        lo, hi = TIGHT_HALF_M, hw
+        if pitch_share(self._shot((ax, ay, 0.0), lo), step=80) < want:
+            # No lens fills the picture with pitch here (a ball on a corner flag): closing in would
+            # only show more run-off, so the shot stays as it was (the blind critic of 0.5.5's
+            # first cut: a 5-degree close-up held 18 s on a corner, then a whip pan at the kick).
+            return hw
+        for _ in range(8):
+            mid = (lo + hi) / 2
+            if pitch_share(self._shot((ax, ay, 0.0), mid), step=80) >= want:
+                lo = mid
+            else:
+                hi = mid
+        return lo
 
     def _play(self, bx: float, by: float) -> tuple[float, float]:
         """Where the play is: the ball, pulled PLAY_PULL of the way toward the players around it,
@@ -333,6 +471,41 @@ class Director:
         if sw <= 0.0:
             return bx, by
         return bx + PLAY_PULL * (sx / sw - bx), by + PLAY_PULL * (sy / sw - by)
+
+    def _ball_in_centre(self, bx: float, by: float, vx: float, vy: float, ax: float, ay: float,
+                        hw: float) -> tuple[float, float]:
+        """The aim, moved toward the ball only as far as keeps the ball inside the CENTRAL box of the
+        picture (well_framed's box, shrunk by CENTRE_MARGIN). The pulls, leads, clamps and holds above
+        place the play; none of them may leave the ball itself at the edge or out of the picture
+        (lesson 175). The main camera follows the ball to the byline (*design*). The ball where it
+        will be when the pan has caught up (pan_lag_s ahead, inside the pitch) must fit as well, so a
+        ball running to a line is not left behind by the pan's own lag."""
+        left, right, top, bottom = CENTRAL
+        m = CENTRE_MARGIN
+        lag = self.p.pan_lag_s
+        z = getattr(self, "ball_z", 0.0) + 0.11
+        balls = [(bx, by, z),
+                 (min(max(bx + vx * lag, 0.0), 105.0), min(max(by + vy * lag, 0.0), 68.0), z)]
+
+        def inside(t: float) -> bool:
+            shot = self._shot((ax + t * (bx - ax), ay + t * (by - ay), 0.0), hw)
+            for ball in balls:
+                uv = shot.project(ball)
+                if not (uv is not None and (left + m) * self.width <= uv[0] <= (right - m) * self.width
+                        and (top + m) * self.height <= uv[1] <= (bottom - m) * self.height):
+                    return False
+            return True
+
+        if inside(0.0):
+            return ax, ay
+        lo, hi = 0.0, 1.0  # at t = 1 the ball is at the centre of the picture
+        for _ in range(14):
+            mid = (lo + hi) / 2
+            if inside(mid):
+                hi = mid
+            else:
+                lo = mid
+        return ax + hi * (bx - ax), ay + hi * (by - ay)
 
     def _below_stands(self, ax: float, ay: float, hw: float) -> tuple[float, float]:
         """The aim on the line of sight to (ax, ay), there or nearer the gantry, that keeps the far
@@ -371,10 +544,17 @@ class Director:
         players: list | None = None,
         goal: tuple | None = None,
         cut_in: float | None = None,
+        ball_z: float = 0.0,
+        corner: tuple[float, float] | None = None,
+        scorer: tuple[float, float] | None = None,
     ) -> Camera:
         """The camera for the next frame. `cut_in` is how long until the edit's next cut, in seconds
         (None when no cut follows): no angle starts or ends that close to one, because the cut is
-        itself the change of shot."""
+        itself the change of shot. `ball_z` is the ball's height, so a lofted ball is kept in the
+        picture too (lesson 175). `scorer` is where the player who scored is, from the goal until
+        the restart (the render passes it): the camera follows his celebration (GOAL_WIDE_S)."""
+        self.ball_z = ball_z
+        self._corner_flag = corner
         self.players = [(p[0], p[1], p[2]) for p in players] if players else []
         if self.prev_ball is None:
             vx = vy = 0.0
@@ -386,9 +566,11 @@ class Director:
         if self.aim is None:
             self.aim = [gx, gy]
             self.aim_v = [0.0, 0.0]
+            self.aim_z, self.aim_zv = [self._goal_z, 0.0], [0.0, 0.0]
             self.half_width = ghw
         else:
             self._ease(self.aim, self.aim_v, gx, gy)
+            self._ease(self.aim_z, self.aim_zv, self._goal_z, 0.0)  # the tilt eases like the pan
             # The zoom is a spring too, slower than the pan, so it gathers and loses pace and never
             # turns round in a frame.
             w = 2.0 / (self.p.pan_lag_s * 2.5)
@@ -408,9 +590,14 @@ class Director:
                 "t0": self.t,
             }
             fresh_goal = True
+            if scorer is not None:
+                self._celebrate_from = self.t + GOAL_WIDE_S
+        if scorer is None:  # the restart: the celebration is over
+            self._celebrate_from = None
+        self._scorer = scorer if self._celebrate_from is not None else None
         sx = self.p.shake_m * math.sin(2 * math.pi * 1.3 * self.t + self.shake_phase[0])
         sy = self.p.shake_m * math.sin(2 * math.pi * 0.9 * self.t + self.shake_phase[1])
-        target = (self.aim[0] + sx, self.aim[1] + sy, 0.0)
+        target = (self.aim[0] + sx, self.aim[1] + sy, self.aim_z[0])
         self.angle = "main"
         want = self._better(ball_x, ball_y) if self.cuts else ""
         # The hold covers every angle, including the return to the gantry, so an action on the
@@ -418,9 +605,17 @@ class Director:
         # once, even over a hold. Near the edit's next cut nothing changes: the cut is the change.
         steady = cut_in is not None and cut_in < CUT_HOLD_S
         due = self.t >= self._cut_until - 1e-9 and want != self._cut_kind and not steady
-        if (fresh_goal and self.cuts) or due:
+        if (fresh_goal and self.cuts and self._scorer is None) or due:
             self._cut_kind = want
             self._cut_until = self.t + CUT_HOLD_S
+        if self._cut_kind == "scorer":
+            spot = self._scorer or (ball_x, ball_y)  # held until the next shot, if he is gone
+            if self.scorer_aim is None:
+                self.scorer_aim, self.scorer_v = list(spot), [0.0, 0.0]
+            else:
+                self._ease(self.scorer_aim, self.scorer_v, *spot)
+        else:
+            self.scorer_aim = None
         if self._cut_kind != "tight":
             self.tight_aim = None
         else:
@@ -482,6 +677,8 @@ class Director:
 
     def _better(self, bx: float, by: float) -> str:
         """The angle that frames this moment better than the gantry, or '' to stay on the gantry."""
+        if self._scorer is not None:  # the goal on the gantry, then the scorer's celebration
+            return "scorer" if self.t >= self._celebrate_from - 1e-9 else ""
         if self._net_due():
             return "net" + self.net["side"]
         if self._tight(bx, by):
@@ -549,6 +746,10 @@ class Director:
         if self._cut_kind in ("netL", "netR"):
             self.angle = "net"
             return self._net_shot()
+        if self._cut_kind == "scorer":
+            self.angle = "scorer"
+            aim = (self.scorer_aim[0], self.scorer_aim[1], 1.0)
+            return self._framed(self._tight_pos(), aim, SCORER_HALF_M)
         self.angle = "tight"
         return self._framed(self._tight_pos(), (self.tight_aim[0], self.tight_aim[1], 0.8), TIGHT_HALF_M)
 
@@ -569,3 +770,31 @@ def blur_vector(prev: Camera | None, cur: Camera, shutter: float) -> tuple[float
         return (0.0, 0.0)
     dx, dy = cur.width / 2 - p[0], cur.height / 2 - p[1]
     return (round(dx * shutter, 3), round(dy * shutter, 3))
+
+
+def corner_waits(events: list[dict]) -> dict[int, tuple[float, float]]:
+    """Every frame a corner waits to be taken, with its flag: from the engine's set piece at a corner
+    flag (within the corner arc) after the ball went out over a goal line (Law 17: a corner, not a
+    throw-in or a free kick near the flag), to the frame before the next touch, the kick."""
+    from ninety.render.edit import STOPS  # edit.py imports this module: imported here, not copied
+
+    order = sorted(events, key=lambda e: e["frame"])
+    out: dict[int, tuple[float, float]] = {}
+    stop = None
+    for i, e in enumerate(order):
+        if e["type"] in STOPS:
+            stop = e
+        if e["type"] != "set_piece":
+            continue
+        over_goal_line = (stop is not None and stop["type"] == "out_of_play"
+                          and (stop["x"] <= 0.0 or stop["x"] >= 105.0))
+        if not over_goal_line:
+            continue
+        flag = next(((fx, fy) for fx in (0.0, 105.0) for fy in (0.0, 68.0)
+                     if math.hypot(e["x"] - fx, e["y"] - fy) <= CORNER_ARC_M + BALL_RADIUS_M), None)
+        if flag is None:
+            continue
+        kick = next((n["frame"] for n in order[i + 1:] if n["frame"] > e["frame"]), e["frame"] + 1)
+        for f in range(e["frame"], kick):
+            out[f] = flag
+    return out

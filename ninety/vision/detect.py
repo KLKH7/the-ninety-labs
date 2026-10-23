@@ -98,9 +98,25 @@ def to_frame_detections(row: dict, xyxy, scores, class_ids, label, model_field) 
     )
 
 
-def main(argv: list[str] | None = None) -> None:
+def detect_rows(det, rows: list[dict], label, model_field, batch: int = 8) -> list[FrameDetections]:
+    """The loaded detector over `rows` (frame_rows), `batch` images at a time, in frame order."""
     from PIL import Image
 
+    out_rows = []
+    for i in range(0, len(rows), batch):
+        chunk = rows[i : i + batch]
+        preds = det.predict(
+            [Image.open(r["image"]).convert("RGB") for r in chunk],
+            threshold=SCORE_FLOOR,
+            include_source_image=False,
+        )
+        preds = preds if isinstance(preds, list) else [preds]
+        for r, p in zip(chunk, preds, strict=True):
+            out_rows.append(to_frame_detections(r, p.xyxy, p.confidence, p.class_id, label, model_field))
+    return out_rows
+
+
+def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description="Detect players and the ball in a clip's frames.")
     ap.add_argument("clip", type=Path)
     ap.add_argument("--checkpoint", required=True, help='"coco" or our checkpoint name, e.g. ours-v1')
@@ -120,18 +136,7 @@ def main(argv: list[str] | None = None) -> None:
     det = load(a.weights, resolution=a.resolution or trained_resolution(a.weights))
     label = labels_for(a.checkpoint, det.class_names)
     field = model(a.checkpoint)
-    rows = frame_rows(a.clip, a.stride)
-    out_rows = []
-    for i in range(0, len(rows), a.batch):
-        batch = rows[i : i + a.batch]
-        preds = det.predict(
-            [Image.open(r["image"]).convert("RGB") for r in batch],
-            threshold=SCORE_FLOOR,
-            include_source_image=False,
-        )
-        preds = preds if isinstance(preds, list) else [preds]
-        for r, p in zip(batch, preds, strict=True):
-            out_rows.append(to_frame_detections(r, p.xyxy, p.confidence, p.class_id, label, field))
+    out_rows = detect_rows(det, frame_rows(a.clip, a.stride), label, field, a.batch)
     out = a.out or a.clip / f"detections-{a.checkpoint}.jsonl"
     write_detections(out, out_rows)
     print(

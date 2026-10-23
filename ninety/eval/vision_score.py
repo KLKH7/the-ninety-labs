@@ -26,6 +26,14 @@ BALL_DISTANCE_PX = 5.0
 DEFAULT_THRESHOLD = 0.5
 VISIBILITY_GROUPS = ("visible", "partly hidden", "mostly hidden")
 BOUNDARY_GROUPS = ("edge-touching", "interior")
+# EVALUATION.md's "in the air" group: a ball whose true centre is above 0.5 m (about knee height).
+# The one cut-off for the ball's height: the pitch-level scorer and pitch_score import it.
+IN_AIR_Z = 0.5
+HEIGHT_GROUPS = ("on the ground", "in the air")
+# EVALUATION.md's "blurred" group: a frame whose camera blur streak (the length of `blur_px`) is
+# longer than 3 px, about half the width of a ball at broadcast distance.
+BLUR_PX = 3.0
+BLUR_GROUPS = ("not blurred", "blurred")
 
 
 def load_jsonl(path: str | Path, *, flatten_detections: bool = False) -> list[dict]:
@@ -101,6 +109,37 @@ def visibility_group(visibility: float) -> str | None:
     if visibility > 0:
         return "mostly hidden"
     return None
+
+
+def height_group(z: float) -> str:
+    """Strictly above IN_AIR_Z is in the air; exactly IN_AIR_Z is on the ground."""
+    return "in the air" if z > IN_AIR_Z else "on the ground"
+
+
+def blur_group(blur_px: Iterable[float]) -> str:
+    """Strictly longer than BLUR_PX is blurred; a streak of exactly BLUR_PX is not."""
+    dx, dy = (float(v) for v in blur_px)
+    return "blurred" if math.hypot(dx, dy) > BLUR_PX else "not blurred"
+
+
+def frame_groups(frames: Iterable[Mapping]) -> tuple[dict[int, str] | None, dict[int, str] | None]:
+    """Each frame's ball height group and camera blur group, from ``ball.z`` and ``blur_px``.
+
+    Either is None when no frame has the field (frames built without it), so that axis is not
+    reported; a mix of frames with and without it is refused, so no label silently drops out.
+    """
+    frames = list(frames)
+    out = []
+    for name, value, group in (
+        ("ball.z", lambda row: (row.get("ball") or {}).get("z"), height_group),
+        ("blur_px", lambda row: row.get("blur_px"), blur_group),
+    ):
+        values = {int(row["frame"]): value(row) for row in frames}
+        present = {v is not None for v in values.values()}
+        if len(present) > 1:
+            raise ValueError(f"some frames have {name} and some do not")
+        out.append({f: group(v) for f, v in values.items()} if present == {True} else None)
+    return out[0], out[1]
 
 
 def boundary_group(box: Iterable[float], camera: Mapping) -> str:
@@ -207,7 +246,7 @@ def score(
     threshold: float = DEFAULT_THRESHOLD,
     run: Iterable[int] | None = None,
 ) -> dict:
-    """Return overall, visibility and image-boundary pixel metrics.
+    """Return overall, visibility, image-boundary, ball height and camera blur pixel metrics.
 
     ``run`` is the set of frames the detector ran on (``frames_run``). Labels on other frames
     are skipped, not counted as misses. ``None`` scores every frame in ``frames``.
@@ -222,20 +261,29 @@ def score(
     skipped = {label["frame"] for label in all_labels} - run
     cameras = {int(row["frame"]): row.get("camera", {}) for row in frames}
     boundary = [boundary_group(label["bbox"], cameras[label["frame"]]) for label in labels]
+    heights, blurs = frame_groups(row for row in frames if int(row["frame"]) in run)
     detections = [dict(d) for d in detections]
     eligible = [d for d in detections if float(d.get("score", 0.0)) >= threshold]
     pairs = match(labels, eligible, threshold=threshold)
     matched_truth = {p["truth"] for p in pairs}
     matched_detection = {p["detection"] for p in pairs}
     overall = _metrics(len(pairs), len(eligible) - len(pairs), len(labels) - len(pairs))
-    difficulty = {}
-    for axis, names, assignments in (
-        ("visibility", VISIBILITY_GROUPS, [visibility_group(label["visibility"]) for label in labels]),
-        ("image_boundary", BOUNDARY_GROUPS, boundary),
-    ):
+    axes = [
+        ("visibility", VISIBILITY_GROUPS, CLASSES,
+         [visibility_group(label["visibility"]) for label in labels]),
+        ("image_boundary", BOUNDARY_GROUPS, CLASSES, boundary),
+    ]
+    # The ball's height and the frame's blur: an axis is null when the frames do not record it.
+    difficulty: dict = {"height": None, "blur": None}
+    if heights is not None:
+        axes.append(("height", HEIGHT_GROUPS, ("ball",),
+                     [heights[label["frame"]] if label["cls"] == "ball" else None for label in labels]))
+    if blurs is not None:
+        axes.append(("blur", BLUR_GROUPS, CLASSES, [blurs[label["frame"]] for label in labels]))
+    for axis, names, classes, assignments in axes:
         groups = {}
         difficulty[axis] = groups
-        for cls in CLASSES:
+        for cls in classes:
             groups[cls] = {}
             for group in names:
                 group_truth = {
@@ -272,6 +320,8 @@ def score(
             "score_threshold": threshold,
             "player_iou": PLAYER_IOU,
             "ball_center_distance_px": BALL_DISTANCE_PX,
+            "in_the_air_above_m": IN_AIR_Z,
+            "blurred_above_px": BLUR_PX,
             "match": "same frame/class, one-to-one, best-first",
             "frames": "only frames with a line in the detections file; an empty list is scored",
         },
@@ -312,6 +362,11 @@ def main(argv: list[str] | None = None) -> None:
     detections, run, clips = read_run(args.detected)
     check_clip(frames, clips)
     report = score(frames, detections, args.threshold, run=run)
+    from ninety.eval.vision_pitch_score import has_cameras, score_pitch  # it imports this module
+
+    # Beside the pixel numbers when frames.jsonl has the saved cameras (every rendered clip does).
+    report["pitch"] = (score_pitch(frames, detections, args.threshold, run=run)
+                       if has_cameras(frames) else None)
     text = json.dumps(report, indent=2) + "\n"
     if args.report:
         args.report.write_text(text)
