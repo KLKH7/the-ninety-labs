@@ -35,8 +35,9 @@ def derive(clips: Path, obs: Path, seeds: list[int]) -> dict:
         if refused(seed):
             raise SystemExit(f"test seed {seed}: the band is derived on validation clips only")
         clip = clips / f"seed{seed}"
-        kinds["broadcast"].append((seed, load_jsonl(obs / "broadcast" / f"seed{seed}.jsonl"),
-                                   _frames(clip / "frames.jsonl")))
+        if (obs / "broadcast" / f"seed{seed}.jsonl").exists():  # each kind may be run on its own
+            kinds["broadcast"].append((seed, load_jsonl(obs / "broadcast" / f"seed{seed}.jsonl"),
+                                       _frames(clip / "frames.jsonl")))
         for d in sorted(obs.glob("view-*")):
             view = _view(d.name, clip)
             if (d / f"seed{seed}.jsonl").exists():

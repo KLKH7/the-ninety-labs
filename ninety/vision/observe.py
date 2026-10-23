@@ -63,9 +63,13 @@ NEIGHBOUR_M = 2.0
 PLAYER_HEIGHT_M = 1.80
 HEIGHT_BAND = (0.901, 1.002)
 # The same test for a fixed lens (the tactical camera): its own band, from its own frames, because
-# the ratio depends on the camera's height and distance (docs/eval/ball-three-cams/PLAN.md,
-# Deviations). Until it is measured it is the broadcast's.
-FIXED_HEIGHT_BAND = HEIGHT_BAND
+# the ratio depends on the camera's height and distance and on how players are drawn. Measured by
+# the same rule (step B: the 1st to 99th percentile on frames whose ground mapping is within 1.0 m)
+# on tactical1's 23 validation clips, both lenses, renderer 0.5.15, ours-freeze tiled: 11,250 good
+# frames of 11,500 (docs/eval/ball-three-cams/band-fixed.json). It keeps 98% of them; of the 250 bad
+# frames (one lens of seed 2042 fitted 69 m wrong) it trusts one, which `agree` then has no
+# trusted neighbour for.
+FIXED_HEIGHT_BAND = (1.002, 1.151)
 
 
 def kit_rgb(rgb: np.ndarray, bbox) -> list[float] | None:

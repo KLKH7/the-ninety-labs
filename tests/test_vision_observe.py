@@ -196,3 +196,8 @@ def test_regate_judges_a_fixed_lens_by_the_fixed_band_and_the_broadcast_by_its_o
         src.write_text("".join(json.dumps(r) + "\n" for r in [first, *rows[1:]]))
         observe.main(["--regate", str(src), "--out", str(out)])
         assert [json.loads(x)["camera"]["heights_ok"] for x in out.read_text().splitlines()] == [expect] * 3
+
+
+def test_the_fixed_band_is_the_committed_validation_measurement():
+    body = json.loads((ROOT / "docs/eval/ball-three-cams/band-fixed.json").read_text())
+    assert list(observe.FIXED_HEIGHT_BAND) == body["fixed"]["band"]
