@@ -267,11 +267,17 @@ BOX_RUNS = {"ST": (99.0, 4.0), "far_winger": (98.0, -7.0), "RCM": (88.0, 0.0)}  
 # went with more shots from corners than a static one (Casal et al. 2015, Int J Perf Anal Sport
 # 15:430-451, 1,139 corners in elite football; verify: read from the abstract).
 BOX_RUN_START_M = 11.0
+# Lesson 202: at a free kick to them in the final third, the forwards stand on the opponents' line no
+# wider of the goal's centre than the goal area (Law 1: 5.5 m beside each post), attacking the box for
+# the kick or the rebound (design: where they stand; ENGINE.md: box occupation at set pieces). Held at
+# their open-play width the wingers stood outside the box: no attacker was in it at 6 of 16 free kicks
+# within 35 m over 20 matches on main.
+SET_PIECE_HALF_WIDTH_M = GOAL_HALF_WIDTH + 5.5
 
 
 def attacking_slot(role: str, own_goal_x: float, ball_x: float, ball_y: float,
                    last_line_x: float, wide_m: float = 0.0,
-                   waiting: bool = False) -> tuple[float, float] | None:
+                   waiting: bool = False, set_piece: bool = False) -> tuple[float, float] | None:
     # `last_line_x`: the furthest a player of this side may stand and be onside, as he sees it.
     """O6: where this role stands while his team has the ball. Heights follow the ball; attackers
     stand on the opponents' last line (onside); with the ball wide in the final third, the striker,
@@ -281,7 +287,8 @@ def attacking_slot(role: str, own_goal_x: float, ball_x: float, ball_y: float,
     spacing, until the back line is LENGTH_MAX_M behind the forwards or level with the ball; the
     forwards then hold no more than LENGTH_MAX_M ahead of the back line. `waiting`: a corner not yet
     being run up to, so every role whose spot is nearer the goal waits at BOX_RUN_START_M from it and
-    makes his run as the taker runs up (lesson 202)."""
+    makes his run as the taker runs up (lesson 202). `set_piece`: a free kick to this side, so in
+    the final third the forwards attack the box (SET_PIECE_HALF_WIDTH_M)."""
     shape = SHAPE_IN_POSSESSION.get(role)
     if shape is None:
         return None
@@ -316,6 +323,8 @@ def attacking_slot(role: str, own_goal_x: float, ball_x: float, ball_y: float,
     y = PITCH_Y / 2 + across * width + (ball_y - PITCH_Y / 2) * BALL_SIDE_IN_POSSESSION
     if wide_m and width:
         y += math.copysign(wide_m, across * width)  # his side of the pitch, further out
+    if set_piece and behind is None and ball_u > FINAL_THIRD_M:
+        y = min(PITCH_Y / 2 + SET_PIECE_HALF_WIDTH_M, max(PITCH_Y / 2 - SET_PIECE_HALF_WIDTH_M, y))
     return own_goal_x + fwd * u, min(PITCH_Y - 2.0, max(2.0, y))
 
 

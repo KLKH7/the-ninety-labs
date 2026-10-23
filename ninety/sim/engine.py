@@ -2604,7 +2604,8 @@ class Engine:
             waiting = (given is not None and given.kind == "corner" and given.team == p.team
                        and given.run_in_at is None)  # lesson 202: the runs start with the run-up
             spot = offball.attacking_slot(p.role, PITCH_X - goal_x(p.team), clamp(bx, 0, PITCH_X),
-                                          clamp(by, 0, PITCH_Y), onside, wide, waiting)
+                                          clamp(by, 0, PITCH_Y), onside, wide, waiting,
+                                          set_piece=self.own_free_kick(p.team))
             if spot:
                 spot = self.open_spot(p, spot, onside)
                 return *spot, self.in_time(p, *spot)
@@ -2661,6 +2662,12 @@ class Engine:
                     ty = clamp(ty, PITCH_Y / 2 - half, PITCH_Y / 2 + half)
         tx, ty = clamp(tx, 0.5, PITCH_X - 0.5), clamp(ty, 0.5, PITCH_Y - 0.5)
         return tx, ty, self.in_time(p, tx, ty)
+
+    def own_free_kick(self, team: str) -> bool:
+        """A free kick to `team` waits to be taken or is taken and not yet kicked (lesson 202: its
+        forwards attack the box, offball.attacking_slot); not the other side's, nor any other restart."""
+        given = self.restart or self.set_by
+        return given is not None and given.kind == "free_kick" and given.team == team
 
     def shared_view(self, team: str, of_team: str) -> dict[str, tuple[float, float]]:
         """What a team's players know between them about another team's positions: for each
