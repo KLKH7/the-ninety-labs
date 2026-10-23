@@ -365,6 +365,14 @@ def test_number_words_combine_only_into_one_well_formed_number(text, digits):
 
 # Lesson 219: the forms the reader still missed. Each planted form aired on the old check; each true
 # form must still pass (lesson 11: false rejections are measured too).
+# Two cited passes: h7's was 12 m at 40 km/h, h4's 30 m at 70 km/h.
+TWO = {
+    "p1": {"id": "p1", "type": "pass", "team": "home", "player": "h7", "receiver": "h9", "outcome": "success",
+           "minute": 2, "distance_m": 12, "ball_speed_kmh": 40},
+    "p2": {"id": "p2", "type": "pass", "team": "home", "player": "h4", "receiver": "h7", "outcome": "success",
+           "minute": 3, "distance_m": 30, "ball_speed_kmh": 70},
+}
+# One pass of 50 m at 31 km/h.
 LONG = {"id": "p31", "type": "pass", "team": "home", "player": "h7", "receiver": "h9", "outcome": "success",
         "minute": 2, "distance_m": 50, "ball_speed_kmh": 31}
 
@@ -433,7 +441,8 @@ def test_an_ordinal_in_words_must_be_in_the_evidence(text, reason):
     "h7 encuentra a h9 con un tercer hombre.",
 ])
 def test_a_word_that_is_no_ordinal_count_passes(text):
-    assert check(Claim(text, ["p31"]), {"p31": LONG}).ok
+    # Two passes cited, so a "first" misread as 1 is no count the evidence holds.
+    assert check(Claim(text, ["p1", "p2"]), TWO).ok
 
 
 @pytest.mark.parametrize("text", [
@@ -471,13 +480,6 @@ def test_a_unit_glued_with_a_hyphen_is_read_as_its_field():
     assert verdict.reasons == ["number 2 is not a cited distance_m"]
 
 
-# Two cited passes: h7's was 12 m at 40 km/h, h4's 30 m at 70 km/h.
-TWO = {
-    "p1": {"id": "p1", "type": "pass", "team": "home", "player": "h7", "receiver": "h9", "outcome": "success",
-           "minute": 2, "distance_m": 12, "ball_speed_kmh": 40},
-    "p2": {"id": "p2", "type": "pass", "team": "home", "player": "h4", "receiver": "h7", "outcome": "success",
-           "minute": 3, "distance_m": 30, "ball_speed_kmh": 70},
-}
 
 
 @pytest.mark.parametrize("text, reason", [
@@ -505,6 +507,8 @@ def test_a_number_bound_to_a_player_must_be_from_his_cited_event(text, reason):
     "h7 pasa el balón 12 metros a h9.",
     "A 30 m pass from h4 finds h7, who plays 12 m to h9.",  # "from h4" and "who" bind nothing
     "h9 meets h7's 12 m pass.",
+    "h4 finds h7, who plays his 12 m pass to h9.",  # three players named: "his" binds nothing
+    "h7 da un pase de 12 metros a h9, y h4 juega una pelota de 30 metros a h7.",  # articles, not 1
 ])
 def test_a_number_bound_to_its_own_player_passes(text):
     assert check(Claim(text, ["p1", "p2"]), TWO).ok
