@@ -1,7 +1,7 @@
 """The image stage of event detection: images + detections -> observations on the pitch.
 
     uv run --group vision python -m ninety.vision.observe <clip> \\
-        --detections <detections.jsonl> --out <observations.jsonl>
+        --detections <detections.jsonl> --out <observations.jsonl> [--fixed]
 
 Reads the clip's `images/` and the detections file (ninety/vision/detections.py), nothing else: not
 frames.jsonl, events.jsonl, clip.json or meta.json, which hold the answer key and the render
@@ -12,6 +12,11 @@ the counts must agree). For each frame it writes one line:
      "camera": {"ok", "median_px", "points", "P"},       # estimated from the markings (pitch.py)
      "players": [{"bbox", "score", "x", "y", "rgb"}],     # foot point on the pitch, kit colour
      "ball": [{"bbox", "score", "x", "y"}]}               # centre, on the ground
+
+The broadcast camera pans and zooms, so its camera is fitted frame by frame (pitch.fit_clip). A
+lens of the tactical camera (`--fixed`) never moves: its camera is fitted once, from the marking
+pixels that stay put across the clip's frames (pitch.fit_fixed), and every frame is placed
+through that one camera.
 
 Positions are null on a frame whose camera fit is not ok. A player's place is the bottom centre
 of his box (where his feet meet the ground); the ball's is its box centre taken to be on the
@@ -160,18 +165,29 @@ def place(row: dict) -> dict:
     return row
 
 
-def observe(images: list[Path], dets: list, load) -> list[dict]:
-    """`load(path) -> (H, W, 3) uint8` reads an image; passed in so tests need no image files."""
+def observe(images: list[Path], dets: list, load, fixed: bool = False) -> list[dict]:
+    """`load(path) -> (H, W, 3) uint8` reads an image; passed in so tests need no image files.
+    `fixed` for a lens that never moves (the tactical camera), else the broadcast camera."""
     if len(images) != len(dets):
         raise ValueError(f"{len(images)} images but {len(dets)} detection lines: they pair one to one")
     rgbs, points = [], []
+    counts = None
     for img, fd in zip(images, dets, strict=True):
         rgb = load(img)
         boxes = [d.bbox for d in fd.detections if d.score >= SCORE_MIN]
         rgbs.append(rgb)
-        points.append(pitch.line_points(rgb, boxes))
+        if not fixed:
+            points.append(pitch.line_points(rgb, boxes))
+            continue
+        mask = pitch.line_mask(rgb, boxes)
+        counts = mask.astype(np.uint32) if counts is None else counts + mask
+        points.append(pitch.mask_points(mask))
     H, W = rgbs[0].shape[:2]
-    gantry, fits = pitch.fit_clip(points, W, H)
+    if not fixed:
+        gantry, fits = pitch.fit_clip(points, W, H)
+    else:
+        view, fits = pitch.fit_fixed(pitch.static_points(counts, len(points)), points, W, H)
+        gantry = (view.cx, view.cy, view.cz)
     rows = []
     for rgb, fd, fit in zip(rgbs, dets, fits, strict=True):
         players, balls = [], []
@@ -190,6 +206,8 @@ def observe(images: list[Path], dets: list, load) -> list[dict]:
         }))
     rows = agree(rows)
     rows[0]["gantry"] = [round(v, 3) for v in gantry]
+    if fixed:
+        rows[0]["fixed"] = True
     return rows
 
 
@@ -204,6 +222,8 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("clip", type=Path, nargs="?", help="the clip's folder (images/)")
     ap.add_argument("--detections", type=Path)
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--fixed", action="store_true",
+                    help="a fixed lens (the tactical camera): one camera for the whole clip")
     ap.add_argument("--regate", type=Path, default=None,
                     help="an observations file to judge again with today's trust test and placing, "
                          "without the camera fit (its cameras are kept)")
@@ -219,7 +239,7 @@ def main(argv: list[str] | None = None) -> None:
             ap.error("a clip and --detections, or --regate")
         images = sorted((a.clip / "images").glob("*.jpg"))
         dets = read_detections(a.detections)
-        rows = observe(images, dets, lambda p: np.asarray(Image.open(p).convert("RGB")))
+        rows = observe(images, dets, lambda p: np.asarray(Image.open(p).convert("RGB")), fixed=a.fixed)
     with open(a.out, "w", encoding="utf-8", newline="\n") as f:
         for r in rows:
             f.write(json.dumps(r, separators=(",", ":")) + "\n")

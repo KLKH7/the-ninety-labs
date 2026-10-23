@@ -1589,6 +1589,24 @@ short and actionable. This file is public: no research sources, product names or
   `sys.modules` in a fresh interpreter (lesson 104); `::test_the_check_sees_an_sdk_when_one_is_imported`
   shows the check can go red.
 
+### 154. A check that measures a defect also stops it where it airs
+- **What happened:** #182 taught the failure table to fail a baseline whose Spanish profile read as
+  English, but the on-air gate (`personalizer/cues.verify`) still held only text byte-identical to
+  the verified English. A live Personalizer writing English with one word changed would have aired,
+  marked verified, to a Spanish viewer, and only the evaluation would have noticed. The
+  first version of the gate also passed the mock translator's English: its `[es]` label counted as
+  the Spanish word "es".
+- **Rule:** when an evaluation learns to catch a defect, the same check guards the live path, and
+  the evaluation keeps measuring independently of the gate. An exemption names both the mode and
+  the mark: the mock airs only in a run that asked for it (`NINETY_TRANSLATOR=mock`) and only with
+  its label on screen, so a model cannot exempt itself by writing the label. Labels and quotes are
+  not words of the text.
+- **Check:** `tests/test_personalizer_live.py::test_english_for_a_spanish_profile_never_airs`,
+  `::test_the_labelled_mock_airs_only_in_mock_mode`,
+  `::test_spanish_with_an_english_name_or_quote_still_airs`; and
+  `tests/test_workflow_failures.py::test_the_baseline_fails_when_a_spanish_profile_reads_english_with_a_word_changed`
+  shows the table still catches it with the gate removed.
+
 ### 155. A test of a library's message shape goes through the library's own parser
 - **What happened:** #182 made a published agent's call to the match tools fail the call, keyed on
   the content type `mcp_server_tool_call` in its reply. The tests built that content by hand with
@@ -1749,6 +1767,21 @@ short and actionable. This file is public: no research sources, product names or
   counts a restart taken again as the same restart.
 - **Check:** `uv run pytest tests/test_restarts.py -k past_the_end_of_the_touchline`; on the engine
   before it, the ball runs on to 127 m and jumps 18 m in a frame.
+
+### 172. A score called a confidence is measured before a gate is built on it
+- **What happened:** the phone's possession layer was designed to show a team only above a
+  confidence: the detector's side confidence times an age factor. Measured on 13 validation clips
+  before any UI was built, team agreement fell as the cut-off rose (65 % at 0.2, 30 % at 0.7, 0 %
+  at 0.9), because the side is decided once per clip, and a flipped clip is wrong throughout, one
+  of them at 0.88 to 0.97. `Track.side_confidence` says it is "a score, not a probability"; the
+  design treated it as one.
+- **Rule:** before a confidence gates what a viewer sees, measure agreement against it on
+  validation data: the curve by cut-off, and per clip, since errors that share a cause share a
+  clip. If no cut-off reaches the target, the gate stays shut and the feature stays off; never
+  move the target to open it. Build the screen only after the gate can open.
+- **Check:** `tests/test_possession.py::test_while_the_gate_is_unset_the_layer_shows_nothing` and
+  `::test_the_committed_calibration_states_its_targets_and_its_evidence`;
+  docs/eval/possession-calibration.md.
 
 ### 173. A label check written for one pose fails the first body drawn in another
 - **What happened:** to make fouls legible (the fouled player goes down at the foul, the fouler's
@@ -2051,6 +2084,20 @@ short and actionable. This file is public: no research sources, product names or
   `tests/test_zone_tracking.py::test_a_defender_follows_the_attacker_in_his_zone_once_he_scans`; the
   held-out measures in the pull request.
 
+### 189. A sentence beside a number is not its mark
+- **What happened:** the goal-net change merged while its review check was skipped, so the
+  hard-coding audit (lesson 21) ran after the merge. Two new factors had a sentence beside them
+  and were still neither. The net-touch slack is two roundings of a written millimetre, and the
+  comment said "measurement precision", but the grounding row's source cell said only "physics".
+  A step through a corner of the net meets the side and the back, and the comment said so, with
+  no *design* on the count of two.
+- **Rule:** the mark sits on the constant. A margin from how positions are written names
+  measurement precision in the grounding source cell, with the derivation beside the value
+  (lesson 10). A choice carries the word *design* on its own line. A sentence that only describes
+  the number is neither. The audit runs before the merge.
+- **Check:** the audit's neither list. A constant on it is marked in a follow-up that does not
+  change the value.
+
 ### 188. Two scorers of one group share one cut-off and one comparison
 - **What happened:** EVALUATION.md puts a ball in the air when its centre is above 0.5 m. The
   pitch-level vision scorer used `z > 0.5`, but the position scorer (`pitch_score.py`) used
@@ -2115,3 +2162,46 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** the CI `image` job's step "The Dockerfile's pinned Replay bundle exists and matches its
   hash"; `tests/test_api_site.py::test_a_websocket_behind_the_gate_needs_the_key_too` fails with the
   WebSocket branch of `RequireKey` removed.
+
+### 163. A rule every writer follows goes into every writer's instructions
+- **What happened:** the live Personalizer evaluation (agents-live 39514003721) aired its casual
+  persona in only 12 of 20 claims. For a claim at 00:03 the model wrote "At 3 seconds" (in Spanish
+  "A los 3 segundos"), turning the clock into plain words as "no jargon" seemed to ask. The re-check
+  dropped every one, as it should, since the claim's clock is a number to keep. The Analyst,
+  Tactician and Challenger all carry the one-clock rule (lesson 33); the Personalizer's
+  instructions never did. On the live path each drop then read "no translation", which pointed at
+  the translator rather than the model.
+- **Rule:** a rule the code checks on every writer's text is stated in every writer's instructions,
+  including a persona's style line ("plain words go around the claim's facts, never in place of
+  them"). A fix to model behaviour is measured on the model before publishing: here, unpublished,
+  6 of 24 variants dropped with the old wording and 0 of 24 with the new. A hold says which check
+  made it.
+- **Check:** `tests/test_personalizer.py::test_the_instructions_keep_the_claim_s_clock_for_every_persona`;
+  `tests/test_personalizer_live.py::test_a_variant_the_personalizer_s_re_check_replaced_is_held_with_its_reason`.
+
+### 208. A script inside YAML is code: parse it before a run is approved
+- **What happened:** resolving a merge conflict in `agents-live.yml`, two new `case` branches were
+  joined and the `;;` closing one was lost. The YAML still loaded and the merge was checked only
+  with a YAML parser, so the defect reached a live run: Kian approved it, it signed in to Azure,
+  and then failed on `syntax error near unexpected token ')'` without publishing anything.
+- **Rule:** a change to a workflow's `run:` block is checked as the shell it is, not only as YAML.
+  An approval for a live run is spent only on a script that parses.
+- **Check:** `tests/test_workflows.py` runs `bash -n` on every bash `run:` step of every workflow;
+  it fails on the shipped `agents-live.yml` (`7e76d15`) and passes on the fixed one.
+
+### 193. Score a claimed tie at the answer before adding an input to break it
+- **What happened:** building the fixed-camera fit, I reasoned that the pitch markings are
+  symmetric about halfway, so a lens and its mirror across halfway would see the same picture, and
+  made the lens's side a required input to break the tie. The test written to prove the tie
+  failed: the mirror lens sees the picture flipped left to right, which no camera without that
+  flip draws, so the two fit 0.0 px and 68 px apart. The input would have been a needless
+  dependency every caller had to get right. The same fit, freed in all six parameters, stalled a
+  metre from the true camera at 2.6 times its cost; the objective was right (lesson 97), the step
+  was not.
+- **Rule:** a claimed ambiguity is checked by scoring both candidates at the answer, as an
+  objective is (lesson 97), before any interface is built around it. A reflection is not a camera
+  move.
+- **Check:** `tests/test_vision_pitch_fixed.py::test_a_lens_and_its_mirror_across_halfway_do_not_tie`
+  (the true lens fits, its mirror does not, the flipped picture does);
+  `::test_the_compass_search_walks_on_where_the_free_step_stalls` fails with the compass search
+  removed from `pitch.settle` (a half-size scene did not stall, so the stalled view is a fixture).

@@ -251,7 +251,7 @@ pull request.
 |---|---|---|---|
 | [`match_event.schema.json`](../schemas/match_event.schema.json) | one event, from ground truth or detected (`source`, `confidence`) | match engine, vision | stats engine, agents, scoring |
 | [`frame.schema.json`](../schemas/frame.schema.json) | positions at one frame | match engine, renderer, tracker | renderer, scoring |
-| [`overlay_cue.schema.json`](../schemas/overlay_cue.schema.json) | one timed on-screen graphic (optional `pan` for a spoken cue) | Producer, Personalizer, Describer | viewer, WebVTT export |
+| [`overlay_cue.schema.json`](../schemas/overlay_cue.schema.json) | one timed on-screen graphic (optional `pan` and `speech` for a spoken cue) | Producer, Personalizer, Describer | viewer, WebVTT export |
 | [`viewer_question.schema.json`](../schemas/viewer_question.schema.json) | a question typed on the phone companion (data, never instructions) | phone companion | Companion agent |
 | [`viewer_answer.schema.json`](../schemas/viewer_answer.schema.json) | the answer the phone shows; its number is computed by code | Companion agent | phone companion |
 | [`companion_message.schema.json`](../schemas/companion_message.schema.json) | server to phone: `clock`, `focus`, `answer`, `player_card` or `flow` (a team's velocity per cell, for the wind map) | API ([`ninety/api/companion.py`](../ninety/api/companion.py)) | phone companion |
