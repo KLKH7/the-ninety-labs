@@ -1997,7 +1997,7 @@ def test_at_a_dead_ball_the_presser_goes_in_time_and_does_not_spring_about_his_p
     e.kickoff("home", setup=True)
     while e.t < 65.44 - 1e-9:
         e.step()
-    r, brain = e.restart, e.brains["home"]
+    r, brain = e.restart, e.brains["home"]  # away's goal kick: home presses
     assert r is not None and r.kind == "goal_kick" and brain.pressers  # premise: the goal kick waits
     p = e.by_id[brain.pressers[0]]
     tx, ty, top = e.shape_target(p)

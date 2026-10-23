@@ -2120,3 +2120,32 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** the CI `image` job's step "The Dockerfile's pinned Replay bundle exists and matches its
   hash"; `tests/test_api_site.py::test_a_websocket_behind_the_gate_needs_the_key_too` fails with the
   WebSocket branch of `RequireKey` removed.
+
+### 197. A rule the renderer has to draw must be in the truth first
+- **What happened:** Kian saw that a keeper never seemed to hold the ball and throw or kick it.
+  The engine settled every caught ball to the keeper's feet, and he played it from there like an
+  outfielder, by a ground pass or a dribble. The renderer could only draw what the truth said: a
+  ball on the grass. Law 12 (six seconds in his hands, no challenge) was only half in the engine:
+  nobody challenged him, but nothing held the ball in his hands.
+- **Rule:** when footage looks wrong, check the engine's truth before the renderer. A caught ball
+  stays at the keeper's chest (L15). He lets it go within Law 12's six seconds: by a throw to a
+  team-mate in range, by a kick from his hands, or by putting it down to play with his feet. He
+  chooses by the same estimate as any pass. The rate of kicks from his hands is a held-out check
+  against a published count, never a target. Leaving the put-down out made him kick from his
+  hands 10.6 times a match against the 0.66 published: when a held-out number is far off, look for
+  an option the Laws allow that the engine lacks. And before changing an option, log what
+  each release was chosen over: every kick from his hands (19 of 19 on three seeds) was the long
+  clear, chosen when every pass he had was valued below zero near his own goal, so the count is
+  set by the shared pass value there, not by the keeper's options. Widening his options (a throw
+  as far as a ball can be thrown, a kick from his hands to any team-mate) left it unchanged.
+- **Check:** `tests/test_keeper_hands.py`. Three of its tests go red when a catch does not put
+  the ball in his hands. Two more are red on the first version: there a lunge already on its way
+  knocked the ball out of his hands, and a drop kick took the ball from his chest to the grass in
+  one frame. The held-out counts then showed the decisions: no throws, holds of about 0.7 s, and
+  kicks from the hands far above the published count. The throw had only the throw-in's lofted
+  way, and he released on the first look. `test_he_waits_out_the_window_while_the_team_sets` is
+  red if he decides before `KEEPER_RELEASE_S`. `test_a_keepers_throw_may_roll_and_a_throw_in_stays_in_the_air`
+  is red if his throw cannot roll or a throw-in can.
+  `test_he_throws_no_faster_than_a_ball_can_be_thrown_and_may_kick_to_anyone` is red without the
+  throw's speed limit, or if a kick from his hands can roll. The 5 s window is the design value
+  written before the measurement; the 30 m split is gone. The kick count stays a check, never a target.
