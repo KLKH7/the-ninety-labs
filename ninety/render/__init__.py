@@ -68,4 +68,7 @@ docs/decisions/0001-synthetic-data.md.
 # does next over a second; his feet stay planted through it.
 # 0.5.14: a fouled player is drawn from the engine's fall (degrees over his feet) and fall_dir;
 # the fouler's foot meets his shins (lesson 173). The renderer does not time the fall.
-RENDERER_VERSION = "0.5.14"
+# 0.5.15: `views=tactical` also writes two fixed whole-pitch tactical lenses (camera.tactical_views)
+# under views/tac-l and views/tac-r, 1920x1080 without graphics, from the same scene frame for frame.
+# The broadcast's images and labels are byte-identical to 0.5.14's for every seed.
+RENDERER_VERSION = "0.5.15"

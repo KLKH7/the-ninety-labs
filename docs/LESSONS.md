@@ -2137,6 +2137,23 @@ short and actionable. This file is public: no research sources, product names or
   `tests/test_vision_live_job.py::test_a_clip_folder_holding_anything_else_is_refused_before_the_model_loads`
   (each answer-key file planted), and `::test_a_clean_clip_runs_the_whole_live_path_and_opens_no_truth`.
 
+### 192. A seal that matches a file by where it sits misses the same file one folder down
+- **What happened:** the render job sealed the answer key by name and place: `frames.jsonl` and
+  `events.jsonl` went to the private `truth` container only when they sat at the top of the clip
+  folder (`f.parent == clip_dir` in `ninety/render/job.py`). The tactical views write a complete
+  clip under `views/tac-l/` and `views/tac-r/`, answer key included, so the first Azure render
+  with views would have put true positions, boxes and events in the readable `renders` container,
+  next to the images vision reads. The plan for the views caught it before any render ran.
+  The same review found the job's failure reports going to `renders` too: a report's contract
+  messages quote true events and positions.
+- **Rule:** a file is answer key by what it is, wherever it sits: the seal matches the name at any
+  depth, and anything built from the key (a check report) is sealed with it. A change that adds a
+  folder to a clip plants that folder's answer key in the seal's tests.
+- **Check:** `tests/test_render_job.py::test_a_views_answer_key_is_sealed_with_the_clips` (fails
+  on the old seal), and `infra/check_truth_sealed.py` (CI), which runs the job's own `upload_dir`
+  on a planted clip with views and fails if a `frames.jsonl` or `events.jsonl` reaches `renders`
+  (`tests/test_truth_sealed.py::test_a_seal_that_matches_only_the_clips_top_level_is_caught`).
+
 ### 194. An allow-list of a folder's top level lets anything through one level down
 - **What happened:** the live detection job refused an input folder holding anything but
   `index.jsonl` and `images/`, but it checked only the folder's own entries, and inside `images/`
@@ -2179,6 +2196,34 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_personalizer.py::test_the_instructions_keep_the_claim_s_clock_for_every_persona`;
   `tests/test_personalizer_live.py::test_a_variant_the_personalizer_s_re_check_replaced_is_held_with_its_reason`.
 
+### 212. A tolerance converted to pixels for one camera is wrong for the next
+- **What happened:** the feet-in-box check (GROUNDING V6) allows 0.45 m between a player's tracked
+  ground point and the bottom of his box. It converted that to pixels as box height / 1.8, a
+  scale that holds for a camera looking across the pitch. On a touch, the renderer draws the foot
+  at the ball, up to about 0.9 m out. From the broadcast gantry, about 25 degrees down, a reach
+  toward the lens moved the box bottom only about 0.42 m in that scale, so the check never failed.
+  From the tactical lens, 35 to 40 degrees down, the same reach is about 0.65 to 0.75 m. Dataset
+  tactical lost training clips 70 and 79, and possibly test clip 900004, to frames whose drawing
+  was right.
+- **Rule:** a tolerance stated in metres is measured in metres, through the frame's own camera
+  matrix, never with a pixel scale fitted to one camera. An allowance for a real motion is bounded
+  by the drawing's own limit (here the leg's reach), so it cannot excuse a drawing beyond it.
+- **Check:** the V6 high-lens tests in `tests/test_render_checks.py`.
+  - A 1.0 m reach to a touched ball passes, though the side-on slack alone fails it.
+  - These all fail:
+    - the same foot with no touch;
+    - a 2.5 m "reach";
+    - a 0.3 m touch with a 1.0 m box;
+    - a floating body;
+    - a box moved sideways;
+    - a chest or thigh touch;
+    - rows far from the touch, or after an edit cut.
+  - Fourteen mutations each turn a test red; one more is equivalent.
+  - Two independent reviews, both cited in the PR, found holes in the earlier drafts:
+    - the first draft's ground disc excused floating and sideways boxes and spilled across cuts;
+    - the second still let a body rise on a touch away from the camera.
+    The rule now only extends the bottom down the picture, toward the foot drawn at the ball.
+
 ### 208. A script inside YAML is code: parse it before a run is approved
 - **What happened:** resolving a merge conflict in `agents-live.yml`, two new `case` branches were
   joined and the `;;` closing one was lost. The YAML still loaded and the merge was checked only
@@ -2207,3 +2252,20 @@ short and actionable. This file is public: no research sources, product names or
   Markdown line fails; an unknown version fails; a listing without a reason, or for a fresh file,
   fails); `tests/test_nightly.py` (a report without fingerprints is not archived; the workflow's
   writing job has no Azure sign-in and opens a PR against main).
+
+### 193. Score a claimed tie at the answer before adding an input to break it
+- **What happened:** building the fixed-camera fit, I reasoned that the pitch markings are
+  symmetric about halfway, so a lens and its mirror across halfway would see the same picture, and
+  made the lens's side a required input to break the tie. The test written to prove the tie
+  failed: the mirror lens sees the picture flipped left to right, which no camera without that
+  flip draws, so the two fit 0.0 px and 68 px apart. The input would have been a needless
+  dependency every caller had to get right. The same fit, freed in all six parameters, stalled a
+  metre from the true camera at 2.6 times its cost; the objective was right (lesson 97), the step
+  was not.
+- **Rule:** a claimed ambiguity is checked by scoring both candidates at the answer, as an
+  objective is (lesson 97), before any interface is built around it. A reflection is not a camera
+  move.
+- **Check:** `tests/test_vision_pitch_fixed.py::test_a_lens_and_its_mirror_across_halfway_do_not_tie`
+  (the true lens fits, its mirror does not, the flipped picture does);
+  `::test_the_compass_search_walks_on_where_the_free_step_stalls` fails with the compass search
+  removed from `pitch.settle` (a half-size scene did not stall, so the stalled view is a fixture).

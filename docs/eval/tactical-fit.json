@@ -1,0 +1,509 @@
+{
+ "cameras": 20,
+ "seed": 193,
+ "frames": 12,
+ "zones": {
+  "near": {
+   "footprint_m_per_px": {
+    "n": 12720,
+    "median": 0.0615,
+    "p95": 0.0881,
+    "max": 0.12
+   },
+   "error_m": {
+    "n": 12720,
+    "median": 0.007,
+    "p95": 0.0246,
+    "max": 0.0496
+   },
+   "error_px": {
+    "n": 12720,
+    "median": 0.1698,
+    "p95": 0.5304,
+    "max": 1.0507
+   }
+  },
+  "centre": {
+   "footprint_m_per_px": {
+    "n": 36000,
+    "median": 0.1254,
+    "p95": 0.1852,
+    "max": 0.2497
+   },
+   "error_m": {
+    "n": 36000,
+    "median": 0.0078,
+    "p95": 0.0227,
+    "max": 0.0853
+   },
+   "error_px": {
+    "n": 36000,
+    "median": 0.1039,
+    "p95": 0.361,
+    "max": 0.8242
+   }
+  },
+  "far": {
+   "footprint_m_per_px": {
+    "n": 13107,
+    "median": 0.1899,
+    "p95": 0.2382,
+    "max": 0.2785
+   },
+   "error_m": {
+    "n": 13107,
+    "median": 0.017,
+    "p95": 0.0633,
+    "max": 0.1156
+   },
+   "error_px": {
+    "n": 13107,
+    "median": 0.1338,
+    "p95": 0.6317,
+    "max": 1.1547
+   }
+  },
+  "near_corner": {
+   "footprint_m_per_px": {
+    "n": 5158,
+    "median": 0.0907,
+    "p95": 0.1166,
+    "max": 0.146
+   },
+   "error_m": {
+    "n": 5158,
+    "median": 0.0118,
+    "p95": 0.0377,
+    "max": 0.0568
+   },
+   "error_px": {
+    "n": 5158,
+    "median": 0.2142,
+    "p95": 0.6255,
+    "max": 1.0414
+   }
+  },
+  "far_corner": {
+   "footprint_m_per_px": {
+    "n": 4738,
+    "median": 0.2248,
+    "p95": 0.272,
+    "max": 0.3036
+   },
+   "error_m": {
+    "n": 4738,
+    "median": 0.0193,
+    "p95": 0.0666,
+    "max": 0.0977
+   },
+   "error_px": {
+    "n": 4738,
+    "median": 0.1487,
+    "p95": 0.2916,
+    "max": 0.5146
+   }
+  }
+ },
+ "scenes": [
+  {
+   "side": "left",
+   "position": [
+    52.536,
+    -30.519,
+    29.63
+   ],
+   "fov_v_deg": 33.509,
+   "static_points": 2000,
+   "frames_ok": 12,
+   "median_px": 0.644,
+   "fitted_position": [
+    52.53,
+    -30.487,
+    29.601
+   ],
+   "position_error_m": 0.043,
+   "max_m": 0.0322,
+   "p95_px": 0.2784
+  },
+  {
+   "side": "right",
+   "position": [
+    52.401,
+    -32.833,
+    28.7
+   ],
+   "fov_v_deg": 37.87,
+   "static_points": 2000,
+   "frames_ok": 12,
+   "median_px": 0.635,
+   "fitted_position": [
+    52.389,
+    -32.909,
+    28.776
+   ],
+   "position_error_m": 0.109,
+   "max_m": 0.0848,
+   "p95_px": 0.6054
+  },
+  {
+   "side": "left",
+   "position": [
+    50.366,
+    -33.746,
+    27.07
+   ],
+   "fov_v_deg": 36.412,
+   "static_points": 2000,
+   "frames_ok": 12,
+   "median_px": 0.686,
+   "fitted_position": [
+    50.37,
+    -33.699,
+    27.031
+   ],
+   "position_error_m": 0.062,
+   "max_m": 0.0436,
+   "p95_px": 0.3933
+  },
+  {
+   "side": "right",
+   "position": [
+    53.938,
+    -30.12,
+    28.178
+   ],
+   "fov_v_deg": 36.563,
+   "static_points": 2000,
+   "frames_ok": 12,
+   "median_px": 0.646,
+   "fitted_position": [
+    53.971,
+    -30.049,
+    28.153
+   ],
+   "position_error_m": 0.082,
+   "max_m": 0.0346,
+   "p95_px": 0.4084
+  },
+  {
+   "side": "left",
+   "position": [
+    51.257,
+    -32.04,
+    28.864
+   ],
+   "fov_v_deg": 34.972,
+   "static_points": 2000,
+   "frames_ok": 12,
+   "median_px": 0.647,
+   "fitted_position": [
+    51.212,
+    -31.966,
+    28.833
+   ],
+   "position_error_m": 0.092,
+   "max_m": 0.0381,
+   "p95_px": 0.608
+  },
+  {
+   "side": "right",
+   "position": [
+    50.495,
+    -36.682,
+    28.321
+   ],
+   "fov_v_deg": 38.078,
+   "static_points": 2000,
+   "frames_ok": 12,
+   "median_px": 0.616,
+   "fitted_position": [
+    50.538,
+    -36.542,
+    28.234
+   ],
+   "position_error_m": 0.171,
+   "max_m": 0.0946,
+   "p95_px": 0.3528
+  },
+  {
+   "side": "left",
+   "position": [
+    50.912,
+    -32.68,
+    28.854
+   ],
+   "fov_v_deg": 38.926,
+   "static_points": 2000,
+   "frames_ok": 12,
+   "median_px": 0.636,
+   "fitted_position": [
+    50.901,
+    -32.633,
+    28.819
+   ],
+   "position_error_m": 0.059,
+   "max_m": 0.0383,
+   "p95_px": 0.2108
+  },
+  {
+   "side": "right",
+   "position": [
+    51.928,
+    -35.077,
+    27.503
+   ],
+   "fov_v_deg": 34.906,
+   "static_points": 2000,
+   "frames_ok": 12,
+   "median_px": 0.629,
+   "fitted_position": [
+    51.923,
+    -35.078,
+    27.488
+   ],
+   "position_error_m": 0.016,
+   "max_m": 0.0515,
+   "p95_px": 0.2528
+  },
+  {
+   "side": "left",
+   "position": [
+    53.11,
+    -33.257,
+    31.742
+   ],
+   "fov_v_deg": 34.103,
+   "static_points": 2000,
+   "frames_ok": 12,
+   "median_px": 0.656,
+   "fitted_position": [
+    53.11,
+    -33.236,
+    31.718
+   ],
+   "position_error_m": 0.032,
+   "max_m": 0.0237,
+   "p95_px": 0.2165
+  },
+  {
+   "side": "right",
+   "position": [
+    54.708,
+    -34.567,
+    27.645
+   ],
+   "fov_v_deg": 38.603,
+   "static_points": 2000,
+   "frames_ok": 12,
+   "median_px": 0.62,
+   "fitted_position": [
+    54.708,
+    -34.59,
+    27.654
+   ],
+   "position_error_m": 0.024,
+   "max_m": 0.0178,
+   "p95_px": 0.1227
+  },
+  {
+   "side": "left",
+   "position": [
+    54.847,
+    -33.395,
+    31.336
+   ],
+   "fov_v_deg": 34.636,
+   "static_points": 2000,
+   "frames_ok": 12,
+   "median_px": 0.646,
+   "fitted_position": [
+    54.823,
+    -33.385,
+    31.34
+   ],
+   "position_error_m": 0.026,
+   "max_m": 0.0197,
+   "p95_px": 0.2753
+  },
+  {
+   "side": "right",
+   "position": [
+    52.219,
+    -28.1,
+    24.967
+   ],
+   "fov_v_deg": 33.024,
+   "static_points": 2000,
+   "frames_ok": 12,
+   "median_px": 0.663,
+   "fitted_position": [
+    52.213,
+    -28.133,
+    25.009
+   ],
+   "position_error_m": 0.053,
+   "max_m": 0.0477,
+   "p95_px": 0.613
+  },
+  {
+   "side": "left",
+   "position": [
+    52.953,
+    -29.798,
+    30.142
+   ],
+   "fov_v_deg": 37.518,
+   "static_points": 2000,
+   "frames_ok": 12,
+   "median_px": 0.63,
+   "fitted_position": [
+    52.947,
+    -29.789,
+    30.123
+   ],
+   "position_error_m": 0.022,
+   "max_m": 0.0203,
+   "p95_px": 0.2166
+  },
+  {
+   "side": "right",
+   "position": [
+    51.141,
+    -33.762,
+    27.381
+   ],
+   "fov_v_deg": 33.314,
+   "static_points": 2000,
+   "frames_ok": 12,
+   "median_px": 0.707,
+   "fitted_position": [
+    51.209,
+    -33.617,
+    27.281
+   ],
+   "position_error_m": 0.189,
+   "max_m": 0.1044,
+   "p95_px": 0.8984
+  },
+  {
+   "side": "left",
+   "position": [
+    54.624,
+    -37.202,
+    28.2
+   ],
+   "fov_v_deg": 35.813,
+   "static_points": 2000,
+   "frames_ok": 12,
+   "median_px": 0.693,
+   "fitted_position": [
+    54.554,
+    -36.978,
+    28.048
+   ],
+   "position_error_m": 0.28,
+   "max_m": 0.1156,
+   "p95_px": 0.7624
+  },
+  {
+   "side": "right",
+   "position": [
+    52.074,
+    -36.442,
+    27.609
+   ],
+   "fov_v_deg": 36.062,
+   "static_points": 2000,
+   "frames_ok": 12,
+   "median_px": 0.618,
+   "fitted_position": [
+    52.092,
+    -36.365,
+    27.561
+   ],
+   "position_error_m": 0.092,
+   "max_m": 0.0722,
+   "p95_px": 0.3074
+  },
+  {
+   "side": "left",
+   "position": [
+    53.331,
+    -33.677,
+    26.572
+   ],
+   "fov_v_deg": 32.889,
+   "static_points": 2000,
+   "frames_ok": 12,
+   "median_px": 0.662,
+   "fitted_position": [
+    53.316,
+    -33.647,
+    26.563
+   ],
+   "position_error_m": 0.034,
+   "max_m": 0.0165,
+   "p95_px": 0.2332
+  },
+  {
+   "side": "right",
+   "position": [
+    49.793,
+    -37.001,
+    26.391
+   ],
+   "fov_v_deg": 38.833,
+   "static_points": 2000,
+   "frames_ok": 12,
+   "median_px": 0.614,
+   "fitted_position": [
+    49.789,
+    -36.954,
+    26.363
+   ],
+   "position_error_m": 0.056,
+   "max_m": 0.0421,
+   "p95_px": 0.2867
+  },
+  {
+   "side": "left",
+   "position": [
+    54.396,
+    -28.246,
+    25.534
+   ],
+   "fov_v_deg": 38.151,
+   "static_points": 2000,
+   "frames_ok": 12,
+   "median_px": 0.631,
+   "fitted_position": [
+    54.382,
+    -28.238,
+    25.521
+   ],
+   "position_error_m": 0.02,
+   "max_m": 0.0183,
+   "p95_px": 0.1558
+  },
+  {
+   "side": "right",
+   "position": [
+    51.471,
+    -28.486,
+    27.752
+   ],
+   "fov_v_deg": 38.75,
+   "static_points": 2000,
+   "frames_ok": 12,
+   "median_px": 0.645,
+   "fitted_position": [
+    51.472,
+    -28.486,
+    27.745
+   ],
+   "position_error_m": 0.007,
+   "max_m": 0.0123,
+   "p95_px": 0.0869
+  }
+ ]
+}
