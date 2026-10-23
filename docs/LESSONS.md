@@ -2207,6 +2207,23 @@ short and actionable. This file is public: no research sources, product names or
     - the second still let a body rise on a touch away from the camera.
     The rule now only extends the bottom down the picture, toward the foot drawn at the ball.
 
+
+### 217. The demo runs the system the pitch describes
+- **What happened:** the pitch and the challenge map describe a multi-agent graph (an Analyst picks
+  moments, a Tactician explains, a Challenger offers another reading, the fact-checking agent sends
+  wrong claims back), and the ablation measured it. But `ninety-e2e`, which builds the bundle the
+  viewer and the video show, ran the single Analyst -> fact-checker slice. A judge watching the
+  demo would have seen a different system from the one the README claims. The audit found it by
+  reading `ninety/e2e.py`, not the docs. The graph also checked a Challenger's reading after the
+  Tactician's claim was already verified, and rewrote it when it failed: three model calls in the
+  committed recording spent on a claim that could not air.
+- **Rule:** the path that makes the demo is the path the claims describe; a fallback is named in
+  the bundle and the trace whenever it ran. A check whose outcome cannot change what airs is not
+  run.
+- **Check:** `tests/test_e2e.py::test_the_claim_is_about_the_shot_and_carries_its_numbers` asserts
+  the bundle's trace has the graph's roles in order; `::test_a_minute_the_graph_fails_on_falls_back_to_the_single_analyst`
+  and `tests/test_workflow.py::test_a_wrong_alternative_after_a_verified_claim_costs_no_rewrite`.
+
 ### 208. A script inside YAML is code: parse it before a run is approved
 - **What happened:** resolving a merge conflict in `agents-live.yml`, two new `case` branches were
   joined and the `;;` closing one was lost. The YAML still loaded and the merge was checked only
