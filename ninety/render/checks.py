@@ -15,6 +15,7 @@ from ninety.render.camera import project_with
 from ninety.validate import validate
 
 PROJECTION_TOL_PX = 1.0  # guide: ground truth projects onto its pixels within 1 px
+V6_M = 0.45  # GROUNDING V6: a sole within this of the tracked point (feet swing about 0.4 m)
 EDGE_MARGIN_PX = 2  # objects cut by the image border have a shifted centroid; skip them
 
 
@@ -35,17 +36,79 @@ def _inside(b: list[int], w: int, h: int) -> bool:
     )
 
 
-def projection_errors(frames: list[dict]) -> dict:
+def _reaching(frames: list[dict], events: list[dict] | None, heights: dict[str, float]
+              ) -> dict[tuple[int, str], list[tuple[float, float]]]:
+    """(row, player) -> the ground offset (dx, dy) from his tracked point to where his foot is drawn
+    at the ball he touches with it: the renderer's own touches with a foot (scene.contacts; a chest,
+    thigh or head puts no foot there), over the frames it draws each (scene._touch_window, in match
+    frames, never across an edit cut), as far as his leg reaches ((LEG_M + HIP_SIDE_M) at his scale,
+    as touch_at scales them). A row in two touches' windows holds both: touch_at draws one of them.
+    Rows outside such a touch are absent."""
+    from ninety.render.meshpose import ASSET_STATURE_M
+    from ninety.render.scene import HIP_SIDE_M, LEG_M, _touch_window, contacts
+    from ninety.sim.engine import FPS
+
+    out: dict[tuple[int, str], list[tuple[float, float]]] = {}
+    nums = [fr.get("frame", i) for i, fr in enumerate(frames)]
+    for pid, mine in contacts(frames, events).items():
+        reach = (LEG_M + HIP_SIDE_M) * heights.get(pid, ASSET_STATURE_M) / ASSET_STATURE_M
+        for c in mine:
+            if c["part"] not in ("foot", "strike"):
+                continue
+            # A saved row has no ball velocity, which tells a kick's longer window from a touch's,
+            # so the wider of the two is taken (*design*): still only the frames round this touch.
+            kick, touch = _touch_window({**c, "part": "strike"}), _touch_window({**c, "part": "chest"})
+            lo, hi = min(kick[0], touch[0]), max(kick[1], touch[1])
+            dx, dy = c["ball"][0] - c["at"][0], c["ball"][1] - c["at"][1]
+            d = math.hypot(dx, dy)
+            if d < 1e-9:
+                continue
+            f = min(d, reach) / d
+            at = c["frame"]
+            for i in range(len(frames)):
+                # the same shot: as many match frames from the touch as rows (no cut between)
+                # in seconds, as touch_at compares them
+                if lo < (nums[i] - nums[at]) / FPS < hi and nums[i] - nums[at] == i - at:
+                    out.setdefault((i, pid), []).append((dx * f, dy * f))
+    return out
+
+
+def _reaches(P: list[list[float]], pl: dict, offs: list[tuple[float, float]], y1: float) -> bool:
+    """Whether the box's bottom `y1` is where the drawn feet can put it on a touch, as the saved
+    matrix projects them: no higher than his own sole lifted V6_M (the standing foot is under him, so
+    a reach never raises the bottom), and no lower than the touching foot, out along the ground
+    toward the ball, or V6_M beyond it (V6's tolerance at the drawn foot, *design*)."""
+    top = project_with(P, (pl["x"], pl["y"], V6_M))
+    if top is None or y1 < top[1]:
+        return False
+    for dx, dy in offs:
+        n = math.hypot(dx, dy)
+        far = (n + V6_M) / n
+        ends = [project_with(P, (pl["x"] + dx * t, pl["y"] + dy * t, 0.0)) for t in (0.0, 1.0, far)]
+        if all(e is not None for e in ends) and y1 <= max(e[1] for e in ends):
+            return True
+    return False
+
+
+def projection_errors(frames: list[dict], events: list[dict] | None = None,
+                      heights: dict[str, float] | None = None) -> dict:
     """Ball: saved-matrix projection of its centre against the centroid of its drawn pixels.
 
     Players: saved-matrix projection of their foot point must sit inside their pixel box, and the
     keypoint pixels must equal the saved-matrix projection of the pitch points they name.
+
+    The box's bottom is the sole of his lowest foot, within V6's 0.45 m of the tracked point. While
+    he touches the ball with a foot, that foot is drawn at the ball (scene.touch_at), as far out as
+    his leg reaches, so on those frames the bottom may also lie between the tracked point and that
+    foot as the saved matrix projects them: from a high lens a reach toward the camera is a long way
+    down the picture, which a side-on scale did not allow for (lesson 212).
     """
     from ninety.render.scene import KEYPOINTS
 
     kp_xy = {name: (x, y) for name, x, y in KEYPOINTS}
     ball_err, kp_err, foot_outside, foot_checked = [], [], 0, 0
-    for fr in frames:
+    reaching = _reaching(frames, events, heights or {}) if events is not None else {}
+    for i, fr in enumerate(frames):
         cam = fr["camera"]
         P, w, h = cam["P"], cam["width"], cam["height"]
         b = fr["ball"]
@@ -69,8 +132,12 @@ def projection_errors(frames: list[dict]) -> dict:
                 # feet swing about 0.4 m either side of the tracked point, and the bottom of the
                 # box is the sole of the lowest foot, so allow that much slack in metres-as-pixels
                 slack = 0.45 * (y1 - y0) / 1.8
-                if not (x0 - slack <= u <= x1 + slack and y1 - slack <= v <= y1 + slack):
-                    foot_outside += 1
+                if x0 - slack <= u <= x1 + slack and y1 - slack <= v <= y1 + slack:
+                    continue
+                offs = reaching.get((i, pl["id"]), [])
+                if offs and x0 - slack <= u <= x1 + slack and _reaches(P, pl, offs, y1):
+                    continue
+                foot_outside += 1
         for k in fr["keypoints"]:
             uv = project_with(P, (*kp_xy[k["name"]], 0.0))
             kp_err.append(math.dist(uv, (k["px"], k["py"])))
@@ -254,8 +321,9 @@ def ball_projection_ok(ball_max_px: float | None, is_view: bool) -> bool:
 
 
 def check_clip(clip_dir: Path) -> dict:
-    clip, frames, _ = load_clip(clip_dir)
-    proj = projection_errors(frames)
+    clip, frames, events = load_clip(clip_dir)
+    heights = {lk["id"]: lk["height_m"] for lk in clip.get("looks", [])}
+    proj = projection_errors(frames, events, heights)
     comp = label_completeness(clip, frames, clip_dir)
     occ = occlusion(frames)
     contract = validate(clip_dir)  # docs/DATA_CONTRACT.md: every clip passes `ninety-validate`
