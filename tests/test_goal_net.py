@@ -172,9 +172,19 @@ def test_the_side_that_conceded_fetches_it_out_through_the_goal_mouth(name):
 
 @pytest.mark.parametrize("name", SHOTS)
 def test_nobody_walks_through_the_net_after_a_goal(name):
-    """Defect: the keeper walked through the net to the ball behind the goal."""
-    _, before, after, _ = goal_then_kickoff(SHOTS[name][0])
-    assert walked_through(before + after) == []
+    """Defect: the keeper walked through the net to the ball behind the goal. The side that conceded
+    has a player standing behind the goal, whose straight way to the ball in it is through the back
+    of the net (the audit of lesson 184 found the goals alone never sent anyone that way)."""
+    e = shot_at_goal(SHOTS[name][0])
+    before = play_on(e, lambda e: any(ev["type"] == "goal" for ev in e.match.events), 3)
+    rest = e.dead_ball_rest()
+    behind, keeper = e.by_id["a2"], e.keeper("away")
+    behind.x, behind.y, behind.vx, behind.vy = PITCH_X + NET_DEPTH_M + 0.4, rest[1], 0.0, 0.0
+    keeper.x, keeper.y, keeper.vx, keeper.vy = PITCH_X - 20.0, MID, 0.0, 0.0
+    assert any(through((behind.x, behind.y), rest, c, d) for c, d in nets())
+    track = play_on(e, lambda e: e.restart is not None and e.restart.carried_by is not None, 60)
+    assert e.restart.carried_by == "a2"  # he is the nearest, and he went round the net to it
+    assert walked_through(before) == [] and walked_through(track) == []  # placed between the two
 
 
 def test_a_ball_played_on_after_the_whistle_into_the_goal_is_held_by_its_net():
@@ -269,6 +279,13 @@ def test_the_goal_itself_is_unchanged():
         mp.setattr(engine, "in_the_net", lambda s, line: (s, None))
         play_on(no_net, lambda e: any(ev["type"] == "goal" for ev in e.match.events), 3)
     assert netted.match.events == no_net.match.events
+    # and from the goal on the ball moves on from where it was, by no more than its own speed
+    # allows in a frame: the net holds it where it meets it, it does not put it anywhere
+    track = play_on(netted, lambda e: math.hypot(*e.ball[3:]) == 0.0, 5)
+    fastest = math.hypot(*shot[3:]) * DT
+    for a, b in zip(track, track[1:], strict=False):
+        assert math.dist(a["ball"][:3], b["ball"][:3]) <= fastest, b["t"]
+        assert b["ball"][0] > PITCH_X  # in the goal
     goal = netted.match.events[-1]
     shot_event = next(ev for ev in netted.match.events if ev["type"] == "shot" and ev["player"] == "h9")
     assert goal["type"] == "goal" and shot_event["outcome"] == "goal" and goal["player"] == "h9"
@@ -362,3 +379,74 @@ def test_a_ball_played_on_after_the_whistle_wide_or_over_is_not_pulled_into_the_
     assert e.netted is None and len(track) <= len(free)
     for f, s in zip(track, free, strict=False):
         assert f["ball"] == s
+
+
+def dead_ball(state: tuple[float, ...]) -> Engine:
+    """A minute in, the whistle has gone for a free kick in midfield and the dead ball is moving
+    near the away side's goal (x = PITCH_X), everyone else far from it."""
+    e = Engine(2)
+    e.run(1)
+    for p in e.players:
+        p.x, p.vx, p.vy = min(p.x, 80.0), 0.0, 0.0
+    e.possessor, e.throw_by, e.set_by = None, None, None
+    e.stop("free_kick", "away", (60.0, MID))
+    e.ball = state
+    return e
+
+
+def in_the_goal(b: tuple[float, ...]) -> bool:
+    """The ball's centre inside the goal: behind its line, between its side nets and under its roof."""
+    behind = b[0] - PITCH_X
+    return 0 < behind < NET_DEPTH_M and abs(b[1] - MID) < GOAL_HALF_WIDTH and b[2] < roof(b[0]) + 2 * R
+
+
+# Lesson 200: a ball outside the goal meets the net's outside. Each starts outside the goal and
+# would go into it through the net: beside the post into the side netting, from behind into the
+# back, dropping onto the roof. On main each went through the net and into (or across) the goal.
+OUTSIDE = {
+    "beside the post": ((104.0, 39.0, 0.0, 6.0, -3.0, 0.0), "side"),
+    "from behind the goal": ((109.0, 34.0, 0.0, -5.0, 0.0, 0.0), "back"),
+    "dropping onto the roof": ((106.0, 34.0, 3.0, 0.0, 0.0, 0.0), "roof"),
+}
+
+
+@pytest.mark.parametrize("name", OUTSIDE)
+def test_a_dead_ball_outside_the_goal_meets_its_net_from_outside(name):
+    state, part = OUTSIDE[name]
+    e = dead_ball(state)
+    track = play_on(e, lambda e: math.hypot(*e.ball[3:]) == 0.0 and e.ball[2] == 0.0, 15)
+    assert not any(in_the_goal(f["ball"]) for f in track)
+    met = []
+    for f in track:
+        bx, by, bz, vx, vy, vz = f["ball"]
+        if part == "side" and abs(abs(by - MID) - (GOAL_HALF_WIDTH + R)) <= EPS and bx > PITCH_X:
+            met.append(f)
+            assert vy * (by - MID) >= 0, f["t"]  # not on into the net: the net took that speed
+        if part == "back" and abs(bx - (PITCH_X + NET_DEPTH_M + R)) <= EPS:
+            met.append(f)
+            assert vx >= 0, f["t"]
+        if part == "roof" and bz > 0 and abs(bz - (roof(bx) + 2 * R)) <= 1e-6:
+            met.append(f)
+    assert met  # it met that part of the net
+    assert track[-1]["ball"][0] > PITCH_X  # and came to rest outside the goal, behind its line
+
+
+def test_a_ball_on_the_roof_rolls_down_it_and_off_the_back():
+    """Lesson 200: a ball dropped onto the roof does not stay up there (the fetcher could never take
+    it): it rolls down the slope toward the back and drops off behind the goal."""
+    e = dead_ball(OUTSIDE["dropping onto the roof"][0])
+    track = play_on(e, lambda e: math.hypot(*e.ball[3:]) == 0.0 and e.ball[2] == 0.0, 15)
+    on = [f for f in track if f["ball"][2] > 0 and abs(f["ball"][2] - (roof(f["ball"][0]) + 2 * R)) <= 1e-6]
+    assert len(on) > 2
+    assert all(b["ball"][0] >= a["ball"][0] for a, b in zip(on, on[1:], strict=False))  # toward the back
+    assert track[-1]["ball"][0] > PITCH_X + NET_DEPTH_M  # down behind the goal
+
+
+def test_a_shot_wide_of_the_post_meets_the_side_netting_in_the_frame_it_crosses():
+    """Lesson 200: in play, a ball crossing the goal line just wide of the post and on into where the
+    side netting is, within one frame, is stopped there too (Engine.woodwork), not only once dead."""
+    e = shot_at_goal((104.9, MID + GOAL_HALF_WIDTH + 0.24, 0.3, 20.0, -10.0, 0.0))
+    play_on(e, lambda e: e.ball[0] > PITCH_X, 1)
+    assert abs(e.ball[1] - MID) >= GOAL_HALF_WIDTH + R - EPS
+    assert e.ball[4] == 0.0
+    assert e.restart is not None and e.restart.kind == "goal_kick"

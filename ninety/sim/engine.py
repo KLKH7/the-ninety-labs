@@ -398,7 +398,7 @@ def net_stop(px: float, py: float, x: float, y: float, vx: float,
     (px, py) to (x, y) that would take him through it, along the axis it crosses, is not made."""
     if 0.0 < min(px, x) and max(px, x) < PITCH_X:  # both ends in front of both goal lines
         return x, y, vx, vy
-    for _ in range(2):  # a step through a corner of the net meets its side and its back
+    for _ in range(2):  # design: a corner is two segments, so one step meets the side and the back
         hit = False
         for c, d in NETS:
             if crosses((px, py), (x, y), c, d):
@@ -453,11 +453,47 @@ def goal_entered(before: ball.State, after: ball.State) -> float | None:
     return None
 
 
+def net_top(behind: float) -> float:
+    """How high the net is this far behind the goal line: its roof slopes from the crossbar down to
+    the top of its back (NET_DEPTH_M, NET_BACK_M)."""
+    return CROSSBAR + (NET_BACK_M - CROSSBAR) * clamp(behind, 0.0, NET_DEPTH_M) / NET_DEPTH_M
+
+
+def off_the_net(before: ball.State, after: ball.State) -> ball.State:
+    """L1, lesson 200: a ball outside a goal meets its net from outside as it does from inside
+    (in_the_net): beside a post into the side netting, from behind into the back, or dropping onto
+    the roof. Where its step would take it into the net it stays a ball's radius outside (on the
+    roof, its lowest point on it), and its speed into the net is lost (design, as inside). On the
+    roof it rolls down the slope toward the back, as a ball rolls down any incline (g sin a cos a
+    across the ground, the roof's own slope a; design: the net's give and any friction on it are
+    not modelled), so a ball dropped onto it does not stay up there."""
+    bx, by, bz, vx, vy, vz = after
+    r, mid = ball.RADIUS, PITCH_Y / 2
+    for line in (0.0, PITCH_X):
+        out = 1.0 if line > 0 else -1.0
+        behind, off = (bx - line) * out, abs(by - mid)
+        if not (0.0 < behind < NET_DEPTH_M + r and off < GOAL_HALF_WIDTH + r and bz < net_top(behind)):
+            continue  # not in the net's way
+        was, was_off, was_z = (before[0] - line) * out, abs(before[1] - mid), before[2]
+        if was >= NET_DEPTH_M + r:  # from behind the goal: the back
+            bx, vx = line + out * (NET_DEPTH_M + r), (0.0 if vx * out < 0 else vx)
+        elif was_z >= net_top(was):  # from above it: the roof
+            slope = (CROSSBAR - NET_BACK_M) / NET_DEPTH_M
+            bz, vz = net_top(behind), max(vz, 0.0)
+            vx += out * ball.GRAVITY * slope / (1.0 + slope * slope) * DT  # sin a cos a = s / (1 + s^2)
+        elif was_off >= GOAL_HALF_WIDTH + r:  # from beside the goal: a side
+            side = math.copysign(GOAL_HALF_WIDTH + r, by - mid)
+            by, vy = mid + side, (0.0 if vy * side < 0 else vy)
+        return bx, by, bz, vx, vy, vz
+    return after
+
+
 def net_step(before: ball.State, after: ball.State, line: float | None) -> tuple[ball.State, float | None]:
     """A dead ball's move from `before` to `after`, held by the net of the goal it is in (`line`),
     or has just gone into (goal_entered): a goal, or a ball played on after the whistle. A ball
-    outside the goal meets no net (design, as specified for lesson 184: the net's outside, met by a
-    ball wide of a post or dropping over the bar, is not modelled yet)."""
+    outside the goal meets the net's outside (off_the_net)."""
+    if line is None and goal_entered(before, after) is None:
+        return off_the_net(before, after), None
     return in_the_net(after, goal_entered(before, after) if line is None else line)
 
 
@@ -1660,7 +1696,8 @@ class Engine:
         return False
 
     def woodwork(self, before: ball.State) -> None:
-        """Law 1: the ball rebounds off a post or the crossbar where it meets the goal line."""
+        """Law 1: the ball rebounds off a post or the crossbar where it meets the goal line, and a
+        ball going on past it outside the goal meets the net's outside (off_the_net)."""
         for line in (0.0, PITCH_X):
             x0, x1 = before[0], self.ball[0]
             if (x0 - line) * (x1 - line) > 0 or x0 == x1:
@@ -1683,6 +1720,7 @@ class Engine:
                 self.bumped = None
                 self.chase = {}
                 return
+        self.ball = off_the_net(before, self.ball)  # beside a post or over the bar: the net's outside
 
     def went_out(self, before: ball.State) -> bool:
         """Law 9: out once the whole ball has crossed a goal line or touchline. Where and how high

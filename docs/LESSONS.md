@@ -2063,6 +2063,20 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `uv run pytest tests/test_pitch_score.py tests/test_vision_score.py
   tests/test_fake_box_detections.py -k "cut_off"`; the pitch_score test fails with `z < 0.5` put back.
 
+### 189. A sentence beside a number is not its mark
+- **What happened:** the goal-net change merged while its review check was skipped, so the
+  hard-coding audit (lesson 21) ran after the merge. Two new factors had a sentence beside them
+  and were still neither. The net-touch slack is two roundings of a written millimetre, and the
+  comment said "measurement precision", but the grounding row's source cell said only "physics".
+  A step through a corner of the net meets the side and the back, and the comment said so, with
+  no *design* on the count of two.
+- **Rule:** the mark sits on the constant. A margin from how positions are written names
+  measurement precision in the grounding source cell, with the derivation beside the value
+  (lesson 10). A choice carries the word *design* on its own line. A sentence that only describes
+  the number is neither. The audit runs before the merge.
+- **Check:** the audit's neither list. A constant on it is marked in a follow-up that does not
+  change the value.
+
 ### 190. A test that reads its constant back cannot pin it
 - **What happened:** the foul pose asserted `foul_fall_deg(...) == FALL_DOWN_DEG` and `peak >= 80`.
   A lie of 80° left both green, and so did rewriting the pose times, because the test added those
