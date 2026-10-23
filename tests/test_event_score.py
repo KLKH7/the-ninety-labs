@@ -352,6 +352,14 @@ def test_a_foul_is_placed_at_the_fouled_player_not_the_one_who_fouled():
     assert reference_point("foul", "home", 0.0, [frame], (10.5, 11.4))[:2] == (10.5, 11.4)
 
 
+def test_the_wilson_interval_matches_known_values():
+    from ninety.eval.event_score import wilson
+    assert wilson(7, 13) == [0.29, 0.77]
+    assert wilson(7, 7) == [0.65, 1.0]
+    assert wilson(0, 5) == [0.0, 0.43]
+    assert wilson(0, 0) is None
+
+
 def test_a_clip_the_broadcast_cut_is_graded_across_its_recorded_cut():
     """A rendered clip leaves out a dead ball (meta.json cuts, ninety/render/edit.py). It is graded
     on the frames it shows; a detection timed inside the cut has nowhere to be right, and a gap the

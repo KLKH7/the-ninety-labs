@@ -1,0 +1,2729 @@
+{
+  "name": "learning curve: dataset v1 plus 20 mesh clips",
+  "base": "docs/eval/dataset-v1.json (308 clips; sha256 81fcf81a15dca6ce355daef8cfbeab134fa2f5c3d688f42cfca152488fe6b2cf)",
+  "added": "the first 20 of the 160 round-1 mesh clips (round1 7101-7180, round1ctrl 7201-7280, rendered at 91d1e3b), in coco_export.clip_order (sha256 of 'ninety-train-order-<seed>'); nested: every smaller list is inside every larger one. Chosen before any run.",
+  "storage": "renders/<run>/train/seed<N>/ (images, clip.json) and truth/<run>/train/seed<N>/ (frames.jsonl, events.jsonl)",
+  "clips": 328,
+  "excluded": {
+    "82": "v3: a blocked shot is touched again after the window's cut, which no clip can show (R1 on #108)",
+    "111": "failed the render checks twice (b319f21 and cca498c): one player foot outside his box of 1,718 checked; a renderer defect to trace",
+    "v3 seeds replaced": "13 15 25 26 28 34 54 56 57 63 101 105 110 122 2033 3003 3005 3013 3016 3030 3037 3042 4004 4015 4020 4027 4032 4033 4038 4047: the ball rests behind the boards, labelled visible at renderer 0.3.1; re-rendered at cca498c (v3boards, v3boards-set)",
+    "v3boards seeds not used": "2033 3003 3005 3013 3016 3030 3037 3042 4004 4015 4020 4027 4032 4033 4038 4047: launched without v3's overrides; v3boards-set has them"
+  },
+  "by_run": {
+    "v3": 248,
+    "topup1": 30,
+    "v3boards": 14,
+    "v3boards-set": 16,
+    "round1": 10,
+    "round1ctrl": 10
+  },
+  "clips_list": [
+    {
+      "seed": 3,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 4,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 5,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 6,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 7,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 8,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 9,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 10,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 11,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 12,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 13,
+      "run": "v3boards",
+      "commit": "cca498c",
+      "renderer": "0.3.2",
+      "overrides": {}
+    },
+    {
+      "seed": 14,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 15,
+      "run": "v3boards",
+      "commit": "cca498c",
+      "renderer": "0.3.2",
+      "overrides": {}
+    },
+    {
+      "seed": 16,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 17,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 18,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 19,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 20,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 21,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 22,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 23,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 24,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 25,
+      "run": "v3boards",
+      "commit": "cca498c",
+      "renderer": "0.3.2",
+      "overrides": {}
+    },
+    {
+      "seed": 26,
+      "run": "v3boards",
+      "commit": "cca498c",
+      "renderer": "0.3.2",
+      "overrides": {}
+    },
+    {
+      "seed": 27,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 28,
+      "run": "v3boards",
+      "commit": "cca498c",
+      "renderer": "0.3.2",
+      "overrides": {}
+    },
+    {
+      "seed": 29,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 30,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 31,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 32,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 33,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 34,
+      "run": "v3boards",
+      "commit": "cca498c",
+      "renderer": "0.3.2",
+      "overrides": {}
+    },
+    {
+      "seed": 35,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 36,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 37,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 38,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 39,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 40,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 41,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 42,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 43,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 44,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 45,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 46,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 47,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 48,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 49,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 50,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 51,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 52,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 53,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 54,
+      "run": "v3boards",
+      "commit": "cca498c",
+      "renderer": "0.3.2",
+      "overrides": {}
+    },
+    {
+      "seed": 55,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 56,
+      "run": "v3boards",
+      "commit": "cca498c",
+      "renderer": "0.3.2",
+      "overrides": {}
+    },
+    {
+      "seed": 57,
+      "run": "v3boards",
+      "commit": "cca498c",
+      "renderer": "0.3.2",
+      "overrides": {}
+    },
+    {
+      "seed": 58,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 59,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 60,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 61,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 62,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 63,
+      "run": "v3boards",
+      "commit": "cca498c",
+      "renderer": "0.3.2",
+      "overrides": {}
+    },
+    {
+      "seed": 64,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 65,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 66,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 67,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 68,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 69,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 70,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 71,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 72,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 73,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 74,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 75,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 76,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 77,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 78,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 79,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 80,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 81,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 83,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 84,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 85,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 86,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 87,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 88,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 89,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 90,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 91,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 92,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 93,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 94,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 95,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 96,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 97,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 98,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 99,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 100,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 101,
+      "run": "v3boards",
+      "commit": "cca498c",
+      "renderer": "0.3.2",
+      "overrides": {}
+    },
+    {
+      "seed": 102,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 103,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 104,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 105,
+      "run": "v3boards",
+      "commit": "cca498c",
+      "renderer": "0.3.2",
+      "overrides": {}
+    },
+    {
+      "seed": 106,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 107,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 108,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 109,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 110,
+      "run": "v3boards",
+      "commit": "cca498c",
+      "renderer": "0.3.2",
+      "overrides": {}
+    },
+    {
+      "seed": 112,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 113,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 114,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 115,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 116,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 117,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 118,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 119,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 120,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 121,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 122,
+      "run": "v3boards",
+      "commit": "cca498c",
+      "renderer": "0.3.2",
+      "overrides": {}
+    },
+    {
+      "seed": 123,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 124,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 125,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 126,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 127,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 128,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 129,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 130,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 131,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 132,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {}
+    },
+    {
+      "seed": 2001,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 2002,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 2003,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 2004,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 2005,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 2006,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 2007,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 2008,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 2009,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 2010,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 2011,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 2012,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 2013,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 2014,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 2015,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 2016,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 2017,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 2018,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 2019,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 2020,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 2021,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 2022,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 2023,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 2024,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 2025,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 2026,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 2027,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 2028,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 2029,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 2030,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 2031,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 2032,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 2033,
+      "run": "v3boards-set",
+      "commit": "cca498c",
+      "renderer": "0.3.2",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 2034,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 2035,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 2036,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 2037,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 2038,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 2039,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 2040,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 2041,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 2042,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 2043,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 2044,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 2045,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 3001,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 3002,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 3003,
+      "run": "v3boards-set",
+      "commit": "cca498c",
+      "renderer": "0.3.2",
+      "overrides": {
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 3004,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 3005,
+      "run": "v3boards-set",
+      "commit": "cca498c",
+      "renderer": "0.3.2",
+      "overrides": {
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 3006,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 3007,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 3008,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 3009,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 3010,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 3011,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 3012,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 3013,
+      "run": "v3boards-set",
+      "commit": "cca498c",
+      "renderer": "0.3.2",
+      "overrides": {
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 3014,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 3015,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 3016,
+      "run": "v3boards-set",
+      "commit": "cca498c",
+      "renderer": "0.3.2",
+      "overrides": {
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 3017,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 3018,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 3019,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 3020,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 3021,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 3022,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 3023,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 3024,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 3025,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 3026,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 3027,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 3028,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 3029,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 3030,
+      "run": "v3boards-set",
+      "commit": "cca498c",
+      "renderer": "0.3.2",
+      "overrides": {
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 3031,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 3032,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 3033,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 3034,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 3035,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 3036,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 3037,
+      "run": "v3boards-set",
+      "commit": "cca498c",
+      "renderer": "0.3.2",
+      "overrides": {
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 3038,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 3039,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 3040,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 3041,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 3042,
+      "run": "v3boards-set",
+      "commit": "cca498c",
+      "renderer": "0.3.2",
+      "overrides": {
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 3043,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 3044,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 3045,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 4001,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4002,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4003,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4004,
+      "run": "v3boards-set",
+      "commit": "cca498c",
+      "renderer": "0.3.2",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4005,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4006,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4007,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4008,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4009,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4010,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4011,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4012,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4013,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4014,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4015,
+      "run": "v3boards-set",
+      "commit": "cca498c",
+      "renderer": "0.3.2",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4016,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4017,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4018,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4019,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4020,
+      "run": "v3boards-set",
+      "commit": "cca498c",
+      "renderer": "0.3.2",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4021,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4022,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4023,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4024,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4025,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4026,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4027,
+      "run": "v3boards-set",
+      "commit": "cca498c",
+      "renderer": "0.3.2",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4028,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4029,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4030,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4031,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4032,
+      "run": "v3boards-set",
+      "commit": "cca498c",
+      "renderer": "0.3.2",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4033,
+      "run": "v3boards-set",
+      "commit": "cca498c",
+      "renderer": "0.3.2",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4034,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4035,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4036,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4037,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4038,
+      "run": "v3boards-set",
+      "commit": "cca498c",
+      "renderer": "0.3.2",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4039,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4040,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4041,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4042,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4043,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4044,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4045,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4046,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4047,
+      "run": "v3boards-set",
+      "commit": "cca498c",
+      "renderer": "0.3.2",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4048,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4049,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4050,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4051,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4052,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4053,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4054,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4055,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4056,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4057,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4058,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4059,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 4060,
+      "run": "v3",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 6001,
+      "run": "topup1",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded",
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 6002,
+      "run": "topup1",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded",
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 6003,
+      "run": "topup1",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded",
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 6004,
+      "run": "topup1",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded",
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 6005,
+      "run": "topup1",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded",
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 6006,
+      "run": "topup1",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded",
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 6007,
+      "run": "topup1",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded",
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 6008,
+      "run": "topup1",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded",
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 6009,
+      "run": "topup1",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded",
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 6010,
+      "run": "topup1",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded",
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 6011,
+      "run": "topup1",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded",
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 6012,
+      "run": "topup1",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded",
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 6013,
+      "run": "topup1",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded",
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 6014,
+      "run": "topup1",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded",
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 6015,
+      "run": "topup1",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded",
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 6016,
+      "run": "topup1",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded",
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 6017,
+      "run": "topup1",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded",
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 6018,
+      "run": "topup1",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded",
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 6019,
+      "run": "topup1",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded",
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 6020,
+      "run": "topup1",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded",
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 6021,
+      "run": "topup1",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded",
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 6022,
+      "run": "topup1",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded",
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 6023,
+      "run": "topup1",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded",
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 6024,
+      "run": "topup1",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded",
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 6025,
+      "run": "topup1",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded",
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 6026,
+      "run": "topup1",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded",
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 6027,
+      "run": "topup1",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded",
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 6028,
+      "run": "topup1",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded",
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 6029,
+      "run": "topup1",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded",
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 6030,
+      "run": "topup1",
+      "commit": "b319f21",
+      "renderer": "0.3.1",
+      "overrides": {
+        "occlusion": "crowded",
+        "kit_contrast": "low"
+      }
+    },
+    {
+      "seed": 7111,
+      "run": "round1",
+      "commit": "91d1e3b",
+      "renderer": "0.4.0",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 7218,
+      "run": "round1ctrl",
+      "commit": "91d1e3b",
+      "renderer": "0.4.0",
+      "overrides": {}
+    },
+    {
+      "seed": 7241,
+      "run": "round1ctrl",
+      "commit": "91d1e3b",
+      "renderer": "0.4.0",
+      "overrides": {}
+    },
+    {
+      "seed": 7213,
+      "run": "round1ctrl",
+      "commit": "91d1e3b",
+      "renderer": "0.4.0",
+      "overrides": {}
+    },
+    {
+      "seed": 7223,
+      "run": "round1ctrl",
+      "commit": "91d1e3b",
+      "renderer": "0.4.0",
+      "overrides": {}
+    },
+    {
+      "seed": 7132,
+      "run": "round1",
+      "commit": "91d1e3b",
+      "renderer": "0.4.0",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 7161,
+      "run": "round1",
+      "commit": "91d1e3b",
+      "renderer": "0.4.0",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 7169,
+      "run": "round1",
+      "commit": "91d1e3b",
+      "renderer": "0.4.0",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 7273,
+      "run": "round1ctrl",
+      "commit": "91d1e3b",
+      "renderer": "0.4.0",
+      "overrides": {}
+    },
+    {
+      "seed": 7210,
+      "run": "round1ctrl",
+      "commit": "91d1e3b",
+      "renderer": "0.4.0",
+      "overrides": {}
+    },
+    {
+      "seed": 7201,
+      "run": "round1ctrl",
+      "commit": "91d1e3b",
+      "renderer": "0.4.0",
+      "overrides": {}
+    },
+    {
+      "seed": 7231,
+      "run": "round1ctrl",
+      "commit": "91d1e3b",
+      "renderer": "0.4.0",
+      "overrides": {}
+    },
+    {
+      "seed": 7204,
+      "run": "round1ctrl",
+      "commit": "91d1e3b",
+      "renderer": "0.4.0",
+      "overrides": {}
+    },
+    {
+      "seed": 7216,
+      "run": "round1ctrl",
+      "commit": "91d1e3b",
+      "renderer": "0.4.0",
+      "overrides": {}
+    },
+    {
+      "seed": 7141,
+      "run": "round1",
+      "commit": "91d1e3b",
+      "renderer": "0.4.0",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 7156,
+      "run": "round1",
+      "commit": "91d1e3b",
+      "renderer": "0.4.0",
+      "overrides": {
+        "occlusion": "keeper"
+      }
+    },
+    {
+      "seed": 7131,
+      "run": "round1",
+      "commit": "91d1e3b",
+      "renderer": "0.4.0",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 7139,
+      "run": "round1",
+      "commit": "91d1e3b",
+      "renderer": "0.4.0",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 7126,
+      "run": "round1",
+      "commit": "91d1e3b",
+      "renderer": "0.4.0",
+      "overrides": {
+        "occlusion": "crowded"
+      }
+    },
+    {
+      "seed": 7148,
+      "run": "round1",
+      "commit": "91d1e3b",
+      "renderer": "0.4.0",
+      "overrides": {
+        "occlusion": "keeper"
+      }
+    }
+  ]
+}

@@ -27,7 +27,7 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from ninety.eval.event_score import EPS, WINDOW_S, git_commit, load_events, ratio
+from ninety.eval.event_score import EPS, WINDOW_S, git_commit, load_events, ratio, wilson
 from ninety.eval.pitch_score import PLAYER_IOU, SCORE_MIN, _iou
 from ninety.vision import events as ev
 from ninety.vision import track as tr
@@ -167,6 +167,7 @@ def grade(clips: list[dict]) -> dict:
         right_team = sum(1 for p in pairs if p["team"]["truth"] == p["team"]["detected"])
         row = {"matched": len(pairs), "team_right": right_team,
                "team_accuracy": ratio(right_team, len(pairs)),
+               "team_accuracy_95": wilson(right_team, len(pairs)),
                # Reported, never used to set anything here: the side's confidence when right and when wrong.
                "team_confidence": side_confidence(pairs)}
         for role in NAMED[kind]:
@@ -208,6 +209,8 @@ def report_md(body: dict) -> str:
     ]
     for kind, row in g.items():
         team = f"{row['team_right']} of {row['matched']}"
+        if row["matched"]:
+            team += f" (95% {row['team_accuracy_95']})"
         roles = list(NAMED[kind]) or ["-"]
         for n, role in enumerate(roles):
             lead = f"| {kind} | {row['matched']} | {team} " if n == 0 else "| | | "

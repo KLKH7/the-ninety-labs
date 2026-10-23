@@ -32,6 +32,13 @@ A clip is one directory:
 A rendered clip (`ninety-render`, `ninety-dataset`) is the same directory plus `clip.json` (the
 render parameters) and `images/`, and is checked the same way: `uv run ninety-validate <clip>`.
 
+**A player down (renderer 0.5.10 on).** While a fouled player is drawn lying over his feet, his
+player row in `frames.jsonl` carries `fall`, the degrees his body is over (0 to 90); a standing
+player's row has no `fall`. Those degrees are the engine's `fall`: the renderer draws that
+angle and does not time the fall. The field is optional and additive: positions, ball and events are
+unchanged, clips rendered before 0.5.10 have none and stay valid, and the render check judges a
+row with `fall` by its ground point inside the box rather than at its bottom (GROUNDING V6).
+
 **A window.** A rendered clip is a few seconds cut from a simulated match, so its `meta.json`
 carries `window: {"first_frame", "last_frame"}`, the match frames it covers, which must be its
 first and last frames. Its frames keep their match numbers, and its events are those inside it.
@@ -66,7 +73,9 @@ consecutive frames only, never the jump across a cut. `clip.json` also carries `
 of consecutive frames the images show (image `index` is match frame `frame`): whatever maps video
 time to match time (the viewer, the audio description) reads them through `ninety/match/timeline.py`
 instead of adding the clip's start, and a reader that links frames (vision's tracks and passes)
-links nothing across a cut.
+links nothing across a cut. Each cut is covered by a stinger, a graphic that wipes across the picture
+for about half a second either side of it; `clip.json` lists the picture indices it covers as
+`stinger_frames`, and, like the scorebug, it is an occluder that the visibility labels count.
 
 A window that opens at frame 0 starts with the match and is withheld nothing at its start. A
 missing event alone never excuses a judgement, everything whose evidence lies inside the window is

@@ -12,24 +12,40 @@ import math
 import pytest
 
 from ninety.render.camera import Camera
-from ninety.render.meshpose import HOLD_SIDE, foot_yaw, pose_markers
+from ninety.render.meshpose import (
+    ASSET_STATURE_M,
+    HOLD_SIDE,
+    _bone_index,
+    _fk,
+    foot_yaw,
+    pose_angles,
+    pose_markers,
+    to_world,
+)
 from ninety.render.scene import (
+    ACCEL_BOX,
     BALL_RADIUS,
     KICK_SWING_S,
     LEAD_AHEAD_FRAMES,
     LEAD_MAX,
     PLANT_AHEAD_MAX,
+    STEP_FRAMES,
     STEP_LIFT,
+    THROW_FOLLOW_S,
     Gait,
     Look,
     _step_m,
+    advance_gaits,
     body_parts,
     contacts,
     hold_at,
     holds,
     mesh_pose,
+    pace,
     parts_box,
     reach_sign,
+    throw_at,
+    throws,
     touch_at,
 )
 
@@ -115,23 +131,28 @@ def test_a_planted_foot_keeps_pointing_the_way_it_landed_while_the_hips_turn():
 
 
 def test_a_run_lands_its_foot_where_the_leg_reaches():
-    """Old: a touchdown up to 0.58 m ahead, which the leg could not reach, so the foot slid onto it."""
+    """Old: a touchdown up to 0.58 m ahead, which the leg could not reach, so the foot slid onto it.
+    A landing is a foot coming down out of its swing (scene._stride_feet); the stride's phase moves
+    with the ground covered."""
+    k = LOOK.height_m / ASSET_STATURE_M
     for speed in (2.5, 4.0, 6.0, 8.0):
         g = Gait(action="run", speed=speed)
         x = 0.0
         landed = 0
-        for i in range(40):
-            g.phase = (i * 0.5) % (2 * math.pi)
+        for _ in range(60):  # 2.4 s: at 2.5 m/s two strides hold only four landings
+            g.phase = (g.phase + 2 * math.pi * speed / FPS / (2 * _step_m(speed))) % (2 * math.pi)
             x += speed / FPS
-            before = (g.plant_l, g.plant_r)
+            before = (g.down_l, g.down_r)
             body_parts(x, 0.0, LOOK, g)
             pose = mesh_pose(g, x, 0.0, 0.0)
-            feet = pose_markers(pose, 0.0, 1.84)
-            for s, was, now in (("l", before[0], g.plant_l), ("r", before[1], g.plant_r)):
+            feet = pose_markers(pose, 0.0, LOOK.height_m)
+            sides = (("l", before[0], g.down_l, g.plant_l), ("r", before[1], g.down_r, g.plant_r))
+            for s, was, now, plant in sides:
                 if now and not was:
                     landed += 1
-                    assert now[0] - x <= PLANT_AHEAD_MAX + 1e-9
-                    assert math.dist(feet[f"foot_{s}"][:2], now[:2]) < 0.03, (speed, s)
+                    # within the plant's rounding (0.1 mm, scene._feet)
+                    assert plant[0] - x <= PLANT_AHEAD_MAX * k + 5e-5, (speed, s, plant[0] - x)
+                    assert math.dist(feet[f"foot_{s}"][:2], plant[:2]) < 0.03, (speed, s)
         assert landed > 4
 
 
@@ -337,8 +358,8 @@ def test_a_keeper_holding_the_ball_has_his_hands_on_it():
             m = pose_markers(pose, g.heading, look.height_m)
             centre = (b["x"], b["y"], b["z"] + BALL_RADIUS)
             for s in "lr":
-                assert math.dist(m[f"hand_{s}"], centre) < HOLD_SIDE * look.height_m / 1.84 + 0.06, (
-                    z, fi, s, m[f"hand_{s}"])
+                side = HOLD_SIDE * look.height_m / ASSET_STATURE_M
+                assert math.dist(m[f"hand_{s}"], centre) < side + 0.06, (z, fi, s, m[f"hand_{s}"])
                 assert m[f"foot_{s}"][2] > -0.02, (z, fi, s, m[f"foot_{s}"])  # feet on, not in, the grass
             box = parts_box(cam, parts)
             for name in ("head", "hand_l", "hand_r", "foot_l", "foot_r"):
@@ -363,6 +384,10 @@ def _draw(frames, events=None):
     mine, held, prev = contacts(frames, events), holds(frames), {}
     out = {pid: [] for pid in looks}
     for fi, fr in enumerate(frames):
+        coming = {}
+        for later in frames[fi + 1:fi + 1 + ACCEL_BOX]:
+            for p in later["players"]:
+                coming.setdefault(p["id"], []).append((p["vx"], p["vy"]))
         b = fr["ball"]
         ball = (b["x"], b["y"], b["z"])
         for pl in fr["players"]:
@@ -373,6 +398,7 @@ def _draw(frames, events=None):
             stride = 2 * _step_m(math.hypot(pl["vx"], pl["vy"]))
             g.phase = (g.phase + 2 * math.pi * dist / stride) % (2 * math.pi)
             g.heading, g.action, g.speed = pl["heading"], pl["action"], math.hypot(pl["vx"], pl["vy"])
+            pace(g, pl["vx"], pl["vy"], g.heading, 1 / FPS, coming.get(pl["id"]))
             touch_at(g, mine.get(pl["id"], []), fi, 1.84, FPS, pl["x"], pl["y"])
             hold_at(g, held.get(pl["id"], []), fi, ball, 1.84, FPS)
             body_parts(pl["x"], pl["y"], looks[pl["id"]], g, ball)
@@ -453,6 +479,74 @@ def test_a_tackle_puts_the_tacklers_foot_on_the_ball_and_neither_body_jumps():
         assert not over, (who, over)
 
 
+def _run_frames(profile, turn_rate=0.0):
+    """One player running the speed `profile` (m/s a frame), turning at `turn_rate` rad/s."""
+    x, y, h, frames = 20.0, 30.0, 0.0, []
+    for v in profile:
+        h += turn_rate / FPS
+        x, y = x + math.cos(h) * v / FPS, y + math.sin(h) * v / FPS
+        frames.append({"ball": {"x": 80.0, "y": 50.0, "z": 0.0, "vx": 0.0, "vy": 0.0}, "possessor": None,
+                       "players": [{"id": "h1", "x": x, "y": y, "vx": v * math.cos(h), "vy": v * math.sin(h),
+                                    "heading": h, "action": _engine_action(v), "dive": 0.0}]})
+    return frames
+
+
+def _slides(drawn):
+    """How far each foot moves along the grass between two frames it is on the grass in: drawn
+    within 2 cm of it in both, and not the frame a swing lands in (a walking swing's last frame can be
+    1 to 2 cm up with 2 cm still to go; with the hips' bob the leg now reaches that low)."""
+    out = []
+    for (pa, a, _, _), (pb, b, _, _) in zip(drawn, drawn[1:], strict=False):
+        for s in "lr":
+            was, now = pa[f"plant_{s}"], pb[f"plant_{s}"]
+            landing = was is not None and was[3] > 0.0 and now is not None and now[3] == 0.0
+            if a[f"foot_{s}"][2] < 0.02 and b[f"foot_{s}"][2] < 0.02 and not landing:
+                out.append(math.dist(a[f"foot_{s}"][:2], b[f"foot_{s}"][:2]))
+    return out
+
+
+def test_a_foot_on_the_grass_does_not_slide_from_a_standstill_to_a_sprint_and_back():
+    """Old: the stride swung each foot back and forth along one path between two stored poses, so a
+    walking foot skimmed along the grass and a landing foot blended onto its plant: a quarter of the
+    frames a foot was on the grass it slid more than 2 cm, up to 23 cm (lesson 157). Now a foot on
+    the grass stays where it landed (within the leg search's precision, 2 cm) and a swinging foot
+    is lifted, from a standstill to 7 m/s and back, and running a bend."""
+    profile = [0.0] * 15 + [min(7.0, 0.1 * i) for i in range(1, 71)] + [7.0] * 25
+    profile += [max(0.0, 7.0 - 0.1 * i) for i in range(1, 71)] + [0.0] * 15
+    for frames in (_run_frames(profile), _run_frames([5.0] * 120, turn_rate=0.5)):
+        slides = _slides(_draw(frames)["h1"])
+        assert len(slides) > 30
+        assert max(slides) <= 0.02, sorted(slides)[-5:]
+
+
+def test_the_stride_lengthens_and_the_swing_lifts_with_speed():
+    """The same foot lands a stride (two steps, scene._step_m: Debaere 2013) further on each time,
+    and is carried higher through its swing the faster he runs, up to where the drawn knee folds no
+    further (scene.SWING_LIFT_M, held from 4.5 m/s); beyond it no lower than the leg search's 2 cm."""
+    lifts = []
+    for speed in (1.5, 3.0, 5.0, 7.0):
+        drawn = _draw(_run_frames([speed] * 150))["h1"]
+        landings, top = [], 0.0
+        for (pa, _, _, _), (pb, mb, _, _) in zip(drawn, drawn[1:], strict=False):
+            was, now = pa["plant_l"], pb["plant_l"]
+            if now and now[3] == 0.0 and was and was[3] > 0.0:
+                landings.append(now[0])
+            top = max(top, mb["foot_l"][2])
+        strides = [b - a for a, b in zip(landings[1:], landings[2:], strict=False)]
+        assert strides, speed
+        for s in strides:
+            assert abs(s / (2 * _step_m(speed)) - 1.0) < 0.1, (speed, s, 2 * _step_m(speed))
+        lifts.append(top)
+    assert lifts[:3] == sorted(lifts[:3]) and lifts[3] >= lifts[2] - 0.02, lifts
+    assert lifts[0] > 0.05 and lifts[-1] > 0.3, lifts
+
+
+# A low step after the body (scene.STEP_LIFT) with 4 cm for the foot marker above its sole, both
+# lengths of the body: for the 1.84 m player these tests draw, scaled as the scene scales every
+# length, by height / ASSET_STATURE_M.
+LOW_STEP_M = (STEP_LIFT + 0.04) * 1.84 / ASSET_STATURE_M
+
+
 def test_a_kick_straight_after_a_touch_stands_on_its_other_foot():
     """Old (0.4.2): a touch then a strike while walking left the other foot to the stride, which
     lifted it as the kick swung: both feet in the air, the drawn body above the label's foot line
@@ -486,7 +580,7 @@ def test_a_kick_straight_after_a_touch_stands_on_its_other_foot():
         if touch and touch["part"] in ("foot", "strike") and touch["w"] >= 0.9:  # the touch, the kick
             other = "foot_r" if touch["side"] == "l" else "foot_l"
             # It stands, or takes a low step after the body (STEP_LIFT, 8 cm): it is not swung up.
-            assert m[other][2] < STEP_LIFT + 0.04, (i, touch["part"], m[other])
+            assert m[other][2] < LOW_STEP_M, (i, touch["part"], m[other])
 
 
 @pytest.mark.parametrize("gap", [0, 5])
@@ -524,9 +618,12 @@ def test_a_first_touch_then_a_strike_on_the_move_keeps_a_foot_on_the_grass(gap):
     assert any(p["touch"] and p["touch"]["part"] == "foot" and p["touch"]["side"] == "l" for p, *_ in drawn)
     assert any(p["touch"] and p["touch"]["part"] == "strike" and p["touch"]["side"] == "r" for p, *_ in drawn)
     for i, (pose, m, _, _) in enumerate(drawn):
-        # Walking, a foot is always on the grass, or on a low step after the body (STEP_LIFT).
+        # While a touch is drawn, a foot is on the grass or on a low step after the body (STEP_LIFT).
+        # Between touches the stride's own flight phase is a run's (3.1 m/s, _duty).
         low = min(m["foot_l"][2], m["foot_r"][2])
-        assert -0.03 < low < STEP_LIFT + 0.04, (i, pose["touch"], m["foot_l"], m["foot_r"])
+        assert low > -0.03, (i, m["foot_l"], m["foot_r"])
+        if pose["touch"]:
+            assert low < LOW_STEP_M, (i, pose["touch"], m["foot_l"], m["foot_r"])
 
 
 def test_a_thigh_touch_on_the_move_keeps_a_foot_on_the_grass():
@@ -548,8 +645,38 @@ def test_a_thigh_touch_on_the_move_keeps_a_foot_on_the_grass():
     drawn = _draw(frames)["h1"]
     assert any(p["touch"] and p["touch"]["part"] == "thigh" for p, *_ in drawn)
     for i, (pose, m, _, _) in enumerate(drawn):
+        # While the touch is drawn; between touches a 3 m/s stride has a run's flight phase (_duty).
         low = min(m["foot_l"][2], m["foot_r"][2])
-        assert -0.03 < low < STEP_LIFT + 0.04, (i, pose["touch"], m["foot_l"], m["foot_r"])
+        assert low > -0.03, (i, m["foot_l"], m["foot_r"])
+        if pose["touch"]:
+            assert low < LOW_STEP_M, (i, pose["touch"], m["foot_l"], m["foot_r"])
+
+
+@pytest.mark.parametrize("wind_up", range(20, 34, 2))
+def test_a_strike_on_the_run_keeps_a_foot_on_the_grass(wind_up):
+    """Old (0.5.3 before the fix): running at 4.2 m/s into a strike, the support foot could be just
+    lifting off behind him when the strike began; it came down where it was, a metre back, and
+    stepped after him at standing pace (STEP_PEAK_MPS), never catching him up: the leg hung toward
+    it, both feet 0.3 to 0.4 m up through the strike (seed 7, h6 at 9.9 s). A stepping foot now
+    outpaces the body (STEP_CATCH_UP). Across the stride's phases at the strike (`wind_up`)."""
+    frames, x, v = [], 50.0, 4.2
+    for i in range(wind_up + 16):
+        x += v / FPS
+        striking = wind_up <= i < wind_up + 3
+        ball = {"x": x + 0.4, "y": 29.85, "z": 0.0, "vx": v, "vy": 0.0}
+        if i >= wind_up + 3:
+            t = (i - wind_up - 2) / FPS
+            struck = frames[wind_up + 2]["ball"]["x"]
+            ball = {"x": struck + 18.0 * t, "y": 29.85, "z": 0.0, "vx": 18.0, "vy": 0.0}
+        frames.append({"ball": ball, "possessor": "h1" if i < wind_up + 3 else None,
+                       "players": [{"id": "h1", "x": x, "y": 30.0, "vx": v, "vy": 0.0, "heading": 0.0,
+                                    "action": "strike" if striking else _engine_action(v), "dive": 0.0}]})
+    drawn = _draw(frames)["h1"]
+    for i, (pose, m, _, _) in enumerate(drawn):
+        touch = pose["touch"]
+        if touch and touch["part"] == "strike" and touch["w"] >= 0.5:
+            low = min(m["foot_l"][2], m["foot_r"][2])
+            assert -0.03 < low < LOW_STEP_M + 0.05, (wind_up, i, m["foot_l"], m["foot_r"])
 
 
 def test_a_keeper_stooping_on_the_run_keeps_his_feet_on_the_grass():
@@ -569,3 +696,840 @@ def test_a_keeper_stooping_on_the_run_keeps_his_feet_on_the_grass():
     drawn = _draw(frames)["h1"]
     for i, (pose, m, _, _) in enumerate(drawn):
         assert min(m["foot_l"][2], m["foot_r"][2]) > -0.03, (i, pose["lift"], m["foot_l"], m["foot_r"])
+
+
+def _throw_in(wait=30, hold=5, after=30, way=(-15.6, 5.5, 10.0)):
+    """Engine-shaped frames of a throw-in (engine.throw_hands, tick_carrier): the taker stands behind
+    the touchline facing the pitch with the ball on the grass 0.28 m in front of him; on the frame he
+    is named thrower it is still there, then rises 0.48 m a frame (P6's 12 m/s) to 1.85 m, stays for
+    `hold` frames, and leaves on the first frame after, at `way` m/s; he then walks off."""
+    frames, x, y = [], 50.0, -0.55
+    bx, by = 50.0, -0.27
+    n = wait + 1 + 4 + hold + after
+    rel = wait + 1 + 4 + hold
+    for i in range(n):
+        if i <= wait:
+            action, z = "stand", 0.0
+        elif i < rel:
+            action, z = "throw", min(1.85, 0.48 * (i - wait))
+        else:
+            action = "stand" if i < rel + 3 else "walk"
+        if i < rel:
+            ball = {"x": bx, "y": by, "z": z if i > wait else 0.0, "vx": 0.0, "vy": 0.0}
+        else:
+            t = (i - rel) / FPS
+            ball = {"x": bx + way[0] * t, "y": by + way[1] * t, "z": 1.85 + way[2] * t - 4.9 * t * t,
+                    "vx": way[0], "vy": way[1]}
+        v = 0.0 if i < rel + 3 else min(1.5, 0.1 * (i - rel - 2))
+        y += v / FPS
+        frames.append({"frame": 2000 + i, "ball": ball, "possessor": "h1" if wait <= i < rel else None,
+                       "players": [{"id": "h1", "x": x, "y": y, "vx": 0.0, "vy": v, "heading": math.pi / 2,
+                                    "action": action, "dive": 0.0}]})
+    return frames, wait, rel
+
+
+def _draw_throw(frames, height=1.84):
+    look = Look("h1", "home", "FB", height, 1.0, "#c68642", "#1b1410")
+    thrown = throws(frames, FPS)
+    g, out = Gait(), []
+    for fi, fr in enumerate(frames):
+        pl, b = fr["players"][0], fr["ball"]
+        g.heading, g.action, g.speed = pl["heading"], pl["action"], math.hypot(pl["vx"], pl["vy"])
+        g.phase = (g.phase + 2 * math.pi * g.speed / FPS / (2 * _step_m(g.speed))) % (2 * math.pi)
+        touch_at(g, [], fi, height, FPS, pl["x"], pl["y"])
+        hold_at(g, [], fi, (b["x"], b["y"], b["z"]), height, FPS)
+        throw_at(g, thrown.get("h1", []), fi, height, FPS, pl["x"], pl["y"])
+        body_parts(pl["x"], pl["y"], look, g, None)
+        pose = mesh_pose(g, pl["x"], pl["y"], 0.0)
+        m = pose_markers(pose, g.heading, height)
+        rel = {k: (v[0] - pl["x"], v[1] - pl["y"], v[2]) for k, v in m.items()}
+        out.append((pose, m, rel, g.speed))
+    return out
+
+
+def test_a_throw_in_keeps_both_hands_on_the_ball_from_the_grass_to_the_throw():
+    """Old: on the frame the engine named him thrower the arms snapped over his head with the ball
+    still at his feet, the ball rose into the hands by itself, and on the throw the arms dropped to
+    his sides in one frame (seed 21, a6 at 6:09). Now he bends to the ball beforehand, a hand either
+    side of it (HOLD_SIDE) from the frame it starts to rise until it leaves, and follows through."""
+    frames, start, rel = _throw_in()
+    drawn = _draw_throw(frames)
+    side = HOLD_SIDE * 1.84 / ASSET_STATURE_M
+    for i in range(start, rel + 1):
+        b = frames[i]["ball"]
+        centre = (b["x"], b["y"], b["z"] + BALL_RADIUS)
+        for s in "lr":
+            assert math.dist(drawn[i][1][f"hand_{s}"], centre) < side + 0.04, (i, s, drawn[i][1][f"hand_{s}"])
+    # Bent to it on the grass: the head is below the hips' standing height when the lift starts.
+    assert drawn[start][1]["head"][2] < 1.0, drawn[start][1]["head"]
+    # The follow-through goes the way the ball went (forward along the throw), not straight down.
+    way = (-15.6 / math.hypot(15.6, 5.5), 5.5 / math.hypot(15.6, 5.5))
+    mid = lambda m: [(m["hand_l"][j] + m["hand_r"][j]) / 2 for j in range(3)]  # noqa: E731
+    a, b = mid(drawn[rel][1]), mid(drawn[rel + 4][1])
+    assert (b[0] - a[0]) * way[0] + (b[1] - a[1]) * way[1] > 0.25, (a, b)
+    assert b[2] < a[2] - 0.3, (a, b)
+
+
+def test_a_throw_in_moves_no_limb_in_a_jump():
+    """Old: the arms jumped about a metre on the frame he was named thrower and again on the throw.
+    Now no marker moves relative to the body faster than the limb cap, with two stated exceptions.
+    While the engine lifts the ball at 12 m/s (0.48 m a frame) the hands hold it, so the head moves
+    no further in a frame than the ball and each hand no further than the ball plus the 4 cm either
+    side of its hold at both ends and a frame's turn of the wrist about it (0.15 m). In the
+    follow-through the hands swing on from a ball that left them at about 20 m/s: up to 0.3 m a frame
+    (7.5 m/s, design), still a third of the release."""
+    frames, start, rel = _throw_in()
+    drawn = _draw_throw(frames)
+    for i in range(1, len(drawn)):
+        cap = _limb_cap(max(drawn[i - 1][3], drawn[i][3]))
+        for k in ("head", "hand_l", "hand_r", "foot_l", "foot_r"):
+            limit = cap
+            if start < i <= rel:
+                a, b = frames[i - 1]["ball"], frames[i]["ball"]
+                step = math.dist((a["x"], a["y"], a["z"]), (b["x"], b["y"], b["z"]))
+                limit = max(cap, step + (0.15 if k.startswith("hand") else 0.0))
+            elif rel < i <= rel + round(THROW_FOLLOW_S * FPS) and k.startswith("hand"):
+                limit = 0.3
+            mv = math.dist(drawn[i - 1][2][k], drawn[i][2][k])
+            assert mv <= limit, (i, k, round(mv, 3), round(limit, 3))
+
+
+@pytest.mark.parametrize("speed", [2.5, 3.5, 4.5, 6.0])
+def test_a_running_foot_is_highest_early_in_its_swing(speed):
+    """Old (0.5.3): a running foot was carried highest halfway through its swing, under the hips, as
+    if walking: a high-knee march at 3 to 4 m/s. Running, it is highest about a third of the way
+    through (Fukuchi et al. 2017, Fig. 3: the knee most folded at 69% of the stride, the swing from
+    about 54%), behind him, and comes through low to land: in most swings no later than a third and
+    one frame (a swing is 10 to 13 frames here)."""
+    drawn = _draw(_run_frames([speed] * 120))["h1"][30:]
+    shares = []
+    for s in "lr":
+        swing = []
+        for pose, m, _, _ in drawn:
+            plant = pose[f"plant_{s}"]
+            if plant and plant[3] > 0.0:
+                swing.append(m[f"foot_{s}"][2])
+            elif swing:
+                shares.append((swing.index(max(swing)) + 1) / (len(swing) + 1))
+                swing = []
+    shares = sorted(shares[1:])
+    assert len(shares) > 4
+    assert shares[len(shares) // 2] < 1 / 3 + 1 / 11, (speed, shares)
+
+
+def test_a_run_has_a_flight_phase_and_a_walk_does_not():
+    """Above the walk-to-run switch (1.96 m/s, Neptune and Sasaki 2005) both feet leave the grass
+    between steps; below it there are frames with both feet down. Old (0.5.3): at 3 to 4 m/s the
+    stride dragged a foot on its toes behind him while the other landed."""
+    for speed, flight in ((1.3, False), (3.5, True), (6.0, True)):
+        drawn = _draw(_run_frames([speed] * 100))["h1"][40:]
+        both_up = sum(1 for _, m, _, _ in drawn if min(m["foot_l"][2], m["foot_r"][2]) > 0.03)
+        both_down = sum(1 for _, m, _, _ in drawn if max(m["foot_l"][2], m["foot_r"][2]) < 0.03)
+        assert (both_up > 0) == flight and (both_down > 0) != flight, (speed, both_up, both_down)
+
+
+def test_a_change_of_pace_in_mid_swing_moves_no_foot_in_a_jump():
+    """Old (0.5.3): the swing's progress was read straight off the stride's phase, so when braking
+    from a run changed the stance's share mid-swing the swinging foot jumped, from knee-up to planted
+    far ahead in one frame (seed 21, h2 at 5:43.8). Braking at 7 m/s (the engine's) from 5 m/s
+    through the walk-run switch and speeding up again, no foot moves relative to the body faster
+    than the limb cap."""
+    profile = [5.0] * 30 + [max(1.0, 5.0 - 0.28 * i) for i in range(1, 16)] + [1.0] * 10
+    profile += [min(5.0, 1.0 + 0.25 * i) for i in range(1, 17)] + [5.0] * 20
+    for start in range(0, 12, 3):  # different phases of the stride at the change
+        drawn = _draw(_run_frames([5.0] * start + profile))["h1"]
+        over = [(i, round(mv, 3), round(cap, 3)) for i, (mv, cap) in enumerate(_jumps(drawn)) if mv > cap]
+        assert not over, (start, over)
+
+
+def test_the_push_off_toe_does_not_slide_before_it_lifts():
+    """Old (0.5.3): a foot was kept on the grass behind him further back than the leg reaches
+    (STANCE_BEHIND_MAX 0.45, measured 0.30), so in its last frames before lifting the leg dragged
+    it along on its toes at the same height, up to 17 cm a frame (seed 21, h9 at 5:55). Now in the
+    frame after a foot was planted it either stays within 3 cm or has left the grass (risen 2 cm,
+    the slide test's height for on the grass), at every pace from a walk to a sprint."""
+    for speed in (1.5, 2.5, 3.5, 5.0, 7.0):
+        drawn = _draw(_run_frames([speed] * 80))["h1"][20:]
+        for (pa, a, _, _), (_, b, _, _) in zip(drawn, drawn[1:], strict=False):
+            for s in "lr":
+                planted = pa[f"plant_{s}"] is not None and pa[f"plant_{s}"][3] == 0.0
+                if planted:
+                    mv = math.dist(a[f"foot_{s}"][:2], b[f"foot_{s}"][:2])
+                    rise = b[f"foot_{s}"][2] - a[f"foot_{s}"][2]
+                    assert mv <= 0.03 or rise >= 0.02, (speed, s, round(mv, 3), round(rise, 3))
+
+
+# Seed 21, h2 from 5:49.6 (engine frames 8740-8829): he slows from a jog, turns on the spot and the
+# engine's pose flickers between walk and stand: (x, y, vx, vy, heading, action).
+H2_STOP = [
+    (45.943, 3.851, 4.057, -5.313, -0.919, "run"), (46.106, 3.638, 4.092, -5.343, -0.917, "run"),
+    (46.268, 3.426, 4.046, -5.282, -0.917, "run"), (46.425, 3.222, 3.907, -5.101, -0.917, "run"),
+    (46.576, 3.026, 3.786, -4.915, -0.914, "run"), (46.722, 2.836, 3.647, -4.734, -0.914, "run"),
+    (46.862, 2.654, 3.508, -4.553, -0.914, "run"), (46.997, 2.479, 3.368, -4.372, -0.914, "run"),
+    (47.125, 2.313, 3.199, -4.149, -0.914, "run"), (47.246, 2.156, 3.03, -3.926, -0.913, "run"),
+    (47.361, 2.008, 2.861, -3.703, -0.913, "run"), (47.468, 1.869, 2.691, -3.48, -0.913, "run"),
+    (47.569, 1.739, 2.521, -3.257, -0.912, "run"), (47.663, 1.617, 2.352, -3.034, -0.911, "walk"),
+    (47.75, 1.505, 2.182, -2.811, -0.911, "walk"), (47.831, 1.402, 2.014, -2.588, -0.91, "walk"),
+    (47.905, 1.307, 1.845, -2.364, -0.908, "walk"), (47.972, 1.221, 1.677, -2.141, -0.906, "walk"),
+    (48.032, 1.145, 1.509, -1.916, -0.904, "walk"), (48.086, 1.077, 1.342, -1.692, -0.9, "walk"),
+    (48.134, 1.019, 1.203, -1.448, -0.877, "walk"), (48.177, 0.971, 1.069, -1.203, -0.845, "walk"),
+    (48.214, 0.933, 0.937, -0.956, -0.795, "walk"), (48.247, 0.904, 0.81, -0.706, -0.717, "walk"),
+    (48.274, 0.886, 0.688, -0.454, -0.584, "walk"), (48.297, 0.878, 0.57, -0.2, -0.34, "walk"),
+    (48.315, 0.88, 0.457, 0.056, -0.584, "stand"), (48.329, 0.893, 0.348, 0.314, -0.828, "stand"),
+    (48.339, 0.916, 0.245, 0.574, -0.584, "walk"), (48.344, 0.947, 0.135, 0.771, -0.34, "walk"),
+    (48.346, 0.984, 0.039, 0.938, -0.095, "walk"), (48.344, 1.028, -0.043, 1.091, 0.149, "walk"),
+    (48.34, 1.077, -0.112, 1.236, 0.393, "walk"), (48.333, 1.133, -0.173, 1.378, 0.638, "walk"),
+    (48.324, 1.193, -0.226, 1.516, 0.882, "walk"), (48.313, 1.259, -0.274, 1.652, 1.127, "walk"),
+    (48.3, 1.331, -0.317, 1.785, 1.371, "walk"), (48.286, 1.407, -0.357, 1.917, 1.615, "walk"),
+    (48.27, 1.489, -0.394, 2.046, 1.761, "walk"), (48.253, 1.576, -0.429, 2.173, 1.766, "walk"),
+    (48.234, 1.668, -0.462, 2.298, 1.769, "walk"), (48.215, 1.765, -0.493, 2.421, 1.772, "walk"),
+    (48.194, 1.867, -0.524, 2.541, 1.774, "walk"), (48.173, 1.968, -0.522, 2.526, 1.774, "walk"),
+    (48.154, 2.059, -0.474, 2.296, 1.774, "walk"), (48.137, 2.142, -0.427, 2.065, 1.774, "walk"),
+    (48.122, 2.215, -0.379, 1.833, 1.774, "walk"), (48.108, 2.279, -0.33, 1.599, 1.774, "walk"),
+    (48.097, 2.334, -0.281, 1.362, 1.774, "walk"), (48.088, 2.379, -0.232, 1.121, 1.774, "walk"),
+    (48.081, 2.414, -0.181, 0.875, 1.774, "walk"), (48.075, 2.438, -0.128, 0.617, 1.774, "walk"),
+    (48.073, 2.452, -0.071, 0.343, 2.019, "stand"), (48.06, 2.46, -0.309, 0.196, 2.263, "stand"),
+    (48.039, 2.462, -0.528, 0.047, 2.507, "walk"), (48.012, 2.458, -0.684, -0.092, 2.752, "walk"),
+    (47.979, 2.449, -0.82, -0.215, 2.996, "walk"), (47.941, 2.436, -0.947, -0.328, -3.043, "walk"),
+    (47.898, 2.419, -1.068, -0.436, -2.798, "walk"), (47.851, 2.397, -1.184, -0.542, -2.712, "walk"),
+    (47.799, 2.371, -1.296, -0.647, -2.678, "walk"), (47.757, 2.352, -1.065, -0.489, -2.711, "walk"),
+    (47.723, 2.339, -0.847, -0.313, -2.788, "walk"), (47.697, 2.334, -0.631, -0.134, -2.932, "walk"),
+    (47.682, 2.335, -0.398, 0.02, -2.688, "stand"), (47.66, 2.329, -0.543, -0.143, -2.884, "walk"),
+    (47.633, 2.318, -0.663, -0.283, -2.738, "walk"), (47.602, 2.301, -0.775, -0.411, -2.654, "walk"),
+    (47.581, 2.29, -0.534, -0.269, -2.674, "walk"), (47.568, 2.287, -0.317, -0.092, -2.43, "stand"),
+    (47.551, 2.278, -0.438, -0.229, -2.186, "stand"), (47.542, 2.276, -0.224, -0.049, -1.941, "stand"),
+    (47.528, 2.268, -0.348, -0.187, -1.697, "stand"), (47.523, 2.267, -0.116, -0.03, -1.452, "stand"),
+    (47.514, 2.261, -0.241, -0.157, -1.358, "stand"), (47.511, 2.263, -0.065, 0.061, -1.358, "stand"),
+    (47.502, 2.259, -0.235, -0.107, -1.356, "stand"), (47.487, 2.249, -0.354, -0.233, -1.354, "stand"),
+    (47.469, 2.235, -0.469, -0.351, -1.598, "walk"), (47.456, 2.231, -0.31, -0.121, -1.354, "stand"),
+    (47.451, 2.234, -0.131, 0.095, -1.348, "stand"), (47.438, 2.231, -0.315, -0.095, -1.346, "stand"),
+    (47.421, 2.221, -0.429, -0.243, -1.343, "stand"), (47.4, 2.206, -0.537, -0.374, -1.587, "walk"),
+    (47.374, 2.186, -0.641, -0.499, -1.831, "walk"), (47.355, 2.175, -0.468, -0.279, -2.076, "walk"),
+    (47.343, 2.173, -0.3, -0.055, -1.831, "stand"), (47.341, 2.175, -0.048, 0.067, -1.587, "stand"),
+    (47.333, 2.17, -0.221, -0.121, -1.343, "stand"), (47.319, 2.16, -0.33, -0.256, -1.325, "stand"),
+]
+
+
+def test_a_player_stopping_does_not_stand_with_his_legs_crossed():
+    """Old (0.5.3): slowing and turning on the spot while the engine's pose flickered between walk and
+    stand, h2's left foot ended up to the right of his right foot and stayed there for 7 frames
+    (seed 21 at 5:51), as each flicker restarted the step that would have uncrossed them. Now feet
+    crossed for the way he faces step apart at once, and a foot stepping across passes the other
+    within half a step (STEP_FRAMES // 2). Drawn as clip.py draws him, from the engine's frames
+    (H2_STOP), the gait starting fresh on the first."""
+    frames = [{"ball": {"x": 80.0, "y": 50.0, "z": 0.0, "vx": 0.0, "vy": 0.0}, "possessor": None,
+               "players": [{"id": "h1", "x": x, "y": y, "vx": vx, "vy": vy, "heading": h, "action": a,
+                            "dive": 0.0}]} for x, y, vx, vy, h, a in H2_STOP]
+    frames += [frames[-1]] * 20  # then he stands
+    h2 = Look("h1", "home", "RB", 1.81, 1.11, "#4a2e1d", "#3b2516")  # as seed 21 draws h2
+    g, prev, run, worst = Gait(), {}, 0, 0
+    for i, fr in enumerate(frames):
+        advance_gaits({"h1": g}, prev, fr, 1 / FPS, frames[min(i + LEAD_AHEAD_FRAMES, len(frames) - 1)])
+        pl = fr["players"][0]
+        body_parts(pl["x"], pl["y"], h2, g)
+        pose = mesh_pose(g, pl["x"], pl["y"], 0.0)
+        m = pose_markers(pose, g.heading, h2.height_m)
+        lx, ly = -math.sin(pl["heading"]), math.cos(pl["heading"])  # his left
+        left = (m["foot_l"][0] - pl["x"]) * lx + (m["foot_l"][1] - pl["y"]) * ly
+        right = (m["foot_r"][0] - pl["x"]) * lx + (m["foot_r"][1] - pl["y"]) * ly
+        # Stopping: slower than a walk's stride (1.25 m/s, Swinnen et al. 2026's slowest; design). A
+        # stride turning fast crosses over, as a turning walker's does; that is not a stance.
+        run = run + 1 if left < right and math.hypot(pl["vx"], pl["vy"]) < 1.0 else 0
+        worst = max(worst, run)
+    assert worst <= STEP_FRAMES // 2, worst
+
+
+def _both_up_runs(drawn, height=0.14):
+    """Longest run of frames with both feet above `height` (a blind critic's measure: 14 cm)."""
+    run = worst = 0
+    for _, m, _, _ in drawn:
+        run = run + 1 if min(m["foot_l"][2], m["foot_r"][2]) > height else 0
+        worst = max(worst, run)
+    return worst
+
+
+def test_a_player_drifting_while_the_pose_flickers_keeps_his_feet_down():
+    """Found by the blind critic of this change's first draft: drifting at 0.4 to 0.6 m/s, the engine's
+    pose flickers between walk and stand every frame (seed 21, a8 at 6:08), and a stride restarted
+    each frame never landed: both feet hovered 10 to 20 cm up for 40 frames, a crouched shuffle.
+    Below STRIDE_FROM_MPS  the feet step after the body as when standing."""
+    frames, x = [], 30.0
+    for i in range(60):
+        v, action = (0.55, "walk") if i % 3 else (0.4, "stand")
+        x += v / FPS
+        frames.append({"ball": {"x": 80.0, "y": 50.0, "z": 0.0, "vx": 0.0, "vy": 0.0}, "possessor": None,
+                       "players": [{"id": "h1", "x": x, "y": 30.0, "vx": v, "vy": 0.0, "heading": 0.0,
+                                    "action": action, "dive": 0.0}]})
+    assert _both_up_runs(_draw(frames)["h1"], 0.05) <= STEP_FRAMES // 2
+
+
+def test_setting_off_from_standing_lifts_one_foot_at_a_time():
+    """Found by the same critic: setting off, both standing feet were behind the leg's reach at once
+    and lifted together, a tuck-jump (seed 21, a5 and h9). One foot lifts early at a time; a run's
+    flight with both feet high lasts no more than a frame."""
+    profile = [0.0] * 20 + [min(3.2, 0.15 * i) for i in range(1, 30)] + [3.2] * 20
+    for start in range(0, 8, 2):  # different stance phases at the start
+        drawn = _draw(_run_frames([0.0] * start + profile))["h1"]
+        assert _both_up_runs(drawn) <= 1, start
+
+
+# Seed 7, h10 from 1:33 (engine frames 2324-2599, where the clip"s picture comes back after a cut):
+# standing, then setting off to 3.5 m/s at the end.
+H10_SET_OFF = [
+    (78.115, 41.025, -0.79, 0.329, 2.746, "walk"), (78.084, 41.038, -0.79, 0.329, 2.746, "walk"),
+    (78.052, 41.052, -0.79, 0.329, 2.746, "walk"), (78.021, 41.065, -0.79, 0.329, 2.746, "walk"),
+    (77.989, 41.078, -0.79, 0.329, 2.746, "walk"), (77.957, 41.091, -0.79, 0.329, 2.746, "walk"),
+    (77.926, 41.104, -0.79, 0.329, 2.746, "walk"), (77.894, 41.117, -0.79, 0.329, 2.746, "walk"),
+    (77.863, 41.131, -0.79, 0.329, 2.746, "walk"), (77.831, 41.144, -0.79, 0.329, 2.746, "walk"),
+    (77.799, 41.157, -0.79, 0.329, 2.746, "walk"), (77.768, 41.17, -0.79, 0.329, 2.746, "walk"),
+    (77.736, 41.183, -0.79, 0.329, 2.746, "walk"), (77.705, 41.196, -0.79, 0.329, 2.746, "walk"),
+    (77.673, 41.21, -0.79, 0.329, 2.746, "walk"), (77.642, 41.223, -0.79, 0.329, 2.746, "walk"),
+    (77.61, 41.236, -0.79, 0.329, 2.746, "walk"), (77.578, 41.249, -0.79, 0.329, 2.746, "walk"),
+    (77.547, 41.262, -0.79, 0.329, 2.746, "walk"), (77.515, 41.276, -0.79, 0.329, 2.746, "walk"),
+    (77.484, 41.289, -0.79, 0.329, 2.746, "walk"), (77.452, 41.302, -0.79, 0.329, 2.746, "walk"),
+    (77.42, 41.315, -0.79, 0.33, 2.746, "walk"), (77.389, 41.328, -0.789, 0.33, 2.746, "walk"),
+    (77.357, 41.342, -0.788, 0.333, 2.742, "walk"), (77.326, 41.355, -0.787, 0.335, 2.74, "walk"),
+    (77.294, 41.368, -0.786, 0.337, 2.737, "walk"), (77.263, 41.382, -0.785, 0.34, 2.733, "walk"),
+    (77.232, 41.396, -0.784, 0.342, 2.73, "walk"), (77.2, 41.41, -0.783, 0.345, 2.727, "walk"),
+    (77.169, 41.423, -0.782, 0.347, 2.724, "walk"), (77.138, 41.437, -0.781, 0.349, 2.721, "walk"),
+    (77.107, 41.451, -0.78, 0.351, 2.719, "walk"), (77.075, 41.465, -0.78, 0.351, 2.719, "walk"),
+    (77.044, 41.48, -0.78, 0.352, 2.718, "walk"), (77.013, 41.494, -0.78, 0.352, 2.718, "walk"),
+    (76.982, 41.508, -0.781, 0.35, 2.72, "walk"), (76.95, 41.522, -0.781, 0.349, 2.721, "walk"),
+    (76.919, 41.536, -0.782, 0.348, 2.723, "walk"), (76.888, 41.549, -0.783, 0.346, 2.725, "walk"),
+    (76.857, 41.563, -0.783, 0.344, 2.728, "walk"), (76.825, 41.577, -0.784, 0.342, 2.731, "walk"),
+    (76.794, 41.59, -0.787, 0.336, 2.738, "walk"), (76.762, 41.604, -0.788, 0.334, 2.74, "walk"),
+    (76.731, 41.617, -0.788, 0.332, 2.743, "walk"), (76.699, 41.63, -0.789, 0.331, 2.745, "walk"),
+    (76.668, 41.643, -0.79, 0.329, 2.747, "walk"), (76.636, 41.656, -0.79, 0.328, 2.748, "walk"),
+    (76.604, 41.67, -0.79, 0.328, 2.748, "walk"), (76.573, 41.683, -0.79, 0.328, 2.748, "walk"),
+    (76.541, 41.696, -0.79, 0.328, 2.748, "walk"), (76.51, 41.709, -0.79, 0.328, 2.748, "walk"),
+    (76.478, 41.722, -0.79, 0.328, 2.748, "walk"), (76.446, 41.735, -0.79, 0.328, 2.748, "walk"),
+    (76.415, 41.748, -0.79, 0.328, 2.748, "walk"), (76.383, 41.761, -0.79, 0.328, 2.748, "walk"),
+    (76.351, 41.775, -0.79, 0.328, 2.748, "walk"), (76.32, 41.788, -0.79, 0.328, 2.748, "walk"),
+    (76.288, 41.801, -0.79, 0.328, 2.748, "walk"), (76.257, 41.814, -0.79, 0.328, 2.748, "walk"),
+    (76.225, 41.827, -0.79, 0.328, 2.748, "walk"), (76.193, 41.84, -0.79, 0.328, 2.748, "walk"),
+    (76.162, 41.853, -0.79, 0.328, 2.748, "walk"), (76.13, 41.866, -0.79, 0.328, 2.748, "walk"),
+    (76.099, 41.879, -0.79, 0.328, 2.748, "walk"), (76.067, 41.893, -0.79, 0.328, 2.748, "walk"),
+    (76.035, 41.906, -0.79, 0.328, 2.748, "walk"), (76.004, 41.919, -0.79, 0.328, 2.748, "walk"),
+    (75.972, 41.932, -0.79, 0.328, 2.748, "walk"), (75.941, 41.945, -0.79, 0.328, 2.748, "walk"),
+    (75.909, 41.958, -0.79, 0.328, 2.748, "walk"), (75.877, 41.971, -0.79, 0.328, 2.748, "walk"),
+    (75.846, 41.984, -0.79, 0.328, 2.748, "walk"), (75.814, 41.998, -0.79, 0.328, 2.748, "walk"),
+    (75.783, 42.011, -0.79, 0.328, 2.748, "walk"), (75.751, 42.024, -0.79, 0.328, 2.748, "walk"),
+    (75.719, 42.037, -0.79, 0.328, 2.748, "walk"), (75.688, 42.05, -0.79, 0.328, 2.748, "walk"),
+    (75.656, 42.063, -0.79, 0.328, 2.748, "walk"), (75.624, 42.076, -0.79, 0.328, 2.748, "walk"),
+    (75.593, 42.089, -0.79, 0.328, 2.748, "walk"), (75.561, 42.102, -0.79, 0.328, 2.748, "walk"),
+    (75.53, 42.116, -0.79, 0.328, 2.748, "walk"), (75.498, 42.129, -0.79, 0.328, 2.748, "walk"),
+    (75.466, 42.142, -0.79, 0.328, 2.748, "walk"), (75.435, 42.155, -0.79, 0.328, 2.748, "walk"),
+    (75.403, 42.168, -0.79, 0.328, 2.748, "walk"), (75.372, 42.181, -0.79, 0.328, 2.748, "walk"),
+    (75.34, 42.194, -0.79, 0.328, 2.748, "walk"), (75.308, 42.207, -0.79, 0.328, 2.748, "walk"),
+    (75.277, 42.221, -0.79, 0.328, 2.748, "walk"), (75.245, 42.234, -0.79, 0.328, 2.748, "walk"),
+    (75.214, 42.247, -0.79, 0.328, 2.748, "walk"), (75.182, 42.26, -0.79, 0.328, 2.748, "walk"),
+    (75.15, 42.273, -0.79, 0.328, 2.748, "walk"), (75.119, 42.286, -0.79, 0.328, 2.748, "walk"),
+    (75.087, 42.299, -0.79, 0.328, 2.748, "walk"), (75.056, 42.312, -0.79, 0.328, 2.748, "walk"),
+    (75.024, 42.325, -0.79, 0.328, 2.748, "walk"), (74.992, 42.339, -0.79, 0.328, 2.748, "walk"),
+    (74.961, 42.352, -0.79, 0.328, 2.748, "walk"), (74.929, 42.365, -0.79, 0.328, 2.748, "walk"),
+    (74.897, 42.378, -0.79, 0.328, 2.748, "walk"), (74.866, 42.391, -0.79, 0.328, 2.748, "walk"),
+    (74.834, 42.404, -0.79, 0.328, 2.748, "walk"), (74.803, 42.417, -0.79, 0.328, 2.748, "walk"),
+    (74.771, 42.43, -0.79, 0.328, 2.748, "walk"), (74.739, 42.444, -0.79, 0.328, 2.748, "walk"),
+    (74.708, 42.457, -0.79, 0.328, 2.748, "walk"), (74.676, 42.47, -0.79, 0.328, 2.748, "walk"),
+    (74.645, 42.483, -0.79, 0.328, 2.748, "walk"), (74.613, 42.496, -0.79, 0.328, 2.748, "walk"),
+    (74.581, 42.509, -0.79, 0.328, 2.748, "walk"), (74.55, 42.522, -0.79, 0.328, 2.748, "walk"),
+    (74.518, 42.535, -0.79, 0.328, 2.748, "walk"), (74.487, 42.549, -0.79, 0.328, 2.748, "walk"),
+    (74.455, 42.562, -0.79, 0.328, 2.748, "walk"), (74.423, 42.575, -0.79, 0.328, 2.748, "walk"),
+    (74.392, 42.588, -0.79, 0.328, 2.748, "walk"), (74.36, 42.601, -0.79, 0.328, 2.748, "walk"),
+    (74.329, 42.614, -0.79, 0.328, 2.748, "walk"), (74.297, 42.627, -0.79, 0.328, 2.748, "walk"),
+    (74.265, 42.64, -0.79, 0.328, 2.748, "walk"), (74.234, 42.653, -0.79, 0.328, 2.748, "walk"),
+    (74.202, 42.667, -0.79, 0.328, 2.748, "walk"), (74.171, 42.68, -0.79, 0.328, 2.748, "walk"),
+    (74.139, 42.693, -0.79, 0.328, 2.748, "walk"), (74.107, 42.706, -0.79, 0.328, 2.748, "walk"),
+    (74.076, 42.719, -0.79, 0.328, 2.748, "walk"), (74.044, 42.732, -0.79, 0.328, 2.748, "walk"),
+    (74.013, 42.745, -0.79, 0.328, 2.748, "walk"), (73.981, 42.758, -0.79, 0.328, 2.748, "walk"),
+    (73.949, 42.772, -0.79, 0.328, 2.748, "walk"), (73.918, 42.785, -0.79, 0.328, 2.748, "walk"),
+    (73.886, 42.798, -0.79, 0.328, 2.748, "walk"), (73.854, 42.811, -0.79, 0.328, 2.748, "walk"),
+    (73.823, 42.824, -0.79, 0.328, 2.748, "walk"), (73.791, 42.837, -0.79, 0.328, 2.748, "walk"),
+    (73.76, 42.85, -0.79, 0.328, 2.748, "walk"), (73.728, 42.863, -0.79, 0.328, 2.748, "walk"),
+    (73.696, 42.876, -0.79, 0.328, 2.748, "walk"), (73.665, 42.89, -0.79, 0.328, 2.748, "walk"),
+    (73.633, 42.903, -0.79, 0.328, 2.748, "walk"), (73.602, 42.916, -0.79, 0.328, 2.748, "walk"),
+    (73.57, 42.929, -0.79, 0.328, 2.748, "walk"), (73.538, 42.942, -0.79, 0.328, 2.748, "walk"),
+    (73.507, 42.955, -0.79, 0.328, 2.748, "walk"), (73.475, 42.968, -0.79, 0.328, 2.748, "walk"),
+    (73.444, 42.981, -0.79, 0.328, 2.748, "walk"), (73.412, 42.995, -0.79, 0.328, 2.748, "walk"),
+    (73.38, 43.008, -0.79, 0.328, 2.748, "walk"), (73.349, 43.021, -0.79, 0.328, 2.748, "walk"),
+    (73.317, 43.034, -0.79, 0.328, 2.748, "walk"), (73.286, 43.047, -0.79, 0.328, 2.748, "walk"),
+    (73.254, 43.06, -0.79, 0.328, 2.748, "walk"), (73.222, 43.073, -0.79, 0.328, 2.748, "walk"),
+    (73.191, 43.086, -0.79, 0.328, 2.748, "walk"), (73.159, 43.099, -0.79, 0.328, 2.748, "walk"),
+    (73.128, 43.113, -0.79, 0.328, 2.748, "walk"), (73.096, 43.126, -0.79, 0.328, 2.748, "walk"),
+    (73.064, 43.139, -0.79, 0.328, 2.748, "walk"), (73.033, 43.152, -0.79, 0.328, 2.748, "walk"),
+    (73.001, 43.165, -0.79, 0.328, 2.748, "walk"), (72.97, 43.178, -0.79, 0.328, 2.748, "walk"),
+    (72.938, 43.191, -0.79, 0.328, 2.748, "walk"), (72.906, 43.204, -0.79, 0.328, 2.748, "walk"),
+    (72.875, 43.218, -0.79, 0.328, 2.748, "walk"), (72.843, 43.231, -0.79, 0.328, 2.748, "walk"),
+    (72.812, 43.244, -0.79, 0.328, 2.748, "walk"), (72.78, 43.257, -0.79, 0.328, 2.748, "walk"),
+    (72.748, 43.27, -0.79, 0.328, 2.748, "walk"), (72.717, 43.283, -0.79, 0.328, 2.748, "walk"),
+    (72.685, 43.296, -0.79, 0.328, 2.748, "walk"), (72.654, 43.309, -0.79, 0.328, 2.748, "walk"),
+    (72.622, 43.322, -0.79, 0.328, 2.748, "walk"), (72.59, 43.336, -0.79, 0.328, 2.748, "walk"),
+    (72.559, 43.349, -0.79, 0.328, 2.748, "walk"), (72.527, 43.362, -0.79, 0.328, 2.748, "walk"),
+    (72.495, 43.375, -0.79, 0.328, 2.748, "walk"), (72.464, 43.388, -0.79, 0.328, 2.748, "walk"),
+    (72.432, 43.401, -0.79, 0.328, 2.748, "walk"), (72.401, 43.414, -0.79, 0.328, 2.748, "walk"),
+    (72.369, 43.427, -0.79, 0.328, 2.748, "walk"), (72.337, 43.441, -0.79, 0.328, 2.748, "walk"),
+    (72.306, 43.454, -0.79, 0.328, 2.748, "walk"), (72.274, 43.467, -0.79, 0.328, 2.748, "walk"),
+    (72.243, 43.48, -0.79, 0.328, 2.748, "walk"), (72.211, 43.493, -0.79, 0.328, 2.748, "walk"),
+    (72.179, 43.506, -0.79, 0.328, 2.748, "walk"), (72.148, 43.519, -0.79, 0.328, 2.748, "walk"),
+    (72.116, 43.532, -0.79, 0.328, 2.748, "walk"), (72.085, 43.546, -0.79, 0.328, 2.748, "walk"),
+    (72.053, 43.559, -0.79, 0.328, 2.748, "walk"), (72.021, 43.572, -0.79, 0.328, 2.748, "walk"),
+    (71.99, 43.585, -0.79, 0.328, 2.748, "walk"), (71.958, 43.598, -0.79, 0.328, 2.748, "walk"),
+    (71.927, 43.611, -0.79, 0.328, 2.748, "walk"), (71.895, 43.624, -0.79, 0.328, 2.748, "walk"),
+    (71.863, 43.637, -0.79, 0.328, 2.748, "walk"), (71.832, 43.65, -0.79, 0.328, 2.748, "walk"),
+    (71.807, 43.661, -0.618, 0.257, 2.748, "walk"), (71.782, 43.671, -0.618, 0.257, 2.748, "walk"),
+    (71.758, 43.681, -0.618, 0.257, 2.748, "walk"), (71.733, 43.692, -0.618, 0.257, 2.748, "walk"),
+    (71.708, 43.702, -0.618, 0.257, 2.748, "walk"), (71.683, 43.712, -0.618, 0.257, 2.748, "walk"),
+    (71.659, 43.722, -0.618, 0.257, 2.748, "walk"), (71.634, 43.733, -0.618, 0.257, 2.748, "walk"),
+    (71.609, 43.743, -0.621, 0.257, 2.75, "walk"), (71.584, 43.753, -0.621, 0.257, 2.75, "walk"),
+    (71.56, 43.763, -0.621, 0.257, 2.75, "walk"), (71.543, 43.77, -0.414, 0.171, 2.505, "stand"),
+    (71.526, 43.777, -0.412, 0.17, 2.261, "stand"), (71.51, 43.784, -0.411, 0.17, 2.017, "stand"),
+    (71.494, 43.791, -0.409, 0.169, 1.772, "stand"), (71.477, 43.797, -0.407, 0.168, 1.656, "stand"),
+    (71.461, 43.804, -0.406, 0.168, 1.668, "stand"), (71.445, 43.811, -0.404, 0.167, 1.68, "stand"),
+    (71.429, 43.817, -0.402, 0.166, 1.692, "stand"), (71.413, 43.824, -0.401, 0.166, 1.705, "stand"),
+    (71.397, 43.831, -0.401, 0.165, 1.718, "stand"), (71.381, 43.837, -0.4, 0.165, 1.731, "stand"),
+    (71.365, 43.844, -0.398, 0.164, 1.745, "stand"), (71.349, 43.85, -0.397, 0.164, 1.76, "stand"),
+    (71.333, 43.857, -0.396, 0.163, 1.775, "stand"), (71.317, 43.863, -0.395, 0.163, 1.79, "stand"),
+    (71.302, 43.87, -0.394, 0.162, 1.806, "stand"), (71.286, 43.876, -0.392, 0.162, 1.823, "stand"),
+    (71.27, 43.883, -0.391, 0.161, 1.84, "stand"), (71.255, 43.889, -0.39, 0.161, 1.857, "stand"),
+    (71.239, 43.896, -0.389, 0.16, 1.876, "stand"), (71.224, 43.902, -0.388, 0.16, 1.895, "stand"),
+    (71.208, 43.908, -0.386, 0.16, 1.914, "stand"), (71.193, 43.915, -0.385, 0.159, 1.934, "stand"),
+    (71.177, 43.921, -0.384, 0.159, 1.955, "stand"), (71.162, 43.927, -0.383, 0.158, 1.977, "stand"),
+    (71.147, 43.934, -0.382, 0.158, 1.999, "stand"), (71.132, 43.94, -0.381, 0.158, 2.022, "stand"),
+    (71.116, 43.946, -0.38, 0.157, 2.046, "stand"), (71.101, 43.953, -0.379, 0.157, 2.07, "stand"),
+    (71.086, 43.959, -0.379, 0.157, 2.096, "stand"), (71.071, 43.965, -0.378, 0.156, 2.122, "stand"),
+    (71.056, 43.971, -0.377, 0.156, 2.148, "stand"), (71.041, 43.978, -0.375, 0.155, 2.176, "stand"),
+    (71.026, 43.984, -0.374, 0.155, 2.204, "stand"), (71.011, 43.99, -0.372, 0.154, 2.233, "stand"),
+    (70.996, 43.996, -0.37, 0.153, 2.262, "stand"), (70.982, 44.002, -0.366, 0.152, 2.292, "stand"),
+    (70.967, 44.008, -0.36, 0.149, 2.323, "stand"), (70.953, 44.014, -0.351, 0.145, 2.354, "stand"),
+    (70.939, 44.008, -0.345, -0.135, 2.386, "stand"), (70.926, 43.992, -0.337, -0.415, 2.63, "walk"),
+    (70.914, 43.966, -0.307, -0.652, 2.874, "walk"), (70.903, 43.931, -0.276, -0.861, 3.119, "walk"),
+    (70.892, 43.889, -0.253, -1.052, -2.92, "walk"), (70.883, 43.84, -0.234, -1.234, -2.676, "walk"),
+    (70.863, 43.787, -0.5, -1.322, -2.431, "walk"), (70.833, 43.732, -0.755, -1.387, -2.187, "walk"),
+    (70.793, 43.674, -0.993, -1.431, -2.177, "walk"), (70.745, 43.616, -1.215, -1.462, -2.264, "walk"),
+    (70.688, 43.556, -1.421, -1.485, -2.334, "walk"), (70.623, 43.496, -1.616, -1.503, -2.392, "walk"),
+    (70.551, 43.436, -1.799, -1.518, -2.441, "walk"), (70.472, 43.374, -1.972, -1.533, -2.481, "walk"),
+    (70.387, 43.312, -2.138, -1.547, -2.515, "walk"), (70.295, 43.25, -2.296, -1.56, -2.545, "walk"),
+    (70.197, 43.187, -2.447, -1.574, -2.57, "walk"), (70.093, 43.123, -2.592, -1.589, -2.592, "walk"),
+    (69.984, 43.06, -2.741, -1.588, -2.616, "walk"), (69.868, 42.996, -2.884, -1.589, -2.638, "walk"),
+    (69.747, 42.933, -3.02, -1.593, -2.656, "walk"), (69.621, 42.869, -3.15, -1.599, -2.672, "walk"),
+    (69.49, 42.804, -3.276, -1.606, -2.686, "walk"), (69.354, 42.74, -3.398, -1.614, -2.698, "walk"),
+    (69.214, 42.675, -3.516, -1.623, -2.709, "walk"), (69.069, 42.61, -3.631, -1.63, -2.72, "walk"),
+]
+
+
+def test_setting_off_the_feet_do_not_leave_the_grass_together():
+    """Found by the blind critic of this change's second draft: h10 setting off from standing (seed 7 at
+    1:43) lifted his right foot, which hovered low while his pace grew, then his left on its phase:
+    both rose together, a hop. A foot whose stance is over waits for the other to be past the middle
+    of its swing (unless the leg can no longer reach it). Both feet are high for less than a whole
+    flight: at 3.3 m/s a flight lasts about 3 frames (half of a 0.72 s stride less a 0.233 s stance,
+    Swinnen et al. 2026); without the rule, 3; with it, 1 (the bound, 2, was set after measuring an
+    earlier draft). Drawn as clip.py draws him."""
+    from ninety.render.scene import advance_gaits as advance
+
+    frames = [{"ball": {"x": 80.0, "y": 50.0, "z": 0.0, "vx": 0.0, "vy": 0.0}, "possessor": None,
+               "players": [{"id": "h1", "x": x, "y": y, "vx": vx, "vy": vy, "heading": h, "action": a,
+                            "dive": 0.0}]} for x, y, vx, vy, h, a in H10_SET_OFF]
+    h10 = Look("h1", "home", "ST", 1.732, 1.085, "#8d5a3b", "#d9c08c")  # as seed 7 draws him
+    g, prev, drawn = Gait(), {}, []
+    for i, fr in enumerate(frames):
+        advance({"h1": g}, prev, fr, 1 / FPS, frames[min(i + LEAD_AHEAD_FRAMES, len(frames) - 1)])
+        pl = fr["players"][0]
+        body_parts(pl["x"], pl["y"], h10, g)
+        pose = mesh_pose(g, pl["x"], pl["y"], 0.0)
+        drawn.append((pose, pose_markers(pose, g.heading, h10.height_m), None, g.speed))
+    assert _both_up_runs(drawn) <= 2, _both_up_runs(drawn)
+    # Off the grass, the leg reaches where the stride carries the foot (within 10 cm): a foot left
+    # further behind than the leg reaches as he sped away had the knee fold it up toward the seat,
+    # 26 to 38 cm above its path for three frames.
+    for i, (pose, m, _, _) in enumerate(drawn):
+        for s in "lr":
+            plant = pose[f"plant_{s}"]
+            if plant and plant[3] > 0.05:
+                assert m[f"foot_{s}"][2] - plant[3] < 0.10, (i, s, m[f"foot_{s}"][2], plant[3])
+
+
+# The runner's bob, knee fold, lean and arms (lesson 180). Measured on the drawn mesh: the pelvis
+# joint, the knee and the trunk from the posed bones, the feet from the skinned markers.
+def _joint(pose, bone, height=1.84):
+    """World position of a posed bone's joint for one frame's pose (heading 0, as _run_frames runs)."""
+    head, _ = _fk(pose_angles(pose, 0.0, height))
+    lift = (pose.get("lift") or 0.0) + (pose.get("bob") or 0.0)
+    return to_world(pose["x"], pose["y"], 0.0, height, head[_bone_index()[bone]], lift)
+
+
+def _knee_fold(pose, side):
+    """Degrees the knee is bent: between the thigh and the shin."""
+    hip, knee, ankle = (_joint(pose, f"{b}_{side}") for b in ("thigh", "calf", "foot"))
+    u, v = [knee[i] - hip[i] for i in range(3)], [ankle[i] - knee[i] for i in range(3)]
+    c = sum(a * b for a, b in zip(u, v, strict=True)) / (math.dist(hip, knee) * math.dist(knee, ankle))
+    return math.degrees(math.acos(max(-1.0, min(1.0, c))))
+
+
+def _trunk(pose):
+    """Degrees the trunk leans forward of upright: pelvis to neck, along the way he runs."""
+    p, n = _joint(pose, "pelvis"), _joint(pose, "neck_01")
+    return math.degrees(math.atan2(n[0] - p[0], n[2] - p[2]))
+
+
+@pytest.mark.parametrize("speed,bob", [(3.33, 0.0855), (4.44, 0.0835), (5.56, 0.0755)])
+def test_a_runners_hips_are_lowest_on_the_grass_and_rise_in_the_air(speed, bob):
+    """Old (0.5.9): the hips were drawn level, a jog at 3 to 4 m/s gliding like a power-walk. Running,
+    the centre of mass rises and falls 8.55, 8.35 and 7.55 cm a step at these speeds (Hanley et al.
+    2022, Premier League players, Fig. 2), lowest at mid-stance (Lee and Farley 1998) and in free
+    fall in the air. The drawn hips bob within 30% of it (design: measured 0.98 to 1.00 of it; the
+    drawn flight, lengthened by the leg's reach, could change the free fall's share), and are higher
+    with both feet in the air than with a foot on the grass under them, by at least half of it
+    (design: measured 0.61 to 0.77)."""
+    drawn = _draw(_run_frames([speed] * 110))["h1"][40:]
+    hips = [_joint(p, "pelvis")[2] for p, _, _, _ in drawn]
+    assert 0.7 * bob <= max(hips) - min(hips) <= 1.3 * bob, (speed, max(hips) - min(hips), bob)
+    air = [z for z, (_, m, _, _) in zip(hips, drawn, strict=True)
+           if min(m["foot_l"][2], m["foot_r"][2]) > 0.03]
+    under = [z for z, (_, m, r, _) in zip(hips, drawn, strict=True)
+             if any(m[f"foot_{s}"][2] < 0.02 and abs(r[f"foot_{s}"][0]) < 0.15 for s in "lr")]
+    assert air and under, (speed, len(air), len(under))
+    assert sum(air) / len(air) - sum(under) / len(under) >= 0.5 * bob, (speed, air, under)
+
+
+@pytest.mark.parametrize("speed,bob", [(1.0, 0.0361), (1.6, 0.0483)])
+def test_a_walkers_hips_are_highest_over_the_standing_leg(speed, bob):
+    """Old (0.5.9): level hips at a walk. Walking, the body vaults over the standing leg: highest at
+    mid-stance and lowest as the weight passes from one foot to the other, 3.61 cm at 1.0 m/s and
+    4.83 at 1.6 (Orendurff et al. 2004). The drawn hips within 30% (design, as running), and higher,
+    by at least half of it, with a foot on the grass under them (within 10 cm) than without
+    (design)."""
+    drawn = _draw(_run_frames([speed] * 110))["h1"][40:]
+    hips = [_joint(p, "pelvis")[2] for p, _, _, _ in drawn]
+    assert 0.7 * bob <= max(hips) - min(hips) <= 1.3 * bob, (speed, max(hips) - min(hips), bob)
+    over, other = [], []
+    for z, (_, m, r, _) in zip(hips, drawn, strict=True):
+        under = any(m[f"foot_{s}"][2] < 0.02 and abs(r[f"foot_{s}"][0]) < 0.10 for s in "lr")
+        (over if under else other).append(z)
+    assert over and other, (speed, len(over), len(other))
+    assert sum(over) / len(over) - sum(other) / len(other) >= 0.5 * bob, (speed, over, other)
+
+
+@pytest.mark.parametrize("speed,peak", [(2.5, 93.5), (3.5, 108.7)])
+def test_a_running_knee_folds_as_far_as_a_runners(speed, peak):
+    """Old (0.5.9): a swinging knee folded to 77 degrees at 2.5 m/s and 90 at 3.5, the foot carried at
+    a walk's height. Runners fold it to 93.5 and 108.7 degrees (Fukuchi et al. 2017, Table 4), and
+    the swing's height (scene.SWING_LIFT_M) was measured on the asset to draw that: this holds the
+    calibration, the drawn peak within 5 degrees (design: the peak varies about 2 degrees with where
+    the frames fall in the stride)."""
+    drawn = _draw(_run_frames([speed] * 90))["h1"][40:]
+    top = max(_knee_fold(p, s) for p, _, _, _ in drawn for s in "lr")
+    assert abs(top - peak) <= 5.0, (speed, top, peak)
+
+
+def test_the_trunk_leans_into_a_sprint_start_and_comes_up_braking():
+    """Old (0.5.9): the trunk kept the stride's lean whatever the pace did. Speeding up at a m/s^2 the
+    body leans atan(a / g) so the ground's push passes through it (Kugler and Janshen 2010), half of it
+    drawn in the trunk (scene.LEAN_DRAWN, design); slowing, the trunk comes back up to upright and no
+    further. Setting off at 4 m/s^2, as he passes 3.5, 4.5 and 5.4 m/s the drawn trunk leans at
+    least 0.7 of half of atan(4 / g) beyond its lean at that speed held (the lean eases in); braking
+    at 6 m/s^2 it is never ahead of its lean held at that speed (old, from boxes behind him: 5
+    frames late, forward while braking), and from 0.4 s in it is upright, within 1 degree behind
+    and 3 ahead of his standing trunk. At a steady jog
+    whose engine speed rises and brakes back every 9 frames (seed 21's a5, 3.2 to 4.0 m/s) the trunk
+    nods no more than 4 degrees (old, eased over 5 frames: it nodded every step). Held at 9 m/s the
+    trunk leans at least 0.7 of the 3.4 degrees more than at 3.05 that Folland 2017 (10.3 degrees
+    at 11 km/h) and Nagahara 2014 (14.3 at 10.04 m/s) give. The 0.7s, the 1 and 3 degrees and the 4
+    are design: easing, and the leg search's precision."""
+    up = [0.0] * 10 + [min(6.0, 0.16 * i) for i in range(1, 40)] + [6.0] * 30
+    down = [max(1.0, 6.0 - 0.24 * i) for i in range(1, 22)]
+    drawn = _draw(_run_frames(up + down))["h1"]
+    want = 0.7 * 0.5 * math.degrees(math.atan(4.0 / 9.81))
+    for i in (31, 37, 43):  # 3.5, 4.5 and 5.4 m/s
+        v = drawn[i][3]
+        held = _trunk(_draw(_run_frames([v] * 50))["h1"][-1][0])
+        assert _trunk(drawn[i][0]) - held >= want, (v, _trunk(drawn[i][0]), held, want)
+    stand = _trunk(drawn[5][0])
+    for p, _, _, v in drawn[len(up):len(up) + 6]:  # braking, its first frames
+        held = _trunk(_draw(_run_frames([v] * 50))["h1"][-1][0])
+        assert _trunk(p) <= held + 1.0, (v, _trunk(p), held)
+    for p, _, _, v in drawn[-11:]:  # braking, from 3.4 m/s
+        assert stand - 1.0 <= _trunk(p) <= stand + 3.0, (v, _trunk(p), stand)
+    saw = [3.21, 3.35, 3.49, 3.62, 3.75, 3.87, 4.0, 3.75, 3.52, 3.29] * 8
+    trunks = [_trunk(p) for p, _, _, _ in _draw(_run_frames(saw))["h1"][30:]]
+    assert max(trunks) - min(trunks) <= 4.0, (min(trunks), max(trunks))
+    slow, fast = (_trunk(_draw(_run_frames([v] * 50))["h1"][-1][0]) for v in (3.05, 9.0))
+    assert fast - slow >= 0.7 * (14.3 - 10.3) * (9.0 - 3.05) / (10.04 - 3.05), (slow, fast)
+
+
+def test_the_arms_swing_wider_toward_a_sprint():
+    """Old (0.5.9): from 4 m/s up the arms kept the stored run's swing, the shoulder through 83
+    degrees, so a sprinting arm moved no more than a jogging one. A sprinter's shoulder swings
+    through 118 to 135 degrees at top speed (Mann and Herman 1985); the drawn swing widens toward
+    their mean, 126.5, at 10.04 m/s from 83 at 4 m/s: at 7 m/s within 10% of the way there (design:
+    measured 1.005 of it), and wider than at 4.5 m/s."""
+    def swing(speed):
+        drawn = _draw(_run_frames([speed] * 70))["h1"][40:]
+        angles = []
+        for p, _, _, _ in drawn:
+            sh, el = _joint(p, "upperarm_l"), _joint(p, "lowerarm_l")
+            angles.append(math.degrees(math.atan2(el[0] - sh[0], sh[2] - el[2])))
+        return max(angles) - min(angles)
+
+    jog, sprint = swing(4.5), swing(7.0)
+    want = 83.0 + (126.5 - 83.0) * (7.0 - 4.0) / (10.04 - 4.0)
+    assert abs(sprint / want - 1.0) <= 0.1, (sprint, want)
+    assert sprint > jog * 1.1, (jog, sprint)
+
+
+@pytest.mark.parametrize("speed", [5.0, 7.0, 8.5])
+def test_a_sprints_flight_is_seen_over_two_frames_or_more(speed):
+    """Old (0.5.9): sprinting, a foot was drawn on the grass for the frame it lifted, by then 40 to 56
+    cm behind the hips, beyond the leg's reach; the leg hung toward it and both feet were seen off
+    the grass together (5 cm up) for one frame a step, a flicker. A sprinter's foot is down 0.29 to
+    0.26 of the stride at 5 to 7.3 m/s (scene.RUN_DUTY, Martinez-Sobrino 2023), so both are up 0.21 to
+    0.24 of it, about 2.7 frames a step at these speeds; drawn, both feet are up (5 cm, design: clear
+    of the grass at broadcast size) for at least 2 frames every step."""
+    drawn = _draw(_run_frames([speed] * 100))["h1"][40:]
+    runs, run = [], 0
+    for _, m, _, _ in drawn:
+        if min(m["foot_l"][2], m["foot_r"][2]) > 0.05:
+            run += 1
+        elif run:
+            runs.append(run)
+            run = 0
+    assert len(runs) >= 6 and min(runs) >= 2, (speed, runs)
+
+
+# Seed 21's a4 jogging, then slowing to a stop (frames 60 to 135 of the clip at 5:40; the freeze needs
+# the stride's phase that 2.4 s of his run gives it):
+# x, y, vx, vy, heading, action.
+A4_STOP = [
+    (74.567, 19.472, 0.128, 0.115, 1.954, "stand"), (74.572, 19.476, 0.128, 0.115, 2.198, "stand"),
+    (74.576, 19.479, 0.083, 0.075, 2.442, "stand"), (74.579, 19.482, 0.083, 0.074, 2.687, "stand"),
+    (74.582, 19.485, 0.082, 0.074, 2.931, "stand"), (74.586, 19.488, 0.081, 0.073, -3.108, "stand"),
+    (74.589, 19.491, 0.081, 0.073, -2.864, "stand"), (74.592, 19.494, 0.081, 0.073, -2.619, "stand"),
+    (74.595, 19.497, 0.081, 0.073, -2.375, "stand"), (74.599, 19.5, 0.081, 0.073, -2.308, "stand"),
+    (74.602, 19.503, 0.081, 0.073, -2.295, "stand"), (74.605, 19.506, 0.081, 0.073, -2.282, "stand"),
+    (74.608, 19.509, 0.082, 0.074, -2.27, "stand"), (74.612, 19.512, 0.082, 0.074, -2.259, "stand"),
+    (74.621, 19.52, 0.236, 0.212, -2.248, "stand"), (74.637, 19.534, 0.387, 0.347, -2.004, "walk"),
+    (74.658, 19.553, 0.534, 0.479, -1.759, "walk"), (74.685, 19.578, 0.677, 0.608, -1.515, "walk"),
+    (74.718, 19.607, 0.817, 0.734, -1.27, "walk"), (74.756, 19.641, 0.953, 0.856, -1.026, "walk"),
+    (74.799, 19.68, 1.087, 0.976, -0.782, "walk"), (74.848, 19.724, 1.217, 1.093, -0.537, "walk"),
+    (74.902, 19.772, 1.344, 1.207, -0.293, "walk"), (74.96, 19.825, 1.468, 1.318, -0.049, "walk"),
+    (75.024, 19.882, 1.589, 1.427, 0.196, "walk"), (75.092, 19.943, 1.707, 1.533, 0.44, "walk"),
+    (75.152, 19.997, 1.499, 1.346, 0.684, "walk"), (75.204, 20.044, 1.29, 1.159, 0.732, "walk"),
+    (75.247, 20.082, 1.082, 0.972, 0.732, "walk"), (75.282, 20.114, 0.874, 0.785, 0.732, "walk"),
+    (75.309, 20.138, 0.666, 0.598, 0.732, "walk"), (75.327, 20.154, 0.457, 0.411, 0.732, "walk"),
+    (75.337, 20.163, 0.249, 0.224, 0.487, "stand"), (75.341, 20.167, 0.101, 0.09, 0.243, "stand"),
+    (75.345, 20.17, 0.101, 0.09, -0.001, "stand"), (75.349, 20.174, 0.101, 0.09, -0.245, "stand"),
+    (75.353, 20.178, 0.1, 0.09, -0.49, "stand"), (75.357, 20.181, 0.1, 0.09, -0.734, "stand"),
+    (75.362, 20.186, 0.126, 0.113, -0.979, "stand"), (75.367, 20.19, 0.128, 0.115, -1.223, "stand"),
+    (75.372, 20.195, 0.13, 0.117, -1.467, "stand"), (75.378, 20.2, 0.132, 0.118, -1.712, "stand"),
+    (75.383, 20.205, 0.134, 0.12, -1.956, "stand"), (75.388, 20.209, 0.136, 0.122, -2.088, "stand"),
+    (75.394, 20.214, 0.138, 0.124, -2.084, "stand"), (75.399, 20.219, 0.14, 0.126, -2.081, "stand"),
+    (75.405, 20.225, 0.142, 0.128, -2.078, "stand"), (75.411, 20.23, 0.144, 0.13, -2.075, "stand"),
+    (75.417, 20.235, 0.146, 0.131, -2.072, "stand"), (75.423, 20.24, 0.148, 0.133, -2.07, "stand"),
+    (75.435, 20.251, 0.301, 0.27, -2.067, "stand"), (75.453, 20.267, 0.449, 0.404, -1.823, "walk"),
+    (75.477, 20.289, 0.595, 0.534, -1.579, "walk"), (75.506, 20.315, 0.737, 0.662, -1.334, "walk"),
+    (75.541, 20.347, 0.875, 0.786, -1.09, "walk"), (75.581, 20.383, 1.01, 0.908, -0.845, "walk"),
+    (75.627, 20.424, 1.142, 1.026, -0.601, "walk"), (75.678, 20.47, 1.271, 1.142, -0.357, "walk"),
+    (75.734, 20.52, 1.397, 1.255, -0.112, "walk"), (75.795, 20.574, 1.52, 1.365, 0.132, "walk"),
+    (75.86, 20.633, 1.64, 1.473, 0.376, "walk"), (75.93, 20.696, 1.757, 1.578, 0.621, "walk"),
+    (75.993, 20.752, 1.556, 1.382, 0.726, "walk"), (76.047, 20.799, 1.356, 1.186, 0.718, "walk"),
+    (76.093, 20.839, 1.157, 0.99, 0.708, "walk"), (76.131, 20.87, 0.957, 0.794, 0.693, "walk"),
+    (76.162, 20.894, 0.757, 0.598, 0.668, "walk"), (76.184, 20.91, 0.557, 0.401, 0.624, "walk"),
+    (76.198, 20.919, 0.358, 0.205, 0.38, "stand"), (76.205, 20.919, 0.158, 0.008, 0.136, "stand"),
+    (76.209, 20.917, 0.114, -0.039, -0.109, "stand"), (76.214, 20.916, 0.114, -0.042, -0.353, "stand"),
+    (76.218, 20.914, 0.114, -0.041, -0.597, "stand"), (76.223, 20.912, 0.114, -0.041, -0.842, "stand"),
+    (76.228, 20.902, 0.125, -0.248, -1.086, "stand"), (76.233, 20.893, 0.124, -0.246, -1.33, "stand"),
+]
+
+
+def test_a_player_braking_to_a_stop_keeps_his_planted_feet_on_the_grass():
+    """Old (a draft of 0.5.12): the stride's bob was sent in the body's lift, and a lowered lift is a
+    lunge's, so braking from 2.4 to 0.4 m/s in 7 frames (seed 21's a4) a planted foot beyond the
+    leg's reach was reached for above the grass: the knee folded it 25 to 38 cm up for 8 frames, a
+    freeze a blind critic rated 4 to 5. Every frame a foot is planted (on the grass, fully taken),
+    it is drawn within 10 cm of the grass (design: main draws it within 8.4 cm)."""
+    frames = [{"ball": {"x": 80.0, "y": 50.0, "z": 0.0, "vx": 0.0, "vy": 0.0}, "possessor": None,
+               "players": [{"id": "a4", "x": x, "y": y, "vx": vx, "vy": vy, "heading": h, "action": a,
+                            "dive": 0.0}]} for x, y, vx, vy, h, a in A4_STOP]
+    for i, (pose, m, _, _) in enumerate(_draw(frames)["a4"]):
+        for s in "lr":
+            plant = pose[f"plant_{s}"]
+            if plant and plant[3] == 0.0 and (len(plant) < 5 or plant[4] >= 1.0):
+                assert m[f"foot_{s}"][2] < 0.10, (i, s, m[f"foot_{s}"][2])
+
+
+# Demo v1's keeper a1 (seed 8001 from 100 s, renderer 0.5.9, engine frames 436 to 499 and 640 to
+# 679): x, y, vx, vy, heading, action, dive. In the first the engine turns him from 1.08 to -3.0
+# rad while he is down, so its dive's side flips from 1.0 to -1.0; the second (the goal) starts at
+# full stretch, from its "down after a dive".
+A1_LOB_DIVE = [
+    (100.761, 33.572, 2.245, 2.126, 0.7582, "walk", 0.0),
+    (100.851, 33.666, 2.242, 2.338, 0.8062, "walk", 0.0),
+    (100.94, 33.768, 2.233, 2.542, 0.8501, "walk", 0.0),
+    (101.029, 33.877, 2.21, 2.746, 0.8932, "walk", 0.0),
+    (101.116, 33.995, 2.18, 2.943, 0.9332, "walk", 0.0),
+    (101.202, 34.12, 2.145, 3.134, 0.9707, "walk", 0.0),
+    (101.286, 34.253, 2.103, 3.32, 1.0061, "walk", 0.0),
+    (101.367, 34.394, 2.045, 3.506, 1.0428, "run", 0.0),
+    (101.447, 34.541, 1.978, 3.687, 1.0783, "run", 0.0),
+    (101.515, 34.692, 1.714, 3.78, 1.0783, "dive", 0.104),
+    (101.573, 34.844, 1.435, 3.8, 1.0783, "dive", 0.209),
+    (101.619, 34.996, 1.155, 3.8, 1.0783, "dive", 0.314),
+    (101.654, 35.148, 0.875, 3.8, 1.0783, "dive", 0.419),
+    (101.678, 35.3, 0.595, 3.8, 1.0783, "dive", 0.524),
+    (101.69, 35.452, 0.315, 3.8, 1.0783, "dive", 0.628),
+    (101.692, 35.604, 0.035, 3.8, 1.0783, "dive", 0.733),
+    (101.692, 35.756, 0.0, 3.8, 1.0783, "dive", 0.838),
+    (101.692, 35.908, 0.0, 3.8, 1.0783, "dive", 0.943),
+    (101.692, 36.06, 0.0, 3.8, 1.0783, "dive", 1.0),
+    (101.692, 36.201, 0.0, 3.52, 1.3227, "dive", 1.0),
+    (101.692, 36.331, 0.0, 3.24, 1.567, "dive", 1.0),
+    (101.692, 36.449, 0.0, 2.96, 1.5708, "dive", 1.0),
+    (101.692, 36.556, 0.0, 2.68, 1.5708, "dive", 1.0),
+    (101.692, 36.652, 0.0, 2.4, 1.5708, "dive", 1.0),
+    (101.692, 36.737, 0.0, 2.12, 1.5708, "dive", 1.0),
+    (101.692, 36.811, 0.0, 1.84, 1.5708, "dive", 1.0),
+    (101.692, 36.873, 0.0, 1.56, 1.5708, "dive", 1.0),
+    (101.692, 36.924, 0.0, 1.28, 1.5708, "dive", 1.0),
+    (101.692, 36.964, 0.0, 1.0, 1.5708, "dive", 1.0),
+    (101.692, 36.993, 0.0, 0.72, 1.5708, "dive", 1.0),
+    (101.692, 37.011, 0.0, 0.44, 1.8151, "dive", -1.0),
+    (101.692, 37.017, 0.0, 0.16, 2.0595, "dive", -1.0),
+    (101.692, 37.017, 0.0, 0.0, 2.3038, "dive", -1.0),
+    (101.692, 37.017, 0.0, 0.0, 2.5482, "dive", -1.0),
+    (101.692, 37.017, 0.0, 0.0, 2.7925, "dive", -1.0),
+    (101.692, 37.017, 0.0, 0.0, 3.0369, "dive", -1.0),
+    (101.692, 37.017, 0.0, 0.0, -3.002, "dive", -1.0),
+    (101.692, 37.017, 0.0, 0.0, -3.002, "dive", -1.0),
+    (101.692, 37.017, 0.0, 0.0, -3.002, "dive", -1.0),
+    (101.692, 37.017, 0.0, 0.0, -3.002, "hands", 0.0),
+    (101.692, 37.017, 0.0, 0.0, -3.002, "hands", 0.0),
+    (101.692, 37.017, 0.0, 0.0, -3.002, "hands", 0.0),
+    (101.692, 37.017, 0.0, 0.0, -3.002, "hands", 0.0),
+    (101.692, 37.017, 0.0, 0.0, -3.002, "hands", 0.0),
+    (101.692, 37.017, 0.0, 0.0, -3.002, "hands", 0.0),
+    (101.692, 37.017, 0.0, 0.0, -3.002, "hands", 0.0),
+    (101.692, 37.017, 0.0, 0.0, -3.002, "stand", 0.0),
+    (101.692, 37.017, 0.0, 0.0, -3.002, "stand", 0.0),
+    (101.692, 37.017, 0.0, 0.0, -3.002, "stand", 0.0),
+    (101.692, 37.017, 0.0, 0.0, -3.002, "stand", 0.0),
+    (101.692, 37.017, 0.0, 0.0, -3.002, "stand", 0.0),
+    (101.692, 37.017, 0.0, 0.0, -3.002, "stand", 0.0),
+    (101.692, 37.017, 0.0, 0.0, -3.002, "stand", 0.0),
+    (101.683, 37.017, -0.216, -0.007, -3.002, "stand", 0.0),
+    (101.666, 37.016, -0.427, -0.009, -3.002, "stand", 0.0),
+    (101.64, 37.016, -0.634, -0.012, -3.1227, "walk", 0.0),
+    (101.607, 37.015, -0.836, -0.015, -3.1242, "walk", 0.0),
+    (101.566, 37.015, -1.033, -0.017, -3.1251, "walk", 0.0),
+    (101.517, 37.014, -1.226, -0.02, -3.1256, "walk", 0.0),
+    (101.46, 37.013, -1.415, -0.022, -3.126, "walk", 0.0),
+    (101.396, 37.012, -1.6, -0.025, -3.1262, "walk", 0.0),
+    (101.325, 37.011, -1.78, -0.027, -3.1264, "walk", 0.0),
+    (101.247, 37.01, -1.957, -0.029, -3.1266, "walk", 0.0),
+    (101.161, 37.008, -2.129, -0.032, -3.1267, "walk", 0.0),
+]
+A1_GOAL_DIVE = [
+    (101.998, 32.668, -0.007, -0.971, -2.126, "walk", 0.0),
+    (101.998, 32.622, -0.006, -1.166, -1.8817, "walk", 0.0),
+    (101.998, 32.567, -0.004, -1.356, -1.6373, "walk", 0.0),
+    (101.997, 32.506, -0.003, -1.541, -1.5727, "walk", 0.0),
+    (101.997, 32.437, -0.002, -1.723, -1.5717, "walk", 0.0),
+    (101.997, 32.361, -0.0, -1.901, -1.5709, "walk", 0.0),
+    (101.997, 32.288, 0.0, -1.814, -1.5708, "walk", 0.0),
+    (102.005, 32.224, 0.188, -1.607, -1.4542, "walk", 0.0),
+    (102.02, 32.168, 0.374, -1.397, -1.3095, "walk", 0.0),
+    (102.042, 32.121, 0.556, -1.184, -1.132, "walk", 0.0),
+    (102.055, 32.079, 0.313, -1.044, -1.132, "dive", 1.0),
+    (102.067, 32.048, 0.313, -0.764, -1.132, "dive", 1.0),
+    (102.08, 32.029, 0.313, -0.484, -1.132, "dive", 1.0),
+    (102.092, 32.021, 0.313, -0.204, -1.132, "dive", 1.0),
+    (102.105, 32.024, 0.313, 0.087, -1.132, "dive", 1.0),
+    (102.117, 32.04, 0.313, 0.402, -1.132, "dive", 1.0),
+    (102.13, 32.069, 0.313, 0.719, -1.132, "dive", 1.0),
+    (102.142, 32.111, 0.313, 1.036, -1.132, "dive", 0.26),
+    (102.144, 32.15, 0.036, 0.997, -0.8877, "walk", 0.0),
+    (102.156, 32.194, 0.297, 1.097, -0.6433, "walk", 0.0),
+    (102.178, 32.242, 0.559, 1.196, -0.399, "walk", 0.0),
+    (102.21, 32.293, 0.808, 1.272, -0.1546, "walk", 0.0),
+    (102.252, 32.346, 1.041, 1.331, 0.0897, "walk", 0.0),
+    (102.302, 32.401, 1.259, 1.38, 0.334, "walk", 0.0),
+    (102.361, 32.458, 1.465, 1.423, 0.5784, "walk", 0.0),
+    (102.427, 32.517, 1.661, 1.462, 0.722, "walk", 0.0),
+    (102.501, 32.577, 1.847, 1.5, 0.6823, "walk", 0.0),
+    (102.582, 32.638, 2.025, 1.538, 0.6495, "walk", 0.0),
+    (102.67, 32.701, 2.196, 1.575, 0.6221, "walk", 0.0),
+    (102.764, 32.766, 2.36, 1.612, 0.5991, "walk", 0.0),
+    (102.865, 32.832, 2.519, 1.649, 0.5796, "walk", 0.0),
+    (102.972, 32.899, 2.672, 1.686, 0.563, "walk", 0.0),
+    (103.085, 32.968, 2.819, 1.724, 0.5489, "walk", 0.0),
+    (103.203, 33.039, 2.963, 1.763, 0.5367, "walk", 0.0),
+    (103.327, 33.111, 3.101, 1.801, 0.5262, "walk", 0.0),
+    (103.457, 33.184, 3.236, 1.84, 0.5171, "walk", 0.0),
+    (103.592, 33.26, 3.366, 1.88, 0.5093, "walk", 0.0),
+    (103.731, 33.336, 3.493, 1.92, 0.5026, "walk", 0.0),
+    (103.876, 33.415, 3.615, 1.96, 0.4967, "run", 0.0),
+    (104.025, 33.495, 3.735, 2.0, 0.4917, "run", 0.0),
+]
+
+
+def _dive_jumps(rows, drawn):
+    """Frames where a limb moves faster than the cap, leaving out a frame where the engine changes his
+    pose between two poses that are not a dive (a catch to standing): 0.5.12 snaps those whatever the
+    dive (a shared gap, not this one)."""
+    out = []
+    for i, (mv, cap) in enumerate(_jumps(drawn)):
+        a, b = rows[i][5], rows[i + 1][5]
+        if a != b and "dive" not in (a, b):
+            continue
+        if mv > cap:
+            out.append((i, a, b, round(mv, 3), round(cap, 3)))
+    return out
+
+
+def _draw_keeper(rows):
+    """a1 drawn through the clip's own path (advance_gaits, body_parts, mesh_pose): his poses, the
+    skinned markers and the drawn facing, frame by frame."""
+    from ninety.render.scene import advance_gaits as advance
+
+    frames = [{"ball": {"x": 80.0, "y": 50.0, "z": 0.0, "vx": 0.0, "vy": 0.0}, "possessor": None,
+               "players": [{"id": "a1", "x": x, "y": y, "vx": vx, "vy": vy, "heading": h, "action": a,
+                            "dive": d}]} for x, y, vx, vy, h, a, d in rows]
+    keeper = Look("a1", "away", "GK", 1.88, 1.0, "#c68642", "#1b1410")
+    g, prev, drawn = Gait(), {}, []
+    for i, fr in enumerate(frames):
+        advance({"a1": g}, prev, fr, 1 / FPS, frames[min(i + LEAD_AHEAD_FRAMES, len(frames) - 1)])
+        pl = fr["players"][0]
+        body_parts(pl["x"], pl["y"], keeper, g)
+        pose = mesh_pose(g, pl["x"], pl["y"], 0.0)
+        m = pose_markers(pose, g.heading, keeper.height_m)
+        drawn.append((pose, m, {k: (v[0] - pl["x"], v[1] - pl["y"], v[2]) for k, v in m.items()}, g.speed))
+    return drawn
+
+
+def test_a_keepers_dive_is_drawn_once_to_one_side():
+    """Old (0.5.12 and before): the dive was drawn as the engine's pose each frame, and the engine
+    turns a keeper toward the ball while he is down. Drawn turned, the stretched body spun on the
+    spot and dived again to the other side (demo v1, Kian: "keeps diving"). Now the dive keeps the
+    side and the facing it began with until he is up: his head stays on the side he dived to, and
+    no limb moves faster than the limb cap through the dive and his getting up (_dive_jumps)."""
+    drawn = _draw_keeper(A1_LOB_DIVE)
+    diving = [i for i, (pose, _, _, _) in enumerate(drawn) if pose["action"] == "dive"]
+    assert len(diving) >= 25, len(diving)
+    start = drawn[diving[0]][0]
+    side = 1.0 if start["dive"] >= 0 else -1.0
+    for i in diving:
+        assert drawn[i][0]["dive"] * side >= 0.0, (i, drawn[i][0]["dive"])
+    over = _dive_jumps(A1_LOB_DIVE, drawn)
+    assert not over, over
+
+
+def test_a_dive_that_starts_at_full_stretch_grows_and_gets_up():
+    """Old: the engine's goal dive arrived at full stretch, so the keeper snapped into it in a frame
+    and out of it 8 frames later. Now it grows over DIVE_IN_FRAMES and fades out after: no limb moves
+    faster than the limb cap (_dive_jumps), and it is still drawn after the engine has him up."""
+    drawn = _draw_keeper(A1_GOAL_DIVE)
+    over = _dive_jumps(A1_GOAL_DIVE, drawn)
+    assert not over, over
+    engine = [i for i, r in enumerate(A1_GOAL_DIVE) if r[5] == "dive"]
+    drawn_dive = [i for i, (pose, _, _, _) in enumerate(drawn)
+                  if pose["action"] == "dive" or pose.get("dive_up")]
+    assert drawn_dive and drawn_dive[-1] > engine[-1] + 5, (engine, drawn_dive)

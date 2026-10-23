@@ -15,6 +15,7 @@ that the world is then arranged to match. Every limit cites its source in docs/G
 
 from __future__ import annotations
 
+import itertools
 import math
 from dataclasses import asdict, dataclass, field
 
@@ -33,6 +34,7 @@ from ninety.sim.body import (
     Body,
     can_get_to,
     relative_speed,
+    stopping_distance,
     stopping_speed,
 )
 from ninety.sim.body import move as move_body
@@ -50,7 +52,7 @@ DT = 1.0 / FPS
 # the ball could get there (in_time, O8), no faster; a few jobs are flat out. What he can reach is
 # limited by his own body (ninety/sim/body.py): acceleration, top speed, energy.
 SPRINT = 99.0  # as fast as their body allows (a keeper's dash, P17 does not price his)
-RECOVER = 6.0  # a restart taker or the keeper getting into position (design)
+RECOVER = 6.0  # a restart taker or the keeper getting into position, a goal's celebration runs (design)
 SHAPE = 3.0  # getting up after being beaten (design)
 DRIBBLE = 2.5
 DECIDE_EVERY = 6  # frames between the ball carrier's decisions (about 4 a second)
@@ -121,6 +123,15 @@ RESTART_DISTANCE_M = {"throw_in": 2.0, "corner": 9.15, "goal_kick": PENALTY_DEPT
 PENALTY_MARK_M = 11.0  # Law 1: the penalty mark, 11 m from the goal line
 CORNER_ARC_M = 1.0  # Law 1: the corner arc's radius; Law 17 measures the 9.15 m from the arc
 KEEP_OFF_MARGIN_M = 0.5  # design: opponents aim this far outside a restart's distance, as at a kickoff
+# Law 13 and Bray (Plus Maths, 2014): at a direct free kick the defending side builds a wall at the
+# restart's distance that hides the goal from the near post to this far past its centre (Bray: two
+# thirds of the goal line, q = p / 3); the keeper covers the rest
+WALL_COVER_PAST_CENTRE_M = GOAL_HALF_WIDTH / 3
+WALL_ATTACKER_GAP_M = 1.0  # Law 13: with three or more defenders in a wall, attackers stay 1 m from it
+# design: a wall player first stands behind his place to within this much across the line (a few times
+# the 1 to 2 cm by which steering stops on a target), then steps forward into it
+WALL_LANE_M = 0.1
+ON_CIRCLE_M = 1e-6  # a target this close to a keep-off circle's edge is on it (rounding), not inside
 # design: the taker stands this far from a set ball's centre, so it is clear of him whichever way he
 # is turned (his shoulder's reach, P11) with a ball's width to spare for his steering
 SET_BALL_CLEAR_M = shape.surface(math.pi / 2, 0.0, pad=2 * ball.RADIUS)
@@ -128,21 +139,90 @@ SET_BALL_CLEAR_M = shape.surface(math.pi / 2, 0.0, pad=2 * ball.RADIUS)
 # points on it dips inside by at most 1 - cos(15°), under 4% of the radius (0.35 m at 9.65 m)
 KEEP_OFF_STEP_DEG = 30.0
 BOARDS_M = 4.0  # verify: advertising boards behind the lines stop a ball (and players) that go out
+# design, verify: a goal's net, as the renderer draws it (web/render/render.js, buildNet): NET_DEPTH_M
+# behind the goal line at the top and the bottom, its back NET_BACK_M high, its roof sloping down to
+# it from the crossbar. Law 1 sets the posts and crossbar, not the net; nets for a full-size goal
+# (7.32 x 2.44 m) are sold 1.8 to 2.6 m deep (UEFA- and Premier-League-grade stadium nets listed at
+# 6 ft, 1.83 m; box nets at 2 m). Players keep NET_CLEAR_M from it going round, a stride (design).
+NET_DEPTH_M = 2.0
+NET_BACK_M = 2.0
+NET_CLEAR_M = 1.0
 # R1: seconds from the ball going out to the restart. Means from Opta timing of the Premier League
 # (The Analyst): throw-ins about 16 s (2022-23; 17.9 in 2025-26), goal kicks 29 to 30 s, free kicks
 # 31.3 to 40.9 s by team (2022-23; mean taken as the middle), corners about half a minute (only a
-# combined figure is published). The spread around each mean is design. Kickoff: design, long
-# enough to see (a goal's celebration, about 72 s in the same data, is not modelled).
+# combined figure is published). The spread around each mean is design. The kick-off that starts the
+# match: design, long enough to see. After a goal (L4): FIFA's referees' chief, on added time at the
+# 2022 World Cup, put a goal's celebration at "one, one and a half minutes" (Collina, November 2022);
+# Opta's guide gives 72 s for the celebration after a penalty goal (The Analyst, May 2023).
 RESTART_DELAY_S = {"throw_in": (12, 20), "goal_kick": (24, 34), "corner": (24, 36),
                    "free_kick": (29, 41),
                    # about two minutes from the foul to the spot kick (same source, 2022-23)
                    "penalty_kick": (100, 140),
-                   "kick_off": (1, 2)}
+                   "kick_off": (1, 2),
+                   "kick_off_after_goal": (60, 90)}
+# design: a fouled player goes down and gets up. A standing body topples over its feet in about
+# half a second; he lies short of flat, so his head stays off the grass, stays there a moment,
+# and gets up in about a second. He is upright this long before the restart is due. The lie
+# shortens first when the restart is sooner than the whole pose; the topple and the get-up then
+# scale together. The validator's floor is 1 s (ninety/validate.py, P18).
+FALL_S = 0.5
+FALL_LIE_S = 1.5
+FALL_RISE_S = 1.0
+FALL_DOWN_DEG = 85.0
+FALL_UP_BEFORE_S = 1.5
+
+
+def foul_fall_deg(elapsed: float, span: float) -> float:
+    """Degrees the body is over. 0 at the contact and once `span` has run. Design: half the
+    topple at a steady rate and half gathering pace; the get-up eases in and out; the lie is
+    whatever the span leaves after the topple and the get-up."""
+    if span <= 0.0 or elapsed <= 0.0 or elapsed >= span:
+        return 0.0
+    fall_s, rise_s = FALL_S, FALL_RISE_S
+    if span < fall_s + rise_s:
+        scale = span / (fall_s + rise_s)
+        fall_s, rise_s = fall_s * scale, rise_s * scale
+        lie_s = 0.0
+    else:
+        lie_s = span - fall_s - rise_s
+    if elapsed < fall_s:
+        u = elapsed / fall_s
+        return FALL_DOWN_DEG * 0.5 * (u + u * u)  # *design*: half steady, half gathering pace
+    if elapsed < fall_s + lie_s:
+        return FALL_DOWN_DEG
+    u = (elapsed - fall_s - lie_s) / rise_s
+    return FALL_DOWN_DEG * (1.0 - u * u * (3.0 - 2.0 * u))  # *design*: the get-up eases in and out
+# design: how long each of the scorer's team-mates celebrates with him (the run to him, the huddle);
+# the scorer stays until the last has gone; the rest of the minute or more before the kick-off is
+# the walk back (L4)
+CELEBRATION_S = (15.0, 25.0)
+# design: team-mates round a scorer stand a shoulder's breadth apart (P11) with a little to spare
+HUDDLE_SPACING_M = 0.55
+# design: from where a team-mate running at RECOVER must start braking for his place (round a
+# scorer, in a wall; stopping as body.stopping_speed has him, with P2's grip), he is joining the
+# others, and stands as close to them as bodies allow; the switch at that distance is design, about
+# 3.2 m
+GATHER_REACH_M = stopping_distance(RECOVER)
+# L4: after a goal players walk back at least at a normal walking pace: men aged 20 to 29 walk at
+# about 1.36 m/s (Bohannon & Andrews 2011, Physiotherapy 97:182, a meta-analysis of 23,111 adults,
+# as tabulated by the University of Toronto's iWalk guide)
+WALK_MPS = 1.36
+# design: about a stride. While a restart waits, a player standing at his place settles to a shift
+# of it smaller than this at his own pace, rather than walking to it and back (lesson 174)
+SETTLE_M = 1.0
+# design: a few strides. Settled at his place, a player makes a later shift of it within this at his
+# own pace; further, as when the restart's shape forms after the whistle or his man walks off, he
+# walks to it again (L4) and settles there. Longer than the 1 to 3.5 m by which places jumped with
+# noisy sightings, which settling is there to absorb (lesson 174)
+SHUFFLE_M = 4.0
 NO_OFFSIDE_FROM = ("throw_in", "goal_kick", "corner")  # Law 11: no offside offence direct from these
 INTERCEPT_SHARE = 0.85  # design: taken before this share of the way to its target, a pass is intercepted
 THROW_BEHIND_M = 0.55  # Law 15: his body stands outside the touchline, feet on or behind it (design)
 THROW_SPOT_M = 0.25  # design: within this of his spot he throws from where he stands, still behind the line
 THROW_SETTLED_MPS = BRAKE_MAX * DT  # a taker takes it once one frame of braking would stop him (P2)
+# design: closing on his place faster than one frame of braking would stop him (P2), a player is still
+# walking in to it, and keeps a walking pace (lesson 174)
+CLOSING_MPS = BRAKE_MAX * DT
 THROW_REACH_M = 0.28  # design: both hands reach toward the pitch and still stay short of the line
 THROW_HAND_Z = 1.85  # design: bottom of the ball just over an average head (no stature per player)
 
@@ -190,6 +270,22 @@ class Restart:
     carried_by: str | None = None  # who has the dead ball at his feet (or in his hands)
     passed_by: str | None = None  # who knocked it on toward the spot, while it is still rolling
     gathered_at: float = 0.0  # when the one who has it took it
+    direct: bool = True  # a free kick that may be scored from directly (Law 13); offside's is indirect
+    wall: dict[str, tuple[float, float]] = field(default_factory=dict)  # defender -> his spot in it
+    pressers: list[str] | None = None  # the other side's presser and cover, set once (lesson 174)
+    settled: set[str] = field(default_factory=set)  # at their places with the ball set (lesson 174)
+    marks: dict[str, str] | None = None  # the other side's markers and their men (lesson 174)
+
+
+@dataclass
+class Celebration:
+    team: str  # the side that scored
+    focus: str  # the scorer (or, for an own goal, the scoring side's player nearest the ball)
+    spot: tuple[float, float]  # where he goes: the corner flag nearest him at that end, a keeper stays
+    until: float  # when the last of them stops celebrating
+    ring: list[str] = field(default_factory=list)  # the team-mates who run to him
+    leave: dict[str, float] = field(default_factory=dict)  # when each, the focus too, stops celebrating
+    places: dict[str, tuple[float, float]] = field(default_factory=dict)  # this frame's places round him
 
 
 @dataclass
@@ -276,6 +372,182 @@ def segment_distance(px: float, py: float, ax: float, ay: float, bx: float, by: 
     return math.hypot(ax + s * dx - px, ay + s * dy - py)
 
 
+def crosses(a: tuple[float, float], b: tuple[float, float], c: tuple[float, float],
+            d: tuple[float, float]) -> bool:
+    """Whether the straight way from a to b crosses the segment from c to d (touching it counts)."""
+    def side(p: tuple[float, float], q: tuple[float, float], r: tuple[float, float]) -> float:
+        return (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
+    d1, d2, d3, d4 = side(c, d, a), side(c, d, b), side(a, b, c), side(a, b, d)
+    return d1 * d2 <= 0 and d3 * d4 <= 0 and (d1, d2) != (0.0, 0.0)
+
+
+def goal_net(line: float) -> list[tuple[tuple[float, float], tuple[float, float]]]:
+    """The net of the goal on this goal line, seen from above: its two sides and its back,
+    NET_DEPTH_M behind the line, from post to post (Law 1)."""
+    out = 1.0 if line > 0 else -1.0
+    lo, hi, back = PITCH_Y / 2 - GOAL_HALF_WIDTH, PITCH_Y / 2 + GOAL_HALF_WIDTH, line + out * NET_DEPTH_M
+    return [((line, lo), (back, lo)), ((line, hi), (back, hi)), ((back, lo), (back, hi))]
+
+
+NETS = [side for line in (0.0, PITCH_X) for side in goal_net(line)]
+
+
+def net_stop(px: float, py: float, x: float, y: float, vx: float,
+             vy: float) -> tuple[float, float, float, float]:
+    """A goal's net stops a player as the advertising boards do (steer): the part of his step from
+    (px, py) to (x, y) that would take him through it, along the axis it crosses, is not made."""
+    if 0.0 < min(px, x) and max(px, x) < PITCH_X:  # both ends in front of both goal lines
+        return x, y, vx, vy
+    for _ in range(2):  # a step through a corner of the net meets its side and its back
+        hit = False
+        for c, d in NETS:
+            if crosses((px, py), (x, y), c, d):
+                hit = True
+                if c[0] == d[0]:  # the back of the net
+                    x, vx = px, 0.0
+                else:  # a side of it
+                    y, vy = py, 0.0
+        if not hit:
+            break
+    return x, y, vx, vy
+
+
+def in_the_net(s: ball.State, line: float | None) -> tuple[ball.State, float | None]:
+    """Law 1 and NET_DEPTH_M: a ball that has gone into the goal on this goal line is held by its
+    net. Where it meets the back net, a side net or the roof, its speed into the net is lost
+    (design: a net gives and holds it), and it drops and rolls inside the goal. Returns the ball,
+    and the goal line whose net still holds it: none once it is back on the pitch, out through
+    the goal mouth."""
+    if line is None:
+        return s, None
+    bx, by, bz, vx, vy, vz = s
+    out = 1.0 if line > 0 else -1.0  # from the goal line into the goal
+    if (bx - line) * out <= 0:
+        return s, None
+    back = line + out * (NET_DEPTH_M - ball.RADIUS)
+    if (bx - back) * out > 0:
+        bx = back
+        vx = 0.0 if vx * out > 0 else vx
+    side = GOAL_HALF_WIDTH - ball.RADIUS
+    if abs(by - PITCH_Y / 2) > side:
+        by = PITCH_Y / 2 + math.copysign(side, by - PITCH_Y / 2)
+        vy = 0.0 if vy * (by - PITCH_Y / 2) > 0 else vy
+    behind = min((bx - line) * out, NET_DEPTH_M)  # the roof slopes down from the crossbar to the back
+    roof = CROSSBAR + (NET_BACK_M - CROSSBAR) * behind / NET_DEPTH_M - 2 * ball.RADIUS
+    if bz > roof:
+        bz, vz = roof, min(vz, 0.0)
+    return (bx, by, bz, vx, vy, vz), line
+
+
+def goal_entered(before: ball.State, after: ball.State) -> float | None:
+    """The goal line the ball went into the goal over, from `before` to `after`: its centre over
+    the line, the whole ball between the posts and under the bar where it crossed (as for a goal,
+    Law 10, Engine.in_goal). None if it did not go in."""
+    for line in (0.0, PITCH_X):
+        out = 1.0 if line > 0 else -1.0
+        a, b = (before[0] - line) * out, (after[0] - line) * out
+        if a <= 0 < b:
+            k = a / (a - b)  # how far through the move it crosses the line
+            if Engine.in_goal(before[1] + k * (after[1] - before[1]), before[2] + k * (after[2] - before[2])):
+                return line
+    return None
+
+
+def net_step(before: ball.State, after: ball.State, line: float | None) -> tuple[ball.State, float | None]:
+    """A dead ball's move from `before` to `after`, held by the net of the goal it is in (`line`),
+    or has just gone into (goal_entered): a goal, or a ball played on after the whistle. A ball
+    outside the goal meets no net (design, as specified for lesson 184: the net's outside, met by a
+    ball wide of a post or dropping over the bar, is not modelled yet)."""
+    return in_the_net(after, goal_entered(before, after) if line is None else line)
+
+
+def within_lines(x: float, y: float) -> bool:
+    """Half a metre or more inside the lines, as players' targets are kept: they brake for a line
+    rather than stop dead at it."""
+    return 0.5 <= x <= PITCH_X - 0.5 and 0.5 <= y <= PITCH_Y - 0.5
+
+
+def circle_point_within_lines(cx: float, cy: float, radius: float, nx: float, ny: float,
+                              then: tuple[float, float] | None = None) -> tuple[float, float] | None:
+    """The point of the circle of `radius` round (cx, cy) that is within the lines (within_lines)
+    nearest (nx, ny), or with `then`, on the shortest way from (nx, ny) by it to `then`; searched
+    every 5 degrees (design: under 0.9 m apart at 10.15 m); None if none is."""
+    round_it = [(cx + fmath.cos(math.radians(a)) * radius, cy + fmath.sin(math.radians(a)) * radius)
+                for a in range(0, 360, 5)]
+    on = [q for q in round_it if within_lines(*q)]
+
+    def way(q: tuple[float, float]) -> float:
+        on_to = math.hypot(q[0] - then[0], q[1] - then[1]) if then else 0.0
+        return math.hypot(q[0] - nx, q[1] - ny) + on_to
+
+    return min(on, key=way) if on else None
+
+
+def round_reach(cx: float, cy: float, radius: float, a: float, m: float) -> float | None:
+    """How far from (cx, cy) a player going round its circle of `radius` aims at bearing `a`: at
+    his own distance m, but within the lines (within_lines) and never inside the circle; None if no
+    point at that bearing is both."""
+    ux, uy = fmath.cos(a), fmath.sin(a)
+    lo, hi = radius, math.inf
+    for c, u, length in ((cx, ux, PITCH_X), (cy, uy, PITCH_Y)):
+        if abs(u) < 1e-12:
+            if not 0.5 <= c <= length - 0.5:
+                return None
+            continue
+        s, t = (0.5 - c) / u, (length - 0.5 - c) / u
+        lo, hi = max(lo, min(s, t)), min(hi, max(s, t))
+    return clamp(m, lo, hi) if lo <= hi else None
+
+
+def way_round_within_lines(cx: float, cy: float, radius: float, here: float, turn: float,
+                           m: float) -> bool:
+    """Whether a player at bearing `here` from (cx, cy) can go round its circle of `radius` by
+    `turn` (radians, signed), every 5 degrees of the way (as circle_point_within_lines searches)
+    having a point within the lines and outside the circle to aim at (round_reach)."""
+    step = math.radians(5.0)
+    bearings = [here + math.copysign(k * step, turn) for k in range(1, int(abs(turn) / step) + 1)]
+    return all(round_reach(cx, cy, radius, a, m) is not None for a in [*bearings, here + turn])
+
+
+def round_the_circle(cx: float, cy: float, radius: float, px: float, py: float, qx: float,
+                     qy: float) -> float:
+    """How far a player walks from (px, py) to (qx, qy) keeping off the circle of `radius` round
+    (cx, cy), estimated from above: straight on if the straight way stays outside it; otherwise
+    round it at his own distance from its centre (stepping straight out past its edge first, if he
+    is inside) until the straight way on just touches it, then straight on. keep_off aims him at
+    most KEEP_OFF_STEP_DEG round from where he is, so he walks a spiral in toward the circle, which
+    is shorter (lesson 161; measured in tests/test_restarts.py)."""
+    mx, my = px - cx, py - cy
+    m = math.hypot(mx, my)
+    out = 0.0
+    if m < radius:  # inside: straight out first, KEEP_OFF_MARGIN_M past the edge
+        reach = radius + KEEP_OFF_MARGIN_M
+        mx, my = (mx / m * reach, my / m * reach) if m > 1e-6 else (reach, 0.0)
+        out, m, px, py = reach - m, reach, cx + mx, cy + my
+    if segment_distance(cx, cy, px, py, qx, qy) >= radius - ON_CIRCLE_M:
+        return out + math.hypot(qx - px, qy - py)
+    q = max(math.hypot(qx - cx, qy - cy), radius)
+    turn = abs((fmath.atan2(qy - cy, qx - cx) - fmath.atan2(my, mx) + math.pi) % (2 * math.pi) - math.pi)
+
+    def touch(d: float) -> float:  # at the centre, from d away to where a line from there touches it
+        return fmath.atan2(math.sqrt(d * d - radius * radius), radius)
+
+    arc = max(0.0, turn - touch(m) - touch(q))
+    return out + m * arc + math.sqrt(m * m - radius * radius) + math.sqrt(q * q - radius * radius)
+
+
+def way_in(bx: float, by: float, place: tuple[float, float], at: tuple[float, float]) -> tuple[float, float]:
+    """Engine.way_into_wall for a player at `at` and his place in a wall across a kick from (bx, by)."""
+    wx, wy = place
+    d = math.hypot(wx - bx, wy - by)
+    ux, uy = (wx - bx) / d, (wy - by) / d  # from the ball through his place
+    across = abs((at[0] - wx) * -uy + (at[1] - wy) * ux)
+    if across <= WALL_LANE_M:
+        return wx, wy
+    behind = max(shape.SHOULDER_BREADTH_M, (at[0] - wx) * ux + (at[1] - wy) * uy)
+    return wx + ux * behind, wy + uy * behind
+
+
 def clamp(v: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, v))
 
@@ -294,13 +566,13 @@ def steer(p: Player, tx: float, ty: float, want_speed: float) -> None:
     a shared grip limit for braking and turning, and energy (ninety/sim/body.py)."""
     x, y, p.vx, p.vy = move_body(p.x, p.y, p.vx, p.vy, tx, ty, want_speed, p.physique, DT)
     # No wall at the lines: players may run past them, as in real matches. Targets stay on the
-    # pitch, so they slow down and come back; only the advertising boards stop them, and then
-    # the boards also stop the part of the run that goes into them.
+    # pitch, so they slow down and come back; only the advertising boards and the goals' nets stop
+    # them, and then they also stop the part of the run that goes into them.
     if not -BOARDS_M <= x <= PITCH_X + BOARDS_M:
         x, p.vx = clamp(x, -BOARDS_M, PITCH_X + BOARDS_M), 0.0
     if not -BOARDS_M <= y <= PITCH_Y + BOARDS_M:
         y, p.vy = clamp(y, -BOARDS_M, PITCH_Y + BOARDS_M), 0.0
-    p.x, p.y = x, y
+    p.x, p.y, p.vx, p.vy = net_stop(p.x, p.y, x, y, p.vx, p.vy)
 
 
 class Engine:
@@ -310,6 +582,8 @@ class Engine:
         # Perception draws from its own stream, so a change to what players see does not
         # reshuffle every other random draw in the match.
         self.sight_rng = fmath.Random(f"{seed}-perception")
+        # So does a goal's celebration: how long each celebrates moves no other draw (lesson 90).
+        self.celebration_rng = fmath.Random(f"{seed}-celebration")
         self.match = Match(seed=seed)
         self.players: list[Player] = []
         # A strength not given is drawn, home first: with none given the match is the same as before.
@@ -408,17 +682,30 @@ class Engine:
         # D4: each carrier's misjudgement of his options, held until he next scans: player -> (the
         # scan it belongs to, as Belief.next_scan, option key -> draw).
         self.tastes: dict[str, tuple[float, dict]] = {}
+        # O3: each attacker off the ball's offset from his place in the shape, to be open to a pass,
+        # chosen when he last scanned and held until he next does; and who has scanned since.
+        self.open_at: dict[str, tuple[float, float]] = {}
+        self.open_due: set[str] = set()
+        # O2 beyond the box: the attacker each defender in the block tracks in his zone, chosen when he
+        # last scanned; and who has scanned since.
+        self.track: dict[str, str | None] = {}
+        self.track_due: set[str] = set()
         self.restart: Restart | None = None
         # Laws 13, 15 to 17: a restart that has been set but not yet kicked; the opponents keep off
         self.set_by: Restart | None = None
+        self.celebration: Celebration | None = None  # a goal just scored: the scorers celebrate (L4)
+        self.side_by_side: set[str] = set()  # this frame, who stands as close to team-mates as bodies allow
         # Laws 8, 13 to 17: who took the last restart, until another player has touched the ball
         self.restart_kicker: str | None = None
         self.throw_by: str | None = None  # a throw-in taker holding the ball until he throws it
         self.throw_ready = 0.0
         self.into_play = False  # released from behind the line; not a new out until it enters or falls away
         self.throw_from: tuple[float, float] | None = None  # where the last throw-in was taken
+        self.netted: float | None = None  # the goal line whose net holds the dead ball after a goal
         self.touch_show: dict[str, tuple[str, float]] = {}  # player -> (part, until)
         self.dive_show: dict[str, tuple[float, float]] = {}  # keeper -> (until, side)
+        # P18: a fouled player -> (contact t, upright t, the way his head goes, radians)
+        self.fallen: dict[str, tuple[float, float, float]] = {}
         self.dribble_to: tuple[float, float] | None = None  # the carrier's chosen carry, if any
         self.intended: str | None = None  # the team-mate a pass was played to: he expects it
         self.runs: dict[str, tuple[float, float, float]] = {}  # runner -> (x, y, started at)
@@ -514,6 +801,8 @@ class Engine:
         if self.team_of(pid) != self.poss_team:
             self.pressed.clear()
             self.poss_team = self.team_of(pid)
+            self.open_at.clear()  # O3: a new possession: each attacker finds his space afresh
+            self.track.clear()  # O2: and each defender looks afresh for a man in his zone
         self.possessor = pid
         self.last_touch = pid
         self.tastes.pop(pid, None)  # D4: a new possession is a new look at his options
@@ -573,8 +862,9 @@ class Engine:
     def kickoff(self, team: str, setup: bool = False) -> None:
         """Law 8. At the start of the match (`setup`) the teams walk out to their kick-off spots
         before the first frame. After a goal nobody is moved: they make their own way back to their
-        spots, the ball is fetched to the centre mark (tick_restart), and the kick is taken once
-        everyone stands where Law 8 puts them, after a short pause rather than at once."""
+        spots after the celebration (celebrate), the ball is fetched to the centre mark
+        (tick_restart), and the kick is taken once everyone stands where Law 8 puts them and the
+        stoppage has run its time (L4: a minute or more after a goal, 1 to 2 s at the start)."""
         taker = next(p for p in self.players if p.team == team and p.role == "ST")
         if setup:
             for p in self.players:
@@ -586,7 +876,8 @@ class Engine:
         self.poss_team = team
         self.kicked = None
         self.new_phase()
-        self.stop("kick_off", team, (PITCH_X / 2, PITCH_Y / 2), taker.id)
+        self.stop("kick_off", team, (PITCH_X / 2, PITCH_Y / 2), taker.id,
+                  delay="kick_off" if setup else "kick_off_after_goal")
 
     def lined_up_for_kickoff(self, r: Restart) -> bool:
         """Law 8: everyone but the kicker in his own half, and the opponents outside the centre
@@ -615,17 +906,13 @@ class Engine:
 
     def offside_offence(self, p: Player, x: float, y: float) -> None:
         """L10: an indirect free kick to the defending side where the offside player played it."""
-        kicked = self.kicked
-        if kicked and kicked["type"] == "pass":  # not received: the offside event names him
-            kicked.update(end_x=round(x, 2), end_y=round(y, 2), outcome="fail")
-        elif kicked and kicked["type"] == "shot":
-            self.close_shot(kicked, x, y)
-        self.kicked = None
+        self.end_kick(x, y)  # not received: the offside event names him
         self.offside = set()
         self.emit("offside", p.team, x, y, player=p.id)
         self.possessor = None  # the ball is dead and rolls on until the free kick is taken
         self.chase = {}
-        self.stop("free_kick", other(p.team), (clamp(x, 0.5, PITCH_X - 0.5), clamp(y, 0.5, PITCH_Y - 0.5)))
+        self.stop("free_kick", other(p.team), (clamp(x, 0.5, PITCH_X - 0.5), clamp(y, 0.5, PITCH_Y - 0.5)),
+                  direct=False)  # Law 11: an indirect free kick
 
     def onside_limit(self, team: str, positions: list[tuple[float, float]], ball_x: float) -> float:
         """Law 11: how far toward the opponents' goal a player of `team` may stand and be onside:
@@ -1328,6 +1615,20 @@ class Engine:
             self.close_shot(kicked, x, y)
         # A deflection (block, parry, a team-mate's touch) leaves the shot in flight: it may still go in.
 
+    def end_kick(self, x: float, y: float) -> None:
+        """The pass or shot in flight ends where the ball is when the next thing happens to it that is
+        not a touch (a touch ends it in `touched`): a tackle on it, a whistle. Its end point is then a
+        point of its path (data contract C7). A pass nobody received has failed; a shot is closed as
+        the touches since it was struck decide (close_shot)."""
+        kicked = self.kicked
+        if kicked is None:
+            return
+        if kicked["type"] == "pass":
+            kicked.update(end_x=round(x, 2), end_y=round(y, 2), outcome="fail")
+        else:
+            self.close_shot(kicked, x, y)
+        self.kicked = None
+
     def close_shot(self, kicked: dict, x: float, y: float) -> None:
         """A shot ends without a goal: blocked if a defender got to it, saved or tipped if only the
         keeper did (on or off target as it was going), otherwise on or off target as it went."""
@@ -1392,8 +1693,10 @@ class Engine:
             r = ball.RADIUS
             inside = -r <= bx <= PITCH_X + r and -r <= by <= PITCH_Y + r
             inward = (by >= 0 or vy > 0) and (by <= PITCH_Y or vy < 0)
-            if not inside and not inward and self.throw_from:
-                # Law 15: it never entered the field, so the same side throws it again from there.
+            beside = -r <= bx <= PITCH_X + r  # still alongside the touchline, short of its ends
+            if not inside and (not inward or not beside) and self.throw_from:
+                # Law 15: it never entered the field (it went away from it, or on past the end of
+                # the touchline), so the same side throws it again from there.
                 self.into_play = False
                 if self.kicked:
                     self.kicked.update(outcome="fail")
@@ -1477,15 +1780,192 @@ class Engine:
                     kicked.update(receiver=None if own else scorer, end_x=touch["x"], end_y=touch["y"],
                                   outcome="fail" if own else "success")
         self.emit("goal", team, x, y, player=scorer)
+        self.netted = PITCH_X if x > PITCH_X / 2 else 0.0  # in the goal: its net holds it (in_the_net),
+        self.ball, self.netted = in_the_net(self.ball, self.netted)  # from this frame on
+        self.celebrate(team, scorer)
         self.kickoff(other(team))
 
-    def stop(self, kind: str, team: str, spot: tuple[float, float], taker: str | None = None) -> None:
+    def celebrate(self, team: str, scorer: str | None) -> None:
+        """L4 (design): the scorer runs off toward the corner flag nearest him at the end he scored at,
+        and his outfield team-mates run to him; after CELEBRATION_S they walk back for the kick-off.
+        An own goal has no scorer: the side's outfielder nearest the ball is the one they run to. A
+        keeper who scores celebrates where he is. The team-mates gather on the side they come from
+        (huddle_spot), each at his own place, never on the same spot: bodies do not pass through each
+        other (P11)."""
+        side = [p for p in self.players if p.team == team and p.role != "GK"]
+        focus = self.by_id[scorer] if scorer else min(
+            side, key=lambda p: math.hypot(p.x - self.ball[0], p.y - self.ball[1]))
+        if focus.role == "GK":
+            spot = (focus.x, focus.y)
+        else:
+            flag_y = 0.5 if focus.y < PITCH_Y / 2 else PITCH_Y - 0.5
+            spot = (clamp(goal_x(team), 0.5, PITCH_X - 0.5), flag_y)
+        mates = [q.id for q in side if q is not focus]
+        # each team-mate stops at his own moment, so they leave him one by one, not as one body;
+        # the one they celebrate goes last
+        leave = {pid: self.t + self.celebration_rng.uniform(*CELEBRATION_S) for pid in mates}
+        leave[focus.id] = max(leave.values())
+        self.celebration = Celebration(team, focus.id, spot, leave[focus.id], mates, leave)
+
+    def celebrating(self, p: Player) -> bool:
+        c = self.celebration
+        return c is not None and self.t < c.leave.get(p.id, 0.0)
+
+    def huddle_places(self, c: Celebration) -> dict[str, tuple[float, float]]:
+        """The places round the focus of the team-mates still celebrating, worked out for all of
+        them from where they all are now: on an arc facing the side they come from (their mean
+        bearing from him), HUDDLE_SPACING_M apart, in the order of their bearings, so no two runs
+        to them cross; at most a half-circle, far enough out to hold them all and clear of his body.
+        As they leave, those still there close up round him."""
+        f = self.by_id[c.focus]
+        mates = [self.by_id[pid] for pid in c.ring if self.t < c.leave[pid]]
+        if not mates:
+            return {}
+        bear = {q.id: fmath.atan2(q.y - f.y, q.x - f.x) for q in mates}
+        # math.fsum: one exact rounding, the same on every Python (lesson 134)
+        mean = fmath.atan2(math.fsum(fmath.sin(a) for a in bear.values()),
+                           math.fsum(fmath.cos(a) for a in bear.values()))
+        order = sorted(bear, key=lambda pid: (bear[pid] - mean + math.pi) % (2 * math.pi))
+        n = len(order)
+        radius = max(n * HUDDLE_SPACING_M / math.pi, shape.SHOULDER_BREADTH_M)
+        step = HUDDLE_SPACING_M / radius
+        places = {}
+        for k, pid in enumerate(order):
+            a = mean + (k - (n - 1) / 2) * step
+            places[pid] = (f.x + fmath.cos(a) * radius, f.y + fmath.sin(a) * radius)
+        return places
+
+    def huddle_spot(self, c: Celebration, p: Player) -> tuple[float, float]:
+        """His place round the focus this frame (huddle_places, worked out once a frame in gather)."""
+        if p.id not in c.places:
+            c.places = self.huddle_places(c)
+        return c.places[p.id]
+
+    def gather(self) -> None:
+        """Once a frame, before anyone moves: the places round the one they celebrate, and who is
+        joining the others. A team-mate within GATHER_REACH_M of his place round a scorer (the focus
+        of the spot he runs to) or in a free kick's wall stands as close to them as bodies allow
+        (together)."""
+        self.side_by_side = set()
+        r = self.restart or self.set_by
+        if r is not None:
+            for pid, (x, y) in r.wall.items():
+                p = self.by_id[pid]
+                if math.hypot(p.x - x, p.y - y) < GATHER_REACH_M:
+                    self.side_by_side.add(pid)
+        c = self.celebration
+        if c is None:
+            return
+        c.places = self.huddle_places(c)
+        for pid, (x, y) in [(c.focus, c.spot), *c.places.items()]:
+            p = self.by_id[pid]
+            if self.celebrating(p) and math.hypot(p.x - x, p.y - y) < GATHER_REACH_M:
+                self.side_by_side.add(pid)
+
+    def together(self, p: Player, q: Player) -> bool:
+        """Team-mates who mean to stand side by side keep only clear of each other's bodies, not the
+        usual personal space; on the way there they keep it as ever (gather)."""
+        return p.team == q.team and p.id in self.side_by_side and q.id in self.side_by_side
+
+    def looks_at(self, p: Player) -> tuple[float, float]:
+        """What a still player turns to: the ball; round a scorer, the scorer, and the scorer to
+        his team-mates round him."""
+        c = self.celebration
+        if c is not None and p.id in self.side_by_side:
+            if p.id != c.focus:
+                f = self.by_id[c.focus]
+                return f.x, f.y
+            around = [self.by_id[pid] for pid in c.places if pid in self.side_by_side]
+            if around:
+                n = len(around)
+                return math.fsum(q.x for q in around) / n, math.fsum(q.y for q in around) / n
+        return self.ball[0], self.ball[1]
+
+    def stop(self, kind: str, team: str, spot: tuple[float, float], taker: str | None = None,
+             delay: str | None = None, direct: bool = True) -> None:
         if taker is None:
             taker = self.nearest(spot[0], spot[1], team).id
-        lo, hi = RESTART_DELAY_S[kind]
+        lo, hi = RESTART_DELAY_S[delay or kind]
         self.dribbler = self.dribble_to = None  # the ball is dead: nobody is running onto a touch
         self.restart_kicker = None  # a new stoppage ends the last restart's bar
-        self.restart = Restart(kind, team, spot[0], spot[1], taker, self.t + self.rng.uniform(lo, hi))
+        self.restart = Restart(kind, team, spot[0], spot[1], taker, self.t + self.rng.uniform(lo, hi),
+                               direct=direct)
+        if kind == "free_kick" and direct:
+            self.restart.wall = self.form_wall(self.restart)
+
+    def wall_spots(self, r: Restart) -> list[tuple[float, float]]:
+        """Law 13, Bray (2014): where a wall stands for a direct free kick within shooting range (the
+        distance from the goal's centre, straight-line, inside which the shot is an option,
+        offball.SHOT_RANGE_M, measured as decisions measures it: lesson 138). Seen from the ball it
+        hides the goal from one post to WALL_COVER_PAST_CENTRE_M past the centre (Bray: p + q of a
+        2p goal, q = p / 3, two thirds of it), on a line across the kick at the restart's distance
+        (and KEEP_OFF_MARGIN_M). The post is the near one (design). Its width over a shoulder's
+        breadth (P11), rounded down (design: a wall of whole players), is how many stand in it,
+        shoulder to shoulder, the outermost covering the near post; what rounding leaves short is on
+        the keeper's side (Bray's model asks about 4.5 at 22 m straight on; his keeper's four is
+        "half-a-defender light" of it). Spots off the pitch are left out."""
+        line = goal_x(r.team)  # the goal the kick is at
+        bx, by = self.restart_ball_spot(r)
+        if math.hypot(line - bx, PITCH_Y / 2 - by) >= offball.SHOT_RANGE_M:
+            return []
+        mid_y = PITCH_Y / 2
+        near = mid_y - GOAL_HALF_WIDTH if by < mid_y else mid_y + GOAL_HALF_WIDTH
+        cover = mid_y + (WALL_COVER_PAST_CENTRE_M if near < mid_y else -WALL_COVER_PAST_CENTRE_M)
+        a_near = fmath.atan2(near - by, line - bx)
+        sweep = (fmath.atan2(cover - by, line - bx) - a_near + math.pi) % (2 * math.pi) - math.pi
+        mid = a_near + sweep / 2
+        d = RESTART_DISTANCE_M["free_kick"] + KEEP_OFF_MARGIN_M
+        half = abs(sweep) / 2  # under a right angle: the goal is in front of the kick
+        width = 2 * d * fmath.sin(half) / fmath.cos(half)
+        n = int(width / shape.SHOULDER_BREADTH_M)
+        cx, cy = bx + fmath.cos(mid) * d, by + fmath.sin(mid) * d
+        ux, uy = -fmath.sin(mid), fmath.cos(mid)  # across the line of the kick
+        toward = 1.0 if sweep > 0 else -1.0  # along it, from the near post's line to the cover edge
+        start = -toward * width / 2  # where the near post's line crosses it
+        along = [start + toward * (k + 0.5) * shape.SHOULDER_BREADTH_M for k in range(n)]
+        spots = [(cx + ux * a, cy + uy * a) for a in along]
+        return [(x, y) for x, y in spots if 0.5 <= x <= PITCH_X - 0.5 and 0.5 <= y <= PITCH_Y - 0.5]
+
+    def way_into_wall(self, r: Restart, p: Player) -> tuple[float, float]:
+        """Where he heads for his place in the wall: first a shoulder's breadth behind it, seen
+        from the ball, then, once there to within WALL_LANE_M across the line, forward into it. He
+        comes in behind the others and steps up between them, never walking along the line through
+        them (P11; design)."""
+        return way_in(*self.restart_ball_spot(r), r.wall[p.id], (p.x, p.y))
+
+    def walk_to_wall(self, r: Restart, at: tuple[float, float], place: tuple[float, float]) -> float:
+        """How far he walks from `at` to a place in the wall, the way he goes there, estimated from
+        above (round_the_circle): round the restart's keep-off circle, to where he comes in behind the
+        line (way_into_wall), then up into it."""
+        bx, by = self.restart_ball_spot(r)
+        wx, wy = way_in(bx, by, place, at)
+        clear = RESTART_DISTANCE_M[r.kind] + KEEP_OFF_MARGIN_M
+        return round_the_circle(bx, by, clear, *at, wx, wy) + math.hypot(place[0] - wx, place[1] - wy)
+
+    def form_wall(self, r: Restart) -> dict[str, tuple[float, float]]:
+        """The defending side's outfielders with the shortest walks to the wall's spots stand in it
+        (design), the nearest pair of player and spot first, each walk estimated the way he would go
+        there (walk_to_wall: round the keep-off circle, in behind the line, up into it). They then share
+        the places out so that their walks add up to the least, so no two of them could swap places
+        for a shorter pair of walks (lesson 143). As walked, two coming round the same side can
+        still pass each other behind the wall (lesson 161; docs/eval/restarts.md)."""
+        spots = self.wall_spots(r)
+        free = [p for p in self.players if p.team != r.team and p.role != "GK"]
+        chosen: list[Player] = []
+        places: list[tuple[float, float]] = []
+        while spots and free:
+            p, spot = min(((q, s) for q in free for s in spots),
+                          key=lambda ps: self.walk_to_wall(r, (ps[0].x, ps[0].y), ps[1]))
+            chosen.append(p)
+            places.append(spot)
+            free.remove(p)
+            spots.remove(spot)
+
+        def walks(order: tuple[tuple[float, float], ...]) -> float:
+            return math.fsum(self.walk_to_wall(r, (p.x, p.y), s) for p, s in zip(chosen, order, strict=True))
+
+        best = min(itertools.permutations(places), key=walks)
+        return {p.id: s for p, s in zip(chosen, best, strict=True)}
 
     def restart_ball_spot(self, r: Restart) -> tuple[float, float]:
         """Where the ball goes for this restart: the mark for a penalty (Law 14), else where the
@@ -1524,11 +2004,16 @@ class Engine:
         return max(0.0, reach)
 
     def dead_ball_rest(self) -> tuple[float, float]:
-        """Where the dead ball will come to rest: along its own flight, or where the advertising
-        boards stop it (tick_restart)."""
-        for s in ball.predict(self.ball, DT, ball.FLIGHT_BOUND_S):
+        """Where the dead ball will come to rest: along its own flight (ball.predict's), or where
+        the advertising boards stop it, or in a goal, where its net holds it (tick_restart)."""
+        s, line = self.ball, self.netted
+        for i in range(int(ball.FLIGHT_BOUND_S / DT) + 1):
+            if i:
+                s, line = net_step(s, ball.step(s, DT), line)
             if not (-BOARDS_M <= s[0] <= PITCH_X + BOARDS_M and -BOARDS_M <= s[1] <= PITCH_Y + BOARDS_M):
                 return clamp(s[0], -BOARDS_M, PITCH_X + BOARDS_M), clamp(s[1], -BOARDS_M, PITCH_Y + BOARDS_M)
+            if i and s[2] == 0 and s[5] == 0 and s[3] == 0 and s[4] == 0:
+                break
         return s[0], s[1]
 
     def carry_dead_ball(self, r: Restart, carrier: Player) -> None:
@@ -1565,10 +2050,13 @@ class Engine:
         r = self.restart
         carrier = self.by_id[r.carried_by] if r.carried_by else None
         if carrier:
+            before = self.ball
             self.carry_dead_ball(r, carrier)
+            self.ball, self.netted = net_step(before, self.ball, self.netted)  # out of a goal, it is free
         else:
-            # The dead ball rolls on until it stops or reaches the advertising boards.
-            bx, by, bz, vx, vy, vz = ball.step(self.ball, DT)
+            # The dead ball rolls on until it stops or reaches the advertising boards, or, in a
+            # goal, its net holds it.
+            (bx, by, bz, vx, vy, vz), self.netted = net_step(self.ball, ball.step(self.ball, DT), self.netted)
             if not (-BOARDS_M <= bx <= PITCH_X + BOARDS_M and -BOARDS_M <= by <= PITCH_Y + BOARDS_M):
                 bx, by = clamp(bx, -BOARDS_M, PITCH_X + BOARDS_M), clamp(by, -BOARDS_M, PITCH_Y + BOARDS_M)
                 vx = vy = 0.0
@@ -1576,14 +2064,16 @@ class Engine:
             if math.hypot(vx, vy) == 0.0:
                 r.passed_by = None  # it has stopped: anyone may go for it again
             # One of his side within a foot's reach of it takes it (the taker first), once it is
-            # on the ground: a dead ball still dropping is left to land.
+            # on the ground: a dead ball still dropping is left to land. Nobody reaches it through
+            # a goal's net (L1).
             bx, by, bz = self.ball[0], self.ball[1], self.ball[2]
             # His foot kills no more speed than a first touch does (A4); a faster ball runs on.
             if bz == 0.0 and self.ball[5] <= 0.0:
                 near = [p for p in self.players if p.team == r.team and p.id != r.passed_by
                         and math.hypot(p.x - bx, p.y - by) <= CONTROL_M
                         and math.hypot(self.ball[3] - p.vx, self.ball[4] - p.vy)
-                        <= p.profile.absorb_mps(False)]
+                        <= p.profile.absorb_mps(False)
+                        and not any(crosses((p.x, p.y), (bx, by), c, d) for c, d in NETS)]  # not through nets
                 if near:
                     carrier = next((p for p in near if p.id == r.taker), near[0])
                     r.carried_by, r.passed_by, r.fetcher = carrier.id, None, None
@@ -1638,6 +2128,7 @@ class Engine:
             spot = self.restart_ball_spot(r)
             self.ball = (*spot, 0.0, 0.0, 0.0, 0.0)
         self.restart = None
+        self.celebration = None  # play restarts: any celebration is over
         self.set_by = r if r.kind not in ("throw_in", "penalty_kick") else None
         self.emit("kickoff" if r.kind == "kick_off" else "set_piece", r.team, *spot, player=taker.id,
                   **({} if r.kind == "kick_off" else {"outcome": None}))
@@ -1737,6 +2228,48 @@ class Engine:
             wait = settle_s(AVERAGE)
         return wait + math.hypot(x - bx, y - by) / decisions.PASS_SPEED_EST_MPS
 
+    def open_spot(self, p: Player, slot: tuple[float, float], onside: float) -> tuple[float, float]:
+        """O3: his place in the shape, moved to where a pass from the carrier is worth most, as he
+        last saw it (decisions.open_spot), every opponent he believes is near counted, the keeper
+        too. He looks again only when he scans (P13), so between scans he keeps his offset and moves
+        with the shape; but an offset the play has made illegal (offside as he sees it, off the
+        pitch, out of range, or nearer the carrier as he sees him now: decisions.open_legal) is
+        dropped at once, and he goes back to his place until he next scans."""
+        carrier = self.by_id.get(self.possessor) if self.possessor else None
+        mates = carrier is not None and carrier.team == p.team
+        view = self.beliefs[p.id]
+        at = (view.where(carrier.id, self.t) or (carrier.x, carrier.y)) if mates else None
+        if p.id in self.open_due and mates:
+            self.open_due.discard(p.id)
+            defenders = [w for w in (view.where(q.id, self.t) for q in self.players if q.team != p.team) if w]
+            self.open_at[p.id] = decisions.open_spot(slot, self.open_at.get(p.id, (0.0, 0.0)), at,
+                                                     defenders, onside, goal_x(p.team))
+        offset = self.open_at.get(p.id, (0.0, 0.0))
+        if offset != (0.0, 0.0) and not decisions.open_legal(slot, offset, at, onside, goal_x(p.team)):
+            offset = self.open_at[p.id] = (0.0, 0.0)
+        dx, dy = offset
+        return clamp(slot[0] + dx, 0.5, PITCH_X - 0.5), clamp(slot[1] + dy, 0.5, PITCH_Y - 0.5)
+
+    def zone_spot(self, p: Player, slot: tuple[float, float], own_goal_x: float) -> tuple[float, float]:
+        """O2 beyond the box: his place in the block, moved goal-side of the attacker he tracks in his
+        zone (offball.zone_spot). He picks whom to track when he scans (P13), and follows that man as
+        he sees him until he scans again. Never the carrier (the press is the presser's, P17) and
+        never a man a near-goal marker has (O2), when he picks and while he follows: if his man gets
+        the ball or a marker, he goes back to his place."""
+        view = self.beliefs[p.id]
+        marked = self.brains[p.team].marked
+        if p.id in self.track_due:
+            self.track_due.discard(p.id)
+            attackers = {q.id: w for q in self.players if q.team != p.team and q.role != "GK"
+                         and q.id != self.possessor and q.id not in marked
+                         and (w := view.where(q.id, self.t))}
+            self.track[p.id] = offball.zone_man(slot, attackers, self.track.get(p.id))
+        man = self.track.get(p.id)
+        if man is None or man == self.possessor or man in marked:
+            return slot
+        at = view.where(man, self.t)
+        return offball.zone_spot(slot, at, own_goal_x) if at else slot
+
     def in_time(self, p: Player, tx: float, ty: float) -> float:
         """O8: the speed he chooses to get to (tx, ty): just enough to be there before the ball could
         be, so far from the ball he walks and near it he bursts; his body caps it."""
@@ -1793,9 +2326,17 @@ class Engine:
             return p.x + (sx - p.x) / d * CONTROL_M, p.y + (sy - p.y) / d * CONTROL_M, DRIBBLE
         if self.restart and self.restart.kind == "penalty_kick" and p.id != self.restart.taker:
             return *self.penalty_wait_spot(p), SHAPE  # Law 14: until the ball is kicked
+        c = self.celebration
+        if c and self.celebrating(p):
+            if p.id == c.focus:  # the scorer runs off to celebrate
+                return *c.spot, RECOVER
+            return *self.huddle_spot(c, p), RECOVER  # his team-mates run to their places by him
         kick_off = self.restart or self.set_by
         if kick_off and kick_off.kind == "kick_off" and p.id != kick_off.taker:
-            return *self.kickoff_spot(p, kick_off.team), SHAPE  # Law 8: until the ball is kicked
+            # Law 8: in his own half until the ball is kicked, walking back (L4), faster if a walk
+            # would not get him there in time for it (O8)
+            kx, ky = self.kickoff_spot(p, kick_off.team)
+            return kx, ky, max(WALK_MPS, self.in_time(p, kx, ky))
         if self.restart and p.id == self.restart.taker:
             r = self.restart
             # With the ball at his feet he goes no faster than he can carry it (D1).
@@ -1808,6 +2349,14 @@ class Engine:
             sx, sy = self.restart_ball_spot(r)
             behind = SET_BALL_CLEAR_M
             return sx - attack_dir(p.team) * behind, sy, pace
+        wall = self.restart or self.set_by
+        if wall and p.id in wall.wall:  # Law 13: in the wall until the ball is kicked
+            wx, wy = self.way_into_wall(wall, p)
+            # At least a walk (L4); faster if the whole way in, round the circle and by behind the
+            # line, would not get him to his place by the time the kick may be taken (R1's wait). The
+            # way is estimated from above (walk_to_wall), so he is early rather than late.
+            way = self.walk_to_wall(wall, (p.x, p.y), wall.wall[p.id])
+            return wx, wy, max(WALK_MPS, way / max(wall.ready_at - self.t, DT))
         bx, by = self.play_point(p)  # O8: where the ball is going, once a pass is struck
         poss_team = self.team_of(self.possessor) if self.possessor else None
         shift = (clamp(bx, 0, PITCH_X) - PITCH_X / 2) * 0.45
@@ -1876,6 +2425,7 @@ class Engine:
             spot = offball.attacking_slot(p.role, PITCH_X - goal_x(p.team), clamp(bx, 0, PITCH_X),
                                           clamp(by, 0, PITCH_Y), onside, wide)
             if spot:
+                spot = self.open_spot(p, spot, onside)
                 return *spot, self.in_time(p, *spot)
         if not brain.in_possession and p.role != "GK":
             own = PITCH_X - goal_x(p.team), PITCH_Y / 2
@@ -1886,8 +2436,9 @@ class Engine:
                 return clamp(x, 0.5, PITCH_X - 0.5), clamp(y, 0.5, PITCH_Y - 0.5)
 
             gap = brain.press_gap_m  # how tight the style presses (pressing intensity)
-            if self.restart and self.restart.team != p.team:  # Laws 15 to 17: stand off the restart
-                gap = RESTART_DISTANCE_M[self.restart.kind]
+            given = self.restart or self.set_by
+            if given and given.team != p.team:  # Laws 13 to 17: stand off the restart until it is in play
+                gap = RESTART_DISTANCE_M[given.kind]
             presser = self.by_id[brain.pressers[0]] if brain.pressers else None
             engaged = (
                 presser is not None
@@ -1900,14 +2451,24 @@ class Engine:
                 carrier = self.by_id.get(self.possessor) if self.possessor else None
                 lead_x = carrier.vx * JOCKEY_LOOKAHEAD_S if carrier else 0.0
                 lead_y = carrier.vy * JOCKEY_LOOKAHEAD_S if carrier else 0.0
-                return *on_pitch(bx + lead_x + gx * gap, by + lead_y + gy * gap), work
+                px, py = on_pitch(bx + lead_x + gx * gap, by + lead_y + gy * gap)
+                # Until a restart's ball is in play there is nobody to press: standing where the Laws
+                # let him (stand_off), he goes to where he stands off it in time for the kick, as the
+                # cover does, not at his pressing pace; at it, knocked a few centimetres off his
+                # place by a team-mate's bending round him, he sprang back and forth twice a second.
+                # From inside the distance he must keep he still leaves at it: in time is for the
+                # ball reaching his place, and the Laws want him out by the kick (lesson 174).
+                legal = self.stand_off(p, p.x, p.y)[0] == (p.x, p.y)
+                return px, py, self.in_time(p, px, py) if given and legal else work
             if engaged and brain.pressers[1:2] == [p.id]:  # cover: behind the presser, goal-side
                 behind = max(COVER_BEHIND_M, gap + 2)
                 cx, cy = on_pitch(bx + gx * behind, by + gy * behind)
                 return cx, cy, self.in_time(p, cx, cy)
             slot = brain.slot(p.role, p.ay, clamp(by, 0, PITCH_Y))
             if slot:
-                tx, ty = slot
+                # O2: the defence and midfield track men in their zones; the forwards wait at their
+                # line of engagement, never past the ball (T3).
+                tx, ty = self.zone_spot(p, slot, own[0]) if ROLE_LINE.get(p.role) != "attack" else slot
         tx, ty = clamp(tx, 0.5, PITCH_X - 0.5), clamp(ty, 0.5, PITCH_Y - 0.5)
         return tx, ty, self.in_time(p, tx, ty)
 
@@ -1933,7 +2494,7 @@ class Engine:
         for i, p in enumerate(self.players):
             if (self.frame + i) % PERCEIVE_EVERY == 0:
                 others = [st for st in states if st[0] != p.id]
-                perception.observe(
+                scanned = perception.observe(
                     self.beliefs[p.id],
                     (p.x, p.y, p.heading),
                     others,
@@ -1942,6 +2503,9 @@ class Engine:
                     p.profile.view_half_angle(),
                     p.profile.scan_interval(),
                 )
+                if scanned:
+                    self.open_due.add(p.id)  # O3: he may look again for space to be open in
+                    self.track_due.add(p.id)  # O2: and for a man in his zone
         holder = self.restart.team if self.restart else self.poss_team
         for k, (team, brain) in enumerate(self.brains.items()):
             if (self.frame + k * BRAIN_EVERY // 2) % BRAIN_EVERY:
@@ -1956,7 +2520,21 @@ class Engine:
                 along = (p.vx * dx + p.vy * dy) / (d or 1.0)
                 reach[p.id] = p.physique.time_to_cover(d, along)
             brain.update(self.t, holder == team, bx, reach)
-            if holder != team:
+            given = self.restart or self.set_by
+            if holder != team and given is not None:
+                # Until a restart's ball is in play, the side keeps the presser and cover it named when
+                # the restart was given (design). Asked again at every look, the order by time to the
+                # ball moved with the very walks the two roles sent them on, and two players swapped
+                # roles at every look, out and back through the whole wait; asked again as the taker
+                # stood over the ball, the cover was named to press and ran in from his place 11 m off
+                # (lesson 174). With a wall up (Law 13), the wall is the side's block and nobody else is
+                # named to press until the ball is in play (design): a presser's place, goal-side at the
+                # Laws' distance, is where the wall stands, and named to it he was pushed in and out of
+                # the Laws' distance by the wall's players.
+                if given.pressers is None:
+                    given.pressers = [] if given.wall else self.who_presses(brain)
+                brain.pressers = given.pressers
+            elif holder != team:
                 brain.pressers = self.who_presses(brain)
             if holder != team:  # O2: pick up the attackers who threaten our goal
                 free = {
@@ -1964,11 +2542,25 @@ class Engine:
                     for p in self.players
                     if p.team == team and p.role != "GK" and p.id not in brain.pressers
                 }
-                brain.markers = offball.marking(
-                    free, self.shared_view(team, other(team)), PITCH_X - goal_x(team)
-                )
+                seen, own_goal = self.shared_view(team, other(team)), PITCH_X - goal_x(team)
+                if given is None:
+                    pairs = offball.pick_up(free, seen, own_goal)
+                    brain.markers = offball.marking(free, seen, own_goal, pairs)
+                else:
+                    # Until a restart's ball is in play each marker keeps his man (design). Picked up
+                    # again at every look, from noisy sightings and from where the markers' own walks
+                    # had taken them, men changed markers at every look, and the markers walked out
+                    # and back through the wait. Those in the wall stand in it, and the taker is faced
+                    # by the wall or the presser: marked goal-side, his marker's place was the wall's
+                    # own (lesson 174).
+                    free = {pid: at for pid, at in free.items() if pid not in given.wall}
+                    seen = {pid: at for pid, at in seen.items() if pid != given.taker}
+                    pairs = given.marks = offball.pick_up(free, seen, own_goal, keep=given.marks)
+                    brain.markers = {did: offball.goal_side(seen[aid], own_goal)
+                                     for did, aid in given.marks.items()}
+                brain.marked = set(pairs.values())
             else:
-                brain.markers = {}
+                brain.markers, brain.marked = {}, set()
 
     def who_presses(self, brain: TeamBrain) -> list[str]:
         """T3, P17: the brain asks its players in the order they could reach the ball; the first
@@ -2097,11 +2689,11 @@ class Engine:
         grip = math.sqrt(max(BRAKE_MAX * BRAKE_MAX - pushing * pushing, 0.0))
         brake = min(abs(p.vx), grip * DT)
         p.vx -= math.copysign(brake, p.vx)
-        p.x += p.vx * DT
-        p.vy = (y - p.y) / DT
-        p.y = y
+        # a goal's net stops a dive as it stops a run (net_stop)
+        x, stop_y, p.vx, p.vy = net_stop(p.x, p.y, p.x + p.vx * DT, y, p.vx, (y - p.y) / DT)
+        p.x, p.y = x, stop_y
         if landing:
-            p.vy = carried
+            p.vy = carried if stop_y == y else 0.0
             self.landed = (p.id, self.dive[4])
             self.dive = None
             self.off_balance[p.id] = self.t + offball.KEEPER_DOWN_S  # on the ground: getting up
@@ -2118,9 +2710,12 @@ class Engine:
                 steer(p, p.x + p.vx * 0.5, p.y + p.vy * 0.5, DRIBBLE)
                 continue
             tx, ty, top = self.shape_target(p)
+            place = self.stand_off(p, tx, ty)[0]
             kx, ky = self.keep_off(p, tx, ty)
             if (kx, ky) != (tx, ty):
                 tx, ty, top = kx, ky, max(top, self.in_time(p, kx, ky))
+            tx, ty = self.round_the_net(p, tx, ty)
+            top = self.restart_pace(p, tx, ty, top, place)
             dist = math.hypot(tx - p.x, ty - p.y)
             if dist > 1e-6:  # bend the running direction away from anyone about to be in the way
                 ax, ay = self.avoid(p)
@@ -2129,20 +2724,106 @@ class Engine:
                 tx, ty = p.x + ux / u * dist, p.y + uy / u * dist
             steer(p, tx, ty, top)
             p.heading = turn_toward(p.heading, perception.facing(p.heading, p.vx, p.vy, p.x, p.y,
-                                                                 self.ball[0], self.ball[1]))
+                                                                 *self.looks_at(p)))
         self.separate()
 
-    def keep_off(self, p: Player, tx: float, ty: float) -> tuple[float, float]:
+    def round_the_net(self, p: Player, tx: float, ty: float) -> tuple[float, float]:
+        """Nobody walks through a goal's net (Law 1, NET_DEPTH_M): where his straight way would cross
+        it, he heads for the first point of the shortest way that does not, by the goal mouth, in
+        front of it NET_CLEAR_M, or round the goal, NET_CLEAR_M clear of its posts and back corners
+        (design). The keeper fetching the ball from his net walks in through the mouth."""
+        if 0.0 < min(p.x, tx) and max(p.x, tx) < PITCH_X:  # a way in front of both goal lines
+            return tx, ty
+        at, target = (p.x, p.y), (tx, ty)
+        for line in (0.0, PITCH_X):
+            net = goal_net(line)
+            if not any(crosses(at, target, c, d) for c, d in net):
+                continue
+            out, mid, m = (1.0 if line > 0 else -1.0), PITCH_Y / 2, NET_CLEAR_M
+            lo, hi = mid - GOAL_HALF_WIDTH + m, mid + GOAL_HALF_WIDTH - m
+            behind = line + out * (NET_DEPTH_M + m)
+            nodes = [at, (line - out * m, clamp(p.y, lo, hi)), (line - out * m, clamp(ty, lo, hi)),
+                     (line, lo - 2 * m), (line, hi + 2 * m), (behind, lo - 2 * m), (behind, hi + 2 * m),
+                     target]
+            # shortest way from him (0) to his target (last) over ways that cross no net
+            best, first, todo = {0: 0.0}, {}, {0}
+            while todo:
+                i = min(todo, key=best.get)
+                todo.discard(i)
+                for j in range(1, len(nodes)):
+                    if j == i or any(crosses(nodes[i], nodes[j], c, d) for c, d in net):
+                        continue
+                    cost = best[i] + math.dist(nodes[i], nodes[j])
+                    if cost < best.get(j, math.inf):
+                        best[j], first[j] = cost, first.get(i, j)
+                        todo.add(j)
+            if len(nodes) - 1 in first:
+                return nodes[first[len(nodes) - 1]]
+        return tx, ty
+
+    def restart_pace(self, p: Player, tx: float, ty: float, top: float,
+                     place: tuple[float, float] | None = None) -> float:
+        """How fast a player goes on his way to (tx, ty) while a restart waits to be taken. His place
+        is where he will stand, kept off the restart (stand_off); by default the end of his way. If
+        it is more than SETTLE_M off, or he is still walking in to it, or his way goes round or out of
+        the keep-off circle (keep_off), he goes at no less than a normal walking pace (L4), so he gets
+        there and stands there rather than creeping in over the whole wait (R1's). Walking in is
+        closing on it: one kept off his place by another standing on it, going round him, slows to his
+        own pace rather than circling him at a walk. Once he is at his place with the ball set
+        (ball_set), he has settled: a later shift of his place within SHUFFLE_M, as it moves with what
+        he sees and whom he marks, he makes at his own pace, rather than walking every jump of it out
+        and back; further, he walks to it again and settles there. The one fetching the ball keeps
+        his own pace: near the boards it is what he can stop in (lesson 174). Who has settled is kept
+        on the restart."""
+        r = self.restart
+        if r is None or p.id == r.fetcher:
+            return top
+        px, py = place if place is not None else (tx, ty)
+        off = math.hypot(px - p.x, py - p.y)
+        if p.id in r.settled:
+            if off <= SHUFFLE_M:
+                return top
+            r.settled.discard(p.id)
+        way = math.hypot(tx - p.x, ty - p.y)
+        closing = ((tx - p.x) * p.vx + (ty - p.y) * p.vy) / way if way > 0.0 else 0.0
+        if off > SETTLE_M or closing > CLOSING_MPS or (px, py) != (tx, ty):
+            return max(top, WALK_MPS)
+        if self.ball_set(r):
+            r.settled.add(p.id)
+        return top
+
+    def ball_set(self, r: Restart) -> bool:
+        """A restart's ball is set: still on its spot (within a foot's reach of it, CONTROL_M), neither
+        rolling there nor carried by any but the taker (tick_restart). From then on players' places
+        no longer move with it (lesson 174)."""
+        sx, sy = self.restart_ball_spot(r)
+        return (math.hypot(*self.ball[3:6]) == 0.0 and r.carried_by in (None, r.taker)
+                and math.hypot(self.ball[0] - sx, self.ball[1] - sy) <= CONTROL_M)
+
+    def stand_off(self, p: Player, tx: float, ty: float) -> tuple[tuple[float, float],
+                                                                  tuple[float, float, float] | None]:
         """Until a restart's ball is in play an opponent keeps the Laws' distance from it: 2 m at a
         throw-in (Law 15), 9.15 m at a free kick (Law 13) and from the corner arc at a corner (Law
-        17), and out of the kicking side's penalty area at a goal kick (Law 16). His target is moved
-        out by the shortest way, KEEP_OFF_MARGIN_M clear, as the kick-off and penalty spots are;
-        those two restarts have their own spots (kickoff_spot, penalty_wait_spot)."""
+        17), and out of the kicking side's penalty area at a goal kick (Law 16). His place is his
+        target moved out by the shortest way, KEEP_OFF_MARGIN_M clear, as the kick-off and penalty
+        spots are; those two restarts have their own spots (kickoff_spot, penalty_wait_spot). With
+        it, the circle he keeps out of on his way there (its centre and radius), if there is one: his
+        way is keep_off's."""
         r = self.restart or self.set_by
+        if r is not None and p.team == r.team and p.id != r.taker and len(r.wall) >= 3:
+            # Law 13: with three or more defenders in a wall, attackers keep 1 m from it
+            # between bodies: a shoulder's breadth covers the two half-bodies side on (P11)
+            clear = WALL_ATTACKER_GAP_M + shape.SHOULDER_BREADTH_M + KEEP_OFF_MARGIN_M
+            for wx, wy in r.wall.values():
+                d = math.hypot(tx - wx, ty - wy)
+                if d < clear:
+                    ux, uy = ((tx - wx) / d, (ty - wy) / d) if d > 1e-6 else (-attack_dir(p.team), 0.0)
+                    tx, ty = wx + ux * clear, wy + uy * clear
+            return (tx, ty), None
         if r is None or p.team == r.team or r.kind in ("kick_off", "penalty_kick"):
-            return tx, ty
+            return (tx, ty), None
         if r.kind == "goal_kick":
-            return self.out_of_area(r.team, tx, ty)
+            return self.out_of_area(r.team, tx, ty), None
         if r.kind == "free_kick" and self.in_own_box(r.team, r.x, r.y):
             # Law 13: from inside its own penalty area, the opponents also stay out of the area
             tx, ty = self.out_of_area(r.team, tx, ty)
@@ -2153,33 +2834,77 @@ class Engine:
         if r.kind == "corner":  # measured from the arc, so from the corner itself one arc further
             bx, by = r.x, r.y
             clear += CORNER_ARC_M
+        tx, ty = clamp(tx, 0.5, PITCH_X - 0.5), clamp(ty, 0.5, PITCH_Y - 0.5)  # on the pitch, then out
         d = math.hypot(tx - bx, ty - by)
         if d < clear:  # his target is inside: the nearest point outside instead, on the pitch
             ux, uy = ((tx - bx) / d, (ty - by) / d) if d > 1e-6 else (-attack_dir(p.team), 0.0)
             ox, oy = tx, ty
             tx, ty = bx + ux * clear, by + uy * clear
-            if not (0.5 <= tx <= PITCH_X - 0.5 and 0.5 <= ty <= PITCH_Y - 0.5):
-                # off the pitch (a ball near a line): the nearest point round the circle that is on
-                # it, searched every 5 degrees (design: under 0.8 m apart at 9.65 m)
-                round_it = [(bx + fmath.cos(math.radians(a)) * clear, by + fmath.sin(math.radians(a)) * clear)
-                            for a in range(0, 360, 5)]
-                on = [q for q in round_it if 0.5 <= q[0] <= PITCH_X - 0.5 and 0.5 <= q[1] <= PITCH_Y - 0.5]
-                if on:
-                    tx, ty = min(on, key=lambda q: math.hypot(q[0] - ox, q[1] - oy))
-        # And he goes round the circle, not across it. Inside it, he first steps straight out; while
-        # the straight way to his target would cut inside, he aims along the circle, at most
-        # KEEP_OFF_STEP_DEG round from where he is.
+            if not within_lines(tx, ty):  # off the pitch (a ball near a line): the nearest on it
+                tx, ty = circle_point_within_lines(bx, by, clear, ox, oy) or (tx, ty)
+        return (clamp(tx, 0.5, PITCH_X - 0.5), clamp(ty, 0.5, PITCH_Y - 0.5)), (bx, by, clear)
+
+    def keep_off(self, p: Player, tx: float, ty: float) -> tuple[float, float]:
+        """His way to his place kept off a restart (stand_off): round the keep-off circle, not across
+        it. Inside the Laws' distance, he first steps straight out, to KEEP_OFF_MARGIN_M past the
+        circle (aimed at its edge, he would stop on the edge, still inside); where straight out would
+        leave the pitch (a ball near a line, he between it and the line), out by the point past it,
+        on the pitch, on the shortest way to his place. While the straight way to his place would cut
+        inside the circle, he aims along it, at most KEEP_OFF_STEP_DEG round from where he is, at his
+        own distance, or from inside the circle's margin past it, but within the lines (round_reach):
+        the short way round, or the long way where the short one would leave the pitch; if both
+        would, hemmed in between the circle and the lines, he stays where he is. Going round at the
+        circle's edge, each step dips into the margin, and straight out from there he would stop
+        short every few strides (lesson 174). But one inside the circle whose place is within a
+        stride (SETTLE_M), by a straight way that keeps the Laws' distance, as when he has stopped a
+        hair short of his place on its edge, goes straight there: sent out past it, he would come back
+        in to the same place and stop short again, out and back over and over. Going anywhere
+        further, he aims past the margin, which takes up most of a bend round others or a step too
+        far (lesson 174)."""
+        (tx, ty), circle = self.stand_off(p, tx, ty)
+        if circle is None:
+            return tx, ty
+        bx, by, clear = circle
         mx, my = p.x - bx, p.y - by
         m = math.hypot(mx, my)
-        out_x, out_y = (bx + mx / m * clear, by + my / m * clear) if m > 1e-6 else (tx, ty)
-        if 1e-6 < m < clear and 0.5 <= out_x <= PITCH_X - 0.5 and 0.5 <= out_y <= PITCH_Y - 0.5:
+        out = clear + KEEP_OFF_MARGIN_M
+        out_x, out_y = (bx + mx / m * out, by + my / m * out) if m > 1e-6 else (tx, ty)
+        laws = clear - KEEP_OFF_MARGIN_M  # the Laws' distance itself
+        if 1e-6 < m < clear and math.hypot(tx - p.x, ty - p.y) <= SETTLE_M \
+                and segment_distance(bx, by, p.x, p.y, tx, ty) >= laws:
+            pass
+        elif 1e-6 < m < laws:
+            if not within_lines(out_x, out_y):
+                way_out = circle_point_within_lines(bx, by, out, p.x, p.y, then=(tx, ty))
+                out_x, out_y = way_out or (out_x, out_y)
             tx, ty = out_x, out_y
-        elif m > 1e-6 and segment_distance(bx, by, p.x, p.y, tx, ty) < clear:
+        elif m > 1e-6 and segment_distance(bx, by, p.x, p.y, tx, ty) < clear - ON_CIRCLE_M:
             here, there = fmath.atan2(my, mx), fmath.atan2(ty - by, tx - bx)
             turn = (there - here + math.pi) % (2 * math.pi) - math.pi
-            a = here + clamp(turn, -math.radians(KEEP_OFF_STEP_DEG), math.radians(KEEP_OFF_STEP_DEG))
-            reach = max(clear, m)
-            tx, ty = bx + fmath.cos(a) * reach, by + fmath.sin(a) * reach
+            ways = (turn, turn - math.copysign(2 * math.pi, turn))  # the short way round, then the long
+            # From inside the margin, round and out past it: half as far round as a chord that would
+            # leave his own distance along it (design), so he heads out as well as round; that chord's
+            # angle is acos(m / out), here by fmath for the same result everywhere.
+            if m >= clear:
+                step = math.radians(KEEP_OFF_STEP_DEG)
+            else:
+                step = fmath.atan2(math.sqrt(out * out - m * m), m) / 2
+            found = None
+            for way in ways:
+                if not way_round_within_lines(bx, by, clear, here, way, m):
+                    continue
+                a = here + clamp(way, -step, step)
+                # The aim itself must be open too: from the margin it can fall between the 5-degree
+                # checks, in an arc off the pitch narrower than them (lesson 174).
+                reach = round_reach(bx, by, clear, a, m if m >= clear else out)
+                if reach is not None:
+                    found = a, reach
+                    break
+            if found is None:
+                tx, ty = p.x, p.y
+            else:
+                a, reach = found
+                tx, ty = bx + fmath.cos(a) * reach, by + fmath.sin(a) * reach
         return clamp(tx, 0.5, PITCH_X - 0.5), clamp(ty, 0.5, PITCH_Y - 0.5)
 
     def out_of_area(self, team: str, tx: float, ty: float) -> tuple[float, float]:
@@ -2207,8 +2932,9 @@ class Engine:
                 continue
             dx, dy = px - (q.x + q.vx * ANTICIPATE_S), py - (q.y + q.vy * ANTICIPATE_S)
             d = math.hypot(dx, dy)
-            if 1e-6 < d < PERSONAL_SPACE_M:
-                closeness = (PERSONAL_SPACE_M - d) / PERSONAL_SPACE_M  # 0 at the edge, 1 at contact
+            space = shape.SHOULDER_BREADTH_M if self.together(p, q) else PERSONAL_SPACE_M
+            if 1e-6 < d < space:
+                closeness = (space - d) / space  # 0 at the edge, 1 at contact
                 w = 4 * closeness * closeness / d  # urgency grows sharply as contact nears
                 nx, ny = nx + dx * w, ny + dy * w
         return nx, ny
@@ -2483,12 +3209,7 @@ class Engine:
         """Law 12: a careless challenge that hits the man: a direct free kick to his side where it
         happened (Law 13); in the offender's own penalty area, a penalty kick (Law 14), taken by
         his side's best finisher."""
-        kicked, (bx, by) = self.kicked, self.ball[:2]
-        if kicked and kicked["type"] == "pass":  # the whistle stops a pass that had not arrived
-            kicked.update(end_x=round(bx, 2), end_y=round(by, 2), outcome="fail")
-        elif kicked and kicked["type"] == "shot":
-            self.close_shot(kicked, bx, by)
-        self.kicked = None
+        self.end_kick(*self.ball[:2])  # the whistle stops a pass or shot that had not arrived
         self.emit("foul", p.team, victim.x, victim.y, player=p.id, receiver=victim.id)
         self.off_balance[p.id] = self.t + OFF_BALANCE_S
         self.lunges.clear(), self.lunge_at.clear(), self.evade_at.clear()
@@ -2501,9 +3222,38 @@ class Engine:
                         key=lambda q: q.profile["finishing"])  # the side's designated taker (design)
             self.stop("penalty_kick", victim.team, (gx - attack_dir(victim.team) * PENALTY_MARK_M,
                                                     PITCH_Y / 2), taker.id)
-            return
-        self.stop("free_kick", victim.team, (clamp(victim.x, 0.5, PITCH_X - 0.5),
-                                             clamp(victim.y, 0.5, PITCH_Y - 0.5)))
+        else:
+            self.stop("free_kick", victim.team, (clamp(victim.x, 0.5, PITCH_X - 0.5),
+                                                 clamp(victim.y, 0.5, PITCH_Y - 0.5)))
+        self._go_down(p, victim)
+
+    def _fall_span(self, t0: float) -> float:
+        """How long he is down. The whole pose, or less so he is upright FALL_UP_BEFORE_S before
+        the restart is due. The kick itself can be later, which only adds time on his feet."""
+        total = FALL_S + FALL_LIE_S + FALL_RISE_S
+        if self.restart is None:
+            return total  # *design*: nothing is due, so the whole pose
+        # *design*: a restart already inside the margin leaves no time down
+        return max(0.0, min(total, self.restart.ready_at - FALL_UP_BEFORE_S - t0))
+
+    def _go_down(self, fouler: Player, victim: Player) -> None:
+        """P18: from the fouler toward the man he hit, the way the head goes. His feet stay."""
+        dx, dy = victim.x - fouler.x, victim.y - fouler.y
+        direction = fmath.atan2(dy, dx) if dx or dy else 0.0  # *design*: one place has no way
+        self.fallen[victim.id] = (self.t, self.t + self._fall_span(self.t), direction)
+
+    def player_fall(self, p: Player) -> tuple[float, float] | None:
+        """(degrees over, direction in radians) while he is down, else nothing. The snapshot is
+        this frame's t and the contact has happened, so the contact frame shows one frame of it."""
+        rec = self.fallen.get(p.id)
+        if rec is None:
+            return None
+        t0, t_end, direction = rec
+        # *design*: the contact frame is already one frame into the fall
+        deg = foul_fall_deg((self.t - t0) + DT, t_end - t0)
+        if round(deg, 1) <= 0.0:  # *design*: a tenth of a degree; 0 is standing
+            return None
+        return deg, direction
 
     def evade(self, carrier: Player, defender: Player) -> None:
         """The carrier, having reacted to a lunge, pushes the ball away from the defender's foot,
@@ -2523,6 +3273,8 @@ class Engine:
     def poke(self, p: Player, holder: Player) -> None:
         """A tackle that reaches the ball knocks it loose; whoever then controls it decides the
         tackle (won or lost)."""
+        # A pass or shot still open ends at the tackle (C7), judged on its own flight, before the push.
+        self.end_kick(self.ball[0], self.ball[1])
         heading = (
             fmath.atan2(p.vy, p.vx)
             if math.hypot(p.vx, p.vy) > 0.5
@@ -2717,6 +3469,8 @@ class Engine:
     def pose(self, p: Player) -> tuple[str, float]:
         """How this body should be drawn. Read off the match: a strike is a wind-up already
         chosen, a dive is the keeper's own dive, and a touch names the part that met the ball."""
+        if self.player_fall(p) is not None:  # P18: down while the foul's fall is over 0
+            return "down", 0.0
         if self.throw_by == p.id:
             return "throw", 0.0
         if self.possessor == p.id and self.windup:
@@ -2747,9 +3501,15 @@ class Engine:
         players = []
         for p in self.players:
             action, dive = self.pose(p)  # what the renderer draws (scene.py), read off the match
-            players.append({"id": p.id, "team": p.team, "role": p.role, "x": round(p.x, 3),
-                            "y": round(p.y, 3), "vx": round(p.vx, 3), "vy": round(p.vy, 3),
-                            "heading": round(p.heading, 4), "action": action, "dive": dive})
+            row = {"id": p.id, "team": p.team, "role": p.role, "x": round(p.x, 3),
+                   "y": round(p.y, 3), "vx": round(p.vx, 3), "vy": round(p.vy, 3),
+                   "heading": round(p.heading, 4), "action": action, "dive": dive}
+            fall = self.player_fall(p)  # x, y stay his feet; the tip is fall and fall_dir
+            if fall is not None:
+                deg, direction = fall
+                row["fall"] = round(deg, 1)  # *design*: a tenth of a degree
+                row["fall_dir"] = round(direction, 4)  # *design*: four decimals, as heading
+            players.append(row)
         self.match.frames.append({
             "frame": self.frame,
             "t": round(self.t, 3),
@@ -2774,6 +3534,7 @@ class Engine:
         if r and (self.possessor != r.taker
                   or math.dist(self.ball[:3], (*self.restart_ball_spot(r), 0.0)) > 1e-6):
             self.set_by = None  # it has moved (a touch on, turning it onto his foot): in play
+        self.gather()
         self.move_players()
         self.snapshot()
         self.t += DT

@@ -186,7 +186,9 @@ async def _personalized(
         if (v.persona, v.lang) in asked and (v.persona, v.lang) not in seen:
             seen.add((v.persona, v.lang))
             kept.append(v)
-    checked = await personal.verify(claim, kept, known, judge)
+    from ninety.personalizer import translate
+
+    checked = await personal.verify(claim, kept, known, judge, labelled_mock=translate.mock_on())
     for variant, status, reasons in checked.refused:
         detail = f"{variant.persona}/{variant.lang}: " + "; ".join(reasons)
         trace.append(TraceStep("fact_checker", moment, status, 0.0, detail))
