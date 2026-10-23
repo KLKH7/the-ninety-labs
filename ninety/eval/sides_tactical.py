@@ -51,11 +51,43 @@ def _pair(dets: list[tuple[int, float, float]], truth: list[dict]) -> dict[int, 
     return out
 
 
-def clip_tracks(rows: list[dict], truth: dict[int, list[dict]]) -> tuple[list[dict], dict]:
+def inherit(tactical: list[tr.Track], broadcast: list[tr.Track]) -> None:
+    """Plan variant TB: each tactical track takes the side (and its confidence) of the broadcast
+    track it overlaps most. Overlap: frames where both are tracked and their places are within
+    STRICT_M, paired one to one per frame, nearest first. A tactical track with no overlap has no
+    side (None). Keepers keep their own side (the half they stand in)."""
+    count: dict[tuple[int, int], int] = {}
+    frames = {f for t in tactical for f in t.frames}
+    for f in sorted(frames):
+        a = [(i, *t.at(f)) for i, t in enumerate(tactical) if t.at(f) is not None]
+        b = [(j, *u.at(f)) for j, u in enumerate(broadcast) if u.at(f) is not None and u.team is not None]
+        cands = sorted((math.hypot(x - x2, y - y2), i, j) for i, x, y in a for j, x2, y2 in b)
+        used_a, used_b = set(), set()
+        for d, i, j in cands:
+            if d > STRICT_M or i in used_a or j in used_b:
+                continue
+            used_a.add(i)
+            used_b.add(j)
+            count[(i, j)] = count.get((i, j), 0) + 1
+    for i, t in enumerate(tactical):
+        if t.keeper:
+            continue
+        best = max(((n, j) for (k, j), n in count.items() if k == i), default=None)
+        t.team = broadcast[best[1]].team if best else None
+        t.side_confidence = broadcast[best[1]].side_confidence if best else None
+
+
+def clip_tracks(rows: list[dict], truth: dict[int, list[dict]],
+                broadcast_rows: list[dict] | None = None) -> tuple[list[dict], dict]:
     """Every track the events stage would use, with its side, confidence, keeper flag, frames,
-    paired frames and true team (None when under half its frames pair)."""
+    paired frames and true team (None when under half its frames pair). With `broadcast_rows`,
+    the sides are inherited from the broadcast's tracks (variant TB)."""
     tracks = tr.track_players(rows)
     info = tr.assign_teams(tracks)
+    if broadcast_rows is not None:
+        btracks = tr.track_players(broadcast_rows)
+        tr.assign_teams(btracks)
+        inherit(tracks, btracks)
     by_frame: dict[int, list[tuple[int, float, float]]] = {}
     for k, t in enumerate(tracks):
         for f, (x, y) in zip(t.frames, t.xy, strict=True):
@@ -133,6 +165,8 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--clips", type=Path, required=True)
     ap.add_argument("--obs", type=Path, required=True, help="a folder of seed<N>.jsonl observations")
     ap.add_argument("--seeds", type=int, nargs="+", required=True)
+    ap.add_argument("--inherit-from", type=Path, default=None,
+                    help="variant TB: a folder of broadcast observations whose tracks give the sides")
     ap.add_argument("--out", type=Path, required=True)
     a = ap.parse_args(argv)
     clips = {}
@@ -140,7 +174,9 @@ def main(argv: list[str] | None = None) -> None:
         if refused(seed):
             raise SystemExit(f"test seed {seed}: sides are measured on validation clips here")
         rows = tr.read_observations(a.obs / f"seed{seed}.jsonl")
-        clips[seed], _ = clip_tracks(rows, _truth(a.clips / f"seed{seed}"))
+        bro = (tr.read_observations(a.inherit_from / f"seed{seed}.jsonl")
+               if a.inherit_from is not None else None)
+        clips[seed], _ = clip_tracks(rows, _truth(a.clips / f"seed{seed}"), bro)
     report = {"seeds": a.seeds, "obs": a.obs.name, **summarise(clips),
               "per_clip": {s: [t for t in ts] for s, ts in clips.items()}}
     a.out.write_text(json.dumps(report, indent=1) + "\n")
