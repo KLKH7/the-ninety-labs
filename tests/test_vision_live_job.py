@@ -177,3 +177,77 @@ def test_the_command_refuses_the_folder_before_reading_the_weights(tmp_path):
     with pytest.raises(SystemExit, match="frames.jsonl"):
         live_job.main([str(clip), "--checkpoint", "ours-v4", "--weights", str(missing),
                        "--out", str(tmp_path / "out")])
+
+
+TAC = ("tac-l", "tac-r")
+
+
+def views_clip(tmp_path: Path) -> tuple[Path, Path]:
+    """The clean clip as the tactical camera's two views, each its own index and images."""
+    single, dets = clean_clip(tmp_path)
+    clip = tmp_path / "tac"
+    for name in TAC:
+        shutil.copytree(single, clip / "views" / name)
+    return clip, dets
+
+
+def test_a_clip_of_two_views_runs_detects_each_merges_them_and_opens_no_truth(tmp_path):
+    clip, dets = views_clip(tmp_path)
+    out = tmp_path / "out"
+    run = run_audited(f"""
+        from pathlib import Path
+        from ninety.vision import live_job, pitch
+        from ninety.vision.detections import read_detections
+        pitch.find_gantry = lambda anchors, w, h: (58.0, -37.0, 16.0)  # the search is tested elsewhere
+        found = read_detections({str(dets)!r})
+        calls = []
+        report = live_job.run(Path({str(clip)!r}), Path({str(out)!r}),
+                              lambda: (lambda rows: calls.append(rows[0]["image"]) or found), {{}})
+        o = Path({str(out)!r})
+        OUT = {{"report": report, "calls": [str(c) for c in calls],
+                "files": sorted(str(p.relative_to(o)) for p in o.rglob("*.jsonl"))}}
+    """)
+    report = run["out"]["report"]
+    assert [Path(c).parts[-3] for c in run["out"]["calls"]] == list(TAC)  # each view detected
+    assert report["views"] == list(TAC) and report["frames"] == 2 and report["camera_ok"] == 2
+    assert "fuse" in report["seconds"]
+    assert run["out"]["files"] == sorted(
+        ["detected.jsonl", "observations.jsonl"]
+        + [f"views/{n}/{f}" for n in TAC for f in ("detections.jsonl", "observations.jsonl")])
+    assert truth_reads(run) == []
+
+
+@pytest.mark.parametrize("where", ["views/tac-l", "views/tac-l/images", "views", "",
+                                   "views/tac-r/images/sub"])
+@pytest.mark.parametrize("name", [*TRUTH_FILES, "notes.txt"])
+def test_an_answer_key_file_anywhere_in_a_views_clip_is_refused_before_the_model_loads(tmp_path, where, name):
+    clip, _ = views_clip(tmp_path)
+    (clip / where).mkdir(parents=True, exist_ok=True)
+    (clip / where / name).write_text("{}\n")
+    with pytest.raises(SystemExit, match="refused"):
+        live_job.run(clip, tmp_path / "out", never_loaded)
+    assert not (tmp_path / "out").exists()
+
+
+def test_a_planted_frame_file_in_a_single_clip_s_images_is_refused(tmp_path):
+    clip, _ = clean_clip(tmp_path)
+    (clip / "images" / "frames.jsonl").write_text("{}\n")
+    with pytest.raises(SystemExit, match="frames.jsonl"):
+        live_job.run(clip, tmp_path / "out", never_loaded)
+
+
+def test_views_listing_different_frames_are_refused(tmp_path):
+    clip, _ = views_clip(tmp_path)
+    index = clip / "views" / "tac-r" / "index.jsonl"
+    rows = [json.loads(line) for line in index.read_text().splitlines()]
+    rows[1]["frame"] = 7
+    index.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    with pytest.raises(SystemExit, match="same frames"):
+        live_job.run(clip, tmp_path / "out", never_loaded)
+
+
+def test_a_views_clip_with_one_view_is_refused(tmp_path):
+    clip, _ = views_clip(tmp_path)
+    shutil.rmtree(clip / "views" / "tac-r")
+    with pytest.raises(SystemExit, match="two views"):
+        live_job.run(clip, tmp_path / "out", never_loaded)
