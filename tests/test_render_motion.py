@@ -28,6 +28,7 @@ from ninety.render.scene import (
     KICK_SWING_S,
     LEAD_AHEAD_FRAMES,
     LEAD_MAX,
+    PLANT_ACTIONS,
     PLANT_AHEAD_MAX,
     STEP_FRAMES,
     STEP_LIFT,
@@ -1569,6 +1570,8 @@ def test_a_bowled_ball_is_brought_down_in_both_hands_with_no_kick():
         face(g, pl)
         g.speed = 0.0
         assert g.action != "strike"
+        if 8 <= fi <= 10:  # drawn as the hold: hands, a planted pose (PLANT_ACTIONS), feet still
+            assert g.action == "hands" and g.action in PLANT_ACTIONS
         hold_at(g, runs, fi, (b["x"], b["y"], b["z"]), look.height_m, FPS)
         if 8 <= fi <= 10:
             pose = mesh_pose(g, pl["x"], pl["y"], 0.0)
