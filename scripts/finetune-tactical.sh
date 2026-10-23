@@ -37,6 +37,11 @@ prepare)
   echo "== code at $commit to $work/ninety (the environment is kept)"
   git archive --format=tar.gz "$commit" | "${ssh_[@]}" "mkdir -p $work/ninety $work/init && cd $work/ninety \
     && find . -mindepth 1 -maxdepth 1 ! -name .venv -exec rm -rf {} + && tar -xzf - && echo $commit > COMMIT"
+  tiles=f6254952438eb17181696c9fd76516bc30376266  # #230's tiles and tile export, pre-registered in the plan
+  echo "== the live path's tile export at $tiles to $work/tiles"
+  git fetch -q origin "$tiles" 2>/dev/null || git fetch -q origin claude/vision-tiles-fuse
+  git archive --format=tar.gz "$tiles" ninety | "${ssh_[@]}" "rm -rf $work/tiles && mkdir -p $work/tiles \
+    && cd $work/tiles && tar -xzf - && echo $tiles > COMMIT"
   echo "== ours-freeze to $work/init"
   "${scp_[@]}" "$init/checkpoint_best_total.pth" "$init/train-manifest.json" "$host:$work/init/"
   "${ssh_[@]}" "bash -lc 'bash $work/ninety/scripts/finetune-tactical-on-pod.sh prepare'"

@@ -30,15 +30,16 @@ its checks is excluded and not replaced (dataset-tactical.json, `checks`).
 | Model | RF-DETR Small (Apache-2.0), rfdetr 1.11.2, as every earlier run |
 | Starts from | **ours-freeze**, sha256 `0fafe959ec2e08279e5741261ac4e639f2b87f0c11384a2d0e976dda6ef5d5e5`, the demo's detector |
 | Name | **ours-tactical** |
-| Images | Every 5th frame of each view, cut into a 2x2 grid of tiles (`scripts/coco_tiles.py`: each tile is half the frame plus 10% of a half on its inner side, 1056x594 px at x 0 and 864, y 0 and 486). A box cut by a tile's edge is kept, clipped, when at least 30% of its area is inside, and dropped otherwise (*design*). About 120 clips x 2 views x 50 frames x 4 tiles = 48,000 training tiles |
+| Images | Every 5th frame of each view, cut into the live path's tiles: `ninety/vision/tiles.py` and `coco_export --tiles` of PR #230 at **`f6254952438eb17181696c9fd76516bc30376266`**, so training sees exactly the tiles inference runs on. That is a 2x2 grid of 1056x594 tiles at x 0 and 864, y 0 and 486, with neighbours sharing 10% of the frame. Each label is clipped to its tile and kept when any part is inside. A tenth of the label-free tiles is kept, chosen by a fixed hash (`--empty-tiles 0.1`, the default). Crops are JPEG q95 with no chroma subsampling. About 120 clips x 2 views x 50 frames x 4 tiles, less most empty tiles |
 | Config | [config.json](config.json): `finetune-v2freeze.json`'s settings (resolution 640, batch 4 x 4, lr 5e-5, encoder 7.5e-5, at most 8 epochs, early stopping with patience 3, seed 7, 8 loader workers) with a time cap |
 | Time cap | **150 minutes of training.** At the cap the best validation checkpoint so far is the model, and its manifest says it was stopped. Expected 100 to 150 minutes: ours-freeze took 30 minutes for 12,250 images on a 4090, and this run has about 4 times as many |
 
 ## Scoring (on the Mac, after the copy-back)
 
-Both models are scored on the same tiles with the same code. Each tile is detected separately and
-its boxes are mapped back to the frame. Where two tiles overlap, boxes are merged by non-maximum
-suppression at IoU 0.5 (*design*). The scorer's rule is `vision_score.match` at threshold 0.5.
+Both models are scored on the same tiles with the same code: the live path's tiled detection and
+merge (`tiles.merge` at the commit above). A box cut by an inner tile edge is dropped when an uncut
+box of its class from another tile covers half of it; uncut duplicates at IoU 0.5 or more keep the
+higher score. The scorer's rule is `vision_score.match` at threshold 0.5.
 
 - **Validation:** the 24 validation clips' views, every 5th frame, ours-freeze and ours-tactical.
   ours-tactical becomes the tactical detector if its recall on balls and on players is each at

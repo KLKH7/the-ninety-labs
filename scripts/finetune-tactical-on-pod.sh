@@ -58,10 +58,13 @@ run)
   echo "== $(date -u +%FT%TZ) clips of $out (run $RUN at $RENDER_COMMIT), checked against the manifest"
   "$py" -m ninety.vision.pod_clips "$out" --run "$RUN" --commit "$RENDER_COMMIT" --config "$CONFIG" \
     --work "$WORK/data-$name" --crashed "${CRASHED:-}"
-  echo "== $(date -u +%FT%TZ) export: each view, every 5th frame, 2x2 tiles"
+  # The live path's own tiles (#230, ninety/vision/tiles.py and its coco_export --tiles at TILES_COMMIT,
+  # pre-registered in the plan), copied to $WORK/tiles by the Mac driver: training sees what inference sees.
+  echo "== $(date -u +%FT%TZ) export: each view, every 5th frame, the live path's 2x2 tiles ($(cat "$WORK/tiles/COMMIT"))"
   rm -rf "$WORK/coco-$name"
   mapfile -t clips < "$WORK/data-$name/clips.txt"
-  "$py" scripts/coco_tiles.py "${clips[@]}" --out "$WORK/coco-$name" --config "$WORK/data-$name/config.json"
+  PYTHONPATH=$WORK/tiles "$py" -m ninety.vision.coco_export "${clips[@]}" --out "$WORK/coco-$name" \
+    --config "$WORK/data-$name/config.json" --tiles
   "$py" - "$dest/machine.json" "$name" <<'EOF'
 import datetime as dt, json, subprocess, sys, torch
 smi = subprocess.run(["nvidia-smi", "-L"], capture_output=True, text=True).stdout.splitlines()
