@@ -2102,3 +2102,18 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** the CI `image` job's step "The Dockerfile's pinned Replay bundle exists and matches its
   hash"; `tests/test_api_site.py::test_a_websocket_behind_the_gate_needs_the_key_too` fails with the
   WebSocket branch of `RequireKey` removed.
+
+### 206. When two parts split a job, both read the split from one definition
+- **What happened:** the free-kick wall was built to hide the goal from the near post to a third
+  past its centre, its comment saying "the keeper covers the rest". The keeper never read the
+  wall: he set himself on the bisector of the whole goal, as at any other moment, so he stood
+  behind the middle of his own wall and left the open part to nobody. Each half was tested on its
+  own, so nothing failed.
+- **Rule:** when a rule hands part of a job to another (the wall and the keeper, a presser and his
+  cover), the split is one function both call (`Engine.wall_cover`), and a test sets up the shared
+  case and checks the second part takes what the first leaves. A comment that assigns work to
+  another part names the code that does it.
+- **Check:** `uv run pytest tests/test_keeper_setpiece.py`: with the wall up he stands on the
+  bisector of the open part (red on main); his spots at three kicks are written out, so a change
+  to the wall's cover moves them; he keeps the cover while the set ball waits and drops it after
+  the kick; at his own side's free kick nothing changes.
