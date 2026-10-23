@@ -7,16 +7,16 @@ of players missing a frame, and team-mates within 1.5 m swapping tracks half the
 assigned over each 15-minute window. Targets, fixed before the run: name 0.95, position
 0.9, line 0.95, over at least 50 tracks.
 
-Gates (the share at or above which each may be said): {'name': 0.337, 'role': 0.337, 'line': 0.337}.
+Gates (the share at or above which each may be said): {'name': 0.335, 'role': 0.335, 'line': 0.335}.
 
 | Fragment mean | Split | Tracks | Role right | Line right | Named (precision) | Confusions |
 |---|---|---|---|---|---|---|
-| 30 s | dev | 6895 | 6785 | 6800 | 6895 (0.984) | GK->LCB 17, GK->RCB 12, LCB->GK 11, RCB->GK 7, LCM->ST 6, ST->CM 5 |
-| 30 s | held_out | 3455 | 3454 | 3454 | 3455 (1.0) | RB->RCM 1 |
-| 10 s | dev | 14293 | 14033 | 14074 | 14291 (0.982) | GK->RCB 39, GK->LCB 38, RCB->GK 25, LCB->GK 20, LCM->ST 18, ST->LCM 13 |
-| 10 s | held_out | 7139 | 7133 | 7133 | 7139 (0.999) | RB->RCM 5, RCM->RB 1 |
-| 120 s | dev | 2159 | 2130 | 2136 | 2158 (0.987) | LW->LCM 4, GK->RCB 3, GK->LCB 3, RCM->CM 2, CM->ST 2, RCM->RW 2 |
-| 120 s | held_out | 1005 | 1004 | 1004 | 1005 (0.999) | RB->RCM 1 |
+| 30 s | dev | 6843 | 6731 | 6751 | 6843 (0.984) | GK->LCB 18, GK->RCB 10, LCB->GK 10, LCM->ST 7, ST->RW 6, ST->LCM 5 |
+| 30 s | held_out | 3406 | 3404 | 3404 | 3406 (0.999) | RB->RCM 1, RCM->RB 1 |
+| 10 s | dev | 14401 | 14126 | 14169 | 14398 (0.981) | GK->RCB 42, GK->LCB 39, RCB->GK 23, LCB->GK 21, LCM->ST 15, CM->ST 11 |
+| 10 s | held_out | 7112 | 7107 | 7107 | 7112 (0.999) | RB->RCM 3, RCM->RB 2 |
+| 120 s | dev | 2176 | 2151 | 2156 | 2176 (0.989) | RW->RCM 3, LW->LCM 3, LCM->CM 2, LB->LCM 2, LCM->LW 2, RCM->RCB 1 |
+| 120 s | held_out | 1079 | 1079 | 1079 | 1079 (1.0) |  |
 
 Reading: on the engine's football almost every track is given its right role, so the gates sit at
 the lowest share seen. That says the engine's players hold their formation places (they rarely swap
