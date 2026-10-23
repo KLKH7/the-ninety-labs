@@ -29,6 +29,7 @@ from pathlib import Path
 import numpy as np
 
 from ninety.render.camera import Camera
+from ninety.sim import fmath
 from ninety.vision import pitch
 
 W, H = 1920, 1080
@@ -64,9 +65,10 @@ def camera(side: str, x: float, back: float, height: float, hfov_deg: float, til
     """The renderer's camera for one lens: at (x, -back, height), aimed `pan` toward its half and
     `tilt` below the horizon, `hfov_deg` across a W x H picture."""
     s = 1.0 if side == "right" else -1.0
-    fwd = (s * math.sin(pan) * math.cos(tilt), math.cos(pan) * math.cos(tilt), -math.sin(tilt))
+    fwd = (s * fmath.sin(pan) * fmath.cos(tilt), fmath.cos(pan) * fmath.cos(tilt), -fmath.sin(tilt))
     pos = (x, -back, height)
-    fov_v = 2 * math.degrees(math.atan(math.tan(math.radians(hfov_deg) / 2) * H / W))
+    half = math.radians(hfov_deg) / 2
+    fov_v = 2 * math.degrees(fmath.atan2(fmath.sin(half) * H, fmath.cos(half) * W))
     return Camera(pos, tuple(p + 10 * f for p, f in zip(pos, fwd, strict=True)), fov_v, W, H)
 
 
@@ -134,7 +136,7 @@ def background(cam: Camera) -> np.ndarray:
             paint += np.where(on, marking_distance(gx, gy) <= LINE_HALF_M, False)
             stripe += np.where(ok, (np.floor(gx / STRIPE_M) % 2), 0.0)
             ground += ok
-    paint, stripe, ground = paint / n ** 2, stripe / n ** 2, ground / n ** 2
+    paint, stripe, ground = paint / (n * n), stripe / (n * n), ground / (n * n)
     g0, g1 = np.array(GRASS[0], float), np.array(GRASS[1], float)
     grass = g0 + (g1 - g0) * (stripe / np.maximum(ground, 1e-9))[..., None]
     img = grass * (1 - paint[..., None]) + np.array(PAINT, float) * paint[..., None]
