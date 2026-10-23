@@ -601,9 +601,38 @@ def settle_s(first_touch: float) -> float:
     return 0.3 + 0.3 * (1 - first_touch)
 
 
+def net_room(x: float, y: float, vx: float, vy: float) -> float | None:
+    """How far he runs the way (vx, vy) points before his centre meets a goal's net (NETS); None if
+    he never does, or is nowhere near a goal."""
+    speed = math.hypot(vx, vy)
+    if speed < 1e-9 or NET_DEPTH_M + 6.0 < min(x, PITCH_X - x):  # design: 6 m, beyond any stop
+        return None
+    far = (x + vx / speed * 100.0, y + vy / speed * 100.0)
+    rx, ry = far[0] - x, far[1] - y
+    best = None
+    for (cx, cy), (dx, dy) in NETS:
+        qx, qy = dx - cx, dy - cy
+        den = rx * qy - ry * qx
+        if abs(den) < 1e-12:
+            continue
+        s = ((cx - x) * qy - (cy - y) * qx) / den
+        u = ((cx - x) * ry - (cy - y) * rx) / den
+        if 0.0 <= s <= 1.0 and 0.0 <= u <= 1.0:
+            best = s * 100.0 if best is None else min(best, s * 100.0)
+    return best
+
+
 def steer(p: Player, tx: float, ty: float, want_speed: float) -> None:
     """Move toward a target within the player's own body: force-velocity acceleration, braking,
-    a shared grip limit for braking and turning, and energy (ninety/sim/body.py)."""
+    a shared grip limit for braking and turning, and energy (ninety/sim/body.py). Near a goal's net
+    he runs toward it no faster than he could stop before it, as the fetcher does before the boards
+    (L14, body.stopping_speed): going round a goal, a way that flipped between a post and a back
+    corner, or grazed a post, met the net and it stopped him dead (lesson 200)."""
+    ways = (net_room(p.x, p.y, p.vx, p.vy), net_room(p.x, p.y, tx - p.x, ty - p.y))
+    rooms = [r for r in ways if r is not None]
+    if rooms:  # the way he is running or means to run, whichever meets a net first (L14)
+        # to his body's edge, not his centre: half a shoulder, the outline at its widest (P11)
+        want_speed = min(want_speed, stopping_speed(min(rooms) - shape.SHOULDER_BREADTH_M / 2))
     x, y, p.vx, p.vy = move_body(p.x, p.y, p.vx, p.vy, tx, ty, want_speed, p.physique, DT)
     # No wall at the lines: players may run past them, as in real matches. Targets stay on the
     # pitch, so they slow down and come back; only the advertising boards and the goals' nets stop

@@ -543,3 +543,37 @@ def test_going_round_the_net_he_never_runs_into_it():
         speeds.append((bx - ax, by - ay))
     for (ux, uy), (vx, vy) in zip(speeds, speeds[1:], strict=False):
         assert math.hypot(vx - ux, vy - uy) / DT / DT <= BRAKE_MAX + 1e-6  # within his grip, frame to frame
+
+
+def test_nobody_is_stopped_dead_by_a_net_going_round_it():
+    """Lesson 200 (its third audit): going round a goal from behind or beside it, a player whose way
+    flipped between the post and the back corner, or grazed a post, met the net and it stopped him
+    dead (6 of 100 sampled starts; up to 102 m/s²). A net is met as the boards are: near it nobody
+    runs toward it faster than he could stop before it (L14), so he brakes as a body brakes (P2).
+    Starts behind and beside both goals, running at 3 m/s toward the goal's centre, each sent to a
+    point on the other side of the goal."""
+    from ninety.sim.body import BRAKE_MAX
+    e = Engine(2)
+    p = e.keeper("away")
+    hits = []
+    for line, out in ((PITCH_X, 1.0), (0.0, -1.0)):
+        # each at least a stopping distance from the net (3 m/s braking at P2's grip: 0.64 m)
+        ys = (-6.0, -4.0, -2.0, 0.0, 2.0, 4.0, 6.0)
+        starts = [(line + out * d, MID + y) for d in (3.0, 3.5) for y in ys]
+        starts += [(line + out * d, MID + k * y)
+                   for d in (0.5, 1.0, 1.5) for y in (5.5, 6.5) for k in (-1, 1)]
+        for sx, sy in starts:
+            if 0 < (sx - line) * out < NET_DEPTH_M and abs(sy - MID) < GOAL_HALF_WIDTH:
+                continue  # inside the goal
+            d = math.hypot(line - sx, MID - sy) or 1.0
+            p.x, p.y, p.vx, p.vy = sx, sy, 3.0 * (line - sx) / d, 3.0 * (MID - sy) / d
+            beside = abs(sy - MID) >= GOAL_HALF_WIDTH
+            target = (line - out * 3.0, 2 * MID - sy) if beside else (line + out * 3.5, 2 * MID - sy)
+            for _ in range(int(4.0 / DT)):
+                ux, uy = p.vx, p.vy
+                steer(p, *e.round_the_net(p, *target), 5.0)
+                change = math.hypot(p.vx - ux, p.vy - uy) / DT
+                if change > BRAKE_MAX + 1e-6:
+                    hits.append(((sx, sy), round(change, 1)))
+                    break
+    assert hits == []
