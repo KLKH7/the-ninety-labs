@@ -1,12 +1,10 @@
 """The ball-source scorer (ninety/eval/ball_sources.py) on hand-built clips: recall and precision by
-zone and radius from the ball the tracker takes, and the gate's precision from pixel-matched balls."""
+zone and radius, and coverage, from the ball the tracker takes."""
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
-
-import pytest
 
 from ninety.eval import ball_sources as bs
 
@@ -49,29 +47,6 @@ def test_recall_and_precision_by_zone_and_radius(tmp_path):
     assert r["near"]["recall_strict"]["rate"] == 1.0 and r["centre"]["recall_strict"]["rate"] == 0.0
     assert r["centre"]["recall_lenient"]["rate"] == 1.0 and r["far"]["recall_lenient"]["rate"] == 0.0
     assert r["in the air"]["recall_lenient"]["n"] == 1 and r["on the ground"]["recall_lenient"]["k"] == 2
-
-
-def test_precision_matches_in_pixels_and_measures_on_the_pitch_for_grounded_balls(tmp_path):
-    clips, obs = tmp_path / "clips", tmp_path / "obs"
-    seed = 108
-    write(clips / f"seed{seed}" / "frames.jsonl",
-          [truth_row(0, 50.0, 10.0), truth_row(1, 50.0, 10.0, z=2.0), truth_row(2, 50.0, 10.0)])
-    for v in ("tac-l", "tac-r"):
-        write(clips / f"seed{seed}" / "views" / v / "frames.jsonl",
-              [truth_row(0, 50.0, 10.0), truth_row(1, 50.0, 10.0, z=2.0), truth_row(2, 50.0, 10.0)])
-    write(obs / "broadcast" / f"seed{seed}.jsonl", [
-        obs_row(0, [{"x": 53.0, "y": 14.0}]),  # 5 m off, matched in pixels
-        obs_row(1, [{"x": 60.0, "y": 10.0}]),  # in the air: not measured
-        obs_row(2, [{"x": 50.0, "y": 10.0, "bbox": [300, 300, 304, 304]}]),  # 200 px away: no match
-    ])
-    write(obs / "tactical" / f"seed{seed}.jsonl", [
-        obs_row(0, [{"x": 50.0, "y": 11.0, "view": "tac-l"}, {"x": 50.0, "y": 12.0, "view": "tac-r"}]),
-        obs_row(1, []), obs_row(2, [], ok=False)])
-    p = bs.precision(clips, obs, [seed])
-    assert p["broadcast"]["n"] == 1 and p["broadcast"]["p99_m"] == 5.0
-    assert p["tactical"]["n"] == 2 and p["tactical"]["rms_m"] == round((2.5) ** 0.5, 3)
-
-
-def test_the_gate_is_never_measured_on_a_test_seed(tmp_path):
-    with pytest.raises(SystemExit, match="validation"):
-        bs.precision(tmp_path, tmp_path, [900001])
+    # Coverage: a ball placed at all on frames with the true ball on the pitch (2 of 3).
+    assert r["all"]["coverage"]["k"] == 2 and r["all"]["coverage"]["n"] == 3
+    assert r["far"]["coverage"]["k"] == 0

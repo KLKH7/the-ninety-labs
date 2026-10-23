@@ -1,6 +1,6 @@
 # The ball from three cameras: pre-registered plan
 
-Status: **pre-registered.** Written Oct 23, before any clip of run `tactical1` was detected or
+Status: **pre-registered, amended Oct 23 (Deviations) before any result.** Written Oct 23, before any clip of run `tactical1` was detected or
 placed, and before any of its numbers were read. A change after this commit goes under
 "Deviations" with its date and reason, before any result is read.
 
@@ -82,4 +82,34 @@ tactical views alone, and this is recorded as a deviation.
 
 ## Deviations
 
-None yet.
+### Oct 23, before any clip of run `tactical1` was detected for this plan or any number read
+
+**The ball comes only from the broadcast** (Kian's decision, relayed by the Coordinator). The
+tactical lenses are for players only. Sources (b) and (c) are no longer candidates. The tactical
+ball may be reported as context, never chosen. The decision rule above is withdrawn. What is
+measured and reported, on validation and then once on test:
+
+- the broadcast ball (ours-freeze, whole frame, the broadcast's per-frame fit), per frame, as the
+  tracker takes it: strict (1.0 m) and lenient (2.0 m) recall and precision, by zone and by height,
+  as above;
+- **coverage:** the share of frames with the true ball on the pitch where the broadcast places a
+  ball at all (any distance), by zone. Cuts and frames with no ball count against it; the tracker
+  bridges them downstream, and that is not scored here.
+
+The gate measurement (r_b, r_t) is dropped with (c). `ball_fuse.py` and the fused variant are
+removed from the PR.
+
+**The camera trust test is re-derived first.** On current renders the height band (0.901 to
+1.002, measured before renderer 0.5.3 drew players at their own heights) trusts almost no frame.
+With true boxes and true cameras the median ratio is 1.048 on dataset v2's validation clips (0.5.9),
+where 1.2% of frames are inside the band, and 1.077 (broadcast) and 1.10 (tactical lens) on a
+0.5.15 training clip. Without a trusted frame nothing is placed. The band is re-derived by its own
+rule (docs/eval/detector-plan.md, step B; `ninety.eval.detector_derive.gates`: the 1st to 99th
+percentile of the ratio on validation frames whose ground mapping is within 1.0 m), on `tactical1`'s
+24 validation clips (0.5.15), separately for the broadcast and for the fixed lens. It is frozen with
+the code before any test detection. Detection and camera fits do not depend on the band:
+saved observations are re-judged with `observe --regate`.
+
+**Ball height later.** PR #226 (`ninety.vision.flight.heights`) re-places balls in the air from
+their flight. It takes and returns observe's lines, so the same scorer can score its output as a
+second row once #226 lands. That row is not part of this plan's result.
