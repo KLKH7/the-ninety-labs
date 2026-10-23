@@ -133,3 +133,13 @@ So:
 - **On test, the broadcast only:** the ball comes from the broadcast. The tactical lenses (for
   players, and the fixed band) run on validation only.
 
+### Oct 23, evening (see the commit time), before any test result was read
+
+**The broadcast camera fit is #250's** (PR #250, `claude/marking-grain` at `43ef1d2d`: the marking
+pixels are blurred 3 x 3 before the fit, because sensor grain read as markings broke the fit on
+GPU-rendered clips). The validation clips are GPU-rendered, so the broadcast band is derived at
+#250's `pitch.py`. The test clips' detections and fits are made with the same code (4ae7357's
+driver and detection, #250's `pitch.py`) so the band is applied to fits made the way it was
+derived. The one test clip fitted at 4ae7357 before this (900001) is fitted again. Its first
+observations were never read.
+
