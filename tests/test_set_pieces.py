@@ -12,6 +12,7 @@ from ninety.sim import offball
 from ninety.sim.engine import (
     DT,
     GOAL_HALF_WIDTH,
+    GUARD_M,
     PITCH_X,
     PITCH_Y,
     RUNUP_M,
@@ -111,16 +112,72 @@ def test_the_box_runners_wait_off_goal_then_run_in_as_the_taker_runs_up(seed, te
 @pytest.mark.parametrize(("seed", "team", "flag"), CASES)
 def test_at_a_corner_the_defending_side_guards_its_near_post(seed, team, flag):
     """Defect: nobody stood in the near-post area unless he marked a man there. At the kick one
-    defending outfielder stands within a stride of the near post, inside it, marking nobody."""
+    defending outfielder, named once, stands at the guard's spot (GUARD_M off the line and inside the
+    near post), marking nobody."""
     e = corner(seed, team, flag)
-    guard_spot = None
+    r = e.restart
     kick(e)
     line = goal_line(team)
-    near = PITCH_Y / 2 + (GOAL_HALF_WIDTH if flag > PITCH_Y / 2 else -GOAL_HALF_WIDTH)
-    defending = "away" if team == "home" else "home"
-    guards = [p for p in e.players if p.team == defending and p.role != "GK"
-              and abs(p.x - line) <= 2.0 and abs(p.y - near) <= 2.0]
-    assert guards, guard_spot
+    out = 1.0 if line > 0 else -1.0
+    near = PITCH_Y / 2 + (GOAL_HALF_WIDTH - GUARD_M) * (1.0 if flag > PITCH_Y / 2 else -1.0)
+    guard = e.by_id[r.guard]
+    assert guard.team != team and guard.role != "GK"
+    assert math.dist((guard.x, guard.y), (line - out * GUARD_M, near)) <= 0.3
+    assert r.guard not in r.marks
+
+
+@pytest.mark.parametrize(("seed", "team", "flag"), CASES)
+def test_at_a_corner_there_is_one_presser_and_no_cover(seed, team, flag):
+    """Lesson 202: goal-side of a presser held 9.15 m off the arc is the goal line by the flag, so
+    the cover stood there, out of the play. The defending side names its presser alone."""
+    e = corner(seed, team, flag)
+    r = e.restart
+    kick(e)
+    assert len(r.pressers) == 1
+
+
+@pytest.mark.parametrize(("seed", "team", "flag"), CASES)
+def test_at_a_corner_the_free_defence_and_midfield_stand_in_the_area(seed, team, flag):
+    """Lesson 202: the defending side's defence and midfield defend from inside their penalty area;
+    held at their block's slots, free defenders stood just outside it. At the kick every defender
+    and midfielder who marks nobody and is not the presser stands in the area."""
+    from ninety.sim.team import ROLE_LINE
+    e = corner(seed, team, flag)
+    r = e.restart
+    kick(e)
+    line = goal_line(team)
+    free = [p for p in e.players if p.team != team and ROLE_LINE.get(p.role) in ("defence", "midfield")
+            and p.id not in r.marks and p.id not in r.pressers]
+    assert free  # premise
+    for p in free:
+        assert abs(p.x - line) <= AREA_DEPTH_M and abs(p.y - PITCH_Y / 2) <= AREA_HALF_WIDTH_M, p.id
+
+
+@pytest.mark.parametrize(("seed", "team", "flag"), CASES)
+def test_the_taker_runs_in_only_once_his_team_mates_are_at_their_places(seed, team, flag):
+    """Lesson 202 (ENGINE.md: a restart lasts as long as players take to get into position): taken at
+    R1's drawn time, team-mates going "in time" for a pass after the kick were still walking up at it.
+    He runs in once every outfield team-mate has settled at his place, or at the bound, never sooner
+    than R1's wait; and he strikes it as he gets there, with no pause over it."""
+    e = corner(seed, team, flag)
+    r = e.restart
+    mates = [p.id for p in e.players if p.team == team and p.role != "GK" and p.id != r.taker]
+    seen = None
+    n = len(e.match.events)
+    for _ in range(int(80 / DT)):
+        before = set(r.settled)  # as the taker sees it when he decides this frame (tick_restart)
+        e.step()
+        if seen is None and r.run_in_at is not None:
+            seen = before
+        if any(ev["type"] in ("pass", "shot") for ev in e.match.events[n:]):
+            break
+    assert r.run_in_at >= r.ready_at
+    assert set(mates) <= seen or r.run_in_at >= 2 * r.ready_at - r.given_at
+    taken = next(ev for ev in e.match.events[n:] if ev["type"] == "set_piece")
+    struck = next(ev for ev in e.match.events[n:] if ev["type"] in ("pass", "shot"))
+    # off his run-up: sooner than the shortest pause a taker standing over the ball took (0.5 s;
+    # he decides every DECIDE_EVERY frames and may turn to his target first)
+    assert struck["t"] - taken["t"] < 0.5
 
 
 def test_at_a_corner_the_defending_side_outnumbers_the_attackers_in_its_area():
