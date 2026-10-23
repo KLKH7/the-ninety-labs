@@ -363,7 +363,10 @@ def test_the_net_of_the_goal_at_the_other_end_holds_the_ball_too():
     assert walked_through(before + after) == []
     p = e.keeper("home")
     p.x, p.y = -1.0, MID
-    assert e.round_the_net(p, -3.5, MID) == (NET_CLEAR_M, MID)
+    wx, wy = e.round_the_net(p, -3.5, MID)
+    assert wx == NET_CLEAR_M  # out through the mouth to a stride in front of the line
+    k = p.x / (p.x - wx)
+    assert abs(p.y + k * (wy - p.y) - MID) <= GOAL_HALF_WIDTH - NET_CLEAR_M
 
 
 @pytest.mark.parametrize("ball_state", [
