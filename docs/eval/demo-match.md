@@ -59,9 +59,8 @@ in a new commit that says so; nothing else changes.
 
 A goal is also a shot on target, so it scores 4; a save scores 2. The highest score wins; **a tie
 goes to the lowest seed.** The weights are *design*, fixed here before the sweep: goals lead, a game
-both sides are in comes next, then chances, then set pieces and passing play. They were set so each
-part can move a typical match's total by a few points, read from matches outside the
-pool, never from a pool seed. On main `7f3a595`, seed 7 (3-2) scores 66.2: goals 15, contested 4,
+both sides are in comes next, then chances, then set pieces and passing play. They were written first, then
+checked on matches outside the pool (never a pool seed) to see that no one part swamps the rest. On main `7f3a595`, seed 7 (3-2) scores 66.2: goals 15, contested 4,
 saves 10, shots on target 15, set pieces 9, moves 13.2; seed 11 (1-3) scores 43.9.
 
 What the score reads, from `events.jsonl`:
