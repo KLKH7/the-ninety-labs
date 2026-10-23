@@ -2102,3 +2102,19 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** the CI `image` job's step "The Dockerfile's pinned Replay bundle exists and matches its
   hash"; `tests/test_api_site.py::test_a_websocket_behind_the_gate_needs_the_key_too` fails with the
   WebSocket branch of `RequireKey` removed.
+
+### 204. A spring that trails its target is fed where the target will be, not where it is
+- **What happened:** #220 changed how keepers play, and two broadcast camera tests failed on
+  held-out seeds the new play reached. On seed 43 a long ball (17 to 20 m/s, 7 m up) left the side
+  of the picture: the gantry's aim is a spring that trails a target moving at the ball's pace by
+  `pan_lag_s`, about 14 m at 0.83 s. When the ball and where it would be a lag on did not fit one
+  shot, the director aimed at the ball itself, so the picture ran a lag behind it. On seed 53 a free
+  kick scored 0.44 s after it was taken; the goal started the low angle at once, over the hold the
+  edit cut had just set, so the restart's shot lasted 2.4 s.
+- **Rule:** a follow with a known lag is aimed at where the followed thing will be after that lag.
+  An edit cut is a change of shot: no rule, a goal included, starts another within `CUT_HOLD_S`
+  of it.
+- **Check:** `tests/test_render_camera.py::test_a_long_ball_stays_in_the_picture_across_it` and
+  `::test_a_goal_soon_after_the_restart_waits_for_the_edits_hold` both fail on the old camera. The
+  held-out framing (`test_the_gantry_frames_the_play_with_the_pitch_filling_the_picture`) holds
+  on main and with #220 merged.
