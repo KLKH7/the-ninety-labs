@@ -9,7 +9,11 @@ What it reads is what the live path already gates (ninety/agents/live.py):
   (`factcheck.check`): every number and player it says is read off that event;
 - the verified insight cues (kind `insight`, `verified` true): the claims the fact-checking agent
   accepted. A rejected or held claim never becomes a cue, and the Describer speaks no cue that is
-  not marked verified, so it never speaks either.
+  not marked verified, so it never speaks either;
+- with `shape` (team-shape facts from tracked positions, ninety/intel/shape.py), at most one plain
+  sentence a minute on how a team's shape moved ("Home's back line has pushed up 8 metres"), said
+  only from a confident fact whose change is larger than tracking error could make, and passed
+  through `factcheck.check` and its confidence gate like every other line.
 
 Pace: one voice, never two lines at once, and every line starts within `MAX_LAG_S` of its event.
 When the play outruns the voice, a line falls back to its short form, then is dropped, never
@@ -41,7 +45,7 @@ from jsonschema import validate
 
 from ninety.agents.contracts import Description
 from ninety.agents.cues import SCHEMA, _pass_text
-from ninety.agents.factcheck import MIN_CONFIDENCE, Claim, check
+from ninety.agents.factcheck import MIN_CONFIDENCE, Claim, check, confidence_gate
 from ninety.match.facts import compact
 from ninety.match.timeline import Timeline
 
@@ -67,7 +71,19 @@ MODEL_MAX_WORDS = 20
 QUOTES = {'"': "&quot;", "'": "&apos;"}
 
 # Lower is more important: what keeps its place when there is no time for everything.
-PRIORITY = {"goal": 0, "shot": 1, "insight": 2, "interception": 3, "tackle": 3, "pass": 4, "kickoff": 4}
+PRIORITY = {"goal": 0, "shot": 1, "insight": 2, "interception": 3, "tackle": 3, "pass": 4, "kickoff": 4,
+            "shape": 4}
+# A shape change is said only when it is larger than tracking error could make it: each minute's
+# value is within the position error (ninety/intel/shape.POSITION_ERROR_M, 1.26 m) of the truth, so
+# their difference is within twice that, 2.52 m; the smallest whole-metre change past it is 3 m.
+SHAPE_CHANGE_M = 3
+# What is said about each shape change, by its sign: plain words a listener needs no diagram for.
+SHAPE_SAID = {
+    ("line_height", 1): "{team}'s back line has pushed up {n} m.",
+    ("line_height", -1): "{team}'s back line has dropped back {n} m.",
+    ("width", -1): "{team} have narrowed by {n} m.",
+    ("width", 1): "{team} have widened by {n} m.",
+}
 
 # Thirds of the camera's view, and of the pitch's width from the near touchline. Design: thirds
 # are how a commentator places play ("down the left", "in the middle"), coarse enough to hear.
@@ -85,7 +101,7 @@ class Line:
     pan: float
     evidence: list[str]
     versions: list[str]  # checked text (player ids, units as written), full form first
-    source: str  # "event" (written here), "insight" (a verified claim) or "model" (its model line)
+    source: str  # "event" or "shape" (written here), "insight" (a verified claim) or "model" (its model line)
 
 
 @dataclass
@@ -198,15 +214,37 @@ def estimated_seconds(text: str) -> float:
 # ---------------------------------------------------------------- the script
 
 
-def candidates(events: list[dict], cues: list[dict], upgrades: dict[str, str] | None = None
-               ) -> tuple[list[Line], list[dict]]:
+def _said(row: dict) -> tuple[str, int]:
+    return row["metric"], 1 if row["change"] > 0 else -1
+
+
+def shape_lines(shape: list[dict]) -> list[tuple[float, str, str]]:
+    """(time, text, fact id) for at most one shape change a minute: the largest confident change in
+    line height or width of at least SHAPE_CHANGE_M, said at the end of the minute it was measured
+    over (a minute's shape is known only once it has been played)."""
+    out = []
+    for minute in sorted({r["minute"] for r in shape}):
+        moved = [r for r in shape if r["minute"] == minute and r["confident"] and r.get("change")
+                 and abs(r["change"]) >= SHAPE_CHANGE_M and _said(r) in SHAPE_SAID]
+        if moved:
+            r = max(moved, key=lambda r: (abs(r["change"]), r["metric"] == "line_height", r["id"]))
+            text = SHAPE_SAID[_said(r)].format(team=r["team"], n=abs(r["change"]))
+            out.append((60.0 * minute, text, r["id"]))
+    return out
+
+
+def candidates(
+    events: list[dict], cues: list[dict], upgrades: dict[str, str] | None = None,
+    shape: list[dict] | None = None,
+) -> tuple[list[Line], list[dict]]:
     """Every line the Describer may say, each checked, and what it refused to say and why.
 
     `upgrades` maps a verified insight cue's id to a line the Describer model wrote for that moment
     (ninety/agents/describer.py). It is checked here like every other line, against the claim's
     evidence; if it passes it is said first, with the code line as its shorter fallback, and if it
-    fails the code line stays and the refusal says why."""
-    known = {e["id"]: compact(e) for e in events}
+    fails the code line stays and the refusal says why. `shape` is the clip's team-shape facts."""
+    shape = list(shape or ())
+    known = {e["id"]: compact(e) for e in events} | {r["id"]: r for r in shape}
     by_id = {e["id"]: e for e in events}
     refused: list[dict] = []
 
@@ -214,6 +252,8 @@ def candidates(events: list[dict], cues: list[dict], upgrades: dict[str, str] | 
         ok = []
         for text in texts:
             verdict = check(Claim(text, evidence), known)
+            if verdict.ok:  # an unsure detection or shape fact is never said
+                verdict = confidence_gate(Claim(text, evidence), known)
             if verdict.ok:
                 ok.append(text)
             else:
@@ -228,7 +268,8 @@ def candidates(events: list[dict], cues: list[dict], upgrades: dict[str, str] | 
             refused.append({"evidence": cue["evidence"], "text": cue["text"], "reason": "not verified"})
             continue
         cited = [by_id[i] for i in cue["evidence"] if i in by_id]
-        if len(cited) != len(cue["evidence"]) or not cited:
+        facts = [i for i in cue["evidence"] if i in known and i not in by_id]  # shape facts it cites
+        if len(cited) + len(facts) != len(cue["evidence"]) or not cited:
             refused.append({"evidence": cue["evidence"], "text": cue["text"],
                             "reason": "cites unknown events"})
             continue
@@ -267,6 +308,10 @@ def candidates(events: list[dict], cues: list[dict], upgrades: dict[str, str] | 
             lines.append(Line(event["id"], event["t"], PRIORITY[event["type"]], pan_for(event["x"]),
                               [event["id"]], versions, "event"))
     lines.extend(insights.values())  # an insight whose last event is not in this list: none today
+    for t, text, fact in shape_lines(shape):
+        versions = checked([text], [fact])
+        if versions:  # about the whole team, so said from the centre
+            lines.append(Line(fact, t, PRIORITY["shape"], 0.0, [fact], versions, "shape"))
     lines.sort(key=lambda line: (line.t, line.priority, line.key))
     return lines, refused
 
@@ -319,9 +364,11 @@ def schedule(lines: list[Line], duration: Duration) -> Track:
 
 
 def describe(events: list[dict], cues: list[dict], duration: Duration = estimate,
-             upgrades: dict[str, str] | None = None) -> tuple[Track, list[dict]]:
-    """The spoken track for detected `events` and the live path's `cues`, and the refusals."""
-    lines, refused = candidates(events, cues, upgrades)
+             upgrades: dict[str, str] | None = None, shape: list[dict] | None = None
+             ) -> tuple[Track, list[dict]]:
+    """The spoken track for detected `events` and the live path's `cues` (and the clip's shape facts,
+    when it has tracked positions), and the refusals."""
+    lines, refused = candidates(events, cues, upgrades, shape)
     return schedule(lines, duration), refused
 
 

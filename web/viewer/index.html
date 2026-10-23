@@ -20,7 +20,17 @@
 
     <main class="layout">
       <section class="player" aria-label="Match clip">
+        <div class="match" id="match" hidden>
+          <div class="match-top">
+            <span class="match-tag">Condensed match</span>
+            <output class="score" id="score">Home 0 – 0 Away</output>
+            <span class="chapter-now" id="chapter-now"></span>
+          </div>
+          <p class="match-honest" id="match-honest"></p>
+          <p class="sr-only" id="match-live" aria-live="polite"></p>
+        </div>
         <div class="stage" id="stage">
+          <div class="time-skip" id="time-skip" hidden></div>
           <video id="video" muted playsinline preload="auto" aria-hidden="true"></video>
           <canvas id="frames" aria-hidden="true" hidden></canvas>
           <canvas id="overlay" tabindex="0" role="img" aria-label="On-screen graphics"></canvas>
@@ -33,10 +43,15 @@
           <label class="toggle"><input type="checkbox" id="show-radar" checked /> Radar <kbd>M</kbd></label>
           <label class="toggle" id="voice-toggle" hidden><input type="checkbox" id="voice" checked /> Voice <kbd>V</kbd></label>
         </div>
+        <nav class="chapter-bar" aria-label="Chapters">
+          <ol id="chapters"></ol>
+          <div class="playhead" id="playhead" aria-hidden="true"></div>
+        </nav>
         <p class="sr-only" id="on-air" aria-live="polite"></p>
         <p class="keys">
           <kbd>Space</kbd> play or pause · <kbd>←</kbd> <kbd>→</kbd> 1 s · <kbd>,</kbd> <kbd>.</kbd> one frame ·
           <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> persona · <kbd>D</kbd> detections · <kbd>M</kbd> radar
+          <span class="match-keys">· <kbd>[</kbd> <kbd>]</kbd> chapter</span>
           <span id="audio-keys" hidden>· <kbd>V</kbd> voice on or off · <kbd>R</kbd> repeat the last description</span>
         </p>
         <p class="audio-note" id="audio-note" hidden></p>
@@ -59,6 +74,13 @@
           </ul>
         </div>
         <p class="radar-note" id="radar-note"></p>
+      </section>
+      <section class="stats-panel" id="match-stats" aria-labelledby="stats-title" hidden>
+        <div class="radar-head">
+          <h2 id="stats-title">Team stats</h2>
+          <span class="radar-source">from the footage shown, so far</span>
+        </div>
+        <table class="stats" id="stats-table"></table>
       </section>
       <section class="phone-panel" id="phone-panel" aria-labelledby="phone-title">
         <h2 id="phone-title">Connect your phone</h2>

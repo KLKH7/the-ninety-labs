@@ -13,10 +13,10 @@ ranges to render in parallel (infra/render-job.sh). Configuration comes from the
     AZURE_STORAGE_TRUTH_CONTAINER  container for the ground truth                     (default truth)
     AZURE_CLIENT_ID     the job's user-assigned managed identity (set by the job definition)
 
-Ground truth is sealed: events.jsonl and frames.jsonl (true events, positions, camera, boxes) go to
-the `truth` container, which only the render job, training and scoring may read; images and
-clip.json go to `renders`. Nothing on the live path is granted the truth container
-(infra/main.bicep, checked by infra/check_truth_sealed.py).
+Ground truth is sealed: events.jsonl and frames.jsonl (true events, positions, camera, boxes), the
+clip's own and every view's under views/<name>/, go to the `truth` container, which only the render
+job, training and scoring may read; images and clip.json go to `renders`. Nothing on the live path
+is granted the truth container (infra/main.bicep, checked by infra/check_truth_sealed.py).
 
 Queue mode (the event-driven job): with NINETY_QUEUE set, the execution takes one render request
 from that Storage Queue instead of reading the seed range from the environment. A request is JSON
@@ -27,7 +27,8 @@ once, then moved to NINETY_QUEUE + "-failed" with the error.
 
 Only training seeds: the fixed test set is rendered once, locally, with software GL, so its pixels
 never depend on which machine drew them. Each clip runs the render checks before upload. A clip
-that fails them is not uploaded as data; its check report goes to <run>/failed/ so it is counted,
+that fails them is not uploaded as data; its check report goes to <run>/failed/ in `truth` (its
+contract messages quote true events and positions, lesson 192) so it is counted,
 never silently dropped. A seed whose clip.json is already in the container is skipped, so a
 retried execution resumes instead of redoing finished clips.
 """
@@ -87,8 +88,10 @@ def blob_name(run: str, seed: int, rel: Path) -> str:
 def upload_dir(container, truth, run: str, seed: int, clip_dir: Path, last: str = "clip.json") -> int:
     """Upload a clip: ground truth to the sealed `truth` container first, then images, and `last`
     after everything else, so its presence means the whole clip, truth included, arrived."""
-    files = [f for f in sorted(clip_dir.rglob("*")) if f.is_file() and f.name != last]
-    truth_files = [f for f in files if f.name in TRUTH_FILES and f.parent == clip_dir]
+    # only the clip's own `last` waits: a view's clip.json (views/<name>/) is an ordinary file
+    files = [f for f in sorted(clip_dir.rglob("*")) if f.is_file() and f != clip_dir / last]
+    # At any depth: a clip's views (views/<name>/, clip.py) carry their own answer key (lesson 192).
+    truth_files = [f for f in files if f.name in TRUTH_FILES]
     media = [f for f in files if f not in truth_files]
     n = 0
     for target, group in ((truth, truth_files), (container, [*media, clip_dir / last])):
@@ -130,7 +133,9 @@ def run_job(cfg: dict, container, render_clip, browser_page, work: Path, truth) 
                 files = upload_dir(container, truth, cfg["run"], s, d)
                 done["uploaded"].append(s)
             else:
-                container.upload_blob(
+                # The report quotes the answer key (a contract message names a true event and where
+                # it was), so it is sealed with it, never beside vision's input (lesson 192).
+                truth.upload_blob(
                     f"{cfg['run']}/failed/seed{s}.json", json.dumps(report).encode(), overwrite=True
                 )
                 files = 0

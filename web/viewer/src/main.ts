@@ -1,6 +1,7 @@
 import { PhonePanel } from "./companion";
 import { type Bundle, type ClaimTrace, type Cue, PERSONAS, type Persona, clock, loadBundle, onAir } from "./bundle";
 import { drawCues, drawDetections } from "./draw";
+import { setupMatch } from "./match";
 import { Narrator } from "./narrator";
 import { RadarModel, type RadarState, aspect, describe, drawRadar, projection, timeline } from "./radar";
 
@@ -305,6 +306,7 @@ async function start() {
   renderPipeline(b);
   renderTrace(b, seekMatch);
   const radar = setupRadar(b, segmentOf, matchTime);
+  const match = setupMatch(b, (v) => footage.seek(v));
   const phone = new PhonePanel(m.clip, { time: () => m.t_start + footage.time(), playing: () => !footage.paused() });
 
   document.addEventListener("keydown", (e) => {
@@ -343,6 +345,12 @@ async function start() {
       case "d":
         showBoxes.checked = !showBoxes.checked;
         break;
+      case "[":
+      case "]":
+        if (!match) return;
+        e.preventDefault();
+        match.step(footage.time(), e.key === "]" ? 1 : -1);
+        break;
       case "m":
         if (!b.radar) return;
         showRadar.checked = !showRadar.checked;
@@ -370,6 +378,7 @@ async function start() {
     narrator.update(t, !footage.paused(), persona === "audio" && voiceBox.checked);
     phone.tick();
     radar.tick(v);
+    match?.tick(v, t, reduceMotionBox.checked);
 
     const ids = aired.map((c) => c.id).sort().join(" ");
     overlay.dataset.onAir = ids;
