@@ -117,7 +117,7 @@ def test_a_verified_insight_citing_a_shape_fact_is_still_said():
     ev = [e for e in EVENTS if e["id"] == MAIN]
     cue = {"id": "insight-x", "kind": "insight", "verified": True, "t_in": ev[0]["t"],
            "text": "Home's back line pushed up 8 m behind it.", "evidence": [MAIN, LINE["id"]]}
-    lines, refused = describe.candidates(ev, [cue], SHAPE)
+    lines, refused = describe.candidates(ev, [cue], shape=SHAPE)
     assert any(line.source == "insight" for line in lines), refused
 
 
@@ -126,6 +126,6 @@ def test_a_verified_insight_citing_an_unsure_shape_fact_is_not_said():
     ev = [e for e in EVENTS if e["id"] == MAIN]
     cue = {"id": "insight-x", "kind": "insight", "verified": True, "t_in": ev[0]["t"],
            "text": "Away were narrow behind it.", "evidence": [MAIN, UNSURE["id"]]}
-    lines, refused = describe.candidates(ev, [cue], SHAPE)
+    lines, refused = describe.candidates(ev, [cue], shape=SHAPE)
     assert not any(line.source == "insight" for line in lines)
     assert any("7 of 11" in r["reason"] for r in refused)

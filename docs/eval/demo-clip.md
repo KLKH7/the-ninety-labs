@@ -1,6 +1,10 @@
 # Demo clip: pre-registered choice of the match footage
 
-Status: **pre-registered, not yet applied.** The rule is fixed here, before any candidate from its
+Status: **superseded, never applied.** On Oct 23 Kian decided the demo plays a condensed full
+match instead, chosen and cut by [demo-match.md](demo-match.md); `scripts/demo_clip.py` now exits
+without choosing. What follows is kept as the record of what was registered.
+
+Original status: pre-registered, not yet applied. The rule is fixed here, before any candidate from its
 range is rendered or watched. (Seed 8001 is outside it: it was the demo seed for v1 and v2, was
 watched, and the engine was fixed on it.) It is applied once at the final freeze commit, and its output is recorded below. If the
 footage then has a defect, that is reported and fixed in the renderer; the footage is not swapped

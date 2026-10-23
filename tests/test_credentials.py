@@ -149,6 +149,7 @@ def test_sign_in_asks_for_the_foundry_token_once_and_keeps_it(order):
 # client has no default (test above).
 LIVE = ["ninety/agents/slice.py", "ninety/eval/factcheck_eval.py", "ninety/agents/analyst_eval.py",
         "ninety/agents/workflow.py", "ninety/agents/credentials.py", "ninety/api/companion.py",
+        "ninety/agents/describer.py",
         "ninety/personalizer/core.py", "ninety/personalizer/eval.py", "ninety/personalizer/server.py"]
 
 

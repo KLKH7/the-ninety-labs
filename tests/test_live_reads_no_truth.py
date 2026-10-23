@@ -83,6 +83,19 @@ m1 = phone.post("/api/pair", json={"clip": detected.M1_CLIP})
 assert m1.status_code in (201, 503), m1.text  # 503 until its tracked frames file is committed
 if m1.status_code == 201:
     assert phone.get(f"/api/minimap/{detected.M1_CLIP}").json()["source"] == "tracked"
+
+# Audio description: the model words each verified moment (a stand-in model here), the code and
+# the Judge check it, and the track is scheduled from the detected events and the live cues.
+from ninety.agents import describer
+from ninety.agents.contracts import Description
+from ninety.speech import describe
+
+async def model(event, around):
+    return Description(event["id"], f"{sure['player']} finds {sure['receiver']}", "", 0.0, "model")
+
+texts, calls = asyncio.run(describer.upgrades(events, result.cues, model, judge))
+track, refused = describe.describe(events, result.cues, upgrades=texts)
+assert calls and track.said
 """
 
 
