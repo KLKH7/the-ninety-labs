@@ -7,6 +7,10 @@
     "apiExists": { "value": "${SERVICE_API_RESOURCE_EXISTS=false}" },
     "ciPrincipalId": { "value": "${CI_PRINCIPAL_ID=}" },
     "mcpKey": { "value": "${MCP_KEY=}" },
+    "demoPasscode": { "value": "${DEMO_PASSCODE=}" },
+    "apiMinReplicas": { "value": "${API_MIN_REPLICAS=0}" },
+    "budgetAmount": { "value": "${BUDGET_AMOUNT=20}" },
+    "budgetEmail": { "value": "${BUDGET_EMAIL=}" },
     "renderReaderPrincipalId": { "value": "${RENDER_READER_PRINCIPAL_ID=}" },
     "renderCommit": { "value": "${RENDER_COMMIT=}" }
   }
