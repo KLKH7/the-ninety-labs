@@ -70,5 +70,5 @@ docs/decisions/0001-synthetic-data.md.
 # the fouler's foot meets his shins (lesson 173). The renderer does not time the fall.
 # 0.5.16 (after #231's 0.5.15): a long ball the gantry cannot frame together with where it will be a
 # lag on is aimed at the latter, so the trailing pan lands on the ball rather than a lag behind it;
-# a goal soon after an edit cut waits for the restart's hold before the low angle (lesson 204).
+# a goal soon after an edit cut waits for the restart's hold before the low angle (lesson 205).
 RENDERER_VERSION = "0.5.16"

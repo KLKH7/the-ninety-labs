@@ -504,7 +504,7 @@ class Director:
             # The ball and where it will be a lag on are too far apart for one shot (a long ball).
             # The aim trails a target moving at the ball's pace by that lag (_ease), so aiming at
             # the ball itself leaves the picture a lag behind it and the ball runs out of shot.
-            # Aimed where the ball will be, the trailing aim is on the ball (lesson 204).
+            # Aimed where the ball will be, the trailing aim is on the ball (lesson 205).
             return balls[1][0], balls[1][1]
         lo, hi = 0.0, 1.0  # at t = 1 the ball is at the centre of the picture
         for _ in range(14):
@@ -612,7 +612,7 @@ class Director:
         # edge of the rule cannot bounce the camera back and forth. A goal starts the low angle at
         # once, even over a hold, except the hold after an edit cut: that cut was itself a change of
         # shot, so a goal soon after the restart is seen on the gantry and the low angle comes up
-        # once the hold ends, while the goal is still fresh (_net_due; lesson 204). Near the edit's
+        # once the hold ends, while the goal is still fresh (_net_due; lesson 205). Near the edit's
         # next cut nothing changes: the cut is the change.
         steady = cut_in is not None and cut_in < CUT_HOLD_S
         due = self.t >= self._cut_until - 1e-9 and want != self._cut_kind and not steady

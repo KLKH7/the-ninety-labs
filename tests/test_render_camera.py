@@ -710,7 +710,7 @@ def test_open_play_through_the_corner_arc_is_framed_as_with_no_corner_rule(monke
 
 
 def test_a_long_ball_stays_in_the_picture_across_it():
-    """A long ball (lesson 204; seed 43 on #220's engine): the ball still in midfield, then kicked
+    """A long ball (lesson 205; seed 43 on #220's engine): the ball still in midfield, then kicked
     at 20 m/s along the pitch, slowing as it flies. The aim trails a moving target by the pan's lag
     (_ease), so a target on the ball itself left the picture that lag behind it: at pan_lag_s 0.83
     and 17 m/s about 14 m, and the ball ran out of the side of the shot. Across the picture it must

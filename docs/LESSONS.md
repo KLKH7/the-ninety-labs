@@ -2103,7 +2103,7 @@ short and actionable. This file is public: no research sources, product names or
   hash"; `tests/test_api_site.py::test_a_websocket_behind_the_gate_needs_the_key_too` fails with the
   WebSocket branch of `RequireKey` removed.
 
-### 204. A spring that trails its target is fed where the target will be, not where it is
+### 205. A spring that trails its target is fed where the target will be, not where it is
 - **What happened:** #220 changed how keepers play, and two broadcast camera tests failed on
   held-out seeds the new play reached. On seed 43 a long ball (17 to 20 m/s, 7 m up) left the side
   of the picture: the gantry's aim is a spring that trails a target moving at the ball's pace by
