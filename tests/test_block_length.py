@@ -41,3 +41,16 @@ def test_the_capped_line_stays_goal_side_of_the_ball_for_the_away_side_too():
     brain.update(0.0, False, 105.0 - GOAL_KICK_BALL_X, {})
     assert brain.line_x - brain.front_x == pytest.approx(LENGTH_MAX_M)
     assert brain.line_x > 105.0 - GOAL_KICK_BALL_X + LINE_GAPS_M["attack"]
+
+
+def test_the_midfield_recovers_level_with_a_ball_inside_the_block():
+    """Fails before the recovery: the midfield kept 12 m ahead of the line wherever the ball was, so
+    with the ball 30 m from goal the line stood at 25 m and the midfield at 37 m, behind the play."""
+    for team, own in (("home", 0.0), ("away", 105.0)):
+        brain = TeamBrain(team, Style(MID, MID))
+        brain.update(0.0, False, abs(own - 30.0), {})
+        line = abs(brain.line_x - own)
+        mid = abs(brain.slot("CM", 34.0, 34.0)[0] - own)
+        assert line == pytest.approx(25.0) and mid == pytest.approx(30.0)  # level with the ball
+        brain.update(0.0, False, abs(own - 60.0), {})  # ball in front of the block: the usual gap
+        assert abs(brain.slot("CM", 34.0, 34.0)[0] - brain.line_x) == pytest.approx(LINE_GAPS_M["midfield"])
