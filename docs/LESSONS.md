@@ -2271,3 +2271,30 @@ short and actionable. This file is public: no research sources, product names or
   (the true lens fits, its mirror does not, the flipped picture does);
   `::test_the_compass_search_walks_on_where_the_free_step_stalls` fails with the compass search
   removed from `pitch.settle` (a half-size scene did not stall, so the stalled view is a fixture).
+
+### 199. A role named afresh every look is a role nobody holds
+- **What happened:** the team brain named its presser and cover afresh at every look, twice a
+  second, from who could reach the ball soonest, and the cover was simply the second soonest to the
+  ball. Two players about as near swapped the job, and the cover often came from beyond the ball:
+  at shots from 25 to 40 m he had held the job a median 0.7 s and stood a median 9.2 m from
+  his place, 8 m goal-side of the ball. #160 found the same churn in the chase, lesson 174 at
+  restarts.
+- **Rule:** a job answers a piece of play and lasts as long as it does: the presser and cover are
+  held while the same carrier has the ball or the same kick is in flight, and named again when that
+  changes or the man cannot do the job. The cover is whoever reaches the cover's place soonest, not
+  the next man to the ball. When a role keeps changing hands, check how long its holder has held it
+  before tuning where he stands; and check that the measure the fix was for moved: here the cover held his job longer (0.7 to 1.0 s) and stood nearer his place (9.2 to 5.4 m), yet the share of long shots with nobody in the triangle to the posts did not move (84% to 87%), so the churn was real but was not what left shots unscreened.
+- **Check:** `tests/test_press_hold.py`; in the pull request, the cover's tenure and distance from
+  his place at long shots, and the share of shots with nobody in the triangle to the posts, held out
+  against the tracking-data share in GROUNDING D3.
+
+### 201. A rule written for one phase of play leaves the other phase without it
+- **What happened:** the length cap (46 m, deepest outfield player to most advanced) was written for
+  the team on the ball, after it camped in its own box. The team without the ball had no cap, so a
+  high press up to a goal kick stood its forwards at the ball and its line at its block, 49 m apart
+  (77 m with a low line), with the midfield 12 m ahead of the line wherever the ball was, behind
+  the play once the ball came inside the block.
+- **Rule:** when a shape rule is fixed for one phase (in possession, out of possession, restarts),
+  ask whether the other phases need the same rule, and test each phase.
+- **Check:** `tests/test_block_length.py`; in the pull request, the team's length while the
+  opponent waits to take a goal kick.

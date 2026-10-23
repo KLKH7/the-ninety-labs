@@ -1642,7 +1642,8 @@ def test_through_a_restart_wait_the_defending_side_keeps_its_presser_and_cover()
     assert frames >= BRAIN_EVERY and other  # premise: the brain looked, and would have named another
     for _ in range(int(1.0 / DT)):  # in play
         e.step()
-    assert brain.pressers == e.who_presses(brain) != named
+    # asked again at its first look in play, and that pair held for the play it answers (T3)
+    assert brain.pressers == brain.held_pressers != named and brain.press_on is not None
 
 
 def test_until_the_ball_is_in_play_the_presser_and_cover_stand_off_it():
@@ -1890,7 +1891,7 @@ def test_through_a_restart_wait_each_marker_keeps_his_man():
     pairs are the restart's)."""
     from ninety.sim import offball
     from ninety.sim.engine import other
-    e = corner_wait(13)  # a corner to home, its kick 30 s off: away defends (a seed with men near goal)
+    e = corner_wait(17)  # a corner to home, its kick 30 s off: away defends (a seed with men near goal)
     r, brain = e.restart, e.brains["away"]
     for _ in range(int(6.0 / DT)):  # attackers come near and are picked up
         e.step()
@@ -1920,7 +1921,7 @@ def test_through_a_restart_wait_each_marker_keeps_his_man():
         e.step()
     assert new.id in r.marks.values() and not set(brain.pressers) & set(r.marks)
     assert r.guard not in r.marks  # the near-post guard marks nobody (lesson 202)
-    w = wall_kick(13)  # and at a free kick with a wall (a seed whose wait has men to mark)
+    w = wall_kick(17)  # and at a free kick with a wall (a seed whose wait has men to mark)
     for _ in range(int(1.0 / DT)):
         w.step()
     wr = w.restart
@@ -1997,28 +1998,24 @@ def test_at_a_dead_ball_the_presser_goes_in_time_and_does_not_spring_about_his_p
     leaves at his pressing pace: test_opponents_keep_out_of_the_penalty_area_at_a_goal_kick_...).
     Once off-ball movement changed play, seed 114 no longer came to that goal kick. The scene was
     found again by its premises, then checked to go red with the fix reverted (the presser back at
-    his pressing pace: 8 turns here): seed 134's goal kick at 1:05, found below by its premises."""
-    e = Engine(141)
+    his pressing pace: 8 turns here): seed 134's goal kick at 1:05. When the press and cover were held
+    for the play they answer (lesson 199) play changed again; found again the same way: seed 133's
+    goal kick at 3:14.6 (with the fix reverted the match differs before this kick, so its premises go red)."""
+    e = Engine(133)
     e.kickoff("home", setup=True)
-    # The scene is found by its premises, not at a fixed time (lesson 78): since lesson 207 set places
-    # from the restart spot, seed 134's goal kick no longer crowds its presser; seed 141's at about 3:00 does
-    # (the presser at his pressing pace there turns 3 times; lesson 207).
-    while e.t < 185.0:
+    while e.t < 194.6 - 1e-9:
         e.step()
-        r, brain = e.restart, e.brains["home"]
-        if e.t < 170.0 or r is None or r.kind != "goal_kick" or not brain.pressers:
-            continue
-        p = e.by_id[brain.pressers[0]]
-        tx, ty, top = e.shape_target(p)
-        crowd = [q for q in e.players
-                 if q.team == p.team and q is not p and math.dist((q.x, q.y), (tx, ty)) < 0.7]
-        if top == pytest.approx(e.in_time(p, tx, ty)) and top < e.press_pace(p) and crowd:
-            break  # premise: he walks in time, and a team-mate stands a hair from his place
-    else:
-        raise AssertionError("premise: the goal kick with its crowded presser never came")
+    r = e.restart
+    brain = e.brains["away" if r and r.team == "home" else "home"]  # the side defending the kick
+    assert r is not None and r.kind == "goal_kick" and brain.pressers  # premise: the goal kick waits
+    p = e.by_id[brain.pressers[0]]
+    tx, ty, top = e.shape_target(p)
+    assert top == pytest.approx(e.in_time(p, tx, ty)) and top < e.press_pace(p)
+    crowd = [q for q in e.players
+             if q.team == p.team and q is not p and math.dist((q.x, q.y), (tx, ty)) < 0.7]
+    assert crowd  # premise: a team-mate stands a hair from his place
     turns, history = 0, []
-    end = e.t + 6.0
-    while e.t < end and e.restart is r:
+    while e.t < 200.6 and e.restart is r:
         e.step()
         history.append((p.vx, p.vy))
         if len(history) > 10:
