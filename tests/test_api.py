@@ -42,7 +42,8 @@ def test_mcp_without_a_configured_key_refuses_everyone():
 def test_mcp_with_the_key_lists_the_match_tools():
     response = call("k" * 64, "k" * 64)
     assert response.status_code == 200
-    assert sorted(t["name"] for t in response.json()["result"]["tools"]) == ["list_events", "match_info"]
+    names = sorted(t["name"] for t in response.json()["result"]["tools"])
+    assert names == ["list_events", "match_info", "team_shape"]
 
 
 def test_mcp_answers_a_tool_call():
