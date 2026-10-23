@@ -29,10 +29,14 @@ The radar beside the video: `--tracked FILE --observations FILE` (vision's track
 observations.jsonl for the clip, as ninety/vision/live_job.py writes them) add radar.json
 (ninety/radar.py): every tracked player, the ball and the broadcast camera's footprint, from above.
 
+Match mode, for a condensed match (one clip cut from passage to passage): `--match` adds match.json
+(ninety/condensed.py): a chapter per segment named from the detected events, the scoreline from
+detected goals, and each team's stats from the footage shown.
+
 The bundle (manifest.json, cues.jsonl, trace.json, events.jsonl, facts.json, detections.jsonl,
-radar.json when asked for, and the footage as video.webm or frames/) is all the viewer reads. This
-module never opens the clip's events.jsonl or frames.jsonl: they are the answer key
-(tests/test_e2e.py checks).
+radar.json and match.json when asked for, and the footage as video.webm or frames/) is all the
+viewer reads. This module never opens the clip's events.jsonl or frames.jsonl: they are the answer
+key (tests/test_e2e.py checks).
 """
 
 from __future__ import annotations
@@ -48,7 +52,7 @@ import warnings
 from dataclasses import dataclass
 from pathlib import Path
 
-from ninety import radar
+from ninety import condensed, radar
 from ninety.agents import live, telemetry
 from ninety.agents.cues import _text
 from ninety.agents.factcheck import Claim, Verdict
@@ -316,6 +320,12 @@ async def run(args: argparse.Namespace) -> dict:
                       "footprints": sum(v["footprint"] is not None for v in body["views"])}
 
     write_jsonl(out / "events.jsonl", events)
+    match_info = None
+    if args.match:
+        body = condensed.build(clip.meta, events)
+        (out / "match.json").write_text(json.dumps(body, indent=1) + "\n")
+        match_info = {"chapters": len(body["chapters"]), "goals": len(body["goals"]),
+                      "min_confidence": body["min_confidence"]}
     write_jsonl(out / "cues.jsonl", cues)
     (out / "facts.json").write_text(json.dumps(facts, indent=2) + "\n")
     (out / "trace.json").write_text(json.dumps({"claims": claims}, indent=2) + "\n")
@@ -340,8 +350,10 @@ async def run(args: argparse.Namespace) -> dict:
         "cues": len(cues),
         "audio": audio,
         "radar": radar_info,
+        "match": match_info,
         "files": ["detections.jsonl", "events.jsonl", "facts.json", "trace.json", "cues.jsonl", "audio.json",
-                  "description.vtt"] + (["radar.json"] if radar_info else []),
+                  "description.vtt"] + (["radar.json"] if radar_info else [])
+                 + (["match.json"] if match_info else []),
     }
     (out / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     return manifest
@@ -369,6 +381,8 @@ def parser() -> argparse.ArgumentParser:
                     help="vision's tracked.json for the clip: adds the radar (needs --observations)")
     ap.add_argument("--observations", type=Path, default=None,
                     help="vision's observations.jsonl for the clip: the radar's camera footprint")
+    ap.add_argument("--match", action="store_true",
+                    help="match mode: chapters, scoreline and team stats for a condensed match (match.json)")
     ap.add_argument("--frames", action="store_true", help="ship JPEG frames instead of encoding video.webm")
     return ap
 

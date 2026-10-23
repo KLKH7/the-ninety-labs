@@ -8,6 +8,7 @@ principal point is the image centre.
 
 from __future__ import annotations
 
+import functools
 import math
 import random
 from dataclasses import dataclass
@@ -810,3 +811,95 @@ def corner_waits(events: list[dict]) -> dict[int, tuple[float, float]]:
         for f in range(e["frame"], kick):
             out[f] = flag
     return out
+
+
+# The tactical views: two fixed lenses side by side on the main gantry, both at one mount
+# (params.TacticalParams), each holding one half of the pitch for the whole match, so vision sees
+# every player whatever the broadcast follows. A club analysis camera stands as these do: at halfway,
+# high, with all four corners in shot and never moved during the match (docs/GROUNDING.md V7).
+TACTICAL_VIEWS = ("tac-l", "tac-r")  # the left lens covers x 0 to halfway, the right halfway to 105
+TACTICAL_SIZE = (1920, 1080)  # each lens: the sharper of the guide's two broadcast sizes (section 2)
+# Each half reaches this far past halfway, so a player on the line is whole in one view or the
+# other (*design*: 2.5 m either side, 5 m shared, about two strides).
+TACTICAL_OVERLAP_M = 5.0
+# What a lens must hold: its half of the pitch from the ground to a tall player's head (*design*:
+# 2 m), every corner of that box at least this share of the picture inside its edge (*design*).
+TACTICAL_HEAD_M = 2.0
+TACTICAL_MARGIN = 0.01
+TACTICAL_PITCH = (105.0, 68.0)  # Law 1, the pitch the engine plays on (ninety/sim/engine.py)
+
+
+def _aimed(position: Vec, pan: float, tilt: float) -> Vec:
+    """The point one metre along a lens panned `pan` from +y toward +x and tilted `tilt` below the
+    horizon (vision's pitch.View convention)."""
+    ct = math.cos(tilt)
+    return (position[0] + math.sin(pan) * ct, position[1] + math.cos(pan) * ct, position[2] - math.sin(tilt))
+
+
+def _longest_focal(position: Vec, pan: float, tilt: float, points: list[Vec], w: int, h: int) -> float:
+    """The longest focal length (px) at which every point sits inside the margin, 0 if one is behind."""
+    cam = Camera(position, _aimed(position, pan, tilt), 60.0, w, h)
+    half_w, half_h = (0.5 - TACTICAL_MARGIN) * w, (0.5 - TACTICAL_MARGIN) * h
+    f = math.inf
+    for p in points:
+        x, y, z = cam.to_camera(p)
+        if z <= 1e-6:
+            return 0.0
+        if x:
+            f = min(f, half_w * z / abs(x))
+        if y:
+            f = min(f, half_h * z / abs(y))
+    return f
+
+
+def _solve_lens(position: Vec, x_lo: float, x_hi: float, w: int, h: int) -> tuple[float, float, float]:
+    """(pan, tilt, vertical FOV in degrees) of the tightest lens that holds x_lo..x_hi of the pitch.
+
+    The tightest fit is the longest focal length, maximised over the aim: a grid over every aim that
+    sees the pitch from the gantry (pan within a right angle of +y, tilt 0 to 80 degrees), then
+    finer grids round the best. The fit is smooth in the aim, so the refinement finds its top."""
+    points = [
+        (x, y, z) for x in (x_lo, x_hi) for y in (0.0, TACTICAL_PITCH[1]) for z in (0.0, TACTICAL_HEAD_M)
+    ]
+    best = max(
+        (_longest_focal(position, pan, tilt, points, w, h), pan, tilt)
+        for pan in (math.radians(d) for d in range(-90, 91, 2))
+        for tilt in (math.radians(d) for d in range(0, 81, 2))
+    )
+    step = math.radians(2.0)
+    while step > 1e-5:
+        step /= 4
+        _, pan0, tilt0 = best
+        best = max(
+            (_longest_focal(position, pan0 + i * step, tilt0 + j * step, points, w, h), pan0 + i * step,
+             tilt0 + j * step)
+            for i in range(-4, 5)
+            for j in range(-4, 5)
+        )
+    f, pan, tilt = best
+    return pan, tilt, math.degrees(2 * math.atan(h / 2 / f))
+
+
+@functools.lru_cache(maxsize=64)
+def _tactical(height_m: float, back_m: float, offset_x_m: float) -> tuple[Camera, Camera]:
+    w, h = TACTICAL_SIZE
+    position = (TACTICAL_PITCH[0] / 2 + offset_x_m, -back_m, height_m)
+    mid, lap = TACTICAL_PITCH[0] / 2, TACTICAL_OVERLAP_M / 2
+    out = []
+    for x_lo, x_hi in ((0.0, mid + lap), (mid - lap, TACTICAL_PITCH[0])):
+        pan, tilt, fov = _solve_lens(position, x_lo, x_hi, w, h)
+        out.append(Camera(position, _aimed(position, pan, tilt), fov, w, h))
+    return out[0], out[1]
+
+
+def tactical_views(params) -> list[Camera]:
+    """The two fixed tactical lenses for a clip's mount (params.TacticalParams, or RenderParams), in
+    TACTICAL_VIEWS order. No roll and a centred principal point, as every camera here."""
+    t = getattr(params, "tactical", params)
+    return list(_tactical(float(t.height_m), float(t.back_m), float(t.offset_x_m)))
+
+
+def pan_tilt(cam: Camera) -> tuple[float, float]:
+    """A camera's pan (from +y toward +x) and tilt (below the horizon), in radians."""
+    fwd = _norm(_sub(cam.target, cam.position))
+    return math.atan2(fwd[0], fwd[1]), -math.asin(fwd[2])
