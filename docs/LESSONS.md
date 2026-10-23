@@ -2167,6 +2167,19 @@ short and actionable. This file is public: no research sources, product names or
   (each answer-key file planted at the clip, in `views/`, in a view, in its `images/` and in a
   folder under it) and `::test_a_planted_frame_file_in_a_single_clip_s_images_is_refused`.
 
+### 196. A new file is written only to a path nothing holds yet
+- **What happened:** the team-shape tests were written to `tests/test_shape.py`, a name that sounded
+  free. It held the engine's attacking-shape tests (O6, O7), 129 lines, and the write replaced them
+  without a warning: the editor said "updated", not "created". The suite still passed, because a
+  deleted test cannot fail. It was caught only because `git status` showed the file as modified
+  (`M`) where a new one shows `??`.
+- **Rule:** before writing a file meant to be new, check that its path is not tracked
+  (`git ls-files <path>` prints nothing). Name a module's tests after the module's own words
+  (`test_team_shape.py` for `ninety/intel/shape.py`, whose subject is the team's shape), and read
+  `git status --short` before every commit: a file you meant to create must show `??`.
+- **Check:** `git diff --stat origin/main -- tests/test_shape.py` is empty on this branch; the shape
+  tests are in `tests/test_team_shape.py`.
+
 ### 203. CI built the image with a stand-in, so the real pin was never tried
 - **What happened:** the demo image downloads its Replay bundle from a release asset pinned by URL
   and SHA-256 in the Dockerfile. CI's image job builds with a fixture bundle instead, so it stayed
@@ -2179,6 +2192,22 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** the CI `image` job's step "The Dockerfile's pinned Replay bundle exists and matches its
   hash"; `tests/test_api_site.py::test_a_websocket_behind_the_gate_needs_the_key_too` fails with the
   WebSocket branch of `RequireKey` removed.
+
+### 205. A spring that trails its target is fed where the target will be, not where it is
+- **What happened:** #220 changed how keepers play, and two broadcast camera tests failed on
+  held-out seeds the new play reached. On seed 43 a long ball (17 to 20 m/s, 7 m up) left the side
+  of the picture: the gantry's aim is a spring that trails a target moving at the ball's pace by
+  `pan_lag_s`, about 14 m at 0.83 s. When the ball and where it would be a lag on did not fit one
+  shot, the director aimed at the ball itself, so the picture ran a lag behind it. On seed 53 a free
+  kick scored 0.44 s after it was taken; the goal started the low angle at once, over the hold the
+  edit cut had just set, so the restart's shot lasted 2.4 s.
+- **Rule:** a follow with a known lag is aimed at where the followed thing will be after that lag.
+  An edit cut is a change of shot: no rule, a goal included, starts another within `CUT_HOLD_S`
+  of it.
+- **Check:** `tests/test_render_camera.py::test_a_long_ball_stays_in_the_picture_across_it` and
+  `::test_a_goal_soon_after_the_restart_waits_for_the_edits_hold` both fail on the old camera. The
+  held-out framing (`test_the_gantry_frames_the_play_with_the_pitch_filling_the_picture`) holds
+  on main and with #220 merged.
 
 ### 163. A rule every writer follows goes into every writer's instructions
 - **What happened:** the live Personalizer evaluation (agents-live 39514003721) aired its casual
