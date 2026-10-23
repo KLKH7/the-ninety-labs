@@ -322,7 +322,8 @@ def test_a_wrong_alternative_after_a_verified_claim_costs_no_rewrite():
 
     result = run(Models.scripted({"analyst": [picks(MAIN)], "tactician": [reply(true_claim(MAIN))]},
                                  challenger=challenger, judge=Judge()))
-    assert len(calls) == 1 and result.model_calls == 3  # analyst, tactician, challenger: no rewrite
+    # analyst, tactician, challenger, one Judge call for the Tactician: no check or rewrite of the reading
+    assert len(calls) == 1 and result.model_calls == 4
     assert result.reviews[0].aired == true_claim(MAIN)
 
 
