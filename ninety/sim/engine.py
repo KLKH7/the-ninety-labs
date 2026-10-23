@@ -2461,8 +2461,7 @@ class Engine:
                 legal = self.stand_off(p, p.x, p.y)[0] == (p.x, p.y)
                 return px, py, self.in_time(p, px, py) if given and legal else work
             if engaged and brain.pressers[1:2] == [p.id]:  # cover: behind the presser, goal-side
-                behind = max(COVER_BEHIND_M, gap + 2)
-                cx, cy = on_pitch(bx + gx * behind, by + gy * behind)
+                cx, cy = self.cover_spot(p.team, bx, by, gap)
                 return cx, cy, self.in_time(p, cx, cy)
             slot = brain.slot(p.role, p.ay, clamp(by, 0, PITCH_Y))
             if slot:
@@ -2521,6 +2520,8 @@ class Engine:
                 reach[p.id] = p.physique.time_to_cover(d, along)
             brain.update(self.t, holder == team, bx, reach)
             given = self.restart or self.set_by
+            if holder == team or given is not None:
+                brain.press_on, brain.held_pressers = None, []  # T3: the play the jobs answered is over
             if holder != team and given is not None:
                 # Until a restart's ball is in play, the side keeps the presser and cover it named when
                 # the restart was given (design). Asked again at every look, the order by time to the
@@ -2535,7 +2536,7 @@ class Engine:
                     given.pressers = [] if given.wall else self.who_presses(brain)
                 brain.pressers = given.pressers
             elif holder != team:
-                brain.pressers = self.who_presses(brain)
+                brain.pressers = self.press_for(brain)
             if holder != team:  # O2: pick up the attackers who threaten our goal
                 free = {
                     p.id: (p.x, p.y)
@@ -2562,13 +2563,55 @@ class Engine:
             else:
                 brain.markers, brain.marked = {}, set()
 
+    def press_for(self, brain: TeamBrain) -> list[str]:
+        """T3: the presser and the cover keep their jobs while the press is on the same thing: the same
+        carrier, or the same kick in flight. The brain names them again when the ball changes feet or is
+        struck, when the presser no longer thinks pressing is worth it (P17), or when either is beaten.
+        Named afresh at every look (twice a second), two players about as near swapped the cover and
+        neither reached his spot (*design*: a job is held while the play it answers lasts)."""
+        kick = ("kick", self.kicked.get("id"), self.kicked.get("t")) if self.kicked else None
+        on = self.possessor or kick
+        held = brain.held_pressers
+        if on is not None and on == brain.press_on and held and self.accepts_press(self.by_id[held[0]]) \
+                and all(self.off_balance.get(pid, -1.0) <= self.t for pid in held):
+            return held
+        brain.press_on, brain.held_pressers = on, self.who_presses(brain)
+        return brain.held_pressers
+
+    def cover_spot(self, team: str, bx: float, by: float, gap: float) -> tuple[float, float]:
+        """T3: the cover's place: on the line from the ball to the centre of our goal, behind the
+        presser (COVER_BEHIND_M, or further when the press stands off further), on the pitch."""
+        own = PITCH_X - goal_x(team), PITCH_Y / 2
+        d = math.hypot(own[0] - bx, own[1] - by) or 1.0
+        behind = max(COVER_BEHIND_M, gap + 2)
+        return (clamp(bx + (own[0] - bx) / d * behind, 0.5, PITCH_X - 0.5),
+                clamp(by + (own[1] - by) / d * behind, 0.5, PITCH_Y - 0.5))
+
     def who_presses(self, brain: TeamBrain) -> list[str]:
         """T3, P17: the brain asks its players in the order they could reach the ball; the first
-        who thinks pressing now is worth what it costs him goes, the next in that order covers."""
-        for i, pid in enumerate(brain.ranked):
-            if self.accepts_press(self.by_id[pid]):
-                return brain.ranked[i:i + 2]
-        return []
+        who thinks pressing now is worth what it costs him goes. The cover is the player who could
+        reach the cover's place soonest (cover_spot), by the same reach as the ranking, among those
+        not pressing and not marking near goal (O2). A player who is beaten (down, getting up) is
+        out of the play and is not asked. Until October 2026 the next player in the order to the
+        ball covered, often from beyond the ball or across the pitch from his place."""
+        up = [pid for pid in brain.ranked if self.off_balance.get(pid, -1.0) <= self.t]
+        presser = next((pid for pid in up if self.accepts_press(self.by_id[pid])), None)
+        if presser is None:
+            return []
+        bx, by = self.play_point(team=brain.team)
+        given = self.restart or self.set_by
+        gap = RESTART_DISTANCE_M[given.kind] if given and given.team != brain.team else brain.press_gap_m
+        cx, cy = self.cover_spot(brain.team, bx, by, gap)
+
+        def reach(pid: str) -> float:
+            q = self.by_id[pid]
+            dx, dy = cx - q.x, cy - q.y
+            dist = math.hypot(dx, dy)
+            return q.physique.time_to_cover(dist, (q.vx * dx + q.vy * dy) / (dist or 1.0))
+
+        free = [pid for pid in up if pid != presser and pid not in brain.markers]
+        cover = min(free, key=reach, default=None)
+        return [presser] if cover is None else [presser, cover]
 
     def run_target(self, p: Player, carrier: Player, brain: TeamBrain) -> tuple[float, float] | None:
         """O4: forwards (and anyone who likes to) run in behind when the carrier has the ball
