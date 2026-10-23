@@ -45,7 +45,9 @@ STATS_DIR = "stats"
 TOOLS = ("list_events", "match_info")  # the published Analyst may call only these (tests check they exist)
 # The insight tools the Companion chooses from (ninety/agents/companion_match.py). Served here too, read
 # only, but not in the published Analyst's allowed tools: adding them changes that agent's definition.
-INSIGHT_TOOLS = ("line_breaks", "overloads", "counter_press", "pass_options", "lineup")
+INSIGHT_TOOLS = (
+    "line_breaks", "overloads", "counter_press", "pass_options", "goal_build_up", "players", "lineup",
+)
 INSIGHTS_DIR = "insights"  # inside NINETY_MATCH_DIR: a match's precomputed MatchInsights, one file each
 # Every tool the server serves. team_shape and the insight tools are served but not in the published
 # Analyst's allowed tools: adding them changes that agent's definition, which takes an `agents-live`
@@ -185,6 +187,20 @@ def pass_options(match: str, minute_from: int, minute_to: int, club: str | None 
     return _insight(match, "pass_options", minute_from, minute_to, club)
 
 
+def goal_build_up(match: str, minute: int, club: str | None = None) -> dict:
+    """The latest goal vision detected at or before `minute` (one club's, or either), and the insight
+    facts of the minute before it, strongest first: what led to it. Cite by id; quote numbers with
+    their units."""
+    return _insight(match, "goal_build_up", minute, club)
+
+
+def players(match: str, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+    """Players ranked by the opponents their completed passes took out of the game between two
+    match minutes. The leader's fact is confident only when his lowest possible total beats every
+    other player's highest; say "the most" only then. player_is is how to name him."""
+    return _insight(match, "players", minute_from, minute_to, club)
+
+
 def lineup(match: str, club: str | None = None) -> dict:
     """The fictional clubs' team sheets (name, number, position) and, for each tracked player,
     the position vision inferred from his place in the team's shape, with its share and how a
@@ -236,7 +252,7 @@ def make_server() -> FastMCP:
         # Host headers; ours is public and answers only with the key, so the Host check is off.
         transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
     )
-    insight = (line_breaks, overloads, counter_press, pass_options, lineup)
+    insight = (line_breaks, overloads, counter_press, pass_options, goal_build_up, players, lineup)
     for tool in (list_events, match_info, team_shape, *insight):
         server.add_tool(tool)
     return server

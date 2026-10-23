@@ -156,6 +156,14 @@
       "type": "string",
       "minLength": 1,
       "description": "The card as spoken to a screen-reader user and by the Describer: the text plus where it happened in words, fact-checked, with no visual reference."
+    },
+    "follow_ups": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 3,
+      "description": "Suggested next questions for /api/ask."
     }
   },
   "$defs": {

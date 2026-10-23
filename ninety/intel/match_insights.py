@@ -24,6 +24,7 @@ from ninety.intel import counter_press, line_breaks, overloads, pass_options, ro
 from ninety.intel.scene import TEAMS, Frames, xy
 from ninety.intel.teamsheet import Fixture
 
+BUILD_UP_S = 60.0  # design: a goal's build-up is the minute before it
 MAX_FACTS = 12  # design: the most facts a tool returns, the strongest first, so a prompt stays short
 KIND_FACTS = ("line_break", "overload", "counter_press", "pass_options")
 
@@ -76,6 +77,23 @@ class MatchInsights:
             ],
         }
         clubs = fixture.clubs
+        # Goals as vision detected them: what "why did that goal happen?" is asked about.
+        facts["goal"] = [
+            {
+                "id": f"goal:{e['id']}",
+                "kind": "goal",
+                "team": e["team"],
+                "minute": int(float(e["t"]) // 60) + 1,
+                "t": round(float(e["t"]), 2),
+                "event": e["id"],
+                "event_confidence": e.get("confidence"),
+                "team_confidence": e.get("team_confidence"),
+                "player": e.get("player"),
+                "confident": True,
+            }
+            for e in events
+            if e.get("type") == "goal"
+        ]
         for rows in facts.values():
             for r in rows:
                 r["club"] = clubs[r["team"]]
@@ -173,6 +191,70 @@ class MatchInsights:
         # The confident facts of the latest minutes first: a fan asks about now.
         top = sorted(rows, key=lambda r: (not r["confident"], -r["minute"], r["metric"]))[: MAX_FACTS * 2]
         return {"facts": top, "summary": []}
+
+    def goal_build_up(self, minute: int, club: str | None = None) -> dict:
+        """The goal at or before `minute` (the latest, or one club's), and the insight facts of the
+        BUILD_UP_S before it: what led to it, strongest first."""
+        team = self.team(club)
+        goals = [
+            g
+            for g in self.facts.get("goal", ())
+            if g["minute"] <= minute and (team is None or g["team"] == team)
+        ]
+        if not goals:
+            return {"facts": [], "summary": []}
+        goal = goals[-1]
+        before = [
+            f
+            for kind in ("line_break", "overload", "counter_press", "pass_options")
+            for f in self.facts.get(kind, ())
+            if goal["t"] - BUILD_UP_S <= f["t"] <= goal["t"]
+        ]
+        before.sort(key=lambda f: (not f["confident"], f["team"] != goal["team"], -f["value"], -f["t"]))
+        return {"facts": [goal, *before[:MAX_FACTS]], "summary": []}
+
+    def players(self, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+        """Players ranked by the opponents their completed passes took out of the game, each as one
+        fact. A player's total is confident when its bounds agree; the leader's fact is confident only
+        when, in addition, his lowest possible total beats every other player's highest, so "the most"
+        holds whatever the untracked players were doing."""
+        team = self.team(club)
+        by: dict[str, list[dict]] = {}
+        for f in self._rows("line_break", minute_from, minute_to, club):
+            if f.get("passer") and f["hi"] > 0:
+                by.setdefault(f["passer"], []).append(f)
+        ranked = sorted(by.items(), key=lambda kv: (-sum(f["value"] for f in kv[1]), kv[0]))
+        out = []
+        for k, (track, rows) in enumerate(ranked[:5], 1):
+            who = self.people.get(track, {})
+            out.append(
+                {
+                    "id": f"top:{track}:m{minute_from}-{minute_to}",
+                    "kind": "players",
+                    "metric": "opponents_bypassed_by_player",
+                    "team": who.get("team", rows[0]["team"]),
+                    "club": self.fixture.clubs[rows[0]["team"]],
+                    "minute_from": minute_from,
+                    "minute_to": minute_to,
+                    "player": track,
+                    "player_is": who.get("say"),
+                    "rank": k,
+                    "value": sum(f["value"] for f in rows),
+                    "unit": "opponents",
+                    "lo": sum(f["lo"] for f in rows),
+                    "hi": sum(f["hi"] for f in rows),
+                    "confident": sum(f["lo"] for f in rows) == sum(f["hi"] for f in rows),
+                    "also": [[len(rows), "passes"]],
+                }
+            )
+        # "The most" needs the leader's least to beat everyone else's most.
+        if out:
+            others_hi = max((sum(f["hi"] for f in rows) for _, rows in ranked[1:]), default=-1)
+            out[0]["leads"] = out[0]["lo"] > others_hi
+            out[0]["confident"] = out[0]["confident"] and out[0]["leads"]
+        if team is not None:
+            out = [r for r in out if r["team"] == team]
+        return {"facts": out, "summary": []}
 
     def lineup(self, club: str | None = None) -> dict:
         """The team sheets, and who of the tracked players may be named and how."""

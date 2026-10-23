@@ -93,6 +93,14 @@ def where_spoken(fact: Mapping, clubs: Mapping[str, str]) -> str:
     return f"It was {end}{side}."
 
 
+TOOL_OF = {
+    "line_break": "line_breaks",
+    "overload": "overloads",
+    "counter_press": "counter_press",
+    "pass_options": "pass_options",
+}
+
+
 def notability(f: Mapping) -> tuple:
     """Higher is more notable, within one kind."""
     kind = f["kind"]
@@ -202,6 +210,7 @@ async def card_for(
             "evidence": [fact["id"]],
             "visual": visual,
             "spoken": spoken,
+            "follow_ups": list(companion.follow_ups([{"name": TOOL_OF[fact["kind"]]}], [fact], insights)),
             "names": companion.names_of([fact], visual, insights),
             "why": {
                 "question": WHY[fact["kind"]],
