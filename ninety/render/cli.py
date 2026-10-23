@@ -209,7 +209,7 @@ def check_main(argv: list[str] | None = None) -> None:
                 seconds=clip["frames"] / clip["fps"],
                 start_s=clip["t_start"],
                 overrides=clip["overrides"],
-                views=clip["params"].get("views"),
+                views=clip.get("params", {}).get("views"),
             )
             da, db = digest(first), digest(again)
         summary["determinism"] = {

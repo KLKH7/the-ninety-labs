@@ -247,7 +247,7 @@ def test_each_view_is_a_whole_clip_that_passes_every_check_and_films_the_broadca
     assert report["streams_agree"] == []
     for name in TACTICAL_VIEWS:
         d = views / "views" / name
-        assert validate_clip(d) == []
+        assert not validate_clip(d)
         alone = check_clip(d)["passed"]
         assert all(alone.values()) and "streams_agree" not in alone, alone
         clip = json.loads((d / "clip.json").read_text())
