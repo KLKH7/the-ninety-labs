@@ -27,6 +27,7 @@ from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
 from ninety.intel import shape
+from ninety.intel.match_insights import MatchInsights, load_fixture
 from ninety.intel.windows import agent_rows
 from ninety.match import detected, tracking
 from ninety.match.facts import AGENT_TYPES, compact, events_in, match_events, select
@@ -42,10 +43,18 @@ MAX_EVENTS = 60
 # match id and nothing else.
 STATS_DIR = "stats"
 TOOLS = ("list_events", "match_info")  # the published Analyst may call only these (tests check they exist)
-# Every tool the server serves. team_shape is served but not yet in the published Analyst's allowed
-# tools: adding it changes that agent's definition, which takes an `agents-live` publish run. Until
-# then the workflow hands the minute's shape facts to the writers as evidence (ninety/agents/workflow.py).
-SERVED = (*TOOLS, "team_shape")
+# The insight tools the Companion chooses from (ninety/agents/companion_match.py). Served here too, read
+# only, but not in the published Analyst's allowed tools: adding them changes that agent's definition.
+INSIGHT_TOOLS = (
+    "line_breaks", "overloads", "counter_press", "pass_options", "goal_build_up", "players", "style",
+    "referee", "lineup",
+)
+INSIGHTS_DIR = "insights"  # inside NINETY_MATCH_DIR: a match's precomputed MatchInsights, one file each
+# Every tool the server serves. team_shape and the insight tools are served but not in the published
+# Analyst's allowed tools: adding them changes that agent's definition, which takes an `agents-live`
+# publish run. Until then the workflow hands the minute's shape facts to the writers as evidence
+# (ninety/agents/workflow.py).
+SERVED = (*TOOLS, "team_shape", *INSIGHT_TOOLS)
 
 def match_id(seed: int) -> str:
     return f"seed{seed}"
@@ -109,6 +118,118 @@ def match_info(match: str) -> dict:
             "stats": list(stats_of(match))}
 
 
+def fixture_path(clip: str) -> Path:
+    return tracking.FIXTURES / f"fixture-{clip}.json"  # its seed and club codes, from its clip.json
+
+
+@lru_cache(maxsize=4)
+def insights_of(match: str) -> MatchInsights | None:
+    """A match's insight facts: precomputed in NINETY_MATCH_DIR/insights when the image has them,
+    else computed from a tracked clip's frames and detected events. None for a match with no
+    tracked frames: the simulator's positions are the answer key, never served as insight."""
+    stored = Path(MATCH_DIR) / INSIGHTS_DIR / f"{match}.json" if MATCH_DIR else None
+    if stored and stored.exists():
+        return MatchInsights.from_dict(json.loads(stored.read_text()))
+    if match not in DETECTED and match not in MATCHES:
+        raise ValueError(f"unknown match {match!r}; available: {', '.join([*DETECTED, *MATCHES])}")
+    if match not in tracking.TRACKED_CLIPS or match not in DETECTED or not fixture_path(match).exists():
+        return None
+    try:
+        frames = tracking.tracked(match).frames
+    except tracking.NotTracked:
+        return None
+    events = detected.load(DETECTED[match]())
+    return MatchInsights.build(match, frames, events, load_fixture(fixture_path(match)))
+
+
+def _insight(match: str, tool: str, *args) -> dict:
+    mi = insights_of(match)
+    if mi is None:
+        return {"match": match, "tracked": False, "facts": [], "summary": []}
+    return {"match": match, "tracked": True, "clubs": mi.fixture.clubs, **getattr(mi, tool)(*args)}
+
+
+def line_breaks(match: str, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+    """Line breaks (packing): for each completed pass between two match minutes (inclusive), how
+    many opponents it took out of the game, counted by code from tracked positions: opponents nearer
+    the goal than the ball where the pass was played, and no longer nearer than where it ended. club:
+    one club's name, or null for both. Facts are the passes that bypassed most, strongest first;
+    summary has each club's total. Each fact has id, club, minute, value with unit, lo and hi
+    (bounds from untracked players and tracking error), confident, passer_is and receiver_is (how to
+    name them) and visual. Cite facts by id; quote value or an `also` number with its unit."""
+    return _insight(match, "line_breaks", minute_from, minute_to, club)
+
+
+def overloads(match: str, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+    """Overloads: moments between two match minutes when one club had at least 2 more players
+    than the other in one of nine zones (own, middle or final third, by left, centre or right
+    channel, as that club attacks), counted by code from tracked positions. club: one club's name,
+    or null for both. Each fact has id, club, third, channel, value (extra players) with unit,
+    own_players and other_players, duration_s, confident and visual; summary counts each club's
+    confident overloads by zone. Cite by id; quote numbers with their units."""
+    return _insight(match, "overloads", minute_from, minute_to, club)
+
+
+def counter_press(match: str, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+    """Counter-pressing: for each open-play turnover between two match minutes, the club that
+    lost the ball, the most of its players within five yards of the ball in the 5 s after (value,
+    players), the time it took to win it back (regain_s, seconds, null if a dead ball came first)
+    and whether that was within 5 s (regained). club: the club that lost it, or null for both.
+    summary: each club's turnovers and regains within 5 s. Cite by id; quote numbers with units."""
+    return _insight(match, "counter_press", minute_from, minute_to, club)
+
+
+def pass_options(match: str, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+    """Pass options (decision quality): for each pass between two match minutes, the passer's
+    teammates ahead of the ball with no opponent within five yards (value, teammates), whether the
+    pass went to one of them (target_open) and its outcome. club: the passing club, or null for
+    both. Lost passes come first. summary: per club, passes with no open teammate ahead. Cite by
+    id; quote numbers with their units."""
+    return _insight(match, "pass_options", minute_from, minute_to, club)
+
+
+def goal_build_up(match: str, minute: int, club: str | None = None) -> dict:
+    """The latest goal vision detected at or before `minute` (one club's, or either), and the insight
+    facts of the minute before it, strongest first: what led to it. Cite by id; quote numbers with
+    their units."""
+    return _insight(match, "goal_build_up", minute, club)
+
+
+def players(match: str, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+    """Players ranked by the opponents their completed passes took out of the game between two
+    match minutes. The leader's fact is confident only when his lowest possible total beats every
+    other player's highest; say "the most" only then. player_is is how to name him."""
+    return _insight(match, "players", minute_from, minute_to, club)
+
+
+def style(match: str, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+    """How each club plays between two match minutes, computed by code from detected passes and
+    tracked shape: share of passes from each channel (left, centre, right as it attacks), its median
+    width against the other club's, crosses (wide final-third passes ending in the box), its keeper's
+    long (32 m or more) and short passes, counter-attacks (open-play regain to shot, seconds) and
+    one-twos. Cite by id; quote a channel's share right after naming the channel."""
+    return _insight(match, "style", minute_from, minute_to, club)
+
+
+def referee(match: str, minute_from: int, minute_to: int, club: str | None = None) -> dict:
+    """Offside readings at each completed pass between two match minutes, from the 22 tracked
+    positions (Law 11): verdict onside, offside, too_close (within the tracking error: never call it),
+    unsure (a defender out of view) or restart, with the margin in metres when there is a call; and
+    the Laws summarised in our own words (offside, fouls, handball, cards, VAR). The tracking cannot
+    see contact: never judge a foul, handball or penalty from these facts."""
+    return _insight(match, "referee", minute_from, minute_to, club)
+
+
+def lineup(match: str, club: str | None = None) -> dict:
+    """The fictional clubs' team sheets (name, number, position) and, for each tracked player,
+    the position vision inferred from his place in the team's shape, with its share and how a
+    sentence may name him (say): by name only when that share passed its measured gate."""
+    mi = insights_of(match)
+    if mi is None:
+        return {"match": match, "tracked": False}
+    return {"match": match, "tracked": True, **mi.lineup(club)}
+
+
 @lru_cache(maxsize=len(tracking.TRACKED_CLIPS))
 def shape_of(match: str) -> tuple[dict, ...]:
     """The match's team-shape facts, from tracked positions only (`tracking.tracked`, which refuses
@@ -150,7 +271,10 @@ def make_server() -> FastMCP:
         # Host headers; ours is public and answers only with the key, so the Host check is off.
         transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
     )
-    for tool in (list_events, match_info, team_shape):
+    insight = (
+        line_breaks, overloads, counter_press, pass_options, goal_build_up, players, style, referee, lineup,
+    )
+    for tool in (list_events, match_info, team_shape, *insight):
         server.add_tool(tool)
     return server
 
