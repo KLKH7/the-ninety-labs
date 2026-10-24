@@ -240,11 +240,12 @@ def markdown(report: dict) -> str:
         f"({report['run']}), spoiled as the tracker spoils it (ninety/eval/insight_standin.py). Code "
         "checks only: no model and no Judge were called, nothing was spent.",
         "",
-        "Caveat: the same author wrote the claim templates, the plants and the checker. This is an author's "
-        "test of the reader, not an independent audit (docs/LESSONS.md, lesson 4). The plants reverse code's "
-        "own templates; free paraphrases are covered by the closed-world direction rule (a cue it cannot match is held) and the reviewer's "
-        "61 paraphrases (tests/test_insight_check.py::test_paraphrases_of_a_direction), and every model "
-        "sentence also goes to the Judge.",
+        "Caveat: the same author wrote the claim templates, the plants and the checker. This is an "
+        "author's test of the reader, not an independent audit (docs/LESSONS.md, lesson 4). The plants "
+        "reverse code's own templates. Free paraphrases meet the closed direction check: for a fact "
+        "whose direction matters, any word left once its own phrases, numbers, names and glue words "
+        "are taken out holds the sentence; the reviewer's 125 paraphrases and reversals are tests "
+        "(tests/test_insight_check.py). Every model sentence also goes to the Judge.",
         "",
         "| Players missing a frame | True claims | Wrongly stopped | Planted false | Caught "
         "| Unsure claims | Held |",

@@ -371,8 +371,10 @@ PARAPHRASES = [
 
 @pytest.mark.parametrize("text, fid, reject", PARAPHRASES)
 def test_paraphrases_of_a_direction(text, fid, reject):
-    v = verify(Claim(text, [fid]), K, CLUBS, NAMED, NAMES)
-    assert (not v.ok) is reject, (text, v.reasons)
+    # A reversal never passes (held or rejected); a true sentence is never rejected (it may be held:
+    # the closed check holds words it cannot vouch for, which is the cost of failing closed).
+    status = status_for(verify(Claim(text, [fid]), K, CLUBS, NAMED, NAMES))
+    assert status != "verified" if reject else status != "rejected", (text, status)
 
 
 # What failing closed costs: true sentences in words the direction check does not know are held, not
@@ -395,3 +397,196 @@ TRUE_PARAPHRASES = [
 def test_true_paraphrases_pass_or_are_held_never_rejected(text, fid, status):
     v = verify(Claim(text, [fid]), K, CLUBS, NAMED, NAMES)
     assert status_for(v) == status, (text, v.reasons)
+
+
+# The merge queue's third review: 64 more reversals and 20 true sentences (its adv2.py and
+# true2.py). With the closed check every reversal is held or rejected, and no true one is rejected.
+R_SUMMARY0 = {
+    "also": [[2, "turnovers"], [5.0, "s", WITHIN]],
+    "id": "cps:z",
+    "kind": "counter_press",
+    "metric": "regains_within_5s",
+    "team": "away",
+    "club": "Lisbon Esportes",
+    "minute_from": 1,
+    "minute_to": 15,
+    "value": 0,
+    "unit": "regains",
+    "confident": True,
+}
+R_SUMMARY2 = {**R_SUMMARY0, "id": "cps:t", "value": 2, "also": [[4, "turnovers"], [5.0, "s", WITHIN]]}
+R_PASSFAIL = {**OPTIONS, "id": "po:f", "outcome": "fail", "target_open": False, "value": 0, "lo": 0, "hi": 0}
+R_R_PASSFAIL1 = {**R_PASSFAIL, "id": "po:f1", "value": 3, "lo": 3, "hi": 3}
+R_NOOPEN0 = {
+    "id": "po:home:m1-15",
+    "kind": "pass_options",
+    "metric": "passes_with_no_open_teammate_ahead",
+    "team": "home",
+    "club": "London Athletic",
+    "minute_from": 1,
+    "minute_to": 15,
+    "value": 0,
+    "unit": "passes",
+    "lo": 0,
+    "hi": 0,
+    "confident": True,
+    "passes": 9,
+    "confident_passes": 9,
+}
+R_NOOPEN4 = {**R_NOOPEN0, "id": "po:n4", "value": 4, "lo": 4, "hi": 4}
+K2 = {
+    f["id"]: f
+    for f in (
+        COUNTER,
+        PRESS_LOST,
+        OPTIONS,
+        R_SUMMARY0,
+        R_SUMMARY2,
+        R_PASSFAIL,
+        R_R_PASSFAIL1,
+        OVERLOAD,
+        R_NOOPEN0,
+        R_NOOPEN4,
+    )
+}
+L = "Lisbon Esportes"
+H = "London Athletic"
+REVERSALS2 = [  # all should be rejected
+    (f"{L} immediately regained the ball.", "cp:v8"),
+    (f"{L} lost the ball and quickly recovered it.", "cp:v8"),
+    (f"{L} lost the ball but the press paid off.", "cp:v8"),
+    (f"{L} lost the ball and had it again within 3 seconds.", "cp:v8"),
+    (f"{L} lost the ball and the ball was theirs again.", "cp:v8"),
+    (f"{L} lost the ball, then reclaimed it.", "cp:v8"),
+    (f"{L} lost the ball and the press succeeded.", "cp:v8"),
+    (f"{L} lost the ball and the counter-press worked.", "cp:v8"),
+    (f"{L} lost the ball and the press failed to win it.", "cp:v7"),
+    (f"{L} lost the ball and the opponents kept it despite the press.", "cp:v7"),
+    (f"{L} lost the ball and the press was beaten.", "cp:v7"),
+    (f"{L} lost the ball and could not get it back.", "cp:v7"),
+    (f"{L} lost the ball and 3 players pressed but in vain.", "cp:v7"),
+    (f"{L} lost the ball and the press went unrewarded.", "cp:v7"),
+    (f"{L} lost the ball and never recovered it.", "cp:v7"),
+    (f"{L} lost the ball and 3 players hunted it down in vain.", "cp:v7"),
+    (f"{L} regained possession {2} times from minute 1 to minute 15.", "cps:z"),
+    (f"{L} made 2 regains from minute 1 to minute 15.", "cps:z"),
+    (f"{L} lost the ball 4 times and won it back every time from minute 1 to minute 15.", "cps:z"),
+    (f"{L} lost the ball 4 times and recovered none of them from minute 1 to minute 15.", "cps:t"),
+    (f"{L} lost the ball 4 times and never got it back from minute 1 to minute 15.", "cps:t"),
+    (f"{L} lost the ball 4 times and reclaimed it twice from minute 1 to minute 15.", "cps:z"),
+    (f"{L} lost the ball 4 times and the press got nothing from minute 1 to minute 15.", "cps:t"),
+    (f"{L} had 0 regains from minute 1 to minute 15.", "cps:t"),
+    (f"{H} had 3 open teammates ahead, but the pass broke down.", "po:v9"),
+    (f"{H} had 3 open teammates ahead, but the ball was turned over.", "po:v9"),
+    (f"{H} had 3 open teammates ahead, yet the pass was blocked.", "po:v9"),
+    (f"{H} had 3 open teammates ahead, yet the pass missed its target.", "po:v9"),
+    (f"{H} had 3 open teammates ahead, and the pass hit a defender.", "po:v9"),
+    (f"{H} had 3 open teammates ahead, and gifted possession to the opponents.", "po:v9"),
+    (f"{H} had 3 open teammates ahead, but the receiver was tightly guarded.", "po:v9"),
+    (f"{H} had 3 open teammates ahead, and the pass was delivered to a defended player.", "po:v9"),
+    (f"{H} had 3 open teammates ahead and the pass was perfectly delivered.", "po:f1"),
+    (f"{H} had 3 open teammates ahead and the pass was accurate.", "po:f1"),
+    (f"{H} had 3 open teammates ahead and the pass was received by a free man.", "po:f1"),
+    (f"{H} had 3 open teammates ahead and the pass hit the free man.", "po:f1"),
+    (f"{H} had 3 open teammates ahead and the pass was on target.", "po:f1"),
+    (f"{H} had 3 open teammates ahead and the pass picked out a free man.", "po:f1"),
+    (f"{H} had 3 open teammates ahead and the pass was a success.", "po:f1"),
+    (f"{H} had 3 open teammates ahead and the move continued.", "po:f1"),
+    (f"{H} had 4 passes with nobody ahead to receive.", "po:n4"),
+    (f"{H} had 4 passes where every teammate was marked.", "po:n4"),
+    (f"{H} had 4 passes with a free teammate ahead.", "po:n4"),
+    (f"{H} had 4 passes with every option open.", "po:n4"),
+    (f"{H} had no passes with an unmarked teammate ahead.", "po:n4"),
+    (f"{H} had all passes with a free teammate ahead and not one was stuck.", "po:n4"),
+    (f"{H} never lacked an open teammate ahead.", "po:n4"),
+    (f"{H} had 4 passes with no open teammate ahead.", "po:n0"),
+    (f"{H} were outnumbered 1 to 4 in minute 12.", "ov:v3"),
+    (f"{H} lacked any numerical edge in minute 12.", "ov:v3"),
+    (f"{H} had a deficit of players around the ball in minute 12.", "ov:v3"),
+    (f"{H} had no numerical advantage around the ball in minute 12.", "ov:v3"),
+    (f"{H} had an even fight around the ball in minute 12, with no extra man.", "ov:v3"),
+    (f"{H} were level on numbers in minute 12.", "ov:v3"),
+    (f"{H} held a numerical edge in minute 12.", "ov:v1"),
+    (f"{H} had no overload to speak of in minute 12.", "ov:v3"),
+    (f"{H} never built an overload in minute 12.", "ov:v3"),
+    (f"{H} were not outnumbered, yet had no overloads in minute 12.", "ov:v3"),
+    # mixed two-fact sentences (reverse one)
+    (
+        f"{L} lost the ball and won it back, while {H} had 3 open teammates ahead but lost the pass.",
+        "cp:v8,po:v9",
+    ),
+    (
+        f"{L} lost the ball and never won it back, while {H} had 3 open teammates ahead and completed the "
+        f"pass.",
+        "cp:v7,po:v9",
+    ),
+    (
+        f"{L} lost the ball, and the press did not work, yet {H} had 3 open teammates ahead and completed "
+        f"the pass.",
+        "cp:v8,po:v9",
+    ),
+    (
+        f"{L} won it back after losing it, and {H} had 3 open teammates ahead and kept the ball, but {L} "
+        f"stole it.",
+        "cp:v7,po:v9",
+    ),
+    (f"{H} had 3 open teammates ahead and had no extra players around the ball in minute 12.", "po:v9,ov:v3"),
+    (f"{L} lost the ball and had 3 players near it, and {H} had no teammate open ahead.", "cp:v7,po:v9"),
+]
+TRUE2 = [
+    (f"{L} lost the ball and won it back 2.4 seconds later.", "cp:v7"),
+    (f"{L} lost the ball, then won it back within 5 seconds.", "cp:v7"),
+    (f"After losing it, {L} sent 3 players to press and won the ball back.", "cp:v7"),
+    (f"{L} lost the ball and 3 players pressed straight away.", "cp:v7"),
+    (f"{L} lost the ball and sent 1 player to press, but did not win it back.", "cp:v8"),
+    (f"{L} lost the ball and could not win it back.", "cp:v8"),
+    (f"{L} lost the ball and only 1 player pressed.", "cp:v8"),
+    (f"{L} lost the ball 4 times from minute 1 to minute 15 and won it back once.", "cps:t"),
+    (f"{L} made 2 regains from minute 1 to minute 15.", "cps:t"),
+    (f"{L} won the ball back 2 times from minute 1 to minute 15.", "cps:t"),
+    (f"{L} had no regains from minute 1 to minute 15.", "cps:z"),
+    (f"{H} had 3 teammates open further forward and completed the pass.", "po:v9"),
+    (f"{H} had 3 open teammates ahead and the pass found one of them.", "po:v9"),
+    (f"{H} had 3 open teammates ahead and played it to an open teammate.", "po:v9"),
+    (f"{H} kept the ball with 3 teammates free ahead.", "po:v9"),
+    (f"{H} lost the ball with 3 open teammates further up the pitch.", "po:f1"),
+    (f"{H} had 3 open teammates ahead, but the pass went elsewhere and was lost.", "po:f1"),
+    (f"{H} had no open teammate ahead and lost the pass.", "po:f"),
+    (f"{H} had 4 passes with no open teammate ahead from minute 1 to minute 15.", "po:n4"),
+    (f"{H} had 3 extra players around the ball in minute 12.", "ov:v3"),
+]
+
+
+@pytest.mark.parametrize("text, fids", REVERSALS2)
+def test_no_reversal_passes(text, fids):
+    assert status_for(verify(Claim(text, fids.split(",")), K2, CLUBS, NAMED, NAMES)) != "verified", text
+
+
+@pytest.mark.parametrize("text, fids", TRUE2)
+def test_no_true_sentence_is_rejected(text, fids):
+    assert status_for(verify(Claim(text, fids.split(",")), K2, CLUBS, NAMED, NAMES)) != "rejected", text
+
+
+# Each phrase the closed check accepts is pinned by a true sentence that needs it: drop the phrase
+# from `_approved` and the sentence is held, so the test turns red (the review's surviving mutations).
+PINNED = [
+    ("Lisbon Esportes lost the ball and had 1 player near it in the next 5 seconds.", "cp:v8"),
+    ("Lisbon Esportes won the ball back 2.4 seconds after losing it, with 3 players around it.", "cp:v7"),
+    ("Lisbon Esportes lost the ball and could not win it back.", "cp:v8"),
+    ("Lisbon Esportes lost the ball 2 times in open play and never won it back within 5 seconds.", "cps:z"),
+    ("London Athletic had 3 teammates free further up the pitch and kept the ball.", "po:v9"),
+    ("London Athletic completed the pass, and it found an open teammate.", "po:v9"),
+    (
+        "London Athletic had 3 teammates free further up the pitch, but the pass went elsewhere and was "
+        "lost.",
+        "po:f1",
+    ),
+    ("London Athletic lost the ball with no teammate free further up the pitch.", "po:f"),
+    ("London Athletic had 3 extra players around the ball in minute 12.", "ov:v3"),
+]
+
+
+@pytest.mark.parametrize("text, fid", PINNED)
+def test_each_approved_phrase_is_pinned(text, fid):
+    v = verify(Claim(text, [fid]), K2, CLUBS, NAMED, NAMES)
+    assert v.ok, (text, v.reasons)

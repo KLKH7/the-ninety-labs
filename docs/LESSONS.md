@@ -2482,8 +2482,10 @@ short and actionable. This file is public: no research sources, product names or
   for a number of that context, and a number of a context only where it is written in it. The same holds for a fact's direction: a sentence that says it went the other way (won back or not,
   lost or kept, to an open teammate or not, nobody open) is checked against the fact's own field, and the
   evaluation plants each reversal (the merge queue's review found them passing). A list of wrong phrasings fails open (a second review found 27 of 61
-  paraphrases passing it): the direction check is closed-world, every direction word must sit inside
-  a phrase that states the fact's own direction, and anything else is refused.
+  paraphrases passing it), and so does a list of direction words (a third found 27 of 64 more): the
+  check is closed by construction now. For a fact whose direction matters, the fact's own phrases,
+  numbers, names and a short list of glue words are taken out of the sentence, and any word left
+  holds it. True sentences in other words are held too; that cost is measured, not hidden.
 - **Check:** `uv run python -m ninety.eval.insight_claims` (the `number` and `spelled` plants on
   overloads and counter-presses are caught); `tests/test_insight_check.py` (the window said as
   the regain, the extra players said as the own count, both rejected).

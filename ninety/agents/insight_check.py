@@ -127,7 +127,8 @@ NEVER_WON = re.compile(
     r"\b(?:never|didn't|did not|couldn't|could not|failed to|unable to)\s+(?:won|win)\s+"
     r"(?:it|the ball|possession)\s+back\b"
     r"|\bwithout (?:winning|getting) (?:it|the ball) back\b|\bnot (?:won|regained)\b"
-    r"|\b(?:never|didn't|did not|couldn't|could not|failed to|unable to)\s+(?:regain|recover|get)\w*\b",
+    r"|\b(?:never|didn't|did not|couldn't|could not|failed to|unable to)\s+(?:regain|recover|get)\w*\b"
+    r"|\b(?:no|zero|not a single)\s+regains?\b",
     re.I,
 )
 WON_BACK = re.compile(
@@ -324,7 +325,9 @@ def check(
     reasons += polarity_reasons(claim.text, cited)  # a known reversal: wrong, rejected
     # A direction cue the check cannot match to the fact: it may be right, but it is not affirmatively
     # matched, so it is held, never passed (the Coordinator's decision: fail closed).
-    held += direction_reasons(claim.text, cited)
+    held += direction_reasons(
+        claim.text, cited, clubs, [*sheet_names, *(w.get("say", "") for w in people.values())]
+    )
 
     # Kind words.
     kinds = {f.get("kind") for f in cited}
@@ -377,45 +380,45 @@ def polarity_reasons(text: str, cited: list[Mapping]) -> list[str]:
     return out
 
 
-# Closed-world direction (the merge queue's second review): a list of wrong phrasings fails open,
-# since a writer can always find one more ("failed to regain possession"). So for a fact whose
-# direction matters, every word that could state a direction is checked: the sentence's direction
-# words must all sit inside a phrase that states the fact's own direction (APPROVED), and any other
-# direction word or negation is refused. A true sentence in other words is refused too, and code's
-# own sentence airs instead: it fails closed. Such a sentence is held (it may be true; nothing that
-# is not affirmatively matched airs); a known reversal (`polarity_reasons`) is rejected.
-NEGATION = re.compile(
-    r"\b(?:not|no|never|none|nobody|nothing|zero|without|fail\w*|unable|neither|nor|cannot|no-one"
-    r"|no one)\b|n't\b",
-    re.I,
+# Closed-world direction (the merge queue's reviews: a list of wrong phrasings fails open, and so did
+# a list of direction words). For a fact whose direction matters, the sentence is taken apart: the
+# phrases that state the fact's own direction (`_approved`), its numbers, the clubs, the players and
+# positions, and a short list of glue words are removed. Any word left over is a word the check
+# cannot vouch for, so the sentence is held, never passed, and code's own sentence airs instead. A
+# true sentence in other words is held too: that is the cost of failing closed, and it is measured
+# (tests/test_insight_check.py). A known reversal (`polarity_reasons`) is rejected.
+GLUE = frozenset(
+    """a an the and but then while with in of to from for on at by as it its their his her they them
+    there this that these those when after before had has have was were is are be been being so also
+    just only all both each one minute minutes time times second seconds s m around near ball player
+    players teammate teammates team-mate team-mates side play open further forward up pitch ahead same
+    straight away again moment""".split()
 )
-PRESS_WORDS = re.compile(
-    r"\b(?:win|wins|won|winning|regain\w*|recover\w*|back|possession|lost|lose|loses|losing|got|get|gets|"
-    r"getting|took|take|takes|taking|for good|keep|kept)\b",
-    re.I,
+DIRECTED = (
+    "pressers",
+    "regains_within_5s",
+    "open_teammates_ahead",
+    "passes_with_no_open_teammate_ahead",
+    "extra_players",
+    "overload_moments",
 )
-PASS_WORDS = re.compile(
-    r"\b(?:lost|lose|loses|losing|gave|give|gives|given|away|intercept\w*|cut out|astray|overhit|underhit|"
-    r"fail\w*|incomplete|arriv\w*|reach\w*|complet\w*|success\w*|found|find|finds|kept|keep|keeps|"
-    r"came off|got through|marked|covered|someone else|elsewhere|instead|chose|picked|open|free|unmarked|"
-    r"nobody|none|no one|no-one)\b",
-    re.I,
-)
-OVERLOAD_NEGATED = re.compile(
-    r"\b(?:no|zero|without|never had an?|did not have an?|didn't have an?|not a single|not one)\s+(?:\w+\s+)?"
-    r"(?:overloads?|extra (?:man|men|players?)|spare (?:man|men|players?))\b",
-    re.I,
-)
+_N = r"\d+(?:\.\d+)?"
 
 
 def _approved(f: Mapping) -> list[str]:
-    """The phrases that state this fact's own direction (and the neutral ones its sentences use)."""
+    """The phrases that state this fact's own direction, and the neutral ones its sentences use."""
     metric = f.get("metric")
     if metric == "pressers":
         out = [
             r"lost the ball",
-            r"after losing it",
-            r"winning the ball back within \d+(?:\.\d+)? seconds of losing it",
+            r"(?:after )?losing it",
+            r"winning the ball back within \d+ seconds of losing it",
+            rf"{_N} players? (?:near|around) (?:it|the ball)",
+            rf"(?:sent )?{_N} players? (?:to )?press(?:ed|ing)?",
+            r"pressed",
+            rf"in the next {_N} seconds",
+            rf"{_N} seconds (?:later|after losing it)",
+            rf"within {_N} seconds",
         ]
         out += (
             [r"won (?:it|the ball) back"]
@@ -424,58 +427,80 @@ def _approved(f: Mapping) -> list[str]:
         )
         return out
     if metric == "regains_within_5s":
-        out = [r"lost the ball \d+ times?", r"\d+ regains?"]
-        out += [r"never won it back"] if not f.get("value") else [r"won it back (?:once|\d+ times)"]
+        out = [r"lost the ball \d+ times?", r"in open play", r"within \d+ seconds"]
+        out += (
+            [r"never won it back", r"(?:had )?no regains"]
+            if not f.get("value")
+            else [r"won (?:it|the ball) back (?:once|\d+ times)", r"(?:made )?\d+ regains?"]
+        )
         return out
     if metric == "open_teammates_ahead":
-        out = [r"further up the pitch", r"further forward"]
+        out = [r"the pass", r"further up the pitch", r"further forward"]
         out += (
-            [r"lost the ball", r"was lost", r"lost the pass", r"lost (?:a|the) pass"]
+            [r"lost the ball", r"lost (?:a|the) pass", r"was lost"]
             if f.get("outcome") == "fail"
             else [r"completed (?:the|a) pass", r"kept the ball"]
         )
         if f.get("target_open") is False:
-            out += [r"(?:the pass )?went elsewhere"]
+            out += [r"went elsewhere"]
         if f.get("target_open") is True:
-            out += [r"found an open teammate"]
+            out += [r"found (?:an open teammate|one of them)", r"played it to an open teammate"]
         out += (
-            [r"no teammate free", r"no open teammate", r"nobody (?:was )?(?:open|free)"]
+            [r"no (?:open )?teammate(?: free| open)?"]
             if not f.get("value")
-            else [r"\d+ (?:open )?teammates? (?:free|open)", r"\d+ open teammates?"]
+            else [rf"{_N} (?:open )?teammates?(?: free| open)?"]
         )
         return out
     if metric == "passes_with_no_open_teammate_ahead":
-        return [r"no open teammate", r"no teammate free", r"further forward", r"further up the pitch"]
+        return [
+            r"(?:made |had )?\d+ passes",
+            r"with no open teammate",
+            r"no teammate free",
+            r"further forward",
+            r"further up the pitch",
+        ]
+    if metric == "extra_players":
+        return [
+            rf"{_N} extra players?",
+            rf"{_N} players? against {_N} players?",
+            r"a spare player there",
+            r"built an overload",
+            r"(?:had )?an overload",
+            r"in their (?:own|middle|final) third",
+            r"(?:on the (?:left|right)|in the centre)",
+        ]
+    if metric == "overload_moments":
+        return (
+            [r"built no overloads", r"no overloads"]
+            if not f.get("value")
+            else [
+                rf"built {_N} overloads?",
+                rf"{_N} overloads?",
+                r"most often in their (?:own|middle|final) third",
+                r"(?:on the (?:left|right)|in the centre)",
+            ]
+        )
     return []
 
 
-def direction_reasons(text: str, cited: list[Mapping]) -> list[str]:
-    """Closed-world direction (see above): the words left once the cited facts' own phrases are
-    taken out may not state a direction or a negation."""
-    out = []
-    kinds = [(f, PRESS_WORDS) for f in cited if f.get("metric") in ("pressers", "regains_within_5s")]
-    kinds += [
-        (f, PASS_WORDS)
-        for f in cited
-        if f.get("metric") in ("open_teammates_ahead", "passes_with_no_open_teammate_ahead")
-    ]
-    if kinds:
-        rest = text
-        for f, _ in kinds:
-            for phrase in _approved(f):
-                rest = re.sub(phrase, " ", rest, flags=re.I)
-        for words in {w for _, w in kinds}:
-            m = words.search(rest) or NEGATION.search(rest)
-            if m:
-                say = "; ".join(sorted({p for f, _ in kinds for p in _approved(f)}))
-                out.append(f"'{m.group()}' states a direction in other words than the fact's own ({say})")
-                break
-    for f in cited:
-        if f.get("metric") in ("overload_moments", "extra_players") and f.get("value"):
-            m = OVERLOAD_NEGATED.search(text)
-            if m:
-                out.append(f"'{m.group()}'; the cited facts count some")
-    return out
+def direction_reasons(
+    text: str, cited: list[Mapping], clubs: Mapping[str, str] = (), names: Iterable[str] = ()
+) -> list[str]:
+    """The words a sentence about a directed fact uses that the check cannot vouch for (see above)."""
+    directed = [f for f in cited if f.get("metric") in DIRECTED]
+    if not directed:
+        return []
+    rest = spelled_as_digits(text)  # "three players pressing" is "3 players pressing"
+    for f in directed:
+        for phrase in sorted(_approved(f), key=len, reverse=True):
+            rest = re.sub(phrase, " ", rest, flags=re.I)
+    for name in sorted({*dict(clubs).values(), *names, *LABEL.values()}, key=len, reverse=True):
+        rest = re.sub(rf"\b{re.escape(name)}(?:'s)?\b", " ", rest, flags=re.I)
+    words = [w for w in re.findall(r"[a-z]+(?:[-'][a-z]+)*", rest.lower()) if w not in GLUE]
+    if not words:
+        return []
+    say = "; ".join(sorted({p for f in directed for p in _approved(f)}))
+    return [f"'{' '.join(words[:6])}' is not one of the fact's own words: say it as {say}"]
 
 
 def gate(claim: Claim, known: Mapping[str, Mapping], min_confidence: float = MIN_CONFIDENCE) -> Verdict:
