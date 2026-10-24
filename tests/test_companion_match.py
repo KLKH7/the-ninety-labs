@@ -152,7 +152,7 @@ def test_model_plans_tools_and_answers_from_them():
 def test_a_plan_followed_by_an_answer_the_model_made_up_is_read_as_the_plan_only():
     # The published Companion (v2, live run 40066697726) replies to a plan with the plan and then
     # an "answer" step of its own, with facts it invented: 27 of 32 drafts were lost to the parse
-    # (lesson 236). The plan is read; the invented step never reaches the tools or the fan.
+    # (lesson 238). The plan is read; the invented step never reaches the tools or the fan.
     made_up = {
         "step": "answer",
         "facts": [{"id": "cp1", "club": "London Athletic", "seconds_to_recover": 2.5, "confident": True}],
