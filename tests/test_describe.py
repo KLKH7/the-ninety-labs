@@ -73,7 +73,8 @@ def test_a_shot_is_not_pushed_late_by_the_pass_before_it():
     track, _ = d.describe(BUSY_THEN_SHOT, [])
     said = {s.event: s for s in track.said}
     assert "e2" in said and said["e2"].lag_s <= d.MAX_LAG_S
-    assert said["e1"].short, "the pass gives up its long form for the shot"
+    # The pass gives up its long form for the shot, or is not said at all: never the shot late.
+    assert "e1" not in said or said["e1"].short
 
 
 # ---------------------------------------------------------------- stereo position
@@ -145,8 +146,17 @@ def test_every_line_said_passes_the_fact_checker_and_is_said_as_checked():
 
 
 def test_spoken_form_names_players_and_units():
-    assert d.spoken("h4 → h8, 12 m, 48 km/h.") == "Home 4 to Home 8, 12 metres, 48 kilometres an hour."
+    # Said as a commentator would, not as a graphic reads (Kian: no machine-sounding lines).
+    assert d.spoken("h4 → h8, 12 m, 48 km/h.") == \
+        "Home's number 4 plays it 12 metres to number 8, at 48 kilometres an hour."
+    assert d.spoken("h8 shot, on target, 101 km/h.") == \
+        "Home's number 8 shoots at 101 kilometres an hour, on target."
     assert d.spoken("away plays a pass, on the left.") == "Away plays a pass, on the left."
+    # A tracked player has no shirt number the tracker read: no "number 12" for track 12.
+    assert d.spoken("a-t9 → a-t4, 30 m.") == "An away player plays it 30 metres to a team-mate."
+    assert d.spoken("h7 plays a 12 m pass to a4.") == \
+        "Home's number 7 plays a 12-metre pass to Away's number 4."
+    assert "→" not in d.spoken("h4 → h8.") and "Fact-checked" not in d.spoken("h4 → h8.")
 
 
 # ---------------------------------------------------------------- SSML and WebVTT
@@ -169,7 +179,9 @@ def test_webvtt_is_timed_on_the_clip(tmp_path):
     audio = json.loads((out / "audio.json").read_text())
     stamps = re.findall(r"(\d\d):(\d\d):(\d\d)\.(\d{3}) --> ", vtt)
     starts = [int(h) * 3600 + int(m) * 60 + int(s) + int(ms) / 1000 for h, m, s, ms in stamps]
-    assert starts == pytest.approx([s["t_in"] - T_START for s in audio["said"]], abs=1e-3)
+    # A line that starts after the 3 s clip's last frame is placed at its end (the timeline clamps).
+    clip_s = 75 / 25
+    assert starts == pytest.approx([min(s["t_in"] - T_START, clip_s) for s in audio["said"]], abs=1e-3)
 
 
 # ---------------------------------------------------------------- synthesis, offline and behind the flag

@@ -184,15 +184,76 @@ def event_versions(event: dict) -> list[str]:
     return []
 
 
-PLAYER_SPOKEN = re.compile(r"\b([ha])(\d{1,2})\b")
+PLAYER_SPOKEN = re.compile(r"\b([ha])(?:(\d{1,2})|-t(\d+))\b")
 TEAM_SPOKEN = re.compile(r"\b(home|away)\b")
+# The graphics' compact forms ("h11 → h8, 17 m, 53 km/h", "h8 shot, on target, 101 km/h"): read
+# for a screen, not a voice. Said as a commentator would say them, with the same numbers.
+_ID = r"(?:[ha](?:\d{1,2}|-t\d+)|a player)"
+ARROW_PASS = re.compile(rf"^(?P<a>{_ID}) → (?P<b>{_ID})(?P<rest>(?:, [^,.]+)*)\.?$")
+PLAIN_PASS = re.compile(rf"^(?P<a>{_ID}|a pass) ?(?:pass)?(?P<rest>(?:, [^,.]+)*)\.?$")
+SHOT = re.compile(rf"^(?P<a>{_ID}|a shot) ?(?:shot)?(?P<rest>(?:, [^,.]+)*)\.?$")
+DIST = re.compile(r"(\d+(?:\.\d+)?) m\b")
+SPEED = re.compile(r"(\d+(?:\.\d+)?) km/h")
+
+
+def _sentence(text: str) -> str:
+    """A graphic's compact form as a sentence; any other text unchanged."""
+    def parts(rest: str) -> tuple[str | None, str | None, list[str]]:
+        bits = [b.strip() for b in rest.split(",") if b.strip()]
+        dist = next((DIST.search(b)[1] for b in bits if DIST.fullmatch(b)), None)
+        speed = next((SPEED.search(b)[1] for b in bits if SPEED.fullmatch(b)), None)
+        other = [b for b in bits if not DIST.fullmatch(b) and not SPEED.fullmatch(b)]
+        return dist, speed, other
+
+    if m := ARROW_PASS.match(text):
+        dist, speed, other = parts(m["rest"])
+        how = f" {dist} m" if dist else ""
+        tail = f", at {speed} km/h" if speed else ""
+        extra = "".join(f", {o}" for o in other)
+        return f"{m['a']} plays it{how} to {m['b']}{tail}{extra}."
+    if (m := PLAIN_PASS.match(text)) and text.split(",")[0].strip().endswith("pass"):
+        dist, speed, other = parts(m["rest"])
+        who = "" if m["a"] == "a pass" else f"{m['a']} plays "
+        size = f"a {dist} m pass" if dist else "a pass"
+        tail = f" at {speed} km/h" if speed else ""
+        return (f"{who}{size}{tail}" if who else f"{size.capitalize()}{tail}") + "".join(
+            f", {o}" for o in other) + "."
+    if (m := SHOT.match(text)) and text.split(",")[0].strip().endswith("shot"):
+        dist, speed, other = parts(m["rest"])
+        who = "a player" if m["a"] == "a shot" else m["a"]
+        tail = f" at {speed} km/h" if speed else ""
+        return f"{who} shoots{tail}" + "".join(f", {o}" for o in other) + "."
+    return text
+
+
+as_sentence = _sentence  # the offline stand-in Tactician writes its claim this way (ninety/e2e.py)
+
+
+def _names(text: str) -> str:
+    """Ids as a commentator says them: a squad id is its side's shirt number ("Home's number 11", then
+    "number 8" for a team-mate); a tracked player has no shirt number the tracker read, so he is "a
+    home player", then "a team-mate" (a track id is no shirt number)."""
+    named: set[str] = set()
+
+    def say(m: re.Match) -> str:
+        side = "home" if m[1] == "h" else "away"
+        first = side not in named
+        named.add(side)
+        if m[2]:
+            return f"{side.capitalize()}'s number {m[2]}" if first else f"number {m[2]}"
+        return ("an away player" if side == "away" else "a home player") if first else "a team-mate"
+
+    return PLAYER_SPOKEN.sub(say, text)
 
 
 def spoken(text: str) -> str:
-    """What the voice says for a checked line: ids as names, units in full, arrows as words."""
-    out = PLAYER_SPOKEN.sub(lambda m: f"{'Home' if m[1] == 'h' else 'Away'} {m[2]}", text)
-    out = TEAM_SPOKEN.sub(lambda m: m[1].capitalize(), out)
+    """What the voice says for a checked line: a sentence, not a graphic's compact form; ids as a
+    commentator names players; units in full. The substitutions are fixed, so what is said carries
+    exactly the checked line's numbers and players."""
+    out = TEAM_SPOKEN.sub(lambda m: m[1].capitalize(), _sentence(text))
+    out = _names(out)
     out = out.replace("→", "to").replace("km/h", "kilometres an hour")
+    out = re.sub(r"(\d+(?:\.\d+)?) m pass\b", r"\1-metre pass", out)
     out = re.sub(r"(\d+(?:\.\d+)?) m\b", r"\1 metres", out)
     return out[0].upper() + out[1:] if out else out
 
@@ -275,7 +336,8 @@ def candidates(
                             "reason": "cites unknown events"})
             continue
         last = max(cited, key=lambda e: (e["t"], e["id"]))
-        versions = checked([f"Fact-checked: {cue['text']}"], list(cue["evidence"]))
+        # Said as the sentence itself: that it was checked is shown in How we know, never said.
+        versions = checked([cue["text"]], list(cue["evidence"]))
         source = "insight"
         if versions and (upgrades or {}).get(cue["id"]):
             text = upgrades[cue["id"]]
