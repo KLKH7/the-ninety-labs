@@ -88,3 +88,18 @@ def test_each_piece_of_evidence_alone_moves_the_side(weights):
     tracks, info, r = sided(TEAMS + [(15.0, 60.0, PURPLE)])
     feats = sides.features(tracks, info, r)
     assert any(sides.p_home(f, weights) != 0.5 for f in feats.values())
+
+
+def test_the_radar_gives_the_tactical_views_the_sides_the_events_do():
+    from ninety.vision import tracked_frames
+
+    reddish = [195.0, 31.0, 43.0]  # within noise of the red kit: the kit alone says away
+    scene = TEAMS + [(5.0, 60.0, reddish)]  # but he stands deepest of all in home's half
+    tracks, info, r = sided(scene, frames=40, ball=(30.0, 30.0))  # the radar draws frames with a ball
+    assert next(t for t in tracks if tuple(t.rgb[0]) == tuple(reddish)).team == "away"
+    sides.apply(tracks, info, r)
+    assert next(t for t in tracks if tuple(t.rgb[0]) == tuple(reddish)).team == "home"
+    built = tracked_frames.build(r, "clip")
+    near_him = [p for f in built["frames"] for p in f["players"]
+                if abs(p["x"] - 5.0) < 0.5 and abs(p["y"] - 60.0) < 0.5]
+    assert near_him and all(p["team"] == "home" for p in near_him)

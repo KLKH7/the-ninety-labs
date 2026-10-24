@@ -35,6 +35,7 @@ import json
 import math
 from pathlib import Path
 
+from ninety.vision import sides
 from ninety.vision import track as tr
 
 SOURCE = "tracked"
@@ -101,6 +102,8 @@ def build(rows: list[dict], clip: str, smooth_frames: int = SMOOTH_FRAMES) -> di
     were made."""
     tracks = tr.track_players(rows)
     teams = tr.assign_teams(tracks)
+    if sides.whole_pitch(rows):  # the tactical views: the same sides events.detect gives (sides.py)
+        teams["spatial_changed"] = sides.apply(tracks, teams, rows)
     kept = [t for t in tracks if t.team is not None and len(t.frames) >= MIN_TRACK_FRAMES]
     at: dict[int, list[dict]] = {}
     for t in kept:
