@@ -1,6 +1,6 @@
 # Demo match: pre-registered choice and edit of the condensed full match
 
-Status: **pre-registered, not yet applied.** The rule is fixed and merged here before any match in
+Status: **applied on Oct 24 (see Result); the demo shows seed 8080 by Kian's choice, stated there.** The rule is fixed and merged here before any match in
 its pool is simulated on the final engine. It is applied once, at the engine SHA the Coordinator
 names after the last engine merges, and its output is recorded below. If the footage then has a
 defect, that is reported and fixed in the renderer; the match is not swapped for a better-looking
@@ -182,5 +182,20 @@ the referee ends the first half (the `half_time` event, 2700.04 s here) and the 
 off 5.8 s later, still without a change of ends, so the rule's fixed directions hold. The always-in
 45:00 segment therefore shows the real whistle and the restart. The rule reads no `half_time` event
 beyond ending a passing move at it, as any other event does.
+
+**The match shown is seed 8080, not the rule's pick (Kian's decision, Oct 24).** After seeing the
+result, including the goal timings above, Kian chose seed 8080 for the demo as a presentation
+choice: a 4-1 comeback with goals in both halves (the away side at 21:32, then the home side at
+37:24, 44:31, 67:08 and 70:36), where the rule's pick has all five in the first half. This is a
+human choice made after looking, not the rule's output, and is stated as such. 8080 passes all four
+gates and ranks 4th of the 15 that do, with a score of 59.5 (table above). The ranking, the gates,
+the weights and the edit rule are unchanged; the rule's pick stays 8076, and its manifest stays in
+[demo-match-8076.json](demo-match-8076.json).
+
+The unchanged edit rule cuts 8080 to 16.9 minutes (1,016 s) in 34 segments, inside the target with
+no adjustment. Its chapters are the five goals, 7 saves, 12 shots, 2 corners, 2 free kicks, 4
+passing moves, the kick-off, 45:00 (the half-time whistle at 2700.04 s) and the end. The segments,
+chapters and render commands are in [demo-match-8080.json](demo-match-8080.json), which is what the
+demo renders.
 
 **Render checks:** filled in when the segments are rendered.
