@@ -1,0 +1,1809 @@
+{
+ "seed": 8076,
+ "score": 69.9,
+ "top5": [
+  {
+   "seed": 8076,
+   "gates": {
+    "G1_contract": true,
+    "G2_completion": true,
+    "G3_football_sense": true,
+    "G4_goals": true
+   },
+   "passed": true,
+   "fs_mean_rank": 14.5,
+   "fs_bar": 20.785714285714285,
+   "score": 69.9,
+   "counts": {
+    "goals": {
+     "home": 4,
+     "away": 1
+    },
+    "on_target": {
+     "home": 14,
+     "away": 6
+    },
+    "saves": 15,
+    "set_pieces": 7,
+    "moves": 62,
+    "passes": 954,
+    "completion": 0.8081761006289309,
+    "possession_changes": 214
+   }
+  },
+  {
+   "seed": 8069,
+   "gates": {
+    "G1_contract": true,
+    "G2_completion": true,
+    "G3_football_sense": true,
+    "G4_goals": true
+   },
+   "passed": true,
+   "fs_mean_rank": 17.071428571428573,
+   "fs_bar": 20.785714285714285,
+   "score": 65.7,
+   "counts": {
+    "goals": {
+     "home": 3,
+     "away": 0
+    },
+    "on_target": {
+     "home": 9,
+     "away": 7
+    },
+    "saves": 13,
+    "set_pieces": 15,
+    "moves": 81,
+    "passes": 1124,
+    "completion": 0.8745551601423488,
+    "possession_changes": 190
+   }
+  },
+  {
+   "seed": 8085,
+   "gates": {
+    "G1_contract": true,
+    "G2_completion": true,
+    "G3_football_sense": true,
+    "G4_goals": true
+   },
+   "passed": true,
+   "fs_mean_rank": 15.285714285714286,
+   "fs_bar": 20.785714285714285,
+   "score": 60.1,
+   "counts": {
+    "goals": {
+     "home": 3,
+     "away": 0
+    },
+    "on_target": {
+     "home": 7,
+     "away": 7
+    },
+    "saves": 11,
+    "set_pieces": 13,
+    "moves": 78,
+    "passes": 1113,
+    "completion": 0.876010781671159,
+    "possession_changes": 182
+   }
+  },
+  {
+   "seed": 8080,
+   "gates": {
+    "G1_contract": true,
+    "G2_completion": true,
+    "G3_football_sense": true,
+    "G4_goals": true
+   },
+   "passed": true,
+   "fs_mean_rank": 19.714285714285715,
+   "fs_bar": 20.785714285714285,
+   "score": 59.5,
+   "counts": {
+    "goals": {
+     "home": 4,
+     "away": 1
+    },
+    "on_target": {
+     "home": 10,
+     "away": 3
+    },
+    "saves": 8,
+    "set_pieces": 9,
+    "moves": 75,
+    "passes": 1074,
+    "completion": 0.8324022346368715,
+    "possession_changes": 226
+   }
+  },
+  {
+   "seed": 8053,
+   "gates": {
+    "G1_contract": true,
+    "G2_completion": true,
+    "G3_football_sense": true,
+    "G4_goals": true
+   },
+   "passed": true,
+   "fs_mean_rank": 20.5,
+   "fs_bar": 20.785714285714285,
+   "score": 59.1,
+   "counts": {
+    "goals": {
+     "home": 3,
+     "away": 0
+    },
+    "on_target": {
+     "home": 11,
+     "away": 3
+    },
+    "saves": 11,
+    "set_pieces": 13,
+    "moves": 73,
+    "passes": 1126,
+    "completion": 0.8579040852575488,
+    "possession_changes": 204
+   }
+  }
+ ],
+ "edit": {
+  "segments": [
+   {
+    "start_s": 0.0,
+    "end_s": 20.0,
+    "video_start_s": 0.0
+   },
+   {
+    "start_s": 99.64,
+    "end_s": 117.64,
+    "video_start_s": 20.0
+   },
+   {
+    "start_s": 142.2,
+    "end_s": 156.2,
+    "video_start_s": 38.0
+   },
+   {
+    "start_s": 173.44,
+    "end_s": 191.44,
+    "video_start_s": 52.0
+   },
+   {
+    "start_s": 325.8,
+    "end_s": 339.8,
+    "video_start_s": 70.0
+   },
+   {
+    "start_s": 450.76,
+    "end_s": 468.76,
+    "video_start_s": 84.0
+   },
+   {
+    "start_s": 659.24,
+    "end_s": 704.24,
+    "video_start_s": 102.0
+   },
+   {
+    "start_s": 918.08,
+    "end_s": 956.68,
+    "video_start_s": 147.0
+   },
+   {
+    "start_s": 979.6,
+    "end_s": 1000.0,
+    "video_start_s": 185.6
+   },
+   {
+    "start_s": 1066.48,
+    "end_s": 1084.48,
+    "video_start_s": 206.0
+   },
+   {
+    "start_s": 1098.04,
+    "end_s": 1143.04,
+    "video_start_s": 224.0
+   },
+   {
+    "start_s": 1224.52,
+    "end_s": 1242.52,
+    "video_start_s": 269.0
+   },
+   {
+    "start_s": 1274.36,
+    "end_s": 1319.36,
+    "video_start_s": 287.0
+   },
+   {
+    "start_s": 1517.64,
+    "end_s": 1535.64,
+    "video_start_s": 332.0
+   },
+   {
+    "start_s": 1558.96,
+    "end_s": 1576.96,
+    "video_start_s": 350.0
+   },
+   {
+    "start_s": 1625.76,
+    "end_s": 1643.76,
+    "video_start_s": 368.0
+   },
+   {
+    "start_s": 1691.68,
+    "end_s": 1731.84,
+    "video_start_s": 386.0
+   },
+   {
+    "start_s": 1743.6,
+    "end_s": 1761.6,
+    "video_start_s": 426.16
+   },
+   {
+    "start_s": 1908.72,
+    "end_s": 1959.32,
+    "video_start_s": 444.16
+   },
+   {
+    "start_s": 2221.44,
+    "end_s": 2235.44,
+    "video_start_s": 494.76
+   },
+   {
+    "start_s": 2246.28,
+    "end_s": 2278.32,
+    "video_start_s": 508.76
+   },
+   {
+    "start_s": 2376.72,
+    "end_s": 2421.72,
+    "video_start_s": 540.8
+   },
+   {
+    "start_s": 2492.12,
+    "end_s": 2510.12,
+    "video_start_s": 585.8
+   },
+   {
+    "start_s": 2531.36,
+    "end_s": 2545.36,
+    "video_start_s": 603.8
+   },
+   {
+    "start_s": 2690.0,
+    "end_s": 2710.0,
+    "video_start_s": 617.8
+   },
+   {
+    "start_s": 2888.76,
+    "end_s": 2923.32,
+    "video_start_s": 637.8
+   },
+   {
+    "start_s": 3241.28,
+    "end_s": 3259.28,
+    "video_start_s": 672.36
+   },
+   {
+    "start_s": 3281.64,
+    "end_s": 3340.68,
+    "video_start_s": 690.36
+   },
+   {
+    "start_s": 3355.04,
+    "end_s": 3373.04,
+    "video_start_s": 749.4
+   },
+   {
+    "start_s": 3419.16,
+    "end_s": 3437.16,
+    "video_start_s": 767.4
+   },
+   {
+    "start_s": 3497.32,
+    "end_s": 3534.92,
+    "video_start_s": 785.4
+   },
+   {
+    "start_s": 3588.8,
+    "end_s": 3606.8,
+    "video_start_s": 823.0
+   },
+   {
+    "start_s": 3776.08,
+    "end_s": 3794.08,
+    "video_start_s": 841.0
+   },
+   {
+    "start_s": 3826.92,
+    "end_s": 3840.92,
+    "video_start_s": 859.0
+   },
+   {
+    "start_s": 4222.84,
+    "end_s": 4240.84,
+    "video_start_s": 873.0
+   },
+   {
+    "start_s": 4686.6,
+    "end_s": 4723.6,
+    "video_start_s": 891.0
+   },
+   {
+    "start_s": 4800.8,
+    "end_s": 4818.8,
+    "video_start_s": 928.0
+   },
+   {
+    "start_s": 5200.56,
+    "end_s": 5218.56,
+    "video_start_s": 946.0
+   },
+   {
+    "start_s": 5312.24,
+    "end_s": 5330.24,
+    "video_start_s": 964.0
+   },
+   {
+    "start_s": 5359.72,
+    "end_s": 5400.0,
+    "video_start_s": 982.0
+   }
+  ],
+  "chapters": [
+   {
+    "type": "kickoff",
+    "clock": "00:00",
+    "match_s": 0.0,
+    "video_s": 0.0
+   },
+   {
+    "type": "shot",
+    "clock": "01:51",
+    "match_s": 111.64,
+    "video_s": 20.0
+   },
+   {
+    "type": "corner",
+    "clock": "02:24",
+    "match_s": 144.2,
+    "video_s": 38.0
+   },
+   {
+    "type": "save",
+    "clock": "03:05",
+    "match_s": 185.44,
+    "video_s": 52.0
+   },
+   {
+    "type": "corner",
+    "clock": "05:27",
+    "match_s": 327.8,
+    "video_s": 70.0
+   },
+   {
+    "type": "save",
+    "clock": "07:42",
+    "match_s": 462.76,
+    "video_s": 84.0
+   },
+   {
+    "type": "goal",
+    "clock": "11:24",
+    "match_s": 684.24,
+    "video_s": 102.0
+   },
+   {
+    "type": "move",
+    "clock": "15:20",
+    "match_s": 920.08,
+    "video_s": 147.0
+   },
+   {
+    "type": "save",
+    "clock": "16:31",
+    "match_s": 991.6,
+    "video_s": 185.6
+   },
+   {
+    "type": "save",
+    "clock": "17:58",
+    "match_s": 1078.48,
+    "video_s": 206.0
+   },
+   {
+    "type": "goal",
+    "clock": "18:43",
+    "match_s": 1123.04,
+    "video_s": 224.0
+   },
+   {
+    "type": "shot",
+    "clock": "20:36",
+    "match_s": 1236.52,
+    "video_s": 269.0
+   },
+   {
+    "type": "goal",
+    "clock": "21:39",
+    "match_s": 1299.36,
+    "video_s": 287.0
+   },
+   {
+    "type": "shot",
+    "clock": "25:29",
+    "match_s": 1529.64,
+    "video_s": 332.0
+   },
+   {
+    "type": "save",
+    "clock": "26:10",
+    "match_s": 1570.96,
+    "video_s": 350.0
+   },
+   {
+    "type": "shot",
+    "clock": "27:17",
+    "match_s": 1637.76,
+    "video_s": 368.0
+   },
+   {
+    "type": "move",
+    "clock": "28:13",
+    "match_s": 1693.68,
+    "video_s": 386.0
+   },
+   {
+    "type": "shot",
+    "clock": "29:15",
+    "match_s": 1755.6,
+    "video_s": 426.16
+   },
+   {
+    "type": "goal",
+    "clock": "32:19",
+    "match_s": 1939.32,
+    "video_s": 444.16
+   },
+   {
+    "type": "free_kick",
+    "clock": "37:03",
+    "match_s": 2223.44,
+    "video_s": 494.76
+   },
+   {
+    "type": "move",
+    "clock": "37:28",
+    "match_s": 2248.28,
+    "video_s": 508.76
+   },
+   {
+    "type": "goal",
+    "clock": "40:01",
+    "match_s": 2401.72,
+    "video_s": 540.8
+   },
+   {
+    "type": "shot",
+    "clock": "41:44",
+    "match_s": 2504.12,
+    "video_s": 585.8
+   },
+   {
+    "type": "corner",
+    "clock": "42:13",
+    "match_s": 2533.36,
+    "video_s": 603.8
+   },
+   {
+    "type": "half",
+    "clock": "45:00",
+    "match_s": 2700.0,
+    "video_s": 627.8
+   },
+   {
+    "type": "move",
+    "clock": "48:10",
+    "match_s": 2890.76,
+    "video_s": 637.8
+   },
+   {
+    "type": "shot",
+    "clock": "54:13",
+    "match_s": 3253.28,
+    "video_s": 672.36
+   },
+   {
+    "type": "save",
+    "clock": "55:34",
+    "match_s": 3334.68,
+    "video_s": 690.36
+   },
+   {
+    "type": "save",
+    "clock": "56:07",
+    "match_s": 3367.04,
+    "video_s": 749.4
+   },
+   {
+    "type": "save",
+    "clock": "57:11",
+    "match_s": 3431.16,
+    "video_s": 767.4
+   },
+   {
+    "type": "move",
+    "clock": "58:19",
+    "match_s": 3499.32,
+    "video_s": 785.4
+   },
+   {
+    "type": "save",
+    "clock": "60:00",
+    "match_s": 3600.8,
+    "video_s": 823.0
+   },
+   {
+    "type": "save",
+    "clock": "63:08",
+    "match_s": 3788.08,
+    "video_s": 841.0
+   },
+   {
+    "type": "corner",
+    "clock": "63:48",
+    "match_s": 3828.92,
+    "video_s": 859.0
+   },
+   {
+    "type": "shot",
+    "clock": "70:34",
+    "match_s": 4234.84,
+    "video_s": 873.0
+   },
+   {
+    "type": "move",
+    "clock": "78:08",
+    "match_s": 4688.6,
+    "video_s": 891.0
+   },
+   {
+    "type": "save",
+    "clock": "80:12",
+    "match_s": 4812.8,
+    "video_s": 928.0
+   },
+   {
+    "type": "save",
+    "clock": "86:52",
+    "match_s": 5212.56,
+    "video_s": 946.0
+   },
+   {
+    "type": "save",
+    "clock": "88:44",
+    "match_s": 5324.24,
+    "video_s": 964.0
+   },
+   {
+    "type": "save",
+    "clock": "89:31",
+    "match_s": 5371.72,
+    "video_s": 982.0
+   },
+   {
+    "type": "full_time",
+    "clock": "89:40",
+    "match_s": 5380.0,
+    "video_s": 1002.28
+   }
+  ],
+  "total_s": 1022.28,
+  "adjust": []
+ },
+ "render": [
+  "uv run ninety-render --seed 8076 --start 0 --seconds 20 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg00",
+  "uv run ninety-render --seed 8076 --start 99.64 --seconds 18 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg01",
+  "uv run ninety-render --seed 8076 --start 142.2 --seconds 14 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg02",
+  "uv run ninety-render --seed 8076 --start 173.44 --seconds 18 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg03",
+  "uv run ninety-render --seed 8076 --start 325.8 --seconds 14 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg04",
+  "uv run ninety-render --seed 8076 --start 450.76 --seconds 18 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg05",
+  "uv run ninety-render --seed 8076 --start 659.24 --seconds 45 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg06",
+  "uv run ninety-render --seed 8076 --start 918.08 --seconds 38.6 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg07",
+  "uv run ninety-render --seed 8076 --start 979.6 --seconds 20.4 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg08",
+  "uv run ninety-render --seed 8076 --start 1066.48 --seconds 18 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg09",
+  "uv run ninety-render --seed 8076 --start 1098.04 --seconds 45 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg10",
+  "uv run ninety-render --seed 8076 --start 1224.52 --seconds 18 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg11",
+  "uv run ninety-render --seed 8076 --start 1274.36 --seconds 45 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg12",
+  "uv run ninety-render --seed 8076 --start 1517.64 --seconds 18 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg13",
+  "uv run ninety-render --seed 8076 --start 1558.96 --seconds 18 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg14",
+  "uv run ninety-render --seed 8076 --start 1625.76 --seconds 18 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg15",
+  "uv run ninety-render --seed 8076 --start 1691.68 --seconds 40.16 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg16",
+  "uv run ninety-render --seed 8076 --start 1743.6 --seconds 18 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg17",
+  "uv run ninety-render --seed 8076 --start 1908.72 --seconds 50.6 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg18",
+  "uv run ninety-render --seed 8076 --start 2221.44 --seconds 14 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg19",
+  "uv run ninety-render --seed 8076 --start 2246.28 --seconds 32.04 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg20",
+  "uv run ninety-render --seed 8076 --start 2376.72 --seconds 45 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg21",
+  "uv run ninety-render --seed 8076 --start 2492.12 --seconds 18 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg22",
+  "uv run ninety-render --seed 8076 --start 2531.36 --seconds 14 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg23",
+  "uv run ninety-render --seed 8076 --start 2690 --seconds 20 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg24",
+  "uv run ninety-render --seed 8076 --start 2888.76 --seconds 34.56 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg25",
+  "uv run ninety-render --seed 8076 --start 3241.28 --seconds 18 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg26",
+  "uv run ninety-render --seed 8076 --start 3281.64 --seconds 59.04 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg27",
+  "uv run ninety-render --seed 8076 --start 3355.04 --seconds 18 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg28",
+  "uv run ninety-render --seed 8076 --start 3419.16 --seconds 18 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg29",
+  "uv run ninety-render --seed 8076 --start 3497.32 --seconds 37.6 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg30",
+  "uv run ninety-render --seed 8076 --start 3588.8 --seconds 18 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg31",
+  "uv run ninety-render --seed 8076 --start 3776.08 --seconds 18 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg32",
+  "uv run ninety-render --seed 8076 --start 3826.92 --seconds 14 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg33",
+  "uv run ninety-render --seed 8076 --start 4222.84 --seconds 18 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg34",
+  "uv run ninety-render --seed 8076 --start 4686.6 --seconds 37 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg35",
+  "uv run ninety-render --seed 8076 --start 4800.8 --seconds 18 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg36",
+  "uv run ninety-render --seed 8076 --start 5200.56 --seconds 18 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg37",
+  "uv run ninety-render --seed 8076 --start 5312.24 --seconds 18 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg38",
+  "uv run ninety-render --seed 8076 --start 5359.72 --seconds 40.28 --set dead_ball_cut=true --set kit_contrast=broadcast --set stadium=broadcast --set views=tactical --mp4 --gpu --out runs/demo-match/seed8076/seg39"
+ ],
+ "gates": [
+  {
+   "seed": 8051,
+   "gates": {
+    "G1_contract": true,
+    "G2_completion": true,
+    "G3_football_sense": false,
+    "G4_goals": true
+   },
+   "passed": false,
+   "fs_mean_rank": 22.285714285714285,
+   "fs_bar": 20.785714285714285,
+   "score": 43.0,
+   "counts": {
+    "goals": {
+     "home": 0,
+     "away": 1
+    },
+    "on_target": {
+     "home": 7,
+     "away": 4
+    },
+    "saves": 10,
+    "set_pieces": 4,
+    "moves": 65,
+    "passes": 1156,
+    "completion": 0.7984429065743944,
+    "possession_changes": 292
+   }
+  },
+  {
+   "seed": 8052,
+   "gates": {
+    "G1_contract": true,
+    "G2_completion": true,
+    "G3_football_sense": true,
+    "G4_goals": true
+   },
+   "passed": true,
+   "fs_mean_rank": 14.428571428571429,
+   "fs_bar": 20.785714285714285,
+   "score": 46.8,
+   "counts": {
+    "goals": {
+     "home": 0,
+     "away": 2
+    },
+    "on_target": {
+     "home": 10,
+     "away": 4
+    },
+    "saves": 12,
+    "set_pieces": 4,
+    "moves": 44,
+    "passes": 714,
+    "completion": 0.8207282913165266,
+    "possession_changes": 178
+   }
+  },
+  {
+   "seed": 8053,
+   "gates": {
+    "G1_contract": true,
+    "G2_completion": true,
+    "G3_football_sense": true,
+    "G4_goals": true
+   },
+   "passed": true,
+   "fs_mean_rank": 20.5,
+   "fs_bar": 20.785714285714285,
+   "score": 59.1,
+   "counts": {
+    "goals": {
+     "home": 3,
+     "away": 0
+    },
+    "on_target": {
+     "home": 11,
+     "away": 3
+    },
+    "saves": 11,
+    "set_pieces": 13,
+    "moves": 73,
+    "passes": 1126,
+    "completion": 0.8579040852575488,
+    "possession_changes": 204
+   }
+  },
+  {
+   "seed": 8054,
+   "gates": {
+    "G1_contract": true,
+    "G2_completion": true,
+    "G3_football_sense": false,
+    "G4_goals": true
+   },
+   "passed": false,
+   "fs_mean_rank": 24.428571428571427,
+   "fs_bar": 20.785714285714285,
+   "score": 69.0,
+   "counts": {
+    "goals": {
+     "home": 1,
+     "away": 2
+    },
+    "on_target": {
+     "home": 10,
+     "away": 10
+    },
+    "saves": 17,
+    "set_pieces": 8,
+    "moves": 75,
+    "passes": 1110,
+    "completion": 0.8531531531531531,
+    "possession_changes": 208
+   }
+  },
+  {
+   "seed": 8055,
+   "gates": {
+    "G1_contract": true,
+    "G2_completion": true,
+    "G3_football_sense": false,
+    "G4_goals": false
+   },
+   "passed": false,
+   "fs_mean_rank": 25.142857142857142,
+   "fs_bar": 20.785714285714285,
+   "score": 52.400000000000006,
+   "counts": {
+    "goals": {
+     "home": 0,
+     "away": 0
+    },
+    "on_target": {
+     "home": 10,
+     "away": 5
+    },
+    "saves": 15,
+    "set_pieces": 12,
+    "moves": 82,
+    "passes": 1186,
+    "completion": 0.8709949409780776,
+    "possession_changes": 217
+   }
+  },
+  {
+   "seed": 8056,
+   "gates": {
+    "G1_contract": true,
+    "G2_completion": false,
+    "G3_football_sense": true,
+    "G4_goals": false
+   },
+   "passed": false,
+   "fs_mean_rank": 20.0,
+   "fs_bar": 20.785714285714285,
+   "score": 34.8,
+   "counts": {
+    "goals": {
+     "home": 0,
+     "away": 0
+    },
+    "on_target": {
+     "home": 8,
+     "away": 0
+    },
+    "saves": 8,
+    "set_pieces": 6,
+    "moves": 79,
+    "passes": 1208,
+    "completion": 0.8832781456953642,
+    "possession_changes": 191
+   }
+  },
+  {
+   "seed": 8057,
+   "gates": {
+    "G1_contract": true,
+    "G2_completion": true,
+    "G3_football_sense": true,
+    "G4_goals": true
+   },
+   "passed": true,
+   "fs_mean_rank": 10.214285714285714,
+   "fs_bar": 20.785714285714285,
+   "score": 32.9,
+   "counts": {
+    "goals": {
+     "home": 1,
+     "away": 1
+    },
+    "on_target": {
+     "home": 5,
+     "away": 2
+    },
+    "saves": 5,
+    "set_pieces": 9,
+    "moves": 32,
+    "passes": 489,
+    "completion": 0.8118609406952966,
+    "possession_changes": 126
+   }
+  },
+  {
+   "seed": 8058,
+   "gates": {
+    "G1_contract": true,
+    "G2_completion": true,
+    "G3_football_sense": true,
+    "G4_goals": true
+   },
+   "passed": true,
+   "fs_mean_rank": 18.785714285714285,
+   "fs_bar": 20.785714285714285,
+   "score": 57.2,
+   "counts": {
+    "goals": {
+     "home": 1,
+     "away": 0
+    },
+    "on_target": {
+     "home": 14,
+     "away": 3
+    },
+    "saves": 16,
+    "set_pieces": 8,
+    "moves": 66,
+    "passes": 1150,
+    "completion": 0.8547826086956521,
+    "possession_changes": 222
+   }
+  },
+  {
+   "seed": 8059,
+   "gates": {
+    "G1_contract": true,
+    "G2_completion": true,
+    "G3_football_sense": true,
+    "G4_goals": true
+   },
+   "passed": true,
+   "fs_mean_rank": 11.428571428571429,
+   "fs_bar": 20.785714285714285,
+   "score": 34.2,
+   "counts": {
+    "goals": {
+     "home": 1,
+     "away": 0
+    },
+    "on_target": {
+     "home": 6,
+     "away": 3
+    },
+    "saves": 8,
+    "set_pieces": 4,
+    "moves": 41,
+    "passes": 627,
+    "completion": 0.84688995215311,
+    "possession_changes": 134
+   }
+  },
+  {
+   "seed": 8060,
+   "gates": {
+    "G1_contract": true,
+    "G2_completion": true,
+    "G3_football_sense": false,
+    "G4_goals": true
+   },
+   "passed": false,
+   "fs_mean_rank": 22.428571428571427,
+   "fs_bar": 20.785714285714285,
+   "score": 60.8,
+   "counts": {
+    "goals": {
+     "home": 1,
+     "away": 4
+    },
+    "on_target": {
+     "home": 4,
+     "away": 9
+    },
+    "saves": 8,
+    "set_pieces": 16,
+    "moves": 64,
+    "passes": 984,
+    "completion": 0.8516260162601627,
+    "possession_changes": 180
+   }
+  },
+  {
+   "seed": 8061,
+   "gates": {
+    "G1_contract": true,
+    "G2_completion": false,
+    "G3_football_sense": true,
+    "G4_goals": true
+   },
+   "passed": false,
+   "fs_mean_rank": 18.5,
+   "fs_bar": 20.785714285714285,
+   "score": 40.5,
+   "counts": {
+    "goals": {
+     "home": 0,
+     "away": 1
+    },
+    "on_target": {
+     "home": 4,
+     "away": 3
+    },
+    "saves": 6,
+    "set_pieces": 9,
+    "moves": 80,
+    "passes": 1215,
+    "completion": 0.8839506172839506,
+    "possession_changes": 200
+   }
+  },
+  {
+   "seed": 8062,
+   "gates": {
+    "G1_contract": true,
+    "G2_completion": true,
+    "G3_football_sense": true,
+    "G4_goals": true
+   },
+   "passed": true,
+   "fs_mean_rank": 20.357142857142858,
+   "fs_bar": 20.785714285714285,
+   "score": 36.2,
+   "counts": {
+    "goals": {
+     "home": 0,
+     "away": 1
+    },
+    "on_target": {
+     "home": 1,
+     "away": 7
+    },
+    "saves": 7,
+    "set_pieces": 10,
+    "moves": 66,
+    "passes": 1151,
+    "completion": 0.8531711555169418,
+    "possession_changes": 218
+   }
+  },
+  {
+   "seed": 8063,
+   "gates": {
+    "G1_contract": true,
+    "G2_completion": true,
+    "G3_football_sense": false,
+    "G4_goals": true
+   },
+   "passed": false,
+   "fs_mean_rank": 23.571428571428573,
+   "fs_bar": 20.785714285714285,
+   "score": 52.2,
+   "counts": {
+    "goals": {
+     "home": 0,
+     "away": 2
+    },
+    "on_target": {
+     "home": 6,
+     "away": 8
+    },
+    "saves": 12,
+    "set_pieces": 10,
+    "moves": 56,
+    "passes": 1048,
+    "completion": 0.8120229007633588,
+    "possession_changes": 245
+   }
+  },
+  {
+   "seed": 8064,
+   "gates": {
+    "G1_contract": true,
+    "G2_completion": true,
+    "G3_football_sense": false,
+    "G4_goals": true
+   },
+   "passed": false,
+   "fs_mean_rank": 21.357142857142858,
+   "fs_bar": 20.785714285714285,
+   "score": 36.4,
+   "counts": {
+    "goals": {
+     "home": 1,
+     "away": 0
+    },
+    "on_target": {
+     "home": 2,
+     "away": 4
+    },
+    "saves": 5,
+    "set_pieces": 10,
+    "moves": 67,
+    "passes": 1110,
+    "completion": 0.8441441441441442,
+    "possession_changes": 234
+   }
+  },
+  {
+   "seed": 8065,
+   "gates": {
+    "G1_contract": true,
+    "G2_completion": true,
+    "G3_football_sense": true,
+    "G4_goals": true
+   },
+   "passed": true,
+   "fs_mean_rank": 20.357142857142858,
+   "fs_bar": 20.785714285714285,
+   "score": 55.5,
+   "counts": {
+    "goals": {
+     "home": 2,
+     "away": 1
+    },
+    "on_target": {
+     "home": 5,
+     "away": 8
+    },
+    "saves": 10,
+    "set_pieces": 9,
+    "moves": 75,
+    "passes": 1179,
+    "completion": 0.8608990670059372,
+    "possession_changes": 219
+   }
+  },
+  {
+   "seed": 8066,
+   "gates": {
+    "G1_contract": true,
+    "G2_completion": false,
+    "G3_football_sense": false,
+    "G4_goals": true
+   },
+   "passed": false,
+   "fs_mean_rank": 23.714285714285715,
+   "fs_bar": 20.785714285714285,
+   "score": 68.3,
+   "counts": {
+    "goals": {
+     "home": 1,
+     "away": 1
+    },
+    "on_target": {
+     "home": 11,
+     "away": 7
+    },
+    "saves": 16,
+    "set_pieces": 17,
+    "moves": 79,
+    "passes": 1083,
+    "completion": 0.8827331486611265,
+    "possession_changes": 179
+   }
+  },
+  {
+   "seed": 8067,
+   "gates": {
+    "G1_contract": true,
+    "G2_completion": false,
+    "G3_football_sense": false,
+    "G4_goals": true
+   },
+   "passed": false,
+   "fs_mean_rank": 23.928571428571427,
+   "fs_bar": 20.785714285714285,
+   "score": 71.2,
+   "counts": {
+    "goals": {
+     "home": 1,
+     "away": 1
+    },
+    "on_target": {
+     "home": 8,
+     "away": 11
+    },
+    "saves": 17,
+    "set_pieces": 18,
+    "moves": 81,
+    "passes": 1203,
+    "completion": 0.8811305070656692,
+    "possession_changes": 202
+   }
+  },
+  {
+   "seed": 8068,
+   "gates": {
+    "G1_contract": true,
+    "G2_completion": true,
+    "G3_football_sense": false,
+    "G4_goals": true
+   },
+   "passed": false,
+   "fs_mean_rank": 21.357142857142858,
+   "fs_bar": 20.785714285714285,
+   "score": 72.3,
+   "counts": {
+    "goals": {
+     "home": 1,
+     "away": 1
+    },
+    "on_target": {
+     "home": 9,
+     "away": 12
+    },
+    "saves": 19,
+    "set_pieces": 15,
+    "moves": 74,
+    "passes": 1029,
+    "completion": 0.8571428571428571,
+    "possession_changes": 211
+   }
+  },
+  {
+   "seed": 8069,
+   "gates": {
+    "G1_contract": true,
+    "G2_completion": true,
+    "G3_football_sense": true,
+    "G4_goals": true
+   },
+   "passed": true,
+   "fs_mean_rank": 17.071428571428573,
+   "fs_bar": 20.785714285714285,
+   "score": 65.7,
+   "counts": {
+    "goals": {
+     "home": 3,
+     "away": 0
+    },
+    "on_target": {
+     "home": 9,
+     "away": 7
+    },
+    "saves": 13,
+    "set_pieces": 15,
+    "moves": 81,
+    "passes": 1124,
+    "completion": 0.8745551601423488,
+    "possession_changes": 190
+   }
+  },
+  {
+   "seed": 8070,
+   "gates": {
+    "G1_contract": true,
+    "G2_completion": true,
+    "G3_football_sense": false,
+    "G4_goals": true
+   },
+   "passed": false,
+   "fs_mean_rank": 25.071428571428573,
+   "fs_bar": 20.785714285714285,
+   "score": 68.4,
+   "counts": {
+    "goals": {
+     "home": 1,
+     "away": 0
+    },
+    "on_target": {
+     "home": 20,
+     "away": 2
+    },
+    "saves": 21,
+    "set_pieces": 14,
+    "moves": 57,
+    "passes": 979,
+    "completion": 0.8192032686414709,
+    "possession_changes": 245
+   }
+  },
+  {
+   "seed": 8071,
+   "gates": {
+    "G1_contract": true,
+    "G2_completion": true,
+    "G3_football_sense": true,
+    "G4_goals": true
+   },
+   "passed": true,
+   "fs_mean_rank": 17.571428571428573,
+   "fs_bar": 20.785714285714285,
+   "score": 49.5,
+   "counts": {
+    "goals": {
+     "home": 2,
+     "away": 1
+    },
+    "on_target": {
+     "home": 7,
+     "away": 3
+    },
+    "saves": 7,
+    "set_pieces": 9,
+    "moves": 75,
+    "passes": 1143,
+    "completion": 0.8346456692913385,
+    "possession_changes": 247
+   }
+  },
+  {
+   "seed": 8072,
+   "gates": {
+    "G1_contract": true,
+    "G2_completion": true,
+    "G3_football_sense": false,
+    "G4_goals": true
+   },
+   "passed": false,
+   "fs_mean_rank": 26.071428571428573,
+   "fs_bar": 20.785714285714285,
+   "score": 52.8,
+   "counts": {
+    "goals": {
+     "home": 1,
+     "away": 1
+    },
+    "on_target": {
+     "home": 1,
+     "away": 11
+    },
+    "saves": 10,
+    "set_pieces": 12,
+    "moves": 74,
+    "passes": 1239,
+    "completion": 0.87409200968523,
+    "possession_changes": 203
+   }
+  },
+  {
+   "seed": 8073,
+   "gates": {
+    "G1_contract": true,
+    "G2_completion": false,
+    "G3_football_sense": true,
+    "G4_goals": true
+   },
+   "passed": false,
+   "fs_mean_rank": 20.642857142857142,
+   "fs_bar": 20.785714285714285,
+   "score": 51.4,
+   "counts": {
+    "goals": {
+     "home": 2,
+     "away": 0
+    },
+    "on_target": {
+     "home": 7,
+     "away": 5
+    },
+    "saves": 10,
+    "set_pieces": 8,
+    "moves": 77,
+    "passes": 1218,
+    "completion": 0.8850574712643678,
+    "possession_changes": 187
+   }
+  },
+  {
+   "seed": 8074,
+   "gates": {
+    "G1_contract": false,
+    "G2_completion": true,
+    "G3_football_sense": false,
+    "G4_goals": true
+   },
+   "passed": false,
+   "fs_mean_rank": 22.642857142857142,
+   "fs_bar": 20.785714285714285,
+   "score": 54.2,
+   "counts": {
+    "goals": {
+     "home": 1,
+     "away": 0
+    },
+    "on_target": {
+     "home": 6,
+     "away": 8
+    },
+    "saves": 13,
+    "set_pieces": 12,
+    "moves": 71,
+    "passes": 1125,
+    "completion": 0.8444444444444444,
+    "possession_changes": 238
+   }
+  },
+  {
+   "seed": 8075,
+   "gates": {
+    "G1_contract": true,
+    "G2_completion": true,
+    "G3_football_sense": false,
+    "G4_goals": true
+   },
+   "passed": false,
+   "fs_mean_rank": 20.928571428571427,
+   "fs_bar": 20.785714285714285,
+   "score": 54.6,
+   "counts": {
+    "goals": {
+     "home": 1,
+     "away": 1
+    },
+    "on_target": {
+     "home": 6,
+     "away": 6
+    },
+    "saves": 10,
+    "set_pieces": 12,
+    "moves": 83,
+    "passes": 1238,
+    "completion": 0.8707592891760905,
+    "possession_changes": 206
+   }
+  },
+  {
+   "seed": 8076,
+   "gates": {
+    "G1_contract": true,
+    "G2_completion": true,
+    "G3_football_sense": true,
+    "G4_goals": true
+   },
+   "passed": true,
+   "fs_mean_rank": 14.5,
+   "fs_bar": 20.785714285714285,
+   "score": 69.9,
+   "counts": {
+    "goals": {
+     "home": 4,
+     "away": 1
+    },
+    "on_target": {
+     "home": 14,
+     "away": 6
+    },
+    "saves": 15,
+    "set_pieces": 7,
+    "moves": 62,
+    "passes": 954,
+    "completion": 0.8081761006289309,
+    "possession_changes": 214
+   }
+  },
+  {
+   "seed": 8077,
+   "gates": {
+    "G1_contract": true,
+    "G2_completion": false,
+    "G3_football_sense": false,
+    "G4_goals": true
+   },
+   "passed": false,
+   "fs_mean_rank": 25.142857142857142,
+   "fs_bar": 20.785714285714285,
+   "score": 47.8,
+   "counts": {
+    "goals": {
+     "home": 0,
+     "away": 1
+    },
+    "on_target": {
+     "home": 9,
+     "away": 3
+    },
+    "saves": 11,
+    "set_pieces": 4,
+    "moves": 79,
+    "passes": 1255,
+    "completion": 0.8900398406374502,
+    "possession_changes": 209
+   }
+  },
+  {
+   "seed": 8078,
+   "gates": {
+    "G1_contract": true,
+    "G2_completion": true,
+    "G3_football_sense": false,
+    "G4_goals": true
+   },
+   "passed": false,
+   "fs_mean_rank": 21.857142857142858,
+   "fs_bar": 20.785714285714285,
+   "score": 54.6,
+   "counts": {
+    "goals": {
+     "home": 1,
+     "away": 1
+    },
+    "on_target": {
+     "home": 8,
+     "away": 7
+    },
+    "saves": 13,
+    "set_pieces": 14,
+    "moves": 48,
+    "passes": 903,
+    "completion": 0.7818383167220376,
+    "possession_changes": 238
+   }
+  },
+  {
+   "seed": 8079,
+   "gates": {
+    "G1_contract": true,
+    "G2_completion": true,
+    "G3_football_sense": true,
+    "G4_goals": true
+   },
+   "passed": true,
+   "fs_mean_rank": 16.071428571428573,
+   "fs_bar": 20.785714285714285,
+   "score": 51.5,
+   "counts": {
+    "goals": {
+     "home": 1,
+     "away": 2
+    },
+    "on_target": {
+     "home": 8,
+     "away": 4
+    },
+    "saves": 9,
+    "set_pieces": 9,
+    "moves": 65,
+    "passes": 1052,
+    "completion": 0.873574144486692,
+    "possession_changes": 186
+   }
+  },
+  {
+   "seed": 8080,
+   "gates": {
+    "G1_contract": true,
+    "G2_completion": true,
+    "G3_football_sense": true,
+    "G4_goals": true
+   },
+   "passed": true,
+   "fs_mean_rank": 19.714285714285715,
+   "fs_bar": 20.785714285714285,
+   "score": 59.5,
+   "counts": {
+    "goals": {
+     "home": 4,
+     "away": 1
+    },
+    "on_target": {
+     "home": 10,
+     "away": 3
+    },
+    "saves": 8,
+    "set_pieces": 9,
+    "moves": 75,
+    "passes": 1074,
+    "completion": 0.8324022346368715,
+    "possession_changes": 226
+   }
+  },
+  {
+   "seed": 8081,
+   "gates": {
+    "G1_contract": true,
+    "G2_completion": true,
+    "G3_football_sense": false,
+    "G4_goals": true
+   },
+   "passed": false,
+   "fs_mean_rank": 28.357142857142858,
+   "fs_bar": 20.785714285714285,
+   "score": 70.8,
+   "counts": {
+    "goals": {
+     "home": 2,
+     "away": 1
+    },
+    "on_target": {
+     "home": 10,
+     "away": 9
+    },
+    "saves": 16,
+    "set_pieces": 18,
+    "moves": 69,
+    "passes": 975,
+    "completion": 0.8584615384615385,
+    "possession_changes": 198
+   }
+  },
+  {
+   "seed": 8082,
+   "gates": {
+    "G1_contract": true,
+    "G2_completion": false,
+    "G3_football_sense": true,
+    "G4_goals": false
+   },
+   "passed": false,
+   "fs_mean_rank": 20.0,
+   "fs_bar": 20.785714285714285,
+   "score": 31.2,
+   "counts": {
+    "goals": {
+     "home": 0,
+     "away": 0
+    },
+    "on_target": {
+     "home": 1,
+     "away": 4
+    },
+    "saves": 5,
+    "set_pieces": 8,
+    "moves": 86,
+    "passes": 1197,
+    "completion": 0.8805346700083542,
+    "possession_changes": 192
+   }
+  },
+  {
+   "seed": 8083,
+   "gates": {
+    "G1_contract": true,
+    "G2_completion": true,
+    "G3_football_sense": false,
+    "G4_goals": true
+   },
+   "passed": false,
+   "fs_mean_rank": 22.642857142857142,
+   "fs_bar": 20.785714285714285,
+   "score": 52.2,
+   "counts": {
+    "goals": {
+     "home": 0,
+     "away": 2
+    },
+    "on_target": {
+     "home": 1,
+     "away": 13
+    },
+    "saves": 12,
+    "set_pieces": 12,
+    "moves": 71,
+    "passes": 1149,
+    "completion": 0.835509138381201,
+    "possession_changes": 245
+   }
+  },
+  {
+   "seed": 8084,
+   "gates": {
+    "G1_contract": true,
+    "G2_completion": false,
+    "G3_football_sense": false,
+    "G4_goals": true
+   },
+   "passed": false,
+   "fs_mean_rank": 21.357142857142858,
+   "fs_bar": 20.785714285714285,
+   "score": 45.5,
+   "counts": {
+    "goals": {
+     "home": 0,
+     "away": 2
+    },
+    "on_target": {
+     "home": 1,
+     "away": 9
+    },
+    "saves": 8,
+    "set_pieces": 11,
+    "moves": 80,
+    "passes": 1156,
+    "completion": 0.8814878892733564,
+    "possession_changes": 190
+   }
+  },
+  {
+   "seed": 8085,
+   "gates": {
+    "G1_contract": true,
+    "G2_completion": true,
+    "G3_football_sense": true,
+    "G4_goals": true
+   },
+   "passed": true,
+   "fs_mean_rank": 15.285714285714286,
+   "fs_bar": 20.785714285714285,
+   "score": 60.1,
+   "counts": {
+    "goals": {
+     "home": 3,
+     "away": 0
+    },
+    "on_target": {
+     "home": 7,
+     "away": 7
+    },
+    "saves": 11,
+    "set_pieces": 13,
+    "moves": 78,
+    "passes": 1113,
+    "completion": 0.876010781671159,
+    "possession_changes": 182
+   }
+  },
+  {
+   "seed": 8086,
+   "gates": {
+    "G1_contract": true,
+    "G2_completion": false,
+    "G3_football_sense": false,
+    "G4_goals": false
+   },
+   "passed": false,
+   "fs_mean_rank": 24.5,
+   "fs_bar": 20.785714285714285,
+   "score": 42.8,
+   "counts": {
+    "goals": {
+     "home": 0,
+     "away": 0
+    },
+    "on_target": {
+     "home": 5,
+     "away": 4
+    },
+    "saves": 9,
+    "set_pieces": 14,
+    "moves": 89,
+    "passes": 1250,
+    "completion": 0.892,
+    "possession_changes": 193
+   }
+  },
+  {
+   "seed": 8087,
+   "gates": {
+    "G1_contract": true,
+    "G2_completion": true,
+    "G3_football_sense": true,
+    "G4_goals": true
+   },
+   "passed": true,
+   "fs_mean_rank": 15.142857142857142,
+   "fs_bar": 20.785714285714285,
+   "score": 50.9,
+   "counts": {
+    "goals": {
+     "home": 1,
+     "away": 0
+    },
+    "on_target": {
+     "home": 7,
+     "away": 7
+    },
+    "saves": 13,
+    "set_pieces": 7,
+    "moves": 67,
+    "passes": 1203,
+    "completion": 0.8786367414796342,
+    "possession_changes": 193
+   }
+  },
+  {
+   "seed": 8088,
+   "gates": {
+    "G1_contract": true,
+    "G2_completion": true,
+    "G3_football_sense": true,
+    "G4_goals": true
+   },
+   "passed": true,
+   "fs_mean_rank": 19.0,
+   "fs_bar": 20.785714285714285,
+   "score": 43.5,
+   "counts": {
+    "goals": {
+     "home": 1,
+     "away": 0
+    },
+    "on_target": {
+     "home": 2,
+     "away": 8
+    },
+    "saves": 9,
+    "set_pieces": 5,
+    "moves": 75,
+    "passes": 1226,
+    "completion": 0.8735725938009788,
+    "possession_changes": 228
+   }
+  },
+  {
+   "seed": 8089,
+   "gates": {
+    "G1_contract": true,
+    "G2_completion": true,
+    "G3_football_sense": false,
+    "G4_goals": true
+   },
+   "passed": false,
+   "fs_mean_rank": 23.785714285714285,
+   "fs_bar": 20.785714285714285,
+   "score": 51.6,
+   "counts": {
+    "goals": {
+     "home": 1,
+     "away": 1
+    },
+    "on_target": {
+     "home": 9,
+     "away": 2
+    },
+    "saves": 9,
+    "set_pieces": 16,
+    "moves": 68,
+    "passes": 1032,
+    "completion": 0.8643410852713178,
+    "possession_changes": 196
+   }
+  },
+  {
+   "seed": 8090,
+   "gates": {
+    "G1_contract": true,
+    "G2_completion": true,
+    "G3_football_sense": true,
+    "G4_goals": false
+   },
+   "passed": false,
+   "fs_mean_rank": 19.857142857142858,
+   "fs_bar": 20.785714285714285,
+   "score": 58.0,
+   "counts": {
+    "goals": {
+     "home": 0,
+     "away": 0
+    },
+    "on_target": {
+     "home": 13,
+     "away": 9
+    },
+    "saves": 22,
+    "set_pieces": 6,
+    "moves": 55,
+    "passes": 1063,
+    "completion": 0.8494825964252116,
+    "possession_changes": 199
+   }
+  }
+ ]
+}

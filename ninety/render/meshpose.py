@@ -63,6 +63,10 @@ LEAN_SHARE = (("spine_01", 0.35), ("spine_02", 0.35), ("neck_01", 0.3))
 # The trunk's lean on top of the stride's (scene.pace), half tipping it at the hips and half in the
 # lower spine (design: bent down the spine alone it read as a stoop to a blind critic; tipped at the
 # hips alone, a lean of 30 degrees took the thigh past its reach behind him and a swinging leg flipped).
+# A head turned toward something: the neck takes part of the turn and the head the rest (design), and
+# LOOK_SIGN maps a turn to the left of his facing (positive, as headings turn) onto the bones' axis.
+LOOK_SHARE = (("neck_01", 0.4), ("head", 0.6))
+LOOK_SIGN = 1.0
 # The pelvis turns, and the legs are placed after it. The neck takes half back, so the eyes stay up
 # the pitch (design: the head tipped down to the feet read as a stoop).
 TRUNK_SHARE = (("pelvis", 0.5), ("spine_01", 0.5), ("neck_01", -0.5))
@@ -505,7 +509,30 @@ def _upper(pose: dict, heading: float, height_m: float) -> dict:
     hold = pose.get("hold")
     if hold and hold.get("w", 0.0) > 0.0:
         angles = _blend(angles, _hold(angles, pose, hold, heading, height_m), float(hold["w"]))
+    look = pose.get("look")
+    if look and look.get("w", 0.0) > 0.0:
+        # A head turned toward something (scene: team-mates toward a fouled player), shared by the
+        # neck and the head, as a neck turns (fouls.look_at).
+        yaw = LOOK_SIGN * float(look["yaw"]) * float(look["w"])
+        for bone, share in LOOK_SHARE:
+            _add(angles, bone, dy=yaw * share)
+    signal = pose.get("signal")
+    if signal and signal.get("w", 0.0) > 0.0:
+        # One hand up (scene: a fouler owning up to the foul, fouls.signal_at), put there as a hold's
+        # hands are.
+        angles = _blend(angles, _signal(angles, pose, signal, heading, height_m), float(signal["w"]))
     return angles
+
+
+def _signal(angles: dict, pose: dict, signal: dict, heading: float, height_m: float) -> dict:
+    """The arm on `signal`'s side with its hand at `signal['at']` (world metres)."""
+    x, y = pose.get("x", 0.0), pose.get("y", 0.0)
+    lift = (pose.get("lift") or 0.0) + (pose.get("bob") or 0.0)
+    ax, ay, az = signal["at"]
+    target = _to_object(x, y, heading, height_m, ax, ay, az, lift)
+    head, rot = _fk(angles, max(_bone_index()["clavicle_l"], _bone_index()["clavicle_r"]))
+    side = signal.get("side", "r")
+    return _arm(dict(angles), side, 1.0 if side == "l" else -1.0, target, head, rot)
 
 
 def pose_angles(pose: dict, heading: float, height_m: float) -> dict:

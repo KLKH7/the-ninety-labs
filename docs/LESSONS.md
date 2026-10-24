@@ -2176,6 +2176,23 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `uv run pytest tests/test_restarts.py -k "walks_over_a_set_ball or places_are_set_from"`
   (each fails on main); `scripts/defect_sweep/crossball.py` counts walks over the set ball over a sweep.
 
+### 213. A match has two halves: build what the Laws require, and say plainly what is still missing
+- **What happened:** the engine played 90 minutes as one long half: no whistle at 45:00, no
+  second-half kick-off. For a demo cut from a full match, a judge would see play run straight through
+  half-time. Switching ends was out of reach for the deadline: the attacking direction is fixed by
+  team in about 60 places in the engine and in at least ten readers of its data (the stats, vision,
+  evaluation, the validator), so it needs a direction field in the contract before the engine can
+  change it. The first version also ended the half between a penalty being taken and its shot
+  being struck, because "in progress" was read from the shot alone.
+- **Rule:** a rule of the game is built as far as can be done right, and the rest is written down as
+  a gap in GROUNDING with its reason, never left to look as if it is there. A direction (or any
+  other per-period fact) that many readers derive from the team is a contract field before it is a
+  variable. A state that extends a time limit ("a penalty in progress") names every phase it covers:
+  awarded, taken, struck, until completed.
+- **Check:** `uv run pytest tests/test_half_time.py` (each fails on main); the 90-minute sweep in
+  the pull request: the half-time whistle in every match, the second-half kick-off by the other
+  team, nothing in play across it, the contract met.
+
 ### 190. A test that reads its constant back cannot pin it
 - **What happened:** the foul pose asserted `foul_fall_deg(...) == FALL_DOWN_DEG` and `peak >= 80`.
   A lie of 80° left both green, and so did rewriting the pose times, because the test added those
@@ -2319,6 +2336,36 @@ short and actionable. This file is public: no research sources, product names or
     - the second still let a body rise on a touch away from the camera.
     The rule now only extends the bottom down the picture, toward the foot drawn at the ball.
 
+
+### 217. The demo runs the system the pitch describes
+- **What happened:** the pitch and the challenge map describe a multi-agent graph (an Analyst picks
+  moments, a Tactician explains, a Challenger offers another reading, the fact-checking agent sends
+  wrong claims back), and the ablation measured it. But `ninety-e2e`, which builds the bundle the
+  viewer and the video show, ran the single Analyst -> fact-checker slice. A judge watching the
+  demo would have seen a different system from the one the README claims. The audit found it by
+  reading `ninety/e2e.py`, not the docs. The graph also checked a Challenger's reading after the
+  Tactician's claim was already verified, and rewrote it when it failed: three model calls in the
+  committed recording spent on a claim that could not air.
+- **Rule:** the path that makes the demo is the path the claims describe; a fallback is named in
+  the bundle and the trace whenever it ran. A check whose outcome cannot change what airs is not
+  run.
+- **Check:** `tests/test_e2e.py::test_the_claim_is_about_the_shot_and_carries_its_numbers` asserts
+  the bundle's trace has the graph's roles in order; `::test_a_minute_the_graph_fails_on_falls_back_to_the_single_analyst`
+  and `tests/test_workflow.py::test_a_wrong_alternative_after_a_verified_claim_costs_no_rewrite`.
+
+### 218. A confidence the agents never see protects nothing
+- **What happened:** detected events carried `team_confidence`, how firmly the side was told from
+  the kit, and the evaluation reported it. But `facts.compact`, which shapes every event an agent
+  or the fact-checker reads, dropped it. A claim naming the wrong team passed every check whenever
+  the detector had the side wrong (5 of 16 validation passes), because the evidence agreed with the
+  claim and nothing said how unsure that evidence was. Lesson 146 is the same failure for names.
+- **Rule:** an uncertainty the detector measures travels with the fact to the fact-checker. A claim
+  that rests on it is held below a threshold set from the measured reliability, and the threshold's
+  source and n are written beside it.
+- **Check:** `tests/test_confidence_gate.py::test_the_agents_see_how_firmly_the_side_was_told` and
+  `::test_a_claim_naming_a_team_on_an_unsure_side_is_held_not_rejected` fail if `compact` drops the
+  field or the gate ignores it.
+
 ### 208. A script inside YAML is code: parse it before a run is approved
 - **What happened:** resolving a merge conflict in `agents-live.yml`, two new `case` branches were
   joined and the `;;` closing one was lost. The YAML still loaded and the merge was checked only
@@ -2328,6 +2375,29 @@ short and actionable. This file is public: no research sources, product names or
   An approval for a live run is spent only on a script that parses.
 - **Check:** `tests/test_workflows.py` runs `bash -n` on every bash `run:` step of every workflow;
   it fails on the shipped `agents-live.yml` (`7e76d15`) and passes on the fixed one.
+
+### 216. Evidence says which agent produced it, or it rots without a sound
+- **What happened:** the agents' committed reports named a published version (`ninety-judge:1`) in
+  their prose, and nothing compared it with the code. The Judge moved to version 4, the
+  Personalizer to version 2, and `fact-checker.md`, `personalizer.md` and the planted-claim set
+  kept describing agents that no longer ran; the nightly that re-measured the Judge wrote only to
+  `runs/eval/`, so its numbers never reached a file anyone reviews. The published 136/136 also
+  counted 9 false claims held back by Judge service errors as catches, and `analyst.md` graded
+  drafts against this commit's match after the Analyst had read the deployed one (lesson 90).
+- **Rule:** every agent report and replay records each agent's version and `definition_sha` as the
+  run wrote it, and CI compares them with the code: a mismatch fails unless the file is listed as
+  stale with why and the run that replaces it, and the list fails when an entry is fresh again.
+  A file from before fingerprints is read through the registry's history, never given an invented
+  fingerprint, and an agent a file names without a definition is unknown, never fresh. A hold the
+  service caused is counted apart from a rejection a check made, and a run the model mostly did
+  not answer writes no report. A nightly lands as a pull request of dated, unedited reports.
+- **Check:** `tests/test_evidence_fresh.py` (a planted fingerprint in a copied report, replay or
+  Markdown line fails; an unknown version fails; a listing without a reason, or for a fresh file,
+  fails, a listing whose stale agents differ fails); `tests/test_live_eval_outage.py` (an
+  all-service-error run writes nothing); `tests/test_nightly.py` (a report without fingerprints
+  is not archived; the workflow's writing job has no Azure sign-in and opens a PR against main).
+  The first version passed a report with an empty definitions line as fresh; review caught it, and
+  23 mutants of the rules are now each killed by a test.
 
 ### 193. Score a claimed tie at the answer before adding an input to break it
 - **What happened:** building the fixed-camera fit, I reasoned that the pitch markings are
@@ -2443,7 +2513,6 @@ short and actionable. This file is public: no research sources, product names or
   bisector of the open part (red on main); his spots at three kicks are written out, so a change
   to the wall's cover moves them; he keeps the cover while the set ball waits and drops it after
   the kick; at his own side's free kick nothing changes.
-
 ### 204. A pose that names the action's mechanics, not its kind, draws one action as another
 - **What happened:** #216 gave keepers a throw from the hands: a roll is bowled, the ball brought
   down in his hands to the grass and released from there. The engine named every wind-up `strike`,
@@ -2455,6 +2524,23 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_render_motion.py::test_a_bowled_ball_is_brought_down_in_both_hands_with_no_kick`
   fails on the old renderer (the hold ends before the bowl). A clip of an engine that names no bowl
   renders byte-identical (seed 122 at main, frames, events, meta and images).
+
+### 227. A confidence is compared only with a threshold measured on the same reading
+- **What happened:** active perception re-runs the event detector on another camera, or on a 3 s
+  window, to re-read a side the fact-checker holds. The first version let any look re-read the side.
+  On the M1 clip a 3 s window read the side of v00003, a false detection (a shot read as a pass), at
+  1.0; the whole clip had read it at 0.529. A side vote over a few frames is more one-sided than the
+  clip's, whoever is right, and the 0.96 threshold was measured on whole-clip votes. The look would
+  have aired a team claim on an event that never happened. The evaluation's own fixture test caught
+  it before any number was published. The second version still let a tactical lens's whole-clip vote
+  re-read the side, although 0.96 was measured on the broadcast's (the independent review caught it:
+  wrong sides reach 0.994 on the lenses). Now a look never re-reads a side.
+- **Rule:** a score is compared only with a threshold measured on the same kind of reading. A
+  shorter window, another camera or another model is a new reading, and needs its own measurement
+  before it can open a gate. Until then it may only confirm what does not depend on it (here, that
+  the event was seen).
+- **Check:** `tests/test_perceive.py::test_a_look_never_re_reads_a_side_so_a_team_claim_on_an_unsure_side_stays_held`
+  and `::test_a_real_camera_look_runs_inside_the_workflow`.
 
 ### 215. A detector tuned on one look is re-checked on the look the renderer draws now
 - **What happened:** the camera fit's marking detector (`ninety/vision/pitch.py`, `line_mask`) was
@@ -2469,3 +2555,290 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_vision_pitch.py::test_sensor_grain_is_not_a_marking_and_a_far_line_with_a_gap_still_is`
   (grain at params.noise's top, 0.02) fails with the blur removed; the before and after on
   validation clips are in `docs/eval/marking-grain.md`.
+
+### 230. A threshold measured on one look is re-measured when the look changes, by the same rule
+- **What happened:** the camera trust test's height band (0.901 to 1.002) was measured on renderer
+  0.3's validation clips. On today's renders (0.5.x) the players' height ratio through a right
+  camera is 1.00 to 1.11, so the band rejected every correctly fitted frame: nothing was placed on
+  the pitch, and with the grain defect (lesson 215) hiding behind it, the cause looked like one
+  thing when it was two.
+- **Rule:** a threshold derived from rendered data carries the look it was measured on; when the
+  renderer's look changes, it is re-derived by its own pre-registered rule on new validation clips
+  before any number that passes through it is read, and the new value cites both.
+- **Check:** `tests/test_vision_observe.py::test_the_band_is_the_committed_validation_measurement`
+  holds HEIGHT_BAND to `docs/eval/band-broadcast.json` (tactical1's validation clips only), and
+  `ninety/eval/band_derive.py` re-derives it.
+- **And:** re-derived, the heights alone trusted a clip whose camera was 28 m wrong in every frame on
+  dataset v2 (and 48.9 m on tactical1): the marking fit's own verdict is required again on the
+  broadcast (gate B3, `docs/eval/gate-b3.md`), chosen on validation;
+  `tests/test_vision_observe.py::test_a_whole_clip_through_a_wrong_camera_whose_markings_do_not_fit_is_never_trusted`.
+
+### 221. A number matched by value and unit alone passes in the wrong role
+- **What happened:** the insight fact-check let a sentence state any number a cited fact held,
+  written with that number's unit. A planted claim "6 players against 1 player" passed when the
+  true count was 5 against 1, because the fact's other number, 5 extra players, was also in
+  players; "won it back 5 seconds after losing it" passed because the fact also held the 5-second
+  counter-press window. Both numbers were on the fact; neither was the number the sentence said.
+- **Rule:** a fact's numbers carry their role: a distinct unit where they measure different things
+  (`extra players`), and a context where one unit serves two (the other side's count after
+  "against", the window after "within" or "next"). A number written in a context may stand only
+  for a number of that context, and a number of a context only where it is written in it. The same holds for a fact's direction: a sentence that says it went the other way (won back or not,
+  lost or kept, to an open teammate or not, nobody open) is checked against the fact's own field, and the
+  evaluation plants each reversal (the merge queue's review found them passing). A list of wrong phrasings fails open (a second review found 27 of 61
+  paraphrases passing it), and so does a list of direction words (a third found 27 of 64 more): the
+  check is closed by construction now. For a fact whose direction matters, the fact's own phrases,
+  numbers, names and a short list of glue words are taken out of the sentence, and any word left
+  holds it. True sentences in other words are held too; that cost is measured, not hidden. The rule
+  covers only the facts it names; any other fact's direction words are left to the Judge, and the
+  docs say so.
+- **Check:** `uv run python -m ninety.eval.insight_claims` (the `number` and `spelled` plants on
+  overloads and counter-presses are caught); `tests/test_insight_check.py` (the window said as
+  the regain, the extra players said as the own count, both rejected).
+
+### 222. A floor on how many there are can make a share impossible to reach
+- **What happened:** the Insight Scout pushed a fact only when it ranked above 90% of its kind so
+  far, among at least 5. Among 5, the best rank is 4 of 5, 80%, so no fact could ever be pushed
+  until there were 10: the floor and the share were each sensible, and together they made the
+  first cards of every match impossible. A test that expected a card found none.
+- **Rule:** when a gate combines a least count and a share, check that the count can reach the
+  share (a share s needs at least 1 / (1 - s) items), and set the floor from the share.
+- **Check:** `ninety/agents/scout.py` `MIN_SO_FAR` is 10 for `NOTABLE` 0.9;
+  `tests/test_companion_match.py::test_scout_cards_are_verified_and_spaced` plants a notable fact
+  and requires its card.
+
+### 223. A rule about who acted, tested on sentences that start with the club, rejects the ones that start with the player
+- **What happened:** the insight fact-check took the first club a sentence named as the side that
+  acted. Every test sentence began with the club. On the stand-in match, every true line break said
+  by name, "Ben Raimble played a pass that took 6 Fenwick players out of the game", was rejected:
+  the first club named was the opponents, who were counted, not acting.
+- **Rule:** a rule that reads roles out of a sentence is tested on every sentence shape the writers
+  produce (lesson 130): a club written straight after a number is what was counted, and the side
+  is the first club named otherwise; for a line break, the counted club must be the other side.
+- **Check:** `tests/test_insight_check.py` (a named passer with the counted opponents passes; the
+  counted club being the passing side is rejected); `insight_claims` reports no true claim stopped.
+
+### 228. A new test file named after a word another module already owns overwrites that module's tests
+- **What happened:** adding tests for the playing-style tool (`ninety/intel/style.py`), a new file
+  was written to `tests/test_style.py`, which already held the engine's team-style tests. The write
+  replaced them; `git status` showed `M` where a new file shows `??`. This is lesson 196 again.
+- **Rule:** before writing a test file, check that its path is free (`git ls-files tests/<name>`),
+  and name a new test file after its own module's full purpose (`test_playing_style.py`), never a
+  word another package also uses.
+- **Check:** `git status --short tests/` after creating test files: every new file shows `??`.
+
+### 229. Prose a number reader will check is tested through that reader
+- **What happened:** the Referee's summary of Law 11 said "being in an offside position is not an
+  offence by itself; it becomes one when he gets involved". The fact-checker reads number words,
+  so "one" was a number no fact held, and every answer that quoted the summary was refused and fell
+  back to a shorter one. A test that the summaries hold no digits passed: it read the text, not what
+  the checker reads.
+- **Rule:** text that the fact-checker will read (code's sentences, the Law summaries) is tested by
+  running it through the checker's own reader (`factcheck.spelled_as_digits`, then `check`), not by
+  a separate look at the characters.
+- **Check:** `tests/test_referee_offside.py::test_the_laws_carry_no_numbers` reads each summary through
+  `spelled_as_digits`; `::test_the_referee_answers_offside_from_the_reading_and_the_law` quotes them.
+
+### 232. A voice a fan hears is chosen by listening, and the device's voice is only the fallback
+- **What happened:** the phone's read-aloud spoke through the browser's `speechSynthesis`, so a fan
+  heard whatever system voice their device had. On Kian's Mac that was a robotic voice he called
+  creepy, in the one feature built for fans who listen instead of watch. Meanwhile we had an Azure AI
+  Speech resource, and the Describer pinned a neural voice (Ryan) that nothing on the phone used.
+  Nobody had chosen either voice by listening.
+- **Rule:** the voice is picked by ear from samples made in the voices that could ship (Oct 23:
+  all 17 British neural voices and two HD voices; Kian chose en-GB-OllieMultilingualNeural). It is
+  pinned in one place (`ninety/speech/voice.py`), and every path that speaks reads it: the bundle's
+  pre-generated lines, the Live route and the Describer. The phone plays the bundle's audio first,
+  then the Live route, and uses the device's voice only when neither has the line.
+- **Check:** `tests/test_speech.py::test_every_path_that_speaks_reads_the_one_pinned_voice`,
+  `::test_the_phone_plays_the_bundles_audio_before_any_other_voice` and
+  `::test_the_device_voice_is_the_last_resort_in_voice_ts`. Point voice.ts at the device's voice
+  first and the second and third tests fail.
+
+### 224. Every picture of the pitch goes through one projection, and its words follow the engine
+- **What happened:** the phone's minimap drew pitch metres with its own projection, y = 0 at the
+  top, while the TV picture and the viewer's radar put the y = 0 touchline at the bottom, where the
+  broadcast camera stands. The phone showed the match upside down beside the screen it follows,
+  and its heat map and wind map with it. Its "left" and "right" flank words had been written to
+  match that drawing, so they were wrong too: the engine starts a home left-back at 0.85 of the
+  width, which the phone called the right. Its tests tapped dots with the same y-down formula, so
+  they agreed with the bug.
+- **Rule:** every drawing of the pitch on any screen (radar, heat map, wind map, answer pictures)
+  goes through `web/viewer/src/radar.ts`'s `projection`, and taps are hit-tested through it. Words
+  for a place on the pitch are grounded in the engine's own coordinates, not in a drawing. A test
+  that finds a dot asks the page where it drew it, and checks which way up that is.
+- **Check:** `tests/test_phone_companion.py::test_the_radar_is_drawn_the_way_up_the_tv_shows_it_and_a_tap_finds_the_dot`
+  (a player 20 m from the near touchline is below halfway); `tests/test_phone.py`'s tap test asks
+  `ninetyPhone.screenOf` and asserts the same.
+
+### 225. A second screen runs on the first screen's clock, cuts included
+- **What happened:** the viewer sent the phone `t_start` plus the video's time, which is the match
+  time only while the clip has no cut; a condensed match is all cuts. Between messages the phone
+  ran its clock on in match time, so even with the right message it slid into the stretch of the
+  match the broadcast skipped, drawing the radar where the video never was for up to a second.
+- **Rule:** one clock for every screen (lesson 33): the big screen sends match time from the same
+  function the graphics use, and the phone reads the bundle's cuts and runs on in video time
+  between messages, as the video does.
+- **Check:** `tests/test_match_mode.py::test_the_big_screen_pairs_at_once_and_sends_the_phone_match_time_across_the_cut`
+  fails with `t_start + video time`; `tests/test_phone_companion.py::test_the_phone_clock_jumps_the_cut_with_the_video_and_never_shows_the_gap`
+  fails with the cuts dropped from `LaptopClock.time`.
+
+### 236. A late joiner is sent the state as it stands now, not as it was last stored
+- **What happened:** the companion relay stored the big screen's once-a-second clock and replayed
+  it unchanged to a phone that joined late. A phone could start up to a second behind the screen it
+  follows until the next message; the phone clock test failed two runs in three, and the mock relay
+  did the same.
+- **Rule:** state that runs on by itself (a playing clock) is advanced by how long it was held
+  before it is replayed; state that does not (a paused clock, a focus) is replayed as stored. The
+  mock relay asks the laptop for its clock as it stands now, as the server computes it.
+- **Check:** `tests/test_api_companion.py::test_a_late_phone_gets_a_playing_clock_as_it_stands_now`
+  (fails with the stored message replayed); `tests/test_phone.py::test_the_phone_clock_stays_within_tolerance_of_the_laptop`.
+
+### 237. Tests and screenshot runs never speak aloud
+- **What happened:** browser tests and screenshot scripts turned read-aloud on and the headless
+  browser spoke with the Mac's system voice; Kian heard it from a test run.
+- **Rule:** every voice the screens use goes through one function (`web/viewer/src/speech.ts`,
+  `speakAloud`), which under automation (`navigator.webdriver`) records the line instead of
+  speaking it; recorded audio and tones stay silent too. Read-aloud is off until a fan turns it on.
+- **Check:** `tests/test_phone_companion.py::test_read_aloud_is_off_until_tapped_and_an_automated_browser_never_speaks`
+  (fails if `speakAloud` calls `speechSynthesis` under webdriver).
+
+### 234. A foul that only the data knows about is not a foul on screen
+- **What happened:** Kian watched a test clip with a foul in it and could not tell a foul had
+  happened. The engine had stopped play: within 0.5 s of each whistle on seed 7, at most one of 22
+  players was still running. But the picture showed players drifting to a stop, no whistle and no
+  one reacting. The fall itself (#223) was not in that clip's render yet.
+- **Rule:** an event a viewer must follow gets a cue they can see or hear, drawn from the engine's
+  own record of it (the foul's frame, its fouler and the fouled player, their positions), never by
+  moving anyone. A cue that would contradict a truth field, such as turning a body away from its
+  `heading`, is drawn where the truth says nothing: here the head turns, and the hand goes up.
+- **Check:**
+  - `tests/test_render_fouls.py`: the reactions start at the foul frame, are gone after REACT_S,
+    reach the three nearest team-mates and not the fouled man, and the head turns toward him;
+    nothing happens without a foul.
+  - `tests/test_render_mesh.py`: the page and Python draw the raised hand and the turned head the
+    same way, within 1.5 cm on every marker.
+  - A clip with no foul renders byte-identical to the renderer before this change, given the same
+    two team codes. The rename to LON and LIS changes the scorebug text in every render with
+    graphics on. Labels and `frames.jsonl` are unchanged. The frozen test sets recorded the old
+    codes in their params, so re-rendering one differs in the scorebug only.
+
+### 238. A model's reply is read as the first object it writes, and the live eval keeps what it parsed
+- **What happened:** the published match Companion (v2) answered a plan step with the plan and then
+  kept going: an "answer" step of its own, with facts and fact ids it made up, in the same reply. The
+  plan parser took everything from the first `{` to the last `}`, which is not one JSON object, so
+  every such plan failed. In the first live run (40066697726) 22 of 32 plans were unparseable and 27
+  of 32 answers fell back to code's checked answer. The fan saw only verified text, and the stand-in
+  tests passed, because every scripted reply was exactly one object.
+- **Rule:** a model's plan is the first JSON object in its reply (`companion_match.first_object`), and
+  nothing after it is read, so the made-up facts never reach the tools. The eval reads plans through
+  the same function as the service. A scripted reply in a test includes what the live model actually
+  sent, not only the ideal shape.
+- **Check:** `tests/test_companion_match.py::test_a_plan_followed_by_an_answer_the_model_made_up_is_read_as_the_plan_only`
+  and `::test_the_eval_reads_a_plan_as_the_service_does` fail when the parse goes back to first `{` to
+  last `}`.
+
+### 239. A sentence template is tested through the checker it must pass, and a fallback row answers only what it is about
+- **What happened:** the team-sheet sentence ("X plays left-back for London Athletic, by the team
+  sheet") had never passed the fact-checker. Its name gate counted only the tracked players the facts
+  were about, not the sheet row being cited. So no "who plays where" question was ever answered, and
+  the router's lineup score (2/4) measured routing to a tool that could not answer. Meanwhile "who is
+  the best player?" routed to the sheet as well, and with no confident leader the first sheet row
+  answered: the goalkeeper. On the phone, the answer's headline was taken from the picture's number
+  ("6 moves") rather than from what the fan asked.
+- **Rule:** every code template is run through `verify` on the stand-in in a test, not only read. A
+  cited sheet row vouches for its own name, position and club, and a name said with another row's
+  position is refused. A sheet row answers only a question that names a position. The answer carries
+  a `headline` computed by code from the question's kind: a name (or the role, or the club) for who,
+  the number with its unit for how many, the place for where; the supporting number stays in the
+  sentence.
+- **Check:** `tests/test_companion_match.py::test_who_plays_a_position_is_answered_from_that_row_of_the_sheet`,
+  `::test_a_sheet_row_says_only_its_own_name_position_and_club`,
+  `::test_who_is_best_is_never_answered_with_a_name_off_the_sheet` and
+  `::test_every_held_out_answer_is_headed_by_what_its_question_asks`. Each fails when its rule is
+  mutated (eleven mutations, all caught).
+
+### 235. Every live_job mode gets an end-to-end test on a real clip of its camera type
+- **What happened:** `observe` gained `fixed=True` for the tactical camera's lenses, but the views
+  mode of `ninety/vision/live_job.py` never passed it. Each lens was searched frame by frame as the
+  broadcast's moving gantry, and the fit failed on every frame: on validation seed108, camera OK on
+  0 of 250 frames and no player placed. Its unit tests passed because they ran on a synthetic clip
+  drawn through a broadcast camera, which the broadcast search fits. A phone fixture built from
+  views runs on main (12–17 players, no events) carried the defect downstream.
+- **Rule:** any live_job mode (broadcast, views, and any added later) has an end-to-end test on a
+  real rendered clip of that camera type, at the renderer's own image quality. The test asserts a
+  non-zero placement rate, not only that the run finished.
+- **Check:** `tests/test_vision_live_job.py::test_each_view_is_placed_as_a_fixed_lens_and_the_broadcast_is_not`
+  (the flag), and `test_a_real_tactical_clip_places_players_from_every_view` and
+  `test_a_real_broadcast_clip_places_players` in the same file, on two frames of each camera
+  (`tests/fixtures/tactical-seed108`, `broadcast-seed108`). The tactical test fails without the fix.
+
+### 219. A number reader must read every language and every unit our writers produce, and bind a number to its player
+- **What happened:** an audit of the fact-checker's code half found four forms it still let
+  through, each re-verified on main with a planted claim. Spanish, which the Personalizer writes and
+  `check` re-checks, was not read at all: "cincuenta km/h" and "treinta y uno" were no numbers, and
+  "50 kilómetros por hora" or "minuto 50" read as a bare 50, which any cited distance let through.
+  Ordinals in words ("his seventh pass", "the ninth minute") were missed although lesson 130 fixed
+  "7th". A number in a unit we never publish passed when its digits matched a field ("50 yards" for
+  a 50 m pass, "31 mph" for 31 km/h), and so did "a 2-metre pass" (read bare, passed by the minute).
+  And a number only had to be in some cited event: "h7's 30 m pass" passed when h7's was 12 m and
+  30 m was h4's. The review of the first fix found it too loose and too strict at once: "his" bound
+  to a player named after it, only the first number after a verb was bound, and Spanish idioms
+  ("se va de uno", "cien por cien", "con los dos pies") were read as numbers that main had passed.
+- **Rule:** the reader reads every language a writer is told to use (number words, ordinals and
+  units), refuses a unit no fact of ours is in rather than converting it, and checks a distance or
+  speed the sentence gives to one player against that player's own cited events. Words that are no
+  number stay words in every language ("first time", "the final third", "a two-on-one", "el once
+  inicial", "uno contra uno", "a mil por hora", English "once"), and a pitch marking ("the six-yard
+  box") is a name, not a measurement. A binding starts only at a named form, never reaches forward
+  for its player, holds every distance and speed up to the next player or the end of the clause,
+  and says what it does not cover; any other wording falls back to the check against all cited
+  events.
+- **Check:** `tests/test_factcheck.py::test_a_planted_spanish_number_is_rejected`,
+  `::test_an_ordinal_in_words_must_be_in_the_evidence`,
+  `::test_a_number_in_a_unit_we_do_not_publish_is_rejected`,
+  `::test_a_number_bound_to_a_player_must_be_from_his_cited_event` fail on the old check, and each
+  has a true-form twin that passes; `tests/test_personalizer.py` drops each form from a Spanish
+  variant. Measured for false rejections: the verdicts on every recorded claim with its evidence in
+  `replays/`, `docs/eval/` and the fixtures are unchanged from main's check on the same texts.
+
+### 240. A measurement is re-run on the engine the demo uses, and a fixed sentence in a report becomes a computed one
+- **What happened:** the insight, roles and team-distance evaluations ran on runs/u7, seed11 and
+  c21, simulated on Oct 13–14, before the engine fixes. The u7 run logged 22 of 265 passes from a
+  player to himself; the validator's C8 now rejects these. Re-run on the freeze engine (65247ba3:
+  the demo's seed 8076 and seeds 7, 11 and 21), the fact-checker missed 9 planted false claims and
+  stopped 16 true ones that u7 never produced:
+  - a back line's change and height, both in metres, were not bound to their roles ("pushed up
+    21 m, to 21 m");
+  - one name could be said as both players of a one-two;
+  - a regain that led to a shot was stopped by the counter-press's words, and its reversal
+    ("never won the ball back and had a shot") passed.
+
+  Name precision fell from 0.999 to 0.939–0.975, and with full tracking team distance read
+  0.967–1.204 of the truth, not "within a few percent". A step rule fixed before measuring found no
+  step that tames the error, so the phone now labels the distance with its measured worst over
+  every freeze match graded (±21%, the demo's own match; one held-out match alone gave ±15%, narrower
+  than the demo's, caught in review). Two report texts were fixed strings: the
+  roles report named runs/u7 whatever it ran on, and the team-distance report kept its "few
+  percent". Both stayed true-sounding after the numbers changed.
+- **Rule:** an evaluation quoted in the docs runs on a match simulated at the engine the demo uses,
+  and its report states the runs it read and the range it measured, computed, never typed. When the
+  engine moves, the evaluations are re-run before their numbers are quoted.
+- **Check:** `docs/eval/roles.md`, `team-distance.md` and `insight-claims.md` name their runs (the
+  `f*-65247ba3` folders). `tests/test_insight_check.py::test_a_line_moves_by_its_change_to_its_height_never_the_other_way_round`,
+  `::test_one_name_said_as_both_players_of_a_one_two_is_refused` and
+  `::test_a_regain_that_led_to_a_shot_is_said_in_its_own_words_and_never_reversed` fail when their
+  rule is mutated.
+
+### 241. A name is one player at a time
+- **What happened:** the players ranking listed one starter's name twice: two tracks were both
+  assigned his role and both passed the name gate. The first rule proposed, "if two tracks claim a
+  name, neither gets it", named nobody on the stand-in: the tracker breaks every player into
+  several tracks over a match, so every name had several claimants (742 named tracks became 0).
+- **Rule:** tracks that claim one name and are never on the pitch together are one player in
+  pieces, and keep it; two that are there at the same time lose it and fall back to their role
+  (`roles.one_track_per_name`). The ranking merges one named player's pieces into one row. On the
+  freeze stand-in (gates 0.203) this keeps 612 of 742 names and lifts their precision from 0.930 to
+  0.977; 38 of the 130 names it removes were wrong.
+- **Check:** `tests/test_insights.py::test_a_name_binds_to_one_player_at_a_time` and
+  `tests/test_companion_match.py::test_one_players_pieces_of_track_are_one_row_of_the_ranking` fail
+  when the overlap test or the merge is mutated.

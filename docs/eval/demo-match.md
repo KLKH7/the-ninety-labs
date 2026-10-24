@@ -1,10 +1,11 @@
 # Demo match: pre-registered choice and edit of the condensed full match
 
-Status: **pre-registered, not yet applied.** The rule is fixed and merged here before any match in
+Status: **applied on Oct 24 (see Result); the demo shows seed 8080 by Kian's choice, stated there.** The rule is fixed and merged here before any match in
 its pool is simulated on the final engine. It is applied once, at the engine SHA the Coordinator
 names after the last engine merges, and its output is recorded below. If the footage then has a
 defect, that is reported and fixed in the renderer; the match is not swapped for a better-looking
-seed, and the weights, gates and windows below are not changed after the sweep.
+seed, and the weights, gates and windows below are not changed after the sweep. That promise was broken once, by a
+stated human choice: the demo shows seed 8080, chosen by Kian after seeing the result (Result).
 
 **What it is for:** the live demo plays one whole simulated 90-minute match, condensed to 15 to 20
 minutes the way a broadcaster cuts a condensed match: every goal is in it, the clock jumps at each
@@ -149,8 +150,53 @@ as the edit's chapters, never as something the system detected, and are never ha
 
 ## Result
 
-Filled in when the rule is applied at the final engine SHA:
-- the engine SHA;
-- the gate table for the top 5 and the chosen seed's score;
-- the segments, chapters and total minutes, and any adjustment;
-- the render checks of each segment.
+Applied on Oct 24 at engine `65247ba3` (the freeze: #275 and #276, half-time), unchanged, all 40
+seeds simulated through `runs/slot.sh` on two workers.
+
+**Seed 8076 wins with 69.9**: 4-1, both sides scored (contested). Goals 5 x 3 = 15, contested 4,
+saves 15 x 1 = 15, shots on target 20 x 1 = 20, set pieces 7 x 0.5 = 3.5, passing moves 62 x 0.2 =
+12.4. Pass completion 80.8%; football-sense mean rank 14.5 against the pool's bar of 20.79.
+
+**Gates:** 15 of 40 seeds pass all four. G1 contract 39 (seed 8074 fails P2: the away keeper
+accelerates at up to 23 m/s² over frames 78379 to 78383, about 52:15, an engine defect reported,
+not part of this rule); G2 completion 31; G3 football sense 20; G4 goals 35.
+
+| Seed | Score | Goals | On target | Saves | Set pieces | Moves | Completion | FS mean rank |
+|---|---:|---|---|---:|---:|---:|---:|---:|
+| 8076 | 69.9 | 4-1 | 14-6 | 15 | 7 | 62 | 80.8% | 14.5 |
+| 8069 | 65.7 | 3-0 | 9-7 | 13 | 15 | 81 | 87.5% | 17.1 |
+| 8085 | 60.1 | 3-0 | 7-7 | 11 | 13 | 78 | 87.6% | 15.3 |
+| 8080 | 59.5 | 4-1 | 10-3 | 8 | 9 | 75 | 83.2% | 19.7 |
+| 8053 | 59.1 | 3-0 | 11-3 | 11 | 13 | 73 | 85.8% | 20.5 |
+
+**The edit:** 17.0 minutes (1,022 s) in 40 segments, inside the target with no adjustment. Chapters:
+the five goals (11:24, 18:43, 21:39, 32:19, 40:01), saves (15 saves in the edit; 14 are chapter
+headings, the other shares a segment with a goal), shots, corners, a free kick, passing
+moves, the kick-off, 45:00 and the end. All five goals fall in the first half, so the second half of
+the edit is saves and chances. The segments, chapters and render commands are in
+[demo-match-8076.json](demo-match-8076.json). The full `select` output, with every seed's counts,
+football-sense mean rank and each gate's pass or fail for all 40 seeds, is
+[demo-match-65247ba3-select.json](demo-match-65247ba3-select.json).
+
+**Half-time at the freeze.** This rule was written when the engine had no half-time; at `65247ba3`
+the referee ends the first half (the `half_time` event, 2700.04 s here) and the second half kicks
+off 5.8 s later, still without a change of ends, so the rule's fixed directions hold. The always-in
+45:00 segment therefore shows the real whistle and the restart. The rule reads no `half_time` event
+beyond ending a passing move at it, as any other event does.
+
+**The match shown is seed 8080, not the rule's pick (Kian's decision, Oct 24).** After seeing the
+result, including the goal timings above, Kian chose seed 8080 for the demo as a presentation
+choice: a 4-1 comeback with goals in both halves (the away side at 21:32, then the home side at
+37:24, 44:31, 67:08 and 70:36), where the rule's pick has all five in the first half. This is a
+human choice made after looking, not the rule's output, and is stated as such. 8080 passes all four
+gates and ranks 4th of the 15 that do, with a score of 59.5 (table above). The ranking, the gates,
+the weights and the edit rule are unchanged; the rule's pick stays 8076, and its manifest stays in
+[demo-match-8076.json](demo-match-8076.json).
+
+The unchanged edit rule cuts 8080 to 16.9 minutes (1,016 s) in 34 segments, inside the target with
+no adjustment. Its chapters are the five goals, 7 saves, 12 shots, 2 corners, 2 free kicks, 4
+passing moves, the kick-off, 45:00 (the half-time whistle at 2700.04 s) and the end. The segments,
+chapters and render commands are in [demo-match-8080.json](demo-match-8080.json), which is what the
+demo renders.
+
+**Render checks:** filled in when the segments are rendered.

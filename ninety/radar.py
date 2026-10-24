@@ -134,7 +134,9 @@ def build(tracked: dict, observations: list[dict], width: int, height: int) -> d
         views.append({
             "frame": row["frame"],
             "ball_seen": row["frame"] in seen,
-            "footprint": footprint(cam["P"], width, height) if cam["ok"] else None,
+            # Fused from the fixed tactical views (ninety/vision/fuse.py), a frame has no broadcast
+            # camera fit, so the broadcast picture's footprint is unknown, not guessed.
+            "footprint": footprint(cam["P"], width, height) if cam["ok"] and "P" in cam else None,
         })
     clip = frames[0].get("clip") if frames else None
     return {"format": FORMAT, "source": SOURCE, "clip": clip, "frames": frames, "views": views}
