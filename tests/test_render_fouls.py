@@ -115,3 +115,71 @@ def test_the_frame_row_says_how_far_a_player_is_down():
         raise AssertionError("a negative fall passed the schema")
     except ValidationError:
         pass
+
+
+# The players' reactions to a foul (lesson 234): drawn from the engine's foul event and positions.
+
+
+
+def _foul_frames(n=80, foul_at=20):
+    """h4 fouls a9 at frame foul_at; a9's team-mates at 3, 6, 9, 12 and 30 m from him."""
+    frames = []
+    for i in range(n):
+        players = [{"id": "h4", "team": "home", "x": 50.5, "y": 34.0, "heading": 3.1},
+                   {"id": "a9", "team": "away", "x": 50.0, "y": 34.0, "heading": 0.0}]
+        for k, d in enumerate((3.0, 6.0, 9.0, 12.0, 30.0)):
+            players.append({"id": f"a{k + 2}", "team": "away", "x": 50.0, "y": 34.0 + d, "heading": 0.0})
+        frames.append({"frame": 1000 + i, "players": players})
+    return frames, [{"type": "foul", "frame": 1000 + foul_at, "player": "h4", "receiver": "a9"}]
+
+
+def test_the_fouler_signals_and_the_fouled_sides_nearest_turn_to_him():
+    frames, events = _foul_frames()
+    r = fouls.reactions(frames, events)
+    assert r["h4"] == [{"kind": "signal", "frame": 20}]
+    lookers = sorted(pid for pid, mine in r.items() if any(x["kind"] == "look" for x in mine))
+    assert lookers == ["a2", "a3", "a4"]  # the three nearest team-mates, not the fouled man himself
+    assert all(x["to"] == "a9" for pid in lookers for x in r[pid])
+
+
+def test_a_reaction_starts_at_the_foul_and_is_gone_after_react_s():
+    frames, events = _foul_frames()
+    r = fouls.reactions(frames, events)
+    g = Gait(heading=0.0)
+    ws = []
+    for fi in range(80):
+        fouls.signal_at(g, r["h4"], fi, 25, 50.5, 34.0, 1.84)
+        ws.append(g.signal["w"] if g.signal else 0.0)
+    assert all(w == 0.0 for w in ws[:20])  # nothing before the whistle
+    assert max(ws) == 1.0 and ws[20 + round(fouls.REACT_S * 25) + 1] == 0.0
+    assert g.signal is None
+    fouls.signal_at(g, r["h4"], 40, 25, 50.5, 34.0, 1.84)
+    assert g.signal["at"][2] == round(fouls.HAND_UP * 1.84, 4) > 1.84  # above his head
+
+
+def test_a_turned_head_faces_the_fouled_player_within_the_necks_reach():
+    frames, events = _foul_frames()
+    r = fouls.reactions(frames, events)
+    g = Gait(heading=0.0)  # a2 faces +x; a9 is 3 m to his right (-y)
+    fouls.look_at(g, r["a2"], 40, 25, 50.0, 37.0, frames[40])
+    assert g.look["yaw"] == round(-fouls.LOOK_MAX, 4)  # a quarter turn away: as far as the neck goes
+    g.heading = -1.2  # nearly facing him
+    fouls.look_at(g, r["a2"], 40, 25, 50.0, 37.0, frames[40])
+    assert abs(g.look["yaw"] - (-math.pi / 2 + 1.2)) < 1e-3
+    # and the drawn brow turns that way: toward a9 (-y) from a body facing +x
+    pose = {"action": "stand", "phase": 0, "speed": 0, "x": 50.0, "y": 37.0}
+    plain = pose_markers(pose, 0.0, 1.84)["brow"]
+    turned = pose_markers({**pose, "look": {"yaw": -1.0, "w": 1.0}}, 0.0, 1.84)["brow"]
+    assert turned[1] < plain[1] - 0.04
+
+
+def test_no_foul_no_reaction():
+    frames, _ = _foul_frames()
+    assert fouls.reactions(frames, []) == {}
+
+
+def test_a_reaction_eases_in_rather_than_jumping():
+    """Halfway up the ease the reaction is part-way: strictly between none and full."""
+    fps = 100  # REACT_EASE_S / 2 = 0.15 s is a whole number of frames here
+    w = fouls._weight(1000 + round(fouls.REACT_EASE_S / 2 * fps), 1000, fps)
+    assert 0.0 < w < 1.0, w

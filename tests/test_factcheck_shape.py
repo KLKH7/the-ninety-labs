@@ -10,7 +10,8 @@ from ninety.agents.factcheck import Claim, check, confidence_gate
 def row(metric, team, value, change=None, unit="m", minute=4, tracked=11, confident=True):
     return {"id": f"shape:{metric}:{team}:m{minute}", "type": "shape", "metric": metric, "team": team,
             "minute": minute, "value": value, "unit": unit, "change": change, "tracked": tracked,
-            "of": 11, "need": 11, "frames": 1500, "confident": confident}
+            "of": 11, "need": 11, "frames": 1500, "confident": confident,
+            "team_confidence": 1.0}  # a side told surely (the side gate's tests set it otherwise)
 
 
 ROWS = [

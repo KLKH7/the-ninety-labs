@@ -7,9 +7,10 @@ a ground-truth event (`"source": "truth"`) or a file named like the answer key n
 so the live path cannot be pointed at the truth by mistake (AGENTS.md, "Ground truth is the
 answer key").
 
-Until R3's detected events for the M1 clip land, `M1_CLIP` falls back to a stand-in written by
-hand from the schema. It is marked as one in its file name and in every id (`standin-`), and it was
-never derived from the clip's ground truth.
+For the M1 clip, `m1_path` serves R3's detected events (`tests/fixtures/detected-seed900001.jsonl`,
+the event detector's output from the clip's video). Only when that file is absent does it fall back
+to a stand-in written by hand from the schema. The stand-in is marked as one in its file name and
+in every id (`standin-`), and it was never derived from the clip's ground truth.
 """
 
 from __future__ import annotations
