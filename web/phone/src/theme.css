@@ -15,8 +15,8 @@
   --pitch-stripe: #357947;
   --pitch-edge: #24552f;
   --pitch-line: rgba(255, 255, 255, 0.75);
-  --team-a: #1b2f5b; /* London (palette pending Kian) */
-  --team-b: #7a1f33; /* Lisbon */
+  --team-a: #3a68c0; /* London navy */
+  --team-b: #d23a44; /* Lisbon crimson */
   --live: #e5484d;
   --ok: #2e7d4f;
   --hold: #8a6d1e;
@@ -50,10 +50,9 @@
   --ion-tab-bar-color-selected: var(--text);
 }
 /* Crests stay the deep club colours in both modes; only dots and numbers lighten for dark. */
-:root { --crest-a: #0d2547; --crest-b: #e6a708; }
-/* The band's deep fields (Apple Sports): London's navy; Lisbon's gold kept yellow, never orange
-   (Kian): a high-lightness, yellow-hued gold rather than gold mixed with black, which reads brown. */
-:root { --field-a: oklch(0.34 0.1 262); --field-b: oklch(0.6 0.12 92); }
+:root { --crest-a: #0d2547; --crest-b: #ad1c28; --accent-b: #c79a48; }
+/* The band's deep fields (Apple Sports): London's navy and Lisbon's crimson, deep and saturated. */
+:root { --field-a: oklch(0.36 0.11 262); --field-b: oklch(0.4 0.15 24); }
 
 /* Live and Story are Apple Sports, which is dark only (Coordinator, Oct 24: exact match): the dark
    tokens apply whatever the phone's setting. Ask is Perplexity's light page (below). */
@@ -83,10 +82,10 @@
     --ion-color-primary-tint: #d8d8da;
     --surface: #1c1c1e;
   --raised: #2c2c2e;
-  /* Club colours from Kian's crests (Oct 24): London's navy, lifted to read on black and grass;
-     Lisbon's tram gold. Alternates on compare/palettes-2. */
-  --team-a: #2f5aa6;
-  --team-b: #e6a708;
+  /* Club colours from Kian's crests (Oct 24): London's navy and Lisbon's crimson, each lifted to 3:1
+     on the cards (WCAG graphics); the crests keep their own deep colours, gold is Lisbon's accent. */
+  --team-a: #3a68c0;
+  --team-b: #d23a44;
   --text-2: rgba(235, 235, 245, 0.6);
   --text-3: rgba(235, 235, 245, 0.3);
   --hairline: rgba(84, 84, 88, 0.65);

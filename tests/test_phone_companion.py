@@ -347,14 +347,17 @@ def test_every_scorebug_code_has_one_club_name_starting_with_its_letters():
 
     source = (Path(__file__).resolve().parent.parent / "web" / "viewer" / "src" / "teams.ts").read_text()
     clubs = dict(re.findall(r'^\s+([A-Z]{3}): "([^"]+)",(?: //.*)?$', source, re.M))
-    assert set(clubs) == set(TEAM_CODES)
-    assert len(set(clubs.values())) == len(clubs)
-    # Each name starts with its code's letter, so the scorebug and the screens name the same club;
-    # Kian renamed the demo's two clubs (Oct 24) and the renderer still draws their old codes, which
-    # its frozen test sets record: the two renamed codes are listed here until it draws LON / LIS.
-    renamed = {"OAK": "London Athletic", "FEN": "Lisbon Esportes"}
-    for code, name in clubs.items():
-        assert name == renamed[code] if code in renamed else name.upper().startswith(code[0]), (code, name)
+    # Every code the renderer draws has a club. Kian renamed the demo's two clubs (Oct 24): bundles
+    # made before carry OAK / FEN, the renderer's new scorebug LON / LIS; both name the same club.
+    assert set(TEAM_CODES) <= set(clubs)
+    same = {"OAK": "LON", "FEN": "LIS"}
+    assert set(clubs) - set(TEAM_CODES) <= set(same) | set(same.values())
+    for old, new in same.items():
+        assert clubs[old] == clubs[new], (old, new)
+    others = {code: name for code, name in clubs.items() if code not in same}
+    assert len(set(others.values())) == len(others)  # one name per club
+    for code, name in others.items():
+        assert name.upper().startswith(code[0]), (code, name)  # the screens name the club the scorebug shows
     teams = {"home": "FEN", "away": "OAK"}
     assert e2e.teams_of({"params": {"home_code": "FEN", "away_code": "OAK"}}) == teams
     assert e2e.teams_of({"params": {}}) is None

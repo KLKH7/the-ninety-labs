@@ -2116,9 +2116,6 @@ let flowBusy = false;
 
 $("pitch-mode").addEventListener("ionChange", (e) => {
   const flow = (e as CustomEvent<{ value: string }>).detail.value === "flow";
-  $("mode-caption").textContent = flow
-    ? "Which way each team has been moving over the last half-minute."
-    : "Where every player is now, tracked from the cameras.";
   if (flow !== state.wind) $("wind-toggle").click();
 });
 $("wind-toggle").addEventListener("click", async () => {

@@ -80,7 +80,6 @@
                 <ion-segment-button value="players"><ion-label>Positions</ion-label></ion-segment-button>
                 <ion-segment-button value="flow" id="flow-button"><ion-label>Movement</ion-label></ion-segment-button>
               </ion-segment>
-              <p class="mode-caption" id="mode-caption">Where every player is now, tracked from the cameras.</p>
               <div class="pitch-wrap">
                 <div class="map" id="map-box">
                   <canvas id="map" role="img" aria-label="Pitch"></canvas>
@@ -113,7 +112,7 @@
                   <div class="strip-axis" aria-hidden="true"><span class="ht-label">HT</span><span class="ft-label">90′</span></div>
                 </div>
                 <div class="next-bin" aria-hidden="true"><div class="next-fill" id="next-fill"></div></div>
-                <p class="fine" id="momentum-note"></p>
+                <p class="sr-only" id="momentum-note"></p>
               </section>
               </div>
               <div class="live-pane" id="pane-stats" role="tabpanel" aria-labelledby="lt-stats" hidden>
@@ -121,7 +120,7 @@
               <section class="card" id="live-stats" aria-labelledby="live-stats-title" hidden>
                 <h2 class="section-title" id="live-stats-title">Team Stats</h2>
                 <ul class="stat-rows" id="stat-rows"></ul>
-                <p class="fine" id="stats-note">From the footage shown, so far.</p>
+                <p class="sr-only" id="stats-note">From the footage shown, so far.</p>
               </section>
               <!-- Shot map: detected shots so far, both clubs toward one goal; only when there are any. -->
               <section class="card" id="shot-map" aria-labelledby="shot-map-title" hidden>
@@ -133,7 +132,7 @@
                 </ion-segment>
                 <svg id="shots" class="half-pitch" role="img"></svg>
                 <ul class="sr-only" id="shot-list"></ul>
-                <p class="fine">Filled: goal · ringed: saved · hollow: off target or blocked. Each club shooting up the page.</p>
+                <p class="sr-only">Filled: goal. Ringed: saved. Hollow: off target or blocked. Each club shooting up the page.</p>
               </section>
               </div>
               <div class="live-pane" id="pane-players" role="tabpanel" aria-labelledby="lt-players" hidden>
@@ -246,7 +245,7 @@
           <section class="sheet-section" id="involved-box" hidden>
             <h3 class="section-title">In the play</h3>
             <ul class="kv" id="involved"></ul>
-            <p class="fine">From the events our detector found, so far.</p>
+            <p class="sr-only">From the events our detector found, so far.</p>
           </section>
           <section class="sheet-section" id="compare-box">
             <h3 class="section-title">Compare with…</h3>
@@ -257,10 +256,10 @@
             <ion-list-header><ion-label class="caps" id="heat-title">Heat map</ion-label></ion-list-header>
             <div class="pad-in">
               <canvas id="heat" role="img" aria-label="Heat map"></canvas>
-              <p class="fine" id="avg-pos"></p>
-              <p class="fine" id="heat-legend"></p>
-              <p class="fine" id="heat-span"></p>
-              <p class="fine" id="card-note">Computed by code from tracked positions.</p>
+              <p class="sr-only" id="avg-pos"></p>
+              <p class="sr-only" id="heat-legend"></p>
+              <p class="sr-only" id="heat-span"></p>
+              <p class="sr-only" id="card-note">Computed by code from tracked positions.</p>
             </div>
           </ion-list>
         </div>
@@ -296,7 +295,6 @@
           </div>
           <h3 class="group-title" id="text-title">Text size</h3>
           <ul class="group" id="text-sizes" role="radiogroup" aria-labelledby="text-title"></ul>
-          <p class="fine pad">Kept on this phone only.</p>
         </div>
       </ion-modal>
     </ion-app>

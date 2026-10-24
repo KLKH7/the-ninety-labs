@@ -13,13 +13,15 @@ export const CLUBS: Record<string, string> = {
   CRW: "Crowmere",
   DUN: "Dunhollow",
   ELM: "Elmwick",
-  FEN: "Lisbon Esportes", // renamed by Kian, Oct 24
+  FEN: "Lisbon Esportes", // renamed by Kian, Oct 24; the renderer's older code
   GRV: "Grovely",
   HLT: "Holtmoor",
   IVY: "Ivydale",
   KST: "Kestwood",
+  LIS: "Lisbon Esportes", // the renderer's new code for the same club
+  LON: "London Athletic", // the renderer's new code for the same club
   MRL: "Merlton",
-  OAK: "London Athletic", // renamed by Kian, Oct 24
+  OAK: "London Athletic", // renamed by Kian, Oct 24; the renderer's older code
   QRY: "Quarrydale",
 };
 
