@@ -357,6 +357,7 @@ interface DescribedLine {
   t_in: number;
   t_out: number;
   text: string;
+  spoken?: string;
 }
 let described: DescribedLine[] = []; // the audio description as said (audio.json), oldest first
 let bundleRadar: { data: import("../../viewer/src/radar").RadarData; fps: number; segmentOf: (k: number) => [number, number] } | null = null;
@@ -1832,7 +1833,7 @@ function renderDescribed(list: HTMLElement, now: number) {
     ...said.map((l, i) => {
       const li = document.createElement("li");
       li.className = "lyric";
-      const text = named(l.text, undefined);
+      const text = named(l.spoken ?? l.text, undefined); // the sentence as the voice says it
       li.textContent = text.charAt(0).toUpperCase() + text.slice(1);
       const current = i === said.length - 1 && now <= l.t_out;
       if (current) li.setAttribute("aria-current", "true");
