@@ -319,9 +319,9 @@ def check(
                 f"({sorted(verdicts) or 'none'})"
             )
 
-
     # Polarity: the words that say which way it went must agree with the cited facts' own fields.
     reasons += polarity_reasons(claim.text, cited)
+    reasons += direction_reasons(claim.text, cited)
 
     # Kind words.
     kinds = {f.get("kind") for f in cited}
@@ -371,6 +371,106 @@ def polarity_reasons(text: str, cited: list[Mapping]) -> list[str]:
         ]
         if any(f.get("value") for f in same):
             out.append(f"it says {m.group()}; the cited facts count some")
+    return out
+
+
+# Closed-world direction (the merge queue's second review): a list of wrong phrasings fails open,
+# since a writer can always find one more ("failed to regain possession"). So for a fact whose
+# direction matters, every word that could state a direction is checked: the sentence's direction
+# words must all sit inside a phrase that states the fact's own direction (APPROVED), and any other
+# direction word or negation is refused. A true sentence in other words is refused too, and code's
+# own sentence airs instead: it fails closed.
+NEGATION = re.compile(
+    r"\b(?:not|no|never|none|nobody|nothing|zero|without|fail\w*|unable|neither|nor|cannot|no-one"
+    r"|no one)\b|n't\b",
+    re.I,
+)
+PRESS_WORDS = re.compile(
+    r"\b(?:win|wins|won|winning|regain\w*|recover\w*|back|possession|lost|lose|loses|losing|got|get|gets|"
+    r"getting|took|take|takes|taking|for good|keep|kept)\b",
+    re.I,
+)
+PASS_WORDS = re.compile(
+    r"\b(?:lost|lose|loses|losing|gave|give|gives|given|away|intercept\w*|cut out|astray|overhit|underhit|"
+    r"fail\w*|incomplete|arriv\w*|reach\w*|complet\w*|success\w*|found|find|finds|kept|keep|keeps|"
+    r"came off|got through|marked|covered|someone else|elsewhere|instead|chose|picked|open|free|unmarked|"
+    r"nobody|none|no one|no-one)\b",
+    re.I,
+)
+OVERLOAD_NEGATED = re.compile(
+    r"\b(?:no|zero|without|never had an?|did not have an?|didn't have an?|not a single|not one)\s+(?:\w+\s+)?"
+    r"(?:overloads?|extra (?:man|men|players?)|spare (?:man|men|players?))\b",
+    re.I,
+)
+
+
+def _approved(f: Mapping) -> list[str]:
+    """The phrases that state this fact's own direction (and the neutral ones its sentences use)."""
+    metric = f.get("metric")
+    if metric == "pressers":
+        out = [
+            r"lost the ball",
+            r"after losing it",
+            r"winning the ball back within \d+(?:\.\d+)? seconds of losing it",
+        ]
+        out += (
+            [r"won (?:it|the ball) back"]
+            if f.get("regained")
+            else [r"(?:did not|didn't|never|could not|couldn't) win (?:it|the ball) back"]
+        )
+        return out
+    if metric == "regains_within_5s":
+        out = [r"lost the ball \d+ times?", r"\d+ regains?"]
+        out += [r"never won it back"] if not f.get("value") else [r"won it back (?:once|\d+ times)"]
+        return out
+    if metric == "open_teammates_ahead":
+        out = [r"further up the pitch", r"further forward"]
+        out += (
+            [r"lost the ball", r"was lost", r"lost the pass", r"lost (?:a|the) pass"]
+            if f.get("outcome") == "fail"
+            else [r"completed (?:the|a) pass", r"kept the ball"]
+        )
+        if f.get("target_open") is False:
+            out += [r"(?:the pass )?went elsewhere"]
+        if f.get("target_open") is True:
+            out += [r"found an open teammate"]
+        out += (
+            [r"no teammate free", r"no open teammate", r"nobody (?:was )?(?:open|free)"]
+            if not f.get("value")
+            else [r"\d+ (?:open )?teammates? (?:free|open)", r"\d+ open teammates?"]
+        )
+        return out
+    if metric == "passes_with_no_open_teammate_ahead":
+        return [r"no open teammate", r"no teammate free", r"further forward", r"further up the pitch"]
+    return []
+
+
+def direction_reasons(text: str, cited: list[Mapping]) -> list[str]:
+    """Closed-world direction (see above): the words left once the cited facts' own phrases are
+    taken out may not state a direction or a negation."""
+    out = []
+    kinds = [(f, PRESS_WORDS) for f in cited if f.get("metric") in ("pressers", "regains_within_5s")]
+    kinds += [
+        (f, PASS_WORDS)
+        for f in cited
+        if f.get("metric") in ("open_teammates_ahead", "passes_with_no_open_teammate_ahead")
+    ]
+    if kinds:
+        rest = text
+        for f, _ in kinds:
+            for phrase in _approved(f):
+                rest = re.sub(phrase, " ", rest, flags=re.I)
+        for words in {w for _, w in kinds}:
+            m = words.search(rest) or NEGATION.search(rest)
+            if m:
+                say = "; ".join(sorted({p for f, _ in kinds for p in _approved(f)}))
+                out.append(f"'{m.group()}' states a direction in other words than the fact's own ({say})")
+                break
+    for f in cited:
+        if f.get("metric") in ("overload_moments", "extra_players") and f.get("value"):
+            m = OVERLOAD_NEGATED.search(text)
+            if m:
+                out.append(f"'{m.group()}'; the cited facts count some")
     return out
 
 

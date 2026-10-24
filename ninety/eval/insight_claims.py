@@ -239,7 +239,10 @@ def markdown(report: dict) -> str:
         "checks only: no model and no Judge were called, nothing was spent.",
         "",
         "Caveat: the same author wrote the claim templates, the plants and the checker. This is an author's "
-        "test of the reader, not an independent audit (docs/LESSONS.md, lesson 4).",
+        "test of the reader, not an independent audit (docs/LESSONS.md, lesson 4). The plants reverse code's "
+        "own templates; free paraphrases are covered by the closed-world direction rule and the reviewer's "
+        "61 paraphrases (tests/test_insight_check.py::test_paraphrases_of_a_direction), and every model "
+        "sentence also goes to the Judge.",
         "",
         "| Players missing a frame | True claims | Wrongly stopped | Planted false | Caught "
         "| Unsure claims | Held |",

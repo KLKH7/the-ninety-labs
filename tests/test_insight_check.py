@@ -278,3 +278,98 @@ def test_none_of_something_needs_a_zero():
         CLUBS,
     )
     assert not v.ok
+
+
+# The merge queue's second review: 61 paraphrases (its adv.py), each must be rejected or passed as
+# marked. The direction check is closed-world, so a paraphrase it does not know is refused.
+NOREGAIN = {**PRESS_LOST}
+SUMMARY0 = {
+    "id": "cps:z",
+    "kind": "counter_press",
+    "metric": "regains_within_5s",
+    "team": "away",
+    "club": "Lisbon Esportes",
+    "minute_from": 1,
+    "minute_to": 15,
+    "value": 0,
+    "unit": "regains",
+    "confident": True,
+}
+SUMMARY2 = {**SUMMARY0, "id": "cps:t", "value": 2}
+PASSFAIL = {**OPTIONS, "id": "po:f", "outcome": "fail", "target_open": False, "value": 0, "lo": 0, "hi": 0}
+PASSFAIL1 = {**PASSFAIL, "id": "po:f1", "value": 3}
+K = {f["id"]: f for f in (COUNTER, PRESS_LOST, OPTIONS, OVERLOAD, SUMMARY0, SUMMARY2, PASSFAIL, PASSFAIL1)}
+PARAPHRASES = [
+    # (text, fid, should_reject)
+    ("Lisbon Esportes never won it back.", "cp:v7", True),
+    ("Lisbon Esportes never got the ball back.", "cp:v7", True),
+    ("Lisbon Esportes failed to regain possession.", "cp:v7", True),
+    ("Lisbon Esportes did not regain the ball.", "cp:v7", True),
+    ("Lisbon Esportes lost it for good.", "cp:v7", True),
+    ("Lisbon Esportes could not recover the ball.", "cp:v7", True),
+    ("Lisbon Esportes got it back within 5 seconds.", "cp:v8", True),
+    ("Lisbon Esportes recovered the ball after losing it.", "cp:v8", True),
+    ("Lisbon Esportes took it back.", "cp:v8", True),
+    ("Lisbon Esportes had the ball back in 2 seconds.", "cp:v8", True),
+    ("Lisbon Esportes won possession straight back.", "cp:v8", True),
+    ("Lisbon Esportes won it back within 5 seconds.", "cp:v8", True),
+    ("Lisbon Esportes won it back 2.4 seconds after losing it.", "cp:v7", False),
+    ("London Athletic played it with nobody open ahead.", "po:v9", True),
+    ("London Athletic played it with no one free ahead.", "po:v9", True),
+    ("London Athletic had no teammates open ahead.", "po:v9", True),
+    ("London Athletic had zero open teammates ahead.", "po:v9", True),
+    ("London Athletic had none open ahead.", "po:v9", True),
+    ("London Athletic had 0 open teammates ahead.", "po:v9", True),
+    ("London Athletic had only 1 open teammate ahead.", "po:v9", True),
+    ("London Athletic lost a pass with no open teammate further forward.", "po:v9", True),
+    ("London Athletic gave away a pass with 3 open teammates ahead.", "po:v9", True),
+    ("London Athletic's pass was intercepted with 3 open teammates ahead.", "po:v9", True),
+    ("London Athletic's pass was cut out with 3 open teammates ahead.", "po:v9", True),
+    ("London Athletic's pass went astray with 3 open teammates ahead.", "po:v9", True),
+    ("London Athletic overhit the pass with 3 open teammates ahead.", "po:v9", True),
+    ("London Athletic had 3 open teammates ahead but the pass failed.", "po:v9", True),
+    ("London Athletic had 3 open teammates ahead and the pass did not arrive.", "po:v9", True),
+    ("London Athletic had 3 open teammates ahead but the pass was incomplete.", "po:v9", True),
+    ("London Athletic had 3 open teammates ahead and chose to pass to a marked player.", "po:v9", True),
+    ("London Athletic had 3 open teammates ahead and played it to a covered man.", "po:v9", True),
+    ("London Athletic had 3 open teammates ahead and passed to someone else.", "po:v9", True),
+    (
+        "London Athletic had 3 open teammates ahead and the pass went to a teammate who was marked.",
+        "po:v9",
+        True,
+    ),
+    ("London Athletic had 3 open teammates ahead but lost the pass.", "po:v9", True),
+    ("London Athletic had 3 open teammates ahead and kept the ball.", "po:f1", True),
+    ("London Athletic had 3 open teammates ahead and completed the pass.", "po:f1", True),
+    ("London Athletic had 3 open teammates ahead and the pass found an open teammate.", "po:f1", True),
+    ("London Athletic had 3 open teammates ahead and the pass reached a teammate.", "po:f1", True),
+    ("London Athletic had 3 open teammates ahead and the pass was successful.", "po:f1", True),
+    ("London Athletic had 3 open teammates ahead and the pass came off.", "po:f1", True),
+    ("London Athletic had 3 open teammates ahead and the pass got through.", "po:f1", True),
+    ("London Athletic had no open teammate ahead and lost the pass.", "po:f", False),
+    ("Lisbon Esportes had no regains from minute 1 to minute 15.", "cps:t", True),
+    ("Lisbon Esportes had only 2 regains from minute 1 to minute 15.", "cps:t", False),
+    ("Lisbon Esportes had 2 regains from minute 1 to minute 15.", "cps:z", True),
+    ("Lisbon Esportes did not win it back once from minute 1 to minute 15.", "cps:t", True),
+    ("Lisbon Esportes never won it back from minute 1 to minute 15.", "cps:t", True),
+    ("Lisbon Esportes won it back from minute 1 to minute 15.", "cps:z", True),
+    ("Lisbon Esportes made zero regains from minute 1 to minute 15.", "cps:t", True),
+    ("Lisbon Esportes made not one regain from minute 1 to minute 15.", "cps:t", True),
+    ("Lisbon Esportes made none of their regains from minute 1 to minute 15.", "cps:t", True),
+    ("Lisbon Esportes did not make a single regain from minute 1 to minute 15.", "cps:t", True),
+    ("Lisbon Esportes won none of it back from minute 1 to minute 15.", "cps:t", True),
+    ("London Athletic built no overloads in minute 12.", "ov:v3", True),
+    ("London Athletic built zero overloads in minute 12.", "ov:v3", True),
+    ("London Athletic built an overload in minute 12.", "ov:v3", False),
+    ("London Athletic were never outnumbered in minute 12.", "ov:v3", False),
+    ("London Athletic never had an overload in minute 12.", "ov:v3", True),
+    ("London Athletic did not have an overload in minute 12.", "ov:v3", True),
+    ("London Athletic had no extra players in minute 12.", "ov:v3", True),
+    ("London Athletic had no extra man in minute 12.", "ov:v3", True),
+]
+
+
+@pytest.mark.parametrize("text, fid, reject", PARAPHRASES)
+def test_paraphrases_of_a_direction(text, fid, reject):
+    v = verify(Claim(text, [fid]), K, CLUBS, NAMED, NAMES)
+    assert (not v.ok) is reject, (text, v.reasons)
