@@ -700,3 +700,57 @@ ion-segment.seg ion-segment-button { --indicator-color: rgba(255, 255, 255, 0.18
 #rate { accent-color: #0a84ff; }
 .switch:checked { background: #34c759; }
 .story-body .when-line { margin-top: 20px; }
+
+/* ===== Ask, How we know, VAR check in strict Apple style (Kian, Oct 24) =====
+   Ask: Apple Intelligence's answer style on black: the question a grey bubble on the right
+   (#2C2C2E, as Messages), the answer plain 17 pt white text at full width, a 22 pt semibold
+   headline, the picture a flat card; actions and follow-ups quiet grey. */
+.asked { background: #2c2c2e; border: 0; font-size: 17px; line-height: 1.35; padding: 10px 16px; border-radius: 20px; }
+#panel-ask .figure { font-size: 22px; font-weight: 600; letter-spacing: 0; }
+#panel-ask .said { font-size: 17px; line-height: 1.45; }
+.answers { padding: 4px 16px 24px; }
+.answer-actions .act { color: var(--text-2); }
+.answer-actions .facts { font-size: 15px; }
+.follow-up { font-size: 17px; font-weight: 400; color: #0a84ff; grid-template-columns: 30px 1fr; }
+.follow-up svg { stroke: #0a84ff; }
+.follow-ups li + li { border-top: 0.5px solid rgba(84, 84, 88, 0.65); }
+#panel-ask .chip { background: #1c1c1e; border: 0; backdrop-filter: none; font-size: 15px; min-height: 34px; }
+.ask-pill, .ask-send { background: #1c1c1e; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
+.ask-pill { border-radius: 22px; }
+#question { min-height: 44px; font-size: 17px; padding: 0 16px; }
+.ask-send { width: 44px; height: 44px; border-radius: 22px; background: #0a84ff; color: #fff; }
+.ask-send svg { width: 20px; height: 20px; }
+
+/* Sheets (How we know, VAR check, player): iOS sheets, a centred 17 pt title and a blue Done. */
+#how-sheet .sheet-head, #player-sheet .sheet-head { position: relative; justify-content: center; padding: 14px 16px 4px; }
+#how-sheet .sheet-head h2 { font-size: 17px; font-weight: 600; }
+#how-sheet .close { position: absolute; right: 8px; top: 4px; width: auto; padding: 0 10px; color: #0a84ff; font-size: 17px; font-weight: 600; }
+#how-sheet .close svg { display: none; }
+#how-sheet .close::after { content: "Done"; }
+ion-modal { --background: #1c1c1e; }
+.how-body { padding: 0 16px 40px; }
+.count-line { font-size: 13px; color: var(--text-2); }
+.step-dot { background: #34c759; color: #000; }
+.step:not(:last-child)::before { background: rgba(84, 84, 88, 0.65); }
+.step-body h3 { font-size: 17px; font-weight: 600; }
+canvas.seen, .picture canvas { border-radius: 14px; }
+.evidence { font-size: 15px; }
+.margin-scale::before { background: rgba(84, 84, 88, 0.9); }
+.band-zone { background: rgba(118, 118, 128, 0.3); }
+.mark { background: #fff; border-color: #1c1c1e; }
+/* Critic pass on Ask and the sheets. */
+.answers .asked { margin-top: 16px; }
+.follow-ups { margin: 4px 0 0; border-radius: 14px; background: #1c1c1e; padding: 0 0 0 16px; }
+.follow-up { display: block; min-height: 44px; padding: 11px 16px 11px 0; font-size: 17px; color: #0a84ff; }
+.follow-ups li + li { border-top: 0.5px solid rgba(84, 84, 88, 0.65); }
+.ask-pill:has(#question:placeholder-shown) + .ask-send { opacity: 0.35; }
+#panel-ask .picture figcaption { display: none; } /* the headline above already says it */
+#how-sheet .picture figcaption { display: none; }
+ion-modal { --backdrop-opacity: 0.45; }
+#how-sheet .sheet-head, #settings-sheet .sheet-head { align-items: center; min-height: 52px; padding-top: 6px; }
+#how-sheet .close, #settings-sheet .close { top: 50%; transform: translateY(-50%); margin-top: 3px; }
+/* "How we know" details: an inset grouped list, label left, value right. */
+.evidence { display: block; margin: 12px 0 0; padding: 0 16px; border-radius: 12px; background: #2c2c2e; }
+.evidence dt { float: left; clear: left; padding: 11px 0; color: var(--text-2); }
+.evidence dd { margin: 0; padding: 11px 0 11px 120px; text-align: right; border-bottom: 0.5px solid rgba(84, 84, 88, 0.65); }
+.evidence dd:last-of-type { border-bottom: 0; }

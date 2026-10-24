@@ -1266,6 +1266,8 @@ function renderAnswer(question: string, at: number, a: ViewerAnswer | null, fail
     if (a.visual) bubble.append(picture(a.visual, a.t_to, a.names));
     li.append(answerActions(a));
     if (a.follow_ups?.length) li.append(followUps(a.follow_ups));
+    // One set of suggestions at a time: an answer's follow-ups replace the starter chips.
+    $("ask-chips").hidden = !!a.follow_ups?.length;
     if (a.spoken) li.setAttribute("aria-label", a.spoken); // a sentence that needs no picture
   }
   return li;
@@ -1319,7 +1321,6 @@ function followUps(qs: string[]): HTMLElement {
       const b = document.createElement("button");
       b.type = "button";
       b.className = "follow-up";
-      b.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4v8a3 3 0 0 0 3 3h10"/><path d="m15 11 4 4-4 4"/></svg>';
       b.append(q);
       b.addEventListener("click", () => void ask(q));
       li.append(b);
