@@ -140,6 +140,21 @@ def mock_pair(browser, site, *, play=True, minimap_body=None):
     return laptop, phone, errors, requests
 
 
+def open_roster(page):
+    """Open the player list the way a keyboard or screen-reader user does: it is off screen until
+    focus reaches it (Live is the score band and the pitch)."""
+    page.focus("#roster-box summary")
+    page.keyboard.press("Enter")
+    page.wait_for_function("document.querySelector('#roster-box').open")
+
+
+def pick(page, name: str):
+    """Pick a player from the list by keyboard: focus his button, press Enter."""
+    open_roster(page)
+    page.get_by_role("button", name=name, exact=True).focus()
+    page.keyboard.press("Enter")
+
+
 def sheet_closed(page):
     """Wait until the player sheet (an ion-modal) has finished closing: until then it covers the page."""
     page.wait_for_function("!document.querySelector('#player-sheet').classList.contains('show-modal')")
@@ -259,8 +274,7 @@ def test_tapping_a_player_shows_their_speed_and_heat_map(browser, mock_site):
     # The same choice without the map, for a screen reader: the roster's buttons.
     phone.click("#close-player")
     sheet_closed(phone)
-    phone.click("#roster-box summary")
-    phone.get_by_role("button", name="Oakfield 4", exact=True).click()
+    pick(phone, "Oakfield 4")
     assert phone.inner_text("#player-title") == "Oakfield 4"
     assert phone.get_attribute("#roster [data-player=h4]", "aria-pressed") == "true"
     assert not errors
@@ -268,8 +282,7 @@ def test_tapping_a_player_shows_their_speed_and_heat_map(browser, mock_site):
 
 def test_answers_show_their_evidence_one_tap_away(browser, mock_site):
     laptop, phone, errors, _ = mock_pair(browser, mock_site)
-    phone.click("#roster-box summary")
-    phone.get_by_role("button", name="Fenwick 7", exact=True).click()
+    pick(phone, "Fenwick 7")
     phone.get_by_role("button", name="What is Fenwick 7's top speed?").click()  # on the player card
     sheet_closed(phone)  # the sheet closes for the Ask tab
     assert phone.get_attribute("#tab-button-ask", "aria-selected") == "true"  # the answer is on the Ask tab
@@ -292,8 +305,7 @@ def test_answers_show_their_evidence_one_tap_away(browser, mock_site):
 
 def test_an_injected_question_is_refused_and_shown_only_as_text(browser, mock_site):
     laptop, phone, errors, _ = mock_pair(browser, mock_site)
-    phone.click("#roster-box summary")
-    phone.get_by_role("button", name="Fenwick 7", exact=True).click()
+    pick(phone, "Fenwick 7")
     phone.click("#ask-about")
     sheet_closed(phone)
     phone.fill("#question", INJECTION)
@@ -314,7 +326,8 @@ def test_a_screen_reader_hears_the_play_described_and_never_an_old_sentence_as_n
     laptop, phone, errors, _ = mock_pair(browser, mock_site)
     said = phone.locator("#now-said")
     assert said.get_attribute("aria-live") == "polite"
-    phone.check("#now-live")  # describe as it happens
+    phone.click(".speak >> nth=0")  # read-aloud on: the play is described as it happens
+    assert phone.is_checked("#now-live")
     phone.wait_for_function("document.querySelector('#now-said').textContent.startsWith('At ')")
     club = "(Oakfield|Fenwick)"
     assert re.search(rf"The ball is .+\. {club} \d+ is nearest it, in {club}'s", said.inner_text())
@@ -619,9 +632,10 @@ def test_the_phone_shows_the_tracked_m1_clip_through_the_api(browser, tracked_ap
         page.wait_for_selector("body[data-state=live]")
         page.wait_for_function("Number(document.querySelector('#map').dataset.dots) > 0")
         assert page.get_attribute("#map", "data-source") == "tracked"
-        assert page.inner_text("#roster-summary") == "Players"
-        page.click("#roster-box summary")
-        page.locator("#roster .who").first.click()
+        assert page.text_content("#roster-summary") == "Players"
+        open_roster(page)
+        page.locator("#roster .who").first.focus()
+        page.keyboard.press("Enter")
         page.wait_for_function("document.querySelector('#speed').textContent !== '–'")
         assert re.fullmatch(r"(Oakfield|Fenwick) player \d+", page.inner_text("#player-title"))
         assert re.fullmatch(r"Covering \d+ s of play: .*", page.inner_text("#heat-span"))
@@ -687,8 +701,7 @@ FLOW = {"type": "flow", "team": "home", "t_from": 0.0, "t_to": 30.0, "nx": 2, "n
 
 def test_a_ground_truth_player_card_is_never_shown(browser, prod_site):
     page, errors, requests = fake_api(browser, prod_site, card=CARD)
-    page.click("#roster-box summary")
-    page.get_by_role("button", name="Fenwick 7", exact=True).click()
+    pick(page, "Fenwick 7")
     page.wait_for_function("performance.getEntriesByType('resource').some(e => e.name.includes('api/card/'))")
     page.wait_for_timeout(500)
     assert page.locator("#player").is_hidden()
@@ -712,8 +725,7 @@ def test_a_ground_truth_flow_field_is_never_drawn(browser, prod_site):
 
 
 def answered(page, text: str):
-    page.click("#roster-box summary")
-    page.get_by_role("button", name="Fenwick 7", exact=True).click()
+    pick(page, "Fenwick 7")
     page.click("#ask-about")  # from his sheet: the question is about him
     sheet_closed(page)
     page.fill("#question", text)

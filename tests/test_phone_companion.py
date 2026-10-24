@@ -460,3 +460,15 @@ def test_how_do_we_know_shows_the_frame_with_what_the_detector_found_and_the_che
     assert "no AI wrote it" in page.inner_text("#how-body")  # a code answer: no Judge to claim
     assert page.locator("#how-body figure.picture").count() == 1  # what it measured, drawn again
     assert not errors
+
+
+def test_live_is_band_and_pitch_and_the_player_list_appears_when_focus_reaches_it(browser, site):  # noqa: F811
+    laptop, page, errors = phone(browser, site, bundle=False)
+    box = page.locator("#now-box").bounding_box()
+    assert box["width"] <= 1 and box["height"] <= 1  # nothing under the pitch on screen
+    page.focus("#roster-box summary")  # a keyboard or screen-reader user tabs in
+    box = page.locator("#now-box").bounding_box()
+    assert box["width"] > 100 and box["height"] > 40, box  # and the rows are there, in place
+    page.click(".speak >> nth=0")  # one control: read aloud, and describe the play as it happens
+    assert page.is_checked("#now-live")
+    assert not errors

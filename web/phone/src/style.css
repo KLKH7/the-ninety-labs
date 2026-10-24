@@ -59,7 +59,10 @@ ion-toolbar.band-bar { --background: var(--band); --color: var(--band-ink); --bo
 .now-said { margin: 16px 20px 0; }
 .now-said:empty, .now-age:empty { display: none; }
 .now-age { margin: 4px 20px 0; color: var(--text-3); }
+/* Live is the score band and the pitch (DESIGN.md). Picking a player from a list stays for keyboard
+   and screen-reader users: off screen until focus reaches it, then shown in place. */
 .rows { margin: 32px 0 24px 20px; border-top: 0.5px solid var(--hairline); }
+.rows:not(:focus-within) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding-right: 20px; border-bottom: 0.5px solid var(--hairline); }
 .row-button { width: 100%; border: 0; background: none; text-align: left; font-size: 17px; color: var(--text); min-height: 48px; padding: 0; }
 .rows .row-button { border-bottom: 0.5px solid var(--hairline); }
@@ -122,9 +125,8 @@ canvas.seen { display: block; width: 100%; border-radius: 12px; background: #000
 .asked { justify-self: end; max-width: 80%; margin: 8px 0 0; padding: 10px 14px; border-radius: 20px 20px 6px 20px; background: var(--text); color: var(--bg); overflow-wrap: anywhere; }
 .bubble { justify-self: start; max-width: 92%; padding: 12px 14px; border-radius: 20px 20px 20px 6px; background: var(--surface); }
 .figure { margin: 0 0 4px; font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.badge { margin: 0 0 0 14px; font-size: 13px; color: var(--text-3); }
-.verified[data-source="model"] .badge { color: var(--ok); }
-.rejected .badge, .error .badge { color: var(--bad); }
+/* Who checked an answer: said to a screen reader; on screen it is in How we know (DESIGN.md: no badges). */
+.badge { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 ion-footer.composer { padding: 8px 0 10px; }
 .chips { display: flex; gap: 8px; overflow-x: auto; padding: 0 16px 10px; scrollbar-width: none; }
 .chips::-webkit-scrollbar { display: none; }

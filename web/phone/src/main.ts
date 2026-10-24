@@ -588,6 +588,12 @@ for (const b of document.querySelectorAll<HTMLButtonElement>(".speak")) {
   b.addEventListener("click", () => {
     speaking = !speaking;
     for (const x of document.querySelectorAll(".speak")) x.setAttribute("aria-pressed", String(speaking));
+    // Read-aloud on also describes the play as it happens: one control for a fan who can't see it.
+    const live = $<HTMLInputElement>("now-live");
+    if (live.checked !== speaking) {
+      live.checked = speaking;
+      live.dispatchEvent(new Event("change"));
+    }
     if (!speaking && "speechSynthesis" in window) speechSynthesis.cancel();
   });
 }
