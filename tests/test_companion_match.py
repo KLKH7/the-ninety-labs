@@ -521,3 +521,31 @@ def test_a_failing_director_model_leaves_code_order():
     log: list = []
     cards = asyncio.run(scout.scout(insights(), rank=rank, log=log))
     assert cards == asyncio.run(scout.scout(insights()))
+
+
+def test_the_live_eval_runs_end_to_end_on_a_scripted_service(monkeypatch):
+    # The paid run must not be the first time this path runs: script the service, run it here.
+    from ninety.api import companion as comp
+    from ninety.eval import companion_tools as ct
+
+    async def match_ask(prompt):
+        if json.loads(prompt)["step"] == "plan":
+            return json.dumps(
+                {"tools": [{"name": "counter_press", "club": None, "minute_from": 1, "minute_to": 20}]}
+            )
+        return "the service fell over"
+
+    async def judge(claim, evidence):
+        from ninety.agents.factcheck import Verdict
+
+        return Verdict(ok=True)
+
+    async def models():
+        return comp.LiveModels(match_ask, judge, match_ask)
+
+    monkeypatch.setattr(comp, "foundry_models", models)
+    body = json.loads(ct.QUESTIONS.read_text())
+    ct.SEEDS.update(body["seeds"])
+    out = asyncio.run(ct.live(body["questions"][:3]))
+    assert out["plans"]["right"] == 3 and out["answers"] == {"code:verified": 3}
+    assert all(r["reasons"] == ["model reply is not the reply format"] for r in out["rows"])
