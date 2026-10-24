@@ -29,14 +29,15 @@ MAX_STEP_MPS = 12.0
 BIN_MIN = 5  # the phone's strips: one bar per five match minutes (*design*)
 
 
-def _sampled(frames: Sequence[Mapping]) -> list[Mapping]:
-    step = round(STEP_S * FPS)
+def _sampled(frames: Sequence[Mapping], step_s: float = STEP_S) -> list[Mapping]:
+    step = round(step_s * FPS)
     return [f for f in frames if int(f["frame"]) % step == 0]
 
 
-def distance(frames: Sequence[Mapping], team: str) -> dict:
+def distance(frames: Sequence[Mapping], team: str, step_s: float | None = None) -> dict:
     """The team's tracked distance over the frames: metres, coverage, steps skipped as jumps."""
-    sampled = _sampled(frames)
+    step_s = STEP_S if step_s is None else step_s
+    sampled = _sampled(frames, step_s)
     last: dict[str, tuple[float, float, float]] = {}
     metres = 0.0
     jumps = 0
@@ -50,7 +51,7 @@ def distance(frames: Sequence[Mapping], team: str) -> dict:
             x, y = float(p["x"]), float(p["y"])
             prev = last.get(p["id"])
             last[p["id"]] = (t, x, y)
-            if prev is None or t - prev[0] > STEP_S * 1.5:
+            if prev is None or t - prev[0] > step_s * 1.5:
                 continue
             step = math.hypot(x - prev[1], y - prev[2])
             if step > MAX_STEP_MPS * (t - prev[0]):

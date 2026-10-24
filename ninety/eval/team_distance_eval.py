@@ -14,15 +14,68 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import statistics
 from pathlib import Path
 
 from ninety.eval import roles_eval
 from ninety.intel import team_stats
 
+# The step is chosen before any held-out grading (pre-registered, Oct 24): the smallest of CANDIDATES
+# whose noise share on the development matches is at most NOISE_SHARE. The noise share is how far the
+# tracked position's error moves over a step, as a share of how far the players truly move: the
+# part of each step that is the tracker's error walking, not running. 5% is *design*, fixed before
+# any share was seen.
+CANDIDATES_S = (1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 8.0, 10.0)
+NOISE_SHARE = 0.05
+SWAP_M = 4.0  # *design*: an error past this is a track following another player (a swap), not noise
 
-def grade(run: Path, minutes: float, missing: float, fragment_s: float, seed: int = 1) -> dict:
-    frames, _ = roles_eval.load(run, step=round(team_stats.STEP_S * 25))
+
+def noise_share(run: Path, minutes: float, step_s: float, fragment_s: float, seed: int = 1) -> dict:
+    """Over every step of every track: the error's movement over the true movement, summed."""
+    frames, _ = roles_eval.load(run, step=25)
+    frames = [f for f in frames if f["t"] <= minutes * 60]
+    spoilt, owner = roles_eval.spoil(frames, seed, fragment_s)
+    every = round(step_s)
+    err_m = true_m = 0.0
+    last: dict[str, tuple] = {}
+    for k, (f, g) in enumerate(zip(frames, spoilt, strict=True)):
+        if k % every:
+            continue
+        truth = {p["id"]: (p["x"], p["y"]) for p in f["players"]}
+        for p in g["players"]:
+            tx, ty = truth[owner[p["id"]]]
+            ex, ey = p["x"] - tx, p["y"] - ty
+            prev = last.get(p["id"])
+            last[p["id"]] = (k, tx, ty, ex, ey)
+            if prev is None or k - prev[0] != every:
+                continue
+            if max(abs(ex), abs(ey), abs(prev[3]), abs(prev[4])) > SWAP_M:
+                continue
+            dex, dey, dtx, dty = ex - prev[3], ey - prev[4], tx - prev[1], ty - prev[2]
+            err_m += math.sqrt(dex * dex + dey * dey)  # sqrt is exact in IEEE: the same on every machine
+            true_m += math.sqrt(dtx * dtx + dty * dty)
+    return {"step_s": step_s, "error_m": round(err_m), "true_m": round(true_m),
+            "share": round(err_m / true_m, 4) if true_m else None}
+
+
+def choose(runs: list[Path], minutes: float, fragment_s: float = 30.0) -> dict:
+    """The pre-registered rule on the development matches: the smallest step with a small noise share."""
+    rows = []
+    for step_s in CANDIDATES_S:
+        got = [noise_share(r, minutes, step_s, fragment_s) for r in runs]
+        err, true = sum(g["error_m"] for g in got), sum(g["true_m"] for g in got)
+        rows.append({"step_s": step_s, "share": round(err / true, 4) if true else None})
+    chosen = next((r["step_s"] for r in rows if r["share"] is not None and r["share"] <= NOISE_SHARE), None)
+    return {"runs": [str(r) for r in runs], "rule": f"smallest step with noise share <= {NOISE_SHARE}",
+            "shares": rows, "chosen_s": chosen}
+
+
+def grade(
+    run: Path, minutes: float, missing: float, fragment_s: float, seed: int = 1, step_s: float | None = None
+) -> dict:
+    step_s = team_stats.STEP_S if step_s is None else step_s
+    frames, _ = roles_eval.load(run, step=25)  # spoiled at one second; the stat samples at its own step
     frames = [f for f in frames if f["t"] <= minutes * 60]
     old = roles_eval.MISSING
     roles_eval.MISSING = missing
@@ -36,8 +89,8 @@ def grade(run: Path, minutes: float, missing: float, fragment_s: float, seed: in
         true = [f for f in frames if lo <= f["t"] < hi]
         seen = [f for f in spoilt if lo <= f["t"] < hi]
         for team in ("home", "away"):
-            t = team_stats.distance(true, team)
-            s = team_stats.distance(seen, team)
+            t = team_stats.distance(true, team, step_s)
+            s = team_stats.distance(seen, team, step_s)
             rows.append(
                 {
                     "bin": b0 // team_stats.BIN_MIN,
@@ -71,7 +124,13 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("run", type=Path)
     ap.add_argument("--minutes", type=float, default=30.0)
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--choose", type=Path, nargs="+", help="development runs: apply the step rule and stop")
     args = ap.parse_args(argv)
+    if args.choose:
+        got = choose(args.choose, args.minutes)
+        args.out.write_text(json.dumps(got, indent=1) + "\n")
+        print(json.dumps(got))
+        return
     report = {
         "run": args.run.name,
         "minutes": args.minutes,
