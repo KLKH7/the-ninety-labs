@@ -41,6 +41,47 @@ tracks have the same true player. The results:
 Each comes with a Wilson 95% interval. The results are reported as measured, with no second run
 under another threshold.
 
+## Deviations (recorded before the results were read)
+
+- **The views' runs:** the first views runs placed nothing. `live_job` never passed `fixed=True`
+  for a view (lesson 235): seed108 had its camera OK on 0 of 250 frames. They were run again with
+  that one-line fix. The runs are at 716014c plus that line, as `code/COMMIT` in the run folder
+  records.
+- **seed112:** its broadcast run failed. The camera could not be placed on any frame, so `live_job`
+  raised. seed112's views run is in step 1, and the clip is reported as not run in step 2.
+- **seed115:** its broadcast run finished with the camera OK on 0 frames, so it has no broadcast
+  track to pair. Its views are in step 1.
+
 ## Results
 
-Pending: the runs are in progress.
+**Step 1** (`association/error.json`): the views' players' pitch-position error over 42,579
+detections on all 8 clips. The median is 0.213 m and the 90th percentile **0.39 m**. The largest,
+102 m, is one far outlier on seed113; the p90 is robust to it. So `VIEWS_ERROR_M = 0.39` and
+`MATCH_M = hypot(1.26, 0.39) = 1.319 m`.
+
+**Step 2** (`association/grade.json`), on the 7 clips with both runs:
+
+| | Count | Share | Wilson 95% |
+|---|---|---|---|
+| Broadcast tracks associated | 144 of 179 | 80.4% | 74-86% |
+| Their tracked frames | 12,456 of 14,461 | 86.1% | |
+| Associations wrong | 4 of 144 | 2.8% | 1-7% |
+| Their tracked frames | 176 of 12,456 | 1.4% | |
+
+| Seed | Broadcast tracks | Associated | Wrong | Frame share |
+|---|---|---|---|---|
+| 108 | 40 | 38 | 0 | 0.93 |
+| 109 | 26 | 26 | 0 | 1.00 |
+| 110 | 31 | 15 | 1 | 0.72 |
+| 113 | 25 | 22 | 3 | 0.80 |
+| 114 | 22 | 11 | 0 | 0.79 |
+| 115 | 0 | 0 | 0 | (camera never OK) |
+| 116 | 35 | 32 | 0 | 0.95 |
+
+- **Unassociated tracks:** most are short. The median is 17 tracked frames, under a second.
+- **The 4 wrong pairs:** three have confidence 1.0, so the confidence does not flag them; each is
+  20-48 frames long. The fourth has confidence 0.72 over 86 frames.
+- **The right pairs:** median confidence 1.0, lowest 0.44.
+- **So:** the confidence is reported, not used as a gate. A consumer that needs one man across both
+  cameras for longer than a few seconds should prefer long tracks: of the associated tracks of 50 frames or more, 1 of 82 was wrong, against
+3 of 62 shorter ones (reported, not a gate chosen here).

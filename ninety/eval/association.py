@@ -117,9 +117,9 @@ def main(argv: list[str] | None = None) -> None:
     if any(refused(s) for s in seeds):
         raise SystemExit(f"refused: {[s for s in seeds if refused(s)]} are test or reserved seeds")
     # A clip whose live run failed (the camera could not be placed on any frame) is reported, not
-    # graded: neither camera's run of it exists to join.
-    ran = [s for s in seeds
-           if all((a.runs / f"seed{s}" / c / "run.json").is_file() for c in ("broadcast", "views"))]
+    # used: the error step needs the views' run of it, grading both cameras'.
+    needs = ("views",) if a.step == "error" else ("broadcast", "views")  # the error is the views' own
+    ran = [s for s in seeds if all((a.runs / f"seed{s}" / c / "run.json").is_file() for c in needs)]
     body = {"step": a.step, "seeds": ran, "not_run": [s for s in seeds if s not in ran],
             "commit": git_commit()}
     seeds = ran

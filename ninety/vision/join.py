@@ -53,7 +53,7 @@ RUN_FILES = ("run.json", "detected.jsonl", "observations.jsonl", "tracked.json")
 # broadcast's is events.RIVAL_M (docs/eval/attribution-derive.md); the views' is measured by the
 # same rule on the views' tracked players (docs/eval/association.md).
 BROADCAST_ERROR_M = ev.RIVAL_M
-VIEWS_ERROR_M = 0.0  # set from docs/eval/association.md before this merges
+VIEWS_ERROR_M = 0.39  # docs/eval/association/error.json: 42579 detections, 8 validation clips
 MATCH_M = math.hypot(BROADCAST_ERROR_M, VIEWS_ERROR_M)
 PLACES = 3
 
