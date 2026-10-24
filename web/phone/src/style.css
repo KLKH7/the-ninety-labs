@@ -218,3 +218,7 @@ ion-tab ion-content { --padding-bottom: calc(64px + 8px + env(safe-area-inset-bo
 .stat-row .bar { position: absolute; bottom: 6px; height: 4px; border-radius: 2px; }
 .stat-row .home-bar { right: calc(50% + 1px); background: var(--home); }
 .stat-row .away-bar { left: calc(50% + 1px); background: var(--away); }
+
+/* Every pitch: rounded 12, a 2 px outline a shade darker than the grass. */
+.map, .picture canvas, #heat { border-radius: 12px; box-shadow: 0 0 0 2px var(--pitch-edge); }
+.map { margin: 2px; }

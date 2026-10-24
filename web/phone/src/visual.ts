@@ -298,8 +298,8 @@ export function drawVisual(view: View, v: Visual) {
       const top = Y(Math.max(z.y0, z.y1));
       const w = Math.abs(X(z.x1) - X(z.x0));
       const h = Math.abs(Y(z.y1) - Y(z.y0));
-      // DESIGN.md: the zone shaded white at 12%, nothing else added.
-      ctx.fillStyle = "rgba(255, 255, 255, 0.12)";
+      // DESIGN.md: the zone shaded white at 15%, nothing else added.
+      ctx.fillStyle = "rgba(255, 255, 255, 0.15)";
       ctx.fillRect(left, top, w, h);
       for (const p of rest("attacker", "defender")) dot(view, p, { dim: true });
       for (const p of [...role("defender"), ...role("attacker")]) dot(view, p);

@@ -72,6 +72,7 @@ export const COLORS = {
   grass: "#123d2b",
   stripe: "#15442f",
   line: "rgba(255,255,255,0.6)",
+  lineWidth: 1, // the markings' width in CSS pixels
   view: "rgba(255,255,255,0.09)",
   viewLine: "rgba(255,255,255,0.7)",
 };
@@ -244,7 +245,7 @@ function drawPitch(ctx: CanvasRenderingContext2D, p: Projection, w: number, h: n
   ctx.fillStyle = COLORS.stripe;
   for (let i = 0; i < 12; i += 2) ctx.fillRect(X((i * PITCH_X) / 12), top, (PITCH_X / 12) * s, PITCH_Y * s);
   ctx.strokeStyle = COLORS.line;
-  ctx.lineWidth = 1;
+  ctx.lineWidth = COLORS.lineWidth;
   ctx.setLineDash([]);
   ctx.strokeRect(X(0), top, PITCH_X * s, PITCH_Y * s);
   ctx.beginPath();

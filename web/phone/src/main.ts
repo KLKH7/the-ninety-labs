@@ -395,8 +395,9 @@ function clubColours() {
     home: read(`--team-${h}`),
     away: read(`--team-${a}`),
     grass: read("--pitch"),
-    stripe: read("--pitch"),
+    stripe: read("--pitch-stripe"),
     line: read("--pitch-line"),
+    lineWidth: 1.5,
     homeInk: "#ffffff",
     awayInk: "#ffffff",
   };
