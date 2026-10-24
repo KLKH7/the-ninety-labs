@@ -103,3 +103,26 @@ def apply(tracks: list[tr.Track], info: dict, rows: list[dict], weights=WEIGHTS)
         changed += team != t.team
         t.team, t.side_confidence = team, round(max(p, 1 - p), 3)
     return changed
+
+
+def transfers(spells: list, cuts: list[int]) -> list[tuple[int, int]]:
+    """(track id, track id) for each time the ball goes from one player's spell to the next player's
+    (`events.spells`, consecutive spells of two tracks, no cut between them): mostly completed passes
+    (GROUNDING R3: completion 75 to 88%), so evidence the two are team-mates, whatever their kits."""
+    out = []
+    for a, b in zip(spells, spells[1:], strict=False):
+        if a.track is b.track or any(a.last <= c < b.first for c in cuts):
+            continue
+        out.append((a.track.id, b.track.id))
+    return out
+
+
+def graph_evidence(links: list[tuple[int, int]], p: dict[int, float]) -> dict[int, float]:
+    """{track id: the mean over its transfers of 2 p_other - 1}: how home its passing partners are."""
+    acc: dict[int, list[float]] = {}
+    for a, b in links:
+        if b in p:
+            acc.setdefault(a, []).append(2 * p[b] - 1)
+        if a in p:
+            acc.setdefault(b, []).append(2 * p[a] - 1)
+    return {k: sum(v) / len(v) for k, v in acc.items()}

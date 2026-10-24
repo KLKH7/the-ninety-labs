@@ -136,13 +136,88 @@ def run(clips: Path, obs: Path, seeds: list[int]) -> dict:
     return report
 
 
+def _loo(data: dict, seeds: list[int], cols: list[int]) -> tuple[dict, dict]:
+    """Leave-one-clip-out fit on the chosen feature columns: ({seed: weights}, {seed: [rows]})."""
+    weights, scored = {}, {}
+    for seed in seeds:
+        train = [(f, tt, n) for s in seeds if s != seed for _, f, tt, n in data[s]
+                 if f is not None and tt is not None]
+        X = np.array([[f[c] for c in cols] for f, _, _ in train])
+        beta = fit(X, np.array([1.0 if tt == "home" else 0.0 for _, tt, _ in train]),
+                   np.array([n for _, _, n in train], dtype=float))
+        weights[seed] = beta
+        out = []
+        for t, f, tt, n in data[seed]:
+            if t.keeper or f is None:
+                team, conf = t.team, t.side_confidence
+            else:
+                p = predict(beta, [f[c] for c in cols])
+                team, conf = ("home" if p >= 0.5 else "away"), max(p, 1 - p)
+            out.append({"id": t.id, "team": team, "keeper": t.keeper, "confidence": None if conf is None
+                        else round(conf, 4), "frames": n, "paired": None, "true_team": tt})
+        scored[seed] = out
+    return weights, scored
+
+
+def _report(scored: dict) -> dict:
+    rep = summarise(scored)
+    rows = [r for ts in scored.values() for r in ts if not r["keeper"] and r["true_team"] is not None
+            and r["team"] is not None]
+    top = [r for r in rows if r["confidence"] is not None and r["confidence"] >= 0.96]
+    return {"outfield": rep["outfield"], "sound_clips": rep["sound_clips"],
+            "flipped_clips": rep["flipped_clips"],
+            "calibration_error": calibration_error(rows), "confidence": rep["confidence"],
+            "at_or_above_0.96": {"tracks": len(top), "right": sum(r["team"] == r["true_team"] for r in top)}}
+
+
+def run_graph(clips: Path, obs: Path, seeds: list[int]) -> dict:
+    """Variant G of the plan: S's features plus the possession-transfer graph, and each source alone."""
+    from ninety.vision import events as ev
+
+    data, links = {}, {}
+    for seed in seeds:
+        if refused(seed):
+            raise SystemExit(f"test seed {seed}: sides are measured on validation clips here")
+        rows = tr.read_observations(obs / f"seed{seed}.jsonl")
+        tracks, feats = features(rows)
+        truth = true_teams(tracks, _truth(clips / f"seed{seed}"))
+        path = tr.ball_path(rows)
+        cuts = [p["frame"] for p, q in zip(rows, rows[1:], strict=False) if q["frame"] != p["frame"] + 1]
+        links[seed] = sides.transfers(ev.spells(path, tracks), cuts)
+        data[seed] = [(t, feats.get(t.id), truth[t.id], len(t.frames)) for t in tracks
+                      if len(t.frames) >= MIN_TRACK_FRAMES]
+    s_weights, _ = _loo(data, seeds, [0, 1, 2])
+    for seed in seeds:  # the graph from S's own leave-one-out probabilities, never this clip's fit
+        p = {t.id: predict(s_weights[seed], f) for t, f, _, _ in data[seed] if f is not None}
+        g = sides.graph_evidence(links[seed], p)
+        data[seed] = [(t, None if f is None else f + [g.get(t.id, 0.0)], tt, n) for t, f, tt, n in data[seed]]
+    out = {"seeds": seeds, "obs": obs.name, "transfers": sum(len(v) for v in links.values())}
+    sources = (("kit", [0]), ("spatial", [1, 2]), ("graph", [3]), ("S", [0, 1, 2]), ("G", [0, 1, 2, 3]))
+    for name, cols in sources:
+        _, scored = _loo(data, seeds, cols)
+        out[name] = _report(scored)
+    every = [(f, tt, n) for s in seeds for _, f, tt, n in data[s] if f is not None and tt is not None]
+    out["G_weights_all"] = [round(float(b), 4) for b in fit(np.array([f for f, _, _ in every]),
+                            np.array([1.0 if tt == "home" else 0.0 for _, tt, _ in every]),
+                            np.array([n for _, _, n in every], dtype=float))]
+    return out
+
+
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description="Variant S: kit and position combined, leave one clip out.")
     ap.add_argument("--clips", type=Path, required=True)
     ap.add_argument("--obs", type=Path, required=True)
     ap.add_argument("--seeds", type=int, nargs="+", required=True)
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--graph", action="store_true",
+                    help="variant G: the possession graph too, and each source alone")
     a = ap.parse_args(argv)
+    if a.graph:
+        report = run_graph(a.clips, a.obs, a.seeds)
+        a.out.write_text(json.dumps(report, indent=1) + "\n")
+        print(json.dumps({k: (v["outfield"]["accuracy"], v["calibration_error"], v["at_or_above_0.96"])
+                          for k, v in report.items() if isinstance(v, dict) and "outfield" in v}))
+        return
     report = run(a.clips, a.obs, a.seeds)
     a.out.write_text(json.dumps(report, indent=1) + "\n")
     print(json.dumps({k: report[k] for k in ("outfield", "sound_clips", "flipped_clips", "calibration_error",

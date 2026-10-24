@@ -79,3 +79,22 @@ reported the same way (kit; depth and kick-off together, the spatial prior; grap
 (0.750) and its calibration error is at most 0.05. Reported beside it, for the gate: the number of
 tracks at or above 0.96 and their accuracy, against S's 6 tracks at 1.0. Keepers and referees keep
 their own handling (kit and position outliers, `assign_teams`). The 0.96 gate is not moved.
+
+### G's result (validation, leave one clip out; `G-validation.json`)
+
+| Source | Outfield accuracy | Calibration error | Tracks at or above 0.96 (right) |
+|---|---|---|---|
+| kit alone | 0.734 | 0.019 | 0 |
+| spatial prior alone (depth, kick-off) | 0.661 | 0.014 | 6 (6) |
+| possession graph alone | 0.433 | 0.058 | 0 |
+| S (kit + spatial) | 0.750 | 0.037 | 6 (6) |
+| **G (all three)** | **0.753** | **0.041** | **13 (12)** |
+
+By the rule as written G replaces S (accuracy at least S's, calibration error at most 0.05). But the
+graph's fitted weight is **negative** (-1.68 of `G_weights_all`): a track whose passing partners look
+home is pushed toward away, the opposite of the premise the plan registered (transfers are mostly
+completed passes, so team-mates). The fit rests on 93 transfers over 23 clips; alone the graph is
+worse than a coin (0.433). G's 0.003 gain is therefore evidence working against its own reason, and
+it adds a wrong track above the gate (12 of 13 right there, against S's 6 of 6). The rule did not
+foresee a sign check; this is put to the Coordinator, not decided here. Until then the live path
+keeps S.
