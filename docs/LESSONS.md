@@ -2291,3 +2291,30 @@ short and actionable. This file is public: no research sources, product names or
 - **Check:** `tests/test_render_motion.py::test_a_bowled_ball_is_brought_down_in_both_hands_with_no_kick`
   fails on the old renderer (the hold ends before the bowl). A clip of an engine that names no bowl
   renders byte-identical (seed 122 at main, frames, events, meta and images).
+
+### 215. A detector tuned on one look is re-checked on the look the renderer draws now
+- **What happened:** the camera fit's marking detector (`ninety/vision/pitch.py`, `line_mask`) was
+  set on renders without sensor grain. The renderer later added grain (`params.noise`). On dataset
+  v2's validation clips only 0.39 of the marked pixels then lay on a marking, the fitted gantry
+  sat on its search grid's corners 10 to 20 m away, and no frame passed the markings test.
+  Nothing placed anything, and it read at first as a stale height band. No check ran the fit on a
+  current render: its tests draw clean scenes, and the scored observations were older looks'.
+- **Rule:** when the renderer's look changes, every vision stage tuned on pixels is re-measured on
+  a clip of the new look against its true camera before any number from it is read. A stage's
+  tests plant the look's own noise, at the renderer's own amplitude, not a clean image.
+- **Check:** `tests/test_vision_pitch.py::test_sensor_grain_is_not_a_marking_and_a_far_line_with_a_gap_still_is`
+  (grain at params.noise's top, 0.02) fails with the blur removed; the before and after on
+  validation clips are in `docs/eval/marking-grain.md`.
+
+### 230. A threshold measured on one look is re-measured when the look changes, by the same rule
+- **What happened:** the camera trust test's height band (0.901 to 1.002) was measured on renderer
+  0.3's validation clips. On today's renders (0.5.x) the players' height ratio through a right
+  camera is 1.00 to 1.11, so the band rejected every correctly fitted frame: nothing was placed on
+  the pitch, and with the grain defect (lesson 215) hiding behind it, the cause looked like one
+  thing when it was two.
+- **Rule:** a threshold derived from rendered data carries the look it was measured on; when the
+  renderer's look changes, it is re-derived by its own pre-registered rule on new validation clips
+  before any number that passes through it is read, and the new value cites both.
+- **Check:** `tests/test_vision_observe.py::test_the_band_is_the_committed_validation_measurement`
+  holds HEIGHT_BAND to `docs/eval/band-broadcast.json` (tactical1's validation clips only), and
+  `ninety/eval/band_derive.py` re-derives it.

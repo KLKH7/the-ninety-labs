@@ -129,7 +129,25 @@ def test_a_white_line_on_grass_is_a_marking():
     img = grass()
     img[30, :] = (240, 240, 235)
     m = pitch.line_mask(img)
-    assert m[30, 10:70].all() and m.sum() == m[30].sum()
+    # The blur spreads a 1 px line over the rows either side, centred on it: no pixel elsewhere.
+    assert m[30, 10:70].all() and m.sum() == m[29:32].sum()
+    assert m[29].sum() == m[31].sum()
+
+
+def test_sensor_grain_is_not_a_marking_and_a_far_line_with_a_gap_still_is():
+    # Grain at the renderer's strongest noise (params.noise up to 0.02 of full scale: 5.1 levels),
+    # drawn independently per pixel and channel.
+    rng = np.random.default_rng(0)
+
+    def grainy(img):
+        return np.clip(img + rng.normal(0, 0.02 * 255, img.shape), 0, 255).astype(np.uint8)
+
+    assert pitch.line_mask(grainy(grass(80, 120))).sum() == 0
+    line = grass(80, 120)
+    line[40, :] = (240, 240, 235)
+    line[40, 60] = line[39, 60]  # a gap of one pixel in a 1 px line
+    m = pitch.line_mask(grainy(line))
+    assert m[40, 10:110].sum() >= 98 and m.sum() == m[39:42].sum()
 
 
 def test_the_edge_between_two_mowing_stripes_is_not_a_marking():

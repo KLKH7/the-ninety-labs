@@ -1,0 +1,207 @@
+"""Shot outcomes from the ball's path (ninety/vision/outcomes.py, through events.detect).
+
+Every scene is built here as observations, frame by frame (lesson 47): a blue (home) shooter at
+(90, 34) strikes toward the goal at x = 105, which red (away) defends, with a green keeper. The
+rules are the plan's (docs/eval/shot-outcomes-plan.md); inputs that must sit by a threshold are
+derived from it (lesson 36), expected outcomes are written out (lesson 190).
+"""
+
+from __future__ import annotations
+
+import math
+
+import pytest
+
+from ninety.vision import events as ev
+from ninety.vision import outcomes as oc
+from tests.test_vision_events import BLUE, FPS, GREEN_KEEPER, RED, crowd, row
+
+KICK = 10
+
+
+def shot_scene(path, frames=60, keeper=None, others=(), heights=None, kickoff_after=None):
+    """The shooter has the ball until KICK; from then the ball is at path(f - KICK) (x, y), or
+    absent where path returns None. `keeper`/`others`: (x, y) or a function of the frame giving
+    it. `heights`: f -> (z, se) for a fitted flight height on the ball."""
+    rows = []
+    for f in range(frames):
+        people = crowd(f) + [(90.0, 34.0, BLUE)]
+        for who, colour in ([(keeper, GREEN_KEEPER)] if keeper else []) + [(o, RED) for o in others]:
+            people.append((*(who(f) if callable(who) else who), colour))
+        ball = (90.3, 34.0) if f <= KICK else path(f - KICK)
+        r = row(f, people, ball)
+        if ball is not None and heights and heights(f) is not None:
+            z, se = heights(f)
+            r["ball"][0] |= {"z": z, "se": se, "flight": 0}
+        rows.append(r)
+    if kickoff_after is not None:
+        rows += kickoff_rows(kickoff_after, rows[-1]["frame"] + 1)
+    return rows
+
+
+def kickoff_rows(own_halves: bool, first: int, frames: int = 10):
+    """After a cut: the ball still on the centre spot, blue (home) in its half (x < 52.5) and red
+    in the other, or everyone on the wrong side."""
+    out = []
+    for f in range(first + 200, first + 200 + frames):  # frame numbers jump: a cut
+        blue_x, red_x = (40.0, 65.0) if own_halves else (65.0, 40.0)
+        people = ([(blue_x, 10.0 + 6 * k, BLUE) for k in range(4)]
+                  + [(red_x, 10.0 + 6 * k, RED) for k in range(4)])
+        out.append(row(f, people, oc.CENTRE))
+    return out
+
+
+def into_net(rest=(106.0, 35.0), speed=25.0):
+    """From (90.3, 34) straight at `rest` at `speed` m/s, stopped there by the net."""
+    def at(k):
+        d = math.dist((90.3, 34.0), rest)
+        s = min(1.0, speed * k / FPS / d)
+        return 90.3 + (rest[0] - 90.3) * s, 34.0 + (rest[1] - 34.0) * s
+    return at
+
+
+def run(rows, context=None):
+    events, summary = ev.detect(rows, context_rows=context)
+    shots = [e for e in events if e["type"] == "shot"]
+    goals = [e for e in events if e["type"] == "goal"]
+    return shots, goals, [e["type"] for e in events], summary
+
+
+def test_a_ball_at_rest_in_the_net_is_a_goal_with_a_goal_event_and_no_out_of_play():
+    shots, goals, types, _ = run(shot_scene(into_net()))
+    assert [s["outcome"] for s in shots] == ["goal"]
+    assert len(goals) == 1 and "out_of_play" not in types
+    g = goals[0]
+    assert g["team"] == "home" and g["x"] == 105.0 and g["player"] == shots[0]["player"]
+    # The line alone, height unknown: the ball's score 0.8, halved (rule 6): below the gate.
+    assert g["confidence"] == 0.4
+
+
+def test_a_kick_off_after_the_goal_adds_evidence_and_one_with_players_in_the_wrong_halves_does_not():
+    _, goals, _, _ = run(shot_scene(into_net(), kickoff_after=True))
+    assert goals[0]["confidence"] == round(1 - (1 - 0.4) * (1 - 0.8), 3)  # 0.88
+    _, goals, _, _ = run(shot_scene(into_net(), kickoff_after=False))
+    assert goals[0]["confidence"] == 0.4
+
+
+def test_a_known_height_under_the_bar_keeps_the_line_evidence_whole_and_one_over_it_is_no_goal():
+    under = shot_scene(into_net(), heights=lambda f: (0.11, 0.05) if f > KICK else None)
+    assert run(under)[1][0]["confidence"] == 0.8
+    # Law 1's bar is 2.44 m, the ball's radius 0.11 m: a centre at 2.31 m give or take 0.01 m
+    # (2.33 m at two standard errors) is under it; at 2.32 m (2.34 m) it is not.
+    under_edge = shot_scene(into_net(), heights=lambda f: (2.31, 0.01) if f > KICK else None)
+    assert run(under_edge)[1][0]["confidence"] == 0.8
+    over = shot_scene(into_net(), heights=lambda f: (2.32, 0.01) if f > KICK else None)
+    shots, goals, _, _ = run(over)
+    assert goals == [] and shots[0]["outcome"] != "goal"
+
+
+def test_a_ball_that_lands_beyond_the_net_or_in_the_side_netting_is_no_goal():
+    for rest in ((105.0 + oc.NET_DEPTH_M + oc.E_X + 1.0, 34.0),
+                 (106.0, 34.0 + oc.GOAL_HALF - oc.BALL_R + oc.E_Y + 0.5)):
+        shots, goals, types, _ = run(shot_scene(into_net(rest)))
+        assert goals == [], rest
+        assert shots[0]["outcome"] == "off_target" and "out_of_play" in types
+
+
+def test_a_ball_flying_through_the_goal_footprint_without_stopping_is_no_goal():
+    shots, goals, _, _ = run(shot_scene(lambda k: (90.3 + 30.0 * k / FPS, 34.0)))
+    assert goals == [] and shots[0]["outcome"] == "off_target"
+
+
+def test_on_the_line_is_not_over_it():
+    # Rule 1: the centre must be beyond the line by more than the radius plus E_X.
+    on = 105.0 + oc.BALL_R + oc.E_X
+    _, goals, _, _ = run(shot_scene(into_net((on - 1e-6, 34.0))))  # on it, clear of float rounding
+    assert goals == []
+    _, goals, _, _ = run(shot_scene(into_net((on + 0.05, 34.0))))
+    assert len(goals) == 1
+
+
+def test_a_ball_within_the_posts_by_the_error_is_in_at_half_the_evidence():
+    edge = 34.0 + oc.GOAL_HALF - oc.BALL_R + oc.E_Y  # rule 2's own edge
+    assert oc.E_Y > 0  # measured (docs/eval/shot-outcomes.json): the band near a post is not empty
+    _, goals, _, _ = run(shot_scene(into_net((106.0, edge - 1e-6))))
+    assert goals[0]["confidence"] == 0.2  # 0.8, halved near a post, halved for no height
+    _, goals, _, _ = run(shot_scene(into_net((106.0, edge + 0.05))))
+    assert goals == []
+    _, goals, _, _ = run(shot_scene(into_net((106.0, edge - 2 * oc.E_Y - 0.05))))
+    assert goals[0]["confidence"] == 0.4  # clear of the band: only the height halves it
+
+
+def keeper_catch(at=(103.0, 34.0)):
+    """The ball flies at the keeper standing at `at` and stays with him."""
+    def path(k):
+        d = math.dist((90.3, 34.0), at) - 0.3
+        s = min(1.0, 25.0 * k / FPS / d)
+        return 90.3 + (at[0] - 0.3 - 90.3) * s, 34.0 + (at[1] - 34.0) * s
+    return path
+
+
+def test_a_shot_on_target_the_keeper_holds_is_a_save():
+    shots, goals, _, summary = run(shot_scene(keeper_catch(), keeper=(103.0, 34.0)))
+    assert goals == [] and [s["outcome"] for s in shots] == ["on_target"]
+    assert summary["shot_outcomes"]["on_target"] == 1
+
+
+def test_the_same_turn_at_an_outfield_defender_is_a_block():
+    shots, _, _, _ = run(shot_scene(keeper_catch((97.0, 34.0)), keeper=(103.0, 34.0), others=[(97.0, 34.0)]))
+    assert [s["outcome"] for s in shots] == ["blocked"]
+
+
+def test_a_shot_that_goes_out_wide_of_the_post_is_off_target():
+    wide = 34.0 + oc.GOAL_HALF + 0.6  # inside the shot rule's margin, outside the posts
+    shots, goals, types, _ = run(shot_scene(lambda k: (90.3 + 25.0 * k / FPS, 34.0 + (wide - 34.0) * min(
+        1.0, 25.0 * k / FPS / (105.0 - 90.3)))))
+    assert goals == [] and [s["outcome"] for s in shots] == ["off_target"] and "out_of_play" in types
+
+
+def test_the_kick_off_reads_players_from_the_tactical_views_when_they_are_given():
+    rows = shot_scene(into_net(), kickoff_after=True)
+    # The broadcast's own players at the kick-off removed; the tactical views say they were wrong.
+    broadcast = [r | {"players": []} if r["frame"] >= 200 else r for r in rows]
+    wrong = [r for r in shot_scene(into_net(), kickoff_after=False)]
+    _, goals, _, _ = run(broadcast, context=wrong)
+    assert goals[0]["confidence"] == 0.4
+    right = [r for r in shot_scene(into_net(), kickoff_after=True)]
+    _, goals, _, _ = run(broadcast, context=right)
+    assert goals[0]["confidence"] == 0.88
+
+
+@pytest.mark.parametrize("frames_in_net,goal", [(oc.IN_NET_FRAMES, True), (oc.IN_NET_FRAMES - 1, False)])
+def test_the_net_must_hold_the_ball_in_net_frames(frames_in_net, goal):
+    approach = into_net((104.5, 35.0))  # up to the line, not over it
+    reach = math.ceil(math.dist((90.3, 34.0), (104.5, 35.0)) / (25.0 / FPS))
+
+    def path(k):
+        if k <= reach:
+            return approach(k)
+        if k <= reach + frames_in_net:
+            return (106.0, 35.0)
+        return None  # the ball no longer seen: picked out of the net, or hidden
+    _, goals, _, _ = run(shot_scene(path))
+    assert bool(goals) is goal
+
+
+def parried(turn_deg):
+    """The ball flies at the keeper at (103, 34) and leaves him at the same speed, turned by
+    `turn_deg` toward +y, and goes on until it is out."""
+    at = (102.7, 34.0)
+    d = math.dist((90.3, 34.0), at)
+    reach = d / (25.0 / FPS)
+    a = math.radians(turn_deg)
+
+    def path(k):
+        if k <= reach:
+            return 90.3 + (at[0] - 90.3) * k / reach, 34.0
+        s = 25.0 * (k - reach) / FPS
+        return at[0] + s * math.cos(a), at[1] + s * math.sin(a)
+    return path
+
+
+def test_a_parry_that_turns_the_ball_wide_at_the_keeper_is_a_save_and_a_slight_swerve_is_not_a_touch():
+    # The ball keeps its speed, so only the change of direction can show the touch.
+    shots, goals, _, _ = run(shot_scene(parried(60.0), keeper=(103.0, 34.0)))
+    assert goals == [] and [s["outcome"] for s in shots] == ["on_target"]
+    shots, _, _, _ = run(shot_scene(parried(20.0), keeper=(103.0, 34.0)))
+    assert [s["outcome"] for s in shots] != ["on_target"]

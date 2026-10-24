@@ -67,8 +67,9 @@ def test_with_no_player_to_measure_the_markings_verdict_stands():
 
 
 def test_the_band_is_the_committed_validation_measurement():
-    body = json.loads((ROOT / "docs/eval/detector-derive.json").read_text())
-    assert list(observe.HEIGHT_BAND) == body["gates"]["band"]
+    body = json.loads((ROOT / "docs/eval/band-broadcast.json").read_text())
+    assert list(observe.HEIGHT_BAND) == body["broadcast"]["band"] == [0.966, 1.121]
+    assert not any(s >= 900000 for s in body["seeds"])  # validation clips only
 
 
 def view_at(dx: float) -> pitch.View:
