@@ -590,3 +590,47 @@ PINNED = [
 def test_each_approved_phrase_is_pinned(text, fid):
     v = verify(Claim(text, [fid]), K2, CLUBS, NAMED, NAMES)
     assert v.ok, (text, v.reasons)
+
+
+# The merge queue's fourth review: 30 more reversals (its new30.py), each held or rejected.
+REVERSALS3 = [
+    (f"{L} lost the ball and the press snuffed out the break.", "cp:v8"),
+    (f"{L} lost the ball and swarmed it straight back.", "cp:v8"),
+    (f"{L} lost the ball and the hunt paid dividends.", "cp:v8"),
+    (f"{L} lost the ball and snatched it off them.", "cp:v8"),
+    (f"{L} lost the ball and the press delivered.", "cp:v8"),
+    (f"{L} lost the ball and pinched it back.", "cp:v8"),
+    (f"{L} lost the ball and the press came up empty.", "cp:v7"),
+    (f"{L} lost the ball and 3 players chased shadows.", "cp:v7"),
+    (f"{L} lost the ball and the opponents escaped the press.", "cp:v7"),
+    (f"{L} lost the ball and the press was bypassed.", "cp:v7"),
+    (f"{L} lost the ball and the opponents kept hold of it.", "cp:v7"),
+    (f"{L} lost the ball and nothing came of the press.", "cp:v7"),
+    (f"{H} had 3 open teammates ahead and the pass sailed out of play.", "po:v9"),
+    (f"{H} had 3 open teammates ahead and the opponents snuffed out the pass.", "po:v9"),
+    (f"{H} had 3 open teammates ahead and the pass was cleared.", "po:v9"),
+    (f"{H} had 3 open teammates ahead and handed the ball to the opposition.", "po:v9"),
+    (f"{H} had 3 open teammates ahead and the pass never made it.", "po:v9"),
+    (f"{H} had 3 open teammates ahead and the pass fell short.", "po:v9"),
+    (f"{H} had 3 open teammates ahead and the pass hit the target.", "po:f1"),
+    (f"{H} had 3 open teammates ahead and the move came off nicely.", "po:f1"),
+    (f"{H} had 3 open teammates ahead and the pass was well received.", "po:f1"),
+    (f"{H} had 3 open teammates ahead and played it neatly.", "po:f1"),
+    (f"{H} had 4 passes with a spare man ahead from minute 1 to minute 15.", "po:n4"),
+    (f"{H} had 4 passes where every teammate was well covered from minute 1 to minute 15.", "po:n4"),
+    (f"{H} were outnumbered around the ball in minute 12.", "ov:v3"),
+    (f"{H} fell short of an extra man in minute 12.", "ov:v3"),
+    (f"{H} did not have extra players in minute 12.", "ov:v3"),
+    (f"{H} had fewer players than the opponents around the ball in minute 12.", "ov:v3"),
+    (
+        f"{L} lost the ball and the press snuffed it out, while {H} had 3 open teammates ahead and the "
+        f"pass broke down.",
+        "cp:v7,po:v9",
+    ),
+    (f"{L} lost the ball 4 times and the press paid off every time from minute 1 to minute 15.", "cps:z"),
+]
+
+
+@pytest.mark.parametrize("text, fids", REVERSALS3)
+def test_no_reversal_of_the_fourth_review_passes(text, fids):
+    assert status_for(verify(Claim(text, fids.split(",")), K2, CLUBS, NAMED, NAMES)) != "verified", text

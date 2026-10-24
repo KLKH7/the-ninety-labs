@@ -386,7 +386,8 @@ def polarity_reasons(text: str, cited: list[Mapping]) -> list[str]:
 # positions, and a short list of glue words are removed. Any word left over is a word the check
 # cannot vouch for, so the sentence is held, never passed, and code's own sentence airs instead. A
 # true sentence in other words is held too: that is the cost of failing closed, and it is measured
-# (tests/test_insight_check.py). A known reversal (`polarity_reasons`) is rejected.
+# (tests/test_insight_check.py). A known reversal (`polarity_reasons`) is rejected. Only the
+# metrics in DIRECTED are covered: any other fact's direction words are left to the Judge.
 GLUE = frozenset(
     """a an the and but then while with in of to from for on at by as it its their his her they them
     there this that these those when after before had has have was were is are be been being so also

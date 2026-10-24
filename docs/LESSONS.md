@@ -2485,7 +2485,9 @@ short and actionable. This file is public: no research sources, product names or
   paraphrases passing it), and so does a list of direction words (a third found 27 of 64 more): the
   check is closed by construction now. For a fact whose direction matters, the fact's own phrases,
   numbers, names and a short list of glue words are taken out of the sentence, and any word left
-  holds it. True sentences in other words are held too; that cost is measured, not hidden.
+  holds it. True sentences in other words are held too; that cost is measured, not hidden. The rule
+  covers only the facts it names; any other fact's direction words are left to the Judge, and the
+  docs say so.
 - **Check:** `uv run python -m ninety.eval.insight_claims` (the `number` and `spelled` plants on
   overloads and counter-presses are caught); `tests/test_insight_check.py` (the window said as
   the regain, the extra players said as the own count, both rejected).
