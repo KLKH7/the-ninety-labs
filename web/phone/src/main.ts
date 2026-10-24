@@ -15,7 +15,7 @@ import { tickTo } from "./ticker";
 import * as prefs from "./settings";
 import { speakAloud } from "../../viewer/src/speech";
 import * as shotMap from "./shots";
-import { nameIds, teamNames } from "../../viewer/src/teams";
+import { fullName, nameIds, teamNames } from "../../viewer/src/teams";
 import { LaptopClock } from "./clock";
 import { ApiError, type Closed, type Feed, GroundTruth, HttpFeed, type Link, guarded } from "./feed";
 import { CODE_ALPHABET, CODE_LENGTH } from "./mockrelay";
@@ -449,6 +449,7 @@ function showTeams() {
   clubColours();
   for (const side of ["home", "away"] as const) {
     for (const el of document.querySelectorAll(`.${side}-name`)) el.textContent = teams[side];
+    for (const el of document.querySelectorAll(`svg.crest.${side}`)) el.innerHTML = crestSvg(teams[side], side);
     for (const el of document.querySelectorAll(`.${side}-letter`)) el.textContent = teams[side].charAt(0);
   }
   $("legend-home").textContent = `${teams.home} →`;
@@ -522,7 +523,42 @@ function rosterIds(): string[] {
   return state.minimap?.roster ?? [];
 }
 
+/** Each player's average position over the footage so far, in pitch metres: from the bundle's
+ * tracked frames, else the minimap feed. Only what was tracked; a player never seen has none. */
+function averagePositions(): Map<string, [number, number]> {
+  const sum = new Map<string, [number, number, number]>();
+  const add = (id: string, x: number, y: number) => {
+    const s = sum.get(id) ?? [0, 0, 0];
+    sum.set(id, [s[0] + x, s[1] + y, s[2] + 1]);
+  };
+  const now = viewTime();
+  if (bundleRadar) for (const f of bundleRadar.data.frames) { if (f.t <= now) for (const p of f.players) add(p.id, p.x, p.y); }
+  else if (state.minimap) for (const f of state.minimap.frames) { if (f.t <= now) for (const [id, x, y] of f.players) add(id, x, y); }
+  return new Map([...sum].map(([id, [x, y, n]]) => [id, [x / n, y / n]]));
+}
+
+/** An original crest for each club (no real club's mark, no city's arms): London Athletic a shield
+ * with a river wave, Lisbon Esportes a roundel with a tram's trolley pole; any other club a plain
+ * shield with its initial. */
+function crestSvg(club: string, side: "home" | "away"): string {
+  const fill = `var(--crest-${side})`;
+  if (club === "London")
+    return `<path d="M27 2 50 9v22c0 14-10 24-23 29C14 55 4 45 4 31V9z" fill="${fill}" stroke="#fff" stroke-width="2.5"/><path d="M12 30q7.5-7 15 0t15 0" fill="none" stroke="#fff" stroke-width="3"/>`;
+  if (club === "Lisbon")
+    return `<circle cx="27" cy="31" r="24" fill="${fill}" stroke="#fff" stroke-width="2.5"/><path d="M27 15v32M15 39h24M19 31l8-12 8 12" fill="none" stroke="#fff" stroke-width="3"/>`;
+  return `<path d="M27 2 50 9v22c0 14-10 24-23 29C14 55 4 45 4 31V9z" fill="${fill}" stroke="#fff" stroke-width="2.5"/><text x="27" y="38" text-anchor="middle" font-size="22" font-weight="700" fill="#fff">${club.charAt(0)}</text>`;
+}
+
+/** Where a player has mostly been, in two words a line-up uses ("Left · defence"). */
+function spot(side: "home" | "away", x: number, y: number): string {
+  const z = zoneFor(side, x, y); // "defensive third, on the left"
+  const depth = z.startsWith("defensive") ? "defence" : z.startsWith("middle") ? "midfield" : "attack";
+  const flank = z.includes("on the left") ? "Left" : z.includes("on the right") ? "Right" : "Centre";
+  return `${flank} · ${depth}`;
+}
+
 function renderRoster(roster: string[]) {
+  const avg = averagePositions();
   const button = (id: string) => {
     const b = document.createElement("button");
     b.type = "button";
@@ -534,13 +570,22 @@ function renderRoster(roster: string[]) {
     const name = document.createElement("span");
     name.className = "name";
     name.textContent = playerName(id);
-    b.append(num, name);
+    const where = document.createElement("span");
+    where.className = "where";
+    const at = avg.get(id);
+    where.textContent = at ? spot(team(id), at[0], at[1]) : "";
+    b.append(num, name, where);
     b.setAttribute("aria-label", playerName(id));
+    if (at) {
+      where.id = `where-${id}`;
+      b.setAttribute("aria-describedby", where.id); // "Left · defence", read after the name
+    }
     b.setAttribute("aria-pressed", "false");
     b.addEventListener("click", () => select(id));
     return b;
   };
-  // One card per club, home first (Apple Sports' line-ups): its crest and name, then # and name.
+  // One card per club, home first (Apple Sports and FotMob line-ups): crest and full name, the
+  // club's players at their average positions on a small pitch, then #, name and where he plays.
   $("roster").replaceChildren(
     ...(["home", "away"] as const).map((side) => {
       const ids = roster.filter((id) => team(id) === side).sort((a, b) => Number(shirt(a)) - Number(shirt(b)));
@@ -548,16 +593,35 @@ function renderRoster(roster: string[]) {
       card.className = "card roster-card";
       const head = document.createElement("h3");
       head.className = "card-title roster-team";
-      head.innerHTML = `<svg class="crest ${side}" viewBox="0 0 54 62" aria-hidden="true"><path d="M27 2 50 9v22c0 14-10 24-23 29C14 55 4 45 4 31V9z"/></svg>`;
-      head.append(teams[side]);
+      head.innerHTML = `<svg class="crest" viewBox="0 0 54 62" aria-hidden="true">${crestSvg(teams[side], side)}</svg>`;
+      head.append(fullName(teams[side]));
+      // The small pitch: x 0..105 left to right, y 0..68 bottom to top, as the radar draws it.
+      const svgNS = "http://www.w3.org/2000/svg";
+      const pitch = document.createElementNS(svgNS, "svg");
+      pitch.setAttribute("viewBox", "-2 -2 109 72");
+      pitch.setAttribute("class", "lineup-pitch");
+      pitch.setAttribute("aria-hidden", "true");
+      pitch.innerHTML =
+        '<rect x="0" y="0" width="105" height="68" rx="2" class="turf"/><rect x="0" y="0" width="105" height="68" class="line"/>' +
+        '<line x1="52.5" y1="0" x2="52.5" y2="68" class="line"/><circle cx="52.5" cy="34" r="9.15" class="line"/>' +
+        '<rect x="0" y="13.84" width="16.5" height="40.32" class="line"/><rect x="88.5" y="13.84" width="16.5" height="40.32" class="line"/>';
+      for (const id of ids) {
+        const at = avg.get(id);
+        if (!at) continue;
+        const g = document.createElementNS(svgNS, "g");
+        g.setAttribute("transform", `translate(${at[0].toFixed(1)} ${(68 - at[1]).toFixed(1)})`);
+        g.innerHTML = `<circle r="3.6" class="shirt ${side}"/><text y="1.3" text-anchor="middle" class="shirt-no"></text>`;
+        g.querySelector("text")!.textContent = shirt(id);
+        pitch.append(g);
+      }
       const cols = document.createElement("p");
       cols.className = "roster-cols";
       cols.setAttribute("aria-hidden", "true");
-      cols.innerHTML = "<span>#</span><span>Name</span>";
+      cols.innerHTML = "<span>#</span><span>Name</span><span>Mostly</span>";
       const row = document.createElement("div");
       row.className = "roster-row";
       row.append(...ids.map(button));
-      card.append(head, cols, row);
+      card.append(head, pitch, cols, row);
       return card;
     }),
   );
@@ -1611,15 +1675,20 @@ function renderJustNow() {
   $("just-now-body").replaceChildren(text, when);
 }
 
+const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
+
 /** A detected event as a play-by-play line (Apple Sports: "Kyle Walker takes a throw-in."), from
  * its own fields only; a player the detection did not name is his club. */
 function playSentence(e: DetectedEvent): string | null {
   const side = e.team === "home" || e.team === "away" ? e.team : null;
-  const who = (id?: string | null) => (id ? playerName(id) : side ? teams[side] : "A player");
+  // A tracked player nobody has named is "a London player", never the tracker's number; a pass
+  // between two of them reaches "a teammate".
+  const who = (id?: string | null) => (id ? cap(named(id)) : side ? teams[side] : "A player");
+  const to = (id: string) => (isTrack(id) && e.player && isTrack(e.player) && team(id) === team(e.player) ? "a teammate" : named(id));
   switch (e.type) {
     case "pass":
-      if (e.outcome === "success") return e.receiver ? `${who(e.player)} passes to ${playerName(e.receiver)}.` : `${who(e.player)} completes a pass.`;
-      return e.interceptor ? `${who(e.player)}'s pass is cut out by ${playerName(e.interceptor)}.` : `${who(e.player)}'s pass doesn't find a teammate.`;
+      if (e.outcome === "success") return e.receiver ? `${who(e.player)} passes to ${to(e.receiver)}.` : `${who(e.player)} completes a pass.`;
+      return e.interceptor ? `${who(e.player)}'s pass is cut out by ${named(e.interceptor)}.` : `${who(e.player)}'s pass doesn't find a teammate.`;
     case "shot":
       return e.outcome === "goal" ? `${who(e.player)} scores.` : e.outcome === "on_target" ? `Shot saved, from ${who(e.player)}.` : e.outcome === "blocked" ? `${who(e.player)}'s shot is blocked.` : `${who(e.player)} shoots wide.`;
     case "out_of_play":
@@ -2009,6 +2078,9 @@ let flowBusy = false;
 
 $("pitch-mode").addEventListener("ionChange", (e) => {
   const flow = (e as CustomEvent<{ value: string }>).detail.value === "flow";
+  $("mode-caption").textContent = flow
+    ? "Which way each team has been moving over the last half-minute."
+    : "Where every player is now, tracked from the cameras.";
   if (flow !== state.wind) $("wind-toggle").click();
 });
 $("wind-toggle").addEventListener("click", async () => {

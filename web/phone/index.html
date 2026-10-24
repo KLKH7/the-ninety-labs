@@ -77,9 +77,10 @@
               <div class="live-pane" id="pane-pitch" role="tabpanel" aria-labelledby="lt-pitch">
                 <section class="card pitch-card" aria-label="Pitch">
               <ion-segment value="players" id="pitch-mode" class="seg" aria-label="What the pitch shows">
-                <ion-segment-button value="players"><ion-label>Players</ion-label></ion-segment-button>
-                <ion-segment-button value="flow" id="flow-button"><ion-label>Flow</ion-label></ion-segment-button>
+                <ion-segment-button value="players"><ion-label>Positions</ion-label></ion-segment-button>
+                <ion-segment-button value="flow" id="flow-button"><ion-label>Movement</ion-label></ion-segment-button>
               </ion-segment>
+              <p class="mode-caption" id="mode-caption">Where every player is now, tracked from the cameras.</p>
               <div class="pitch-wrap">
                 <div class="map" id="map-box">
                   <canvas id="map" role="img" aria-label="Pitch"></canvas>
