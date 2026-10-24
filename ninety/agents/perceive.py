@@ -17,14 +17,16 @@ MATCH_S of the event and MATCH_M of where it was (the event scorer's own rules,
 docs/EVALUATION.md). What it adds is written to the Ledger with `source: re_perceive`, and the
 fact-checker decides again on the evidence with the new reading:
 
-- confirmed: the other camera saw the same event, confidently enough to pass the gate (and the same
-  side, told surely enough, when the claim names one): the claim goes back through the whole
-  fact-checker and airs if it passes;
-- contradicted: it saw the same event for the other side: the claim stays held, and says why;
+- confirmed: the other camera saw the same event, confidently enough to pass the detection gate:
+  the claim goes back through the whole fact-checker and airs if it passes. A side is never
+  re-read by a look (see `recheck`), so a claim naming a side unsure stays held;
+- contradicted: a whole-clip look told the other side: the claim stays held, and says why;
 - not found, or found but no surer: held, as before.
 
-Nothing here reads ground truth: only observations, the vision pipeline's own output. A look costs
-CPU, not a model call, and is capped at MAX_PER_MINUTE a match minute; every look is logged.
+Measured on 22 validation clips (docs/eval/re-perceive.md). Nothing here reads ground truth: only
+observations, the vision pipeline's own output. A look costs CPU, not a model call, and the
+workflow's are capped at MAX_PER_MINUTE a match minute and logged. The MCP tool `re_perceive`
+(ninety/mcp/match_server.py) is neither capped nor logged; no published agent may call it yet.
 """
 
 from __future__ import annotations
@@ -41,9 +43,9 @@ WINDOW_S = 3.0
 # team, within 1.0 s; the lenient spot rule, 2.0 m).
 MATCH_S = 1.0
 MATCH_M = 2.0
-# Design: at most three looks a match minute, the most moments the workflow explains in one
-# (workflow.MAX_MOMENTS_PER_MINUTE): one look per held moment. A look is CPU, not a model call, but
-# a match minute's re-checks must not hold up its graphics.
+# Design: at most three looks a match minute (CPU, not a model call, but a minute's re-checks must not
+# hold up its graphics). One doubtful detection takes a window and a whole-clip look per camera, so
+# with two cameras the first held moment of a minute can use them all; a look already taken is reused.
 MAX_PER_MINUTE = 3
 MODES = ("window", "track")
 
@@ -76,6 +78,7 @@ class Perceiver:
     views: dict[str, list[dict]]
     looks: list[Look] = field(default_factory=list)
     spent: dict[int, int] = field(default_factory=dict)  # match minute -> looks taken
+    memo: dict[tuple[str, str, str], Look] = field(default_factory=dict)
 
     def re_perceive(self, event: Mapping, camera: str, mode: str) -> Look:
         """Look at `event` again through `camera`, in `mode` (see the module docstring)."""
@@ -102,6 +105,16 @@ class Perceiver:
         found = {k: best.get(k) for k in ("type", "t", "team", "team_confidence", "player", "confidence")}
         return Look(event["id"], camera, mode, found, f"{camera} saw it")
 
+    def cached(self, event: Mapping, camera: str, mode: str) -> Look | None:
+        """A look already taken at this event through this camera in this mode: looks are
+        deterministic, so a second claim on the same moment (the Challenger's) reuses it."""
+        return self.memo.get((event["id"], camera, mode))
+
+    def remember(self, look: Look) -> Look:
+        self.memo[(look.event, look.camera, look.mode)] = look
+        self.looks.append(look)
+        return look
+
     def spend(self, minute: int) -> bool:
         """Take one of the minute's looks, if any are left."""
         if self.spent.get(minute, 0) >= MAX_PER_MINUTE:
@@ -110,12 +123,12 @@ class Perceiver:
         return True
 
 
-def doubtful(claim_text: str, evidence: Iterable[Mapping]) -> list[Mapping]:
+def doubtful(claim_text: str, cited: Iterable[Mapping]) -> list[Mapping]:
     """The cited detections the gate distrusts: below the detection confidence, or, for a claim that
     names a side, with a side not told surely."""
     names_side = TEAM_NAMED.search(claim_text) is not None
     out = []
-    for e in evidence:
+    for e in cited:
         if e.get("confidence") is None or e.get("type") in (None, "stat", "shape"):
             continue  # ground truth, a stat or a shape fact: nothing to look at again
         if e["confidence"] < MIN_CONFIDENCE or (names_side and not side_known(e)):
@@ -123,42 +136,56 @@ def doubtful(claim_text: str, evidence: Iterable[Mapping]) -> list[Mapping]:
     return out
 
 
-def recheck(perceiver: Perceiver, claim_text: str, scope: dict[str, dict], minute: int,
+def recheck(perceiver: Perceiver, claim_text: str, evidence: list[str], scope: dict[str, dict],
+            located: Mapping[str, Mapping], minute: int,
             own_camera: str | None = None) -> tuple[dict[str, dict] | None, list[Look]]:
-    """Look again at each doubtful cited detection, through each other camera, a window first and
-    then the whole track. Returns the scope with the confirmed readings in place (None when a look
-    contradicts the side, or nothing was confirmed) and the looks taken."""
+    """Look again at each doubtful detection the claim cites (`evidence`), through each other camera,
+    a window first and then the whole track. `scope` is what the fact-checker checks (compact
+    events); `located` gives each detection's time and place (the full detected events), which a
+    look needs to find it. Returns the scope with confirmed readings in place, or None, and the looks.
+
+    What a look may decide, until a camera's own reading is measured (lesson 227):
+    - it may confirm a DETECTION (seen there, at or above the detection gate);
+    - it never re-reads a SIDE: MIN_TEAM_CONFIDENCE was measured on the broadcast clip's whole-clip
+      vote, and a tactical lens's vote is another reading (wrong sides reach 0.994 there, and the
+      lenses are the fused reading's own inputs). So a claim naming a side stays held on its side;
+    - a whole-clip look that tells the other side, by name, keeps the claim held, with that reason
+      (holding is always safe); a window's side, or an unknown one, decides nothing."""
     names_side = TEAM_NAMED.search(claim_text) is not None
-    updated, looks, confirmed = dict(scope), [], 0
-    targets = doubtful(claim_text, scope.values())
+    cited = [scope[i] for i in evidence if i in scope]
+    targets = doubtful(claim_text, cited)
+    looks: list[Look] = []
+    updated, confirmed = dict(scope), 0
     for event in targets:
-        done = False
+        where = {**event, **{k: located.get(event["id"], {}).get(k) for k in ("t", "x", "y")}}
+        if any(where.get(k) is None for k in ("t", "x", "y")):
+            continue  # nowhere to look: the event's time and place are unknown
+        seen = None
         for camera in sorted(c for c in perceiver.views if c != own_camera):
             for mode in MODES:
-                if done or not perceiver.spend(minute):
-                    continue
-                look = perceiver.re_perceive(event, camera, mode)
+                look = perceiver.cached(where, camera, mode)
+                if look is None:
+                    if not perceiver.spend(minute):
+                        continue
+                    look = perceiver.remember(perceiver.re_perceive(where, camera, mode))
                 looks.append(look)
-                perceiver.looks.append(look)
                 found = look.found
                 if found is None:
                     continue
-                if found["team"] != event["team"]:
-                    look.why = f"{camera} saw it for the other side ({found['team']})"
+                if mode == "track" and found.get("team") not in (None, event["team"]):
+                    look.why = f"{camera} told the other side ({found['team']}) over the whole clip"
                     return None, looks
-                reading = {**event, "confidence": max(event["confidence"], found["confidence"] or 0.0)}
-                # Only the whole-clip vote re-reads the side: MIN_TEAM_CONFIDENCE was measured on that
-                # reading. A 3 s window's vote is more one-sided than the clip's, whoever is right:
-                # on the M1 clip it read the false v00003's side at 1.0 (lesson 227).
-                if look.mode == "track" and found.get("team_confidence") is not None:
-                    reading["team_confidence"] = max(event.get("team_confidence") or 0.0,
-                                                     found["team_confidence"])
-                sure = reading["confidence"] >= MIN_CONFIDENCE and (not names_side or side_known(reading))
-                look.why = f"{camera} saw it" + (", surely enough" if sure else ", no surer")
-                if sure:
-                    updated[event["id"]] = {**reading, "re_perceived": look.as_dict()}
-                    confirmed += 1
-                    done = True
+                if (found.get("confidence") or 0.0) >= MIN_CONFIDENCE:
+                    seen = seen or look
+        if seen is None:
+            continue
+        reading = {**event, "confidence": max(event["confidence"], seen.found["confidence"])}
+        sure = reading["confidence"] >= MIN_CONFIDENCE and (not names_side or side_known(reading))
+        seen.why = f"{seen.camera} saw it" + ("; detection confirmed" if sure else
+                                               "; the side stays unsure (a look never re-reads it)")
+        if sure:
+            updated[event["id"]] = {**reading, "re_perceived": seen.as_dict()}
+            confirmed += 1
     return (updated if targets and confirmed == len(targets) else None), looks
 
 

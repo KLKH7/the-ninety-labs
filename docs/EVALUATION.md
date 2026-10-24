@@ -518,19 +518,21 @@ Describer model's line goes through the same gate; the Personalizer asks for no 
 and holds one written anyway. **Known residual:** a track id (`a-t9`) encodes the side by its
 letter, from the same decision; it is not held, as naming the track is how the agents say who.
 
-**Active perception** (`ninety/agents/perceive.py`, the MCP tool `re_perceive`). A claim the gate
-holds on a doubtful detection is looked at again: the fact-checker re-runs R3's event detection
-(`ninety.vision.events.detect`, unchanged) on another camera's observations, a 3 s window and then
-the whole clip, at most 3 looks a match minute, every look a trace step and a Ledger record
-(`source: re_perceive`). It airs only when every doubtful detection is confirmed: the same event
-(type, 1 s, 2 m) seen confidently, and, for a claim naming a side, the side re-read above 0.96 by the
-whole-clip vote only, the reading the threshold was measured on (lesson 227: a window's vote read a
-false event's side at 1.0). A camera that sees the other side keeps it held, with that reason.
+**Active perception** (`ninety/agents/perceive.py`). A claim the gate holds on a doubtful detection
+is looked at again: the fact-checker re-runs R3's event detection (`ninety.vision.events.detect`,
+unchanged) on another camera's observations, a 3 s window and then the whole clip, at most 3 looks a
+match minute (a look already taken is reused), every look a trace step and a Ledger record (`source:
+re_perceive`). A look may **confirm a detection** (the same event, by type, 1 s and 2 m, seen at or
+above the detection gate), and the claim then goes through the whole fact-checker again. It **never
+re-reads a side**: 0.96 was measured on the broadcast clip's whole-clip vote, and each camera's vote
+is another reading until it is measured (lesson 227; wrong sides reach 0.994 on the tactical
+lenses). A whole-clip look that tells the other side keeps a claim held, with that reason. The MCP
+tool `re_perceive` is read-only and neither capped nor logged; no published agent may call it yet.
 **Measured** on 22 validation clips through the tactical rig's two lenses
-([eval/re-perceive.md](eval/re-perceive.md)): of 81 detections a team claim would be held on, a
-second look resolved **0** (so it aired nothing, and no wrong side), and contradicted 28, no better
-than a coin where the event was real (7 right, 7 wrong; a contradiction only holds). Safe, and no
-gain yet: the gate opens only when a camera tells sides better than today's kit reader.
+([eval/re-perceive.md](eval/re-perceive.md)): 81 held claims (80 on an unsure side, 1 on an unsure
+detection), **0 resolved** (nothing aired, so no wrong side aired), 15 contradicted (4 rightly, 1
+wrongly where the event was real). Safe, and no gain yet: it opens a gate only once a camera's own
+side reading is measured and good.
 
 ## Broadcast framing: a known limit of the metric at set-piece deliveries
 

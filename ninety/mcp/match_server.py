@@ -157,7 +157,9 @@ def re_perceive(match: str, event_id: str, camera: str, mode: str) -> dict:
     on that camera's observations, in mode "window" (3 s around the event) or "track" (the whole clip:
     each track's side voted over every frame it was seen). Returns the same event as that camera saw
     it (type, t, team, team_confidence, player, confidence), or found null and why. Read-only; it
-    never reads ground truth. Use it when a claim's evidence is unsure, not to find new events."""
+    never reads ground truth. Use it when a claim's evidence is unsure, not to find new events. Unlike
+    the fact-checker's own looks, calls here are neither capped nor logged: no published agent may
+    call it yet (it is not in TOOLS)."""
     if match not in DETECTED:
         served = ", ".join(DETECTED)
         raise ValueError(f"no detected events to look at again for {match!r}; available: {served}")

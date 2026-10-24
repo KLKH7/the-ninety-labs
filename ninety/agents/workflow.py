@@ -586,13 +586,15 @@ class FactChecker(Executor):
 
         run = self.run
         started = time.perf_counter()
-        confirmed, looks = perceive.recheck(run.perceiver, draft.claim.text, scope, case.moment.minute)
+        located = {e["id"]: e for e in run.events}  # each detection's time and place, to find it again
+        confirmed, looks = perceive.recheck(run.perceiver, draft.claim.text, draft.claim.evidence, scope,
+                                            located, case.moment.minute)
         for n, look in enumerate(looks):
             run.step("fact_checker", case.moment.id, "re_perceive", started,
                      f"{look.event} through {look.camera} ({look.mode}): {look.why}")
             await run.ledger.append(Record(
                 id=f"look-{case.moment.id}-{draft.author}-{draft.attempt}-{n}", version=1, kind="fact",
-                t=run.t[case.moment.main_event], source="re_perceive",
+                t=run.t.get(look.event, run.t[case.moment.main_event]), source="re_perceive",
                 confidence=(look.found or {}).get("confidence"), evidence=(),
                 payload=look.as_dict()))
         if not looks:

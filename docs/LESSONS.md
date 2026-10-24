@@ -2352,10 +2352,12 @@ short and actionable. This file is public: no research sources, product names or
   1.0; the whole clip had read it at 0.529. A side vote over a few frames is more one-sided than the
   clip's, whoever is right, and the 0.96 threshold was measured on whole-clip votes. The look would
   have aired a team claim on an event that never happened. The evaluation's own fixture test caught
-  it before any number was published.
+  it before any number was published. The second version still let a tactical lens's whole-clip vote
+  re-read the side, although 0.96 was measured on the broadcast's (the independent review caught it:
+  wrong sides reach 0.994 on the lenses). Now a look never re-reads a side.
 - **Rule:** a score is compared only with a threshold measured on the same kind of reading. A
   shorter window, another camera or another model is a new reading, and needs its own measurement
   before it can open a gate. Until then it may only confirm what does not depend on it (here, that
   the event was seen).
-- **Check:** `tests/test_perceive.py::test_a_window_s_side_vote_never_confirms_a_side` and
-  `::test_on_the_m1_clip_no_look_resolves_the_false_detection`.
+- **Check:** `tests/test_perceive.py::test_a_look_never_re_reads_a_side_so_a_team_claim_on_an_unsure_side_stays_held`
+  and `::test_a_real_camera_look_runs_inside_the_workflow`.
