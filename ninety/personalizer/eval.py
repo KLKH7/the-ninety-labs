@@ -24,6 +24,9 @@ from collections import Counter
 from pathlib import Path
 
 from ninety.agents.contracts import LANGS, Profile
+
+# The outage threshold and refusal, shared with every live evaluation (ninety/agents/evidence.py).
+from ninety.agents.evidence import MAX_UNANSWERED_SHARE, NothingMeasured  # noqa: F401
 from ninety.agents.factcheck import check
 from ninety.personalizer import core
 from ninety.personalizer.client import in_process
@@ -70,10 +73,6 @@ async def _each(client, cases: list[tuple], rows: list[dict]) -> None:
                          "ms": ms})
 
 
-# design: a run reports only when the model answered at least four requests in five. Which claims
-# an outage hits depends on when it struck, not on the claims, so past that the answered set no
-# longer stands for the claims the report names; such a run is re-run, never reported.
-MAX_UNANSWERED_SHARE = 0.2
 
 
 def answered(row: dict) -> bool:
@@ -109,7 +108,9 @@ def timing(times: list[float]) -> str:
             f"max {times[-1]:.0f} ms.")
 
 
-def report(rows: list[dict], label: str, seeds: str, budget_s: float = core.BUDGET_S) -> str:
+def report(rows: list[dict], label: str, seeds: str, budget_s: float = core.BUDGET_S, *, defs: dict) -> str:
+    from ninety.agents.evidence import md_line
+
     sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True, text=True)
     requests = requests_of(rows)
     answered_requests = [r for r in requests.values() if answered(r)]
@@ -122,6 +123,8 @@ def report(rows: list[dict], label: str, seeds: str, budget_s: float = core.BUDG
         f"claims, each sent once over A2A for {len(PROFILES)} profiles; the model answered "
         f"{len(answered_requests)} of them. A variant *airs* when it passes the re-check; otherwise the "
         "profile gets the verified English text. Air rates and times count answered requests only.",
+        "",
+        md_line(defs),
         "",
         "| Persona | Language | Variants | Model answered | Airs |",
         "|---|---|---|---|---|",
@@ -151,10 +154,6 @@ def report(rows: list[dict], label: str, seeds: str, budget_s: float = core.BUDG
     return "\n".join(lines) + "\n"
 
 
-class NothingMeasured(RuntimeError):
-    """Too few requests were answered for the run to measure the Personalizer, not an outage."""
-
-
 async def _main(args, published=core.published_ask) -> str:
     seeds = [int(s) for s in args.seeds.split(",")]
     # Sign in before the slow part: building the claims simulates matches for minutes, and the
@@ -172,7 +171,16 @@ async def _main(args, published=core.published_ask) -> str:
             f"the model did not answer {unanswered} of {len(requests)} requests "
             f"(over {MAX_UNANSWERED_SHARE:.0%}); see {raw}"
         )
-    return report(rows, label, args.seeds, args.budget)
+    defs = definitions() if published is core.published_ask else {}  # a test's stand-in is no agent
+    return report(rows, label, args.seeds, args.budget, defs=defs)
+
+
+def definitions() -> dict:
+    """The published Personalizer's definition (ninety/agents/evidence.py), as `core.published_ask`
+    pins it."""
+    from ninety.agents import evidence
+
+    return evidence.of_code(lambda client: [core.personalizer_agent(client)])
 
 
 def main() -> None:

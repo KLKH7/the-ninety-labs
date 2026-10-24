@@ -9,7 +9,7 @@ from pathlib import Path
 
 from jsonschema import validate
 
-from ninety.agents.factcheck import MIN_CONFIDENCE, Claim, check
+from ninety.agents.factcheck import MIN_CONFIDENCE, Claim, check, side_known
 from ninety.agents.ledger import InMemoryLedger, Ledger, load_match
 from ninety.match.facts import match_events
 
@@ -47,7 +47,7 @@ def _pass_text(event: dict, persona: str) -> str:
         if intended:
             return f"{player} looks for {intended}"
         return f"{player} plays a pass"
-    parts = [f"{player} → {target}" if target else f"{player} pass"]
+    parts = [f"{player} → {target}" if target else "a pass" if player == UNNAMED else f"{player} pass"]
     if outcome == "fail":
         parts[0] += f" ({stopped})" if stopped else " (incomplete)"
     elif outcome is None and target:
@@ -59,9 +59,13 @@ def _pass_text(event: dict, persona: str) -> str:
     return ", ".join(parts)
 
 
+UNNAMED = "a player"  # who an event is about when neither the player nor, surely, the side is known
+
+
 def _who(event: dict) -> str:
-    """The player, or the team when the detector could not say who it was."""
-    return event.get("player") or event["team"]
+    """The player, or the team when the detector could not say who it was and its side is known
+    (factcheck.side_known); else neither: a graphic never names a side the detector is unsure of."""
+    return event.get("player") or (event["team"] if side_known(event) else UNNAMED)
 
 
 def _shot_text(event: dict, persona: str) -> str:
@@ -70,7 +74,7 @@ def _shot_text(event: dict, persona: str) -> str:
         return f"{player} scores"
     if persona == "casual":
         return f"{player} takes a shot"
-    parts = [f"{player} shot"]
+    parts = ["a shot" if player == UNNAMED else f"{player} shot"]
     if event.get("outcome") in SHOT_OUTCOME:
         parts.append(SHOT_OUTCOME[event["outcome"]])
     if event.get("ball_speed_kmh") is not None:

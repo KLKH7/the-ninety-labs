@@ -474,9 +474,9 @@ def test_the_evaluation_counts_a_variant_the_server_dropped_as_not_airing():
     rows = run(personalizer_eval.run([(21, "pass", CLAIM, EVIDENCE)], ask, core.BUDGET_S))
     airs = {(r["persona"], r["lang"]): r["dropped"] is None for r in rows}
     assert airs == {(p.persona, p.lang): p.lang == "en" for p in personalizer_eval.PROFILES}
-    report = personalizer_eval.report(rows, "scripted", "21")
+    report = personalizer_eval.report(rows, "scripted", "21", defs={})
     assert f"budget {core.BUDGET_S} s." in report
-    assert "budget 30.0 s." in personalizer_eval.report(rows, "scripted", "21", 30.0)
+    assert "budget 30.0 s." in personalizer_eval.report(rows, "scripted", "21", 30.0, defs={})
     assert "| casual | es | 1 | 1 | 0 |" in report and "| casual | en | 1 | 1 | 1 |" in report
     assert "- 4 x server: number N is not in the cited evidence" in report
 
@@ -637,7 +637,7 @@ def test_a_partial_outage_counts_rates_and_times_over_answered_requests_only(mon
     rows = run(personalizer_eval.run(five_claims(), outage_on("a"), core.BUDGET_S))
     for r in rows:  # the unanswered request was slow, the answered ones fast
         r["ms"] = 3000.0 if r["claim"].endswith("[a]") else 10.0
-    report = personalizer_eval.report(rows, "scripted", "a-e")
+    report = personalizer_eval.report(rows, "scripted", "a-e", defs={})
     assert "the model answered 4 of them" in report
     assert "| casual | es | 5 | 4 |" in report
     # The unanswered request's 3000 ms is not counted. With 4 times, no p95 is shown (lesson 89).
@@ -726,7 +726,7 @@ def test_two_claims_with_the_same_words_are_two_requests():
     rows = [{"request": i, "seed": 21, "claim": CLAIM.text, "route": "remote", "dropped": None, "ms": 5.0,
              "persona": p.persona, "lang": p.lang} for i in (0, 1) for p in personalizer_eval.PROFILES]
     assert len(personalizer_eval.requests_of(rows)) == 2
-    assert "2 true claims" in personalizer_eval.report(rows, "scripted", "21")
+    assert "2 true claims" in personalizer_eval.report(rows, "scripted", "21", defs={})
 
 
 def test_a_p95_is_shown_only_when_it_is_not_the_maximum():

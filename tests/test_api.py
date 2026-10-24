@@ -43,7 +43,7 @@ def test_mcp_with_the_key_lists_the_match_tools():
     response = call("k" * 64, "k" * 64)
     assert response.status_code == 200
     names = sorted(t["name"] for t in response.json()["result"]["tools"])
-    assert names == ["list_events", "match_info", "team_shape"]
+    assert names == ["list_events", "match_info", "re_perceive", "team_shape"]
 
 
 def test_mcp_answers_a_tool_call():
