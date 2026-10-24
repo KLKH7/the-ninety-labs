@@ -166,6 +166,7 @@ class Room:
     laptop: WebSocket | None = None
     phones: dict[WebSocket, Outbox] = field(default_factory=dict)
     latest: dict[str, dict] = field(default_factory=dict)  # last clock and focus, for late phones
+    stored_at: dict[str, float] = field(default_factory=dict)  # when each was stored (Companion.clock)
     sending: set[asyncio.Task] = field(default_factory=set)  # flushes in flight, kept until done
     # The match conversation: each phone question and its answer, so a follow-up has its context
     # (ninety/agents/companion_match.py). Capped; it lives and dies with the pairing.
@@ -367,7 +368,7 @@ class Companion:
         if role == "laptop":
             room.laptop = ws
         else:
-            box = Outbox(ws, deque(room.latest.values()), flushing=True)
+            box = Outbox(ws, deque(self._catch_up(room)), flushing=True)
             room.phones[ws] = box
         try:
             await ws.accept()
@@ -390,6 +391,7 @@ class Companion:
                     await ws.close(code=1007)  # not a clock or focus message
                     return
                 room.latest[message["type"]] = message
+                room.stored_at[message["type"]] = self.clock()
                 for phone_box in list(room.phones.values()):
                     phone_box.items.append(message)
                     # Each phone is sent to on its own task, so a stalled phone holds up only itself.
@@ -402,6 +404,18 @@ class Companion:
             if role == "laptop" and room.laptop is ws:
                 room.laptop = None
             room.phones.pop(ws, None)
+
+    def _catch_up(self, room: Room) -> list[dict]:
+        """The latest state for a phone joining late. A playing clock has run on since the laptop
+        sent it (up to a second ago), so it is sent as it stands now, not as it stood then; a
+        paused clock and a focus are sent as stored."""
+        out = []
+        for kind, message in room.latest.items():
+            if kind == "clock" and message.get("playing"):
+                held = max(0.0, self.clock() - room.stored_at.get(kind, self.clock()))
+                message = {**message, "t": round(message["t"] + held, 2)}
+            out.append(message)
+        return out
 
     @staticmethod
     async def _flush(room: Room, box: Outbox) -> None:
