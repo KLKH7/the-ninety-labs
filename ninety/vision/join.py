@@ -11,8 +11,8 @@ come from them. The joined folder is what ninety-e2e reads (`--events-file`, `--
 
     detected.jsonl      the broadcast run's events, unchanged
     observations.jsonl  the broadcast run's, unchanged (the radar draws its camera's footprint)
-    tracked.json        the views' tracked players and teams on every frame they have, with the
-                        broadcast's ball on the frames where the broadcast has one
+    tracked.json        the views' tracked players and teams, with the broadcast's ball where the
+                        broadcast placed one and the views' elsewhere, on every frame either has it
     association.json    each broadcast player track -> the tactical track of the same man, or none
     join.json           what was joined, and how
 
@@ -21,9 +21,10 @@ frame numbers and times). The join refuses two runs unless they are of the same 
 exactly the same frames at the same times, so a frame number means the same moment in both. It
 never shifts or resamples one camera onto the other.
 
-**Association.** On every frame both tracked files hold, each broadcast player is paired with the
-nearest tactical player on the pitch. The pair is taken only when it is unambiguous: the nearest
-is within MATCH_M and the next nearest is more than MATCH_M farther than it. MATCH_M is the two
+**Association.** On every frame the broadcast's tracked frames and the joined ones both hold,
+each broadcast player is paired with the nearest tactical player on the pitch. The pair is taken
+only when it is unambiguous: the nearest is within MATCH_M and the next nearest is more than
+MATCH_M farther than it. MATCH_M is the two
 cameras' position errors added in quadrature (two independent errors on one man), each a measured
 90th percentile, not a tuned number. Each broadcast track is then given the tactical track most of
 its paired frames chose, with the share of its paired frames that chose it as the confidence.
@@ -39,11 +40,13 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import shutil
 from collections import Counter
 from pathlib import Path
 
 from ninety.vision import events as ev
 from ninety.vision import track as tr
+from ninety.vision import tracked_frames
 
 RUN_FILES = ("run.json", "detected.jsonl", "observations.jsonl", "tracked.json")
 # The players' position errors, each the 90th percentile measured on validation clips. The
@@ -89,18 +92,33 @@ def check_clock(broadcast: dict, views: dict) -> None:
             raise SystemExit(f"refused: the {name} run's tracked frames {stray[:3]} were not observed")
 
 
+def radar_rows(views: list[dict], broadcast: list[dict]) -> list[dict]:
+    """The views' observations, each frame's ball replaced by the broadcast's where the broadcast
+    placed one on a trusted camera (it follows the ball close up), else the views' own."""
+    by_frame = {r["frame"]: r for r in broadcast}
+    out = []
+    for row in views:
+        b = by_frame[row["frame"]]
+        placed = [x for x in b.get("ball", []) if x.get("x") is not None]
+        if b["camera"]["ok"] and placed:
+            row = {**row, "ball": placed}
+        out.append(row)
+    return out
+
+
 def tracked(broadcast: dict, views: dict) -> tuple[dict, dict]:
-    """The views' tracked frames, with the broadcast's ball wherever the broadcast has one."""
-    ball = {f["frame"]: f["ball"] for f in broadcast["tracked"]["frames"]}
-    frames, swapped = [], 0
-    for f in views["tracked"]["frames"]:
-        if f["frame"] in ball:
-            f = {**f, "ball": ball[f["frame"]]}
-            swapped += 1
-        frames.append(f)
-    body = {"restarts": views["tracked"].get("restarts", []), "frames": frames}
-    return body, {"frames": len(frames), "ball_from_broadcast": swapped,
-                  "ball_from_views": len(frames) - swapped}
+    """The views' players and teams, tracked as tracked_frames tracks them, on every frame either
+    camera has the ball. Built from the views' observations rather than their tracked.json, which
+    keeps only the frames the views found the ball on."""
+    b_ok = {r["frame"] for r in broadcast["observations"]
+            if r["camera"]["ok"] and any(x.get("x") is not None for x in r.get("ball", []))}
+    body = tracked_frames.build(radar_rows(views["observations"], broadcast["observations"]),
+                                broadcast["run"]["clip"])
+    frames = body["frames"]
+    swapped = sum(1 for f in frames if f["frame"] in b_ok)
+    return {"restarts": body["restarts"], "frames": frames}, {
+        "frames": len(frames), "ball_from_broadcast": swapped, "ball_from_views": len(frames) - swapped,
+        "views_tracked_frames": len(views["tracked"]["frames"])}
 
 
 def pair_frame(mine: list[dict], theirs: list[dict], match_m: float) -> dict[str, tuple[str, float]]:
@@ -116,10 +134,10 @@ def pair_frame(mine: list[dict], theirs: list[dict], match_m: float) -> dict[str
     return out
 
 
-def associate(broadcast: dict, views: dict, match_m: float = MATCH_M) -> dict:
+def associate(broadcast: dict, joined: list[dict], match_m: float = MATCH_M) -> dict:
     """broadcast track id -> {track, confidence, frames, paired, agree}, or track None when no
-    frame of it was paired."""
-    theirs = {f["frame"]: f["players"] for f in views["tracked"]["frames"]}
+    frame of it was paired. `joined` is the joined tracked frames (the views' players)."""
+    theirs = {f["frame"]: f["players"] for f in joined}
     seen: Counter[str] = Counter()
     votes: dict[str, Counter[str]] = {}
     dist: dict[tuple[str, str], list[float]] = {}
@@ -151,12 +169,11 @@ def join(broadcast_run: Path, views_run: Path, out: Path) -> dict:
     check_clock(b, v)
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
-    (out / "detected.jsonl").write_text("".join(json.dumps(e) + "\n" for e in b["events"]), encoding="utf-8")
-    (out / "observations.jsonl").write_text(
-        "".join(json.dumps(r, separators=(",", ":")) + "\n" for r in b["observations"]), encoding="utf-8")
+    for name in ("detected.jsonl", "observations.jsonl"):  # the broadcast's, byte for byte
+        shutil.copyfile(Path(broadcast_run) / name, out / name)
     body, how = tracked(b, v)
     (out / "tracked.json").write_text(json.dumps(body, separators=(",", ":")) + "\n", encoding="utf-8")
-    pairs = associate(b, v)
+    pairs = associate(b, body["frames"])
     (out / "association.json").write_text(json.dumps({
         "match_m": round(MATCH_M, PLACES),
         "broadcast_error_m": BROADCAST_ERROR_M,

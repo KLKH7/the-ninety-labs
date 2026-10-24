@@ -73,7 +73,7 @@ def grade_one(seed: int, runs: Path, clips: Path) -> dict:
     jn.join(runs / f"seed{seed}" / "broadcast", runs / f"seed{seed}" / "views", out)
     assoc = json.loads((out / "association.json").read_text())["tracks"]
     b = jn.read_run(runs / f"seed{seed}" / "broadcast")["tracked"]["frames"]
-    v = jn.read_run(runs / f"seed{seed}" / "views")["tracked"]["frames"]
+    v = json.loads((out / "tracked.json").read_text())["frames"]  # the joined: the ids association.json names
     truth = {f["frame"]: f for f in _frames(clips / f"seed{seed}" / "frames.jsonl")}
     tb, tv = true_players(b, truth), true_players(v, truth)
     rows = []

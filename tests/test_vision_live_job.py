@@ -251,3 +251,25 @@ def test_a_views_clip_with_one_view_is_refused(tmp_path):
     shutil.rmtree(clip / "views" / "tac-r")
     with pytest.raises(SystemExit, match="two views"):
         live_job.run(clip, tmp_path / "out", never_loaded)
+
+
+def test_each_view_is_placed_as_a_fixed_lens_and_the_broadcast_is_not(tmp_path, monkeypatch):
+    """A view is the tactical camera, which never moves: observe fits it once (fixed=True). Without
+    it each frame is searched as the broadcast's gantry, and a view's frames place no player."""
+    from ninety.vision import observe
+    from ninety.vision.detections import read_detections
+
+    seen = []
+    real = observe.observe
+
+    def spy(images, dets, load, fixed=False):
+        seen.append(fixed)
+        return real(images, dets, load, fixed)
+
+    monkeypatch.setattr(observe, "observe", spy)
+    clip, dets = views_clip(tmp_path)
+    found = read_detections(dets)
+    live_job.run(clip, tmp_path / "out", lambda: (lambda rows: found), {})
+    single, dets1 = clean_clip(tmp_path / "b")
+    live_job.run(single, tmp_path / "out1", lambda: (lambda rows: read_detections(dets1)), {})
+    assert seen == [True, True, False]
