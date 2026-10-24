@@ -342,7 +342,7 @@ def detect(rows: list[dict], join_breaks: bool = True) -> tuple[list[dict], dict
               outcome="success" if mate else "fail", player=who,
               receiver=next_who if mate else None, interceptor=None if mate else next_who,
               end_x=_clip(path[j].x, PITCH_X), end_y=_clip(path[j].y, PITCH_Y))
-    for a, b in possession_changes(sp, out_frames, cut_at, join_breaks):
+    for _, b in possession_changes(sp, out_frames, cut_at, join_breaks):
         j = index[b.first]
         event("possession_change", b.first, b.track.team, path[j].x, path[j].y,
               path[j].score * min(1.0, b.frames / (2 * MIN_SPELL_FRAMES)), b.track.side_confidence,
@@ -364,7 +364,8 @@ def detect(rows: list[dict], join_breaks: bool = True) -> tuple[list[dict], dict
         "tracks": len(tracks),
         "teams": teams,
         "spells": len(sp),
-        "events": {k: sum(1 for e in events if e["type"] == k) for k in ("pass", "shot", "out_of_play", "possession_change")},
+        "events": {k: sum(1 for e in events if e["type"] == k)
+                   for k in ("pass", "shot", "out_of_play", "possession_change")},
         "named": {k: sum(1 for e in events if e.get(k)) for k in ("player", "receiver", "interceptor")},
     }
     return events, summary
