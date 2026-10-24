@@ -199,6 +199,16 @@ def observations_clip() -> list[dict]:
     return rows
 
 
+def test_a_frame_fused_from_the_fixed_views_has_no_broadcast_footprint():
+    """Observations fused from the tactical lenses carry each view's fit, not the broadcast camera's
+    matrix: the broadcast picture's footprint is unknown there, never an error or a guess."""
+    rows = observations_clip()
+    rows[0]["camera"] = {"ok": True, "views": {"tac-l": {"ok": True}, "tac-r": {"ok": False}}}
+    body = radar.build(tracked_clip(), rows, W, H)
+    assert body["views"][0]["footprint"] is None
+    assert body["views"][1]["footprint"] is not None
+
+
 @pytest.fixture(scope="module")
 def browser():
     if not (DIST / "index.html").exists():
@@ -334,7 +344,9 @@ def test_the_radar_toggles_from_the_keyboard_and_says_what_it_shows(browser, sit
     page, errors = open_viewer(browser, site[0])
     page.wait_for_function("document.querySelector('#radar').getAttribute('aria-label').startsWith('Radar:')")
     label = page.get_attribute("#radar", "aria-label")
-    assert "home" in label and "away" in label and "broadcast camera" in label
+    # The clubs by the names of the codes the clip was rendered with (CRW, DUN), never home and away.
+    assert "Crowmere" in label and "Dunhollow" in label and "broadcast camera" in label
+    assert "home" not in label.lower() and "away" not in label.lower()
     assert page.is_visible("#radar")
     page.keyboard.press("m")
     assert not page.is_visible("#radar")

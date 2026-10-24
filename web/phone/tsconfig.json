@@ -12,5 +12,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["src", "vite.config.ts"]
+  "include": ["src", "vite.config.ts", "../viewer/src/radar.ts", "../viewer/src/match.ts", "../viewer/src/teams.ts", "../viewer/src/bundle.ts"]
 }

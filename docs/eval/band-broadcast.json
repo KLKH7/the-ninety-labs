@@ -1,0 +1,112 @@
+{
+  "seeds": [
+    108,
+    109,
+    110,
+    112,
+    113,
+    114,
+    115,
+    116,
+    117,
+    119,
+    120,
+    121,
+    122,
+    2041,
+    2042,
+    2043,
+    2044,
+    2045,
+    3041,
+    3042,
+    3043,
+    3044,
+    3045
+  ],
+  "broadcast": {
+    "frames": 5500,
+    "good": 4563,
+    "bad": 937,
+    "band": [
+      0.966,
+      1.121
+    ],
+    "candidates": {
+      "B1 markings": {
+        "bad_rejected": 556,
+        "bad_trusted": 381,
+        "good_kept": 4553,
+        "good_kept_share": 0.9978,
+        "bad_trusted_by_seed": {
+          "117": 118,
+          "121": 4,
+          "2044": 242,
+          "3043": 17
+        },
+        "bad_trusted_worst_m": 58.667
+      },
+      "B2 heights": {
+        "bad_rejected": 283,
+        "bad_trusted": 654,
+        "good_kept": 4474,
+        "good_kept_share": 0.9805,
+        "bad_trusted_by_seed": {
+          "115": 11,
+          "117": 247,
+          "2044": 250,
+          "3043": 146
+        },
+        "bad_trusted_worst_m": 51.68
+      },
+      "B3 both": {
+        "bad_rejected": 577,
+        "bad_trusted": 360,
+        "good_kept": 4464,
+        "good_kept_share": 0.9783,
+        "bad_trusted_by_seed": {
+          "117": 118,
+          "2044": 242
+        },
+        "bad_trusted_worst_m": 14.072
+      }
+    }
+  },
+  "fixed": {
+    "frames": 11500,
+    "good": 11250,
+    "bad": 250,
+    "band": [
+      1.002,
+      1.151
+    ],
+    "candidates": {
+      "B1 markings": {
+        "bad_rejected": 250,
+        "bad_trusted": 0,
+        "good_kept": 978,
+        "good_kept_share": 0.0869,
+        "bad_trusted_by_seed": {},
+        "bad_trusted_worst_m": 0.0
+      },
+      "B2 heights": {
+        "bad_rejected": 249,
+        "bad_trusted": 1,
+        "good_kept": 11042,
+        "good_kept_share": 0.9815,
+        "bad_trusted_by_seed": {
+          "2042": 1
+        },
+        "bad_trusted_worst_m": 69.422
+      },
+      "B3 both": {
+        "bad_rejected": 250,
+        "bad_trusted": 0,
+        "good_kept": 966,
+        "good_kept_share": 0.0859,
+        "bad_trusted_by_seed": {},
+        "bad_trusted_worst_m": 0.0
+      }
+    }
+  }
+}

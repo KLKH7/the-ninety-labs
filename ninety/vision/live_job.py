@@ -154,7 +154,7 @@ def run(clip: Path, out: Path, load_detector: Callable[[], Detector], about: dic
         n_dets += sum(len(d.detections) for d in dets)
         lap("detect")
         write_detections(where / "detections.jsonl", dets)
-        placed[name] = observe.observe([r["image"] for r in rows], dets, _rgb)
+        placed[name] = observe.observe([r["image"] for r in rows], dets, _rgb, fixed=bool(name))
         if name:
             _jsonl(where / "observations.jsonl", placed[name])
         lap("observe")

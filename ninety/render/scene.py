@@ -388,6 +388,8 @@ class Gait:
     accel: float = 0.0  # his acceleration the way he faces, from the engine's velocity (m/s^2, pace)
     lean: float = 0.0  # the trunk's lean on top of the stride's (radians, forward +, pace)
     fall: float = 0.0  # radians the body is tipped over its feet: a fouled player going down (fouls.py)
+    signal: dict | None = None  # one hand up: side, at (world), w (fouls.signal_at)
+    look: dict | None = None  # the head turned: yaw (radians from his facing), w (fouls.look_at)
     fall_dir: float = 0.0  # the way he falls, pitch radians
 
 
@@ -1264,6 +1266,8 @@ def mesh_pose(g: Gait, x: float, y: float, reach: float) -> dict:
         "y": round(y, 4),
         "fall": round(g.fall, 4),
         "fall_dir": round(g.fall_dir, 4),
+        "signal": g.signal,
+        "look": g.look,
     }
 
 
@@ -1691,7 +1695,7 @@ def crowded_start(
 
 # A goalkeeper's own touches and his dive: the actions the engine names when he handles the ball
 # or throws himself at it (ninety/sim). Arms over the ball are what hides it from the lens.
-KEEPER_ACTIONS = ("hands", "dive", "throw")
+KEEPER_ACTIONS = ("hands", "dive", "throw", "bowl")
 # The penalty area, 16.5 m from the goal line and 40.32 m wide (Law 1): where a keeper handles.
 PENALTY_DEPTH_M = 16.5
 PENALTY_HALF_WIDTH_M = 20.16
