@@ -12,8 +12,8 @@
     "version": "1"
   },
   "ninety-companion-match": {
-    "definition_sha": "a8095009e5fedf72",
-    "version": "1"
+    "definition_sha": "750fea34984653b6",
+    "version": "2"
   },
   "ninety-describer": {
     "definition_sha": "064da096ff49c4f1",
@@ -30,6 +30,10 @@
   "ninety-personalizer": {
     "definition_sha": "14cda33892950116",
     "version": "2"
+  },
+  "ninety-referee": {
+    "definition_sha": "500b90a60e681dd0",
+    "version": "1"
   },
   "ninety-tactician": {
     "definition_sha": "59ffc39047d2afce",
