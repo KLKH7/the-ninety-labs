@@ -214,7 +214,8 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             // DefaultAzureCredential signs in as this user-assigned identity only when told its id.
             { name: 'AZURE_CLIENT_ID', value: apiIdentity.properties.clientId }
             { name: 'NINETY_SPEECH_RESOURCE_ID', value: speech.id }
-            { name: 'NINETY_SPEECH_REGION', value: speech.location }
+            // The TTS host is <region>.tts.speech.microsoft.com: the region's name, lowercase, no spaces.
+            { name: 'NINETY_SPEECH_REGION', value: toLower(replace(speech.location, ' ', '')) }
           ]
           probes: apiExists
             ? [

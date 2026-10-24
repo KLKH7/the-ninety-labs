@@ -177,9 +177,17 @@ export function createVoice(options: VoiceOptions): Voice {
           body: JSON.stringify(answer === undefined ? { text: line } : { text: line, answer }),
         });
         if (r.ok && mine === current) {
-          blob = URL.createObjectURL(await r.blob());
-          if (mine !== current) return "none" as const;
-          await player.play(blob, rate());
+          const url = URL.createObjectURL(await r.blob());
+          if (mine !== current) {
+            URL.revokeObjectURL(url); // stopped while it downloaded
+            return "none" as const;
+          }
+          blob = url;
+          await player.play(url, rate());
+          if (blob === url) {
+            URL.revokeObjectURL(url); // played to its end: freed now, not at the next line
+            blob = null;
+          }
           return "api" as const;
         }
       }

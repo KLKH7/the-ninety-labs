@@ -24,7 +24,7 @@ A fan never waits on build time: those lines ship in the bundle and play with no
 On the Live path, a spoken answer starts about half a second after its text appears. The route
 measured here runs on this laptop, not in Azure, so the Container App's numbers still need a run
 after deploy. The voice samples chose Ollie partly because it is fast: the two HD voices took
-2.2 to 2.6 s a line (`~/ninety-notes/voice-samples/results.json`).
+2.2 to 2.6 s a line in the same sampling run.
 
 ## Cost
 
@@ -39,10 +39,11 @@ first 0.5 M characters a month are free.
 | A full 90-minute match, estimated | about 68,000 | about $1.02 |
 | Live: a day at the route's cap (`speak.DAY_CHARS`) | 50,000 | $0.75 |
 
-The full-match estimate is an upper bound, not a measurement. It assumes the Replay clip's rate of
+The full-match figure is an estimate, not a measurement. It assumes the Replay clip's rate of
 2 description lines in 10 s (12 a minute) holds for all 90 minutes, at that clip's 56 characters a
 line (about 60,000), plus at most 30 cards (the Scout's one per three minutes), each said three
-ways (spoken, "New insight: " and spoken, its Why? answer) at about 250 characters (about 7,500).
+ways (spoken, "New insight: " and spoken, its Why? answer) at about 250 characters for the three
+together, about 80 each (about 7,500).
 A rebuilt bundle pays only for lines it has not said before (the cache in `runs/speech-cache`).
 
 Size: a line is about 26 KB of MP3 (514,944 bytes for the 20), so a full match at that rate would

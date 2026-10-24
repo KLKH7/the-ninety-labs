@@ -1,6 +1,6 @@
 """The one voice a fan hears, pinned here, and the SSML every read-aloud line is sent as.
 
-Kian chose en-GB-OllieMultilingualNeural on Oct 23 from samples of all 17 British neural voices and
+en-GB-OllieMultilingualNeural was chosen by ear on Oct 23 from samples of all 17 British neural voices and
 two HD voices on our Speech resource (lesson 232): chosen by ear, never the browser's system voice,
 which the phone uses only when it is offline. Every path that speaks to a fan reads `VOICE`: the
 bundle's pre-generated audio (ninety/speech/bundle.py), the Live route (ninety/api/speak.py) and the
@@ -20,7 +20,7 @@ LANG = "en-GB"
 # The MP3 every read-aloud line is made in: 24 kHz mono at 48 kbit/s, about 6 KB a second of speech.
 FORMAT = "audio-24khz-48kbitrate-mono-mp3"
 # A livelier rate for insight cards only (audio description stays at the voice's own rate). None
-# until it has been heard to sound natural in this voice; then "+5%" (the Coordinator's ask).
+# until it has been heard to sound natural in this voice; then "+5%".
 INSIGHT_RATE: str | None = None
 # Quotes too: an escaped quote can never close an attribute, wherever the builder puts the text.
 QUOTES = {'"': "&quot;", "'": "&apos;"}

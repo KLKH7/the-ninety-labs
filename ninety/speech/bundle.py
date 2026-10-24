@@ -34,8 +34,9 @@ ROOT = Path(__file__).resolve().parents[2]
 CACHE = ROOT / "runs" / "speech-cache"
 NEW_INSIGHT = "New insight: "  # the phone's prefix for a card that just arrived (web/phone/src/main.ts)
 # Lines the phone says whatever the match: the Listening sheet's voice preview (web/phone/src/main.ts,
-# SAMPLE), so the fan previews the voice they will hear.
-FIXED = ("London keep winning it back fast: four times inside five seconds this half.",)
+# SAMPLE), so the fan previews the voice they will hear. It states no fact about any match: a number
+# a fan hears is computed by code (AGENTS.md), and this line is the same in every bundle.
+FIXED = ("This is the voice that will read the match to you.",)
 MAX_RETRIES = 3
 RETRY_WAIT_S = 3.0  # design: when a 429 gives no Retry-After; F0 refills over a minute
 # Azure AI Speech S1 neural text to speech: $15 per million characters (Azure Retail Prices API,
@@ -69,8 +70,9 @@ def lines(bundle: Path) -> list[tuple[str, str]]:
             add(card.get("spoken"), "insight")
             if card.get("spoken"):
                 add(NEW_INSIGHT + card["spoken"], "insight")
-            why = card.get("why") or {}
-            add((why.get("answer") or {}).get("text"), "why")
+            answer = (card.get("why") or {}).get("answer") or {}
+            if answer.get("status") == "verified":  # the schema says so; checked here too
+                add(answer.get("text"), "why")
     return list(found.items())
 
 

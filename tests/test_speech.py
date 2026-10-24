@@ -81,14 +81,17 @@ class FakeSynth:
 
 
 def test_the_bundle_says_each_description_and_verified_card_once(tmp_path):
-    why = {"question": "Why?", "answer": {"text": "Three won back."}}
-    cards = [card("c1", "Home pressed high.", why=why), card("c2", "Not checked.", status="rejected")]
+    why = {"question": "Why?", "answer": {"status": "verified", "text": "Three won back."}}
+    held = {"question": "Why?", "answer": {"status": "held", "text": "Not this one."}}
+    cards = [card("c1", "Home pressed high.", why=why), card("c2", "Not checked.", status="rejected"),
+             card("c3", "Away sat deep.", why=held)]
     texts = dict(sb.lines(bundle_dir(tmp_path, cards)))
     assert texts == {
         **{t: "fixed" for t in sb.FIXED},
         "Home 4 passes to Home 9.": "description", "Home 9 shoots.": "description",
         "Home pressed high.": "insight", "New insight: Home pressed high.": "insight",
         "Three won back.": "why",
+        "Away sat deep.": "insight", "New insight: Away sat deep.": "insight",  # its Why? held back
     }
 
 
