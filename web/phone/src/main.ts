@@ -1833,7 +1833,8 @@ function renderDescribed(list: HTMLElement, now: number) {
     ...said.map((l, i) => {
       const li = document.createElement("li");
       li.className = "lyric";
-      const text = named(l.spoken ?? l.text, undefined); // the sentence as the voice says it
+      // The line with its players named; the spoken form names sides ("Away 11"), so it is not used.
+      const text = named(l.text, undefined).replace(/\s*→\s*/g, " to ");
       li.textContent = text.charAt(0).toUpperCase() + text.slice(1);
       const current = i === said.length - 1 && now <= l.t_out;
       if (current) li.setAttribute("aria-current", "true");

@@ -483,7 +483,7 @@ ion-tab > .ion-page { background: var(--wash) fixed, #000; }
 ion-tab ion-content { --background: transparent; }
 .band, .live-tabs { background: transparent; }
 .live-tabs { position: static; }
-ion-toolbar.band-bar, #panel-ask ion-toolbar.band-bar { --background: rgba(0, 0, 0, 0.35); --color: var(--text); --border-color: var(--glass-edge); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur); }
+ion-toolbar.band-bar, #panel-ask ion-toolbar.band-bar { --background: rgba(8, 8, 12, 0.82); --color: var(--text); --border-color: var(--glass-edge); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur); }
 #panel-ask .mini-score, #panel-ask .speak { color: var(--text); }
 
 .card, .insight, .group, .roster-card {
