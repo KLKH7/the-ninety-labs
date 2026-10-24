@@ -52,7 +52,7 @@ jobs:
           echo "night=$night" >> "$GITHUB_OUTPUT"
       - uses: astral-sh/setup-uv@v7
       - run: uv sync --locked
-      - uses: azure/login@v2
+      - uses: azure/login@v3
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
