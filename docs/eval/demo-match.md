@@ -169,10 +169,13 @@ not part of this rule); G2 completion 31; G3 football sense 20; G4 goals 35.
 | 8053 | 59.1 | 3-0 | 11-3 | 11 | 13 | 73 | 85.8% | 20.5 |
 
 **The edit:** 17.0 minutes (1,022 s) in 40 segments, inside the target with no adjustment. Chapters:
-the five goals (11:24, 18:43, 21:39, 32:19, 40:01), 15 saves, shots, corners, a free kick, passing
+the five goals (11:24, 18:43, 21:39, 32:19, 40:01), saves (15 saves in the edit; 14 are chapter
+headings, the other shares a segment with a goal), shots, corners, a free kick, passing
 moves, the kick-off, 45:00 and the end. All five goals fall in the first half, so the second half of
 the edit is saves and chances. The segments, chapters and render commands are in
-[demo-match-8076.json](demo-match-8076.json).
+[demo-match-8076.json](demo-match-8076.json). The full `select` output, with every seed's counts,
+football-sense mean rank and each gate's pass or fail for all 40 seeds, is
+[demo-match-65247ba3-select.json](demo-match-65247ba3-select.json).
 
 **Half-time at the freeze.** This rule was written when the engine had no half-time; at `65247ba3`
 the referee ends the first half (the `half_time` event, 2700.04 s here) and the second half kicks
