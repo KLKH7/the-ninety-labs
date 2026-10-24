@@ -192,6 +192,9 @@ export interface ViewerAnswer {
   visual?: ScoutVisual | null;
   spoken?: string;
   follow_ups?: string[];
+  /** The direct answer in a few words, computed by code from the question's kind (a name, a number
+   * with its unit, a place); null when code has none (viewer_answer.schema.json, #294). */
+  headline?: string | null;
   /** A label for a player only where the names tool gave one: a name, or a role. */
   names?: Record<string, string>;
   teams?: TeamNames;
