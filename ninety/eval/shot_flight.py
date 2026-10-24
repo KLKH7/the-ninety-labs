@@ -302,9 +302,16 @@ def clip_seed(root: Path) -> int | None:
     """A clip's seed: meta.json's, else the digits ending its folder's name."""
     meta = root / "meta.json"
     if meta.exists():
-        seed = json.loads(meta.read_text()).get("seed")
-        if isinstance(seed, int):
-            return seed
+        body = json.loads(meta.read_text())
+        if not isinstance(body, dict):
+            return None  # a meta.json that is not an object has no seed: unknown, never the name's
+        if "seed" in body:  # meta.json wins over the name, and a seed it cannot read is unknown
+            seed = body["seed"]
+            if isinstance(seed, float) and seed.is_integer():
+                seed = int(seed)
+            if isinstance(seed, str) and seed.strip().isdigit():
+                seed = int(seed)
+            return seed if isinstance(seed, int) and not isinstance(seed, bool) else None
     found = re.search(r"(\d+)$", root.name)
     return int(found.group(1)) if found else None
 
